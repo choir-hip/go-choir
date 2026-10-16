@@ -414,7 +414,11 @@ in
         # text/event-stream (live Texture and trajectory updates) unencoded,
         # so a compressor never buffers a stream; WebSocket upgrades pass
         # untouched (docs/problems/edge-serves-everything-uncompressed-2026-10-16.md).
-        encode {
+        # A request that asks for a stream is never wrapped: Caddy's encoder
+        # holds the headers until the first body write, so an idle stream
+        # would not open (lifecycle.js waits for open before its snapshot).
+        @compressible not header Accept *text/event-stream*
+        encode @compressible {
           zstd
           gzip
           match {
