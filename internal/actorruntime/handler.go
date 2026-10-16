@@ -533,8 +533,12 @@ func (h *actorHandler) handleInitialDispatch(ctx context.Context, u actor.Update
 	if err != nil {
 		return nil, fmt.Errorf("actorruntime: load run %s for initial dispatch: %w", runID, err)
 	}
-	if rec.State == types.RunPassivated &&
-		strings.TrimSpace(metadataString(rec.Metadata, "passivated_reason")) == "runtime_restarted" {
+	restartParked := rec.State == types.RunPassivated &&
+		strings.TrimSpace(metadataString(rec.Metadata, "passivated_reason")) == "runtime_restarted"
+	if restartParked && (strings.HasPrefix(rec.AgentID, agentprofile.Texture+":") || textureRunRecord(rec)) {
+		return h.resumeRestartParkedTexture(ctx, u)
+	}
+	if restartParked {
 		// The initial_dispatch occurrence is durable and may have been queued
 		// before boot passivated its run. It is the sole resume authority, not
 		// an already-consumed start: reactivate it before executing.
@@ -576,6 +580,49 @@ func (h *actorHandler) handleInitialDispatch(ctx context.Context, u actor.Update
 		return nil, fmt.Errorf("%w: actorruntime: execute initial activation: %v", actor.ErrDeferUnprocessed, err)
 	}
 	return h.memoryFromRunState(&rec)
+}
+
+// resumeRestartParkedTexture is the one resume a planned restart allows a
+// Texture turn it parked. Boot passivation staled the turn's mutation, so
+// only the Texture controller may resume it: it re-arms the mutation
+// against the document's current head, or declines when the document has
+// moved on. The generic reactivation set the run running with a stale
+// mutation, which failed activation authority until the dispatch was
+// dead-lettered, leaving the run "running" with nobody running it
+// (docs/problems/planned-restart-drops-texture-dispatch-mutation-mismatch-2026-10-16.md).
+func (h *actorHandler) resumeRestartParkedTexture(ctx context.Context, u actor.Update) ([]byte, error) {
+	ownerID, computerID, agentID, err := parseScopedActorMailboxID(u.ToAgentID)
+	if err != nil {
+		return nil, fmt.Errorf("actorruntime: resolve initial_dispatch scope: %w", err)
+	}
+	if h.textureOwner == nil {
+		return nil, deferTextureOccurrence(fmt.Errorf("actorruntime: Texture owner is not bound"))
+	}
+	rec, err := h.textureOwner.ReconcileAgentWake(ctx, ownerID, strings.TrimPrefix(agentID, agentprofile.Texture+":"))
+	if err != nil {
+		return nil, fmt.Errorf("%w: actorruntime: resume restart-parked Texture turn: %v", actor.ErrDeferUnprocessed, err)
+	}
+	reactivated := false
+	if rec != nil {
+		reactivated, _ = rec.Metadata["actor_reactivated_from_passivated"].(bool)
+	}
+	if rec == nil || rec.State != types.RunPending || !reactivated {
+		// Nothing of this turn is left to resume. A fresh turn the
+		// controller started is run by its own dispatch, never here too
+		// (Cut 1 breakage B4).
+		logTextureOccurrenceConsumed(agentID, u, "the restart-parked turn has no resumable authority")
+		return nil, nil
+	}
+	if err := h.textureOwner.ValidateActivationAuthority(ctx, ownerID, computerID, agentID, rec.RunID); err != nil {
+		return nil, deferTextureOccurrence(fmt.Errorf("actorruntime: revalidate resumed Texture turn: %w", err))
+	}
+	if err := h.rt.ExecuteActivationSyncChecked(ctx, rec); err != nil {
+		if errors.Is(err, agentcore.ErrActivationOccurrenceMustRemainUnprocessed) {
+			return nil, fmt.Errorf("%w: %v", actor.ErrDeferUnprocessed, err)
+		}
+		return nil, deferTextureOccurrence(fmt.Errorf("actorruntime: execute resumed Texture turn: %w", err))
+	}
+	return h.memoryFromRunState(rec)
 }
 
 // handleCoagentResult resumes a parked run. memory carries the resume pointer
