@@ -496,3 +496,27 @@ and stories published per hour. V3a acceptance over 6h:
 A fall in published stories is expected and is the owner's two-source
 rule working. A collapse below 0.7× means the threshold or the
 resolution recall needs work before V4.
+
+## 16. Panel round 2 adjudication (Devin and Gemini, 2026-10-16 about 01:05 UTC)
+
+Both said "ready with changes". Neither asked for a redesign. Both
+endorsed the held flag on the existing record kind over a new kind.
+
+| Finding | From | Decision |
+|---|---|---|
+| Wakes must come from the ledger, not from transitions seen in memory: a crash between a membership write and its record loses the wake silently | Devin B1 | **Adopted.** Each flush checks events whose members changed against their conversation's records (`store.ConversationRecords`, indexed): no `event-corroborated:` record means mint one, and members no record named go on a growth record. A checked event is settled until it gains a member. Test: a crash before the record, then the next flush fills the gap |
+| The settings matrix and the held backlog on rollback | Devin B2 | **Adopted.** Events and wakes both on is V3. Events on with wakes off is V1 shadow: arrivals are unheld and no event records are minted. The sweep (below) drains: with wakes off, every unnamed held capture is released (`released`). Rollback order: turn wakes off, wait one sweep (5 min plus the 10 min grace), then events off if wanted |
+| The sibling sweep re-puts poison captures to Jev, so a crash loop; newest-first starves | Gemini B1 | **Adopted, replacing §15.2 #6.** No capture is put to Jev twice. A live poll (never a boot), at most every 5 min, scans the newest 1000 management records and releases held captures older than 10 min that no event record named and that have no membership. They go oldest first, at most 48 a sweep, as `event-unresolved:` records that wake. Captures older than 24h are not released. That is a named residual, visible in the sweep's log counts |
+| Growth wakes management every flush; declined events keep waking | Gemini B2 | **Adopted, changed.** Growth records are held: they wake no one and are read on management's next turn, because a held record that carries an `Event` stays in the view. So wakes come only from corroboration, aged official events and unresolved captures. Gating growth on declined events, and §6's O3 auto-feed, wait for V3b, where they belong with the label fold |
+| Tentative members read as corroboration | Gemini B3 | **Adopted.** Items carry `Tentative`. The overlay says never to count one as a second source. The publish gate counts outlets of cited captures, so a cited tentative capture from another outlet would count. That is a named residual for V3b: the gate should consult membership |
+| Aged wake idempotence; aged then corroborated | Gemini B4 | **Adopted.** `agedWoken` in memory, plus the deterministic id; after a restart the retry is a conflict that counts as minted. Aged then corroborated is two wakes, which is legitimate. Acceptance counts wakes per kind |
+| Per-item `SourceID` | both | **Adopted.** Every event and unresolved item carries its own source, and `Decline` routes by it (E13 test) |
+| Disposed captures in event items; second-disposal churn | Devin | **Partly.** Growth names only members no event record named. A capture released as unresolved never gets a membership, so it is never named again. The flag-flip window can name a capture on both an unheld arrival and an event record. The index refuses the second disposal; this is a named residual |
+| Acceptance: model calls per hour, gap = 0, fallback and sweep counts | Devin | **Adopted** into V3a acceptance |
+
+**Baseline for V3a** (the paper, 22:00–00:00 UTC on 2026-10-15/16, from
+`/api/runs`), runs per hour:
+
+| management | management tasks | research | Texture |
+|---|---|---|---|
+| ~33 | ~14 | ~21 | ~100 |
