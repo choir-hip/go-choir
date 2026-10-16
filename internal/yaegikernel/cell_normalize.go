@@ -52,6 +52,7 @@ import (
 
 func (s *Session) normalizeCellSource(src string) string {
 	s.cellDeclares = nil
+	src = guardInitOnlyForLoops(src)
 	src = expandOneLineImportLists(src)
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, "cell.go", src, parser.ParseComments)
@@ -169,6 +170,76 @@ func guardLeadingFuncStatement(src string) string {
 	switch _, tok, _ := scan.Scan(); tok {
 	case token.FUNC, token.TYPE, token.VAR, token.CONST:
 		return ";\n" + src
+	}
+	return src
+}
+
+// guardInitOnlyForLoops rewrites every `for init; ; {` header to
+// `for init; true; {`, the same Go program. Yaegi v0.16.1 wires the
+// init-only shape (forStmt1) back to its init statement on every
+// iteration (interp/cfg.go: body.tnext = n.start), so a body that advances
+// the loop variable never ends; a constant-true condition takes forStmt3,
+// which is wired correctly. On the paper such cells grew until the guest
+// OOM killer took a worker and then the daemon
+// (docs/problems/desk-cell-init-only-for-loop-never-ends-guest-oom-2026-10-16.md).
+//
+// It scans tokens rather than parsing, so it reaches every cell shape. A
+// header ends at its first brace outside parentheses and brackets, as in
+// Go's grammar; a header holding a func literal therefore never matches and
+// is left alone. The insertion stays on the header's line, so compile
+// errors keep their line numbers.
+func guardInitOnlyForLoops(src string) string {
+	if !strings.Contains(src, "for") || !strings.Contains(src, ";") {
+		return src
+	}
+	fset := token.NewFileSet()
+	file := fset.AddFile("cell.go", fset.Base(), len(src))
+	var scan scanner.Scanner
+	scan.Init(file, []byte(src), func(token.Position, string) {}, 0)
+	var inserts []int
+	inHeader, depth, clause := false, 0, 0
+	var clauseTokens [3]int
+	secondSemi := 0
+	for {
+		pos, tok, _ := scan.Scan()
+		if tok == token.EOF {
+			break
+		}
+		if !inHeader {
+			if tok == token.FOR {
+				inHeader, depth, clause, clauseTokens = true, 0, 0, [3]int{}
+			}
+			continue
+		}
+		switch {
+		case tok == token.LBRACE && depth == 0:
+			if clause == 2 && clauseTokens[0] > 0 && clauseTokens[1] == 0 && clauseTokens[2] == 0 {
+				inserts = append(inserts, secondSemi)
+			}
+			inHeader = false
+		case tok == token.SEMICOLON && depth == 0:
+			clause++
+			if clause == 2 {
+				secondSemi = file.Offset(pos)
+			}
+			if clause > 2 {
+				inHeader = false
+			}
+		default:
+			switch tok {
+			case token.LPAREN, token.LBRACK:
+				depth++
+			case token.RPAREN, token.RBRACK:
+				if depth > 0 {
+					depth--
+				}
+			}
+			clauseTokens[clause]++
+		}
+	}
+	for i := len(inserts) - 1; i >= 0; i-- {
+		at := inserts[i]
+		src = src[:at] + "true" + src[at:]
 	}
 	return src
 }
