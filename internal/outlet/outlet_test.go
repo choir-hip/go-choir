@@ -12,7 +12,13 @@ import "testing"
 //     each other;
 //   - O3 a public-suffix host (bbc.co.uk) collapses to its suffix (co.uk),
 //     making every British outlet one;
-//   - O4 an unparseable or hostless URL yields an outlet, so it counts.
+//   - O4 an unparseable or hostless URL yields an outlet, so it counts;
+//   - O5 an aggregator, search page or syndicator (Hacker News, Google
+//     search, Yahoo News republishing Reuters) counts as an outlet, so an
+//     article and its HN thread corroborate each other (offline event
+//     study, 2026-10-16: four of 36 "corroborated" events were article+HN);
+//   - O6 a reader-proxy URL (r.jina.ai/<url>, web.archive.org/web/<ts>/<url>)
+//     names the proxy instead of the publisher it wraps.
 
 func TestOf(t *testing.T) {
 	same := [][2]string{ // O1, O3
@@ -43,6 +49,29 @@ func TestOf(t *testing.T) {
 	for _, bad := range []string{"", "not a url", "cap-court", "https:///nohost", "https://t.me/"} { // O4
 		if got := Of(bad); got != "" {
 			t.Errorf("Of(%q) = %q, want no outlet", bad, got)
+		}
+	}
+	for _, none := range []string{ // O5
+		"https://news.ycombinator.com/item?id=50083130",
+		"https://www.google.com/search?q=memory+prices",
+		"https://news.google.com/rss/articles/abc",
+		"https://www.reddit.com/r/news/comments/x",
+		"https://malaysia.news.yahoo.com/flavio-bolsonaro-slightly-leads-lula-213312820.html",
+		"https://aol.co.uk/articles/horror-freight-train.html",
+		"https://www.msn.com/en-us/news/world/x",
+		"https://lobste.rs/s/abc",
+	} {
+		if got := Of(none); got != "" {
+			t.Errorf("Of(%q) = %q, want no outlet (aggregator, search or syndicator)", none, got)
+		}
+	}
+	for raw, want := range map[string]string{ // O6
+		"https://r.jina.ai/https://openai.com/index/introducing-gpt-rosalind/":          "openai.com",
+		"https://web.archive.org/web/20261015000000/https://www.bbc.co.uk/news/world-1": "bbc.co.uk",
+		"https://r.jina.ai/https://news.ycombinator.com/item?id=1":                      "",
+	} {
+		if got := Of(raw); got != want {
+			t.Errorf("Of(%q) = %q, want %q", raw, got, want)
 		}
 	}
 }

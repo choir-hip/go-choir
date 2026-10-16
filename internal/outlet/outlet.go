@@ -30,6 +30,17 @@ var platformAliases = map[string]string{
 	"x.com": "x.com", "twitter.com": "x.com", "mobile.twitter.com": "x.com",
 }
 
+// notOutlets are registrable hosts that publish no reporting of their own:
+// aggregators and search pages link to it, and syndicators republish other
+// outlets' copy. A capture of one corroborates nothing, so it names no
+// outlet (offline event study, 2026-10-16: an article and its Hacker News
+// thread read as two outlets).
+var notOutlets = map[string]bool{
+	"ycombinator.com": true, "google.com": true, "reddit.com": true, "lobste.rs": true,
+	"yahoo.com": true, "aol.com": true, "aol.co.uk": true, "msn.com": true,
+	"bing.com": true, "duckduckgo.com": true, "flipboard.com": true, "newsbreak.com": true,
+}
+
 // Of returns the outlet key of a URL, or "" when it names no outlet.
 func Of(raw string) string {
 	u, err := url.Parse(strings.TrimSpace(raw))
@@ -39,6 +50,9 @@ func Of(raw string) string {
 	host := strings.TrimSuffix(strings.ToLower(u.Hostname()), ".")
 	if host == "" || !strings.Contains(host, ".") {
 		return ""
+	}
+	if wrapped, ok := unwrapProxy(host, raw); ok {
+		return Of(wrapped)
 	}
 	if platform, ok := platformAliases[strings.TrimPrefix(host, "www.")]; ok {
 		account := firstPathSegment(u.Path, platform)
@@ -55,7 +69,33 @@ func Of(raw string) string {
 	if len(labels) < keep {
 		return ""
 	}
-	return strings.Join(labels[len(labels)-keep:], ".")
+	key := strings.Join(labels[len(labels)-keep:], ".")
+	if notOutlets[key] {
+		return ""
+	}
+	return key
+}
+
+// unwrapProxy returns the URL a reader proxy or archive wraps:
+// r.jina.ai/<url> and web.archive.org/web/<timestamp>/<url>.
+func unwrapProxy(host, raw string) (string, bool) {
+	var rest string
+	switch host {
+	case "r.jina.ai":
+		_, rest, _ = strings.Cut(raw, "r.jina.ai/")
+	case "web.archive.org":
+		_, after, ok := strings.Cut(raw, "/web/")
+		if !ok {
+			return "", false
+		}
+		_, rest, _ = strings.Cut(after, "/")
+	default:
+		return "", false
+	}
+	if !strings.HasPrefix(rest, "http://") && !strings.HasPrefix(rest, "https://") {
+		return "", false
+	}
+	return rest, true
 }
 
 // firstPathSegment is the account a platform URL names: t.me/<channel>/<id>,
