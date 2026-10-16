@@ -102,6 +102,12 @@ type ogIdentityFormula struct {
 var ogIdentityFormulas = []ogIdentityFormula{
 	{kind: "choir.agent", fields: []string{"agent_id"}, scoped: true},
 	{kind: "choir.agent", fields: []string{"agent_id"}},
+	// Capture labels and their overrides are keyed by capture, version and
+	// record (captureLabelKey); their free text (titles, headlines,
+	// reasons) can hold "-super-" and must not read as an identity change
+	// (problems/paper-boot-refused-vocabulary-migration-capture-label-override-2026-10-16.md).
+	{kind: "choir.capture_label", fields: []string{"capture_id", "version"}, scoped: true},
+	{kind: "choir.capture_label_override", fields: []string{"capture_id", "label_version", "record_id"}, scoped: true},
 	{kind: "choir.run", fields: []string{"run_id"}, scoped: true},
 	{kind: "choir.run", fields: []string{"run_id"}},
 	{kind: "choir.trajectory", fields: []string{"trajectory_id"}, scoped: true},
