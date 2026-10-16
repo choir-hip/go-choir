@@ -253,10 +253,17 @@ type PoolMember struct {
 	// Weight is the member's share of hashed thread assignments; zero
 	// counts as one.
 	Weight int `json:"weight,omitempty"`
+	// FallbackOnly members are assigned no thread; they serve only as a
+	// failover for the members before them.
+	FallbackOnly bool `json:"fallback_only,omitempty"`
 }
 
-// SlotWeight is the member's assignment weight, at least one.
+// SlotWeight is the member's assignment weight: zero for a fallback-only
+// member, else at least one.
 func (m PoolMember) SlotWeight() int {
+	if m.FallbackOnly {
+		return 0
+	}
 	if m.Weight < 1 {
 		return 1
 	}
@@ -279,12 +286,14 @@ func (m PoolMember) SlotWeight() int {
 // deepseek-v4.1-flash and gpt-6-luna). An OpenCode key is parked for every
 // model after any 429, so its free-tier 429s parked the keys deepseek uses
 // (docs/reports/chatgpt-cache-ratio-2026-10-15.md §7.3). The owner weighted
-// it 1:3 the same day, so gpt-6-luna takes about three threads in four.
+// it 1:3 the same day. Owner 2026-10-16: "we are using Opencode too much. We
+// will hit our weekly limit soon. Let's go 100% gpt-6 luna for now." Every
+// thread runs on gpt-6-luna; deepseek-v4.1-flash is only its failover.
 func Pools() map[string][]PoolMember {
 	return map[string][]PoolMember{
 		DefaultPool: {
-			{Provider: "opencode-go", Model: "deepseek-v4.1-flash", Weight: 1},
-			{Provider: "chatgpt", Model: "gpt-6-luna", Weight: 3},
+			{Provider: "chatgpt", Model: "gpt-6-luna"},
+			{Provider: "opencode-go", Model: "deepseek-v4.1-flash", FallbackOnly: true},
 		},
 	}
 }

@@ -250,11 +250,15 @@ func FormatFallbacks(fallbacks []provideriface.LLMSelection) string {
 }
 
 // weightedIndex maps a thread hash onto a member, each member taking a
-// share of hashes in proportion to its weight.
+// share of hashes in proportion to its weight. A pool of fallback-only
+// members assigns its first.
 func weightedIndex(members []modelcatalog.PoolMember, hash uint32) int {
 	total := 0
 	for _, member := range members {
 		total += member.SlotWeight()
+	}
+	if total == 0 {
+		return 0
 	}
 	slot := int(hash % uint32(total))
 	for i, member := range members {
@@ -521,8 +525,9 @@ requires = ["image", "tool_use"]
 }
 
 func fallbackPolicy(_ provideriface.Config) Policy {
-	// Owner 2026-10-12: every role runs on the default pool (deepseek-v4.1-flash
-	// and gpt-6-luna), assigned per thread, each the other's fallback. Texture
+	// Owner 2026-10-12: every role runs on the default pool, assigned per
+	// thread (since 2026-10-16 every thread on gpt-6-luna, failing over to
+	// deepseek-v4.1-flash; modelcatalog.Pools). Texture
 	// and management keep high effort; opencode-go ignores the setting.
 	pool := func(effort string) provideriface.LLMSelection {
 		return provideriface.LLMSelection{Model: defaultPoolSpec, ReasoningEffort: effort, Source: "platform_fallback"}

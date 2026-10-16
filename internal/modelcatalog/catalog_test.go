@@ -10,13 +10,15 @@ import "testing"
 // cat-jam-free left the default pool on 2026-10-15 (owner): an OpenCode key
 // is parked for every model after any 429, so its free-tier 429s parked the
 // keys deepseek uses and pushed about 55% of paper calls to failover. The
-// pool is the owner's dual pool, deepseek-v4.1-flash and gpt-6-luna,
-// weighted 1:3 so gpt-6-luna takes about three threads in four.
+// pool was the owner's dual pool, deepseek-v4.1-flash and gpt-6-luna,
+// weighted 1:3. Owner 2026-10-16: OpenCode's weekly limit is close, so every
+// thread runs on gpt-6-luna; deepseek-v4.1-flash stays only as the failover,
+// assigned no thread.
 func TestDefaultPoolMembers(t *testing.T) {
 	pool := Pools()[DefaultPool]
 	want := []PoolMember{
-		{Provider: "opencode-go", Model: "deepseek-v4.1-flash", Weight: 1},
-		{Provider: "chatgpt", Model: "gpt-6-luna", Weight: 3},
+		{Provider: "chatgpt", Model: "gpt-6-luna"},
+		{Provider: "opencode-go", Model: "deepseek-v4.1-flash", FallbackOnly: true},
 	}
 	if len(pool) != len(want) {
 		t.Fatalf("default pool = %v, want %v", pool, want)
@@ -31,5 +33,15 @@ func TestDefaultPoolMembers(t *testing.T) {
 	}
 	if _, ok := Lookup("opencode-go", "cat-jam-free"); !ok {
 		t.Fatal("cat-jam-free should stay in the catalog, out of the pool only")
+	}
+}
+
+// A fallback-only member takes no share of threads; the others keep theirs.
+func TestFallbackOnlyMemberHasNoSlotWeight(t *testing.T) {
+	if w := (PoolMember{Weight: 3, FallbackOnly: true}).SlotWeight(); w != 0 {
+		t.Fatalf("fallback-only slot weight = %d, want 0", w)
+	}
+	if w := (PoolMember{}).SlotWeight(); w != 1 {
+		t.Fatalf("default slot weight = %d, want 1", w)
 	}
 }
