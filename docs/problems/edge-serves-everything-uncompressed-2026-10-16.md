@@ -44,3 +44,28 @@ Caddy `encode zstd gzip` on the `choir.news` site, with an explicit
 SVG), so `text/event-stream` is never encoded whatever Caddy's default
 list does. Acceptance: on choir.news the story bundle and the app
 scripts come back with `Content-Encoding`, and an SSE route does not.
+
+## Regression introduced by the fix (869420ad3, found 23:25)
+
+Deployed at 23:15, the edge compresses: on the wire the story bundle is
+55 KB (zstd) instead of 467 KB, the app script 91 KB instead of 271 KB,
+the stylesheet 14 KB instead of 77 KB. The deployed spec passes 3 of 3.
+
+But on staging an SSE stream that has not sent an event yet now sends **no
+response headers** when the client advertises compression (every browser
+does). On the paper's Texture document stream, with
+`Accept-Encoding: identity` the headers came at 0.96 s; with
+`gzip, br, zstd` none came in 25 s. Caddy's encoder holds the headers
+until the first body write, so it can choose an encoding, and it ignores
+the upstream's early flush. The content-type match is only checked once
+there is a body. The local harness (Caddy 2.11.7, HTTP/1.1) did not show
+this; Node B runs 2.11.4 over HTTP/2.
+
+Impact: `frontend/src/lib/lifecycle.js` waits for the EventSource `open`
+before it loads the trajectory snapshot, so a lifecycle view of an idle
+trajectory hangs until its next event. The Texture document stream's
+`open` is late in the same way.
+
+Fix direction: skip encoding for any request that asks for a stream
+(`Accept: text/event-stream`, which EventSource always sends). The
+encoder then never wraps a stream response at all.
