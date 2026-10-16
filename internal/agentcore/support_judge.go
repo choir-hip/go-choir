@@ -34,7 +34,7 @@ func (rt *Runtime) SetCandidateJudge(judge CandidateJudge) {
 }
 
 // candidateJudgmentModel names the model the gateway pins for judgments.
-const candidateJudgmentModel = "typesafe/jev-1.13"
+const candidateJudgmentModel = "~typesafe/jev-latest"
 
 // Support judgement off every desk's turn
 // (docs/reports/support-judgement-to-jev-design-2026-10-14.md). A Texture

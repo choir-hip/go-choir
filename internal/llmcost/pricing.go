@@ -83,6 +83,10 @@ var pricingTable = []ModelPricing{
 	// Jev 1.13: TypeSafe through OpenRouter's Decisions endpoint; output is
 	// not billed, and no cached rate is listed.
 	{Provider: "typesafe", Model: "jev-1.13", InputPerMillion: 0.042, OutputPerMillion: 0},
+	// Jev 1.14 (2026-10-14) at the same rate, observed in usage.cost; the
+	// gateway calls the jev-latest alias, which resolves to it.
+	{Provider: "typesafe", Model: "jev-1.14", InputPerMillion: 0.042, OutputPerMillion: 0},
+	{Provider: "typesafe", Model: "jev-latest", InputPerMillion: 0.042, OutputPerMillion: 0},
 	// Free previews on opencode-go: found at $0, not unpriced. Free "for a
 	// limited time" with no end date; LongCat 2.5 Preview lists at about
 	// 0.30/1.20 elsewhere (unverified), Cat Jam has no known origin.

@@ -1,6 +1,7 @@
 package llmcost
 
 import "testing"
+
 func TestLookupPricingDatedSnapshot(t *testing.T) {
 	t.Parallel()
 	// Dated OpenAI snapshots should resolve to the base pricing entry.
@@ -74,6 +75,8 @@ func TestLookupPricingModelsInUse(t *testing.T) {
 		{"cat-jam-free", 0, 0},
 		{"typesafe/jev-1.13", 0.042, 0},
 		{"jev-1.13", 0.042, 0},
+		{"typesafe/jev-1.14-20261014", 0.042, 0},
+		{"~typesafe/jev-latest", 0.042, 0},
 		{"deepseek-v4-pro", 1.32, 3.96},
 		{"kimi-k2p6", 0.95, 4.00},
 	}

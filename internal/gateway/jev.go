@@ -17,14 +17,15 @@ import (
 )
 
 const (
-	jevModel                = "typesafe/jev-1.13"
+	jevModel                = "~typesafe/jev-latest"
 	openRouterDecisionsURL  = "https://openrouter.ai/api/alpha/decisions"
 	jevTransportTimeout     = 2 * time.Minute
 	jevTransportMaxBodySize = 1 << 20
 )
 
 // JudgmentRequest is the gateway wire contract for a Jev decision. The model
-// is deliberately absent: the gateway pins it to typesafe/jev-1.13.
+// is deliberately absent: the gateway pins it to ~typesafe/jev-latest
+// (owner, 2026-10-16), and each receipt records the concrete model served.
 type JudgmentRequest struct {
 	State     json.RawMessage            `json:"state"`
 	Questions map[string]json.RawMessage `json:"questions"`

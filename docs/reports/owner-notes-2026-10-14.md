@@ -500,3 +500,31 @@ Given by the owner before sleep. Quotes are the owner's words.
   decide routine questions without waiting for the owner. The signing
   authority for witness (b) is a credential choice, so it still waits
   for the owner.
+
+## 25. Capture separate from production; Jev at ingestion; pin jev-latest (2026-10-16, ~00:10 UTC)
+
+- **Separate source capture from article production.** "There needs to be
+  some separation between source capture and article production. That's
+  the whole idea of having the object graph intermediate representation,
+  the world model, the ontology." One source at time T publishes
+  nothing. More sources arriving at T′ and T″ accumulate on the same
+  event, and the article is produced after that. The owner said this is
+  not prescriptive: "I don't even know exactly how the whole system
+  operates right now."
+- **The world model is retrieved from, first.** It is "something that
+  we're producing, but also something that we're retrieving from.
+  Probably more important to retrieve from that than to be retrieving the
+  articles as the first order retrievals." It gives researchers "a more
+  token efficient way to comprehend the world beyond their knowledge
+  cutoff." This is the overnight priority.
+- **Jev is allowed at ingestion.** "Between embeddings and a model call is
+  Jev. So we can use Jev during capture/ingestion." The no-model-calls
+  rule for ingestion (§24) means no desk or agent runs. Typed Jev
+  judgments per capture are in scope.
+- **Pin `~typesafe/jev-latest`.** "We should pin Jev-latest." The
+  receipts record the concrete served model for every call. A probe at
+  00:08 UTC showed the alias resolving to `typesafe/jev-1.14-20261014`,
+  with the same response shape and price as 1.13 ($0.042/M input) and a
+  262,144-token context. Above about 32 KB of text, 1.14 runs in a slower
+  long-context mode. Version drift is accepted in exchange for upgrades;
+  the served model on each receipt keeps it traceable.
