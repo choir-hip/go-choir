@@ -329,3 +329,43 @@ Both returned **ready with changes**. Raw output is in
 | Single-outlet official sources: all wait (Gemini), or an aged, bounded wake for `sources.Source.Official` events (Devin) | split | **Decided for V3: Devin's aged wake.** An official-source event still single-outlet after one poll interval wakes management once, so it can ask research for a second source. The publish gate is unchanged. Gemini's concern (noise) is met by the age bound and one wake per event |
 | `Stories`, `Delegate("intake")` and Feed/Decline are gated on `intake.labels` | Devin | **V3 must decide the enable matrix.** Lean: fold the topic question into the batched call, migrate the gates to `intake.events`, and retire per-capture label calls, so calls stop scaling with captures |
 | Batched multi-question accuracy is unmeasured | Devin | **V1 acceptance:** replay the 500-capture study coalesced, against per-capture resolution, and report agreement before V3 depends on it |
+
+## 14. Coalesced versus per-capture accuracy (Devin's V1 measure, 2026-10-16 about 00:40 UTC)
+
+**Setup.** The same 500 captures were replayed with the V1 algorithm in
+both modes:
+- chunks of up to 12 per call, with sibling choices and the tentative
+  band;
+- one capture per call.
+
+**Results.**
+
+| | Coalesced | Per capture |
+|---|---|---|
+| Calls | **137** | 499 |
+| Cost | **$0.040** | $0.062 |
+| Events | 202 | 160 |
+| Tentative members | 61 | 56 |
+| Same-event pairs | 1,159 | 1,504 |
+| Share of its pairs the other mode also made | **0.93** | 0.72 |
+
+**Reading the disagreements (orchestrator, not blind).**
+- **Pairs only the per-capture mode made lean toward topic merges.**
+  Examples: a box-office report with a film review, a mortgage-rate data
+  page with a rates article, and a president's statement with the strike
+  it reacts to (a development, arguably the same event).
+- **Pairs only the coalesced mode made are mostly correct same-event
+  joins**, among them the Romania tanker reports.
+
+**Conclusion.** Coalesced resolution is more conservative, with fewer
+merges and fewer topic merges, at about a quarter of the calls. That is
+the right bias for a gate whose failure mode is false corroboration.
+
+**Remaining measures.**
+- **Missed merges.** The coalesced run split the Romania tanker event
+  into more than one cluster.
+- **The V1.5 merge question,** which is the repair for missed merges.
+
+The replay includes research-read captures (FEC pages, review
+aggregators), which V1 does not resolve (it takes only source-poll
+captures), so production precision should be higher.
