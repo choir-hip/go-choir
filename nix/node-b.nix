@@ -1290,6 +1290,45 @@ in
     };
   };
 
+  # btrfs chunk headroom for metadata. The platform artifact store writes
+  # millions of small files, which btrfs keeps inline in metadata; when every
+  # chunk is allocated to data, metadata cannot grow and writes fail with
+  # ENOSPC while df shows 135 GB free
+  # (docs/problems/node-b-btrfs-metadata-exhausted-small-artifact-files-2026-10-16.md).
+  # Once a day, if unallocated space is under 30 GiB, relocate at most 20
+  # data chunks that are at most 20% used, returning them as unallocated
+  # space. Bounded and online; no file content changes.
+  # Rollback: remove this unit and timer.
+  systemd.services.go-choir-btrfs-headroom = {
+    description = "go-choir btrfs unallocated-space headroom for metadata";
+    serviceConfig = {
+      Type = "oneshot";
+      Nice = 19;
+      IOSchedulingClass = "idle";
+      ExecStart = pkgs.writeShellScript "go-choir-btrfs-headroom" ''
+        set -euo pipefail
+        export PATH="${lib.makeBinPath [ pkgs.coreutils pkgs.btrfs-progs ]}:$PATH"
+        unallocated=$(btrfs filesystem usage -b / | awk '/Device unallocated:/ {print $3}')
+        echo "btrfs unallocated: $((unallocated / 1073741824)) GiB"
+        if [ "$unallocated" -ge $((30 * 1073741824)) ]; then
+          exit 0
+        fi
+        btrfs balance start -dusage=20,limit=20 /
+        btrfs filesystem usage -b / | awk '/Device unallocated:/ {print "btrfs unallocated after balance: " int($3 / 1073741824) " GiB"}'
+      '';
+    };
+  };
+
+  systemd.timers.go-choir-btrfs-headroom = {
+    description = "Daily go-choir btrfs metadata headroom check";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "daily";
+      RandomizedDelaySec = "1h";
+      Persistent = true;
+    };
+  };
+
   systemd.services.go-choir-platform-dolt-history-audit = {
     description = "go-choir platform dolt commit-history growth audit";
     after = [ "go-choir-platform-dolt.service" ];
