@@ -13,7 +13,7 @@ func TestPromptCoreTeachesWriteCitationsAndTurnVerbs(t *testing.T) {
 	prompt := DefaultSystemPrompt()
 	for _, want := range []string{
 		"choir.Write(edits, why)", "@replace", "@insert", "@delete", "@move", "@section", "@all",
-		`{{cite r2.c1 "`, "{{embed", "{{ref", "names its line",
+		`{{cite r2.c1 "`, "{{ref", "names its line",
 		"choir.Done(why)", "choir.Wait(why)", "choir.Reject(record, why)",
 		`choir.Cast("research", objective, packet)`, `choir.Cast("management", objective, packet)`, "execution_request",
 		"choir.ReadDoc()", "frame", "r1..rM", "b1..bN",
@@ -21,6 +21,11 @@ func TestPromptCoreTeachesWriteCitationsAndTurnVerbs(t *testing.T) {
 		if !strings.Contains(prompt, want) {
 			t.Errorf("prompt core does not teach %q", want)
 		}
+	}
+	// Write refuses {{embed}}: a story never reprints a source's text
+	// (owner, 2026-10-16).
+	if strings.Contains(prompt, "{{embed") {
+		t.Error("prompt core still teaches {{embed}}")
 	}
 }
 

@@ -611,16 +611,12 @@ func (w *writer) citation(t Token) (texturedoc.Node, bool) {
 		ref.Hash = blockHash(capture.Blocks, match.BlockID)
 		ref.Span = RefSpanOf(match, blockText(capture.Blocks, match.BlockID))
 		tier = string(match.Tier)
-	} else if t.Kind == TokenCite {
+	} else {
 		w.errs.add(t.Line, "{{cite %s}} needs the quoted source words", t.Handle)
 		return texturedoc.Node{}, false
 	}
 	entityID := w.entityFor(capture)
-	mode := "numbered_ref"
-	if t.Kind == TokenEmbed {
-		mode = "expanded_ref"
-	}
-	attrs := map[string]any{"id": w.newID("ref", ""), "source_entity_id": entityID, "display_mode": mode, refAttr: refAttrValue(ref)}
+	attrs := map[string]any{"id": w.newID("ref", ""), "source_entity_id": entityID, "display_mode": "numbered_ref", refAttr: refAttrValue(ref)}
 	if tier != "" {
 		attrs[tierAttr] = tier
 	}

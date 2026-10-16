@@ -102,7 +102,7 @@ func (f Frame) renderDoc(b *strings.Builder) {
 			digest = strings.TrimSpace(digest[:80]) + "…"
 		}
 		cited := ""
-		if n := strings.Count(blk.Text, "{{cite") + strings.Count(blk.Text, "{{embed") + strings.Count(blk.Text, "{{ref"); n > 0 {
+		if n := strings.Count(blk.Text, "{{cite") + strings.Count(blk.Text, "{{ref"); n > 0 {
 			cited = fmt.Sprintf(", %d citations", n)
 		}
 		fmt.Fprintf(b, "%s [%s, %d chars%s] %s\n", blk.Alias, blk.Kind, len(blk.Text), cited, digest)

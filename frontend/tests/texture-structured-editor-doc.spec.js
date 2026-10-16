@@ -6,6 +6,7 @@ import {
   serializeEditorStructuredDoc,
   sourceEntitiesForStructuredDoc,
 } from '../src/lib/texture-structured-editor-doc.ts';
+import { buildPublishedCitationContext } from '../src/lib/texture-published-citations.ts';
 
 const ELEMENT_NODE = 1;
 const TEXT_NODE = 3;
@@ -119,7 +120,10 @@ test('structured docs render source refs as native non-link citation atoms', () 
   expect(html).not.toContain('source:src-1');
 });
 
-test('structured docs render expanded_ref source refs as a block with preserved source text', () => {
+// An embed ({{embed}}, display_mode expanded_ref) is a transclusion: the same
+// inline numbered marker a cite gets, never the source's text as a block on
+// the page (docs/problems/published-embeds-republish-source-text-2026-10-16.md).
+test('structured docs render expanded_ref source refs as an inline numbered marker', () => {
   const bodyDoc = {
     schema: 'choir.texture_doc.v1',
     doc: {
@@ -152,16 +156,14 @@ test('structured docs render expanded_ref source refs as a block with preserved 
 
   const html = renderStructuredTextureDocHTML(bodyDoc, [entity]);
 
-  // A transclusion is a block of its own, never a block inside a paragraph
-  // (the HTML parser would close the paragraph around it).
-  expect(html).toContain('data-embed-block');
+  expect(html).toMatch(/^<p><span class="texture-source-ref" data-texture-source-ref[^>]*data-source-display-mode="expanded_ref"/);
   expect(html).toContain('data-texture-source-node-id="ref-expanded"');
-  expect(html).toContain('data-source-display-mode="expanded_ref"');
-  expect(html).toContain('Carrier service advisory');
-  expect(html).toContain('Expanded source excerpt should be visible.');
-  expect(html).not.toMatch(/<p>[^]*data-embed-block/);
+  expect(html).toContain('<span class="texture-source-ref-label">1</span>');
+  expect(html).toMatch(/data-texture-source-ref-popover[^]*Carrier service advisory[^]*Open source/);
+  expect(html).not.toContain('data-embed-block');
+  expect(html).not.toContain('texture-source-ref-block');
+  expect(html).not.toContain('Full source viewer text');
   expect(html).not.toContain('source:src-expanded');
-  expect(html).not.toContain('data-texture-source-embed');
 });
 
 test('structured doc source entities keep only attached entities', () => {
@@ -193,12 +195,13 @@ test('structured doc source entities keep only attached entities', () => {
 // Write-era citations (docs/problems/prompt-bar-research-slow-unsynthesized-
 // mangled-2026-10-14.md). A Write citation carries its quote in attrs.ref and
 // its entity's selector is the whole resource, so an unpublished renderer
-// that reads only the entity's excerpt shows an empty popover, and an
-// {{embed}} drawn inside its paragraph broke the paragraph: a stray title
-// line, then a lone "[n]" paragraph. Ways it can fail:
+// that reads only the entity's excerpt shows an empty popover. An {{embed}}
+// was drawn as a block of the source's text; it is now the same inline
+// marker as a cite (docs/problems/published-embeds-republish-source-text-
+// 2026-10-16.md). Ways it can fail:
 //   1. the numbered cite's popover does not carry the citation's own quote;
-//   2. the embed is drawn inside a <p> (block inside inline) or loses its
-//      quote, its number or its title;
+//   2. the embed splits its paragraph, prints the source's text on the page,
+//      or loses its quote, its number or its title from the popover;
 //   3. the embed does not serialize back to the same expanded_ref citation;
 //   4. bold that reached a text node as literal ** stays literal, or
 //      asterisks that are not emphasis turn bold, or marked text is touched.
@@ -245,7 +248,7 @@ test('a Write citation popover shows the citation quote', () => {
   expect(html).toMatch(/data-texture-source-ref-popover[^]*texture-transclusion-quote[^]*On average, it now costs around 75% less to run\./);
 });
 
-test('a Write embed renders as its own block with its quote, number and title', () => {
+test('a Write embed renders inline as a numbered marker whose popover carries its quote', () => {
   const entity = writeEntity('src_b', 'Execution of Follow-on Investment', 'https://example.com/softbank');
   const bodyDoc = writeDoc([{
     type: 'paragraph',
@@ -253,30 +256,78 @@ test('a Write embed renders as its own block with its quote, number and title', 
     content: [
       { type: 'text', text: 'SoftBank closed its third tranche.' },
       writeRef('ref-embed', 'src_b', 'expanded_ref', 'SoftBank completed the third tranche of its follow-on investment.'),
-      { type: 'text', text: 'The round values the company higher.' },
+      { type: 'text', text: ' The round values the company higher.' },
     ],
   }]);
   const html = renderStructuredTextureDocHTML(bodyDoc, [entity]);
 
-  expect(html).toContain('<p>SoftBank closed its third tranche.</p>');
-  expect(html).toContain('<p>The round values the company higher.</p>');
-  expect(html).toMatch(/<\/p>\s*<figure class="texture-embed-block" data-embed-block data-texture-local-embed data-texture-source-node-id="ref-embed"/);
-  expect(html).toContain('<blockquote class="texture-embed-quote">SoftBank completed the third tranche of its follow-on investment.</blockquote>');
-  expect(html).toContain('<span class="texture-source-number">[1]</span>');
-  expect(html).toContain('href="https://example.com/softbank"');
-  expect(html).not.toMatch(/<p>[^<]*<span[^>]*data-texture-source-ref[^>]*data-source-display-mode="expanded_ref"/);
+  expect(html.startsWith('<p>SoftBank closed its third tranche.<span class="texture-source-ref"')).toBe(true);
+  expect(html).toMatch(/<span class="texture-source-ref"[^>]*data-source-display-mode="expanded_ref"[^>]*>/);
+  expect(html).toContain('data-texture-source-node-id="ref-embed"');
+  expect(html).toMatch(/ The round values the company higher\.<\/p>$/);
+  expect(html).toContain('<span class="texture-source-ref-label">1</span>');
+  expect(html).toMatch(/data-texture-source-ref-popover[^]*Execution of Follow-on Investment[^]*texture-transclusion-quote[^]*SoftBank completed the third tranche of its follow-on investment\./);
+  expect(html).not.toContain('data-embed-block');
+  expect(html).not.toContain('<blockquote');
 
-  const figure = element('figure', {
-    'data-embed-block': '',
-    'data-texture-local-embed': '',
+  const marker = element('span', {
+    'data-texture-source-ref': '',
     'data-texture-source-node-id': 'ref-embed',
     'data-source-entity-id': 'src_b',
-  }, [text('SoftBank completed the third tranche of its follow-on investment. [1] Execution of Follow-on Investment')]);
-  const roundTrip = serializeEditorStructuredDoc(element('div', {}, [figure]));
+    'data-source-display-mode': 'expanded_ref',
+  }, [text('1')]);
+  const roundTrip = serializeEditorStructuredDoc(element('div', {}, [element('p', {}, [text('SoftBank closed its third tranche.'), marker])]));
   expect(roundTrip.doc.content[0]).toMatchObject({
     type: 'paragraph',
-    content: [{ type: 'source_ref', attrs: { id: 'ref-embed', source_entity_id: 'src_b', display_mode: 'expanded_ref' } }],
+    content: [
+      { type: 'text', text: 'SoftBank closed its third tranche.' },
+      { type: 'source_ref', attrs: { id: 'ref-embed', source_entity_id: 'src_b', display_mode: 'expanded_ref' } },
+    ],
   });
+});
+
+// A published embed pins capture blocks, which keep page furniture ("Save",
+// "Share", photo credits). The reader shows the marker; the pinned blocks
+// never reach the page, and a quoted embed's popover marks its quote.
+test('a published embed renders as an inline marker and never prints its pinned blocks', () => {
+  const bodyDoc = writeDoc([{
+    type: 'paragraph',
+    attrs: { id: 'p-pub' },
+    content: [
+      { type: 'text', text: 'Commercial goods stay out.' },
+      { type: 'source_ref', attrs: { id: 'ref-whole', source_entity_id: 'src_g', display_mode: 'expanded_ref', ref: { doc: 'cap-g', version: 'v1' } } },
+      { type: 'text', text: ' Aid groups object.' },
+      writeRef('ref-quoted', 'src_b', 'expanded_ref', 'We cannot go back'),
+      { type: 'text', text: ' Talks continue.' },
+    ],
+  }]);
+  const bundle = {
+    artifact: { body_doc: bodyDoc },
+    payload: {
+      manifest: JSON.stringify({ anchors: [
+        { anchor_id: 'ref-whole', relation: 'embeds', ref: { doc: 'cap-g', version: 'v1' }, cids: ['g1', 'g2', 'g3'] },
+        { anchor_id: 'ref-quoted', relation: 'embeds', ref: { doc: 'cap-src_b', version: 'v1', cid: 'c3', quote: 'We cannot go back' }, cids: ['c3'] },
+      ] }),
+      resolved_blocks: [
+        { doc: 'cap-g', cid: 'g1', text: 'Save', kind: 'p', url: 'https://example.com/gaza', title: 'Israel halts commercial goods' },
+        { doc: 'cap-g', cid: 'g2', text: 'Share', kind: 'p' },
+        { doc: 'cap-g', cid: 'g3', text: 'Image caption, a charity kitchen', kind: 'p' },
+        { doc: 'cap-src_b', cid: 'c3', text: 'Pires said: We cannot go back to that.', kind: 'p', url: 'https://example.com/unicef', title: 'UNICEF briefing' },
+      ],
+    },
+    checks: { citations: [{ anchor_id: 'ref-quoted', state: 'exact' }] },
+  };
+  const citations = buildPublishedCitationContext(bundle, []);
+  const html = renderStructuredTextureDocHTML(bodyDoc, [], { citations });
+
+  expect(html.startsWith('<p>Commercial goods stay out.<span class="texture-source-ref')).toBe(true);
+  expect(html.endsWith(' Talks continue.</p>')).toBe(true);
+  expect(html).not.toContain('data-embed-block');
+  expect(html).not.toContain('Save');
+  expect(html).not.toContain('Share');
+  expect(html).not.toContain('Image caption');
+  expect(html).toMatch(/data-citation-anchor="ref-whole"[^>]*>\s*<span class="texture-source-ref-label">1<\/span>[^]*Israel halts commercial goods[^]*Open source/);
+  expect(html).toMatch(/data-citation-anchor="ref-quoted"[^>]*>\s*<span class="texture-source-ref-label">2<\/span>[^]*<mark class="texture-citation-quote"[^>]*>We cannot go back<\/mark>/);
 });
 
 test('literal ** in an unmarked text node renders bold; other asterisks and marked text stay as they are', () => {

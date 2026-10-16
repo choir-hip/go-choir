@@ -91,36 +91,6 @@
   margin: 0.35rem 0 0.5rem;
 }
 
-.rendered-doc .texture-embed-block {
-  margin: 0 0 1rem;
-  border: 1px solid var(--choir-border-strong);
-  border-radius: 8px;
-  padding: 0.7rem 0.85rem;
-  background: var(--choir-state-hover);
-}
-
-.rendered-doc .texture-embed-quote {
-  margin: 0 0 0.55rem;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.rendered-doc .texture-embed-more {
-  display: block;
-  margin-bottom: 0.4rem;
-  color: var(--choir-text-muted, var(--choir-text-primary));
-  font-size: 0.82rem;
-}
-
-.rendered-doc .texture-embed-block figcaption {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.82rem;
-  overflow-wrap: anywhere;
-}
-
 .rendered-doc .texture-source-number {
   font-weight: 820;
 }

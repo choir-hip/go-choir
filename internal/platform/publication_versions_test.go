@@ -286,12 +286,13 @@ func TestPublishPinsCitedBlocksAndOverlayStaysOutsideTheManifest(t *testing.T) {
 	res, err := texturewrite.Apply(ctx, texturewrite.Input{
 		OwnerID: "owner-1", DocID: "doc-story", Seed: "rev-a",
 		Base:     texturewrite.PlainDoc("doc-story", "rev-0", "# Harbor"),
-		Script:   "@insert end\nThe harbor reopens {{cite " + captureID + " \"harbor reopens at dawn\"}}.\n\nAgain {{cite " + captureID + " \"reopens at dawn on Monday\"}}.\n\n{{embed " + captureID + " \"Ferry service resumes\"}}",
+		Script:   "@insert end\nThe harbor reopens {{cite " + captureID + " \"harbor reopens at dawn\"}}.\n\nAgain {{cite " + captureID + " \"reopens at dawn on Monday\"}}.\n\nFerries run {{cite " + captureID + " \"Ferry service resumes\"}}.",
 		Resolver: captures,
 	})
 	if err != nil {
 		t.Fatalf("Write: %v", err)
 	}
+	markStoredEmbed(t, &res.Doc, "Ferry service resumes")
 	bodyDoc, _ := json.Marshal(res.Doc)
 	entities, _ := json.Marshal(res.Entities)
 	publish := func(n int, revisionID string, doc, ents json.RawMessage) (*PublishTextureResponse, error) {

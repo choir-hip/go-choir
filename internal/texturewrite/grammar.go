@@ -16,10 +16,11 @@
 //	@all                 rewrite the whole document with the text below
 //
 // Citations are inline tokens: {{cite <handle> "quote"}} cites the quoted
-// words of a captured source, {{embed <handle>}} or {{embed <handle>
-// "quote"}} transcludes it, and {{ref <source_entity_id>}} keeps a citation
-// made before Write existed. A handle is a frame source (r2.c1), a capture
-// id or a URL. Every refusal names the script line it is about.
+// words of a captured source, and {{ref <source_entity_id>}} keeps a
+// citation the frame shows (one made before Write existed, or a stored
+// embed that quoted nothing). {{embed}} is retired and refused. A handle
+// is a frame source (r2.c1), a capture id or a URL. Every refusal names
+// the script line it is about.
 package texturewrite
 
 import (

@@ -8,10 +8,15 @@ import (
 
 // Token kinds.
 const (
-	TokenCite  = "cite"
-	TokenEmbed = "embed"
-	TokenRef   = "ref"
+	TokenCite = "cite"
+	TokenRef  = "ref"
 )
+
+// tokenEmbedRetired is the {{embed}} token Write no longer takes: it printed
+// a source's text as a block on the published page, and a story cites
+// passages instead of reprinting its sources (owner, 2026-10-16;
+// docs/problems/published-embeds-republish-source-text-2026-10-16.md).
+const tokenEmbedRetired = "embed"
 
 // Token is one {{...}} citation token in a block's text.
 type Token struct {
@@ -251,7 +256,7 @@ func markDelim(m string) string {
 // parseToken reads `kind handle "quote"}}` after the opening braces and
 // returns the rest of the line.
 func parseToken(s string, line int) (*Token, string, *LineError) {
-	usage := `a citation token is {{cite <handle> "quote"}}, {{embed <handle>}} or {{ref <source id>}}`
+	usage := `a citation token is {{cite <handle> "quote"}} or {{ref <source id>}}`
 	s = strings.TrimLeft(s, " \t")
 	kindEnd := strings.IndexAny(s, " \t}")
 	if kindEnd <= 0 {
@@ -259,7 +264,9 @@ func parseToken(s string, line int) (*Token, string, *LineError) {
 	}
 	tok := &Token{Kind: strings.ToLower(s[:kindEnd]), Line: line}
 	switch tok.Kind {
-	case TokenCite, TokenEmbed, TokenRef:
+	case TokenCite, TokenRef:
+	case tokenEmbedRetired:
+		return nil, "", &LineError{Line: line, Msg: `{{embed}} is gone: a story does not reprint its sources. Cite the passage that supports the sentence with {{cite <handle> "exact words"}}`}
 	default:
 		return nil, "", &LineError{Line: line, Msg: "{{" + s[:kindEnd] + " is not a citation token; " + usage}
 	}
@@ -332,7 +339,7 @@ func quoteToken(q string) string {
 // TokenText renders a token the way the frame shows it and Write reads it.
 func TokenText(t Token) string {
 	switch {
-	case t.Kind == TokenRef || (t.Kind == TokenEmbed && t.Quote == ""):
+	case t.Kind == TokenRef:
 		return "{{" + t.Kind + " " + t.Handle + "}}"
 	default:
 		return "{{" + t.Kind + " " + t.Handle + " " + quoteToken(t.Quote) + "}}"

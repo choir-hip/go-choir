@@ -60,8 +60,8 @@ var spaceBeforeCloseRE = regexp.MustCompile(` ([,.;:!?)\]])`)
 
 // Checks lists every citation of doc in document order with its quote
 // check, and the support pairs of the captured ones, one per key. A
-// transclusion with no quote ({{embed}} of a whole capture) cites no
-// passage, so it is neither checked nor judged.
+// stored embed with no quote (a whole capture, from before {{embed}} was
+// retired) cites no passage, so it is neither checked nor judged.
 func Checks(doc texturedoc.StructuredTextureDoc, docID, revisionID string) ([]QuoteCheck, []types.CitationPair) {
 	var checks []QuoteCheck
 	var pairs []types.CitationPair

@@ -4,7 +4,9 @@
  * 2026-10-14.md). The owner's "What's current in ai" v4 showed:
  *   - paragraphs opening with literal "**OpenAI — GPT-6 "Astra".**";
  *   - a stray full-width title line and then a lone "[5]" paragraph, where
- *     an {{embed}} transclusion sat inside a paragraph;
+ *     an {{embed}} transclusion sat inside a paragraph. Embeds are retired;
+ *     a stored one draws as the numbered marker a cite gets
+ *     (docs/problems/published-embeds-republish-source-text-2026-10-16.md);
  *   - citation numbers whose quotes were nowhere to be read.
  *
  * The revision is served as a published bundle without citation anchors, so
@@ -13,9 +15,9 @@
  * Ways it can fail:
  *   1. bold reaches the page as "**" characters (a marked text node, or a
  *      legacy unmarked node holding paired "**");
- *   2. the embed is drawn inside a paragraph, so the HTML parser splits the
- *      paragraph: a title line, then a "[n]" paragraph of its own;
- *   3. the embed loses its quoted words, its number or its title;
+ *   2. the stored embed prints its source's text on the page, or splits its
+ *      paragraph (a title line, then a "[n]" paragraph of its own);
+ *   3. the embed's marker loses its quoted words, its number or its title;
  *   4. a numbered cite's popover does not carry the citation's own quote;
  *   5. the page scrolls horizontally at phone width.
  * A screenshot of the rendered reader is written to TEXTURE_RENDER_SHOT_DIR
@@ -128,7 +130,7 @@ function bundle() {
 
 test.use({ viewport: { width: 390, height: 844 }, storageState: { cookies: [], origins: [] } });
 
-test('a Write revision renders bold, its embed as a block and its cite quotes at phone width', async ({ page }, testInfo) => {
+test('a Write revision renders bold, a stored embed as a marker and its cite quotes at phone width', async ({ page }, testInfo) => {
   await page.route('**/auth/session', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ authenticated: false }) }),
   );
@@ -149,17 +151,18 @@ test('a Write revision renders bold, its embed as a block and its cite quotes at
   await expect(doc.locator('p strong', { hasText: 'EU AI Act enforcement begins.' })).toHaveCount(1);
   await expect(doc.locator('ul li', { hasText: 'Lists still render.' })).toHaveCount(1);
 
-  // 2-3. The embed is its own block with its quote, number and title; no
-  // paragraph is a lone "[n]" and no paragraph holds the embed.
-  const embed = doc.locator('[data-embed-block][data-texture-source-node-id="ref-embed"]');
-  await expect(embed).toBeVisible();
-  await expect(embed.locator('blockquote')).toHaveText(EMBED_QUOTE);
-  await expect(embed.locator('figcaption')).toContainText('[2]');
-  await expect(embed.locator('figcaption a')).toHaveText(EMBED_TITLE);
-  expect(await embed.evaluate((el) => el.closest('p') === null)).toBe(true);
+  // 2-3. The stored embed is an inline marker in its sentence: its popover
+  // carries its quote, number and title; nothing draws as a block, and no
+  // paragraph is a lone "[n]".
+  await expect(doc.locator('[data-embed-block]')).toHaveCount(0);
+  await expect(doc.locator('blockquote')).toHaveCount(0);
+  const embed = doc.locator('[data-texture-source-ref][data-texture-source-node-id="ref-embed"]');
+  await expect(embed.locator('.texture-source-ref-label')).toHaveText('2');
+  await expect(embed.locator('[data-texture-source-ref-popover] strong')).toHaveText(EMBED_TITLE);
+  await expect(embed.locator('[data-texture-source-ref-popover] .texture-transclusion-quote')).toHaveText(EMBED_QUOTE);
+  expect(await embed.evaluate((el) => el.closest('p')?.textContent.includes('SoftBank closed its third OpenAI tranche.'))).toBe(true);
   const loneMarkers = await doc.locator('p').evaluateAll((els) => els.map((el) => el.textContent.trim()).filter((t) => /^\[\d+\]$/.test(t) || t === ''));
   expect(loneMarkers).toEqual([]);
-  await expect(doc.locator('p', { hasText: 'SoftBank closed its third OpenAI tranche.' })).toHaveCount(1);
   await expect(doc.locator('p', { hasText: 'The money funds compute through 2027.' })).toHaveCount(1);
 
   // 4. The cite reads as a number in a whole sentence, and its popover

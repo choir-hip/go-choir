@@ -7,8 +7,10 @@
 //   - one numbered source per cited source, numbered in reading order;
 //   - per citation: its quote, the resolved blocks it is pinned to, and its
 //     check state (exact ✓, tolerant ≈, pending, unread source, failed ✗);
-//   - HTML for the inline numbered marker (with its quote popover), for a
-//     transcluded embed drawn as a block, and for the closing source list.
+//   - HTML for the inline numbered marker (with its quote popover) and for
+//     the source list. A stored embed (relation embeds) is the same marker:
+//     the reader never prints a source's text as a block
+//     (docs/problems/published-embeds-republish-source-text-2026-10-16.md).
 //
 // Everything is read from the bundle the public resolve route returns; it
 // never calls a computer.
@@ -55,8 +57,6 @@ export type PublishedCitationContext = {
   sources: PublishedSource[];
   sourceByKey: Map<string, PublishedSource>;
 };
-
-const EMBED_BLOCK_LIMIT = 8;
 
 // ---- checks ----
 
@@ -300,7 +300,6 @@ function citationBodyHTML(citation: PublishedCitation, tag: 'span' | 'blockquote
 export function renderPublishedCitationRef(ctx: PublishedCitationContext, anchorId: string): string | null {
   const citation = ctx.byAnchor.get(anchorId);
   if (!citation) return null;
-  if (citation.relation === 'embeds' && !citation.quote) return '';
   const source = ctx.sourceByKey.get(citation.sourceKey);
   if (!source) return null;
   const number = String(source.number);
@@ -310,27 +309,10 @@ export function renderPublishedCitationRef(ctx: PublishedCitationContext, anchor
     <span class="texture-source-ref-label">${escapeHTML(number)}</span>
     <span class="texture-source-ref-popover" data-texture-source-ref-popover data-texture-inline-transclusion role="note">
       <strong>${escapeHTML(source.title)}</strong>
-      <span class="texture-transclusion-body texture-citation-body" data-texture-transclusion-body data-texture-citation-body>${citationBodyHTML(citation, 'span')}</span>
+      ${citation.quote ? `<span class="texture-transclusion-body texture-citation-body" data-texture-transclusion-body data-texture-citation-body>${citationBodyHTML(citation, 'span')}</span>` : ''}
       ${entityID ? `<button type="button" class="texture-source-open" data-texture-open-source data-source-entity-id="${escapeHTML(entityID)}">Open source</button>` : ''}
     </span>
   </span>`;
-}
-
-/** A transcluded citation drawn as a block of its pinned source blocks. */
-export function renderPublishedEmbedBlock(ctx: PublishedCitationContext, anchorId: string): string | null {
-  const citation = ctx.byAnchor.get(anchorId);
-  if (!citation) return null;
-  const source = ctx.sourceByKey.get(citation.sourceKey);
-  const shown = citation.blocks.slice(0, EMBED_BLOCK_LIMIT);
-  const more = Math.max(0, citation.blocks.length - EMBED_BLOCK_LIMIT);
-  const title = source?.url
-    ? `<a href="${escapeHTML(source.url)}" rel="noopener noreferrer" target="_blank">${escapeHTML(source.title)}</a>`
-    : escapeHTML(source?.title || 'Source');
-  return `<figure class="texture-embed-block" data-embed-block data-citation-anchor="${escapeHTML(anchorId)}" data-source-entity-id="${escapeHTML(source?.entityID || '')}" contenteditable="false">
-    ${shown.map((block) => `<blockquote class="texture-embed-quote" data-pinned-cid="${escapeHTML(block.cid)}">${escapeHTML(block.text)}</blockquote>`).join('')}
-    ${more > 0 ? `<span class="texture-embed-more">${more} more ${more === 1 ? 'block' : 'blocks'} in the source</span>` : ''}
-    <figcaption><span class="texture-source-number">[${escapeHTML(String(source?.number || ''))}]</span> ${title}${citation.quote ? ` ${badgeHTML(citation)}` : ''}</figcaption>
-  </figure>`;
 }
 
 /** The numbered source list closing a published document. */

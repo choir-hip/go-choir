@@ -129,14 +129,13 @@ func nodeMarks(n texturedoc.Node) []string {
 	return out
 }
 
-// tokenOf is the token a citation renders as.
+// tokenOf is the token a citation renders as. A stored embed (display_mode
+// expanded_ref, from before {{embed}} was retired) renders as the cite of
+// its quote, or as a ref when it quoted nothing, so a block holding one
+// copies back unchanged.
 func tokenOf(n texturedoc.Node) Token {
-	if ref, ok := RefOf(n); ok {
-		kind := TokenCite
-		if stringAttr(n, "display_mode") == "expanded_ref" {
-			kind = TokenEmbed
-		}
-		return Token{Kind: kind, Handle: ref.Doc, Quote: ref.Quote}
+	if ref, ok := RefOf(n); ok && strings.TrimSpace(ref.Quote) != "" {
+		return Token{Kind: TokenCite, Handle: ref.Doc, Quote: ref.Quote}
 	}
 	return Token{Kind: TokenRef, Handle: stringAttr(n, "source_entity_id")}
 }

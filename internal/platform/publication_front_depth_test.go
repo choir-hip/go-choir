@@ -19,6 +19,7 @@ package platform
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -26,6 +27,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/sourcegraph"
 	"github.com/yusefmosiah/go-choir/internal/sources"
+	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/texturewrite"
 )
 
@@ -50,12 +52,13 @@ func TestFrontRowCarriesDepthCountedLikeTheReader(t *testing.T) {
 		OwnerID: "paper-owner", DocID: "doc-mauritius", Seed: "rev-a",
 		Base: texturewrite.PlainDoc("doc-mauritius", "rev-0", "# Mauritius"),
 		// AFP cited twice (one source), BBC embedded (a source).
-		Script:   "@insert end\nPolice shot a woman {{cite " + afp + " \"Police shot a woman\"}}; a curfew followed {{cite " + afp + " \"A curfew covers ten regions\"}}.\n\n{{embed " + bbc + " \"Water shortages drove the protests\"}}",
+		Script:   "@insert end\nPolice shot a woman {{cite " + afp + " \"Police shot a woman\"}}; a curfew followed {{cite " + afp + " \"A curfew covers ten regions\"}}.\n\nWater ran short {{cite " + bbc + " \"Water shortages drove the protests\"}}.",
 		Resolver: captures,
 	})
 	if err != nil {
 		t.Fatalf("Write: %v", err)
 	}
+	markStoredEmbed(t, &res.Doc, "Water shortages drove the protests")
 	bodyDoc, _ := json.Marshal(res.Doc)
 	entities, _ := json.Marshal(res.Entities)
 	if _, err := svc.PublishTexture(ctx, PublishTextureRequest{
@@ -132,5 +135,29 @@ func TestFrontDepthUnknownOnCorruptBodyAndCJKWords(t *testing.T) {
 	}
 	if got := countWords("Mixed 中文 text, 3 words"); got != 5 {
 		t.Fatalf("countWords mixed = %d, want 5", got)
+	}
+}
+
+// markStoredEmbed turns the Write citation quoting quote into an embed
+// (display_mode expanded_ref), as stories stored them before Write retired
+// {{embed}} (docs/problems/published-embeds-republish-source-text-2026-10-16.md).
+// Publishing must still read those.
+func markStoredEmbed(t *testing.T, doc *texturedoc.StructuredTextureDoc, quote string) {
+	t.Helper()
+	var walk func(n *texturedoc.Node) bool
+	walk = func(n *texturedoc.Node) bool {
+		if n.Type == "source_ref" && strings.Contains(fmt.Sprint(n.Attrs["ref"]), quote) {
+			n.Attrs["display_mode"] = "expanded_ref"
+			return true
+		}
+		for i := range n.Content {
+			if walk(&n.Content[i]) {
+				return true
+			}
+		}
+		return false
+	}
+	if !walk(&doc.Doc) {
+		t.Fatalf("no citation quotes %q", quote)
 	}
 }

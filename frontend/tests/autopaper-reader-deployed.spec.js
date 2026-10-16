@@ -232,8 +232,11 @@ test('Autopaper front list and stories as Texture published views, logged out at
       await expect(badge, `${slug}: badge of ${anchor.anchor_id}`).toHaveCount(1);
       expect(CHECK_STATES.has(await badge.getAttribute('data-check-badge'))).toBe(true);
     }
+    // A stored embed is a numbered marker; the reader never prints a
+    // source's text as a block (published-embeds-republish-source-text-2026-10-16).
+    await expect(reader.locator('[data-embed-block]'), `${slug}: no source text drawn as a block`).toHaveCount(0);
     for (const anchor of embeds) {
-      await expect(reader.locator(`[data-embed-block][data-citation-anchor="${anchor.anchor_id}"]`), `${slug}: transclusion ${anchor.anchor_id} as a block`).toHaveCount(1);
+      await expect(reader.locator(`[data-texture-source-ref][data-citation-anchor="${anchor.anchor_id}"]`), `${slug}: embed ${anchor.anchor_id} as a marker`).toHaveCount(1);
     }
     await expectNoHorizontalScroll(page, `story ${slug}`);
     checked.push({ slug, versions: story.version_count, citations: cites.length, embeds: embeds.length });

@@ -256,10 +256,15 @@ func TestSessionCellErrorCarriesSurfaceHint(t *testing.T) {
 // a staged write.
 func TestWriteHelpGivesTheWholeGrammar(t *testing.T) {
 	doc := choirFunctionDocs["Write"].Summary
-	for _, want := range []string{"@replace", "@insert", "@delete", "@move", "@section", "@all", "{{cite", "{{embed", "{{ref", "line"} {
+	for _, want := range []string{"@replace", "@insert", "@delete", "@move", "@section", "@all", "{{cite", "{{ref", "line"} {
 		if !strings.Contains(doc, want) {
 			t.Errorf("Write help does not mention %q", want)
 		}
+	}
+	// {{embed}} printed a source's text on the published page; Write
+	// refuses it, so its help must not teach it (owner, 2026-10-16).
+	if strings.Contains(doc, "{{embed") {
+		t.Error("Write help still teaches {{embed}}")
 	}
 }
 
