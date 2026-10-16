@@ -166,6 +166,8 @@ type depositUpcaster struct {
 	objects map[string]string
 	edges   map[string]string
 	file    *os.File
+	// added counts aliases this process recorded (renames by this replay).
+	added int
 }
 
 func (u *depositUpcaster) isActive() bool {
@@ -356,7 +358,22 @@ func (u *depositUpcaster) recordAlias(old, current string, edge bool) error {
 		return nil
 	}
 	aliases[old] = current
+	u.added++
 	return u.appendDeltaLocked(delta)
+}
+
+// depositUpcastAliasesAdded reports how many aliases this process's upcaster
+// recorded: a nonzero count means replay renamed a row.
+func (s *Store) depositUpcastAliasesAdded() int {
+	s.depositUpcastMu.Lock()
+	u := s.depositUpcast
+	s.depositUpcastMu.Unlock()
+	if u == nil {
+		return 0
+	}
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.added
 }
 
 // rewriteAliasID rewrites one ID-valued column through the alias ledger.

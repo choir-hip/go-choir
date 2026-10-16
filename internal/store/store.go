@@ -152,6 +152,10 @@ type Store struct {
 	// cut-over replay: set on a staged store whose live counterpart never
 	// upcast (RetainReplayDeposits).
 	retainReplayDeposits atomic.Bool
+	// vocabReplay records this process's replay since the last vocabulary
+	// fence, so the boot fence can check only the replayed rows
+	// (vocab_replay_fence.go).
+	vocabReplay vocabReplayTrack
 	// kernelMode marks the store post-ontology-kernel: bare OG state
 	// transitions that bypass the canonical reducer path fail closed instead
 	// of silently writing a non-event-backed mutation. Set by
@@ -930,6 +934,7 @@ func (s *Store) Reopen(path string) error {
 	s.depositUpcastMu.Lock()
 	s.depositUpcast = nil
 	s.depositUpcastMu.Unlock()
+	s.vocabReplay.reset()
 	s.db = live.db
 	s.readDB = live.readDB
 	s.path = live.path

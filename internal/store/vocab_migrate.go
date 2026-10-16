@@ -39,6 +39,12 @@ type MigrationReport struct {
 	// skip the rescan: replay is the only unguarded writer, and the write
 	// guard has refused non-V2 rows since the report existed.
 	FencedAt string `json:"fenced_at,omitempty"`
+	// ReplayOpenedAt marks that replay wrote this fenced store after the
+	// fence. It is persisted before the first replayed deposit commits and
+	// cleared only when the fence is stamped again, so a replay that spans
+	// processes (resume quantum, crash) is never trusted on the fast path
+	// (problems/s0-vocab-rescan-fires-on-any-replay-2026-10-01.md).
+	ReplayOpenedAt string `json:"replay_opened_at,omitempty"`
 	// OGObjects records every migrated og_objects row for INV-PROV revert:
 	// the original canonical ID plus every changed leaf's original value.
 	// Revert restores recorded leaves exactly, recomputes content_hash and
@@ -199,7 +205,9 @@ func (s *Store) VerifyServingVocabularyV2(ctx context.Context, progress func()) 
 // zero events were applied and a previously fenced report exists, the full
 // rescan is skipped: replay is the only writer that bypasses the write
 // guard, so a fenced store with no replayed events cannot contain non-V2
-// rows. progress, when non-nil, is ticked once per scanned row so callers
+// rows. When this process replayed onto a fenced store, only the replayed
+// rows are checked (vocab_replay_fence.go); a replay an earlier process
+// opened always takes the full pass. progress, when non-nil, is ticked once per scanned row so callers
 // can expose liveness during long scans (the guest health gate reports it
 // to the host stall detector).
 func (s *Store) MigrateAndFenceServingVocabulary(ctx context.Context, replayed bool, progress func()) (*MigrationReport, error) {
@@ -207,12 +215,33 @@ func (s *Store) MigrateAndFenceServingVocabulary(ctx context.Context, replayed b
 	if err != nil {
 		return nil, err
 	}
-	if !replayed && prior != nil && prior.FencedAt != "" {
+	if !replayed && prior != nil && prior.FencedAt != "" && prior.ReplayOpenedAt == "" {
 		// Fast path: nothing replayed and the fence already verified this
 		// store. The write guard has refused non-V2 rows since the report
-		// existed, so the serving vocabulary is still V2.
+		// existed, so the serving vocabulary is still V2. A replay marker
+		// means an earlier process replayed rows after the fence and never
+		// re-fenced them: the full pass decides.
 		s.vocabCutover.Store(true)
 		return prior, nil
+	}
+	if replayed && prior != nil && prior.FencedAt != "" {
+		// Narrowed path: check only the rows this process replayed
+		// (vocab_replay_fence.go). Anything it cannot prove takes the full
+		// pass below.
+		stays, err := s.vocabReplayStaysFenced(ctx, prior, progress)
+		if err != nil {
+			return nil, err
+		}
+		if stays {
+			prior.FencedAt = time.Now().UTC().Format(time.RFC3339Nano)
+			prior.ReplayOpenedAt = ""
+			if err := s.persistVocabMigrationReport(prior); err != nil {
+				return nil, err
+			}
+			s.vocabReplay.reset()
+			s.vocabCutover.Store(true)
+			return prior, nil
+		}
 	}
 	rep := &MigrationReport{Counts: map[string]int64{}}
 	// OG planning seeds its reference map from the persisted report so a
@@ -254,9 +283,11 @@ func (s *Store) MigrateAndFenceServingVocabulary(ctx context.Context, replayed b
 	// The fence verified: stamp the report so a zero-replay boot can skip
 	// the rescan, and persist the stamp before opening the gate.
 	rep.FencedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	rep.ReplayOpenedAt = ""
 	if err := s.persistVocabMigrationReport(rep); err != nil {
 		return nil, err
 	}
+	s.vocabReplay.reset()
 	s.vocabCutover.Store(true)
 	return rep, nil
 }
@@ -334,11 +365,38 @@ func (s *Store) persistVocabMigrationReport(rep *MigrationReport) error {
 	}
 	path := s.vocabReportPath()
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, raw, 0o644); err != nil {
+	// The report must be on disk, not only in the page cache, before the
+	// mutation or deposit it precedes commits: provenance before apply, and
+	// the replay marker before the first replayed deposit
+	// (vocab_replay_fence.go).
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+	if err != nil {
+		return fmt.Errorf("vocab migrate report persist: %w", err)
+	}
+	if _, err := f.Write(raw); err != nil {
+		_ = f.Close()
+		_ = os.Remove(tmp)
+		return fmt.Errorf("vocab migrate report persist: %w", err)
+	}
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		_ = os.Remove(tmp)
+		return fmt.Errorf("vocab migrate report persist: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(tmp)
 		return fmt.Errorf("vocab migrate report persist: %w", err)
 	}
 	if err := os.Rename(tmp, path); err != nil {
 		_ = os.Remove(tmp)
+		return fmt.Errorf("vocab migrate report persist: %w", err)
+	}
+	dir, err := os.Open(filepath.Dir(path))
+	if err != nil {
+		return fmt.Errorf("vocab migrate report persist: %w", err)
+	}
+	defer dir.Close()
+	if err := dir.Sync(); err != nil {
 		return fmt.Errorf("vocab migrate report persist: %w", err)
 	}
 	return nil
