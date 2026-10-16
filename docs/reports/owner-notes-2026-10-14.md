@@ -533,3 +533,8 @@ Given by the owner before sleep. Quotes are the owner's words.
   activated in the overnight scale-up. Telegram ingestion will come
   through MTProto, set up with the owner. The outlet key already names a
   Telegram channel as its own outlet (`t.me/<channel>`).
+- **Overnight mandate (about 00:24 UTC).** "You can take it and any of the
+  future work that we've documented forward ambitiously and creatively
+  and intelligently and courageously." The owner returns in the morning
+  to drive. Credential and authority choices (the witness (b) signing
+  key, the off-host backup target) still wait for them.
