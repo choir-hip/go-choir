@@ -1,6 +1,6 @@
 # Hacker News point counts mint a new capture every poll and wake the story each time (2026-10-17)
 
-Status: fixed (67201a94c, staging 09:07 UTC). Two-hour measurement in progress.
+Status: fixed and measured (67201a94c, staging 09:07 UTC).
 
 Found at 08:53 UTC during the hourly paper check. The story `365f889a`
 ("Llmspeed's linked page offers no captured product details") went from
@@ -138,3 +138,15 @@ First hour (paper):
   every poll.
 - "Nine-Inch Snails" stayed at 30 revisions. The 09:33 wake made no new
   revision.
+
+Through 10:51 (paper, 09:40 to 10:51):
+
+| | Before (06:48–08:53) | After (09:40–10:51) |
+|---|---|---|
+| Texture runs | 62 in 2 h 5 min | 30 in 1 h 11 min |
+| Documents woken on the 15-minute poll beat | 5 (36 runs) | none |
+| New revisions of the five HN stories | 4 to 15 each | none since 09:33 |
+| "Nine-Inch Snails" published versions | one every 15 minutes | none since |
+
+The btrfs metadata step at the deploy hour (+180 MiB) was the deploy.
+The next hour grew about 10 MiB, the same rate as before.
