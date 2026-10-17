@@ -1,6 +1,6 @@
 # A link-only capture counts as an outlet in the two-outlet publish gate (2026-10-17)
 
-Status: fix committed (see "Landed"); deploy and live check pending.
+Status: fixed and deployed (7ca01a329, staging 16:44 UTC). Waiting for the first live hold.
 
 Found on 2026-10-17 at about 17:00 UTC by the article-quality research pass
 (a read-only Sonnet subagent), and confirmed in the code by the
@@ -74,10 +74,13 @@ link-only capture.
 ## Landed
 
 `citedOutlets` counts a cited capture only if at least 20 letters remain outside its URLs and the HN link labels
-(`captureHoldsOnlyLinks`, `minOutletWords`). The threshold moved from the
-40 planned above to 20 because a real one-sentence Chinese excerpt has
+(`captureHoldsOnlyLinks`, `minOutletWords`). The threshold is 20, not the 40 first planned, because a real one-sentence Chinese excerpt has
 about 30 letters, and a link-only capture has about 0. The hold message
 adds "(not counted: <outlet>, whose capture holds only links, not the
 outlet's own words)". `TestLinkOnlyCaptureDoesNotCountAsAnOutlet` was
 written first and failed on the old gate, with one outlet plus a link-only capture
 published. It covers L1 to L4. The existing two-outlet test still passes.
+
+Deployed: CI run 39049755711 green; staging 7ca01a329 at 16:44:06. The paper
+took a clean planned restart at 16:41:59. A hold on a link-only capture logs
+"whose capture holds only links"; none had happened by 16:45.
