@@ -417,3 +417,26 @@ computer has about 4,500 a day.
   newest-1,000 corpus window and URL lookup (now all history); JSON-path
   scans for the five Store B lookups; unbounded newest-N sorts; edges to an
   id by kind.
+
+## Landed and proved on staging (2026-10-17)
+
+Pushed as main 4ed852b67, CI run 39047149193 green, staging deployed it at
+16:04:16. corpusd on Node B (corpus Dolt 2.4.2) ran the migration:
+- the two indexes built in 1,524 ms and 1,138 ms;
+- 42,145 lookup keys backfilled in 3,487 ms;
+- the throttled capture projection backfilled 13,887 captures in 44 s;
+- the migration finished at 16:02:55 (51 s);
+- `/health` reports `capture_index`, `capture_index_complete` and
+  `lookup_keys` live.
+
+Corpus Dolt memory afterwards was 2.2 GB, against its 5.4 GB MemoryHigh, with no unit restarts.
+
+Proof (steps 1-4 above, run on Node B):
+- capture by URL: the oldest of the paper's newest 3,000 captures
+  (2026-10-16 03:57) was found, with the same capture id;
+- search over all history: `searched` 12,132, `matched` 1,590;
+- owner scope: another owner on the same computer id gets 0 objects.
+
+Inline projection writes for new captures took about 7 ms, with 0 errors. The paper took a
+clean planned restart at 16:02:22. Step 5 (the paper's own research
+calls through the new routes) is checked after its next research run.
