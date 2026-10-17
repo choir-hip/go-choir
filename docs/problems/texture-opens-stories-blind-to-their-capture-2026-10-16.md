@@ -176,3 +176,18 @@ no longer shows. Decision: the guard stays unbuilt. Reopen if a story is
 again found stalled after a bare Wait (measure with `barewait.py <since>`
 in the session scratchpad: bare Wait cells and later runs on their
 documents).
+
+## Link-only residual measured (2026-10-17 06:53)
+
+Two of the paper's 92 documents opened since 2026-10-16 18:00 carry
+titles about their own capture: `365f889a` ("Llmspeed's linked page
+offers no captured product details", 06:32) and `d4ffc335` ("The linked
+essay is about car lights and Apple icons, not survey studies", 06:47).
+Texture read each capture and wrote truthfully that it does not hold
+the story the record promised. Neither is among the 100 newest stories
+on the public front (`/api/platform/publications/front?limit=500`), so
+the two-outlet gate is holding them back as designed. The upstream cause stays
+open: management opens stories on aggregator items whose capture is a
+link or an unrelated page. At about 2% of openings, a cost in Texture
+turns and not a reader-facing defect, this does not justify a fix yet.
+Reopen if one reaches the front.
