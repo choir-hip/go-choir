@@ -8,6 +8,7 @@ import (
 	stdhtml "html"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -113,7 +114,7 @@ func (p *RSSPoller) Poll(ctx context.Context, source *Source) (PollResult, error
 			published = parsed
 		}
 
-		bodyText := cleanFeedDescriptionText(feedItem.Description)
+		bodyText := dropHackerNewsCounters(cleanFeedDescriptionText(feedItem.Description))
 		item := Item{
 			ID:            StableItemID(*source, feedItem.GUID, feedItem.Link, feedItem.Title, feedItem.Description),
 			SourceID:      source.ID,
@@ -171,6 +172,22 @@ func cleanFeedDescriptionText(raw string) string {
 			}
 		}
 	}
+}
+
+// hackerNewsCounters matches the live points and comment count that
+// hnrss.org appends to every item description.
+var hackerNewsCounters = regexp.MustCompile(`\s*(?:Points: \d+|# Comments: \d+)`)
+
+// dropHackerNewsCounters removes an HN item's live counters from its feed
+// text. They change between polls, and in the body they gave the same item
+// a new capture, and its story a new wake, every poll
+// (docs/problems/hn-point-counts-mint-a-capture-every-poll-2026-10-17.md).
+// Only text that carries an HN comments link is touched.
+func dropHackerNewsCounters(text string) string {
+	if !strings.Contains(text, "Comments URL: https://news.ycombinator.com/item?id=") {
+		return text
+	}
+	return strings.TrimSpace(hackerNewsCounters.ReplaceAllString(text, ""))
 }
 
 func cleanFeedDescriptionWhitespace(text string) string {
