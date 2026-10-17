@@ -449,3 +449,65 @@ func TestRevisionCitingOneOutletIsHeldUntilASecondOutletIsCited(t *testing.T) {
 	}
 	pub.none(t, "after the two-outlet revision")
 }
+
+// linkOnlyCapture is a Hacker News feed item: its URL is the linked site,
+// its body only the links
+// (docs/problems/link-only-capture-counts-as-an-outlet-2026-10-17.md).
+var linkOnlyCapture = texturewrite.Capture{
+	Doc: "cap-hn", Version: "doc-hash-hn", URL: "https://tool.example.com/", Title: "Show HN: Tool",
+	Blocks: []quotematch.Block{{ID: "cid-h1", Text: "Article URL: https://tool.example.com/ Comments URL: https://news.ycombinator.com/item?id=1 Points: 52 # Comments: 21"}},
+}
+
+// shortExcerptCapture is a real one-sentence excerpt in Chinese, short in
+// letters but the outlet's own words.
+var shortExcerptCapture = texturewrite.Capture{
+	Doc: "cap-short", Version: "doc-hash-short", URL: "https://zh.example.cn/harbor", Title: "港口",
+	Blocks: []quotematch.Block{{ID: "cid-z1", Text: "港口周一重新开放，渡轮恢复运营，官员表示航运将在本周内全面恢复正常。"}},
+}
+
+// Ways the link-only rule can fail, written first: L1 a link-only capture
+// still counts as an outlet; L2 a short real excerpt in a non-Latin script
+// stops counting; L3 two real outlets plus a link-only capture are held;
+// L4 the hold does not say a capture held only links.
+func TestLinkOnlyCaptureDoesNotCountAsAnOutlet(t *testing.T) {
+	core, h, s, pub := storySetup(t)
+	captures := storyCaptures()
+	for _, c := range []texturewrite.Capture{linkOnlyCapture, shortExcerptCapture} {
+		captures[c.URL], captures[c.Doc] = c, c
+	}
+	core.SetTextureCaptures(captures)
+	rec := openStoryForTexture(t, h, s, "link-only", types.CastPublishAuto)
+	ctx := context.Background()
+	write := func(identity, edits string) string {
+		t.Helper()
+		base := headOf(t, s, rec)
+		out, err := h.CommitCellTextureAuthor(ctx, &rec, turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID,
+			Write: &yaegikernel.TextureWrite{Edits: edits, Why: "report"}}), identity)
+		if err != nil {
+			t.Fatalf("Write %s: %v", identity, err)
+		}
+		return out
+	}
+	linkCite := " The tool is listed {{cite https://tool.example.com/ \"Article URL: https://tool.example.com/\"}}."
+
+	// L1 and L4: one real outlet plus a link-only capture is one outlet.
+	out := write("write-link", "@all\n# Harbor\n\n"+citedOnce("The harbor reopens Monday.")+linkCite)
+	pub.none(t, "one outlet plus a link-only capture")
+	if !strings.Contains(out, `"publish_held"`) || !strings.Contains(out, "1 outlet") || !strings.Contains(out, "only links") {
+		t.Fatalf("turn result %s does not say the link-only capture was not counted", out)
+	}
+
+	// L2: a short real excerpt in Chinese counts.
+	write("write-short", "@all\n# Harbor\n\n"+citedOnce("The harbor reopens Monday.")+
+		" Ferries resume {{cite https://zh.example.cn/harbor \"渡轮恢复运营\"}}.")
+	if v := pub.next(t); v.Revision != 3 {
+		t.Fatalf("published %+v; want v3 (court plus a short Chinese excerpt)", v)
+	}
+
+	// L3: two real outlets plus a link-only capture publish.
+	write("write-three", "@all\n# Harbor\n\n"+cited("The harbor reopens Monday. Ferries resume.")+linkCite)
+	if v := pub.next(t); v.Revision != 4 {
+		t.Fatalf("published %+v; want v4 (two outlets plus a link-only capture)", v)
+	}
+	pub.none(t, "after the three-capture revision")
+}

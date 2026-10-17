@@ -1,6 +1,6 @@
 # A link-only capture counts as an outlet in the two-outlet publish gate (2026-10-17)
 
-Status: documented. Fix to follow.
+Status: fix committed (see "Landed"); deploy and live check pending.
 
 Found on 2026-10-17 at about 17:00 UTC by the article-quality research pass
 (a read-only Sonnet subagent), and confirmed in the code by the
@@ -39,7 +39,7 @@ from ingestion, is noted under "Not fixed here".
 ## Fix direction (orange: the publish gate; rollback is a git revert)
 
 In `citedOutlets`, a cited capture counts toward outlets only if it holds
-some of its outlet's own words. That means at least 40 letters remain once
+some of its outlet's own words. That means at least 20 letters remain once
 its URLs and the HN link labels ("Article URL:", "Comments URL:",
 "Points:", "# Comments:") are removed. The gate already reads every cited
 capture's blocks (`CaptureBlocks`), so this adds no read. The hold message
@@ -70,3 +70,14 @@ link-only capture.
   story on one. Fetching the linked article for HN feeds
   (`store_body_policy` `bounded_text` for `hn_frontpage` and `hn_show`)
   would give real text. That is a registry decision for the sources work.
+
+## Landed
+
+`citedOutlets` counts a cited capture only if at least 20 letters remain outside its URLs and the HN link labels
+(`captureHoldsOnlyLinks`, `minOutletWords`). The threshold moved from the
+40 planned above to 20 because a real one-sentence Chinese excerpt has
+about 30 letters, and a link-only capture has about 0. The hold message
+adds "(not counted: <outlet>, whose capture holds only links, not the
+outlet's own words)". `TestLinkOnlyCaptureDoesNotCountAsAnOutlet` was
+written first and failed on the old gate, with one outlet plus a link-only capture
+published. It covers L1 to L4. The existing two-outlet test still passes.

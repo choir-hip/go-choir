@@ -8,13 +8,16 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/yusefmosiah/go-choir/internal/outlet"
+	"github.com/yusefmosiah/go-choir/internal/quotematch"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/texturewrite"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -198,9 +201,12 @@ func (rt *Runtime) AutoPublishRevision(ctx context.Context, ownerID string, doc 
 		log.Printf("story publish: %s revision %s not published: %s", v.DocID, v.RevisionID, held)
 		return held
 	}
-	if outlets, err := rt.citedOutlets(ctx, ownerID, rev); err != nil || len(outlets) < MinPublishOutlets {
+	if outlets, linkOnly, err := rt.citedOutlets(ctx, ownerID, rev); err != nil || len(outlets) < MinPublishOutlets {
 		held = fmt.Sprintf("it cites %d outlet%s (%s); a story publishes only when its citations span at least %d distinct outlets, so v%d stays a gap; the next revision that cites another outlet's capture publishes",
 			len(outlets), plural(len(outlets)), strings.Join(outlets, ", "), MinPublishOutlets, v.Revision)
+		if len(linkOnly) > 0 {
+			held += fmt.Sprintf(" (not counted: %s, whose capture holds only links, not the outlet's own words)", strings.Join(linkOnly, ", "))
+		}
 		if err != nil {
 			held = "its cited captures could not be read (" + err.Error() + "), so v" + strconv.Itoa(v.Revision) + " stays a gap"
 		}
@@ -236,35 +242,79 @@ const MinPublishOutlets = 2
 const citedOutletsTimeout = 20 * time.Second
 
 // citedOutlets returns the distinct outlets of the captures rev cites,
-// sorted. A cited capture the store cannot resolve, or whose URL names no
-// outlet, does not count.
+// sorted, and the outlets of cited captures that hold only links. A cited
+// capture the store cannot resolve, whose URL names no outlet, or that
+// holds only links does not count.
 // A store that is not configured is an error: the revision is held.
-func (rt *Runtime) citedOutlets(ctx context.Context, ownerID string, rev types.Revision) ([]string, error) {
+func (rt *Runtime) citedOutlets(ctx context.Context, ownerID string, rev types.Revision) ([]string, []string, error) {
 	docs, err := texturewrite.CitedCaptures(rev)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	captures := rt.TextureCaptures()
 	if captures == nil {
-		return nil, fmt.Errorf("the capture store is not configured")
+		return nil, nil, fmt.Errorf("the capture store is not configured")
 	}
 	ctx, cancel := context.WithTimeout(ctx, citedOutletsTimeout)
 	defer cancel()
-	seen := map[string]bool{}
-	var out []string
+	seen, seenLinkOnly := map[string]bool{}, map[string]bool{}
+	var out, linkOnly []string
 	for _, doc := range docs {
 		capture, err := captures.CaptureBlocks(ctx, ownerID, doc)
 		if err != nil {
 			log.Printf("story publish: cited capture %s does not count toward outlets: %v", doc, err)
 			continue
 		}
-		if key := outlet.Of(capture.URL); key != "" && !seen[key] {
+		key := outlet.Of(capture.URL)
+		if key == "" {
+			continue
+		}
+		if captureHoldsOnlyLinks(capture.Blocks) {
+			if !seenLinkOnly[key] {
+				seenLinkOnly[key] = true
+				linkOnly = append(linkOnly, key)
+			}
+			continue
+		}
+		if !seen[key] {
 			seen[key] = true
 			out = append(out, key)
 		}
 	}
 	sort.Strings(out)
-	return out, nil
+	sort.Strings(linkOnly)
+	return out, linkOnly, nil
+}
+
+// minOutletWords is how many letters of its own a cited capture must hold,
+// once its links and link labels are removed, to speak for its outlet. A
+// Hacker News feed item's capture is addressed by the linked site but
+// holds only links, so it is not that site's report
+// (docs/problems/link-only-capture-counts-as-an-outlet-2026-10-17.md).
+// Twenty letters is under one short sentence in any script.
+const minOutletWords = 20
+
+var (
+	captureLinkPattern = regexp.MustCompile(`https?://\S+`)
+	captureLinkLabels  = strings.NewReplacer("Article URL:", " ", "Comments URL:", " ", "Points:", " ", "# Comments:", " ")
+)
+
+// captureHoldsOnlyLinks reports whether blocks hold fewer than
+// minOutletWords letters outside their URLs and link labels.
+func captureHoldsOnlyLinks(blocks []quotematch.Block) bool {
+	letters := 0
+	for _, b := range blocks {
+		text := captureLinkLabels.Replace(captureLinkPattern.ReplaceAllString(b.Text, " "))
+		for _, r := range text {
+			if unicode.IsLetter(r) {
+				letters++
+				if letters >= minOutletWords {
+					return false
+				}
+			}
+		}
+	}
+	return true
 }
 
 func plural(n int) string {
