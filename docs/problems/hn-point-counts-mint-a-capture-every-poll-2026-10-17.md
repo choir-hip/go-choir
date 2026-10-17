@@ -1,6 +1,6 @@
 # Hacker News point counts mint a new capture every poll and wake the story each time (2026-10-17)
 
-Status: documented. Fix to follow.
+Status: fixed (67201a94c, staging 09:07 UTC). Two-hour measurement in progress.
 
 Found at 08:53 UTC during the hourly paper check. The story `365f889a`
 ("Llmspeed's linked page offers no captured product details") went from
@@ -119,3 +119,22 @@ HN poll.
   the Note is correct.
 - The stories already opened on link-only HN items (the residual in
   texture-opens-stories-blind-to-their-capture-2026-10-16.md) stay as they are.
+
+## Landed (67201a94c)
+
+`dropHackerNewsCounters` in `internal/sources/rss.go` removes the
+counters at parse time. `TestRSSPollerDropsHackerNewsCounters` was written
+first and failed on the old parser. It checks four things: the body and
+content hash are stable when the counters move; a non-HN item that also
+reads "Points: N" is left alone; both URLs survive; Ask HN self-text
+survives. CI run 39019383320 passed. Staging deployed it at 09:07:18,
+and the paper took a planned restart at 09:06:56 with a clean console.
+
+First hour (paper):
+- Each HN story was woken **once** after the deploy, as expected, when the
+  counter-free capture arrived: `365f889a` at 09:18, and `3cb6c4b9`,
+  `9ff4d12d` and `4fe4f5df` at 09:33.
+- The 09:48 poll woke **none** of them. Before the fix, each was woken on
+  every poll.
+- "Nine-Inch Snails" stayed at 30 revisions. The 09:33 wake made no new
+  revision.
