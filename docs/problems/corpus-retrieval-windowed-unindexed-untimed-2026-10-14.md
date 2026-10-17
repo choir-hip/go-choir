@@ -440,3 +440,8 @@ Proof (steps 1-4 above, run on Node B):
 Inline projection writes for new captures took about 7 ms, with 0 errors. The paper took a
 clean planned restart at 16:02:22. Step 5 (the paper's own research
 calls through the new routes) is checked after its next research run.
+
+Step 5 (16:19): the paper's own calls go through the new routes. Since
+16:06, after the proof queries, corpusd logged 4 `capture_by_url` calls
+(mean 3.8 ms, 0 errors) and 2 more `capture_search` calls (70 ms with 251
+rows; 340 ms with 1,598 rows for a broad query), all with 0 errors.
