@@ -150,3 +150,18 @@ Through 10:51 (paper, 09:40 to 10:51):
 
 The btrfs metadata step at the deploy hour (+180 MiB) was the deploy.
 The next hour grew about 10 MiB, the same rate as before.
+
+## Related residual: publisher copy edits (2026-10-17 14:49)
+
+The Pope Leo story (`afbfdc7c`) was woken 11 times from 14:00 to 14:44,
+on the poll beat. The wakes are real news, Guardian and DW reporting
+his discharge. Three of them were the same DW item recaptured
+(`rss:dw_en`, 14:14, 14:29 and 14:44, 135 to 139 characters), because
+DW edited its feed summary between polls ("left hospital" became "left
+the hospital"). Each edit is a new capture and a new Texture rewrite of
+the same paragraph. Unlike the HN counters, this is the publisher's own
+text changing, so the capture is genuinely new. A near-duplicate rule
+("a recapture of the same URL that differs only trivially is not an
+arrival") would be a design change to capture identity. The cost is a few
+turns on a developing story, so it is not built. Reopen if a story is
+seen recaptured on most polls for hours.
