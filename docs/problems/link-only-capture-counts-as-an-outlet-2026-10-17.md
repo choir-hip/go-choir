@@ -84,3 +84,10 @@ published. It covers L1 to L4. The existing two-outlet test still passes.
 Deployed: CI run 39049755711 green; staging 7ca01a329 at 16:44:06. The paper
 took a clean planned restart at 16:41:59. A hold on a link-only capture logs
 "whose capture holds only links"; none had happened by 16:45.
+
+First live holds (17:05): story `91391b99` (an Amazon warehouse report)
+cited only an `rss:hn_frontpage` capture of opendemocracy.net. Its
+206-character body is "Article URL: … Comments URL: …". The gate held v2 and
+v3 with "not counted: opendemocracy.net, whose capture holds only links".
+That is correct: the old gate would have counted it as opendemocracy.net.
+The story kept working toward real sources (5 revisions by 17:40).
