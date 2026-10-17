@@ -306,6 +306,36 @@ the deploy. Store B's migration does not have that shape:
   is committed once (`markCorpusDirty`), so its chunks enter platform Dolt
   history once.
 
+### Second rebase and Dolt 2.4.2 check (2026-10-17, after the Dolt soak)
+
+Rebased again onto main dc3d9c38a (138 commits later). There were no textual conflicts.
+Two of main's changes overlap the branch in meaning:
+- **575cb3ef5** made the check overlay read checks by ID. The
+  `publication_check` lookup key is now unused on that path, which is harmless.
+- **9eb2c037f**, the event layer, lives in `corpus_events.go`, which this branch does not touch. The
+  capture half of corpus search is the only part this branch changes.
+
+`go build ./...` and `go vet` pass. `go test ./internal/platform ./internal/researchtools` passes.
+
+Node B's corpus and platform servers now run **Dolt 2.4.2**, not 2.1.9.
+`scripts/ograph-bench platform` ran against a local `dolt sql-server` 2.4.2,
+using the production DSN flags (`multiStatements=true` is required:
+Bootstrap is multi-statement). It seeded 20,000 captures over 10 days and 3 computers:
+- the indexes built in 118 ms and 13 ms;
+- `og_lookup_keys` backfilled 1,400 keys in 108 ms;
+- the throttled capture backfill took 69 s;
+- all three steps reported live;
+- concurrent capture writes: 1,163 with 0 errors, p95 103 ms, max 420 ms.
+
+After the migration (ms p50):
+- window ladder 23;
+- corpus search 3.6–54;
+- capture by URL 1.1;
+- `public_route` by lookup key 0.97;
+- capture write 20 (it was 7.4 before; the projection costs extra, as recorded above).
+
+The upsert breakage recorded for 2.1.9 does not arise, because the branch uses the side table.
+
 ### Rollback
 
 - Host switch without a deploy: `nix/node-b.nix` now gives corpusd an
