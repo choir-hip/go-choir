@@ -80,6 +80,12 @@ turn (records can coalesce into one turn, so this is an upper bound). No
 story went past 3 this hour. The long 7 to 9 cycles need a story whose
 only source can't support it.
 
+**Hourly series (same method, upper bounds).** 16:17–17:17: 3 records over
+33 Texture runs (9%). 17:17–18:17: 7 over 34 (21%). 18:17–19:17: 21 over
+56 (38%), on 11 stories, none past 3. The share swings with how many fresh
+stories open on thin sources, and in the busiest hour it was the
+largest single cause of Texture turns.
+
 ## Fix directions (not chosen; red surface, wake rule)
 
 1. **A per-document support budget.** After N consecutive support-failure
