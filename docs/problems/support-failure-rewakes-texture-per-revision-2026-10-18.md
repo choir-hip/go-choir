@@ -30,6 +30,7 @@ The same pattern, counted from the inboxes:
 | 4f1a228b (github.com, one outlet) | 7 | 18:07–18:11 Oct 17 |
 | 5af5ef1e (scottstevenson.net, one outlet) | 7 | 19:21–19:23 Oct 17 |
 | 3ee21d44 (thing.net) | 1 | 15:25 Oct 18 |
+| a24fadda (youtube.com, HN link-only) | 6 | 22:55–22:57 Oct 18 |
 
 **Correction.** The handoff rows for the 18:40 and 19:40 checks on Oct 17
 blamed the 4f1a228b and 5af5ef1e bursts on research verdicts arriving one
@@ -85,6 +86,12 @@ only source can't support it.
 56 (38%), on 11 stories, none past 3. The share swings with how many fresh
 stories open on thin sources, and in the busiest hour it was the
 largest single cause of Texture turns.
+Then 19:17–20:17: 7 over 29 (24%); 20:17–21:16: 7 over 34 (21%);
+21:16–22:16: 7 over 29 (24%); 22:16–23:15: 10 over 40 (25%), six of
+them on a24fadda, whose only source was an HN link-only capture of a
+YouTube video. Its 7 Texture turns ran from 22:54:51 to 22:57:51, all
+`inbox_record`, and the gate held all 7 revisions. Steady state is about
+a fifth to a quarter of Texture turns.
 
 ## Fix directions (not chosen; red surface, wake rule)
 
