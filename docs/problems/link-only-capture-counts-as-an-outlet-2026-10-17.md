@@ -94,8 +94,8 @@ The story kept working toward real sources (5 revisions by 17:40).
 
 ## Live holds through 00:40 on 2026-10-18
 
-From 16:44 to 00:40 the gate held 9 stories, each on a capture with no outlet
-words. Seven were HN captures of links only: opendemocracy.net, lwn.net,
+From 16:44 to 00:40 the gate held 10 stories, each on a capture with no outlet
+words. Nine were HN captures of links only: opendemocracy.net, lwn.net,
 github.com, x.com/opencode, scottstevenson.net, llmspeed.dev, doctor-seo.net,
 openjdk.org and phillyvoice.com. Each story then cited a real outlet or
 stayed held, and none looped.
