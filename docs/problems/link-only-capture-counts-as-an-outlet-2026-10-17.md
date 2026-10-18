@@ -91,3 +91,24 @@ cited only an `rss:hn_frontpage` capture of opendemocracy.net. Its
 v3 with "not counted: opendemocracy.net, whose capture holds only links".
 That is correct: the old gate would have counted it as opendemocracy.net.
 The story kept working toward real sources (5 revisions by 17:40).
+
+## Live holds through 00:40 on 2026-10-18
+
+From 16:44 to 00:40 the gate held 9 stories, each on a capture with no outlet
+words. Seven were HN captures of links only: opendemocracy.net, lwn.net,
+github.com, x.com/opencode, scottstevenson.net, llmspeed.dev, doctor-seo.net,
+openjdk.org and phillyvoice.com. Each story then cited a real outlet or
+stayed held, and none looped.
+
+One was not HN. Story `4cc4754a` (Au Jus wage theft) cited patch.com plus a
+fetched manhattanda.org page, 59 KB of HTML that the extractor reduced to one
+block: "October 8, 2026 | Patch". I fetched the page and ran `ExtractBlocks`
+on it. The extractor is right: the page is a "Media Coverage" stub whose
+`entry-content` holds only that dateline, pointing to Patch's own story. The
+DA wrote no words there, so the gate was correct not to count it.
+
+Residual (wording, green): the hold message says the capture "holds only
+links", which is accurate for HN captures but not for a stub page that holds
+only a dateline. "Holds too few of the outlet's own words" would cover both.
+It does not change what Texture should do, so it waits for the next edit to
+the gate.
