@@ -71,6 +71,15 @@ Oct 18, the hourly checks show such a burst roughly once or twice an
 hour, which is perhaps 10 to 15% of Texture runs. That is an estimate,
 not measured.
 
+**First measurement (15:30 to 16:17 Oct 18).** 45 Texture runs on 21
+stories. Their inboxes hold 11 `system:support` records committed in the
+window, on 7 stories: d24f1104 got 3 records over 6 runs, e79b0b46 2 over
+4, 1f4b845c 2 over 3, and four others 1 each. So about 24% of Texture
+runs that hour were support-failure wakes, if each record caused one
+turn (records can coalesce into one turn, so this is an upper bound). No
+story went past 3 this hour. The long 7 to 9 cycles need a story whose
+only source can't support it.
+
 ## Fix directions (not chosen; red surface, wake rule)
 
 1. **A per-document support budget.** After N consecutive support-failure
