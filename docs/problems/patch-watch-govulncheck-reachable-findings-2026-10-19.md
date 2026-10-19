@@ -113,3 +113,18 @@ Heresy delta: repaired the nine reachable findings above.
 - A local linux scan was not possible (cgo cross-compile for Dolt/ICU fails on
   macOS; the Docker VM OOM-kills govulncheck). The PR's linux CI job is the
   confirming check.
+
+## Follow-up 2: linux scan reproduced and confirmed
+
+- A linux scan was possible after all: `golang:1.26.9` in Docker with
+  `libicu-dev`, `GOFLAGS=-p=1 GOMEMLIMIT=4GiB GOGC=40` (the earlier OOM was
+  memory pressure). On the second-bump tree it reported one reachable finding
+  that darwin cannot see: GO-2026-6238, github.com/cilium/ebpf v0.16.0, fixed
+  in v0.22.0, reached via `capsule.CreateCgroup` -> `cgroup2.NewManager` ->
+  `btf.LoadKernelSpec` (linux-only code, so the hypothesis above is confirmed:
+  govulncheck scans the host GOOS only, and the darwin scan under-reports for
+  this repo. The linux scan is the one that matches the workflow's runner).
+- Third bump: github.com/cilium/ebpf v0.16.0 -> v0.22.0 (logrus v1.9.3 ->
+  v1.9.4 follows by MVS); `vendorHash` recomputed again.
+- Linux scan after the third bump: "Your code is affected by 0
+  vulnerabilities", and `go build ./...` succeeds on linux.
