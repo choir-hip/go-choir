@@ -257,7 +257,11 @@ func (rt *Runtime) askJevForSupport(ctx context.Context, owner, runID string, pe
 		}
 		name := fmt.Sprintf("p%d", len(names)+1)
 		names[name] = i
-		pairs[name] = map[string]string{"sentence": pair.Text, "quote": pair.Cited.Quote, "cited_passage": passage, "source": firstNonEmpty(capture.Title, capture.URL)}
+		entry := map[string]string{"sentence": pair.Text, "quote": pair.Cited.Quote, "cited_passage": passage, "source": firstNonEmpty(capture.Title, capture.URL)}
+		if pair.Context != "" {
+			entry["paragraph"] = pair.Context
+		}
+		pairs[name] = entry
 		question := map[string]any{"instructions": fmt.Sprintf("Pair %s: does state.pairs.%s.cited_passage support what state.pairs.%s.sentence says where it cites that source? Judge support, not truth.", name, name, name)}
 		for k, v := range supportJudgeQuestion {
 			question[k] = v
@@ -272,7 +276,7 @@ func (rt *Runtime) askJevForSupport(ctx context.Context, owner, runID string, pe
 		return nil, nil
 	}
 	state, err := json.Marshal(map[string]any{
-		"task":  "Each pair is a sentence from a news story and the source passage it cites (quote is the cited words). Judge whether the passage supports the sentence as cited.",
+		"task":  "Each pair is a sentence from a news story and the source passage it cites (quote is the cited words). Judge whether the passage supports the sentence as cited. A pair's paragraph, when given, is the sentence's surroundings, there only to resolve names and references: judge only the sentence, not the rest of the paragraph, which cites other sources.",
 		"pairs": pairs,
 	})
 	if err != nil {

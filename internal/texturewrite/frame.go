@@ -191,11 +191,14 @@ func (f Frame) renderRecord(b *strings.Builder, r FrameRecord) {
 		for _, blk := range f.Blocks {
 			alias[blk.ID] = blk.Alias
 		}
-		b.WriteString("  unsupported citations (the cited passage does not support the sentence; correct the sentence or its citation with choir.Write):\n")
+		b.WriteString("  unsupported citations (the cited passage does not support the words the citation closes; with choir.Write, make them say only what a cited passage says, cite a passage that says it, or cut the claim; naming the outlet does not make a claim supported):\n")
 		for _, fail := range r.Failures {
 			where := alias[fail.BlockID]
 			if where == "" {
 				where = "a block no longer in the document"
+			}
+			if fail.Text != "" {
+				where += " " + strconv.Quote(clip(fail.Text, 400))
 			}
 			fmt.Fprintf(b, "  - %s cites %s %s", where, fail.Doc, strconv.Quote(clip(fail.Quote, 300)))
 			if fail.Why != "" {
@@ -242,9 +245,11 @@ type FrameRecord struct {
 }
 
 // FrameFailure is one citation Jev judged unsupported: the citing
-// block, the cited capture and quote, and why.
+// block, the span judged when it is less than the block, the cited capture
+// and quote, and why.
 type FrameFailure struct {
 	BlockID string
+	Text    string
 	Doc     string
 	Quote   string
 	Why     string
@@ -307,7 +312,11 @@ func RecordsFrom(in []RecordInput) []FrameRecord {
 				if v.Pair == nil {
 					continue
 				}
-				fr.Failures = append(fr.Failures, FrameFailure{BlockID: v.Pair.BlockID, Doc: v.Pair.Cited.Doc, Quote: v.Pair.Cited.Quote, Why: v.Why})
+				failure := FrameFailure{BlockID: v.Pair.BlockID, Doc: v.Pair.Cited.Doc, Quote: v.Pair.Cited.Quote, Why: v.Why}
+				if v.Pair.Context != "" {
+					failure.Text = v.Pair.Text
+				}
+				fr.Failures = append(fr.Failures, failure)
 			}
 		}
 		if r.Cast != nil {

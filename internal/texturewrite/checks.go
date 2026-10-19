@@ -58,6 +58,61 @@ func CitingText(n texturedoc.Node) string {
 
 var spaceBeforeCloseRE = regexp.MustCompile(` ([,.;:!?)\]])`)
 
+// citingSpans is the span each of a block's citations closes, in
+// sourceRefs order: the block's words from the previous citation (or the
+// start of the block, or of its list item) up to the citation, with the
+// closing punctuation right after it. Citations side by side close the
+// same span, so a sentence two sources both support is judged against
+// each quote alone. A pair judged its whole block before
+// (docs/problems/support-pair-judges-whole-paragraph-against-one-quote-
+// 2026-10-19.md), so a paragraph drawing on two outlets failed against
+// either quote.
+func citingSpans(n texturedoc.Node) []string {
+	var spans []string
+	var buf strings.Builder
+	pending := 0
+	settle := func() {
+		span := strings.Join(strings.Fields(buf.String()), " ")
+		span = spaceBeforeCloseRE.ReplaceAllString(span, "$1")
+		for ; pending > 0; pending-- {
+			spans = append(spans, span)
+		}
+		buf.Reset()
+	}
+	var walk func(texturedoc.Node)
+	walk = func(n texturedoc.Node) {
+		switch n.Type {
+		case "source_ref":
+			pending++
+		case "text":
+			text := n.Text
+			if pending > 0 {
+				if strings.TrimSpace(text) == "" {
+					return
+				}
+				close := closingPunctRE.FindString(text)
+				buf.WriteString(close)
+				settle()
+				text = text[len(close):]
+			}
+			buf.WriteString(text)
+		case "hard_break":
+			buf.WriteByte(' ')
+		}
+		for _, c := range n.Content {
+			if isBlockType(c.Type) {
+				settle()
+			}
+			walk(c)
+		}
+	}
+	walk(n)
+	settle()
+	return spans
+}
+
+var closingPunctRE = regexp.MustCompile(`^\s*[,.;:!?)\]"”’]+`)
+
 // Checks lists every citation of doc in document order with its quote
 // check, and the support pairs of the captured ones, one per key. A
 // stored embed with no quote (a whole capture, from before {{embed}} was
@@ -67,9 +122,14 @@ func Checks(doc texturedoc.StructuredTextureDoc, docID, revisionID string) ([]Qu
 	var pairs []types.CitationPair
 	seen := map[string]bool{}
 	for _, block := range DocBlocks(doc) {
-		text := CitingText(block.Node)
-		blockHash := TextHash(text)
-		for _, ref := range sourceRefs(block.Node) {
+		context := CitingText(block.Node)
+		spans := citingSpans(block.Node)
+		for i, ref := range sourceRefs(block.Node) {
+			text := context
+			if i < len(spans) && spans[i] != "" {
+				text = spans[i]
+			}
+			spanHash := TextHash(text)
 			check := QuoteCheck{RefID: nodeID(ref), BlockID: block.ID}
 			cited, ok := RefOf(ref)
 			switch {
@@ -83,13 +143,17 @@ func Checks(doc texturedoc.StructuredTextureDoc, docID, revisionID string) ([]Qu
 				if check.Tier == "" {
 					check.Tier = quotematch.TierExact
 				}
-				check.Pair = PairKey(blockHash, cited.Hash, cited.Quote)
+				check.Pair = PairKey(spanHash, cited.Hash, cited.Quote)
 				if !seen[check.Pair] {
 					seen[check.Pair] = true
-					pairs = append(pairs, types.CitationPair{
-						Key: check.Pair, DocID: docID, RevisionID: revisionID, BlockID: block.ID, BlockHash: blockHash,
+					pair := types.CitationPair{
+						Key: check.Pair, DocID: docID, RevisionID: revisionID, BlockID: block.ID, BlockHash: spanHash,
 						Text: text, Cited: cited, Matcher: quotematch.Version, Tier: string(check.Tier),
-					})
+					}
+					if text != context {
+						pair.Context = context
+					}
+					pairs = append(pairs, pair)
 				}
 			}
 			checks = append(checks, check)

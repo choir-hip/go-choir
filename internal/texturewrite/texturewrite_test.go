@@ -456,3 +456,73 @@ func TestBaseReadsAnOwnerDraftAsItsBlocks(t *testing.T) {
 		t.Fatal("owner draft block ids are not stable, so the frame and the commit would disagree")
 	}
 }
+
+// A support pair judged a whole paragraph against one quote, so a
+// paragraph that drew on two outlets could never pass (docs/problems/
+// support-pair-judges-whole-paragraph-against-one-quote-2026-10-19.md). A
+// pair's text is now the span its citation closes, with the paragraph as
+// context. Ways it can fail: S1 the closing period lands in the next span;
+// S2 side-by-side citations get different spans; S3 a lone citation at a
+// paragraph's end does not cover the paragraph; S4 an edit to another
+// sentence re-keys this citation; S7 the frame does not say which span
+// failed.
+func TestChecksPairEachCitationWithTheSpanItCloses(t *testing.T) {
+	caps := newFakeCaptures()
+	caps.captures["https://example.org/wire"] = Capture{
+		Doc: "cap-wire", Version: "v1", URL: "https://example.org/wire", Title: "Wire report",
+		Blocks: []quotematch.Block{{ID: "w1", Text: "The regulator appealed the ruling on Monday."}},
+	}
+	write := func(first string) texturedoc.StructuredTextureDoc {
+		t.Helper()
+		res, err := Apply(context.Background(), Input{
+			OwnerID: "owner", DocID: "doc", Seed: "rev-0",
+			Base: baseDoc(heading("h1", 1, "Merger"), paragraph("p1", "Opening line."), paragraph("p2", "Closing line.")),
+			Script: "@replace b2\n" + first + " {{cite https://example.org/court \"the court ruled that the merger may proceed\"}}. " +
+				"The regulator appealed on Monday {{cite https://example.org/court \"The appeal was filed on Monday by the regulator\"}} " +
+				"{{cite https://example.org/wire \"The regulator appealed the ruling on Monday\"}}. An uncited closing remark.\n" +
+				"@replace b3\nThe merger was announced in spring. It closes next year {{cite https://example.org/court \"the court ruled that the merger may proceed\"}}.",
+			Resolver: caps,
+		})
+		if err != nil {
+			t.Fatalf("write: %v", err)
+		}
+		return res.Doc
+	}
+	doc := write("The court ruled that the merger may proceed")
+	_, pairs := Checks(doc, "doc", "rev-1")
+	if len(pairs) != 4 {
+		t.Fatalf("pairs = %+v; want four", pairs)
+	}
+	if pairs[0].Text != "The court ruled that the merger may proceed." {
+		t.Errorf("S1: first span = %q", pairs[0].Text)
+	}
+	if pairs[1].Text != "The regulator appealed on Monday." || pairs[2].Text != pairs[1].Text {
+		t.Errorf("S2: side-by-side spans = %q and %q; want the same sentence", pairs[1].Text, pairs[2].Text)
+	}
+	if pairs[3].Text != "The merger was announced in spring. It closes next year." {
+		t.Errorf("S3: a lone closing citation spans %q; want the whole paragraph", pairs[3].Text)
+	}
+	whole := "The court ruled that the merger may proceed. The regulator appealed on Monday. An uncited closing remark."
+	for i, p := range pairs[:3] {
+		if p.Context != whole {
+			t.Errorf("pair %d context = %q; want the paragraph", i, p.Context)
+		}
+		if p.BlockHash != TextHash(p.Text) || p.Key != PairKey(p.BlockHash, p.Cited.Hash, p.Cited.Quote) {
+			t.Errorf("pair %d is not keyed by its span: %+v", i, p)
+		}
+	}
+	_, again := Checks(write("A court ruled that the merger may proceed"), "doc", "rev-2")
+	if again[0].Key == pairs[0].Key {
+		t.Error("an edited span kept its key")
+	}
+	if again[1].Key != pairs[1].Key || again[2].Key != pairs[2].Key {
+		t.Error("S4: an edit to another sentence re-keyed this citation")
+	}
+
+	failure := types.SupportVerdict{Key: pairs[1].Key, Verdict: types.SupportUnsupported, Why: "not said", Judge: "jev:test", Pair: &pairs[1]}
+	frame := Frame{DocID: "doc", RevisionID: "rev-1", Blocks: DocBlocks(doc), Records: RecordsFrom([]RecordInput{{Seq: 3, RecordID: "rec-3", Kind: "report", From: "system:support",
+		Support: &types.CommitmentSupport{Failures: []types.SupportVerdict{failure}}}})}.Render()
+	if !strings.Contains(frame, `"The regulator appealed on Monday."`) {
+		t.Errorf("S7: the frame does not quote the failing span:\n%s", frame)
+	}
+}

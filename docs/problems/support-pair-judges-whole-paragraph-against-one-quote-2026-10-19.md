@@ -130,3 +130,68 @@ Ways a fix could fail, to test first:
 Measure after any fix: failing pairs by sentence count (today 26 of 27
 are multi-sentence), `system:support` records per Texture run (today about
 a fifth to a quarter), and published versions per story per hour.
+
+## Fix chosen (2026-10-19, owner: "You can pursue this and make smart changes")
+
+Direction 1, the cited span, plus the paragraph as context. Mutation
+class: **red** (support judgement, the evidence a published citation's
+verdict rests on).
+
+- **The pair's text is the span its citation closes.** That is the
+  block's words from the previous citation, or from the block's start,
+  up to this citation, plus the closing punctuation right after it.
+  Citations side by side (`{{cite A}} {{cite B}}`) close the same span,
+  so a fact two outlets both state is judged against each quote alone.
+  That is the corroboration case. Each list item starts a new span.
+- **The key hashes the span**, in the field still named `block_hash`.
+  So an edit to another sentence in the paragraph no longer re-keys this
+  citation, and its verdict stays memoized. A one-sentence paragraph
+  keeps its old key and verdict.
+- **Jev gets the paragraph as context.** The pair carries `context`, the
+  block's words. Jev is told to judge only `sentence` and to use
+  `paragraph` for names and references.
+- **Texture is told which span failed.** The frame's failure line quotes
+  the judged span, and says that naming the outlet ("X reports") does
+  not make a sentence supported.
+
+Conjecture delta: if the paragraph unit causes most support failures,
+then after deploy the failing pairs' median length falls from about 417
+characters to under 200. `system:support` records per Texture run fall
+from about a fifth to a quarter to under a tenth. Published versions per
+story-hour fall too.
+
+Protected surfaces: the support pair unit (`texturewrite.Checks`), the Jev
+support question (`askJevForSupport`), and the frame's failure text. Not
+touched: the publish gate, the quote check, and the verdict store schema
+(the pair's `context` is a new optional field).
+
+Admissible evidence: staging only. Pairs in `system:support` records and
+the check memos after the deploy, and front-page prose.
+
+Rollback: `git revert` of the fix commit. Old memos keep their paragraph
+keys, and new revisions key by span. Verdicts already published keep
+their keys either way.
+
+Heresy delta: discovered, judging a paragraph against one quote, which
+the design called "the committed sentence". Repaired by this fix if the
+conjecture holds. Introduced: none expected. The residuals are below.
+
+Ways it can fail, tested first:
+- S1: a span is cut wrongly: the trailing period lands in the next
+  span, or a span starts mid-word;
+- S2: two side-by-side citations get different spans, so the first one
+  is judged against nothing;
+- S3: a citation at a paragraph's end with no earlier citation does not
+  cover the whole paragraph;
+- S4: an edit to another sentence still changes this citation's key;
+- S5: a one-sentence paragraph's key changes, so every existing verdict
+  is judged again;
+- S6: Jev is not given the paragraph, so "it" and "the ministry" in a
+  span cannot be resolved; or it is given the paragraph without being
+  told to judge only the span;
+- S7: the frame still does not say which span failed.
+
+Residual: text after a block's last citation is in no span and is not
+judged. It was judged before, inside the paragraph. A claim with no
+citation is outside the support judge's job, but this does narrow what
+it sees.

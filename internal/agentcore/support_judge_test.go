@@ -458,3 +458,36 @@ fmt.Println(err)`); !strings.Contains(out, "Judge") || !strings.Contains(strings
 		t.Fatalf("choir.Judge in a management cell = %s; want it undefined", out)
 	}
 }
+
+// A pair's text is the span its citation closes, with its paragraph as
+// context (docs/problems/support-pair-judges-whole-paragraph-against-one-
+// quote-2026-10-19.md). Way it can fail (S6): Jev is not given the
+// paragraph, so a span's "it" or "the regulator" cannot be resolved; or it
+// is given the paragraph and not told to judge only the span, so it judges
+// the paragraph again.
+func TestJevJudgesTheSpanWithItsParagraphAsContext(t *testing.T) {
+	jev := &fakeSupportJudge{choice: "yes"}
+	rt, _ := supportRuntime(t, jev)
+	span, paragraph := "It appealed on Monday.", "The regulator lost in court. It appealed on Monday. Shares rose."
+	pair := types.CitationPair{Key: "sp-span", DocID: "doc", RevisionID: "rev", BlockID: "p1", BlockHash: texturewrite.TextHash(span),
+		Text: span, Context: paragraph, Matcher: "qm1",
+		Cited: types.Ref{Doc: "cap-court", CID: "cid-2", Hash: texturewrite.TextHash(supportAppealBlock), Quote: supportAppealBlock}}
+	judged, err := rt.askJevForSupport(context.Background(), "owner", "", []types.SupportVerdict{{Key: pair.Key, Pair: &pair}})
+	if err != nil || len(judged) != 1 {
+		t.Fatalf("judged = %+v, %v", judged, err)
+	}
+	var state struct {
+		Task  string                       `json:"task"`
+		Pairs map[string]map[string]string `json:"pairs"`
+	}
+	if err := json.Unmarshal([]byte(jev.state), &state); err != nil {
+		t.Fatal(err)
+	}
+	got := state.Pairs["p1"]
+	if got["sentence"] != span || got["paragraph"] != paragraph {
+		t.Fatalf("pair state = %+v; want the span as sentence and the paragraph as context", got)
+	}
+	if !strings.Contains(state.Task, "only the sentence") {
+		t.Fatalf("task = %q; Jev is not told to judge only the sentence", state.Task)
+	}
+}

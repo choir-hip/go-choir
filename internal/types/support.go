@@ -22,10 +22,14 @@ const (
 	SupportUnsupported = "unsupported"
 )
 
-// CitationPair is one citation of a committed revision: the citing block
-// (top-level block id, the hash and text of its words without citations)
-// and the cited Ref. Matcher is the quote matcher's version, part of Key;
-// Tier is the tier its quote matched at (exact or tolerant).
+// CitationPair is one citation of a committed revision: the citing span
+// (its top-level block id, and the hash and text of the words the citation
+// closes, without citations), the block's words as context, and the cited
+// Ref. BlockHash keeps its name but hashes the span, not the block
+// (docs/problems/support-pair-judges-whole-paragraph-against-one-quote-
+// 2026-10-19.md); pairs listed before then hash their whole block, which
+// was their text. Matcher is the quote matcher's version, part of Key; Tier
+// is the tier its quote matched at (exact or tolerant).
 type CitationPair struct {
 	Key        string `json:"key"`
 	DocID      string `json:"doc_id"`
@@ -33,6 +37,7 @@ type CitationPair struct {
 	BlockID    string `json:"block_id"`
 	BlockHash  string `json:"block_hash"`
 	Text       string `json:"text"`
+	Context    string `json:"context,omitempty"`
 	Cited      Ref    `json:"cited"`
 	Matcher    string `json:"matcher"`
 	Tier       string `json:"tier,omitempty"`
