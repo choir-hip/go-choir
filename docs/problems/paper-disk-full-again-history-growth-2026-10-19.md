@@ -392,3 +392,30 @@ trees are history-independent, so equal schemas and rows give an equal root
 hash whatever the history; it costs nothing. The squash's `-A` commits any
 uncommitted working changes, so the check is the WORKING root before against
 the HEAD and WORKING roots after. The full witness stays behind a flag.
+
+## History compacted: 52.0 GB to 8.06 GB, root hash identical (23:23 to 23:41)
+
+- **E2E first** (deployed a3fe4c98c, reflink probe of the unsquashed 20:30
+  backup): 13,539 commits to 2, 51.4 GB to 7.97 GB, root
+  `7rlefddgk6ksbo1rjcdgk8mrc2rfkhg0` before and after, 12 min 26 s, 8.4 GB
+  peak (cgroup, page cache included), no swap.
+- **Live:** hold and stop 23:23:25 (head `69a2cd27…7f2e`); reflink backup
+  `data.img.pre-compact-20261019T2324Z`; `projection-compact` under
+  `MemoryMax=10G`, `MemorySwapMax=0`, 23:23:50 to 23:34:55: **13,700 commits
+  to 2, 51,954,497,839 to 8,062,682,469 bytes, root
+  `6kpdt7e7vr87ctv60ikiuvch5gaim62a` before and after**, 10 GB peak, 79.9 GB
+  read, 28.7 GB written. Guest disk 49 GB to 8.0 GB used of 126 GB.
+  Read-only fsck clean. maintenance-serve 23:35:21 (crash boot: in-flight
+  polls closed as interrupted, per the restart rule), unhold and refresh
+  23:41:15.
+- **Host side effect:** the compaction's 28.7 GB of new blocks are CoW
+  against the backup images, so Node B unallocated fell from 30 to 16 GiB.
+  Reclaim: delete superseded backups (pre-grow 1626Z and 1740Z, aborted
+  2110Z, pre-compact 2035Z), keep 2324Z until the paper is verified, then
+  trim the image and run the headroom balance.
+
+**Standing remedy.** Run this compaction on a schedule before the store
+nears its disk (it grows about 0.25 GiB an hour: weekly keeps it under
+about 50 GB of history). Today it needs a hold and about 18 minutes down.
+The durable fix is fewer writes at the source (the appendOps design,
+docs/reports/tape-volume-forward-fix-and-surgery-2026-10-19.md).
