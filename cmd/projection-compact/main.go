@@ -12,7 +12,10 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"syscall"
+
+	"github.com/dolthub/dolt/go/store/util/tempfiles"
 
 	"github.com/yusefmosiah/go-choir/internal/projectionbase"
 )
@@ -21,11 +24,22 @@ func main() {
 	workspace := flag.String("workspace", "", "projection store workspace directory (for example <data>/state.texture)")
 	computerID := flag.String("computer-id", "", "computer the store projects")
 	canonicalHead := flag.String("canonical-head", "", "canonical event head the store is at (recorded in the squash commit)")
+	memoryLimit := flag.Int64("memory-limit-mib", 5120, "Go soft memory limit in MiB when GOMEMLIMIT is unset; run under a MemoryMax without swap so an overrun fails instead of thrashing")
 	flag.Parse()
 	if *workspace == "" || *computerID == "" || *canonicalHead == "" {
 		flag.Usage()
 		os.Exit(2)
 	}
+	if os.Getenv("GOMEMLIMIT") == "" && *memoryLimit > 0 {
+		debug.SetMemoryLimit(*memoryLimit << 20)
+	}
+	// Stage Dolt's GC output on the store's own filesystem, not the host's
+	// os.TempDir() (the killed 2026-10-19 run left 4.2 GB in Node B's /tmp).
+	tempDir := projectionbase.TempDir(*workspace)
+	if err := os.MkdirAll(tempDir, 0o700); err != nil {
+		log.Fatalf("projection-compact: temp dir: %v", err)
+	}
+	tempfiles.MovableTempFileProvider = tempfiles.NewTempFileProviderAt(tempDir)
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	result, err := projectionbase.CompactWorkspace(ctx, *computerID, *canonicalHead, *workspace)

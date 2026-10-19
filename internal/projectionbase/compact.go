@@ -37,6 +37,22 @@ type CompactResult struct {
 
 const compactionDatabase = "texture"
 
+// gcIncrementalFileSize bounds the full GC's memory (docs/problems/paper-
+// disk-full-again-history-growth-2026-10-19.md). With incremental files, leaf
+// chunks skip the GC's visited set and the copier rotates its output, so the
+// per-chunk bookkeeping resets per file. Archive level 0 writes plain table
+// files, skipping the archive writer and its zstd dictionaries. Unbounded,
+// DOLT_GC('--full') on the paper's 48 GiB store took 13 GB plus 15 GB of swap
+// and never finished; bounded, it took 6.1 GB and 2 min 19 s.
+const gcIncrementalFileSize = "268435456"
+
+// TempDir is where Dolt stages GC output and table files for a workspace:
+// inside the store's own .dolt, on the same filesystem as the files they
+// become. The embedded driver otherwise stages them in os.TempDir().
+func TempDir(workspacePath string) string {
+	return filepath.Join(filepath.Clean(workspacePath), compactionDatabase, ".dolt", "temptf")
+}
+
 func openCompactionDB(workspacePath string) (*sql.DB, interface{ Close() error }, error) {
 	dsn := fmt.Sprintf("file://%s?commitname=Choir&commitemail=system@choir.local&database=%s&multistatements=true&clientfoundrows=true",
 		filepath.Clean(workspacePath), compactionDatabase)
@@ -119,7 +135,7 @@ func CompactWorkspace(ctx context.Context, computerID, canonicalHead, workspaceP
 	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM dolt_log").Scan(&result.CommitsAfter); err != nil {
 		return fail(fmt.Errorf("projection compaction: count commits after squash: %w", err))
 	}
-	if _, err := db.ExecContext(ctx, "CALL DOLT_GC('--full')"); err != nil {
+	if _, err := db.ExecContext(ctx, "CALL DOLT_GC('--full', '--archive-level', '0', '--incremental-file-size', ?)", gcIncrementalFileSize); err != nil {
 		return fail(fmt.Errorf("projection compaction: full gc: %w", err))
 	}
 	if err := closeDB(); err != nil {
