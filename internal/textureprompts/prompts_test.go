@@ -153,7 +153,7 @@ func TestPromptCoreTeachesTheStoryHeadline(t *testing.T) {
 func TestPromptCoreReportsTheNewsNotTheCoverage(t *testing.T) {
 	prompt := DefaultSystemPrompt()
 	for _, want := range []string{
-		"Report the news, not the coverage.",
+		"Report the news, not the coverage:",
 		`not "DW reports … Al Jazeera says …"`,
 		"never to the outlet that relayed it",
 		"cites each source right after its part",
@@ -166,5 +166,39 @@ func TestPromptCoreReportsTheNewsNotTheCoverage(t *testing.T) {
 	}
 	if strings.Contains(prompt, "in its source's own terms") {
 		t.Error("prompt core still asks for each claim in its source's own terms")
+	}
+}
+
+// The first grounding rules let Texture "name an outlet only where outlets
+// disagree or one alone reports a lead". Almost every claim in a revision
+// has one source, so revisions kept writing "Euronews says 19 people were
+// detained" and "Al Jazeera reported on Oct. 19 that President Donald
+// Trump accused …": 9 of 22 new revision sentences after the deploy named
+// an outlet as subject, against 38% before. Pipeline voice came back in
+// words the rule did not name ("three newsrooms … describe the same
+// beats", "in the material reviewed"), and old relay prose stayed in
+// blocks no revision touched (articles-relay-outlets-instead-of-grounding-
+// them-2026-10-19.md, second hour). Ways the prompt can fail: the escape
+// clause survives; it still reads as if one report were not enough to
+// state an event; it names no case where an outlet should be named (its
+// own unnamed source or analysis, a disagreement), so the outlet's own
+// scoop is stated as fact; the source-talk rule still names only the
+// capture phrases; nothing asks a revision to fix an old block that
+// breaks these rules.
+func TestPromptCoreStatesOneReportedEventAndNamesOutletsOnlyForTheirOwnFindings(t *testing.T) {
+	prompt := DefaultSystemPrompt()
+	if strings.Contains(prompt, "one alone reports a lead") {
+		t.Error("prompt core still lets one outlet's report be named as a lead")
+	}
+	for _, want := range []string{
+		"One report of an event or a statement is enough",
+		"Name an outlet only for its own unconfirmed finding (an unnamed source, its own analysis)",
+		"where outlets disagree",
+		`"in the material reviewed"`,
+		"A revision rewrites any block that breaks these rules.",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("prompt core lacks %q", want)
+		}
 	}
 }
