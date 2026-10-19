@@ -394,3 +394,23 @@ record that carried the BBC capture, and who routed it.
   baseline comparison counts them as new, though they are carried from
   v7. One is TechCrunch's review of a documentary, an outlet's own
   analysis where naming it is right.
+
+## Eighth hour (10:44 to 11:40): the share swings with the story mix
+
+- 113 runs (65 Texture on 25 documents), all gpt-6-luna. Console clean;
+  btrfs metadata 87.8%. Support: 13 records over 65 Texture runs (20%),
+  median span 160.
+- New-against-baseline sentences in revisions: 10 of 24 name an outlet,
+  and 7 of the 10 are one story, "Zelenskyy tells NPR Ukraine wants
+  peace" (v23 to v26). The measure cannot tell allowed naming from
+  relay. Reading the 7: three are cases the rules allow (an interview
+  Zelenskyy gave NPR, a Washington Post columnist's unnamed US official,
+  a Kyiv Independent finding); two are source talk ("The reporting
+  describes a US declaration …", "A BBC World video teaser … the
+  captured item provi[des] …"); two are plain relay.
+- The midterm travel story, the "own analysis" loophole case at 07:46,
+  is now v9 with 0 of 4 outlet sentences: a later revision rewrote it.
+- Lesson for the measure: an hourly outlet share depends on which
+  stories happen to be revised. Across hours, new stories and new
+  revision sentences sit well below the 38% baseline, but one long
+  interview story can move an hour from 0% to 42%.
