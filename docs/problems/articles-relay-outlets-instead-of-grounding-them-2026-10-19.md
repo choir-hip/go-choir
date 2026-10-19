@@ -337,3 +337,24 @@ Options for the carried prose (not chosen; for the owner):
   claim qualifies. The facts inside (rallies in Montana, Tennessee and
   Alaska; states he won in 2024) could be stated plainly with cites.
   Not acted on yet: one story. Watch for more.
+
+## Fifth hour on the second rule set (08:04 to 09:01)
+
+- 56 runs (32 Texture), all gpt-6-luna. Console clean; btrfs metadata
+  87.1%. Support: 6 records over 32 Texture runs (19%), median failing
+  span 146.
+- New sentences in revised baseline stories: 3 of 20 name an outlet
+  (15%). Carried: 21 of 25. Netanyahu v11 stays at 0 of 7.
+- **A second off-topic second source.** Saudi juvenile execution story
+  (v7, 08:49): the headline describes the sources ("Saudi execution
+  report leaves al-Manasif's fate unclear"), and the last sentence says
+  "The BBC report concerns two Bangladeshis, not al-Manasif, and does
+  not clarify his fate." The midterm story at 07:46 did the same ("The
+  BBC account concerns its correspondent's reporting trip, not another
+  Trump rally").
+- **Hypothesis (not traced):** the two-outlet publish gate pushes
+  Texture to cite a loosely related second outlet, and the rule "say
+  what is known and what is open" then makes it explain why that source
+  does not bear on the story. To confirm: read these two stories' held
+  revisions and their Texture `why` lines, and check whether the
+  off-topic cite arrived in the revision that first passed the gate.
