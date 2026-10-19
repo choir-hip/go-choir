@@ -444,3 +444,11 @@ outlet (29%); new sentences in revised baseline stories 3 of 14.
 Primary sources: 8 of the 77 cited this hour (10%), against 4 of 113
 (3.5%) at baseline, the highest share of the day; one hour, so a hint,
 not a trend.
+
+## Twelfth hour (14:30 to 15:26)
+
+125 runs (72 Texture on 35 documents), all gpt-6-luna; console clean;
+btrfs metadata 88.9%. Support 17 records over 72 Texture runs (24%),
+median span 211. New sentences in revised baseline stories: 4 of 32
+(13%). Carried: 31 of 61 still name an outlet (Albania 16 of 42, France
+12 of 15). The Tech Sgt Ian Patterson story (v4 to v9): 0 of 5.
