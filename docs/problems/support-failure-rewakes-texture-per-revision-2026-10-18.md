@@ -1,7 +1,13 @@
 # A support failure re-wakes Texture once per revision, so an unsupportable story takes 7 to 9 turns (2026-10-18)
 
-Status: documented, not fixed. This is a cost problem, not a correctness
-one: the gate holds every such story, and the cycle ends on its own.
+Status: documented, not fixed. The cycle ends on its own. **Correction
+(2026-10-19):** I first wrote that this is "a cost problem, not a
+correctness one" because "the gate holds every such story". Story
+c0fb708e ran the cycle while published (v4 to v10 in three minutes). The
+likely main cause is that a support pair judges a whole paragraph against
+one quote:
+[support-pair-judges-whole-paragraph-against-one-quote-2026-10-19](support-pair-judges-whole-paragraph-against-one-quote-2026-10-19.md).
+Fix the pair unit there before adding a wake budget here.
 
 Found at the 15:30 hourly check on 2026-10-18. The ledger confirms it:
 inbox records, run metadata and console lines, all listed below.
@@ -31,6 +37,7 @@ The same pattern, counted from the inboxes:
 | 5af5ef1e (scottstevenson.net, one outlet) | 7 | 19:21–19:23 Oct 17 |
 | 3ee21d44 (thing.net) | 1 | 15:25 Oct 18 |
 | a24fadda (youtube.com, HN link-only) | 6 | 22:55–22:57 Oct 18 |
+| c0fb708e (theguardian.com + ABC, **published** v4–v10) | 7 | 23:18–23:22 Oct 18 |
 
 **Correction.** The handoff rows for the 18:40 and 19:40 checks on Oct 17
 blamed the 4f1a228b and 5af5ef1e bursts on research verdicts arriving one
