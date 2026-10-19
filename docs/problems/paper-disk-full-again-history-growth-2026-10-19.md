@@ -220,3 +220,113 @@ throughout; choir.news health ok.
 Still open: Node B's data use rose about 68 GiB today, mostly the guest's
 freed-but-not-trimmed blocks and the two backups. Next stop of the paper:
 offline `fstrim`, then drop the 48 GiB backup.
+
+## History compaction (owner, 2026-10-19 about 20:30: "I want history compaction and other stuff to reduce resource consumption")
+
+Mutation class: red (the always-on paper's persistent store). Same tool
+and sequence as the owner-approved 10-09 window
+(`guest-store-history-bloat-and-memory-shape-2026-10-09.md`): hold, stop,
+reflink backup, offline mount, `projection-compact` (squash the single
+branch to one commit on its root, then `CALL DOLT_GC('--full')`; it
+refuses unless the content witness, schema plus per-table digests, is
+identical before and after), `fstrim`, unmount, maintenance-serve,
+unhold, refresh.
+
+- Canonical head label: the last head the paper reported to vmctl
+  (`859f4f2d…`, sequence 1,334,778, reported at the 17:41 boot). The
+  head only labels the squash commit; the witness compares content.
+- The tool runs on Node B under a memory cap (`systemd-run`,
+  MemoryHigh 8G, MemoryMax 10G, low IO weight), since the 10-15 GC test
+  peaked at 8 GB and Node B has about 13 GiB available.
+- Expected: Dolt store from about 46 GiB to a few GiB; `fstrim` returns
+  the freed blocks to Node B once the older backups are dropped.
+- Rollback: hold, stop, swap `data.img.pre-compact-<ts>` back in.
+- Failure modes to check: the witness differs (the tool refuses; restore
+  nothing, boot the unchanged store); more than one branch (refused);
+  the GC runs out of memory (capped; the store is untouched until the
+  GC's final swap, and the backup covers a torn swap); the boot after
+  compaction replays slowly or misses heads (verify `runtime: started`,
+  schedules active, runs, and a publish).
+
+## Compaction aborted; the store restored unchanged (20:30 to 21:27)
+
+- 20:30:46 hold and stop; reflink backup `data.img.pre-compact-20261019T2035Z`;
+  offline mount (store 48 GiB, 7 old-generation archives after the
+  conjoin). 20:31:00 `projection-compact` started as a transient unit
+  (MemoryHigh 8G, MemoryMax 10G).
+- **The full GC did not fit in memory.** At 20:56 it held 8.3 GB of
+  anonymous memory and 8.4 GB in swap, so its 115 GB of "writes" were swap,
+  not store output (the guest disk stayed at 49 GiB used). I raised the cap
+  to 13G/15G at about 20:57. By 21:07 it held 14 GB plus 16.9 GB of swap,
+  **Node B's 15 GB of swap was full**, and it had read 781 GB: thrashing,
+  not converging. choir.news stayed healthy.
+- 21:09:27 stopped (SIGTERM, then SIGKILL on timeout). It had used 13 GB
+  of memory and 15.7 GB of swap at peak, 902 GB read, 147 GB written, in
+  38 minutes. Node B recovered at once (swap 0, 22 GB available).
+- **Restore, not repair:** the squash had committed but the GC was killed
+  and the witness check never ran. I moved the image aside
+  (`data.img.compact-aborted-20261019T2110Z`, kept for diagnosis) and
+  restored the 20:30 backup by reflink. Read-only fsck clean.
+  maintenance-serve 21:10:08, unhold and refresh 21:10:42, schedules
+  active, next ticks 21:26:54. Downtime about 20:30 to 21:27.
+
+**Lesson.** `DOLT_GC('--full')` holds the store's reachable set in memory.
+At 9.5 GiB (10-09) it fit; at 48 GiB of mostly history it needed well over
+30 GB. Offline full GC on Node B cannot compact this store. Options for
+the history bound, to choose next:
+1. Rebuild instead of GC: copy the squashed HEAD's tables into a fresh
+   database (row copy, bounded memory) and swap it in, with the witness
+   compared. Or re-materialize from the latest compact base plus the tape
+   tail (the 10-09 doc's "guest reclaim = rebase onto a compact base").
+2. Compact more often so each full GC stays small (it fit at 9.5 GiB).
+3. Cut the write volume at the source: group commit in the projection
+   tape (`docs/problems/platform-artifact-small-file-growth-2026-10-19.md`
+   measures 3x to 7x fewer events), which also slows this store's history
+   growth.
+
+### Why the full GC needed so much memory (code reading, 21:25; hypotheses until traced)
+
+A read-only reading of the pinned Dolt module (go@v0.40.5-0.20260716231223-6bea93f2f665)
+by a Sonnet subagent; file:line refer to that module.
+
+- **Memory scales with reachable chunks, not disk size.** Each full GC sweep is
+  a breadth-first walk from the roots. Per reachable chunk it keeps a `visited`
+  entry (every chunk counts as non-leaf when `IncrementalFileSize=0`,
+  `store/nbs/store.go:2414`), the output archive writer's per-chunk state (one
+  unrotated output file, `archive_writer.go:157,183-184`, `gc_copier.go:55-58`)
+  and the walk frontier with copies (`store.go:2432-2459`): roughly 200 B per
+  chunk plus about 150 B at the widest level. Archive indexes for every file
+  also load onto the heap (mmap off, `archive_reader.go:224-237`).
+- **Hypothesis: C memory the Go GC cannot see.** Archive reads cache 256 zstd
+  dictionaries per file (`archive_reader.go:216`); a hash-order walk misses and
+  builds new ones freed only by finalizers. `projection-compact` sets no
+  `GOMEMLIMIT`.
+- **The 900 GB of reads** were the page cache squeezed by anonymous memory under
+  the cgroup cap: indexes and archive pages read back again and again.
+- **Open question that decides everything: is the reachable set small after the
+  squash?** `internal/projectionbase/compact.go:96-100` checks only
+  `dolt_branches`; Dolt's GC also roots tags, remotes, internal refs, working
+  sets and stashes (`doltdb/doltdb.go:1985-2005`). Any such ref keeps the whole
+  history reachable, and the squash then frees nothing. Count the refs on the
+  aborted image (offline, read-only) before choosing.
+- **The witness is memory-heavy too:** `queryTableContentHash`
+  (`internal/computerversion/dolt_state_extractor.go:322-380`) holds every row
+  of a table as JSON and sorts it. It fit under the 10 GB cap before the squash.
+- **The Dolt v2.4.2 bump does not change this:** the mark-and-sweep code is
+  byte-identical.
+
+Ranked options from that reading:
+1. **Fresh-database row copy** (`CREATE DATABASE`, `INSERT … SELECT` per table in
+   the same engine, swap directories). Memory is independent of chunk count
+   (pending edits flush at 64K, `store/prolly/tuple_mutable_map.go:30`; caches
+   256 MiB). Needs schema, indexes and auto-increment recreated; the witness
+   checks it, and the witness should become streaming.
+2. **Push the squashed branch to an empty `file://` remote** and use that store.
+   The puller keeps one seen set (about 40 B a chunk) and rotates files at
+   1 GiB: about a quarter of GC's bookkeeping. Not verified end to end.
+3. **Full GC with bounds:** `DOLT_GC('--full','--incremental-file-size',…,'--archive-level',0)`,
+   `GOMEMLIMIT` about 20 GiB, `TMPDIR` on the data disk, `MemoryMax` without
+   `MemoryHigh`. Bounded only if the reachable set is modest.
+
+Next safe probe: on `data.img.compact-aborted-20261019T2110Z` (not the live
+image), list every ref class and count chunks reachable from the squashed head.

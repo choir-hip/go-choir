@@ -36,9 +36,16 @@
     #   nix flake update nixpkgs-kernel
     # The full base bump belongs to the patch pipeline's weekly lane.
     nixpkgs-kernel.url = "github:NixOS/nixpkgs/nixos-unstable";
+    # Qdrant-only nixpkgs (docs/problems/weekly-nixpkgs-bump-qdrant-build-
+    # failure-2026-10-19.md). Pinned to the nixpkgs revision that production
+    # runs, and deliberately NOT updated by the weekly bump (which moves only
+    # `nixpkgs`). Used ONLY for pkgs.qdrant on the host, and only while the
+    # base nixpkgs builds rustc against an LLVM older than 22 (see
+    # choirQdrantModule). Delete this input when that module retires.
+    nixpkgs-qdrant.url = "github:NixOS/nixpkgs/ec84054698e3875e23d6057a10283eb9dfa41f1b";
   };
 
-  outputs = { self, nixpkgs, nixpkgs-kernel, microvm, sbomnix, ... }:
+  outputs = { self, nixpkgs, nixpkgs-kernel, nixpkgs-qdrant, microvm, sbomnix, ... }:
     let
       # Packages are x86_64-linux only (deployment target)
       system = "x86_64-linux";
@@ -114,6 +121,26 @@
         });
       choirDoltModule = { ... }: {
         nixpkgs.overlays = [ (final: prev: { dolt = mkChoirDolt prev; }) ];
+      };
+
+      # Qdrant lane (docs/problems/weekly-nixpkgs-bump-qdrant-build-failure-
+      # 2026-10-19.md). nixos-unstable's rustc 1.98 is linked against LLVM 21
+      # but its stdarch declares the LLVM 22 shape of
+      # llvm.x86.avx512.vpdpbusd.512, so qdrant's `quantization` crate fails
+      # to compile ("intrinsic signature mismatch"). Until the base's rustc
+      # uses LLVM 22 or newer, take qdrant (same 1.18.2, the deployed build,
+      # a binary-cache hit) from the pinned `nixpkgs-qdrant` input. The
+      # condition flips by itself on a later weekly bump; then remove the
+      # input and this module.
+      choirQdrantModule = { ... }: {
+        nixpkgs.overlays = [
+          (final: prev: {
+            qdrant =
+              if prev.lib.versionAtLeast prev.rustc.llvm.version "22"
+              then prev.qdrant
+              else nixpkgs-qdrant.legacyPackages.${system}.qdrant;
+          })
+        ];
       };
 
       # Go module version from go.mod
@@ -568,6 +595,7 @@ EOF
           ./nix/node-b.nix
           choirKernelModule
           choirDoltModule
+          choirQdrantModule
         ];
       };
 
