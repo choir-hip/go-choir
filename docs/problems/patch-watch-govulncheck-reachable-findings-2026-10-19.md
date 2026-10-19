@@ -128,3 +128,22 @@ Heresy delta: repaired the nine reachable findings above.
   v1.9.4 follows by MVS); `vendorHash` recomputed again.
 - Linux scan after the third bump: "Your code is affected by 0
   vulnerabilities", and `go build ./...` succeeds on linux.
+
+## Follow-up 3: the ci.yml "govulncheck (report only)" job stays red at 0 findings
+
+- With linux/arm64 and linux/amd64 scans both at "Your code is affected by 0
+  vulnerabilities" (Docker, `golang:1.26.9`), the PR's ci.yml job
+  "govulncheck (report only)" still fails (runs 39312914634, 39315269948, and
+  the next one). Hypothesis from reading `.github/workflows/ci.yml` (lines
+  ~306-326), not trace-confirmed because the step output is never logged: the
+  step runs under `bash -e -o pipefail`; with zero findings the summary
+  pipeline `grep -E '^(Vulnerability #|    Found in:|...)' ... | head -200`
+  matches nothing, `grep` exits 1, `pipefail` makes the pipeline fail, and `-e`
+  ends the step with exit 1 before `cat` and `exit 0`. With findings, the
+  `go run ... govulncheck` line itself exits 1 under `-e`. Either way the job
+  cannot pass, and it is not a required gate ("Go Vet + Test + Build" is green).
+- This is separate from Patch Watch: `patch-watch.yml` builds its summary with
+  `echo` only and counts with `grep -c ... || true`, so with 0 findings its
+  govulncheck step passes (status 0, count 0). The ci.yml job is left unchanged
+  here (instruction: do not weaken workflows); it is recorded as a residual
+  heresy: discovered, not repaired.
