@@ -220,3 +220,30 @@ throughout; choir.news health ok.
 Still open: Node B's data use rose about 68 GiB today, mostly the guest's
 freed-but-not-trimmed blocks and the two backups. Next stop of the paper:
 offline `fstrim`, then drop the 48 GiB backup.
+
+## History compaction (owner, 2026-10-19 about 20:30: "I want history compaction and other stuff to reduce resource consumption")
+
+Mutation class: red (the always-on paper's persistent store). Same tool
+and sequence as the owner-approved 10-09 window
+(`guest-store-history-bloat-and-memory-shape-2026-10-09.md`): hold, stop,
+reflink backup, offline mount, `projection-compact` (squash the single
+branch to one commit on its root, then `CALL DOLT_GC('--full')`; it
+refuses unless the content witness, schema plus per-table digests, is
+identical before and after), `fstrim`, unmount, maintenance-serve,
+unhold, refresh.
+
+- Canonical head label: the last head the paper reported to vmctl
+  (`859f4f2d…`, sequence 1,334,778, reported at the 17:41 boot). The
+  head only labels the squash commit; the witness compares content.
+- The tool runs on Node B under a memory cap (`systemd-run`,
+  MemoryHigh 8G, MemoryMax 10G, low IO weight), since the 10-15 GC test
+  peaked at 8 GB and Node B has about 13 GiB available.
+- Expected: Dolt store from about 46 GiB to a few GiB; `fstrim` returns
+  the freed blocks to Node B once the older backups are dropped.
+- Rollback: hold, stop, swap `data.img.pre-compact-<ts>` back in.
+- Failure modes to check: the witness differs (the tool refuses; restore
+  nothing, boot the unchanged store); more than one branch (refused);
+  the GC runs out of memory (capped; the store is untouched until the
+  GC's final swap, and the backup covers a torn swap); the boot after
+  compaction replays slowly or misses heads (verify `runtime: started`,
+  schedules active, runs, and a publish).
