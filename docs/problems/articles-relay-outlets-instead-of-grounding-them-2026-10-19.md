@@ -230,3 +230,9 @@ outlets and coverage. A revision rewrites a block it finds breaking
 these rules. Risk to watch: G1 (single-source claims stated as fact),
 and G4 (a one-time rewrite wave as each story's next revision fixes
 old prose, with more support judgements and published versions).
+
+Deployed: 8be39bb36, CI run 39197635727 green, staging at 04:14:35.
+The paper's `/api/prompts` serves the new Texture default (the new rule
+present, the escape clause gone), and runs resumed by 04:19, all
+gpt-6-luna. Measure from 04:15: new-in-revision outlet share (41% this
+hour), G1 and G4, and support records per Texture run (32%).
