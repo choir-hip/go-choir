@@ -285,3 +285,31 @@ hour), G1 and G4, and support records per Texture run (32%).
   median 220 characters. Among them a source-talk sentence ("its
   available report here is a brief teaser rather than the full
   account") and several long plain spans from the EQT story.
+
+## Third hour on the second rule set (06:11 to 07:08): the residual is carried prose
+
+- 35 runs (21 Texture), all gpt-6-luna. Console clean; btrfs metadata
+  86.9%.
+- New writing stays grounded: new sentences in revisions 2 of 13 (15%);
+  new stories 1 of 7 (WFP Gaza names one outlet).
+- **Carried prose is the residual.** In the three revised baseline
+  stories, 29 of 60 carried sentences still name an outlet. Albania v29
+  (48 sentences) carries 18 outlet sentences and 9 source-talk ones ("No
+  captured report establishes …", "remain unanswered in the captured
+  reporting"); 8 of the 9 predate the rules, 1 is new ("The
+  announcement does not establish the programme's results"). The rule
+  "a revision rewrites any block that breaks these rules" fires only
+  partly: Texture edits the blocks the new evidence touches.
+- Support: 7 records over 21 Texture runs (33%), median failing span 146
+  characters.
+
+Options for the carried prose (not chosen; for the owner):
+1. Let it age out. New writing is grounded; old stories leave the front.
+   Long-running stories (France, Albania) stay visible for days.
+2. A one-time rewrite pass: one cast per front story asking Texture to
+   rewrite to the news rules. About 60 Texture turns and one published
+   version per story, plus fresh support judgements on every span.
+3. A frame note: when a story's current text has sentences whose subject
+   is an outlet or the captures, the frame lists those blocks, so every
+   revision sees them. Orange (frame text); needs an outlet-name
+   detector that does not flag a disagreement paragraph.
