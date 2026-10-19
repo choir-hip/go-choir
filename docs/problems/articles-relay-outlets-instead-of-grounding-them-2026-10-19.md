@@ -259,3 +259,29 @@ hour), G1 and G4, and support records per Texture run (32%).
 - Not yet seen: a new story under the second rules, or a revision that
   rewrites old relay prose. Next hour decides whether the rewrite rule
   needs a stronger trigger.
+
+## Second hour on the second rule set (05:15 to 06:11): new writing is grounded
+
+- 86 runs (51 Texture on 21 documents), all gpt-6-luna. The busiest hour
+  of the night: 7 new front stories. Console clean; btrfs metadata 86.8%.
+- **New stories: 4 of 47 sentences name an outlet (9%)**, against 38%
+  at baseline. EQT and Cleanaway (0 of 14), ConnectWise (0 of 6), NHS
+  maternity units (0 of 5), biodiversity (0 of 3, IPBES as the primary
+  record). Longyearbyen credits the council and a named permafrost
+  expert, and names the Guardian once.
+- **New sentences in revisions: 2 of 10 (20%)**, from 41% before the
+  second rules. Netanyahu endorsement v6 to v9 went from 3 of 4 outlet
+  sentences to 0 of 5.
+- **Old relay prose mostly stays.** 17 of 23 carried sentences in the
+  three revised baseline stories still name an outlet. France fell from
+  17 of 20 to 13 of 19, so the rewrite rule fires partly.
+- **G1 (outlet findings stated as fact): no case seen** in the stories
+  read.
+- **Pipeline voice in a new form:** Barclays v5 says "The full article
+  remained inaccessible with an HTTP 401 error." The story rests on a
+  MarketWatch teaser and a loosely related complaint. The measure's
+  phrase list misses this, so the 0 meta count undercounts.
+- **Support:** 11 records over 51 Texture runs (22%), 21 failing pairs,
+  median 220 characters. Among them a source-talk sentence ("its
+  available report here is a brief teaser rather than the full
+  account") and several long plain spans from the EQT story.
