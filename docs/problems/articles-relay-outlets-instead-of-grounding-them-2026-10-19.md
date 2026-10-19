@@ -414,3 +414,15 @@ record that carried the BBC capture, and who routed it.
   stories happen to be revised. Across hours, new stories and new
   revision sentences sit well below the 38% baseline, but one long
   interview story can move an hour from 0% to 42%.
+
+## Ninth hour (11:40 to 12:37)
+
+- 130 runs (71 Texture on 30 documents), all gpt-6-luna. Console clean.
+  Support: 20 records over 71 Texture runs (28%), median span 169.
+- New-against-baseline sentences in revisions: **7 of 54 (13%)**.
+  Savannah police story v3 to v7: 0 of 15. Alberta referendum v19: 0 of
+  5. France v39 still carries 12 of its 15 old outlet sentences.
+- Kenya Ebola v12 is now headlined "Reports differ on Kenya's Ebola case
+  count …". Outlets disagreeing on a count is the case where naming them
+  is right, but the headline leads with the sources rather than the
+  outbreak. Borderline against the headline rule; one case.
