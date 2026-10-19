@@ -95,3 +95,21 @@ Rollback: revert the fix commit (dependency bump only).
   and focused subsets of internal/agentcore and internal/textureowner.
 
 Heresy delta: repaired the nine reachable findings above.
+
+## Follow-up: platform-specific findings (same PR)
+
+- After the first fix commit, the local darwin govulncheck reported 0, but the
+  PR's "govulncheck (report only)" job (linux/amd64, same invocation) still
+  failed (job 118266964676; the output is not logged because the step runs under
+  `bash -e`). Hypothesis, not yet trace-confirmed: govulncheck only analyzes the
+  host GOOS, and the linux build reaches code the darwin scan does not. The
+  darwin scan's non-called list pointed at google.golang.org/grpc v1.83.1
+  (GO-2026-6443, fixed in v1.83.2) and github.com/klauspost/compress v1.18.0
+  (GO-2026-5841, fixed in v1.18.7).
+- Second bump: grpc v1.83.1 -> v1.83.2, klauspost/compress v1.18.0 -> v1.18.7;
+  `vendorHash` recomputed again. golang.org/x/crypto v0.57.0 has one
+  GO-2026-5932 advisory with no fixed version (N/A); it is not reachable on
+  darwin and is recorded as a named residual.
+- A local linux scan was not possible (cgo cross-compile for Dolt/ICU fails on
+  macOS; the Docker VM OOM-kills govulncheck). The PR's linux CI job is the
+  confirming check.
