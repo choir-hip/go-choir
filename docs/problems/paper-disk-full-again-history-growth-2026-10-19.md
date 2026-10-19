@@ -283,3 +283,50 @@ the history bound, to choose next:
    tape (`docs/problems/platform-artifact-small-file-growth-2026-10-19.md`
    measures 3x to 7x fewer events), which also slows this store's history
    growth.
+
+### Why the full GC needed so much memory (code reading, 21:25; hypotheses until traced)
+
+A read-only reading of the pinned Dolt module (go@v0.40.5-0.20260716231223-6bea93f2f665)
+by a Sonnet subagent; file:line refer to that module.
+
+- **Memory scales with reachable chunks, not disk size.** Each full GC sweep is
+  a breadth-first walk from the roots. Per reachable chunk it keeps a `visited`
+  entry (every chunk counts as non-leaf when `IncrementalFileSize=0`,
+  `store/nbs/store.go:2414`), the output archive writer's per-chunk state (one
+  unrotated output file, `archive_writer.go:157,183-184`, `gc_copier.go:55-58`)
+  and the walk frontier with copies (`store.go:2432-2459`): roughly 200 B per
+  chunk plus about 150 B at the widest level. Archive indexes for every file
+  also load onto the heap (mmap off, `archive_reader.go:224-237`).
+- **Hypothesis: C memory the Go GC cannot see.** Archive reads cache 256 zstd
+  dictionaries per file (`archive_reader.go:216`); a hash-order walk misses and
+  builds new ones freed only by finalizers. `projection-compact` sets no
+  `GOMEMLIMIT`.
+- **The 900 GB of reads** were the page cache squeezed by anonymous memory under
+  the cgroup cap: indexes and archive pages read back again and again.
+- **Open question that decides everything: is the reachable set small after the
+  squash?** `internal/projectionbase/compact.go:96-100` checks only
+  `dolt_branches`; Dolt's GC also roots tags, remotes, internal refs, working
+  sets and stashes (`doltdb/doltdb.go:1985-2005`). Any such ref keeps the whole
+  history reachable, and the squash then frees nothing. Count the refs on the
+  aborted image (offline, read-only) before choosing.
+- **The witness is memory-heavy too:** `queryTableContentHash`
+  (`internal/computerversion/dolt_state_extractor.go:322-380`) holds every row
+  of a table as JSON and sorts it. It fit under the 10 GB cap before the squash.
+- **The Dolt v2.4.2 bump does not change this:** the mark-and-sweep code is
+  byte-identical.
+
+Ranked options from that reading:
+1. **Fresh-database row copy** (`CREATE DATABASE`, `INSERT … SELECT` per table in
+   the same engine, swap directories). Memory is independent of chunk count
+   (pending edits flush at 64K, `store/prolly/tuple_mutable_map.go:30`; caches
+   256 MiB). Needs schema, indexes and auto-increment recreated; the witness
+   checks it, and the witness should become streaming.
+2. **Push the squashed branch to an empty `file://` remote** and use that store.
+   The puller keeps one seen set (about 40 B a chunk) and rotates files at
+   1 GiB: about a quarter of GC's bookkeeping. Not verified end to end.
+3. **Full GC with bounds:** `DOLT_GC('--full','--incremental-file-size',…,'--archive-level',0)`,
+   `GOMEMLIMIT` about 20 GiB, `TMPDIR` on the data disk, `MemoryMax` without
+   `MemoryHigh`. Bounded only if the reachable set is modest.
+
+Next safe probe: on `data.img.compact-aborted-20261019T2110Z` (not the live
+image), list every ref class and count chunks reachable from the squashed head.
