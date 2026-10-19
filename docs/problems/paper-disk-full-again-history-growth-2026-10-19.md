@@ -114,3 +114,9 @@ October 22**, unless history is compacted or the disk grown again.
 
 **Watching from now:** the hourly check reads the guest's last `store:
 dolt gc` line (avail MiB, live GiB), not only Node B's btrfs.
+
+**Acceptance (16:50):** 38 runs since 16:29 (19 Texture, 16
+management, 3 research), all gpt-6-luna; no fatal, panic or "no space"
+line since the boot. Four front stories published 16:46 to 16:51
+(Shakahola v14, WFP Gaza v6, Meta No Kings v7, the budget synth story
+v5). The paper publishes again.
