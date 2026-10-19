@@ -186,6 +186,41 @@ jobs:
           echo "status=$status" >> "$GITHUB_OUTPUT"
           exit 0
 
+      - name: OpenSSL actually in the closure
+        # The version table above reads pkgs.openssl, the package-set default.
+        # What ships is whatever the built closure contains: this step lists
+        # every OpenSSL library store path in the host closure and the guest
+        # image and which closure members link it (docs/problems/weekly-
+        # nixpkgs-bump-openssl-downgrade-2026-10-19.md).
+        if: steps.build.outputs.status == '0'
+        shell: bash
+        run: |
+          set -uo pipefail
+          out="$RUNNER_TEMP/openssl-closure.md"
+          {
+            echo
+            echo "OpenSSL in the built closures (runtime store paths, and the closure members that reference them):"
+            echo
+            echo "| closure | openssl | referenced by |"
+            echo "|---|---|---|"
+          } > "$out"
+          report() {
+            label="$1"; root="$2"
+            nix-store -qR "$root" | sort > "$RUNNER_TEMP/closure.txt"
+            grep -E -- '-openssl-[0-9][0-9.]*(-bin)?$' "$RUNNER_TEMP/closure.txt" | while read -r ssl; do
+              name="${ssl#/nix/store/*-}"
+              refs=$(nix-store -q --referrers "$ssl" | sort | comm -12 - "$RUNNER_TEMP/closure.txt" \
+                | sed -e 's|^/nix/store/[a-z0-9]*-||' -e "s|^${name}\$||" | grep -v '^$' | tr '\n' ' ')
+              echo "| ${label} | ${name} | ${refs:-(none)} |" >> "$out"
+            done
+          }
+          host=$(nix build --no-link --print-out-paths .#nixosConfigurations.go-choir-b.config.system.build.toplevel)
+          guest=$(nix build --no-link --print-out-paths .#guest-image)
+          report "host" "$host"
+          report "guest image" "$guest"
+          cat "$out" >> "$GITHUB_STEP_SUMMARY"
+          cat "$out" >> "$RUNNER_TEMP/versions.md"
+
       - name: Report on the pull request
         if: always()
         shell: bash
