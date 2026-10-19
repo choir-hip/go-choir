@@ -426,3 +426,11 @@ record that carried the BBC capture, and who routed it.
   count …". Outlets disagreeing on a count is the case where naming them
   is right, but the headline leads with the sources rather than the
   outbreak. Borderline against the headline rule; one case.
+
+## Tenth hour (12:37 to 13:33)
+
+97 runs (52 Texture), all gpt-6-luna; console clean; btrfs metadata
+88.3%. Support 10 records over 53 Texture runs (19%), median span 224.
+All 11 front stories changed this hour: 19 of 81 sentences name an
+outlet (23%). Only one baseline story was revised (the West Bank
+settler story, 2 of 7 new sentences, still carrying 9 of 10 old ones).
