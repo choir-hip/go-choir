@@ -236,3 +236,26 @@ The paper's `/api/prompts` serves the new Texture default (the new rule
 present, the escape clause gone), and runs resumed by 04:19, all
 gpt-6-luna. Measure from 04:15: new-in-revision outlet share (41% this
 hour), G1 and G4, and support records per Texture run (32%).
+
+## First hour on the second rule set (04:15 to 05:15, thin sample)
+
+- 30 runs, all gpt-6-luna; console clean since the 04:14 restart; btrfs
+  metadata 86.6%.
+- Only two front stories changed. OpenCode v11 credits OpenCode itself
+  in all three sentences, with no outlet named.
+- France protests v25 to v27 (the worst baseline story, 17 of 20 outlet
+  sentences) **kept 16 of its 19 carried outlet sentences**, and 2 of
+  its 3 new sentences name an outlet ("CNN reported protesters in Lille
+  and Marseille …", "…, BBC correspondent Katya Adler wrote"). The new
+  "a revision rewrites any block that breaks these rules" did not fire
+  on this revision. Hypothesis, not traced: the turn was a small
+  integration edit, and "change only the blocks that change" won. Its
+  arrest-count paragraph (Al Jazeera, the BBC, the Guardian and DW
+  giving 1,200 to 2,400) is the case where naming outlets is right:
+  they disagree.
+- Support: 3 records over 17 Texture runs (18%, from 32%), 4 failing
+  pairs. Two are France's relay sentence; two are a DeepSeek benchmark
+  sentence ("Its model page lists …").
+- Not yet seen: a new story under the second rules, or a revision that
+  rewrites old relay prose. Next hour decides whether the rewrite rule
+  needs a stronger trigger.
