@@ -1,6 +1,6 @@
 # The paper's 48 GB disk filled with Dolt history and live data, and the runtime crash-loops (2026-10-19)
 
-Status: documented; recovery not started. Found at the 16:22 UTC hourly
+Status: recovered by growing the disk (option 1) at 16:25–16:29 UTC; history still unbounded (owner decision). Found at the 16:22 UTC hourly
 check. Class: red (the always-on paper's persistent state and VM
 lifecycle). Owner rule: "we need paper publishing 24/7, even after
 crashes."
@@ -80,3 +80,37 @@ squash".
   host's.
 - The 10-15 doc predicted this fill date to within days. A predicted
   deadline belongs in the handoff's open-decision list with its date.
+
+## Recovery (option 1, 2026-10-19 16:25 to 16:33 UTC)
+
+The conservative, reversible recovery, as on 10-15. Compaction (option 2)
+stays the owner's decision: it rewrites Dolt history.
+
+1. **16:25:35** hold (`/internal/vmctl/hold`, reason names this doc). The
+   ownership was `state=degraded`, epoch 13134.
+2. **16:25:41** stop; no firecracker process left for the VM; no loop
+   device attached.
+3. Reflink backup `data.img.pre-grow-20261019T1626Z` (48 GiB, ext4
+   `go-choir-data`). **Rollback:** hold, stop, swap this file back in.
+4. `truncate -s 64G`, `e2fsck -f -p` (it replayed the ext4 journal and
+   returned 1, corrected; a second pass returned 0), `resize2fs` to
+   16,777,216 blocks: **about 15.8 GiB free**. Loop detached.
+5. **16:26:28** `maintenance-serve`: boot under the fence, Dolt
+   maintenance phase complete, no crash.
+6. **16:27:17** unhold and refresh. A crash boot, as the owner rule
+   requires: pre-boot work closed as `interrupted_by_restart`; every
+   source schedule "stays active" with its next tick (16:44 for most).
+   No maintenance boot argument left in `fc-config.json`. `runtime:
+   started` at 16:29:04. The paper's API answered from 16:32:51 (two
+   502s from the gateway's resolve before that).
+
+**Downtime:** about 15:40 to 16:29 UTC (about 50 minutes), noticed at the
+16:22 hourly check.
+
+**New deadline:** about 15.8 GiB free, at the measured 3 to 6 GB a day of
+history and live growth, and a GC needs about 2 GB of headroom to finish.
+The disk fills again in about **two and a half to four days, around
+October 22**, unless history is compacted or the disk grown again.
+
+**Watching from now:** the hourly check reads the guest's last `store:
+dolt gc` line (avail MiB, live GiB), not only Node B's btrfs.
