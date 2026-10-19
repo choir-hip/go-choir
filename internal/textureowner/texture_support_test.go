@@ -135,8 +135,12 @@ func TestCommitListsNewPairsAndJevJudgesThemOffTheCommit(t *testing.T) {
 			t.Fatalf("check memo for %s = %+v, %v, %v; want matched, listed by the Texture turn", c.Pair, check, found, err)
 		}
 		p := check.Pair
-		if p.DocID != rec.ChannelID || p.RevisionID != v1.RevisionID || p.BlockID != blockID || p.BlockHash != texturewrite.TextHash(blockText) || p.Text != blockText {
-			t.Fatalf("pair %+v does not name the citing block %s (%q) of %s", p, blockID, blockText, v1.RevisionID)
+		// A pair's text is the span its citation closes, with the block as
+		// context (support-pair-judges-whole-paragraph-against-one-quote-
+		// 2026-10-19).
+		if p.DocID != rec.ChannelID || p.RevisionID != v1.RevisionID || p.BlockID != blockID || p.BlockHash != texturewrite.TextHash(p.Text) ||
+			p.Text == "" || p.Text == blockText || !strings.Contains(blockText, strings.TrimSpace(strings.TrimRight(p.Text, ".,"))) || p.Context != blockText {
+			t.Fatalf("pair %+v does not name its span of the citing block %s (%q) of %s", p, blockID, blockText, v1.RevisionID)
 		}
 		if p.Cited.Doc != "cap-court" || p.Cited.Version != "doc-hash-1" || p.Cited.CID == "" || p.Cited.Hash == "" || p.Matcher != quotematch.Version {
 			t.Fatalf("pair %+v does not carry the cited Ref", p)
