@@ -165,6 +165,13 @@ jobs:
               label="${a%%|*}"; attr="${a#*|}"
               old=$(ver "$RUNNER_TEMP/main" "$attr"); new=$(ver . "$attr")
               mark=""; [ "$old" != "$new" ] && mark=" **(moved)**"
+              # Owner rule: upgrades, never downgrades. Flag any row whose
+              # version sorts below the one on main.
+              if [ "$old" != "?" ] && [ "$new" != "?" ] && [ "$old" != "$new" ] \
+                && [ "$(nix-instantiate --eval --expr "builtins.compareVersions \"${new}\" \"${old}\"")" = "-1" ]; then
+                mark=" **(DOWNGRADE)**"
+                echo "${label} ${old} -> ${new}" >> "$RUNNER_TEMP/downgrades.txt"
+              fi
               echo "| ${label} | ${old} | ${new}${mark} |"
             done
           } > "$table"
@@ -239,6 +246,10 @@ jobs:
           body="$RUNNER_TEMP/comment.md"
           {
             echo "Weekly nixpkgs bump, head \`${HEAD_SHA}\`: ${verdict} ([run](${run_url}))"
+            if [ -s "$RUNNER_TEMP/downgrades.txt" ]; then
+              echo
+              echo "**Downgrades vs main (owner rule: upgrades, never downgrades):** $(paste -sd ';' "$RUNNER_TEMP/downgrades.txt" | sed 's/;/; /g')"
+            fi
             echo
             cat "$RUNNER_TEMP/versions.md" 2>/dev/null || echo "(version table unavailable)"
           } > "$body"
