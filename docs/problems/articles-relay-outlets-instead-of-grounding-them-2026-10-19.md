@@ -371,3 +371,14 @@ integrated it, explaining why it does not apply, instead of rejecting
 the record with `choir.Reject`. The headline then took on the state of
 the sources, against the headline rule. To confirm: the story's inbox
 record that carried the BBC capture, and who routed it.
+
+## Sixth hour on the second rule set (09:01 to 09:47)
+
+- 104 runs (59 Texture on 25 documents), all gpt-6-luna; the busiest
+  hour. Console clean; btrfs metadata 87.4%. Support: 14 records over
+  60 Texture runs (23%), median failing span 176.
+- **New sentences in revised baseline stories: 0 of 10.** Alberta
+  referendum v14 to v18 went from 5 of 7 outlet sentences to 0 of 4, and
+  kept only one old sentence: the rewrite rule fired on a whole story.
+- Across every front story changed this hour: 4 of 34 sentences name an
+  outlet (12%), against 38% at baseline.
