@@ -330,3 +330,49 @@ Ranked options from that reading:
 
 Next safe probe: on `data.img.compact-aborted-20261019T2110Z` (not the live
 image), list every ref class and count chunks reachable from the squashed head.
+
+### Bounded full GC works: 48 GiB to 7.5 GiB in 2 min 19 s at 6.1 GB (21:30 to 22:05)
+
+Probe on a reflink copy of `data.img.compact-aborted-20261019T2110Z` (already
+squashed), mounted on Node B at `/mnt/probe-refs`, never the live image.
+
+- **Refs:** one branch (`main`), no tags, no remotes, no stashes, an empty
+  `dolt_status`, two commits. The squash did make the history unreachable, so
+  the earlier GC's memory was not a pinned ref.
+- **Live data:** `computer_event_index` 1,356,556 rows (3.84 GiB of event and
+  receipt JSON), `og_objects` 1,017,782 rows (2.18 GiB of body and metadata),
+  `run_memory_entries` 424,992 rows (0.76 GiB), `og_edges` 23,547,
+  `texture_agent_mutations` 9,345. About 6.8 GiB raw; the other ~40 GiB was
+  history.
+- **The killed run's GC output went to the host's `/tmp`.** The embedded
+  driver keeps Dolt's process-wide temp provider at `os.TempDir()`, fixed at
+  package init (`store/util/tempfiles/temp_files.go:135`); the `dolt` CLI
+  points it at `.dolt/temptf` but the embedded driver does not. A 4.2 GB
+  `buffered_file_byte_sink_*` was left in Node B's `/tmp` (removed). `/tmp`
+  is on the root btrfs, not tmpfs, so this was disk, not memory.
+- **Experiment:** `dolt gc --full --archive-level=0 --incremental-file-size=268435456`
+  (dolt CLI 2.4.2, whose mark-and-sweep is byte-identical to the pinned
+  module) with `GOMEMLIMIT=5GiB GOGC=50`, `MemoryMax=8G`, `MemorySwapMax=0`.
+  **It finished in 2 min 19 s: 6.1 GB memory peak, 77 GB read, 18.1 GB
+  written, store 48 GiB to 7.5 GiB** (19 table files). Row counts after:
+  identical in all five tables; two commits.
+
+So the unbounded `DOLT_GC('--full')` was the problem, not the store size.
+With incremental files, leaf chunks skip the `visited` set and the writer's
+per-chunk state resets per file (`store/nbs/store.go:2414`,
+`gc_copier.go:204-234`); archive level 0 avoids the archive writer and its
+zstd dictionaries.
+
+**Failure modes for the tool change, written before the code:**
+1. A flag the pinned module does not parse: `DOLT_GC` accepts
+   `--archive-level` and `--incremental-file-size` there
+   (`dprocedures/dolt_gc.go:249-266`).
+2. Temp output on a different filesystem from the store: set the temp
+   provider to `<workspace>/texture/.dolt/temptf` before opening.
+3. Memory still unbounded through the witness (`queryTableContentHash` holds a
+   table's rows as JSON): it fit under 10 GB before; set a Go memory limit and
+   run under `MemoryMax` with no swap, so it fails fast instead of thrashing.
+4. Archive level 0 leaves plain table files: 7.5 GiB instead of a smaller
+   archive; the guest's own online GC writes archives later. Accept.
+5. Pinned-module result differs from the CLI's: prove it end to end with the
+   built tool on a fresh probe copy (witness must match) before any live use.
