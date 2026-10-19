@@ -209,3 +209,14 @@ Remedy, in order: run the designed headroom service now (`btrfs balance
 too little, a wider `-dusage` balance; trim the guest's freed blocks
 (offline `fstrim` on the next stop) and drop the 48 GiB backup once the
 paper has run a day on the new disk.
+
+**Done (19:02 to 19:05):** the headroom service's balance
+(`-dusage=20,limit=20`) returned 8 GiB in 9 s. A second idle-priority
+balance (`-dusage=40,limit=30`, `ionice -c3 nice -n19`) relocated 30 of
+456 chunks: **unallocated 31 GiB**, data chunks 407 GiB (81% used),
+metadata got a new chunk (18.64 GiB, 80.5% used). The paper kept running
+throughout; choir.news health ok.
+
+Still open: Node B's data use rose about 68 GiB today, mostly the guest's
+freed-but-not-trimmed blocks and the two backups. Next stop of the paper:
+offline `fstrim`, then drop the 48 GiB backup.
