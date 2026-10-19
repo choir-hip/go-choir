@@ -176,3 +176,14 @@ for history growth, and the next station.
 - To confirm: the first GC after the boot is followed by "conjoin
   completed successfully" with a small `new_upstream_len`, and free space
   stays near 78 GiB minus growth.
+
+**Confirmed (18:08):** the first GC after the boot ran at 18:05:29
+(journal 1131 MiB, avail 72,947 MiB → 73,883 MiB). The conjoin began at
+18:06:01 with 270 old-generation tables and logged "conjoin completed
+successfully … new_upstream_len=2" at 18:08:33. No fatal or "no space"
+line. The table count is now 2, so the next conjoin is about 255 GCs away
+(days), and the conjoiner will then take only the small tables.
+
+Remaining: history and live data still grow (46 GiB live). At the
+measured rate, about 73 GiB free lasts roughly two to three weeks.
+Offline compaction is the next station, and should come before that.
