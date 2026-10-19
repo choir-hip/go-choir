@@ -40,6 +40,13 @@ The sample is capped by the runs listing, so read it as a sample, not a
 census. I cannot see passing pairs from the inboxes, so I have no pass
 rate by paragraph length yet.
 
+**Next hour (00:15 to 01:15 Oct 19).** 15 `system:support` records with
+16 failing pairs: 13 are paragraphs of 2 or 3 sentences, and 3 are single
+sentences. Several of these stories cite only an HN link-only capture.
+There the single-sentence failures are the expected kind (no outlet
+words to support anything), so the paragraph unit does not explain every
+failure.
+
 ## Mechanism (code)
 
 - `internal/texturewrite/checks.go:66` `Checks`: for each block,
