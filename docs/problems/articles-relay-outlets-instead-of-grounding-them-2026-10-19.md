@@ -148,3 +148,30 @@ story whose second outlet was only such an embed will be held at its next
 revision. That is correct, but visible: watch for new holds that name one
 outlet on these eight stories. Stories that are never revised keep the
 embed. A read-side skip would cover them, and is not done.
+
+## First hour after deploy (02:15 to 02:58, small sample)
+
+- 39 runs, all gpt-6-luna. Holds as usual. Console clean; the three
+  "OOM" matches are oomd's boot lines, not kills. btrfs metadata rose
+  from 86.2% to 87.4% with the new image.
+- **New story written under the rules** (79b4bfc1, KillSwitch): 0 of 9
+  sentences name an outlet. It credits the creator, cites the
+  repository (a primary record), and its open question is in the
+  story's terms.
+- **Revisions keep the old style.** Iran (a648c3bb v7) still ends 6 of 6
+  sentences with "Al Jazeera / The Hill reports", even after crediting
+  the speaker ("Vance said … The Hill reports"). The rule's escape
+  clause ("name an outlet … where one alone reports a lead") covers
+  almost every single-source claim. That is a wording loophole, to fix
+  if the next hours confirm it.
+- **Pipeline voice survived once** (Steele-John v8): "The capture is a
+  feed extract, not the full article, and attributes the dossier
+  account to Nine …". G5 for that rule, at least on gpt-6-luna.
+- **Support, since 02:16:** 9 records over 27 Texture runs, 13 failing
+  pairs. Their median text fell from 417 to 183 characters. The pairs
+  without context are blocks with one closing citation (S3 by
+  design). **Attribution clauses fail support on their own:** "according
+  to TechCrunch, which reported the announcement on Oct. 18" (p 0.44)
+  and "The BBC reported the announcement as …" (p 0.18). The passage
+  holds the fact, not the outlet's framing or date. So relaying is not
+  even the safe sentence under the new unit.
