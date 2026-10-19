@@ -247,3 +247,39 @@ unhold, refresh.
   GC's final swap, and the backup covers a torn swap); the boot after
   compaction replays slowly or misses heads (verify `runtime: started`,
   schedules active, runs, and a publish).
+
+## Compaction aborted; the store restored unchanged (20:30 to 21:27)
+
+- 20:30:46 hold and stop; reflink backup `data.img.pre-compact-20261019T2035Z`;
+  offline mount (store 48 GiB, 7 old-generation archives after the
+  conjoin). 20:31:00 `projection-compact` started as a transient unit
+  (MemoryHigh 8G, MemoryMax 10G).
+- **The full GC did not fit in memory.** At 20:56 it held 8.3 GB of
+  anonymous memory and 8.4 GB in swap, so its 115 GB of "writes" were swap,
+  not store output (the guest disk stayed at 49 GiB used). I raised the cap
+  to 13G/15G at about 20:57. By 21:07 it held 14 GB plus 16.9 GB of swap,
+  **Node B's 15 GB of swap was full**, and it had read 781 GB: thrashing,
+  not converging. choir.news stayed healthy.
+- 21:09:27 stopped (SIGTERM, then SIGKILL on timeout). It had used 13 GB
+  of memory and 15.7 GB of swap at peak, 902 GB read, 147 GB written, in
+  38 minutes. Node B recovered at once (swap 0, 22 GB available).
+- **Restore, not repair:** the squash had committed but the GC was killed
+  and the witness check never ran. I moved the image aside
+  (`data.img.compact-aborted-20261019T2110Z`, kept for diagnosis) and
+  restored the 20:30 backup by reflink. Read-only fsck clean.
+  maintenance-serve 21:10:08, unhold and refresh 21:10:42, schedules
+  active, next ticks 21:26:54. Downtime about 20:30 to 21:27.
+
+**Lesson.** `DOLT_GC('--full')` holds the store's reachable set in memory.
+At 9.5 GiB (10-09) it fit; at 48 GiB of mostly history it needed well over
+30 GB. Offline full GC on Node B cannot compact this store. Options for
+the history bound, to choose next:
+1. Rebuild instead of GC: copy the squashed HEAD's tables into a fresh
+   database (row copy, bounded memory) and swap it in, with the witness
+   compared. Or re-materialize from the latest compact base plus the tape
+   tail (the 10-09 doc's "guest reclaim = rebase onto a compact base").
+2. Compact more often so each full GC stays small (it fit at 9.5 GiB).
+3. Cut the write volume at the source: group commit in the projection
+   tape (`docs/problems/platform-artifact-small-file-growth-2026-10-19.md`
+   measures 3x to 7x fewer events), which also slows this store's history
+   growth.
