@@ -175,3 +175,58 @@ embed. A read-side skip would cover them, and is not done.
   and "The BBC reported the announcement as …" (p 0.18). The passage
   holds the fact, not the outlet's framing or date. So relaying is not
   even the safe sentence under the new unit.
+
+## Second hour (02:58 to 03:59): revisions still write relay sentences
+
+- 43 runs, all gpt-6-luna. Console clean (no panic, fatal, OOM or "ended
+  run" in the window). btrfs metadata 87.5%.
+- **Short stories follow the rules.** Austrian Airlines (new, 0 of 3
+  sentences name an outlet) credits "Bulgarian authorities". Alberta
+  base fire v16 (2 of 5 before, 0 of 3 now) credits Prime Minister
+  Carney. Lambie v13 (2 of 3 before, 0 of 4 now) states the facts and
+  credits Lambie.
+- **Revisions write new relay sentences, not only carry old ones.** On
+  the 7 baseline stories revised since the deploy, I split each
+  sentence into new (not in the baseline text) or carried. **9 of 22
+  new sentences name an outlet as the subject (41%)**, against 9 of 46
+  carried (20%) and 38% at baseline. Examples, all written after the
+  deploy: "Euronews says the town hall's spire collapsed" and "Euronews
+  says 19 people were detained" (Limoges v5), "Al Jazeera reported on
+  Oct. 19 that President Donald Trump accused …" (Zelenskyy v14), "The
+  BBC describes video published by news outlets as showing gunmen …"
+  (Tiger Shroff v5), "Araghchi also warned …, The Hill reports" (Iran
+  v7). Each is a one-source claim.
+- **Cause (from the prompt text and the output, not a frame trace):**
+  the rule calls a claim confirmed only with a primary record or two
+  reports, and lets Texture "name an outlet only where outlets disagree
+  or one alone reports a lead". Almost every claim in a revision has
+  one source, so the escape clause covers it. The new stories pass
+  because their few claims have a primary record or an official maker.
+- **Pipeline voice in other words.** Maine v20 carries "three newsrooms
+  … describe the same beats", "a fourth outlet carrying the account,
+  but not a fourth separate one" and "in the material reviewed". The
+  rule's four named phrases do not cover these.
+- **Support:** 7 records over 22 Texture runs (32%), 10 failing pairs,
+  median text 160 characters. All 4 failing pairs on the Anthropic story
+  (3 records in 5 runs) are relay sentences: "according to TechCrunch,
+  which reported the announcement on Oct. 18", "The BBC reported the
+  announcement as …", "Al Jazeera says the fund could be used …".
+  Others are hedges about sources: "that is the authority's account, not
+  an identification of …", "the cited account does not identify them".
+- **The pair-unit conjecture is half confirmed.** The failing-span
+  length fell as predicted (417, then 183, then 160 characters). But
+  records per Texture run did not fall below a tenth: 33% then 32%. The
+  paragraph unit made failures long. It did not cause most of them. Most
+  remaining failures are sentences about outlets and sources, which no
+  quote can support. So the writing rule, not the judge, is now the
+  lever for both groundedness and support churn.
+
+Decision (yellow, prompt text): close the escape clause. An event or
+statement a report describes is stated as fact with its cite, credited
+to whoever made the statement. An outlet is named only for its own
+unconfirmed finding (an unnamed source, its own analysis) or where
+outlets disagree. The pipeline-voice rule widens to cover talk about
+outlets and coverage. A revision rewrites a block it finds breaking
+these rules. Risk to watch: G1 (single-source claims stated as fact),
+and G4 (a one-time rewrite wave as each story's next revision fixes
+old prose, with more support judgements and published versions).
