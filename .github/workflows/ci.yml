@@ -306,6 +306,10 @@ jobs:
       - name: govulncheck ./...
         shell: bash
         run: |
+          # Actions runs `bash -e -o pipefail`; a report-only step must not end
+          # at govulncheck's non-zero exit or an empty summary grep
+          # (docs/problems/patch-watch-govulncheck-reachable-findings-2026-10-19.md).
+          set +e
           set -uo pipefail
           go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./... > "$RUNNER_TEMP/govulncheck.txt" 2>&1
           status=$?
@@ -316,7 +320,7 @@ jobs:
             echo "exit ${status}; reachable findings: ${count:-0}. Report only: this job never gates CI."
             echo
             echo '```'
-            grep -E '^(Vulnerability #|    Found in:|    Fixed in:|  Standard library)' "$RUNNER_TEMP/govulncheck.txt" | head -200
+            grep -E '^(Vulnerability #|    Found in:|    Fixed in:|  Standard library)' "$RUNNER_TEMP/govulncheck.txt" | head -200 || true
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           cat "$RUNNER_TEMP/govulncheck.txt"
