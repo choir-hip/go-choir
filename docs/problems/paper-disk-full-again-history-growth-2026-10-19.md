@@ -10,8 +10,9 @@ This is the residual named in
 under "Belief and remaining error": "the history and live class grows about
 6 GB/day on the paper. That fills the 48 GB disk in about a week after the
 fix, unless history is bounded". It filled in four and a half days. Bounding
-history (squash plus `dolt gc --full`) is the open owner decision "Store A
-squash".
+history (squash plus `dolt gc --full`) is the next station the 10-15
+doc named. (Correction: I first called it the owner's "Store A squash"
+decision; Store A is the platform's Dolt store, not this guest's.)
 
 ## Evidence (guest console on Node B, read-only; counts, sizes, states and times only)
 
@@ -120,3 +121,38 @@ management, 3 research), all gpt-6-luna; no fatal, panic or "no space"
 line since the boot. Four front stories published 16:46 to 16:51
 (Shakahola v14, WFP Gaza v6, Meta No Kings v7, the budget synth story
 v5). The paper publishes again.
+
+## Second mechanism: Dolt's conjoin needs the whole old generation in free space (17:36)
+
+The 17:36 hourly check, reading the guest's GC lines:
+
+- After the grow, free space went 15.8 GiB (16:26) → 12.1 GiB at the
+  16:51 GC (journal 1188 MiB) → 13.1 GiB after it → 11.9 GiB at the 17:28
+  GC → 12.9 GiB after it. Live data held at 46 GiB.
+- **After each GC, Dolt starts a conjoin of the old generation**
+  ("beginning conjoin of database … generation=old … upstream_len=268",
+  then 269), and it fails: "conjoin of database failed … write
+  …/noms/oldgen/nbs_table_…: copy_file_range: no space left on device"
+  (17:30:27, with about 12.9 GiB free). The same failure ran every five
+  minutes from 15:08 to the 15:40 crash.
+- **Why (Dolt source, pinned version):** `store/nbs/conjoiner.go`
+  conjoins when a table set holds more than `defaultMaxTables = 256`
+  files. `chooseConjoinees` sorts by chunk count and keeps taking tables
+  while the running sum exceeds the next table. Every online GC since the
+  10-15 fix promoted one table of similar size into the old generation,
+  so the sum always exceeds the next one, and it chooses **all 269
+  tables, about 45 GiB**. That copy can never fit, and each attempt
+  fills the disk to zero before it fails.
+- **Effect:** every GC (about every 35 minutes now) briefly takes the
+  disk to zero. Any journal write in that window is fatal, which is how
+  the 15:40 crash happened ("error writing to database journal file").
+  The grow alone does not make the paper safe.
+
+Decision (conservative, reversible, same procedure): grow the disk again,
+to 128 GiB, so the conjoin of about 45 GiB fits once. After it, the old
+generation is one large table plus small ones, and the conjoiner then
+takes only the small ones. Host cost: Node B's btrfs has about 138 GiB
+free inside its data chunks, so no new chunk and no metadata-chunk
+growth. Offline compaction (squash plus `gc --full` with
+`projection-compact`, owner-approved once on 10-09) remains the real fix
+for history growth, and the next station.
