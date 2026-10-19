@@ -313,3 +313,27 @@ Options for the carried prose (not chosen; for the owner):
    is an outlet or the captures, the frame lists those blocks, so every
    revision sees them. Orange (frame text); needs an outlet-name
    detector that does not flag a disagreement paragraph.
+
+## Fourth hour on the second rule set (07:08 to 08:04)
+
+- 53 runs (25 Texture), all gpt-6-luna. Console clean; btrfs metadata
+  87.0%. Support: 3 records over 25 Texture runs (12%, the lowest of the
+  night), median failing span 129 characters.
+- New sentences in revised baseline stories: 3 of 11 name an outlet
+  (27%). One is a new disagreement-free relay ("DW reported Nuñez said
+  police 'lost control'"); one is the same Katya Adler sentence carried
+  through each France revision since 04:15 (it is new only against the
+  01:52 baseline).
+- A caveat on the measure: "new" in `measure.py` means not among the 60
+  baseline stories, not written after the rules. Bend (v25, 8 of 11) and
+  Katie Zacharia (v33, 16 of 43) are long-running stories outside the
+  baseline, so their relay prose is mostly carried.
+- **A loophole in the second rules: analysis sources.** The midterm
+  travel story (v5, 07:46) is coverage of coverage: "NPR says his travel
+  includes several red states …", "The Guardian says he held rallies …",
+  and "The BBC account concerns its correspondent's reporting trip, not
+  another Trump rally." The rule lets an outlet be named for "its own
+  analysis", and this story's sources are all analysis pieces, so every
+  claim qualifies. The facts inside (rallies in Montana, Tennessee and
+  Alaska; states he won in 2024) could be stated plainly with cites.
+  Not acted on yet: one story. Watch for more.
