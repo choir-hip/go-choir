@@ -20,6 +20,15 @@ on:
   schedule:
     - cron: '23 5 * * 1' # Mondays 05:23 UTC
   workflow_dispatch:
+    inputs:
+      build_only:
+        description: >-
+          Rebuild the host closure and guest image on the existing bump branch
+          without re-bumping. A normal run resets the branch to main plus a
+          fresh lock bump, discarding any fix commits pushed to it.
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: write
@@ -39,15 +48,27 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
-      pr: ${{ steps.bump.outputs.pull-request-number }}
-      operation: ${{ steps.bump.outputs.pull-request-operation }}
+      pr: ${{ steps.bump.outputs.pull-request-number || steps.existing.outputs.pr }}
+      operation: ${{ steps.bump.outputs.pull-request-operation || steps.existing.outputs.operation }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - uses: DeterminateSystems/determinate-nix-action@e847f25223456b3058e12f7fc9d777b6a6f25060 # v3.23.2
 
+      - name: Use the existing bump pull request (build_only)
+        id: existing
+        if: ${{ inputs.build_only }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pr=$(gh pr list --head "$BUMP_BRANCH" --state open --json number --jq '.[0].number // empty')
+          echo "pr=$pr" >> "$GITHUB_OUTPUT"
+          echo "operation=existing" >> "$GITHUB_OUTPUT"
+
       - name: Update the base nixpkgs input only
         id: bump
+        if: ${{ !inputs.build_only }}
         uses: DeterminateSystems/update-flake-lock@da03c0f078bc4b2c37ee4f7e072d34bf8f188bb3 # v29
         with:
           inputs: nixpkgs
@@ -144,6 +165,13 @@ jobs:
               label="${a%%|*}"; attr="${a#*|}"
               old=$(ver "$RUNNER_TEMP/main" "$attr"); new=$(ver . "$attr")
               mark=""; [ "$old" != "$new" ] && mark=" **(moved)**"
+              # Owner rule: upgrades, never downgrades. Flag any row whose
+              # version sorts below the one on main.
+              if [ "$old" != "?" ] && [ "$new" != "?" ] && [ "$old" != "$new" ] \
+                && [ "$(nix-instantiate --eval --expr "builtins.compareVersions \"${new}\" \"${old}\"")" = "-1" ]; then
+                mark=" **(DOWNGRADE)**"
+                echo "${label} ${old} -> ${new}" >> "$RUNNER_TEMP/downgrades.txt"
+              fi
               echo "| ${label} | ${old} | ${new}${mark} |"
             done
           } > "$table"
@@ -165,6 +193,41 @@ jobs:
           echo "status=$status" >> "$GITHUB_OUTPUT"
           exit 0
 
+      - name: OpenSSL actually in the closure
+        # The version table above reads pkgs.openssl, the package-set default.
+        # What ships is whatever the built closure contains: this step lists
+        # every OpenSSL library store path in the host closure and the guest
+        # image and which closure members link it (docs/problems/weekly-
+        # nixpkgs-bump-openssl-downgrade-2026-10-19.md).
+        if: steps.build.outputs.status == '0'
+        shell: bash
+        run: |
+          set -uo pipefail
+          out="$RUNNER_TEMP/openssl-closure.md"
+          {
+            echo
+            echo "OpenSSL in the built closures (runtime store paths, and the closure members that reference them):"
+            echo
+            echo "| closure | openssl | referenced by |"
+            echo "|---|---|---|"
+          } > "$out"
+          report() {
+            label="$1"; root="$2"
+            nix-store -qR "$root" | sort > "$RUNNER_TEMP/closure.txt"
+            grep -E -- '-openssl-[0-9][0-9.]*(-bin)?$' "$RUNNER_TEMP/closure.txt" | while read -r ssl; do
+              name="${ssl#/nix/store/*-}"
+              refs=$(nix-store -q --referrers "$ssl" | sort | comm -12 - "$RUNNER_TEMP/closure.txt" \
+                | sed -e 's|^/nix/store/[a-z0-9]*-||' -e "s|^${name}\$||" | grep -v '^$' | tr '\n' ' ')
+              echo "| ${label} | ${name} | ${refs:-(none)} |" >> "$out"
+            done
+          }
+          host=$(nix build --no-link --print-out-paths .#nixosConfigurations.go-choir-b.config.system.build.toplevel)
+          guest=$(nix build --no-link --print-out-paths .#guest-image)
+          report "host" "$host"
+          report "guest image" "$guest"
+          cat "$out" >> "$GITHUB_STEP_SUMMARY"
+          cat "$out" >> "$RUNNER_TEMP/versions.md"
+
       - name: Report on the pull request
         if: always()
         shell: bash
@@ -183,6 +246,10 @@ jobs:
           body="$RUNNER_TEMP/comment.md"
           {
             echo "Weekly nixpkgs bump, head \`${HEAD_SHA}\`: ${verdict} ([run](${run_url}))"
+            if [ -s "$RUNNER_TEMP/downgrades.txt" ]; then
+              echo
+              echo "**Downgrades vs main (owner rule: upgrades, never downgrades):** $(paste -sd ';' "$RUNNER_TEMP/downgrades.txt" | sed 's/;/; /g')"
+            fi
             echo
             cat "$RUNNER_TEMP/versions.md" 2>/dev/null || echo "(version table unavailable)"
           } > "$body"
