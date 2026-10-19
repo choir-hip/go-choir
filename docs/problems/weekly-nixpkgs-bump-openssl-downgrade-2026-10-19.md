@@ -9,8 +9,7 @@ deploy and is the owner's act; this work touches only branch
 
 Owner rule: Choir takes upgrades, never downgrades.
 
-Heresy delta: `discovered` 3 (below), `introduced` 0, `repaired` 0 at the time
-of this commit (the repair is recorded in the decision section when it lands).
+Heresy delta: see the Decision section.
 
 ## Observation
 
@@ -56,24 +55,27 @@ default.
 
 ## Is the table mis-measuring?
 
-Partly. The row reads `nixosConfigurations.go-choir-b.pkgs.openssl.version`:
-the package-set default of the host configuration. That is exactly what moved
-(the guest uses the same default), so the 3.6.2 -> 3.5.8 move is real for every
-package that takes `openssl` from the set. But it is not an inventory of what
-ships:
+No, but it is a proxy. The row reads
+`nixosConfigurations.go-choir-b.pkgs.openssl.version`: the package-set default
+of the host configuration, which the guest (`go-choir-autoputer-vm`) shares.
+The workflow now also prints what the built closures contain (step "OpenSSL
+actually in the closure", added in this branch; first output posted on PR #74
+from run 39320308935). Result for the unchanged bump:
 
-- the closure contains more than one OpenSSL. Instantiating the bump's host
-  toplevel and guest image shows `openssl-3.5.8` AND `openssl-3.6.2` (two
-  derivations each). The 3.6.2 one comes from the pinned `nixpkgs-qdrant` input
-  (rev `ec84054`, the qdrant lane from the previous problem doc): qdrant and
-  its dependencies are taken whole from the deployed nixpkgs, so the older
-  3.6.2 stays in the host closure;
-- packages can pin a specific line independently of the default.
+- host closure: exactly one OpenSSL library, `openssl-3.5.8` (plus `-bin`,
+  `-dev`);
+- guest image: exactly one, `openssl-3.5.8`;
+- about 55 closure members link it, including openssh, systemd, curl, git,
+  python3 3.14.7 and python3.14-cryptography, nodejs-slim, rsync, socat,
+  libreoffice, pipewire and the gst plugins (the guest installs nodejs and
+  libreoffice on purpose, `nix/autoputer-vm.nix`).
 
-The workflow therefore also gets a step that lists every OpenSSL library store
-path in the built host closure and guest image and the closure members that
-reference it. That output is the evidence for "which version does the closure
-carry", not the single `pkgs.openssl` row.
+So the move is real and total: every OpenSSL consumer that ran 3.6.2 on main
+runs 3.5.8 after the merge. (An older `openssl-3.6.2` derivation is in the
+build-time derivation graph because the qdrant lane takes qdrant whole from the
+pinned `nixpkgs-qdrant` input; it is not in the runtime closure, so qdrant does
+not leave a vulnerable OpenSSL on the host.) Go services and caddy use Go's own
+crypto and are unaffected; qdrant does not link OpenSSL.
 
 ## Security comparison (openssl-library.org/news/vulnerabilities, fetched 2026-10-19)
 
@@ -117,35 +119,58 @@ as a build input of some dependents.
 
 ## Options
 
-Cost numbers are measured with `nix build --dry-run` for
-`go-choir-b ... toplevel` plus `guest-image` (x86_64-linux), cache.nixos.org as
-the substituter.
+Costs are measured with `nix build --dry-run` for the `go-choir-b` toplevel
+plus `guest-image` (x86_64-linux) against cache.nixos.org. Baseline (the bump as
+it is): 238 derivations to build (Choir's own services and NixOS glue), 1261
+paths / 3.7 GiB fetched; the run took about 17 minutes. There is no Choir
+binary cache (a search for cachix, attic and substituters in the workflows and
+nix files finds none), so any non-nixpkgs derivation is built from source in CI
+and again on Node B.
 
 | option | result | cost |
 |---|---|---|
-| A. Accept 3.5.8 | downgrade by version number; fewer open advisories than 3.6.2 but 13 open, 1 High | zero; violates the owner rule |
-| B. Global overlay `openssl = prev.openssl_3_6` (3.6.5) | closure at 3.6.5 everywhere | **2462 derivations to build (baseline 238), 4140 paths / 17.9 GiB fetched (baseline 1261 / 3.7 GiB).** A global override rebuilds everything that links `openssl`, which includes rustc and cargo, systemd, curl (and with it git, cmake, libgit2 ...), python3 (24 environments), nodejs, gradle, ruby gems. Hours on a hosted runner against a 240 minute job timeout; rejected |
-| C. Targeted overrides of the OpenSSL consumers that run in the Choir closure (`openssh`, `systemd`, `python3`/searxng, `nodejs`, `socat`, `rsync` ... decided from the closure inventory) with `openssl_3_6` | the network-facing daemons use 3.6.5; default stays 3.5.8 for the rest | per package rebuild only; exact set and cost recorded in the decision below once measured |
-| D. Wait for 3.5.9 in nixos-unstable | clean, cached, but 3.6.2 -> 3.5.9 is still a downgrade by number | zero build cost; violates the owner rule |
-| E. Move to `openssl_4_0` (4.0.3) | newest, supported to 2027-05 | major version, API removals; mass rebuild like B; no |
+| A. Accept 3.5.8 as nixpkgs ships it | version number goes down; open 2026 advisories go **down** 41 -> 13 | zero; breaks the owner's "never downgrade" rule by number, not by security |
+| B. Global overlay `openssl = prev.openssl_3_6` (3.6.5; measured by an uncommitted experiment) | whole closure on 3.6.5, 0 open advisories | **2462 derivations to build, 4140 paths / 17.9 GiB fetched.** Rebuilds llvm 21 and 22, clang, rustc and cargo, openjdk 21, gradle, libreoffice, nodejs, python3 (24 environments), torch, systemd, curl (hence the version-control tools, cmake, libgit2), postgresql, duckdb, gdal, pipewire, gst. Many hours from source with no cache against a 240 minute job timeout, and the same again on Node B |
+| C. Override only a few consumers (`openssh` measured) | those consumers on 3.6.5; the rest stays 3.5.8 | an `openssh.override { openssl = ... }` overlay takes 278 builds / 2145 paths / 7.1 GiB, because other closure members (libreoffice among them) depend on openssh through the package set; a service-local `services.openssh.package` avoids the cascade but leaves two OpenSSL lines in the runtime closure and the "closure uses >= 3.6.2" invariant is still false. Rejected: more moving parts, no invariant gained |
+| D. Wait for 3.5.9 (nixpkgs master has it; nixos-unstable `fe13242` does not) | 0 open advisories, cached | zero; still a number downgrade vs 3.6.2 |
+| E. `openssl_4_0` (4.0.3) | newest, supported to 2027-05 | major version with API removals; mass rebuild like B |
+| F. Pin base nixpkgs to a revision before PR 564262 (3.6 default) | cached 3.6.x | gives up "current nixos-unstable head" for every other package; forks the bump process |
 
-## Decision
+## Decision (made without a blocking ask, per CLAUDE.md "No Blocking Asks")
 
-Pending the closure inventory (the new workflow step), then a targeted
-override (option C) chosen from facts, with the build cost stated. Option B is
-rejected on cost. The 2026-11-01 end of support of 3.6 is recorded as a
-residual: the override is a `max(default, openssl_3_6)` expression, so it
-disappears by itself once the default catches up, and a later weekly bump must
-revisit it before or when 3.6 loses support (a 3.5.9-or-newer default is then
-the correct, supported floor, and the "never downgrade" rule must be reconciled
-with it by the owner).
+Take the conservative option on the branch and state the exception plainly:
+
+1. **Do not override OpenSSL.** B is infeasible (hours of from-source rebuild
+   of rustc, llvm, libreoffice, nodejs and torch, twice, for a library line
+   that loses support 2026-11-01); C buys no invariant. Options A and D are the
+   engineering answer: 3.5 LTS is supported to 2030-04, and the next weekly
+   bump brings 3.5.9 (cached, 0 open advisories).
+2. **The bump is a version-number downgrade and a security upgrade.** Open 2026
+   advisories 41 -> 13; the High PKCS7_verify use-after-free (CVE-2026-45447)
+   is fixed. What remains is the 2026-09-29 batch (one High: DTLS stale-buffer
+   retransmit, CVE-2026-84782; DTLS is not used by sshd, curl, git, python TLS
+   or the Go services). Merging PR #74 therefore needs an explicit owner
+   exception to "never downgrade by version number". That is the one open
+   decision, recorded as a named residual below. Until the owner ratifies it,
+   PR #74 should not be merged.
+3. **Make the rule enforceable.** The workflow now marks any version-table row
+   whose version sorts below main as `**(DOWNGRADE)**` and repeats the list at
+   the top of the PR comment, so a downgrade cannot hide in a long table. The
+   closure-level OpenSSL step covers the library itself.
+
+Heresy delta: `discovered` 2 (a silent library downgrade in the weekly bump;
+the table measures a proxy), `introduced` 0, `repaired` 1 (downgrades are now
+flagged), with the OpenSSL downgrade itself left open as a named owner
+decision.
 
 ## Residuals
 
-- 3.6 EOL 2026-11-01 (above).
-- The qdrant lane keeps an older nixpkgs closure (OpenSSL 3.6.2, 41 open
-  advisories) in the host closure for as long as it applies. If qdrant links
-  that OpenSSL at runtime, the lane leaves a vulnerable library on the host; the
-  inventory step shows whether it does. Retiring the lane when the base rustc
-  uses LLVM 22 resolves it; until then, overriding qdrant's OpenSSL is a
-  separate decision.
+- Owner decision: ratify (or reject) the 3.6.2 -> 3.5.8 version-number
+  downgrade on the grounds above. If rejected, the only mechanisms are B or F,
+  both costly; neither should be taken without that explicit decision.
+- 3.6 reaches end of support 2026-11-01. Any "stay on 3.6" decision expires
+  then; this is why the nixpkgs default moved to LTS.
+- Re-check at the next weekly bump that `openssl` is >= 3.5.9 (0 open
+  advisories) and close this document.
+- python3 3.13.13 -> 3.14.7 is a minor-line jump outside this problem; it is an
+  upgrade by number and should be reviewed as a behavior change.
