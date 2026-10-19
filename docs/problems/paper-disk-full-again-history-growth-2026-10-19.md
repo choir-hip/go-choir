@@ -376,3 +376,19 @@ zstd dictionaries.
    archive; the guest's own online GC writes archives later. Accept.
 5. Pinned-module result differs from the CLI's: prove it end to end with the
    built tool on a fresh probe copy (witness must match) before any live use.
+
+### The content witness is the next bottleneck (22:20 to 22:55)
+
+End-to-end run of the deployed tool (471689517, bounded GC) on a reflink
+probe of the unsquashed 20:30 backup (`/var/lib/go-choir/probe-paper-e2e.img`):
+it spent the whole 34 min in the **first** content witness, before the
+squash: 8.6 GB peak (cap raised from 8G to 12G at the owner's go-ahead), 2 h
+33 min of CPU (about 4.4 cores, competing with the paper), 65 GB read,
+store untouched. Stopped at 22:54. `queryTableContentHash` JSON-encodes and
+sorts every row of each table; on 1.36M event rows that is the cost.
+
+Remedy: compare Dolt root value hashes (`dolt_hashof_db`) instead. Prolly
+trees are history-independent, so equal schemas and rows give an equal root
+hash whatever the history; it costs nothing. The squash's `-A` commits any
+uncommitted working changes, so the check is the WORKING root before against
+the HEAD and WORKING roots after. The full witness stays behind a flag.
