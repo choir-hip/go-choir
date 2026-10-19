@@ -73,3 +73,25 @@ Rollback: revert the fix commit (dependency bump only).
   never produce the intended patch-sla issue.
 - introduced: none.
 - repaired: none yet.
+
+## Resolution (fix commit)
+
+- `go get` of the four modules. The module graph forced golang.org/x/text to
+  v0.42.0 (golang.org/x/net v0.60.0 requires it), not the minimum v0.39.0;
+  gRPC v1.83.1, OTel sdk v1.45.0, and x/net v0.60.0 as planned. Their
+  dependencies moved by MVS (x/crypto, x/sys, x/sync, x/mod, x/oauth2, x/term,
+  x/time, x/tools, google.golang.org/api, genproto, OTel contrib, and others).
+  `go` and `toolchain` lines are unchanged.
+- `flake.nix`: `commonGoArgs.vendorHash` updated, because the Nix build vendors
+  from `go.mod`/`go.sum`. The new hash was computed with buildGoModule's own
+  `goModules` fixed-output derivation over the same source filter; the same
+  procedure reproduced the old hash exactly on the pre-bump `go.mod`/`go.sum`.
+  The CI Nix build is the authoritative check.
+- Result: `govulncheck@v1.9.0 ./...` reports "Your code is affected by 0
+  vulnerabilities" (1 imported-package and 2 required-module findings remain
+  that the code does not call).
+- Tests: `go vet ./...` clean; `go test` passed for internal/store, proxy,
+  auth, gateway/..., vmctl, toolregistry, modelpolicy, actorruntime, selfdev,
+  and focused subsets of internal/agentcore and internal/textureowner.
+
+Heresy delta: repaired the nine reachable findings above.
