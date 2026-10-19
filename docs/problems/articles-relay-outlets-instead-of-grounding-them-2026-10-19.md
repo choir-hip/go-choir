@@ -382,3 +382,15 @@ record that carried the BBC capture, and who routed it.
   kept only one old sentence: the rewrite rule fired on a whole story.
 - Across every front story changed this hour: 4 of 34 sentences name an
   outlet (12%), against 38% at baseline.
+
+## Seventh hour (09:47 to 10:44)
+
+- 121 runs (75 Texture on 33 documents), all gpt-6-luna. Console clean
+  (one keyword match was inside a capture id). btrfs metadata 87.6%.
+  Support: 14 records over 75 Texture runs (19%), median span 191.
+- New-against-baseline sentences in revisions: 6 of 31 name an outlet.
+  Three are Iran v8's "… Al Jazeera reports" and "… The Hill reports",
+  the same sentences v7 wrote at about 02:45 under the first rules: the
+  baseline comparison counts them as new, though they are carried from
+  v7. One is TechCrunch's review of a documentary, an outlet's own
+  analysis where naming it is right.
