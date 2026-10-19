@@ -979,3 +979,70 @@ func TestAppenderPostCommitObserverFiresOnlyOnCommit(t *testing.T) {
 		t.Fatalf("observer fired %v, want exactly [%s]", fired, EventGenesisImported)
 	}
 }
+
+// batchCountingProjection records the batches it is asked to apply and can
+// refuse them, to pin the appender's payload cache lifetime.
+type batchCountingProjection struct {
+	*dryRunProjection
+	applied  []string
+	failNext error
+}
+
+func (p *batchCountingProjection) FinalizeBatch(ctx context.Context, computerID string, digest string, receipt Receipt, batch *ProjectionBatch) error {
+	if batch == nil {
+		return p.dryRunProjection.FinalizeBatch(ctx, computerID, digest, receipt, batch)
+	}
+	if err := p.failNext; err != nil {
+		p.failNext = nil
+		return err
+	}
+	p.applied = append(p.applied, batch.EventID)
+	return nil
+}
+
+// Failure modes (docs/problems/guest-appender-retains-every-projection-
+// payload-2026-10-19.md): the cached payload survives a successful append and
+// the process heap grows with every write; the batch is not applied because
+// the cache was dropped too early; the cache is dropped after a failed
+// finalize that recovery may retry.
+func TestAppenderDropsProjectionPayloadCacheAfterAppend(t *testing.T) {
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer := SigningKey{SignerRef: SignerRef{SignerDomain: "platform-control", KeyID: "platform-1"}, PrivateKey: privateKey}
+	projection := &batchCountingProjection{dryRunProjection: &dryRunProjection{memoryProjection: &memoryProjection{}}}
+	cas := &memoryCAS{signer: signer}
+	appender, err := NewComputerEventAppender(testComputerID, memoryPinner{signer: signer}, projection, cas, EventHeadReceiptVerifier{Keys: staticKeyResolver{key: publicKey}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	genesis := testEvent(t, nil, EventGenesisImported)
+	genesis.ResultingEffectiveCommitment = testDigestA
+	if _, err := appender.AppendNew(ctx, genesis, TransitionInput{TargetStateCommitment: testDigestA}, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	first := testEvent(t, nil, EventProjectionBatchRecorded)
+	payload := testBatchPayloadFor(t, first.EventID)
+	if _, _, err := appender.AppendNewPayload(ctx, first, TransitionInput{}, payload, ProjectionBatchMediaType, "owner"); err != nil {
+		t.Fatalf("append batch: %v", err)
+	}
+	if len(projection.applied) != 1 || projection.applied[0] != first.EventID {
+		t.Fatalf("applied batches = %v, want [%s]", projection.applied, first.EventID)
+	}
+	if n := len(appender.livePayloads); n != 0 {
+		t.Fatalf("payload cache holds %d entries after a finalized append, want 0", n)
+	}
+
+	// A refused finalize keeps the entry for recovery.
+	projection.failNext = errors.New("finalize refused")
+	failed := testEvent(t, nil, EventProjectionBatchRecorded)
+	if _, _, err := appender.AppendNewPayload(ctx, failed, TransitionInput{}, testBatchPayloadFor(t, failed.EventID), ProjectionBatchMediaType, "owner"); err == nil {
+		t.Fatal("append with a refused finalize succeeded")
+	}
+	if n := len(appender.livePayloads); n != 1 {
+		t.Fatalf("payload cache holds %d entries after a failed finalize, want 1", n)
+	}
+}

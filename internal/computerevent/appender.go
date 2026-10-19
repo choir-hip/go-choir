@@ -393,6 +393,14 @@ func (a *ComputerEventAppender) AppendNewPayload(ctx context.Context, event Even
 	}
 	a.livePayloads[payloadDigest] = append([]byte(nil), payload...)
 	receipt, err := a.appendLocked(ctx, event, input, []string{payloadReceiptDigest})
+	if err == nil {
+		// Finalized: drop the cached plaintext, or every payload this process
+		// ever appended stays on the heap (docs/problems/guest-appender-
+		// retains-every-projection-payload-2026-10-19.md). After a failure it
+		// stays for the prepared-event recovery paths, which read through to
+		// the artifact store without it.
+		delete(a.livePayloads, payloadDigest)
+	}
 	return receipt, payloadDigest, err
 }
 
