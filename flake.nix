@@ -148,9 +148,13 @@
       buildCommit = self.rev or self.dirtyRev or "local";
       buildDate = self.lastModifiedDate or "unknown";
       sourceRepoRemote = "https://github.com/choir-hip/go-choir.git";
+      # No x86_64-darwin: nixpkgs 26.11 throws on import for that system
+      # (docs/problems/flakehub-publish-fails-after-nixpkgs-bump-2026-10-19.md),
+      # and `nix flake show --all-systems` (flakehub-push) evaluates every
+      # system named here. Re-add it only if the base moves to a nixpkgs
+      # that supports x86_64-darwin again.
       devSystems = [
         "aarch64-darwin"
-        "x86_64-darwin"
         "aarch64-linux"
         "x86_64-linux"
       ];
