@@ -128,3 +128,23 @@ outlet-attributed share of sentences (38% before), primary sources per
 story (4 of 113), pipeline-voice sentences (7 in 25 stories), failing-pair
 median length (417 characters), and support records per Texture run
 (about a fifth to a quarter).
+
+## Stored whole-capture embeds (traced 2026-10-19)
+
+8 of 60 front stories carry a quoteless `expanded_ref`. All four checked
+were first published on Oct 15–16, before `{{embed}}` was retired
+(3143ade5b, Oct 16 18:13). No current path mints one: story opening
+seeds an empty body, and Write mints only `numbered_ref`. They survive
+because Write copies stored citations back unchanged, on purpose
+(`TestStoredEmbedsRoundTripWithoutTheEmbedToken`). Besides the lone "1",
+the embed's capture **counts toward the publish gate's outlets**
+(`CitedCaptures` and `citedOutlets` read any Ref), though it grounds no
+sentence.
+
+Fix (red: a Texture canonical write): after each Write, `Apply` drops
+every quoteless `expanded_ref`, and any paragraph it leaves with no words,
+including in blocks the Write did not touch. Quoted stored embeds stay. A
+story whose second outlet was only such an embed will be held at its next
+revision. That is correct, but visible: watch for new holds that name one
+outlet on these eight stories. Stories that are never revised keep the
+embed. A read-side skip would cover them, and is not done.

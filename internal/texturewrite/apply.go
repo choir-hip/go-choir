@@ -114,6 +114,9 @@ func Apply(ctx context.Context, in Input) (Result, error) {
 	if len(errs) > 0 {
 		return Result{}, errs.sorted()
 	}
+	if kept := dropEmbedOnlyBlocks(content); len(kept) > 0 {
+		content = kept
+	}
 	if len(content) == 0 {
 		return Result{}, Errors{{Line: ops[0].Line, Msg: "the Write leaves the document empty; a document keeps at least one block"}}
 	}
@@ -792,6 +795,45 @@ func copyAttrs(in map[string]any) map[string]any {
 	out := make(map[string]any, len(in))
 	for k, v := range in {
 		out[k] = v
+	}
+	return out
+}
+
+// dropEmbedOnlyBlocks drops every stored embed of a whole capture (an
+// expanded_ref with no quote, from before {{embed}} was retired) from the
+// document, and each paragraph left with no words. Such an embed grounds no
+// sentence: it drew as a lone marker under the headline and counted its
+// outlet toward the publish gate
+// (docs/problems/articles-relay-outlets-instead-of-grounding-them-2026-10-19.md).
+// A quoted stored embed cites a passage and stays.
+func dropEmbedOnlyBlocks(blocks []texturedoc.Node) []texturedoc.Node {
+	out := make([]texturedoc.Node, 0, len(blocks))
+	for _, b := range blocks {
+		before := len(sourceRefs(b))
+		b.Content = dropWholeCaptureEmbeds(b.Content)
+		if b.Type == "paragraph" && len(sourceRefs(b)) < before && strings.TrimSpace(plainText(b)) == "" && len(sourceRefs(b)) == 0 {
+			continue
+		}
+		out = append(out, b)
+	}
+	return out
+}
+
+// dropWholeCaptureEmbeds removes the whole-capture embeds among nodes,
+// at any depth.
+func dropWholeCaptureEmbeds(nodes []texturedoc.Node) []texturedoc.Node {
+	if len(nodes) == 0 {
+		return nodes
+	}
+	out := make([]texturedoc.Node, 0, len(nodes))
+	for _, n := range nodes {
+		if n.Type == "source_ref" && stringAttr(n, "display_mode") == "expanded_ref" {
+			if ref, ok := RefOf(n); ok && strings.TrimSpace(ref.Quote) == "" {
+				continue
+			}
+		}
+		n.Content = dropWholeCaptureEmbeds(n.Content)
+		out = append(out, n)
 	}
 	return out
 }
