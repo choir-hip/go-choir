@@ -51,8 +51,10 @@ rate by paragraph length yet.
   citation in it. That means a new judgement and, on failure, a new wake.
 - `docs/reports/support-judgement-to-jev-design-2026-10-14.md` (failure
   mode 4) speaks of Jev judging "the committed sentence and the captured
-  block". The design meant the cited sentence. The code sends the
-  paragraph.
+  block". Its guard is "unchanged code path", so the paragraph unit
+  probably came over from the older management judge. Either "sentence"
+  was loose wording, or the unit was never examined. I have not found a
+  decision record choosing the paragraph.
 
 So a paragraph that synthesizes two outlets, which is the paper's own
 two-outlet rule at work, makes pairs that each claim one quote supports
@@ -95,7 +97,7 @@ reader overlay)
    previous sentence end or citation to this citation. Keep the block hash
    for memo identity, and hash the sentence for the key. That way an edit
    to another sentence in the paragraph does not re-key this citation.
-   This is the design doc's stated unit.
+   This is the unit the design doc names.
 2. **Judge the paragraph against all its quotes together.** Make one pair
    per block, carrying every cited quote. Jev asks whether the quotes
    together support the paragraph. Fewer calls, but one bad citation fails
