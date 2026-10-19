@@ -156,3 +156,23 @@ free inside its data chunks, so no new chunk and no metadata-chunk
 growth. Offline compaction (squash plus `gc --full` with
 `projection-compact`, owner-approved once on 10-09) remains the real fix
 for history growth, and the next station.
+
+## Second grow (2026-10-19 17:39 to 17:41 UTC)
+
+- 0 runs in flight. **17:39:45** hold and stop; no firecracker process,
+  no loop. Reflink backup `data.img.pre-grow-20261019T1740Z` (64 GiB).
+  **Rollback:** hold, stop, swap it back in (the 48 GiB backup from 16:26
+  is also kept).
+- `truncate -s 128G`; `e2fsck -f -p` (journal replay, returned 1; second
+  pass 0); `resize2fs` to 33,554,432 blocks: **about 78 GiB free**.
+  Loop detached.
+- **17:40:19** `maintenance-serve`: Dolt maintenance complete, fenced,
+  no crash. **17:40:51** unhold and refresh; no maintenance boot argument
+  left. `runtime: started` at 17:41:19; schedules ticked at 17:56:18 and
+  runs resumed (5 management runs by 17:58).
+- Downtime about 17:39 to 17:56 for publishing.
+- Dolt has no setting to turn conjoin off: `DisableConjoin` is only used
+  inside GC.
+- To confirm: the first GC after the boot is followed by "conjoin
+  completed successfully" with a small `new_upstream_len`, and free space
+  stays near 78 GiB minus growth.
