@@ -358,3 +358,16 @@ Options for the carried prose (not chosen; for the owner):
   does not bear on the story. To confirm: read these two stories' held
   revisions and their Texture `why` lines, and check whether the
   off-topic cite arrived in the revision that first passed the gate.
+
+**Correction (09:15): the gate hypothesis is refuted for the Saudi
+story.** Its versions 2 to 6 already cited uscirf.gov and the Guardian
+and were published. The BBC capture first appears in v7 (08:49), which
+also rewrote the headline from "Saudi reports warn Youssef al-Manasif
+faces imminent execution" to "Saudi execution report leaves
+al-Manasif's fate unclear". So the off-topic cite was not added to pass
+the gate. New hypothesis (not traced): a loosely related capture (Saudi
+executions of two Bangladeshis) was routed to the story, and Texture
+integrated it, explaining why it does not apply, instead of rejecting
+the record with `choir.Reject`. The headline then took on the state of
+the sources, against the headline rule. To confirm: the story's inbox
+record that carried the BBC capture, and who routed it.
