@@ -74,9 +74,12 @@ func TestCompactWorkspaceDropsHistoryAndKeepsContentWitness(t *testing.T) {
 		t.Fatalf("fixture commits = %d, want >= 12", before)
 	}
 
-	result, err := CompactWorkspace(ctx, "computer-compact", "head-compact", workspace)
+	result, err := CompactWorkspaceWith(ctx, "computer-compact", "head-compact", workspace, CompactOptions{FullWitness: true})
 	if err != nil {
 		t.Fatalf("compact: %v", err)
+	}
+	if result.RootBefore == "" || result.RootBefore != result.RootAfter {
+		t.Fatalf("root changed: %q -> %q", result.RootBefore, result.RootAfter)
 	}
 	if result.CommitsBefore != before || result.CommitsAfter > 2 {
 		t.Fatalf("commits before=%d after=%d, want %d then <= 2", result.CommitsBefore, result.CommitsAfter, before)
@@ -127,5 +130,44 @@ func TestCompactWorkspaceRefusesExtraBranch(t *testing.T) {
 	_ = closer.Close()
 	if _, err := CompactWorkspace(context.Background(), "computer-compact", "head-compact", workspace); err == nil {
 		t.Fatal("compaction ran with a second branch that keeps history reachable")
+	}
+}
+
+// The runtime commits every 100 events, so a stopped store can hold
+// uncommitted working changes. The squash commits them (-A); the root check
+// compares the working root before with the HEAD root after, and the rows
+// must survive.
+func TestCompactWorkspaceKeepsUncommittedWorkingChanges(t *testing.T) {
+	ctx := context.Background()
+	_, workspace := churnedWorkspace(t)
+	db, closer, err := openCompactionDB(workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("REPLACE INTO compaction_fixture (id, body) VALUES (99, 'uncommitted')"); err != nil {
+		t.Fatal(err)
+	}
+	_ = db.Close()
+	_ = closer.Close()
+
+	result, err := CompactWorkspace(ctx, "computer-compact", "head-compact", workspace)
+	if err != nil {
+		t.Fatalf("compact: %v", err)
+	}
+	if result.RootBefore == "" || result.RootBefore != result.RootAfter {
+		t.Fatalf("root changed: %q -> %q", result.RootBefore, result.RootAfter)
+	}
+	db, closer, err = openCompactionDB(workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close(); _ = closer.Close() }()
+	var body string
+	if err := db.QueryRow("SELECT body FROM compaction_fixture WHERE id = 99").Scan(&body); err != nil || body != "uncommitted" {
+		t.Fatalf("uncommitted row after compaction: %q, %v", body, err)
+	}
+	var dirty int
+	if err := db.QueryRow("SELECT COUNT(*) FROM dolt_status").Scan(&dirty); err != nil || dirty != 0 {
+		t.Fatalf("dolt_status rows after compaction = %d, %v; want a clean store", dirty, err)
 	}
 }

@@ -19,8 +19,9 @@ import (
 // old chunk generations were 81% of the owner store (8.9 GiB vs 1.7 GiB live).
 //
 // CompactWorkspace squashes the store's single branch to one commit on top of
-// its root and runs a full GC. It refuses unless the content witness (schema
-// and per-table content digests) is identical before and after. It mutates the
+// its root and runs a full GC. It refuses unless the store's root value hash
+// (every schema and row) is identical before and after; optionally it also
+// compares the content witness (schema and per-table content digests). It mutates the
 // workspace in place: run it on a copy, a reflink snapshot, or a scratch store
 // whose loss is recoverable from the tape. Never on a store a runtime has open.
 
@@ -31,8 +32,23 @@ type CompactResult struct {
 	CommitsAfter    int
 	NomsBytesBefore int64
 	NomsBytesAfter  int64
+	RootBefore      string
+	RootAfter       string
 	WitnessBefore   selfdevprotocol.VMLocalContentWitness
 	WitnessAfter    selfdevprotocol.VMLocalContentWitness
+}
+
+// CompactOptions selects the content check.
+//
+// The default check compares Dolt root value hashes: the working root before
+// the squash against the HEAD and working roots after the GC. Prolly trees are
+// history-independent, so the same schemas and rows give the same root hash
+// however the history looked; it costs nothing to compute. FullWitness also
+// extracts the VM-local content witness before and after, which reads and
+// sorts every row (on the paper's 48 GiB store it held 8 GB for over half an
+// hour before the squash); use it when the witness itself is the evidence.
+type CompactOptions struct {
+	FullWitness bool
 }
 
 const compactionDatabase = "texture"
@@ -82,15 +98,31 @@ func workspaceBytes(workspacePath string) int64 {
 	return total
 }
 
-// CompactWorkspace compacts a closed projection store workspace in place.
+// CompactWorkspace compacts a closed projection store workspace in place with
+// the default (root hash) content check.
 func CompactWorkspace(ctx context.Context, computerID, canonicalHead, workspacePath string) (CompactResult, error) {
+	return CompactWorkspaceWith(ctx, computerID, canonicalHead, workspacePath, CompactOptions{})
+}
+
+func rootHash(ctx context.Context, db *sql.DB, ref string) (string, error) {
+	var h string
+	if err := db.QueryRowContext(ctx, "SELECT dolt_hashof_db(?)", ref).Scan(&h); err != nil {
+		return "", fmt.Errorf("projection compaction: %s root hash: %w", ref, err)
+	}
+	return h, nil
+}
+
+// CompactWorkspaceWith compacts a closed projection store workspace in place.
+func CompactWorkspaceWith(ctx context.Context, computerID, canonicalHead, workspacePath string, opts CompactOptions) (CompactResult, error) {
 	var result CompactResult
 	result.NomsBytesBefore = workspaceBytes(workspacePath)
-	before, err := witnessForWorkspace(ctx, computerID, canonicalHead, workspacePath)
-	if err != nil {
-		return result, err
+	if opts.FullWitness {
+		before, err := witnessForWorkspace(ctx, computerID, canonicalHead, workspacePath)
+		if err != nil {
+			return result, err
+		}
+		result.WitnessBefore = before
 	}
-	result.WitnessBefore = before
 
 	db, closer, err := openCompactionDB(workspacePath)
 	if err != nil {
@@ -115,6 +147,11 @@ func CompactWorkspace(ctx context.Context, computerID, canonicalHead, workspaceP
 	if branches != 1 {
 		return fail(fmt.Errorf("projection compaction: refused: %d branches keep history reachable; want exactly one", branches))
 	}
+	rootBefore, err := rootHash(ctx, db, "WORKING")
+	if err != nil {
+		return fail(err)
+	}
+	result.RootBefore = rootBefore
 	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM dolt_log").Scan(&result.CommitsBefore); err != nil {
 		return fail(fmt.Errorf("projection compaction: count commits: %w", err))
 	}
@@ -142,13 +179,36 @@ func CompactWorkspace(ctx context.Context, computerID, canonicalHead, workspaceP
 		return result, fmt.Errorf("projection compaction: close workspace: %w", err)
 	}
 
-	after, err := witnessForWorkspace(ctx, computerID, canonicalHead, workspacePath)
+	// Reopen, so the check reads what the GC left on disk.
+	db, closer, err = openCompactionDB(workspacePath)
 	if err != nil {
 		return result, err
 	}
-	result.WitnessAfter = after
-	if err := selfdevprotocol.WitnessContentMatches(after, before); err != nil {
-		return result, fmt.Errorf("projection compaction: refused: content witness changed: %w", err)
+	headAfter, err := rootHash(ctx, db, "HEAD")
+	if err != nil {
+		return fail(err)
+	}
+	workingAfter, err := rootHash(ctx, db, "WORKING")
+	if err != nil {
+		return fail(err)
+	}
+	if err := closeDB(); err != nil {
+		return result, fmt.Errorf("projection compaction: close workspace: %w", err)
+	}
+	result.RootAfter = headAfter
+	if headAfter != rootBefore || workingAfter != rootBefore {
+		return result, fmt.Errorf("projection compaction: refused: root changed: working before %s, head after %s, working after %s", rootBefore, headAfter, workingAfter)
+	}
+
+	if opts.FullWitness {
+		after, err := witnessForWorkspace(ctx, computerID, canonicalHead, workspacePath)
+		if err != nil {
+			return result, err
+		}
+		result.WitnessAfter = after
+		if err := selfdevprotocol.WitnessContentMatches(after, result.WitnessBefore); err != nil {
+			return result, fmt.Errorf("projection compaction: refused: content witness changed: %w", err)
+		}
 	}
 	result.NomsBytesAfter = workspaceBytes(workspacePath)
 	return result, nil
