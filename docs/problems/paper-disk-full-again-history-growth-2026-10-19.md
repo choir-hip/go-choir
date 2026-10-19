@@ -187,3 +187,25 @@ line. The table count is now 2, so the next conjoin is about 255 GCs away
 Remaining: history and live data still grow (46 GiB live). At the
 measured rate, about 73 GiB free lasts roughly two to three weeks.
 Offline compaction is the next station, and should come before that.
+
+## Host side effect: Node B's btrfs has no unallocated space (18:59)
+
+The grows moved the problem to the host. At the 18:59 check, Node B's
+btrfs reads: device allocated 475.31 of 475.31 GiB, **unallocated 1 MiB**
+(40 GiB at the 00:29 headroom run). Data chunks grew from 400 to 442 GiB
+(used 262 → 330 GiB): the conjoin wrote about 45 GiB of new table files
+into the grown, previously sparse part of `data.img`. The guest freed the
+270 old tables inside ext4, but without discard the host still holds
+those blocks, and the two reflink backups pin the old extents too.
+Metadata is 15.02 of 16.64 GiB (90.3%) and **cannot get a new chunk**.
+Data chunks still have about 112 GiB free inside them.
+
+Risk: when metadata fills, every write on Node B fails with ENOSPC, every
+computer and the platform included. At the day's rate (about 0.04 GiB of
+metadata an hour) that is over a day away, but bursts are faster.
+
+Remedy, in order: run the designed headroom service now (`btrfs balance
+-dusage=20,limit=20`, idle IO) instead of waiting for 00:58; if it frees
+too little, a wider `-dusage` balance; trim the guest's freed blocks
+(offline `fstrim` on the next stop) and drop the 48 GiB backup once the
+paper has run a day on the new disk.
