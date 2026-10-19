@@ -82,9 +82,11 @@ func TestPromptCoreRetiresTheOldWriteSurface(t *testing.T) {
 	// until the citation self-score (icrl-calibration-experiment-2026-10-14)
 	// added one sentence; 4.4k until Texture could read its frame's
 	// captures (texture-opens-stories-blind-to-their-capture-2026-10-16)
-	// and one sentence said so.
-	if n := len(prompt); n > 4560 {
-		t.Errorf("prompt core is %d characters; the budget is about 4.55k", n)
+	// and one sentence said so; 4.56k until the grounding rules
+	// (articles-relay-outlets-instead-of-grounding-them-2026-10-19)
+	// replaced two news rules with three.
+	if n := len(prompt); n > 5150 {
+		t.Errorf("prompt core is %d characters; the budget is about 5.15k", n)
 	}
 }
 
@@ -132,5 +134,37 @@ func TestPromptCoreTeachesTheStoryHeadline(t *testing.T) {
 		if !strings.Contains(prompt, want) {
 			t.Errorf("prompt core lacks %q", want)
 		}
+	}
+}
+
+// Stories relayed outlets instead of reporting the news: 38% of front-page
+// sentences named an outlet as their subject ("the BBC reports", "Al
+// Jazeera says"), 4 of 113 sources were primary, and the pipeline's voice
+// leaked into prose ("its captured text says ... but gives no further case
+// details"); one headline described its sources ("surfaces without its
+// text") (docs/problems/articles-relay-outlets-instead-of-grounding-them-
+// 2026-10-19.md; owner, 2026-10-19). Ways the prompt can fail: it still
+// asks for each claim "in its source's own terms", so Texture keeps
+// attributing; it gives no example of a corroborated fact stated plainly
+// with two cites; it lets Texture credit the relaying outlet rather than
+// whoever made the claim; it does not ask for a cite after each part of a
+// sentence that draws on two sources; it names no pipeline phrase to avoid;
+// the headline rule does not forbid describing the sources.
+func TestPromptCoreReportsTheNewsNotTheCoverage(t *testing.T) {
+	prompt := DefaultSystemPrompt()
+	for _, want := range []string{
+		"Report the news, not the coverage.",
+		`not "DW reports … Al Jazeera says …"`,
+		"never to the outlet that relayed it",
+		"cites each source right after its part",
+		`"its captured text"`,
+		"The headline states the news, never the state of the sources.",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("prompt core lacks %q", want)
+		}
+	}
+	if strings.Contains(prompt, "in its source's own terms") {
+		t.Error("prompt core still asks for each claim in its source's own terms")
 	}
 }

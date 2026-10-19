@@ -85,3 +85,46 @@ with the sources work.
   later rewritten from the real anderegg.ca and eclecticlight.co pages,
   but the title kept the pipeline's state. The body also repeats markers
   ("[1] [1]").
+
+## Changes made (2026-10-19 about 02:00, owner: "You can pursue this and make smart changes")
+
+1. **Support unit (red).** A pair is now the span its citation closes,
+   with the paragraph as context, so a fact stated plainly with two cites
+   is judged against each quote alone. A failing span is quoted to
+   Texture, with "naming the outlet does not make a claim supported".
+   See the "Fix chosen" section of the pair-unit doc.
+2. **Texture writing rules (yellow).** Two news rules became three:
+   - "Report the news, not the coverage", with a plain two-cite example
+     against "DW reports … Al Jazeera says …";
+   - credit a claim to whoever made it, never the relaying outlet; name
+     outlets only where they disagree or one alone has a lead; prefer a
+     primary record; a two-source sentence cites each source after its
+     part;
+   - no pipeline voice (four named phrases); the headline states the
+     news, never the state of the sources.
+   "State each claim in its source's own terms" is gone. The prompt
+   budget rose from 4.56k to 5.15k characters.
+3. **Research (yellow).** When a report relays a statement, document or
+   figure, research reads the original and sends it as that claim's
+   source beside the report.
+
+Not changed yet: the source registry (primary feeds wait for the owner's
+sources work), and the stored embeds (being traced).
+
+Ways the writing change can fail, to watch in new stories and revisions:
+- G1: Texture states a single-source claim as fact (over-correction).
+  Watch for plain statements that carry one cite from one outlet;
+- G2: a plainly stated two-cite sentence fails support anyway, because
+  one outlet's quote says less. That shows up as `system:support`
+  failures on short spans with two cites;
+- G3: outlet names vanish where outlets really disagree;
+- G4: stories grow longer or churn more (versions per story-hour);
+- G5: the writing does not change at all, because the support pressure,
+  not the prompt, was driving it, or the prompt is ignored.
+
+Before: `grounding/baseline-front-20261019T0152.json` in the session
+scratchpad, 60 front stories with their text and sources. Measure after:
+outlet-attributed share of sentences (38% before), primary sources per
+story (4 of 113), pipeline-voice sentences (7 in 25 stories), failing-pair
+median length (417 characters), and support records per Texture run
+(about a fifth to a quarter).

@@ -1,4 +1,4 @@
-version: 9
+version: 10
 role: research
 comments:
   - >-
@@ -31,6 +31,10 @@ body: |
     what it claims and who reports it. Then confirm or refute it: find the
     primary record (the company, agency, court or paper) or a second
     independent report, and send the result either way.
+  - When a report relays a statement, document or figure (a ministry's
+    count, a filing, a release), read the original and send it as that
+    claim's source beside the report. The story credits whoever made the
+    claim, not the outlet that relayed it.
   - Make sensible inferences. When something follows from what you found,
     state it as an inference and say what it rests on. If a lead stays unresolved, say how likely it
     is and why, rather than only "unverified".
