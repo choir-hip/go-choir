@@ -434,3 +434,13 @@ record that carried the BBC capture, and who routed it.
 All 11 front stories changed this hour: 19 of 81 sentences name an
 outlet (23%). Only one baseline story was revised (the West Bank
 settler story, 2 of 7 new sentences, still carrying 9 of 10 old ones).
+
+## Eleventh hour (13:33 to 14:30)
+
+125 runs (70 Texture on 37 documents), all gpt-6-luna; console clean;
+btrfs metadata 88.7%. Support 12 records over 70 Texture runs (17%),
+median span 167. Changed front stories: 34 of 116 sentences name an
+outlet (29%); new sentences in revised baseline stories 3 of 14.
+Primary sources: 8 of the 77 cited this hour (10%), against 4 of 113
+(3.5%) at baseline, the highest share of the day; one hour, so a hint,
+not a trend.
