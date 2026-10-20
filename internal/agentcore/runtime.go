@@ -269,6 +269,9 @@ type Runtime struct {
 	// marker, or a crash (bootRestartPlanned false).
 	bootRestart        PlannedRestart
 	bootRestartPlanned bool
+	// telemetryDrainDeadline bounds the planned-restart telemetry drain; zero
+	// means the default (telemetry_batching.go).
+	telemetryDrainDeadline time.Duration
 	// deliveryHooksMu guards the actor delivery hooks against the projector
 	// goroutine reading them while they are set.
 	deliveryHooksMu sync.RWMutex
@@ -835,6 +838,9 @@ func WithComputerEventAppender(appender *computerevent.ComputerEventAppender) Ru
 func (rt *Runtime) Start(ctx context.Context) {
 	rt.bootInProgress.Store(true)
 	defer rt.bootInProgress.Store(false)
+	// Telemetry batching is decided before the first event of this process, so
+	// the sequence reseed gap applies to every number seeded after a crash.
+	rt.configureTelemetryBatching(ctx)
 	if rt.maintenanceHeld() {
 		log.Printf("runtime: maintenance hold active (RUNTIME_MAINTENANCE_HOLD=1); refusing run admission + agent rewake while held")
 		return
@@ -943,6 +949,15 @@ func (rt *Runtime) Stop() {
 	rt.runningMu.Unlock()
 
 	rt.wg.Wait()
+
+	// Seal the open telemetry window: a graceful stop loses none of it.
+	if rt.store != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), rt.drainDeadline())
+		if err := rt.store.DrainTelemetry(ctx); err != nil {
+			log.Printf("runtime: stop: telemetry drain: %v", err)
+		}
+		cancel()
+	}
 
 	log.Printf("runtime: stopped")
 }
@@ -2567,7 +2582,7 @@ func (rt *Runtime) closePreBootRunsAfterCrash(ctx context.Context) {
 			}
 		}
 		rt.emitEvent(ctx, rec, types.EventRunCancelled, events.CauseSupervisorRecovery,
-			json.RawMessage(`{"fate":"interrupted_by_restart"}`))
+			crashClosePayload(rt.store.TelemetryBatchingConfigured()))
 		log.Printf("runtime: closed run %s (was %s) after a crash restart", rec.RunID, was)
 		return true
 	})
@@ -2622,7 +2637,7 @@ func (rt *Runtime) passivateInterruptedActivations(ctx context.Context) {
 			}
 		}
 		rt.emitEvent(ctx, rec, types.EventRunPassivated, events.CauseSupervisorRecovery,
-			json.RawMessage(`{"recovery":"passivated_on_restart"}`))
+			passivatedOnRestartPayload(rt.bootRestart))
 		log.Printf("runtime: passivated run %s (was %s) after restart", rec.RunID, was)
 		return true
 	})

@@ -3,6 +3,7 @@ package textureowner
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -23,6 +24,35 @@ type TextureWorkflowVerificationOptions struct {
 	RequireVerificationCmdEvent bool
 	RequireWorkerConsumption    bool
 	RequireToolBackedWorkerRuns bool
+}
+
+// ErrVerificationInconclusive marks a verification that failed only because
+// tool.result evidence is missing from a trajectory a restart interrupted. A
+// crash may lose the newest window of batched run telemetry (owner ruling
+// 2026-10-14, telemetry batching design 3.3), so the absence proves nothing:
+// the run is reported inconclusive, never failed by ruled telemetry loss.
+var ErrVerificationInconclusive = errors.New("verification inconclusive: tool evidence may have been lost with a restart's open telemetry window")
+
+// trajectoryInterruptedByRestart reports whether any run of the trajectory was
+// closed with the boot fate interrupted_by_restart.
+func trajectoryInterruptedByRestart(runs []types.RunRecord) bool {
+	for _, run := range runs {
+		if run.State == types.RunCancelled && (run.Error == "interrupted_by_restart" || metadataStringValue(run.Metadata, "fate") == "interrupted_by_restart") {
+			return true
+		}
+	}
+	return false
+}
+
+// toolEvidenceError wraps a failure of a check that reads batched-kind events
+// (tool.result) as inconclusive when a restart interrupted the trajectory. Any
+// other failure, and any failure on a trajectory no restart touched, is
+// returned unchanged.
+func toolEvidenceError(err error, runs []types.RunRecord) error {
+	if err == nil || !trajectoryInterruptedByRestart(runs) {
+		return err
+	}
+	return fmt.Errorf("%w: %w", ErrVerificationInconclusive, err)
 }
 
 type TextureWorkflowVerificationReport struct {
@@ -106,7 +136,7 @@ func (rt *Handler) VerifyTextureWorkflow(ctx context.Context, opts TextureWorkfl
 	guarantee("texture delegated only allowed work directly")
 	if opts.RequireToolBackedWorkerRuns {
 		if err := verifyWorkerRunToolCausality(trajectoryRuns, events); err != nil {
-			return report, err
+			return report, toolEvidenceError(err, trajectoryRuns)
 		}
 		guarantee("worker run creation is backed by parent tool results")
 	}
@@ -125,13 +155,13 @@ func (rt *Handler) VerifyTextureWorkflow(ctx context.Context, opts TextureWorkfl
 	}
 
 	if opts.RequireArtifactWriteEvent && !eventsContainAnySuccessfulTool(events, "write_file", "edit_file") {
-		return report, fmt.Errorf("missing successful artifact write tool result")
+		return report, toolEvidenceError(fmt.Errorf("missing successful artifact write tool result"), trajectoryRuns)
 	}
 	if opts.RequireArtifactWriteEvent {
 		guarantee("artifact write requirement has a successful file-write tool result")
 	}
 	if opts.RequireVerificationCmdEvent && !eventsContainSuccessfulBashVerification(events) {
-		return report, fmt.Errorf("missing successful bash verification result")
+		return report, toolEvidenceError(fmt.Errorf("missing successful bash verification result"), trajectoryRuns)
 	}
 	if opts.RequireVerificationCmdEvent {
 		guarantee("verification requirement has a successful command result")

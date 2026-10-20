@@ -551,6 +551,15 @@ func Run() {
 	}
 	rt := actorruntime.New(rtCfg, db, bus, rtProvider, coreOpts, rtOpts...)
 
+	// A graceful stop (SIGTERM) seals the open run-telemetry window after the
+	// HTTP server stops accepting; a crash does not, which is the loss the
+	// batching ruling allows. A no-op when batching was never enabled.
+	s.AddShutdownHook(func(ctx context.Context) {
+		if err := db.DrainTelemetry(ctx); err != nil {
+			log.Printf("autoputer: shutdown telemetry drain: %v", err)
+		}
+	})
+
 	// Initialize the file browser handler with autoputer files root. File
 	// mutations publish owner-scoped product events after the filesystem write
 	// succeeds so other devices can refresh Files without manual reload UI.

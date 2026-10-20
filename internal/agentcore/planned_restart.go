@@ -41,6 +41,10 @@ type PlannedRestart struct {
 	Target         string    `json:"target,omitempty"`
 	RequestedAt    time.Time `json:"requested_at"`
 	WorkStateEpoch int       `json:"work_state_epoch,omitempty"`
+	// TelemetryDrainFailed records that the run-telemetry queue could not be
+	// sealed before the restart, so the resume's records say the trace may
+	// have a gap. Telemetry never blocks the restart.
+	TelemetryDrainFailed bool `json:"telemetry_drain_failed,omitempty"`
 }
 
 // PlannedRestartMarkerPath is the marker beside the runtime store, on the
@@ -300,13 +304,19 @@ func (rt *Runtime) markPlannedRestart(reason, target string) (func(applyErr erro
 		log.Printf("runtime: refuse %s %s: %v", reason, target, err)
 		return func(error) {}, err
 	}
-	if err := WritePlannedRestartMarker(storePath, PlannedRestart{Reason: reason, Target: target}); err != nil {
+	// Queued run telemetry is sealed before the marker is written, so a marker
+	// normally means the queue was empty when the restart began and the one
+	// resume starts on a tape with no telemetry gap. New telemetry takes the
+	// acknowledged path until then. A failed drain is recorded, not fatal.
+	drainFailed, restoreTelemetry := rt.drainTelemetryForRestart()
+	if err := WritePlannedRestartMarker(storePath, PlannedRestart{Reason: reason, Target: target, TelemetryDrainFailed: drainFailed}); err != nil {
 		// Without the marker the restart reads as a crash and pending work is
 		// interrupted, which is safe; the apply itself proceeds.
 		log.Printf("runtime: %v (restart will be treated as a crash)", err)
-		return func(error) {}, nil
+		return func(error) { restoreTelemetry() }, nil
 	}
 	return func(error) {
+		restoreTelemetry()
 		if err := ClearPlannedRestartMarker(storePath); err != nil {
 			log.Printf("runtime: clear planned restart marker after apply returned: %v", err)
 		}

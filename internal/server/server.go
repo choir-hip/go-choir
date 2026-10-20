@@ -52,6 +52,44 @@ type Server struct {
 	// published (S0a boot observer: marks the exact listen-ready boundary).
 	onListen        func()
 	shutdownTimeout time.Duration
+	// shutdownHooks run in order during Shutdown, after the HTTP server has
+	// stopped accepting and in-flight requests finished, each bounded by the
+	// shutdown timeout.
+	hookMu        sync.Mutex
+	shutdownHooks []func(ctx context.Context)
+}
+
+// AddShutdownHook registers fn to run during Shutdown (SIGTERM or SIGINT),
+// after the HTTP server stops accepting, with a context that expires at the
+// shutdown timeout. The autoputer uses it to seal the open run-telemetry
+// window. A hook that outlives its context is abandoned, not waited for.
+func (s *Server) AddShutdownHook(fn func(ctx context.Context)) {
+	if s == nil || fn == nil {
+		return
+	}
+	s.hookMu.Lock()
+	s.shutdownHooks = append(s.shutdownHooks, fn)
+	s.hookMu.Unlock()
+}
+
+func (s *Server) runShutdownHooks() {
+	s.hookMu.Lock()
+	hooks := append([]func(ctx context.Context){}, s.shutdownHooks...)
+	s.hookMu.Unlock()
+	for _, hook := range hooks {
+		ctx, cancel := context.WithTimeout(context.Background(), s.shutdownTimeout)
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			hook(ctx)
+		}()
+		select {
+		case <-done:
+		case <-ctx.Done():
+			log.Printf("%s: shutdown hook still running at the deadline; abandoned", s.serviceName)
+		}
+		cancel()
+	}
 }
 
 // defaultBindHost is the default host address that services bind to.
@@ -283,6 +321,7 @@ func (s *Server) Shutdown() {
 	if err := s.httpServer.Shutdown(ctx); err != nil {
 		log.Printf("%s: shutdown error: %v", s.serviceName, err)
 	}
+	s.runShutdownHooks()
 	select {
 	case s.done <- struct{}{}:
 	default:
