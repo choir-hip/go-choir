@@ -96,3 +96,79 @@ applies, so each open owner question takes the design's recommended answer:
 8. The owner's user id is the allowlist's deploy value: **yes**, supplied by
    the owner at turn-on; this change ships with the value empty (dark).
 9. Outside readers stay out until the pre-production review: **yes**.
+
+## Public door (owner 2026-10-20 section 32)
+
+Owner decision, [owner notes](../reports/owner-notes-2026-10-14.md) section 32:
+"Research more" on a published Autopaper story must be usable by readers who
+are not logged in ("could be abused but dont worry about this for now"), and
+the research should dig deeper with web search as well as more outlets. This
+supersedes phase 1 decision 9 ("outside readers stay out until the
+pre-production review"). Mutation class: red (proxy authority on an
+unauthenticated route that ends in a Texture owner revision). Problem first;
+no code in this commit.
+
+The shape: a new flag `PROXY_EXPAND_PUBLIC` (default off). When on, a caller
+with no owner session is a **public reader**: the proxy still asks the paper
+through the story owner's door with the fixed request text, so the paper sees
+the owner's act with the provenance "public reader". Nothing about the reader
+reaches the guest. Signed-in allowlisted owners keep the existing path and are
+not charged to the per-address throttle. `PROXY_EXPAND=off` still wins over
+everything. A public reader is limited per address (3 an hour, 10 a UTC day,
+in proxy memory) on top of the global limits (3 in flight, 12 a day, one per
+published version).
+
+Failure modes guarded, written before the code (each gets a failing test
+first, in `internal/proxy/platform_expand_test.go`, ids P1 to P9):
+
+- **P1 Anonymous accepted while the flag is off.** With
+  `PROXY_EXPAND_PUBLIC` off, an anonymous POST must still be 401 (or 404 when
+  dark) and the read `allowed:false`; the flag must not be implied by a
+  non-empty allowlist.
+- **P2 Owner allowlist path broken.** With the flag on, an allowlisted
+  signed-in owner still asks and reads as before, is not charged to the
+  per-address throttle, and `PROXY_EXPAND=off` still makes both routes dark
+  even with the flag on.
+- **P3 One address exhausts the shared daily cap.** One address asking
+  different stories must be stopped after 3 in an hour and 10 in a UTC day
+  with a typed `address_limit` refusal (429, Retry-After, the words "too many
+  requests from your address; try later"); another address is still served;
+  the window slides (an hour later the address may ask again; the next UTC day
+  resets the day count).
+- **P4 Spoofed X-Forwarded-For bypasses the per-address limit.** The address
+  is derived exactly as the auth limiter does (`auth.clientIP`: the last
+  `X-Forwarded-For` entry, which Caddy appends, else the peer address). A
+  client that sends its own leading `X-Forwarded-For` entries, or changes
+  them per request, is still one address.
+- **P5 A second request on the same published version.** Public readers do
+  not get a second revise for one version, across addresses; a refused repeat
+  does not spend the address's allowance.
+- **P6 A non-Autopaper or unknown route.** An anonymous read answers
+  `allowed:false` and an anonymous POST answers the same 404 as an unknown
+  route, without reaching the paper and without spending the address's
+  allowance.
+- **P7 The in-flight cap.** Public readers share the 3-in-flight and 12-a-day
+  global limits; the fourth in flight is refused with the global `limit`
+  status, not the address reason.
+- **P8 Restart resets the in-memory counters.** Accepted residual: the proxy
+  restarts on every deploy and keeps these counters in memory, so a restart
+  gives each address a fresh allowance. The one-per-version rule survives
+  because it is checked against the paper's chain. A test pins the residual so
+  it is not mistaken for a guarantee. A durable counter is a later cut if
+  abuse appears.
+- **P9 The anonymous requester's identity reaches the guest.** The call to the
+  paper carries the story owner as the user, the request text carries the
+  marker `provenance: public reader`, and neither the address, the forwarded
+  header, a session user id nor a cookie appears in the paper request or the
+  proxy log line. No reader identity is stored: the ledger keeps only a hash
+  of the address, in memory, for the throttle.
+
+Also changed with the door: the fixed request text asks research to search the
+web for new reporting, primary documents and additional distinct outlets and
+to add what is new with citations, still as an expansion and not a rewrite.
+
+Residuals recorded, not fixed: an anonymous read still costs a corpusd lookup
+and, when a request is open, paper reads (bounded here by returning only the
+newest request to a public reader); the global 12 a day can still be spent by
+twelve different addresses; there is no CAPTCHA. The owner said not to worry
+about abuse for now.
