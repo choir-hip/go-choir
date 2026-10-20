@@ -151,8 +151,11 @@ a compromised service). With restic over SFTP a chrooted user can delete its
 own repository, so a compromised or buggy Node B deletes the backups together
 with the data. With rest-server `--append-only` the client can add packs,
 indexes and snapshots, and cannot delete or overwrite them (lock files
-excepted). Per rest-server's documentation; node-a's agent confirms it with
-the commands in the handover note. Consequence: the daily job **cannot run
+excepted). **[V]** locally with rest-server 0.14.0 and restic 0.19.1: with
+`--append-only`, `restic forget <snapshot>` is answered `403 Forbidden`, a raw
+`DELETE` or overwriting `POST` of a pack is `403`, and a second backup of
+unchanged data adds 0 bytes; node-a's agent repeats the check on the real
+host with the commands in the handover note. Consequence: the daily job **cannot run
 `forget --prune`**. Retention is a monthly, owner-supervised act through a
 second, normally stopped, non-append-only instance (section 5). That is
 deliberate: deleting backups is the black operation, and it should need a
@@ -216,10 +219,12 @@ Everything is encrypted by restic on Node B before it leaves.
 - **Prune is a monthly, owner-supervised window.** node-a's agent starts the
   second rest-server instance (no `--append-only`, bounded by
   `RuntimeMaxSec`, reachable only through a different SSH key that the owner
-  holds and Node B never has); the owner runs `restic forget --prune` from
-  Node B with that key and the delete credential supplied interactively; the
-  instance is stopped. The module defines this instance only if a prune key is
-  configured.
+  holds and Node B never has); the owner runs `restic forget --prune` from a
+  machine they trust (not an unattended Node B job), with the repository
+  password from the offline copy, over that SSH key and a separate delete
+  credential; the instance stops itself. The module defines this instance only
+  if a prune key is configured, so by default Choir can never delete anything
+  through it.
 - The `archive` repository (tape-cleanup archives) is **never pruned**; an
   archive is retained until the owner rules otherwise (tape report 6.4).
 - Because the sources are mostly additive, prune reclaims little. The
@@ -366,9 +371,21 @@ There is no alert channel on Node B yet (the cost-track report: "Not started:
   a running `sql-server` as root works and repeats; restore returns committed
   data and uncommitted working-set rows; a user with `ALL` on its database is
   denied.
-- **[V]** syntax: `nix-instantiate --parse` on the Nix files and `bash -n` on
-  the script. restic, rest-server and shellcheck are not installed where this
-  was written, so their flags come from documentation, and the handover note's
-  verification steps are what settle them on the real hosts.
-- Not verified: anything on Node B or node-a; rest-server append-only
-  behaviour; the SSH forward restrictions; restic memory at 9M files.
+- **[V]** local restic 0.19.1 against rest-server 0.14.0 (loopback, htpasswd,
+  `--append-only --private-repos --max-size`): `RESTIC_REST_USERNAME` and
+  `RESTIC_REST_PASSWORD`, `init --repository-version 2`, a `--json` backup
+  summary, `stats --mode raw-data --json`, `check --read-data-subset=3/10` all
+  work; forget and raw DELETE/overwrite are `403`; another user's path and a
+  wrong password are `401`. An **apr1/md5 htpasswd entry is rejected** by this
+  rest-server ("Invalid htpasswd entry"); bcrypt and `{SHA}` entries work, so
+  the client's `keygen` emits bcrypt (`htpasswd -niB`).
+- **[V]** the Nix: `nix-instantiate --parse` on both files; the node-a module
+  evaluates as a real NixOS module (no failed assertions; generated
+  `authorized_keys` options, sshd `Match` blocks, rest-server command lines
+  and the subvolume script inspected); the node-b `offHostBackup` units
+  evaluate with stub arguments (disabled: `condition = false`). `bash -n` on
+  the script, and `plan`/`freshness` run against a scratch tree.
+- Not verified: anything on Node B or node-a; the SSH forward restrictions on
+  a real sshd; btrfs subvolume and qgroup commands; the full `backup` run
+  (needs restic, ssh and Dolt on Node B); restic memory at 9M files;
+  shellcheck was not available.
