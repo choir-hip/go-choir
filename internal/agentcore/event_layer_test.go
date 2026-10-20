@@ -45,6 +45,22 @@ import (
 //   - R12 flushes run concurrently, so queued flushes pile on the index and
 //     expire, and chunk order breaks (code review, Gemini);
 //   - R13 a stopped runtime still flushes from a timer (code review, Gemini).
+//
+// Owner ruling 2026-10-20 (docs/problems/event-layer-false-merges-at-
+// marginal-p-2026-10-16.md, "Owner ruling and plan"): one event is one
+// incident, one place, one time; a later development is a new event linked
+// to the earlier one. Ways that could fail, written before the code (the
+// full list is F1-F8 in the problem doc):
+//   - F1 the Jev request still tells it a development is the same event;
+//   - F2 true duplicates (two outlets, one incident, updated details) stop
+//     merging and corroborating;
+//   - F3 a story-level pair from the false-merge tables joins as a counted
+//     member and fakes corroboration instead of minting its own event;
+//   - F4 the link lends one event's outlets to the other;
+//   - F5 a weak, unknown or conflicting link answer sets a wrong link or
+//     breaks the resolver;
+//   - F6 the extra choices grow the request past the context bound;
+//   - F7 the blind judge script's definition drifts from the resolver's.
 
 // eventJudge answers each capture question by title: target is an event
 // headline, a recent title of one, or another capture's title; "" is new.
@@ -53,6 +69,7 @@ type eventJudge struct {
 	answers  map[string]eventAnswer
 	omit     map[string]bool // capture titles whose answer is left out
 	calls    []map[string]any
+	asked    []map[string]json.RawMessage // each call's questions
 	bytes    []int
 	delay    time.Duration
 	inFlight int
@@ -62,6 +79,10 @@ type eventJudge struct {
 type eventAnswer struct {
 	target string
 	p      float64
+	// after answers the target event as an earlier incident of the same
+	// story: the capture is a new event that follows it. The fake picks
+	// the after_ choice only when the question offered it, as Jev would.
+	after bool
 }
 
 func (j *eventJudge) Judge(ctx context.Context, state json.RawMessage, questions map[string]json.RawMessage) (json.RawMessage, error) {
@@ -89,6 +110,7 @@ func (j *eventJudge) JudgeScoped(_ context.Context, _ string, stateRaw json.RawM
 	}
 	j.mu.Lock()
 	j.calls = append(j.calls, generic)
+	j.asked = append(j.asked, questions)
 	j.bytes = append(j.bytes, total)
 	j.inFlight++
 	if j.inFlight > j.maxIn {
@@ -113,17 +135,23 @@ func (j *eventJudge) JudgeScoped(_ context.Context, _ string, stateRaw json.RawM
 		choice := "new"
 		if a.target != "" {
 			for alias, ev := range state.Events {
-				if ev.Headline == a.target {
-					choice = alias
-				}
+				match := ev.Headline == a.target
 				for _, r := range ev.Recent {
 					if r == a.target {
-						choice = alias
+						match = true
 					}
+				}
+				switch {
+				case match && a.after:
+					if strings.Contains(string(questions[key]), `"after_`+alias+`"`) {
+						choice = "after_" + alias
+					}
+				case match:
+					choice = alias
 				}
 			}
 			for k, c := range state.Captures {
-				if c.Title == a.target && k != key {
+				if c.Title == a.target && k != key && !a.after {
 					choice = k
 				}
 			}

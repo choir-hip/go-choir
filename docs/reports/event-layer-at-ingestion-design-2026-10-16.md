@@ -655,3 +655,63 @@ The paper alone will not reach 40 distinct-URL joins by 07:00. The
 acceptance run pools the paper and the test computer. Both run the same
 resolver; the test computer's six world feeds make more cross-outlet
 joins. Each computer is reported separately.
+
+### 19.3 The event is one incident (owner ruling 2026-10-20); the blind rerun
+
+The definition changed (owner notes §27 item 8; problem doc "Owner ruling
+and plan"). An event is one incident, in one place, at one time. A later
+development, another incident of the same story, a live blog or roundup
+spanning incidents, and opinion or analysis about a topic are each a
+different event. A capture Jev reads as a later development mints its
+own event with `follows` set to the earlier one (offered per capture as up
+to three `after_` choices over the events sharing the most title words).
+The link is evidence and never counts toward corroboration. The sample
+judges in §19.2 were given the old wording ("or its direct
+development"); the judge text now carries the new definition, so the rerun
+is not directly comparable with the 7.0% and 9.5% runs. It measures the
+new definition against its own text.
+
+**Rerun procedure** (after the change is deployed; nothing here runs on
+staging until then). The script is `scripts/event-blind-sample.py`; its
+definition is held equal to the resolver's by
+`TestBlindSampleScriptCarriesTheResolverDefinition`.
+
+1. **Deploy and identity.** Confirm `choir.news` health reports the
+   change's SHA. The window opens when each computer is *running* the new
+   code, not at the push: for the paper, the time of the planned refresh
+   that applied it; for the test computer, its first boot on the new
+   build. Call the later of the two `T`, in UTC.
+2. **Settings and wake.** `intake.events` on for both computers; leave
+   `intake.event_wakes` off. The test computer `v3-events-0146` hibernates
+   within the hour (free tier): wake it with a lifecycle start at each
+   check, or its feeds do not poll.
+3. **Accumulate a fresh window.** Only joins resolved at or after `T`
+   count; do not pad with older joins. The previous fresh window gave 21
+   distinct-URL joins per computer in about 6 hours, so expect 6 to 12
+   hours to reach 40 pooled. A short sample is reported as short.
+4. **Sample.** From a shell with the test-computer credentials in
+   `~/.config/choir-qa/test-computers/` and `OPENROUTER_API_KEY` in the
+   environment or the repo `.env`:
+   `scripts/event-blind-sample.py --since <T as RFC3339 UTC> --n 40 --out <scratch dir> autopaper-paper v3-events-0146`.
+   It lists the counted, non-opening, distinct-URL joins from
+   `GET /api/autopaper/events`, samples 40 pooled (fixed seed), and asks
+   `openai/gpt-6.1-sol` and `google/gemini-3.8-flash` through OpenRouter,
+   which see only the two titles and URLs. It prints per-judge tallies,
+   per-computer counts, and a JSON file of every row.
+5. **The bar.** False merge counts only when both judges say DIFFERENT.
+   The bar is **at most 5%**: with 40 sampled, at most 2 rows. 3 of 40
+   (7.5%) fails. Then the orchestrator reads every DIFFERENT row itself
+   and reports both numbers, as in the earlier runs (a title-only member
+   such as tesla.com/roadster, the reveal's official page, is a correct
+   member the judges cannot see).
+6. **Also report, not gated.** (a) Corroborations per window against the
+   previous fresh window (5 corroborations over 172 captures, all correct
+   by reading): a large drop is the signal that true duplicates stopped
+   merging (F2). (b) Read 10 events with `follows` set and say whether
+   each link names a real earlier event (link precision). (c) Calls per
+   flush and cost from the log lines; the extra choices must not push the
+   calls per flush above about 1.
+7. **Record.** Append the result to the problem doc and set
+   `intake.event_wakes` only if the bar passes; otherwise the next step is
+   a structural assessment, since this is the third failure and CLAUDE.md
+   says to stop patching after non-convergence.

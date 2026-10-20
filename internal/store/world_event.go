@@ -51,6 +51,12 @@ type WorldEvent struct {
 	OpenedBy     string    `json:"opened_by"` // the capture that minted it
 	OpenedOutlet string    `json:"opened_outlet,omitempty"`
 	FirstSeen    time.Time `json:"first_seen"`
+	// Follows is the earlier event this one is a later development of
+	// (owner ruling 2026-10-20: one event is one incident; a later
+	// development is a new event linked to the earlier one). It is
+	// evidence for the reader: it never lends outlets or corroboration in
+	// either direction. Optional and additive; older readers ignore it.
+	Follows string `json:"follows,omitempty"`
 }
 
 // EventMembership is Jev's judgment that a capture reports an event. A

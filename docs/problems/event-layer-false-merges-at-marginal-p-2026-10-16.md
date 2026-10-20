@@ -159,9 +159,9 @@ Plan (all in the shadow event layer, `intake.events`, off by default):
    choices `after_eN` for the candidate events that share the most title
    words with that capture; this bounds the request growth that matters
    for the "calls per flush" bar.
-3. **Rerun.** `scripts/event-blind-sample` (new, in the repo) with the new
-   definition, on a fresh window, per the procedure in the design doc
-   (§19.3).
+3. **Rerun.** `scripts/event-blind-sample.py` (new, in the repo; it
+   replaces the scratchpad `v1_blind.py`) with the new definition, on a
+   fresh window, per the procedure in the design doc (§19.3).
 
 Mutation class: **red** by ceremony. The change is orange on its face
 (shadow event layer, additive schema field) but it changes the content of
@@ -215,3 +215,14 @@ Ways it could fail (written before the tests and the code):
 - **F8 Circular acceptance:** the sample window overlaps one the text was
   chosen on. Mitigation: the rerun samples only memberships resolved after
   the deploy time of this change (`SINCE`).
+
+Implemented (2026-10-20): `eventDefinition` and `eventLinkChoices` in
+`internal/agentcore/event_layer.go`; `WorldEvent.Follows` in
+`internal/store/world_event.go`; tests in
+`internal/agentcore/event_layer_incident_test.go` (fixtures: the seven
+story-level pairs from the tables above and four true-duplicate pairs).
+Not yet deployed and not yet measured; the acceptance evidence is the
+blind rerun. Known limit of the link: a pair with no shared title word
+(France protests, the recession pair, the Indonesia fires) is offered no
+`after_` choice, so it is a new unlinked event. That is correct for the
+bar and loses only the link.

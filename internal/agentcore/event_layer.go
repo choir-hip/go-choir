@@ -46,6 +46,9 @@ const (
 	eventChunkSize        = 12
 	eventShortlistRecent  = 30
 	eventShortlistOverlap = 10
+	// eventLinkChoices bounds the after_ choices one capture's question
+	// offers: the known events sharing the most words with the capture.
+	eventLinkChoices = 3
 	// eventRecentHorizon bounds the recency slots; eventOverlapHorizon
 	// bounds the title-overlap slots, which reach uncorroborated events a
 	// slow second report would otherwise miss (panel B2).
@@ -104,6 +107,8 @@ type eventSummary struct {
 	LastSeen     time.Time `json:"last_seen"`
 	Titles       []string  `json:"titles"`
 	CaptureIDs   []string  `json:"capture_ids"`
+	// Follows is the earlier event this one is a later development of.
+	Follows string `json:"follows,omitempty"`
 }
 
 type eventView struct {
@@ -159,7 +164,7 @@ func (v *eventView) apply(m store.EventMembership) {
 func (v *eventView) summary() eventSummary {
 	s := eventSummary{EventID: v.ev.EventID, Headline: v.ev.Headline, Origins: len(v.origins), Members: v.members,
 		Tentative: v.tentative, Corroborated: v.corroborated(), FirstSeen: v.ev.FirstSeen, LastSeen: v.last,
-		Titles: append([]string(nil), v.titles...), CaptureIDs: append([]string(nil), v.captures...)}
+		Titles: append([]string(nil), v.titles...), CaptureIDs: append([]string(nil), v.captures...), Follows: v.ev.Follows}
 	for o := range v.outlets {
 		s.Outlets = append(s.Outlets, o)
 	}
@@ -410,6 +415,10 @@ func (rt *Runtime) resolveEventChunk(ctx context.Context, idx *eventIndex, owner
 		event     *eventView
 		tentative bool
 		p         float64
+		// follows is the known event this capture is a later development
+		// of (an after_ answer); it only matters if the capture mints.
+		follows  *eventView
+		followsP float64
 	}
 	decisions := make([]decision, len(chunk))
 	parent := make([]int, len(chunk))
@@ -431,6 +440,8 @@ func (rt *Runtime) resolveEventChunk(ctx context.Context, idx *eventIndex, owner
 		p := a.Probabilities[choice]
 		decisions[j] = decision{answered: true, p: p}
 		switch {
+		case alias.after[choice] != nil && p >= eventTentativeP:
+			decisions[j].follows, decisions[j].followsP = alias.after[choice], p
 		case alias.events[choice] != nil && p >= eventJoinP:
 			decisions[j].event = alias.events[choice]
 		case alias.events[choice] != nil && p >= eventTentativeP:
@@ -494,6 +505,14 @@ func (rt *Runtime) resolveEventChunk(ctx context.Context, idx *eventIndex, owner
 			first := chunk[members[0]]
 			ev := store.WorldEvent{OwnerID: ownerID, ComputerID: computerID, EventID: eventID(computerID, first.Item.CaptureID),
 				Headline: strings.TrimSpace(first.Item.Title), OpenedBy: first.Item.CaptureID, OpenedOutlet: outlet.Of(first.Item.URL), FirstSeen: first.At}
+			// A later development links to the earlier event; the
+			// strongest answer in the component names it.
+			best := -1.0
+			for _, j := range members {
+				if f := decisions[j].follows; f != nil && decisions[j].followsP > best {
+					ev.Follows, best = f.ev.EventID, decisions[j].followsP
+				}
+			}
 			stored, created, err := rt.store.PutWorldEvent(ctx, ev)
 			if err != nil {
 				report.Unresolved += len(members)
@@ -571,7 +590,8 @@ func (r *eventResolveReport) noteCreated(eventID, captureID string) {
 
 type eventAliases struct {
 	events   map[string]*eventView
-	captures map[string]int // alias -> index+1
+	after    map[string]*eventView // "after_eN" -> the event a capture would follow
+	captures map[string]int        // alias -> index+1
 }
 
 // eventShortlist is the candidate events for a chunk: the newest within the
@@ -633,15 +653,68 @@ func lastN(s []string, n int) []string {
 	return s[len(s)-n:]
 }
 
+// eventDefinition is what an event is, for Jev's task and questions and for
+// the blind judges (scripts/event-blind-sample.py carries it verbatim; a
+// test holds them together). Owner ruling 2026-10-20: one event is one
+// incident, one place, one time; later developments are new linked events.
+// The earlier wording ("the same occurrence or its direct development")
+// made a developing story one event, which no threshold could undo
+// (docs/problems/event-layer-false-merges-at-marginal-p-2026-10-16.md).
+const eventDefinition = "One event is one incident, in one place, at one time: the occurrence itself, however many outlets report it and however its details are updated. A later development of it (a reaction, a response, an investigation, an outcome), another incident of the same story, place or actors, a live blog or roundup spanning several incidents, and an opinion or analysis piece about a topic are each a different event."
+
+// linkTokens are a title's words for choosing link candidates: titleTokens
+// with a plural s trimmed, so houthi and houthis meet.
+func linkTokens(text string) map[string]bool {
+	out := map[string]bool{}
+	for w := range titleTokens(text) {
+		if len(w) > 4 && strings.HasSuffix(w, "s") {
+			w = strings.TrimSuffix(w, "s")
+		}
+		out[w] = true
+	}
+	return out
+}
+
+// eventLinkCandidates are the known events one capture may be a later
+// development of: up to eventLinkChoices sharing the most words with it,
+// at least one, ties in candidate order.
+func eventLinkCandidates(in eventInput, candidates []*eventView, aliasOf map[*eventView]string) []string {
+	want := linkTokens(in.Item.Title + " " + in.Item.Summary)
+	type scored struct {
+		alias string
+		score int
+	}
+	var hits []scored
+	for _, v := range candidates {
+		score := 0
+		for w := range linkTokens(v.ev.Headline + " " + strings.Join(lastN(v.titles, eventRecentTitles), " ")) {
+			if want[w] {
+				score++
+			}
+		}
+		if score > 0 {
+			hits = append(hits, scored{aliasOf[v], score})
+		}
+	}
+	sort.SliceStable(hits, func(i, j int) bool { return hits[i].score > hits[j].score })
+	var out []string
+	for i := 0; i < len(hits) && i < eventLinkChoices; i++ {
+		out = append(out, hits[i].alias)
+	}
+	return out
+}
+
 // eventQuestion builds one call: the candidate events, the chunk's
 // captures, and one choice question per capture.
 func eventQuestion(chunk []eventInput, candidates []*eventView, summaryRunes int) (json.RawMessage, map[string]json.RawMessage, eventAliases) {
-	alias := eventAliases{events: map[string]*eventView{}, captures: map[string]int{}}
+	alias := eventAliases{events: map[string]*eventView{}, after: map[string]*eventView{}, captures: map[string]int{}}
+	aliasOf := map[*eventView]string{}
 	events := map[string]any{}
 	var eventChoices []string
 	for i, v := range candidates {
 		a := fmt.Sprintf("e%d", i+1)
 		alias.events[a] = v
+		aliasOf[v] = a
 		entry := map[string]any{"headline": intakeClip(v.ev.Headline, 200), "last_seen": v.last.UTC().Format(time.RFC3339)}
 		var recent []string
 		for _, t := range lastN(v.titles, eventRecentTitles) {
@@ -674,7 +747,7 @@ func eventQuestion(chunk []eventInput, candidates []*eventView, summaryRunes int
 		captures[a] = c
 	}
 	state := map[string]any{
-		"task":     "Each capture in state.captures is a news item just fetched, in any language. For each, decide whether it reports the same real-world event as a known event in state.events or as another capture in state.captures, or a new event. The same event means the same occurrence or its direct development (a later announcement, reaction or outcome of it). The same topic, the same actors or the same ongoing story in a different occurrence is a new event.",
+		"task":     "Each capture in state.captures is a news item just fetched, in any language. For each, decide whether it reports the same real-world event as a known event in state.events or as another capture in state.captures, or a new event. " + eventDefinition + " A new event that is a later development of a known event can name it with that event's after_ choice, when one is offered.",
 		"captures": captures,
 	}
 	if len(events) > 0 {
@@ -683,23 +756,29 @@ func eventQuestion(chunk []eventInput, candidates []*eventView, summaryRunes int
 	questions := map[string]json.RawMessage{}
 	for j := range chunk {
 		a := fmt.Sprintf("k%d", j+1)
-		criteria := map[string]string{"new": "No known event and no other capture reports this occurrence."}
+		criteria := map[string]string{"new": "No known event and no other capture reports this incident."}
 		choices := append([]string(nil), eventChoices...)
 		for _, e := range eventChoices {
-			criteria[e] = "state.events." + e + " reports the same occurrence as state.captures." + a + "."
+			criteria[e] = "state.events." + e + " reports the same incident as state.captures." + a + "."
+		}
+		for _, e := range eventLinkCandidates(chunk[j], candidates, aliasOf) {
+			after := "after_" + e
+			alias.after[after] = alias.events[e]
+			criteria[after] = "state.captures." + a + " reports a later development, or another incident, of the story state.events." + e + " reports, and not that incident itself: a new event that follows state.events." + e + "."
+			choices = append(choices, after)
 		}
 		for i := range chunk {
 			if i == j {
 				continue
 			}
 			other := fmt.Sprintf("k%d", i+1)
-			criteria[other] = "state.captures." + other + " reports the same occurrence, and no known event does."
+			criteria[other] = "state.captures." + other + " reports the same incident, and no known event does."
 			choices = append(choices, other)
 		}
 		choices = append(choices, "new")
 		raw, _ := json.Marshal(map[string]any{
 			"type":         "choice",
-			"instructions": "Which known event or other capture reports the same real-world occurrence as state.captures." + a + "? Prefer a known event over another capture when both match.",
+			"instructions": eventDefinition + " Which known event or other capture reports the same incident as state.captures." + a + "? Prefer a known event over another capture when both match. Choose an after_ choice only for a later development of a known event.",
 			"criteria":     criteria,
 			"choices":      choices,
 		})
