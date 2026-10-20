@@ -25,6 +25,22 @@ func BrokerProcessEnv(lookup func(string) (string, bool)) []string {
 	return append(env, yaegikernel.BuildToolchainCarry(lookup)...)
 }
 
+// captureBrokerEnv is what the executor adds to a new broker's environment:
+// the Chromium and fontconfig paths when the host granted visual capture to
+// this computer and the image names an executable Chromium, and nothing
+// otherwise (V1). The broker hands them to jobs alone (CaptureJobEnv).
+func captureBrokerEnv(grantDir, browser, fontconfig string) []string {
+	st := visualcapture.ReadGrant(grantDir, browser)
+	if !st.Granted {
+		return nil
+	}
+	env := []string{visualcapture.BrowserEnv + "=" + st.Browser}
+	if fontconfig = strings.TrimSpace(fontconfig); fontconfig != "" {
+		env = append(env, visualcapture.FontconfigEnv+"="+fontconfig)
+	}
+	return env
+}
+
 // CaptureJobEnv is what a broker adds to its jobs' environment for visual
 // capture: the Chromium and fontconfig paths the executor gave it, and only
 // those, when it gave them (a granted computer;

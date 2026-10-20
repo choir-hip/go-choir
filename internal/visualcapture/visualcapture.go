@@ -313,6 +313,10 @@ func cleanRel(p string) string {
 	return strings.TrimPrefix(c, "/")
 }
 
+// DigestHex is the lowercase hex sha256 of data: the digest Freeze records
+// for the manifest.
+func DigestHex(data []byte) string { return sha256Hex(data) }
+
 func sha256Hex(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])

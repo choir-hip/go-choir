@@ -3,7 +3,6 @@
 package capsule
 
 import (
-	"os"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/visualcapture"
@@ -34,23 +33,8 @@ func (e *Executor) VisualCaptureStatus() visualcapture.Status {
 	return visualcapture.ReadGrant(e.visualCaptureDir, e.captureBrowser)
 }
 
-// teardownReclaimEnabled is the report's control-run switch:
-// CHOIR_CAPSULE_TEARDOWN_RECLAIM=off leaves a capsule's page cache to be
-// reparented, as before this slice.
-func teardownReclaimEnabled() bool {
-	return strings.TrimSpace(strings.ToLower(os.Getenv("CHOIR_CAPSULE_TEARDOWN_RECLAIM"))) != "off"
-}
-
 // visualCaptureBrokerEnvLocked is what a new broker carries for capture
 // jobs: nothing unless the grant is on. Callers hold e.mu.
 func (e *Executor) visualCaptureBrokerEnvLocked() []string {
-	st := visualcapture.ReadGrant(e.visualCaptureDir, e.captureBrowser)
-	if !st.Granted {
-		return nil
-	}
-	env := []string{visualcapture.BrowserEnv + "=" + st.Browser}
-	if e.captureFontconfig != "" {
-		env = append(env, visualcapture.FontconfigEnv+"="+e.captureFontconfig)
-	}
-	return env
+	return captureBrokerEnv(e.visualCaptureDir, e.captureBrowser, e.captureFontconfig)
 }

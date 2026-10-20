@@ -746,7 +746,7 @@ func (e *Executor) destroy(ctx context.Context, id string, signal syscall.Signal
 			// Return the capsule's page cache before removal reparents it
 			// (visual evidence slice V27); every capsule, since builds
 			// leave cache too.
-			if report := caps.Cgroup.TeardownReclaim(caps.MemoryMax); report != "" {
+			if report := teardownReclaim(e.cgroupMemoryOf(caps)); report != "" {
 				log.Printf("capsule %s teardown memory: %s", id, report)
 			}
 		}
@@ -1803,7 +1803,7 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 	}
 	// Visual evidence (docs/design/visual-evidence-slice-2026-10-15.md):
 	// captures bound to this release's frontend, beside release/.
-	visual, err := e.stageVisualEvidence(ctx, rootFD, agentRunID, changes, temporary, files)
+	visual, err := e.stageVisualEvidence(ctx, rootFD, agentRunID, caps.ID, changes, temporary, files)
 	if err != nil {
 		return nil, err
 	}
