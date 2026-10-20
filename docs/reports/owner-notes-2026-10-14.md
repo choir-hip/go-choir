@@ -664,3 +664,13 @@ Owner, on waking:
   stack: "I think we committed to UIKit+swift. Is that the right idea? Or
   should we think about capacitor and reuse some of our svelte? Maybe that
   would make it easier for android? Well, kotlin isn't too hard per se."
+- Related stories need more connections (about 11:30 UTC): "there should
+  be more connections between articles, more links from one to the other
+  with the related stories feature. We should think about how to review
+  all the existing articles and make sure that they are correctly
+  connected in the object graph when they touch on similar topics, events,
+  and entities. Let's think about how we can effectuate this with a desk
+  like the research desk." Context: Phase 1 (shared captures) links 9 of
+  the front 60 stories at about 87-92% precision
+  (`docs/problems/related-stories-dead-end-2026-10-20.md`); Phase 2
+  (events) waits on the one-incident blind rerun. Design answer pending.
