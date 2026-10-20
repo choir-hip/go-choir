@@ -786,3 +786,14 @@ Owner, on waking:
   that forbid the access itself still rule a source out.
 - Streams overview published as an artifact (about 16:15 UTC):
   https://claude.ai/artifact/NXjrjYiR3VseMwuFwTs5gi
+- Telegram and RSSHub as background (about 16:20 UTC): "Can we still use
+  Telegram and RSS Hub as background material, which then needs
+  corroboration from other sources? This would be fine because those
+  aren't trusted sources anyway." Answer given: corroboration settles
+  trust, not access; the terms question is about how we collect, not how
+  we cite. Recommended line: logged-out public pages (t.me/s channel
+  previews, RSSHub routes with no login) as tips only, never cited,
+  quoted or shown, each tip sending research to find independent
+  corroboration, polite rate limits; no MTProto and no cookie routes,
+  because a logged-in account binds us to terms that forbid this. Counsel
+  to confirm. Awaiting the owner's yes.
