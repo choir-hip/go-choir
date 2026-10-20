@@ -706,6 +706,11 @@ type guestObservabilityResponse struct {
 	// EngineMutex is the engine lock's cumulative wait and hold per call
 	// path since boot (H3: lock waits at K = 4).
 	EngineMutex map[string]objectgraph.EngineMutexOpStats `json:"engine_mutex,omitempty"`
+	// TelemetryBatching is the run-telemetry batching instrumentation
+	// (docs/reports/telemetry-batching-design-2026-10-20.md section 9): the
+	// per-kind event counts and tape batch sizes that price batching, and the
+	// sealer's counters when it is on. Read-only.
+	TelemetryBatching *store.TelemetryStats `json:"telemetry_batching,omitempty"`
 	// ClaudeDelegate is the Claude delegate's availability on this computer
 	// and why not (docs/design/claude-delegate-slice1-2026-10-14.md). Never
 	// the token.
@@ -807,6 +812,8 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 	if h.rt.store != nil {
 		resp.ManagementTasks = h.rt.managementTaskObservability(r.Context(), ownerID, h.rt.TextureComputerID())
 		resp.EngineMutex = h.rt.store.EngineMutexStats()
+		telemetry := h.rt.store.TelemetryStats()
+		resp.TelemetryBatching = &telemetry
 	}
 	if h.rt.capsuleExecutor != nil {
 		status := h.rt.capsuleExecutor.ClaudeDelegateStatus()

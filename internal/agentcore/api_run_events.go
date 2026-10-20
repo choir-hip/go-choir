@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -69,7 +70,7 @@ func (h *APIHandler) handleRunEvents(w http.ResponseWriter, r *http.Request, own
 		return
 	}
 	// Read one past the page to learn whether another page exists.
-	events, err := h.rt.Store().ListEventsAfter(r.Context(), runID, after, limit+1)
+	events, err := h.rt.Store().ListEventsAfter(store.WithReadConsistency(r.Context(), store.ReadRelaxed), runID, after, limit+1)
 	if err != nil {
 		log.Printf("runtime api: list run events: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list run events"})

@@ -1962,7 +1962,7 @@ func (h *Handler) HandleTextureDiagnosis(w http.ResponseWriter, r *http.Request)
 			resp.ErrorMatches = append(resp.ErrorMatches, run.RunID+": Incorrect string value")
 		}
 	}
-	if events, err := h.Store.ListEventsByOwner(r.Context(), ownerID, limit); err == nil {
+	if events, err := h.Store.ListEventsByOwner(store.WithReadConsistency(r.Context(), store.ReadRelaxed), ownerID, limit); err == nil {
 		resp.Events = events
 		for _, ev := range events {
 			if strings.Contains(string(ev.Payload), "Incorrect string value") {

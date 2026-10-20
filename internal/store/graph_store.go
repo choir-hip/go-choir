@@ -1240,6 +1240,7 @@ func buildEventObject(rec *types.EventRecord, now time.Time) (objectgraph.Object
 
 // ListEventsOG lists events for a run from the object graph.
 func (s *Store) ListEventsOG(ctx context.Context, runID string, limit int) ([]types.EventRecord, error) {
+	s.beforeEventRead(ctx)
 	if limit <= 0 {
 		limit = 100
 	}
@@ -1260,6 +1261,7 @@ func (s *Store) ListEventsOG(ctx context.Context, runID string, limit int) ([]ty
 
 // ListEventsByOwnerOG lists events by owner from the object graph.
 func (s *Store) ListEventsByOwnerOG(ctx context.Context, ownerID string, limit int) ([]types.EventRecord, error) {
+	s.beforeEventRead(ctx)
 	if limit <= 0 {
 		limit = 100
 	}

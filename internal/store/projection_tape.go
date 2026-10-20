@@ -15,6 +15,8 @@ import (
 type projectionTape struct {
 	computerID string
 	appender   *computerevent.ComputerEventAppender
+	// stats counts the tape events this binding accepts (telemetry_stats.go).
+	stats *telemetryCounters
 }
 
 // BindProjectionTape routes live desktop and OG mutations through append+project.
@@ -28,7 +30,7 @@ func (s *Store) BindProjectionTape(computerID string, appender *computerevent.Co
 	if computerID == "" {
 		return fmt.Errorf("store: projection tape requires computer_id")
 	}
-	tape := &projectionTape{computerID: computerID, appender: appender}
+	tape := &projectionTape{computerID: computerID, appender: appender, stats: &s.telemetryStats}
 	s.projectionTape = tape
 	if s.ogStore != nil {
 		s.ogStore.SetMutationInterceptor(tape.interceptOG)
@@ -131,6 +133,7 @@ func (t *projectionTape) appendOps(ctx context.Context, ops []computerevent.Proj
 	if err != nil {
 		return fmt.Errorf("store: append projection batch: %w", err)
 	}
+	t.stats.recordTapeEvent(event.AuthorityRef, ops)
 	return nil
 }
 

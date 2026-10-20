@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/llmcost"
+	"github.com/yusefmosiah/go-choir/internal/store"
 )
 
 // costsResponse is the JSON envelope for GET /api/costs. All cost figures are
@@ -70,7 +71,7 @@ func (h *Handler) HandleCosts(w http.ResponseWriter, r *http.Request) {
 	includeModels := strings.TrimSpace(r.URL.Query().Get("models")) == "1" ||
 		strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("models")), "true")
 
-	events, err := h.store.ListEventsByOwner(r.Context(), ownerID, limit)
+	events, err := h.store.ListEventsByOwner(store.WithReadConsistency(r.Context(), store.ReadRelaxed), ownerID, limit)
 	if err != nil {
 		log.Printf("runtime costs: list events by owner: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load cost data"})

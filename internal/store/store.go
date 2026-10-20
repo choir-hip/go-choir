@@ -174,6 +174,11 @@ type Store struct {
 	// is correct across restarts; AppendEvent is the only writer of a
 	// non-zero Seq (the lifecycle batch path writes Seq 0).
 	eventSeqs map[eventSeqKey]int64
+	// telemetryStats is the batching instrumentation (telemetry_stats.go);
+	// telemetry is the window sealer, nil until batching is first configured
+	// on in this process (telemetry_sealer.go).
+	telemetryStats telemetryCounters
+	telemetry      atomic.Pointer[telemetrySealer]
 }
 
 type eventSeqKey struct{ runID, ownerID string }
@@ -1930,6 +1935,7 @@ func (s *Store) AppendEvent(ctx context.Context, rec *types.EventRecord) error {
 	if len(rec.Payload) == 0 {
 		rec.Payload = json.RawMessage(`{}`)
 	}
+	s.telemetryStats.recordAppend(rec.Kind)
 
 	// Serialize event sequence allocation to prevent two concurrent
 	// goroutines from reading the same max and assigning duplicate Seq
@@ -2036,6 +2042,7 @@ func (s *Store) ListEvents(ctx context.Context, runID string, limit int) ([]type
 // ListEventsAfter returns events for the given run with sequence > afterSeq,
 // ordered by sequence ascending, limited to the given count.
 func (s *Store) ListEventsAfter(ctx context.Context, runID string, afterSeq int64, limit int) ([]types.EventRecord, error) {
+	s.beforeEventRead(ctx)
 	if limit <= 0 {
 		limit = 200
 	}
@@ -2066,6 +2073,7 @@ func (s *Store) ListEventsAfter(ctx context.Context, runID string, afterSeq int6
 // ListEventsByOwner returns events for the given owner, ordered by timestamp
 // descending, limited to the given count.
 func (s *Store) ListEventsByOwner(ctx context.Context, ownerID string, limit int) ([]types.EventRecord, error) {
+	s.beforeEventRead(ctx)
 	if limit <= 0 {
 		limit = 200
 	}
@@ -2097,6 +2105,7 @@ func (s *Store) ListEventsByOwner(ctx context.Context, ownerID string, limit int
 // given count. This supports SSE catch-up after reconnection where the client
 // needs events newer than a previously seen sequence number.
 func (s *Store) ListEventsByOwnerAfter(ctx context.Context, ownerID string, afterSeq int64, limit int) ([]types.EventRecord, error) {
+	s.beforeEventRead(ctx)
 	if limit <= 0 {
 		limit = 200
 	}
@@ -2131,6 +2140,7 @@ func (s *Store) ListEventsByOwnerAfter(ctx context.Context, ownerID string, afte
 
 // ListEventsByChannel returns recent events for the given coordination channel.
 func (s *Store) ListEventsByChannel(ctx context.Context, ownerID, channelID string, limit int) ([]types.EventRecord, error) {
+	s.beforeEventRead(ctx)
 	if limit <= 0 {
 		limit = 200
 	}
@@ -2159,6 +2169,7 @@ func (s *Store) ListEventsByChannel(ctx context.Context, ownerID, channelID stri
 
 // ListEventsByTrajectory returns recent events for a specific user trajectory.
 func (s *Store) ListEventsByTrajectory(ctx context.Context, ownerID, trajectoryID string, limit int) ([]types.EventRecord, error) {
+	s.beforeEventRead(ctx)
 	if limit <= 0 {
 		limit = 500
 	}
@@ -2188,6 +2199,7 @@ func (s *Store) ListEventsByTrajectory(ctx context.Context, ownerID, trajectoryI
 // ListEventsByTrajectoryAfter returns trajectory-scoped events newer than the
 // provided stream sequence, ordered by stream_seq ascending.
 func (s *Store) ListEventsByTrajectoryAfter(ctx context.Context, ownerID, trajectoryID string, afterSeq int64, limit int) ([]types.EventRecord, error) {
+	s.beforeEventRead(ctx)
 	if limit <= 0 {
 		limit = 500
 	}
