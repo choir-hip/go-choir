@@ -314,6 +314,27 @@ slices:
       --scenario engineering --change go-served --expect-sha <deployed sha>` on a
       fresh test computer; the receipt holds the witness and the gap table.
     exit: Gap table committed as a problem doc; S6-C1 set supported, weakened or falsified; slices 1 and 2 re-scoped.
+    code_reading_2026_10_20: >-
+      Built on branch feat/s6-0-release-witness (draft PR 77), not yet
+      deployed or drilled. The code reading in
+      docs/problems/s6-activation-trusts-not-compares-2026-10-20.md corrects
+      two gaps above (hypotheses until the drill). (a) A failing test receipt
+      is already refused, at Freeze (freezeReceiptOutcomesError,
+      tools_capsule.go), so a bundle with a failing test cannot form and leg 3
+      as written is unreachable through the product path; what is missing is a
+      declared test command and a re-read after Freeze. Leg 3 is re-scoped to
+      a post-freeze mutation of the test result. (b) The host build is mostly
+      compared (hostbuild.VerifyJob binds operation, bundle digest, patch hash,
+      base commit and base image; the host compares the builder's patch); only
+      builder-receipt.json's content is hash-pinned and never parsed on the
+      guest. (c) splits: heads are compared at the decision and held by the
+      reducer's pending-transition lock; the candidate's frozen surface against
+      the decision's heads is not compared, and divergence is not derived.
+      Gap table: 17 pairs, 12 compared at or before the gate, 5 recorded-only
+      (test_receipts_exit at the gate, builder_receipt_patch,
+      manifest_builder_receipt, frozen_surface_decision_heads,
+      divergence_derived). S6-1 and S6-2 are re-scoped from the drill's table,
+      not from this reading alone.
   S6-1:
     what: >-
       Declared tests are a gate: the digested bundle names the declared test
