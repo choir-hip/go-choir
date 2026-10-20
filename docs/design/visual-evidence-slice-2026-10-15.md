@@ -328,3 +328,161 @@ node scripts/reeng_tracer.mjs --label visual-<n> --scenario engineering --visual
   that is not a runtime file. Introduced: a store path a cell can exec
   without the grant (V1, named). Repaired: capsule page cache reparented
   at teardown (V27).
+
+## 9. Resumed 2026-10-20
+
+Owner direction (2026-10-20): "get Playwright working so that we can make
+screenshots and videos of work inside capsules. So then users can approve
+evidence they can see." The slice was paused on 2026-10-15 because the
+local Chromium runs loaded the owner's Mac. This pass launched no browser
+and built no guest image locally; it used Go tests and `nix eval`.
+Mutation class of the pass: **orange** (capsule), **red** (guest image,
+vmctl grant, node-b), **green** (this section).
+
+### 9.1 What was rebased
+
+Branch `feat/visual-evidence-resume-2026-10-20`, from `main` at
+`73483585a`. The four commits of `feat/visual-evidence-slice` (base
+`133de45fa`, about 580 commits behind) were cherry-picked in order: the
+design (this file), `choir-capture`, the guest image plus vmctl grant, and
+the unfinished capsule side. Two commits follow: the capsule fix and tests
+(orange), and node-b's grant list set to empty (red).
+
+Conflicts, all in the vmctl-to-vmmanager config path (`cmd/vmctl/main.go`,
+`internal/vmctl/ownership.go`, `internal/vmmanager/manager.go`): adjacent
+additions beside main's `OfflineMaintenance` hook (store compaction) and
+`MemoryHotplug*` fields. Resolved by keeping both sides; no logic overlaps.
+`nix/autoputer-vm.nix`, `flake.nix` and `nix/node-b.nix` merged cleanly
+(the Claude delegate's grant files and the visual grant share
+`createCredentialDisk`'s file map, merged in `bootVM`).
+
+### 9.2 What changed in main that mattered
+
+- **The capsule cgroup is an interface now** (`capsuleCgroup`), so the WIP's
+  `CgroupManager.TeardownReclaim` did not compile. Teardown reclaim now
+  goes through the `cgroupMemory` seam that job memory boosts added
+  (`teardown_reclaim.go`), asks for the cgroup's whole charge instead of
+  `MemoryMax`, and takes a fake in tests.
+- **Memory hotplug and job leases landed** (`memory_mib` on `choir.Start`,
+  `WithGuestMemoryLease`). V29 (no lease while Chromium runs) is closable
+  without new code: teach the capture call
+  `{"minutes": 5, "memory_mib": 768}`. Hotplug itself stays off by default
+  (`VM_MEMORY_HOTPLUG`), so on staging today the browser still runs inside
+  the capsule's 2 GiB.
+- **Chromium moved** from 150 to 155.0.8059.79 in the pinned nixpkgs; its
+  closure is 1,833,464,976 bytes (1.71 GiB) per `nix path-info -S` against
+  cache.nixos.org. The delta against the whole guest closure is still
+  UNVERIFIED (the report estimated 0.7 to 0.8 GiB on top of LibreOffice).
+- The test tier moved into `OwnershipRegistry` (`warmnessClassForOwnership`);
+  `bootWarmnessClass` (V2) was the only vmctl change needed.
+
+### 9.3 Capsule side, corrected
+
+- Teardown reclaim, tested over a fake and a temp cgroup directory
+  (`internal/capsule/teardown_reclaim_test.go`): reclaims the whole charge;
+  EAGAIN is `partial`, any other error is logged and never blocks
+  teardown; `CHOIR_CAPSULE_TEARDOWN_RECLAIM=off` is the control run.
+- Staging split so the refusals run without a capsule
+  (`stageEvidenceFiles` with an injected opener; the Linux wrapper only
+  does `Openat2`).
+- The capture receipt now comes from the frozen capsule's own jobs (the WIP
+  used every job of the run) and only from a `done` `choir-capture` job
+  whose output carries the manifest's sha256 (`choir-capture` prints it,
+  `visualcapture.Summary`). A manifest rewritten after the job gets no
+  receipt, and `visual_captured` will not accept it.
+- Freeze decodes every capture at the manifest's viewport and recomputes
+  `blank`; it no longer trusts the manifest for either.
+- Every staged file is scanned for secrets, and a refused directory writes
+  nothing into the bundle area.
+
+New failure modes found in this pass:
+
+- **V31. A secret rides in a PNG or the manifest.** Guard: the release
+  scan's rules (binary windows with a carry for captures, per line for the
+  manifest). Test: a private key appended after the image data.
+- **V32. A receipt from another capsule, or for another manifest.** Guard
+  above. Test: the ten receipt cases in `visual_evidence_test.go`.
+- **V33. Freeze believes the manifest's `blank` or size.** Guard: decode at
+  Freeze. Test: lying `blank` both ways, a wrong-size and a non-PNG file.
+
+### 9.4 Tests and checks (this pass)
+
+Run on Darwin: `internal/visualcapture`, `internal/capsule` (new:
+`visual_evidence_test.go`, `teardown_reclaim_test.go`,
+`visual_capture_env_test.go`), `internal/capsule/transaction`,
+`internal/vmmanager`, `internal/vmctl`, `cmd/vmctl`, `internal/autoputer`:
+all pass. `GOOS=linux go vet` of `internal/capsule` and `cmd/capsule-broker`
+(tests included) is clean; `cmd/capsule-broker/visual_capture_test.go` (V1,
+the job manager is the only broker child that carries the capture keys) is
+linux-only and was compile-checked, not run. `scripts/check-heresies.sh
+--fail-on-regression` exits 0 (`/tmp/heresy-visual.json`). `nix eval` (no
+build) shows: `go-choir-autoputer-vm` carries `CHOIR_CAPTURE_BROWSER_BIN`
+(Chromium 155.0.8059.79), `CHOIR_CAPTURE_FONTCONFIG_FILE`, the credential
+directory, and `choir-capture` among the system packages; `go-choir-b`'s
+vmctl environment has `CHOIR_VISUAL_CAPTURE_COMPUTERS=` (empty: nothing is
+granted). There is no dedicated nix check script for this.
+
+### 9.5 Still design only
+
+Not written: the `visual_evidence` bundle field and the in-cell inspection
+mirror (V18), Freeze wiring in `agentcore` (image store write, the result's
+`visual_captures`, V22), the `visual_captured` rule in `internal/types`
+(validate, settle at Freeze, R2), the prompt sections (capture and `memory_mib`
+for engineering, vision review for management), the read route (V26), and
+`reeng_tracer.mjs --visual`. The capsule side is the last piece that had
+no tests; the rest has none yet either.
+
+### 9.6 Remaining path to a staging proof
+
+1. Bundle field plus inspection mirror (omitempty pointer; drift test).
+2. Freeze wiring: stage `Visual` into the bundle directory, write each
+   capture to `internal/imageblob`, return `visual_captures`.
+3. Rule `visual_captured` (optional `routes`), settled from the Freeze
+   observation only; test yes, no without a receipt, no on a missing route.
+4. Read route (owner-authenticated; `?ref=` only for refs the operation's
+   bundle cites).
+5. Prompts, including `memory_mib` on the capture job.
+6. Tracer `--visual` drill (section 5).
+7. Red deploy (9.7), then: set `CHOIR_VISUAL_CAPTURE_COMPUTERS` to one
+   named test computer, deploy, cold-boot it, run the drill, and run the
+   report's section 8.2 probe (host RSS of the Firecracker process returns
+   to within 128 MiB of its pre-browser value within about 2 minutes), with
+   a control run under `CHOIR_CAPSULE_TEARDOWN_RECLAIM=off`. V13 (Chromium
+   under the capsule's seccomp, Landlock and mounts) is first tested here.
+8. The owner-facing display (9.8).
+
+### 9.7 Red ceremony for the guest-image change
+
+- **Conjecture delta.** Unchanged from section 8, plus: a capture receipt is
+  bound to its manifest by the job's own output, so existence and binding
+  stay runtime facts and content stays a model or human judgment.
+- **Protected surfaces.** Guest image (store closure +1 Chromium, fonts, one
+  Go tool); vmctl boot input (`WarmnessClass`) and the credential disk's
+  file set; node-b's vmctl environment; Freeze evidence (tightened only).
+- **Admissible evidence.** Local: the tests above and the `nix eval`
+  results. Staging: the drill and the 8.2 probe. A local browser run is not
+  evidence for the capsule and was not made.
+- **Rollback path.** Revert the red commits (097211c41 and c307acaab) and
+  deploy; or leave the image and keep the list empty, which is the
+  shipped state. A guest-image change invalidates snapshots at deploy as
+  every guest-image change does, so each computer cold-boots once.
+- **Heresy delta.** Discovered: the WIP counted every job of a run for the
+  capture receipt, and trusted the manifest's `blank` and size. Introduced:
+  the V1 residual (a cell can exec the store path without the grant); the
+  guest store image grows by the Chromium closure. Repaired: both
+  discovered items; capsule cache reparenting at teardown (V27), pending the
+  staging probe.
+
+### 9.8 Open owner decisions (recommendations)
+
+- **Grant scope.** Start with one named test computer, then `class:test`.
+  Never the default for a primary or the owner's computer until the 8.2
+  probe shows memory returns.
+- **Approval surface.** Texture. It already renders the commitment ledger
+  into the owner-facing supervision surface, and Freeze's captures are
+  evidence on that ledger; a second approval UI would fork the authority.
+  The read route stays as the API and drill instrument, not a product view.
+- **Video.** Not yet. Recording takes every CPU it is given and runs 2 to 3
+  times slower than real time (report section 2). Ship viewport screenshots
+  first, then a 3 to 5 frame filmstrip over CDP, and treat video as a
+  separate one-at-a-time job class with its own lease.
