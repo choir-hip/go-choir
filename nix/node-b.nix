@@ -492,6 +492,19 @@ let
     platformSigningKey = "-${platformArtifactsDir}/signing-key";
     escrowKey = "-${platformArtifactsDir}/key-escrow-key";
     mail = "-${mailDir}";
+    # Env files read only through EnvironmentFile= (systemd reads them before
+    # the namespace exists): hidden everywhere, so a unit that can write
+    # /var/lib/go-choir cannot rewrite another unit's environment for its
+    # next start.
+    deployEnv = "-/var/lib/go-choir/deploy.env";
+    corpusDsnEnv = "-/var/lib/go-choir/corpus-dsn.env";
+    sandboxGatewayEnv = "-/var/lib/go-choir/sandbox-gateway-token.env";
+    # PID 1's private socket and the system bus: a root unit that can reach
+    # either can ask systemd to run a command outside its own sandbox. Only
+    # units that run systemctl keep them (vmctl's store compaction, the Dolt
+    # liveness probe); the guest units already hide both.
+    systemdPrivate = "-/run/systemd/private";
+    dbusSystemSocket = "-/run/dbus/system_bus_socket";
   };
   hiddenSecretsExcept = keep: lib.attrValues (removeAttrs hostSecretPaths keep);
   # SEC-05 gateway bearer binding (internal/gateway/bearer_binding.go;
@@ -1335,14 +1348,22 @@ in
       # data.img files were 0644 in a 0755 vm-state, private only because
       # /var/lib/go-choir is 0750.
       StateDirectoryMode = "0750";
-      ReadWritePaths = [ "/var/lib/go-choir" "/var/lib/go-choir/vm-state" "/var/lib/go-choir/guest" ];
+      ReadWritePaths = [ "/var/lib/go-choir" "/var/lib/go-choir/vm-state" ];
       # vmctl reads none of the host secrets, and every Firecracker VMM runs
       # in vmctl's mount namespace: hiding them here takes the JWT key,
       # provider credentials, escrow key and operator tokens out of reach of
       # a VMM escape (F1 partial; VMMs started before the restart keep the
       # old view until their next boot).
-      InaccessiblePaths = hiddenSecretsExcept [ ];
-      ReadOnlyPaths = [ "/var/lib/go-choir/auth" ];
+      # Store compaction runs systemctl and systemd-run, so vmctl keeps PID 1's
+      # sockets: vmctl stays root-equivalent through them (named residual;
+      # the fix is a dedicated compaction unit vmctl starts by name).
+      InaccessiblePaths = hiddenSecretsExcept [ "systemdPrivate" "dbusSystemSocket" ];
+      # vmctl reads but never writes the deployed service binaries and the
+      # guest images (the shared images attach read-only; data.img lives in
+      # vm-state). Read-only here means a VMM escape cannot replace corpusd's
+      # binary or the kernel every later cold boot runs. auth/ stays readable
+      # for the retention sweep (VMCTL_RETENTION_AUTH_DB_PATH).
+      ReadOnlyPaths = [ "/var/lib/go-choir/auth" "/var/lib/go-choir/services" "/var/lib/go-choir/guest" ];
       LoadCredential = internalTokenCredential ++ doltClientCredential;
       # Computer tiers (paid accounts, platform computers) are not host
       # configuration: they live in internal/computertiers/computer-tiers.json,
@@ -1963,7 +1984,7 @@ in
       RuntimeDirectoryMode = "0700";
       RuntimeDirectoryPreserve = "yes";
       LoadCredential = [ "dolt-app-password:${doltAppPasswordFile}" ];
-      InaccessiblePaths = hiddenSecretsExcept [ ];
+      InaccessiblePaths = hiddenSecretsExcept [ "systemdPrivate" "dbusSystemSocket" ];  # it runs systemctl kill, show and restart
       # Reading /proc/<dolt pid>/{stack,io,wchan} for the evidence record can
       # need ptrace access to another process under Yama.
       CapabilityBoundingSet = [ "CAP_SYS_PTRACE" ];
