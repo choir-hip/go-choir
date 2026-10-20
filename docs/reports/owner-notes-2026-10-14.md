@@ -864,3 +864,40 @@ Owner, on waking:
   desk-cell confinement and guest egress landed, owner-act enforced), with
   the user-held vault as a later opt-in. Google and Apple sign-in and the
   emailed sign-in code wait until later this week.
+
+## 32. The overnight plan: research more, op-eds, sources, self-development arms (2026-10-20, ~23:30 UTC)
+
+Owner, before sleep. The order is backup and disk cleanup first, then:
+
+- **Research more.** "what you said, and also web search. for now, allow
+  users not logged in to trigger it (could be abused but dont worry about
+  this for now)". A reader presses Research more on a published story;
+  research digs deeper with web search and the keyed search providers;
+  Texture publishes a revised version, shown in version history with its
+  sources. Code reading after the answer: the button, the request route and
+  the fate line exist on main for an owner allowlist that is empty in
+  production (`PROXY_EXPAND_REQUESTERS`); the keyed providers are the
+  gateway's search tiers (serper, parallel, exa, tavily, serpapi, with daily
+  caps); NewsAPI.ai is not wired anywhere, contrary to what I said in the
+  briefing.
+- **Op-eds.** "any logged in user should be able to write anything in a
+  texture, research should pull relevant published texture articles from
+  autopaper amongst other sources, and user should be able to publish their
+  texture to autopaper. thats an op-ed.... this may already be implicitly
+  built actually. just needs better connection.." Code reading: writing and
+  publishing to an unlisted public link work for any signed-in user today;
+  the missing connections are research search over published articles, a
+  listing on the paper, and an author and opinion label. Section 30 ties
+  op-eds to reader corrections as one stream; corrections follow op-eds.
+- **Self-development arms.** "lets try sonnet through claude delegate and
+  not (which wuold just use gpt 6 luna... not best for quality but good as
+  proof and comparison)". Limits from the briefing stand: test computers
+  only, frontend-only app rewrites, the failure 15 carried patch (option A)
+  first, the smallest frontend app first.
+- **Delegate token.** "keep it".
+- **Sources.** "schedule wave-1 and start atproto and fediverse ingestion...
+  research how to choose supernodes which are themselves aggregating or
+  other intelligent strategies which can pivot out from there to other info".
+- Briefing questions 6 to 12 wait until after 2026-10-21 ("wakeup 5:15,
+  leave 6:15, home by 7-8pm").
+- Goal: docs/definitions/choir-overnight-research-oped-sources-2026-10-20.md.

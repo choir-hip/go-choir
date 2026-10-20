@@ -1248,6 +1248,19 @@ nodes:
       restart design (station L1) in docs/restart-subsystem-design-2026-10-13.md.
       Convergent round 1 (8a1477c3): send_back, findings adopted; round 2
       (d46d3d08): accept.
+  - id: choir-overnight-research-oped-sources-2026-10-20
+    title: Overnight 2026-10-20 — research more for every reader, op-eds on the paper, wave-1 and social sources, self-development two-arm drill
+    path: docs/definitions/choir-overnight-research-oped-sources-2026-10-20.md
+    ledger: ''
+    status: working  # drafted 2026-10-20 ~23:55 UTC under owner notes section 32; runs beside S6
+    kind: side
+    entrypoint: false
+    execution_mode: mission_orchestrator
+    depends_on: []
+    enables: []
+    note: >-
+      Owner's overnight order (owner notes section 32). Does not change the
+      S6 slices; the self-development drill runs on test computers only.
   - id: choir-lp-s6-commit-gate-2026-10-20
     title: LP S6 — the commit gate (what runs is what was approved; tests, build, heads, fault boundaries, derived divergence)
     path: docs/definitions/choir-lp-s6-commit-gate-2026-10-20.md

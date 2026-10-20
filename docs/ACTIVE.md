@@ -33,6 +33,16 @@ patch. Reading: [selfdev update architecture](reports/selfdev-update-architectur
 the [S6 station definition](definitions/choir-appdev-s6-commit-gate-full-release-2026-10-01.md),
 and the S7 definition for what follows.
 
+## Overnight run (2026-10-20 → 10-21, owner notes section 32)
+
+**Goal:** [`definitions/choir-overnight-research-oped-sources-2026-10-20.md`](definitions/choir-overnight-research-oped-sources-2026-10-20.md)
+(`readiness: drafted`). After the backup snapshot path lands: Research more
+for every reader (logged out included), op-eds as connected Texture
+publishing with an Opinion section, wave-1 schedules plus AT Protocol and
+Fediverse leads, then the failure 15 carried patch and a two-arm frontend
+self-development drill (Sonnet through the Claude delegate versus GPT-6
+Luna) on test computers. S6 above stays the active LP station.
+
 ## Foundations push (2026-10-14 evening → 10-15 15:00; owner: deepen foundations)
 
 Live today: LF0/LF1 front page, S2a+S2b management tasks, artifact GC,
