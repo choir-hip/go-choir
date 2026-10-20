@@ -116,3 +116,14 @@ Test computer `computer-ad1b46d4…` cold-booted through the lifecycle API
   engineering cell, before any change. A fix for (1) is to drop the scrub
   variable or declare the tools as the message says, weighed against why
   the scrub was set (token isolation from Claude's subprocesses, F13).
+
+### Hypothesis 1 refuted locally (2026-10-20 ~10:20 UTC)
+
+Local Claude Code 2.1.299 with the delegate's exact flags (`-p`, Sonnet,
+`--tools`/`--allowedTools`/`--disallowedTools` as in spec.go, empty MCP,
+`--permission-mode dontAsk`) and `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` prints
+the same "Permission mode forced to default" warning, then writes the file:
+`subtype: success`, `permission_denials: []`. Write is on the explicit allow
+list, so the forced mode does not refuse it. The guest's Claude Code version
+may differ; the evidence moves to hypothesis 2 (the delegate and the cells see
+different views of `/workspace/platform`), under investigation.
