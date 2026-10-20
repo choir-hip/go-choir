@@ -26,6 +26,9 @@ type Dependencies struct {
 	// corpusd (Autopaper W1b2), never this computer's embedded graph.
 	Sources  *sources.Registry
 	Captures CaptureSink
+	// SourceAPI is the gateway's keyed source APIs (choir.SourceAPI); nil
+	// when this computer has no gateway.
+	SourceAPI search.SourceAPIClient
 }
 
 // newSearchWireCorpusTool is choir.SearchWireCorpus: a keyword search of

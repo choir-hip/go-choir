@@ -378,6 +378,8 @@ func (rt *Runtime) InstallDefaultAgentTools() error {
 	researchDeps := researchtools.Dependencies{
 		Store: rt.store, Search: searchClient,
 		HTTP: httpClient,
+		// Keyed source APIs go through the gateway, which holds the keys.
+		SourceAPI: search.NewGatewaySourceAPIClientFromEnv(),
 		// Autopaper captures are shared content: written to Store B through
 		// corpusd, never this computer's embedded graph (W1b2).
 		Captures: researchtools.NewCorpusdCaptureSink(rt.cfg.CorpusdURL),

@@ -1,8 +1,8 @@
 # Keyed source APIs: five keys exist, nothing can use them without putting a key in a guest (2026-10-20)
 
-Status: problem recorded; fix designed here, built on branch
-`keyed-source-apis` (not pushed, not deployed). Working document, not
-doctrine.
+Status: problem recorded; fix built on branch `keyed-source-apis` and
+checked live from a developer machine (section 5); not deployed. Working
+document, not doctrine.
 
 Mutation class: this note is green. The fix is red (a new gateway provider
 route: gateway/provider calls are a protected surface).
@@ -155,3 +155,43 @@ These are readings for research use, not cleared for republication:
 
 Rollback: revert the route commit; the keys in the EnvironmentFile are
 inert without it.
+
+## 5. Built (2026-10-20)
+
+- Gateway: `internal/gateway/source_api.go`, route
+  `POST /provider/v1/source-api`, the table of section 2 plus
+  `youtube.channels` (`id` or `for_handle`, 1 unit). Redirects are
+  answered, never followed (a followed redirect would carry the key
+  header). The gateway logs at start which providers have a key loaded
+  (`gateway: source api: fred: key loaded, 2000 a day; ...`), never the key.
+- Guest: `internal/search/source_api.go` (the gateway client),
+  `internal/researchtools/source_api.go` (the `source_api` host-egress
+  tool; an answer over 48,000 characters is cut, marked truncated, with a
+  hint to narrow it), and the research verb `choir.SourceAPI(provider,
+  endpoint, params)` in `internal/yaegikernel` (research only; Texture,
+  management and engineering do not export it; research children do not
+  have it, so a fan-out cannot spend the shared budgets).
+- Tests, written first: the eight failure modes of section 2
+  (`internal/gateway/source_api_test.go`), the guest tool's four
+  (`internal/researchtools/source_api_test.go`) and the verb's three
+  (`internal/yaegikernel/source_api_verb_test.go`).
+- Live check: `TestSourceAPILiveProviders` runs only with
+  `CHOIR_SOURCE_API_LIVE=1` and the keys in the environment. On
+  2026-10-20 at 17:35 UTC all twelve calls answered 200 (three FRED, three
+  Congress, CourtListener search and a docket taken from it, two YouTube,
+  NewsAPI.ai usage and one Chinese-language article search). A
+  CourtListener docket id I picked by hand answered 502 upstream; the test
+  now takes the id from the search.
+
+Known gaps, not fixed in this slice:
+
+- **An answer is not a capture.** `choir.SourceAPI` returns data, not a
+  citable capture id, so Texture cannot cite it as a source block. Research
+  reports a figure with its provider named, or reads the provider's public
+  page with `choir.Read` when a story needs a link. Writing answers as
+  captures is the next slice, with the keyed schedules.
+- **Budgets live in memory.** A gateway restart resets the day's counts,
+  so a day with restarts can spend more than its budget. NewsAPI.ai's
+  2,000-token trial is the one this matters for.
+- **A CourtListener search answer is large** (68 KB for one page), so the
+  research tool cuts it; research narrows with `court`, dates or `type`.

@@ -155,7 +155,7 @@ func NewChoirScope(broker *Broker, issuer *HandleIssuer, computerID, activationI
 		actions = []BrokerAction{ActionReadFile, ActionListDir, ActionEmit,
 			ActionSearchStart, ActionRead, ActionSearchWireCorpus,
 			ActionSaveEvidence, ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry, ActionResearch,
-			ActionPollSource, ActionReadCapture, ActionSystem1}
+			ActionPollSource, ActionReadCapture, ActionSystem1, ActionSourceAPI}
 	}
 	// SMG: the management desk's product API call rides the broker like the
 	// research egress verbs — the typed product_api_request tool is deleted.
@@ -351,7 +351,7 @@ var deskModuleSets = map[string][]string{
 	"research": {"Cast", "Ask", "Note", "Reply", "CancelAct",
 		"Escalate", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement",
 		"SearchStart", "Searches", "SearchWait", "Read", "ReadCapture", "SearchWireCorpus",
-		"SaveEvidence", "ReadEvidence", "ListEvidence", "RunMemoryEntry", "Research", "PollSource",
+		"SaveEvidence", "ReadEvidence", "ListEvidence", "RunMemoryEntry", "Research", "PollSource", "SourceAPI",
 		// System1 is the fast intuitive judge: closed questions answered with
 		// a distribution the desk weighs (owner ruling 2026-10-20; research
 		// only, not management, children or tasks).
@@ -451,6 +451,7 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"Research":         func() reflect.Value { return reflect.ValueOf(s.Research) },
 		"Read":             func() reflect.Value { return reflect.ValueOf(s.Read) },
 		"PollSource":       func() reflect.Value { return reflect.ValueOf(s.PollSource) },
+		"SourceAPI":        func() reflect.Value { return reflect.ValueOf(s.SourceAPI) },
 		"ReadCapture":      func() reflect.Value { return reflect.ValueOf(s.ReadCapture) },
 		"SearchWireCorpus": func() reflect.Value { return reflect.ValueOf(s.SearchWireCorpus) },
 		"System1":          func() reflect.Value { return reflect.ValueOf(s.System1) },
@@ -656,6 +657,14 @@ func (s *ChoirScope) Read(url string) (JSON, error) {
 func (s *ChoirScope) PollSource(sourceID string, maxItems int) (JSON, error) {
 	var out JSON
 	err := s.call(ActionPollSource, PollSourcePayload{SourceID: sourceID, MaxItems: maxItems}, &out)
+	return out, err
+}
+
+// SourceAPI calls one named endpoint of one keyed source API through the
+// host gateway, which adds the key; returns the provider's answer as JSON.
+func (s *ChoirScope) SourceAPI(provider, endpoint string, params map[string]any) (JSON, error) {
+	var out JSON
+	err := s.call(ActionSourceAPI, SourceAPIPayload{Provider: provider, Endpoint: endpoint, Params: params}, &out)
 	return out, err
 }
 

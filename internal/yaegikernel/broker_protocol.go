@@ -26,6 +26,7 @@ const (
 	// import_document_content and the ContentItem selector reads.
 	ActionRead             BrokerAction = "read"
 	ActionPollSource       BrokerAction = "poll_source"
+	ActionSourceAPI        BrokerAction = "source_api"
 	ActionReadCapture      BrokerAction = "read_capture"
 	ActionSearchWireCorpus BrokerAction = "search_wire_corpus"
 	// ActionResearch runs child research activations on the host and
@@ -242,6 +243,15 @@ type PollSourcePayload struct {
 	MaxItems int    `json:"max_items,omitempty"`
 }
 
+// SourceAPIPayload defines ActionSourceAPI: one named endpoint of one keyed
+// source API through the host gateway, which adds the key
+// (docs/problems/keyed-source-apis-2026-10-20.md).
+type SourceAPIPayload struct {
+	Provider string         `json:"provider"`
+	Endpoint string         `json:"endpoint"`
+	Params   map[string]any `json:"params,omitempty"`
+}
+
 // ReadCapturePayload defines ActionReadCapture: read one shared capture's
 // blocks from FromBlock (Autopaper W1; Cut 2 unit 2a).
 type ReadCapturePayload struct {
@@ -301,7 +311,7 @@ func (r *BrokerRequest) Validate() error {
 	case ActionExec, ActionReadFile, ActionWriteFile, ActionListDir, ActionMessage, ActionEmit,
 		ActionSearchStart, ActionRead, ActionSearchWireCorpus,
 		ActionSaveEvidence, ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry,
-		ActionProductAPI, ActionResearch, ActionPollSource, ActionReadCapture, ActionStories, ActionSystem1:
+		ActionProductAPI, ActionResearch, ActionPollSource, ActionReadCapture, ActionStories, ActionSystem1, ActionSourceAPI:
 		return nil
 	default:
 		return fmt.Errorf("broker protocol: unsupported action %q", r.Action)

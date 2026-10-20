@@ -131,6 +131,9 @@ type Handler struct {
 	searchClient *SearchClient            // web search client with rotation (may be nil)
 	breakers     *BreakerRegistry         // per-provider circuit breakers (may be nil)
 	jevTransport *JevTransport            // OpenRouter Decisions transport (may be nil)
+	// sourceAPI serves /provider/v1/source-api; nil means the client built
+	// from the environment (source_api.go).
+	sourceAPI *SourceAPIClient
 	// serviceCheckers maps a dependency service name to its health probe.
 	// Used by GET /health/{service} so operators can observe backend
 	// dependency health (runtime, qdrant, dolt, ollama) from
@@ -1135,6 +1138,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/provider/v1/search", h.HandleSearch)
 	s.HandleFunc("/provider/v1/search/health", h.HandleSearchHealth)
 	s.HandleFunc("/provider/v1/search/health/reset", h.HandleSearchHealthReset)
+	s.HandleFunc("/provider/v1/source-api", h.HandleSourceAPI)
 	s.HandleFunc("/provider/v1/credentials/issue", h.HandleIssueCredential)
 	s.HandleFunc("/provider/v1/credentials/ensure", h.HandleEnsureCredential)
 	s.HandleFunc("/provider/v1/breakers", h.HandleProviderBreakers)

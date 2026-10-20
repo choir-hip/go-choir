@@ -77,6 +77,7 @@ func main() {
 	}
 
 	handler.SetBreakers(breakers)
+	log.Printf("gateway: source api: %s", handler.SourceAPIStatus())
 
 	// The Jev Decisions route is independently gated. Its OpenRouter key stays
 	// in the gateway environment; disabled transport never falls back to an
