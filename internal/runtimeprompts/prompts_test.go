@@ -256,6 +256,19 @@ func TestRLMEngineeringOverlayTeachesCapsuleJobs(t *testing.T) {
 			t.Errorf("J5: the overlay does not say %q", want)
 		}
 	}
+	// Failures 6 and 7 of the cluster doc (S6-0 drill): a failed build was
+	// reported "completed", and a running job was reported as a blocker.
+	for _, want := range []string{
+		"never report the build done, to management or in a Report, unless its job's State is done with exit code 0",
+		"Never run the steps of this command as separate cells or jobs",
+		"A running job is never a blocker: end your turn and wait to be woken",
+		`do not Complete "blocked" because a build or test is still running`,
+		"and neither is a job that is still running",
+	} {
+		if !strings.Contains(overlay, want) {
+			t.Errorf("J7: the overlay does not say %q", want)
+		}
+	}
 	for _, verb := range []string{"Start", "Poll", "Stop"} {
 		if !strings.Contains(yaegikernel.DeskSurface("engineering", "implementation", false), "choir."+verb+"(") {
 			t.Errorf("J6: the kernel documents no choir.%s", verb)
