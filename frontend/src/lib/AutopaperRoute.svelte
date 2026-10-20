@@ -12,6 +12,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import AutopaperApp from './AutopaperApp.svelte';
+  import AutopaperExpand from './AutopaperExpand.svelte';
   import {
     AUTOPAPER_BASE,
     parseAutopaperPath,
@@ -90,6 +91,9 @@
       {#if location.kind === 'story' && storyTitle}
         <span class="ap-story-title" data-autopaper-story-title>{storyTitle}</span>
       {/if}
+      {#if location.kind === 'story'}
+        <AutopaperExpand route={publicationRoute(location.slug)} />
+      {/if}
       <a class="ap-header-link" href="/">Choir</a>
     </header>
   {/if}
@@ -138,6 +142,7 @@
     flex: 0 0 auto;
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 0.75rem;
     min-width: 0;
     padding: 0.7rem clamp(1rem, 4vw, 2.5rem);
