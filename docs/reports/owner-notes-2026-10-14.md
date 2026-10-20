@@ -640,3 +640,14 @@ Owner, on waking:
   after we have app packages".
 - Security is front of mind ("the importance of strong cyber security
   defenses").
+- Later the same morning: "yes, we should do the missions in order through
+  app packages as recommended". The order is: S6 (commit gate), then S7-0
+  (every existing first-party app becomes a package), with a frontend
+  self-development drill on one rewrite candidate in parallel; app rewrites
+  follow, one package at a time. This moves LP ahead of the 2026-10-14
+  priority order (efficiency, then Autopaper scaling, then LP).
+- The owner asked why self-development would need a special command rather
+  than prompt bar to engineering. It does not: `choir self-dev start` was
+  deleted on 2026-10-15 (it called a route C1e B1 had removed); the start
+  is the prompt bar. The remaining `self-dev` commands are owner acts (arm
+  mode, approve or reject a frozen candidate, roll back), not routing.
