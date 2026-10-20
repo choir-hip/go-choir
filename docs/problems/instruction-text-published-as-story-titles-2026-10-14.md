@@ -253,3 +253,15 @@ Each publication's route slug was fixed by its v1
 
 Revert the fix commit. Titles already set from headlines stay; they are
 data, and correct. Holds stop at once.
+
+## Stragglers still live (2026-10-20, 03:30 UTC)
+
+A scan of all 1,032 published stories (the front list API, every page)
+finds 11 whose title is still an instruction ("Write the story of…" /
+"Write the story behind…"), all published 2026-10-14 13:36 to 17:13,
+before the fix. None since, so the fix holds. They keep the instruction
+title because none has had a heading-led revision since. The remedy
+named above stands: a Note (owner act) asking Texture to revise each one.
+The story expansion request (docs/reports/story-expansion-request-design-
+2026-10-20.md) is the product path for exactly that act; use it on these
+11 once it lands.
