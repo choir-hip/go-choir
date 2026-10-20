@@ -750,3 +750,14 @@ Owner, on waking:
   Apple Developer Program enrollment (an organization account needs a
   D-U-N-S number, which can take days), the stack choice, and whether v1
   needs sign-in (sign-in brings Apple's in-app account deletion rule).
+- Telegram skipped; the open social networks instead (about 16:20 UTC),
+  after the sources review found Telegram's API and content terms forbid
+  aggregation and AI use: "Skip Telegram then. We still have the Fediverse
+  and AT Proto. there's a lot of data there. We just got to figure out how
+  to process it correctly. And additionally, there's the whole RSS hub
+  world of Asian social media." So: Telegram MTProto setup is closed as an
+  open item; the 73 Telegram registry rows stay unscheduled. AT Protocol
+  (Jetstream), the Fediverse (account and tag feeds) and a self-hosted
+  RSSHub (AGPL-3.0; several Asian routes need login cookies) are the
+  social sources to design. Social posts are leads, not citations: a story
+  still needs two distinct outlets.
