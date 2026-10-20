@@ -25,6 +25,7 @@ usage: claude_delegate_probe.py --cred FILE --out FILE [--ssh node-b]
 """
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -192,6 +193,24 @@ def main():
     health = c.call("GET", "/health", retries=3)
     receipt["staging_health"] = {k: health.get(k) for k in ("commit", "deployed_commit", "build", "status") if isinstance(health, dict) and k in health}
 
+    def stall_snapshot(c, out, receipt):
+        # Where the computer is stopped when the probe fails: in-flight steps,
+        # unanswered reads and goroutine stacks, beside the receipt
+        # (engineering-completion-path-cluster-2026-10-20.md, failure 9).
+        try:
+            obs = c.call("GET", "/api/runtime/observability?goroutines=1", retries=2)
+        except Exception as err:  # the snapshot never fails the probe
+            receipt["stall"] = {"error": str(err)[:300]}
+            return
+        path = out + ".observability.json"
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
+            json.dump(obs, f, indent=2)
+        steps = (obs.get("steps") or {}) if isinstance(obs, dict) else {}
+        receipt["stall"] = {"in_flight": steps.get("in_flight") or [], "unanswered": obs.get("unanswered") or [],
+                            "goroutines_bytes": len(obs.get("goroutines") or ""), "path": path}
+        log("stall_observed", **receipt["stall"])
+
     def finish(code, verdict):
         receipt["verdict"] = verdict
         receipt["finished_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -252,6 +271,8 @@ def main():
     receipt["delegate"] = evidence
     ok = (receipt["engineering_run"]["capsule_network_mode"] == "claude" and evidence["start_seen"]
           and evidence["done_with_success"] and eng.get("state") == "completed")
+    if not ok:
+        stall_snapshot(c, args.out, receipt)
     finish(0 if ok else 1, "pass: engineering ran the delegate to success" if ok else "fail: see delegate and engineering_run")
 
 

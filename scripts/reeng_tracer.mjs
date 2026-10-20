@@ -255,6 +255,23 @@ function writePrivate(path, content) {
   chmodSync(path, 0o600);
 }
 
+// A drill that stops short keeps where the computer was stopped: the in-flight
+// steps, the reads that did not answer, and the goroutine stacks
+// (engineering-completion-path-cluster-2026-10-20.md, failure 9). The dump
+// goes to the private trace directory, never the repo.
+async function stallSnapshot(c, n) {
+  const obs = await c.api('/api/runtime/observability?goroutines=1', 'GET', undefined, 60_000);
+  const path = join(TRACE_DIR, `observability-stall-a${n}.json`);
+  if (obs.status === 200) writePrivate(path, JSON.stringify(obs.body, null, 2));
+  phase('stall_observed', {
+    status: obs.status,
+    in_flight: obs.body?.steps?.in_flight || [],
+    unanswered: obs.body?.unanswered || [],
+    goroutines_bytes: (obs.body?.goroutines || '').length,
+    path: obs.status === 200 ? path : null,
+  });
+}
+
 // ---- mint ----------------------------------------------------------------
 
 function reuseMinted(path) {
@@ -1602,6 +1619,7 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild, optio
   const pastBoundary = AUTONOMOUS && ['accepted', 'materializing', 'applied'].includes(op?.state);
   if (!op || (op.state !== 'awaiting_approval' && !pastBoundary)) {
     phase('decision_boundary_not_reached', { state: op?.state || null, last_intent_error: op?.last_intent_error || null });
+    await stallSnapshot(c, n);
     return finish();
   }
   claim.verify = { verifier_refs: op.verifier_refs || [], bundle_digest: op.bundle_digest, last_intent_error: op.last_intent_error || null };

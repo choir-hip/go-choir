@@ -562,3 +562,36 @@ about 7 minutes and compacted once; the overlay says not to poll.
 2. Rerun the delegate drill (the fastest reproduction) and read the
    in-flight teardown step and the goroutine dump.
 3. Then fix the named wait, and decide 8 and 10 (design first, red).
+
+## Fix design for failure 9 (red: guest observability)
+
+Written before code. The route must answer while the executor lock or the
+store's engine lock is held, because that is when it is needed.
+
+Ways it could fail, each pinned by a test or a reason:
+
+1. A read in the handler waits on `e.mu`. `ClaudeDelegateStatus` reads
+   the delegate's dir and binary from an atomic copy written beside the
+   locked fields, so it never takes `e.mu` (linux test: the status
+   returns while a test holds `e.mu`).
+2. A read waits on the engine lock or any other lock not yet known. Each
+   read that can wait (management tasks, effective release, the delegate
+   status) runs under a 3 s budget; a read that does not return in time is
+   named in `unanswered` and the rest of the response is still written. The
+   abandoned read finishes when its lock frees and writes only to its own
+   buffered channel, so there is no race on the response (test: a blocked
+   read is named and the handler still answers; race detector in CI).
+3. `steps` is read after something that blocks. It is read first, and it
+   takes only the tracker's own short mutex.
+4. The goroutine dump leaks something. It is opt-in (`?goroutines=1`),
+   behind the same owner authentication as the route, bounded to 1 MiB with
+   a visible truncation marker, and holds stacks: function names, files,
+   lines and argument words, no heap contents. Secrets are not stack
+   arguments in this runtime's call paths (they are read from files into
+   byte slices passed by pointer).
+5. Repeated polling during a long hang piles up blocked goroutines. Each
+   poll leaves at most three goroutines parked on a lock, each a few KiB;
+   the tracer polls once a minute at most. Accepted, named.
+
+Rollback: revert. Heresy delta: discovered, an instrument that shares the
+lock it observes (failure 9); repaired, that one.

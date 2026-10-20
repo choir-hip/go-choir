@@ -75,6 +75,11 @@ type Executor struct {
 	// token and binary (claude_delegate.go); empty dir means no delegate.
 	claudeDelegateDir string
 	claudeBinary      string
+	// claudeDelegateSource is the same pair, readable without e.mu, so
+	// ClaudeDelegateStatus never waits behind a teardown that holds e.mu
+	// for its whole run (engineering-completion-path-cluster-2026-10-20.md,
+	// failure 9).
+	claudeDelegateSource atomic.Pointer[claudeDelegateSource]
 	// jobs are the capsule jobs this process started (jobs.go); jobDone is
 	// the runtime's completion handler and jobAdmission the memory-lease
 	// seam.
@@ -95,14 +100,18 @@ func (e *Executor) SetClaudeDelegateSource(dir, binary string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.claudeDelegateDir, e.claudeBinary = strings.TrimSpace(dir), strings.TrimSpace(binary)
+	e.claudeDelegateSource.Store(&claudeDelegateSource{dir: e.claudeDelegateDir, binary: e.claudeBinary})
 }
+
+type claudeDelegateSource struct{ dir, binary string }
 
 // ClaudeDelegateStatus reports whether a claude-mode capsule could be
 // spawned now, and why not. It never returns the token.
 func (e *Executor) ClaudeDelegateStatus() ClaudeDelegateStatus {
-	e.mu.RLock()
-	dir, binary := e.claudeDelegateDir, e.claudeBinary
-	e.mu.RUnlock()
+	var dir, binary string
+	if source := e.claudeDelegateSource.Load(); source != nil {
+		dir, binary = source.dir, source.binary
+	}
 	_, status := ReadClaudeDelegate(dir, binary, time.Now())
 	return status
 }

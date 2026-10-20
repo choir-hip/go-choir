@@ -1,6 +1,7 @@
 package agentcore
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
+	"runtime/pprof"
 	"strconv"
 	"strings"
 	"time"
@@ -725,6 +727,13 @@ type guestObservabilityResponse struct {
 	// and why not (docs/design/claude-delegate-slice1-2026-10-14.md). Never
 	// the token.
 	ClaudeDelegate *capsule.ClaudeDelegateStatus `json:"claude_delegate,omitempty"`
+	// Unanswered names the reads that did not return within
+	// observabilityReadBudget, most likely waiting on a held lock; the rest
+	// of the response is still current (failure 9).
+	Unanswered []string `json:"unanswered,omitempty"`
+	// Goroutines is the runtime's goroutine stacks, only with ?goroutines=1:
+	// where a hang is stopped, by call (failure 9). Bounded.
+	Goroutines string `json:"goroutines,omitempty"`
 	// EffectiveRelease is /health's identity block on the product path
 	// (P6): what the tracer and owners read without /internal/*.
 	EffectiveRelease *EffectiveRelease `json:"effective_release,omitempty"`
@@ -807,11 +816,18 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
 		return
 	}
+	// Steps first: the route exists to show a hang, so nothing that can wait
+	// on a lock comes before it, and every read that can is bounded.
+	steps := h.rt.stepTrace().Snapshot()
 	resp := guestObservabilityResponse{
 		Service:    "autoputer",
 		ComputerID: h.rt.cfg.ComputerID,
 		Build:      buildinfo.Snapshot("autoputer"),
 		RecentLog:  h.rt.RecentBootLog(),
+		Steps:      &steps,
+	}
+	if r.URL.Query().Get("goroutines") == "1" {
+		resp.Goroutines = goroutineDump()
 	}
 	if raw, err := os.ReadFile("/proc/meminfo"); err == nil {
 		resp.Memory = parseGuestMeminfo(string(raw))
@@ -819,22 +835,74 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 			resp.Memory.VirtioMemLoaded, resp.Memory.VirtioMemBound = guestVirtioMemState("/sys")
 		}
 	}
+	unanswered := func(name string) { resp.Unanswered = append(resp.Unanswered, name) }
 	if h.rt.store != nil {
-		resp.ManagementTasks = h.rt.managementTaskObservability(r.Context(), ownerID, h.rt.TextureComputerID())
 		resp.EngineMutex = h.rt.store.EngineMutexStats()
 		resp.EngineMutexLive = h.rt.store.EngineMutexLive()
 		telemetry := h.rt.store.TelemetryStats()
 		resp.TelemetryBatching = &telemetry
+		if tasks, ok := boundedObservabilityRead(observabilityReadBudget, func() *managementTaskObservability {
+			return h.rt.managementTaskObservability(r.Context(), ownerID, h.rt.TextureComputerID())
+		}); ok {
+			resp.ManagementTasks = tasks
+		} else {
+			unanswered("management_tasks")
+		}
 	}
 	if h.rt.capsuleExecutor != nil {
-		status := h.rt.capsuleExecutor.ClaudeDelegateStatus()
-		resp.ClaudeDelegate = &status
+		if status, ok := boundedObservabilityRead(observabilityReadBudget, h.rt.capsuleExecutor.ClaudeDelegateStatus); ok {
+			resp.ClaudeDelegate = &status
+		} else {
+			unanswered("claude_delegate")
+		}
 	}
-	steps := h.rt.stepTrace().Snapshot()
-	resp.Steps = &steps
-	identity := h.rt.EffectiveRelease(r.Context())
-	resp.EffectiveRelease = &identity
+	if identity, ok := boundedObservabilityRead(observabilityReadBudget, func() EffectiveRelease {
+		return h.rt.EffectiveRelease(r.Context())
+	}); ok {
+		resp.EffectiveRelease = &identity
+	} else {
+		unanswered("effective_release")
+	}
 	writeAPIJSON(w, http.StatusOK, resp)
+}
+
+// observabilityReadBudget bounds each observability read that can wait on a
+// lock (the store's engine lock, the executor's).
+const observabilityReadBudget = 3 * time.Second
+
+// boundedObservabilityRead runs read and gives up after budget. A read it
+// gives up on keeps running until its lock frees and then writes only to its
+// own buffered channel, so the caller's response is never touched late.
+func boundedObservabilityRead[T any](budget time.Duration, read func() T) (T, bool) {
+	done := make(chan T, 1)
+	go func() { done <- read() }()
+	timer := time.NewTimer(budget)
+	defer timer.Stop()
+	select {
+	case value := <-done:
+		return value, true
+	case <-timer.C:
+		var zero T
+		return zero, false
+	}
+}
+
+// goroutineDumpMax bounds the owner-requested goroutine dump.
+const goroutineDumpMax = 1 << 20
+
+func goroutineDump() string {
+	var buf bytes.Buffer
+	if err := pprof.Lookup("goroutine").WriteTo(&buf, 2); err != nil {
+		return "goroutine dump failed: " + err.Error()
+	}
+	return boundGoroutineDump(buf.String(), goroutineDumpMax)
+}
+
+func boundGoroutineDump(dump string, max int) string {
+	if len(dump) <= max {
+		return dump
+	}
+	return dump[:max] + fmt.Sprintf("\n[... truncated: %d of %d bytes]", max, len(dump))
 }
 
 // HandleInternalRuntimeRunRouter dispatches internal service-to-service run
