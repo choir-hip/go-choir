@@ -14,19 +14,23 @@ definition_version: 4
 # (docs/definitions/choir-appdev-s6-commit-gate-full-release-2026-10-01.md)
 # stays the source of the six acceptance legs and the divergence addendum;
 # where the two differ, this file governs execution.
-readiness: drafted
+readiness: reviewed
 
 review:
-  reviewer: none (one authoring agent; the authoring gate is a convergent panel on this file)
-  frozen_ref: none
-  verdict: none
-  evidence_ref: none
+  reviewer: >-
+    convergent panel 2026-10-20 ~10:20 UTC, devin + omp-gemini38 (owner-approved
+    panelists). omp-gemini38: ready with edits, all four code gaps verified,
+    agrees with both owner-question defaults. devin: incomplete (stopped on a
+    non-interactive tool-confirmation refusal before a verdict).
+  frozen_ref: this file at the commit that applies the three panel edits
+  verdict: accept with edits (applied - witness gets its own read-only route; baseline moved to 09e98e9b2; this block)
+  evidence_ref: session scratchpad panel-s6/run (manifest.tsv, omp-gemini38.out, devin.out); not in the repo
 
 start:
   captured_at: 2026-10-20T10:05:00Z
   source:
     canonical_ref: main ea7cdda0b (docs-only over 4c2d66c38)
-    deploy_identity: staging https://choir.news x-choir-build-commit 4c2d66c38 (proxy /health header, 2026-10-20T10:02Z)
+    deploy_identity: staging https://choir.news x-choir-build-commit 09e98e9b2 (proxy /health header, 2026-10-20T10:20Z; 4c2d66c38 at drafting)
   worktrees:
     - path: /Users/wiz/go-choir/.claude/worktrees/agent-ac665835b21f89e29 (branch worktree-agent-ac665835b21f89e29)
       status: clean
@@ -188,7 +192,7 @@ standing_questions:
     ordering, not authority): the slice cut, "a declared test's exit status is
     part of the approval's binding", the relaxed LP edges.
   q2_conformance: >-
-    No third store; the witness reads the tape and the release draft's readers;
+    No third store; the witness reads the tape through its own read-only route;
     shared content stays in Store B behind corpusd. D1 contradicts the S6 text
     "S7 supplies the package S6 commits", so S6 carries no packages.
   q3_deletion_citers: >-
@@ -235,7 +239,7 @@ now:
     gaps as hypotheses (code reading, not yet trace-confirmed). Then the
     witness, then a go-served drill that fetches it.
   source_ref: main ea7cdda0b
-  deploy_identity: staging 4c2d66c38
+  deploy_identity: staging 09e98e9b2
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
   conjecture:
     id: S6-C1
@@ -299,11 +303,12 @@ now:
 slices:
   S6-0:
     what: >-
-      Release witness: extend the release draft's readers to any operation in any
-      state (`bindings: [{pair, compared_at_gate, bound, reason}]`), a tracer step
-      that fetches it at frozen, accepted, applied and restored, and a check
-      `witness_joined`. A new route only if the draft's applied-only refusal
-      cannot carry pre-apply states.
+      Release witness: a dedicated read-only witness route for any operation in
+      any state (`bindings: [{pair, compared_at_gate, bound, reason}]`), a tracer
+      step that fetches it at frozen, accepted, applied and restored, and a check
+      `witness_joined`. The release draft's applied-only refusal
+      (internal/agentcore/api_release.go:52-55) stays as is: Store B release
+      records are statements of applied releases only (panel finding 1).
     proof: >-
       Landing Loop, then `node scripts/reeng_tracer.mjs --label s6-0-<HHMM>
       --scenario engineering --change go-served --expect-sha <deployed sha>` on a
@@ -322,7 +327,9 @@ slices:
       hash and base commit, the applied manifest names that receipt, expected
       heads are re-checked at apply; mismatch refuses before the swap. Owner-act
       enforce flips here if a clean window with real owner acts exists (owner
-      notes s27 item 3).
+      notes s27 item 3). While owner-act is still in observe, the leg 4
+      negatives are scoped to the guest's decision-binding authority check
+      (self_development_decision_binding.go), not the proxy signature (panel risk 2).
     proof: Legs 1, 2 and the leg 4 negatives, including a patch byte changed after approval.
   S6-3:
     what: Fault sweep at each activation boundary, killed as a crash (no planned marker), settled from the journal; the kill hook is test-tier only.
