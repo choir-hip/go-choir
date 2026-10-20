@@ -1140,7 +1140,13 @@ func (e *Executor) OpenExecutionReceipt(ref string) (ExecutionReceipt, error) {
 	}
 	raw, err := os.ReadFile(filepath.Join(e.artifactRoot(), "receipts", "execution", receiptArtifactName(ref)))
 	if err != nil {
-		return ExecutionReceipt{}, fmt.Errorf("executor receipt unavailable")
+		e.mu.RLock()
+		issued := make([]string, 0, len(e.executionReceipts))
+		for issuedRef := range e.executionReceipts {
+			issued = append(issued, issuedRef)
+		}
+		e.mu.RUnlock()
+		return ExecutionReceipt{}, unknownReceiptError(ref, issued)
 	}
 	var receipt ExecutionReceipt
 	if err := json.Unmarshal(raw, &receipt); err != nil || receipt.ReceiptRef != ref {

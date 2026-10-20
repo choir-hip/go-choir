@@ -2,6 +2,7 @@ package agentcore
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"unicode/utf8"
@@ -96,12 +97,17 @@ func (rt *Runtime) engineeringRequestView(ctx context.Context, ownerID, computer
 	}
 	assignment, err := rt.store.EngineeringAssignmentForInbox(ctx, ownerID, computerID, inbox)
 	if err != nil {
+		view.RequestError = fmt.Sprintf("the assignment for %s could not be read: %v", inbox, err)
+		requestIntoBody(view)
 		return
 	}
 	binding := assignment.Binding
 	if rec.RecordID != binding.ParentControlID || rec.SenderInbox != binding.ParentAgentID {
 		return // only management's Cast that opened this assignment
 	}
+	// Desks print r.Body, not r.Request: the spec JSON shown as Body carries
+	// the request, or why it is missing.
+	defer requestIntoBody(view)
 	parent, err := rt.store.GetCommitmentRecord(ctx, ownerID, computerID, rec.ParentID)
 	if err != nil || !isTextureCastTo(parent, binding.ParentAgentID) {
 		view.RequestError = fmt.Sprintf("the request %s is not a Texture's Cast to %s on the tape", rec.ParentID, binding.ParentAgentID)
@@ -123,4 +129,29 @@ func (rt *Runtime) engineeringRequestView(ctx context.Context, ownerID, computer
 	request.Body, cutBody = boundRequestText(parent.Directive.Body, engineeringRequestBodyMax, parent.RecordID)
 	request.Truncated = cutObjective || cutBody
 	view.Request = request
+}
+
+// requestIntoBody folds view.Request (or view.RequestError) into the spec JSON
+// the desk reads as Body, keeping the spec's own keys. A Body that is not a
+// JSON object is kept under "spec".
+func requestIntoBody(view *yaegikernel.InboxRecord) {
+	if view.Request == nil && view.RequestError == "" {
+		return
+	}
+	spec := map[string]any{}
+	if raw := strings.TrimSpace(view.Body); raw != "" {
+		if err := json.Unmarshal([]byte(raw), &spec); err != nil || spec == nil {
+			spec = map[string]any{"spec": view.Body}
+		}
+	}
+	if r := view.Request; r != nil {
+		spec["request"] = map[string]any{
+			"record_id": r.RecordID, "from": r.From, "objective": r.Objective, "body": r.Body, "truncated": r.Truncated,
+		}
+	} else {
+		spec["request_error"] = view.RequestError
+	}
+	if out, err := json.Marshal(spec); err == nil {
+		view.Body = string(out)
+	}
 }

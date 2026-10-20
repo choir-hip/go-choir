@@ -2,6 +2,7 @@ package agentcore
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -265,5 +266,55 @@ func TestEngineeringLaterCastsCarryNoRequest(t *testing.T) {
 	}
 	if v[0].Request == nil || v[1].Request != nil || v[1].RequestError != "" {
 		t.Fatalf("only the Cast that opened the assignment carries the request: %+v", v)
+	}
+}
+
+// Desks print r.Body, not r.Request (drills-0565-request-unseen-and-receipt-
+// typos-2026-10-20): the opening Cast's Body carries the request inside its
+// spec JSON, or the reason it is missing, so printing Body shows it.
+func TestEngineeringCastBodyCarriesTheRequest(t *testing.T) {
+	f := newRequestFixture(t)
+	parent := f.textureCast(t, f.seed.TextureInbox, "body", "put the probe line in docs/probes/y.md", `{"path":"docs/probes/y.md","line":"hi"}`)
+	inbox := f.open(t, &parent, "capability-body", boundDigest(parent))
+	v := f.view(t, f.rt, inbox)
+	if len(v) != 1 {
+		t.Fatalf("%d records", len(v))
+	}
+	var body map[string]any
+	if err := json.Unmarshal([]byte(v[0].Body), &body); err != nil {
+		t.Fatalf("body is not JSON: %v: %s", err, v[0].Body)
+	}
+	req, ok := body["request"].(map[string]any)
+	if !ok || req["objective"] != parent.Directive.Objective || req["body"] != parent.Directive.Body || req["from"] != parent.SenderInbox {
+		t.Fatalf("body does not carry the request verbatim: %s", v[0].Body)
+	}
+
+	g := newRequestFixture(t)
+	parent = g.textureCast(t, g.seed.TextureInbox, "body-drift", "drift ask", "drift secret body")
+	inbox = g.open(t, &parent, "capability-body-drift", func(string, string, string) string {
+		return objectgraph.SHA256([]byte("a different parent"))
+	})
+	v = g.view(t, g.rt, inbox)
+	if len(v) != 1 || !strings.Contains(v[0].Body, "request_error") || strings.Contains(v[0].Body, "drift secret body") {
+		t.Fatalf("drifted body shows text or no reason: %s", v[0].Body)
+	}
+}
+
+func TestRequestIntoBodyKeepsTheSpec(t *testing.T) {
+	v := yaegikernel.InboxRecord{Body: `{"parent":"cell:x","network":"forbidden"}`, Request: &yaegikernel.InboxRequest{RecordID: "cell:x", From: "texture:d", Objective: "o", Body: "b"}}
+	requestIntoBody(&v)
+	var got map[string]any
+	if err := json.Unmarshal([]byte(v.Body), &got); err != nil || got["parent"] != "cell:x" || got["network"] != "forbidden" || got["request"] == nil {
+		t.Fatalf("spec keys lost or no request: %s (%v)", v.Body, err)
+	}
+	plain := yaegikernel.InboxRecord{Body: "not json", RequestError: "why"}
+	requestIntoBody(&plain)
+	if err := json.Unmarshal([]byte(plain.Body), &got); err != nil || got["spec"] != "not json" || got["request_error"] != "why" {
+		t.Fatalf("non-JSON body: %s (%v)", plain.Body, err)
+	}
+	none := yaegikernel.InboxRecord{Body: `{"parent":"p"}`}
+	requestIntoBody(&none)
+	if none.Body != `{"parent":"p"}` {
+		t.Fatalf("a record with no request changed: %s", none.Body)
 	}
 }
