@@ -13,6 +13,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/visualcapture"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
@@ -107,6 +108,17 @@ func engineeringRulePrecommitRecord(scope ReductionScope, in yaegikernel.StagedI
 		}
 		rule.Paths = paths
 	}
+	if len(rule.Routes) > 0 {
+		routes := make([]string, 0, len(rule.Routes))
+		for _, raw := range rule.Routes {
+			clean, err := visualcapture.NormalizeRoute(raw)
+			if err != nil {
+				return types.CommitmentRecord{}, fmt.Errorf("reduce: precommit %s: %w", in.LocalID, err)
+			}
+			routes = append(routes, clean)
+		}
+		rule.Routes = routes
+	}
 	rec.Precommit.Rule = &rule
 	if len(rec.Prediction.Questions) == 1 {
 		rec.Prediction.Questions[0].Answers = []string{types.PrecommitAnswerYes, types.PrecommitAnswerNo}
@@ -185,12 +197,15 @@ func (rt *Runtime) settleRulePrecommits(ctx context.Context, ownerID, computerID
 func (r *rlmCallReduction) settleFreezePrecommits(ctx context.Context, in yaegikernel.StagedIntent, out map[string]any, assignmentID string, frozenAt time.Time) {
 	paths, fresh := out[freezeSourcePathsKey].([]string)
 	delete(out, freezeSourcePathsKey)
+	var visual types.EngineeringFreezeObservation
+	applyFreezeVisual(&visual, out)
 	rt := r.rt()
 	if !fresh || rt == nil || r.toolCtx == nil || r.toolCtx.Executor == nil {
 		return
 	}
 	obs := types.EngineeringFreezeObservation{
 		FrozenAt: frozenAt, SourcePaths: paths, SourcePathsKnown: true,
+		VisualKnown: visual.VisualKnown, VisualReceipt: visual.VisualReceipt, VisualCaptures: visual.VisualCaptures,
 	}
 	obs.BundleDigest, _ = out["bundle_digest"].(string)
 	obs.OperationID, _ = out["operation_id"].(string)

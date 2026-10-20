@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/visualcapture"
 )
 
 // selfDevBundleMountPoint is the read-only lower-layer path where the host
@@ -61,6 +62,27 @@ type bundleDraftMirror struct {
 	SourcePatchSHA256       string                     `json:"source_patch_sha256,omitempty"`
 	SourcePatchBaseCommit   string                     `json:"source_patch_base_commit,omitempty"`
 	ReleaseBinary           *mountedReleaseBinary      `json:"release_binary,omitempty"`
+	VisualEvidence          *mountedVisualEvidence     `json:"visual_evidence,omitempty"`
+}
+
+// mountedVisualEvidence mirrors capsule.VisualEvidence (the bundle's
+// screenshots, docs/design/visual-evidence-slice-2026-10-15.md).
+type mountedVisualEvidence struct {
+	ManifestSHA256 string                 `json:"manifest_sha256"`
+	FrontendSHA256 string                 `json:"frontend_sha256"`
+	CaptureReceipt string                 `json:"capture_receipt,omitempty"`
+	Captures       []mountedVisualCapture `json:"captures"`
+}
+
+// mountedVisualCapture mirrors capsule.VisualEvidenceCapture.
+type mountedVisualCapture struct {
+	Artifact  string `json:"artifact"`
+	Route     string `json:"route"`
+	MediaType string `json:"media_type"`
+	Bytes     int64  `json:"bytes"`
+	Width     int    `json:"width"`
+	Height    int    `json:"height"`
+	Blank     bool   `json:"blank,omitempty"`
 }
 
 // mountedReleaseBinary mirrors capsule.ReleaseBinaryProvenance.
@@ -147,6 +169,10 @@ func inspectMountedBundleAt(root string) (map[string]any, error) {
 			return nil, fmt.Errorf("choir: inspect_bundle: frozen runtime file digest mismatch: %s", file.Path)
 		}
 	}
+	visual, err := inspectMountedVisualEvidence(root, record.VisualEvidence, record.RuntimeFiles)
+	if err != nil {
+		return nil, err
+	}
 	executionRefs := append([]string{record.BuildRecipeRef}, record.TestReceipts...)
 	executionRefs = append(executionRefs, record.DependencyToolchainRefs...)
 	runtimeFiles := make([]map[string]any, 0, len(record.RuntimeFiles))
@@ -171,5 +197,50 @@ func inspectMountedBundleAt(root string) (map[string]any, error) {
 			"running_commit": binary.RunningCommit, "source_base_commit": binary.SourceBaseCommit,
 		}
 	}
+	if visual != nil {
+		out["visual_evidence"] = visual
+	}
 	return out, nil
+}
+
+// inspectMountedVisualEvidence re-hashes every capture the bundle cites under
+// <root>/evidence/visual/ and checks the captures answer to the frontend the
+// bundle's runtime files freeze, so a verifier cites what it inspected. It
+// returns nil for a bundle with no captures.
+func inspectMountedVisualEvidence(root string, evidence *mountedVisualEvidence, runtime []mountedRuntimeFile) (map[string]any, error) {
+	if evidence == nil {
+		return nil, nil
+	}
+	var tree []visualcapture.FileDigest
+	for _, file := range runtime {
+		if rel, ok := strings.CutPrefix(file.Path, "frontend/"); ok && rel != "" {
+			tree = append(tree, visualcapture.FileDigest{Path: rel, SHA256: file.SHA256})
+		}
+	}
+	if evidence.FrontendSHA256 != visualcapture.FrontendDigest(tree) {
+		return nil, fmt.Errorf("choir: inspect_bundle: visual evidence was captured from a different frontend than the frozen runtime files")
+	}
+	captures := make([]map[string]any, 0, len(evidence.Captures))
+	for _, capture := range evidence.Captures {
+		digest, ok := strings.CutPrefix(capture.Artifact, "artifact:sha256:")
+		if !ok || !computerevent.IsSHA256(digest) {
+			return nil, fmt.Errorf("choir: inspect_bundle: visual capture %q is not a content-addressed artifact", capture.Artifact)
+		}
+		data, err := os.ReadFile(filepath.Join(root, "evidence", "visual", digest+".png"))
+		if err != nil {
+			return nil, fmt.Errorf("choir: inspect_bundle: visual capture unavailable: %s", capture.Artifact)
+		}
+		sum := sha256.Sum256(data)
+		if hex.EncodeToString(sum[:]) != digest || int64(len(data)) != capture.Bytes {
+			return nil, fmt.Errorf("choir: inspect_bundle: visual capture digest mismatch: %s", capture.Artifact)
+		}
+		captures = append(captures, map[string]any{
+			"artifact": capture.Artifact, "route": capture.Route, "media_type": capture.MediaType,
+			"bytes": capture.Bytes, "width": capture.Width, "height": capture.Height, "blank": capture.Blank,
+		})
+	}
+	return map[string]any{
+		"manifest_sha256": evidence.ManifestSHA256, "frontend_sha256": evidence.FrontendSHA256,
+		"capture_receipt": evidence.CaptureReceipt, "captures": captures,
+	}, nil
 }

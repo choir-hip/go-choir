@@ -74,8 +74,8 @@ func (rt *Runtime) assignedEngineeringToolOverlay(ctx context.Context, rec *type
 func (rt *Runtime) assignedEngineeringCapsuleToolCtx(rec *types.RunRecord, handle string) *CapsuleToolCtx {
 	toolCtx := &CapsuleToolCtx{
 		Executor: rt.capsuleExecutor, AgentRunID: rec.RunID, ComputerID: rec.ComputerID,
-		OwnerID: rec.OwnerID,
-		Role:    capsule.RoleEngineering, CapsuleHandle: handle,
+		OwnerID: rec.OwnerID, Images: rt.imageStore(),
+		Role: capsule.RoleEngineering, CapsuleHandle: handle,
 		EventAppender: rt.eventAppender, TransactionBuilder: rt.capsuleBuilder,
 		OperationStore: rt.selfdevOperations, UpdaterRoot: rt.selfdevUpdaterRoot,
 		ValidateCurrentObligation: func(callCtx context.Context) error {
