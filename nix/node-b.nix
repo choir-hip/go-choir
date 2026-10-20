@@ -2348,6 +2348,13 @@ in
     strace
     ripgrep
     vim
+    # Off-host backup by hand (keygen, init, a supervised run, the restore
+    # drill): the units carry these on their own PATH, a root shell did not
+    # (docs/problems/no-off-host-backup-2026-10-20.md section 13 item 5).
+    # htpasswd stays out: it ships with the Apache web server, and keygen,
+    # run once, takes it from nix-shell.
+    restic
+    sqlite
   ];
 
   # Timezone
