@@ -259,6 +259,14 @@ type GrantedExecutionReceipt struct {
 	Frozen                 bool             `json:"frozen"`
 	SourceSubjectDigest    string           `json:"source_subject_digest"`
 	FinalSubjectDigest     string           `json:"final_subject_digest"`
+	// SubjectBinding is "observed" when the receipts were granted for a fate
+	// that claims nothing about the subject (failed, blocked): no cited
+	// receipt is required to have observed FinalSubjectDigest, and
+	// LatestReceiptWorktreeDigest records what the chronologically latest
+	// one did observe. Empty means the certified binding. Both are omitted
+	// when empty, so a certified receipt keeps its canonical bytes.
+	SubjectBinding              string `json:"subject_binding,omitempty"`
+	LatestReceiptWorktreeDigest string `json:"latest_receipt_worktree_digest,omitempty"`
 }
 
 type ChangeKind int

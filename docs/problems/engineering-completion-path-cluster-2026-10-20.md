@@ -187,7 +187,10 @@ the ref, and the refusal names the nearest issued ref (0a8c77cbc).
    Complete-time freeze.
 3. Replay. Deterministic: the granted receipt ref and the attestation ref
    are digests of the content, which now includes `subject_binding`, so the
-   same inputs give the same refs and a replay is idempotent. A `certified`
+   same inputs give the same refs and a replay is idempotent (one existing
+   quirk, unchanged: a second grant of the same raw receipt embeds the
+   first grant's `granted_receipt_ref` in its `execution`, so its ref
+   differs from the first). A `certified`
    and an `observed` granted receipt of the same raw receipt are different
    artifacts; `persistReceiptArtifact` refuses a same-ref different-content
    write, and the refs differ, so neither overwrites the other.
@@ -234,3 +237,21 @@ the ref, and the refusal names the nearest issued ref (0a8c77cbc).
   none expected; repaired, that conflation for `failed` and `blocked`.
   Residual R1 (cited refs checked after the durable freeze intent) is
   discovered and not repaired.
+
+- Action 2 (failure 2, red): landed in code. `capsule.SubjectBinding`
+  (`certified` default, `observed`), `bindGrantedReceipts` (portable, in
+  `granted_receipt.go`), `Executor.ResolveGrantedExecutionReceiptsFor`,
+  `assignmentSubjectBinding` (allow-list of `failed` and `blocked`), the
+  `subject_binding` field on the granted receipt, the execution attestation
+  and the evidence packet, and the store's attestation validation. Tests:
+  `internal/capsule/granted_subject_binding_test.go` (the visual drill's
+  case with real tree digests: receipts, a receipt-less mutation,
+  observed binds and certified is refused), a linux executor test of the
+  same through `ResolveGrantedExecutionReceiptsFor` (compiled and vetted on
+  linux, not run on this darwin host),
+  `internal/store/engineering_subject_binding_test.go` (a completed report
+  cannot carry an observed attestation or a mismatched tree),
+  `internal/agentcore/engineering_assignment_subject_binding_test.go`.
+  Open: R1 (cited refs checked after the durable freeze intent), R2 (the
+  content-addressed candidate of a failed report). Not proven until the
+  staging drill (action 4).

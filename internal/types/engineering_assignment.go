@@ -16,6 +16,11 @@ const (
 	EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay = "assignment_local_writable_overlay"
 	EngineeringGrantPolicyAttestationSchemaV1                  = "choir.co_super_grant_policy_attestation/v1"
 	EngineeringExecutionAttestationSchemaV1                    = "choir.co_super_execution_attestation/v1"
+	// EngineeringSubjectBindingObserved marks an execution attestation on a
+	// failed or blocked report: the receipt is bound to the run, handle and
+	// capsule, and WorktreeDigest is the tree the command itself observed, not
+	// a certification of FinalSubjectDigest. Empty means certified.
+	EngineeringSubjectBindingObserved = "observed"
 	EngineeringCapsuleFateStepSchemaV1                         = "choir.co_super_capsule_fate_step/v1"
 )
 
@@ -331,6 +336,10 @@ type EngineeringExecutionAttestation struct {
 	ReportEventID       string    `json:"report_event_id"`
 	ReducerSeq          int64     `json:"reducer_seq"`
 	RecordedAt          time.Time `json:"recorded_at"`
+	// SubjectBinding is EngineeringSubjectBindingObserved on a failed or
+	// blocked report, empty (certified) otherwise. Omitted when empty so
+	// every existing attestation keeps its ref.
+	SubjectBinding string `json:"subject_binding,omitempty"`
 }
 
 // EngineeringCapsuleFateStep is one append-only runtime-authored capsule fate

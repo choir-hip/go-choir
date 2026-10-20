@@ -154,6 +154,9 @@ type EngineeringEvidenceExecution struct {
 	ReportEventID       string    `json:"report_event_id"`
 	ReducerSeq          int64     `json:"reducer_seq"`
 	RecordedAt          time.Time `json:"recorded_at"`
+	// SubjectBinding is "observed" when no receipt certifies FinalSubjectDigest
+	// (a failed or blocked report); empty means certified.
+	SubjectBinding string `json:"subject_binding,omitempty"`
 }
 
 type EngineeringEvidenceFateStep struct {
@@ -603,7 +606,7 @@ func (s *Store) GetEngineeringCapsuleEvidence(ctx context.Context, ownerID, comp
 		}
 		out.Reports = append(out.Reports, pr)
 		for _, x := range r.ExecutionAttestations {
-			out.ExecutionAttestations = append(out.ExecutionAttestations, EngineeringEvidenceExecution{x.AttestationRef, x.ReportID, x.CommandID, x.CommandDigest, x.RunID, x.CapsuleID, x.ExitCode, x.StdoutDigest, x.StderrDigest, x.SourceSubjectDigest, x.FinalSubjectDigest, x.WorktreeDigest, x.Granted, x.Frozen, x.OccurredAt, x.ReportEventID, x.ReducerSeq, x.RecordedAt})
+			out.ExecutionAttestations = append(out.ExecutionAttestations, EngineeringEvidenceExecution{x.AttestationRef, x.ReportID, x.CommandID, x.CommandDigest, x.RunID, x.CapsuleID, x.ExitCode, x.StdoutDigest, x.StderrDigest, x.SourceSubjectDigest, x.FinalSubjectDigest, x.WorktreeDigest, x.Granted, x.Frozen, x.OccurredAt, x.ReportEventID, x.ReducerSeq, x.RecordedAt, x.SubjectBinding})
 		}
 	}
 	if len(out.ExecutionAttestations) > engineeringEvidenceMaxExecutions {

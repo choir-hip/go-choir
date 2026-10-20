@@ -115,6 +115,9 @@ func (e *Executor) OpenGrantedExecutionReceipt(string) (GrantedExecutionReceipt,
 func (e *Executor) ResolveGrantedExecutionReceipts(context.Context, string, string, []string) ([]ExecutionReceipt, error) {
 	return nil, stubErr("execution receipts")
 }
+func (e *Executor) ResolveGrantedExecutionReceiptsFor(context.Context, string, string, []string, SubjectBinding) ([]ExecutionReceipt, error) {
+	return nil, stubErr("execution receipts")
+}
 func (e *Executor) ResolveExecutionReceipts(refs []string) ([]ExecutionReceipt, error) {
 	receipts := make([]ExecutionReceipt, 0, len(refs))
 	for _, ref := range refs {

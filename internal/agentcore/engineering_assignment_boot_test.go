@@ -607,7 +607,7 @@ func TestExecutionAttestationPinsFrozenFinalSubject(t *testing.T) {
 	command := types.EngineeringRecordedCommand{
 		CommandID: "cmd-1", CommandDigest: objectgraph.SHA256([]byte(commandText)), ExecutionRef: "capsule-exec:sha256:x",
 	}
-	att, err := engineeringExecutionAttestationFromReceipt(assignment, "report-x", command, receipt, frozen)
+	att, err := engineeringExecutionAttestationFromReceipt(assignment, "report-x", command, receipt, frozen, capsule.SubjectCertified)
 	if err != nil {
 		t.Fatalf("attestation mint: %v", err)
 	}

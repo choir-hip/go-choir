@@ -96,6 +96,76 @@ func TestResolveGrantedExecutionReceiptsBindsFinalSubjectNotPreEval(t *testing.T
 	}
 }
 
+// The visual drill's case through the real resolver: receipts, then a
+// receipt-less mutation of the worktree. A completed claim (certified) is
+// refused; a blocked one (observed) is granted, and its granted receipt
+// records the frozen digest and the latest receipt's digest side by side.
+func TestResolveGrantedExecutionReceiptsForObservedBindsAfterReceiptlessMutation(t *testing.T) {
+	state := t.TempDir()
+	merged := filepath.Join(t.TempDir(), "root")
+	subject := filepath.Join(merged, "workspace", "platform")
+	if err := os.MkdirAll(subject, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(subject, "README"), []byte("before\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sourceDigest, err := digestCanonicalSubjectTree(context.Background(), subject)
+	if err != nil {
+		t.Fatal(err)
+	}
+	caps := &Capsule{ID: "capsule-observed", State: StateFrozen, MergedDir: merged, SourceSnapshotDigest: sourceDigest}
+	capability := &Capability{
+		CapabilityID: "cap-observed", Handle: "handle-observed", AgentRunID: "run-observed",
+		AgentRole: RoleEngineering, TargetCapsule: caps.ID, ExpiresAt: time.Now().Add(time.Hour),
+	}
+	executor := &Executor{
+		stateDir:          state,
+		capsules:          map[string]*Capsule{caps.ID: caps},
+		capabilities:      map[capKey]*Capability{{AgentRunID: "run-observed", Handle: "handle-observed"}: capability},
+		revokedCaps:       map[string]bool{},
+		executionReceipts: map[string]ExecutionReceipt{},
+		grantedReceipts:   map[string]GrantedExecutionReceipt{},
+	}
+	if err := os.WriteFile(filepath.Join(subject, "page.html"), []byte("page\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	observedByReceipt, err := digestCanonicalSubjectTree(context.Background(), subject)
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipt := persistTestExecutionReceipt(t, executor, ExecutionReceipt{
+		AgentRunID: "run-observed", CapabilityHandleDigest: computerevent.DigestBytes([]byte("handle-observed")), CapsuleID: caps.ID,
+		Command: "go_eval:write", ExitCode: 0, WorktreeDigest: observedByReceipt,
+		SourceTreeDigest: sourceDigest, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
+	})
+	// Timed-out build cells change the tree and mint no receipt.
+	if err := os.WriteFile(filepath.Join(subject, "dist-partial"), []byte("partial\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	frozen, err := digestCanonicalSubjectTree(context.Background(), subject)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.Background()
+	if _, err = executor.ResolveGrantedExecutionReceipts(ctx, "run-observed", "handle-observed", []string{receipt}); err == nil || !strings.Contains(err.Error(), "final frozen subject") {
+		t.Fatalf("completed-style binding of a receipt-less mutation = %v", err)
+	}
+	granted, err := executor.ResolveGrantedExecutionReceiptsFor(ctx, "run-observed", "handle-observed", []string{receipt}, SubjectObserved)
+	if err != nil || len(granted) != 1 || granted[0].GrantedReceiptRef == "" {
+		t.Fatalf("blocked-style binding = %+v, %v", granted, err)
+	}
+	opened, err := executor.OpenGrantedExecutionReceipt(granted[0].GrantedReceiptRef)
+	if err != nil {
+		t.Fatalf("open granted receipt: %v", err)
+	}
+	if opened.SubjectBinding != "observed" || opened.FinalSubjectDigest != frozen || opened.LatestReceiptWorktreeDigest != observedByReceipt ||
+		opened.Execution.WorktreeDigest != observedByReceipt || opened.FinalSubjectDigest == opened.LatestReceiptWorktreeDigest {
+		t.Fatalf("granted receipt does not record both digests: %+v", opened)
+	}
+}
+
 func persistTestExecutionReceipt(t *testing.T, executor *Executor, receipt ExecutionReceipt) string {
 	t.Helper()
 	canonical, err := computerevent.CanonicalJSON(receipt)

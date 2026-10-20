@@ -1196,7 +1196,25 @@ func (rt *Runtime) resumeStrandedFrozenAssignmentCommit(ctx context.Context, ass
 	return err
 }
 
-func engineeringExecutionAttestationFromReceipt(assignment types.EngineeringAssignment, reportID string, command types.EngineeringRecordedCommand, receipt capsule.ExecutionReceipt, finalSubjectDigest string) (types.EngineeringExecutionAttestation, error) {
+// assignmentSubjectBinding is what a terminal report's cited receipts must
+// prove about the frozen subject. Only a report that claims failure (failed,
+// blocked) is relieved of certifying the tree: it states nothing about the
+// subject, so tying it to the subject made honest failure impossible after
+// any receipt-less mutation
+// (docs/problems/engineering-completion-path-cluster-2026-10-20.md). The
+// relaxation is an allow-list: completed, partial, unknown and empty results
+// keep the certified binding. The result is part of the proposition digest,
+// so the model cannot change the mode of a recorded or staged proposal.
+func assignmentSubjectBinding(result types.EngineeringAssignmentResultKind) capsule.SubjectBinding {
+	switch result {
+	case types.EngineeringResultFailed, types.EngineeringResultBlocked:
+		return capsule.SubjectObserved
+	default:
+		return capsule.SubjectCertified
+	}
+}
+
+func engineeringExecutionAttestationFromReceipt(assignment types.EngineeringAssignment, reportID string, command types.EngineeringRecordedCommand, receipt capsule.ExecutionReceipt, finalSubjectDigest string, binding capsule.SubjectBinding) (types.EngineeringExecutionAttestation, error) {
 	if receipt.AgentRunID != assignment.BoundRunID || receipt.CapsuleID != assignment.Binding.CapsuleID || objectgraph.SHA256([]byte(receipt.Command)) != command.CommandDigest ||
 		"sha256:"+strings.TrimPrefix(receipt.SourceTreeDigest, "sha256:") != assignment.Binding.SubjectDigest || strings.TrimSpace(receipt.GrantedReceiptRef) == "" {
 		return types.EngineeringExecutionAttestation{}, fmt.Errorf("assignment granted receipt scope is invalid")
@@ -1210,12 +1228,22 @@ func engineeringExecutionAttestationFromReceipt(assignment types.EngineeringAssi
 	// per-command post-tree in receipt.WorktreeDigest. Intermediate commands
 	// legitimately observe earlier tree states; per-command post-trees remain
 	// on the raw execution receipts.
-	return types.EngineeringExecutionAttestation{
+	attestation := types.EngineeringExecutionAttestation{
 		GrantedReceiptRef: receipt.GrantedReceiptRef, CommandID: command.CommandID, CommandDigest: command.CommandDigest,
 		ExitCode: receipt.ExitCode, StdoutDigest: "sha256:" + strings.TrimPrefix(receipt.StdoutDigest, "sha256:"), StderrDigest: "sha256:" + strings.TrimPrefix(receipt.StderrDigest, "sha256:"),
 		SourceSubjectDigest: "sha256:" + strings.TrimPrefix(receipt.SourceTreeDigest, "sha256:"), FinalSubjectDigest: "sha256:" + strings.TrimPrefix(finalSubjectDigest, "sha256:"), WorktreeDigest: "sha256:" + strings.TrimPrefix(finalSubjectDigest, "sha256:"),
 		Granted: true, Frozen: true, OccurredAt: occurredAt.UTC(), ReportID: reportID,
-	}, nil
+	}
+	if binding == capsule.SubjectObserved {
+		// No receipt certifies the frozen subject: record the tree this
+		// command observed beside it, and say so.
+		attestation.SubjectBinding = types.EngineeringSubjectBindingObserved
+		attestation.WorktreeDigest = ""
+		if observed := strings.TrimSpace(receipt.WorktreeDigest); observed != "" {
+			attestation.WorktreeDigest = "sha256:" + strings.TrimPrefix(observed, "sha256:")
+		}
+	}
+	return attestation, nil
 }
 
 func (rt *Runtime) bindFrozenAssignmentExecutionReceipts(ctx context.Context, assignment types.EngineeringAssignment, handle string, report types.EngineeringAssignmentReport, frozenDigest string) (types.EngineeringAssignmentReport, error) {
@@ -1226,7 +1254,8 @@ func (rt *Runtime) bindFrozenAssignmentExecutionReceipts(ctx context.Context, as
 	if len(refs) == 0 {
 		return report, nil
 	}
-	receipts, err := rt.capsuleExecutor.ResolveGrantedExecutionReceipts(ctx, assignment.BoundRunID, handle, refs)
+	binding := assignmentSubjectBinding(report.Result)
+	receipts, err := rt.capsuleExecutor.ResolveGrantedExecutionReceiptsFor(ctx, assignment.BoundRunID, handle, refs, binding)
 	if err != nil || len(receipts) != len(refs) {
 		return report, fmt.Errorf("assignment command evidence unavailable after durable freeze: %w", err)
 	}
@@ -1241,7 +1270,7 @@ func (rt *Runtime) bindFrozenAssignmentExecutionReceipts(ctx context.Context, as
 		}
 		report.ExecutorReceiptRefs = append(report.ExecutorReceiptRefs, receipt.GrantedReceiptRef)
 		if assignment.GrantPolicyAttestation != nil {
-			attestation, buildErr := engineeringExecutionAttestationFromReceipt(assignment, report.ReportID, report.Commands[i], receipt, frozenDigest)
+			attestation, buildErr := engineeringExecutionAttestationFromReceipt(assignment, report.ReportID, report.Commands[i], receipt, frozenDigest, binding)
 			if buildErr != nil {
 				return report, buildErr
 			}

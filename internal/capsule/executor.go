@@ -1199,7 +1199,20 @@ func (e *Executor) OpenGrantedExecutionReceipt(ref string) (GrantedExecutionRece
 	return receipt, nil
 }
 
+// ResolveGrantedExecutionReceipts grants the cited receipts against the
+// frozen final subject: the strict binding, where the chronologically latest
+// receipt must observe the frozen tree. choir.Freeze and a completed fate use
+// it.
 func (e *Executor) ResolveGrantedExecutionReceipts(ctx context.Context, agentRunID, handle string, refs []string) ([]ExecutionReceipt, error) {
+	return e.ResolveGrantedExecutionReceiptsFor(ctx, agentRunID, handle, refs, SubjectCertified)
+}
+
+// ResolveGrantedExecutionReceiptsFor is ResolveGrantedExecutionReceipts with
+// an explicit binding. SubjectObserved grants receipts for a fate that
+// claims nothing about the subject (failed, blocked): the granted receipt
+// records the frozen digest and the latest receipt's worktree digest side by
+// side and says so, and the two are not required to match.
+func (e *Executor) ResolveGrantedExecutionReceiptsFor(ctx context.Context, agentRunID, handle string, refs []string, binding SubjectBinding) ([]ExecutionReceipt, error) {
 	capability, caps, err := e.resolveOne(agentRunID, handle, "exec")
 	if err != nil || capability.AgentRole != RoleEngineering {
 		return nil, fmt.Errorf("capsule execution evidence unavailable")
@@ -1215,25 +1228,18 @@ func (e *Executor) ResolveGrantedExecutionReceipts(ctx context.Context, agentRun
 		return nil, err
 	}
 	handleDigest := computerevent.DigestBytes([]byte(handle))
-	latestOccurrence, latestWorktreeDigest := "", ""
-	receipts := make([]ExecutionReceipt, 0, len(refs))
-	seen := make(map[string]struct{}, len(refs))
-	for _, ref := range refs {
-		if _, duplicate := seen[ref]; duplicate {
-			continue
-		}
-		receipt, openErr := e.OpenExecutionReceipt(ref)
-		if openErr != nil {
-			return nil, fmt.Errorf("capsule execution evidence does not bind the exact run, handle, capsule, and frozen source: %s: %w", ref, openErr)
-		}
-		if reason := grantedExecutionBindReason(receipt, agentRunID, handleDigest, caps.ID, caps.SourceSnapshotDigest); reason != "" {
-			return nil, fmt.Errorf("capsule execution evidence does not bind the exact run, handle, capsule, and frozen source: %s", reason)
-		}
-		if receipt.OccurredAt > latestOccurrence {
-			latestOccurrence, latestWorktreeDigest = receipt.OccurredAt, receipt.WorktreeDigest
-		}
+	bound, err := bindGrantedReceipts(e.OpenExecutionReceipt, refs, binding, agentRunID, handleDigest, caps.ID, caps.SourceSnapshotDigest, worktreeDigest)
+	if err != nil {
+		return nil, err
+	}
+	receipts := make([]ExecutionReceipt, 0, len(bound.Receipts))
+	for _, receipt := range bound.Receipts {
+		ref := receipt.ReceiptRef
 		granted := GrantedExecutionReceipt{Execution: receipt, AgentRunID: agentRunID, CapabilityHandleDigest: handleDigest,
 			CapsuleID: caps.ID, Frozen: true, SourceSubjectDigest: caps.SourceSnapshotDigest, FinalSubjectDigest: worktreeDigest}
+		if binding == SubjectObserved {
+			granted.SubjectBinding, granted.LatestReceiptWorktreeDigest = string(SubjectObserved), bound.LatestWorktreeDigest
+		}
 		canonicalWithoutRef, canonicalErr := json.Marshal(granted)
 		if canonicalErr != nil {
 			return nil, canonicalErr
@@ -1257,17 +1263,7 @@ func (e *Executor) ResolveGrantedExecutionReceipts(ctx context.Context, agentRun
 		e.grantedReceipts[granted.ReceiptRef] = granted
 		e.executionReceipts[ref] = receipt
 		e.mu.Unlock()
-		seen[ref] = struct{}{}
 		receipts = append(receipts, receipt)
-	}
-	if len(receipts) == 0 {
-		return nil, fmt.Errorf("capsule execution evidence is required")
-	}
-	// The frozen final subject is certified once, by the chronologically
-	// latest cited receipt: earlier receipts legitimately recorded earlier
-	// post-evaluation tree states.
-	if latestWorktreeDigest != worktreeDigest {
-		return nil, fmt.Errorf("capsule execution evidence does not bind the final frozen subject: latest receipt observed %s, frozen subject is %s", latestWorktreeDigest, worktreeDigest)
 	}
 	return receipts, nil
 }

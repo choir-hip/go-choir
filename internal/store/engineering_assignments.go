@@ -480,8 +480,26 @@ func validateExecutionAttestations(atts []types.EngineeringExecutionAttestation,
 		if att.SourceSubjectDigest != assignment.Binding.SubjectDigest {
 			return nameErr("source subject digest")
 		}
-		if att.FinalSubjectDigest != report.ObservedSubjectDigest || att.WorktreeDigest != att.FinalSubjectDigest {
+		if att.FinalSubjectDigest != report.ObservedSubjectDigest {
 			return nameErr("final subject digest")
+		}
+		switch att.SubjectBinding {
+		case "":
+			if att.WorktreeDigest != att.FinalSubjectDigest {
+				return nameErr("final subject digest")
+			}
+		case types.EngineeringSubjectBindingObserved:
+			// Only a report that claims nothing about the subject may carry
+			// receipts that do not certify it; the receipt's own observed
+			// tree is recorded beside the frozen subject.
+			if report.Result != types.EngineeringResultFailed && report.Result != types.EngineeringResultBlocked {
+				return nameErr("subject binding")
+			}
+			if att.WorktreeDigest != "" && !types.ValidSHA256Digest(att.WorktreeDigest) {
+				return nameErr("observed worktree digest")
+			}
+		default:
+			return nameErr("subject binding")
 		}
 		if !validCanonicalTime(att.OccurredAt) || strings.TrimSpace(att.ReportCommandID) == "" {
 			return nameErr("occurred_at/report command")
