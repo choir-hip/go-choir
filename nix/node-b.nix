@@ -368,10 +368,16 @@ let
       Nice = 19;
       IOSchedulingClass = "idle";
       CPUWeight = 10;
-      # restic holds the tree of a 9M-file tape in memory (unmeasured, see
-      # the problem record): throttle, never let it starve the paper.
-      MemoryHigh = "4G";
-      MemoryMax = "6G";
+      # restic holds the tree of a 9.5M-file tape in memory. Measured on
+      # run 1 (docs/problems/no-off-host-backup-2026-10-20.md section 13
+      # item 8): about 13 GB, so a 4G line pushed 9 GB into swap and the
+      # unit wrote 1 TB. Owner, 2026-10-20: give restic more memory. Node B
+      # had about 14 GB available at idle, so: throttle at 10G, stop at
+      # 12G, and at most 4G of swap, so a run that outgrows this fails
+      # loudly instead of paging the host.
+      MemoryHigh = "10G";
+      MemoryMax = "12G";
+      MemorySwapMax = "4G";
       TimeoutStartSec = "12h";
       # Creates ${offHostBackup.stateDir} (status.json, restic cache, staging)
       # and keeps it writable under ProtectSystem=strict.
