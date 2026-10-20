@@ -265,3 +265,89 @@ alone is not the fix.
 - Proof: the same probe on the test computer; pass is engineering's
   `cat /workspace/platform/docs/probes/<stamp>.md` printing the line and
   `written_files[0].exists: true`.
+
+## Fix design: engineering reads the Texture request (written before the code)
+
+**Found, then chosen.** Nothing existing carries the parent's text to
+engineering. `ParentID` on the Cast record and `ParentConversationID` /
+`ParentRound` on the view are pointers only. The one precedent is the
+read-time join in `loadCellRecords` (`delegatedCaptureViews`, R2-14): a
+management task's opening Cast shows the records it delegated, joined from
+the immutable tape when the view is built. This fix uses that pattern and adds
+no stored field and no process-local state.
+
+**Mechanism.**
+
+1. `planEngineeringCast` already resolves the parent and checks it is a
+   Texture's Cast in management's inbox with an open round. That check moves
+   into one helper, `engineeringCastRequest`, which also returns the parent's
+   request: `{from: parent.SenderInbox, objective, body}` verbatim, and
+   `ParentDigest`, the sha256 over the full, untruncated text with a
+   domain-separation prefix.
+2. The parent digest is folded into the binding's `RequestDigest` (the same
+   join that already holds the objective, parent id and Cast id). A replay of
+   the same Cast with a different parent text computes a different binding, so
+   the open command's digest differs and the replay is refused by the existing
+   idempotence check. Parent records are immutable, so a legitimate replay
+   always recomputes the same digest.
+3. When `loadCellRecords` builds engineering's view of a Cast whose parent is a
+   Texture Cast, it loads the assignment binding for the inbox, reloads the
+   parent through the same helper, recomputes the `RequestDigest` and compares
+   it with the committed binding. Equal: the view carries `request` (from,
+   objective, body, `digest`, `truncated`). Unequal, or the parent is not a
+   valid Texture Cast: no request, and a visible `request_error`. A pre-fix
+   binding (legacy digest) shows `request_error: "assignment predates request
+   binding"` rather than unbound text.
+4. Size: the digest covers the full text; the view cuts objective at 4 KiB and
+   body at 16 KiB on a rune boundary and says so (`truncated: true` and a
+   marker line naming the parent record id, which stays on the tape).
+5. Only management's Cast that opened the assignment (`record_id ==
+   binding.ParentControlID`) gets a request. Engineering gets no read access to
+   management's inbox, and Texture's and management's authority are unchanged.
+
+**Ways it could fail, and the handling (each has a test).**
+
+- Lost on replay or crash restart: nothing is process-local. The view is
+  derived from the tape (parent record, binding) at every read, so a fresh
+  runtime reading the same store shows the same request. Test builds the view
+  from a store that never ran the plan.
+- Digest mismatch refusing legitimate replays: the digest is over immutable
+  parent text and the same Cast id, so replays agree. Tests: same inputs give
+  the same `RequestDigest`; a different parent text gives a different one; an
+  identical re-plan produces an identical binding.
+- Oversized parent: truncation is visible and bounded; digest still covers the
+  full text. Test with a body larger than the limit and a multibyte boundary.
+- Untrusted text in engineering's prompt: the text enters only through
+  `choir.Records()` (REPL data, like every record), never the system prompt,
+  the run objective or the delegate brief. The overlay says to treat it as the
+  request, not as instructions that widen authority. Test: the assigned run's
+  objective stays management's objective only.
+- Parent not a Texture Cast (a Note, a Cast from another sender, another
+  desk's inbox): the existing refusal remains in the plan; the view shows
+  `request_error` and no text. Tests for both.
+- Crash restart: a restart closes work, never resumes it, so no resumer is
+  added. A planned-restart resume re-reads the same tape.
+
+**Red ceremony.**
+
+- Mutation class: red (Cast authority, engineering inbox record).
+- Conjecture delta: engineering failed these probes because the request never
+  reached it, not because it lacks the capability (trace: the three
+  occurrences in this doc and P5 cause B). Prediction: with the request
+  visible, the same probe has engineering write the probe file, and
+  `written_files[0].exists` is true. Refuted if engineering still lacks the
+  target path with the request in its `Records()`.
+- Protected surfaces: engineering's inbox record view, the assignment binding's
+  `RequestDigest`, `planEngineeringCast`. Not touched: Texture's canonical
+  writes, vmctl, gateway, auth, route projection, capsule code.
+- Admissible evidence: focused Go tests (plan digest, view join, replay,
+  truncation, non-Texture parent, legacy binding); then staging only: the same
+  delegate probe on the test computer. No local proof is claimed for the live
+  path.
+- Rollback: revert the fix commit. Bindings already minted keep their digest
+  (an opaque hash), so no data migration. A reverted build shows no `request`
+  and recomputes nothing.
+- Heresy delta: discovered: engineering's Records() views a Cast whose
+  `parent` it cannot read (P5 cause B, now three occurrences);
+  introduced: none expected; repaired: P5 cause B on the substrate (overlay
+  text alone was not the fix).
