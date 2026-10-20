@@ -30,6 +30,11 @@ var capsuleAllowedSyscalls = []string{
 	"setuid", "setgid", "setreuid", "setregid", "setresuid", "setresgid", "setgroups", "setfsuid", "setfsgid",
 	"kill", "tkill", "tgkill", "prctl", "capget", "capset", "set_tid_address", "set_robust_list", "rseq",
 	"futex", "sched_yield", "sched_getaffinity", "sched_setaffinity", "nanosleep", "clock_nanosleep",
+	// Read-only scheduling queries: pthread_getschedparam (every Node process)
+	// calls them, and refused it prints "pthread_getschedparam failed: 1" in a
+	// flood (docs/problems/engineering-completion-path-cluster-2026-10-20.md
+	// failure 5). The setters stay denied.
+	"sched_getparam", "sched_getscheduler",
 	"clock_gettime", "clock_getres", "gettimeofday", "time", "times", "getitimer", "setitimer", "alarm",
 	"getrlimit", "setrlimit", "prlimit64", "getrusage", "sysinfo", "uname", "getrandom",
 	"sendfile", "copy_file_range", "splice", "tee", "vmsplice", "memfd_create", "arch_prctl",
