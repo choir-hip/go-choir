@@ -1,6 +1,6 @@
 # The paper's 48 GB disk filled with Dolt history and live data, and the runtime crash-loops (2026-10-19)
 
-Status: recovered by growing the disk (option 1) at 16:25–16:29 UTC; history still unbounded (owner decision). Found at the 16:22 UTC hourly
+Status: history compacted 2026-10-19 23:23–23:41 UTC (52.0 GB to 8.06 GB, root hash identical); compaction not yet scheduled. Earlier: recovered by growing the disk at 16:25–16:29 UTC. Found at the 16:22 UTC hourly
 check. Class: red (the always-on paper's persistent state and VM
 lifecycle). Owner rule: "we need paper publishing 24/7, even after
 crashes."
@@ -419,3 +419,21 @@ nears its disk (it grows about 0.25 GiB an hour: weekly keeps it under
 about 50 GB of history). Today it needs a hold and about 18 minutes down.
 The durable fix is fewer writes at the source (the appendOps design,
 docs/reports/tape-volume-forward-fix-and-surgery-2026-10-19.md).
+
+## Host space reclaimed (00:05 to 00:30, Oct 20)
+
+- The first deploy of b36519198 failed its root-disk preflight (86 of 90
+  GiB free after its own reclaim): tonight's backup images pinned the
+  pre-compaction blocks. Deleted the four superseded images (pre-grow 1626Z
+  and 1740Z, aborted 2110Z, pre-compact 2035Z): 94 GiB free; re-run deployed.
+- fstrim at a short stop (hold 00:07:14, refresh 00:07:55): loop-mounted
+  `fstrim` trimmed 117 GiB; the image went from 105 GiB to 11 GiB allocated;
+  fsck clean.
+- After 12 runs on all three working desks (00:08 to 00:26), deleted the last
+  backup `data.img.pre-compact-20261019T2324Z` (the store is a cache of the
+  tape, and the root hash matched exactly). Root 94 to 205 GiB free; headroom
+  balance: unallocated 40 GiB, metadata 82%.
+
+Status: **history bounded for now** (8 GB store, 126 GB disk). Remaining:
+schedule the compaction (weekly) and cut writes at the source
+(docs/reports/tape-volume-forward-fix-and-surgery-2026-10-19.md).
