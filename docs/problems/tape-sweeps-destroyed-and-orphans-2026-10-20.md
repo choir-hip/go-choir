@@ -389,3 +389,22 @@ Fix shape (red, deletion logic):
 - Tests first: a fixture that appends during the walk passes; a receipt
   above the current head refuses; a receipt for a computer with no head
   refuses.
+
+### Fix (as built)
+
+`tapeReceiptsMatchSnapshot` (internal/platform/tape_sweep.go) replaces the
+global `COUNT(*)`. Per computer in `ids`, `COUNT(*) WHERE computer_id=? AND
+sequence<=snapshot head` must equal the walked rows. One grouped
+`MAX(sequence) GROUP BY computer_id` query, read before the current heads,
+classifies the rest: a computer with receipts but no head row refuses; a
+max at or below the snapshot head passes; a max above it passes only when at
+or below the computer's current head (live append), otherwise it refuses naming
+the computer, the receipt sequence and the current head. An earlier chain-read
+refusal still wins. The apply path has no receipt count: its delta-references
+phase (`tape_sweep_apply.go`) walks from the new heads and unions references,
+so it needed no change. Tests: `TestTapeSweepOrphanReceiptCheckIsHeadBounded`
+(failed against the old code, passes now; the existing tape sweep tests and
+`go test ./internal/platform/...` pass). Residual: the grouped MAX is a
+full-table scan of the receipts table, as the old count was; the surplus a live
+append leaves between the grouped read and the head read is covered because the
+head is read second and only grows.
