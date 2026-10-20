@@ -39,3 +39,18 @@ through it clean.
 Rollback: `internalAuthMode = "observe"` (or `ownerActMode`), redeploy.
 Mutation class: red (auth). Heresy delta: discovered, a timer added
 tonight without the credential; repaired by the fix below.
+
+## Step 2 done (04:00 UTC)
+
+The timer, deployed with its credential (4c3291e16), ran at 04:00:06:
+`POST /internal/vmctl/compact-sweep caller="go-choir-store-compaction-timer"`,
+no "would refuse" line. It selected nothing (the paper at 19.1 GB host
+allocation, under 32 GiB; the account computer, not a platform class).
+Step 3 follows: `internalAuthMode = "enforce"`, alone.
+
+Side observation: the paper's host allocation went from about 9 GB after
+the 01:50 compaction to 19.1 GB by 04:00 while its store stayed about
+8 GB. The guest never trims, so every rewritten block stays allocated on
+the host. Mounting the guest data disk with discard (or a periodic guest
+fstrim) would keep host allocation near the live size; recorded for the
+compaction doc's next step.
