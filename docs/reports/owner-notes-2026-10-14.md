@@ -651,3 +651,16 @@ Owner, on waking:
   deleted on 2026-10-15 (it called a route C1e B1 had removed); the start
   is the prompt bar. The remaining `self-dev` commands are owner acts (arm
   mode, approve or reject a frozen candidate, roll back), not routing.
+- Visual evidence for self-development approval lives inside Texture:
+  "embedding this inside texture is the right approach".
+- "Embedding multimedia in texture is one of my next goals": images, video
+  (including YouTube), audio (including podcasts), slides, "and even figure
+  out the right way to embed calendar and email". Then Autoradio is built
+  with Texture and its audio layer, "feature complete without the full
+  desktop, while still being able to drive the autoputer from mobile". The
+  embedded capsule video can show self-development results inside the
+  Autoradio mobile app.
+- Asked for a deeper design review of the app plans, and reopened the native
+  stack: "I think we committed to UIKit+swift. Is that the right idea? Or
+  should we think about capacitor and reuse some of our svelte? Maybe that
+  would make it easier for android? Well, kotlin isn't too hard per se."
