@@ -61,7 +61,7 @@ Jev, the gateway-pinned choice judge, is called only by runtime-side judges
 that run outside any desk's turn:
 
 - the intake labeller: `callIntakeJudge` and `labelOneCapture`,
-  `internal/agentcore/intake_labels.go:383` and `:235`, which calls
+  `internal/agentcore/intake_labels.go:382` and `:236`, which calls
   `callJudgeWithin` (`:389`) on the `intake_labels` scope;
 - the event layer: `internal/agentcore/event_layer.go:386`, the same scope;
 - the support judge: `askJevForSupport`,
@@ -117,6 +117,80 @@ distributions on the pair-relation questions are calibrated enough to take
 without reading closely (design R4; the blind audit decides that, not unit
 tests), and how many calls a run and a day need (the caps ship off and are set
 by the owner from config).
+
+## Ways the verb could fail (before code)
+
+The verb is `choir.System1(questions)`: a research cell sends closed choice
+questions, the host sends them to the one `CandidateJudge`, records the call
+on the tape and returns each question's distribution. Each failure below is
+named before the code, with the guard that the tests pin.
+
+- **F1 Unbounded spend.** A loop in a cell, or a retry storm, calls the
+  judge thousands of times. Guard: a per-call bound (12 questions, 2-6
+  choices each, bounded text), a per-run cap and a per-computer daily cap on
+  calls, both from runtime config and both off by default (0): with either
+  unset the verb returns an error naming the config. Attempts count against
+  the caps, not only successes, and a "requested" record is written before
+  the call so a crash mid-call is still counted.
+- **F2 Smuggled evidence.** A cell pastes text it never read into a question
+  and the judge treats it as a source. Guard: `context_refs` name captures
+  (canonical capture ids) or story versions (`story:<revision_id>`) and the
+  runtime resolves their text itself, bounded, from the owner's stores; a
+  ref that does not resolve refuses the whole call before any spend. The
+  question text is the desk's own wording, sent in a separate field from the
+  context, bounded, and the instruction to the judge says only
+  `state.context` is evidence.
+- **F3 Distribution collapsed into a decision.** The verb returns "the
+  answer" and the desk takes it. Guard: the verb returns the probabilities
+  per choice exactly as the judge gave them, no thresholding, no argmax
+  field, no confidence gate; a choice the judge gave no probability for is
+  absent, never filled in. The decision stays in the cell (System 2).
+- **F4 No tape record.** The question, the answer and the cost live only in
+  the cell's memory; no audit, no replay. Guard: a `system1.judgment` event
+  (acknowledged durability, not batched) per call carrying the request
+  digest, the question ids, the distributions, the model as reported, the
+  usage and cost, and the transport's response id when it has one; the
+  cost also goes to the run's cost line (`recordJevCost`) so `/api/costs`
+  sees it.
+- **F5 Replay double spend.** A cell that runs again (a retry in the same
+  run, a model re-sending the same cell, a resumed run after a planned
+  restart) calls the judge again and pays twice. Guard: the request digest
+  covers the normalized questions and the content hash of every resolved
+  context text; before any spend the host looks the digest up among the
+  run's recorded answers and returns the recorded distributions, flagged
+  `replayed`, without a call and without counting toward the caps. Because
+  the context is hashed, a changed text is a new question, not a stale
+  answer.
+- **F6 Crash restart.** The computer restarts between "requested" and the
+  answer. Guard: nothing resumes (restart rule); the request record stays,
+  counts toward the caps, and has no answer, so a retried cell is new work
+  and calls the judge once more. A crash costs at most one call.
+- **F7 Transport errors.** The gateway is down, rate limited, disabled, the
+  call times out, or the answer does not parse or misses a question.
+  Guard: an error to the cell that says what failed, a bounded timeout, a
+  failure record on the tape (counted as an attempt, never replayed), and no
+  partial success is guessed at; a question the judge did not answer is
+  reported as unanswered, never filled.
+- **F8 Validation.** Empty list, empty or oversized text, duplicate ids,
+  ids that are not simple names, fewer than two or more than six choices,
+  duplicate or empty choices, too many context refs. Guard: all refused
+  before any resolution or spend, with the first offending field named.
+- **F9 Wrong desk sees the verb.** Management, engineering, Texture, a
+  research child or a management task gets `choir.System1`. Guard: the verb
+  is in the research module set only (owner ruling: management does not get
+  it in this change); the session handle of every other role lacks the
+  broker action; and the host refuses the action unless the session role is
+  `research`, independent of the worker. Tests pin the exports of all five
+  other roles, the handle, and the host check.
+- **F10 Injection through context.** A capture's text tells the judge to
+  answer a certain way. Guard: context is bounded and passed as data under
+  a named field; the judge's answer is only a distribution the desk weighs
+  and the desk's overlay says story text is data; one call's answers carry
+  no authority over a graph object (there is no write verb in this change).
+- **F11 Shared rate bucket.** The verb draws on the shared judgment bucket
+  with the support judge. Guard: the caps keep the volume small; if the
+  bucket starves the support judge in staging, a `system1` scope is a
+  gateway change and its own record. Not changed here.
 
 ## Fix order
 
