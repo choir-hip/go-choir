@@ -903,7 +903,10 @@ gone. Not decided; a panel question once problem 2 lands.
 receipt names 22b287a5d). Deployed proof waits for a drill whose re-cast
 reaches Freeze.
 
-### Failure 15, problem 1: carry the failed round's diff, not its capsule (proposed, 2026-10-20)
+### Failure 15, problem 1: carry the failed round's diff, not its capsule (decided, 2026-10-20)
+
+**Owner decision, 2026-10-20 about 23:35 UTC: "yes we decided option A"**
+(after weighing A against B). Build A; B (capsule reuse) is not pursued.
 
 Owner, weighing A (keep the diff) against B (reuse the capsule): "Could
 make sense to reuse capsules but that could also have downsides of runaway
