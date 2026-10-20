@@ -70,6 +70,12 @@ func TestCgroupMemoryDir(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "memory.current"), []byte("1048576\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	// Control files exist in a real cgroup; the writer opens, never creates.
+	for _, name := range []string{"memory.max", "memory.reclaim"} {
+		if err := os.WriteFile(filepath.Join(dir, name), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
 	cg := cgroupMemoryDir(dir)
 	if n, err := cg.Current(); err != nil || n != 1<<20 {
 		t.Fatalf("current = %d %v", n, err)

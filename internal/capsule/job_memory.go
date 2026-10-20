@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"golang.org/x/sys/unix"
 )
 
 // Job memory (docs/reports/memory-hotplug-controller-design-2026-10-14.md
@@ -71,11 +73,35 @@ func (d cgroupMemoryDir) Current() (int64, error) {
 // Linux 5.19+). It fails with EAGAIN when it could not reclaim all of it;
 // the caller reads memory.current afterwards either way.
 func (d cgroupMemoryDir) Reclaim(bytes int64) error {
-	return os.WriteFile(filepath.Join(string(d), "memory.reclaim"), []byte(strconv.FormatInt(bytes, 10)), 0o600)
+	return writeCgroupFile(filepath.Join(string(d), "memory.reclaim"), strconv.FormatInt(bytes, 10))
 }
 
 func (d cgroupMemoryDir) SetMax(bytes int64) error {
-	return os.WriteFile(filepath.Join(string(d), "memory.max"), []byte(strconv.FormatInt(bytes, 10)), 0o600)
+	return writeCgroupFile(filepath.Join(string(d), "memory.max"), strconv.FormatInt(bytes, 10))
+}
+
+// writeCgroupFile writes one value to a cgroup control file with a raw
+// descriptor, so an EAGAIN (memory.reclaim's partial reclaim) comes back as an
+// error. os.WriteFile registers the pollable kernfs file with the runtime
+// poller and parks on EAGAIN until the file is writable, which a control file
+// never reports: a partial reclaim hung teardown, under the executor lock,
+// forever (engineering-completion-path-cluster-2026-10-20.md, failure 3).
+func writeCgroupFile(path, value string) error {
+	fd, err := unix.Open(path, unix.O_WRONLY|unix.O_CLOEXEC|unix.O_NONBLOCK, 0)
+	if err != nil {
+		return &os.PathError{Op: "open", Path: path, Err: err}
+	}
+	defer unix.Close(fd)
+	for {
+		_, err = unix.Write(fd, []byte(value))
+		if err != unix.EINTR {
+			break
+		}
+	}
+	if err != nil {
+		return &os.PathError{Op: "write", Path: path, Err: err}
+	}
+	return nil
 }
 
 // lowerCgroupMemory brings memory.max down to limit only when usage is (or
