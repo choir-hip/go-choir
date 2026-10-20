@@ -300,23 +300,31 @@ func TestPlainDeployRefreshCarriesNoMaintenance(t *testing.T) {
 func TestSelectStoreCompaction(t *testing.T) {
 	big := &dataImageResponse{FileBytes: 40 << 30}
 	small := &dataImageResponse{FileBytes: 3 << 30}
+	cp, pp := string(WarmnessClassCriticalProtected), string(WarmnessClassPublicPlatform)
 	ownerships := []ownershipResponse{
-		{VMID: "vm-paper", State: string(VMStateActive), Kind: VMKindInteractive, DataImage: big},
-		{VMID: "vm-small", State: string(VMStateActive), Kind: VMKindInteractive, DataImage: small},
-		{VMID: "vm-held", State: string(VMStateActive), Kind: VMKindInteractive, Held: true, DataImage: big},
-		{VMID: "vm-stopped", State: string(VMStateStopped), Kind: VMKindInteractive, DataImage: big},
-		{VMID: "vm-worker", State: string(VMStateActive), Kind: "worker", DataImage: big},
-		{VMID: "vm-nostats", State: string(VMStateActive), Kind: VMKindInteractive},
+		{VMID: "vm-paper", State: string(VMStateActive), Kind: VMKindInteractive, WarmnessClass: cp, DataImage: big},
+		{VMID: "vm-public", State: string(VMStateActive), Kind: VMKindInteractive, WarmnessClass: pp, DataImage: big},
+		{VMID: "vm-small", State: string(VMStateActive), Kind: VMKindInteractive, WarmnessClass: cp, DataImage: small},
+		{VMID: "vm-held", State: string(VMStateActive), Kind: VMKindInteractive, WarmnessClass: cp, Held: true, DataImage: big},
+		{VMID: "vm-stopped", State: string(VMStateStopped), Kind: VMKindInteractive, WarmnessClass: cp, DataImage: big},
+		{VMID: "vm-worker", State: string(VMStateActive), Kind: "worker", WarmnessClass: cp, DataImage: big},
+		{VMID: "vm-nostats", State: string(VMStateActive), Kind: VMKindInteractive, WarmnessClass: cp},
+		// An account's computer whose untrimmed image sits far above the
+		// threshold: never squashed by the sweep (staging, 2026-10-20 01:20).
+		{VMID: "vm-premium", State: string(VMStateActive), Kind: VMKindInteractive, WarmnessClass: string(WarmnessClassPremiumAlwaysOn), DataImage: big},
+		{VMID: "vm-primary", State: string(VMStateActive), Kind: VMKindInteractive, WarmnessClass: string(WarmnessClassPrimary), DataImage: big},
+		{VMID: "vm-unclassed", State: string(VMStateActive), Kind: VMKindInteractive, DataImage: big},
 	}
 	selected, skipped, picks := selectStoreCompaction(ownerships, 32<<30)
-	if len(selected) != 1 || selected[0].VMID != "vm-paper" || len(picks) != 1 {
+	if len(selected) != 2 || selected[0].VMID != "vm-paper" || selected[1].VMID != "vm-public" || len(picks) != 2 {
 		t.Fatalf("selected = %+v", selected)
 	}
 	reasons := map[string]string{}
 	for _, s := range skipped {
 		reasons[s.VMID] = s.Reason
 	}
-	if reasons["vm-small"] != "below threshold" || reasons["vm-held"] != "held" || reasons["vm-nostats"] != "no data image stats" || len(skipped) != 3 {
+	if reasons["vm-small"] != "below threshold" || reasons["vm-held"] != "held" || reasons["vm-nostats"] != "no data image stats" ||
+		reasons["vm-premium"] != "not a platform class" || reasons["vm-primary"] != "not a platform class" || reasons["vm-unclassed"] != "not a platform class" || len(skipped) != 6 {
 		t.Fatalf("skipped = %+v", skipped)
 	}
 }
@@ -325,6 +333,7 @@ func TestSelectStoreCompaction(t *testing.T) {
 // or it never selects a computer (staging, 2026-10-20 01:03).
 func TestCompactSweepReadsDataImageStats(t *testing.T) {
 	h, _, _, compactor := compactFixture(t, "owner-sweep")
+	makePlatformComputer(t, h, "owner-sweep")
 	h.dataImageStatsFor = func(string) (DataImageStats, bool) {
 		return DataImageStats{FileBytes: 40 << 30, CapBytes: 128 << 30}, true
 	}

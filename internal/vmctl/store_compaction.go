@@ -289,6 +289,8 @@ func (h *Handler) fillDataImageStats(ownerships []ownershipResponse) {
 	}
 }
 
+// selectStoreCompaction picks the active, unheld interactive platform
+// computers whose data image allocates at least minFileBytes on the host.
 func selectStoreCompaction(ownerships []ownershipResponse, minFileBytes uint64) (selected, skipped []storeCompactSweepEntry, picks []ownershipResponse) {
 	selected, skipped = []storeCompactSweepEntry{}, []storeCompactSweepEntry{}
 	for _, own := range ownerships {
@@ -301,6 +303,12 @@ func selectStoreCompaction(ownerships []ownershipResponse, minFileBytes uint64) 
 			continue
 		case own.Kind != "" && own.Kind != VMKindInteractive:
 			continue
+		case !deployRefreshAllowsBusy(WarmnessClass(own.WarmnessClass)):
+			// History squashing is ruled for the platform's always-busy
+			// computers (owner notes §26). An account's computer can hold
+			// a small store in a large untrimmed image; it is compacted
+			// only by hand, on the owner's ask.
+			entry.Reason = "not a platform class"
 		case own.Held:
 			entry.Reason = "held"
 		case own.DataImage == nil:
