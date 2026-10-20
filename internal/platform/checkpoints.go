@@ -212,6 +212,9 @@ func (a *CheckpointAuthority) Publish(ctx context.Context, request selfdevprotoc
 }
 
 func (a *CheckpointAuthority) verifyVerifierEvidence(ctx context.Context, request selfdevprotocol.CheckpointRequest) error {
+	if err := a.cas.store.refuseTombstonedTape(ctx, request.ComputerID); err != nil {
+		return fmt.Errorf("checkpoint authority: %w", err)
+	}
 	certificate := request.VerifierCertificate.Request
 	if certificate.Decision == "genesis_baseline" {
 		var eventKind string

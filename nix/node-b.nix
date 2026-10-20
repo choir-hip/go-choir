@@ -885,6 +885,12 @@ in
         "PLATFORM_ARTIFACT_GC_MAX_DELETES=50000"
         "PLATFORM_ARTIFACT_GC_MAX_BYTES=34359738368"
         "PLATFORM_ARTIFACT_GC_ACTIVE_NAMESPACES=projection-base,platform-update,file-cas-roots,file-cas-chunks"
+        # Tape sweep (orphan pins, destroyed computers' tapes), on demand only
+        # at /internal/platform/artifact-gc/tape. dry-run admits manifests and
+        # refuses apply; flip to active only after a dry-run manifest has been
+        # reviewed (docs/problems/tape-sweeps-destroyed-and-orphans-2026-10-20.md).
+        # Archives default to <artifacts>/tape-sweep-archive (ReadWritePaths).
+        "PLATFORM_TAPE_SWEEP_MODE=dry-run"
         # P5 host build service. The checkout is the deploy's /opt/go-choir
         # (read only: its objects, never its worktree); the base is the
         # deployed guest image a computer must have booted.

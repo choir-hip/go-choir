@@ -85,8 +85,13 @@ func main() {
 	}
 	svc.SetArtifactGCPolicy(gcPolicy)
 	platform.NewGCRunner(svc, gcPolicy, gcInterval).Start(context.Background())
+	// Tape sweep (orphan pins, destroyed computers' tapes): dry-run unless
+	// PLATFORM_TAPE_SWEEP_MODE=active; on demand only, at
+	// /internal/platform/artifact-gc/tape. The destroyed proof needs vmctl.
+	svc.SetTapeSweepPolicy(platform.TapeSweepPolicy{Mode: cfg.TapeSweepMode, ArchiveDir: cfg.TapeSweepArchiveDir})
 	handler := platform.NewHandler(svc)
 	if cfg.VmctlURL != "" {
+		svc.SetComputerRegistry(platform.NewVmctlComputerRegistry(vmctl.NewClient(cfg.VmctlURL)))
 		if err := handler.ConfigureGuestBinding(vmctl.NewClient(cfg.VmctlURL)); err != nil {
 			log.Fatalf("corpusd guest binding: %v", err)
 		}

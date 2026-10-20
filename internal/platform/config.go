@@ -32,6 +32,11 @@ type Config struct {
 	// ArtifactGCNamespaces is PLATFORM_ARTIFACT_GC_ACTIVE_NAMESPACES: the
 	// comma list an active run may delete from (ParseArtifactGCNamespaces).
 	ArtifactGCNamespaces string
+	// TapeSweepMode is PLATFORM_TAPE_SWEEP_MODE: dry-run (default), active
+	// (apply admitted) or off. TapeSweepArchiveDir is
+	// PLATFORM_TAPE_SWEEP_ARCHIVE_DIR (default <artifacts>/tape-sweep-archive).
+	TapeSweepMode       string
+	TapeSweepArchiveDir string
 	// AutopaperOwnersRaw is CORPUSD_AUTOPAPER_OWNERS: comma-separated owner
 	// ids whose auto stories the front list shows; unset shows every
 	// owner's (ParseAutopaperOwners).
@@ -59,6 +64,8 @@ func LoadConfig() (*Config, error) {
 		ArtifactGCMaxDeletes:  os.Getenv("PLATFORM_ARTIFACT_GC_MAX_DELETES"),
 		ArtifactGCMaxBytes:    os.Getenv("PLATFORM_ARTIFACT_GC_MAX_BYTES"),
 		ArtifactGCNamespaces:  os.Getenv("PLATFORM_ARTIFACT_GC_ACTIVE_NAMESPACES"),
+		TapeSweepMode:         os.Getenv("PLATFORM_TAPE_SWEEP_MODE"),
+		TapeSweepArchiveDir:   os.Getenv("PLATFORM_TAPE_SWEEP_ARCHIVE_DIR"),
 		AutopaperOwnersRaw:    os.Getenv("CORPUSD_AUTOPAPER_OWNERS"),
 		FrontImportancePath:   envOr("CORPUSD_FRONT_IMPORTANCE_PATH", DefaultFrontImportancePath),
 	}

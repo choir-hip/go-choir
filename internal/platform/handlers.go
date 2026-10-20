@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -476,6 +477,46 @@ func (h *Handler) HandleArtifactGC(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, report)
 }
 
+// HandleTapeSweep starts (POST) or reads (GET ?job=<id>, latest when empty)
+// a tape sweep job: dry-run by default; apply names a dry-run's run_id and
+// manifest_sha256 and needs PLATFORM_TAPE_SWEEP_MODE=active
+// (docs/problems/tape-sweeps-destroyed-and-orphans-2026-10-20.md). The run
+// is asynchronous: a classification outlasts the HTTP write timeout.
+func (h *Handler) HandleTapeSweep(w http.ResponseWriter, r *http.Request) {
+	if !trustedInternalCaller(r) {
+		writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		job, ok := h.service.TapeSweepJobStatus(strings.TrimSpace(r.URL.Query().Get("job")))
+		if !ok {
+			writeJSON(w, http.StatusNotFound, apiError{Error: "tape sweep job not found"})
+			return
+		}
+		writeJSON(w, http.StatusOK, job)
+	case http.MethodPost:
+		var req TapeSweepRequest
+		if r.Body != nil {
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+				writeJSON(w, http.StatusBadRequest, apiError{Error: "invalid tape sweep request: " + err.Error()})
+				return
+			}
+		}
+		job, err := h.service.StartTapeSweep(req)
+		switch {
+		case errors.Is(err, errTapeSweepBusy), errors.Is(err, errTapeSweepActiveNotConfigured):
+			writeJSON(w, http.StatusConflict, apiError{Error: err.Error()})
+		case err != nil:
+			writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+		default:
+			writeJSON(w, http.StatusAccepted, job)
+		}
+	default:
+		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+	}
+}
+
 func RegisterRoutes(s *server.Server, h *Handler) {
 	s.SetHealthHandler(h.HandleHealth)
 	s.HandleFunc("/internal/computers/credentials/exchange", h.HandleComputerCredentialExchange)
@@ -528,6 +569,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/platform/texture/revisions/", h.HandleInternalGetTextureRevision)
 	s.HandleFunc("/internal/platform/texture/documents/", h.HandleInternalListTextureRevisions)
 	s.HandleFunc("/internal/platform/artifact-gc", h.HandleArtifactGC)
+	s.HandleFunc("/internal/platform/artifact-gc/tape", h.HandleTapeSweep)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

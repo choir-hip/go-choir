@@ -206,6 +206,15 @@ func (c *ComputerEventCAS) CompareAndSwap(ctx context.Context, request computere
 	lock := &c.locks[computerEventLockIndex(request.Event.ComputerID)]
 	lock.Lock()
 	defer lock.Unlock()
+	// A tombstoned computer's tape is archived/deleted: refuse the append
+	// explicitly (the tape sweep writes the tombstone before any file goes).
+	// The gate is held through the commit so the sweep's post-tombstone
+	// head check sees every append that passed this check.
+	c.store.tombstones.gate.RLock()
+	defer c.store.tombstones.gate.RUnlock()
+	if err := c.store.refuseTombstonedTape(ctx, request.Event.ComputerID); err != nil {
+		return computerevent.Receipt{}, fmt.Errorf("computer event CAS: %w", err)
+	}
 	if err := c.pins.ValidateEventPins(ctx, request); err != nil {
 		return computerevent.Receipt{}, fmt.Errorf("computer event CAS: pin verification: %w", err)
 	}

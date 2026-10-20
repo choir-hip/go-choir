@@ -39,6 +39,9 @@ type Store struct {
 	// retrievalState records which retrieval indexes and projections are
 	// live (retrieval_schema.go).
 	retrievalState retrievalSchemaState
+	// tombstones caches computer_tape_tombstones: a tombstoned computer's
+	// tape reads and appends fail closed (tape_tombstone.go).
+	tombstones tapeTombstoneCache
 }
 
 // SetArtifactsRoot configures the filesystem CAS root used to externalize
@@ -362,6 +365,9 @@ func (s *Store) Bootstrap(ctx context.Context) error {
 	}
 	if _, err := s.db.ExecContext(ctx, projectionJobSchemaDDL); err != nil {
 		return fmt.Errorf("platform store: bootstrap projection jobs: %w", err)
+	}
+	if err := s.ensureTapeTombstoneSchema(ctx); err != nil {
+		return err
 	}
 	if _, err := s.corpus().ExecContext(ctx, corpusSchemaDDL); err != nil {
 		return fmt.Errorf("platform store: bootstrap corpus schema: %w", err)

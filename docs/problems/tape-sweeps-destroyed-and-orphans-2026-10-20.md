@@ -165,12 +165,17 @@ from the local archive the sweep writes first. Protected surfaces:
      `<artifacts_root>/tape-sweep-archive`, because corpusd's systemd unit
      may write only there (`ReadWritePaths`). Keep it about 7 days; pruning
      is an explicit request field, never automatic.
-   - **Pin and unlink are serialized by a dedicated lock:**
-     - `writeImmutable` takes `tapeSweepMu` for read on tape namespaces,
-       and touches mtime when the file already exists;
-     - apply takes it for write per batch.
-
-     This is the same reuse-wins rule the CAS reuse lock gives file-cas.
+   - **Pin and unlink are serialized by the existing CAS reuse lock**
+     (`store.casReuseMu`; the plan said a dedicated `tapeSweepMu`, and the
+     code reuses the lock file-cas and og already share):
+     - `writeImmutable` takes it for read, and touches mtime when the file
+       already exists;
+     - apply re-checks and unlinks each item under it for write
+       (`unlinkIfStillUnreachable`, shared with the artifact GC).
+   - **Append and tombstone are serialized by a tombstone gate.** Head CAS
+     holds `tombstones.gate` for read from its tombstone check through its
+     commit; apply holds it for write while it writes the tombstone and
+     re-reads the head, so no append lands after that check.
 
 8. **Bounded deletion.**
    - Batches default to 256 items, with a pause between batches (default
@@ -236,7 +241,7 @@ from the local archive the sweep writes first. Protected surfaces:
   no tombstone check.
 - **Data:** before an apply, nothing is deleted. After an apply, restore the
   files from the archive:
-  `zstd -dc <archive>.tar.zst | tar -x -C /var/lib/go-choir/platform-artifacts`
+  `zstd -dc <archive>.tar.zst | tar -x -C /var/lib/go-choir/platform-artifacts --exclude=MANIFEST.jsonl`
   restores the files at their paths. Then delete the tombstone row, or call
   the untombstone request, which is allowed only while nothing has been
   deleted.
@@ -257,6 +262,30 @@ from the local archive the sweep writes first. Protected surfaces:
   lookup to CAS, replay and payload fetch.
 - repaired: the tape namespaces get a deletion path for destroyed computers
   and orphan pins.
+
+## Implementation notes (code commit)
+
+- Files: `internal/platform/tape_sweep.go` (policy, request, job,
+  dry-run), `tape_sweep_apply.go` (apply, archive, prune),
+  `tape_tombstone.go`, and the route in `handlers.go`.
+- Endpoint: `POST /internal/platform/artifact-gc/tape` starts a job and
+  answers 202 with its `job_id`; `GET ...?job=<id>` (latest when empty)
+  reads its phase and report. Actions: `dry-run` (default), `apply`,
+  `untombstone` (only while nothing was deleted), `prune-archives`
+  (`older_than`, at least 168h; explicit only).
+- Node B starts in `PLATFORM_TAPE_SWEEP_MODE=dry-run`. Apply needs a nix
+  change to `active` after the dry-run manifest is reviewed.
+- Reference sets are sorted 8-byte digest prefixes. A collision keeps a
+  file and never deletes one. The extra records scanned for 64-hex digests
+  are code closures, artifact programs, checkpoints (checkpoint and
+  receipt JSON) and route projection certificates. A failure on any of
+  them refuses both sweeps.
+- An unfinished destroyed apply (a tombstone not in `deleted`) refuses the
+  orphan payload sweep until it finishes, because that computer's payload
+  references may already be gone.
+- There are no Prometheus metrics in corpusd. The job status (GET), the
+  report JSON beside the manifest, and the `tape sweep:` log lines carry
+  the counts and bytes.
 
 ## Acceptance (to run after merge; not run here)
 

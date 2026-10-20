@@ -200,6 +200,9 @@ func (s *EventArtifactService) FetchPayload(computerID, artifactDigest string) (
 	if computerID == "" || !computerevent.IsSHA256(artifactDigest) {
 		return nil, fmt.Errorf("event artifact service: computer and payload digest are required")
 	}
+	if err := s.platform.store.refuseTombstonedTape(context.Background(), computerID); err != nil {
+		return nil, fmt.Errorf("event artifact service: %w", err)
+	}
 	for _, namespace := range []string{"computer-event-payload", "computer-event", "projection-base"} {
 		path, err := s.platform.artifactPath(filepath.Join("sha256", namespace, artifactDigest))
 		if err != nil {
@@ -225,10 +228,21 @@ func (s *EventArtifactService) writeImmutable(storageRef string, payload []byte)
 	if err != nil {
 		return err
 	}
+	// Reuse wins against the tape sweep: the sweep re-checks and unlinks an
+	// old unreferenced tape file only under the exclusive CAS reuse lock, and
+	// a pin that finds the file already present refreshes its mtime, so a
+	// re-pinned orphan is inside grace before any CAS can name it
+	// (docs/problems/tape-sweeps-destroyed-and-orphans-2026-10-20.md).
+	s.platform.store.casReuseMu.RLock()
+	defer s.platform.store.casReuseMu.RUnlock()
 	existing, err := os.ReadFile(path)
 	if err == nil {
 		if !bytes.Equal(existing, payload) {
 			return fmt.Errorf("event artifact service: immutable digest collision")
+		}
+		now := time.Now()
+		if err := os.Chtimes(path, now, now); err != nil {
+			return fmt.Errorf("event artifact service: refresh reused artifact: %w", err)
 		}
 		return nil
 	}

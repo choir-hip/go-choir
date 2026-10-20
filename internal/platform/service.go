@@ -46,7 +46,10 @@ type Service struct {
 	artifactGCPolicy   *ArtifactGCConfig
 	// artifactGCBeforeUnlink is a test hook run before each locked unlink.
 	artifactGCBeforeUnlink func(rel string)
-	graphStore             *PublicationGraphStore // graph-native dual-write target
+	// tapeSweep is the tape sweep's run lock, policy, registry and jobs
+	// (tape_sweep.go).
+	tapeSweep  tapeSweepState
+	graphStore *PublicationGraphStore // graph-native dual-write target
 	// captureBodies reads cited captures' blocks at publish, to pin them.
 	captureBodies *CaptureBodyStore
 	// overlay supplies the live check overlay served beside a version.

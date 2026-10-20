@@ -16,6 +16,9 @@ func (s *EventArtifactService) EventsPage(ctx context.Context, computerID string
 	if s == nil || s.platform == nil || s.platform.store == nil || computerID == "" {
 		return nil, fmt.Errorf("event replay: service and computer are required")
 	}
+	if err := s.platform.store.refuseTombstonedTape(ctx, computerID); err != nil {
+		return nil, fmt.Errorf("event replay: %w", err)
+	}
 	if pageSize <= 0 || pageSize > computerevent.EventReplayMaxPageSize {
 		return nil, fmt.Errorf("event replay: page size %d exceeds maximum %d", pageSize, computerevent.EventReplayMaxPageSize)
 	}
