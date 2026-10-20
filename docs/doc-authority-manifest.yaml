@@ -712,6 +712,15 @@ documents:
     witnesses: [docs/mission-graph.yaml, docs/ACTIVE.md]
     refresh_triggers: [mission_state_change, owner_ratification_change, deployed_acceptance]
 
+  - path: docs/definitions/choir-lp-s6-commit-gate-2026-10-20.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: definition, authority: mission, lifecycle: living, entrypoint: false}
+    depends_on: [docs/choir-doctrine.md, docs/definitions/choir-ledger-metamission-2026-10-13.md, docs/definitions/choir-appdev-s6-commit-gate-full-release-2026-10-01.md, docs/reports/selfdev-update-architecture-2026-10-15.md]
+    witnesses: [docs/mission-graph.yaml, docs/ACTIVE.md, docs/reports/owner-notes-2026-10-14.md]
+    refresh_triggers: [mission_state_change, owner_ratification_change, deployed_acceptance]
+
   - path: docs/definitions/choir-ledger-lu-guest-updates-2026-10-14.md
     claim_scope: current
     is_root: []

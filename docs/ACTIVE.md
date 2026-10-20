@@ -8,6 +8,31 @@ Sequencing lives here and in
 throughline (`skills/throughline/SKILL.md`). Direction:
 [`reports/choir-state-and-vision-2026-10-14.md`](reports/choir-state-and-vision-2026-10-14.md).
 
+## Active station (2026-10-20): LP S6, the commit gate
+
+**Goal:** [`definitions/choir-lp-s6-commit-gate-2026-10-20.md`](definitions/choir-lp-s6-commit-gate-2026-10-20.md)
+(`/goal` file, `readiness: drafted`, authoring-gate panel pending). Under the
+[ledger metamission](definitions/choir-ledger-metamission-2026-10-13.md), station LP.
+
+**Priority change (owner, 2026-10-20, [owner notes §28](reports/owner-notes-2026-10-14.md)):**
+"yes, we should do the missions in order through app packages as recommended."
+Order: S6 (what runs is what was approved), then S7-0 (every first-party app
+becomes a package) with a frontend self-development drill on one rewrite
+candidate in parallel, then rewrites of the weaker apps (not mail, settings,
+autopaper or texture), one package at a time. This moves LP ahead of the
+2026-10-14 order (efficiency, Autopaper scaling, then LP) and relaxes LP's edge
+to L2a, LR and LU: S6 needs none of them. The foundations list and the
+Autopaper work below continue alongside; nothing below is superseded.
+
+**First slice:** S6-0, a release witness that joins decision, bundle, test
+result, host-build digests, applied release and heads, and names each join as
+compared at the gate or only recorded; proven by the go-served tracer drill on
+staging. **Open for the owner (defaults in force):** whether a failing declared
+test refuses the owner's own approval; whether to approve the closure or the
+patch. Reading: [selfdev update architecture](reports/selfdev-update-architecture-2026-10-15.md),
+the [S6 station definition](definitions/choir-appdev-s6-commit-gate-full-release-2026-10-01.md),
+and the S7 definition for what follows.
+
 ## Foundations push (2026-10-14 evening → 10-15 15:00; owner: deepen foundations)
 
 Live today: LF0/LF1 front page, S2a+S2b management tasks, artifact GC,
