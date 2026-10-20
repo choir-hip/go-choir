@@ -326,6 +326,15 @@ let
     quotaGiB = 450; # must match the node-a module's quotaGiB
     uploadLimitKiB = 25000; # about 200 Mbit/s; 0 = unlimited
     minFreeGiB = 40; # disk guard: Dolt backup copies and image clones need room
+    # Guest data.img images in the nightly run: the paper and the owner
+    # computer only. A computer rebuilds from its tape by design; an image
+    # is a recovery-time hedge, and the tracers' test computers need none
+    # (docs/problems/no-off-host-backup-2026-10-20.md section 13 item 10).
+    # Empty = every image.
+    imageComputers = [
+      "computer-1355b83bced1613eb048ee28d66688a8" # the paper computer
+      "computer-03335285269bdba4f94377e56879f9e6" # the owner computer
+    ];
     # Does not exist yet. The unit fails to start (loudly) while any file
     # below is missing; that is the intended state until the owner runs keygen.
     secretsDir = "/var/lib/go-choir/secrets/offhost-backup";
@@ -346,6 +355,7 @@ let
     "OFFHOST_QUOTA_GIB=${toString offHostBackup.quotaGiB}"
     "OFFHOST_UPLOAD_LIMIT_KIB=${toString offHostBackup.uploadLimitKiB}"
     "OFFHOST_MIN_FREE_GIB=${toString offHostBackup.minFreeGiB}"
+    "OFFHOST_IMAGE_COMPUTERS=${lib.concatStringsSep "," offHostBackup.imageComputers}"
   ];
   offHostBackupCredentials = [
     "restic-password:${offHostBackup.secretsDir}/restic-password"

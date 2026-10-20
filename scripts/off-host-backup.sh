@@ -34,6 +34,12 @@ SECRETS_DIR="${OFFHOST_SECRETS_DIR:-$ROOT/secrets/offhost-backup}"
 DOLT_ROOT_PW_FILE="${OFFHOST_DOLT_ROOT_PASSWORD_FILE:-$ROOT/secrets/dolt-root-password}"
 ART="$ROOT/platform-artifacts"
 VM_STATE="$ROOT/vm-state"
+# Computers whose guest data.img is cloned into the run, comma or space
+# separated (the unit passes commas: systemd splits Environment= on spaces).
+# Empty: every image. A computer rebuilds from its tape by design, so
+# images are a recovery-time hedge for the computers that matter, not the
+# tracers' test computers (problem record section 13 item 10).
+IMAGE_COMPUTERS="${OFFHOST_IMAGE_COMPUTERS:-}"; IMAGE_COMPUTERS="${IMAGE_COMPUTERS//,/ }"
 
 NODE_A_HOST="${OFFHOST_HOST:-}"
 NODE_A_SSH_PORT="${OFFHOST_SSH_PORT:-22}"
@@ -129,6 +135,34 @@ resolve_paths() {
   add_path "$STAGING" optional # sqlite copies, reflink image clones, manifest
 }
 
+# ---- guest images ------------------------------------------------------
+IMAGES=()
+IMAGE_MISSING=()
+IMAGE_ERR=""
+select_images() { # fills IMAGES (data.img paths), IMAGE_MISSING, IMAGE_ERR
+  IMAGES=(); IMAGE_MISSING=(); IMAGE_ERR=""
+  local src c vm found vms
+  if [ -z "$IMAGE_COMPUTERS" ]; then
+    for src in "$VM_STATE"/*/data.img; do [ -f "$src" ] && IMAGES+=("$src"); done
+    return 0
+  fi
+  if ! vms="$(jq -r '.ownerships[] | [.computer_id, .vm_id] | @tsv' "$VM_STATE/ownerships.json" 2>/dev/null)"; then
+    IMAGE_ERR="$VM_STATE/ownerships.json is unreadable; no guest image selected"
+    for c in $IMAGE_COMPUTERS; do IMAGE_MISSING+=("$c"); done
+    return 1
+  fi
+  for c in $IMAGE_COMPUTERS; do
+    found=0
+    while IFS=$'\t' read -r cid vm; do
+      [ "$cid" = "$c" ] || continue
+      case "$vm" in ""|*/*|.*) continue ;; esac
+      [ -f "$VM_STATE/$vm/data.img" ] && { IMAGES+=("$VM_STATE/$vm/data.img"); found=1; }
+    done <<<"$vms"
+    [ "$found" = 1 ] || IMAGE_MISSING+=("$c")
+  done
+  [ "${#IMAGE_MISSING[@]}" = 0 ]
+}
+
 # ---- the tunnel and restic environment ---------------------------------
 CTL=""
 tunnel_up() {
@@ -216,8 +250,11 @@ stage() {
   # Reflink clones are atomic per file: a crash-consistent image. They pin
   # copy-on-write extents while they exist; the EXIT trap removes them.
   rm -rf "$STAGING/vm-images"; install -d -m 0700 "$STAGING/vm-images"
-  for src in "$VM_STATE"/*/data.img; do
-    [ -f "$src" ] || continue
+  if ! select_images; then
+    [ -n "$IMAGE_ERR" ] && err "$IMAGE_ERR"
+    err "guest image missing for: ${IMAGE_MISSING[*]}"; ok=1
+  fi
+  for src in "${IMAGES[@]}"; do
     local id; id="$(basename "$(dirname "$src")")"
     install -d -m 0700 "$STAGING/vm-images/$id"
     if ! cp --reflink=always "$src" "$STAGING/vm-images/$id/data.img" 2>/dev/null; then
@@ -244,11 +281,18 @@ disk_guard() {
 
 # ---- subcommands -------------------------------------------------------
 cmd_plan() {
+  [ -z "$IMAGE_COMPUTERS" ] || need jq || return
+  local rc=0
   resolve_paths
   echo "would back up:"; printf '  %s\n' "${PATHS[@]}"
   echo "excluded:";      printf '  %s\n' "${EXCLUDES[@]}"
   echo "absent:";        printf '  %s\n' "${SKIPPED[@]:-}"
+  select_images || rc=3
+  echo "guest images: ${IMAGE_COMPUTERS:-every computer}"; printf '  %s\n' "${IMAGES[@]:-}"
+  echo "missing images:"; printf '  %s\n' "${IMAGE_MISSING[@]:-}"
+  [ -z "$IMAGE_ERR" ] || echo "$IMAGE_ERR"
   [ "$REQUIRED_MISSING" = 0 ] || { echo "a required path is absent"; return 3; }
+  return "$rc"
 }
 
 cmd_backup() {
