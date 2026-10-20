@@ -302,3 +302,35 @@ from the local archive the sweep writes first. Protected surfaces:
    - replay of the two live computers still pages;
    - a tombstoned computer's replay returns `computer tape archived/deleted`.
 6. Then run a metadata balance (`btrfs balance -musage=...`).
+
+## Dry-run receipt (2026-10-20 05:16–05:51 UTC, on 4128cb16f)
+
+Run `ts-20261020T051653Z-fd085f79`, `accept_unrecorded_fork_lineage=true`,
+manifest sha256 `ebac0efd51ba761d5322a2dcbf9468908f0b6266e5b53f7b474270d8ed903384`
+(`/var/lib/go-choir/platform-artifacts/artifact-gc-log/tape-sweep-ts-20261020T051653Z-fd085f79.manifest.jsonl`).
+Two earlier dry runs (02:16, 03:45) were killed by corpusd restarts during
+deploys; this one ran on a quiet host and took 34 minutes.
+
+- Walked 228 computers, 2,300,908 chain events, through the tape-segment
+  reader landed in 4128cb16f (stage A1), with no read error.
+- **Destroyed:** 162 computers listed and deletable, 763,610 files,
+  2,301,811,887 bytes; 0 blocked by fork lineage. Fewer than the 224 /
+  1.24M / 2.7 GB estimate above: the estimate counted tape directories
+  without ownership, the sweep lists only computers that pass every check.
+- **Manifest review.** Every proof has `ownership_lookup=not_found`, not in
+  the registry list, no route, quiet; the newest head is 2026-10-13 04:58
+  UTC. None of the 162 ids appears in the vmctl list (151 computers), and
+  the paper's computer is not among them. 11 proofs carry
+  `shared_payloads_kept`.
+- **Orphans refused.** "append receipts (2304539) do not match the
+  head-bounded chains (2300908)": 3,631 more receipts than chain events.
+  The check fails closed as designed (failure mode 4). Hypothesis, not
+  confirmed: receipts appended by live computers after the walk took
+  their heads. A second hypothesis is receipts above heads that a
+  rewind left behind. The orphan sweep stays unapplied until the count
+  is explained.
+
+Next: `PLATFORM_TAPE_SWEEP_MODE=active` (owner §26: "Destroyed computer
+tapes can be deleted"), then apply this run id and manifest hash. Apply
+re-proves each computer, tombstones it, archives its files to
+`tape-sweep-archive/` and verifies the archive before any unlink.
