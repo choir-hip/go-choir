@@ -538,3 +538,33 @@ Given by the owner before sleep. Quotes are the owner's words.
   and intelligently and courageously." The owner returns in the morning
   to drive. Credential and authority choices (the witness (b) signing
   key, the off-host backup target) still wait for them.
+
+## 26. Tape surgery approved; compaction scheduled (2026-10-20, ~00:40 UTC)
+
+After the Opus review (docs/reports/tape-volume-forward-fix-and-surgery-
+2026-10-19.md) and the paper's history compaction:
+
+- **Safe tape surgery is approved.** "I approve safe tape surgery. We can
+  bend the rules of immutability now. No external users yet. Still
+  pre-launch." This covers repacking existing tape files into per-computer
+  segments with identical bytes and digests, and it relaxes the standing
+  "never edit the tape" rule for the pre-launch reclamation below. Rewriting
+  or squashing a live chain stays out: the review found it unsafe, not
+  merely forbidden.
+- **Destroyed computers' tapes can be deleted.** "Destroyed computer tapes
+  can be deleted."
+- **Orphan pin receipts can be deleted.** "Orphan receipts too can be
+  deleted I think." (receipts for appends that never reached a chain; the
+  review's one-day grace still applies, so in-flight appends are not
+  swept.)
+- **Schedule the compaction.** "Yes schedule compaction." The paper's
+  history compaction (bounded `projection-compact`, a short hold) runs on a
+  schedule.
+- **Otherwise the recommendations stand.** "Otherwise I'll go with your
+  recommendations." From the review: the forward fix is the segment store
+  staged A0 (measure, the appender leak fix already landed), A1 (segment
+  reads with legacy fallback), A2 (segment writes behind a flag), A3
+  (group commit only if measured worthwhile); old projection payloads
+  below the oldest retained base are archived, not deleted, until a target
+  exists. Deletion still runs dry-run first, against a manifest, with a
+  short local archive where the bytes are small.
