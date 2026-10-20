@@ -75,7 +75,7 @@ func (p *RSSPoller) Poll(ctx context.Context, source *Source) (PollResult, error
 		return PollResult{Fetch: fetch}, nil
 	}
 
-	body, readErr := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	body, readErr := io.ReadAll(io.LimitReader(resp.Body, int64(source.EffectiveMaxBodyBytes())))
 	if readErr != nil {
 		fetch = FinishFetch(fetch, resp.StatusCode, nil, readErr)
 		return PollResult{Fetch: fetch}, fmt.Errorf("read response: %w", readErr)

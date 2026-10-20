@@ -35,21 +35,29 @@ type Source struct {
 	Tier                string     `json:"tier,omitempty"`
 	PollIntervalSeconds int        `json:"poll_interval_seconds"`
 	MaxItemsPerPoll     int        `json:"max_items_per_poll,omitempty"`
-	RateLimit           string     `json:"rate_limit,omitempty"`
-	ConditionalMode     string     `json:"conditional_request_mode,omitempty"`
-	UserAgent           string     `json:"user_agent,omitempty"`
-	TOSClass            string     `json:"tos_class,omitempty"`
-	RobotsPolicy        string     `json:"robots_policy,omitempty"`
-	AuthPolicy          string     `json:"auth_policy,omitempty"`
-	StoreBodyPolicy     string     `json:"store_body_policy,omitempty"`
-	RetentionDays       int        `json:"retention_days,omitempty"`
-	Official            bool       `json:"official,omitempty"`
-	SourceStanding      string     `json:"source_standing,omitempty"`
-	Status              string     `json:"status,omitempty"`
-	LastPolled          time.Time  `json:"last_polled,omitempty"`
-	LastETag            string     `json:"last_etag,omitempty"`
-	LastModified        string     `json:"last_modified,omitempty"`
-	LastAuxCursor       string     `json:"last_aux_cursor,omitempty"`
+	// MaxBodyBytes is the most of a feed response the RSS poller reads.
+	// Zero or negative is DefaultMaxFeedBodyBytes; a value above
+	// MaxFeedBodyBytesCeiling is clamped to it.
+	MaxBodyBytes    int    `json:"max_body_bytes,omitempty"`
+	RateLimit       string `json:"rate_limit,omitempty"`
+	ConditionalMode string `json:"conditional_request_mode,omitempty"`
+	UserAgent       string `json:"user_agent,omitempty"`
+	TOSClass        string `json:"tos_class,omitempty"`
+	RobotsPolicy    string `json:"robots_policy,omitempty"`
+	AuthPolicy      string `json:"auth_policy,omitempty"`
+	StoreBodyPolicy string `json:"store_body_policy,omitempty"`
+	RetentionDays   int    `json:"retention_days,omitempty"`
+	// License is the licence the source's content is published under, from
+	// the licence check each primary-source row passes before it is added
+	// (docs/problems/primary-source-registry-wave-1-2026-10-20.md).
+	License        string    `json:"license,omitempty"`
+	Official       bool      `json:"official,omitempty"`
+	SourceStanding string    `json:"source_standing,omitempty"`
+	Status         string    `json:"status,omitempty"`
+	LastPolled     time.Time `json:"last_polled,omitempty"`
+	LastETag       string    `json:"last_etag,omitempty"`
+	LastModified   string    `json:"last_modified,omitempty"`
+	LastAuxCursor  string    `json:"last_aux_cursor,omitempty"`
 }
 
 func (s Source) AllowsConditionalGET() bool {
@@ -58,6 +66,27 @@ func (s Source) AllowsConditionalGET() bool {
 		return false
 	default:
 		return true
+	}
+}
+
+const (
+	// DefaultMaxFeedBodyBytes is the feed read limit of a source that sets
+	// none.
+	DefaultMaxFeedBodyBytes = 2 << 20
+	// MaxFeedBodyBytesCeiling bounds what a registry row may ask for, so no
+	// row can make the poller buffer an unbounded body.
+	MaxFeedBodyBytesCeiling = 8 << 20
+)
+
+// EffectiveMaxBodyBytes is the most of a feed response the poller reads.
+func (s Source) EffectiveMaxBodyBytes() int {
+	switch {
+	case s.MaxBodyBytes <= 0:
+		return DefaultMaxFeedBodyBytes
+	case s.MaxBodyBytes > MaxFeedBodyBytesCeiling:
+		return MaxFeedBodyBytesCeiling
+	default:
+		return s.MaxBodyBytes
 	}
 }
 
