@@ -428,12 +428,17 @@ boundaries:
   pace: inherits the re-engineering metamission's pace rules (claim-directed tracer scenarios, identity fence, batched pushes, nothing pushed while a run is in flight)
   review_loops: inherits the re-engineering metamission's review loops; each `intent` station is authored, then reviewed by a convergent panel, before it becomes executable
 
-owner_decisions_open:
-  - cost amendment text and any kill-switch level
-  - Telegram given its 2026-02 terms; whether Autopaper is commercial (CNA, UDN terms)
-  - Taiwan and East Asia as the first vertical (default yes)
-  - Autoradio follows L2-L4 unless pulled forward
-  - restart schedules policy (design §3.4; option B is the adjudicated default pending ratification)
+# Decided; none is open (checked 2026-10-20). The five items listed here until
+# then were answered on 2026-10-14 (docs/reports/owner-roadmap-rulings-2026-10-14.md,
+# see decision.owner_ratification_ref below): spend tracked and never capped (no
+# kill switch), Autopaper commercial (CNA and UDN stay out), Taiwan first behind
+# vertical zero, Autoradio after the architecture work, schedules option B. The
+# 2026-10-20 decisions digest was answered the same day: owner notes
+# docs/reports/owner-notes-2026-10-14.md section 27. Still the owner's, as
+# actions rather than decisions: the Telegram MTProto account setup (Telegram's
+# terms are read when that station opens) and the account-recovery launch
+# blocker (section 27 item 13).
+owner_decisions_open: []
 
 now:
   # This spine is reviewed; owner ratification (decision below) and the open
@@ -468,6 +473,10 @@ now:
     - the pool split (moot while luna-only);
     - the witness key, the off-host backup target, and the yaegi
       upstream report.
+    All five were answered on 2026-10-20 (owner notes §27: event definition,
+    item 8; evidence-store growth, §26 and items 1 and 17; witness key,
+    item 9; off-host backup, item 17; yaegi report, item 5; the pool split
+    stays moot). Read §27, not this list.
   source_ref: 85a9f5742
   deploy_identity: staging 85a9f5742 (deployed 23:27:53 UTC)
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
