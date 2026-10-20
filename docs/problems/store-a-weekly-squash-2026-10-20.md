@@ -1,6 +1,6 @@
 # Store A (the platform Dolt) keeps every commit; a weekly squash with a backup first (2026-10-20)
 
-Status: designed, not built. Class: red (Store A is the platform's canonical
+Status: built, not deployed, timer disabled. Class: red (Store A is the platform's canonical
 event and control database, the vmctl route database and the checkpoint
 source; a squash cannot be undone, and the store is stopped for it).
 Owner rulings: [notes 2026-10-14](../reports/owner-notes-2026-10-14.md) §23
@@ -180,4 +180,159 @@ adds the unit). The script never restarts vmctl (a restart detaches guests).
 
 ## Design details added after the build
 
-(Appended below by the build commits.)
+What was built (nothing is deployed or enabled):
+
+- `internal/projectionbase/squash.go`: `SquashAndGC`, the shared method. The
+  guest compaction (`CompactWorkspaceWith`, used by `projection-compact` and
+  vmctl's sweep) now calls it. Two behaviour changes for the guest path, both
+  stricter: the root commit is found by topology, and the squash is refused
+  before the GC when the squashed HEAD root differs from the recorded root.
+- `cmd/platform-dolt-squash`: the command. Exit 0 squashed, 3 refused before
+  any change, 1 anything else. It prints one JSON report line (both roots,
+  commit counts, seconds).
+- `scripts/platform-dolt-squash.sh` (+ `scripts/test-platform-dolt-squash.sh`):
+  stop, backup, run, restore on failure, start, query check, prune.
+- `nix/node-b.nix`: `go-choir-platform-dolt-squash.service` (oneshot,
+  `MemoryMax=10G`, `MemorySwapMax=0`, `ExecStopPost=... --finish`) and the
+  `.timer` (`Sun 06:00 UTC`, `Persistent=false`), **disabled**:
+  `platformDoltSquashTimerEnabled = false` leaves `wantedBy` empty
+  (checked with `nix eval`: `wantedBy = []`). `flake.nix` packages
+  `platformDoltSquash`; `.github/scripts/deploy-impact-classify` treats the
+  command and script as host-OS-only.
+
+Findings during the build (local probes, dolt CLI 2.1.9 and the pinned
+embedded module):
+
+- **A sql-server makes an embedded open read-only.** With `dolt sql-server`
+  running on the repo, the embedded driver opens it and reads, but the first
+  write fails with "cannot update manifest: database is read only". So a
+  squash beside a live server fails closed even without the script. The
+  server also writes `.dolt/sql-server.info` and removes it on a clean stop;
+  `SquashAndGC` refuses on its presence (exit 3) with a message saying so.
+  FM7 is therefore two layers (script stops units; Dolt refuses writes).
+  Caveat: a server that died uncleanly leaves the file; the refusal then
+  needs `rm` by hand after confirming no server runs.
+- **The Node B layout works with the embedded driver.** `file://<parent>?
+  database=platform` over a parent holding the sql-server's global
+  `.dolt/config_global.json` and the repo in `<parent>/platform`, created by
+  the CLI's `dolt init`, as `platform-dolt-init` does.
+- **Refs and ignore:** `dolt_tags`, `dolt_remotes`, `dolt_stashes` exist and are
+  checked. With a `dolt_ignore`d table `dolt_hashof_db('HEAD')` differs from
+  `'WORKING'` (checked with the CLI), which the pre-GC root check catches.
+- The squash's `-A` commit is the only write before the GC; everything else is
+  a read.
+
+### Scope and what the checks do not cover
+
+The root hash proves schemas and rows are identical. It does not prove: that
+`dolt gc --full` produced a store the server binary (2.1.9 or 2.4.2) reads
+(archive level 0 writes plain table files, which every version reads; the
+first run ends with the real server answering a query, then `dolt fsck`); that
+Dolt's server-only state is intact (users and grants live in
+`.doltcfg/privileges.db` beside the repo, untouched by the squash; the
+post-start query check logs in as the app user, so a lost grant would show).
+
+### Expected downtime and space
+
+- Estimate, by analogy (unmeasured on Store A): the paper's 52 GB, 13.7k-commit
+  store took 11 minutes end to end (squash, GC, verify) at a 6 to 10 GB peak.
+  Store A is smaller in bytes (about 25 GB at 10-15, +1.6 GB/day, so
+  roughly 30 to 35 GB now) but has about 100k commits, which the soft reset
+  and commit handle in seconds. Expect **10 to 25 minutes of Store A down**:
+  stop (<= 20 s), reflink backup (seconds), squash and GC (5 to 20 min), start
+  and query check (< 1 min). Abort and investigate past 45 minutes; the hard
+  bound is `TimeoutStartSec=2h`.
+- What stops with it: Dolt, `go-choir-corpusd` (Requires=), the checkpointd and
+  history-audit oneshots and their timers. corpusd down means the platform
+  API behind it, source ingestion, publishing and the paper's corpusd calls
+  pause; the front page keeps serving what is stored. vmctl and the guests
+  keep running (hypothesis above).
+- Space: the backup is a reflink, so free space is needed only for the GC's new
+  files (about the live size, a few GB to 10 GB) while the old extents stay
+  pinned by the backup until the next run replaces it. Preflight refuses below
+  max(10 GiB, half the store).
+
+### Supervised first run on Node B (operator commands)
+
+The timer stays off until this has been watched once end to end.
+
+1. Preconditions. CI has deployed this commit (`systemctl cat
+   go-choir-platform-dolt-squash.service` shows the unit); no deploy is in
+   flight; the paper is not mid-publish (check `/health` and recent runs);
+   `df -h /var/lib/go-choir` shows well over 30 GiB free; `btrfs filesystem
+   usage /var/lib/go-choir` shows unallocated space (a CoW GC allocates);
+   `ls -d /var/lib/go-choir/platform-dolt.squash-failed-*` is empty; the
+   liveness probe is running (`systemctl list-timers go-choir-dolt-liveness-probe`).
+2. Baseline, read-only (record the output):
+   `cd /var/lib/go-choir/platform-dolt/platform && HOME=/var/lib/go-choir/platform-dolt
+   dolt sql -q "select count(*) from dolt_log; select count(*) from
+   dolt_branches; select count(*) from dolt_tags; select count(*) from
+   dolt_remotes; select count(*) from dolt_stashes"`, and `du -sh
+   /var/lib/go-choir/platform-dolt`. Expect 1 branch and no tags, remotes or
+   stashes; if not, the run will refuse (exit 3) and nothing changes.
+3. In a second terminal start the watchers: `journalctl -fu
+   go-choir-platform-dolt-squash`, `journalctl -fu go-choir-vmctl`, and
+   `watch -n5 'systemctl show -p MemoryCurrent -p MemoryPeak
+   go-choir-platform-dolt-squash.service; curl -s -m3 http://127.0.0.1:8086/health'`.
+4. Run it, in the foreground: `sudo systemctl start
+   go-choir-platform-dolt-squash.service` (blocks until the oneshot ends).
+5. Abort, if needed: `sudo systemctl stop go-choir-platform-dolt-squash.service`.
+   SIGTERM cancels the command; the script's exit trap and `ExecStopPost`
+   restore the backup (if the squash had started), start Dolt, its dependents
+   and the timers, and clear the state.
+6. Verify success: unit result `success`; `cat
+   /var/lib/go-choir/platform-dolt-squash-backups/last-run.json` shows
+   `"squashed":true`, `root_before` equal to `root_after`, `commits_after`
+   1 or 2; the journal ends "done; newest backup kept at ..."; `systemctl
+   is-active go-choir-platform-dolt go-choir-corpusd`; the baseline query again
+   (commits 1 or 2, same branch count); `du -sh` smaller; `curl -s
+   https://choir.news/health`; the liveness probe journal clean; vmctl did not
+   restart (`systemctl show -p NRestarts go-choir-vmctl`) and the paper
+   publishes within 30 minutes. Record vmctl's journal lines during the
+   window: they settle the open hypothesis.
+7. Soak a day, then (owner call) delete `/var/lib/go-choir/dolt-backup-20261015-pre-2.4.2`
+   and, after the next run, nothing else needs deleting: the run keeps only the
+   newest backup. Run `dolt fsck` on a reflink copy of the new store under a
+   `systemd-run -p MemoryMax=8G` cap (1,348 s last time) to settle the
+   version-skew risk.
+8. Enable the weekly timer: set `platformDoltSquashTimerEnabled = true` in
+   `nix/node-b.nix`, push, deploy.
+
+### Rollback
+
+- During the run: step 5 above, or automatically on any failure after the
+  squash began (the failed store is kept as
+  `/var/lib/go-choir/platform-dolt.squash-failed-<ts>`; the next run refuses
+  until it is removed by hand, so evidence is never overwritten).
+- After a run that looked fine but is wrong: `systemctl stop
+  go-choir-corpusd go-choir-platform-dolt`; `mv /var/lib/go-choir/platform-dolt
+  /var/lib/go-choir/platform-dolt.bad`; `cp -a --reflink=always
+  /var/lib/go-choir/platform-dolt-squash-backups/platform-dolt.<ts>
+  /var/lib/go-choir/platform-dolt`; `systemctl start go-choir-platform-dolt
+  go-choir-corpusd`. The backup is the pre-squash store as of the stop.
+  Nothing writes Store A while it is stopped, so restoring within the same
+  window loses nothing; once services have run on the squashed store, a
+  restore drops every write made since.
+- Code rollback: revert the commits; the guest compaction goes back to its
+  previous implementation. The timer is disabled, so nothing runs by itself.
+
+### Residual risks
+
+- Embedded module and server binary versions differ (FM9); archive level 0 and
+  a post-start query plus `dolt fsck` are the mitigations, not a proof.
+- vmctl's behaviour with Store A down for 10 to 25 minutes is unverified.
+- A stale `.dolt/sql-server.info` after an unclean Dolt death blocks the run
+  (fail closed).
+- The first GC on a store with years of archives is unmeasured; if memory
+  exceeds the cap the run fails, the backup is restored, and the store is
+  as before (cost: one outage).
+- Power loss or a host reboot mid-run: Dolt may start at boot against a
+  half-squashed store (Dolt's manifest swaps are atomic, so the store is
+  consistent but unverified); the state file remains and the next run refuses
+  until `platform-dolt-squash.sh --finish` has restored or cleared it.
+- Backup pins pre-squash blocks until the next run: the host's btrfs
+  headroom (see the 10-19 host-space notes) should be watched after the run.
+- Deploying this commit restarts the services the classifier maps from
+  `internal/projectionbase` (checkpointd, corpusd, gateway, proxy,
+  autoputer, vmctl) and, with `nix/node-b.nix`, activates the host OS: an
+  ordinary deploy, subject to the Landing Loop and the busy-computer rules.
