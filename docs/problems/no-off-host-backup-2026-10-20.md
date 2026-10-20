@@ -589,4 +589,39 @@ with this. either edit node-a or the mike repo").
     proven by a supervised unit run before the 02:30 timer, watching
     Store A's memory pressure and the probe. Longer term: a filesystem
     snapshot of the Dolt data directory instead of a server-side sync
-    (no server work at all); not designed yet.
+    (no server work at all).
+16. **The long-term fix, now (owner, 2026-10-20: "lets do the longterm
+    now").** Capture each Dolt store as a read-only btrfs snapshot of its
+    server's data directory, and let restic read the snapshot.
+    - Why it is safe: a btrfs snapshot is atomic across the subvolume, so
+      the copy is what a power cut at that instant would leave, which
+      Dolt's chunk journal is built to recover. A file-by-file copy (even
+      reflinks) is not: the manifest and the table files could come from
+      different moments, so it is never used.
+    - What it removes: the server-side `DOLT_BACKUP` (the incident of
+      item 15, and run 2's 36 minutes), the memory raise of 43b5bc034,
+      and the standing `.choir-backup` copies (34.5 GB) once a restore
+      drill has passed on the new path.
+    - Precondition: the data directory is its own subvolume. Today
+      neither is (both live in `@`). The servers' working directories:
+      Store A `platform-dolt/platform`, Store B `corpus-dolt` (which also
+      holds its `.choir-backup`; the snapshot's copy of it is excluded).
+    - One-time migration per store (`scripts/dolt-data-to-subvolume.sh`):
+      record the head, `systemctl stop` the server (which also stops the
+      units that `Require` it: corpusd, checkpointd and the history audit
+      for Store A; corpusd for Store B; vmctl only `Wants` Store A and is
+      not stopped), `btrfs subvolume create`, `cp -a --reflink=always`
+      (metadata only), swap the directories, start the server and its
+      dependents, and compare the head. The old directory is kept as
+      `<dir>.pre-subvolume-<time>` until the drill passes. Downtime:
+      the stop, the copy (seconds) and Dolt's start.
+    - The backup script takes the snapshot path when the directory is a
+      subvolume and falls back to the sync (with the memory raise)
+      otherwise, so it is safe before, during and after the migration.
+      Snapshots live at fixed paths under `staging/dolt/` (so restic
+      matches unchanged files with the previous run) and are deleted at
+      exit, and before a new one is taken.
+    - To prove: a supervised run on the snapshot path with Store A's
+      memory pressure watched; a restore drill that starts `dolt
+      sql-server` on the restored copy on a side port and reads the head
+      the run recorded.
