@@ -37,6 +37,10 @@ package platform
 //     cited captures (the publish-path proof), even past the fan-out cap.
 //  W13 The permalink of an old version answers a different list than the
 //     bare link: both show the story's current list.
+//  W14 A live page (a live blog: many subjects under one URL, each
+//     recapture a different set of entries) links the stories that cite
+//     it, by exact capture or by recapture (staging, 2026-10-20: one
+//     Guardian live blog meshed five unrelated stories).
 
 import (
 	"context"
@@ -529,5 +533,55 @@ func TestRelatedRouteIsInternalGetOnlyAndAlwaysAList(t *testing.T) { // W11
 	unknown := call(http.MethodGet, true, "/internal/platform/publications/related?route=/pub/texture/nope-abc")
 	if unknown.Code != http.StatusOK || !strings.Contains(unknown.Body.String(), `"links":[]`) {
 		t.Fatalf("unknown route = %d %s, want 200 with links []", unknown.Code, unknown.Body.String())
+	}
+}
+
+func TestRelatedLivePageGivesNoVote(t *testing.T) { // W14
+	l := newRealisticLab(t)
+	const blog = "https://www.theguardian.com/us-news/live/2026/oct/19/trump-kansas-golf-ukraine-latest-news-updates"
+	live1 := l.capture(blog+"?page=1", blog, "Live: Kansas rally, golf course case, Ukraine")
+	live2 := l.capture(blog+"?page=2", blog, "Live: later entries on the midterms")
+	a := l.publish("doc-a", 1, "Kansas rally", live1)
+	l.publish("doc-b", 1, "Golf course judge", live2)
+	l.publish("doc-c", 1, "Approval poll", live1)
+	if got := l.related(a.RoutePath); len(got.Links) != 0 {
+		t.Fatalf("A links = %+v, want none: a live page links nothing, by exact capture or recapture", relatedRoutes(got))
+	}
+
+	// An ordinary page shared alongside still links.
+	shared := l.capture("https://dw.example/kansas", "https://dw.example/kansas", "The Kansas Senate race")
+	d := l.publish("doc-d", 1, "Senate race", live1, shared)
+	l.publish("doc-e", 1, "Kansas rally follow-up", shared)
+	got := l.related(d.RoutePath)
+	if len(got.Links) != 1 || got.Links[0].Title != "Kansas rally follow-up" || got.Links[0].Shared.Sources != 1 {
+		t.Fatalf("D links = %+v, want the ordinary shared page only", got.Links)
+	}
+}
+
+func TestIsLivePageURL(t *testing.T) { // W14
+	for _, u := range []string{
+		"https://www.theguardian.com/us-news/live/2026/oct/19/x-latest-news-updates",
+		"https://www.bbc.com/news/live/c1234",
+		"https://edition.cnn.com/politics/live-news/trump-10-19-26",
+		"https://www.nytimes.com/live/2026/10/19/us/election",
+		"https://apnews.com/live/election-updates",
+		"https://example.com/world/liveblog/2026/10/19/ukraine",
+		"https://example.com/news/2026/10/19/ukraine-war-live-updates",
+	} {
+		if !isLivePageURL(u) {
+			t.Errorf("%s: not seen as a live page", u)
+		}
+	}
+	for _, u := range []string{
+		"",
+		"not a url",
+		"https://thehill.com/video-clips/6158911-watch-live-donald-trump-kansas-rally/",
+		"https://www.theguardian.com/us-news/2026/oct/18/trump-dc-golf-course-renovation",
+		"https://example.com/culture/live-music-returns-to-the-city",
+		"https://live.example.com/news/2026/10/19/story",
+	} {
+		if isLivePageURL(u) {
+			t.Errorf("%s: seen as a live page", u)
+		}
 	}
 }

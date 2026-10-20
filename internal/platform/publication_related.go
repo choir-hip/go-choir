@@ -33,6 +33,7 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"sort"
 	"strconv"
@@ -364,6 +365,7 @@ func rankRelated(self FrontStory, cands []relatedCandidate, now time.Time, t rel
 type captureKeyRow struct {
 	id, owner, computer  string
 	canonicalKey, urlKey string
+	url, canonicalURL    string
 }
 
 // sourceKeyOf is the identity of the page a capture is of. Captures with
@@ -381,6 +383,33 @@ func sourceKeyOf(r captureKeyRow) string {
 	return "capture|" + r.id
 }
 
+// isLivePageURL reports a live page: a live blog or rolling updates page,
+// many subjects under one URL, each recapture a different set of entries.
+// Sharing one says nothing about two stories' subject (staging,
+// 2026-10-20: one live blog meshed five unrelated stories), so it gives no
+// vote. It reads the path only: a "live" or "liveblog" segment, or a last
+// segment that names live updates.
+func isLivePageURL(raw string) bool {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Host == "" {
+		return false
+	}
+	segments := strings.Split(strings.Trim(strings.ToLower(u.Path), "/"), "/")
+	for _, seg := range segments {
+		switch seg {
+		case "live", "liveblog", "live-blog", "live-news", "live-updates":
+			return true
+		}
+	}
+	last := segments[len(segments)-1]
+	for _, marker := range []string{"live-updates", "liveblog", "live-blog"} {
+		if strings.Contains(last, marker) {
+			return true
+		}
+	}
+	return false
+}
+
 // captureKeyRows reads the keys of captures from the projection. It returns
 // nothing when the projection is not ready: the caller then treats each
 // capture as its own page.
@@ -395,7 +424,7 @@ func (s *Store) captureKeyRows(ctx context.Context, ids []string) (map[string]ca
 		marks = append(marks, "?")
 	}
 	rows, err := s.corpus().QueryContext(ctx,
-		`SELECT capture_id, owner_id, computer_id, canonical_key, url_key FROM `+captureIndexTable+` WHERE capture_id IN (`+strings.Join(marks, ",")+`)`, args...)
+		`SELECT capture_id, owner_id, computer_id, canonical_key, url_key, url, canonical_url FROM `+captureIndexTable+` WHERE capture_id IN (`+strings.Join(marks, ",")+`)`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -403,7 +432,7 @@ func (s *Store) captureKeyRows(ctx context.Context, ids []string) (map[string]ca
 	out := map[string]captureKeyRow{}
 	for rows.Next() {
 		var r captureKeyRow
-		if err := rows.Scan(&r.id, &r.owner, &r.computer, &r.canonicalKey, &r.urlKey); err != nil {
+		if err := rows.Scan(&r.id, &r.owner, &r.computer, &r.canonicalKey, &r.urlKey, &r.url, &r.canonicalURL); err != nil {
 			return nil, err
 		}
 		out[r.id] = r
@@ -445,6 +474,8 @@ type relatedGroup struct {
 	// owner, computer, column and key locate siblings; empty for a capture
 	// that is its own page.
 	owner, computer, column, key string
+	// live: the page is a live page (isLivePageURL); it gives no vote.
+	live bool
 }
 
 func (g *relatedGroup) add(id string) {
@@ -634,7 +665,7 @@ func (s *Service) relatedCandidates(ctx context.Context, og *ObjectGraphStore, s
 	}
 	tallies := map[string]*tally{}
 	for gi := range groups {
-		if hub[gi] {
+		if hub[gi] || groups[gi].live {
 			continue
 		}
 		// The stories whose latest version cites this source.
@@ -751,6 +782,7 @@ func (s *Service) relatedGroups(ctx context.Context, captures []string, t relate
 			groups = append(groups, g)
 		}
 		g.own[id] = true
+		g.live = g.live || isLivePageURL(row.url) || isLivePageURL(row.canonicalURL)
 		g.add(id)
 	}
 	for _, g := range groups {
