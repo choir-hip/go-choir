@@ -96,3 +96,141 @@ Mutation classes as above. Rollback: revert each commit.
   build) job starts after the frontend job ends (one job at a time). The
   prompts test pins that no recipe runs `npm ci` or `npm run build` through
   `choir.Exec`.
+
+## Fix design: a non-completed fate does not need a certifying receipt (action 2, red)
+
+Written before code. Mutation class: red (run acceptance and completion
+evidence).
+
+### The path today (read, not inferred)
+
+`Complete(result, ...)` on an assignment goes through
+`recordAssignedEngineeringReportOnce` (`internal/agentcore/engineering_assignment_fate.go`):
+a durable freeze intent with the staged proposal, `ExtractGranted` (the
+capsule is frozen), the frozen worktree digest, then
+`bindFrozenAssignmentExecutionReceipts` ->
+`capsule.Executor.ResolveGrantedExecutionReceipts`
+(`internal/capsule/executor.go`). That resolver:
+
+1. digests the whole frozen worktree (`digestCapsuleWorktree`);
+2. for each cited ref: opens the receipt, binds run, handle, capsule and
+   frozen source snapshot (`grantedExecutionBindReason`), mints and persists
+   a `capsule-granted-exec` receipt that states `FinalSubjectDigest` =
+   the frozen digest;
+3. after the loop, refuses unless the chronologically latest cited receipt's
+   own `WorktreeDigest` equals the frozen digest ("does not bind the final
+   frozen subject").
+
+The same resolver serves `choir.Freeze` (`tools_capsule.go`), where the
+check is the point: a freeze claims "this frozen tree was built and tested".
+It is applied to every terminal fate, including `blocked` and `failed`,
+which claim nothing about the subject. The visual drill's three timed-out
+build cells changed the worktree with no receipt, so the latest receipt
+(`b437b6e5…`) could never equal the frozen digest (`041e339e…`); the saga had
+already frozen the capsule durably, so every later cell was refused ("no
+longer executable") and the run ended only by restart.
+
+Zero receipts is not the trap: the caller returns early when the report
+cites no commands (`len(refs) == 0`), so `Complete("blocked")` citing nothing
+already records. The resolver's own "capsule execution evidence is required"
+is unreachable from the fate path and stays for a strict caller.
+
+### Design
+
+A resolver argument, `SubjectBinding`, chosen by the caller from the report's
+result and never by the model:
+
+- `certified` (default, the existing behavior): the latest cited receipt must
+  carry the frozen digest. Used by `choir.Freeze` and by `Complete` with
+  result `completed`. Any result that is not exactly `failed` or `blocked`
+  (including an unknown or empty one) is certified: the relaxed path is an
+  allow-list of two values.
+- `observed` (result `failed` or `blocked`): each cited receipt is still
+  bound to the run, handle, capsule and frozen source snapshot, and an
+  unknown or foreign ref still refuses (a false citation is not an honest
+  report). The frozen subject digest and the latest receipt's worktree digest
+  are recorded side by side and are not compared. The granted receipt
+  carries `subject_binding: "observed"` and `latest_receipt_worktree_digest`
+  (both `omitempty`, so every existing granted receipt keeps its digest).
+  The execution attestation carries `subject_binding: "observed"` and its
+  `worktree_digest` is the receipt's own observed tree rather than the
+  frozen one; `final_subject_digest` is still the frozen subject. The store
+  accepts `observed` only on a `failed` or `blocked` report, and a
+  `completed` report still requires `worktree_digest == final_subject_digest`
+  and no `subject_binding`.
+
+Zero receipts: kept as is. A blocked or failed Complete that cites no command
+records its fate; the resolver in `observed` mode returns an empty list for
+empty refs instead of "evidence is required". A cited-but-invalid ref still
+refuses, which is not an honest-failure trap because the desk can drop or fix
+the ref, and the refusal names the nearest issued ref (0a8c77cbc).
+
+### Failure modes
+
+1. A completed claim slips through the relaxed path. The mode is derived from
+   `report.Result`, which is in the proposition digest (`ComputeTerminalPropositionDigest`)
+   and hence in the report id and freeze intent, so a `blocked` proposal
+   cannot be replayed as `completed` (a different digest conflicts at the
+   slot gate and at the freeze-intent check). The relaxed path is an
+   allow-list of `failed` and `blocked`. The store re-checks the attestation
+   against the report's result, so a caller that passed the wrong mode still
+   cannot produce a `completed` report with an observed attestation.
+2. A blocked fate promoted or reused as evidence of a subject. A blocked or
+   failed report whose worktree differs from the binding subject already
+   records a content-addressed candidate (`PersistGrantedCandidate`), and the
+   reducer maps it to a failed assignment, never `completed`
+   (`reducerAssignmentOutcome`); `CertifiesOriginalSubject` requires a
+   completed verification. The new attestation says in its own field that no
+   receipt certifies the subject, so a reader that wants "a receipt
+   certified this tree" must see `subject_binding` empty. Management's Verify
+   still re-derives from a Freeze candidate (strict) and never from a
+   Complete-time freeze.
+3. Replay. Deterministic: the granted receipt ref and the attestation ref
+   are digests of the content, which now includes `subject_binding`, so the
+   same inputs give the same refs and a replay is idempotent. A `certified`
+   and an `observed` granted receipt of the same raw receipt are different
+   artifacts; `persistReceiptArtifact` refuses a same-ref different-content
+   write, and the refs differ, so neither overwrites the other.
+4. Crash restart. No new resumer. The pending proposal and the freeze intent
+   behave as today: a crash closes the open work at boot with the fate
+   "interrupted by a restart" and does not re-dispatch (CLAUDE.md, Restarts
+   End Work). The staged-proposal resume path (`resumeStrandedFrozenAssignmentCommit`,
+   planned-restart/watchdog) re-enters the same function with the stored
+   report, whose result is unchanged, so it picks the same mode.
+5. Freeze versus Complete. `choir.Freeze` stays `certified`, thaws the
+   capsule and leaves it live. A desk that froze, then wrote without a
+   receipt, then completes `completed` is refused as today; the same desk
+   completing `blocked` now records. The Freeze candidate is not touched.
+6. The overlay's terminal-fate retry loop. The loop was the overlay saying
+   "finish with blocked" while blocked was refused. With the fix a blocked
+   Complete binds. Residual, not fixed here: a refusal after the durable
+   freeze intent (a cited ref that does not bind) still strands the
+   capsule, because the intent is written before the refs are checked and a
+   retry with different refs is a different proposition. The correct fix is
+   a pre-flight of the cited refs (open and bind, no frozen state needed)
+   before the freeze intent. Named residual R1.
+
+### Red ceremony
+
+- Conjecture delta: before, "a terminal report is admissible only if the
+  latest cited receipt certifies the frozen tree"; after, "that is required
+  of a claim about the subject (completed, Freeze); a report that claims
+  failure needs only that its cited receipts are this run's, this handle's,
+  this capsule's".
+- Protected surfaces: run acceptance and completion evidence (the resolver,
+  the attestation schema and its store validation), the engineering terminal
+  saga. Not touched: Texture canonical writes, vmctl, auth, gateway,
+  checkpoint/route projection, deployment routing.
+- Admissible evidence: tests that build the visual drill's case
+  (receipts, a receipt-less mutation, then `blocked` binds and `completed`
+  is refused) in the capsule package and in the store; a staging drill
+  (action 4) is the acceptance proof.
+- Rollback: revert the commit. New JSON fields are `omitempty` and read by
+  nothing else; records written with `subject_binding: "observed"` become
+  unreadable to an older store only for attestation validation, and only on
+  failed or blocked reports.
+- Heresy delta: discovered, the completion-evidence check conflated a claim
+  about the subject with a report of failure (this section); introduced,
+  none expected; repaired, that conflation for `failed` and `blocked`.
+  Residual R1 (cited refs checked after the durable freeze intent) is
+  discovered and not repaired.
