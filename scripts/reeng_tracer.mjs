@@ -79,6 +79,7 @@ const arg = (name, dflt) => {
 };
 const flag = (name) => args.includes(`--${name}`);
 const LABEL = arg('label', '');
+const CRED_FILE = arg('cred', '');
 const ATTEMPTS = Math.max(1, Number(arg('attempts', '1')));
 const TIMEOUT_MIN = Number(arg('timeout-min', '15'));
 const SETTLE_MIN = Number(arg('settle-min', '3'));
@@ -252,6 +253,14 @@ function writePrivate(path, content) {
 }
 
 // ---- mint ----------------------------------------------------------------
+
+function reuseMinted(path) {
+  const cred = JSON.parse(readFileSync(path, 'utf8'));
+  if (!cred.computer_id || !cred.api_key || !/^test-|@example\.com$/.test(String(cred.email || cred.label || ''))) {
+    throw new Error(`--cred ${path}: not a minted test computer credential`);
+  }
+  return { computer_id: cred.computer_id, user_id: cred.user_id, credential_file: path, guest_build_commit: null, timings: null };
+}
 
 function runMint(label) {
   return new Promise((resolve, reject) => {
@@ -455,7 +464,11 @@ async function attempt(n, out) {
     if (!fence.ok) throw new Error(`identity fence: ${fence.reason}`);
   }
   const mintStarted = Date.now();
-  const minted = await runMint(label);
+  // --cred <file> reuses a computer qa_test_computer.mjs minted for this drill
+  // (a per-computer grant such as visual capture names the computer before the
+  // deploy, so the drill cannot mint it fresh). It is still a computer minted
+  // for the drill, never an owner's.
+  const minted = CRED_FILE ? reuseMinted(CRED_FILE) : await runMint(label);
   out.timings.mint_ms = Date.now() - mintStarted;
   out.timings.mint_breakdown = minted.timings || null;
   out.computer_id = minted.computer_id;
