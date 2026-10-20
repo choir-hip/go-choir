@@ -55,12 +55,21 @@ MIN_FREE_GIB="${OFFHOST_MIN_FREE_GIB:-40}"
 # the liveness probe aborted it (problem record section 13 item 15).
 DOLT_SYNC_MEMORY_HIGH="${OFFHOST_DOLT_SYNC_MEMORY_HIGH:-8G}"
 PLATFORM_DOLT_UNIT="${OFFHOST_PLATFORM_DOLT_UNIT:-go-choir-platform-dolt.service}"
+# The Dolt servers' data directories (their working directories). When one
+# is its own btrfs subvolume the store is captured as a read-only snapshot
+# of it, atomic across the directory (what a power cut would leave, which
+# Dolt's journal recovers), with no work in the server; otherwise the
+# server-side sync above is the fallback (problem record section 13 item
+# 16; scripts/dolt-data-to-subvolume.sh makes the subvolume).
+PLATFORM_DOLT_DATA="${OFFHOST_PLATFORM_DOLT_DATA:-$ROOT/platform-dolt/platform}"
+CORPUS_DOLT_DATA="${OFFHOST_CORPUS_DOLT_DATA:-$ROOT/corpus-dolt}"
 MAX_AGE_HOURS="${OFFHOST_MAX_AGE_HOURS:-36}"
 MAX_VERIFY_AGE_HOURS="${OFFHOST_MAX_VERIFY_AGE_HOURS:-240}"
 RESTIC_HOST_TAG="go-choir-b"
 
 STATUS="$STATE/status.json"
 STAGING="$STATE/staging"
+DOLT_SNAPS="$STAGING/dolt"
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 now() { date -u +%s; }
 log() { printf '%s offhost-backup: %s\n' "$(date -u +%FT%TZ)" "$*"; }
@@ -118,12 +127,15 @@ EXCLUDES=(
   "$ROOT/mail/mail.db"            # captured consistently via sqlite3 .backup
   "$ROOT/mail/mail.db-wal"
   "$ROOT/mail/mail.db-shm"
+  "$DOLT_SNAPS/corpus/.choir-backup" # Store B's old sync copy, inside its data directory
+  "$DOLT_SNAPS/**/sql-server.info"   # the live server's lock note; a restore starts without it
 )
 resolve_paths() {
   PATHS=(); SKIPPED=(); REQUIRED_MISSING=0
   add_path "$ART" required
-  add_path "$ROOT/platform-dolt/.choir-backup/platform" required
-  add_path "$ROOT/corpus-dolt/.choir-backup/corpus" optional
+  # A snapshotted store travels in $STAGING; its old sync copy is not read.
+  is_subvolume "$PLATFORM_DOLT_DATA" || add_path "$ROOT/platform-dolt/.choir-backup/platform" required
+  is_subvolume "$CORPUS_DOLT_DATA" || add_path "$ROOT/corpus-dolt/.choir-backup/corpus" optional
   add_path "$ROOT/secrets" required
   add_path "$ROOT/auth-signing" optional
   add_path "$ROOT/gateway-provider.env" optional
@@ -238,6 +250,39 @@ dolt_sync() { # $1 port, $2 database, $3 target dir
   DOLT_HEADS+=("$db=$hash")
   log "dolt backup $db synced (head $hash)"
 }
+is_subvolume() { command -v btrfs >/dev/null 2>&1 && btrfs subvolume show "$1" >/dev/null 2>&1; }
+drop_snapshot() { # $1 path; a read-only snapshot needs btrfs to delete it
+  [ -e "$1" ] || return 0
+  btrfs subvolume delete "$1" >/dev/null 2>&1 || { err "could not delete snapshot $1"; return 1; }
+}
+dolt_head() { # $1 port, $2 database: the newest commit, as root with its password or passwordless
+  local port="$1" db="$2" pw home oldhome="${HOME:-}" out
+  home="$(mktemp -d)"; export HOME="$home"
+  pw="$(cat "$(cred dolt-root-password)" 2>/dev/null || true)"
+  case "$pw" in *[!A-Za-z0-9]*) pw="" ;; esac
+  if [ -n "$pw" ] && printf 'select 1;\n' | DOLT_CLI_PASSWORD="$pw" dolt --host 127.0.0.1 --port "$port" --no-tls --user root sql >/dev/null 2>&1; then
+    out="$(DOLT_CLI_PASSWORD="$pw" dolt --host 127.0.0.1 --port "$port" --no-tls --user root --use-db "$db" sql -r csv -q 'select commit_hash from dolt_log limit 1' 2>/dev/null | tail -1)"
+  else
+    out="$(dolt --host 127.0.0.1 --port "$port" --no-tls --user root --password "" --use-db "$db" sql -r csv -q 'select commit_hash from dolt_log limit 1' 2>/dev/null | tail -1)"
+  fi
+  rm -rf "$home"; export HOME="$oldhome"
+  printf '%s' "$out"
+}
+snapshot_store() { # $1 name, $2 port, $3 database, $4 data directory (a subvolume)
+  local name="$1" dst="$DOLT_SNAPS/$1" hash
+  install -d -m 0700 "$DOLT_SNAPS" "$STATE/run"
+  drop_snapshot "$dst" || return 1
+  # The head is read first: the snapshot holds it or a later commit.
+  hash="$(dolt_head "$2" "$3")"
+  if ! btrfs subvolume snapshot -r "$4" "$dst" >/dev/null 2>"$STATE/run/snapshot-$name.err"; then
+    err "btrfs snapshot of $name failed: $(head -c 200 "$STATE/run/snapshot-$name.err" | tr -d '\n')"
+    drop_snapshot "$dst"; return 1
+  fi
+  DOLT_HEADS+=("$name=$hash")
+  log "dolt $name captured as a read-only snapshot (head before it: ${hash:-unread})"
+}
+cleanup_snapshots() { local s; for s in "$DOLT_SNAPS"/*; do [ -e "$s" ] && drop_snapshot "$s"; done; return 0; }
+
 RAISED_UNIT=""
 SAVED_MEMORY_HIGH=""
 raise_dolt_memory() { # $1 unit: raise its MemoryHigh for the sync, remembering the old value
@@ -261,13 +306,19 @@ stage() {
   local ok=0 src
   install -d -m 0700 "$STAGING/sqlite" "$STAGING/vm-images" "$STATE/run"
   DOLT_HEADS=()
-  if raise_dolt_memory "$PLATFORM_DOLT_UNIT"; then
+  if is_subvolume "$PLATFORM_DOLT_DATA"; then
+    snapshot_store platform 13306 platform "$PLATFORM_DOLT_DATA" || ok=1
+  elif raise_dolt_memory "$PLATFORM_DOLT_UNIT"; then
     dolt_sync 13306 platform "$ROOT/platform-dolt/.choir-backup/platform" || ok=1
     restore_dolt_memory
   else
     err "could not raise $PLATFORM_DOLT_UNIT MemoryHigh; platform Dolt sync skipped (at the unit's own line the sync stalled Store A)"; ok=1
   fi
-  [ -d "$ROOT/corpus-dolt" ] && { dolt_sync 13307 corpus "$ROOT/corpus-dolt/.choir-backup/corpus" || ok=1; }
+  if is_subvolume "$CORPUS_DOLT_DATA"; then
+    snapshot_store corpus 13307 corpus "$CORPUS_DOLT_DATA" || ok=1
+  elif [ -d "$ROOT/corpus-dolt" ]; then
+    dolt_sync 13307 corpus "$ROOT/corpus-dolt/.choir-backup/corpus" || ok=1
+  fi
   for src in "$ROOT/auth/auth.db" "$ROOT/mail/mail.db"; do
     [ -f "$src" ] || continue
     if sqlite3 "$src" ".backup '$STAGING/sqlite/$(basename "$src")'"; then
@@ -297,7 +348,7 @@ stage() {
   } > "$STAGING/manifest.json"
   return "$ok"
 }
-cleanup_clones() { rm -rf "$STAGING/vm-images" 2>/dev/null || true; }
+cleanup_clones() { rm -rf "$STAGING/vm-images" 2>/dev/null || true; cleanup_snapshots; }
 
 disk_guard() {
   local free_kib

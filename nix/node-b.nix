@@ -346,7 +346,7 @@ let
   offHostBackupScript = pkgs.writeShellScript "go-choir-offhost-backup"
     (builtins.readFile ../scripts/off-host-backup.sh);
   offHostBackupEnv = [
-    "PATH=${lib.makeBinPath [ pkgs.coreutils pkgs.gnugrep pkgs.gnused pkgs.gawk pkgs.findutils pkgs.util-linux pkgs.jq pkgs.restic pkgs.openssh pkgs.sqlite pkgs.dolt pkgs.apacheHttpd pkgs.systemd ]}"
+    "PATH=${lib.makeBinPath [ pkgs.coreutils pkgs.gnugrep pkgs.gnused pkgs.gawk pkgs.findutils pkgs.util-linux pkgs.jq pkgs.restic pkgs.openssh pkgs.sqlite pkgs.dolt pkgs.apacheHttpd pkgs.systemd pkgs.btrfs-progs ]}"
     "OFFHOST_STATE_DIR=${offHostBackup.stateDir}"
     "OFFHOST_SECRETS_DIR=${offHostBackup.secretsDir}"
     "OFFHOST_HOST=${offHostBackup.host}"
