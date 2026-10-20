@@ -226,3 +226,38 @@ blind rerun. Known limit of the link: a pair with no shared title word
 (France protests, the recession pair, the Indonesia fires) is offered no
 `after_` choice, so it is a new unlinked event. That is correct for the
 bar and loses only the link.
+
+## Preliminary rerun under the one-incident definition (2026-10-20 09:10 UTC), short
+
+Procedure: design §19.3, window from the paper's planned refresh onto
+31a5c2bc4 (`--since 2026-10-20T03:05:00Z`), judges `openai/gpt-6.1-sol` and
+`google/gemini-3.8-flash`, output in the session scratchpad (not in the repo).
+
+- **Short sample.** The paper had 12 distinct-URL joins in about 6 hours
+  (the previous window gave 21 per computer). The test computer
+  `v3-events-0146` (computer-3191b29f…) returned 403 from
+  `GET /api/autopaper/events` and is not in the vmctl list; it was not
+  among the computers the 2026-10-20 tape sweep removed (no archive). So
+  this read is the paper alone, n = 12, and the bar cannot be decided on
+  it: one merge is 8.3%.
+- **Judges:** gpt-6.1-sol 2 of 12 DIFFERENT, gemini-3.8-flash 3 of 12; 2 of
+  12 with both DIFFERENT (16.7%).
+- **Orchestrator's reading of the two all-DIFFERENT rows:**
+  - `ev-65b0d8ae…` OpenBSD: a bsd.network post on what the 8.0 release will
+    carry, joined to `openbsd.org/80.html`, the 8.0 release page. Same
+    release; the bare title "OpenBSD 8.0" hides it (the tesla.com/roadster
+    case again). Counted correct.
+  - `ev-f3b7b3dd…` Kansas: the event's **opener is a Guardian live blog**
+    ("US politics live", `/us-news/live/2026/oct/19/…`), and a Guardian
+    report on the Kansas rally joined it at p 0.98. The ruling makes a
+    live blog spanning incidents its own event, so this is a false merge.
+  - Reading: 1 of 12 (8.3%), above the bar, on a sample too small to judge.
+- **Hypothesis, not confirmed:** live pages open events and then attract
+  joins, the same failure the related-stories walk had last night
+  (`docs/problems/related-stories-dead-end-2026-10-20.md`, `isLivePageURL`).
+  Candidate fix, not made: a capture whose URL is a live page never opens or
+  joins a counted event (it gets a singleton event, or no event). Confirm on
+  a full sample first.
+- **Next:** rerun on the paper alone at about 15:00 UTC (12-hour window,
+  expect about 24 joins), and decide whether a second test computer is
+  worth minting for the pooled 40.
