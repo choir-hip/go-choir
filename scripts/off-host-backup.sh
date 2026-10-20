@@ -17,7 +17,8 @@
 #   off-host-backup.sh archive TAG PATH...   tape-cleanup archive (never pruned)
 #
 # Exit status: 0 ok; 1 failed or stale; 2 usage; 3 partial (everything that
-# could be uploaded was, but an item was skipped or unreadable); 4 disk guard.
+# could be uploaded was, but an item was skipped or unreadable); 4 disk guard;
+# 5 a tool the subcommand needs is not on PATH (nothing was done).
 #
 # Credentials: files named restic-password, rest-password, ssh-key, known-hosts
 # and (for backup) dolt-root-password come from $CREDENTIALS_DIRECTORY
@@ -62,6 +63,20 @@ cred() { # path of credential file $1
   else
     printf '%s/%s' "$SECRETS_DIR" "$1"
   fi
+}
+
+# ---- tools -------------------------------------------------------------
+# The systemd units carry every tool on PATH (offHostBackupEnv in
+# nix/node-b.nix); a root shell on Node B does not. Each subcommand checks
+# the tools it uses before it touches anything, so a hand run refuses
+# instead of ending partial an hour later (problem record section 13 item 5).
+NIX_SHELL_LINE="nix-shell -p restic jq openssh sqlite dolt apacheHttpd --run '...'"
+need() { # tools...
+  local t missing=()
+  for t in "$@"; do command -v "$t" >/dev/null 2>&1 || missing+=("$t"); done
+  [ "${#missing[@]}" = 0 ] && return 0
+  err "not on PATH: ${missing[*]}; nothing was done. On Node B run it under: $NIX_SHELL_LINE"
+  return 5
 }
 
 # ---- status file ------------------------------------------------------
@@ -238,6 +253,7 @@ cmd_plan() {
 
 cmd_backup() {
   local result=ok rc ex sid started added
+  need ssh restic jq sqlite3 dolt || return
   started="$(now)"
   trap 'cleanup_clones; tunnel_down' EXIT
   status_merge <<EOF
@@ -288,6 +304,7 @@ EOF
 
 cmd_verify() {
   local week n rc
+  need ssh restic jq || return
   trap 'tunnel_down' EXIT
   tunnel_up || return 1
   restic_env daily
@@ -306,6 +323,7 @@ EOF
 
 cmd_freshness() {
   local bad=0 t last first v raw
+  need jq || return
   [ -s "$STATUS" ] || { err "no status.json: the backup has never run"; return 1; }
   t="$(now)"
   last="$(jq -r '.last_success_epoch // 0' "$STATUS")"
@@ -327,6 +345,7 @@ cmd_freshness() {
 }
 
 cmd_init() {
+  need ssh restic || return
   trap 'tunnel_down' EXIT
   tunnel_up || return 1
   local repo
@@ -340,6 +359,7 @@ cmd_init() {
 cmd_archive() { # TAG PATH...: tape-cleanup archive; verifies by re-reading everything
   local tag="${1:-}"; shift || true
   [ -n "$tag" ] && [ "$#" -gt 0 ] || { echo "usage: archive TAG PATH..." >&2; return 2; }
+  need ssh restic || return
   trap 'tunnel_down' EXIT
   tunnel_up || return 1
   restic_env archive
@@ -349,6 +369,11 @@ cmd_archive() { # TAG PATH...: tape-cleanup archive; verifies by re-reading ever
 }
 
 cmd_keygen() { # owner, interactive, once. Prints the restic password to the terminal only.
+  # htpasswd is not installed on Node B; nix-shell supplies it. Checked
+  # before any key is written: a key without its htpasswd line makes a
+  # rerun refuse (the keys exist) while node-a still cannot authenticate.
+  need ssh-keygen base64 || return
+  command -v htpasswd >/dev/null 2>&1 || command -v nix-shell >/dev/null 2>&1 || need htpasswd || return
   [ -t 1 ] && [ -e /dev/tty ] || { err "keygen prints the password once and needs a terminal"; return 2; }
   install -d -m 0700 "$SECRETS_DIR"
   umask 077
@@ -369,7 +394,11 @@ cmd_keygen() { # owner, interactive, once. Prints the restic password to the ter
     echo "htpasswd line:"
     # bcrypt (apache htpasswd -B): rest-server did not accept apr1/md5 hashes
     # when tested; bcrypt and {SHA} entries authenticate. -i reads stdin.
-    htpasswd -niB "$REST_USER" < "$SECRETS_DIR/rest-password"
+    if command -v htpasswd >/dev/null 2>&1; then
+      htpasswd -niB "$REST_USER" < "$SECRETS_DIR/rest-password"
+    else
+      REST_USER="$REST_USER" nix-shell -p apacheHttpd --run 'htpasswd -niB "$REST_USER"' < "$SECRETS_DIR/rest-password"
+    fi
     echo
     echo "Still to place by hand: $SECRETS_DIR/known-hosts (node-a's host key, verified out of band)."
   } > /dev/tty
