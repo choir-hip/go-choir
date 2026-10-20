@@ -33,6 +33,8 @@ type autoputerTextureDocument struct {
 	OwnerID           string `json:"owner_id"`
 	Title             string `json:"title"`
 	CurrentRevisionID string `json:"current_revision_id,omitempty"`
+	ComputerID        string `json:"computer_id,omitempty"`
+	TrajectoryID      string `json:"trajectory_id,omitempty"`
 }
 
 type autoputerTextureRevision struct {

@@ -657,6 +657,12 @@ in
         "PROXY_RESIDUE_IMPORT_TIMEOUT=110s"
         "PROXY_CORPUSD_URL=http://127.0.0.1:8086"
         "PROXY_MAILD_URL=http://127.0.0.1:8087"
+        # Story expansion requests (docs/reports/story-expansion-request-
+        # design-2026-10-20.md, phase 1). Comma-separated user ids allowed to
+        # ask a story to be expanded; empty means off (the routes are dark and
+        # the page shows no button). Not a secret. To turn on, set the owner's
+        # user id here and deploy. Kill switch: PROXY_EXPAND=off.
+        "PROXY_EXPAND_REQUESTERS="
         # Unsigned / and /assets/* serve this host tree (picker/auth chrome).
         # Authenticated computer surface is selected after vmctl resolve.
         "PROXY_PLATFORM_SHELL_ROOT=${frontendCurrent}"

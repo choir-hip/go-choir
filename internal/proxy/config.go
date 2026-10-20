@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -71,6 +72,35 @@ type Config struct {
 	// without constructing a vmctl service. Production configuration never sets
 	// this field; served routes otherwise fail closed without D-ROUTE authority.
 	AllowDirectAutoputerForTests bool
+
+	// ExpandRequesters are the user ids allowed to ask a story to be
+	// expanded (PROXY_EXPAND_REQUESTERS, comma separated). Empty means the
+	// feature is off: it ships dark. ExpandOff is the kill switch
+	// (PROXY_EXPAND=off). See platform_expand.go.
+	ExpandRequesters []string
+	ExpandOff        bool
+}
+
+// ParseExpandRequesters splits PROXY_EXPAND_REQUESTERS: comma-separated user
+// ids, blanks dropped.
+func ParseExpandRequesters(raw string) []string {
+	var out []string
+	for _, part := range strings.Split(raw, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
+}
+
+func expandRequesterSet(ids []string) map[string]bool {
+	set := map[string]bool{}
+	for _, id := range ids {
+		if id = strings.TrimSpace(id); id != "" {
+			set[id] = true
+		}
+	}
+	return set
 }
 
 const (
@@ -126,6 +156,8 @@ func LoadConfig() (*Config, error) {
 		MaildURL:                  envOr("PROXY_MAILD_URL", DefaultMaildURL),
 		AuthDBPath:                os.Getenv("PROXY_AUTH_DB_PATH"),
 		PlatformShellRoot:         envOr("PROXY_PLATFORM_SHELL_ROOT", "/var/www/go-choir/frontend-current"),
+		ExpandRequesters:          ParseExpandRequesters(os.Getenv("PROXY_EXPAND_REQUESTERS")),
+		ExpandOff:                 strings.EqualFold(strings.TrimSpace(os.Getenv("PROXY_EXPAND")), "off"),
 	}
 
 	if err := cfg.validate(); err != nil {

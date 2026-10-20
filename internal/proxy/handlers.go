@@ -214,6 +214,13 @@ type Handler struct {
 	routeCacheTTL time.Duration
 	routeCacheMu  sync.Mutex
 	routeCache    map[string]routeCacheEntry
+
+	// Story expansion requests (platform_expand.go): dark unless
+	// expandRequesters holds a user id and expandOff is false.
+	expandRequesters map[string]bool
+	expandOff        bool
+	expandMu         sync.Mutex
+	expand           *expandLedger
 }
 
 // Context keys used to carry the resolved upstream URL and its invalidator
@@ -448,6 +455,8 @@ func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 		authStore:                  authStore,
 		platformSignerDigest:       platformSignerDigest,
 		ownerActSigner:             ownerActSigner,
+		expandRequesters:           expandRequesterSet(cfg.ExpandRequesters),
+		expandOff:                  cfg.ExpandOff,
 	}
 	if authStore != nil {
 		h.apiKeyValidator = authStore
@@ -933,6 +942,12 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	case path == "/api/platform/publications/related":
 		h.HandlePlatformPublicationRelated(w, r)
+		return
+	case path == "/api/platform/publications/expand":
+		h.HandlePlatformPublicationExpand(w, r)
+		return
+	case path == "/api/platform/publications/expansion":
+		h.HandlePlatformPublicationExpansion(w, r)
 		return
 	case path == "/api/platform/retrieval/search":
 		h.HandlePlatformRetrievalSearch(w, r)
