@@ -391,6 +391,8 @@ func (s *Store) EnsureSchema(cfg *Config) error {
 			updated_at text not null
 		)`,
 	}
+	// Autopaper daily digest tables (digest_store.go): additive.
+	stmts = append(stmts, digestSchemaStatements...)
 	for _, stmt := range stmts {
 		if _, err := s.routingDB.Exec(stmt); err != nil {
 			return fmt.Errorf("routing schema migration: %w", err)

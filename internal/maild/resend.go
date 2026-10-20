@@ -72,6 +72,12 @@ type resendSendRequest struct {
 	HTML        string             `json:"html,omitempty"`
 	Headers     map[string]any     `json:"headers,omitempty"`
 	Attachments []resendAttachment `json:"attachments,omitempty"`
+
+	// idempotencyKey, when set, is the Idempotency-Key for this send instead
+	// of the payload hash. A recurring send names itself (the digest's
+	// choir_digest_<owner>_<date>), so a retry whose body changed is still
+	// deduplicated. Never serialised.
+	idempotencyKey string
 }
 
 type resendSendResponse struct {
@@ -174,7 +180,11 @@ func (c resendClient) sendEmail(ctx context.Context, payload resendSendRequest) 
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Idempotency-Key", resendSendIdempotencyKey(body))
+	key := strings.TrimSpace(payload.idempotencyKey)
+	if key == "" {
+		key = resendSendIdempotencyKey(body)
+	}
+	req.Header.Set("Idempotency-Key", key)
 
 	resp, err := c.client.Do(req)
 	if err != nil {

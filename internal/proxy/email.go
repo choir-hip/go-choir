@@ -65,25 +65,33 @@ func (h *Handler) forwardMaildAuthenticated(w http.ResponseWriter, r *http.Reque
 	_, _ = io.Copy(w, resp.Body)
 }
 
-// isEmailOwnerActRoute reports whether r is maild's approve-and-send route,
-// POST /api/email/drafts/{id}/send. Empty path segments are ignored, so
-// every spelling maild could treat as the send route is caught (and a few it
-// would not, which only refuses more).
+// isEmailOwnerActRoute reports whether r is an email owner act that an API key
+// must not perform: maild's approve-and-send route, POST
+// /api/email/drafts/{id}/send, or a route that opts the owner in to or causes
+// recurring mail, the Autopaper daily digest's PUT and DELETE
+// /api/email/digest and POST /api/email/digest/send-now. Empty path segments
+// are ignored, so every spelling maild could treat as the same route is caught
+// (and a few it would not, which only refuses more). Reading the digest
+// status stays open to an API key.
 func isEmailOwnerActRoute(r *http.Request) bool {
-	if r == nil || r.URL == nil || r.Method != http.MethodPost {
-		return false
-	}
-	const prefix = "/api/email/drafts/"
-	if !strings.HasPrefix(r.URL.Path, prefix) {
+	if r == nil || r.URL == nil || !strings.HasPrefix(r.URL.Path, "/api/email/") {
 		return false
 	}
 	var parts []string
-	for _, part := range strings.Split(strings.TrimPrefix(r.URL.Path, prefix), "/") {
+	for _, part := range strings.Split(strings.TrimPrefix(r.URL.Path, "/api/email/"), "/") {
 		if part != "" {
 			parts = append(parts, part)
 		}
 	}
-	return len(parts) == 2 && parts[1] == "send"
+	switch {
+	case r.Method == http.MethodPost && len(parts) == 3 && parts[0] == "drafts" && parts[2] == "send":
+		return true
+	case (r.Method == http.MethodPut || r.Method == http.MethodDelete) && len(parts) == 1 && parts[0] == "digest":
+		return true
+	case r.Method == http.MethodPost && len(parts) == 2 && parts[0] == "digest" && parts[1] == "send-now":
+		return true
+	}
+	return false
 }
 
 func stripClientIdentityHeaders(header http.Header) {

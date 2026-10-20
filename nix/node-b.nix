@@ -707,6 +707,11 @@ in
         # Maild routes trace events through vmctl to user VMs. The host
         # autoputer fallback (MAILD_RUNTIME_URL) was removed in PR 5.
         "MAILD_VMCTL_URL=http://127.0.0.1:8083"
+        # Autopaper daily digest: where maild reads the front list, and the
+        # kill switch ("off" makes the run route do nothing). Nobody receives
+        # a digest until the owner opts in from the Mail app.
+        "MAILD_CORPUSD_URL=http://127.0.0.1:8086"
+        "MAILD_DIGEST=on"
         # Send gate (docs/problems/maild-send-gate-defects-2026-10-14.md):
         # only the owner's session approves and sends; a guest drafts and
         # proposes. Rollback: "legacy" restores the pre-E1 rules for guest
@@ -1408,6 +1413,57 @@ in
     wantedBy = [ "timers.target" ];
     timerConfig = {
       OnCalendar = "*-*-* 04:00:00 UTC";
+      Persistent = false;
+    };
+  };
+
+  # Autopaper daily digest (docs/reports/autopaper-daily-digest-design-2026-10-20.md,
+  # docs/problems/autopaper-daily-digest-phase1-2026-10-20.md). A deterministic
+  # host job: this oneshot makes one call to maild's host-internal run route,
+  # and maild reads the front list, picks stories with a fixed function and
+  # sends one fixed-template mail through its existing Resend sender to each
+  # owner who opted in (the Mail app toggle; nobody is opted in by default). No
+  # agent, no computer, no model call.
+  # Auth: the call carries the host-internal credential header from the unit's
+  # private $CREDENTIALS_DIRECTORY, never loopback alone; if the credential
+  # cannot be read the unit fails instead of calling without it. curl fails on
+  # an HTTP error, so a missing Resend key (maild answers 503) or a provider
+  # failure (502) shows as a failed unit and a journal line.
+  # Persistent = false: after a host outage the timer does not fire a stale
+  # digest; a missed day is closed, not resumed (CLAUDE.md "Restarts End Work").
+  # Rollback: MAILD_DIGEST=off on go-choir-maild (the run route does nothing),
+  # or `systemctl disable --now go-choir-digest.timer`, or revert this block.
+  systemd.services.go-choir-digest = {
+    description = "Autopaper daily digest (deterministic host job; no agent, no model)";
+    after = [ "go-choir-maild.service" "network-online.target" ];
+    wants = [ "go-choir-maild.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      TimeoutStartSec = "6min";
+      PrivateTmp = true;
+      NoNewPrivileges = true;
+      LoadCredential = [ "choir-internal-token.header:${internalTokenHeaderFile}" ];
+      ExecStart = pkgs.writeShellScript "go-choir-digest" ''
+        set -euo pipefail
+        if [ -z "''${CREDENTIALS_DIRECTORY:-}" ] || [ ! -r "''${CREDENTIALS_DIRECTORY}/choir-internal-token.header" ]; then
+          echo "go-choir-digest: host-internal credential header is not readable; refusing to call maild without it" >&2
+          exit 1
+        fi
+        ${pkgs.curl}/bin/curl -sS --fail-with-body --max-time 300 \
+          -X POST \
+          -H 'X-Internal-Caller: true' \
+          -H "@''${CREDENTIALS_DIRECTORY}/choir-internal-token.header" \
+          http://127.0.0.1:8087/internal/maild/digest/run
+        echo
+      '';
+    };
+  };
+
+  systemd.timers.go-choir-digest = {
+    description = "Daily Autopaper digest at 12:00 UTC";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "*-*-* 12:00:00 UTC";
       Persistent = false;
     };
   };

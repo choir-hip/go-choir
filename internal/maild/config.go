@@ -20,6 +20,7 @@ const (
 	DefaultWebhookMaxBody  = 1 << 20
 	DefaultAPIMaxBody      = 1 << 20
 	DefaultProviderMaxBody = 4 << 20
+	DefaultCorpusdURL      = "http://127.0.0.1:8086"
 )
 
 // Send gate modes (MAILD_SEND_GATE_MODE;
@@ -60,6 +61,13 @@ type Config struct {
 	// server whose Authentication-Results maild believes, lowercased. Empty
 	// means no inbound sender is ever "authenticated" (fail closed).
 	TrustedAuthservIDs []string
+	// CorpusdURL is where the daily digest reads the Autopaper front list
+	// (MAILD_CORPUSD_URL; host loopback). The host-internal credential is sent
+	// only to the default loopback service ports (hostauth.MarkInternal).
+	CorpusdURL string
+	// DigestOff is the digest kill switch (MAILD_DIGEST=off). The zero value
+	// is on, but nobody is subscribed until the owner opts in.
+	DigestOff bool
 }
 
 // LoadConfig resolves MAILD_* and RESEND_* environment variables.
@@ -83,6 +91,8 @@ func LoadConfig() (*Config, error) {
 		WebhookClockSkew:        5 * time.Minute,
 		SendGateMode:            parseSendGateMode(os.Getenv("MAILD_SEND_GATE_MODE")),
 		TrustedAuthservIDs:      parseAuthservIDs(os.Getenv("MAILD_TRUSTED_AUTHSERV_IDS")),
+		CorpusdURL:              envOr("MAILD_CORPUSD_URL", DefaultCorpusdURL),
+		DigestOff:               strings.EqualFold(strings.TrimSpace(os.Getenv("MAILD_DIGEST")), "off"),
 	}
 	if err := cfg.validate(); err != nil {
 		return nil, err

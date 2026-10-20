@@ -1,0 +1,914 @@
+{
+ "note": "Front rows for the digest rank parity test. Expected orders in digest_rank_golden.json are produced by rankFrontStories in frontend/src/lib/autopaper.ts via frontend/scripts/rank-front-fixture.mjs.",
+ "cases": [
+  {
+   "name": "scored_majority",
+   "stories": [
+    {
+     "publication_id": "a01",
+     "title": "Story a01",
+     "dek": "Dek for a01",
+     "updated_at": "2026-10-20T09:30:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-a01",
+      "permalink": "/pub/texture/slug-a01/v1"
+     },
+     "importance": 9,
+     "source_count": 6,
+     "words": 600,
+     "section": "world"
+    },
+    {
+     "publication_id": "a02",
+     "title": "Story a02",
+     "dek": "Dek for a02",
+     "updated_at": "2026-10-20T09:00:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-a02",
+      "permalink": "/pub/texture/slug-a02/v1"
+     },
+     "importance": 9,
+     "source_count": 5,
+     "words": 500,
+     "section": "world"
+    },
+    {
+     "publication_id": "a03",
+     "title": "Story a03",
+     "dek": "Dek for a03",
+     "updated_at": "2026-10-20T08:30:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-a03",
+      "permalink": "/pub/texture/slug-a03/v1"
+     },
+     "importance": 10,
+     "source_count": 1,
+     "words": 700,
+     "section": "us_politics"
+    },
+    {
+     "publication_id": "a04",
+     "title": "Story a04",
+     "dek": "Dek for a04",
+     "updated_at": "2026-10-20T08:00:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-a04",
+      "permalink": "/pub/texture/slug-a04/v1"
+     },
+     "importance": 8,
+     "source_count": 4,
+     "words": 120,
+     "section": "business"
+    },
+    {
+     "publication_id": "a05",
+     "title": "Story a05",
+     "dek": "Dek for a05",
+     "updated_at": "2026-10-20T07:30:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-a05",
+      "permalink": "/pub/texture/slug-a05/v1"
+     },
+     "importance": 7,
+     "source_count": 2,
+     "words": 400,
+     "section": "tech_ai"
+    },
+    {
+     "publication_id": "a06",
+     "title": "Story a06",
+     "dek": "Dek for a06",
+     "updated_at": "2026-10-20T07:00:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-a06",
+      "permalink": "/pub/texture/slug-a06/v1"
+     },
+     "importance": 7,
+     "source_count": 2,
+     "words": 400,
+     "section": "tech_ai"
+    },
+    {
+     "publication_id": "a07",
+     "title": "Story a07",
+     "dek": "Dek for a07",
+     "updated_at": "2026-10-20T06:40:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-a07",
+      "permalink": "/pub/texture/slug-a07/v1"
+     },
+     "importance": 9,
+     "promo": true,
+     "source_count": 5,
+     "words": 500,
+     "section": "business"
+    },
+    {
+     "publication_id": "a08",
+     "title": "Open a story on the thing",
+     "dek": "Dek for a08",
+     "updated_at": "2026-10-20T06:30:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-a08",
+      "permalink": "/pub/texture/slug-a08/v1"
+     },
+     "importance": 10,
+     "source_count": 7,
+     "words": 900,
+     "section": "world"
+    },
+    {
+     "publication_id": "a09",
+     "title": "Story a09",
+     "dek": "Dek for a09",
+     "updated_at": "2026-10-20T06:00:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-a09",
+      "permalink": "/pub/texture/slug-a09/v1"
+     },
+     "source_count": 3,
+     "words": 300
+    },
+    {
+     "publication_id": "a10",
+     "title": "Story a10",
+     "dek": "Dek for a10",
+     "updated_at": "2026-10-20T05:00:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-a10",
+      "permalink": "/pub/texture/slug-a10/v1"
+     },
+     "importance": 11,
+     "source_count": 3,
+     "words": 300
+    },
+    {
+     "publication_id": "a11",
+     "title": "Story a11",
+     "dek": "Dek for a11",
+     "updated_at": "2026-10-20T04:00:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-a11",
+      "permalink": "/pub/texture/slug-a11/v1"
+     },
+     "importance": 5.5,
+     "source_count": 3,
+     "words": 300,
+     "section": "world"
+    },
+    {
+     "publication_id": "a12",
+     "title": "Story a12",
+     "dek": "Dek for a12",
+     "updated_at": "2026-10-20T03:20:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-a12",
+      "permalink": "/pub/texture/slug-a12/v1"
+     },
+     "importance": 6
+    },
+    {
+     "publication_id": "a13",
+     "title": "Story a13",
+     "dek": "Dek for a13",
+     "updated_at": "not a date",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-a13",
+      "permalink": "/pub/texture/slug-a13/v1"
+     },
+     "importance": 10,
+     "source_count": 9,
+     "words": 900
+    },
+    {
+     "publication_id": "a14",
+     "title": "Story a14",
+     "dek": "Dek for a14",
+     "updated_at": "2026-10-20T09:15:00Z",
+     "version_count": 5,
+     "latest_revision": 5,
+     "route": {
+      "bare": "/pub/texture/slug-a14",
+      "permalink": "/pub/texture/slug-a14/v1"
+     },
+     "importance": 4,
+     "source_count": 3,
+     "words": 250,
+     "section": "business"
+    },
+    {
+     "publication_id": "b01",
+     "title": "Story b01",
+     "dek": "Dek for b01",
+     "updated_at": "2026-10-20T00:00:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-b01",
+      "permalink": "/pub/texture/slug-b01/v1"
+     },
+     "importance": 6,
+     "source_count": 3,
+     "words": 300
+    },
+    {
+     "publication_id": "b02",
+     "title": "Story b02",
+     "dek": "Dek for b02",
+     "updated_at": "2026-10-20T00:00:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-b02",
+      "permalink": "/pub/texture/slug-b02/v1"
+     },
+     "importance": 6,
+     "source_count": 3,
+     "words": 300
+    },
+    {
+     "publication_id": "a15",
+     "title": "Story a15",
+     "dek": "Dek for a15",
+     "updated_at": "2026-10-20T09:40:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-a15",
+      "permalink": "/pub/texture/slug-a15/v1"
+     },
+     "importance": 3,
+     "source_count": 0,
+     "words": 90,
+     "section": "us_politics"
+    }
+   ]
+  },
+  {
+   "name": "recency_fallback",
+   "stories": [
+    {
+     "publication_id": "c01",
+     "title": "Story c01",
+     "dek": "Dek for c01",
+     "updated_at": "2026-10-20T09:50:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-c01",
+      "permalink": "/pub/texture/slug-c01/v1"
+     },
+     "source_count": 3,
+     "words": 400
+    },
+    {
+     "publication_id": "c02",
+     "title": "Story c02",
+     "dek": "Dek for c02",
+     "updated_at": "2026-10-20T09:10:00Z",
+     "version_count": 3,
+     "latest_revision": 3,
+     "route": {
+      "bare": "/pub/texture/slug-c02",
+      "permalink": "/pub/texture/slug-c02/v1"
+     },
+     "source_count": 3,
+     "words": 400
+    },
+    {
+     "publication_id": "c03",
+     "title": "Story c03",
+     "dek": "Dek for c03",
+     "updated_at": "2026-10-20T08:50:00Z",
+     "version_count": 9,
+     "latest_revision": 9,
+     "route": {
+      "bare": "/pub/texture/slug-c03",
+      "permalink": "/pub/texture/slug-c03/v1"
+     },
+     "source_count": 3,
+     "words": 400
+    },
+    {
+     "publication_id": "c04",
+     "title": "Story c04",
+     "dek": "Dek for c04",
+     "updated_at": "2026-10-20T03:20:00Z",
+     "version_count": 9,
+     "latest_revision": 9,
+     "route": {
+      "bare": "/pub/texture/slug-c04",
+      "permalink": "/pub/texture/slug-c04/v1"
+     },
+     "source_count": 3,
+     "words": 400
+    },
+    {
+     "publication_id": "c05",
+     "title": "Story c05",
+     "dek": "Dek for c05",
+     "updated_at": "2026-10-20T09:30:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-c05",
+      "permalink": "/pub/texture/slug-c05/v1"
+     },
+     "importance": 8,
+     "source_count": 3,
+     "words": 400
+    },
+    {
+     "publication_id": "c06",
+     "title": "Story c06",
+     "dek": "Dek for c06",
+     "updated_at": "2026-10-20T09:25:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-c06",
+      "permalink": "/pub/texture/slug-c06/v1"
+     },
+     "importance": 9,
+     "source_count": 3,
+     "words": 400
+    },
+    {
+     "publication_id": "c07",
+     "title": "Story c07",
+     "dek": "Dek for c07",
+     "updated_at": "2026-10-20T00:00:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-c07",
+      "permalink": "/pub/texture/slug-c07/v1"
+     }
+    },
+    {
+     "publication_id": "c08",
+     "title": "Story c08",
+     "dek": "Dek for c08",
+     "updated_at": "2026-10-19T23:50:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-c08",
+      "permalink": "/pub/texture/slug-c08/v1"
+     },
+     "promo": true
+    },
+    {
+     "publication_id": "c09",
+     "title": "Story c09",
+     "dek": "Dek for c09",
+     "updated_at": "",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-c09",
+      "permalink": "/pub/texture/slug-c09/v1"
+     }
+    },
+    {
+     "publication_id": "c10",
+     "title": "Story c10",
+     "dek": "Dek for c10",
+     "updated_at": "2026-10-19T18:55:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-c10",
+      "permalink": "/pub/texture/slug-c10/v1"
+     }
+    },
+    {
+     "publication_id": "g1",
+     "title": "Story g1",
+     "dek": "Dek for g1",
+     "updated_at": "2026-10-20T09:06:00Z",
+     "version_count": 2,
+     "latest_revision": 2,
+     "route": {
+      "bare": "/pub/texture/slug-g1",
+      "permalink": "/pub/texture/slug-g1/v1"
+     },
+     "source_count": 3,
+     "words": 400
+    },
+    {
+     "publication_id": "g2",
+     "title": "Story g2",
+     "dek": "Dek for g2",
+     "updated_at": "2026-10-20T08:20:00Z",
+     "version_count": 2,
+     "latest_revision": 2,
+     "route": {
+      "bare": "/pub/texture/slug-g2",
+      "permalink": "/pub/texture/slug-g2/v1"
+     },
+     "source_count": 3,
+     "words": 400
+    },
+    {
+     "publication_id": "g3",
+     "title": "Story g3",
+     "dek": "Dek for g3",
+     "updated_at": "2026-10-20T09:00:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-g3",
+      "permalink": "/pub/texture/slug-g3/v1"
+     },
+     "source_count": 3,
+     "words": 400
+    }
+   ]
+  },
+  {
+   "name": "lead_promotion",
+   "stories": [
+    {
+     "publication_id": "d01",
+     "title": "Story d01",
+     "dek": "Dek for d01",
+     "updated_at": "2026-10-20T09:50:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-d01",
+      "permalink": "/pub/texture/slug-d01/v1"
+     },
+     "importance": 10,
+     "source_count": 1,
+     "words": 800
+    },
+    {
+     "publication_id": "d02",
+     "title": "Story d02",
+     "dek": "Dek for d02",
+     "updated_at": "2026-10-20T09:40:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-d02",
+      "permalink": "/pub/texture/slug-d02/v1"
+     },
+     "importance": 6,
+     "source_count": 4,
+     "words": 800
+    },
+    {
+     "publication_id": "d03",
+     "title": "Story d03",
+     "dek": "Dek for d03",
+     "updated_at": "2026-10-20T09:35:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-d03",
+      "permalink": "/pub/texture/slug-d03/v1"
+     },
+     "importance": 9,
+     "source_count": 1,
+     "words": 800
+    },
+    {
+     "publication_id": "d04",
+     "title": "Story d04",
+     "dek": "Dek for d04",
+     "updated_at": "2026-10-20T09:30:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-d04",
+      "permalink": "/pub/texture/slug-d04/v1"
+     },
+     "importance": 5,
+     "source_count": 3,
+     "words": 800
+    }
+   ]
+  },
+  {
+   "name": "none_can_lead",
+   "stories": [
+    {
+     "publication_id": "e01",
+     "title": "Story e01",
+     "dek": "Dek for e01",
+     "updated_at": "2026-10-20T09:50:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-e01",
+      "permalink": "/pub/texture/slug-e01/v1"
+     },
+     "importance": 10,
+     "source_count": 1,
+     "words": 800
+    },
+    {
+     "publication_id": "e02",
+     "title": "Story e02",
+     "dek": "Dek for e02",
+     "updated_at": "2026-10-20T09:40:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-e02",
+      "permalink": "/pub/texture/slug-e02/v1"
+     },
+     "importance": 6,
+     "source_count": 0,
+     "words": 800
+    }
+   ]
+  },
+  {
+   "name": "depth_boundaries",
+   "stories": [
+    {
+     "publication_id": "h01",
+     "title": "Story h01",
+     "dek": "Dek for h01",
+     "updated_at": "2026-10-20T09:30:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-h01",
+      "permalink": "/pub/texture/slug-h01/v1"
+     },
+     "importance": 8,
+     "source_count": 3,
+     "words": 149
+    },
+    {
+     "publication_id": "h02",
+     "title": "Story h02",
+     "dek": "Dek for h02",
+     "updated_at": "2026-10-20T09:30:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-h02",
+      "permalink": "/pub/texture/slug-h02/v1"
+     },
+     "importance": 7,
+     "source_count": 3,
+     "words": 150
+    },
+    {
+     "publication_id": "h03",
+     "title": "Story h03",
+     "dek": "Dek for h03",
+     "updated_at": "2026-10-20T09:30:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-h03",
+      "permalink": "/pub/texture/slug-h03/v1"
+     },
+     "importance": 10,
+     "source_count": 2,
+     "words": 400
+    },
+    {
+     "publication_id": "h04",
+     "title": "Story h04",
+     "dek": "Dek for h04",
+     "updated_at": "2026-10-20T09:30:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-h04",
+      "permalink": "/pub/texture/slug-h04/v1"
+     },
+     "importance": 6,
+     "source_count": 5,
+     "words": 400
+    },
+    {
+     "publication_id": "h05",
+     "title": "Story h05",
+     "dek": "Dek for h05",
+     "updated_at": "2026-10-20T09:30:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-h05",
+      "permalink": "/pub/texture/slug-h05/v1"
+     },
+     "importance": 7.5,
+     "source_count": 2,
+     "words": 400
+    },
+    {
+     "publication_id": "h06",
+     "title": "Story h06",
+     "dek": "Dek for h06",
+     "updated_at": "2026-10-20T09:30:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-h06",
+      "permalink": "/pub/texture/slug-h06/v1"
+     },
+     "importance": 9,
+     "source_count": 1,
+     "words": 400
+    }
+   ]
+  },
+  {
+   "name": "three_of_eight_scored",
+   "stories": [
+    {
+     "publication_id": "k00",
+     "title": "Story k00",
+     "dek": "Dek for k00",
+     "updated_at": "2026-10-20T09:40:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-k00",
+      "permalink": "/pub/texture/slug-k00/v1"
+     },
+     "source_count": 4,
+     "words": 500
+    },
+    {
+     "publication_id": "k01",
+     "title": "Story k01",
+     "dek": "Dek for k01",
+     "updated_at": "2026-10-20T08:50:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-k01",
+      "permalink": "/pub/texture/slug-k01/v1"
+     },
+     "source_count": 4,
+     "words": 500
+    },
+    {
+     "publication_id": "k02",
+     "title": "Story k02",
+     "dek": "Dek for k02",
+     "updated_at": "2026-10-20T08:00:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-k02",
+      "permalink": "/pub/texture/slug-k02/v1"
+     },
+     "source_count": 4,
+     "words": 500
+    },
+    {
+     "publication_id": "k03",
+     "title": "Story k03",
+     "dek": "Dek for k03",
+     "updated_at": "2026-10-20T07:10:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-k03",
+      "permalink": "/pub/texture/slug-k03/v1"
+     },
+     "source_count": 4,
+     "words": 500
+    },
+    {
+     "publication_id": "k04",
+     "title": "Story k04",
+     "dek": "Dek for k04",
+     "updated_at": "2026-10-20T06:20:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-k04",
+      "permalink": "/pub/texture/slug-k04/v1"
+     },
+     "source_count": 4,
+     "words": 500
+    },
+    {
+     "publication_id": "k05",
+     "title": "Story k05",
+     "dek": "Dek for k05",
+     "updated_at": "2026-10-20T05:30:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-k05",
+      "permalink": "/pub/texture/slug-k05/v1"
+     },
+     "importance": 10,
+     "source_count": 4,
+     "words": 500
+    },
+    {
+     "publication_id": "k06",
+     "title": "Story k06",
+     "dek": "Dek for k06",
+     "updated_at": "2026-10-20T04:40:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-k06",
+      "permalink": "/pub/texture/slug-k06/v1"
+     },
+     "importance": 10,
+     "source_count": 4,
+     "words": 500
+    },
+    {
+     "publication_id": "k07",
+     "title": "Story k07",
+     "dek": "Dek for k07",
+     "updated_at": "2026-10-20T03:50:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-k07",
+      "permalink": "/pub/texture/slug-k07/v1"
+     },
+     "importance": 10,
+     "source_count": 4,
+     "words": 500
+    }
+   ]
+  },
+  {
+   "name": "four_of_eight_scored",
+   "stories": [
+    {
+     "publication_id": "k00",
+     "title": "Story k00",
+     "dek": "Dek for k00",
+     "updated_at": "2026-10-20T09:40:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-k00",
+      "permalink": "/pub/texture/slug-k00/v1"
+     },
+     "source_count": 4,
+     "words": 500
+    },
+    {
+     "publication_id": "k01",
+     "title": "Story k01",
+     "dek": "Dek for k01",
+     "updated_at": "2026-10-20T08:50:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-k01",
+      "permalink": "/pub/texture/slug-k01/v1"
+     },
+     "source_count": 4,
+     "words": 500
+    },
+    {
+     "publication_id": "k02",
+     "title": "Story k02",
+     "dek": "Dek for k02",
+     "updated_at": "2026-10-20T08:00:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-k02",
+      "permalink": "/pub/texture/slug-k02/v1"
+     },
+     "source_count": 4,
+     "words": 500
+    },
+    {
+     "publication_id": "k03",
+     "title": "Story k03",
+     "dek": "Dek for k03",
+     "updated_at": "2026-10-20T07:10:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-k03",
+      "permalink": "/pub/texture/slug-k03/v1"
+     },
+     "source_count": 4,
+     "words": 500
+    },
+    {
+     "publication_id": "k04",
+     "title": "Story k04",
+     "dek": "Dek for k04",
+     "updated_at": "2026-10-20T06:20:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-k04",
+      "permalink": "/pub/texture/slug-k04/v1"
+     },
+     "importance": 10,
+     "source_count": 4,
+     "words": 500
+    },
+    {
+     "publication_id": "k05",
+     "title": "Story k05",
+     "dek": "Dek for k05",
+     "updated_at": "2026-10-20T05:30:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-k05",
+      "permalink": "/pub/texture/slug-k05/v1"
+     },
+     "importance": 10,
+     "source_count": 4,
+     "words": 500
+    },
+    {
+     "publication_id": "k06",
+     "title": "Story k06",
+     "dek": "Dek for k06",
+     "updated_at": "2026-10-20T04:40:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-k06",
+      "permalink": "/pub/texture/slug-k06/v1"
+     },
+     "importance": 10,
+     "source_count": 4,
+     "words": 500
+    },
+    {
+     "publication_id": "k07",
+     "title": "Story k07",
+     "dek": "Dek for k07",
+     "updated_at": "2026-10-20T03:50:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-k07",
+      "permalink": "/pub/texture/slug-k07/v1"
+     },
+     "importance": 10,
+     "source_count": 4,
+     "words": 500
+    }
+   ]
+  },
+  {
+   "name": "single",
+   "stories": [
+    {
+     "publication_id": "f01",
+     "title": "Story f01",
+     "dek": "Dek for f01",
+     "updated_at": "2026-10-20T09:55:00Z",
+     "version_count": 1,
+     "latest_revision": 1,
+     "route": {
+      "bare": "/pub/texture/slug-f01",
+      "permalink": "/pub/texture/slug-f01/v1"
+     },
+     "importance": 5
+    }
+   ]
+  },
+  {
+   "name": "empty",
+   "stories": []
+  }
+ ]
+}

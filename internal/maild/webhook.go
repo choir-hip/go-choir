@@ -34,6 +34,13 @@ type Handler struct {
 	// an owner session does not write it on every request.
 	addressMu      sync.Mutex
 	knownAddresses map[string]string
+
+	// Autopaper daily digest (digest.go). digestMu serialises runs and
+	// send-now claims. The clock and retry delay are overridden by tests.
+	digestMu         sync.Mutex
+	digestNow        func() time.Time
+	digestRetryDelay time.Duration
+	digestHTTP       *http.Client
 }
 
 type webhookResponse struct {
@@ -70,6 +77,9 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/api/email/messages/", h.HandleMessages)
 	s.HandleFunc("/api/notifications/email-risk-alert", h.HandleRiskAlert)
 	s.HandleFunc(AuthRecoveryLinkPath, h.HandleAuthRecoveryLink)
+	s.HandleFunc(DigestPath, h.HandleDigest)
+	s.HandleFunc(DigestSendNowPath, h.HandleDigestSendNow)
+	s.HandleFunc(DigestRunPath, h.HandleDigestRun)
 }
 
 // HandleResendWebhook verifies and stores Resend webhook metadata.
