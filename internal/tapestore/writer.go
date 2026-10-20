@@ -1,0 +1,136 @@
+package tapestore
+
+import (
+	"errors"
+	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+)
+
+// SegmentWriter appends records to one segment and seals it with an index.
+//
+// A1 status: THIS IS NOT WIRED INTO ANY PRODUCTION PATH. It exists for test
+// fixtures and for offline tools (the byte-identical repack tool, deferred).
+// A guard test fails if a non-test source outside this package references it.
+// A2 adds the platform write path, which will extend this type with a
+// per-computer lock and open-segment recovery (truncate a torn tail on open).
+//
+// A writer is not safe for concurrent use.
+type SegmentWriter struct {
+	dir        string
+	computerID string
+	segno      uint64
+	f          *os.File
+	off        int64
+	entries    map[openKey]idxEntry
+	sealed     bool
+}
+
+// CreateSegment creates seg-<segno>.seg exclusively under
+// <artifactsRoot>/tape-seg/<computerID>/ and writes its header.
+func CreateSegment(artifactsRoot, computerID string, segno uint64) (*SegmentWriter, error) {
+	if !ValidComputerID(computerID) {
+		return nil, fmt.Errorf("tapestore: invalid computer id %q", computerID)
+	}
+	dir := filepath.Join(filepath.Clean(artifactsRoot), SegDirName, computerID)
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		return nil, fmt.Errorf("tapestore: create %s: %w", dir, err)
+	}
+	f, err := os.OpenFile(filepath.Join(dir, SegmentFileName(segno)), os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o640)
+	if err != nil {
+		return nil, fmt.Errorf("tapestore: create segment %d: %w", segno, err)
+	}
+	if _, err := f.Write(encodeSegHeader(segno, computerID)); err != nil {
+		f.Close()
+		return nil, fmt.Errorf("tapestore: write segment header: %w", err)
+	}
+	return &SegmentWriter{dir: dir, computerID: computerID, segno: segno, f: f, off: segHeaderSize, entries: map[openKey]idxEntry{}}, nil
+}
+
+// Append adds one record and returns the SHA-256 hex of body. Appending a
+// (namespace, body) pair already in this segment is a no-op.
+func (w *SegmentWriter) Append(ns NS, body []byte) (string, error) {
+	if w.sealed || w.f == nil {
+		return "", errors.New("tapestore: segment writer is closed")
+	}
+	if !ns.valid() {
+		return "", fmt.Errorf("tapestore: invalid namespace %d", uint8(ns))
+	}
+	if len(body) > MaxRecordBytes {
+		return "", fmt.Errorf("tapestore: record of %d bytes exceeds the %d byte limit", len(body), MaxRecordBytes)
+	}
+	digest := digestBytes(body)
+	key := openKey{ns, digest}
+	if _, dup := w.entries[key]; dup {
+		return hexDigest(digest), nil
+	}
+	rec := encodeRecord(ns, digest, body)
+	if _, err := w.f.Write(rec); err != nil {
+		return "", fmt.Errorf("tapestore: append record: %w", err)
+	}
+	w.entries[key] = idxEntry{digest: digest, ns: ns, off: uint64(w.off), length: uint32(len(body))}
+	w.off += int64(len(rec))
+	return hexDigest(digest), nil
+}
+
+// Size is the segment's current size in bytes.
+func (w *SegmentWriter) Size() int64 { return w.off }
+
+// Records is the number of distinct records appended.
+func (w *SegmentWriter) Records() int { return len(w.entries) }
+
+// Sync flushes the segment to stable storage.
+func (w *SegmentWriter) Sync() error { return w.f.Sync() }
+
+// Seal fsyncs the segment, writes its index to a temp file, fsyncs it,
+// renames it into place and fsyncs the directory (section 4.1, rotation).
+func (w *SegmentWriter) Seal() error {
+	if w.sealed || w.f == nil {
+		return errors.New("tapestore: segment writer is closed")
+	}
+	if err := w.f.Sync(); err != nil {
+		return fmt.Errorf("tapestore: fsync segment: %w", err)
+	}
+	idx := encodeIndex(w.segno, w.computerID, uint64(w.off), sortedEntries(w.entries))
+	final := filepath.Join(w.dir, IndexFileName(w.segno))
+	tmp := final + ".tmp"
+	t, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o640)
+	if err != nil {
+		return fmt.Errorf("tapestore: create index: %w", err)
+	}
+	if _, err := t.Write(idx); err != nil {
+		t.Close()
+		return fmt.Errorf("tapestore: write index: %w", err)
+	}
+	if err := t.Sync(); err != nil {
+		t.Close()
+		return fmt.Errorf("tapestore: fsync index: %w", err)
+	}
+	if err := t.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, final); err != nil {
+		return fmt.Errorf("tapestore: install index: %w", err)
+	}
+	if d, err := os.Open(w.dir); err == nil {
+		_ = d.Sync()
+		d.Close()
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	w.sealed = true
+	err = w.f.Close()
+	w.f = nil
+	return err
+}
+
+// Close releases the file and leaves the segment unsealed (open).
+func (w *SegmentWriter) Close() error {
+	if w.f == nil {
+		return nil
+	}
+	err := w.f.Close()
+	w.f = nil
+	return err
+}
