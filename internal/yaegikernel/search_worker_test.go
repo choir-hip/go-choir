@@ -92,7 +92,7 @@ seen := 0
 for i := 0; i < 300; i++ {
 	r, _ := choir.Searches.Get(s.ID)
 	seen = len(r.Arrivals)
-	if seen == 2 { break }
+	if seen == 2 && r.Done { break }
 	time.Sleep(10 * time.Millisecond)
 }
 r, _ := choir.Searches.Get(s.ID)
