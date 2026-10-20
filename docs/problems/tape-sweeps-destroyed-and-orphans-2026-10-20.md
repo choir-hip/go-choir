@@ -358,3 +358,34 @@ Job `ts-20261020T060033Z-eb7c5980`, applying run
   80% now; a balance is heavy I/O on the live host and can wait for a
   quiet window.
 - The orphan sweep is still unapplied (receipt-count mismatch above).
+
+## Problem: the orphan check can never pass on a live host (2026-10-20 06:35 UTC)
+
+Trace, not hypothesis: `tapeSweepDryRun` (internal/platform/tape_sweep.go)
+snapshots every computer's head at the start, walks each chain up to that
+head while counting `receiptRows`, and only after the walk runs
+`SELECT COUNT(*) FROM computer_event_append_receipts` over the whole
+table. The walk took 34 minutes on staging. Every receipt appended by a
+live computer in that window is in the total and not in `receiptRows`.
+The 3,631 surplus in run `ts-20261020T051653Z-fd085f79` is about what the
+paper and the other live computers append in 34 minutes at the measured
+~268,000 events a day (about 6,300 per 34 minutes at the daily mean).
+So the orphan sweep refuses on every run while any computer is working,
+which on this platform is always. The earlier "rewind leftovers"
+hypothesis is not needed to explain the count, but the check exists to
+catch exactly those, so the fix must keep catching them.
+
+Fix shape (red, deletion logic):
+
+- Bound the count by the same snapshot: per computer in `ids`,
+  `COUNT(*) WHERE computer_id = ? AND sequence <= head.Sequence` must equal
+  that computer's walked rows.
+- Receipts above the snapshot head are classified, not counted: a receipt
+  at or below the computer's *current* head is a live append (its files are
+  inside the 24 h grace and apply re-checks references in its delta
+  phase); a receipt above the current head is a leftover past the head and
+  still refuses the orphan sweep.
+- Receipts for a computer not in `ids` (no head row) still refuse.
+- Tests first: a fixture that appends during the walk passes; a receipt
+  above the current head refuses; a receipt for a computer with no head
+  refuses.
