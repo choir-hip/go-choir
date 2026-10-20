@@ -119,3 +119,27 @@ Fix: the sweep selects only the computer-level platform classes
 restart while busy (`deployRefreshAllowsBusy`). Other computers are listed
 as skipped with the reason "not a platform class". Compacting an account's
 computer stays a by-hand `compact-store` call, made only when the owner asks.
+
+## Staging proof run 1: the reflink copy flags are refused (01:35 UTC)
+
+Deployed 06643d2bd (CI 39352944304). The dry-run sweep then selected only
+the paper and skipped the account computer as "not a platform class".
+`POST /internal/vmctl/compact-store` on the paper at 01:35:18 took the
+planned-restart path (`planned_restart: true`, `busy_allowed: true`),
+killed the VM, and ran the hook. The hook's first step failed:
+
+    cp: --reflink can be used only with --sparse=auto
+
+GNU coreutils refuses `--reflink=always` together with `--sparse=always`.
+The unit tests use a fake command runner, so they never ran the real `cp`.
+The failure path behaved as designed: nothing was copied or swapped, the
+VM booted its untouched image at 01:35:29 (epoch 13152), and its health
+was `ready` by the next check (one failed check at 01:35:48 during boot).
+No compaction happened.
+
+Fix: `cp --reflink=always` alone. A reflink clone shares extents and keeps
+the image's holes, so `--sparse` adds nothing. A test pins the argument
+list.
+
+Lesson: a fake runner proves ordering and failure handling, not that the
+host tools accept the flags. The staging run is the evidence for that.
