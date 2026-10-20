@@ -64,3 +64,19 @@ less-important apps through self-development, which waits on app packages.
   owner's own computer, never relayed or shared. Re-read the terms wording
   before any second computer is allowlisted.
 - Quota: the subscription that ran out on 2026-10-15 is the same one.
+
+## Finding after deploy (2026-10-20 10:00 UTC): the allowlisted computer is gone
+
+4c2d66c38 deployed and vmctl carries the allowlist and the new expiry. The
+cold boot then failed: the test computer's key gets `403 api key computer
+ownership required`, and `GET /api/computers/computer-33594053…` answers
+404. The computer's ownership record is gone; its tape is still on disk
+because it has not yet been quiet for the tape sweep's 7 days, which is why
+the 2026-10-20 sweep did not list it. The test computer
+`v3-events-0146` shows the same pattern (403, not in the vmctl list).
+Cause of the removal not traced here.
+
+Replacement: `scripts/qa_test_computer.mjs --label
+claude-delegate-sonnet-20261020` minted `computer-ad1b46d4c20129e84b9e239cf4720fb9`
+(guest build 4c2d66c38, key expiry 2026-10-27) at 10:01 UTC. It replaces the
+dead id on the allowlist; the proof runs on it after a cold boot.
