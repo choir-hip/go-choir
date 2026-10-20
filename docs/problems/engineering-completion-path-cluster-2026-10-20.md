@@ -332,3 +332,102 @@ Mutation class: red (capsule isolation boundary). Add `sched_getparam` and
   staging drill (re-run of the frontend job) is the acceptance proof.
 - Rollback: revert the commit. Heresy delta: discovered, none new;
   repaired, P5 residual item 3.
+
+## Failure 3: where a Complete can wait without end (code reading, action 3)
+
+Read, not observed: the path from the Complete intent to the tool result,
+and every wait on it. This is a ranked list of hypotheses; none is confirmed,
+none is patched. Facts first.
+
+**What bounds the path.** `capsule_go_eval` (`tools_capsule.go`) runs the cell
+through `Executor.GoEval` with the activation's context (60 minutes,
+`provideriface.DefaultActivationBudget`) unless the cell passes `timeout_ms`;
+the broker client sets its read deadline from that context's deadline
+(`broker_client.go` `call`, 30 s only when there is none). `commitTray`
+(`rlm_reduce.go`) runs `commitCompleteIntent` under a 3-minute context
+detached from cancellation. Inside it: the terminal saga in
+`recordAssignedEngineeringReportOnce` (`engineering_assignment_fate.go`):
+freeze intent (store), `ExtractGranted` (quiesce: wait for in-flight broker
+ops to drain, then cgroup freeze), digest of the whole worktree, freeze
+receipt, store disposition, receipt binding, candidate export,
+`revokeAssignedCapsule` (store, `ForceDestroy`, orphan cleanup, store), then
+the report commit (store) and precommit settlement (store). Every capsule
+wait in that list takes the context (`Quiesce`, `setFrozen`, `WaitEmpty`,
+`waitCapsuleProcess`, the digest walk). So a 40-minute silence cannot be one
+of those ctx-bounded waits expiring late; it needs a wait that ignores the
+context, or a wait outside the 3-minute scope.
+
+**There is no host-side wait on the delegate.** The delegate server and its
+process group live in the capsule (`cmd/capsule-broker/delegate.go`,
+`internal/claudedelegate/server.go`); the host reaches them only through the
+cgroup (freeze, kill, wait-empty). Nothing in the freeze/complete path waits
+on the delegate socket, its supervisor, or its pipes. (Inside the capsule,
+`supervise` waits for the stdout/stderr pumps before `cmd.Wait`, so a
+claude descendant that keeps the pipes open leaves the delegate status
+`running` after claude exits; that affects `choir-delegate wait`, not the
+host.) The new evidence (failure 7: a hung `blocked` Complete, no delegate
+involved) also points away from the delegate.
+
+Ranked hypotheses:
+
+1. **The store's engine lock is not context-aware and a stall on it is
+   invisible.** `objectgraph.engineMutex.Lock`
+   (`internal/objectgraph/engine_mutex.go`) is a plain `sync.Mutex`; no
+   context can interrupt a wait on it, so the saga's six to eight store
+   calls can outlive the 3-minute scope by any amount if one holder is
+   wedged (a stalled Dolt call, or a holder waiting on something that waits
+   on the saga). `EngineMutexStats` records a wait only after it ends, so a
+   wait that never ends shows nothing. Shared by the completed and blocked
+   hangs. Likelihood: highest of the code-visible candidates. Check: the
+   new `engine_mutex_live` field.
+2. **The executor lock is held across teardown.** `Executor.destroy` holds
+   `e.mu` (write) across process wait, `unmountCapsuleRoot`, cgroup kill
+   and wait, `teardownReclaim` (a synchronous `memory.reclaim` write the
+   code itself says runs "under the executor lock"), `Cgroup.Delete`, and
+   `removePrivateTree`, several of which take no context; everything that
+   needs `e.mu.RLock` (`resolveOne`, `OpenExecutionReceipt`,
+   `AssignmentHandle`, job polls) queues behind it. A claude-mode capsule
+   has up to 3 GiB and a larger tree to reclaim and remove. Shared by both
+   hangs. Check: the new `capsule.destroy.*` steps.
+3. **The cell itself never returned from the broker.** For a cell with no
+   `timeout_ms` the only bound is the 60-minute activation deadline, and the
+   broker client holds its connection mutex (`connMu`, not context-aware)
+   for the whole exchange, so every other broker call queues behind it,
+   including `Quiesce`'s drain. A silent run that stays `running` for 40+
+   minutes and is ended by an external stop is consistent with this. Check:
+   the new `cell.go_eval` step. Not excluded for the first hang: the cell
+   text is not in the record I have. Likelihood: medium.
+4. **A freeze that never reports frozen.** `Capsule.Quiesce` holds the
+   capsule's write lock while it waits for in-flight operations and
+   `cgroup.freeze` to settle. Context-bounded (3 minutes), so it would end
+   in an error and the retry watchdog, not a silent hang. Low as a cause of
+   an unbounded wait; it explains slow Completes. Check: `capsule.quiesce`.
+5. **The records route before the Complete loop** (`commitRecordsRoute`)
+   runs under the cell's 60-minute context, not the 3-minute one. Only if
+   the cell staged other acts with the Complete. Low.
+6. **The digest walk** reads every regular file under `/workspace/platform`;
+   special files are refused (an error, not a block) and the read loop
+   checks the context only between reads. Low.
+
+**What I changed for it.** No definite unbounded wait was found that a
+bounded deadline would fix without guessing (the candidates are a
+non-context-aware mutex used by every store call, and teardown steps whose
+bounds are a design question), so no behavior was changed. Instead
+(red: observability on the guest runtime, read-only fields only):
+
+- `internal/steptrace`: named in-flight steps with start time and elapsed
+  time, plus the last 64 finished steps with duration and error.
+- Instrumented: the cell (`cell.go_eval`, `cell.reduce`), the Complete
+  intent (`reduce.complete_intent`), every physical and store step of the
+  terminal saga (`complete.*`), and the executor's quiesce, digest and
+  teardown steps (`capsule.*`).
+- `/api/runtime/observability` carries `steps` (in-flight and recent) and
+  `engine_mutex_live` (the current holder's call path and age, and every
+  waiter with its wait so far). `choir trace` already reads that route; no
+  SSH.
+
+**What the next drill should show.** For a hung Complete, one `steps.in_flight`
+entry names where it is stopped and since when; if it is a store call,
+`engine_mutex_live` names the holder. Confirm or refute 1 to 3 from that,
+then fix the named wait (a context-aware lock acquisition, a bound on
+teardown, or a default cell bound) and not before.
