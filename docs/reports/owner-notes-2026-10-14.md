@@ -743,3 +743,10 @@ Owner, on waking:
   expand the gamut of sources. And you can help me with that, just
   telling me which things I need to sign up for and API keys I need to
   create." First, an overview panel of every stream, as an artifact.
+- Autoradio target (about 16:15 UTC): "I feel confident that we can ship
+  the auto radio to the App Store, even if who knows how long it'll take
+  them to approve it, before October ends, before Halloween." Target:
+  submitted for App Review by 2026-10-31. Critical path named in reply:
+  Apple Developer Program enrollment (an organization account needs a
+  D-U-N-S number, which can take days), the stack choice, and whether v1
+  needs sign-in (sign-in brings Apple's in-app account deletion rule).
