@@ -1326,7 +1326,8 @@ in
         # 2026-10-20: ON again, on Sonnet, by owner request (owner notes §28;
         # docs/problems/claude-delegate-resume-sonnet-2026-10-20.md). Two-week
         # expiry, renewed only by an explicit edit.
-        "CHOIR_CLAUDE_DELEGATE_COMPUTERS=computer-33594053a05f46e93d80e7e15ce8a0d2"
+        # The 10-14 test computer is gone (ownership 404); replacement minted 2026-10-20.
+        "CHOIR_CLAUDE_DELEGATE_COMPUTERS=computer-ad1b46d4c20129e84b9e239cf4720fb9"
         "CHOIR_CLAUDE_DELEGATE_EXPIRES=2026-11-03T00:00:00Z"
         "CHOIR_CLAUDE_DELEGATE_TOKEN_FILE=${claudeDelegateTokenCopy}"
         # Keep personal computers resident while the host is under capacity.
