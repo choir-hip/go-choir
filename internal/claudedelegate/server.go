@@ -88,7 +88,24 @@ type Status struct {
 	EventsSHA256 string    `json:"events_sha256,omitempty"`
 	StderrTail   string    `json:"stderr_tail,omitempty"`
 	Result       *Result   `json:"result,omitempty"`
+	// WrittenFiles are the files the run's Write and Edit calls named inside
+	// the working tree, as absolute paths, stat'ed by the broker in the
+	// capsule's own view when the run ended. The desk's cells run at /, so a
+	// path relative to the working tree names a different file to them.
+	WrittenFiles          []WrittenFile `json:"written_files,omitempty"`
+	WrittenFilesTruncated int           `json:"written_files_truncated,omitempty"`
 }
+
+// WrittenFile is one file a run wrote or tried to write.
+type WrittenFile struct {
+	Path   string `json:"path"`
+	Exists bool   `json:"exists"`
+	Bytes  int64  `json:"bytes,omitempty"`
+}
+
+// maxWrittenFiles bounds status.json: a run that rewrites a package lists
+// the first files and counts the rest.
+const maxWrittenFiles = 64
 
 // Launch builds the (unstarted) command that becomes the claude process for
 // a run directory. The server sets its environment, stdio and process group.
@@ -101,6 +118,9 @@ type Server struct {
 	BaseEnv []string // the claude environment before Env adds the token
 	Launch  Launch
 	Now     func() time.Time
+	// Workdir is the delegate's working tree (default Workdir); the paths a
+	// run writes are resolved against it. Tests override it.
+	Workdir string
 
 	token []byte
 	// wallClock overrides the spec's wall clock (tests only).
@@ -119,8 +139,11 @@ type run struct {
 	mu       sync.Mutex
 	status   Status
 	cmd      *exec.Cmd
-	stopping string // StateTimeout or StateStopped once a kill is asked
-	done     chan struct{}
+	stopping string   // StateTimeout or StateStopped once a kill is asked
+	written  []string // absolute in-tree paths named by Write/Edit, first-seen order, at most maxWrittenFiles
+	// writtenSeen holds every distinct such path, so the overflow is counted.
+	writtenSeen map[string]bool
+	done        chan struct{}
 }
 
 // Request is one line on the delegate socket.
@@ -137,6 +160,13 @@ type Response struct {
 	Available bool    `json:"available"`
 	Model     string  `json:"model,omitempty"`
 	Status    *Status `json:"status,omitempty"`
+}
+
+func (s *Server) workdir() string {
+	if s.Workdir != "" {
+		return s.Workdir
+	}
+	return Workdir
 }
 
 func (s *Server) now() time.Time {
@@ -333,7 +363,7 @@ func (s *Server) supervise(r *run, spec Spec, stdout, stderr io.Reader, events, 
 				written += int64(n)
 				hash.Write(line[:n])
 			}
-			r.observe(line, &resultMu, &lastResult)
+			r.observe(line, s.workdir(), &resultMu, &lastResult)
 			r.mu.Lock()
 			r.status.EventsBytes = written
 			r.mu.Unlock()
@@ -373,6 +403,7 @@ func (s *Server) supervise(r *run, spec Spec, stdout, stderr io.Reader, events, 
 	r.status.FinishedAt = now.UTC()
 	r.status.EventsSHA256 = "sha256:" + hex.EncodeToString(hash.Sum(nil))
 	r.status.StderrTail = tail.String()
+	r.status.WrittenFiles, r.status.WrittenFilesTruncated = r.statWritten()
 	resultMu.Lock()
 	if len(lastResult) > 0 {
 		var res Result
@@ -405,13 +436,16 @@ func (s *Server) supervise(r *run, spec Spec, stdout, stderr io.Reader, events, 
 }
 
 // observe counts progress and keeps the last result line.
-func (r *run) observe(line []byte, resultMu *sync.Mutex, lastResult *[]byte) {
+func (r *run) observe(line []byte, workdir string, resultMu *sync.Mutex, lastResult *[]byte) {
 	var head struct {
 		Type    string `json:"type"`
 		Message struct {
 			Content []struct {
-				Type string `json:"type"`
-				Name string `json:"name"`
+				Type  string `json:"type"`
+				Name  string `json:"name"`
+				Input struct {
+					FilePath string `json:"file_path"`
+				} `json:"input"`
 			} `json:"content"`
 		} `json:"message"`
 	}
@@ -425,6 +459,9 @@ func (r *run) observe(line []byte, resultMu *sync.Mutex, lastResult *[]byte) {
 		for _, c := range head.Message.Content {
 			if c.Type == "tool_use" {
 				r.status.Progress.ToolUses++
+				if c.Name == "Write" || c.Name == "Edit" {
+					r.noteWritten(workdir, c.Input.FilePath)
+				}
 				r.status.Progress.LastTools = append(r.status.Progress.LastTools, c.Name)
 				if n := len(r.status.Progress.LastTools); n > 8 {
 					r.status.Progress.LastTools = r.status.Progress.LastTools[n-8:]
@@ -539,4 +576,52 @@ func Call(socket string, req Request, timeout time.Duration) (Response, error) {
 		return Response{}, err
 	}
 	return resp, nil
+}
+
+// writtenPath resolves a path a tool call named against the working tree. A
+// path that is empty, is the tree itself, or leaves it is not reported, and
+// the broker never stats it: the model names these paths.
+func writtenPath(workdir, p string) (string, bool) {
+	p = strings.TrimSpace(p)
+	if p == "" {
+		return "", false
+	}
+	if !filepath.IsAbs(p) {
+		p = filepath.Join(workdir, p)
+	}
+	p = filepath.Clean(p)
+	if !strings.HasPrefix(p, workdir+"/") {
+		return "", false
+	}
+	return p, true
+}
+
+// noteWritten records a Write/Edit target; r.mu is held by the caller.
+func (r *run) noteWritten(workdir, raw string) {
+	p, ok := writtenPath(workdir, raw)
+	if !ok || r.writtenSeen[p] {
+		return
+	}
+	if r.writtenSeen == nil {
+		r.writtenSeen = map[string]bool{}
+	}
+	r.writtenSeen[p] = true
+	if len(r.written) < maxWrittenFiles {
+		r.written = append(r.written, p)
+	}
+}
+
+// statWritten stats every recorded path from the broker's side, which is the
+// capsule's view and the one the cells share; r.mu is held by the caller.
+// The second result counts paths seen beyond the bound.
+func (r *run) statWritten() ([]WrittenFile, int) {
+	var out []WrittenFile
+	for _, p := range r.written {
+		f := WrittenFile{Path: p}
+		if info, err := os.Lstat(p); err == nil && info.Mode().IsRegular() {
+			f.Exists, f.Bytes = true, info.Size()
+		}
+		out = append(out, f)
+	}
+	return out, len(r.writtenSeen) - len(r.written)
 }

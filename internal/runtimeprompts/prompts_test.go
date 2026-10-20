@@ -268,6 +268,8 @@ func TestRLMEngineeringOverlayShowsTheClaudeDelegateOnlyInClaudeMode(t *testing.
 	for _, want := range []string{
 		carveOut, `choir.Exec("choir-delegate", []string{"start", "--spec-json"`, `"wait", "--id"`,
 		"re-run the test in your own cell", "resume_session", "only the model API", "Precommit in your first cell", `"-newer", dir + "/spec.json"`,
+		// F15: the delegate's cwd is the tree, the cells' is /.
+		"written_files", "means /docs/x.md to you", "absolute /workspace/platform/",
 	} {
 		if !strings.Contains(claude, want) {
 			t.Errorf("claude overlay lacks %q", want)

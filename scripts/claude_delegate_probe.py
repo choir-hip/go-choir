@@ -223,7 +223,8 @@ def main():
         f"Engineering probe {stamp} for the Claude delegate. Engineering: use the Claude delegate (choir-delegate) "
         f"to create the file {target} with the single line 'claude delegate probe {stamp} ok'. Brief it with "
         f'paths ["docs/probes"], test ["cat", "{target}"], max_turns 8 and wall_clock_min 10. Poll it until it is done, '
-        f"read the file yourself with cat in your own cell, then Complete with result completed, naming the delegate's "
+        f"read the file yourself with cat /workspace/platform/{target} in your own cell (your cells run at /, so a "
+        f"relative path misses it; the wait output's written_files names the absolute path and whether it exists), then Complete with result completed, naming the delegate's "
         f"run id, session id, turns and cost. Do not Freeze: this is a probe, not a change to land."
     )
     started = c.call("POST", "/api/prompt-bar", {"text": brief, "command_id": f"claude-delegate-probe-{stamp}"})
