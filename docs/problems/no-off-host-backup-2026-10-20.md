@@ -514,4 +514,31 @@ with this. either edit node-a or the mike repo").
     empty disk and compares the witness; (c) if it matches, drop images
     from the nightly run, keeping at most a weekly paper image for
     recovery time.
-11. Next: run 2's numbers, (a), the restore drill, then `enable = true`.
+11. **(a) done.** Owner, 2026-10-20: "Yes, we can stop backing up the
+    test computers." 710ce53cb (deployed) clones only the paper and owner
+    computers' images; on Node B's data the plan selects 2 of 15.
+12. **Run 2 (20:21:56 to 21:42:04 UTC, 1 h 20 min): ok, the first clean
+    run.** Script from main with the tool preflight, tools from the
+    system packages, `auth.db` and `mail.db` staged. Snapshot
+    `17cdae99…`: 9,557,485 files unmodified, 63,645 new, 5,052 changed;
+    9.3 GB new before compression, 3.0 GB packed; the repository is
+    104.2 GB. restic's stage took 37 min (20:58 to 21:35), then `restic
+    check`. Memory peak 10.0 GB (the new 10G line, raised at 20:58),
+    swap peak 7.5 GB (pushed out under the old 4G line, before the
+    raise; 2 MB in swap at 21:40). Read 669 GB, wrote 118 GB, CPU 41
+    min. This run still cloned all 15 images (it started before 710ce53cb).
+    Open, measured but not explained:
+    - **The Dolt platform sync took 36 minutes** (2 minutes in run 1),
+      and the unit sat at its 4G memory line during it while the host
+      swapped out about 27 GiB (`pswpout` 80.86M to 87.84M pages,
+      20:21 to 20:58). `DOLT_BACKUP` runs in the Dolt server; what in
+      the backup's own cgroup held 4 GB then is not known.
+    - **669 GB read** is close to the whole source set (680 GB apparent),
+      though restic re-read only changed files. Not yet attributed
+      (image clones are new inodes and are re-read; the Dolt backup
+      directory; swap-in).
+    Run 3, with two images, is the comparison.
+13. Next: the restore drill (section 9), in pieces on a Node B scratch
+    directory (85 GB free, 40 GB guard), each piece verified and deleted
+    before the next; a test computer's image, not the owner's. Then
+    `enable = true`.
