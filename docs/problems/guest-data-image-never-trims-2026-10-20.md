@@ -158,3 +158,29 @@ against the live store size. Pass: allocation stays within about 1.5x of the
 live Dolt store (about 12 GB for 8 GB live) instead of climbing ~5 GB/hour;
 the journal line `choir-data-fstrim` reports bytes trimmed each hour; store
 read/write latency and Dolt commit time show no hourly regression.
+
+## As built (same day)
+
+- `internal/vmmanager/data_discard.go`: `ManagerConfig.DataDiscard`
+  (`VM_DATA_DISCARD`), `firecrackerSupportsBlockDiscard`, and
+  `applyDataDriveDiscard` (adds `io_engine: Sync` and `discard: true` to the
+  `data` drive only). `LoadConfigFromEnv` honors the flag only when
+  `firecracker --version` reports >= 1.17.0, and logs when it ignores it.
+  Tests: `internal/vmmanager/data_discard_test.go` (off emits nothing; on
+  touches only `data`, Sync; version table; env gate incl. unreadable binary;
+  jail rewrite keeps the fields).
+- `nix/autoputer-vm.nix`: `choir-data-fstrim.service` and `.timer` (first run
+  10 min after boot, then hourly, idle IO class, no-op when the device
+  advertises no discard). Check: `scripts/check-guest-data-fstrim.sh` (Nix
+  evaluation of the guest config, no build).
+- `nix/node-b.nix`: a comment only. `VM_DATA_DISCARD` is not set, because the
+  pinned binary is 1.16.1.
+- Nothing is live until `pkgs.firecracker` is >= 1.17.0 and
+  `VM_DATA_DISCARD=1` is added to vmctl's environment. Guests pick up the
+  timer at their next planned refresh; the flag at each computer's next cold
+  boot. A Firecracker bump also invalidates hibernate snapshots
+  (`firecracker_version_mismatch`), which cold boot.
+- Until then the only trim is the compaction hook's loop-mount `fstrim`; the
+  32 GiB sweep threshold remains the lever, and it is driven by host
+  allocation the guest inflates (about 10 GB per 2 h on the paper), so it will
+  fire more often than the store's real growth warrants.

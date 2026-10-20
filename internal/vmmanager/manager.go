@@ -318,6 +318,11 @@ type ManagerConfig struct {
 	// off by default). See balloon.go.
 	BalloonFreePageReporting bool
 
+	// DataDiscard adds virtio-blk discard (and the Sync io_engine it needs)
+	// to the data drive (VM_DATA_DISCARD; off by default, and honored only
+	// when the Firecracker binary is 1.17.0 or newer). See data_discard.go.
+	DataDiscard bool
+
 	// BalloonStatsPollingIntervalS is the balloon statistics interval in
 	// seconds; 0 disables statistics. Only meaningful with the balloon on.
 	BalloonStatsPollingIntervalS int
@@ -1720,12 +1725,14 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 	// Per-VM data volume for mutable autoputer state (always present).
 	// vmmanager creates a data.img per-VM in the state directory.
 	dataImgPath := filepath.Join(m.cfg.StateDir, cfg.VMID, "data.img")
-	drives = append(drives, map[string]interface{}{
+	dataDrive := map[string]interface{}{
 		"drive_id":       "data",
 		"path_on_host":   dataImgPath,
 		"is_root_device": false,
 		"is_read_only":   false,
-	})
+	}
+	applyDataDriveDiscard(m.cfg, dataDrive)
+	drives = append(drives, dataDrive)
 	if cfg.credentialDiskPath != "" {
 		drives = append(drives, map[string]interface{}{
 			"drive_id":       "credential",
