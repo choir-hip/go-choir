@@ -78,8 +78,10 @@
     publishedCitationPayload as publishedCitationPayloadFromContext,
     titleForPublishedBundle,
   } from './texture-publication-context';
+  import { fetchRelatedStories, relatedLinkTarget, renderRelatedHTML } from './texture-related-stories';
   import './texture-source-flow.css';
   import './texture-published-citations.css';
+  import './texture-related-stories.css';
 
   export let currentUser = null;
   export let authenticated = false;
@@ -141,6 +143,12 @@
   let publishedDerivativeActive = false;
   let publishedTransclusions = [];
   let publishedProposal = null;
+  // "More on this": the related stories of the open published story, asked
+  // for after the article renders (texture-related-stories.ts). relatedBare
+  // is the story the list belongs to; relatedToken drops a late answer.
+  let publishedRelated = null;
+  let relatedBare = '';
+  let relatedToken = 0;
   let publishedActionPending = false;
   let publishResult = null;
   let publishMenuOpen = false;
@@ -864,6 +872,13 @@
     stopPublishedPoll();
 
     try {
+      // A list that belongs to another story is dropped now; the same
+      // story's list (a move between its versions) stays.
+      if (bareOfPublishedRoute(appContext.publishedRoutePath) !== relatedBare) {
+        publishedRelated = null;
+        relatedBare = '';
+        relatedToken += 1;
+      }
       publishedBundle = null;
       publishedRoutePath = '';
       publishedCitations = null;
@@ -995,14 +1010,40 @@
     const title = titleForPublishedBundle(bundle);
     if (title !== appContext.windowTitle) publishWindowContext({ windowTitle: title }, title);
     startPublishedPoll();
+    void loadPublishedRelated(publishedBareRoute(bundle));
 
     if (appContext.startPublishedDerivative && currentUser && !appContext.publishedReadOnly) {
       await createPublishedDerivative({ auto: true });
     }
   }
 
+  function bareOfPublishedRoute(route = '') {
+    return String(route || '').replace(/\/v[1-9][0-9]*$/, '');
+  }
+
   function publishedBareRoute(bundle = publishedBundle) {
-    return String(bundle?.route?.bare || publishedRoutePath || '').replace(/\/v[1-9][0-9]*$/, '');
+    return bareOfPublishedRoute(bundle?.route?.bare || publishedRoutePath || '');
+  }
+
+  // Ask for the story's related list. Never awaited by the load: the
+  // article is already on screen, and the list is an addition to it. An
+  // answer for a story the reader has left is dropped, and a failure shows
+  // nothing.
+  async function loadPublishedRelated(bare) {
+    if (!bare || (bare === relatedBare && publishedRelated)) return;
+    const token = ++relatedToken;
+    relatedBare = bare;
+    const related = await fetchRelatedStories(bare);
+    if (token !== relatedToken || publishedBareRoute() !== bare) return;
+    publishedRelated = related;
+  }
+
+  /** Move this window to another published story, from a related link. */
+  async function openRelatedStory(route, title) {
+    publishWindowContext({ publishedRoutePath: route, windowTitle: title || '' }, title || '');
+    await loadContext();
+    await tick();
+    if (editorSurface) editorSurface.scrollTop = 0;
   }
 
   /** Move this window to another published version (0 = the bare latest link). */
@@ -1581,6 +1622,13 @@
   }
 
   function handleEditorClick(event) {
+    const related = relatedLinkTarget(event);
+    if (related) {
+      event.preventDefault();
+      event.stopPropagation();
+      void openRelatedStory(related.route, related.title);
+      return;
+    }
     const collapse = event.target?.closest?.('[data-texture-source-flow-collapse]');
     if (collapse) {
       event.preventDefault();
@@ -1799,7 +1847,8 @@
   $: sourceDecisions = sourceDecisionEvidence(sourceDiagnosis);
   $: editEvidence = sourceEditEvidence(currentRevision, sourceDiagnosis);
   $: renderedMarkdown = renderDocumentHTML(editorValue, editorBodyDoc, publishedCitations);
-  $: syncEditorSurface(renderedMarkdown);
+  $: relatedHTML = isPublishedReadOnly && publishedBundle ? renderRelatedHTML(publishedRelated) : '';
+  $: syncEditorSurface(renderedMarkdown + relatedHTML);
 
   onMount(() => {
     if (!initializedKey) {

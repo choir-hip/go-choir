@@ -1,0 +1,73 @@
+/* "More on this": the related stories drawn at the end of a published
+   story, inside the scrolling article (texture-related-stories.ts). */
+
+.rendered-doc .related-stories {
+  margin: 2.2rem 0 0.4rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--choir-border-strong);
+}
+
+.rendered-doc .related-stories-heading {
+  margin: 0 0 0.6rem;
+  color: var(--choir-text-muted, var(--choir-text-primary));
+  font-size: 0.78rem;
+  font-weight: 760;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.rendered-doc .related-stories ul.related-stories-list {
+  display: grid;
+  gap: 0.2rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rendered-doc .related-stories-item {
+  margin: 0;
+  padding: 0;
+}
+
+.rendered-doc a.related-story {
+  display: block;
+  min-width: 0;
+  padding: 0.62rem 0.7rem;
+  border-radius: 8px;
+  color: var(--choir-text-primary);
+  text-decoration: none;
+  line-height: 1.38;
+  overflow-wrap: anywhere;
+}
+
+.rendered-doc a.related-story:hover,
+.rendered-doc a.related-story:focus-visible {
+  background: var(--choir-state-hover);
+  outline: none;
+}
+
+.rendered-doc a.related-story:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--choir-accent);
+}
+
+.rendered-doc .related-story-title {
+  display: block;
+  font-weight: 720;
+}
+
+.rendered-doc .related-story-dek {
+  display: -webkit-box;
+  margin-top: 0.15rem;
+  overflow: hidden;
+  color: var(--choir-text-muted, var(--choir-text-primary));
+  font-size: 0.9rem;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.rendered-doc .related-story-meta {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--choir-text-muted, var(--choir-text-primary));
+  font-size: 0.74rem;
+}

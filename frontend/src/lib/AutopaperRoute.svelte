@@ -65,6 +65,11 @@
     const path = storyPathForRoute(String(ctx.publishedRoutePath || ''));
     if (location.kind === 'story' && path !== window.location.pathname) {
       window.history.pushState({ autopaper: true }, '', path);
+      // The shell's own location follows the reader, so the context it
+      // hands back to the editor names the story and version on screen. A
+      // reader that moves to another story (a related link) would
+      // otherwise be sent back to the story the page was opened on.
+      location = parseAutopaperPath(path);
     }
   }
 
