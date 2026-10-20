@@ -844,3 +844,57 @@ hypothesis.
   file list and size) before choosing a fix. Candidate fixes, not decided:
   a re-cast carries the prior capsule's diff, or a Freeze refuses an empty
   diff, or management's verify checks the patch against the request.
+
+### Failure 15 confirmed from the trace: the re-cast started a fresh capsule, and an empty source patch passed as "frontend-only" (2026-10-20, 19:55 UTC)
+
+Read from the s6-0-1817 trace bundle (run events, tool calls and results of
+both engineering runs) and the receipt's release witness. Hypothesis A is
+confirmed; hypothesis B is wrong as stated (Freeze did not misread a Go
+change: there was no change to read), but the gate gap it pointed at is real.
+
+- **Round 1** (`run:assignment-248192…`, capsule `capsule-40939d44…`,
+  18:18-18:21): wrote `internal/selfdevprobe/selfdevprobe.go`, its test and
+  the route line in `internal/apihandler` (18:18:34, "written"); the
+  focused test passed (`ok …/internal/selfdevprobe 0.003s`, 18:19:26);
+  vet sat in module downloads; Complete at 18:21:37 reported failed.
+- **Round 2** (`run:assignment-1bf749…`, operation capsule
+  `capsule-ce41d011…`, 18:22-18:36): a different capsule. Its cells, in
+  order: read records, Precommit, `go vet ./internal/apihandler/` (12
+  minutes of downloads, then passed), toolchain versions, two frontend
+  builds (the first failed on `cp` permissions, the second used
+  `--no-preserve`), `go build ./cmd/autoputer`, Freeze, Complete. No
+  `WriteFile`, `ReadFile` or diff of any kind: it never looked for round
+  1's change. Its prompt ("Complete the requested bounded recovery: run
+  go vet …; only if it passes, build the release tree …, freeze") did not
+  say the change had to be made again. The prompt came from Texture's
+  `integrate_execution_findings` revision, passed on by management.
+- **The gate.** The frozen operation's bundle has `binary_input_count: 0`
+  and 55 runtime files (the rebuilt frontend). The witness reads it as
+  "the bundle carries no source patch (a frontend-only candidate)". Freeze,
+  verify, owner approval and apply all went through. After the apply the
+  effective-release read already says "the applied operation changed no
+  workspace/platform source" (`errNoSourcePatch`,
+  `internal/agentcore/effective_release.go`), but only as a recorded
+  `tree_error`, after the restart.
+
+**Two problems, not one:**
+
+1. **Lost work across a re-cast (substrate: capsule lifetime).** A failed
+   Complete revokes and destroys the assignment's capsule, so a re-cast
+   starts from the base tree. Round 1's working, tested change is gone,
+   and nothing tells round 2. Management and Texture wrote "continue the
+   existing engineering work", which the substrate cannot honour.
+2. **A candidate with no change passes the gate (symptom layer,
+   deterministic).** "No source patch" is read as "frontend-only" without
+   checking that the frontend changed either. A rebuilt frontend from an
+   unchanged tree is a release of nothing new. The check belongs at
+   Freeze: a capsule whose source tree, frontend included, equals its base
+   has nothing to propose; Freeze refuses and engineering reports that,
+   honestly.
+
+Fix order: problem 2 first (small, deterministic, red: Freeze is run
+acceptance). It turns this case into an honest failure report instead of
+an applied no-op. Problem 1 needs a design: either a failed assignment's
+capsule diff is kept as an artifact that a re-cast can name to seed its
+new capsule, or the re-cast tells engineering plainly that the work is
+gone. Not decided; a panel question once problem 2 lands.
