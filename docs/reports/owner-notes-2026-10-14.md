@@ -812,3 +812,33 @@ Owner, on waking:
   distinct outlets a story needs, and it never stands as proof of a fact
   by itself. Unverified or anonymous channels are cited only once the
   claim itself is the news.
+
+## 31. Autoradio launch scope: the full experience by Halloween (2026-10-20, ~16:30 UTC)
+
+- Apple account: "I'm going to resume my account tomorrow or the next
+  day. I already have an account. It just lapsed." (No D-U-N-S wait.)
+- Scope is the full product, not a public player: "I do want the full
+  experience with auth and signed in users so that a user that makes an
+  account has their own autoputer VM that they can drive and so on ...
+  there's a lot that we can do in 10 days. So I like to set ambitious
+  targets and then hit them."
+- The feature that sets Autoradio apart: "integrating a podcast player and
+  playing clips and full episodes of podcasts ... by and large, podcasts
+  have a public RSS feed for a reason." Reply given: podcasts are
+  copyrighted, not public domain; a public feed is an implied licence to
+  fetch and play the episode as published, so full episodes streamed
+  unmodified from the publisher's own enclosure URL (their ads, their
+  download counts) are what every podcast app does. Clips are the gray
+  part: play a time range from the original URL, short, attributed, with
+  "play the full episode"; never re-host or re-encode, never cut ads out.
+- Voice: "we're going to need to build a whole voice pipeline to let
+  users speak and interrupt ... probably the hardest part of all. So we'll
+  get to that in a couple days." On-device on the iPhone; the owner knows
+  the local speech-to-text and text-to-speech state of the art from a side
+  project. Voice character: "not to have the highest quality AI voice, but
+  actually to have a recognizably robotic, a little bit, AI voice, and
+  then to be mixing in human voices as much as possible."
+- App Store consequences named in reply: in-app account deletion (5.1.1(v))
+  makes account recovery and deletion launch work; any paid compute must
+  go through in-app purchase (3.1.1), so launch free; a per-user computer
+  per sign-up needs admission limits or a waitlist on Node B.
