@@ -224,6 +224,15 @@ const (
 	// with its search id and how many providers answered of how many.
 	EventDeskEgress EventKind = "desk.egress"
 
+	// EventSystem1Judgment records a research cell's choir.System1 call on
+	// the tape: a "requested" record before the judge is called (it counts
+	// toward the caps even if the computer restarts mid-call), then an
+	// "answered" record with the request digest, the distributions, the model
+	// as reported and the cost, or a "failed" one. A replay of the cell
+	// reads the answered record instead of calling the judge again
+	// (docs/problems/related-stories-thin-no-subject-nodes-2026-10-20.md).
+	EventSystem1Judgment EventKind = "system1.judgment"
+
 	// EventChannelMessage is emitted when a message is posted to an agent
 	// channel, making inter-agent coordination observable through the
 	// event stream.

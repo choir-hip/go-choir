@@ -282,3 +282,42 @@ func TestRLMEngineeringOverlayShowsTheClaudeDelegateOnlyInClaudeMode(t *testing.
 		t.Fatal("unrendered template in the claude overlay")
 	}
 }
+
+// choir.System1 is the research desk's closed-question verb (owner ruling
+// 2026-10-20: research gets it, management does not in this change; the verb
+// is System1, not the name of the judge behind it). Research's overlay lists
+// it with its contract: a distribution comes back, the desk decides, a flat
+// one means read closely, evidence is by reference. No other desk's overlay
+// teaches it, and none names the backing judge as a verb.
+func TestRLMResearchOverlayListsSystem1WithItsContract(t *testing.T) {
+	overlay := RLMResearchOverlay()
+	at := strings.Index(overlay, "Research Cell Surface")
+	if at < 0 {
+		t.Fatalf("overlay has no cell surface: %q", overlay)
+	}
+	surface := overlay[at:]
+	for _, want := range []string{"choir.System1(", "distribution", "you decide", "flat", "read the sources closely", "context_refs", "story:<revision_id>", "may be off on this computer"} {
+		if !strings.Contains(surface, want) {
+			t.Errorf("research overlay does not say %q about choir.System1", want)
+		}
+	}
+	if strings.Contains(overlay, "choir.Jev") {
+		t.Error("research overlay names a choir.Jev verb; the verb is choir.System1")
+	}
+}
+
+func TestOtherDesksOverlaysDoNotTeachSystem1(t *testing.T) {
+	overlays := map[string]string{
+		"management":      RLMManagementOverlay(RLMManagementOverlayOptions{IntakeLabels: true, EventWakes: true}),
+		"management-off":  RLMManagementOverlay(),
+		"management task": RLMManagementTaskOverlay(RLMManagementTaskOverlayOptions{Deadline: "10m"}),
+		"engineering":     RLMEngineeringOverlay(RLMEngineeringOverlayOptions{HasSelfDevelopmentOperation: true}),
+	}
+	for desk, overlay := range overlays {
+		for _, banned := range []string{"choir.System1", "choir.Jev"} {
+			if strings.Contains(overlay, banned) {
+				t.Errorf("%s overlay mentions %s, a verb it does not have", desk, banned)
+			}
+		}
+	}
+}

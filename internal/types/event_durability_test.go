@@ -118,7 +118,9 @@ func TestDurabilityTableIsTheDesignedTen(t *testing.T) {
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("batched kinds = %v\nwant %v (design telemetry-batching-design-2026-10-20.md section 3.1; changing this set needs the design and the panel)", got, want)
 	}
-	if n := len(eventDurability); n != 42 {
-		t.Fatalf("eventDurability has %d entries, design accounts for 42 runtime kinds", n)
+	// 42 designed kinds plus system1.judgment (acknowledged, 2026-10-20): a
+	// paid call the tape must hold so a replay never spends twice.
+	if n := len(eventDurability); n != 43 {
+		t.Fatalf("eventDurability has %d entries, want 43 (the 42 designed kinds and system1.judgment)", n)
 	}
 }

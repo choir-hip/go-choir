@@ -300,7 +300,7 @@ desk's module set admits it):
 | **Texture** | sole agent writer of canonical document revisions (I1) | `ReadDoc`, `Write`, `Done`, `Wait`, `Reject`, plus `Cast`, `Ask`, `Note` |
 | **management** | computer-wide coherence; admits engineering by delegated Cast; owns schedules | `Cast`, `Verify`, `Delegate`, `CancelTask`, `CancelAssignment`, `ProductAPI`, `Feed`, `Decline`, `Stories`, `ReadCapture`, the commitment acts |
 | **engineering** | mutation only inside one assignment's capsule | `WriteFile`, `Exec`, `Freeze`, `Complete`, plus `Report`, `Ask`, `Reply`, `Note` |
-| **research** | read-only toward the world, full message authority | `SearchStart`, `Searches`, `SearchWait`, `Read`, `ReadCapture`, `SearchWireCorpus`, `PollSource`, `Research`, evidence verbs, the commitment acts |
+| **research** | read-only toward the world, full message authority | `SearchStart`, `Searches`, `SearchWait`, `Read`, `ReadCapture`, `SearchWireCorpus`, `PollSource`, `Research`, `System1` (closed questions, off unless capped), evidence verbs, the commitment acts |
 | research child | one level of fan-out, no messaging | world-reading verbs only |
 | management task | dispose of leased captures | `Cast`, `Note`, `ReadCapture`, `Stories`, `Feed`, `Decline`, `Done` |
 
