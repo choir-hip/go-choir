@@ -772,3 +772,117 @@ interrupted run) is accepted and goes into phase 1's E2E.
 
 **Confidence.** Panel: high on the verdict. Mine: high on the classification and
 shape; medium on realised `k` until phase 0 counters exist.
+
+## Implementation plan and failure modes (2026-10-20, written before any code)
+
+Scope of this implementation: phase 0 and phase 1 of section 12, flag
+`CHOIR_TELEMETRY_BATCH` default off. Phases 2 to 4 (enabling anywhere,
+`Relaxed` reads, default on) are not part of it. Mutation class: phase 0
+orange; phase 1 **red** (protected surfaces: tape write path, evidence readers,
+sequence allocation, restart handling; evidence class: unit and in-process
+tape tests with a real appender over the real projection store, not staging;
+rollback: flag off drains and resumes the acknowledged path, or revert the
+commit; no payload, reducer or witness format changes). Heresy delta:
+discovered, see "Found while reading the code" below; introduced, none
+intended (the failure-mode tests are what would find one); repaired, none.
+
+### Found while reading the code (feeds the plan)
+
+1. **The projection store's `Prepare`, `Finalize` and `DiscardPrepared` take
+   `Store.eventMu`** (`internal/store/computer_events.go:46,132,261`), and the
+   appender calls them while holding its own mutex. So the lock order is already
+   appender mutex then `eventMu`. A flush under `eventMu` would deadlock, not
+   merely stall. The design's "flush outside `eventMu`" is therefore a hard
+   requirement, and the backpressure test (P1-F11) is also the deadlock test.
+2. **A crash-boot close event is the first append of its run in the new
+   process**, and it is an acknowledged kind. Design 6.1 says the close event
+   "stores a number above the lost range"; it does not unless the reseed gap
+   applies to it too (stored 100, lost 101 to 105, close event gets 101). So the
+   gap is applied to **every** first seed of a run's `seq` while the sealer
+   exists, whatever the kind of the appending event, not only batched ones.
+3. **No diagnostics counters from forward-fix A0 exist yet** (only the
+   `livePayloads` leak fix landed). The counters are added to the existing
+   guest `GET /api/runtime/observability` response, next to `EngineMutex`
+   (`store.EngineMutexStats()` is the precedent), not to the replay health gate.
+4. **`ErrBatchRefused` (A3) does not exist.** The appender wraps the decode and
+   dry-run refusals with `%w` on a new sentinel so the sealer can tell a safe
+   pre-pin refusal from an unknown-outcome failure. Messages are unchanged.
+5. **`server.Shutdown` has no hook and `Runtime.Stop` is not called on SIGTERM**
+   in `autoputer.Run`. Drain on shutdown therefore needs a small
+   `AddShutdownHook` on `internal/server` (runs after the HTTP server stops
+   accepting, with the shutdown deadline).
+6. **Flag source.** A computer-owned boolean setting already exists
+   (`KnownComputerSettings`, written through the settings API,
+   `internal/agentcore/computer_settings.go`). The flag is on when the env value
+   `CHOIR_TELEMETRY_BATCH=on` or the setting `telemetry.batch` is true, so a test
+   computer is switched on through the product path without patching the host.
+   `W` is `CHOIR_TELEMETRY_BATCH_WINDOW_MS`, clamped to 250 to 2000, env only for
+   now (settings are boolean). Both are residual items, listed in the report.
+
+### Decisions where the design left a choice
+
+- Reads: a context marker `store.WithReadConsistency(ctx, ReadRelaxed)`; absent
+  means `Consistent`; in this implementation `Relaxed` behaves as `Consistent`
+  (phase 0 says so). Every `ListEvents*` method seals first.
+- Seal failure classes: an error wrapping `ErrBatchRefused` (decode or dry-run,
+  nothing pinned) splits to individual writes through the same direct path; a
+  single record that is still refused is dropped and counted as poison; **any
+  other error is an unknown outcome and is not retried** (design 6.2 item 3),
+  counted and logged. The unknown-outcome rule is also applied to a pin failure
+  (outage), which keeps an outage from multiplying work.
+- Capacity: pending plus in-flight plus reserved is capped at 256. A slot is
+  reserved before `eventMu`; at the cap the caller flushes (outside `eventMu`)
+  and retries. Records that fail to seal free their slots (dropped and counted).
+- Boot watermark: the first batched append after boot adds `G`=512 to
+  `maxStreamSeq` under `eventMu`, then writes one acknowledged `runtime.health`
+  event (payload `{"telemetry_boot_watermark":true}`) before anything is
+  queued. If that write fails, batched appends keep taking the acknowledged path
+  until it succeeds.
+- The sealer exists only after the first time batching is configured on in this
+  process. A process that never turned it on runs the old code, plus counters.
+  Known residual: a crash with a non-empty queue and a reboot with batching off
+  can reuse numbers; the flag is written by owner acts that drain first, so only
+  an env change coinciding with a crash exposes it.
+
+### Phase 0 failure modes (orange)
+
+| # | Failure | Test, written first |
+|---|---|---|
+| P0-1 | A new `types.EventKind` ships unclassified | `TestEveryEventKindIsClassified` parses `internal/types` with `go/parser`; every constant of type `EventKind` needs a map entry and the map has no entry without a constant |
+| P0-2 | An unknown or empty kind batches | `TestDurabilityUnknownKindIsAcknowledged` |
+| P0-3 | The table drifts from the design's ten kinds | `TestDurabilityTableIsTheDesignedTen` |
+| P0-4 | A new `ListEvents*` call site is added without a read class | `TestListEventsCallSitesAreClassified` scans every non-test `.go` file for `ListEvents*` calls outside `internal/store` against a table of (file, method, class) |
+| P0-5 | Counters are wrong or racy | `TestTelemetryStatsCountEventsAndBatchSizes`: per-kind counts, batchable share, ops-per-tape-event histogram, under `-race` with concurrent appends |
+| P0-6 | Counters change behaviour | covered by the flag-off golden test (P1-F8) |
+
+### Phase 1 failure modes (red), each with its test
+
+| # | Failure | Test |
+|---|---|---|
+| P1-F1 | A semantic kind is batched | type level: `TestTelemetryRecordIsUnforgeable` (go/parser: `telemetryRecord` has no exported field, and a composite literal of it appears only in `newTelemetryRecord`); runtime: `TestSemanticKindsNeverEnterTheQueue` (every `Acknowledged` kind: constructor refuses it, and with the flag on `AppendEvent` leaves queue depth 0 and writes an ordinary-authority event) |
+| P1-F2 | A forged record reaches the sealer | `TestSealTimeRecheckRefusesViolation`: a test-forged record with an acknowledged kind makes the whole batch fall back to singles, `telemetry_class_violation` increments, no telemetry-authority batch holds it |
+| P1-F3 | A missed appender entry point puts a semantic event ahead of earlier telemetry | `TestEveryAppenderEntryPointRunsTheBarrier` (go/parser: every exported method that locks `a.mu` is in a named non-append allowlist or calls `awaitBarrier` before locking) and a behavioural test that the entry points call the hook once, before the lock |
+| P1-F4 | A third caller exempts itself from the barrier | `TestBarrierExemptionHasExactlyTwoCallSites` (source scan: the sealer flush and `AppendRunMemoryEntry`) |
+| P1-F5 | Ordering: a semantic event lands ahead of earlier telemetry | `TestOrderingIsPreservedAcrossBarrier`: t1, t2, semantic, t3 gives tape order [t1,t2] then semantic then [t3], read from the recorded CAS stream |
+| P1-F6 | A crash loses a semantic event, or leaves a hole | `TestCrashLosesOnlyTheOpenWindow`: abandon the store with a non-empty queue, reopen the same files; every acknowledged event is present, the lost records are the newest telemetry of the run, none in the middle |
+| P1-F7 | Sequence reuse (design 6.1, four cases) | `TestNoSeqReuseCrashReseed`, `TestNoSeqReuseCrashThenCrash`, `TestNoSeqReuseInProcessReseedUnderQueue` (cache drop, mark deletion, async seal failure), `TestNoSeqReuseCloseEventAfterCrash` (finding 2), `TestBootWatermarkWrittenOncePerBoot` |
+| P1-F8 | Flag off changes the tape | `TestFlagOffTapeIsByteIdentical`: a scripted workload (batched kinds, semantic kinds, run memory, a folded lifecycle event) with fixed ids and timestamps, normalised only for tape event ids and times, compared to a golden file **generated from the unmodified baseline commit before any production code changed** |
+| P1-F9 | The window is sliding, or a quiet tail never seals | `TestDeadlineIsFromFirstRecordNotSliding`, `TestQuietTailSealsAtDeadline`, count cap 64, byte cap 256 KiB, single oversized op seals alone |
+| P1-F10 | Reads see a tape missing telemetry that is in the queue | `TestConsistentReadSealsPending` for every `ListEvents*` method; acceptance synthesis returns the same verdict as flag off |
+| P1-F11 | Barrier deadlock, lock inversion | `TestBackpressureAtCapacityDoesNotDeadlock` (cap path with the real appender, whose `Prepare` takes `eventMu`; a flush under `eventMu` hangs it), `TestSealerNeverTakesStoreLocks` (source scan of the sealer file), `TestConsistentReadUnderTrajectoryLock` |
+| P1-F12 | Timer/barrier/count race: lost wakeup, double seal, reordering | `TestConcurrentTelemetryAndBarriers` under `-race`: every record sealed exactly once, per-run order preserved, no duplicate `(run, seq)` |
+| P1-F13 | Seal failure handling | `TestSealFailureBeforePinSplitsToSingles`, `TestPoisonRecordDroppedAndCounted`, `TestSealFailureAfterPinIsNotRetried`, `TestPlatformOutageIsBounded` (queue never exceeds 256, nothing grows) |
+| P1-F14 | Flag turned off with pending records, or planned restart with a queue | `TestFlagOffDrainsThenAcknowledges`; agentcore: `TestPlannedRestartDrainsBeforeMarker`, `TestDrainFailureStillWritesMarkerAndFlagsResume` |
+| P1-F15 | A restart-interrupted trajectory fails verification because trace lines were lost | `TestVerifierReportsInconclusiveForInterruptedTrajectory` |
+| P1-F16 | The loss is silent | `TestCrashCloseRecordNamesTheMissingWindow` (sentence only when batching is configured on; flag-off payload unchanged) |
+| P1-F17 | Counters not readable without ssh | `TestObservabilityReportsTelemetryBatching` |
+
+### Order of work and commits
+
+1. This section (green, docs only).
+2. Golden test and golden file generated on the unmodified baseline (yellow).
+3. Phase 0 (orange): `Durability()` plus parser test, counters, read-class API,
+   call-site scan.
+4. Phase 1 (red): appender barrier hook and sentinel, sealer, `AppendEvent` and
+   sequence rule, reads, drain and restart hooks, verifier rule, flag wiring,
+   observability. Tests listed above are written before the code they cover.
