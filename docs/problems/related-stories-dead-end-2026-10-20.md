@@ -44,3 +44,29 @@ Remaining error: precision of the capture and canonical-key signals is
 unmeasured on live data (ship criterion: at most 10% wrong over 40+ pairs).
 Phase 2 (events) is out of scope here. Mutation class of the fix: red
 (publication write path, Store B edge kind).
+
+## Staging finding: live blogs link unrelated stories (02:32 UTC)
+
+Deployed e7ea4afda (CI 39358014589). Backfill: 1,032 stories, 4,056
+`cites_capture` edges written, 0 mismatches; a second dry run writes 0.
+The deployed spec passes (3 of 3). Coverage: 12 of 60 front stories have
+links (20%, against the 8% shared-URL baseline).
+
+Precision fails the ship bar. I read all 27 linked pairs on the front 60:
+10 are wrong and 1 is loose, about 40% against the 10% limit, and the
+DOJ/Zelenskyy pair the design names as a must-not-link is among them.
+Nine of the ten wrong pairs share one page by recapture (reason `source`,
+`citers: 5`): `theguardian.com/us-news/live/2026/oct/19/...-latest-news-
+updates`, a live blog that covered the Kansas rally, the East Potomac golf
+course case, Ukraine and the midterms in one feed. It meshes five stories
+(Kansas rally, midterm travel, the East Potomac judge, the approval poll,
+Zelenskyy on Starlink). The tenth (Italy's protest decree to Macron's
+curfews) shares a 2-citer source and is loosely related.
+
+Cause: a live page is many subjects under one URL, and a recapture of it
+is a different set of entries. Sharing it says nothing about the subject.
+The hub cutoff (7 citers) does not catch it at 5.
+
+Fix: a live page (path segment `live` or `liveblog`, or a slug naming
+live updates) gives no vote, by exact capture or by recapture. The rest of
+the read (exact shared captures, ordinary recaptures) is 16 of 17 right.
