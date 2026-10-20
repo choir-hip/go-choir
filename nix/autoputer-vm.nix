@@ -704,6 +704,53 @@ EOF
     };
   };
 
+  # Periodic trim of the data volume (docs/problems/guest-data-image-never-
+  # trims-2026-10-20.md). data.img is a sparse file on the host's btrfs: the
+  # host keeps every block the guest ever wrote until the guest trims it, and
+  # Dolt rewrites about 5 GB an hour. A timer, not the `discard` mount option:
+  # continuous discard adds latency to every Dolt file delete. Hourly, because
+  # a daily trim lets the image grow tens of GB between runs.
+  #
+  # Inert until the VMM offers virtio-blk discard (Firecracker >= 1.17.0 with
+  # VM_DATA_DISCARD on, vmmanager/data_discard.go): without the feature the
+  # device reports discard_max_bytes 0 and the service logs it and exits 0, so
+  # no failed unit appears on a guest whose VMM cannot discard.
+  systemd.services.choir-data-fstrim = {
+    description = "Trim the guest data volume so the host can reclaim freed blocks";
+    unitConfig.RequiresMountsFor = "/mnt/persistent";
+    path = [ pkgs.util-linux pkgs.coreutils ];
+    serviceConfig = {
+      Type = "oneshot";
+      Nice = 19;
+      IOSchedulingClass = "idle";
+      TimeoutStartSec = "30min";
+    };
+    script = ''
+      set -eu
+      src="$(findmnt -n -o SOURCE --target /mnt/persistent)"
+      dev="$(basename "$(readlink -f "$src")")"
+      max="/sys/class/block/$dev/queue/discard_max_bytes"
+      if [ ! -r "$max" ] || [ "$(cat "$max")" = 0 ]; then
+        echo "choir-data-fstrim: $dev offers no discard; nothing to trim"
+        exit 0
+      fi
+      fstrim -v /mnt/persistent
+    '';
+  };
+
+  systemd.timers.choir-data-fstrim = {
+    description = "Hourly trim of the guest data volume";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      # First run after boot lets a freshly refreshed computer shrink what
+      # earlier churn left; then hourly from the last run.
+      OnBootSec = "10min";
+      OnUnitActiveSec = "1h";
+      RandomizedDelaySec = "5min";
+      Unit = "choir-data-fstrim.service";
+    };
+  };
+
   systemd.services.go-choir-updater = {
     # No crash loops (docs/restart-subsystem-design-2026-10-13.md, L1a): after 5 starts in 10 minutes the unit stays failed until the computer is restarted from outside.
     startLimitIntervalSec = 600;

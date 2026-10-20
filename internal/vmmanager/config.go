@@ -4,6 +4,7 @@ package vmmanager
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -104,6 +105,12 @@ func LoadConfigFromEnv() ManagerConfig {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("VM_BALLOON_FREE_PAGE_REPORTING"))) {
 	case "1", "true", "on", "yes":
 		cfg.BalloonFreePageReporting = true
+	}
+	// Guest data drive discard (data_discard.go). Needs Firecracker >= 1.17.0;
+	// on an older binary the flag is ignored rather than failing every boot.
+	cfg.DataDiscard = dataDiscardEnabledFromEnv(envFlagOn("VM_DATA_DISCARD"), cfg.FirecrackerBinPath)
+	if envFlagOn("VM_DATA_DISCARD") && !cfg.DataDiscard {
+		log.Printf("vmmanager: VM_DATA_DISCARD is on but the Firecracker binary does not report 1.17.0 or newer; data drive discard stays off")
 	}
 	if v := os.Getenv("VM_BALLOON_STATS_POLLING_INTERVAL_S"); v != "" {
 		// Firecracker's field is a u16: refuse out-of-range values rather
