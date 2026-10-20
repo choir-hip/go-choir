@@ -260,3 +260,54 @@ becomes a measured number once the witness is fetched on staging.
   commitment is self-sourced from the head.
 - introduced: none.
 - repaired: none.
+
+## The release witness and how it could fail (S6-0)
+
+The witness is `GET /api/computers/<id>/self-development/operations/<op>/release-witness`
+(`internal/agentcore/selfdev_release_witness.go`). It is a read of the tape, the
+operation row and the updater store; it is never an authority and has no store
+of its own. Mutation class: **orange** (a read, no canonical write). Rollback:
+revert the commit; nothing reads the witness back. Failure modes, written down
+before the tests that cover them:
+
+1. **Wrong join.** (a) A staged host build of another attempt or operation is
+   taken for this one: matched on operation id and bundle digest, preferred by
+   the job id the gate itself derives, `candidates` reported. (b) The checkpoint,
+   route and applied events are found by the idempotency key derived from the
+   decision event, never "the latest event". (c) The effective release is
+   compared to an operation that has been superseded or restored: that is
+   `bound: null` with the reason, never `false`. (d) Another computer's
+   operation: the route requires `X-Authenticated-Computer` to equal the path's
+   computer and the lookup is scoped to it.
+2. **Stale read.** The stores are read one after another, not atomically. The
+   operation row is read again after the sections; if its state or `updated_at`
+   moved the read repeats (three tries) and `read_consistent: false` reports a
+   read that never settled (an apply in flight). `read_at` and
+   `Cache-Control: no-store` are set; nothing is cached by the witness.
+3. **Leaks private data.** The witness returns digests, refs, exit codes,
+   counts and fixed reason text. No patch bytes, no file paths, no command text
+   (a command is its sha256), no reject reason, no event payload, no decision
+   actor, no keys; error strings are truncated. It sits behind the same owner
+   authentication as the other self-development reads.
+4. **Claims compared when not.** `compared_at_gate` is read from the constant
+   table `selfdevGatePairs`; the code that evaluates a pair can only attach an
+   observation and cannot set it. `TestReleaseWitnessGateTableMatchesTheGateCode`
+   ties every row to the gate source: a compared row needs its comparison text
+   present, a recorded-only row needs the text that would make it compared to
+   stay absent (or under its count), so a gate change fails the test until the
+   row is updated. `bound` is the witness's own observation and is separate: a
+   join can be bound without being compared, and the summary counts
+   `recorded_only_unbound` apart.
+5. **Writes or becomes an authority.** GET only; the route appends nothing,
+   transitions nothing and reads nothing back; the test asserts the operation
+   row and the event head are unchanged by a read.
+6. **Partial rows.** An operation in `requested` through `awaiting_approval`
+   has no decision, release, checkpoint or route: every dependent pair is
+   `bound: null` with a reason, never an error or a panic.
+7. **Unbounded reads.** At most 256 staged host-build directories are opened
+   per read; the effective-release source tree resolves in the background as
+   `/health` already does.
+
+What the witness does not do: it does not read the vmctl route (a network call
+to another service), the event payload bodies, or the Store B release records.
+Those stay with their own routes.
