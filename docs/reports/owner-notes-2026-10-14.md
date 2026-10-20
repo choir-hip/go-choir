@@ -697,3 +697,20 @@ Owner, on waking:
   want to compare everything — from that to capacitor to UIkit plus Swift
   as needed to pure Swift." A comparison report is owed:
   `docs/reports/autoradio-native-stack-comparison-2026-10-20.md`.
+
+## 29. System 1 does the related-stories reading; images we may republish (2026-10-20, ~15:30 UTC)
+
+- "I saw somewhere that choir.system1 is still off. Is there a reason for
+  that?" Answer: off by design until both caps are set; nothing calls it
+  yet; config held while drills ran. To be turned on for the paper after
+  the drills (40 a run, 3,000 a day).
+- "I think we should use System 1 for a lot of the related stories work.
+  It should be able to read and classify stories very well and very
+  cheaply, more cheaply than the model behind research, GPT-6 Luna, and
+  much faster as well." Recorded as §12 of
+  `docs/reports/related-stories-phase3-research-review-2026-10-20.md`.
+- New initiative: "how can we get images, photographs that we have the
+  rights to republish into articles when they are relevant and
+  illustrative. What are the rules around republishing images and how can
+  we get images that we can republish?" Answered in conversation; a design
+  doc follows, queued behind related stories.
