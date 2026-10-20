@@ -192,6 +192,33 @@ named before the code, with the guard that the tests pin.
   bucket starves the support judge in staging, a `system1` scope is a
   gateway change and its own record. Not changed here.
 
+## Built: choir.System1 (step 3, not yet deployed)
+
+- Cell side: `internal/yaegikernel/system1.go` (the one validation, the bounds,
+  `ChoirScope.System1`); the verb is in the research module set only
+  (`deskModuleSets`, `internal/yaegikernel/choir.go`), and only the research
+  session handle carries `ActionSystem1`.
+- Host side: `internal/agentcore/system1_verb.go`, reached from `deskEgress`
+  (`internal/agentcore/tools_desk.go`) with the session role, refused unless it
+  is `research`. It reuses the one `CandidateJudge` and `callJudgeWithin`, the
+  shared parsing type `jevDistribution`, and `recordJevCost` (now
+  `recordJevCostFor`, same event, agent and purpose named by the caller).
+- Bounds: 12 questions per call, 2-6 choices of 80 characters, question text
+  400 characters, 4 context refs per question and 16 distinct per call, each
+  resolved text 1000 characters (the intake labeller sends 600 per capture
+  summary), judge call timeout 60 s.
+- Config (runtime environment, positive integers, both required, default off):
+  `CHOIR_SYSTEM1_MAX_CALLS_PER_RUN`, `CHOIR_SYSTEM1_MAX_CALLS_PER_DAY`. The
+  day is the UTC day and the count is per computer. `nix/node-b.nix` is not
+  changed here; enabling means setting both in the guest runtime's environment.
+- Tape: `system1.judgment` events (`types.EventSystem1Judgment`, acknowledged)
+  on channel `system1:<computer>`: `requested`, then `answered` or `failed`.
+  Replay reads the `answered` record of the same run with the same request
+  digest.
+- Not done, by decision: management does not get the verb (owner ruling); the
+  gateway rate scope stays the shared one (F11); entity and thread nodes,
+  `choir.Relate` and the export are step 4.
+
 ## Fix order
 
 1. This record (green).

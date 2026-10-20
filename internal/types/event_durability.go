@@ -61,6 +61,10 @@ var eventDurability = map[EventKind]EventDurability{
 	// Acknowledged: inter-agent coordination record.
 	EventChannelMessage: DurabilityAcknowledged,
 
+	// Acknowledged: a System1 call is a paid, replayed-from-the-tape fact. A
+	// lost record would be a second spend on replay.
+	EventSystem1Judgment: DurabilityAcknowledged,
+
 	// Acknowledged: the owner's approval and the send are acts and evidence.
 	EventEmailDraftApprovalRecorded: DurabilityAcknowledged,
 	EventEmailDraftBlocked:          DurabilityAcknowledged,

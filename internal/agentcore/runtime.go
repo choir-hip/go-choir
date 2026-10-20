@@ -214,6 +214,9 @@ type Runtime struct {
 	// candidateJudge is the decision model (Jev): support judgement and
 	// intake labels.
 	candidateJudge CandidateJudge
+	// system1Mu serializes choir.System1 calls, so a cap check, its request
+	// record and the judge call are one step (system1_verb.go).
+	system1Mu sync.Mutex
 	// support is the support-judgement job state (support_judge.go).
 	support supportJudging
 	// events is the event layer's queue and index (event_layer.go).

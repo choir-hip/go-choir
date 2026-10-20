@@ -155,7 +155,7 @@ func NewChoirScope(broker *Broker, issuer *HandleIssuer, computerID, activationI
 		actions = []BrokerAction{ActionReadFile, ActionListDir, ActionEmit,
 			ActionSearchStart, ActionRead, ActionSearchWireCorpus,
 			ActionSaveEvidence, ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry, ActionResearch,
-			ActionPollSource, ActionReadCapture}
+			ActionPollSource, ActionReadCapture, ActionSystem1}
 	}
 	// SMG: the management desk's product API call rides the broker like the
 	// research egress verbs — the typed product_api_request tool is deleted.
@@ -351,7 +351,11 @@ var deskModuleSets = map[string][]string{
 	"research": {"Cast", "Ask", "Note", "Reply", "CancelAct",
 		"Escalate", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement",
 		"SearchStart", "Searches", "SearchWait", "Read", "ReadCapture", "SearchWireCorpus",
-		"SaveEvidence", "ReadEvidence", "ListEvidence", "RunMemoryEntry", "Research", "PollSource"},
+		"SaveEvidence", "ReadEvidence", "ListEvidence", "RunMemoryEntry", "Research", "PollSource",
+		// System1 is the fast intuitive judge: closed questions answered with
+		// a distribution the desk weighs (owner ruling 2026-10-20; research
+		// only, not management, children or tasks).
+		"System1"},
 	// A child research activation (choir.Research) reads the world and may
 	// fan out further; it cannot message, report or write. Its findings
 	// return to the parent cell as a value. It runs on the same desk-session
@@ -449,6 +453,7 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"PollSource":       func() reflect.Value { return reflect.ValueOf(s.PollSource) },
 		"ReadCapture":      func() reflect.Value { return reflect.ValueOf(s.ReadCapture) },
 		"SearchWireCorpus": func() reflect.Value { return reflect.ValueOf(s.SearchWireCorpus) },
+		"System1":          func() reflect.Value { return reflect.ValueOf(s.System1) },
 		"SaveEvidence":     func() reflect.Value { return reflect.ValueOf(s.SaveEvidence) },
 		"ReadEvidence":     func() reflect.Value { return reflect.ValueOf(s.ReadEvidence) },
 		"ListEvidence":     func() reflect.Value { return reflect.ValueOf(s.ListEvidence) },

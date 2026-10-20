@@ -442,7 +442,7 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 							rt.recordDeskEvent(context.WithoutCancel(egrCtx), cellExec, types.EventDeskEgress, ev)
 						})
 					} else {
-						out, err = rt.deskEgress(egrCtx, cellExec, action, payload)
+						out, err = rt.deskEgress(egrCtx, deskRole, cellExec, action, payload)
 					}
 					ev := map[string]any{
 						"request_id": requestID, "response_request_id": requestID,
@@ -1066,7 +1066,10 @@ func cellHostDeadlineError(deskRole string, deadline, elapsed time.Duration) str
 // desk's product_api action serves through the canonical route table;
 // network/content actions go to researchDeps.HostEgress — one deps surface,
 // never an open socket.
-func (rt *Runtime) deskEgress(egrCtx context.Context, cellExec toolregistry.ExecutionContext, action yaegikernel.BrokerAction, payload json.RawMessage) (json.RawMessage, error) {
+func (rt *Runtime) deskEgress(egrCtx context.Context, deskRole string, cellExec toolregistry.ExecutionContext, action yaegikernel.BrokerAction, payload json.RawMessage) (json.RawMessage, error) {
+	if action == yaegikernel.ActionSystem1 {
+		return rt.system1Egress(egrCtx, deskRole, cellExec, payload)
+	}
 	if action == yaegikernel.ActionProductAPI {
 		return rt.productAPIEgress(egrCtx, cellExec.OwnerID, cellExec.OwnerEmail, payload)
 	}

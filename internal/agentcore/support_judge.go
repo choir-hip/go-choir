@@ -286,14 +286,7 @@ func (rt *Runtime) askJevForSupport(ctx context.Context, owner, runID string, pe
 	if err != nil {
 		return nil, fmt.Errorf("Jev: %w", err)
 	}
-	var distribution struct {
-		Model   string `json:"model"`
-		Answers map[string]struct {
-			Choice        string             `json:"choice"`
-			Probabilities map[string]float64 `json:"probabilities"`
-		} `json:"answers"`
-		Usage jevUsage `json:"usage"`
-	}
+	var distribution jevDistribution
 	if err := json.Unmarshal(raw, &distribution); err != nil {
 		return nil, fmt.Errorf("Jev: decode its answer: %w", err)
 	}
@@ -332,6 +325,19 @@ func (rt *Runtime) askJevForSupport(ctx context.Context, owner, runID string, pe
 	return judged, nil
 }
 
+// jevDistribution is the judge's answer as the transport returns it: the
+// model that served it, each question's choice with the full probability
+// distribution, and the usage. The support judge and choir.System1 read it.
+type jevDistribution struct {
+	ID      string `json:"id"`
+	Model   string `json:"model"`
+	Answers map[string]struct {
+		Choice        string             `json:"choice"`
+		Probabilities map[string]float64 `json:"probabilities"`
+	} `json:"answers"`
+	Usage jevUsage `json:"usage"`
+}
+
 // jevUsage is the token usage a Jev answer reports.
 type jevUsage struct {
 	InputTokens      int     `json:"input_tokens"`
@@ -349,6 +355,12 @@ const jevJudgmentPhase = "jev_judgment"
 // the run that caused it, where /api/costs reads it. Best effort: a call
 // with no usage or no run records nothing.
 func (rt *Runtime) recordJevCost(ctx context.Context, ownerID, runID, model string, usage jevUsage, questions int) {
+	rt.recordJevCostFor(ctx, ownerID, runID, types.SupportSystemAgentID, "support_judgement", model, usage, questions)
+}
+
+// recordJevCostFor is recordJevCost for a caller that is not the support
+// judge: it names the agent the cost is booked under and the purpose.
+func (rt *Runtime) recordJevCostFor(ctx context.Context, ownerID, runID, agentID, purpose, model string, usage jevUsage, questions int) {
 	input, output := usage.InputTokens, usage.OutputTokens
 	if input == 0 && output == 0 {
 		input, output = usage.PromptTokens, usage.CompletionTokens
@@ -359,13 +371,13 @@ func (rt *Runtime) recordJevCost(ctx context.Context, ownerID, runID, model stri
 	payload, err := json.Marshal(map[string]any{
 		"phase": jevJudgmentPhase, "llm_model": model, "llm_provider": "openrouter",
 		"input_tokens": input, "output_tokens": output, "cost_usd": usage.Cost,
-		"purpose": "support_judgement", "questions": questions,
+		"purpose": purpose, "questions": questions,
 	})
 	if err != nil {
 		return
 	}
 	ev := types.EventRecord{EventID: uuid.New().String(), Timestamp: time.Now().UTC(), RunID: runID, OwnerID: ownerID,
-		AgentID: types.SupportSystemAgentID, Kind: types.EventRunProgress, Phase: jevJudgmentPhase, Payload: payload}
+		AgentID: agentID, Kind: types.EventRunProgress, Phase: jevJudgmentPhase, Payload: payload}
 	if err := rt.store.AppendEvent(ctx, &ev); err != nil {
 		log.Printf("support judge: record Jev cost on run %s: %v", runID, err)
 	}
