@@ -47,6 +47,35 @@ into Texture's next revision. `promptOnlyInitialModelPriorTextureRevision`
 an expanded story's revision may carry a wrong "model prior" label in its
 metadata. Recorded as a heresy for a later cut, not repaired in phase 1.
 
+## Phase 1 status (branch worktree-agent-a0236e0c335ef4037, not pushed)
+
+Landed in order: this note; the wake-prompt condition (P2, test first);
+corpusd `GET /internal/platform/publications/expansion-source`; proxy
+`POST /api/platform/publications/expand` and `GET .../expansion`; the story
+header control and a local spec; the deployed spec (written, not run).
+
+Choices the design left open, taken conservatively:
+
+- Dark has two shapes: an empty `PROXY_EXPAND_REQUESTERS` or
+  `PROXY_EXPAND=off` makes the POST a 404 and the read `200 allowed:false`
+  (design 11 said the route returns 404; the read stays 200 so the page logs
+  no failed request).
+- "Already asked" is checked three ways: proxy memory, the paper's chain
+  (the owner revision id is recomputed from owner, computer, trajectory and
+  client_request_id; `texture_owner_revision_identity_test.go` pins that
+  formula), and the paper's replay or digest-conflict answer.
+- The fate line is held in proxy memory, so a proxy restart drops it; the
+  request itself stays on the paper's chain and a repeat ask answers
+  "already asked". Phase 2 (a read-only guest endpoint) makes it durable.
+- The fate "unknown" (the paper cannot be read) is added to the design's
+  list so a stopped paper never reads as "no new version".
+- The trace half of the acceptance hazard check needs the paper account's
+  credential and is an operator step (`choir trace export`); the deployed
+  spec records the window and ids it needs.
+
+Residual P3 stays open: the interim stamp on Texture's revision after an
+owner revise.
+
 ## Phase 1 decisions (owner questions answered with the design's recommendations)
 
 The owner left the night to us and the CLAUDE.md "No Blocking Asks" rule
