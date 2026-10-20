@@ -622,3 +622,21 @@ Each item as ruled (the digest's recommendation, now settled):
     events, settled by rules first; a desk sees aggregates of its own
     record, not item verdicts; no token-budget learner yet.
 20. Red-team scope is forks only until the pre-production security slot.
+
+## 28. Disclosure placement; Claude in engineering; app rewrites (2026-10-20, ~12:00 UTC)
+
+Owner, on waking:
+
+- "The ai disclosure should go at the article bottom, before the related
+  stories." This replaces the placement in §27 item 14 (above the first
+  paragraph). The text is unchanged.
+- "we should resume using Claude (sonnet) within Eng desk (shelling out).
+  We set that up then stopped it. Let's resume that". This lifts the
+  standing "no Claude in Choir" rule for the engineering desk's coding
+  shell-out, with Sonnet as the model.
+- "then look to rewrite our less-important apps (keep mail, settings,
+  autopaper, texture, as is for now) with self-dev. Many of them need a lot
+  of work, they were made by weak agents." Gated: "we should only rewrite
+  after we have app packages".
+- Security is front of mind ("the importance of strong cyber security
+  defenses").
