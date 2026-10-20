@@ -668,7 +668,11 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 		b.WriteString("\n\nSource path: " + sourcePath + ". Preserve the file-backed structure while producing the next version.")
 	}
 	if current.AuthorKind == types.AuthorUser {
-		if metadataStringValue(metadata, "input_origin") == textureInputOriginUserPrompt {
+		// Only a seed request (an owner revision with no parent) is the
+		// request itself. An owner /revise carries the whole story forward
+		// as a child of the head and is stamped user_prompt too; for it the
+		// sentence told Texture to throw a finished story away.
+		if metadataStringValue(metadata, "input_origin") == textureInputOriginUserPrompt && strings.TrimSpace(current.ParentRevisionID) == "" {
 			b.WriteString("\n\nThe current revision is the owner's request itself, not prose to keep: write the first useful document that answers it.")
 		} else {
 			b.WriteString("\n\nThe owner edited the document. Read the edit as the instruction: replace text the owner replaced, act on instructions they wrote inline, and keep what they wrote as prose.")
