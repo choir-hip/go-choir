@@ -195,3 +195,27 @@ Known gaps, not fixed in this slice:
   2,000-token trial is the one this matters for.
 - **A CourtListener search answer is large** (68 KB for one page), so the
   research tool cuts it; research narrows with `court`, dates or `type`.
+
+## 6. Deployed (7eb24d630, 2026-10-20)
+
+- Keys: upserted into Node B's gateway EnvironmentFile at 17:55 UTC
+  (`CHOIR_PROVIDER_ONLY_KEYS=... ./nix/deploy-provider-creds.sh node-b`;
+  file 0600 root, each name once). CI run 39469266673 passed and deployed;
+  staging health reports 7eb24d630. The gateway's startup line at 17:57:16:
+  `source api: fred: key loaded, 2000 a day; congress: key loaded ...;
+  newsapi_ai: key loaded` (all five).
+- Product path (tracer `--scenario research --story-file`, label
+  srcapi-1803, fresh computer, 18:03-18:04 UTC): Texture cast research a
+  brief on US unemployment, with research told to use `choir.SourceAPI`.
+  Research called `fred.series_observations` (gateway journal 18:04:01:
+  `upstream=200 bytes=648 in 730ms`), reported four observations (2026-09
+  4.2, 08 4.1, 07 4.1, 06 4.2), and Texture's later revision cites FRED.
+  Research also called an unknown endpoint and its report quotes the
+  refusal: `source api: unknown endpoint "no_such_endpoint" for fred`; the
+  gateway made no upstream call for it.
+- No key value appears in the gateway journal for the 90 minutes around
+  the deploy (6,625 lines) or in the trace bundle (checked against the
+  local key values, on the developer machine).
+
+Cosmetic, not fixed: the cell sees the refusal prefixed
+`choir: source_api: source_api: source_api:` (each layer adds its name).
