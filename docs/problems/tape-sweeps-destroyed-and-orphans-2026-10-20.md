@@ -408,3 +408,25 @@ so it needed no change. Tests: `TestTapeSweepOrphanReceiptCheckIsHeadBounded`
 full-table scan of the receipts table, as the old count was; the surplus a live
 append leaves between the grouped read and the head read is covered because the
 head is read second and only grows.
+
+## Deployed proof of the fix, and the orphan apply (2026-10-20 06:49–07:26 UTC, on 4064880b4)
+
+- Dry run `ts-20261020T064930Z-2a10a568` (manifest sha256
+  `444ea3b1a1559af40a49757f613b2f4b98638afe1be908ce774632ea33ab804f`), 35
+  minutes, 228 computers, 2,310,017 chain events, while the paper and the
+  other live computers kept appending. `orphans_refused` is empty: the
+  bounded check passed on a live host.
+- Orphans: 41,270 files, 865,422,975 bytes: 18,378 payloads
+  (844 MB), 22,324 pin receipts, 568 event files that no chain names.
+  Newest mtime 2026-10-16 11:03 UTC, well past the 24 h grace. This matches
+  the original estimate (17,391 payloads, 20,792 receipts).
+- Destroyed: 3 more computers (4,646 files). Their heads were last written
+  2026-10-13 05:19–06:11 UTC, so they crossed the 7-day quiet line between
+  the two dry runs. None is in the vmctl list; no ownership; no route.
+- Apply `ts-20261020T072519Z-aa77f327`: 45,916 files and 876,066,813 bytes
+  deleted, 4 archives (3 computers and the orphan set), 0 kept, 0 errors.
+- After apply the paper stayed ready on 4128cb16f and published at 07:24
+  and 07:25 UTC. btrfs metadata used 14.53 GiB (78.0%).
+
+Totals for the night: 165 destroyed computers and the orphan set,
+809,378 files and about 3.18 GB deleted, all archived first.
