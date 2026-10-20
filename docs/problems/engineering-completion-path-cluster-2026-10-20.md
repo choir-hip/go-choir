@@ -83,3 +83,16 @@ to end inside the engineering capsule:
 4. Rerun both drills.
 
 Mutation classes as above. Rollback: revert each commit.
+
+## Status
+
+- Action 1 (failure 4, yellow): landed. The overlay's no-Go frontend build is
+  a `choir.Start` job (`sh -c`, 15 minutes); the job's `receipt_ref` is the
+  `buildRecipeRef`. The recipe ends with `rm -rf node_modules dist`, so the
+  job's start and end worktree digests match and the job receipt is not
+  refused as "workspace changed while the job ran". No `memory_mib`: that
+  option admits memory beyond the capsule for a browser capture, and an
+  `npm ci` does not need it. The Go-change path now says the second (Go
+  build) job starts after the frontend job ends (one job at a time). The
+  prompts test pins that no recipe runs `npm ci` or `npm run build` through
+  `choir.Exec`.

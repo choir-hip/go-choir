@@ -2,6 +2,7 @@ package runtimeprompts
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -9,6 +10,10 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
+
+// shellScriptCalls matches the overlay's worked `sh -c` recipes in either call
+// shape, capturing the verb (Exec or Start) and the script.
+var shellScriptCalls = regexp.MustCompile(`choir\.(Exec|Start)\((?:\[\]string\{"sh", "-c"|"sh", \[\]string\{"-c"), "([^"]*)"`)
 
 func TestRLMEngineeringOverlayGatesFreezeMandate(t *testing.T) {
 	const mandate = "Freeze the capsule diff with choir.Freeze."
@@ -214,9 +219,42 @@ func TestRLMEngineeringOverlayTeachesCapsuleJobs(t *testing.T) {
 			t.Errorf("J4: the overlay does not say %q", want)
 		}
 	}
+	// J5 (docs/problems/engineering-completion-path-cluster-2026-10-20.md,
+	// failure 4): the no-Go frontend build is a job. Its recipe ran
+	// `npm ci && npm run build` inside one choir.Exec, which the overlay's
+	// own text says is killed at 30 s; the visual drill followed the recipe
+	// and hit the broker timeout three times.
 	noGo := overlay[strings.Index(overlay, "touches no Go input"):strings.Index(overlay, "A change that touches a Go input")]
-	if strings.Contains(noGo, "choir.Start") || !strings.Contains(noGo, "It fits within one choir.Exec") {
-		t.Errorf("J5: the no-Go path changed: %q", noGo)
+	if strings.Contains(noGo, "It fits within one choir.Exec") || !strings.Contains(noGo, "it is a job") ||
+		!strings.Contains(noGo, "never run any part of it in a choir.Exec") {
+		t.Errorf("J5: the no-Go build is not taught as a job: %q", noGo)
+	}
+	startedBuild := false
+	for _, m := range shellScriptCalls.FindAllStringSubmatch(overlay, -1) {
+		verb, script := m[1], m[2]
+		if !strings.Contains(script, "npm ci") && !strings.Contains(script, "npm run build") {
+			continue
+		}
+		if verb != "Start" {
+			t.Errorf("J5: a recipe runs the npm build in choir.%s, not choir.Start: %q", verb, script)
+			continue
+		}
+		startedBuild = true
+		if !strings.Contains(overlay, `"minutes": 15`) {
+			t.Errorf("J5: the npm build job names no minutes")
+		}
+		if !strings.Contains(script, "rm -rf node_modules dist") {
+			t.Errorf("J5: the npm build job does not clean up after itself: %q", script)
+		}
+	}
+	if !startedBuild {
+		t.Errorf("J5: no choir.Start recipe runs the npm build")
+	}
+	for _, want := range []string{"the job's own receipt_ref is the frontend build receipt you cite as buildRecipeRef",
+		"the frontend build job for a change with no Go input", "a second job (one job at a time)"} {
+		if !strings.Contains(overlay, want) {
+			t.Errorf("J5: the overlay does not say %q", want)
+		}
 	}
 	for _, verb := range []string{"Start", "Poll", "Stop"} {
 		if !strings.Contains(yaegikernel.DeskSurface("engineering", "implementation", false), "choir."+verb+"(") {
