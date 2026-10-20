@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/tapestore"
 )
 
 type EventArtifactService struct {
@@ -109,15 +110,14 @@ func (s *EventArtifactService) ValidateEventPins(_ context.Context, request comp
 		return fmt.Errorf("event artifact service: payload pin count mismatch")
 	}
 	digests := append([]string{request.EventPinReceiptDigest}, request.PayloadPinReceiptDigests...)
+	tape := s.platform.tapeReader()
 	for index, digest := range digests {
 		if !computerevent.IsSHA256(digest) {
 			return fmt.Errorf("event artifact service: invalid pin receipt digest")
 		}
-		path, err := s.platform.artifactPath(filepath.Join("sha256", "pin-receipts", digest+".json"))
-		if err != nil {
-			return err
-		}
-		raw, err := os.ReadFile(path)
+		// Segment first, legacy second; the library checks the digest of the
+		// bytes it returns. A corrupt segment is an error, never a fallback.
+		raw, _, err := tape.Read(request.Event.ComputerID, tapestore.NSReceipt, digest)
 		if err != nil {
 			return fmt.Errorf("event artifact service: read pin receipt: %w", err)
 		}
@@ -155,12 +155,18 @@ func (s *EventArtifactService) ValidateEventPins(_ context.Context, request comp
 				return fmt.Errorf("event artifact service: payload pin mismatch")
 			}
 		}
-		artifactPath, err := s.platform.artifactPath(filepath.Join("sha256", namespace, artifactDigest))
-		if err != nil {
-			return err
+		artifactNS := tapestore.NSPayload // the checks above leave only the two pin namespaces
+		if index == 0 {
+			artifactNS = tapestore.NSEvent
 		}
-		artifact, err := os.ReadFile(artifactPath)
-		if err != nil || computerevent.DigestBytes(artifact) != artifactDigest {
+		artifact, _, err := tape.Read(request.Event.ComputerID, artifactNS, artifactDigest)
+		if err != nil {
+			if errors.Is(err, tapestore.ErrCorrupt) {
+				return fmt.Errorf("event artifact service: pinned artifact unavailable: %w", err)
+			}
+			return fmt.Errorf("event artifact service: pinned artifact unavailable")
+		}
+		if computerevent.DigestBytes(artifact) != artifactDigest {
 			return fmt.Errorf("event artifact service: pinned artifact unavailable")
 		}
 		if index > 0 && request.Event.PrivacyClass == "private" {
@@ -184,6 +190,20 @@ func eventArtifactDigestFromRef(raw string) (string, bool) {
 	return ref.Digest().String(), true
 }
 
+// tapeReader is the one tape read path: segment first, legacy second, every
+// returned byte digest-checked (internal/tapestore, forward-fix doc section
+// 9). It follows the artifacts root, so a service whose root is set after
+// construction still reads the right tree.
+func (s *Service) tapeReader() *tapestore.Reader {
+	s.tapeReaderMu.Lock()
+	defer s.tapeReaderMu.Unlock()
+	root := filepath.Clean(s.artifactsRoot)
+	if s.tapeReaderVal == nil || s.tapeReaderVal.Root() != root {
+		s.tapeReaderVal = tapestore.NewReader(root)
+	}
+	return s.tapeReaderVal
+}
+
 func (s *Service) computerEventSigningKey() computerevent.SigningKey {
 	return computerevent.SigningKey{
 		SignerRef:  computerevent.SignerRef{SignerDomain: "platform-control", KeyID: s.signingKey.KeyID},
@@ -203,14 +223,26 @@ func (s *EventArtifactService) FetchPayload(computerID, artifactDigest string) (
 	if err := s.platform.store.refuseTombstonedTape(context.Background(), computerID); err != nil {
 		return nil, fmt.Errorf("event artifact service: %w", err)
 	}
+	tape := s.platform.tapeReader()
 	for _, namespace := range []string{"computer-event-payload", "computer-event", "projection-base"} {
-		path, err := s.platform.artifactPath(filepath.Join("sha256", namespace, artifactDigest))
-		if err != nil {
-			return nil, err
+		var raw []byte
+		var err error
+		switch namespace {
+		case "computer-event-payload":
+			raw, _, err = tape.Read(computerID, tapestore.NSPayload, artifactDigest)
+		case "computer-event":
+			raw, _, err = tape.Read(computerID, tapestore.NSEvent, artifactDigest)
+		default: // projection bases are never segmented
+			var path string
+			if path, err = s.platform.artifactPath(filepath.Join("sha256", namespace, artifactDigest)); err != nil {
+				return nil, err
+			}
+			if raw, err = os.ReadFile(path); errors.Is(err, os.ErrNotExist) {
+				err = tapestore.ErrNotFound
+			}
 		}
-		raw, err := os.ReadFile(path)
 		if err != nil {
-			if errors.Is(err, os.ErrNotExist) {
+			if errors.Is(err, tapestore.ErrNotFound) {
 				continue
 			}
 			return nil, fmt.Errorf("event artifact service: read payload: %w", err)

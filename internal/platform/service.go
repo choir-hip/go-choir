@@ -19,6 +19,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/tapestore"
 )
 
 const (
@@ -48,8 +49,12 @@ type Service struct {
 	artifactGCBeforeUnlink func(rel string)
 	// tapeSweep is the tape sweep's run lock, policy, registry and jobs
 	// (tape_sweep.go).
-	tapeSweep  tapeSweepState
-	graphStore *PublicationGraphStore // graph-native dual-write target
+	tapeSweep tapeSweepState
+	// tapeReaders caches the segment-first tape reader per artifacts root
+	// (event_artifacts.go tapeReader).
+	tapeReaderMu  sync.Mutex
+	tapeReaderVal *tapestore.Reader
+	graphStore    *PublicationGraphStore // graph-native dual-write target
 	// captureBodies reads cited captures' blocks at publish, to pin them.
 	captureBodies *CaptureBodyStore
 	// overlay supplies the live check overlay served beside a version.

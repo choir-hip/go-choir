@@ -4,11 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/tapestore"
 )
 
 // EventsPage returns one validated, sequence-ordered durable event page.
@@ -68,11 +67,7 @@ func (s *EventArtifactService) EventsPage(ctx context.Context, computerID string
 		if eventArtifactRef != record.Request.EventDigest {
 			return nil, fmt.Errorf("event replay: artifact reference mismatch at sequence %d", sequence)
 		}
-		path, err := s.platform.artifactPath(filepath.Join("sha256", "computer-event", eventArtifactRef))
-		if err != nil {
-			return nil, err
-		}
-		eventJSON, err := os.ReadFile(path)
+		eventJSON, _, err := s.platform.tapeReader().Read(computerID, tapestore.NSEvent, eventArtifactRef)
 		if err != nil {
 			return nil, fmt.Errorf("event replay: read event sequence %d: %w", sequence, err)
 		}

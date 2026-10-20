@@ -16,12 +16,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/tapestore"
 )
 
 // CommitmentRecordKind is the object kind of an inbox record.
@@ -68,8 +67,7 @@ func Walk(ctx context.Context, cfg Config, recordIDs []string) (Result, error) {
 		}
 	}
 	res := Result{ComputerID: cfg.ComputerID, Head: cfg.Head, Found: map[string]Position{}}
-	eventsDir := filepath.Join(cfg.ArtifactsRoot, "sha256", "computer-event")
-	payloadDir := filepath.Join(cfg.ArtifactsRoot, "sha256", "computer-event-payload")
+	tape := tapestore.NewReader(cfg.ArtifactsRoot)
 	curr := cfg.Head
 	for curr != computerevent.ZeroHead && len(res.Found) < len(want) {
 		if err := ctx.Err(); err != nil {
@@ -79,7 +77,7 @@ func Walk(ctx context.Context, cfg Config, recordIDs []string) (Result, error) {
 			res.Capped = true
 			break
 		}
-		event, err := readEvent(eventsDir, curr)
+		event, err := readEvent(tape, cfg.ComputerID, curr)
 		if err != nil {
 			return res, err
 		}
@@ -91,7 +89,7 @@ func Walk(ctx context.Context, cfg Config, recordIDs []string) (Result, error) {
 		}
 		res.Walked++
 		if event.EventKind == computerevent.EventProjectionBatchRecorded {
-			ids, err := recordsInPayload(payloadDir, curr, event.PayloadCommitment, want)
+			ids, err := recordsInPayload(tape, cfg.ComputerID, curr, event.PayloadCommitment, want)
 			if err != nil {
 				return res, err
 			}
@@ -112,11 +110,13 @@ func Walk(ctx context.Context, cfg Config, recordIDs []string) (Result, error) {
 	return res, nil
 }
 
-func readEvent(dir, digest string) (computerevent.Event, error) {
+// readEvent reads an event segment-first, legacy-second (internal/tapestore).
+// A corrupt segment is an error; it is never answered from the other layout.
+func readEvent(tape *tapestore.Reader, computerID, digest string) (computerevent.Event, error) {
 	if !computerevent.IsSHA256(digest) {
 		return computerevent.Event{}, fmt.Errorf("ledger witness: previous head %q is not a sha256", digest)
 	}
-	raw, err := os.ReadFile(filepath.Join(dir, digest))
+	raw, _, err := tape.Read(computerID, tapestore.NSEvent, digest)
 	if err != nil {
 		return computerevent.Event{}, fmt.Errorf("ledger witness: read event %s: %w", digest, err)
 	}
@@ -128,11 +128,11 @@ func readEvent(dir, digest string) (computerevent.Event, error) {
 
 // recordsInPayload returns the asked records an event's projection batch
 // creates, by record id, with their canonical ids.
-func recordsInPayload(dir, eventDigest, payloadDigest string, want map[string]bool) (map[string]string, error) {
+func recordsInPayload(tape *tapestore.Reader, computerID, eventDigest, payloadDigest string, want map[string]bool) (map[string]string, error) {
 	if !computerevent.IsSHA256(payloadDigest) {
 		return nil, fmt.Errorf("ledger witness: projection event %s has no payload commitment", eventDigest)
 	}
-	raw, err := os.ReadFile(filepath.Join(dir, payloadDigest))
+	raw, _, err := tape.Read(computerID, tapestore.NSPayload, payloadDigest)
 	if err != nil {
 		return nil, fmt.Errorf("ledger witness: projection event %s: read payload %s: %w", eventDigest, payloadDigest, err)
 	}
