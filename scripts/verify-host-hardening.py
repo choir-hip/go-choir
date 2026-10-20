@@ -284,6 +284,23 @@ def check_containment():
                "writable inside vmctl's namespace" if writable_in_namespace(pid, path) else "read-only")
 
 
+# The issuer credential (internal/hostauth/issuer.go) reaches only vmctl,
+# which presents it, and corpusd, which checks it.
+ISSUER_UNITS = {"go-choir-vmctl", "go-choir-corpusd"}
+
+
+def check_issuer_credential():
+    for unit in TOKEN_UNITS:
+        path = f"/run/credentials/{unit}.service/choir-issuer-token"
+        present = os.path.exists(path)  # existence only; never opened
+        want = unit in ISSUER_UNITS
+        record("credential", f"{unit} {'holds' if want else 'lacks'} the issuer credential", present == want,
+               "present" if present else "absent")
+    would = journal_lines("go-choir-corpusd", "would refuse.*issuer:")
+    record("credential", "corpusd saw no issuance without the issuer credential in the last 24h", not would,
+           would[-1][:200] if would else "none")
+
+
 def check_dolt_probe():
     """The query-level Dolt liveness probe (scripts/dolt-liveness-probe.sh)
     must be scheduled and healthy: docs/problems/
@@ -766,6 +783,7 @@ def main():
     check_credential_delivery(args.expect_internal)
     check_units()
     check_containment()
+    check_issuer_credential()
     check_dolt(args.expect_dolt, args.with_credential)
     check_dolt_probe()
     check_paper_probe()
