@@ -842,3 +842,18 @@ Owner, on waking:
   makes account recovery and deletion launch work; any paid compute must
   go through in-app purchase (3.1.1), so launch free; a per-user computer
   per sign-up needs admission limits or a waitlist on Node B.
+- Auth and security, after the recovery questions were summarised (about
+  16:40 UTC): "Maybe we should accelerate encrypting the user data. Let's
+  really try to improve our cybersecurity, both in terms of hardening the
+  system, but also making it less catastrophic if we do get hacked. And we
+  should also consider enabling sign-in with Google and Apple, as well as
+  maybe a magic link sign-in or some kind of email thing that doesn't
+  require a passkey." Points given in reply: user-held keys conflict with
+  a computer that works while its owner is away, so the launch form is
+  blast-radius reduction (keys out of reach of a host compromise, per-
+  computer keys, encrypted backups, the built-but-off hardening turned on)
+  with a user-held vault as a later opt-in; offering Google sign-in makes
+  Sign in with Apple required (App Review 4.8); every non-passkey sign-in
+  is only as strong as that inbox or that Google/Apple account, and has no
+  passkey PRF to derive a key from, so encryption cannot hang on passkeys
+  alone. A security design with a panel is owed before code.
