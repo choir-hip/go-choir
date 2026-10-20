@@ -1313,12 +1313,16 @@ in
         "VMCTL_STOP_MANAGED_ON_EXIT=false"
         # visual capture (docs/design/visual-evidence-slice-2026-10-15.md):
         # the right to launch the guest image's Chromium in a capsule capture
-        # job. ComputerIDs and/or class:test (every test account's computer).
-        # A computer gets the grant at its next cold boot (a snapshot resume
-        # keeps its old credential disk). A capture runs inside the
-        # engineering capsule's existing 2 GiB / 1 CPU budget (0.4-0.55 GiB
-        # per shot, measured). Rollback: empty the list and deploy.
-        "CHOIR_VISUAL_CAPTURE_COMPUTERS=class:test"
+        # job. OFF while the list is empty (resumed 2026-10-20: no computer is
+        # granted until the staging drill is scheduled; the guest image
+        # carries Chromium on no PATH either way). To turn it on: ComputerIDs
+        # and/or class:test (every test account's computer), space or comma
+        # separated. A computer gets the grant at its next cold boot (a
+        # snapshot resume keeps its old credential disk). A capture runs
+        # inside the engineering capsule's existing 2 GiB / 1 CPU budget
+        # (0.4-0.55 GiB per shot, measured). Rollback: empty the list and
+        # deploy.
+        "CHOIR_VISUAL_CAPTURE_COMPUTERS="
         # claude delegate (docs/design/claude-delegate-slice1-2026-10-14.md;
         # Option T, owner-ratified 2026-10-14). OFF while the list is empty.
         # To turn it on for one test computer: put its ComputerID in
