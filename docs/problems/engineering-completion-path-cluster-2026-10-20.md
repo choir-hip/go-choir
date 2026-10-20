@@ -595,3 +595,55 @@ Ways it could fail, each pinned by a test or a reason:
 
 Rollback: revert. Heresy delta: discovered, an instrument that shares the
 lock it observes (failure 9); repaired, that one.
+
+## Failures 8 and 10: what the code says, and the candidate fixes (not decided)
+
+Read from code after the evidence above; no change made.
+
+**Failure 8, the path.** `closeOpenRoundsAfterCrash`
+(`internal/agentcore/inbox_records.go`) writes one system closure per open
+round at a crash boot, addressed to the round's caster, and "a closure wakes
+no one". That holds: nothing woke on the closures. But the next drill's
+Texture Cast woke management at 13:40:41, and management's `Records()`
+listed the unread closures with it (seq 14 and earlier). Management then
+sent a final `ReportPacket` to `texture:1c989d17…`, whose round with
+management the same boot had already closed (record
+`…|texture:1c989d17…:r1:restart` in that Texture's inbox). That report
+woke the Texture (`integrate_execution_findings`), and the Texture, whose
+work item for the request is still open, cast the request again. The
+census on the computer shows six open Texture work items, the oldest from
+10:11, across at least four cold boots: the crash boot closes rounds,
+runs and assignments, but a Texture's work item for its request survives,
+so the Texture still holds the request as unfinished.
+
+Candidates, most mechanical first:
+
+- **A. A round closed by a restart takes no further Report.** The store
+  refuses (or records without waking) a Report addressed to a caster whose
+  latest round in that conversation was closed `interrupted_by_restart`,
+  until the caster casts again. This cuts the relay without relying on a
+  prompt. Cost: a desk that learns something real after a restart cannot
+  tell the old Texture; it can only answer a new Cast.
+- **B. The crash boot closes the Texture's work item too**, with the fate
+  "interrupted by a restart", so the Texture no longer holds the request
+  as open, and a wake renders the fate instead of re-requesting. This is
+  what CLAUDE.md's rule already says (work items are listed). The owner
+  restarts the request.
+- **C. Prompts only:** management's overlay says a restart closure is not
+  news to relay; Texture's says a restart is not a reason to re-request.
+  Weakest; the rule would depend on two models reading two sentences.
+
+A and B are not exclusive. Leaning: B, because it is the stated rule, plus
+A, because it removes the relay path. Red (desk wake semantics, Texture
+obligations); a panel before code.
+
+**Failure 10, the path.** `reclaimSupersededAssignmentCapsules`
+(`internal/agentcore/engineering_assignment_runtime.go`) cancels every
+other live assignment on the computer before a new one spawns, so the
+capsule budget holds one. It does not look at the trajectory. Candidate:
+supersede only an assignment on the same trajectory (the same request cast
+again); for another trajectory, refuse the new assignment with a visible
+"engineering is busy with <assignment> for <request>" so management can
+wait, instead of killing work the owner is waiting on. Red (assignment
+admission); after the hang is fixed, because each supersede today ends in
+the teardown that hangs.
