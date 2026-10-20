@@ -772,3 +772,76 @@ func TestHandleTapeSweepStartsAndReportsJobs(t *testing.T) {
 		t.Fatalf("apply on a dry-run policy = %d %s", rec.Code, rec.Body.String())
 	}
 }
+
+// Orphan check bounded by the head snapshot
+// (docs/problems/tape-sweeps-destroyed-and-orphans-2026-10-20.md, "the orphan
+// check can never pass on a live host").
+func TestTapeSweepOrphanReceiptCheckIsHeadBounded(t *testing.T) {
+	insertBareReceipt := func(f *tapeFixture, id string, seq uint64) {
+		t.Helper()
+		d := platformTestDigest('a')
+		if _, err := f.store.db.Exec(`INSERT INTO computer_event_append_receipts (computer_id,idempotency_key,request_commitment,sequence,previous_head,event_kind,event_digest,event_artifact_ref,event_pin_receipt_digest,pin_receipt_digests_json,event_head_receipt_id,event_head_receipt_json,event_head_receipt_digest,desired_event_head,effective_event_head,desired_state_commitment,effective_state_commitment,pending_transition_ref,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			id, fmt.Sprintf("bare-%d", seq), d, seq, d, "verification_recorded", d, d, d, `[]`, fmt.Sprintf("rb-%d", seq), `{}`, d, d, d, d, d, nil, time.Now().UTC()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Run("live append during the walk does not refuse", func(t *testing.T) {
+		f := newTapeFixture(t)
+		f.live("live-1")
+		c := f.chain("live-1", 3, tapeAged)
+		f.svc.tapeSweep.afterReferences = func() {
+			f.appendSeq(c, nil, 0) // receipt and head move past the snapshot
+		}
+		dry := f.dryRun(TapeSweepRequest{Sweeps: []string{TapeSweepOrphans}})
+		if dry.OrphansRefused != "" {
+			t.Fatalf("live append during the walk refused the orphan sweep: %s", dry.OrphansRefused)
+		}
+	})
+	t.Run("receipt above the current head refuses and names it", func(t *testing.T) {
+		f := newTapeFixture(t)
+		f.live("live-1")
+		f.chain("live-1", 3, tapeAged)
+		insertBareReceipt(f, "live-1", 4) // head stays at 3
+		dry := f.dryRun(TapeSweepRequest{Sweeps: []string{TapeSweepOrphans}})
+		if dry.OrphansRefused == "" || !strings.Contains(dry.OrphansRefused, "live-1") || !strings.Contains(dry.OrphansRefused, "4") {
+			t.Fatalf("leftover above the head not refused by name: %q", dry.OrphansRefused)
+		}
+	})
+	t.Run("receipt above the current head after a live append still refuses", func(t *testing.T) {
+		f := newTapeFixture(t)
+		f.live("live-1")
+		c := f.chain("live-1", 3, tapeAged)
+		f.svc.tapeSweep.afterReferences = func() {
+			f.appendSeq(c, nil, 0)            // sequence 4, head 4
+			insertBareReceipt(f, "live-1", 9) // leftover past the head
+		}
+		dry := f.dryRun(TapeSweepRequest{Sweeps: []string{TapeSweepOrphans}})
+		if dry.OrphansRefused == "" || !strings.Contains(dry.OrphansRefused, "live-1") || !strings.Contains(dry.OrphansRefused, "9") {
+			t.Fatalf("leftover past the current head not refused: %q", dry.OrphansRefused)
+		}
+	})
+	t.Run("receipt for a computer with no head refuses", func(t *testing.T) {
+		f := newTapeFixture(t)
+		f.live("live-1")
+		f.chain("live-1", 2, tapeAged)
+		insertBareReceipt(f, "ghost-1", 1)
+		dry := f.dryRun(TapeSweepRequest{Sweeps: []string{TapeSweepOrphans}})
+		if dry.OrphansRefused == "" || !strings.Contains(dry.OrphansRefused, "ghost-1") {
+			t.Fatalf("headless receipt not refused by name: %q", dry.OrphansRefused)
+		}
+	})
+	t.Run("a receipt missing below the snapshot head refuses", func(t *testing.T) {
+		f := newTapeFixture(t)
+		f.live("live-1")
+		f.chain("live-1", 3, tapeAged)
+		f.svc.tapeSweep.afterReferences = func() {
+			if _, err := f.store.db.Exec(`DELETE FROM computer_event_append_receipts WHERE computer_id=? AND sequence=2`, "live-1"); err != nil {
+				t.Fatal(err)
+			}
+		}
+		dry := f.dryRun(TapeSweepRequest{Sweeps: []string{TapeSweepOrphans}})
+		if dry.OrphansRefused == "" {
+			t.Fatal("receipts below the snapshot head no longer match the walk, but the sweep was not refused")
+		}
+	})
+}

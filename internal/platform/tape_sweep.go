@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -275,6 +276,9 @@ type tapeSweepState struct {
 	order    []string
 	// beforeDelete is a test hook run before each item's locked unlink.
 	beforeDelete func(item tapeSweepItem)
+	// afterReferences is a test hook run after the dry-run's chain walk and
+	// before the append-receipt check, to simulate live appends during the walk.
+	afterReferences func()
 }
 
 // SetTapeSweepPolicy records the configured policy.
@@ -620,6 +624,72 @@ func (s *Service) tapeHeads(ctx context.Context) (map[string]tapeHead, error) {
 	return out, nil
 }
 
+// tapeReceiptsMatchSnapshot is the orphan sweep's completeness check on the
+// append-receipt table, bounded by the same head snapshot the walk used. The
+// walk takes minutes on a live host, so a global receipt count would never
+// match: live computers append meanwhile. Instead, per computer, the receipts
+// at or below the snapshot head must equal the rows the walk saw. A receipt
+// above the snapshot head is allowed only when it is at or below the
+// computer's current head (a live append: its files are inside the grace
+// window and apply re-checks references in its delta phase). A receipt above
+// the current head, or for a computer with no head row, is a leftover and
+// refuses. It returns a non-empty refusal reason, or an error when the
+// check itself could not run.
+func (s *Service) tapeReceiptsMatchSnapshot(ctx context.Context, heads map[string]tapeHead, ids []string, walked map[string]uint64) (string, error) {
+	// Highest receipt sequence per computer, read before the current heads so
+	// every receipt seen here is covered by a head at least as new.
+	type maxSeq struct {
+		computerID string
+		sequence   uint64
+	}
+	var maxes []maxSeq
+	rows, err := s.store.db.QueryContext(ctx, `SELECT computer_id, MAX(sequence) FROM computer_event_append_receipts GROUP BY computer_id ORDER BY computer_id`)
+	if err != nil {
+		return "", err
+	}
+	for rows.Next() {
+		var m maxSeq
+		if err := rows.Scan(&m.computerID, &m.sequence); err != nil {
+			rows.Close()
+			return "", err
+		}
+		maxes = append(maxes, m)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return "", err
+	}
+	rows.Close()
+
+	for _, id := range ids {
+		var bounded uint64
+		if err := s.store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM computer_event_append_receipts WHERE computer_id=? AND sequence<=?`, id, heads[id].Sequence).Scan(&bounded); err != nil {
+			return "", err
+		}
+		if bounded != walked[id] {
+			return fmt.Sprintf("computer %s: append receipts (%d) up to snapshot head sequence %d do not match the head-bounded chain (%d)", id, bounded, heads[id].Sequence, walked[id]), nil
+		}
+	}
+	for _, m := range maxes {
+		snap, known := heads[m.computerID]
+		if !known {
+			return fmt.Sprintf("computer %s has append receipts (up to sequence %d) but no head row", m.computerID, m.sequence), nil
+		}
+		if m.sequence <= snap.Sequence {
+			continue
+		}
+		var current uint64
+		err := s.store.db.QueryRowContext(ctx, `SELECT sequence FROM computer_event_heads WHERE computer_id=?`, m.computerID).Scan(&current)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return "", err
+		}
+		if m.sequence > current {
+			return fmt.Sprintf("computer %s has an append receipt at sequence %d above its current head sequence %d", m.computerID, m.sequence, current), nil
+		}
+	}
+	return "", nil
+}
+
 func sortedHeadIDs(heads map[string]tapeHead) []string {
 	ids := make([]string, 0, len(heads))
 	for id := range heads {
@@ -896,7 +966,7 @@ func (s *Service) tapeSweepDryRun(ctx context.Context, jobID string, p tapeSweep
 	s.setTapeSweepPhase(jobID, "references")
 	var live, doomed digestPrefixSet
 	orphansIncomplete := ""
-	var receiptRows uint64
+	walkedRows := map[string]uint64{}
 	tombstoned := 0
 	for _, id := range ids {
 		if err := ctx.Err(); err != nil {
@@ -922,7 +992,7 @@ func (s *Service) tapeSweepDryRun(ctx context.Context, jobID string, p tapeSweep
 			}
 		}
 		err = s.walkTapeChain(ctx, id, 0, h.Sequence, readEvents || deletable(id), func(row tapeChainRow) error {
-			receiptRows++
+			walkedRows[id]++
 			set.add(row.EventDigest)
 			set.add(row.EventPin)
 			for _, d := range row.PayloadPins {
@@ -944,13 +1014,15 @@ func (s *Service) tapeSweepDryRun(ctx context.Context, jobID string, p tapeSweep
 			}
 		}
 	}
-	var total uint64
-	if err := s.store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM computer_event_append_receipts`).Scan(&total); err != nil {
+	if hook := s.tapeSweep.afterReferences; hook != nil {
+		hook()
+	}
+	// Keep the first refusal: a chain that failed to read already says why
+	// the counts differ.
+	if refusal, err := s.tapeReceiptsMatchSnapshot(ctx, heads, ids, walkedRows); err != nil {
 		report.OrphansRefused = "count append receipts: " + err.Error()
-	} else if total != receiptRows && report.OrphansRefused == "" {
-		// Keep the first refusal: a chain that failed to read already says why
-		// the counts differ.
-		report.OrphansRefused = fmt.Sprintf("append receipts (%d) do not match the head-bounded chains (%d)", total, receiptRows)
+	} else if refusal != "" && report.OrphansRefused == "" {
+		report.OrphansRefused = refusal
 	}
 	extraErr := s.tapeExtraRefs(ctx, func(text string) { live.addAllHex(text) })
 	if extraErr != nil {
