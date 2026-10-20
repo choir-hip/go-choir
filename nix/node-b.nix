@@ -280,6 +280,104 @@ let
     done
   '';
 
+  # Off-host backup stopgap (owner ruling 2026-10-14, owner-notes section 27
+  # item 17; design and residual risks: docs/problems/no-off-host-backup-
+  # 2026-10-20.md). restic encrypts on this host with a repository password
+  # that exists only here and in the owner's offline copy; node-a holds
+  # ciphertext in an append-only rest-server reached through a restricted SSH
+  # port forward (nix/node-a-choir-backup-target.nix, applied by node-a's own
+  # agent, never by us). DISABLED: nothing below exists until `enable` is true.
+  #
+  # Enable procedure (all of it before flipping `enable`; mutation class red,
+  # so it then goes through the Landing Loop):
+  #   1. node-a's agent applies nix/node-a-choir-backup-target.nix and returns
+  #      its SSH host key (docs/reports/node-a-backup-handover-2026-10-20.md).
+  #   2. Owner, on Node B as root, in a terminal: scripts/off-host-backup.sh
+  #      keygen. It creates secretsDir (0700) and, inside it, restic-password
+  #      (printed once to the terminal; copy it to the offline medium),
+  #      rest-password and ssh-key; it prints the ssh public key and the
+  #      htpasswd line to hand to node-a's agent. Place known-hosts (node-a's
+  #      host key, verified out of band) there by hand.
+  #   3. scripts/off-host-backup.sh init (creates the daily and archive repos),
+  #      then confirm the offline copy opens the repo (`restic key list`).
+  #   4. Temporarily set enable = true on a staging build or `systemd-run` the
+  #      script by hand; one supervised `backup` run; measure wall time, RSS,
+  #      bytes, free disk. Then the restore drill in the problem record.
+  #   5. Flip enable = true here and deploy.
+  # Rollback: enable = false. Nothing on node-a is touched by that.
+  offHostBackup = {
+    enable = false;
+    host = "51.81.93.94"; # node-a (docs/node-a-shared-host.md)
+    sshPort = 22;
+    sshUser = "choir-backup";
+    remoteRestPort = 8000; # rest-server, loopback on node-a
+    localPort = 18000; # the forward's end on this host, loopback only
+    restUser = "nodeb";
+    quotaGiB = 450; # must match the node-a module's quotaGiB
+    uploadLimitKiB = 25000; # about 200 Mbit/s; 0 = unlimited
+    minFreeGiB = 40; # disk guard: Dolt backup copies and image clones need room
+    # Does not exist yet. The unit fails to start (loudly) while any file
+    # below is missing; that is the intended state until the owner runs keygen.
+    secretsDir = "/var/lib/go-choir/secrets/offhost-backup";
+    stateDir = "/var/lib/go-choir/offhost-backup";
+  };
+  offHostBackupScript = pkgs.writeShellScript "go-choir-offhost-backup"
+    (builtins.readFile ../scripts/off-host-backup.sh);
+  offHostBackupEnv = [
+    "PATH=${lib.makeBinPath [ pkgs.coreutils pkgs.gnugrep pkgs.gnused pkgs.gawk pkgs.findutils pkgs.util-linux pkgs.jq pkgs.restic pkgs.openssh pkgs.sqlite pkgs.dolt pkgs.openssl ]}"
+    "OFFHOST_STATE_DIR=${offHostBackup.stateDir}"
+    "OFFHOST_SECRETS_DIR=${offHostBackup.secretsDir}"
+    "OFFHOST_HOST=${offHostBackup.host}"
+    "OFFHOST_SSH_PORT=${toString offHostBackup.sshPort}"
+    "OFFHOST_SSH_USER=${offHostBackup.sshUser}"
+    "OFFHOST_REMOTE_REST_PORT=${toString offHostBackup.remoteRestPort}"
+    "OFFHOST_LOCAL_PORT=${toString offHostBackup.localPort}"
+    "OFFHOST_REST_USER=${offHostBackup.restUser}"
+    "OFFHOST_QUOTA_GIB=${toString offHostBackup.quotaGiB}"
+    "OFFHOST_UPLOAD_LIMIT_KIB=${toString offHostBackup.uploadLimitKiB}"
+    "OFFHOST_MIN_FREE_GIB=${toString offHostBackup.minFreeGiB}"
+  ];
+  offHostBackupCredentials = [
+    "restic-password:${offHostBackup.secretsDir}/restic-password"
+    "rest-password:${offHostBackup.secretsDir}/rest-password"
+    "ssh-key:${offHostBackup.secretsDir}/ssh-key"
+    "known-hosts:${offHostBackup.secretsDir}/known-hosts"
+  ];
+  offHostBackupUnit = description: sub: extra: {
+    inherit description;
+    # A deploy must not kill a run in flight; a run cut off leaves only
+    # unreferenced packs and the next tick continues. Never resumed at boot.
+    restartIfChanged = false;
+    stopIfChanged = false;
+    after = [ "network-online.target" ];
+    wants = [ "network-online.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${offHostBackupScript} ${sub}";
+      Environment = offHostBackupEnv;
+      Nice = 19;
+      IOSchedulingClass = "idle";
+      CPUWeight = 10;
+      # restic holds the tree of a 9M-file tape in memory (unmeasured, see
+      # the problem record): throttle, never let it starve the paper.
+      MemoryHigh = "4G";
+      MemoryMax = "6G";
+      TimeoutStartSec = "12h";
+      # Creates ${offHostBackup.stateDir} (status.json, restic cache, staging)
+      # and keeps it writable under ProtectSystem=strict.
+      StateDirectory = "go-choir/offhost-backup";
+      StateDirectoryMode = "0700";
+      PrivateTmp = true;
+      NoNewPrivileges = true;
+      ProtectHome = "tmpfs";
+      ProtectSystem = "strict";
+      ProtectKernelModules = true;
+      ProtectKernelTunables = true;
+      ProtectControlGroups = true;
+      ReadWritePaths = [ "-${offHostBackup.stateDir}" "-${platformDoltDir}" "-${corpusDoltDir}" ];
+    } // extra;
+  };
+
   # Common systemd service hardening options applied to all go-choir
   # services. These restrict what the service process can do at the
   # Linux kernel level, reducing the blast radius of any compromise.
@@ -1485,6 +1583,63 @@ in
       OnCalendar = "daily";
       RandomizedDelaySec = "30m";
       Persistent = true;
+    };
+  };
+
+  # Off-host backup to node-a (see offHostBackup in the let block). Every
+  # attribute below is behind offHostBackup.enable, which is false: today none
+  # of these units exists. The daily job is append-only on the remote and
+  # cannot delete backups; pruning is a supervised monthly act (design,
+  # section 5). Persistent = false on every timer: a missed run is never
+  # replayed at boot (CLAUDE.md, "Restarts End Work").
+  systemd.services.go-choir-offhost-backup = lib.mkIf offHostBackup.enable (offHostBackupUnit
+    "go-choir daily encrypted backup to node-a (restic, append-only)" "backup" {
+      LoadCredential = offHostBackupCredentials ++ [ "dolt-root-password:${doltRootPasswordFile}" ];
+    } // {
+      after = [ "network-online.target" "go-choir-platform-dolt.service" "go-choir-corpus-dolt.service" ];
+      wants = [ "network-online.target" ];
+    });
+
+  systemd.timers.go-choir-offhost-backup = lib.mkIf offHostBackup.enable {
+    description = "Daily encrypted backup to node-a";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "*-*-* 02:30:00 UTC";
+      RandomizedDelaySec = "15m";
+      Persistent = false;
+    };
+  };
+
+  # Weekly: re-read and re-hash a rotating tenth of the repository.
+  systemd.services.go-choir-offhost-backup-verify = lib.mkIf offHostBackup.enable
+    (offHostBackupUnit "go-choir weekly off-host backup verification (restic check, rotating subset)" "verify" {
+      LoadCredential = offHostBackupCredentials;
+    });
+
+  systemd.timers.go-choir-offhost-backup-verify = lib.mkIf offHostBackup.enable {
+    description = "Weekly off-host backup verification";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "Sun *-*-* 06:00:00 UTC";
+      RandomizedDelaySec = "30m";
+      Persistent = false;
+    };
+  };
+
+  # Every 6 h: the unit FAILS when the last good backup is older than 36 h,
+  # the last run was partial, no verify passed in 10 days, or the repository
+  # is over 80% of the node-a quota. Failure is visible in `systemctl
+  # --failed` and the journal; paging is still a named gap.
+  systemd.services.go-choir-offhost-backup-freshness = lib.mkIf offHostBackup.enable
+    (offHostBackupUnit "go-choir off-host backup freshness check" "freshness" { });
+
+  systemd.timers.go-choir-offhost-backup-freshness = lib.mkIf offHostBackup.enable {
+    description = "Off-host backup freshness check every 6 hours";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "2h";
+      OnUnitActiveSec = "6h";
+      Persistent = false;
     };
   };
 
