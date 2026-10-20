@@ -206,18 +206,27 @@ metamission:
         not gating. Telegram out pending the owner; CNA and UDN out if
         Autopaper counts as commercial.
     - id: LP
-      path: docs/definitions/choir-appdev-s7-app-packages-2026-10-01.md
-      readiness: reviewed
-      status: pending
-      depends_on: [L2a, LR, LU]
+      path: docs/definitions/choir-lp-s6-commit-gate-2026-10-20.md
+      readiness: drafted
+      status: working
+      depends_on: []
       note: >-
         App packages, pulled in from the supervised app-development
-        metamission (S6 commit gate, then S7 app packages; owner
-        2026-10-14). First slice S7-0 converts every existing first-party
-        app into a package before any new app is built. After the
-        Autopaper scaling work (owner priority); data model work on the
-        object graph and Dolt continues alongside. S6:
+        metamission. Owner 2026-10-20 (owner notes section 28): "yes, we
+        should do the missions in order through app packages as recommended".
+        This moves LP ahead of the 2026-10-14 order (efficiency, Autopaper
+        scaling, then LP) and relaxes the old edge to L2a, LR and LU: S6 needs
+        none of them (LU depends on S6's divergence signal, not the reverse;
+        LU is needed from S7-1, when package bytes reach other computers).
+        Order: S6 (the commit gate, the file above), then S7-0 (every existing
+        first-party app becomes a package; definition:
+        docs/definitions/choir-appdev-s7-app-packages-2026-10-01.md; a
+        successor stub is in the S6 file), with a frontend self-development
+        drill on one rewrite candidate in parallel; rewrites of the weaker
+        apps (not mail, settings, autopaper or texture) follow, one package
+        at a time. Station definition of S6:
         docs/definitions/choir-appdev-s6-commit-gate-full-release-2026-10-01.md.
+        Autopaper work and the data model continue alongside.
     - id: LA
       path: unauthored (docs/reports/roadmap-sequencing-appdev-security-2026-10-14.md, phase 2)
       readiness: intent
@@ -447,6 +456,10 @@ now:
   # the reviewed restart design. The spine's card points at the live station.
   status: working
   slice: >-
+    2026-10-20 pointer: the active station is LP S6, the commit gate
+    (docs/definitions/choir-lp-s6-commit-gate-2026-10-20.md), by owner
+    direction (owner notes section 28); the Autopaper stations below continue
+    alongside. The 2026-10-16 card follows.
     2026-10-16 23:40 UTC. Handoff: docs/reports/handoff-2026-10-15.md §0
     (overnight and 2026-10-16 tables). Landed and proven on staging
     2026-10-16:

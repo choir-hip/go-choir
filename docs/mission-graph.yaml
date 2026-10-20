@@ -1248,6 +1248,23 @@ nodes:
       restart design (station L1) in docs/restart-subsystem-design-2026-10-13.md.
       Convergent round 1 (8a1477c3): send_back, findings adopted; round 2
       (d46d3d08): accept.
+  - id: choir-lp-s6-commit-gate-2026-10-20
+    title: LP S6 — the commit gate (what runs is what was approved; tests, build, heads, fault boundaries, derived divergence)
+    path: docs/definitions/choir-lp-s6-commit-gate-2026-10-20.md
+    ledger: ''
+    status: working  # drafted 2026-10-20; authoring-gate panel pending; S6-0 (release witness) is the first slice
+    kind: station
+    entrypoint: false
+    member_of: choir-ledger-metamission-2026-10-13
+    execution_mode: mission_orchestrator
+    depends_on: []  # relaxed 2026-10-20 (owner notes section 28); LU consumes S6's divergence signal
+    enables: [choir-ledger-metamission-2026-10-13]
+    note: >-
+      Owner 2026-10-20: "we should do the missions in order through app
+      packages as recommended" (S6, then S7-0, rewrites after). Moves LP ahead
+      of the 2026-10-14 order. Station definition:
+      docs/definitions/choir-appdev-s6-commit-gate-full-release-2026-10-01.md;
+      S7-0 successor stub inside the goal file.
   - id: choir-ledger-l1-restart-2026-10-13
     title: L1 — no crash loops (start limits, crash boots never re-drive, boot ledger and holds)
     path: docs/definitions/choir-ledger-l1-restart-2026-10-13.md
