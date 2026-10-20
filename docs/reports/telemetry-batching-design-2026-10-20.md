@@ -886,3 +886,68 @@ intended (the failure-mode tests are what would find one); repaired, none.
 4. Phase 1 (red): appender barrier hook and sentinel, sealer, `AppendEvent` and
    sequence rule, reads, drain and restart hooks, verifier rule, flag wiring,
    observability. Tests listed above are written before the code they cover.
+
+## As built (phase 0 and phase 1, flag default off; 2026-10-20)
+
+Where the code departs from, or settles a question left open by, the sections
+above.
+
+- **Files.** `internal/types/event_durability.go` (the closed table);
+  `internal/store/telemetry_sealer.go` (queue, barrier, seal, boot watermark),
+  `telemetry_stats.go`, `telemetry_reads.go`; `internal/computerevent/appender.go`
+  (`SetAppendBarrier`, `WithBarrierExemption`, `ErrBatchRefused`);
+  `internal/agentcore/telemetry_batching.go` (flag, restart rules, records);
+  `internal/server` (`AddShutdownHook`); `internal/textureowner` verifier rule.
+- **Per-run `seq` after two crashes** relies on the crash boot closing every
+  pre-boot run with an acknowledged event (design 6.1), exactly as written. The
+  test for case 2 therefore puts the second-boot telemetry on a run created
+  after the first crash, not on the run the first crash boot closed. A run with
+  no stored acknowledged event at all (never the case in production: every run
+  begins with `loop.submitted`) would not get a gap.
+- **Stream gap and per-run gap apply at the moment each counter is seeded**,
+  whatever the kind of the appending event (finding 2 of the plan), and only
+  when the sealer exists then. `stream_seq` also gets the boot watermark.
+- **`W` is env only** (`CHOIR_TELEMETRY_BATCH_WINDOW_MS`, clamped 250 ms to
+  2 s); the on/off flag is the env value or the computer setting
+  `telemetry.batch`. The setting is read at `Runtime.Start`, before the first
+  event of the process, using `CHOIR_OWNER_ID`, which the host passes to every
+  guest.
+- **`Relaxed` reads behave as `Consistent`.** The three polled endpoints are
+  marked `Relaxed` (a source-scan test pins every external `ListEvents*` call
+  site), so phase 3 is a one-line change in `beforeEventRead`.
+- **The Texture verifier rule is a wrapper** (`toolEvidenceError`,
+  `ErrVerificationInconclusive`) on the three checks that read `tool.result`.
+  `VerifyTextureWorkflow` has no non-test caller in the repo today.
+- **Not done, deliberately:** `Relaxed` reads that skip the seal, a sealer
+  integration with group commit (A3), any retention policy keyed on the
+  telemetry authority, relaxing generic object-graph reads of `choir.event`
+  made outside `Store.ListEvents*` (none found in `internal/`).
+
+### Reading the counters (no ssh)
+
+`GET /api/runtime/observability` on the computer (the product path, owner
+authenticated) returns `telemetry_batching`:
+
+- Phase 0, with the flag off: `events_appended_by_kind`,
+  `events_appended_batchable` and `_acknowledged`, `batchable_share`;
+  `tape_events`, `tape_ops`, `ops_per_tape_event` (the baseline batch size,
+  1 for every standalone write), `tape_events_by_authority`, `tape_ops_by_kind`.
+  **t of section 7** is `events_appended_batchable / tape_events` read over a
+  flag-off interval.
+- Phase 1, with the flag on: `batching.enabled`, `window_ms`, `queue_depth`,
+  `records_enqueued`, `batches_sealed`, `sealed_ops_per_batch` and
+  `mean_ops_per_batch` (the realised **k**), `seal_reasons` (deadline, count,
+  bytes, barrier, read, shutdown, capacity), `barrier_waits`,
+  `telemetry_class_violation`, `records_dropped`, `poison_dropped`,
+  `seal_failures`, `unknown_outcome_records_lost`, `split_to_singles`,
+  `capacity_flushes`, `boot_watermark_writes`, seal latency mean and max.
+
+### Turning it on for one test computer first
+
+Do not set it fleet-wide. On the test computer, as its owner:
+`POST /api/computer-settings {"key":"telemetry.batch","value":true}`. It takes
+effect at once and persists across restarts (read at boot); the same call with
+`false` drains the queue and returns to acknowledged writes. Alternatively
+`CHOIR_TELEMETRY_BATCH=on` in the guest environment turns it on whatever the
+setting says. Verify with the observability counters above, then run the
+section 9 drills before phase 2.
