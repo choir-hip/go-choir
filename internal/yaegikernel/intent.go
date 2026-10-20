@@ -230,6 +230,26 @@ type InboxRecord struct {
 	ParentConversationID string    `json:"parent_conversation_id,omitempty"`
 	ParentRound          int       `json:"parent_round,omitempty"`
 	CreatedAt            time.Time `json:"created_at"`
+	// Request is, on management's Cast that opened an engineering
+	// assignment, the Texture request the assignment serves: the parent
+	// Texture Cast's sender, objective and body, verbatim (bounded), read from
+	// the tape and checked against the assignment binding's RequestDigest.
+	// RequestError says why it is absent when the check refused it.
+	Request      *InboxRequest `json:"request,omitempty"`
+	RequestError string        `json:"request_error,omitempty"`
+}
+
+// InboxRequest is the Texture request an engineering assignment serves, as
+// engineering reads it. Objective and Body are the Texture Cast's own text
+// (cut at a size bound, with Truncated and a marker line when cut); Digest
+// is over the full text and is what the assignment binding commits to.
+type InboxRequest struct {
+	RecordID  string `json:"record_id"`
+	From      string `json:"from"`
+	Objective string `json:"objective,omitempty"`
+	Body      string `json:"body,omitempty"`
+	Truncated bool   `json:"truncated,omitempty"`
+	Digest    string `json:"digest"`
 }
 
 // CaptureLabelView is Jev's label on one capture as management sees it:
