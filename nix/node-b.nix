@@ -27,6 +27,14 @@ let
   mailDir = "/var/lib/go-choir/mail";
   platformDoltDir = "/var/lib/go-choir/platform-dolt";
   platformDoltDBDir = "${platformDoltDir}/platform";
+  # Store A weekly history squash (owner notes 2026-10-14 sections 23 and 27
+  # item 7; docs/problems/store-a-weekly-squash-2026-10-20.md). The service is
+  # always defined so the first run is supervised by hand
+  # (`systemctl start go-choir-platform-dolt-squash.service`); the weekly timer
+  # starts only when this is true. Enable it after the first run has been
+  # watched end to end.
+  platformDoltSquashTimerEnabled = false;
+  platformDoltSquashBackupRoot = "/var/lib/go-choir/platform-dolt-squash-backups";
   corpusDoltDir = "/var/lib/go-choir/corpus-dolt";
   corpusDoltDBDir = "${corpusDoltDir}/corpus";
   platformArtifactsDir = "/var/lib/go-choir/platform-artifacts";
@@ -161,6 +169,8 @@ let
   # docs/problems/dolt-clustering-assessment-2026-10-15.md sections 4 and 7).
   doltLivenessProbe = pkgs.writeShellScript "go-choir-dolt-liveness-probe"
     (builtins.readFile ../scripts/dolt-liveness-probe.sh);
+  platformDoltSquashScript = pkgs.writeShellScript "go-choir-platform-dolt-squash"
+    (builtins.readFile ../scripts/platform-dolt-squash.sh);
   doltUsersUnit = doltUnit: port: db: {
     description = "go-choir Dolt users and grants for ${doltUnit} (${db})";
     wantedBy = [ "multi-user.target" "${doltUnit}.service" ];
@@ -1562,6 +1572,64 @@ in
     wantedBy = [ "timers.target" ];
     timerConfig = {
       OnCalendar = "*-*-* 12:00:00 UTC";
+      Persistent = false;
+    };
+  };
+
+  # Store A weekly history squash, offline (docs/problems/store-a-weekly-squash-
+  # 2026-10-20.md). The script stops the Dolt unit's timers and Requires=
+  # dependents and the unit, takes a reflink backup of the data directory, runs
+  # platform-dolt-squash (squash to one commit, bounded full GC, refuse unless
+  # the root hash is identical), restores the backup on any failure, starts
+  # everything again, runs a query check and keeps only the newest backup.
+  # This unit deliberately has no After/Requires/Wants/PartOf on the Dolt unit:
+  # it stops that unit and must not be stopped with it. ExecStopPost runs
+  # `--finish`, so an OOM kill of the run cannot leave Store A down or a torn
+  # squash in place. It never touches vmctl.
+  # Memory: MemoryMax without MemoryHigh and no swap, as the paper's proven run
+  # (MemoryHigh made it thrash on 2026-10-19); the command also sets a Go
+  # memory limit of 5 GiB.
+  # First run by hand: docs/problems/store-a-weekly-squash-2026-10-20.md.
+  systemd.services.go-choir-platform-dolt-squash = {
+    description = "go-choir Store A (platform Dolt) weekly history squash";
+    path = [ pkgs.coreutils pkgs.gawk pkgs.gnugrep pkgs.gnused pkgs.systemd pkgs.dolt ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = platformDoltSquashScript;
+      ExecStopPost = "${platformDoltSquashScript} --finish";
+      TimeoutStartSec = "2h";
+      MemoryMax = "10G";
+      MemorySwapMax = "0";
+      Nice = 10;
+      CPUWeight = 20;
+      IOWeight = 20;
+      RuntimeDirectory = "go-choir-platform-dolt-squash";
+      RuntimeDirectoryMode = "0700";
+      # The query check reuses the liveness probe's --sql mode, which reads the
+      # app user's password from the credential directory and never prints it.
+      LoadCredential = [ "dolt-app-password:${doltAppPasswordFile}" ];
+      Environment = [
+        "HOME=${platformDoltDir}"
+        "LD_LIBRARY_PATH=${goServiceLibraryPath}"
+        "SQUASH_BIN=${goChoirPackages.platformDoltSquash}/bin/platform-dolt-squash"
+        "DOLT_UNIT=go-choir-platform-dolt.service"
+        "DATA_DIR=${platformDoltDir}"
+        "DATABASE=platform"
+        "BACKUP_ROOT=${platformDoltSquashBackupRoot}"
+        "SQL_CHECK_CMD=${doltLivenessProbe} --sql 13306 platform"
+        "SQUASH_NOTE=weekly"
+      ];
+    };
+  };
+
+  # DISABLED until the first supervised run: no wantedBy while
+  # platformDoltSquashTimerEnabled is false. Persistent=false so a missed
+  # window is skipped, never replayed at boot.
+  systemd.timers.go-choir-platform-dolt-squash = {
+    description = "Weekly Store A history squash";
+    wantedBy = lib.optional platformDoltSquashTimerEnabled "timers.target";
+    timerConfig = {
+      OnCalendar = "Sun *-*-* 06:00:00 UTC";
       Persistent = false;
     };
   };

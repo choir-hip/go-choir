@@ -299,6 +299,7 @@
       goServiceSubPackages = [
         "cmd/auth" "cmd/proxy" "cmd/maild" "cmd/maildctl" "cmd/vmctl"
         "cmd/gateway" "cmd/corpusd" "cmd/checkpointd" "cmd/projection-compact"
+        "cmd/platform-dolt-squash"
         "cmd/choir-updater" "cmd/choir-receipt-signer" "cmd/capsule-broker"
         "cmd/autoputer" "cmd/choir-builder" "cmd/goproxy"
         # claude delegate (docs/design/claude-delegate-slice1-2026-10-14.md)
@@ -404,6 +405,11 @@
         projectionCompact = mkGoService {
           pname = "projection-compact";
           subPackage = "cmd/projection-compact";
+        };
+        # Store A weekly history squash (nix/node-b.nix, scripts/platform-dolt-squash.sh).
+        platformDoltSquash = mkGoService {
+          pname = "platform-dolt-squash";
+          subPackage = "cmd/platform-dolt-squash";
         };
         updater = mkGoService {
           pname = "choir-updater";

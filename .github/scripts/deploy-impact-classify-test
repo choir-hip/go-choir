@@ -224,4 +224,12 @@ checkpoint_dependency_output="$(run_classifier "internal/projectionbase/rebuilde
 assert_contains "$checkpoint_dependency_output" "deploy_needed=true"
 assert_contains "$checkpoint_dependency_output" "host_services=checkpointd"
 
+store_a_squash_output="$(run_classifier "cmd/platform-dolt-squash/main.go" "scripts/platform-dolt-squash.sh")"
+assert_contains "$store_a_squash_output" "deploy_needed=true"
+assert_contains "$store_a_squash_output" "deploy_host_os=true"
+assert_not_contains "$store_a_squash_output" "unknown deployed path"
+
+store_a_squash_test_output="$(run_classifier "scripts/test-platform-dolt-squash.sh")"
+assert_contains "$store_a_squash_test_output" "deploy_needed=false"
+
 printf 'deploy-impact-classify-test: ok\n'
