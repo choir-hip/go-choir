@@ -714,3 +714,32 @@ Owner, on waking:
   illustrative. What are the rules around republishing images and how can
   we get images that we can republish?" Answered in conversation; a design
   doc follows, queued behind related stories.
+- Images mock-up (about 15:55 UTC), two of the day's stories illustrated
+  only from Commons (public domain, CC BY, CC BY-SA): pursue, with one
+  owner approval click per image. Same-week protest photos exist; the
+  diplomacy story gets labelled file photos only; four of eleven
+  rejections were license laundering (agency credits under a free label).
+- System 1 turned on for the paper (15:57 UTC): `research.system1` true on
+  the paper computer, build 614fd445f. The paper's QA key had expired at
+  15:13 UTC; re-minted from its saved owner session, valid to 10-27.
+
+## 30. System 1 judges images; op-eds next, with corrections; a day for sources (2026-10-20, ~16:05 UTC)
+
+- Image relevance: "We should try using the System 1 model. It supports
+  images to determine the relevance of an image for the story. And if
+  it's uncertain, we can have Luna to determine that as well. Or whichever
+  model is working as research. Even if it's imperfect, that's fine." So
+  System 1 reads each candidate image with the story and answers with a
+  distribution; flat answers go to the research model.
+- Why imperfect is acceptable: "the next thing for us to work on is the
+  op-ed feature, and that dovetails with the ability of users to provide
+  corrections to the system. And all of that then becomes learning
+  material so that it gets better over time." Op-eds and reader
+  corrections are one stream; corrections are training signal.
+- App rewrites deferred to overnight: "We can put that off maybe until
+  overnight tonight, as today I want to actually do some stuff which
+  requires my attention."
+- Today is for sources: "today is the day where we're going to really
+  expand the gamut of sources. And you can help me with that, just
+  telling me which things I need to sign up for and API keys I need to
+  create." First, an overview panel of every stream, as an artifact.
