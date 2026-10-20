@@ -1,7 +1,7 @@
 # Primary-source registry, wave 1: what it adds, why, and the licence of each row (2026-10-20)
 
-Status: wave 1 registry rows and the per-source byte cap landed on a branch
-(not pushed). No schedule is activated; activation is an operator act on
+Status: wave 1 registry rows and the per-source byte cap are committed on
+branch `worktree-agent-a2f29a88561ca00fd` (not pushed, not deployed). No schedule is activated; activation is an operator act on
 the paper (section 6). Working document, not doctrine; the licence readings
 are engineering readings, not legal advice.
 
@@ -40,9 +40,9 @@ Two gaps in the code, found while reading it:
    (Fed, ECB, EC, NASA, CDC US, NOAA, USGS, WTO, UN) are not edited.
 2. **A 2 MiB read cap on every feed.** `internal/sources/rss.go` reads
    `io.LimitReader(resp.Body, 2<<20)`. The Central Bank (CBC) feed is 3.4
-   MB (re-measured 2026-10-20: 3,430,572 bytes, 483 items). The decoder is
-   not strict, so a feed cut at 2 MiB either fails to parse or silently
-   loses the items past the cut; either way the source is wrong. Wave 1
+   MB (re-measured 2026-10-20: 3,430,572 bytes, 483 items). A feed cut at
+   2 MiB fails to parse ("XML syntax error ... unexpected EOF", confirmed by
+   a test with a 3.5 MB feed), so the source polls as an error every time. Wave 1
    makes the cap a per-source setting `max_body_bytes`: default 2 MiB
    unchanged, hard ceiling 8 MiB, a value above the ceiling is clamped to
    it. Only the CBC row sets it (to 4 MiB; 8 MiB is a ceiling, not a target).

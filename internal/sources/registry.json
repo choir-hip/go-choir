@@ -5868,6 +5868,355 @@
       "auth_policy": "none",
       "store_body_policy": "excerpt_only",
       "retention_days": 90
+    },
+    {
+      "id": "official:whitehouse:news",
+      "type": "rss",
+      "name": "White House News",
+      "url": "https://www.whitehouse.gov/news/feed/",
+      "verticals": [
+        "politics",
+        "policy"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "us"
+      ],
+      "jurisdictions": [
+        "US"
+      ],
+      "poll_interval_seconds": 1800,
+      "max_items_per_poll": 25,
+      "rate_limit": "30m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "official_public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_release_text",
+      "retention_days": 365,
+      "license": "us-federal-public-domain",
+      "official": true,
+      "source_standing": "primary_government"
+    },
+    {
+      "id": "official:sec:press",
+      "type": "rss",
+      "name": "U.S. Securities and Exchange Commission Press Releases",
+      "url": "https://www.sec.gov/news/pressreleases.rss",
+      "verticals": [
+        "finance",
+        "markets",
+        "policy"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "us"
+      ],
+      "jurisdictions": [
+        "US"
+      ],
+      "poll_interval_seconds": 3600,
+      "max_items_per_poll": 25,
+      "rate_limit": "1h poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "official_public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_release_text",
+      "retention_days": 3650,
+      "license": "us-federal-public-domain",
+      "official": true,
+      "source_standing": "primary_government"
+    },
+    {
+      "id": "official:doj:news",
+      "type": "rss",
+      "name": "U.S. Department of Justice News",
+      "url": "https://www.justice.gov/news/rss?m=1",
+      "verticals": [
+        "politics",
+        "policy",
+        "public_safety"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "us"
+      ],
+      "jurisdictions": [
+        "US"
+      ],
+      "poll_interval_seconds": 1800,
+      "max_items_per_poll": 25,
+      "rate_limit": "30m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "official_public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_release_text",
+      "retention_days": 365,
+      "license": "us-federal-public-domain",
+      "official": true,
+      "source_standing": "primary_government"
+    },
+    {
+      "id": "official:federalregister:significant_rules",
+      "type": "rss",
+      "name": "Federal Register Significant Rules",
+      "url": "https://www.federalregister.gov/api/v1/documents.rss?conditions%5Btype%5D%5B%5D=RULE&conditions%5Bsignificant%5D=1",
+      "verticals": [
+        "policy",
+        "economics"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "us"
+      ],
+      "jurisdictions": [
+        "US"
+      ],
+      "poll_interval_seconds": 3600,
+      "max_items_per_poll": 25,
+      "rate_limit": "1h poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "official_public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 3650,
+      "license": "us-federal-public-domain",
+      "official": true,
+      "source_standing": "primary_government"
+    },
+    {
+      "id": "official:federalregister:bis",
+      "type": "rss",
+      "name": "Federal Register: Bureau of Industry and Security (export controls)",
+      "url": "https://www.federalregister.gov/api/v1/documents.rss?conditions%5Bagencies%5D%5B%5D=industry-and-security-bureau",
+      "verticals": [
+        "policy",
+        "semiconductors",
+        "supply_chain",
+        "technology"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "us"
+      ],
+      "jurisdictions": [
+        "US"
+      ],
+      "poll_interval_seconds": 3600,
+      "max_items_per_poll": 25,
+      "rate_limit": "1h poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "official_public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 3650,
+      "license": "us-federal-public-domain",
+      "official": true,
+      "source_standing": "primary_government"
+    },
+    {
+      "id": "official:uk_fcdo:news",
+      "type": "rss",
+      "name": "UK Foreign, Commonwealth and Development Office (GOV.UK)",
+      "url": "https://www.gov.uk/government/organisations/foreign-commonwealth-development-office.atom",
+      "verticals": [
+        "conflict",
+        "politics",
+        "policy"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "jurisdictions": [
+        "UK"
+      ],
+      "poll_interval_seconds": 1800,
+      "max_items_per_poll": 25,
+      "rate_limit": "30m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "official_public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_release_text",
+      "retention_days": 365,
+      "license": "ogl-v3.0",
+      "official": true,
+      "source_standing": "primary_government"
+    },
+    {
+      "id": "official:uk_dsit:news",
+      "type": "rss",
+      "name": "UK Department for Science, Innovation and Technology (GOV.UK)",
+      "url": "https://www.gov.uk/government/organisations/department-for-science-innovation-and-technology.atom",
+      "verticals": [
+        "ai",
+        "technology",
+        "policy"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "jurisdictions": [
+        "UK"
+      ],
+      "poll_interval_seconds": 3600,
+      "max_items_per_poll": 25,
+      "rate_limit": "1h poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "official_public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_release_text",
+      "retention_days": 365,
+      "license": "ogl-v3.0",
+      "official": true,
+      "source_standing": "primary_government"
+    },
+    {
+      "id": "official:tw_cbc:press",
+      "type": "rss",
+      "name": "Central Bank of the Republic of China (Taiwan) Press Releases (zh)",
+      "url": "https://www.cbc.gov.tw/tw/rss-302-1.xml",
+      "verticals": [
+        "macro_policy",
+        "finance",
+        "economics"
+      ],
+      "languages": [
+        "zh"
+      ],
+      "regions": [
+        "asia"
+      ],
+      "jurisdictions": [
+        "TW"
+      ],
+      "poll_interval_seconds": 3600,
+      "max_items_per_poll": 25,
+      "rate_limit": "1h poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "official_public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_release_text",
+      "retention_days": 3650,
+      "license": "ogdl-tw-v1.0",
+      "official": true,
+      "source_standing": "primary_government",
+      "max_body_bytes": 4194304
+    },
+    {
+      "id": "official:kremlin:en_news",
+      "type": "rss",
+      "name": "President of Russia: News (Kremlin, English; state media)",
+      "url": "http://en.kremlin.ru/events/president/news/feed",
+      "verticals": [
+        "conflict",
+        "politics"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "europe"
+      ],
+      "jurisdictions": [
+        "RU"
+      ],
+      "poll_interval_seconds": 1800,
+      "max_items_per_poll": 25,
+      "rate_limit": "30m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "official_public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_release_text",
+      "retention_days": 365,
+      "license": "cc-by-4.0",
+      "official": true,
+      "source_standing": "state_media"
+    },
+    {
+      "id": "official:cisa:advisories",
+      "type": "rss",
+      "name": "CISA Cybersecurity Advisories",
+      "url": "https://www.cisa.gov/cybersecurity-advisories/all.xml",
+      "verticals": [
+        "security",
+        "technology"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "us"
+      ],
+      "jurisdictions": [
+        "US"
+      ],
+      "poll_interval_seconds": 3600,
+      "max_items_per_poll": 25,
+      "rate_limit": "1h poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "official_public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_release_text",
+      "retention_days": 365,
+      "license": "us-federal-public-domain",
+      "official": true,
+      "source_standing": "primary_government"
+    },
+    {
+      "id": "official:eia:today_in_energy",
+      "type": "rss",
+      "name": "U.S. Energy Information Administration: Today in Energy",
+      "url": "https://www.eia.gov/rss/todayinenergy.xml",
+      "verticals": [
+        "energy",
+        "economics"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "us"
+      ],
+      "jurisdictions": [
+        "US"
+      ],
+      "poll_interval_seconds": 3600,
+      "max_items_per_poll": 25,
+      "rate_limit": "1h poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "official_public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_release_text",
+      "retention_days": 365,
+      "license": "us-federal-public-domain",
+      "official": true,
+      "source_standing": "primary_government"
     }
   ]
 }
