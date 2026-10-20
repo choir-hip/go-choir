@@ -389,3 +389,40 @@ There is no alert channel on Node B yet (the cost-track report: "Not started:
   a real sshd; btrfs subvolume and qgroup commands; the full `backup` run
   (needs restic, ssh and Dolt on Node B); restic memory at 9M files;
   shellcheck was not available.
+
+### 13. Enable procedure, progress (2026-10-20)
+
+The owner approved node-a as the stopgap target and authorized Choir to
+change node-a's config (owner, 2026-10-20: "you can edit mike project work
+with this. either edit node-a or the mike repo").
+
+1. **Done, 18:23 UTC.** The target module is in the Mike project's node-a
+   config (`/root/mike-infra/node-a/choir-backup-target.nix`, imported from
+   `configuration.nix`), mirrored into the Mike repo on the owner's Mac
+   (`infra/node-a/`, commit df9f05cc, only those two paths). Applied the
+   way node-a's own rules ask: `nixos-rebuild build` (the closure diff was
+   only the backup units and rest-server 0.14.0), `test`, a fresh root
+   login, then `switch` (system generation 61; rollback is generation 60;
+   the pre-change config is kept in `/root/configuration.nix.pre-choir-backup-*`).
+   Two departures from the module defaults: `dataDir = /srv/choir-backup`
+   (`/data` does not exist on node-a; `/srv` is a btrfs subvolume) and
+   `enforceBtrfsQuota = false` (quotas are off on that filesystem and slow
+   one with many snapshots, which node-a has; rest-server's `--max-size`,
+   95% of 450 GiB, is the limit). rest-server listens on 127.0.0.1:8000
+   only; the `choir-backup` user exists; no unit failed.
+2. **Done.** The owner ran `keygen` on Node B (18:0x UTC). It stopped at
+   the bcrypt line: Node B has no `htpasswd` (a script bug: fix is to fall
+   back to `nix-shell -p apacheHttpd`, held until the S6-0 drill ends).
+   The bcrypt line was generated on Node B from the rest password with
+   that fallback and placed on node-a (`/var/lib/choir-backup/htpasswd`,
+   0600). node-a's host key is pinned in `secrets/offhost-backup/known-hosts`,
+   cross-checked three ways (node-a's key file, the operator session, Node
+   B's existing builder entry).
+3. **Done, 18:25 UTC.** `init` created the `daily` and `archive`
+   repositories through the restricted tunnel (restic from `nix-shell`;
+   Node B has no restic outside the unit). **Owed by the owner:** confirm
+   the offline copy of the restic password matches.
+4. Next: one supervised `backup` run with the timer off, after the S6-0
+   drill (the host is busy), measuring wall time, RSS, bytes and free disk;
+   then the restore drill (section 9); then `enable = true` through the
+   Landing Loop.
