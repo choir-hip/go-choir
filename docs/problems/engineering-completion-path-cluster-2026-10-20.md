@@ -898,3 +898,56 @@ an applied no-op. Problem 1 needs a design: either a failed assignment's
 capsule diff is kept as an artifact that a re-cast can name to seed its
 new capsule, or the re-cast tells engineering plainly that the work is
 gone. Not decided; a panel question once problem 2 lands.
+
+**Problem 2 landed** (22b287a5d, CI 39487132368 passed, staging deploy
+receipt names 22b287a5d). Deployed proof waits for a drill whose re-cast
+reaches Freeze.
+
+### Failure 15, problem 1: carry the failed round's diff, not its capsule (proposed, 2026-10-20)
+
+Owner, weighing A (keep the diff) against B (reuse the capsule): "Could
+make sense to reuse capsules but that could also have downsides of runaway
+resource usage and maybe security implications."
+
+Proposed: **A**. Reasons:
+
+- **A capsule is authority and state, not just files.** It holds running
+  processes, a job cgroup, caches, `node_modules`, built binaries, the
+  release directory, and a capability grant bound to one agent run.
+  Reusing it means moving that grant from one assignment to another (a new
+  authority surface) and carrying forward whatever ran inside it: round 1
+  of this drill ran `npm ci`, and npm reported a package with install
+  scripts. A fresh capsule per assignment is the guarantee that nothing
+  but the base tree reaches the next round.
+- **Resources.** A held capsule keeps memory, disk and a cgroup until
+  something collects it; fail-and-re-cast loops multiply them. It also
+  cuts against the restart rule (a crash closes work; it never resumes it).
+- **A patch is inert data.** The `/workspace/platform` source diff only
+  (the same writer Freeze uses, `emitSourcePatch`), digest-bound and
+  size-capped, and readable: management and Texture can see its file
+  list, so their belief that "the work is still there" becomes true and
+  checkable.
+
+Shape:
+
+1. A Complete that ends without a frozen candidate writes the capsule's
+   source diff as an unfinished-work artifact, before the capsule is
+   destroyed, and the assignment report names it (digest, base commit,
+   file list, size). An empty diff writes nothing and the report says so.
+2. A re-cast may name that artifact. The new capsule starts from the base
+   tree with the patch applied; if the base moved and it does not apply,
+   the cast says that plainly instead of starting.
+3. Nothing is trusted from the carried patch: the new round re-runs the
+   tests, and Freeze, verify and approval judge it as any change.
+4. The re-cast carries the original request text, not only the recovery
+   step (round 2 here had only "run vet, build, freeze").
+
+Failure modes to write as tests first: a diff lost when the capsule is
+destroyed; a patch applied to a different base without saying so; a
+carried patch that skips a test; a patch with paths outside
+`/workspace/platform`; an oversize patch; the report naming a patch that
+does not exist.
+
+Also: the trigger here was failure 12 (vet stalls on module downloads).
+Fixing that removes the commonest way a round fails after doing its work.
+The capsule Go-modules decision (A/B/C) is still the owner's.
