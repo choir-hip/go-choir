@@ -761,3 +761,17 @@ Owner, on waking:
   RSSHub (AGPL-3.0; several Asian routes need login cookies) are the
   social sources to design. Social posts are leads, not citations: a story
   still needs two distinct outlets.
+- Translation as an exception (about 16:30 UTC): "for stuff that seems
+  like it's off limits for rights issues, look into an exception for
+  translations. If it's in a different language and there's no English
+  language coverage of it, I think it should be fair to translate it into
+  English and cover the translation. That's not mere aggregation." Reply
+  given: copyright treats a translation as a derivative work (Berne art. 8;
+  17 U.S.C. 101 and 106(2)), so a full translation needs permission; but
+  facts are free, so reporting a foreign-language story in English in our
+  own words, with short translated quotes marked as our translation,
+  attribution and a link, is ordinary news practice and is not
+  aggregation. "No English coverage" raises the value of covering it; it
+  does not change the law. Translation does not cure platform terms that
+  forbid the access itself (Telegram, cookie routes). Counsel to confirm
+  the bright lines (quote length, the EU press publishers' right).
