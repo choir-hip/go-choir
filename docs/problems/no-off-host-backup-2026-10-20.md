@@ -455,5 +455,36 @@ with this. either edit node-a or the mike repo").
    extents the running guests rewrite while the run is in flight, and
    the exit trap removes them. The 40 GiB disk guard is checked before
    staging; nothing rechecks it while restic runs.
-7. Next: read the run's result, then the restore drill (section 9), then
-   `enable = true` through the Landing Loop.
+7. **Run 1 result (18:39:15 to 20:19:44 UTC, 1 h 40 min).** Exit 3,
+   `partial`, for the two sqlite stores only (item 5); every other path
+   was present (`skipped: []`). Snapshot `31b057be…` in `daily`: restic
+   scanned 9,555,586 files, 680 GB apparent (the guest image clones are
+   sparse; the tape is millions of small files), and added 163.6 GB
+   before compression; the repository on node-a is 101.2 GB raw
+   (`repo_raw_bytes`), inside section 7's 110 to 180 GB estimate. The
+   network counters (191 GB out, 98 GB in) count the loopback leg to the
+   tunnel as well as the leg to node-a; node-a received about 101 GB.
+   Free disk on Node B ended at 83 GB (the Dolt backup directories, 34.5
+   GB, stay; the image clones were removed). CPU 2 h 11 min.
+8. **Problem found by run 1: restic's working set is about three times
+   its memory limit, and the overflow went to swap.** Memory peak 4.0 GB
+   (the `MemoryHigh` line) and **swap peak 9.1 GB**, so restic needed
+   about 13 GB; the unit read 1.3 TB from disk and wrote 1.0 TB. The
+   writes are not the backup (the staging copies are reflinks and the
+   Dolt syncs are about 35 GB); swap churn under the `MemoryHigh`
+   throttle is the likely cause, not yet measured. Nothing else
+   suffered that I could see: no OOM kill on the host, no vmctl
+   timeouts, memory and I/O pressure back near zero after the run (I/O
+   `full` averaged about 7% over the last five minutes of it). Why it
+   matters: a terabyte written a night is real wear on Node B's NVMe,
+   and the working set grows with the tape's file count (9.5 million
+   now; restic holds the tree in memory). The unit's limits (4G high, 6G
+   max) cap RAM, not swap: `MemorySwapMax` is unset. Not fixed yet.
+   Options: give restic the RAM it needs (about 14 GB of Node B's 31
+   GB), cap swap and let it fail loudly, or cut the file count (the
+   tape-segment packing already on the roadmap; the pin receipts are
+   most of the 9.5 million). Next measurement: run 2 (incremental),
+   the same limits, with the host's swap-in and swap-out counters and
+   the unit's I/O read before and after, so the writes are attributed.
+9. Next: run 2, then the restore drill (section 9), then `enable = true`
+   through the Landing Loop once item 8 has a decided fix.
