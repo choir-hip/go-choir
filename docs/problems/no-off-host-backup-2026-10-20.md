@@ -486,5 +486,32 @@ with this. either edit node-a or the mike repo").
    most of the 9.5 million). Next measurement: run 2 (incremental),
    the same limits, with the host's swap-in and swap-out counters and
    the unit's I/O read before and after, so the writes are attributed.
-9. Next: run 2, then the restore drill (section 9), then `enable = true`
-   through the Landing Loop once item 8 has a decided fix.
+9. **Memory, decided.** Owner, 2026-10-20: "give restic more memory".
+   The unit now throttles at 10G, stops at 12G and may swap at most 4G
+   (60ae1cb64, deployed); run 2 was raised to the same limits at 20:58
+   UTC, after its Dolt stage.
+10. **Question from the owner: do the guest images need cloning at all?**
+    Owner, 2026-10-20: "Do we need to clone guest images? Can't those
+    restore from tape/snapshot?" By doctrine, no: "if a field is needed
+    after reboot of this computer, it is on the tape"
+    (unified-event-tape design), and the self-development restore is
+    tape-only by construction (`tape_reconstruct`, which must not read
+    surviving local state). The tape and the key escrow are backed up in
+    full. What is not yet shown: a computer rebuilt from a *restored*
+    tape onto an empty disk on another host matches its live witness,
+    and how long that takes for the paper computer (a full replay may be
+    hours; an image restores in minutes). Known guest-local state exists
+    (for example the guest Dolt GC disposition file, guest-dolt-storage-
+    growth FM7), so "everything is on the tape" is a hypothesis to test,
+    not a given. Today's images: 15 VM directories, most of them tracer
+    test computers; the largest image is 40 GB on disk (128 GB apparent).
+    The nightly cost of the images is the re-read (each clone is a new
+    inode) and the copy-on-write extents the clones pin, not the upload
+    (dedup).
+    Plan: (a) after run 2, clone only the protected computers' images
+    (the paper and the owner computer), not test computers; (b) the
+    restore drill rebuilds one computer from the restored tape onto an
+    empty disk and compares the witness; (c) if it matches, drop images
+    from the nightly run, keeping at most a weekly paper image for
+    recovery time.
+11. Next: run 2's numbers, (a), the restore drill, then `enable = true`.
