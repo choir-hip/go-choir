@@ -1009,7 +1009,9 @@ in
         # refuses apply; flip to active only after a dry-run manifest has been
         # reviewed (docs/problems/tape-sweeps-destroyed-and-orphans-2026-10-20.md).
         # Archives default to <artifacts>/tape-sweep-archive (ReadWritePaths).
-        "PLATFORM_TAPE_SWEEP_MODE=dry-run"
+        # active since 2026-10-20, after the reviewed dry-run
+        # ts-20261020T051653Z-fd085f79. Rollback: set back to dry-run.
+        "PLATFORM_TAPE_SWEEP_MODE=active"
         # P5 host build service. The checkout is the deploy's /opt/go-choir
         # (read only: its objects, never its worktree); the base is the
         # deployed guest image a computer must have booted.
