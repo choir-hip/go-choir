@@ -159,7 +159,10 @@ func (f *fakeHostBuilder) shape(job hostbuild.Job) hostbuild.Job {
 		job.State, job.Reason, job.Detail = hostbuild.StateFailed, hostbuild.ReasonBuildFailed, "builder: apply source patch: patch does not apply"
 	case "done", "forged":
 		nar := hostBuildTestClosure()
-		receipt := []byte(`{"code_commit":"` + hostBuildTestCodeCommit + `"}`)
+		// The real builder receipt (builder.ClosureResult) names the patch
+		// and base it built; the fake keeps those fields so the release
+		// witness reads the same shape.
+		receipt := []byte(`{"code_commit":"` + hostBuildTestCodeCommit + `","source_patch_sha256":"` + job.SourcePatchSHA256 + `","source_patch_base_commit":"` + job.BaseCommit + `"}`)
 		f.blobs[computerevent.DigestBytes(nar)] = nar
 		f.blobs[computerevent.DigestBytes(receipt)] = receipt
 		result := hostbuild.Result{
