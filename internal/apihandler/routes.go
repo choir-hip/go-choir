@@ -44,6 +44,7 @@ func RegisterRoutes(s *server.Server, h *agentcore.APIHandler, texture *textureo
 	s.HandleFunc("/api/media/progress", mediaOwner.HandleMediaProgress)
 	s.HandleFunc("/api/media/recents", mediaOwner.HandleMediaRecents)
 	s.HandleFunc("/api/preferences/theme", mediaOwner.HandleThemePreference)
+	s.HandleFunc("/api/assets/", h.HandleAssets)
 	s.HandleFunc("/api/computers/", h.HandleComputersRouter)
 	s.HandleFunc("/api/trajectories", h.HandleTrajectoriesRoot)
 	s.HandleFunc("/api/trajectories/", h.HandleTrajectoryDetail)

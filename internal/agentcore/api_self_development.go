@@ -206,6 +206,12 @@ func (h *APIHandler) handleSelfDevelopmentRoute(w http.ResponseWriter, r *http.R
 			return
 		}
 		h.exportSelfDevelopmentSourcePatch(w, r, computerID, strings.TrimSpace(parts[3]))
+	case len(parts) == 5 && parts[1] == "self-development" && parts[2] == "operations" && parts[4] == "visual-evidence":
+		if r.Method != http.MethodGet {
+			writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+			return
+		}
+		h.listSelfDevelopmentVisualEvidence(w, r, computerID, strings.TrimSpace(parts[3]))
 	case len(parts) == 5 && parts[1] == "self-development" && parts[2] == "operations" && parts[4] == "release-draft":
 		// P7: the release record this computer would publish; read only.
 		if r.Method != http.MethodGet {
