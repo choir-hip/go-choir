@@ -405,7 +405,8 @@ func (s *Service) graphCitationEdges(ctx context.Context, og *ObjectGraphStore, 
 		switch string(edge.Kind) {
 		case "has_version", "has_manifest", "routes_to", "has_policy",
 			"references_entity", "transcludes", "has_retrieval_manifest",
-			"contains_span", "contains_blob", "has_resolved_blocks", "supersedes":
+			"contains_span", "contains_blob", "has_resolved_blocks", "supersedes",
+			string(edgeCitesCapture):
 			continue
 		}
 		var meta struct {

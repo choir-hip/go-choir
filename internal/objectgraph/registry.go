@@ -240,6 +240,10 @@ func DefaultRegistry() *Registry {
 		// its edge kind).
 		{Kind: "has_resolved_blocks", Owner: OwnerCorpusd},
 		{Kind: "is_version_of", Owner: OwnerCorpusd},
+		// corpusd: a publication version to each capture its anchors cite;
+		// the related-stories walk's reverse index
+		// (docs/reports/related-stories-graph-design-2026-10-19.md).
+		{Kind: "cites_capture", Owner: OwnerCorpusd},
 		// computer: engineering records (frozen V1 spelling) and the
 		// commitment record's delivery packet.
 		{Kind: "co_super_assignment_trajectory", Owner: OwnerVMStore},

@@ -589,6 +589,11 @@ func (p *PublicationGraphStore) PublishTextureToGraph(ctx context.Context, param
 		makeEdge(attestationID, versionID, "attests_to", now, mustJSONRaw(map[string]any{"predicate_type": "choir.platform.publish_texture.v0", "result": "passed"})),
 	)
 
+	// --- Story to capture: one edge per distinct cited capture, in the
+	// version's own batch (a version exists with all its capture edges or
+	// not at all). Built from the anchors publish already resolved. ---
+	batch.Edges = append(batch.Edges, citesCaptureEdges(versionID, params.Transclusions, now)...)
+
 	// --- Citation edges ---
 	for _, cite := range params.Citations {
 		citeEdge := makeEdge(versionID, cite.ToID, objectgraph.EdgeKind(cite.RelationType), now, mustJSONRaw(map[string]any{
