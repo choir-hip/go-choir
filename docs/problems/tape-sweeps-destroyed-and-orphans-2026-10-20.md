@@ -334,3 +334,27 @@ Next: `PLATFORM_TAPE_SWEEP_MODE=active` (owner §26: "Destroyed computer
 tapes can be deleted"), then apply this run id and manifest hash. Apply
 re-proves each computer, tombstones it, archives its files to
 `tape-sweep-archive/` and verifies the archive before any unlink.
+
+## Apply receipt (2026-10-20 06:00–06:15 UTC, on 5a3cffbe6)
+
+Job `ts-20261020T060033Z-eb7c5980`, applying run
+`ts-20261020T051653Z-fd085f79` with manifest sha256 `ebac0efd…d903384`.
+
+- 162 computers re-proved, tombstoned, archived and deleted; 0 skipped,
+  0 errors.
+- 763,462 files and 2,301,580,825 bytes deleted. 148 files kept as
+  referenced by live chains (the `shared_payloads_kept` proofs).
+- 162 archives, `tape-sweep-archive/<computer>-<run>.tar.zst`, 314 MB in
+  all, each with a sidecar. Net reclaim about 2 GB of data. btrfs
+  metadata used fell from 15.59 GiB to 14.70 GiB (83.6% to 78.8% of
+  18.64 GiB).
+- After apply, the paper stayed ready on 4128cb16f and published at
+  06:12 and 06:13 UTC.
+- Not verified here: replay of a tombstoned computer returning the
+  explicit archived error. The replay route needs the computer's own
+  event capability, which an operator does not hold; unit tests cover
+  it (failure mode 9).
+- Not run: the metadata balance (acceptance step 6). Metadata is under
+  80% now; a balance is heavy I/O on the live host and can wait for a
+  quiet window.
+- The orphan sweep is still unapplied (receipt-count mismatch above).
