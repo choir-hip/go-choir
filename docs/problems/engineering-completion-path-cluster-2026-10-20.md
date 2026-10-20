@@ -699,3 +699,44 @@ EAGAIN (a full non-blocking pipe) through the same helper path and
 requires the write to return. Not in this fix, named: physical teardown
 still runs under `e.mu`, so any future slow step stalls the whole
 executor; moving it off the lock is a separate red change.
+
+## Drills against 614fd445f (the reclaim fix), 16:00-17:01 UTC
+
+Staging ran 614fd445f (deployed 15:53). Drill script: scratch `drills6.sh`;
+the drill computers are cold-booted first.
+
+- **Delegate drill: pass** at 16:06 ("engineering ran the delegate to
+  success"). This is the drill that hung twice on failure 3. Complete
+  returned. The fix holds here.
+- **Visual drill: pass** to its decision boundary at 16:16, with a capture
+  listed, the PNG served (range 206) and vision reading the token. Before
+  that, at 16:07, Freeze refused one build receipt: "the workspace changed
+  while job ... ran". Engineering re-ran the build and froze. This is the
+  receipt rule working as designed, but it cost a cycle; noted under action 1.
+- **S6-0 go-served (label s6-0-1618): reached owner approval, failed at
+  apply on the drill's own budget.** Frozen and accepted at 16:51. The
+  release witness read consistently at accepted and at the applied read (17
+  pairs: 12 compared at the gate, 5 recorded only, 0 unbound). The materializer
+  then logged "host build pending" every minute until the tracer's default
+  `--apply-min 10` ran out at 17:01. That is a harness budget, not a product
+  refusal. Rerun with `--apply-min 40` started at about 17:10.
+
+### Failures 12-13 (new, from the S6-0 drill, hypotheses until a second run)
+
+12. **Go module downloads stall in the capsule.** Round 1's report says:
+    "required Go vet and the Go release binary build could not complete
+    because dependency downloads stopped progressing". This is the capsule
+    Go-modules question that is still open
+    (`docs/reports/capsule-go-modules-decision-2026-10-14.md`, routes A/B/C,
+    no recorded ruling). It cost one round and about 10 minutes.
+13. **A retry names a test package that does not exist yet.** Rounds 2 and 3
+    report the required `go test ./internal/selfdevprobe/` failing "because
+    that directory is absent", and block. The retry objective required the
+    test before the package was created, so engineering refused rather than
+    create it. Round 4 succeeded. Whether management wrote that objective,
+    or engineering misread it, has to come from the trace
+    (`~/.config/choir-qa/traces/s6-0-1618/bundle-a1.json`, records 1 and 9)
+    before it is called a finding.
+
+Not changed by these drills: failures 8, 10 and 11 stay open, and teardown
+still runs under `e.mu`.
