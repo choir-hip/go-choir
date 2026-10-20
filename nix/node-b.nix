@@ -1370,10 +1370,11 @@ in
 
   # Guest store compaction (docs/problems/guest-store-compaction-scheduled-
   # 2026-10-20.md; owner notes §26). vmctl compacts, one at a time, every
-  # active unheld interactive computer whose data image holds at least
-  # 32 GiB on the host, as a planned restart with offline maintenance; a busy
-  # refusal waits for the next day. The paper grows about 6 GB a day, so it
-  # is compacted every few days; small computers never are.
+  # active unheld platform computer (critical_protected, public_platform)
+  # whose data image holds at least 32 GiB on the host, as a planned restart
+  # with offline maintenance; a busy refusal waits for the next day. The
+  # paper grows about 6 GB a day, so it is compacted every few days. An
+  # account's computer is never compacted by the timer.
   systemd.services.go-choir-store-compaction = {
     description = "go-choir guest store compaction sweep";
     after = [ "go-choir-vmctl.service" ];
@@ -1381,11 +1382,13 @@ in
     serviceConfig = {
       Type = "oneshot";
       TimeoutStartSec = "3h";
+      LoadCredential = [ "choir-internal-token.header:${internalTokenHeaderFile}" ];
       ExecStart = pkgs.writeShellScript "go-choir-store-compaction" ''
         set -euo pipefail
         ${pkgs.curl}/bin/curl -sS --fail-with-body --max-time 10800 \
           --unix-socket /run/go-choir/vmctl.sock \
           -X POST http://vmctl/internal/vmctl/compact-sweep \
+          -H "@''${CREDENTIALS_DIRECTORY}/choir-internal-token.header" \
           -H 'Content-Type: application/json' \
           -H 'X-Choir-Lifecycle-Caller: go-choir-store-compaction-timer' \
           -d '{"min_file_bytes":34359738368}'
