@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# Off-host backup restore drill (docs/problems/no-off-host-backup-2026-10-20.md
+# section 9), run on Node B as root inside a memory-capped unit, for example:
+#   systemd-run --wait --collect -p MemoryHigh=8G -p MemoryMax=10G \
+#     -p MemorySwapMax=4G -p Nice=19 -p IOSchedulingClass=idle \
+#     bash scripts/off-host-restore-drill.sh <snapshot> tape|dolt|image [vm]
+# restic needs about 8 GB to walk a 9.6M-file snapshot, so never run it
+# uncapped beside the guests. Everything lands under a scratch directory,
+# never a live path, and each piece deletes its restore before it exits.
+#   tape:  200 random tape files compared byte for byte with live, and the
+#          two sqlite stores' integrity checks.
+#   dolt:  the corpus Dolt backup (restore, `dolt backup restore`, query,
+#          head compared with the run's), and the platform Dolt backup
+#          directory compared byte for byte with live (no second copy: disk).
+#   image: one stopped test computer's data.img, compared with live and
+#          checked read-only.
+# Secrets are read from files and never printed. Each piece deletes its
+# restore before the next.
+set -euo pipefail
+SNAP="${1:?snapshot}"; PIECE="${2:?tape|dolt|image}"
+A=/var/lib/go-choir/platform-artifacts/sha256
+S=/var/lib/go-choir/secrets/offhost-backup
+D=/var/lib/go-choir-restore-drill
+install -d -m 0700 "$D"
+CTL="$D/ssh2.ctl"
+ssh -i "$S/ssh-key" -o IdentitiesOnly=yes -o BatchMode=yes -o UserKnownHostsFile="$S/known-hosts" \
+  -o StrictHostKeyChecking=yes -o ExitOnForwardFailure=yes -o ControlMaster=yes -o ControlPath="$CTL" \
+  -f -N -L 127.0.0.1:18002:127.0.0.1:8000 choir-backup@51.81.93.94
+trap 'ssh -O exit -o ControlPath="$CTL" choir-backup@51.81.93.94 >/dev/null 2>&1 || true; rm -rf "$D/r" "$D/r2" "$D/dolt-restored"' EXIT
+export RESTIC_PASSWORD_FILE="$S/restic-password" RESTIC_REST_USERNAME=nodeb
+RESTIC_REST_PASSWORD="$(cat "$S/rest-password")"; export RESTIC_REST_PASSWORD
+export RESTIC_REPOSITORY=rest:http://127.0.0.1:18002/nodeb/daily RESTIC_CACHE_DIR="$D/cache"
+free_gib() { df -Pk /var/lib | awk 'NR==2{print int($4/1048576)}'; }
+restore() { # path in snapshot
+  local t0; t0=$(date +%s)
+  restic --no-lock restore "$SNAP:$1" --target "$D/r2" --sparse >"$D/restore2.log" 2>&1 \
+    || { echo "restore of $1 failed: $(tail -c 400 "$D/restore2.log")"; exit 1; }
+  echo "restored $1: $(du -sh "$D/r2" | cut -f1) on disk in $(( $(date +%s) - t0 ))s; free $(free_gib) GiB"
+}
+
+case "$PIECE" in
+tape)
+  t0=$(date +%s)
+  find "$A/computer-event" "$A/computer-event-payload" "$A/pin-receipts" "$A/file-cas-roots" "$A/file-cas-chunks" \
+    -type f ! -newermt "2026-10-20 20:20" 2>/dev/null | shuf -n 200 > "$D/sample.txt"
+  { cat "$D/sample.txt"
+    echo /var/lib/go-choir/offhost-backup/staging/sqlite/auth.db
+    echo /var/lib/go-choir/offhost-backup/staging/sqlite/mail.db; } > "$D/include.txt"
+  t1=$(date +%s)
+  restic --no-lock restore "$SNAP" --target "$D/r" --include-file "$D/include.txt" >"$D/restore.log" 2>&1 \
+    || { echo "restore failed: $(tail -c 400 "$D/restore.log")"; exit 1; }
+  t2=$(date +%s)
+
+  same=0; diff=0; missing=0
+  while read -r f; do
+    if [ ! -f "$D/r$f" ]; then missing=$((missing + 1))
+    elif cmp -s "$D/r$f" "$f"; then same=$((same + 1))
+    else diff=$((diff + 1)); fi
+  done < "$D/sample.txt"
+  echo "sample: $(wc -l < "$D/sample.txt") files; identical=$same different=$diff missing=$missing"
+  echo "sample by kind: $(sed -E 's#.*/sha256/([^/]+)/.*#\1#' "$D/sample.txt" | sort | uniq -c | tr '\n' ' ')"
+  for db in auth mail; do
+    f="$D/r/var/lib/go-choir/offhost-backup/staging/sqlite/$db.db"
+    printf '%s.db: integrity=%s tables=%s bytes=%s\n' "$db" \
+      "$(sqlite3 "$f" 'PRAGMA integrity_check' 2>&1 | head -1)" \
+      "$(sqlite3 "$f" "select count(*) from sqlite_master where type='table'" 2>&1)" "$(stat -c %s "$f")"
+  done
+  echo "timing: pick $((t1 - t0))s restore $((t2 - t1))s"
+  ;;
+dolt)
+  rm -rf "$D/r2"; restore /var/lib/go-choir/corpus-dolt/.choir-backup/corpus
+  rm -rf "$D/dolt-restored"; install -d "$D/dolt-restored"
+  ( cd "$D/dolt-restored" && export HOME="$D/dolt-restored" && \
+    dolt config --global --add user.name drill >/dev/null && dolt config --global --add user.email drill@localhost >/dev/null && \
+    dolt backup restore "file://$D/r2" corpus >/dev/null && cd corpus && \
+    echo "corpus restored: head $(dolt sql -r csv -q 'select commit_hash from dolt_log limit 1' | tail -1), tables $(dolt sql -r csv -q 'show tables' | tail -n +2 | wc -l), branches $(dolt sql -r csv -q 'select count(*) from dolt_branches' | tail -1)" )
+  rm -rf "$D/r2" "$D/dolt-restored"
+  restore /var/lib/go-choir/platform-dolt/.choir-backup/platform
+  if diff -rq "$D/r2" /var/lib/go-choir/platform-dolt/.choir-backup/platform >"$D/platform-diff.txt" 2>&1; then
+    echo "platform backup directory: identical to live ($(find "$D/r2" -type f | wc -l) files)"
+  else
+    echo "platform backup directory: differs from live in $(wc -l < "$D/platform-diff.txt") entries (a sync after the snapshot would explain it)"; head -5 "$D/platform-diff.txt"
+  fi
+  ;;
+image)
+  VM="${3:?vm id}"
+  rm -rf "$D/r2"; restore "/var/lib/go-choir/offhost-backup/staging/vm-images/$VM"
+  img="$D/r2/data.img"
+  if cmp -s "$img" "/var/lib/go-choir/vm-state/$VM/data.img"; then echo "image: identical to live (stopped computer)"; else echo "image: differs from live"; fi
+  echo "image: $(blkid -o value -s TYPE "$img" 2>/dev/null || echo unknown) filesystem; e2fsck -n: $(e2fsck -fn "$img" >"$D/fsck.txt" 2>&1; echo "exit $?"); $(tail -1 "$D/fsck.txt")"
+  ;;
+  *) echo "piece is tape, dolt or image" >&2; exit 2 ;;
+esac

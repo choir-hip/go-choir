@@ -538,7 +538,16 @@ with this. either edit node-a or the mike repo").
       (image clones are new inodes and are re-read; the Dolt backup
       directory; swap-in).
     Run 3, with two images, is the comparison.
-13. Next: the restore drill (section 9), in pieces on a Node B scratch
-    directory (85 GB free, 40 GB guard), each piece verified and deleted
-    before the next; a test computer's image, not the owner's. Then
-    `enable = true`.
+13. **Restore drill passed, 21:44 to 22:30 UTC**
+    (docs/reports/off-host-restore-drill-2026-10-20.md): 200 of 200 tape
+    files identical, both sqlite stores pass integrity checks, the corpus
+    Dolt store restores at run 2's head, the platform Dolt backup
+    directory is identical to live, and a test computer's image is
+    identical and fsck-clean. Not shown, kept as residuals: a restore on
+    another host, the platform store restored into a running database, a
+    tape-only rebuild onto an empty disk (item 10 (b)), a full restore's
+    time, a booted image. Restore needs about 8 GB of memory, so the
+    drill runs capped.
+14. Next: `enable = true` through the Landing Loop, then the first
+    unit-run backup started by hand (the sandbox, `ProtectSystem=strict`
+    and `LoadCredential`, has not run yet), then the 02:30 UTC timer.
