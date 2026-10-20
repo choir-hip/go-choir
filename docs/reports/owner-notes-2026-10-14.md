@@ -857,3 +857,10 @@ Owner, on waking:
   is only as strong as that inbox or that Google/Apple account, and has no
   passkey PRF to derive a key from, so encryption cannot hang on passkeys
   alone. A security design with a panel is owed before code.
+- Ruled (about 16:45 UTC): "we should do number one as a priority, and
+  numbers two and three we can save for later this week." Priority now:
+  blast-radius reduction before launch (keys out of reach of a host
+  compromise, per-computer keys, encrypted backups, Dolt locked, jailer on,
+  desk-cell confinement and guest egress landed, owner-act enforced), with
+  the user-held vault as a later opt-in. Google and Apple sign-in and the
+  emailed sign-in code wait until later this week.
