@@ -320,3 +320,26 @@ func TestSelectStoreCompaction(t *testing.T) {
 		t.Fatalf("skipped = %+v", skipped)
 	}
 }
+
+// The ownership list carries no data image stats; the sweep must read them,
+// or it never selects a computer (staging, 2026-10-20 01:03).
+func TestCompactSweepReadsDataImageStats(t *testing.T) {
+	h, _, _, compactor := compactFixture(t, "owner-sweep")
+	h.dataImageStatsFor = func(string) (DataImageStats, bool) {
+		return DataImageStats{FileBytes: 40 << 30, CapBytes: 128 << 30}, true
+	}
+	req := httptest.NewRequest(http.MethodPost, "/internal/vmctl/compact-sweep", bytes.NewBufferString(`{"dry_run":true}`))
+	req.Header.Set("X-Internal-Caller", "true")
+	rec := httptest.NewRecorder()
+	h.HandleCompactSweep(rec, req)
+	var resp storeCompactSweepResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode %d %s: %v", rec.Code, rec.Body.String(), err)
+	}
+	if rec.Code != http.StatusOK || len(resp.Selected) != 1 || resp.Selected[0].FileBytes != 40<<30 {
+		t.Fatalf("sweep = %d %+v, want the 40 GiB computer selected", rec.Code, resp)
+	}
+	if resp.Selected[0].Result != nil || len(compactor.calls) != 0 {
+		t.Fatalf("a dry run compacted: %+v %v", resp.Selected[0].Result, compactor.calls)
+	}
+}

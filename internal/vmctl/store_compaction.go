@@ -270,6 +270,25 @@ func (h *Handler) compactStore(ctx context.Context, own ownershipResponse) (stor
 	return out, status
 }
 
+// fillDataImageStats reads the host data image stats of each active
+// interactive computer: the ownership list leaves them empty (only the
+// single-computer lookup fills them), and the sweep selects by them.
+func (h *Handler) fillDataImageStats(ownerships []ownershipResponse) {
+	statsFor := h.dataImageStatsFor
+	if statsFor == nil {
+		statsFor = h.registry.DataImageStatsForVM
+	}
+	for i := range ownerships {
+		own := &ownerships[i]
+		if own.DataImage != nil || own.State != string(VMStateActive) || (own.Kind != "" && own.Kind != VMKindInteractive) {
+			continue
+		}
+		if stats, ok := statsFor(own.VMID); ok {
+			own.DataImage = dataImageResponseFromStats(stats)
+		}
+	}
+}
+
 func selectStoreCompaction(ownerships []ownershipResponse, minFileBytes uint64) (selected, skipped []storeCompactSweepEntry, picks []ownershipResponse) {
 	selected, skipped = []storeCompactSweepEntry{}, []storeCompactSweepEntry{}
 	for _, own := range ownerships {
@@ -357,6 +376,7 @@ func (h *Handler) HandleCompactSweep(w http.ResponseWriter, r *http.Request) {
 		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: err.Error()})
 		return
 	}
+	h.fillDataImageStats(ownerships)
 	selected, skipped, picks := selectStoreCompaction(ownerships, req.MinFileBytes)
 	resp := storeCompactSweepResponse{MinFileBytes: req.MinFileBytes, DryRun: req.DryRun, Selected: selected, Skipped: skipped}
 	if !req.DryRun {

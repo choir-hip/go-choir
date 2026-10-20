@@ -159,8 +159,11 @@ type Handler struct {
 	// pending set the retry sweep works through, and the in-flight guard).
 	// storeCompact runs guest store compactions (store_compaction.go); built
 	// on first use unless a test sets it.
-	storeCompactOnce     sync.Once
-	storeCompact         *storeCompactState
+	storeCompactOnce sync.Once
+	storeCompact     *storeCompactState
+	// dataImageStatsFor reads a VM's host data image stats (nil: the
+	// registry's); tests substitute it.
+	dataImageStatsFor    func(vmID string) (DataImageStats, bool)
 	deployRefreshMu      sync.Mutex
 	deployRefreshTracker *deployRefreshTracker
 	// guestServedCommit reads the build a guest serves (nil: its /health).
