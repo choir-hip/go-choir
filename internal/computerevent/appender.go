@@ -138,7 +138,13 @@ type ComputerEventAppender struct {
 	// event commit. Atomic so it can be swapped while appends run
 	// (docs/problems/post-commit-observer-race-2026-10-13.md).
 	postCommitObserver atomic.Pointer[func(kind EventKind)]
-	mu                 sync.Mutex
+	// appendBarrier runs first in every append entry point, before a.mu is
+	// taken (docs/reports/telemetry-batching-design-2026-10-20.md 4.3). The
+	// store installs the telemetry sealer's flush here, so no acknowledged
+	// write reaches the tape ahead of earlier telemetry. Nil is a single
+	// atomic load and no call.
+	appendBarrier atomic.Pointer[func(ctx context.Context)]
+	mu            sync.Mutex
 	// Replay progress snapshot (guarded by mu) so the guest health surface can
 	// report a replay in progress with its sequence to the host wait-for-ready
 	// probe without racing the replay goroutine.
@@ -157,6 +163,60 @@ type ReplayObserver interface {
 	PageFetched(afterSequence uint64, count int)
 	RecordApplied(sequence uint64)
 	CheckpointCommitted(sequence uint64)
+}
+
+// ErrBatchRefused marks a projection batch refused before anything was pinned
+// or appended: it did not decode, or the projection's dry run rejected it.
+// Nothing about the batch is on the tape or in the artifact store, so a caller
+// that built it from separable records may safely split it and write the
+// pieces. Any other AppendNewPayload failure may have an unknown outcome.
+var ErrBatchRefused = errors.New("computer event appender: projection batch refused")
+
+// batchRefusedError carries the original message unchanged and matches
+// ErrBatchRefused under errors.Is, so existing error text does not move.
+type batchRefusedError struct{ err error }
+
+func (e batchRefusedError) Error() string        { return e.err.Error() }
+func (e batchRefusedError) Unwrap() error        { return e.err }
+func (e batchRefusedError) Is(target error) bool { return target == ErrBatchRefused }
+
+func batchRefused(err error) error { return batchRefusedError{err: err} }
+
+type barrierExemptKey struct{}
+
+// WithBarrierExemption marks ctx so appends made under it skip the append
+// barrier. Exactly two callers may use it: the telemetry sealer's own flush,
+// which is what the barrier waits for, and the run-memory writer, which is
+// deliberately not ordered against telemetry (design 4.3, "the one
+// exemption"). A source-scan test fails if a third appears.
+func WithBarrierExemption(ctx context.Context) context.Context {
+	return context.WithValue(ctx, barrierExemptKey{}, true)
+}
+
+// SetAppendBarrier installs the hook every append entry point runs first.
+// Nil removes it.
+func (a *ComputerEventAppender) SetAppendBarrier(fn func(ctx context.Context)) {
+	if a == nil {
+		return
+	}
+	if fn == nil {
+		a.appendBarrier.Store(nil)
+		return
+	}
+	a.appendBarrier.Store(&fn)
+}
+
+// awaitBarrier runs the append barrier unless ctx is exempt. It must be called
+// before a.mu is taken: the barrier flushes through this appender.
+func (a *ComputerEventAppender) awaitBarrier(ctx context.Context) {
+	fn := a.appendBarrier.Load()
+	if fn == nil {
+		return
+	}
+	if exempt, _ := ctx.Value(barrierExemptKey{}).(bool); exempt {
+		return
+	}
+	(*fn)(ctx)
 }
 
 // HoldAppends runs fn while no event can be appended. Every append and its
@@ -305,6 +365,7 @@ func (a *ComputerEventAppender) RebindProjection(projection ProjectionStore) err
 }
 
 func (a *ComputerEventAppender) Append(ctx context.Context, event Event, input TransitionInput, payloadPinReceiptDigests []string) (Receipt, error) {
+	a.awaitBarrier(ctx)
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.appendLocked(ctx, event, input, payloadPinReceiptDigests)
@@ -314,6 +375,7 @@ func (a *ComputerEventAppender) Append(ctx context.Context, event Event, input T
 // and effective projections, computes the exact request commitment, and appends
 // it through the sole event writer.
 func (a *ComputerEventAppender) AppendNew(ctx context.Context, event Event, input TransitionInput, payloadPinReceiptDigests []string) (Receipt, error) {
+	a.awaitBarrier(ctx)
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -336,6 +398,7 @@ func (a *ComputerEventAppender) AppendNew(ctx context.Context, event Event, inpu
 // appending the event that names it. The payload receipt is bound into the
 // event request commitment; no process-local tape is authoritative.
 func (a *ComputerEventAppender) AppendNewPayload(ctx context.Context, event Event, input TransitionInput, payload []byte, mediaType, privacyClass string) (Receipt, string, error) {
+	a.awaitBarrier(ctx)
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -365,10 +428,10 @@ func (a *ComputerEventAppender) AppendNewPayload(ctx context.Context, event Even
 		if runner, ok := a.projection.(BatchDryRunner); ok {
 			batch, derr := DecodeProjectionBatch(payload)
 			if derr != nil {
-				return Receipt{}, "", fmt.Errorf("computer event appender: projection dry-run decode: %w", derr)
+				return Receipt{}, "", batchRefused(fmt.Errorf("computer event appender: projection dry-run decode: %w", derr))
 			}
 			if derr = runner.DryRunProjectionBatch(ctx, a.computerID, &batch); derr != nil {
-				return Receipt{}, "", fmt.Errorf("computer event appender: projection dry-run refused batch: %w", derr)
+				return Receipt{}, "", batchRefused(fmt.Errorf("computer event appender: projection dry-run refused batch: %w", derr))
 			}
 		}
 	}
@@ -407,6 +470,7 @@ func (a *ComputerEventAppender) AppendNewPayload(ctx context.Context, event Even
 // AppendNewPrivatePayload encrypts, authenticates, and pins one private payload
 // before appending the event that names its immutable envelope.
 func (a *ComputerEventAppender) AppendNewPrivatePayload(ctx context.Context, event Event, input TransitionInput, plaintext []byte, mediaType string, cipher *PrivateArtifactCipher) (Receipt, string, error) {
+	a.awaitBarrier(ctx)
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -474,6 +538,7 @@ type EventPayload struct {
 // AppendNewPayloadSet pins every input before every output and binds their
 // canonical artifact references and pin receipts into one event append.
 func (a *ComputerEventAppender) AppendNewPayloadSet(ctx context.Context, event Event, input TransitionInput, payloads []EventPayload, cipher *PrivateArtifactCipher) (Receipt, []string, error) {
+	a.awaitBarrier(ctx)
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if len(payloads) == 0 {

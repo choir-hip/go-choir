@@ -487,6 +487,25 @@ func (s *DoltStore) InheritMetadataColumns(other *DoltStore) {
 	s.liveColumns.Store(other.liveColumns.Load())
 }
 
+// PreflightWrite runs the refusals PutObject and PutBatch apply before they
+// hand a mutation to the projection interceptor: the write gate (an
+// unregistered kind) and the configured write validator. A caller that holds a
+// mutation back and appends it later (the telemetry sealer) calls it at the
+// moment the write would have been made, so a refusal still reaches the caller
+// that issued the write.
+func (s *DoltStore) PreflightWrite(ctx context.Context, objects []Object, edges []Edge) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("objectgraph dolt: nil store")
+	}
+	if err := CheckWrite(objects, edges); err != nil {
+		return err
+	}
+	if s.validate != nil {
+		return s.validate(ctx, objects, edges)
+	}
+	return nil
+}
+
 func (s *DoltStore) PutObject(ctx context.Context, obj Object) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("objectgraph dolt: nil store")
