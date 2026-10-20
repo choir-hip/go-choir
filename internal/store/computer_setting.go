@@ -43,6 +43,12 @@ const SettingCalibrationFeedback = "calibration.feedback"
 // turns it on regardless.
 const SettingTelemetryBatch = "telemetry.batch"
 
+// SettingResearchSystem1 lets the research desk ask System 1
+// (choir.System1) with the default caps, when the runtime config sets none
+// (owner notes §29: System 1 does the related-stories reading). Off by
+// default; off is the rollback.
+const SettingResearchSystem1 = "research.system1"
+
 // KnownComputerSettings are the settings a computer has, with their
 // defaults. A key outside this list is refused, so a typo never stores a
 // setting nobody reads.
@@ -51,6 +57,7 @@ var KnownComputerSettings = map[string]bool{
 	SettingManagementSerialTasks: false,
 	SettingCalibrationFeedback:   false,
 	SettingTelemetryBatch:        false,
+	SettingResearchSystem1:       false,
 }
 
 // ComputerSetting is one switch's value on one computer.

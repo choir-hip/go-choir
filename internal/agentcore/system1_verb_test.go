@@ -532,3 +532,32 @@ type failingCaptures struct{}
 func (failingCaptures) CaptureBlocks(context.Context, string, string) (texturewrite.Capture, error) {
 	return texturewrite.Capture{}, errors.New("store down")
 }
+
+// Owner ruling (owner notes §29): System 1 does the related-stories reading,
+// and a guest has no way to receive per-computer environment, so the owner
+// turns it on with the research.system1 setting. On with no env caps, the
+// default caps apply; env caps, when both are set, override them; off and no
+// env is off, and the refusal names the setting.
+func TestSystem1OwnerSettingTurnsItOnWithDefaultCaps(t *testing.T) {
+	f := newSystem1Fixture(t)
+	ctx := context.Background()
+	if run, day := f.rt.system1Limits(ctx, f.owner, f.computer); run != 0 || day != 0 {
+		t.Fatalf("no setting, no env: caps %d/%d, want off", run, day)
+	}
+	if _, err := f.call(t, agentprofile.Research, "run-setting-off", question("q1")); err == nil || !strings.Contains(err.Error(), store.SettingResearchSystem1) {
+		t.Fatalf("off: err = %v, want the refusal to name %s", err, store.SettingResearchSystem1)
+	}
+	if err := f.s.PutComputerSetting(ctx, store.ComputerSetting{OwnerID: f.owner, ComputerID: f.computer, Key: store.SettingResearchSystem1, Value: true, UpdatedAt: time.Now().UTC()}); err != nil {
+		t.Fatal(err)
+	}
+	if run, day := f.rt.system1Limits(ctx, f.owner, f.computer); run != system1DefaultCallsPerRun || day != system1DefaultCallsPerDay {
+		t.Fatalf("setting on: caps %d/%d, want %d/%d", run, day, system1DefaultCallsPerRun, system1DefaultCallsPerDay)
+	}
+	if _, err := f.call(t, agentprofile.Research, "run-setting-on", question("q1")); err != nil {
+		t.Fatalf("setting on: %v", err)
+	}
+	f.enable(t, 3, 10)
+	if run, day := f.rt.system1Limits(ctx, f.owner, f.computer); run != 3 || day != 10 {
+		t.Fatalf("env caps with the setting on: %d/%d, want 3/10", run, day)
+	}
+}

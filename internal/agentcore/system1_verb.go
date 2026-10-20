@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
@@ -35,8 +36,9 @@ import (
 //   - research only: the host refuses every other session role, whatever the
 //     worker sent;
 //   - off until both caps are configured (CHOIR_SYSTEM1_MAX_CALLS_PER_RUN and
-//     CHOIR_SYSTEM1_MAX_CALLS_PER_DAY, positive integers); attempts count,
-//     not only answers;
+//     CHOIR_SYSTEM1_MAX_CALLS_PER_DAY, positive integers) or the owner turns
+//     on the research.system1 setting, which applies the default caps;
+//     attempts count, not only answers;
 //   - evidence by reference: context_refs name captures and story versions
 //     whose text the host reads itself, bounded; a cell cannot paste text
 //     into a question as evidence;
@@ -78,9 +80,19 @@ var system1CallTimeout = 60 * time.Second
 // events of every run.
 func system1Channel(computerID string) string { return "system1:" + strings.TrimSpace(computerID) }
 
-// system1Limits reads the caps from runtime config. A cap that is unset, not
-// a number or not positive is 0, and either at 0 leaves the verb off.
-func system1Limits() (perRun, perDay int) {
+// The caps the research.system1 setting applies: a review batch of about 20
+// stories at two calls each, and the backfill of about 1,000 stories in a day
+// or two (related-stories-phase3-research-review-2026-10-20.md §12).
+const (
+	system1DefaultCallsPerRun = 40
+	system1DefaultCallsPerDay = 3000
+)
+
+// system1Limits reads the caps. Runtime config wins when it sets both;
+// otherwise the owner's research.system1 setting applies the defaults. A cap
+// that is unset, not a number or not positive is 0, and either at 0 leaves
+// the verb off.
+func (rt *Runtime) system1Limits(ctx context.Context, ownerID, computerID string) (perRun, perDay int) {
 	read := func(name string) int {
 		n, err := strconv.Atoi(strings.TrimSpace(os.Getenv(name)))
 		if err != nil || n < 0 {
@@ -88,7 +100,13 @@ func system1Limits() (perRun, perDay int) {
 		}
 		return n
 	}
-	return read(system1MaxCallsPerRunEnv), read(system1MaxCallsPerDayEnv)
+	if perRun, perDay = read(system1MaxCallsPerRunEnv), read(system1MaxCallsPerDayEnv); perRun > 0 && perDay > 0 {
+		return perRun, perDay
+	}
+	if rt.computerSettingOn(ctx, ownerID, computerID, store.SettingResearchSystem1) {
+		return system1DefaultCallsPerRun, system1DefaultCallsPerDay
+	}
+	return 0, 0
 }
 
 type system1Answer struct {
@@ -117,16 +135,16 @@ func (rt *Runtime) system1Egress(ctx context.Context, deskRole string, exec tool
 	if deskRole != yaegikernel.SessionRoleResearch {
 		return nil, fmt.Errorf("choir.System1 belongs to the research desk; this session is %q", deskRole)
 	}
-	perRun, perDay := system1Limits()
-	if perRun <= 0 || perDay <= 0 {
-		return nil, fmt.Errorf("choir.System1 is off on this computer: set %s and %s to positive numbers to allow it", system1MaxCallsPerRunEnv, system1MaxCallsPerDayEnv)
-	}
 	if rt == nil || rt.store == nil {
 		return nil, fmt.Errorf("choir.System1 host unavailable")
 	}
 	owner, computer, runID := strings.TrimSpace(exec.OwnerID), strings.TrimSpace(exec.ComputerID), strings.TrimSpace(exec.RunID)
 	if owner == "" || computer == "" || runID == "" {
 		return nil, fmt.Errorf("choir.System1 needs a run with an owner and a computer")
+	}
+	perRun, perDay := rt.system1Limits(ctx, owner, computer)
+	if perRun <= 0 || perDay <= 0 {
+		return nil, fmt.Errorf("choir.System1 is off on this computer: the owner turns on the %s setting, or the runtime config sets %s and %s to positive numbers", store.SettingResearchSystem1, system1MaxCallsPerRunEnv, system1MaxCallsPerDayEnv)
 	}
 	var req yaegikernel.System1Payload
 	dec := json.NewDecoder(bytes.NewReader(payload))
