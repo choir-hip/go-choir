@@ -182,9 +182,17 @@ the ref, and the refusal names the nearest issued ref (0a8c77cbc).
    (`reducerAssignmentOutcome`); `CertifiesOriginalSubject` requires a
    completed verification. The new attestation says in its own field that no
    receipt certifies the subject, so a reader that wants "a receipt
-   certified this tree" must see `subject_binding` empty. Management's Verify
-   still re-derives from a Freeze candidate (strict) and never from a
-   Complete-time freeze.
+   certified this tree" must see `subject_binding` empty. Not changed, and named
+   residual R2: a failed or blocked report whose tree differs from the
+   binding subject already persists the content-addressed candidate
+   artifact and lists it in the report's outcome refs
+   (`assignmentOutcomeRefs`), so management can name it. That candidate
+   carried no receipt certification before this change (it is the frozen
+   tree's content address), and promoting it still needs management's
+   Verify and the owner's approval; the fix makes more failed reports
+   reach that point, not a new kind of claim. (This replaces an earlier
+   sentence here that said Verify only reads Freeze candidates; that was
+   not checked and is not claimed.)
 3. Replay. Deterministic: the granted receipt ref and the attestation ref
    are digests of the content, which now includes `subject_binding`, so the
    same inputs give the same refs and a replay is idempotent (one existing
@@ -255,3 +263,72 @@ the ref, and the refusal names the nearest issued ref (0a8c77cbc).
   Open: R1 (cited refs checked after the durable freeze intent), R2 (the
   content-addressed candidate of a failed report). Not proven until the
   staging drill (action 4).
+
+## Failures 5-7: the S6-0 go-served drill (added 2026-10-20, 12:52-13:06 UTC)
+
+Evidence: deploy 423001678, computer-bba615665b4cfe16f40616f1a4d3d13a,
+trajectory 8e131085-…, run `run:assignment-e5d0e9a3aadc9717cd4297dc`; the run
+was cancelled at 13:06 by the drill's stop. Recorded before any fix for them.
+
+5. **The capsule seccomp denies the scheduling reads Node needs.** The
+   frontend build cell (the overlay's old `npm ci && npm run build` in one
+   `choir.Exec`) failed with `[mutex.cc : 955] RAW: pthread_getschedparam
+   failed: 1` repeated. `internal/capsule/seccomp.go`'s allow-list has
+   `sched_yield`, `sched_getaffinity` and `sched_setaffinity` but not
+   `sched_getparam` or `sched_getscheduler`, which `pthread_getschedparam`
+   calls; the default action is EPERM (errno 1, the "failed: 1"). This is
+   P5 residual item 3 of
+   `p5-go-served-0825-engineering-never-freezes-2026-10-15.md` (named there
+   twice, never done). It is a symptom contained to two read-only entries.
+6. **A failed build reported as completed.** After the failed build cell,
+   engineering ran only the copy step (`dist` did not exist) and later told
+   management "frontend build completed". The old recipe invited it: build
+   and copy were separable cells. Task-1's recipe is one job (`&&` chain)
+   that fails as a whole; what is still missing is the rule that a build is
+   not reported done without its job's exit code 0.
+7. **A running job treated as a blocker.** Engineering started the Go build
+   job correctly, polled it twice while it ran (the overlay says do not
+   poll), then called `Complete("blocked", "Go build job is still running")`
+   instead of ending its turn to be woken. That is the same wrong reading
+   as the 0565 drill's ("a refusal you have not yet tried to fix is not a
+   blocker"): a job in flight is not a precondition that cannot be met.
+
+**Failure 3, further evidence (hypothesis, not a finding).** That final
+`Complete("blocked")` also has no `tool.result` before the run was
+cancelled at 13:06. It may simply have been cut off by the stop (the wait
+was at most the time between the call and 13:06, not known from the
+record), so it is weak evidence; but it is a second Complete cell with no
+result, and it is a `blocked` one. If it hung, the hang is not specific to
+`completed`, not specific to the delegate, and not in the receipt-binding
+path alone: a blocked Complete with no cited execution refs skips the
+receipt resolver entirely (`bindFrozenAssignmentExecutionReceipts` returns
+at `len(refs) == 0`), so what it shares with the completed one is the
+freeze, the revoke and the store commits. That narrows the hang to the
+terminal saga's physical steps (freeze, digest, revoke, destroy) and the
+store, away from the evidence function.
+
+### Fix design for failure 5 (red: capsule isolation, seccomp)
+
+Mutation class: red (capsule isolation boundary). Add `sched_getparam` and
+`sched_getscheduler` to `capsuleAllowedSyscalls`.
+
+- Conjecture delta: before, "a workload that reads its own scheduling
+  parameters is a risk"; after, "reading scheduling parameters discloses
+  nothing the workload does not already hold (its own policy and priority)
+  and cannot change anything". The setters (`sched_setscheduler`,
+  `sched_setparam`, `sched_setattr`, `sched_set_deadline`-class) stay
+  denied, and the test pins that they do.
+- Protected surface: the workload, broker, L2 and delegate seccomp filters,
+  which all derive from `capsuleAllowedSyscalls`. A capsule that could
+  already call `sched_setaffinity` gains two read-only queries.
+- Failure modes: a setter slipping in (pinned by test); the broker's
+  stacked-filter rule (a child cannot gain what its parent's filter
+  refuses): the broker filter is built from the same list, so jobs and
+  session workers get them too; the delegate filter is a superset of the
+  same list; TSYNC and filter ordering are unchanged.
+- Admissible evidence: a linux test that loads the workload filter and
+  calls both queries successfully while a setter is refused. It cannot run
+  on this darwin host; it is compiled and vetted for linux, and the
+  staging drill (re-run of the frontend job) is the acceptance proof.
+- Rollback: revert the commit. Heresy delta: discovered, none new;
+  repaired, P5 residual item 3.
