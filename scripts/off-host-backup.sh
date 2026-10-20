@@ -50,6 +50,11 @@ REST_USER="${OFFHOST_REST_USER:-nodeb}"
 QUOTA_GIB="${OFFHOST_QUOTA_GIB:-450}"
 UPLOAD_LIMIT_KIB="${OFFHOST_UPLOAD_LIMIT_KIB:-25000}" # about 200 Mbit/s; 0 = unlimited
 MIN_FREE_GIB="${OFFHOST_MIN_FREE_GIB:-40}"
+# Store A's memory line while its sync runs. DOLT_BACKUP runs in the
+# server, and at the unit's own 3G line the sync stalled the server until
+# the liveness probe aborted it (problem record section 13 item 15).
+DOLT_SYNC_MEMORY_HIGH="${OFFHOST_DOLT_SYNC_MEMORY_HIGH:-8G}"
+PLATFORM_DOLT_UNIT="${OFFHOST_PLATFORM_DOLT_UNIT:-go-choir-platform-dolt.service}"
 MAX_AGE_HOURS="${OFFHOST_MAX_AGE_HOURS:-36}"
 MAX_VERIFY_AGE_HOURS="${OFFHOST_MAX_VERIFY_AGE_HOURS:-240}"
 RESTIC_HOST_TAG="go-choir-b"
@@ -233,11 +238,35 @@ dolt_sync() { # $1 port, $2 database, $3 target dir
   DOLT_HEADS+=("$db=$hash")
   log "dolt backup $db synced (head $hash)"
 }
+RAISED_UNIT=""
+SAVED_MEMORY_HIGH=""
+raise_dolt_memory() { # $1 unit: raise its MemoryHigh for the sync, remembering the old value
+  local cur
+  cur="$(systemctl show -p MemoryHigh --value "$1" 2>/dev/null)" || return 1
+  [ -n "$cur" ] || return 1
+  systemctl set-property --runtime "$1" "MemoryHigh=$DOLT_SYNC_MEMORY_HIGH" || return 1
+  RAISED_UNIT="$1"; SAVED_MEMORY_HIGH="$cur"
+  log "raised $1 MemoryHigh from $cur to $DOLT_SYNC_MEMORY_HIGH for the sync"
+}
+restore_dolt_memory() { # idempotent; also called from the exit trap
+  [ -n "$RAISED_UNIT" ] || return 0
+  if systemctl set-property --runtime "$RAISED_UNIT" "MemoryHigh=$SAVED_MEMORY_HIGH"; then
+    log "restored $RAISED_UNIT MemoryHigh to $SAVED_MEMORY_HIGH"
+  else
+    err "could not restore $RAISED_UNIT MemoryHigh to $SAVED_MEMORY_HIGH; set it by hand (systemctl set-property --runtime)"
+  fi
+  RAISED_UNIT=""
+}
 stage() {
   local ok=0 src
   install -d -m 0700 "$STAGING/sqlite" "$STAGING/vm-images" "$STATE/run"
   DOLT_HEADS=()
-  dolt_sync 13306 platform "$ROOT/platform-dolt/.choir-backup/platform" || ok=1
+  if raise_dolt_memory "$PLATFORM_DOLT_UNIT"; then
+    dolt_sync 13306 platform "$ROOT/platform-dolt/.choir-backup/platform" || ok=1
+    restore_dolt_memory
+  else
+    err "could not raise $PLATFORM_DOLT_UNIT MemoryHigh; platform Dolt sync skipped (at the unit's own line the sync stalled Store A)"; ok=1
+  fi
   [ -d "$ROOT/corpus-dolt" ] && { dolt_sync 13307 corpus "$ROOT/corpus-dolt/.choir-backup/corpus" || ok=1; }
   for src in "$ROOT/auth/auth.db" "$ROOT/mail/mail.db"; do
     [ -f "$src" ] || continue
@@ -297,9 +326,9 @@ cmd_plan() {
 
 cmd_backup() {
   local result=ok rc ex sid started added
-  need ssh restic jq sqlite3 dolt || return
+  need ssh restic jq sqlite3 dolt systemctl || return
   started="$(now)"
-  trap 'cleanup_clones; tunnel_down' EXIT
+  trap 'restore_dolt_memory; cleanup_clones; tunnel_down' EXIT
   status_merge <<EOF
 {"last_attempt_epoch":$started,"last_attempt_run":"$RUN_ID"}
 EOF
