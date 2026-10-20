@@ -37,7 +37,7 @@ const (
 	// and the proxy never forwards, and it needs the host credential.
 	DigestRunPath = "/internal/maild/digest/run"
 
-	digestFrontLimit     = 100
+	digestFrontLimit     = 60 // the page's first load (FRONT_FIRST_PAGE_SIZE), so edition and score coverage match
 	digestManualInterval = time.Hour
 	digestRetryDefault   = 30 * time.Second
 	digestAttemptTimeout = 30 * time.Second

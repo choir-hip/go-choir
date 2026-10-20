@@ -126,7 +126,7 @@ test('deployed digest: opt-in, preview, send-now, opt-out (A1 to A5)', async ({ 
   artifact.status_after_subscribe = status.body;
 
   // A3: the preview against the live front list.
-  const frontRes = await api(page, '/api/platform/publications/front?limit=100');
+  const frontRes = await api(page, '/api/platform/publications/front?limit=60');
   expect(frontRes.status).toBe(200);
   const front = frontRes.body.stories || [];
   artifact.front_list = front.map((s) => ({ id: s.publication_id, title: s.title, updated_at: s.updated_at, importance: s.importance, section: s.section, source_count: s.source_count, promo: s.promo }));
