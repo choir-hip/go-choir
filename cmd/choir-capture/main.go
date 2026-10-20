@@ -14,11 +14,11 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/visualcapture"
@@ -59,22 +59,12 @@ func run(args []string) int {
 		}
 		return 1
 	}
-	type row struct {
-		Route    string `json:"route"`
-		Artifact string `json:"artifact"`
-		Bytes    int64  `json:"bytes"`
-		Blank    bool   `json:"blank,omitempty"`
+	// The summary names the manifest's digest (visualcapture.Summary, V17).
+	manifestRaw, err := os.ReadFile(filepath.Join(visualcapture.OutputDir, visualcapture.ManifestFile))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s: read back the manifest: %v\n", visualcapture.ToolName, err)
+		return 1
 	}
-	summary := struct {
-		Manifest       string `json:"manifest"`
-		FrontendSHA256 string `json:"frontend_sha256"`
-		Browser        string `json:"browser,omitempty"`
-		Captures       []row  `json:"captures"`
-	}{Manifest: visualcapture.OutputDir + "/" + visualcapture.ManifestFile, FrontendSHA256: m.Subject.FrontendSHA256, Browser: m.Browser.Version}
-	for _, c := range m.Captures {
-		summary.Captures = append(summary.Captures, row{Route: c.Route, Artifact: c.Artifact, Bytes: c.Bytes, Blank: c.Blank})
-	}
-	out, _ := json.Marshal(summary)
-	fmt.Println(string(out))
+	fmt.Println(string(visualcapture.Summary(m, manifestRaw)))
 	return 0
 }
