@@ -88,3 +88,12 @@ host storage their data image holds.
   repaired: an operator-only crash-restart procedure becomes a planned one.
 - Conjecture: a store compacted every few days stays under about 30 GB,
   and the compaction fits in the planned-restart window.
+
+## Staging finding: the sweep sees no data image stats (01:03 UTC)
+
+Deployed d8ea02b07 (CI 39349824902). A dry-run sweep at a 1 GiB threshold
+skipped both active computers, the paper included, as "no data image
+stats". `listOwnershipResponses` does not fill `DataImage`; only the
+single-computer lookup does (`internal/vmctl/handlers.go:471-473`). So the
+04:00 sweep would never select anything. Fix: the sweep reads
+`DataImageStatsForVM` for each active interactive computer itself.
