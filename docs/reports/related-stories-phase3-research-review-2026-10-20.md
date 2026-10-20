@@ -216,3 +216,78 @@ full backfill, then the links show.
   reading Jev's intake labels; giving it the verb is a later, separate
   decision.
 - **D4 No embeddings in this phase.**
+
+## 11. Build plan, read against the code (2026-10-20, afternoon)
+
+Two facts from reading `origin/main` change the order in §8:
+
+- **Phase 2 never reached Store B.** `choir.world_event` and
+  `choir.event_membership` live only on the computer's own store
+  (`internal/store/world_event.go`, `internal/objectgraph/registry.go`);
+  no export route and no `reports_event` edge exist. The related-stories
+  walk runs in corpusd (`platform/publication_related.go`,
+  `Service.RelatedStories`) over Store B's `cites_capture` edges, and its
+  `Events` fields are always 0. So phase 3 builds the first export of
+  desk judgments to Store B; there is no phase 2 route to copy.
+- **The 15:00 event rerun failed the same-incident bar** (15-30% on 20
+  joins, `docs/problems/event-layer-false-merges-at-marginal-p-2026-10-16.md`),
+  and its wrong joins are real related pairs. Event identity is not used
+  as a relation; events stay one candidate source among the graph walks.
+
+Slices, each landed and proven before the next:
+
+1. **`choir.Relate`, reduced onto the paper's tape (red: desk authority,
+   ledger).** A staged intent like `ReportPacket`
+   (`yaegikernel/intent.go`, checked early in the cell like
+   `checkReportPacket`, re-checked in `rlm_reduce.go`
+   `validateSemanticActIntent`, committed by `commitActIntent`), in
+   research's module set only. Its body: one story version; entity
+   attachments (an existing entity id, or a new one with name, type and an
+   optional Wikidata id; role central or incidental); at most one thread
+   (existing, or new with a title); pair relations (the other story
+   version, relation, the System 1 distribution it rests on by its
+   judgment id, one-line reason). Objects, not edges, on the computer's
+   store, keyed like the event layer's (`computer\x00id`, write-once):
+   `choir.entity`, `choir.topic_thread`, `choir.entity_mention`,
+   `choir.thread_membership`, `choir.story_relation`. Ways it fails: a
+   relation citing a System 1 judgment the run did not record (refused:
+   the judgment id must be on this run's `system1:` channel); a story
+   version that is not a published story on this computer (refused);
+   sprawl (R1: a new entity whose normalised name matches an existing one
+   is refused with the match named); one story writing another's
+   attachments (refused: entity and thread attachments are for the act's
+   own story; a pair relation names both and is stored once, ordered);
+   replay (deterministic record id from cell and local id, as
+   `commitmentRecordForIntent` does).
+2. **Research reads them (orange).** `SearchWireCorpus` gains `entities`
+   and `threads` beside `events` (`researchtools/corpus_search.go`,
+   `corpus_events.go`), so matching an existing node is the default.
+3. **The review schedule (red: standing intent, restart rule).** A
+   research review schedule reusing the source schedule chain
+   (`internal/agentcore/source_schedule.go`: generation guard, in-flight
+   mark, crash-loop bound, `recoverSourceSchedulesAtBoot`, the overdue
+   sweep), with its own wake kind added to `actorruntime/handler.go` and
+   `RestartWorkKinds`. A tick commits one review-batch record to research:
+   up to K story versions with no `Relate` yet, newest first, each with its
+   graph-walk candidates (shared captures and recaptures from the related
+   walk, shared central entities, same thread, the event layer's members).
+4. **Export to Store B (red: Store B schema and write route).** A typed
+   corpusd route modelled on support verdicts
+   (`types.StoryVerdictsPath`, `platform/publication_checks.go`
+   `HandleSupportVerdicts`, `requireInternalOrBoundGuestWrite`, a
+   per-request cap, `MaxBytesReader`), refusing a computer that is not
+   platform tier (`platformComputer`, fail closed), queued on the guest
+   like `publishStoryVerdicts`. Re-runnable: the tape is the authority
+   (R7).
+5. **The query reads relations (orange).** `relatedWalk` takes
+   `story_relation` rows at or above a per-relation show threshold, ranked
+   same incident, development, same thread, central shared entity, then
+   the phase 1 capture score; `RelatedLink.reason` gains those values; the
+   frontend renders them (`texture-related-stories.ts`).
+6. **The 100-story sample and the blind audit** (§7), then backfill and
+   show.
+
+Mutation classes: 1, 3 and 4 red; 2 and 5 orange; 6 evidence. Ceremony as
+§9. Slice 1 starts after the engineering completion hang is fixed, because
+both land on the same runtime and a hung guest makes every drill
+ambiguous.
