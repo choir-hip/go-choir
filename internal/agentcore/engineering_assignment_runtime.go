@@ -193,8 +193,7 @@ func (rt *Runtime) planEngineeringCast(ctx context.Context, scope ReductionScope
 	if err != nil {
 		return engineeringCastPlan{}, fmt.Errorf("engineering cast: parent %s: %w", parentID, err)
 	}
-	if parent == nil || parent.InboxSeq <= 0 || parent.Inbox != management || !parent.IsCast() ||
-		!strings.HasPrefix(parent.SenderInbox, agentprofile.Texture+":") {
+	if !isTextureCastTo(parent, management) {
 		return engineeringCastPlan{}, fmt.Errorf("engineering cast: parent %s is not a Texture's Cast in %s", parentID, management)
 	}
 	head, err := rt.store.ConversationState(ctx, ownerID, computerID, parent.ConversationID)
@@ -246,9 +245,11 @@ func (rt *Runtime) planEngineeringCast(ctx context.Context, scope ReductionScope
 		ParentControlID: recordID, AssignedAgentID: assignedAgentID,
 		Kind: types.EngineeringAssignmentImplementation, Attempt: attempt,
 		ScopeDigest: objectgraph.SHA256(scopeBytes),
-		RequestDigest: objectgraph.SHA256([]byte(strings.Join([]string{
-			vocabmigrate.IdentitySeedDelegatedCastRequestV1, objective, parentID, recordID,
-		}, "\x00"))),
+		// The parent Texture Cast's full text is bound in, so engineering's
+		// view of the request (engineeringRequestView) is checked against
+		// what this Cast committed to.
+		RequestDigest: engineeringRequestDigest(objective, parentID, recordID,
+			parentRequestDigest(parent.SenderInbox, parent.Directive.Objective, parent.Directive.Body)),
 		CapabilityDigest:      store.DigestEngineeringOpaqueCapability(opaque),
 		ExecutionHandleDigest: objectgraph.SHA256([]byte(opaque)), SubjectDigest: subjectDigest,
 		SourceArtifactRef: preflight.ArtifactRef,

@@ -1,6 +1,7 @@
 package yaegikernel
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -19,5 +20,42 @@ func TestInboxRecordPrintsItsBodies(t *testing.T) {
 		if !strings.Contains(out, "cap-1") || !strings.Contains(out, "A headline") || strings.Contains(out, "0x") {
 			t.Fatalf("%s print of records hides their captures: %s", verb, out)
 		}
+	}
+}
+
+// Engineering reads the Texture request in the Cast that opened its
+// assignment: the request survives the frame's JSON hop to the worker and is
+// readable in a cell as r.Request.Objective / r.Request.Body, and a printed
+// record shows it.
+func TestInboxRecordCarriesTheTextureRequestIntoACell(t *testing.T) {
+	in := SessionFrame{ID: "cell", Source: `for _, r := range choir.Records() {
+	fmt.Println(r.Request.From, "|", r.Request.Objective, "|", r.Request.Body, "|", r.Request.Truncated)
+}
+fmt.Println(choir.Records()[0].RequestError == "")`,
+		Records: []InboxRecord{{Seq: 1, RecordID: "rec-1", Kind: "cast", From: "management:o",
+			Request: &InboxRequest{RecordID: "texture-cast", From: "texture:doc", Objective: "write the probe line", Body: `{"path":"docs/probes/x.md"}`, Digest: "sha256:x"}}}}
+	raw, err := json.Marshal(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var frame SessionFrame
+	if err := json.Unmarshal(raw, &frame); err != nil {
+		t.Fatal(err)
+	}
+	_, _, scope, _ := testChoirFixture(t)
+	scope.desk = "engineering"
+	sess, err := NewSession(NewAllowlist(DefaultSafeStdlibPackagesList()...), scope.ChoirExports())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sess.Close()
+	hooks := scope.BindCell()
+	out, err := serveCell(sess, frame, nil, &hooks)
+	want := "texture:doc | write the probe line | {\"path\":\"docs/probes/x.md\"} | false\ntrue\n"
+	if err != nil || out.Error != "" || out.Stdout != want {
+		t.Fatalf("cell read of the request: %v %q stdout %q", err, out.Error, out.Stdout)
+	}
+	if s := frame.Records[0].String(); !strings.Contains(s, "write the probe line") || !strings.Contains(s, `"request"`) {
+		t.Fatalf("a printed record hides the request: %s", s)
 	}
 }

@@ -182,6 +182,10 @@ func (rt *Runtime) loadCellRecords(ctx context.Context, ownerID, computerID, des
 			continue
 		}
 		view := inboxRecordView(rec)
+		// Management's Cast that opened an engineering assignment carries
+		// the Texture request it serves (engineering cannot read the
+		// parent's inbox).
+		rt.engineeringRequestView(ctx, ownerID, computerID, rec, &view)
 		if rec.Support != nil && len(rec.Support.Pairs) > 0 {
 			// A support_pairs list minted before support judgement left
 			// management (support-judgement-to-jev-design-2026-10-14): its
