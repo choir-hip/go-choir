@@ -127,3 +127,78 @@ the same "Permission mode forced to default" warning, then writes the file:
 list, so the forced mode does not refuse it. The guest's Claude Code version
 may differ; the evidence moves to hypothesis 2 (the delegate and the cells see
 different views of `/workspace/platform`), under investigation.
+
+## Root cause (2026-10-20, code reading; staging confirmation pending)
+
+Both open hypotheses are wrong. Hypothesis 1 was refuted by the local repro.
+Hypothesis 2 (a different filesystem view) is refuted by code: the delegate
+and the cells share one chroot, one mount namespace and one overlay. The
+difference is the **working directory**, which turns a relative path in the
+engineering brief into two different files.
+
+**Same view, by code.**
+
+- The executor starts the capsule's broker once, with `Chroot: caps.MergedDir`
+  and one `CLONE_NEWNS` (`internal/capsule/executor.go:608-610`); the merged
+  dir is the overlay of the pinned source lower layer plus the capsule's
+  upper (`executor.go:394-453`), and the broker is told `--merged /`
+  (`executor.go:595`). Every process the broker starts is in that root.
+- The delegate stage is a child of that broker: `startDelegate` launches
+  `supervisedCommand(... "--isolation-stage", delegateStage ...)` with
+  `cmd.Dir = /workspace/platform` (`cmd/capsule-broker/delegate.go:66-71`),
+  applies `NewWorkloadLandlock("/")`, then `os.Chdir(/workspace/platform)`
+  and `exec` (`delegate.go:106-121`). No `unshare`, `pivot_root`, bind or
+  second overlay anywhere on that path.
+- The cells run in a session worker the same broker spawns with
+  `allowedRoot: b.mergedDir`, i.e. `/` (`cmd/capsule-broker/session_worker.go:342`),
+  under the same `NewWorkloadLandlock("/")` (`cmd/capsule-broker/main.go:169`).
+  The delegate and the cells are also one capsule: the assignment spawns a
+  single `SpawnSpec` with `ClaudeDelegate: claude`
+  (`internal/agentcore/engineering_assignment_runtime.go:452-459`).
+
+**Different working directory, by code.** A cell's `choir.Exec(command, args)`
+sends `ExecPayload{Command, Args}` with no `Dir` (`internal/yaegikernel/choir.go:538`),
+and the broker then sets `cmd.Dir = b.cfg.AllowedRoot` (`internal/yaegikernel/broker.go:195-197`),
+which is `/`. Relative `ReadFile`/`WriteFile` paths resolve against the same
+root (`broker.go:421-425`). `SpawnSpec.WorkingDir = "/workspace/platform"`
+(`engineering_assignment_runtime.go:458`) is set but read nowhere. This is the
+already-known F6 / option E of `selfdev-freeze-receipts-refused-2026-10-15.md`
+("`choir.Exec` runs at `/`", deferred), and the engineering overlay already
+says so (`internal/runtimeprompts/overlays/rlm_engineering_runtime.yaml`,
+step 3 uses absolute `/workspace/platform`).
+
+**What happened.** The probe's brief (`scripts/claude_delegate_probe.py:221-227`)
+names a relative target `docs/probes/claude-delegate-<stamp>.md` and tells
+engineering to "read the file yourself with cat in your own cell". The delegate
+(cwd `/workspace/platform`) wrote `/workspace/platform/docs/probes/...`;
+engineering's `cat docs/probes/...` ran at `/` and looked for
+`/docs/probes/...`. The delegate's isolation and the Write both worked; the
+check was aimed at the wrong path. The product gap is that nothing in the
+delegate's result gives the desk an absolute, broker-verified path to what the
+delegate wrote, so a relative path in a brief is silently ambiguous.
+
+**Confidence.** High that the views are shared and that the cell cwd is `/`
+(read from the code that runs). Not yet confirmed on staging that the file
+exists at `/workspace/platform/docs/probes/claude-delegate-20261020T101114.md`:
+that capsule was reclaimed, so the proof is a re-run, below.
+
+**Cheap staging confirmation.** The fix below makes `choir-delegate wait`
+report `written_files` (absolute path, `exists`, `bytes`), stat'ed by the
+broker in the capsule's own view when the run ends. After deploy, the probe
+with an absolute target should show `exists: true` and engineering's `cat`
+of the absolute path should print the line. A one-off before the fix: in an
+engineering cell, `choir.Exec("ls", []string{"-l", "/workspace/platform/docs/probes"})`.
+
+**Fix (red, `internal/claudedelegate` is broker-side delegate custody code).**
+1. The server records the `file_path` of every `Write`/`Edit` tool call in the
+   stream, resolves it against `/workspace/platform`, and when the run ends
+   stats each path from the broker side (`written_files` in status.json).
+2. The engineering overlay tells the desk to use those absolute paths
+   (cells run at `/`).
+3. The probe script's target for engineering's own `cat` is absolute.
+No change to Landlock, capabilities, seccomp or egress, and no new gate.
+Option E (default `choir.Exec` cwd) stays deferred: it changes every
+existing cell's relative paths.
+
+- **Heresy delta.** Discovered: none new (F6 is known). Introduced: none.
+  Repaired: none.
