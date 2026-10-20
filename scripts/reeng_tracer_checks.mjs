@@ -10,6 +10,8 @@
 //  - the job checks read the first assignment's inbox and matched argv
 //    word by word, so `sh -c "... go test ..."` was missed.
 
+import { createHash } from 'node:crypto';
+
 // textureCastIDs is every Texture Cast to management the drill saw.
 export function textureCastIDs(claim) {
   const ids = new Set();
@@ -102,4 +104,44 @@ export function completingInbox(claim, report) {
   if (report?.sender) return report.sender;
   const casts = claim?.engineering_casts || [];
   return casts.length ? casts[casts.length - 1].inbox : null;
+}
+
+// ---- --visual drill (docs/design/visual-evidence-slice-2026-10-15.md section 5) ----
+
+const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+const sha256Of = (bytes) => createHash('sha256').update(bytes).digest('hex');
+const isPng = (bytes) => Boolean(bytes && bytes.length >= PNG_MAGIC.length && PNG_MAGIC.every((b, i) => bytes[i] === b));
+
+// visualEvidenceChecks decides the --visual drill's claims from what the
+// drill read through product routes: the operation's evidence listing, the
+// asset the listing points at, and a Range request on it. The drill's page is
+// /choir-drill/<token>.html. It claims existence, binding and serving; what a
+// vision model reads off the picture is observed by the drill, never a check
+// here. Every group fails closed on a missing input.
+export function visualEvidenceChecks({ token, listing, asset, range }) {
+  const body = listing?.status === 200 ? listing.body : null;
+  const captures = Array.isArray(body?.captures) ? body.captures : [];
+  const route = `/choir-drill/${token}.html`;
+  const capture = captures.find((c) => c?.route === route) || null;
+  const digest = capture?.digest || '';
+  const headers = asset?.headers || {};
+  const bytes = asset?.bytes || null;
+  const served = asset?.status === 200 && Boolean(bytes);
+  const requested = (bytes && range?.bytes) ? bytes.subarray(0, 8) : null;
+  return {
+    visual_listing: Boolean(body && captures.length > 0),
+    visual_capture_receipted: typeof body?.capture_receipt === 'string' && /^capsule-exec:sha256:[0-9a-f]{64}$/.test(body.capture_receipt),
+    visual_drill_route_captured: Boolean(capture),
+    visual_capture_not_blank: Boolean(capture) && capture.blank === false,
+    visual_capture_viewport: Boolean(capture) && capture.width === 1280 && capture.height === 800,
+    visual_capture_resolvable: Boolean(capture) && capture.resolvable === true && capture.asset_url === `/api/assets/sha256/${digest}`,
+    visual_asset_headers: served && String(headers['content-type'] || '').split(';')[0].trim() === 'image/png'
+      && String(headers['x-content-type-options'] || '').toLowerCase() === 'nosniff'
+      && /\bimmutable\b/.test(String(headers['cache-control'] || '')) && /\bprivate\b/.test(String(headers['cache-control'] || ''))
+      && headers.etag === `"sha256-${digest}"`,
+    visual_asset_bytes_match_digest: served && Boolean(digest) && sha256Of(bytes) === digest,
+    visual_asset_is_png: served && isPng(bytes),
+    visual_asset_range: range?.status === 206 && Boolean(requested) && Buffer.compare(Buffer.from(range.bytes), Buffer.from(requested)) === 0
+      && range.headers?.['content-range'] === `bytes 0-7/${bytes?.length}`,
+  };
 }
