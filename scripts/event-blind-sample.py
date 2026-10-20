@@ -89,8 +89,10 @@ def judge(key, model, a, b):
         headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"},
     )
     text = json.load(urllib.request.urlopen(req, timeout=120))["choices"][0]["message"]["content"] or ""
-    w = re.search(r"\b(SAME|DIFFERENT|UNSURE)\b", text.upper())
-    return w.group(1) if w else "UNPARSED"
+    # The last verdict word is the answer: a judge may name the others while
+    # reasoning ("not SAME but ..."), and the first match misreads that.
+    words = re.findall(r"\b(SAME|DIFFERENT|UNSURE)\b", text.upper())
+    return (words[-1] if words else "UNPARSED"), text.strip()[:600]
 
 
 def main():
@@ -119,19 +121,20 @@ def main():
     tally = {m: {} for m in models}
     per = {l: [0, 0] for l in args.labels}  # [all-judges-DIFFERENT, sampled]
     for label, ev, a, b in sample:
-        verdicts = []
+        verdicts, answers = [], []
         for m in models:
             try:
-                v = judge(key, m, a, b)
+                v, answer = judge(key, m, a, b)
             except Exception as e:  # a judge error is recorded, never counted as DIFFERENT
-                v = "ERROR"
+                v, answer = "ERROR", str(e)[:200]
             tally[m][v] = tally[m].get(v, 0) + 1
             verdicts.append(v)
+            answers.append(answer)
         bad = all(v == "DIFFERENT" for v in verdicts)
         per[label][1] += 1
         per[label][0] += bad
         rows.append({"computer": label, "event": ev, "verdicts": verdicts, "a": a["title"][:120], "a_url": a["url"],
-                     "b": b["title"][:120], "b_url": b["url"], "p": b.get("p"), "all_different": bad})
+                     "b": b["title"][:120], "b_url": b["url"], "p": b.get("p"), "all_different": bad, "answers": answers})
         print("%-15s %-6s %s || %s" % ("/".join(v[:4] for v in verdicts), label[:6], a["title"][:55], b["title"][:55]))
     n_bad = sum(r["all_different"] for r in rows)
     n = max(1, len(rows))
