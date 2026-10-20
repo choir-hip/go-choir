@@ -54,3 +54,12 @@ the 01:50 compaction to 19.1 GB by 04:00 while its store stayed about
 the host. Mounting the guest data disk with discard (or a periodic guest
 fstrim) would keep host allocation near the live size; recorded for the
 compaction doc's next step.
+
+## Step 3 done (04:09 UTC)
+
+Deployed 9a42a7abb (CI 39367395471). vmctl logs `hostauth: internal
+routes mode=enforce, credential loaded`. Checks: an internal vmctl call
+without the token answers 403 and is logged `hostauth: enforce: refused`;
+with the token it answers 200; the public front answers 200; the paper is
+`ready` with 3 runs. The only refusal since the flip is that test call.
+Owner-act stays in observe (step 4).
