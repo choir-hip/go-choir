@@ -422,7 +422,7 @@ directory, and `choir-capture` among the system packages; `go-choir-b`'s
 vmctl environment has `CHOIR_VISUAL_CAPTURE_COMPUTERS=` (empty: nothing is
 granted). There is no dedicated nix check script for this.
 
-### 9.5 Still design only
+### 9.5 Still design only (as of the first pass; items 1 to 3 and the route, listing and drill are built in section 10)
 
 Not written: the `visual_evidence` bundle field and the in-cell inspection
 mirror (V18), Freeze wiring in `agentcore` (image store write, the result's
@@ -486,3 +486,211 @@ no tests; the rest has none yet either.
   times slower than real time (report section 2). Ship viewport screenshots
   first, then a 3 to 5 frame filmstrip over CDP, and treat video as a
   separate one-at-a-time job class with its own lease.
+
+## 10. Built 2026-10-20 (second pass), aligned with the Texture media design
+
+Owner ruling (owner notes section 28): visual evidence is reviewed inside
+Texture ("embedding this inside texture is the right approach"), and the
+owner wants screenshots and videos. The Texture design
+([texture-media-and-autoradio-design-2026-10-20.md](../reports/texture-media-and-autoradio-design-2026-10-20.md))
+makes the asset route and the `capsule_evidence` embed the review surface.
+This pass built the producer side of that contract and left the embed and the
+owner display to its step T1. Sections 9.5 and 9.6 listed the design-only
+items; items 1 to 3 below are those, built.
+
+### 10.1 What was built
+
+1. **Bundle field and Freeze.** `visual_evidence` on the capsule effect
+   bundle (omitempty pointer: no captures, same digest as before; the content
+   digest covers captures; they must answer to the frontend the bundle
+   freezes). The verifier's in-cell inspection mirror reads it and re-hashes
+   each staged capture. Freeze files every capture in the computer's asset
+   store, returns `visual_captures` (artifact, route, blank, resolvable) and
+   `visual_capture_receipt` to the cell, and does not fail on a store error
+   (`visual_store_errors`, V22). The capture directory classifies as the
+   artifact ledger, so Freeze does not reject the candidate for unknown paths.
+2. **Rule `visual_captured`** (optional `routes`, at most 6). It settles from
+   the runtime's Freeze observation only: a non-blank capture of each named
+   route and the capture job's receipt (V17, V23). A replayed freeze observes
+   nothing, so the rule stays open; at the terminal it is no (no candidate)
+   or unresolved (a candidate froze, observation lost).
+3. **Prompts, only on a granted computer.** Engineering: `choir-capture` as a
+   job with `"memory_mib": 768` (closes V29: the job leases the browser's
+   memory instead of competing with the build), the rule, and the bounds.
+   Management: one vision call before Verify through
+   `/api/model-policy/verify` with `role: verifier_multimodal` and the
+   capture's `image_ref`, cited in the Verify and not a settlement (V24, V25).
+4. **The asset route** `GET /api/assets/sha256/<hex>`: owner-authenticated,
+   range requests, `Content-Type` from the stored kind, `nosniff`, a sandbox
+   CSP, `private, max-age=31536000, immutable`, the digest as ETag, and a
+   re-hash on every read. `internal/imageblob` gained the asset view: typed
+   kinds (image served; audio and video are typed TODOs the store refuses),
+   digest validated before the filesystem, tampered and unservable bytes
+   refused. The proxy forwards `/api/*` as a reverse proxy, so ranges and
+   validators pass through.
+5. **The thin listing** `GET /api/computers/{id}/self-development/operations/{op}/visual-evidence`:
+   which digests belong to the operation's frozen bundle, with the capture
+   receipt and a per-capture `resolvable` flag; 404, not an empty list, for a
+   candidate with no captures; the source-patch export's binding rules.
+6. **The `--visual` drill** in `scripts/reeng_tracer.mjs` (`--scenario
+   engineering --change static --visual`): the checks are pure predicates
+   (`visualEvidenceChecks`, `node --test`), the PNG is kept in the trace
+   directory, and the vision reading is observed, not claimed.
+
+Tests (Darwin, all pass): `internal/types`, `internal/imageblob`,
+`internal/capsule/...`, `internal/yaegikernel`, `internal/runtimeprompts`,
+`internal/apihandler`, `internal/proxy`, and `internal/agentcore` run with
+`-run 'Precommit|SelfDevelopment|Freeze|Asset|Visual|Rule|Overlay|Capsule|SystemPrompt|ToolProfile|Census|Product'`;
+`node --test` on the four tracer test files (66 tests). Not run: the full
+`internal/agentcore` suite; anything Linux-only (the capsule executor, the
+broker tests); `freezeCapsuleEffectBundle` end to end (it needs the Linux
+executor, so the Freeze wiring is tested as `recordFreezeVisual` and
+`applyFreezeVisual`); the drill itself.
+
+New failure modes found:
+
+- **V34. The asset route reads any digest in the owner's store**, not only
+  evidence. Accepted on the owner's own computer (owner-authenticated, one
+  owner per store). It must not become the public route: T2's public asset
+  route is separate and serves only pinned public digests.
+- **V35. The asset store has no retention.** A capture outlives its bundle's
+  retention, and nothing deletes it. Texture revisions that cite an asset
+  must pin it, so a later store GC cannot orphan a published or past
+  revision (T1 states the policy before any GC exists).
+- **V36. The listing and the bytes disagree** (a store write failed, V22, or
+  a blob was swapped). `resolvable` reports presence only; integrity is the
+  asset route's re-hash, and the drill checks that served bytes hash to the
+  listed digest.
+
+### 10.2 Residuals that remain from section 6
+
+R1 (direct exec of the store path), R2 (no ready-selector wait; filmstrip and
+video are 10.4), R3 (screens that need data), R5 (revocation needs a cold
+boot), R6 (host RSS return unverified until the staging probe). R4 is
+narrowed: `memory.peak` is in the capsule teardown log line, and the job
+lease is requested, but neither is a field of a capsule receipt yet. R7
+(review is prompt-taught) stands, with the vision call bounded in the prompt
+only.
+
+### 10.3 What T1's `capsule_evidence` embed needs from this work
+
+T1 is a red schema change and is not built here. These are the fields it
+reads and the rules it keeps. The embed in the Texture design is
+`capsule_evidence | event-artifact digest + operation id`.
+
+| Embed field | Source | Notes |
+| --- | --- | --- |
+| `target.digest` | the listing's `digest` (64 lowercase hex) | One capture. The same sha256 as the `artifact:sha256:` ref in the bundle. Renders `<img src="/api/assets/sha256/<digest>">`; the owner's session cookie authorizes it. |
+| `target.operation_id` | the listing's `operation_id` | Binds the embed to the candidate. |
+| candidate identity | listing: `bundle_digest`, `frontend_sha256`, `capture_receipt` | `bundle_digest` is the operation's current digest (the draft digest until Verify finalizes it); `frontend_sha256` says which build; `capture_receipt` says which job vouches. Texture shows them on the card and does not store them in the revision (they re-resolve live). |
+| viewport | listing: `width`, `height` | Lets the renderer reserve the box before the image loads. |
+| `route` | listing: `route` | Shown with the caption and in the audio rendition. |
+| blank flag | listing: `blank` | Renderers badge a blank capture "blank"; Texture should not present all-blank evidence as support for approving. |
+| `resolvable` | listing: `resolvable` | False renders the "evidence not retained" card, not a broken image. |
+| `caption` | written by Texture | The writer is Texture, never engineering. Default: "Screenshot of `<route>` from candidate `<operation_id>` (1280x800)". |
+| `alt` | written by Texture | The capture has no description. Default: "Screenshot of `<route>`". A vision reading (the management review) may refine it, and is cited, not copied unchecked. |
+| `privacy` | derived, always `private` | Publication must refuse a document that holds one (T2). |
+
+Rules T1 must keep:
+
+- **Membership check at write.** Texture's writer accepts a `capsule_evidence`
+  embed only when the operation exists on this computer and its bundle's
+  listing contains the digest, so a document cannot present an arbitrary
+  stored image as evidence of a candidate. The renderer re-checks through the
+  listing; a 410 (bundle not retained) renders the not-retained card while the
+  asset route may still serve the pinned bytes (V35).
+- **Pin on cite.** A revision that embeds a capture pins the asset (V35).
+- **One kind of target.** The digest resolves through the asset route, not
+  through the event artifact store. The Texture design's phrase
+  "event-artifact digest" should read "asset digest" for this embed: the
+  captures are image-store assets whose ref spelling happens to be
+  `artifact:sha256:` (see 10.5).
+- **The approval act stays an owner act.** The embed shows evidence beside the
+  approve control; it carries no authority, and the decision route is
+  unchanged.
+- **A filmstrip is several digests.** Until the `selector` field carries
+  frame ranges, a filmstrip is a short list of `capsule_evidence` embeds in
+  capture order (10.4).
+
+### 10.4 Filmstrip first, video as its own job class (design only)
+
+The owner wants videos, so this is sequenced, not dropped. The report
+measured recording at one full core (1.0 at a one-CPU cap, 1.9 at two), 2 to
+3 times slower than real time, which is why it is a separate class.
+
+1. **Screenshots** (built).
+2. **Filmstrip, 3 to 5 frames.** Needs a CDP client in Go
+   (`internal/browsercontrol` already speaks CDP to Obscura): load the page,
+   wait on a ready selector, and capture at chosen virtual times. It reuses
+   everything above: each frame is a PNG capture, named by its sha256, with
+   `group` and `frame_index` added to the manifest and to
+   `VisualEvidenceCapture` (omitempty, so old bundles keep their digests),
+   still bounded by the 6-capture and 24 MiB limits. `visual_captured` keeps
+   its meaning; a new rule is not needed. The Texture embed shows a strip, or
+   a list of embeds in order.
+3. **Animated image.** An APNG or GIF from the same frames, encoded in pure Go
+   (no ffmpeg in the guest), is the first motion artifact: `<img>` plays it,
+   the asset route serves it, and no new kind is needed (`image/apng`,
+   `image/gif`; GIF is already a sniffed image type).
+4. **Video.** A `choir-record` job class: one at a time per computer (the
+   `SetJobAdmission` seam and `visualcapture.IsCaptureJob`-style detection
+   already size jobs by class), a memory lease sized for recording
+   (`memory_mib` at least 1536), a wall-clock cap, and an output cap per clip.
+   Encoding needs a decision: ffmpeg in the guest image (measure the closure
+   cost first; Chromium is already 1.71 GiB) or Chromium's own screencast
+   frames encoded in Go. It adds `KindVideo` to the asset store, with the
+   range route already in place (`http.ServeContent` answers ranges), a
+   per-kind size cap, and a Texture `video` embed with `poster` (the first
+   filmstrip frame). The same grant gates it; a computer can be granted
+   screenshots and not video.
+
+Failure modes to write before step 4: a recorder that never stops (wall clock
+and process-group kill, as V5); two recordings at once (admission by class);
+a clip larger than the cap (cap before write); a clip that plays different
+content than the frozen build (bind the recording to the same frontend digest
+as V8); the lease not returned (teardown reclaim, V27, and the lease release).
+
+### 10.5 Where this conflicts with, or sharpens, the Texture design
+
+- **"Event-artifact digest" is the wrong store** for `capsule_evidence` (see
+  10.3). The target is an asset digest read through `/api/assets/sha256/`.
+  The Texture design already says to generalize the image store into the media
+  asset store, so this is a wording fix, not a design change.
+- **The asset store is not yet the media store.** Only the kind typing and the
+  route exist. The per-kind size cap, audio and video types, and PDF are T1 and
+  T4. `Put` still enforces the gateway's 20 MiB image limit.
+- **Per-operation versus owner-wide reads.** The listing is bound to a
+  computer and an operation (it needs `X-Authenticated-Computer`); the asset
+  route is owner-wide (V34). T1's resolver should go through the listing for
+  evidence and not assume the asset route proves membership.
+- **API-key scope.** `/api/assets/` is forwarded by the generic `/api/*`
+  path, which checks the key's `read:runtime` scope, not the self-development
+  read scope the listing uses. A key that can read the runtime can read any
+  digest. Acceptable now (the owner's keys); T2's public route must not
+  inherit it.
+- **CSP.** The Texture design's `img-src 'self'` admits the asset route. The
+  asset response carries its own `sandbox` CSP, which does not restrict its
+  use as an `<img>`.
+- **Order against S6.** Nothing here touches the schema, so T1 can run beside
+  S6 as the Texture design says. What T1 should not start without is the
+  producer side (this section) deployed on staging and the drill green.
+
+### 10.6 Left before the red guest-image deploy
+
+1. Run the Linux-only tests in CI (the executor staging path, the broker job
+   environment, `internal/agentcore` in full) and fix what they find; none was
+   run on Darwin.
+2. `nix eval` the touched configurations again after rebase (done once for the
+   guest and node-b on 2026-10-20; no build).
+3. Choose and record the first grant: one named test computer in
+   `CHOIR_VISUAL_CAPTURE_COMPUTERS`.
+4. Read the red ceremony in 9.7 against the extra surfaces this pass touched:
+   the bundle schema and digest (Freeze evidence), a new owner-readable
+   route, and the proxy classifier. Rollback is a revert of the commits; the
+   bundle field is omitempty and nothing migrates.
+5. Deploy, cold-boot the granted computer, run
+   `node scripts/reeng_tracer.mjs --label visual-<n> --scenario engineering
+   --change static --visual --expect-sha <sha> --timeout-min 30`, then the
+   section 8.2 probe with the `CHOIR_CAPSULE_TEARDOWN_RECLAIM=off` control.
+   V13 (Chromium under the capsule's seccomp, Landlock and mounts) is first
+   tested by that drill, and it is still the main unknown.
