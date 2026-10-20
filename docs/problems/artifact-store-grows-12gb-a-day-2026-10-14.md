@@ -261,3 +261,14 @@ design) and its 268,000 events a day; full-snapshot projection bases (one
 per 2,500 events); `checkpointd` failing on `og migrate ... no verified
 identity formula`; and the guest still re-sending (not re-storing) its tree
 after each boot (network only).
+
+## Step D enabled (2026-10-20 06:25 UTC)
+
+Precondition C is met: the corpus dump was deleted on 2026-10-20 (owner
+notes §27 item 1). The hourly GC report at 06:10 UTC for `og`, still in
+dry-run: 577,773 scanned, 7,173 live, 570,600 unreachable and eligible
+(1,101,002,048 bytes), 0 in grace, 0 unproven. That matches the plan's
+570,000 files and 1.1 GB. `og` joins
+`PLATFORM_ARTIFACT_GC_ACTIVE_NAMESPACES`. Each hourly run deletes at most
+50,000 objects, so the backlog drains over about twelve runs, every
+deletion logged to `artifact-gc-log/`. Rollback: drop `og` from the list.
