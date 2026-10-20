@@ -686,3 +686,14 @@ Owner, on waking:
   UTC): "rather than choir.jev, we should make it choir.system1". System 1
   is the fast judge that answers with a distribution; the desk reasons and
   decides. Jev stays the backing model's name.
+- Sequence after related stories (about 12:10 UTC): "once we have the
+  related stories feature really working deeply and completely, is the
+  op-eds. And I feel like once we get op-eds working, then we'll be ready
+  for the auto radio app." So: related stories phase 3, then op-eds, then
+  Autoradio.
+- Autoradio stack, reopened wider: "consider using Wails V3 (wrapping our
+  svelte, recognizing that we can't ship the whole desktop as an app for
+  App Store rules). I don't really think that's a good idea, but I just
+  want to compare everything — from that to capacitor to UIkit plus Swift
+  as needed to pure Swift." A comparison report is owed:
+  `docs/reports/autoradio-native-stack-comparison-2026-10-20.md`.
