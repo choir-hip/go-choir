@@ -806,3 +806,41 @@ acceptance check; the check probably reads a static path the go-served
 change does not touch.
 
 Open from this cluster: failures 8, 10, 11 and 14; teardown under `e.mu`.
+
+## S6-0 rerun against ac4737862 (label s6-0-1817, 18:17-18:38 UTC)
+
+Staging ac4737862 (the failure-14 logging, 38954bb55). Receipt: scratch
+`s68/log.txt`; bundle `~/.config/choir-qa/traces/s6-0-1817/bundle-a1.json`.
+
+**15 of 19 checks pass; it did not exercise failure 14.** Failed:
+`go_test_passed`, `probe_served_after_apply`, `layered_release_serving`,
+`restore_restarted_into_pre_apply`. `witness_joined` passed: the
+`restored` witness read 200 at 18:37:57, and the proxy journal has no
+`computer authority unavailable` line since 18:15. The restore did not
+restart the computer this time (there was no new build to leave), which
+fits failure 14 being tied to the restart after a restore; still a
+hypothesis.
+
+- **Failure 12 recurred.** Round 1 (assignment ...248192, 18:18-18:21)
+  reported failed: "Vet remains blocked: the job is still downloading
+  dependencies with no completion receipt". The capsule Go-modules decision
+  is still unanswered.
+- **Failure 15 (new): a candidate without the change passed the gate and
+  was applied.** Management re-cast (assignment ...1bf749, 18:22).
+  Engineering reported "go vet passed; built release tree and froze
+  candidate bundle 78f00766..." (18:36:18). Verify, owner approval and
+  apply followed; the apply took 18 seconds with one planned restart (boot
+  18:36:47) onto the same build ac4737862, and the effective release is
+  `layered: false`. The probe route was never served; the tracer found no
+  Go test evidence.
+
+  Hypothesis A (leading, from the trace order only): the re-cast is a new
+  assignment, so a fresh capsule from the base tree; round 1's edits did
+  not carry over, and round 2's objective ("vet, release builds, freeze")
+  led engineering to freeze an unchanged tree. Hypothesis B: Freeze's
+  no-Go-input path misclassified a Go change. Either way the gate has a
+  gap: verify and approval passed a candidate whose patch does not do what
+  the request asked. To confirm: read the operation's source patch (its
+  file list and size) before choosing a fix. Candidate fixes, not decided:
+  a re-cast carries the prior capsule's diff, or a Freeze refuses an empty
+  diff, or management's verify checks the patch against the request.
