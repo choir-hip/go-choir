@@ -80,3 +80,39 @@ Replacement: `scripts/qa_test_computer.mjs --label
 claude-delegate-sonnet-20261020` minted `computer-ad1b46d4c20129e84b9e239cf4720fb9`
 (guest build 4c2d66c38, key expiry 2026-10-27) at 10:01 UTC. It replaces the
 dead id on the allowlist; the proof runs on it after a cold boot.
+
+## Staging proof (2026-10-20 10:11–10:12 UTC, on 09e98e9b2): delegate runs, its edit does not reach engineering
+
+Test computer `computer-ad1b46d4…` cold-booted through the lifecycle API
+(stop 10:09:45, start 10:10:04). `scripts/claude_delegate_probe.py`:
+
+- `--status-only`: pass. Guest status `available: true`, model
+  `claude-sonnet-5-5`, expiry 2026-11-03, guest build 09e98e9b2.
+- End to end: **fail**. Trajectory `366115a4-…`, engineering run
+  `run:assignment-c64a301390f01c2d40e7f15e`, capsule network mode `claude`.
+  - Engineering (gpt-6-luna) precommitted, called `choir-delegate start` and
+    `wait`. Delegate run `d20261020T101200-73eeba02` ended `state: done`,
+    `subtype: success`, 5 turns, 13 s, $0.039, last tools `Write, Bash,
+    Bash, Read`. So the Bun seccomp fix holds on x86_64 staging.
+  - stderr tail: "Permission mode forced to default —
+    CLAUDE_CODE_SUBPROCESS_ENV_SCRUB is set (allowed_non_write_users
+    hardening). Declare allowedTools explicitly, or set
+    CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=0 to opt out." `Args` passes
+    `--permission-mode dontAsk` (spec.go:163) and the env sets the scrub
+    (spec.go:231); the CLI overrides the mode.
+  - Engineering then ran `cat docs/probes/claude-delegate-20261020T101114.md`
+    in its own cell: **No such file or directory**. It completed the
+    assignment `blocked`, citing the delegate's report that its own `cat`
+    checks failed because bwrap was unavailable (design §6, known).
+- **Not yet known (hypotheses, the delegate's event log in the capsule's
+  run dir would decide):**
+  1. The forced `default` permission mode denied the Write in `-p` mode
+     (look for `permission_denials` in the result).
+  2. The delegate stage writes to a different view of `/workspace/platform`
+     than the engineering cells see (broker namespace vs cell overlay), so
+     a successful Write is invisible to engineering.
+- Next probe: read the delegate's `events.jsonl` / result
+  `permission_denials` through `choir-delegate status --id …` from an
+  engineering cell, before any change. A fix for (1) is to drop the scrub
+  variable or declare the tools as the message says, weighed against why
+  the scrub was set (token isolation from Claude's subprocesses, F13).
