@@ -80,6 +80,9 @@ const arg = (name, dflt) => {
 const flag = (name) => args.includes(`--${name}`);
 const LABEL = arg('label', '');
 const CRED_FILE = arg('cred', '');
+// --story-file replaces the research scenario's story with a file's text
+// (for example a story that needs a keyed source API).
+const STORY_FILE = arg('story-file', '');
 const ATTEMPTS = Math.max(1, Number(arg('attempts', '1')));
 const TIMEOUT_MIN = Number(arg('timeout-min', '15'));
 const SETTLE_MIN = Number(arg('settle-min', '3'));
@@ -518,7 +521,7 @@ async function attempt(n, out) {
   if (SCENARIO === 'engineering') return engineeringScenario(c, out, n, deadline, phase, fenceBuild);
   if (SCENARIO === 'adopt') return adoptScenario(c, out, n, deadline, phase, fenceBuild, label);
   // Story submit; the first accepted submit is the "first ready prompt bar".
-  const story = await submitPrompt(c, SCENARIO === 'management' ? MANAGEMENT_STORY : SCENARIO === 'research' ? RESEARCH_STORY : STORY, 'story', deadline);
+  const story = await submitPrompt(c, SCENARIO === 'management' ? MANAGEMENT_STORY : SCENARIO === 'research' ? (STORY_FILE ? readFileSync(STORY_FILE, 'utf8').trim() : RESEARCH_STORY) : STORY, 'story', deadline);
   out.timings.first_prompt_accepted_ms = Date.now() - t0;
   out.trajectory_id = story.body.trajectory_id;
   out.doc_id = story.body.doc_id;
