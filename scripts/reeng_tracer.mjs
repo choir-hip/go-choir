@@ -65,8 +65,8 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  castOnRecords, completingInbox, doneJobs, goTestCells, isGoBuildOfAutoputer, isGoTest, reportNamesBundle, verifiedNamedBundle,
-  visualEvidenceChecks,
+  castOnRecords, completingInbox, doneJobs, formatWitnessGapTable, goTestCells, isGoBuildOfAutoputer, isGoTest, reportNamesBundle,
+  verifiedNamedBundle, visualEvidenceChecks, witnessGapTable, witnessJoined,
 } from './reeng_tracer_checks.mjs';
 import { inProgressReceipt, interruptedReceipt, signalExitCode, strandedTracerComputers } from './reeng_tracer_receipt.mjs';
 
@@ -119,7 +119,10 @@ if (!['story', 'crash', 'management', 'research', 'paper', 'engineering', 'adopt
 // the route does not serve the nonce before apply, serves it after apply
 // from a layered release whose code_commit is the serving build's commit,
 // and stops serving it after the restore (the restore restarts into the
-// pre-apply release).
+// pre-apply release). go-served also keeps the release witness (S6-0,
+// docs/problems/s6-activation-trusts-not-compares-2026-10-20.md) fetched at
+// frozen, accepted, applied and restored, checks `witness_joined`, and prints
+// the gap table (each join, compared at the gate or only recorded).
 const CHANGE = arg('change', 'static');
 if (!['static', 'go', 'go-served'].includes(CHANGE)) {
   console.error(`unknown --change ${CHANGE} (static | go | go-served)`);
@@ -1352,7 +1355,7 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild, optio
     operation: null, operation_states: [], verify: null, decision_boundary: null,
     pre_apply_checkpoint: null, owner_approval: null, boots: [], unreachable: [], applied: null, route_receipt: null,
     standing_arm: null, consensus_decision: null, decision_calls: 0,
-    restore: null, served: {}, probe: {}, heads: {}, obligations: {}, census: null, management_final_report_to_texture: null,
+    restore: null, served: {}, probe: {}, witness: {}, heads: {}, obligations: {}, census: null, management_final_report_to_texture: null,
   };
   claim.token = token;
   out.drill = { label: out.label, scenario: 'engineering', change: CHANGE, token, claim, gaps, note: [] };
@@ -1393,6 +1396,28 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild, optio
     };
     phase('probe_check', { tag, ...claim.probe[tag] });
     return claim.probe[tag];
+  };
+  // witness (go-served): the release witness for the operation, a read of the
+  // joined release identity (S6-0). Stored whole in the receipt; the
+  // acceptance check `witness_joined` reads it and prints the gap table. A
+  // failed fetch is kept (status, error) and fails that check, nothing else.
+  // retryMs retries only a transport or 5xx answer (the restore restarts the
+  // runtime a few seconds after it answers).
+  const witness = async (tag, opID, retryMs = 0) => {
+    if (CHANGE !== 'go-served' || !opID) return null;
+    const until = Date.now() + retryMs;
+    let r;
+    for (;;) {
+      r = await c.api(sd(`operations/${encodeURIComponent(opID)}/release-witness`), 'GET', undefined, 60_000);
+      if (r.status === 200 || ![0, 502, 503, 504].includes(r.status) || Date.now() >= until) break;
+      await sleep(5_000);
+    }
+    claim.witness[tag] = {
+      at: iso(), status: r.status, operation_id: opID, operation_state: r.status === 200 ? (r.body?.operation?.state || null) : null,
+      error: r.status === 200 ? null : (r.body?.error || r.error || null), body: r.status === 200 ? r.body : null,
+    };
+    phase('witness', { tag, status: r.status, operation_state: claim.witness[tag].operation_state, read_consistent: r.body?.read_consistent ?? null, summary: r.body?.summary || null });
+    return claim.witness[tag];
   };
   const inbox = async (id) => {
     const r = await c.api(`/api/inboxes/${encodeURIComponent(id)}/records?limit=1000`);
@@ -1581,6 +1606,7 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild, optio
   }
   claim.verify = { verifier_refs: op.verifier_refs || [], bundle_digest: op.bundle_digest, last_intent_error: op.last_intent_error || null };
   claim.decision_boundary = { at: iso(), operation_id: op.operation_id };
+  await witness('frozen', op.operation_id);
   // Capsule jobs (--change go): each engineering inbox holds one job record
   // per job that ended, from job:<id>, with its state and receipt. The
   // bundle's jobs are the completing assignment's; earlier assignments'
@@ -1689,6 +1715,7 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild, optio
   }
   if (!decided) return finish();
   at('owner_approval');
+  await witness('accepted', op.operation_id);
 
   // The apply (P2, F3): poll the operation and the guest's boot every 3 s
   // until applied or settled, then 30 s more for a second boot.
@@ -1744,6 +1771,7 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild, optio
   claim.effective_release_post_apply = postApplyObs?.effective_release || null;
   await served('post_apply');
   if (CHANGE === 'go-served') await probe('post_apply');
+  await witness('applied', op.operation_id);
   const census = await c.api('/api/runtime/census', 'GET', undefined, 30_000);
   claim.census = census.status === 200 ? { counts: census.body?.counts || {}, objects: (census.body?.objects || []).length, truncated: Boolean(census.body?.truncated) } : { status: census.status };
 
@@ -1804,6 +1832,7 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild, optio
         await sleep(5_000);
         p = await probe('post_restore');
       }
+      await witness('restored', op.operation_id, Math.max(0, probeDeadline - Date.now()));
     }
     gap('restore', 'none', 'no product route serves the computer\'s projection head after a restore; corpusd\'s head is append-only (a restore is a forward event), so the landing is read from the restore report\'s checkpoint binding');
   } else if (op.state === 'applied') {
@@ -2162,6 +2191,14 @@ function acceptEngineering(out, claim, gaps, reached, phase) {
       || (typeof claim.restore?.restart_deferred === 'string' && claim.restore.restart_deferred.startsWith('busy'));
     checks.probe_gone_after_restore = claim.probe.post_restore?.served === false && claim.probe.post_restore?.status !== 0
       && claim.probe.post_restore?.effective_release?.layered !== true;
+    // S6-0: the release witness answered at frozen, accepted, applied and
+    // restored with every pair and its gate flag. The gap table is printed
+    // and kept in the claim; an unbound pair does not fail this check.
+    const joined = witnessJoined(claim.witness);
+    claim.witness_joined = joined;
+    claim.witness_gap_table = witnessGapTable(claim.witness);
+    log(`release witness gap table (pair, compared at the gate, bound at frozen/accepted/applied/restored):\n${formatWitnessGapTable(claim.witness_gap_table)}`);
+    checks.witness_joined = joined.ok;
   }
   out.acceptance = {
     scenario: 'engineering',

@@ -145,3 +145,106 @@ export function visualEvidenceChecks({ token, listing, asset, range }) {
       && range.headers?.['content-range'] === `bytes 0-7/${bytes?.length}`,
   };
 }
+
+// ---- release witness (S6-0) ------------------------------------------------
+//
+// The engineering go-served scenario fetches
+// GET /api/computers/{id}/self-development/operations/{op}/release-witness at
+// four moments and keeps each in the receipt. `witness_joined` holds when every
+// fetch answered with every expected pair, each carrying a gate flag, the same
+// flag at every moment, and a reason.
+// WITNESS_PAIRS must equal the Go table selfdevGatePairs
+// (internal/agentcore/selfdev_release_witness.go); a Go test reads this list.
+export const WITNESS_SCHEMA = 'choir.selfdev.release_witness.v1';
+export const WITNESS_TAGS = ['frozen', 'accepted', 'applied', 'restored'];
+export const WITNESS_PAIRS = [
+  'decision_operation',
+  'decision_expected_heads',
+  'bundle_operation',
+  'test_receipts_exit',
+  'bundle_source_patch',
+  'bundle_host_build',
+  'builder_receipt_patch',
+  'manifest_closure_commit',
+  'manifest_builder_receipt',
+  'manifest_decision',
+  'decision_pending_transition',
+  'frozen_surface_decision_heads',
+  'checkpoint_event',
+  'route_event',
+  'serving_current',
+  'effective_release_operation',
+  'divergence_derived',
+];
+
+// witnessJoined reads {tag: {status, body}} and says whether every tag holds a
+// complete witness. It never reads `bound` for the verdict: a join may be
+// unbound and the check still holds (the gap table is the finding, not a
+// failure of the witness).
+export function witnessJoined(witnesses) {
+  const missing = [];
+  const unexpected = [];
+  const malformed = [];
+  const tagsFailed = [];
+  const flags = new Map();
+  const inconsistent = [];
+  for (const tag of WITNESS_TAGS) {
+    const w = witnesses?.[tag];
+    const body = w?.body;
+    if (!w || w.status !== 200 || body?.schema !== WITNESS_SCHEMA || !Array.isArray(body.bindings)) {
+      tagsFailed.push(tag);
+      continue;
+    }
+    const seen = new Map();
+    for (const b of body.bindings) seen.set(b?.pair, (seen.get(b?.pair) || 0) + 1);
+    for (const pair of WITNESS_PAIRS) {
+      if (seen.get(pair) !== 1) missing.push(`${tag}:${pair}`);
+    }
+    for (const b of body.bindings) {
+      if (!WITNESS_PAIRS.includes(b?.pair)) { unexpected.push(`${tag}:${b?.pair}`); continue; }
+      const boundOK = b.bound === null || typeof b.bound === 'boolean';
+      if (typeof b.compared_at_gate !== 'boolean' || !boundOK || typeof b.reason !== 'string' || b.reason.trim() === '') {
+        malformed.push(`${tag}:${b.pair}`);
+      }
+      if (flags.has(b.pair) && flags.get(b.pair) !== b.compared_at_gate) inconsistent.push(b.pair);
+      flags.set(b.pair, b.compared_at_gate);
+    }
+  }
+  return {
+    ok: tagsFailed.length === 0 && missing.length === 0 && unexpected.length === 0 && malformed.length === 0 && inconsistent.length === 0,
+    tags_failed: tagsFailed, missing, unexpected, malformed, inconsistent: [...new Set(inconsistent)],
+  };
+}
+
+// witnessGapTable is one row per pair: whether a gate compares it and what the
+// witness observed at each moment (true bound, false unbound, null unknown,
+// undefined absent from that fetch).
+export function witnessGapTable(witnesses) {
+  const rows = [];
+  for (const pair of WITNESS_PAIRS) {
+    const row = { pair, compared_at_gate: null, compared_at: null, bound: {}, reason: {} };
+    for (const tag of WITNESS_TAGS) {
+      const b = (witnesses?.[tag]?.body?.bindings || []).find((x) => x?.pair === pair);
+      if (!b) { row.bound[tag] = undefined; continue; }
+      row.compared_at_gate = b.compared_at_gate;
+      row.compared_at = b.compared_at;
+      row.bound[tag] = b.bound;
+      row.reason[tag] = b.reason;
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
+// formatWitnessGapTable prints the table: pair, whether a gate compares it,
+// then bound at each moment (Y bound, N unbound, - unknown, ? absent).
+export function formatWitnessGapTable(rows) {
+  const mark = (v) => (v === true ? 'Y' : v === false ? 'N' : v === null ? '-' : '?');
+  const width = Math.max(...rows.map((r) => r.pair.length), 4);
+  const lines = [`${'pair'.padEnd(width)}  ${'compared_at_gate'.padEnd(26)}  ${WITNESS_TAGS.map((t) => t.padEnd(8)).join(' ')}`];
+  for (const r of rows) {
+    const gate = r.compared_at_gate === true ? `yes (${r.compared_at})` : r.compared_at_gate === false ? `NO (${r.compared_at})` : '?';
+    lines.push(`${r.pair.padEnd(width)}  ${gate.padEnd(26)}  ${WITNESS_TAGS.map((t) => mark(r.bound[t]).padEnd(8)).join(' ')}`);
+  }
+  return lines.join('\n');
+}

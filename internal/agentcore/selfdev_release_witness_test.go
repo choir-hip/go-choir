@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -588,4 +589,29 @@ func mustReadWitnessBundle(t *testing.T, fx *derivableSelfDevFixture, operation 
 		t.Fatal(err)
 	}
 	return bundle
+}
+
+// The tracer's expected pair list (scripts/reeng_tracer_checks.mjs
+// WITNESS_PAIRS, what `witness_joined` requires) is the table's, in order: a
+// pair added to one side without the other fails here, not on staging.
+func TestReleaseWitnessTracerExpectsTheTablesPairs(t *testing.T) {
+	raw, err := os.ReadFile(filepath.FromSlash("../../scripts/reeng_tracer_checks.mjs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	block := regexp.MustCompile(`(?s)export const WITNESS_PAIRS = \[(.*?)\];`).FindSubmatch(raw)
+	if block == nil {
+		t.Fatal("WITNESS_PAIRS not found in the tracer checks")
+	}
+	var tracer []string
+	for _, m := range regexp.MustCompile(`'([a-z_]+)'`).FindAllSubmatch(block[1], -1) {
+		tracer = append(tracer, string(m[1]))
+	}
+	var table []string
+	for _, row := range selfdevGatePairs {
+		table = append(table, row.Pair)
+	}
+	if strings.Join(tracer, ",") != strings.Join(table, ",") {
+		t.Fatalf("tracer pairs differ from the Go table:\n tracer %v\n table  %v", tracer, table)
+	}
 }
