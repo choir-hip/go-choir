@@ -1322,7 +1322,9 @@ in
         # inside the engineering capsule's existing 2 GiB / 1 CPU budget
         # (0.4-0.55 GiB per shot, measured). Rollback: empty the list and
         # deploy.
-        "CHOIR_VISUAL_CAPTURE_COMPUTERS="
+        # 2026-10-20: one test computer (visual-evidence-20261020) for the
+        # --visual staging drill; owner scope "one test computer first".
+        "CHOIR_VISUAL_CAPTURE_COMPUTERS=computer-7011602c92710d9cf13ee52fd2675908"
         # claude delegate (docs/design/claude-delegate-slice1-2026-10-14.md;
         # Option T, owner-ratified 2026-10-14). OFF while the list is empty.
         # To turn it on for one test computer: put its ComputerID in
