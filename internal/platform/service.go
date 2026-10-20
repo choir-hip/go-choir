@@ -62,6 +62,9 @@ type Service struct {
 	// frontImportance attaches model-judged importance scores to front
 	// rows when its scores file is present (publication_front_importance.go).
 	frontImportance frontImportanceCache
+	// backfillMu admits one cites_capture backfill at a time
+	// (publication_related_backfill.go).
+	backfillMu sync.Mutex
 }
 
 type citationInput struct {
