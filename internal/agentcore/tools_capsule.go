@@ -268,6 +268,9 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 	}
 	files := staged.Files
 	defer os.RemoveAll(staged.TemporaryRoot)
+	if err := freezeSourceChangeError(staged); err != nil {
+		return nil, err
+	}
 	sourceTreeDigest, err := toolCtx.Executor.ResolveGrantedSourceSnapshotDigest(toolCtx.AgentRunID, handle)
 	if err != nil {
 		return nil, err
@@ -732,6 +735,22 @@ const freezeDistinctReceiptsRequired = "distinct build, test, and dependency/too
 // what each slot should cite (docs/problems/selfdev-freeze-receipts-refused-2026-10-15.md).
 // It decides nothing new: nil exactly when the slots hold three or more
 // distinct refs, the count the executor's resolver dedupes to.
+// freezeSourceChangeError refuses a candidate whose capsule changed no
+// /workspace/platform source. A release is source (api_release.go), and a
+// frontend change is source too (frontend/ is under /workspace/platform), so
+// an empty source patch means the release is the base tree rebuilt. Failure
+// 15 (docs/problems/engineering-completion-path-cluster-2026-10-20.md): a
+// re-cast ran in a fresh capsule without the earlier round's change, and the
+// unchanged tree passed verify, approval and apply.
+func freezeSourceChangeError(staged *capsule.StagedRelease) error {
+	if staged != nil && strings.TrimSpace(staged.SourcePatchSHA) != "" {
+		return nil
+	}
+	return fmt.Errorf("Freeze refused: this capsule changed no /workspace/platform source, so its candidate would release the base tree unchanged. " +
+		"Each assignment, a re-cast included, runs in a fresh capsule from the base tree: an earlier assignment's edits are not here. " +
+		"Make the change in this capsule, run its tests, then Freeze; or Complete and report that nothing was changed")
+}
+
 func freezeReceiptSlotsError(buildRecipeRef string, testReceipts, dependencyToolchainRefs []string) error {
 	var order []string
 	slots := map[string][]string{}
