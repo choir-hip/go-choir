@@ -1323,8 +1323,11 @@ in
         # subscription is near its limit and must not be spent by Choir.
         # The token file stays installed; re-add the test computer
         # (computer-33594053a05f46e93d80e7e15ce8a0d2) to turn it back on.
-        "CHOIR_CLAUDE_DELEGATE_COMPUTERS="
-        "CHOIR_CLAUDE_DELEGATE_EXPIRES=2026-10-22T00:00:00Z"
+        # 2026-10-20: ON again, on Sonnet, by owner request (owner notes §28;
+        # docs/problems/claude-delegate-resume-sonnet-2026-10-20.md). Two-week
+        # expiry, renewed only by an explicit edit.
+        "CHOIR_CLAUDE_DELEGATE_COMPUTERS=computer-33594053a05f46e93d80e7e15ce8a0d2"
+        "CHOIR_CLAUDE_DELEGATE_EXPIRES=2026-11-03T00:00:00Z"
         "CHOIR_CLAUDE_DELEGATE_TOKEN_FILE=${claudeDelegateTokenCopy}"
         # Keep personal computers resident while the host is under capacity.
         "VMCTL_IDLE_TIMEOUT=30m"

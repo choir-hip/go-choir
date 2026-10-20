@@ -30,7 +30,7 @@ const (
 	// Workdir is the delegate's working directory: the capsule's source tree.
 	Workdir = "/workspace/platform"
 	// Model is the one model the delegate runs.
-	Model = "claude-opus-5-5"
+	Model = "claude-sonnet-5-5"
 	// TokenEnv is the variable Claude Code reads a setup-token token from.
 	// It is set on the claude process only, by Env.
 	TokenEnv = "CLAUDE_CODE_OAUTH_TOKEN"
