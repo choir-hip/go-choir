@@ -53,6 +53,10 @@ func newRelatedLab(t *testing.T) *relatedLab {
 // canonical). Two calls with the same url and different text are two
 // captures of one page (a recapture).
 func (l *relatedLab) capture(url, canonical, text string) string {
+	return l.captureAs(labOwner, "computer-paper", url, canonical, text)
+}
+
+func (l *relatedLab) captureAs(owner, computer, url, canonical, text string) string {
 	l.t.Helper()
 	l.seq++
 	item := sources.Item{
@@ -62,7 +66,7 @@ func (l *relatedLab) capture(url, canonical, text string) string {
 		FetchedAt: time.Date(2026, 10, 18, 8, 0, l.seq, 0, time.UTC),
 	}
 	written, err := sourcegraph.WriteCaptures(context.Background(), l.ogSvc, l.bodies, []sourcegraph.CaptureItem{{Item: item}},
-		sourcegraph.CaptureWriteConfig{OwnerID: labOwner, ComputerID: "computer-paper", Now: time.Now().UTC()})
+		sourcegraph.CaptureWriteConfig{OwnerID: owner, ComputerID: computer, Now: time.Now().UTC()})
 	if err != nil || len(written.Captured) != 1 {
 		l.t.Fatalf("write capture %q: %+v %v", text, written, err)
 	}
@@ -138,4 +142,42 @@ func (l *relatedLab) citesCapture(versionCanonicalID string) []string {
 		out = append(out, e.ToID)
 	}
 	return out
+}
+
+// fillers publishes n stories that cite nothing, so the paper has n more
+// stories than the ones a test is about (the walk's idf reads the count).
+func (l *relatedLab) fillers(n int) {
+	l.t.Helper()
+	for i := 0; i < n; i++ {
+		l.publish(fmt.Sprintf("doc-filler-%d", i), 1, fmt.Sprintf("Filler story %d", i))
+	}
+}
+
+// related asks the walk for a story's list; the cache is cleared first so
+// a test reads what the graph says now unless it is testing the cache.
+func (l *relatedLab) related(route string) *RelatedStories {
+	l.t.Helper()
+	l.svc.related.reset()
+	out, err := l.svc.RelatedStories(context.Background(), route, 0)
+	if err != nil {
+		l.t.Fatalf("related %s: %v", route, err)
+	}
+	return out
+}
+
+func relatedRoutes(r *RelatedStories) []string {
+	out := make([]string, 0, len(r.Links))
+	for _, l := range r.Links {
+		out = append(out, l.Route.Bare)
+	}
+	return out
+}
+
+func hasRoute(routes []string, want string) bool {
+	for _, r := range routes {
+		if r == want {
+			return true
+		}
+	}
+	return false
 }

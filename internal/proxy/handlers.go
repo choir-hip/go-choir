@@ -931,6 +931,9 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 	case path == "/api/platform/publications/front":
 		h.HandlePlatformFrontStories(w, r)
 		return
+	case path == "/api/platform/publications/related":
+		h.HandlePlatformPublicationRelated(w, r)
+		return
 	case path == "/api/platform/retrieval/search":
 		h.HandlePlatformRetrievalSearch(w, r)
 		return

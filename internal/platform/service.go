@@ -65,6 +65,9 @@ type Service struct {
 	// backfillMu admits one cites_capture backfill at a time
 	// (publication_related_backfill.go).
 	backfillMu sync.Mutex
+	// related is the derived state of the related-stories walk: answer
+	// cache, memo, story count (publication_related.go).
+	related relatedCache
 }
 
 type citationInput struct {
@@ -86,6 +89,7 @@ func NewService(store *Store, artifactsRoot, signingKeyPath string) *Service {
 		artifactsRoot: filepath.Clean(artifactsRoot),
 		captureBodies: &CaptureBodyStore{root: CaptureBodiesRoot(artifactsRoot)},
 	}
+	svc.related.init()
 	store.SetArtifactsRoot(artifactsRoot)
 	if signingKeyPath != "" {
 		if key, err := LoadOrCreateSigningKey(signingKeyPath); err == nil {
