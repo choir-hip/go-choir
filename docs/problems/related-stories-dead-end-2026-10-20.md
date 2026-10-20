@@ -71,7 +71,7 @@ Fix: a live page (path segment `live` or `liveblog`, or a slug naming
 live updates) gives no vote, by exact capture or by recapture. The rest of
 the read (exact shared captures, ordinary recaptures) is 16 of 17 right.
 
-## After the live-page fix (0a541483c, 03:20 UTC)
+## After the live-page fix (0a541483c, about 02:45 UTC)
 
 Front 60: 9 stories linked, 15 pairs, 14 right; the Italy decree to
 Macron curfews pair is the one loose link. The live-blog mesh is gone.
