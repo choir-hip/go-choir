@@ -124,3 +124,94 @@ Options, for the owner and a panel (not tuned here):
 
 **V3 event wakes stay off on the paper.** V1 has failed twice; turning
 wakes on would wake management on story-level merges.
+
+## Owner ruling and plan: option 1, an event is one incident (2026-10-20)
+
+Ruling (docs/reports/owner-notes-2026-10-14.md §27 item 8): "One event is
+one incident, one place, one time; later developments are new linked
+events. Rerun the blind sample on a fresh window." Option 1 above is
+adopted. Options 2 and 3 are not pursued; they would have kept story-level
+events and tried to filter corroboration afterwards.
+
+Root cause, from the code. Jev's event definition lives in one place,
+`eventQuestion` (`internal/agentcore/event_layer.go`): "the same
+occurrence or its direct development (a later announcement, reaction or
+outcome of it)". The blind judge script (`v1_blind.py`, which lives in a
+session scratchpad and is not in the repo) carried the same sentence. So
+the 0.98-1.0 merges were not Jev misreading its definition: the definition
+itself says a later development is the same event. A developing story
+(Hormuz ship attacks, the Indonesian fire season, a live blog) is by that
+text one event. No threshold can fix a definition.
+
+Plan (all in the shadow event layer, `intake.events`, off by default):
+1. **Definition.** One shared definition text for the Jev task, its
+   question and the blind judge: one incident, in one place, at one time.
+   Updated detail about the same incident is the same event. A later
+   development (reaction, response, investigation, outcome), another
+   incident of the same story, place or actors, a live blog or roundup
+   spanning incidents, and opinion or analysis about a topic are new events.
+2. **Link.** `store.WorldEvent` gains an optional `follows` event id
+   (additive JSON field on an immutable object; no migration, older readers
+   ignore it). A capture that Jev answers as a later development of a
+   known event mints a new event with `follows` set to it. The link is
+   evidence for the reader and never counts toward corroboration. Jev is a
+   choice judge, so the question offers, per capture, up to three extra
+   choices `after_eN` for the candidate events that share the most title
+   words with that capture; this bounds the request growth that matters
+   for the "calls per flush" bar.
+3. **Rerun.** `scripts/event-blind-sample` (new, in the repo) with the new
+   definition, on a fresh window, per the procedure in the design doc
+   (§19.3).
+
+Mutation class: **red** by ceremony. The change is orange on its face
+(shadow event layer, additive schema field) but it changes the content of
+every Jev gateway call, which CLAUDE.md lists as a protected surface.
+
+- Conjecture delta: the false merges are definitional, so a one-incident
+  definition lowers the story-level merge rate below 5% without a
+  threshold change. Refuted if the fresh blind sample is above 5% again
+  with the new judge text.
+- Protected surfaces: gateway/provider calls (Jev request content). The
+  store object body gains an optional field. No Texture, tape, auth or vmctl
+  path.
+- Admissible evidence: unit tests prove plumbing only (what Jev is asked,
+  what a linked answer writes, that true duplicates still merge and
+  corroborate). They cannot prove that Jev reads the new text correctly.
+  Only the staging blind sample can; it is the acceptance evidence.
+- Rollback: set `intake.events` false, or revert the commit. Events written
+  with `follows` stay valid for older code.
+- Heresy delta: discovered, the blind judge definition and the resolver
+  definition were duplicated by hand across a scratchpad script and Go
+  (introduced a shared text plus a sync test; repaired). Introduced: none
+  known. Repaired: the "direct development" clause.
+
+Ways it could fail (written before the tests and the code):
+- **F1 Story-level merge survives:** the Jev text still tells it to join
+  developments. Test: the request carries the one-incident definition and
+  no "direct development" wording, in the task and in every question.
+- **F2 True duplicates stop merging:** the stricter text, or the new
+  choices, make two outlets' reports of one incident split. Test: the
+  Eurotunnel-style pair from the fixtures still joins at p >= 0.92 and
+  corroborates; so do updated-detail reports of one incident.
+- **F3 A development merges as a counted member** (Hormuz ships, the
+  Indonesia fire season, the Tesla recession pair, the Houthi live blog)
+  and fakes corroboration. Test, fixtures from the tables above: when Jev
+  answers `after_eN` the capture mints its own event, with `follows` set,
+  and the earlier event's outlets and corroboration are unchanged.
+- **F4 The link counts:** a linked event lends its outlets to its
+  predecessor or the reverse. Test: neither event corroborates from the
+  other's members.
+- **F5 The link is unreliable or crashes the resolver:** `after_eN` with
+  low p, an alias that does not exist, a sibling component with
+  conflicting links, a link to an event of a retried mint. Test: below
+  `eventTentativeP` no link is set; the strongest link in a sibling
+  component wins; a retry writes the same event (identity is the opener).
+- **F6 Request growth:** extra choices push calls past the 24 KB bound and
+  split flushes (calls per flush >> 1). Test: at most three `after_`
+  choices per capture, and a full 12-capture chunk with 40 candidates
+  stays within one split of today's call count.
+- **F7 Judge/resolver definitions drift** again. Test: the blind script's
+  judge prompt contains the Go definition text verbatim.
+- **F8 Circular acceptance:** the sample window overlaps one the text was
+  chosen on. Mitigation: the rerun samples only memberships resolved after
+  the deploy time of this change (`SINCE`).
