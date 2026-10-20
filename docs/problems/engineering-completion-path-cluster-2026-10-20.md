@@ -451,3 +451,114 @@ teardown, or a default cell bound) and not before.
   receipt-less mutation refused with the digests named; (d) if any Complete
   stalls, `steps.in_flight` naming the step and its age, and
   `engine_mutex_live` naming the lock holder.
+
+## Drills against 130caf6d9 (2026-10-20, 13:40-14:25 UTC)
+
+Deploy 130caf6d9 (staging health `deployed_commit` checked before the
+drills; both test computers cold-booted first). Recorded before any fix.
+
+### What the drills show
+
+- **(a) holds.** No `pthread_getschedparam` line in either drill. The
+  frontend job (`sh -c 'npm ci && npm run build && cp …'`) builds in about
+  20 s. In both drills the first frontend job failed in its copy step
+  (`cp: setting permissions for '/var/lib/artifact/release/frontend/…':
+  Operation not permitted`) and the identical second job passed. Not
+  understood; named failure 11 below.
+- **(b) and (c) not reached.** No drill got to a blocked-after-mutation or
+  a refused completed Complete.
+- **(d) failed as an instrument.** `/api/runtime/observability` on the hung
+  delegate computer did not answer in 60 s or in 240 s, while
+  `/api/runtime/obligations` and `/api/runtime/census` answered in 0.1 s.
+  The handler reads `capsuleExecutor.ClaudeDelegateStatus()`, which takes
+  `e.mu.RLock()`, before it reads `steps`. So the field built to show a
+  hung step cannot be read while the executor lock is held, which is the
+  case it was built for. Named failure 9.
+
+### Failure 3 reproduced twice; both hangs are a capsule destroy
+
+**Visual drill** (computer-7011602c…, trajectory 6b725656-…, run
+`run:assignment-4d03f32430f92b8ef7b7026b`). Engineering ran the frontend
+job, a Go build job, `choir-capture` on the drill route, then `Freeze` at
+13:53:49 returned `FREEZEOK` (bundle `3aba33a4…`, the operation reached
+`frozen`). At 13:54:04 it called `Complete("completed", …)`. No
+`tool.result` followed; the run was cancelled `interrupted_by_restart` at
+14:34 when I booted the computer to read it. The guest log (host console
+file, read only) has no runtime line after 13:53:59.
+
+**Delegate drill** (computer-ad1b46d4…, trajectory 0acd05c8-…, run
+`run:assignment-d1b46e6e7bf07d8227061c9b`). The delegate worked: run
+`d20261020T134119-001273b3`, done in 19 s, exit 0. Then the cell that read
+the file was refused `assigned capsule obligation is no longer executable:
+assignment fate is not active and bound` (13:41:43, 13:41:44), and the next
+model step (13:41:45) produced no `tool.invoked`. The run is still
+`running` at 14:30. The guest log has no runtime line after 13:41:45.
+
+What unbound it, from the tape:
+
+1. 13:40:41: management's run (`fd28a87e…`) read a `closure` record:
+   `conv:engineering:assignment-b4bb8ad3…|management:…:r1:restart`, the
+   cold boot closing the 12:17 drill's engineering as interrupted.
+2. 13:40:57: management relayed it as a `blocker` ReportPacket to that
+   drill's Texture (`texture:1c989d17…`), `work_disposition: completed`.
+3. 13:40:58: that Texture woke (`integrate_execution_findings`) and at
+   13:41:25 cast management "Resume and complete the Claude delegate
+   probe". Its packet says "Engineering's prior assignment was interrupted
+   by restart … The probe remains unfulfilled."
+4. 13:41:30: management cast engineering for it.
+5. Opening that assignment runs `reclaimSupersededAssignmentCapsules`
+   (`engineering_assignment_runtime.go`): one live assignment capsule per
+   computer, so every other live assignment, here the current drill's, is
+   cancelled "superseded by a fresh implementation assignment" through the
+   fate path (revoke, `ForceDestroy`). Its success log line ("reclaimed
+   superseded assignment capsule") never appears, and the new assignment
+   has no run.
+
+So both hangs are inside a capsule teardown: the visual one under
+`Complete` (`complete.revoke_capsule`), the delegate one under the
+supersede's cancel. `Executor.destroy` holds `e.mu` (write) for the whole
+teardown, and `WaitEmpty(ctx)` and the cancel path's context are the
+unbounded candidates (hypothesis 2 above). Everything else that needs
+`e.mu`, including the observability handler, the cell gate and every job
+poll, then queues behind it, which is why the runtime goes silent.
+Hypothesis 2 is now the leading one; which teardown step is stuck is
+still not observed (failure 9).
+
+### Failures 8-11 (new)
+
+8. **A crash restart resumes work through the desks.** Steps 1-3 above:
+   the boot's closure record wakes management, management reports it to
+   the old Texture as a blocker, and the old Texture re-requests the same
+   work. CLAUDE.md: "A crash restart never resumes work." Each cold boot of
+   a drill computer repeats this for every earlier interrupted request
+   (this computer had six). Hypothesis on the fix's location, not decided:
+   either the closure reaches Texture as a fate to render, with the
+   overlay saying a restart closure is not a reason to re-request, or the
+   runtime refuses a Cast whose parent request was closed by a restart
+   until an owner act.
+9. **Observability blocks on the executor lock** (above).
+10. **A new assignment preempts a live one on another trajectory.** The
+    one-live-capsule rule (budget) cancels live work for an unrelated
+    request instead of queueing the new one. With 8, a restart's stale
+    re-request kills the request the owner is waiting on.
+11. **The frontend job's copy fails once, then passes** (above).
+
+**S6-0 drill** (computer-5dab0a75…, trajectory 8b629702-…) is not a hang:
+engineering wrote the probe package, ran the frontend job twice (11 above),
+and started the Go build job at 14:12:36; at 14:25 the job was still
+downloading modules (`go: downloading github.com/Azure/…`) and the tracer's
+15-minute decision budget ended. The visual drill's Go build job ran more
+than 414 s. A cold-module Go build in a capsule is over ten minutes, so the
+S6-0 drill needs a budget of at least 30 minutes until module downloads are
+warm. Polling cost: the visual run polled the Go build job 84 times in
+about 7 minutes and compacted once; the overlay says not to poll.
+
+### Next actions, in order
+
+1. Failure 9 (red: guest observability): the handler reads `steps` first
+   and never takes `e.mu` (the delegate config read moves to its own
+   lock), and the route gains an owner-only goroutine dump, bounded, so a
+   hang names its stack.
+2. Rerun the delegate drill (the fastest reproduction) and read the
+   in-flight teardown step and the goroutine dump.
+3. Then fix the named wait, and decide 8 and 10 (design first, red).
