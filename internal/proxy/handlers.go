@@ -1559,7 +1559,31 @@ func writeAutoputerResolveFailure(w http.ResponseWriter, status int, message str
 		writeRecoveryRefusalResponse(w, refusal)
 		return
 	}
+	if status >= 500 && err != nil {
+		log.Printf("proxy: %s: %v", message, err)
+	}
 	writeJSON(w, status, errorResponse{Error: message})
+}
+
+// logComputerAuthorityFailure records why a request was answered "computer
+// authority unavailable": the computer, the route, the realization's state
+// and the cause, never a credential or the guest's address (failure 14,
+// docs/problems/engineering-completion-path-cluster-2026-10-20.md).
+func logComputerAuthorityFailure(r *http.Request, computerID string, target *resolvedComputerTarget, err error) {
+	route := ""
+	if r != nil && r.URL != nil {
+		route = r.URL.Path
+	}
+	state, hasURL := "", false
+	if target != nil {
+		state = target.State
+		hasURL = strings.TrimSpace(target.ComputerURL) != ""
+	}
+	cause := "none"
+	if err != nil {
+		cause = err.Error()
+	}
+	log.Printf("proxy: computer authority unavailable: computer=%s route=%s state=%q has_url=%t cause=%s", computerID, route, state, hasURL, cause)
 }
 
 // setResolvedRouteContext stashes the resolved upstream URL and the route
