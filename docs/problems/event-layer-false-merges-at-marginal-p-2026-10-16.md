@@ -261,3 +261,52 @@ Procedure: design §19.3, window from the paper's planned refresh onto
 - **Next:** rerun on the paper alone at about 15:00 UTC (12-hour window,
   expect about 24 joins), and decide whether a second test computer is
   worth minting for the pooled 40.
+
+## The 15:00 UTC rerun under the one-incident definition (2026-10-20), short
+
+Window 03:05 to 15:00 UTC on the paper; `scripts/event-blind-sample.py`,
+judges `openai/gpt-6.1-sol` and `google/gemini-3.8-flash`, output in the
+session scratchpad (not in the repo).
+
+- **Sample:** 20 distinct-URL joins (short of the 40 the bar assumes; not
+  padded with older joins).
+- **Judges:** each said DIFFERENT on 8 of 20, the same 8 rows; 40% by the
+  script's count.
+- **Orchestrator's reading of the 8, from titles and URLs, under the
+  one-incident definition:**
+  - False merges (an analysis, roundup or topic piece joined to an
+    incident), 3: "DOJ charges 28 with voting crimes. And, TikTok …" (a
+    newsletter roundup) with "Federal efforts over alleged noncitizen
+    voting escalate"; "Seventh day of violent clashes between Albanian
+    protesters …" with "'Horizontal revolt': Why Albania's young protesters
+    want …" (analysis); "JB Pritzker is turning midterm money into potential
+    2028 …" with "Is JB Pritzker positioning himself for a 2028 …" (two
+    pieces about a topic, not an incident).
+  - Arguable, 3: "Google cloud outage takes down banks" with "Millions unable
+    to use Revolut app or cards …" (the cause and one of its effects); two
+    Kansas pairs: "At Kansas rally, Trump focuses closing midterm message"
+    with "In ruby-red Kansas, Trump contemplates …" and with "WATCH: Trump
+    heads to rally in Kansas …" (a preview video before the rally).
+  - Judge errors by title, 2: "Helen Haines loses a leg and surgeons fight to
+    save the …" with "Helen Haines loses leg as surgeons fight to save the
+    other …"; "Google says 'power event' that disrupted Cloud services" with
+    "Google Cloud says a 'power event' caused today's outage". The script
+    keeps only the first SAME/DIFFERENT/UNSURE word of each answer and not
+    the answer text, so a misparse cannot be ruled out; that is a gap in the
+    instrument (it should keep the answer).
+  - Reading: 3 to 6 of 20 false merges, 15% to 30%. Far above the 5% bar
+    either way.
+- **Decision (No Blocking Asks, the conservative option):** phase 2 event
+  links do not show as "same incident". The event layer keeps running (it
+  feeds the paper's story assembly), but related stories do not read it as
+  a same-incident relation.
+- **What the wrong joins are:** every false or arguable merge above is a real
+  *related* pair: the same running subject (Albania's protests, Pritzker
+  2028, Kansas), a development of an incident, or a roundup that includes
+  it. They fail "same incident" and would pass "related story". That is the
+  case for phase 3's typed relation (same incident, development, same
+  thread, shared central entity) judged per pair, rather than one event
+  identity that has to mean both
+  (`docs/reports/related-stories-phase3-research-review-2026-10-20.md`).
+- **Next for the instrument:** keep each judge's full answer in the output,
+  and parse the last verdict word, not the first.
