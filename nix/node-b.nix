@@ -316,7 +316,10 @@ let
   #   5. Flip enable = true here and deploy.
   # Rollback: enable = false. Nothing on node-a is touched by that.
   offHostBackup = {
-    enable = false;
+    # On 2026-10-20 after two supervised runs and a passing restore drill
+    # (docs/reports/off-host-restore-drill-2026-10-20.md); owner approved
+    # node-a as the target the same day.
+    enable = true;
     host = "51.81.93.94"; # node-a (docs/node-a-shared-host.md)
     sshPort = 22;
     sshUser = "choir-backup";
@@ -335,8 +338,8 @@ let
       "computer-1355b83bced1613eb048ee28d66688a8" # the paper computer
       "computer-03335285269bdba4f94377e56879f9e6" # the owner computer
     ];
-    # Does not exist yet. The unit fails to start (loudly) while any file
-    # below is missing; that is the intended state until the owner runs keygen.
+    # Created by the owner's keygen (2026-10-20). The unit fails to start
+    # (loudly) if any credential file below goes missing.
     secretsDir = "/var/lib/go-choir/secrets/offhost-backup";
     stateDir = "/var/lib/go-choir/offhost-backup";
   };
@@ -1697,8 +1700,7 @@ in
   };
 
   # Off-host backup to node-a (see offHostBackup in the let block). Every
-  # attribute below is behind offHostBackup.enable, which is false: today none
-  # of these units exists. The daily job is append-only on the remote and
+  # attribute below is behind offHostBackup.enable. The daily job is append-only on the remote and
   # cannot delete backups; pruning is a supervised monthly act (design,
   # section 5). Persistent = false on every timer: a missed run is never
   # replayed at boot (CLAUDE.md, "Restarts End Work").
