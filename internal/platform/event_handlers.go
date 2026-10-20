@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
 )
 
 type computerEventPinRequest struct {
@@ -44,7 +45,11 @@ func (h *Handler) HandleComputerCredentialIssue(w http.ResponseWriter, r *http.R
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
 	}
-	if !trustedInternalCaller(r) || h == nil || h.service == nil {
+	// Issuance also needs the issuer credential, which only vmctl holds: the
+	// shared internal credential alone must not mint an envelope for any
+	// computer (it leads to that computer's data key through exchange and
+	// realization delivery).
+	if !trustedInternalCaller(r) || !hostauth.AuthorizeIssuer(r) || h == nil || h.service == nil {
 		writeJSON(w, http.StatusForbidden, apiError{Error: "credential issuance refused"})
 		return
 	}

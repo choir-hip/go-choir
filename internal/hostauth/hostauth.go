@@ -127,8 +127,16 @@ func current() *config {
 }
 
 func loadFromEnv() *config {
-	c := &config{ports: portsFromEnv()}
-	rawMode := strings.ToLower(strings.TrimSpace(os.Getenv(EnvMode)))
+	c := loadConfig(EnvMode, EnvTokenFile, CredentialName)
+	c.ports = portsFromEnv()
+	return c
+}
+
+// loadConfig reads one credential's mode and secret: the internal
+// credential, or the narrower issuer credential (issuer.go).
+func loadConfig(envMode, envTokenFile, credentialName string) *config {
+	c := &config{}
+	rawMode := strings.ToLower(strings.TrimSpace(os.Getenv(envMode)))
 	switch Mode(rawMode) {
 	case "", ModeOff:
 		c.mode = ModeOff
@@ -139,16 +147,16 @@ func loadFromEnv() *config {
 	default:
 		// Fail closed on a typo rather than open.
 		c.mode = ModeEnforce
-		c.modeNote = fmt.Sprintf("unknown %s %q treated as enforce", EnvMode, rawMode)
+		c.modeNote = fmt.Sprintf("unknown %s %q treated as enforce", envMode, rawMode)
 	}
-	path := strings.TrimSpace(os.Getenv(EnvTokenFile))
+	path := strings.TrimSpace(os.Getenv(envTokenFile))
 	if path == "" {
 		if dir := strings.TrimSpace(os.Getenv("CREDENTIALS_DIRECTORY")); dir != "" {
-			path = filepath.Join(dir, CredentialName)
+			path = filepath.Join(dir, credentialName)
 		}
 	}
 	if path == "" {
-		c.loadErr = fmt.Errorf("neither %s nor $CREDENTIALS_DIRECTORY/%s is set", EnvTokenFile, CredentialName)
+		c.loadErr = fmt.Errorf("neither %s nor $CREDENTIALS_DIRECTORY/%s is set", envTokenFile, credentialName)
 		return c
 	}
 	c.source = path
@@ -204,6 +212,9 @@ func LogStartup(service string) {
 		return
 	}
 	log.Printf("%s: hostauth: internal routes %s", service, c.Status())
+	if ic := currentIssuer(); ic.mode != ModeOff || ic.hasToken {
+		log.Printf("%s: hostauth: issuer credential %s", service, ic.Status())
+	}
 	if c.mode == ModeEnforce && !c.hasToken {
 		log.Printf("%s: hostauth: enforce without a credential: every internal call will be refused (fail closed)", service)
 	}
@@ -258,7 +269,9 @@ func Middleware(next http.Handler) http.Handler {
 		if len(values) > 0 {
 			r.Header.Del(Header)
 		}
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxKey{}, v)))
+		ctx := context.WithValue(r.Context(), ctxKey{}, v)
+		ctx = withIssuerVerdict(ctx, issuerVerdict(r))
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
@@ -383,8 +396,12 @@ func logLimited(prefix string, r *http.Request, route, reason string) {
 	if suppressed > 0 {
 		extra = fmt.Sprintf(" (%d more since the last line)", suppressed)
 	}
+	header, credential := Header, CredentialName
+	if strings.HasPrefix(reason, "issuer:") {
+		header, credential = IssuerHeader, IssuerCredentialName
+	}
 	log.Printf("hostauth: %s internal call %s %s from %s: %s; send %s from %s (docs/problems/loopback-is-a-credential-2026-10-14.md)%s",
-		prefix, r.Method, route, r.RemoteAddr, reason, Header, CredentialName, extra)
+		prefix, r.Method, route, r.RemoteAddr, reason, header, credential, extra)
 }
 
 // IsDocumentationNetwork reports whether ip is in one of the RFC 5737
