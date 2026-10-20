@@ -72,7 +72,7 @@ let
   # refused ("hostauth: observe: would refuse"); flip to "enforce" once the
   # journal shows none for a full day of deploys and timers. Rollback:
   # "off" (transport alone, the pre-repair rule), or "observe".
-  internalAuthMode = "observe";
+  internalAuthMode = "enforce";
   internalTokenFile = "/var/lib/go-choir/secrets/internal-service-token";
   # The same secret as a curl header line, for root shells (CI deploy,
   # disk-gc): `curl -H @<file>` keeps it off the command line.
