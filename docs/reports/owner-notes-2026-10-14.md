@@ -568,3 +568,57 @@ After the Opus review (docs/reports/tape-volume-forward-fix-and-surgery-
   below the oldest retained base are archived, not deleted, until a target
   exists. Deletion still runs dry-run first, against a manifest, with a
   short local archive where the bytes are small.
+
+## 27. The decisions digest answered (2026-10-20, ~02:20 UTC)
+
+The owner answered every item of docs/reports/owner-decisions-digest-
+2026-10-20.md: "1-7 yes, your recommendations. 8-16 also yes, agree with
+your recommendations. And note #13 requires more work before we can safely
+launch. 17: yes, use node a for now. True durable offsite backup requires
+more infra which we will get later. 18: yes, batch telemetry. 19 & 20: yes,
+agreed with recommendations."
+
+Each item as ruled (the digest's recommendation, now settled):
+
+1. Delete the old corpus dump (`corpus-dolt/rebuild-20261009`, 22.9 GB)
+   and the pre-teardown body files.
+2. Outside contributions use a DCO sign-off, not a CLA; the trademark
+   policy comes later.
+3. Agents may flip the security switches (hostauth, owner-act) from observe
+   to enforce after a clean day, and roll out the Firecracker jailer on one
+   test computer, then all.
+4. Self-development may arm autonomously on test-tier computers only; the
+   paper and the owner's computer stay propose-only. The tracer may approve
+   its own changes on computers it mints.
+5. An agent drafts the upstream yaegi loop bug report; the owner posts it.
+6. Run the coverage-gap analysis of the paper's 28 sources before adding
+   sources.
+7. Store A's weekly squash is built as a small tested command, on the
+   paper compaction's method (squash, identical root hash, memory cap).
+8. One event is one incident, one place, one time; later developments are
+   new linked events. Rerun the blind sample on a fresh window.
+9. The capture-first-seen witness (b) is signed by a new dedicated key.
+10. A one-time rewrite pass clears carried relay prose (about 60 Texture
+    turns).
+11. Start the primary-source registry, licences checked first.
+12. No top-ups; stay on Keenable's free tier, revisit after Nov 5.
+13. Recovery says plainly that it restores sign-in, not passkey-wrapped
+    data; a recovery key is designed later. **Owner: "#13 requires more
+    work before we can safely launch."** The recovery protector is a launch
+    blocker.
+14. Published stories carry a one-line AI-written disclosure; counsel
+    reads later.
+15. The claims layer's D1–D5 and D7–D13 are accepted as recommended (D6
+    was already ruled).
+16. The guest-update defaults O1–O10 are accepted.
+17. **Off-host backup: node-a now, as a stopgap.** Encrypted (key only on
+    Node B and the owner's offline copy), quota'd subvolume, node-a holds
+    only ciphertext. "True durable offsite backup requires more infra which
+    we will get later." Node-a is also the tape cleanup's archive target.
+18. **Batch run telemetry.** Telemetry events may be sealed in small
+    batches instead of one acknowledged write each; a crash may lose up to
+    the batch window of telemetry. The window form goes through a panel.
+19. The learning loop: a separate forecast act on scheduled, checkable
+    events, settled by rules first; a desk sees aggregates of its own
+    record, not item verdicts; no token-budget learner yet.
+20. Red-team scope is forks only until the pre-production security slot.
