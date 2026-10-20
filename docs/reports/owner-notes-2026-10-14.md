@@ -682,3 +682,7 @@ Owner, on waking:
   reads Jev's intake labels): "Even if management isn't using Jev as a tool,
   then research should." Design:
   `docs/reports/related-stories-phase3-research-review-2026-10-20.md`.
+- The research verb is named `choir.System1`, not `choir.Jev` (about 12:00
+  UTC): "rather than choir.jev, we should make it choir.system1". System 1
+  is the fast judge that answers with a distribution; the desk reasons and
+  decides. Jev stays the backing model's name.

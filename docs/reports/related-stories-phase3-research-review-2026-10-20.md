@@ -62,7 +62,13 @@ attaches every published story to them:
 
 ## 3. The two new desk verbs
 
-### 3.1 `choir.Jev(questions)`: a closed question, answered with a distribution
+### 3.1 `choir.System1(questions)`: a closed question, answered with a distribution
+
+Named by the owner (§28): "rather than choir.jev, we should make it
+choir.system1". System 1 is the fast, intuitive judge: it answers a closed
+question with a distribution. The desk's own reading and reasoning is
+System 2, and it decides. Jev is the model behind System 1 today; the verb
+does not name it, so the backing judge can change without changing desks.
 
 For research (owner, §28: "Even if management isn't using Jev as a tool, then research should"). A cell passes up to N choice questions (each:
 id, text, choices, optional context refs); the runtime sends them through
@@ -174,7 +180,7 @@ full backfill, then the links show.
    when they pass.
 2. Problem doc first: coverage of the front 60 and the missing subject
    nodes, with the probe numbers.
-3. `choir.Jev` for research, with bounds and tape records (red: gateway
+3. `choir.System1` for research, with bounds and tape records (red: gateway
    calls).
 4. Entity and thread kinds, the three edge kinds, `choir.Relate`, the
    export route (red: Store B schema and write route, desk authority).
@@ -206,7 +212,7 @@ full backfill, then the links show.
 - **D2 Who reviews:** research, through a standing schedule, not through
   Texture's Casts, because the review is about the graph, not about one
   document.
-- **D3 Research gets `choir.Jev` first** (owner ruling). Management keeps
+- **D3 Research gets `choir.System1` first** (owner ruling). Management keeps
   reading Jev's intake labels; giving it the verb is a later, separate
   decision.
 - **D4 No embeddings in this phase.**
