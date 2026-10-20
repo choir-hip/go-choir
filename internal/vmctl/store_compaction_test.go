@@ -72,6 +72,16 @@ func compactorFixture(t *testing.T, report string, toolErr error) (*hostStoreCom
 	runner.on = func(name string, args []string) ([]byte, error) {
 		switch name {
 		case "cp":
+			// GNU coreutils refuses a reflink with any sparse mode but
+			// auto (staging, 2026-10-20 01:35).
+			reflink, sparse := false, false
+			for _, a := range args {
+				reflink = reflink || strings.HasPrefix(a, "--reflink") && a != "--reflink=auto"
+				sparse = sparse || strings.HasPrefix(a, "--sparse") && a != "--sparse=auto"
+			}
+			if reflink && sparse {
+				return []byte("cp: --reflink can be used only with --sparse=auto"), errors.New("exit status 1")
+			}
 			src, dst := args[len(args)-2], args[len(args)-1]
 			b, err := os.ReadFile(src)
 			if err != nil {

@@ -138,7 +138,7 @@ func (c *hostStoreCompactor) Compact(ctx context.Context, vmID, dataImagePath, c
 	mountDir := filepath.Join(c.mountRoot, vmID)
 	c.cleanupStale(ctx, vmID, copyPath, mountDir)
 
-	if out, err := c.run.Run(ctx, c.bin("cp"), "--reflink=always", "--sparse=always", dataImagePath, copyPath); err != nil {
+	if out, err := c.run.Run(ctx, c.bin("cp"), "--reflink=always", dataImagePath, copyPath); err != nil {
 		_ = os.Remove(copyPath)
 		return report, fmt.Errorf("store compaction: reflink copy: %v: %s", err, strings.TrimSpace(string(out)))
 	}
