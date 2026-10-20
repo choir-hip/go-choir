@@ -796,4 +796,8 @@ Owner, on waking:
   quoted or shown, each tip sending research to find independent
   corroboration, polite rate limits; no MTProto and no cookie routes,
   because a logged-in account binds us to terms that forbid this. Counsel
-  to confirm. Awaiting the owner's yes.
+  to confirm.
+- Ruled (about 16:22 UTC): "Okay, so then we can still use it logged out.
+  That's fine with me." Telegram public channel previews and RSSHub
+  no-login routes are tip sources: never cited, quoted or shown;
+  corroboration required. No MTProto, no cookie routes, no Telegram account.
