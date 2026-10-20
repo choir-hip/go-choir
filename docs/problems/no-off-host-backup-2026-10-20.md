@@ -548,6 +548,45 @@ with this. either edit node-a or the mike repo").
     tape-only rebuild onto an empty disk (item 10 (b)), a full restore's
     time, a booted image. Restore needs about 8 GB of memory, so the
     drill runs capped.
-14. Next: `enable = true` through the Landing Loop, then the first
-    unit-run backup started by hand (the sandbox, `ProtectSystem=strict`
-    and `LoadCredential`, has not run yet), then the 02:30 UTC timer.
+14. **Enabled** (cac559cba, CI 39507571620, deploy receipt names
+    cac559cba). Timers: backup 02:30 UTC plus up to 15 min, freshness
+    every 6 h (first run 22:38:53: "fresh: last success 56 min ago, repo
+    97 GiB of 450"), verify Sundays 06:00. The first unit run was started
+    by hand at 22:39:44; the sandbox and `LoadCredential` worked.
+15. **Incident: the backup's Dolt sync took Store A down, 22:51 to 22:53:35
+    UTC.** Order of events, from the journals:
+    - 22:39:46: the unit's `CALL DOLT_BACKUP('sync-url', …)` on the
+      platform server (port 13306) starts.
+    - Store A runs with `MemoryHigh = 3G` and `MemorySwapMax = 0` (the
+      2026-10-09 host memory budget; about 1.1 GB RSS measured then). The
+      sync pushed it to that line: the server's own cgroup memory
+      pressure was `full avg10=46.71 avg60=47.98 avg300=45.75`, so it
+      spent nearly half its time stalled on reclaim.
+    - The Dolt liveness probe (every 30 s) found it unresponsive three
+      times in a row and at 22:53:22 sent SIGABRT for a stack dump
+      ("unresponsive for 3 consecutive probes"). The stack shows the
+      sync in `dolt_backup.go:223` (`doltBackupSyncUrl`).
+    - 22:53:30 the server exited; 22:53:35 systemd started it again
+      (`NRestarts=1`). corpusd's store ping was refused twice at 22:53:35
+      and then connected. The backup's sync failed with `invalid
+      connection`; the corpus sync and both sqlite copies succeeded, and
+      the run continues as `partial`.
+    - Impact: Store A unresponsive for about 90 s and down for about 13 s.
+      The site answered 200 afterwards; the paper's liveness probe
+      reported nothing. No OOM kill. Run 2's 36-minute platform sync
+      (item 12) was very likely the same throttling, without three missed
+      probes in a row (no SIGABRT in the run 2 window).
+    Why it was not seen before: runs 1 and 2 synced the same store and
+    survived; run 1 was fast (2 min), run 2 slow (36 min), and the sync's
+    effect on the server's memory was not watched. The restore drill
+    tested the data, not the cost of taking it.
+    Fix chosen (orange, the backup script): raise Store A's `MemoryHigh`
+    at runtime only for the length of the platform sync (to 8G; the
+    host has about 11 GB available then, before restic starts), then
+    restore the exact value read before, in a trap, so a failed script
+    still restores it. If the raise is refused, the platform sync is
+    skipped and the run is `partial`, rather than syncing at 3G. To be
+    proven by a supervised unit run before the 02:30 timer, watching
+    Store A's memory pressure and the probe. Longer term: a filesystem
+    snapshot of the Dolt data directory instead of a server-side sync
+    (no server work at all); not designed yet.
