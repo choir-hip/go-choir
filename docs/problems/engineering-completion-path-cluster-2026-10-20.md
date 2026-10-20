@@ -740,3 +740,69 @@ the drill computers are cold-booted first.
 
 Not changed by these drills: failures 8, 10 and 11 stay open, and teardown
 still runs under `e.mu`.
+
+## S6-0 rerun against 614fd445f (label s6-0-1702, 17:02-17:45 UTC)
+
+Same staging build, `--apply-min 40 --timeout-min 45`. Receipt and log:
+scratch `s67/log.txt`; bundle `~/.config/choir-qa/traces/s6-0-1702/bundle-a1.json`
+(exported 17:33:12, before the restore).
+
+**18 of 19 acceptance checks pass; `witness_joined` fails.** Every product
+step passed: Texture cast management (17:02:41), management cast
+engineering (17:03:07), engineering froze in one round (one cast, one final
+report; failures 12 and 13 did not recur), the verify named the bundle,
+owner approval (17:17:05), apply through one planned
+`self_development_apply` restart (boot 17:32:31, applied 17:32:37), the
+route receipt, the probe served by the applied build 19527f0e0 (17:33:09),
+then restore by `tape_reconstruct` to the pre-apply head (sequence 2727,
+witness matched, 17:33:15) and the probe gone on the deployed build
+614fd445f (17:33:21).
+
+- **The apply takes about 15 minutes.** Accepted 17:17:05, applied 17:32:37,
+  almost all of it host build. The first run's 10-minute default
+  (`scripts/reeng_tracer.mjs`, `--apply-min`) was the whole of its failure.
+  The default should be at least 20; not changed here.
+- **The release witness joined at frozen, accepted and applied** (17
+  pairs; bound 4, 6 and 15; unbound 0 at every read; 2 still unknown at
+  applied: `frozen_surface_decision_heads` and `divergence_derived`, both
+  recorded only).
+
+### Failure 14 (new): the release witness answers 502 for 12 minutes after a restore
+
+The `restored` witness read retried for the tracer's whole restore budget
+(12 minutes) and ended `502 {"error":"computer authority unavailable"}` at
+17:45:19. The guest was reachable through that window: the probe at
+17:33:21 came back from the deployed build.
+
+That error is written in one place for this route
+(`internal/proxy/self_development.go`, the `operations/{id}/...` handler):
+`resolveComputerURLForComputerTarget` returned an error for an API-key
+caller. That function fails on three branches: the target's state is not
+`active` or has no URL, `ensureComputerVersionRoute` cannot resolve the
+immutable ComputerVersion route from vmctl, or the key's computer does not
+match. **Which branch it was is not known**, and is a hypothesis until
+traced: the handler discards `err` and logs nothing. The proxy journal has
+no line for this computer between 17:33 and 17:46, and vmctl's journal has
+only the stop at 17:45:20.
+
+Leading hypothesis, from code reading only: the restore re-projects the
+computer's route, and the version-route lookup refuses (or the realization
+row is not `active`) until something re-reads it. The proxy's route cache
+keeps `routeOK` for a slot once seen, which would explain a fast probe and
+a refused witness only if they resolve through different paths. That has
+to come from a trace.
+
+Two changes follow, in this order (problem first):
+
+1. Log the discarded error on that 502 (and on the other
+   `computer authority unavailable` sites in `internal/proxy`), with
+   computer id and branch, never a credential. Orange, observability only.
+2. Rerun S6-0 and read which branch refuses, then fix that branch.
+
+Also seen, not a failure: the tracer's front-end `served_check` reported
+`served: false` at every read, including post-apply, while the API probe
+was served. `served_required` is off for this change, so it is not an
+acceptance check; the check probably reads a static path the go-served
+change does not touch.
+
+Open from this cluster: failures 8, 10, 11 and 14; teardown under `e.mu`.
