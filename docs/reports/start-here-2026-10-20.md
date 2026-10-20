@@ -14,7 +14,7 @@ Autopaper stories now open with a one-line label saying AI wrote them, as you ru
 
 The scheduled compaction works. I proved it twice by hand on the paper as a planned restart. The second run squashed the store from one hundred and seven commits to two in forty-seven seconds, with an identical content hash, and the paper resumed its work on its own. Along the way, a dry run showed the timer would also have squashed the history of another account's always-on computer. I limited it to the paper and the other platform computers before the timer's first night. At four in the morning UTC the timer ran on its own, found nothing over its threshold, and stopped.
 
-The event layer now uses your definition: one incident, one place, one time. Later developments become new events, linked to the first. The blind check needs six to twelve hours of fresh data, so it can run later this morning, your time.
+The event layer now uses your definition: one incident, one place, one time. Later developments become new events, linked to the first. I ran an early blind check at nine UTC, and it came back too small to decide. The paper made only twelve joins in six hours, and the second test computer has gone missing. Of the twelve, I read one as a wrong merge, and it has a familiar cause: a Guardian live blog opened an event and a rally report joined it. That is the same live-page trap that broke related stories last night. I recorded it without a fix, and I will rerun the check this afternoon on a larger window.
 
 Expansion and the digest are deployed but switched off. Expansion puts a "More research" button on a story for you alone. Pressing it asks the paper to research and revise that story. The digest is a daily email of the top stories at noon UTC, sent only to accounts that turn it on. Tonight that is nobody.
 
@@ -84,6 +84,7 @@ The paper now has the shape of a real paper: related reading, an honest label, a
   - docs/problems/guest-store-compaction-scheduled-2026-10-20.md
   - docs/reports/telemetry-batching-design-2026-10-20.md
   - docs/problems/hostauth-enforce-flip-2026-10-20.md
+  - docs/problems/event-layer-false-merges-at-marginal-p-2026-10-16.md, last section
   - docs/problems/guest-data-image-never-trims-2026-10-20.md
   - docs/reports/tape-volume-forward-fix-and-surgery-2026-10-19.md, section 9 and appendix A
 - Owner rulings: docs/reports/owner-notes-2026-10-14.md §27. Decisions digest: docs/reports/owner-decisions-digest-2026-10-20.md.
