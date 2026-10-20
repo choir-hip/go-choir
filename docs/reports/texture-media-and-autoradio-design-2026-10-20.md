@@ -99,7 +99,7 @@ embed {
 | `document` | PDF or EPUB asset + page range | reader | pinned copy |
 | `calendar_event` | computer object ref | event card, live | never (snapshot only by owner act) |
 | `mail_message` | computer object ref | message card; body in Mail's sandbox | never (snapshot only by owner act) |
-| `capsule_evidence` | event-artifact digest + operation id | screenshot or clip, with the candidate's identity | never |
+| `capsule_evidence` | asset-store digest (`imageblob`) + operation id | screenshot or clip, with the candidate's identity | never |
 | `texture` | another document or revision | transcluded card | per that document |
 
 Rules that keep this honest:
@@ -136,6 +136,30 @@ Rules that keep this honest:
   - The citation iframe gets the same sandbox.
   - Mail bodies keep Mail's pattern.
   - No embed runs script in the document's origin.
+
+### Corrections from the visual evidence build (2026-10-20)
+
+The visual evidence slice (`docs/design/visual-evidence-slice-2026-10-15.md`
+section 10, draft PR 76) built the first half of T1's asset path and found
+five places where this design was loose.
+
+- **Evidence digests are asset-store digests.** A capture is stored in the
+  computer's `imageblob` store at Freeze and read through
+  `/api/assets/sha256/<hex>`; the embed names that digest, not an event
+  artifact.
+- **The owner route is not the public route.** The asset route serves any
+  digest in the owner's store to an owner-authenticated caller (a
+  `read:runtime` key scope included). T2's public route is a separate route
+  that serves only digests a publication pinned.
+- **The store has no retention yet.** A Texture revision that embeds an asset
+  must pin it, so a later reclamation cannot leave the document pointing at
+  nothing. Retention lands with T1, before any sweep touches assets.
+- **Only the kind typing exists.** Audio and video kinds are typed and
+  refused; the per-kind size caps are still to come, and the store enforces
+  only the 20 MiB image limit.
+- **Texture writes the words.** A capture carries no description. The
+  embed's `alt` and `caption` are written by Texture (the sole canonical
+  writer), never by the capture job.
 
 ## 5. The audio layer
 
