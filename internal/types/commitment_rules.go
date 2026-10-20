@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/visualcapture"
 )
 
 // Rule-settled precommitments: engineering's say–do record (2026-10-14).
@@ -86,12 +88,19 @@ const (
 	PrecommitRuleVerifyPass PrecommitRuleKind = "verify_pass"
 	// PrecommitRuleCompletes: the assignment ends completed.
 	PrecommitRuleCompletes PrecommitRuleKind = "completes"
+	// PrecommitRuleVisualCaptured: the successful Freeze carries a non-blank
+	// screenshot of the frozen frontend (of every route named in Routes),
+	// vouched for by the receipt of the capsule's choir-capture job. It
+	// never says the picture is right, only that a capture of the frozen
+	// build exists and where it came from
+	// (docs/design/visual-evidence-slice-2026-10-15.md V17, V23).
+	PrecommitRuleVisualCaptured PrecommitRuleKind = "visual_captured"
 )
 
 // PrecommitRuleKinds lists the vocabulary in a stable order.
 var PrecommitRuleKinds = []PrecommitRuleKind{
 	PrecommitRuleTestsPass, PrecommitRuleFreezeWithin, PrecommitRulePathsConfined,
-	PrecommitRuleVerifyPass, PrecommitRuleCompletes,
+	PrecommitRuleVerifyPass, PrecommitRuleCompletes, PrecommitRuleVisualCaptured,
 }
 
 const (
@@ -111,6 +120,9 @@ const (
 	PrecommitRuleMaxP             = 0.98
 	PrecommitRuleMaxWithinMinutes = 24 * 60
 	PrecommitRuleMaxPaths         = 32
+	// PrecommitRuleMaxRoutes bounds visual_captured's routes, as the capture
+	// tool bounds a run (visualcapture.MaxRoutes).
+	PrecommitRuleMaxRoutes = visualcapture.MaxRoutes
 )
 
 // PrecommitRule is the typed settlement rule a rule precommit carries.
@@ -119,6 +131,7 @@ type PrecommitRule struct {
 	Kind          PrecommitRuleKind `json:"kind"`
 	WithinMinutes int               `json:"within_minutes,omitempty"`
 	Paths         []string          `json:"paths,omitempty"`
+	Routes        []string          `json:"routes,omitempty"`
 	AssignmentID  string            `json:"assignment_id,omitempty"`
 	Since         string            `json:"since,omitempty"`
 }
@@ -152,7 +165,28 @@ func ValidateRulePrecommit(p CommitmentPrecommit) error {
 }
 
 func (r PrecommitRule) validate() error {
+	if r.Kind != PrecommitRuleVisualCaptured && len(r.Routes) != 0 {
+		return fmt.Errorf("precommit rule %s takes no routes", r.Kind)
+	}
 	switch r.Kind {
+	case PrecommitRuleVisualCaptured:
+		if r.WithinMinutes != 0 || len(r.Paths) != 0 {
+			return fmt.Errorf("precommit rule visual_captured takes no within_minutes or paths")
+		}
+		if len(r.Routes) > PrecommitRuleMaxRoutes {
+			return fmt.Errorf("precommit rule visual_captured: at most %d routes", PrecommitRuleMaxRoutes)
+		}
+		seen := map[string]bool{}
+		for _, route := range r.Routes {
+			clean, err := visualcapture.NormalizeRoute(route)
+			if err != nil {
+				return fmt.Errorf("precommit rule visual_captured: %w", err)
+			}
+			if seen[clean] {
+				return fmt.Errorf("precommit rule visual_captured: route %s is named twice", clean)
+			}
+			seen[clean] = true
+		}
 	case PrecommitRuleFreezeWithin:
 		if r.WithinMinutes < 1 || r.WithinMinutes > PrecommitRuleMaxWithinMinutes {
 			return fmt.Errorf("precommit rule freeze_within: within_minutes must be 1..%d", PrecommitRuleMaxWithinMinutes)
@@ -235,6 +269,19 @@ type EngineeringFreezeObservation struct {
 	TestReceipts     []EngineeringReceiptExit
 	SourcePaths      []string
 	SourcePathsKnown bool
+	// VisualKnown is true when this Freeze's visual evidence was observed
+	// (a replayed freeze observes nothing). VisualReceipt is the capture
+	// job's receipt that vouches for the evidence, empty when none does.
+	VisualKnown    bool
+	VisualReceipt  string
+	VisualCaptures []VisualCaptureObservation
+}
+
+// VisualCaptureObservation is one capture the Freeze's bundle carries.
+type VisualCaptureObservation struct {
+	Route    string
+	Artifact string
+	Blank    bool
 }
 
 // EngineeringVerifyObservation is management's committed Verify.
@@ -315,8 +362,63 @@ func SettleRuleOnFreeze(rule PrecommitRule, obs EngineeringFreezeObservation) (R
 			shown = shown[:5]
 		}
 		return RuleSettlement{Answer: PrecommitAnswerNo, Excerpt: fmt.Sprintf("%d of %d changed files lie outside %s: %s", len(outside), len(obs.SourcePaths), strings.Join(rule.Paths, ", "), strings.Join(shown, ", ")), EvidenceRefs: refs}, true
+	case PrecommitRuleVisualCaptured:
+		if !obs.VisualKnown {
+			return RuleSettlement{}, false
+		}
+		return settleVisualCaptured(rule, obs, refs), true
 	}
 	return RuleSettlement{}, false
+}
+
+// settleVisualCaptured decides visual_captured from the Freeze observation:
+// a vouching receipt, at least one capture (of each named route), and no
+// named route blank. A blank extra beside a good capture does not fail it.
+func settleVisualCaptured(rule PrecommitRule, obs EngineeringFreezeObservation, refs []string) RuleSettlement {
+	refs = append(refs, nonEmpty(obs.VisualReceipt)...)
+	byRoute := map[string]VisualCaptureObservation{}
+	for _, c := range obs.VisualCaptures {
+		byRoute[c.Route] = c
+		refs = append(refs, nonEmpty(c.Artifact)...)
+	}
+	no := func(format string, args ...any) RuleSettlement {
+		return RuleSettlement{Answer: PrecommitAnswerNo, Excerpt: fmt.Sprintf(format, args...), EvidenceRefs: refs}
+	}
+	if len(obs.VisualCaptures) == 0 {
+		return no("the Freeze carries no visual capture")
+	}
+	if strings.TrimSpace(obs.VisualReceipt) == "" {
+		return no("the Freeze carries %d capture(s) but no choir-capture job receipt vouches for them", len(obs.VisualCaptures))
+	}
+	if len(rule.Routes) == 0 {
+		good := 0
+		for _, c := range obs.VisualCaptures {
+			if !c.Blank {
+				good++
+			}
+		}
+		if good == 0 {
+			return no("every capture is blank (a uniform image)")
+		}
+		return RuleSettlement{Answer: PrecommitAnswerYes, Excerpt: fmt.Sprintf("%d capture(s), %d not blank, vouched for by the capture job receipt", len(obs.VisualCaptures), good), EvidenceRefs: refs}
+	}
+	var missing, blank []string
+	for _, route := range rule.Routes {
+		c, ok := byRoute[route]
+		switch {
+		case !ok:
+			missing = append(missing, route)
+		case c.Blank:
+			blank = append(blank, route)
+		}
+	}
+	if len(missing) > 0 {
+		return no("no capture of %s", strings.Join(missing, ", "))
+	}
+	if len(blank) > 0 {
+		return no("the capture of %s is blank (a uniform image)", strings.Join(blank, ", "))
+	}
+	return RuleSettlement{Answer: PrecommitAnswerYes, Excerpt: fmt.Sprintf("%d capture(s) of %s, none blank, vouched for by the capture job receipt", len(rule.Routes), strings.Join(rule.Routes, ", ")), EvidenceRefs: refs}
 }
 
 // SettleRuleOnVerify decides verify_pass from management's Verify.
@@ -349,7 +451,7 @@ func SettleRuleAtTerminal(rule PrecommitRule, obs EngineeringTerminalObservation
 			return RuleSettlement{Answer: PrecommitAnswerYes, Excerpt: ended, EvidenceRefs: refs}, true
 		}
 		return RuleSettlement{Answer: PrecommitAnswerNo, Excerpt: ended, EvidenceRefs: refs}, true
-	case PrecommitRuleFreezeWithin, PrecommitRuleTestsPass, PrecommitRulePathsConfined:
+	case PrecommitRuleFreezeWithin, PrecommitRuleTestsPass, PrecommitRulePathsConfined, PrecommitRuleVisualCaptured:
 		if obs.CandidateFrozen {
 			// R5: the freeze happened but its settlement is missing.
 			return RuleSettlement{Answer: PrecommitAnswerUnresolved, Excerpt: "a candidate froze but its freeze observation was not recorded; " + ended, EvidenceRefs: refs}, true

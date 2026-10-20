@@ -72,6 +72,10 @@ type RLMManagementOverlayOptions struct {
 	// EventWakes is the computer's intake.event_wakes setting (event
 	// layer §15): captures reach management on their events' records.
 	EventWakes bool
+	// VisualReview: the host granted this computer visual capture, so
+	// management reads a candidate's screenshots and may put one vision call
+	// to them before Verify.
+	VisualReview bool
 }
 
 // RLMManagementTaskOverlay is a management task's overlay (management
@@ -100,6 +104,10 @@ type RLMEngineeringOverlayOptions struct {
 	// Claude delegate is available to it
 	// (docs/design/claude-delegate-slice1-2026-10-14.md).
 	ClaudeDelegate bool
+	// VisualCapture: the host granted this computer visual capture, so the
+	// overlay teaches choir-capture, memory_mib on the job and the
+	// visual_captured rule (docs/design/visual-evidence-slice-2026-10-15.md).
+	VisualCapture bool
 }
 
 func RLMEngineeringOverlay(opts RLMEngineeringOverlayOptions) string {

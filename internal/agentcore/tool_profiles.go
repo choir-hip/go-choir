@@ -224,7 +224,7 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 	intakeLabels := profile == agentprofile.Management && rec != nil && rt.intakeLabelsEnabled(context.Background(), rec.OwnerID, rec.ComputerID)
 	eventWakes := profile == agentprofile.Management && rec != nil && rt.computerSettingOn(context.Background(), rec.OwnerID, rec.ComputerID, store.SettingIntakeEventWakes)
 	if profile == agentprofile.Management {
-		b.WriteString(runtimeprompts.RLMManagementOverlay(runtimeprompts.RLMManagementOverlayOptions{IntakeLabels: intakeLabels, EventWakes: eventWakes}))
+		b.WriteString(runtimeprompts.RLMManagementOverlay(runtimeprompts.RLMManagementOverlayOptions{IntakeLabels: intakeLabels, EventWakes: eventWakes, VisualReview: rt.visualCaptureGranted()}))
 	}
 	if profile == agentprofile.Engineering {
 		// The two flags pick one of four fixed overlay variants; the exact
@@ -245,6 +245,9 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 			CanProposeChange:            canProposeChange,
 			// The run's capsule mode, fixed at assignment open.
 			ClaudeDelegate: rec != nil && metadataStringValue(rec.Metadata, "capsule_network_mode") == types.EngineeringCapsuleNetworkClaude,
+			// A computer fact fixed at boot (the host's grant), so the
+			// stable prompt stays stable across runs.
+			VisualCapture: rt.visualCaptureGranted(),
 		}))
 	}
 	if profile == agentprofile.Research {

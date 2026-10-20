@@ -56,6 +56,10 @@ type CapsuleToolCtx struct {
 	// verification of a reused release binary; nil means
 	// capsule.CurrentRunningBinary.
 	RunningBinary func() (capsule.RunningBinary, error)
+	// Images is the computer's asset store: Freeze files each visual
+	// capture in it so the owner's browser can read it by digest
+	// (visual_evidence_slice V22). Nil leaves captures unresolvable.
+	Images visualAssetStore
 }
 
 // releaseBinaryStillRunning refuses a verification pass on a bundle whose
@@ -297,6 +301,7 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 	record.SourcePatchBaseCommit = staged.SourceBaseCommit
 	record.RuntimeFiles = files
 	record.ReleaseBinary = staged.Binary
+	record.VisualEvidence = staged.Visual
 	record.ContentDigest, err = record.ComputeContentDigest()
 	if err != nil || record.Validate(false) != nil {
 		return nil, fmt.Errorf("complete capsule effect bundle draft unavailable")
@@ -337,6 +342,9 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 	if record.ReleaseBinary != nil {
 		out["release_binary_origin"] = record.ReleaseBinary.Origin
 	}
+	// Visual evidence: file the captures in the asset store, tell the cell
+	// what resolved, and leave the runtime's observation for the rule pass.
+	recordFreezeVisual(toolCtx.Images, frozenRoot, staged.Visual, out)
 	return out, nil
 }
 
