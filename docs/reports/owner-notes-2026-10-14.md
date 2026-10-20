@@ -801,3 +801,14 @@ Owner, on waking:
   That's fine with me." Telegram public channel previews and RSSHub
   no-login routes are tip sources: never cited, quoted or shown;
   corroboration required. No MTProto, no cookie routes, no Telegram account.
+- "Well, if we're logged out, can we cite them or not?" (about 16:25 UTC).
+  Answer given: yes, as the speaker of a claim. Naming a public channel
+  or account and linking to its post is attribution, not copying, and the
+  terms concern collection, not citation. "Never cited" above was too
+  strict; the rule is: a logged-out Telegram or RSSHub post may be cited
+  for what that account said ("the Ukrainian Air Force said on
+  Telegram..."), with at most a short quote and a link, and official
+  channels are the strongest case. It never counts toward the two
+  distinct outlets a story needs, and it never stands as proof of a fact
+  by itself. Unverified or anonymous channels are cited only once the
+  claim itself is the news.
