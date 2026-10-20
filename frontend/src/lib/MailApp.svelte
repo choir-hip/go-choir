@@ -793,6 +793,78 @@
     }
   }
 
+  // ---- Autopaper daily digest ----
+  // An opt-in, fixed-template email of the day's top Autopaper stories to this
+  // account's address of record (docs/reports/autopaper-daily-digest-design-
+  // 2026-10-20.md). Nobody is opted in by default. The state is read only when
+  // the panel opens, so the mailbox bootstrap stays one aliases request and one
+  // mailbox request.
+  let digestOpen = false;
+  let digestLoading = false;
+  let digestBusy = false;
+  let digestError = '';
+  let digestState: {
+    enabled: boolean;
+    subscribed: boolean;
+    address_masked?: string;
+    sender_configured: boolean;
+    schedule?: string;
+    last_run?: { run_date: string; kind: string; status: string; reason?: string } | null;
+  } | null = null;
+
+  function toggleDigestPanel() {
+    digestOpen = !digestOpen;
+    if (digestOpen && authenticated && !digestState) void loadDigest();
+  }
+
+  async function loadDigest() {
+    if (!authenticated || digestLoading) return;
+    digestLoading = true;
+    digestError = '';
+    try {
+      const res = await fetchMailWithTimeout('/api/email/digest');
+      if (!res.ok) {
+        if (res.status === 401) throw new AuthRequiredError();
+        throw new Error(await responseError(res, 'Could not load the daily digest'));
+      }
+      digestState = await res.json();
+    } catch (err) {
+      if (err instanceof AuthRequiredError) handleError(err);
+      else digestError = err?.message || 'Could not load the daily digest';
+    } finally {
+      digestLoading = false;
+    }
+  }
+
+  async function setDigestSubscribed(next: boolean, input: HTMLInputElement | null = null) {
+    if (!authenticated || digestBusy) return;
+    digestBusy = true;
+    digestError = '';
+    try {
+      const res = await fetchMailWithTimeout('/api/email/digest', { method: next ? 'PUT' : 'DELETE' });
+      if (!res.ok) {
+        if (res.status === 401) throw new AuthRequiredError();
+        throw new Error(await responseError(res, next ? 'Could not turn the daily digest on' : 'Could not turn the daily digest off'));
+      }
+      digestState = await res.json();
+      showNotice(next ? 'Daily digest on' : 'Daily digest off');
+    } catch (err) {
+      if (err instanceof AuthRequiredError) handleError(err);
+      else digestError = err?.message || 'Could not change the daily digest';
+      if (input) input.checked = !next;
+    } finally {
+      digestBusy = false;
+    }
+  }
+
+  function digestLastRunLine(state) {
+    const run = state?.last_run;
+    if (!run) return 'No digest sent yet.';
+    const what = { sent: 'sent', skipped: 'skipped', failed: 'failed', interrupted: 'interrupted', started: 'started' }[run.status] || run.status;
+    const why = run.reason ? ` (${run.reason.replace(/_/g, ' ')})` : '';
+    return `Last run ${run.run_date}: ${what}${why}.`;
+  }
+
   async function responseError(res, fallback) {
     const text = await res.text().catch(() => '');
     if (!text) return fallback;
@@ -1489,6 +1561,18 @@
               on:click={() => { void loadMessages(activeFolder); void loadFolderCounts({ background: true }); }}
               data-mail-refresh
             >{@html icon('refresh', 15)}</button>
+            {#if authenticated}
+              <button
+                type="button"
+                class="mail-icon-btn"
+                class:mail-icon-btn-on={digestOpen}
+                title="Daily Autopaper digest"
+                aria-label="Daily Autopaper digest"
+                aria-expanded={digestOpen}
+                on:click={toggleDigestPanel}
+                data-mail-digest-toggle
+              >{@html icon('calendar', 15)}</button>
+            {/if}
             {#if compactLayout}
               <button
                 type="button"
@@ -1502,6 +1586,43 @@
           </div>
         </div>
       </header>
+
+      {#if authenticated && digestOpen}
+        <section class="mail-digest" aria-label="Daily Autopaper digest" data-mail-digest>
+          <div class="mail-digest-head">
+            <strong>Daily Autopaper digest</strong>
+            <button type="button" class="mail-icon-btn" title="Close" aria-label="Close daily digest" on:click={toggleDigestPanel}>{@html icon('close', 14)}</button>
+          </div>
+          <p class="mail-digest-copy">
+            The day's top stories from Autopaper in one email{digestState?.schedule ? `, ${digestState.schedule}` : ''}.
+            Written by a fixed program, not an agent. Sent to {digestState?.address_masked || 'your account address'}.
+          </p>
+          {#if digestLoading && !digestState}
+            <p class="mail-digest-line" data-mail-digest-loading>Loading…</p>
+          {:else if digestState}
+            <label class="mail-digest-switch">
+              <input
+                type="checkbox"
+                role="switch"
+                checked={digestState.subscribed}
+                disabled={digestBusy || !digestState.enabled}
+                on:change={(e) => void setDigestSubscribed(e.currentTarget.checked, e.currentTarget)}
+                data-mail-digest-switch
+              />
+              <span>{digestState.subscribed ? 'On' : 'Off'}</span>
+            </label>
+            <p class="mail-digest-line" data-mail-digest-last>{digestLastRunLine(digestState)}</p>
+            {#if !digestState.enabled}
+              <p class="mail-digest-warn" role="status">The daily digest is switched off on the server.</p>
+            {:else if !digestState.sender_configured}
+              <p class="mail-digest-warn" role="status" data-mail-digest-warn>The mail sender is not configured, so no digest can be sent yet.</p>
+            {/if}
+          {/if}
+          {#if digestError}
+            <p class="mail-digest-warn" role="alert" data-mail-digest-error>{digestError}</p>
+          {/if}
+        </section>
+      {/if}
 
       {#if error}
         <div class="mail-error" role="alert">
@@ -2207,6 +2328,61 @@
   .mail-icon-btn:hover {
     background: var(--choir-state-hover) !important;
     color: var(--choir-text-primary) !important;
+  }
+
+  .mail-icon-btn-on {
+    background: var(--choir-state-hover) !important;
+    color: var(--choir-text-primary) !important;
+  }
+
+  /* ---------- Daily digest panel ---------- */
+
+  .mail-digest {
+    flex: none;
+    display: grid;
+    gap: 8px;
+    margin: 4px 10px 6px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: var(--choir-surface-pane);
+    border: 1px solid var(--choir-border);
+    font-size: 12.5px;
+    line-height: 1.45;
+  }
+
+  .mail-digest-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .mail-digest-copy,
+  .mail-digest-line,
+  .mail-digest-warn {
+    margin: 0;
+    color: var(--choir-text-muted);
+  }
+
+  .mail-digest-warn {
+    color: var(--choir-text-primary);
+    padding: 8px 10px;
+    border-radius: 9px;
+    background: color-mix(in srgb, var(--choir-accent) 10%, transparent);
+  }
+
+  .mail-digest-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .mail-digest-switch input {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--choir-accent);
   }
 
   /* ---------- Message rows ---------- */
