@@ -1,0 +1,183 @@
+# Store A (the platform Dolt) keeps every commit; a weekly squash with a backup first (2026-10-20)
+
+Status: designed, not built. Class: red (Store A is the platform's canonical
+event and control database, the vmctl route database and the checkpoint
+source; a squash cannot be undone, and the store is stopped for it).
+Owner rulings: [notes 2026-10-14](../reports/owner-notes-2026-10-14.md) §23
+("Store A history is squashed weekly with a backup first": the store keeps
+every commit, 92k commits and 24 GB of old history, growing about 1.6 GB a
+day, and nothing reads it; "after the Dolt liveness probe is live, back up
+the Dolt data directory, then in a quiet window do one squash and a full GC.
+After that, squash every week. Current rows and the event-tape rows are kept;
+only Dolt's own version history of them is dropped. The squash can't be
+undone, so the backup comes first") and §27 item 7 ("Store A's weekly squash
+is built as a small tested command, on the paper compaction's method (squash,
+identical root hash, memory cap)").
+
+## Problem
+
+Store A commits its working set every ~45 s (`internal/doltbatch`,
+`CALL DOLT_COMMIT('-Am', ...)`), so `dolt_log` grows by ~1,900 commits a day.
+No GC collects reachable commits, so history is retained forever: the
+[clustering assessment](dolt-clustering-assessment-2026-10-15.md) measured
+92,290 commits and 24 G of `noms/oldgen` (260 `.darc` archives) with a live
+set far smaller, +1.6 G/day. The 2026-08-26 incident
+([evidence](../evidence/platform-dolt-oldgen-218g-dead-history-2026-08-26.md))
+was the same mechanism at 6.9 M commits and 218 G; its squash was done by hand
+(dump, fresh init, import). Nothing is scheduled to bound it: the daily
+history audit only fails at 1 M commits or 50 GiB, a signal with no consumer.
+
+The paper's guest store had the same disease and was fixed on 2026-10-19
+([paper-disk-full-again](paper-disk-full-again-history-growth-2026-10-19.md)):
+13,700 commits to 2, 51.95 GB to 8.06 GB, root hash identical, by a squash
+plus a bounded full GC. That method is proven; Store A needs it as a tool and
+a schedule.
+
+## Evidence that history has no reader (read from code, not production)
+
+- No Go, shell, nix or python file outside `internal/projectionbase/compact.go`
+  and `internal/store` (guest stores) uses `dolt_log`, `dolt_diff`,
+  `dolt_history_*`, `AS OF`, `DOLT_BRANCH`, `DOLT_TAG`, `DOLT_CHECKOUT`,
+  `DOLT_MERGE`, `DOLT_REMOTE`, `DOLT_PUSH`, `DOLT_BACKUP` or `DOLT_STASH`
+  (grep over `internal/ cmd/ scripts/ nix/`; the hits are the history audit's
+  `COUNT(*) FROM dolt_log`, the Store B `dolt_ignore` projection tables in
+  `internal/platform/capture_index.go`, and the ograph bench scripts).
+  So Store A has one branch, no tags, no remotes, no stashes, by construction.
+  The command still checks, because an operator could have created one by hand.
+- `dolt_ignore` is used, but only for Store B's projection tables. Under the
+  pre-split topology (empty `corpusDSN`) those tables would sit in Store A;
+  ignored tables are in the WORKING root but never in a commit, so HEAD and
+  WORKING roots differ and the root check below refuses (verified locally with
+  the dolt CLI: `dolt_hashof_db('HEAD')` differs from `'WORKING'` with an
+  ignored table present).
+- The 2026-10-15 preflight
+  ([dolt-upgrade-preflight](../reports/dolt-upgrade-preflight-2026-10-15.md))
+  already took a reflink copy of the platform data dir (25 GB), ran
+  `dolt fsck` on a scratch copy with 2.4.2 (no problems, 1,348 s, peak RSS
+  ~4 GB), and showed 2.1.9 reads a store 2.4.2 opened. It says that backup
+  "also serves as the pre-squash backup" for this ruling; it is a week old and
+  not a substitute for the backup this tool takes.
+
+## Method (the paper's, generalized)
+
+1. Open the store with the embedded Dolt driver (`projectionbase`), refuse
+   unless exactly one branch and no tags, remotes or stashes.
+2. Record `dolt_hashof_db('WORKING')`.
+3. `CALL DOLT_RESET('--soft', <root commit>)`, then `CALL DOLT_COMMIT('-A',
+   '--allow-empty', ...)`: one commit holding the working set.
+4. Check before the GC that the new HEAD root equals the recorded WORKING
+   root and that the log is at most two commits (cheap, and it stops a GC that
+   would free nothing).
+5. `CALL DOLT_GC('--full','--archive-level','0','--incremental-file-size',
+   '268435456')`, with temp files staged inside the store and a Go memory
+   limit (`GOMEMLIMIT`-equivalent); the unit adds `MemoryMax` and
+   `MemorySwapMax=0`. This bound took the paper's full GC from "13 GB plus
+   15 GB of swap, never finished" to 6.1 GB and 2 min 19 s.
+6. Reopen; refuse unless HEAD root and WORKING root both equal the recorded
+   WORKING root. Prolly trees are history independent, so equal root hashes
+   mean the same schemas and rows.
+
+Differences from the guest tool: the root commit is found by topology
+(`dolt_commit_ancestors` with a NULL parent, exactly one) instead of "oldest
+by date", so a clock step cannot leave older history reachable; and the
+ref/log checks above are stricter. Both live in one shared function in
+`internal/projectionbase` that the guest compaction also calls, so the proven
+path has one implementation.
+
+## Decision: offline with the service stopped, not online through SQL
+
+Online (`CALL DOLT_GC` and the squash through the running sql-server) is
+rejected:
+
+- **The invariant needs a quiet store.** The root-hash check compares the
+  WORKING root before with the roots after. Writers (corpusd, the debounced
+  committer every 45 s, vmctl route updates) change WORKING between the two
+  reads, so a changed hash would be ambiguous: a bug or a write. Making it
+  unambiguous requires stopping the writers, which is the same outage.
+- **Memory.** The unit has `MemoryHigh=3G`, `MemorySwapMax=0`,
+  `OOMScoreAdjust=-500` (the canonical log is never swapped or killed). The
+  GC needs ~6 GB; running it inside the server either throttles the server
+  or kills it. 2026-08-26 killed Store A with one large scan (27 GB peak).
+- **Online GC invalidates open sessions** and, on 2026-10-15, an online
+  server stalled for 40 minutes after a conjoin; a long online `--full` GC is
+  the most likely thing to wedge it.
+- **The backup must be consistent.** A reflink copy of a stopped store is
+  crash-consistent without Dolt's help; a copy of a live one is not.
+
+Offline: the Dolt unit and what it `Requires=` are stopped, a reflink copy
+of the data dir is taken, the command runs against the closed store under
+the cap, and the unit starts again. The window is a short planned platform
+maintenance window (estimate below). The embedded driver is the same module
+version as the guest tool; the server binary is `pkgs.dolt` (2.1.9, 2.4.2 on
+the dolt lane), so version skew is a named risk (FM9).
+
+## Failure modes, written before the code
+
+| # | Failure | Guard | Pinned by |
+|---|---|---|---|
+| FM1 | Root hash changes (data lost or altered) | refuse unless HEAD and WORKING after equal WORKING before; script restores the backup | Go test: root identical; script test: refusal restores |
+| FM2 | A branch, tag, remote or stash keeps history reachable | refuse before touching anything (exit 3); original byte-identical | Go tests for each ref class |
+| FM3 | Ignored tables or other state HEAD cannot hold (HEAD root != WORKING root) | refuse after the squash commit and before the GC | Go test with a `dolt_ignore` table |
+| FM4 | History not actually dropped (more than one root, merge shape, clock skew) | root commit by topology, exactly one; refuse before GC if log > 2 | Go test |
+| FM5 | Unbounded GC memory | bounded GC flags, memory limit, unit `MemoryMax`, `MemorySwapMax=0` | flags are the proven ones; unit asserts in nix |
+| FM6 | GC temp output on another filesystem (host `/tmp`) | tempfile provider at `<repo>/.dolt/temptf`, removed after | Go test checks the dir is empty after |
+| FM7 | The server or a dependent opens the store during the squash | stop `RequiredBy` units and their timers first, verify the unit is inactive, `flock`; whether the embedded open itself refuses while a server holds the store is probed in the build and recorded below | script test; local lock probe |
+| FM8 | Backup missing, not a reflink, or no space | `cp --reflink=always`, abort before the command and start services; free-space preflight (>= 50% of store size and >= 10 GiB) | script test |
+| FM9 | Embedded module and server binary differ in version | plain table files (archive level 0) readable by all; supervised first run with `dolt fsck` afterwards | residual risk, first-run procedure |
+| FM10 | The unit is OOM-killed or the host reboots mid-run, services stay down | persisted state file; `ExecStopPost` runs the same `--finish` which restores the backup if a squash was in flight, then starts services | script test: finish after a kill |
+| FM11 | A failed run's evidence is destroyed by the next run | refuse to run while a `*.squash-failed-*` directory exists | script test |
+| FM12 | Backups pile up (CoW extents pin old blocks) | keep the newest backup only, deleted after the next run's backup succeeds | script test |
+| FM13 | A schedule enabled before the first run was watched | timer ships disabled (flag off, no `wantedBy`); first run by hand | nix |
+| FM14 | The command mutates a store another run is using | `flock` on a lock file in the script | script test |
+
+## Open hypothesis, to be checked on the first supervised run
+
+vmctl reads Store A (`VMCTL_ROUTE_DSN`, the ComputerVersion route database)
+and only `Wants=` the Dolt unit, so it is not stopped with it. At startup it
+now retries (`cmd/vmctl/routedb_retry.go`); what a running vmctl does with a
+route database that is down for ~15 minutes is not established by trace. This
+is a hypothesis, not a finding. The first run is supervised for exactly this:
+watch vmctl and the paper through the window (procedure in the commit that
+adds the unit). The script never restarts vmctl (a restart detaches guests).
+
+## Ceremony (red)
+
+- **Mutation class:** red. Protected surfaces: Store A canonical writes
+  (event append receipts and heads), vmctl route database, checkpoint source,
+  VM lifecycle adjacency (dependents stop for the window).
+- **Conjecture delta:** Store A history can be bounded weekly by the paper's
+  method inside a window short enough that dependents tolerate it.
+- **Admissible evidence:** equal root hash before and after (recorded in the
+  command's JSON report and the journal); `dolt_log` at 1 or 2 commits;
+  row counts spot-checked by the operator on first run; staging `/health`
+  and the paper's runs continue after the window; a clean `dolt fsck`.
+- **Rollback:** the reflink backup of the data dir, taken before the command
+  and kept until the next run. Automatic on any failure after the first
+  mutation (script restores, then starts services); manual after a bad
+  outcome the checks missed: stop the Dolt unit, move the data dir aside,
+  `cp -a --reflink=always` the backup back, start. The squash is irreversible
+  without it; the backup is the only undo.
+- **Heresy delta:** discovered: no defined behavior of a running vmctl when
+  Store A is down for a planned window (hypothesis above); the history audit
+  is a signal with no consumer (already named). Introduced: none while the
+  timer is disabled. Repaired: none yet; the schedule repairs unbounded Store A
+  history when enabled.
+- **Standing questions:** provenance (owner §23, §27.7); no deletion of
+  citers (nothing deleted); single authority (the root hash, not narration);
+  artifact-verified success (JSON report with both roots); fate-sharing
+  (named above); restart durability (state file plus `ExecStopPost`);
+  no-SSH operability (everything is a unit and a script; the first run is by
+  hand on Node B); registry hygiene (one backup kept, failed runs kept for
+  diagnosis).
+
+## Build plan
+
+1. This document (green).
+2. `internal/projectionbase` shared squash function; the guest compaction calls
+   it; tests on a local temp Dolt repo; `cmd/platform-dolt-squash` (orange/red).
+3. `scripts/platform-dolt-squash.sh` with a fake-systemctl behavioural test,
+   and the nix oneshot, timer (disabled) and flake package (red).
+
+## Design details added after the build
+
+(Appended below by the build commits.)
