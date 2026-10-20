@@ -674,3 +674,11 @@ Owner, on waking:
   the front 60 stories at about 87-92% precision
   (`docs/problems/related-stories-dead-end-2026-10-20.md`); Phase 2
   (events) waits on the one-incident blind rerun. Design answer pending.
+- Related stories, follow-ups (about 11:45 UTC): "We are not yet using the
+  embeddings, although we're looking to do that eventually, but I want to
+  really use the object graph effectively first." "Jev can also do a lot of
+  this classification. maybe we should give research the ability to use Jev
+  in addition to management." Told that no desk calls Jev today (management
+  reads Jev's intake labels): "Even if management isn't using Jev as a tool,
+  then research should." Design:
+  `docs/reports/related-stories-phase3-research-review-2026-10-20.md`.
