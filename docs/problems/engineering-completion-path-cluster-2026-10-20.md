@@ -647,3 +647,55 @@ again); for another trajectory, refuse the new assignment with a visible
 wait, instead of killing work the owner is waiting on. Red (assignment
 admission); after the hang is fixed, because each supersede today ends in
 the teardown that hangs.
+
+## Failure 3 located: the teardown's memory.reclaim write never returns (424ee13f7, 15:30 UTC)
+
+Observed, not inferred. Deploy 424ee13f7; both drill computers hung at the
+first engineering Complete, and the fixed route answered in 0.2 s with
+nothing in `unanswered`.
+
+- **Delegate drill** (computer-ad1b46d4…, run
+  `run:assignment-9efd4078ed66c63c9add0163`): in-flight steps `cell.reduce`
+  → `reduce.complete_intent` → `complete.revoke_capsule` →
+  `revoke.destroy_capsule` → `capsule.destroy.reclaim`, the last started
+  15:11:14, 1,120 s at the read.
+- **Visual drill** (computer-7011602c…, run
+  `run:assignment-df7f8cb2948dfb283e3ce9e0`): the same chain,
+  `capsule.destroy.reclaim` started 15:21:04, 530 s at the read; the
+  operation had reached `frozen`.
+- **Goroutine dump, both computers:** `goroutine … [IO wait, 18 minutes]`
+  in `internal/poll.(*FD).Write` ← `os.WriteFile` ←
+  `capsule.cgroupMemoryDir.Reclaim` (`job_memory.go:74`) ←
+  `teardownReclaim` (`teardown_reclaim.go:96`) ← `Executor.destroy`
+  (`executor.go:769`, holding `e.mu`) ← `ForceDestroy` ←
+  `revokeAssignedCapsule` ← `recordAssignedEngineeringReportOnce`.
+  Reclaim targets were 0x15b89000 and 0x1633e000 bytes (about 347 and
+  355 MiB). The guests had 7.1 and 6.3 GiB available.
+
+**Cause.** `memory.reclaim` fails with EAGAIN when the kernel reclaims less
+than asked, which the code expects ("a partial reclaim (EAGAIN) is not an
+error"). But `os.WriteFile` opens the cgroup file through Go's runtime
+poller: kernfs files are pollable, so `os.OpenFile` registers the
+descriptor with epoll and makes it non-blocking, and on EAGAIN `FD.Write`
+parks the goroutine until epoll reports the file writable. A cgroup
+control file never does. So a partial reclaim parks forever, inside the
+executor lock, and everything that needs `e.mu` stops behind it: the
+Complete, every cell gate, job polls, and (before de92fad5e) the
+observability route. A full reclaim returns normally, which is why some
+teardowns finish.
+
+The same call sits in `lowerCgroupMemory` (`job_memory.go`, returning a
+job's memory boost), so a job's end can hang the same way.
+
+This is the substrate cause of failure 3 and of every silent run today:
+hypothesis 2 (teardown under the executor lock) was the right layer;
+the specific wait is a write the Go runtime turns into an unbounded poll.
+
+**Fix (next commit, red: capsule teardown).** Write cgroup control files
+with a plain blocking descriptor (`unix.Open`, `unix.Write`, `unix.Close`),
+so EAGAIN comes back as an error, as the code always assumed; one helper
+used by `Reclaim` and `SetMax`. A test opens a pollable file that answers
+EAGAIN (a full non-blocking pipe) through the same helper path and
+requires the write to return. Not in this fix, named: physical teardown
+still runs under `e.mu`, so any future slow step stalls the whole
+executor; moving it off the lock is a separate red change.
