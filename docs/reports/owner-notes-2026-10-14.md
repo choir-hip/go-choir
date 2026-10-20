@@ -743,14 +743,14 @@ Owner, on waking:
   expand the gamut of sources. And you can help me with that, just
   telling me which things I need to sign up for and API keys I need to
   create." First, an overview panel of every stream, as an artifact.
-- Autoradio target (about 16:15 UTC): "I feel confident that we can ship
+- Autoradio target (about 16:08 UTC): "I feel confident that we can ship
   the auto radio to the App Store, even if who knows how long it'll take
   them to approve it, before October ends, before Halloween." Target:
   submitted for App Review by 2026-10-31. Critical path named in reply:
   Apple Developer Program enrollment (an organization account needs a
   D-U-N-S number, which can take days), the stack choice, and whether v1
   needs sign-in (sign-in brings Apple's in-app account deletion rule).
-- Telegram skipped; the open social networks instead (about 16:20 UTC),
+- Telegram skipped; the open social networks instead (about 16:10 UTC),
   after the sources review found Telegram's API and content terms forbid
   aggregation and AI use: "Skip Telegram then. We still have the Fediverse
   and AT Proto. there's a lot of data there. We just got to figure out how
@@ -761,7 +761,7 @@ Owner, on waking:
   RSSHub (AGPL-3.0; several Asian routes need login cookies) are the
   social sources to design. Social posts are leads, not citations: a story
   still needs two distinct outlets.
-- Translation as an exception (about 16:30 UTC): "for stuff that seems
+- Translation as an exception (about 16:12 UTC): "for stuff that seems
   like it's off limits for rights issues, look into an exception for
   translations. If it's in a different language and there's no English
   language coverage of it, I think it should be fair to translate it into
@@ -775,3 +775,14 @@ Owner, on waking:
   does not change the law. Translation does not cure platform terms that
   forbid the access itself (Telegram, cookie routes). Counsel to confirm
   the bright lines (quote length, the EU press publishers' right).
+- Gray sources, the working rule (about 16:15 UTC): "I'm not even
+  interested in a raw translation. So I think for all these sources that
+  may be kind of gray, we focus on the stuff which is in languages outside
+  of English, and we are using them as sources that we're reading. We're
+  not trying to copy their material, nor are we just doing a raw
+  translation." So gray-rights sources are read, not republished: the
+  focus is non-English material, reported in English in our own words with
+  attribution and a link; no copying, no raw translation. Platform terms
+  that forbid the access itself still rule a source out.
+- Streams overview published as an artifact (about 16:15 UTC):
+  https://claude.ai/artifact/NXjrjYiR3VseMwuFwTs5gi
