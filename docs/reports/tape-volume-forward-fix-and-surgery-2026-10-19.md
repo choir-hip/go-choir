@@ -946,3 +946,199 @@ Wiring (`internal/platform`, `projectionbase`, `ledgerwitness`):
   immutable index headers keyed by file size and mtime. No-SSH: the reader
   keeps hit counters (segment, legacy, not found, corrupt) that A2 exposes
   on the diagnostics endpoint.
+
+### 9.6 As built, and what A2 needs
+
+A1 landed as planned in 9.1 to 9.4, with these differences:
+
+- The reader returns `ErrDigestMismatch` for a legacy file that does not hash
+  to its name, as the old code did in substance; callers keep their error
+  prefixes and gain `errors.Is` on the cause.
+- The tape sweep's `walkTapeChain` treats only `ErrCorrupt` as a stop. Every
+  other unreadable event (missing, legacy digest mismatch, I/O error) still
+  sets `EventReadable=false`, which is the old behavior and refuses the
+  payload sweep.
+- The orphan dry-run now keeps the first refusal reason. Before, a chain
+  that failed to read was reported as "append receipts do not match", which
+  hid the cause.
+- The offline `ReadDir` mode of `DiskEventSource` refuses a computer with
+  segments, as section 4.3 asked.
+- The reader keeps hit counters (`Reader.Stats`). They are not yet exposed
+  on a diagnostics endpoint.
+
+What A2 needs, in order:
+
+1. The production writer, following appendix A.5: a per-computer lock in
+   `tapestore`, open-segment recovery on start (truncate a torn tail, refuse
+   anything else), rotation at 64 MiB or 50,000 records, one fsync per event
+   before the head CAS, behind `PLATFORM_TAPE_SEGMENTS=off|write`, default
+   off.
+2. `pin` / `writeImmutable` routed by flag, with the collision check across
+   both stores (same bytes: no-op; different bytes: error). The legacy
+   path's mtime refresh on reuse (the tape sweep's grace rule) has no
+   per-record analogue in a segment: a pin whose CAS never lands stays in the
+   segment as dead weight until the segment is dropped. Bound it and state it
+   in the A2 mission.
+3. `cmd/tape-explode`, and the runbook gate: no binary rollback below A1
+   once any segment holds data.
+4. Counters on the diagnostics endpoint: `Reader.Stats`, plus files created
+   per 1,000 writes on `writeBlob` and the segment writer, as the E2E
+   assertion in section 4.5 needs.
+5. The destroyed-computer sweep for segments: archive the computer's whole
+   `tape-seg/<id>/` directory, tombstone, delete. Until then A1 refuses.
+6. A measurement of lookup cost over many sealed segments (directory listing
+   per read, one index read per segment per process) before any cache is
+   added; the fanout already bounds one probe to a small bucket.
+7. The byte-identical repack tool and the soak of section 6.1, which turn
+   the 9M legacy files into segments. It can be written against
+   `SegmentWriter`, `Reader.Scan` and `Reader.ReadLegacy` as they are.
+
+## Appendix A. Segment format v1, as built in A1
+
+Implementation: `internal/tapestore` (`format.go`, `reader.go`, `scan.go`,
+`writer.go`). Tests: `internal/tapestore/tapestore_test.go`. This appendix is
+the contract A2 writes to and every reader reads. Section 4.1 is the design
+sketch; where the two differ (the segment header, the fixed-width index with a
+fanout table, the crc coverage), this appendix is the built format.
+
+### A.1 Layout
+
+All integers are big endian. Paths are relative to the artifacts root.
+
+```text
+tape-seg/<computer_id>/seg-NNNNNNNN.seg     append-only; the segment
+tape-seg/<computer_id>/seg-NNNNNNNN.idx     written at seal; sorted index
+tape-seg/<computer_id>/seg-NNNNNNNN.idx.tmp writer temp file; readers ignore it
+```
+
+`NNNNNNNN` is the segment number, zero-padded to eight digits (more digits
+once it exceeds 99,999,999). Only the canonical spelling names a segment.
+`<computer_id>` must match `[A-Za-z0-9._:-]{1,200}`, must not start with `.`,
+and is never `.` or `..`. The reader and the writer share this rule; an id
+that fails it has no segments and reads legacy only. Any other file in the
+directory is ignored.
+
+A segment is **sealed** when `seg-N.idx` exists, and **open** otherwise. The
+highest-numbered segment of a computer is the only one that may be open and
+carry a torn tail.
+
+### A.2 Segment file
+
+```text
+header, 32 bytes
+  0   magic        "CHTS"
+  4   version      u8 = 1
+  5   reserved     3 bytes = 0
+  8   segment no.  u64
+  16  computer     first 12 bytes of SHA-256(computer_id)
+  28  crc32c       u32 over bytes 0..27
+records, back to back, from offset 32
+  0   magic        "CHRC"
+  4   version      u8 = 1
+  5   namespace    u8: 1 event, 2 payload, 3 receipt
+  6   digest       32 bytes, SHA-256 of the body
+  38  length       u32, at most 64 MiB (67,108,864)
+  42  crc32c       u32 over bytes 4..41 followed by the body
+  46  body         length bytes
+```
+
+CRC32C is the Castagnoli polynomial. The CRC detects a torn or damaged
+write; the digest is the identity. The body of an event is the canonical
+event JSON, of a payload the payload bytes, of a receipt the canonical
+`PinReceipt` JSON. For all three, `digest = SHA-256(body)`, which is the legacy
+file name (`pin-receipts/<digest>.json` for receipts). The key of a record is
+`(namespace, digest)`; the same bytes in two namespaces are two records. A
+segment holds a key at most once; a digest may appear in more than one
+segment, with the same bytes by construction.
+
+Rotation thresholds for A2 are 64 MiB or 50,000 records (`DefaultSealBytes`,
+`DefaultSealRecords`). The reader does not depend on them.
+
+### A.3 Index file
+
+```text
+header, 40 bytes
+  0   magic        "CHIX"
+  4   version      u8 = 1
+  5   reserved     3 bytes = 0
+  8   segment no.  u64, must equal the file name's
+  16  segment size u64, size in bytes of seg-N.seg at seal
+  24  count        u32, number of records
+  28  computer     12 bytes, as in the segment header
+fanout, 1,024 bytes
+  256 x u32: fanout[i] = number of entries whose digest's first byte <= i
+entries, count x 45 bytes, sorted strictly by (digest, namespace)
+  0   digest       32 bytes
+  32  namespace    u8
+  33  offset       u64, offset of the record header in the segment
+  41  length       u32, record body length
+trailer, 4 bytes
+  crc32c over every preceding byte of the file
+```
+
+A lookup reads the bucket `[fanout[b-1], fanout[b])` for the digest's first
+byte `b`, which is a few hundred entries at most, and binary-searches it. The
+fixed width is what allows the index to be read in place without loading it.
+
+### A.4 Rules every reader applies
+
+1. **Hash what you return.** After any CRC check, recompute SHA-256 of the
+   body and compare it with the record's digest field and with the digest the
+   caller asked for. A mismatch is corruption.
+2. **Sealed segments are strict.** Opening one checks the index size,
+   trailer CRC, magic, version, segment number, computer hash, that the
+   fanout is monotonic and describes the entries, that the entries are
+   strictly sorted, that the segment file size equals the sealed size, and
+   the segment header. Each lookup then checks that the record at the
+   indexed offset has the indexed namespace, digest and length, a valid CRC,
+   and a body that hashes to the digest. Any failure is `ErrCorrupt`.
+3. **An index with no segment file is corruption.**
+4. **Open segments are scanned read-only.** Records are accepted in order
+   while each is whole and its CRC holds. At the first record that is not,
+   the reader decides between a torn tail and corruption. It is a torn tail,
+   and the rest of the file is treated as absent, only if the segment is the
+   highest-numbered one, the unreadable region is no larger than one maximum
+   record, and no whole, CRC-valid record starts anywhere after it. Anything
+   else is `ErrCorrupt`. A record that is whole and CRC-valid but has an
+   unknown version or namespace is `ErrCorrupt`, never a torn tail.
+5. **Unknown versions and bad magics are errors.** An older binary must not
+   ignore a newer layout.
+6. **Search order.** Newest segment first. The first segment that holds the
+   key answers. A segment that fails a check before an answer is found makes
+   the lookup an error, including a lookup that would have been a miss. Only
+   a clean "no segment holds this key" falls through to the legacy file.
+7. **Segments are per computer; legacy files never were.** Segments are
+   looked up in the requesting computer's directory only. The legacy file is
+   `sha256/computer-event/<d>`, `sha256/computer-event-payload/<d>` or
+   `sha256/pin-receipts/<d>.json`, found by digest alone as it always was,
+   and hash-checked the same way. `projection-base` objects are never
+   segmented.
+
+### A.5 Writer rules (A2 will implement these in production)
+
+The A1 `SegmentWriter` is test and offline only. A2's writer must:
+
+1. Create the segment with `O_EXCL`, write the header, and append whole
+   records with one `write` each.
+2. `fsync` the segment before the head CAS that makes its records canonical
+   (one fsync per event covers the event's records).
+3. Seal by `fsync` of the segment, writing the index to `seg-N.idx.tmp`,
+   `fsync` of it, `rename` to `seg-N.idx`, and `fsync` of the directory.
+   A crash before the rename leaves an open segment, which the reader scans.
+4. On open, scan the last segment, truncate a torn tail at the first bad
+   record, and refuse to start if the damage is not a torn tail.
+5. Serialize writes per computer, and never modify a sealed segment.
+
+### A.6 What A1 does not do
+
+- No production code writes a segment. A guard test fails if a non-test
+  source outside `internal/tapestore` names `SegmentWriter` or
+  `CreateSegment`.
+- The byte-identical repack tool is not built (section 9.1). Its pieces are
+  there: `SegmentWriter` to write, `Reader.Scan` and `Reader.ReadLegacy` for
+  the census of section 6.1 step 4.
+- The destroyed-computer tape sweep refuses a computer that has segments.
+- Lookup cost over many segments is not measured. Each lookup lists the
+  computer's directory and reads the fanout-narrowed bucket of each sealed
+  segment newest first; a sealed segment's index is read and validated once
+  per process.
