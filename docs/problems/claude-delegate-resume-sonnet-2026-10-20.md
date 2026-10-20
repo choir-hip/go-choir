@@ -212,3 +212,56 @@ Clustering: the next action is option E itself (cells default to
 `/workspace/platform` in engineering capsules, with an audit of overlay
 recipes that rely on `/`), not more overlay text. The overlay also named
 the delegate "Claude Opus 5.5"; it now says Sonnet 5.5, matching spec.go.
+
+## Staging rerun (2026-10-20 10:42–10:45 UTC, on ec2dc7b7d): delegate runs, management's Cast drops the brief
+
+Test computer cold-booted (lifecycle stop/start), guest build ec2dc7b7d,
+status `available: true`, model `claude-sonnet-5-5`. Trajectory
+`5ce07bc9-…`, engineering run `run:assignment-d3d91666c7948ab1741c3161`,
+capsule network mode `claude`. Read from the run's events, in order:
+
+1. Management's Cast to engineering carried only the objective "Run the
+   specified Claude delegate probe and verify; do not freeze or land
+   changes." and the spec `{"parent": <Texture cast record>}`. The probe
+   brief's target path, line and test command were not in it.
+2. Engineering precommitted, then briefed the delegate with a generic
+   objective (`paths ["."]`, test `go test ./...`), because it had no
+   concrete task.
+3. Delegate run `d20261020T104314-f34b5796`: `state: done`,
+   `subtype: success`, 9 turns, 19 s, $0.078, tools Bash, Glob, Grep, Read;
+   no Write or Edit, so `written_files` is absent, which is correct.
+4. Engineering ran `go -C /workspace/platform test ./...` twice in cells with
+   `timeout_ms: 30000`; both returned `failed to read broker response … i/o
+   timeout` (the whole-repo test cannot finish in 30 s; the known
+   broker-read-timeout class, P5 residual).
+5. Engineering completed `blocked`, saying the delegate "did not perform
+   requested probe" and naming the run id, session, turns and cost.
+
+So the delegate path works end to end twice (Bun seccomp fix holds; the
+token, egress and status are sound). The fix's own proof (`written_files`
+reporting an absolute existing file) is not yet observed, because no write
+was asked for.
+
+**Cause (trace-confirmed): engineering never receives the request.** The
+Cast's `parent` names Texture's Cast to management, which engineering
+cannot read (`choir.Records()` in engineering shows only management's Cast,
+whose body is the `parent` pointer). This is P5 cause B
+(`p5-go-served-0825-engineering-never-freezes-2026-10-15.md`: "spec passed
+by reference", seen in 0101 A3 and 0825 #1), whose fix 2 ("inline the
+parent's body into the assignment record") was proposed and never built.
+The management overlay does not tell management that engineering cannot
+read the parent.
+
+**Root Cause Clustering.** Three occurrences across two weeks, all
+answered or left as prose. The next action is substrate: the engineering
+Cast delivers the parent Texture Cast's objective and body to engineering
+(inlined in the assignment's inbox record, digest-bound), so engineering
+reads the owner's request, not management's summary of it. Overlay text
+alone is not the fix.
+
+- Mutation class of the fix: red (Cast authority, engineering inbox
+  record).
+- Rollback: revert the fix commit.
+- Proof: the same probe on the test computer; pass is engineering's
+  `cat /workspace/platform/docs/probes/<stamp>.md` printing the line and
+  `written_files[0].exists: true`.
