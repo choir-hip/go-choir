@@ -67,9 +67,10 @@ cred() { # path of credential file $1
 # ---- status file ------------------------------------------------------
 status_merge() { # JSON object on stdin merged into status.json atomically
   install -d -m 0700 "$STATE"
-  local cur="{}"
+  local new cur="{}"
+  new="$(cat)" # read before the pipeline: its stages do not share this stdin
   [ -s "$STATUS" ] && cur="$(cat "$STATUS")"
-  printf '%s' "$cur" | jq -c --argjson new "$(cat)" '. * $new' > "$STATUS.tmp" && mv "$STATUS.tmp" "$STATUS"
+  printf '%s' "$cur" | jq -c --argjson new "$new" '. * $new' > "$STATUS.tmp" && mv "$STATUS.tmp" "$STATUS"
 }
 
 # ---- the set of paths -------------------------------------------------
@@ -116,8 +117,11 @@ resolve_paths() {
 # ---- the tunnel and restic environment ---------------------------------
 CTL=""
 tunnel_up() {
-  [ -n "$NODE_A_HOST" ] || { err "OFFHOST_HOST is not set"; return 1; }
   install -d -m 0700 "$STATE/run"
+  # Test hook: a rest-server already listening on OFFHOST_LOCAL_PORT (the
+  # local drill and the harness use it; production never sets this).
+  [ "${OFFHOST_NO_TUNNEL:-}" = 1 ] && return 0
+  [ -n "$NODE_A_HOST" ] || { err "OFFHOST_HOST is not set"; return 1; }
   CTL="$STATE/run/ssh.ctl"
   ssh -i "$(cred ssh-key)" -o IdentitiesOnly=yes -o BatchMode=yes \
     -o UserKnownHostsFile="$(cred known-hosts)" -o StrictHostKeyChecking=yes \
@@ -363,7 +367,9 @@ cmd_keygen() { # owner, interactive, once. Prints the restic password to the ter
     echo "== Give node-a's agent these two lines (neither is secret) =="
     echo "ssh public key:"; cat "$SECRETS_DIR/ssh-key.pub"
     echo "htpasswd line:"
-    printf '%s:%s\n' "$REST_USER" "$(openssl passwd -apr1 -stdin < "$SECRETS_DIR/rest-password")"
+    # bcrypt (apache htpasswd -B): rest-server did not accept apr1/md5 hashes
+    # when tested; bcrypt and {SHA} entries authenticate. -i reads stdin.
+    htpasswd -niB "$REST_USER" < "$SECRETS_DIR/rest-password"
     echo
     echo "Still to place by hand: $SECRETS_DIR/known-hosts (node-a's host key, verified out of band)."
   } > /dev/tty
