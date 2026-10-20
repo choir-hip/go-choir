@@ -420,9 +420,40 @@ with this. either edit node-a or the mike repo").
    B's existing builder entry).
 3. **Done, 18:25 UTC.** `init` created the `daily` and `archive`
    repositories through the restricted tunnel (restic from `nix-shell`;
-   Node B has no restic outside the unit). **Owed by the owner:** confirm
-   the offline copy of the restic password matches.
-4. Next: one supervised `backup` run with the timer off, after the S6-0
-   drill (the host is busy), measuring wall time, RSS, bytes and free disk;
-   then the restore drill (section 9); then `enable = true` through the
-   Landing Loop.
+   Node B has no restic outside the unit). The owner confirmed the offline
+   copy of the restic password opens the repository (owner, 2026-10-20:
+   "restic password: MATCH").
+4. **Running, started 18:39:15 UTC.** One supervised `backup`, timer off,
+   as a transient unit with the daily unit's limits (Nice 19, idle I/O,
+   CPUWeight 10, MemoryHigh 4G, MemoryMax 6G), tools from `nix-shell`.
+   Readings at 19:43 UTC: both Dolt backup syncs done by 18:41:13
+   (platform about 2 minutes, corpus 13 seconds); restic still uploading,
+   66 GB on node-a, about 18 MB/s against the 25,000 KiB/s cap; memory at
+   the 4G MemoryHigh line (page cache from reading the sources counts
+   there; not yet told apart from restic's own heap); free disk on Node B
+   121 GB at the start, 85 GB now.
+5. **Problem found by the run: a hand-run backup is silently partial.**
+   The `nix-shell` tool set I gave the run (restic, jq, openssh, dolt)
+   left out `sqlite3`, so `auth.db` and `mail.db` were not staged
+   (`sqlite3: command not found`, then `ERROR: sqlite backup of auth.db
+   failed`, and the same for `mail.db`). The script carries on and the
+   run ends `partial` (exit 3), an hour later. The systemd units do not
+   have this problem: their `PATH` (`offHostBackupEnv` in
+   `nix/node-b.nix`) already has restic, jq, openssh, sqlite, dolt and
+   apacheHttpd. An earlier note of mine said the unit lacked restic, jq
+   and openssh; that was the Dolt liveness probe's `path`, not this unit.
+   Same cause as the keygen stop in item 2: a step run by hand on Node B
+   finds tools missing that the unit has. Fix: each subcommand checks the
+   tools it needs before it does anything, and names the `nix-shell`
+   line that supplies them; keygen falls back to `nix-shell -p
+   apacheHttpd` for `htpasswd`.
+6. **Disk cost of a run, measured.** The Dolt backup directories are kept
+   between runs (`platform-dolt/.choir-backup` 31 GB,
+   `corpus-dolt/.choir-backup` 3.5 GB), so most of the 36 GB drop is a
+   standing cost, not a per-run one. The image clones under `staging/`
+   show 83 GB apparent but are reflinks on btrfs; they cost only the
+   extents the running guests rewrite while the run is in flight, and
+   the exit trap removes them. The 40 GiB disk guard is checked before
+   staging; nothing rechecks it while restic runs.
+7. Next: read the run's result, then the restore drill (section 9), then
+   `enable = true` through the Landing Loop.
