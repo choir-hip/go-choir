@@ -249,6 +249,41 @@ def check_units():
                f"mode inside the unit's namespace: {mode}")
 
 
+# Quick containment (blast-radius design, wave 1): PID 1's sockets, the env
+# files read only through EnvironmentFile=, and vmctl's read-only view.
+SYSTEMD_SOCKETS = ["/run/systemd/private", "/run/dbus/system_bus_socket"]
+SYSTEMD_SOCKET_UNITS = {"go-choir-vmctl", "go-choir-dolt-liveness-probe"}  # they run systemctl
+ENV_FILES = ["/var/lib/go-choir/deploy.env", "/var/lib/go-choir/corpus-dsn.env",
+             "/var/lib/go-choir/sandbox-gateway-token.env"]
+VMCTL_READ_ONLY = ["/var/lib/go-choir/services", "/var/lib/go-choir/guest"]
+
+
+def writable_in_namespace(pid, path):
+    """Whether path is writable inside pid's mount namespace (access(2), no write)."""
+    proc = subprocess.run(["nsenter", "-t", str(pid), "-m", "--", "/run/current-system/sw/bin/test", "-w", path],
+                          capture_output=True, text=True, check=False)
+    return proc.returncode == 0
+
+
+def check_containment():
+    for unit in UNITS:
+        pid = systemctl_show(unit, ["MainPID"]).get("MainPID", "0")
+        if pid in ("", "0"):
+            continue  # not running now (a oneshot); its view is checked when it runs
+        hidden = [] if unit in SYSTEMD_SOCKET_UNITS else SYSTEMD_SOCKETS
+        for path in hidden + ENV_FILES:
+            mode = mode_in_namespace(pid, path)
+            record("containment", f"{unit} cannot reach {path}", mode in ("0", "absent"),
+                   f"mode inside the unit's namespace: {mode}")
+    pid = systemctl_show("go-choir-vmctl", ["MainPID"]).get("MainPID", "0")
+    for path in VMCTL_READ_ONLY:
+        if pid in ("", "0"):
+            record("containment", f"go-choir-vmctl cannot write {path}", False, "not running")
+            continue
+        record("containment", f"go-choir-vmctl cannot write {path}", not writable_in_namespace(pid, path),
+               "writable inside vmctl's namespace" if writable_in_namespace(pid, path) else "read-only")
+
+
 def check_dolt_probe():
     """The query-level Dolt liveness probe (scripts/dolt-liveness-probe.sh)
     must be scheduled and healthy: docs/problems/
@@ -730,6 +765,7 @@ def main():
     check_internal(args.expect_internal, args.with_credential)
     check_credential_delivery(args.expect_internal)
     check_units()
+    check_containment()
     check_dolt(args.expect_dolt, args.with_credential)
     check_dolt_probe()
     check_paper_probe()
