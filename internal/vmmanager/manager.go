@@ -174,7 +174,20 @@ type VMConfig struct {
 	// (cold | refresh | recover | resume). Callers set it before bootVM;
 	// bootVM defaults empty values to "cold".
 	BootKind string
+
+	// OfflineMaintenance, when set on a refresh, runs after the Firecracker
+	// process is killed and before the boot, with the VM's data image path,
+	// under the per-VM operation lock (docs/problems/guest-store-compaction-
+	// scheduled-2026-10-20.md). It must leave a bootable image even when it
+	// fails; the boot happens either way. Refresh takes it from the overrides
+	// only and never stores it in an instance config.
+	OfflineMaintenance func(dataImagePath string) error `json:"-"`
 }
+
+// ErrOfflineMaintenanceUnbootable is returned (wrapped) by an
+// OfflineMaintenance hook that could not leave a bootable image, for example
+// when restoring its backup failed. Refresh then does not boot the VM.
+var ErrOfflineMaintenanceUnbootable = errors.New("offline maintenance left no bootable image")
 
 // VMInstance represents a running or stopped Firecracker VM.
 type VMInstance struct {
@@ -1541,6 +1554,7 @@ func (m *Manager) RefreshVMWithConfig(vmID string, overrides VMConfig) (*VMInsta
 	m.killFirecrackerProcess(inst, "refresh")
 	inst.State = StateFailed
 	cfg := refreshBootConfig(inst.Config, overrides, m.cfg)
+	cfg.OfflineMaintenance = nil
 	if overrides.BootKind == "" {
 		cfg.BootKind = "refresh"
 	}
@@ -1550,6 +1564,15 @@ func (m *Manager) RefreshVMWithConfig(vmID string, overrides VMConfig) (*VMInsta
 	cfg.VMID = vmID
 	m.mu.Unlock()
 
+	if overrides.OfflineMaintenance != nil {
+		dataImage := filepath.Join(m.cfg.StateDir, vmID, "data.img")
+		if err := overrides.OfflineMaintenance(dataImage); err != nil {
+			if errors.Is(err, ErrOfflineMaintenanceUnbootable) {
+				return nil, fmt.Errorf("vm %s not booted after offline maintenance: %w", vmID, err)
+			}
+			log.Printf("vmmanager: offline maintenance for %s failed (booting the image it left): %v", vmID, err)
+		}
+	}
 	return m.bootVM(cfg)
 }
 

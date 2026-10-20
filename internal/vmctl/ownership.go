@@ -409,7 +409,15 @@ type VMManagerConfig struct {
 	// (cold | refresh | recover | resume). Optional; the manager defaults
 	// empty values to "cold".
 	BootKind string
+
+	// OfflineMaintenance runs on a refresh between the kill and the boot,
+	// with the data image path (store_compaction.go). Refresh only.
+	OfflineMaintenance func(dataImagePath string) error
 }
+
+// ErrOfflineMaintenanceUnbootable marks an OfflineMaintenance failure that
+// left no bootable image; the refresh then fails instead of booting.
+var ErrOfflineMaintenanceUnbootable = errors.New("offline maintenance left no bootable image")
 
 // VMInstanceInfo holds the information returned by the VM manager
 // after a VM lifecycle operation.
@@ -3003,6 +3011,20 @@ func (r *OwnershipRegistry) recoverVMForDesktop(userID, desktopID string, mainte
 // while preserving persistent user data. This is for deploy-time image refresh
 // and owner-scoped recovery from stale boot artifacts, not crash recovery.
 func (r *OwnershipRegistry) RefreshVMForDesktop(userID, desktopID string) (*VMOwnership, error) {
+	return r.refreshVMForDesktop(userID, desktopID, nil)
+}
+
+// RefreshVMForDesktopWithMaintenance refreshes a running computer and runs
+// maintenance on its data image between the kill and the boot
+// (store_compaction.go). It refuses a computer that is not running.
+func (r *OwnershipRegistry) RefreshVMForDesktopWithMaintenance(userID, desktopID string, maintenance func(dataImagePath string) error) (*VMOwnership, error) {
+	if maintenance == nil {
+		return nil, fmt.Errorf("refresh with maintenance: no maintenance given")
+	}
+	return r.refreshVMForDesktop(userID, desktopID, maintenance)
+}
+
+func (r *OwnershipRegistry) refreshVMForDesktop(userID, desktopID string, maintenance func(dataImagePath string) error) (*VMOwnership, error) {
 	var ensureVMID string
 	defer func() {
 		if ensureVMID != "" {
@@ -3039,6 +3061,10 @@ func (r *OwnershipRegistry) RefreshVMForDesktop(userID, desktopID string) (*VMOw
 	snapshot := *own
 	missingManagerInstance := mgr != nil && mgr.GetVM(own.VMID) == nil &&
 		(own.State == VMStateStopped || own.State == VMStateHibernated || own.State == VMStateFailed)
+	if maintenance != nil && (mgr == nil || own.State != VMStateActive || missingManagerInstance) {
+		r.mu.Unlock()
+		return nil, fmt.Errorf("VM %s refresh with maintenance needs a running VM (state=%s)", own.VMID, own.State)
+	}
 	r.refreshing[key] = struct{}{}
 	r.mu.Unlock()
 	defer func() {
@@ -3064,6 +3090,7 @@ func (r *OwnershipRegistry) RefreshVMForDesktop(userID, desktopID string) (*VMOw
 		if missingManagerInstance {
 			info, err = mgr.BootVM(cfg)
 		} else {
+			cfg.OfflineMaintenance = maintenance
 			info, err = mgr.RefreshVM(snapshot.VMID, cfg)
 		}
 		if err != nil {

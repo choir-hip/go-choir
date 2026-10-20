@@ -157,6 +157,10 @@ type Handler struct {
 	guestMarker guestPlannedRestartMarker
 	// deployRefreshMu guards the lazily built deploy refresh tracker (the
 	// pending set the retry sweep works through, and the in-flight guard).
+	// storeCompact runs guest store compactions (store_compaction.go); built
+	// on first use unless a test sets it.
+	storeCompactOnce     sync.Once
+	storeCompact         *storeCompactState
 	deployRefreshMu      sync.Mutex
 	deployRefreshTracker *deployRefreshTracker
 	// guestServedCommit reads the build a guest serves (nil: its /health).
@@ -1245,6 +1249,8 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/vmctl/maintenance-serve", attributedLifecycle(h.HandleMaintenanceServe))
 	s.HandleFunc("/internal/vmctl/refresh", attributedLifecycle(h.HandleRefresh))
 	s.HandleFunc("/internal/vmctl/deploy-refresh", attributedLifecycle(h.HandleDeployRefresh))
+	s.HandleFunc("/internal/vmctl/compact-store", attributedLifecycle(h.HandleCompactStore))
+	s.HandleFunc("/internal/vmctl/compact-sweep", attributedLifecycle(h.HandleCompactSweep))
 	s.HandleFunc("/internal/vmctl/idle-check", h.HandleIdleCheck)
 	s.HandleFunc("/internal/vmctl/reclaim", attributedLifecycle(h.HandleReclaim))
 	s.HandleFunc("/internal/vmctl/hold", h.HandleHold)

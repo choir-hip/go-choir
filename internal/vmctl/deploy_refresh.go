@@ -290,6 +290,13 @@ func (h *Handler) HandleDeployRefresh(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) deployRefresh(ctx context.Context, req deployRefreshRequest) (deployRefreshResponse, int) {
+	return h.deployRefreshWith(ctx, req, nil)
+}
+
+// deployRefreshWith is deployRefresh with optional offline maintenance run on
+// the data image between the kill and the boot (store_compaction.go). The
+// guards, the planned-restart marker and its busy refusal are the same.
+func (h *Handler) deployRefreshWith(ctx context.Context, req deployRefreshRequest, maintenance func(dataImagePath string) error) (deployRefreshResponse, int) {
 	existing := h.registry.GetOwnershipForDesktop(req.UserID, req.DesktopID)
 	if existing == nil {
 		return deployRefreshResponse{Outcome: deployRefreshSkipped, Reason: "no computer", UserID: req.UserID, DesktopID: req.DesktopID}, http.StatusNotFound
@@ -342,7 +349,13 @@ func (h *Handler) deployRefresh(ctx context.Context, req deployRefreshRequest) (
 		return reply(deployRefreshDeferred, "guest did not answer the planned-restart request: "+detail, http.StatusConflict)
 	}
 
-	refreshed, err := h.registry.RefreshVMForDesktop(req.UserID, req.DesktopID)
+	var refreshed *VMOwnership
+	var err error
+	if maintenance != nil {
+		refreshed, err = h.registry.RefreshVMForDesktopWithMaintenance(req.UserID, req.DesktopID, maintenance)
+	} else {
+		refreshed, err = h.registry.RefreshVMForDesktop(req.UserID, req.DesktopID)
+	}
 	if err != nil {
 		if planned {
 			// The marker must not outlive a restart that did not happen.

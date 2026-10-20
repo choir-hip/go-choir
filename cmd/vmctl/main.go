@@ -328,6 +328,22 @@ func toManagerVMConfig(cfg vmctl.VMManagerConfig) vmmanager.VMConfig {
 		MaintenanceHold:            cfg.MaintenanceHold,
 		RecoveryReplayOnly:         cfg.RecoveryReplayOnly,
 		BootKind:                   cfg.BootKind,
+		OfflineMaintenance:         toManagerOfflineMaintenance(cfg.OfflineMaintenance),
+	}
+}
+
+// toManagerOfflineMaintenance maps vmctl's unbootable sentinel to the
+// manager's, so a hook that could not restore its backup stops the boot.
+func toManagerOfflineMaintenance(hook func(string) error) func(string) error {
+	if hook == nil {
+		return nil
+	}
+	return func(dataImagePath string) error {
+		err := hook(dataImagePath)
+		if errors.Is(err, vmctl.ErrOfflineMaintenanceUnbootable) {
+			return fmt.Errorf("%w: %v", vmmanager.ErrOfflineMaintenanceUnbootable, err)
+		}
+		return err
 	}
 }
 

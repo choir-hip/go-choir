@@ -1994,20 +1994,23 @@ func TestIssueGatewayToken_GatewayFailure(t *testing.T) {
 // It records lifecycle calls so tests can verify that the OwnershipRegistry
 // properly delegates to the VM manager when one is configured.
 type mockVMManager struct {
-	mu             sync.Mutex
-	boots          []VMManagerConfig
-	stops          []string
-	hibernates     []string
-	resumes        []string
-	reattaches     []string
-	reattachCfgs   []VMManagerConfig
-	recovers       []string
-	refreshes      []string
-	recoverCfgs    []VMManagerConfig
-	refreshCfgs    []VMManagerConfig
-	destroys       []string
-	tokens         map[string]string
-	reservedEpochs map[string]int64
+	mu           sync.Mutex
+	boots        []VMManagerConfig
+	stops        []string
+	hibernates   []string
+	resumes      []string
+	reattaches   []string
+	reattachCfgs []VMManagerConfig
+	recovers     []string
+	refreshes    []string
+	recoverCfgs  []VMManagerConfig
+	refreshCfgs  []VMManagerConfig
+	// maintenanceImage, when set, makes RefreshVM run the config's
+	// OfflineMaintenance on it before "booting", as vmmanager does.
+	maintenanceImage string
+	destroys         []string
+	tokens           map[string]string
+	reservedEpochs   map[string]int64
 	// Configurable responses
 	bootResponse       *VMInstanceInfo
 	bootError          error
@@ -2157,6 +2160,11 @@ func (m *mockVMManager) RefreshVM(vmID string, cfg VMManagerConfig) (*VMInstance
 	m.mu.Unlock()
 	if release != nil {
 		<-release
+	}
+	if cfg.OfflineMaintenance != nil && m.maintenanceImage != "" {
+		if err := cfg.OfflineMaintenance(m.maintenanceImage); errors.Is(err, ErrOfflineMaintenanceUnbootable) {
+			return nil, err
+		}
 	}
 	if refreshError != nil {
 		return nil, refreshError
