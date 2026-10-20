@@ -956,6 +956,9 @@ func (s *Store) Reopen(path string) error {
 
 // Close closes the underlying database connection.
 func (s *Store) Close() error {
+	// Graceful close seals the telemetry window first. A crash does not, which
+	// is the loss the ruling allows.
+	s.closeTelemetry()
 	var err error
 	if closeErr := s.closeDepositUpcastLedger(); closeErr != nil {
 		err = closeErr
@@ -1937,6 +1940,21 @@ func (s *Store) AppendEvent(ctx context.Context, rec *types.EventRecord) error {
 	}
 	s.telemetryStats.recordAppend(rec.Kind)
 
+	// Telemetry batching (docs/reports/telemetry-batching-design-2026-10-20.md).
+	// sl is nil unless batching was ever configured on in this process, and
+	// then every line below that mentions it is skipped: the flag-off path is
+	// the code that was here before. batched means this record is queued, not
+	// written: only a batched kind, only on the standalone path (this
+	// function), only with the sealer accepting records and a boot watermark
+	// already durable. The slot is reserved here, before eventMu, because
+	// reserving may flush and a flush must never run under eventMu.
+	sl := s.telemetry.Load()
+	batched := false
+	if sl != nil && s.projectionTape != nil && rec.Kind.Batchable() && sl.accepting() {
+		batched = s.ensureBootWatermark(ctx, sl) && sl.reserve()
+	}
+	reservationHeld := batched
+
 	// Serialize event sequence allocation to prevent two concurrent
 	// goroutines from reading the same max and assigning duplicate Seq
 	// or StreamSeq values. The old SQL path relied on UNIQUE(loop_id, seq).
@@ -1945,6 +1963,9 @@ func (s *Store) AppendEvent(ctx context.Context, rec *types.EventRecord) error {
 	defer func() {
 		if !unlocked {
 			s.eventMu.Unlock()
+		}
+		if reservationHeld {
+			sl.release() // an early return before enqueue gives the slot back
 		}
 	}()
 	tapeBound := s.projectionTape != nil
@@ -1980,6 +2001,18 @@ func (s *Store) AppendEvent(ctx context.Context, rec *types.EventRecord) error {
 				maxSeq = ev.Seq
 			}
 		}
+		if sl != nil {
+			// With the sealer a number can be published and never stored, so a
+			// seed from the store alone can hand it out twice (design 6.1).
+			// Skip a gap over anything the previous process could have lost,
+			// and never go below a number the queue still holds.
+			if maxSeq > 0 {
+				maxSeq += telemetrySeqGap
+			}
+			if floor := sl.seqFloor(key); floor > maxSeq {
+				maxSeq = floor
+			}
+		}
 		if s.eventSeqs == nil || len(s.eventSeqs) >= eventSeqCacheLimit {
 			s.eventSeqs = map[eventSeqKey]int64{}
 		}
@@ -2008,9 +2041,30 @@ func (s *Store) AppendEvent(ctx context.Context, rec *types.EventRecord) error {
 			}
 		}
 		s.streamSeqSeeded = true
+		if sl != nil && s.maxStreamSeq > 0 {
+			s.maxStreamSeq += telemetrySeqGap // see the per-run seed above
+		}
 	}
 	s.maxStreamSeq++
 	rec.StreamSeq = s.maxStreamSeq
+
+	if batched {
+		queued, err := newTelemetryRecord(rec)
+		if err == nil {
+			// The refusals the acknowledged write would have made at this
+			// moment, so a refused write still reaches its caller.
+			err = s.ogStore.PreflightWrite(ctx, []objectgraph.Object{queued.object}, nil)
+		}
+		if err != nil {
+			return err // numbers stay allocated: a gap, never a duplicate
+		}
+		reason, triggered := sl.enqueue(queued) // consumes the reservation
+		reservationHeld = false
+		s.eventMu.Unlock()
+		unlocked = true
+		sl.afterEnqueue(reason, triggered)
+		return nil
+	}
 
 	if tapeBound {
 		s.eventMu.Unlock()
@@ -2021,12 +2075,13 @@ func (s *Store) AppendEvent(ctx context.Context, rec *types.EventRecord) error {
 		// append re-reads the store and takes this number again, as the
 		// per-append read did. If a concurrent append to the run (possible
 		// once the tape path released eventMu) already took a later number,
-		// keep the mark: a gap, never a duplicate.
+		// keep the mark: a gap, never a duplicate. With the sealer the mark is
+		// kept always: the number may sit in a queue as well (design 6.1).
 		if unlocked {
 			s.eventMu.Lock()
 			defer s.eventMu.Unlock()
 		}
-		if s.eventSeqs[key] == rec.Seq {
+		if sl == nil && s.eventSeqs[key] == rec.Seq {
 			delete(s.eventSeqs, key)
 		}
 		return err

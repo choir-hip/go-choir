@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -138,6 +139,25 @@ type tapeHarness struct {
 	tape       *recordingTape
 	store      *Store
 	appender   *computerevent.ComputerEventAppender
+	// dryRunHook, when set, is consulted by the projection's dry run: a
+	// non-nil error refuses the batch before anything is pinned.
+	dryRunHook func(batch *computerevent.ProjectionBatch) error
+}
+
+// hookedProjection is the store as the appender's projection, with a scriptable
+// dry-run refusal. Every other method is the store's own.
+type hookedProjection struct {
+	*Store
+	hook func() func(batch *computerevent.ProjectionBatch) error
+}
+
+func (p hookedProjection) DryRunProjectionBatch(ctx context.Context, computerID string, batch *computerevent.ProjectionBatch) error {
+	if fn := p.hook(); fn != nil {
+		if err := fn(batch); err != nil {
+			return err
+		}
+	}
+	return p.Store.DryRunProjectionBatch(ctx, computerID, batch)
 }
 
 func newTapeHarness(t *testing.T) *tapeHarness {
@@ -163,7 +183,7 @@ func (h *tapeHarness) bind() {
 	appender, err := computerevent.NewComputerEventAppender(
 		h.computerID,
 		recordingPinner{liveTapePinner: liveTapePinner{signer: h.tape.signer}, tape: h.tape},
-		h.store,
+		hookedProjection{Store: h.store, hook: func() func(*computerevent.ProjectionBatch) error { return h.dryRunHook }},
 		recordingCAS{liveTapeCAS: liveTapeCAS{signer: h.tape.signer, projection: h.store}, tape: h.tape},
 		liveTapeVerifier{},
 	)
@@ -198,8 +218,82 @@ func (h *tapeHarness) event(id, run, owner string, kind types.EventKind, at time
 
 var telemetryBase = time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
 
-// abandon drops the store the way a crash does: nothing is flushed on purpose.
+// abandon drops the store the way a crash does: whatever the sealer still
+// holds is discarded, nothing is flushed on purpose.
 func (h *tapeHarness) abandon() {
 	h.t.Helper()
+	if sl := h.store.telemetry.Load(); sl != nil {
+		sl.discardForCrash()
+	}
 	_ = h.store.Close()
+}
+
+// enableBatching turns the sealer on with a test window (not clamped, so a
+// test can use a window well under the production floor of 250 ms).
+func (h *tapeHarness) enableBatching(window time.Duration) *telemetrySealer {
+	h.t.Helper()
+	if err := h.store.ConfigureTelemetryBatching(TelemetryBatchConfig{Enabled: true, Window: window}); err != nil {
+		h.t.Fatal(err)
+	}
+	sl := h.store.telemetry.Load()
+	sl.setWindow(window)
+	return sl
+}
+
+// shapeEntry is one tape event reduced to what the ordering tests read: its
+// authority and the events it carries, each as "kind:event_id" (run memory as
+// "run_memory:entry_id").
+type shapeEntry struct {
+	Authority string
+	Items     []string
+}
+
+func (h *tapeHarness) shape() []shapeEntry {
+	h.t.Helper()
+	var out []shapeEntry
+	for _, rec := range h.tape.snapshot() {
+		e := shapeEntry{Authority: rec.Authority}
+		for _, op := range h.tape.batchOps(h.t, rec) {
+			switch op.Kind {
+			case computerevent.ProjectionOpObject:
+				var obj objectgraph.Object
+				if err := json.Unmarshal(op.Body, &obj); err != nil {
+					h.t.Fatal(err)
+				}
+				var ev types.EventRecord
+				if err := json.Unmarshal(obj.Body, &ev); err != nil {
+					h.t.Fatal(err)
+				}
+				e.Items = append(e.Items, string(ev.Kind)+":"+ev.EventID)
+			case computerevent.ProjectionOpRunMemoryEntry:
+				e.Items = append(e.Items, "run_memory:"+op.CanonicalID)
+			default:
+				e.Items = append(e.Items, string(op.Kind))
+			}
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
+// storedEvents reads the events of one run through the sealing read path.
+func (h *tapeHarness) storedEvents(runID string) []types.EventRecord {
+	h.t.Helper()
+	events, err := h.store.ListEventsAfter(context.Background(), runID, 0, 1000)
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	return events
+}
+
+func waitFor(t *testing.T, what string, timeout time.Duration, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("timed out after %s waiting for %s", timeout, what)
 }

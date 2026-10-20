@@ -32,6 +32,9 @@ func (s *Store) BindProjectionTape(computerID string, appender *computerevent.Co
 	}
 	tape := &projectionTape{computerID: computerID, appender: appender, stats: &s.telemetryStats}
 	s.projectionTape = tape
+	if sl := s.telemetry.Load(); sl != nil {
+		appender.SetAppendBarrier(sl.appendBarrier) // a rebind keeps the barrier
+	}
 	if s.ogStore != nil {
 		s.ogStore.SetMutationInterceptor(tape.interceptOG)
 	}
@@ -96,7 +99,19 @@ func (t *projectionTape) appendDesktop(ctx context.Context, state projectedDeskt
 	}})
 }
 
+// projectionAuthority is the authority_ref of every ordinary projection batch;
+// telemetryProjectionAuthority marks a batch the telemetry sealer wrote, so
+// the tape itself says which batches are telemetry (design 3.4 layer 5).
+const (
+	projectionAuthority          = "authority:vm-local-projection"
+	telemetryProjectionAuthority = "authority:vm-local-projection-telemetry"
+)
+
 func (t *projectionTape) appendOps(ctx context.Context, ops []computerevent.ProjectionOp) error {
+	return t.appendOpsAs(ctx, ops, projectionAuthority)
+}
+
+func (t *projectionTape) appendOpsAs(ctx context.Context, ops []computerevent.ProjectionOp, authority string) error {
 	if t == nil || t.appender == nil {
 		return fmt.Errorf("store: projection tape is not bound")
 	}
@@ -125,7 +140,7 @@ func (t *projectionTape) appendOps(ctx context.Context, ops []computerevent.Proj
 		OccurredAt:     time.Now().UTC().Format(time.RFC3339Nano),
 		IdempotencyKey: "projection-batch:" + eventID,
 		ActorProfile:   "trusted-core",
-		AuthorityRef:   "authority:vm-local-projection",
+		AuthorityRef:   authority,
 		PrivacyClass:   "owner",
 		ReducerVersion: computerevent.ReducerVersionV1,
 	}

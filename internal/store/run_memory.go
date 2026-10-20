@@ -81,7 +81,10 @@ func (s *Store) AppendRunMemoryEntry(ctx context.Context, entry types.RunMemoryE
 		if err != nil {
 			return types.RunMemoryEntry{}, fmt.Errorf("marshal projected run memory entry: %w", err)
 		}
-		if err := s.projectionTape.appendOps(ctx, []computerevent.ProjectionOp{{
+		// Run memory is not telemetry and is not ordered against it: it is the
+		// one exemption from the telemetry append barrier (design 4.3). A
+		// source-scan test allows exactly two WithBarrierExemption callers.
+		if err := s.projectionTape.appendOps(computerevent.WithBarrierExemption(ctx), []computerevent.ProjectionOp{{
 			Kind: computerevent.ProjectionOpRunMemoryEntry, CanonicalID: entry.EntryID, Body: body,
 		}}); err != nil {
 			return types.RunMemoryEntry{}, fmt.Errorf("append projected run memory entry: %w", err)

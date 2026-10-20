@@ -35,6 +35,14 @@ const SettingManagementSerialTasks = "management.serial_tasks"
 // and turning it off is the rollback.
 const SettingCalibrationFeedback = "calibration.feedback"
 
+// SettingTelemetryBatch turns on run-telemetry batching for the computer: the
+// ten high-volume trace event kinds are sealed in small windows instead of one
+// acknowledged tape write each, and a crash may lose the open window
+// (docs/reports/telemetry-batching-design-2026-10-20.md). Off by default; off
+// drains the queue and is the rollback. The env flag CHOIR_TELEMETRY_BATCH=on
+// turns it on regardless.
+const SettingTelemetryBatch = "telemetry.batch"
+
 // KnownComputerSettings are the settings a computer has, with their
 // defaults. A key outside this list is refused, so a typo never stores a
 // setting nobody reads.
@@ -42,6 +50,7 @@ var KnownComputerSettings = map[string]bool{
 	SettingIntakeLabels:          false,
 	SettingManagementSerialTasks: false,
 	SettingCalibrationFeedback:   false,
+	SettingTelemetryBatch:        false,
 }
 
 // ComputerSetting is one switch's value on one computer.

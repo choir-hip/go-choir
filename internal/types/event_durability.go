@@ -1,5 +1,7 @@
 package types
 
+import "sort"
+
 // EventDurability says how a runtime event kind reaches the tape.
 //
 // It belongs to the kind, never to the caller: a call site has no parameter
@@ -103,4 +105,15 @@ func (k EventKind) Durability() EventDurability {
 // Batchable reports whether the kind may be sealed in a telemetry window.
 func (k EventKind) Batchable() bool {
 	return k.Durability() == DurabilityBatched
+}
+
+// EventKinds returns every classified runtime event kind, sorted. Tests use it
+// to exercise each kind; the parser test keeps it equal to the constants.
+func EventKinds() []EventKind {
+	kinds := make([]EventKind, 0, len(eventDurability))
+	for k := range eventDurability {
+		kinds = append(kinds, k)
+	}
+	sort.Slice(kinds, func(i, j int) bool { return kinds[i] < kinds[j] })
+	return kinds
 }

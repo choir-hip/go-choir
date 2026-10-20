@@ -174,9 +174,11 @@ type BatchingStats struct {
 }
 
 // TelemetryStats is the batching instrumentation snapshot served on the
-// guest observability endpoint. Phase 0 reads it to price batching:
-// BatchableShare is t and OpsPerTapeEvent is the baseline batch size, both
-// of design section 7. It is read-only; nothing branches on it.
+// guest observability endpoint. Phase 0 reads it to price batching, with the
+// flag off: t of design section 7 is EventsAppendedBatchable / TapeEvents
+// (each standalone AppendEvent is one tape event), and OpsPerTapeEvent is the
+// baseline batch size. With the flag on the sealer counters give the realised
+// k. It is read-only; nothing branches on it.
 type TelemetryStats struct {
 	EventsAppendedByKind       map[string]int64 `json:"events_appended_by_kind"`
 	EventsAppendedBatchable    int64            `json:"events_appended_batchable"`
@@ -190,9 +192,6 @@ type TelemetryStats struct {
 	OpsPerTapeEvent       map[string]int64 `json:"ops_per_tape_event"`
 	TapeEventsByAuthority map[string]int64 `json:"tape_events_by_authority"`
 	TapeOpsByKind         map[string]int64 `json:"tape_ops_by_kind"`
-	// BatchableTapeShare is batchable AppendEvents / all tape events: the t of
-	// design section 7 (about the share of the tape that batching can shrink).
-	BatchableTapeShare float64 `json:"batchable_tape_share"`
 
 	ReadsConsistent int64 `json:"reads_consistent"`
 	ReadsRelaxed    int64 `json:"reads_relaxed"`
@@ -231,9 +230,6 @@ func (s *Store) TelemetryStats() TelemetryStats {
 		if n := c.tapeOpsHist[i].Load(); n > 0 {
 			out.OpsPerTapeEvent[opsBucketLabel(i)] = n
 		}
-	}
-	if out.TapeEvents > 0 {
-		out.BatchableTapeShare = float64(out.EventsAppendedBatchable) / float64(out.TapeEvents)
 	}
 	out.ReadsConsistent = c.readsConsistent.Load()
 	out.ReadsRelaxed = c.readsRelaxed.Load()
