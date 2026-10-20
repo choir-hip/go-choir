@@ -1,5 +1,5 @@
-// The AI-written disclosure at the top of an Autopaper story (owner notes
-// §27 item 14; EU AI Act Art. 50(4) applies to AI-written public-interest
+// The AI-written disclosure at the bottom of an Autopaper story, before the
+// related block (owner notes §27 item 14, placement §28; EU AI Act Art. 50(4) applies to AI-written public-interest
 // text published without human editorial control). Autopaper stories are
 // written by the paper's agent desks and published without a human editor,
 // so every one carries the line. A person's own published Texture does not:

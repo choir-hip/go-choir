@@ -1850,7 +1850,8 @@
   $: renderedMarkdown = renderDocumentHTML(editorValue, editorBodyDoc, publishedCitations);
   $: relatedHTML = isPublishedReadOnly && publishedBundle ? renderRelatedHTML(publishedRelated) : '';
   $: disclosureHTML = isPublishedReadOnly && publishedBundle ? aiDisclosureHTML(appContext) : '';
-  $: syncEditorSurface(disclosureHTML + renderedMarkdown + relatedHTML);
+  // The AI-written label closes the story, before related stories (owner notes §28).
+  $: syncEditorSurface(renderedMarkdown + disclosureHTML + relatedHTML);
 
   onMount(() => {
     if (!initializedKey) {

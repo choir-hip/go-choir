@@ -72,9 +72,10 @@
   font-size: 0.74rem;
 }
 
-/* The AI-written disclosure above an Autopaper story (texture-ai-disclosure.ts). */
+/* The AI-written disclosure at the bottom of an Autopaper story, before the
+   related block (texture-ai-disclosure.ts; owner notes §28). */
 .texture-ai-disclosure {
-  margin: 0 0 1.25rem;
+  margin: 1.5rem 0 0;
   padding: 0.5rem 0.75rem;
   border-left: 3px solid currentColor;
   font-size: 0.85em;

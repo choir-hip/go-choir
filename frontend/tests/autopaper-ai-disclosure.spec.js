@@ -5,8 +5,9 @@
  *
  * Ways it can fail:
  *   D1 An Autopaper story renders without the disclosure.
- *   D2 The disclosure sits below the story (a reader must see it before the
- *      text), or outside the scrolling article.
+ *   D2 The disclosure is not at the article bottom: it must follow the last
+ *      story paragraph and sit directly before the related block (owner notes
+ *      §28), inside the scrolling article.
  *   D3 A published document that is not an Autopaper story (a person's own
  *      published Texture) is labelled AI-written.
  *   D4 The label is lost when the reader moves to another story through a
@@ -71,7 +72,7 @@ async function mockRoutes(page) {
 test.describe('the disclosure on a story page', () => {
   test.use({ viewport: { width: 375, height: 812 }, storageState: { cookies: [], origins: [] } });
 
-  test('opens the article, above the first paragraph, and survives a related link (D1, D2, D4, D5)', async ({ page }) => {
+  test('closes the article, after the last paragraph and before related stories, and survives a related link (D1, D2, D4, D5)', async ({ page }) => {
     await mockRoutes(page);
     await page.goto(`${BASE_URL}/autopaper/story-a`, { waitUntil: 'domcontentloaded' });
     const reader = page.locator('[data-texture-published-reader]');
@@ -79,13 +80,19 @@ test.describe('the disclosure on a story page', () => {
     const label = reader.locator('[data-texture-ai-disclosure]');
     await expect(label).toHaveCount(1, { timeout: 15_000 });
     await expect(label).toHaveText(AI_DISCLOSURE_TEXT);
-    const order = await reader.evaluate((el) => {
-      const label = el.querySelector('[data-texture-ai-disclosure]');
-      const first = [...el.querySelectorAll('p')].find((p) => !label.contains(p));
-      return label.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING;
-    });
-    expect(order, 'the label comes before the first paragraph').toBeTruthy();
     await expect(reader.locator('[data-texture-related]')).toHaveCount(1, { timeout: 15_000 });
+    const placement = await reader.evaluate((el) => {
+      const label = el.querySelector('[data-texture-ai-disclosure]');
+      const related = el.querySelector('[data-texture-related]');
+      const story = [...el.querySelectorAll('p')].filter((p) => !label.contains(p) && !related.contains(p));
+      const last = story[story.length - 1];
+      return {
+        afterLastParagraph: Boolean(last.compareDocumentPosition(label) & Node.DOCUMENT_POSITION_FOLLOWING),
+        nextIsRelated: label.nextElementSibling === related,
+      };
+    });
+    expect(placement.afterLastParagraph, 'the label follows the last story paragraph').toBe(true);
+    expect(placement.nextIsRelated, 'the related block follows the label directly').toBe(true);
     expect(await reader.evaluate((el) => el.lastElementChild?.hasAttribute('data-texture-related'))).toBe(true);
 
     await reader.locator('[data-related-link]').first().click();
