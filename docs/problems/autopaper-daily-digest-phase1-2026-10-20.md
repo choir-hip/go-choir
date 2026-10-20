@@ -1,7 +1,7 @@
 # Autopaper daily digest, phase 1: two problems found before building (2026-10-20)
 
-Status: documented; phase 1 code follows on `worktree-agent-acf270b75bf8b2602`
-(not pushed, not deployed). Mutation class of the work: **red** (a new
+Status: phase 1 built on `worktree-agent-acf270b75bf8b2602` (not pushed, not
+deployed, not run against staging; see "As built" below). Mutation class of the work: **red** (a new
 outbound send path on the shared sending domain, a host timer in
 `nix/node-b.nix`, a route beside the mail send gate). The Mail app toggle and
 the ranking function are orange within it.
@@ -90,3 +90,53 @@ Repaired: none.
 disable `go-choir-digest.timer`, or `DELETE` the subscription, or revert the
 commit. Tables are additive and can stay. Mail already sent cannot be
 recalled.
+
+## As built (2026-10-20)
+
+Where: `internal/maild/digest*.go` (rank mirror, selection, render, store,
+routes), `cmd/maild/main.go` (boot closes started runs), `internal/proxy/email.go`
+(digest writes are owner acts an API key cannot do), `nix/node-b.nix`
+(`go-choir-digest` oneshot and timer, `MAILD_CORPUSD_URL`, `MAILD_DIGEST`),
+`frontend/src/lib/MailApp.svelte` (the toggle), specs under `frontend/tests/`.
+
+How the owner opts in: Mail app, signed in, the calendar button in the list
+header, switch On. It is the account's address of record; no address is typed.
+
+Timer: 12:00 UTC daily, `Persistent = false`, a oneshot that curls
+`http://127.0.0.1:8087/internal/maild/digest/run` with `X-Internal-Caller: true`
+and the host-internal token header from `$CREDENTIALS_DIRECTORY`. It exits 1 if
+the credential is unreadable. curl `--fail-with-body`, so a 503 (no Resend key)
+or 502 (provider failure) fails the unit.
+
+Deviations from the design, each chosen for a stated reason:
+
+1. The rank measures age from the edition time, not the run clock (the page
+   reads no clock); the 24 hour candidate window is the only clock read.
+2. The digest reads 60 stories, the page's first load, not 100.
+3. `UNIQUE(owner, run_date, kind)` is a partial unique index on scheduled rows
+   only, so send-now can run once an hour. Scheduled reruns the same day are
+   allowed after a skipped, failed or interrupted row (Resend's key dedups a
+   send that did land); a started or sent row is never rerun.
+4. Preview and send-now do not read or write the no-repeat ledger: the ledger
+   belongs to the scheduled series, and a manual send must not hide stories
+   from tomorrow's mail. Stories with no section are not capped as a group.
+5. A missing Resend key answers 503 even with nobody subscribed, so the unit
+   fails visibly from the first deploy rather than at the first opt-in.
+6. The footer link `https://choir.news/?app=email` lands on the desktop, not
+   the Mail window: a bare `?app=email` is consumed by the shell and opens
+   nothing (an existing spec asserts that). Residual.
+
+Residual risks: the Go rank is a copy (parity test guards drift only where
+node is on PATH, `CHOIR_REQUIRE_NODE=1` makes its absence a failure; the
+committed golden guards the Go side everywhere); the Resend key's presence on
+the host is unverified; DMARC `p=none` has no `rua`; deliverability is
+unproven until the owner reads "Show original" on the first message; bounce
+and complaint handling (G5) still blocks any second recipient.
+
+Acceptance (not run): `frontend/tests/autopaper-digest-deployed.spec.js` after
+the landing loop. It registers a QA account at `delivered+digest<run>@resend.dev`
+(Resend's sink), checks 401 signed out, opt-in, a preview of 3 to 8 stories
+that are on the live front list, in page order, with safe links, one real
+send-now, the one-an-hour limit and opt-out. A second run armed with
+`DIGEST_ARM_SCHEDULED=1`, then `DIGEST_CHECK_SCHEDULED=1` after 12:00 UTC the
+next day, proves the timer.
