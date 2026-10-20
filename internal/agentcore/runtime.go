@@ -38,6 +38,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/qdrant"
 	"github.com/yusefmosiah/go-choir/internal/researchtools"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
+	"github.com/yusefmosiah/go-choir/internal/steptrace"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/texturewrite"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
@@ -182,6 +183,10 @@ type Runtime struct {
 	desktopState    *desktopstate.Handler
 	content         *contentowner.Service
 	capsuleExecutor *capsule.Executor
+	// steps tracks the named in-flight steps of long operations for
+	// /api/runtime/observability (step_trace.go); stepsOnce creates it.
+	steps     *steptrace.Tracker
+	stepsOnce sync.Once
 	// textureCellAuthorizer commits a Texture cell's turn (choir.Write,
 	// Done, Wait, Reject) through the canonical ApplyTextureTurn
 	// transaction. Bound by autoputer to the texture lifecycle owner —
@@ -756,6 +761,9 @@ func WithCapsuleExecutor(executor *capsule.Executor) RuntimeOption {
 	return func(rt *Runtime) {
 		rt.capsuleExecutor = executor
 		rt.assignmentReceiptResolver = executor
+		if executor != nil {
+			executor.SetStepTrace(rt.stepTrace())
+		}
 		if executor != nil {
 			rt.capsuleBuilder = transaction.NewTransactionBuilder(transaction.NewClassifier())
 			// A capsule job's end commits its record and wakes its run

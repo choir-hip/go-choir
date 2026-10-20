@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/steptrace"
 	"github.com/yusefmosiah/go-choir/internal/visualcapture"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
@@ -118,6 +119,7 @@ func (e *Executor) ResolveGrantedExecutionReceipts(context.Context, string, stri
 func (e *Executor) ResolveGrantedExecutionReceiptsFor(context.Context, string, string, []string, SubjectBinding) ([]ExecutionReceipt, error) {
 	return nil, stubErr("execution receipts")
 }
+func (e *Executor) SetStepTrace(*steptrace.Tracker) {}
 func (e *Executor) ResolveExecutionReceipts(refs []string) ([]ExecutionReceipt, error) {
 	receipts := make([]ExecutionReceipt, 0, len(refs))
 	for _, ref := range refs {

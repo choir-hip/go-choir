@@ -2907,6 +2907,14 @@ func (s *Store) EngineMutexStats() map[string]objectgraph.EngineMutexOpStats {
 	return s.ogStore.EngineMutexStats()
 }
 
+// EngineMutexLive returns who holds the engine lock now and who waits for it.
+func (s *Store) EngineMutexLive() *objectgraph.EngineMutexLive {
+	if s == nil || s.ogStore == nil {
+		return nil
+	}
+	return s.ogStore.EngineMutexLive()
+}
+
 // marshalJSON marshals a value to JSON, returning "{}" for nil.
 func marshalJSON(v any) ([]byte, error) {
 	if v == nil {

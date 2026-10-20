@@ -134,19 +134,19 @@ func (rt *Runtime) revokeAssignedCapsule(ctx context.Context, assignment types.E
 	if ackRunID == "" {
 		ackRunID = "unbound:" + assignment.AssignmentID
 	} else if handle, err := exec.AssignmentHandle(assignment.BoundRunID, assignment.Binding.CapsuleID); err == nil {
-		if err := exec.RevokeCapability(assignment.BoundRunID, handle); err != nil {
+		if err := traceErr(rt, assignment.BoundRunID, "revoke.capability", func() error { return exec.RevokeCapability(assignment.BoundRunID, handle) }); err != nil {
 			return assignment, fmt.Errorf("revoke assignment capability: %w", err)
 		}
 	}
 	if exec.HasCapsule(assignment.Binding.CapsuleID) {
-		if err := exec.ForceDestroy(ctx, assignment.Binding.CapsuleID); err != nil {
+		if err := traceErr(rt, assignment.BoundRunID, "revoke.destroy_capsule", func() error { return exec.ForceDestroy(ctx, assignment.Binding.CapsuleID) }); err != nil {
 			return assignment, fmt.Errorf("destroy assignment capsule after durable revoke intent: %w", err)
 		}
 	}
 	if exec.HasCapsule(assignment.Binding.CapsuleID) {
 		return assignment, fmt.Errorf("assignment capsule continued after executor acknowledgement")
 	}
-	if err := exec.CleanupOrphanedCapsule(ctx, assignment.Binding.CapsuleID); err != nil {
+	if err := traceErr(rt, assignment.BoundRunID, "revoke.cleanup_orphan", func() error { return exec.CleanupOrphanedCapsule(ctx, assignment.Binding.CapsuleID) }); err != nil {
 		return assignment, fmt.Errorf("clean exact orphaned capsule residue before acknowledgement: %w", err)
 	}
 	revocationReceipt, receiptErr := exec.PersistRevocationReceipt(ackRunID, assignment.Binding.CapabilityDigest, assignment.Binding.CapsuleID, intentRef)
@@ -160,7 +160,9 @@ func (rt *Runtime) revokeAssignedCapsule(ctx context.Context, assignment types.E
 	if fateAckErr != nil {
 		return assignment, fmt.Errorf("invalid revoke receipt occurred_at: %w", fateAckErr)
 	}
-	acked, err := rt.store.SetEngineeringCapsuleDisposition(ctx, fateAck)
+	acked, err := traceCall(rt, assignment.BoundRunID, "revoke.ack_store", func() (types.EngineeringAssignmentCommandResult, error) {
+		return rt.store.SetEngineeringCapsuleDisposition(ctx, fateAck)
+	})
 	if err != nil {
 		return assignment, err
 	}
@@ -881,7 +883,9 @@ func (rt *Runtime) recordAssignedEngineeringReportOnce(ctx context.Context, rec 
 		freezeReq := engineeringFateRequest(assignment, types.EngineeringCapsuleFreezeRequested, intent, "")
 		freezeReq.PendingProposal = proposal
 		freezeReq.CommandDigest, _ = store.ComputeSetEngineeringCapsuleDispositionDigest(freezeReq)
-		requested, err := rt.store.SetEngineeringCapsuleDisposition(ctx, freezeReq)
+		requested, err := traceCall(rt, rec.RunID, "complete.freeze_intent_store", func() (types.EngineeringAssignmentCommandResult, error) {
+			return rt.store.SetEngineeringCapsuleDisposition(ctx, freezeReq)
+		})
 		if err != nil {
 			return types.EngineeringAssignmentCommandResult{}, err
 		}
@@ -908,7 +912,9 @@ func (rt *Runtime) recordAssignedEngineeringReportOnce(ctx context.Context, rec 
 		if err != nil {
 			return freezeFailure(fmt.Errorf("resolve exact assignment capability after freeze intent: %w", err))
 		}
-		_, err = rt.capsuleExecutor.ExtractGranted(ctx, rec.RunID, handle)
+		_, err = traceCall(rt, rec.RunID, "complete.freeze_capsule", func() ([]capsule.FileChange, error) {
+			return rt.capsuleExecutor.ExtractGranted(ctx, rec.RunID, handle)
+		})
 		if err != nil {
 			return freezeFailure(fmt.Errorf("freeze assignment after durable intent: %w", err))
 		}
@@ -916,11 +922,15 @@ func (rt *Runtime) recordAssignedEngineeringReportOnce(ctx context.Context, rec 
 		if err != nil || diagnostics.ID != assignment.Binding.CapsuleID || diagnostics.State != capsule.StateFrozen {
 			return freezeFailure(fmt.Errorf("executor did not acknowledge exact frozen assignment capsule: %w", err))
 		}
-		frozenDigest, err := rt.capsuleExecutor.ResolveGrantedWorktreeDigest(ctx, rec.RunID, handle)
+		frozenDigest, err := traceCall(rt, rec.RunID, "complete.digest_frozen_tree", func() (string, error) {
+			return rt.capsuleExecutor.ResolveGrantedWorktreeDigest(ctx, rec.RunID, handle)
+		})
 		if err != nil || !types.ValidSHA256Digest(frozenDigest) {
 			return freezeFailure(fmt.Errorf("frozen assignment digest unavailable: %w", err))
 		}
-		freezeReceipt, receiptErr := rt.capsuleExecutor.PersistGrantedFreezeReceipt(ctx, rec.RunID, handle)
+		freezeReceipt, receiptErr := traceCall(rt, rec.RunID, "complete.freeze_receipt", func() (capsule.CapsuleFateReceipt, error) {
+			return rt.capsuleExecutor.PersistGrantedFreezeReceipt(ctx, rec.RunID, handle)
+		})
 		if receiptErr != nil || freezeReceipt.CapsuleID != assignment.Binding.CapsuleID || "sha256:"+strings.TrimPrefix(freezeReceipt.FinalSubjectDigest, "sha256:") != frozenDigest || "sha256:"+strings.TrimPrefix(freezeReceipt.SourceSubjectDigest, "sha256:") != assignment.Binding.SubjectDigest {
 			return freezeFailure(fmt.Errorf("durable typed executor freeze receipt unavailable: %w", receiptErr))
 		}
@@ -933,7 +943,9 @@ func (rt *Runtime) recordAssignedEngineeringReportOnce(ctx context.Context, rec 
 			fateAck.PendingProposal = assignment.PendingProposal
 			fateAck.CommandDigest, _ = store.ComputeSetEngineeringCapsuleDispositionDigest(fateAck)
 		}
-		frozen, err := rt.store.SetEngineeringCapsuleDisposition(ctx, fateAck)
+		frozen, err := traceCall(rt, rec.RunID, "complete.frozen_ack_store", func() (types.EngineeringAssignmentCommandResult, error) {
+			return rt.store.SetEngineeringCapsuleDisposition(ctx, fateAck)
+		})
 		if err != nil {
 			return freezeFailure(err)
 		}
@@ -955,11 +967,15 @@ func (rt *Runtime) recordAssignedEngineeringReportOnce(ctx context.Context, rec 
 		if resolveErr != nil {
 			return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("resolve frozen assignment capability: %w", resolveErr)
 		}
-		frozenDigest, digestErr := rt.capsuleExecutor.ResolveGrantedWorktreeDigest(ctx, rec.RunID, handle)
+		frozenDigest, digestErr := traceCall(rt, rec.RunID, "complete.digest_frozen_tree_again", func() (string, error) {
+			return rt.capsuleExecutor.ResolveGrantedWorktreeDigest(ctx, rec.RunID, handle)
+		})
 		if digestErr != nil || !types.ValidSHA256Digest(frozenDigest) {
 			return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("already-frozen assignment digest unavailable: %w", digestErr)
 		}
-		report, resolveErr = rt.bindFrozenAssignmentExecutionReceipts(ctx, assignment, handle, report, frozenDigest)
+		report, resolveErr = traceCall(rt, rec.RunID, "complete.bind_receipts", func() (types.EngineeringAssignmentReport, error) {
+			return rt.bindFrozenAssignmentExecutionReceipts(ctx, assignment, handle, report, frozenDigest)
+		})
 		if resolveErr != nil {
 			return types.EngineeringAssignmentCommandResult{}, resolveErr
 		}
@@ -968,7 +984,9 @@ func (rt *Runtime) recordAssignedEngineeringReportOnce(ctx context.Context, rec 
 			report.Mutations = []types.EngineeringRecordedMutation{{MutationID: "assignment-subject:" + objectgraph.SHA256([]byte(assignment.CapsuleAckRef)), Kind: "workspace_platform_complete_tree", BeforeDigest: assignment.Binding.SubjectDigest, AfterDigest: frozenDigest, EvidenceRef: "capsule-diff:" + objectgraph.SHA256([]byte(assignment.CapsuleAckRef)), SubjectBytesChanged: true}}
 		}
 		if frozenDigest != assignment.Binding.SubjectDigest {
-			candidate, candidateErr := rt.capsuleExecutor.PersistGrantedCandidate(ctx, rec.RunID, handle)
+			candidate, candidateErr := traceCall(rt, rec.RunID, "complete.export_candidate", func() (capsule.SourcePreflight, error) {
+				return rt.capsuleExecutor.PersistGrantedCandidate(ctx, rec.RunID, handle)
+			})
 			if candidateErr != nil || "sha256:"+strings.TrimPrefix(candidate.SubjectDigest, "sha256:") != frozenDigest {
 				return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("persist reconstructable content-addressed candidate: %w", candidateErr)
 			}
@@ -1029,7 +1047,9 @@ func (rt *Runtime) recordAssignedEngineeringReportOnce(ctx context.Context, rec 
 	} else {
 		// Revocation must precede terminal commitment! No terminal state is visible until revoke ack.
 		if assignment.CapsuleDisposition != types.EngineeringCapsuleRevoked {
-			assignment, err = rt.revokeAssignedCapsule(ctx, assignment, "terminal assignment report recorded")
+			assignment, err = traceCall(rt, rec.RunID, "complete.revoke_capsule", func() (types.EngineeringAssignment, error) {
+				return rt.revokeAssignedCapsule(ctx, assignment, "terminal assignment report recorded")
+			})
 			if err != nil {
 				return types.EngineeringAssignmentCommandResult{}, err
 			}
@@ -1037,7 +1057,9 @@ func (rt *Runtime) recordAssignedEngineeringReportOnce(ctx context.Context, rec 
 		if assignment.CapsuleDisposition != types.EngineeringCapsuleRevoked {
 			return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("terminal report requires revoked executor acknowledgement")
 		}
-		result, err = rt.commitAssignedEngineeringReport(ctx, assignment, report)
+		result, err = traceCall(rt, rec.RunID, "complete.commit_report", func() (types.EngineeringAssignmentCommandResult, error) {
+			return rt.commitAssignedEngineeringReport(ctx, assignment, report)
+		})
 	}
 	if err != nil {
 		// Name the exact strand state on every failed terminal attempt: the

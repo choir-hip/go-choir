@@ -22,6 +22,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/persistentdisk"
 	"github.com/yusefmosiah/go-choir/internal/server"
+	"github.com/yusefmosiah/go-choir/internal/steptrace"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -706,6 +707,15 @@ type guestObservabilityResponse struct {
 	// EngineMutex is the engine lock's cumulative wait and hold per call
 	// path since boot (H3: lock waits at K = 4).
 	EngineMutex map[string]objectgraph.EngineMutexOpStats `json:"engine_mutex,omitempty"`
+	// EngineMutexLive is who holds the engine lock now and who waits for it,
+	// with ages: a store call that never returns shows here, where the
+	// cumulative stats above record a wait only after it ends.
+	EngineMutexLive *objectgraph.EngineMutexLive `json:"engine_mutex_live,omitempty"`
+	// Steps is the named steps of long operations (a cell, a Complete's
+	// terminal saga, the executor's freeze and teardown) running now with
+	// their start times, and the last finished ones: where a hung Complete
+	// stopped (engineering-completion-path-cluster-2026-10-20.md, failure 3).
+	Steps *steptrace.Snapshot `json:"steps,omitempty"`
 	// TelemetryBatching is the run-telemetry batching instrumentation
 	// (docs/reports/telemetry-batching-design-2026-10-20.md section 9): the
 	// per-kind event counts and tape batch sizes that price batching, and the
@@ -812,6 +822,7 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 	if h.rt.store != nil {
 		resp.ManagementTasks = h.rt.managementTaskObservability(r.Context(), ownerID, h.rt.TextureComputerID())
 		resp.EngineMutex = h.rt.store.EngineMutexStats()
+		resp.EngineMutexLive = h.rt.store.EngineMutexLive()
 		telemetry := h.rt.store.TelemetryStats()
 		resp.TelemetryBatching = &telemetry
 	}
@@ -819,6 +830,8 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 		status := h.rt.capsuleExecutor.ClaudeDelegateStatus()
 		resp.ClaudeDelegate = &status
 	}
+	steps := h.rt.stepTrace().Snapshot()
+	resp.Steps = &steps
 	identity := h.rt.EffectiveRelease(r.Context())
 	resp.EffectiveRelease = &identity
 	writeAPIJSON(w, http.StatusOK, resp)

@@ -936,7 +936,9 @@ func (r *rlmCallReduction) commitTray(ctx context.Context, intents []yaegikernel
 			// recordAssignedEngineeringReport (dual delivery retired, RN4).
 			fateCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Minute)
 			var terminal bool
-			terminal, err = r.commitCompleteIntent(fateCtx, in)
+			terminal, err = traceCall(r.rt(), r.scope.RunID, "reduce.complete_intent", func() (bool, error) {
+				return r.commitCompleteIntent(fateCtx, in)
+			})
 			cancel()
 			if err == nil {
 				if terminal {

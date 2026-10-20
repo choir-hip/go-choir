@@ -23,12 +23,14 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
 	"golang.org/x/sys/unix"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/steptrace"
 )
 
 const capsuleNamespaceHostID = 65534
@@ -37,6 +39,9 @@ const capsuleNamespaceHostID = 65534
 // opaque, run-bound capabilities. All authority is process-local and is lost
 // when the guest runtime restarts; no host daemon or vsock authority exists.
 type Executor struct {
+	// trace records the freeze, digest and teardown steps for
+	// /api/runtime/observability; unset means untraced (executor_trace.go).
+	trace             atomic.Pointer[steptrace.Tracker]
 	mu                sync.RWMutex
 	capsules          map[string]*Capsule
 	capabilities      map[capKey]*Capability
@@ -697,7 +702,9 @@ func (e *Executor) ForceDestroy(ctx context.Context, id string) error {
 }
 
 func (e *Executor) destroy(ctx context.Context, id string, signal syscall.Signal) error {
+	endLock := e.beginStep(id, "capsule.destroy.lock_wait")
 	e.mu.Lock()
+	endLock(nil)
 	defer e.mu.Unlock()
 	caps, ok := e.capsules[id]
 	if !ok {
@@ -724,14 +731,17 @@ func (e *Executor) destroy(ctx context.Context, id string, signal syscall.Signal
 			}
 			return caps.Process.Kill()
 		}
-		if waitErr := waitCapsuleProcess(ctx, caps.wait, kill, capsuleProcessWaitTimeout); waitErr != nil {
+		endWait := e.beginStep(id, "capsule.destroy.wait_process")
+		waitErr := waitCapsuleProcess(ctx, caps.wait, kill, capsuleProcessWaitTimeout)
+		endWait(waitErr)
+		if waitErr != nil {
 			var exitErr *exec.ExitError
 			if !errors.As(waitErr, &exitErr) && !strings.Contains(waitErr.Error(), "signal:") {
 				cleanupErr = errors.Join(cleanupErr, waitErr)
 			}
 		}
 	}
-	if err := unmountCapsuleRoot(caps.MergedDir); err != nil {
+	if err := e.traceStep(id, "capsule.destroy.unmount", func() error { return unmountCapsuleRoot(caps.MergedDir) }); err != nil {
 		cleanupErr = errors.Join(cleanupErr, err)
 	}
 	if caps.Cgroup != nil {
@@ -740,22 +750,25 @@ func (e *Executor) destroy(ctx context.Context, id string, signal syscall.Signal
 		// alone fails EBUSY on a non-empty cgroup — observed stranding the
 		// capsule at revoke_requested on assignment completion.
 		_ = caps.Cgroup.Kill()
-		if err := caps.Cgroup.WaitEmpty(ctx); err != nil {
+		if err := e.traceStep(id, "capsule.destroy.cgroup_wait_empty", func() error { return caps.Cgroup.WaitEmpty(ctx) }); err != nil {
 			cleanupErr = errors.Join(cleanupErr, err)
 		} else if teardownReclaimEnabled() {
 			// Return the capsule's page cache before removal reparents it
 			// (visual evidence slice V27); every capsule, since builds
 			// leave cache too.
-			if report := teardownReclaim(e.cgroupMemoryOf(caps)); report != "" {
+			endReclaim := e.beginStep(id, "capsule.destroy.reclaim")
+			report := teardownReclaim(e.cgroupMemoryOf(caps))
+			endReclaim(nil)
+			if report != "" {
 				log.Printf("capsule %s teardown memory: %s", id, report)
 			}
 		}
-		if err := caps.Cgroup.Delete(); err != nil {
+		if err := e.traceStep(id, "capsule.destroy.cgroup_delete", func() error { return caps.Cgroup.Delete() }); err != nil {
 			cleanupErr = errors.Join(cleanupErr, err)
 		}
 	}
 	if cleanupErr == nil {
-		if err := removePrivateTree(filepath.Join(e.stateDir, id)); err != nil {
+		if err := e.traceStep(id, "capsule.destroy.remove_tree", func() error { return removePrivateTree(filepath.Join(e.stateDir, id)) }); err != nil {
 			cleanupErr = err
 		}
 	}
@@ -1223,7 +1236,11 @@ func (e *Executor) ResolveGrantedExecutionReceiptsFor(ctx context.Context, agent
 	if state != StateFrozen {
 		return nil, fmt.Errorf("capsule execution evidence requires frozen capsule")
 	}
-	worktreeDigest, err := digestCapsuleWorktree(ctx, caps)
+	var worktreeDigest string
+	err = e.traceStep(caps.ID, "capsule.digest_worktree", func() (digestErr error) {
+		worktreeDigest, digestErr = digestCapsuleWorktree(ctx, caps)
+		return digestErr
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -1368,7 +1385,7 @@ func (e *Executor) ExtractGranted(ctx context.Context, agentRunID, handle string
 	caps.mu.RUnlock()
 	switch state {
 	case StateActive:
-		if err := caps.Quiesce(ctx); err != nil {
+		if err := e.traceStep(caps.ID, "capsule.quiesce", func() error { return caps.Quiesce(ctx) }); err != nil {
 			return nil, fmt.Errorf("freeze capsule before extracting diff: %w", err)
 		}
 	case StateFrozen:
@@ -1376,7 +1393,8 @@ func (e *Executor) ExtractGranted(ctx context.Context, agentRunID, handle string
 	default:
 		return nil, fmt.Errorf("capsule granted diff unavailable in state %s", state)
 	}
-	changes, err := caps.Diff(ctx)
+	var changes []FileChange
+	err = e.traceStep(caps.ID, "capsule.diff", func() (diffErr error) { changes, diffErr = caps.Diff(ctx); return diffErr })
 	if err != nil && state == StateActive {
 		// Quiesce succeeded but the diff failed: leave the capsule usable —
 		// a frozen-but-never-thawed capsule strands every later cell.
@@ -1430,7 +1448,8 @@ func (e *Executor) ResolveGrantedWorktreeDigest(ctx context.Context, agentRunID,
 	if state != StateFrozen {
 		return "", fmt.Errorf("capsule granted worktree requires frozen capsule")
 	}
-	digest, err := digestCapsuleWorktree(ctx, capsule)
+	var digest string
+	err = e.traceStep(capsule.ID, "capsule.digest_worktree", func() (digestErr error) { digest, digestErr = digestCapsuleWorktree(ctx, capsule); return digestErr })
 	if err != nil {
 		return "", err
 	}

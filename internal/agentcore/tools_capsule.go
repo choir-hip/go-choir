@@ -632,7 +632,9 @@ func newCapsuleGoEvalTool(rt *Runtime) toolregistry.Tool {
 				req.Updates = pendingCellUpdates(ctx, rt, toolregistry.ExecutionContextFrom(ctx))
 				rt.armCellTerminalDeadline(ctx, reduction)
 			}
-			result, err := toolCtx.Executor.GoEval(evalCtx, toolCtx.AgentRunID, toolCtx.CapsuleHandle, req)
+			result, err := traceCall(rt, toolCtx.AgentRunID, "cell.go_eval", func() (capsule.GoEvalResult, error) {
+				return toolCtx.Executor.GoEval(evalCtx, toolCtx.AgentRunID, toolCtx.CapsuleHandle, req)
+			})
 			if err != nil {
 				if reduction.active {
 					fate := cellFateFailure
@@ -656,7 +658,7 @@ func newCapsuleGoEvalTool(rt *Runtime) toolregistry.Tool {
 			}
 			if reduction.active && result.Error == "" {
 				reduction.records = reduction.records.capToShown(rt.noteRecordsShown(reduction.scope.RunID, result.RecordsShown))
-				if rerr := reduction.commit(ctx, result.Intents); rerr != nil {
+				if rerr := traceErr(rt, toolCtx.AgentRunID, "cell.reduce", func() error { return reduction.commit(ctx, result.Intents) }); rerr != nil {
 					return "", rerr
 				}
 				for _, in := range reduction.receipt.Intents {

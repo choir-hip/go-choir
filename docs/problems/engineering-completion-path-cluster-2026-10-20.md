@@ -431,3 +431,23 @@ entry names where it is stopped and since when; if it is a store call,
 `engine_mutex_live` names the holder. Confirm or refute 1 to 3 from that,
 then fix the named wait (a context-aware lock acquisition, a bound on
 teardown, or a default cell bound) and not before.
+
+## Status (end of this change)
+
+- Action 1: landed (overlay: frontend build is a job), plus failures 6 and 7
+  (never report a build done without its job's exit 0; a running job is not a
+  blocker), pinned by `TestRLMEngineeringOverlayTeachesCapsuleJobs` J5 and J7.
+- Failure 5 (seccomp `sched_getparam`, `sched_getscheduler`): landed, red.
+  Linux test compiled and vetted, not run on this darwin host.
+- Action 2 (failure 2): landed, red; see "Fix design" above. R1 and R2 open.
+- Action 3 (failure 3): observability landed, no behavior fix, by design.
+  Not proven; `steps` and `engine_mutex_live` on `/api/runtime/observability`
+  are what the next drill reads. Open: which of hypotheses 1 to 3 is the
+  wait.
+- Action 4: not done. The staging drill should show: (a) a frontend job
+  finishing without `pthread_getschedparam` noise; (b) a `blocked` Complete
+  after a receipt-less mutation recording its fate (the granted receipts
+  carry `subject_binding: "observed"`); (c) a `completed` Complete after a
+  receipt-less mutation refused with the digests named; (d) if any Complete
+  stalls, `steps.in_flight` naming the step and its age, and
+  `engine_mutex_live` naming the lock holder.
