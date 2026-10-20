@@ -143,3 +143,30 @@ list.
 
 Lesson: a fake runner proves ordering and failure handling, not that the
 host tools accept the flags. The staging run is the evidence for that.
+
+## Staging proof run 2: compacted as a planned restart (01:50 UTC)
+
+Deployed af8ae3686 (CI 39354641605). `POST /internal/vmctl/compact-store`
+on the paper at 01:50:32:
+
+- planned restart: `planned_restart: true`, `busy_allowed: true`; VM
+  killed 01:50:33.
+- compaction: 107 commits to 2, 8.55 to 8.12 GB, root
+  `uj6ffvg3m46uosua62ujcfsu45m0uooo` before and after, 47 s.
+- boot 01:51:35 (epoch 13154); the guest logged "boot follows a planned
+  restart (platform update store-compaction); pre-boot work resumes" and
+  ran `platform_update_resume`. The marker was consumed inside its window.
+- vmctl health checks failed from 01:51:54 to about 02:00 while projection
+  recovery ran; `ready` at 02:01. Longer than run 1's boot (about 20 s).
+  Watch this on the timer's runs.
+
+A false alarm, closed: after run 1 the guest reported 16.5 GB used against
+8.0 GB measured on the host after the 23:41 compaction, which looked like
+4 GB an hour. The mounted copy in run 2 showed 8.6 GiB used, 8.2 GiB of it
+the Dolt store. The guest's `used_bytes` is total minus available, so it
+includes ext4's 5% root reserve (about 6.7 GB on this 126 GiB disk). The
+store is not growing that fast.
+
+Status: the endpoint, the hook and the sweep selection are proven on
+staging. The 04:00 UTC timer will skip the paper tonight (12.8 GB host
+allocation, under 32 GiB) and the account computer (not a platform class).
