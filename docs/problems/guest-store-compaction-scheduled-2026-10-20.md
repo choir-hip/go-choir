@@ -97,3 +97,25 @@ stats". `listOwnershipResponses` does not fill `DataImage`; only the
 single-computer lookup does (`internal/vmctl/handlers.go:471-473`). So the
 04:00 sweep would never select anything. Fix: the sweep reads
 `DataImageStatsForVM` for each active interactive computer itself.
+
+## Staging finding: the sweep would squash a second computer (01:20 UTC)
+
+Deployed 15b471e44 (CI 39351328741). A dry-run sweep at 1 GiB now selects
+the paper (`vm-1669…`, critical_protected, 12.6 GB on the host), so the
+stats fix works. It also selects `candidate-fleet-e15c…`, an account's
+premium_always_on computer created 2026-07-17, at 42.75 GB host
+allocation. That is over the timer's 32 GiB threshold, so the 04:00 UTC
+run would squash that computer's Dolt history to two commits.
+
+The plan assumed only the paper would qualify. It measured the wrong
+thing: `FileBytes` is the host's allocation for the image, and an image
+the guest never trims keeps every block it ever wrote, so a computer with
+a small store can still sit far above the threshold. History squashing was
+ruled for the paper's growth (owner notes §26), not for an account's own
+computer.
+
+Fix: the sweep selects only the computer-level platform classes
+(critical_protected, public_platform), the same set that may take a planned
+restart while busy (`deployRefreshAllowsBusy`). Other computers are listed
+as skipped with the reason "not a platform class". Compacting an account's
+computer stays a by-hand `compact-store` call, made only when the owner asks.
