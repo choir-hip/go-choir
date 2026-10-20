@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -18,6 +17,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
+	"github.com/yusefmosiah/go-choir/internal/tapestore"
 	"github.com/yusefmosiah/go-choir/internal/vocabmigrate"
 )
 
@@ -222,9 +222,12 @@ func (a *CheckpointAuthority) verifyVerifierEvidence(ctx context.Context, reques
 		if err != nil || eventKind != string(computerevent.EventGenesisImported) || certificate.VerificationEventDigest != certificate.DecisionEventHead {
 			return fmt.Errorf("checkpoint authority: genesis verifier evidence refused")
 		}
-		rawEvent, err := os.ReadFile(filepath.Join(a.service.artifactsRoot, "sha256", "computer-event", certificate.VerificationEventDigest))
+		rawEvent, _, err := a.service.tapeReader().Read(request.ComputerID, tapestore.NSEvent, certificate.VerificationEventDigest)
+		if err != nil {
+			return fmt.Errorf("checkpoint authority: genesis event artifact refused: %w", err)
+		}
 		event, uerr := computerevent.DecodeHistoricEvent(rawEvent)
-		if err != nil || computerevent.DigestBytes(rawEvent) != certificate.VerificationEventDigest || uerr != nil {
+		if computerevent.DigestBytes(rawEvent) != certificate.VerificationEventDigest || uerr != nil {
 			return fmt.Errorf("checkpoint authority: genesis event artifact refused")
 		}
 		publicKey, _ := base64.RawStdEncoding.DecodeString(request.VerifierCertificate.PublicKey)
@@ -247,9 +250,11 @@ func (a *CheckpointAuthority) verifyVerifierEvidence(ctx context.Context, reques
 	if err != nil || eventKind != string(computerevent.EventVerificationRecorded) {
 		return fmt.Errorf("checkpoint authority: verifier event is unavailable")
 	}
-	eventPath := filepath.Join(a.service.artifactsRoot, "sha256", "computer-event", certificate.VerificationEventDigest)
-	rawEvent, err := os.ReadFile(eventPath)
-	if err != nil || computerevent.DigestBytes(rawEvent) != certificate.VerificationEventDigest {
+	rawEvent, _, err := a.service.tapeReader().Read(request.ComputerID, tapestore.NSEvent, certificate.VerificationEventDigest)
+	if err != nil {
+		return fmt.Errorf("checkpoint authority: verifier event artifact refused: %w", err)
+	}
+	if computerevent.DigestBytes(rawEvent) != certificate.VerificationEventDigest {
 		return fmt.Errorf("checkpoint authority: verifier event artifact refused")
 	}
 	event, uerr := computerevent.DecodeHistoricEvent(rawEvent)
@@ -266,8 +271,11 @@ func (a *CheckpointAuthority) verifyVerifierEvidence(ctx context.Context, reques
 		return fmt.Errorf("checkpoint authority: verifier payload reference refused")
 	}
 	payloadDigest := payloadRef.Digest().String()
-	rawPayload, err := os.ReadFile(filepath.Join(a.service.artifactsRoot, "sha256", "computer-event-payload", payloadDigest))
-	if err != nil || computerevent.DigestBytes(rawPayload) != payloadDigest {
+	rawPayload, _, err := a.service.tapeReader().Read(request.ComputerID, tapestore.NSPayload, payloadDigest)
+	if err != nil {
+		return fmt.Errorf("checkpoint authority: verifier payload unavailable: %w", err)
+	}
+	if computerevent.DigestBytes(rawPayload) != payloadDigest {
 		return fmt.Errorf("checkpoint authority: verifier payload unavailable")
 	}
 	var payload struct {

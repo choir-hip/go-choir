@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/tapestore"
 )
 
 // DiskEventSource reads durable event envelopes and payload batch bodies directly
@@ -18,6 +19,8 @@ type DiskEventSource struct {
 	artifactsRoot string
 	computerID    string
 	targetHead    string
+	// tape reads events and payloads segment first, legacy second.
+	tape *tapestore.Reader
 }
 
 // NewDiskEventSource returns an event and payload source reading from artifactsRoot.
@@ -29,6 +32,7 @@ func NewDiskEventSource(artifactsRoot, computerID string, targetHead ...string) 
 		artifactsRoot: filepath.Clean(artifactsRoot),
 		computerID:    strings.TrimSpace(computerID),
 	}
+	s.tape = tapestore.NewReader(s.artifactsRoot)
 	if len(targetHead) > 0 {
 		s.targetHead = strings.TrimSpace(targetHead[0])
 	}
@@ -54,8 +58,7 @@ func (s *DiskEventSource) EventsPage(ctx context.Context, computerID string, aft
 	if s.targetHead != "" && computerevent.IsSHA256(s.targetHead) {
 		curr := s.targetHead
 		for curr != computerevent.ZeroHead && computerevent.IsSHA256(curr) {
-			path := filepath.Join(eventsDir, curr)
-			raw, err := os.ReadFile(path)
+			raw, _, err := s.tape.Read(computerID, tapestore.NSEvent, curr)
 			if err != nil {
 				return nil, fmt.Errorf("disk event source: read event file %s: %w", curr, err)
 			}
@@ -78,6 +81,15 @@ func (s *DiskEventSource) EventsPage(ctx context.Context, computerID string, aft
 			allDigests[i], allDigests[j] = allDigests[j], allDigests[i]
 		}
 	} else {
+		// The enumeration lists legacy files only. Once the computer has
+		// segments it would silently miss their events, so it refuses.
+		hasSegments, err := s.tape.HasSegments(computerID)
+		if err != nil {
+			return nil, fmt.Errorf("disk event source: check segments of %s: %w", computerID, err)
+		}
+		if hasSegments {
+			return nil, fmt.Errorf("disk event source: computer %s has tape segments; enumerating the events directory would miss segment-resident events (read from a target head instead)", computerID)
+		}
 		entries, err := os.ReadDir(eventsDir)
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
@@ -177,11 +189,13 @@ func (s *DiskEventSource) FetchPayload(ctx context.Context, computerID, artifact
 	if !computerevent.IsSHA256(artifactDigest) {
 		return nil, fmt.Errorf("disk event source: invalid payload commitment %q", artifactDigest)
 	}
-	for _, namespace := range []string{"computer-event-payload", "computer-event"} {
-		path := filepath.Join(s.artifactsRoot, "sha256", namespace, artifactDigest)
-		raw, err := os.ReadFile(path)
+	if computerID = strings.TrimSpace(computerID); computerID == "" {
+		computerID = s.computerID
+	}
+	for _, namespace := range []tapestore.NS{tapestore.NSPayload, tapestore.NSEvent} {
+		raw, _, err := s.tape.Read(computerID, namespace, artifactDigest)
 		if err != nil {
-			if errors.Is(err, os.ErrNotExist) {
+			if errors.Is(err, tapestore.ErrNotFound) {
 				continue
 			}
 			return nil, fmt.Errorf("disk event source: read payload %s: %w", artifactDigest, err)

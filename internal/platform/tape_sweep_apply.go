@@ -397,6 +397,11 @@ func (s *Service) reproveDestroyed(ctx context.Context, run *tapeSweepApplyRun, 
 	if run.started.Sub(now.UpdatedAt) < run.quiet {
 		return "head moved within the quiet window"
 	}
+	if has, err := s.tapeReader().HasSegments(id); err != nil {
+		return "segments unreadable: " + err.Error()
+	} else if has {
+		return "computer has tape segments"
+	}
 	return ""
 }
 

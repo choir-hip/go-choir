@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/tapestore"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
@@ -681,7 +682,13 @@ func (s *Service) walkTapeChain(ctx context.Context, computerID string, from, to
 		}
 		for _, row := range batch {
 			if readEvents {
-				raw, err := os.ReadFile(filepath.Join(s.artifactsRoot, "sha256", tapeNSEvent, row.EventDigest))
+				// Segment first, legacy second. A corrupt segment is not
+				// "unreadable, no references": it stops the walk, so no
+				// caller can read it as an empty reference set.
+				raw, _, err := s.tapeReader().Read(computerID, tapestore.NSEvent, row.EventDigest)
+				if errors.Is(err, tapestore.ErrCorrupt) {
+					return fmt.Errorf("tape sweep: chain %s sequence %d: %w", computerID, row.Sequence, err)
+				}
 				if err == nil && computerevent.DigestBytes(raw) == row.EventDigest {
 					row.EventReadable = true
 					row.PayloadRefs = hex64RE.FindAllString(string(raw), -1)
@@ -940,7 +947,9 @@ func (s *Service) tapeSweepDryRun(ctx context.Context, jobID string, p tapeSweep
 	var total uint64
 	if err := s.store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM computer_event_append_receipts`).Scan(&total); err != nil {
 		report.OrphansRefused = "count append receipts: " + err.Error()
-	} else if total != receiptRows {
+	} else if total != receiptRows && report.OrphansRefused == "" {
+		// Keep the first refusal: a chain that failed to read already says why
+		// the counts differ.
 		report.OrphansRefused = fmt.Sprintf("append receipts (%d) do not match the head-bounded chains (%d)", total, receiptRows)
 	}
 	extraErr := s.tapeExtraRefs(ctx, func(text string) { live.addAllHex(text) })
@@ -1124,6 +1133,17 @@ func (s *Service) tapeDestroyedProofs(ctx context.Context, registry ComputerRegi
 		pr.Destroyed = true
 		if !p.forkAck {
 			pr.Reason = "fork lineage unrecorded; not acknowledged"
+			continue
+		}
+		// The destroyed sweep archives and unlinks legacy files only. It has
+		// no way to archive or delete a segment, so a computer with any is
+		// left whole (A2 teaches the sweep segments).
+		hasSegments, err := s.tapeReader().HasSegments(id)
+		if err != nil {
+			return nil, fmt.Errorf("segments of %s: %w", id, err)
+		}
+		if hasSegments {
+			pr.Reason = "computer has tape segments; the destroyed sweep cannot archive or delete segments yet"
 			continue
 		}
 		pr.Deletable, pr.Reason = true, "destroyed: no ownership, not listed, no route, quiet; fork lineage unrecorded (acknowledged)"
