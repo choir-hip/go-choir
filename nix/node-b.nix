@@ -98,6 +98,18 @@ let
   # Rollback: drop VMCTL_GUEST_DNS_PORT (vmctl stops adding the DNAT at the
   # next start of each VM) and services.unbound.
   guestDnsPort = 8053;
+  # Issuer credential (internal/hostauth/issuer.go): a second secret only
+  # vmctl and corpusd load. corpusd's credential-issuance route needs it as
+  # well as the internal credential, so the shared internal credential alone
+  # cannot mint an envelope for any computer (which leads, through exchange
+  # and realization delivery, to that computer's data key). Rollout:
+  # "observe" logs "hostauth: observe: would refuse ... issuer:"; flip to
+  # "enforce" once the journal shows vmctl presenting it on every boot.
+  # A refusal in enforce is a computer that cannot boot. Rollback: "observe".
+  issuerAuthMode = "observe";
+  issuerTokenFile = "/var/lib/go-choir/secrets/issuer-token";
+  issuerTokenCredential = [ "choir-issuer-token:${issuerTokenFile}" ];
+  issuerAuthEnv = "CHOIR_ISSUER_AUTH_MODE=${issuerAuthMode}";
   # S1 owner-act receipts (internal/owneract;
   # docs/problems/effect-accepted-admitted-without-authority-2026-10-15.md).
   # The proxy signs, with its own Ed25519 key (signer domain
@@ -1075,7 +1087,7 @@ in
       StateDirectoryMode = "0750";
       ReadWritePaths = [ platformArtifactsDir "/var/lib/go-choir/host-build" ];
       InaccessiblePaths = hiddenSecretsExcept [ "platformSigningKey" "escrowKey" ];
-      LoadCredential = internalTokenCredential ++ doltClientCredential ++ [ "choir-owner-act-public-key:${ownerActPublicKeyFile}" ];
+      LoadCredential = internalTokenCredential ++ issuerTokenCredential ++ doltClientCredential ++ [ "choir-owner-act-public-key:${ownerActPublicKeyFile}" ];
       # Track K two-approval operator credentials live in a deploy-created
       # file outside git (same trust class as gateway credentials):
       # CHOIR_KEY_ESCROW_OPERATORS="name:token,..." — the unwrap gate stays
@@ -1159,6 +1171,7 @@ in
         "HOME=/var/lib/go-choir/host-build"
         "XDG_CACHE_HOME=/var/lib/go-choir/host-build/cache"
         internalAuthEnv
+        issuerAuthEnv
       ];
     };
   };
@@ -1364,7 +1377,7 @@ in
       # binary or the kernel every later cold boot runs. auth/ stays readable
       # for the retention sweep (VMCTL_RETENTION_AUTH_DB_PATH).
       ReadOnlyPaths = [ "/var/lib/go-choir/auth" "/var/lib/go-choir/services" "/var/lib/go-choir/guest" ];
-      LoadCredential = internalTokenCredential ++ doltClientCredential;
+      LoadCredential = internalTokenCredential ++ issuerTokenCredential ++ doltClientCredential;
       # Computer tiers (paid accounts, platform computers) are not host
       # configuration: they live in internal/computertiers/computer-tiers.json,
       # embedded in vmctl and changed by a reviewed commit (owner ruling
@@ -2175,6 +2188,13 @@ in
         mv -f ${internalTokenHeaderFile}.next ${internalTokenHeaderFile} )
     fi
     chmod 0600 ${internalTokenHeaderFile}
+    if [ ! -s ${issuerTokenFile} ]; then
+      ( umask 077
+        ${pkgs.openssl}/bin/openssl rand -hex 32 > ${issuerTokenFile}.next
+        mv -f ${issuerTokenFile}.next ${issuerTokenFile} )
+      echo "go-choir issuer credential generated"
+    fi
+    chmod 0600 ${issuerTokenFile}
   '';
 
   # S1 owner-act key (ownerActMode). Ed25519, generated once, PEM, root

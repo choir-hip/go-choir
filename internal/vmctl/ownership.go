@@ -1773,6 +1773,7 @@ func issueComputerCredentialEnvelopeOnce(corpusdURL, computerID, realizationID, 
 	}
 	request.Header.Set("Content-Type", "application/json")
 	hostauth.MarkInternal(request)
+	hostauth.MarkIssuer(request)
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
 		log.Printf("vmctl: computer credential request failed for %s: %v", realizationID, err)
