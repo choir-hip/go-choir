@@ -70,3 +70,32 @@ The hub cutoff (7 citers) does not catch it at 5.
 Fix: a live page (path segment `live` or `liveblog`, or a slug naming
 live updates) gives no vote, by exact capture or by recapture. The rest of
 the read (exact shared captures, ordinary recaptures) is 16 of 17 right.
+
+## After the live-page fix (0a541483c, 03:20 UTC)
+
+Front 60: 9 stories linked, 15 pairs, 14 right; the Italy decree to
+Macron curfews pair is the one loose link. The live-blog mesh is gone.
+
+Widened read (the bar asks for at least 40 pairs): the top 300 stories by
+the front list give 38 distinct pairs. 33 are right. Loose or wrong: Italy
+decree to Macron curfews; Zelenskyy on peace to a Russian diesel deal;
+the Ilhan Omar search to DOJ suing California; an inflation-driven AI
+stock rout to Anthropic's revenue; a Scion-Mononoke charge to Anthropic's
+version control. That is 13% strict, about 8% if the Musk and Ukraine
+borderline pairs count as related. At the edge of the 10% bar, not past
+it. Each loose pair rests on one shared source cited by two stories.
+
+Latency over the 300 requests (mostly uncached): p50 111 ms, p95 185 ms,
+inside the 400 ms cold budget. The deployed spec passes (3 of 3), and the
+AI disclosure spec passes against the deployed frontend.
+
+Decision (No Blocking Asks): keep `CORPUSD_RELATED` on. Most links are
+right and the paper is pre-launch. Calibrate next from data, not from this
+sample: a single shared source between two stories is the weak case; the
+candidates are requiring a second signal (another source, or a shared
+event once phase 2 lands) when the only signal is one source.
+
+Separate finding: a published story is titled "Write the story of BBC
+economics editor Faisal Islam's analysis of surp…", an instruction leaked
+into a headline. Recorded for the paper's quality checks; not a
+related-stories defect.
