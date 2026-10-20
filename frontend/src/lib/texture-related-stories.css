@@ -71,3 +71,12 @@
   color: var(--choir-text-muted, var(--choir-text-primary));
   font-size: 0.74rem;
 }
+
+/* The AI-written disclosure above an Autopaper story (texture-ai-disclosure.ts). */
+.texture-ai-disclosure {
+  margin: 0 0 1.25rem;
+  padding: 0.5rem 0.75rem;
+  border-left: 3px solid currentColor;
+  font-size: 0.85em;
+  opacity: 0.75;
+}

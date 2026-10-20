@@ -104,6 +104,8 @@ export function storyTextureContext(route: string, title = ''): Record<string, u
   return {
     publishedRoutePath: route,
     publishedReadOnly: true,
+    // An Autopaper story: the reader shows the AI-written disclosure.
+    autopaperStory: true,
     windowTitle: title || 'Story',
     allowMultiple: true,
   };

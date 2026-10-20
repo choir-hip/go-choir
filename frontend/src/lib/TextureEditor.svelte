@@ -82,6 +82,7 @@
   import './texture-source-flow.css';
   import './texture-published-citations.css';
   import './texture-related-stories.css';
+  import { aiDisclosureHTML } from './texture-ai-disclosure';
 
   export let currentUser = null;
   export let authenticated = false;
@@ -1848,7 +1849,8 @@
   $: editEvidence = sourceEditEvidence(currentRevision, sourceDiagnosis);
   $: renderedMarkdown = renderDocumentHTML(editorValue, editorBodyDoc, publishedCitations);
   $: relatedHTML = isPublishedReadOnly && publishedBundle ? renderRelatedHTML(publishedRelated) : '';
-  $: syncEditorSurface(renderedMarkdown + relatedHTML);
+  $: disclosureHTML = isPublishedReadOnly && publishedBundle ? aiDisclosureHTML(appContext) : '';
+  $: syncEditorSurface(disclosureHTML + renderedMarkdown + relatedHTML);
 
   onMount(() => {
     if (!initializedKey) {
