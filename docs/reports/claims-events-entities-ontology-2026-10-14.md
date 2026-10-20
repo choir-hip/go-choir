@@ -1496,6 +1496,39 @@ complete.
 
 ## 13. Open decisions for the owner
 
+> **Ratified (owner, 2026-10-20; owner notes §27 item 15, the answer to
+> the decisions digest, item fifteen):** D1–D5 and D7–D13 are accepted as
+> recommended, text unchanged below. D6 was already ruled (owner,
+> 2026-10-14 evening) and stays as ruled. Open sub-items inside the
+> accepted decisions keep their stated form: D7's per-provider terms check
+> before snippet extraction in E5, D9's later named editor role, and D11's
+> model choice by E0's measured quality per dollar.
+>
+> Follow-ons recorded on 2026-10-20 (the digest asked for "accept the rest
+> as written"; the two items below were not separately worded in §27, so
+> they are recorded as the inferred recommendations, now accepted, and are
+> reversible):
+>
+> - **E0 finding F1** (scheduled captures are 95% feed summaries; full text
+>   arrives through research's targeted reads, which §4.1 never scores;
+>   [claims-e0-e6a-results-2026-10-14.md](claims-e0-e6a-results-2026-10-14.md)
+>   §6 and §7 name two options and say "either needs a ruling alongside
+>   D1", without a stated recommendation). Status: D1 is ratified; the
+>   option is taken as **count a research read of a scheduled item's own
+>   URL as scheduled** (no new fetch cost), with the deepen fetch of
+>   scheduled items as the fallback if E1 shows the coverage too thin.
+>   Carried as a named residual until E1 measures it.
+> - **GDPR note on D6** (scoring natural persons is profiling under the
+>   GDPR, separate from defamation; rights of access and objection and the
+>   reach of the journalism exemption). Status: D6's scope is settled; the
+>   GDPR sub-question is recorded as an **accepted risk with the reply path
+>   serving as the objection channel**, as D6's "To confirm" recommended, and
+>   a lawyer's read remains owed later (the same posture as the AI-written
+>   disclosure, §27 item 14). It gates nothing before E7.
+> - The gate in §12 stands: D1 and D6 still have to be written into the
+>   metamission as amendments before E7. Ratification is given; the
+>   amendment text is not yet written.
+
 1. **D1. The claim is the speaker's precommitment, recorded by Choir.**
    Amend the metamission's "sources never precommit" to "sources never
    emit records; Choir records their claims as attributed

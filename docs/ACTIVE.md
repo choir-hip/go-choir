@@ -31,7 +31,10 @@ next; branches built in parallel, landed in dependency order):
     4 and 5 land (same files).
 Alongside, no deploy: self-development drill rerun, claims E0 + E6a,
 Autoradio prototype (branch), teaching series (docs/learn/).
-Owner decisions list expected tonight.
+Owner decisions list: delivered as the 2026-10-20 digest and answered; the
+rulings are [owner notes §27](reports/owner-notes-2026-10-14.md). Open items
+are the account-recovery launch blocker (§27 item 13) and the Telegram
+MTProto account setup.
 
 ## Now (2026-10-14, 07:00 UTC): what landed overnight, what is next
 
@@ -118,9 +121,12 @@ review); L1 ends crash loops
 L1a-2 landed, L1a-3 next, before C1e); L2 bounded
 attention; L3 hypotheses settled and scored; L4 Taiwan and East Asia as
 standing questions; L5 the evidence reader and an Autoradio prototype. It
-stays open to additions. Owner decisions open: the cost amendment,
-Telegram and commercial status, Taiwan first, Autoradio's slot, and
-schedules option B. Convergent round 1 sent the spine back; round 2
+stays open to additions. No owner decisions are open on the spine: the
+cost amendment, Telegram and commercial status, Taiwan first, Autoradio's
+slot and schedules option B were answered 2026-10-14
+([rulings](reports/owner-roadmap-rulings-2026-10-14.md)), and the
+2026-10-20 decisions digest was answered in
+[owner notes §27](reports/owner-notes-2026-10-14.md). Convergent round 1 sent the spine back; round 2
 accepted the repaired spine and the L1 station file (2026-10-13). L1a-3
 (crash boots settle from the updater journal, never re-apply) landed at
 18d01cc0. Cross-model cell errors (owner 2026-10-13: errors every model

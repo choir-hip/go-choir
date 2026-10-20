@@ -820,6 +820,13 @@ binding (`autoputer-vm.nix:133-142`).
 
 ## 6. Open decisions for the owner
 
+> **Accepted (owner, 2026-10-20; owner notes §27 item 16):** the defaults
+> O1–O10 below (O1, O2, O3, O3b, O5, O7, O8, O9, O10; O4 and O6 were moved
+> out in round 2) are accepted as written. The table text is unchanged.
+> Two defaults are conditional by their own wording and stay so: O5 (LU4 is
+> built only if measured planned-refresh downtime matters) and O8 (the
+> CLAUDE.md wording change is deferred, not made).
+
 | # | Decision | Default in this note |
 | --- | --- | --- |
 | O1 | At the drain deadline: defer, or force after K failed drains | Defer; "update stuck" alert after K = 3; a forced refresh only by an owner act |
