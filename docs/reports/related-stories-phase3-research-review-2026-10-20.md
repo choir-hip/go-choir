@@ -291,3 +291,64 @@ Mutation classes: 1, 3 and 4 red; 2 and 5 orange; 6 evidence. Ceremony as
 §9. Slice 1 starts after the engineering completion hang is fixed, because
 both land on the same runtime and a hung guest makes every drill
 ambiguous.
+
+## 12. Owner ruling: System 1 does most of the reading (2026-10-20)
+
+Owner: "I think we should use System 1 for a lot of the related stories
+work. It should be able to read and classify stories very well and very
+cheaply, more cheaply than the model behind research, GPT-6 Luna, and much
+faster as well."
+
+This turns §4 around. Before, research read each story and asked System 1
+the close calls. Now System 1 reads and classifies every story and every
+candidate pair, and research reads only what System 1 cannot settle.
+
+**Per review batch (one research turn for K stories, not one per story):**
+
+1. The batch record carries, per story, its graph-walk candidates (§4.1),
+   its candidate entities and its nearest threads. Candidate entities are
+   found mechanically, not by a model: existing entity nodes whose names
+   (or recorded aliases) occur in the story's title or text, plus the
+   capture labels' named subjects. Nearest threads are those the story's
+   candidates and candidate entities already belong to.
+2. Research's first cell sends the closed questions through
+   `choir.System1`, with `story:<revision_id>` context refs so System 1
+   reads the stories themselves: per candidate pair, the relation (same
+   incident, later development, same running subject, shares an entity only
+   incidentally, unrelated); per candidate entity, central, incidental or
+   not about it; per story, which nearest thread or none. At the current
+   bounds (12 questions a call, 4 refs a question) that is about one or two
+   calls a story.
+3. The same cell applies a fixed rule in code: an answer whose top choice
+   is at or above the show threshold and clear of the runner-up by a set
+   margin is taken as System 1 gave it, and recorded with `choir.Relate`
+   citing the judgment. No Luna reading for those.
+4. Research reads only the residue: flat distributions, and stories where
+   System 1 found a central subject with no existing entity or thread (a
+   new node needs a name, which a closed question cannot give). It
+   records those with `Relate` too, saying whether it settled or overrode
+   System 1.
+
+The desk still decides: the threshold rule is research's, applied in its
+own cell, and every relation is a `Relate` act on the tape citing the
+System 1 judgment it rests on. Desk authority and the audit trail are as in
+§3; only who does the reading changes.
+
+**Why not a runtime classifier with no desk at all** (as the intake
+labeller calls Jev directly): it would be cheaper again, but the relations
+would then be the runtime's, with no desk accountable for them, and new
+entities and threads would have no namer. Kept as a later option if the
+residue turns out to be tiny.
+
+**Budget.** System 1 is off until both caps are set
+(`CHOIR_SYSTEM1_MAX_CALLS_PER_RUN`, `CHOIR_SYSTEM1_MAX_CALLS_PER_DAY`). On
+the paper: 40 a run (a batch of 20 stories at two calls each) and 3,000 a
+day (about the backfill of 1,000 stories in a day or two), set after the
+current drills. The 100-story sample measures the cost per story from
+`recordJevCostFor` and the residue share before the backfill runs; the
+caps are raised or lowered on that number.
+
+**What the blind audit adds.** It audits System 1's taken answers
+separately from research's settled ones, per relation kind, so the
+threshold is set from evidence (R4), and a relation kind System 1 gets
+wrong is routed to research instead.
