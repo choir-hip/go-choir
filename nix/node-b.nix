@@ -1003,7 +1003,7 @@ in
         "PLATFORM_ARTIFACT_GC_INTERVAL=1h"
         "PLATFORM_ARTIFACT_GC_MAX_DELETES=50000"
         "PLATFORM_ARTIFACT_GC_MAX_BYTES=34359738368"
-        "PLATFORM_ARTIFACT_GC_ACTIVE_NAMESPACES=projection-base,platform-update,file-cas-roots,file-cas-chunks"
+        "PLATFORM_ARTIFACT_GC_ACTIVE_NAMESPACES=projection-base,platform-update,file-cas-roots,file-cas-chunks,og"
         # Tape sweep (orphan pins, destroyed computers' tapes), on demand only
         # at /internal/platform/artifact-gc/tape. dry-run admits manifests and
         # refuses apply; flip to active only after a dry-run manifest has been
