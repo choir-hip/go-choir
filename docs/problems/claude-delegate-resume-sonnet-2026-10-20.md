@@ -202,3 +202,13 @@ existing cell's relative paths.
 
 - **Heresy delta.** Discovered: none new (F6 is known). Introduced: none.
   Repaired: none.
+
+**Substrate residual (counted, 2026-10-20).** This is the second failure
+from one missing default: cells run at `/` because `choir.Exec` sends no
+`Dir` and `SpawnSpec.WorkingDir` is never read. The first was F6 in the
+Freeze drill (`selfdev-freeze-receipts-refused-2026-10-15.md`). Both were
+answered with overlay text. A third occurrence triggers Root Cause
+Clustering: the next action is option E itself (cells default to
+`/workspace/platform` in engineering capsules, with an audit of overlay
+recipes that rely on `/`), not more overlay text. The overlay also named
+the delegate "Claude Opus 5.5"; it now says Sonnet 5.5, matching spec.go.
