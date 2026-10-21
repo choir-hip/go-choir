@@ -267,6 +267,20 @@ now:
     not fsync, so the fallback copy itself carries the inherited risk; (r4)
     repack must refuse to delete a legacy file whose segment copy does not
     verify (a repack obligation, not yet code).
+    r1 chain, from reading appender.go and stageSegmented (a hypothesis
+    until a test reproduces it): a writer's fsync fails on a batch; the
+    pin call returns an error and, if its legacy fallback also fails, the
+    client is never acknowledged; the next writer re-reads that tail from
+    page cache, fsyncs (which can succeed on pages the kernel already
+    marked clean) and seals it; the client retries; stageSegmented finds no
+    legacy file, finds the sealed record and acknowledges the retry as
+    reuse. The acknowledged bytes then live only in a tail whose
+    durability nobody proved. Recommended fix, provenance-free and without
+    a format change: a reuse that hits a segment record and finds no
+    legacy file writes the legacy copy (writeImmutable) before it
+    acknowledges, counted as reuse_legacy_writes. The cost is at most one
+    legacy file per digest that is pinned again with no legacy copy, which
+    the counter bounds. Build test-first before the flag flip.
   owner_choice: >-
     (a) build fail-stop and review it once more, then land flag-off;
     (b) land db96e07a1 flag-off now with round 3's P1 as a named residual
