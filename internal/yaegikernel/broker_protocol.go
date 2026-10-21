@@ -174,6 +174,11 @@ type ResearchChildResult struct {
 	Findings   string `json:"findings,omitempty"`
 	Error      string `json:"error,omitempty"`
 	DurationMs int64  `json:"duration_ms"`
+	// What the child's model loop spent, tracked and never capped
+	// (ARCH-08 slice 1, docs/design/agent-tree-budgets-2026-10-21.md).
+	InputTokens       int `json:"input_tokens,omitempty"`
+	OutputTokens      int `json:"output_tokens,omitempty"`
+	CachedInputTokens int `json:"cached_input_tokens,omitempty"`
 }
 
 // ProductAPIPayload defines the parameters for ActionProductAPI — the
