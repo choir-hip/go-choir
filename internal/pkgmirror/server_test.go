@@ -149,7 +149,8 @@ func (h *harness) do(method, path string, header ...string) (int, http.Header, s
 		h.t.Fatal(err)
 	}
 	// Keep the path exactly as written (an escaped slash stays escaped).
-	req.URL.Opaque = "//" + req.URL.Host + path
+	opaque, _, _ := strings.Cut(path, "?")
+	req.URL.Opaque = "//" + req.URL.Host + opaque
 	for i := 0; i+1 < len(header); i += 2 {
 		req.Header.Set(header[i], header[i+1])
 	}
