@@ -283,17 +283,19 @@ boundaries:
 now:
   status: working
   slice: >-
-    Resume after the intermission (owner notes §39): recreate the lane
-    worktrees, land FP3 group 1, then FP6 batch 1, FP1, FP2, FP7, FP4
-  source_ref: 0cb66b4cb
-  deploy_identity: c893a956a serving (6bfe06fcf and 0cb66b4cb changed only the workflow and docs)
+    Land FP3 group 1 (bfac3f52a plus the contract fix 94b656fdb) and run
+    its deployed proof on the test computer; then FP1 as T2; review bunch
+    5 (FP4 delta, ARCH-03, RES-17 on FP2, FP1-A1; then FP8 and FP3 groups
+    2-3) while the bunch 4b repairs run
+  source_ref: 94b656fdb
+  deploy_identity: 53a691be6 serving (FP6 batch 1); bfac3f52a and 94b656fdb in CI
   candidate:
     id: FP3-group-1
-    state: frozen, review round 2 fixes applied; Argon's two findings (rescue through RecoverVM with the old boot config; ResumeVMForDesktop without a booting claim) to be confirmed fixed by re-review
-    ref: lane/host-vmctl-b4-b5 4ca5cd6cc
-    base: cf9751f36 (rebase onto 0cb66b4cb before freezing)
-    digest: none
-    scope: [internal/vmctl]
+    state: landed on main, CI running after the contract-test fix; accepted by both reviewers in bunch 4a
+    ref: bfac3f52a (main), test fix 94b656fdb
+    base: 53a691be6
+    digest: delta bcdb74659..f6914992e sha256 bfeae4df36a26ded5524dd5600ca77c88567098cc503f60d7851d6ec6d06025d
+    scope: [internal/vmctl, .github/workflows/ci.yml, internal/computertiers]
   bridge_conjecture: >-
     If the security and density batches land with deployed proofs and
     independent review, then the owner's second pass starts from a computer
@@ -324,20 +326,23 @@ now:
     owner_ratification_ref: not_applicable
   belief:
     believed_state: >-
-      The paper is up on c893a956a. Six lanes have built candidates on
-      their branches (FP1, FP2, FP3, FP4, FP6, FP7; FP9 checkpointed); none
-      has landed. SEC-14's first half landed (6bfe06fcf).
+      The paper and owner computer run 53a691be6 (FP6 batch 1). FP3 group
+      1 is on main and deploying. Accepted and waiting for a deploy slot:
+      FP1 (bed24b526), FP2 batch 1 (27d39057d). In review: bunch 5a.
+      Sent back and being repaired in the VM: FP7, SEC-14, FP9, FP2 batch
+      2. Six VM workers and one Mac worker (NET-01) are running.
     main_uncertainty: >-
-      whether the node-a agents VM plus the Mac carry the lanes without
-      memory pressure on the Mac, and whether one deploy slot every 25
-      minutes is enough for six red candidates.
-    next_observation: the time from a lane's frozen candidate to its deployed proof, per landing (B1).
+      whether the FP3 rescue behaves on staging as the tests say (the
+      proof wedges a test computer), and whether one deploy slot every
+      25 to 40 minutes lands the queue before the pass ends.
+    next_observation: the FP3 proof steps 1-4 on computer-7dcdf5e2, then FP1's deploy as T2 for steps 5-6.
   blocker_or_risk: >-
-    Two red batches waiting for one deploy slot; a worker straying outside
-    its lane; the paper's boot path (any store schema change).
+    A landing's CI checks that no lane runs locally (the workflow
+    contract tests caught one); the paper's boot path on FP1's store
+    change; reviewers sending back the same lane a third time.
   next_action: >-
-    Recreate the lane worktrees; rebase FP3 group 1 onto 0cb66b4cb,
-    re-review it on its frozen identity, land it and prove it on staging.
+    Confirm bfac3f52a and 94b656fdb deployed and the paper healthy, run
+    the FP3 proof, land FP1 as T2, read bunch 5a.
 
 receipts:
   - id: capture-label-key-read
@@ -355,6 +360,21 @@ receipts:
       deploy_ref: the same run's Deploy to Staging (Node B), success
       environment_identity: the paper's observability build.commit c893a956a, deployed_at 2026-10-21T17:49:03Z
       deployed_acceptance: 27 source polls between 17:49 and 18:01 UTC, all ok; 66 schedules active; no capture-label op in the engine counters
+  - id: fp6-batch-1
+    boundary: implement
+    identity: 53a691be6
+    proof_refs: [frontend/tests web-lens spec 13/13 local, internal/agentcore/observability_bounded_test.go]
+    rollback_ref: git revert b489ed48f..53a691be6 (the twelve FP6 commits)
+    disposition: >-
+      landed; the browsercontrol and Obscura routes answer 404, Web Lens
+      imports through import-url, memory=detail is bounded and reads the
+      workspace; image (step 5) and egress (step 6) are later deploys
+    landing:
+      source_commit: 53a691be6
+      ci_ref: GitHub Actions run 39692787991, success
+      deploy_ref: the same run's Deploy to Staging (Node B), success, deployed_at 2026-10-21T23:36:26Z
+      environment_identity: the owner computer's and the paper's observability build.commit 53a691be6
+      deployed_acceptance: browser routes 404 (GET capabilities, POST sessions), no key 401; import-url example.com 201 with text; memory=detail store root /mnt/persistent/state.texture 3,134,501,771 bytes and a concurrent request busy; the paper booted 23:31:02 and made 42 inference calls in the next 10 minutes
 ---
 
 # The launch first pass
