@@ -84,6 +84,13 @@ func main() {
 	bindingMode := gateway.LoadBindingMode()
 	handler.SetBearerBinding(bindingMode)
 	log.Printf("gateway: bearer binding mode: %s", bindingMode)
+
+	// SEC-08 Option K: the Claude delegate's key, held here. Dark unless the
+	// owner's Console API key, the relay identities and a window are all set;
+	// the status line names none of them.
+	relay := gateway.NewAnthropicRelayFromEnv()
+	handler.SetAnthropicRelay(relay)
+	log.Printf("gateway: anthropic relay: %s", relay.Status())
 	log.Printf("gateway: source api: %s", handler.SourceAPIStatus())
 
 	// The Jev Decisions route is independently gated. Its OpenRouter key stays

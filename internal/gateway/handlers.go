@@ -36,6 +36,9 @@ type gatewayHealthResponse struct {
 	// BearerBinding is the SEC-05 bearer binding: its mode, how many active
 	// computers are pinned, and what it has refused or would refuse.
 	BearerBinding *gatewayBindingHealth `json:"bearer_binding,omitempty"`
+	// AnthropicRelay is "off" (no key), "dark" (a key, but no identity or no
+	// open window) or "on". It names neither the key nor an identity.
+	AnthropicRelay string `json:"anthropic_relay,omitempty"`
 }
 
 // gatewayCacheHealth is provider.CacheStats plus its hit rate.
@@ -148,6 +151,9 @@ type Handler struct {
 	bindingMode BindingMode
 	binding     bindingCounters
 	bindingLogState
+	// anthropicRelay serves /provider/anthropic/* (SEC-08, Option K); nil
+	// means every relay call is answered 503.
+	anthropicRelay *AnthropicRelay
 }
 
 const internalCallerHeader = "X-Internal-Caller"
@@ -241,6 +247,7 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp.BearerBinding = h.bindingHealth()
+	resp.AnthropicRelay = h.anthropicRelay.status()
 
 	if stats := provider.CacheStatsSnapshot(); len(stats) > 0 {
 		resp.PromptCache = make(map[string]gatewayCacheHealth, len(stats))
@@ -1161,6 +1168,10 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/provider/openai/v1/chat/completions", h.HandleOpenAIChatCompletions)
 	s.HandleFunc("/provider/openai/v1/models", h.HandleOpenAIModels)
 	s.HandleFunc("/provider/v1/models", h.HandleModels)
+	// SEC-08 Option K: the Claude delegate's Messages API calls, relayed with
+	// the gateway-held API key. Dark unless a key, identities and a window
+	// are configured (anthropic_relay.go).
+	s.HandleFunc("/provider/anthropic/", h.HandleAnthropicRelay)
 	s.HandleFunc("/provider/v1/search", h.HandleSearch)
 	s.HandleFunc("/provider/v1/search/health", h.HandleSearchHealth)
 	s.HandleFunc("/provider/v1/search/health/reset", h.HandleSearchHealthReset)
