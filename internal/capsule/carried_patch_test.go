@@ -15,6 +15,17 @@ package capsule
 //     or one that does apply is refused for an unrelated base change.
 //  7. The same inputs give different bytes (the digest must be stable so a
 //     restart re-derives the same offer).
+//
+// Failure 16 (the first staging drill, 2026-10-21): the delegate's sandbox
+// leaves empty files named .env, .npmrc, package.json and the like at the
+// source root, and the patch carried all of them.
+//
+//  8. A secret-named path (one the release refuses) is carried, with its
+//     content, into the next capsule.
+//  9. A new empty file (a sandbox mask) is carried as a new source file.
+// 10. Leaving those out also drops a real change: a file emptied by the
+//     candidate is still a change and must be carried.
+// 11. The carried-patch rule and the release rule drift apart.
 
 import (
 	"context"
@@ -163,5 +174,79 @@ func TestCheckPatchAppliesToMovedBase(t *testing.T) {
 	err = CheckPatchAppliesToTree(context.Background(), got.Patch, got.Files, conflict)
 	if err == nil || !strings.Contains(err.Error(), "a.go") {
 		t.Fatalf("conflicting base = %v, want a refusal naming a.go", err)
+	}
+}
+
+func TestDiffTreesToPatchLeavesOutSecretNamedAndMaskFiles(t *testing.T) {
+	requireGit(t)
+	base, cand := t.TempDir(), t.TempDir()
+	writeTree(t, base, map[string]string{
+		"a.go":                    "package a\n",
+		".npmrc":                  "registry=https://example.invalid/\n",
+		"frontend/src/emptied.js": "export const x = 1\n",
+	})
+	writeTree(t, cand, map[string]string{
+		"a.go":                     "package a\n// edited\n",
+		".npmrc":                   "registry=https://example.invalid/\n//example.invalid/:_authToken=npm-secret\n",
+		".env":                     "",
+		".env.local":               "TOKEN=env-secret\n",
+		"frontend/.ENV.production": "KEY=upper-secret\n",
+		"certs/server.pem":         "pem-secret\n",
+		"package.json":             "",
+		"bunfig.toml":              "",
+		"frontend/src/emptied.js":  "",
+	})
+	got, err := DiffTreesToPatch(context.Background(), base, cand, CarriedPatchMaxBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(got.Files, ",") != "a.go,frontend/src/emptied.js" {
+		t.Fatalf("files = %v, want a.go and the emptied file only (modes 8-10)", got.Files)
+	}
+	for _, leak := range []string{"secret", ".env", ".npmrc", "server.pem", "package.json", "bunfig.toml"} {
+		if strings.Contains(string(got.Patch), leak) {
+			t.Fatalf("patch carries %q (modes 8-9)", leak)
+		}
+	}
+	omitted := strings.Join(got.Omitted, "\n")
+	for _, want := range []string{
+		".env (secret-bearing path)", ".env.local (secret-bearing path)", "frontend/.ENV.production (secret-bearing path)",
+		".npmrc (secret-bearing path)", "certs/server.pem (secret-bearing path)",
+		"package.json (new empty file)", "bunfig.toml (new empty file)",
+	} {
+		if !strings.Contains(omitted, want) {
+			t.Fatalf("omitted list %q does not name %q", omitted, want)
+		}
+	}
+	if err := CheckPatchAppliesToTree(context.Background(), got.Patch, got.Files, base); err != nil {
+		t.Fatalf("the filtered patch must still apply to its base: %v", err)
+	}
+}
+
+func TestDiffTreesToPatchOfOnlyMasksIsEmpty(t *testing.T) {
+	requireGit(t)
+	base, cand := t.TempDir(), t.TempDir()
+	writeTree(t, base, map[string]string{"a.go": "package a\n"})
+	writeTree(t, cand, map[string]string{"a.go": "package a\n", ".env": "", ".yarnrc.yml": "", "yarn.lock": ""})
+	got, err := DiffTreesToPatch(context.Background(), base, cand, CarriedPatchMaxBytes)
+	if !errors.Is(err, ErrCarriedPatchEmpty) {
+		t.Fatalf("err = %v, want ErrCarriedPatchEmpty when only masks changed", err)
+	}
+	if len(got.Omitted) != 3 {
+		t.Fatalf("omitted = %v, want the three masks named", got.Omitted)
+	}
+}
+
+func TestSecretBearingPathIsTheReleaseRule(t *testing.T) {
+	for path, want := range map[string]bool{
+		".env": true, "a/.env.local": true, "frontend/.ENV.production": true, ".npmrc": true, ".netrc": true,
+		"x/credentials.json": true, "auth.json": true, "home/id_rsa": true, "id_ed25519": true,
+		"certs/a.PEM": true, "tls.key": true, "a.p12": true, "b.pfx": true, ".env/inner.txt": true,
+		"workspace/platform/frontend/src/App.svelte": false, ".envrc": false, "env.go": false,
+		"keys.go": false, "id_rsa.pub": false, "frontend/package.json": false,
+	} {
+		if got := secretBearingPath(path); got != want {
+			t.Errorf("secretBearingPath(%q) = %v, want %v", path, got, want)
+		}
 	}
 }
