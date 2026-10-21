@@ -241,6 +241,32 @@ now:
     with a legacy copy, serves legacy, counted; (5) the census and
     ReadSegment still report the segment error; (6) a healthy segment hit
     never reads legacy; (7) flag-off reads are unchanged.
+  round_5: >-
+    2026-10-21 09:30 UTC. Panel on the design and the diff: gpt-6.1-sol
+    and gemini-3.8 adopt with changes; devin returned reading narration and
+    no verdict. Adopted: a segment, index or record version this binary does
+    not know is ErrUnsupportedVersion (also ErrCorrupt) and never falls
+    back, so an older binary never quietly serves around a newer format;
+    FetchPayload keeps probing the next namespace after a segment error and
+    returns that error, not "not found", when nothing matches; a pin whose
+    reuse check cannot read the segments is stored the legacy way instead of
+    failing (collisions stay errors); a legacy read error other than "not
+    found" or "does not hash" is joined to the segment error. Landed
+    test-first as d0490fbc6 (tests) and b13846ae2 (fix); tapestore -race and
+    platform tests pass. Correction to failure mode (7): flag-off reads are
+    unchanged only when no segments exist on disk. A computer with segments
+    from a flag-on window still reads them segment-first with the flag off;
+    production has none, which the deployed health block shows.
+    Enabled-mode residuals, none blocking flag-off: (r1) a pin that reuses a
+    recovered segment tail with no legacy copy has nothing to fall back to
+    if that tail later fails verification (gpt-6.1-sol, conditional P1;
+    the fix is to write the legacy copy on reuse of an unsealed tail the
+    writer did not sync itself); (r2) readSegment stops at the first error,
+    so a corrupt newer segment can hide a healthy older one holding the same
+    digest when there is no legacy copy; (r3) legacy writeBlob still does
+    not fsync, so the fallback copy itself carries the inherited risk; (r4)
+    repack must refuse to delete a legacy file whose segment copy does not
+    verify (a repack obligation, not yet code).
   owner_choice: >-
     (a) build fail-stop and review it once more, then land flag-off;
     (b) land db96e07a1 flag-off now with round 3's P1 as a named residual
@@ -255,7 +281,13 @@ now:
       legacy files are repacked.
     main_uncertainty: whether fail-stop closes the class in one more review round.
     next_observation: the owner's choice.
-  blocker: none for flag-off landing; the two enabled-mode P1s (round_4) block turning the flag on
-  next_action: Land land/tape-a2 (ten commits on main) with the flag off after the SlidesApp drill; deployed flag-off acceptance (no tape-seg files, legacy counts grow).
+  blocker: >-
+    none for flag-off; round 4's two enabled-mode P1s are closed by round 5.
+    Turning the flag on, the repack and the legacy delete are owner steps;
+    residuals r1 and r4 should close before the repack.
+  next_action: >-
+    Deploy b13846ae2 flag-off and check the health tape block
+    (segment_error_fallbacks 0, legacy reads growing, no segment reads);
+    then r1 test-first, then the owner's flag decision.
 
 receipts: []

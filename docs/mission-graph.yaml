@@ -1265,7 +1265,7 @@ nodes:
     title: Tape segments A2 — the production segment writer behind a flag, then a copy-only repack, so the weekly backup verify stops walking 9.7M files
     path: docs/definitions/choir-tape-segments-a2-repack-2026-10-21.md
     ledger: ''
-    status: working  # 2026-10-21 05:50 UTC: fail-stop redesign reviewed 'land flag-off now'; two P1s block turning the flag on (now card)
+    status: working  # 2026-10-21 09:30 UTC: round 5 closes the two enabled-mode P1s; flag flip and repack are owner steps (now card)
     kind: side
     entrypoint: false
     execution_mode: mission_orchestrator
