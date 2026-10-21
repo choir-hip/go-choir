@@ -111,6 +111,8 @@ type Config struct {
 	// Ecosystems lists the ecosystems served; any other prefix answers 404.
 	Ecosystems []string
 	Upstreams  Upstreams
+	// Git configures the git mirror (git.go).
+	Git GitConfig
 	// FileCap bounds one artifact, MetaCap one metadata document.
 	FileCap int64
 	MetaCap int64
@@ -133,6 +135,7 @@ type Server struct {
 	record     func(Record)
 
 	npm, pypiIndex, pypiFiles, cratesIndex, cratesDL upstreamBase
+	git                                              *gitMirror
 
 	perSource int
 	total     chan struct{}
@@ -182,7 +185,7 @@ func New(cfg Config) (*Server, error) {
 	enabled := map[string]bool{}
 	for _, e := range cfg.Ecosystems {
 		switch e {
-		case EcosystemNPM, EcosystemPyPI, EcosystemCrates:
+		case EcosystemNPM, EcosystemPyPI, EcosystemCrates, EcosystemGit:
 			enabled[e] = true
 		default:
 			return nil, fmt.Errorf("pkgmirror: unknown ecosystem %q", e)
@@ -236,6 +239,11 @@ func New(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("pkgmirror: open cache: %w", err)
 	}
 	s.cache = cache
+	if enabled[EcosystemGit] {
+		if s.git, err = newGitMirror(cacheFile(cfg.CacheDir, "git"), cfg.Git); err != nil {
+			return nil, fmt.Errorf("pkgmirror: open git mirror: %w", err)
+		}
+	}
 	if s.record == nil {
 		s.record = func(r Record) {
 			line, _ := json.Marshal(r)
@@ -382,15 +390,19 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	eco, rest, _ := strings.Cut(strings.TrimPrefix(rec.Path, "/"), "/")
 	rec.Ecosystem = eco
-	if eco != EcosystemNPM && eco != EcosystemPyPI && eco != EcosystemCrates {
+	if eco != EcosystemNPM && eco != EcosystemPyPI && eco != EcosystemCrates && eco != EcosystemGit {
 		rec.Ecosystem = ""
-		http.Error(w, "not found: this mirror serves /npm/, /pypi/ and /crates/", http.StatusNotFound)
+		http.Error(w, "not found: this mirror serves /npm/, /pypi/, /crates/ and /git/", http.StatusNotFound)
 		finish(OutcomeRefused, http.StatusNotFound, 0, "unknown prefix")
 		return
 	}
 	if !s.enabled[eco] {
 		http.Error(w, "not found: the "+eco+" mirror is not enabled on this host", http.StatusNotFound)
 		finish(OutcomeRefused, http.StatusNotFound, 0, "ecosystem not enabled")
+		return
+	}
+	if eco == EcosystemGit {
+		s.serveGit(w, r, rest, &rec, finish)
 		return
 	}
 	var req request
