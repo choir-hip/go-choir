@@ -96,33 +96,40 @@ finish:
     probe script that read the facts from outside the cell.
   acceptance:
     - action: >-
-        go test -run 'TestDeskManifest|TestFrameRole|TestForgedFrame|TestFrameVersion|TestSlotToken'
-        on internal/deskmanifest and internal/yaegikernel; go test -run 'TestDeskEgressRole|TestDeskRefusal'
-        on internal/agentcore
+        go test ./internal/deskmanifest ./internal/yaegikernel ./internal/agentprofile ./internal/capsule
+        (TestFrameRole*, TestForgedFrame*, TestSlotToken*, TestFrameRefuses*, TestHandleScopes*,
+        TestVerbDispatchMatchesKernel, TestFrameBoundarySelfTestReceipt, the manifest tests), and
+        scratchpad/bin/heavy go test ./internal/agentcore -run 'TestDeskRefusal|TestPool|TestManifest|TestRecordsDesk'
       proves: >-
         a frame naming an action outside the sending desk's table, carrying another
-        desk's identity, a wrong slot token, an unknown version, or an emit, is
-        refused with a visible error and a trace event, and the handler is never called
+        desk's identity, a wrong slot token, a stale epoch, an unknown version, or an
+        emit, is refused with a visible error and a trace event, never reaches the
+        handler, and a wrong token ends the worker
       evidence_class: local test
     - action: >-
-        the Linux confinement and cgroup tests (go test -c for linux, run in a
-        privileged container): TestDeskCell*, TestDeskCgroup*, TestCapsuleSeccomp*
+        the Linux tests in a privileged Linux container (go test -c for linux/arm64): TestDeskCell*,
+        TestDeskCgroup*, TestCapsuleSeccomp*, TestSessionWorker*
       proves: >-
         an escaped worker cannot open sockets, fork, exec, signal, trace or write
-        outside its own directory; a worker over its budget is killed by the kernel
-        and not the daemon; clone3 answers ENOSYS and CLONE_NEWUSER is refused
-      evidence_class: local Linux test (Docker kernel, no Landlock); Landlock and cgroup delegation are staging proof
+        outside its own directory; a cell that allocates without end is killed by the
+        kernel at its worker's budget while the host process and a sibling worker live;
+        clone3 answers ENOSYS and CLONE_NEWUSER is refused
+      evidence_class: local Linux test (Docker kernel 6.10, cgroup v2, no Landlock); Landlock and the guest's cgroup layout are staging proof
     - action: >-
-        POST /api/runtime/isolation-selftest on a disposable test computer, then
+        POST /api/runtime/isolation-selftest on a disposable test computer, judged by
         scripts/desk_cell_confinement_probe.py (exact steps in the FP2 report)
       proves: >-
-        on the deployed guest kernel: Landlock V5 enforced, three distinct cell
-        uids, CapEff 0, NoNewPrivs 1, Seccomp 2, own network namespace, every
-        escape probe refused, the cgroup budget present and an out-of-memory probe
-        killing the worker while the daemon lives
+        on the deployed guest kernel: Landlock V5 enforced, three distinct cell uids,
+        CapEff 0, NoNewPrivs 1, Seccomp 2, own network namespace, every escape probe
+        refused; the deployed binary's frame admission serves each desk exactly its table
+        and refuses every forged case
       evidence_class: deployed proof
-    - action: texture-acceptance-deployed and a research desk turn on the same computer
-      proves: real desk turns still work confined
+    - action: >-
+        the out-of-memory probe and a real turn of each desk on the same computer
+        (steps 4 and 5 of the FP2 report), then texture-acceptance-deployed
+      proves: >-
+        a runaway cell on the guest is killed at its worker's budget with the daemon's
+        pid unchanged, and real management, research and Texture turns work confined
       evidence_class: deployed proof
   rollback: >-
     One rollback unit: git revert of the lane's commits and the Landing Loop.
@@ -175,17 +182,29 @@ boundaries:
   protected_surfaces: [guest desk confinement, desk worker spawn, run authority at the daemon, gateway-bound egress verbs the frames reach, the guest image (users, units, sysctls), capsule seccomp]
 
 now:
-  status: working
-  slice: station goal file and problem record (first commit), then the manifest, the frame boundary, confinement, memory, seccomp
+  status: checkpoint_incomplete
+  slice: >-
+    hand-off to FP0: the candidate is the lane branch; RES-04 (capsule memory per
+    doctrine) and SEC-15's non-root daemon and document-tool sandbox are not built
   source_ref: f399a2e8c
   deploy_identity: none of this batch is deployed
   candidate:
-    id: none
-    state: none
+    id: fp2-desk-boundary
+    state: ready
     ref: lane/b3-desk-boundary
     base: f399a2e8c
-    digest: none
-    scope: []
+    digest: the lane branch HEAD at hand-off (see the FP2 report)
+    scope:
+      - internal/deskmanifest
+      - internal/yaegikernel
+      - internal/agentcore
+      - internal/agentprofile
+      - internal/capsule
+      - cmd/capsule-broker
+      - internal/autoputer
+      - internal/gomemlimit
+      - nix/autoputer-vm.nix
+      - scripts/desk_cell_confinement_probe.py
   conjecture:
     id: C-FP2-one-table
     claim: >-
@@ -195,47 +214,67 @@ now:
       authority in one place.
     test: >-
       Parity tests that fail when a desk's authority differs from the pinned
-      table; a test that every consumer rejects a desk with no entry; a diff
-      review that no other file spells a desk's frame actions.
+      table; a test that every consumer rejects a desk with no entry; the
+      AST-reading TestVerbDispatchMatchesKernel; the staging probe's own table.
     edge: missing_oracle
     delta_o: >-
-      The guest self-test reading the worker's facts from /proc outside the
-      cell, and a deployed forged-frame probe (a test-only worker is not
-      possible in production; the probe is the isolation self-test's escaped-cell
-      worker sending raw frames).
+      The deployed probe (frame_boundary and desk_cells in the isolation
+      self-test), which reads facts from /proc and from the daemon's own
+      admission outside the cell.
     scope_if_supported: the five system desks and app desks that register through the manifest
-    status: active
-    evidence_refs: []
+    status: testing
+    evidence_refs: [the local tests named under finish.acceptance; no deployed proof yet]
   decision:
     what: >-
       Frame role table lives in the manifest; the check sits in the yaegikernel
-      transport (serviceEgress, serviceEmit), the one place every host-served
-      action passes, with a second check in agentcore deskEgress for defense in
-      depth. Memory budget: cgroup v2 per worker under a desks slice, required in
-      the guest image, best effort elsewhere.
+      transport (admitFrame), the one place every host-served action passes, with a
+      second check in the agentcore Egress handler. Memory budget: cgroup v2 per
+      worker under a desks cgroup the daemon makes, required in the guest image,
+      best effort elsewhere; hard memory.max only, no memory.high (measured: it
+      throttles a runaway for minutes instead of killing it). Cell identity is a
+      numeric uid from the manifest. clone3 ENOSYS and no CLONE_NEWUSER in every
+      capsule filter.
     kind: architecture
     status: proposal
-    evidence_ref: this file; panel on the frozen diff
+    evidence_ref: the commits of lane/b3-desk-boundary; a panel on the frozen diff
     owner_ratification_ref: owner notes sections 36 and 37 ratify the goal (every item lands before launch), not these choices
   belief:
     believed_state: >-
-      The recovered confinement branch ports with conflicts in five files; the
-      role table is derivable from NewChoirScope and the verbs; emit has no
-      caller; the Landlock and cgroup behavior cannot be proved on this Mac.
+      Frames, handles, capsule verbs and message targets read the manifest and the
+      Linux behavior (identity, netns, seccomp, cgroup kill, clone rules) holds on a
+      6.10 kernel. Landlock V5, the guest cgroup layout and the 8 GiB sizes are
+      unproved.
     main_uncertainty: >-
-      Whether the guest's systemd lets the runtime unit own a delegated cgroup
-      subtree beside the existing /sys/fs/cgroup/capsule tree (the capsule code
-      writes a root-level cgroup directly).
+      Whether the guest lets the runtime make /sys/fs/cgroup/choir-desks beside the
+      existing /sys/fs/cgroup/capsule (the capsule code writes a root-level cgroup
+      the same way) and whether 768 MiB / 384 MiB fit real research and management
+      cells.
     next_observation: >-
-      The staging probe reading /sys/fs/cgroup layout and memory.events from the
-      self-test route.
+      The staging probe's desk_cells receipt, then a research turn's worker memory.peak.
   blocker_or_risk: >-
-    A required-mode guest image that cannot confine would stop every desk on the
-    refreshed computers, the paper included: the first deploy must reach a test
-    computer and pass the probe before the paper refreshes (FP0's call).
-  next_action: commit this file, then the failing manifest and frame tests.
+    A required-mode guest image that cannot confine or cannot make its cgroup would
+    stop every desk on the refreshed computers, the paper included: the first deploy
+    must reach a test computer and pass the probe before the paper refreshes (FP0's call).
+  next_action: >-
+    FP0: panel the frozen diff, rebase, land with its own deploy, run the FP2 report's
+    probe steps on a disposable test computer before the paper refreshes.
 
-receipts: []
+receipts:
+  - id: fp2-local
+    boundary: implement
+    identity: lane/b3-desk-boundary at hand-off
+    proof_refs:
+      - go test of internal/deskmanifest, yaegikernel, agentprofile, capsule on the Mac
+      - the Linux container runs named in the FP2 report (yaegikernel as root and uid 1000, capsule seccomp, capsule-broker session limits)
+      - heavy go test ./internal/agentcore -run TestDesk|TestPool|TestManifest|TestRecordsDesk|TestIsolation|TestRuntime|TestResearch|TestManagement
+    rollback_ref: git revert of the lane's commits
+    disposition: candidate ready for review; not landed
+    landing:
+      source_commit: not_applicable
+      ci_ref: not_applicable
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+      deployed_acceptance: not_applicable
 ---
 
 # FP2: the guest desk boundary
@@ -338,16 +377,20 @@ Go build that previously ran to its 2 GiB ceiling.
 ## Memory
 
 The values come from code and the record, and are marked where they are
-guesses. Guest 8 GiB (`VM_INTERACTIVE_MEM_MIB=8192`). Daemon slice
-`memory.min` 512 MiB (a guess, to be set from L1-02's measurement). Desks slice
-`memory.high` 3 GiB and `memory.max` 4 GiB. A worker: `memory.max` 768 MiB for
-management, Texture, research; 256 MiB for a management task and a research
-child (guesses; the first staging probe reads each worker's `memory.peak` and
-FP0 adjusts before the paper refreshes). Capsules slice: aggregate
-`memory.max` 4.5 GiB, which is the existing admission total, now enforced by
-the kernel. A capsule requested R: `memory.high` R, `memory.max` 2R,
-admission against R (doctrine, docs/choir-doctrine.md and
-docs/runtime-invariants.md).
+guesses. Guest 8 GiB (`VM_INTERACTIVE_MEM_MIB=8192`). Daemon unit
+`MemoryMin` 512 MiB (a guess, to be set from L1-02's measurement). Desks
+cgroup (made by the daemon at start): `memory.max` half of guest memory,
+`memory.high` three eighths. A worker: `memory.max` 768 MiB for management,
+Texture and research; 384 MiB for a management task and a research child
+(guesses; the first staging probe reads each worker's `memory.peak` and FP0
+adjusts before the paper refreshes). A worker has no `memory.high`: measured in a
+Linux container, `memory.high` at 320 MiB under a 384 MiB cap throttled a
+runaway cell 5272 times in 90 s without reaching the kill, so the hard limit
+alone is the budget. Capsule `memory.high` = requested, `memory.max` = 2x
+requested, admission against requested (docs/choir-doctrine.md:406-408) is
+RES-04, not built here: a `memory.high` below the link's anonymous peak
+(1.50 GiB stripped, 1.80 GiB with DWARF) would throttle the build with no swap,
+so the values need `memory.events` from real builds first.
 
 ## What the probes must show
 
@@ -362,6 +405,60 @@ memory: a cell that allocates until it dies is killed by the cgroup, the
 daemon's pid is unchanged, and the desk's result names the memory budget.
 Real turns: a management, a research and a Texture turn on the same computer.
 
+## Data flow between taint classes (ARCH-05)
+
+Research and its children read attacker-controlled content from the world
+(pages, feeds, files). Management, Texture and engineering hold authority to
+act. Untrusted content reaches a privileged desk only as a record or a report
+that the host reduces onto the ledger: research stages `Report`/`ReportPacket`
+acts, the reducer writes records addressed to `texture:<doc>`, and Texture
+reads them with `choir.Records()` in its own worker. There is no call from a
+research cell into a privileged desk, no shared process (the pool keys a worker
+to one desk and `sameDeskSessionConfig` compares roles), no shared uid
+(`TestCellUIDsAreDistinctPerWorkerClass`: an untrusted-input desk never shares a
+uid with a privileged one), and no shared memory. Captures that management and
+Texture read (`ReadCapture`) are content research or a source poll fetched; the
+text is data in the cell, and what a cell may do with it is the table in the
+manifest, not the content. Mail's input is labelled `UNTRUSTED_EXTERNAL_EMAIL` by
+`maild` and the email desk is `untrusted_input` in the manifest; it has no worker
+yet.
+
+## Staging probe steps (for FP0; no secrets here)
+
+All on a disposable test computer, after the deploy carrying this batch, never
+first on the paper.
+
+1. `GET /health` on the platform shows the deployed commit. On the computer:
+   `GET /api/runtime/observability` shows the guest build commit. Cold boot
+   the test computer onto the new guest image (an idle computer picks it up on
+   its next refresh).
+2. `python3 scripts/desk_cell_confinement_probe.py --cred <the test computer's
+   0600 credential file> --out docs/evidence/fp2-desk-boundary-<date>.json --skip-egress`
+   (drop `--skip-egress` after the host egress policy, lane FP3, is deployed).
+   Pass is exit 0: mode `required`, Landlock ABI >= 5, three distinct cell
+   uids (61001, 61002, 61003), CapEff 0, NoNewPrivs 1, Seccomp 2, own network
+   and IPC namespaces, every escape probe EPERM or EACCES, the cross-desk canary
+   EACCES, the check cell runs; and `frame_boundary`: each desk served exactly its
+   table, every forged case refused, a wrong slot token ends the worker, no
+   refused frame reached a handler. Exit 2 means the route is not deployed.
+3. The trace shows refusals: for a run of the test computer after step 2 nothing
+   is expected (the probe's handlers are counters); a real refusal appears as a
+   `desk.egress` run event with `refused: true`.
+4. Out of memory: `GET /api/runtime/observability` before; run a research desk
+   turn whose cell allocates without end (a prompt that asks for a cell
+   `for { keep = append(keep, make([]byte, 8<<20)) }`); expect the cell result
+   "cell's worker died ... killed by its memory budget (memory.max 768 MiB ...)",
+   the daemon's start time unchanged in observability, and the next turn of the
+   same desk working. Read each worker's `memory.peak` (the daemon logs the
+   desk cgroup at start: "desk cgroup /sys/fs/cgroup/choir-desks memory.max ...").
+5. Real turns: management, research and Texture each complete a turn on the
+   computer (`cd frontend && BASE_URL=https://choir.news npx playwright test
+   tests/texture-acceptance-deployed.spec.js` with the test computer's session),
+   and one engineering assignment completes (this proves the capsule seccomp,
+   the session worker's new limits, and that nothing inside needed `clone3`).
+6. Rollback: `git revert` the lane's commits and the Landing Loop; the guest
+   image carries the unit environment, so a revert is a deploy.
+
 ## Residuals named now
 
 - The guest daemon still runs as root (SEC-15's main part). Design: split the
@@ -369,8 +466,19 @@ Real turns: a management, a research and a Texture turn on the same computer.
   privileged helper that creates capsules and cgroups, reached over a unix
   socket with peer credentials. It touches capsule creation, mounts and
   signers and is not a part of this batch.
+- `pdftotext`, `pdfinfo` and `pandoc` still run on untrusted bytes as guest root
+  with the guest's network (`internal/content/extract.go:215`). Design: run them
+  through a re-exec helper that drops to a numeric uid in an empty network
+  namespace, sets rlimits, no_new_privs and Landlock (read the input file and the
+  tool's store paths, write nothing) and then execs the tool.
+- RES-04 (capsule `memory.high` / `2x` / admission against the request, and a
+  `memory.events` reader) and the capsules slice aggregate of RES-01 are not
+  built; the mechanism needs measured values first.
 - `OwnedKinds`, `Model`, `Restart` have no consumer; `recordsRoute` is checked
   against `Addresses`, not generated from it.
-- ARCH-05's data-flow record for how research output reaches Texture and
-  management is a doc; the enforcement here is the pool, the user and the
-  profile.
+- The host's emit handler (`deskEmitSignal`, `DeskSessionWorkerConfig.Emit`) is
+  unreachable (no desk's row holds `emit`) but still compiled: delete it.
+- `CHOIR_DESK_CELL_CONFINEMENT` unset means `auto`: best effort on a host that
+  cannot do more (dev, CI). The guest image sets `required`, pinned by a test. A
+  stricter default (required unless a test says otherwise) would need every
+  desk-spawning test to opt out explicitly; FP0 decides.
