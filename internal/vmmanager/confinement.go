@@ -235,19 +235,10 @@ func (m *Manager) decideConfinement(cfg VMConfig) (mode, reason string) {
 	return ConfinementJailer, ""
 }
 
+// jailerSelects is VMCTL_JAILER_ONLY: VM ids, computer ids, class:<class>
+// or * (computer_select.go).
 func jailerSelects(only []string, cfg VMConfig) bool {
-	vmID := strings.TrimSpace(cfg.VMID)
-	computerID := strings.TrimSpace(cfg.ComputerID)
-	for _, id := range only {
-		id = strings.TrimSpace(id)
-		if id == "" {
-			continue
-		}
-		if id == vmID || (computerID != "" && id == computerID) {
-			return true
-		}
-	}
-	return false
+	return selectsComputer(only, cfg)
 }
 
 // --- paths -----------------------------------------------------------------

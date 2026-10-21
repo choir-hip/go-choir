@@ -1281,10 +1281,13 @@ in
         #   - storedisk.erofs (shared nix store)
         "VM_FIRECRACKER_BIN=${pkgs.firecracker}/bin/firecracker"
         # VMM jailer slice 1: off until staging proves it on one test
-        # computer. Rollout: VMCTL_JAILER=on with VMCTL_JAILER_ONLY=<that
-        # computer's id>, verify with scripts/vmm_confinement_verify.py, then
-        # drop VMCTL_JAILER_ONLY. Rollback: VMCTL_JAILER=off (new launches go
-        # direct; a jailed snapshot is refused and the computer cold boots).
+        # computer. Rollout (FP8 station, SEC-04): VMCTL_JAILER=on with
+        # VMCTL_JAILER_ONLY=<that computer's id>, verify with
+        # scripts/vmm_confinement_verify.py; then VMCTL_JAILER_ONLY=class:test
+        # (every test account's computer); then drop VMCTL_JAILER_ONLY.
+        # Jailed VMs share one inode per store image (RES-05). Rollback:
+        # VMCTL_JAILER=off (new launches go direct; a jailed snapshot is
+        # refused and the computer cold boots).
         "VMCTL_JAILER=off"
         "VM_JAILER_BIN=${pkgs.firecracker}/bin/jailer"
         "VMCTL_JAILER_CGROUP_PARENT=system.slice/go-choir-vmctl.service/vms"
