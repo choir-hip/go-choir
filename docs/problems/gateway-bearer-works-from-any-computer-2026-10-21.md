@@ -159,6 +159,27 @@ the code; no deployed evidence, the candidate never left the lane.
     The host's ensure pins it right after the boot, and observe is a
     measured, temporary mode.
 
+## Review finding, bunch 4b (2026-10-21, candidate 6dafee596)
+
+14. **The finding 13 repair opened Jev in observe** (GPT-6.1-sol, blocking;
+    Gemini 4 Argon accepted). Accepted. Evidence: `jevPeerAllowed` at
+    6dafee596 passes `bind = mode == enforce || mode == off`, and returns
+    true for `PeerUnpinned` in observe; the candidate's own test
+    (`TestJevRouteWritesAPinOnlyWhereTheModeAllowsOne/observe`) asserts an
+    unpinned call passes with no pin written. So in observe (the staged
+    mode) guest A's first Jev call no longer pins, and a copied bearer from
+    guest B is served until the host's ensure. Before the batch, A's call
+    pinned and B was refused. That is new provider access, not observation,
+    and breaks "nothing here makes a call succeed that was refused before".
+    Finding 13's "observe writes no pin" was the wrong reading: the Jev
+    route's first-use pin predates SEC-05, so keeping it is not a write
+    observe adds. Repair: the Jev route pins on first use in off, observe
+    and enforce, as it always did; strict alone refuses an unpinned bearer
+    (finding 13's strict bypass stays closed). A Jev-written pin in observe
+    is read by the other routes only to count `would_refuse`, which is the
+    signal observe exists for. The finding 13 residual (an unpinned Jev
+    bearer accepted from any address in observe) is withdrawn.
+
 ## Heresy delta
 
 - Discovered: the Jev pin's trust-on-first-use is an unplanned authority
