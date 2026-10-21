@@ -25,7 +25,10 @@ func main() {
 	cacheDir := flag.String("cache-dir", "/var/lib/go-choir-pkgmirror", "cache directory")
 	maxBytes := flag.Int64("max-bytes", pkgmirror.DefaultMaxBytes, "artifact cache size cap in bytes; oldest entries are evicted past it (negative: no cap)")
 	publicBase := flag.String("public-base", "http://mirror.choir.internal", "base URL capsules use for this mirror (rewritten links name it)")
-	ecosystems := flag.String("ecosystems", "", "comma-separated ecosystems to serve (npm, pypi, crates); empty serves none")
+	ecosystems := flag.String("ecosystems", "", "comma-separated ecosystems to serve (npm, pypi, crates, git); empty serves none")
+	gitBinary := flag.String("git", "git", "git executable for the git mirror")
+	gitRepoCap := flag.Int64("git-repo-cap", pkgmirror.DefaultGitRepoCap, "size cap of one mirrored repository in bytes")
+	gitMaxBytes := flag.Int64("git-max-bytes", pkgmirror.DefaultGitMaxBytes, "size cap of all mirrored repositories in bytes; least recently used are removed past it")
 	flag.Parse()
 	log.SetFlags(0)
 
@@ -40,6 +43,7 @@ func main() {
 		MaxBytes:   *maxBytes,
 		PublicBase: *publicBase,
 		Ecosystems: enabled,
+		Git:        pkgmirror.GitConfig{Binary: *gitBinary, RepoCap: *gitRepoCap, MaxBytes: *gitMaxBytes},
 	})
 	if err != nil {
 		log.Fatal(err)
