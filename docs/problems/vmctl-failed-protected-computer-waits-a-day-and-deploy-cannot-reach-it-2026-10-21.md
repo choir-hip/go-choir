@@ -180,16 +180,88 @@ Defect B:
 
 Mutation checks: reverting each of the four fixes fails the test named for it.
 
+## Review round 2 (2026-10-21, second reviewer): findings A1-A7
+
+- **A1 (fixed).** A spend succeeded for a computer that was no longer stopped
+  by a failure, so a caller on a stale snapshot could write a spend that its
+  refund then erased. `spendRetry` now judges the registry's entry under the
+  lock: `State == stopped` and a failure stop (the sweep) or a failure or
+  vmctl-restart stop (the rescue); anything else refuses and writes nothing.
+  Test: `TestSpendRefusesUnlessTheRegistryEntryIsStoppedByAFailureNow`
+  (stale wedged label on an active, booting, hibernated and failed entry).
+- **A2 (fixed).** Two races. (a) The warm sweep's `ResumeVMForDesktop` runs
+  `startExistingVM` outside `r.mu` for as long as the manager takes, with the
+  registry still saying stopped; a rescue then went to `RecoverVM`, which
+  waits for the first boot, kills the healthy guest without a marker and boots
+  it again. Resume and recovery now count themselves in `r.starting[key]`
+  under the lock before they unlock. (b) A rescue acting on the deploy's
+  snapshot of a computer that had reattached resumed the already-active VM
+  unchanged and answered "refreshed" for the old image. `deployRescue` now
+  calls `claimRescue`, which re-reads the registry under the lock: active
+  returns not-done (the ordinary planned refresh), booting, a refresh in
+  flight or a start in flight returns deferred, and a rescue takes the
+  `refreshing[key]` claim before any boot, so the sweep, a visit's recovery
+  and a deploy refresh see "in progress" (that refusal is transient and
+  refunds a retry the sweep had spent). Tests:
+  `TestRescueDefersWhileAWarmSweepBootIsInFlight` (the sweep is held inside
+  `BootVM`; the rescue must answer deferred and spawn nothing),
+  `TestRescueOnAStaleSnapshotOfAReattachedComputerTakesThePlannedRefresh`.
+- **A3 (fixed).** After the wedge detector's `StopVM` the manager still tracks
+  the stopped instance, and the rescue went `startAdmittedVM` to `RecoverVM`,
+  which keeps `inst.Config` (the old kernel, initrd, store disk and kernel
+  parameters, the image that hung) and passed no gateway token. The rescue
+  now boots through `rescueBoot`: a tracked instance is refreshed with
+  `RefreshVM` (`refreshBootConfig`: the current deploy's artifacts), an
+  untracked one is booted with `BootVM`, both with a freshly issued gateway
+  token and the same admission gates as any start. The test fixture's
+  `failStop` now keeps the stopped instance as `StopVM` does; `failStopUntracked`
+  models the stop after a vmctl restart. Test:
+  `TestRescueOfATrackedStoppedInstanceBootsTheCurrentDeployWithAFreshToken`.
+- **A4 (fixed, CI).** The rescue verification overwrote the observed commit on
+  every probe, so a non-layered computer still on the old commit passed after
+  120 probes, and a layered one slept the full 120 seconds. Each probe now
+  reads `.build.commit` and `.effective_release.layered` and breaks on the
+  target commit, or on any commit with `layered == true`; a loop that ends
+  without a break fails the deploy. Exercised with a stubbed `curl` over six
+  cases (target, layered other commit, non-layered old commit, no layered
+  field, no answer, layered without a commit). This retires the earlier
+  residual "the rescue's final /health accepts any commit".
+- **A5 (residual).** A protected computer in `VMStateFailed` (a failed deploy
+  refresh sets `State=failed, StoppedBy=""`; the platform warmer sets
+  `recovery_failed` with `State=failed`; `loadLocked` keeps it) is skipped by
+  `selectDeployRefresh`, `deployRescueStopped`, `alwaysOnWarmTargets` and
+  `ResumeVMForDesktop`. The paper was not in that state in the 2026-10-21
+  outage as the timeline records it: active (the 16:20 refresh answered, the
+  guest hung), stopped by wedge (16:44:54), active (16:45:01 warm), stopped by
+  the vmctl restart or outside the registry (16:53), stopped by wedge
+  (16:59:09), active by resolve (17:09). I did not read the journal; the
+  timeline is the orchestrator's. Covering `failed` is a named residual: a
+  failed boot after a deploy refresh leaves an always-on computer down until a
+  visit or an operator refresh.
+- **A6 (fixed, CI).** Every field of the candidate and skipped rows now has a
+  non-empty placeholder (`-`), restored to empty after the `read`, so an empty
+  `snapshot_kind` or `computer_url` cannot shift the later columns.
+- **A7 (recorded, benign for the bound).** The grant clears `FailureWarmedAt`
+  before the rescue knows whether it can proceed (a live unmanaged guest
+  defers it). The next warm sweep can then spend that re-armed retry, if the
+  wedge detector has ended the guest by then. That is still one spawn for the
+  target: the spend is charged to the same allowance, a start the manager
+  refuses refunds it, and the rescue for the same target then finds it spent.
+
 ## Residuals recorded by the review (not fixed here)
 
-- The rescue's final `/health` wait accepts any commit (liveness, not identity),
-  because a layered computer keeps serving its retained app-layer release and
-  a stopped computer had no commit to compare beforehand.
+- The rescue's final `/health` check is identity for a non-layered computer and
+  liveness for a layered one (it keeps its retained release); see A4.
 - A planned-restart marker written by an earlier refresh could survive into a
   rescue boot (the inherited marker weakness of the restart design, section
   3.3; the host does not attest planned-ness yet).
 - `saveLocked` does not fsync and only logs errors (restart ledger L1b); a
   crash between a spend and its write can lose the spend or the grant.
+- The always-on sweep (`ResumeVMForDesktop`) and a visit's recovery still
+  recover a tracked stopped instance with `RecoverVM`, which keeps the stored
+  config. Only the deploy rescue refreshes onto the current deploy's artifacts
+  (A3). After a deploy that deferred the paper's refresh, a sweep boot of a
+  tracked instance can still run the stored (older) image.
 - The always-on sweep still boots a `vmctl-restart` stop or a hibernated
   computer without an allowance (a host act, not a failure); only the rescue
   charges and converts a hard failure.
