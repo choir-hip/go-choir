@@ -102,7 +102,7 @@ const FENCE_MIN = Number(arg('fence-min', '30'));
 // "crash" proves restart closure only: crash at the first run in flight,
 // then a quiet window with no owner act, then export. Its acceptance is the
 // claim, not the I5 load.
-const USAGE = 'usage: node scripts/reeng_tracer.mjs --label <label> [--scenario story|crash|management|research|paper|engineering|adopt] [--attempts 1] [--timeout-min 15] [--settle-min 3] [--quiesce-min 2] [--exporter <cmd>] [--skip-export] [--owner-publish] [--keep-computer] [--expect-sha <sha>] [--fence-min 30] [--quiet-s 150] [--sources arxiv:cs_ai] [--interval-min 10] [--max-items 6] [--apply-min 10] [--restore-min 12] [--require-served] [--change static|go|go-served] [--autonomous] [--autonomy-min 120] [--decide-min 75] [--visual]';
+const USAGE = 'usage: node scripts/reeng_tracer.mjs --label <label> [--scenario story|crash|management|research|paper|engineering|adopt] [--attempts 1] [--timeout-min 15] [--settle-min 3] [--quiesce-min 2] [--exporter <cmd>] [--skip-export] [--owner-publish] [--keep-computer] [--expect-sha <sha>] [--fence-min 30] [--quiet-s 150] [--sources arxiv:cs_ai] [--interval-min 10] [--max-items 6] [--apply-min 10] [--restore-min 12] [--require-served] [--change static|go|go-served|rewrite] [--app <ComponentName>] [--delegate] [--autonomous] [--autonomy-min 120] [--decide-min 75] [--visual]';
 if (flag('help')) {
   console.log(USAGE);
   process.exit(0);
@@ -127,9 +127,41 @@ if (!['story', 'crash', 'management', 'research', 'paper', 'engineering', 'adopt
 // frozen, accepted, applied and restored, checks `witness_joined`, and prints
 // the gap table (each join, compared at the gate or only recorded).
 const CHANGE = arg('change', 'static');
-if (!['static', 'go', 'go-served'].includes(CHANGE)) {
-  console.error(`unknown --change ${CHANGE} (static | go | go-served)`);
+if (!['static', 'go', 'go-served', 'rewrite'].includes(CHANGE)) {
+  console.error(`unknown --change ${CHANGE} (static | go | go-served | rewrite)`);
   process.exit(2);
+}
+// --change rewrite --app <App> [--delegate]: a frontend app rewrite drill.
+// The request asks the computer to rewrite frontend/src/lib/<App>.svelte
+// (default ImageApp) for clarity, accessibility and maintainability with its
+// props, events, exported API, routes and visible behaviour unchanged. It is
+// a frontend-only change (no Go probe, no bin/autoputer, no served marker
+// file). With --delegate, engineering writes the rewrite through the Claude
+// delegate, whose network mode refuses npm, so the build runs in a second
+// round with network ecosystem_proxy whose capsule is offered the first
+// round's diff as a carried patch (docs/problems/
+// claude-delegate-resume-sonnet-2026-10-20.md, design option (a)).
+const APP = arg('app', 'ImageApp');
+const DELEGATE = flag('delegate');
+const REWRITE = CHANGE === 'rewrite';
+if (!REWRITE && (DELEGATE || arg('app', '') !== '')) {
+  console.error('--app and --delegate belong to --change rewrite');
+  process.exit(2);
+}
+if (REWRITE && SCENARIO !== 'engineering') {
+  console.error('--change rewrite needs --scenario engineering');
+  process.exit(2);
+}
+if (REWRITE) {
+  const appFile = join(REPO, 'frontend', 'src', 'lib', `${APP}.svelte`);
+  if (!/^[A-Z][A-Za-z]+App$/.test(APP)) {
+    console.error(`invalid --app ${APP} (must match /^[A-Z][A-Za-z]+App$/)`);
+    process.exit(2);
+  }
+  if (!existsSync(appFile)) {
+    console.error(`--app ${APP}: ${appFile} does not exist`);
+    process.exit(2);
+  }
 }
 const GO_CHANGE = CHANGE === 'go' || CHANGE === 'go-served';
 const PROBE_ROUTE = '/api/selfdev-probe';
@@ -143,8 +175,8 @@ const PROBE_ROUTE = '/api/selfdev-probe';
 const APPLY_MIN = Number(arg('apply-min', '10'));
 const RESTORE_MIN = Number(arg('restore-min', '12'));
 const REQUIRE_SERVED = flag('require-served');
-if (REQUIRE_SERVED && GO_CHANGE) {
-  console.error('--require-served checks a static file; a --change go drill serves none (go-served checks its own route)');
+if (REQUIRE_SERVED && (GO_CHANGE || REWRITE)) {
+  console.error('--require-served checks a static file; a --change go or rewrite drill serves none (go-served checks its own route)');
   process.exit(2);
 }
 // --autonomous (engineering scenario; P4,
@@ -1253,6 +1285,26 @@ function engineeringStory(token) {
       'then Verify the frozen bundle that engineering\'s final Report names, and answer this request.',
     ].join(' ');
   }
+  if (CHANGE === 'rewrite') {
+    const file = `frontend/src/lib/${APP}.svelte`;
+    const delegate = DELEGATE ? [
+      `Engineering writes the rewrite through the Claude delegate (choir-delegate start with a brief naming the absolute path /workspace/platform/${file}), then reviews the diff itself.`,
+      'The delegate\'s network mode refuses npm; if the build cannot run in that round, Complete the round as failed with the rewrite left in the capsule,',
+      'and management Casts a second round with network ecosystem_proxy, whose capsule is offered the first round\'s diff as a carried patch: apply it, build, check, freeze.',
+    ] : [];
+    return [
+      `Change this computer itself: rewrite ${file} in the platform workspace for clarity, accessibility (labels, keyboard focus, alt text), and maintainability.`,
+      'Keep its props, events, exported API, routes and visible behaviour unchanged. Touch only that file (and a small helper module next to it if clearly needed). Change nothing else.',
+      'Deterministic checks, to run in the capsule before freezing, from /workspace/platform/frontend:',
+      `npm ci && npm run build must pass, and git diff --stat must show ${file} changed.`,
+      'This change touches the frontend only, so the release tree needs the frontend release tree only (no bin/autoputer).',
+      ...delegate,
+      'Only engineering can change this computer: Cast this request to management verbatim in your first cell, with a one-paragraph plan revision,',
+      'and incorporate management\'s answer when it arrives.',
+      'Management: Cast it to engineering; engineering makes the change, runs the checks, builds the release tree, freezes the candidate with choir.Freeze and completes;',
+      'then Verify the frozen bundle that engineering\'s final Report names, and answer this request.',
+    ].join(' ');
+  }
   if (CHANGE === 'go') {
     const pkg = 'internal/drillmark';
     return [
@@ -1378,7 +1430,7 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild, optio
     restore: null, served: {}, probe: {}, witness: {}, heads: {}, obligations: {}, census: null, management_final_report_to_texture: null,
   };
   claim.token = token;
-  out.drill = { label: out.label, scenario: 'engineering', change: CHANGE, token, claim, gaps, note: [] };
+  out.drill = { label: out.label, scenario: 'engineering', change: CHANGE, ...(REWRITE ? { app: APP, delegate: DELEGATE } : {}), token, claim, gaps, note: [] };
   let reached = 'mint';
   const at = (name) => { if (REACHED.indexOf(name) > REACHED.indexOf(reached)) reached = name; };
   const readHead = async (tag) => {
@@ -1392,6 +1444,7 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild, optio
     return o;
   };
   const served = async (tag) => {
+    if (REWRITE) return; // the rewrite serves no marker file; the build and the diff are the evidence
     const r = await c.surface(markerPath);
     claim.served[tag] = { at: iso(), status: r.status, served: r.status === 200 && r.text.trim() === token, error: r.error || null };
     phase('served_check', { tag, ...claim.served[tag] });
@@ -2229,6 +2282,7 @@ function acceptEngineering(out, claim, gaps, reached, phase) {
     autonomous: AUTONOMOUS,
     reached, checks, failed: Object.keys(checks).filter((k) => !checks[k]),
     served_change_then_restored: servedOK, served_required: REQUIRE_SERVED,
+    ...(REWRITE ? { change: 'rewrite', app: APP, delegate: DELEGATE, engineering_assignments: claim.engineering_casts.length } : {}),
     operation_id: op?.operation_id || null, bundle_digest: op?.bundle_digest || null, assignment_id: cast?.assignment_id || null,
     build: { pre_apply: claim.build_pre_apply || null, post_apply: claim.build_post_apply || null, post_restore: claim.build_post_restore || null },
     census_forbidden_objects: claim.census?.objects ?? null,
