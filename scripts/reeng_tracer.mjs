@@ -1291,13 +1291,14 @@ function engineeringStory(token) {
       'This takes two engineering rounds.',
       `Round 1: management's Cast leaves the spec's "network" field out, so the capsule is in the claude mode and the Claude delegate is available; engineering saves a copy of the file, writes the rewrite through the delegate (choir-delegate start with a brief naming the absolute path /workspace/platform/${file}), and reviews the diff against the copy.`,
       'The claude mode refuses npm, so round 1 Completes as failed with the rewrite left in the capsule.',
-      'Round 2: after that report, management Casts again with "network": "ecosystem_proxy"; its capsule holds round 1\'s diff at /selfdev/carried/source.patch: save a copy of the file, apply the patch with git -C /workspace/platform apply, build, check, freeze.',
+      'Round 2: after that report, management Casts again with "network": "ecosystem_proxy"; its capsule holds round 1\'s diff at /selfdev/carried/source.patch: save a copy of the file, apply the patch with git -C /workspace/platform apply, check the diff against the copy, run the frontend build job (with its release copy), record the toolchain, Freeze, and Complete with the frozen bundle. Once those checks pass, round 2 freezes; it does not stop to ask for provenance.',
     ] : [];
     return [
       `Change this computer itself: rewrite ${file} in the platform workspace for clarity, accessibility (labels, keyboard focus, alt text), and maintainability.`,
       'Keep its props, events, exported API, routes and visible behaviour unchanged. Touch only that file (and a small helper module next to it if clearly needed). Change nothing else.',
       'Deterministic checks, to run in the capsule before freezing, from /workspace/platform/frontend:',
-      `npm ci && npm run build must pass, and diff -u against a copy of ${file} saved before the change must show it changed (the capsule has no .git, so git diff and git status cannot show changes).`,
+      `npm ci && npm run build must pass, run as the frontend build job that also copies dist into the release tree; and diff -u against a copy of ${file} saved before the change must show it changed: diff -u exits 1 when the file changed, and that exit 1 is the passing result.`,
+      'The capsule has no .git: git diff and git status cannot run there, and a missing .git is expected, never a blocker.',
       'This change touches the frontend only, so the release tree needs the frontend release tree only (no bin/autoputer).',
       ...delegate,
       'Only engineering can change this computer: Cast this request to management verbatim in your first cell, with a one-paragraph plan revision,',
