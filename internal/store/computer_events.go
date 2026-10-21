@@ -110,7 +110,7 @@ func (s *Store) DryRunProjectionBatch(ctx context.Context, computerID string, ba
 		return fmt.Errorf("computer event projection: dry-run begin: %w", err)
 	}
 	defer tx.Rollback()
-	if err := projectBatch(ctx, tx, *batch); err != nil {
+	if err := projectBatch(ctx, tx, *batch, nil); err != nil {
 		return err
 	}
 	return nil
@@ -214,9 +214,13 @@ func (s *Store) finalizeBatch(ctx context.Context, computerID, eventDigest strin
 	if batch != nil {
 		var projectErr error
 		if allowLegacyTextureBootstrap {
+			// Replay writes og_objects without the side table: withdraw the
+			// families (a replayed row would otherwise read as missing) and
+			// let the online pass fill it.
+			s.derivedKeys().InvalidateAll("replay projection")
 			projectErr = projectBatchForReplay(ctx, tx, *batch)
 		} else {
-			projectErr = projectBatch(ctx, tx, *batch)
+			projectErr = projectBatch(ctx, tx, *batch, s.derivedKeys())
 		}
 		if projectErr != nil {
 			return projectErr

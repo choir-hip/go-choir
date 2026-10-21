@@ -679,6 +679,9 @@ func Run() {
 			if err := rt.Start(ctx); err != nil {
 				return err
 			}
+			// The side table's online check starts after the runtime: never on
+			// the boot path (docs/problems/store-hot-reads-need-a-rollback-safe-side-table-2026-10-21.md).
+			db.StartDerivedKeyValidation(ctx)
 			StartPeriodicFileSync(ctx, fileSyncService, fileSyncIntervalFromEnv())
 			return nil
 		})
@@ -703,6 +706,7 @@ func Run() {
 		if err := rt.Start(ctx); err != nil {
 			boot.fatalf("autoputer: runtime startup refused: %v", err)
 		}
+		db.StartDerivedKeyValidation(ctx)
 		StartPeriodicFileSync(ctx, fileSyncService, fileSyncIntervalFromEnv())
 	}
 

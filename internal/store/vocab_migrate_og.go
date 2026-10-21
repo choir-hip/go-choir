@@ -771,6 +771,7 @@ func (s *Store) applyOGMigration(ctx context.Context, objs []*ogObjectRow, edges
 				_ = tx.Rollback()
 				return fmt.Errorf("og migrate drop %s: %w", o.canonicalID, err)
 			}
+			s.derivedKeys().Drop(ctx, tx, o.canonicalID)
 			continue
 		}
 		if _, err := tx.ExecContext(ctx,
@@ -779,6 +780,9 @@ func (s *Store) applyOGMigration(ctx context.Context, objs []*ogObjectRow, edges
 			_ = tx.Rollback()
 			return fmt.Errorf("og migrate write %s: %w", o.canonicalID, err)
 		}
+		// The row moved to a new id with new content: its key rows follow.
+		s.derivedKeys().Drop(ctx, tx, o.canonicalID)
+		s.derivedKeys().Maintain(ctx, tx, o.newID, objectgraph.ObjectKind(o.kind))
 	}
 	for _, e := range edges {
 		if !e.dirty {
@@ -1019,6 +1023,8 @@ func (s *Store) revertOGMigration(ctx context.Context, rep *MigrationReport) err
 			_ = tx.Rollback()
 			return fmt.Errorf("og revert write %s: %w", entry.NewCanonicalID, err)
 		}
+		s.derivedKeys().Drop(ctx, tx, entry.NewCanonicalID)
+		s.derivedKeys().Maintain(ctx, tx, entry.OldCanonicalID, objectgraph.ObjectKind(kind))
 	}
 	for _, entry := range rep.OGEdges {
 		if _, err := tx.ExecContext(ctx,
