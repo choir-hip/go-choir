@@ -30,6 +30,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/mirrorgrant"
 	"github.com/yusefmosiah/go-choir/internal/steptrace"
 )
 
@@ -68,6 +69,11 @@ type Executor struct {
 	// goModuleProxy is where L2 capsules' GoProxyRouteHost goes; invalid
 	// (unset) leaves the route out of the policy.
 	goModuleProxy netip.AddrPort
+	// mirrorAddr and mirrorGrantDir are where L2 capsules' MirrorRouteHost
+	// goes and where the host's grant for it is read (mirror.go); without
+	// both, and a grant, capsules get no mirror.
+	mirrorAddr     netip.AddrPort
+	mirrorGrantDir string
 	// runningBinary identifies the executable Freeze may reuse as a
 	// release's bin/autoputer; nil means CurrentRunningBinary.
 	runningBinary func() (RunningBinary, error)
@@ -145,15 +151,47 @@ func (e *Executor) SetGoModuleProxy(addr netip.AddrPort) {
 	e.goModuleProxy = addr
 }
 
+// SetCapsuleMirrors routes granted L2 capsules' MirrorRouteHost to the host
+// package mirror at addr, reading the grant from grantDir (mirror.go). It
+// applies to capsules spawned afterwards.
+func (e *Executor) SetCapsuleMirrors(addr netip.AddrPort, grantDir string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.mirrorAddr = addr
+	e.mirrorGrantDir = strings.TrimSpace(grantDir)
+}
+
+// CapsuleMirrorStatus reports whether L2 capsules use the host package
+// mirror on this computer, for which ecosystems, and why not.
+func (e *Executor) CapsuleMirrorStatus() mirrorgrant.Status {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.capsuleMirrorsLocked()
+}
+
+// capsuleMirrorsLocked reads the grant; a grant with no route address is not
+// in force. Callers hold e.mu.
+func (e *Executor) capsuleMirrorsLocked() mirrorgrant.Status {
+	st := mirrorgrant.ReadGrant(e.mirrorGrantDir)
+	if st.Granted && !e.mirrorAddr.IsValid() {
+		return mirrorgrant.Status{Reason: "granted, but this computer has no address for the host package mirror"}
+	}
+	return st
+}
+
 // egressPolicyLocked is the policy for a new capsule: L2, or the claude
-// mode's model-API-only policy. Both keep the Go module proxy route.
-func (e *Executor) egressPolicyLocked(claude bool) EgressPolicy {
+// mode's model-API-only policy. Both keep the Go module proxy route; only L2
+// takes the package mirror grant.
+func (e *Executor) egressPolicyLocked(claude bool, mirrors mirrorgrant.Status) EgressPolicy {
 	policy := EcosystemEgressPolicy()
 	if claude {
 		policy = ClaudeEgressPolicy()
 	}
 	if e.goModuleProxy.IsValid() {
 		policy.Routes = map[string]netip.AddrPort{GoProxyRouteHost: e.goModuleProxy}
+	}
+	if !claude {
+		policy = applyCapsuleMirrors(policy, mirrors, e.mirrorAddr, e.goModuleProxy.IsValid())
 	}
 	return policy
 }
@@ -593,7 +631,15 @@ func (e *Executor) startEgressLocked(caps *Capsule) error {
 	_ = os.MkdirAll(ledgerDir, 0o700)
 	ledgerPath := filepath.Join(ledgerDir, caps.ID+".jsonl")
 	var ledgerMu sync.Mutex
-	proxy := NewEgressProxy(caps.ID, e.egressPolicyLocked(caps.Spec.ClaudeDelegate), func(record EgressRecord) {
+	// The grant is read once per capsule: its route, allowlist and client
+	// settings come from the same reading.
+	var mirrors mirrorgrant.Status
+	if !caps.Spec.ClaudeDelegate {
+		if mirrors = e.capsuleMirrorsLocked(); mirrors.Granted {
+			caps.mirrors = mirrors.Ecosystems
+		}
+	}
+	proxy := NewEgressProxy(caps.ID, e.egressPolicyLocked(caps.Spec.ClaudeDelegate, mirrors), func(record EgressRecord) {
 		line, _ := json.Marshal(record)
 		log.Printf("capsule-egress: %s", line)
 		ledgerMu.Lock()
@@ -650,6 +696,9 @@ func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule, claudeT
 	// Visual capture: the Chromium path for capture jobs, on a granted
 	// computer only (visual_capture_linux.go).
 	cmd.Env = append(cmd.Env, e.visualCaptureBrokerEnvLocked()...)
+	// Package mirrors: the granted ecosystems, for the broker's workload
+	// client settings (mirror.go); nothing on an ungranted computer.
+	cmd.Env = append(cmd.Env, mirrorBrokerEnv(caps.mirrors)...)
 	if claudeToken != "" {
 		// Claude delegate (claude mode only): the broker reads the token
 		// once, removes it from its environment and hands it to the claude
