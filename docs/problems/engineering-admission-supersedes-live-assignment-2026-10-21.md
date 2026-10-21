@@ -149,3 +149,74 @@ restores supersede-on-spawn.
   the Cast path and false of the legacy coagent spawn path.
 - introduced: none.
 - repaired: none until the fix lands.
+
+## Review findings on the candidate (2026-10-21, b0f872bd6)
+
+Two independent reviewers (Sol, Argon) sent the first candidate back. The
+findings below are recorded before any fix. B1 and B2 were reproduced by Sol
+with real-store overlay probes; B3 is from code reading (Argon) and is a
+hypothesis until a test shows it. Mutation class of this section: green.
+
+### B1: a planned restart cancels the queue
+
+The queue made `open` + `unbound` a legitimate long-lived state. The restart
+reconcile (`reconcileEngineeringAssignmentsForTrajectory`,
+`engineering_assignment_fate.go`, the `BoundRunID == ""` branch) still reads
+every such row created before this boot as an interrupted spawn strand: it
+records a revoke intent, acknowledges the absent capsule, and cancels with
+"restart acknowledged absent pre-bind assignment capsule". On a planned
+restart (marker present, `crashBoot == false`) that destroys every queued
+request, although the station's q7/q8 say a planned restart keeps the queue.
+The same branch also runs during normal operation (the run-end kick and work
+wakes call the reconcile with `crashBoot == false`), so after a planned
+restart any later reconcile of the trajectory would cancel the request too.
+The surviving retry wake then finds a terminal row and drops.
+
+Sol's probe: `assignment=cancelled capsule=revoked reason="restart
+acknowledged absent pre-bind assignment capsule"`.
+
+The crash rule is not in question: a markerless boot cancels every open
+assignment `interrupted_by_restart` and drops the queued wake; that stays.
+
+### B2: expiry is checked only on a busy refusal
+
+`engineeringRequestExpired` is applied to the request itself only in
+`deferEngineeringAdmission`, which runs only when admission refuses. Two
+failures follow:
+
+1. A request whose deadline passes between retries, and whose blocker
+   finishes before the next retry, is admitted and enters the spawn path.
+   Sol's probe: `request_expired=true disposition=open ... assigned
+   Engineering capsule authority unavailable` (the probe supplied no
+   executor, so it stopped just past admission).
+2. An older request that has expired but is still `open` (its own retry has
+   not fired) no longer blocks a younger one, which is right ("FIFO among
+   non-expired requests"), but its row stays open while the younger runs,
+   and when its retry fires its cancel reason blames the younger request.
+   The existing test `TestEngineeringAdmissionExpiredQueuedRequestDoesNotBlock`
+   passes only because admission never notices that the admitted request is
+   expired too.
+
+### B3: queue wait counts against the bound execution deadline
+
+`HandleAssignedEngineeringFateDeadline` fails a bound, active assignment
+closed at `CreatedAt + deadline`. With a queue, `CreatedAt` is arrival, not
+the start of execution: a request that waited 5h55m and then bound is killed
+five minutes into its run. Separately, the deadline wake's content is
+`{assignment_id, attempt}` both at open and at bind, and the wake's update id
+is derived from its content, so the bind-time arm dedups into the open-time
+wake's row; if that row was already consumed (it fired while the request was
+still queued, a no-op), the bound assignment has no deadline wake at all.
+
+### Non-blocking findings recorded with them
+
+- ARCH-04's observe-mode counts (`objectgraph.WriterGateCounts`) have no
+  reader outside tests; the guest log line is first-seen only. The counts are
+  the oracle for the enforce flip and must be readable without SSH
+  (standing question 9).
+- Story opening writes `choir.texture_document` and
+  `choir.texture_revision` from management's records commit
+  (`internal/store/story_open.go`). Undeclared today, so observe mode passes
+  it; before enforce, story seeding needs its own writer accounting.
+- When the live assignment ends, the next queued request waits for its own
+  retry (up to one minute); nothing wakes it.
