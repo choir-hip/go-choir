@@ -39,7 +39,7 @@
     sourceEntitySnapshotText,
     sourceEntityTitle,
   } from './texture-source-renderer.ts';
-  import { webLensAddress } from './source-url';
+  import { webLensAddress, storedSnapshotApplies } from './source-url';
   import { createContentItem } from './texture.js';
 
   export let appContext = {};
@@ -51,11 +51,15 @@
   const sourceSnapshot = sourceEntitySnapshotText(sourceEntity);
   const sourceSnapshotWarnings = sourceEntitySnapshotWarnings(sourceEntity);
   const initialTarget = webLensAddress(appContext?.initialUrl || appContext?.sourceUrl || '');
+  // A stored snapshot is the text of this address, not of whatever is typed
+  // next: it is shown and imported only while the target is still this one.
+  const snapshotURL = initialTarget;
   let urlInput = initialTarget;
   let target = initialTarget;
   let busy = false;
   let error = '';
 
+  $: snapshotApplies = !!sourceSnapshot && storedSnapshotApplies(snapshotURL, target);
   $: readableSnapshotHTML = renderSnapshotMarkdown(sourceSnapshot);
 
   // ---- Actions ----
@@ -95,8 +99,8 @@
   }
 
   async function importSnapshotToTexture() {
-    if (!sourceSnapshot) return;
-    const sourceURL = target || webLensAddress(appContext?.sourceUrl || '') || '';
+    if (!sourceSnapshot || !snapshotApplies) return;
+    const sourceURL = snapshotURL;
     const title = sourceEntityTitle(sourceEntity) || 'Web Lens Import';
     busy = true;
     error = '';
@@ -258,7 +262,7 @@
     </div>
   {/if}
 
-  {#if sourceSnapshot}
+  {#if snapshotApplies}
     <div class="backend-snapshot" data-browser-source-snapshot>
       <div class="backend-main">
         <div class="snapshot-actions">

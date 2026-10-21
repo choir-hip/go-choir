@@ -35,3 +35,12 @@ export function webLensAddress(value: unknown): string {
   }
   return candidate;
 }
+
+// storedSnapshotApplies says whether a stored reader snapshot may still be
+// shown and imported for the current address. The snapshot is the immutable
+// text of the address it was taken from (snapshotURL); once the address
+// changes it belongs to nothing the person is looking at, so it is hidden
+// rather than relabelled with the new address.
+export function storedSnapshotApplies(snapshotURL: string, target: string): boolean {
+  return snapshotURL === target;
+}
