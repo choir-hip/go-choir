@@ -374,6 +374,10 @@ When S7-0 is designed:
 - Per-app sole writers: the desk is the one writer of its app's object
   kinds, as Texture is for documents.
 
+Design of the join, with the fields it needs from the desk manifest and the
+failure modes of the install:
+[app-package-carries-app-desk-2026-10-21.md](../design/app-package-carries-app-desk-2026-10-21.md).
+
 Items ARCH-01 to ARCH-05 of the
 [security, density and architecture checklist](../security-density-architecture-checklist-2026-10-21.md) track
 this. Still owed in this file: owner ruling D1 (whether a package is
