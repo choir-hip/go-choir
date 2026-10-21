@@ -1,8 +1,8 @@
 ---
 definition_version: 4
 
-# The launch first pass: every agent-doable batch of the launch checklist,
-# built concurrently and landed in order, then reviewed with the owner.
+# The launch first pass: the security and density checklist, built
+# concurrently and landed in order, then reviewed with the owner.
 # Owner 2026-10-21, in session: "zoom back out into our nested checklist so
 # that we can set a really aggressive meta mission to really bang out this
 # work promptly with as much concurrency as possible. I mean, of course,
@@ -27,10 +27,15 @@ definition_version: 4
 readiness: executable
 
 review:
-  reviewer: agentic-consensus round 1 (omp-gpt61-sol, omp-gemini38 pinned to gemini-4-argon-high; devin failed)
-  frozen_ref: git blob 9a813197646dfcd24d63067b434374c02482f703 (this file at 26c4e1ed0)
-  verdict: send_back
-  evidence_ref: scratchpad/panel-fp/run (session diagnostics); adjudication below
+  reviewer: agentic-consensus round 2 (omp-gpt61-sol, omp-gemini38 pinned to gemini-4-argon-high)
+  frozen_ref: git blob 6225eee4c17250795c3268fe185bbc8572132a7b (this file at cf9751f36)
+  verdict: accept
+  evidence_ref: >-
+    scratchpad/panel-fp/run-r2 (session diagnostics). Argon accepted;
+    GPT-6.1-sol sent back with two bounded repairs, each given as exact
+    text (the landing paragraph's order; the finish contract's
+    settlement), applied verbatim with its three non-blocking suggestions.
+    Round 1 (blob 9a813197, send_back) is adjudicated below.
 
 metamission:
   stations:
@@ -163,7 +168,7 @@ metamission:
         RES-18 (with FP1), the second half of B8 (NET-01's host fetch
         service, NET-02, NET-05, NET-10, closing general guest egress; it
         follows FP6), and the P2 items (NET-03, NET-04, RES-08, RES-10,
-        RES-13, RES-15, RES-20 to RES-22, ARCH-06, ARCH-08, ARCH-09,
+        RES-13, RES-15, RES-20, RES-22, ARCH-06, ARCH-08, ARCH-09,
         ARCH-11 to ARCH-15), each decided item by item. Autopaper, accounts
         and Autoradio items are out of this pass (owner notes §38).
 
@@ -209,16 +214,22 @@ start:
 
 finish:
   deliver: >-
-    Every launch-checklist batch that agents can do without the owner or a
-    physical iPhone is either landed on staging with its deployed proof, or
-    stopped at a named blocker with the smallest next probe; and the owner
-    has one first-pass report to review.
+    Every item of the security and density checklist that agents can do
+    without the owner is either landed on staging with its deployed proof,
+    or stopped at a named blocker with the smallest next probe; and the
+    owner has one first-pass report to review.
   artifact: >-
     For each station FP1 to FP10: pushed commits on main, a green CI run, the
     deployed sha seen on staging, and the station's deployed proof; or a
     blocked_incomplete card naming the blocker. The launch and security
     checklists ticked to match. A first-pass report (reporter letter) for
-    the owner's review.
+    the owner's review. The report covers every station, including FP0 and
+    explicitly superseded FP5, with its disposition and evidence. The
+    metamission settles complete only when every station is complete or
+    explicitly superseded. If unresolved blockers remain, deliver the owner
+    report with aggregate status checkpoint_incomplete or
+    blocked_incomplete, preserving each blocker and smallest safe next
+    probe.
   acceptance:
     - action: per station, the deployed proof its goal file names, run by FP0 against https://choir.news
       proves: the batch's claim on the deployed product, not on a worktree
@@ -368,10 +379,12 @@ the second pass.
 **How the lanes work.** Each lane is one worker in its own worktree, on its
 own branch. Its first commit is its station goal file and, where the
 problem is not yet written down, the problem record. Then tests, then code.
-When a batch is ready, the worker freezes it and reports to FP0. FP0 sends
-a red candidate to a panel, rebases it onto main, lands it with the Landing
-Loop, and runs its deployed proof. A failed proof goes back to the lane
-with the evidence.
+When a batch is ready, the worker reports its candidate to FP0. FP0 rebases
+it onto current main, runs focused checks, freezes its base, scoped paths
+and digest, obtains independent review for red work, verifies the reviewed
+identity is unchanged, then lands through the Landing Loop and runs
+deployed acceptance. Semantic changes after review require re-freezing and
+re-review. A failed proof goes back to the lane with the evidence.
 
 **Why landing is the constraint.** Building is parallel. Landing is not:
 each red batch gets a deploy of its own, so the order of landing is the
