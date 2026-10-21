@@ -14,6 +14,20 @@ and self-development. Do all the security and density work before launch,
 and order work by what speeds up the next piece, not only by importance:
 "we can blitz out all this work at agentic pace."
 
+Then the owner's launch condition and notes (2026-10-21,
+[owner notes §37](reports/owner-notes-2026-10-14.md)): launch is a
+condition, not a date; the foundations matter most (security, density, the
+self-development loop); and work lands in bigger batches.
+
+## What launch means
+
+The stack is **autoputer, then Autopaper, then Autoradio**. An Autopaper
+problem is read as an autoputer problem first, and a rushed Autoradio will
+show where Autopaper needs work; the owner wants that pressure, and wants
+the fixes to land in the layer that caused them. The self-development loop
+is the measure of the foundations: good enough to build several app agents
+at once.
+
 ## How to use it
 
 - **Tick rule.** As in SDC: runtime items need the pushed SHA, the staging
@@ -33,18 +47,31 @@ and order work by what speeds up the next piece, not only by importance:
 - **Status** is what the docs said on 2026-10-21. Items marked *unverified*
   are claims I could not confirm from main.
 
-## Launch targets
+## Launch condition
 
-- **Autoradio submitted for App Review by 2026-10-31** (owner notes §31,
-  2026-10-20). This is the full product: sign-in, and every account gets its
-  own autoputer computer it can drive.
-- **"Before we launch next week"** (owner, 2026-10-21, notes §36).
-- [ ] **LD-01 (owner): define launch.** Nothing in the repo defines it yet. A
-  proposed definition: Autoradio is live on the App Store, choir.news is open
-  to public sign-up with admission limits, and every P0 and P1 item in SDC
-  that the owner chose is ticked. Also: is choir.news production? The Terms
-  still call it a staging environment, and every plan says staging is the
-  acceptance environment. Launch needs one answer.
+- [ ] **LD-01 (owner): the Autoradio launch condition** (owner, 2026-10-21,
+  verbatim in notes §37). On the phone, the owner can:
+  - watch embedded YouTube on their YouTube Premium account, through Sign in
+    with Google (L4-04, L8-09);
+  - sign in with Apple too, because offering Google requires it (L4-04);
+  - play podcasts (L8-03);
+  - have e-books, arbitrary PDFs and any file read aloud (L8-10);
+  - interrupt any of those by voice at any time, and have agent events
+    interrupt them (L8-11).
+- **The date is the push, not the gate.** Submitting for App Review by
+  2026-10-31 (notes §31) stays the target. The owner expects it may take
+  longer: "so does everything worthwhile in life".
+- [ ] **LD-02 (owner): production.** The Terms still call choir.news a
+  staging environment, and every plan treats staging as the acceptance
+  environment. Launch needs one answer: is choir.news production on launch
+  day, and what is the acceptance environment after it?
+- **The core experience, and how far launch goes toward it.** Today the
+  owner plays a PDF in Speech Central and pauses it again and again to
+  dictate notes into a notes app. Autoradio merges the two. The owner
+  listens to a report, answers it line by line, goes off on tangents
+  ("send an email to Sally about the reservation"), and each note lands in
+  the right work stream. Launch needs the listen-and-answer loop
+  (L8-12); the full routing is the longer vision (L3-06).
 
 ## Phase 0: owner setup with lead times (start now, in parallel)
 
@@ -86,9 +113,15 @@ and order work by what speeds up the next piece, not only by importance:
   Autopaper computer uses far more memory than it needs. Measure the daemon
   RSS, the per-desk workers and the guest page cache before cutting
   anything. This feeds SDC RES-07 and RES-19, and the density numbers.
-- [ ] **L1-03 (agent): a faster landing loop.** CI takes about 20 minutes and
-  runs serialized, and a superseded run is cancelled. Shard or cache it so a
-  red deploy lands, and gets verified, in minutes.
+- [ ] **L1-03 (both): bigger batches and a faster landing loop.** The owner's
+  rule (notes §37): stop landing one small change per deploy. One deploy
+  takes about 25 minutes and its staging check about 30 more, and an
+  imperfect result starts the cycle again. Land larger changes per batch,
+  accept that a batch may fail in more than one place, and debug forward.
+  The Landing Loop still runs, once per batch. Then cut the loop itself:
+  CI takes about 20 minutes, runs serialized, and cancels a superseded run.
+  Shard or cache it, and script the staging proof, so a batch lands and is
+  verified in minutes.
 - [ ] **L1-04 (agent): desk manifest (SDC ARCH-02).** One declared table of
   desks, roles and capabilities. Confinement, budgets and app desks then
   read it instead of each re-deriving it.
@@ -125,8 +158,16 @@ of that order:
   it ran.
 - [ ] **L2-04 (agent): off-host backup is durable**, not the node-a stopgap.
   It needs L0-03.
-- [ ] **L2-05 (both): red team before production** (notes §8). The scope is
-  forks only. The secrets vault comes first.
+- [ ] **L2-05 (both): agentic red teaming before launch** (notes §8, §37).
+  Agents attack a forked computer, never a live one. The secrets vault
+  comes first.
+- [ ] **L2-06 (agent): Obscura and Web Lens, decided.** A Sonnet research
+  pass covers their history, what still runs, and what capture depends on
+  them (owner, notes §37). Live viewing of arbitrary sites moves to the
+  device's own browser (WKWebView on iPhone, the platform web view
+  elsewhere). Server-side capture keeps only what it needs. SDC SEC-07
+  covers the address guard on those fetches. The recommendation goes here
+  when the research lands.
 
 ## Phase 3: self-development
 
@@ -135,9 +176,11 @@ of that order:
 - [ ] **L3-02 (agent): S7-0, every first-party app is a package**, with a
   frontend self-development drill in parallel. The branch
   `feat/s7-0-app-packages` is paused.
-- [ ] **L3-03 (agent): app rewrites** of Slides, Pdf, Epub, Podcast, Calendar
-  and FileBrowser (notes §33). They resume with SlidesApp after the
-  dual-model tool-call evaluation.
+- [ ] **L3-03 (agent): app agents for launch: podcast and one reader**
+  (notes §37). EPUB and PDF become a single reader app agent, replacing the
+  two viewers in the §33 rewrite list. Each app agent ships as a package
+  with its own desk (doctrine I26). Slides, calendar and mail app agents
+  may land after launch (Post-launch, below).
 - [ ] **L3-04 (both): the self-development update path** as far as launch
   needs. Published source only, the host is the only builder, and
   owner-only arming (P3) lands before P4
@@ -145,6 +188,14 @@ of that order:
 - [ ] **L3-05 (agent): the dual-model tool-call evaluation.** DeepSeek and
   luna run in the pool. Fix the failures they share
   (docs/problems/tool-call-failures-dual-model-2026-10-21.md).
+- [ ] **L3-06 (agent): Texture as a tree** (notes §37). Each Texture
+  document gets its own sub-RLM, under a root Texture agent that routes
+  input to the right work stream: a dictated note, a tangent, an errand.
+  The work exists in part (Texture desks, Texture articles), but not this
+  shape. Launch needs enough of it for L8-12.
+- [ ] **L3-07 (agent): the loop builds app agents in parallel.** The
+  measure of phase 3 is that self-development builds several app agents
+  at once (L3-03 first) on test computers.
 
 ## Phase 4: accounts and onboarding for strangers
 
@@ -158,10 +209,13 @@ of that order:
 - [ ] **L4-03 (agent): admission limits or a waitlist.** Every sign-up gets a
   computer on Node B; density is roughly 1,200 to 2,000 registered users per
   host (reports/vm-density-limits). The mechanism is unspecified.
-- [ ] **L4-04 (agent): more sign-in methods** (deferred to "later this week",
-  notes §31): Sign in with Apple, Google (which makes Apple required, App
-  Review 4.8), and an emailed one-time code. A security design with a panel
-  comes before code.
+- [ ] **L4-04 (agent): Sign in with Google and Sign in with Apple** (part of
+  the launch condition, LD-01). Google is also how the owner's YouTube
+  account connects (L8-09), and offering it makes Apple required (App
+  Review 4.8). An emailed one-time code is optional. Every one of these is
+  only as strong as the account behind it, and none has a passkey's PRF to
+  derive a key from. A security design with a panel comes before code (red:
+  auth and session).
 - [ ] **L4-05 (agent): per-user budgets and rate limits.** These cover
   Research more (open to logged-out readers today), desk runs and search.
   They depend on L0-06 and SDC DEC-07.
@@ -230,8 +284,8 @@ reports/autoradio-programming-engine.
 - [ ] **L8-02 (agent): milestones M0 to M3** (autoradio-mobile-app-plan).
   The stack is native Swift: UIKit core, SwiftUI where cheaper, and one
   YouTube web view.
-- [ ] **L8-03 (agent): podcast player.** Full episodes stream unmodified
-  from the publisher's enclosure URL. Clips play a short time range from
+- [ ] **L8-03 (agent): podcasts, through the podcast app agent** (L3-03).
+  Full episodes stream unmodified from the publisher's enclosure URL. Clips play a short time range from
   that URL, attributed, with "play the full episode". Never re-host and
   never cut ads (notes §31).
 - [ ] **L8-04 (agent): drive the autoputer from the phone.**
@@ -242,6 +296,21 @@ reports/autoradio-programming-engine.
   speech recognition, and AI-data consent (App Review 5.1.2(i)).
 - [ ] **L8-07 (agent): accessibility.** VoiceOver and Dynamic Type for every
   screen.
+- [ ] **L8-09 (agent): embedded YouTube on the owner's Premium account**
+  (LD-01). Feasibility and terms are under research: whether a Premium
+  session reaches an embedded player, and what YouTube's terms and App
+  Review allow for background play and interruption. The result goes here.
+- [ ] **L8-10 (agent): read anything aloud, through the reader app agent**
+  (L3-03). E-books, arbitrary PDFs and any other file the owner opens.
+  Speech keeps a sentence position, so it can stop, resume and be
+  interrupted without losing its place.
+- [ ] **L8-11 (agent): one interruption layer** for every source: YouTube,
+  podcasts and read-aloud. A voice barge-in or an agent event pauses or
+  ducks what is playing; the owner speaks or hears the event; playback
+  resumes at the right place.
+- [ ] **L8-12 (agent): answer as you listen.** A note dictated while a report
+  plays is bound to the line it answers, and goes to that document's
+  Texture agent; the root routes a tangent elsewhere (L3-06).
 
 ## Phase 9: App Store submission (by 2026-10-31)
 
@@ -275,6 +344,16 @@ reports/autoradio-programming-engine.
 - [ ] **L10-06 (agent): self-hosting path** for the public repo. No install
   document exists today. This can come after launch.
 
+## Post-launch
+
+- [ ] **LP-01 (agent): Slides, calendar and mail app agents** (notes §37).
+  Other app agents follow as apps get used.
+- [ ] **LP-02 (both): residential computers.** Choir connects to an ordinary
+  desktop computer on a residential IP for computer use and browsing, or
+  is self-hosted on one (a Mac mini, an old laptop) (notes §37).
+- [ ] **LP-03 (agent): Android and Linux clients** use their platform web
+  views for live content, as the iPhone app uses WKWebView.
+
 ## Things that may be missing (for the owner's review)
 
 - Android is after launch in the plan (M5 needs a 12-tester Play closed test
@@ -301,3 +380,7 @@ reports/autoradio-programming-engine.
 - L5-01 → L5-02 → Autoradio (notes §28).
 - L0-07 → phase 7 → the voice parts of phase 8.
 - L9-01 → L9-07.
+- L4-04 (Google sign-in) → L8-09 (YouTube on the owner's Premium account).
+- L3-03 (podcast and reader app agents) → L8-03 and L8-10.
+- L3-06 (Texture tree) → L8-12 (answer as you listen).
+- Phase 7 (voice) → L8-11 (barge-in).

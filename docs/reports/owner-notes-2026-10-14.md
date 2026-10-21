@@ -1096,3 +1096,104 @@ session, which pushed `fix/desk-cell-confinement` (fedb7656c),
 (4bc762102) and `recovered/vmbackend-2026-10-14` (b6f27ded4) as new
 branches, and saved a verified bundle of the two desk-cell branches to
 iCloud Drive "Choir Backups" (checklist REC-01, ARCH-03, RES-20).
+
+## 37. The Autoradio launch condition; foundations first; bigger batches; Obscura and Web Lens (2026-10-21, afternoon)
+
+Owner notes on the security checklist, for the launch checklist, dictated
+while listening to a report (voice transcription; "Qire" and "auto pewter"
+read as Choir and autoputer). Verbatim, trimmed:
+
+- Order of work: "after review and recording of these, run agentic
+  consensus on checklists looking for ways to improve, streamline,
+  reorder, and correct."
+- Items, "in no particular order": "agentic red teaming, podcast as an app
+  agent, rewriting the EPUB and PDF viewer as a single reader app agent,
+  Slides calendar mail as app agents." Then: "I suppose the app agents as,
+  you know, calendar app agent or whatever, that could land post launch."
+- The launch condition: "my launch condition is that I can have embedded
+  YouTube, which is configured to connect with my YouTube premium account.
+  I have to get all the sign-in with Google connection working. [Sign] in
+  with Google means we also need sign-in with Apple and not just YouTube,
+  but I need podcasts and e-books. I need to be able to play any of those,
+  I mean not just those, but arbitrary PDFs and any file should be read to
+  me and they should be interruptible by agent events and I should be able
+  to interrupt by voice at any time. That's what auto radio means to me."
+- On the date: "I definitely want to accelerate the launch of this; it
+  occurs to me that it may take a bit longer than I anticipated, but so
+  does everything worthwhile in life."
+- The purpose: "The point is to get our self-development loop working
+  really well to the point where we could be building multiple app agents
+  concurrently. Really, it's the foundations that matter, whether it's the
+  security, the density of resource utilization, the self-development
+  loop." The stack: autoputer, Autopaper, Autoradio. "Anytime we have an
+  auto paper issue, it's because the [autoputer] needs work ... if we try
+  to rush auto radio, it will just reveal where auto paper needs work. Now,
+  to some extent, that forcing function is good because the consumer of
+  the service reveals the weaknesses and gets to shape the refactoring and
+  improvement."
+- The core Autoradio experience, in use right now: a PDF playing in Speech
+  Central, paused again and again to dictate notes, which land in a notes
+  app. "Auto radio merges the 2 so that you could listen to some report
+  from your work and respond to it line by line, including going off on
+  tangents and saying, now send an email to Sally about the reservation
+  ... and it would intelligently know how to cluster the relevant
+  information with the correct work stream ... I realize that the full
+  vision is a bit away."
+- Texture as a tree: "the texture desk that we have, like texture
+  articles. And then each texture agent should be a sub-RLM, and then
+  there's a root texture agent which is supervening over all of them, and
+  that is crucial for being able to put the right input into the right
+  work stream."
+- Pace: "we are working too sequentially ... one change, deploy it, takes
+  25 minutes, then test it on staging, takes another half hour, then maybe
+  that's imperfect, so we have to do it again, way too slow. We need to
+  take more radical steps to make bigger changes and bigger batches, and
+  there might be a little bit of some issues of having multiple failures,
+  but we're gonna debug everything eventually, so we should trust our
+  architecture and design capabilities to make larger radical changes so
+  we can get through the backlog more aggressively."
+- Obscura and Web Lens: "This is a whole research project which I want
+  you to do with a Sonnet subagent." The history: Obscura came from trying
+  to build a browser inside the Choir desktop as an iframe, which sites
+  block. Options named: a browser on a residential IP and computer ("kind
+  of gray"), or, better, "the browser built in to the device, so for the
+  iPhone app or for Linux and Android as well ... much more effective for
+  loading arbitrary content." Post-launch: Choir connects to and uses an
+  ordinary desktop computer on a residential IP for computer use, or is
+  self-hosted on one (a Mac mini, an old laptop), and browses from there.
+  "In the short term, I don't know what, if anything, we should do with
+  Obscura and WebLens ... to the extent that we're using some of those
+  pathways to capture content ... that's important, but it can kind of be
+  a bit of like a dead end, I think, unless you have any ideas."
+
+Taken as:
+
+- **Launch is a condition, not a date.** Autoradio launches when the owner
+  can, on the phone: watch embedded YouTube on their YouTube Premium
+  account through Sign in with Google (so Sign in with Apple too); play
+  podcasts; and have e-books, arbitrary PDFs and any file read aloud; with
+  every source interruptible by agent events and by voice at any time.
+  The 2026-10-31 App Review target stays as the push, not the gate
+  (launch checklist LD-01).
+- **App agents before launch: podcast, and one reader** (EPUB and PDF as a
+  single reader app agent, replacing the two viewers in §33's rewrite
+  list). Slides, calendar and mail app agents may land after launch.
+- **Agentic red teaming** is a launch item (security checklist and launch
+  checklist L2-05).
+- **Foundations come first**, and the self-development loop is the
+  measure: good enough to build several app agents at once. An Autopaper
+  problem is read as an autoputer problem first; an Autoradio problem as
+  an Autopaper or autoputer problem first.
+- **Texture becomes a tree**: one sub-RLM per Texture document under a root
+  Texture agent that routes input (a dictated note, a tangent, an errand)
+  to the right work stream. The line-by-line response needs it; the full
+  routing is the longer vision.
+- **Bigger batches.** Land larger changes per deploy and accept that a
+  batch may fail in more than one place; debug forward. This changes how
+  the Landing Loop is run (one verified deploy per batch, not per fix),
+  not the loop itself (launch checklist L1-03).
+- **Obscura and Web Lens go to a Sonnet research subagent**; the
+  recommendation is recorded in the launch checklist. Live viewing of
+  arbitrary sites moves toward the device's own browser (WKWebView on
+  iPhone, the platform web view elsewhere). Residential-computer browsing
+  and self-hosting on a residential machine are after launch.
