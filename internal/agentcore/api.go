@@ -861,6 +861,16 @@ type guestObservabilityResponse struct {
 	// store versus the shared nix store (SDC RES-07, launch checklist
 	// L1-02). Bounded to a few seconds; it takes no lock.
 	MemoryDetail *guestmem.Detail `json:"memory_detail,omitempty"`
+	// ObjectGraphWriterGate is the object graph writer gate's mode and the
+	// violations it has seen since boot, keyed "kind|declared writer|reason"
+	// (ARCH-04): the oracle for the observe-to-enforce flip, read here
+	// instead of over SSH. This process's counts only (corpusd keeps its own).
+	ObjectGraphWriterGate *writerGateObservability `json:"objectgraph_writer_gate,omitempty"`
+}
+
+type writerGateObservability struct {
+	Mode   string            `json:"mode"`
+	Counts map[string]uint64 `json:"counts"`
 }
 
 // guestMemoryObservability is the guest's own memory as the kernel reports it.
@@ -945,6 +955,9 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 		Build:      buildinfo.Snapshot("autoputer"),
 		RecentLog:  h.rt.RecentBootLog(),
 		Steps:      &steps,
+		ObjectGraphWriterGate: &writerGateObservability{
+			Mode: objectgraph.CurrentWriterGateMode().String(), Counts: objectgraph.WriterGateCounts(),
+		},
 	}
 	if r.URL.Query().Get("goroutines") == "1" {
 		resp.Goroutines = goroutineDump()

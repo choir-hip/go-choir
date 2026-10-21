@@ -143,6 +143,9 @@ var writerGateMode atomic.Int32
 
 func init() { writerGateMode.Store(int32(WriterGateModeFromEnv())) }
 
+// CurrentWriterGateMode is the mode in force (read by the observability route).
+func CurrentWriterGateMode() WriterGateMode { return WriterGateMode(writerGateMode.Load()) }
+
 // SetWriterGateMode sets the mode and returns the function that restores the
 // previous one. It is the test injection seam; production reads the environment.
 func SetWriterGateMode(m WriterGateMode) (restore func()) {
