@@ -143,10 +143,11 @@ func (s *Store) mechanicalResolveForReport(ctx context.Context, ownerID, compute
 	if len(links) == 0 {
 		return nil, nil
 	}
-	records, err := s.ListCommitmentRecords(ctx, ownerID, computerID, "", 10000)
-	if err != nil {
-		return nil, err
-	}
+	// The record list is a body scan (about a second on a busy computer);
+	// read it only once a link is an ask (docs/problems/
+	// research-more-slow-and-hidden-2026-10-21.md, E6).
+	var records []types.CommitmentRecord
+	listed := false
 	for _, targetID := range links {
 		target, err := s.GetCommitmentRecord(ctx, ownerID, computerID, targetID)
 		if err != nil {
@@ -154,6 +155,12 @@ func (s *Store) mechanicalResolveForReport(ctx context.Context, ownerID, compute
 		}
 		if target == nil || target.RecordKind() != types.CommitmentKindPrecommit || target.Precommit == nil {
 			continue
+		}
+		if !listed {
+			if records, err = s.ListCommitmentRecords(ctx, ownerID, computerID, "", 10000); err != nil {
+				return nil, err
+			}
+			listed = true
 		}
 		resolved := false
 		for _, rec := range records {
