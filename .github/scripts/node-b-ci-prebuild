@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# The prebuild program for Node B (ci.yml prebuild-staging). It runs as root
+# on Node B, read from the commit being prebuilt: through scripts/node-b-ci-gate
+# (`prebuild` verb), which supplies DEPLOY_COMMIT, DEPLOY_FRONTEND,
+# DEPLOY_HOST, DEPLOY_HOST_OS and HOST_SERVICES. Moved verbatim out of the
+# workflow's REMOTE_PREBUILD heredoc (SEC-14); the body keeps its indent.
+  set -euo pipefail
+  export PATH="/run/current-system/sw/bin:/run/wrappers/bin:$PATH"
+
+  # Disjoint checkout: deploy-staging resets /opt/go-choir under its own
+  # concurrency group; this job must never race that working tree.
+  prebuild_repo=/opt/go-choir-prebuild
+  if [ ! -d "$prebuild_repo/.git" ]; then
+    git clone https://github.com/choir-hip/go-choir.git "$prebuild_repo"
+  fi
+  git config --global --add safe.directory "$prebuild_repo"
+  cd "$prebuild_repo"
+  git remote set-url origin https://github.com/choir-hip/go-choir.git
+  if [ "${#DEPLOY_COMMIT}" -ne 40 ] || [[ "$DEPLOY_COMMIT" == *[!0-9a-f]* ]]; then
+    echo "Invalid prebuild commit: ${DEPLOY_COMMIT}" >&2
+    exit 1
+  fi
+  git fetch --no-tags origin "$DEPLOY_COMMIT"
+  git reset --hard "$DEPLOY_COMMIT"
+  git clean -ffdx
+  if [ "$(git rev-parse HEAD)" != "$DEPLOY_COMMIT" ]; then
+    echo "Prebuild checkout does not match ${DEPLOY_COMMIT}" >&2
+    exit 1
+  fi
+
+  # Result symlinks live outside the checkout so git clean cannot
+  # remove the GC roots before deploy-staging re-registers its own.
+  results_dir=/var/lib/go-choir/prebuild-results
+  install -d -m 0755 "$results_dir"
+
+  # Move store GC off the deploy critical path: Node B sits near
+  # min-free, so auto-GC otherwise fires inside nix build/switch
+  # (observed ~100s mid-switch in run 34779534767). GC only collects
+  # unrooted paths; in-flight builds and profile generations are safe.
+  nix store gc || true
+
+  prebuild_one() {
+    local label="$1"
+    local attr="$2"
+    local out="$3"
+    local log
+    log=$(mktemp)
+    local started
+    started=$(date +%s)
+    echo "    Prebuilding ${label}: ${attr}"
+    local status=0
+    /run/current-system/sw/bin/nix build "$attr" -o "$out" >"$log" 2>&1 || status=$?
+    cat "$log"
+    rm -f "$log"
+    if [ "$status" -ne 0 ]; then
+      echo "Prebuild failed for ${label} with status ${status}" >&2
+      exit "$status"
+    fi
+    echo "    ${label} prebuild complete in $(( $(date +%s) - started ))s"
+  }
+
+  service_pointer_deploy=false
+  if [ "${DEPLOY_HOST_OS}" != "true" ] && [ -n "${HOST_SERVICES}" ]; then
+    service_pointer_deploy=true
+  fi
+
+  prebuild_pids=()
+  prebuild_status=0
+  if [ "${DEPLOY_FRONTEND}" = "true" ]; then
+    prebuild_one "Frontend bundle" ".#frontend" "${results_dir}/frontend-result" &
+    prebuild_pids+=("$!")
+  fi
+  if [ "${service_pointer_deploy}" = "true" ]; then
+    IFS=',' read -ra service_roots <<< "${HOST_SERVICES}"
+    for service in "${service_roots[@]}"; do
+      [ -z "$service" ] && continue
+      prebuild_one "Host service ${service}" ".#${service}" "${results_dir}/service-${service}-result" &
+      prebuild_pids+=("$!")
+    done
+  elif [ "${DEPLOY_HOST}" = "true" ]; then
+    prebuild_one "Host NixOS closure" ".#nixosConfigurations.go-choir-b.config.system.build.toplevel" "${results_dir}/nixos-result" &
+    prebuild_pids+=("$!")
+  fi
+  for pid in "${prebuild_pids[@]}"; do
+    if ! wait "$pid"; then
+      prebuild_status=1
+    fi
+  done
+  if [ "${#prebuild_pids[@]}" -eq 0 ]; then
+    echo "    No deploy-selected Nix attributes to prebuild"
+  fi
+  exit "$prebuild_status"

@@ -563,6 +563,18 @@ let
     fi
     exit 0
   '';
+
+  # CI deploy channel (SDC SEC-14;
+  # docs/problems/ci-deploys-to-node-b-as-root-2026-10-21.md). The CI key
+  # logs in as choir-deploy with one forced command, which can only run the
+  # gate as root. The gate accepts three verbs (receipt, prebuild, deploy)
+  # with typed values and runs the deploy program read from a commit on main.
+  ciDeployKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHR2N41wH+Uw3BFTbgThe4f4PGnODEcm6nVI6aPN2ugf github-actions-deploy@go-choir";
+  ciDeployGate = pkgs.writeShellScript "go-choir-ci-deploy-gate"
+    (builtins.readFile ../scripts/node-b-ci-gate);
+  ciDeployForcedCommand = pkgs.writeShellScript "go-choir-ci-deploy-forced-command" ''
+    exec /run/wrappers/bin/sudo -n ${ciDeployGate} -- "''${SSH_ORIGINAL_COMMAND:-}"
+  '';
 in
 {
 
@@ -593,7 +605,34 @@ in
   # SSH authorized keys — copied EXACTLY from choiros-rs nix/hosts/ovh-node.nix
   users.users.root.openssh.authorizedKeys.keys = [
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILN3IIn6TzBBExWiJTJ7aDlA/LlEMXvjFlSfkKkV02TZ wiz@choiros-ovh"
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHR2N41wH+Uw3BFTbgThe4f4PGnODEcm6nVI6aPN2ugf github-actions-deploy@go-choir"
+    # Until CI deploys as choir-deploy and that is proven (SEC-14 rollout
+    # step 3 removes it), root keeps the CI key so a revert can deploy.
+    ciDeployKey
+  ];
+
+  # The CI deploy user: no password, no pty, no forwarding; the forced
+  # command is its only program, and the gate its only sudo rule.
+  users.groups.choir-deploy = { };
+  users.users.choir-deploy = {
+    description = "go-choir CI deploy (forced command)";
+    isSystemUser = true;
+    group = "choir-deploy";
+    useDefaultShell = true;
+    openssh.authorizedKeys.keys = [
+      ''restrict,command="${ciDeployForcedCommand}" ${ciDeployKey}''
+    ];
+  };
+  security.sudo.extraRules = [
+    {
+      users = [ "choir-deploy" ];
+      runAs = "root";
+      commands = [
+        {
+          command = "${ciDeployGate}";
+          options = [ "NOPASSWD" ];
+        }
+      ];
+    }
   ];
 
   # Firewall — ports 22, 80, 443 ONLY. Service ports (8081-8087) NOT open externally.
