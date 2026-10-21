@@ -360,6 +360,18 @@ type ManagerConfig struct {
 	// SnapshotMaxAge bounds how long a snapshot stays resumable
 	// (VM_SNAPSHOT_MAX_AGE, default DefaultSnapshotMaxAge).
 	SnapshotMaxAge time.Duration
+	// SnapshotVaultDir (VM_SNAPSHOT_VAULT_DIR) is the mount of an
+	// ephemeral-key dm-crypt volume. When set, snapshots of the selected
+	// computers are written there and only there, and refused when the path
+	// does not probe as such a mount. Empty (default): snapshots go to the
+	// state directory as before. See snapshot_vault.go.
+	SnapshotVaultDir string
+	// SnapshotVaultOnly (VM_SNAPSHOT_VAULT_ONLY) limits the vault to these VM
+	// ids or computer ids; empty means every computer when the dir is set.
+	SnapshotVaultOnly []string
+	// SnapshotVaultAcceptAnyCrypt (VM_SNAPSHOT_VAULT_ACCEPT_ANY_CRYPT) also
+	// accepts a LUKS mapping, whose key slot is on disk. Weaker; off by default.
+	SnapshotVaultAcceptAnyCrypt bool
 
 	// Jailer runs each Firecracker under the Firecracker jailer (VMCTL_JAILER;
 	// off by default). See confinement.go.
@@ -458,6 +470,10 @@ type Manager struct {
 	// cannot change owners replace them.
 	chownFn     func(path string, uid, gid int) error
 	fileOwnerFn func(path string) (int, bool)
+
+	// vaultProbe checks that the snapshot vault is an encrypted mount
+	// (snapshot_vault.go); tests replace it.
+	vaultProbe func(dir string, acceptAnyCrypt bool) error
 }
 
 func (m *Manager) StateDir() string {
@@ -486,6 +502,7 @@ func NewManager(cfg ManagerConfig) *Manager {
 		cgroupRoot:  defaultCgroupRoot,
 		chownFn:     os.Lchown,
 		fileOwnerFn: defaultFileOwner,
+		vaultProbe:  probeSnapshotVault,
 	}
 	if cfg.Jailer.Enabled {
 		m.jailerHostErr = errJailerHostNotPrepared
