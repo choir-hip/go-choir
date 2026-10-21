@@ -478,6 +478,13 @@ func (w *DeskSessionWorker) EvalCell(ctx context.Context, source string, inbox [
 			return SessionResult{}, r.err
 		}
 		if r.err != nil {
+			if errors.Is(r.err, ErrFrameVersion) && w.cfg.Refused != nil {
+				// Refused from the header alone: there is no decoded action or
+				// request id, but the refusal is still traced before the
+				// worker ends.
+				w.cfg.Refused(ctx, FrameRefusal{Role: w.cfg.Session.Role, Action: ActionTransport,
+					Reason: "refused: " + r.err.Error(), WorkerPID: w.pid})
+			}
 			w.dead = true
 			w.transportLost = true
 			return SessionResult{}, r.err
@@ -566,6 +573,11 @@ func (w *DeskSessionWorker) serviceEgress(ctx context.Context, payload []byte) (
 	w.writeEgressResult(req.RequestID, res, err)
 	return false
 }
+
+// ActionTransport names a refusal that happened below the broker protocol: a
+// frame header the host will not read (ErrFrameVersion). It is never a wire
+// action and no desk's frame table names it.
+const ActionTransport BrokerAction = "transport"
 
 // errForgedFrame ends an EvalCell whose worker sent a frame that proves it is
 // not the process the host started.

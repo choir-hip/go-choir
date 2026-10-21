@@ -3,6 +3,7 @@ package yaegikernel
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -299,5 +300,42 @@ func TestEmitStreamCarryingOtherActionRefused(t *testing.T) {
 	resp := h.send(StreamBrokerEmit, h.request(ActionProductAPI, nil))
 	if resp.Success || h.emit.Load() != 0 || h.egress.Load() != 0 {
 		t.Fatalf("emit stream served another action: success=%v emit=%d egress=%d", resp.Success, h.emit.Load(), h.egress.Load())
+	}
+}
+
+// TestBadWireHeaderRecordsATransportRefusal: a worker that sends an
+// unsupported version or a nonzero reserved byte is refused from eight
+// bytes (transport), and the refusal reaches the trace hook before the
+// worker ends; it needs no decoded action or request id.
+func TestBadWireHeaderRecordsATransportRefusal(t *testing.T) {
+	for name, hdr := range map[string][]byte{
+		"version-2":  rawHeader(0, StreamBrokerEgress, 2, 0, 0),
+		"reserved-1": rawHeader(0, StreamBrokerEgress, FrameVersion, 1, 0),
+		"reserved-2": rawHeader(0, StreamBrokerEgress, FrameVersion, 0, 7),
+	} {
+		hdr := hdr
+		t.Run(name, func(t *testing.T) {
+			h := newFrameHarness(t, "research")
+			if _, err := h.wfc.conn.Write(hdr); err != nil {
+				t.Fatalf("worker write: %v", err)
+			}
+			select {
+			case err := <-h.evalDone:
+				if !errors.Is(err, ErrFrameVersion) {
+					t.Fatalf("EvalCell err = %v, want ErrFrameVersion", err)
+				}
+			case <-time.After(3 * time.Second):
+				t.Fatal("EvalCell did not end on a bad wire header")
+			}
+			h.mu.Lock()
+			defer h.mu.Unlock()
+			if len(h.refusals) != 1 {
+				t.Fatalf("want one transport refusal before the worker ends, got %d", len(h.refusals))
+			}
+			r := h.refusals[0]
+			if r.Role != "research" || r.Action != ActionTransport || r.Reason == "" || r.Forged {
+				t.Errorf("refusal = %+v, want research / transport / a reason / not forged", r)
+			}
+		})
 	}
 }
