@@ -283,10 +283,20 @@ func (l *SQLiteLog) Epoch(ctx context.Context, agentID string) (int64, error) {
 // agents with at least one unprocessed update that is due (not_before absent
 // or elapsed). This is the ONLY scan the kernel permits — the dispatcher's
 // internal projection, never an independent trigger.
+//
+// Agents come oldest due first: an update is due since its not_before when
+// it has one (a schedule or a deferral) and since it was created otherwise.
+// The dispatcher fills free slots in this order, so the agent that has waited
+// longest gets the next slot. Unordered, the rows came back in agent-id
+// order and an id that sorts late waited until nothing earlier was due
+// (docs/problems/research-more-slow-and-hidden-2026-10-21.md, E6).
+// Timestamps are stored as UTC time.Time strings, which sort as times.
 func (l *SQLiteLog) PendingAgents(ctx context.Context, now time.Time) ([]string, error) {
 	rows, err := l.db.QueryContext(ctx, `
-SELECT DISTINCT to_agent_id FROM actor_updates
-WHERE processed_at IS NULL AND (not_before IS NULL OR not_before <= ?)`, now.UTC())
+SELECT to_agent_id FROM actor_updates
+WHERE processed_at IS NULL AND (not_before IS NULL OR not_before <= ?)
+GROUP BY to_agent_id
+ORDER BY MIN(COALESCE(not_before, created_at)), to_agent_id`, now.UTC())
 	if err != nil {
 		return nil, err
 	}
