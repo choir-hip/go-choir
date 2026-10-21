@@ -109,7 +109,8 @@ let
   # reaches only the proxy and the public key only corpusd, each through
   # LoadCredential=. Rollout: "observe" logs "owner-act: observe: would
   # refuse"; flip to "enforce" after a clean window. Rollback: "observe".
-  ownerActMode = "observe";
+  # Enforce (SEC-12, FP3 group 3, 2026-10-21; owner notes §27 item 3).
+  ownerActMode = "enforce";
   ownerActKeyFile = "/var/lib/go-choir/secrets/owner-act-signing-key";
   ownerActPublicKeyFile = "${ownerActKeyFile}.pub";
   # Dolt SQL authentication (internal/dbcred;
