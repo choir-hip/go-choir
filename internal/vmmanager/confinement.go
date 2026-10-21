@@ -553,7 +553,9 @@ func ensurePrivateDir(dir string) error {
 // prepareJail rebuilds the VM's jail from nothing: the jailer refuses its own
 // leftovers (pid file, device nodes) and copies its binary without
 // truncating. Writable drives are hard links owned by uid (the host file is
-// the same inode); everything else is a copy owned by vmctl, read-only.
+// the same inode); everything else is a hard link of vmctl's one shared,
+// read-only copy of the artifact (jail_shared.go), so every jailed VM reads
+// the store image through one inode and one host page-cache copy.
 // config, when non-nil, becomes the jail's fc-config.json. It returns how
 // each file was placed, for the receipt.
 func (m *Manager) prepareJail(vmID string, uid int, files []jailFile, config []byte) ([]string, error) {
@@ -597,7 +599,7 @@ func (m *Manager) prepareJail(vmID string, uid int, files []jailFile, config []b
 			notes = append(notes, f.Name+"=hardlink")
 			continue
 		}
-		method, err := placeReadOnlyCopy(f.HostPath, dst)
+		method, err := m.linkSharedReadOnly(f.HostPath, dst)
 		if err != nil {
 			return nil, fmt.Errorf("place %s in the jail: %w", f.HostPath, err)
 		}

@@ -810,3 +810,116 @@ func (f *jailedSnapshotFixture) jailedRestoreStarter(t *testing.T, api *fakeFire
 		return nil
 	}
 }
+
+// RES-05 (docs/problems/jailer-copies-store-image-per-vm-2026-10-21.md):
+// jailed VMs read each read-only artifact through one shared inode, so the
+// host page cache holds one copy of the store however many VMs run.
+func TestPrepareJailSharesReadOnlyArtifacts(t *testing.T) {
+	stateDir := shortStateDir(t)
+	mgr, rec := jailedManager(t, stateDir)
+	guest := filepath.Join(stateDir, "guest")
+	if err := os.MkdirAll(guest, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	store := filepath.Join(guest, "storedisk.erofs")
+	if err := os.WriteFile(store, []byte("store-v1"), 0o444); err != nil {
+		t.Fatal(err)
+	}
+	place := func(vmID string) (string, []string) {
+		t.Helper()
+		vmDir := filepath.Join(stateDir, vmID)
+		if err := os.MkdirAll(vmDir, 0o750); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(vmDir, "data.img"), []byte("data"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		notes, err := mgr.prepareJail(vmID, 900007, []jailFile{
+			{HostPath: store, Name: "store.img"},
+			{HostPath: filepath.Join(vmDir, "data.img"), Name: "data.img", Writable: true},
+		}, nil)
+		if err != nil {
+			t.Fatalf("prepareJail %s: %v", vmID, err)
+		}
+		return filepath.Join(mgr.jailRoot(vmID), "store.img"), notes
+	}
+	aPath, aNotes := place("vm-a")
+	bPath, _ := place("vm-b")
+	a, _ := os.Stat(aPath)
+	b, _ := os.Stat(bPath)
+	src, _ := os.Stat(store)
+	if !os.SameFile(a, b) {
+		t.Fatal("two jailed VMs must read the store image through one inode")
+	}
+	if os.SameFile(a, src) {
+		t.Fatal("the jail must never link the source artifact itself")
+	}
+	if a.Mode().Perm() != 0o444 {
+		t.Fatalf("shared store mode = %v, want 0444", a.Mode().Perm())
+	}
+	if _, chowned := rec.ownerOf(aPath); chowned {
+		t.Fatal("the shared store image must stay owned by vmctl")
+	}
+	if st, ok := a.Sys().(*syscall.Stat_t); !ok || int(st.Uid) != os.Geteuid() {
+		t.Fatalf("shared store owner = %+v, want vmctl", a.Sys())
+	}
+	if !strings.Contains(strings.Join(aNotes, " "), "store.img=shared") {
+		t.Fatalf("receipt notes %v must say the store is shared", aNotes)
+	}
+	if got, _ := os.ReadFile(aPath); string(got) != "store-v1" {
+		t.Fatalf("shared store bytes = %q", got)
+	}
+	// A relaunch of vm-a keeps the same shared inode.
+	again, _ := place("vm-a")
+	ag, _ := os.Stat(again)
+	if !os.SameFile(ag, b) {
+		t.Fatal("a relaunch must reuse the shared inode")
+	}
+
+	// A deploy replaces the source: new launches get a new inode, running
+	// jails keep theirs, and the old copy goes once no jail holds it.
+	if err := os.Remove(store); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(store, []byte("store-v2-longer"), 0o444); err != nil {
+		t.Fatal(err)
+	}
+	cPath, _ := place("vm-c")
+	c, _ := os.Stat(cPath)
+	if os.SameFile(c, b) {
+		t.Fatal("a replaced source must get a new shared inode")
+	}
+	if got, _ := os.ReadFile(bPath); string(got) != "store-v1" {
+		t.Fatalf("a running jail's store changed under it: %q", got)
+	}
+	countShared := func() int {
+		entries, err := os.ReadDir(mgr.jailSharedDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return len(entries)
+	}
+	if n := countShared(); n != 2 {
+		t.Fatalf("shared entries = %d, want the old copy (held by vm-a, vm-b) and the new", n)
+	}
+	place("vm-a")
+	place("vm-b")
+	if n := countShared(); n != 1 {
+		t.Fatalf("shared entries = %d, want 1 once no jail holds the old copy", n)
+	}
+
+	// A shared file that is not vmctl's read-only copy is rebuilt, never used.
+	entries, _ := os.ReadDir(mgr.jailSharedDir())
+	shared := filepath.Join(mgr.jailSharedDir(), entries[0].Name())
+	if err := os.Chmod(shared, 0o666); err != nil {
+		t.Fatal(err)
+	}
+	dPath, _ := place("vm-d")
+	d, _ := os.Stat(dPath)
+	if d.Mode().Perm() != 0o444 {
+		t.Fatalf("a writable shared file was linked into a jail (mode %v)", d.Mode().Perm())
+	}
+	if base, err := os.Lstat(mgr.jailSharedDir()); err != nil || !base.IsDir() || base.Mode().Perm() != 0o700 {
+		t.Fatalf("shared dir = %v, %v; want a 0700 directory", base, err)
+	}
+}
