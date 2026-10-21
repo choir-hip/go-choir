@@ -6,9 +6,11 @@
 // failure logs and leaves the previous scores file in place, and a missing
 // file leaves the front page ranked by recency, as before scores existed.
 //
-// corpusd has no model access; this host job holds the OpenRouter
-// credential (the gateway's provider environment file) and calls Jev
-// through the gateway's own transport code (internal/gateway/jev.go).
+// corpusd has no model access; this host job calls Jev through the gateway's
+// host route (internal/gateway/host_judgment.go) with the host-internal
+// credential and holds no provider key (SEC-16). FRONT_IMPORTANCE_DIRECT=1
+// restores the old direct OpenRouter transport (internal/gateway/jev.go) for
+// one release as the rollback.
 package frontimportance
 
 import (
@@ -115,14 +117,17 @@ func Main(args []string) int {
 		return 2
 	}
 
-	if strings.TrimSpace(os.Getenv("OPENROUTER_API_KEY")) == "" {
-		log.Printf("front-importance: OpenRouter credential unavailable; scores left as they are")
-		return 0
-	}
-	if strings.TrimSpace(os.Getenv("GATEWAY_JEV_RECEIPT_PATH")) == "" {
+	// SEC-16: Jev is reached through the gateway by default, so this job
+	// holds no provider key. Direct mode is an explicit opt-in (the rollback).
+	if strings.ToLower(strings.TrimSpace(os.Getenv("FRONT_IMPORTANCE_DIRECT"))) == "1" && strings.TrimSpace(os.Getenv("GATEWAY_JEV_RECEIPT_PATH")) == "" {
 		_ = os.Setenv("GATEWAY_JEV_RECEIPT_PATH", filepath.Join(filepath.Dir(cfg.ScoresPath), "jev-receipts.jsonl"))
 	}
-	jev := gateway.NewJevTransportFromEnv(true)
+	jev, mode, err := newDecider(os.Getenv, &http.Client{Timeout: cfg.CallTime + 15*time.Second})
+	if err != nil {
+		log.Printf("front-importance: %v; scores left as they are", err)
+		return 0
+	}
+	log.Printf("front-importance: Jev reached by %s", mode)
 	stats, err := run(context.Background(), cfg, http.DefaultClient, jev, time.Now)
 	if err != nil {
 		log.Printf("front-importance: %v", err)
