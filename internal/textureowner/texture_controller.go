@@ -49,6 +49,14 @@ func (rt *Handler) dispatchTextureRevisionWake(ownerID, computerID, trajectoryID
 	}
 }
 
+// logTextureWakeNoRun records why a Texture wake reconcile returned no run.
+// A wake that yields no run is acknowledged by its caller, so without this
+// line the only trace of a stalled desk is the absence of a turn (problem
+// doc P6). Ids and the reason only, no content.
+func logTextureWakeNoRun(ownerID, computerID, agentID, reason string) {
+	log.Printf("texture wake: no run owner=%s computer=%s agent=%s reason=%s", ownerID, computerID, agentID, reason)
+}
+
 // lifecycleDocDeskProfile derives the bound desk profile for one lifecycle
 // document from its open desk work item. Returns "" when the document has no
 // bound desk (unbound or non-desk trajectory).
@@ -502,6 +510,7 @@ func (rt *Handler) reconcileAgentWakeLocked(ctx context.Context, doc types.Docum
 		return nil, err
 	}
 	if !activationEligible {
+		logTextureWakeNoRun(ownerID, doc.ComputerID, textureAgentID, "trajectory is not live or has a cancellation intent")
 		return nil, nil
 	}
 	if _, err := rt.Store.GetAgentByScope(ctx, ownerID, doc.ComputerID, textureAgentID); err != nil {
@@ -513,6 +522,7 @@ func (rt *Handler) reconcileAgentWakeLocked(ctx context.Context, doc types.Docum
 	}
 	if found {
 		if authorityErr := rt.ValidateActivationAuthority(ctx, ownerID, doc.ComputerID, textureAgentID, active.RunID); authorityErr == nil {
+			logTextureWakeNoRun(ownerID, doc.ComputerID, textureAgentID, "a resident run holds valid authority: run "+active.RunID+" state "+string(active.State))
 			return nil, nil
 		}
 		cleanupCtx := context.WithoutCancel(ctx)
@@ -647,6 +657,7 @@ func (rt *Handler) reconcileAgentWakeLocked(ctx context.Context, doc types.Docum
 		if recErr := rt.reconcileTextureUpdateDelivery(ctx, doc, textureAgentID, "", nil, exhausted, breakerTripped, breakerStreak, breakerNewestRun, breakerReason); recErr != nil {
 			return nil, recErr
 		}
+		logTextureWakeNoRun(ownerID, doc.ComputerID, textureAgentID, "nothing armed: no pending update, owner head, open initial work or unread records")
 		return nil, nil
 	}
 	// Breaker-tripped update-driven pressure: exhaust the packet claims so
@@ -656,6 +667,7 @@ func (rt *Handler) reconcileAgentWakeLocked(ctx context.Context, doc types.Docum
 		if recErr := rt.reconcileTextureUpdateDelivery(ctx, doc, textureAgentID, "", armedUpdates, exhausted, true, breakerStreak, breakerNewestRun, breakerReason); recErr != nil {
 			return nil, recErr
 		}
+		logTextureWakeNoRun(ownerID, doc.ComputerID, textureAgentID, "activation breaker tripped for update-driven pressure")
 		return nil, nil
 	}
 	if rec, reactivated, err := rt.reactivatePassivatedTextureRun(ctx, doc, textureAgentID, scheduledSeq, ownerHeadPending || initialWorkWake || recordsPending, recordsPending); err != nil {
@@ -715,6 +727,7 @@ func (rt *Handler) reconcileAgentWakeLocked(ctx context.Context, doc types.Docum
 				}
 			}
 			if !workNowOpen {
+				logTextureWakeNoRun(ownerID, doc.ComputerID, textureAgentID, "no open Texture work item for the run submit")
 				return nil, nil
 			}
 		}

@@ -440,6 +440,11 @@ func (h *actorHandler) handleInboxRecord(ctx context.Context, u actor.Update, me
 				rec = &active
 			}
 		}
+		if rec == nil {
+			log.Printf("actorruntime: Texture inbox wake yielded no run owner=%s computer=%s agent=%s reason=reconcile returned no run and no active run exists", ownerID, computerID, agentID)
+		} else if rec.State != types.RunPending {
+			log.Printf("actorruntime: Texture inbox wake leaves resident run owner=%s computer=%s agent=%s run=%s state=%s reason=run is not pending, it reads the records itself", ownerID, computerID, agentID, rec.RunID, rec.State)
+		}
 		if rec != nil && rec.State == types.RunPending {
 			if reactivated, _ := rec.Metadata["actor_reactivated_from_passivated"].(bool); reactivated {
 				if err := h.textureOwner.ValidateActivationAuthority(ctx, ownerID, computerID, agentID, rec.RunID); err != nil {
