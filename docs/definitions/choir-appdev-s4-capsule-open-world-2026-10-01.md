@@ -372,3 +372,7 @@ receives its result as content-addressed evidence.
   - `money` / `irreversible` effect classes with per-use confirmation;
   - World Wire publication as a platform-protocol egress, using the same
     grant object.
+
+App-desk egress declarations (manifest to grant) and ingress (host service,
+records only) are specified in
+[app-agent-network-policy-2026-10-21.md](../design/app-agent-network-policy-2026-10-21.md) (NET-10).
