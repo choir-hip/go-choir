@@ -1553,3 +1553,40 @@ Fix (decided):
    cleanup runs whether or not the build succeeded,
    `{ npm ci ... && cp ...; }; s=$?; rm -rf node_modules dist; exit $s`,
    so a failed job leaves the workspace as it found it.
+
+## Failure 25: management refuses the build round because it thinks it must supply the carried patch (label sonnet-slides-1021g, deploy 16a5aa0e0, 07:49-07:54 UTC)
+
+Evidence (trajectory 06225c0d, records from the trace bundle):
+
+- Round 1 went as designed (assignment 9663ae73): baseline saved, the
+  delegate rewrote SlidesApp in 21 turns ($0.21), and the round
+  completed as failed: "the required second-round Cast with
+  network=ecosystem_proxy and carried source.patch has not arrived ...
+  Awaiting management's round-two authenticated assignment."
+- Management (07:53:28) relayed that to Texture as a blocker: "the
+  ecosystem-enabled round with the carried patch never arrived ...
+  Provide the exact patch artifact and provenance before another bounded
+  verification attempt."
+- Texture re-cast. Management (07:54:05) refused to cast: "The exact
+  carried SlidesApp patch and its provenance are not present in the
+  available workflow record. Following the request's no-substitution
+  condition, I did not launch engineering." The drill stalled.
+
+Reading: engineering's "awaiting round two and the carried patch" means
+"cast the next round". Management read it as a missing input that
+management has to produce. The management overlay says to add
+`"network": "ecosystem_proxy"` for "the round that applies a carried
+patch". It never says that the platform derives and mounts that patch
+for the next engineering Cast on the same request by itself
+(`offerCarriedPatchForAssignment`). Nothing management can see names
+the patch, so it found none. Only engineering's run context gets the
+carried-patch notice.
+
+Fix (prompt default, orange): the management overlay says that the
+platform carries a failed round's source changes into the next
+engineering Cast for the same request without any input from
+management, that the new capsule finds them at
+/selfdev/carried/source.patch, that management never supplies, attaches
+or looks for the patch, and that a report awaiting round two or the
+carried patch means: Cast the next round. Test-first, beside
+`TestManagementOverlayNamesEveryCastNetworkMode`.
