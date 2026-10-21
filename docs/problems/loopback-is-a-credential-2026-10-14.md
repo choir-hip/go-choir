@@ -197,3 +197,16 @@ check.
   The proxy then forwards to corpusd marked internal
   (`internal/proxy/handlers.go:1799-1820`), so any host process can borrow
   corpusd's internal authority on `/internal/platform/objects*`.
+  Two more facts for the repair (FP3 group 3, SEC-11, 2026-10-21):
+  `hostauth.MarkInternal` sends the credential only to ports 8083, 8084,
+  8086 and 8087 (`internal/hostauth/hostauth.go` `defaultPorts`), never to
+  the proxy's 8082, so a legitimate host caller of this route could not
+  pass `Authorize` even if it wanted to; and the proxy unit already runs
+  `CHOIR_INTERNAL_AUTH_MODE=enforce`, so calling `Authorize` here with no
+  route-level mode would enforce on the first deploy, with no observe
+  window to find callers. Caddy refuses `/internal/*` at the public edge
+  and guests arrive from their tap addresses, so the loopback branch
+  serves only host processes. The repair adds 8082 to the credential's
+  ports, gates the loopback branch on `Authorize` behind a route mode
+  (`PROXY_OBJECT_GRAPH_INTERNAL_AUTH`, shipped `observe`), and takes
+  TEST-NET-1 from `hostauth.TestNetworkAllowed` (test binaries only).
