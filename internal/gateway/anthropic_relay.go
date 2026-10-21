@@ -195,6 +195,49 @@ var relayRoutes = map[string]relayRoute{
 	"/v1/models":                {http.MethodGet, "/v1/models", false},
 }
 
+// relayAuthFailure answers a failed authentication or pin check in the
+// Messages API's error envelope, with the gateway's status and retry hint.
+func relayAuthFailure(w http.ResponseWriter, err error) {
+	status, retry, message := authFailure(err)
+	if retry != "" {
+		w.Header().Set("Retry-After", retry)
+	}
+	errType := "authentication_error"
+	if status == http.StatusTooManyRequests {
+		errType = "rate_limit_error"
+	} else if status != http.StatusUnauthorized {
+		errType = "api_error"
+	}
+	relayError(w, status, errType, message)
+}
+
+// relayPeerCheck is the relay's own SEC-05 check, independent of
+// GATEWAY_BEARER_BINDING (problem record, finding 11): the relay spends a key
+// the gateway holds, so it serves only a bearer whose identity is already
+// pinned (by the host's ensure, or an earlier first use on another route) to
+// the caller's address. It reads the pin and never writes it; an unpinned
+// identity waits for the host's ensure.
+func (h *Handler) relayPeerCheck(computerID string, r *http.Request) error {
+	ip := remoteIP(r)
+	if ip == nil {
+		return errPeerUnbindable
+	}
+	peer := ip.String()
+	state, pin, err := h.registry.CheckPeer(computerID, peer, false)
+	switch {
+	case err != nil:
+		h.bindingLogf("relay-could-not-check/"+computerID, "gateway: anthropic relay refused %s from %s: %v", computerID, peer, err)
+		return errPeerUnbindable
+	case state == PeerMatch:
+		return nil
+	case state == PeerUnpinned:
+		h.bindingLogf("relay-unpinned/"+computerID, "gateway: anthropic relay refused %s from %s: no pin", computerID, peer)
+		return errPeerUnpinned
+	}
+	h.bindingLogf("relay-mismatch/"+computerID+"/"+peer, "gateway: anthropic relay refused %s from %s (pinned to %s)", computerID, peer, pin)
+	return errPeerPinMismatch
+}
+
 func relayError(w http.ResponseWriter, status int, errType, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -205,9 +248,10 @@ func relayError(w http.ResponseWriter, status int, errType, message string) {
 }
 
 // HandleAnthropicRelay serves /provider/anthropic/v1/{messages,
-// messages/count_tokens,models}. The order is the design's: path and method,
-// the computer's bearer (bound to its address, SEC-05), the allowlist and
-// window, the key, the rate and in-flight bounds, the body and its model, and
+// messages/count_tokens,models}. The order: path and method, the computer's
+// bearer (validated, nothing written), the allowlist and window, the key, the
+// bearer's pin (which must already name the caller's address, in every
+// binding mode), the rate and in-flight bounds, the body and its model, and
 // only then the upstream call.
 func (h *Handler) HandleAnthropicRelay(w http.ResponseWriter, r *http.Request) {
 	started := time.Now()
@@ -221,20 +265,13 @@ func (h *Handler) HandleAnthropicRelay(w http.ResponseWriter, r *http.Request) {
 		relayError(w, http.StatusMethodNotAllowed, "invalid_request_error", "method not allowed")
 		return
 	}
-	computerID, err := h.authenticateAutoputer(r)
+	// The bearer is validated without touching its pin, and the relay's own
+	// configuration is checked before the pin is read: a relay call never
+	// writes identity state, whatever it answers (problem record, finding 12).
+	computerID, err := h.authenticateBearer(r)
 	if err != nil {
 		log.Printf("gateway: anthropic relay authentication denied: %v", err)
-		status, retry, message := authFailure(err)
-		if retry != "" {
-			w.Header().Set("Retry-After", retry)
-		}
-		errType := "authentication_error"
-		if status == http.StatusTooManyRequests {
-			errType = "rate_limit_error"
-		} else if status != http.StatusUnauthorized {
-			errType = "api_error"
-		}
-		relayError(w, status, errType, message)
+		relayAuthFailure(w, err)
 		return
 	}
 	relay := h.anthropicRelay
@@ -250,6 +287,10 @@ func (h *Handler) HandleAnthropicRelay(w http.ResponseWriter, r *http.Request) {
 	if relay.key == "" {
 		log.Printf("gateway: anthropic relay refused %s: no API key is configured", computerID)
 		relayError(w, http.StatusServiceUnavailable, "api_error", "anthropic relay is not configured")
+		return
+	}
+	if err := h.relayPeerCheck(computerID, r); err != nil {
+		relayAuthFailure(w, err)
 		return
 	}
 	if h.rateLimiter != nil {
