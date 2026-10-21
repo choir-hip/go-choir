@@ -1694,3 +1694,33 @@ assignment-f138ade610d43435de66afeb):
   source. The engineering overlay and the drill brief both say a
   frontend-only change needs no bin/autoputer, so engineering completed
   as blocked. The refusal is correct; the instructions are what is wrong.
+
+## Failure 29: the delegate leaves Claude Code's sandbox placeholders in the source tree (label sonnet-slides-1021j, deploy be47b14bf, 10:42-10:52 UTC)
+
+After the failure 27 fix management left "network" out, the delegate ran
+in claude mode and rewrote SlidesApp.svelte twice (71 s and 95 s, about
+$0.24 and $0.35, Sonnet's report naming only that file). Both build jobs
+failed the same way: esbuild, loading vite.config.js, read
+`/workspace/platform/package.json` and found it empty ("Unexpected end of
+file in JSON, ../package.json:1:0"). The repository has no root
+package.json, and the no-delegate capsule of drill i built cleanly.
+
+Cause, read from the pinned Claude Code 2.1.300 binary in the guest
+closure: with `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` (set by the delegate
+design so Bash children never see the token), Claude Code creates
+placeholder files at startup, which its bubblewrap sandbox then masks:
+in its working directory it opens for append (creating them empty)
+`.npmrc`, `.yarnrc`, `.yarnrc.yml`, `bunfig.toml`, `package.json`,
+`.gitmodules`, `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml` and the
+`.env*` family, creates `node_modules/.bin`, and creates a stub `.git`
+(`info/exclude` appended, `config.worktree`, `commondir`, `modules`,
+`worktrees`, `glab-cli`). The delegate's working directory is
+`/workspace/platform`, so all of these land in the source tree and stay
+after the run. The empty root package.json is what esbuild read. The stub
+`.git` and the rest also enter any diff of the tree; whether they reached
+earlier drills' carried patches is not checked (a hypothesis to test).
+
+Fix direction: the delegate supervisor (trusted, outside the delegate's
+process) records which of those paths are absent from the working
+directory before it starts Claude Code and removes the ones that appear,
+once the run has ended. The scrub stays on.
