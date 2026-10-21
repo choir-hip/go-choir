@@ -192,18 +192,25 @@ func (s *DiskEventSource) FetchPayload(ctx context.Context, computerID, artifact
 	if computerID = strings.TrimSpace(computerID); computerID == "" {
 		computerID = s.computerID
 	}
+	// A segment error in one namespace does not end the probe (round 5,
+	// choir-tape-segments-a2-repack-2026-10-21.md): the digest may live in
+	// the next one. It is returned only when nothing matches.
+	var firstErr error
 	for _, namespace := range []tapestore.NS{tapestore.NSPayload, tapestore.NSEvent} {
 		raw, _, err := s.tape.Read(computerID, namespace, artifactDigest)
 		if err != nil {
-			if errors.Is(err, tapestore.ErrNotFound) {
-				continue
+			if !errors.Is(err, tapestore.ErrNotFound) && firstErr == nil {
+				firstErr = err
 			}
-			return nil, fmt.Errorf("disk event source: read payload %s: %w", artifactDigest, err)
+			continue
 		}
 		if computerevent.DigestBytes(raw) != artifactDigest {
 			return nil, fmt.Errorf("disk event source: payload digest mismatch for %s", artifactDigest)
 		}
 		return raw, nil
+	}
+	if firstErr != nil {
+		return nil, fmt.Errorf("disk event source: read payload %s: %w", artifactDigest, firstErr)
 	}
 	return nil, fmt.Errorf("disk event source: payload %s not found", artifactDigest)
 }
