@@ -364,3 +364,51 @@ func TestGuestImageHardeningIsDeclared(t *testing.T) {
 		t.Error("the guest network unit does not take choir.dns from the kernel command line (SEC-10)")
 	}
 }
+
+func TestRetireAppRemovesOnlyAppDesks(t *testing.T) {
+	d, err := NewAppDesk(goodApp())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := RegisterApp(d); err != nil {
+		t.Fatal(err)
+	}
+	if err := RetireApp(d.Name); err != nil {
+		t.Fatalf("retire: %v", err)
+	}
+	if _, ok := Lookup(d.Name); ok || FrameAllowed(d.Name, "read_capture") {
+		t.Fatal("a retired app desk is still known")
+	}
+	if err := RetireApp(d.Name); err == nil {
+		t.Fatal("retiring an unknown desk must fail")
+	}
+	if err := RetireApp(Management); err == nil {
+		t.Fatal("RetireApp removed a system desk")
+	}
+	if _, ok := Lookup(Management); !ok {
+		t.Fatal("management is gone")
+	}
+}
+
+// The worker carry (ARCH-03): a registered app desk renders back to the spec
+// that made it, so the worker can rebuild it through NewAppDesk.
+func TestAppSpecRoundTrips(t *testing.T) {
+	spec := goodApp()
+	spec.OwnedKinds = []string{"choir.app.x.note"}
+	d, err := NewAppDesk(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	back, err := NewAppDesk(d.AppSpec())
+	if err != nil {
+		t.Fatalf("rebuild: %v", err)
+	}
+	if !back.Equal(d) {
+		t.Fatalf("round trip changed the desk: %+v vs %+v", back, d)
+	}
+	other := back
+	other.Verbs = append(other.Verbs, "Cast")
+	if other.Equal(d) {
+		t.Fatal("Equal ignores verbs")
+	}
+}

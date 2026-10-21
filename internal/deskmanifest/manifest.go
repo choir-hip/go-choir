@@ -542,3 +542,51 @@ func RegisterApp(d Desk) error {
 	registry[d.Name] = d.clone()
 	return nil
 }
+
+// RetireApp removes an app desk (ARCH-03: a disabled package's desk). A
+// system desk is never removed. After it, every consumer treats the name as
+// unknown, which is deny.
+func RetireApp(name string) error {
+	mu.Lock()
+	defer mu.Unlock()
+	d, ok := registry[name]
+	if !ok {
+		return fmt.Errorf("desk %s is not registered", name)
+	}
+	if d.Kind != KindApp {
+		return fmt.Errorf("only app desks retire: %s is %s", name, d.Kind)
+	}
+	delete(registry, name)
+	return nil
+}
+
+// AppSpec renders an app desk back to the spec NewAppDesk builds it from. A
+// desk worker is re-executed with a fresh registry, so the daemon hands it
+// this spec and the worker rebuilds the row through NewAppDesk's checks
+// (docs/problems/app-desk-registration-does-not-cross-worker-execve-2026-10-21.md).
+func (d Desk) AppSpec() AppDeskSpec {
+	c := d.clone()
+	return AppDeskSpec{Name: c.Name, Verbs: c.Verbs, Taint: c.Taint, UID: c.Sandbox.UID,
+		WorkerMaxBytes: c.Memory.WorkerMaxBytes, OwnedKinds: c.OwnedKinds}
+}
+
+// Equal reports whether two rows grant the same authority. A nil and an
+// empty list are equal.
+func (d Desk) Equal(o Desk) bool {
+	same := func(a, b []string) bool {
+		if len(a) != len(b) {
+			return false
+		}
+		for i := range a {
+			if a[i] != b[i] {
+				return false
+			}
+		}
+		return true
+	}
+	return d.Name == o.Name && d.Kind == o.Kind && d.Carrier == o.Carrier &&
+		same(d.Verbs, o.Verbs) && same(d.CapsuleVerbs, o.CapsuleVerbs) &&
+		same(d.MessageTargets, o.MessageTargets) && same(d.Addresses, o.Addresses) &&
+		d.Sandbox == o.Sandbox && d.Taint == o.Taint && d.Memory == o.Memory &&
+		same(d.OwnedKinds, o.OwnedKinds) && d.ModelRole == o.ModelRole && d.Restart == o.Restart
+}

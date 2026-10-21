@@ -22,6 +22,12 @@ func RunDeskSessionWorker() int {
 		fmt.Fprintf(os.Stderr, "desk-session: session socket unavailable (fd=%d err=%v)\n", fd, err)
 		return 2
 	}
+	// An app desk's row crosses execve from the daemon (ARCH-03); a worker
+	// whose carry is missing or refused does not serve cells.
+	if err := yaegikernel.RegisterCarriedAppDesk(nil, ""); err != nil {
+		fmt.Fprintf(os.Stderr, "desk-session: %v\n", err)
+		return 2
+	}
 	if len(cfg.AllowedPackages) == 0 {
 		cfg.AllowedPackages = yaegikernel.DefaultSafeStdlibPackagesList()
 	}

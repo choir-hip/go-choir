@@ -283,6 +283,9 @@ func (c DeskSessionWorkerConfig) sessionEnv() []string {
 	if c.Session.KeepCellOutput {
 		env = append(env, prefix+"KEEP_CELL_OUTPUT=1")
 	}
+	if carry := appDeskCarry(prefix, c.Session.Role); carry != "" {
+		env = append(env, carry)
+	}
 	return env
 }
 
