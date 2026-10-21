@@ -868,6 +868,7 @@ func (rt *Runtime) Start(ctx context.Context) {
 	// Telemetry batching is decided before the first event of this process, so
 	// the sequence reseed gap applies to every number seeded after a crash.
 	rt.configureTelemetryBatching(ctx)
+	rt.configureGuestCheckpoint(ctx)
 	if rt.maintenanceHeld() {
 		log.Printf("runtime: maintenance hold active (RUNTIME_MAINTENANCE_HOLD=1); refusing run admission + agent rewake while held")
 		return

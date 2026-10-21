@@ -105,6 +105,9 @@ func (h *APIHandler) HandleComputerSettings(w http.ResponseWriter, r *http.Reque
 		if key == store.SettingTelemetryBatch {
 			rt.applyTelemetryBatchingSetting(value)
 		}
+		if key == store.SettingDebouncedCheckpoint {
+			rt.applyGuestCheckpointSetting(value)
+		}
 		writeAPIJSON(w, http.StatusOK, map[string]any{"setting": setting})
 	default:
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})

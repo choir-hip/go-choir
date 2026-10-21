@@ -49,6 +49,14 @@ const SettingTelemetryBatch = "telemetry.batch"
 // default; off is the rollback.
 const SettingResearchSystem1 = "research.system1"
 
+// SettingDebouncedCheckpoint moves the guest's Dolt history commit off the
+// write path: a background committer commits on a time debounce and an ops
+// bound instead of finalize committing inline every hundred events
+// (docs/problems/guest-checkpoint-on-the-write-path-2026-10-21.md). Off by
+// default; off is the rollback. The env flag CHOIR_GUEST_CHECKPOINT=debounced
+// turns it on regardless.
+const SettingDebouncedCheckpoint = "store.debounced_checkpoint"
+
 // KnownComputerSettings are the settings a computer has, with their
 // defaults. A key outside this list is refused, so a typo never stores a
 // setting nobody reads.
@@ -58,6 +66,7 @@ var KnownComputerSettings = map[string]bool{
 	SettingCalibrationFeedback:   false,
 	SettingTelemetryBatch:        false,
 	SettingResearchSystem1:       false,
+	SettingDebouncedCheckpoint:   false,
 }
 
 // ComputerSetting is one switch's value on one computer.

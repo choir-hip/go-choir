@@ -104,17 +104,29 @@ type doltConnector interface {
 const defaultFinalizeCheckpointEvery = 100
 
 type Store struct {
-	db               *sql.DB
-	readDB           *sql.DB
-	path             string
-	textureDB        *sql.DB
-	texturePath      string
-	doltConnector    doltConnector
-	jsonPatchMu      sync.Mutex
-	trajectoryMu     sync.Mutex
-	textureRevMu     sync.Mutex
-	doltCommitMu     sync.Mutex
-	doltHistoryDirty bool
+	db            *sql.DB
+	readDB        *sql.DB
+	path          string
+	textureDB     *sql.DB
+	texturePath   string
+	doltConnector doltConnector
+	jsonPatchMu   sync.Mutex
+	trajectoryMu  sync.Mutex
+	textureRevMu  sync.Mutex
+	doltCommitMu  sync.Mutex
+	// dirtyGen counts marks; cleanGen (under doltCommitMu) is the mark
+	// count the last successful commit read before it ran. The store is
+	// dirty while they differ. A mark is one atomic add and never waits on
+	// a commit in flight (checkpoint_cadence.go).
+	dirtyGen atomic.Uint64
+	cleanGen uint64
+	// checkpoint is the commit cadence and its counters
+	// (checkpoint_cadence.go).
+	checkpoint checkpointCadence
+	// checkpointExecHook runs after a commit reads the dirty generation and
+	// before DOLT_COMMIT; an error from it stands for a failed commit
+	// (tests only).
+	checkpointExecHook func() error
 	// actorWakeSignal wakes the outbox projector after committed wake
 	// writes (SL slice 2, actor_wake_signal.go).
 	actorWakeSignal     chan struct{}
@@ -215,6 +227,10 @@ func (s *Store) DB() *sql.DB {
 // must describe the boundary as a VM-state checkpoint rather than claiming the
 // commit contains only one logical record.
 func (s *Store) commitDoltCheckpoint(ctx context.Context, message string) error {
+	return s.commitDoltCheckpointAt(ctx, message, checkpointSiteOther)
+}
+
+func (s *Store) commitDoltCheckpointAt(ctx context.Context, message string, site checkpointSite) error {
 	if s == nil || s.textureHandle() == nil {
 		return fmt.Errorf("runtime store: nil database")
 	}
@@ -225,28 +241,44 @@ func (s *Store) commitDoltCheckpoint(ctx context.Context, message string) error 
 
 	s.doltCommitMu.Lock()
 	defer s.doltCommitMu.Unlock()
-	if !s.doltHistoryDirty {
+	// Read the generation before the commit: a mark after this read may
+	// not be in the snapshot, so it keeps the store dirty.
+	gen := s.dirtyGen.Load()
+	if gen == s.cleanGen {
 		return nil
 	}
-
-	if _, err := s.textureHandle().ExecContext(ctx, "CALL DOLT_COMMIT('-Am', ?)", message); err != nil {
-		if strings.Contains(err.Error(), "nothing to commit") {
-			s.doltHistoryDirty = false
-			return nil
-		}
-		return fmt.Errorf("runtime store: dolt checkpoint: %w", err)
+	events, ops := s.checkpoint.events.Load(), s.checkpoint.ops.Load()
+	started := time.Now()
+	var err error
+	if hook := s.checkpointExecHook; hook != nil {
+		err = hook()
 	}
-	s.doltHistoryDirty = false
+	if err == nil {
+		_, err = s.textureHandle().ExecContext(ctx, "CALL DOLT_COMMIT('-Am', ?)", message)
+	}
+	if err != nil && !strings.Contains(err.Error(), "nothing to commit") {
+		err = fmt.Errorf("runtime store: dolt checkpoint: %w", err)
+		s.checkpoint.recordFailure(err)
+		return err
+	}
+	s.cleanGen = gen
+	s.checkpoint.recordCommit(site, time.Since(started), events, ops)
 	return nil
+}
+
+// doltHistoryIsDirty reports whether a mark is not yet in a commit.
+func (s *Store) doltHistoryIsDirty() bool {
+	s.doltCommitMu.Lock()
+	defer s.doltCommitMu.Unlock()
+	return s.dirtyGen.Load() != s.cleanGen
 }
 
 func (s *Store) markDoltHistoryDirty() {
 	if s == nil {
 		return
 	}
-	s.doltCommitMu.Lock()
-	s.doltHistoryDirty = true
-	s.doltCommitMu.Unlock()
+	s.dirtyGen.Add(1)
+	s.armCheckpoint()
 }
 
 // schemaDDL creates the runtime tables if they do not already exist.
@@ -970,7 +1002,8 @@ func (s *Store) Reopen(path string) error {
 	s.textureDB = live.textureDB
 	s.texturePath = live.texturePath
 	s.doltConnector = live.doltConnector
-	s.doltHistoryDirty = live.doltHistoryDirty
+	// The adopted workspace may differ from the last commit: keep it dirty.
+	s.dirtyGen.Add(1)
 	s.og = live.og
 	s.ogStore = live.ogStore
 	s.ogReadStore = live.ogReadStore
@@ -984,8 +1017,12 @@ func (s *Store) Close() error {
 	// is the loss the ruling allows.
 	s.closeTelemetry()
 	// A running derived-column migration stops before its next step; closing
-	// the pools waits for a step in flight.
+	// the pools waits for a step in flight. Cancel it before the closing
+	// checkpoint so no migration step starts after that final commit, and
+	// commit the checkpoint before the pools below close, since it writes
+	// through s.db.
 	s.CancelDerivedColumnMigration()
+	s.closeCheckpoint()
 	var err error
 	if closeErr := s.closeDepositUpcastLedger(); closeErr != nil {
 		err = closeErr

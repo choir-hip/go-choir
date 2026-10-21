@@ -837,6 +837,10 @@ type guestObservabilityResponse struct {
 	// per-kind event counts and tape batch sizes that price batching, and the
 	// sealer's counters when it is on. Read-only.
 	TelemetryBatching *store.TelemetryStats `json:"telemetry_batching,omitempty"`
+	// GuestCheckpoint is the guest's Dolt history-commit cadence: the mode,
+	// inline commits (time writers waited) and background commits, and
+	// what is not yet committed (ARCH-13). Read-only.
+	GuestCheckpoint *store.CheckpointStats `json:"guest_checkpoint,omitempty"`
 	// ClaudeDelegate is the Claude delegate's availability on this computer
 	// and why not (docs/design/claude-delegate-slice1-2026-10-14.md). Never
 	// the token.
@@ -986,6 +990,8 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 		resp.EngineMutexLive = h.rt.store.EngineMutexLive()
 		telemetry := h.rt.store.TelemetryStats()
 		resp.TelemetryBatching = &telemetry
+		checkpoint := h.rt.store.CheckpointStats()
+		resp.GuestCheckpoint = &checkpoint
 		if tasks, ok := boundedObservabilityRead(observabilityReadBudget, func() *managementTaskObservability {
 			return h.rt.managementTaskObservability(r.Context(), ownerID, h.rt.TextureComputerID())
 		}); ok {
