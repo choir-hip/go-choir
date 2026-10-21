@@ -212,20 +212,23 @@ func TestAssignPoolIsStablePerThreadAndSpreadsAcrossThreads(t *testing.T) {
 	}
 }
 
-// Owner 2026-10-16: every thread runs on gpt-6-luna; deepseek-v4.1-flash
-// (OpenCode, near its weekly limit) is only the failover. Ways it could
-// fail: a thread is still assigned deepseek; a luna thread loses its
-// failover; a pool whose members are all fallback-only assigns nothing.
-func TestAssignDefaultPoolPutsEveryThreadOnLuna(t *testing.T) {
+// Owner 2026-10-21: the dual pool is back, deepseek-v4.1-flash and
+// gpt-6-luna at 1:3. Ways it could fail: one model takes every thread (the
+// fallback-only flag left on); the split drifts far from 1:3; a thread loses
+// its failover to the other model. A pool whose members are all
+// fallback-only still assigns its first member.
+func TestAssignDefaultPoolSplitsThreadsOneToThree(t *testing.T) {
 	spec := provideriface.LLMSelection{Model: "pool:default"}
+	seen := map[string]int{}
 	for i := 0; i < 4000; i++ {
 		chosen, fallbacks, _ := Assign(spec, fmt.Sprintf("thread-%d", i))
-		if chosen.Provider != "chatgpt" || chosen.Model != "gpt-6-luna" {
-			t.Fatalf("thread-%d assigned %s/%s", i, chosen.Provider, chosen.Model)
+		seen[chosen.Model]++
+		if len(fallbacks) != 1 || fallbacks[0].Model == chosen.Model {
+			t.Fatalf("thread-%d on %s has fallbacks %+v, want the other model", i, chosen.Model, fallbacks)
 		}
-		if len(fallbacks) != 1 || fallbacks[0].Model != "deepseek-v4.1-flash" {
-			t.Fatalf("thread-%d fallbacks %+v, want deepseek-v4.1-flash", i, fallbacks)
-		}
+	}
+	if d := seen["deepseek-v4.1-flash"]; d < 800 || d > 1200 {
+		t.Fatalf("split = %v, want about 1000 deepseek-v4.1-flash of 4000", seen)
 	}
 	only := []modelcatalog.PoolMember{{Provider: "opencode-go", Model: "deepseek-v4.1-flash", FallbackOnly: true}}
 	if got := weightedIndex(only, 7); got != 0 {

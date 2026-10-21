@@ -12,13 +12,15 @@ import "testing"
 // keys deepseek uses and pushed about 55% of paper calls to failover. The
 // pool was the owner's dual pool, deepseek-v4.1-flash and gpt-6-luna,
 // weighted 1:3. Owner 2026-10-16: OpenCode's weekly limit is close, so every
-// thread runs on gpt-6-luna; deepseek-v4.1-flash stays only as the failover,
-// assigned no thread.
+// thread ran on gpt-6-luna with deepseek-v4.1-flash only as the failover.
+// Owner 2026-10-21: "We have Opencode quota now"; the dual pool is back at
+// the owner's 1:3, so the same tasks run on both models and the errors they
+// share can be fixed in the tool surface, not tuned to one model.
 func TestDefaultPoolMembers(t *testing.T) {
 	pool := Pools()[DefaultPool]
 	want := []PoolMember{
-		{Provider: "chatgpt", Model: "gpt-6-luna"},
-		{Provider: "opencode-go", Model: "deepseek-v4.1-flash", FallbackOnly: true},
+		{Provider: "opencode-go", Model: "deepseek-v4.1-flash", Weight: 1},
+		{Provider: "chatgpt", Model: "gpt-6-luna", Weight: 3},
 	}
 	if len(pool) != len(want) {
 		t.Fatalf("default pool = %v, want %v", pool, want)
