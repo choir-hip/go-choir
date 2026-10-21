@@ -599,7 +599,7 @@ func resumeDeadlineFrom(capabilityExpiresAt time.Time) time.Time {
 // releases its host-port reservation. Callers hold the VM's operation lock.
 func (m *Manager) discardSnapshotFiles(vmID string) bool {
 	removed := false
-	for _, dir := range []string{m.snapshotDir(vmID), m.snapshotPartialDir(vmID)} {
+	for _, dir := range m.snapshotAnyDirs(vmID) {
 		if _, err := os.Stat(dir); err == nil {
 			if err := os.RemoveAll(dir); err != nil {
 				log.Printf("vmmanager: remove snapshot dir %s: %v", dir, err)
@@ -608,6 +608,7 @@ func (m *Manager) discardSnapshotFiles(vmID string) bool {
 			removed = true
 		}
 	}
+	m.removeVaultVMDir(vmID)
 	m.removeJailSnapshotLinks(vmID)
 	m.releaseSnapshotPort(vmID)
 	return removed
@@ -685,31 +686,30 @@ func dirLogicalBytes(dir string) int64 {
 	return total
 }
 
-// listSnapshots scans <state>/*/snapshot/meta.json.
+// listSnapshots scans <root>/*/snapshot/meta.json in every root (the vault
+// when configured, then the state directory).
 func (m *Manager) listSnapshots() []snapshotEntry {
-	root := m.cfg.StateDir
-	if root == "" {
-		return nil
-	}
-	entries, err := os.ReadDir(root)
-	if err != nil {
-		return nil
-	}
 	out := make([]snapshotEntry, 0)
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		dir := filepath.Join(root, entry.Name(), snapshotDirName)
-		meta, err := readSnapshotMeta(dir)
+	for _, root := range m.snapshotRoots() {
+		entries, err := os.ReadDir(root)
 		if err != nil {
 			continue
 		}
-		bytes := meta.DiskBytes
-		if bytes <= 0 {
-			bytes, _ = dirDiskBytes(dir)
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			dir := snapshotDirIn(root, entry.Name())
+			meta, err := readSnapshotMeta(dir)
+			if err != nil {
+				continue
+			}
+			bytes := meta.DiskBytes
+			if bytes <= 0 {
+				bytes, _ = dirDiskBytes(dir)
+			}
+			out = append(out, snapshotEntry{vmID: entry.Name(), dir: dir, meta: meta, bytes: bytes})
 		}
-		out = append(out, snapshotEntry{vmID: entry.Name(), dir: dir, meta: meta, bytes: bytes})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].meta.CreatedAt.Before(out[j].meta.CreatedAt) })
 	return out
@@ -732,6 +732,14 @@ var statfsAvailable = func(path string) (int64, error) {
 // its compressed size is unknown until written. The free-space floor guards
 // that worst case absolutely.
 func (m *Manager) ensureSnapshotRoom(vmID string, need int64) bool {
+	return m.ensureSnapshotRoomAt(m.cfg.StateDir, vmID, need)
+}
+
+// ensureSnapshotRoomAt is ensureSnapshotRoom for a snapshot that will occupy
+// root: the budget counts every snapshot on the host, and the free-space floor
+// is measured on the file system the new snapshot lands on (a vault has its
+// own, smaller floor: only snapshots live there).
+func (m *Manager) ensureSnapshotRoomAt(root, vmID string, need int64) bool {
 	budget := m.snapshotBudgetBytes()
 	if need > budget {
 		return false
@@ -759,12 +767,16 @@ func (m *Manager) ensureSnapshotRoom(vmID string, need int64) bool {
 	if used+need > budget {
 		return false
 	}
-	avail, err := statfsAvailable(m.cfg.StateDir)
+	avail, err := statfsAvailable(root)
 	if err != nil {
-		log.Printf("vmmanager: statfs %s: %v; refusing snapshot", m.cfg.StateDir, err)
+		log.Printf("vmmanager: statfs %s: %v; refusing snapshot", root, err)
 		return false
 	}
-	return avail-need >= snapshotDiskFloorBytes
+	floor := snapshotDiskFloorBytes
+	if m.isVaultRoot(root) {
+		floor = snapshotVaultFloorBytes
+	}
+	return avail-need >= floor
 }
 
 // tryLockVMOperation takes the VM's operation lock only if it is free.
@@ -800,7 +812,7 @@ func (m *Manager) tryDiscardSnapshot(vmID, reason string) (locked, removed bool)
 
 // hasSnapshotFiles reports whether a committed or partial snapshot exists.
 func (m *Manager) hasSnapshotFiles(vmID string) bool {
-	for _, dir := range []string{m.snapshotDir(vmID), m.snapshotPartialDir(vmID)} {
+	for _, dir := range m.snapshotAnyDirs(vmID) {
 		if _, err := os.Lstat(dir); err == nil {
 			return true
 		}
@@ -826,15 +838,22 @@ func (m *Manager) DiscardSnapshot(vmID, reason string) bool {
 // SweepOrphanSnapshots runs once at vmctl start. It removes every
 // interrupted capture (snapshot.partial/) and every committed snapshot whose
 // VM keep reports false (not hibernated), releasing its port, and logs each
-// removal. A nil keep removes no committed snapshot. Only real directories
-// under the state dir are touched (symlinks are skipped), and a VM whose
+// removal. A nil keep removes no committed snapshot for that reason. With the
+// snapshot vault configured it also removes, from the state directory, every
+// committed snapshot of a computer the vault now serves: that is plaintext
+// guest memory the vault exists to keep off the main file system. Only real
+// directories under a root are touched (symlinks are skipped), and a VM whose
 // operation lock is held is left alone (design note items 46-47). It
 // returns the removed paths.
 func (m *Manager) SweepOrphanSnapshots(keep func(vmID string) bool) []string {
-	root := m.cfg.StateDir
-	if root == "" {
-		return nil
+	removed := make([]string, 0)
+	for _, root := range m.snapshotRoots() {
+		removed = append(removed, m.sweepSnapshotRoot(root, keep)...)
 	}
+	return removed
+}
+
+func (m *Manager) sweepSnapshotRoot(root string, keep func(vmID string) bool) []string {
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		log.Printf("vmmanager: snapshot sweep: read %s: %v", root, err)
@@ -844,18 +863,28 @@ func (m *Manager) SweepOrphanSnapshots(keep func(vmID string) bool) []string {
 		info, err := os.Lstat(path)
 		return err == nil && info.IsDir()
 	}
+	inVault := m.isVaultRoot(root)
 	removed := make([]string, 0)
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue // files and symlinks
 		}
 		vmID := entry.Name()
-		committed, partial := m.snapshotDir(vmID), m.snapshotPartialDir(vmID)
+		committed, partial := snapshotDirIn(root, vmID), snapshotPartialDirIn(root, vmID)
 		hasCommitted, hasPartial := isDir(committed), isDir(partial)
 		if !hasCommitted && !hasPartial {
 			continue
 		}
 		dropCommitted := hasCommitted && keep != nil && !keep(vmID)
+		plaintextOfVaultComputer := false
+		if hasCommitted && !inVault && m.vaultConfigured() {
+			computerID := ""
+			if meta, err := readSnapshotMeta(committed); err == nil {
+				computerID = meta.ComputerID
+			}
+			plaintextOfVaultComputer = m.vaultSelected(vmID, computerID)
+			dropCommitted = dropCommitted || plaintextOfVaultComputer
+		}
 		if !hasPartial && !dropCommitted {
 			continue
 		}
@@ -877,9 +906,16 @@ func (m *Manager) SweepOrphanSnapshots(keep func(vmID string) bool) []string {
 				log.Printf("vmmanager: snapshot sweep: remove %s: %v", committed, err)
 			} else {
 				m.releaseSnapshotPort(vmID)
-				log.Printf("vmmanager: snapshot sweep: removed orphaned snapshot %s (VM %s is not hibernated)", committed, vmID)
+				if plaintextOfVaultComputer {
+					log.Printf("vmmanager: snapshot sweep: removed plaintext snapshot %s (VM %s uses the snapshot vault)", committed, vmID)
+				} else {
+					log.Printf("vmmanager: snapshot sweep: removed orphaned snapshot %s (VM %s is not hibernated)", committed, vmID)
+				}
 				removed = append(removed, committed)
 			}
+		}
+		if inVault {
+			_ = os.Remove(filepath.Join(root, vmID))
 		}
 		unlock()
 	}
