@@ -200,3 +200,46 @@ gets its own.
 - The gate refuses commits from before the move (they lack the program), so
   rolling back to such a commit means the owner deploys by hand.
 
+
+## Review bunch 4b (frozen 646f6488a): findings and dispositions
+
+Source: `~/runs/sec14-findings.md` (GPT-6.1-sol send back; Gemini 4 Argon
+accept). FP0's rebase maps this lane's shas in order: deploy 1 = 0fca75329,
+deploy 2 = 7637ad240, root-key removal = d948c3ecd.
+
+**B1 (blocking, GPT-6.1-sol): an allowed ancestor deploy restores root's CI
+key. Accepted.**
+- Evidence: the gate's only commit check is `merge-base --is-ancestor
+  <commit> origin/main` (`scripts/node-b-ci-gate`, `run()`). The deploy-1
+  commit (lane 67ef79140, rebased 0fca75329) carries both the deploy program
+  and `ciDeployKey` in root's key list (`git show 67ef79140:nix/node-b.nix`,
+  line 532). Deploy 2 (7637ad240) carries both as well.
+- Attack: after step 3, a stolen key sends `deploy DEPLOY_COMMIT=0fca75329...
+  DEPLOY_HOST=true DEPLOY_HOST_OS=true HOST_SERVICES=`. The request is
+  accepted, the NixOS switch restores root's CI key, and the key holder has a
+  root shell. CI's stale-guard is never consulted on a direct gate request.
+- The residual "downgrade is an availability risk" in this file was wrong:
+  here a downgrade restores arbitrary root.
+- Fix, to land with deploy 1 (it changes only the gate): the gate keeps a
+  host floor in `/var/lib/go-choir/ci-gate-floor`.
+  - Before running a deploy, the gate raises the floor to the requested
+    commit.
+  - The gate refuses any prebuild or deploy commit that is not a descendant
+    of the floor. A missing file falls back to a seed main commit written in
+    the gate. A malformed floor, or a floor git can't resolve, is refused.
+  - The floor can't be lowered through the gate: the gate writes only a
+    commit that already descends from the current floor. Once step 3 is
+    deployed through the gate, the floor is at or above step 3, so no
+    accepted commit restores root's key.
+
+**N1 (non-blocking, both): the rollout table names pre-rebase shas.
+Accepted.** The rollout below is remapped to the rebased identities.
+
+**N2 (non-blocking, Argon): run the program as `bash "$program" </dev/null`
+so a future stdin read can't swallow script lines. Residual.** Today no
+command in either program reads stdin (Argon checked), and `bash -s` from a
+file keeps the transport the heredoc had. The change is untestable off Node
+B, so it waits.
+
+**N3 (Argon's landing constraint): the three groups land in separate
+sequential deploys. Already the rollout.**
