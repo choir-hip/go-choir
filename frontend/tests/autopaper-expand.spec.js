@@ -28,6 +28,12 @@
  *      (a private document), or asks the server about it.
  *   X8 A refused ask (429 limit, 409 already asked) leaves the button stuck
  *      or the reader without a word.
+ *   X10 An ask the server accepted reads "Could not ask" (problem E3,
+ *      docs/problems/research-more-slow-and-hidden-2026-10-21.md: a phone
+ *      showed it for a 202): a 202 whose body cannot be read, or a request
+ *      that failed on the client after the server took it, while the read
+ *      that follows says the version was asked. A failure that is real
+ *      names its kind (network, body, status) so the next report says which.
  *
  *   cd frontend && npm run build && npx vite preview --port 4173 --strictPort &
  *   npx playwright test tests/autopaper-expand.spec.js
@@ -79,6 +85,13 @@ test.describe('fate lines and polling decisions', () => {
     expect(askNotice(403, '')).toContain('not available');
     expect(askNotice(500, '')).toContain('Could not ask');
     expect(askNotice(0, '')).toContain('Could not ask');
+  });
+
+  test('a failure that is not a refusal names its kind (X10)', () => {
+    expect(askNotice(0, '', 'network')).toContain('(network)');
+    expect(askNotice(502, '', 'body')).toContain('(body)');
+    expect(askNotice(500, '', 'status')).toContain('(status 500)');
+    expect(askNotice(409, 'busy', 'status')).not.toContain('(');
   });
 });
 
@@ -136,7 +149,8 @@ async function mockRoutes(page, state) {
     state.asks.push(JSON.parse(route.request().postData() || '{}'));
     const answer = state.ask || { status: 202, body: { status: 'asked', request_id: 'rx-1' } };
     await new Promise((resolve) => setTimeout(resolve, answer.delayMs || 0));
-    await route.fulfill({ status: answer.status, contentType: 'application/json', body: JSON.stringify(answer.body) });
+    if (answer.abort) return route.abort('failed');
+    await route.fulfill({ status: answer.status, contentType: 'application/json', body: answer.raw ?? JSON.stringify(answer.body) });
   });
 }
 
@@ -237,6 +251,38 @@ test.describe('the control in a story window\'s toolbar', () => {
     state.read = allowed({ asked: true, requests: [requestOf('accepted')] });
     await button.click();
     await expect(page.locator('[data-autopaper-expand-line]')).toContainText('already asked', { timeout: 10_000 });
+  });
+
+  test('an ask the server took never reads "Could not ask" (X10)', async ({ page }) => {
+    // The request failed on the client; the read that follows says it was asked.
+    const state = { read: allowed(), ask: { abort: true } };
+    await mockRoutes(page, state);
+    await openStory(page);
+    state.read = allowed({ asked: true, requests: [requestOf('accepted')] });
+    await page.locator('[data-autopaper-expand-button]').click();
+    const line = page.locator('[data-autopaper-expand-line]');
+    await expect(line).toContainText('Request received', { timeout: 10_000 });
+    await expect(line).not.toContainText('Could not ask');
+
+    // A 202 whose body cannot be read is still an accepted ask.
+    const other = await page.context().newPage();
+    const second = { read: allowed(), ask: { status: 202, raw: 'not json' } };
+    await mockRoutes(other, second);
+    await openStory(other);
+    await other.locator('[data-autopaper-expand-button]').click();
+    await expect.poll(() => second.asks.length).toBe(1);
+    await other.waitForTimeout(500);
+    await expect(other.locator('[data-autopaper-expand-line]')).toHaveCount(0);
+  });
+
+  test('a real client-side failure names its kind (X10)', async ({ page }) => {
+    const state = { read: allowed(), ask: { abort: true } };
+    await mockRoutes(page, state);
+    await openStory(page);
+    await page.locator('[data-autopaper-expand-button]').click();
+    await expect(page.locator('[data-autopaper-expand-line]')).toContainText('Could not ask just now', { timeout: 10_000 });
+    await expect(page.locator('[data-autopaper-expand-line]')).toContainText('(network)');
+    await expect(page.locator('[data-autopaper-expand-button]')).toBeEnabled();
   });
 
   test('an address over its allowance is told so in the fate line (X8)', async ({ page }) => {
