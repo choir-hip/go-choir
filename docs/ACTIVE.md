@@ -11,7 +11,7 @@ throughline (`skills/throughline/SKILL.md`). Direction:
 ## Active station (2026-10-20): LP S6, the commit gate
 
 **Goal:** [`definitions/choir-lp-s6-commit-gate-2026-10-20.md`](definitions/choir-lp-s6-commit-gate-2026-10-20.md)
-(`/goal` file, `readiness: drafted`, authoring-gate panel pending). Under the
+(`/goal` file, `readiness: reviewed`, verdict accept with edits). Under the
 [ledger metamission](definitions/choir-ledger-metamission-2026-10-13.md), station LP.
 
 **Priority change (owner, 2026-10-20, [owner notes §28](reports/owner-notes-2026-10-14.md)):**
@@ -55,7 +55,10 @@ outer checklist: every launch feature and requirement in the intended order,
 from the Apple developer account to the Autoradio app, by way of the voice
 pipeline, self-development, accounts and the App Store submission (target
 2026-10-31). Its phase 2 points at the security checklist below without
-copying it.
+copying it. Revised the same afternoon after a three-model panel
+(GPT-6.1-sol, Gemini 4 Argon, Devin): its batch plan is now the one
+ordered list for both checklists, and its owner decisions OD-01 to OD-09
+carry the YouTube research (Premium cannot be promised inside an embed).
 
 ## Security, density and architecture checklist (2026-10-21; owner: as soon as possible)
 

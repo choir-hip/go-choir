@@ -20,15 +20,24 @@ VMs and later hosts.
   CLAUDE.md). A docs item is ticked with its SHA. Write them on the item:
   `Done: <sha>, deploy <run>, evidence <path>`.
 - **Priority.** **P0** before launch. **P1** before strangers share a host,
-  or as soon after launch as possible. **P2** architecture after launch.
+  which on Node B is launch day. **P2** architecture, decided item by item.
+  Owner rule (2026-10-21, owner notes §37): every security and density item
+  that can land before launch does, so P0 and P1 both land before launch,
+  and a P2 item is post-launch only when it is architecture, not unfinished
+  hardening. This answers DEC-04.
 - **Each item says:** what is true on main now, existing branch work, the
   plans that cover it, and what in those plans was stale or missing (the
   "plan update" line says whether this change already fixed it).
 - **IDs are stable.** Add new items at the end of a section; never renumber.
 
-## Suggested P0 order
+## Order
 
-One red deploy at a time, each verified on staging before the next:
+**Superseded (2026-10-21):** the order is now the batch plan in the
+[launch checklist](launch-checklist-2026-10-21.md#batch-plan), ordered by
+what speeds up the next batch (owner notes §37) and reviewed by a
+three-model panel. One ordered list lives there; this checklist stays the
+authority for each item's facts and its tick. The earlier P0 order, kept
+for reference (one red deploy at a time):
 
 1. REC-01, then SEC-01 (recover and land desk-cell confinement).
 2. SEC-02 (the daemon checks the role on every frame action).
@@ -200,7 +209,7 @@ item below:
     (stale: test-net allowance is now test-binary-only, b02a71fe8).
   - Plan update owed: no problem doc or station; rotation unplanned. Later
     the binding moves to the vsock CID (NET-03).
-- [ ] **SEC-06 · P0 · red — Egress proxy tunnel identity (P1 finding)**
+- [ ] **SEC-06 · P0 · red — Egress proxy tunnel identity (a P1 finding, promoted to P0)**
   - Now: suffix match admits subdomains and broad suffixes
     (`githubusercontent.com`, `hf.co`) (`internal/capsule/egress.go:104-143`).
   - Plans: [egress-proxy-tunnel-identity-2026-10-21.md](problems/egress-proxy-tunnel-identity-2026-10-21.md)
@@ -209,7 +218,9 @@ item below:
     principle 2, threats T1/T8).
   - Plan update owed: cross-reference the mirror argument; NET-02 is the
     durable fix.
-- [ ] **SEC-07 · P0 · orange — Address guard on browser and Obscura fetches**
+- [ ] **SEC-07 · P0 · red — Address guard on browser and Obscura fetches**
+  (red, corrected 2026-10-21: an egress boundary on untrusted URLs, like
+  SEC-03 and NET-01)
   - Now: browser navigate checks only the scheme
     (`internal/browsercontrol/handler.go:79-93, 272`); the follow fetch uses
     a plain client (`:817-826, 920-930`); the alternate fetch pre-checks
@@ -219,6 +230,13 @@ item below:
     the unlanded `land/desk-cell-confinement` branch); [research-fetch-url-has-no-address-guard-2026-10-10.md](problems/research-fetch-url-has-no-address-guard-2026-10-10.md)
     (no "fixed" status line; its egressTables cache leak still "not fixed").
   - Plan update owed: a problem record for browser and Obscura paths.
+  - Research (2026-10-21, launch checklist L2-06): no automated capture
+    path uses Obscura; research Read, content import and the source
+    pollers all use `sourcefetch`. Its only caller is the Web Lens
+    "Snapshot" button. Recommendation: delete Obscura and the
+    `browsercontrol` package, and make Web Lens open the device's own
+    browser. That closes the browser half of this item and half of
+    SEC-15, rather than guarding it.
 - [ ] **SEC-08 · P0 · red — Claude delegate launch posture**
   - Now: one test computer until 2026-11-03 (`nix/node-b.nix:1371-1389`).
     The owner's Claude token sits on the guest credential disk, readable by
@@ -229,7 +247,8 @@ item below:
     `reports/claude-agent-sdk-in-choir-2026-10-14.md` Options R/T/K.
   - Decided (owner, 2026-10-21, owner notes §36): the delegate stays on
     the one test computer until desk-cell confinement (SEC-01) lands.
-    Before any wider use, Option K (key held by the gateway).
+    Before any wider use, Option K (key held by the gateway): SEC-01 alone
+    does not unlock wider use.
 - [ ] **SEC-09 · P0 · green/red — KSM off, stale comments fixed**
   - Now: nothing in nix sets KSM; the last reading (`run=1`, nothing
     merged) predates the 10-15 host reboot. Comments still claim KSM
@@ -463,9 +482,11 @@ item below:
   - Plan update: the report now says nothing landed (this change). Still
     owed: `definitions/choir-supervised-app-development-metamission-2026-10-01.md:536`
     still excludes CH and hotplug.
-- [ ] **RES-21 · P2 · green — Reconcile guest sizes in docs**: code gives
-  every non-platform computer 8 GiB (`internal/vmctl/ownership.go:1166-1178`);
-  several docs say 4 GiB test computers.
+- [ ] **RES-21 · P2 · green — Reconcile guest sizes in docs**: the code
+  defaults are 2 GiB interactive and 4 GiB platform
+  (`internal/vmctl/ownership.go:1734, 1743`); Node B overrides interactive
+  computers to 8 GiB (`nix/node-b.nix:1308`, `VM_INTERACTIVE_MEM_MIB=8192`);
+  several docs say 4 GiB test computers. (Corrected 2026-10-21.)
 - [ ] **RES-22 · P2 · red — Host slab and btrfs metadata** (density L19;
   [node-b-btrfs-metadata-exhausted-small-artifact-files-2026-10-16.md](problems/node-b-btrfs-metadata-exhausted-small-artifact-files-2026-10-16.md)).
 
@@ -479,13 +500,6 @@ item below:
     get their own desks, and the plan is to add many (owner notes §36).
     The §23 "no new desks" ruling was about coordinator-invented desks
     ("story writer", "triage"), not app desks.
-  - Owed: doctrine I26 (`docs/choir-doctrine.md:391-412`), CLAUDE.md Desk
-    Ontology and `docs/agent-product-doctrine.md:22-25` still name exactly
-    four desks. Text to ratify: system desks (management, engineering,
-    research) and app desks (Texture first; Mail, Calendar, Slides, Video,
-    ...), app desks under management. The email desk report already
-    proposes this tier (`reports/agentic-email-desk-2026-10-14.md:170-178`,
-    question Q9).
 - [ ] **ARCH-02 · P1 · red — A desk manifest instead of hardcoded desks**
   - Now: desks are hardcoded across `internal/agentprofile/agentprofile.go`,
     `internal/agentcore/tool_profiles.go`, `internal/capsule/roles.go`,
@@ -528,7 +542,9 @@ item below:
     (tenant, desk class, taint class, tree).
   - Plans: PD2 (`definitions/choir-pd2-desk-sessions-outlive-runs-2026-10-11.md`);
     PD3.
-- [ ] **ARCH-07 · P1 · orange — Versioned, authenticated frame protocol**
+- [ ] **ARCH-07 · P1 · red — Versioned, authenticated frame protocol**
+  (red, corrected 2026-10-21: it authenticates the worker-to-daemon
+  boundary SEC-02 relies on)
   - Now: 8-byte header, no version, no authentication
     (`internal/yaegikernel/transport.go:14-23`). The RLM consensus asked for
     a version byte from day one (`reviews/rlm-implementation-consensus-2026-08-29.md:246-251`).
@@ -553,6 +569,10 @@ item below:
     doctrine says FIFO with retryable refusal; `maxManagementActiveEngineeringSlots`
     (`runtime.go:1656-1679`) is unreachable.
   - Plan update owed: record supersede versus FIFO as a doctrine deviation.
+  - Split (panel, 2026-10-21): admission correctness (FIFO with a
+    retryable refusal, not cancelling the live assignment) is launch work,
+    because the launch checklist's L3-07 builds several app agents at
+    once; N parallel capsules per assignment stays P2.
 - [ ] **ARCH-11 · P2 · red — Executor VMs**
   - Ephemeral, one per (tenant, taint class), cloned from a snapshot, no
     persistent state or authority, a lease per tree; they run untrusted
@@ -617,7 +637,8 @@ Still owed:
   applied in e5ea2404d (ARCH-01).
 - **DEC-03** Decided 2026-10-21: the Claude delegate stays on the one test
   computer until SEC-01 lands (SEC-08).
-- **DEC-04** Which P1 items block launch, beyond the P0 list.
+- **DEC-04** Answered 2026-10-21 (owner notes §37): every security and
+  density item that can land before launch does; P1 is launch work.
 - **DEC-05** Cross-tenant shared pages (pmem DAX, shared snapshot templates):
   a side channel of the same class as KSM; run the security panel
   (RES-08, ARCH-11).

@@ -1099,6 +1099,23 @@ iCloud Drive "Choir Backups" (checklist REC-01, ARCH-03, RES-20).
 
 ## 37. The Autoradio launch condition; foundations first; bigger batches; Obscura and Web Lens (2026-10-21, afternoon)
 
+Earlier the same afternoon, before reviewing the security checklist, the
+owner, verbatim: "my prior on the order is that it may be ordered too
+conservatively. And I'm less concerned about, like, what do we do before
+launch and after launch? I really want to do all the security and density
+work that we can before we launch. And I want to order it by basically
+what will accelerate the next part of it, rather than ordering it purely by
+what's the most important security fix. Basically, I think we can blitz
+out all this work at agentic pace, much faster than we think we can." And
+on the store work: "all that waiting and busyness indicates a deeper
+problem ... when we do, we should be able to increase the number of lanes
+from 8 to much higher. I think our auto paper is using way too much
+memory, more than it needs to ... when we fix the most important problems
+first, that'll give us more resources." Taken as: every security and
+density item that can land before launch does (the security checklist's
+P0/P1 split no longer decides launch scope; DEC-04 answered), ordered by
+acceleration (the launch checklist's batch plan).
+
 Owner notes on the security checklist, for the launch checklist, dictated
 while listening to a report (voice transcription; "Qire" and "auto pewter"
 read as Choir and autoputer). Verbatim, trimmed:
