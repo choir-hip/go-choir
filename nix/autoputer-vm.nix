@@ -858,6 +858,11 @@ EOF
       # Desk cell workers run confined or not at all: their desk's user,
       # mandatory Landlock V5, seccomp, private network namespace.
       CHOIR_DESK_CELL_CONFINEMENT = "required";
+      # The desks cgroup (SDC RES-01, RES-02): each desk worker runs in its own
+      # child with a hard memory.max from its desk's manifest row, under an
+      # aggregate the daemon sets at start (internal/autoputer/desk_cgroup.go).
+      # Required mode refuses to start a worker without it.
+      CHOIR_DESK_CGROUP_ROOT = "/sys/fs/cgroup/choir-desks";
       PATH = lib.mkForce (lib.makeBinPath (with pkgs; [
         busybox
         bash
@@ -964,6 +969,11 @@ EOF
       # Updater and capsule-adjacent child work can approach the guest memory
       # envelope. Keep the runtime alive so it can persist terminal evidence.
       OOMPolicy = "continue";
+      # RES-01: the daemon's pages are protected from reclaim by the desk
+      # workers and capsules around it. 512M is a first value (the paper's
+      # daemon measured Sys 1.46 GB, HeapInuse 1.05 GB); L1-02's measurement
+      # sets the real one. A reservation only binds when used.
+      MemoryMin = "512M";
       StandardOutput = "journal+console";
       StandardError = "journal+console";
       EnvironmentFile = [ "-/run/go-choir-autoputer.env" ];

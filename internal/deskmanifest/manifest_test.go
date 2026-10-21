@@ -194,8 +194,11 @@ func TestWorkerBudgets(t *testing.T) {
 			continue
 		}
 		m := d.Memory
-		if m.WorkerMaxBytes == 0 || m.WorkerHighBytes == 0 || m.WorkerHighBytes >= m.WorkerMaxBytes {
-			t.Errorf("desk %s: memory.high %d must be set and below memory.max %d", name, m.WorkerHighBytes, m.WorkerMaxBytes)
+		if m.WorkerMaxBytes == 0 || (m.WorkerHighBytes != 0 && m.WorkerHighBytes >= m.WorkerMaxBytes) {
+			t.Errorf("desk %s: memory.max %d must be set, and memory.high %d (if any) below it", name, m.WorkerMaxBytes, m.WorkerHighBytes)
+		}
+		if m.WorkerHighBytes != 0 {
+			t.Errorf("desk %s: a worker budget is the hard limit alone: memory.high throttles a runaway cell for minutes instead of killing it", name)
 		}
 		if m.WorkerMaxBytes > 1<<30 {
 			t.Errorf("desk %s: a worker budget over 1 GiB defeats the 8 GiB guest's aggregate", name)
@@ -322,5 +325,13 @@ func TestGuestImageUsersMatchTheManifest(t *testing.T) {
 	}
 	if !strings.Contains(nix, `CHOIR_DESK_CELL_CONFINEMENT = "required";`) {
 		t.Error("the guest image does not set CHOIR_DESK_CELL_CONFINEMENT=required")
+	}
+	// Required mode refuses a worker with no memory budget; the image must
+	// therefore name the desks cgroup the daemon makes at start.
+	if !strings.Contains(nix, `CHOIR_DESK_CGROUP_ROOT = "/sys/fs/cgroup/choir-desks";`) {
+		t.Error("the guest image does not name the desks cgroup (CHOIR_DESK_CGROUP_ROOT)")
+	}
+	if !strings.Contains(nix, `MemoryMin = "512M";`) {
+		t.Error("the guest image does not protect the daemon's memory (MemoryMin)")
 	}
 }
