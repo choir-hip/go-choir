@@ -14,8 +14,9 @@ import (
 )
 
 // A1 (forward-fix doc section 9.4, FM20): DiskEventSource reads events and
-// payloads from segments first and legacy second, fails closed on corruption,
-// and refuses the directory-enumeration mode once a computer has segments
+// payloads from segments first and legacy second, answers a segment error
+// from a digest-verified legacy copy and otherwise fails closed (round 5,
+// choir-tape-segments-a2-repack-2026-10-21.md), and refuses the directory-enumeration mode once a computer has segments
 // (it would silently miss segment-resident events).
 
 func moveEventsToSegment(t *testing.T, root, computerID string, segno uint64, keepLegacy bool, digests ...string) {
@@ -75,7 +76,8 @@ func TestDiskEventSourceReadsSegmentResidentEvents(t *testing.T) {
 		t.Fatalf("ReadDir mode without segments: %d, %v", len(recs), err)
 	}
 
-	// Rot in a segment fails the trace; legacy is not consulted.
+	// Rot in a segment whose record also has a legacy copy is answered from
+	// that copy; without the copy the trace fails.
 	seg := filepath.Join(root, tapestore.SegDirName, id, tapestore.SegmentFileName(2))
 	raw, err := os.ReadFile(seg)
 	if err != nil {
@@ -85,8 +87,15 @@ func TestDiskEventSourceReadsSegmentResidentEvents(t *testing.T) {
 	if err := os.WriteFile(seg, raw, 0o640); err != nil {
 		t.Fatal(err)
 	}
+	got, err = NewDiskEventSource(root, id, head).EventsPage(context.Background(), id, 0, 0)
+	if err != nil || !reflect.DeepEqual(got, baseline) {
+		t.Fatalf("corrupt segment with a legacy copy: replay differs or fails: %v", err)
+	}
+	if err := os.Remove(filepath.Join(root, "sha256", "computer-event", digests[1])); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := NewDiskEventSource(root, id, head).EventsPage(context.Background(), id, 0, 0); !errors.Is(err, tapestore.ErrCorrupt) {
-		t.Fatalf("corrupt segment trace = %v, want ErrCorrupt", err)
+		t.Fatalf("corrupt segment trace without a legacy copy = %v, want ErrCorrupt", err)
 	}
 }
 
@@ -131,5 +140,33 @@ func TestDiskEventSourceFetchPayloadFromSegments(t *testing.T) {
 	}
 	if _, err := src.FetchPayload(context.Background(), id, digest); !errors.Is(err, tapestore.ErrCorrupt) {
 		t.Fatalf("corrupt payload segment = %v, want ErrCorrupt", err)
+	}
+
+	// A segment error in the payload namespace does not end the probe: an
+	// event stored legacy is still found, and a digest found nowhere
+	// returns the segment error, not "not found".
+	ev := []byte(`{"an":"event only in legacy"}`)
+	evDigest := computerevent.DigestBytes(ev)
+	if err := os.MkdirAll(filepath.Join(root, "sha256", "computer-event"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "sha256", "computer-event", evDigest), ev, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	idx := filepath.Join(root, tapestore.SegDirName, id, tapestore.IndexFileName(1))
+	iraw, err := os.ReadFile(idx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	iraw[len(iraw)-1] ^= 0xff
+	if err := os.WriteFile(idx, iraw, 0o640); err != nil {
+		t.Fatal(err)
+	}
+	src = NewDiskEventSource(root, id)
+	if got, err := src.FetchPayload(context.Background(), id, evDigest); err != nil || string(got) != string(ev) {
+		t.Fatalf("event behind a payload-namespace segment error = %q, %v, want the legacy event", got, err)
+	}
+	if _, err := src.FetchPayload(context.Background(), id, strings.Repeat("9", 64)); !errors.Is(err, tapestore.ErrCorrupt) {
+		t.Fatalf("absent digest behind a segment error = %v, want the segment error", err)
 	}
 }
