@@ -40,6 +40,21 @@ var capsuleAllowedSyscalls = []string{
 	"sendfile", "copy_file_range", "splice", "tee", "vmsplice", "memfd_create", "arch_prctl",
 }
 
+// capsuleXattrSyscalls stay refused, but with EOPNOTSUPP rather than the
+// default EPERM. Tools read EOPNOTSUPP as "this filesystem has no xattrs"
+// and fall back (cp sets permissions with chmod instead of an ACL); EPERM
+// made every first release copy fail with "setting permissions"
+// (docs/problems/engineering-completion-path-cluster-2026-10-20.md failure
+// 24). Only the errno differs: nothing here is allowed.
+var capsuleXattrSyscalls = []string{
+	"setxattr", "lsetxattr", "fsetxattr", "setxattrat",
+	"getxattr", "lgetxattr", "fgetxattr", "getxattrat",
+	"listxattr", "llistxattr", "flistxattr", "listxattrat",
+	"removexattr", "lremovexattr", "fremovexattr", "removexattrat",
+}
+
+var refuseEOPNOTSUPP = seccomp.ActionErrno | seccomp.Action(unix.EOPNOTSUPP)
+
 // WorkloadSeccompFilter is default-deny. It admits the file/process/memory
 // substrate needed by the broker and offline build tools plus AF_UNIX only.
 func WorkloadSeccompFilter() seccomp.Filter {
@@ -74,6 +89,7 @@ func seccompFilterAllowing(allowed []string, inet bool) seccomp.Filter {
 			Syscalls: []seccomp.SyscallGroup{
 				{Action: seccomp.ActionAllow, Names: allowed},
 				{Action: seccomp.ActionAllow, NamesWithCondtions: socketRules},
+				{Action: refuseEOPNOTSUPP, Names: capsuleXattrSyscalls},
 			},
 		},
 	}
