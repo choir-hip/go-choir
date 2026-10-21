@@ -50,11 +50,11 @@ func TestEnsureCredentialForPeerMovesTheJevPinToTheHostAttestedAddress(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := reg.BindJevPeer("computer-repin", firstBootPeer); err != nil {
+	if err := reg.BindPeer("computer-repin", firstBootPeer); err != nil {
 		t.Fatalf("first boot binds: %v", err)
 	}
 	// Failure mode 1, the defect as it is: the next boot's address is refused.
-	if err := reg.BindJevPeer("computer-repin", secondBootPeer); err == nil {
+	if err := reg.BindPeer("computer-repin", secondBootPeer); err == nil {
 		t.Fatal("a second address was accepted before any re-pin; the pin guards nothing")
 	}
 
@@ -65,10 +65,10 @@ func TestEnsureCredentialForPeerMovesTheJevPinToTheHostAttestedAddress(t *testin
 	if result.Status != "already_active" {
 		t.Fatalf("status = %q, want already_active", result.Status)
 	}
-	if err := reg.BindJevPeer("computer-repin", secondBootPeer); err != nil {
+	if err := reg.BindPeer("computer-repin", secondBootPeer); err != nil {
 		t.Fatalf("the new boot's address after the host re-pinned it: %v", err)
 	}
-	if err := reg.BindJevPeer("computer-repin", firstBootPeer); err == nil {
+	if err := reg.BindPeer("computer-repin", firstBootPeer); err == nil {
 		t.Fatal("the old address still works after the re-pin")
 	}
 
@@ -77,10 +77,10 @@ func TestEnsureCredentialForPeerMovesTheJevPinToTheHostAttestedAddress(t *testin
 	if err := restarted.SetPersistencePath(path); err != nil {
 		t.Fatal(err)
 	}
-	if err := restarted.BindJevPeer("computer-repin", secondBootPeer); err != nil {
+	if err := restarted.BindPeer("computer-repin", secondBootPeer); err != nil {
 		t.Fatalf("the re-pinned address after a gateway restart: %v", err)
 	}
-	if err := restarted.BindJevPeer("computer-repin", firstBootPeer); err == nil {
+	if err := restarted.BindPeer("computer-repin", firstBootPeer); err == nil {
 		t.Fatal("the old address works again after a gateway restart")
 	}
 }
@@ -95,7 +95,7 @@ func TestEnsureCredentialForPeerImportsWithThePin(t *testing.T) {
 	if result.Status != "imported" {
 		t.Fatalf("status = %q, want imported", result.Status)
 	}
-	if err := reg.BindJevPeer("computer-imported", firstBootPeer); err == nil {
+	if err := reg.BindPeer("computer-imported", firstBootPeer); err == nil {
 		t.Fatal("an imported credential took its pin from the first Jev caller, not from the host")
 	}
 }
@@ -106,7 +106,7 @@ func TestEnsureCredentialForPeerRefusesWhatItMustNotMove(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := reg.BindJevPeer("computer-guarded", firstBootPeer); err != nil {
+	if err := reg.BindPeer("computer-guarded", firstBootPeer); err != nil {
 		t.Fatal(err)
 	}
 	// Failure mode 3: only a Choir guest address can hold the pin.
@@ -122,7 +122,7 @@ func TestEnsureCredentialForPeerRefusesWhatItMustNotMove(t *testing.T) {
 	if _, err := reg.EnsureCredential(cred.RawToken); err != nil {
 		t.Fatalf("ensure (old call): %v", err)
 	}
-	if err := reg.BindJevPeer("computer-guarded", firstBootPeer); err != nil {
+	if err := reg.BindPeer("computer-guarded", firstBootPeer); err != nil {
 		t.Fatalf("the pin moved without a peer or with a refused one: %v", err)
 	}
 	// Failure mode 5: a conflicting or revoked credential moves nothing.
@@ -134,7 +134,7 @@ func TestEnsureCredentialForPeerRefusesWhatItMustNotMove(t *testing.T) {
 		t.Fatal("a revoked credential was ensured")
 	}
 	reg.mu.Lock()
-	pinned := reg.identities["computer-guarded"].JevPeerIP
+	pinned := reg.identities["computer-guarded"].PeerIP
 	reg.mu.Unlock()
 	if pinned != firstBootPeer {
 		t.Fatalf("pin = %q after refused ensures, want %q", pinned, firstBootPeer)

@@ -678,7 +678,7 @@ func (h *Handler) HandleSourceAPI(w http.ResponseWriter, r *http.Request) {
 	computerID, err := h.authenticateAutoputer(r)
 	if err != nil {
 		log.Printf("gateway: source-api authentication denied: %v", err)
-		writeGatewayJSON(w, http.StatusUnauthorized, ErrorResponse{Error: "authentication required"})
+		writeAuthFailure(w, err)
 		return
 	}
 	if h.rateLimiter != nil {

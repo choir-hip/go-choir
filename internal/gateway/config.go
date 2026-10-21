@@ -19,6 +19,7 @@ package gateway
 import (
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -173,10 +174,19 @@ type AutoputerIdentity struct {
 	// Revoked or replaced credentials have Active=false.
 	Active bool
 
-	// JevPeerIP is the guest-network source address first authorized to use
-	// this bearer on the Jev route. It prevents a bearer copied to a different
-	// VM from being reused there; credential rotation clears the binding.
-	JevPeerIP string
+	// PeerIP is the guest-network source address this bearer is pinned to.
+	// The host moves it through the credential-ensure route (vmctl attests
+	// each boot's address); in enforce mode the first authorized use of an
+	// unpinned bearer sets it; the Jev route always does (BindPeer). It
+	// prevents a bearer copied to a different VM from being reused there;
+	// credential rotation clears the binding. Every gateway route that
+	// serves a computer checks it (checkBearerBinding), under the mode set
+	// by GATEWAY_BEARER_BINDING.
+	//
+	// The JSON key stays "JevPeerIP", from when only the Jev route used the
+	// pin: a stored identity file keeps loading, and a rollback to a gateway
+	// that only knows the Jev pin keeps reading it.
+	PeerIP string `json:"JevPeerIP"`
 }
 
 // IdentityRegistry manages autoputer identities and their credentials.
@@ -328,7 +338,7 @@ func (r *IdentityRegistry) EnsureCredential(rawToken string) (*CredentialEnsureR
 // EnsureCredentialForPeer is EnsureCredential from host lifecycle control
 // that also names the computer's current guest address. A computer keeps its
 // token across boots but takes a new guest address from each boot's host
-// port, so the Jev pin (BindJevPeer) is moved to the address the host
+// port, so the pin (PeerIP, BindPeer) is moved to the address the host
 // attests; only this caller can move it, never the Jev route itself. An
 // empty peer leaves the pin as it is; an address that is not a Choir guest
 // address is refused and changes nothing
@@ -354,7 +364,7 @@ func (r *IdentityRegistry) EnsureCredentialForPeer(rawToken, peerIP string) (*Cr
 	now := time.Now()
 
 	if existing, ok := r.identities[computerID]; ok {
-		if existing.TokenHash != hashText {
+		if !hashesEqual(existing.TokenHash, hashText) {
 			return nil, fmt.Errorf("credential conflict")
 		}
 		if !existing.Active {
@@ -363,10 +373,12 @@ func (r *IdentityRegistry) EnsureCredentialForPeer(rawToken, peerIP string) (*Cr
 		if now.After(existing.ExpiresAt) {
 			return nil, fmt.Errorf("credential expired")
 		}
-		moved := peerIP != "" && existing.JevPeerIP != peerIP
+		moved := peerIP != "" && existing.PeerIP != peerIP
 		if moved {
-			existing.JevPeerIP = peerIP
+			previous := existing.PeerIP
+			existing.PeerIP = peerIP
 			if err := r.persistLocked(); err != nil {
+				existing.PeerIP = previous
 				return nil, err
 			}
 		}
@@ -384,7 +396,7 @@ func (r *IdentityRegistry) EnsureCredentialForPeer(rawToken, peerIP string) (*Cr
 		IssuedAt:   now,
 		ExpiresAt:  now.Add(r.tokenTTL),
 		Active:     true,
-		JevPeerIP:  peerIP,
+		PeerIP:     peerIP,
 	}
 	r.identities[computerID] = identity
 	if err := r.persistLocked(); err != nil {
@@ -421,38 +433,110 @@ func (r *IdentityRegistry) ValidateCredential(rawToken string) (string, error) {
 		return "", fmt.Errorf("credential expired")
 	}
 
-	// Verify the token hash.
+	// Verify the token hash in constant time (SEC-05): the stored value is
+	// a hash of a random token, so a timing leak is of low value, but the
+	// comparison costs nothing to make safe.
 	hash := sha256.Sum256([]byte(token))
-	if hex.EncodeToString(hash[:]) != identity.TokenHash {
+	if !hashesEqual(hex.EncodeToString(hash[:]), identity.TokenHash) {
 		return "", fmt.Errorf("invalid credential")
 	}
 
 	return computerID, nil
 }
 
-// BindJevPeer binds a validated Jev bearer to its first authorized VM source
-// address. Subsequent use from any other guest peer is refused. This binding
-// is persisted alongside the token hash so a gateway restart cannot widen the
-// bearer to every runtime VM again.
-func (r *IdentityRegistry) BindJevPeer(computerID, peerIP string) error {
+// PeerState is the outcome of checking a call's source address against a
+// bearer's pin.
+type PeerState int
+
+const (
+	// PeerMatch: the pin is this address.
+	PeerMatch PeerState = iota
+	// PeerBound: the bearer was unpinned and is now pinned to this address.
+	PeerBound
+	// PeerUnpinned: the bearer has no pin and was left that way.
+	PeerUnpinned
+	// PeerMismatch: the bearer is pinned to another address.
+	PeerMismatch
+)
+
+// CheckPeer compares a validated bearer's source address with its pin. With
+// bindIfUnpinned an unpinned bearer is pinned to peerIP and the pin is made
+// durable first: if it cannot be written, nothing is pinned and the error says
+// so (a caller that enforces then refuses). The returned string is the pin as
+// it stands after the call. It never moves an existing pin: only
+// EnsureCredentialForPeer, which the host alone can call, does.
+func (r *IdentityRegistry) CheckPeer(computerID, peerIP string, bindIfUnpinned bool) (PeerState, string, error) {
 	peerIP = strings.TrimSpace(peerIP)
 	if computerID == "" || peerIP == "" {
-		return fmt.Errorf("Jev peer binding requires computer and peer")
+		return PeerUnpinned, "", fmt.Errorf("peer binding requires computer and peer")
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	identity, ok := r.identities[computerID]
 	if !ok || !identity.Active || time.Now().After(identity.ExpiresAt) {
-		return fmt.Errorf("credential is not active")
+		return PeerUnpinned, "", fmt.Errorf("credential is not active")
 	}
-	if identity.JevPeerIP != "" && identity.JevPeerIP != peerIP {
+	switch {
+	case identity.PeerIP == peerIP:
+		return PeerMatch, identity.PeerIP, nil
+	case identity.PeerIP != "":
+		return PeerMismatch, identity.PeerIP, nil
+	case !bindIfUnpinned:
+		return PeerUnpinned, "", nil
+	}
+	identity.PeerIP = peerIP
+	if err := r.persistLocked(); err != nil {
+		identity.PeerIP = ""
+		return PeerUnpinned, "", err
+	}
+	return PeerBound, peerIP, nil
+}
+
+// BindPeer binds a validated bearer to its first authorized VM source
+// address. Subsequent use from any other guest peer is refused. This binding
+// is persisted alongside the token hash so a gateway restart cannot widen the
+// bearer to every runtime VM again. The Jev route calls it in every binding
+// mode; the other routes go through checkBearerBinding.
+func (r *IdentityRegistry) BindPeer(computerID, peerIP string) error {
+	if strings.TrimSpace(computerID) == "" || strings.TrimSpace(peerIP) == "" {
+		return fmt.Errorf("Jev peer binding requires computer and peer")
+	}
+	state, _, err := r.CheckPeer(computerID, peerIP, true)
+	if err != nil {
+		return err
+	}
+	if state == PeerMismatch {
 		return fmt.Errorf("Jev bearer is bound to another VM")
 	}
-	if identity.JevPeerIP == peerIP {
-		return nil
+	return nil
+}
+
+// PinCounts reports how many active, unexpired identities have a pin and how
+// many do not.
+func (r *IdentityRegistry) PinCounts() (pinned, unpinned int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	now := time.Now()
+	for _, id := range r.identities {
+		if !id.Active || !now.Before(id.ExpiresAt) {
+			continue
+		}
+		if id.PeerIP != "" {
+			pinned++
+		} else {
+			unpinned++
+		}
 	}
-	identity.JevPeerIP = peerIP
-	return r.persistLocked()
+	return pinned, unpinned
+}
+
+// hashesEqual compares two hex-encoded credential hashes in constant time.
+// An empty hash matches nothing, not even another empty one.
+func hashesEqual(a, b string) bool {
+	if a == "" || b == "" {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
 }
 
 // RevokeCredential revokes the credential for the given autoputer ID.

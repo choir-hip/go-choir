@@ -33,6 +33,9 @@ type gatewayHealthResponse struct {
 	// PromptCache is the per-provider cached-input share since the gateway
 	// started: sample it twice and subtract for an hourly ratio.
 	PromptCache map[string]gatewayCacheHealth `json:"prompt_cache,omitempty"`
+	// BearerBinding is the SEC-05 bearer binding: its mode, how many active
+	// computers are pinned, and what it has refused or would refuse.
+	BearerBinding *gatewayBindingHealth `json:"bearer_binding,omitempty"`
 }
 
 // gatewayCacheHealth is provider.CacheStats plus its hit rate.
@@ -140,6 +143,11 @@ type Handler struct {
 	// outside the gateway without auth (M22b / C20). May be nil; in that
 	// case /health/{service} reports "not configured".
 	serviceCheckers map[string]health.Checker
+	// bindingMode is the bearer-binding rollout mode (bearer_binding.go);
+	// the zero value enforces.
+	bindingMode BindingMode
+	binding     bindingCounters
+	bindingLogState
 }
 
 const internalCallerHeader = "X-Internal-Caller"
@@ -231,6 +239,8 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	if h.searchClient != nil {
 		resp.SearchProviders = h.searchClient.AvailableProviders()
 	}
+
+	resp.BearerBinding = h.bindingHealth()
 
 	if stats := provider.CacheStatsSnapshot(); len(stats) > 0 {
 		resp.PromptCache = make(map[string]gatewayCacheHealth, len(stats))
@@ -350,7 +360,7 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 	computerID, err := h.authenticateAutoputer(r)
 	if err != nil {
 		log.Printf("gateway: authentication denied: %v", err)
-		writeGatewayJSON(w, http.StatusUnauthorized, ErrorResponse{Error: "authentication required"})
+		writeAuthFailure(w, err)
 		return
 	}
 
@@ -675,6 +685,22 @@ func (h *Handler) HandleEnsureCredential(w http.ResponseWriter, r *http.Request)
 // header against the identity registry. Returns the autoputer ID if valid
 // (VAL-GATEWAY-003).
 func (h *Handler) authenticateAutoputer(r *http.Request) (string, error) {
+	computerID, err := h.authenticateBearer(r)
+	if err != nil {
+		return "", err
+	}
+	// SEC-05: the bearer works only from its computer's own address.
+	if err := h.checkBearerBinding(computerID, r); err != nil {
+		return "", err
+	}
+	return computerID, nil
+}
+
+// authenticateBearer is authenticateAutoputer without the SEC-05 binding: the
+// bearer and the runtime-peer rule only. The Jev route uses it because it
+// keeps its own strict pin (BindPeer) in every binding mode, with its own
+// refusal.
+func (h *Handler) authenticateBearer(r *http.Request) (string, error) {
 	auth := r.Header.Get("Authorization")
 	if auth == "" {
 		return "", fmt.Errorf("missing authorization header")
@@ -816,7 +842,7 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 	computerID, err := h.authenticateAutoputer(r)
 	if err != nil {
 		log.Printf("gateway: search authentication denied: %v", err)
-		writeGatewayJSON(w, http.StatusUnauthorized, ErrorResponse{Error: "authentication required"})
+		writeAuthFailure(w, err)
 		return
 	}
 

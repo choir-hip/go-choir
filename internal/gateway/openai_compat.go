@@ -221,7 +221,7 @@ func (h *Handler) HandleModels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := h.authenticateAutoputer(r); err != nil {
-		writeGatewayJSON(w, http.StatusUnauthorized, ErrorResponse{Error: "authentication required"})
+		writeAuthFailure(w, err)
 		return
 	}
 	writeGatewayJSON(w, http.StatusOK, map[string]any{
@@ -235,7 +235,11 @@ func (h *Handler) authorizeOpenAICompatibleRequest(w http.ResponseWriter, r *htt
 	computerID, err := h.authenticateAutoputer(r)
 	if err != nil {
 		log.Printf("gateway: openai-compatible authentication denied: %v", err)
-		writeGatewayJSON(w, http.StatusUnauthorized, openAIErrorResponse("authentication required"))
+		status, retry, message := authFailure(err)
+		if retry != "" {
+			w.Header().Set("Retry-After", retry)
+		}
+		writeGatewayJSON(w, status, openAIErrorResponse(message))
 		return "", false
 	}
 	if h.rateLimiter != nil {
