@@ -330,13 +330,6 @@ User edit: keep the model deterministic, cite the research assumptions, and requ
   await expect(filesApp.locator('[data-file-item]').filter({ hasText: 'evolution-ca.html' })).toBeVisible({ timeout: 10000 });
   await expect(filesApp.locator('[data-file-item]').filter({ hasText: 'evolution-ca.verify.js' })).toBeVisible();
 
-  await page.locator('[data-desktop-icon-id="browser"]').click();
-  const browserApp = page.locator('[data-browser-app]').last();
-  await expect(browserApp).toBeVisible({ timeout: 10000 });
-  await browserApp.locator('[data-browser-url-input]').fill(`data:text/html;charset=utf-8,${encodeURIComponent(artifactHTML)}`);
-  await browserApp.locator('[data-browser-go-btn]').click();
-  await expect(browserApp.locator('[data-browser-iframe]')).toHaveAttribute('src', /data:text\/html/, { timeout: 10000 });
-
   const traceSnapshot = await fetchJSON(page, `/api/trajectories/${encodeURIComponent(conductorSubmitted.submission_id)}`);
   const roles = (traceSnapshot.agents || []).map((agent) => agent.role || agent.profile || agent.label);
   expect(roles).toEqual(expect.arrayContaining(['conductor', 'texture', 'researcher', 'super', 'co-super']));

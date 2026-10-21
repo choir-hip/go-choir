@@ -1,298 +1,255 @@
 /**
- * Playwright tests for the Browser app.
+ * Playwright tests for Web Lens, the launcher.
  *
- * Covers:
- * - Browser app launches from left rail Browser icon
- * - URL input bar visible in window content area
- * - Typing URL and pressing Enter loads it in iframe
- * - Back/forward/reload buttons work
- * - Loading indicator shown while page loads
- * - Graceful error handling for blocked iframes
- * - Works in mobile focus mode
+ * Web Lens used to run a second browser inside the computer (Obscura, a
+ * headless browser the guest daemon started as root) and an unsandboxed
+ * iframe preview. It is now a launcher: it opens the original page in the
+ * device's own browser, and reads a Source Viewer snapshot made by the
+ * guarded import path
+ * (docs/problems/obscura-untrusted-javascript-as-guest-root-2026-10-21.md).
+ *
+ * These specs run on the logged-out desktop, so they need only the static
+ * frontend. The route-level guards matter more than the markup:
+ *
+ * - no request to /api/browser ever leaves the page;
+ * - nothing in the launcher is an iframe;
+ * - only http and https addresses become links, so javascript:, data: and
+ *   file: addresses are refused;
+ * - the link is a top-level navigation that cannot reach back to the
+ *   desktop (noopener) or leak its address (noreferrer).
  */
 import { test, expect } from './helpers/fixtures.js';
-import { registerPasskey } from './helpers/auth.js';
+import { webLensAddress } from '../src/lib/source-url.ts';
 
-const BASE_URL = 'http://localhost:4173';
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:4173';
 
-function uniqueEmail() {
-  return `browser-test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
+function trackBrowserBackendRequests(page) {
+  const requests = [];
+  page.on('request', (request) => {
+    const pathname = new URL(request.url()).pathname;
+    if (pathname.startsWith('/api/browser')) requests.push(pathname);
+  });
+  return requests;
 }
 
-// Helper: register a passkey and get to the authenticated desktop.
-async function registerAndLoadDesktop(page, authenticator, email) {
+// The specs need only the static frontend. Answer the session probe the way a
+// healthy server answers a signed-out browser (401, no retry) so the desktop
+// does not wait on a backend that is not there.
+async function routeSignedOutSession(page) {
+  await page.route('**/auth/session', (route) =>
+    route.fulfill({ status: 401, json: { error: 'not authenticated' } }),
+  );
+}
+
+async function openWebLens(page) {
+  await routeSignedOutSession(page);
   await page.goto(BASE_URL);
-  await registerPasskey(page, email, BASE_URL);
-  await page.reload();
   await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: 10000 });
+  await expect(page.locator('[data-desktop]')).toHaveAttribute('data-authenticated', 'false');
+  await page.locator('[data-desk-menu-button]').click();
+  await page.locator('[data-desk-sheet-app][data-desk-app-id="browser"]').click();
+  const app = page.locator('[data-browser-app]').last();
+  await expect(app).toBeVisible({ timeout: 5000 });
+  return app;
 }
 
-// Helper: open the Browser app from the floating desktop icon
-async function openBrowserApp(page) {
-  const browserIcon = page.locator('[data-desktop-icon-id="browser"]');
-  await browserIcon.click();
-  // Wait for browser app to appear
-  await page.locator('[data-browser-app]').waitFor({ state: 'visible', timeout: 10000 });
+async function submitAddress(app, value) {
+  const input = app.locator('[data-browser-url-input]');
+  await input.fill(value);
+  await app.locator('[data-browser-go-btn]').click();
 }
 
-// ---------------------------------------------------------------
-// Test: Browser app launches from floating desktop icon
-// ---------------------------------------------------------------
-test('browser app launches from floating desktop icon', async ({ page, authenticator }) => {
-  const email = uniqueEmail();
-  await registerAndLoadDesktop(page, authenticator, email);
+test('web lens is a launcher: no iframe, no browser history, no backend request', async ({ page }) => {
+  const backendRequests = trackBrowserBackendRequests(page);
+  const app = await openWebLens(page);
 
-  // Click the Browser floating desktop icon
-  await openBrowserApp(page);
+  await expect(app).toHaveAttribute('data-browser-launcher', '');
+  await expect(app.locator('[data-browser-url-input]')).toBeVisible();
+  await expect(app.locator('[data-browser-url-input]')).toBeEditable();
+  await expect(app.locator('[data-browser-go-btn]')).toBeVisible();
 
-  // Browser app window should appear
-  const browserApp = page.locator('[data-browser-app]');
-  await expect(browserApp).toBeVisible();
+  await submitAddress(app, 'https://example.com/some/page');
+  await expect(app.locator('[data-browser-open-original]')).toBeVisible();
 
-  // Window should have title "Browser"
-  const windowEl = page.locator('[data-window]').filter({ has: page.locator('[data-browser-app]') });
-  await expect(windowEl).toBeVisible();
+  await expect(app.locator('iframe')).toHaveCount(0);
+  await expect(app.locator('[data-browser-iframe]')).toHaveCount(0);
+  await expect(app.locator('[data-browser-nav-back]')).toHaveCount(0);
+  await expect(app.locator('[data-browser-nav-forward]')).toHaveCount(0);
+  await expect(app.locator('[data-browser-nav-reload]')).toHaveCount(0);
+  await expect(app.locator('[data-browser-backend-status]')).toHaveCount(0);
+  await expect(app.locator('[data-browser-backend-control]')).toHaveCount(0);
+  expect(backendRequests).toEqual([]);
 });
 
-// ---------------------------------------------------------------
-// Test: URL input bar visible in window content area
-// ---------------------------------------------------------------
-test('url input bar is visible', async ({ page, authenticator }) => {
-  const email = uniqueEmail();
-  await registerAndLoadDesktop(page, authenticator, email);
-  await openBrowserApp(page);
+test('open original is a top-level link that cannot reach back or leak the desktop address', async ({ page }) => {
+  const backendRequests = trackBrowserBackendRequests(page);
+  const app = await openWebLens(page);
 
-  // URL input should be visible
-  const urlInput = page.locator('[data-browser-url-input]');
-  await expect(urlInput).toBeVisible();
-  await expect(urlInput).toBeEditable();
-
-  // Navigation buttons should be present
-  await expect(page.locator('[data-browser-nav-back]')).toBeVisible();
-  await expect(page.locator('[data-browser-nav-forward]')).toBeVisible();
-  await expect(page.locator('[data-browser-nav-reload]')).toBeVisible();
-
-  // Go button should be present
-  await expect(page.locator('[data-browser-go-btn]')).toBeVisible();
+  await submitAddress(app, 'https://example.com/some/page?q=1');
+  const link = app.locator('a[data-browser-open-original]');
+  await expect(link).toBeVisible();
+  await expect(link).toHaveAttribute('href', 'https://example.com/some/page?q=1');
+  await expect(link).toHaveAttribute('target', '_blank');
+  const rel = (await link.getAttribute('rel')) || '';
+  expect(rel.split(/\s+/)).toEqual(expect.arrayContaining(['noopener', 'noreferrer']));
+  expect(backendRequests).toEqual([]);
 });
 
-// ---------------------------------------------------------------
-// Test: Typing URL and pressing Enter loads it in iframe
-// ---------------------------------------------------------------
-test('typing url and pressing enter loads iframe', async ({ page, authenticator }) => {
-  const email = uniqueEmail();
-  await registerAndLoadDesktop(page, authenticator, email);
-  await openBrowserApp(page);
+test('an address without a scheme gets https', async ({ page }) => {
+  const app = await openWebLens(page);
 
-  // Clear and type a URL that allows iframe embedding
-  const urlInput = page.locator('[data-browser-url-input]');
-  await urlInput.clear();
-  await urlInput.fill('https://en.wikipedia.org/wiki/Go_(programming_language)');
-  await urlInput.press('Enter');
-
-  // iframe should appear with the URL
-  const iframe = page.locator('[data-browser-iframe]');
-  await expect(iframe).toBeVisible({ timeout: 10000 });
-
-  // Verify iframe src contains the URL
-  const src = await iframe.getAttribute('src');
-  expect(src).toContain('wikipedia.org');
+  await submitAddress(app, 'example.com');
+  await expect(app.locator('a[data-browser-open-original]')).toHaveAttribute('href', 'https://example.com');
 });
 
-// ---------------------------------------------------------------
-// Test: Go button also triggers navigation
-// ---------------------------------------------------------------
-test('go button triggers navigation', async ({ page, authenticator }) => {
-  const email = uniqueEmail();
-  await registerAndLoadDesktop(page, authenticator, email);
-  await openBrowserApp(page);
+for (const [label, address] of [
+  ['javascript', 'javascript:alert(document.domain)'],
+  ['data', 'data:text/html;charset=utf-8,%3Ch1%3Ex%3C%2Fh1%3E'],
+  ['file', 'file:///etc/passwd'],
+  ['blob', 'blob:https://example.com/00000000-0000-0000-0000-000000000000'],
+  ['plain words', 'not an address'],
+]) {
+  test(`web lens refuses a ${label} address`, async ({ page }) => {
+    const backendRequests = trackBrowserBackendRequests(page);
+    const app = await openWebLens(page);
 
-  const urlInput = page.locator('[data-browser-url-input]');
-  await urlInput.clear();
-  await urlInput.fill('https://example.com');
+    await submitAddress(app, address);
+    await expect(app.locator('[data-browser-error]')).toBeVisible();
+    await expect(app.locator('[data-browser-open-original]')).toHaveCount(0);
+    await expect(app.locator('[data-browser-open-snapshot]')).toHaveCount(0);
+    await expect(app.locator('iframe')).toHaveCount(0);
+    expect(backendRequests).toEqual([]);
+  });
+}
 
-  // Click Go button
-  await page.locator('[data-browser-go-btn]').click();
+test('logged-out web lens offers the original but no snapshot, and calls no protected route', async ({ page }) => {
+  const protectedRequests = [];
+  page.on('request', (request) => {
+    const pathname = new URL(request.url()).pathname;
+    if (
+      pathname.startsWith('/api/browser') ||
+      pathname.startsWith('/api/content') ||
+      pathname.startsWith('/api/trajectories') ||
+      pathname.startsWith('/api/runs')
+    ) {
+      protectedRequests.push(pathname);
+    }
+  });
+  const app = await openWebLens(page);
 
-  // iframe should appear
-  const iframe = page.locator('[data-browser-iframe]');
-  await expect(iframe).toBeVisible({ timeout: 10000 });
-
-  const src = await iframe.getAttribute('src');
-  expect(src).toContain('example.com');
+  await submitAddress(app, 'https://example.com');
+  await expect(app.locator('[data-browser-open-original]')).toBeVisible();
+  await expect(app.locator('[data-browser-open-snapshot]')).toHaveCount(0);
+  expect(protectedRequests).toEqual([]);
 });
 
-test('browser app preserves data urls for generated local artifacts', async ({ page, authenticator }) => {
-  const email = uniqueEmail();
-  await registerAndLoadDesktop(page, authenticator, email);
-  await openBrowserApp(page);
-
-  const artifactUrl = 'data:text/html;charset=utf-8,%3Ch1%3ELocal%20artifact%3C%2Fh1%3E';
-  const urlInput = page.locator('[data-browser-url-input]');
-  await urlInput.clear();
-  await urlInput.fill(artifactUrl);
-  await page.locator('[data-browser-go-btn]').click();
-
-  const iframe = page.locator('[data-browser-iframe]');
-  await expect(iframe).toBeVisible({ timeout: 10000 });
-  await expect(iframe).toHaveAttribute('src', artifactUrl);
-});
-
-// ---------------------------------------------------------------
-// Test: Back/forward navigation works
-// ---------------------------------------------------------------
-test('back and forward navigation works', async ({ page, authenticator }) => {
-  const email = uniqueEmail();
-  await registerAndLoadDesktop(page, authenticator, email);
-  await openBrowserApp(page);
-
-  // Navigate to first URL
-  const urlInput = page.locator('[data-browser-url-input]');
-  await urlInput.clear();
-  await urlInput.fill('https://en.wikipedia.org');
-  await urlInput.press('Enter');
-
-  const iframe = page.locator('[data-browser-iframe]');
-  await expect(iframe).toBeVisible({ timeout: 10000 });
-
-  // Navigate to second URL
-  await urlInput.clear();
-  await urlInput.fill('https://example.com');
-  await urlInput.press('Enter');
-  await expect(iframe).toBeVisible({ timeout: 10000 });
-
-  let src = await iframe.getAttribute('src');
-  expect(src).toContain('example.com');
-
-  // Click back
-  const backBtn = page.locator('[data-browser-nav-back]');
-  await expect(backBtn).toBeEnabled();
-  await backBtn.click();
-
-  // Wait for iframe to update
-  await page.waitForTimeout(500);
-
-  // Click forward
-  const forwardBtn = page.locator('[data-browser-nav-forward]');
-  await expect(forwardBtn).toBeEnabled();
-  await forwardBtn.click();
-
-  await page.waitForTimeout(500);
-});
-
-// ---------------------------------------------------------------
-// Test: Reload button works
-// ---------------------------------------------------------------
-test('reload button refreshes the page', async ({ page, authenticator }) => {
-  const email = uniqueEmail();
-  await registerAndLoadDesktop(page, authenticator, email);
-  await openBrowserApp(page);
-
-  // Navigate to a URL
-  const urlInput = page.locator('[data-browser-url-input]');
-  await urlInput.clear();
-  await urlInput.fill('https://example.com');
-  await urlInput.press('Enter');
-
-  const iframe = page.locator('[data-browser-iframe]');
-  await expect(iframe).toBeVisible({ timeout: 10000 });
-
-  // Click reload
-  const reloadBtn = page.locator('[data-browser-nav-reload]');
-  await expect(reloadBtn).toBeEnabled();
-  await reloadBtn.click();
-
-  // iframe should still be visible
-  await expect(iframe).toBeVisible({ timeout: 5000 });
-});
-
-// ---------------------------------------------------------------
-// Test: Loading indicator shown while page loads
-// ---------------------------------------------------------------
-test('loading indicator appears while loading', async ({ page, authenticator }) => {
-  const email = uniqueEmail();
-  await registerAndLoadDesktop(page, authenticator, email);
-  await openBrowserApp(page);
-
-  // Navigate — the loading indicator should appear at least momentarily
-  const urlInput = page.locator('[data-browser-url-input]');
-  await urlInput.clear();
-  await urlInput.fill('https://example.com');
-  await urlInput.press('Enter');
-
-  // The loading bar might be very brief, so we just verify the iframe eventually appears
-  const iframe = page.locator('[data-browser-iframe]');
-  await expect(iframe).toBeVisible({ timeout: 10000 });
-});
-
-// ---------------------------------------------------------------
-// Test: URL auto-prefixes https://
-// ---------------------------------------------------------------
-test('url auto-prefixes https protocol', async ({ page, authenticator }) => {
-  const email = uniqueEmail();
-  await registerAndLoadDesktop(page, authenticator, email);
-  await openBrowserApp(page);
-
-  const urlInput = page.locator('[data-browser-url-input]');
-  await urlInput.clear();
-  await urlInput.fill('example.com');
-  await urlInput.press('Enter');
-
-  const iframe = page.locator('[data-browser-iframe]');
-  await expect(iframe).toBeVisible({ timeout: 10000 });
-
-  const src = await iframe.getAttribute('src');
-  expect(src).toBe('https://example.com');
-});
-
-// ---------------------------------------------------------------
-// Test: Single-instance — clicking icon again focuses existing window
-// ---------------------------------------------------------------
-test('clicking browser icon again focuses existing window', async ({ page, authenticator }) => {
-  const email = uniqueEmail();
-  await registerAndLoadDesktop(page, authenticator, email);
-
-  // Open browser app via click
-  await openBrowserApp(page);
-
-  // Count windows
-  const windowCount = await page.locator('[data-window][data-window-id]').count();
-
-  // Click browser icon again
-  await page.locator('[data-desktop-icon-id="browser"]').click();
-  await page.waitForTimeout(500);
-
-  // Should still have the same number of windows (no duplicate)
-  const newWindowCount = await page.locator('[data-window][data-window-id]').count();
-  expect(newWindowCount).toBe(windowCount);
-});
-
-// ---------------------------------------------------------------
-// Test: Works in mobile focus mode
-// ---------------------------------------------------------------
-test('browser app works in mobile focus mode', async ({ page, authenticator }) => {
-  const email = uniqueEmail();
-
-  // Set mobile viewport before navigating
+test('web lens works in mobile focus mode', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
-  await registerAndLoadDesktop(page, authenticator, email);
+  const app = await openWebLens(page);
 
-  // Click the Browser floating desktop icon
-  await openBrowserApp(page);
+  await submitAddress(app, 'https://example.com');
+  const link = app.locator('a[data-browser-open-original]');
+  await expect(link).toBeVisible();
+  const box = await link.boundingBox();
+  expect(box).not.toBeNull();
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(375);
+});
 
-  // Browser app should appear in full-width focus mode
-  const browserApp = page.locator('[data-browser-app]');
-  await expect(browserApp).toBeVisible({ timeout: 10000 });
+// ---------------------------------------------------------------
+// The address check is one pure function; pin its table directly.
+// ---------------------------------------------------------------
+test('webLensAddress accepts only http and https addresses with a real host', () => {
+  const accepted = [
+    ['https://example.com', 'https://example.com'],
+    ['  http://example.com/a?b=c#d  ', 'http://example.com/a?b=c#d'],
+    ['HTTPS://EXAMPLE.COM/Path', 'HTTPS://EXAMPLE.COM/Path'],
+    ['example.com', 'https://example.com'],
+    ['example.com/path?q=1', 'https://example.com/path?q=1'],
+    ['example.com:8080/path', 'https://example.com:8080/path'],
+    ['http://localhost:3000/', 'http://localhost:3000/'],
+  ];
+  for (const [input, want] of accepted) {
+    expect(webLensAddress(input), input).toBe(want);
+  }
 
-  // URL input should be accessible
-  const urlInput = page.locator('[data-browser-url-input]');
-  await expect(urlInput).toBeVisible();
+  const refused = [
+    '',
+    '   ',
+    'javascript:alert(1)',
+    'JaVaScRiPt:alert(1)',
+    'javascript://example.com/%0aalert(1)',
+    'data:text/html,<h1>x</h1>',
+    'file:///etc/passwd',
+    'blob:https://example.com/00000000-0000-0000-0000-000000000000',
+    'vbscript:msgbox(1)',
+    'mailto:someone@example.com',
+    'ftp://example.com/file',
+    'view-source:https://example.com',
+    'about:blank',
+    'https://example.com@evil.test/',
+    'example.com@evil.test',
+    'user:pass@example.com',
+    'not an address',
+    'localhost',
+    'https://',
+  ];
+  for (const input of refused) {
+    expect(webLensAddress(input), input).toBe('');
+  }
+  expect(webLensAddress(undefined)).toBe('');
+  expect(webLensAddress(null)).toBe('');
+  expect(webLensAddress({ toString: () => 'https://example.com' })).toBe('https://example.com');
+});
 
-  // Navigate to a URL
-  await urlInput.clear();
-  await urlInput.fill('https://example.com');
-  await urlInput.press('Enter');
+// ---------------------------------------------------------------
+// Signed in: the snapshot button opens the Source Viewer, which reads the
+// address through /api/content/import-url (the guarded path research uses).
+// The session and the computer are answered by routes, so no backend runs.
+// ---------------------------------------------------------------
+test('signed-in web lens opens the Source Viewer through the guarded import path', async ({ page }) => {
+  const backendRequests = trackBrowserBackendRequests(page);
+  const imports = [];
 
-  const iframe = page.locator('[data-browser-iframe]');
-  await expect(iframe).toBeVisible({ timeout: 10000 });
+  // The last route registered wins, so the catch-all goes first.
+  await page.route('**/api/**', (route) => route.fulfill({ json: {} }));
+  await page.route('**/auth/session', (route) =>
+    route.fulfill({ json: { authenticated: true, user: { id: 'user-1', email: 'owner@example.com' } } }),
+  );
+  await page.route('**/api/shell/bootstrap', (route) =>
+    route.fulfill({ json: { computer_id: 'computer-1' } }),
+  );
+  await page.route('**/api/content/import-url', async (route) => {
+    imports.push(route.request().postDataJSON());
+    await route.fulfill({
+      json: {
+        content_id: 'content-1',
+        title: 'Example page',
+        source_url: 'https://example.com/read',
+        media_type: 'text/markdown',
+        app_hint: 'content',
+        text_content: 'Snapshot text from the guarded import path.',
+      },
+    });
+  });
+
+  await page.goto(BASE_URL);
+  await page
+    .locator('[data-desktop][data-authenticated="true"][data-desktop-ready="true"]')
+    .waitFor({ state: 'visible', timeout: 30000 });
+  await page.locator('[data-desk-menu-button]').click();
+  await page.locator('[data-desk-sheet-app][data-desk-app-id="browser"]').click();
+  const app = page.locator('[data-browser-app]').last();
+  await expect(app).toBeVisible({ timeout: 5000 });
+
+  await submitAddress(app, 'https://example.com/read');
+  await expect(app.locator('[data-browser-open-original]')).toBeVisible();
+  expect(imports).toEqual([]);
+
+  await app.locator('[data-browser-open-snapshot]').click();
+  const viewer = page.locator('[data-content-viewer]').last();
+  await expect(viewer).toContainText('Snapshot text from the guarded import path.', { timeout: 10000 });
+  expect(imports).toHaveLength(1);
+  expect(imports[0].url).toBe('https://example.com/read');
+  expect(backendRequests).toEqual([]);
 });
