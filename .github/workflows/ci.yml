@@ -29,6 +29,14 @@ concurrency:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  # Node B's public host keys, pinned (SDC SEC-14): every ssh to Node B
+  # checks them strictly under the alias go-choir-node-b, so a host that
+  # answers at Node B's address with another key is refused instead of
+  # trusted on first use. Public keys, not secrets. When Node B's host keys
+  # change, update these lines (ssh node-b cat /etc/ssh/ssh_host_*_key.pub).
+  NODE_B_KNOWN_HOSTS: |
+    go-choir-node-b ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFCjvDBN+AUYh84Zo2uaiD4QhByU8/LxKWdBgi5ut192
+    go-choir-node-b ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDENbH4x5c1yY6hNtkplDlrbcrs+3ZALkk7FeaOGKP4hHuqOnWAiZ4//Y/JMhxFsZrb70TvLBro3EZ63Z57r3zAtlo+zu41rsxDQbY0YBiHNZI5nEDRK7mqzit5u+4GN/to4o6Gd90pLRm6FOi8xUMlL1g6m9T7M04YOmooHjoIhlLmdQ6lpLtMuR1pxopCyNFyk+1Z/zqDqPT3/EfiwDW7HbLDvGXfVD5vI93r4983k5RfyJsY5vUUnzatQ9tZmk1cLAk5tUg/6jTychGoKicf+zyHYgkFM7UibCHrlgoirq1Ld8yA7vF3vhYQHEymxeDOO0gnDeu/cWlHUvZgGPyg7Nmz6rdqc9R8UbIIl5NntBD3pwuwPrp2k2gh6CYVa93lr1BIuhwArbP0PJ8vLgSFDuveHaOdzp4ZQ+M6RJjlsJsFeYP7vhvNiqAguJo83xKKKmAHINYfPw0DeyBpQWxhAiuupwjueI1NMan1sPbDSXhmV95aSUQfeXqlP+BhXaVNRTtLVi6eHBQpvGbUueeWgorQXvkrg9ttgCW9xPJaSvOtIOQKTMY2rkcOJUk+KPNR2/hd54vU8vlwVZ89ohFvP9syUryVLezh3NTquQdptE7uHSC07dBBK8gZNxvcxngtr+HFHGAevGq/dIpNB4obSWPUyQedMkeTlAP2sPOo/w==
 
 jobs:
   plan:
@@ -685,7 +693,8 @@ jobs:
           install -d -m 0700 ~/.ssh
           printf '%s\n' "${{ secrets.OVH_DEPLOY_SSH_KEY }}" >~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          if timeout 30 ssh -i ~/.ssh/deploy_key -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+          printf '%s' "$NODE_B_KNOWN_HOSTS" >~/.ssh/node_b_known_hosts
+          if timeout 30 ssh -i ~/.ssh/deploy_key -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=yes -o HostKeyAlias=go-choir-node-b -o UserKnownHostsFile=~/.ssh/node_b_known_hosts \
             "root@${{ secrets.OVH_NODE_B_HOST }}" 'cat /var/lib/go-choir/deploy-receipt.json' >"$receipt_json" 2>/dev/null; then
             echo "Read Node B deploy receipt (target $(jq -r '.target_commit // "unknown"' "$receipt_json" 2>/dev/null))"
           else
@@ -799,13 +808,15 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.OVH_DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H ${{ secrets.OVH_NODE_B_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+          printf '%s' "$NODE_B_KNOWN_HOSTS" > ~/.ssh/node_b_known_hosts
           cat > ~/.ssh/config <<EOF
           Host go-choir-node-b
             HostName ${{ secrets.OVH_NODE_B_HOST }}
             User root
             IdentityFile ~/.ssh/deploy_key
-            StrictHostKeyChecking no
+            HostKeyAlias go-choir-node-b
+            UserKnownHostsFile ~/.ssh/node_b_known_hosts
+            StrictHostKeyChecking yes
             ServerAliveInterval 30
             ServerAliveCountMax 6
           EOF
@@ -944,13 +955,15 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.OVH_DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H ${{ secrets.OVH_NODE_B_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+          printf '%s' "$NODE_B_KNOWN_HOSTS" > ~/.ssh/node_b_known_hosts
           cat > ~/.ssh/config <<EOF
           Host go-choir-node-b
             HostName ${{ secrets.OVH_NODE_B_HOST }}
             User root
             IdentityFile ~/.ssh/deploy_key
-            StrictHostKeyChecking no
+            HostKeyAlias go-choir-node-b
+            UserKnownHostsFile ~/.ssh/node_b_known_hosts
+            StrictHostKeyChecking yes
             ServerAliveInterval 30
             ServerAliveCountMax 6
           EOF
