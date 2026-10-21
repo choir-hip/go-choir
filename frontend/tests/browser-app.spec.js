@@ -19,7 +19,7 @@
  *   desktop (noopener) or leak its address (noreferrer).
  */
 import { test, expect } from './helpers/fixtures.js';
-import { webLensAddress } from '../src/lib/source-url.ts';
+import { webLensAddress, storedSnapshotApplies } from '../src/lib/source-url.ts';
 
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:4173';
 
@@ -252,4 +252,18 @@ test('signed-in web lens opens the Source Viewer through the guarded import path
   expect(imports).toHaveLength(1);
   expect(imports[0].url).toBe('https://example.com/read');
   expect(backendRequests).toEqual([]);
+});
+
+// A stored reader snapshot is the immutable text of the address it was taken
+// from. Changing the address must not let that text be imported under the new
+// address (the Open in Texture import would relabel it with the wrong
+// source_url, canonical_url and provenance).
+test('a stored snapshot applies only while the address is the one it was taken from', () => {
+  const original = 'https://example.com/original';
+  expect(storedSnapshotApplies(original, original)).toBe(true);
+  expect(storedSnapshotApplies(original, 'https://example.com/other')).toBe(false);
+  expect(storedSnapshotApplies(original, '')).toBe(false);
+  // A snapshot taken from no address belongs to no address that is typed.
+  expect(storedSnapshotApplies('', '')).toBe(true);
+  expect(storedSnapshotApplies('', 'https://example.com/typed')).toBe(false);
 });
