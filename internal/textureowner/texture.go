@@ -149,9 +149,12 @@ type textureDocumentExportResponse struct {
 
 // textureDocumentResponse is the JSON response for GET /api/texture/documents/{id}.
 type textureDocumentResponse struct {
-	DocID                string `json:"doc_id"`
-	OwnerID              string `json:"owner_id"`
-	Title                string `json:"title"`
+	DocID   string `json:"doc_id"`
+	OwnerID string `json:"owner_id"`
+	Title   string `json:"title"`
+	// ComputerID is the document's own scope; the proxy's Research more door
+	// recomputes the owner revision id from it (problem doc P4, 2026-10-21).
+	ComputerID           string `json:"computer_id,omitempty"`
 	TrajectoryID         string `json:"trajectory_id,omitempty"`
 	CurrentRevisionID    string `json:"current_revision_id,omitempty"`
 	CurrentVersionNumber int    `json:"current_version_number"`
@@ -1345,6 +1348,7 @@ func (h *Handler) textureDocumentResponse(ctx context.Context, doc types.Documen
 		DocID:             doc.DocID,
 		OwnerID:           doc.OwnerID,
 		Title:             doc.Title,
+		ComputerID:        doc.ComputerID,
 		TrajectoryID:      doc.TrajectoryID,
 		CurrentRevisionID: doc.CurrentRevisionID,
 		CreatedAt:         doc.CreatedAt.Format("2006-01-02T15:04:05.000Z"),

@@ -635,3 +635,28 @@ func TestOwnerReviseAfterTextureSettledReopensTextureWork(t *testing.T) {
 		t.Fatalf("revise after settle dispatched no wake")
 	}
 }
+
+// The proxy's Research more door reads a story's document from the paper
+// and recomputes the owner revision id from owner, computer, trajectory and
+// client request id (internal/proxy/platform_expand.go). The read must carry
+// all three heads, and the computer id must be the document's own scope, the
+// one handleLifecycleOwnerRevision hashes. Failure modes pinned: the field
+// absent (staging 2026-10-21, problem doc P4); a different computer id.
+func TestDocumentReadCarriesLifecycleHeadsForTheExpandDoor(t *testing.T) {
+	core, handler := testAPISetup(t)
+	start := startObservationLifecycle(t, core.Store())
+	request := httptest.NewRequest(http.MethodGet, "/api/texture/documents/"+start.InitialDocument.DocID, nil)
+	request.Header.Set("X-Authenticated-User", start.OwnerID)
+	response := httptest.NewRecorder()
+	handler.HandleTextureRouter(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("get document status=%d body=%s", response.Code, response.Body.String())
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(response.Body.Bytes(), &doc); err != nil {
+		t.Fatal(err)
+	}
+	if doc["computer_id"] != start.ComputerID || doc["trajectory_id"] != start.TrajectoryID || doc["current_revision_id"] == "" || doc["current_revision_id"] == nil {
+		t.Fatalf("document heads computer=%v (want %s) trajectory=%v (want %s) revision=%v", doc["computer_id"], start.ComputerID, doc["trajectory_id"], start.TrajectoryID, doc["current_revision_id"])
+	}
+}
