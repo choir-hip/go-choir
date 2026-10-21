@@ -183,6 +183,14 @@ boundaries:
 
 now:
   status: checkpoint_incomplete
+  batch1_fix: >-
+    Reviewer edits applied on lane/b3-desk-boundary-b1fix: (1) prlimit64 is
+    read-only for a confined worker (pid 0 or self, null new_limit);
+    (2) a bad wire version or reserved byte records a transport refusal
+    (desk.egress, refused, verb "transport") before the worker ends;
+    (3) memory.swap.max tolerates ENOENT. Not yet proved on a live guest: the
+    sibling-rlimit denial is proved by confined-worker probes and a filter unit
+    test only. The second batch is on lane/b3-desk-boundary-2.
   slice: >-
     hand-off to FP0: the candidate is the lane branch; RES-04 (capsule memory per
     doctrine) and SEC-15's non-root daemon and document-tool sandbox are not built
@@ -482,3 +490,16 @@ first on the paper.
   cannot do more (dev, CI). The guest image sets `required`, pinned by a test. A
   stricter default (required unless a test says otherwise) would need every
   desk-spawning test to opt out explicitly; FP0 decides.
+- Same-UID sub-roles (`research`/`research_child` on 61003, `management`/
+  `management_task` on 61001) share read access to `/tmp` (the default
+  `AllowedRoot`) and share a UID, so a sibling can read another's
+  `choir-cell-*` directory. Fix later: distinct UIDs per sub-role and an empty
+  read-only `AllowedRoot` for non-engineering desks (Argon).
+- The aggregate desks `memory.high` near 3 GiB can throttle every desk's
+  descendants before any reaches its own hard limit, the mechanism measured and
+  removed at worker level. Remove it or justify it with concurrent-load
+  measurements and aggregate-event visibility (sol).
+- There is no one guest-wide memory budget: the desks aggregate allows about
+  half of MemTotal while capsule admission independently allows three quarters
+  (`internal/capsule/job_memory.go`); `MemoryMin=512M` is not OOM immunity
+  (sol).
