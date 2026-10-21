@@ -3,6 +3,8 @@ package proxy
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -26,6 +28,9 @@ type publishTextureRequest struct {
 	Slug         string          `json:"slug,omitempty"`
 	AccessPolicy json.RawMessage `json:"access_policy,omitempty"`
 	ExportPolicy json.RawMessage `json:"export_policy,omitempty"`
+	// AuthorLabel is the opinion route's byline, set by the proxy from the
+	// session and never read from a body.
+	AuthorLabel string `json:"-"`
 }
 
 type autoputerTextureDocument struct {
@@ -144,6 +149,81 @@ func (h *Handler) HandleTexturePublication(w http.ResponseWriter, r *http.Reques
 	h.publishTextureRevision(w, r, authResult.UserID, autoputerURL, req, platform.PublishModeOwner, started)
 }
 
+// opinionPublishRequest is the body of POST /api/platform/texture/opinions:
+// the document, its revision and a slug. The mode, the owner, the access
+// policy and the byline are the route's, never the body's.
+type opinionPublishRequest struct {
+	DocID      string `json:"doc_id"`
+	RevisionID string `json:"revision_id,omitempty"`
+	Slug       string `json:"slug,omitempty"`
+}
+
+// opinionAccessPolicy is the access policy of every opinion piece: public
+// and routed, so the Opinion section can list it.
+var opinionAccessPolicy = json.RawMessage(`{"visibility":"public","route":"public"}`)
+
+// opinionAuthorLabel is a signed-in user's byline: a short stable handle
+// derived from the user id. The auth store holds no display name, and the
+// email is never published.
+func opinionAuthorLabel(userID string) string {
+	sum := sha256.Sum256([]byte("choir-opinion-author:" + strings.TrimSpace(userID)))
+	return "writer-" + hex.EncodeToString(sum[:])[:6]
+}
+
+// HandleOpinionPublication serves POST /api/platform/texture/opinions: a
+// signed-in user publishes one revision of their own Texture as an opinion
+// piece. It takes a browser session only (an API key, which a headless agent
+// may hold, is refused), runs the owner's publish path with the opinion mode
+// the route sets, and leaves the kill switch, the daily limit and the byline
+// rules to corpusd.
+func (h *Handler) HandleOpinionPublication(w http.ResponseWriter, r *http.Request) {
+	started := time.Now()
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
+		return
+	}
+	authResult, err := h.authenticate(r)
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
+		h.lifecycle.record("platform_opinion.auth", "unauthorized", time.Since(started))
+		return
+	}
+	if authResult.AuthMethod != "cookie" || strings.TrimSpace(authResult.UserID) == "" {
+		writeJSON(w, http.StatusForbidden, errorResponse{Error: "publishing as opinion needs a signed-in browser session"})
+		h.lifecycle.record("platform_opinion.auth", "forbidden", time.Since(started))
+		return
+	}
+	var body opinionPublishRequest
+	dec := json.NewDecoder(io.LimitReader(r.Body, 1<<16))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&body); err != nil || strings.TrimSpace(body.DocID) == "" {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid request body: doc_id is required"})
+		h.lifecycle.record("platform_opinion.total", "bad_request", time.Since(started))
+		return
+	}
+	desktopID := requestDesktopID(r)
+	computerTarget, ok := h.requireAPIKeyComputerTarget(w, r, authResult, "", desktopID)
+	if !ok {
+		h.lifecycle.record("platform_opinion.authz", "forbidden", time.Since(started))
+		return
+	}
+	autoputerURL, err := h.resolveComputerURLForComputerTarget(r.Context(), authResult, computerTarget, desktopID)
+	if err != nil {
+		log.Printf("proxy: platform opinion failed to resolve autoputer for user %s desktop %s: %v", authResult.UserID, desktopID, err)
+		writeAutoputerResolveFailure(w, http.StatusBadGateway, "failed to resolve user autoputer", err)
+		h.lifecycle.record("platform_opinion.total", "resolve_error", time.Since(started))
+		return
+	}
+	req := publishTextureRequest{
+		DocID:        strings.TrimSpace(body.DocID),
+		RevisionID:   strings.TrimSpace(body.RevisionID),
+		Slug:         strings.TrimSpace(body.Slug),
+		AccessPolicy: opinionAccessPolicy,
+		AuthorLabel:  opinionAuthorLabel(authResult.UserID),
+	}
+	h.publishTextureRevision(w, r, authResult.UserID, autoputerURL, req, platform.PublishModeOpinion, started)
+}
+
 // HandleGuestTexturePublication serves POST types.StoryPublishPath: a
 // computer publishing one revision of its own story (Cut 2 2b). The proxy
 // binds the calling guest to its owner and computer and runs the owner's
@@ -246,6 +326,7 @@ func (h *Handler) publishTextureRevision(w http.ResponseWriter, r *http.Request,
 		RevisionNumber: types.RevisionNumber(rev.VersionNumber),
 		RevisionHash:   rev.RevisionHash,
 		PublishMode:    publishMode,
+		AuthorLabel:    req.AuthorLabel,
 	}
 	platformResp, status, err := h.postPlatformPublication(r, platformReq)
 	if err != nil {

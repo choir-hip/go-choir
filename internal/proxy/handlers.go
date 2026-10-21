@@ -933,6 +933,9 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 	case path == "/api/platform/texture/publications":
 		h.HandleTexturePublication(w, r)
 		return
+	case path == "/api/platform/texture/opinions":
+		h.HandleOpinionPublication(w, r)
+		return
 	case path == "/api/platform/publications/resolve":
 		h.HandlePlatformPublicationResolve(w, r)
 		return

@@ -119,6 +119,7 @@ func (p *PublicationGraphStore) PublishTextureToGraph(ctx context.Context, param
 			"route_path":     params.RoutePath,
 			"publish_mode":   params.PublishMode,
 			"owner_id":       params.PublicationOwnerID,
+			"author_label":   params.AuthorLabel,
 		}),
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -646,6 +647,8 @@ type PublishGraphParams struct {
 	// fixed by its first version, carried through every later one.
 	PublishMode        string
 	PublicationOwnerID string
+	// AuthorLabel is an opinion piece's byline, fixed by its first version.
+	AuthorLabel        string
 	Revision           int
 	VersionMetadata    versionMetadata
 	ResolvedBlocksJSON []byte

@@ -67,6 +67,11 @@ type Service struct {
 	// publicBaseURL is the host a published piece's read_url names
 	// (CORPUSD_PUBLIC_BASE_URL); empty means DefaultPublicBaseURL.
 	publicBaseURL string
+	// opinionListing is the opinion kill switch (CORPUSD_OPINION_LISTING);
+	// off by default. opinionDailyLimit is the per-user daily cap on new
+	// opinion pieces (CORPUSD_OPINION_DAILY_LIMIT); zero means the default.
+	opinionListing    bool
+	opinionDailyLimit int
 	// frontImportance attaches model-judged importance scores to front
 	// rows when its scores file is present (publication_front_importance.go).
 	frontImportance frontImportanceCache
@@ -216,10 +221,11 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 	switch req.PublishMode {
 	case "":
 		req.PublishMode = PublishModeOwner
-	case PublishModeAuto, PublishModeOwner:
+	case PublishModeAuto, PublishModeOwner, PublishModeOpinion:
 	default:
-		return nil, fmt.Errorf("publish_mode %q is not %q or %q", req.PublishMode, PublishModeAuto, PublishModeOwner)
+		return nil, fmt.Errorf("publish_mode %q is not %q, %q or %q", req.PublishMode, PublishModeAuto, PublishModeOwner, PublishModeOpinion)
 	}
+	req.AuthorLabel = strings.TrimSpace(req.AuthorLabel)
 	if req.RequestedBy == "" {
 		req.RequestedBy = req.OwnerID
 	}
@@ -302,12 +308,14 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 	// So are its publish mode and owner: a story stays a story, and a hand
 	// published Texture stays off the front, whatever later versions say.
 	routePath := publicTexturePrefix + slugify(firstNonEmpty(req.Slug, req.Title)) + "-" + shortID(ident.PublicationID)
-	publishMode, publicationOwner := req.PublishMode, req.OwnerID
+	publishMode, publicationOwner, authorLabel := req.PublishMode, req.OwnerID, ""
+	existingMode := ""
 	if !newPublication {
 		var pubMeta struct {
 			RoutePath   string `json:"route_path"`
 			PublishMode string `json:"publish_mode"`
 			OwnerID     string `json:"owner_id"`
+			AuthorLabel string `json:"author_label"`
 		}
 		if err := json.Unmarshal(pubObj.Metadata, &pubMeta); err != nil || strings.TrimSpace(pubMeta.RoutePath) == "" {
 			return nil, fmt.Errorf("platform publish: publication %s has no route", ident.PublicationID)
@@ -315,8 +323,21 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 		routePath = pubMeta.RoutePath
 		// A publication written before modes were recorded takes this
 		// version's mode.
-		publishMode = firstNonEmpty(strings.TrimSpace(pubMeta.PublishMode), publishMode)
+		existingMode = strings.TrimSpace(pubMeta.PublishMode)
+		publishMode = firstNonEmpty(existingMode, publishMode)
 		publicationOwner = firstNonEmpty(strings.TrimSpace(pubMeta.OwnerID), publicationOwner)
+		authorLabel = strings.TrimSpace(pubMeta.AuthorLabel)
+	}
+	// An opinion piece is a public, labelled listing: the switch, the byline,
+	// the mode and the user's daily limit are checked before anything is
+	// written. Its byline is fixed by the first version.
+	if req.PublishMode == PublishModeOpinion {
+		if err := s.checkOpinionPublish(ctx, req, newPublication, existingMode); err != nil {
+			return nil, err
+		}
+	}
+	if publishMode == PublishModeOpinion && authorLabel == "" {
+		authorLabel = req.AuthorLabel
 	}
 	versionID := publicationVersionID(ident.PublicationID, revision)
 	versionCanonicalID, err := publicationVersionCanonicalID(req.OwnerID, versionID)
@@ -456,6 +477,7 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 		NewPublication:             newPublication,
 		PublishMode:                publishMode,
 		PublicationOwnerID:         publicationOwner,
+		AuthorLabel:                authorLabel,
 		Revision:                   revision,
 		VersionMetadata: versionMetadata{
 			EditionLabel:         "v" + strconv.Itoa(revision),

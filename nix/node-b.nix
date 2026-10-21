@@ -1012,6 +1012,17 @@ in
         # computer's owner (Cut 2 2b; docs/reports/reeng-autopaper-paper-computer-2026-10-13.md),
         # so tracer test computers' stories stay off choir.news's front page.
         "CORPUSD_AUTOPAPER_OWNERS=e5962310-8767-4624-87e5-a9b93a4e1db1"
+        # Opinion pieces: any signed-in user's Texture published as a
+        # labelled op-ed, listed in the Opinion section and found by research
+        # (docs/problems/oped-not-connected-2026-10-20.md). Kill switch, no
+        # deploy: write CORPUSD_OPINION_LISTING=off to
+        # /var/lib/go-choir/corpusd-retrieval.env (an EnvironmentFile
+        # overrides Environment) and restart corpusd; every opinion piece
+        # leaves the front, research search and the publish route at once,
+        # direct links keep working. New opinion pieces per user per 24 hours
+        # are capped by CORPUSD_OPINION_DAILY_LIMIT (default 5).
+        "CORPUSD_OPINION_LISTING=on"
+        "CORPUSD_OPINION_DAILY_LIMIT=5"
         # Platform-artifacts reachability GC
         # (docs/problems/artifact-store-grows-12gb-a-day-2026-10-14.md).
         # Keeps everything a current computer, restore point (pin) or route

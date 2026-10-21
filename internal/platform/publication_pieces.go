@@ -115,6 +115,9 @@ func (s *Service) pieceKind(meta frontPublicationMeta) string {
 	if s.isAutopaperStory(meta) {
 		return "story"
 	}
+	if s.isOpinionPiece(meta) {
+		return "opinion"
+	}
 	return ""
 }
 

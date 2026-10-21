@@ -35,6 +35,8 @@ type publicationHead struct {
 		Slug          string `json:"slug"`
 		Title         string `json:"title"`
 		State         string `json:"state"`
+		PublishMode   string `json:"publish_mode"`
+		AuthorLabel   string `json:"author_label"`
 	}
 	versions []publishedVersion
 	ref      publishedVersion
@@ -111,7 +113,11 @@ func (h *publicationHead) route() PublicationRoute {
 }
 
 func (h *publicationHead) publication() PublicationSummary {
-	return PublicationSummary{ID: h.pubMeta.PublicationID, Title: h.pubMeta.Title, Slug: h.pubMeta.Slug, State: h.pubMeta.State}
+	out := PublicationSummary{ID: h.pubMeta.PublicationID, Title: h.pubMeta.Title, Slug: h.pubMeta.Slug, State: h.pubMeta.State}
+	if h.pubMeta.PublishMode == PublishModeOpinion {
+		out.Kind, out.AuthorLabel = "opinion", h.pubMeta.AuthorLabel
+	}
+	return out
 }
 
 // GetPublicationNavByRoute answers a link with its route, publication and

@@ -12,6 +12,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -67,6 +68,12 @@ func main() {
 	// CORPUSD_AUTOPAPER_OWNERS is set; every owner's when unset.
 	svc.SetAutopaperOwners(platform.ParseAutopaperOwners(cfg.AutopaperOwnersRaw))
 	svc.SetPublicBaseURL(cfg.PublicBaseURL)
+	// Opinion pieces (signed-in users' labelled Texture, listed in the
+	// Opinion section) are off unless CORPUSD_OPINION_LISTING=on.
+	svc.SetOpinionListing(platform.ParseOpinionListing(cfg.OpinionListingRaw))
+	if n, err := strconv.Atoi(strings.TrimSpace(cfg.OpinionDailyLimitRaw)); err == nil {
+		svc.SetOpinionDailyLimit(n)
+	}
 	// Front rows carry importance scores when the host scorer's file is
 	// present; absent or unreadable, the front list is unchanged.
 	svc.SetFrontImportancePath(cfg.FrontImportancePath)

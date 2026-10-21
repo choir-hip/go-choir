@@ -126,7 +126,14 @@ func (h *Handler) HandleInternalPublishTexture(w http.ResponseWriter, r *http.Re
 	resp, err := h.service.PublishTexture(r.Context(), req)
 	if err != nil {
 		log.Printf("corpusd: publish texture: %v", err)
-		writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+		status := http.StatusBadRequest
+		switch {
+		case errors.Is(err, ErrOpinionDailyLimit):
+			status = http.StatusTooManyRequests
+		case errors.Is(err, ErrOpinionListingOff), errors.Is(err, ErrOpinionModeConflict):
+			status = http.StatusConflict
+		}
+		writeJSON(w, status, apiError{Error: err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusCreated, resp)

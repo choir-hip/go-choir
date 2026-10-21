@@ -55,6 +55,11 @@ type FrontStory struct {
 	// and zero means a body with no citations.
 	SourceCount *int `json:"source_count,omitempty"`
 	Words       *int `json:"words,omitempty"`
+	// Kind is "opinion" for a row of the Opinion section; empty for an
+	// Autopaper story. Author is the opinion piece's byline (a handle, never
+	// an email); empty for a story.
+	Kind   string `json:"kind,omitempty"`
+	Author string `json:"author,omitempty"`
 }
 
 // FrontRoute is a story's bare link (serves the latest version in place)
@@ -201,7 +206,7 @@ func (s *Service) ListFrontStoriesInSection(ctx context.Context, limit int, curs
 		return nil, fmt.Errorf("platform service: object graph store unavailable")
 	}
 	section = strings.TrimSpace(section)
-	if section != "" && !frontSections[section] {
+	if section != "" && section != FrontSectionOpinion && !frontSections[section] {
 		return nil, ErrInvalidFrontSection
 	}
 	if limit <= 0 {
@@ -214,7 +219,13 @@ func (s *Service) ListFrontStoriesInSection(ctx context.Context, limit int, curs
 	if err != nil {
 		return nil, ErrInvalidFrontCursor
 	}
-	if section != "" {
+	opinion := section == FrontSectionOpinion
+	if opinion && !s.opinionEnabled() {
+		// The kill switch hides the whole section: an empty bucket, not an
+		// error, so the front renders without it.
+		return &FrontPage{Stories: []FrontStory{}}, nil
+	}
+	if section != "" && !opinion {
 		return s.listFrontSection(ctx, og, limit, after, section)
 	}
 
@@ -233,7 +244,7 @@ func (s *Service) ListFrontStoriesInSection(ctx context.Context, limit int, curs
 		}
 		for _, pub := range batch {
 			after = &frontCursor{UpdatedAt: pub.UpdatedAt.Unix(), CanonicalID: pub.CanonicalID}
-			row, ok, err := s.frontStory(ctx, og, pub)
+			row, ok, err := s.frontRow(ctx, og, pub, opinion)
 			if err != nil {
 				return nil, err
 			}
@@ -263,7 +274,9 @@ func (s *Service) ListFrontStoriesInSection(ctx context.Context, limit int, curs
 	sort.SliceStable(page.Stories, func(i, j int) bool {
 		return page.Stories[i].UpdatedAt.After(page.Stories[j].UpdatedAt)
 	})
-	s.attachFrontImportance(page.Stories)
+	if !opinion {
+		s.attachFrontImportance(page.Stories)
+	}
 	return page, nil
 }
 
@@ -403,11 +416,25 @@ func (s *Service) frontPublicationBatch(ctx context.Context, after *frontCursor,
 // published, no version, or a latest version whose access policy keeps it
 // off public routes.
 func (s *Service) frontStory(ctx context.Context, og *ObjectGraphStore, pub frontPublicationRow) (FrontStory, bool, error) {
+	return s.frontRow(ctx, og, pub, false)
+}
+
+// frontRow is frontStory for either list: the news front (opinion false:
+// Autopaper stories only) or the Opinion section (opinion true: opinion
+// pieces only, with the kill switch on).
+func (s *Service) frontRow(ctx context.Context, og *ObjectGraphStore, pub frontPublicationRow, opinion bool) (FrontStory, bool, error) {
 	var meta frontPublicationMeta
 	if err := json.Unmarshal(pub.Metadata, &meta); err != nil {
 		return FrontStory{}, false, nil
 	}
-	if meta.State != "published" || strings.TrimSpace(meta.RoutePath) == "" || !s.isAutopaperStory(meta) {
+	if meta.State != "published" || strings.TrimSpace(meta.RoutePath) == "" {
+		return FrontStory{}, false, nil
+	}
+	if opinion {
+		if !s.isOpinionPiece(meta) {
+			return FrontStory{}, false, nil
+		}
+	} else if !s.isAutopaperStory(meta) {
 		return FrontStory{}, false, nil
 	}
 	versions, err := publishedVersions(ctx, og, pub.CanonicalID)
@@ -452,7 +479,13 @@ func (s *Service) frontStory(ctx context.Context, og *ObjectGraphStore, pub fron
 	}
 	bare := normalizePublicationRoutePath(meta.RoutePath)
 	sourceCount, words := frontDepth(manifest.BodyDoc, manifest.Anchors)
+	kind, author := "", ""
+	if opinion {
+		kind, author = "opinion", meta.AuthorLabel
+	}
 	return FrontStory{
+		Kind:           kind,
+		Author:         author,
 		PublicationID:  firstNonEmpty(meta.PublicationID, versionMeta.PublicationID),
 		Title:          title,
 		Dek:            dek,

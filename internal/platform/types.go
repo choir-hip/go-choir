@@ -35,12 +35,19 @@ type PublishTextureRequest struct {
 	// The first version's mode is recorded on the publication and kept;
 	// only auto publications are Autopaper stories. Empty means owner.
 	PublishMode string `json:"publish_mode,omitempty"`
+	// AuthorLabel is an opinion piece's byline, a short handle the proxy
+	// derives from the signed-in session (never an email). It is required
+	// for PublishModeOpinion and fixed by the publication's first version.
+	AuthorLabel string `json:"author_label,omitempty"`
 }
 
 // Publish modes (PublishTextureRequest.PublishMode).
 const (
 	PublishModeAuto  = "auto"
 	PublishModeOwner = "owner"
+	// PublishModeOpinion is a signed-in user's labelled opinion piece, listed
+	// in the Opinion section; it is never an Autopaper story.
+	PublishModeOpinion = "opinion"
 )
 
 type PublishTextureResponse struct {
@@ -89,6 +96,10 @@ type PublicationSummary struct {
 	Title string `json:"title"`
 	Slug  string `json:"slug"`
 	State string `json:"state"`
+	// Kind is "opinion" for an opinion piece, whose page shows the Opinion
+	// label and AuthorLabel in place of the AI disclosure; empty otherwise.
+	Kind        string `json:"kind,omitempty"`
+	AuthorLabel string `json:"author_label,omitempty"`
 }
 
 type PublicationVersionSummary struct {
