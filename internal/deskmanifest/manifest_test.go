@@ -335,3 +335,32 @@ func TestGuestImageUsersMatchTheManifest(t *testing.T) {
 		t.Error("the guest image does not protect the daemon's memory (MemoryMin)")
 	}
 }
+
+// SDC SEC-15 / SEC-09 / SEC-10, guest side: the guest image sets kernel
+// hardening sysctls, does not claim KSM deduplicates guests, and takes its
+// resolver from the host when the host names one. Pinned here because the
+// image is built by Nix on the host and not exercised by Go tests.
+func TestGuestImageHardeningIsDeclared(t *testing.T) {
+	raw, err := os.ReadFile("../../nix/autoputer-vm.nix")
+	if err != nil {
+		t.Skipf("nix/autoputer-vm.nix not readable from the package: %v", err)
+	}
+	nix := string(raw)
+	for _, key := range []string{"kernel.kptr_restrict", "kernel.dmesg_restrict", "kernel.unprivileged_bpf_disabled",
+		"net.core.bpf_jit_harden", "kernel.kexec_load_disabled", "kernel.sysrq", "net.ipv4.conf.all.rp_filter",
+		"net.ipv4.conf.all.accept_redirects", "net.ipv4.conf.all.send_redirects"} {
+		if !strings.Contains(nix, `"`+key+`" =`) {
+			t.Errorf("guest image does not set sysctl %s", key)
+		}
+	}
+	// Capsules need user namespaces; the runtime creates one per capsule.
+	if strings.Contains(nix, `"user.max_user_namespaces"`) {
+		t.Error("the guest image restricts user namespaces, which every capsule needs")
+	}
+	if strings.Contains(nix, "with KSM deduplication") || strings.Contains(nix, "Combined with KSM") {
+		t.Error("the guest image still claims KSM deduplicates guests (SEC-09: KSM is off)")
+	}
+	if !strings.Contains(nix, "choir.dns=*)") || !strings.Contains(nix, `echo "DNS=$dns_ip"`) {
+		t.Error("the guest network unit does not take choir.dns from the kernel command line (SEC-10)")
+	}
+}
