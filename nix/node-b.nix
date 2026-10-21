@@ -728,6 +728,9 @@ in
         "AUTH_COOKIE_SECURE=true"
         # Recovery links are mailed through maild (empty disables mail).
         "AUTH_MAILD_URL=http://127.0.0.1:8087"
+        # Sign-up cap with a waitlist (L4-03, internal/auth/registration_cap.go):
+        # unset is no cap. FP0 sets "AUTH_REGISTRATION_CAP=<n>" after reading
+        # the count of users holding a passkey (FP8 station, L4-03).
         internalAuthEnv
       ];
     };

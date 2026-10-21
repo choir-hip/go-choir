@@ -511,7 +511,10 @@ func (h *Handler) HandleRegisterBegin(w http.ResponseWriter, r *http.Request) {
 	// Look up the user by email.
 	user, err := h.store.GetUserByEmail(req.Email)
 	if err != nil {
-		// User doesn't exist yet — create them.
+		// User doesn't exist yet — create them, unless the cap is reached.
+		if h.refuseIfRegistrationClosed(w, "register_begin", emailHash, "", req.Email) {
+			return
+		}
 		userID := uuid.NewString()
 		user, err = h.store.CreateUser(userID, req.Email)
 		if err != nil {
@@ -535,7 +538,10 @@ func (h *Handler) HandleRegisterBegin(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// User exists but has no credentials (started but didn't complete registration).
-		// Allow them to proceed with registration.
+		// Allow them to proceed with registration, unless the cap is reached.
+		if h.refuseIfRegistrationClosed(w, "register_begin", emailHash, user.ID, req.Email) {
+			return
+		}
 		log.Printf("[auth] operation=register_begin email_hash=%s user_id=%s step=resume_incomplete_registration", emailHash, user.ID)
 	}
 
@@ -790,6 +796,10 @@ func (h *Handler) HandleRegisterFinish(w http.ResponseWriter, r *http.Request) {
 	user, err := h.store.GetUserByID(cs.UserID)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "user not found"})
+		return
+	}
+	// The cap again: ceremonies begun below it must not all finish above it.
+	if h.refuseIfRegistrationClosed(w, "register_finish", hashEmail(user.Email), user.ID, user.Email) {
 		return
 	}
 

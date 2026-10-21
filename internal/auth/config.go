@@ -56,6 +56,11 @@ type Config struct {
 	// request endpoint still answers identically and logs that no mailer is
 	// configured.
 	MaildURL string
+
+	// RegistrationCap is the most users with a passkey the service admits
+	// (AUTH_REGISTRATION_CAP; 0, the default, is no cap). At the cap a new
+	// sign-up is refused and its email waitlisted (registration_cap.go).
+	RegistrationCap int
 }
 
 const (
@@ -108,6 +113,14 @@ func LoadConfig() (*Config, error) {
 		RotationGraceTTL:  envDuration("AUTH_ROTATION_GRACE_TTL", 15*time.Second),
 		CookieSecure:      envBool("AUTH_COOKIE_SECURE", false),
 		MaildURL:          envOr("AUTH_MAILD_URL", DefaultMaildURL),
+	}
+
+	if v := strings.TrimSpace(os.Getenv("AUTH_REGISTRATION_CAP")); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 {
+			return nil, fmt.Errorf("auth config: AUTH_REGISTRATION_CAP must be a whole number >= 0 (0 is no cap), got %q", v)
+		}
+		cfg.RegistrationCap = n
 	}
 
 	originsStr := envOr("AUTH_RP_ORIGINS", DefaultRPOrigins)
