@@ -604,7 +604,7 @@ nodes:
     ledger: ''
     status: working
     kind: spine
-    entrypoint: true
+    entrypoint: false  # 2026-10-21: the launch first pass is the entrypoint
     execution_mode: mission_orchestrator
     depends_on: []
     enables:
@@ -1354,3 +1354,18 @@ nodes:
       computers ... this is going to relate to the self-development
       system"; "Yes, this all makes sense as a new station".
       Specification: docs/reports/lu-guest-updates-design-2026-10-14.md.
+  - id: choir-launch-first-pass-metamission-2026-10-21
+    title: Launch first pass — every agent-doable launch batch, built concurrently, landed in order, reviewed with the owner
+    path: docs/definitions/choir-launch-first-pass-metamission-2026-10-21.md
+    ledger: ''
+    status: working  # drafted 2026-10-21; panel review on its first commit
+    kind: spine
+    entrypoint: true
+    execution_mode: mission_orchestrator
+    depends_on: []
+    enables: []
+    note: >-
+      Owner 2026-10-21: "set a really aggressive meta mission ... with as
+      much concurrency as possible", "work autonomously for the first
+      pass". Runs docs/launch-checklist-2026-10-21.md's batch plan in five
+      parallel lanes; S6 (choir-lp-s6-commit-gate-2026-10-20) is its FP4.

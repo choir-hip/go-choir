@@ -8,6 +8,19 @@ Sequencing lives here and in
 throughline (`skills/throughline/SKILL.md`). Direction:
 [`reports/choir-state-and-vision-2026-10-14.md`](reports/choir-state-and-vision-2026-10-14.md).
 
+## Active metamission (2026-10-21): the launch first pass
+
+**Goal:** [`definitions/choir-launch-first-pass-metamission-2026-10-21.md`](definitions/choir-launch-first-pass-metamission-2026-10-21.md)
+(`readiness: drafted`; a panel reviews it). Owner, 2026-10-21: "set a
+really aggressive meta mission to really bang out this work promptly with
+as much concurrency as possible ... security is paramount", then "work
+autonomously for the first pass, and then I will review that with you".
+It runs the launch checklist's batch plan: five lanes at once (store B2,
+desk boundary B3, host and vmctl B4 and B5, self-development B10, the
+mobile server half of B11 and B12), each a worker in its own worktree;
+the orchestrator alone lands, one red batch per deploy. S6 below is its
+station FP4. The second pass is planned with the owner after review.
+
 ## Active station (2026-10-20): LP S6, the commit gate
 
 **Goal:** [`definitions/choir-lp-s6-commit-gate-2026-10-20.md`](definitions/choir-lp-s6-commit-gate-2026-10-20.md)
