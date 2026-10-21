@@ -224,11 +224,11 @@ var deskCellSyscalls = []string{
 	"set_tid_address", "set_robust_list", "rseq",
 	"futex", "sched_yield", "sched_getaffinity", "nanosleep", "clock_nanosleep",
 	"clock_gettime", "clock_getres", "gettimeofday", "time", "times", "getitimer", "setitimer",
-	"getrlimit", "prlimit64", "getrusage", "sysinfo", "uname", "getrandom", "arch_prctl",
+	"getrlimit", "getrusage", "sysinfo", "uname", "getrandom", "arch_prctl",
 }
 
 // DeskCellSeccompFilter is the worker's deny-by-default filter. pid is the
-// worker's own pid: kill and tgkill reach only it (the Go runtime signals its
+// worker's own pid: kill and tgkill reach only it, prlimit64 only reads it (the Go runtime signals its
 // own threads for preemption). clone is admitted only with CLONE_THREAD, so
 // the worker can grow threads but never a process or a namespace.
 func DeskCellSeccompFilter(pid int) seccomp.Filter {
@@ -253,6 +253,16 @@ func DeskCellSeccompFilter(pid int) seccomp.Filter {
 					{Name: "clone", Conditions: seccomp.ArgumentConditions{{Argument: 0, Operation: seccomp.BitsSet, Value: unix.CLONE_THREAD}}},
 					{Name: "kill", Conditions: seccomp.ArgumentConditions{{Argument: 0, Operation: seccomp.Equal, Value: self}}},
 					{Name: "tgkill", Conditions: seccomp.ArgumentConditions{{Argument: 0, Operation: seccomp.Equal, Value: self}}},
+					// prlimit64 reads only: the target is the worker itself (pid 0
+					// or its own pid) and new_limit is null. Same-UID siblings
+					// share credentials, so an unconditioned prlimit64 could lower
+					// another worker's limits.
+					{Name: "prlimit64", Conditions: seccomp.ArgumentConditions{
+						{Argument: 0, Operation: seccomp.Equal, Value: 0},
+						{Argument: 2, Operation: seccomp.Equal, Value: 0}}},
+					{Name: "prlimit64", Conditions: seccomp.ArgumentConditions{
+						{Argument: 0, Operation: seccomp.Equal, Value: self},
+						{Argument: 2, Operation: seccomp.Equal, Value: 0}}},
 				}},
 				{Action: cellENOSYS, Names: []string{"clone3"}},
 			},

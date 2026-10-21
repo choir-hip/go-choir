@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	seccomp "github.com/elastic/go-seccomp-bpf"
 	ll "github.com/landlock-lsm/go-landlock/landlock/syscall"
 	"golang.org/x/sys/unix"
 )
@@ -123,6 +124,13 @@ func runEscapeProbes(cfg SessionWorkerConfig) probeResults {
 	out["kill_pid1"] = errString(unix.Kill(1, 0))
 	out["kill_parent"] = errString(unix.Kill(os.Getppid(), 0))
 	out["ptrace_parent"] = errString(unix.PtraceSeize(os.Getppid()))
+	// prlimit64 is read-only once confined: a same-UID sibling's limits and
+	// the worker's own can be read (pid 0) but never set.
+	var lim unix.Rlimit
+	out["prlimit_self_read"] = errString(unix.Prlimit(0, unix.RLIMIT_NOFILE, nil, &lim))
+	out["prlimit_self_set"] = errString(unix.Prlimit(0, unix.RLIMIT_NOFILE, &lim, nil))
+	out["prlimit_parent_read"] = errString(unix.Prlimit(os.Getppid(), unix.RLIMIT_NOFILE, nil, &lim))
+	out["prlimit_parent_set"] = errString(unix.Prlimit(os.Getppid(), unix.RLIMIT_NOFILE, &lim, nil))
 	out["setuid_root"] = errString(unix.Setresuid(0, 0, 0))
 	out["unshare_user"] = errString(unix.Unshare(unix.CLONE_NEWUSER))
 	return out
@@ -414,7 +422,10 @@ fmt.Println(r, err)`, nil, nil, nil, nil, nil, nil)
 		"socket_unix", "socket_netlink", "dial_host_port",
 		"fork_exec", "execve", "kill_pid1", "kill_parent", "ptrace_parent",
 		"setuid_root", "unshare_user")
-	requireEPERM(t, probes, "socket_inet_stream", "socket_unix", "socket_packet_raw", "fork_exec", "execve", "ptrace_parent", "kill_parent")
+	requireEPERM(t, probes, "socket_inet_stream", "socket_unix", "socket_packet_raw", "fork_exec", "execve", "ptrace_parent", "kill_parent", "prlimit_self_set", "prlimit_parent_set")
+	if probes["prlimit_self_read"] != "" {
+		t.Errorf("confined worker cannot read its own rlimit: %s", probes["prlimit_self_read"])
+	}
 	if kernelHasLandlock() != landlockEnforced(probes) {
 		t.Errorf("kernel Landlock=%v but worker file confinement enforced=%v", kernelHasLandlock(), landlockEnforced(probes))
 	}
@@ -493,7 +504,10 @@ func TestDeskCellWorkerSandboxedWithoutRoot(t *testing.T) {
 		"socket_packet_raw", "socket_inet_raw", "socket_inet_stream", "socket_inet6_dgram",
 		"socket_unix", "socket_netlink", "dial_host_port",
 		"fork_exec", "execve", "kill_pid1", "kill_parent", "ptrace_parent", "unshare_user")
-	requireEPERM(t, probes, "socket_inet_stream", "socket_unix", "socket_packet_raw", "fork_exec", "execve", "ptrace_parent", "kill_parent")
+	requireEPERM(t, probes, "socket_inet_stream", "socket_unix", "socket_packet_raw", "fork_exec", "execve", "ptrace_parent", "kill_parent", "prlimit_self_set", "prlimit_parent_set")
+	if probes["prlimit_self_read"] != "" {
+		t.Errorf("confined worker cannot read its own rlimit: %s", probes["prlimit_self_read"])
+	}
 	if landlockEnforced(probes) {
 		requireDenied(t, probes, "write_allowed_root", "read_pid1_environ")
 	} else {
@@ -569,9 +583,50 @@ func TestDeskCellSeccompFilterAssembles(t *testing.T) {
 			t.Errorf("cell filter allows %s", banned)
 		}
 	}
-	for _, conditioned := range []string{"clone?", "kill?", "tgkill?"} {
+	for _, conditioned := range []string{"clone?", "kill?", "tgkill?", "prlimit64?"} {
 		if !names[conditioned] {
 			t.Errorf("cell filter does not admit %s under a condition", strings.TrimSuffix(conditioned, "?"))
 		}
+	}
+}
+
+// TestDeskCellSeccompPrlimitIsReadOnly: prlimit64 is never in the
+// unconditioned allow list, and every conditioned entry pins both the target
+// (pid 0 or the worker's own pid) and a null new_limit.
+func TestDeskCellSeccompPrlimitIsReadOnly(t *testing.T) {
+	self := os.Getpid()
+	filter := DeskCellSeccompFilter(self)
+	if _, err := filter.Policy.Assemble(); err != nil {
+		t.Fatalf("assemble: %v", err)
+	}
+	targets := map[uint64]bool{}
+	for _, group := range filter.Policy.Syscalls {
+		for _, n := range group.Names {
+			if n == "prlimit64" && group.Action == cellAllow {
+				t.Fatal("prlimit64 is allowed unconditionally")
+			}
+		}
+		for _, n := range group.NamesWithCondtions {
+			if n.Name != "prlimit64" || group.Action != cellAllow {
+				continue
+			}
+			var pid uint64
+			pinned, nullNew := false, false
+			for _, c := range n.Conditions {
+				if c.Argument == 0 && c.Operation == seccomp.Equal {
+					pid, pinned = c.Value, true
+				}
+				if c.Argument == 2 && c.Operation == seccomp.Equal && c.Value == 0 {
+					nullNew = true
+				}
+			}
+			if !pinned || !nullNew {
+				t.Errorf("prlimit64 entry %+v does not pin pid and null new_limit", n.Conditions)
+			}
+			targets[pid] = true
+		}
+	}
+	if !targets[0] || !targets[uint64(self)] || len(targets) != 2 {
+		t.Errorf("prlimit64 targets = %v, want exactly pid 0 and %d", targets, self)
 	}
 }
