@@ -304,7 +304,7 @@ func jailFirecrackerRestoreArgs() []string {
 // jailerArgs is the jailer's command line (without argv[0]).
 func (m *Manager) jailerArgs(vmID string, uid int, firecrackerArgs []string) []string {
 	j := m.cfg.Jailer
-	bin := m.cfg.FirecrackerBinPath
+	bin := m.launchedVMM(vmID).Firecracker
 	if bin == "" {
 		bin = "firecracker"
 	}
@@ -946,7 +946,7 @@ func (m *Manager) startJailedFirecracker(vmID string, receipt *ConfinementReceip
 	if err != nil {
 		return fmt.Errorf("open console sink for VM %s: %w", vmID, err)
 	}
-	cmd := exec.Command(m.cfg.Jailer.BinPath, args...)
+	cmd := exec.Command(m.launchedVMM(vmID).Jailer, args...)
 	cmd.Stdout = console
 	cmd.Stderr = os.Stderr
 	cmd.Env = []string{}
