@@ -98,6 +98,9 @@ type tapeCounters struct {
 	// segmentFallbacks counts pin calls that went to the segment writer, which
 	// failed, and were stored legacy instead (each is also a legacyPin).
 	segmentFallbacks atomic.Uint64
+	// reuseLegacyWrites counts synced legacy copies written by pins that a
+	// segment record answered (residual r1).
+	reuseLegacyWrites atomic.Uint64
 }
 
 // TapeDiagnostics is the tape write/read snapshot served on the health
@@ -111,6 +114,7 @@ type TapeDiagnostics struct {
 	BlobFilesCreated    uint64                  `json:"blob_files_created"`
 	LegacyFilesCreated  uint64                  `json:"legacy_files_created"`
 	SegmentFilesCreated uint64                  `json:"segment_files_created"`
+	ReuseLegacyWrites   uint64                  `json:"reuse_legacy_writes"`
 	Reader              tapestore.Stats         `json:"reader"`
 	Appender            tapestore.AppenderStats `json:"appender"`
 }
@@ -127,6 +131,7 @@ func (s *Service) TapeDiagnostics() TapeDiagnostics {
 		SegmentFallbacks:   s.tapeCount.segmentFallbacks.Load(),
 		BlobFilesCreated:   s.tapeCount.blobFiles.Load(),
 		LegacyFilesCreated: s.tapeCount.legacyFiles.Load(),
+		ReuseLegacyWrites:  s.tapeCount.reuseLegacyWrites.Load(),
 		Reader:             s.tapeReader().Stats(),
 	}
 	s.tapeReaderMu.Lock()
@@ -155,6 +160,10 @@ var errSegmentReuseRead = errors.New("event artifact service: read segment")
 // no-op; different bytes under the digest, in either, is an error. A segment
 // error, including corruption, is errSegmentReuseRead: the caller stores the
 // pin the legacy way (round 5), and nothing in the segment is overwritten.
+// A segment hit with no legacy copy writes one, synced, before the pin is
+// acknowledged (residual r1): the record may sit in a tail whose writer
+// never synced it, and the legacy copy is what the digest-verified read
+// falls back to. A copy that cannot be written fails the pin.
 // The caller holds the CAS reuse lock.
 func (s *EventArtifactService) stageSegmented(computerID string, ns tapestore.NS, body []byte) (*tapestore.Item, error) {
 	digest := computerevent.DigestBytes(body)
@@ -184,7 +193,50 @@ func (s *EventArtifactService) stageSegmented(computerID string, ns tapestore.NS
 		if !bytes.Equal(have, body) {
 			return nil, fmt.Errorf("event artifact service: immutable digest collision")
 		}
+		if err := writeSyncedNew(path, body); err != nil {
+			return nil, fmt.Errorf("event artifact service: legacy copy of a reused segment record: %w", err)
+		}
+		s.platform.tapeCount.blobFiles.Add(1)
+		s.platform.tapeCount.legacyFiles.Add(1)
+		s.platform.tapeCount.reuseLegacyWrites.Add(1)
 		return nil, nil
 	}
 	return &tapestore.Item{NS: ns, Body: body}, nil
+}
+
+// writeSyncedNew installs data at path through a synced temporary file and
+// a synced directory, so the copy is on disk before it is relied on.
+func writeSyncedNew(path string, data []byte) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".tmp-")
+	if err != nil {
+		return err
+	}
+	name := tmp.Name()
+	_, werr := tmp.Write(data)
+	if werr == nil {
+		werr = tmp.Chmod(0o640)
+	}
+	if werr == nil {
+		werr = tmp.Sync()
+	}
+	if cerr := tmp.Close(); werr == nil {
+		werr = cerr
+	}
+	if werr == nil {
+		werr = os.Rename(name, path)
+	}
+	if werr != nil {
+		_ = os.Remove(name)
+		return werr
+	}
+	d, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+	return d.Sync()
 }
