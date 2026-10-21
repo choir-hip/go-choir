@@ -1,0 +1,976 @@
+#!/usr/bin/env bash
+# The deploy program for Node B (ci.yml deploy-staging). It runs as root on
+# Node B, read from the commit being deployed: through scripts/node-b-ci-gate
+# (`deploy` verb), which supplies the DEPLOY_* values, REFRESH_ACTIVE_COMPUTERS
+# and HOST_SERVICES. Moved verbatim out of the workflow's REMOTE_DEPLOY
+# heredoc (SEC-14); the body keeps its indent.
+  set -euo pipefail
+  # Host-internal credential for vmctl's internal routes
+  # (internal/hostauth; docs/problems/loopback-is-a-credential-2026-10-14.md).
+  # curl reads it from the root-only header file, so it never appears
+  # on a command line. Before the first activation that creates the
+  # file, vmctl is not enforcing, so the empty array is correct.
+  choir_internal_auth=()
+  if [ -r /var/lib/go-choir/secrets/internal-service-token.header ]; then
+    choir_internal_auth=(-H @/var/lib/go-choir/secrets/internal-service-token.header)
+  fi
+  export PATH="/run/current-system/sw/bin:/run/wrappers/bin:$PATH"
+  export PKG_CONFIG_PATH="/run/current-system/sw/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+  deploy_started_at=$(date +%s)
+  phase_started_at=$deploy_started_at
+  deploy_shell_pid=$BASHPID
+  deploy_completed=false
+  receipt_artifacts='{}'
+  record_incomplete_deploy() {
+    local status="$1"
+    [ "$BASHPID" = "$deploy_shell_pid" ] || return 0
+    [ "$deploy_completed" = "true" ] && return 0
+    local failed_at
+    local failure_dir=/var/lib/go-choir/deploy-failures
+    local failure_tmp
+    local failure_path
+    local artifacts_json="${receipt_artifacts:-"{}"}"
+    failed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    install -d -m 0750 "$failure_dir" || return 0
+    failure_path="${failure_dir}/${DEPLOY_RUN_ID}-${DEPLOY_RUN_ATTEMPT}.json"
+    failure_tmp="${failure_path}.tmp"
+    jq -n \
+      --arg target_commit "$DEPLOY_COMMIT" \
+      --arg failed_at "$failed_at" \
+      --arg run_id "$DEPLOY_RUN_ID" \
+      --arg run_attempt "$DEPLOY_RUN_ATTEMPT" \
+      --arg exit_status "$status" \
+      --argjson artifacts "$artifacts_json" \
+      '{schema_version: 1, status: "incomplete", target_commit: $target_commit, failed_at: $failed_at, github: {run_id: $run_id, run_attempt: $run_attempt}, exit_status: $exit_status, observed_artifacts: $artifacts, rollback: {previous_receipt: "/var/lib/go-choir/deploy-receipt-previous.json", frontend: "/var/www/go-choir/frontend-previous", service_pattern: "/var/lib/go-choir/services/<service>-previous", nixos_profile: "/nix/var/nix/profiles/system"}}' \
+      > "$failure_tmp" 2>/dev/null || return 0
+    mv "$failure_tmp" "$failure_path" || return 0
+    chmod 0644 "$failure_path" || true
+    echo "==> Recorded incomplete deployment evidence at ${failure_path}" >&2
+  }
+  on_deploy_exit() {
+    local status=$?
+    trap - EXIT
+    record_incomplete_deploy "$status"
+    exit "$status"
+  }
+  trap on_deploy_exit EXIT
+  echo "==> Deploy impact classes"
+  echo "    deploy_host=${DEPLOY_HOST}"
+  echo "    deploy_frontend=${DEPLOY_FRONTEND}"
+  echo "    deploy_vmctl_restart=${DEPLOY_VMCTL_RESTART}"
+  echo "    deploy_active_vm_refresh=${DEPLOY_ACTIVE_VM_REFRESH}"
+  echo "    deploy_host_os=${DEPLOY_HOST_OS}"
+  echo "    host_services=${HOST_SERVICES}"
+  echo "    workflow_commit=${DEPLOY_COMMIT}"
+  echo "    workflow_run=${DEPLOY_RUN_ID} attempt=${DEPLOY_RUN_ATTEMPT}"
+  service_pointer_deploy=false
+  if [ "${DEPLOY_HOST_OS}" != "true" ] && [ -n "${HOST_SERVICES}" ]; then
+    service_pointer_deploy=true
+  fi
+  # vmctl's start time before this deploy touches it. A service
+  # pointer deploy restarts vmctl on its new pointer; the explicit
+  # restart below then only waits for health, so a deploy restarts
+  # vmctl at most once (vmctl 360 review Phase 0 step 6: each
+  # restart detaches every guest). Host OS deploys re-take this
+  # baseline after the pointer sync.
+  vmctl_started_at_deploy_start="$(systemctl show -p ActiveEnterTimestampMonotonic --value go-choir-vmctl 2>/dev/null || true)"
+  note_phase() {
+    local phase="$1"
+    local now
+    now=$(date +%s)
+    echo "    Phase ${phase}: $((now - phase_started_at))s (total $((now - deploy_started_at))s)"
+    phase_started_at=$now
+  }
+  record_receipt_artifact() {
+    local artifact="$1"
+    local commit="$2"
+    local status="$3"
+    receipt_artifacts=$(printf '%s' "$receipt_artifacts" |
+      jq --arg artifact "$artifact" --arg commit "$commit" --arg status "$status" \
+        '. + {($artifact): {commit: $commit, status: $status}}')
+  }
+  require_receipt_artifact() {
+    local artifact="$1"
+    local required_status="$2"
+    if ! printf '%s' "$receipt_artifacts" |
+      jq -e --arg artifact "$artifact" --arg commit "$DEPLOY_COMMIT" --arg status "$required_status" \
+        '.[ $artifact ] | .commit == $commit and (if $status == "verified" then (.status == "active" or .status == "installed") else .status == $status end)' \
+        >/dev/null; then
+      echo "Deployment selected ${artifact}, but no ${required_status} receipt entry exists for ${DEPLOY_COMMIT}" >&2
+      return 1
+    fi
+  }
+  artifact_manifest_commit() {
+    local manifest="$1"
+    local expected_artifact="$2"
+    if [ ! -f "$manifest" ]; then
+      echo "Missing build manifest for ${expected_artifact}: ${manifest}" >&2
+      return 1
+    fi
+    local artifact
+    local commit
+    artifact=$(jq -er '.artifact' "$manifest")
+    commit=$(jq -er '.commit' "$manifest")
+    if [ "$artifact" != "$expected_artifact" ] || [ "${#commit}" -ne 40 ] || [[ "$commit" == *[!0-9a-f]* ]]; then
+      echo "Build manifest invalid at ${manifest}: artifact=${artifact} commit=${commit}, expected artifact ${expected_artifact} with a full commit SHA" >&2
+      return 1
+    fi
+    printf '%s\n' "$commit"
+  }
+  verify_artifact_manifest() {
+    local manifest="$1"
+    local expected_artifact="$2"
+    local commit
+    commit=$(artifact_manifest_commit "$manifest" "$expected_artifact") || return 1
+    if [ "$commit" != "$DEPLOY_COMMIT" ]; then
+      echo "Build manifest mismatch at ${manifest}: artifact=${expected_artifact} commit=${commit}, expected ${expected_artifact} ${DEPLOY_COMMIT}" >&2
+      return 1
+    fi
+    printf '%s\n' "$commit"
+  }
+  wait_for_autoputer_commit() {
+    local computer_url="$1"
+    local vm_id="$2"
+    local expected_commit="$3"
+    # A pointer-following guest (no retained app-layer release, or its
+    # release advanced with this deploy) serves the deployed commit
+    # post-refresh — the deploy's own intent. A layered guest keeps
+    # serving its retained release commit. Both are valid
+    # post-refresh identities; anything else stays fail-closed.
+    local alt_commit="${4:-}"
+    local commit=""
+    # The persistent public-platform guest can spend more than one minute
+    # reopening its store after a refresh. Keep the identity check fail-closed,
+    # but allow the measured startup path to finish before declaring failure.
+    for _ in $(seq 1 120); do
+      # A bounded migration step can hold the embedded store for roughly
+      # three seconds. Give one health probe enough time to cross that
+      # contention window while keeping exact identity fail-closed.
+      commit=$(curl -fsS --max-time 5 "${computer_url}/health" 2>/dev/null | jq -r '.build.commit // empty' || true)
+      if [ "$commit" = "$expected_commit" ] || { [ -n "$alt_commit" ] && [ "$commit" = "$alt_commit" ]; }; then
+        echo "    Verified ${vm_id} serves autoputer commit ${commit}"
+        return 0
+      fi
+      sleep 1
+    done
+    echo "Timed out waiting for ${vm_id} to serve autoputer runtime ${expected_commit}${alt_commit:+ or ${alt_commit}}; observed ${commit:-missing}" >&2
+    return 1
+  }
+  dump_deploy_service_diagnostics() {
+    local reason="$1"
+    echo "==> Deploy service diagnostics: ${reason}" >&2
+    for service in go-choir-vmctl go-choir-proxy; do
+      echo "-- systemctl status ${service}" >&2
+      systemctl --no-pager --full status "$service" >&2 || true
+      echo "-- journalctl -u ${service} -n 80" >&2
+      journalctl -u "$service" -n 80 --no-pager >&2 || true
+    done
+    echo "-- local health probes" >&2
+    for port in 8081 8082 8083 8084 8086 8087; do
+      echo "port ${port}" >&2
+      curl -fsS --max-time 5 "http://127.0.0.1:${port}/health" >&2 || true
+    done
+    for receipt in /var/lib/go-choir/deploy-receipt.json /var/lib/go-choir/deploy-receipt-previous.json; do
+      if [ -f "$receipt" ]; then
+        echo "-- ${receipt}" >&2
+        cat "$receipt" >&2 || true
+      fi
+    done
+    echo "-- vmctl ownership snapshot" >&2
+    ownerships_snapshot=$(curl -fsS --max-time 5 -H "X-Internal-Caller: true" "${choir_internal_auth[@]}" http://127.0.0.1:8083/internal/vmctl/list 2>/dev/null || true)
+    if [ -n "$ownerships_snapshot" ]; then
+      printf '%s\n' "$ownerships_snapshot" | jq . >&2 || printf '%s\n' "$ownerships_snapshot" >&2
+      mapfile -t diagnostic_computer_urls < <(printf '%s' "$ownerships_snapshot" | jq -r '
+        .ownerships[]
+        | select(.state == "active")
+        | select((.kind == null) or (.kind == "") or (.kind == "interactive"))
+        | [.vm_id, .computer_url]
+        | @tsv
+      ' 2>/dev/null || true)
+      for record in "${diagnostic_computer_urls[@]}"; do
+        IFS=$'\t' read -r diagnostic_vm_id diagnostic_computer_url <<< "$record"
+        if [ -z "$diagnostic_computer_url" ]; then
+          continue
+        fi
+        echo "-- active autoputer health ${diagnostic_vm_id} ${diagnostic_computer_url}" >&2
+        curl -sS --max-time 5 -w '\nhttp_status=%{http_code} total_time=%{time_total}\n' "${diagnostic_computer_url}/health" >&2 || true
+      done
+    fi
+  }
+
+  if [ ! -d /opt/go-choir/.git ]; then
+    echo "==> Cloning go-choir repository"
+    git clone https://github.com/choir-hip/go-choir.git /opt/go-choir
+  fi
+
+  # CI SSH deploy runs as root; /opt/go-choir may be owned by another uid from prior deploys.
+  git config --global --add safe.directory /opt/go-choir
+
+  cd /opt/go-choir
+  git remote set-url origin https://github.com/choir-hip/go-choir.git
+  if [ "${#DEPLOY_COMMIT}" -ne 40 ] || [[ "$DEPLOY_COMMIT" == *[!0-9a-f]* ]]; then
+    echo "Invalid immutable deployment commit: ${DEPLOY_COMMIT}" >&2
+    exit 1
+  fi
+  echo "==> Fetching tested workflow commit ${DEPLOY_COMMIT}"
+  git fetch --no-tags origin "$DEPLOY_COMMIT"
+  git reset --hard "$DEPLOY_COMMIT"
+  git clean -ffdx
+  if [ -n "$(git status --short)" ]; then
+    echo "Remote checkout is dirty after reset/clean:" >&2
+    git status --short >&2
+    exit 1
+  fi
+  checked_out_commit=$(git rev-parse HEAD)
+  if [ "$checked_out_commit" != "$DEPLOY_COMMIT" ]; then
+    echo "Remote checkout ${checked_out_commit} does not match tested workflow commit ${DEPLOY_COMMIT}" >&2
+    exit 1
+  fi
+  install -d -m 0750 /var/lib/go-choir
+  note_phase "checkout"
+
+  scripts/node-b-deploy-disk-preflight
+  note_phase "disk preflight"
+
+  systemctl reset-failed nixos-rebuild-switch-to-configuration.service 2>/dev/null || true
+
+  echo "==> Building selected NixOS closure and guest images"
+  build_selected_root() {
+    local label="$1"
+    local attr="$2"
+    local out="$3"
+    local log
+    log=$(mktemp)
+    local started
+    started=$(date +%s)
+    echo "    Building ${label}: ${attr}"
+    local status=0
+    /run/current-system/sw/bin/nix build "$attr" -o "$out" >"$log" 2>&1 || status=$?
+    echo "==> ${label} build log"
+    cat "$log"
+    rm -f "$log"
+    local ended
+    ended=$(date +%s)
+    if [ "$status" -ne 0 ]; then
+      echo "Nix build failed for ${label} with status ${status}" >&2
+      exit "$status"
+    fi
+    echo "    ${label} build complete in $((ended - started))s"
+  }
+
+  build_host_service_root() {
+    local service="$1"
+    local out="/tmp/go-choir-service-${service}-result"
+    rm -rf "$out"
+    build_selected_root "Host service ${service}" ".#${service}" "$out"
+  }
+
+  selected_build_pids=()
+  selected_build_status=0
+  if [ "${DEPLOY_FRONTEND}" = "true" ]; then
+    build_selected_root "Frontend bundle" ".#frontend" "/tmp/go-choir-frontend-result" &
+    selected_build_pids+=("$!")
+  else
+    echo "    Skipping frontend bundle build"
+  fi
+  if [ "${service_pointer_deploy}" = "true" ]; then
+    IFS=',' read -ra service_roots <<< "${HOST_SERVICES}"
+    for service in "${service_roots[@]}"; do
+      [ -z "$service" ] && continue
+      build_host_service_root "$service" &
+      selected_build_pids+=("$!")
+    done
+    echo "    Skipping host NixOS closure build for service-pointer deploy"
+  elif [ "${DEPLOY_HOST}" = "true" ]; then
+    build_selected_root "Host NixOS closure" ".#nixosConfigurations.go-choir-b.config.system.build.toplevel" "/tmp/go-choir-nixos-result"
+  else
+    echo "    Skipping host NixOS closure build"
+  fi
+  for pid in "${selected_build_pids[@]}"; do
+    if ! wait "$pid"; then
+      selected_build_status=1
+    fi
+  done
+  if [ "$selected_build_status" -ne 0 ]; then
+    echo "One or more selected Nix builds failed" >&2
+    exit "$selected_build_status"
+  fi
+  echo "    Selected Nix builds complete"
+  note_phase "nix build"
+
+  if [ "${service_pointer_deploy}" = "true" ]; then
+    echo "==> Skipping NixOS switch (host service pointer deploy)"
+  elif [ "${DEPLOY_HOST}" = "true" ]; then
+    echo "==> Activating NixOS config"
+    current_system=$(readlink -f /run/current-system)
+    next_system=$(readlink -f /tmp/go-choir-nixos-result)
+    if [ "$current_system" = "$next_system" ]; then
+      echo "    Host closure unchanged; skipping NixOS switch"
+    else
+      run_switch() {
+        /run/current-system/sw/bin/nix-env -p /nix/var/nix/profiles/system --set "$next_system"
+        NIXOS_NO_CHECK=1 "$next_system/bin/switch-to-configuration" switch
+      }
+      switch_status=0
+      run_switch || switch_status=$?
+      if [ "$switch_status" -ne 0 ]; then
+        echo "    Switch failed with status ${switch_status}; checking logind before one retry" >&2
+        dump_deploy_service_diagnostics "nixos switch failed before retry"
+        if ! timeout 10 loginctl list-users >/dev/null 2>&1; then
+          echo "    logind did not answer; restarting systemd-logind before retry" >&2
+          systemctl restart systemd-logind.service || true
+          sleep 3
+        fi
+        retry_status=0
+        run_switch || retry_status=$?
+        if [ "$retry_status" -ne 0 ]; then
+          dump_deploy_service_diagnostics "nixos switch retry failed"
+          exit "$retry_status"
+        fi
+      fi
+      echo "    Switch complete"
+    fi
+  else
+    echo "==> Skipping NixOS switch (host closure not selected)"
+  fi
+  note_phase "nixos switch"
+
+  install_frontend_pointer() {
+    local src="$1"
+    local root="/var/www/go-choir"
+    local current="$root/frontend-current"
+    local previous="$root/frontend-previous"
+    local next="$root/.frontend-next"
+    install -d -m 0755 "$root"
+    if [ ! -f "$src/index.html" ]; then
+      echo "Frontend bundle missing index.html at $src" >&2
+      exit 1
+    fi
+    rm -rf "$next"
+    mkdir -p "$next"
+    cp -a "$src/." "$next/"
+    rm -rf "$previous"
+    if [ -e "$current" ]; then
+      mv "$current" "$previous"
+    fi
+    mv "$next" "$current"
+    echo "    Frontend directory now contains $(find "$current/assets" -maxdepth 1 -type f 2>/dev/null | wc -l | tr -d ' ') assets"
+  }
+
+  echo "==> Installing selected frontend bundle"
+  if [ "${DEPLOY_FRONTEND}" = "true" ]; then
+    install_frontend_pointer /tmp/go-choir-frontend-result
+  elif [ ! -f /var/www/go-choir/frontend-current/index.html ]; then
+    echo "Frontend directory is missing and frontend bundle was not selected" >&2
+    exit 1
+  else
+    echo "    Skipping frontend directory update"
+  fi
+  note_phase "frontend install"
+
+  install_service_pointer() {
+    local service="$1"
+    local src
+    src=$(readlink -f "/tmp/go-choir-service-${service}-result")
+    install_service_pointer_from_src "$service" "$src"
+  }
+
+  install_service_pointer_from_src() {
+    local service="$1"
+    local src="$2"
+    local root="/var/lib/go-choir/services"
+    local current="$root/$service"
+    local previous="$root/${service}-previous"
+    local next="$root/.${service}-next"
+    if [ ! -x "$src/bin/$service" ]; then
+      echo "Host service package missing executable $service at $src" >&2
+      exit 1
+    fi
+    install -d -m 0755 "$root"
+    rm -rf "$next"
+    mkdir -p "$next"
+    cp -a "$src/." "$next/"
+    rm -rf "$previous"
+    if [ -e "$current" ]; then
+      mv "$current" "$previous"
+    fi
+    mv "$next" "$current"
+    echo "    Host service pointer updated: $service -> $current"
+  }
+
+  if [ "${service_pointer_deploy}" = "true" ]; then
+    echo "==> Installing selected host service packages"
+    IFS=',' read -ra service_roots <<< "${HOST_SERVICES}"
+    for service in "${service_roots[@]}"; do
+      [ -z "$service" ] && continue
+      install_service_pointer "$service"
+    done
+    echo "==> Restarting selected host services"
+    for service in "${service_roots[@]}"; do
+      [ -z "$service" ] && continue
+      # autoputer is a VM runtime package, not a host systemd service.
+      # The service pointer is installed above; VMs pick it up on
+      # refresh/restart. Skip systemd restart for autoputer.
+      if [ "$service" = "autoputer" ]; then
+        echo "    Skipped autoputer restart (VM runtime package, not a host service)"
+        continue
+      fi
+      if [ "$service" = "checkpointd" ]; then
+        # A running frozen-target job finishes with its current
+        # binary. The next timer activation uses the new pointer.
+        echo "    Checkpoint worker pointer installed; timer remains authoritative"
+        continue
+      fi
+      # A deploy releases a unit latched by its start limit (L1a).
+      systemctl reset-failed "go-choir-${service}.service" 2>/dev/null || true
+      systemctl restart "go-choir-${service}.service"
+      systemctl is-active --quiet "go-choir-${service}.service"
+      echo "    Restarted go-choir-${service}.service"
+    done
+  elif [ "${DEPLOY_HOST}" = "true" ]; then
+    echo "==> Synchronizing host service pointers from activated NixOS closure"
+    scripts/node-b-sync-service-pointers auth gateway maild corpusd proxy vmctl checkpointd
+    # A vmctl restart before this sync ran the old pointer; only a
+    # restart from here on counts as loading the new binary.
+    vmctl_started_at_deploy_start="$(systemctl show -p ActiveEnterTimestampMonotonic --value go-choir-vmctl 2>/dev/null || true)"
+  else
+    echo "    Skipping host service pointer install"
+  fi
+  note_phase "host service install"
+
+  echo "==> Ensuring edge config and host services are live"
+  if [ "${DEPLOY_HOST}" = "true" ] && [ "${service_pointer_deploy}" != "true" ]; then
+    systemctl daemon-reload || true
+    # A deploy releases a unit latched by its start limit (L1a).
+    systemctl reset-failed go-choir-auth go-choir-maild go-choir-corpusd go-choir-gateway go-choir-proxy 2>/dev/null || true
+    # The site's services restart first, together, so systemd orders
+    # them; none waits on the gateway. The gateway restarts last and
+    # alone: its graceful drain (up to 11 min) holds only model calls,
+    # never the site (L1, deploy-without-site-outage design).
+    systemctl restart \
+      go-choir-auth \
+      go-choir-maild \
+      go-choir-corpusd \
+      go-choir-proxy
+    systemctl restart go-choir-gateway
+    if systemctl is-active --quiet caddy; then
+      systemctl reload caddy || systemctl restart caddy
+    else
+      systemctl start caddy
+    fi
+  elif [ "${service_pointer_deploy}" = "true" ]; then
+    echo "    Host service pointer deploy already restarted selected services"
+  elif [ "${DEPLOY_FRONTEND}" = "true" ]; then
+    echo "    Host closure not selected; reloading Caddy only for frontend pointer update"
+    if systemctl is-active --quiet caddy; then
+      systemctl reload caddy || systemctl restart caddy
+    else
+      systemctl start caddy
+    fi
+  else
+    echo "    Host closure not selected; no host service activation required"
+  fi
+  note_phase "service activation"
+
+  echo "==> Waiting for services to start"
+  if [ "${service_pointer_deploy}" = "true" ]; then
+    echo "    Service pointer deploys already wait for selected systemd restarts; health probes below perform readiness retries"
+  else
+    sleep 5
+  fi
+  note_phase "service settle"
+
+
+  if [ "${DEPLOY_VMCTL_RESTART}" = "true" ]; then
+    echo "==> Restarting vmctl when selected classes require it"
+    vmctl_started_now="$(systemctl show -p ActiveEnterTimestampMonotonic --value go-choir-vmctl 2>/dev/null || true)"
+    if [ -n "$vmctl_started_at_deploy_start" ] && [ -n "$vmctl_started_now" ] && [ "$vmctl_started_now" != "$vmctl_started_at_deploy_start" ] && systemctl is-active --quiet go-choir-vmctl; then
+      echo "    vmctl already restarted by this deploy; not restarting it again"
+    else
+      systemctl reset-failed go-choir-vmctl 2>/dev/null || true
+      systemctl restart go-choir-vmctl
+    fi
+    # vmctl answers health only after its reattach pass, which
+    # health-checks every running VM (a dead guest costs a
+    # timeout); 30 tries was shorter than that with several VMs up
+    # (deploy-switch-dbus-reload-and-vmctl-health-window-2026-10-09).
+    vmctl_ready=false
+    vmctl_deadline=$((SECONDS + 180))
+    while [ "$SECONDS" -lt "$vmctl_deadline" ]; do
+      if curl -fsS --max-time 2 http://127.0.0.1:8083/health >/dev/null 2>&1; then
+        vmctl_ready=true
+        break
+      fi
+      sleep 1
+    done
+    echo "    vmctl health after $((SECONDS - vmctl_deadline + 180)) s (ready=${vmctl_ready})"
+    if [ "$vmctl_ready" != "true" ]; then
+      dump_deploy_service_diagnostics "vmctl did not become healthy after restart"
+      exit 1
+    fi
+  else
+    echo "==> Skipping vmctl restart; selected classes do not affect vmctl or guest images"
+  fi
+  note_phase "vmctl restart"
+
+  autoputer_service_selected=false
+  if [ -n "${HOST_SERVICES}" ]; then
+    IFS=',' read -ra refresh_services <<< "${HOST_SERVICES}"
+    for service in "${refresh_services[@]}"; do
+      if [ "$service" = "autoputer" ]; then
+        autoputer_service_selected=true
+      fi
+    done
+  fi
+  if [ "$autoputer_service_selected" = "true" ]; then
+    autoputer_commit=$(verify_artifact_manifest /var/lib/go-choir/services/autoputer/share/go-choir/build.json autoputer)
+    record_receipt_artifact autoputer "$autoputer_commit" installed
+  fi
+  if [ "$autoputer_service_selected" = "true" ] && [ "${DEPLOY_ACTIVE_VM_REFRESH}" != "true" ]; then
+    echo "Autoputer runtime selected without canonical guest boot refresh; refusing an undeployable service-pointer-only artifact" >&2
+    exit 1
+  fi
+  if [ "${DEPLOY_ACTIVE_VM_REFRESH}" = "true" ] && [ "$autoputer_service_selected" != "true" ]; then
+    echo "Canonical guest boot refresh selected without a same-commit autoputer runtime package" >&2
+    exit 1
+  fi
+  if [ "${DEPLOY_ACTIVE_VM_REFRESH}" = "true" ]; then
+    autoputer_runtime_commit=$autoputer_commit
+    # Deploys keep active computers current without crash-closing
+    # their work (owner rule "Restarts End Work (Crash) Or Resume It
+    # (Planned Update)"; docs/problems/owner-computer-pinned-as-canary-2026-10-13.md).
+    # vmctl selects every active interactive computer — constructed
+    # computer versions and premium_always_on ones included — except
+    # held ones, then per computer asks the guest to write its
+    # planned-restart marker. A busy guest (running runs or a
+    # self-development operation in flight) refuses and is deferred;
+    # vmctl records it and its retry sweep asks again every minute
+    # until it takes the update. A critical_protected or
+    # public_platform computer (the paper) is asked with allow_busy
+    # (owner ruling 2026-10-15): its running runs park for the
+    # planned boot's one resume, and only a self-development apply
+    # or a live capsule defers it
+    # (docs/problems/always-busy-computer-never-updates-2026-10-15.md).
+    # An idle one restarts as a planned boot that resumes its parked
+    # work once. The manual dispatch input
+    # refresh_active_computers=true additionally force-restarts the
+    # deferred ones through the operator refresh (crash boot).
+    echo "==> Refreshing active interactive computers onto deployed VM boot contract (planned restart)"
+    deploy_refresh_plan=""
+    if ! deploy_refresh_plan=$(curl -fsS --retry 5 --retry-delay 2 --retry-all-errors -H "X-Internal-Caller: true" "${choir_internal_auth[@]}" http://127.0.0.1:8083/internal/vmctl/deploy-refresh); then
+      deploy_refresh_plan=""
+    fi
+    if [ -z "$deploy_refresh_plan" ]; then
+      echo "    vmctl did not answer the deploy refresh selection; every active computer stays update-pending" >&2
+      record_receipt_artifact active_computers "$DEPLOY_COMMIT" pending
+    else
+      mapfile -t skipped_interactive < <(printf '%s' "$deploy_refresh_plan" | jq -r '.skipped[] | [.vm_id, .user_id, .desktop_id, .reason] | @tsv')
+      for record in "${skipped_interactive[@]}"; do
+        IFS=$'\t' read -r skipped_vm_id skipped_user_id skipped_desktop_id skipped_reason <<< "$record"
+        echo "    Skipped ${skipped_vm_id} (user ${skipped_user_id} desktop ${skipped_desktop_id}): ${skipped_reason}"
+      done
+      mapfile -t active_interactive < <(printf '%s' "$deploy_refresh_plan" | jq -r '.candidates[] | [.user_id, .desktop_id, .vm_id, .computer_url, (.snapshot_kind // ""), (.warmness_class // "")] | @tsv')
+      refresh_outcomes_dir=$(mktemp -d /tmp/go-choir-deploy-refresh.XXXXXX)
+      if [ "${#active_interactive[@]}" -eq 0 ]; then
+        echo "    No active interactive computers need refresh"
+      fi
+      refresh_pids=()
+      refresh_status=0
+      max_parallel_refresh=1
+      for record in "${active_interactive[@]}"; do
+        IFS=$'\t' read -r refresh_user_id refresh_desktop_id refresh_vm_id refresh_computer_url refresh_snapshot_kind refresh_warmness <<< "$record"
+        (
+          echo "    Refreshing ${refresh_vm_id} for user ${refresh_user_id} desktop ${refresh_desktop_id} (snapshot=${refresh_snapshot_kind:-mutable} warmness=${refresh_warmness:-default})"
+          # A refreshed layered computer keeps serving its retained
+          # app-layer release — that is the point of layering — so
+          # its /health reports the release commit, never the host
+          # autoputer pointer commit. Read the pre-refresh served
+          # commit and expect THAT after the refresh, not the
+          # pointer. Only a computer with no retained release is
+          # expected to serve the pointer commit.
+          refresh_expected_commit=$(curl -fsS --max-time 10 "${refresh_computer_url}/health" 2>/dev/null | jq -r '.build.commit // empty' || true)
+          if [ -z "$refresh_expected_commit" ]; then
+            refresh_expected_commit="$autoputer_runtime_commit"
+          fi
+          if [ "$refresh_expected_commit" = "$autoputer_runtime_commit" ]; then
+            echo "    ${refresh_vm_id}: already serves ${autoputer_runtime_commit}; nothing to refresh"
+            echo "current" > "${refresh_outcomes_dir}/${refresh_vm_id}"
+            exit 0
+          fi
+          echo "    ${refresh_vm_id}: expecting served commit ${refresh_expected_commit} or ${autoputer_runtime_commit} after refresh"
+          payload=$(jq -nc --arg user_id "$refresh_user_id" --arg desktop_id "$refresh_desktop_id" --arg target "$autoputer_runtime_commit" '{user_id:$user_id,desktop_id:$desktop_id,target:$target}')
+          refresh_body="/tmp/go-choir-vm-refresh-${refresh_vm_id}.json"
+          # A stale body from an earlier deploy must not explain this one.
+          rm -f "$refresh_body"
+          refresh_http_status=$(timeout 600 curl -sS -o "$refresh_body" -w '%{http_code}' \
+            -H "X-Internal-Caller: true" \
+            "${choir_internal_auth[@]}" \
+            -H "X-Choir-Lifecycle-Caller: ci.deploy-refresh" \
+            -H "Content-Type: application/json" \
+            -d "$payload" \
+            http://127.0.0.1:8083/internal/vmctl/deploy-refresh || printf 'curl_error_%s' "$?")
+          refresh_outcome=$(jq -r '.outcome // empty' "$refresh_body" 2>/dev/null || true)
+          refresh_reason=$(jq -r '.reason // empty' "$refresh_body" 2>/dev/null || true)
+          if [[ "$refresh_http_status" =~ ^2[0-9][0-9]$ ]] && [ "$refresh_outcome" = "refreshed" ]; then
+            refresh_planned=$(jq -r '.planned_restart // false' "$refresh_body")
+            refresh_busy_allowed=$(jq -r '.busy_allowed // false' "$refresh_body")
+            echo "    Refreshed ${refresh_vm_id} (planned_restart=${refresh_planned} busy_allowed=${refresh_busy_allowed}${refresh_reason:+; ${refresh_reason}})"
+          elif [ "$refresh_outcome" = "skipped" ]; then
+            echo "    Skipped ${refresh_vm_id}: ${refresh_reason}"
+            echo "skipped" > "${refresh_outcomes_dir}/${refresh_vm_id}"
+            exit 0
+          elif [ "$refresh_outcome" = "deferred" ] && [ "${REFRESH_ACTIVE_COMPUTERS}" != "true" ]; then
+            echo "    Deferred ${refresh_vm_id} (vmctl retries it every minute until it updates): ${refresh_reason}"
+            echo "deferred" > "${refresh_outcomes_dir}/${refresh_vm_id}"
+            exit 0
+          elif [ "$refresh_outcome" = "deferred" ]; then
+            # Manual dispatch: the operator asked to restart busy
+            # computers too. This is the forced operator refresh — a
+            # crash boot that closes their work.
+            echo "    ${refresh_vm_id} deferred (${refresh_reason}); refresh_active_computers=true, forcing an operator refresh (crash boot)"
+            forced_payload=$(jq -nc --arg user_id "$refresh_user_id" --arg desktop_id "$refresh_desktop_id" '{user_id:$user_id,desktop_id:$desktop_id}')
+            refresh_http_status=$(timeout 300 curl -sS -o "$refresh_body" -w '%{http_code}' --retry 2 --retry-delay 2 --retry-all-errors \
+              -H "X-Internal-Caller: true" \
+              "${choir_internal_auth[@]}" \
+              -H "X-Choir-Lifecycle-Caller: ci.deploy-refresh-forced" \
+              -H "Content-Type: application/json" \
+              -d "$forced_payload" \
+              http://127.0.0.1:8083/internal/vmctl/refresh || printf 'curl_error_%s' "$?")
+            if [[ ! "$refresh_http_status" =~ ^2[0-9][0-9]$ ]]; then
+              echo "    Forced refresh failed for ${refresh_vm_id} user ${refresh_user_id} desktop ${refresh_desktop_id}: ${refresh_http_status}" >&2
+              if [ -s "$refresh_body" ]; then
+                sed 's/^/      response: /' "$refresh_body" >&2
+              fi
+              exit 1
+            fi
+            echo "    Force-refreshed ${refresh_vm_id}"
+          else
+            echo "    Refresh failed for ${refresh_vm_id} user ${refresh_user_id} desktop ${refresh_desktop_id}: ${refresh_http_status}" >&2
+            if [ -s "$refresh_body" ]; then
+              sed 's/^/      response: /' "$refresh_body" >&2
+            fi
+            exit 1
+          fi
+          refreshed_computer_url=$(jq -r '.computer_url // empty' "$refresh_body" 2>/dev/null || true)
+          if [ -n "$refreshed_computer_url" ]; then
+            refresh_computer_url="$refreshed_computer_url"
+          fi
+          wait_for_autoputer_commit "$refresh_computer_url" "$refresh_vm_id" "$refresh_expected_commit" "$autoputer_runtime_commit"
+          echo "refreshed" > "${refresh_outcomes_dir}/${refresh_vm_id}"
+        ) &
+        refresh_pids+=("$!")
+        if [ "${#refresh_pids[@]}" -ge "$max_parallel_refresh" ]; then
+          for refresh_pid in "${refresh_pids[@]}"; do
+            wait "$refresh_pid" || refresh_status=$?
+          done
+          refresh_pids=()
+        fi
+      done
+      for refresh_pid in "${refresh_pids[@]}"; do
+        wait "$refresh_pid" || refresh_status=$?
+      done
+      if [ "$refresh_status" -ne 0 ]; then
+        dump_deploy_service_diagnostics "active computer refresh or identity verification failed"
+        exit "$refresh_status"
+      fi
+      # grep exits 1 on no match; under pipefail a zero count would
+      # end the script (deploy-refresh-all-deferred-fails-deploy-2026-10-13).
+      refreshed_count=$({ grep -lx 'refreshed' "${refresh_outcomes_dir}"/* 2>/dev/null || true; } | wc -l | tr -d ' ')
+      current_count=$({ grep -lx 'current' "${refresh_outcomes_dir}"/* 2>/dev/null || true; } | wc -l | tr -d ' ')
+      mapfile -t deferred_vms < <(grep -lx 'deferred' "${refresh_outcomes_dir}"/* 2>/dev/null | xargs -r -n1 basename)
+      rm -rf "$refresh_outcomes_dir"
+      deferred_json=$(printf '%s\n' "${deferred_vms[@]}" | jq -R . | jq -sc 'map(select(length > 0))')
+      echo "    Deploy refresh summary: refreshed=${refreshed_count} already_current=${current_count} deferred=${#deferred_vms[@]} skipped=${#skipped_interactive[@]}"
+      if [ "${#deferred_vms[@]}" -gt 0 ]; then
+        echo "    Deferred computers are retried by vmctl's deploy refresh sweep until they update (GET /internal/vmctl/deploy-refresh lists them as pending): ${deferred_vms[*]}"
+      fi
+      if [ "$refreshed_count" -gt 0 ]; then
+        record_receipt_artifact autoputer "$DEPLOY_COMMIT" active
+      fi
+      if [ "${#deferred_vms[@]}" -gt 0 ] && [ "$refreshed_count" -gt 0 ]; then
+        active_computers_status=partial
+      elif [ "${#deferred_vms[@]}" -gt 0 ]; then
+        active_computers_status=pending
+      elif [ "$refreshed_count" -gt 0 ] || [ "$current_count" -gt 0 ]; then
+        active_computers_status=active
+      else
+        active_computers_status=empty
+      fi
+      receipt_artifacts=$(printf '%s' "$receipt_artifacts" |
+        jq --arg commit "$DEPLOY_COMMIT" --arg status "$active_computers_status" --argjson deferred "$deferred_json" \
+          '. + {active_computers: {commit: $commit, status: $status, deferred: $deferred}}')
+    fi
+  else
+    echo "==> Skipping active computer refresh; ordinary guest image and autoputer runtime package unchanged"
+  fi
+  note_phase "active computer refresh"
+
+  echo "==> Smoke test: health endpoints"
+  for port in 8081 8082 8083 8084 8086 8087; do
+    curl -fsS --retry 5 --retry-delay 2 --retry-all-errors http://127.0.0.1:$port/health
+    echo "    Port $port: OK"
+  done
+  service_health_port() {
+    case "$1" in
+      auth) echo 8081 ;;
+      proxy) echo 8082 ;;
+      vmctl) echo 8083 ;;
+      gateway) echo 8084 ;;
+      corpusd) echo 8086 ;;
+      maild) echo 8087 ;;
+      *) return 1 ;;
+    esac
+  }
+  identity_services=()
+  if [ "${service_pointer_deploy}" = "true" ]; then
+    IFS=',' read -ra identity_services <<< "${HOST_SERVICES}"
+  elif [ "${DEPLOY_HOST}" = "true" ]; then
+    identity_services=(auth proxy vmctl gateway corpusd maild)
+  fi
+  for service in "${identity_services[@]}"; do
+    [ -z "$service" ] && continue
+    # autoputer is a VM runtime package. Active VM refresh verifies its
+    # compiled identity through the guest /health body above.
+    [ "$service" = "autoputer" ] && continue
+    # checkpointd is a timer-driven oneshot with no health port: its
+    # identity is the installed pointer's build manifest, fail-closed.
+    if [ "$service" = "checkpointd" ]; then
+      manifest="/var/lib/go-choir/services/checkpointd/share/go-choir/build.json"
+      observed_commit=$(jq -r '.commit // empty' "$manifest" 2>/dev/null || true)
+      if [ "$observed_commit" != "$DEPLOY_COMMIT" ]; then
+        echo "Selected service checkpointd manifest commit=${observed_commit:-missing}, expected ${DEPLOY_COMMIT}" >&2
+        dump_deploy_service_diagnostics "selected service build identity mismatch"
+        exit 1
+      fi
+      echo "    Activation receipt: service=checkpointd commit=${observed_commit} (manifest)"
+      record_receipt_artifact checkpointd "$observed_commit" active
+      continue
+    fi
+    port=$(service_health_port "$service") || {
+      echo "No health identity probe is defined for selected host service ${service}" >&2
+      exit 1
+    }
+    observed_commit=""
+    observed_status=""
+    for _ in $(seq 1 15); do
+      probe=$(curl -sS --max-time 5 -D - -o /dev/null -w '\nX-Choir-Probe-Status: %{http_code}\n' "http://127.0.0.1:${port}/health" || true)
+      observed_commit=$(printf '%s\n' "$probe" |
+        awk 'tolower($1) == "x-choir-build-commit:" {gsub(/\r/, "", $2); print $2}' |
+        tail -n 1)
+      observed_status=$(printf '%s\n' "$probe" |
+        awk 'tolower($1) == "x-choir-probe-status:" {gsub(/\r/, "", $2); print $2}' |
+        tail -n 1)
+      if [ "$observed_commit" = "$DEPLOY_COMMIT" ] && [[ "$observed_status" =~ ^2[0-9][0-9]$ ]]; then
+        break
+      fi
+      sleep 2
+    done
+    if [ "$observed_commit" != "$DEPLOY_COMMIT" ] || [[ ! "$observed_status" =~ ^2[0-9][0-9]$ ]]; then
+      echo "Selected service ${service} health=${observed_status:-missing} commit=${observed_commit:-missing}, expected 2xx ${DEPLOY_COMMIT}" >&2
+      dump_deploy_service_diagnostics "selected service build identity mismatch"
+      exit 1
+    fi
+    echo "    Activation receipt: service=${service} commit=${observed_commit}"
+    record_receipt_artifact "$service" "$observed_commit" active
+  done
+  proxy_health=$(curl -fsS --retry 5 --retry-delay 2 --retry-all-errors http://127.0.0.1:8082/health)
+  if ! echo "$proxy_health" | grep -q '"service":"proxy"'; then
+    echo "Proxy health probe hit the wrong service (expected proxy on :8082): $proxy_health" >&2
+    dump_deploy_service_diagnostics "proxy health probe wrong service"
+    exit 1
+  fi
+  # Proxy health must report status="ok". With vmctl routing (the
+  # steady state after PR 5), upstream="vmctl" and vmctl_status must
+  # also be "ok". With static routing, upstream="ok".
+  if ! echo "$proxy_health" | grep -q '"status":"ok"'; then
+    echo "Proxy status is not ok: $proxy_health" >&2
+    dump_deploy_service_diagnostics "proxy status unhealthy"
+    exit 1
+  fi
+  if echo "$proxy_health" | grep -q '"vmctl_routing":"enabled"'; then
+    if ! echo "$proxy_health" | grep -q '"vmctl_status":"ok"'; then
+      echo "Proxy vmctl_status is not ok: $proxy_health" >&2
+      dump_deploy_service_diagnostics "proxy vmctl unhealthy"
+      exit 1
+    fi
+  fi
+  echo "    Proxy upstream: OK"
+  note_phase "health checks"
+
+  echo "==> Smoke test: public frontend asset graph"
+  served_asset=$(curl -fsS --retry 5 --retry-delay 2 --retry-all-errors --resolve choir.news:443:147.135.70.196 https://choir.news/ |
+    sed -n "s/.*src=\"\\/assets\\/\\([^\"]*\\.js\\)\".*/\\1/p" |
+    head -n 1)
+  if [ -z "$served_asset" ]; then
+    echo "Could not find served frontend JS asset in public index" >&2
+    exit 1
+  fi
+  served_asset_path=""
+  if [ -f "/var/www/go-choir/frontend-current/assets/$served_asset" ]; then
+    served_asset_path="/var/www/go-choir/frontend-current/assets/$served_asset"
+  elif [ -f "/var/www/go-choir/frontend-previous/assets/$served_asset" ]; then
+    served_asset_path="/var/www/go-choir/frontend-previous/assets/$served_asset"
+  else
+    echo "Served asset $served_asset is not in frontend-current or frontend-previous" >&2
+    exit 1
+  fi
+  if ! curl -fsSI --retry 5 --retry-delay 2 --retry-all-errors --resolve choir.news:443:147.135.70.196 "https://choir.news/assets/$served_asset" >/dev/null; then
+    echo "Served asset URL /assets/$served_asset did not resolve through Caddy" >&2
+    exit 1
+  fi
+  echo "    Public frontend asset /assets/$served_asset resolves through current/previous asset roots"
+  if [ "${DEPLOY_FRONTEND}" = "true" ]; then
+    if ! grep -Fq "$DEPLOY_COMMIT" "$served_asset_path"; then
+      echo "Selected frontend asset ${served_asset_path} does not contain workflow commit ${DEPLOY_COMMIT}" >&2
+      exit 1
+    fi
+    receipt_artifacts=$(printf '%s' "$receipt_artifacts" |
+      jq --arg commit "$DEPLOY_COMMIT" --arg asset "$served_asset" \
+        '. + {frontend: {commit: $commit, status: "active", asset: $asset}}')
+    echo "    Activation receipt: service=frontend commit=${DEPLOY_COMMIT} asset=${served_asset}"
+  fi
+  note_phase "frontend asset graph"
+
+  for service in "${identity_services[@]}"; do
+    [ -z "$service" ] && continue
+    [ "$service" = "autoputer" ] && continue
+    require_receipt_artifact "$service" active
+  done
+  if [ "$autoputer_service_selected" = "true" ]; then
+    require_receipt_artifact autoputer verified
+  fi
+  if [ "${DEPLOY_FRONTEND}" = "true" ]; then
+    require_receipt_artifact frontend active
+  fi
+  if [ "$(printf '%s' "$receipt_artifacts" | jq 'length')" -eq 0 ]; then
+    echo "Refusing to publish an activation receipt with no verified artifacts" >&2
+    exit 1
+  fi
+
+  checkout_head=$(git rev-parse HEAD)
+  if [ "$checkout_head" != "$DEPLOY_COMMIT" ] || [ -n "$(git status --porcelain)" ]; then
+    echo "Refusing identity receipt for a dirty or divergent checkout" >&2
+    exit 1
+  fi
+  nixos_closure=$(readlink -f /nix/var/nix/profiles/system)
+  if [ -z "$nixos_closure" ] || [[ "$nixos_closure" != /nix/store/* ]]; then
+    echo "NixOS system closure identity is unavailable" >&2
+    exit 1
+  fi
+  nixos_closure_digest=$(nix hash path --type sha256 "$nixos_closure")
+  nixos_closure_digest="sha256:${nixos_closure_digest#sha256-}"
+  # Installed is not running (docs/reports/patch-lanes-plan-
+  # 2026-10-15.md, slice 1): record whether the host runs the
+  # kernel, modules, command line and KVM parameters it just
+  # activated. The detector never fails a deploy.
+  boot_state=$(python3 scripts/verify-host-hardening.py --boot-state-json 2>/dev/null) || boot_state=''
+  if ! printf '%s' "$boot_state" | jq -e 'type == "object" and .schema_version == 1' >/dev/null 2>&1; then
+    boot_state='{"schema_version":1,"available":false,"error":"boot-state detector failed"}'
+  fi
+  boot_state=$(printf '%s' "$boot_state" | jq -c .)
+  if [ "$(printf '%s' "$boot_state" | jq -r '.reboot_pending')" = "true" ]; then
+    echo "::warning title=Host reboot pending::Node B runs $(printf '%s' "$boot_state" | jq -r '.running_kernel_release // "unknown"'); activated changes not booted: $(printf '%s' "$boot_state" | jq -r '.reasons | join(", ")') (pending since $(printf '%s' "$boot_state" | jq -r '.pending_since // "unknown"'), overdue=$(printf '%s' "$boot_state" | jq -r '.pending_overdue'))"
+  fi
+  # Service runners execute atomically copied packages under /var/lib.
+  # Bind those live bytes back to an immutable Nix package by digest;
+  # a leftover build result or the unit's fallback package is not
+  # evidence unless it exactly matches the active copied tree.
+  source scripts/node-b-sync-service-pointers
+  host_services='{}'
+  for service in auth proxy vmctl gateway corpusd maild checkpointd; do
+    active_path="/var/lib/go-choir/services/${service}"
+    active_commit=$(artifact_manifest_commit "$active_path/share/go-choir/build.json" "$service")
+    active_digest=$(nix hash path --type sha256 "$active_path")
+    package_path=
+    candidate="/tmp/go-choir-service-${service}-result"
+    if [ -e "$candidate" ]; then
+      candidate_path=$(readlink -f "$candidate")
+      candidate_commit=$(artifact_manifest_commit "$candidate_path/share/go-choir/build.json" "$service" 2>/dev/null || true)
+      candidate_digest=$(nix hash path --type sha256 "$candidate_path" 2>/dev/null || true)
+      if [ "$candidate_commit" = "$active_commit" ] && [ "$candidate_digest" = "$active_digest" ]; then
+        package_path="$candidate_path"
+      fi
+    fi
+    if [ -z "$package_path" ]; then
+      fallback_path=$(resolve_service_package_from_unit "$service")
+      fallback_commit=$(artifact_manifest_commit "$fallback_path/share/go-choir/build.json" "$service" 2>/dev/null || true)
+      fallback_digest=$(nix hash path --type sha256 "$fallback_path" 2>/dev/null || true)
+      if [ "$fallback_commit" = "$active_commit" ] && [ "$fallback_digest" = "$active_digest" ]; then
+        package_path="$fallback_path"
+      fi
+    fi
+    if [ -z "$package_path" ]; then
+      echo "No immutable Nix package matches active service ${service}: commit=${active_commit} digest=sha256:${active_digest#sha256-}" >&2
+      exit 1
+    fi
+    package_commit="$active_commit"
+    package_digest="sha256:${active_digest#sha256-}"
+    selected_service=false
+    for identity_service in "${identity_services[@]}"; do
+      if [ "$identity_service" = "$service" ]; then
+        selected_service=true
+        break
+      fi
+    done
+    if [ "$selected_service" = "true" ]; then
+      service_commit=$(printf '%s' "$receipt_artifacts" | jq -er --arg service "$service" '.[$service] | select(.status == "active") | .commit')
+      if [ "$package_commit" != "$DEPLOY_COMMIT" ] || [ "$service_commit" != "$DEPLOY_COMMIT" ]; then
+        echo "Selected host service identity conflicts for ${service}: package_commit=${package_commit:-missing} service_commit=${service_commit:-missing} target_commit=${DEPLOY_COMMIT}" >&2
+        exit 1
+      fi
+    fi
+    if [ -z "$package_path" ] || [[ "$package_path" != /nix/store/* ]] || [[ "$package_digest" != sha256:* ]]; then
+      echo "Host service identity is incomplete for ${service}: package=${package_path:-missing} package_commit=${package_commit:-missing}" >&2
+      exit 1
+    fi
+    host_services=$(printf '%s' "$host_services" |
+      jq --arg service "$service" --arg path "$package_path" --arg digest "$package_digest" --arg commit "$package_commit" \
+        '. + {($service): {package_path: $path, package_digest: $digest, embedded_commit: $commit}}')
+  done
+  host_identity=$(jq -n \
+    --arg canonical_ref "refs/heads/main@${DEPLOY_COMMIT}" \
+    --arg checkout_head "$checkout_head" \
+    --arg nixos_closure "$nixos_closure" \
+    --arg nixos_closure_digest "$nixos_closure_digest" \
+    --argjson services "$host_services" \
+    --argjson boot_state "$boot_state" \
+    '{canonical_ref: $canonical_ref, checkout_head: $checkout_head, checkout_clean: true, nixos_closure: $nixos_closure, nixos_closure_digest: $nixos_closure_digest, boot_state: $boot_state, services: $services}')
+
+  activated_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  receipt_tmp=/var/lib/go-choir/deploy-receipt.json.tmp
+  jq -n \
+    --arg target_commit "$DEPLOY_COMMIT" \
+    --arg activated_at "$activated_at" \
+    --arg run_id "$DEPLOY_RUN_ID" \
+    --arg run_attempt "$DEPLOY_RUN_ATTEMPT" \
+    --argjson artifacts "$receipt_artifacts" \
+    --argjson host_identity "$host_identity" \
+    '{schema_version: 1, target_commit: $target_commit, activated_at: $activated_at, github: {run_id: $run_id, run_attempt: $run_attempt}, artifacts: $artifacts, host_identity: $host_identity}' \
+    > "${receipt_tmp}.new"
+  # Merge, never replace: carry forward untouched services'
+  # artifacts and record the platform deployed_commit, so a partial
+  # deploy cannot blank /health's deployed commit (docs/problems/
+  # partial-deploy-receipt-blanks-deployed-commit-2026-10-14.md).
+  .github/scripts/deploy-receipt-merge /var/lib/go-choir/deploy-receipt.json < "${receipt_tmp}.new" > "$receipt_tmp"
+  rm -f "${receipt_tmp}.new"
+  if [ -f /var/lib/go-choir/deploy-receipt.json ]; then
+    cp /var/lib/go-choir/deploy-receipt.json /var/lib/go-choir/deploy-receipt-previous.json
+  fi
+  mv "$receipt_tmp" /var/lib/go-choir/deploy-receipt.json
+  chmod 0644 /var/lib/go-choir/deploy-receipt.json
+  # Deployment identity no longer belongs in the service environment.
+  # Preserve operator-managed keys while deleting obsolete target
+  # assertions after the independent receipt is durable.
+  if [ -f /var/lib/go-choir/deploy.env ]; then
+    grep -v -E '^CHOIR_DEPLOYED_(AT|COMMIT)=' /var/lib/go-choir/deploy.env > /var/lib/go-choir/deploy.env.tmp || true
+    mv /var/lib/go-choir/deploy.env.tmp /var/lib/go-choir/deploy.env
+    chmod 0644 /var/lib/go-choir/deploy.env
+  fi
+  echo "==> Published activation receipt for ${DEPLOY_COMMIT}"
+  cat /var/lib/go-choir/deploy-receipt.json
+  note_phase "activation receipt"
+  echo "==> Publishing platform release manifest for ${DEPLOY_COMMIT}"
+  go run ./cmd/platformrelease --output /var/lib/go-choir/platform-release.json || true
+
+  deploy_completed=true
+  echo "==> Staging deploy complete"
