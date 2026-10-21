@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -61,14 +63,14 @@ func (s *Store) ListStoryDocuments(ctx context.Context, ownerID, computerID stri
 		if !before.IsZero() && (doc.UpdatedAt.After(before) || (doc.UpdatedAt.Equal(before) && doc.DocID <= beforeDoc)) {
 			continue
 		}
-		trajectory, err := s.GetLifecycleTrajectory(ctx, ownerID, computerID, doc.TrajectoryID)
+		kind, err := s.storyTrajectoryKind(ctx, ownerID, computerID, doc.TrajectoryID)
 		if errors.Is(err, ErrNotFound) {
 			continue
 		}
 		if err != nil {
 			return nil, err
 		}
-		if trajectory.Kind != types.TrajectoryKindStory {
+		if kind != types.TrajectoryKindStory {
 			continue
 		}
 		out = append(out, doc)
@@ -79,20 +81,86 @@ func (s *Store) ListStoryDocuments(ctx context.Context, ownerID, computerID stri
 	return out, nil
 }
 
-// StorySummaryOf reads a story's head revision for its lede and version.
-// A head that cannot be read leaves both empty; the story is still listed.
+// StorySummaryOf is one story's summary (StorySummariesOf).
 func (s *Store) StorySummaryOf(ctx context.Context, doc types.Document) StorySummary {
-	out := StorySummary{DocID: doc.DocID, TrajectoryID: doc.TrajectoryID, Headline: doc.Title, UpdatedAt: doc.UpdatedAt, RevisionID: doc.CurrentRevisionID}
-	if strings.TrimSpace(doc.CurrentRevisionID) == "" {
-		return out
+	return s.StorySummariesOf(ctx, []types.Document{doc})[0]
+}
+
+// StorySummariesOf gives each story its head's lede and version, from the
+// head entries the corpus search keeps by revision id (search_index.go), so a
+// head is read once however often the library is listed, and a few at a time
+// when it is (docs/problems/tool-call-failures-dual-model-2026-10-21.md T1).
+// A head that cannot be read leaves both empty; the story is still listed.
+func (s *Store) StorySummariesOf(ctx context.Context, docs []types.Document) []StorySummary {
+	entries := s.headEntries(ctx, docs)
+	out := make([]StorySummary, len(docs))
+	for i, doc := range docs {
+		out[i] = StorySummary{DocID: doc.DocID, TrajectoryID: doc.TrajectoryID, Headline: doc.Title, UpdatedAt: doc.UpdatedAt, RevisionID: doc.CurrentRevisionID}
+		if e := entries[i]; e != nil {
+			out[i].Version = types.RevisionNumber(e.version)
+			out[i].Lede = StoryLede(e.content)
+		}
 	}
-	rev, err := s.GetLifecycleRevision(ctx, doc.OwnerID, doc.ComputerID, doc.CurrentRevisionID)
-	if err != nil {
-		return out
-	}
-	out.Version = types.RevisionNumber(rev.VersionNumber)
-	out.Lede = StoryLede(rev.Content)
 	return out
+}
+
+// storyKindCache keeps each trajectory's kind, which never changes after the
+// trajectory is created, so the library reads a trajectory once.
+type storyKindCache struct {
+	mu    sync.Mutex
+	kinds map[string]types.TrajectoryKind
+	// reads counts trajectories read to fill the cache.
+	reads atomic.Uint64
+}
+
+func (s *Store) storyTrajectoryKind(ctx context.Context, ownerID, computerID, trajectoryID string) (types.TrajectoryKind, error) {
+	key := ownerID + "\x00" + computerID + "\x00" + trajectoryID
+	s.storyKinds.mu.Lock()
+	kind, ok := s.storyKinds.kinds[key]
+	s.storyKinds.mu.Unlock()
+	if ok {
+		return kind, nil
+	}
+	s.storyKinds.reads.Add(1)
+	trajectory, err := s.GetLifecycleTrajectory(ctx, ownerID, computerID, trajectoryID)
+	if err != nil {
+		return "", err
+	}
+	s.storyKinds.mu.Lock()
+	if s.storyKinds.kinds == nil {
+		s.storyKinds.kinds = map[string]types.TrajectoryKind{}
+	}
+	s.storyKinds.kinds[key] = trajectory.Kind
+	s.storyKinds.mu.Unlock()
+	return trajectory.Kind, nil
+}
+
+// warmStoryKinds reads the kinds of the listed documents' trajectories a few
+// at a time, so the first library page after a boot does not read them one
+// by one.
+func (s *Store) warmStoryKinds(ctx context.Context, docs []types.Document) {
+	work := make(chan types.Document)
+	var wg sync.WaitGroup
+	for w := 0; w < searchHeadReadPool; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for doc := range work {
+				_, _ = s.storyTrajectoryKind(ctx, doc.OwnerID, doc.ComputerID, doc.TrajectoryID)
+			}
+		}()
+	}
+	for _, doc := range docs {
+		if ctx.Err() != nil {
+			break
+		}
+		if strings.TrimSpace(doc.TrajectoryID) == "" || strings.TrimSpace(doc.ComputerID) == "" || doc.ArchivedAt != nil {
+			continue
+		}
+		work <- doc
+	}
+	close(work)
+	wg.Wait()
 }
 
 // StoryLede is the first paragraph of a story's text that is not a

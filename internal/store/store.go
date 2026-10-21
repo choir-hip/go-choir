@@ -182,6 +182,8 @@ type Store struct {
 	// searchIdx caches tokenized head text for SearchDocuments
 	// (search_index.go).
 	searchIdx searchIndex
+	// storyKinds caches trajectory kinds for the story library (stories.go).
+	storyKinds storyKindCache
 }
 
 type eventSeqKey struct{ runID, ownerID string }

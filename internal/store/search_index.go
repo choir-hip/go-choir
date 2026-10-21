@@ -37,9 +37,12 @@ type searchIndex struct {
 
 type searchEntry struct {
 	revisionID string
-	terms      map[string]int
-	length     int
-	content    string
+	// version is the revision's VersionNumber (the story library's
+	// summaries read it here too).
+	version int
+	terms   map[string]int
+	length  int
+	content string
 }
 
 func (x *searchIndex) get(docID string) *searchEntry {
@@ -94,9 +97,23 @@ func searchTermCounts(text string) (map[string]int, int) {
 }
 
 // searchEntries returns each listed document's entry, reading the heads the
-// cache has not seen (a few at a time). A head that cannot be read leaves the
-// document searchable by title only and is retried next time.
+// cache has not seen (a few at a time), and drops entries for documents no
+// longer listed: docs must be the whole corpus. A head that cannot be read
+// leaves the document searchable by title only and is retried next time.
 func (s *Store) searchEntries(ctx context.Context, docs []types.Document) []*searchEntry {
+	entries := s.headEntries(ctx, docs)
+	listed := make(map[string]bool, len(docs))
+	for _, doc := range docs {
+		listed[doc.DocID] = true
+	}
+	s.searchIdx.prune(listed)
+	return entries
+}
+
+// headEntries returns each document's head entry, reading the heads the cache
+// has not seen a few at a time; nil where a head cannot be read. It drops
+// nothing, so it serves any subset of the corpus.
+func (s *Store) headEntries(ctx context.Context, docs []types.Document) []*searchEntry {
 	entries := make([]*searchEntry, len(docs))
 	var missing []int
 	for i, doc := range docs {
@@ -124,7 +141,7 @@ func (s *Store) searchEntries(ctx context.Context, docs []types.Document) []*sea
 						continue
 					}
 					terms, length := searchTermCounts(rev.Content)
-					e := &searchEntry{revisionID: doc.CurrentRevisionID, terms: terms, length: length, content: rev.Content}
+					e := &searchEntry{revisionID: doc.CurrentRevisionID, version: rev.VersionNumber, terms: terms, length: length, content: rev.Content}
 					s.searchIdx.put(doc.DocID, e)
 					entries[i] = e
 				}
@@ -139,11 +156,6 @@ func (s *Store) searchEntries(ctx context.Context, docs []types.Document) []*sea
 		close(work)
 		wg.Wait()
 	}
-	listed := make(map[string]bool, len(docs))
-	for _, doc := range docs {
-		listed[doc.DocID] = true
-	}
-	s.searchIdx.prune(listed)
 	return entries
 }
 
@@ -271,5 +283,6 @@ func (s *Store) WarmSearchIndex(ctx context.Context) (docs int, reads uint64, er
 	}
 	before := s.searchIdx.headReads.Load()
 	s.searchEntries(ctx, listed)
+	s.warmStoryKinds(ctx, listed)
 	return len(listed), s.searchIdx.headReads.Load() - before, ctx.Err()
 }

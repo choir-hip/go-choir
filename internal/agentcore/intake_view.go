@@ -119,8 +119,7 @@ func (rt *Runtime) storiesEgress(ctx context.Context, exec toolregistry.Executio
 	if more {
 		docs = docs[:limit]
 	}
-	for _, doc := range docs {
-		sum := rt.store.StorySummaryOf(ctx, doc)
+	for _, sum := range rt.store.StorySummariesOf(ctx, docs) {
 		page.Stories = append(page.Stories, yaegikernel.StoryEntry{DocID: sum.DocID, Inbox: agentprofile.Texture + ":" + sum.DocID,
 			Headline: sum.Headline, Lede: sum.Lede, UpdatedAt: sum.UpdatedAt.UTC().Format(time.RFC3339Nano), Version: sum.Version})
 	}
