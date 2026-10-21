@@ -155,17 +155,18 @@ func TestEgressTunnelsAllowlistedHostToTheCheckedAddress(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("CONNECT status = %d", resp.StatusCode)
 	}
-	if _, err := conn.Write([]byte("client-hello")); err != nil {
+	hello := realClientHello(t, "files.pythonhosted.org")
+	if _, err := conn.Write(hello); err != nil {
 		t.Fatal(err)
 	}
-	echo := make([]byte, len("client-hello"))
-	if _, err := io.ReadFull(br, echo); err != nil || string(echo) != "client-hello" {
+	echo := make([]byte, len(hello))
+	if _, err := io.ReadFull(br, echo); err != nil || string(echo) != string(hello) {
 		t.Fatalf("tunnel echo = %q, %v", echo, err)
 	}
 	conn.Close()
 	records := h.waitRecords(1)
 	if len(records) != 1 || records[0].Outcome != EgressOutcomeOK || records[0].Host != "files.pythonhosted.org" ||
-		records[0].IP != publicAddr.String() || records[0].BytesUp < int64(len("client-hello")) || records[0].BytesDown < int64(len("client-hello")) {
+		records[0].IP != publicAddr.String() || records[0].BytesUp < int64(len(hello)) || records[0].BytesDown < int64(len(hello)) {
 		t.Fatalf("records = %+v", records)
 	}
 	if d := h.dials(); len(d) != 1 || d[0] != net.JoinHostPort(publicAddr.String(), "443") {
@@ -182,14 +183,15 @@ func TestEgressForwardsBytesSentBehindTheConnectHeader(t *testing.T) {
 	}
 	defer conn.Close()
 	// A client may pipeline its TLS hello in the same write as CONNECT.
-	fmt.Fprintf(conn, "CONNECT github.com:443 HTTP/1.1\r\nHost: github.com:443\r\n\r\neager-bytes")
+	hello := realClientHello(t, "github.com")
+	fmt.Fprintf(conn, "CONNECT github.com:443 HTTP/1.1\r\nHost: github.com:443\r\n\r\n%s", hello)
 	br := bufio.NewReader(conn)
 	resp, err := http.ReadResponse(br, nil)
 	if err != nil || resp.StatusCode != http.StatusOK {
 		t.Fatalf("CONNECT: %v %v", resp, err)
 	}
-	echo := make([]byte, len("eager-bytes"))
-	if _, err := io.ReadFull(br, echo); err != nil || string(echo) != "eager-bytes" {
+	echo := make([]byte, len(hello))
+	if _, err := io.ReadFull(br, echo); err != nil || string(echo) != string(hello) {
 		t.Fatalf("eager bytes = %q, %v", echo, err)
 	}
 }
@@ -271,7 +273,7 @@ func TestEgressPlainHTTPAllowsOnlyReadsOnPort80(t *testing.T) {
 
 func TestEgressUploadBudgetCutsTheTunnel(t *testing.T) {
 	policy := EcosystemEgressPolicy()
-	policy.MaxUploadBytes = 1024
+	policy.MaxUploadBytes = 8192
 	h := newEgressHarness(t, policy)
 	h.resolved["pypi.org"] = []netip.Addr{publicAddr}
 	conn, _, resp := h.connect("pypi.org:443")
@@ -280,6 +282,9 @@ func TestEgressUploadBudgetCutsTheTunnel(t *testing.T) {
 	}
 	payload := strings.Repeat("x", 4096)
 	conn.SetDeadline(time.Now().Add(3 * time.Second))
+	if _, err := conn.Write(realClientHello(t, "pypi.org")); err != nil {
+		t.Fatal(err)
+	}
 	for i := 0; i < 8; i++ {
 		if _, err := io.WriteString(conn, payload); err != nil {
 			break
