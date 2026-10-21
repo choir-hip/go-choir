@@ -11,6 +11,10 @@ import (
 	"sync/atomic"
 )
 
+// ErrAppenderPoisoned is returned by every call of an Appender after its first
+// failed fsync or failed write (the fail-stop rule). The failure tests name it.
+var ErrAppenderPoisoned = errors.New("tapestore: appender poisoned by an earlier write or fsync failure")
+
 // Item is one record to append: a namespace and the exact bytes whose
 // SHA-256 is the digest.
 type Item struct {
