@@ -26,7 +26,14 @@ const (
 type assignedEngineeringFateDeadline struct {
 	AssignmentID string `json:"assignment_id"`
 	Attempt      uint64 `json:"attempt"`
+	// Stage is "bound" on the bound-assignment deadline armed at bind. The
+	// wake's update id is derived from its content, so without it the bind
+	// arm would dedup into an earlier {assignment_id, attempt} wake (an
+	// open-time arm or a fate watchdog) that may already be consumed.
+	Stage string `json:"stage,omitempty"`
 }
+
+const assignedEngineeringBoundDeadlineStage = "bound"
 
 // delegatedAssignmentSpawnDeadline is the durable spawn obligation minted
 // atomically inside the assignment Open commit (actorWakeOutboxFromObject).
@@ -249,29 +256,53 @@ func decodeAssignedEngineeringFateDeadline(content string) (assignedEngineeringF
 	return deadline, nil
 }
 
-// armAssignedEngineeringDeadline makes the I26 bound-assignment deadline
-// derivable from the assignment's durable creation receipt. Delegated casts
-// arm it when their durable open lands; every bind path arms it again, so an
-// open that takes longer than the deadline to bind still receives an immediate
-// expiry wake once it becomes live. The handler is deliberately the predicate
-// authority: an unbound, terminal, or pending-fate assignment is a no-op.
+// assignedEngineeringBoundAt is when the assignment's capsule was granted to
+// its run: the start of execution, from which the bound deadline runs. Time a
+// request spent queued before admission is not execution time (review finding
+// B3). It reads the grant attestation the bind committed; a row bound without
+// one falls back to its bound run's creation (the bind commit writes both),
+// and only then to the assignment's creation.
+func (rt *Runtime) assignedEngineeringBoundAt(ctx context.Context, assignment types.EngineeringAssignment) time.Time {
+	if att := assignment.GrantPolicyAttestation; att != nil && !att.GrantedAt.IsZero() {
+		return att.GrantedAt.UTC()
+	}
+	if runID := strings.TrimSpace(assignment.BoundRunID); runID != "" && rt.store != nil {
+		if run, err := rt.store.GetLifecycleRun(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, runID); err == nil && !run.CreatedAt.IsZero() {
+			return run.CreatedAt.UTC()
+		}
+	}
+	return assignment.CreatedAt.UTC()
+}
+
+// armAssignedEngineeringDeadline arms the I26 bound-assignment deadline when
+// an assignment binds: a wake due at bind plus the deadline, with an identity
+// of its own (Stage). An open arms nothing: a queued request's own deadline is
+// its spawn wake's expiry (engineering_admission.go). The handler is the
+// predicate authority: an unbound, terminal, or pending-fate assignment is a
+// no-op.
 func (rt *Runtime) armAssignedEngineeringDeadline(assignment types.EngineeringAssignment) {
-	if rt == nil || assignment.Disposition.Terminal() || assignment.CreatedAt.IsZero() {
+	if rt == nil || assignment.Disposition.Terminal() || strings.TrimSpace(assignment.BoundRunID) == "" {
 		return
 	}
-	content, err := encodeAssignedEngineeringFateDeadline(assignment.AssignmentID, assignment.Binding.Attempt)
+	content, err := json.Marshal(assignedEngineeringFateDeadline{
+		AssignmentID: assignment.AssignmentID, Attempt: assignment.Binding.Attempt, Stage: assignedEngineeringBoundDeadlineStage,
+	})
 	if err != nil {
 		log.Printf("runtime: encode assignment %s deadline: %v", assignment.AssignmentID, err)
 		return
 	}
-	rt.scheduleContinuation(context.Background(), assignment.Binding.OwnerID, assignment.Binding.ComputerID,
-		assignment.Binding.ParentAgentID, assignedEngineeringFateDeadlineUpdateKind, content,
-		assignment.Binding.TrajectoryID, "", assignment.CreatedAt.Add(assignedEngineeringDeadline()))
+	ctx := context.Background()
+	rt.scheduleContinuation(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID,
+		assignment.Binding.ParentAgentID, assignedEngineeringFateDeadlineUpdateKind, string(content),
+		assignment.Binding.TrajectoryID, "", rt.assignedEngineeringBoundAt(ctx, assignment).Add(assignedEngineeringDeadline()))
 }
 
 // HandleAssignedEngineeringFateDeadline either resumes a still-pending fate
-// saga or fails closed a bound, active assignment whose durable deadline has
-// elapsed. Both paths re-read durable state, so duplicate delivery is a no-op.
+// saga or fails closed a bound, active assignment whose durable deadline,
+// counted from bind, has elapsed. Both paths re-read durable state, so
+// duplicate delivery is a no-op. A wake without the bound stage (an open-time
+// arm from before this change, or a watchdog) that finds the run not yet due
+// re-arms the bound deadline, so a row bound by an older binary keeps one.
 func (rt *Runtime) HandleAssignedEngineeringFateDeadline(ctx context.Context, ownerID, computerID, agentID, content string) error {
 	deadline, err := decodeAssignedEngineeringFateDeadline(content)
 	if err != nil {
@@ -292,9 +323,13 @@ func (rt *Runtime) HandleAssignedEngineeringFateDeadline(ctx context.Context, ow
 	}
 	if assignment.Disposition != types.EngineeringAssignmentBound ||
 		assignment.CapsuleDisposition != types.EngineeringCapsuleActive ||
-		strings.TrimSpace(assignment.BoundRunID) == "" ||
-		assignment.CreatedAt.IsZero() ||
-		time.Now().UTC().Before(assignment.CreatedAt.Add(assignedEngineeringDeadline())) {
+		strings.TrimSpace(assignment.BoundRunID) == "" {
+		return nil
+	}
+	if time.Now().UTC().Before(rt.assignedEngineeringBoundAt(ctx, assignment).Add(assignedEngineeringDeadline())) {
+		if deadline.Stage != assignedEngineeringBoundDeadlineStage {
+			rt.armAssignedEngineeringDeadline(assignment)
+		}
 		return nil
 	}
 	parent := types.RunRecord{
