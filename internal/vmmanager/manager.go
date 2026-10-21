@@ -364,6 +364,10 @@ type ManagerConfig struct {
 	// (CHOIR_VISUAL_CAPTURE_COMPUTERS; empty by default). See
 	// visual_capture.go.
 	VisualCapture VisualCaptureConfig
+
+	// CapsuleMirrors is the capsule package mirror grant switch
+	// (CHOIR_CAPSULE_MIRROR_*; empty by default). See capsule_mirrors.go.
+	CapsuleMirrors CapsuleMirrorConfig
 }
 
 // DefaultManagerConfig returns a sensible default configuration.
@@ -931,6 +935,18 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 			log.Printf("vmmanager: visual capture for computer %s (VM %s): %s", cfg.ComputerID, cfg.VMID, captureStatus)
 		}
 		for name, content := range captureFiles {
+			if delegateFiles == nil {
+				delegateFiles = map[string][]byte{}
+			}
+			delegateFiles[name] = content
+		}
+		// Capsule package mirrors: a granted computer's disk carries the
+		// ecosystems its L2 capsules use the host mirror for (station FP10).
+		mirrorFiles, mirrorStatus := m.cfg.CapsuleMirrors.capsuleMirrorMaterial(cfg.ComputerID, cfg.WarmnessClass, time.Now())
+		if mirrorStatus != "" {
+			log.Printf("vmmanager: capsule mirrors for computer %s (VM %s): %s", cfg.ComputerID, cfg.VMID, mirrorStatus)
+		}
+		for name, content := range mirrorFiles {
 			if delegateFiles == nil {
 				delegateFiles = map[string][]byte{}
 			}
@@ -3551,6 +3567,9 @@ func tapReachableHostServicePorts() []string {
 		// Go module proxy for L2 capsules' goproxy.choir.internal route
 		// (docs/reports/capsule-go-module-proxy-design-2026-10-14.md).
 		"8088",
+		// Package mirror for L2 capsules' mirror.choir.internal route
+		// (station FP10, docs/definitions/choir-launch-fp10-net02-mirrors-2026-10-21.md).
+		"8089",
 	}
 }
 

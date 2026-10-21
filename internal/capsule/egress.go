@@ -62,10 +62,17 @@ const CapsuleHeader = "X-Choir-Capsule"
 // guest's tap peer) on GoProxyHostPort. ok is false when neither names an
 // address; the route is then absent and module fetches are refused.
 func GoModuleProxyAddr(explicit, gatewayURL string) (addr netip.AddrPort, ok bool, err error) {
+	return hostServiceAddr(explicit, gatewayURL, GoProxyHostPort, "Go module proxy")
+}
+
+// hostServiceAddr is a host service's address for an egress route: the
+// explicit ip:port when configured, else the gateway URL's literal host
+// address on port. ok is false when neither names an address.
+func hostServiceAddr(explicit, gatewayURL string, port uint16, what string) (addr netip.AddrPort, ok bool, err error) {
 	if explicit = strings.TrimSpace(explicit); explicit != "" {
 		addr, err := netip.ParseAddrPort(explicit)
 		if err != nil {
-			return netip.AddrPort{}, false, fmt.Errorf("capsule Go module proxy address %q: want ip:port", explicit)
+			return netip.AddrPort{}, false, fmt.Errorf("capsule %s address %q: want ip:port", what, explicit)
 		}
 		return netip.AddrPortFrom(addr.Addr().Unmap(), addr.Port()), true, nil
 	}
@@ -82,7 +89,7 @@ func GoModuleProxyAddr(explicit, gatewayURL string) (addr netip.AddrPort, ok boo
 		// Only a literal tap address makes a route; a name would need DNS.
 		return netip.AddrPort{}, false, nil
 	}
-	return netip.AddrPortFrom(ip.Unmap(), GoProxyHostPort), true, nil
+	return netip.AddrPortFrom(ip.Unmap(), port), true, nil
 }
 
 // EgressPolicy is what an L2 capsule may reach. Hosts are DNS suffixes
@@ -354,6 +361,9 @@ func (p *EgressProxy) serveConn(client net.Conn) {
 		return
 	case !routed && rec.Host == GoProxyRouteHost:
 		refuse(http.StatusForbidden, "no host Go module proxy is configured for this computer")
+		return
+	case !routed && rec.Host == MirrorRouteHost:
+		refuse(http.StatusForbidden, "no host package mirror is granted to this computer")
 		return
 	case !routed && !p.policy.allowsHost(rec.Host):
 		refuse(http.StatusForbidden, "host is not on the L2 ecosystem allowlist; ask management for a wider grant")

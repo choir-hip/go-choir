@@ -85,6 +85,7 @@ func sessionWorkerEnv(inet bool, lookup func(string) (string, bool)) []string {
 	env := []string{"PATH=/run/current-system/sw/bin:/bin:/usr/bin", "TMPDIR=/tmp"}
 	if inet {
 		env = append(env, capsule.EgressProxyEnv()...)
+		env = append(env, capsule.MirrorClientEnv(lookup)...)
 	}
 	return append(env, yaegikernel.BuildToolchainCarry(lookup)...)
 }

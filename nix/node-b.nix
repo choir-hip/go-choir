@@ -1368,6 +1368,19 @@ in
         # 2026-10-20: one test computer (visual-evidence-20261020) for the
         # --visual staging drill; owner scope "one test computer first".
         "CHOIR_VISUAL_CAPTURE_COMPUTERS=computer-7011602c92710d9cf13ee52fd2675908"
+        # capsule package mirrors (station FP10,
+        # docs/definitions/choir-launch-fp10-net02-mirrors-2026-10-21.md):
+        # point the named computers' L2 capsules at go-choir-pkgmirror for
+        # the listed ecosystems (npm, pypi, crates, git). OFF while either
+        # list is empty. Each ecosystem must also be on in the
+        # go-choir-pkgmirror unit's -ecosystems, or the capsule's tools are
+        # pointed at a prefix that answers 404. MIRRORS_ONLY=1 also takes the
+        # mirrored registries off those capsules' CONNECT allowlist. A
+        # computer reads the grant at its next cold boot. Rollback: empty the
+        # computer list and deploy.
+        "CHOIR_CAPSULE_MIRROR_COMPUTERS="
+        "CHOIR_CAPSULE_MIRROR_ECOSYSTEMS="
+        "CHOIR_CAPSULE_MIRRORS_ONLY="
         # claude delegate (docs/design/claude-delegate-slice1-2026-10-14.md;
         # Option T, owner-ratified 2026-10-14). OFF while the list is empty.
         # To turn it on for one test computer: put its ComputerID in
@@ -2057,6 +2070,52 @@ in
       # 0750 /var/lib/go-choir is not traversable by the dynamic user
       # (docs/problems/goproxy-unit-cannot-create-cache-2026-10-14.md).
       StateDirectory = "go-choir-goproxy";
+      StateDirectoryMode = "0750";
+      RestrictAddressFamilies = [ "AF_INET" "AF_INET6" "AF_UNIX" ];
+      MemoryMax = "1G";
+      # Under host memory pressure the kernel kills this cache before a guest.
+      OOMScoreAdjust = 500;
+    };
+  };
+
+  # Package mirror for engineering capsules (station FP10,
+  # docs/definitions/choir-launch-fp10-net02-mirrors-2026-10-21.md): npm,
+  # PyPI, crates and git, following the Go module proxy above. Capsules on a
+  # granted computer (CHOIR_CAPSULE_MIRROR_* in go-choir-vmctl) reach it only
+  # through their egress route mirror.choir.internal, which the guest
+  # executor sends to the tap peer on 8089; vmmanager DNATs that to this
+  # loopback listener. GET and HEAD only; artifacts enter the cache only
+  # after they match the registry's published hash; git is served over the
+  # dumb protocol from bare copies this unit's git keeps. Every ecosystem is
+  # OFF until named in -ecosystems (for example "-ecosystems npm,pypi,git").
+  # Holds no secrets; runs as a dynamic user.
+  systemd.services.go-choir-pkgmirror = {
+    # No crash loops (docs/restart-subsystem-design-2026-10-13.md, L1a).
+    startLimitIntervalSec = 600;
+    startLimitBurst = 10;
+    description = "go-choir package mirror for engineering capsules";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "network-online.target" ];
+    wants = [ "network-online.target" ];
+    path = [ pkgs.git ];
+    serviceConfig = commonServiceHardening // {
+      ExecStart = lib.concatStringsSep " " [
+        "${goChoirPackages.pkgmirror}/bin/pkgmirror"
+        "-listen 127.0.0.1:8089"
+        "-cache-dir /var/lib/go-choir-pkgmirror"
+        "-public-base http://mirror.choir.internal"
+        "-max-bytes 17179869184"
+        "-git-max-bytes 17179869184"
+        "-ecosystems ''"
+      ];
+      Restart = "on-failure";
+      RestartSec = 3;
+      # SIGTERM drains in-flight downloads for up to 45 s.
+      TimeoutStopSec = "60s";
+      DynamicUser = true;
+      # Top-level, as for goproxy
+      # (docs/problems/goproxy-unit-cannot-create-cache-2026-10-14.md).
+      StateDirectory = "go-choir-pkgmirror";
       StateDirectoryMode = "0750";
       RestrictAddressFamilies = [ "AF_INET" "AF_INET6" "AF_UNIX" ];
       MemoryMax = "1G";

@@ -49,6 +49,7 @@ const (
 	gitCloneTimeout = 15 * time.Minute
 	gitFetchTimeout = 5 * time.Minute
 	gitWatchEvery   = 500 * time.Millisecond
+	systemCABundle  = "/etc/ssl/certs/ca-certificates.crt"
 )
 
 // GitConfig configures the git mirror.
@@ -367,6 +368,17 @@ func (g *gitMirror) run(timeout time.Duration, watch, dir string, args ...string
 		"GIT_TERMINAL_PROMPT=0",
 		"GIT_ASKPASS=/bin/false",
 		"LANG=C",
+	}
+	// The CA bundle for https: the service's own setting, else the system's.
+	for _, k := range []string{"SSL_CERT_FILE", "NIX_SSL_CERT_FILE", "GIT_SSL_CAINFO"} {
+		if v := os.Getenv(k); v != "" {
+			cmd.Env = append(cmd.Env, k+"="+v)
+		}
+	}
+	if os.Getenv("GIT_SSL_CAINFO") == "" && os.Getenv("SSL_CERT_FILE") == "" {
+		if _, err := os.Stat(systemCABundle); err == nil {
+			cmd.Env = append(cmd.Env, "GIT_SSL_CAINFO="+systemCABundle)
+		}
 	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }

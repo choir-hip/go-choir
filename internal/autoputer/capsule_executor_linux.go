@@ -94,5 +94,19 @@ func configuredCapsuleExecutor() (*capsule.Executor, bool, error) {
 	}
 	executor.SetVisualCaptureSource(captureDir, os.Getenv("CHOIR_CAPTURE_BROWSER_BIN"), os.Getenv("CHOIR_CAPTURE_FONTCONFIG_FILE"))
 	log.Printf("capsule executor: visual capture: %s", executor.VisualCaptureStatus().Reason)
+	// Package mirrors (station FP10): L2 capsules use the host package
+	// mirror only when the host put a grant on the credential disk; the
+	// route address is the guest's tap peer unless set explicitly.
+	// A zero address (none configured, or an error) leaves the grant out of force.
+	mirrorAddr, _, err := capsule.MirrorAddr(os.Getenv("CHOIR_CAPSULE_MIRROR_ADDR"), os.Getenv("RUNTIME_GATEWAY_URL"))
+	if err != nil {
+		log.Printf("capsule executor: no package mirror route: %v", err)
+	}
+	mirrorDir := strings.TrimSpace(os.Getenv("CHOIR_CAPSULE_MIRROR_CREDENTIAL_DIR"))
+	if mirrorDir == "" {
+		mirrorDir = capsule.DefaultClaudeDelegateCredentialDir
+	}
+	executor.SetCapsuleMirrors(mirrorAddr, mirrorDir)
+	log.Printf("capsule executor: package mirrors: %s", executor.CapsuleMirrorStatus().Reason)
 	return executor, true, nil
 }

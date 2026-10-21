@@ -573,6 +573,7 @@ func (b *Broker) handleExecDirect(ctx context.Context, cwdPath string, p capsule
 	cmd.Env = directExecEnv(p.Env)
 	if b.egress {
 		cmd.Env = append(cmd.Env, capsule.EgressProxyEnv()...)
+		cmd.Env = append(cmd.Env, capsule.MirrorClientEnv(os.LookupEnv)...)
 	}
 
 	var stdout, stderr cappedBuffer
