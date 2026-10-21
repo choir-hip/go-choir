@@ -386,6 +386,10 @@ func (m *deskSessionWorkers) release(key string) {
 		s.close()
 		delete(m.sessions, key)
 	}
+	if len(m.sessions) == 0 && m.reaper != nil {
+		m.reaper.Stop()
+		m.reaper = nil
+	}
 }
 
 // closeAll terminates every session.
