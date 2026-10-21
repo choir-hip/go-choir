@@ -202,7 +202,11 @@ now:
     a computer's model calls in enforce mode, which is why enforce is a
     separate, watched flip; the scheduler's caps are guesses until staging
     shows whether they bind.
-  next_action: FP0 freezes the candidate, sends the red commits to a panel, lands in the order SEC-05 (with its nix line), RES-11, SEC-08, SEC-16, and runs the deployed proofs below
+  next_action: >-
+    FP0 freezes the candidate, sends the red commits to a panel, lands them
+    (suggested order: SEC-05 with its nix line and the renewal, RES-11 with
+    its nix line, SEC-08 gateway half, SEC-16 code and later its nix change),
+    and runs the deployed proofs below
 
 receipts:
   - id: fp7-docs
@@ -219,7 +223,7 @@ receipts:
     disposition: built; not deployed; not closed until enforced on staging
   - id: sec-05-renewal
     boundary: implement
-    identity: the commit after 1eb084100 titled "host-attested renewal"
+    identity: 718dddb51
     proof_refs: [internal/gateway/credential_renewal_test.go, "three mutations fail the tests"]
     rollback_ref: git revert (the expiry then returns to one TTL from issue)
     disposition: built; closes the 720 h time bomb for refresh-only computers once deployed; live rotation stays designed
