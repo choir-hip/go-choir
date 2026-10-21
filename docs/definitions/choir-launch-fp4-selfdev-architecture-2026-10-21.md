@@ -210,7 +210,7 @@ now:
     are the orchestrator's. ARCH-03 green design written
     (docs/design/app-package-carries-app-desk-2026-10-21.md); its red slice
     waits for lane FP2's desk manifest (ARCH-02).
-  source_ref: lane/b10-selfdev (see receipts)
+  source_ref: 824ca2995 on lane/b10-selfdev
   deploy_identity: unknown to this lane
   candidate: {id: arch10-admission, state: ready, ref: lane/b10-selfdev, base: f399a2e8c, digest: none, scope: [internal/agentcore/engineering_admission.go, internal/agentcore/engineering_assignment_runtime.go, internal/agentcore/continuation_schedule.go]}
   conjecture:
@@ -313,12 +313,12 @@ receipts:
     rollback_ref: git revert 6ce19af5a
   - id: arch04-writer-gate
     boundary: implement
-    identity: see git log (feat(objectgraph) one writer per kind)
+    identity: 5b4578e73
     proof_refs: [internal/objectgraph/writer_gate_test.go, internal/store/texture_writer_gate_test.go]
     rollback_ref: git revert of the ARCH-04 commit; the default mode is observe, so a revert changes no behavior
   - id: arch03-design
     boundary: define
-    identity: see git log (docs: design: an app package carries its app desk)
+    identity: 58f369309
     proof_refs: [docs/design/app-package-carries-app-desk-2026-10-21.md]
     rollback_ref: git revert of the docs commit
 ---
