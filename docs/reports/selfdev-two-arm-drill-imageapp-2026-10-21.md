@@ -85,9 +85,12 @@ Run one at a time on the delegate test computer, smallest app first, with
 | SlidesApp | 810 | sonnet-slides-1021f (f9ad90709, brief fixed) | stopped 07:29 after four rounds: round 1 delegate rewrite (19 turns, $0.20); round 2 completed while its build job ran (failure 23); rounds 3 and 4 hit `cp` EPERM on new files from refused xattr calls; round 4's retry built and copied, but Freeze refused it because the failed first job had left build outputs in the workspace (failure 24) |
 | SlidesApp | 810 | sonnet-slides-1021g (16a5aa0e0, xattr EOPNOTSUPP, Complete guard) | stalled 07:54 after round 1 (21 turns, $0.21): management read "awaiting the carried patch" as an input it had to supply and refused to cast the build round (failure 25) |
 | SlidesApp | 810 | sonnet-slides-1021h (10132ed5b, management prompt) | stopped 08:30: management cast round 1 twice; round 3 had the carried patch but emptied the file while inspecting it and stopped on "provenance" (failure 26). Escalated: structural assessment in the cluster doc |
+| SlidesApp | 810 | sonnet-slides-1021i (219535ef3, one-round build) | stopped 10:24: management cast with network forbidden, so no delegate ran (failure 27); the build job linked the image's dependencies and passed in about 17 s with no network; Freeze refused the running binary, built from another commit than the computer's source (failure 28) |
+| SlidesApp | 810 | sonnet-slides-1021j (be47b14bf, failures 27 and 28 fixed) | stopped 10:52: management left the network out and the delegate rewrote the file twice (71 s, $0.24; 95 s, $0.35); both builds read an empty root package.json that Claude Code's sandbox placeholders left in the tree (failure 29) |
 
 Each stop is a Choir or drill defect found and fixed, in order; none is
-about the delegate's work. The rewrites of Pdf, Epub, Podcast, Calendar and
-FileBrowser wait for the owner's choice among the three structural
-options in the cluster doc (failure 26), because each would hit the same
-two-round handoff.
+about the delegate's work. The owner chose option 1 of failure 26 (owner
+notes 34); it landed as the one-round build with the image's dependencies
+(docs/design/delegate-one-round-build-2026-10-21.md), and drills i and j
+are its first runs. The rewrites of Pdf, Epub, Podcast, Calendar and
+FileBrowser follow once SlidesApp freezes.
