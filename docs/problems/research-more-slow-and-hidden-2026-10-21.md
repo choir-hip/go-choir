@@ -135,7 +135,15 @@ share: research's model calls are 1 to 3 s each at low effort.
    `"story"`) and the reader shows the AI-written disclosure from that.
 3. The ask goes straight to research, which reports to Texture (red,
    E4); research sends a packet as soon as it has a read source and
-   finishes with the final report (prompt, E5).
+   finishes with the final report (prompt, E5). Built to
+   [the design](../design/research-more-goes-to-research-2026-10-21.md):
+   the proxy calls the paper's `POST .../research`, which casts the
+   story's research desk with the story text in one store transaction
+   (`CommitStoryResearchRequest`); Texture's frame says a reader asked
+   while the request is pending; a request a crash closed reads
+   `interrupted` and its version may be asked once more. The proxy no
+   longer sends a prompt, so an owner's ask and a public reader's ask
+   are the same request at the paper (the provenance line is gone).
 4. E3, E6: instrument before fixing (client error kind on the notice,
    wake latency per report).
 

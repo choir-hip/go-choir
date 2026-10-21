@@ -63,7 +63,7 @@ const DECLINED: Record<string, string> = {
   already_asked: 'This version was already asked to be expanded.',
   limit: 'Too many expansion requests right now. Try again later.',
   address_limit: 'Too many requests from your address; try later.',
-  busy: 'The story\'s desk is busy. Try again shortly.',
+  busy: 'Research is already working on this story. Try again shortly.',
   changed: 'The story just changed. Try again.',
   unavailable: 'The paper is not reachable right now. Try again shortly.',
 };
@@ -112,7 +112,9 @@ export function fateLine(request: ExpandRequestView | null | undefined): string 
     case 'asked':
       return 'Asked. Waiting for the desk to take it.';
     case 'accepted':
-      return 'Request received. The desk may add research or leave the story as it is.';
+      return 'Request received. Research is looking for new sources; the story changes only if it finds something.';
+    case 'interrupted':
+      return 'Your request was interrupted by a restart. You can ask again.';
     case 'revised': {
       const v = Number(request.to_version);
       return Number.isInteger(v) && v > 0 ? `Revised since your request: version ${v} is up.` : 'Revised since your request.';

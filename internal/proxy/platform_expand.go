@@ -16,8 +16,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/yusefmosiah/go-choir/internal/auth"
 	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -28,9 +26,11 @@ import (
 // 2026-10-20.md, phase 1). An allowlisted signed-in owner asks one public
 // Autopaper story to be expanded with more research. The proxy checks the
 // allowlist, asks corpusd which paper document the route publishes, applies
-// the limits, and calls the paper's own owner door, POST /revise, as the
-// story's owner with a fixed request text. Texture decides what to do with
-// it; the reader sees a fate line. Management is not a hop.
+// the limits, and calls the paper's research door, POST .../research, as the
+// story's owner. The paper casts the story's research desk with the story
+// itself; research reports to Texture as it goes, and Texture expands the
+// story (docs/design/research-more-goes-to-research-2026-10-21.md). The
+// reader sees a fate line. Management is not a hop.
 //
 // Dark by default: PROXY_EXPAND_REQUESTERS empty and PROXY_EXPAND_PUBLIC off
 // means off, and PROXY_EXPAND=off is the kill switch.
@@ -38,8 +38,8 @@ import (
 // The public door (owner 2026-10-20, section 32 of the owner notes; problem
 // doc "Public door"): with PROXY_EXPAND_PUBLIC=on a reader with no owner
 // session may ask too. The paper still sees the owner's act, with the
-// provenance "public reader" in the request text; nothing about the reader
-// reaches the guest. A public reader is throttled per address on top of the
+// same request an owner's ask makes; nothing about the reader reaches the
+// guest. A public reader is throttled per address on top of the
 // global limits. The counters live in proxy memory, so a restart resets them
 // (an accepted residual).
 
@@ -72,12 +72,15 @@ const (
 	expandStateRevised  = "revised"
 	expandStateNoNew    = "no_new_version"
 	expandStateUnknown  = "unknown"
-	expandStatusAsked   = "asked"
-	expandStatusAlready = "already_asked"
-	expandStatusLimit   = "limit"
-	expandStatusBusy    = "busy"
-	expandStatusChanged = "changed"
-	expandStatusUnavail = "unavailable"
+	// expandStateInterrupted is a request a crash closed before research
+	// reported; the reader may ask once more for the same version.
+	expandStateInterrupted = "interrupted"
+	expandStatusAsked      = "asked"
+	expandStatusAlready    = "already_asked"
+	expandStatusLimit      = "limit"
+	expandStatusBusy       = "busy"
+	expandStatusChanged    = "changed"
+	expandStatusUnavail    = "unavailable"
 	// expandStatusAddrLimit is the typed refusal for a public reader whose
 	// address has used its allowance.
 	expandStatusAddrLimit = "address_limit"
@@ -85,30 +88,6 @@ const (
 	expandNotFoundBody    = "not found"
 	expandAskedHeaderMsg  = "owner session required: asking a story to be expanded needs the owner's signed-in session, not an API key"
 )
-
-const (
-	expandProvenanceOwner  = "owner"
-	expandProvenancePublic = "public reader"
-)
-
-// expansionRequestText is the fixed request, with the marker a person or a
-// trace search can find (design 4.4) and the provenance of the asker: "owner"
-// or "public reader", never an identity. It asks for an expansion, not a
-// rewrite, and to dig: search the web for what the story does not yet use.
-// The last sentence gives Texture an honest way to decline.
-func expansionRequestText(requestID, provenance string) string {
-	asker := "The owner"
-	if provenance == expandProvenancePublic {
-		asker = "A reader"
-	}
-	return "[expansion " + requestID + "] Expansion request (provenance: " + provenance + "). " +
-		asker + " asked for this story to be expanded with more research. " +
-		"Search the web for new reporting, primary documents and additional distinct outlets that the story does not yet cite, and read them. " +
-		"Add what is new, with citations from sources you have read. " +
-		"Expand the story; do not rewrite it. " +
-		"Keep the story's existing text, structure and citations unless a new source corrects them. " +
-		"If there is nothing new to add, change nothing and say why in a note to management."
-}
 
 // expandRequest is one remembered request.
 type expandRequest struct {
@@ -118,17 +97,21 @@ type expandRequest struct {
 	StoryOwnerID     string
 	DocID            string
 	SourceRevisionID string
-	// RevisionID is the owner revision on the paper's chain; empty while the
+	// PaperRequestID is the request's id at the paper (the client request
+	// id, or its second attempt after an interrupted first); empty while the
 	// request is being made.
-	RevisionID  string
-	FromVersion int
-	AskedAt     time.Time
+	PaperRequestID string
+	FromVersion    int
+	AskedAt        time.Time
 	// Addr is a hash of a public reader's address, for the per-address
 	// throttle only; empty for an owner. It is never logged or sent on.
 	Addr string
 	// settled is set once a read found the story revised, which frees the
 	// in-flight slot and stops the reads that go to the paper.
 	settled bool
+	// interrupted is set once a read found the request closed by a crash:
+	// it frees the slot and lets the version be asked again.
+	interrupted bool
 }
 
 // expandLedger is the proxy's soft memory of requests: the limits and the
@@ -158,12 +141,10 @@ func expandRequestID(clientRequestID string) string {
 	return "rx-" + hex.EncodeToString(sum[:])[:12]
 }
 
-// expandOwnerRevisionID is the id the paper gives the owner revision for a
-// client_request_id: internal/textureowner handleLifecycleOwnerRevision
-// hashes owner, computer, trajectory and that id. A textureowner test pins
-// the formula, so the "already asked" check survives a proxy restart.
-func expandOwnerRevisionID(ownerID, computerID, trajectoryID, clientRequestID string) string {
-	return uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join([]string{ownerID, computerID, trajectoryID, clientRequestID}, "\x00"))).String()
+// expandSecondAttempt is the paper request id of the one re-ask a version
+// gets after its first request was interrupted by a restart.
+func expandSecondAttempt(clientRequestID string) string {
+	return clientRequestID + ":2"
 }
 
 type expandVerdict int
@@ -189,7 +170,7 @@ func (l *expandLedger) reserve(req *expandRequest) (*expandRequest, expandVerdic
 		}
 	}
 	key := expandKey(req.PublicationID, req.SourceRevisionID)
-	if existing, ok := l.byKey[key]; ok {
+	if existing, ok := l.byKey[key]; ok && !existing.interrupted {
 		return existing, expandAlready
 	}
 	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
@@ -215,7 +196,7 @@ func (l *expandLedger) reserve(req *expandRequest) (*expandRequest, expandVerdic
 	}
 	inFlight, today := 0, 0
 	for _, old := range l.byKey {
-		if !old.settled && now.Sub(old.AskedAt) < expandSilenceAfter {
+		if !old.settled && !old.interrupted && now.Sub(old.AskedAt) < expandSilenceAfter {
 			inFlight++
 		}
 		if !old.AskedAt.Before(dayStart) {
@@ -267,10 +248,10 @@ func (l *expandLedger) release(req *expandRequest) {
 	}
 }
 
-func (l *expandLedger) confirm(req *expandRequest, revisionID string) {
+func (l *expandLedger) confirm(req *expandRequest, paperRequestID string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	req.RevisionID = revisionID
+	req.PaperRequestID = paperRequestID
 }
 
 // forStory returns copies of a story's remembered requests, newest first.
@@ -453,12 +434,40 @@ type expandPostRequest struct {
 }
 
 type expandAnswer struct {
-	Status     string `json:"status"`
-	Error      string `json:"error,omitempty"`
-	RequestID  string `json:"request_id,omitempty"`
-	RevisionID string `json:"revision_id,omitempty"`
-	Route      string `json:"route,omitempty"`
-	FromV      int    `json:"from_version,omitempty"`
+	Status    string `json:"status"`
+	Error     string `json:"error,omitempty"`
+	RequestID string `json:"request_id,omitempty"`
+	Route     string `json:"route,omitempty"`
+	FromV     int    `json:"from_version,omitempty"`
+}
+
+// paperResearchState is the paper's read of one research request
+// (GET /api/texture/documents/{doc}/research/{id}).
+type paperResearchState struct {
+	RecordID    string    `json:"record_id"`
+	CommittedAt time.Time `json:"committed_at"`
+	Open        bool      `json:"open"`
+	Reports     int       `json:"reports"`
+	Interrupted bool      `json:"interrupted"`
+}
+
+// paperResearch reads a research request; found is false for a 404.
+func (h *Handler) paperResearch(ctx context.Context, base, ownerID, docID, paperRequestID string) (state paperResearchState, found bool, err error) {
+	status, body, err := h.paperCall(ctx, base, http.MethodGet, "/api/texture/documents/"+url.PathEscape(docID)+"/research/"+url.PathEscape(paperRequestID), ownerID, nil)
+	if err != nil {
+		return state, false, err
+	}
+	switch status {
+	case http.StatusNotFound:
+		return state, false, nil
+	case http.StatusOK:
+		if err := json.Unmarshal(body, &state); err != nil {
+			return state, false, fmt.Errorf("decode research request: %w", err)
+		}
+		return state, true, nil
+	default:
+		return state, false, fmt.Errorf("research request read status %d", status)
+	}
 }
 
 // HandlePlatformPublicationExpand serves POST
@@ -501,10 +510,6 @@ func (h *Handler) HandlePlatformPublicationExpand(w http.ResponseWriter, r *http
 		return
 	}
 	requester = caller.requester
-	provenance := expandProvenanceOwner
-	if !caller.owner {
-		provenance = expandProvenancePublic
-	}
 
 	var in expandPostRequest
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<12)).Decode(&in); err != nil || strings.TrimSpace(in.Route) == "" {
@@ -538,7 +543,7 @@ func (h *Handler) HandlePlatformPublicationExpand(w http.ResponseWriter, r *http
 	switch verdict {
 	case expandAlready:
 		outcome = "already_asked"
-		writeJSON(w, http.StatusConflict, expandAnswer{Status: expandStatusAlready, Error: "this version of the story was already asked to be expanded", RequestID: existing.RequestID, RevisionID: existing.RevisionID, Route: src.Route})
+		writeJSON(w, http.StatusConflict, expandAnswer{Status: expandStatusAlready, Error: "this version of the story was already asked to be expanded", RequestID: existing.RequestID, Route: src.Route})
 		return
 	case expandAddrHourFull, expandAddrDayFull:
 		outcome = "address_limit"
@@ -579,87 +584,70 @@ func (h *Handler) HandlePlatformPublicationExpand(w http.ResponseWriter, r *http
 			unavailable("read document", err)
 			return
 		}
-		// The owner revision may already be on the paper's chain: a proxy
-		// restart forgets the ledger, the chain does not.
-		ownerRevID := expandOwnerRevisionID(src.OwnerID, doc.ComputerID, doc.TrajectoryID, clientRequestID)
-		status, _, err := h.paperCall(r.Context(), base, http.MethodGet, "/api/texture/revisions/"+url.PathEscape(ownerRevID), src.OwnerID, nil)
+		// The request may already be at the paper: a proxy restart forgets
+		// the ledger, the paper does not. A first request a crash closed gets
+		// one second attempt.
+		paperID := clientRequestID
+		state, found, err := h.paperResearch(r.Context(), base, src.OwnerID, src.SourceDocID, paperID)
+		if err == nil && found && state.Interrupted {
+			paperID = expandSecondAttempt(clientRequestID)
+			state, found, err = h.paperResearch(r.Context(), base, src.OwnerID, src.SourceDocID, paperID)
+		}
 		if err != nil {
-			unavailable("check chain", err)
+			unavailable("check request", err)
 			return
 		}
-		if status == http.StatusOK {
+		if found {
 			outcome = "already_asked"
-			led.confirm(entry, ownerRevID)
+			led.confirm(entry, paperID)
 			accepted = true // the request exists; keep it remembered
-			writeJSON(w, http.StatusConflict, expandAnswer{Status: expandStatusAlready, Error: "this version of the story was already asked to be expanded", RequestID: requestID, RevisionID: ownerRevID, Route: src.Route})
-			return
-		}
-		if status != http.StatusNotFound {
-			unavailable("check chain", fmt.Errorf("status %d", status))
+			writeJSON(w, http.StatusConflict, expandAnswer{Status: expandStatusAlready, Error: "this version of the story was already asked to be expanded", RequestID: requestID, Route: src.Route})
 			return
 		}
 
-		status, body, err := h.paperCall(r.Context(), base, http.MethodPost, "/api/texture/documents/"+url.PathEscape(src.SourceDocID)+"/revise", src.OwnerID, map[string]string{
-			"prompt":                    expansionRequestText(requestID, provenance),
-			"client_request_id":         clientRequestID,
+		status, body, err := h.paperCall(r.Context(), base, http.MethodPost, "/api/texture/documents/"+url.PathEscape(src.SourceDocID)+"/research", src.OwnerID, map[string]string{
+			"client_request_id":         paperID,
 			"expected_head_revision_id": doc.CurrentRevisionID,
 		})
 		if err != nil {
-			unavailable("revise", err)
+			unavailable("research", err)
 			return
 		}
 		switch {
-		case status == http.StatusAccepted || status == http.StatusOK:
+		case status == http.StatusAccepted:
 			var receipt struct {
-				RevisionID string `json:"revision_id"`
-				Replay     bool   `json:"replay"`
+				Replay bool `json:"replay"`
 			}
 			_ = json.Unmarshal(body, &receipt)
-			led.confirm(entry, receipt.RevisionID)
+			led.confirm(entry, paperID)
 			accepted = true
 			if receipt.Replay {
 				outcome = "already_asked"
-				writeJSON(w, http.StatusConflict, expandAnswer{Status: expandStatusAlready, Error: "this version of the story was already asked to be expanded", RequestID: requestID, RevisionID: receipt.RevisionID, Route: src.Route})
+				writeJSON(w, http.StatusConflict, expandAnswer{Status: expandStatusAlready, Error: "this version of the story was already asked to be expanded", RequestID: requestID, Route: src.Route})
 				return
 			}
 			outcome = "asked"
-			writeJSON(w, http.StatusAccepted, expandAnswer{Status: expandStatusAsked, RequestID: requestID, RevisionID: receipt.RevisionID, Route: src.Route, FromV: src.LatestRevision})
+			writeJSON(w, http.StatusAccepted, expandAnswer{Status: expandStatusAsked, RequestID: requestID, Route: src.Route, FromV: src.LatestRevision})
 			return
 		case status == http.StatusConflict:
-			var apiErr struct {
-				Error string `json:"error"`
+			var refusal struct {
+				Reason string `json:"reason"`
 			}
-			_ = json.Unmarshal(body, &apiErr)
-			msg := strings.ToLower(apiErr.Error)
-			// The paper's refusal names its cause; the reader sees only the
-			// mapped status (problem doc P5).
-			reason := apiErr.Error
-			if len(reason) > 160 {
-				reason = reason[:160]
-			}
-			log.Printf("proxy: expand: request=%s paper refused revise (409): %q", requestID, reason)
-			switch {
-			case strings.Contains(msg, "digest conflict"):
-				// The same request id with different content: the earlier
-				// request is on the chain.
-				outcome = "already_asked"
-				accepted = true
-				writeJSON(w, http.StatusConflict, expandAnswer{Status: expandStatusAlready, Error: "this version of the story was already asked to be expanded", RequestID: requestID, Route: src.Route})
-				return
-			case strings.Contains(msg, "head changed"):
+			_ = json.Unmarshal(body, &refusal)
+			log.Printf("proxy: expand: request=%s paper refused research (409): reason=%q", requestID, refusal.Reason)
+			if refusal.Reason == "changed" {
 				if attempt == 0 {
-					continue // Texture committed between the read and the revise: read again, once
+					continue // Texture committed between the read and the ask: read again, once
 				}
 				outcome = "changed"
 				writeJSON(w, http.StatusConflict, expandAnswer{Status: expandStatusChanged, Error: "the story just changed; try again"})
 				return
-			default:
-				outcome = "busy"
-				writeJSON(w, http.StatusConflict, expandAnswer{Status: expandStatusBusy, Error: "the story's desk is busy; try again shortly"})
-				return
 			}
+			outcome = "busy"
+			writeJSON(w, http.StatusConflict, expandAnswer{Status: expandStatusBusy, Error: "research is already working on this story; try again shortly"})
+			return
 		default:
-			unavailable("revise", fmt.Errorf("status %d", status))
+			unavailable("research", fmt.Errorf("status %d", status))
 			return
 		}
 	}
@@ -671,9 +659,9 @@ func hashedRequester(userID string) string {
 }
 
 // expansionFate derives what a reader sees for one request (design 6). A
-// request is revised when a Texture revision followed it and a higher public
-// version exists; that says the story was revised since the request, not that
-// the request caused it (phase 2 puts the request id in revision metadata).
+// request is revised when a Texture revision followed its commit at the paper
+// and a higher public version exists; that says the story was revised since
+// the request, not that the request caused it.
 // Silence for expandSilenceAfter is "no new version", which is a fate and not
 // an error.
 func expansionFate(req expandRequest, accepted, texturedAfter bool, latestVersion int, now time.Time) string {
@@ -695,7 +683,6 @@ type expandFateItem struct {
 	AskedAt     string `json:"asked_at"`
 	FromVersion int    `json:"from_version"`
 	ToVersion   int    `json:"to_version,omitempty"`
-	RevisionID  string `json:"revision_id,omitempty"`
 }
 
 type expansionRead struct {
@@ -743,8 +730,7 @@ func (h *Handler) HandlePlatformPublicationExpansion(w http.ResponseWriter, r *h
 		return
 	}
 	led := h.expandLedger()
-	_, asked := led.lookup(src.PublicationID, src.SourceRevisionID)
-	out := expansionRead{Allowed: true, Route: src.Route, Asked: asked, Requests: []expandFateItem{}}
+	out := expansionRead{Allowed: true, Route: src.Route, Requests: []expandFateItem{}}
 	recent := led.forStory(src.PublicationID)
 	if !caller.owner && len(recent) > 1 {
 		// A public poll follows only the newest request, so an anonymous
@@ -754,6 +740,9 @@ func (h *Handler) HandlePlatformPublicationExpansion(w http.ResponseWriter, r *h
 	for _, req := range recent {
 		out.Requests = append(out.Requests, h.expansionFateItem(r.Context(), led, req, src))
 	}
+	// After the fate reads: an interrupted request may be asked again.
+	req, asked := led.lookup(src.PublicationID, src.SourceRevisionID)
+	out.Asked = asked && !req.interrupted
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -765,47 +754,51 @@ type expandHistory struct {
 	} `json:"entries"`
 }
 
-// expansionFateItem evaluates one request against the paper's chain and the
-// public version. A paper that cannot be read leaves the state "unknown"
+// expansionFateItem evaluates one request against the paper's read of it and
+// the public version. A paper that cannot be read leaves the state "unknown"
 // rather than inventing one.
 func (h *Handler) expansionFateItem(ctx context.Context, led *expandLedger, req expandRequest, src platform.ExpansionSource) expandFateItem {
-	item := expandFateItem{RequestID: req.RequestID, AskedAt: req.AskedAt.UTC().Format(time.RFC3339), FromVersion: req.FromVersion, RevisionID: req.RevisionID}
+	item := expandFateItem{RequestID: req.RequestID, AskedAt: req.AskedAt.UTC().Format(time.RFC3339), FromVersion: req.FromVersion}
 	if req.settled {
 		item.State, item.ToVersion = expandStateRevised, src.LatestRevision
 		return item
 	}
-	accepted, texturedAfter, readable := false, false, false
-	if req.RevisionID != "" {
-		if base, err := h.paperURL(ctx, req.StoryOwnerID); err == nil {
-			status, _, err := h.paperCall(ctx, base, http.MethodGet, "/api/texture/revisions/"+url.PathEscape(req.RevisionID), req.StoryOwnerID, nil)
-			if err == nil && (status == http.StatusOK || status == http.StatusNotFound) {
-				readable = true
-				accepted = status == http.StatusOK
-			}
-			if accepted {
-				hstatus, body, herr := h.paperCall(ctx, base, http.MethodGet, "/api/texture/documents/"+url.PathEscape(req.DocID)+"/history", req.StoryOwnerID, nil)
-				var hist expandHistory
-				if herr == nil && hstatus == http.StatusOK && json.Unmarshal(body, &hist) == nil {
-					since := req.AskedAt
-					for _, entry := range hist.Entries {
-						if entry.RevisionID == req.RevisionID {
-							since = entry.CreatedAt
-						}
-					}
-					for _, entry := range hist.Entries {
-						if entry.AuthorKind == string(types.AuthorAppAgent) && entry.CreatedAt.After(since) {
-							texturedAfter = true
-						}
-					}
+	if req.interrupted {
+		item.State = expandStateInterrupted
+		return item
+	}
+	if req.PaperRequestID == "" {
+		item.State = expansionFate(req, false, false, src.LatestRevision, led.now())
+		return item
+	}
+	base, err := h.paperURL(ctx, req.StoryOwnerID)
+	if err != nil {
+		item.State = expandStateUnknown
+		return item
+	}
+	state, found, err := h.paperResearch(ctx, base, req.StoryOwnerID, req.DocID, req.PaperRequestID)
+	if err != nil {
+		item.State = expandStateUnknown
+		return item
+	}
+	if found && state.Interrupted {
+		item.State = expandStateInterrupted
+		led.markByKey(req.PublicationID, req.SourceRevisionID, func(r *expandRequest) { r.interrupted = true })
+		return item
+	}
+	texturedAfter := false
+	if found {
+		hstatus, body, herr := h.paperCall(ctx, base, http.MethodGet, "/api/texture/documents/"+url.PathEscape(req.DocID)+"/history", req.StoryOwnerID, nil)
+		var hist expandHistory
+		if herr == nil && hstatus == http.StatusOK && json.Unmarshal(body, &hist) == nil {
+			for _, entry := range hist.Entries {
+				if entry.AuthorKind == string(types.AuthorAppAgent) && entry.CreatedAt.After(state.CommittedAt) {
+					texturedAfter = true
 				}
 			}
 		}
 	}
-	if !readable && req.RevisionID != "" {
-		item.State = expandStateUnknown
-		return item
-	}
-	item.State = expansionFate(req, accepted, texturedAfter, src.LatestRevision, led.now())
+	item.State = expansionFate(req, found, texturedAfter, src.LatestRevision, led.now())
 	if item.State == expandStateRevised {
 		item.ToVersion = src.LatestRevision
 		led.settleByKey(req.PublicationID, req.SourceRevisionID)
@@ -818,5 +811,13 @@ func (l *expandLedger) settleByKey(publicationID, sourceRevisionID string) {
 	defer l.mu.Unlock()
 	if req, ok := l.byKey[expandKey(publicationID, sourceRevisionID)]; ok {
 		req.settled = true
+	}
+}
+
+func (l *expandLedger) markByKey(publicationID, sourceRevisionID string, mark func(*expandRequest)) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if req, ok := l.byKey[expandKey(publicationID, sourceRevisionID)]; ok {
+		mark(req)
 	}
 }

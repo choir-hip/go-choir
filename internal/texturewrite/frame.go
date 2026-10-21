@@ -40,6 +40,9 @@ type Frame struct {
 	Captured map[string]bool
 	// ThroughSeq is the last inbox record the frame shows.
 	ThroughSeq int64
+	// ReaderRequest, when set, names a reader's pending request for more
+	// research on this story (docs/design/research-more-goes-to-research-2026-10-21.md).
+	ReaderRequest string
 }
 
 // Render writes the frame as one user turn.
@@ -47,6 +50,9 @@ func (f Frame) Render() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s\ndoc=%s rev=%s through=%d\n\n", FrameHeader, f.DocID, f.RevisionID, f.ThroughSeq)
 	f.renderDoc(&b)
+	if f.ReaderRequest != "" {
+		fmt.Fprintf(&b, "\nA reader asked for more research on this story (request %s). Research works on it and reports to you as it goes. Expand the story with what research reports: keep its text, structure and citations unless a source corrects them, and add what the new sources say. With nothing new, change nothing.\n", f.ReaderRequest)
+	}
 	if len(f.Dropped) > 0 {
 		alias := map[string]string{}
 		for _, blk := range f.Blocks {

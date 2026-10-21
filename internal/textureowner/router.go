@@ -42,6 +42,8 @@ func (h *Handler) HandleTextureRouter(w http.ResponseWriter, r *http.Request) {
 			h.HandleTextureDocumentEvents(w, r)
 		case strings.HasSuffix(rest, "/source-open"):
 			h.HandleTextureSourceOpen(w, r)
+		case strings.HasSuffix(rest, "/research") || strings.Contains(rest, "/research/"):
+			h.HandleTextureStoryResearch(w, r)
 		case strings.HasSuffix(rest, "/revise"):
 			h.HandleTextureAgentRevision(w, r)
 		case strings.HasSuffix(rest, "/restore"):

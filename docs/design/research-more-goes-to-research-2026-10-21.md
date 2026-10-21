@@ -1,6 +1,6 @@
 # More research goes to research first, and research reports as it goes
 
-Date: 2026-10-21. Status: design, revised after the panel (section 8), written before the code. Mutation class:
+Date: 2026-10-21. Status: built (revised after the panel, section 8); the code follows section 8 where it differs from section 2. Mutation class:
 red (a new owner-act door into a desk inbox; the public expansion door).
 Problem: [research-more-slow-and-hidden-2026-10-21.md](../problems/research-more-slow-and-hidden-2026-10-21.md)
 E4 to E6. Owner direction (this session): "Yes, it should skip texture.

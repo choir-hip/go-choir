@@ -140,6 +140,9 @@ func (rt *Runtime) currentTextureFrame(ctx context.Context, rec *types.RunRecord
 		Dropped: texturewrite.DroppedFrom(rev), Records: texturewrite.RecordsFrom(textureRecordInputs(records.view)),
 		ThroughSeq: records.through,
 	}
+	if id, pending, perr := rt.store.PendingStoryResearchRequest(ctx, rec.OwnerID, rec.ComputerID, doc.DocID); perr == nil && pending {
+		frame.ReaderRequest = id
+	}
 	if parent != nil {
 		if prior, _, perr := texturewrite.Base(*parent); perr == nil {
 			frame.Changed = texturewrite.ChangedBlocks(base, prior)
