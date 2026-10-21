@@ -924,3 +924,32 @@ Taken as:
   `sha256/computer-event-payload`; 9.2 million files), problem record first
   (docs/problems/no-off-host-backup-2026-10-20.md section 13 item 18,
   option c).
+
+## 34. The delegate builds in one round; segments on for everyone after r1; repack, then evidence-gated deletes (2026-10-21, morning)
+
+Asked to choose among the structural options of
+docs/problems/engineering-completion-path-cluster-2026-10-20.md failure 26
+(one round with registry egress for build jobs; a platform-driven round
+two; higher engineering effort), the owner, verbatim: "yes, ill go with
+your recommendatation for #1".
+
+Asked about the segment store flag (A: r1 fix, then test computers, then
+everyone; B: r1 fix, then everyone; C: on now; D: off) and the repack and
+legacy delete (A: repack, keep legacy, delete in batches after a soak; B:
+repack and delete in one pass; C: repack, never delete; D: no repack),
+the owner, verbatim: "2. B ; 3. A. but maybe delete faster than 2 weeks?"
+
+Taken as:
+
+- One-round delegate handoff: the engineering desk's build job, in the
+  same capsule as the delegate, reaches the package registry through the
+  ecosystem proxy; the delegate process itself keeps no network. Test
+  computers only; then the six Sonnet rewrites of section 33 resume.
+- Tape segments: build residual r1 test-first, then turn the write flag on
+  for every computer at once (no per-computer allowlist).
+- Repack copy-only, keep the legacy files, delete in batches oldest first,
+  gated on evidence rather than two weeks: the repack verifies every copy
+  it made; a restore drill covering tapes passes; an off-host snapshot
+  holds the segments; about three days with zero segment-error fallbacks.
+  First batch one computer, then faster. The first delete still takes an
+  explicit owner yes (irreversible).
