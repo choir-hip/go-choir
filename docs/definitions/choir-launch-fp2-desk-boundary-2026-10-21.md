@@ -740,3 +740,63 @@ to 5.
   the cross-desk canary is readable. This batch changes no desk-cell code;
   whether the test needs a root or no-Landlock guard is FP0's call. It is
   not fixed here.
+
+### Second batch, review round (bunch 4b, frozen e2a88e4ee): findings
+
+GPT-6.1-sol sent the candidate back. Gemini 4 Argon sent it back too, or
+would accept it with the non-Linux fix. The findings file is FP0's
+(`~/runs/fp2b2-findings.md`). The rule for this round: observe mode must
+not change today's kill domain or today's results. Every blocking finding
+is accepted. None is refuted.
+
+- **B1 (sol, Argon), high: non-Linux builds break.** Accepted.
+  `internal/agentcore/isolation_selftest.go` has no build tag, but it uses
+  `doctool.SelfTestReceipt` and `doctool.SelfTest`, which exist only in
+  `probe_linux.go`. Evidence: both reviewers got `undefined:
+  doctool.SelfTestReceipt` / `doctool.SelfTest` building `internal/agentcore`
+  for darwin; reproduced here with `GOOS=darwin GOARCH=arm64 go vet` (round
+  receipt below). Fix: the report types and `JudgeProbe` move to portable
+  code, and the non-Linux `SelfTest` fails closed ("needs Linux").
+- **B2 (sol), high: observe charges the converter to the desks aggregate.**
+  Accepted. `runSandboxed` puts every sandboxed run in a `w-doctool-*`
+  child of `CHOIR_DESK_CGROUP_ROOT` (`doctool_linux.go:65-74`). Under
+  observe, a converter's memory now counts against the desks' half-guest
+  aggregate. Before, it ran in the daemon's cgroup, outside that aggregate.
+  A desk worker (`oom_score_adj` 1000) can therefore be killed by memory
+  the desks never used. Fix: the sandbox never runs in the desks cgroup.
+  Under observe it runs with no cgroup budget, in the daemon's cgroup as
+  before, and its peak RSS is recorded against the budget. Under required
+  it gets a cgroup of its own under a separate document-tools root
+  (`CHOIR_DOCTOOL_CGROUP_ROOT`, its own aggregate and boot sweep), never
+  the desks root.
+- **B3 (sol), medium: observe can change stored results (TZ).** Accepted.
+  The helper's environment drops `TZ`, and a sandboxed run that succeeds is
+  returned as the result. sol's check: the same PDF date prints as October
+  20 under `TZ=America/New_York` and October 21 under `TZ=UTC`, and the
+  printed date is stored as metadata. More generally, observe returned the
+  sandbox's output whenever the sandbox succeeded, and the
+  `document_tool_sandbox_*` warnings went into stored `extraction_warnings`.
+  Fix: `TZ` is passed through. Under observe the direct run is the
+  authoritative result and the extraction is byte-for-byte what it is today.
+  The sandboxed run is a shadow that runs after it. Its outcome (equal,
+  diverged, failed, setup failed) is counted in memory, logged, and shown
+  in the isolation self-test, never written into the extraction.
+- **B4 (sol), high: the aggregate does not follow a hotplug-backed boost.**
+  Accepted. Under doctrine, `boostJobMemory` admits against the live budget
+  and raises the leaf, but the capsules aggregate keeps the value written at
+  the last spawn (`job_memory_linux.go:67-108`). Fix: under doctrine a boost
+  first raises the aggregate to the live budget. If that fails, the boost is
+  refused, and nothing is raised or counted.
+- **B5 (sol), high: doctrine admission ignores aggregate failures.**
+  Accepted. `setCapsuleAggregateLocked` only logs when it cannot read usage,
+  when usage is above the budget, or when the write fails
+  (`job_memory_linux.go:207-228`), and `Spawn` goes on. Fix: it returns an
+  error, and under doctrine `Spawn` refuses the capsule (the existing error
+  path deletes its cgroup) unless the aggregate is set to the budget. Under
+  observe it is never written, as before.
+- **Non-blocking (Argon), capfloor, cheap and in scope: fixed.** Under
+  observe, an unreadable `/proc/self/status` now logs instead of stopping
+  the daemon from starting. Under enforce, a start whose reading thread is
+  already within the floor still verifies every thread.
+- **Non-blocking (sol): "sandbox fallback does not establish observe
+  equivalence."** Covered by B3's fix (shadow comparison).
