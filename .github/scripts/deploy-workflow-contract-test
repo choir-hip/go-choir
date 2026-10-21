@@ -49,6 +49,20 @@ reject_in "$workflow" "<<'REMOTE_DEPLOY'"
 reject_in "$workflow" "<<'REMOTE_PREBUILD'"
 require_in "$deploy_program" 'echo "==> Staging deploy complete"'
 require_in "$prebuild_program" 'exit "$prebuild_status"'
+# SEC-14 deploy 2: CI logs in as choir-deploy, whose forced command is the
+# gate (scripts/node-b-ci-gate); it sends a verb and typed values, never a
+# program, and never logs in as root.
+require_in "$workflow" 'User choir-deploy'
+reject_in "$workflow" 'User root'
+reject_in "$workflow" 'root@'
+reject_in "$workflow" 'bash -s'
+reject_in "$workflow" 'remote_env_q'
+require_in "$workflow" 'request="prebuild DEPLOY_COMMIT=${DEPLOY_COMMIT} DEPLOY_FRONTEND=${DEPLOY_FRONTEND} DEPLOY_HOST=${DEPLOY_HOST} DEPLOY_HOST_OS=${DEPLOY_HOST_OS} HOST_SERVICES=${HOST_SERVICES}"'
+require_in "$workflow" 'request="deploy DEPLOY_COMMIT=${DEPLOY_COMMIT} DEPLOY_RUN_ID=${DEPLOY_RUN_ID} DEPLOY_RUN_ATTEMPT=${DEPLOY_RUN_ATTEMPT} DEPLOY_HOST=${DEPLOY_HOST} DEPLOY_FRONTEND=${DEPLOY_FRONTEND} DEPLOY_VMCTL_RESTART=${DEPLOY_VMCTL_RESTART} DEPLOY_ACTIVE_VM_REFRESH=${DEPLOY_ACTIVE_VM_REFRESH} REFRESH_ACTIVE_COMPUTERS=${REFRESH_ACTIVE_COMPUTERS} DEPLOY_HOST_OS=${DEPLOY_HOST_OS} HOST_SERVICES=${HOST_SERVICES}"'
+[ "$(grep -cF 'ssh -n go-choir-node-b "$request"' "$workflow")" -eq 2 ] || {
+  echo "deploy workflow contract: prebuild and deploy each send one gate request" >&2
+  exit 1
+}
 
 require_in "$workflow" 'DEPLOY_COMMIT: ${{ github.sha }}'
 require_in "$prebuild_program" 'git fetch --no-tags origin "$DEPLOY_COMMIT"'
@@ -63,7 +77,7 @@ require_in "$deploy_program" 'deploy-receipt.json'
 # partial-deploy-receipt-blanks-deployed-commit-2026-10-14.md).
 require_in "$deploy_program" '.github/scripts/deploy-receipt-merge /var/lib/go-choir/deploy-receipt.json < "${receipt_tmp}.new" > "$receipt_tmp"'
 require_in "$workflow" 'selection="$(.github/scripts/deploy-base-select --after "$after" --health "$health_json" --receipt "$RUNNER_TEMP/deployed-receipt.json")"'
-require_in "$workflow" "'cat /var/lib/go-choir/deploy-receipt.json' >\"\$receipt_json\""
+require_in "$workflow" '"choir-deploy@${{ secrets.OVH_NODE_B_HOST }}" receipt >"$receipt_json"'
 # The receipt records whether the activated kernel is booted, and the
 # detector can never fail a deploy (docs/reports/patch-lanes-plan-2026-10-15.md).
 require_in "$deploy_program" "boot_state=\$(python3 scripts/verify-host-hardening.py --boot-state-json 2>/dev/null) || boot_state=''"
