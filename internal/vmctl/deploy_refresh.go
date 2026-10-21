@@ -360,10 +360,15 @@ func (h *Handler) deployRefreshWith(ctx context.Context, req deployRefreshReques
 		return reply(deployRefreshDeferred, deployRefreshInFlightReason, http.StatusConflict)
 	}
 	defer release()
-	// A deploy of a different build is an external event: it re-arms the
-	// single automatic retry of a protected computer (once per target).
-	h.registry.GrantDeployRetry(own.VMID, req.Target)
-	if h.registry.deployRescueEligible(&own) {
+	// A real deploy of a different build is an external event: it re-arms the
+	// single automatic retry of a protected computer (once per target). The
+	// store compaction passes maintenance and is neither a deploy nor a
+	// rescue: its Target is a label, and it must not grant or boot.
+	realDeploy := maintenance == nil
+	if realDeploy {
+		h.registry.GrantDeployRetry(own.VMID, req.Target)
+	}
+	if realDeploy && h.registry.deployRescueEligible(&own) {
 		if resp, status, done := h.deployRescue(ctx, req, own, reply); done {
 			return resp, status
 		}
@@ -451,9 +456,12 @@ func (h *Handler) deployRefreshWith(ctx context.Context, req deployRefreshReques
 //     whole window) is the only evidence that ends a live guest. The answer is
 //     "deferred", the pending set keeps the rescue, and the sweep asks again
 //     once the detector has stopped it.
-//   - With no process, a computer stopped by a failure spends its one retry
-//     (re-armed for this target by GrantDeployRetry; a second request for the
-//     same target finds it spent and is skipped) and is resumed. The boot is a
+//   - With no process, a rescue spends the computer's one retry, whatever the
+//     stop reason (re-armed for this target by GrantDeployRetry; a second
+//     request for the same target finds it spent and is skipped), and
+//     resumes it. Adoption of a live guest spawns nothing and is free. The
+//     rescue is for real deploys only: the store compaction never reaches
+//     it (deployRefreshWith). The boot is a
 //     crash boot: the host stopped the computer without a planned-restart
 //     marker, so no marker is requested and the guest closes open work as
 //     interrupted by a restart.
@@ -473,25 +481,24 @@ func (h *Handler) deployRescue(ctx context.Context, req deployRefreshRequest, ow
 		resp, status := reply(deployRefreshDeferred, "runs outside the registry and did not answer reattach; the wedge detector ends it on evidence, then vmctl boots it on "+req.Target, http.StatusConflict)
 		return resp, status, true
 	}
-	var previous string
-	spent := false
-	if stoppedByFailure(own.StoppedBy) {
-		prev, ok := reg.spendFailureWarm(own.VMID)
-		if !ok {
-			resp, status := reply(deployRefreshSkipped, "stopped by "+own.StoppedBy+" and its automatic retry is spent; a different deploy target or an owner act boots it", http.StatusConflict)
-			return resp, status, true
-		}
-		previous, spent = prev, true
+	// Every rescue that spawns a process is charged against this target's
+	// allowance, whatever the stop reason; adoption (above) spawns nothing and
+	// is free. A target whose allowance is spent finds it spent here.
+	receipt, ok := reg.spendDeployRetry(own.VMID)
+	if !ok {
+		resp, status := reply(deployRefreshSkipped, "stopped by "+own.StoppedBy+" and the automatic retry for this deploy target is spent; a different deploy target or an owner act boots it", http.StatusConflict)
+		return resp, status, true
 	}
 	refreshed, err := reg.ResumeVMForDesktop(req.UserID, req.DesktopID)
 	if err != nil {
 		if transientStartRefusal(err) {
-			if spent {
-				reg.refundFailureWarm(own.VMID, previous)
-			}
+			reg.refundFailureWarm(own.VMID, receipt)
 			resp, status := reply(deployRefreshDeferred, "start refused, retried by the sweep: "+err.Error(), http.StatusConflict)
 			return resp, status, true
 		}
+		// A hard failure keeps the retry spent, and a stop by a vmctl restart
+		// becomes a recovery failure so the sweep's bound applies too.
+		reg.markRecoveryFailed(own.VMID)
 		status := http.StatusInternalServerError
 		if RecoveryRefusalFrom(err) != nil {
 			status = http.StatusConflict
