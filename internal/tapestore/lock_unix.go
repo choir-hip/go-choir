@@ -7,6 +7,9 @@ import (
 	"syscall"
 )
 
+// openNoFollow makes open fail on a symlink at the final path component.
+const openNoFollow = syscall.O_NOFOLLOW
+
 // lockDir takes an exclusive advisory lock on an open directory and returns
 // its release. It is the cross-instance (and cross-process) half of the
 // per-computer write lock; the in-process half is a mutex.

@@ -111,7 +111,19 @@ func sealIndex(dir string, segno uint64, computerID string, size int64, entries 
 	idx := encodeIndex(segno, computerID, uint64(size), sortedEntries(entries))
 	final := filepath.Join(dir, IndexFileName(segno))
 	tmp := final + ".tmp"
-	t, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o640)
+	// A temp file left by a crash is replaced; anything that is not a plain
+	// file (a symlink above all) is refused, and the create refuses to follow.
+	if fi, err := os.Lstat(tmp); err == nil {
+		if !fi.Mode().IsRegular() {
+			return fmt.Errorf("tapestore: %s is not a regular file", tmp)
+		}
+		if err := os.Remove(tmp); err != nil {
+			return fmt.Errorf("tapestore: remove stale index temp: %w", err)
+		}
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	t, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL|openNoFollow, 0o640)
 	if err != nil {
 		return fmt.Errorf("tapestore: create index: %w", err)
 	}
@@ -129,13 +141,9 @@ func sealIndex(dir string, segno uint64, computerID string, size int64, entries 
 	if err := os.Rename(tmp, final); err != nil {
 		return fmt.Errorf("tapestore: install index: %w", err)
 	}
-	if d, err := os.Open(dir); err == nil {
-		_ = d.Sync()
-		d.Close()
-	} else if !errors.Is(err, fs.ErrNotExist) {
-		return err
+	if err := syncDir(dir); err != nil {
+		return fmt.Errorf("tapestore: fsync directory after installing index: %w", err)
 	}
-	_ = syncDir
 	return nil
 }
 

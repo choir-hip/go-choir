@@ -172,6 +172,11 @@ func (a *Appender) appendFunc(computerID string, items []Item, build func() ([]I
 
 func (a *Appender) appendLocked(l *computerLog, id string, items []Item, build func() ([]Item, error)) error {
 	dir := filepath.Join(a.root, SegDirName, id)
+	for _, p := range []string{filepath.Join(a.root, SegDirName), dir} {
+		if err := requirePlainDir(p); err != nil {
+			return err
+		}
+	}
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return fmt.Errorf("tapestore: create %s: %w", dir, err)
 	}
@@ -215,7 +220,7 @@ func (a *Appender) appendLocked(l *computerLog, id string, items []Item, build f
 		}
 	}
 
-	f, err := os.OpenFile(filepath.Join(dir, SegmentFileName(l.segno)), os.O_RDWR, 0)
+	f, err := openRegular(filepath.Join(dir, SegmentFileName(l.segno)), os.O_RDWR, 0)
 	if err != nil {
 		l.valid = false
 		return fmt.Errorf("tapestore: open segment %d: %w", l.segno, err)
@@ -375,12 +380,21 @@ func (a *Appender) recover(l *computerLog, dir, id string, d *os.File) error {
 		}
 		return a.startSegment(l, dir, id, last.segno+1, d)
 	}
-	return a.recoverOpen(l, dir, id, last.segno)
+	if err := a.recoverOpen(l, dir, id, last.segno); err != nil {
+		return err
+	}
+	// A surviving file proves nothing about its directory entries: finish the
+	// durability sequence before anything is acknowledged on top of it.
+	if err := a.syncTree(dir); err != nil {
+		l.valid = false
+		return err
+	}
+	return nil
 }
 
 func (a *Appender) recoverOpen(l *computerLog, dir, id string, segno uint64) error {
 	path := filepath.Join(dir, SegmentFileName(segno))
-	f, err := os.OpenFile(path, os.O_RDWR, 0)
+	f, err := openRegular(path, os.O_RDWR, 0)
 	if err != nil {
 		return fmt.Errorf("tapestore: open segment %d: %w", segno, err)
 	}
@@ -466,6 +480,11 @@ func (a *Appender) recoverOpen(l *computerLog, dir, id string, segno uint64) err
 		}
 		a.torn.Add(1)
 	}
+	if !torn {
+		if err := f.Sync(); err != nil {
+			return fmt.Errorf("tapestore: fsync %s: %w", label, err)
+		}
+	}
 	l.valid, l.segno, l.size, l.entries = true, segno, pos, entries
 	return nil
 }
@@ -473,7 +492,7 @@ func (a *Appender) recoverOpen(l *computerLog, dir, id string, segno uint64) err
 // startSegment creates segment segno exclusively, writes and fsyncs its
 // header and makes its directory entries durable.
 func (a *Appender) startSegment(l *computerLog, dir, id string, segno uint64, d *os.File) error {
-	f, err := os.OpenFile(filepath.Join(dir, SegmentFileName(segno)), os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o640)
+	f, err := openRegular(filepath.Join(dir, SegmentFileName(segno)), os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o640)
 	if err != nil {
 		return fmt.Errorf("tapestore: create segment %d: %w", segno, err)
 	}
@@ -485,19 +504,58 @@ func (a *Appender) startSegment(l *computerLog, dir, id string, segno uint64, d 
 	if err := f.Sync(); err != nil {
 		return fmt.Errorf("tapestore: fsync segment header: %w", err)
 	}
-	if err := d.Sync(); err != nil {
-		return fmt.Errorf("tapestore: fsync %s: %w", dir, err)
-	}
-	for _, parent := range []string{filepath.Dir(dir), a.root} {
-		_ = a.syncDirPath(parent)
+	if err := a.syncTree(dir); err != nil {
+		return err
 	}
 	l.valid, l.segno, l.size, l.entries = true, segno, segHeaderSize, map[openKey]idxEntry{}
 	return nil
 }
 
+// syncTree fsyncs the computer directory, tape-seg and the artifacts root, in
+// that order, so a created segment, a renamed index and the directories that
+// hold them survive a power loss. Every failure is returned: nothing is
+// acknowledged on top of a directory entry that may not be durable.
+func (a *Appender) syncTree(dir string) error {
+	for _, p := range []string{dir, filepath.Dir(dir), a.root} {
+		if err := a.syncDirPath(p); err != nil {
+			return fmt.Errorf("tapestore: fsync directory %s: %w", p, err)
+		}
+	}
+	return nil
+}
+
+// requirePlainDir refuses a path that exists as anything but a real directory
+// (a symlink above all), so no write is redirected outside the root.
+func requirePlainDir(path string) error {
+	fi, err := os.Lstat(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	if !fi.IsDir() {
+		return corruptf("%s is not a plain directory", path)
+	}
+	return nil
+}
+
+// openRegular opens a segment file, refusing a symlink or any non-regular
+// file at the path.
+func openRegular(path string, flag int, perm os.FileMode) (*os.File, error) {
+	if fi, err := os.Lstat(path); err == nil {
+		if !fi.Mode().IsRegular() {
+			return nil, corruptf("%s is not a regular file", path)
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	return os.OpenFile(path, flag|openNoFollow, perm)
+}
+
 // seal fsyncs the open segment and writes its index (appendix A.5 rule 3).
 func (a *Appender) seal(l *computerLog, dir, id string, d *os.File) error {
-	f, err := os.OpenFile(filepath.Join(dir, SegmentFileName(l.segno)), os.O_RDWR, 0)
+	f, err := openRegular(filepath.Join(dir, SegmentFileName(l.segno)), os.O_RDWR, 0)
 	if err != nil {
 		return fmt.Errorf("tapestore: open segment %d to seal: %w", l.segno, err)
 	}
