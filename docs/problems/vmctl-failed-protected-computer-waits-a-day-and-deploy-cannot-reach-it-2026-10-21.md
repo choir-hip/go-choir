@@ -409,6 +409,56 @@ request-level dedup before any claim), not a boot.
   boot continues on the guest's existing token. The rescue requests a fresh
   token; it does not require one.
 
+## Review round 3, second reviewer (Gemini 4 Argon on bcdb74659)
+
+Each finding read against 122eb9623:
+
+- **Argon 1 (not fixed by 122eb9623).** The deploy's grant clears the
+  allowance before the deploy defers (an unanswering guest; A7). When the
+  wedge detector stops the guest, `StartIdleSweeper` runs the always-on warm
+  right after reconcile, before the retry sweep; the warm spends the re-armed
+  retry and `startExistingVM` → `startAdmittedVM` recovers the stopped
+  instance the manager still tracks with `RecoverVM`: the stored config of
+  the hung build (`mergeVMConfigOverrides(inst.Config, …)`) and an empty
+  gateway token. The rollback target is then consumed by a boot of the old
+  image. 122eb9623 serializes that boot against the rescue but does not
+  change what it boots. This is the round-2 residual "a sweep boot of a
+  tracked instance can still run the stored (older) image", now shown to
+  lose the rollback. Fix: a start of a tracked instance whose guest is not
+  live (manager state not running or pending) boots through `RefreshVM`
+  with a freshly issued token, from every path (sweep, visit, resume,
+  `recoverOrRestartActiveVM`), so whichever path spends the re-armed retry
+  boots the current deploy. `RefreshVM` and `RecoverVM` both kill then
+  boot; they differ only in the config (`refreshBootConfig` vs the stored
+  one). A live tracked guest keeps `RecoverVM` (crash recovery, unchanged).
+  The grant still precedes the deferral: with the boot fixed, a sweep that
+  spends it boots the rollback, which is what the grant is for, charged
+  once.
+- **Argon 2a, 2b, 2c (fixed by 122eb9623).** (a) the visit's resolve takes
+  the `visit start` claim with `pendingWaiters` and `claimRescue` refuses on
+  any claim (`TestRescueDefersWhileAVisitBootsTheStoppedComputer`); (b) the
+  sweep charges inside its claim step and `spendDeployRetry` needs the rescue
+  claim (`TestNoSpendWhileARescueHoldsTheComputer`); (c) resume, recover and
+  refresh refuse on any claim, so overlapping sweep ticks or a resolve and
+  a resume cannot both boot.
+- **Argon 2d (recorded, not changed).** After a rescue defers to another
+  path's boot, the pending entry still asks once: if `/health` does not yet
+  serve the target (or the computer is layered) the computer takes the
+  ordinary planned refresh. That is a marker-backed planned restart of an
+  active computer (work resumes), at most one per deferral, the existing
+  rule for pending refreshes; it is not a failure retry and does not touch
+  the allowance. Making it exact needs a record of which artifacts a
+  realization booted, which the registry does not keep.
+- **Argon 3 = R3-P1c (fixed by 122eb9623):** `deployRescueStopped` takes
+  `VMStateFailed`, `spendRetryLocked` charges it for a rescue, the selection
+  lists it (`TestDeployRescuesAProtectedComputerItsOwnFailedRefreshLeftFailed`).
+  The always-on sweep still skips failed (named residual).
+- **Argon non-blocking (not fixed by 122eb9623; fixed next).** `rescueBoot`
+  and `startExistingVM` admit host memory only for an untracked instance.
+  A stopped tracked instance holds no memory, so its boot adds a VM; a
+  protected computer is always admitted, but without a reservation other
+  wakes do not count it.
+
 ## Residuals recorded by the review (not fixed here)
 
 - The rescue's final `/health` check is identity for a non-layered computer and
