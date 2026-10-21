@@ -360,6 +360,11 @@ type ManagerConfig struct {
 	MemoryHotplugBlockMiB int
 	MemoryHotplugSlotMiB  int
 
+	// GuestDNSPort is the host resolver's loopback port (VMCTL_GUEST_DNS_PORT;
+	// 0, the default, means none). With it set, a guest's DNS to its tap host
+	// address port 53 is DNAT'd there (SEC-10, hostfirewall.go).
+	GuestDNSPort int
+
 	// VisualCapture is the visual capture grant switch
 	// (CHOIR_VISUAL_CAPTURE_COMPUTERS; empty by default). See
 	// visual_capture.go.
@@ -2101,14 +2106,20 @@ func (m *Manager) launchFirecracker(cfg VMConfig, fcConfig map[string]interface{
 			return fmt.Errorf("prepare jail for VM %s: %w", vmID, jailErr)
 		}
 		receipt.JailFiles = notes
-		m.prepareVMNetwork(vmID, hostPort, cfg.GuestPort, receipt.UID)
+		// Torn down by the deferred cleanup if any part of it failed.
 		networkReady = true
-		return m.startJailedFirecracker(vmID, receipt, jailFirecrackerLaunchArgs(m.wantsAPISocket(cfg)))
+		if err = m.prepareVMNetwork(vmID, hostPort, cfg.GuestPort, receipt.UID); err != nil {
+			return err
+		}
+		err = m.startJailedFirecracker(vmID, receipt, jailFirecrackerLaunchArgs(m.wantsAPISocket(cfg)))
+		return err
 	}
 
 	m.reclaimDirectOwnership(vmID)
-	m.prepareVMNetwork(vmID, hostPort, cfg.GuestPort, -1)
 	networkReady = true
+	if err = m.prepareVMNetwork(vmID, hostPort, cfg.GuestPort, -1); err != nil {
+		return err
+	}
 
 	// Build the Firecracker command.
 	// --no-api disables the Firecracker API socket (kill hibernate mode);
@@ -2127,7 +2138,7 @@ func (m *Manager) launchFirecracker(cfg VMConfig, fcConfig map[string]interface{
 // and MAC it had, so the tap must be exactly the one it was launched with.
 // tapOwner >= 0 creates the tap owned by that uid/gid, so a jailed VMM with
 // no capabilities can attach to it.
-func (m *Manager) prepareVMNetwork(vmID string, hostPort int, guestPort int, tapOwner int) {
+func (m *Manager) prepareVMNetwork(vmID string, hostPort int, guestPort int, tapOwner int) error {
 	// Create the tap device for VM networking.
 	// Firecracker requires the tap device to exist before launching.
 	// The tap name comes from the config's host_dev_name field.
@@ -2141,8 +2152,10 @@ func (m *Manager) prepareVMNetwork(vmID string, hostPort int, guestPort int, tap
 	// so traffic to the host port reaches the guest.
 	guestIP, hostIP := m.guestAndHostIP(hostPort)
 	if err := m.setupHostNetworking(tapName, hostIP, hostPort, guestIP, guestPort); err != nil {
-		log.Printf("vmmanager: warning: host networking setup failed for %s: %v", tapName, err)
+		log.Printf("vmmanager: host networking for %s failed; VM %s not started: %v", tapName, vmID, err)
+		return fmt.Errorf("host networking for VM %s: %w", vmID, err)
 	}
+	return nil
 }
 
 // startFirecrackerProcess starts Firecracker with args, retains its serial
@@ -3500,19 +3513,24 @@ func (m *Manager) setupHostNetworking(tapName, hostIP string, hostPort int, gues
 	// subnets on the tap interface.
 	_ = h.writeProc(fmt.Sprintf("/proc/sys/net/ipv4/conf/%s/accept_local", tapName), "1")
 
+	// SEC-03: every step below is part of the floor; a failure is returned
+	// and the VM does not start (docs/problems/host-egress-floor-fails-open-2026-10-21.md).
+	// F6 first: the guest egress policy (guest_egress.go) narrows what any
+	// tap may reach before the per-tap rules see the packet, so it is in
+	// place before this tap's egress ACCEPT.
+	if err := h.ensureGuestEgress(); err != nil {
+		return fmt.Errorf("guest egress policy: %w", err)
+	}
 	// S1a: isolation, anti-spoofing and host-service access. The "-o lo"
 	// MASQUERADE rule was removed — the guest-originated packets it claimed
 	// to catch do not exist (post-DNAT they carry the real tap IP, not
 	// 127.0.0.1; 0-packet counters observed live).
 	if err := h.ensureTap(tapName, guestIP); err != nil {
-		log.Printf("vmmanager: warning: tap firewall for %s incomplete: %v", tapName, err)
+		return fmt.Errorf("tap firewall for %s: %w", tapName, err)
 	}
 	if err := h.ensureNAT(tapName, hostIP, guestIP, hostPort, guestPort); err != nil {
-		log.Printf("vmmanager: warning: tap nat for %s incomplete: %v", tapName, err)
+		return fmt.Errorf("tap nat for %s: %w", tapName, err)
 	}
-	// F6: the guest egress policy (guest_egress.go) narrows what any tap
-	// may reach before the per-tap rules above see the packet.
-	m.ensureGuestEgressPolicy()
 	return nil
 }
 
