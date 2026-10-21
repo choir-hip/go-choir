@@ -7,11 +7,12 @@ package tapestore
 //  W1  A batch of records is readable by the Reader from the segment, byte
 //      for byte, and creates no legacy file. One Append is one fsync.
 //  W2  The same (namespace, body) appended twice is one record, whether it
-//      repeats inside one call, across calls, or across a reopen.
-//  W3  A torn tail (a partial record header, a partial body, or a segment
-//      whose header never landed) found on open is truncated, counted, and
-//      later writes succeed; the torn record was never acknowledged, so it
-//      stays absent.
+//      repeats inside one call or across calls of one writer. A new writer
+//      writes it again, in its own segment (it never trusts a segment it did
+//      not write; see the fail-stop tests).
+//  W3  A torn tail or a segment whose header never landed, found by a new
+//      writer, is cut, counted and sealed (appender_failstop_test.go, S6);
+//      the torn record was never acknowledged, so it stays absent.
 //  W4  Any other damage on open refuses with ErrCorrupt and changes no byte
 //      on disk: a bad record with valid records after it, a bad segment
 //      header, an intact record of an unsupported version, a segment that
@@ -22,14 +23,14 @@ package tapestore
 //      starts the next; at the byte limit likewise. The limits are checked
 //      before a batch, so one call's records are never split across
 //      segments.
-//  W6  Reopening continues the open segment (and still dedupes against it) or
-//      starts the next number after a sealed one.
+//  W6  A new writer never appends to an existing segment: it seals the
+//      unsealed highest one and starts the next number, or starts the next
+//      number after a sealed one.
 //  W7  Goroutines writing the same computer are serialized: no torn record,
 //      no duplicate, every record resolvable, under -race. Two Appender
 //      values over one root (two owners of the directory lock) serialize too.
-//  W8  A write that fails part-way (disk full) returns an error, leaves no
-//      part of the batch behind, and later writes succeed. An fsync failure
-//      returns an error and later writes succeed.
+//  W8  (replaced by the fail-stop tests, appender_failstop_test.go S4/S5: a
+//      failed write or fsync returns an error and poisons the writer.)
 //  W9  Invalid computer ids, namespaces and empty batches are refused before
 //      any file is created.
 //  W10 Only internal/platform may name the production writer, and no code
@@ -44,7 +45,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"syscall"
 	"testing"
 )
 
@@ -138,16 +138,22 @@ func TestAppenderDuplicatesAreNoops(t *testing.T) {
 	mustAppend(t, a, cid, Item{NSPayload, pl})
 	// Same bytes, other namespace: a different key, a record.
 	mustAppend(t, a, cid, Item{NSEvent, pl})
+	if n := scanCount(t, root, cid); n != 2 {
+		t.Fatalf("records = %d, want 2", n)
+	}
+	// A new writer does not trust the segment it finds: it writes the same
+	// records again, in a segment of its own, and leaves the old one alone.
 	before, _ := os.Stat(segPath(root, cid, 1))
 	b := NewAppender(root)
 	mustAppend(t, b, cid, Item{NSPayload, pl}, Item{NSEvent, pl})
 	after, _ := os.Stat(segPath(root, cid, 1))
 	if before.Size() != after.Size() {
-		t.Fatalf("a reopened writer appended a duplicate: %d -> %d bytes", before.Size(), after.Size())
+		t.Fatalf("a new writer appended to the old segment: %d -> %d bytes", before.Size(), after.Size())
 	}
-	if n := scanCount(t, root, cid); n != 2 {
-		t.Fatalf("records = %d, want 2", n)
+	if n := scanCount(t, root, cid); n != 4 {
+		t.Fatalf("records = %d, want 2 in each of the two segments", n)
 	}
+	mustRead(t, NewReader(root), cid, NSPayload, pl)
 }
 
 func appendTail(t *testing.T, path string, b []byte) {
@@ -162,68 +168,9 @@ func appendTail(t *testing.T, path string, b []byte) {
 	}
 }
 
-func TestAppenderTruncatesATornTailAndContinues(t *testing.T) {
-	unacked := body("a record whose fsync and CAS never happened, long enough to cut in two")
-	whole := encodeRecord(NSPayload, digestBytes(unacked), unacked)
-	for name, tail := range map[string][]byte{
-		"partial record header":       whole[:recHeaderSize-9],
-		"header but no body":          whole[:recHeaderSize],
-		"half a body":                 whole[:recHeaderSize+len(unacked)/2],
-		"whole record minus one byte": whole[:len(whole)-1],
-	} {
-		t.Run(name, func(t *testing.T) {
-			root := t.TempDir()
-			first, second := body("acknowledged one"), body("acknowledged two")
-			mustAppend(t, NewAppender(root), cid, Item{NSEvent, first}, Item{NSReceipt, second})
-			good, _ := os.Stat(segPath(root, cid, 1))
-			appendTail(t, segPath(root, cid, 1), tail)
-
-			a := NewAppender(root)
-			later := body("written after the crash")
-			mustAppend(t, a, cid, Item{NSPayload, later})
-			if st := a.Stats(); st.TornTails != 1 {
-				t.Fatalf("TornTails = %d, want 1", st.TornTails)
-			}
-			r := NewReader(root)
-			mustRead(t, r, cid, NSEvent, first)
-			mustRead(t, r, cid, NSReceipt, second)
-			mustRead(t, r, cid, NSPayload, later)
-			if _, _, err := r.Read(cid, NSPayload, sum(unacked)); !errors.Is(err, ErrNotFound) {
-				t.Fatalf("the unacknowledged torn record resolved: %v", err)
-			}
-			if scanCount(t, root, cid) != 3 {
-				t.Fatal("scan count after recovery")
-			}
-			after, _ := os.Stat(segPath(root, cid, 1))
-			want := good.Size() + int64(recHeaderSize+len(later))
-			if after.Size() != want {
-				t.Fatalf("segment is %d bytes, want %d (torn bytes gone, the new record whole)", after.Size(), want)
-			}
-		})
-	}
-}
-
-func TestAppenderRecoversASegmentWhoseHeaderNeverLanded(t *testing.T) {
-	for _, n := range []int{0, 5, segHeaderSize - 1} {
-		t.Run(fmt.Sprint(n), func(t *testing.T) {
-			root := t.TempDir()
-			mustAppend(t, NewAppender(root), cid, Item{NSPayload, body("will be lost with its torn header")})
-			if err := os.Truncate(segPath(root, cid, 1), int64(n)); err != nil {
-				t.Fatal(err)
-			}
-			a := NewAppender(root)
-			pl := body("fresh")
-			mustAppend(t, a, cid, Item{NSPayload, pl})
-			if a.Stats().TornTails != 1 {
-				t.Fatalf("stats = %+v", a.Stats())
-			}
-			mustRead(t, NewReader(root), cid, NSPayload, pl)
-			if scanCount(t, root, cid) != 1 {
-				t.Fatal("scan count")
-			}
-		})
-	}
-	// A short file that is not a prefix of this segment's header is damage.
+// A short file that is not a prefix of this segment's header is damage, not a
+// torn creation (the torn creation itself is appender_failstop_test.go, S6).
+func TestAppenderRefusesAShortSegmentThatIsNotAHeaderPrefix(t *testing.T) {
 	root := t.TempDir()
 	mustAppend(t, NewAppender(root), cid, Item{NSPayload, body("x")})
 	patchFile(t, segPath(root, cid, 1), func(b []byte) []byte { b[1] ^= 0xff; return b[:10] })
@@ -412,7 +359,7 @@ func TestAppenderRotatesAtTheByteLimit(t *testing.T) {
 	}
 }
 
-func TestAppenderReopenContinuesOrStartsTheNextSegment(t *testing.T) {
+func TestAppenderReopenSealsTheOldSegmentAndStartsTheNext(t *testing.T) {
 	root := t.TempDir()
 	var all [][]byte
 	put := func(a *Appender) {
@@ -428,12 +375,7 @@ func TestAppenderReopenContinuesOrStartsTheNextSegment(t *testing.T) {
 		t.Fatalf("files = %v", got)
 	}
 	b := newTestAppender(root, 1<<30, 2)
-	put(b) // reopen continues the open segment 2: now 2 records, no new file
-	if got := segNames(t, root, cid); len(got) != 3 {
-		t.Fatalf("a reopen started a new segment instead of continuing: %v", got)
-	}
-	c := newTestAppender(root, 1<<30, 2)
-	put(c) // segment 2 is full: sealed, segment 3 started
+	put(b) // a new writer does not continue segment 2: it seals it and starts segment 3
 	if got := segNames(t, root, cid); len(got) != 5 {
 		t.Fatalf("files = %v, want segment 2 sealed and segment 3 open", got)
 	}
@@ -572,58 +514,6 @@ func TestAppenderTwoInstancesOverOneRootSerialize(t *testing.T) {
 			t.Fatalf("%s records = %d", id, n)
 		}
 	}
-}
-
-func TestAppenderPartialWriteLeavesNoPartialRecord(t *testing.T) {
-	root := t.TempDir()
-	a := NewAppender(root)
-	kept := body("acknowledged before the disk filled")
-	mustAppend(t, a, cid, Item{NSPayload, kept})
-
-	calls := 0
-	a.writeAt = func(f *os.File, b []byte, off int64) (int, error) {
-		calls++
-		if calls == 2 { // second record of the failing batch: a short write, then ENOSPC
-			n, _ := f.WriteAt(b[:len(b)/2], off)
-			return n, syscall.ENOSPC
-		}
-		return f.WriteAt(b, off)
-	}
-	whole, partial := body("first record of the failed batch, written whole"), body("second record of the failed batch, cut short")
-	err := a.Append(cid, Item{NSPayload, whole}, Item{NSReceipt, partial})
-	if !errors.Is(err, syscall.ENOSPC) {
-		t.Fatalf("Append = %v, want ENOSPC", err)
-	}
-	r := NewReader(root)
-	// The record cut short is never visible. A record written whole before the
-	// failure may stay (it was not acknowledged; a reader may already have
-	// cached it, so the writer never removes a whole record).
-	if _, _, err := r.Read(cid, NSReceipt, sum(partial)); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("the partial record is visible: %v", err)
-	}
-	mustRead(t, r, cid, NSPayload, kept)
-	a.writeAt = nil
-	later := body("written after the disk freed")
-	mustAppend(t, a, cid, Item{NSPayload, later})
-	mustRead(t, NewReader(root), cid, NSPayload, later)
-	scanCount(t, root, cid) // no torn bytes left in the middle of the segment
-	if st := a.Stats(); st.Errors != 1 || st.TornTails != 0 {
-		t.Fatalf("stats = %+v", st)
-	}
-}
-
-func TestAppenderFsyncFailureReturnsAnErrorAndRecovers(t *testing.T) {
-	root := t.TempDir()
-	a := NewAppender(root)
-	a.syncFile = func(*os.File) error { return syscall.EIO }
-	if err := a.Append(cid, Item{NSPayload, body("not durable")}); !errors.Is(err, syscall.EIO) {
-		t.Fatalf("Append = %v, want EIO", err)
-	}
-	a.syncFile = nil
-	after := body("after the failure")
-	mustAppend(t, a, cid, Item{NSPayload, after})
-	mustRead(t, NewReader(root), cid, NSPayload, after)
-	scanCount(t, root, cid)
 }
 
 func TestAppenderRefusesBadInputBeforeCreatingAnything(t *testing.T) {

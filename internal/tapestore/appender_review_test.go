@@ -1,23 +1,17 @@
 package tapestore
 
-// Review-panel regressions for the A2 writer, written before the fixes.
+// Review-panel regressions for the A2 writer. The fail-stop redesign
+// (appender_failstop_test.go) replaced V1 and V1b: a failed call no longer
+// repairs its segment, it poisons the writer, so a reader's cached location
+// can never be removed or reused and the next writer writes anything it is
+// asked to append afresh, in its own segment.
 //
-//  V1  (blocking) A reader must never hold a record location that the writer
-//      later removes or reuses. A failed Append (a failed fsync, or a short
-//      write) must not truncate a whole record away: a live reader that cached
-//      it would keep a stale location, and an equal-sized rewrite would then be
-//      invisible (ErrNotFound) while the old digest reads as ErrCorrupt.
-//      Regression: a reader active during the failed Append, then equal-sized
-//      and larger appends.
-//  V1b Records that survive a failed fsync are not trusted as durable: the
-//      next Append writes them afresh, in a later segment (second review
-//      round: the first design rewrote them in place, which another writer
-//      could not know to do).
 //  V3  (blocking) Directory durability is part of acknowledging: failures of
 //      the directory fsyncs of the computer directory, tape-seg and the root
 //      (segment creation), and of the segment directory at seal, are
-//      returned; and a surviving file whose directory sync never completed is
-//      not accepted by recovery until the sequence completes.
+//      returned and poison the writer; the next writer completes the whole
+//      directory sequence before it acknowledges anything on top of a file
+//      whose directory entry may never have been synced.
 //  V4  Symlinks are refused: tape-seg/, tape-seg/<computer>, a segment file,
 //      and a seg-N.idx.tmp that is a link never redirect a write; a stale
 //      regular temp file is replaced.
@@ -35,115 +29,6 @@ import (
 	"time"
 )
 
-func TestReaderCacheSurvivesAFailedFsyncAndLaterRewrites(t *testing.T) {
-	root := t.TempDir()
-	a := NewAppender(root)
-	r := NewReader(root)
-	mustAppend(t, a, cid, Item{NSPayload, body("acknowledged base record")})
-
-	first := body("AAAA failed-batch payload")
-	second := append([]byte("BBBB"), bytes.Repeat([]byte("b"), len(first)-4)...) // same length as first
-	if len(first) != len(second) {
-		t.Fatalf("test needs equal lengths: %d vs %d", len(first), len(second))
-	}
-	failed := false
-	a.syncFile = func(f *os.File) error {
-		if failed {
-			return f.Sync() // the writer's own cleanup after the failure
-		}
-		failed = true
-		mustRead(t, r, cid, NSPayload, first) // the reader caches the unsynced record
-		return syscall.EIO
-	}
-	if err := a.Append(cid, Item{NSPayload, first}); !errors.Is(err, syscall.EIO) {
-		t.Fatalf("Append = %v, want EIO", err)
-	}
-	a.syncFile = nil
-	third := body("CCCC a larger payload that does not fit where the failed one was written")
-	for _, next := range [][]byte{second, third} {
-		mustAppend(t, a, cid, Item{NSPayload, next})
-		if got, _, err := r.Read(cid, NSPayload, sum(next)); err != nil || !bytes.Equal(got, next) {
-			t.Fatalf("the live reader cannot read a record appended after a failed Append: %v", err)
-		}
-		if _, _, err := r.Read(cid, NSPayload, sum(first)); errors.Is(err, ErrCorrupt) {
-			t.Fatalf("the live reader reports corruption for the failed batch's record: %v", err)
-		}
-	}
-	if scanCount(t, root, cid) < 3 {
-		t.Fatal("scan lost acknowledged records")
-	}
-}
-
-func TestReaderCacheSurvivesAShortWriteAndLaterRewrites(t *testing.T) {
-	root := t.TempDir()
-	a := NewAppender(root)
-	r := NewReader(root)
-	mustAppend(t, a, cid, Item{NSPayload, body("acknowledged base record")})
-	first, torn := body("DDDD first record of a failing batch"), body("EEEE second record that is cut short by ENOSPC")
-	calls := 0
-	a.writeAt = func(f *os.File, b []byte, off int64) (int, error) {
-		calls++
-		if calls == 2 {
-			mustRead(t, r, cid, NSPayload, first) // the first record is whole and readable
-			n, _ := f.WriteAt(b[:len(b)/2], off)
-			return n, syscall.ENOSPC
-		}
-		return f.WriteAt(b, off)
-	}
-	if err := a.Append(cid, Item{NSPayload, first}, Item{NSPayload, torn}); !errors.Is(err, syscall.ENOSPC) {
-		t.Fatalf("Append = %v", err)
-	}
-	a.writeAt = nil
-	same := append([]byte("FFFF"), bytes.Repeat([]byte("f"), len(first)-4)...)
-	for _, next := range [][]byte{same, body("GGGG a much larger record than anything written before it, so it overruns")} {
-		mustAppend(t, a, cid, Item{NSPayload, next})
-		if got, _, err := r.Read(cid, NSPayload, sum(next)); err != nil || !bytes.Equal(got, next) {
-			t.Fatalf("the live reader cannot read a record appended after a short write: %v", err)
-		}
-		if _, _, err := r.Read(cid, NSPayload, sum(first)); errors.Is(err, ErrCorrupt) {
-			t.Fatalf("stale location for the failed batch's first record: %v", err)
-		}
-	}
-	if _, _, err := r.Read(cid, NSPayload, sum(torn)); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("the cut-short record resolved: %v", err)
-	}
-	scanCount(t, root, cid)
-}
-
-func TestAppenderRewritesUnsyncedRecordsBeforeAcknowledgingThem(t *testing.T) {
-	root := t.TempDir()
-	a := NewAppender(root)
-	p := body("payload whose first fsync failed")
-	a.syncFile = func(*os.File) error { return syscall.EIO }
-	if err := a.Append(cid, Item{NSPayload, p}); err == nil {
-		t.Fatal("expected a failed fsync")
-	}
-	a.syncFile = nil
-	var offs []int64
-	var lens []int
-	a.writeAt = func(f *os.File, b []byte, off int64) (int, error) {
-		if f.Name() != segPath(root, cid, 2) {
-			t.Errorf("rewrite went to %s, not to a later segment", f.Name())
-		}
-		offs, lens = append(offs, off), append(lens, len(b))
-		return f.WriteAt(b, off)
-	}
-	mustAppend(t, a, cid, Item{NSPayload, p}) // the retry: a duplicate of a record the kernel may have dropped
-	want := int64(segHeaderSize)
-	found := false
-	for i, o := range offs {
-		if o == want && lens[i] == recHeaderSize+len(p) {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatalf("the retried record's bytes were not rewritten at their offset before the fsync (writes at %v)", offs)
-	}
-	if n := scanCount(t, root, cid); n != 1 {
-		t.Fatalf("records = %d, want 1", n)
-	}
-}
-
 type syncCall struct {
 	path string
 	err  error
@@ -155,77 +40,66 @@ func TestAppenderCompletesDirectoryDurabilityBeforeAcknowledging(t *testing.T) {
 			root := t.TempDir()
 			paths := map[string]string{"root": filepath.Clean(root), "tape-seg": filepath.Join(root, SegDirName), "computer": segDir(root, cid)}
 			a := NewAppender(root)
-			var calls []syncCall
 			failed := false
 			a.syncDir = func(p string) error {
 				if p == paths[target] && !failed {
 					failed = true
-					calls = append(calls, syncCall{p, syscall.EIO})
 					return syscall.EIO
 				}
-				err := realSyncDir(p)
-				calls = append(calls, syncCall{p, err})
-				return err
+				return realSyncDir(p)
 			}
 			if err := a.Append(cid, Item{NSPayload, body("first")}); !errors.Is(err, syscall.EIO) {
 				t.Fatalf("Append = %v, want the directory fsync error", err)
 			}
-			mark := len(calls)
-			// The file created by the failed Append now survives. The next Append
-			// must finish the sequence, not accept the file as it is.
-			mustAppend(t, a, cid, Item{NSPayload, body("second")})
+			// The file created by the failed Append survives. The writer is
+			// poisoned; the next writer must finish the whole sequence before
+			// it acknowledges anything.
+			b := NewAppender(root)
+			var calls []syncCall
+			b.syncDir = func(p string) error { err := realSyncDir(p); calls = append(calls, syncCall{p, err}); return err }
+			mustAppend(t, b, cid, Item{NSPayload, body("second")})
 			for name, p := range paths {
 				ok := false
-				for _, c := range calls[mark:] {
+				for _, c := range calls {
 					if c.path == p && c.err == nil {
 						ok = true
 					}
 				}
 				if !ok {
-					t.Errorf("no successful fsync of %s (%s) between the failure and the acknowledgement", name, p)
+					t.Errorf("no successful fsync of %s (%s) before the next writer acknowledged", name, p)
 				}
-			}
-			// A fresh process (cold cache) over the same files syncs again before it acknowledges.
-			b := NewAppender(root)
-			var cold []syncCall
-			b.syncDir = func(p string) error { err := realSyncDir(p); cold = append(cold, syncCall{p, err}); return err }
-			mustAppend(t, b, cid, Item{NSPayload, body("third")})
-			if len(cold) == 0 {
-				t.Error("recovery of an existing open segment did not run the directory sequence")
 			}
 		})
 	}
 }
 
-func TestAppenderReturnsASealDirectoryFsyncFailure(t *testing.T) {
+func TestAppenderSealDirectoryFsyncFailureIsReturnedAndRedoneByTheNextWriter(t *testing.T) {
 	root := t.TempDir()
 	a := newAppender(root, 1<<30, 1)
 	mustAppend(t, a, cid, Item{NSPayload, body("fills the segment")})
-	var calls []syncCall
-	failed := false
 	a.syncDir = func(p string) error {
-		if _, err := os.Stat(idxPath(root, cid, 1)); err == nil && p == segDir(root, cid) && !failed {
-			failed = true
-			calls = append(calls, syncCall{p, syscall.EIO})
+		if _, err := os.Stat(idxPath(root, cid, 1)); err == nil && p == segDir(root, cid) {
 			return syscall.EIO
 		}
-		err := realSyncDir(p)
-		calls = append(calls, syncCall{p, err})
-		return err
+		return realSyncDir(p)
 	}
 	if err := a.Append(cid, Item{NSPayload, body("triggers the seal")}); !errors.Is(err, syscall.EIO) {
 		t.Fatalf("Append = %v, want the seal's directory fsync error", err)
 	}
-	mark := len(calls)
-	mustAppend(t, a, cid, Item{NSPayload, body("after the failed seal")})
+	// The renamed index exists but its directory entry was never synced: the
+	// next writer syncs the directory before it acknowledges.
+	b := NewAppender(root)
+	var calls []syncCall
+	b.syncDir = func(p string) error { err := realSyncDir(p); calls = append(calls, syncCall{p, err}); return err }
+	mustAppend(t, b, cid, Item{NSPayload, body("after the failed seal")})
 	ok := false
-	for _, c := range calls[mark:] {
+	for _, c := range calls {
 		if c.path == segDir(root, cid) && c.err == nil {
 			ok = true
 		}
 	}
 	if !ok {
-		t.Fatal("the renamed index was acknowledged without a successful directory fsync")
+		t.Fatal("the next writer acknowledged without a successful directory fsync")
 	}
 	scanCount(t, root, cid)
 }
@@ -338,25 +212,26 @@ func TestReaderRetiresOpenScanStateWhenASegmentIsSealed(t *testing.T) {
 }
 
 // V2 (tapestore half): AppendFunc's build step runs inside the writer's lock,
-// so it never reads the open segment while another call is mid-batch, and
-// what it reads excludes a failed call's records (their segment tail was
-// abandoned), which it then writes afresh.
+// so it never reads the open segment while another call is mid-batch.
 func TestAppendFuncBuildsOnlyBetweenOtherCalls(t *testing.T) {
 	root := t.TempDir()
 	a := NewAppender(root)
-	p := body("payload of the call that fails its fsync")
+	p := body("payload of the slow call")
 	entered, release := make(chan struct{}), make(chan struct{})
 	var aDone, buildSawDone bool
 	var mu sync.Mutex
+	first := true
 	a.syncFile = func(f *os.File) error {
-		select {
-		case <-entered:
+		mu.Lock()
+		hold := first
+		first = false
+		mu.Unlock()
+		if !hold {
 			return f.Sync()
-		default:
 		}
 		close(entered)
 		<-release
-		return syscall.EIO
+		return f.Sync()
 	}
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -381,10 +256,7 @@ func TestAppendFuncBuildsOnlyBetweenOtherCalls(t *testing.T) {
 			if err != nil {
 				return nil, err
 			}
-			if found {
-				return nil, nil
-			}
-			return []Item{{NSPayload, p}}, nil // the failed call's tail was abandoned: write P afresh
+			return nil, nil
 		})
 		if err != nil {
 			t.Errorf("AppendFunc: %v", err)
@@ -396,8 +268,8 @@ func TestAppendFuncBuildsOnlyBetweenOtherCalls(t *testing.T) {
 	if !buildSawDone {
 		t.Fatal("build ran while another call was still inside its batch")
 	}
-	if sawP {
-		t.Fatal("build saw a record of the failed call: its unsynced tail should have been abandoned, not left readable")
+	if !sawP {
+		t.Fatal("build did not see the record of the call that finished before it")
 	}
 	mustRead(t, NewReader(root), cid, NSPayload, p)
 }

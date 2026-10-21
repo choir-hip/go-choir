@@ -84,6 +84,11 @@ func TestTapeSegmentsFailedAppendFallsBackToLegacy(t *testing.T) {
 			t.Fatalf("FetchPayload %s: %v", it.ns, err)
 		}
 	}
+	// The health block says so: both pins fell back and the writer is poisoned.
+	d := f.service.TapeDiagnostics()
+	if d.SegmentFallbacks != 2 || d.SegmentPins != 0 || d.LegacyPins != 2 || !d.Appender.Poisoned {
+		t.Fatalf("diagnostics after a failed segment fsync: %+v", d)
+	}
 }
 
 // PF2

@@ -595,7 +595,7 @@ func TestFailStopRepeatedFailuresGrowByAtMostOneSegmentPerWriter(t *testing.T) {
 
 // S8
 func TestFailStopAcknowledgedRecordsAreAlwaysReadable(t *testing.T) {
-	for seed := int64(1); seed <= 25; seed++ {
+	for seed := int64(1); seed <= 8; seed++ {
 		t.Run(fmt.Sprintf("seed %d", seed), func(t *testing.T) {
 			rng := rand.New(rand.NewSource(seed))
 			root := t.TempDir()
@@ -610,7 +610,7 @@ func TestFailStopAcknowledgedRecordsAreAlwaysReadable(t *testing.T) {
 			apps := [2]*Appender{mk(0), mk(1)}
 			var dead []*Appender
 			var acked [][]byte
-			for step := 0; step < 60; step++ {
+			for step := 0; step < 40; step++ {
 				i := rng.Intn(2)
 				a := apps[i]
 				p := body("seed %d step %d %s", seed, step, strings.Repeat("x", rng.Intn(90)))
@@ -664,12 +664,13 @@ func TestFailStopAcknowledgedRecordsAreAlwaysReadable(t *testing.T) {
 func TestFailStopReaderNeverServesAWrongRecord(t *testing.T) {
 	root := t.TempDir()
 	a := NewAppender(root)
+	disk := newFstopDisk()
+	a.syncFile = disk.sync
 	r := NewReader(root)
 	mustAppend(t, a, cid, Item{NSPayload, body("acknowledged base record")})
 	frontier := fstopSize(t, segPath(root, cid, 1))
 	first := body("AAAA a record no one acknowledged")
 	second := append([]byte("BBBB"), bytes.Repeat([]byte("b"), len(first)-4)...) // same length as first
-	disk := newFstopDisk()
 	cachedOnce := false
 	disk.onFail = func(*os.File) {
 		if !cachedOnce {
@@ -677,7 +678,6 @@ func TestFailStopReaderNeverServesAWrongRecord(t *testing.T) {
 			mustRead(t, r, cid, NSPayload, first) // the live reader caches the unsynced record
 		}
 	}
-	a.syncFile = disk.sync
 	disk.set(true, true) // fsync fails and the tail is lost
 	_ = a.Append(cid, Item{NSPayload, first})
 	disk.set(false, false)

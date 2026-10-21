@@ -95,6 +95,9 @@ type tapeCounters struct {
 	legacyFiles atomic.Uint64 // of those, created by tape pins
 	legacyPins  atomic.Uint64 // pin calls written to legacy
 	segmentPins atomic.Uint64 // pin calls written to a segment
+	// segmentFallbacks counts pin calls that went to the segment writer, which
+	// failed, and were stored legacy instead (each is also a legacyPin).
+	segmentFallbacks atomic.Uint64
 }
 
 // TapeDiagnostics is the tape write/read snapshot served on the health
@@ -104,6 +107,7 @@ type TapeDiagnostics struct {
 	SegmentsMode        string                  `json:"segments_mode"`
 	SegmentPins         uint64                  `json:"segment_pins"`
 	LegacyPins          uint64                  `json:"legacy_pins"`
+	SegmentFallbacks    uint64                  `json:"segment_fallbacks"`
 	BlobFilesCreated    uint64                  `json:"blob_files_created"`
 	LegacyFilesCreated  uint64                  `json:"legacy_files_created"`
 	SegmentFilesCreated uint64                  `json:"segment_files_created"`
@@ -120,6 +124,7 @@ func (s *Service) TapeDiagnostics() TapeDiagnostics {
 		SegmentsMode:       s.TapeSegmentsMode(),
 		SegmentPins:        s.tapeCount.segmentPins.Load(),
 		LegacyPins:         s.tapeCount.legacyPins.Load(),
+		SegmentFallbacks:   s.tapeCount.segmentFallbacks.Load(),
 		BlobFilesCreated:   s.tapeCount.blobFiles.Load(),
 		LegacyFilesCreated: s.tapeCount.legacyFiles.Load(),
 		Reader:             s.tapeReader().Stats(),

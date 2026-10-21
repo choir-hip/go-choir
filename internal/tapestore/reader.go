@@ -560,7 +560,8 @@ func (o *openSeg) read(computerID string, isLast bool, ns NS, digest [32]byte) (
 // Caller holds o.mu.
 func (o *openSeg) refresh(f io.ReaderAt, size int64, label, computerID string, isLast bool) error {
 	if size < o.scanned {
-		// The file shrank (a writer truncated its torn tail). Start over.
+		// The file shrank (a recovering writer cut its torn tail before sealing
+		// it). Start over.
 		o.headOK, o.scanned, o.entries = false, 0, map[openKey]openLoc{}
 	}
 	if !o.headOK {
@@ -599,7 +600,7 @@ func (o *openSeg) refresh(f io.ReaderAt, size int64, label, computerID string, i
 			if later {
 				return corruptf("%s: bad record at %d is followed by valid records: %s", label, pos, bad)
 			}
-			o.scanned = pos // torn tail: absent until the writer completes it
+			o.scanned = pos // torn tail: absent; a recovering writer cuts it and seals the segment
 			return nil
 		}
 		k := openKey{h.ns, h.digest}
