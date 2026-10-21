@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"time"
 )
@@ -166,12 +167,25 @@ type DispatcherOptions struct {
 	// never arrives, the event starves the dispatcher. 0 = default 64.
 	MaxDeferrals int
 	// MaxConcurrent bounds how many actor activations may run at once across
-	// all agents (0 = default 8). Prevents unbounded goroutine fan-out.
+	// all agents outside a lane (0 = default 8). Prevents unbounded goroutine
+	// fan-out.
 	MaxConcurrent int
+	// Lanes give the agents whose id starts with a prefix their own cap,
+	// outside MaxConcurrent, so I/O-bound actors (source polls) do not hold
+	// the slots desks wait for. An agent belongs to the first lane its id
+	// (the last NUL-separated segment) matches.
+	Lanes []Lane
 	// OnActorFailure is called when an activation's handler panics. The
 	// callback receives the agent ID and the recovered error. It must not
 	// block. When nil, panics are logged only.
 	OnActorFailure FailureFunc
+}
+
+// Lane is a dispatcher lane: agents whose id starts with Prefix run at most
+// MaxConcurrent (at least 1) activations at once, outside the shared slots.
+type Lane struct {
+	Prefix        string
+	MaxConcurrent int
 }
 
 // NewDispatcher constructs a dispatcher over the kernel log. Call Run to
@@ -281,7 +295,7 @@ func (d *Dispatcher) dispatchPending(ctx context.Context) {
 	d.mu.Unlock()
 	for _, agentID := range agents {
 		d.mu.Lock()
-		if _, busy := d.running[agentID]; busy || len(d.running) >= d.opts.MaxConcurrent {
+		if _, busy := d.running[agentID]; busy || !d.hasRoomLocked(agentID) {
 			d.mu.Unlock()
 			continue
 		}
@@ -309,6 +323,41 @@ func (d *Dispatcher) dispatchPending(ctx context.Context) {
 			d.activate(ctx, id)
 		}(agentID)
 	}
+}
+
+// laneOf is the index of the lane agentID belongs to, or -1 for the shared
+// slots.
+func (d *Dispatcher) laneOf(agentID string) int {
+	name := actorLogName(agentID)
+	for i, lane := range d.opts.Lanes {
+		if lane.Prefix != "" && strings.HasPrefix(name, lane.Prefix) {
+			return i
+		}
+	}
+	return -1
+}
+
+// runningInLocked counts in-flight activations in lane (-1: the shared
+// slots). Callers hold d.mu.
+func (d *Dispatcher) runningInLocked(lane int) int {
+	n := 0
+	for id := range d.running {
+		if d.laneOf(id) == lane {
+			n++
+		}
+	}
+	return n
+}
+
+// hasRoomLocked reports whether agentID's lane, or the shared slots, has a
+// free slot. Callers hold d.mu.
+func (d *Dispatcher) hasRoomLocked(agentID string) bool {
+	lane := d.laneOf(agentID)
+	limit := d.opts.MaxConcurrent
+	if lane >= 0 {
+		limit = max(d.opts.Lanes[lane].MaxConcurrent, 1)
+	}
+	return d.runningInLocked(lane) < limit
 }
 
 // activate runs one fenced activation: snapshot the actor's epoch, fold each
@@ -556,10 +605,15 @@ func (d *Dispatcher) logActivationWait(agentID string, pending []Update) {
 	if oldest.IsZero() || now.Sub(oldest) < activationWaitLogAfter {
 		return
 	}
+	lane := d.laneOf(agentID)
+	limit := d.opts.MaxConcurrent
+	if lane >= 0 {
+		limit = max(d.opts.Lanes[lane].MaxConcurrent, 1)
+	}
 	d.mu.Lock()
-	slots, due := len(d.running), d.dueAgents
+	slots, due := d.runningInLocked(lane), d.dueAgents
 	d.mu.Unlock()
-	log.Printf("dispatcher: activation wait agent=%s waited=%s updates=%d slots=%d/%d due_agents=%d", actorLogName(agentID), now.Sub(oldest).Round(time.Second), len(pending), slots, d.opts.MaxConcurrent, due)
+	log.Printf("dispatcher: activation wait agent=%s waited=%s updates=%d slots=%d/%d due_agents=%d", actorLogName(agentID), now.Sub(oldest).Round(time.Second), len(pending), slots, limit, due)
 }
 
 // actorLogName is a scoped actor id's last segment (owner and computer are

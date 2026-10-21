@@ -45,6 +45,11 @@ type RuntimeOption func(*Adapter)
 // WithKernelMode is retained for source compatibility but is a no-op: the
 // dispatcher is always the sole delivery authority (ontology kernel). The
 // legacy channel-mailbox runtime was removed at the cutover.
+
+// sourcePollLane is how many source polls run at once in their dispatcher
+// lane.
+const sourcePollLane = 4
+
 func WithKernelMode() RuntimeOption {
 	return func(a *Adapter) {}
 }
@@ -136,6 +141,10 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 		MaxAttempts:  8,
 		MaxDeferrals: 64,
 		ErrorSink:    sinkMailbox,
+		// Source polls are network I/O up to the poll timeout; their own
+		// lane keeps them out of the slots desks wait for
+		// (docs/problems/research-more-slow-and-hidden-2026-10-21.md, E6).
+		Lanes: []actor.Lane{{Prefix: "source:", MaxConcurrent: sourcePollLane}},
 	})
 	rt.SetKernelMode()
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -88,5 +89,89 @@ func TestDispatcherServesTheLongestWaitingAgentNext(t *testing.T) {
 	defer mu.Unlock()
 	if order[0] != "texture:zz" {
 		t.Fatalf("first activation = %s (order %v); want the agent waiting 10 minutes", order[0], order)
+	}
+}
+
+// docs/problems/research-more-slow-and-hidden-2026-10-21.md, E6: after a
+// boot, every source poll came due at once and each held a slot for network
+// I/O up to the 90 s poll timeout, so desks waited behind RSS fetches. A lane
+// gives agents with an id prefix their own cap. Failure modes:
+//  1. a laned activation takes a shared slot, so a desk waits behind it;
+//  2. the lane runs more than its cap at once;
+//  3. a laned agent waits for a shared slot when its lane has room.
+func TestLaneKeepsSourcePollsOutOfDeskSlots(t *testing.T) {
+	l := openKernelLog(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	now := time.Now().UTC()
+	appendAt(t, l, "s1", "source:rss:a", now.Add(-3*time.Minute), time.Time{})
+	appendAt(t, l, "s2", "source:rss:b", now.Add(-2*time.Minute), time.Time{})
+	appendAt(t, l, "d1", "texture:desk", now.Add(-1*time.Minute), time.Time{})
+
+	release := make(chan struct{})
+	var mu sync.Mutex
+	started := map[string]bool{}
+	running, maxSources := 0, 0
+	h := HandlerFunc(func(ctx context.Context, agentID string, u Update, mem []byte) ([]byte, error) {
+		mu.Lock()
+		started[agentID] = true
+		laned := strings.HasPrefix(agentID, "source:")
+		if laned {
+			running++
+			if running > maxSources {
+				maxSources = running
+			}
+		}
+		mu.Unlock()
+		if laned {
+			<-release
+			mu.Lock()
+			running--
+			mu.Unlock()
+		}
+		return mem, nil
+	})
+	d := NewDispatcher(l, h, DispatcherOptions{MaxConcurrent: 1, PollInterval: 10 * time.Millisecond,
+		Lanes: []Lane{{Prefix: "source:", MaxConcurrent: 1}}})
+	go d.Run(ctx)
+	defer d.Stop()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		mu.Lock()
+		desk, src := started["texture:desk"], started["source:rss:a"]
+		mu.Unlock()
+		if desk && src {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("started = %v; the desk must run while a source poll holds the lane", started)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	mu.Lock()
+	if started["source:rss:b"] {
+		mu.Unlock()
+		t.Fatal("the second source ran while the lane (cap 1) was full")
+	}
+	mu.Unlock()
+	close(release)
+	deadline = time.Now().Add(5 * time.Second)
+	for {
+		mu.Lock()
+		b := started["source:rss:b"]
+		mu.Unlock()
+		if b {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the second source never ran after the lane freed")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if maxSources > 1 {
+		t.Fatalf("lane ran %d sources at once, cap 1", maxSources)
 	}
 }
