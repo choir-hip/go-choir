@@ -409,7 +409,9 @@ EOF
   sid="$(jq -r 'select(.message_type=="summary") | .snapshot_id' "$STATE/run/backup.json" | tail -1)"
   added="$(jq -r 'select(.message_type=="summary") | .data_added' "$STATE/run/backup.json" | tail -1)"
   log "snapshot ${sid:-unknown} added ${added:-?} bytes"
-  R check >/dev/null 2>"$STATE/run/check.err" || { err "restic check failed: $(tail -c 300 "$STATE/run/check.err" | tr -d '\n')"; status_merge <<<'{"last_attempt_result":"check-failed"}'; return 1; }
+  # No `restic check` here: walking every tree of a 9.7 million file
+  # source runs past the unit's memory line for hours (problem doc section
+  # 13 item 18). The weekly verify carries the structural check.
   local raw; raw="$(R stats --mode raw-data --json 2>/dev/null | jq -r '.total_size // 0')"
   local skipped_json; skipped_json="$(printf '%s\n' "${SKIPPED[@]:-}" | jq -R . | jq -sc 'map(select(length>0))')"
   status_merge <<EOF
@@ -433,7 +435,7 @@ cmd_verify() {
   tunnel_up || return 1
   restic_env daily
   week="$(date -u +%V)"; n=$(( (10#$week % 10) + 1 ))
-  R check --read-data-subset="$n/10" >/dev/null 2>"$STATE/run/verify.err"; rc=$?
+  R check --with-cache --read-data-subset="$n/10" >/dev/null 2>"$STATE/run/verify.err"; rc=$?
   if [ "$rc" -ne 0 ]; then
     err "verify $n/10 failed: $(tail -c 300 "$STATE/run/verify.err" | tr -d '\n')"
     status_merge <<<'{"last_verify_result":"failed"}'

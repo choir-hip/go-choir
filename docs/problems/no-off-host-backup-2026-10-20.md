@@ -683,3 +683,18 @@ with this. either edit node-a or the mike repo").
     which shrinks every tree and also helps the file system and any
     restore. (c) is a substrate change in the artifact store and needs
     its own problem record; (a) with (b) is the small step.
+    **Outcome and decision (02:17 UTC).** At 02:15 the check had run 98
+    minutes with CPU time growing about a quarter of a core, so I stopped
+    the unit (`Result=signal`; 2 h 7 min, 3.6 TB read). The snapshot
+    `cbe1e08b` was already committed on node-a; the exit trap deleted
+    both Dolt snapshots and restic left no process. More memory does not
+    fit: Node B has 31 GB, about 14 GB free beside the guests, and the
+    check's working set was above that. Decision: options (a) and (b).
+    The daily run no longer runs `restic check`; the weekly verify runs
+    `check --with-cache --read-data-subset`. Failure modes 7 and 8 in
+    `scripts/off-host-backup-dolt-snapshot-test.sh`. The 02:38 run of
+    2026-10-21 was skipped by stopping its timer at runtime (the deploy
+    starts it again). Residuals: the weekly verify still walks every tree
+    under the same cap and may run for hours; option (c), sharding the
+    three flat directories, is the real fix and needs its own record; the
+    snapshot restore drill (`snap`) against `cbe1e08b` has not run yet.

@@ -16,6 +16,11 @@
 #  5. A failed snapshot is silent: never; the run is partial.
 #  6. The corpus snapshot's nested .choir-backup is uploaded again: never;
 #     restic is told to exclude it.
+#  7. The daily run walks every tree with `restic check` (item 18: 9.2
+#     million files in three flat directories put it past the memory line
+#     for hours): never; the structural check is the weekly verify's.
+#  8. The weekly verify downloads every tree pack into a throwaway cache:
+#     never; it checks with the run's cache.
 #
 # Run: bash scripts/off-host-backup-dolt-snapshot-test.sh
 set -u
@@ -38,6 +43,7 @@ setup() { # name, subvolumes (space separated: platform corpus), snapshot mode (
   for t in ssh sqlite3; do printf '#!/bin/sh\nexit 0\n' > "$R/bin/$t"; done
   cat > "$R/bin/restic" <<EOF
 #!/bin/sh
+case " \$* " in *" check "*) echo "restic check \$*" | grep -o -- 'check.*' >> "$R/calls" ;; esac
 case "\$*" in *" backup "*) echo "restic backup \$*" | grep -o -- '--exclude [^ ]*choir-backup[^ ]*' | sed 's#.*/staging/#--exclude staging/#' >> "$R/calls" ;; esac
 exit 0
 EOF
@@ -68,10 +74,10 @@ EOF
   chmod +x "$R/bin/"*
   printf x > "$R/sec/restic-password"; printf x > "$R/sec/rest-password"
 }
-run() {
+run() { # optional subcommand, default backup
   OUT="$(PATH="$R/bin:$PATH" OFFHOST_DATA_ROOT="$R/root" OFFHOST_SECRETS_DIR="$R/sec" \
     OFFHOST_DOLT_ROOT_PASSWORD_FILE="$R/sec/none" OFFHOST_NO_TUNNEL=1 OFFHOST_MIN_FREE_GIB=0 \
-    bash "$SCRIPT" backup 2>&1)"; RC=$?
+    bash "$SCRIPT" "${1:-backup}" 2>&1)"; RC=$?
 }
 calls() { tr '\n' '|' < "$R/calls"; }
 has() { grep -qx -- "$1" "$R/calls"; }
@@ -85,6 +91,11 @@ check "no server-side sync and no memory raise" "$(! grep -q 'port 1330\|systemc
 check "snapshots are deleted at exit" "$([ -z "$(left)" ] && has 'delete platform' && has 'delete corpus'; echo $?)"
 check "the corpus snapshot's .choir-backup is excluded" "$(has '--exclude staging/dolt/corpus/.choir-backup'; echo $?)"
 check "a clean run is ok" "$([ "$RC" = 0 ]; echo $?)"
+check "the daily run does not walk the trees" "$(! grep -q '^check' "$R/calls"; echo $?)"
+
+# 8: the weekly verify checks with the run's cache.
+: > "$R/calls"; run verify
+check "the weekly verify checks a data subset with the cache" "$(grep -q -- '^check.*--with-cache.*--read-data-subset' "$R/calls"; echo $?)"
 
 # 2: neither is a subvolume: the sync, as before.
 setup neither "" ok; run
