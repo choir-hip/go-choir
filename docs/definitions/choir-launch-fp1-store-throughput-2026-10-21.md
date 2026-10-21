@@ -103,17 +103,30 @@ boundaries:
   protected_surfaces: [object store schema, og_objects writers including the production projector, replay and witness extraction, boot path]
 
 now:
-  status: working
-  slice: problem record and this file (commit 1), then tests that fail, then the side table
-  source_ref: f399a2e8c
-  deploy_identity: f2c4a3ec3 serving
+  status: checkpoint_incomplete
+  slice: B2 built and tested locally on lane/b2-store; awaiting FP0's panel, landing in a deploy of its own after the host lane's vmctl rollback-reachability fix, and the deployed proof
+  source_ref: see receipts
+  deploy_identity: f2c4a3ec3 serving at start; this lane deploys nothing
   candidate:
-    id: none
-    state: none
+    id: fp1-b2-store
+    state: paused
     ref: lane/b2-store
     base: f399a2e8c
     digest: none
-    scope: []
+    scope:
+      - internal/objectgraph/derived_keys.go
+      - internal/objectgraph/dolt_store.go
+      - internal/objectgraph/boot_step.go
+      - internal/store/derived_keys.go
+      - internal/store/project.go
+      - internal/store/computer_events.go
+      - internal/store/vocab_migrate_og.go
+      - internal/store/store.go
+      - internal/store/texture.go
+      - internal/computerversion/dolt_state_extractor.go
+      - internal/agentcore/replay_completeness.go
+      - internal/projectionbase/witness.go
+      - internal/autoputer/run.go
   conjecture:
     id: C-FP1-sidetable
     claim: >-
@@ -122,38 +135,59 @@ now:
       exactly as the JSON scans do, and takes the engine mutex from 70% to
       about half.
     test: >-
-      The differential and rollback-simulation tests locally; the engine-mutex
-      counters on the paper before and after (FP0).
+      The differential and rollback-simulation tests locally (passing);
+      the engine-mutex counters on the paper before and after (FP0).
     edge: missing_oracle
     delta_o: the validator logs its pass and the tripwire counts hash mismatches, so a missed writer shows as a number
     scope_if_supported: the guest object store on a computer with the same writers
-    status: active
-    evidence_refs: []
+    status: testing
+    evidence_refs: [receipts]
   decision:
     what: >-
       Persisted side table, in-memory validated flag, read-time tripwire; the
-      extractors skip the table; replay does not maintain it.
+      extractors skip the table; replay does not maintain it and withdraws the
+      families. L3-05: T1 was already landed (1db03dacf), T2 is left as is.
     kind: architecture
     status: proposal
     evidence_ref: docs/problems/store-hot-reads-need-a-rollback-safe-side-table-2026-10-21.md
     owner_ratification_ref: the orchestrator's panel on the frozen candidate
   belief:
     believed_state: >-
-      The three scans held the engine 40.1 s of the 122 s window (33% of
-      wall time, 47% of the 85 s it was busy); GetObject's 150 s of waiting
-      is queueing behind them.
+      The three scans (40.1 s of the 85 s held) are replaced by indexed reads
+      that are exact or absent; the first validation pass is seconds of engine
+      time per 100,000 rows, in 40 ms pages.
     main_uncertainty: >-
-      Whether the validator pass on the paper's real row counts is short
-      enough, and whether a join-free two-step read keeps its plan on the
-      embedded engine.
-    next_observation: plan-shape and 20,000-row timings in the worktree
+      The paper's real row counts and engine share after the deploy; whether
+      the paper carries the reverted release's stray STORED columns.
+    next_observation: FP0's 120 s engine-mutex reading on the paper after the deploy (steps in the problem record)
   blocker_or_risk: >-
-    The panel's findings on the first design are not in the committed
-    problem doc ("panel pending"); the design here follows the brief. A new
-    table makes an older binary replay-ineligible after a rollback.
-  next_action: write the failing tests
+    Lands only after the host lane's vmctl rollback-reachability fix. A
+    rollback to a binary without the extractor change leaves og_key_index as an
+    unknown table to that binary (replay-ineligible until dropped).
+  next_action: FP0 reviews and lands; then B2b (docs/design/store-engine-concurrency-2026-10-21.md)
 
-receipts: []
+receipts:
+  - id: fp1-side-table
+    boundary: implement
+    identity: aa1e2a4f4 (objectgraph), 14c1a62db (store wiring), 3aa4b543e (extractors)
+    proof_refs:
+      - internal/objectgraph/derived_keys_test.go
+      - internal/store/derived_keys_test.go
+      - internal/computerversion/dolt_state_extractor_test.go
+    rollback_ref: git revert 3aa4b543e 14c1a62db aa1e2a4f4
+    disposition: built and tested locally; not landed
+  - id: fp1-boot-logs
+    boundary: implement
+    identity: 17778b6e6, 8829596b3
+    proof_refs: [internal/store/boot_steps_test.go]
+    rollback_ref: git revert 8829596b3 17778b6e6
+    disposition: built and tested locally; not landed
+  - id: fp1-engine-concurrency-design
+    boundary: define
+    identity: 636612d3e, b630883d0
+    proof_refs: [docs/design/store-engine-concurrency-2026-10-21.md, internal/objectgraph/engine_concurrency_probe_test.go]
+    rollback_ref: git revert 636612d3e
+    disposition: design landed in the lane, nothing implemented; next batch named
 ---
 
 # FP1: store and daemon throughput
