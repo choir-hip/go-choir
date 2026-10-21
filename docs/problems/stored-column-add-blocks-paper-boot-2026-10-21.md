@@ -109,7 +109,35 @@ the start and the end of the step.
    registry instead of leaving it: the rollback must reach the computer
    that the bad release broke.
 
-## Fix design (proposed, 2026-10-21; panel pending)
+## Fix design (superseded 2026-10-21: plain columns on og_objects)
+
+**Superseded** by the rollback-safe side table in
+[store-hot-reads-need-a-rollback-safe-side-table-2026-10-21.md](store-hot-reads-need-a-rollback-safe-side-table-2026-10-21.md)
+(lane FP1, `docs/definitions/choir-launch-fp1-store-throughput-2026-10-21.md`).
+The reasons the panel review gave against the plain-column design, as relayed
+to the lane by the orchestrator (the panel's own text is not in this
+repository, so treat the list as the lane's record of it, not a transcript):
+
+1. **Silent staleness after rollback-then-forward.** An older binary's
+   `INSERT ... ON DUPLICATE KEY UPDATE` never names a new column, so an
+   updated row keeps its old derived value and nothing marks it; the
+   `og_derived_v` marker would be left as it was. A side table that carries
+   the `content_hash` it was derived from makes a stale row detectable.
+2. **Indexes over a populated table are another full pass on the boot path**
+   (item 5 below named the open question: one pass per index, holding the
+   single connection, minutes on the paper). A side table and its indexes
+   are created while empty, which is cheap at boot, and filled online.
+3. **Completeness was unprovable.** A reader needs to know that every row of
+   the kind is derived and still current; a per-row version marker on the
+   table the older binary also writes cannot say that after a rollback.
+4. **The columns change `og_objects`' schema and `SELECT *` content**, which
+   the replay equivalence and the content witness hash. (A new table has its
+   own cost there, handled in the superseding record's finding 3.)
+
+The text below is kept as the record of what was proposed. Its count of
+writers ("the two upserts, project.go, the two UPDATEs") was also short: there
+are six SQL sites (see the superseding record's finding 1).
+
 
 Measured: a plain nullable column adds in 8 ms; a BEFORE INSERT trigger
 fills it, but a BEFORE UPDATE trigger does not fire on our
