@@ -148,6 +148,8 @@ type fakeGuest struct {
 	envelopes []string
 	// resumedStatus, when set, is the resumed answer (a refused install).
 	resumedStatus int
+	// onPrepare, when set, runs while the guest is being fenced.
+	onPrepare func()
 }
 
 func (g *fakeGuest) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -159,6 +161,9 @@ func (g *fakeGuest) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	case guestHibernatePreparePath:
 		g.prepares++
+		if g.onPrepare != nil {
+			g.onPrepare()
+		}
 		status := g.prepareStatus
 		if status == 0 {
 			status = http.StatusOK
