@@ -43,6 +43,18 @@ Fediverse leads, then the failure 15 carried patch and a two-arm frontend
 self-development drill (Sonnet through the Claude delegate versus GPT-6
 Luna) on test computers. S6 above stays the active LP station.
 
+Status at 05:30 UTC on 2026-10-21: the backup snapshot path, Research
+more (logged out), op-eds and the wave-1 and social rows (Taiwan included)
+are deployed and proven; the two-arm drill ran (report:
+[`reports/selfdev-two-arm-drill-imageapp-2026-10-21.md`](reports/selfdev-two-arm-drill-imageapp-2026-10-21.md)).
+Owner notes section 33 changed the rest of the night: no more Luna arms;
+Sonnet rewrites of Slides, Pdf, Epub, Podcast, Calendar and FileBrowser, one
+at a time; and a durable fix for the backup verify through the tape segment
+store, goal
+[`definitions/choir-tape-segments-a2-repack-2026-10-21.md`](definitions/choir-tape-segments-a2-repack-2026-10-21.md)
+(`status: blocked` on an owner choice after three review rounds; the
+assessment is in its now card).
+
 ## Foundations push (2026-10-14 evening → 10-15 15:00; owner: deepen foundations)
 
 Live today: LF0/LF1 front page, S2a+S2b management tasks, artifact GC,

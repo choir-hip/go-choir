@@ -1261,6 +1261,19 @@ nodes:
     note: >-
       Owner's overnight order (owner notes section 32). Does not change the
       S6 slices; the self-development drill runs on test computers only.
+  - id: choir-tape-segments-a2-repack-2026-10-21
+    title: Tape segments A2 — the production segment writer behind a flag, then a copy-only repack, so the weekly backup verify stops walking 9.7M files
+    path: docs/definitions/choir-tape-segments-a2-repack-2026-10-21.md
+    ledger: ''
+    status: blocked  # 2026-10-21 05:15 UTC: three review rounds each found a new fsync-recovery hole; owner chooses the recovery design (now card)
+    kind: side
+    entrypoint: false
+    execution_mode: mission_orchestrator
+    depends_on: []
+    enables: []
+    note: >-
+      Owner notes section 33 ("we need a durable fix for the backup
+      verify"). The flag flip and the legacy delete are owner steps.
   - id: choir-lp-s6-commit-gate-2026-10-20
     title: LP S6 — the commit gate (what runs is what was approved; tests, build, heads, fault boundaries, derived divergence)
     path: docs/definitions/choir-lp-s6-commit-gate-2026-10-20.md
