@@ -118,6 +118,12 @@ const (
 	// confinement (jailer vs direct) or another VMM uid: no mixed-mode
 	// resume (VMM jailer slice 1, failure item 15).
 	snapshotReasonConfinement = "confinement_mismatch"
+	// Snapshot vault (SDC NET-06): the target did not probe as an encrypted
+	// mount; a jailed VMM would capture on the main file system first; a
+	// plaintext snapshot was found for a computer that now uses the vault.
+	snapshotReasonVaultUnavailable = "snapshot_vault_unavailable"
+	snapshotReasonVaultJailed      = "snapshot_vault_jailed_unsupported"
+	snapshotReasonNotInVault       = "snapshot_not_in_vault"
 )
 
 // Credential paths of a snapshot resume, recorded on the wake timeline.
@@ -206,6 +212,9 @@ type SnapshotMeta struct {
 	// the jailed VMM's uid, which owns the snapshot files.
 	Confinement string `json:"confinement,omitempty"`
 	VMMUID      int    `json:"vmm_uid,omitempty"`
+	// Vault records that the snapshot was written into the snapshot vault.
+	// Observability only: where a snapshot is found decides where it is read.
+	Vault bool `json:"vault,omitempty"`
 }
 
 // snapshotConfinement is the confinement a snapshot was captured under.
@@ -234,6 +243,8 @@ type SnapshotTimeline struct {
 	ClockStepMS     int64  `json:"clock_step_ms,omitempty"`
 	// Credential is snapshotCredentialDelivered or snapshotCredentialRenewOnly.
 	Credential string `json:"credential,omitempty"`
+	// Vault: the snapshot was written into the snapshot vault.
+	Vault bool `json:"vault,omitempty"`
 }
 
 // --- paths ---------------------------------------------------------------
