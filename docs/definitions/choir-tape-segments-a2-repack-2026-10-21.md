@@ -210,6 +210,37 @@ now:
     build. Inherited: legacy writeBlob does not fsync (service.go).
     Decision under No Blocking Asks: land flag-off (reversible, dormant),
     after the SlidesApp drill; the flag stays off.
+  round_5_design: >-
+    2026-10-21 08:40 UTC, written before the code. Both enabled-mode P1s
+    end in the same state: an acknowledged pin has a valid legacy copy,
+    but the segment-first reader fails closed on a segment error and never
+    reaches it. P1-1: a recovery refusal (corrupt unsealed segment) makes
+    the pin fall back to legacy, and every later read for that computer
+    probes the corrupt segment first. P1-2: a poisoned writer's
+    unacknowledged tail, whole when the next writer reads it back, is
+    sealed; if the kernel had dropped those pages, the sealed record later
+    fails verification and shadows the legacy copy of the same pin.
+    Change to design section 9.3.1 (fail closed): a segment error falls
+    back to the legacy file only when that file's SHA-256 equals the
+    requested digest. The bytes returned are then exactly the record
+    meant, because the store is content-addressed and every returned byte
+    is hashed. 9.3.1 refused the fallback because it "would answer from
+    different storage than the record that was meant". With the digest
+    check, the bytes cannot differ; the remaining risk is that corruption
+    goes unnoticed. Each such read therefore counts in a new
+    segment_error_fallbacks counter in health and logs once per segment,
+    and the segment error is still returned when there is no legacy
+    copy, or the legacy copy does not hash. ReadSegment, the census and
+    the repack keep segment-only reads, so a corrupt segment can never be
+    counted as a good copy or used as a repack source, and repack must
+    not delete a legacy file whose segment copy fails verification.
+    Failure modes: (1) a corrupt sealed record with an intact legacy copy
+    serves legacy, counted; (2) the same without a legacy copy fails closed;
+    (3) a legacy copy that does not hash fails with the segment error;
+    (4) an unreadable segment directory or an index without its segment,
+    with a legacy copy, serves legacy, counted; (5) the census and
+    ReadSegment still report the segment error; (6) a healthy segment hit
+    never reads legacy; (7) flag-off reads are unchanged.
   owner_choice: >-
     (a) build fail-stop and review it once more, then land flag-off;
     (b) land db96e07a1 flag-off now with round 3's P1 as a named residual
