@@ -376,4 +376,10 @@ done
 [ "$(grep -c 'command = ' "$nix_file")" -eq 1 ] || fail "nix/node-b.nix has more than one sudo command rule"
 grep -Eq 'choir-deploy.*(ALL|NOPASSWD: *ALL)' "$nix_file" && fail "choir-deploy has a broad sudo rule"
 
+# Step 3: root no longer accepts the CI key; only choir-deploy does.
+root_keys=$(sed -n '/users\.users\.root\.openssh\.authorizedKeys\.keys = \[/,/\];/p' "$nix_file")
+[ -n "$root_keys" ] || fail "nix/node-b.nix: root's key list not found"
+grep -Eq 'ciDeployKey|github-actions-deploy' <<<"$root_keys" && fail "root still accepts the CI deploy key"
+[ "$(grep -c 'github-actions-deploy@go-choir' "$nix_file")" -eq 1 ] || fail "the CI key must appear once, in ciDeployKey"
+
 echo "node-b-ci-gate tests passed"
