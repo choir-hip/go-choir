@@ -698,13 +698,6 @@ func (rt *Runtime) reclaimTerminalAssignmentCapsules(ctx context.Context, parent
 		}
 		// A terminal assignment whose capsule was never revoked still holds
 		// admission budget: revoke the capsule directly through the fate path.
-		// Prior assignments may have been opened by a different persistent-Management
-		// run identity (e.g. before a restart reactivated the actor), so the
-		// parent is the one recorded on each assignment binding, not the
-		// current caller, and the fate path's parent-identity check passes.
-		reclaimParent := parent
-		reclaimParent.RunID = assignment.Binding.ParentRunID
-		reclaimParent.AgentID = assignment.Binding.ParentAgentID
 		reclaimed, err := rt.revokeAssignedCapsule(ctx, assignment,
 			"terminal assignment capsule budget reclaimed for fresh assignment")
 		if err != nil {
