@@ -79,6 +79,14 @@ let
   internalTokenHeaderFile = "${internalTokenFile}.header";
   internalAuthEnv = "CHOIR_INTERNAL_AUTH_MODE=${internalAuthMode}";
   internalTokenCredential = [ "choir-internal-token:${internalTokenFile}" ];
+  # Guest DNS (SEC-10; docs/problems/host-egress-floor-fails-open-2026-10-21.md):
+  # Unbound answers guests on 127.0.0.1:guestDnsPort, and vmctl DNATs each
+  # guest's tap host address :53 to it (VMCTL_GUEST_DNS_PORT). The guest
+  # points its resolver at its gateway (the guest side of SEC-10, FP2's
+  # nix/autoputer-vm.nix line); until then guests keep public resolvers.
+  # Rollback: drop VMCTL_GUEST_DNS_PORT (vmctl stops adding the DNAT at the
+  # next start of each VM) and services.unbound.
+  guestDnsPort = 8053;
   # S1 owner-act receipts (internal/owneract;
   # docs/problems/effect-accepted-admitted-without-authority-2026-10-15.md).
   # The proxy signs, with its own Ed25519 key (signer domain
@@ -550,6 +558,33 @@ in
       80    # HTTP
       443   # HTTPS
     ];
+  };
+
+  # The guests' resolver (guestDnsPort above). Loopback only; the tap DNAT
+  # keeps the guest's source address, so access control names the guest
+  # pool (vmmanager guestPoolCIDRs: 10.200.0.0/13 and 10.208.0.0/13) and
+  # refuses everything else. Private and link-local answers are stripped
+  # (DNS rebinding: a public name must not resolve to a host or LAN
+  # address). The host's own resolv.conf is not changed.
+  services.unbound = {
+    enable = true;
+    resolveLocalQueries = false;
+    settings.server = {
+      interface = [ "127.0.0.1@${toString guestDnsPort}" ];
+      access-control = [
+        "0.0.0.0/0 refuse"
+        "::/0 refuse"
+        "127.0.0.0/8 allow"
+        "10.200.0.0/13 allow"
+        "10.208.0.0/13 allow"
+      ];
+      private-address = [
+        "0.0.0.0/8" "10.0.0.0/8" "100.64.0.0/10" "127.0.0.0/8" "169.254.0.0/16"
+        "172.16.0.0/12" "192.168.0.0/16" "fc00::/7" "fe80::/10" "::ffff:0:0/96"
+      ];
+      hide-identity = true;
+      hide-version = true;
+    };
   };
 
   # Caddy reverse proxy (TLS termination → Go services + frontend)
@@ -1291,6 +1326,7 @@ in
       # 2026-10-13). The old vmctl-priority.env always-on list is retired.
       Environment = [
         "VMCTL_PORT=8083"
+        "VMCTL_GUEST_DNS_PORT=${toString guestDnsPort}"
         # D-ROUTE and immutable ComputerVersion inputs are tables on the same
         # corpusd world-wire SQL server. vmctl is the sole route CAS writer.
         "VMCTL_ROUTE_DSN=root@tcp(127.0.0.1:13306)/platform?parseTime=true&multiStatements=true&clientFoundRows=true"
@@ -2335,6 +2371,16 @@ in
   # kernel and rootfs are deployed here. Provider credentials are never
   # placed in this directory or in the guest image itself (VAL-VM-011).
   systemd.tmpfiles.rules = [
+    # KSM off (SEC-09; review N4): merged pages across guests are a
+    # cross-tenant side channel. 2 stops ksmd and unmerges what it merged.
+    # Firecracker does not madvise guest memory MERGEABLE, so nothing was
+    # merged; this makes the posture explicit. Rollback: drop the line.
+    "w /sys/kernel/mm/ksm/run - - - - 2"
+    # /dev/kvm 0660 root:kvm, not systemd's 0666 (NET-07): direct VMMs run
+    # as root and jailed VMMs get their own device node from the jailer, so
+    # no other local user needs KVM. Local Nix builds with the kvm feature
+    # go to node-a. Rollback: drop the line and the udev rule below.
+    "z /dev/kvm 0660 root kvm -"
     "d /opt/go-choir 0755 root root -"
     "d /var/www 0755 root root -"
     "d /var/www/go-choir 0755 root root -"
@@ -2458,7 +2504,13 @@ in
     options kvm_intel nested=0
   '';
 
-  # SMT (hyperthreading): left ON pending an owner decision. The E-2236 is
+  # The udev half of the /dev/kvm mode (tmpfiles above sets the live node).
+  services.udev.extraRules = ''
+    KERNEL=="kvm", GROUP="kvm", MODE="0660"
+  '';
+
+  # SMT (hyperthreading): left ON by owner ruling (NET-07, DEC-06: until
+  # outside users share the host; owner notes, around line 330). The E-2236 is
   # Coffee Lake; L1TF, MDS and VMScape cross-tenant leaks need SMT off for
   # full protection. Cost: 6 cores / 12 threads -> 6 threads, i.e. half the
   # vCPU-schedulable threads for computers (density analysis in the problem

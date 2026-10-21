@@ -512,7 +512,8 @@
 
           # Guest store disk (erofs image containing the nix store closure).
           # This is the shared read-only nix store that VMs of this image class
-          # reference. With KSM on the host, identical pages are deduplicated.
+          # reference. Guests share the file's host page cache; KSM is off on
+          # the host (SEC-09), so guest memory pages are never merged.
           guestStoreDisk = vmConfig.microvm.storeDisk;
         in pkgs.runCommand name { } ''
         mkdir -p $out
@@ -595,7 +596,7 @@ EOF
       #
       # Key design (aligned with choiros-rs proven approach):
       #   - systemd as init (proper NixOS boot, not custom init script)
-      #   - erofs for shared nix store with KSM deduplication
+      #   - erofs for a shared read-only nix store (one file; no KSM, SEC-09)
       #   - virtio-blk for data volumes (mutable autoputer state)
       #   - No virtiofs/9p shares (simpler, no host daemon needed)
       nixosConfigurations.go-choir-autoputer-vm = nixpkgs.lib.nixosSystem {
