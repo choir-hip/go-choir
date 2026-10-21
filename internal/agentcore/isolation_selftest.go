@@ -50,10 +50,14 @@ type isolationEgressProbe struct {
 type isolationSelfTestResponse struct {
 	ComputerID string                              `json:"computer_id"`
 	DeskCells  yaegikernel.DeskCellSelfTestReceipt `json:"desk_cells"`
-	Egress     []isolationEgressProbe              `json:"egress"`
-	EgressHost string                              `json:"egress_host,omitempty"`
-	OK         bool                                `json:"ok"`
-	Failures   []string                            `json:"failures,omitempty"`
+	// FrameBoundary is the forged-frame probe: raw observations of the
+	// daemon's frame admission per desk, judged by the staging script against
+	// a table it holds itself.
+	FrameBoundary yaegikernel.FrameBoundaryReceipt `json:"frame_boundary"`
+	Egress        []isolationEgressProbe           `json:"egress"`
+	EgressHost    string                           `json:"egress_host,omitempty"`
+	OK            bool                             `json:"ok"`
+	Failures      []string                         `json:"failures,omitempty"`
 }
 
 // HandleIsolationSelfTest runs the desk cell and guest egress self-tests.
@@ -78,6 +82,12 @@ func (h *APIHandler) HandleIsolationSelfTest(w http.ResponseWriter, r *http.Requ
 	resp.DeskCells = yaegikernel.DeskCellSelfTest(ctx, deskCellSelfTestConfig(h.rt.cfg.ComputerID))
 	for _, f := range resp.DeskCells.Failures {
 		resp.Failures = append(resp.Failures, "desk_cells: "+f)
+	}
+	resp.FrameBoundary = yaegikernel.FrameBoundarySelfTest()
+	for _, r := range resp.FrameBoundary.Roles {
+		if r.Error != "" {
+			resp.Failures = append(resp.Failures, "frame_boundary: "+r.Role+": "+r.Error)
+		}
 	}
 	host, targets := guestEgressTargets(os.Getenv("RUNTIME_GATEWAY_URL"))
 	resp.EgressHost = host
