@@ -280,11 +280,23 @@ func Middleware(next http.Handler) http.Handler {
 // requests never produce "would refuse" noise. It returns false only in
 // enforce mode.
 func Authorize(r *http.Request) bool {
+	return AuthorizeAtMost(r, ModeEnforce)
+}
+
+// AuthorizeAtMost is Authorize with the configured mode capped for one
+// route: a route newly put behind the credential can run observe while the
+// service enforces everywhere else (SEC-11). It never raises the mode: a
+// service in observe or off stays there.
+func AuthorizeAtMost(r *http.Request, routeCap Mode) bool {
 	if r == nil {
 		return false
 	}
 	c := current()
-	if c.mode == ModeOff {
+	mode := c.mode
+	if mode == ModeEnforce && routeCap == ModeObserve {
+		mode = ModeObserve
+	}
+	if mode == ModeOff || routeCap == ModeOff {
 		return true
 	}
 	v, _ := r.Context().Value(ctxKey{}).(verdict)
@@ -302,7 +314,7 @@ func Authorize(r *http.Request) bool {
 	if route == "" && r.URL != nil {
 		route = r.URL.Path
 	}
-	if c.mode == ModeObserve {
+	if mode == ModeObserve {
 		logLimited("observe: would refuse", r, route, reason)
 		return true
 	}
@@ -328,11 +340,14 @@ func MarkInternal(req *http.Request) {
 	}
 }
 
+// 8082 is the proxy: its object-graph route needs the credential from host
+// callers (SEC-11), and its Middleware strips the header at ingress like
+// every other service.
 // Every port here must stay below vmctl's guest host-port base
 // (VM_HOST_BASE_PORT, 9000): vmctl DNATs 127.0.0.1:<host port> to a guest,
 // so a credential port in that range would hand the secret to a guest.
 // TestCredentialPortsNeverInGuestHostPortRange holds it.
-var defaultPorts = []string{"8083", "8084", "8086", "8087"}
+var defaultPorts = []string{"8082", "8083", "8084", "8086", "8087"}
 
 func portsFromEnv() map[string]bool {
 	list := defaultPorts
