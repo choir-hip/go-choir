@@ -92,7 +92,7 @@ func (w *SegmentWriter) Seal() error {
 	if err := w.f.Sync(); err != nil {
 		return fmt.Errorf("tapestore: fsync segment: %w", err)
 	}
-	if err := sealIndex(w.dir, w.segno, w.computerID, w.off, w.entries); err != nil {
+	if err := sealIndex(w.dir, w.segno, w.computerID, w.off, w.entries, nil); err != nil {
 		return err
 	}
 	w.sealed = true
@@ -104,7 +104,10 @@ func (w *SegmentWriter) Seal() error {
 // sealIndex writes seg-<segno>.idx for a segment that is already fsynced:
 // temp file, fsync, rename, fsync of the directory (appendix A.5 rule 3). A
 // crash before the rename leaves the segment open, which readers scan.
-func sealIndex(dir string, segno uint64, computerID string, size int64, entries map[openKey]idxEntry) error {
+func sealIndex(dir string, segno uint64, computerID string, size int64, entries map[openKey]idxEntry, syncDir func(string) error) error {
+	if syncDir == nil {
+		syncDir = realSyncDir
+	}
 	idx := encodeIndex(segno, computerID, uint64(size), sortedEntries(entries))
 	final := filepath.Join(dir, IndexFileName(segno))
 	tmp := final + ".tmp"
@@ -132,7 +135,18 @@ func sealIndex(dir string, segno uint64, computerID string, size int64, entries 
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
+	_ = syncDir
 	return nil
+}
+
+// realSyncDir opens a directory and fsyncs it.
+func realSyncDir(path string) error {
+	d, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+	return d.Sync()
 }
 
 // Close releases the file and leaves the segment unsealed (open).

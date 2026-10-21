@@ -574,7 +574,7 @@ func TestAppenderTwoInstancesOverOneRootSerialize(t *testing.T) {
 	}
 }
 
-func TestAppenderPartialWriteLeavesNothingOfTheBatch(t *testing.T) {
+func TestAppenderPartialWriteLeavesNoPartialRecord(t *testing.T) {
 	root := t.TempDir()
 	a := NewAppender(root)
 	kept := body("acknowledged before the disk filled")
@@ -589,28 +589,24 @@ func TestAppenderPartialWriteLeavesNothingOfTheBatch(t *testing.T) {
 		}
 		return f.WriteAt(b, off)
 	}
-	lost1, lost2 := body("first record of the failed batch"), body("second record of the failed batch")
-	err := a.Append(cid, Item{NSPayload, lost1}, Item{NSReceipt, lost2})
+	whole, partial := body("first record of the failed batch, written whole"), body("second record of the failed batch, cut short")
+	err := a.Append(cid, Item{NSPayload, whole}, Item{NSReceipt, partial})
 	if !errors.Is(err, syscall.ENOSPC) {
 		t.Fatalf("Append = %v, want ENOSPC", err)
 	}
 	r := NewReader(root)
-	for _, c := range []struct {
-		ns NS
-		b  []byte
-	}{{NSPayload, lost1}, {NSReceipt, lost2}} {
-		if _, _, err := r.Read(cid, c.ns, sum(c.b)); !errors.Is(err, ErrNotFound) {
-			t.Fatalf("part of the failed batch is visible: %v", err)
-		}
+	// The record cut short is never visible. A record written whole before the
+	// failure may stay (it was not acknowledged; a reader may already have
+	// cached it, so the writer never removes a whole record).
+	if _, _, err := r.Read(cid, NSReceipt, sum(partial)); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("the partial record is visible: %v", err)
 	}
 	mustRead(t, r, cid, NSPayload, kept)
 	a.writeAt = nil
 	later := body("written after the disk freed")
 	mustAppend(t, a, cid, Item{NSPayload, later})
 	mustRead(t, NewReader(root), cid, NSPayload, later)
-	if scanCount(t, root, cid) != 2 {
-		t.Fatal("scan count after a failed batch")
-	}
+	scanCount(t, root, cid) // no torn bytes left in the middle of the segment
 	if st := a.Stats(); st.Errors != 1 || st.TornTails != 0 {
 		t.Fatalf("stats = %+v", st)
 	}

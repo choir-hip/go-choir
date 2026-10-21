@@ -63,6 +63,7 @@ type Appender struct {
 	// Fault-injection seams for tests; nil means the real call.
 	writeAt  func(f *os.File, b []byte, off int64) (int, error)
 	syncFile func(f *os.File) error
+	syncDir  func(path string) error
 
 	appends, records, bytes, syncs, segsCreated, idxCreated, seals, torn, errs atomic.Uint64
 }
@@ -390,10 +391,7 @@ func (a *Appender) startSegment(l *computerLog, dir, id string, segno uint64, d 
 		return fmt.Errorf("tapestore: fsync %s: %w", dir, err)
 	}
 	for _, parent := range []string{filepath.Dir(dir), a.root} {
-		if p, err := os.Open(parent); err == nil {
-			_ = p.Sync()
-			p.Close()
-		}
+		_ = a.syncDirPath(parent)
 	}
 	l.valid, l.segno, l.size, l.entries = true, segno, segHeaderSize, map[openKey]idxEntry{}
 	return nil
@@ -409,10 +407,23 @@ func (a *Appender) seal(l *computerLog, dir, id string, d *os.File) error {
 	if err := f.Sync(); err != nil {
 		return fmt.Errorf("tapestore: fsync segment: %w", err)
 	}
-	if err := sealIndex(dir, l.segno, id, l.size, l.entries); err != nil {
+	if err := sealIndex(dir, l.segno, id, l.size, l.entries, a.syncDirPath); err != nil {
 		return err
 	}
 	a.idxCreated.Add(1)
 	a.seals.Add(1)
 	return nil
 }
+
+// syncDirPath fsyncs a directory (or the test hook standing in for it).
+func (a *Appender) syncDirPath(path string) error {
+	if a.syncDir != nil {
+		return a.syncDir(path)
+	}
+	return realSyncDir(path)
+}
+
+// SetSyncHookForTest replaces the segment fsync. It is a test seam for the
+// platform's pin-path tests; production never calls it. Not safe to call
+// while an Append is running.
+func (a *Appender) SetSyncHookForTest(fn func(*os.File) error) { a.syncFile = fn }
