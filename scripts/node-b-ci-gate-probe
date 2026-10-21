@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# On-host probe of the CI deploy gate (SDC SEC-14), for FP0 between deploy 1
+# and deploy 2. Run as root on Node B, from the deployed checkout:
+#
+#   scripts/node-b-ci-gate-probe <off-main-sha> [<main-sha-to-prebuild>]
+#
+# <off-main-sha>: a full commit GitHub serves that is not on main (a lane
+# branch tip); the gate must refuse it. With <main-sha-to-prebuild>, the probe
+# also runs a real prebuild through the gate (nix build only, never
+# activates). It runs every request as choir-deploy through the forced
+# command from authorized_keys.d, exactly as sshd would, and prints one line
+# per check. Exit 0 only if every check passes.
+set -uo pipefail
+
+off_main="${1:?usage: node-b-ci-gate-probe <off-main-sha> [<main-sha-to-prebuild>]}"
+prebuild_sha="${2:-}"
+keys=/etc/ssh/authorized_keys.d/choir-deploy
+failures=0
+
+pass() { echo "PASS $*"; }
+failc() {
+  echo "FAIL $*"
+  failures=$((failures + 1))
+}
+
+[ "$(id -u)" -eq 0 ] || {
+  echo "run as root on Node B" >&2
+  exit 2
+}
+
+id choir-deploy >/dev/null 2>&1 && pass "choir-deploy exists" || failc "choir-deploy missing"
+
+line=$(grep -c . "$keys" 2>/dev/null)
+line=${line:-0}
+[ "$line" -eq 1 ] && pass "choir-deploy has one authorized key" || failc "choir-deploy has ${line} authorized keys"
+grep -q '^restrict,command="/nix/store/[^"]*-go-choir-ci-deploy-forced-command" ssh-ed25519 ' "$keys" &&
+  pass "the key is restricted to the forced command" || failc "the key is not restricted to the forced command"
+forced=$(sed -n 's/^restrict,command="\([^"]*\)".*/\1/p' "$keys")
+
+rules=$(sudo -l -U choir-deploy 2>&1)
+echo "$rules" | grep -Eq '\(root\) NOPASSWD: /nix/store/[^ ]+-go-choir-ci-deploy-gate$' &&
+  pass "sudo: one NOPASSWD rule, as root, to the gate" || failc "sudo rule: $rules"
+[ "$(echo "$rules" | grep -c 'NOPASSWD')" -eq 1 ] || failc "sudo: more than one NOPASSWD rule"
+
+as_deploy() {
+  runuser -u choir-deploy -- env -i SSH_ORIGINAL_COMMAND="$1" "$forced"
+}
+
+out=$(as_deploy receipt 2>/dev/null)
+echo "$out" | jq -e '.target_commit | test("^[0-9a-f]{40}$")' >/dev/null &&
+  pass "receipt reads the deploy receipt" || failc "receipt: ${out:0:200}"
+
+refused() {
+  local label="$1" request="$2" status=0 err
+  err=$(as_deploy "$request" 2>&1 >/dev/null) || status=$?
+  if [ "$status" -ne 0 ] && grep -q 'node-b-ci-gate: refused' <<<"$err"; then
+    pass "refused: ${label}"
+  else
+    failc "not refused (status ${status}): ${label}: ${err:0:200}"
+  fi
+}
+
+refused "a shell" "bash -s"
+refused "the old receipt command" "cat /var/lib/go-choir/deploy-receipt.json"
+refused "command substitution" "prebuild DEPLOY_COMMIT=\$(id) DEPLOY_FRONTEND=false DEPLOY_HOST=false DEPLOY_HOST_OS=false HOST_SERVICES="
+refused "an unknown verb" "rollback"
+refused "an off-main commit" "prebuild DEPLOY_COMMIT=${off_main} DEPLOY_FRONTEND=false DEPLOY_HOST=false DEPLOY_HOST_OS=false HOST_SERVICES="
+
+status=0
+runuser -u choir-deploy -- sudo -n /run/current-system/sw/bin/bash -c id >/dev/null 2>&1 || status=$?
+[ "$status" -ne 0 ] && pass "sudo refuses a shell to choir-deploy" || failc "sudo ran bash for choir-deploy"
+
+if [ -n "$prebuild_sha" ]; then
+  status=0
+  as_deploy "prebuild DEPLOY_COMMIT=${prebuild_sha} DEPLOY_FRONTEND=false DEPLOY_HOST=false DEPLOY_HOST_OS=false HOST_SERVICES=proxy" || status=$?
+  [ "$status" -eq 0 ] && pass "prebuild of ${prebuild_sha} through the gate" || failc "prebuild through the gate: status ${status}"
+fi
+
+echo "failures=${failures}"
+[ "$failures" -eq 0 ]
