@@ -27,6 +27,13 @@ umask 022
 
 repo_url=https://github.com/choir-hip/go-choir.git
 receipt=/var/lib/go-choir/deploy-receipt.json
+# The host floor (SEC-14, bunch 4b B1). Prebuild and deploy refuse a commit
+# that does not descend from the floor; a deploy raises the floor to its
+# commit before it runs. Commits below a floor may restore root's CI key (the
+# deploy-1 and deploy-2 commits do), and the gate never lowers the floor.
+# Without the file the seed applies: a main commit from before the gate.
+floor_file=/var/lib/go-choir/ci-gate-floor
+seed_floor=961588290c0cc8c889e7b1d2832ef6d85ea7dda5
 max_request=2048
 
 refuse() {
@@ -126,6 +133,34 @@ commit_from_env() {
   done
 }
 
+# check_floor REPO COMMIT: refuse unless COMMIT descends from the seed and
+# from the floor file's commit, when there is one.
+check_floor() {
+  local repo="$1"
+  local commit="$2"
+  local floor
+  git -C "$repo" cat-file -e "${seed_floor}^{commit}" 2>/dev/null ||
+    refuse "seed floor ${seed_floor} is not in ${repo}"
+  git -C "$repo" merge-base --is-ancestor "$seed_floor" "$commit" 2>/dev/null ||
+    refuse "commit ${commit} is below the seed floor ${seed_floor}"
+  if [ -e "$floor_file" ] || [ -L "$floor_file" ]; then
+    floor=$(<"$floor_file") || refuse "floor ${floor_file} is unreadable"
+    [[ "$floor" =~ ^[0-9a-f]{40}$ ]] || refuse "floor ${floor_file} is malformed"
+    git -C "$repo" cat-file -e "${floor}^{commit}" 2>/dev/null ||
+      refuse "floor ${floor} is not in ${repo}"
+    git -C "$repo" merge-base --is-ancestor "$floor" "$commit" 2>/dev/null ||
+      refuse "commit ${commit} is below the floor ${floor}"
+  fi
+}
+
+# advance_floor COMMIT: record COMMIT as the floor (check_floor has passed).
+advance_floor() {
+  local commit="$1"
+  local tmp="${floor_file}.tmp.$$"
+  { printf '%s\n' "$commit" >"$tmp" && mv -f "$tmp" "$floor_file"; } ||
+    { rm -f "$tmp"; refuse "cannot record floor ${commit}"; }
+}
+
 run() {
   if [ "$verb" = receipt ]; then
     exec cat "$receipt"
@@ -147,12 +182,14 @@ run() {
   if ! git -C "$repo" merge-base --is-ancestor "$commit" refs/remotes/origin/main; then
     refuse "commit ${commit} is not on main"
   fi
+  check_floor "$repo" "$commit"
 
   local program
   program=$(mktemp /run/go-choir-ci-gate.XXXXXX)
   trap 'rm -f "$program"' EXIT
   git -C "$repo" show "${commit}:${script}" >"$program" ||
     refuse "commit ${commit} has no ${script}"
+  [ "$verb" = deploy ] && advance_floor "$commit"
 
   echo "node-b-ci-gate: ${verb} ${commit} as root from ${script}" >&2
   # A clean root environment, as a NixOS root login would have it, plus the
@@ -168,6 +205,20 @@ run() {
 
 mode="${1:-}"
 case "$mode" in
+  --test-floor | --test-advance)
+    # Tests only (.github/scripts/node-b-ci-gate-test): the floor logic on a
+    # caller's repo and floor file. Never as root.
+    [ "$(id -u)" -ne 0 ] || refuse "test modes never run as root"
+    [ "$#" -eq 5 ] || refuse "usage: node-b-ci-gate $mode <repo> <floor-file> <seed> <commit>"
+    floor_file="$3"
+    seed_floor="$4"
+    [[ "$5" =~ ^[0-9a-f]{40}$ ]] || refuse "invalid commit"
+    check_floor "$2" "$5"
+    if [ "$mode" = --test-advance ]; then
+      advance_floor "$5"
+    fi
+    exit 0
+    ;;
   --print-plan | --) ;;
   *) refuse "usage: node-b-ci-gate (--print-plan | --) <request>" ;;
 esac
