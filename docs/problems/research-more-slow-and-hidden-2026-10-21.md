@@ -215,6 +215,17 @@ before the next:
 A larger `MaxConcurrent` before steps 2 and 3 would add contention for the
 same mutex, not throughput.
 
+Landed (each deployed and measured before the next is judged):
+
+- Step 1: af5ab17e4, `PendingAgents` oldest due first.
+- Step 2, first reads: 381825279, `GetCommitmentRecord` by key (it was the
+  2.3 s body scan); b1edcd9bf, the lifecycle snapshot through the
+  trajectory index, with its document and revisions read by key (the 416
+  ms read). The same commit names each metadata read's kind and field in the
+  mutex counters, so the paged read can be attributed next. Hypothesis to
+  check on the paper: the wake outbox list (`$.projected`, a JSON match over
+  every outbox row ever written) is the 2 to 15 s before each wake.
+
 ### E9. Texture's Write cites with `{{ref N}}` and is refused
 
 In the same run Texture's first Write was refused: "`{{ref 1}}` names no

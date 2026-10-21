@@ -33,6 +33,21 @@ patch. Reading: [selfdev update architecture](reports/selfdev-update-architectur
 the [S6 station definition](definitions/choir-appdev-s6-commit-gate-full-release-2026-10-01.md),
 and the S7 definition for what follows.
 
+## Daytime work (2026-10-21, owner notes section 35)
+
+The owner raised the priority of dual-model tool-call evaluation above the
+SlidesApp rewrite, and of desk-wake delay: "the delays for waking a desk.
+There should be no delays." Records:
+[`problems/research-more-slow-and-hidden-2026-10-21.md`](problems/research-more-slow-and-hidden-2026-10-21.md)
+(E6: the dispatcher's slots full and served in agent-id order, over a
+store engine 96% busy; fix order inside) and
+[`problems/tool-call-failures-dual-model-2026-10-21.md`](problems/tool-call-failures-dual-model-2026-10-21.md)
+(T1 to T5, the census by model). Landed: Research more goes straight to
+research, the toolbar's overflow menu, the deepseek-v4.1-flash and
+gpt-6-luna pool (1 to 3), the dispatcher's oldest-due-first order, and
+three store reads moved off scans. Next: measure the paper after each
+deploy, then the remaining hot reads, then engine concurrency.
+
 ## Overnight run (2026-10-20 → 10-21, owner notes section 32)
 
 **Goal:** [`definitions/choir-overnight-research-oped-sources-2026-10-20.md`](definitions/choir-overnight-research-oped-sources-2026-10-20.md)
