@@ -118,6 +118,21 @@ assert_contains "$pointer_sync_output" "host_services="
 assert_contains "$pointer_sync_output" "scripts/node-b-sync-service-pointers -> host OS activation and immutable service-pointer synchronization"
 assert_not_contains "$pointer_sync_output" "playwright"
 
+# The CI deploy gate is a builtins.readFile input of nix/node-b.nix (SEC-14).
+ci_gate_output="$(run_classifier "scripts/node-b-ci-gate")"
+assert_contains "$ci_gate_output" "deploy_needed=true"
+assert_contains "$ci_gate_output" "deploy_host_os=true"
+assert_contains "$ci_gate_output" "deploy_active_vm_refresh=false"
+assert_contains "$ci_gate_output" "scripts/node-b-ci-gate -> host OS only (the CI deploy gate, builtins.readFile input of nix/node-b.nix)"
+
+# The gate's on-host probe is operator tooling.
+ci_probe_output="$(run_classifier "scripts/node-b-ci-gate-probe")"
+assert_contains "$ci_probe_output" "deploy_needed=false"
+
+# The deploy programs are read from the deployed commit at deploy time.
+ci_program_output="$(run_classifier ".github/scripts/node-b-ci-deploy" ".github/scripts/node-b-ci-prebuild")"
+assert_contains "$ci_program_output" "deploy_needed=false"
+
 guest_boot_output="$(run_classifier "nix/autoputer-vm.nix")"
 assert_contains "$guest_boot_output" "deploy_needed=true"
 assert_contains "$guest_boot_output" "deploy_host=true"
