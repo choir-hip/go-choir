@@ -398,6 +398,9 @@ func TestRepairedMalformedRowRestoresTheSideRead(t *testing.T) {
 	put("good", `{"addressee":"a"}`, now)
 	put("bad", `not json`, now.Add(time.Second))
 
+	saved := derivedKeyRepairRecheckEvery
+	derivedKeyRepairRecheckEvery = 300 * time.Millisecond
+	t.Cleanup(func() { derivedKeyRepairRecheckEvery = saved })
 	d := s.derivedKeys()
 	s.StartDerivedKeyValidation(ctx)
 	waitFor := func(what string, cond func() bool) {
