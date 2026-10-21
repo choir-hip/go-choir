@@ -7,8 +7,11 @@ output_dir="${1:-sboms}"
 baseline_dir="${2:-}"
 source_commit="${3:-$(git rev-parse HEAD)}"
 
-packages=(auth proxy gateway maild maildctl corpusd autoputer vmctl frontend obscura)
-required_packages=" auth proxy gateway maild maildctl corpusd autoputer vmctl frontend "
+packages=(auth proxy gateway maild maildctl corpusd autoputer vmctl frontend)
+# Every package is required in CI. SBOM_REQUIRED_PACKAGES is a test seam for the
+# optional-package paths (build-sboms-differential-test); verify-sbom-candidate
+# rejects any manifest in which a package is not required.
+required_packages="${SBOM_REQUIRED_PACKAGES:- auth proxy gateway maild maildctl corpusd autoputer vmctl frontend }"
 semantic_packages=" auth proxy gateway maild maildctl corpusd autoputer vmctl frontend "
 
 rm -rf "$output_dir"

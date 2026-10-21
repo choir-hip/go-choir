@@ -7,7 +7,7 @@ tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
 
 mkdir -p "$tmpdir/bin" "$tmpdir/fake-outputs" "$tmpdir/fake-store" "$tmpdir/fake-tool/bin"
-packages=(auth proxy gateway maild maildctl corpusd autoputer vmctl frontend obscura)
+packages=(auth proxy gateway maild maildctl corpusd autoputer vmctl frontend)
 for package in "${packages[@]}"; do
   mkdir -p "$tmpdir/fake-outputs/$package" "$tmpdir/fake-store"
   jq -n --arg package "$package" \
@@ -140,11 +140,11 @@ export FAKE_REVISION=one
 : > "$FAKE_BUILD_LOG"
 : > "$FAKE_SBOMNIX_LOG"
 "$builder" "$tmpdir/first" "" first-commit >/dev/null
-[[ "$(grep -c '^\.#' "$FAKE_BUILD_LOG")" == "10" ]]
+[[ "$(grep -c '^\.#' "$FAKE_BUILD_LOG")" == "9" ]]
 [[ "$(grep -c '^github:tiiuae/sbomnix/30c95eb2fc0c402300ee05354c5cf84c7e5f74e2#sbomnix$' "$FAKE_BUILD_LOG")" == "1" ]]
 ! grep -q '^\.#sbom\.' "$FAKE_BUILD_LOG"
-[[ "$(wc -l < "$FAKE_SBOMNIX_LOG" | tr -d ' ')" == "10" ]]
-[[ "$(jq -s 'map(select(.status == "built")) | length' "$tmpdir/first/manifest.jsonl")" == "10" ]]
+[[ "$(wc -l < "$FAKE_SBOMNIX_LOG" | tr -d ' ')" == "9" ]]
+[[ "$(jq -s 'map(select(.status == "built")) | length' "$tmpdir/first/manifest.jsonl")" == "9" ]]
 
 export FAKE_REVISION=two
 : > "$FAKE_BUILD_LOG"
@@ -153,7 +153,7 @@ export FAKE_REVISION=two
 [[ ! -s "$FAKE_BUILD_LOG" ]]
 [[ ! -s "$FAKE_SBOMNIX_LOG" ]]
 [[ "$(jq -s 'map(select(.status == "rebound")) | length' "$tmpdir/second/manifest.jsonl")" == "9" ]]
-[[ "$(jq -s 'map(select(.status == "reused")) | length' "$tmpdir/second/manifest.jsonl")" == "1" ]]
+[[ "$(jq -s 'map(select(.status == "reused")) | length' "$tmpdir/second/manifest.jsonl")" == "0" ]]
 jq -se 'map(select(.status == "rebound")) | all(.reason == "identical_semantic_fingerprint" and .artifact_derivation != .previous_derivation)' \
   "$tmpdir/second/manifest.jsonl" >/dev/null
 grep -Fq '/nix/store/fake-artifact-auth-two.drv' "$tmpdir/second/auth/sbom.json"
@@ -171,29 +171,32 @@ export FAKE_REVISION=legacy
 [[ ! -s "$FAKE_BUILD_LOG" ]]
 [[ ! -s "$FAKE_SBOMNIX_LOG" ]]
 [[ "$(jq -s 'map(select(.status == "rebound")) | length' "$tmpdir/legacy-rebound/manifest.jsonl")" == "9" ]]
-[[ "$(jq -s 'map(select(.status == "reused")) | length' "$tmpdir/legacy-rebound/manifest.jsonl")" == "1" ]]
+[[ "$(jq -s 'map(select(.status == "reused")) | length' "$tmpdir/legacy-rebound/manifest.jsonl")" == "0" ]]
 ! grep -Fq '/nix/store/fake-artifact-auth-one.drv' "$tmpdir/second/auth/sbom.json"
 
 cp -a "$tmpdir/second" "$tmpdir/failure-baseline"
-mv "$tmpdir/failure-baseline/obscura/sbom.json" "$tmpdir/failure-baseline/obscura/sbom.unavailable"
-jq -c 'if .package == "obscura" then .status = "failed" | .reason = "package_build_failed" | del(.sbom_sha256) else . end' \
+# Every package is required in CI. In the next three runs SBOM_REQUIRED_PACKAGES
+# leaves vmctl out of the required set to exercise the optional-failure paths.
+optional_vmctl=" auth proxy gateway maild maildctl corpusd autoputer frontend "
+mv "$tmpdir/failure-baseline/vmctl/sbom.json" "$tmpdir/failure-baseline/vmctl/sbom.unavailable"
+jq -c 'if .package == "vmctl" then .status = "failed" | .reason = "package_build_failed" | del(.sbom_sha256) else . end' \
   "$tmpdir/failure-baseline/manifest.jsonl" > "$tmpdir/failure-baseline/manifest.jsonl.next"
 mv "$tmpdir/failure-baseline/manifest.jsonl.next" "$tmpdir/failure-baseline/manifest.jsonl"
 export FAKE_REVISION=two
 : > "$FAKE_BUILD_LOG"
 : > "$FAKE_SBOMNIX_LOG"
-"$builder" "$tmpdir/failure-reuse" "$tmpdir/failure-baseline" failure-reuse-commit >/dev/null
+SBOM_REQUIRED_PACKAGES="$optional_vmctl" "$builder" "$tmpdir/failure-reuse" "$tmpdir/failure-baseline" failure-reuse-commit >/dev/null
 [[ ! -s "$FAKE_BUILD_LOG" ]]
 [[ ! -s "$FAKE_SBOMNIX_LOG" ]]
-[[ "$(jq -s 'map(select(.status == "reused")) | length' "$tmpdir/failure-reuse/manifest.jsonl")" == "9" ]]
-jq -se 'map(select(.package == "obscura"))[0] | .status == "skipped" and .reason == "unchanged_previous_failure" and .previous_reason == "package_build_failed"' \
+[[ "$(jq -s 'map(select(.status == "reused")) | length' "$tmpdir/failure-reuse/manifest.jsonl")" == "8" ]]
+jq -se 'map(select(.package == "vmctl"))[0] | .status == "skipped" and .reason == "unchanged_previous_failure" and .previous_reason == "package_build_failed"' \
   "$tmpdir/failure-reuse/manifest.jsonl" >/dev/null
 : > "$FAKE_BUILD_LOG"
 : > "$FAKE_SBOMNIX_LOG"
-"$builder" "$tmpdir/failure-reuse-again" "$tmpdir/failure-reuse" failure-reuse-again-commit >/dev/null
+SBOM_REQUIRED_PACKAGES="$optional_vmctl" "$builder" "$tmpdir/failure-reuse-again" "$tmpdir/failure-reuse" failure-reuse-again-commit >/dev/null
 [[ ! -s "$FAKE_BUILD_LOG" ]]
 [[ ! -s "$FAKE_SBOMNIX_LOG" ]]
-jq -se 'map(select(.package == "obscura"))[0] | .status == "skipped" and .reason == "unchanged_previous_failure" and .previous_reason == "package_build_failed"' \
+jq -se 'map(select(.package == "vmctl"))[0] | .status == "skipped" and .reason == "unchanged_previous_failure" and .previous_reason == "package_build_failed"' \
   "$tmpdir/failure-reuse-again/manifest.jsonl" >/dev/null
 
 jq '.components[0].version = "2" | .components[0].purl = "pkg:generic/auth@2"' \
@@ -209,7 +212,7 @@ FAKE_CHANGED_PACKAGE=auth "$builder" "$tmpdir/third" "$tmpdir/second" third-comm
 [[ "$(cat "$FAKE_SBOMNIX_LOG")" == "auth" ]]
 [[ "$(jq -s 'map(select(.status == "built")) | length' "$tmpdir/third/manifest.jsonl")" == "1" ]]
 [[ "$(jq -s 'map(select(.status == "rebound")) | length' "$tmpdir/third/manifest.jsonl")" == "8" ]]
-[[ "$(jq -s 'map(select(.status == "reused")) | length' "$tmpdir/third/manifest.jsonl")" == "1" ]]
+[[ "$(jq -s 'map(select(.status == "reused")) | length' "$tmpdir/third/manifest.jsonl")" == "0" ]]
 jq -e '.packages[] | select(.package == "auth") | (.added == ["pkg:generic/auth@2"] and .removed == ["pkg:generic/auth@1"])' \
   "$tmpdir/third/diff.json" >/dev/null
 
