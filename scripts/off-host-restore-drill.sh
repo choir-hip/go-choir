@@ -14,10 +14,14 @@
 #          directory compared byte for byte with live (no second copy: disk).
 #   image: one stopped test computer's data.img, compared with live and
 #          checked read-only.
+#   snap:  the Dolt stores captured as btrfs snapshots (section 13 item 16):
+#          each restored data directory opened with `dolt sql` (journal
+#          recovery as after a power cut), the head the run recorded found
+#          in its log, and the table count read. One store at a time: disk.
 # Secrets are read from files and never printed. Each piece deletes its
 # restore before the next.
 set -euo pipefail
-SNAP="${1:?snapshot}"; PIECE="${2:?tape|dolt|image}"
+SNAP="${1:?snapshot}"; PIECE="${2:?tape|dolt|image|snap}"
 A=/var/lib/go-choir/platform-artifacts/sha256
 S=/var/lib/go-choir/secrets/offhost-backup
 D=/var/lib/go-choir-restore-drill
@@ -89,5 +93,28 @@ image)
   if cmp -s "$img" "/var/lib/go-choir/vm-state/$VM/data.img"; then echo "image: identical to live (stopped computer)"; else echo "image: differs from live"; fi
   echo "image: $(blkid -o value -s TYPE "$img" 2>/dev/null || echo unknown) filesystem; e2fsck -n: $(e2fsck -fn "$img" >"$D/fsck.txt" 2>&1; echo "exit $?"); $(tail -1 "$D/fsck.txt")"
   ;;
-  *) echo "piece is tape, dolt or image" >&2; exit 2 ;;
+snap)
+  M=/var/lib/go-choir/offhost-backup/staging/manifest.json
+  rm -rf "$D/r"; restic --no-lock restore "$SNAP" --target "$D/r" --include "$M" >"$D/restore.log" 2>&1 \
+    || { echo "manifest restore failed: $(tail -c 400 "$D/restore.log")"; exit 1; }
+  heads="$(jq -r '.dolt_heads' "$D/r$M")"; echo "manifest dolt heads: $heads"
+  for store in corpus platform; do
+    want="$(printf '%s\n' $heads | sed -n "s/^$store=//p")"
+    rm -rf "$D/r2" "$D/dolt-restored"; restore "/var/lib/go-choir/offhost-backup/staging/dolt/$store"
+    repo="$D/r2"; [ -d "$D/r2/$store/.dolt" ] && repo="$D/r2/$store"
+    [ -d "$repo/.dolt" ] || { echo "$store: no .dolt in the restored snapshot"; exit 1; }
+    install -d "$D/dolt-restored"
+    out="$(cd "$repo" && export HOME="$D/dolt-restored" && \
+      dolt config --global --add user.name drill >/dev/null && dolt config --global --add user.email drill@localhost >/dev/null && \
+      printf 'head=%s found=%s tables=%s' \
+        "$(dolt sql -r csv -q 'select commit_hash from dolt_log limit 1' | tail -1)" \
+        "$(dolt sql -r csv -q "select count(*) from dolt_log where commit_hash = '${want:-none}'" | tail -1)" \
+        "$(dolt sql -r csv -q 'show tables' | tail -n +2 | wc -l)")" \
+      || { echo "$store: dolt could not open the restored snapshot"; exit 1; }
+    echo "$store restored and opened: $out (recorded head ${want:-unread})"
+    case "$out" in *found=1*) ;; *) echo "$store: the recorded head is not in the restored log"; exit 1 ;; esac
+    rm -rf "$D/r2" "$D/dolt-restored"
+  done
+  ;;
+  *) echo "piece is tape, dolt, image or snap" >&2; exit 2 ;;
 esac
