@@ -101,7 +101,7 @@ func (o *ObjectGraphStore) PutObject(ctx context.Context, obj objectgraph.Object
 	if o == nil || o.store == nil || o.store.db == nil {
 		return fmt.Errorf("platform objectgraph: nil store")
 	}
-	if err := objectgraph.CheckWrite([]objectgraph.Object{obj}, nil); err != nil {
+	if err := objectgraph.CheckWriteAs(corpusdWriter(ctx), []objectgraph.Object{obj}, nil); err != nil {
 		return err
 	}
 	bodyRef, err := o.externalizeBody(obj.Body)
@@ -151,7 +151,7 @@ func (o *ObjectGraphStore) InsertObjectIfAbsent(ctx context.Context, obj objectg
 	if o == nil || o.store == nil || o.store.db == nil {
 		return false, fmt.Errorf("platform objectgraph: nil store")
 	}
-	if err := objectgraph.CheckWrite([]objectgraph.Object{obj}, nil); err != nil {
+	if err := objectgraph.CheckWriteAs(corpusdWriter(ctx), []objectgraph.Object{obj}, nil); err != nil {
 		return false, err
 	}
 	bodyRef, err := o.externalizeBody(obj.Body)
@@ -608,7 +608,7 @@ func (o *ObjectGraphStore) PutBatch(ctx context.Context, batch objectgraph.Batch
 	if o == nil || o.store == nil || o.store.db == nil {
 		return fmt.Errorf("platform objectgraph: nil store")
 	}
-	if err := objectgraph.CheckWrite(batch.Objects, batch.Edges); err != nil {
+	if err := objectgraph.CheckWriteAs(corpusdWriter(ctx), batch.Objects, batch.Edges); err != nil {
 		return err
 	}
 	tx, err := o.store.corpus().BeginTx(ctx, nil)
@@ -739,4 +739,11 @@ func notFoundIsNil(err error) error {
 		return nil
 	}
 	return err
+}
+
+// corpusdWriter declares corpusd as the writer of everything this store
+// writes (objectgraph writer gate, SDC ARCH-04). The declaration is made here,
+// by the store itself, never taken from a request.
+func corpusdWriter(ctx context.Context) context.Context {
+	return objectgraph.WithWriter(ctx, objectgraph.WriterCorpusd)
 }

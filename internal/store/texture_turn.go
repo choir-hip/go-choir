@@ -317,6 +317,10 @@ func (s *Store) ApplyTextureTurn(ctx context.Context, req types.ApplyTextureTurn
 // source graph, events, and receipt. This store method never wakes an actor;
 // wake/reconstruction is a post-success caller contract.
 func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.ApplyTextureTurnRequest, sourceGraph TextureSourceGraphWriteSet) (types.LifecycleResult, error) {
+	// This method is Texture's sole agent write path for its kinds (the shape
+	// check below proves the caller is Texture); the object graph's writer gate
+	// (SDC ARCH-04) is told so, here, not by the request.
+	ctx = objectgraph.WithWriter(ctx, objectgraph.WriterTexture)
 	ownerID, computerID, err := normalizeLifecycleScope(req.OwnerID, req.ComputerID)
 	if err != nil {
 		return types.LifecycleResult{}, err

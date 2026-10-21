@@ -536,7 +536,7 @@ func (s *DoltStore) PreflightWrite(ctx context.Context, objects []Object, edges 
 	if s == nil || s.db == nil {
 		return fmt.Errorf("objectgraph dolt: nil store")
 	}
-	if err := CheckWrite(objects, edges); err != nil {
+	if err := CheckWriteAs(ctx, objects, edges); err != nil {
 		return err
 	}
 	if s.validate != nil {
@@ -549,7 +549,7 @@ func (s *DoltStore) PutObject(ctx context.Context, obj Object) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("objectgraph dolt: nil store")
 	}
-	if err := CheckWrite([]Object{obj}, nil); err != nil {
+	if err := CheckWriteAs(ctx, []Object{obj}, nil); err != nil {
 		return err
 	}
 	// validate + intercept run OUTSIDE engineMu: intercept is the projection
@@ -1040,7 +1040,7 @@ func (s *DoltStore) putBatch(ctx context.Context, conditions []ObjectCondition, 
 	if s == nil || s.db == nil {
 		return fmt.Errorf("objectgraph dolt: nil store")
 	}
-	if err := CheckWrite(batch.Objects, batch.Edges); err != nil {
+	if err := CheckWriteAs(ctx, batch.Objects, batch.Edges); err != nil {
 		return err
 	}
 	// validate + intercept run OUTSIDE engineMu. intercept is the projection
