@@ -49,8 +49,8 @@ printf '%s\n' '{"name":"frontend","lockfileVersion":3,"packages":{"node_modules/
 frontend_dependency="$($fingerprint frontend "$tmpdir")"
 [[ "$frontend_dependency" != "$frontend_initial" ]]
 
-if "$fingerprint" obscura "$tmpdir" >/dev/null 2>&1; then
-  echo "external package unexpectedly received a semantic fingerprint" >&2
+if "$fingerprint" not-a-listed-package "$tmpdir" >/dev/null 2>&1; then
+  echo "unlisted package unexpectedly received a semantic fingerprint" >&2
   exit 1
 fi
 

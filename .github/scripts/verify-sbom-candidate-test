@@ -8,7 +8,7 @@ trap 'rm -rf "$tmpdir"' EXIT
 
 source_commit=1111111111111111111111111111111111111111
 run_id=123456
-packages=(auth proxy gateway maild maildctl corpusd autoputer vmctl frontend obscura)
+packages=(auth proxy gateway maild maildctl corpusd autoputer vmctl frontend)
 required_packages=" auth proxy gateway maild maildctl corpusd autoputer vmctl frontend "
 semantic_packages=" auth proxy gateway maild maildctl corpusd autoputer vmctl frontend "
 
@@ -155,20 +155,16 @@ make_rebound_bundle() {
   make_bundle "$candidate"
   jq -c \
     --arg previous_commit "$baseline_commit" '
-      if .package == "obscura" then
-        .previous_commit = $previous_commit
-      else
-        .status = "rebound"
-        | .reason = "identical_semantic_fingerprint"
-        | .previous_commit = $previous_commit
-        | .previous_semantic_fingerprint = .semantic_fingerprint
-      end
+      .status = "rebound"
+      | .reason = "identical_semantic_fingerprint"
+      | .previous_commit = $previous_commit
+      | .previous_semantic_fingerprint = .semantic_fingerprint
     ' "$candidate/manifest.jsonl" > "$candidate/manifest.next"
   mv "$candidate/manifest.next" "$candidate/manifest.jsonl"
   jq \
     --arg previous_commit "$baseline_commit" '
       .previous_commit = $previous_commit
-      | .packages |= map(if .package == "obscura" then . else .status = "rebound" end)
+      | .packages |= map(.status = "rebound")
     ' "$candidate/diff.json" > "$candidate/diff.next"
   mv "$candidate/diff.next" "$candidate/diff.json"
 }
@@ -235,6 +231,14 @@ jq -c 'if .package == "auth" then .semantic_fingerprint = "forged" else . end' \
   "$rebound_bundle/manifest.jsonl" > "$rebound_bundle/manifest.next"
 mv "$rebound_bundle/manifest.next" "$rebound_bundle/manifest.jsonl"
 expect_failure semantic-fingerprint "$rebound_bundle" "$rebound_baseline"
+
+# Every package carries a semantic fingerprint now; the exact-derivation form
+# the external packages used is refused.
+make_bundle "$bundle"
+jq -c 'if .package == "auth" then .semantic_fingerprint = ("exact:" + .derivation) else . end' \
+  "$bundle/manifest.jsonl" > "$bundle/manifest.tmp"
+mv "$bundle/manifest.tmp" "$bundle/manifest.jsonl"
+expect_failure exact-fingerprint "$bundle"
 
 make_bundle "$bundle"
 jq -c 'if .package == "auth" then .source_commit = "wrong" else . end' "$bundle/manifest.jsonl" > "$bundle/manifest.tmp"

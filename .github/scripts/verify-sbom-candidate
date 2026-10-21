@@ -20,7 +20,7 @@ for file in "$manifest" "$diff" "$candidate"; do
   fi
 done
 
-expected_packages='["auth","autoputer","corpusd","frontend","gateway","maild","maildctl","obscura","proxy","vmctl"]'
+expected_packages='["auth","autoputer","corpusd","frontend","gateway","maild","maildctl","proxy","vmctl"]'
 previous_commit=""
 if [[ -n "$baseline" && -s "$baseline/manifest.jsonl" ]]; then
   previous_commit="$(jq -r 'select(.source_commit != null) | .source_commit' "$baseline/manifest.jsonl" | head -n 1)"
@@ -34,7 +34,7 @@ jq -e -s \
     (map(.package) | unique | length) == ($expected | length) and
     all(.source_commit == $source_commit) and
     all(.previous_commit == $previous_commit) and
-    all(if .package == "obscura" then .required == false else .required == true end) and
+    all(.required == true) and
     all(.status == "built" or .status == "reused" or .status == "rebound" or .status == "failed" or .status == "skipped") and
     all(
       (.derivation | type == "string" and length > 0) and
@@ -42,13 +42,7 @@ jq -e -s \
       (.artifact_output | type == "string" and length > 0) and
       (.semantic_fingerprint | type == "string" and length > 0)
     ) and
-    all(
-      if .package == "obscura" then
-        .semantic_fingerprint == ("exact:" + .derivation)
-      else
-        (.semantic_fingerprint | test("^[0-9a-f]{64}$"))
-      end
-    ) and
+    all(.semantic_fingerprint | test("^[0-9a-f]{64}$")) and
     all(
       if .required then
         (.status == "built" or .status == "reused" or .status == "rebound") and
