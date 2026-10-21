@@ -391,6 +391,10 @@ EOF
   fi
   tunnel_up || { status_merge <<<'{"last_attempt_result":"no-tunnel"}'; return 1; }
   restic_env daily
+  # A run killed mid-command loses its tunnel in the same instant, so restic
+  # cannot delete its lock and the next run is refused (item 18, run 5).
+  # unlock removes only locks whose process is gone.
+  R unlock >/dev/null 2>&1 || true
   R cat config >/dev/null 2>&1 || { err "repository is not initialised or unreachable (run: off-host-backup.sh init)"; status_merge <<<'{"last_attempt_result":"no-repo"}'; return 1; }
   stage || result=partial
   resolve_paths

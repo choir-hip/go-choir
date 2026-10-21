@@ -21,6 +21,9 @@
 #     for hours): never; the structural check is the weekly verify's.
 #  8. The weekly verify downloads every tree pack into a throwaway cache:
 #     never; it checks with the run's cache.
+#  9. A lock left by a killed run (its tunnel dies with it, so restic cannot
+#     delete the lock) blocks the next run: never; the run removes stale
+#     locks before it opens the repository.
 #
 # Run: bash scripts/off-host-backup-dolt-snapshot-test.sh
 set -u
@@ -43,6 +46,7 @@ setup() { # name, subvolumes (space separated: platform corpus), snapshot mode (
   for t in ssh sqlite3; do printf '#!/bin/sh\nexit 0\n' > "$R/bin/$t"; done
   cat > "$R/bin/restic" <<EOF
 #!/bin/sh
+case " \$* " in *" unlock "*) echo unlock >> "$R/calls" ;; *" cat config "*) echo "cat config" >> "$R/calls" ;; esac
 case " \$* " in *" check "*) echo "restic check \$*" | grep -o -- 'check.*' >> "$R/calls" ;; esac
 case "\$*" in *" backup "*) echo "restic backup \$*" | grep -o -- '--exclude [^ ]*choir-backup[^ ]*' | sed 's#.*/staging/#--exclude staging/#' >> "$R/calls" ;; esac
 exit 0
@@ -91,6 +95,7 @@ check "no server-side sync and no memory raise" "$(! grep -q 'port 1330\|systemc
 check "snapshots are deleted at exit" "$([ -z "$(left)" ] && has 'delete platform' && has 'delete corpus'; echo $?)"
 check "the corpus snapshot's .choir-backup is excluded" "$(has '--exclude staging/dolt/corpus/.choir-backup'; echo $?)"
 check "a clean run is ok" "$([ "$RC" = 0 ]; echo $?)"
+check "stale locks are removed before the repository is opened" "$(calls | grep -q '^unlock|cat config|'; echo $?)"
 check "the daily run does not walk the trees" "$(! grep -q '^check' "$R/calls"; echo $?)"
 
 # 8: the weekly verify checks with the run's cache.
