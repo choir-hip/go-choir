@@ -212,6 +212,7 @@ func (r *Reader) readSegment(computerID string, ns NS, digest string) ([]byte, b
 		var body []byte
 		var found bool
 		if f.hasIdx {
+			r.retireOpen(filepath.Join(dir, SegmentFileName(f.segno)))
 			s, err := r.loadSealed(dir, computerID, f.segno)
 			if err != nil {
 				return nil, false, err
@@ -493,6 +494,14 @@ type openSeg struct {
 	headOK  bool
 	scanned int64 // bytes known to hold only whole, crc-valid records
 	entries map[openKey]openLoc
+}
+
+// retireOpen drops the open-scan state of a segment that has been sealed;
+// the sealed index answers from then on.
+func (r *Reader) retireOpen(path string) {
+	r.mu.Lock()
+	delete(r.open, path)
+	r.mu.Unlock()
 }
 
 func (r *Reader) openFor(path string, segno uint64) *openSeg {
