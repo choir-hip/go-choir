@@ -164,6 +164,12 @@ func (s *EventArtifactService) pinSegmented(computerID string, ns tapestore.NS, 
 		return items, nil
 	})
 	if checkErr != nil {
+		// A segment that cannot be read is a store failure, not a verdict on
+		// this pin: it goes the legacy way, where a digest-verified read
+		// finds it (round 5). Collisions stay errors.
+		if errors.Is(checkErr, errSegmentReuseRead) {
+			return checkErr, nil
+		}
 		return nil, checkErr
 	}
 	return aerr, nil
@@ -303,6 +309,10 @@ func (s *EventArtifactService) FetchPayload(computerID, artifactDigest string) (
 		return nil, fmt.Errorf("event artifact service: %w", err)
 	}
 	tape := s.platform.tapeReader()
+	// A segment error in one namespace does not end the probe: the digest
+	// may be a verified object in the next one. With no match anywhere, the
+	// first such error is returned rather than "not found".
+	var firstErr error
 	for _, namespace := range []string{"computer-event-payload", "computer-event", "projection-base"} {
 		var raw []byte
 		var err error
@@ -324,12 +334,18 @@ func (s *EventArtifactService) FetchPayload(computerID, artifactDigest string) (
 			if errors.Is(err, tapestore.ErrNotFound) {
 				continue
 			}
-			return nil, fmt.Errorf("event artifact service: read payload: %w", err)
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
 		}
 		if computerevent.DigestBytes(raw) != artifactDigest {
 			return nil, fmt.Errorf("event artifact service: payload digest mismatch")
 		}
 		return raw, nil
+	}
+	if firstErr != nil {
+		return nil, fmt.Errorf("event artifact service: read payload: %w", firstErr)
 	}
 	return nil, fmt.Errorf("event artifact service: payload not found")
 }

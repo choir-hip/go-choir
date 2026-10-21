@@ -75,14 +75,23 @@ const (
 var (
 	// ErrNotFound: the digest is in no segment and no legacy file.
 	ErrNotFound = errors.New("tapestore: not found")
-	// ErrCorrupt: a segment or index failed a check. Never falls back.
+	// ErrCorrupt: a segment or index failed a check. Reader.Read answers it
+	// from a legacy file only when that file hashes to the digest.
 	ErrCorrupt = errors.New("tapestore: corrupt segment store")
+	// ErrUnsupportedVersion: a segment, index or record carries a version
+	// this binary does not know (a newer format, or a downgrade). It is also
+	// ErrCorrupt, and it never falls back to legacy.
+	ErrUnsupportedVersion = errors.New("tapestore: unsupported segment format version")
 	// ErrDigestMismatch: bytes do not hash to the requested digest.
 	ErrDigestMismatch = errors.New("tapestore: digest mismatch")
 )
 
 func corruptf(format string, args ...any) error {
 	return fmt.Errorf("%w: %s", ErrCorrupt, fmt.Sprintf(format, args...))
+}
+
+func unsupportedf(format string, args ...any) error {
+	return fmt.Errorf("%w: %w: %s", ErrCorrupt, ErrUnsupportedVersion, fmt.Sprintf(format, args...))
 }
 
 // Layout constants. All integers are big endian. See appendix A.
@@ -221,7 +230,7 @@ func checkSegHeader(b []byte, segno uint64, computerID string) error {
 		return corruptf("segment %d: bad magic", segno)
 	}
 	if b[4] != segVersion {
-		return corruptf("segment %d: unsupported version %d", segno, b[4])
+		return unsupportedf("segment %d: unsupported version %d", segno, b[4])
 	}
 	if crc32.Checksum(b[0:28], castagnoli) != binary.BigEndian.Uint32(b[28:32]) {
 		return corruptf("segment %d: header crc mismatch", segno)
@@ -272,7 +281,7 @@ func parseRecHeader(b []byte) (recHeader, error) {
 		return h, err
 	}
 	if b[4] != recVersion {
-		return h, fmt.Errorf("unsupported record version %d", b[4])
+		return h, fmt.Errorf("%w: record version %d", ErrUnsupportedVersion, b[4])
 	}
 	if !h.ns.valid() {
 		return h, fmt.Errorf("unknown record namespace %d", b[5])

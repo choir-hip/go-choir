@@ -145,12 +145,17 @@ func (s *Service) tapeSegmentable(computerID string) bool {
 	return s.TapeSegmentsMode() == tapeSegmentsWrite && tapestore.ValidComputerID(computerID)
 }
 
+// errSegmentReuseRead marks a reuse check that could not read the
+// computer's segments.
+var errSegmentReuseRead = errors.New("event artifact service: read segment")
+
 // stageSegmented decides whether an artifact needs a new record and
 // enforces the collision rule across both stores: the same bytes already in
 // legacy (mtime refreshed, as writeImmutable does) or in a segment is a
 // no-op; different bytes under the digest, in either, is an error. A segment
-// error, including corruption, is an error: it is never answered from
-// legacy or overwritten. The caller holds the CAS reuse lock.
+// error, including corruption, is errSegmentReuseRead: the caller stores the
+// pin the legacy way (round 5), and nothing in the segment is overwritten.
+// The caller holds the CAS reuse lock.
 func (s *EventArtifactService) stageSegmented(computerID string, ns tapestore.NS, body []byte) (*tapestore.Item, error) {
 	digest := computerevent.DigestBytes(body)
 	path, err := s.platform.artifactPath(ns.LegacyRel(digest))
@@ -173,7 +178,7 @@ func (s *EventArtifactService) stageSegmented(computerID string, ns tapestore.NS
 	}
 	have, found, err := s.platform.tapeReader().ReadSegment(computerID, ns, digest)
 	if err != nil {
-		return nil, fmt.Errorf("event artifact service: read segment: %w", err)
+		return nil, fmt.Errorf("%w: %w", errSegmentReuseRead, err)
 	}
 	if found {
 		if !bytes.Equal(have, body) {

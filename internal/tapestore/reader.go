@@ -9,6 +9,7 @@ import (
 	"hash/crc32"
 	"io"
 	"io/fs"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -27,6 +28,8 @@ type Reader struct {
 	open   map[string]*openSeg   // by segment path
 
 	segmentHits, legacyHits, notFound, corrupt, digestMismatch atomic.Uint64
+	segmentErrorFallbacks                                      atomic.Uint64
+	fallbackLogged                                             sync.Map // computer id -> struct{}: one log line each
 }
 
 // Stats are the reader's lifetime counters.
@@ -36,6 +39,10 @@ type Stats struct {
 	NotFound       uint64 `json:"not_found"`
 	Corrupt        uint64 `json:"corrupt"`
 	DigestMismatch uint64 `json:"digest_mismatch"`
+	// SegmentErrorFallbacks counts reads whose segment lookup failed and
+	// that were served from a legacy file hashing to the digest. Any
+	// non-zero value is segment corruption to investigate.
+	SegmentErrorFallbacks uint64 `json:"segment_error_fallbacks"`
 }
 
 // NewReader returns a reader over the artifacts root. It performs no I/O.
@@ -58,13 +65,18 @@ func (r *Reader) Stats() Stats {
 		NotFound:       r.notFound.Load(),
 		Corrupt:        r.corrupt.Load(),
 		DigestMismatch: r.digestMismatch.Load(),
+
+		SegmentErrorFallbacks: r.segmentErrorFallbacks.Load(),
 	}
 }
 
 // Read returns the bytes of (ns, digest) for computerID: from a segment if
 // one holds the digest, otherwise from the legacy file. The bytes are hashed
-// and compared with digest before they are returned. A segment error is
-// returned as is; it never falls back to legacy.
+// and compared with digest before they are returned. A segment error falls
+// back to the legacy file only when that file hashes to digest, so the bytes
+// are exactly the object asked for; the fallback is counted
+// (SegmentErrorFallbacks) and logged once per computer. Without such a file
+// the segment error is returned. ReadSegment never falls back.
 func (r *Reader) Read(computerID string, ns NS, digest string) ([]byte, Source, error) {
 	if !ns.valid() {
 		return nil, 0, fmt.Errorf("tapestore: invalid namespace %d", uint8(ns))
@@ -78,6 +90,20 @@ func (r *Reader) Read(computerID string, ns NS, digest string) ([]byte, Source, 
 			r.digestMismatch.Add(1)
 		} else {
 			r.corrupt.Add(1)
+		}
+		if errors.Is(err, ErrUnsupportedVersion) {
+			return nil, 0, err // a format this binary does not know is not rot
+		}
+		legacy, lerr := r.readLegacy(ns, digest)
+		if lerr == nil {
+			r.segmentErrorFallbacks.Add(1)
+			if _, seen := r.fallbackLogged.LoadOrStore(computerID, struct{}{}); !seen {
+				log.Printf("tapestore: computer %s: segment read failed, served a digest-verified legacy copy: %v", computerID, err)
+			}
+			return legacy, SourceLegacy, nil
+		}
+		if !errors.Is(lerr, ErrNotFound) && !errors.Is(lerr, ErrDigestMismatch) {
+			return nil, 0, errors.Join(err, lerr)
 		}
 		return nil, 0, err
 	}
@@ -272,6 +298,9 @@ func readRecordAt(f io.ReaderAt, segLabel string, off int64, limit int64, ns NS,
 	}
 	h, err := parseRecHeader(head)
 	if err != nil {
+		if errors.Is(err, ErrUnsupportedVersion) {
+			return nil, unsupportedf("%s: record at %d: %v", segLabel, off, err)
+		}
 		return nil, corruptf("%s: record at %d: %v", segLabel, off, err)
 	}
 	if h.ns != ns || h.digest != want {
@@ -346,7 +375,7 @@ func openSealed(dir, computerID string, segno uint64) (*sealedSeg, error) {
 		return nil, corruptf("%s: bad magic", label)
 	}
 	if raw[4] != idxVersion {
-		return nil, corruptf("%s: unsupported version %d", label, raw[4])
+		return nil, unsupportedf("%s: unsupported version %d", label, raw[4])
 	}
 	body := len(raw) - idxTrailerSize
 	if crc32.Checksum(raw[:body], castagnoli) != binary.BigEndian.Uint32(raw[body:]) {
@@ -642,7 +671,7 @@ func scanRecord(f io.ReaderAt, pos, size int64) (h recHeader, next int64, bad st
 	// The record is whole and intact, so it is not a torn write. If this
 	// reader does not understand it, fail closed rather than skip it.
 	if head[4] != recVersion || !h.ns.valid() {
-		return h, 0, "", corruptf("record at %d is intact but unsupported (version %d, namespace %d)", pos, head[4], head[5])
+		return h, 0, "", unsupportedf("record at %d is intact but unsupported (version %d, namespace %d)", pos, head[4], head[5])
 	}
 	return h, next, "", nil
 }

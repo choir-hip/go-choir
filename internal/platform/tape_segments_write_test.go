@@ -408,7 +408,10 @@ func TestTapeSegmentsCollisionsAcrossBothStores(t *testing.T) {
 			t.Fatal("legacy files appeared")
 		}
 	})
-	t.Run("a segment record that does not hold its digest is an error and appends nothing", func(t *testing.T) {
+	t.Run("a segment record that does not hold its digest sends the pin the legacy way and appends nothing", func(t *testing.T) {
+		// Round 5: the unreadable segment is a store failure, not a verdict
+		// on the pin. The pin is stored as a legacy file, the segment is not
+		// touched, and the digest-verified read serves the legacy copy.
 		f := newWriteFixture(t, "write", true)
 		payload := projectionPayload("rotten resident")
 		if err := pinBatch(f, payload); err != nil {
@@ -417,15 +420,18 @@ func TestTapeSegmentsCollisionsAcrossBothStores(t *testing.T) {
 		corruptSegments(t, f.root, id) // first record = the payload; a valid record (the receipt) follows
 		segFile := filepath.Join(f.root, tapestore.SegDirName, id, tapestore.SegmentFileName(1))
 		before, _ := os.ReadFile(segFile)
-		if err := pinBatch(f, payload); !errors.Is(err, tapestore.ErrCorrupt) {
-			t.Fatalf("pin = %v, want ErrCorrupt", err)
+		if err := pinBatch(f, payload); err != nil {
+			t.Fatalf("pin = %v, want the legacy fallback", err)
 		}
 		after, _ := os.ReadFile(segFile)
 		if !bytes.Equal(before, after) {
-			t.Fatal("a refused pin changed the segment")
+			t.Fatal("the pin changed the corrupt segment")
 		}
-		if len(legacyTree(t, f.root)) != 0 {
-			t.Fatal("a refused pin fell back to legacy")
+		if _, ok := legacyTree(t, f.root)["sha256/computer-event-payload/"+computerevent.DigestBytes(payload)]; !ok {
+			t.Fatal("the pin did not store the payload as a legacy file")
+		}
+		if got, err := f.artifacts.FetchPayload(id, computerevent.DigestBytes(payload)); err != nil || !bytes.Equal(got, payload) {
+			t.Fatalf("FetchPayload after the fallback = %v", err)
 		}
 	})
 }
