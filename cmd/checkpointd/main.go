@@ -38,9 +38,12 @@ func main() {
 	if err := ensureDoltHome(os.Getenv); err != nil {
 		log.Fatal(err)
 	}
-	escrow, err := keyescrow.LoadOrGeneratePrivateKey(cfg.KeyEscrowKeyPath)
+	escrow, escrowKeyState, escrowSealMode, err := keyescrow.LoadConfiguredPrivateKey(cfg.KeyEscrowKeyPath, os.Getenv)
 	if err != nil {
 		log.Fatal(err)
+	}
+	if escrowSealMode != keyescrow.SealOff {
+		log.Printf("checkpoint escrow key: %s (seal mode %s)", escrowKeyState, escrowSealMode)
 	}
 	defer clear(escrow[:])
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
