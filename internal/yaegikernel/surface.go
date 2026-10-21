@@ -353,8 +353,23 @@ func cellErrorHint(surface map[string]bool, src, msg string) string {
 	if topLevelDefineRE.MatchString(msg) {
 		return topLevelDefineHint
 	}
+	if packetVerbRE.MatchString(src) && literalSyntaxRE.MatchString(msg) {
+		return packetLiteralHint
+	}
 	return ""
 }
+
+// A packet written as JSON inside a Go map literal (`"claims":[] ,`,
+// `[]any{{"k":"v"}}`) does not parse (T3,
+// docs/problems/tool-call-failures-dual-model-2026-10-21.md; cluster I of
+// docs/reports/cross-model-cell-errors-2026-10-13.md).
+var (
+	packetVerbRE    = regexp.MustCompile(`\bchoir\.(?:ReportPacket|Report|Cast|Note|Ask|Reply|Escalate|Resolve|Precommit|Disagreement)\(`)
+	literalSyntaxRE = regexp.MustCompile(`expected type, found|expected ';', found ':'|expected operand|expected expression|missing ',' in (?:argument list|composite literal)|expected '[)}\]]', found`)
+)
+
+const packetLiteralHint = "This looks like JSON written as a Go map literal, which does not parse: in Go an empty list is []any{}, a list of objects is []any{map[string]any{...}}, and a nested object is map[string]any{...}. " +
+	"The packet verbs also take a JSON string, so write the packet as JSON in a backquoted raw string: p := `{\"kind\":\"evidence_update\",\"claims\":[],\"sources\":[]}`; then choir.ReportPacket(\"texture\", p, \"\")."
 
 var (
 	jsonVerbCallRE  = regexp.MustCompile(`\bchoir\.(?:Read|ReadCapture|PollSource|SourceAPI)\(`)
