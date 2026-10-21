@@ -94,6 +94,9 @@ type Status struct {
 	// path relative to the working tree names a different file to them.
 	WrittenFiles          []WrittenFile `json:"written_files,omitempty"`
 	WrittenFilesTruncated int           `json:"written_files_truncated,omitempty"`
+	// PlaceholdersRemoved names the Claude Code sandbox placeholders the
+	// server removed from the working tree after the run (failure 29).
+	PlaceholdersRemoved []string `json:"placeholders_removed,omitempty"`
 }
 
 // WrittenFile is one file a run wrote or tried to write.
@@ -143,7 +146,10 @@ type run struct {
 	written  []string // absolute in-tree paths named by Write/Edit, first-seen order, at most maxWrittenFiles
 	// writtenSeen holds every distinct such path, so the overflow is counted.
 	writtenSeen map[string]bool
-	done        chan struct{}
+	// absent are the placeholder names missing from the working tree
+	// before the run, the only ones removed after it.
+	absent []string
+	done   chan struct{}
 }
 
 // Request is one line on the delegate socket.
@@ -286,6 +292,7 @@ func (s *Server) Start(spec Spec) (Status, error) {
 		_ = events.Close()
 		return Status{}, err
 	}
+	absent := absentPlaceholders(s.workdir())
 	cmd := s.Launch(dir)
 	cmd.Env = env
 	cmd.Stdin = prompt
@@ -307,7 +314,7 @@ func (s *Server) Start(spec Spec) (Status, error) {
 		_ = stderrFile.Close()
 		return Status{}, err
 	}
-	r := &run{done: make(chan struct{}), cmd: cmd, status: Status{
+	r := &run{done: make(chan struct{}), cmd: cmd, absent: absent, status: Status{
 		ID: id, State: StateRunning, Dir: dir, StartedAt: now.UTC(),
 		WallClockMin: spec.WallClockMin, MaxTurns: spec.MaxTurns,
 	}}
@@ -404,6 +411,7 @@ func (s *Server) supervise(r *run, spec Spec, stdout, stderr io.Reader, events, 
 	r.status.EventsSHA256 = "sha256:" + hex.EncodeToString(hash.Sum(nil))
 	r.status.StderrTail = tail.String()
 	r.status.WrittenFiles, r.status.WrittenFilesTruncated = r.statWritten()
+	r.status.PlaceholdersRemoved = removePlaceholders(s.workdir(), r.absent)
 	resultMu.Lock()
 	if len(lastResult) > 0 {
 		var res Result
