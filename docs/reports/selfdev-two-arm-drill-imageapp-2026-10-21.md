@@ -81,6 +81,7 @@ Run one at a time on the delegate test computer, smallest app first, with
 | SlidesApp | 810 | sonnet-slides-1021b (d31403fd5) | stopped 05:28: after the prompt fix, management cast round 1 as the build round; the brief demanded `git diff` in a capsule without `.git` |
 | SlidesApp | 810 | sonnet-slides-1021c (d31403fd5, brief fixed) | stopped 05:50: round 1 delegate rewrite (25 turns, $0.28); round 2 applied the carried patch, `npm ci` and `vite build` ran; the release copy failed on `fchmodat2` (failure 20) |
 | SlidesApp | 810 | sonnet-slides-1021d (4d45601d0, fchmodat2 allowed) | stopped: round 1 delegate rewrite; round 2 built, but `cp` into the release tree failed with EPERM and freeze refused. Cause: the capsule lower is the guest root, whose applied release is owned by an unmapped uid (failure 21, which corrects failure 20) |
+| SlidesApp | 810 | sonnet-slides-1021e (871c3c145, own release dir) | stalled 06:54: round 1 delegate rewrite (15 turns, $0.20); round 2 applied the patch and `npm ci && npm run build` passed, then completed as blocked on the `diff -u` exit code and the missing `.git`, with no release tree and no freeze; round 3 had no carried patch (failure 22, a brief defect) |
 
 Each stop is a Choir or drill defect found and fixed, in order; none is
 about the delegate's work. The rewrites of Pdf, Epub, Podcast, Calendar and

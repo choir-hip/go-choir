@@ -1444,3 +1444,51 @@ Fix (drill brief, yellow): say that `diff -u` exiting 1 is the passing
 result. Name the round 2 steps in full: build the frontend release tree,
 then `choir.Freeze`, then Complete. Say that a missing `.git` is expected
 and is never a blocker.
+
+## Failure 23: engineering completes the round while its build job is still running (label sonnet-slides-1021f, deploy f9ad90709, 07:19-07:24 UTC)
+
+Evidence (trajectory be257da2, run events of assignment 9f4eda47, trace
+bundle outside the repo):
+
+- Round 1 went as designed: baseline saved, delegate rewrite in 19 turns
+  ($0.20), 21229 to 22336 bytes, completed as failed for the build round.
+- Round 2 (`ecosystem_proxy`, GPT-6 Luna, low effort): `git apply` of the
+  carried patch exited 0. It started the frontend build exactly as the
+  engineering overlay prescribes, as a job (`job-76e9ba26ee77`: `npm ci`,
+  `npm run build`, the release copy, the cleanup) at 07:23:57.
+- At 07:24:13, while that job was running, one cell ran
+  `choir.Poll(id)` and then, in the same cell,
+  `if v.State != "done" ... { choir.Complete("blocked", ...) }`. Poll
+  answered `running`. The Complete committed, and the round's fate was
+  terminal at 07:24:20 with the build still in progress. The overlay says
+  to end the turn and be woken when the job ends. The completion guard
+  (`engineeringJobWait`) only holds a turn that ends *without* a terminal
+  fate, so it never ran.
+- Round 2 also took its "saved copy" after applying the patch, so its
+  diff check compared the file to itself. That is a model error, not a
+  substrate gap, and it does not change the fix below.
+
+Classification: substrate. Freeze is already refused while a job runs
+(`freezeCapsuleEffectBundle`: "job ... is still running; Freeze waits
+until it ends (or choir.Stop it)"). Complete has no such refusal, so any
+model that polls early can end a round in the middle of its own build. A
+prompt change would only shift the odds. A refusal closes the path for
+every model.
+
+Fix (decided; orange, the engineering in-cell API): the reducer refuses a
+cell that stages Complete while the run's capsule job is running, with an
+instruction to end the turn (you are woken when the job ends with its
+outcome) or to `choir.Stop(id)` it in a cell of its own first. The
+refusal comes before any side effect, so the cell's fate, the cursor and
+the mailbox are untouched. Failure modes written before the code:
+
+1. Complete while the run's job runs: refused, naming the job.
+2. Complete with no running job: unchanged.
+3. A cell without Complete while the job runs (Poll, Note, Report):
+   unchanged.
+4. A desk with no capsule jobs (management, Texture, research): unchanged.
+5. The refusal must leave no trace: no fate, no cursor advance, no
+   envelope.
+6. A job that never ends cannot hold the round forever: jobs carry a wall
+   clock (at most the `minutes` given to Start), and `choir.Stop` remains
+   the way out.
