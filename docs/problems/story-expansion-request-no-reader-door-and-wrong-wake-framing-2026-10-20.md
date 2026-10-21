@@ -318,3 +318,39 @@ reconcile checks). A reproduction test is being written before any fix.
 Consequence: a reader's ask spends a Texture turn and a research run, the
 research is filed, and the story does not change. The fate line will end
 "no new version", which is honest but wrong about the cause.
+
+### P6 retest on cbef56155: the door works end to end on a quiet story (2026-10-21, 04:46 to 04:52 UTC)
+
+Deploy cbef56155 adds no behavior to this path; it adds the
+`texture wake: no run … reason=` log lines at the silent returns. Story:
+"AP says Apu returns to The Simpsons with a South Asian voice"
+(importance 3, unchanged since 03:26, not mid-turn). Paper console read
+from the host, read-only.
+
+- 04:46:58: logged-out `POST /api/platform/publications/expand`, 202
+  `asked`, `rx-c4e206c940e3`, owner revision `0dae8280`, from version 4.
+  The proxy logged `requester=public outcome=asked`.
+- 04:47:57: Texture turn `wait` on head `0dae8280` (research requested).
+- 04:48:04: one `coagent_result` occurrence for the story was "consumed
+  without a turn: terminal". It is not yet known which result that was;
+  the report Texture used arrived later.
+- 04:51:49: Texture turn `revision` (`747d030c`), done, no dropped
+  citations. 04:51:55: published v7.
+- v4 had 111 words, 4 paragraphs and 7 sources; v7 has 191 words, 5
+  paragraphs and 8 sources. The fate line, logged out, reads
+  `revised`, version 4 to 7.
+
+So P6 does not reproduce on a quiet story. Over the 25 minutes, every
+`texture wake: no run` line named a resident pending run or "nothing
+armed"; none named this story while its report was unread. P6 stays open
+as an intermittent failure seen once, on the FCA story at 03:34, which a
+publication run was revising at the time. Hypotheses, in order: the
+report arrived while the story's resident run was mid-turn and the wake
+was answered "a resident run holds valid authority" and never retried; or
+the FCA run's report was the occurrence consumed as terminal. The log
+lines now in production can tell these apart on the next occurrence.
+
+Side effect of the retest: a check-read `POST` after v7 published was
+accepted as a new ask (`rx-9658cb7374f1`, from version 7). That is the
+designed rule: one ask per version, and v7 is a new version. It costs one
+more research turn on a low-importance story.
