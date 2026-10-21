@@ -161,7 +161,7 @@ func (rt *Runtime) deferEngineeringAdmission(ctx context.Context, assignment typ
 		return fmt.Errorf("no wake available to retry the request: %w", busy)
 	}
 	content, err := json.Marshal(delegatedAssignmentSpawnDeadline{
-		AssignmentID: assignment.AssignmentID, Attempt: binding.Attempt, Objective: objective, CandidateID: wake.CandidateID, Retry: retry,
+		AssignmentID: assignment.AssignmentID, Attempt: binding.Attempt, Objective: objective, CandidateID: wake.CandidateID, Retry: retry, Boot: wake.Boot,
 	})
 	if err != nil {
 		return err
@@ -174,4 +174,50 @@ func (rt *Runtime) deferEngineeringAdmission(ctx context.Context, assignment typ
 	log.Printf("runtime: engineering admission: assignment %s waits behind %s (%s); retry %d in %s",
 		assignment.AssignmentID, busy.BlockedBy, busy.Why, retry, delay)
 	return nil
+}
+
+// plannedBootKeepsQueuedRequest reports whether an open, unbound assignment
+// opened before this boot is a queued request to keep rather than an
+// interrupted spawn strand to close (review finding B1). Only a planned boot
+// keeps it, and only where a wake can resume it (kernel mode) and no capsule
+// was spawned for it. A crash boot never reaches here: it closes every open
+// assignment interrupted_by_restart. The rule holds for the whole process
+// life, so a later reconcile of the trajectory keeps the request too.
+func (rt *Runtime) plannedBootKeepsQueuedRequest(a types.EngineeringAssignment, exec assignmentCapsuleRuntime) bool {
+	return rt.bootRestartPlanned && rt.kernelMode && rt.scheduleActor != nil &&
+		a.Disposition == types.EngineeringAssignmentOpen && a.CapsuleDisposition == types.EngineeringCapsuleUnbound &&
+		strings.TrimSpace(a.BoundRunID) == "" && exec != nil && !exec.HasCapsule(a.Binding.CapsuleID)
+}
+
+// resumeQueuedEngineeringRequestsAtPlannedBoot arms the one resume a planned
+// restart gives each queued request it kept: a spawn wake due now whose
+// content carries this boot's identity, so it never dedups into a consumed
+// pre-boot wake. A pre-boot retry wake that also survives runs as well; both
+// are ordinary admission attempts under the saga mutex, so the second is a
+// no-op or a refusal. If the resume crashes the computer, the next boot has no
+// marker and closes the request: one resume per planned restart, no loop. An
+// overdue request is expired by the wake, before admission.
+func (rt *Runtime) resumeQueuedEngineeringRequestsAtPlannedBoot(ctx context.Context, computerID string) {
+	exec := rt.assignedCapsule()
+	assignments, err := rt.store.ListEngineeringAssignmentsForComputer(ctx, computerID)
+	if err != nil {
+		log.Printf("runtime: planned boot: list queued engineering requests: %v", err)
+		return
+	}
+	now := time.Now().UTC()
+	for _, a := range assignments {
+		if !a.CreatedAt.Before(rt.bootedAt) || !rt.plannedBootKeepsQueuedRequest(a, exec) {
+			continue
+		}
+		content, err := json.Marshal(delegatedAssignmentSpawnDeadline{AssignmentID: a.AssignmentID, Attempt: a.Binding.Attempt, Boot: rt.bootedAt.UnixNano()})
+		if err != nil {
+			continue
+		}
+		if err := rt.scheduleActor(ctx, a.Binding.OwnerID, a.Binding.ComputerID, a.Binding.ParentAgentID,
+			delegatedAssignmentSpawnDeadlineUpdateKind, string(content), a.Binding.TrajectoryID, "", now); err != nil {
+			log.Printf("runtime: planned boot: resume queued engineering request %s: %v", a.AssignmentID, err)
+			continue
+		}
+		log.Printf("runtime: planned boot: queued engineering request %s kept and resumed", a.AssignmentID)
+	}
 }
