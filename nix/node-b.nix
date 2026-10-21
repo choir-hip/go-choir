@@ -1049,6 +1049,12 @@ in
         # active since 2026-10-20, after the reviewed dry-run
         # ts-20261020T051653Z-fd085f79. Rollback: set back to dry-run.
         "PLATFORM_TAPE_SWEEP_MODE=active"
+        # Tape segments (A2): projection-batch pins go to per-computer
+        # append-only segments instead of one file each. Owner notes 34
+        # ("2. B"): on for every computer after residual r1 (687867fd5).
+        # Rollback: set back to off; new pins go legacy again and segments
+        # stay readable (docs/definitions/choir-tape-segments-a2-repack-2026-10-21.md).
+        "PLATFORM_TAPE_SEGMENTS=write"
         # P5 host build service. The checkout is the deploy's /opt/go-choir
         # (read only: its objects, never its worktree); the base is the
         # deployed guest image a computer must have booted.
