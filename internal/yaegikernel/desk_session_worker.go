@@ -12,6 +12,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -63,6 +64,9 @@ type DeskSessionWorkerConfig struct {
 	// Refused reports a frame the daemon refused (outside the desk's table,
 	// a forged token, a stale epoch) so the host can record it on the trace.
 	Refused func(ctx context.Context, r FrameRefusal)
+	// CgroupRoot is the desks cgroup the worker's budget cgroup is made in.
+	// Empty reads DeskCgroupRootEnv. Tests only; a daemon sets the env.
+	CgroupRoot string
 	// Confinement is the OS boundary the worker runs inside
 	// (desk_cell_confinement.go). The zero value confines as far as the
 	// spawner can; it is never weaker than that.
@@ -113,6 +117,19 @@ type DeskSessionWorker struct {
 	slotToken []byte
 	// cellTmpDir is the worker's private tmp dir, removed at reap.
 	cellTmpDir string
+	// budget is the worker's memory cgroup (nil without one), released at
+	// reap.
+	budget *workerCgroup
+}
+
+// envHasKey reports whether env sets key.
+func envHasKey(env []string, key string) bool {
+	for _, kv := range env {
+		if strings.HasPrefix(kv, key+"=") {
+			return true
+		}
+	}
+	return false
 }
 
 // workerExitGrace is how long the host waits, after the session socket
@@ -157,8 +174,23 @@ func SpawnDeskSessionWorker(cfg DeskSessionWorkerConfig) (*DeskSessionWorker, er
 	if err != nil {
 		return nil, err
 	}
+	// The memory budget: a cgroup of the worker's own, from its desk's
+	// manifest row (RES-02). Refused, not skipped, in required mode.
+	budget, err := planWorkerCgroup(cfg)
+	if err != nil {
+		removeCellTmpDir(plan.tmpDir)
+		return nil, err
+	}
+	if budget != nil {
+		if err := attachCgroup(plan.attr, budget); err != nil {
+			budget.release()
+			removeCellTmpDir(plan.tmpDir)
+			return nil, err
+		}
+	}
 	fds, err := unixSocketpairFiles()
 	if err != nil {
+		budget.release()
 		removeCellTmpDir(plan.tmpDir)
 		return nil, fmt.Errorf("desk session socketpair: %w", err)
 	}
@@ -168,6 +200,7 @@ func SpawnDeskSessionWorker(cfg DeskSessionWorkerConfig) (*DeskSessionWorker, er
 	_ = parentFile.Close()
 	if err != nil {
 		_ = childFile.Close()
+		budget.release()
 		removeCellTmpDir(plan.tmpDir)
 		return nil, fmt.Errorf("desk session parent socket: %w", err)
 	}
@@ -175,6 +208,7 @@ func SpawnDeskSessionWorker(cfg DeskSessionWorkerConfig) (*DeskSessionWorker, er
 	if _, err := rand.Read(token); err != nil {
 		_ = parentConn.Close()
 		_ = childFile.Close()
+		budget.release()
 		removeCellTmpDir(plan.tmpDir)
 		return nil, fmt.Errorf("desk session slot token: %w", err)
 	}
@@ -188,6 +222,11 @@ func SpawnDeskSessionWorker(cfg DeskSessionWorkerConfig) (*DeskSessionWorker, er
 	// The slot token rides the environment, never argv (argv is visible to
 	// every process through /proc).
 	cmd.Env = append(cmd.Env, sessionEnvPrefix(cfg.EnvPrefix)+"SLOT_TOKEN="+hex.EncodeToString(token))
+	if budget != nil && !envHasKey(cmd.Env, "GOMEMLIMIT") {
+		// The collector works before the kernel kills: a soft limit below
+		// memory.max (an operator's override, if any, was passed above).
+		cmd.Env = append(cmd.Env, "GOMEMLIMIT="+strconv.FormatUint(budget.softHeapLimit(), 10))
+	}
 	cmd.ExtraFiles = []*os.File{childFile}
 	cmd.Stdin = nil
 	cmd.Stdout = &stdoutBuf
@@ -195,6 +234,7 @@ func SpawnDeskSessionWorker(cfg DeskSessionWorkerConfig) (*DeskSessionWorker, er
 	if err := cmd.Start(); err != nil {
 		_ = childFile.Close()
 		_ = parentConn.Close()
+		budget.release()
 		removeCellTmpDir(plan.tmpDir)
 		return nil, fmt.Errorf("start desk session worker: %w", err)
 	}
@@ -206,6 +246,7 @@ func SpawnDeskSessionWorker(cfg DeskSessionWorkerConfig) (*DeskSessionWorker, er
 		cfg:        cfg,
 		stderr:     &stderrBuf,
 		cellTmpDir: plan.tmpDir,
+		budget:     budget,
 		// The worker returns the hex form; the host compares that.
 		slotToken: []byte(hex.EncodeToString(token)),
 	}
@@ -655,6 +696,16 @@ func (w *DeskSessionWorker) reapLocked(hostReason string, grace time.Duration) {
 	}
 	w.reaped = true
 	defer removeCellTmpDir(w.cellTmpDir)
+	defer func() {
+		if w.budget != nil {
+			// Say whether the memory budget ended the worker: a bare "signal:
+			// killed" told a desk nothing, and the daemon's own OOM kill looked
+			// the same.
+			w.exitCause += w.budget.note()
+			w.budget.release()
+			w.budget = nil
+		}
+	}()
 	done := make(chan error, 1)
 	go func() { done <- w.cmd.Wait() }()
 	if w.transportLost {

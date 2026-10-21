@@ -444,6 +444,10 @@ func TestDeskCellRequiredModeNeedsLandlock(t *testing.T) {
 		t.Skip("required mode needs a root spawner")
 	}
 	env := newConfinedTestEnv(t, "texture", CellConfinementRequired)
+	// Required mode also demands the memory budget; give it a real desks
+	// cgroup (skips where cgroups are not writable) so the Landlock refusal
+	// is what is tested.
+	env.cfg.CgroupRoot = deskCgroupTestRoot(t)
 	w, err := SpawnDeskSessionWorker(env.cfg)
 	if !kernelHasLandlock() {
 		if err == nil {

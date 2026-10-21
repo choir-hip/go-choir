@@ -124,6 +124,15 @@ func WorkerEnv(getenv func(string) string) []string {
 	return []string{"GOMEMLIMIT=" + v}
 }
 
+// MemTotal reads the machine's total memory from /proc/meminfo.
+func MemTotal() (int64, error) {
+	data, err := os.ReadFile(meminfoPath)
+	if err != nil {
+		return 0, err
+	}
+	return parseMemTotal(data)
+}
+
 // LimitFor is the soft limit for a role on a machine of memTotal bytes, or 0
 // when memTotal is unknown. A floor never exceeds the machine.
 func LimitFor(role Role, memTotal int64) int64 {

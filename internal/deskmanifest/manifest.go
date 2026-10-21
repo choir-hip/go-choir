@@ -108,8 +108,12 @@ type Memory struct {
 	// WorkerMaxBytes is a desk worker's cgroup memory.max: the kernel kills
 	// the worker past it, never the daemon (RES-02).
 	WorkerMaxBytes uint64
-	// WorkerHighBytes is the worker's memory.high: past it the kernel
-	// throttles and reclaims. Below WorkerMaxBytes.
+	// WorkerHighBytes is the worker's memory.high, or 0 for none. Past
+	// memory.high the kernel throttles the worker's allocations instead of
+	// killing it, and with no swap to reclaim into a runaway cell crawls for
+	// minutes before it reaches memory.max (measured in a Linux container:
+	// 5272 throttle events in 90 s, no kill). A desk worker's budget is the
+	// hard limit alone, so a runaway is killed promptly and the desk is told.
 	WorkerHighBytes uint64
 	// CapsuleRequestedBytes is what a capsule of this desk asks for
 	// (RES-04); admission counts it, memory.high is set to it.
@@ -209,7 +213,7 @@ var system = []Desk{
 		Addresses:      []string{Texture, Engineering},
 		Sandbox:        Sandbox{Profile: "desk_cell", UID: 61001},
 		Taint:          TaintPrivileged,
-		Memory:         Memory{WorkerMaxBytes: 768 * mib, WorkerHighBytes: 640 * mib},
+		Memory:         Memory{WorkerMaxBytes: 768 * mib},
 		OwnedKinds:     []string{"assignment", "admission"},
 		ModelRole:      Management, Restart: RestartContract,
 	},
@@ -224,7 +228,7 @@ var system = []Desk{
 		Addresses:      []string{Research, Management},
 		Sandbox:        Sandbox{Profile: "desk_cell", UID: 61002},
 		Taint:          TaintPrivileged,
-		Memory:         Memory{WorkerMaxBytes: 768 * mib, WorkerHighBytes: 640 * mib},
+		Memory:         Memory{WorkerMaxBytes: 768 * mib},
 		OwnedKinds:     []string{"document_revision"},
 		ModelRole:      Texture, Restart: RestartContract,
 	},
@@ -242,7 +246,7 @@ var system = []Desk{
 		Addresses:      []string{Texture},
 		Sandbox:        Sandbox{Profile: "desk_cell", UID: 61003},
 		Taint:          TaintUntrustedInput,
-		Memory:         Memory{WorkerMaxBytes: 768 * mib, WorkerHighBytes: 640 * mib},
+		Memory:         Memory{WorkerMaxBytes: 768 * mib},
 		OwnedKinds:     []string{"evidence"},
 		ModelRole:      Research, Restart: RestartContract,
 	},
@@ -274,7 +278,7 @@ var system = []Desk{
 		Addresses:      []string{Texture},
 		Sandbox:        Sandbox{Profile: "desk_cell", UID: 61001},
 		Taint:          TaintPrivileged,
-		Memory:         Memory{WorkerMaxBytes: 384 * mib, WorkerHighBytes: 320 * mib},
+		Memory:         Memory{WorkerMaxBytes: 384 * mib},
 		ModelRole:      ManagementTask, Restart: RestartContract,
 	},
 	{
@@ -288,7 +292,7 @@ var system = []Desk{
 		Addresses:      []string{},
 		Sandbox:        Sandbox{Profile: "desk_cell", UID: 61003},
 		Taint:          TaintUntrustedInput,
-		Memory:         Memory{WorkerMaxBytes: 384 * mib, WorkerHighBytes: 320 * mib},
+		Memory:         Memory{WorkerMaxBytes: 384 * mib},
 		ModelRole:      ResearchChild, Restart: RestartContract,
 	},
 	{
@@ -442,8 +446,8 @@ func validateStructure(d Desk) error {
 		if d.Sandbox.Profile != "desk_cell" || d.Sandbox.UID == 0 {
 			return fmt.Errorf("desk %s: a desk worker needs the desk_cell profile and a non-zero uid", d.Name)
 		}
-		if d.Memory.WorkerMaxBytes == 0 || d.Memory.WorkerHighBytes == 0 || d.Memory.WorkerHighBytes >= d.Memory.WorkerMaxBytes {
-			return fmt.Errorf("desk %s: a desk worker needs memory.high below memory.max", d.Name)
+		if d.Memory.WorkerMaxBytes == 0 || (d.Memory.WorkerHighBytes != 0 && d.Memory.WorkerHighBytes >= d.Memory.WorkerMaxBytes) {
+			return fmt.Errorf("desk %s: a desk worker needs a memory.max, and memory.high (if any) below it", d.Name)
 		}
 	}
 	for _, v := range d.Verbs {
@@ -506,7 +510,7 @@ func NewAppDesk(spec AppDeskSpec) (Desk, error) {
 		MessageTargets: []string{}, Addresses: []string{},
 		Sandbox:    Sandbox{Profile: "desk_cell", UID: spec.UID},
 		Taint:      spec.Taint,
-		Memory:     Memory{WorkerMaxBytes: spec.WorkerMaxBytes, WorkerHighBytes: spec.WorkerMaxBytes * 5 / 6},
+		Memory:     Memory{WorkerMaxBytes: spec.WorkerMaxBytes},
 		OwnedKinds: append([]string{}, spec.OwnedKinds...), ModelRole: spec.Name, Restart: RestartContract,
 	}
 	if err := validateStructure(d); err != nil {
