@@ -137,6 +137,17 @@ func LoadConfigFromEnv() ManagerConfig {
 		}
 	}
 
+	// Snapshot vault (snapshot_vault.go). Off unless the dir is set; an
+	// unusable value is kept as given so the probe refuses every capture
+	// instead of the vault silently turning off.
+	cfg.SnapshotVaultDir = strings.TrimSpace(os.Getenv("VM_SNAPSHOT_VAULT_DIR"))
+	for _, id := range strings.Split(os.Getenv("VM_SNAPSHOT_VAULT_ONLY"), ",") {
+		if id = strings.TrimSpace(id); id != "" {
+			cfg.SnapshotVaultOnly = append(cfg.SnapshotVaultOnly, id)
+		}
+	}
+	cfg.SnapshotVaultAcceptAnyCrypt = envFlagOn("VM_SNAPSHOT_VAULT_ACCEPT_ANY_CRYPT")
+
 	cfg.Jailer = loadJailerConfigFromEnv(cfg.FirecrackerBinPath)
 	cfg.FirecrackerNext = loadFirecrackerNextFromEnv(cfg.FirecrackerBinPath, envFlagOn("VM_DATA_DISCARD"))
 	cfg.ClaudeDelegate = loadClaudeDelegateConfig(os.Getenv)
