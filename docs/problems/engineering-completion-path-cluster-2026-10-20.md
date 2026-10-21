@@ -1387,3 +1387,60 @@ uses), so the guest's release tree never shows through and a build writes
 only capsule-owned files. Freeze already reads only the upper layer, so it
 sees exactly what the capsule built. Red (capsule isolation surface);
 test-first.
+
+## Failure 22: the build round passes its checks and then completes as blocked, without a release tree or a freeze (label sonnet-slides-1021e, deploy 871c3c145, 06:48-06:54 UTC)
+
+Evidence (trajectory 34259f8b, trace bundle kept outside the repo; read
+from the run events of each engineering assignment):
+
+- Round 1 went as designed. The guest ran 871c3c145. Engineering saved a
+  copy of the file, and the delegate rewrote SlidesApp in 15 turns
+  ($0.20); the file grew from 21229 to 22216 bytes. The round completed as
+  failed, waiting for the build round.
+- Round 2 (assignment 745a0430, `ecosystem_proxy`, GPT-6 Luna at low
+  reasoning effort) applied `/selfdev/carried/source.patch`, ran
+  `npm ci && npm run build` (exit 0, `vite build` done), and then ran
+  `diff -u` against the saved copy, which showed the rewrite. It then
+  called `choir.Complete("blocked", ...)`: "Saved-original diff remains
+  unresolved: it is nonempty as intended for the patch, and git
+  comparison unavailable because no .git directory. ... No freeze." It
+  never built the release tree, never ran the release copy and never
+  called `choir.Freeze`.
+- Management's round 2 cast had added: "Stop and report the
+  missing-lockfile blocker if checks cannot be completed; freeze only if
+  every required check passes." The lockfile claim comes from round 1's
+  report, which said `npm ci` in the claude-mode capsule exited EUSAGE on
+  a missing `frontend/package-lock.json`. Round 2 found the lockfile
+  present.
+- Round 3 (assignment 38cfc84c) found no carried patch, saved the
+  unchanged file, and completed as blocked ("clean base without .git
+  provenance"). Management then judged that another retry was not useful.
+  Texture's document now says the rewrite "still needs provenance
+  verification". The drill stalled at 06:54.
+
+Reading of the trace (behavior claims):
+
+- The tracer brief says "npm ci && npm run build must pass, and diff -u
+  ... must show it changed". `diff -u` exits 1 when the file changed, and
+  the brief never says that 1 is the passing result. Engineering treated
+  the diff as an unresolved gate. Management's "freeze only if every
+  required check passes" turned that doubt into a stop. Every other step
+  had passed. This is a drill-brief defect, and the tracer is where to fix
+  it.
+- The failure 21 fix is deployed but not exercised: this round never
+  reached the release copy.
+
+Hypotheses, not findings:
+
+- Round 3 had no carried patch because round 2 completed as blocked with
+  a capsule whose diff held the build output as well as the source change.
+  The offer either refused that as too large or picked nothing. The offer
+  record on the guest was not read.
+- Round 1's missing lockfile: the claude-mode capsule may not present
+  `frontend/package-lock.json`, or the delegate's npm refusal printed a
+  misleading error. The claude-mode capsule's tree was not read.
+
+Fix (drill brief, yellow): say that `diff -u` exiting 1 is the passing
+result. Name the round 2 steps in full: build the frontend release tree,
+then `choir.Freeze`, then Complete. Say that a missing `.git` is expected
+and is never a blocker.
