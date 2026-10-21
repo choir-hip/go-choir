@@ -542,7 +542,10 @@ func TestAppenderRefusesBadInputBeforeCreatingAnything(t *testing.T) {
 }
 
 // W10. The fixture writer stays out of production code everywhere; the
-// production writer is named only by internal/platform.
+// production writer is named only by internal/platform and by the offline
+// repack tool, internal/taperepack (copy only; A2 item 3, station FP9). The
+// appender's per-computer directory lock and recovery rule are what make a
+// second writing process safe; no other package may write segments.
 func TestOnlyPlatformNamesTheProductionWriter(t *testing.T) {
 	dir, err := os.Getwd()
 	if err != nil {
@@ -560,6 +563,7 @@ func TestOnlyPlatformNamesTheProductionWriter(t *testing.T) {
 	}
 	self := filepath.Join(dir, "internal", "tapestore")
 	platform := filepath.Join(dir, "internal", "platform")
+	repack := filepath.Join(dir, "internal", "taperepack")
 	var offenders []string
 	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -583,7 +587,7 @@ func TestOnlyPlatformNamesTheProductionWriter(t *testing.T) {
 			return nil
 		}
 		if bytes.Contains(raw, []byte("tapestore.NewAppender")) || bytes.Contains(raw, []byte("tapestore.Appender")) {
-			if !strings.HasPrefix(path, platform+string(filepath.Separator)) {
+			if !strings.HasPrefix(path, platform+string(filepath.Separator)) && !strings.HasPrefix(path, repack+string(filepath.Separator)) {
 				offenders = append(offenders, path)
 			}
 		}
