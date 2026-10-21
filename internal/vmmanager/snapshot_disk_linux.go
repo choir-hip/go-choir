@@ -22,8 +22,10 @@ const (
 )
 
 // measureFileDiskBytes measures a btrfs file by its extent items
-// (compression-aware; needs CAP_SYS_ADMIN, which vmctl's unit does not
-// have), else by the unprivileged FIEMAP bound, and falls back to
+// (compression-aware; needs CAP_SYS_ADMIN, which vmctl's unit has held
+// since the jailer change 10e9f18e1, so this exact method is expected on
+// Node B: RES-14 is the staging reading of disk_bytes_method that confirms
+// it), else by the unprivileged FIEMAP bound, and falls back to
 // st_blocks*512 on any other filesystem or when both fail. Each fallback
 // reason is logged once (snapshot_disk.go).
 func measureFileDiskBytes(path string) (int64, string, error) {
