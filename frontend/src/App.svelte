@@ -25,7 +25,7 @@
   import Desktop from './lib/Desktop.svelte';
   import LegalDocument from './lib/LegalDocument.svelte';
   import RecoverRoute from './lib/RecoverRoute.svelte';
-  import { isAutopaperPath } from './lib/autopaper';
+  import { legacyAutopaperRedirect } from './lib/autopaper';
   import { registerPasskey, loginPasskey, passkeyErrorMessage, prewarmAuthenticatedComputer, getSession, TransientAuthError } from './lib/auth.js';
   import { handoffToComputerSurfaceIfStale } from './lib/computer-surface-handoff.js';
   import { DEFAULT_THEME, applyThemeToElement, normalizeThemeConfig, validateThemeConfig } from './lib/theme';
@@ -58,15 +58,6 @@
   let isLegalDocumentRoute = false;
   /** /recover: landing page for an account-recovery email link. */
   let isRecoverRoute = false;
-  /**
-   * The public Autopaper pages (/autopaper, /autopaper/<slug>[/v<n>]) are a
-   * reading surface like the legal routes: they render at once, signed in or
-   * not, and read only public platform routes. A story renders in the
-   * Texture app's published mode, standalone.
-   */
-  let isAutopaperRoute = false;
-  let autopaperPath = '';
-  let AutopaperReader = null;
   const THEME_BOOT_CACHE_KEY = 'choir.theme.boot.v2';
 
   $: isAuthenticated = authState === 'signed_in';
@@ -440,12 +431,12 @@
     legalDocumentKind = legalKind || 'privacy';
     isLegalDocumentRoute = !!legalKind;
     isRecoverRoute = isRecoverPath(window.location.pathname);
-    isAutopaperRoute = isAutopaperPath(window.location.pathname);
-    autopaperPath = isAutopaperRoute ? window.location.pathname : '';
-    if (isAutopaperRoute) {
-      import('./lib/AutopaperRoute.svelte').then((module) => {
-        AutopaperReader = module.default;
-      });
+    // The standalone /autopaper pages are gone: an old link replaces the
+    // address with the story's public Texture route (the desktop opens it
+    // in a Texture window) or the desktop home.
+    const legacy = legacyAutopaperRedirect(window.location.pathname);
+    if (legacy !== null) {
+      window.history.replaceState(window.history.state, '', `${legacy}${window.location.search}${window.location.hash}`);
     }
     publicRoutePath = isPublicTextureRoutePath(window.location.pathname) ? window.location.pathname : '';
     applyTheme(loadThemeBootCache(), false);
@@ -518,15 +509,6 @@
     <LegalDocument kind={legalDocumentKind} />
   {:else if isRecoverRoute}
     <RecoverRoute />
-  {:else if isAutopaperRoute}
-    {#if AutopaperReader}
-      <svelte:component this={AutopaperReader} initialPath={autopaperPath} />
-    {:else}
-      <div class="loading" role="status" aria-live="polite">
-        <span class="loading-orbit" aria-hidden="true"></span>
-        <p>Loading…</p>
-      </div>
-    {/if}
   {:else if authState === 'checking' || authState === 'reconnecting'}
     <div class="loading" role="status" aria-live="polite">
       <span class="loading-orbit" aria-hidden="true"></span>

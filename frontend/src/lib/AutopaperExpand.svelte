@@ -1,5 +1,6 @@
 <!--
-  AutopaperExpand — the "More research" control in a story's header.
+  AutopaperExpand — the "More research" control in a published story's
+  Texture toolbar (TextureToolbar mounts it for a story window).
 
   It shows nothing unless the proxy says this reader may ask
   (GET /api/platform/publications/expansion allowed:true). With the public
@@ -105,23 +106,27 @@
 {/if}
 
 <style>
-  /* The button and the line are the header's own flex items: the line wraps
-     to a row of its own so a phone's header never scrolls sideways. */
+  /* The wrapper adds no box: the button is a flex item of the Texture
+     toolbar beside its other controls, and the fate line is a row of the
+     toolbar's own, after everything (order), so a phone's toolbar wraps and
+     never scrolls sideways. The button is styled like the toolbar's pills. */
   .ap-expand {
     display: contents;
   }
 
   .ap-expand-button {
     flex: 0 0 auto;
-    min-height: 2.75rem;
-    padding: 0.35rem 0.8rem;
-    border: 1px solid var(--choir-border);
-    border-radius: 8px;
-    background: var(--choir-surface-control);
-    color: var(--choir-text-primary);
+    height: 2.1rem;
+    padding: 0.62rem 0.84rem;
+    border: 1px solid var(--choir-border-strong);
+    border-radius: 999px;
+    background: var(--choir-state-selected);
+    color: var(--choir-text-accent);
     font: inherit;
     font-size: 0.78rem;
-    font-weight: 700;
+    font-weight: 620;
+    line-height: 1;
+    white-space: nowrap;
     cursor: pointer;
   }
 
@@ -138,10 +143,20 @@
   }
 
   .ap-expand-line {
+    order: 10;
     flex: 1 0 100%;
     min-width: 0;
-    color: var(--choir-text-muted);
-    font-size: 0.8rem;
+    color: var(--choir-text-secondary, var(--choir-text-muted));
+    font-size: 0.74rem;
+    line-height: 1.3;
     overflow-wrap: anywhere;
+  }
+
+  /* A finger needs 44 px. */
+  @media (pointer: coarse) {
+    .ap-expand-button {
+      height: auto;
+      min-height: max(2.75rem, 44px);
+    }
   }
 </style>

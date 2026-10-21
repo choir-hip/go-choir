@@ -10,7 +10,7 @@
  *   - exactly one lead story (the only h2), and it is the top-ranked story,
  *     a developed story rather than merely the newest; every other headline
  *     is an h3, in rank order;
- *   - four columns at 1280px, one column at 390px with a 16px gutter and no
+ *   - four columns in a wide desktop window, one column at 390px with a 16px gutter and no
  *     horizontal overflow, and no headline (CJK, Arabic, a long unbroken
  *     word) wider than its column;
  *   - every headline links to /pub/texture/<slug>, every version line to
@@ -177,6 +177,8 @@ async function openFront(page, viewport, fx, theme = '', mockOptions = {}) {
   await mockFront(page, fx, mockOptions);
   await page.goto(`${BASE_URL}/`);
   await expect(page.locator('[data-autopaper-grid]')).toBeVisible({ timeout: 20_000 });
+  // The desktop window opens with a short scale animation; measure after it.
+  await page.waitForTimeout(500);
 }
 
 async function cellLefts(page) {
@@ -601,14 +603,15 @@ test.describe('Autopaper sections', () => {
 test.describe('Autopaper front page', () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
-  test('broadsheet layout at 1280px: masthead, one lead, four columns, rank order, links', async ({ page }, testInfo) => {
+  test('broadsheet layout in a wide window (1440px screen): masthead, one lead, four columns, rank order, links', async ({ page }, testInfo) => {
     const fx = fixture();
     const ranked = rankFrontStories(fx.first);
     // The lead is the developed storm story, not the newest one.
     expect(ranked[0].publication_id).toBe('pub-storm');
     expect(fx.first[0].publication_id).toBe('pub-harbor');
 
-    await openFront(page, { width: 1280, height: 900 }, fx);
+    // The window is 84% of the screen, and four columns need 1100px of it.
+    await openFront(page, { width: 1440, height: 900 }, fx);
     const front = page.locator('[data-autopaper]');
 
     // Masthead.
@@ -685,7 +688,7 @@ test.describe('Autopaper front page', () => {
     // Multilingual headlines render in their columns; Arabic runs right to left.
     const arabic = front.locator('[data-publication-route="/pub/texture/story-ar-water"] [data-autopaper-headline]');
     expect(await arabic.evaluate((el) => getComputedStyle(el).direction)).toBe('rtl');
-    await expectNoHorizontalOverflow(page, '1280px');
+    await expectNoHorizontalOverflow(page, '1440px');
 
     // Focus is visible on a headline link.
     await page.locator('[data-autopaper-lead] h2 a').focus();
@@ -695,7 +698,7 @@ test.describe('Autopaper front page', () => {
     expect(focus).toContain('inset');
     await page.locator('[data-autopaper-lead] h2 a').blur();
 
-    await shoot(page, testInfo, 'autopaper-front-1280-default');
+    await shoot(page, testInfo, 'autopaper-front-1440-default');
 
     // Older stories pages in the rest, below More stories.
     const older = page.locator('[data-autopaper-more]');

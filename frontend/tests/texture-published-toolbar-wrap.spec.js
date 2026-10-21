@@ -59,6 +59,7 @@ async function mockRoutes(page, { allowed = true, resolved = [] } = {}) {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(bundle(slug, `Story ${slug.replace('story-', '').toUpperCase()}`)) });
   });
   await page.route('**/api/platform/publications/expansion?*', (route) => {
+    // An open request: the button reads "Asked for more" and the fate line shows.
     const body = allowed
       ? { allowed: true, route: '/pub/texture/story-a', asked: true, requests: [{ request_id: 'rx-1', state: 'accepted', asked_at: '2026-10-21T12:00:00Z', from_version: 12 }] }
       : { allowed: false };
@@ -72,7 +73,7 @@ async function toolbarFit(page) {
     const toolbar = document.querySelector('[data-texture-toolbar]');
     const tr = toolbar.getBoundingClientRect();
     const controls = [...toolbar.querySelectorAll('button, summary, [data-texture-version]')]
-      .filter((el) => el.getClientRects().length > 0)
+      .filter((el) => el.getClientRects().length > 0 && (el.tagName === 'SUMMARY' || !el.closest('details:not([open])')))
       .map((el) => {
         const r = el.getBoundingClientRect();
         return { label: (el.textContent || '').trim().slice(0, 24), left: Math.round(r.left), right: Math.round(r.right), top: Math.round(r.top), bottom: Math.round(r.bottom) };
@@ -112,7 +113,7 @@ test.describe('the toolbar at phone width', () => {
       }
       // Nothing is dropped to make it fit.
       const labels = fit.controls.map((c) => c.label).join('|');
-      for (const want of ['v12', '<', '>', 'Copy text', 'Download', 'More research']) expect(labels, want).toContain(want);
+      for (const want of ['v12', '<', '>', 'Copy text', 'Download', 'Asked for more']) expect(labels, want).toContain(want);
       // The fate line wraps under the buttons and stays on screen.
       const line = page.locator('[data-texture-toolbar] [data-autopaper-expand-line]');
       await expect(line).toBeVisible();

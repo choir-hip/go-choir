@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
+  import AutopaperExpand from './AutopaperExpand.svelte';
 
   export let toolbarHidden = false;
   export let versionLabel = '';
@@ -29,6 +30,12 @@
   export let publishedSourcesOpen = false;
   export let hasCurrentDoc = false;
   export let hasCurrentRevision = false;
+  /**
+   * The bare route of the published story this window reads. With one, the
+   * toolbar offers "More research" (AutopaperExpand shows nothing unless the
+   * proxy says this reader may ask). Empty for a private document.
+   */
+  export let expandRoute = '';
 
   const dispatch = createEventDispatcher();
 
@@ -72,6 +79,10 @@
   <div class="doc-state" class:doc-state-empty={!visibleStateLabel} data-texture-state aria-hidden={!visibleStateLabel}>
     {visibleStateLabel}
   </div>
+
+  {#if isPublishedReader && expandRoute}
+    <AutopaperExpand route={expandRoute} />
+  {/if}
 
   <div class="doc-actions">
     {#if isPublishedReader}
@@ -253,14 +264,18 @@
     z-index: 10;
     flex: 0 0 auto;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 0.55rem;
-    height: 3.7rem;
+    gap: 0.3rem 0.55rem;
+    /* One row while the controls fit; a phone or large text wraps them to
+       more rows instead of running off the side. max-height is the number
+       the hide transition animates from. */
+    height: auto;
     min-height: 3.7rem;
     padding: 0.5rem 0.72rem;
     border-bottom: 1px solid var(--choir-border-strong);
     background: var(--choir-state-selected);
-    max-height: 3.7rem;
+    max-height: 24rem;
     overflow: visible;
     container-type: inline-size;
     transition:
@@ -290,8 +305,9 @@
   }
 
   .doc-toolbar.toolbar-hidden:focus-within {
-    height: 3.7rem;
-    max-height: 3.7rem;
+    height: auto;
+    min-height: 3.7rem;
+    max-height: 24rem;
     padding-top: 0.5rem;
     padding-bottom: 0.5rem;
     border-bottom-color: var(--choir-border-strong);
@@ -308,9 +324,10 @@
   .doc-actions {
     display: flex;
     align-items: center;
-    gap: 0.42rem;
+    gap: 0.3rem 0.42rem;
     min-width: 0;
-    flex-wrap: nowrap;
+    max-width: 100%;
+    flex-wrap: wrap;
   }
 
   .doc-actions {
@@ -359,6 +376,7 @@
     align-items: center;
     justify-content: center;
     width: 7.6rem;
+    max-width: 100%;
     height: 1.95rem;
     padding: 0 0.72rem;
     border-radius: 999px;
@@ -708,6 +726,31 @@
       padding-inline: 0.44rem;
       font-size: 0.64rem;
       font-weight: 560;
+    }
+  }
+
+  /* A finger needs 44 px: on a touch screen every toolbar control grows to
+     it, and the row wraps to take the room. */
+  @media (pointer: coarse) {
+    .nav-btn {
+      width: 2.75rem;
+      height: 2.75rem;
+    }
+
+    .prompt-btn,
+    .secondary-action {
+      height: auto;
+      min-height: max(2.75rem, 44px);
+    }
+
+    .download-menu > summary {
+      display: inline-flex;
+      align-items: center;
+      min-height: max(2.75rem, 44px);
+    }
+
+    .download-menu button {
+      min-height: max(2.75rem, 44px);
     }
   }
 </style>

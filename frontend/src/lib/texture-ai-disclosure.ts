@@ -5,6 +5,11 @@
 // so every one carries the line. A person's own published Texture does not:
 // the label follows the Autopaper story context, never the text.
 //
+// A story is known by the server's record too: a resolved Autopaper story
+// carries publication.kind "story", so a story opened at its public Texture
+// route (an old link, an email, a new tab) shows the line without the
+// Autopaper window that would otherwise supply the context.
+//
 // An opinion piece is the other kind of public page: a signed-in reader's own
 // text, listed in the Opinion section. It carries an "Opinion" label with the
 // author's byline at the top and a human-author notice at the bottom in place
@@ -58,5 +63,6 @@ export function pieceDisclosureHTML(
     const text = author ? `${OPINION_NOTICE_TEXT} Author: ${escapeHTML(author)}.` : OPINION_NOTICE_TEXT;
     return `<p class="texture-opinion-notice" data-texture-opinion-notice>${text}</p>`;
   }
+  if (publication?.kind === 'story') return aiDisclosureHTML({ autopaperStory: true });
   return aiDisclosureHTML(appContext);
 }

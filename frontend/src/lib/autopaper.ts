@@ -6,14 +6,16 @@
 // A story is one publication. Autopaper lists stories; a story itself opens
 // in the Texture app's published mode (the same Texture UI as a user's own
 // documents), read from GET /api/platform/publications/resolve. Its bare
-// link serves the latest version in place; /v<n> serves version n. The
-// public pages mirror those links under /autopaper/<slug> and
-// /autopaper/<slug>/v<n>. The front page is laid out like a broadsheet's:
-// rankFrontStories orders the stories and layoutFrontPage cuts them into
-// the lead, the top tier, the briefs, and more stories.
+// link /pub/texture/<slug> serves the latest version in place;
+// /pub/texture/<slug>/v<n> serves version n. There is no page of Autopaper's
+// own any more: the old /autopaper/<slug>[/v<n>] links are replaced with
+// those routes (legacyAutopaperRedirect), and /autopaper itself goes to the
+// desktop home, which opens the front page. The front page is laid out like
+// a broadsheet's: rankFrontStories orders the stories and layoutFrontPage
+// cuts them into the lead, the top tier, the briefs, and more stories.
 
-export const AUTOPAPER_BASE = '/autopaper';
 const PUBLIC_TEXTURE_PREFIX = '/pub/texture/';
+const LEGACY_BASE = '/autopaper';
 
 export type FrontStory = {
   publication_id: string;
@@ -41,37 +43,29 @@ export type FrontStory = {
 
 export type FrontPage = { stories: FrontStory[]; next_cursor?: string };
 
-export type AutopaperLocation =
-  | { kind: 'front' }
-  | { kind: 'story'; slug: string; revision: number }
-  | { kind: 'not_found' };
-
 // ---- routes ----
 
-/** The public page named by a pathname under /autopaper. */
-export function parseAutopaperPath(pathname: string): AutopaperLocation {
+/**
+ * Where an old Autopaper page address goes now, or null when the pathname is
+ * not one: /autopaper/<slug> and /autopaper/<slug>/v<n> become the public
+ * Texture route of the story (the desktop opens it in a Texture window), and
+ * /autopaper alone, or anything else under it, becomes the desktop home.
+ */
+export function legacyAutopaperRedirect(pathname: string): string | null {
   const path = String(pathname || '').replace(/\/+$/, '');
-  if (path === AUTOPAPER_BASE || path === '') return { kind: 'front' };
-  if (!path.startsWith(`${AUTOPAPER_BASE}/`)) return { kind: 'not_found' };
-  const parts = path.slice(AUTOPAPER_BASE.length + 1).split('/').filter(Boolean);
-  if (parts.length === 0) return { kind: 'front' };
+  if (path !== LEGACY_BASE && !path.startsWith(`${LEGACY_BASE}/`)) return null;
+  const parts = path.slice(LEGACY_BASE.length + 1).split('/').filter(Boolean);
+  if (parts.length === 0) return '/';
   let slug = '';
   try {
     slug = decodeURIComponent(parts[0]);
   } catch {
-    return { kind: 'not_found' };
+    return '/';
   }
-  if (!slug || slug.includes('/')) return { kind: 'not_found' };
-  if (parts.length === 1) return { kind: 'story', slug, revision: 0 };
-  if (parts.length === 2 && /^v[1-9][0-9]*$/.test(parts[1])) {
-    return { kind: 'story', slug, revision: Number(parts[1].slice(1)) };
-  }
-  return { kind: 'not_found' };
-}
-
-export function isAutopaperPath(pathname: string): boolean {
-  const path = String(pathname || '');
-  return path === AUTOPAPER_BASE || path.startsWith(`${AUTOPAPER_BASE}/`);
+  if (!slug || slug.includes('/')) return '/';
+  if (parts.length === 1) return storyPath(slug);
+  if (parts.length === 2 && /^v[1-9][0-9]*$/.test(parts[1])) return storyPath(slug, Number(parts[1].slice(1)));
+  return '/';
 }
 
 /** The slug and version of a /pub/texture/<slug>[/v<n>] publication route. */
@@ -82,19 +76,19 @@ export function parsePublicationRoute(route: string): { slug: string; revision: 
   return { slug, revision: /^v[1-9][0-9]*$/.test(version) ? Number(version.slice(1)) : 0 };
 }
 
-/** The public page of a story: its bare link, or version n. */
+/** The address of a story: its bare link, or version n. */
 export function storyPath(slug: string, revision = 0): string {
-  const base = `${AUTOPAPER_BASE}/${encodeURIComponent(slug)}`;
+  const base = `${PUBLIC_TEXTURE_PREFIX}${encodeURIComponent(slug)}`;
   return revision > 0 ? `${base}/v${revision}` : base;
 }
 
-/** The public page of a publication route. */
+/** The address of a publication route (its own path, normalized); the desktop home for a route that names no story. */
 export function storyPathForRoute(route: string): string {
   const { slug, revision } = parsePublicationRoute(route);
-  return slug ? storyPath(slug, revision) : AUTOPAPER_BASE;
+  return slug ? storyPath(slug, revision) : '/';
 }
 
-/** The publication route a story page reads. */
+/** The publication route a story window reads. */
 export function publicationRoute(slug: string, revision = 0): string {
   const base = `${PUBLIC_TEXTURE_PREFIX}${slug}`;
   return revision > 0 ? `${base}/v${revision}` : base;

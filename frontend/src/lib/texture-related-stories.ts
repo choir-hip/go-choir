@@ -98,7 +98,7 @@ function sectionLabel(id: string | undefined): string {
 /**
  * The block, as HTML for the article. Everything the server sent is
  * escaped. Empty when there is nothing to show: no heading, no placeholder.
- * Each link is a real anchor to /autopaper/<slug>, so a reader can open it
+ * Each link is a real anchor to /pub/texture/<slug>, so a reader can open it
  * in a new tab; a plain click is taken over by the reader
  * (relatedLinkTarget).
  */

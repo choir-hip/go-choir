@@ -7,8 +7,8 @@
   largest headline and its dek, the top tier with deks, briefs as headlines
   only, and the rest as a compact list of more stories, with older stories
   paged in below. Columns follow the width of this component, not of the
-  screen, so the same layout serves the public /autopaper page and a
-  desktop window: one column on a phone, two on a tablet, four when wide.
+  screen, so the same layout serves a narrow phone window and a wide
+  desktop one: one column on a phone, two on a tablet, four when wide.
 
   Under the masthead, a row of section names (Front page, World, U.S.
   Politics, Business & Finance, Tech & AI) switches the page to one
@@ -22,9 +22,8 @@
   sections on the front page.
 
   A story is not read here: it opens in the Texture app's read-only
-  published mode, the same Texture UI as a user's own documents. On the
-  desktop that is a Texture window; on the public /autopaper page it is the
-  standalone story page (the parent page owns the URL).
+  published mode, the same Texture UI as a user's own documents: a Texture
+  window on the desktop, at the story's /pub/texture/<slug> route.
 
   Reads only the public front list route, logged out.
 -->
@@ -51,8 +50,6 @@
     type FrontStory,
   } from './autopaper';
 
-  /** True on the public /autopaper page; false inside a desktop window. */
-  export let standalone = false;
   export let windowId = '';
 
   /** The Autopaper tagline, as the app registry describes it. */
@@ -218,10 +215,6 @@
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     if (!route) return;
     event.preventDefault();
-    if (standalone) {
-      dispatch('openstory', { route, title: row.title });
-      return;
-    }
     dispatch('launchapp', {
       appId: 'texture',
       appName: 'Texture',
@@ -237,12 +230,9 @@
   });
 </script>
 
-<div class="autopaper" class:standalone data-autopaper data-autopaper-window-id={windowId || undefined}>
+<div class="autopaper" data-autopaper data-autopaper-window-id={windowId || undefined}>
   <div class="ap-sheet">
     <header class="ap-masthead" data-autopaper-masthead>
-      {#if $$slots.ear}
-        <div class="ap-ear"><slot name="ear" /></div>
-      {/if}
       <h1 class="ap-nameplate">Autopaper</h1>
       <p class="ap-edition" data-autopaper-edition>
         <time class="ap-edition-date" datetime={todayISO}>{todayLabel}</time>
@@ -412,12 +402,6 @@
   .ap-masthead {
     padding-top: 1.1rem;
     text-align: center;
-  }
-
-  .ap-ear {
-    display: flex;
-    justify-content: flex-end;
-    margin-bottom: 0.25rem;
   }
 
   .ap-nameplate {

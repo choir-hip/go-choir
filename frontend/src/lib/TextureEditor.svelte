@@ -39,7 +39,6 @@
   import {
     parseTextureRelatedRef,
     sourceEntityID,
-    sourceEntityTargetURL,
     textureEntityPinnedRevisionID,
   } from './texture-source-renderer';
   import { buildPublishedCitationContext, renderPublishedSourcesHTML } from './texture-published-citations';
@@ -89,13 +88,6 @@
   export let authenticated = false;
   export let appContext = {};
   export let windowId = '';
-  /**
-   * True when the Texture renders outside the desktop (the public
-   * /autopaper/<slug> story route): there is no window manager, so sources
-   * open as links and version moves are reported to the page, which owns
-   * the URL.
-   */
-  export let standalone = false;
 
   const dispatch = createEventDispatcher();
 
@@ -1588,12 +1580,6 @@
   }
 
   function handleSourceEntityOpen(entity) {
-    if (standalone) {
-      // No desktop to open a source window in: open the original instead.
-      const url = sourceEntityTargetURL(entity);
-      if (/^https?:\/\//i.test(url)) window.open(url, '_blank', 'noopener,noreferrer');
-      return;
-    }
     const payload = sourceEntityLaunchPayload(entity);
     if (payload) dispatch('launchapp', payload);
   }
@@ -1823,6 +1809,12 @@
   $: promptLabel = submitting ? 'Submitting…' : agentPending ? 'Revising…' : 'Revise';
   $: isPublishedMode = !!publishedBundle || !!appContext?.publishedRoutePath;
   $: isPublishedReadOnly = isPublishedMode && !publishedDerivativeActive;
+  // The story a "More research" ask is about: the bare route of a published
+  // story this window reads. Empty for a private document and for the
+  // reader's own derivative, which the toolbar then gives no button.
+  $: expandRoute = isPublishedReadOnly
+    ? bareOfPublishedRoute(publishedBundle?.route?.bare || publishedRoutePath || appContext?.publishedRoutePath || '')
+    : '';
   $: isEditorReadOnly = isViewingHistorical || loading || isPublishedReadOnly;
   $: editorSurfaceAriaLabel = isPublishedReadOnly ? 'Published Texture document' : 'Texture document';
   $: editorSurfaceAriaMultiline = isPublishedReadOnly ? undefined : 'true';
@@ -1945,7 +1937,7 @@
       {revisionLineLabel}
       stateLabel={toolbarStateLabel}
       isPublishedReader={isPublishedMode && !publishedDerivativeActive}
-      allowPublishedEdit={!standalone && !appContext?.publishedReadOnly}
+      allowPublishedEdit={!appContext?.publishedReadOnly}
       {isPublishedMode}
       {isViewingHistorical}
       {currentUser}
@@ -1960,6 +1952,7 @@
       sourceCandidateCount={sourceEntities.length}
       publishedSourceCount={publishedCitations?.sources?.length || 0}
       {publishedSourcesOpen}
+      {expandRoute}
       hasCurrentDoc={!!currentDoc}
       hasCurrentRevision={!!currentRevision}
       on:prev={handlePrevVersion}

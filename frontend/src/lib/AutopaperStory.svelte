@@ -1,10 +1,10 @@
 <!--
   AutopaperStory — one story on the Autopaper front page.
 
-  The headline is the link to the story's living page (/autopaper/<slug>,
+  The headline is the link to the story's living page (/pub/texture/<slug>,
   always its latest version). A quiet meta line says when it was last
   updated and how far it has developed, and links to the pinned version
-  the front page saw (/autopaper/<slug>/v<n>). The tier sets the size: the
+  the front page saw (/pub/texture/<slug>/v<n>). The tier sets the size: the
   lead (h2, with its dek), the top tier (h3 with dek), briefs and more
   stories (h3, headline only). The parent decides what a click opens.
 -->

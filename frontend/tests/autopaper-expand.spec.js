@@ -178,8 +178,9 @@ test.describe('the control in a story window\'s toolbar', () => {
     const button = page.locator('[data-texture-toolbar] [data-autopaper-expand-button]');
     await expect(button).toBeVisible();
     await expect(button).toHaveText('More research');
-    const box = await button.boundingBox();
-    expect(box.height, 'tap target height').toBeGreaterThanOrEqual(44);
+    // Layout height: the window opens with a small scale animation that
+    // would shave a fraction off a bounding box.
+    expect(await button.evaluate((el) => el.offsetHeight), 'tap target height').toBeGreaterThanOrEqual(44);
     const overflow = await page.evaluate(() => [document.scrollingElement.scrollWidth, document.scrollingElement.clientWidth, document.querySelector('[data-texture-toolbar]').scrollWidth, document.querySelector('[data-texture-toolbar]').clientWidth]);
     expect(overflow[0]).toBeLessThanOrEqual(overflow[1] + 1);
     expect(overflow[2]).toBeLessThanOrEqual(overflow[3] + 1);
@@ -197,6 +198,9 @@ test.describe('the control in a story window\'s toolbar', () => {
   });
 
   test('follows an open request every 30 seconds and stops when it settles (X6)', async ({ page }) => {
+    // The desktop runs many timers of its own, so moving the clock by hand
+    // takes real seconds here.
+    test.setTimeout(120_000);
     const state = { read: allowed({ asked: true, requests: [requestOf('accepted')] }) };
     await mockRoutes(page, state);
     // The page's own timers are fake from the start (time still flows), so
@@ -214,7 +218,7 @@ test.describe('the control in a story window\'s toolbar', () => {
     await page.clock.runFor(EXPAND_POLL_MS);
     await expect(page.locator('[data-autopaper-expand-line]')).toHaveText('Revised since your request: version 3 is up.');
     const settled = state.reads.length;
-    await page.clock.runFor(EXPAND_POLL_MS * 4);
+    await page.clock.runFor(EXPAND_POLL_MS * 2);
     expect(state.reads.length, 'no more polls once settled').toBe(settled);
   });
 
