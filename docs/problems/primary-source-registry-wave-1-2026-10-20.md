@@ -201,3 +201,20 @@ the paper (no `choir` CLI verb exists for it).
   claim-makers) is not built.
 - Nothing yet checks a registry row's freshness (analysis section 7 item
   6); a feed that goes stale stays `active`.
+
+## 8. Activation, 2026-10-21 00:35 UTC (owner, notes section 32: "schedule wave-1")
+
+- Paper healthy first: 28 schedules active, none overdue (one with
+  failures, a pre-existing row), no liveness-probe alerts in the last hour.
+  Read with the paper credential (states and timings only).
+- Started 10 rows, 15 s apart, each `max_items` 25. At 30 minutes:
+  `official:whitehouse:news`, `official:doj:news`,
+  `official:kremlin:en_news`, `official:uk_fcdo:news`. At 60 minutes:
+  `official:sec:press`, `official:federalregister:significant_rules`,
+  `official:federalregister:bis`, `official:uk_dsit:news`,
+  `official:cisa:advisories`, `official:eia:today_in_energy`. Every POST
+  returned 200, and the list then showed 38 active and none overdue.
+- Not started: `official:tw_cbc:press`. Its guest TLS test (step 2, one
+  `choir.PollSource` from research on the paper) has not run.
+- To verify after one interval: each new row has `consecutive_failures` 0,
+  has a next due time, and shows captures by source id.
