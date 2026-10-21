@@ -85,6 +85,10 @@
     const got = await fetchExpansion(route);
     if (mine !== token) return;
     if (got?.allowed === true) read = got;
+    // A request that failed on this side may still have reached the server
+    // (problem E3): when the read says this version was asked, its fate line
+    // is the truth, not the failure.
+    if (result.failure && got?.asked === true) notice = '';
     schedule();
   }
 

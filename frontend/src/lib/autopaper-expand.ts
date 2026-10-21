@@ -57,7 +57,16 @@ function isRequestView(value: unknown): value is ExpandRequestView {
     && typeof (value as ExpandRequestView).state === 'string';
 }
 
-export type AskResult = { ok: boolean; status: string; message: string };
+/**
+ * Why an ask failed when the server gave no refusal: the request never got an
+ * answer (network), the answer could not be read (body), or the server answered
+ * with a status and no refusal (status). Shown in the notice so a report of
+ * "Could not ask" says which (problem E3,
+ * docs/problems/research-more-slow-and-hidden-2026-10-21.md).
+ */
+export type AskFailure = 'network' | 'body' | 'status';
+
+export type AskResult = { ok: boolean; status: string; message: string; failure?: AskFailure };
 
 const DECLINED: Record<string, string> = {
   already_asked: 'This version was already asked to be expanded.',
@@ -69,11 +78,12 @@ const DECLINED: Record<string, string> = {
 };
 
 /** The notice for a refused or failed ask; plain text. */
-export function askNotice(httpStatus: number, status: string): string {
+export function askNotice(httpStatus: number, status: string, failure?: AskFailure): string {
   if (DECLINED[status]) return DECLINED[status];
   if (httpStatus === 401 || httpStatus === 403 || httpStatus === 404) return 'Asking for more research is not available here.';
   if (httpStatus === 429) return DECLINED.limit;
-  return 'Could not ask just now. Try again shortly.';
+  const kind = failure === 'status' ? `status ${httpStatus}` : failure;
+  return kind ? `Could not ask just now. Try again shortly. (${kind})` : 'Could not ask just now. Try again shortly.';
 }
 
 /** Ask the paper to expand a story. Never throws. */
@@ -86,16 +96,20 @@ export async function askExpansion(route: string): Promise<AskResult> {
       body: JSON.stringify({ route }),
     });
     let body: { status?: string } = {};
+    let unreadable = false;
     try {
       body = await res.json();
     } catch {
       body = {};
+      unreadable = true;
     }
     const status = typeof body?.status === 'string' ? body.status : '';
-    if (res.status === 202 && status === 'asked') return { ok: true, status, message: '' };
-    return { ok: false, status, message: askNotice(res.status, status) };
+    // 202 is the server's acceptance; an answer the page cannot read does not undo it.
+    if (res.status === 202 && (status === 'asked' || unreadable)) return { ok: true, status: 'asked', message: '' };
+    const failure: AskFailure | undefined = DECLINED[status] ? undefined : (unreadable ? 'body' : 'status');
+    return { ok: false, status, message: askNotice(res.status, status, failure), failure };
   } catch {
-    return { ok: false, status: '', message: askNotice(0, '') };
+    return { ok: false, status: '', message: askNotice(0, '', 'network'), failure: 'network' };
   }
 }
 
