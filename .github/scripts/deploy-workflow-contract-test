@@ -3,10 +3,15 @@ set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 workflow="$root/.github/workflows/ci.yml"
+# The programs Node B runs for prebuild and deploy live beside the workflow
+# and are read from the deployed commit (SEC-14); the contract covers both.
+prebuild_program="$root/.github/scripts/node-b-ci-prebuild"
+deploy_program="$root/.github/scripts/node-b-ci-deploy"
+sources=("$workflow" "$prebuild_program" "$deploy_program")
 
 require() {
   local pattern="$1"
-  if ! grep -Fq -- "$pattern" "$workflow"; then
+  if ! grep -Fq -- "$pattern" "${sources[@]}"; then
     echo "deploy workflow contract missing: $pattern" >&2
     exit 1
   fi
@@ -14,11 +19,41 @@ require() {
 
 reject() {
   local pattern="$1"
-  if grep -Fq -- "$pattern" "$workflow"; then
+  if grep -Fq -- "$pattern" "${sources[@]}"; then
     echo "deploy workflow contract forbids: $pattern" >&2
     exit 1
   fi
 }
+
+require_in() {
+  local file="$1"
+  local pattern="$2"
+  if ! grep -Fq -- "$pattern" "$file"; then
+    echo "deploy workflow contract missing from ${file#$root/}: $pattern" >&2
+    exit 1
+  fi
+}
+
+reject_in() {
+  local file="$1"
+  local pattern="$2"
+  if grep -Fq -- "$pattern" "$file"; then
+    echo "deploy workflow contract forbids in ${file#$root/}: $pattern" >&2
+    exit 1
+  fi
+}
+
+# SEC-14: every ssh to Node B checks the pinned host keys, and the workflow
+# carries no remote program of its own.
+require_in "$workflow" 'HostKeyAlias go-choir-node-b'
+require_in "$workflow" 'StrictHostKeyChecking yes'
+reject_in "$workflow" 'StrictHostKeyChecking=no'
+reject_in "$workflow" 'StrictHostKeyChecking no'
+reject_in "$workflow" 'ssh-keyscan'
+reject_in "$workflow" "<<'REMOTE_DEPLOY'"
+reject_in "$workflow" "<<'REMOTE_PREBUILD'"
+require_in "$deploy_program" 'echo "==> Staging deploy complete"'
+require_in "$prebuild_program" 'exit "$prebuild_status"'
 
 require 'DEPLOY_COMMIT: ${{ github.sha }}'
 require 'git fetch --no-tags origin "$DEPLOY_COMMIT"'
@@ -105,8 +140,8 @@ reject 'install_guest_image'
 reject 'ordinary_guest'
 reject '/tmp/guest-image-result'
 
-identity_line=$(grep -nF 'selected service build identity mismatch' "$workflow" | tail -n 1 | cut -d: -f1)
-receipt_line=$(grep -nF 'Published activation receipt' "$workflow" | cut -d: -f1)
+identity_line=$(grep -nF 'selected service build identity mismatch' "$deploy_program" | tail -n 1 | cut -d: -f1)
+receipt_line=$(grep -nF 'Published activation receipt' "$deploy_program" | cut -d: -f1)
 if [ -z "$identity_line" ] || [ -z "$receipt_line" ] || [ "$receipt_line" -le "$identity_line" ]; then
   echo "activation receipt must be published after selected-service identity verification" >&2
   exit 1
