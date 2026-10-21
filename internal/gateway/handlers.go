@@ -727,9 +727,9 @@ func (h *Handler) authenticateAutoputer(r *http.Request) (string, error) {
 }
 
 // authenticateBearer is authenticateAutoputer without the SEC-05 binding: the
-// bearer and the runtime-peer rule only. The Jev route uses it because it
-// keeps its own strict pin (BindPeer) in every binding mode, with its own
-// refusal.
+// bearer and the runtime-peer rule only, writing nothing. The Jev route uses
+// it with its own pin check and 403 (jevPeerAllowed); the Anthropic relay
+// uses it with a pin check of its own that ignores the rollout mode.
 func (h *Handler) authenticateBearer(r *http.Request) (string, error) {
 	auth := r.Header.Get("Authorization")
 	if auth == "" {
