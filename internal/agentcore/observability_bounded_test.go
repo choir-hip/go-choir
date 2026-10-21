@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/store"
 )
 
 // docs/problems/engineering-completion-path-cluster-2026-10-20.md failure 9:
@@ -84,13 +86,22 @@ func TestObservabilityMemoryDetailIsOptInAndSplitsTheStore(t *testing.T) {
 	}
 	splits, _ := detail["page_cache"].([]any)
 	labels := map[string]string{}
+	storeBytes := float64(0)
 	for _, s := range splits {
 		m, _ := s.(map[string]any)
 		label, _ := m["label"].(string)
 		root, _ := m["root"].(string)
 		labels[label] = root
+		if label == "store" {
+			storeBytes, _ = m["bytes"].(float64)
+		}
 	}
-	if labels["store"] != rt.cfg.StorePath || labels["nix_store"] != "/nix/store" {
-		t.Fatalf("page_cache trees = %v, want store at %q and the nix store", labels, rt.cfg.StorePath)
+	// StorePath is a 0-byte marker file; the Dolt workspace directory is the store.
+	workspace := store.TextureWorkspacePath(rt.cfg.StorePath)
+	if labels["store"] != workspace || storeBytes <= 0 {
+		t.Fatalf("store entry root=%q bytes=%v, want the workspace %q with bytes > 0", labels["store"], storeBytes, workspace)
+	}
+	if labels["store"] != workspace || labels["nix_store"] != "/nix/store" {
+		t.Fatalf("page_cache trees = %v, want store at %q and the nix store", labels, workspace)
 	}
 }
