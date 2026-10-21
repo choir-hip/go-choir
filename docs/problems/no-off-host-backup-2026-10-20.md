@@ -651,3 +651,35 @@ with this. either edit node-a or the mike repo").
       drill has restored it. Consequence: until the snapshot path is
       deployed and the store is migrated, a fallback sync would rebuild
       the copy in full.
+18. **Run 4, the first on the snapshot path (started 00:10 UTC on
+    2026-10-21).** Both stores were snapshotted, not synced: no
+    DOLT_BACKUP, no memory raise, and Store A's memory pressure stayed
+    at 0. Snapshot `cbe1e08b` added 6.5 GB and was written 27 minutes in
+    (run 3: 45). The repository check then ran for more than 73 minutes
+    (run 3: about 34), again at the memory line: 10.3 GB resident, its
+    4 GB of swap full, and about 290 MB/s of disk reads by page fault
+    with no read calls (`rchar` flat). Two findings, measured on Node B
+    at 01:40 to 01:50 UTC:
+    - **The source is 9.7 million files in about 1,440 directories.**
+      Almost all of them are three flat directories of the artifact
+      store: `sha256/pin-receipts` (4.58 million),
+      `sha256/computer-event` (2.29 million) and
+      `sha256/computer-event-payload` (2.29 million). restic stores a
+      directory as one tree blob, so each of these is a single tree of
+      hundreds of megabytes. The repository's index is 407 MB and its
+      tree packs 2.3 GB, for a 107 GB repository. `restic check` holds
+      those trees in memory, which is the memory line. This replaces
+      item 17's reclaim hypothesis with a measured shape; the per-tree
+      memory is still inferred, not measured.
+    - **The daily check downloads every tree again.** Without
+      `--with-cache`, `restic check` builds a new temporary cache
+      (`restic-check-cache-*`, 2.3 GB at 01:50) and so pulls all tree
+      packs over the forward each day. That is most of the run's
+      incoming traffic (6.9 GB in run 3).
+    Options, none taken yet: (a) `check --with-cache`, which removes the
+    download but not the memory; (b) move the structural check to the
+    weekly verify unit, so the daily run ends after the snapshot; (c)
+    shard the three flat directories by prefix in the artifact store,
+    which shrinks every tree and also helps the file system and any
+    restore. (c) is a substrate change in the artifact store and needs
+    its own problem record; (a) with (b) is the small step.
