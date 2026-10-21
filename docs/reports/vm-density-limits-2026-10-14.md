@@ -25,6 +25,20 @@ No load was run for this report and no computer was booted. Every number
 says whether it was measured or estimated. The estimates are what the
 benchmark at the end has to replace.
 
+**Lever status, 2026-10-21** (code at 8f71f9c64; tracked in the
+[checklist](../security-density-architecture-checklist-2026-10-21.md)): done: L1, L2. Partial: L3b (FIEMAP bound,
+unverified on staging), L6 (`GOMEMLIMIT`; Dolt cache knob off), L7
+(scheduled compaction), L8 (fstrim; discard waits for Firecracker 1.17),
+L11 (lease controller on test computers, no staging proof, no small base),
+L17 (jailer leaf without `memory.max`, jailer off), L19 (artifact GC).
+Not started: L3, L4, L5 (in-guest reclaim), L9, L10, L12, L16, L18, L20,
+L21. Rejected: L13, L14, L15; host KSM is still not explicitly off. The
+benchmark in §4 has not been run. Finding 3's page cache is on the shared
+store image only if a guest `fincore` read says so (RES-07). New: the
+jailer copies the store image per VM
+([jailer-copies-store-image-per-vm-2026-10-21.md](../problems/jailer-copies-store-image-per-vm-2026-10-21.md)).
+Versions moved since: Firecracker 1.16.1, guest kernel 6.18.55.
+
 ## The short answer
 
 Today's "90 on 128 GB" counts idle computers kept running at 1.21 GiB

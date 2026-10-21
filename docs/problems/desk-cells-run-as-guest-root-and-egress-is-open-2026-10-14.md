@@ -4,7 +4,14 @@ Date: 2026-10-14. Found by the computer isolation security review
 ([docs/reports/computer-isolation-security-review-2026-10-14.md](../reports/computer-isolation-security-review-2026-10-14.md),
 findings F4 and F6). This record re-reads the code on `origin/main`
 (980ffaf4e) and adds the guest egress inventory the fix needs. Status:
-documented; fix in progress on branch `fix/desk-cell-confinement`.
+documented; not fixed on main. The fix was local to the owner's iMac until
+2026-10-21, when it was pushed as `origin/fix/desk-cell-confinement`
+(fedb7656c) and the 10-15 rebase with its isolation self-test as
+`origin/land/desk-cell-confinement` (9cee80a2d); see items REC-01, SEC-01
+and SEC-03 of the
+[security, density and architecture checklist](../security-density-architecture-checklist-2026-10-21.md). The
+daemon-side gap that confinement alone does not close is
+[desk-frame-actions-not-role-checked-by-host-2026-10-21.md](desk-frame-actions-not-role-checked-by-host-2026-10-21.md).
 Mutation class of the fix: **red** (guest runtime child spawn boundary,
 guest image users, host firewall for guest taps).
 

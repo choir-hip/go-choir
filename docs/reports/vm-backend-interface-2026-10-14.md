@@ -14,6 +14,14 @@ Inputs: [isolation-runtimes-2026-10-14](../research/isolation-runtimes-2026-10-1
 
 ## 0. Status, scope and class
 
+**Correction (2026-10-21).** None of what this section lists is on main.
+The code was built locally and never pushed until 2026-10-21, when it was
+recovered from the owner's iMac as `origin/recovered/vmbackend-2026-10-14`
+(b6f27ded4; 977 commits behind main). Read "What landed" below as what
+that branch holds. ACTIVE item
+10's condition (jailer slice 1 and admission landed) is now met. Tracked as
+RES-20 in the [checklist](../security-density-architecture-checklist-2026-10-21.md).
+
 **What landed.** A new package, `internal/vmmanager/vmbackend`, that nothing
 imports yet:
 

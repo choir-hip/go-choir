@@ -2,9 +2,13 @@
 
 Date: 2026-10-14. Found by the isolation-runtimes research
 (docs/research/isolation-runtimes-2026-10-14.md, §5) from the vmctl unit
-and code; confirmed read-only on Node B at about 16:00 UTC. Status:
-slice 1 implemented behind `VMCTL_JAILER` (default off) on branch
-`vmm-jailer-slice1`, not deployed; see "Design: slice 1" and
+and code; confirmed read-only on Node B at about 16:00 UTC. Status
+(2026-10-21): slice 1 landed on main (9ac656298, 10e9f18e1) and is off on
+Node B (`VMCTL_JAILER=off`); the rollout is authorized (owner notes §27
+item 3) and steps 2-4 below are owed. Before turning it on, read
+[jailer-copies-store-image-per-vm-2026-10-21.md](jailer-copies-store-image-per-vm-2026-10-21.md):
+the jail gets a per-VM copy of the shared store image. Tracked as SEC-04
+and RES-05 in the [checklist](../security-density-architecture-checklist-2026-10-21.md). See "Design: slice 1" and
 "Implementation notes" below. Mutation class of any fix: red (vmctl, VM
 lifecycle, tenant isolation).
 

@@ -996,3 +996,103 @@ Taken as:
   description or the Go function, and a failure only one makes is recorded,
   not prompted around. This outranks the SlidesApp rewrites.
 - The multi-desk trace API and an in-Choir trace viewer are a later task.
+
+## 36. Isolation, egress and memory become one checklist; app agents get desks; agent trees scale out (2026-10-21)
+
+After a review comparing Choir with a "one microVM per user, many sandboxed
+agents inside" design, the owner, verbatim:
+
+- Goal: "a secure and lightweight way to have a dense multi-agent system
+  per user, but many agents per user. And I know that the micro VM is the
+  real security boundary, and there are ways to escape the Yaegi, and you
+  could escape the Linux sandboxing, but ideally, the point is that it
+  would be very hard to escape every layer." Also: "I'm very concerned
+  about being as resource efficient as possible, and we do have to be
+  careful to provide the right amount of networking. Like, researcher needs
+  networking, and engineering desk also needs some limited networking. You
+  have a grant system, but you can consider and reconsider how that works
+  as well."
+- App desks: "the plan is to add more desks. For example, we will add more
+  app agents. Texture is the first app agent. Mail will become an app
+  agent, as will other apps. You can imagine a video editing app agent.
+  Calendar, Slides app, everything will become an app agent to the extent
+  that it's actually used a bit more. And app agents get their own desks."
+- Scale-out: "the research desk could become a hierarchical tree of agents
+  with 100 or 1,000 leaf agents, and we'll need to figure out a way to
+  scale this across processes, whether they be capsules or across VMs, and
+  then eventually across hosts as well."
+- "I really want the architecture to be solid, secure, resource efficient,
+  and future-proof before we launch next week."
+- "we're already sharing the base OS across guests. That may be one reason
+  to accelerate the move or defaulting to Cloud Hypervisor." And: "we should
+  also look into our plans to move to app packages, because those two
+  things are related."
+- "I'm really going to prioritize getting all these fixes for security and
+  resource utilization done ASAP. So let's make it a checklist ... the
+  checklist should refer to whether it's work or plans that already exist.
+  And those plans should be updated as needed."
+
+Taken as:
+
+- The checklist is
+  [`docs/security-density-architecture-checklist-2026-10-21.md`](../security-density-architecture-checklist-2026-10-21.md);
+  P0 items land before launch, one red deploy at a time.
+- App agents are desks (as §5 already said); §23's "no new desks" was about
+  coordinator-invented desks, not app desks. Doctrine still names four
+  desks, so the app-desk tier needs the owner's wording (checklist ARCH-01).
+  App packages (S7) and app desks are one plan: a package carries its desk
+  (S7 addendum 2026-10-21).
+- Lead note on base-OS sharing: guests share one EROFS store image on disk
+  and in the host page cache, but each guest keeps its own decompressed
+  copy in guest RAM; sharing it in RAM needs virtio-pmem with DAX (density
+  L10), which both Firecracker and Cloud Hypervisor have, so it does not by
+  itself require Cloud Hypervisor. The jailer as built would also break the
+  host-side sharing (checklist RES-05). Cloud Hypervisor's own case is
+  VFIO/GPU, copy-on-write restore, live migration and balloon resize
+  (RES-20).
+
+Later the same day, on networking: "we do have to make sure that we're not
+overly constricting networking for research desk, which does need to be
+able to read the contents of arbitrary URLs safely, as well as searching
+the web, of course. Also our source ingestion pathway, and also for the
+network grants for engineering. And then we'll have specific policies in
+the future for future app agents that may need some kind of networking
+ingress and egress." Taken as the checklist's "Networking must enable, not
+starve" rules: the floor blocks wrong destinations, not the internet; no
+allowlist for research reads; moving a path to the host changes the route,
+not the capability; a list of capabilities each network item must prove
+still works; and item NET-10 (app-agent ingress and egress in the desk
+manifest).
+
+On the checklist's owner decisions, the owner, verbatim: "I'm not in a good
+position to push stuff right now. I think if you have iMac connection, you
+could handle that yourself." And: "Yeah, I do want to keep the Claude
+delegate just on the test computer until confinement lands." Taken as:
+DEC-01, a session on the owner's iMac finds the unpushed branches
+(`fix/desk-cell-confinement`, `feat/s7-0-app-packages`, the `vmbackend`
+work) and pushes them to origin as new branches without touching any
+working tree; DEC-03, the delegate stays on its one test computer until
+desk-cell confinement lands (checklist SEC-08).
+
+Shown the draft I26 wording (system desks management, engineering and
+research; app desks, one per app agent, Texture first; an app desk ships
+with its app package and is the sole agent writer of its app's object
+kinds), the owner, verbatim: "Yes, the doctrine change is good." Applied to
+docs/choir-doctrine.md I26, CLAUDE.md "Desk Ontology",
+docs/agent-product-doctrine.md and docs/choir-vision.md (checklist ARCH-01).
+
+On publishing security work in the public repo before it is fixed (raised by
+the iMac session before pushing the desk-cell branches), the owner,
+verbatim: "note that we're still really pre-launch, so I'm sure there are
+some security vulnerabilities in this repo, and I'm not that concerned
+about it because we're still going to do hardening before we really
+launch." Taken as: security findings and fix branches may be pushed to the
+public repo pre-launch (secrets never); the checklist's P0 hardening lands
+before launch.
+
+Then, verbatim: "push them." The owner approved the pushes in the iMac
+session, which pushed `fix/desk-cell-confinement` (fedb7656c),
+`land/desk-cell-confinement` (9cee80a2d), `feat/s7-0-app-packages`
+(4bc762102) and `recovered/vmbackend-2026-10-14` (b6f27ded4) as new
+branches, and saved a verified bundle of the two desk-cell branches to
+iCloud Drive "Choir Backups" (checklist REC-01, ARCH-03, RES-20).

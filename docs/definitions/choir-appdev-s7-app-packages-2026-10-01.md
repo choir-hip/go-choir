@@ -348,4 +348,29 @@ object-graph kinds named in that review (one generic app-document kind,
 on demand from a host content-addressed cache (the same pattern as the
 capsule Go module proxy) and distributed by station LU (guest updates).
 Sequencing: in the ledger metamission, S6 and S7 come after the Autopaper
-scaling work (owner priority), not before.
+scaling work (owner priority), not before. (Superseded by owner notes §28:
+S6, then S7-0.)
+
+## App packages carry app-agent desks (addendum 2026-10-21, owner direction)
+
+Owner notes §5 and §36: each app agent is its own RLM desk, app agents get
+their own desks, and many more app desks are coming (Mail, Calendar,
+Slides, a video editor). The manifest above has no desk component, and the
+email desk design
+([agentic-email-desk-2026-10-14.md](../reports/agentic-email-desk-2026-10-14.md))
+never mentions packages, so the two plans are related but not yet joined.
+When S7-0 is designed:
+
+- An app package may carry its app desk as a desk manifest (owned object
+  kinds, verbs, role table, sandbox profile and taint class, egress verbs,
+  compute and memory class, model policy, addressing, wake and dormancy,
+  restart contract); install registers the desk, uninstall retires it.
+- The manifest-declared grants in the addendum above attach to that desk.
+- Per-app sole writers: the desk is the one writer of its app's object
+  kinds, as Texture is for documents.
+
+Items ARCH-01 to ARCH-05 of the
+[security, density and architecture checklist](../security-density-architecture-checklist-2026-10-21.md) track
+this. Still owed in this file: owner ruling D1 (whether a package is
+installed is a tape fact, not part of the release closure; owner notes §23)
+and the edits listed in `choir-lp-s6-commit-gate-2026-10-20.md:391-397`.

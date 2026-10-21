@@ -22,8 +22,12 @@ architecture. Do not let this file drift into doctrine.
 
 ## Desk Ontology
 
-The persistent root RLM desks are **Texture**, **management**, **engineering**,
-and **research**. Texture is the sole writer of canonical document revisions;
+Persistent root RLM desks come in two kinds (doctrine I26, owner 2026-10-21).
+**System desks:** **management**, **engineering** and **research**. **App
+desks:** one per app agent, **Texture** first, then Mail, Calendar, Slides and
+others as apps become app agents; an app desk ships with its app package and
+is the sole agent writer of its app's object kinds. Texture is the sole writer
+of canonical document revisions;
 management owns computer-wide coherence and admits engineering through delegated
 casts; engineering performs capsule-bound mutation; research has read-only
 world-evidence authority. The commitment ledger is the durable substrate:

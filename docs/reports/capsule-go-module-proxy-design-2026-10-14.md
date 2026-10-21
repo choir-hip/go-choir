@@ -1,8 +1,9 @@
 # Design: A Host Go Module Proxy for Engineering Capsules
 
 Date: 2026-10-14. Mutation class: **red** (capsule egress policy, a new host
-service, a new guest-to-host tap port). Status: built on a branch, not
-pushed or deployed.
+service, a new guest-to-host tap port). Status (2026-10-21): landed on main
+(3c6347e81, c841fa474; host unit in `nix/node-b.nix`, tap port 8088). Other ecosystems' mirrors are item
+NET-02 of the [checklist](../security-density-architecture-checklist-2026-10-21.md).
 
 Decision source: the owner, 2026-10-14, on
 [capsule-go-modules-decision-2026-10-14.md](capsule-go-modules-decision-2026-10-14.md):

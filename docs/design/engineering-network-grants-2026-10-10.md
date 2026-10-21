@@ -1,7 +1,12 @@
 # Engineering network grants — design
 
 Date: 2026-10-10
-Status: design proposal (not settled). Source: owner request 2026-10-10;
+Status: design proposal (not settled). Built so far (2026-10-21): L2 only,
+the per-capsule allowlisting proxy (284f7c1a2, `ecosystem_proxy`); not built:
+L1, L3, L4, `EgressGrant`, `request_grant`/`decide_grant`, dep-lock. Open
+P1 against L2: [egress-proxy-tunnel-identity-2026-10-21.md](../problems/egress-proxy-tunnel-identity-2026-10-21.md);
+the mirror argument in principle 2 below is its durable fix. Tracked as
+SEC-06, NET-02 and NET-05 in the [checklist](../security-density-architecture-checklist-2026-10-21.md). Source: owner request 2026-10-10;
 synthesis by a research agent. Under standing question 1 this is a
 **proposal** until the owner ratifies it.
 Mutation class of this document: `green`. Every implementation phase below is

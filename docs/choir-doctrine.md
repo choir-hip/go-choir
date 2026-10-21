@@ -388,14 +388,19 @@ bound release or an explicit frontend join; vmctl route CAS greens only after
 that serving join. CI pointer rotation and a host `frontend-current` tree are not
 computer changes. The current host-global SPA is non-conformance, not ontology.
 
-`I26` Each computer has four persistent root RLM desks — management,
-engineering, research, and Texture — running yaegi Go cells in killable
-subprocesses. Texture is the sole agent writer of document text; research has
-read-only world and message authority; engineering mutates only through
-capsule-bound per-assignment sub-RLM cells; management supplies computer-wide
-coherence/error correction, resource arbitration, delegated-`choir.Cast`
-admission into engineering, and owner escalation, holds no document/event
-mutation authority, and is not a concurrency limiter.
+`I26` Each computer has persistent root RLM desks of two kinds, each running
+yaegi Go cells in killable subprocesses. System desks: management, engineering
+and research. App desks: one per app agent; Texture is the first, then Mail,
+Calendar, Slides and others as apps become app agents. An app desk ships with
+its app package and is the sole agent writer of its app's object kinds
+(Texture: document text). Research has read-only world and message authority;
+engineering mutates only through capsule-bound per-assignment sub-RLM cells;
+management supplies computer-wide coherence/error correction, resource
+arbitration, delegated-`choir.Cast` admission into engineering, and owner
+escalation, holds no document/event mutation authority, and is not a
+concurrency limiter. Desks reach each other only by semantic act.
+(Owner-ratified 2026-10-21, owner notes §36. Until S7-0 packages the existing
+apps, Texture is the only app desk and is not yet packaged.)
 
 The management admission ledger permits one live engineering assignment per
 computer in the initial sequential phase: each request carries a durable

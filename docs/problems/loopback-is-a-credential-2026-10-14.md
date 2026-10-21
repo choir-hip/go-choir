@@ -3,8 +3,11 @@
 Date: 2026-10-14. Source: the computer isolation security review
 (docs/reports/computer-isolation-security-review-2026-10-14.md, findings
 F2 and F3, section 3.5), re-checked read-only on Node B at about 19:30 UTC
-and against the code at origin/main 980ffaf4e. Status: documented; repair
-in progress on branch `security/internal-route-auth` (not deployed).
+and against the code at origin/main 980ffaf4e. Status (2026-10-21): the
+host-internal credential landed (44656ef90) and enforces (9a42a7abb); Dolt
+auth is at stage "users" and owner acts are in observe; residuals below,
+including the proxy object-graph route found 2026-10-21. Tracked as SEC-11
+and SEC-12 in the [checklist](../security-density-architecture-checklist-2026-10-21.md).
 Mutation class of any fix: **red** (auth/session, gateway credentials,
 vmctl, deployment routing).
 
@@ -186,3 +189,11 @@ check.
 - One shared secret, not one per caller: any credential holder can call
   any internal route. Per-caller secrets or `SO_PEERCRED` per route is
   the next step once services have distinct uids.
+- **The proxy's object-graph route still trusts loopback** (found
+  2026-10-21, code at 8f71f9c64). `requirePlatformObjectGraphCaller`
+  accepts a loopback peer plus `X-Internal-Caller: true` without
+  `hostauth.Authorize`, and `trustedInternalProxyTransport` also admits
+  `192.0.2.*` in production (`internal/proxy/guest_authority.go:20-51`).
+  The proxy then forwards to corpusd marked internal
+  (`internal/proxy/handlers.go:1799-1820`), so any host process can borrow
+  corpusd's internal authority on `/internal/platform/objects*`.
