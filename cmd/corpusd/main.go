@@ -156,9 +156,14 @@ func main() {
 	if err := handler.ConfigureConsensusActuator(consensus); err != nil {
 		log.Fatalf("corpusd consensus poster routes: %v", err)
 	}
-	escrowPrivateKey, err := keyescrow.LoadOrGeneratePrivateKey(cfg.KeyEscrowKeyPath)
+	// CHOIR_KEY_ESCROW_SEAL unset is today's load-or-generate; permit and
+	// require read a sealed key under the KEK and never generate (FP9).
+	escrowPrivateKey, escrowKeyState, escrowSealMode, err := keyescrow.LoadConfiguredPrivateKey(cfg.KeyEscrowKeyPath, os.Getenv)
 	if err != nil {
 		log.Fatalf("corpusd key escrow key: %v", err)
+	}
+	if escrowSealMode != keyescrow.SealOff {
+		log.Printf("corpusd key escrow key: %s (seal mode %s)", escrowKeyState, escrowSealMode)
 	}
 	if err := handler.ConfigureKeyEscrow(escrowPrivateKey, cfg.KeyEscrowOperatorsRaw); err != nil {
 		log.Fatalf("corpusd key escrow routes: %v", err)
