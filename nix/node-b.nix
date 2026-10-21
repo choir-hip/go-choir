@@ -466,6 +466,20 @@ let
     mail = "-${mailDir}";
   };
   hiddenSecretsExcept = keep: lib.attrValues (removeAttrs hostSecretPaths keep);
+  # SEC-05 gateway bearer binding (internal/gateway/bearer_binding.go;
+  # docs/problems/gateway-bearer-works-from-any-computer-2026-10-21.md): a
+  # computer's gateway bearer is accepted only from the address vmctl
+  # attests for that computer. Staged like the host-internal credential:
+  #   "observe"  log and count what enforce would refuse ("would_refuse" in
+  #              the gateway's /health bearer_binding); refuse nothing.
+  #   "enforce"  refuse a pinned bearer from any other address; bind an
+  #              unpinned one to its first caller.
+  #   "strict"   enforce, and refuse an unpinned bearer.
+  #   "off"      the old behavior.
+  # Flip to "enforce" once would_refuse has stayed 0 for the paper and the
+  # test computers across a planned refresh and a deploy. Rollback: the
+  # previous mode and redeploy. An unset or unknown value enforces in code.
+  gatewayBearerBindingMode = "observe";
   # claude delegate (docs/design/claude-delegate-slice1-2026-10-14.md): the
   # owner's setup-token token, root 0400, written by the owner only. Every
   # unit, vmctl included, keeps the secrets dir hidden; vmctl's start copies
@@ -1927,6 +1941,7 @@ in
         # proactively rotated. Use a longer TTL in staging to avoid
         # authentication lapses during normal multi-hour sessions.
         "GATEWAY_AUTOPUTER_TOKEN_TTL=720h"
+        "GATEWAY_BEARER_BINDING=${gatewayBearerBindingMode}"
         # SearXNG self-hosted meta-search (free, no credits). SearXNGProvider
         # is first in the provider list, so this absorbs the majority of
         # search load. Paid providers (Tavily, Brave, etc.) act as fallback.
