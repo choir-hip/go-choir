@@ -1,5 +1,9 @@
+<script context="module" lang="ts">
+  let menuSeq = 0;
+</script>
+
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  import { afterUpdate, createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
   import AutopaperExpand from './AutopaperExpand.svelte';
 
   export let toolbarHidden = false;
@@ -48,10 +52,183 @@
   $: normalizedRevisionLineLabel = String(revisionLineLabel || '').trim().toLowerCase();
   $: normalizedStateLabel = String(stateLabel || '').trim().toLowerCase();
   $: visibleStateLabel = normalizedStateLabel && normalizedStateLabel !== normalizedRevisionLineLabel ? stateLabel : '';
+
+  // The toolbar is one row. The version controls stay; every other control is
+  // an item (data-tb-item) in .doc-actions with a priority (1 is kept longest;
+  // ties keep their row order, data-tb-slot). When the items are wider than the
+  // row, the lowest-priority ones are moved, as the same DOM nodes, into the
+  // "more" menu, so there is one copy of each control and its state. The fit is
+  // measured, never a breakpoint: a ResizeObserver on the row and its items
+  // re-runs it for window width, browser zoom, large text and label changes.
+  const menuId = `texture-toolbar-menu-${++menuSeq}`;
+  let rowEl: HTMLElement;
+  let versionEl: HTMLElement;
+  let stateEl: HTMLElement;
+  let actionsEl: HTMLElement;
+  let ghostEl: HTMLElement;
+  let moreEl: HTMLElement;
+  let moreBtnEl: HTMLButtonElement;
+  let menuEl: HTMLElement;
+  let overflowing = false;
+  let menuOpen = false;
+  // The fate line of "More research", shown as a status row under the controls
+  // wherever the button itself sits (row or menu).
+  let expandLine = '';
+  let observer: ResizeObserver | null = null;
+  const observed = new Set<Element>();
+
+  $: if (!(isPublishedReader && expandRoute)) expandLine = '';
+  $: if (toolbarHidden || !overflowing) menuOpen = false;
+
+  const asItems = (host: HTMLElement | undefined) =>
+    host ? (Array.from(host.children) as HTMLElement[]).filter((el) => el.hasAttribute('data-tb-item')) : [];
+  const num = (el: HTMLElement, key: 'tbSlot' | 'tbPriority') => Number(el.dataset[key]);
+  const bySlot = (a: HTMLElement, b: HTMLElement) => num(a, 'tbSlot') - num(b, 'tbSlot');
+  const byPriority = (a: HTMLElement, b: HTMLElement) => num(a, 'tbPriority') - num(b, 'tbPriority') || bySlot(a, b);
+  const px = (value: string) => parseFloat(value) || 0;
+  const sameList = (a: HTMLElement[], b: HTMLElement[]) => a.length === b.length && a.every((el, i) => el === b[i]);
+
+  function fit() {
+    if (!rowEl || !actionsEl || !menuEl || !ghostEl || !moreBtnEl) return;
+    const rowWidth = rowEl.clientWidth;
+    if (!rowWidth) return;
+    // An item with nothing in it (a control that renders nothing for this
+    // reader) takes no room and needs no menu.
+    const all = [...asItems(actionsEl), ...asItems(menuEl)].filter((el) => el.firstElementChild);
+
+    // Natural widths come from inert copies in an off-screen row, so the real
+    // controls are not moved just to be measured.
+    ghostEl.replaceChildren(...all.map((el) => el.cloneNode(true)), moreBtnEl.cloneNode(true));
+    const widths = all.map((_, i) => ghostEl.children[i].getBoundingClientRect().width);
+    const moreWidth = ghostEl.lastElementChild?.getBoundingClientRect().width || 0;
+    ghostEl.replaceChildren();
+
+    const rowGap = px(getComputedStyle(rowEl).columnGap);
+    const itemGap = px(getComputedStyle(actionsEl).columnGap);
+    const stateGap = stateEl && getComputedStyle(stateEl).display !== 'none' ? rowGap : 0;
+    const room = rowWidth - versionEl.getBoundingClientRect().width - rowGap - stateGap;
+    const need = widths.reduce((sum, w) => sum + w, 0) + itemGap * Math.max(0, all.length - 1);
+
+    let keep = all;
+    if (need > room) {
+      // Keep controls in priority order until the next one does not fit; a
+      // smaller, lower-priority control never jumps the queue.
+      const left = room - rowGap - moreWidth;
+      const kept: HTMLElement[] = [];
+      let used = 0;
+      for (const el of [...all].sort(byPriority)) {
+        const add = widths[all.indexOf(el)] + (kept.length ? itemGap : 0);
+        if (used + add > left) break;
+        kept.push(el);
+        used += add;
+      }
+      keep = kept;
+    }
+    const out = all.filter((el) => !keep.includes(el)).sort(byPriority);
+    const inRow = keep.slice().sort(bySlot);
+
+    if (!sameList(asItems(menuEl).filter((el) => el.firstElementChild), out) || !sameList(asItems(actionsEl).filter((el) => el.firstElementChild), inRow)) {
+      const active = document.activeElement as HTMLElement | null;
+      for (const el of inRow) {
+        if (el.parentElement === actionsEl) continue;
+        const next = asItems(actionsEl).find((other) => num(other, 'tbSlot') > num(el, 'tbSlot'));
+        actionsEl.insertBefore(el, next || null);
+      }
+      for (const el of out) if (el.parentElement !== menuEl) menuEl.appendChild(el);
+      if (!sameList(asItems(menuEl).filter((el) => el.firstElementChild), out)) for (const el of out) menuEl.appendChild(el);
+      // Moving a node drops its focus; the user keeps their place.
+      if (active && active !== document.activeElement && (actionsEl.contains(active) || menuEl.contains(active))) active.focus({ preventScroll: true });
+    }
+    overflowing = out.length > 0;
+    watch();
+  }
+
+  // Observe the row, the version controls and every item (wherever it sits).
+  function watch() {
+    if (!observer) return;
+    const want = new Set<Element>([rowEl, versionEl, ...asItems(actionsEl), ...asItems(menuEl)]);
+    for (const el of observed) if (!want.has(el)) { observer.unobserve(el); observed.delete(el); }
+    for (const el of want) if (el && !observed.has(el)) { observer.observe(el); observed.add(el); }
+  }
+
+  onMount(() => {
+    observer = new ResizeObserver(() => fit());
+    fit();
+    // Web fonts change the widths after the first measure.
+    void document.fonts?.ready.then(fit);
+  });
+  afterUpdate(fit);
+  onDestroy(() => {
+    observer?.disconnect();
+    observer = null;
+    observed.clear();
+  });
+
+  const menuFocusables = () =>
+    menuEl
+      ? (Array.from(menuEl.querySelectorAll('button:not(:disabled), summary')) as HTMLElement[]).filter(
+          (el) => el.getClientRects().length && (el.tagName === 'SUMMARY' || !el.closest('details:not([open])')),
+        )
+      : [];
+
+  async function toggleMenu() {
+    menuOpen = !menuOpen;
+    if (!menuOpen) return;
+    await tick();
+    menuFocusables()[0]?.focus();
+  }
+
+  function closeMenu(refocus = false) {
+    // A publish confirmation that opened inside the menu closes with it.
+    if (menuOpen && publishMenuOpen && menuEl.querySelector('[data-texture-publish-menu]')) dispatch('publish-cancel');
+    menuOpen = false;
+    if (refocus) moreBtnEl?.focus();
+  }
+
+  function onMoreKeydown(event: KeyboardEvent) {
+    if (!menuOpen) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      closeMenu(true);
+      return;
+    }
+    if (!menuEl.contains(event.target as Node)) return;
+    const list = menuFocusables();
+    const at = list.indexOf(document.activeElement as HTMLElement);
+    const target =
+      event.key === 'ArrowDown' ? list[(at + 1) % list.length]
+      : event.key === 'ArrowUp' ? list[(at - 1 + list.length) % list.length]
+      : event.key === 'Home' ? list[0]
+      : event.key === 'End' ? list[list.length - 1]
+      : null;
+    if (!target) return;
+    event.preventDefault();
+    target.focus();
+  }
+
+  // Doing something from the menu closes it, except the controls that open
+  // something of their own (Download, Publish).
+  function onMenuClick(event: MouseEvent) {
+    const button = (event.target as HTMLElement).closest('button');
+    if (button && menuEl.contains(button) && !button.hasAttribute('aria-haspopup')) closeMenu(true);
+  }
+
+  function onWindowPointerDown(event: PointerEvent) {
+    if (menuOpen && moreEl && !moreEl.contains(event.target as Node)) closeMenu();
+  }
+
+  function onMoreFocusOut(event: FocusEvent) {
+    const next = event.relatedTarget as Node | null;
+    if (menuOpen && next && !moreEl.contains(next)) closeMenu();
+  }
 </script>
 
+<svelte:window on:pointerdown={onWindowPointerDown} />
+
 <div class="doc-toolbar" class:toolbar-hidden={toolbarHidden} data-texture-toolbar>
-  <div class="version-controls">
+  <div class="tb-row" bind:this={rowEl}>
+  <div class="version-controls" bind:this={versionEl}>
     <span class="nav-version" data-texture-version>{versionLabel}</span>
     <button
       class="nav-btn"
@@ -76,73 +253,19 @@
     <span class="draft-line" data-texture-draft-line>{revisionLineLabel}</span>
   </div>
 
-  <div class="doc-state" class:doc-state-empty={!visibleStateLabel} data-texture-state aria-hidden={!visibleStateLabel}>
+  <div class="doc-state" class:doc-state-empty={!visibleStateLabel} data-texture-state aria-hidden={!visibleStateLabel} bind:this={stateEl}>
     {visibleStateLabel}
   </div>
 
-  {#if isPublishedReader && expandRoute}
-    <AutopaperExpand route={expandRoute} />
-  {/if}
-
-  <div class="doc-actions">
+  <div class="doc-actions" bind:this={actionsEl}>
+    {#if isPublishedReader && expandRoute}
+      <div class="tb-item" data-tb-item data-tb-slot="0" data-tb-priority="2">
+        <AutopaperExpand route={expandRoute} showLine={false} bind:line={expandLine} />
+      </div>
+    {/if}
     {#if isPublishedReader}
       {#if publishedSourceCount}
-        <button
-          class="secondary-action"
-          class:active={publishedSourcesOpen}
-          data-texture-published-sources-toggle
-          aria-pressed={publishedSourcesOpen}
-          on:click={() => dispatch('sources')}
-          disabled={loading}
-        >
-          <span class="label-full">Sources {publishedSourceCount}</span>
-          <span class="label-compact">Sources</span>
-          <span class="label-tiny">Sources</span>
-        </button>
-      {/if}
-      <button
-        class="secondary-action"
-        data-texture-copy-full-text
-        on:click={() => dispatch('copy-full-text')}
-        disabled={loading || publishedActionPending}
-      >
-        Copy text
-      </button>
-      <details class="download-menu" data-texture-download-menu>
-        <summary>Download</summary>
-        <button type="button" data-texture-download-md on:click={() => dispatch('download', 'md')} disabled={loading || publishedActionPending}>Markdown</button>
-        <button type="button" data-texture-download-txt on:click={() => dispatch('download', 'txt')} disabled={loading || publishedActionPending}>Text</button>
-        <button type="button" data-texture-download-html on:click={() => dispatch('download', 'html')} disabled={loading || publishedActionPending}>HTML</button>
-        <button type="button" data-texture-download-docx on:click={() => dispatch('download', 'docx')} disabled={loading || publishedActionPending}>DOCX</button>
-        <button type="button" data-texture-download-pdf on:click={() => dispatch('download', 'pdf')} disabled={loading || publishedActionPending}>PDF</button>
-      </details>
-      {#if allowPublishedEdit}
-        <button
-          class="prompt-btn"
-          data-texture-edit-published
-          on:click={() => dispatch('edit-published')}
-          disabled={loading || publishedActionPending}
-        >
-          <span class="label-full">{publishedActionPending ? 'Opening…' : currentUser ? 'Edit my version' : 'Edit'}</span>
-          <span class="label-compact">{publishedActionPending ? 'Opening…' : 'Edit'}</span>
-          <span class="label-tiny">{publishedActionPending ? '…' : 'E'}</span>
-        </button>
-      {/if}
-    {:else}
-      {#if agentPending}
-        <button
-          class="secondary-action danger"
-          data-texture-cancel-revision
-          on:click={() => dispatch('cancel-revision')}
-          disabled={cancelPending}
-        >
-          <span class="label-full">{cancelPending ? 'Cancelling…' : 'Cancel'}</span>
-          <span class="label-compact">{cancelPending ? '…' : 'Cancel'}</span>
-          <span class="label-tiny">{cancelPending ? '…' : 'X'}</span>
-        </button>
-      {/if}
-      {#if isPublishedMode}
-        {#if publishedSourceCount}
+        <div class="tb-item" data-tb-item data-tb-slot="2" data-tb-priority="5">
           <button
             class="secondary-action"
             class:active={publishedSourcesOpen}
@@ -155,107 +278,222 @@
             <span class="label-compact">Sources</span>
             <span class="label-tiny">Sources</span>
           </button>
-        {/if}
-        <button
-          class="secondary-action"
-          data-texture-submit-proposal
-          on:click={() => dispatch('submit-proposal')}
-          disabled={loading || submitting || agentPending || publishedActionPending || !hasCurrentDoc}
-        >
-          <span class="label-full">{publishedActionPending ? 'Submitting…' : 'Propose'}</span>
-          <span class="label-compact">{publishedActionPending ? '…' : 'Propose'}</span>
-          <span class="label-tiny">{publishedActionPending ? '…' : 'Propose'}</span>
-        </button>
-      {:else}
-        <button
-          class="secondary-action"
-          data-texture-source-panel
-          on:click={() => dispatch('sources')}
-          disabled={loading || submitting || agentPending || !hasCurrentDoc}
-        >
-          <span class="label-full">Sources{sourceCandidateCount ? ` ${sourceCandidateCount}` : ''}</span>
-          <span class="label-compact">Sources</span>
-          <span class="label-tiny">Sources</span>
-        </button>
-        {#if isViewingHistorical}
-          <button
-            class="secondary-action"
-            data-texture-restore-version
-            on:click={() => dispatch('restore')}
-            disabled={loading || submitting || agentPending || restorePending || !hasCurrentRevision}
-          >
-            <span class="label-full">{restorePending ? 'Restoring…' : 'Restore'}</span>
-            <span class="label-compact">{restorePending ? '…' : 'Restore'}</span>
-            <span class="label-tiny">{restorePending ? '…' : 'Restore'}</span>
-          </button>
-        {/if}
-        <div class="publish-menu-wrap">
-          <button
-            class="secondary-action publish-action"
-            data-texture-publish
-            aria-haspopup="menu"
-            aria-expanded={publishMenuOpen}
-            on:click={() => dispatch('toggle-publish')}
-            disabled={publishDisabled}
-          >
-            <span class="label-full">{publishedActionPending ? 'Publishing…' : `Publish ${versionLabel}`}</span>
-            <span class="label-compact">{publishedActionPending ? '…' : 'Publish'}</span>
-            <span class="label-tiny">{publishedActionPending ? '…' : 'Publish'}</span>
-          </button>
-          {#if publishMenuOpen}
-            <div class="publish-menu" data-texture-publish-menu role="menu" aria-label="Publish this version">
-              <div class="publish-menu-heading">
-                <p class="eyebrow">Publish</p>
-                <h3>Publish {versionLabel}</h3>
-                <p>This creates a public link with the current text and source snapshots.</p>
-                <p class="publish-menu-opinion-note">Or list it in the Autopaper Opinion section, under a short author handle (never your email).</p>
-              </div>
-              <div class="publish-menu-actions">
-                <button
-                  type="button"
-                  class="primary-action"
-                  data-texture-publish-confirm
-                  on:click={() => dispatch('publish-confirm')}
-                  disabled={publishedActionPending}
-                >
-                  {publishedActionPending ? 'Publishing…' : 'Publish'}
-                </button>
-                <button
-                  type="button"
-                  class="secondary-action"
-                  data-texture-publish-opinion
-                  on:click={() => dispatch('publish-opinion-confirm')}
-                  disabled={publishedActionPending}
-                >
-                  {publishedActionPending ? 'Publishing…' : 'Publish as opinion'}
-                </button>
-                <button
-                  type="button"
-                  class="secondary-action"
-                  data-texture-publish-cancel
-                  on:click={() => dispatch('publish-cancel')}
-                  disabled={publishedActionPending}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          {/if}
         </div>
       {/if}
-      <button
-        class="prompt-btn revise-action"
-        data-texture-prompt
-        data-texture-save
-        on:click={() => dispatch('prompt')}
-        disabled={loading || submitting || agentPending || isViewingHistorical || publishedActionPending}
-      >
-        <span class="label-full">{promptLabel}</span>
-        <span class="label-compact">{promptLabel}</span>
-        <span class="label-tiny">{submitting || agentPending ? '…' : promptLabel}</span>
-      </button>
+      <div class="tb-item" data-tb-item data-tb-slot="3" data-tb-priority="6">
+        <button
+          class="secondary-action"
+          data-texture-copy-full-text
+          on:click={() => dispatch('copy-full-text')}
+          disabled={loading || publishedActionPending}
+        >
+          Copy text
+        </button>
+      </div>
+      <div class="tb-item" data-tb-item data-tb-slot="4" data-tb-priority="7">
+        <details class="download-menu" data-texture-download-menu>
+          <summary>Download</summary>
+          <button type="button" data-texture-download-md on:click={() => dispatch('download', 'md')} disabled={loading || publishedActionPending}>Markdown</button>
+          <button type="button" data-texture-download-txt on:click={() => dispatch('download', 'txt')} disabled={loading || publishedActionPending}>Text</button>
+          <button type="button" data-texture-download-html on:click={() => dispatch('download', 'html')} disabled={loading || publishedActionPending}>HTML</button>
+          <button type="button" data-texture-download-docx on:click={() => dispatch('download', 'docx')} disabled={loading || publishedActionPending}>DOCX</button>
+          <button type="button" data-texture-download-pdf on:click={() => dispatch('download', 'pdf')} disabled={loading || publishedActionPending}>PDF</button>
+        </details>
+      </div>
+      {#if allowPublishedEdit}
+        <div class="tb-item" data-tb-item data-tb-slot="5" data-tb-priority="3">
+          <button
+            class="prompt-btn"
+            data-texture-edit-published
+            on:click={() => dispatch('edit-published')}
+            disabled={loading || publishedActionPending}
+          >
+            <span class="label-full">{publishedActionPending ? 'Opening…' : currentUser ? 'Edit my version' : 'Edit'}</span>
+            <span class="label-compact">{publishedActionPending ? 'Opening…' : 'Edit'}</span>
+            <span class="label-tiny">{publishedActionPending ? '…' : 'E'}</span>
+          </button>
+        </div>
+      {/if}
+    {:else}
+      {#if agentPending}
+        <div class="tb-item" data-tb-item data-tb-slot="1" data-tb-priority="2">
+          <button
+            class="secondary-action danger"
+            data-texture-cancel-revision
+            on:click={() => dispatch('cancel-revision')}
+            disabled={cancelPending}
+          >
+            <span class="label-full">{cancelPending ? 'Cancelling…' : 'Cancel'}</span>
+            <span class="label-compact">{cancelPending ? '…' : 'Cancel'}</span>
+            <span class="label-tiny">{cancelPending ? '…' : 'X'}</span>
+          </button>
+        </div>
+      {/if}
+      {#if isPublishedMode}
+        {#if publishedSourceCount}
+          <div class="tb-item" data-tb-item data-tb-slot="2" data-tb-priority="5">
+            <button
+              class="secondary-action"
+              class:active={publishedSourcesOpen}
+              data-texture-published-sources-toggle
+              aria-pressed={publishedSourcesOpen}
+              on:click={() => dispatch('sources')}
+              disabled={loading}
+            >
+              <span class="label-full">Sources {publishedSourceCount}</span>
+              <span class="label-compact">Sources</span>
+              <span class="label-tiny">Sources</span>
+            </button>
+          </div>
+        {/if}
+        <div class="tb-item" data-tb-item data-tb-slot="6" data-tb-priority="4">
+          <button
+            class="secondary-action"
+            data-texture-submit-proposal
+            on:click={() => dispatch('submit-proposal')}
+            disabled={loading || submitting || agentPending || publishedActionPending || !hasCurrentDoc}
+          >
+            <span class="label-full">{publishedActionPending ? 'Submitting…' : 'Propose'}</span>
+            <span class="label-compact">{publishedActionPending ? '…' : 'Propose'}</span>
+            <span class="label-tiny">{publishedActionPending ? '…' : 'Propose'}</span>
+          </button>
+        </div>
+      {:else}
+        <div class="tb-item" data-tb-item data-tb-slot="2" data-tb-priority="5">
+          <button
+            class="secondary-action"
+            data-texture-source-panel
+            on:click={() => dispatch('sources')}
+            disabled={loading || submitting || agentPending || !hasCurrentDoc}
+          >
+            <span class="label-full">Sources{sourceCandidateCount ? ` ${sourceCandidateCount}` : ''}</span>
+            <span class="label-compact">Sources</span>
+            <span class="label-tiny">Sources</span>
+          </button>
+        </div>
+        {#if isViewingHistorical}
+          <div class="tb-item" data-tb-item data-tb-slot="7" data-tb-priority="2">
+            <button
+              class="secondary-action"
+              data-texture-restore-version
+              on:click={() => dispatch('restore')}
+              disabled={loading || submitting || agentPending || restorePending || !hasCurrentRevision}
+            >
+              <span class="label-full">{restorePending ? 'Restoring…' : 'Restore'}</span>
+              <span class="label-compact">{restorePending ? '…' : 'Restore'}</span>
+              <span class="label-tiny">{restorePending ? '…' : 'Restore'}</span>
+            </button>
+          </div>
+        {/if}
+        <div class="tb-item" data-tb-item data-tb-slot="8" data-tb-priority="4">
+          <div class="publish-menu-wrap">
+            <button
+              class="secondary-action publish-action"
+              data-texture-publish
+              aria-haspopup="menu"
+              aria-expanded={publishMenuOpen}
+              on:click={() => dispatch('toggle-publish')}
+              disabled={publishDisabled}
+            >
+              <span class="label-full">{publishedActionPending ? 'Publishing…' : `Publish ${versionLabel}`}</span>
+              <span class="label-compact">{publishedActionPending ? '…' : 'Publish'}</span>
+              <span class="label-tiny">{publishedActionPending ? '…' : 'Publish'}</span>
+            </button>
+            {#if publishMenuOpen}
+              <div class="publish-menu" data-texture-publish-menu role="menu" aria-label="Publish this version">
+                <div class="publish-menu-heading">
+                  <p class="eyebrow">Publish</p>
+                  <h3>Publish {versionLabel}</h3>
+                  <p>This creates a public link with the current text and source snapshots.</p>
+                  <p class="publish-menu-opinion-note">Or list it in the Autopaper Opinion section, under a short author handle (never your email).</p>
+                </div>
+                <div class="publish-menu-actions">
+                  <button
+                    type="button"
+                    class="primary-action"
+                    data-texture-publish-confirm
+                    on:click={() => dispatch('publish-confirm')}
+                    disabled={publishedActionPending}
+                  >
+                    {publishedActionPending ? 'Publishing…' : 'Publish'}
+                  </button>
+                  <button
+                    type="button"
+                    class="secondary-action"
+                    data-texture-publish-opinion
+                    on:click={() => dispatch('publish-opinion-confirm')}
+                    disabled={publishedActionPending}
+                  >
+                    {publishedActionPending ? 'Publishing…' : 'Publish as opinion'}
+                  </button>
+                  <button
+                    type="button"
+                    class="secondary-action"
+                    data-texture-publish-cancel
+                    on:click={() => dispatch('publish-cancel')}
+                    disabled={publishedActionPending}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            {/if}
+          </div>
+        </div>
+      {/if}
+      <div class="tb-item tb-item-end" data-tb-item data-tb-slot="9" data-tb-priority="3">
+        <button
+          class="prompt-btn revise-action"
+          data-texture-prompt
+          data-texture-save
+          on:click={() => dispatch('prompt')}
+          disabled={loading || submitting || agentPending || isViewingHistorical || publishedActionPending}
+        >
+          <span class="label-full">{promptLabel}</span>
+          <span class="label-compact">{promptLabel}</span>
+          <span class="label-tiny">{submitting || agentPending ? '…' : promptLabel}</span>
+        </button>
+      </div>
     {/if}
   </div>
+
+  <!-- svelte-ignore a11y-no-static-element-interactions -->
+  <div class="tb-more" class:tb-more-off={!overflowing} bind:this={moreEl} on:keydown={onMoreKeydown} on:focusout={onMoreFocusOut}>
+    <button
+      type="button"
+      class="more-btn"
+      data-texture-toolbar-more
+      aria-label="More toolbar actions"
+      title="More"
+      aria-haspopup="menu"
+      aria-expanded={menuOpen}
+      aria-controls={menuId}
+      bind:this={moreBtnEl}
+      on:click={toggleMenu}
+    >
+      <span aria-hidden="true">⋯</span>
+    </button>
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <div
+      class="tb-menu"
+      class:tb-menu-open={menuOpen}
+      id={menuId}
+      role="menu"
+      tabindex="-1"
+      aria-label="More toolbar actions"
+      data-texture-toolbar-menu
+      bind:this={menuEl}
+      on:click={onMenuClick}
+    ></div>
+  </div>
+  </div>
+
+  {#if expandLine}
+    <div class="tb-status" data-autopaper-expand-line role="status" aria-live="polite">{expandLine}</div>
+  {/if}
+
+  <!-- Off-screen, inert copies of the items, only to read their natural widths. -->
+  <div class="doc-actions tb-ghost" aria-hidden="true" bind:this={ghostEl}></div>
 </div>
 
 <style>
@@ -264,12 +502,12 @@
     z-index: 10;
     flex: 0 0 auto;
     display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.3rem 0.55rem;
-    /* One row while the controls fit; a phone or large text wraps them to
-       more rows instead of running off the side. max-height is the number
-       the hide transition animates from. */
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.3rem;
+    /* The controls are one row (.tb-row); what does not fit goes into the
+       "more" menu. A status line may sit under the row. max-height is the
+       number the hide transition animates from. */
     height: auto;
     min-height: 3.7rem;
     padding: 0.5rem 0.72rem;
@@ -320,23 +558,101 @@
     visibility: visible;
   }
 
+  .tb-row {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    min-width: 0;
+  }
+
   .version-controls,
   .doc-actions {
     display: flex;
     align-items: center;
-    gap: 0.3rem 0.42rem;
+    gap: 0.42rem;
     min-width: 0;
-    max-width: 100%;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
   }
 
+  /* fit() gives each item its room, so the row never wraps or shrinks them. */
   .doc-actions {
-    flex: 1 1 auto;
+    flex: 1 1 0;
     justify-content: flex-start;
   }
 
+  /* Only a very large text size squeezes the version label, so that the
+     "more" button never leaves the row. */
   .version-controls {
+    flex: 0 1 auto;
+  }
+
+  .tb-item {
+    display: flex;
+    align-items: center;
     flex: 0 0 auto;
+    min-width: 0;
+  }
+
+  .tb-item:not(:has(*)) {
+    display: none;
+  }
+
+  .tb-item-end {
+    margin-left: auto;
+  }
+
+  .tb-ghost {
+    position: absolute;
+    top: 0;
+    left: 0;
+    flex: none;
+    width: max-content;
+    height: 0;
+    overflow: hidden;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .tb-status {
+    color: var(--choir-text-secondary, var(--choir-text-muted));
+    font-size: 0.74rem;
+    line-height: 1.3;
+    overflow-wrap: anywhere;
+  }
+
+  .tb-more {
+    position: relative;
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+  }
+
+  .tb-more-off {
+    display: none;
+  }
+
+  .tb-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 0.4rem);
+    right: 0;
+    z-index: 12;
+    flex-direction: column;
+    gap: 0.25rem;
+    width: max-content;
+    min-width: min(12rem, calc(100cqw - 1.5rem));
+    max-width: min(18rem, calc(100cqw - 1.5rem));
+    max-height: min(32rem, 70vh);
+    overflow-y: auto;
+    padding: 0.4rem;
+    border: 1px solid var(--choir-border-strong);
+    border-radius: 0.65rem;
+    background: var(--choir-surface-pane);
+    box-shadow: var(--choir-shadow-floating);
+  }
+
+  .tb-menu.tb-menu-open {
+    display: flex;
   }
 
   .doc-state {
@@ -368,7 +684,9 @@
     font-size: 0.76rem;
     font-weight: 650;
     backdrop-filter: blur(8px);
-    flex: 0 0 auto;
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
   }
 
   .draft-line {
@@ -392,6 +710,7 @@
   }
 
   .nav-btn,
+  .more-btn,
   .prompt-btn,
   .secondary-action,
   .download-menu > summary,
@@ -410,13 +729,24 @@
     display: none;
   }
 
-  .nav-btn {
+  .nav-btn,
+  .more-btn {
     width: 1.95rem;
     height: 1.95rem;
     border-radius: 999px;
     font-size: 0.92rem;
     font-weight: 700;
     flex: 0 0 auto;
+  }
+
+  .more-btn {
+    padding: 0;
+    line-height: 1;
+  }
+
+  .more-btn[aria-expanded='true'] {
+    background: var(--choir-accent-soft);
+    border-color: var(--choir-accent);
   }
 
   .prompt-btn {
@@ -593,6 +923,7 @@
   }
 
   .nav-btn:hover:enabled,
+  .more-btn:hover:enabled,
   .prompt-btn:hover:enabled,
   .secondary-action:hover:enabled,
   .primary-action:hover:enabled {
@@ -729,28 +1060,82 @@
     }
   }
 
+  /* (After every base rule above: same specificity, so source order decides.) */
+  /* An item in the menu is a full-width row; the control inside is the same
+     element that sits in the toolbar, restyled here (:global because the
+     items are moved into the menu at run time). */
+  .tb-menu :global(.tb-item) {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    margin-left: 0;
+  }
+
+  .tb-menu :global(.tb-item:not(:has(*))) {
+    display: none;
+  }
+
+  .tb-menu :global(.secondary-action),
+  .tb-menu :global(.prompt-btn),
+  .tb-menu :global(.download-menu > summary),
+  .tb-menu :global(.tb-item .ap-expand-button) {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    height: auto;
+    min-height: 2.3rem;
+    padding: 0.5rem 0.7rem;
+    border-radius: 0.5rem;
+    text-align: left;
+    white-space: normal;
+  }
+
+  .tb-menu :global(.download-menu),
+  .tb-menu :global(.publish-menu-wrap) {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .tb-menu :global(.download-menu[open]::after) {
+    display: none;
+  }
+
+  /* The publish confirmation opens inside the menu, not over the page. */
+  .tb-menu :global(.publish-menu) {
+    position: static;
+    width: auto;
+    margin-top: 0.4rem;
+  }
+
+  .tb-menu :global(.publish-menu-actions) {
+    flex-wrap: wrap;
+  }
+
   /* A finger needs 44 px: on a touch screen every toolbar control grows to
-     it, and the row wraps to take the room. */
+     it (in px, so large text does not also double the tap size). */
   @media (pointer: coarse) {
-    .nav-btn {
-      width: 2.75rem;
-      height: 2.75rem;
+    .nav-btn,
+    .more-btn {
+      width: max(1.95rem, 44px);
+      height: max(1.95rem, 44px);
     }
 
     .prompt-btn,
-    .secondary-action {
+    .secondary-action,
+    .tb-menu :global(.tb-item .ap-expand-button) {
       height: auto;
-      min-height: max(2.75rem, 44px);
+      min-height: 44px;
     }
 
     .download-menu > summary {
       display: inline-flex;
       align-items: center;
-      min-height: max(2.75rem, 44px);
+      min-height: 44px;
     }
 
     .download-menu button {
-      min-height: max(2.75rem, 44px);
+      min-height: 44px;
     }
   }
 </style>

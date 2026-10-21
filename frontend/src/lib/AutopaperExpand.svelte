@@ -23,6 +23,10 @@
 
   /** The story's publication route (bare or /v<n>). */
   export let route = '';
+  /** False when the host shows the line itself (the toolbar does, bound below). */
+  export let showLine = true;
+  /** The fate line, for a host that shows it elsewhere (bind:line). */
+  export let line = '';
 
   let read: ExpansionRead | null = null;
   let asking = false;
@@ -99,7 +103,7 @@
       {disabled}
       on:click={ask}
     >{label}</button>
-    {#if line}
+    {#if showLine && line}
       <span class="ap-expand-line" data-autopaper-expand-line role="status" aria-live="polite">{line}</span>
     {/if}
   </div>
