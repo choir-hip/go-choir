@@ -64,6 +64,11 @@ func configuredCapsuleExecutor() (*capsule.Executor, bool, error) {
 		return nil, false, err
 	}
 	configureJobMemory(executor, staticBudget)
+	// Capsule memory per doctrine (RES-04) is a policy: observe keeps the
+	// MemoryMax shape and records what doctrine would have done.
+	memoryPolicy := capsule.CapsuleMemoryPolicyFromEnv(nil)
+	executor.SetMemoryPolicy(memoryPolicy)
+	log.Printf("capsule executor: memory policy %s", memoryPolicy)
 	// L2 capsules reach the host Go module proxy through a fixed egress
 	// route; the address is the guest's tap peer unless set explicitly
 	// (docs/reports/capsule-go-module-proxy-design-2026-10-14.md).

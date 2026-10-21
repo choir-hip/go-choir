@@ -24,6 +24,12 @@ type CgroupManager struct {
 // CreateCgroup creates a cgroup v2 hierarchy for a capsule with the
 // specified resource limits.
 func CreateCgroup(capsuleID string, spec SpawnSpec) (*CgroupManager, error) {
+	return createCapsuleCgroup(capsuleID, spec, capsuleMemoryPlan{Admit: spec.MemoryMax, Max: spec.MemoryMax})
+}
+
+// createCapsuleCgroup creates the capsule's cgroup with the memory shape the
+// spawn planned (RES-04): memory.max, and memory.high when the plan sets one.
+func createCapsuleCgroup(capsuleID string, spec SpawnSpec, memory capsuleMemoryPlan) (*CgroupManager, error) {
 	cgPath := filepath.Join("/capsule", capsuleID)
 
 	// Build CPU max string: "quota period" (e.g. "100000 100000" = 1 CPU).
@@ -35,7 +41,7 @@ func CreateCgroup(capsuleID string, spec SpawnSpec) (*CgroupManager, error) {
 	// Create the cgroup with resource limits.
 	resources := &cgroup2.Resources{
 		Memory: &cgroup2.Memory{
-			Max:  &spec.MemoryMax,
+			Max:  &memory.Max,
 			Swap: &[]int64{0}[0], // no swap
 		},
 		CPU: &cgroup2.CPU{
@@ -46,6 +52,9 @@ func CreateCgroup(capsuleID string, spec SpawnSpec) (*CgroupManager, error) {
 		},
 	}
 
+	if memory.High > 0 {
+		resources.Memory.High = &memory.High
+	}
 	mgr, err := cgroup2.NewManager("/sys/fs/cgroup", cgPath, resources)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cgroup %s: %w", cgPath, err)

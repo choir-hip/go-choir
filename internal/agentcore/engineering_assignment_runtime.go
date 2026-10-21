@@ -31,8 +31,13 @@ const (
 	// capsule live at a time
 	// (docs/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md, B5).
 	engineeringAssignmentMemoryMax = int64(2 << 30)
-	engineeringAssignmentCPUQuota  = int64(100000)
-	engineeringAssignmentPidsMax   = int64(256)
+	// engineeringAssignmentMemoryRequest is the capsule's doctrine request
+	// (RES-04, internal/capsule/capsule_memory.go): memory.high under the
+	// doctrine policy, so it holds the DWARF link peak; admission is the
+	// same 2 GiB as before, and the ceiling becomes twice it.
+	engineeringAssignmentMemoryRequest = engineeringAssignmentMemoryMax
+	engineeringAssignmentCPUQuota      = int64(100000)
+	engineeringAssignmentPidsMax       = int64(256)
 	// coManagementAssignmentDeadline is the fail-closed scheduling deadline for one
 	// live assignment (I26): a bound assignment that has not reached a terminal
 	// disposition by this bound is cancelled with an expired reason. The
@@ -462,8 +467,10 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 		// Claude Code beside go test (docs/design/claude-delegate-slice1-2026-10-14.md §3).
 		memory, cpu, pids = capsule.ClaudeCapsuleSize(rt.capsuleExecutor.MemoryBudget(), memory)
 	}
+	// The request is the size chosen above, a Claude capsule's included:
+	// doctrine's memory.high never sits below what the capsule used to get.
 	spec := capsule.SpawnSpec{CapsuleID: capsuleID, OwnerRunID: runID,
-		MemoryMax: memory, CpuQuota: cpu, CpuPeriod: 100000, PidsMax: pids,
+		MemoryMax: memory, MemoryRequest: memory, CpuQuota: cpu, CpuPeriod: 100000, PidsMax: pids,
 		WorkingDir: "/workspace/platform", Tier: capsule.TierMedium,
 		SourceArtifactRef: preflight.ArtifactRef, ExpectedSubjectDigest: preflight.SubjectDigest,
 		Egress:         binding.NetworkMode == types.EngineeringCapsuleNetworkEcosystemProxy || claude,

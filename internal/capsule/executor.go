@@ -66,6 +66,13 @@ type Executor struct {
 	// memory controls in tests (job_memory_linux.go).
 	memoryTotalFn   func() int64
 	cgroupMemoryFor func(*Capsule) cgroupMemory
+	// memoryPolicy is the capsule memory shape (RES-04, capsule_memory.go);
+	// the zero value is observe. capsuleAggregateFor replaces the capsules
+	// aggregate cgroup in tests.
+	memoryPolicy        CapsuleMemoryPolicy
+	capsuleAggregateFor func() cgroupMemory
+	// memoryReceipts are the last capsules' memory receipts, newest last.
+	memoryReceipts []CapsuleMemoryReceipt
 	// goModuleProxy is where L2 capsules' GoProxyRouteHost goes; invalid
 	// (unset) leaves the route out of the policy.
 	goModuleProxy netip.AddrPort
@@ -346,7 +353,11 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 	if _, exists := e.capsules[spec.CapsuleID]; exists {
 		return nil, fmt.Errorf("capsule %s already exists", spec.CapsuleID)
 	}
-	if err := e.admitCapsuleMemoryLocked(spec.MemoryMax); err != nil {
+	memory, err := planCapsuleMemory(e.memoryPolicy, spec)
+	if err != nil {
+		return nil, err
+	}
+	if err := e.admitCapsuleMemoryLocked(memory.Admit); err != nil {
 		return nil, err
 	}
 	if digest, err := digestRegularFile(e.brokerPath); err != nil || digest != e.brokerDigest {
@@ -389,11 +400,15 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 		UpperDir:    filepath.Join(base, "upper"),
 		WorkDir:     filepath.Join(base, "work"),
 		MergedDir:   filepath.Join(base, "root"),
-		MemoryMax:   spec.MemoryMax,
+		MemoryMax:   memory.Max,
+		MemoryHigh:  memory.High,
 		OwnerRunID:  spec.OwnerRunID,
 		StartedAt:   time.Now().UTC(),
 		Spec:        spec,
 		revokedCaps: make(map[string]bool),
+
+		memoryAdmitted: memory.Admit,
+		memoryPolicy:   e.memoryPolicy,
 	}
 	if _, err := os.Lstat(base); err == nil {
 		return nil, fmt.Errorf("capsule state %s is quarantined or already exists", spec.CapsuleID)
@@ -584,11 +599,12 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 			return nil, fmt.Errorf("capsule harden carried patch input mount: %w", err)
 		}
 	}
-	cgroup, err := CreateCgroup(spec.CapsuleID, spec)
+	cgroup, err := createCapsuleCgroup(spec.CapsuleID, spec, memory)
 	if err != nil {
 		return nil, err
 	}
 	caps.Cgroup = cgroup
+	e.setCapsuleAggregateLocked()
 	if spec.Egress {
 		if err := e.startEgressLocked(caps); err != nil {
 			return nil, err
@@ -604,7 +620,7 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 	}
 	e.capsules[caps.ID] = caps
 	e.controlHandles[capKey{AgentRunID: spec.OwnerRunID, Handle: controlHandle}] = caps.ID
-	e.vmMemoryUsed += caps.MemoryMax
+	e.vmMemoryUsed += caps.admittedMemory()
 	return caps, nil
 }
 
@@ -842,15 +858,20 @@ func (e *Executor) destroy(ctx context.Context, id string, signal syscall.Signal
 		_ = caps.Cgroup.Kill()
 		if err := e.traceStep(id, "capsule.destroy.cgroup_wait_empty", func() error { return caps.Cgroup.WaitEmpty(ctx) }); err != nil {
 			cleanupErr = errors.Join(cleanupErr, err)
-		} else if teardownReclaimEnabled() {
-			// Return the capsule's page cache before removal reparents it
-			// (visual evidence slice V27); every capsule, since builds
-			// leave cache too.
-			endReclaim := e.beginStep(id, "capsule.destroy.reclaim")
-			report := teardownReclaim(e.cgroupMemoryOf(caps))
-			endReclaim(nil)
-			if report != "" {
-				log.Printf("capsule %s teardown memory: %s", id, report)
+		} else {
+			// memory.events as feedback (RES-04): read while the empty
+			// cgroup still exists.
+			e.recordMemoryReceiptLocked(caps)
+			if teardownReclaimEnabled() {
+				// Return the capsule's page cache before removal reparents it
+				// (visual evidence slice V27); every capsule, since builds
+				// leave cache too.
+				endReclaim := e.beginStep(id, "capsule.destroy.reclaim")
+				report := teardownReclaim(e.cgroupMemoryOf(caps))
+				endReclaim(nil)
+				if report != "" {
+					log.Printf("capsule %s teardown memory: %s", id, report)
+				}
 			}
 		}
 		if err := e.traceStep(id, "capsule.destroy.cgroup_delete", func() error { return caps.Cgroup.Delete() }); err != nil {
@@ -880,7 +901,7 @@ func (e *Executor) destroy(ctx context.Context, id string, signal syscall.Signal
 	}
 	caps.State = StateDestroyed
 	delete(e.capsules, id)
-	e.vmMemoryUsed -= caps.MemoryMax
+	e.vmMemoryUsed -= caps.admittedMemory()
 	// Job memory boosts end with the capsule (J8): returned to the budget
 	// here, their lease shares released off the executor lock.
 	for _, release := range e.returnMemoryBoostsLocked(caps) {
