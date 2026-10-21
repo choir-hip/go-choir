@@ -193,15 +193,16 @@ test('logged-out desktop opens Browser and Trace as read shells before auth', as
 
   const browserApp = page.locator('[data-browser-app]').last();
   await expect(browserApp).toBeVisible({ timeout: 5000 });
-  await expect(browserApp.locator('[data-browser-backend-status]')).toHaveAttribute(
-    'data-browser-backend-mode',
-    'guest_iframe',
-  );
+  // Web Lens is a launcher: it links to the original page and embeds nothing.
+  await expect(browserApp).toHaveAttribute('data-browser-launcher', '');
 
-  const artifactUrl = 'data:text/html;charset=utf-8,%3Ch1%3EGuest%20browser%3C%2Fh1%3E';
-  await browserApp.locator('[data-browser-url-input]').fill(artifactUrl);
+  await browserApp.locator('[data-browser-url-input]').fill('https://example.com/guest');
   await browserApp.locator('[data-browser-go-btn]').click();
-  await expect(browserApp.locator('[data-browser-iframe]')).toHaveAttribute('src', artifactUrl);
+  await expect(browserApp.locator('[data-browser-open-original]')).toHaveAttribute(
+    'href',
+    'https://example.com/guest',
+  );
+  await expect(browserApp.locator('iframe')).toHaveCount(0);
   expect(protectedAppRequests).toEqual([]);
   await expect(page.locator('[data-auth-entry]')).toHaveCount(0);
 

@@ -66,7 +66,7 @@ export const APP_REGISTRY = [
     id: 'browser',
     name: 'Web Lens',
     icon: '🌐',
-    description: 'Web snapshots and imports',
+    description: 'Open a page or read a snapshot',
     component: () => import('../BrowserApp.svelte'),
     launcher: { desk: true, desktopIcon: true, order: 20 },
     window: { ...windowDefaults },
