@@ -94,7 +94,10 @@ finish:
     each has a runtime switch that restores the old behavior without a
     deploy of old code: GATEWAY_BEARER_BINDING=off, the relay's empty
     allowlist (the default), GATEWAY_MODEL_SCHEDULER=off (the default),
-    FRONT_IMPORTANCE_DIRECT=1 (SEC-16, while the unit still loads the key).
+    FRONT_IMPORTANCE_DIRECT=1 (SEC-16; the unit keeps loading the key in
+    batch 1, because the nix removal, 8c8bd7e54, is reverted out of it by
+    9d53138fc and FP0 cherry-picks it only after deployed proof 7 passes; once
+    that lands, the rollback is a nix revert of it plus FRONT_IMPORTANCE_DIRECT=1).
   landing:
     required: true
     environment: staging
@@ -129,7 +132,8 @@ boundaries:
     - docs/design/claude-delegate-slice1-2026-10-14.md and the Anthropic terms quoted in docs/reports/claude-agent-sdk-in-choir-2026-10-14.md section 2.2
   must_preserve:
     - Nothing here makes a call succeed that was refused before. A change that cannot decide refuses.
-    - The Jev route's strict pin (BindPeer) is unchanged in every mode.
+    - The Jev route refuses a mismatched pin in every mode (its 403). Since the pin is shared by every route, its first-use write follows the mode (batch 1 review, SEC-05 finding 13).
+    - The Anthropic relay serves only a bearer already pinned to the caller's address, in every binding mode, and never writes identity state (batch 1 review, SEC-08 findings 11 and 12).
     - Who may run the delegate, and where, does not change: one test computer, the existing expiry.
     - No secret in the repository, a log, a test, a response or a guest disk; tests use fake keys.
     - Search, Jev judgments and source-api keep their own buckets and the old limiter.
@@ -145,13 +149,13 @@ boundaries:
 
 now:
   status: working
-  slice: built and tested locally; waiting for FP0 to freeze, review, land and prove
+  slice: batch 1 repaired after the panel; waiting for FP0 to re-freeze, re-review, land and prove
   source_ref: 26c4e1ed0
   deploy_identity: unknown to this lane
   candidate:
     id: fp7-gateway-identity
     state: ready
-    ref: lane/b7-gateway
+    ref: lane/b7-gateway-b1fix
     base: 26c4e1ed0
     digest: none
     scope: [internal/gateway, internal/frontimportance, cmd/gateway, nix/node-b.nix (gateway and front-importance lines only), docs]
@@ -179,34 +183,51 @@ now:
       a binding refusal is 429 with Retry-After so a deploy refresh heals.
       Ship the scheduler and the relay dormant (off, empty allowlist). The
       relay allowlist is keyed by gateway identity (the VM id vmctl issues
-      bearers for), because the gateway does not know the ComputerID.
+      bearers for), because the gateway does not know the ComputerID. Batch 1
+      review: the relay's pin check is its own and ignores the rollout mode;
+      the Jev route's first-use write follows the mode; the SEC-16 nix removal
+      is a separate, later landing.
     kind: operational
     status: settled
-    evidence_ref: the Jev pin incident (docs/problems/l2a-merge-recall-on-the-paper-2026-10-14.md finding 2) and hostauth's observe-then-enforce rollout
+    evidence_ref: the Jev pin incident (docs/problems/l2a-merge-recall-on-the-paper-2026-10-14.md finding 2), hostauth's observe-then-enforce rollout, and the batch 1 panel (d5a62eace)
     owner_ratification_ref: not_applicable
   belief:
     believed_state: >-
       The code paths are as read and tested locally; vmctl re-ensures the
-      guest address after every start path; a snapshot resume keeps its
+      guest address after every start path except a brand-new interactive
+      VM's first resolve (residual below); a snapshot resume keeps its
       address, a cold boot issues a new credential, a refresh and a recovery
       keep the token and take a new address; the source address is
       trustworthy because of the S1a tap rules.
     main_uncertainty: >-
       How long the stale-pin window is after a refresh (guest healthy until
-      vmctl's ensure returns) against the guest's ten Retry-After waits; the
-      observe counts after a planned refresh answer it.
+      vmctl's ensure returns) against the guest's Retry-After waits, which
+      only non-streaming inference honors (residual below); the observe
+      counts after a planned refresh answer it.
     next_observation: bearer_binding.would_refuse for the paper after a planned refresh in observe mode
   blocker_or_risk: >-
     Option K needs the owner's Console API key (a credential question, not
-    a design branch) and the guest half; a stale pin after a boot would delay
-    a computer's model calls in enforce mode, which is why enforce is a
-    separate, watched flip; the scheduler's caps are guesses until staging
-    shows whether they bind.
+    a design branch) and the guest half. Residuals from the panel, none
+    blocking observe: (1) only non-streaming Provider.call waits out a 429
+    Retry-After; streaming inference, guest search, source-api and Jev do
+    not, so before enforce the stale-pin window must be measured or those
+    clients taught to wait; (2) a brand-new interactive VM's first
+    resolveDesktopContext issues its credential before boot and never
+    ensures it, so it stays unpinned until the next resolve (refused in
+    strict; strict must wait for a vmctl fix); (3) in observe, between a cold
+    boot and the host's ensure, an unpinned Jev bearer is accepted from any
+    guest address (finding 13's accepted cost); (4) scheduler on: decoded
+    bodies (no MaxBytesReader) sit in memory while queued, up to 256 per
+    computer, and Acquire does not check an already-cancelled context; both
+    are preconditions of turning the scheduler on; (5) scorer.go sets the
+    direct-mode receipt path only for FRONT_IMPORTANCE_DIRECT=1 while
+    newDecider also accepts true and on (the reverted-in unit sets the path
+    itself, so it is harmless while the unit is as it is).
   next_action: >-
-    FP0 freezes the candidate, sends the red commits to a panel, lands them
-    (suggested order: SEC-05 with its nix line and the renewal, RES-11 with
-    its nix line, SEC-08 gateway half, SEC-16 code and later its nix change),
-    and runs the deployed proofs below
+    FP0 freezes lane/b7-gateway-b1fix, re-reviews the four repair commits,
+    lands the batch (8c8bd7e54 and its revert 9d53138fc cancel; land them
+    together or drop both), runs the deployed proofs below, and only after
+    proof 7 passes cherry-picks 8c8bd7e54 as its own landing
 
 receipts:
   - id: fp7-docs
@@ -215,33 +236,39 @@ receipts:
     proof_refs: [docs/problems/gateway-bearer-works-from-any-computer-2026-10-21.md, docs/problems/claude-delegate-key-sits-on-the-guest-disk-2026-10-21.md, docs/problems/gateway-model-calls-have-no-scheduler-2026-10-21.md]
     rollback_ref: git revert 24026a9e6
     disposition: problems documented before any fix
+  - id: fp7-b1-review-docs
+    boundary: define
+    identity: d5a62eace
+    proof_refs: [the batch 1 panel reports (GPT-6.1-sol send back, Gemini 4 Argon accept with edits)]
+    rollback_ref: git revert d5a62eace
+    disposition: the panel's findings recorded in the problem records before any fix
   - id: sec-05
     boundary: implement
-    identity: 37fc682a3 (+ nix af71fec80, + renewal, see sec-05-renewal)
+    identity: 8434448b6 (+ nix 8f9d8443b, + renewal, see sec-05-renewal, + Jev fix 9d612fffc)
     proof_refs: [internal/gateway/bearer_binding_test.go, "go test ./internal/gateway -race: green"]
     rollback_ref: GATEWAY_BEARER_BINDING=off, or git revert
     disposition: built; not deployed; not closed until enforced on staging
   - id: sec-05-renewal
     boundary: implement
-    identity: 718dddb51
+    identity: c84fe6fe8
     proof_refs: [internal/gateway/credential_renewal_test.go, "three mutations fail the tests"]
     rollback_ref: git revert (the expiry then returns to one TTL from issue)
     disposition: built; closes the 720 h time bomb for refresh-only computers once deployed; live rotation stays designed
   - id: sec-08-gateway-half
     boundary: implement
-    identity: 496db5009
+    identity: 6ff5b6254 (+ relay pin fix 94edd2f54)
     proof_refs: [internal/gateway/anthropic_relay_test.go, "seven relay mutations each fail the tests"]
     rollback_ref: leave ANTHROPIC_API_KEY unset, or git revert
     disposition: built, dark; the guest half and the owner's Console key are open
   - id: res-11
     boundary: implement
-    identity: 21c073fb0 (+ nix 6e5b99cc9)
+    identity: 2f4039cad (+ nix dd9b1a73f, + deadline fix f2d3a77be)
     proof_refs: [internal/gateway/model_scheduler_test.go, "six scheduler mutations each fail the tests"]
     rollback_ref: GATEWAY_MODEL_SCHEDULER=off (the default), or git revert
     disposition: built, off; to be flipped after the staging proof
   - id: sec-16
     boundary: implement
-    identity: 704ef5fef (+ nix 738a821d0)
+    identity: 8fd6fcc31 (nix 8c8bd7e54 reverted out of batch 1 by 9d53138fc; FP0 cherry-picks it after proof 7)
     proof_refs: [internal/gateway/host_judgment_test.go, internal/frontimportance/gateway_decider_test.go, "go build ./cmd/corpusd"]
     rollback_ref: FRONT_IMPORTANCE_DIRECT=1 while the unit still loads the key, or git revert
     disposition: built; the scorer defaults to the gateway; the nix change that removes the key from the unit lands after the staging proof
@@ -279,6 +306,11 @@ source address with the pin and refuses a mismatch.
 | `observe` | passes, counted, nothing written | passes | passes, logged "would refuse", counted |
 | `enforce` (unset and unknown values) | binds to the caller's address (first use), passes | passes | refused (429 + Retry-After 2), logged, counted |
 | `strict` | refused (429 + Retry-After 2) | passes | refused (429 + Retry-After 2) |
+
+The Jev route follows the same columns with its own 403 for every refusal,
+and writes a first-use pin only in `enforce` and `off` (`off` is the
+pre-SEC-05 Jev behavior). The Anthropic relay ignores the mode: it serves only
+a pinned bearer from its pin's address and writes nothing (batch 1 review).
 
 A binding refusal is still a refusal (the call never reaches a provider,
 the body names no address), but it is a 429 with a short `Retry-After`, not
@@ -344,10 +376,13 @@ creates a Console key and places it in `gateway-provider.env` on Node B as
 
 **How the gateway authenticates the delegate (gateway half, built).**
 Route `POST|GET /provider/anthropic/v1/...`. In order: method and path
-allowlist (the three above, nothing else); the computer's bearer (bound to its
-address by SEC-05); the computer must be on the relay allowlist
+allowlist (the three above, nothing else); the computer's bearer, validated
+without touching its pin; the computer must be on the relay allowlist
 (`GATEWAY_ANTHROPIC_RELAY_IDENTITIES`) and inside the window
-(`GATEWAY_ANTHROPIC_RELAY_EXPIRES`); the body is read under a 32 MiB cap and
+(`GATEWAY_ANTHROPIC_RELAY_EXPIRES`), and a key must exist; the bearer's pin
+must already name the caller's address, whatever `GATEWAY_BEARER_BINDING`
+says (unpinned or mismatched: 429 + Retry-After, nothing relayed, nothing
+written); the body is read under a 32 MiB cap and
 its `model` must be on the relay's model allowlist (default
 `claude-sonnet-5-5`, the delegate's model); a per-computer in-flight cap (2);
 then every credential-bearing request header is dropped, `x-api-key` is set
@@ -401,7 +436,9 @@ chat calls take a slot from one gateway scheduler instead of the fixed
 60-per-minute window. Global in-flight cap (default 24), per-computer cap
 (default 6), per-computer FIFO queue of at most 256, a wait of at most 120 s
 after which the caller gets 429 with `Retry-After` (the guest already waits
-that out). When a slot frees, the next call comes from the eligible computer
+that out). The wait counts against the call's ten-minute deadline, so wait
+plus call stay inside the 10m30s write and client timeouts, and a configured
+wait is capped at five minutes. When a slot frees, the next call comes from the eligible computer
 with the fewest in flight, ties to the one served longest ago: a computer
 with one call is not queued behind another's backlog. A slot is held for the
 whole call, including a stream, and is released on every exit path. Search,
@@ -431,7 +468,9 @@ is `FRONT_IMPORTANCE_DIRECT=1`, kept for one release as the rollback. A
 separate nix commit then removes `EnvironmentFile` (and the receipt-path
 variable) from the unit, so the key is held only by the gateway; land it
 after the gateway route is proved on staging. Unchanged: the scorer is best
-effort; a failure logs and leaves the previous scores in place.
+effort; a failure logs and leaves the previous scores in place. Batch 1
+carries the code only: the nix removal (8c8bd7e54) is reverted out of it
+(9d53138fc) and FP0 cherry-picks it after deployed proof 7.
 
 ## 5. RES-12: batch endpoints for calls that can wait (design only)
 
@@ -500,7 +539,8 @@ SEC-16, after the code deploy (the unit still holds the key):
 7. Wait one timer tick (10 minutes). The front-importance journal says
    `Jev reached by gateway`; the gateway journal has `host judgment from
    host:front-importance served` lines; `scores.json` is rewritten. Then the
-   nix change that removes the unit's `EnvironmentFile`: the next tick still
+   nix change that removes the unit's `EnvironmentFile` (FP0 cherry-picks
+   8c8bd7e54 as its own landing, only after the first half passed): the next tick still
    scores, and `systemctl show go-choir-front-importance -p Environment`
    shows no `OPENROUTER_API_KEY` (the unit has none).
 8. From a guest address (a test computer's shell), `POST` to the host route
