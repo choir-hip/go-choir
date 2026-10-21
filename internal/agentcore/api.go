@@ -837,8 +837,10 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 		resp.Goroutines = goroutineDump()
 	}
 	if r.URL.Query().Get("memory") == "detail" {
+		// StorePath is a 0-byte marker file; the Dolt workspace directory
+		// beside it holds the data.
 		resp.MemoryDetail = guestmem.Read(r.Context(), []guestmem.Tree{
-			{Label: "store", Root: h.rt.cfg.StorePath},
+			{Label: "store", Root: store.TextureWorkspacePath(h.rt.cfg.StorePath)},
 			{Label: "nix_store", Root: "/nix/store"},
 		}, guestmem.DefaultLimits)
 	}
