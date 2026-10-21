@@ -222,9 +222,23 @@ Landed (each deployed and measured before the next is judged):
   2.3 s body scan); b1edcd9bf, the lifecycle snapshot through the
   trajectory index, with its document and revisions read by key (the 416
   ms read). The same commit names each metadata read's kind and field in the
-  mutex counters, so the paged read can be attributed next. Hypothesis to
-  check on the paper: the wake outbox list (`$.projected`, a JSON match over
-  every outbox row ever written) is the 2 to 15 s before each wake.
+  mutex counters, so the paged read can be attributed next.
+
+Two more findings from the same paper log (14:07 to 15:17):
+
+- The wake outbox listing is in front of every wake. A sweep after each
+  signalled commit lists unprojected wakes by a JSON match on `$.projected`
+  over every outbox row ever written (`ListUnprojectedActorWakes`). The
+  `actor wake outbox list` lines show 2.0 to 3.9 s per listing, once 1m40s
+  just after a boot, and `actor wake latency` shows 2 to 15 s from a wake's
+  write to its dispatch. The store already knows which outbox rows each
+  commit wrote.
+- Source polls take dispatcher slots. After the 15:12 boot the waiting
+  agents were mostly `source:` actors (28 sources, all due at once), each
+  holding a slot for network I/O up to the 90 s poll timeout. Under the
+  oldest-first order the backlog drained from 33 due agents to 11 in about a
+  minute, in arrival order. A separate lane for I/O-bound polls is a
+  candidate, not yet decided.
 
 ### E9. Texture's Write cites with `{{ref N}}` and is refused
 
