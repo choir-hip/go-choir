@@ -316,6 +316,36 @@ and the gateway applies a second redaction pass before answering
   the token. *Inference:* not exploitable in practice; still,
   `subtle.ConstantTimeCompare` costs nothing and is the habit to keep.
 
+**Update, 2026-10-21 (station FP7; deploy status is in
+[the station file](../definitions/choir-launch-fp7-gateway-identity-2026-10-21.md)).**
+Several bullets above changed or are changing:
+
+- *Test networks:* stale. The documentation ranges are admitted only inside a
+  test binary (`runtimePeerAllowed`, `internal/gateway/handlers.go`;
+  `runtime_peer_test.go`).
+- *Bearers are not bound:* in code, every route that serves a computer now
+  compares the call's source address with the identity's pin
+  (`internal/gateway/bearer_binding.go`, mode `GATEWAY_BEARER_BINDING` =
+  off, observe, enforce or strict; the pin keeps its old JSON key
+  `JevPeerIP`). A refusal answers 429 with `Retry-After`, because a deploy
+  refresh keeps the token and takes a new address, and the guest already
+  waits that out. Staging runs `observe` first. Problem record:
+  [gateway-bearer-works-from-any-computer](../problems/gateway-bearer-works-from-any-computer-2026-10-21.md).
+- *Hash comparison is not constant-time:* fixed (`subtle.ConstantTimeCompare`).
+- *720-hour lifetime, no rotation:* unchanged. A live rotation needs a way
+  to hand a running guest a new bearer; the design is in the station file.
+- *A second custodian:* in code, the front-importance timer reaches Jev
+  through the gateway's host route (`/provider/v1/host/judgments`, host-internal
+  credential, `internal/gateway/host_judgment.go`); the unit stops loading the
+  provider environment in a separate nix change.
+- *The rate limit:* a fair model-call scheduler exists behind
+  `GATEWAY_MODEL_SCHEDULER` (`internal/gateway/model_scheduler.go`), off by
+  default; the fixed window still applies to search, Jev and source-api.
+- *The Claude delegate's key:* a relay for the delegate's Messages API calls
+  exists in the gateway, dark until the owner places a Console API key
+  (`internal/gateway/anthropic_relay.go`). It cannot hold the owner's
+  subscription token.
+
 ### 2.4 Options and trade-offs
 
 | option | what it buys | what it costs |

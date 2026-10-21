@@ -6,7 +6,8 @@ the checklist item RES-11 and owner decision DEC-07 ("track spending, never
 cap"), and a re-read of the code at origin/main 26c4e1ed0. Station:
 [FP7](../definitions/choir-launch-fp7-gateway-identity-2026-10-21.md).
 Mutation class of any fix: **red** (gateway and provider calls). Problem
-first; no fix here.
+first; no fix in the commit that wrote this record. Status: scheduler built,
+off by default (station FP7); to be flipped after the staging proof.
 
 ## The problem in one sentence
 
