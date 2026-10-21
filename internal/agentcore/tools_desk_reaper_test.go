@@ -168,6 +168,27 @@ func TestDeskReaperStopsOnCloseAll(t *testing.T) {
 	}
 }
 
+// release of the last session stops the reaper: nothing remains to watch.
+func TestDeskReaperStopsWhenReleaseEmptiesPool(t *testing.T) {
+	deskTestWorkerBin(t)
+	clock := &fakeReaperClock{now: time.Now()}
+	workers := newReaperPool(clock)
+	t.Cleanup(workers.closeAll)
+	cfg := deskPoolCfg(t)
+	lease, err := workers.acquire(context.Background(), "agent:a", true, "run-1", cfg("run-1"))
+	if err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+	workers.done(lease.key)
+	if !clock.isArmed() {
+		t.Fatal("done left no reaper armed")
+	}
+	workers.release(lease.key)
+	if clock.isArmed() {
+		t.Fatal("release of the last session left the reaper timer armed")
+	}
+}
+
 // The daemon spawns the dedicated desk-worker binary when one sits beside its
 // own executable, and re-executes itself otherwise.
 func TestDeskWorkerBinaryPrefersDedicatedSibling(t *testing.T) {
