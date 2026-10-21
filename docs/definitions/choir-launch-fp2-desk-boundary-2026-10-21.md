@@ -243,12 +243,15 @@ now:
     sibling-rlimit denial is proved by confined-worker probes and a filter unit
     test only. The second batch is on lane/b3-desk-boundary-2.
   slice: >-
-    hand-off to FP0: the candidate is the lane branch; RES-04 (capsule memory per
-    doctrine) and SEC-15's non-root daemon and document-tool sandbox are not built
+    hand-off to FP0: two candidates. The first batch is lane/b3-desk-boundary
+    (under review, unchanged). The second batch is lane/b3-desk-boundary-2 on top
+    of it: RES-04 (capsule memory per doctrine, observe), SEC-15's document-tool
+    sandbox (observe) and the daemon's capability floor (observe). The non-root
+    daemon itself (the privileged-helper split) is not built: a named residual
   source_ref: f399a2e8c
   deploy_identity: none of this batch is deployed
   candidate:
-    id: fp2-desk-boundary
+    id: fp2-desk-boundary (first batch); fp2-desk-boundary-2 (second batch, ref lane/b3-desk-boundary-2, base 5fcf59e21, adds internal/doctool, internal/capfloor, internal/content, cmd/autoputer and the capsule, agentcore, nix and probe-script changes listed in "Second batch")
     state: ready
     ref: lane/b3-desk-boundary
     base: f399a2e8c
@@ -316,7 +319,10 @@ now:
     must reach a test computer and pass the probe before the paper refreshes (FP0's call).
   next_action: >-
     FP0: panel the frozen diff, rebase, land with its own deploy, run the FP2 report's
-    probe steps on a disposable test computer before the paper refreshes.
+    probe steps on a disposable test computer before the paper refreshes. The second
+    batch lands after the first, in a deploy of its own; its proof is "Second batch,
+    staging steps" below. Owner or FP0: whether and when the three observe switches
+    move to doctrine, required and enforce (each after its probe).
 
 receipts:
   - id: fp2-local
@@ -327,6 +333,20 @@ receipts:
       - the Linux container runs named in the FP2 report (yaegikernel as root and uid 1000, capsule seccomp, capsule-broker session limits)
       - heavy go test ./internal/agentcore -run TestDesk|TestPool|TestManifest|TestRecordsDesk|TestIsolation|TestRuntime|TestResearch|TestManagement
     rollback_ref: git revert of the lane's commits
+    disposition: candidate ready for review; not landed
+    landing:
+      source_commit: not_applicable
+      ci_ref: not_applicable
+      deploy_ref: not_applicable
+      environment_identity: not_applicable
+      deployed_acceptance: not_applicable
+  - id: fp2-local-2
+    boundary: implement
+    identity: lane/b3-desk-boundary-2 at hand-off
+    proof_refs:
+      - go test ./internal/capsule ./internal/doctool ./internal/capfloor ./internal/content on the node-a agents VM (linux/amd64, kernel 6.18, Landlock V5, uid 1000, unprivileged user namespaces)
+      - go test ./internal/agentcore -run 'TestIsolation|TestGuestEgress|TestEngineeringCapsule' (all pass except TestIsolationSelfTestDeskCellsThroughTheRealWorker, a first-batch test that fails on this VM; see "Second batch, residuals")
+    rollback_ref: git revert of the second batch's commits
     disposition: candidate ready for review; not landed
     landing:
       source_commit: not_applicable
@@ -709,3 +729,91 @@ marked start that still holds extra capabilities (refused under enforce);
 K5 a child that needed a dropped capability (none known: no Mknod, raw I/O,
 module or time call in the guest code); K6 calling this non-root (it is not;
 the receipt says root with a floor).
+
+### Second batch: what was built
+
+Commits on lane/b3-desk-boundary-2 (base 5fcf59e21):
+
+- f7a1e17de docs: the designs and failure modes above (green).
+- f414e3ca7 RES-04: `internal/capsule/capsule_memory.go`, the policy, the
+  receipts (`capsule_memory` in `/api/runtime/observability`), the
+  capsules aggregate under doctrine; the engineering request (red).
+- e9de19687 SEC-15 document tools: `internal/doctool`, the helper and probe
+  entries in `cmd/autoputer/main.go`, `internal/content/extract.go` through
+  it, `document_tool` in the isolation self-test and the probe script, the
+  `choir-doctool` user (red). One addition to the design above: observe
+  never makes an extraction worse. A tool that fails only inside the
+  sandbox runs again as before, and the warning is
+  `document_tool_sandbox_divergence`.
+- 4ab63a8f2 SEC-15 capability floor: `internal/capfloor`, `Apply` at the
+  top of the daemon's `main`, `runtime_capabilities` in the isolation
+  self-test and the probe script (red).
+
+The three switches ship in observe (`CHOIR_CAPSULE_MEMORY_POLICY=observe`,
+`CHOIR_DOCUMENT_TOOL_SANDBOX=observe`, `CHOIR_RUNTIME_CAPABILITY_FLOOR=observe`).
+Under observe the capsule memory policy and the capability floor change no
+behavior. The document-tool sandbox under observe changes how tools run
+(sandboxed, as uid 61010) but never what an extraction returns. All nix is
+unevaluated.
+
+### Second batch, staging steps (FP0; no secrets here)
+
+On a disposable test computer after the deploy that carries this batch,
+never first on the paper. These steps come after the first batch's steps 1
+to 5.
+
+1. `python3 scripts/desk_cell_confinement_probe.py --cred <the test
+   computer's 0600 credential file> --out
+   docs/evidence/fp2-desk-boundary-2-<date>.json --skip-egress`. The
+   receipt has two new sections. `document_tool` must show uid 61010,
+   NoNewPrivs 1, Seccomp 2, CapEff 0, and every probe denied (never by
+   ENOENT). `runtime_capabilities` is report-only under observe: record
+   `cap_bnd`, `extra` and `missing`. `missing` should be empty.
+2. Document tools under observe: read a PDF (a research turn that opens
+   one, or a capture of one), then count `document_tool_sandbox_fallback`
+   and `document_tool_sandbox_divergence` in the extractions'
+   `extraction_warnings`. Both should be zero. Read the run's `w-doctool-*`
+   memory with the desks cgroup log line, and set `toolMemoryMax` from it
+   if 1 GiB is wrong.
+3. Capsule memory under observe: run one engineering assignment to its end.
+   `GET /api/runtime/observability` then has a `capsule_memory` receipt
+   with policy observe, request 2048 MiB, its `peak_bytes`, `events_max`
+   and `doctrine_would_throttle`. Doctrine is safe to try when builds show
+   `events_max` 0 and a peak under the request.
+4. Enforce trial (the capability floor), on the test computer only. Set
+   `CHOIR_RUNTIME_CAPABILITY_FLOOR=enforce` there (an image built with it,
+   or the env file `/run/go-choir-autoputer.env`, if FP0's tooling writes
+   it without SSH; otherwise this step waits for an image). Then: the
+   daemon starts (log `capfloor: enforced: bounding set 00000000012c15ff`),
+   the probe passes with `runtime_capabilities` judged, one engineering
+   assignment with egress completes, and a management, research and
+   Texture turn each complete. If something fails, its log names the
+   capability; add it back to `capfloor.Kept` with its reason.
+5. Moving switches to doctrine, required or enforce on the paper is a
+   separate decision, each after its own probe (FP0 or owner).
+
+### Second batch, residuals
+
+- **The non-root daemon (SEC-15's largest part) is not built.** The
+  privileged-helper split is unchanged from the first batch's design. The
+  floor is the step under it: it bounds what root can do, but the daemon is
+  still root.
+- The capability inventory is conservative. DAC_READ_SEARCH, FSETID,
+  SYS_CHROOT and SYS_RESOURCE are kept "until the enforce probe shows them
+  unused". Each later removal is a reviewed change.
+- The document-tool sandbox runs the daemon's own binary as the helper,
+  as uid 61010. That binary must be executable by that uid, the same need
+  the desk cells have for `autoputer desk-session` as 61001 to 61003. If
+  the cells start on staging, the helper will too.
+- Seccomp for document tools is a deny list (default allow), because the
+  three tools differ in what they need. An allow list needs syscall traces
+  of real runs (strace inside the sandbox on a test computer).
+- `toolMemoryMax` 1 GiB and the engineering request of 2 GiB are first
+  values. The receipts (step 2 and step 3) set them.
+- Observed on the node-a agents VM: `TestIsolationSelfTestDeskCellsThroughTheRealWorker`
+  (first batch, `internal/agentcore`) fails as uid 1000 on a kernel with
+  Landlock. Without root every desk's worker runs as the same uid, and the
+  allowed root (the test's TMPDIR) contains the other desks' tmp dirs, so
+  the cross-desk canary is readable. This batch changes no desk-cell code;
+  whether the test needs a root or no-Landlock guard is FP0's call. It is
+  not fixed here.

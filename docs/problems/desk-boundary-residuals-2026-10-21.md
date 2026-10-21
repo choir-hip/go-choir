@@ -152,3 +152,15 @@ findings from reading the code again for it:
   `go-choir-updater`'s empty set), so a compromised daemon or any child can
   load a kernel module, use raw I/O on the guest's block devices, or set the
   clock, none of which any guest code needs.
+
+Status after the second batch (lane `lane/b3-desk-boundary-2`, not deployed):
+
+- RES-04 and the capsules aggregate of RES-01: the mechanism is built and
+  ships in observe. Capsules keep their old shape. Each capsule's
+  memory.peak and memory.events are recorded with what doctrine would have
+  done, and the doctrine policy is one switch away once the receipts show
+  builds fit (f414e3ca7).
+- SEC-15, document tools: sandboxed as uid 61010 in an empty network
+  namespace under Landlock V5 and seccomp, in observe (e9de19687).
+- SEC-15, the daemon: a capability floor (15 kept, the rest dropped from
+  the bounding set), in observe (4ab63a8f2). Still root: the split is open.
