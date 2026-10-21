@@ -14,6 +14,13 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// statusPath and taskStatusGlob are where the process's and its threads'
+// capability sets are read (tests point them at fixtures).
+var (
+	statusPath     = "/proc/self/status"
+	taskStatusGlob = "/proc/self/task/*/status"
+)
+
 // Apply runs at the top of the daemon's main, before anything else starts.
 // Off and observe return nil; enforce either returns nil with every thread
 // at the floor or an error (the daemon must not start), or never returns
@@ -22,12 +29,17 @@ func Apply(mode Mode) error {
 	if mode != ModeObserve && mode != ModeEnforce {
 		return nil
 	}
-	raw, err := os.ReadFile("/proc/self/status")
-	if err != nil {
-		return fmt.Errorf("capfloor: %w", err)
+	raw, err := os.ReadFile(statusPath)
+	var bnd uint64
+	if err == nil {
+		bnd, err = parseCapBnd(string(raw))
 	}
-	bnd, err := parseCapBnd(string(raw))
 	if err != nil {
+		if mode == ModeObserve {
+			// Observe never stops the daemon from starting.
+			log.Printf("capfloor: observe: cannot read the bounding set: %v", err)
+			return nil
+		}
 		return fmt.Errorf("capfloor: %w", err)
 	}
 	extra, missing := Plan(bnd)
@@ -47,6 +59,10 @@ func Apply(mode Mode) error {
 		return nil
 	}
 	if len(extra) == 0 {
+		// This thread is within the floor; every other must be too.
+		if err := verifyThreads(); err != nil {
+			return err
+		}
 		log.Printf("capfloor: enforce: the bounding set %s is already within the floor", Hex(bnd))
 		return nil
 	}
@@ -89,7 +105,7 @@ func dropInheritable() error {
 // verifyThreads refuses a start in which any thread holds a capability
 // outside the floor.
 func verifyThreads() error {
-	tasks, err := filepath.Glob("/proc/self/task/*/status")
+	tasks, err := filepath.Glob(taskStatusGlob)
 	if err != nil || len(tasks) == 0 {
 		return fmt.Errorf("capfloor: cannot list this process's threads (%v)", err)
 	}
