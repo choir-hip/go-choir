@@ -129,6 +129,92 @@ Hypotheses, not findings (no trace yet shows which):
 Instrument before fixing: the dispatcher logs an activation whose oldest
 due update waited 30 s or more, with the slots in use and the due count.
 
+### E6 measured (2026-10-21 14:07 to 14:33, c19db6c09 and 01c469c24)
+
+The instrumentation shipped in c19db6c09. Its lines, read from the paper's
+observability ring:
+
+- Every `dispatcher: activation wait` line reads `slots=8/8`, with 42 to 59
+  agents due. A slot was never free.
+- The waits rise with the agent id. Between 14:09 and 14:17, the logged
+  Texture desks came in ascending id order (`texture:0f4f…`, `167c…`,
+  `17ac…` up to `799c…`). The waits grew from under a minute to 6m33s,
+  6m58s, and 19m4s for `texture:799c…`. The sumo story's desk is
+  `texture:db96…`, late in that order, and it waited about 19 minutes at
+  13:29. **H2 is a finding:** `PendingAgents` returns agents in index order
+  (`idx_actor_updates_backlog` on `to_agent_id`), each freed slot goes to
+  the first due agent in that order, and an id that sorts late waits until
+  nothing earlier is due.
+- **H1 is a finding:** `in_flight` showed `initial_dispatch` activations
+  (whole Texture turns) in the slots. One `management:` activation folded
+  72 updates and held its slot for over 10 minutes. A reader's research
+  report reaches Texture through two queued activations: `inbox_record`
+  (which only submits the run) and then `initial_dispatch` (which runs the
+  turn). Both wait in the same order.
+- The wake outbox is not the wait. `actor wake latency` lines show 2 to 15
+  s from wake to actor update, plus one 1m40s list right after a boot.
+- No gateway rate-limit wait appears in the log.
+- H3 is not shown: `max_defer_count` is 0 on the due set.
+
+Why the turns that hold the slots are slow: the guest store is saturated.
+The embedded Dolt engine runs behind one mutex and one connection
+(`engineMu`, `configureEmbeddedDoltDB`). The observability `engine_mutex`
+counters, sampled 153 s apart from 14:30:39 (9 minutes after the
+01c469c24 boot), show:
+
+| Operation | Calls | Mutex held | Per call |
+|---|---|---|---|
+| all | | 146.5 s of 153 s (96%) | |
+| `ReadObjectSnapshotFiltered` | 116 | 48.3 s | 416 ms |
+| `ListObjectsByMetadataPage` | 540 | 48.1 s | 89 ms |
+| `ListObjectsByOwnerAndBody` | 13 | 29.6 s | 2.3 s |
+| `GetObject` | 5441 | 5.9 s held, 382 s waited | 1.1 ms held, 70 ms waited |
+
+A `GetObject` holds the mutex for about 1 ms and waits about 70 ms for it.
+A desk turn makes hundreds of store reads, so it spends tens of seconds
+waiting for the store, and holds its dispatcher slot while it waits.
+
+### E6 structural assessment
+
+This is the fourth record on one substrate:
+
+- [texture-list-cold-latency-2026-10-09.md](texture-list-cold-latency-2026-10-09.md);
+- [embedded-dolt-single-connection-is-a-fixed-upstream-race-2026-10-11.md](embedded-dolt-single-connection-is-a-fixed-upstream-race-2026-10-11.md);
+- [guest-cpu-is-unindexed-store-scans-2026-10-14.md](guest-cpu-is-unindexed-store-scans-2026-10-14.md);
+- this one.
+
+The substrate is the object graph used as a JSON document store, read by
+scan-and-filter under one engine mutex. The dispatcher turns store
+saturation into wake delay: slow turns hold the 8 slots, and the fixed
+order chooses who waits.
+
+Two existing replacements are not fully wired:
+
+- The Dolt upgrade past the JSON unescape race landed on 2026-10-15
+  (5b0772561). The engine mutex and the single connection, which were the
+  workaround for that race, are still in place. The 10-11 record says to
+  remove them "in measured steps" after the upgrade, and that has not been
+  done.
+- The generated-column indexes from the 10-14 record exist. The three hot
+  reads above still scan. Whether each one is missing an index or bypassing
+  one is not yet known.
+
+Fix order, smallest blast radius first. Each fix is measured on the paper
+before the next:
+
+1. Dispatcher order: oldest due first (orange, actor kernel query). It
+   removes the starvation tail: a wait becomes about the queue ahead
+   divided by the slots, not unbounded for a late id.
+2. The three hot reads (orange, guest queries): give each an indexed path,
+   or stop calling it per turn. Target: mutex busy well under 50%.
+3. Engine concurrency (red, store substrate): remove `engineMu` and raise
+   the connection count in steps, per the 10-11 record's tests.
+4. Only then, if waits remain: the double activation for a Texture wake,
+   and the slot count.
+
+A larger `MaxConcurrent` before steps 2 and 3 would add contention for the
+same mutex, not throughput.
+
 ### E9. Texture's Write cites with `{{ref N}}` and is refused
 
 In the same run Texture's first Write was refused: "`{{ref 1}}` names no
@@ -200,6 +286,6 @@ share: research's model calls are 1 to 3 s each at low effort.
 
 ## Heresy delta
 
-- discovered: E1 to E9.
+- discovered: E1 to E9; E6 measured: the dispatcher order (H2) and slots held by whole turns (H1), over a store engine 96% busy.
 - introduced: none.
 - repaired: none.
