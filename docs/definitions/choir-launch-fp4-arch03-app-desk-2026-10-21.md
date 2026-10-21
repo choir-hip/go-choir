@@ -61,10 +61,28 @@ boundaries:
   protected_surfaces: [desk worker spawn, run authority at the daemon]
 
 now:
-  status: working
-  slice: problem record, design and station file committed; tests then code next
+  status: checkpoint_incomplete
+  slice: >-
+    hand-off to FP0. Built: 71fd9ffa5 (docs, problem record) and 6d1cffed5
+    (internal/appdesk; deskmanifest RetireApp, AppSpec, Equal; the worker
+    carry). Local evidence: go test ./internal/appdesk ./internal/deskmanifest
+    ./internal/yaegikernel pass (GOMAXPROCS=2); go vet clean.
   source_ref: 27d39057d
   deploy_identity: none
+  candidate:
+    id: fp4-arch03-app-desk
+    lands_after: FP2 (this branch is based on lane/b3-desk-boundary-b1fix)
+    deployed_proof: >-
+      none needed beyond FP2's: with CHOIR_APP_DESKS unset no app desk is
+      registered and sessionEnv is unchanged, so a deployed system desk turn
+      (FP2 step 5, texture-acceptance-deployed) is the proof of no regression
+  residuals:
+    - Activate has no caller: install events need S7-0's package manifest and event kind on main.
+    - The write-gate overlay of derived kinds (writer desk:<pkg>, retired kinds unwritable) needs ARCH-04 landed.
+    - App desks have empty MessageTargets and Addresses, so Cast and Report reach no desk yet; routing needs the addressing field.
+    - Upgrade and reinstall after disable are refused (design §5.10 re-approval path not built); failure modes 7, 8, 10 untested.
+    - Egress is refused outright until NET-10's owner grants.
+  open_owner_questions: design §7 defaults stand (embed, choir.app.<pkg>.<kind> namespace, Texture stays unpackaged); "podcast" is an S7 reserved name, so the L3-03 podcast app agent needs S7-0's legacy rule
 ---
 
 # FP4 ARCH-03: an app package carries its app desk
