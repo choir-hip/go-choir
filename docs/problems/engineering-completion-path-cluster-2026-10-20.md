@@ -1122,3 +1122,21 @@ when the retry spawns.
   change in the management desk, not in this slice.
 - Whether the offer should also name the patch to management and Texture in
   the assignment's final Report (not only in the run record) is open.
+
+**Option A implementation notes (branch `feat/carried-patch-retry`, not yet
+pushed or deployed).** Seams used: `Store.ListEngineeringSubjectCandidates`
+(`internal/store/engineering_assignments.go`), `capsule.DiffTreesToPatch`,
+`CarriedPatchPaths`, `CheckPatchAppliesToTree` (`internal/capsule/carried_patch.go`),
+`Executor.DeriveCarriedPatch` and `SpawnSpec.CarriedPatchDir` mounted at
+`/selfdev/carried` (`carried_patch_linux.go`, `executor.go` Spawn),
+`offerCarriedPatch` (`internal/agentcore/carried_patch.go`) called from
+`spawnBindActivateAssignment`, and the notice in `runContextForRun`. One
+deviation from the design text: the decision is recorded per assignment in
+`<updater root>/carried/offers/` rather than in run metadata, because the
+run is part of the Bind command digest and a replayed spawn that decided
+differently would conflict. The staged patch directory is content-addressed
+at `<updater root>/carried/<sha256>/`. The `/selfdev/carried` capsule mount
+is written like `/selfdev/adoption` and compiles for linux, but its mount was
+not exercised on the darwin build host; the first staging drill is the
+deployed proof (a failed round, a re-cast, then `ls /selfdev/carried` in the
+retry's capsule).

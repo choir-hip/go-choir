@@ -101,6 +101,9 @@ func (rt *Runtime) runContextForRun(rec *types.RunRecord) string {
 				b.WriteString(". This verification capsule contains that exact immutable candidate subject.")
 			} else {
 				b.WriteString(". Implement only the bounded objective in /workspace/platform and return a typed result.")
+				if notice := rt.carriedPatchNoticeForRun(rec); notice != "" {
+					b.WriteString("\n\n" + notice)
+				}
 			}
 		}
 	}

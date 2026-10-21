@@ -2272,6 +2272,43 @@ func (s *Store) GetEngineeringAssignmentReportByCanonicalID(ctx context.Context,
 	return report, nil
 }
 
+// ListEngineeringSubjectCandidates returns the subject candidates the
+// trajectory's assignments minted, newest first. A candidate is the durable
+// record of a round's changed source tree (its artifact ref names the
+// content-addressed tree), whatever result the round reported. A retry reads
+// them to carry the newest unfinished work forward as an inert patch (failure
+// 15, docs/problems/engineering-completion-path-cluster-2026-10-20.md).
+func (s *Store) ListEngineeringSubjectCandidates(ctx context.Context, ownerID, computerID, trajectoryID string) ([]types.EngineeringSubjectCandidate, error) {
+	trajectoryID = strings.TrimSpace(trajectoryID)
+	if trajectoryID == "" {
+		return nil, nil
+	}
+	objects, err := s.ogListAllByMetadata(ctx, ogKindEngineeringCandidate, "trajectory_id", trajectoryID)
+	if err != nil {
+		return nil, err
+	}
+	var out []types.EngineeringSubjectCandidate
+	for _, obj := range objects {
+		if obj.OwnerID != strings.TrimSpace(ownerID) || obj.ComputerID != strings.TrimSpace(computerID) || obj.Tombstone {
+			continue
+		}
+		candidate, decodeErr := decodeLifecycleObject[types.EngineeringSubjectCandidate](obj)
+		if decodeErr != nil {
+			return nil, decodeErr
+		}
+		if candidate.TrajectoryID == trajectoryID && candidate.OwnerID == strings.TrimSpace(ownerID) && candidate.ComputerID == strings.TrimSpace(computerID) {
+			out = append(out, candidate)
+		}
+	}
+	slices.SortFunc(out, func(left, right types.EngineeringSubjectCandidate) int {
+		if cmp := right.CreatedAt.Compare(left.CreatedAt); cmp != 0 {
+			return cmp
+		}
+		return strings.Compare(right.CandidateID, left.CandidateID)
+	})
+	return out, nil
+}
+
 func (s *Store) GetEngineeringSubjectCandidate(ctx context.Context, ownerID, computerID, candidateID string) (types.EngineeringSubjectCandidate, error) {
 	obj, err := s.lifecycleGraph().GetObject(ctx, strings.TrimSpace(candidateID))
 	if err != nil {

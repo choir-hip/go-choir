@@ -1807,3 +1807,55 @@ func TestRecordEngineeringOrphanObservation(t *testing.T) {
 	}
 	requireFinalEngineeringReport(t, s, f, open, 1, result.Report.ReportID, types.EngineeringAssignmentFailed)
 }
+
+// Failure 15, problem 1 (docs/problems/engineering-completion-path-cluster-2026-10-20.md):
+// a failed round's candidate is on the tape, and the next assignment on the
+// trajectory can list it, newest first, scoped to its owner, computer and
+// trajectory. A failed result mints a candidate when the subject changed.
+func TestListEngineeringSubjectCandidatesByTrajectory(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	f := installEngineeringAssignmentAuthority(t, s, 2)
+	var opens []types.OpenEngineeringAssignmentRequest
+	for index := range 2 {
+		open := engineeringOpenRequest(f, f.seed.AssignmentIDs[index], fmt.Sprintf("list-capability-%d", index), fmt.Sprintf("capsule-list-%d", index))
+		if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.BindEngineeringAssignment(ctx, bindEngineeringRequest(open, f.assignedRunIDs[index], fmt.Sprintf("list-capability-%d", index))); err != nil {
+			t.Fatal(err)
+		}
+		opens = append(opens, open)
+	}
+	if got, err := s.ListEngineeringSubjectCandidates(ctx, f.ownerID, f.computerID, opens[0].Binding.TrajectoryID); err != nil || len(got) != 0 {
+		t.Fatalf("before any report = %v, %v; want none", got, err)
+	}
+	for index, result := range []types.EngineeringAssignmentResultKind{types.EngineeringResultFailed, types.EngineeringResultPartial} {
+		digest := objectgraph.SHA256([]byte(fmt.Sprintf("candidate bytes %d", index)))
+		req := assignmentReportRequest(opens[index], 2, fmt.Sprintf("report-list-%d", index), digest, result, types.EngineeringVerdictNone)
+		req.Report.Mutations = []types.EngineeringRecordedMutation{{
+			MutationID: fmt.Sprintf("mutation-list-%d", index), Kind: "subject_bytes", BeforeDigest: opens[index].Binding.SubjectDigest,
+			AfterDigest: digest, EvidenceRef: "receipt:mutation", SubjectBytesChanged: true,
+		}}
+		req.CommandDigest, _ = ComputeRecordEngineeringAssignmentReportDigest(req)
+		if got, err := s.RecordEngineeringAssignmentReport(ctx, req); err != nil || got.Candidate == nil {
+			t.Fatalf("report %d = %+v, %v; want a candidate", index, got, err)
+		}
+	}
+	got, err := s.ListEngineeringSubjectCandidates(ctx, f.ownerID, f.computerID, opens[0].Binding.TrajectoryID)
+	if err != nil || len(got) != 2 {
+		t.Fatalf("candidates = %v, %v; want two", got, err)
+	}
+	if !got[0].CreatedAt.After(got[1].CreatedAt) && !got[0].CreatedAt.Equal(got[1].CreatedAt) {
+		t.Fatalf("not newest first: %v then %v", got[0].CreatedAt, got[1].CreatedAt)
+	}
+	if got[0].AssignmentID != opens[1].AssignmentID || got[1].AssignmentID != opens[0].AssignmentID {
+		t.Fatalf("assignment order = %s, %s; want newest (%s) first", got[0].AssignmentID, got[1].AssignmentID, opens[1].AssignmentID)
+	}
+	if other, err := s.ListEngineeringSubjectCandidates(ctx, f.ownerID, f.computerID, "trajectory-elsewhere"); err != nil || len(other) != 0 {
+		t.Fatalf("another trajectory = %v, %v; want none", other, err)
+	}
+	if other, err := s.ListEngineeringSubjectCandidates(ctx, "owner-elsewhere", f.computerID, opens[0].Binding.TrajectoryID); err != nil || len(other) != 0 {
+		t.Fatalf("another owner = %v, %v; want none", other, err)
+	}
+}

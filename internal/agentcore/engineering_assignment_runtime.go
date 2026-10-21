@@ -469,6 +469,11 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 		return AssignedEngineeringStart{}, cancelOpen(fmt.Errorf("adoption input: %w", adoptionErr))
 	}
 	spec.AdoptionDir = adoptionDir
+	// Option A (failure 15, problem 1): an earlier failed round's work on this
+	// trajectory is offered as an inert patch the engineer may apply in this
+	// fresh capsule. Never fatal: a refusal is recorded and the capsule starts
+	// from the clean base tree.
+	spec.CarriedPatchDir = carriedPatchDirForSpawn(rt.offerCarriedPatchForAssignment(ctx, assignment, preflight.ArtifactRef))
 	// One live assignment capsule at a time: prior capsules are reclaimed
 	// here, in the saga, so the open itself writes nothing but its own
 	// transaction (C1e D4).

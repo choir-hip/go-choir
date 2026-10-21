@@ -46,6 +46,16 @@ type SpawnSpec struct {
 	// trajectory (P8, docs/reports/p6-p8-release-adopt-2026-10-15.md).
 	AdoptionDir string
 
+	// CarriedPatchDir is a trusted-runtime input: the host-side directory of
+	// a failed earlier round's carried source patch (source.patch and
+	// carried.json, staged content-addressed and re-verified by the runtime
+	// just before spawn) installed read-only at /selfdev/carried for the
+	// retry's engineering assignment. The capsule's tree stays the clean
+	// base; the engineer chooses whether to apply the patch inside it
+	// (docs/problems/engineering-completion-path-cluster-2026-10-20.md,
+	// failure 15, problem 1, option A).
+	CarriedPatchDir string
+
 	// Egress makes this an ecosystem_proxy (L2) capsule: the executor serves
 	// an egress proxy on EgressSocketPath and the broker forwards loopback
 	// TCP to it. It is a trusted-runtime input read from the durable

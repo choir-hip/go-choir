@@ -65,6 +65,12 @@ func (e *Executor) ResolveGrantedWorktreeDigest(context.Context, string, string)
 func (e *Executor) PersistGrantedCandidate(context.Context, string, string) (SourcePreflight, error) {
 	return SourcePreflight{}, stubErr("persist candidate")
 }
+func (e *Executor) DeriveCarriedPatch(context.Context, string, string) (CarriedPatch, error) {
+	return CarriedPatch{}, stubErr("derive carried patch")
+}
+func (e *Executor) CheckCarriedPatchApplies(context.Context, CarriedPatch, string) error {
+	return stubErr("check carried patch")
+}
 func (e *Executor) ResolveGrantedSourceSnapshotDigest(string, string) (string, error) {
 	return "", stubErr("resolve")
 }

@@ -467,6 +467,15 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 			return nil, err
 		}
 	}
+	if spec.CarriedPatchDir != "" {
+		carriedTarget := filepath.Join(sourceLower, "selfdev", "carried")
+		if err := copyCanonicalSubjectTree(ctx, spec.CarriedPatchDir, carriedTarget); err != nil {
+			return nil, fmt.Errorf("capsule carried patch input copy: %w", err)
+		}
+		if err := makeSubjectTreeReadOnly(carriedTarget); err != nil {
+			return nil, err
+		}
+	}
 	caps.SourceSnapshotDigest = sourceDigest
 	lowerLayers := sourceLower + ":" + e.lowerDir
 	if err := MountOverlayFS(caps.MergedDir, caps.UpperDir, caps.WorkDir, lowerLayers); err != nil {
@@ -512,6 +521,23 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 			return unix.Mount("", adoptionMount, "", unix.MS_BIND|unix.MS_REMOUNT|unix.MS_RDONLY|unix.MS_NOSUID|unix.MS_NODEV, "")
 		}); err != nil {
 			return nil, fmt.Errorf("capsule harden adoption input mount: %w", err)
+		}
+	}
+	if spec.CarriedPatchDir != "" {
+		// Like the adoption input: the carried patch must not be shadowable
+		// through the overlay upper, so the lower copy is bound read-only
+		// over the merged path.
+		carriedMount := filepath.Join(caps.MergedDir, "selfdev", "carried")
+		carriedSource := filepath.Join(sourceLower, "selfdev", "carried")
+		if err := waitForCommandStart(ctx, capsuleBrokerStartTimeout, func() error {
+			return unix.Mount(carriedSource, carriedMount, "", unix.MS_BIND, "")
+		}); err != nil {
+			return nil, fmt.Errorf("capsule bind carried patch input: %w", err)
+		}
+		if err := waitForCommandStart(ctx, capsuleBrokerStartTimeout, func() error {
+			return unix.Mount("", carriedMount, "", unix.MS_BIND|unix.MS_REMOUNT|unix.MS_RDONLY|unix.MS_NOSUID|unix.MS_NODEV, "")
+		}); err != nil {
+			return nil, fmt.Errorf("capsule harden carried patch input mount: %w", err)
 		}
 	}
 	cgroup, err := CreateCgroup(spec.CapsuleID, spec)
