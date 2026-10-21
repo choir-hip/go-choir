@@ -121,6 +121,14 @@ type DerivedKeyExecer interface {
 // DerivedKeys is the process-wide state of the side table, shared by the
 // write and read stores of one engine. Its maps are built once and never
 // changed; the values are atomics.
+//
+// Withdrawal and publication are ordered by pubMu: Invalidate, a write that
+// marks a family bad, and a pass's final check-and-set take it, so a
+// withdrawal either lands before the pass compares its counters (and the pass
+// does not publish) or after it publishes (and withdraws it again). A writer
+// withdraws inside its transaction, before its commit, so a read that checks
+// readability after its snapshot is taken sees every withdrawal of a row the
+// snapshot holds (readDerived).
 type DerivedKeys struct {
 	tableReady    atomic.Bool
 	validated     map[string]*atomic.Bool
@@ -128,11 +136,16 @@ type DerivedKeys struct {
 	badWrites     map[string]*atomic.Uint64
 	invalidations map[string]*atomic.Uint64
 	mismatches    map[string]*atomic.Uint64
-	passMu        sync.Mutex
-	wake          chan struct{}
+	// writes counts the family's maintained writes and drops; passWrites is
+	// its value when the last published pass started. A bad family written
+	// since may have had its malformed row repaired (RepairPending).
+	writes     map[string]*atomic.Uint64
+	passWrites map[string]*atomic.Uint64
+	pubMu      sync.Mutex
+	passMu     sync.Mutex
+	wake       chan struct{}
 	// Test seams, nil in production: beforeRead runs as a side-table read
-	// starts, beforePublish once a pass has read its counters and is about to
-	// publish. The interleaving tests put a writer at each.
+	// starts, beforePublish as a pass is about to check and publish. The interleaving tests put a writer at each.
 	beforeRead, beforePublish func(name string)
 }
 
@@ -143,6 +156,8 @@ func newDerivedKeys() *DerivedKeys {
 		badWrites:     map[string]*atomic.Uint64{},
 		invalidations: map[string]*atomic.Uint64{},
 		mismatches:    map[string]*atomic.Uint64{},
+		writes:        map[string]*atomic.Uint64{},
+		passWrites:    map[string]*atomic.Uint64{},
 		wake:          make(chan struct{}, 1),
 	}
 	for _, fam := range derivedFamilies {
@@ -151,6 +166,8 @@ func newDerivedKeys() *DerivedKeys {
 		d.badWrites[fam.Name] = new(atomic.Uint64)
 		d.invalidations[fam.Name] = new(atomic.Uint64)
 		d.mismatches[fam.Name] = new(atomic.Uint64)
+		d.writes[fam.Name] = new(atomic.Uint64)
+		d.passWrites[fam.Name] = new(atomic.Uint64)
 	}
 	return d
 }
@@ -190,6 +207,32 @@ func (d *DerivedKeys) readable(keyName string) bool {
 
 func (d *DerivedKeys) setValidated(name string, v bool) { d.validated[name].Store(v) }
 
+// RepairPending reports whether a validated family is on the JSON path for a
+// malformed row and has been written since its last pass started: the row may
+// have been repaired, and only another pass can tell.
+func (d *DerivedKeys) RepairPending(name string) bool {
+	if d == nil || d.validated[name] == nil {
+		return false
+	}
+	return d.validated[name].Load() && d.bad[name].Load() && d.writes[name].Load() != d.passWrites[name].Load()
+}
+
+// noteWrite counts a maintained write or drop of the family and, if the
+// family is bad, asks for a pass.
+func (d *DerivedKeys) noteWrite(name string) {
+	d.writes[name].Add(1)
+	if d.bad[name].Load() {
+		d.signal()
+	}
+}
+
+func (d *DerivedKeys) signal() {
+	select {
+	case d.wake <- struct{}{}:
+	default:
+	}
+}
+
 // Mismatches counts the read tripwire's catches for a family.
 func (d *DerivedKeys) Mismatches(name string) uint64 {
 	if c := d.mismatches[name]; c != nil {
@@ -209,14 +252,14 @@ func (d *DerivedKeys) Invalidate(name, reason string) {
 	if v == nil {
 		return
 	}
+	d.pubMu.Lock()
 	d.invalidations[name].Add(1)
-	if v.Swap(false) {
+	was := v.Swap(false)
+	d.pubMu.Unlock()
+	if was {
 		log.Printf("objectgraph dolt: derived keys %s withdrawn: %s", name, reason)
 	}
-	select {
-	case d.wake <- struct{}{}:
-	default:
-	}
+	d.signal()
 }
 
 // InvalidateAll withdraws every family.
@@ -265,14 +308,18 @@ func (d *DerivedKeys) Maintain(ctx context.Context, x DerivedKeyExecer, canonica
 // deriveOne derives one row, tolerating an expression error.
 func (d *DerivedKeys) deriveOne(ctx context.Context, x DerivedKeyExecer, fam *derivedFamily, canonicalID string) {
 	if _, err := x.ExecContext(ctx, deriveSQL(fam, `canonical_id = ?`, true), fam.Name, string(fam.Kind), canonicalID); err == nil {
+		d.noteWrite(fam.Name)
 		return
 	}
 	if _, err := x.ExecContext(ctx, deriveSQL(fam, `canonical_id = ?`, false), fam.Name, string(fam.Kind), canonicalID); err != nil {
 		d.Invalidate(fam.Name, fmt.Sprintf("maintain %s: %v", canonicalID, err))
 		return
 	}
+	d.pubMu.Lock()
 	d.badWrites[fam.Name].Add(1)
-	if d.bad[fam.Name].CompareAndSwap(false, true) {
+	marked := d.bad[fam.Name].CompareAndSwap(false, true)
+	d.pubMu.Unlock()
+	if marked {
 		log.Printf("objectgraph dolt: derived keys %s: %s has a body or metadata the expression cannot read; the family keeps the JSON path", fam.Name, canonicalID)
 	}
 }
@@ -287,6 +334,11 @@ func (d *DerivedKeys) Drop(ctx context.Context, x DerivedKeyExecer, canonicalID 
 	}
 	if _, err := x.ExecContext(ctx, `DELETE FROM `+DerivedKeysTable+` WHERE canonical_id = ?`, canonicalID); err != nil {
 		d.InvalidateAll(fmt.Sprintf("drop %s: %v", canonicalID, err))
+		return
+	}
+	// The dropped row may have been a family's malformed one.
+	for _, fam := range derivedFamilies {
+		d.noteWrite(fam.Name)
 	}
 }
 
@@ -368,7 +420,11 @@ type derivedIDRow struct {
 // checked against the row the table promised (kind, owner, updated_at,
 // content_hash); a difference, or a promised row that is gone, is a stale
 // table: the family is withdrawn and ok is false, and the caller answers
-// from the JSON path. The caller holds the engine mutex.
+// from the JSON path. The caller holds the engine mutex, which does not order
+// it with the projector, so the family's readability is checked again once
+// the transaction's snapshot is taken: a writer withdraws before it commits,
+// so any row in the snapshot that withdrew the family is seen here, and the
+// caller's earlier check is only a shortcut.
 func (s *DoltStore) readDerived(ctx context.Context, fam *derivedFamily, query string, args []any) (objs []Object, ok bool, err error) {
 	if hook := s.derived.beforeRead; hook != nil {
 		hook(fam.Name)
@@ -396,6 +452,9 @@ func (s *DoltStore) readDerived(ctx context.Context, fam *derivedFamily, query s
 		return nil, false, fmt.Errorf("objectgraph dolt: iterate key index: %w", err)
 	}
 	rows.Close()
+	if !s.derived.readable(fam.Name) {
+		return nil, false, nil
+	}
 	if len(promised) == 0 {
 		return nil, true, nil
 	}
@@ -563,6 +622,7 @@ func (s *DoltStore) validateFamily(ctx context.Context, fam *derivedFamily, opt 
 	}
 	startInvalidations := d.invalidations[fam.Name].Load()
 	startBadWrites := d.badWrites[fam.Name].Load()
+	startWrites := d.writes[fam.Name].Load()
 
 	s.engineMu.LockAs(derivedKeysPageOpName)
 	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM og_objects WHERE object_kind = ?`, string(fam.Kind)).Scan(&p.total)
@@ -608,18 +668,25 @@ func (s *DoltStore) validateFamily(ctx context.Context, fam *derivedFamily, opt 
 	}
 
 	elapsed := time.Since(p.started).Round(time.Millisecond)
-	withdrawn := d.invalidations[fam.Name].Load() != startInvalidations
-	bad := p.sawBad || d.badWrites[fam.Name].Load() != startBadWrites
 	if hook := d.beforePublish; hook != nil {
 		hook(fam.Name)
 	}
+	// Check and publish under pubMu: a withdrawal or a bad write is either
+	// counted here or comes after and undoes the publication.
+	d.pubMu.Lock()
+	withdrawn := d.invalidations[fam.Name].Load() != startInvalidations
+	bad := p.sawBad || d.badWrites[fam.Name].Load() != startBadWrites
+	if !withdrawn {
+		d.bad[fam.Name].Store(bad)
+		d.passWrites[fam.Name].Store(startWrites)
+		d.validated[fam.Name].Store(true)
+	}
+	d.pubMu.Unlock()
 	if withdrawn {
 		p.logf("derived keys %s: pass over %d rows ended in %s but the family was withdrawn during it; it will be run again", fam.Name, p.checked, elapsed)
 		return nil
 	}
-	d.bad[fam.Name].Store(bad)
-	d.validated[fam.Name].Store(true)
-	p.logf("derived keys %s: validated %d rows in %s (%d re-derived, %d orphans dropped, malformed rows %t)", fam.Name, p.checked, elapsed, p.rederived, p.orphan, d.bad[fam.Name].Load())
+	p.logf("derived keys %s: validated %d rows in %s (%d re-derived, %d orphans dropped, malformed rows %t)", fam.Name, p.checked, elapsed, p.rederived, p.orphan, bad)
 	return nil
 }
 

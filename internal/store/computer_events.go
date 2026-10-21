@@ -219,6 +219,9 @@ func (s *Store) finalizeBatch(ctx context.Context, computerID, eventDigest strin
 			// let the online pass fill it.
 			s.derivedKeys().InvalidateAll("replay projection")
 			projectErr = projectBatchForReplay(ctx, tx, *batch)
+			// Again before the commit, so a pass that published while the
+			// batch was written cannot leave a family readable.
+			s.derivedKeys().InvalidateAll("replay projection")
 		} else {
 			projectErr = projectBatch(ctx, tx, *batch, s.derivedKeys())
 		}
