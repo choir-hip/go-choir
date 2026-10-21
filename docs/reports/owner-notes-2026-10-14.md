@@ -1214,3 +1214,45 @@ Taken as:
   arbitrary sites moves toward the device's own browser (WKWebView on
   iPhone, the platform web view elsewhere). Residential-computer browsing
   and self-hosting on a residential machine are after launch.
+
+## 38. The first pass: security and density, aggressively; no iPhone or voice work (2026-10-21, evening)
+
+The owner, in session, after the paper came back:
+
+> "once we've landed that, I want to zoom back out into our nested checklist
+> so that we can set a really aggressive meta mission to really bang out
+> this work promptly with as much concurrency as possible. I mean, of
+> course, security is paramount, but I think the most effective approach is
+> to do it all as aggressively as we can. I think we have like a 5 to 7
+> concurrent agent limit on our 16 gigabytes of RAM right now."
+
+> "Don't plan for the second pass. I want you to work autonomously for the
+> first pass, and then I will review that with you, and then we'll make a
+> new plan for the second pass."
+
+> "Yeah, let's punt on the iPhone app. ... we have a whole voice stack that
+> we are building in a separate project in the [mike] repository in my home
+> directory. ... we want it to be a continuous radio stream."
+
+> "Generally, I think the security and density checklist is going to take a
+> few days. And to me, that's a higher priority than the iPhone stuff."
+
+> "No, don't work on the voice pipeline either. I have that working in a
+> whole separate project. Don't worry about iPhone or voice. Just let's
+> stick with the security and density checklist."
+
+> "we can make progress with self-development as well. That's a good thing.
+> But I just want to make sure that we are maximizing our acceleration."
+
+Taken as:
+
+- **The first pass is the security and density checklist**, worked as
+  aggressively as five to seven concurrent agents allow, with security
+  first. Self-development items on that checklist (ARCH-03, ARCH-04,
+  ARCH-10) are in; the S6 slices that are not on it wait.
+- **No iPhone app and no voice work** in this pass. The voice stack lives
+  in `~/mike`, a separate project the owner is building; Autoradio is a
+  continuous radio stream, not turn-taking chat. Nothing for the iPhone was
+  ever built here: the repo holds design documents and an unpushed browser
+  prototype (`prototype/autoradio-2026-10-14`).
+- **The owner plans the second pass** after reviewing the first.

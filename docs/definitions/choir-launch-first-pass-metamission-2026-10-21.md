@@ -11,7 +11,11 @@ definition_version: 4
 # agent limit on our 16 gigabytes of RAM right now." Then: "Don't plan for
 # the second pass. I want you to work autonomously for the first pass, and
 # then I will review that with you, and then we'll make a new plan for the
-# second pass." The batch plan it runs is
+# second pass." Then (owner notes §38): "Don't worry about iPhone or voice.
+# Just let's stick with the security and density checklist"; "we can make
+# progress with self-development as well ... maximizing our acceleration";
+# "the rule is 5 to 7 agents running locally. We can run more agents on
+# node B and as many as we have resources for." The batch plan it runs is
 # docs/launch-checklist-2026-10-21.md "Batch plan"; the security and
 # density items are docs/security-density-architecture-checklist-2026-10-21.md.
 readiness: drafted
@@ -78,23 +82,27 @@ metamission:
         then B5 (REC-02, SEC-11, SEC-12). Built together, landed one batch
         per deploy. Lane worktree lanes/host-vmctl-b4-b5.
     - id: FP4
-      path: docs/definitions/choir-lp-s6-commit-gate-2026-10-20.md
-      readiness: reviewed
-      status: pending
-      depends_on: []
-      note: >-
-        Batch B10, the self-development spine: the S6 commit gate's next
-        slices after S6-0 (1b4292899, 826219be6, 486ffbc47), then L3-08
-        (engineering admission queues instead of cancelling live work,
-        SDC ARCH-10's launch half). Self-development runs only on test
-        computers. Lane worktree lanes/b10-selfdev.
-    - id: FP5
-      path: docs/definitions/choir-launch-fp5-mobile-server-2026-10-21.md (the lane's first commit)
+      path: docs/definitions/choir-launch-fp4-selfdev-architecture-2026-10-21.md (the lane's first commit)
       readiness: intent
-      status: pending
+      status: working
       depends_on: []
       note: >-
-        The server half of batches B11 and B12. L6-02 first (the
+        The self-development items of the security and density checklist:
+        ARCH-10 (its launch half is L3-08: engineering admission queues
+        instead of cancelling live work; then N capsules per assignment
+        with apply serialized, which lets the loop build several things at
+        once), ARCH-04 (one writer per object kind), ARCH-03 (an app
+        package carries its app desk). Rescoped 2026-10-21 (owner notes
+        §38): the S6 slices are not on the checklist and wait. Lane
+        worktree lanes/b10-selfdev.
+    - id: FP5
+      path: none
+      readiness: intent
+      status: superseded
+      depends_on: []
+      note: >-
+        Superseded 2026-10-21 (owner notes §38: no iPhone or voice work in
+        this pass); its worker moved to FP6. Was: the server half of batches B11 and B12. L6-02 first (the
         capabilities endpoint and an OpenAPI contract, frozen so the app can
         build against it); then the L4-04 security design for Sign in with
         Google and Apple, reviewed by a panel before any code (red: auth
@@ -102,20 +110,26 @@ metamission:
         and L6-03 (the supervision feed with a durable cursor). Lane
         worktree lanes/b11-mobile-server.
     - id: FP6
-      path: to be authored when a slot frees
+      path: docs/definitions/choir-launch-fp6-network-2026-10-21.md (the lane's first commit)
       readiness: intent
-      status: pending
+      status: working
       depends_on: []
       note: >-
-        Batch B8's first half: the Obscura deletion (L2-06 steps 1 to 4;
-        step 5, the image change, lands with B8) and SDC NET-01's network
-        inventory, then SEC-06.
+        Batch B8's first half, red: the Obscura deletion (L2-06 steps 1 to
+        4; step 5, the image change, is a separate commit and deploy), SDC
+        NET-01's guest network inventory, then SEC-06 (P0). Lane worktree
+        lanes/b8-network.
     - id: FP7
-      path: to be authored when a slot frees
+      path: docs/definitions/choir-launch-fp7-gateway-identity-2026-10-21.md (the lane's first commit)
       readiness: intent
-      status: pending
+      status: working
       depends_on: []
-      note: Batch B7, red. SDC SEC-05, SEC-08 (Option K), SEC-16, RES-11, RES-12; L4-05.
+      note: >-
+        Batch B7, red: SDC SEC-05 (the gateway bearer bound to its
+        computer), SEC-08 Option K (the gateway holds the delegate's key),
+        RES-11, then SEC-16 and RES-12. With SEC-01 (FP2) it is what lets
+        agents run on Node B beyond the one delegate test computer. Lane
+        worktree lanes/b7-gateway.
     - id: FP8
       path: to be authored when a slot frees
       readiness: intent
@@ -134,9 +148,12 @@ metamission:
       status: pending
       depends_on: []
       note: >-
-        Autopaper for strangers and the rest of B12: L5-02 moderation and
-        unpublish with L9-03, L5-05 the daily digest, L6-06, L6-07 (T1, T4),
-        L3-06's minimum routing; B14's agent items L10-01, L10-04, L4-03.
+        The rest of the checklist when a slot frees: SEC-14 (CI deploys as
+        root, with FP0's B1), RES-07 and RES-19 (FP0 measures), RES-17,
+        RES-18 (with FP1), and the P2 items (NET-03, NET-04, RES-08, RES-10,
+        RES-13, RES-15, RES-20 to RES-22, ARCH-06, ARCH-08, ARCH-09,
+        ARCH-11 to ARCH-15), each decided item by item. Autopaper, accounts
+        and Autoradio items are out of this pass (owner notes §38).
 
 start:
   captured_at: 2026-10-21T17:50:00Z
@@ -226,7 +243,7 @@ boundaries:
     - docs/choir-doctrine.md and CLAUDE.md
     - the launch checklist's batch plan and owner-decision defaults OD-01 to OD-09
   must_preserve:
-    - Workers (Sonnet, at most five, plus the orchestrator) work only in their own lane worktree and branch; they never push, never use Node B or staging credentials, never read secrets, never touch another worktree, never run git commit -a, never bypass hooks.
+    - Locally five to seven agents in all (owner, 2026-10-21): six Sonnet workers and the orchestrator. Workers work only in their own lane worktree and branch; they never push, never use Node B or staging credentials, never read secrets, never touch another worktree, never run git commit -a, never bypass hooks.
     - Only FP0 lands. A deploy carries at most one red batch; orange and green work may ride with it.
     - Problem documentation first; the test before the code (CLAUDE.md Testing).
     - No boot-path step that rewrites or scans all of og_objects; schema changes are online and rollback-safe.
@@ -236,12 +253,14 @@ boundaries:
     - Broad Go test runs go through scratchpad/bin/heavy (two slots machine-wide) with GOMAXPROCS=2 GOFLAGS=-p=2.
   excluded:
     - The second pass; the owner plans it after reviewing this one.
-    - Owner items (B0 lead times, OD rulings); B13, the iPhone app (owner 2026-10-21: "I don't think we need to proceed with iPhone just yet"; corrected the same day: Xcode is installed, only the command-line tools are selected); L2-05 red teaming (needs fork re-keying and the vault); and running an account deletion (black).
+    - Everything outside the security and density checklist (owner notes §38), including the iPhone app (B13), the voice pipeline (the owner's own project in ~/mike), accounts and Autoradio's server (B11, B12), Autopaper phase 5, and the S6 slices. Xcode is installed (corrected 2026-10-21; xcodebuild failed only because the Nix shell's SDK is the selected developer directory).
+    - Owner items (B0 lead times, OD rulings); L2-05 red teaming (needs fork re-keying and the vault); running an account deletion (black).
+    - Agents on the Node B host. Owner 2026-10-21: "We can run more agents on node B and as many as we have resources for." They run inside computers, never as host processes (the host holds every tenant and the secrets). Today that is the one Claude delegate test computer (SDC DEC-03); SEC-01 (FP2) and SEC-08 Option K (FP7) unlock more.
   protected_surfaces: [vmctl, guest desk confinement, gateway and provider calls, auth and session, the object store schema, deployment routing]
 
 now:
   status: working
-  slice: launch FP1 to FP5 in parallel; FP0 lands c893a956a and reviews this file
+  slice: FP1, FP2, FP3, FP4, FP6 and FP7 in parallel; FP0 lands c893a956a and reviews this file
   source_ref: c893a956a
   deploy_identity: f2c4a3ec3 serving; c893a956a deploying
   candidate:
@@ -266,7 +285,7 @@ now:
     status: active
     evidence_refs: []
   decision:
-    what: five lanes now (FP1 to FP5), FP6 to FP10 fill slots as they free
+    what: six lanes now (FP1 to FP4, FP6, FP7); FP8 to FP10 fill slots as they free
     kind: operational
     status: settled
     evidence_ref: owner in session 2026-10-21
@@ -275,7 +294,10 @@ now:
     believed_state: >-
       The paper is up and publishing on f2c4a3ec3; the store's capture-label
       scan is gone at c893a956a; every other batch is open.
-    main_uncertainty: whether five lanes on 16 GB stay inside memory while each runs Go builds.
+    main_uncertainty: >-
+      whether six lanes on 16 GB stay inside memory while they run Go
+      builds: at 18:15 the Mac already had 15.7 GB of swap in use and
+      about 4.9 GB in the compressor, before the first build wave.
     next_observation: the Mac's memory pressure and the heavy-slot wait times once all five lanes are building.
   blocker_or_risk: >-
     Two red batches waiting for one deploy slot; a worker straying outside

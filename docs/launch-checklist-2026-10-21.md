@@ -248,8 +248,9 @@ the panel's agreed order:
   tier renews on 2026-11-05. Quota planning does not need to wait for SDC
   DEC-07.
 - [ ] **L0-07 (both): voice pipeline hand-off.** The owner brings the voice
-  project in. Agents need its repo or package location, its licence, and the
-  on-device models it uses. L7-01 is the integration side of this item.
+  project in. Agents need its repo or package location (`~/mike`, the
+  owner's separate project, noted 2026-10-21), its licence, and the
+  on-device models it uses. Not in the first pass (owner notes §38). L7-01 is the integration side of this item.
 - [ ] **L0-08 (owner): Google Cloud project and OAuth clients.** The
   consent screen, brand verification (days), the iOS and web clients, and
   the scope decision (OD-04). Submit early: it is an external clock.
