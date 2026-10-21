@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -140,27 +141,33 @@ func (s *Store) LatestCaptureLabel(ctx context.Context, ownerID, computerID, cap
 }
 
 // CaptureLabels returns every label version of a capture, oldest first.
+// AppendCaptureLabel keys each version captureLabelKey(computer, capture,
+// version) and numbers them 1..N with no gaps, so the read gets versions by
+// primary key until the first missing one. It used to scan every capture
+// label's $.capture_id, which held the paper's single engine connection for
+// seconds (docs/problems/research-more-slow-and-hidden-2026-10-21.md, E6).
 func (s *Store) CaptureLabels(ctx context.Context, ownerID, computerID, captureID string) ([]CaptureLabel, error) {
 	ownerID, computerID, captureID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(captureID)
-	objs, err := s.ogListAllByMetadata(ctx, ogKindCaptureLabel, "capture_id", captureID)
-	if err != nil {
-		return nil, err
+	if ownerID == "" || computerID == "" || captureID == "" {
+		return nil, nil
 	}
 	var out []CaptureLabel
-	for _, obj := range objs {
-		if obj.OwnerID != ownerID {
-			continue
+	for version := 1; ; version++ {
+		// The key already names the computer, and the label was created
+		// with that key unscoped, so the get passes no lifecycle scope.
+		obj, err := s.ogGetByIdentityKey(ctx, ogKindCaptureLabel, ownerID, "", captureLabelKey(computerID, captureID, version))
+		if errors.Is(err, objectgraph.ErrNotFound) {
+			return out, nil
+		}
+		if err != nil {
+			return nil, err
 		}
 		var label CaptureLabel
 		if err := ogDecode(obj, &label); err != nil {
 			return nil, err
 		}
-		if label.ComputerID == computerID {
-			out = append(out, label)
-		}
+		out = append(out, label)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Version < out[j].Version })
-	return out, nil
 }
 
 // RecentCaptureLabels returns the newest label version of each capture
