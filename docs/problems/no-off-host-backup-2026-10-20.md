@@ -698,3 +698,14 @@ with this. either edit node-a or the mike repo").
     under the same cap and may run for hours; option (c), sharding the
     three flat directories, is the real fix and needs its own record; the
     snapshot restore drill (`snap`) against `cbe1e08b` has not run yet.
+19. **Run 5's first start (02:37:31 UTC) was refused: a stale lock.** The
+    script reported "repository is not initialised or unreachable"
+    because `restic cat config` met the exclusive lock of run 4's check
+    (created 00:46:42, never deleted; the rest-server log has no DELETE
+    for it). Stopping the unit sends SIGTERM to the whole cgroup, so the
+    ssh tunnel died with restic and restic could not reach the server to
+    delete its lock. `restic unlock` from Node B at 02:50 removed it (the
+    append-only server allows lock deletion), and run 5 was started by
+    hand at 02:50:5x. Fix: the daily run calls `restic unlock` (stale
+    locks only) before opening the repository; failure mode 9 in the
+    snapshot test. The same fate-sharing would hit any killed run.
