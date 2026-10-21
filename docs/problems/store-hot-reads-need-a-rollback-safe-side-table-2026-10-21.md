@@ -1,8 +1,8 @@
 # The three hot store reads need a rollback-safe side table, not columns on og_objects
 
-Date: 2026-10-21. Status: **open**; design below, code to follow in lane
-lane/b2-store (FP1). Mutation class of the fix: red (object store schema,
-every writer of `og_objects`, boot path).
+Date: 2026-10-21. Status: **built in lane/b2-store (FP1), not landed**; the
+deployed proof is the orchestrator's (below). Mutation class of the fix: red
+(object store schema, every writer of `og_objects`, boot path).
 Found by: reading the code for the fix of
 [stored-column-add-blocks-paper-boot-2026-10-21.md](stored-column-add-blocks-paper-boot-2026-10-21.md)
 after the revert (f2c4a3ec3). Problem documentation first: no fix in this
@@ -220,10 +220,85 @@ unknown table (finding 3). Dropping it is `DROP TABLE og_key_index` by hand,
 not a boot step. Forward again: the new binary treats whatever the table
 holds as unvalidated and repairs it online.
 
+## What was built, and what it measured (lane/b2-store)
+
+Local, on the embedded engine, in the worktree:
+
+- Boot: `Open` over 24,000 rows takes 193 ms; `DOLT_HASHOF_TABLE('og_objects')`
+  is identical before and after; the side table is empty; no family is
+  validated (`TestReopenWithManyRowsDoesNotTouchOgObjects`,
+  `TestOpenDoesNotTouchOgObjects`).
+- Validator: the first pass over 18,000 rows (6,000 each) takes 2.7 s at 6,600
+  rows/s in 99 engine holds, the longest 42 ms; the repeat pass takes 277 ms
+  because it compares narrow columns and derives nothing
+  (`TestValidatorFirstPassAndRepeatPassOnManyRows`). At the production
+  duty cycle (25%) a store ten times larger is about two minutes of wall time.
+- Plans: the keyset and newest-first id queries read their index in order with
+  no sort; the validator's head page is a primary-key range. The same
+  predicate with `object_kind = ?` makes the planner take a secondary index and
+  sort the whole kind on every page, so the kind is filtered in Go
+  (`TestDerivedKeyPlansUseTheirIndexes`).
+- Reads: the two metadata families at three page sizes and the addressee read
+  for three owners at three limits, over 21 lookup values (case, trailing
+  space, unicode, JSON null, numbers, a missing field, 254/255/256-character
+  ASCII and multi-byte values, another owner, tombstones), equal the JSON reads
+  (`TestDerivedKeyReadsMatchJSONReads`). Rows with equal `updated_at` (a
+  second) now come by `canonical_id` descending; the scan left that order to
+  the engine.
+- Rollback then forward, a validated table under a writer the change does not
+  know, a writer storm during a pass, a malformed body, and the four stray
+  STORED columns present or dropped are each a test (list in the failure
+  modes above).
+
+**Not measured locally, and so the orchestrator's:** the paper's row counts,
+its real engine share before and after, and the deploy.
+
+## Deployed proof (orchestrator; no secrets, read-only on the paper)
+
+1. Before the deploy, read the paper's engine-mutex counters over 120 s the
+   way the 17:58:57 reading did (calls, held, waited per op).
+2. After the deploy, the paper's boot log shows every `store: open phase=...`
+   and `autoputer: startup phase=...` line closed with `status=complete
+   duration=...`, and the whole of `runtime-store-open` under two minutes.
+3. Within a few minutes of the runtime start, the log shows `derived keys
+   run.agent_id: validation pass starts over N rows` and then `validated N
+   rows in T` for each of the three families, with no `withdrawn` line. Read
+   the op `(*DoltStore).ValidateDerivedKeys page`: its max hold should be well
+   under a second.
+4. Over a fresh 120 s window the three scans' rows read `... keyindex` with
+   per-call times in milliseconds, and `ListObjectsByMetadataPage choir.run
+   $.agent_id json` shows no calls except lookups of 255 characters or more.
+   `GetObject` and `ListObjectsPage` rows now name a kind. The engine's busy
+   share should fall from 70%; the three scans were 40.1 s of the 85 s held.
+5. The paper still polls its sources and its schedules stay active. A restart
+   of a test computer shows the second pass finishing in seconds.
+6. On a test computer, the product replay probe lists no unknown table.
+
+## Residuals
+
+- A rollback to a binary without the extractor change leaves `og_key_index`
+  as an unknown table (finding 3). Landing the extractor commit one deploy
+  before the table removes it; the orchestrator decides.
+- Trusting `content_hash` as the change detector is a convention (finding 4).
+  The read tripwire catches a changed hash, owner, `updated_at` or a missing
+  row; it does not catch a key that is stale with an unchanged hash. A
+  Go-side comparison of the returned object's field with the looked-up value
+  would; it re-implements JSON semantics for a check and was left out.
+- Equal-`updated_at` order of the addressee read changed (above).
+- The projector's own time in `og_objects` writes is not in the engine-mutex
+  counters; the side table adds one statement to each keyed write.
+- `events.stream_seq` is backfilled by an UPDATE on every boot (now timed in
+  the log, not changed).
+- If the four STORED columns of the reverted release are on the paper, its
+  live schema hash already differs from a fresh replay workspace's (hypothesis
+  in finding 3); the next replay probe on the paper will say.
+
 ## Heresy delta
 
 - discovered: the earlier fix design's "four writers" was six; the projector
   does not take the engine mutex; a new table makes an old binary
   replay-ineligible; `content_hash` freshness is only a convention.
-- introduced: none yet.
-- repaired: none yet.
+- introduced: the addressee read's tie order (above); one more statement per
+  keyed write; a new table that an older binary lists as unknown.
+- repaired: the three JSON scans have an indexed path that is exact or absent
+  (deployed proof pending); boot steps are named by their logs.
