@@ -143,8 +143,11 @@ func (m *Manager) recordLaunchedVMM(vmID string, b vmmBuild) {
 	if err != nil {
 		return
 	}
+	// A new VM's state dir may not exist yet; bootVM creates it with the
+	// same mode moments later.
 	dir := m.vmStateDir(vmID)
-	if _, err := os.Stat(dir); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		log.Printf("vmmanager: record VMM build of VM %s: %v", vmID, err)
 		return
 	}
 	if err := writeFileDurably(dir, launchedVMMFileName, append(data, '\n'), 0o600); err != nil {

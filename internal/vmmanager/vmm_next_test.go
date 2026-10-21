@@ -173,4 +173,9 @@ func TestLaunchedVMMBuildIsDurable(t *testing.T) {
 	if got := restarted.launchedVMM("vm-a"); got != b {
 		t.Fatalf("after restart launchedVMM = %+v, want %+v", got, b)
 	}
+	// A brand-new VM is recorded before bootVM creates its state dir.
+	mgr.recordLaunchedVMM("vm-new", b)
+	if got := NewManager(mgr.cfg).launchedVMM("vm-new"); got != b {
+		t.Fatalf("a new VM's build was not durable: %+v", got)
+	}
 }
