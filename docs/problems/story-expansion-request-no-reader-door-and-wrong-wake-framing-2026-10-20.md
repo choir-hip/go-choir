@@ -236,3 +236,26 @@ the call. Which cause it is: unknown (no trace evidence yet).
 Next. The proxy logs the paper's 409 message (truncated, no content), the
 ask is repeated on a third low-importance story, and the cause is written
 here before any fix.
+
+P5 cause, confirmed 03:01 UTC (050add365's log line): `rx-4b600d44b21e
+paper refused revise (409): "lifecycle has no open desk target work
+item"`. Autopaper stories live on trajectories of kind `story`
+(`internal/types/story.go`: no work items, never settles, fed by Casts and
+Notes to `texture:<doc>`). `handleLifecycleOwnerRevision` needs an open
+Texture work item, or a completed one it can reopen
+(`textureWorkSettledByDesk`); a story has neither, so every owner revise
+of a story is refused, whatever its age. Decision 2 above ("use the
+existing /revise owner door") assumed the reopen path covers a finished
+story; it covers a finished task document only. The work item id is not
+used after the check; only the desk profile goes to the wake.
+
+Fix, chosen as the smallest change consistent with decision 2: `/revise`
+accepts a live story trajectory whose `texture:<doc>` agent is live, with
+the Texture profile and no work item; every other case keeps today's
+refusal. Considered and not taken tonight: deliver the request as a Note
+to `texture:<doc>`, the story-native feed path. It keeps owner input off
+the canonical chain, but it would change the door's "already asked" check
+and the fate line, which key on the owner revision id. Mutation class red
+(Texture canonical writes: the owner revision on a story). Heresy delta:
+discovered, the story ontology and the owner revise door disagree about
+work items; repaired by the fix; introduced, none intended.
