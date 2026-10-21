@@ -220,3 +220,11 @@ still queued, a no-op), the bound assignment has no deadline wake at all.
   it; before enforce, story seeding needs its own writer accounting.
 - When the live assignment ends, the next queued request waits for its own
   retry (up to one minute); nothing wakes it.
+
+### Repairs (lane/b10-selfdev-b1fix)
+
+B1 7e24b0889, B2 d5055214a, B3 a46ed9a9b, writer-gate counts on
+`/api/runtime/observability` bbd19192c, next-request wake 059924c7e. Story
+seeding's writer accounting is left for the enforce flip (residual). Each
+fix's test failed on b0f872bd6 before the fix. The staging drill is still the
+only trace evidence.
