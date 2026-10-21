@@ -170,7 +170,7 @@ func LoadConfigFromEnv() ManagerConfig {
 // VMCTL_JAILER=off (the default): new launches are direct again.
 //
 //	VMCTL_JAILER=off|on             run each Firecracker under the jailer
-//	VMCTL_JAILER_ONLY=a,b           only these VM ids or computer ids
+//	VMCTL_JAILER_ONLY=a,b           only these VM ids, computer ids, class:test or *
 //	VM_JAILER_BIN                   jailer binary (default: beside firecracker)
 //	VMCTL_JAILER_CHROOT_BASE        default <VM_STATE_DIR>/.jail
 //	VMCTL_JAILER_UID_BASE/_COUNT    per-VM uid range (900000 + 4096)
@@ -181,11 +181,7 @@ func LoadConfigFromEnv() ManagerConfig {
 func loadJailerConfigFromEnv(firecrackerBin string) JailerConfig {
 	j := defaultJailerConfig()
 	j.Enabled = envFlagOn("VMCTL_JAILER")
-	for _, id := range strings.Split(os.Getenv("VMCTL_JAILER_ONLY"), ",") {
-		if id = strings.TrimSpace(id); id != "" {
-			j.Only = append(j.Only, id)
-		}
-	}
+	j.Only = parseComputerSelector(os.Getenv("VMCTL_JAILER_ONLY"))
 	j.BinPath = "jailer"
 	if dir := filepath.Dir(firecrackerBin); dir != "." && dir != "" {
 		j.BinPath = filepath.Join(dir, "jailer")
