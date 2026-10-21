@@ -801,6 +801,15 @@ func (r *rlmCallReduction) commit(ctx context.Context, intents []yaegikernel.Sta
 	if err := validateCellIntents(r.scope, intents); err != nil {
 		return err
 	}
+	if rt := r.rt(); rt != nil {
+		runID := r.scope.RunID
+		if r.toolCtx != nil && r.toolCtx.AgentRunID != "" {
+			runID = r.toolCtx.AgentRunID
+		}
+		if err := refuseCompleteWhileJobRuns(rt.capsuleJobs(), runID, intents); err != nil {
+			return err
+		}
+	}
 	highWater := r.highWater
 	if highWater < r.scope.Cursor {
 		highWater = r.scope.Cursor
@@ -814,6 +823,26 @@ func (r *rlmCallReduction) commit(ctx context.Context, intents []yaegikernel.Sta
 		return err
 	}
 	return r.recordFate(ctx, cellFateSuccess, "tray committed")
+}
+
+// refuseCompleteWhileJobRuns refuses a cell that stages Complete while the
+// run's capsule job runs, as Freeze is refused (failure 23): a round that
+// polls its build and completes in the same cell would otherwise end in the
+// middle of that build. It runs before any side effect, so the refused cell
+// leaves no fate, cursor advance or envelope.
+func refuseCompleteWhileJobRuns(jobs capsuleJobTable, runID string, intents []yaegikernel.StagedIntent) error {
+	if jobs == nil || runID == "" {
+		return nil
+	}
+	for _, in := range intents {
+		if in.Kind != yaegikernel.IntentComplete {
+			continue
+		}
+		if job, _, running := jobs.RunningJob(runID); running {
+			return fmt.Errorf("reduce: complete %s: job %s is still running; Complete waits until it ends: end your turn and you are woken when it ends with its outcome, or choir.Stop it in a cell of its own first", in.LocalID, job.ID)
+		}
+	}
+	return nil
 }
 
 // abort records a terminal cell disposition without touching the staged tray
