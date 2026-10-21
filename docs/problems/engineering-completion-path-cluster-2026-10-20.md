@@ -1236,3 +1236,56 @@ function shared with the release path, so the two cannot drift. This is
 test-first, in `internal/capsule`. Tracer (a): pass `phase` into
 `stallSnapshot`. Tracer (c): later delegate drills run with
 `--timeout-min 110` and `--keep-computer`.
+
+## Failure 19: management never casts the build round with npm access (SlidesApp drill, 2026-10-21 04:42-05:07 UTC)
+
+Drill: tracer label `sonnet-slides-1021` against cbef56155, on the delegate
+test computer, trajectory ff8a80da-cffb-5e80-8caa-10f7cee8e9e2 (the trace
+bundle stays outside the repo). Section 33's first Sonnet rewrite. I
+stopped the tracer and the computer at 05:08 after Texture's fifth
+re-cast, because no round could build.
+
+What the trace shows. The designed two-round protocol is: round 1 in the
+claude network mode (the delegate writes; npm is refused), round 2 in the
+`ecosystem_proxy` mode (no delegate; npm reaches the registry; engineering
+applies the carried patch, builds and freezes). Texture's request said so
+in words both times ("a second round with network ecosystem_proxy"). The
+capsule mode comes only from the `"network"` field of management's Cast
+spec (`engineeringCastNetwork`,
+`internal/agentcore/engineering_assignment_runtime.go`): no field on a
+computer whose delegate is available gives `claude`; `"ecosystem_proxy"`
+gives npm; `"forbidden"`, `"none"` or `"off"` withholds the network.
+
+| Drill | Round | Management's spec | Capsule mode | Result |
+|---|---|---|---|---|
+| arm A (ImageApp) | 1 | `{"parent"}` | claude | delegate wrote; npm refused, as designed |
+| arm A | 2 | `{"parent"}` | claude | patch applied; `npm ci` could not complete; stopped at the deadline |
+| SlidesApp | 1 | `{"parent", "network": "forbidden"}` | forbidden | "choir-delegate unavailable: this capsule is not in claude mode"; engineering edited the file itself; npm stalled |
+| SlidesApp | 2 | `{"parent"}` | claude | delegate wrote (12 turns, $0.14); `npm ci` failed with E403 on `vitefu-0.2.5.tgz` |
+| SlidesApp | 3-5 | (not read) | | each failed within a minute |
+
+Cause (from code and trace, not a hypothesis). Management's prompt
+(`internal/runtimeprompts/overlays/rlm_management_runtime.yaml`, the
+Delegation line) names one value: "Add "network": "forbidden" to the spec
+to withhold the network." It never names `ecosystem_proxy`, nor says that
+the default on a delegate computer is the claude mode, which refuses npm.
+So management cannot ask for the build round, and when the request says
+"network-restricted round" it reaches for the only value it knows.
+Consequence: on the delegate computer, no two-round rewrite can reach a
+freeze. Every Sonnet rewrite in section 33 is blocked by this, not by the
+delegate. Arm B never met it because a minted computer has no delegate,
+so its default is `ecosystem_proxy`.
+
+Fix (decided: the conservative option, prompt text). The Delegation line
+names the three values and when each applies: the default (on a delegate
+computer, claude: the delegate writes, npm is refused), `"network":
+"ecosystem_proxy"` for a round that must run npm or a build (no delegate),
+and `"forbidden"` to withhold. A mechanical alternative was considered: a
+round that receives a carried patch defaults to `ecosystem_proxy`. It is
+not taken tonight, because the network mode is bound into the Cast's
+binding digest before the carried-patch offer is decided at spawn, so
+moving the decision touches the binding (red). It stays the fallback if
+the prompt fix does not hold on the next drill.
+
+Also seen: Texture re-casts without limit while every round fails fast
+(five rounds in 25 minutes). Recorded as a residual.
