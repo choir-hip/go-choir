@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -98,8 +99,12 @@ func TestObservabilityMemoryDetailIsOptInAndSplitsTheStore(t *testing.T) {
 	}
 	// StorePath is a 0-byte marker file; the Dolt workspace directory is the store.
 	workspace := store.TextureWorkspacePath(rt.cfg.StorePath)
-	if labels["store"] != workspace || storeBytes <= 0 {
-		t.Fatalf("store entry root=%q bytes=%v, want the workspace %q with bytes > 0", labels["store"], storeBytes, workspace)
+	if labels["store"] != workspace {
+		t.Fatalf("store entry root=%q, want the workspace %q", labels["store"], workspace)
+	}
+	// Bytes are counted only where the residency probe runs (Linux).
+	if runtime.GOOS == "linux" && storeBytes <= 0 {
+		t.Fatalf("store entry bytes=%v, want bytes > 0", storeBytes)
 	}
 	if labels["store"] != workspace || labels["nix_store"] != "/nix/store" {
 		t.Fatalf("page_cache trees = %v, want store at %q and the nix store", labels, workspace)
