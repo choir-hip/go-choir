@@ -332,7 +332,12 @@ Several bullets above changed or are changing:
   waits that out. Staging runs `observe` first. Problem record:
   [gateway-bearer-works-from-any-computer](../problems/gateway-bearer-works-from-any-computer-2026-10-21.md).
 - *Hash comparison is not constant-time:* fixed (`subtle.ConstantTimeCompare`).
-- *720-hour lifetime, no rotation:* unchanged. A live rotation needs a way
+- *720-hour lifetime, no rotation:* the bearer's secret is still replaced
+  only at a cold boot, but the expiry no longer ends a computer that is only
+  refreshed: the host's credential-ensure now renews a credential with less
+  than half its life left (`renewed` in the result; `/health` `credentials`
+  counts what expires soon). That inference above was right: a refresh keeps
+  the token and nothing extended it. A live rotation of the secret needs a way
   to hand a running guest a new bearer; the design is in the station file.
 - *A second custodian:* in code, the front-importance timer reaches Jev
   through the gateway's host route (`/provider/v1/host/judgments`, host-internal

@@ -213,10 +213,16 @@ receipts:
     disposition: problems documented before any fix
   - id: sec-05
     boundary: implement
-    identity: 37fc682a3 (+ nix af71fec80)
+    identity: 37fc682a3 (+ nix af71fec80, + renewal, see sec-05-renewal)
     proof_refs: [internal/gateway/bearer_binding_test.go, "go test ./internal/gateway -race: green"]
     rollback_ref: GATEWAY_BEARER_BINDING=off, or git revert
     disposition: built; not deployed; not closed until enforced on staging
+  - id: sec-05-renewal
+    boundary: implement
+    identity: the commit after 1eb084100 titled "host-attested renewal"
+    proof_refs: [internal/gateway/credential_renewal_test.go, "three mutations fail the tests"]
+    rollback_ref: git revert (the expiry then returns to one TTL from issue)
+    disposition: built; closes the 720 h time bomb for refresh-only computers once deployed; live rotation stays designed
   - id: sec-08-gateway-half
     boundary: implement
     identity: 496db5009
@@ -295,19 +301,26 @@ like `internalAuthMode`). FP0 reads `/health`: flip to `enforce` when
 across a planned refresh and a deploy, and `unpinned` has drained. `strict`
 later, once no running computer is unpinned. Rollback: `observe`, then `off`.
 
-**Rotation (designed, not built).** Today the bearer is replaced at every
-cold boot (`IssueCredential` revokes the old one), so its age is bounded by
-the boot interval; a computer that never cold boots for 720 h would lose its
-bearer (the TTL), and the always-on paper depends on deploy refreshes being
-more frequent than that. A live rotation needs the host to hand a running
-guest a new bearer, and no such channel exists (the credential disk is read
-at boot). Design: (1) the gateway keeps the old hash valid for an overlap of
-a few minutes (`PreviousTokenHash`, `PreviousExpiresAt`); (2) vmctl pushes
-the new bearer to the guest runtime on a hostauth-guarded route that
-rewrites `RUNTIME_GATEWAY_TOKEN_FILE`'s in-memory copy; (3) the pin and the
-new hash move together; (4) a failed push leaves the old bearer valid until
-its TTL. Until then the cheap guard is visibility: `/health` can report the
-oldest active credential's age. Slice owner: vmctl lane, after enforce.
+**Rotation.** A new secret reaches a guest only at a cold boot
+(`IssueCredential` revokes the old one); a planned refresh and a recovery keep
+the token (`resolveGatewayToken` reads `persist/gateway-token`) and nothing
+extended its expiry, so a computer that is only ever refreshed would lose its
+gateway one TTL (720 h) after its last cold boot, with the ensure route
+refusing to renew it. Built, as the small safe part: **host-attested
+renewal**. An ensure of an active credential with less than half its life
+left extends it by one TTL (one write, with the pin move if any; fail closed
+if the write fails); an expired or revoked credential is still refused;
+using a bearer never renews it; `/health` `credentials` reports active,
+expiring within 7 days, hours to the soonest expiry and renewals, with no
+name or secret. Designed, not built: live rotation of the secret. It needs the
+host to hand a running guest a new bearer, and no such channel exists (the
+credential disk is read at boot). (1) The gateway keeps the old hash valid for
+an overlap of a few minutes (`PreviousTokenHash`, `PreviousExpiresAt`); (2)
+vmctl pushes the new bearer to the guest runtime on a hostauth-guarded route
+that rewrites its in-memory copy of `RUNTIME_GATEWAY_TOKEN_FILE`; (3) the pin
+and the new hash move together; (4) a failed push leaves the old bearer valid
+until its TTL. With that, the TTL can fall from 720 h to days. Slice owner:
+vmctl lane, after enforce.
 
 ## 2. SEC-08: Option K, the gateway holds the delegate's key
 
