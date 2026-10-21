@@ -25,3 +25,25 @@ func TestOverlaysSayWhereTheTextureRequestIs(t *testing.T) {
 		}
 	}
 }
+
+// Failure 19 (docs/problems/engineering-completion-path-cluster-2026-10-20.md):
+// management's Cast spec is the only place a capsule's network mode comes
+// from, and its prompt named only "forbidden", so the build round of a
+// delegate rewrite was never cast with npm access. Failure modes: the prompt
+// does not name "ecosystem_proxy"; it does not say the default on a delegate
+// computer refuses npm; it names a value engineeringCastNetwork does not read.
+func TestManagementOverlayNamesEveryCastNetworkMode(t *testing.T) {
+	for _, labels := range []bool{false, true} {
+		management := RLMManagementOverlay(RLMManagementOverlayOptions{IntakeLabels: labels})
+		for _, want := range []string{
+			`"network": "ecosystem_proxy"`,
+			`"network": "forbidden"`,
+			"npm",
+			"Claude delegate",
+		} {
+			if !strings.Contains(management, want) {
+				t.Errorf("management overlay (labels %v) lacks %q", labels, want)
+			}
+		}
+	}
+}
