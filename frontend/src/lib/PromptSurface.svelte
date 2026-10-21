@@ -7,7 +7,7 @@
     openWindows,
     restoreWindow,
     focusWindow,
-    DESK_APPS,
+    LAUNCHER_APPS,
     liveStatus as desktopLiveStatus,
     showDesktopMode,
   } from './stores/desktop.js';
@@ -34,7 +34,7 @@
   let removeLiveListener = () => {};
   let promptWasDisabled = promptDisabled;
 
-  const deskApps = DESK_APPS;
+  const launcherApps = LAUNCHER_APPS;
   const publicTicker = [
   ];
 
@@ -208,7 +208,7 @@
 {#if sheetOpen}
   <DeskSheet
     {normalizedPlacement}
-    {deskApps}
+    {launcherApps}
     openWindows={$openWindows}
     {authenticated}
     {currentUser}

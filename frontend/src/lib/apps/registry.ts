@@ -17,7 +17,7 @@ export type ChoirAppDefinition = {
   description: string;
   component: () => Promise<{ default: ComponentType }>;
   launcher: {
-    desk: boolean;
+    menu: boolean;
     desktopIcon: boolean;
     order: number;
   };
@@ -57,7 +57,7 @@ export const APP_REGISTRY = [
     icon: '📁',
     description: 'File Browser',
     component: () => import('../FileBrowser.svelte'),
-    launcher: { desk: true, desktopIcon: true, order: 10 },
+    launcher: { menu: true, desktopIcon: true, order: 10 },
     window: { ...windowDefaults },
     auth: { preview: 'public-preview' },
     theme: { surface: 'standard', shellDataAttr: 'data-files-app', contentClass: 'files-content' },
@@ -68,7 +68,7 @@ export const APP_REGISTRY = [
     icon: '🌐',
     description: 'Open a page or read a snapshot',
     component: () => import('../BrowserApp.svelte'),
-    launcher: { desk: true, desktopIcon: true, order: 20 },
+    launcher: { menu: true, desktopIcon: true, order: 20 },
     window: { ...windowDefaults },
     auth: { preview: 'public-preview' },
     theme: { surface: 'standard', shellDataAttr: 'data-browser-app-container', contentClass: 'browser-content' },
@@ -79,7 +79,7 @@ export const APP_REGISTRY = [
     icon: '📬',
     description: 'Mail for your automatic computer',
     component: () => import('../MailApp.svelte'),
-    launcher: { desk: true, desktopIcon: true, order: 30 },
+    launcher: { menu: true, desktopIcon: true, order: 30 },
     window: {
       singleton: true,
       heavy: false,
@@ -95,7 +95,7 @@ export const APP_REGISTRY = [
     icon: '📊',
     description: 'User computer health and recovery',
     component: () => import('../ComputeMonitorApp.svelte'),
-    launcher: { desk: true, desktopIcon: true, order: 40 },
+    launcher: { menu: true, desktopIcon: true, order: 40 },
     window: { singleton: true, heavy: false, desktop: { width: 980, height: 700, minWidth: 700, minHeight: 520 }, compact: compactDefault },
     auth: { preview: 'public-preview' },
     theme: { surface: 'standard', shellDataAttr: 'data-compute-monitor-window', contentClass: 'compute-monitor-content' },
@@ -106,7 +106,7 @@ export const APP_REGISTRY = [
     icon: '📈',
     description: 'Public aggregate Choir health',
     component: () => import('../PulseApp.svelte'),
-    launcher: { desk: true, desktopIcon: true, order: 45 },
+    launcher: { menu: true, desktopIcon: true, order: 45 },
     window: { singleton: true, heavy: false, desktop: { width: 980, height: 720, minWidth: 700, minHeight: 520 }, compact: compactDefault },
     auth: { preview: 'public-readonly' },
     theme: { surface: 'standard', shellDataAttr: 'data-pulse-window', contentClass: 'pulse-content' },
@@ -117,7 +117,7 @@ export const APP_REGISTRY = [
     icon: '📝',
     description: 'Versioned artifact editor',
     component: () => import('../TextureEditor.svelte'),
-    launcher: { desk: true, desktopIcon: true, order: 50 },
+    launcher: { menu: true, desktopIcon: true, order: 50 },
     window: {
       singleton: false,
       heavy: true,
@@ -133,7 +133,7 @@ export const APP_REGISTRY = [
     icon: '📰',
     description: 'Living stories with checked sources',
     component: () => import('../AutopaperApp.svelte'),
-    launcher: { desk: true, desktopIcon: true, order: 65 },
+    launcher: { menu: true, desktopIcon: true, order: 65 },
     window: {
       singleton: true,
       heavy: false,
@@ -149,7 +149,7 @@ export const APP_REGISTRY = [
     icon: '📡',
     description: 'Podcast feed player',
     component: () => import('../PodcastApp.svelte'),
-    launcher: { desk: true, desktopIcon: true, order: 70 },
+    launcher: { menu: true, desktopIcon: true, order: 70 },
     window: { singleton: false, heavy: true, desktop: { width: 900, height: 660 }, compact: compactDefault },
     auth: { preview: 'public-preview' },
     theme: { surface: 'media', shellDataAttr: 'data-podcast-window', contentClass: 'podcast-content' },
@@ -160,7 +160,7 @@ export const APP_REGISTRY = [
     icon: '🖼️',
     description: 'Image viewer',
     component: () => import('../ImageApp.svelte'),
-    launcher: { desk: true, desktopIcon: false, order: 80 },
+    launcher: { menu: true, desktopIcon: false, order: 80 },
     window: { singleton: false, heavy: true, desktop: { width: 900, height: 680 }, compact: compactDefault },
     auth: { preview: 'public-preview' },
     theme: { surface: 'media', shellDataAttr: 'data-image-window', contentClass: 'image-content' },
@@ -171,7 +171,7 @@ export const APP_REGISTRY = [
     icon: '🎧',
     description: 'Audio player',
     component: () => import('../AudioApp.svelte'),
-    launcher: { desk: true, desktopIcon: false, order: 90 },
+    launcher: { menu: true, desktopIcon: false, order: 90 },
     window: { singleton: false, heavy: true, desktop: { width: 760, height: 420 }, compact: { minWidth: 280, minHeight: 320 } },
     auth: { preview: 'public-preview' },
     theme: { surface: 'media', shellDataAttr: 'data-audio-window', contentClass: 'audio-content' },
@@ -182,7 +182,7 @@ export const APP_REGISTRY = [
     icon: '🎬',
     description: 'Video and YouTube player',
     component: () => import('../VideoApp.svelte'),
-    launcher: { desk: true, desktopIcon: false, order: 100 },
+    launcher: { menu: true, desktopIcon: false, order: 100 },
     window: { singleton: false, heavy: true, desktop: { width: 980, height: 720 }, compact: compactDefault },
     auth: { preview: 'public-preview' },
     theme: { surface: 'media', shellDataAttr: 'data-video-window', contentClass: 'video-content' },
@@ -193,7 +193,7 @@ export const APP_REGISTRY = [
     icon: '📄',
     description: 'PDF reader',
     component: () => import('../PdfApp.svelte'),
-    launcher: { desk: true, desktopIcon: false, order: 110 },
+    launcher: { menu: true, desktopIcon: false, order: 110 },
     window: { singleton: false, heavy: true, desktop: { width: 940, height: 720 }, compact: compactDefault },
     auth: { preview: 'public-preview' },
     theme: { surface: 'document', shellDataAttr: 'data-pdf-window', contentClass: 'pdf-content' },
@@ -204,7 +204,7 @@ export const APP_REGISTRY = [
     icon: '📚',
     description: 'EPUB reader',
     component: () => import('../EpubApp.svelte'),
-    launcher: { desk: true, desktopIcon: false, order: 120 },
+    launcher: { menu: true, desktopIcon: false, order: 120 },
     window: { singleton: false, heavy: true, desktop: { width: 900, height: 700 }, compact: compactDefault },
     auth: { preview: 'public-preview' },
     theme: { surface: 'document', shellDataAttr: 'data-epub-window', contentClass: 'epub-content' },
@@ -215,7 +215,7 @@ export const APP_REGISTRY = [
     icon: '🖥️',
     description: 'Slide player for PPTX, PDF, and HTML',
     component: () => import('../SlidesApp.svelte'),
-    launcher: { desk: true, desktopIcon: false, order: 125 },
+    launcher: { menu: true, desktopIcon: false, order: 125 },
     window: { singleton: false, heavy: true, desktop: { width: 1024, height: 768, minWidth: 640, minHeight: 480 }, compact: compactDefault },
     auth: { preview: 'public-preview' },
     theme: { surface: 'media', shellDataAttr: 'data-slides-window', contentClass: 'slides-content' },
@@ -226,7 +226,7 @@ export const APP_REGISTRY = [
     icon: '📅',
     description: 'Calendar with ICS import',
     component: () => import('../CalendarApp.svelte'),
-    launcher: { desk: true, desktopIcon: true, order: 115 },
+    launcher: { menu: true, desktopIcon: true, order: 115 },
     window: { singleton: true, heavy: false, desktop: { width: 960, height: 720, minWidth: 640, minHeight: 480 }, compact: compactDefault },
     auth: { preview: 'public-preview' },
     theme: { surface: 'standard', shellDataAttr: 'data-calendar-window', contentClass: 'calendar-content' },
@@ -237,7 +237,7 @@ export const APP_REGISTRY = [
     icon: '📎',
     description: 'Source substrate viewer',
     component: () => import('../ContentViewer.svelte'),
-    launcher: { desk: false, desktopIcon: false, order: 135 },
+    launcher: { menu: false, desktopIcon: false, order: 135 },
     window: { singleton: false, heavy: false, desktop: { width: 820, height: 620, minWidth: 560, minHeight: 420 }, compact: compactDefault },
     auth: { preview: 'public-readonly' },
     theme: { surface: 'standard', shellDataAttr: 'data-content-window', contentClass: 'content-viewer-content' },
@@ -248,19 +248,19 @@ export const APP_REGISTRY = [
     icon: '⚙️',
     description: 'Desktop settings',
     component: () => import('../SettingsApp.svelte'),
-    launcher: { desk: true, desktopIcon: true, order: 150 },
+    launcher: { menu: true, desktopIcon: true, order: 150 },
     window: { singleton: true, heavy: false, desktop: { width: 940, height: 720 } },
     auth: { preview: 'public-readonly' },
     theme: { surface: 'standard', shellDataAttr: 'data-settings-window', contentClass: 'settings-content' },
   },
 ] satisfies ChoirAppDefinition[];
 
-export const DESK_APPS = APP_REGISTRY
-  .filter((app) => app.launcher.desk)
+export const LAUNCHER_APPS = APP_REGISTRY
+  .filter((app) => app.launcher.menu)
   .sort((a, b) => a.launcher.order - b.launcher.order);
 
 export const DESKTOP_ICON_APPS = APP_REGISTRY
-  .filter((app) => app.launcher.desktopIcon)
+  .filter((app) => app.launcher.menutopIcon)
   .sort((a, b) => a.launcher.order - b.launcher.order);
 
 export const HEAVY_APP_IDS = new Set(APP_REGISTRY.filter((app) => app.window.heavy).map((app) => app.id));

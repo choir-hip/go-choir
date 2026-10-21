@@ -2,7 +2,7 @@
   import { createEventDispatcher, onMount, tick } from 'svelte';
 
   export let normalizedPlacement: 'top' | 'bottom' = 'bottom';
-  export let deskApps: any[] = [];
+  export let launcherApps: any[] = [];
   export let openWindows: any[] = [];
   export let authenticated = false;
   export let currentUser: any = null;
@@ -45,7 +45,7 @@
   <section class="desk-section">
     <h3>Apps</h3>
     <div class="app-grid" data-desk-sheet-apps>
-      {#each deskApps as app}
+      {#each launcherApps as app}
         <button data-desk-sheet-app data-desk-app-id={app.id} type="button" on:click={() => dispatch('launchapp', { app })}>
           <span>{app.icon}</span>
           <strong>{app.name}</strong>

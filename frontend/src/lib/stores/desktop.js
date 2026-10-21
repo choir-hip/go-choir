@@ -19,7 +19,7 @@
 import { writable, derived } from 'svelte/store';
 import {
   APP_REGISTRY,
-  DESK_APPS,
+  LAUNCHER_APPS,
   DESKTOP_ICON_APPS,
   HEAVY_APP_IDS,
   getAppDefinition,
@@ -31,7 +31,7 @@ import {
 
 // ---- App registry ----
 
-export { APP_REGISTRY, DESK_APPS, DESKTOP_ICON_APPS, HEAVY_APP_IDS, getAppDefinition, getAppIcon, getAppWindowPreference, isHeavyAppId, normalizeAppId };
+export { APP_REGISTRY, LAUNCHER_APPS, DESKTOP_ICON_APPS, HEAVY_APP_IDS, getAppDefinition, getAppIcon, getAppWindowPreference, isHeavyAppId, normalizeAppId };
 
 // ---- Window counter ----
 
