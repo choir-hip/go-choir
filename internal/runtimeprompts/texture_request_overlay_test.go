@@ -47,3 +47,24 @@ func TestManagementOverlayNamesEveryCastNetworkMode(t *testing.T) {
 		}
 	}
 }
+
+// Failure 25 (docs/problems/engineering-completion-path-cluster-2026-10-20.md):
+// management refused to cast the build round because it believed it had to
+// supply the carried patch itself. The overlay says the platform carries a
+// failed round's changes into the next engineering Cast on its own, and that
+// a report awaiting round two means: Cast the next round.
+func TestManagementOverlaySaysThePlatformCarriesThePatch(t *testing.T) {
+	for _, labels := range []bool{false, true} {
+		management := RLMManagementOverlay(RLMManagementOverlayOptions{IntakeLabels: labels})
+		for _, want := range []string{
+			"/selfdev/carried/source.patch",
+			"the platform carries",
+			"never supply",
+			"Cast the next round",
+		} {
+			if !strings.Contains(management, want) {
+				t.Errorf("management overlay (labels %v) lacks %q", labels, want)
+			}
+		}
+	}
+}
