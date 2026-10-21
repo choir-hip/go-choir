@@ -1724,3 +1724,34 @@ Fix direction: the delegate supervisor (trusted, outside the delegate's
 process) records which of those paths are absent from the working
 directory before it starts Claude Code and removes the ones that appear,
 once the run has ended. The scrub stays on.
+
+## Failure 30: a refused Freeze leaves its self-development operation executing, and it blocks every later freeze on the computer (label sonnet-slides-1021k, deploy 37db27741, 11:10-11:15 UTC)
+
+What worked first: the one-round build. Engineering rewrote SlidesApp in
+the delegate's capsule, the saved-copy diff passed, and the frontend build
+linked the image's dependencies and finished in about 24 s with no
+network (job `job-7c7024e2ef1a`, 11:12:13 to 11:12:37).
+
+Then every `choir.Freeze` was refused: "another self-development operation
+is open on this computer: selfdev-20d9baa5eb36704d52009b6876611f98 is
+executing". That operation was opened at 10:23:37 by drill i's Freeze,
+which was refused for the running-binary/source mismatch (failure 28).
+Drill i's round then completed as failed at 10:23:50, and the operation
+stayed `executing`. Round 1 of drill k completed `blocked` at 11:12:53;
+management's round 2 (11:14) hit the same refusal; management then
+reported that it found "no safe audited close action" and asked for an
+approved close, which is the right refusal for a desk. Texture's round 3
+cast at 11:15:12 drew no management cast in the next 34 minutes; the
+drill was stopped at 11:49.
+
+Classification: substrate (self-development operation lifecycle), not a
+prompt. An operation's fate is not tied to the round that opened it: a
+round that ends failed or blocked leaves its operation open, and the only
+closer today is the boot-time crash close. Hypothesis to check in code:
+the operation is opened before the source check that refuses the Freeze,
+and nothing closes it on that refusal or on the round's terminal report.
+
+Fix direction (not chosen): the refusal that follows opening closes the
+operation with that cause, and a round's terminal report closes any
+operation it opened that is not frozen. The delegate computer needs that
+stale operation closed before the next drill; no hand edits of state.
