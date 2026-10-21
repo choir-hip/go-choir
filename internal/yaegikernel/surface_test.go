@@ -228,6 +228,21 @@ func TestCellErrorHintNamesWhatExists(t *testing.T) {
 			t.Errorf("Read misuse %q got no decode hint: %q", tc[1], hint)
 		}
 	}
+	// T3 (docs/problems/tool-call-failures-dual-model-2026-10-21.md): a packet
+	// written as JSON inside a Go map literal does not parse; the hint gives
+	// the typed forms and the JSON string the verbs also take.
+	packets := map[string]bool{"ReportPacket": true, "Cast": true, "Report": true}
+	for _, tc := range [][2]string{
+		{`p := map[string]any{"kind":"evidence_update","claims":[] ,"sources":[]}; choir.ReportPacket("texture", p, "")`, "_.go:1:1309: expected type, found ','"},
+		{`choir.Cast("texture:new", "Harbor", map[string]any{"hypotheses":[]any{{"statement":"x"}}})`, "_.go:1:60: expected ';', found ':' (and 3 more errors)"},
+	} {
+		hint := cellErrorHint(packets, tc[0], tc[1])
+		for _, want := range []string{"[]any{}", "map[string]any{", "JSON string", "`{"} {
+			if !strings.Contains(hint, want) {
+				t.Errorf("packet literal %q got hint %q, missing %q", tc[1], hint, want)
+			}
+		}
+	}
 	if hint := cellErrorHint(surface, "x := 1 +", "1:9: expected operand"); hint != "" {
 		t.Errorf("an unrelated compile error got a choir hint: %q", hint)
 	}
