@@ -110,8 +110,9 @@ func LoadConfigFromEnv() ManagerConfig {
 	// on an older binary the flag is ignored rather than failing every boot.
 	cfg.DataDiscard = dataDiscardEnabledFromEnv(envFlagOn("VM_DATA_DISCARD"), cfg.FirecrackerBinPath)
 	if envFlagOn("VM_DATA_DISCARD") && !cfg.DataDiscard {
-		log.Printf("vmmanager: VM_DATA_DISCARD is on but the Firecracker binary does not report 1.17.0 or newer; data drive discard stays off")
+		log.Printf("vmmanager: VM_DATA_DISCARD is on but the Firecracker binary does not report 1.17.0 or newer; data drive discard stays off for the pinned build")
 	}
+	cfg.DataDiscardOnly = parseComputerSelector(os.Getenv("VM_DATA_DISCARD_ONLY"))
 	if v := os.Getenv("VM_BALLOON_STATS_POLLING_INTERVAL_S"); v != "" {
 		// Firecracker's field is a u16: refuse out-of-range values rather
 		// than fail every boot.
@@ -136,6 +137,7 @@ func LoadConfigFromEnv() ManagerConfig {
 	}
 
 	cfg.Jailer = loadJailerConfigFromEnv(cfg.FirecrackerBinPath)
+	cfg.FirecrackerNext = loadFirecrackerNextFromEnv(cfg.FirecrackerBinPath, envFlagOn("VM_DATA_DISCARD"))
 	cfg.ClaudeDelegate = loadClaudeDelegateConfig(os.Getenv)
 	cfg.VisualCapture = loadVisualCaptureConfig(os.Getenv)
 

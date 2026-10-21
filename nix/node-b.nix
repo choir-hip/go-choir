@@ -1330,11 +1330,18 @@ in
         # (docs/reports/lr-guest-memory-return-2026-10-14.md).
         "VM_BALLOON_FREE_PAGE_REPORTING=1"
         # Data drive discard (VM_DATA_DISCARD=1) is deliberately NOT set: the
-        # pinned Firecracker is 1.16.1, which has no virtio-blk discard. Set it
-        # in the same change that moves pkgs.firecracker to >= 1.17.0 (vmmanager
-        # ignores it on an older binary). Guest side: choir-data-fstrim timer
-        # in nix/autoputer-vm.nix (docs/problems/guest-data-image-never-trims-
-        # 2026-10-20.md).
+        # pinned Firecracker is 1.16.1, which has no virtio-blk discard
+        # (vmmanager ignores the flag on an older binary). Guest side:
+        # choir-data-fstrim timer in nix/autoputer-vm.nix
+        # (docs/problems/guest-data-image-never-trims-2026-10-20.md).
+        # Staged per computer (FP8 station, NET-08 and RES-16): build
+        # nix/firecracker-next.nix (hashes unfilled), then add
+        #   "VM_FIRECRACKER_NEXT_BIN=${firecrackerNext}/bin/firecracker"
+        #   "VM_FIRECRACKER_NEXT_ONLY=<test computer id>"
+        #   "VM_DATA_DISCARD=1"
+        #   "VM_DATA_DISCARD_ONLY=<test computer id>"
+        # with firecrackerNext = import ./firecracker-next.nix { inherit pkgs; }.
+        # Only the named computers launch 1.17 and get discard.
         # Memory hotplug (virtio-mem) for test computers only: a selected
         # computer boots with a 4 GiB unplugged region and grows under
         # admitted, TTL-bound leases (capsule jobs that declare memory_mib).

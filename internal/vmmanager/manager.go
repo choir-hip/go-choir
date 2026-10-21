@@ -326,7 +326,18 @@ type ManagerConfig struct {
 	// DataDiscard adds virtio-blk discard (and the Sync io_engine it needs)
 	// to the data drive (VM_DATA_DISCARD; off by default, and honored only
 	// when the Firecracker binary is 1.17.0 or newer). See data_discard.go.
+	// It is the pinned build's gate; FirecrackerNext.DataDiscard is the next
+	// build's.
 	DataDiscard bool
+
+	// DataDiscardOnly narrows discard to the computers it names
+	// (VM_DATA_DISCARD_ONLY; computer_select.go). Empty: every computer whose
+	// build allows it.
+	DataDiscardOnly []string
+
+	// FirecrackerNext is a second VMM build launched only for the computers
+	// it selects (VM_FIRECRACKER_NEXT_*; vmm_next.go). Empty BinPath: off.
+	FirecrackerNext FirecrackerNextConfig
 
 	// BalloonStatsPollingIntervalS is the balloon statistics interval in
 	// seconds; 0 disables statistics. Only meaningful with the balloon on.
@@ -428,6 +439,10 @@ type Manager struct {
 	// jailSharedMu serializes building, linking and sweeping the shared
 	// read-only artifacts under <jail base>/.shared (jail_shared.go).
 	jailSharedMu sync.Mutex
+	// launchedVMMs is the VMM build each VM last launched with, mirrored in
+	// its state dir (vmm_next.go).
+	launchedMu   sync.Mutex
+	launchedVMMs map[string]vmmBuild
 	cgroupRoot   string
 	// chownFn and fileOwnerFn are chown(2) and the owner lookup; tests that
 	// cannot change owners replace them.
@@ -835,8 +850,10 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 	// so it can never be loaded over them (S3). A wake that tried the
 	// snapshot and fell back names why.
 	m.recordSnapshotFallbackOnBoot(cfg.VMID, tl)
-	tl.FirecrackerBin = m.cfg.FirecrackerBinPath
-	tl.FirecrackerVer = firecrackerBuildVersion(m.cfg.FirecrackerBinPath)
+	vmm := m.vmmFor(cfg)
+	m.recordLaunchedVMM(cfg.VMID, vmm)
+	tl.FirecrackerBin = vmm.Firecracker
+	tl.FirecrackerVer = firecrackerBuildVersion(vmm.Firecracker)
 	tl.HostKernelRelease = hostKernelRelease()
 	tl.markDetail("host_port_allocated", fmt.Sprintf("port=%d", hostPort))
 
@@ -1171,8 +1188,10 @@ func (m *Manager) ResumeVM(vmID string) (*VMInstance, error) {
 	// same observer as cold boots.
 	tl := newBootTimeline(vmID, "resume")
 	tl.mark("boot_begin")
-	tl.FirecrackerBin = m.cfg.FirecrackerBinPath
-	tl.FirecrackerVer = firecrackerBuildVersion(m.cfg.FirecrackerBinPath)
+	vmm := m.vmmFor(inst.Config)
+	m.recordLaunchedVMM(vmID, vmm)
+	tl.FirecrackerBin = vmm.Firecracker
+	tl.FirecrackerVer = firecrackerBuildVersion(vmm.Firecracker)
 	tl.HostKernelRelease = hostKernelRelease()
 	tl.markDetail("host_port_allocated", fmt.Sprintf("port=%d", hostPort))
 	tl.ComputerID = inst.Config.ComputerID
@@ -1759,7 +1778,7 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 		"is_root_device": false,
 		"is_read_only":   false,
 	}
-	applyDataDriveDiscard(m.cfg, dataDrive)
+	applyDataDriveDiscard(m.dataDiscardFor(cfg), dataDrive)
 	drives = append(drives, dataDrive)
 	if cfg.credentialDiskPath != "" {
 		drives = append(drives, map[string]interface{}{
@@ -2154,7 +2173,7 @@ func (m *Manager) startFirecrackerProcess(vmID string, args []string) error {
 	if m.firecrackerStarter != nil {
 		return m.firecrackerStarter(vmID, args)
 	}
-	bin := m.cfg.FirecrackerBinPath
+	bin := m.launchedVMM(vmID).Firecracker
 	if bin == "" {
 		bin = "firecracker"
 	}
