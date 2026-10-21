@@ -1155,3 +1155,84 @@ is written like `/selfdev/adoption` and compiles for linux, but its mount was
 not exercised on the darwin build host; the first staging drill is the
 deployed proof (a failed round, a re-cast, then `ls /selfdev/carried` in the
 retry's capsule).
+
+## First carried-patch drill on staging: arm A, Sonnet delegate, ImageApp (2026-10-21, 03:36-04:31 UTC)
+
+Drill: tracer label `arm-a-sonnet-imageapp-1021` against 8d027370b, on the
+allowlisted delegate test computer (computer-ad1b46d4…), trajectory
+251854fd-3a85-5612-809e-7f5aeb2fa93d. The trace bundle stays outside the
+repo. What the trace shows, in order:
+
+1. **Round 1 ended the way the brief planned.** Assignment
+   `assignment-47d565ce00ff108c29f468d7` ran 03:46-04:06. The Sonnet
+   delegate rewrote `frontend/src/lib/ImageApp.svelte` in 13 turns
+   ($0.13). Its sandbox refused the npm build ("repeated Bash approval
+   denials"), as the delegate's network mode is meant to. Engineering's
+   own verification cell timed out. It reported a terminal failure and
+   asked for the second round with the carried patch.
+2. **Option A worked on staging.** Round 2
+   (`assignment-6c6f6b7d3ff3c46ba183cf5c`, from 04:07:54) read
+   `/selfdev/carried/source.patch` (6479 bytes). Its first
+   `git -C /workspace/platform apply` exited 0 at 04:08:02. Every later
+   "already exists in working directory" error came from engineering
+   re-applying the same patch, not from a conflict. The capsule has no
+   `.git`, so `git diff --stat` and `git status` cannot show the change
+   (they print nothing, or "not a git repository"). That cost engineering
+   five cells of doubt.
+3. **The round-2 build was killed by the drill, not by Choir.** A
+   synchronous `choir.Exec` of `npm ci && npm run build` died with
+   "failed to read broker response … i/o timeout" after about 4 minutes.
+   Engineering then started the same command as a job (`choir.Start`,
+   04:12:37; the cell returned at 04:19:05). At 04:27:09 the tracer's
+   50-minute deadline passed, and the tracer stopped the computer at
+   04:27:30 with the job still running. The next boot closed the loop
+   "interrupted by a restart" (04:31:22), as the restart rule requires.
+   The arm has no outcome, only a deadline.
+
+Problems found (new numbers continue the cluster):
+
+- **Failure 16: secret-named and sandbox-mask files ride in the carried
+  patch.** The patch adds 19 empty files at the source root: `.env` and
+  seven `.env.*` names, `.gitmodules`, `.npmrc`, `.yarnrc`,
+  `.yarnrc.yml`, `bunfig.toml`, `package.json`, `package-lock.json`,
+  `pnpm-lock.yaml` and `yarn.lock`. The same set appeared in the earlier
+  0565 drill as files nobody wrote
+  (`drills-0565-request-unseen-and-receipt-typos-2026-10-20.md`, item 4).
+  Hypothesis, not confirmed from the delegate's code: the delegate's
+  sandbox write-protects these names in its working directory, and for an
+  absent file the bind mount leaves an empty file behind in the capsule's
+  upper layer. The candidate tree persists them, and `DiffTreesToPatch`
+  carries every new text file. `carriedPatchSourcePath` refuses only
+  absolute, climbing, quoted and `.git` paths; it has no secret-path
+  rule. Today the files are empty, and a frontend-only release copies only
+  the release tree, so they did not block the freeze. They still matter
+  for two reasons. A delegate that writes a real `.env` would have its
+  content carried into the next capsule and recorded as patch data. And
+  the release path already refuses these names
+  (`capsule release refuses secret-bearing path`), so the carried patch
+  is looser than the release it feeds.
+- **Failure 17: `choir.Exec` runs with working directory `/`.** The eval
+  cell's `cwd` is `/workspace/platform`, but `pwd` through `choir.Exec`
+  printed `/`, and a relative `git apply` failed with "No such file or
+  directory". Engineering worked around it with `git -C`. Recorded as a
+  residual, not fixed tonight.
+- **Failure 18: a long synchronous `choir.Exec` dies on the broker
+  timeout.** `npm ci && npm run build` through `Exec` lost the broker
+  socket after about 4 minutes; `choir.Start` is the path that works.
+  Recorded as a residual. The run-context text could say "use Start for
+  builds".
+- **Tracer defects.** (a) The deadline path called `phase()` inside
+  `stallSnapshot`, where it is not in scope, so the attempt ended with
+  "phase is not defined" before it kept the stall snapshot. (b) `--cred`
+  cannot boot a stopped delegate computer: an API key gets "api key
+  computer realization unavailable". Today the computer is booted through
+  its browser session first. (c) Fifty minutes is too short for two
+  delegate rounds plus a cold `npm ci`.
+
+Decided fixes, smallest first. Failure 16: the carried-patch reader
+leaves out any path the release would refuse as secret-bearing, and any
+new empty file, and names both in `Omitted`. The predicate becomes one
+function shared with the release path, so the two cannot drift. This is
+test-first, in `internal/capsule`. Tracer (a): pass `phase` into
+`stallSnapshot`. Tracer (c): later delegate drills run with
+`--timeout-min 110` and `--keep-computer`.
