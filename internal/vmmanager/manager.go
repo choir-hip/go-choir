@@ -895,6 +895,12 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 		} else {
 			return nil, fmt.Errorf("stat data image for VM %s: %w", cfg.VMID, err)
 		}
+		// An image from before the mode change is 0644. Tighten it; a failure
+		// is logged, not fatal: the state directory stays the barrier and a
+		// boot is worth more than the mode on one file.
+		if err := tightenDataImageMode(dataImg); err != nil {
+			log.Printf("vmmanager: data image mode for VM %s not tightened: %v", cfg.VMID, err)
+		}
 	} else if cfg.RootfsPath != "" {
 		// Legacy approach: create a per-VM writable copy of the rootfs.
 		// The base rootfs image is read-only (from the Nix store or
@@ -2994,7 +3000,7 @@ func createSparseDataImageSeeded(path string, sizeMB int, mkfsBin string, stagin
 	if err := os.MkdirAll(parent, 0o755); err != nil {
 		return fmt.Errorf("create data image dir %s: %w", parent, err)
 	}
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0o644)
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0o600)
 	if err != nil {
 		return fmt.Errorf("create data image %s: %w", path, err)
 	}
@@ -3093,6 +3099,10 @@ func (m *Manager) QuarantineDataImage(stateRoot, vmID string, recoveryGeneration
 	}
 	if err := syncRegularFileAndParent(quarantine); err != nil {
 		return "", fmt.Errorf("durably quarantine data image: %w", err)
+	}
+	// The rename kept the image's mode; a pre-change image is 0644.
+	if err := tightenDataImageMode(quarantine); err != nil {
+		log.Printf("vmmanager: quarantined image %s mode not tightened: %v", quarantine, err)
 	}
 	return quarantine, nil
 }
@@ -3622,8 +3632,32 @@ func (m *Manager) checkAllHealth() {
 	}
 }
 
-// tightenDataImageMode is pending (FP9 mode change): it makes no change yet.
+// tightenDataImageMode makes an existing data image owner-only (0600). A data
+// image was created 0644 and never re-moded; the 0750 state directory above it
+// is a barrier that a later group or ACL change would silently remove (review
+// F12). It refuses anything that is not a regular file and never follows a
+// link: the file is opened O_NOFOLLOW and the mode is set on the descriptor,
+// so a swapped path cannot redirect it. Mode bits change ctime only, so the
+// disk identity a memory snapshot is bound to (size, mtime, inode, device) is
+// unchanged.
 func tightenDataImageMode(path string) error {
-	_, err := regularFileInfo(path)
-	return err
+	file, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	if err != nil {
+		return fmt.Errorf("open data image %s: %w", path, err)
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("data image %s is not a regular file", path)
+	}
+	if info.Mode().Perm()&0o077 == 0 {
+		return nil
+	}
+	if err := file.Chmod(0o600); err != nil {
+		return fmt.Errorf("chmod data image %s: %w", path, err)
+	}
+	return nil
 }
