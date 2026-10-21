@@ -33,6 +33,7 @@
     : slug && latest > 0 ? publicationRoute(slug, latest) : '';
   $: versionLabel = versions > 1 ? `${versions} versions` : `v${latest || 1}`;
   $: showDek = Boolean(story?.dek) && (tier === 'lead' || tier === 'top');
+  $: isOpinion = story?.kind === 'opinion';
 </script>
 
 <article
@@ -43,6 +44,7 @@
   data-autopaper-rank={rank}
   data-version-count={versions}
   data-publication-route={bareRoute}
+  data-autopaper-kind={isOpinion ? 'opinion' : undefined}
 >
   <svelte:element this={tier === 'lead' ? 'h2' : 'h3'} class="ap-headline" data-autopaper-headline dir="auto">
     <a href={slug ? storyPath(slug) : '#'} on:click={(event) => onOpen(event, story, bareRoute)}>{story.title}</a>
@@ -51,6 +53,13 @@
     <p class="ap-dek" dir="auto">{story.dek}</p>
   {/if}
   <p class="ap-meta">
+    {#if isOpinion}
+      <span class="ap-opinion-label" data-autopaper-opinion-label>Opinion</span>
+      {#if story.author}
+        <span class="ap-byline" data-autopaper-byline>by {story.author}</span>
+      {/if}
+      <span class="ap-meta-dot" aria-hidden="true">·</span>
+    {/if}
     {#if versions > 1}
       <span class="ap-updated" data-updated-marker>Updated</span>
     {/if}
@@ -165,6 +174,14 @@
   .ap-tier-brief .ap-meta,
   .ap-tier-more .ap-meta {
     margin-top: 0.3rem;
+  }
+
+  .ap-opinion-label {
+    color: var(--ap-ink);
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
   }
 
   .ap-updated {

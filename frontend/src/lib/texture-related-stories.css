@@ -74,6 +74,24 @@
 
 /* The AI-written disclosure at the bottom of an Autopaper story, before the
    related block (texture-ai-disclosure.ts; owner notes §28). */
+.texture-opinion-label {
+  margin: 0 0 1rem;
+  font-size: 0.78em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.texture-opinion-kind {
+  font-weight: 700;
+}
+
+.texture-opinion-byline {
+  opacity: 0.75;
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
+.texture-opinion-notice,
 .texture-ai-disclosure {
   margin: 1.5rem 0 0;
   padding: 0.5rem 0.75rem;

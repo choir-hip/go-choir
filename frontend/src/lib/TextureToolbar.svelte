@@ -197,6 +197,7 @@
                 <p class="eyebrow">Publish</p>
                 <h3>Publish {versionLabel}</h3>
                 <p>This creates a public link with the current text and source snapshots.</p>
+                <p class="publish-menu-opinion-note">Or list it in the Autopaper Opinion section, under a short author handle (never your email).</p>
               </div>
               <div class="publish-menu-actions">
                 <button
@@ -207,6 +208,15 @@
                   disabled={publishedActionPending}
                 >
                   {publishedActionPending ? 'Publishing…' : 'Publish'}
+                </button>
+                <button
+                  type="button"
+                  class="secondary-action"
+                  data-texture-publish-opinion
+                  on:click={() => dispatch('publish-opinion-confirm')}
+                  disabled={publishedActionPending}
+                >
+                  {publishedActionPending ? 'Publishing…' : 'Publish as opinion'}
                 </button>
                 <button
                   type="button"

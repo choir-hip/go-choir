@@ -335,6 +335,26 @@ export async function publishTexture(docId, { revisionId = '', slug = '', access
   return res.json();
 }
 
+// publishTextureAsOpinion publishes one revision as a labelled opinion piece,
+// listed in the Autopaper Opinion section. It takes the signed-in browser
+// session only; the server sets the mode, the access policy and the byline
+// (a short handle, never the email), and refuses with a plain message when
+// opinion publishing is off, the daily limit is reached, or the Texture was
+// already published as a plain link.
+export async function publishTextureAsOpinion(docId, { revisionId = '', slug = '' } = {}) {
+  const res = await fetchWithRenewal(platformPath('/texture/opinions'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ doc_id: docId, revision_id: revisionId, slug }),
+  });
+
+  if (!res.ok) {
+    await decodeError(res, `Publish as opinion failed (${res.status})`);
+  }
+
+  return res.json();
+}
+
 // resolvePublication reads a published link's bundle. view 'nav' asks for
 // the route, publication and nav alone: the reader's poll for a newer
 // version needs nothing else, and the whole bundle costs about a second to

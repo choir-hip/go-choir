@@ -33,6 +33,10 @@ export type FrontStory = {
   words?: number;
   /** The front-page section the scorer filed the story under; absent when unscored. */
   section?: string;
+  /** "opinion" for a row of the Opinion section; absent for an Autopaper story. */
+  kind?: string;
+  /** An opinion piece's byline (a handle, never an email); absent for a story. */
+  author?: string;
 };
 
 export type FrontPage = { stories: FrontStory[]; next_cursor?: string };
@@ -100,12 +104,14 @@ export function publicationRoute(slug: string, revision = 0): string {
  * The Texture window context that opens a story read-only in published
  * mode. The route makes the window restore to the same story and version.
  */
-export function storyTextureContext(route: string, title = ''): Record<string, unknown> {
+export function storyTextureContext(route: string, title = '', opinion = false): Record<string, unknown> {
   return {
     publishedRoutePath: route,
     publishedReadOnly: true,
-    // An Autopaper story: the reader shows the AI-written disclosure.
-    autopaperStory: true,
+    // An Autopaper story: the reader shows the AI-written disclosure. An
+    // opinion piece is a person's own text; the reader labels it from the
+    // server's record (publication.kind), not from this context.
+    autopaperStory: !opinion,
     windowTitle: title || 'Story',
     allowMultiple: true,
   };
@@ -138,6 +144,15 @@ export async function fetchFrontPage(cursor = '', limit = 20, section = ''): Pro
   if (!res.ok) throw new Error(`front list returned ${res.status}`);
   const page = await res.json();
   return { stories: Array.isArray(page?.stories) ? page.stories : [], next_cursor: page?.next_cursor || '' };
+}
+
+/** The section id the server lists opinion pieces under. */
+export const OPINION_SECTION_ID = 'opinion';
+
+/** The newest opinion pieces (an empty list when the Opinion section is off). */
+export async function fetchOpinionPage(limit = 8): Promise<FrontStory[]> {
+  const page = await fetchFrontPage('', limit, OPINION_SECTION_ID);
+  return page.stories.filter((story) => story?.kind === 'opinion');
 }
 
 // ---- front-page rank ----

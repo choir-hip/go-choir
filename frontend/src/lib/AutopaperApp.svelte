@@ -37,6 +37,7 @@
     FRONT_SECTION_ID,
     FRONT_FIRST_PAGE_SIZE,
     fetchFrontPage,
+    fetchOpinionPage,
     formatWhen,
     layoutFrontPage,
     loadSavedSection,
@@ -67,6 +68,9 @@
   let status: 'loading' | 'ready' | 'error' = 'loading';
   let loadingMore = false;
   let today = new Date();
+  // The Opinion section: signed-in readers' labelled pieces, listed apart
+  // from the news. Absent (empty) when the section is off or has no piece.
+  let opinionStories: FrontStory[] = [];
 
   // The section the reader chose (restored from this device on mount), and
   // their section visits on this device.
@@ -121,9 +125,19 @@
       sectionPages = {};
       today = new Date();
       status = 'ready';
+      void loadOpinion();
       if (usesSections(frontStories) && section !== FRONT_SECTION_ID) void loadSection(section);
     } catch (_err) {
       status = 'error';
+    }
+  }
+
+  async function loadOpinion() {
+    try {
+      opinionStories = await fetchOpinionPage();
+    } catch (_err) {
+      // The Opinion section is optional; the news front stands without it.
+      opinionStories = [];
     }
   }
 
@@ -212,7 +226,7 @@
       appId: 'texture',
       appName: 'Texture',
       icon: '📝',
-      appContext: storyTextureContext(route, row.title),
+      appContext: storyTextureContext(route, row.title, row.kind === 'opinion'),
     });
   }
 
@@ -331,10 +345,36 @@
         {/if}
       {/if}
     </section>
+
+    {#if opinionStories.length}
+      <section class="ap-opinion-section" aria-label="Opinion" data-autopaper-opinion>
+        <p class="ap-label" data-autopaper-opinion-heading>Opinion</p>
+        <p class="ap-opinion-note">Written by readers, not by Autopaper's agent desks.</p>
+        <ol class="ap-more-list">
+          {#each opinionStories as story, i (story.publication_id)}
+            <li>
+              <AutopaperStory {story} tier="more" rank={i} onOpen={openStory} />
+            </li>
+          {/each}
+        </ol>
+      </section>
+    {/if}
   </div>
 </div>
 
 <style>
+  .ap-opinion-section {
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--ap-rule, currentColor);
+  }
+
+  .ap-opinion-note {
+    margin: 0.2rem 0 0.8rem;
+    color: var(--ap-ink-muted);
+    font-size: 0.78rem;
+  }
+
   /* Paper and ink map to the theme's document surface and text, so the
      page is ink on paper in a light theme and inverts with a dark one.
      Inside a desktop window the shell recolors every p and a under

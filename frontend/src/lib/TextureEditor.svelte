@@ -23,6 +23,7 @@
     listRevisions,
     openDocumentStream,
     publishTexture,
+    publishTextureAsOpinion,
     resolvePublication,
     restoreTextureRevision,
     submitAgentRevision,
@@ -82,7 +83,7 @@
   import './texture-source-flow.css';
   import './texture-published-citations.css';
   import './texture-related-stories.css';
-  import { aiDisclosureHTML } from './texture-ai-disclosure';
+  import { opinionLabelHTML, pieceDisclosureHTML } from './texture-ai-disclosure';
 
   export let currentUser = null;
   export let authenticated = false;
@@ -1247,7 +1248,12 @@
     }
   }
 
-  async function handlePublishCurrent() {
+  function handlePublishOpinion() {
+    return handlePublishCurrent({ opinion: true });
+  }
+
+  async function handlePublishCurrent(options = {}) {
+    const opinion = options?.opinion === true;
     if (!currentDoc || isPublishedMode || loading || submitting || agentPending || publishedActionPending) return;
     if (!authenticated) {
       dispatch('authrequired', { kind: 'publish_texture', appId: 'texture', appName: 'Texture', title: currentDoc.title });
@@ -1262,25 +1268,28 @@
       if (!revision?.revision_id) {
         throw new Error('No revision is available to publish');
       }
-      saveStatus = `Publishing ${versionLabel}...`;
-      publishResult = await publishTexture(currentDoc.doc_id, {
-        revisionId: revision.revision_id,
-        accessPolicy: buildExplicitPublishAccessPolicy(),
-        exportPolicy: buildExplicitPublishExportPolicy(),
-      });
+      saveStatus = opinion ? `Publishing ${versionLabel} as opinion...` : `Publishing ${versionLabel}...`;
+      publishResult = opinion
+        ? await publishTextureAsOpinion(currentDoc.doc_id, { revisionId: revision.revision_id })
+        : await publishTexture(currentDoc.doc_id, {
+            revisionId: revision.revision_id,
+            accessPolicy: buildExplicitPublishAccessPolicy(),
+            exportPolicy: buildExplicitPublishExportPolicy(),
+          });
       const copied = await copyPublicURL(publicURLForPublishResult(publishResult));
       const opened = openPublishedURL(publishResult);
+      const what = opinion ? `${versionLabel} as opinion` : versionLabel;
       if (opened) {
-        saveStatus = copied ? `Published ${versionLabel}; opened public link and copied URL` : `Published ${versionLabel}; opened public link`;
+        saveStatus = copied ? `Published ${what}; opened public link and copied URL` : `Published ${what}; opened public link`;
       } else {
-        saveStatus = copied ? `Published ${versionLabel}; link copied` : `Published ${versionLabel}; copy link below`;
+        saveStatus = copied ? `Published ${what}; link copied` : `Published ${what}; copy link below`;
       }
     } catch (err) {
       if (err instanceof AuthRequiredError) {
         dispatch('authexpired');
         return;
       }
-      error = err.message || 'Failed to publish Texture';
+      error = err.message || (opinion ? 'Failed to publish as opinion' : 'Failed to publish Texture');
       saveStatus = 'Publish failed';
     } finally {
       publishedActionPending = false;
@@ -1849,9 +1858,12 @@
   $: editEvidence = sourceEditEvidence(currentRevision, sourceDiagnosis);
   $: renderedMarkdown = renderDocumentHTML(editorValue, editorBodyDoc, publishedCitations);
   $: relatedHTML = isPublishedReadOnly && publishedBundle ? renderRelatedHTML(publishedRelated) : '';
-  $: disclosureHTML = isPublishedReadOnly && publishedBundle ? aiDisclosureHTML(appContext) : '';
-  // The AI-written label closes the story, before related stories (owner notes §28).
-  $: syncEditorSurface(renderedMarkdown + disclosureHTML + relatedHTML);
+  // The closing line is the AI-written label of an Autopaper story or the
+  // human-author notice of an opinion piece, chosen by the server's record
+  // (owner notes §28). An opinion piece also opens with its Opinion label.
+  $: disclosureHTML = isPublishedReadOnly && publishedBundle ? pieceDisclosureHTML(appContext, publishedBundle.publication) : '';
+  $: opinionHeadHTML = isPublishedReadOnly && publishedBundle ? opinionLabelHTML(publishedBundle.publication) : '';
+  $: syncEditorSurface(opinionHeadHTML + renderedMarkdown + disclosureHTML + relatedHTML);
 
   onMount(() => {
     if (!initializedKey) {
@@ -1961,7 +1973,8 @@
       on:sources={handleOpenSourcePanel}
       on:restore={handleRestoreHistoricalRevision}
       on:toggle-publish={() => (publishMenuOpen = !publishMenuOpen)}
-      on:publish-confirm={handlePublishCurrent}
+      on:publish-confirm={() => handlePublishCurrent()}
+      on:publish-opinion-confirm={handlePublishOpinion}
       on:publish-cancel={() => (publishMenuOpen = false)}
     />
 
@@ -2025,6 +2038,7 @@
           data-texture-rendered
           data-texture-published-reader={publishedBundle ? '' : undefined}
           data-publication-id={publishedBundle?.publication?.id || undefined}
+          data-publication-kind={publishedBundle?.publication?.kind || undefined}
           data-publication-route={publishedRoutePath || undefined}
           data-publication-revision={publishedNav.revision || undefined}
           data-publication-latest={publishedNav.latest || undefined}
