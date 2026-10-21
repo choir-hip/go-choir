@@ -709,3 +709,14 @@ with this. either edit node-a or the mike repo").
     hand at 02:50:5x. Fix: the daily run calls `restic unlock` (stale
     locks only) before opening the repository; failure mode 9 in the
     snapshot test. The same fate-sharing would hit any killed run.
+20. **Run 5 (02:50:55 to 03:27:29 UTC, 36 min): ok**, the first clean run
+    since run 2, and the first without the daily check. Snapshot
+    `0a731df5` added 10.4 GB in 29 minutes. The remaining memory line was
+    `restic stats --mode raw-data`, which sized the repository by walking
+    every snapshot's trees: about 7 minutes at a 10 GB peak with 2.9 GB of
+    swap. Fix: the daily run sums the pack sizes the rest-server lists
+    (REST API v2, `data/`). Measured on the live repository at 03:30:
+    112,391,327,717 bytes in 1,627 packs in 0.27 s, against stats'
+    111,985,828,263 (the pack sum also counts pack headers, so it errs high,
+    the safe side for the 80% quota alert). Failure mode 10 in the snapshot
+    test; `curl` joins the unit's PATH.
