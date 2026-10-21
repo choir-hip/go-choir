@@ -1007,3 +1007,16 @@ Taken as:
   host-side sharing (checklist RES-05). Cloud Hypervisor's own case is
   VFIO/GPU, copy-on-write restore, live migration and balloon resize
   (RES-20).
+
+Later the same day, on networking: "we do have to make sure that we're not
+overly constricting networking for research desk, which does need to be
+able to read the contents of arbitrary URLs safely, as well as searching
+the web, of course. Also our source ingestion pathway, and also for the
+network grants for engineering. And then we'll have specific policies in
+the future for future app agents that may need some kind of networking
+ingress and egress." Taken as the checklist's "Networking must enable, not
+starve" rules: the floor blocks wrong destinations, not the internet; no
+allowlist for research reads; moving a path to the host changes the route,
+not the capability; a list of capabilities each network item must prove
+still works; and item NET-10 (app-agent ingress and egress in the desk
+manifest).

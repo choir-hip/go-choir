@@ -42,6 +42,39 @@ One red deploy at a time, each verified on staging before the next:
 8. SEC-08, SEC-09 (delegate posture, KSM off).
 9. ARCH-01 (doctrine names the app-desk tier, docs only, any time).
 
+## Networking must enable, not starve (owner, 2026-10-21)
+
+The owner: research must read the contents of arbitrary URLs safely and
+search the web; source ingestion, engineering's network grants and future
+app agents' ingress and egress must keep working. Rules for every network
+item below:
+
+- **The floor blocks the wrong destinations, not the internet.** SEC-03
+  drops guest traffic to host services other than the guest's own, to other
+  guests, and to private, link-local, CGNAT and cloud-metadata addresses.
+  Public internet egress stays open until NET-01 gives each path a host
+  route.
+- **No allowlist for research reads.** Research may read any public URL.
+  "Safely" means the address guard (resolve, refuse non-public answers, dial
+  the checked address, re-check every redirect), size and time limits, and
+  page content treated as untrusted data. Allowlists are for engineering
+  toolchains, where the destinations are known.
+- **Moving a path to the host moves where the check runs, not what is
+  reachable.** NET-01 and NET-04 change the route, never the capability.
+- **Capabilities that must keep working at every step.** An item that
+  touches networking names which of these it affects and proves them on
+  staging before it is ticked:
+  1. research reads an arbitrary public URL (Read, fetch_url);
+  2. web search through the gateway;
+  3. source ingestion: RSS, Telegram (MTProto, not HTTP), GDELT, keyed
+     source APIs, podcasts, YouTube, content import;
+  4. Web Lens live inspection (browser control, Obscura);
+  5. engineering: the L2 ecosystem proxy to package registries and source
+     hosts, the Go module proxy, the delegate's model API, and open egress
+     by grant when L3/L4 exist;
+  6. Mail in and out through maild;
+  7. app agents' declared ingress and egress (NET-10).
+
 ## 0. Recover and land existing work
 
 - [ ] **REC-01 · P0 · red — Recover `fix/desk-cell-confinement`**
@@ -122,6 +155,8 @@ One red deploy at a time, each verified on staging before the next:
     6. Confirm no IPv6 path reaches host services.
     7. The mangle-table guest egress policy from the desk-cells doc
        (code was on REC-01's branch).
+    Public internet egress stays open (see "Networking must enable, not
+    starve"); prove capabilities 1-6 still work after the deploy.
   - Now: partial. F7 landed (efbd69e27: forward default-deny over the whole
     pool, sweep at start). Egress is open (MASQUERADE to any destination).
   - Plans: desk-cells doc Problem 2 (inventory, mangle design, failure
@@ -235,6 +270,10 @@ One red deploy at a time, each verified on staging before the next:
   - Plans: grants design Phase 3; desk-cells doc; review §4.5; S4
     definition addendum. No design; the desk-cells inventory misses
     YouTube, iTunes, podcast feeds and Obscura.
+  - Done when: capabilities 1-4 of "Networking must enable, not starve"
+    pass through the host path, with arbitrary public URLs still readable
+    (no allowlist) and Telegram's MTProto connection given its own host
+    route.
 - [ ] **NET-02 · P1 · red — Package mirrors beyond goproxy**
   - Target: npm, PyPI, crates and git mirrors on the host, extending the
     goproxy pattern (`internal/goproxy`, tap port 8088), so capsule egress
@@ -256,7 +295,9 @@ One red deploy at a time, each verified on staging before the next:
     8085 host to guest); vsock CVE review (ladder: Vghost, VsockDrop);
     snapshot restore resets vsock connections (hostlink already retries).
 - [ ] **NET-04 · P2 · red — Remove the guest NIC**
-  - After NET-01 to NET-03. No plan proposes it yet.
+  - After NET-01 to NET-03, and only once every capability in "Networking
+    must enable, not starve" has a host route (Web Lens and Telegram
+    included). No plan proposes it yet.
 - [ ] **NET-05 · P2 · red — Grant object for open egress**
   - Target: `EgressGrant`, `request_grant`/`decide_grant`, L1/L3/L4, by
     owner act, time-limited, enforced at the host proxy; one grant model
@@ -273,6 +314,18 @@ One red deploy at a time, each verified on staging before the next:
   unblocks `VM_DATA_DISCARD` (RES-16).
 - [ ] **NET-09 · P2 · red — Keys behind policy signers; passkey-bound
   owner acts** (ladder items 7-8).
+- [ ] **NET-10 · P1 · green then red — Network policy for app agents**
+  - Target: each app desk's manifest (ARCH-02) declares its egress (verbs
+    and grants, approved by the owner at install, re-approved when an
+    upgrade widens them) and its ingress (inbound webhooks, push
+    notifications, mail). Ingress always lands on a host service and
+    reaches the desk as records, never as a connection into the guest.
+  - Now: Mail ingress arrives through maild on the host (`internal/maild`);
+    no other app agent has ingress, and no ingress model exists.
+  - Plans: S7 addendum (manifest-declared grants); S4 egress capability
+    model (`definitions/choir-appdev-s4-capsule-open-world-2026-10-01.md:283-370`);
+    email desk design (maild as the ingress authority).
+  - Plan update owed: an ingress section in S4 or S7.
 
 ## 3. Resources
 
