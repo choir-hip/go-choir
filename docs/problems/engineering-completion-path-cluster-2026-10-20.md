@@ -1492,3 +1492,64 @@ the mailbox are untouched. Failure modes written before the code:
 6. A job that never ends cannot hold the round forever: jobs carry a wall
    clock (at most the `minutes` given to Start), and `choir.Stop` remains
    the way out.
+
+## Failure 24: the release copy fails because the capsule answers xattr calls with EPERM; a failed build job poisons the next one (label sonnet-slides-1021f, rounds 3 and 4, 07:25-07:29 UTC)
+
+This corrects failure 21 a second time. The 871c3c145 fix (an empty,
+capsule-owned, opaque release directory) was live in these rounds. The
+copy still failed.
+
+Evidence (run events of assignments ac64378b and 962dc239):
+
+- Round 4, first build job (`job-2b20ed0e0e53`), in a fresh capsule
+  whose release directory starts empty and capsule-owned: `npm ci` and
+  `vite build` passed, then `cp -rf --no-preserve=mode,ownership,timestamps`
+  printed `cp: setting permissions for
+  '/var/lib/artifact/release/frontend/./assets/...': Operation not
+  permitted` for each file, and the job failed.
+- The same command again in the same capsule (`job-7631a2c99b1b`) ended
+  `done`, exit 0. The second time, every destination file already
+  existed.
+- Round 3's first job failed the same way.
+
+Cause (from the trace and the code; the copy was not stepped through in
+a capsule):
+
+- `cp --no-preserve=mode` sets a default ACL on each file it creates
+  (coreutils `set_acl` on a new destination). That writes the
+  `system.posix_acl_access` xattr. An existing destination is not
+  re-moded, which is why the retry passed.
+- The capsule seccomp filter is default-deny with EPERM, and it allows no
+  xattr syscall (`internal/capsule/seccomp.go`). The ACL write therefore
+  fails with EPERM, which cp treats as fatal ("setting permissions").
+  When an ACL write fails with EOPNOTSUPP ("this filesystem has no ACLs"),
+  cp falls back to a plain `fchmod`, which the filter allows.
+- The overlay's note that `cp -a` and `cp -p` "exit 1 on every file even
+  though the data was copied" is the same EPERM on xattr reads and
+  writes.
+- Failure 21's ownership reading may still be true on a lower release
+  tree, but it is not what failed here. The release directory was empty
+  and capsule-owned.
+
+Second defect, in the same round: the failed first job stopped at the
+`cp`, before its `rm -rf node_modules dist`, so it left the build outputs
+in the workspace. The second job started with them present and removed
+them, so "the workspace changed while job job-7631a2c99b1b ran", and
+Freeze refused the one good build's receipt. Engineering then completed
+the round as blocked.
+
+Fix (decided):
+
+1. Capsule seccomp (red, capsule isolation; strictly non-widening): the
+   xattr syscall family (`setxattr`, `lsetxattr`, `fsetxattr`,
+   `getxattr`, `lgetxattr`, `fgetxattr`, `listxattr`, `llistxattr`,
+   `flistxattr`, `removexattr`, `lremovexattr`, `fremovexattr` and the
+   `*xattrat` variants) stays refused, but with EOPNOTSUPP in place of
+   EPERM. Nothing new is allowed; only the refusal's errno changes, to
+   the one tools treat as "no xattrs here". Failure modes: an xattr call
+   must still have no effect; every other refused call keeps EPERM; the
+   broker filter gets the same treatment.
+2. Engineering overlay build recipe (orange, prompt default): the
+   cleanup runs whether or not the build succeeded,
+   `{ npm ci ... && cp ...; }; s=$?; rm -rf node_modules dist; exit $s`,
+   so a failed job leaves the workspace as it found it.
