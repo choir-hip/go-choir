@@ -253,6 +253,32 @@ func (w *jevReceiptWriter) write(receipt jevTransportReceipt) error {
 	return file.Sync()
 }
 
+// jevPeerAllowed is the Jev route's pin check. A mismatch is refused in
+// every binding mode, as it always was. The pin is shared with every other
+// route (SEC-05), so a first-use write happens only where the mode allows one:
+// enforce, and off (the pre-SEC-05 behavior). In observe an unpinned bearer
+// passes with nothing written; in strict it is refused until the host's
+// ensure attests its address (SEC-05 record, finding 13).
+func (h *Handler) jevPeerAllowed(computerID string, r *http.Request) bool {
+	peerIP := remoteIP(r)
+	if peerIP == nil {
+		return false
+	}
+	mode := h.bearerBindingMode()
+	bind := mode == BindingEnforce || mode == BindingOff
+	state, _, err := h.registry.CheckPeer(computerID, peerIP.String(), bind)
+	if err != nil {
+		return false
+	}
+	switch state {
+	case PeerMatch, PeerBound:
+		return true
+	case PeerUnpinned:
+		return mode == BindingObserve
+	}
+	return false
+}
+
 // HandleJudgment serves POST /provider/v1/judgments. It only exposes the
 // pinned Jev Decisions transport to authenticated runtime peers; it never
 // accepts a caller-selected model or emits a commitment_score.
@@ -270,8 +296,7 @@ func (h *Handler) HandleJudgment(w http.ResponseWriter, r *http.Request) {
 		writeGatewayJSON(w, http.StatusUnauthorized, ErrorResponse{Error: "authentication required"})
 		return
 	}
-	peerIP := remoteIP(r)
-	if peerIP == nil || h.registry.BindPeer(computerID, peerIP.String()) != nil {
+	if !h.jevPeerAllowed(computerID, r) {
 		writeGatewayJSON(w, http.StatusForbidden, ErrorResponse{Error: "Jev bearer is not authorized for this VM"})
 		return
 	}

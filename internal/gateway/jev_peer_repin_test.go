@@ -204,3 +204,88 @@ func TestJevRouteFollowsTheComputerAfterTheHostReEnsuresItsCredential(t *testing
 		t.Fatalf("after the re-pin, the old address = %d; want 403", code)
 	}
 }
+
+// Batch 1 review, finding 13 of the SEC-05 record: the pin is shared by every
+// route, so the Jev route may write a first-use pin only where the mode
+// allows one (enforce, and off, the pre-SEC-05 behavior). In strict an
+// unpinned bearer is refused and in observe it passes with nothing written;
+// a mismatch is Jev's own 403 in every mode.
+func TestJevRouteWritesAPinOnlyWhereTheModeAllowsOne(t *testing.T) {
+	cases := []struct {
+		mode     BindingMode
+		wantCode int
+		wantPin  bool
+	}{
+		{BindingOff, http.StatusOK, true},
+		{BindingObserve, http.StatusOK, false},
+		{BindingEnforce, http.StatusOK, true},
+		{BindingStrict, http.StatusForbidden, false},
+	}
+	for _, tc := range cases {
+		t.Run(string(tc.mode), func(t *testing.T) {
+			h, reg, _ := setupHandlerWithRateLimit(t, 100, time.Minute)
+			h.SetBearerBinding(tc.mode)
+			h.SetJevTransport(&JevTransport{enabled: true, apiKey: "test-key", httpClient: &http.Client{Transport: &decisionsRoundTripper{}},
+				receipts: newJevReceiptWriter(filepath.Join(t.TempDir(), "receipts.jsonl"))})
+			cred, err := reg.IssueCredential("computer-jev")
+			if err != nil {
+				t.Fatal(err)
+			}
+			judge := func(peer string) int {
+				t.Helper()
+				body, _ := json.Marshal(map[string]any{
+					"state":     map[string]any{"capture": "x"},
+					"questions": map[string]any{"q": map[string]any{"type": "choice", "choices": []string{"yes", "no"}}},
+				})
+				req := httptest.NewRequest(http.MethodPost, "/provider/v1/judgments", bytes.NewReader(body))
+				req.Header.Set("Authorization", "Bearer "+cred.RawToken)
+				req.RemoteAddr = peer + ":40000"
+				rec := httptest.NewRecorder()
+				h.HandleJudgment(rec, req)
+				return rec.Code
+			}
+			pin := func() string {
+				t.Helper()
+				state, p, err := reg.CheckPeer("computer-jev", "10.200.9.9", false)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if state == PeerUnpinned {
+					return ""
+				}
+				return p
+			}
+
+			if code := judge(firstBootPeer); code != tc.wantCode {
+				t.Fatalf("unpinned Jev call in %s = %d, want %d", tc.mode, code, tc.wantCode)
+			}
+			switch got := pin(); {
+			case tc.wantPin && got != firstBootPeer:
+				t.Fatalf("%s: first use did not pin (pin %q)", tc.mode, got)
+			case !tc.wantPin && got != "":
+				t.Fatalf("%s: the Jev route wrote a pin (%q) the mode forbids", tc.mode, got)
+			}
+			if tc.mode == BindingStrict {
+				// The refused Jev call did not open inference either.
+				if code := inferFrom(h, cred.RawToken, firstBootPeer); code != http.StatusTooManyRequests {
+					t.Fatalf("strict: inference after a Jev call from an unpinned bearer = %d, want 429", code)
+				}
+			}
+
+			// Once the host attests an address, a mismatch is Jev's 403 in
+			// every mode and the pin does not move.
+			if _, err := reg.EnsureCredentialForPeer(cred.RawToken, firstBootPeer); err != nil {
+				t.Fatal(err)
+			}
+			if code := judge(secondBootPeer); code != http.StatusForbidden {
+				t.Fatalf("%s: a Jev call from another address = %d, want 403", tc.mode, code)
+			}
+			if got := pin(); got != firstBootPeer {
+				t.Fatalf("%s: a refused Jev call moved the pin to %q", tc.mode, got)
+			}
+			if code := judge(firstBootPeer); code != http.StatusOK {
+				t.Fatalf("%s: the attested address = %d", tc.mode, code)
+			}
+		})
+	}
+}
