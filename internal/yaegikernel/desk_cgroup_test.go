@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
@@ -181,5 +182,32 @@ func TestBudgetNameTheKillInTheExitCause(t *testing.T) {
 	}
 	if got := cg.note(); !strings.Contains(got, "throttled") {
 		t.Errorf("note does not report throttling: %q", got)
+	}
+}
+
+// TestWorkerCgroupToleratesNoSwapController: a kernel without the swap
+// controller has no memory.swap.max, and no swap to bound; the worker's
+// cgroup is still created with its memory.max. Any other write failure (here
+// memory.max) still fails closed.
+func TestWorkerCgroupToleratesNoSwapController(t *testing.T) {
+	fakeCgroupFS(t)
+	prev := writeCgroupFile
+	t.Cleanup(func() { writeCgroupFile = prev })
+	fail := map[string]error{"memory.swap.max": &os.PathError{Op: "open", Err: syscall.ENOENT}}
+	writeCgroupFile = func(dir, name, value string) error {
+		if err := fail[name]; err != nil {
+			return err
+		}
+		return prev(dir, name, value)
+	}
+	cg, err := createWorkerCgroup(t.TempDir(), "w-test", 1<<20, 0)
+	if err != nil {
+		t.Fatalf("no swap controller must not fail the cgroup: %v", err)
+	}
+	cg.release()
+
+	fail = map[string]error{"memory.max": &os.PathError{Op: "open", Err: syscall.ENOENT}}
+	if _, err := createWorkerCgroup(t.TempDir(), "w-test", 1<<20, 0); err == nil {
+		t.Fatal("a missing memory.max must still fail closed")
 	}
 }

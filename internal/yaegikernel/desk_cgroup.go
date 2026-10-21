@@ -3,6 +3,7 @@ package yaegikernel
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -51,7 +52,7 @@ type workerCgroup struct {
 	dir       *os.File
 }
 
-func writeCgroupFile(dir, name, value string) error {
+var writeCgroupFile = func(dir, name, value string) error {
 	return os.WriteFile(filepath.Join(dir, name), []byte(value), 0o644)
 }
 
@@ -147,7 +148,12 @@ func createWorkerCgroup(root, name string, maxBytes, highBytes uint64) (*workerC
 		settings = append(settings, struct{ file, value string }{"memory.high", strconv.FormatUint(highBytes, 10)})
 	}
 	for _, s := range settings {
-		if err := writeCgroupFile(path, s.file, s.value); err != nil {
+		err := writeCgroupFile(path, s.file, s.value)
+		if err != nil && s.file == "memory.swap.max" && errors.Is(err, os.ErrNotExist) {
+			// No swap controller means no swap to bound.
+			continue
+		}
+		if err != nil {
 			_ = os.Remove(path)
 			return nil, fmt.Errorf("desk worker cgroup %s: %s: %w", path, s.file, err)
 		}
