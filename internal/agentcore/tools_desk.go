@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
@@ -114,12 +115,19 @@ func (s *deskSession) close() {
 	s.worker.Close()
 }
 
+// deskReaperTimer is the part of *time.Timer the reaper uses.
+type deskReaperTimer interface{ Stop() bool }
+
 type deskSessionWorkers struct {
 	mu        sync.Mutex
 	sessions  map[string]*deskSession
 	retention time.Duration
 	maxIdle   int
 	now       func() time.Time
+	// afterFunc arms the idle reaper (time.AfterFunc unless a test replaces
+	// it); reaper is the armed timer, nil when nothing idle is being watched.
+	afterFunc func(time.Duration, func()) deskReaperTimer
+	reaper    deskReaperTimer
 	// label prefixes the desk_session a trace event names. A choir.Research
 	// child's pool is keyed on its root run like its siblings', so without a
 	// label two sibling children read as two workers on one desk session.
@@ -272,6 +280,50 @@ func (m *deskSessionWorkers) done(key string) {
 		}
 	}
 	m.reclaimLocked(m.clock())
+	m.armReaperLocked()
+}
+
+// armReaperLocked arms one timer for the earliest moment an idle session
+// passes retention, so a computer that goes quiet still gives its workers
+// back: reclaimLocked alone runs only on acquire and done. It does nothing
+// while a timer is armed or no session is idle. A busy session is not
+// watched; its done re-arms the reaper when the cell ends.
+func (m *deskSessionWorkers) armReaperLocked() {
+	if m.reaper != nil {
+		return
+	}
+	now := m.clock()
+	wait := time.Duration(-1)
+	for _, s := range m.sessions {
+		if s.busyRun != "" {
+			continue
+		}
+		left := s.lastUsed.Add(m.retentionLocked()).Sub(now)
+		if left < time.Second {
+			left = time.Second
+		}
+		if wait < 0 || left < wait {
+			wait = left
+		}
+	}
+	if wait < 0 {
+		return
+	}
+	after := m.afterFunc
+	if after == nil {
+		after = func(d time.Duration, f func()) deskReaperTimer { return time.AfterFunc(d, f) }
+	}
+	m.reaper = after(wait, m.reap)
+}
+
+// reap is the reaper timer's callback: it closes idle sessions past retention
+// (never a busy one, reclaimLocked skips them) and re-arms for the rest.
+func (m *deskSessionWorkers) reap() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.reaper = nil
+	m.reclaimLocked(m.clock())
+	m.armReaperLocked()
 }
 
 // reclaimLocked closes idle sessions past retention, then the least recently
@@ -340,6 +392,10 @@ func (m *deskSessionWorkers) release(key string) {
 func (m *deskSessionWorkers) closeAll() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.reaper != nil {
+		m.reaper.Stop()
+		m.reaper = nil
+	}
 	for key, s := range m.sessions {
 		s.close()
 		delete(m.sessions, key)
@@ -787,9 +843,21 @@ func deskWorkerBinary() string {
 		return deskWorkerBinOverride
 	}
 	if bin, err := os.Executable(); err == nil {
-		return bin
+		return deskWorkerBinaryFor(bin)
 	}
 	return "autoputer"
+}
+
+// deskWorkerBinaryFor is the worker to spawn for a daemon running as exe: the
+// dedicated desk-worker binary beside it (no Dolt engine, no gRPC; RES-17) if
+// there is an executable regular file, else exe itself, which serves
+// `desk-session` too.
+func deskWorkerBinaryFor(exe string) string {
+	dedicated := filepath.Join(filepath.Dir(exe), "desk-worker")
+	if st, err := os.Stat(dedicated); err == nil && st.Mode().IsRegular() && st.Mode().Perm()&0o111 != 0 {
+		return dedicated
+	}
+	return exe
 }
 
 // deskWorkerActivationID identifies the desk activation a worker serves. Run

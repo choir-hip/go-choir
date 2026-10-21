@@ -23,8 +23,6 @@ import (
 	"runtime/debug"
 	"strconv"
 	"strings"
-
-	doltmemlimit "github.com/dolthub/dolt/go/libraries/doltcore/memlimit"
 )
 
 // Role names the process whose limit is computed.
@@ -100,8 +98,12 @@ func (d Decision) String() string {
 // ApplyDaemon fixes Dolt's cache budget, then sets the daemon's soft limit.
 // It must run before anything opens Dolt: Dolt reads the Go memory limit
 // once, at first use, to size its caches.
-func ApplyDaemon() Decision {
-	return apply(RoleDaemon, os.Getenv, os.ReadFile, setMemoryLimit, doltmemlimit.Init, doltmemlimit.NodeCacheSize)
+//
+// The caller passes Dolt's memlimit.Init and NodeCacheSize: this package
+// stays free of the Dolt engine (and its cgo ICU dependency) so the desk
+// worker binary, which links it, stays small.
+func ApplyDaemon(doltInit func(), doltNodeCache func() uint64) Decision {
+	return apply(RoleDaemon, os.Getenv, os.ReadFile, setMemoryLimit, doltInit, doltNodeCache)
 }
 
 // ApplyDeskWorker sets a desk-session worker's soft limit.
