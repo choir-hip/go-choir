@@ -351,3 +351,38 @@ no stored field and no process-local state.
   `parent` it cannot read (P5 cause B, now three occurrences);
   introduced: none expected; repaired: P5 cause B on the substrate (overlay
   text alone was not the fix).
+
+## P6. The delegate's network mode cannot build a frontend change (code reading, 2026-10-21 00:20 UTC)
+
+This was found while setting up the overnight two-arm drill (owner notes
+section 32: the same frontend rewrite with Sonnet through the delegate,
+and with GPT-6 Luna).
+
+- On a computer on the delegate allowlist, an engineering assignment runs
+  in network mode `claude`. That mode allows `api.anthropic.com:443` and
+  the host Go module proxy, and nothing else
+  (`internal/agentcore/engineering_assignment_runtime.go:380-386`;
+  `rlm_engineering_runtime.yaml` line 9).
+- The frontend build job is `npm ci && npm run build`, and Freeze needs
+  the built release tree. npm is refused in `claude` mode.
+- A Cast that asks for `ecosystem_proxy` gets npm, but `ClaudeDelegate`
+  is set only in `claude` mode (`engineering_assignment_runtime.go:452`).
+  So one round can have the delegate or npm, never both.
+- No recorded run combines the two. This is a code reading; staging has not
+  shown it yet.
+
+Options, not decided:
+
+- **(a) Two rounds, no egress change.** Round 1 runs in `claude` mode: the
+  delegate writes the change and the round completes as failed (no
+  build). Round 2 runs in `ecosystem_proxy`, receives round 1's diff as the
+  failure 15 carried patch (option A, built 2026-10-21), and builds,
+  re-tests and freezes it.
+- **(b) Widen `claude` mode with the host ecosystem proxy.** This is red,
+  because it changes the egress policy. It enlarges what a capsule holding
+  the delegate token can reach.
+- **(c) A host-built `node_modules` seed for the base tree.** It would be
+  mounted read-only, like the build-cache seed in failure 12.
+
+Tonight's drill uses (a): it needs no egress change, and it is also the
+first real proof of the carried patch. (b) and (c) wait for the owner.
