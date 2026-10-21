@@ -133,8 +133,8 @@ func researchLineageFrom(ctx context.Context, execCtx toolregistry.ExecutionCont
 // design docs/reviews/rlm-implementation-consensus-2026-08-29.md D7b/M6.5,
 // results as return values per the 2026-09-15 ontology consensus; mission
 // docs/definitions/choir-research-fanout-2026-10-10.md). Each child is a
-// research-child desk on its own model loop: read-only world verbs and
-// further choir.Research, no messaging, reporting or writes, and an inert
+// research-child desk on its own model loop: read-only world verbs, no
+// further choir.Research (PD1), no messaging, reporting or writes, and an inert
 // ledger reduction (no run record, no channel). The whole tree ends with the
 // calling cell's deadline.
 func (rt *Runtime) runResearchChildren(ctx context.Context, parent toolregistry.ExecutionContext, payload json.RawMessage) (json.RawMessage, error) {
@@ -155,6 +155,7 @@ func (rt *Runtime) runResearchChildren(ctx context.Context, parent toolregistry.
 	}
 	ctx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
+	start := time.Now()
 	results := make([]yaegikernel.ResearchChildResult, len(req.Children))
 	sem := make(chan struct{}, researchChildConcurrency)
 	var wg sync.WaitGroup
@@ -173,7 +174,25 @@ func (rt *Runtime) runResearchChildren(ctx context.Context, parent toolregistry.
 		}(i, spec)
 	}
 	wg.Wait()
+	log.Print(researchTreeSpendLine(parent.RunID, results, time.Since(start)))
 	return json.Marshal(results)
+}
+
+// researchTreeSpendLine is one research tree's spending: its children's
+// token totals, summed. It is tracked, never capped (owner: track spending,
+// don't cap; DEC-07, docs/design/agent-tree-budgets-2026-10-21.md).
+func researchTreeSpendLine(root string, results []yaegikernel.ResearchChildResult, elapsed time.Duration) string {
+	var errs, in, out, cached int
+	for _, r := range results {
+		if r.Error != "" {
+			errs++
+		}
+		in += r.InputTokens
+		out += r.OutputTokens
+		cached += r.CachedInputTokens
+	}
+	return fmt.Sprintf("research tree: root=%s children=%d errors=%d input_tokens=%d output_tokens=%d cached_input_tokens=%d duration_ms=%d",
+		root, len(results), errs, in, out, cached, elapsed.Milliseconds())
 }
 
 func (rt *Runtime) runResearchChild(ctx context.Context, parent toolregistry.ExecutionContext, lineage researchLineage, spec yaegikernel.ResearchChild) yaegikernel.ResearchChildResult {
@@ -229,6 +248,7 @@ func (rt *Runtime) runResearchChild(ctx context.Context, parent toolregistry.Exe
 		// cache thread under their parent desk.
 		toolregistry.WithToolLoopPromptCache(researchChildCacheScope(parent)))
 	result.Findings = strings.TrimSpace(text)
+	result.InputTokens, result.OutputTokens, result.CachedInputTokens = usage.InputTokens, usage.OutputTokens, usage.CachedInputTokens
 	if loopErr != nil {
 		result.Error = loopErr.Error()
 	}
