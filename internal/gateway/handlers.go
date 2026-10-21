@@ -39,6 +39,9 @@ type gatewayHealthResponse struct {
 	// AnthropicRelay is "off" (no key), "dark" (a key, but no identity or no
 	// open window) or "on". It names neither the key nor an identity.
 	AnthropicRelay string `json:"anthropic_relay,omitempty"`
+	// ModelScheduler is the RES-11 model-call scheduler: its mode, the calls
+	// in flight and queued, and what it has granted, refused and cancelled.
+	ModelScheduler *gatewaySchedulerHealth `json:"model_scheduler,omitempty"`
 }
 
 // gatewayCacheHealth is provider.CacheStats plus its hit rate.
@@ -154,6 +157,10 @@ type Handler struct {
 	// anthropicRelay serves /provider/anthropic/* (SEC-08, Option K); nil
 	// means every relay call is answered 503.
 	anthropicRelay *AnthropicRelay
+	// modelScheduler, when set, replaces the fixed-window limiter for model
+	// calls (inference and OpenAI-compatible chat) with a fair queue
+	// (model_scheduler.go, RES-11).
+	modelScheduler *ModelScheduler
 }
 
 const internalCallerHeader = "X-Internal-Caller"
@@ -248,6 +255,7 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 
 	resp.BearerBinding = h.bindingHealth()
 	resp.AnthropicRelay = h.anthropicRelay.status()
+	resp.ModelScheduler = h.schedulerHealth()
 
 	if stats := provider.CacheStatsSnapshot(); len(stats) > 0 {
 		resp.PromptCache = make(map[string]gatewayCacheHealth, len(stats))
@@ -371,8 +379,10 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Step 2: Enforce per-autoputer rate limiting (VAL-GATEWAY-005).
-	if h.rateLimiter != nil {
+	// Step 2: Enforce per-autoputer rate limiting (VAL-GATEWAY-005). With the
+	// model scheduler on, model calls are scheduled fairly at step 5 instead
+	// (RES-11): no fixed window, bounded concurrency, queue and wait.
+	if h.rateLimiter != nil && !h.schedulerOn() {
 		if !h.rateLimiter.Record(computerID) {
 			_, _, resetIn := h.rateLimiter.Status(computerID)
 			retrySeconds := int(resetIn.Seconds())
@@ -430,6 +440,14 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 	// (problems/models-configured-text-only-2026-10-15.md, FM11).
 	log.Printf("gateway: inference request from autoputer %s (provider=%s model=%s messages=%d tools=%d tool_choice=%s system_chars=%d max_tokens=%d reasoning=%s stream=%v %s)",
 		computerID, p.Name(), req.Model, len(req.Messages), len(req.Tools), req.ToolChoice, len(req.System), req.MaxTokens, req.ReasoningEffort, req.Stream, provider.SummarizeMedia(req.Messages))
+
+	// RES-11: take a slot for the whole call, a stream included. The release
+	// runs on every exit, a panic too.
+	release, ok := h.scheduleModelCall(w, r, computerID, false)
+	if !ok {
+		return
+	}
+	defer release()
 
 	ctx, cancel := context.WithTimeout(r.Context(), inferenceTimeout)
 	defer cancel()

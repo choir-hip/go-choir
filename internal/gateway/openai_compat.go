@@ -159,6 +159,12 @@ func (h *Handler) HandleOpenAIChatCompletions(w http.ResponseWriter, r *http.Req
 	log.Printf("gateway: openai-compatible chat request from autoputer %s (provider=%s model=%s messages=%d tools=%d reasoning=%s stream=%v)",
 		computerID, p.Name(), gwReq.Model, len(gwReq.Messages), len(gwReq.Tools), gwReq.ReasoningEffort, gwReq.Stream)
 
+	release, ok := h.scheduleModelCall(w, r, computerID, true)
+	if !ok {
+		return
+	}
+	defer release()
+
 	if req.Stream {
 		if len(llmReq.Tools) > 0 {
 			h.handleOpenAIStreamingToolChatCompletions(w, r, p, llmReq, computerID)
@@ -242,7 +248,10 @@ func (h *Handler) authorizeOpenAICompatibleRequest(w http.ResponseWriter, r *htt
 		writeGatewayJSON(w, status, openAIErrorResponse(message))
 		return "", false
 	}
-	if h.rateLimiter != nil {
+	// With the model scheduler on, chat calls are scheduled at the provider
+	// call (scheduleModelCall) instead of passing the fixed window; the models
+	// listing keeps its bucket.
+	if h.rateLimiter != nil && !(scope == "openai_chat" && h.schedulerOn()) {
 		if !h.rateLimiter.Record(rateLimitBucketKey(computerID, scope)) {
 			_, _, resetIn := h.rateLimiter.Status(rateLimitBucketKey(computerID, scope))
 			retrySeconds := int(resetIn.Seconds())
