@@ -720,7 +720,7 @@ with this. either edit node-a or the mike repo").
     111,985,828,263 (the pack sum also counts pack headers, so it errs high,
     the safe side for the 80% quota alert). Failure mode 10 in the snapshot
     test; `curl` joins the unit's PATH.
-21. **Snapshot restore drill on the new path: passed (04:59 to 05:04 UTC
+21. **Snapshot restore drill on the new path: passed (04:50 to 04:56 UTC
     on 2026-10-21).** `off-host-restore-drill.sh 0a731df5 snap` in the
     capped unit (MemoryHigh 8G, MemoryMax 10G, idle I/O). The first
     attempt exited at once: a `systemd-run` unit on NixOS has no
@@ -734,7 +734,7 @@ with this. either edit node-a or the mike repo").
       it is the head run 5 recorded.
     The unit peaked at 7 GB, with no swap. Each restore was deleted before
     the next. This is the drill the migration waited for, so the retired
-    copies were removed at 05:06 UTC: `corpus-dolt.pre-subvolume-*`
+    copies were removed at about 04:57 UTC: `corpus-dolt.pre-subvolume-*`
     (7.0 GB), `platform-dolt/platform.pre-subvolume-*` (31 GB),
     `corpus-dolt/.choir-backup` (3.5 GB, the old sync's target), the
     drill's restic cache, and the one-off `/root` scripts

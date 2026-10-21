@@ -256,7 +256,7 @@ now:
       Backup daily path clean (run 5, 36 minutes, no check); snapshot
       restore drill running (corpus passed). Research more and op-ed
       deployed and proven. Wave-1 plus social rows active; Taiwan row
-      started 04:59. Arm B (Luna) applied and restored; arm A (Sonnet) had
+      started 04:52 (first poll ok: 100 fetched, 25 new). Arm B (Luna) applied and restored; arm A (Sonnet) had
       the carried patch apply in round 2 and was stopped by the tracer
       deadline mid-build. Sonnet SlidesApp drill running.
     main_uncertainty: >-
