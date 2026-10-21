@@ -151,6 +151,10 @@ func main() {
 		log.Fatal("--authorized-peer-uid exceeds uint32")
 	}
 	if isolationStage == "exec-go-session" {
+		// RES-03: bound the worker before it serves anything.
+		if err := applySessionWorkerLimits(); err != nil {
+			log.Fatalf("session worker memory bound: %v", err)
+		}
 		cfg := yaegikernel.SessionWorkerConfig{
 			AllowedPackages: yaegikernel.DefaultSafeStdlibPackagesList(),
 			ComputerID:      sessionComputerID,
