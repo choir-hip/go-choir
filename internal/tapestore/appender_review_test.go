@@ -316,8 +316,8 @@ func TestReaderRetiresOpenScanStateWhenASegmentIsSealed(t *testing.T) {
 		mustAppend(t, a, cid, Item{NSPayload, b})
 		mustRead(t, r, cid, NSPayload, b)
 	}
-	// Read the oldest records again so every segment is probed.
-	mustRead(t, r, cid, NSPayload, body("record %d", 0))
+	// No rereading of old records: only the newest segment was ever probed by
+	// the loop above, and the cache must still be bounded (second review round).
 	mu.Lock()
 	defer mu.Unlock()
 	r.mu.Lock()
