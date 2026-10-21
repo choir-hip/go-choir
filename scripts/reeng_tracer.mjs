@@ -294,7 +294,7 @@ function writePrivate(path, content) {
 // steps, the reads that did not answer, and the goroutine stacks
 // (engineering-completion-path-cluster-2026-10-20.md, failure 9). The dump
 // goes to the private trace directory, never the repo.
-async function stallSnapshot(c, n) {
+async function stallSnapshot(c, n, phase) {
   const obs = await c.api('/api/runtime/observability?goroutines=1', 'GET', undefined, 60_000);
   const path = join(TRACE_DIR, `observability-stall-a${n}.json`);
   if (obs.status === 200) writePrivate(path, JSON.stringify(obs.body, null, 2));
@@ -1675,7 +1675,7 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild, optio
   const pastBoundary = AUTONOMOUS && ['accepted', 'materializing', 'applied'].includes(op?.state);
   if (!op || (op.state !== 'awaiting_approval' && !pastBoundary)) {
     phase('decision_boundary_not_reached', { state: op?.state || null, last_intent_error: op?.last_intent_error || null });
-    await stallSnapshot(c, n);
+    await stallSnapshot(c, n, phase);
     return finish();
   }
   claim.verify = { verifier_refs: op.verifier_refs || [], bundle_digest: op.bundle_digest, last_intent_error: op.last_intent_error || null };
