@@ -335,6 +335,12 @@ type ManagerConfig struct {
 	// build allows it.
 	DataDiscardOnly []string
 
+	// GuestReclaimOnly turns on the guest's DAMON_RECLAIM for the computers
+	// it names (VM_GUEST_RECLAIM_ONLY; guest_reclaim.go); empty: off.
+	// GuestReclaimMinAgeS overrides its 300 s coldness floor.
+	GuestReclaimOnly    []string
+	GuestReclaimMinAgeS int
+
 	// FirecrackerNext is a second VMM build launched only for the computers
 	// it selects (VM_FIRECRACKER_NEXT_*; vmm_next.go). Empty BinPath: off.
 	FirecrackerNext FirecrackerNextConfig
@@ -1844,6 +1850,7 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 		if hotplug != nil {
 			runtimeArgs = append(runtimeArgs, memoryHotplugKernelParam)
 		}
+		runtimeArgs = append(runtimeArgs, m.guestReclaimKernelParams(cfg)...)
 		bootArgs = strings.Join(append([]string{kernelParams}, runtimeArgs...), " ")
 	} else {
 		// Legacy approach with custom init script. Keep the same runtime service
@@ -1870,6 +1877,9 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 		}
 		if hotplug != nil {
 			bootArgs += " " + memoryHotplugKernelParam
+		}
+		for _, arg := range m.guestReclaimKernelParams(cfg) {
+			bootArgs += " " + arg
 		}
 	}
 
