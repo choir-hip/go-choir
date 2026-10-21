@@ -72,6 +72,9 @@ type DoltStore struct {
 	// readers use the index where it exists and JSON_EXTRACT otherwise. Set
 	// by EnsureSchema and EnsureRecordIndexes; replaced whole, never mutated.
 	liveColumns atomic.Pointer[map[string]bool]
+	// derived is the state of the og_key_index side table (derived_keys.go),
+	// shared by the write and read stores of one engine.
+	derived *DerivedKeys
 }
 
 // MutationInterceptor receives durable object/edge mutations before SQL.
@@ -111,7 +114,7 @@ type JSONFieldMatch struct {
 // NewDoltStore returns a DoltStore backed by the given *sql.DB. The
 // caller must call EnsureSchema before using the store.
 func NewDoltStore(db *sql.DB) *DoltStore {
-	return &DoltStore{db: db, engineMu: newEngineMutex()}
+	return &DoltStore{db: db, engineMu: newEngineMutex(), derived: newDerivedKeys()}
 }
 
 // ShareEngineMutex points this store at another store's engine mutex so two
@@ -147,6 +150,10 @@ func (s *DoltStore) EnsureSchema(ctx context.Context) error {
 	if _, err := s.db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_og_objects_kind_owner_computer ON og_objects(object_kind, owner_id, computer_id)`); err != nil {
 		return fmt.Errorf("objectgraph dolt: ensure kind/owner/computer index: %w", err)
 	}
+	// The derived-key side table is created empty: nothing here scales with
+	// og_objects. Its rows are written by the writers and checked online
+	// after the listener is up (derived_keys.go).
+	s.ensureDerivedKeysTable(ctx)
 	// The record columns cost a table rewrite per column on a table with
 	// rows (about 50 us per row per column, measured), and a store opens
 	// before the guest answers /health: on a large existing store that
@@ -460,6 +467,8 @@ func (s *DoltStore) accessPathOp(method, kind, jsonPath, value string) string {
 	path := "json"
 	if _, ok := s.metadataColumnFor(kind, jsonPath, value); ok {
 		path = "index"
+	} else if s.derivedMetadataRead(kind, jsonPath, value) != nil {
+		path = "keyindex"
 	}
 	return "(*DoltStore)." + method + " " + kind + " " + jsonPath + " " + path
 }
@@ -538,7 +547,31 @@ func (s *DoltStore) PutObject(ctx context.Context, obj Object) error {
 	}
 	s.engineMu.Lock()
 	defer s.engineMu.Unlock()
-	_, err := s.db.ExecContext(ctx, `INSERT INTO og_objects
+	if s.derived.keyed(obj.ObjectKind) {
+		// A kind with derived keys is written with them in one transaction.
+		tx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			return fmt.Errorf("objectgraph dolt: put object: begin: %w", err)
+		}
+		defer func() { _ = tx.Rollback() }()
+		if _, err := tx.ExecContext(ctx, upsertObjectSQL, upsertObjectArgs(obj)...); err != nil {
+			return fmt.Errorf("objectgraph dolt: put object: %w", err)
+		}
+		s.derived.Maintain(ctx, tx, obj.CanonicalID, obj.ObjectKind)
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("objectgraph dolt: put object: commit: %w", err)
+		}
+		return nil
+	}
+	_, err := s.db.ExecContext(ctx, upsertObjectSQL, upsertObjectArgs(obj)...)
+	if err != nil {
+		return fmt.Errorf("objectgraph dolt: put object: %w", err)
+	}
+	return nil
+}
+
+// upsertObjectSQL is the og_objects upsert every direct writer shares.
+const upsertObjectSQL = `INSERT INTO og_objects
 		(canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON DUPLICATE KEY UPDATE
@@ -551,25 +584,39 @@ func (s *DoltStore) PutObject(ctx context.Context, obj Object) error {
 			metadata = VALUES(metadata),
 			updated_at = VALUES(updated_at),
 			tombstone = VALUES(tombstone),
-			superseded_by = VALUES(superseded_by)`,
-		obj.CanonicalID, string(obj.ObjectKind), obj.OwnerID, obj.ComputerID,
+			superseded_by = VALUES(superseded_by)`
+
+func upsertObjectArgs(obj Object) []any {
+	return []any{obj.CanonicalID, string(obj.ObjectKind), obj.OwnerID, obj.ComputerID,
 		obj.VersionID, obj.ContentHash, obj.Body, string(obj.Metadata),
 		obj.CreatedAt.UTC(), obj.UpdatedAt.UTC(), obj.Tombstone,
-		obj.SupersededBy)
-	if err != nil {
-		return fmt.Errorf("objectgraph dolt: put object: %w", err)
-	}
-	return nil
+		obj.SupersededBy}
 }
 
 func (s *DoltStore) GetObject(ctx context.Context, id string) (Object, error) {
 	if s == nil || s.db == nil {
 		return Object{}, fmt.Errorf("objectgraph dolt: nil store")
 	}
-	s.engineMu.Lock()
-	defer s.engineMu.Unlock()
+	op := "(*DoltStore).GetObject " + kindOpLabel(id)
+	s.engineMu.LockAs(op)
+	defer s.engineMu.UnlockAs(op)
 	return scanDoltObject(s.db.QueryRowContext(ctx,
 		`SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by FROM og_objects WHERE canonical_id = ?`, id))
+}
+
+// kindOpLabel names an object's kind in an engine-mutex op name, from a
+// canonical id (obj:<kind>:<owner>:<suffix>) or a kind. Only a registered
+// kind is named, so the label set is bounded by code and not by what a
+// caller asks for; anything else is "unknown".
+func kindOpLabel(idOrKind string) string {
+	kind := idOrKind
+	if rest, ok := strings.CutPrefix(idOrKind, "obj:"); ok {
+		kind, _, _ = strings.Cut(rest, ":")
+	}
+	if _, err := writeRegistry.LookupKind(ObjectKind(kind)); err != nil {
+		return "unknown"
+	}
+	return kind
 }
 
 func (s *DoltStore) ListObjects(ctx context.Context, filter ListFilter) ([]Object, error) {
@@ -1042,7 +1089,7 @@ func (s *DoltStore) putBatch(ctx context.Context, conditions []ObjectCondition, 
 		}
 	}
 
-	if err := putBatchTx(ctx, tx, batch); err != nil {
+	if err := putBatchTx(ctx, tx, batch, s.derived); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {
@@ -1051,28 +1098,12 @@ func (s *DoltStore) putBatch(ctx context.Context, conditions []ObjectCondition, 
 	return nil
 }
 
-func putBatchTx(ctx context.Context, tx *sql.Tx, batch Batch) error {
+func putBatchTx(ctx context.Context, tx *sql.Tx, batch Batch, derived *DerivedKeys) error {
 	for _, obj := range batch.Objects {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO og_objects
-			(canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-			ON DUPLICATE KEY UPDATE
-				object_kind = VALUES(object_kind),
-				owner_id = VALUES(owner_id),
-				computer_id = VALUES(computer_id),
-				version_id = VALUES(version_id),
-				content_hash = VALUES(content_hash),
-				body = VALUES(body),
-				metadata = VALUES(metadata),
-				updated_at = VALUES(updated_at),
-				tombstone = VALUES(tombstone),
-				superseded_by = VALUES(superseded_by)`,
-			obj.CanonicalID, string(obj.ObjectKind), obj.OwnerID, obj.ComputerID,
-			obj.VersionID, obj.ContentHash, obj.Body, string(obj.Metadata),
-			obj.CreatedAt.UTC(), obj.UpdatedAt.UTC(), obj.Tombstone,
-			obj.SupersededBy); err != nil {
+		if _, err := tx.ExecContext(ctx, upsertObjectSQL, upsertObjectArgs(obj)...); err != nil {
 			return fmt.Errorf("objectgraph dolt: batch put object %s: %w", obj.CanonicalID, err)
 		}
+		derived.Maintain(ctx, tx, obj.CanonicalID, obj.ObjectKind)
 	}
 
 	for _, edge := range batch.Edges {
@@ -1178,8 +1209,9 @@ func (s *DoltStore) ListObjectsPage(ctx context.Context, kind, afterCanonicalID 
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("objectgraph dolt: nil store")
 	}
-	s.engineMu.Lock()
-	defer s.engineMu.Unlock()
+	op := "(*DoltStore).ListObjectsPage " + kindOpLabel(kind)
+	s.engineMu.LockAs(op)
+	defer s.engineMu.UnlockAs(op)
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by
 		 FROM og_objects
@@ -1213,6 +1245,16 @@ func (s *DoltStore) ListObjectsByMetadataPage(ctx context.Context, kind, jsonPat
 	defer s.engineMu.UnlockAs(op)
 	if !strings.HasPrefix(jsonPath, "$.") {
 		return nil, fmt.Errorf("objectgraph dolt: invalid metadata JSON path %q", jsonPath)
+	}
+	if fam := s.derivedMetadataRead(kind, jsonPath, value); fam != nil {
+		// Validated side table: ids from the key index, rows by primary key.
+		// Any doubt (a stale row) withdraws the family and falls through to
+		// the JSON read below.
+		if objs, ok, err := s.listByDerivedKeyPage(ctx, fam, value, afterCanonicalID, limit); err != nil {
+			return nil, err
+		} else if ok {
+			return objs, nil
+		}
 	}
 	query, args := s.metadataPageSQL(kind, jsonPath, value, afterCanonicalID, limit)
 	rows, err := s.db.QueryContext(ctx, query, args...)
@@ -1299,8 +1341,21 @@ func (s *DoltStore) ListObjectsByOwnerAndBody(ctx context.Context, kind, ownerID
 		paths = append(paths, m.JSONPath)
 	}
 	op := "(*DoltStore).ListObjectsByOwnerAndBody " + kind + " " + strings.Join(paths, ",")
+	fam := s.derivedAddresseeRead(kind, matches)
+	if fam != nil {
+		op += " keyindex"
+	}
 	s.engineMu.LockAs(op)
 	defer s.engineMu.UnlockAs(op)
+	if fam != nil {
+		// The owner's newest rows of the key, from the validated side table;
+		// a stale row withdraws the family and falls through to the scan.
+		if objs, ok, err := s.listByDerivedKeyNewest(ctx, fam, matches[0].Value, ownerID, limit); err != nil {
+			return nil, err
+		} else if ok {
+			return objs, nil
+		}
+	}
 	query := `SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by
 		 FROM og_objects
 		 WHERE object_kind = ? AND owner_id = ?`
@@ -1712,10 +1767,17 @@ func (s *DoltStore) DeleteObject(ctx context.Context, id string) error {
 	}
 	s.engineMu.Lock()
 	defer s.engineMu.Unlock()
-	_, err := s.db.ExecContext(ctx,
-		`DELETE FROM og_objects WHERE canonical_id = ?`, id)
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
+		return fmt.Errorf("objectgraph dolt: delete object: begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM og_objects WHERE canonical_id = ?`, id); err != nil {
 		return fmt.Errorf("objectgraph dolt: delete object: %w", err)
+	}
+	s.derived.Drop(ctx, tx, id)
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("objectgraph dolt: delete object: commit: %w", err)
 	}
 	return nil
 }
