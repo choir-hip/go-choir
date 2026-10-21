@@ -108,7 +108,7 @@ boundaries:
 
 now:
   status: working
-  slice: group 1, the vmctl failure retry and the deploy reach
+  slice: group 1 built and tested; frozen for FP0 review, then groups 2 and 3
   source_ref: f399a2e8c
   deploy_identity: unchanged
   candidate:
@@ -155,7 +155,7 @@ now:
   blocker_or_risk: >-
     Group 2 edits the host firewall, which fails a VM start if a rule does not
     install; the fake-iptables tests must prove the failure path.
-  next_action: write the group 1 failing tests, then the fix.
+  next_action: report group 1 to FP0; groups 2 and 3 after FP0 sends the lane back.
 
 receipts: []
 ---

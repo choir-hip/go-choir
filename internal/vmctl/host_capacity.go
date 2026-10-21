@@ -153,7 +153,7 @@ func (r *OwnershipRegistry) ReconcileVMProcesses(ctx context.Context, guard Comp
 			r.reapOrphan(pc, vmID, &res)
 			continue
 		}
-		if own.State == VMStateStopped && own.StoppedBy == "vmctl-restart" && strings.TrimSpace(own.ComputerURL) != "" &&
+		if own.State == VMStateStopped && own.StoppedBy == stoppedByVMCTLRestart && strings.TrimSpace(own.ComputerURL) != "" &&
 			authorizeLifecycleRoute(ctx, guard, own.UserID, normalizeDesktopID(own.DesktopID)) && r.reattachOwnership(*own, mgr) {
 			res.Reattached++
 			delete(seen, vmID)

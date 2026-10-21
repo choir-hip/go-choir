@@ -29,9 +29,13 @@ import (
 //     refreshed again for the same target;
 //   - a failed refresh is forgotten too (logged): retrying a refresh that
 //     fails would be a kill loop; the next deploy records it again;
-//   - held, stopped, divergent or vanished computers are forgotten, as the
-//     deploy skips them; a stopped computer boots the current image when it
-//     next starts.
+//   - held, divergent or vanished computers are forgotten, as the deploy
+//     skips them; a computer stopped by idle, logout or an owner act boots the
+//     current image when it next starts. A protected always-on computer
+//     stopped by a failure or a vmctl restart is a rescue: it stays pending
+//     while a live guest keeps it from booting, and the sweep boots it once
+//     the wedge detector has ended that guest (deployRescue). The boot is one
+//     per deploy target (GrantDeployRetry), so the sweep cannot loop it.
 
 // DeployRefreshRetryInterval is how often the sweep asks deferred computers
 // again. A guest refusal is cheap (a run count and two indexed lists), and a
@@ -261,11 +265,16 @@ func (h *Handler) SweepDeployRefreshPending(ctx context.Context) {
 			continue
 		}
 		eligible := !own.IsHeld() && own.State == VMStateActive && own.DivergenceStatus != "divergent"
-		if eligible {
+		// A protected computer stopped by a failure or a vmctl restart is a
+		// rescue: it stays pending until the sweep boots it on the target.
+		rescue := h.registry.deployRescueEligible(own)
+		if eligible || rescue {
 			if err := h.requireComputerVersionRoute(ctx, entry.UserID, entry.DesktopID); err != nil {
 				log.Printf("vmctl: deploy refresh retry: user=%s desktop=%s route refused, kept: %v", entry.UserID, entry.DesktopID, err)
 				continue
 			}
+		}
+		if eligible {
 			if served := h.servedCommit(ctx, *own); served != "" && served == entry.Target {
 				log.Printf("vmctl: deploy refresh retry: %s already serves %s; forgotten", own.VMID, entry.Target)
 				h.deployRefreshState().forget(entry.UserID, entry.DesktopID)
