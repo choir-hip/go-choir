@@ -136,13 +136,15 @@ heresy_delta:
   repaired: none
 
 now:
-  status: working
+  status: blocked
   slice: >-
-    A2 writer test-first in tape-wt (subagent), then review, land with the
-    flag off, deploy, deployed acceptance with the flag off. The flag flip
-    and the repack wait for the owner's morning review.
-  source_ref: main 8d027370b
-  deploy_identity: staging 7bb7b3e65
+    A2 writer built test-first on feat/tape-segments-a2 (tape-wt) and
+    reviewed three times by gpt-6.1-sol. Not landed: each round found a new
+    hole in the writer's recovery after a failed fsync. Escalated to the
+    owner with the structural assessment below (CLAUDE.md, "Escalate on
+    dead ends").
+  source_ref: main (this card); branch feat/tape-segments-a2 at db96e07a1, base 8d027370b
+  deploy_identity: staging cbef56155
   candidate: {id: none, state: none, ref: feat/tape-segments-a2, base: 8d027370b, digest: none, scope: [internal/tapestore, internal/platform]}
   conjecture:
     id: TS-C1
@@ -163,14 +165,50 @@ now:
     Segment store over prefix sharding (owner asked to shard; the recorded
     durable design for these directories is the segment store, and
     sharding would be superseded). Flag default off; turning it on and the
-    repack are owner steps in the morning.
+    repack are owner steps. A2 is held, not landed, pending the owner's
+    choice below.
+  structural_assessment: >-
+    Round 1 (five blockers: stale reader cache after rollback, concurrent
+    pin acknowledging a removed artifact, ignored directory fsync errors,
+    symlinks, retained open-scan state) was fixed. Round 2 found two P1s in
+    the fsync-failure recovery (suspect bytes discarded before repair;
+    unsynced knowledge lost on writer handoff) and two P2s; the fix replaced
+    in-place repair with "abandon the unsynced tail, seal at the synced
+    frontier, rewrite in a new segment". Round 3 (2026-10-21 05:10 UTC)
+    reproduced a new P1: after two failed fsyncs, a writer keeps a pending
+    retirement across lock releases; a second process appends and
+    acknowledges a record; the first writer then truncates it away. It
+    also showed offset reuse is still reachable between truncate and seal.
+    All three rounds' holes live in one place: a writer that keeps going
+    after an fsync error and later repairs the file. The flag-off path was
+    found identical to legacy each time; the symlink race is accepted for
+    flag-off under a trusted artifact root.
+    Substrate-level option (not built): fail-stop on fsync error, the
+    PostgreSQL rule since 2018. The first failed fsync poisons the
+    appender; it acknowledges nothing more, never touches the segment
+    again, and the call that failed returns an error so the caller falls
+    back to the legacy file path for that pin. The next appender (a new
+    process) treats an unsealed segment it did not write as read-only and
+    seals it only after re-reading and fsyncing it, starting a new segment
+    for its own writes. This deletes the retirement and suspect machinery
+    rather than adding to it. Cost: an fsync error disables segment writes
+    until restart, which is acceptable because the legacy path stays
+    available.
+  owner_choice: >-
+    (a) build fail-stop and review it once more, then land flag-off;
+    (b) land db96e07a1 flag-off now with round 3's P1 as a named residual
+    (it needs two consecutive fsync failures and two writer processes;
+    with the flag off nothing writes segments);
+    (c) set A2 aside and use plain prefix sharding for the verify cost.
+    Recommendation: (a).
   belief:
-    believed_state: A1 reader live in production; A2 writer being built.
-    main_uncertainty: >-
-      Lookup cost over many sealed segments (9.6 item 6) and the dead-weight
-      bound for pins whose CAS never lands.
-    next_observation: the subagent's tests and diff.
-  blocker: none
-  next_action: Review the A2 diff; land with the flag off.
+    believed_state: >-
+      A1 reader live in production. A2 writer complete for the normal path,
+      not landed. The weekly verify stays heavy until segments land and the
+      legacy files are repacked.
+    main_uncertainty: whether fail-stop closes the class in one more review round.
+    next_observation: the owner's choice.
+  blocker: owner decision on the A2 recovery design (above)
+  next_action: On (a), build fail-stop test-first on feat/tape-segments-a2 and run one gpt-6.1-sol review.
 
 receipts: []
