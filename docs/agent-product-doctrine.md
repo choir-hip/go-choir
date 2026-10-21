@@ -19,8 +19,9 @@ operating update.
 
 ## Authority Boundaries
 
-- The persistent root RLM desks are Texture, `management`, `engineering`, and
-  `research` (doctrine `I26`). Each runs yaegi Go cells in a killable
+- The persistent root RLM desks are the system desks `management`,
+  `engineering` and `research`, and one app desk per app agent, Texture first
+  (doctrine `I26`, owner 2026-10-21). Each runs yaegi Go cells in a killable
   subprocess. A desk is durable for its subject; a sub-RLM is a per-assignment
   run that a desk casts.
 - **Texture** is the sole agent writer. Canonical document versions have two
@@ -132,7 +133,7 @@ Search, source fetch, document and file-format transforms, artifact operations,
 delegation, messaging, evidence, and work state are narrow imported modules;
 there is no duplicate ambient JSON-tool path. Backends may use compiled services
 or isolated converters internally without exposing shell, raw HTTP, or general
-filesystem authority to the actor. The four desks use in-cell yaegi `choir.*`
+filesystem authority to the actor. All desks use in-cell yaegi `choir.*`
 semantic-act functions rather than a tool-call channel; the retired
 `update_coagent` interface is absent for desks, and its packet machinery
 survives only as `Report`'s body.
@@ -187,8 +188,8 @@ Keep the agent loop programmatically uniform where authority permits: provider
 call semantics, cancellation, retry, compaction, and durable trajectory
 projection do not fork by persona. Capability resolution, privacy-safe canonical
 event append, capsule isolation, and typed role policy are deliberate security
-boundaries. Production actor roles are the four desks and explicitly bounded
-appagents; retired aliases refuse. Prefer prompts, tool descriptions,
+boundaries. Production actor roles are the system desks and the app desks
+(explicitly bounded appagents); retired aliases refuse. Prefer prompts, tool descriptions,
 capability policy, and product-visible state over role-specific harness
 branches. If a proposed fix requires programmatic divergence in the core loop
 for one role, document the evidence, the invariant protected, and the simpler

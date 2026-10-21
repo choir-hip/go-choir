@@ -1030,3 +1030,10 @@ DEC-01, a session on the owner's iMac finds the unpushed branches
 work) and pushes them to origin as new branches without touching any
 working tree; DEC-03, the delegate stays on its one test computer until
 desk-cell confinement lands (checklist SEC-08).
+
+Shown the draft I26 wording (system desks management, engineering and
+research; app desks, one per app agent, Texture first; an app desk ships
+with its app package and is the sole agent writer of its app's object
+kinds), the owner, verbatim: "Yes, the doctrine change is good." Applied to
+docs/choir-doctrine.md I26, CLAUDE.md "Desk Ontology",
+docs/agent-product-doctrine.md and docs/choir-vision.md (checklist ARCH-01).

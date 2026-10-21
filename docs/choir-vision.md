@@ -64,11 +64,12 @@ a disposable autoputer, not a publishing surface:
 - **Durable work** — trajectories run for hours and days. A crash ends work; a
   planned restart may resume it (`CLAUDE.md`).
 
-Four persistent root desks share the work: **Texture** (the only agent that
-writes documents; the owner-facing supervision surface), **management**
+Persistent root desks share the work. Three system desks: **management**
 (coherence, attention, spend, admission), **engineering** (mutation only inside
-disposable capsules) and **research** (read-only toward the world). They talk
-through precommitment records.
+disposable capsules) and **research** (read-only toward the world). App desks,
+one per app agent: **Texture** first (the only agent that writes documents; the
+owner-facing supervision surface), then Mail, Calendar, Slides and others as
+apps become app agents. They talk through precommitment records.
 
 A human cannot supervise this computer action by action. Supervision happens
 where the work lives: at the level of ideas and standing state, read off the
