@@ -188,7 +188,10 @@ standing_questions:
   q8_restart: >-
     A crash drops the queued request's retry wake and the reconcile cancels
     the open assignment as interrupted_by_restart. A planned restart keeps the
-    wake (the same marker rules as every restart-work kind).
+    open, unbound row (review B1: the reconcile used to cancel it as a
+    pre-bind strand) and the boot sweep arms its one resume, a spawn wake with
+    the boot's identity; a resume that crashes leads to a markerless boot that
+    closes it. Non-kernel runtimes keep the old strand closure.
   q9_no_ssh: >-
     The drill reads assignment rows and the runtime log through the product
     API and the tracer; no SSH is needed.
@@ -202,71 +205,82 @@ heresy_delta:
   repaired: none until the slices land
 
 now:
-  status: working
+  status: checkpoint
   slice: >-
-    ARCH-10 launch half (6ce19af5a) and ARCH-04 (writer column, gate seam in
-    observe mode, Texture turn and corpusd store declare their writer) are
-    built and tested locally; the staging drill and the observe-to-enforce flip
-    are the orchestrator's. ARCH-03 green design written
-    (docs/design/app-package-carries-app-desk-2026-10-21.md); its red slice
-    waits for lane FP2's desk manifest (ARCH-02).
-  source_ref: 824ca2995 on lane/b10-selfdev
+    Batch 1 repair. Both reviewers (Sol, Argon) sent b0f872bd6 back. Findings
+    recorded first (e832951b0), then fixed tests-first, one commit each: B1
+    planned restart keeps queued requests (7e24b0889); B2 expiry under the
+    saga mutex before admission, whatever the slot (d5055214a); B3 the bound
+    deadline runs from bind and its wake has its own identity (a46ed9a9b).
+    Small extras: the writer gate's mode and counts on
+    /api/runtime/observability (bbd19192c); the next queued request is woken
+    when an assignment ends (059924c7e).
+  source_ref: 059924c7e on lane/b10-selfdev-b1fix
   deploy_identity: unknown to this lane
-  candidate: {id: arch10-admission, state: ready, ref: lane/b10-selfdev, base: f399a2e8c, digest: none, scope: [internal/agentcore/engineering_admission.go, internal/agentcore/engineering_assignment_runtime.go, internal/agentcore/continuation_schedule.go]}
+  candidate: {id: arch10-admission-b1fix, state: ready_for_review, ref: lane/b10-selfdev-b1fix, base: b0f872bd6, digest: none, scope: [internal/agentcore/engineering_admission.go, internal/agentcore/engineering_assignment_runtime.go, internal/agentcore/engineering_assignment_fate.go, internal/agentcore/continuation_schedule.go, internal/agentcore/api.go, internal/objectgraph/writer.go]}
   conjecture:
     id: FP4-C1
     claim: >-
       The supersede cancel is the only path by which a new engineering Cast
       destroys a live assignment. Replacing it with admission in the spawn
-      saga (refuse and retry while a live or older queued assignment exists)
-      makes concurrent requests safe without a new store, event kind or
-      schema.
+      saga makes concurrent requests safe without a new store, event kind or
+      schema, provided every consumer of the open, unbound state reads it as a
+      request (the restart reconcile was the consumer the first candidate
+      missed) and expiry is a precondition of admission.
     test: >-
-      A focused test that opens a second assignment while the first is bound
-      (fake capsule runtime, real store) and sees the first non-terminal with
-      its capsule unrevoked; then the staging drill reads the same rows.
+      Focused tests on a real store (EngineeringAdmission*,
+      EngineeringBoundDeadline*), then the staging drill below.
     edge: missing_oracle
     delta_o: >-
-      The log line naming the blocker and the retry count, and the drill's
-      read of both assignment rows after each step.
+      The drill's assignment rows after each step, the log lines naming the
+      blocker, and the time from the first terminal to the second bind.
     scope_if_supported: >-
       Sequential admission of records Casts on one computer, kernel mode;
       not N concurrent capsules, not the legacy coagent spawn path.
     status: testing
     evidence_refs:
-      - docs/problems/engineering-admission-supersedes-live-assignment-2026-10-21.md
-      - "local: TestEngineeringAdmissionDoesNotCancelLiveAssignment failed on f399a2e8c with 'cancelled (superseded by a fresh implementation assignment; capsule budget reclaimed)' and passes on the fix"
+      - docs/problems/engineering-admission-supersedes-live-assignment-2026-10-21.md (review findings section)
+      - "local: the B1, B2 and B3 tests failed on b0f872bd6 and pass at 059924c7e; go test ./internal/agentcore -run 'Engineering|Assignment|Restart|Boot|C1e|PreBind|Deadline|Records|Cast' ok; go test ./internal/objectgraph ok"
   decision:
     what: >-
-      Queue by durable open request and retry the spawn; do not refuse the
-      Cast at open (a refused open writes nothing and leaves the retry to a
-      model). Never supersede, same trajectory included.
+      Queue by durable open request and retry the spawn; never supersede. A
+      planned boot keeps queued requests and resumes each once; a crash boot
+      closes them. Expiry precedes admission. The bound deadline counts from
+      bind (grant attestation GrantedAt); the open arms no deadline.
     kind: architecture
     status: proposal
     evidence_ref: docs/choir-doctrine.md management admission ledger; docs/computer-ontology.md:378-385
     owner_ratification_ref: >-
-      The FIFO doctrine is owner-ratified (I26, 2026-10-21). The choice between
-      refusing at open and queueing at spawn is not ratified: named as an open
-      question below, default in force.
+      The FIFO doctrine is owner-ratified (I26, 2026-10-21). Refusing at open
+      versus queueing at spawn is not ratified: open question below, default
+      in force.
   belief:
     believed_state: >-
-      Admission correctness was a small change in the spawn saga; the retry
-      identity (a retry count in the wake content) and the expiry were the
-      parts that needed care. A stuck live assignment now holds the slot to
-      its six-hour deadline or an explicit Cancel.
+      The queue's lifecycle now agrees with the restart rules and the
+      deadline: kept across a planned restart, closed by a crash, expired
+      before admission, and bound runs get their full deadline from bind.
     main_uncertainty: >-
-      Whether anything relied on supersede to recover a zombie bound
-      assignment whose run died without a fate. The drill and the paper's
-      engineering history would show it.
-    next_observation: The staging drill: two Casts in a row, rows read after each step.
+      The planned-restart resume on a real refresh (the wake survives, the
+      boot sweep runs after the adapter binds scheduleActor), which only the
+      drill shows.
+    next_observation: The staging drill below, with a planned refresh between the Casts.
   blocker_or_risk: >-
-    A stuck live assignment blocks the queue until its six-hour deadline or an
-    explicit Cancel; accepted, recorded as a residual. A bound assignment
-    whose run is terminal but whose row is not is the case to watch.
+    A stuck live assignment blocks the queue until its deadline (six hours
+    from bind) or an explicit Cancel; accepted residual. After a planned
+    restart a surviving pre-boot retry chain and the boot resume chain can
+    both run until admission (bounded; both no-op after bind).
   next_action: >-
-    Report to the orchestrator. Open: the ARCH-10 staging drill, the ARCH-04
-    observe counts and the enforce flip, ARCH-03's red slice after FP2's manifest.
-
+    FP0: re-review the frozen diff b0f872bd6..059924c7e (the two reviewers'
+    findings), land, then the drill: (1) Cast A, wait for its capsule bound;
+    (2) Cast B; read rows: A bound, B open/unbound, log "waits behind A";
+    (3) trigger a planned refresh of the test computer while A is live
+    (critical_protected or deferred refresh); read rows after boot: B still
+    open, log "planned boot: queued engineering request B kept and resumed";
+    (4) let A finish or Cancel it; B binds within seconds (nudge), not at the
+    next minute retry; (5) GET /api/runtime/observability and read
+    objectgraph_writer_gate {mode: observe, counts}. Crash half: on a
+    throwaway computer, kill the guest with B queued; after boot B is
+    cancelled interrupted_by_restart.
 slices:
   ARCH-10:
     what: >-
@@ -316,6 +330,16 @@ receipts:
     identity: 5b4578e73
     proof_refs: [internal/objectgraph/writer_gate_test.go, internal/store/texture_writer_gate_test.go]
     rollback_ref: git revert of the ARCH-04 commit; the default mode is observe, so a revert changes no behavior
+  - id: arch10-b1fix
+    boundary: implement
+    identity: e832951b0 (problem record), 7e24b0889 (B1), d5055214a (B2), a46ed9a9b (B3), 059924c7e (nudge)
+    proof_refs: [internal/agentcore/engineering_admission_test.go]
+    rollback_ref: git revert of the five commits in reverse order; no schema, no new kind
+  - id: arch04-observability
+    boundary: implement
+    identity: bbd19192c
+    proof_refs: [internal/agentcore/writer_gate_observability_test.go]
+    rollback_ref: git revert bbd19192c (an additive JSON field)
   - id: arch03-design
     boundary: define
     identity: 58f369309
