@@ -480,6 +480,14 @@ let
   # test computers across a planned refresh and a deploy. Rollback: the
   # previous mode and redeploy. An unset or unknown value enforces in code.
   gatewayBearerBindingMode = "observe";
+  # RES-11 gateway model-call scheduler (internal/gateway/model_scheduler.go;
+  # docs/problems/gateway-model-calls-have-no-scheduler-2026-10-21.md): "on"
+  # replaces the per-computer 60/minute window for inference and chat calls
+  # with a fair queue (24 in flight, 6 per computer, 256 queued, 120 s wait,
+  # then 429 with Retry-After). "off" is the old behavior. Flip as its own
+  # deploy after the staging proof; /health model_scheduler shows the queue.
+  # Rollback: "off" and redeploy.
+  gatewayModelScheduler = "off";
   # claude delegate (docs/design/claude-delegate-slice1-2026-10-14.md): the
   # owner's setup-token token, root 0400, written by the owner only. Every
   # unit, vmctl included, keeps the secrets dir hidden; vmctl's start copies
@@ -1942,6 +1950,7 @@ in
         # authentication lapses during normal multi-hour sessions.
         "GATEWAY_AUTOPUTER_TOKEN_TTL=720h"
         "GATEWAY_BEARER_BINDING=${gatewayBearerBindingMode}"
+        "GATEWAY_MODEL_SCHEDULER=${gatewayModelScheduler}"
         # SearXNG self-hosted meta-search (free, no credits). SearXNGProvider
         # is first in the provider list, so this absorbs the majority of
         # search load. Paid providers (Tavily, Brave, etc.) act as fallback.
