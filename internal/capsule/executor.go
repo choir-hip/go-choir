@@ -566,7 +566,11 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 		return nil, err
 	}
 	caps.Cgroup = cgroup
-	e.setCapsuleAggregateLocked()
+	// Under doctrine no capsule starts without the aggregate bound (review
+	// B5); the deferred cleanup deletes the cgroup just made.
+	if err := e.ensureCapsuleAggregateLocked(); err != nil {
+		return nil, err
+	}
 	if spec.Egress {
 		if err := e.startEgressLocked(caps); err != nil {
 			return nil, err
