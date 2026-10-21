@@ -101,9 +101,94 @@ boundaries:
   protected_surfaces: [host services on the tap, vmctl credential disk, capsule egress proxy and route table, capsule environment]
 
 now:
-  status: working
-  slice: problem record and this file
-  next_action: build internal/pkgmirror, tests first
+  status: checkpoint_incomplete
+  slice: >-
+    Built and committed on lane/fp10-net02-mirrors, nothing deployed: the host
+    mirror (npm, PyPI, crates, git; every ecosystem off), the per-computer
+    grant through vmctl's credential disk, the egress route
+    mirror.choir.internal on tap port 8089, client settings for granted
+    ecosystems only, and mirrors only as its own switch. Every switch ships
+    empty, so the deploy changes no computer's egress. A local smoke of the
+    service against the real registries passed for all four ecosystems
+    (npm and git with their real clients). The rest is FP0's: panel, land,
+    deploy, flip one test computer, run the probe.
+  source_ref: lane/fp10-net02-mirrors
+  deploy_identity: unknown to this lane
+  candidate:
+    id: fp10-net02-mirrors
+    state: ready
+    ref: lane/fp10-net02-mirrors
+    base: 53a691be6
+    digest: none
+    scope:
+      - internal/pkgmirror/
+      - cmd/pkgmirror/
+      - internal/mirrorgrant/
+      - internal/capsule/ (mirror.go, executor.go, egress.go, capsule.go)
+      - internal/vmmanager/ (capsule_mirrors.go, manager.go, config.go)
+      - internal/yaegikernel/broker.go
+      - cmd/capsule-broker/ (jobs.go, main.go, session_worker.go)
+      - internal/autoputer/capsule_executor_linux.go
+      - flake.nix, nix/node-b.nix
+      - scripts/capsule-mirror-probe.sh
+  conjecture:
+    id: C-mirrors-only-per-computer
+    claim: >-
+      Capsule package egress for npm, PyPI and git can be made mirrors only on
+      one computer, with the toolchains still working, without changing any
+      other computer.
+    test: the probe below in route mode, then in only mode, on one test computer
+    edge: missing_oracle
+    delta_o: the deployed probe; a unit test cannot show the real toolchains through the real route
+    scope_if_supported: the test computer, then class:test
+    status: testing
+    evidence_refs: [internal/pkgmirror/server_test.go, internal/pkgmirror/git_test.go, internal/capsule/mirror_test.go]
+  decision:
+    what: git over the dumb protocol (GET only), not smart HTTP (a POST to git-upload-pack on the route)
+    kind: safety
+    status: settled for this pass (the conservative default; see residual 1)
+    evidence_ref: this file, "Residuals"
+    owner_ratification_ref: not_applicable
+  belief:
+    believed_state: >-
+      The service, grant, route and client settings work against fakes and,
+      for the service, against the real registries; no computer is affected
+      until FP0 names one.
+    main_uncertainty: >-
+      Whether uv and pip in a real capsule accept the http index with the
+      settings given (neither client exists in this lane's environment), and
+      whether the Nix edits evaluate (no Nix here).
+    next_observation: the probe in route mode on one test computer
+  blocker_or_risk: >-
+    Nix not parsed or built in this lane. Shallow git clones fail through the
+    git mirror, so git under mirrors only breaks `git clone --depth 1`.
+  next_action: FP0 sends the red commits to a panel, then lands and proves them in the order under "Landing and proof"
+
+receipts:
+  - id: problem-record-and-goal
+    boundary: define
+    identity: 4f7eb10c8
+    proof_refs: [docs/problems/capsule-package-egress-is-not-mirrors-only-2026-10-21.md]
+    rollback_ref: git revert 4f7eb10c8
+    disposition: committed
+  - id: pkgmirror-npm-pypi-crates
+    boundary: implement
+    identity: 27acbe0cb
+    proof_refs: [internal/pkgmirror/server_test.go]
+    rollback_ref: git revert 27acbe0cb
+    disposition: committed; 14 tests pass, 3 fail with the hash comparison disabled
+  - id: pkgmirror-git
+    boundary: implement
+    identity: 6a8ec365c
+    proof_refs: [internal/pkgmirror/git_test.go]
+    rollback_ref: git revert 6a8ec365c
+    disposition: committed; 7 tests pass under -race; the pack-survival check fails 3/3 with maintenance left on
+  - id: guest-switch-route-wiring
+    boundary: implement
+    identity: 9d7f6f923
+    proof_refs: [internal/capsule/mirror_test.go, internal/mirrorgrant/grant_test.go, internal/vmmanager/capsule_mirrors_test.go]
+    rollback_ref: empty CHOIR_CAPSULE_MIRROR_COMPUTERS and deploy; then git revert 9d7f6f923
+    disposition: committed; tests pass; Nix unbuilt
 ---
 
 # FP10: package mirrors beyond goproxy (NET-02)
@@ -167,4 +252,77 @@ mirrored registries' hosts leave that computer's CONNECT allowlist.
 
 ## Landing and proof (for FP0)
 
-Not yet written; filled when the code commits land.
+Land in this order; each red commit goes to the panel first.
+
+1. `4f7eb10c8` (green) and the station's closing docs commit.
+2. `27acbe0cb`, `6a8ec365c` (red): the service code. Inert alone: nothing
+   builds or runs it.
+3. `9d7f6f923` (red): the Nix unit, the flake package, the tap port, the
+   grant and the capsule side. The deploy starts `go-choir-pkgmirror` with
+   no ecosystem; the vmctl lists are empty. Check: CI builds
+   `goServices` with `cmd/pkgmirror`; on Node B the unit is active and
+   `curl -s 127.0.0.1:8089/healthz` shows `"ecosystems":[]`; the paper's
+   schedules and polls read the same before and after.
+
+Proof, one test computer (no secrets anywhere):
+
+1. In `nix/node-b.nix` set the unit's `-ecosystems npm,pypi,git` and, in
+   go-choir-vmctl's Environment, `CHOIR_CAPSULE_MIRROR_COMPUTERS=<test
+   ComputerID>` and `CHOIR_CAPSULE_MIRROR_ECOSYSTEMS=npm,pypi,git`. Land,
+   deploy, then cold-boot the test computer (stop and start; a snapshot
+   resume keeps the old credential disk). vmctl logs `capsule mirrors for
+   computer ...: granted (computer) git,npm,pypi`; the guest logs
+   `capsule executor: package mirrors: granted (computer)`.
+2. From an implementation capsule on that computer (a capsule job), run
+   `bash scripts/capsule-mirror-probe.sh route npm,pypi,git`. Expect the
+   summary line `"failures":0`. The capsule's egress ledger shows the
+   mirror requests as host `mirror.choir.internal` with outcome ok, and
+   `journalctl -u go-choir-pkgmirror` shows `fetched` records.
+3. Set `CHOIR_CAPSULE_MIRRORS_ONLY=1`, land, deploy, cold-boot the computer,
+   and run `bash scripts/capsule-mirror-probe.sh only npm,pypi,git`. Expect
+   `"failures":0`; the egress ledger shows refused CONNECTs to
+   registry.npmjs.org, pypi.org and github.com, and `huggingface.co` still
+   ok.
+4. Sharing: add a second test computer (or `class:test`), cold-boot it, run
+   the probe there; the unit's log shows `hit` for the tarballs, files and
+   repository the first computer fetched.
+5. Rollback drill: empty the computer list, deploy, cold-boot; the probe's
+   `npm-env-absent` and `pypi-env-absent` checks pass and the mirror name is
+   refused.
+
+## Residuals
+
+1. **Shallow and partial git clones fail through the git mirror.** The dumb
+   protocol has neither. With git in mirrors only, `git clone --depth 1`
+   (common in agents) breaks; full clones work. The alternative is smart
+   HTTP: the mirror runs `git upload-pack` on its own copy, and the egress
+   route admits one POST path (`.../git-upload-pack`, body capped). The POST
+   body would reach only the host's copy, never the forge. That widens the
+   route's GET/HEAD rule, so it is a decision for FP0 or the owner, not
+   taken here; until then, leave git out of mirrors only or accept full
+   clones.
+2. **cargo is not in the guest image**, so the crates mirror has no client.
+   When cargo ships, its source replacement is a config file (CARGO_HOME),
+   not an environment variable.
+3. **yarn and pnpm** are not pointed at the mirror; under npm mirrors only
+   their registry hosts are refused too (they would reach npm's content
+   around the mirror otherwise).
+4. **Metadata is not cached**: packuments and indexes pass through to the
+   registry on every request; only artifacts are shared.
+5. **Names still leave**: the package and repository names a capsule asks
+   for reach the registry as the mirror's requests. Bounding names is the
+   grant object's job (NET-05).
+6. **Git packs accumulate**: the mirror never repacks (a repack would
+   delete packs a reader is using); a busy repository gains a pack per
+   refresh until the LRU cap or a re-clone. A re-clone-and-swap is the
+   later fix.
+7. **Host git on untrusted content**: bare copies, no checkout, fsck on,
+   hooks and redirects off, a dynamic user; still a new parser on the host.
+8. **Hosts with no mirror** stay on CONNECT: githubusercontent.com, conda,
+   download.pytorch.org, Hugging Face, arXiv, Zenodo, doi.org.
+9. A failed git refresh serves the last good copy and logs it as a hit.
+10. **Not verified here**: Nix evaluation and build; uv and pip in a real
+    capsule; the cell worker's passthrough on a real computer. Local test
+    runs of `cmd/capsule-broker`, `internal/yaegikernel` and one
+    `internal/vmmanager` test fail identically on the base commit (this
+    sandbox's worker spawn and `/bin/cat`).
