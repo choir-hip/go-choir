@@ -207,8 +207,9 @@ now:
     ARCH-10 launch half (6ce19af5a) and ARCH-04 (writer column, gate seam in
     observe mode, Texture turn and corpusd store declare their writer) are
     built and tested locally; the staging drill and the observe-to-enforce flip
-    are the orchestrator's. Next: ARCH-03, the green design only (the desk
-    manifest it needs is lane FP2's).
+    are the orchestrator's. ARCH-03 green design written
+    (docs/design/app-package-carries-app-desk-2026-10-21.md); its red slice
+    waits for lane FP2's desk manifest (ARCH-02).
   source_ref: lane/b10-selfdev (see receipts)
   deploy_identity: unknown to this lane
   candidate: {id: arch10-admission, state: ready, ref: lane/b10-selfdev, base: f399a2e8c, digest: none, scope: [internal/agentcore/engineering_admission.go, internal/agentcore/engineering_assignment_runtime.go, internal/agentcore/continuation_schedule.go]}
@@ -263,9 +264,8 @@ now:
     explicit Cancel; accepted, recorded as a residual. A bound assignment
     whose run is terminal but whose row is not is the case to watch.
   next_action: >-
-    ARCH-03 green: docs/design/app-package-carries-app-desk-2026-10-21.md,
-    naming the desk-manifest fields it needs from FP2 (ARCH-02). No ARCH-03
-    code until FP2's manifest lands.
+    Report to the orchestrator. Open: the ARCH-10 staging drill, the ARCH-04
+    observe counts and the enforce flip, ARCH-03's red slice after FP2's manifest.
 
 slices:
   ARCH-10:
@@ -316,6 +316,11 @@ receipts:
     identity: see git log (feat(objectgraph) one writer per kind)
     proof_refs: [internal/objectgraph/writer_gate_test.go, internal/store/texture_writer_gate_test.go]
     rollback_ref: git revert of the ARCH-04 commit; the default mode is observe, so a revert changes no behavior
+  - id: arch03-design
+    boundary: define
+    identity: see git log (docs: design: an app package carries its app desk)
+    proof_refs: [docs/design/app-package-carries-app-desk-2026-10-21.md]
+    rollback_ref: git revert of the docs commit
 ---
 
 # FP4: the self-development architecture items
