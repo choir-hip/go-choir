@@ -77,6 +77,13 @@ func main() {
 	}
 
 	handler.SetBreakers(breakers)
+
+	// SEC-05: bind each computer's bearer to its own address. Unset and
+	// unknown values enforce; nix sets observe while the rollout is watched
+	// (docs/problems/gateway-bearer-works-from-any-computer-2026-10-21.md).
+	bindingMode := gateway.LoadBindingMode()
+	handler.SetBearerBinding(bindingMode)
+	log.Printf("gateway: bearer binding mode: %s", bindingMode)
 	log.Printf("gateway: source api: %s", handler.SourceAPIStatus())
 
 	// The Jev Decisions route is independently gated. Its OpenRouter key stays

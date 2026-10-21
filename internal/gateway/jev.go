@@ -265,13 +265,13 @@ func (h *Handler) HandleJudgment(w http.ResponseWriter, r *http.Request) {
 		writeGatewayJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "Jev judgments are disabled"})
 		return
 	}
-	computerID, err := h.authenticateAutoputer(r)
+	computerID, err := h.authenticateBearer(r)
 	if err != nil {
 		writeGatewayJSON(w, http.StatusUnauthorized, ErrorResponse{Error: "authentication required"})
 		return
 	}
 	peerIP := remoteIP(r)
-	if peerIP == nil || h.registry.BindJevPeer(computerID, peerIP.String()) != nil {
+	if peerIP == nil || h.registry.BindPeer(computerID, peerIP.String()) != nil {
 		writeGatewayJSON(w, http.StatusForbidden, ErrorResponse{Error: "Jev bearer is not authorized for this VM"})
 		return
 	}
