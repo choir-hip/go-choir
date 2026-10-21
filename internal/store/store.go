@@ -119,6 +119,9 @@ type Store struct {
 	// writes (SL slice 2, actor_wake_signal.go).
 	actorWakeSignal     chan struct{}
 	actorWakeSignalOnce sync.Once
+	// announcedWakes are the outbox rows committed since the projector last
+	// took them, so a signalled sweep reads them by key.
+	announcedWakes announcedActorWakes
 	// finalizeSinceCheckpoint counts finalized events since the last Dolt
 	// checkpoint. finalizeBatch commits at most every doltCheckpointEvery
 	// events (0 = defaultFinalizeCheckpointEvery) instead of once per event:

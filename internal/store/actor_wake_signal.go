@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
@@ -26,21 +28,119 @@ func (s *Store) actorWakeSignalChan() chan struct{} {
 	return s.actorWakeSignal
 }
 
-// signalActorWakesIfAny signals when the committed batch held outbox rows.
+// signalActorWakesIfAny signals when the committed batch held outbox rows,
+// and announces those rows so the signalled sweep reads them by key.
 func (s *Store) signalActorWakesIfAny(objects []objectgraph.Object) {
+	announced := false
 	for _, obj := range objects {
 		if obj.ObjectKind == ogKindActorWakeOutbox {
-			s.signalActorWakes()
-			return
+			s.noteAnnouncedActorWake(obj.CanonicalID)
+			announced = true
 		}
+	}
+	if announced {
+		s.notifyActorWakeProjector()
 	}
 }
 
+// signalActorWakes signals a commit that wrote outbox rows without naming
+// them: the next sweep must read the whole outbox.
 func (s *Store) signalActorWakes() {
+	s.announcedWakes.mu.Lock()
+	s.announcedWakes.full = true
+	s.announcedWakes.mu.Unlock()
+	s.notifyActorWakeProjector()
+}
+
+func (s *Store) notifyActorWakeProjector() {
 	select {
 	case s.actorWakeSignalChan() <- struct{}{}:
 	default:
 	}
+}
+
+// announcedWakeLimit bounds the announced set; past it the next sweep reads
+// the whole outbox instead.
+const announcedWakeLimit = 4096
+
+// announcedActorWakes are the outbox rows committed since the projector last
+// took them (docs/problems/research-more-slow-and-hidden-2026-10-21.md, E6).
+// Process-local: after a restart the projector's first sweep reads the whole
+// outbox, and its audit sweep still does every minute.
+type announcedActorWakes struct {
+	mu   sync.Mutex
+	ids  map[string]struct{}
+	full bool
+}
+
+func (s *Store) noteAnnouncedActorWake(canonicalID string) {
+	canonicalID = strings.TrimSpace(canonicalID)
+	if canonicalID == "" {
+		return
+	}
+	s.announcedWakes.mu.Lock()
+	defer s.announcedWakes.mu.Unlock()
+	if s.announcedWakes.full {
+		return
+	}
+	if len(s.announcedWakes.ids) >= announcedWakeLimit {
+		s.announcedWakes.ids, s.announcedWakes.full = nil, true
+		return
+	}
+	if s.announcedWakes.ids == nil {
+		s.announcedWakes.ids = map[string]struct{}{}
+	}
+	s.announcedWakes.ids[canonicalID] = struct{}{}
+}
+
+// TakeAnnouncedActorWakes returns the unprojected wakes among the outbox rows
+// committed since the last take, read by key, in canonical id order. full is
+// true when a commit signalled without naming its rows, or the set overflowed:
+// the caller must then read the whole outbox with ListUnprojectedActorWakes.
+// Listing the outbox matches $.projected in the metadata of every outbox row
+// ever written, 2 to 4 s on the paper before each wake.
+func (s *Store) TakeAnnouncedActorWakes(ctx context.Context) ([]ActorWakeOutbox, bool, error) {
+	s.announcedWakes.mu.Lock()
+	ids, full := s.announcedWakes.ids, s.announcedWakes.full
+	s.announcedWakes.ids, s.announcedWakes.full = nil, false
+	s.announcedWakes.mu.Unlock()
+	if full {
+		return nil, true, nil
+	}
+	if s.ogStore == nil {
+		return nil, false, fmt.Errorf("announced actor wakes: object graph not initialized")
+	}
+	sorted := make([]string, 0, len(ids))
+	for id := range ids {
+		sorted = append(sorted, id)
+	}
+	sort.Strings(sorted)
+	wakes := make([]ActorWakeOutbox, 0, len(sorted))
+	for _, id := range sorted {
+		obj, err := s.ogStore.GetObject(ctx, id)
+		if errors.Is(err, objectgraph.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return nil, false, fmt.Errorf("announced actor wake %s: %w", id, err)
+		}
+		if obj.Tombstone || obj.ObjectKind != ogKindActorWakeOutbox {
+			continue
+		}
+		var meta struct {
+			Projected bool `json:"projected"`
+		}
+		if err := json.Unmarshal(obj.Metadata, &meta); err != nil || meta.Projected {
+			continue
+		}
+		wake, err := decodeLifecycleObject[ActorWakeOutbox](obj)
+		if err != nil {
+			return nil, false, fmt.Errorf("decode actor wake outbox %s: %w", obj.CanonicalID, err)
+		}
+		wake.CanonicalID = obj.CanonicalID
+		wakes = append(wakes, wake)
+	}
+	return wakes, false, nil
 }
 
 // ExhaustedActorWake is an outbox wake whose dispatch failed past its budget:

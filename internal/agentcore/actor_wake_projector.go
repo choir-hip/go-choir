@@ -89,7 +89,7 @@ func (rt *Runtime) runActorWakeProjector(ctx context.Context, stop <-chan struct
 	signal := rt.store.ActorWakeSignal()
 	reason := "start"
 	for {
-		out := rt.sweepActorWakeOutbox(ctx)
+		out := rt.sweepActorWakes(ctx, reason == "signal")
 		if reason == "audit" && out.dispatched > 0 {
 			log.Printf("runtime: actor wake outbox audit found %d ready wake(s) no signal announced (missed signal)", out.dispatched)
 		}

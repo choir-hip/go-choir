@@ -2685,13 +2685,32 @@ type actorWakeSweep struct {
 	more bool
 }
 
+// sweepActorWakeOutbox reads the whole outbox: the start, audit, retry and
+// pacing sweeps.
 func (rt *Runtime) sweepActorWakeOutbox(ctx context.Context) actorWakeSweep {
+	return rt.sweepActorWakes(ctx, false)
+}
+
+// sweepActorWakes dispatches unprojected wakes. A signalled sweep (announced)
+// reads only the outbox rows committed since the last one, by key; it reads
+// the whole outbox when a commit did not name its rows. Listing the whole
+// outbox matches every row ever written, 2 to 4 s on the paper before each
+// wake (docs/problems/research-more-slow-and-hidden-2026-10-21.md, E6).
+func (rt *Runtime) sweepActorWakes(ctx context.Context, announced bool) actorWakeSweep {
 	var out actorWakeSweep
 	if rt == nil || rt.store == nil {
 		return out
 	}
 	listStarted := time.Now()
-	wakes, err := rt.store.ListUnprojectedActorWakes(ctx)
+	var wakes []store.ActorWakeOutbox
+	full := !announced
+	var err error
+	if announced {
+		wakes, full, err = rt.store.TakeAnnouncedActorWakes(ctx)
+	}
+	if err == nil && full {
+		wakes, err = rt.store.ListUnprojectedActorWakes(ctx)
+	}
 	if err != nil {
 		log.Printf("runtime: actor wake outbox sweep: %v", err)
 		return out
