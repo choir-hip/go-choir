@@ -41,20 +41,22 @@ finish:
     setting store.debounced_checkpoint, default off (red).
   acceptance:
     - action: >-
-        go test ./internal/store -run 'Checkpoint' -race; go test
-        ./internal/agentcore -run 'Checkpoint|ComputerSetting'; go vet of both
+        go test ./internal/store -race -run 'Checkpoint|TestFinalizeBatchesDoltCheckpoints';
+        go test ./internal/agentcore -race -run 'Checkpoint|ComputerSetting|Observability|TelemetryBatching|BootConfigures';
+        go vet of both
       proves: the mode switch, the bounds, the background commit and the counters behave as the tests below state
       evidence_class: local test
     - action: >-
-        After the deploy, GET /health on a staging test computer (owner
-        session): read guest_checkpoint
+        After the deploy, GET /api/runtime/observability on a staging test
+        computer (owner session): read guest_checkpoint
       proves: the counters are live in count mode (mode "count", inline commits, a duration histogram)
       evidence_class: deployed proof
     - action: >-
-        On the same test computer, PUT the computer setting
-        store.debounced_checkpoint=true through the product API, run one
-        research activation, read guest_checkpoint again over a few minutes
-      proves: inline commits stop growing, background commits grow, write-path checkpoint time is zero, and the last-commit age stays under the debounce window plus a commit
+        On the same test computer, POST /api/computer-settings
+        {"key":"store.debounced_checkpoint","value":true}, run one research
+        activation, read guest_checkpoint again over a few minutes, then
+        POST the value false and read it once more
+      proves: inline_commits and inline_ns stop growing, background_commits grows, last_commit_age_ms stays under debounce_ms plus a commit, failures stays 0; after false, mode is count and inline commits resume
       evidence_class: deployed proof
     - action: the paper's schedules and polls read before and after the deploy (setting left off on the paper)
       proves: the deploy did not take the paper down
@@ -102,17 +104,50 @@ boundaries:
   protected_surfaces: [guest store write path]
 
 now:
-  status: working
-  slice: problem record and station file; tests next
-  source_ref: e4b792b7f
+  status: checkpoint_incomplete
+  slice: >-
+    Built and tested on the lane; nothing deployed. The red commit 9b8cc35f8
+    goes to FP0's bunch panel on its frozen diff, then lands alone (or with
+    green) and FP0 runs the deployed acceptance above on a test computer,
+    never the paper. Local evidence: internal/store full package green
+    (374 s); the new store tests 3x under -race; the agentcore seam tests and
+    every agentcore test file that touches settings or observability green
+    under -race.
+  source_ref: 9b8cc35f8
   deploy_identity: unknown to this lane
   candidate:
     id: fp10-arch13-debounced-checkpoint
-    state: drafting
+    state: ready
     ref: lane/fp10-arch13-fanin
     base: e4b792b7f
     digest: none
-    scope: [internal/store, internal/agentcore]
+    scope:
+      - internal/store/checkpoint_cadence.go
+      - internal/store/checkpoint_cadence_test.go
+      - internal/store/store.go
+      - internal/store/computer_events.go
+      - internal/store/computer_setting.go
+      - internal/agentcore/guest_checkpoint.go
+      - internal/agentcore/api.go
+      - internal/agentcore/computer_settings.go
+      - internal/agentcore/runtime.go
+      - internal/agentcore/telemetry_batching_test.go
+  residuals:
+    - >-
+      Behavior change in count mode too, by design: the dirty mark no longer
+      waits on a commit in flight, a "nothing to commit" result counts as a
+      commit in the stats, and Reopen marks the adopted workspace dirty (at
+      most one extra no-op commit). Reviewers should check these three.
+    - >-
+      Concurrent DOLT_COMMIT('-Am') with in-flight finalize transactions is
+      exercised by a -race test on embedded Dolt and has precedent
+      (GetHistory today, doltbatch on the platform), but not under the
+      paper's load. Soak on a test computer before the paper.
+    - >-
+      ARCH-13's larger parts stay open: SA slice 4 (read cost), slice 5
+      (store split, group commit of acts); slice 6 is VM shapes (vmctl,
+      FP8's lane). The checklist line should say eventMu plus the appender
+      mutex, not engineMu (FP0 edits the checklist).
   conjecture:
     id: C-checkpoint-off-write-path
     claim: >-
@@ -127,8 +162,8 @@ now:
     edge: missing_oracle
     delta_o: the observe counters (this slice) are the oracle
     scope_if_supported: guest store at the deployed SHA
-    status: proposed
-    evidence_refs: [docs/problems/guest-checkpoint-on-the-write-path-2026-10-21.md]
+    status: testing
+    evidence_refs: [docs/problems/guest-checkpoint-on-the-write-path-2026-10-21.md, 9b8cc35f8]
   decision:
     what: take option (c) plus a lock-free mark, behind a computer setting, default off
     kind: safety
@@ -143,8 +178,8 @@ Problem: [guest-checkpoint-on-the-write-path-2026-10-21](../problems/guest-check
 
 ## The slice
 
-1. **Observe, always on.** `Store.CheckpointStats()` and `/health`
-   `guest_checkpoint`: mode; inline and background commit counts;
+1. **Observe, always on.** `Store.CheckpointStats()` and
+   `/api/runtime/observability` `guest_checkpoint`: mode; inline and background commit counts;
    write-path checkpoint nanoseconds (inline commits only) and the max;
    background commit nanoseconds; failures and the last error; events and
    ops since the last commit; age of the last commit.
@@ -156,7 +191,8 @@ Problem: [guest-checkpoint-on-the-write-path-2026-10-21](../problems/guest-check
    `CHOIR_GUEST_CHECKPOINT=debounced`; default off). `finalizeBatch` never
    commits; it arms a timer (default 60 s, env
    `CHOIR_GUEST_CHECKPOINT_DEBOUNCE`) or, past an ops bound (default
-   10,000 ops since the last commit), kicks the background committer at
+   10,000 ops since the last commit, env
+   `CHOIR_GUEST_CHECKPOINT_MAX_OPS`), kicks the background committer at
    once. The commit runs outside `eventMu` and the appender mutex. Close
    stops the timer and commits once. Turning the setting off stops the
    timer and returns to counted inline commits.
