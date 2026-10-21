@@ -1,6 +1,6 @@
 # More research goes to research first, and research reports as it goes
 
-Date: 2026-10-21. Status: design, written before the code. Mutation class:
+Date: 2026-10-21. Status: design, revised after the panel (section 8), written before the code. Mutation class:
 red (a new owner-act door into a desk inbox; the public expansion door).
 Problem: [research-more-slow-and-hidden-2026-10-21.md](../problems/research-more-slow-and-hidden-2026-10-21.md)
 E4 to E6. Owner direction (this session): "Yes, it should skip texture.
@@ -122,3 +122,62 @@ which is unchanged.
 - introduced: a second owner-act door into the paper, narrower than
   `/revise`.
 - repaired: on landing, E4 (the deciding Texture turn) and E5.
+
+## 8. Panel and revision (2026-10-21)
+
+Panel: Devin and gpt-6.1-sol, both "build with changes", high confidence;
+gemini-3.8 had not answered when this was written. Findings adopted, all
+verified against code (gpt-6.1-sol reproduced the first with the real
+store):
+
+- **An open round is joined, not refused.** `stepConversation` refuses a
+  Cast into an open round only from another caster, and the ask and
+  Texture's own Casts share the sender `texture:<doc>`. Section 2.1's
+  "another caster" refusal never fires. Changed: the request is refused
+  as busy whenever the research conversation has an open round, whoever
+  cast it, and while the research desk has an active run.
+- **Checks outside the commit race it.** `CommitInboxRecords` has no head
+  or lifecycle condition. Changed: one store command,
+  `CommitStoryResearchRequest`, does, in one transaction and in this
+  order: replay by request id (before any current-state refusal, so a
+  committed request replays after the head moves), live unarchived story
+  binding, expected head, closed conversation, research agent mint, the
+  Cast, its outbox wake.
+- **Research is not given the story.** Changed: the paper writes the
+  Cast's packet itself from the head it checked: headline, head revision
+  id, the story text (bounded), and the URLs it already cites, then the
+  fixed expansion instruction. The caller sends no prompt; the route takes
+  only `client_request_id` and `expected_head_revision_id`. Story text is
+  framed as evidence, not instruction.
+- **The Note is unreliable.** A system Note shows to Texture as a
+  "closure", and any other Texture turn can consume it before research
+  reports. Dropped. Changed: Texture's frame is told, every turn, when the
+  latest research round was opened by a reader's request and Texture has
+  not committed a turn since that round closed: "a reader asked for more
+  research (request id); expand the story with what research reports; keep
+  its text, structure and citations unless a source corrects them". It is
+  derived from the ledger at frame time, so it survives cursors, ordering
+  and restarts.
+- **A crash loses the ask and blocks a retry.** Under the restart rule a
+  crash closes the round (boot closure, no wake), which is correct; what
+  was wrong is that the fate stays "accepted" and a re-ask hits
+  `already_asked`. Changed: the request's read model reports a round
+  closed by a boot closure without a research Report as `interrupted`;
+  the fate line says so, and the proxy admits one new attempt on the same
+  version under an attempt-numbered request id.
+- **The fate needs a read surface.** Changed: `GET
+  /api/texture/documents/{doc}/research/{request_id}` returns the record
+  id, commit time, round, whether it is open, research Reports in it, and
+  the closing stop reason. `accepted` means durably admitted; `revised`
+  means a public version newer than the asked one exists since the commit
+  time (as today, "since", not "because").
+- **Interim fanout.** Each interim Report wakes Texture; an active Texture
+  run absorbs wakes, so the bound is one Texture turn per Report that lands
+  between turns. Accepted, and stated.
+
+Failure modes added to section 4: 9, a request while the research round
+is open from Texture's own Cast is admitted; 10, replay after the head
+moved is refused instead of replayed; 11, the expansion instruction is
+missing from a Texture frame after another turn consumed the records;
+12, a crash-closed request reads `accepted` or blocks a re-ask.
+
