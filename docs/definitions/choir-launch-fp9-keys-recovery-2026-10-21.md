@@ -68,8 +68,8 @@ finish:
     Commits on lane/b9-keys, in this order: (1) this file and the problem
     record; (2) the mode change with its tests (orange); (3) the snapshot
     vault in internal/vmmanager behind VM_SNAPSHOT_VAULT_DIR, with tests
-    first (red, dark); (4) nix/snapshot-vault.nix, scripts/snapshot-vault-
-    verify.sh and a stub-based shell test (red, dark, not imported); (5)
+    first (red, dark); (4) nix/snapshot-vault.nix, scripts/snapshot-vault.sh
+    (up, down, status, scan) and a stub-based shell test (red, dark, not imported); (5)
     sealed escrow keys in internal/keyescrow, the escrowkey tool, the
     corpusd and checkpointd wiring behind CHOIR_KEY_ESCROW_SEAL (red, dark);
     (6) internal/taperepack and cmd/taperepack: plan, copy and census, proven
@@ -177,9 +177,9 @@ heresy_delta:
     and sets the switch.
 
 now:
-  status: working
+  status: open_handoff
   slice: >-
-    Repair round 1 (bunch 4b findings B1 to B4, below). Before it: commits 1 to 7 built on lane/b9-keys (the vault, its host script and
+    Repair round 1 done (bunch 4b findings B1 to B4 fixed, below). Before it: commits 1 to 7 built on lane/b9-keys (the vault, its host script and
     nix module, the mode change, sealed escrow keys with the escrowkey
     tool, taperepack, the drill steps). Every remaining step is FP0's
     (landing, the flake entries, deployed proofs) or the owner's (open
@@ -245,7 +245,7 @@ now:
       for a plain mapping (code from cryptsetup's source, not observed), and
       whether a mount made before vmctl starts is visible in its private mount
       namespace.
-    next_observation: FP0's verify script output on a host with the vault up (uuid prefix, findmnt, vmctl's view).
+    next_observation: FP0's `scripts/snapshot-vault.sh status` output on a host with the vault up (uuid prefix, findmnt, vmctl's view).
   blocker_or_risk: >-
     None for local work. The nix module cannot be evaluated here (no Nix in
     the lane VM; its evaluation test skips); it is not imported by
@@ -254,6 +254,21 @@ now:
   next_action: FP0 reviews the frozen lane, lands it with the switches off, then runs "Landing steps for FP0" below.
 
 receipts:
+  - kind: local_tests
+    at: 2026-10-21
+    ref: lane/b9-keys (repair round 1)
+    evidence: >-
+      go vet and go test ./internal/vmmanager (whole package ok except
+      TestLaunchThreadPolicyReachesOnlyItsChild: no /bin/cat in the lane VM,
+      a file this lane does not touch), ./internal/keyescrow,
+      ./cmd/escrowkey, ./cmd/checkpointd, ./internal/taperepack,
+      ./cmd/taperepack, ./internal/tapestore; GOOS=darwin GOARCH=arm64 go vet
+      ./internal/vmmanager; go build ./...; snapshot-vault-test.sh and the
+      five off-host-backup shell tests pass. Break-once per finding: B1
+      (capture paths reverted to the path string), B2 (discovery without
+      the record), B3 (name check removed; unit sources not read), B4
+      (grep error folded into no-hit; find status ignored); each made a
+      test fail.
   - kind: local_tests
     at: 2026-10-21
     ref: lane/b9-keys
@@ -288,7 +303,7 @@ adds anything.
 |---|---|---|---|
 | data.img, staged and quarantined image modes | create 0600; tighten existing images at boot and on quarantine | built (commit 2) | none (always on) |
 | Snapshot `mem` and `vmstate` | capture into a verified dm-crypt plain mount, else refuse | built, dark (commit 3) | `VM_SNAPSHOT_VAULT_DIR`, `VM_SNAPSHOT_VAULT_ONLY` |
-| The vault itself | nix module, verify script | built, not imported (commit 4) | FP0 imports it |
+| The vault itself | nix module, `scripts/snapshot-vault.sh` (up, down, status, scan) | built, not imported (commit 4) | FP0 imports it |
 | Escrow private key | sealed under a KEK from outside the artifacts volume | built, dark (commit 5) | `CHOIR_KEY_ESCROW_SEAL`, `CHOIR_KEY_ESCROW_KEK_PATH` |
 | Data volumes (guest images) | design only | below | owner decision |
 | Swap file and core dumps | recorded as findings, not changed | problem record | FP0 live check |
@@ -420,8 +435,8 @@ H1 The unit runs twice and recreates a live vault (it must be idempotent when
 the mount is up). H2 A stale device-mapper name or loop device from a failed
 run blocks the next boot (clean up first). H3 The backing file is created
 readable by others. H4 The key is read from anything but /dev/urandom or is
-written to a file. H5 The mount point is left 0755. H6 The verify script
-passes on a vault that is not dm-crypt plain.
+written to a file. H5 The mount point is left 0755. H6 `snapshot-vault.sh
+status` passes on a vault that is not dm-crypt plain.
 
 Sealed escrow key (commit 5).
 E1 Wrong KEK. E2 A sealed file with no KEK configured. E3 A plaintext file in
@@ -543,7 +558,7 @@ memory caps apply):
 
 Snapshot vault. Pick one disposable test computer (not the paper, not the
 owner's). 1. Import `nix/snapshot-vault.nix`, enable it with a size of at
-least budget plus 4 GiB, deploy. 2. Run `scripts/snapshot-vault-verify.sh`
+least budget plus 4 GiB, deploy. 2. Run `scripts/snapshot-vault.sh status`
 on the host: it must pass (plain crypt uuid prefix, mount point, mode, key
 never on disk). 3. Set `VM_SNAPSHOT_VAULT_DIR=<mount>` and
 `VM_SNAPSHOT_VAULT_ONLY=<the test computer's id>`; order vmctl after the
@@ -551,14 +566,26 @@ vault unit; deploy. 4. In the test computer hold a random canary string in
 memory (a process that reads 32 random bytes and keeps them; record only the
 canary's hash). 5. Hibernate it by snapshot. Expect: files under
 `<vault>/<vm>/snapshot/`, none under `<state>/<vm>/snapshot*`. 6. Scan the
-raw backing file for the canary: expect zero hits; scan the mounted vault:
-expect at least one. 7. Wake it: healthy, the canary process still holds it.
+raw backing file for the canary with `scripts/snapshot-vault.sh scan
+<canary file> <backing file> <state dir>`: expect zero hits, `read errors: 0`
+and exit 0 (an incomplete scan exits 1 and is not evidence); scan the
+mounted vault: expect at least one. 5b (finding B1). Check the create paths
+in the hibernate log or timeline go through `/proc/<vmctl pid>/fd/`; if the
+VMM was refused that path the capture fails closed (kill path, a cold wake)
+and the vault is not usable until that is understood. 5c. While a second
+selected computer is being hibernated, run `snapshot-vault.sh down`: it
+must fail busy (the capture holds the vault), and the capture must land
+in the vault or take the kill path, never the state directory. 7. Wake it: healthy, the canary process still holds it.
 8. Hibernate again, then `systemctl restart` the vault unit only if no VMM
 maps a vault file (otherwise skip; the unit is idempotent): wake cold. 9.
 Unmount the vault (with the computer stopped) and hibernate another selected
 computer: the timeline reason is `snapshot_vault_unavailable`, no files in
 the state directory. 10. Compare one unselected computer's hibernate: still
-in the state directory, as before.
+in the state directory, as before. 11 (finding B2). With the vault up and
+the test computer hibernated into it, unset `VM_SNAPSHOT_VAULT_DIR`, deploy,
+and wake it: it resumes from the vault (the recorded root
+`<state>/snapshot-vault-roots` names it); a later hibernate goes to the
+state directory.
 
 Escrow sealing (on staging, not the paper's host path first: use a copy of
 the key on a scratch host or a dry run). 1. `escrowkey check` on the key
@@ -635,23 +662,37 @@ flake commit already adds the two commands). Sol's non-blocking notes need
 no change (the census proves manifest equality, not chain completeness; the
 station already requires the receipt-count comparison).
 
+Repair commits (lane head after this file's update): 24f778b27 (this
+section, green); a348e747f and 4ee539886 (B1, B2: tests, then the
+vmmanager fix, red); a25482b57 and ec86efad2 (B3: tests, then the KEK name
+rule and the unit source exclusion, red); 068a8fa02 and 5079aee6e (B4: tests, then
+the scan, red). All four blocking findings: fixed. Residuals from this round:
+the VMM's use of `/proc/<vmctl pid>/fd/N` is unproven on Node B (step 5b);
+`kek_sources` parses `systemctl show` lines whose format is from systemd's
+documentation, not observed on Node B (the `plan` check in landing step 3);
+a KEK delivered some way other than a credential or that variable is not
+discovered (the loader accepts no other way).
+
 ## Landing steps for FP0
 
 All switches ship off; with them unset the lane is byte-identical in
 behavior to main (must_preserve 1).
 
-1. Add `"cmd/escrowkey"` and `"cmd/taperepack"` to `goServiceSubPackages`
-   in `flake.nix` (the lane VM cannot run a Nix build, so the lane does not
-   touch the flake), or run both from a `go build` in a nix shell on the
-   host for the proofs only.
+1. Done by FP0's flake commit in the frozen candidate 3bd691a6b
+   (`cmd/escrowkey` and `cmd/taperepack` in `goServiceSubPackages`); keep
+   it when rebasing onto the repaired lane.
 2. Snapshot vault: the "Deployed proof" steps below.
 3. Escrow sealing: the corpusd and checkpointd units read
    `CHOIR_KEY_ESCROW_SEAL` and `CHOIR_KEY_ESCROW_KEK_PATH`; give the KEK as
    `LoadCredential=key-escrow-kek:/var/lib/go-choir/secrets/key-escrow-kek`
    and set `CHOIR_KEY_ESCROW_KEK_PATH=%d/key-escrow-kek`. Generate it with
    `escrowkey kek-generate --kek /var/lib/go-choir/secrets/key-escrow-kek`
-   (mode 0400, refuses to overwrite). The daily backup already excludes any
-   `key-escrow-kek*` name. Then the escrow sealing steps below, using
+   (mode 0400, refuses to overwrite; the name must start with
+   `key-escrow-kek`, finding B3). The daily backup excludes any
+   `key-escrow-kek*` name and, read from the units, the source of a
+   `key-escrow-kek*` credential and any absolute `CHOIR_KEY_ESCROW_KEK_PATH`:
+   check `off-host-backup.sh plan` lists the configured source under
+   "excluded:" before the first backup with the KEK in place. Then the escrow sealing steps below, using
    `escrowkey check|seal|unseal --key <key path> --kek <kek path>` with
    corpusd stopped and no checkpoint job running during seal and unseal.
 4. Tape: the restore drill on the segment snapshot (L2-04 above).
