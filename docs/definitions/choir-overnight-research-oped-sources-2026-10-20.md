@@ -213,13 +213,14 @@ heresy_delta:
 now:
   status: working
   slice: >-
-    0. Finish the backup snapshot path (deploy 194fd31c9 after disk, migrate
-    the two Dolt data directories, supervised run 4, restore drill). Then
-    1. Research more public; 2. op-ed search and opinion mode; 3. sources;
-    4. carried patch then the two-arm drill; 5. failure 12 trace. Branches
-    are built in parallel, landed one deploy at a time.
-  source_ref: main 295e5c79d
-  deploy_identity: staging 43b5bc034
+    Owner order section 33 (2026-10-21): after arm B, no more Luna arms;
+    Sonnet rewrites of Slides, Pdf, Epub, Podcast, Calendar and FileBrowser
+    through the delegate, smallest first, one at a time; a durable backup
+    verify through the segment store (separate goal file
+    choir-tape-segments-a2-repack-2026-10-21.md). Items 0-3 have landed;
+    the rewrites are running.
+  source_ref: main 0212dcfa9 (local b96c4755f, unpushed code 73922d044, 4312569e7, 9c31920e6)
+  deploy_identity: staging cbef56155 (CI 39543206946 success, deployed 04:30 UTC)
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
   conjecture:
     id: ON-C1
@@ -236,19 +237,37 @@ now:
       The deployed specs plus the fate line and the version's added sources;
       without them, a published version cannot be told from an unrelated
       Texture revision.
+    result: >-
+      Held, with three fixes the conjecture did not predict (P4 computer id,
+      P5 story work item, P6 open and intermittent). Logged out on a quiet
+      story at cbef56155: asked 04:46:58, Texture revised 04:51:49, v7
+      published with 191 words against 111 and 8 sources against 7, fate
+      line "revised 4 to 7". Op-ed deployed proof passed at 04:18.
   decision: >-
     Throttle defaults (conservative, owner said not to worry about abuse):
     per address 3 an hour and 10 a day, the existing 3 in flight and 12 a
     day overall, one per published version. Opinion listing needs a
-    signed-in account and sits behind a kill switch.
+    signed-in account and sits behind a kill switch. Taiwan row started
+    after a Go TLS probe from Node B (system bundle, chain of 3 verified;
+    stat.gov.tw failed as the control); the guest poll is the confirming
+    read.
   belief:
-    believed_state: backup run 3 in restic check; reader features mapped; sources mapped.
+    believed_state: >-
+      Backup daily path clean (run 5, 36 minutes, no check); snapshot
+      restore drill running (corpus passed). Research more and op-ed
+      deployed and proven. Wave-1 plus social rows active; Taiwan row
+      started 04:59. Arm B (Luna) applied and restored; arm A (Sonnet) had
+      the carried patch apply in round 2 and was stopped by the tracer
+      deadline mid-build. Sonnet SlidesApp drill running.
     main_uncertainty: >-
-      Whether the paper credential is available for schedules tonight
-      (asked); whether Texture expands or rewrites on a research request
-      (hazard F1, untested).
-    next_observation: run 3 result, free disk, then the deploy re-run.
+      Whether a two-round Sonnet rewrite reaches frozen and applied inside
+      110 minutes; P6's cause; whether the 13 single failures at 04:58 were
+      the 04:30 planned restart.
+    next_observation: SlidesApp drill outcome; Taiwan row's first poll; restore drill platform piece.
   blocker: none
-  next_action: Record run 3; free disk to the deploy floor; re-run the deploy.
+  next_action: >-
+    Land 73922d044, 4312569e7 and 9c31920e6 after the SlidesApp drill ends
+    (a deploy mid-drill restarts the host services it reads); then the next
+    app rewrite.
 
 receipts: []
