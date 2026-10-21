@@ -5,6 +5,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/autoputer"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
+	"github.com/yusefmosiah/go-choir/internal/doctool"
 )
 
 func main() {
@@ -20,6 +21,15 @@ func main() {
 		// child that loads one capsule filter and probes clone3 and a new
 		// user namespace under it. Only the daemon's self-test starts it.
 		os.Exit(capsule.RunSeccompSelfTestChild(os.Args[2:]))
+	}
+	if len(os.Args) > 1 && os.Args[1] == doctool.HelperArg {
+		// Document-tool sandbox helper (SDC SEC-15): started by the daemon
+		// as the sandbox user; confines itself and execs the tool.
+		os.Exit(doctool.RunHelper(os.Args[2:]))
+	}
+	if len(os.Args) > 1 && os.Args[1] == doctool.ProbeArg {
+		// The isolation self-test's probe tool, run inside that sandbox.
+		os.Exit(doctool.RunProbe(os.Args[2:]))
 	}
 	autoputer.Run()
 }
