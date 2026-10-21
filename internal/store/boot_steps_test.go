@@ -2,10 +2,14 @@ package store
 
 import (
 	"bytes"
+	"fmt"
 	"log"
 	"regexp"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 )
 
 // docs/problems/stored-column-add-blocks-paper-boot-2026-10-21.md: the paper's
@@ -83,5 +87,80 @@ func TestOpenLogsEveryStoreStepWithItsDuration(t *testing.T) {
 		if !found {
 			t.Errorf("no start line for boot step %q; logged: %v", want, order)
 		}
+	}
+}
+
+// The boot must not scan or rewrite og_objects (the 2026-10-21 outage: an
+// ALTER that rewrote every row held the paper's boot for 50 minutes). A store
+// that already has many rows is closed and opened again, as a restart does:
+// og_objects must be byte-identical after Open (Dolt's table hash), the side
+// table must be empty and every family unvalidated (the check is online,
+// after the listener), and Open must take about as long as it does empty.
+func TestReopenWithManyRowsDoesNotTouchOgObjects(t *testing.T) {
+	path := testStorePath(t)
+	cleanupTestStorePath(path)
+	t.Cleanup(func() { cleanupTestStorePath(path) })
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const rows = 24000
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for start := 0; start < rows; start += 500 {
+		var sb strings.Builder
+		var args []any
+		sb.WriteString(`INSERT INTO og_objects (canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by) VALUES `)
+		for i := start; i < start+500; i++ {
+			if i > start {
+				sb.WriteString(",")
+			}
+			sb.WriteString("(?,?,?,?,?,?,?,?,NOW(),NOW(),0,'')")
+			kind := []string{"choir.run", "choir.commitment_record", "choir.source_ref", "choir.agent"}[i%4]
+			args = append(args, fmt.Sprintf("obj:%s:o1:key-%06d", kind, i), kind, "o1", "c1", "v", fmt.Sprintf("h-%d", i),
+				fmt.Sprintf(`{"addressee":"a%d"}`, i%50), fmt.Sprintf(`{"agent_id":"a%d","doc_id":"d%d"}`, i%50, i%90))
+		}
+		if _, err := tx.Exec(sb.String(), args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	hashOf := func(st *Store) string {
+		var h string
+		if err := st.db.QueryRow(`SELECT DOLT_HASHOF_TABLE('og_objects')`).Scan(&h); err != nil {
+			t.Fatalf("hash of og_objects: %v", err)
+		}
+		return h
+	}
+	before := hashOf(s)
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	start := time.Now()
+	reopened, err := Open(path)
+	took := time.Since(start)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = reopened.Close() })
+	if after := hashOf(reopened); after != before {
+		t.Fatal("Open rewrote og_objects")
+	}
+	var side int
+	if err := reopened.db.QueryRow(`SELECT COUNT(*) FROM og_key_index`).Scan(&side); err != nil || side != 0 {
+		t.Fatalf("Open filled the side table: %d rows, %v", side, err)
+	}
+	d := reopened.derivedKeys()
+	if allFamiliesValidated(d) || d.Validated(objectgraph.KeyRunAgentID) || d.Validated(objectgraph.KeyCommitmentAddressee) || d.Validated(objectgraph.KeySourceRefDocID) {
+		t.Fatal("a family is validated straight after Open; the check is online, after the listener")
+	}
+	t.Logf("Open over %d rows: %s", rows, took.Round(time.Millisecond))
+	if took > 20*time.Second {
+		t.Fatalf("Open over %d rows took %s", rows, took)
 	}
 }
