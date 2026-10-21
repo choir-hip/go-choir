@@ -454,8 +454,8 @@ func TestDeployRescueSkipsHeldProtectedComputer(t *testing.T) {
 	if resp.Outcome != deployRefreshSkipped || !strings.Contains(resp.Reason, "held") || f.spawns() != 0 {
 		t.Fatalf("held: %+v spawns=%d, want skipped held", resp, f.spawns())
 	}
-	if own := f.own(); len(own.DeployGrantTargets) != 0 {
-		t.Fatalf("a held computer was granted a retry: %v", own.DeployGrantTargets)
+	if own := f.own(); len(own.DeployGrants) != 0 {
+		t.Fatalf("a held computer was granted a retry: %v", own.DeployGrants)
 	}
 }
 
@@ -471,7 +471,7 @@ func TestDeployRescueSkipsHeldProtectedComputer(t *testing.T) {
 //     success left the allowance unspent for a later wedge.
 
 func TestDeployGrantRemembersEveryConsumedTargetNotOnlyTheLast(t *testing.T) {
-	reg, _ := hostCapacityRegistry(t, newProcessControlVMManager())
+	reg, now := hostCapacityRegistry(t, newProcessControlVMManager())
 	reg.SetWarmnessPolicyConfig(tierConfig())
 	addOwnership(reg, &VMOwnership{VMID: "vm-paper", UserID: "paper-owner", ComputerID: paperComputerID, DesktopID: PrimaryDesktopID, Kind: VMKindInteractive, State: VMStateStopped, StoppedBy: stoppedByWedged})
 	for _, target := range []string{"A", "B"} {
@@ -485,16 +485,26 @@ func TestDeployGrantRemembersEveryConsumedTargetNotOnlyTheLast(t *testing.T) {
 	if reg.GrantDeployRetry("vm-paper", "B") {
 		t.Fatal("B re-armed again")
 	}
-	// The memory is bounded, not unbounded: a long run of other targets is
-	// the only way an old one is forgotten.
-	for i := 0; i < 20; i++ {
+	// The memory is bounded, not unbounded: inside one window a grant past
+	// the cap is refused (an old target is never forgotten early), and past
+	// the window the old targets go.
+	for i := 0; i < 2*deployGrantsCap; i++ {
 		reg.GrantDeployRetry("vm-paper", fmt.Sprintf("later-%d", i))
 	}
-	reg.mu.RLock()
-	kept := len(reg.vmByID["vm-paper"].DeployGrantTargets)
-	reg.mu.RUnlock()
-	if kept == 0 || kept > deployGrantTargetsKept {
-		t.Fatalf("remembered %d targets, want 1..%d", kept, deployGrantTargetsKept)
+	kept := func() int {
+		reg.mu.RLock()
+		defer reg.mu.RUnlock()
+		return len(reg.vmByID["vm-paper"].DeployGrants)
+	}
+	if kept() != deployGrantsCap {
+		t.Fatalf("remembered %d targets, want the cap %d", kept(), deployGrantsCap)
+	}
+	if reg.GrantDeployRetry("vm-paper", "A") {
+		t.Fatal("A re-armed once the cap was reached")
+	}
+	*now = now.Add(failureWarmWindow)
+	if !reg.GrantDeployRetry("vm-paper", "after-the-window") || kept() != 1 {
+		t.Fatalf("after the window: remembered %d targets, want only the new one", kept())
 	}
 }
 
@@ -510,7 +520,7 @@ func TestStoreCompactionNeverGrantsOrRescues(t *testing.T) {
 	if resp.Outcome != deployRefreshSkipped || f.spawns() != 0 {
 		t.Fatalf("compaction of a failure-stopped paper: %+v spawns=%d, want skipped and none", resp, f.spawns())
 	}
-	if own := f.own(); len(own.DeployGrantTargets) != 0 || own.FailureWarmedAt != "" {
+	if own := f.own(); len(own.DeployGrants) != 0 || own.FailureWarmedAt != "" {
 		t.Fatalf("compaction granted or spent: %+v", own)
 	}
 
@@ -529,8 +539,8 @@ func TestStoreCompactionNeverGrantsOrRescues(t *testing.T) {
 	// A compaction of an active protected computer grants nothing either.
 	g := newRescueFixture(t, true)
 	g.h.deployRefreshWith(t.Context(), req, noop)
-	if own := g.own(); len(own.DeployGrantTargets) != 0 {
-		t.Fatalf("compaction of an active computer recorded targets: %v", own.DeployGrantTargets)
+	if own := g.own(); len(own.DeployGrants) != 0 {
+		t.Fatalf("compaction of an active computer recorded targets: %v", own.DeployGrants)
 	}
 }
 
@@ -667,6 +677,18 @@ func TestSpendRefusesUnlessTheRegistryEntryIsStoppedByAFailureNow(t *testing.T) 
 		defer reg.mu.RUnlock()
 		return reg.vmByID["vm-paper"].FailureWarmedAt
 	}
+	// A rescue charges only while it holds the computer's claim (round 3).
+	key := ownershipKey("paper-owner", PrimaryDesktopID)
+	rescueSpend := func() (failureWarmReceipt, bool) {
+		reg.mu.Lock()
+		reg.lifecycle[key] = lifecycleRescue
+		reg.mu.Unlock()
+		defer reg.releaseLifecycle(key, lifecycleRescue)
+		return reg.spendDeployRetry("vm-paper")
+	}
+	if _, ok := reg.spendDeployRetry("vm-paper"); ok {
+		t.Fatal("a rescue spend succeeded without the rescue claim")
+	}
 
 	// The caller read "stopped by wedged"; by the time it spends, the
 	// computer is running again.
@@ -674,26 +696,26 @@ func TestSpendRefusesUnlessTheRegistryEntryIsStoppedByAFailureNow(t *testing.T) 
 	if _, ok := reg.spendFailureWarm("vm-paper"); ok {
 		t.Fatal("the sweep's spend succeeded for an active computer")
 	}
-	if _, ok := reg.spendDeployRetry("vm-paper"); ok {
+	if _, ok := rescueSpend(); ok {
 		t.Fatal("the rescue's spend succeeded for an active computer")
 	}
 	// A stop label left behind on a computer that is not stopped does not
 	// qualify it.
-	for _, state := range []VMState{VMStateActive, VMStateBooting, VMStateHibernated, VMStateFailed} {
+	for _, state := range []VMState{VMStateActive, VMStateBooting, VMStateHibernated} {
 		set(state, stoppedByWedged)
 		if _, ok := reg.spendFailureWarm("vm-paper"); ok {
 			t.Fatalf("the sweep's spend succeeded for state %s with a wedged label", state)
 		}
-		if _, ok := reg.spendDeployRetry("vm-paper"); ok {
+		if _, ok := rescueSpend(); ok {
 			t.Fatalf("the rescue's spend succeeded for state %s with a wedged label", state)
 		}
 	}
 	set(VMStateStopped, "idle")
-	if _, ok := reg.spendDeployRetry("vm-paper"); ok {
+	if _, ok := rescueSpend(); ok {
 		t.Fatal("a rescue spend succeeded for an idle stop")
 	}
 	set(VMStateHibernated, "")
-	if _, ok := reg.spendDeployRetry("vm-paper"); ok {
+	if _, ok := rescueSpend(); ok {
 		t.Fatal("a rescue spend succeeded for a hibernated computer")
 	}
 	if warmedAt() != "" {
@@ -704,8 +726,20 @@ func TestSpendRefusesUnlessTheRegistryEntryIsStoppedByAFailureNow(t *testing.T) 
 	if _, ok := reg.spendFailureWarm("vm-paper"); ok {
 		t.Fatal("the sweep's spend succeeded for a vmctl-restart stop")
 	}
-	if _, ok := reg.spendDeployRetry("vm-paper"); !ok {
+	if _, ok := rescueSpend(); !ok {
 		t.Fatal("the rescue's spend refused a vmctl-restart stop")
+	}
+	// A failed computer is the sweep's to skip and the rescue's to charge
+	// (round 3, R3-P1c).
+	reg.mu.Lock()
+	reg.vmByID["vm-paper"].FailureWarmedAt = ""
+	reg.mu.Unlock()
+	set(VMStateFailed, "")
+	if _, ok := reg.spendFailureWarm("vm-paper"); ok {
+		t.Fatal("the sweep's spend succeeded for a failed computer")
+	}
+	if _, ok := rescueSpend(); !ok {
+		t.Fatal("the rescue's spend refused a failed computer")
 	}
 	// A refused spend leaves nothing for a stale refund to erase.
 	set(VMStateStopped, stoppedByWedged)
@@ -817,7 +851,7 @@ func TestRescueOnAStaleSnapshotOfAReattachedComputerTakesThePlannedRefresh(t *te
 	g := newRescueFixture(t, true)
 	g.failStop(stoppedByWedged)
 	g.reg.mu.Lock()
-	g.reg.refreshing[ownershipKey(rescueUser, PrimaryDesktopID)] = struct{}{}
+	g.reg.lifecycle[ownershipKey(rescueUser, PrimaryDesktopID)] = lifecycleRefresh
 	g.reg.mu.Unlock()
 	if _, resp := g.deploy(t, "A"); resp.Outcome != deployRefreshDeferred || g.spawns() != 0 {
 		t.Fatalf("rescue during an in-flight refresh: %+v spawns=%d, want deferred and none", resp, g.spawns())
@@ -853,5 +887,301 @@ func TestRescueOfATrackedStoppedInstanceBootsTheCurrentDeployWithAFreshToken(t *
 	g.mock.mu.Unlock()
 	if len(boots) != 1 || !strings.HasPrefix(boots[0].GatewayToken, "gw-token-") {
 		t.Fatalf("untracked boots = %+v, want one with a fresh gateway token", boots)
+	}
+}
+
+// Review round 3 (GPT-6.1-sol, 2026-10-21), written before the fix. The
+// common cause is that no single claim covers every start path
+// (docs/problems/vmctl-failed-protected-computer-waits-a-day-and-deploy-cannot-reach-it-2026-10-21.md,
+// "Review round 3"):
+//
+//   - R3-P1a: a visit's resolve boots a stopped computer and a rescue, which
+//     does not see it, boots over it; an ordinary deploy refresh does the same
+//     to a visit's readiness boot of an active computer;
+//   - R3-P1b: the warm sweep boots on a stale "not a failure" snapshot past
+//     an allowance a rescue spent, and spends while a rescue holds the
+//     computer, so the rescue answers "spent" and the deploy loses it;
+//   - R3-P1c: a protected computer its own failed deploy refresh left failed
+//     is never reached by the next (corrective) deploy;
+//   - R3-P2: a consumed target is forgotten inside the retry window once
+//     eight others were consumed after it.
+
+// liveHookManager runs hook on every process scan, which a rescue makes after
+// it claims the computer and before it charges the allowance.
+type liveHookManager struct {
+	*processControlVMManager
+	hook func()
+}
+
+func (m *liveHookManager) LiveFirecrackerVMs() map[string][]int {
+	if m.hook != nil {
+		m.hook()
+	}
+	return m.processControlVMManager.LiveFirecrackerVMs()
+}
+
+// blockFirstBoot holds the first BootVM until release is closed.
+func (f *rescueFixture) blockFirstBoot() (started, release chan struct{}) {
+	started, release = make(chan struct{}), make(chan struct{})
+	var first atomic.Bool
+	f.mock.bootHook = func(VMManagerConfig) {
+		if first.CompareAndSwap(false, true) {
+			close(started)
+			<-release
+		}
+	}
+	return started, release
+}
+
+func TestRescueDefersWhileAVisitBootsTheStoppedComputer(t *testing.T) {
+	f := newRescueFixture(t, true)
+	f.failStopUntracked(stoppedByWedged)
+	started, release := f.blockFirstBoot()
+	visitDone := make(chan error, 1)
+	go func() {
+		_, err := f.reg.ResolveOrAssignDesktopContext(context.Background(), rescueUser, PrimaryDesktopID)
+		visitDone <- err
+	}()
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		close(release)
+		t.Fatal("the visit never reached BootVM")
+	}
+	answered := make(chan deployRefreshResponse, 1)
+	go func() {
+		_, resp := f.deploy(t, "A")
+		answered <- resp
+	}()
+	var got deployRefreshResponse
+	select {
+	case got = <-answered:
+	case <-time.After(3 * time.Second):
+		close(release)
+		t.Fatal("the rescue blocked behind the visit's boot instead of deferring")
+	}
+	spawned := f.spawns()
+	close(release)
+	if err := <-visitDone; err != nil {
+		t.Fatalf("visit: %v", err)
+	}
+	if got.Outcome != deployRefreshDeferred || spawned != 1 {
+		t.Fatalf("rescue during a visit's boot: %+v spawns=%d, want deferred and only the visit's boot", got, spawned)
+	}
+	if own := f.own(); own.State != VMStateActive {
+		t.Fatalf("the visit's boot did not publish: %+v", own)
+	}
+}
+
+func TestDeployRefreshDefersWhileAVisitBootsAnActiveComputer(t *testing.T) {
+	f := newRescueFixture(t, true)
+	// The registry says active, the manager says stopped: a visit's readiness
+	// check starts it (startExistingVM recovers the tracked instance).
+	f.mock.mu.Lock()
+	f.mock.getVMs[f.own().VMID] = &VMInstanceInfo{HostURL: "http://127.0.0.1:9001", State: "stopped"}
+	f.mock.recoverStarted, f.mock.recoverRelease = make(chan struct{}), make(chan struct{})
+	started, release := f.mock.recoverStarted, f.mock.recoverRelease
+	f.mock.mu.Unlock()
+	visitDone := make(chan error, 1)
+	go func() {
+		_, err := f.reg.ResolveOrAssignDesktopContext(context.Background(), rescueUser, PrimaryDesktopID)
+		visitDone <- err
+	}()
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		close(release)
+		t.Fatal("the visit never reached RecoverVM")
+	}
+	answered := make(chan deployRefreshResponse, 1)
+	go func() {
+		_, resp := f.deploy(t, "A")
+		answered <- resp
+	}()
+	var got deployRefreshResponse
+	select {
+	case got = <-answered:
+	case <-time.After(3 * time.Second):
+		close(release)
+		t.Fatal("the deploy refresh blocked behind the visit's boot")
+	}
+	spawned := f.spawns()
+	close(release)
+	<-visitDone
+	if got.Outcome != deployRefreshDeferred || spawned != 1 {
+		t.Fatalf("deploy refresh during a visit's boot: %+v spawns=%d, want deferred and only the visit's boot", got, spawned)
+	}
+	if pending := f.h.pendingDeployRefreshes(); len(pending) != 1 {
+		t.Fatalf("pending = %+v, want the deferred refresh kept for the retry sweep", pending)
+	}
+}
+
+func TestSweepOnAStaleSnapshotCannotBootPastAnAllowanceARescueSpent(t *testing.T) {
+	f := newRescueFixture(t, true)
+	f.failStopUntracked(stoppedByVMCTLRestart)
+	inGuard, release := make(chan struct{}), make(chan struct{})
+	var first atomic.Bool
+	guard := func(context.Context, string, string) error {
+		if first.CompareAndSwap(false, true) {
+			close(inGuard)
+			<-release
+		}
+		return nil
+	}
+	sweepDone := make(chan struct{})
+	go func() {
+		defer close(sweepDone)
+		f.reg.WarmAlwaysOnDesktops(context.Background(), guard)
+	}()
+	select {
+	case <-inGuard:
+	case <-time.After(5 * time.Second):
+		close(release)
+		t.Fatal("the sweep never reached its route guard")
+	}
+	// The sweep listed a vmctl-restart stop (no charge). Meanwhile a deploy
+	// rescue spends the allowance, its boot fails hard, and the stop becomes a
+	// recovery failure.
+	f.failBoots(errors.New("kernel panic: guest init failed"))
+	if _, resp := f.deploy(t, "A"); resp.Outcome != deployRefreshFailed {
+		close(release)
+		t.Fatalf("rescue: %+v, want failed", resp)
+	}
+	if own := f.own(); own.StoppedBy != stoppedByRecoveryFailed || own.FailureWarmedAt == "" {
+		close(release)
+		t.Fatalf("after the hard failure: %+v, want recovery_failed with the allowance spent", own)
+	}
+	f.failBoots(nil)
+	close(release)
+	<-sweepDone
+	if n := f.spawns(); n != 1 {
+		t.Fatalf("spawns = %d, want 1: the sweep booted on its stale snapshot past the spent allowance", n)
+	}
+}
+
+func TestNoSpendWhileARescueHoldsTheComputer(t *testing.T) {
+	f := newRescueFixture(t, true)
+	f.failStopUntracked(stoppedByWedged)
+	vmID := f.own().VMID
+	inClaim, release := make(chan struct{}), make(chan struct{})
+	var first atomic.Bool
+	f.reg.SetVMManager(&liveHookManager{processControlVMManager: f.ctrl, hook: func() {
+		if first.CompareAndSwap(false, true) {
+			close(inClaim)
+			<-release
+		}
+	}})
+	answered := make(chan deployRefreshResponse, 1)
+	go func() {
+		_, resp := f.deploy(t, "A")
+		answered <- resp
+	}()
+	select {
+	case <-inClaim:
+	case <-time.After(5 * time.Second):
+		close(release)
+		t.Fatal("the rescue never scanned for a live process")
+	}
+	// The rescue holds the computer and has not charged yet: neither a spend
+	// nor the sweep may take its allowance or boot.
+	_, spent := f.reg.spendFailureWarm(vmID)
+	f.reg.WarmAlwaysOnDesktops(context.Background(), allowAllRoutes)
+	spawned := f.spawns()
+	close(release)
+	resp := <-answered
+	if spent {
+		t.Fatal("the sweep's spend succeeded while a rescue held the computer")
+	}
+	if spawned != 0 {
+		t.Fatalf("spawns = %d while the rescue held the computer, want 0", spawned)
+	}
+	if resp.Outcome != deployRefreshRefreshed || f.spawns() != 1 {
+		t.Fatalf("rescue: %+v spawns=%d, want refreshed with one boot", resp, f.spawns())
+	}
+}
+
+func TestDeployRescuesAProtectedComputerItsOwnFailedRefreshLeftFailed(t *testing.T) {
+	f := newRescueFixture(t, true)
+	f.failBoots(errors.New("guest did not become ready"))
+	if _, resp := f.deploy(t, "A"); resp.Outcome != deployRefreshFailed {
+		t.Fatalf("deploy A: %+v, want failed", resp)
+	}
+	if own := f.own(); own.State != VMStateFailed {
+		t.Fatalf("after the failed refresh: %+v, want failed", own)
+	}
+	f.failBoots(nil)
+	ownerships, err := f.h.listOwnershipResponses(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan := selectDeployRefresh(ownerships)
+	if len(plan.Candidates) != 1 || !plan.Candidates[0].Rescue {
+		t.Fatalf("selection of a failed protected computer: %+v, want one rescue candidate", plan)
+	}
+	// The corrective deploy boots it, once.
+	if _, resp := f.deploy(t, "B"); resp.Outcome != deployRefreshRefreshed || f.spawns() != 2 {
+		t.Fatalf("corrective deploy B: %+v spawns=%d, want refreshed (A's refresh and B's rescue)", resp, f.spawns())
+	}
+	if own := f.own(); own.State != VMStateActive {
+		t.Fatalf("after the rescue: %+v", own)
+	}
+	// Failed again under B: B, A, the sweep and the warmer do not boot it.
+	f.reg.mu.Lock()
+	f.reg.ownerships[ownershipKey(rescueUser, PrimaryDesktopID)].State = VMStateFailed
+	f.reg.mu.Unlock()
+	for i := 0; i < 3; i++ {
+		f.deploy(t, "B")
+		f.deploy(t, "A")
+		f.h.SweepDeployRefreshPending(t.Context())
+		f.reg.WarmAlwaysOnDesktops(t.Context(), allowAllRoutes)
+	}
+	if n := f.spawns(); n != 2 {
+		t.Fatalf("spawns = %d, want 2: a consumed target booted the failed computer again", n)
+	}
+}
+
+func TestDeployNeverBootsOverALiveTrackedGuestOfAFailedComputer(t *testing.T) {
+	f := newRescueFixture(t, true)
+	f.reg.mu.Lock()
+	f.reg.ownerships[ownershipKey(rescueUser, PrimaryDesktopID)].State = VMStateFailed
+	f.reg.mu.Unlock()
+	f.mock.mu.Lock()
+	f.mock.getVMs[f.own().VMID] = &VMInstanceInfo{HostURL: "http://127.0.0.1:9001", State: "running"}
+	f.mock.mu.Unlock()
+	if _, resp := f.deploy(t, "A"); resp.Outcome != deployRefreshDeferred || f.spawns() != 0 {
+		t.Fatalf("rescue of a failed computer whose guest still runs: %+v spawns=%d, want deferred and none", resp, f.spawns())
+	}
+	if own := f.own(); own.FailureWarmedAt != "" {
+		t.Fatalf("a deferral spent the allowance: %q", own.FailureWarmedAt)
+	}
+	// A held failed computer is skipped.
+	g := newRescueFixture(t, true)
+	g.reg.mu.Lock()
+	cur := g.reg.ownerships[ownershipKey(rescueUser, PrimaryDesktopID)]
+	cur.State, cur.HoldStatus = VMStateFailed, &MaintenanceHold{}
+	g.reg.mu.Unlock()
+	if _, resp := g.deploy(t, "A"); resp.Outcome != deployRefreshSkipped || g.spawns() != 0 {
+		t.Fatalf("held failed computer: %+v spawns=%d, want skipped and none", resp, g.spawns())
+	}
+}
+
+func TestConsumedTargetIsRememberedForTheWholeRetryWindow(t *testing.T) {
+	reg, now := hostCapacityRegistry(t, newProcessControlVMManager())
+	reg.SetWarmnessPolicyConfig(tierConfig())
+	addOwnership(reg, &VMOwnership{VMID: "vm-paper", UserID: "paper-owner", ComputerID: paperComputerID, DesktopID: PrimaryDesktopID, Kind: VMKindInteractive, State: VMStateStopped, StoppedBy: stoppedByWedged})
+	for _, target := range []string{"A", "B", "C", "D", "E", "F", "G", "H", "I"} {
+		if !reg.GrantDeployRetry("vm-paper", target) {
+			t.Fatalf("target %s did not grant", target)
+		}
+		if !reg.recordFailureWarm("vm-paper") {
+			t.Fatalf("target %s: the granted retry could not be spent", target)
+		}
+		reg.mu.Lock()
+		reg.vmByID["vm-paper"].State, reg.vmByID["vm-paper"].StoppedBy = VMStateStopped, stoppedByWedged
+		reg.mu.Unlock()
+		*now = now.Add(time.Hour)
+	}
+	if reg.GrantDeployRetry("vm-paper", "A") {
+		t.Fatal("A re-armed inside the retry window after eight other targets were consumed")
 	}
 }

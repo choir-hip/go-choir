@@ -136,12 +136,12 @@ type VMOwnership struct {
 	// retry on this computer after a wedged or recovery_failed stop. Interim
 	// bound until the boot ledger (restart station L1b).
 	FailureWarmedAt string `json:"failure_warmed_at,omitempty"`
-	// DeployGrantTargets are the deploy targets that already re-armed this
-	// computer's automatic failure retry (GrantDeployRetry), oldest first and
-	// bounded to the last deployGrantTargetsKept. A deploy of a different
-	// build is an external event with a fresh allowance of one retry; a target
-	// in the set never grants again, so A, B, A re-arms A once.
-	DeployGrantTargets []string `json:"deploy_grant_targets,omitempty"`
+	// DeployGrants are the deploy targets that already re-armed this
+	// computer's automatic failure retry (GrantDeployRetry), oldest first,
+	// each kept for at least failureWarmWindow. A deploy of a different build
+	// is an external event with a fresh allowance of one retry; a target in
+	// the set never grants again, so A, B, ..., A re-arms A once per window.
+	DeployGrants []deployGrant `json:"deploy_grants,omitempty"`
 	// failureWarmGen counts the changes to FailureWarmedAt (spend, grant) in
 	// this process, so a refund only restores the spend it belongs to.
 	failureWarmGen uint64
@@ -548,15 +548,15 @@ type OwnershipRegistry struct {
 	// mechanism to prevent duplicate canonical effects (VAL-CROSS-117).
 	epochCounter int64
 
-	// refreshing serializes deploy-time reboot/config preparation per stable
-	// ownership without holding the registry lock across Firecracker startup.
-	refreshing map[string]struct{}
-
-	// starting counts the resumes and recoveries in flight per stable
-	// ownership. Both run outside r.mu (a boot can block for minutes) while
-	// the registry still says stopped; a deploy rescue defers while the count
-	// is positive instead of recovering the first boot out from under it.
-	starting map[string]int
+	// lifecycle is the one lifecycle claim per stable ownership: every path
+	// that boots an existing computer (a visit's resolve, resume, recover,
+	// the always-on sweep, a deploy refresh or rescue) and hibernate take it
+	// under r.mu before they unlock for the manager, and hold it until the
+	// resulting state is published. A second path finds it held and refuses
+	// (errLifecycleBusy) or, for a visit, waits on pendingWaiters
+	// (docs/problems/vmctl-failed-protected-computer-waits-a-day-and-deploy-cannot-reach-it-2026-10-21.md,
+	// "Review round 3").
+	lifecycle map[string]lifecycleHolder
 
 	// vmManager is the optional Firecracker VM lifecycle manager.
 	// When nil, the registry operates in host-process autoputer mode where
@@ -601,8 +601,7 @@ func NewOwnershipRegistry(autoputerURLBase string) *OwnershipRegistry {
 		pendingWaiters:             make(map[string][]chan *VMOwnership),
 		gatewayCredentialNextCheck: make(map[string]time.Time),
 		gatewayCredentialPeer:      make(map[string]string),
-		refreshing:                 make(map[string]struct{}),
-		starting:                   make(map[string]int),
+		lifecycle:                  make(map[string]lifecycleHolder),
 		autoputerURLBase:           autoputerURLBase,
 		idleTimeout:                0, // no idle timeout by default
 		pressureReclaim:            DefaultPressureReclaimConfig(),
@@ -1168,30 +1167,56 @@ func ownershipKey(userID, desktopID string) string {
 	return strings.TrimSpace(userID) + "|" + normalizeDesktopID(desktopID)
 }
 
-// errRefreshInProgress marks a refusal made because a refresh (or a deploy
-// rescue boot) owns the computer; it spawned nothing and clears by itself.
-var errRefreshInProgress = errors.New("refresh is already in progress")
+// lifecycleHolder names the path that holds a computer's lifecycle claim.
+type lifecycleHolder string
 
-func (r *OwnershipRegistry) rejectRefreshConflictLocked(key string) error {
-	if _, inProgress := r.refreshing[key]; !inProgress {
+const (
+	// lifecycleVisit: a visit's resolve starts the computer or checks an
+	// active one's readiness; other resolves wait on pendingWaiters.
+	lifecycleVisit     lifecycleHolder = "visit start"
+	lifecycleResume    lifecycleHolder = "resume"
+	lifecycleRecover   lifecycleHolder = "recovery"
+	lifecycleRefresh   lifecycleHolder = "refresh"
+	lifecycleHibernate lifecycleHolder = "hibernate"
+	lifecycleRescue    lifecycleHolder = "deploy rescue"
+)
+
+// errLifecycleBusy marks a refusal made because another path holds the
+// computer's lifecycle claim; it spawned nothing and clears by itself.
+var errLifecycleBusy = errors.New("is already in progress")
+
+// lifecycleConflictLocked refuses when any path holds key's claim.
+func (r *OwnershipRegistry) lifecycleConflictLocked(key string) error {
+	holder, held := r.lifecycle[key]
+	if !held {
 		return nil
 	}
 	vmID := "unknown"
 	if own := r.ownerships[key]; own != nil && own.VMID != "" {
 		vmID = own.VMID
 	}
-	return fmt.Errorf("VM %s %w", vmID, errRefreshInProgress)
+	return fmt.Errorf("VM %s %s %w", vmID, holder, errLifecycleBusy)
 }
 
-// endStart releases one claim taken with r.starting[key]++ under r.mu.
-func (r *OwnershipRegistry) endStart(key string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if n := r.starting[key]; n > 1 {
-		r.starting[key] = n - 1
-	} else {
-		delete(r.starting, key)
+// releaseLifecycleLocked ends holder's claim; another holder's stands.
+func (r *OwnershipRegistry) releaseLifecycleLocked(key string, holder lifecycleHolder) {
+	if r.lifecycle[key] == holder {
+		delete(r.lifecycle, key)
 	}
+}
+
+func (r *OwnershipRegistry) releaseLifecycle(key string, holder lifecycleHolder) {
+	r.mu.Lock()
+	r.releaseLifecycleLocked(key, holder)
+	r.mu.Unlock()
+}
+
+// lifecycleRebootingLocked reports a claim under which the realization is
+// being replaced or suspended; lookups report the computer as booting. A
+// visit's readiness check of an active computer is not one.
+func (r *OwnershipRegistry) lifecycleRebootingLocked(key string) bool {
+	holder, held := r.lifecycle[key]
+	return held && holder != lifecycleVisit
 }
 
 func machineShapeForOwnership(own *VMOwnership) (int, int) {
@@ -1946,7 +1971,10 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 			r.mu.Unlock()
 			return nil, fmt.Errorf("realized VM ownership changed for routed computer %s/%s", userID, desktopID)
 		}
-		if err := r.rejectRefreshConflictLocked(key); err != nil {
+		// Another visit's claim is joined through pendingWaiters below; any
+		// other path's claim refuses.
+		if holder := r.lifecycle[key]; holder != "" && holder != lifecycleVisit {
+			err := r.lifecycleConflictLocked(key)
 			r.mu.Unlock()
 			return nil, err
 		}
@@ -1958,6 +1986,7 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 					return r.waitForPendingAssignmentLocked(ctx, key, userID, desktopID, waiters)
 				}
 				r.pendingWaiters[key] = nil
+				r.lifecycle[key] = lifecycleVisit
 				r.mu.Unlock()
 				info, err := r.ensureActiveVMReady(&snapshot, mgr)
 				if err != nil {
@@ -1965,6 +1994,7 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 					r.mu.Lock()
 					waiters := r.pendingWaiters[key]
 					delete(r.pendingWaiters, key)
+					r.releaseLifecycleLocked(key, lifecycleVisit)
 					r.mu.Unlock()
 					for _, ch := range waiters {
 						ch <- nil
@@ -1975,6 +2005,7 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 				r.mu.Lock()
 				waiters := r.pendingWaiters[key]
 				delete(r.pendingWaiters, key)
+				r.releaseLifecycleLocked(key, lifecycleVisit)
 				current := r.ownerships[key]
 				if current == nil || current.VMID != snapshot.VMID || !current.IsReady() {
 					r.mu.Unlock()
@@ -2045,6 +2076,7 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 			}
 			recovering := pending.State == VMStateDegraded || pending.State == VMStateFailed || pending.State == VMStateBooting
 			r.pendingWaiters[key] = nil
+			r.lifecycle[key] = lifecycleVisit
 			r.mu.Unlock()
 
 			var info *VMInstanceInfo
@@ -2056,6 +2088,7 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 					r.mu.Lock()
 					waiters := r.pendingWaiters[key]
 					delete(r.pendingWaiters, key)
+					r.releaseLifecycleLocked(key, lifecycleVisit)
 					r.mu.Unlock()
 					for _, ch := range waiters {
 						ch <- nil
@@ -2069,6 +2102,7 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 			if current == nil || current.VMID != pending.VMID {
 				waiters := r.pendingWaiters[key]
 				delete(r.pendingWaiters, key)
+				r.releaseLifecycleLocked(key, lifecycleVisit)
 				r.mu.Unlock()
 				for _, ch := range waiters {
 					ch <- nil
@@ -2087,6 +2121,7 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 			r.saveLocked()
 			waiters := r.pendingWaiters[key]
 			delete(r.pendingWaiters, key)
+			r.releaseLifecycleLocked(key, lifecycleVisit)
 			result := cloneOwnership(current)
 			r.mu.Unlock()
 			r.ensureExistingGatewayCredential(result.VMID)
@@ -2457,7 +2492,7 @@ func (r *OwnershipRegistry) reconcileLookupReadiness(own *VMOwnership) *VMOwners
 	key := ownershipKey(own.UserID, own.DesktopID)
 	r.mu.RLock()
 	mgr := r.vmManager
-	_, refreshing := r.refreshing[key]
+	refreshing := r.lifecycleRebootingLocked(key)
 	r.mu.RUnlock()
 	if mgr == nil {
 		return own
@@ -2492,7 +2527,7 @@ func (r *OwnershipRegistry) reconcileLookupReadiness(own *VMOwnership) *VMOwners
 		r.mu.Unlock()
 		return result
 	}
-	if _, refreshing = r.refreshing[key]; refreshing {
+	if refreshing = r.lifecycleRebootingLocked(key); refreshing {
 		result := cloneOwnership(current)
 		result.State = VMStateBooting
 		r.mu.Unlock()
@@ -2521,7 +2556,7 @@ func (r *OwnershipRegistry) reconcileDegradedOwnership(own *VMOwnership) *VMOwne
 	key := ownershipKey(own.UserID, own.DesktopID)
 	r.mu.RLock()
 	mgr := r.vmManager
-	_, refreshing := r.refreshing[key]
+	refreshing := r.lifecycleRebootingLocked(key)
 	r.mu.RUnlock()
 	if mgr == nil {
 		return own
@@ -2551,7 +2586,7 @@ func (r *OwnershipRegistry) reconcileDegradedOwnership(own *VMOwnership) *VMOwne
 		r.mu.Unlock()
 		return result
 	}
-	if _, refreshing = r.refreshing[key]; refreshing {
+	if refreshing = r.lifecycleRebootingLocked(key); refreshing {
 		result := cloneOwnership(current)
 		result.State = VMStateBooting
 		r.mu.Unlock()
@@ -2668,7 +2703,7 @@ func (r *OwnershipRegistry) StopVMForDesktop(userID, desktopID string) error {
 	if !ok {
 		return fmt.Errorf("no VM found for user %s desktop %s", userID, normalizeDesktopID(desktopID))
 	}
-	if err := r.rejectRefreshConflictLocked(key); err != nil {
+	if err := r.lifecycleConflictLocked(key); err != nil {
 		return err
 	}
 
@@ -2728,7 +2763,7 @@ func (r *OwnershipRegistry) RemoveOwnershipForDesktop(userID, desktopID string) 
 	if !ok {
 		return nil // already gone, idempotent
 	}
-	if err := r.rejectRefreshConflictLocked(key); err != nil {
+	if err := r.lifecycleConflictLocked(key); err != nil {
 		return err
 	}
 
@@ -2762,7 +2797,7 @@ func (r *OwnershipRegistry) MarkUnhealthyForDesktop(userID, desktopID string) er
 	if !ok {
 		return fmt.Errorf("no VM found for user %s desktop %s", userID, normalizeDesktopID(desktopID))
 	}
-	if err := r.rejectRefreshConflictLocked(key); err != nil {
+	if err := r.lifecycleConflictLocked(key); err != nil {
 		return err
 	}
 
@@ -2795,7 +2830,7 @@ func (r *OwnershipRegistry) hibernateVMForDesktopWithReason(userID, desktopID, r
 		r.mu.Unlock()
 		return fmt.Errorf("no VM found for user %s desktop %s", userID, normalizeDesktopID(desktopID))
 	}
-	if err := r.rejectRefreshConflictLocked(key); err != nil {
+	if err := r.lifecycleConflictLocked(key); err != nil {
 		r.mu.Unlock()
 		return err
 	}
@@ -2812,7 +2847,7 @@ func (r *OwnershipRegistry) hibernateVMForDesktopWithReason(userID, desktopID, r
 	// computer's read as booting meanwhile.
 	if mgr := r.vmManager; mgr != nil {
 		vmID, epoch := own.VMID, own.Epoch
-		r.refreshing[key] = struct{}{}
+		r.lifecycle[key] = lifecycleHibernate
 		r.noteHibernateStartLocked()
 		r.mu.Unlock()
 		if err := mgr.HibernateVM(vmID); err != nil {
@@ -2820,7 +2855,7 @@ func (r *OwnershipRegistry) hibernateVMForDesktopWithReason(userID, desktopID, r
 		}
 		r.mu.Lock()
 		r.noteHibernateEndLocked()
-		delete(r.refreshing, key)
+		r.releaseLifecycleLocked(key, lifecycleHibernate)
 		own, ok = r.ownerships[key]
 		if !ok || own.VMID != vmID || own.Epoch != epoch {
 			r.mu.Unlock()
@@ -2880,6 +2915,21 @@ func (r *OwnershipRegistry) ResumeVM(userID string) (*VMOwnership, error) {
 }
 
 func (r *OwnershipRegistry) ResumeVMForDesktop(userID, desktopID string) (*VMOwnership, error) {
+	own, _, err := r.resumeVMForDesktop(userID, desktopID, false)
+	return own, err
+}
+
+// errNotAlwaysOnStart refuses an always-on sweep start whose computer is no
+// longer one the tiers keep on, or whose automatic retry is spent; the
+// registry was re-read under the lock, so the sweep's list was stale.
+var errNotAlwaysOnStart = errors.New("not an always-on start now")
+
+// resumeVMForDesktop starts a stopped or hibernated computer under its
+// lifecycle claim. With alwaysOn (the always-on sweep) the eligibility is
+// re-read, a failure stop is charged against the automatic retry, and the
+// claim is taken in one locked step, so a stale sweep list can never
+// authorize an uncharged boot; spent reports the charge.
+func (r *OwnershipRegistry) resumeVMForDesktop(userID, desktopID string, alwaysOn bool) (*VMOwnership, bool, error) {
 	var ensureVMID string
 	defer func() {
 		if ensureVMID != "" {
@@ -2892,11 +2942,11 @@ func (r *OwnershipRegistry) ResumeVMForDesktop(userID, desktopID string) (*VMOwn
 	own, ok := r.ownerships[key]
 	if !ok {
 		r.mu.Unlock()
-		return nil, fmt.Errorf("no VM found for user %s desktop %s", userID, normalizeDesktopID(desktopID))
+		return nil, false, fmt.Errorf("no VM found for user %s desktop %s", userID, normalizeDesktopID(desktopID))
 	}
-	if err := r.rejectRefreshConflictLocked(key); err != nil {
+	if err := r.lifecycleConflictLocked(key); err != nil {
 		r.mu.Unlock()
-		return nil, err
+		return nil, false, err
 	}
 
 	if own.State != VMStateStopped && own.State != VMStateHibernated {
@@ -2906,10 +2956,26 @@ func (r *OwnershipRegistry) ResumeVMForDesktop(userID, desktopID string) (*VMOwn
 				ensureVMID = own.VMID
 			}
 			r.mu.Unlock()
-			return own, nil
+			return own, false, nil
 		}
 		r.mu.Unlock()
-		return nil, fmt.Errorf("VM %s cannot be resumed (state=%s)", own.VMID, own.State)
+		return nil, false, fmt.Errorf("VM %s cannot be resumed (state=%s)", own.VMID, own.State)
+	}
+	var receipt failureWarmReceipt
+	spent := false
+	if alwaysOn {
+		if !alwaysOnWarmEligibleLocked(own, normalizeWarmnessPolicyConfig(r.warmnessPolicy)) {
+			r.mu.Unlock()
+			return nil, false, fmt.Errorf("VM %s (stopped by %q) %w", own.VMID, own.StoppedBy, errNotAlwaysOnStart)
+		}
+		if stoppedByFailure(own.StoppedBy) {
+			rec, ok := r.spendRetryLocked(own, false)
+			if !ok {
+				r.mu.Unlock()
+				return nil, false, fmt.Errorf("VM %s automatic retry is spent: %w", own.VMID, errNotAlwaysOnStart)
+			}
+			receipt, spent = rec, true
+		}
 	}
 
 	// Delegate to the real VM manager if available.
@@ -2917,20 +2983,27 @@ func (r *OwnershipRegistry) ResumeVMForDesktop(userID, desktopID string) (*VMOwn
 	vmID := own.VMID
 	if mgr != nil {
 		snapshot := *own
-		// The start runs outside r.mu for as long as the manager takes; mark
-		// it so a deploy rescue defers instead of recovering this first boot.
-		r.starting[key]++
+		// The start runs outside r.mu for as long as the manager takes; the
+		// claim, taken in the same step as the charge, keeps every other
+		// start out until the result is published.
+		r.lifecycle[key] = lifecycleResume
 		r.mu.Unlock()
 		info, err := r.startExistingVM(&snapshot, mgr)
-		r.endStart(key)
-		if err != nil {
-			return nil, fmt.Errorf("failed to resume VM %s: %w", vmID, err)
-		}
 		r.mu.Lock()
+		if err != nil {
+			if spent && transientStartRefusal(err) {
+				r.refundFailureWarmLocked(vmID, receipt)
+				spent = false
+			}
+			r.releaseLifecycleLocked(key, lifecycleResume)
+			r.mu.Unlock()
+			return nil, spent, fmt.Errorf("failed to resume VM %s: %w", vmID, err)
+		}
+		r.releaseLifecycleLocked(key, lifecycleResume)
 		own = r.ownerships[key]
 		if own == nil || own.VMID != vmID {
 			r.mu.Unlock()
-			return nil, fmt.Errorf("VM %s ownership changed during resume", vmID)
+			return nil, spent, fmt.Errorf("VM %s ownership changed during resume", vmID)
 		}
 		if info != nil {
 			own.ComputerURL = info.HostURL
@@ -2946,7 +3019,7 @@ func (r *OwnershipRegistry) ResumeVMForDesktop(userID, desktopID string) (*VMOwn
 	log.Printf("vmctl: started VM %s for user %s desktop %s (epoch=%d)", own.VMID, userID, own.DesktopID, own.Epoch)
 	ensureVMID = own.VMID
 	r.mu.Unlock()
-	return own, nil
+	return own, spent, nil
 }
 
 // RecoverVM recovers an unhealthy or failed VM for the given user.
@@ -2991,7 +3064,7 @@ func (r *OwnershipRegistry) recoverVMForDesktop(userID, desktopID string, mainte
 		return nil, fmt.Errorf("no VM found for user %s desktop %s", userID, normalizeDesktopID(desktopID))
 	}
 	held := own.IsHeld()
-	if err := r.rejectRefreshConflictLocked(key); err != nil {
+	if err := r.lifecycleConflictLocked(key); err != nil {
 		r.mu.Unlock()
 		return nil, err
 	}
@@ -3013,10 +3086,10 @@ func (r *OwnershipRegistry) recoverVMForDesktop(userID, desktopID string, mainte
 		snapshot = *own
 		wasStopped = own.State == VMStateStopped && mgr.GetVM(own.VMID) == nil
 		vmid = own.VMID
-		// Marked as a start in flight until this function returns (the boot
+		// Claimed until this function returns, after the publish (the boot
 		// below runs outside r.mu); every exit after this point has unlocked.
-		r.starting[key]++
-		defer r.endStart(key)
+		r.lifecycle[key] = lifecycleRecover
+		defer r.releaseLifecycle(key, lifecycleRecover)
 	}
 	r.mu.Unlock()
 
@@ -3117,9 +3190,9 @@ func (r *OwnershipRegistry) refreshVMForDesktop(userID, desktopID string, mainte
 		r.mu.Unlock()
 		return nil, fmt.Errorf("VM %s is not refreshable (state=%s)", own.VMID, own.State)
 	}
-	if _, inProgress := r.refreshing[key]; inProgress {
+	if err := r.lifecycleConflictLocked(key); err != nil {
 		r.mu.Unlock()
-		return nil, fmt.Errorf("VM %s refresh is already in progress", own.VMID)
+		return nil, err
 	}
 
 	mgr := r.vmManager
@@ -3130,13 +3203,10 @@ func (r *OwnershipRegistry) refreshVMForDesktop(userID, desktopID string, mainte
 		r.mu.Unlock()
 		return nil, fmt.Errorf("VM %s refresh with maintenance needs a running VM (state=%s)", own.VMID, own.State)
 	}
-	r.refreshing[key] = struct{}{}
+	// Released after the publish below.
+	r.lifecycle[key] = lifecycleRefresh
 	r.mu.Unlock()
-	defer func() {
-		r.mu.Lock()
-		delete(r.refreshing, key)
-		r.mu.Unlock()
-	}()
+	defer r.releaseLifecycle(key, lifecycleRefresh)
 
 	var info *VMInstanceInfo
 	if mgr != nil {
@@ -3219,7 +3289,7 @@ func (r *OwnershipRegistry) LogoutVMForDesktop(userID, desktopID string) error {
 	if !ok {
 		return nil // no VM for this user, idempotent
 	}
-	if err := r.rejectRefreshConflictLocked(key); err != nil {
+	if err := r.lifecycleConflictLocked(key); err != nil {
 		return err
 	}
 
@@ -3409,10 +3479,9 @@ func (r *OwnershipRegistry) StopIdleVMs(ctx context.Context, guard ComputerVersi
 }
 
 type alwaysOnWarmTarget struct {
-	userID       string
-	desktopID    string
-	vmID         string
-	afterFailure bool
+	userID    string
+	desktopID string
+	vmID      string
 }
 
 // failureWarmWindow bounds automatic warms of a computer that stopped by
@@ -3437,8 +3506,23 @@ func failureWarmAllowed(lastWarmedAt string, now time.Time) bool {
 	return !now.Before(last.Add(failureWarmWindow))
 }
 
-// deployGrantTargetsKept bounds the memory of consumed deploy targets.
-const deployGrantTargetsKept = 8
+// deployGrantsCap bounds the consumed deploy targets remembered inside one
+// retry window. A grant past it is refused rather than forgetting a target
+// the window still needs (fail closed: the time backstop still applies).
+const deployGrantsCap = 64
+
+// deployGrant is one consumed deploy target and when it re-armed the retry.
+type deployGrant struct {
+	Target    string `json:"target"`
+	GrantedAt string `json:"granted_at"`
+}
+
+// expired reports a grant older than the retry window; an unreadable time
+// never expires (fail closed: the target stays consumed).
+func (g deployGrant) expired(now time.Time) bool {
+	at, err := time.Parse(time.RFC3339Nano, g.GrantedAt)
+	return err == nil && !now.Before(at.Add(failureWarmWindow))
+}
 
 // recordFailureWarm durably spends the automatic retry before the boot, so
 // a crash between the record and the boot loses the retry rather than
@@ -3456,33 +3540,47 @@ type failureWarmReceipt struct {
 	gen      uint64
 }
 
-// spendFailureWarm is the always-on sweep's spend: only a computer that is
-// stopped by a failure now is charged; any other state or stop reason refuses.
+// spendFailureWarm is a standalone spend of the always-on retry: only a
+// computer that is stopped by a failure now, and that no path holds, is
+// charged. The sweep itself charges inside resumeVMForDesktop's claim step.
 func (r *OwnershipRegistry) spendFailureWarm(vmID string) (failureWarmReceipt, bool) {
-	return r.spendRetry(vmID, false)
-}
-
-// spendDeployRetry is a deploy rescue's spend: every rescue that spawns a
-// process is charged against the target's allowance whether the computer was
-// stopped by a failure or by a vmctl restart. Any other state refuses.
-func (r *OwnershipRegistry) spendDeployRetry(vmID string) (failureWarmReceipt, bool) {
-	return r.spendRetry(vmID, true)
-}
-
-func (r *OwnershipRegistry) spendRetry(vmID string, anyStop bool) (failureWarmReceipt, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	own, found := r.vmByID[vmID]
 	if !found || own == nil {
 		return failureWarmReceipt{}, false
 	}
-	// Judge the registry's entry now, under the lock, never the caller's
-	// snapshot: a computer that is running again, or stopped for another
-	// reason, is not charged and nothing is written for a refund to undo.
-	if own.State != VMStateStopped {
+	if _, held := r.lifecycle[ownershipKey(own.UserID, own.DesktopID)]; held {
 		return failureWarmReceipt{}, false
 	}
-	if !stoppedByFailure(own.StoppedBy) && !(anyStop && own.StoppedBy == stoppedByVMCTLRestart) {
+	return r.spendRetryLocked(own, false)
+}
+
+// spendDeployRetry is a deploy rescue's spend: every rescue that spawns a
+// process is charged against the target's allowance whether the computer was
+// stopped by a failure or a vmctl restart, or left failed. It charges only
+// while the caller holds the rescue claim, so no other path's spend or start
+// can fall between the rescue's eligibility and its charge.
+func (r *OwnershipRegistry) spendDeployRetry(vmID string) (failureWarmReceipt, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	own, found := r.vmByID[vmID]
+	if !found || own == nil || r.lifecycle[ownershipKey(own.UserID, own.DesktopID)] != lifecycleRescue {
+		return failureWarmReceipt{}, false
+	}
+	return r.spendRetryLocked(own, true)
+}
+
+// spendRetryLocked judges the registry's entry now, under the lock, never a
+// caller's snapshot: a computer that is running again, or stopped for another
+// reason, is not charged and nothing is written for a refund to undo. anyStop
+// is the rescue's reach (a vmctl-restart stop, or a failed computer).
+func (r *OwnershipRegistry) spendRetryLocked(own *VMOwnership, anyStop bool) (failureWarmReceipt, bool) {
+	switch {
+	case own.State == VMStateFailed && anyStop:
+	case own.State != VMStateStopped:
+		return failureWarmReceipt{}, false
+	case !stoppedByFailure(own.StoppedBy) && !(anyStop && own.StoppedBy == stoppedByVMCTLRestart):
 		return failureWarmReceipt{}, false
 	}
 	now := r.now()
@@ -3504,6 +3602,10 @@ func (r *OwnershipRegistry) spendRetry(vmID string, anyStop bool) (failureWarmRe
 func (r *OwnershipRegistry) refundFailureWarm(vmID string, rec failureWarmReceipt) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.refundFailureWarmLocked(vmID, rec)
+}
+
+func (r *OwnershipRegistry) refundFailureWarmLocked(vmID string, rec failureWarmReceipt) {
 	own, ok := r.vmByID[vmID]
 	if !ok || own == nil || rec.gen == 0 || own.failureWarmGen != rec.gen {
 		return
@@ -3517,8 +3619,8 @@ func (r *OwnershipRegistry) refundFailureWarm(vmID string, rec failureWarmReceip
 type rescueClaim int
 
 const (
-	// rescueClaimed: the computer is stopped by a failure or a vmctl restart
-	// and the caller now owns its boot (releaseRescue ends it).
+	// rescueClaimed: the computer is stopped by a failure or a vmctl restart,
+	// or failed, and the caller holds its lifecycle claim (releaseRescue).
 	rescueClaimed rescueClaim = iota + 1
 	// rescueAlreadyActive: the computer is running again (a reattach landed
 	// after the caller's snapshot); the ordinary planned refresh applies.
@@ -3531,10 +3633,11 @@ const (
 )
 
 // claimRescue re-reads the computer under the lock and, if it is still a
-// rescue, takes the per-computer refresh claim before any boot starts, so the
-// always-on sweep's resume, a visit's recovery and a deploy refresh all see
-// "in progress" and none of them boots over the rescue (or the rescue over
-// them). The returned snapshot is the registry's, not the caller's.
+// rescue, takes its lifecycle claim before any boot starts, so every other
+// start path sees "in progress" and none of them boots over the rescue (or
+// the rescue over them); the charge follows under the claim
+// (spendDeployRetry). The returned snapshot is the registry's, not the
+// caller's.
 func (r *OwnershipRegistry) claimRescue(userID, desktopID string) (VMOwnership, VMManager, rescueClaim) {
 	key := ownershipKey(userID, desktopID)
 	r.mu.Lock()
@@ -3549,20 +3652,18 @@ func (r *OwnershipRegistry) claimRescue(userID, desktopID string) (VMOwnership, 
 	case VMStateBooting:
 		return *own, nil, rescueBusy
 	}
-	if _, inFlight := r.refreshing[key]; inFlight || r.starting[key] > 0 {
+	if r.lifecycleConflictLocked(key) != nil {
 		return *own, nil, rescueBusy
 	}
 	if !deployRescueStopped(own.State, own.StoppedBy, warmnessClassForOwnership(own, r.warmnessPolicy), own.DesktopID) {
 		return *own, nil, rescueNotNeeded
 	}
-	r.refreshing[key] = struct{}{}
+	r.lifecycle[key] = lifecycleRescue
 	return *own, r.vmManager, rescueClaimed
 }
 
 func (r *OwnershipRegistry) releaseRescue(userID, desktopID string) {
-	r.mu.Lock()
-	delete(r.refreshing, ownershipKey(userID, desktopID))
-	r.mu.Unlock()
+	r.releaseLifecycle(ownershipKey(userID, desktopID), lifecycleRescue)
 }
 
 // rescueBoot boots a claimed, stopped computer onto the current deploy. It is
@@ -3653,7 +3754,7 @@ func (r *OwnershipRegistry) markRecoveryFailed(vmID string) {
 // transientStartRefusal reports whether err is an admission refusal that
 // spawned nothing and clears by itself.
 func transientStartRefusal(err error) bool {
-	if errors.Is(err, errRefreshInProgress) {
+	if errors.Is(err, errLifecycleBusy) {
 		return true
 	}
 	refusal := RecoveryRefusalFrom(err)
@@ -3672,10 +3773,12 @@ func transientStartRefusal(err error) bool {
 // for is an external event (docs/restart-subsystem-design-2026-10-13.md
 // section 1), so it opens a new episode with a fresh allowance of one
 // automatic retry. It clears FailureWarmedAt once per distinct target and
-// remembers the last deployGrantTargetsKept targets, so the same target
-// posted again (a CI re-run, the retry sweep, a duplicate request) and A, B,
-// A never re-arm. The bound is one automatic boot per (computer, deploy
-// target) after a failure stop, plus the failureWarmWindow backstop. It
+// remembers every target it consumed for at least failureWarmWindow, so the
+// same target posted again (a CI re-run, the retry sweep, a duplicate
+// request) and A, B, ..., A never re-arm inside the window; past
+// deployGrantsCap targets in one window it refuses instead of forgetting
+// one. The bound is one automatic boot per (computer, deploy target) after a
+// failure stop, plus the failureWarmWindow backstop. It
 // applies only to protected, unheld computers. The store compaction is a
 // maintenance refresh, not a deploy, and never calls it. It reports whether
 // it re-armed.
@@ -3693,15 +3796,22 @@ func (r *OwnershipRegistry) GrantDeployRetry(vmID, target string) bool {
 	if !protectedWarmnessClass(warmnessClassForOwnership(own, r.warmnessPolicy)) {
 		return false
 	}
-	for _, seen := range own.DeployGrantTargets {
-		if seen == target {
+	now := r.now()
+	kept := make([]deployGrant, 0, len(own.DeployGrants)+1)
+	for _, g := range own.DeployGrants {
+		if g.expired(now) {
+			continue
+		}
+		if g.Target == target {
 			return false
 		}
+		kept = append(kept, g)
 	}
-	own.DeployGrantTargets = append(own.DeployGrantTargets, target)
-	if extra := len(own.DeployGrantTargets) - deployGrantTargetsKept; extra > 0 {
-		own.DeployGrantTargets = append([]string(nil), own.DeployGrantTargets[extra:]...)
+	if len(kept) >= deployGrantsCap {
+		log.Printf("vmctl: deploy target %s not granted to vm=%s: %d targets already consumed inside the retry window", target, vmID, len(kept))
+		return false
 	}
+	own.DeployGrants = append(kept, deployGrant{Target: target, GrantedAt: now.UTC().Format(time.RFC3339Nano)})
 	own.FailureWarmedAt = ""
 	own.failureWarmGen++
 	r.saveLocked()
@@ -3733,7 +3843,7 @@ func (r *OwnershipRegistry) alwaysOnWarmTargets() []alwaysOnWarmTarget {
 	now := r.now()
 	targets := make([]alwaysOnWarmTarget, 0)
 	for _, own := range r.ownerships {
-		if own == nil || own.IsHeld() || own.StoppedBy == "recover_current" {
+		if own == nil || !alwaysOnWarmEligibleLocked(own, cfg) {
 			continue
 		}
 		// A computer stopped because it wedged or failed recovery gets one
@@ -3742,20 +3852,26 @@ func (r *OwnershipRegistry) alwaysOnWarmTargets() []alwaysOnWarmTarget {
 		// without the owner (ruling 2026-10-10), a rollback can land, and a
 		// repeating fault cannot loop. Interim bound until the boot ledger
 		// (restart station L1b) replaces it; delete FailureWarmedAt and
-		// DeployGrantTargets then.
-		afterFailure := stoppedByFailure(own.StoppedBy)
-		if afterFailure && !failureWarmAllowed(own.FailureWarmedAt, now) {
+		// DeployGrants then. This list is advisory: the start re-reads and
+		// charges under the claim (resumeVMForDesktop).
+		if stoppedByFailure(own.StoppedBy) && !failureWarmAllowed(own.FailureWarmedAt, now) {
 			continue
 		}
-		if own.State != VMStateStopped && own.State != VMStateHibernated {
-			continue
-		}
-		if !alwaysOnBootClass(warmnessClassForOwnership(own, cfg), own.DesktopID) {
-			continue
-		}
-		targets = append(targets, alwaysOnWarmTarget{userID: own.UserID, desktopID: own.DesktopID, vmID: own.VMID, afterFailure: afterFailure})
+		targets = append(targets, alwaysOnWarmTarget{userID: own.UserID, desktopID: own.DesktopID, vmID: own.VMID})
 	}
 	return targets
+}
+
+// alwaysOnWarmEligibleLocked reports a stopped or hibernated, unheld
+// computer the tiers keep on that the owner did not stop to recover.
+func alwaysOnWarmEligibleLocked(own *VMOwnership, cfg WarmnessPolicyConfig) bool {
+	if own.IsHeld() || own.StoppedBy == "recover_current" {
+		return false
+	}
+	if own.State != VMStateStopped && own.State != VMStateHibernated {
+		return false
+	}
+	return alwaysOnBootClass(warmnessClassForOwnership(own, cfg), own.DesktopID)
 }
 
 // WarmAlwaysOnDesktops resumes the computers the tiers keep on that already
@@ -3772,20 +3888,13 @@ func (r *OwnershipRegistry) WarmAlwaysOnDesktops(ctx context.Context, guard Comp
 			log.Printf("vmctl: warmness policy refused always-on desktop vm=%s user=%s desktop=%s: %v", target.vmID, target.userID, target.desktopID, err)
 			continue
 		}
-		var receipt failureWarmReceipt
-		spentRetry := false
-		if target.afterFailure {
-			rec, ok := r.spendFailureWarm(target.vmID)
-			if !ok {
-				continue
-			}
-			receipt, spentRetry = rec, true
-			log.Printf("vmctl: warmness policy spends the automatic retry for always-on desktop vm=%s after a failure stop; the next is allowed after %s or for the next deploy target", target.vmID, failureWarmWindow)
+		// Eligibility, the charge of a failure stop and the claim are one
+		// locked step; a refusal that spawned nothing is refunded inside it.
+		_, spent, err := r.resumeVMForDesktop(target.userID, target.desktopID, true)
+		if spent {
+			log.Printf("vmctl: warmness policy spent the automatic retry for always-on desktop vm=%s after a failure stop; the next is allowed after %s or for the next deploy target", target.vmID, failureWarmWindow)
 		}
-		if _, err := r.ResumeVMForDesktop(target.userID, target.desktopID); err != nil {
-			if spentRetry && transientStartRefusal(err) {
-				r.refundFailureWarm(target.vmID, receipt)
-			}
+		if err != nil {
 			log.Printf("vmctl: warmness policy failed to resume always-on desktop vm=%s user=%s desktop=%s: %v", target.vmID, target.userID, target.desktopID, err)
 			continue
 		}

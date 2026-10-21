@@ -2055,15 +2055,18 @@ func (m *mockVMManager) ReserveBootEpoch(vmID string, minimum int64) (int64, err
 }
 
 func (m *mockVMManager) BootVM(cfg VMManagerConfig) (*VMInstanceInfo, error) {
+	m.mu.Lock()
 	m.boots = append(m.boots, cfg)
-	if m.bootHook != nil {
-		m.bootHook(cfg)
+	hook, bootError, bootResponse := m.bootHook, m.bootError, m.bootResponse
+	m.mu.Unlock()
+	if hook != nil {
+		hook(cfg)
 	}
-	if m.bootError != nil {
-		return nil, m.bootError
+	if bootError != nil {
+		return nil, bootError
 	}
-	if m.bootResponse != nil {
-		return m.bootResponse, nil
+	if bootResponse != nil {
+		return bootResponse, nil
 	}
 	return &VMInstanceInfo{HostURL: "http://127.0.0.1:9001", Epoch: 1, Healthy: true, State: "running"}, nil
 }
