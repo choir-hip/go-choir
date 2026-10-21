@@ -2,12 +2,20 @@
 
 package doctool
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 // The sandbox is Linux only: elsewhere observe runs the tool directly with
 // the fallback warning and required refuses.
-func runSandboxed(context.Context, runOptions, string, string, []string, string, []byte, []string) (string, []string, error) {
-	return "", nil, setupErrorf("the document-tool sandbox needs Linux")
+func runSandboxed(context.Context, runOptions, bool, string, string, []string, string, []byte, []string) (string, []string, int64, error) {
+	return "", nil, 0, setupErrorf("the document-tool sandbox needs Linux")
+}
+
+// EnsureToolCgroupRoot needs Linux.
+func EnsureToolCgroupRoot(string) error {
+	return fmt.Errorf("the document tools cgroup needs Linux")
 }
 
 // RunHelper is never started off Linux.

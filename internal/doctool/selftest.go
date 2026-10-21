@@ -25,7 +25,9 @@ type ProbeReport struct {
 // probe tool's report from inside it on the guest, the warnings of the run,
 // and what the judge found wrong.
 type SelfTestReceipt struct {
-	Mode     Mode         `json:"mode"`
+	Mode Mode `json:"mode"`
+	// Observe is observe's shadow counts since start (ShadowSnapshot).
+	Observe  ShadowStats  `json:"observe"`
 	Report   *ProbeReport `json:"report,omitempty"`
 	Warnings []string     `json:"warnings,omitempty"`
 	Failures []string     `json:"failures,omitempty"`
