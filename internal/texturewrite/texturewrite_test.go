@@ -543,3 +543,23 @@ func TestFrameTellsAPendingReaderRequest(t *testing.T) {
 		}
 	}
 }
+
+// T4 (docs/problems/tool-call-failures-dual-model-2026-10-21.md): Texture
+// wrote {{ref 1}}, as the published story numbers its citations, and the
+// refusal did not say what a {{ref}} takes or how to cite a new source, so
+// the next Write dropped the source. The refusal names this document's
+// source ids and the {{cite rN.cM "quote"}} form.
+func TestNumberedRefRefusalNamesTheSourcesAndTheCiteForm(t *testing.T) {
+	doc, entities := citedBase(t)
+	_, err := Apply(context.Background(), Input{OwnerID: "owner", DocID: "doc", Seed: "rev-2", Base: doc, Entities: entities,
+		Script: "@replace b2\nThe court allowed it {{ref 1}}.", Resolver: newFakeCaptures()})
+	if err == nil {
+		t.Fatal("{{ref 1}} was accepted")
+	}
+	msg := err.Error()
+	for _, want := range []string{"{{ref 1}}", entities[0].SourceEntityID, "{{cite rN.cM"} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("refusal %q lacks %q", msg, want)
+		}
+	}
+}
