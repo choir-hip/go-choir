@@ -106,7 +106,15 @@ type Dispatcher struct {
 	done    chan struct{}
 	started bool // Run was launched; Stop waits on done only then
 	stopped bool
+	// dueAgents is the pending projection's size at the last pass, for the
+	// activation wait log.
+	dueAgents int
 }
+
+// activationWaitLogAfter is how long an activation's oldest due update may
+// have waited before the activation logs the wait
+// (docs/problems/research-more-slow-and-hidden-2026-10-21.md E6).
+const activationWaitLogAfter = 30 * time.Second
 
 // KernelLog is the durable surface the dispatcher needs: the pending
 // projection, the fenced commit, and the due-index. *SQLiteLog implements it.
@@ -268,6 +276,9 @@ func (d *Dispatcher) dispatchPending(ctx context.Context) {
 		log.Printf("dispatcher: pending projection: %v", err)
 		return
 	}
+	d.mu.Lock()
+	d.dueAgents = len(agents)
+	d.mu.Unlock()
 	for _, agentID := range agents {
 		d.mu.Lock()
 		if _, busy := d.running[agentID]; busy || len(d.running) >= d.opts.MaxConcurrent {
@@ -323,6 +334,7 @@ func (d *Dispatcher) activate(ctx context.Context, agentID string) {
 	if len(pending) == 0 {
 		return
 	}
+	d.logActivationWait(agentID, pending)
 	// The activation's context carries the emission buffer: the dispatch hook
 	// routes this activation's emitted updates into it, and Commit flushes
 	// them atomically with the state head.
@@ -521,4 +533,42 @@ func (d *Dispatcher) safeHandleUpdate(ctx context.Context, agentID string, u Upd
 		}
 	}()
 	return d.handler.HandleUpdate(ctx, agentID, u, memory)
+}
+
+// logActivationWait logs an activation whose oldest due update waited
+// activationWaitLogAfter or more since it was due, with the slots in use and
+// the due-agent count, so a slow wake shows whether slots or order held it.
+func (d *Dispatcher) logActivationWait(agentID string, pending []Update) {
+	now := time.Now()
+	var oldest time.Time
+	for _, u := range pending {
+		due := u.CreatedAt
+		if u.NotBefore.After(due) {
+			due = u.NotBefore
+		}
+		if due.After(now) {
+			continue
+		}
+		if oldest.IsZero() || due.Before(oldest) {
+			oldest = due
+		}
+	}
+	if oldest.IsZero() || now.Sub(oldest) < activationWaitLogAfter {
+		return
+	}
+	d.mu.Lock()
+	slots, due := len(d.running), d.dueAgents
+	d.mu.Unlock()
+	log.Printf("dispatcher: activation wait agent=%s waited=%s updates=%d slots=%d/%d due_agents=%d", actorLogName(agentID), now.Sub(oldest).Round(time.Second), len(pending), slots, d.opts.MaxConcurrent, due)
+}
+
+// actorLogName is a scoped actor id's last segment (owner and computer are
+// the computer's own).
+func actorLogName(agentID string) string {
+	for i := len(agentID) - 1; i >= 0; i-- {
+		if agentID[i] == 0 {
+			return agentID[i+1:]
+		}
+	}
+	return agentID
 }

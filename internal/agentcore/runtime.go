@@ -2675,6 +2675,10 @@ const bootPersistentManagementRewarmLimit = 1024
 
 // actorWakeSweep reports what one outbox pass did, so the projector can
 // decide when to look again.
+// wakeLatencyLogAfter is the wait, outbox row to dispatch or inside the
+// dispatch, past which the sweep logs it.
+const wakeLatencyLogAfter = 2 * time.Second
+
 type actorWakeSweep struct {
 	dispatched int
 	// more: wakes were left for pacing or budget; sweep again at once.
@@ -2686,10 +2690,16 @@ func (rt *Runtime) sweepActorWakeOutbox(ctx context.Context) actorWakeSweep {
 	if rt == nil || rt.store == nil {
 		return out
 	}
+	listStarted := time.Now()
 	wakes, err := rt.store.ListUnprojectedActorWakes(ctx)
 	if err != nil {
 		log.Printf("runtime: actor wake outbox sweep: %v", err)
 		return out
+	}
+	// Wake latency (docs/problems/research-more-slow-and-hidden-2026-10-21.md
+	// E6): a slow outbox listing delays every wake behind it.
+	if listed := time.Since(listStarted); listed >= wakeLatencyLogAfter {
+		log.Printf("runtime: actor wake outbox list wakes=%d dur=%s", len(wakes), listed.Round(time.Millisecond))
 	}
 	// The projector goroutine runs beside hook setters, so read the hooks as
 	// one locked snapshot.
@@ -2748,7 +2758,11 @@ func (rt *Runtime) sweepActorWakeOutbox(ctx context.Context) actorWakeSweep {
 				out.more = true
 				continue
 			}
+			dispatchStarted := time.Now()
 			dispatchErr = dispatch(ctx, wake.OwnerID, wake.ComputerID, wake.TargetAgentID, wake.Kind, wake.Content, wake.TrajectoryID, wake.AgentID)
+			if waited := dispatchStarted.Sub(wake.CreatedAt); dispatchErr == nil && (waited >= wakeLatencyLogAfter || time.Since(dispatchStarted) >= wakeLatencyLogAfter) {
+				log.Printf("runtime: actor wake latency kind=%s target=%s waited=%s dispatch=%s", wake.Kind, wake.TargetAgentID, waited.Round(time.Millisecond), time.Since(dispatchStarted).Round(time.Millisecond))
+			}
 		}
 		if dispatchErr != nil {
 			if errors.Is(dispatchErr, store.ErrNoPendingActorOccurrence) {
