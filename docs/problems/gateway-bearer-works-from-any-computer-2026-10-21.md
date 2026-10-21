@@ -7,7 +7,9 @@ and a re-read of the code at origin/main 26c4e1ed0. Tracked as SEC-05 in the
 [checklist](../security-density-architecture-checklist-2026-10-21.md). Station:
 [FP7](../definitions/choir-launch-fp7-gateway-identity-2026-10-21.md).
 Mutation class of any fix: **red** (gateway credentials, auth). Problem
-first; no fix here.
+first; no fix in the commit that wrote this record. Status: fix built in
+station FP7 (modes off, observe, enforce, strict; nix stages observe); deploy
+and enforcement status are in the station file.
 
 ## The problem in one sentence
 

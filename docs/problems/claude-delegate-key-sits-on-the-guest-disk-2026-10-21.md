@@ -9,8 +9,10 @@ sections 2.2, 2.3 and 3.3, Options R, T and K), owner notes section 36
 as SEC-08 in the [checklist](../security-density-architecture-checklist-2026-10-21.md).
 Station: [FP7](../definitions/choir-launch-fp7-gateway-identity-2026-10-21.md).
 Mutation class of any fix: **red** (credential custody, gateway and provider
-calls, the guest credential disk, capsule egress). Problem first; no fix
-here.
+calls, the guest credential disk, capsule egress). Problem first; no fix in
+the commit that wrote this record. Status: the gateway half is built and dark
+(station FP7); the guest half and the owner's Console API key are open, so the
+key still sits on the disk (Option T) until both land.
 
 ## The problem in one sentence
 
