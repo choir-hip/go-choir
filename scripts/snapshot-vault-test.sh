@@ -43,7 +43,8 @@ make_box() { # name
   local box="$WORK/$1" t p
   mkdir -p "$box/bin" "$box/state" "$box/dev" "$box/sys" "$box/mnt-parent"
   for t in env date cat head tr mkdir rm basename dirname awk sed grep tail mv cp ls sort wc readlink find chmod touch ln printf sleep id; do
-    p="$(command -v "$t" 2>/dev/null)" && ln -sf "$p" "$box/bin/$t"
+    p="$(command -v "$t" 2>/dev/null)"
+    case "$p" in /*) ln -sf "$p" "$box/bin/$t" ;; esac
   done
   cat > "$box/bin/cryptsetup" <<'EOF'
 #!/bin/sh
@@ -100,7 +101,7 @@ EOF
 echo "truncate $*" >> "$STATE/calls.log"
 : > "$3"; exit 0
 EOF
-  chmod +x "$box"/bin/*
+  for t in cryptsetup losetup mkfs.ext4 mount umount mountpoint truncate; do chmod +x "$box/bin/$t"; done
 }
 
 # run NAME ARGS... ; env for the script is the box's. Sets RC and OUT.
@@ -109,7 +110,7 @@ run() {
   local box="$WORK/$name"
   OUT="$(cd "$box" && env -i PATH="$box/bin" STATE="$box/state" DEVDIR="$box/dev" SYSDIR="$box/sys" \
     VAULT_IMG="$box/vault.img" VAULT_MOUNT="$box/mnt" VAULT_NAME="${VAULT_NAME:-choir-snapshot-vault}" \
-    VAULT_DEV_DIR="$box/dev" VAULT_SYS_DIR="$box/sys" VAULT_SIZE_GIB="${SIZE:-7}" UUID_VALUE="${UUID_VALUE:-}" \
+    VAULT_DEV_DIR="$box/dev" VAULT_SYS_DIR="$box/sys" VAULT_SIZE_GIB="${VSIZE:-7}" VAULT_OWNER="$(id -un)" UUID_VALUE="${UUID_VALUE:-}" \
     "$BASH_BIN" "$SCRIPT" "$@" 2>&1 </dev/null)"
   RC=$?
   BOX="$box"
@@ -224,8 +225,10 @@ printf '%s' "$CANARY" > "$WORK/scan/canary"
 mkdir -p "$WORK/scan/tree/a"
 { echo before; printf '%s' "$CANARY"; echo after; } > "$WORK/scan/tree/a/hit"
 echo nothing > "$WORK/scan/tree/miss"
-run scan scan "$WORK/scan/canary" "$WORK/scan/tree/a/hit" "$WORK/scan/tree"
-check "H14 scan counts the files with a hit" "$([ "$RC" = 0 ] && printf '%s' "$OUT" | grep -q 'hit: 1' && printf '%s' "$OUT" | grep -q 'files with a hit: 1'; echo $?)"
+run scan scan "$WORK/scan/canary" "$WORK/scan/tree"
+check "H14 scan counts the files with a hit under a directory" "$([ "$RC" = 0 ] && printf '%s' "$OUT" | grep -q 'tree: hit: 1' && printf '%s' "$OUT" | grep -q 'files with a hit: 1'; echo $?)"
+run scan scan "$WORK/scan/canary" "$WORK/scan/tree/a/hit"
+check "H14 scan counts a single file with a hit" "$([ "$RC" = 0 ] && printf '%s' "$OUT" | grep -q 'hit: 1' && printf '%s' "$OUT" | grep -q 'files with a hit: 1'; echo $?)"
 check "H14 scan never prints the canary" "$(! printf '%s' "$OUT" | grep -q -F "$CANARY"; echo $?)"
 run scan scan "$WORK/scan/canary" "$WORK/scan/tree/miss"
 check "H14 scan of a clean file reports zero" "$([ "$RC" = 0 ] && printf '%s' "$OUT" | grep -q 'hit: 0'; echo $?)"
