@@ -1,7 +1,7 @@
 # A failure-stopped always-on computer waits 24 hours, and a rollback deploy cannot reach it
 
-Date: 2026-10-21. Status: **open**; fix is FP3 group 1 (this file is its
-problem record). Class: red (vmctl, VM lifecycle, deploy routing). Owner rule:
+Date: 2026-10-21. Status: **fix built** on lane/host-vmctl-b4-b5 (FP3 group
+1), not yet landed or proved on staging. Class: red (vmctl, VM lifecycle, deploy routing). Owner rule:
 "we need paper publishing 24/7, even after crashes."
 
 This is the vmctl half of the 50-minute Autopaper outage in
@@ -124,6 +124,32 @@ Defect B:
 3. **CI.** The candidate list carries the `rescue` flag; the script skips the
    "already serves" shortcut for a rescue candidate and waits for the target
    after a rescue that returns `refreshed`.
+
+## As built (2026-10-21)
+
+- `internal/vmctl/ownership.go`: `VMOwnership.DeployGrantTarget`;
+  `GrantDeployRetry`; `spendFailureWarm`/`refundFailureWarm`/`transientStartRefusal`
+  (the always-on sweep also refunds a retry on a refusal that spawned nothing);
+  `alwaysOnBootClass`.
+- `internal/vmctl/deploy_refresh.go`: `Rescue` on candidates;
+  `deployRescueStopped`/`deployRescueEligible`; `deployRescue`; the grant at the
+  top of `deployRefreshWith`.
+- `internal/vmctl/deploy_refresh_retry.go`: the sweep keeps a pending rescue.
+- `.github/workflows/ci.yml`: the `rescue` field leads each row (always
+  non-empty, so `read` cannot shift it), no "already serves" shortcut for a
+  rescue, no forced operator refresh of one, and a rescue-specific wait (the
+  target commit, or any answer from `/health`, which a retained app-layer
+  release would give).
+- Tests (`internal/vmctl/deploy_rescue_test.go`): grant once per target and for
+  protected unheld computers only (A1-A3); the sweep alone stays at one per
+  window (A4); a refusal that spawned nothing refunds (A5); one spawn per
+  target under many posts, sweeps and warms, with the 24-hour backstop
+  intact (A6, B6); the rescue never boots over or stops a live guest, keeps the
+  pending entry, boots once the detector ends the guest (B1, B2, B4); an
+  ordinary, idle-stopped or held computer is left alone (B3); no planned
+  marker is requested (B7). Mutation checks: dropping the same-target guard,
+  the protected-class guard, or the live-guest guard each fails a named test.
+  The live-guest case is also guarded one layer down by `startExistingVM`.
 
 ## Not fixed here (residuals, named)
 

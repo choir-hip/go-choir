@@ -21,8 +21,11 @@ const (
 	stoppedByWedged = "wedged"
 	// stoppedByRecoveryFailed marks a computer whose recovery boot failed.
 	stoppedByRecoveryFailed = "recovery_failed"
-	wedgedAfterDefault      = 5 * time.Minute
-	wedgeProbeTimeout       = 3 * time.Second
+	// stoppedByVMCTLRestart marks a computer that was running when vmctl
+	// restarted; reattach adopts its surviving process.
+	stoppedByVMCTLRestart = "vmctl-restart"
+	wedgedAfterDefault    = 5 * time.Minute
+	wedgeProbeTimeout     = 3 * time.Second
 )
 
 // guestAcceptsConnection reports whether the guest's service port accepts a

@@ -136,6 +136,11 @@ type VMOwnership struct {
 	// retry on this computer after a wedged or recovery_failed stop. Interim
 	// bound until the boot ledger (restart station L1b).
 	FailureWarmedAt string `json:"failure_warmed_at,omitempty"`
+	// DeployGrantTarget is the last deploy target that re-armed this
+	// computer's automatic failure retry (GrantDeployRetry). A deploy of a
+	// different build is an external event with a fresh allowance of one
+	// retry; the same target never grants twice.
+	DeployGrantTarget string `json:"deploy_grant_target,omitempty"`
 	// HoldStatus, when non-nil, places the computer under a durable
 	// host-authoritative maintenance hold. vmctl refuses any automatic
 	// lifecycle action (boot/recover/refresh/reattach/resume/reclaim/
@@ -664,7 +669,7 @@ func (r *OwnershipRegistry) loadLocked() error {
 		if own.State == "" || own.State == VMStateBooting || own.State == VMStateActive || own.State == VMStateDegraded || own.State == VMStateStopping {
 			own.State = VMStateStopped
 			if own.StoppedBy == "" {
-				own.StoppedBy = "vmctl-restart"
+				own.StoppedBy = stoppedByVMCTLRestart
 			}
 		}
 		if own.CreatedAt.IsZero() {
@@ -759,7 +764,7 @@ func (r *OwnershipRegistry) ReattachManagedVMs(ctx context.Context, guard Comput
 				// vmctl restart; it stays in maintenance hold.
 				continue
 			}
-			if own.State == VMStateStopped && own.StoppedBy == "vmctl-restart" && strings.TrimSpace(own.ComputerURL) != "" {
+			if own.State == VMStateStopped && own.StoppedBy == stoppedByVMCTLRestart && strings.TrimSpace(own.ComputerURL) != "" {
 				candidates = append(candidates, *own)
 			}
 		}
@@ -3377,7 +3382,9 @@ type alwaysOnWarmTarget struct {
 }
 
 // failureWarmWindow bounds automatic warms of a computer that stopped by
-// failing: at most one per window.
+// failing: at most one per window, unless a deploy of a different build
+// re-arms the retry (GrantDeployRetry). The window is the time backstop; the
+// deploy is the external event.
 const failureWarmWindow = 24 * time.Hour
 
 func stoppedByFailure(stoppedBy string) bool {
@@ -3400,19 +3407,101 @@ func failureWarmAllowed(lastWarmedAt string, now time.Time) bool {
 // a crash between the record and the boot loses the retry rather than
 // repeating it. It refuses if the retry was already spent.
 func (r *OwnershipRegistry) recordFailureWarm(vmID string) bool {
+	_, ok := r.spendFailureWarm(vmID)
+	return ok
+}
+
+// spendFailureWarm is recordFailureWarm returning the value it replaced, so a
+// start that is refused before anything spawns can give the retry back
+// (refundFailureWarm).
+func (r *OwnershipRegistry) spendFailureWarm(vmID string) (previous string, ok bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	own, ok := r.vmByID[vmID]
-	if !ok || own == nil || !stoppedByFailure(own.StoppedBy) {
-		return ok
+	own, found := r.vmByID[vmID]
+	if !found || own == nil || !stoppedByFailure(own.StoppedBy) {
+		return "", found
 	}
 	now := r.now()
 	if !failureWarmAllowed(own.FailureWarmedAt, now) {
-		return false
+		return own.FailureWarmedAt, false
 	}
+	previous = own.FailureWarmedAt
 	own.FailureWarmedAt = now.UTC().Format(time.RFC3339Nano)
 	r.saveLocked()
+	return previous, true
+}
+
+// refundFailureWarm restores the retry spent by spendFailureWarm. It is for a
+// start refused by admission (host memory pressure, a live guest still
+// reattaching): nothing spawned, so nothing was spent.
+func (r *OwnershipRegistry) refundFailureWarm(vmID, previous string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if own, ok := r.vmByID[vmID]; ok && own != nil {
+		own.FailureWarmedAt = previous
+		r.saveLocked()
+	}
+}
+
+// transientStartRefusal reports whether err is an admission refusal that
+// spawned nothing and clears by itself.
+func transientStartRefusal(err error) bool {
+	refusal := RecoveryRefusalFrom(err)
+	if refusal == nil {
+		return false
+	}
+	switch refusal.Kind {
+	case RecoveryRefusalHostMemoryPressure, RecoveryRefusalGuestReattachPending:
+		return true
+	}
+	return false
+}
+
+// GrantDeployRetry is the effect of a deploy on a failure-stopped always-on
+// computer: a deploy of a build the computer has not been re-armed for is an
+// external event (docs/restart-subsystem-design-2026-10-13.md section 1), so
+// it opens a new episode with a fresh allowance of one automatic retry. It
+// clears FailureWarmedAt once per distinct target; the same target posted
+// again (a CI re-run, the retry sweep, a duplicate request) never re-arms, so
+// the bound is one automatic boot per (computer, deploy target) after a
+// failure stop, plus the failureWarmWindow backstop. It applies only to
+// protected, unheld computers. It reports whether it re-armed.
+func (r *OwnershipRegistry) GrantDeployRetry(vmID, target string) bool {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	own, ok := r.vmByID[vmID]
+	if !ok || own == nil || own.IsHeld() {
+		return false
+	}
+	if !protectedWarmnessClass(warmnessClassForOwnership(own, r.warmnessPolicy)) {
+		return false
+	}
+	if own.DeployGrantTarget == target {
+		return false
+	}
+	own.DeployGrantTarget = target
+	own.FailureWarmedAt = ""
+	r.saveLocked()
+	log.Printf("vmctl: deploy target %s re-arms the automatic retry of protected computer vm=%s", target, vmID)
 	return true
+}
+
+// alwaysOnBootClass reports whether the tiers keep a computer of this class
+// on by booting it: a platform computer that is critical_protected, and a
+// paid account's primary computer. (The public platform computer has its own
+// warmer.)
+func alwaysOnBootClass(class WarmnessClass, desktopID string) bool {
+	switch class {
+	case WarmnessClassCriticalProtected:
+		return true
+	case WarmnessClassPremiumAlwaysOn:
+		return normalizeDesktopID(desktopID) == PrimaryDesktopID
+	}
+	return false
 }
 
 // alwaysOnWarmTargets lists the stopped or hibernated computers the tiers
@@ -3429,10 +3518,12 @@ func (r *OwnershipRegistry) alwaysOnWarmTargets() []alwaysOnWarmTarget {
 			continue
 		}
 		// A computer stopped because it wedged or failed recovery gets one
-		// automatic warm per failureWarmWindow, so a transient fault heals
-		// without the owner (ruling 2026-10-10) and a repeating one cannot
-		// loop. Interim bound until the boot ledger (restart station L1b)
-		// replaces it; delete FailureWarmedAt then.
+		// automatic warm per failureWarmWindow, and one more for each deploy
+		// of a different build (GrantDeployRetry), so a transient fault heals
+		// without the owner (ruling 2026-10-10), a rollback can land, and a
+		// repeating fault cannot loop. Interim bound until the boot ledger
+		// (restart station L1b) replaces it; delete FailureWarmedAt and
+		// DeployGrantTarget then.
 		afterFailure := stoppedByFailure(own.StoppedBy)
 		if afterFailure && !failureWarmAllowed(own.FailureWarmedAt, now) {
 			continue
@@ -3440,13 +3531,7 @@ func (r *OwnershipRegistry) alwaysOnWarmTargets() []alwaysOnWarmTarget {
 		if own.State != VMStateStopped && own.State != VMStateHibernated {
 			continue
 		}
-		switch warmnessClassForOwnership(own, cfg) {
-		case WarmnessClassCriticalProtected:
-		case WarmnessClassPremiumAlwaysOn:
-			if own.DesktopID != PrimaryDesktopID {
-				continue
-			}
-		default:
+		if !alwaysOnBootClass(warmnessClassForOwnership(own, cfg), own.DesktopID) {
 			continue
 		}
 		targets = append(targets, alwaysOnWarmTarget{userID: own.UserID, desktopID: own.DesktopID, vmID: own.VMID, afterFailure: afterFailure})
@@ -3468,13 +3553,20 @@ func (r *OwnershipRegistry) WarmAlwaysOnDesktops(ctx context.Context, guard Comp
 			log.Printf("vmctl: warmness policy refused always-on desktop vm=%s user=%s desktop=%s: %v", target.vmID, target.userID, target.desktopID, err)
 			continue
 		}
+		var previousWarm string
+		spentRetry := false
 		if target.afterFailure {
-			if !r.recordFailureWarm(target.vmID) {
+			previous, ok := r.spendFailureWarm(target.vmID)
+			if !ok {
 				continue
 			}
-			log.Printf("vmctl: warmness policy spends the automatic retry for always-on desktop vm=%s after a failure stop; the next is allowed after %s", target.vmID, failureWarmWindow)
+			previousWarm, spentRetry = previous, true
+			log.Printf("vmctl: warmness policy spends the automatic retry for always-on desktop vm=%s after a failure stop; the next is allowed after %s or for the next deploy target", target.vmID, failureWarmWindow)
 		}
 		if _, err := r.ResumeVMForDesktop(target.userID, target.desktopID); err != nil {
+			if spentRetry && transientStartRefusal(err) {
+				r.refundFailureWarm(target.vmID, previousWarm)
+			}
 			log.Printf("vmctl: warmness policy failed to resume always-on desktop vm=%s user=%s desktop=%s: %v", target.vmID, target.userID, target.desktopID, err)
 			continue
 		}

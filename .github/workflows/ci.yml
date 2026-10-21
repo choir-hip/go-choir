@@ -1580,7 +1580,9 @@ jobs:
                   IFS=$'\t' read -r skipped_vm_id skipped_user_id skipped_desktop_id skipped_reason <<< "$record"
                   echo "    Skipped ${skipped_vm_id} (user ${skipped_user_id} desktop ${skipped_desktop_id}): ${skipped_reason}"
                 done
-                mapfile -t active_interactive < <(printf '%s' "$deploy_refresh_plan" | jq -r '.candidates[] | [.user_id, .desktop_id, .vm_id, .computer_url, (.snapshot_kind // ""), (.warmness_class // "")] | @tsv')
+                # rescue comes first: it is always "true" or "false", so an empty
+                # field later in the row cannot shift it (read collapses tabs).
+                mapfile -t active_interactive < <(printf '%s' "$deploy_refresh_plan" | jq -r '.candidates[] | [(.rescue // false), .user_id, .desktop_id, .vm_id, .computer_url, (.snapshot_kind // ""), (.warmness_class // "")] | @tsv')
                 refresh_outcomes_dir=$(mktemp -d /tmp/go-choir-deploy-refresh.XXXXXX)
                 if [ "${#active_interactive[@]}" -eq 0 ]; then
                   echo "    No active interactive computers need refresh"
@@ -1589,9 +1591,9 @@ jobs:
                 refresh_status=0
                 max_parallel_refresh=1
                 for record in "${active_interactive[@]}"; do
-                  IFS=$'\t' read -r refresh_user_id refresh_desktop_id refresh_vm_id refresh_computer_url refresh_snapshot_kind refresh_warmness <<< "$record"
+                  IFS=$'\t' read -r refresh_rescue refresh_user_id refresh_desktop_id refresh_vm_id refresh_computer_url refresh_snapshot_kind refresh_warmness <<< "$record"
                   (
-                    echo "    Refreshing ${refresh_vm_id} for user ${refresh_user_id} desktop ${refresh_desktop_id} (snapshot=${refresh_snapshot_kind:-mutable} warmness=${refresh_warmness:-default})"
+                    echo "    Refreshing ${refresh_vm_id} for user ${refresh_user_id} desktop ${refresh_desktop_id} (snapshot=${refresh_snapshot_kind:-mutable} warmness=${refresh_warmness:-default} rescue=${refresh_rescue})"
                     # A refreshed layered computer keeps serving its retained
                     # app-layer release — that is the point of layering — so
                     # its /health reports the release commit, never the host
@@ -1599,11 +1601,22 @@ jobs:
                     # commit and expect THAT after the refresh, not the
                     # pointer. Only a computer with no retained release is
                     # expected to serve the pointer commit.
-                    refresh_expected_commit=$(curl -fsS --max-time 10 "${refresh_computer_url}/health" 2>/dev/null | jq -r '.build.commit // empty' || true)
+                    #
+                    # A rescue candidate is a protected always-on computer that
+                    # is stopped (failure, or a vmctl restart that did not
+                    # reattach it). Its /health does not answer, which would
+                    # read as "already current" below, so it never takes this
+                    # shortcut: vmctl decides, and the commit is verified after
+                    # a refresh (docs/problems/vmctl-failed-protected-computer-waits-a-day-and-deploy-cannot-reach-it-2026-10-21.md).
+                    if [ "$refresh_rescue" = "true" ]; then
+                      refresh_expected_commit="$autoputer_runtime_commit"
+                    else
+                      refresh_expected_commit=$(curl -fsS --max-time 10 "${refresh_computer_url}/health" 2>/dev/null | jq -r '.build.commit // empty' || true)
+                    fi
                     if [ -z "$refresh_expected_commit" ]; then
                       refresh_expected_commit="$autoputer_runtime_commit"
                     fi
-                    if [ "$refresh_expected_commit" = "$autoputer_runtime_commit" ]; then
+                    if [ "$refresh_expected_commit" = "$autoputer_runtime_commit" ] && [ "$refresh_rescue" != "true" ]; then
                       echo "    ${refresh_vm_id}: already serves ${autoputer_runtime_commit}; nothing to refresh"
                       echo "current" > "${refresh_outcomes_dir}/${refresh_vm_id}"
                       exit 0
@@ -1630,7 +1643,10 @@ jobs:
                       echo "    Skipped ${refresh_vm_id}: ${refresh_reason}"
                       echo "skipped" > "${refresh_outcomes_dir}/${refresh_vm_id}"
                       exit 0
-                    elif [ "$refresh_outcome" = "deferred" ] && [ "${REFRESH_ACTIVE_COMPUTERS}" != "true" ]; then
+                    elif [ "$refresh_outcome" = "deferred" ] && { [ "${REFRESH_ACTIVE_COMPUTERS}" != "true" ] || [ "$refresh_rescue" = "true" ]; }; then
+                      # A rescue is never force-refreshed: it is not running,
+                      # or a live guest outside the registry must be ended by
+                      # the wedge detector's evidence, not by a deploy.
                       echo "    Deferred ${refresh_vm_id} (vmctl retries it every minute until it updates): ${refresh_reason}"
                       echo "deferred" > "${refresh_outcomes_dir}/${refresh_vm_id}"
                       exit 0
@@ -1666,7 +1682,29 @@ jobs:
                     if [ -n "$refreshed_computer_url" ]; then
                       refresh_computer_url="$refreshed_computer_url"
                     fi
-                    wait_for_autoputer_commit "$refresh_computer_url" "$refresh_vm_id" "$refresh_expected_commit" "$autoputer_runtime_commit"
+                    if [ "$refresh_rescue" = "true" ]; then
+                      # A rescued computer had no /health to read before the
+                      # refresh, so whether it keeps a retained app-layer
+                      # release is unknown. Wait for the target commit; if it
+                      # answers with another commit it is up and serving its
+                      # retained release, which is the layering contract, not
+                      # a failed rescue. No answer at all fails the deploy.
+                      rescued_commit=""
+                      for _ in $(seq 1 120); do
+                        rescued_commit=$(curl -fsS --max-time 5 "${refresh_computer_url}/health" 2>/dev/null | jq -r '.build.commit // empty' || true)
+                        if [ "$rescued_commit" = "$autoputer_runtime_commit" ]; then
+                          break
+                        fi
+                        sleep 1
+                      done
+                      if [ -z "$rescued_commit" ]; then
+                        echo "Timed out waiting for rescued ${refresh_vm_id} to answer /health" >&2
+                        exit 1
+                      fi
+                      echo "    Verified rescued ${refresh_vm_id} answers /health serving autoputer commit ${rescued_commit} (target ${autoputer_runtime_commit})"
+                    else
+                      wait_for_autoputer_commit "$refresh_computer_url" "$refresh_vm_id" "$refresh_expected_commit" "$autoputer_runtime_commit"
+                    fi
                     echo "refreshed" > "${refresh_outcomes_dir}/${refresh_vm_id}"
                   ) &
                   refresh_pids+=("$!")
