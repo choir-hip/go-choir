@@ -155,3 +155,19 @@ a plain link is refused (409, `ErrOpinionModeConflict`), because a publication
 keeps its first mode for good and would otherwise stay silently unlisted.
 Off-switch without a deploy: write `CORPUSD_OPINION_LISTING=off` to
 `/var/lib/go-choir/corpusd-retrieval.env` and restart corpusd.
+
+## Red ceremony at landing (2026-10-21)
+
+Conjecture delta: before, a signed-in user's Texture piece could only be
+an unlisted link and research could not find published Autopaper
+stories; after, research's corpus search returns published stories and
+can capture one, and a signed-in user's piece can be listed under
+Opinion, labelled and bylined, while the news front is unchanged.
+Admissible evidence: `frontend/tests/oped-deployed.spec.js` on
+choir.news with a fresh test account (unit tests are shaping only).
+Rollback: `CORPUSD_OPINION_LISTING=off` hides every opinion piece and
+refuses new ones; revert for the code. Heresy delta: discovered, the
+published-search cap of 100 rows and a published article that could not
+be cited; repaired, both, by this change; introduced, an opinion piece
+has no unpublish or moderation path beyond the kill switch (named in
+Open items).
