@@ -248,3 +248,48 @@ func TestDoltExtractorRejectsEmptyDatabase(t *testing.T) {
 	}
 }
 
+// A derived index table (internal/objectgraph og_key_index) is rebuilt from
+// other tables and is not state. Live and replay workspaces fill it at
+// different moments, so the replay equivalence and the content witness must
+// not see it: neither its name (the eligibility gate is default-deny on
+// unknown tables) nor its rows (they enter content_root).
+// docs/problems/store-hot-reads-need-a-rollback-safe-side-table-2026-10-21.md,
+// finding 3.
+func TestDoltExtractorLeavesIgnoredTablesOut(t *testing.T) {
+	ddl := "CREATE TABLE records (id INT PRIMARY KEY, v VARCHAR(64) NOT NULL); CREATE TABLE derived_index (id INT PRIMARY KEY, k VARCHAR(64))"
+	filled := openTestDoltWorkspace(t, "testdb", ddl, []string{
+		"INSERT INTO records VALUES (1, 'a')",
+		"INSERT INTO derived_index VALUES (1, 'x'), (2, 'y')",
+	})
+	empty := openTestDoltWorkspace(t, "testdb", ddl, []string{"INSERT INTO records VALUES (1, 'a')"})
+	version := ComputerVersion{CodeRef: "test-code-ref", ArtifactProgramRef: "test-artifact-ref"}
+	extract := func(workspace string, ignored map[string]struct{}) ObservationSet {
+		set, err := (DoltStateExtractor{WorkspacePath: workspace, Database: "testdb", IgnoredTables: ignored}).Extract(context.Background(), ExtractRequest{Name: "ignored-tables", Version: version})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return set
+	}
+	value := func(set ObservationSet, key string) string {
+		for _, o := range set.Observations {
+			if o.Key == key {
+				return o.Value
+			}
+		}
+		return "<absent>"
+	}
+	ignored := map[string]struct{}{"derived_index": {}}
+	a, b := extract(filled, ignored), extract(empty, ignored)
+	for _, key := range []string{"dolt:testdb:table:derived_index", "dolt:testdb:schema:derived_index"} {
+		if got := value(a, key); got != "<absent>" {
+			t.Fatalf("%s is observed although the table is ignored", key)
+		}
+	}
+	if value(a, "dolt:testdb:content_root") != value(b, "dolt:testdb:content_root") {
+		t.Fatal("an ignored table's rows changed the content root")
+	}
+	// Without the option the table is state, so the test above means something.
+	if value(extract(filled, nil), "dolt:testdb:content_root") == value(extract(empty, nil), "dolt:testdb:content_root") {
+		t.Fatal("test premise: the derived table's rows should change the content root when it is not ignored")
+	}
+}

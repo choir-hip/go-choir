@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 )
 
@@ -20,6 +21,8 @@ func witnessForWorkspace(ctx context.Context, computerID, canonicalHead, workspa
 	extractor := computerversion.DoltStateExtractor{
 		WorkspacePath: workspacePath,
 		Database:      "texture",
+		// A derived index is not state (objectgraph.DerivedKeysTable).
+		IgnoredTables: map[string]struct{}{objectgraph.DerivedKeysTable: {}},
 		IgnoredContentColumns: map[string]map[string]struct{}{
 			"computer_event_index": {
 				"prepared_at":  {},

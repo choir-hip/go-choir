@@ -12,6 +12,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/projectionbase"
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
 )
@@ -489,6 +490,8 @@ func replayDoltStateExtractor(workspacePath string) computerversion.DoltStateExt
 	return computerversion.DoltStateExtractor{
 		WorkspacePath: workspacePath,
 		Database:      "texture",
+		// A derived index is not state (objectgraph.DerivedKeysTable).
+		IgnoredTables: map[string]struct{}{objectgraph.DerivedKeysTable: {}},
 		IgnoredContentColumns: map[string]map[string]struct{}{
 			"computer_event_index": {
 				"prepared_at":  {},

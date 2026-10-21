@@ -85,6 +85,13 @@ type DoltStateExtractor struct {
 	// columns. This is needed when a replay projection necessarily assigns a
 	// fresh write timestamp to an otherwise identical semantic row.
 	IgnoredContentColumns map[string]map[string]struct{}
+
+	// IgnoredTables lists tables left out of the observation entirely, name,
+	// schema and rows: derived indexes that are rebuilt from other tables
+	// and so are not state (og_key_index). Live and replay workspaces fill
+	// them at different moments, and the replay gate is default-deny on a
+	// table it does not know.
+	IgnoredTables map[string]struct{}
 }
 
 var _ Extractor = DoltStateExtractor{}
@@ -142,6 +149,15 @@ func (e DoltStateExtractor) Extract(ctx context.Context, request ExtractRequest)
 	tables, err := queryDoltTables(ctx, db)
 	if err != nil {
 		return ObservationSet{}, fmt.Errorf("dolt state extraction: %w", err)
+	}
+	if len(e.IgnoredTables) > 0 {
+		kept := tables[:0]
+		for _, table := range tables {
+			if _, ignored := e.IgnoredTables[table]; !ignored {
+				kept = append(kept, table)
+			}
+		}
+		tables = kept
 	}
 
 	observations := make([]Observation, 0, 1+len(tables)*2+1)
