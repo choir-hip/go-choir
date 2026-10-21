@@ -43,6 +43,41 @@ daemon's Dolt engine and gRPC in its image.
    `autoputer desk-session` (internal/deskworker); built CGO_ENABLED=0.
    The daemon prefers a `desk-worker` next to its own executable.
 
+## After (agents VM, same method)
+
+- Idle worker RSS: **20,128 kB (19.7 MiB)** with `cmd/desk-worker`
+  built `CGO_ENABLED=0 -trimpath -ldflags='-s -w'`, against 82,752 kB: 61.1
+  MiB less per worker (the checklist estimate was 40-60). A real cell
+  (`print(40+2)`) evaluates in it.
+- Worker binary: 20,426,914 bytes against 188,551,216.
+- Cause of the size: `internal/gomemlimit` imported Dolt's memlimit (cgo,
+  ICU), so any binary linking it carried the Dolt engine. `ApplyDaemon` now
+  takes Dolt's `Init`/`NodeCacheSize` from its caller
+  (`internal/autoputer/run.go`); the worker's dependency list has no Dolt.
+- Reaper: `armReaperLocked` arms one timer (at `done`) for the earliest idle
+  session's retention deadline; `reap` closes idle sessions past retention
+  and re-arms. A busy session is never watched or reaped; `closeAll` stops
+  the timer. Tests: `tools_desk_reaper_test.go` (fake clock and timer; run
+  also under `-race`).
+
+## FP0 steps (not done here)
+
+1. **Ship the binary (unverified, no nix in the agents VM).** The code falls
+   back to re-executing the autoputer binary, so nothing changes until
+   this is applied. In `flake.nix`: add `"cmd/desk-worker"` to
+   `goServiceSubPackages`; add `extraBins ? [ ]` to `mkGoService` and
+   `${pkgs.lib.concatMapStrings (b: "cp ${goServicesAll}/bin/${b} $out/bin/\n") extraBins}`
+   after the `cp` of the main binary; give the `autoputer` package
+   `extraBins = [ "desk-worker" ];`. The layered-release path
+   (`nix/autoputer-vm.nix` ~lines 125-240, which execs a release binary)
+   finds no sibling and keeps using the autoputer: confirm what that does
+   to the saving. A nix cgo build of `desk-worker` will link ICU unless
+   `CGO_ENABLED=0` is set for it; measure RSS on staging.
+2. Measure on the paper computer: `VmRSS` of the `desk-session` children
+   before and after, and that an idle computer holds 0 workers 30 minutes
+   after its last cell (trace: pool count).
+
 ## now
 
-Station started; before numbers recorded above.
+Reaper and shared worker entrypoint landed on the lane branch; the nix
+packaging of `desk-worker` is the FP0 step above. Done for this lane.
