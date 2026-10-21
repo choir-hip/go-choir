@@ -287,3 +287,34 @@ the head and the reopened item stays open; whether the next records-route
 turn takes it up is not established. The deployed spec asks on stories
 that are not mid-turn; the fate line will show "no new version" if this
 bites.
+
+## P6. After the fix, research answers but Texture never takes its report (staging, 2026-10-21 03:34 to 04:00 UTC)
+
+Evidence (deploy 8d027370b; logged-out ask on the FCA story at 03:33:53,
+202 `asked`, `rx-4b600d44b21e`, owner revision `1afc50e1`; a second ask
+409 `already_asked`; trace of the story's trajectory `cf4eaaa4` exported
+with the paper credential, kept outside the repo):
+
+- `work_opened` (the reopened owner item `a8e0f35f`), then
+  `artifact_head_advanced` (the owner revision). P5's fix works.
+- Texture run `03:35:04`, turn committed `03:35:35` with `turn: wait`,
+  reason "The story needs additional reporting and primary-source
+  evidence before it can be expanded; research has been requested", and a
+  Cast to research. The run is left `passivated`.
+- `research:<doc>` ran 03:36:08 to 03:38:42 and completed, filing a report
+  with new primary context (the trace's records layer).
+- No Texture run after that, through 04:00. The paper's obligation census
+  shows no unprojected, retrying or exhausted wakes. The fate line read
+  `accepted`, then `unknown` at 03:55 (the proxy could not read the paper
+  then: it is busy, and inbox reads timed out in the export too).
+
+What differs from yesterday's normal story turns (texture, research,
+texture, 10:11 to 10:13 on 2026-10-20): the Texture run now carries the
+reopened owner work item. Hypothesis, not yet confirmed: an inbox-record
+wake (the research report) is refused or treated as quiescent when the
+passivated run holds a work id (P5's recorded residual named the same
+reconcile checks). A reproduction test is being written before any fix.
+
+Consequence: a reader's ask spends a Texture turn and a research run, the
+research is filed, and the story does not change. The fate line will end
+"no new version", which is honest but wrong about the cause.
