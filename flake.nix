@@ -332,6 +332,8 @@
         "cmd/choir-delegate"
         # visual capture (docs/design/visual-evidence-slice-2026-10-15.md)
         "cmd/choir-capture"
+        # the desk-session worker without Dolt (RES-17)
+        "cmd/desk-worker"
       ];
       # Keep source selection structural. Go owns the package dependency graph;
       # repeating it here as per-service internalDirs caused fallback builds to
@@ -369,7 +371,7 @@
       };
 
       # A service package: its binary from the shared build plus identity.
-      mkGoService = { pname, subPackage, includeSkills ? false, includeFrontend ? false, includeGoSum ? false }:
+      mkGoService = { pname, subPackage, includeSkills ? false, includeFrontend ? false, includeGoSum ? false, extraBins ? [ ] }:
         assert pkgs.lib.elem subPackage goServiceSubPackages;
         pkgs.stdenvNoCC.mkDerivation {
           inherit pname;
@@ -379,6 +381,7 @@
           installPhase = ''
             mkdir -p $out/bin $out/share/go-choir
             cp ${goServicesAll}/bin/${baseNameOf subPackage} $out/bin/
+            ${pkgs.lib.concatMapStrings (b: "cp ${goServicesAll}/bin/${b} $out/bin/\n") extraBins}
             cat > $out/share/go-choir/build.json <<'EOF'
             {"schema_version":1,"artifact":"${pname}","version":"${goModuleVersion}","commit":"${buildCommit}","built_at":"${buildDate}"}
             EOF
@@ -468,6 +471,7 @@
           subPackage = "cmd/autoputer";
           includeSkills = true;
           includeFrontend = true;
+          extraBins = [ "desk-worker" ];
         };
         frontend = frontendPkg;
         frontendDeps = frontendDepsPkg;
