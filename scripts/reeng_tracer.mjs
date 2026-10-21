@@ -1297,7 +1297,7 @@ function engineeringStory(token) {
       'Deterministic checks, to run in the capsule before freezing, from /workspace/platform/frontend:',
       `the frontend build job (which also copies dist into the release tree) must end done with exit code 0; and diff -u against a copy of ${file} saved before the change must show it changed: diff -u exits 1 when the file changed, and that exit 1 is the passing result.`,
       'The capsule has no .git: git diff and git status cannot run there, and a missing .git is expected, never a blocker.',
-      'This change touches the frontend only, so the release tree needs the frontend release tree only (no bin/autoputer).',
+      'This change touches the frontend only, so the release tree needs the frontend release tree, plus bin/autoputer built from the workspace source only if Freeze refuses the running binary because it was built from another commit.',
       ...delegate,
       'Only engineering can change this computer: Cast this request to management verbatim in your first cell, with a one-paragraph plan revision,',
       'and incorporate management\'s answer when it arrives.',
