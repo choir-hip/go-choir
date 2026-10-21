@@ -142,6 +142,9 @@ type Store struct {
 	og                      *objectgraph.Service
 	ogStore                 *objectgraph.DoltStore
 	ogReadStore             *objectgraph.DoltStore
+	// derivedColumns is the explicit og_objects derived-column migration
+	// (derived_columns.go); boot never runs it.
+	derivedColumns derivedColumnMigration
 	// vocabCutover marks the store post-cutover: the OG write guard refuses
 	// declared role fields outside the V2 vocabulary. Set when the migration
 	// report exists (open) or when the fenced cutover persists it.
@@ -734,27 +737,6 @@ func Open(dbPath string) (*Store, error) {
 	return s, nil
 }
 
-// EnsureObjectGraphIndexes adds the record-scoped generated columns and
-// indexes to an object graph that already had rows when the store opened
-// (a fresh store takes them in Open). On a large store this rewrites
-// og_objects once per missing column, about 50 us per row per column
-// (docs/problems/guest-cpu-is-unindexed-store-scans-2026-10-14.md), so the
-// boot calls it after the health gate is serving and passes the gate's
-// heartbeat. It is a no-op once the indexes exist; until then the reads use
-// their unindexed paths.
-func (s *Store) EnsureObjectGraphIndexes(ctx context.Context, heartbeat func()) error {
-	if s == nil || s.ogStore == nil {
-		return fmt.Errorf("runtime store: object graph not initialized")
-	}
-	if err := s.ogStore.EnsureRecordIndexes(ctx, heartbeat); err != nil {
-		return err
-	}
-	if s.ogReadStore != nil {
-		s.ogReadStore.InheritMetadataColumns(s.ogStore)
-	}
-	return nil
-}
-
 // retiredRuntimeTables are the legacy relational runtime tables dropped at
 // bootstrap. They are declared retired_absent in the replay airworthiness
 // manifest.
@@ -965,6 +947,7 @@ func (s *Store) Reopen(path string) error {
 	if s == nil {
 		return fmt.Errorf("runtime store: reopen requires a store")
 	}
+	s.CancelDerivedColumnMigration()
 	live, err := Open(path)
 	if err != nil {
 		return err
@@ -1000,6 +983,9 @@ func (s *Store) Close() error {
 	// Graceful close seals the telemetry window first. A crash does not, which
 	// is the loss the ruling allows.
 	s.closeTelemetry()
+	// A running derived-column migration stops before its next step; closing
+	// the pools waits for a step in flight.
+	s.CancelDerivedColumnMigration()
 	var err error
 	if closeErr := s.closeDepositUpcastLedger(); closeErr != nil {
 		err = closeErr

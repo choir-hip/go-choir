@@ -70,7 +70,8 @@ type DoltStore struct {
 	// liveColumns records which generated-column access paths are live
 	// (column names, and composite index names for the record paths) so the
 	// readers use the index where it exists and JSON_EXTRACT otherwise. Set
-	// by EnsureSchema and EnsureRecordIndexes; replaced whole, never mutated.
+	// by discovery (EnsureSchema, DiscoverAccessPaths) and after each step of
+	// MigrateAccessPaths; replaced whole, never mutated.
 	liveColumns atomic.Pointer[map[string]bool]
 	// derived is the state of the og_key_index side table (derived_keys.go),
 	// shared by the write and read stores of one engine.
@@ -139,76 +140,40 @@ func (s *DoltStore) EnsureSchema(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("objectgraph dolt: ensure schema: %w", err)
 	}
-	// Additive indexes for the hot read shapes measured under drain
-	// (texture-latency-layered-evidence-2026-10-01): snapshot phase 1 filters
-	// on (owner_id, computer_id[, object_kind]); ListObjects filters on
-	// object_kind + owner_id + computer_id. Both are idempotent DDL.
-	doneIndexes := BootPhase("store: open", "objectgraph-schema/og-objects-indexes")
-	if _, err := s.db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_og_objects_owner_computer_kind ON og_objects(owner_id, computer_id, object_kind)`); err != nil {
-		// Index DDL failure must not brick a booting guest: fall back to the
-		// unindexed scan and report via the returned error only when the
-		// schema itself is unusable.
-		doneIndexes(err)
-		return fmt.Errorf("objectgraph dolt: ensure owner/computer index: %w", err)
-	}
-	if _, err := s.db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_og_objects_kind_owner_computer ON og_objects(object_kind, owner_id, computer_id)`); err != nil {
-		doneIndexes(err)
-		return fmt.Errorf("objectgraph dolt: ensure kind/owner/computer index: %w", err)
-	}
-	doneIndexes(nil)
 	// The derived-key side table is created empty: nothing here scales with
 	// og_objects. Its rows are written by the writers and checked online
 	// after the listener is up (derived_keys.go).
 	s.ensureDerivedKeysTable(ctx)
-	// The record columns cost a table rewrite per column on a table with
-	// rows (about 50 us per row per column, measured), and a store opens
-	// before the guest answers /health: on a large existing store that
-	// would outlast the updater's health probe. An empty table takes them
-	// at once; a store with rows takes them through EnsureRecordIndexes,
-	// which the boot runs with a health heartbeat.
-	var anyRow int
-	empty := s.db.QueryRowContext(ctx, `SELECT 1 FROM og_objects LIMIT 1`).Scan(&anyRow) == sql.ErrNoRows
-	doneColumns := BootPhase("store: open", "objectgraph-schema/metadata-columns")
-	s.ensureMetadataColumns(ctx, empty)
-	doneColumns(nil)
-	return nil
-}
-
-// EnsureRecordIndexes adds the record-scoped generated columns and indexes
-// (inbox, sender, conversation, inbox sequence, claim) to an og_objects
-// table that already has rows. It is idempotent and fast once they exist.
-// The DDL holds the engine for its duration (a rewrite of every row per
-// missing column); heartbeat, if set, is called every two seconds until it
-// ends, so a boot health gate can report liveness. Until it completes the
-// readers keep their JSON paths; afterwards they use the indexes. A store
-// sharing this engine learns the new columns through InheritMetadataColumns.
-func (s *DoltStore) EnsureRecordIndexes(ctx context.Context, heartbeat func()) error {
-	if s == nil || s.db == nil {
-		return fmt.Errorf("objectgraph dolt: nil store")
+	// Derived columns and indexes (generated columns over metadata and body,
+	// and the composite indexes of the hot reads) are added here only to an
+	// empty table: with no rows there is nothing to rewrite. On a table with
+	// rows, open is discovery only: a STORED column or a new index rewrites
+	// or scans every row while it holds the engine
+	// (docs/problems/boot-alters-og-objects-when-older-columns-missing-2026-10-21.md),
+	// so the missing ones are reported, the readers keep their JSON paths,
+	// and adding them is the explicit MigrateAccessPaths operation.
+	doneDiscover := BootPhase("store: open", "objectgraph-schema/discover-access-paths")
+	plan, err := s.discoverLocked(ctx)
+	doneDiscover(err)
+	if err != nil {
+		log.Printf("objectgraph dolt: discover derived access paths, JSON paths kept: %v", err)
+		return nil
 	}
-	if heartbeat != nil {
-		done := make(chan struct{})
-		defer close(done)
-		go func() {
-			ticker := time.NewTicker(2 * time.Second)
-			defer ticker.Stop()
-			for {
-				select {
-				case <-done:
-					return
-				case <-ticker.C:
-					heartbeat()
-				}
+	if !plan.HasRows && len(plan.MissingColumns)+len(plan.MissingIndexes) > 0 {
+		for _, step := range s.migrationSteps(plan) {
+			doneStep := BootPhase("store: open", "objectgraph-schema/empty-table-"+step.kind+" "+step.name)
+			err := s.runStepLocked(ctx, step)
+			doneStep(err)
+			if err != nil {
+				log.Printf("objectgraph dolt: %s %s on an empty table unavailable, JSON path kept: %v", step.kind, step.name, err)
 			}
-		}()
+		}
+		if plan, err = s.discoverLocked(ctx); err != nil {
+			log.Printf("objectgraph dolt: discover derived access paths, JSON paths kept: %v", err)
+			return nil
+		}
 	}
-	s.engineMu.Lock()
-	defer s.engineMu.Unlock()
-	start := time.Now()
-	done := BootPhase("store: object graph indexes", "record-indexes")
-	s.ensureMetadataColumns(ctx, true)
-	done(nil)
-	log.Printf("objectgraph dolt: record indexes ensured in %s (live: %v)", time.Since(start).Round(time.Millisecond), s.liveNames())
+	plan.log()
 	return nil
 }
 
@@ -318,52 +283,254 @@ func (mc metadataIndexColumn) indexColumns() string {
 	return "object_kind, " + mc.Column + ", updated_at"
 }
 
-// ensureMetadataColumns creates the generated metadata columns + indexes on
-// an existing og_objects table. A column or index is added only when absent
-// (information_schema check), so the DDL stays idempotent across engines
-// whose ALTER lacks IF NOT EXISTS and across every open of an existing
-// store; og_objects is a projection, so no tape event is written. A column
-// whose expression errors on legacy rows is skipped: the live set records
-// which access paths exist, and the readers fall back to JSON_EXTRACT for
-// the rest. The columns are additive and older binaries never name them, so
-// the store schema epoch does not change. With records false, only the
-// three legacy columns are added (they exist on every store already);
-// record columns already present are still recognized. The caller holds
-// engineMu.
-func (s *DoltStore) ensureMetadataColumns(ctx context.Context, records bool) {
-	live := map[string]bool{}
+// derivedIndex is one index of og_objects beyond the base table's own. An
+// index that gates a reader names it in LiveName (a column name for the
+// metadata lookups, the index name for the record paths): that path is
+// live only when the index and every column in Needs exist.
+type derivedIndex struct {
+	Name, Columns string
+	Needs         []string
+	LiveName      string
+}
+
+// baseIndexes serve the hot read shapes measured under drain
+// (texture-latency-layered-evidence-2026-10-01): snapshot phase 1 filters
+// on (owner_id, computer_id[, object_kind]); ListObjects filters on
+// object_kind + owner_id + computer_id. The planner uses them unasked, so
+// they gate no reader.
+var baseIndexes = []derivedIndex{
+	{Name: "idx_og_objects_owner_computer_kind", Columns: "owner_id, computer_id, object_kind"},
+	{Name: "idx_og_objects_kind_owner_computer", Columns: "object_kind, owner_id, computer_id"},
+}
+
+// derivedColumns are the generated columns of og_objects, in the order a
+// migration adds them.
+func derivedColumns() []generatedColumn {
 	columns := make([]generatedColumn, 0, len(metadataIndexColumns)+len(recordColumns))
 	for _, mc := range metadataIndexColumns {
-		if mc.Kind == "" || records {
-			columns = append(columns, mc.generatedColumn())
-		}
+		columns = append(columns, mc.generatedColumn())
 	}
-	if records {
-		columns = append(columns, recordColumns...)
-	}
-	present := s.ensureGeneratedColumns(ctx, columns)
-	// An index is created only over a column this call ensured; an index
-	// that already exists is recognized either way.
-	index := func(name, columns string, ensured bool) bool {
-		if ensured {
-			return s.ensureGeneratedIndex(ctx, name, columns)
-		}
-		return s.indexExists(ctx, name)
-	}
+	return append(columns, recordColumns...)
+}
+
+// derivedIndexes are the indexes beyond the base table's, in the order a
+// migration builds them.
+func derivedIndexes() []derivedIndex {
+	indexes := append([]derivedIndex(nil), baseIndexes...)
 	for _, mc := range metadataIndexColumns {
-		if present[mc.Column] && index(mc.indexName(), mc.indexColumns(), mc.Kind == "" || records) {
-			live[mc.Column] = true
+		indexes = append(indexes, derivedIndex{Name: mc.indexName(), Columns: mc.indexColumns(), Needs: []string{mc.Column}, LiveName: mc.Column})
+	}
+	return append(indexes,
+		derivedIndex{Name: recordInboxSeqIndex, Columns: "object_kind, og_rec_inbox, " + recordInboxSeqColumn,
+			Needs: []string{"og_rec_inbox", recordInboxSeqColumn}, LiveName: recordInboxSeqIndex},
+		derivedIndex{Name: recordClaimIndex, Columns: "object_kind, owner_id, " + recordClaimColumn + ", updated_at, canonical_id",
+			Needs: []string{recordClaimColumn}, LiveName: recordClaimIndex},
+	)
+}
+
+// AccessPathPlan is what discovery found on og_objects: whether it has rows,
+// which derived columns and indexes are missing, and which reader paths are
+// live (the rest read through JSON_EXTRACT).
+type AccessPathPlan struct {
+	HasRows        bool     `json:"has_rows"`
+	MissingColumns []string `json:"missing_columns"`
+	MissingIndexes []string `json:"missing_indexes"`
+	Live           []string `json:"live"`
+}
+
+func (p AccessPathPlan) log() {
+	if len(p.MissingColumns)+len(p.MissingIndexes) == 0 {
+		log.Printf("objectgraph dolt: derived access paths complete (live: %v)", p.Live)
+		return
+	}
+	log.Printf("objectgraph dolt: derived access paths: %d columns and %d indexes missing on a table with rows=%t, not added at open (columns %v, indexes %v; live: %v); those reads stay on JSON until POST /internal/store/derived-columns?action=migrate",
+		len(p.MissingColumns), len(p.MissingIndexes), p.HasRows, p.MissingColumns, p.MissingIndexes, p.Live)
+}
+
+// AccessPathStep is one finished step of MigrateAccessPaths.
+type AccessPathStep struct {
+	Index      int    `json:"index"` // 1-based
+	Total      int    `json:"total"`
+	Kind       string `json:"kind"` // column or index
+	Name       string `json:"name"`
+	DurationMS int64  `json:"duration_ms"`
+	Err        string `json:"error,omitempty"`
+}
+
+type migrationStep struct {
+	kind, name, ddl string
+}
+
+// DiscoverAccessPaths reads which derived columns and indexes og_objects
+// has and replaces the live set from it. It runs no DDL and reads only
+// information_schema and one row of og_objects.
+func (s *DoltStore) DiscoverAccessPaths(ctx context.Context) (AccessPathPlan, error) {
+	if s == nil || s.db == nil {
+		return AccessPathPlan{}, fmt.Errorf("objectgraph dolt: nil store")
+	}
+	s.engineMu.Lock()
+	defer s.engineMu.Unlock()
+	return s.discoverLocked(ctx)
+}
+
+// discoverLocked is DiscoverAccessPaths with engineMu held. On an error the
+// live set is left as it was.
+func (s *DoltStore) discoverLocked(ctx context.Context) (AccessPathPlan, error) {
+	var plan AccessPathPlan
+	var anyRow int
+	switch err := s.db.QueryRowContext(ctx, `SELECT 1 FROM og_objects LIMIT 1`).Scan(&anyRow); {
+	case err == nil:
+		plan.HasRows = true
+	case !errors.Is(err, sql.ErrNoRows):
+		return plan, fmt.Errorf("objectgraph dolt: probe og_objects rows: %w", err)
+	}
+	columns, err := s.listNames(ctx, `SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'og_objects'`)
+	if err != nil {
+		return plan, fmt.Errorf("objectgraph dolt: list og_objects columns: %w", err)
+	}
+	indexes, err := s.listNames(ctx, `SELECT DISTINCT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'og_objects'`)
+	if err != nil {
+		return plan, fmt.Errorf("objectgraph dolt: list og_objects indexes: %w", err)
+	}
+	for _, column := range derivedColumns() {
+		if !columns[column.Name] {
+			plan.MissingColumns = append(plan.MissingColumns, column.Name)
 		}
 	}
-	if present["og_rec_inbox"] && present[recordInboxSeqColumn] &&
-		index(recordInboxSeqIndex, "object_kind, og_rec_inbox, "+recordInboxSeqColumn, records) {
-		live[recordInboxSeqIndex] = true
-	}
-	if present[recordClaimColumn] &&
-		index(recordClaimIndex, "object_kind, owner_id, "+recordClaimColumn+", updated_at, canonical_id", records) {
-		live[recordClaimIndex] = true
+	live := map[string]bool{}
+	for _, index := range derivedIndexes() {
+		if !indexes[index.Name] {
+			plan.MissingIndexes = append(plan.MissingIndexes, index.Name)
+			continue
+		}
+		if index.LiveName == "" {
+			continue
+		}
+		complete := true
+		for _, column := range index.Needs {
+			complete = complete && columns[column]
+		}
+		if complete {
+			live[index.LiveName] = true
+		}
 	}
 	s.liveColumns.Store(&live)
+	plan.Live = s.liveNames()
+	return plan, nil
+}
+
+func (s *DoltStore) listNames(ctx context.Context, query string) (map[string]bool, error) {
+	rows, err := s.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	names := map[string]bool{}
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		names[strings.ToLower(name)] = true
+	}
+	return names, rows.Err()
+}
+
+// migrationSteps are the DDL statements that add what plan is missing: the
+// columns first, one per step, then the indexes.
+func (s *DoltStore) migrationSteps(plan AccessPathPlan) []migrationStep {
+	missingColumn := map[string]bool{}
+	for _, name := range plan.MissingColumns {
+		missingColumn[name] = true
+	}
+	missingIndex := map[string]bool{}
+	for _, name := range plan.MissingIndexes {
+		missingIndex[name] = true
+	}
+	var steps []migrationStep
+	for _, column := range derivedColumns() {
+		if missingColumn[column.Name] {
+			steps = append(steps, migrationStep{kind: "column", name: column.Name,
+				ddl: `ALTER TABLE og_objects ADD COLUMN ` + column.Name + ` ` + column.Def})
+		}
+	}
+	for _, index := range derivedIndexes() {
+		if missingIndex[index.Name] {
+			steps = append(steps, migrationStep{kind: "index", name: index.Name,
+				ddl: fmt.Sprintf(`CREATE INDEX %s ON og_objects(%s)`, index.Name, index.Columns)})
+		}
+	}
+	return steps
+}
+
+func (s *DoltStore) runStepLocked(ctx context.Context, step migrationStep) error {
+	_, err := s.db.ExecContext(ctx, step.ddl)
+	return err
+}
+
+// MigrateAccessPaths adds the derived columns and indexes og_objects is
+// missing. It is the explicit operation behind
+// /internal/store/derived-columns, never a boot step: on a table with rows
+// each column is a rewrite of every row and each index a full pass, about
+// 50 us per row per step (docs/problems/guest-cpu-is-unindexed-store-scans-2026-10-14.md).
+// It runs one statement per step and holds the engine only for that
+// statement, so the computer's reads and writes run between steps; after
+// each step the live set is rediscovered (progress, if set, is called
+// then, outside the engine lock: a shared-engine read store learns it
+// through InheritMetadataColumns). A step that fails is logged and
+// skipped; its paths stay on JSON. A cancelled ctx stops it before the
+// next step; what was added stays, and nothing resumes it at boot.
+// og_objects is a projection, so no tape event is written, and the columns
+// are additive generated columns no older binary writes, so the store
+// schema epoch does not change and a rollback finds them present.
+func (s *DoltStore) MigrateAccessPaths(ctx context.Context, progress func(AccessPathStep)) (AccessPathPlan, error) {
+	plan, err := s.DiscoverAccessPaths(ctx)
+	if err != nil {
+		return plan, err
+	}
+	steps := s.migrationSteps(plan)
+	if len(steps) == 0 {
+		log.Printf("objectgraph dolt: derived access path migration: nothing missing")
+		return plan, nil
+	}
+	log.Printf("objectgraph dolt: derived access path migration: %d steps on a table with rows=%t (columns %v, indexes %v)",
+		len(steps), plan.HasRows, plan.MissingColumns, plan.MissingIndexes)
+	begin := time.Now()
+	var failed []string
+	for i, step := range steps {
+		if err := ctx.Err(); err != nil {
+			log.Printf("objectgraph dolt: derived access path migration cancelled before step %d/%d after %s",
+				i+1, len(steps), time.Since(begin).Round(time.Millisecond))
+			return plan, err
+		}
+		log.Printf("objectgraph dolt: derived access path step %d/%d: %s %s starting", i+1, len(steps), step.kind, step.name)
+		start := time.Now()
+		s.engineMu.LockAs("(*DoltStore).MigrateAccessPaths")
+		stepErr := s.runStepLocked(ctx, step)
+		if next, err := s.discoverLocked(ctx); err == nil {
+			plan = next
+		}
+		s.engineMu.UnlockAs("(*DoltStore).MigrateAccessPaths")
+		done := AccessPathStep{Index: i + 1, Total: len(steps), Kind: step.kind, Name: step.name, DurationMS: time.Since(start).Milliseconds()}
+		if stepErr != nil {
+			done.Err = stepErr.Error()
+			failed = append(failed, step.name)
+			log.Printf("objectgraph dolt: derived access path step %d/%d: %s %s failed after %s, JSON path kept: %v",
+				i+1, len(steps), step.kind, step.name, time.Since(start).Round(time.Millisecond), stepErr)
+		} else {
+			log.Printf("objectgraph dolt: derived access path step %d/%d: %s %s done in %s",
+				i+1, len(steps), step.kind, step.name, time.Since(start).Round(time.Millisecond))
+		}
+		if progress != nil {
+			progress(done)
+		}
+	}
+	log.Printf("objectgraph dolt: derived access path migration finished in %s, %d of %d steps failed (live: %v)",
+		time.Since(begin).Round(time.Millisecond), len(failed), len(steps), plan.Live)
+	if len(failed) > 0 {
+		return plan, fmt.Errorf("objectgraph dolt: derived access path steps failed: %v", failed)
+	}
+	return plan, nil
 }
 
 // live reports whether a generated-column access path (a column or a
@@ -373,6 +540,9 @@ func (s *DoltStore) live(name string) bool {
 	set := s.liveColumns.Load()
 	return set != nil && (*set)[name]
 }
+
+// LiveAccessPaths names the live generated-column access paths, sorted.
+func (s *DoltStore) LiveAccessPaths() []string { return s.liveNames() }
 
 func (s *DoltStore) liveNames() []string {
 	set := s.liveColumns.Load()
@@ -385,98 +555,6 @@ func (s *DoltStore) liveNames() []string {
 	}
 	sort.Strings(names)
 	return names
-}
-
-func (s *DoltStore) indexExists(ctx context.Context, index string) bool {
-	var count int
-	err := s.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'og_objects' AND INDEX_NAME = ?`,
-		index).Scan(&count)
-	return err == nil && count > 0
-}
-
-// ensureGeneratedColumns adds the columns information_schema does not list.
-// A STORED column rewrites every row, so the missing ones go in one ALTER
-// (one rewrite); if that fails, each is tried alone so one rejected
-// expression does not take the others down. It returns the columns that
-// exist afterwards.
-func (s *DoltStore) ensureGeneratedColumns(ctx context.Context, columns []generatedColumn) map[string]bool {
-	present := map[string]bool{}
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'og_objects'`)
-	if err != nil {
-		log.Printf("objectgraph dolt: list og_objects columns, JSON paths kept: %v", err)
-		return present
-	}
-	for rows.Next() {
-		var name string
-		if rows.Scan(&name) == nil {
-			present[strings.ToLower(name)] = true
-		}
-	}
-	_ = rows.Close()
-	var missing []generatedColumn
-	for _, column := range columns {
-		if !present[column.Name] {
-			missing = append(missing, column)
-		}
-	}
-	if len(missing) == 0 {
-		return present
-	}
-	start := time.Now()
-	clauses := make([]string, len(missing))
-	names := make([]string, len(missing))
-	for i, column := range missing {
-		clauses[i] = "ADD COLUMN " + column.Name + " " + column.Def
-		names[i] = column.Name
-	}
-	// A STORED column rewrites every row: say so before it starts, so a hang
-	// in it is named by the log.
-	doneAlter := BootPhase("store: open", "objectgraph-schema/add-generated-columns "+strings.Join(names, ","))
-	_, alterErr := s.db.ExecContext(ctx, `ALTER TABLE og_objects `+strings.Join(clauses, ", "))
-	doneAlter(alterErr)
-	if err := alterErr; err == nil {
-		for _, column := range missing {
-			present[column.Name] = true
-		}
-		log.Printf("objectgraph dolt: added %d generated columns in %s", len(missing), time.Since(start).Round(time.Millisecond))
-		return present
-	}
-	for _, column := range missing {
-		if _, err := s.db.ExecContext(ctx, `ALTER TABLE og_objects ADD COLUMN `+column.Name+` `+column.Def); err != nil {
-			// Expression rejected or column DDL unsupported: the readers keep
-			// the JSON_EXTRACT path for this field.
-			log.Printf("objectgraph dolt: generated column %s unavailable, JSON path kept: %v", column.Name, err)
-			continue
-		}
-		present[column.Name] = true
-	}
-	log.Printf("objectgraph dolt: added generated columns one by one in %s", time.Since(start).Round(time.Millisecond))
-	return present
-}
-
-// ensureGeneratedIndex creates index over columns unless information_schema
-// already lists it. It reports whether the index exists afterwards.
-func (s *DoltStore) ensureGeneratedIndex(ctx context.Context, index, columns string) bool {
-	var count int
-	err := s.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'og_objects' AND INDEX_NAME = ?`,
-		index).Scan(&count)
-	if err == nil && count == 0 {
-		start := time.Now()
-		doneIndex := BootPhase("store: open", "objectgraph-schema/build-index "+index)
-		_, err = s.db.ExecContext(ctx, fmt.Sprintf(`CREATE INDEX %s ON og_objects(%s)`, index, columns))
-		doneIndex(err)
-		if err == nil {
-			log.Printf("objectgraph dolt: built index %s in %s", index, time.Since(start).Round(time.Millisecond))
-		}
-	}
-	if err != nil {
-		log.Printf("objectgraph dolt: index %s unavailable, JSON path kept: %v", index, err)
-		return false
-	}
-	return true
 }
 
 // accessPathOp names a metadata read for the engine mutex counters: the
