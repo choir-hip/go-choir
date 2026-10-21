@@ -5,6 +5,8 @@ package agentprofile
 import (
 	"fmt"
 	"strings"
+
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 )
 
 const (
@@ -37,44 +39,29 @@ func PolicyFor(profile string) (Policy, error) {
 	if err != nil {
 		return Policy{}, err
 	}
+	// The verifier roles and any other canonical profile the manifest does not
+	// name get a bare policy; the processor and reconciler profiles are
+	// frozen history and have none.
 	switch canonical {
-	case Conductor:
-		return Policy{Profile: Conductor}, nil
-	case Research:
-		return Policy{
-			Profile:               Research,
-			AllowedMessageTargets: []string{Texture},
-		}, nil
-	case Texture:
-		// Texture is the artifact control plane, not an evidence gatherer.
-		// Lifecycle target and cancellation authority stays in atomic Texture
-		// controls/reducers.
-		return Policy{
-			Profile:               Texture,
-			AllowedMessageTargets: []string{Research, Management},
-		}, nil
 	case "processor", "reconciler":
 		return Policy{}, UnknownProfileError{Input: profile}
-	case Email:
-		return Policy{Profile: Email}, nil
-	case Engineering:
-		// Engineering has no static tool authority. The assignment runtime constructs a
-		// fresh per-run registry from the exact capsule-local closed set. Message policy
-		// allows reports to Management; executability of those packets is
-		// sender-authorized at Management, not granted by packet.kind.
-		return Policy{Profile: Engineering, AllowedMessageTargets: []string{Management}}, nil
-	case Management:
-		return Policy{
-			Profile:               Management,
-			AllowedMessageTargets: []string{Texture, Research},
-		}, nil
-	default:
-		// Canonical but unlisted profiles (the verifier roles) get a bare
-		// policy: no message targets.
-		// This is fail-closed by construction — never add a permissive
-		// default here.
-		return Policy{Profile: strings.TrimSpace(profile)}, nil
 	}
+	// Message targets come from the desk manifest (internal/deskmanifest), the
+	// one table of what each desk may call. Texture is the artifact control
+	// plane, not an evidence gatherer; engineering has no static tool
+	// authority and reports to management; executability of a report is
+	// sender-authorized at management, not granted by packet.kind.
+	if d, ok := deskmanifest.Lookup(canonical); ok && d.Kind == deskmanifest.KindSystem {
+		p := Policy{Profile: canonical}
+		if len(d.MessageTargets) > 0 {
+			p.AllowedMessageTargets = d.MessageTargets
+		}
+		return p, nil
+	}
+	// Canonical but unlisted profiles (the verifier roles) get a bare policy:
+	// no message targets. Fail-closed by construction — never add a
+	// permissive default here.
+	return Policy{Profile: strings.TrimSpace(profile)}, nil
 }
 
 // UnknownProfileError reports a profile token outside the V2 live vocabulary.

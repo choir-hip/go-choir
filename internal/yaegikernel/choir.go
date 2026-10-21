@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/traefik/yaegi/interp"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/texturewrite"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -118,8 +119,9 @@ const SessionRoleResearchChild = "research_child"
 // spelling is agentprofile.ManagementTask's.
 const SessionRoleManagementTask = "management_task"
 
-// NewChoirScope mints a session-scoped handle for exactly the file
-// and message actions and returns the scope the choir symbols close over.
+// NewChoirScope mints a session-scoped handle for exactly the actions the
+// desk's manifest row gives it and returns the scope the choir symbols close
+// over.
 // The caller (worker session setup) owns the broker lifetime.
 func NewChoirScope(broker *Broker, issuer *HandleIssuer, computerID, activationID string, epoch uint64, role, slot string) (*ChoirScope, error) {
 	if broker == nil {
@@ -130,40 +132,22 @@ func NewChoirScope(broker *Broker, issuer *HandleIssuer, computerID, activationI
 	}
 	desk := normalizeDeskRole(role)
 	readOnly := role == SessionRoleResearch || role == SessionRoleResearchChild
-	actions := []BrokerAction{ActionExec, ActionReadFile, ActionWriteFile, ActionListDir, ActionMessage, ActionEmit}
-	switch {
-	case desk == "":
-		// An unknown role fails closed (R2-2): observation only. Before
-		// S2a it resolved to the engineering surface.
+	if desk == "" || desk == SessionRoleManagementTask {
+		// An unknown role fails closed (R2-2): observation only. A task
+		// stages acts the host reduces and touches no filesystem.
 		readOnly = true
-		actions = []BrokerAction{ActionReadFile, ActionListDir}
-	case desk == SessionRoleManagementTask:
-		// A task reads its records, captures and the story library; its
-		// acts are records the host reduces. No filesystem, assignment,
-		// message or product API authority.
-		readOnly = true
-		actions = []BrokerAction{ActionReadFile, ActionListDir, ActionReadCapture, ActionStories}
-	case role == SessionRoleResearchChild:
-		actions = []BrokerAction{ActionReadFile, ActionListDir,
-			ActionSearchStart, ActionRead, ActionReadCapture, ActionSearchWireCorpus,
-			ActionReadEvidence, ActionListEvidence}
-	case readOnly:
-		// Research is read-only on the filesystem but owns the host-mediated
-		// egress verbs (search_start/read/read_capture/search_wire_corpus/
-		// poll_source + evidence/run-memory) — the handle
-		// must authorize the frame actions the cell verbs dispatch.
-		actions = []BrokerAction{ActionReadFile, ActionListDir, ActionEmit,
-			ActionSearchStart, ActionRead, ActionSearchWireCorpus,
-			ActionSaveEvidence, ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry, ActionResearch,
-			ActionPollSource, ActionReadCapture, ActionSystem1, ActionSourceAPI}
 	}
-	// SMG: the management desk's product API call rides the broker like the
-	// research egress verbs — the typed product_api_request tool is deleted.
-	if desk == "management" {
-		actions = append(actions, ActionProductAPI, ActionReadCapture, ActionStories)
-	}
-	if desk == "texture" {
-		actions = append(actions, ActionReadCapture)
+	// The handle's scopes are the desk's manifest row (internal/deskmanifest):
+	// the observation actions its worker serves itself, plus the host-served
+	// actions its verbs dispatch. exec and write_file are engineering's only,
+	// and the retired message and emit are no desk's. A role the manifest does
+	// not name gets observation only.
+	actions := []BrokerAction{ActionReadFile, ActionListDir}
+	if d, ok := deskmanifest.Lookup(desk); ok && desk != "" {
+		actions = actions[:0]
+		for _, a := range d.HandleActions() {
+			actions = append(actions, BrokerAction(a))
+		}
 	}
 	handleRef, err := issuer.Issue(computerID, "choir-session", epoch, actions, sessionHandleTTL)
 	if err != nil {
@@ -200,8 +184,7 @@ func (s *ChoirScope) HandleRef() string { return *s.handleRef.Load() }
 // R2-2): it used to resolve to engineering, so a role the kernel did not
 // know silently received WriteFile, Exec, Complete and Freeze.
 func normalizeDeskRole(role string) string {
-	switch role {
-	case "management", "engineering", "research", "texture", SessionRoleResearchChild, SessionRoleManagementTask:
+	if d, ok := deskmanifest.Lookup(role); ok && d.Carrier != deskmanifest.CarrierNone {
 		return role
 	}
 	return ""
@@ -317,61 +300,15 @@ func (s *ChoirScope) call(action BrokerAction, payload any, result any) error {
 // verbs are grouped so messaging authority is separable from world mutation.
 // "file" = ReadFile+ListDir+WriteFile+Exec; "delegate" = Cast;
 // "commit" = Complete+Freeze; "epistemic" = the full semantic-act surface.
-var deskModuleSets = map[string][]string{
-	// Management delegates engineering work and reports; it does not touch
-	// the filesystem (mutation is capsule-bound under engineering). It does
-	// not judge citation support: Jev does, off its turn, after each Texture
-	// commit (support-judgement-to-jev-design-2026-10-14). It reads the captures
-	// a capture arrival names (ReadCapture) to open and feed stories (Cut 2
-	// 2b); it never fetches the world. It verifies an engineering
-	// assignment's frozen candidate (Verify, C1e step 4).
-	// It delegates capture intake to management tasks (Delegate) and may
-	// cancel one (CancelTask), management delegation S2a.
-	"management": {"Cast", "Ask", "Note", "Reply",
-		"CancelAct", "CancelAssignment", "Escalate", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement",
-		"ProductAPI", "ReadCapture", "Stories", "Feed", "Decline", "Verify", "Delegate", "CancelTask"},
-	// A management task (S2a) disposes of the captures its lease names: it
-	// opens a story (Cast to texture:new), feeds one (Feed, or a Cast or
-	// Note to texture:<doc>), declines (Decline), and ends with Done. It
-	// sends outward as management, with the task named in provenance. It
-	// cannot cast engineering, verify, call the product API, delegate, or
-	// commit ledger acts: one level of delegation, as research children.
-	SessionRoleManagementTask: {"Cast", "Note", "ReadCapture", "Stories", "Feed", "Decline", "Done"},
-	// Engineering mutates inside its capsule, converses with management on
-	// records (C1e B1: Report, Ask, Reply, Note into its one conversation),
-	// and ends its assignment with Complete, freezing a candidate first. It
-	// precommits what it expects with rule-settled Precommits, which the
-	// runtime settles from its Freeze, management's Verify and the
-	// assignment's end (types/commitment_rules.go).
-	// It runs long builds and tests as capsule jobs (Start, Poll, Stop;
-	// docs/design/capsule-long-exec-2026-10-15.md).
-	"engineering": {"WriteFile", "Exec", "Start", "Poll", "Stop", "Complete", "Freeze", "Precommit", "Report", "Ask", "Reply", "Note"},
-	// Research observes the world read-only but has full message authority —
-	// read-only world access is not read-only messaging.
-	"research": {"Cast", "Ask", "Note", "Reply", "CancelAct",
-		"Escalate", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement",
-		"SearchStart", "Searches", "SearchWait", "Read", "ReadCapture", "SearchWireCorpus",
-		"SaveEvidence", "ReadEvidence", "ListEvidence", "RunMemoryEntry", "Research", "PollSource", "SourceAPI",
-		// System1 is the fast intuitive judge: closed questions answered with
-		// a distribution the desk weighs (owner ruling 2026-10-20; research
-		// only, not management, children or tasks).
-		"System1"},
-	// A child research activation (choir.Research) reads the world and may
-	// fan out further; it cannot message, report or write. Its findings
-	// return to the parent cell as a value. It runs on the same desk-session
-	// machinery as its parent, so it searches the same async way.
-	SessionRoleResearchChild: {"SearchStart", "Searches", "SearchWait", "Read", "ReadCapture", "SearchWireCorpus",
-		"ReadEvidence", "ListEvidence"},
-	// Texture writes its document with one verb, Write, and closes a turn
-	// with Done, Wait or Reject (Cut 2 2a); the cell's turn commits through
-	// ApplyTextureTurn. It dispatches to research and management with Cast,
-	// Ask and Note, which the reducer folds into the same cell's turn
-	// (protocol P2a), so a dispatch commits with the turn. It reads the
-	// captures its frame names (ReadCapture, by capture id or frame handle),
-	// so it can quote the capture a story was opened on; it never fetches
-	// the world (problems/texture-opens-stories-blind-to-their-capture-2026-10-16.md).
-	"texture": {"Cast", "Ask", "Note", "ReadDoc", "ReadCapture", "Write", "Done", "Wait", "Reject"},
-}
+var deskModuleSets = func() map[string][]string {
+	sets := map[string][]string{}
+	for _, name := range deskmanifest.Names() {
+		if d, _ := deskmanifest.Lookup(name); d.Carrier != deskmanifest.CarrierNone && d.Kind != deskmanifest.KindApp {
+			sets[name] = d.Verbs
+		}
+	}
+	return sets
+}()
 
 // legacyObservation gates the observation verbs of the packet transports
 // (Cut 1 L6). Every desk converses on records and reads choir.Records
@@ -394,12 +331,8 @@ func (s *ChoirScope) deskModule(name string) bool {
 	if s == nil {
 		return false
 	}
-	for _, m := range deskModuleSets[s.desk] {
-		if m == name {
-			return true
-		}
-	}
-	return false
+	d, ok := deskmanifest.Lookup(s.desk)
+	return ok && d.HasVerb(name)
 }
 
 // ChoirExports returns the prebound choir package for model-authored Go,

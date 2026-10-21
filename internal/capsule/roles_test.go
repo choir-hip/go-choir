@@ -69,3 +69,15 @@ func TestRoleVerbSets(t *testing.T) {
 		t.Error("super should NOT have go_eval verb")
 	}
 }
+
+// A role the manifest does not name has no verbs: the table is read from
+// internal/deskmanifest and an unknown name fails closed.
+func TestUnknownRoleHasNoVerbs(t *testing.T) {
+	for _, role := range []AgentRole{"", "root", "app:podcast", "Engineering", "research_child"} {
+		for _, verb := range []string{"exec", "read_file", "write_file", "list_dir", "go_eval", "job_start"} {
+			if role.HasVerb(verb) {
+				t.Errorf("role %q is granted %s", role, verb)
+			}
+		}
+	}
+}

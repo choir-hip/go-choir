@@ -54,6 +54,10 @@ type BrokerRequest struct {
 	Action          BrokerAction    `json:"action"`
 	Payload         json.RawMessage `json:"payload"`
 	TimeoutMs       int64           `json:"timeout_ms,omitempty"`
+	// SlotToken is the per-worker token the host generated at spawn
+	// (ARCH-07). A host-bound frame carries it so the daemon can tell the
+	// worker it spawned from a stray or replayed connection.
+	SlotToken string `json:"slot_token,omitempty"`
 }
 
 // BrokerResponse is the flat DTO returned from the broker to the Yaegi activation.

@@ -94,6 +94,10 @@ type SessionResult struct {
 	// cell returned (0: the cell never called it). The cell's commit marks
 	// read only through it (autopaper-arrivals-unanswered-2026-10-13).
 	RecordsShown int64 `json:"records_shown,omitempty"`
+	// SlotToken is set on the worker's ready handshake only (ARCH-07): the
+	// per-spawn token the host generated, proving the process on the socket
+	// is the one it started.
+	SlotToken string `json:"slot_token,omitempty"`
 }
 
 // RunSessionLoopWithDrainAndHooks serves newline-delimited SessionFrames from

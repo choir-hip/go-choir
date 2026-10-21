@@ -23,8 +23,9 @@ func TestDeskWorkerEgressRoundTrip(t *testing.T) {
 	var gotAction BrokerAction
 	var gotPayload json.RawMessage
 	w := &DeskSessionWorker{
-		framed: NewFramedConn(host),
-		cfg: DeskSessionWorkerConfig{Egress: func(ctx context.Context, action BrokerAction, payload json.RawMessage) (json.RawMessage, error) {
+		framed:    NewFramedConn(host),
+		slotToken: []byte(testSlotToken),
+		cfg: DeskSessionWorkerConfig{Session: SessionWorkerConfig{Role: "research", Epoch: 1}, Egress: func(ctx context.Context, action BrokerAction, payload json.RawMessage) (json.RawMessage, error) {
 			gotAction = action
 			gotPayload = payload
 			return json.Marshal(map[string]any{"results": []string{"a", "b"}})
@@ -47,7 +48,7 @@ func TestDeskWorkerEgressRoundTrip(t *testing.T) {
 		t.Fatalf("worker read cell frame: %v", err)
 	}
 	payload, _ := json.Marshal(SearchWireCorpusPayload{Query: "choir", Limit: 2})
-	req, _ := json.Marshal(BrokerRequest{ProtocolVersion: ProtocolVersion, RequestID: "e1", Action: ActionSearchWireCorpus, Payload: payload})
+	req, _ := json.Marshal(BrokerRequest{ProtocolVersion: ProtocolVersion, RequestID: "e1", Epoch: 1, SlotToken: testSlotToken, Action: ActionSearchWireCorpus, Payload: payload})
 	if err := wfc.WriteFrame(StreamBrokerEgress, req); err != nil {
 		t.Fatalf("worker write egress: %v", err)
 	}
@@ -94,7 +95,7 @@ func TestDeskWorkerEgressRefused(t *testing.T) {
 	defer host.Close()
 	defer worker.Close()
 
-	w := &DeskSessionWorker{framed: NewFramedConn(host), cfg: DeskSessionWorkerConfig{}}
+	w := &DeskSessionWorker{framed: NewFramedConn(host), slotToken: []byte(testSlotToken), cfg: DeskSessionWorkerConfig{Session: SessionWorkerConfig{Role: "research", Epoch: 1}}}
 
 	go func() {
 		_, _ = w.EvalCell(context.Background(), "print(1)", nil, nil, nil, nil, nil, nil)
@@ -104,7 +105,7 @@ func TestDeskWorkerEgressRefused(t *testing.T) {
 		t.Fatalf("worker read cell frame: %v", err)
 	}
 	payload, _ := json.Marshal(ReadPayload{URL: "https://x"})
-	req, _ := json.Marshal(BrokerRequest{ProtocolVersion: ProtocolVersion, RequestID: "e2", Action: ActionRead, Payload: payload})
+	req, _ := json.Marshal(BrokerRequest{ProtocolVersion: ProtocolVersion, RequestID: "e2", Epoch: 1, SlotToken: testSlotToken, Action: ActionRead, Payload: payload})
 	_ = wfc.WriteFrame(StreamBrokerEgress, req)
 	stream, rraw, err := wfc.ReadFrame()
 	if err != nil {

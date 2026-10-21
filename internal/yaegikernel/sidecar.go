@@ -34,6 +34,10 @@ type SessionWorkerConfig struct {
 	// sets it; the capsule path does not, so its output and receipt digest
 	// stay uncut.
 	KeepCellOutput bool
+	// SlotToken is the per-spawn token the host handed the worker (ARCH-07).
+	// The worker sends it in its ready handshake and in every host-bound
+	// request. Empty for a capsule worker, whose broker does not verify it.
+	SlotToken string
 }
 
 // ExecuteWorkerSessionStdin serves framed eval cells on stdin/stdout with one
@@ -123,7 +127,7 @@ func cellHooks(scope *ChoirScope, cfg SessionWorkerConfig) CellHooks {
 func ExecuteWorkerSessionConn(conn net.Conn, cfg SessionWorkerConfig) {
 	fc := NewFramedConn(conn)
 	sess, broker, scope := buildSessionWorker(cfg)
-	ready, err := json.Marshal(SessionResult{ID: "ready"})
+	ready, err := json.Marshal(SessionResult{ID: "ready", SlotToken: cfg.SlotToken})
 	if err != nil {
 		os.Exit(2)
 	}
@@ -139,7 +143,7 @@ func ExecuteWorkerSessionConn(conn net.Conn, cfg SessionWorkerConfig) {
 			return EmitResult{}, fmt.Errorf("emit marshal: %w", err)
 		}
 		req := BrokerRequest{ProtocolVersion: ProtocolVersion, RequestID: newReceiptID(),
-			HandleRef: scope.HandleRef(), Epoch: cfg.Epoch, Action: ActionEmit, Payload: raw}
+			HandleRef: scope.HandleRef(), Epoch: cfg.Epoch, Action: ActionEmit, Payload: raw, SlotToken: cfg.SlotToken}
 		resp, err := mux.roundTrip(ctx, StreamBrokerEmit, StreamBrokerEmitResult, req)
 		if err != nil {
 			return EmitResult{}, fmt.Errorf("emit: %w", err)
@@ -155,7 +159,7 @@ func ExecuteWorkerSessionConn(conn net.Conn, cfg SessionWorkerConfig) {
 	// action against its search/HTTP/content deps.
 	broker.SetEgress(func(ctx context.Context, action BrokerAction, payload json.RawMessage) (json.RawMessage, error) {
 		req := BrokerRequest{ProtocolVersion: ProtocolVersion, RequestID: newReceiptID(),
-			HandleRef: scope.HandleRef(), Epoch: cfg.Epoch, Action: action, Payload: payload}
+			HandleRef: scope.HandleRef(), Epoch: cfg.Epoch, Action: action, Payload: payload, SlotToken: cfg.SlotToken}
 		resp, err := mux.roundTrip(ctx, StreamBrokerEgress, StreamBrokerEgressResult, req)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", action, err)
