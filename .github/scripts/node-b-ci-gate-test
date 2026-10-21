@@ -1,0 +1,198 @@
+#!/usr/bin/env bash
+# Tests for scripts/node-b-ci-gate, the forced command behind Node B's
+# choir-deploy user (SDC SEC-14; docs/problems/ci-deploys-to-node-b-as-root-2026-10-21.md).
+#
+# Ways the gate could fail, written before the gate:
+#  1. It runs a program the caller sent (stdin, or a shell word in the request).
+#  2. It passes a shell metacharacter, a newline or a glob through to bash.
+#  3. It accepts an unknown verb or key, so the caller picks paths or scripts.
+#  4. It accepts a short, upper-case or non-hex commit, which git resolves as
+#     a ref or abbreviation the caller controls.
+#  5. It accepts a duplicate key, the last one silently winning.
+#  6. It runs with a required key missing, so the script sees an unset value.
+#  7. It accepts HOST_SERVICES that leave the flake attribute namespace
+#     (".#a b", "../x", "x;y").
+#  8. It deploys a commit that GitHub serves by SHA but that is not on main
+#     (a fork's pull request head). Checked on Node B by FP0; the parser
+#     cannot see it.
+#  9. It treats --print-plan as anything but a dry parse.
+set -euo pipefail
+
+root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+gate="$root/scripts/node-b-ci-gate"
+
+sha=0123456789abcdef0123456789abcdef01234567
+prebuild_ok="prebuild DEPLOY_COMMIT=$sha DEPLOY_FRONTEND=true DEPLOY_HOST=false DEPLOY_HOST_OS=false HOST_SERVICES=autoputer,vmctl"
+deploy_ok="deploy DEPLOY_COMMIT=$sha DEPLOY_RUN_ID=18712345678 DEPLOY_RUN_ATTEMPT=1 DEPLOY_HOST=true DEPLOY_FRONTEND=false DEPLOY_VMCTL_RESTART=true DEPLOY_ACTIVE_VM_REFRESH=false REFRESH_ACTIVE_COMPUTERS=false DEPLOY_HOST_OS=true HOST_SERVICES="
+
+fail() {
+  echo "node-b-ci-gate-test: $*" >&2
+  exit 1
+}
+
+accept() {
+  local request="$1"
+  local expected="$2"
+  local out
+  out=$("$gate" --print-plan "$request" 2>&1) || fail "refused a valid request: $request ($out)"
+  [ "$out" = "$expected" ] || fail "plan mismatch for: $request
+--- got
+$out
+--- want
+$expected"
+}
+
+refuse() {
+  local request="$1"
+  local out status=0
+  out=$("$gate" --print-plan "$request" 2>&1) || status=$?
+  [ "$status" -eq 2 ] || fail "status $status (want 2) for: $(printf '%q' "$request") ($out)"
+  case "$out" in
+    "node-b-ci-gate: refused: "*) ;;
+    *) fail "refusal without the refusal prefix for: $(printf '%q' "$request") ($out)" ;;
+  esac
+}
+
+accept "receipt" "verb=receipt"
+
+accept "$prebuild_ok" "verb=prebuild
+repo=/opt/go-choir-prebuild
+script=.github/scripts/node-b-ci-prebuild
+env=DEPLOY_COMMIT=$sha
+env=DEPLOY_FRONTEND=true
+env=DEPLOY_HOST=false
+env=DEPLOY_HOST_OS=false
+env=HOST_SERVICES=autoputer,vmctl"
+
+# Keys in any order; the plan lists them in the gate's fixed order.
+accept "prebuild HOST_SERVICES=autoputer,vmctl DEPLOY_HOST_OS=false DEPLOY_HOST=false DEPLOY_FRONTEND=true DEPLOY_COMMIT=$sha" "verb=prebuild
+repo=/opt/go-choir-prebuild
+script=.github/scripts/node-b-ci-prebuild
+env=DEPLOY_COMMIT=$sha
+env=DEPLOY_FRONTEND=true
+env=DEPLOY_HOST=false
+env=DEPLOY_HOST_OS=false
+env=HOST_SERVICES=autoputer,vmctl"
+
+accept "$deploy_ok" "verb=deploy
+repo=/opt/go-choir
+script=.github/scripts/node-b-ci-deploy
+env=DEPLOY_COMMIT=$sha
+env=DEPLOY_RUN_ID=18712345678
+env=DEPLOY_RUN_ATTEMPT=1
+env=DEPLOY_HOST=true
+env=DEPLOY_FRONTEND=false
+env=DEPLOY_VMCTL_RESTART=true
+env=DEPLOY_ACTIVE_VM_REFRESH=false
+env=REFRESH_ACTIVE_COMPUTERS=false
+env=DEPLOY_HOST_OS=true
+env=HOST_SERVICES="
+
+# 1, 3: no verb, unknown verbs, a shell, arguments on receipt.
+refuse ""
+refuse "bash -s"
+refuse "sh"
+refuse "cat /var/lib/go-choir/deploy-receipt.json"
+refuse "DEPLOY_COMMIT=$sha bash -s"
+refuse "rollback DEPLOY_COMMIT=$sha"
+refuse "receipt DEPLOY_COMMIT=$sha"
+refuse "Receipt"
+refuse "receipt "
+refuse " receipt"
+
+# 2: metacharacters, whitespace and newlines.
+refuse "${deploy_ok/DEPLOY_RUN_ATTEMPT=1/DEPLOY_RUN_ATTEMPT=\$(id)}"
+refuse "${deploy_ok/HOST_SERVICES=/HOST_SERVICES=a;id}"
+refuse "${deploy_ok/HOST_SERVICES=/HOST_SERVICES=a|id}"
+refuse "${deploy_ok/HOST_SERVICES=/HOST_SERVICES=*}"
+refuse "${deploy_ok/DEPLOY_HOST=true/DEPLOY_HOST=true  }"
+refuse "${deploy_ok/ DEPLOY_HOST=true/$'\t'DEPLOY_HOST=true}"
+refuse "$deploy_ok"$'\n'"id"
+refuse "receipt"$'\n'
+refuse "${deploy_ok/DEPLOY_HOST=true/DEPLOY_HOST=\`id\`}"
+
+# 3: unknown keys, keys from the other verb, environment the gate owns.
+refuse "$deploy_ok PATH=/tmp"
+refuse "$deploy_ok HOME=/tmp"
+refuse "$deploy_ok BASH_ENV=x"
+refuse "$prebuild_ok DEPLOY_RUN_ID=1"
+refuse "${deploy_ok/DEPLOY_HOST=/deploy_host=}"
+
+# 4: commits.
+refuse "${deploy_ok/$sha/${sha:0:39}}"
+refuse "${deploy_ok/$sha/${sha}0}"
+refuse "${deploy_ok/$sha/0123456789ABCDEF0123456789abcdef01234567}"
+refuse "${deploy_ok/$sha/main}"
+refuse "${deploy_ok/$sha/0123456789abcdef0123456789abcdef0123456g}"
+refuse "${deploy_ok/DEPLOY_COMMIT=$sha/DEPLOY_COMMIT=}"
+
+# 5: duplicates.
+refuse "$deploy_ok DEPLOY_HOST=false"
+refuse "$prebuild_ok DEPLOY_COMMIT=$sha"
+
+# 6: missing keys.
+refuse "${deploy_ok/ REFRESH_ACTIVE_COMPUTERS=false/}"
+refuse "${prebuild_ok/ HOST_SERVICES=autoputer,vmctl/}"
+refuse "deploy"
+refuse "prebuild"
+
+# Booleans and numbers.
+refuse "${deploy_ok/DEPLOY_HOST=true/DEPLOY_HOST=yes}"
+refuse "${deploy_ok/DEPLOY_HOST=true/DEPLOY_HOST=}"
+refuse "${deploy_ok/DEPLOY_HOST=true/DEPLOY_HOST=TRUE}"
+refuse "${deploy_ok/DEPLOY_RUN_ATTEMPT=1/DEPLOY_RUN_ATTEMPT=}"
+refuse "${deploy_ok/DEPLOY_RUN_ATTEMPT=1/DEPLOY_RUN_ATTEMPT=0}"
+refuse "${deploy_ok/DEPLOY_RUN_ATTEMPT=1/DEPLOY_RUN_ATTEMPT=-1}"
+refuse "${deploy_ok/DEPLOY_RUN_ID=18712345678/DEPLOY_RUN_ID=123456789012345678901}"
+
+# 7: HOST_SERVICES stays a comma list of plain names.
+accept "${prebuild_ok/HOST_SERVICES=autoputer,vmctl/HOST_SERVICES=corpusd}" "verb=prebuild
+repo=/opt/go-choir-prebuild
+script=.github/scripts/node-b-ci-prebuild
+env=DEPLOY_COMMIT=$sha
+env=DEPLOY_FRONTEND=true
+env=DEPLOY_HOST=false
+env=DEPLOY_HOST_OS=false
+env=HOST_SERVICES=corpusd"
+refuse "${prebuild_ok/autoputer,vmctl/autoputer,}"
+refuse "${prebuild_ok/autoputer,vmctl/,autoputer}"
+refuse "${prebuild_ok/autoputer,vmctl/autoputer,,vmctl}"
+refuse "${prebuild_ok/autoputer,vmctl/..}"
+refuse "${prebuild_ok/autoputer,vmctl/a.b}"
+refuse "${prebuild_ok/autoputer,vmctl/-x}"
+refuse "${prebuild_ok/autoputer,vmctl/Auth}"
+
+# Length bound.
+refuse "$deploy_ok$(printf ' X=%.0s' $(seq 1 600))"
+
+# 9: the gate's own argument forms.
+status=0
+"$gate" >/dev/null 2>&1 || status=$?
+[ "$status" -eq 2 ] || fail "no arguments: status $status, want 2"
+status=0
+"$gate" --print-plan >/dev/null 2>&1 || status=$?
+[ "$status" -eq 2 ] || fail "--print-plan without a request: status $status, want 2"
+status=0
+"$gate" --run "$deploy_ok" >/dev/null 2>&1 || status=$?
+[ "$status" -eq 2 ] || fail "unknown mode: status $status, want 2"
+status=0
+"$gate" -- "receipt" extra >/dev/null 2>&1 || status=$?
+[ "$status" -eq 2 ] || fail "extra argument: status $status, want 2"
+
+# The host wiring (nix/node-b.nix): the key is forced to the gate through
+# sudo with the request as one argument after "--", and the gate is the
+# deploy user's only sudo rule.
+nix_file="$root/nix/node-b.nix"
+for pattern in \
+  '(builtins.readFile ../scripts/node-b-ci-gate);' \
+  'exec /run/wrappers/bin/sudo -n ${ciDeployGate} -- "'"''"'${SSH_ORIGINAL_COMMAND:-}"' \
+  "''restrict,command=\"\${ciDeployForcedCommand}\" \${ciDeployKey}''" \
+  'users = [ "choir-deploy" ];' \
+  'runAs = "root";' \
+  'command = "${ciDeployGate}";'; do
+  grep -Fq -- "$pattern" "$nix_file" || fail "nix/node-b.nix lacks: $pattern"
+done
+[ "$(grep -c 'command = ' "$nix_file")" -eq 1 ] || fail "nix/node-b.nix has more than one sudo command rule"
+grep -Eq 'choir-deploy.*(ALL|NOPASSWD: *ALL)' "$nix_file" && fail "choir-deploy has a broad sudo rule"
+
+echo "node-b-ci-gate tests passed"
