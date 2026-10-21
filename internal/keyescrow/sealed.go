@@ -45,6 +45,13 @@ const (
 	// under the units).
 	EnvKEKPath = "CHOIR_KEY_ESCROW_KEK_PATH"
 
+	// KEKNamePrefix is the name every KEK file must start with: the daily
+	// backup (scripts/off-host-backup.sh) excludes "key-escrow-kek*" by name,
+	// so a KEK under any other name would ride in the backup beside the
+	// sealed key (finding B3). A systemd credential named key-escrow-kek
+	// satisfies it as %d/key-escrow-kek.
+	KEKNamePrefix = "key-escrow-kek"
+
 	kekSize = chacha20poly1305.KeySize
 	// maxKeyFileSize bounds a read of a key or KEK file.
 	maxKeyFileSize = 4096
@@ -234,6 +241,18 @@ func OpenSealedPrivateKey(data, kek []byte) (PrivateKey, error) {
 	return priv, nil
 }
 
+// checkKEKPath requires an absolute path whose file name starts with
+// KEKNamePrefix.
+func checkKEKPath(path string) error {
+	if !filepath.IsAbs(path) {
+		return fmt.Errorf("keyescrow: KEK path must be absolute")
+	}
+	if !strings.HasPrefix(filepath.Base(path), KEKNamePrefix) {
+		return fmt.Errorf("keyescrow: KEK file name must start with %q (the backup excludes that name)", KEKNamePrefix)
+	}
+	return nil
+}
+
 // readBounded reads a regular file without following a final symlink.
 func readBounded(path string) ([]byte, os.FileInfo, error) {
 	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
@@ -262,8 +281,8 @@ func readBounded(path string) ([]byte, os.FileInfo, error) {
 // LoadKEK reads a 32-byte KEK (raw, or base64 text) from an owner-only
 // regular file that is not a symlink.
 func LoadKEK(path string) ([]byte, error) {
-	if !filepath.IsAbs(path) {
-		return nil, fmt.Errorf("keyescrow: KEK path must be absolute")
+	if err := checkKEKPath(path); err != nil {
+		return nil, err
 	}
 	data, info, err := readBounded(path)
 	if err != nil {
@@ -294,8 +313,8 @@ func LoadKEK(path string) ([]byte, error) {
 // GenerateKEKFile writes a new random KEK as base64 text, mode 0400, and
 // refuses to replace an existing file.
 func GenerateKEKFile(path string) error {
-	if !filepath.IsAbs(path) {
-		return fmt.Errorf("keyescrow: KEK path must be absolute")
+	if err := checkKEKPath(path); err != nil {
+		return err
 	}
 	kek := make([]byte, kekSize)
 	defer clear(kek)

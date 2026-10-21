@@ -58,7 +58,9 @@ calls() { tr '\n' '|' < "$R/calls"; }
 
 # 1, 2, 3, 5: raise, platform sync, restore the value read; corpus untouched.
 setup ok ok ok; run
-want="systemctl show -p MemoryHigh --value go-choir-platform-dolt.service|systemctl set-property --runtime go-choir-platform-dolt.service MemoryHigh=8G|port 13306|systemctl set-property --runtime go-choir-platform-dolt.service MemoryHigh=3221225472|port 13307|"
+# The two KEK source reads (finding B3 of FP9) come after the syncs, when the
+# backup resolves its paths; they change no unit.
+want="systemctl show -p MemoryHigh --value go-choir-platform-dolt.service|systemctl set-property --runtime go-choir-platform-dolt.service MemoryHigh=8G|port 13306|systemctl set-property --runtime go-choir-platform-dolt.service MemoryHigh=3221225472|port 13307|systemctl show -p LoadCredential -p LoadCredentialEncrypted -p Environment go-choir-corpusd.service|systemctl show -p LoadCredential -p LoadCredentialEncrypted -p Environment go-choir-checkpointd.service|"
 check "raise, platform sync, restore, then corpus" "$([ "$(calls)" = "$want" ]; echo $?)"
 
 # 2: a failed platform sync still restores.
