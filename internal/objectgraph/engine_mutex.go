@@ -92,7 +92,23 @@ func callerName() string {
 }
 
 func (m *engineMutex) Lock() {
-	op := callerName()
+	m.lockAs(callerName())
+}
+
+// LockAs locks under a finer op name than the method: a read that serves
+// many access paths (kind and field) names the path, so the counters say
+// which one holds the engine. The name must come from code, never from a
+// value. Pair it with UnlockAs and the same name.
+func (m *engineMutex) LockAs(op string) {
+	m.lockAs(op)
+}
+
+// UnlockAs unlocks a LockAs.
+func (m *engineMutex) UnlockAs(op string) {
+	m.unlockAs(op)
+}
+
+func (m *engineMutex) lockAs(op string) {
 	start := time.Now()
 	id := m.beginWait(op, start)
 	m.mu.Lock()
@@ -103,8 +119,11 @@ func (m *engineMutex) Lock() {
 }
 
 func (m *engineMutex) Unlock() {
+	m.unlockAs(callerName())
+}
+
+func (m *engineMutex) unlockAs(op string) {
 	hold := time.Since(m.acquiredAt)
-	op := callerName()
 	m.record(op, hold, false)
 	m.statsMu.Lock()
 	m.holderOp, m.holderSince = "", time.Time{}

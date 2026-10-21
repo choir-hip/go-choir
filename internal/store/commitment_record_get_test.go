@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -32,7 +33,7 @@ func TestGetCommitmentRecordReadsByKeyWithoutABodyScan(t *testing.T) {
 	receipt := mustCommitInbox(t, s, "cell-records:get-by-key", nil, openingCast("get-by-key:cast:c1"))
 	inboxRecord := receipt.Records[0].RecordID
 
-	scansBefore := s.EngineMutexStats()["(*DoltStore).ListObjectsByOwnerAndBody"].Calls
+	scansBefore := bodyScanCalls(s)
 	for _, id := range []string{appended.RecordID, inboxRecord} {
 		rec, err := s.GetCommitmentRecord(ctx, storyOwner, storyComputer, id)
 		if err != nil || rec == nil || rec.RecordID != id {
@@ -45,7 +46,18 @@ func TestGetCommitmentRecordReadsByKeyWithoutABodyScan(t *testing.T) {
 	if rec, err := s.GetCommitmentRecord(ctx, storyOwner, storyComputer, "no-such-record"); err != nil || rec != nil {
 		t.Fatalf("absent record = %+v, %v; want nil, nil", rec, err)
 	}
-	if scans := s.EngineMutexStats()["(*DoltStore).ListObjectsByOwnerAndBody"].Calls - scansBefore; scans != 0 {
+	if scans := bodyScanCalls(s) - scansBefore; scans != 0 {
 		t.Fatalf("GetCommitmentRecord made %d body scans; want reads by key", scans)
 	}
+}
+
+// bodyScanCalls counts ListObjectsByOwnerAndBody calls over every path name.
+func bodyScanCalls(s *Store) uint64 {
+	var n uint64
+	for op, st := range s.EngineMutexStats() {
+		if strings.HasPrefix(op, "(*DoltStore).ListObjectsByOwnerAndBody") {
+			n += st.Calls
+		}
+	}
+	return n
 }

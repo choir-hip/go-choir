@@ -2305,6 +2305,81 @@ func (s *Store) GetLifecycleSnapshot(ctx context.Context, ownerID, computerID, t
 		return types.LifecycleSnapshot{}, err
 	}
 	boundDocID := strings.TrimSpace(bound.SubjectRefs["doc_id"])
+	if objects, ok, err := s.readLifecycleTrajectoryObjects(ctx, graph, ownerID, computerID, trajectoryID, boundDocID); err != nil {
+		return types.LifecycleSnapshot{}, err
+	} else if ok {
+		snapshot, err := assembleLifecycleSnapshot(objects, trajectoryID)
+		if err == nil {
+			return snapshot, nil
+		}
+		// A document or revision not under its key, or a row without its
+		// trajectory metadata: the scan below decides, as it always did.
+		log.Printf("lifecycle snapshot: index read for trajectory %s fell back to the scan: %v", trajectoryID, err)
+	}
+	objects, err := s.scanLifecycleSnapshotObjects(ctx, graph, ownerID, computerID, trajectoryID, boundDocID)
+	if err != nil {
+		return types.LifecycleSnapshot{}, err
+	}
+	return assembleLifecycleSnapshot(objects, trajectoryID)
+}
+
+// lifecycleTrajectoryKinds are the snapshot's kinds whose rows carry the
+// trajectory in their metadata.
+var lifecycleTrajectoryKinds = []objectgraph.ObjectKind{
+	ogKindTrajectory, ogKindWorkItem, ogKindRun, ogKindAgent, ogKindWorkerUpdate,
+	ogKindEngineeringAssignment, ogKindLifecycleEvent,
+}
+
+// readLifecycleTrajectoryObjects reads a snapshot's objects through the
+// trajectory index: the trajectory's rows, then the bound document and the
+// revisions the assembly needs (its current head, and a terminal
+// trajectory's artifact head), by key, in the same read transaction. ok is
+// false when the index read is not available. The scan it replaces read the
+// metadata of every lifecycle object, document and revision of the computer:
+// 416 ms per call on the paper
+// (docs/problems/research-more-slow-and-hidden-2026-10-21.md, E6).
+func (s *Store) readLifecycleTrajectoryObjects(ctx context.Context, graph *objectgraph.DoltStore, ownerID, computerID, trajectoryID, boundDocID string) ([]objectgraph.Object, bool, error) {
+	if boundDocID == "" {
+		return nil, false, nil
+	}
+	docKey, err := lifecycleCanonicalID(ogKindTexDoc, ownerID, computerID, boundDocID)
+	if err != nil {
+		return nil, false, err
+	}
+	keep := func(_ objectgraph.ObjectKind, metadata json.RawMessage) bool {
+		var meta struct {
+			TrajectoryID string `json:"trajectory_id"`
+		}
+		return json.Unmarshal(metadata, &meta) == nil && meta.TrajectoryID == trajectoryID
+	}
+	follow := func(have []objectgraph.Object) []string {
+		next := []string{docKey}
+		for _, obj := range have {
+			var revisionID string
+			switch obj.ObjectKind {
+			case ogKindTexDoc:
+				if doc, err := decodeLifecycleObject[types.Document](obj); err == nil && doc.DocID == boundDocID {
+					revisionID = doc.CurrentRevisionID
+				}
+			case ogKindTrajectory:
+				if traj, err := decodeLifecycleObject[types.TrajectoryRecord](obj); err == nil && traj.TrajectoryID == trajectoryID && traj.Status != types.TrajectoryLive {
+					revisionID = traj.TerminalArtifactHeadRef
+				}
+			}
+			if revisionID = strings.TrimSpace(revisionID); revisionID != "" {
+				if key, err := lifecycleCanonicalID(ogKindTexRev, ownerID, computerID, revisionID); err == nil {
+					next = append(next, key)
+				}
+			}
+		}
+		return next
+	}
+	return graph.ReadTrajectorySnapshot(ctx, ownerID, computerID, trajectoryID, lifecycleTrajectoryKinds, keep, follow)
+}
+
+// scanLifecycleSnapshotObjects reads a snapshot's objects by scanning the
+// metadata of every object of the snapshot's kinds.
+func (s *Store) scanLifecycleSnapshotObjects(ctx context.Context, graph *objectgraph.DoltStore, ownerID, computerID, trajectoryID, boundDocID string) ([]objectgraph.Object, error) {
 	snapshotKinds := []objectgraph.ObjectKind{
 		ogKindTrajectory, ogKindTexDoc, ogKindTexRev, ogKindWorkItem,
 		ogKindRun, ogKindAgent, ogKindWorkerUpdate, ogKindEngineeringAssignment,
@@ -2326,8 +2401,13 @@ func (s *Store) GetLifecycleSnapshot(ctx context.Context, ownerID, computerID, t
 		return meta.TrajectoryID == trajectoryID
 	})
 	if err != nil {
-		return types.LifecycleSnapshot{}, err
+		return nil, err
 	}
+	return objects, nil
+}
+
+// assembleLifecycleSnapshot builds a trajectory's snapshot from its objects.
+func assembleLifecycleSnapshot(objects []objectgraph.Object, trajectoryID string) (types.LifecycleSnapshot, error) {
 	snapshot := types.LifecycleSnapshot{Schema: types.DurableWorkSchemaV1}
 	documents := make(map[string]types.Document)
 	revisions := make(map[string]types.Revision)

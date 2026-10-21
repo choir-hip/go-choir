@@ -453,6 +453,17 @@ func (s *DoltStore) ensureGeneratedIndex(ctx context.Context, index, columns str
 	return true
 }
 
+// accessPathOp names a metadata read for the engine mutex counters: the
+// method, the kind, the field, and whether it reads an index or JSON. The
+// value is not part of the name.
+func (s *DoltStore) accessPathOp(method, kind, jsonPath, value string) string {
+	path := "json"
+	if _, ok := s.metadataColumnFor(kind, jsonPath, value); ok {
+		path = "index"
+	}
+	return "(*DoltStore)." + method + " " + kind + " " + jsonPath + " " + path
+}
+
 // metadataColumnFor returns the live generated column that answers
 // metadata.<jsonPath> = value for kind, if any. The column name comes from
 // the fixed metadataIndexColumns table, never from the caller.
@@ -716,11 +727,132 @@ func (s *DoltStore) ReadObjectSnapshotFiltered(ctx context.Context, ownerID, com
 	}
 
 	// Phase 2: PK-fetch bodies for survivors, preserving canonical_id order.
-	// IDs arrive sorted from phase 1. Fetch them in fixed-size IN batches
-	// inside the same read-only transaction: go-mysql-server's range-overlap
-	// check is quadratic in the IN list, and one list of every survivor cost
-	// 42% of guest CPU on a long-lived computer (docs/problems/
-	// texture-list-cold-latency-2026-10-09.md).
+	objects, err := snapshotFetchByID(ctx, tx, ids)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("objectgraph dolt: snapshot commit: %w", err)
+	}
+	return objects, nil
+}
+
+// trajectoryRefsSQL is one kind's refs for one trajectory, through the
+// (object_kind, og_meta_trajectory_id, updated_at) index. Owner and computer
+// are checked on the rows, not in the predicate: given them, the planner
+// takes the (object_kind, owner_id, computer_id) index and reads every row
+// of the kind, the scan this replaces.
+func (s *DoltStore) trajectoryRefsSQL(kind ObjectKind, trajectoryID string) (string, []any) {
+	return `SELECT canonical_id, object_kind, owner_id, computer_id, metadata FROM og_objects
+WHERE object_kind = ? AND og_meta_trajectory_id = ?`,
+		[]any{string(kind), trajectoryID}
+}
+
+// trajectoryFollowRounds bounds ReadTrajectorySnapshot's follow rounds.
+const trajectoryFollowRounds = 4
+
+// ReadTrajectorySnapshot reads one trajectory's objects in one read-only
+// serializable transaction, the same isolation ReadObjectSnapshotFiltered
+// gives. First the rows of kinds whose metadata trajectory_id is
+// trajectoryID, through the og_meta_trajectory_id index, kept by keep (the
+// exact check: the column is a superset under the engine's collation); then
+// up to trajectoryFollowRounds rounds of the objects follow names by
+// canonical id, given everything read so far, until it names nothing new.
+// The result is in canonical_id order, as the scan's is.
+//
+// ok is false, with nothing read, when the trajectory column is not live or
+// trajectoryID is empty; the caller then reads with ReadObjectSnapshotFiltered.
+// The filtered scan reads the metadata of every object of its kinds in the
+// computer: 416 ms per call on the paper (docs/problems/
+// research-more-slow-and-hidden-2026-10-21.md, E6).
+func (s *DoltStore) ReadTrajectorySnapshot(ctx context.Context, ownerID, computerID, trajectoryID string, kinds []ObjectKind, keep func(kind ObjectKind, metadata json.RawMessage) bool, follow func(have []Object) []string) ([]Object, bool, error) {
+	if s == nil || s.db == nil {
+		return nil, false, fmt.Errorf("objectgraph dolt: nil store")
+	}
+	ownerID, computerID, trajectoryID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(trajectoryID)
+	if ownerID == "" || computerID == "" {
+		return nil, false, fmt.Errorf("objectgraph dolt: snapshot owner_id and computer_id are required")
+	}
+	if trajectoryID == "" || !s.live("og_meta_trajectory_id") {
+		return nil, false, nil
+	}
+	s.engineMu.Lock()
+	defer s.engineMu.Unlock()
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable, ReadOnly: true})
+	if err != nil {
+		return nil, false, fmt.Errorf("objectgraph dolt: begin trajectory snapshot tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var ids []string
+	for _, kind := range kinds {
+		query, args := s.trajectoryRefsSQL(kind, trajectoryID)
+		rows, err := tx.QueryContext(ctx, query, args...)
+		if err != nil {
+			return nil, false, fmt.Errorf("objectgraph dolt: trajectory refs: %w", err)
+		}
+		for rows.Next() {
+			var id, kindStr, owner, computer, metadata string
+			if err := rows.Scan(&id, &kindStr, &owner, &computer, &metadata); err != nil {
+				rows.Close()
+				return nil, false, fmt.Errorf("objectgraph dolt: scan trajectory ref: %w", err)
+			}
+			if owner != ownerID || computer != computerID {
+				continue
+			}
+			if keep == nil || keep(ObjectKind(kindStr), json.RawMessage(metadata)) {
+				ids = append(ids, id)
+			}
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return nil, false, fmt.Errorf("objectgraph dolt: iterate trajectory refs: %w", err)
+		}
+		rows.Close()
+	}
+	sort.Strings(ids)
+	objects, err := snapshotFetchByID(ctx, tx, ids)
+	if err != nil {
+		return nil, false, err
+	}
+	seen := make(map[string]bool, len(objects))
+	for _, obj := range objects {
+		seen[obj.CanonicalID] = true
+	}
+	for round := 0; follow != nil && round < trajectoryFollowRounds; round++ {
+		var next []string
+		for _, id := range follow(objects) {
+			if id = strings.TrimSpace(id); id != "" && !seen[id] {
+				seen[id] = true
+				next = append(next, id)
+			}
+		}
+		if len(next) == 0 {
+			break
+		}
+		sort.Strings(next)
+		more, err := snapshotFetchByID(ctx, tx, next)
+		if err != nil {
+			return nil, false, err
+		}
+		for _, obj := range more {
+			if obj.OwnerID == ownerID && obj.ComputerID == computerID {
+				objects = append(objects, obj)
+			}
+		}
+	}
+	sort.Slice(objects, func(i, j int) bool { return objects[i].CanonicalID < objects[j].CanonicalID })
+	if err := tx.Commit(); err != nil {
+		return nil, false, fmt.Errorf("objectgraph dolt: trajectory snapshot commit: %w", err)
+	}
+	return objects, true, nil
+}
+
+// snapshotFetchByID fetches objects by canonical id inside tx, in id order.
+// Fixed-size IN batches: go-mysql-server's range-overlap check is quadratic
+// in the IN list, and one list of every survivor cost 42% of guest CPU on a
+// long-lived computer (docs/problems/texture-list-cold-latency-2026-10-09.md).
+func snapshotFetchByID(ctx context.Context, tx *sql.Tx, ids []string) ([]Object, error) {
 	objects := make([]Object, 0, len(ids))
 	for start := 0; start < len(ids); start += snapshotFetchBatch {
 		batch := ids[start:min(start+snapshotFetchBatch, len(ids))]
@@ -747,9 +879,6 @@ func (s *DoltStore) ReadObjectSnapshotFiltered(ctx context.Context, ownerID, com
 			return nil, fmt.Errorf("objectgraph dolt: iterate snapshot bodies: %w", err)
 		}
 		objRows.Close()
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("objectgraph dolt: snapshot commit: %w", err)
 	}
 	return objects, nil
 }
@@ -1022,8 +1151,9 @@ func (s *DoltStore) ListObjectsByMetadata(ctx context.Context, kind, jsonPath, v
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("objectgraph dolt: nil store")
 	}
-	s.engineMu.Lock()
-	defer s.engineMu.Unlock()
+	op := s.accessPathOp("ListObjectsByMetadata", kind, jsonPath, value)
+	s.engineMu.LockAs(op)
+	defer s.engineMu.UnlockAs(op)
 	query, args := s.metadataListSQL(kind, jsonPath, value, limit)
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -1078,8 +1208,9 @@ func (s *DoltStore) ListObjectsByMetadataPage(ctx context.Context, kind, jsonPat
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("objectgraph dolt: nil store")
 	}
-	s.engineMu.Lock()
-	defer s.engineMu.Unlock()
+	op := s.accessPathOp("ListObjectsByMetadataPage", kind, jsonPath, value)
+	s.engineMu.LockAs(op)
+	defer s.engineMu.UnlockAs(op)
 	if !strings.HasPrefix(jsonPath, "$.") {
 		return nil, fmt.Errorf("objectgraph dolt: invalid metadata JSON path %q", jsonPath)
 	}
@@ -1163,8 +1294,13 @@ func (s *DoltStore) ListObjectsByOwnerAndBody(ctx context.Context, kind, ownerID
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("objectgraph dolt: nil store")
 	}
-	s.engineMu.Lock()
-	defer s.engineMu.Unlock()
+	paths := make([]string, 0, len(matches))
+	for _, m := range matches {
+		paths = append(paths, m.JSONPath)
+	}
+	op := "(*DoltStore).ListObjectsByOwnerAndBody " + kind + " " + strings.Join(paths, ",")
+	s.engineMu.LockAs(op)
+	defer s.engineMu.UnlockAs(op)
 	query := `SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by
 		 FROM og_objects
 		 WHERE object_kind = ? AND owner_id = ?`
