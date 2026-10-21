@@ -258,3 +258,78 @@ func TestObservabilityReportsTelemetryBatching(t *testing.T) {
 		t.Fatalf("tape_events_by_authority = %v", b.TapeEventsByAuthority)
 	}
 }
+
+// ARCH-13 (docs/problems/guest-checkpoint-on-the-write-path-2026-10-21.md):
+// the owner's setting store.debounced_checkpoint moves the guest's Dolt
+// checkpoint off the write path, and turning it off is the rollback; the
+// counters are readable on the observability surface in either mode.
+func TestComputerSettingTurnsDebouncedCheckpointOnAndOff(t *testing.T) {
+	const computerID = "computer-checkpoint-setting"
+	rt := telemetryRuntime(t, computerID)
+	handler := &APIHandler{rt: rt}
+	post := func(value bool) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/api/computer-settings", strings.NewReader(fmt.Sprintf(`{"key":"store.debounced_checkpoint","value":%v}`, value)))
+		req.Header.Set("X-Authenticated-User", "owner-telemetry")
+		rec := httptest.NewRecorder()
+		handler.HandleComputerSettings(rec, req)
+		return rec
+	}
+	if rt.store.CheckpointStats().Mode != store.CheckpointModeCount {
+		t.Fatal("debounced checkpoint is on with no flag and no setting: the default must be count mode")
+	}
+	if rec := post(true); rec.Code != http.StatusOK {
+		t.Fatalf("set on = %d %s", rec.Code, rec.Body)
+	}
+	if rt.store.CheckpointStats().Mode != store.CheckpointModeDebounced {
+		t.Fatal("the owner's setting did not reach the store")
+	}
+	if rec := post(false); rec.Code != http.StatusOK {
+		t.Fatalf("set off = %d %s", rec.Code, rec.Body)
+	}
+	if rt.store.CheckpointStats().Mode != store.CheckpointModeCount {
+		t.Fatal("turning the setting off did not return to count mode")
+	}
+}
+
+func TestBootConfiguresDebouncedCheckpointFromSettingAndEnv(t *testing.T) {
+	const computerID = "computer-checkpoint-boot"
+	t.Setenv("CHOIR_OWNER_ID", "owner-telemetry")
+	t.Setenv("CHOIR_GUEST_CHECKPOINT", "")
+	rt := telemetryRuntime(t, computerID)
+	rt.configureGuestCheckpoint(context.Background())
+	if rt.store.CheckpointStats().Mode != store.CheckpointModeCount {
+		t.Fatal("debounced with neither the env flag nor the setting")
+	}
+	if err := rt.store.PutComputerSetting(context.Background(), store.ComputerSetting{OwnerID: "owner-telemetry", ComputerID: computerID, Key: store.SettingDebouncedCheckpoint, Value: true}); err != nil {
+		t.Fatal(err)
+	}
+	rt.configureGuestCheckpoint(context.Background())
+	if rt.store.CheckpointStats().Mode != store.CheckpointModeDebounced {
+		t.Fatal("the persisted setting did not turn debounced mode on at boot")
+	}
+
+	rt2 := telemetryRuntime(t, "computer-checkpoint-boot-env")
+	t.Setenv("CHOIR_GUEST_CHECKPOINT", "debounced")
+	t.Setenv("CHOIR_GUEST_CHECKPOINT_DEBOUNCE", "30s")
+	rt2.configureGuestCheckpoint(context.Background())
+	if stats := rt2.store.CheckpointStats(); stats.Mode != store.CheckpointModeDebounced || stats.DebounceMS != 30000 {
+		t.Fatalf("env flag: %+v, want debounced at 30s", stats)
+	}
+}
+
+func TestObservabilityReportsGuestCheckpoint(t *testing.T) {
+	rt := telemetryRuntime(t, "computer-checkpoint-obs")
+	req := httptest.NewRequest(http.MethodGet, "/api/runtime/observability", nil)
+	req.Header.Set("X-Authenticated-User", "owner-telemetry")
+	rec := httptest.NewRecorder()
+	(&APIHandler{rt: rt}).HandleGuestObservability(rec, req)
+	var obs struct {
+		GuestCheckpoint *store.CheckpointStats `json:"guest_checkpoint"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &obs); err != nil || obs.GuestCheckpoint == nil {
+		t.Fatalf("observability = %d %s", rec.Code, rec.Body.String())
+	}
+	if obs.GuestCheckpoint.Mode != store.CheckpointModeCount {
+		t.Fatalf("guest_checkpoint = %+v", obs.GuestCheckpoint)
+	}
+}
