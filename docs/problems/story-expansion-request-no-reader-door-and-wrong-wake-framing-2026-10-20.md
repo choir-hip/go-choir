@@ -213,3 +213,26 @@ planned refresh while busy). Rollback: revert; the door returns to this
 502. Related lesson: a proxy test that fakes the guest should be built
 from the guest's response type, not a hand-written map; recorded, not
 done here.
+
+## P5. After P4, the paper refuses the revise with a 409 the door calls "busy" (staging, 2026-10-21 02:46 UTC)
+
+Evidence. With e0d1b0b6f deployed (CI 39533914520) and the paper refreshed
+to it at 02:45:06 (planned restart, busy allowed), the logged-out ask on
+the FCA story (`rx-4b600d44b21e`) and on a story two hours old, the UK
+pension one (`pub-f7d2be0512ce1158219908232fc71729`, `rx-348ef09415e9`,
+importance 4), both passed the document read and got 409 `busy`. So P4 is
+repaired, and the next step fails on fresh and old stories alike.
+
+What is known. The door's `busy` is its default for any paper 409 that
+is not "digest conflict" or "head changed"
+(`internal/proxy/platform_expand.go`). The paper's revise
+(`internal/textureowner/texture_agent_revision.go`
+`handleLifecycleOwnerRevision`) answers 409 for four other causes: the
+trajectory is not live; several open desk target work items; none open
+after the settled-work reopen; a lifecycle commit conflict. Neither the
+proxy nor the paper logs which one; the paper's console shows nothing for
+the call. Which cause it is: unknown (no trace evidence yet).
+
+Next. The proxy logs the paper's 409 message (truncated, no content), the
+ask is repeated on a third low-importance story, and the cause is written
+here before any fix.
