@@ -5,7 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -54,6 +57,13 @@ func newRescueFixture(t *testing.T, protected bool) *rescueFixture {
 	reg := NewOwnershipRegistry("")
 	reg.SetCorpusdURL(testComputerCredentialIssuerURL(t))
 	reg.SetVMManager(ctrl)
+	var issued atomic.Int64
+	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		fmt.Fprintf(w, `{"raw_token":"gw-token-%d"}`, issued.Add(1))
+	}))
+	t.Cleanup(gateway.Close)
+	reg.SetGatewayURL(gateway.URL)
 	now := time.Date(2026, 10, 21, 16, 0, 0, 0, time.UTC)
 	reg.clock = func() time.Time { return now }
 	reg.guestNetworkProbe = func(string) bool { return true }
@@ -86,17 +96,37 @@ func (f *rescueFixture) own() VMOwnership {
 	return *f.reg.GetOwnershipForDesktop(rescueUser, PrimaryDesktopID)
 }
 
-// failStop puts the computer where the wedge detector leaves it: stopped, by
-// failure, with no process.
+// failStop puts the computer where the wedge detector leaves it: stopped by
+// a failure, with the stopped instance still tracked by the manager, as
+// mgr.StopVM really leaves it (stopWedgedManaged): a rescue without a vmctl
+// restart in between finds the instance and must not recover it with its old
+// config.
 func (f *rescueFixture) failStop(stoppedBy string) {
 	f.reg.mu.Lock()
 	own := f.reg.ownerships[ownershipKey(rescueUser, PrimaryDesktopID)]
 	own.State, own.StoppedBy = VMStateStopped, stoppedBy
+	vmID := own.VMID
 	f.reg.mu.Unlock()
 	f.mock.mu.Lock()
-	delete(f.mock.getVMs, own.VMID)
+	f.mock.getVMs[vmID] = &VMInstanceInfo{HostURL: "http://127.0.0.1:9001", State: "stopped"}
 	f.mock.mu.Unlock()
-	delete(f.ctrl.live, own.VMID)
+	delete(f.ctrl.live, vmID)
+}
+
+// failStopUntracked is the stop after a vmctl restart: the manager lost the
+// instance, so a start goes through BootVM.
+func (f *rescueFixture) failStopUntracked(stoppedBy string) {
+	f.failStop(stoppedBy)
+	f.mock.mu.Lock()
+	delete(f.mock.getVMs, f.own().VMID)
+	f.mock.mu.Unlock()
+}
+
+// failBoots makes every way of starting a guest fail with err (nil clears).
+func (f *rescueFixture) failBoots(err error) {
+	f.mock.mu.Lock()
+	f.mock.bootError, f.mock.refreshError, f.mock.recoverError = err, err, err
+	f.mock.mu.Unlock()
 }
 
 func (f *rescueFixture) deploy(t *testing.T, target string) (int, deployRefreshResponse) {
@@ -259,12 +289,14 @@ func TestDeployBootsAFailureStoppedPaperOncePerTargetAndAsACrashBoot(t *testing.
 func TestDeployLoopBoundIsOneSpawnPerTargetEvenWithManyPosts(t *testing.T) {
 	f := newRescueFixture(t, true)
 	const targets = 6
+	want := 0 // every spawn the bound allows so far
 	for i := 0; i < targets; i++ {
 		target := fmt.Sprintf("build-%d", i)
 		f.failStop(stoppedByWedged)
 		if _, resp := f.deploy(t, target); resp.Outcome != deployRefreshRefreshed {
 			t.Fatalf("target %d: %+v, want a boot", i, resp)
 		}
+		want++
 		// The build wedges again. Every driver that can ask for a boot asks
 		// many times; none may spawn under the same build.
 		f.failStop(stoppedByWedged)
@@ -273,7 +305,7 @@ func TestDeployLoopBoundIsOneSpawnPerTargetEvenWithManyPosts(t *testing.T) {
 			f.h.SweepDeployRefreshPending(t.Context())
 			f.reg.WarmAlwaysOnDesktops(t.Context(), allowAllRoutes)
 		}
-		if want := i + 1; f.spawns() != want {
+		if f.spawns() != want {
 			t.Fatalf("after target %d spawns = %d, want %d (one per target)", i, f.spawns(), want)
 		}
 		// And a day later the backstop allows exactly one sweep retry.
@@ -281,14 +313,14 @@ func TestDeployLoopBoundIsOneSpawnPerTargetEvenWithManyPosts(t *testing.T) {
 		if got := f.reg.WarmAlwaysOnDesktops(t.Context(), allowAllRoutes); got != 1 {
 			t.Fatalf("after the window: warmed %d, want 1", got)
 		}
+		want++
 		f.failStop(stoppedByWedged)
 		if got := f.reg.WarmAlwaysOnDesktops(t.Context(), allowAllRoutes); got != 0 {
 			t.Fatalf("a second sweep retry inside the window warmed %d", got)
 		}
-		// The sweep's retry also spawned: account for it before the next target.
-		f.mock.mu.Lock()
-		f.mock.boots = f.mock.boots[:len(f.mock.boots)-1]
-		f.mock.mu.Unlock()
+		if f.spawns() != want {
+			t.Fatalf("after the backstop spawns = %d, want %d", f.spawns(), want)
+		}
 	}
 }
 
@@ -314,7 +346,7 @@ func TestDeployDoesNotBootAHealthyPaperOrAnOrdinaryComputer(t *testing.T) {
 
 func TestDeployNeverBootsOverALiveGuestAndNeverStopsOne(t *testing.T) {
 	f := newRescueFixture(t, true)
-	f.failStop("vmctl-restart")
+	f.failStopUntracked("vmctl-restart")
 	own := f.own()
 	f.ctrl.live[own.VMID] = []int{4242}
 	f.ctrl.reattachError = errors.New("route authority unavailable")
@@ -351,7 +383,7 @@ func TestDeployNeverBootsOverALiveGuestAndNeverStopsOne(t *testing.T) {
 
 func TestDeployAdoptsALiveGuestThatWillReattachInsteadOfBootingIt(t *testing.T) {
 	f := newRescueFixture(t, true)
-	f.failStop("vmctl-restart")
+	f.failStopUntracked("vmctl-restart")
 	own := f.own()
 	f.ctrl.live[own.VMID] = []int{4242}
 	// Reattach works now (the route guard / health recovered): the computer is
@@ -371,7 +403,7 @@ func TestDeployAdoptsALiveGuestThatWillReattachInsteadOfBootingIt(t *testing.T) 
 func TestDeployRefundsTheRetryWhenTheRefusalSpawnedNothing(t *testing.T) {
 	f := newRescueFixture(t, true)
 	f.failStop(stoppedByWedged)
-	f.mock.bootError = fmt.Errorf("%w: vm busy", vmmanager.ErrLiveUnmanaged)
+	f.failBoots(fmt.Errorf("%w: vm busy", vmmanager.ErrLiveUnmanaged))
 	code, resp := f.deploy(t, "revert-1")
 	if code != http.StatusConflict || resp.Outcome != deployRefreshDeferred {
 		t.Fatalf("transient refusal: %d %+v, want deferred", code, resp)
@@ -380,7 +412,7 @@ func TestDeployRefundsTheRetryWhenTheRefusalSpawnedNothing(t *testing.T) {
 		t.Fatalf("a refusal that spawned nothing burned the retry: %q", own.FailureWarmedAt)
 	}
 	// It clears, and the sweep boots it once, without a new deploy.
-	f.mock.bootError = nil
+	f.failBoots(nil)
 	f.h.SweepDeployRefreshPending(t.Context())
 	if f.spawns() != 2 { // the refused attempt reached BootVM, the sweep's boot is the second call
 		t.Fatalf("boot calls = %d, want the refused one and one success", f.spawns())
@@ -393,7 +425,7 @@ func TestDeployRefundsTheRetryWhenTheRefusalSpawnedNothing(t *testing.T) {
 func TestDeployDoesNotRetryAFailedRescueEveryMinute(t *testing.T) {
 	f := newRescueFixture(t, true)
 	f.failStop(stoppedByWedged)
-	f.mock.bootError = errors.New("kernel panic: guest init failed")
+	f.failBoots(errors.New("kernel panic: guest init failed"))
 	code, resp := f.deploy(t, "revert-1")
 	if code < 400 || resp.Outcome != deployRefreshFailed {
 		t.Fatalf("hard boot failure: %d %+v, want failed", code, resp)
@@ -559,12 +591,12 @@ func TestRescueFromVMCTLRestartIsChargedAgainstTheTarget(t *testing.T) {
 	// A hard boot failure: the same target must not boot it again, and the
 	// sweep must not take over (the failure is a recovery failure now).
 	f := newRescueFixture(t, true)
-	f.failStop(stoppedByVMCTLRestart)
-	f.mock.bootError = errors.New("kernel panic: guest init failed")
+	f.failStopUntracked(stoppedByVMCTLRestart)
+	f.failBoots(errors.New("kernel panic: guest init failed"))
 	if code, resp := f.deploy(t, "A"); code < 400 || resp.Outcome != deployRefreshFailed {
 		t.Fatalf("hard failure: %d %+v, want failed", code, resp)
 	}
-	f.mock.bootError = nil
+	f.failBoots(nil)
 	for i := 0; i < 3; i++ {
 		f.deploy(t, "A")
 		f.h.SweepDeployRefreshPending(t.Context())
@@ -580,7 +612,7 @@ func TestRescueFromVMCTLRestartIsChargedAgainstTheTarget(t *testing.T) {
 	// A success leaves the allowance spent: the build that rescued it does
 	// not boot it again after a later wedge.
 	g := newRescueFixture(t, true)
-	g.failStop(stoppedByVMCTLRestart)
+	g.failStopUntracked(stoppedByVMCTLRestart)
 	if _, resp := g.deploy(t, "A"); resp.Outcome != deployRefreshRefreshed {
 		t.Fatalf("rescue from vmctl-restart: %+v", resp)
 	}
@@ -597,10 +629,229 @@ func TestRescueFromVMCTLRestartIsChargedAgainstTheTarget(t *testing.T) {
 
 func TestAdoptionWithoutASpawnSpendsNothing(t *testing.T) {
 	f := newRescueFixture(t, true)
-	f.failStop(stoppedByVMCTLRestart)
+	f.failStopUntracked(stoppedByVMCTLRestart)
 	f.ctrl.live[f.own().VMID] = []int{4242}
 	f.deploy(t, "A")
 	if own := f.own(); own.FailureWarmedAt != "" {
 		t.Fatalf("adopting a live guest spent the retry: %q", own.FailureWarmedAt)
+	}
+}
+
+// Review findings A1-A3 (second reviewer, 2026-10-21), written before the
+// fixes.
+//
+//   - A1: a spend succeeded for a computer that was no longer stopped by a
+//     failure (the caller's snapshot was stale), then its refund erased a
+//     spend someone else made;
+//   - A2: nothing marked the computer as starting while a resume was blocked
+//     in the manager, so a rescue saw "stopped", went to RecoverVM, killed the
+//     healthy first boot and booted again; and a rescue acting on a stale
+//     snapshot of a computer that had reattached reported "refreshed" for the
+//     old image;
+//   - A3: after the wedge detector's StopVM the manager still tracks the
+//     stopped instance, and the rescue recovered it with the config the hung
+//     boot used (old kernel, initrd, store, params) and no gateway token.
+
+func TestSpendRefusesUnlessTheRegistryEntryIsStoppedByAFailureNow(t *testing.T) {
+	reg, _ := hostCapacityRegistry(t, newProcessControlVMManager())
+	reg.SetWarmnessPolicyConfig(tierConfig())
+	addOwnership(reg, &VMOwnership{VMID: "vm-paper", UserID: "paper-owner", ComputerID: paperComputerID, DesktopID: PrimaryDesktopID, Kind: VMKindInteractive, State: VMStateStopped, StoppedBy: stoppedByWedged})
+	set := func(state VMState, stoppedBy string) {
+		reg.mu.Lock()
+		own := reg.vmByID["vm-paper"]
+		own.State, own.StoppedBy = state, stoppedBy
+		reg.mu.Unlock()
+	}
+	warmedAt := func() string {
+		reg.mu.RLock()
+		defer reg.mu.RUnlock()
+		return reg.vmByID["vm-paper"].FailureWarmedAt
+	}
+
+	// The caller read "stopped by wedged"; by the time it spends, the
+	// computer is running again.
+	set(VMStateActive, "")
+	if _, ok := reg.spendFailureWarm("vm-paper"); ok {
+		t.Fatal("the sweep's spend succeeded for an active computer")
+	}
+	if _, ok := reg.spendDeployRetry("vm-paper"); ok {
+		t.Fatal("the rescue's spend succeeded for an active computer")
+	}
+	// A stop label left behind on a computer that is not stopped does not
+	// qualify it.
+	for _, state := range []VMState{VMStateActive, VMStateBooting, VMStateHibernated, VMStateFailed} {
+		set(state, stoppedByWedged)
+		if _, ok := reg.spendFailureWarm("vm-paper"); ok {
+			t.Fatalf("the sweep's spend succeeded for state %s with a wedged label", state)
+		}
+		if _, ok := reg.spendDeployRetry("vm-paper"); ok {
+			t.Fatalf("the rescue's spend succeeded for state %s with a wedged label", state)
+		}
+	}
+	set(VMStateStopped, "idle")
+	if _, ok := reg.spendDeployRetry("vm-paper"); ok {
+		t.Fatal("a rescue spend succeeded for an idle stop")
+	}
+	set(VMStateHibernated, "")
+	if _, ok := reg.spendDeployRetry("vm-paper"); ok {
+		t.Fatal("a rescue spend succeeded for a hibernated computer")
+	}
+	if warmedAt() != "" {
+		t.Fatalf("a refused spend wrote FailureWarmedAt = %q", warmedAt())
+	}
+	// The sweep never charges a vmctl-restart stop; the rescue does.
+	set(VMStateStopped, stoppedByVMCTLRestart)
+	if _, ok := reg.spendFailureWarm("vm-paper"); ok {
+		t.Fatal("the sweep's spend succeeded for a vmctl-restart stop")
+	}
+	if _, ok := reg.spendDeployRetry("vm-paper"); !ok {
+		t.Fatal("the rescue's spend refused a vmctl-restart stop")
+	}
+	// A refused spend leaves nothing for a stale refund to erase.
+	set(VMStateStopped, stoppedByWedged)
+	reg.mu.Lock()
+	reg.vmByID["vm-paper"].FailureWarmedAt = ""
+	reg.mu.Unlock()
+	rec, ok := reg.spendFailureWarm("vm-paper")
+	if !ok {
+		t.Fatal("a fresh failure stop could not be charged")
+	}
+	set(VMStateActive, "")
+	if _, ok := reg.spendFailureWarm("vm-paper"); ok {
+		t.Fatal("a second spend of an active computer succeeded")
+	}
+	reg.refundFailureWarm("vm-paper", rec)
+	if warmedAt() != "" {
+		t.Fatalf("the refund of the only spend left %q", warmedAt())
+	}
+}
+
+func TestRescueDefersWhileAWarmSweepBootIsInFlight(t *testing.T) {
+	f := newRescueFixture(t, true)
+	f.failStopUntracked(stoppedByWedged)
+	started, release := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	f.mock.bootHook = func(VMManagerConfig) {
+		once.Do(func() { close(started) })
+		<-release
+	}
+	sweepDone := make(chan struct{})
+	go func() {
+		defer close(sweepDone)
+		f.reg.WarmAlwaysOnDesktops(t.Context(), allowAllRoutes)
+	}()
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		close(release)
+		t.Fatal("the sweep never reached BootVM")
+	}
+
+	// The registry still says stopped while the sweep's boot is blocked in the
+	// manager. A rescue now must not start a second boot or recover the first.
+	type result struct {
+		code int
+		resp deployRefreshResponse
+	}
+	answered := make(chan result, 1)
+	go func() {
+		code, resp := f.deploy(t, "A")
+		answered <- result{code, resp}
+	}()
+	var got result
+	select {
+	case got = <-answered:
+	case <-time.After(3 * time.Second):
+		close(release)
+		<-sweepDone
+		t.Fatal("the rescue blocked behind the sweep's boot instead of deferring")
+	}
+	if got.resp.Outcome != deployRefreshDeferred {
+		close(release)
+		<-sweepDone
+		t.Fatalf("rescue during an in-flight start: %d %+v, want deferred", got.code, got.resp)
+	}
+	if n := f.spawns(); n != 1 {
+		close(release)
+		<-sweepDone
+		t.Fatalf("spawns = %d during the in-flight start, want only the sweep's boot", n)
+	}
+	close(release)
+	<-sweepDone
+	if own := f.own(); own.State != VMStateActive {
+		t.Fatalf("the sweep's boot did not complete: %+v", own)
+	}
+	// The pending rescue finds the computer running and takes the ordinary
+	// planned refresh, not a kill-and-reboot without a marker.
+	f.h.SweepDeployRefreshPending(t.Context())
+	if len(f.mock.recovers) != 0 {
+		t.Fatalf("recovers = %v: a healthy first boot was killed", f.mock.recovers)
+	}
+}
+
+func TestRescueOnAStaleSnapshotOfAReattachedComputerTakesThePlannedRefresh(t *testing.T) {
+	f := newRescueFixture(t, true)
+	f.failStopUntracked(stoppedByVMCTLRestart)
+	stale := f.own()
+	// A reattach lands between the deploy's snapshot and the rescue.
+	f.reg.mu.Lock()
+	cur := f.reg.ownerships[ownershipKey(rescueUser, PrimaryDesktopID)]
+	cur.State, cur.StoppedBy = VMStateActive, ""
+	f.reg.mu.Unlock()
+	reply := func(outcome, reason string, status int) (deployRefreshResponse, int) {
+		return deployRefreshResponse{Outcome: outcome, Reason: reason}, status
+	}
+	resp, _, done := f.h.deployRescue(t.Context(), deployRefreshRequest{UserID: rescueUser, DesktopID: PrimaryDesktopID, Target: "A"}, stale, reply)
+	if done {
+		t.Fatalf("a rescue of a reattached computer answered %+v itself instead of handing it to the planned refresh", resp)
+	}
+	if f.spawns() != 0 {
+		t.Fatalf("spawns = %d: the rescue resumed an already active computer", f.spawns())
+	}
+	// Through the whole deploy path the computer takes the marker refresh.
+	if _, resp := f.deploy(t, "B"); resp.Outcome != deployRefreshRefreshed || !resp.PlannedRestart || len(f.fake.marks) != 1 {
+		t.Fatalf("deploy of an active computer: %+v marks=%v, want the planned refresh", resp, f.fake.marks)
+	}
+
+	// A refresh already in flight defers the rescue.
+	g := newRescueFixture(t, true)
+	g.failStop(stoppedByWedged)
+	g.reg.mu.Lock()
+	g.reg.refreshing[ownershipKey(rescueUser, PrimaryDesktopID)] = struct{}{}
+	g.reg.mu.Unlock()
+	if _, resp := g.deploy(t, "A"); resp.Outcome != deployRefreshDeferred || g.spawns() != 0 {
+		t.Fatalf("rescue during an in-flight refresh: %+v spawns=%d, want deferred and none", resp, g.spawns())
+	}
+}
+
+func TestRescueOfATrackedStoppedInstanceBootsTheCurrentDeployWithAFreshToken(t *testing.T) {
+	f := newRescueFixture(t, true)
+	f.failStop(stoppedByWedged) // the wedge detector's StopVM keeps the instance tracked
+	if _, resp := f.deploy(t, "A"); resp.Outcome != deployRefreshRefreshed {
+		t.Fatalf("rescue: %+v", resp)
+	}
+	f.mock.mu.Lock()
+	recovers, refreshes, cfgs := len(f.mock.recovers), len(f.mock.refreshes), append([]VMManagerConfig(nil), f.mock.refreshCfgs...)
+	f.mock.mu.Unlock()
+	if recovers != 0 {
+		t.Fatalf("recovers = %d: the rescue recovered the stopped instance with the config the hung boot used", recovers)
+	}
+	if refreshes != 1 {
+		t.Fatalf("refreshes = %d, want one refresh onto the current deploy's boot artifacts", refreshes)
+	}
+	if !strings.HasPrefix(cfgs[0].GatewayToken, "gw-token-") {
+		t.Fatalf("gateway token = %q, want a freshly issued one", cfgs[0].GatewayToken)
+	}
+	// And after a vmctl restart (nothing tracked) it boots with a fresh token too.
+	g := newRescueFixture(t, true)
+	g.failStopUntracked(stoppedByVMCTLRestart)
+	if _, resp := g.deploy(t, "A"); resp.Outcome != deployRefreshRefreshed {
+		t.Fatalf("untracked rescue: %+v", resp)
+	}
+	g.mock.mu.Lock()
+	boots := append([]VMManagerConfig(nil), g.mock.boots...)
+	g.mock.mu.Unlock()
+	if len(boots) != 1 || !strings.HasPrefix(boots[0].GatewayToken, "gw-token-") {
+		t.Fatalf("untracked boots = %+v, want one with a fresh gateway token", boots)
 	}
 }

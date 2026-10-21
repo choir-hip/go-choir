@@ -552,6 +552,12 @@ type OwnershipRegistry struct {
 	// ownership without holding the registry lock across Firecracker startup.
 	refreshing map[string]struct{}
 
+	// starting counts the resumes and recoveries in flight per stable
+	// ownership. Both run outside r.mu (a boot can block for minutes) while
+	// the registry still says stopped; a deploy rescue defers while the count
+	// is positive instead of recovering the first boot out from under it.
+	starting map[string]int
+
 	// vmManager is the optional Firecracker VM lifecycle manager.
 	// When nil, the registry operates in host-process autoputer mode where
 	// all VMs share the same autoputer URL. When set, the registry delegates
@@ -596,6 +602,7 @@ func NewOwnershipRegistry(autoputerURLBase string) *OwnershipRegistry {
 		gatewayCredentialNextCheck: make(map[string]time.Time),
 		gatewayCredentialPeer:      make(map[string]string),
 		refreshing:                 make(map[string]struct{}),
+		starting:                   make(map[string]int),
 		autoputerURLBase:           autoputerURLBase,
 		idleTimeout:                0, // no idle timeout by default
 		pressureReclaim:            DefaultPressureReclaimConfig(),
@@ -1161,6 +1168,10 @@ func ownershipKey(userID, desktopID string) string {
 	return strings.TrimSpace(userID) + "|" + normalizeDesktopID(desktopID)
 }
 
+// errRefreshInProgress marks a refusal made because a refresh (or a deploy
+// rescue boot) owns the computer; it spawned nothing and clears by itself.
+var errRefreshInProgress = errors.New("refresh is already in progress")
+
 func (r *OwnershipRegistry) rejectRefreshConflictLocked(key string) error {
 	if _, inProgress := r.refreshing[key]; !inProgress {
 		return nil
@@ -1169,7 +1180,18 @@ func (r *OwnershipRegistry) rejectRefreshConflictLocked(key string) error {
 	if own := r.ownerships[key]; own != nil && own.VMID != "" {
 		vmID = own.VMID
 	}
-	return fmt.Errorf("VM %s refresh is already in progress", vmID)
+	return fmt.Errorf("VM %s %w", vmID, errRefreshInProgress)
+}
+
+// endStart releases one claim taken with r.starting[key]++ under r.mu.
+func (r *OwnershipRegistry) endStart(key string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if n := r.starting[key]; n > 1 {
+		r.starting[key] = n - 1
+	} else {
+		delete(r.starting, key)
+	}
 }
 
 func machineShapeForOwnership(own *VMOwnership) (int, int) {
@@ -2895,8 +2917,12 @@ func (r *OwnershipRegistry) ResumeVMForDesktop(userID, desktopID string) (*VMOwn
 	vmID := own.VMID
 	if mgr != nil {
 		snapshot := *own
+		// The start runs outside r.mu for as long as the manager takes; mark
+		// it so a deploy rescue defers instead of recovering this first boot.
+		r.starting[key]++
 		r.mu.Unlock()
 		info, err := r.startExistingVM(&snapshot, mgr)
+		r.endStart(key)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resume VM %s: %w", vmID, err)
 		}
@@ -2987,6 +3013,10 @@ func (r *OwnershipRegistry) recoverVMForDesktop(userID, desktopID string, mainte
 		snapshot = *own
 		wasStopped = own.State == VMStateStopped && mgr.GetVM(own.VMID) == nil
 		vmid = own.VMID
+		// Marked as a start in flight until this function returns (the boot
+		// below runs outside r.mu); every exit after this point has unlocked.
+		r.starting[key]++
+		defer r.endStart(key)
 	}
 	r.mu.Unlock()
 
@@ -3426,15 +3456,15 @@ type failureWarmReceipt struct {
 	gen      uint64
 }
 
-// spendFailureWarm is the always-on sweep's spend: only a computer stopped by
-// a failure is charged (any other stop returns ok without charging).
+// spendFailureWarm is the always-on sweep's spend: only a computer that is
+// stopped by a failure now is charged; any other state or stop reason refuses.
 func (r *OwnershipRegistry) spendFailureWarm(vmID string) (failureWarmReceipt, bool) {
 	return r.spendRetry(vmID, false)
 }
 
 // spendDeployRetry is a deploy rescue's spend: every rescue that spawns a
-// process is charged against the target's allowance whatever the stop reason
-// (vmctl-restart included).
+// process is charged against the target's allowance whether the computer was
+// stopped by a failure or by a vmctl restart. Any other state refuses.
 func (r *OwnershipRegistry) spendDeployRetry(vmID string) (failureWarmReceipt, bool) {
 	return r.spendRetry(vmID, true)
 }
@@ -3446,8 +3476,14 @@ func (r *OwnershipRegistry) spendRetry(vmID string, anyStop bool) (failureWarmRe
 	if !found || own == nil {
 		return failureWarmReceipt{}, false
 	}
-	if !anyStop && !stoppedByFailure(own.StoppedBy) {
-		return failureWarmReceipt{}, true
+	// Judge the registry's entry now, under the lock, never the caller's
+	// snapshot: a computer that is running again, or stopped for another
+	// reason, is not charged and nothing is written for a refund to undo.
+	if own.State != VMStateStopped {
+		return failureWarmReceipt{}, false
+	}
+	if !stoppedByFailure(own.StoppedBy) && !(anyStop && own.StoppedBy == stoppedByVMCTLRestart) {
+		return failureWarmReceipt{}, false
 	}
 	now := r.now()
 	if !failureWarmAllowed(own.FailureWarmedAt, now) {
@@ -3477,6 +3513,131 @@ func (r *OwnershipRegistry) refundFailureWarm(vmID string, rec failureWarmReceip
 	r.saveLocked()
 }
 
+// rescueClaim is the outcome of claiming a computer for a deploy rescue.
+type rescueClaim int
+
+const (
+	// rescueClaimed: the computer is stopped by a failure or a vmctl restart
+	// and the caller now owns its boot (releaseRescue ends it).
+	rescueClaimed rescueClaim = iota + 1
+	// rescueAlreadyActive: the computer is running again (a reattach landed
+	// after the caller's snapshot); the ordinary planned refresh applies.
+	rescueAlreadyActive
+	// rescueBusy: a refresh, a resume or a recovery owns the computer now.
+	rescueBusy
+	// rescueNotNeeded: held, gone, or stopped for a reason a deploy does not
+	// reach.
+	rescueNotNeeded
+)
+
+// claimRescue re-reads the computer under the lock and, if it is still a
+// rescue, takes the per-computer refresh claim before any boot starts, so the
+// always-on sweep's resume, a visit's recovery and a deploy refresh all see
+// "in progress" and none of them boots over the rescue (or the rescue over
+// them). The returned snapshot is the registry's, not the caller's.
+func (r *OwnershipRegistry) claimRescue(userID, desktopID string) (VMOwnership, VMManager, rescueClaim) {
+	key := ownershipKey(userID, desktopID)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	own := r.ownerships[key]
+	if own == nil || own.IsHeld() {
+		return VMOwnership{}, nil, rescueNotNeeded
+	}
+	switch own.State {
+	case VMStateActive:
+		return *own, nil, rescueAlreadyActive
+	case VMStateBooting:
+		return *own, nil, rescueBusy
+	}
+	if _, inFlight := r.refreshing[key]; inFlight || r.starting[key] > 0 {
+		return *own, nil, rescueBusy
+	}
+	if !deployRescueStopped(own.State, own.StoppedBy, warmnessClassForOwnership(own, r.warmnessPolicy), own.DesktopID) {
+		return *own, nil, rescueNotNeeded
+	}
+	r.refreshing[key] = struct{}{}
+	return *own, r.vmManager, rescueClaimed
+}
+
+func (r *OwnershipRegistry) releaseRescue(userID, desktopID string) {
+	r.mu.Lock()
+	delete(r.refreshing, ownershipKey(userID, desktopID))
+	r.mu.Unlock()
+}
+
+// rescueBoot boots a claimed, stopped computer onto the current deploy. It is
+// the deploy path, not the crash-recovery path: a stopped instance the manager
+// still tracks (the wedge detector's StopVM keeps it) is refreshed
+// (RefreshVM: the current kernel, initrd, store and parameters), never
+// recovered with the config the hung boot used; an untracked one is booted.
+// Both get a freshly issued gateway token. The caller holds the claim.
+func (r *OwnershipRegistry) rescueBoot(own VMOwnership, mgr VMManager) (*VMOwnership, error) {
+	if mgr == nil {
+		return nil, fmt.Errorf("VM realization authority is unavailable")
+	}
+	tracked := mgr.GetVM(own.VMID) != nil
+	var ticket *admissionTicket
+	if !tracked {
+		r.mu.RLock()
+		class := warmnessClassForOwnership(&own, r.warmnessPolicy)
+		r.mu.RUnlock()
+		admitted, err := r.admitHostMemory(&own, class)
+		if err != nil {
+			return nil, err
+		}
+		ticket = admitted
+	}
+	info, err := r.rescueLaunch(&own, mgr, tracked)
+	ticket.finish(err == nil && info != nil)
+	if err != nil {
+		return nil, err
+	}
+	key := ownershipKey(own.UserID, own.DesktopID)
+	r.mu.Lock()
+	cur := r.ownerships[key]
+	if cur == nil || cur.VMID != own.VMID {
+		r.mu.Unlock()
+		_ = mgr.StopVM(own.VMID)
+		return nil, fmt.Errorf("VM %s ownership changed during the rescue boot", own.VMID)
+	}
+	if info != nil {
+		cur.ComputerURL = info.HostURL
+		cur.Epoch = info.Epoch
+	} else {
+		cur.Epoch = r.nextEpoch()
+	}
+	cur.State = VMStateActive
+	cur.LastActiveAt = time.Now()
+	cur.StoppedBy = ""
+	r.saveLocked()
+	log.Printf("vmctl: rescued VM %s for user %s desktop %s onto the current deploy (epoch=%d, crash boot)", cur.VMID, cur.UserID, cur.DesktopID, cur.Epoch)
+	result := cloneOwnership(cur)
+	r.mu.Unlock()
+	r.ensureExistingGatewayCredential(result.VMID)
+	return result, nil
+}
+
+func (r *OwnershipRegistry) rescueLaunch(own *VMOwnership, mgr VMManager, tracked bool) (*VMInstanceInfo, error) {
+	if err := r.admitRecoveryStart(own, false); err != nil {
+		return nil, err
+	}
+	cfg, err := r.reserveFreshVMConfig(own, r.issueGatewayToken(own.VMID), mgr)
+	if err != nil {
+		return nil, err
+	}
+	var info *VMInstanceInfo
+	if tracked {
+		info, err = mgr.RefreshVM(own.VMID, cfg)
+	} else {
+		info, err = mgr.BootVM(cfg)
+	}
+	if err != nil {
+		return nil, r.noteRecoveryStartFailure(own, err)
+	}
+	r.clearRecoveryCondition(own)
+	return info, nil
+}
+
 // markRecoveryFailed turns a stop by a vmctl restart into a recovery failure
 // after a rescue boot failed hard, so the always-on sweep's bound applies to
 // it instead of retrying the boot every pass.
@@ -3492,6 +3653,9 @@ func (r *OwnershipRegistry) markRecoveryFailed(vmID string) {
 // transientStartRefusal reports whether err is an admission refusal that
 // spawned nothing and clears by itself.
 func transientStartRefusal(err error) bool {
+	if errors.Is(err, errRefreshInProgress) {
+		return true
+	}
 	refusal := RecoveryRefusalFrom(err)
 	if refusal == nil {
 		return false

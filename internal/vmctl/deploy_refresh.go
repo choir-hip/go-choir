@@ -470,9 +470,20 @@ func (h *Handler) deployRefreshWith(ctx context.Context, req deployRefreshReques
 //     spent and is reported as failed, not retried until the next target.
 func (h *Handler) deployRescue(ctx context.Context, req deployRefreshRequest, own VMOwnership, reply func(outcome, reason string, status int) (deployRefreshResponse, int)) (deployRefreshResponse, int, bool) {
 	reg := h.registry
-	reg.mu.RLock()
-	mgr := reg.vmManager
-	reg.mu.RUnlock()
+	// Re-read under the lock and claim: the caller's snapshot may be stale (a
+	// reattach, a sweep's resume, a visit's recovery since it was taken).
+	snap, mgr, claim := reg.claimRescue(req.UserID, req.DesktopID)
+	switch claim {
+	case rescueAlreadyActive, rescueNotNeeded:
+		// Running again, held, or stopped for a reason a deploy does not
+		// reach: the caller re-reads and continues with its ordinary checks.
+		return deployRefreshResponse{}, 0, false
+	case rescueBusy:
+		resp, status := reply(deployRefreshDeferred, "another start or refresh of this computer is in flight; the retry sweep asks again", http.StatusConflict)
+		return resp, status, true
+	}
+	defer reg.releaseRescue(req.UserID, req.DesktopID)
+	own = snap
 	if mgr != nil && mgr.GetVM(own.VMID) == nil && reg.liveUnmanagedProcess(own.VMID, mgr) {
 		if _, ok := reg.reattachOwnershipInfo(own, mgr); ok {
 			log.Printf("vmctl: deploy rescue: vm=%s ran outside the registry and reattached; refreshing it as an active computer", own.VMID)
@@ -482,14 +493,15 @@ func (h *Handler) deployRescue(ctx context.Context, req deployRefreshRequest, ow
 		return resp, status, true
 	}
 	// Every rescue that spawns a process is charged against this target's
-	// allowance, whatever the stop reason; adoption (above) spawns nothing and
-	// is free. A target whose allowance is spent finds it spent here.
+	// allowance, whether the stop was a failure or a vmctl restart; adoption
+	// (above) spawns nothing and is free. The spend judges the registry's
+	// entry under the lock.
 	receipt, ok := reg.spendDeployRetry(own.VMID)
 	if !ok {
 		resp, status := reply(deployRefreshSkipped, "stopped by "+own.StoppedBy+" and the automatic retry for this deploy target is spent; a different deploy target or an owner act boots it", http.StatusConflict)
 		return resp, status, true
 	}
-	refreshed, err := reg.ResumeVMForDesktop(req.UserID, req.DesktopID)
+	refreshed, err := reg.rescueBoot(own, mgr)
 	if err != nil {
 		if transientStartRefusal(err) {
 			reg.refundFailureWarm(own.VMID, receipt)
@@ -508,7 +520,7 @@ func (h *Handler) deployRescue(ctx context.Context, req deployRefreshRequest, ow
 	}
 	return deployRefreshResponse{
 		Outcome:     deployRefreshRefreshed,
-		Reason:      "stopped by " + own.StoppedBy + "; booted on the deploy as a crash boot (no planned-restart marker)",
+		Reason:      "stopped by " + own.StoppedBy + "; booted onto the current deploy as a crash boot (no planned-restart marker)",
 		BusyAllowed: deployRefreshAllowsBusy(reg.WarmnessClassForOwnership(&own)),
 		VMID:        refreshed.VMID,
 		ComputerID:  stableComputerID(refreshed.UserID, refreshed.DesktopID, refreshed.ComputerID),
