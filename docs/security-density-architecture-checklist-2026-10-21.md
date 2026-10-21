@@ -457,7 +457,10 @@ item below:
 
 ## 4. App desks and scale-out
 
-- [ ] **ARCH-01 · P0 · green — Doctrine names the app-desk tier**
+- [x] **ARCH-01 · P0 · green — Doctrine names the app-desk tier**
+  - Done: e5ea2404d (doctrine I26, CLAUDE.md/AGENTS.md desk ontology,
+    agent-product-doctrine, choir-vision; owner approved the wording
+    2026-10-21, owner notes §35).
   - Owner: each app agent is its own RLM desk (owner notes §5); app agents
     get their own desks, and the plan is to add many (owner notes §35).
     The §23 "no new desks" ruling was about coordinator-invented desks
@@ -573,8 +576,7 @@ Still owed:
 
 - [ ] S7: apply ruling D1 and the LP S6 list of S7 edits (ARCH-03).
 - [ ] S1 security-floor definition: F4, the confinement branch, SEC-02.
-- [ ] Doctrine and CLAUDE.md desk ontology (ARCH-01, needs the owner's
-  wording).
+- [x] Doctrine and CLAUDE.md desk ontology (ARCH-01): e5ea2404d.
 - [ ] `definitions/choir-appdev-sa-agent-density-2026-10-05.md:61` lists
   zswap, rejected as L15.
 - [ ] Supervised metamission `:536` excludes CH and hotplug (RES-20).
@@ -594,7 +596,8 @@ Still owed:
   it is lost (REC-01). Owner, 2026-10-21: handle it from the iMac; a
   session there is searching for it, `feat/s7-0-app-packages` and the
   `vmbackend` work, and pushes what it finds as new branches.
-- **DEC-02** Wording for the app-desk tier in doctrine (ARCH-01).
+- **DEC-02** Decided 2026-10-21: the owner approved the app-desk wording;
+  applied in e5ea2404d (ARCH-01).
 - **DEC-03** Decided 2026-10-21: the Claude delegate stays on the one test
   computer until SEC-01 lands (SEC-08).
 - **DEC-04** Which P1 items block launch, beyond the P0 list.
