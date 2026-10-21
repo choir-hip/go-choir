@@ -625,3 +625,29 @@ with this. either edit node-a or the mike repo").
       memory pressure watched; a restore drill that starts `dolt
       sql-server` on the restored copy on a side port and reads the head
       the run recorded.
+17. **Run 3 (22:39:44 to 23:58:44 UTC, 1 h 19 min): partial.** The
+    platform Dolt sync failed (the item 15 incident); the corpus synced
+    (head `bajdilhd…`), both SQLite copies were ok, and snapshot
+    `127fc899` added 9.3 GB with the source down to 231 GB after the image
+    change. The repository check passed. The run ended partial (exit 3)
+    only for the platform sync. Two findings:
+    - **The daily check runs at the memory line.** `restic check` (no
+      data read) held the unit at its 10G MemoryHigh with its 4G swap
+      full for 25 minutes. It finished, but slowly, and the unit read
+      2.3 TB from disk for a 231 GB source. The likely cause is reclaim
+      under MemoryHigh forcing restic to re-read its index and cache.
+      This is a hypothesis; the per-phase I/O has not been measured. Run
+      2's unexplained 669 GB read is probably the same effect. Next:
+      measure the phases on run 4, and consider moving the daily check
+      to the weekly verify unit.
+    - **The deploy disk floor.** Free space fell from 97 GB (20:34) to
+      75 GB during the run (the image reflink clones diverging, plus the
+      restic cache), and deploys of 194fd31c9 and be786b801 failed the
+      90 GiB preflight. The Nix collection freed nothing (four
+      generations, no dead paths). `platform-dolt/.choir-backup` (31 GB,
+      the old sync's target, outside the server's data directory) was
+      deleted at 00:05 UTC on 2026-10-21, which brought free space to
+      108 GB. Off-host, the copy from run 2 remains; tonight's restore
+      drill has restored it. Consequence: until the snapshot path is
+      deployed and the store is migrated, a fallback sync would rebuild
+      the copy in full.

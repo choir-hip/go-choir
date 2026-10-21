@@ -954,3 +954,37 @@ does not exist.
 Also: the trigger here was failure 12 (vet stalls on module downloads).
 Fixing that removes the commonest way a round fails after doing its work.
 The capsule Go-modules decision (A/B/C) is still the owner's.
+
+### Failure 12 re-read: the stall is a cold compile, not module downloads (hypothesis, 2026-10-21 00:10 UTC)
+
+A code and trace reading (s6-0-1817 bundle, both rounds) points away from
+downloads:
+
+- In round 2, `go vet ./internal/apihandler/` printed its "go: downloading"
+  lines between 18:22:44 and 18:22:58, about 14 seconds, and then nothing
+  until the job ended "done, exit 0, after 728 s" at 18:34:52. Round 1's
+  poll tail showed the same 63 download lines throughout. The poll keeps the
+  last 5 KB, and `go vet` prints nothing while it compiles, so a quiet
+  compile reads as "still downloading". The 171 modules match the host
+  module proxy's earlier drill (513 hits, 0 misses in 49 s).
+- The host module proxy (owner's 2026-10-14 shape, `cmd/goproxy`, reached
+  as `goproxy.choir.internal`) works. It is a read-through proxy, though,
+  not a mounted cache. Capsules get `HOME=/tmp` and no `GOMODCACHE` or
+  `GOCACHE` (`internal/capsule/egress.go:44`,
+  `cmd/capsule-broker/main.go:538-540`,
+  `internal/capsule/broker_env.go:24`), so every capsule starts with an
+  empty module cache and an empty build cache.
+- The engineering capsule has one CPU and 2 GiB
+  (`internal/agentcore/engineering_assignment_runtime.go:29`). A cold
+  compile of apihandler's dependency tree on one CPU is about 1,000 s on a
+  laptop at `-p 1`, which is the order of the 728 s observed.
+
+Leading hypothesis: the build cache is cold on one CPU. The downloads
+add about 15 to 50 seconds. To decide it, run `go vet
+./internal/apihandler/` twice in one fresh engineering capsule and time
+each run with `du -sh /tmp/go/pkg/mod /tmp/.cache/go-build`; a second run
+in seconds confirms it. The host goproxy journal for that capsule gives the
+download span without a capsule. Fix candidates, not decided: a read-only
+build-cache seed built by the host for the base tree (capsule-long-exec
+design R2, "not built"), more CPU for engineering capsules, or vetting
+only the changed packages.
