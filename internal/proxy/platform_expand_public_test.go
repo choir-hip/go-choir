@@ -111,8 +111,8 @@ func TestExpandPublicOnLetsAnAnonymousReaderAskAndSeeTheButton(t *testing.T) {
 	if w.Code != http.StatusAccepted || decodeBody(t, w)["status"] != "asked" {
 		t.Fatalf("anonymous POST = %d %s, want 202 asked", w.Code, w.Body.String())
 	}
-	if f.reviseCount() != 1 {
-		t.Fatalf("revises = %d, want 1", f.reviseCount())
+	if f.askCount() != 1 {
+		t.Fatalf("asks = %d, want 1", f.askCount())
 	}
 	code, body := f.getFrom("", expandTestRoute, readerAddr)
 	if code != http.StatusOK || body["asked"] != true {
@@ -180,8 +180,8 @@ func TestExpandPublicLimitsOneAddressToThreeAnHourAndTenADay(t *testing.T) {
 	if msg, _ := body["error"].(string); !strings.Contains(msg, "too many requests from your address") {
 		t.Fatalf("error = %q", msg)
 	}
-	if f.reviseCount() != 3 {
-		t.Fatalf("revises = %d, want 3 (the refused request never reached the paper)", f.reviseCount())
+	if f.askCount() != 3 {
+		t.Fatalf("asks = %d, want 3 (the refused request never reached the paper)", f.askCount())
 	}
 	// Another address is served.
 	if w := f.postFrom("", route, "203.0.113.50:1", ""); w.Code != http.StatusAccepted {
@@ -271,8 +271,8 @@ func TestExpandPublicSecondRequestOnTheSameVersionIsRefusedAndFree(t *testing.T)
 	if w := f.postFrom(expandTestOwner, expandTestRoute, readerAddr, ""); w.Code != http.StatusConflict {
 		t.Fatalf("owner repeat = %d, want 409", w.Code)
 	}
-	if f.reviseCount() != 1 {
-		t.Fatalf("revises = %d, want 1", f.reviseCount())
+	if f.askCount() != 1 {
+		t.Fatalf("asks = %d, want 1", f.askCount())
 	}
 	// Refused repeats spent nothing: two more stories from the same address fit.
 	for n := 1; n <= 2; n++ {
@@ -302,8 +302,8 @@ func TestExpandPublicUnknownAndNonStoryRoutesAreNotAskedAndAreFree(t *testing.T)
 			t.Fatalf("GET %q = %d %v, want allowed:false", route, code, body)
 		}
 	}
-	if f.reviseCount() != 0 {
-		t.Fatalf("revises = %d, want 0", f.reviseCount())
+	if f.askCount() != 0 {
+		t.Fatalf("asks = %d, want 0", f.askCount())
 	}
 	f.mu.Lock()
 	for _, call := range f.paperCalls {
@@ -382,18 +382,15 @@ func TestExpandPublicRequesterIdentityNeverReachesThePaper(t *testing.T) {
 	}
 	for name, fx := range map[string]*expandFixture{"anonymous": f, "signed-in stranger": g} {
 		fx.mu.Lock()
-		if len(fx.revises) != 1 {
-			t.Fatalf("%s: revises = %d", name, len(fx.revises))
+		if len(fx.asks) != 1 {
+			t.Fatalf("%s: asks = %d", name, len(fx.asks))
 		}
-		call := fx.revises[0]
+		call := fx.asks[0]
 		if call.User != expandTestPaper {
-			t.Errorf("%s: revise acted as %q, want the story owner %q", name, call.User, expandTestPaper)
-		}
-		if !strings.Contains(call.Body.Prompt, "provenance: public reader") {
-			t.Errorf("%s: request text lacks the public reader provenance: %q", name, call.Body.Prompt)
+			t.Errorf("%s: ask acted as %q, want the story owner %q", name, call.User, expandTestPaper)
 		}
 		for _, secret := range []string{addr, "172.16.5.5", "signed-in-stranger", "choir_access"} {
-			if strings.Contains(call.Body.Prompt, secret) || strings.Contains(call.User, secret) {
+			if strings.Contains(call.Raw, secret) || strings.Contains(call.User, secret) {
 				t.Errorf("%s: the paper request carries %q", name, secret)
 			}
 		}
@@ -409,16 +406,6 @@ func TestExpandPublicRequesterIdentityNeverReachesThePaper(t *testing.T) {
 		if strings.Contains(line, secret) {
 			t.Fatalf("log line carries %q: %q", secret, line)
 		}
-	}
-	// The owner's own request keeps the owner provenance.
-	h := newExpandPublicFixture(t, []string{expandTestOwner})
-	if w := h.postFrom(expandTestOwner, expandTestRoute, readerAddr, ""); w.Code != http.StatusAccepted {
-		t.Fatalf("owner POST = %d", w.Code)
-	}
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if p := h.revises[0].Body.Prompt; strings.Contains(p, "public reader") || !strings.Contains(p, "provenance: owner") {
-		t.Fatalf("owner request text = %q", p)
 	}
 }
 
@@ -448,21 +435,5 @@ func TestExpansionReadForAPublicReaderReturnsOnlyTheNewestRequest(t *testing.T) 
 	_, ownerBody := f.getFrom(expandTestOwner, expandTestRoute, readerAddr)
 	if all, _ := ownerBody["requests"].([]any); len(all) != 2 {
 		t.Fatalf("owner GET = %v, want both requests", ownerBody)
-	}
-}
-
-// E11 for the deeper request: web search, primary documents, distinct outlets,
-// citations; still an expansion and not a rewrite.
-func TestExpansionRequestTextAsksResearchToDigDeeper(t *testing.T) {
-	text := expansionRequestText("rx-abc", expandProvenancePublic)
-	for _, must := range []string{
-		"[expansion rx-abc]", "provenance: public reader", "Search the web", "primary documents",
-		"additional distinct outlets", "new reporting", "citations",
-		"Keep the story's existing text, structure and citations",
-		"change nothing and say why in a note to management",
-	} {
-		if !strings.Contains(text, must) {
-			t.Errorf("request text lacks %q: %q", must, text)
-		}
 	}
 }

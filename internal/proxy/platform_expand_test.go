@@ -14,15 +14,15 @@ package proxy
 //  E3  The impersonation bridge widens (F4): the call to the paper is built
 //      from anything but corpusd's answer (a doc_id in the request body is
 //      believed), or acts as the requester instead of the story's owner, or
-//      the document read back does not belong to that owner and the revise
+//      the document read back does not belong to that owner and the ask
 //      goes anyway.
 //  E4  Route existence leaks (F9): an unknown route, a held story and a
 //      non-story route answer differently, or reach the paper.
 //  E5  A double click or a second tab spends twice (4.5): the second request
-//      for the same published version sends a second revise, whether the
-//      first is remembered in memory, only on the paper's chain (a proxy
-//      restart), replayed by the paper, or refused by it as a digest
-//      conflict. A newer published version must be allowed again.
+//      for the same published version sends a second ask, whether the
+//      first is remembered in memory, only at the paper (a proxy restart),
+//      or replayed by the paper. A newer published version must be allowed
+//      again.
 //  E6  Limits (5): a fourth in-flight request or a thirteenth in a UTC day is
 //      accepted; an old request still counts as in flight; a request that
 //      failed before reaching the paper still holds its slot.
@@ -36,8 +36,11 @@ package proxy
 //      touches the paper.
 //  E10 The log line carries the requester's id or the request text instead of
 //      a request id and a requester hash.
-//  E11 The request text changes without a test noticing: a fixed template
-//      with the request marker and the honest way to decline.
+//  E11 The paper is sent more than the request id and the head the reader
+//      saw: no prompt, nothing about the reader
+//      (docs/design/research-more-goes-to-research-2026-10-21.md).
+//  E12 A request a crash closed reads accepted, or blocks the one re-ask its
+//      version gets, or gets more than one (design section 8).
 
 import (
 	"bytes"
@@ -69,11 +72,11 @@ const (
 	expandTestSourceRev = "rev-head-3"
 )
 
-type expandReviseCall struct {
+type expandResearchCall struct {
 	User string
 	Doc  string
+	Raw  string
 	Body struct {
-		Prompt          string `json:"prompt"`
 		ClientRequestID string `json:"client_request_id"`
 		ExpectedHead    string `json:"expected_head_revision_id"`
 	}
@@ -92,11 +95,11 @@ type expandFixture struct {
 	corpusdMarks []string
 	// paper
 	docs         map[string]map[string]string // doc id -> fields
-	revisions    map[string]string            // revision id -> author kind
+	research     map[string]map[string]any    // paper request id -> state
 	history      map[string][]map[string]any
 	paperCalls   []string
-	revises      []expandReviseCall
-	reviseReply  func(n int, call expandReviseCall) (int, any) // nil: accept
+	asks         []expandResearchCall
+	askReply     func(n int, call expandResearchCall) (int, any) // nil: accept
 	paperDown    bool
 	anyUserReads bool // the fake paper answers a document read for any user
 
@@ -132,9 +135,9 @@ func newExpandFixtureWith(t *testing.T, requesters []string, off, public bool) *
 			"doc_id": expandTestDocID, "owner_id": expandTestPaper, "computer_id": expandTestComputer,
 			"trajectory_id": expandTestTraj, "current_revision_id": expandTestHeadRev,
 		}},
-		revisions: map[string]string{expandTestHeadRev: "appagent"},
-		history:   map[string][]map[string]any{},
-		clock:     time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC),
+		research: map[string]map[string]any{},
+		history:  map[string][]map[string]any{},
+		clock:    time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC),
 	}
 	f.corpusd = httptest.NewServer(http.HandlerFunc(f.serveCorpusd))
 	f.paper = httptest.NewServer(http.HandlerFunc(f.servePaper))
@@ -201,30 +204,34 @@ func (f *expandFixture) servePaper(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, http.StatusOK, doc)
-	case r.Method == http.MethodGet && len(parts) == 4 && parts[2] == "revisions":
-		kind, ok := f.revisions[parts[3]]
+	case r.Method == http.MethodGet && len(parts) == 6 && parts[2] == "documents" && parts[4] == "research":
+		state, ok := f.research[parts[5]]
 		if !ok {
-			http.Error(w, `{"error":"revision not found"}`, http.StatusNotFound)
+			http.Error(w, `{"error":"research request not found"}`, http.StatusNotFound)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"revision_id": parts[3], "doc_id": expandTestDocID, "owner_id": expandTestPaper, "author_kind": kind})
+		writeJSON(w, http.StatusOK, state)
 	case r.Method == http.MethodGet && len(parts) == 5 && parts[2] == "documents" && parts[4] == "history":
 		writeJSON(w, http.StatusOK, map[string]any{"doc_id": parts[3], "entries": f.history[parts[3]]})
-	case r.Method == http.MethodPost && len(parts) == 5 && parts[2] == "documents" && parts[4] == "revise":
-		var call expandReviseCall
+	case r.Method == http.MethodPost && len(parts) == 5 && parts[2] == "documents" && parts[4] == "research":
+		var call expandResearchCall
 		call.User, call.Doc = user, parts[3]
-		_ = json.NewDecoder(r.Body).Decode(&call.Body)
-		f.revises = append(f.revises, call)
-		if f.reviseReply != nil {
-			status, body := f.reviseReply(len(f.revises), call)
+		raw, _ := io.ReadAll(r.Body)
+		call.Raw = string(raw)
+		_ = json.Unmarshal(raw, &call.Body)
+		f.asks = append(f.asks, call)
+		if f.askReply != nil {
+			status, body := f.askReply(len(f.asks), call)
 			writeJSON(w, status, body)
 			return
 		}
-		doc := f.docs[parts[3]]
-		id := expandOwnerRevisionID(user, doc["computer_id"], doc["trajectory_id"], call.Body.ClientRequestID)
-		f.revisions[id] = "user"
-		doc["current_revision_id"] = id
-		writeJSON(w, http.StatusAccepted, map[string]any{"schema": "choir.texture_owner_revision.v1", "doc_id": parts[3], "revision_id": id, "request_id": "occ-" + id[:8]})
+		id := call.Body.ClientRequestID
+		if _, ok := f.research[id]; ok {
+			writeJSON(w, http.StatusAccepted, map[string]any{"request_id": id, "replay": true})
+			return
+		}
+		f.research[id] = map[string]any{"record_id": "reader-research:" + id, "committed_at": f.clock.Format(time.RFC3339Nano), "round": 1, "open": true, "reports": 0, "interrupted": false}
+		writeJSON(w, http.StatusAccepted, map[string]any{"schema": "choir.texture.story_research_request.v1", "doc_id": parts[3], "request_id": id, "record_id": "reader-research:" + id, "round": 1, "replay": false})
 	default:
 		f.t.Errorf("unexpected paper call %s %s", r.Method, r.URL.Path)
 		http.NotFound(w, r)
@@ -270,10 +277,10 @@ func (f *expandFixture) noUpstreamCalls() {
 	}
 }
 
-func (f *expandFixture) reviseCount() int {
+func (f *expandFixture) askCount() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return len(f.revises)
+	return len(f.asks)
 }
 
 func decodeBody(t *testing.T, w *httptest.ResponseRecorder) map[string]any {
@@ -349,7 +356,7 @@ func TestExpandRefusesEveryoneButAnAllowlistedBrowserSession(t *testing.T) {
 }
 
 // E3, E8, E11 and the success path.
-func TestExpandAsksTheStoriesOwnDeskAsTheStoriesOwnerWithFixedText(t *testing.T) {
+func TestExpandAsksTheStoriesOwnResearchDeskAsTheStoriesOwner(t *testing.T) {
 	f := newExpandFixture(t, []string{expandTestOwner}, false)
 	var logs bytes.Buffer
 	log.SetOutput(&logs)
@@ -361,7 +368,7 @@ func TestExpandAsksTheStoriesOwnDeskAsTheStoriesOwnerWithFixedText(t *testing.T)
 		t.Fatalf("POST = %d body %s", w.Code, w.Body.String())
 	}
 	body := decodeBody(t, w)
-	if body["status"] != "asked" || body["request_id"] == "" || body["revision_id"] == "" {
+	if body["status"] != "asked" || body["request_id"] == "" {
 		t.Fatalf("response = %v", body)
 	}
 	f.mu.Lock()
@@ -369,30 +376,26 @@ func TestExpandAsksTheStoriesOwnDeskAsTheStoriesOwnerWithFixedText(t *testing.T)
 	if len(f.corpusdCalls) != 1 || f.corpusdCalls[0] != expandTestRoute || f.corpusdMarks[0] != "true" {
 		t.Fatalf("corpusd calls=%v marks=%v", f.corpusdCalls, f.corpusdMarks)
 	}
-	if len(f.revises) != 1 {
-		t.Fatalf("revises = %d, want 1", len(f.revises))
+	if len(f.asks) != 1 {
+		t.Fatalf("asks = %d, want 1", len(f.asks))
 	}
-	call := f.revises[0]
+	call := f.asks[0]
 	if call.User != expandTestPaper || call.Doc != expandTestDocID {
-		t.Fatalf("revise went to doc %q as %q, want %q as %q", call.Doc, call.User, expandTestDocID, expandTestPaper)
+		t.Fatalf("ask went to doc %q as %q, want %q as %q", call.Doc, call.User, expandTestDocID, expandTestPaper)
 	}
 	wantCID := "expand:" + expandTestPubID + ":" + expandTestSourceRev
 	if call.Body.ClientRequestID != wantCID || call.Body.ExpectedHead != expandTestHeadRev {
 		t.Fatalf("client_request_id=%q expected_head=%q, want %q and %q", call.Body.ClientRequestID, call.Body.ExpectedHead, wantCID, expandTestHeadRev)
 	}
 	rid := body["request_id"].(string)
-	wantPrompt := expansionRequestText(rid, expandProvenanceOwner)
-	if call.Body.Prompt != wantPrompt || strings.Contains(call.Body.Prompt, "cats") {
-		t.Fatalf("prompt = %q", call.Body.Prompt)
-	}
-	for _, must := range []string{"[expansion " + rid + "]", "more research", "additional distinct outlets", "citations from sources you have read", "change nothing and say why in a note to management"} {
-		if !strings.Contains(call.Body.Prompt, must) {
-			t.Fatalf("request text lacks %q: %q", must, call.Body.Prompt)
-		}
+	// E11: the request id and the head, nothing else.
+	var sent map[string]any
+	if err := json.Unmarshal([]byte(call.Raw), &sent); err != nil || len(sent) != 2 || strings.Contains(call.Raw, "cats") {
+		t.Fatalf("paper request body = %s", call.Raw)
 	}
 	// E10: the log line has the request id and a hash, never the user id or text.
 	line := logs.String()
-	if !strings.Contains(line, rid) || strings.Contains(line, expandTestOwner) || strings.Contains(line, "additional distinct outlets") {
+	if !strings.Contains(line, rid) || strings.Contains(line, expandTestOwner) {
 		t.Fatalf("log line = %q", line)
 	}
 }
@@ -405,7 +408,7 @@ func TestExpandAnswersAnUnknownAndANonStoryRouteTheSame(t *testing.T) {
 	if a.Code != http.StatusNotFound || b.Code != http.StatusNotFound || a.Body.String() != b.Body.String() {
 		t.Fatalf("unknown=%d %q nonstory=%d %q, want identical 404s", a.Code, a.Body.String(), b.Code, b.Body.String())
 	}
-	if f.reviseCount() != 0 {
+	if f.askCount() != 0 {
 		t.Fatal("a non-story reached the paper")
 	}
 	f.mu.Lock()
@@ -416,15 +419,15 @@ func TestExpandAnswersAnUnknownAndANonStoryRouteTheSame(t *testing.T) {
 }
 
 // E3: the document read back does not belong to the story's owner.
-func TestExpandDoesNotReviseADocumentTheStoriesOwnerDoesNotOwn(t *testing.T) {
+func TestExpandDoesNotAskForADocumentTheStoriesOwnerDoesNotOwn(t *testing.T) {
 	f := newExpandFixture(t, []string{expandTestOwner}, false)
 	f.mu.Lock()
 	f.docs[expandTestDocID]["owner_id"] = "someone-else"
 	f.anyUserReads = true // a paper that answered anyway
 	f.mu.Unlock()
 	w := f.postRoute(expandTestOwner)
-	if w.Code != http.StatusBadGateway || f.reviseCount() != 0 {
-		t.Fatalf("POST = %d revises = %d, want 502 and none", w.Code, f.reviseCount())
+	if w.Code != http.StatusBadGateway || f.askCount() != 0 {
+		t.Fatalf("POST = %d asks = %d, want 502 and none", w.Code, f.askCount())
 	}
 }
 
@@ -442,19 +445,19 @@ func TestExpandAllowsOneRequestPerPublishedVersion(t *testing.T) {
 	if second.Code != http.StatusConflict || decodeBody(t, second)["status"] != "already_asked" || decodeBody(t, second)["request_id"] != firstID {
 		t.Fatalf("second = %d %s, want 409 already_asked with the first id", second.Code, second.Body.String())
 	}
-	if f.reviseCount() != 1 {
-		t.Fatalf("revises = %d after a second click, want 1", f.reviseCount())
+	if f.askCount() != 1 {
+		t.Fatalf("asks = %d after a second click, want 1", f.askCount())
 	}
 
-	// A proxy restart forgets memory; the paper's chain remembers.
+	// A proxy restart forgets memory; the paper remembers.
 	f.h.expand = nil
 	f.h.expandLedger().now = f.now
 	third := f.postRoute(expandTestOwner)
 	if third.Code != http.StatusConflict || decodeBody(t, third)["status"] != "already_asked" {
 		t.Fatalf("after restart = %d %s, want 409 already_asked", third.Code, third.Body.String())
 	}
-	if f.reviseCount() != 1 {
-		t.Fatalf("revises = %d after a restart, want 1", f.reviseCount())
+	if f.askCount() != 1 {
+		t.Fatalf("asks = %d after a restart, want 1", f.askCount())
 	}
 
 	// Texture published a newer version: a new request is allowed.
@@ -462,7 +465,6 @@ func TestExpandAllowsOneRequestPerPublishedVersion(t *testing.T) {
 	src := f.sources[expandTestRoute]
 	src.LatestRevision, src.SourceRevisionID = 5, "rev-texture-5"
 	f.sources[expandTestRoute] = src
-	f.revisions["rev-texture-5"] = "appagent"
 	f.docs[expandTestDocID]["current_revision_id"] = "rev-texture-5"
 	f.mu.Unlock()
 	fourth := f.postRoute(expandTestOwner)
@@ -471,27 +473,61 @@ func TestExpandAllowsOneRequestPerPublishedVersion(t *testing.T) {
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if f.revises[1].Body.ClientRequestID != "expand:"+expandTestPubID+":rev-texture-5" {
-		t.Fatalf("second client_request_id = %q", f.revises[1].Body.ClientRequestID)
+	if f.asks[1].Body.ClientRequestID != "expand:"+expandTestPubID+":rev-texture-5" {
+		t.Fatalf("second client_request_id = %q", f.asks[1].Body.ClientRequestID)
 	}
 }
 
-// E5: the paper replays or refuses the duplicate.
-func TestExpandReadsAPaperReplayOrDigestConflictAsAlreadyAsked(t *testing.T) {
-	for name, reply := range map[string]func(int, expandReviseCall) (int, any){
-		"replay": func(int, expandReviseCall) (int, any) {
-			return http.StatusAccepted, map[string]any{"revision_id": "rev-x", "replay": true}
-		},
-		"digest conflict": func(int, expandReviseCall) (int, any) {
-			return http.StatusConflict, map[string]string{"error": "lifecycle command digest conflict"}
-		},
-	} {
-		f := newExpandFixture(t, []string{expandTestOwner}, false)
-		f.reviseReply = reply
-		w := f.postRoute(expandTestOwner)
-		if w.Code != http.StatusConflict || decodeBody(t, w)["status"] != "already_asked" {
-			t.Fatalf("%s: %d %s, want 409 already_asked", name, w.Code, w.Body.String())
-		}
+// E5: the paper replays the duplicate, or already holds it.
+func TestExpandReadsAPaperReplayOrAKnownRequestAsAlreadyAsked(t *testing.T) {
+	f := newExpandFixture(t, []string{expandTestOwner}, false)
+	f.askReply = func(int, expandResearchCall) (int, any) {
+		return http.StatusAccepted, map[string]any{"replay": true}
+	}
+	if w := f.postRoute(expandTestOwner); w.Code != http.StatusConflict || decodeBody(t, w)["status"] != "already_asked" {
+		t.Fatalf("replay: %d %s, want 409 already_asked", w.Code, w.Body.String())
+	}
+	g := newExpandFixture(t, []string{expandTestOwner}, false)
+	g.research["expand:"+expandTestPubID+":"+expandTestSourceRev] = map[string]any{"record_id": "r", "committed_at": g.clock.Format(time.RFC3339Nano), "open": true}
+	if w := g.postRoute(expandTestOwner); w.Code != http.StatusConflict || decodeBody(t, w)["status"] != "already_asked" || g.askCount() != 0 {
+		t.Fatalf("known at the paper: %d %s asks=%d, want 409 already_asked and no ask", w.Code, w.Body.String(), g.askCount())
+	}
+}
+
+// E12: a crash closed the request before research reported. The reader sees
+// it, may ask once more for the same version, and no more than once.
+func TestExpandLetsAnInterruptedRequestBeAskedOnceMore(t *testing.T) {
+	f := newExpandFixture(t, []string{expandTestOwner}, false)
+	first := "expand:" + expandTestPubID + ":" + expandTestSourceRev
+	if w := f.postRoute(expandTestOwner); w.Code != http.StatusAccepted {
+		t.Fatalf("POST = %d %s", w.Code, w.Body.String())
+	}
+	interrupt := func(id string) {
+		f.mu.Lock()
+		f.research[id]["open"], f.research[id]["interrupted"] = false, true
+		f.mu.Unlock()
+	}
+	interrupt(first)
+	_, body := f.get(expandTestOwner)
+	if got := body["requests"].([]any)[0].(map[string]any)["state"]; got != "interrupted" || body["asked"] != false {
+		t.Fatalf("read after a crash = %v, want interrupted and askable", body)
+	}
+	if w := f.postRoute(expandTestOwner); w.Code != http.StatusAccepted {
+		t.Fatalf("re-ask = %d %s, want 202", w.Code, w.Body.String())
+	}
+	f.mu.Lock()
+	if len(f.asks) != 2 || f.asks[1].Body.ClientRequestID != first+":2" {
+		f.mu.Unlock()
+		t.Fatalf("re-ask ids = %+v, want %q", f.asks, first+":2")
+	}
+	f.mu.Unlock()
+	// The second attempt is interrupted too: no third, even after a restart.
+	interrupt(first + ":2")
+	f.get(expandTestOwner)
+	f.h.expand = nil
+	f.h.expandLedger().now = f.now
+	if w := f.postRoute(expandTestOwner); w.Code != http.StatusConflict || decodeBody(t, w)["status"] != "already_asked" || f.askCount() != 2 {
+		t.Fatalf("third ask = %d %s asks=%d, want 409 already_asked and no ask", w.Code, w.Body.String(), f.askCount())
 	}
 }
 
@@ -516,9 +552,9 @@ func TestExpandLimitsInFlightAndDailyRequests(t *testing.T) {
 	if w.Code != http.StatusTooManyRequests || w.Header().Get("Retry-After") == "" || decodeBody(t, w)["status"] != "limit" {
 		t.Fatalf("fourth in flight = %d %s retry-after=%q, want 429 limit", w.Code, w.Body.String(), w.Header().Get("Retry-After"))
 	}
-	revisesBefore := f.reviseCount()
-	if revisesBefore != 3 {
-		t.Fatalf("revises = %d, want 3 (the refused request never reached the paper)", revisesBefore)
+	asksBefore := f.askCount()
+	if asksBefore != 3 {
+		t.Fatalf("asks = %d, want 3 (the refused request never reached the paper)", asksBefore)
 	}
 	// Requests older than the in-flight window no longer hold a slot.
 	f.advance(31 * time.Minute)
@@ -559,7 +595,7 @@ func TestExpandFailuresBeforeTheDeskReleaseTheSlot(t *testing.T) {
 	f.paperDown = false
 	f.mu.Unlock()
 	// Not queued: nothing resumes by itself; the owner asks again.
-	if f.reviseCount() != 0 {
+	if f.askCount() != 0 {
 		t.Fatal("a request was sent while the paper was down")
 	}
 	if w := f.postRoute(expandTestOwner); w.Code != http.StatusAccepted {
@@ -570,41 +606,41 @@ func TestExpandFailuresBeforeTheDeskReleaseTheSlot(t *testing.T) {
 // E7
 func TestExpandRetriesAStaleHeadOnceAndReportsABusyDesk(t *testing.T) {
 	f := newExpandFixture(t, []string{expandTestOwner}, false)
-	f.reviseReply = func(n int, call expandReviseCall) (int, any) {
+	f.askReply = func(n int, call expandResearchCall) (int, any) {
 		if n == 1 {
-			// Texture committed between the read and the revise.
+			// Texture committed between the read and the ask.
 			f.docs[expandTestDocID]["current_revision_id"] = "rev-newer"
-			return http.StatusConflict, map[string]string{"error": "document head changed; reload the latest version before revising"}
+			return http.StatusConflict, map[string]string{"error": "the story changed", "reason": "changed"}
 		}
-		return http.StatusAccepted, map[string]any{"revision_id": "rev-owner", "request_id": "occ"}
+		return http.StatusAccepted, map[string]any{"request_id": call.Body.ClientRequestID}
 	}
 	w := f.postRoute(expandTestOwner)
 	if w.Code != http.StatusAccepted {
 		t.Fatalf("one stale head = %d %s, want 202 after one retry", w.Code, w.Body.String())
 	}
 	f.mu.Lock()
-	if len(f.revises) != 2 || f.revises[1].Body.ExpectedHead != "rev-newer" {
+	if len(f.asks) != 2 || f.asks[1].Body.ExpectedHead != "rev-newer" {
 		f.mu.Unlock()
-		t.Fatalf("retry did not re-read the head: %+v", f.revises)
+		t.Fatalf("retry did not re-read the head: %+v", f.asks)
 	}
 	f.mu.Unlock()
 
 	g := newExpandFixture(t, []string{expandTestOwner}, false)
-	g.reviseReply = func(int, expandReviseCall) (int, any) {
-		return http.StatusConflict, map[string]string{"error": "document head changed; reload the latest version before revising"}
+	g.askReply = func(int, expandResearchCall) (int, any) {
+		return http.StatusConflict, map[string]string{"error": "the story changed", "reason": "changed"}
 	}
 	w = g.postRoute(expandTestOwner)
-	if w.Code != http.StatusConflict || decodeBody(t, w)["status"] != "changed" || g.reviseCount() != 2 {
-		t.Fatalf("always stale = %d %s revises=%d, want 409 changed after exactly 2 tries", w.Code, w.Body.String(), g.reviseCount())
+	if w.Code != http.StatusConflict || decodeBody(t, w)["status"] != "changed" || g.askCount() != 2 {
+		t.Fatalf("always stale = %d %s asks=%d, want 409 changed after exactly 2 tries", w.Code, w.Body.String(), g.askCount())
 	}
 
 	b := newExpandFixture(t, []string{expandTestOwner}, false)
-	b.reviseReply = func(int, expandReviseCall) (int, any) {
-		return http.StatusConflict, map[string]string{"error": "lifecycle has multiple open desk target work items"}
+	b.askReply = func(int, expandResearchCall) (int, any) {
+		return http.StatusConflict, map[string]string{"error": "the story's research desk is busy", "reason": "busy"}
 	}
 	w = b.postRoute(expandTestOwner)
-	if w.Code != http.StatusConflict || decodeBody(t, w)["status"] != "busy" || b.reviseCount() != 1 {
-		t.Fatalf("busy desk = %d %s revises=%d, want 409 busy, no retry", w.Code, w.Body.String(), b.reviseCount())
+	if w.Code != http.StatusConflict || decodeBody(t, w)["status"] != "busy" || b.askCount() != 1 {
+		t.Fatalf("busy desk = %d %s asks=%d, want 409 busy, no retry", w.Code, w.Body.String(), b.askCount())
 	}
 }
 
@@ -619,8 +655,8 @@ func TestExpansionFateIsDerivedFromTheChainAndThePublicVersion(t *testing.T) {
 		now                  time.Time
 		want                 string
 	}{
-		{"just asked, owner revision not yet visible", false, false, 3, asked.Add(time.Minute), "asked"},
-		{"owner revision is on the chain", true, false, 3, asked.Add(time.Minute), "accepted"},
+		{"just asked, not yet at the paper", false, false, 3, asked.Add(time.Minute), "asked"},
+		{"the paper holds the request", true, false, 3, asked.Add(time.Minute), "accepted"},
 		{"Texture revised but nothing published yet", true, true, 3, asked.Add(5 * time.Minute), "accepted"},
 		{"a higher public version without a Texture revision after the request", true, false, 4, asked.Add(5 * time.Minute), "accepted"},
 		{"Texture revised and a higher version is public", true, true, 4, asked.Add(5 * time.Minute), "revised"},
@@ -655,7 +691,6 @@ func TestExpansionReadShowsTheFateAndTouchesThePaperOnlyForTheOwner(t *testing.T
 	if w.Code != http.StatusAccepted {
 		t.Fatalf("POST = %d %s", w.Code, w.Body.String())
 	}
-	ownerRev := decodeBody(t, w)["revision_id"].(string)
 
 	state := func() string {
 		code, body := f.get(expandTestOwner)
@@ -669,13 +704,12 @@ func TestExpansionReadShowsTheFateAndTouchesThePaperOnlyForTheOwner(t *testing.T
 		return reqs[0].(map[string]any)["state"].(string)
 	}
 	if got := state(); got != "accepted" {
-		t.Fatalf("owner revision on the chain: state = %q, want accepted", got)
+		t.Fatalf("the paper holds the request: state = %q, want accepted", got)
 	}
 	// Texture revises after the request, but nothing is published yet.
 	f.mu.Lock()
 	f.history[expandTestDocID] = []map[string]any{
 		{"revision_id": "rev-texture-4", "author_kind": "appagent", "created_at": f.clock.Add(4 * time.Minute).Format(time.RFC3339Nano)},
-		{"revision_id": ownerRev, "author_kind": "user", "created_at": f.clock.Add(time.Second).Format(time.RFC3339Nano)},
 		{"revision_id": expandTestHeadRev, "author_kind": "appagent", "created_at": f.clock.Add(-time.Hour).Format(time.RFC3339Nano)},
 	}
 	f.mu.Unlock()
@@ -709,11 +743,11 @@ func TestExpansionReadShowsTheFateAndTouchesThePaperOnlyForTheOwner(t *testing.T
 // A Texture revision from before the request must not count as the answer.
 func TestExpansionReadIgnoresATextureRevisionFromBeforeTheRequest(t *testing.T) {
 	f := newExpandFixture(t, []string{expandTestOwner}, false)
-	w := f.postRoute(expandTestOwner)
-	ownerRev := decodeBody(t, w)["revision_id"].(string)
+	if w := f.postRoute(expandTestOwner); w.Code != http.StatusAccepted {
+		t.Fatalf("POST = %d %s", w.Code, w.Body.String())
+	}
 	f.mu.Lock()
 	f.history[expandTestDocID] = []map[string]any{
-		{"revision_id": ownerRev, "author_kind": "user", "created_at": f.clock.Add(time.Second).Format(time.RFC3339Nano)},
 		{"revision_id": expandTestHeadRev, "author_kind": "appagent", "created_at": f.clock.Add(-time.Hour).Format(time.RFC3339Nano)},
 	}
 	src := f.sources[expandTestRoute]

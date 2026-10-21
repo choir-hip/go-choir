@@ -48,7 +48,8 @@ const BASE_URL = (process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:4173').re
 test.describe('fate lines and polling decisions', () => {
   test('every known state has a plain line and an unknown one has none (X5)', () => {
     expect(fateLine({ request_id: 'rx-1', state: 'asked' })).toContain('Asked');
-    expect(fateLine({ request_id: 'rx-1', state: 'accepted' })).toContain('may add research or leave the story');
+    expect(fateLine({ request_id: 'rx-1', state: 'accepted' })).toContain('Research is looking for new sources');
+    expect(fateLine({ request_id: 'rx-1', state: 'interrupted' })).toContain('interrupted by a restart');
     expect(fateLine({ request_id: 'rx-1', state: 'revised', to_version: 4 })).toBe('Revised since your request: version 4 is up.');
     expect(fateLine({ request_id: 'rx-1', state: 'revised', to_version: '<b>x</b>' })).toBe('Revised since your request.');
     expect(fateLine({ request_id: 'rx-1', state: 'no_new_version' })).toContain('No new version yet');
@@ -73,7 +74,7 @@ test.describe('fate lines and polling decisions', () => {
     expect(askNotice(429, 'limit')).toContain('Try again later');
     expect(askNotice(429, '')).toContain('Try again later');
     expect(askNotice(429, 'address_limit')).toBe('Too many requests from your address; try later.');
-    expect(askNotice(409, 'busy')).toContain('busy');
+    expect(askNotice(409, 'busy')).toContain('already working');
     expect(askNotice(502, 'unavailable')).toContain('not reachable');
     expect(askNotice(403, '')).toContain('not available');
     expect(askNotice(500, '')).toContain('Could not ask');

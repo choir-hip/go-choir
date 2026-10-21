@@ -526,3 +526,20 @@ func TestChecksPairEachCitationWithTheSpanItCloses(t *testing.T) {
 		t.Errorf("S7: the frame does not quote the failing span:\n%s", frame)
 	}
 }
+
+// A reader's request for more research is told to Texture in every frame
+// while it is pending (docs/design/research-more-goes-to-research-2026-10-21.md
+// failure mode 11), and never otherwise.
+func TestFrameTellsAPendingReaderRequest(t *testing.T) {
+	doc, _ := citedBase(t)
+	plain := Frame{DocID: "doc", RevisionID: "rev-1", Blocks: DocBlocks(doc)}.Render()
+	if strings.Contains(plain, "A reader asked for more research") {
+		t.Fatalf("frame without a request tells one:\n%s", plain)
+	}
+	asked := Frame{DocID: "doc", RevisionID: "rev-1", Blocks: DocBlocks(doc), ReaderRequest: "expand:pub-1:rev-1"}.Render()
+	for _, want := range []string{"A reader asked for more research", "expand:pub-1:rev-1", "keep its text, structure and citations"} {
+		if !strings.Contains(asked, want) {
+			t.Fatalf("frame missing %q:\n%s", want, asked)
+		}
+	}
+}
