@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
-	"github.com/yusefmosiah/go-choir/internal/browsercontrol"
 	"github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/desktopstate"
 	"github.com/yusefmosiah/go-choir/internal/events"
@@ -39,9 +38,6 @@ func TestRegisterRoutesPreservesCanonicalTable(t *testing.T) {
 		"/api/content/items",
 		"/api/content/import-url",
 		"/api/ws",
-		"/api/browser/capabilities",
-		"/api/browser/sessions",
-		"/api/browser/sessions/session-1",
 		"/api/desktop/state",
 		"/api/media/progress",
 		"/api/media/recents",
@@ -83,6 +79,14 @@ func TestRegisterRoutesPreservesCanonicalTable(t *testing.T) {
 		"/internal/runtime/channel-casts",
 		"/internal/runtime/runs/run-1",
 		"/internal/runtime/runs/run-1/cancel",
+		// Web Lens is a launcher: the guest runs no browser for the owner
+		// (docs/problems/obscura-untrusted-javascript-as-guest-root-2026-10-21.md).
+		"/api/browser/capabilities",
+		"/api/browser/sessions",
+		"/api/browser/sessions/session-1",
+		"/api/browser/sessions/session-1/navigate",
+		"/api/browser/sessions/session-1/control",
+		"/api/browser/sessions/session-1/close",
 	} {
 		if registeredRouteResponds(srv, path) {
 			t.Fatalf("non-canonical route %q is registered", path)
@@ -136,7 +140,6 @@ func registerRoutesForTest(t *testing.T, srv *server.Server, enableTestAPIs bool
 		agentcore.NewAPIHandler(core),
 		textureowner.NewHandler(core),
 		NewHandler(nil),
-		browsercontrol.NewHandler(provideriface.Config{}, nil, events.NewEventBus()),
 		desktopstate.NewHandler(nil, events.NewEventBus()),
 		content.NewService(nil, events.NewEventBus()),
 		mediastate.NewHandler(nil, events.NewEventBus()),

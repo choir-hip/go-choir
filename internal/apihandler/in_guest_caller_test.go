@@ -27,7 +27,6 @@ func TestInGuestLoopbackCallerCannotActAsOwner(t *testing.T) {
 		{http.MethodGet, "/api/texture/documents", ""},
 		{http.MethodPost, "/api/texture/documents", `{"title":"x"}`},
 		{http.MethodPost, "/api/content/items", `{"title":"x"}`},
-		{http.MethodGet, "/api/browser/capabilities", ""},
 		{http.MethodGet, "/api/desktop/state", ""},
 		{http.MethodGet, "/api/media/progress", ""},
 		{http.MethodGet, "/api/preferences/theme", ""},
