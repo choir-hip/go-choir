@@ -133,6 +133,15 @@ share: research's model calls are 1 to 3 s each at low effort.
    opened at its public Texture route has no Autopaper window context, so
    the resolve bundle now names an Autopaper story (`publication.kind`
    `"story"`) and the reader shows the AI-written disclosure from that.
+   Follow-up (owner, 2026-10-21: "The toolbar should have a '3 dots' menu
+   that expands if the content is too wide for the screen"): the wrapped
+   toolbar took about 540 of 812 px at 200% text, so it is now one row. The
+   version controls stay; the other controls have a priority and, measured
+   against the row (ResizeObserver, no breakpoint), the lowest-priority ones
+   move as the same DOM nodes into a "⋯" menu at the end of the row. A story's
+   order is More research, Edit, Sources, Copy text, Download; a private
+   document keeps Revise, then Publish, then Sources, and Cancel or Restore
+   when they apply. The fate line is a status row under the controls.
 3. The ask goes straight to research, which reports to Texture (red,
    E4); research sends a packet as soon as it has a read source and
    finishes with the final report (prompt, E5). Built to
