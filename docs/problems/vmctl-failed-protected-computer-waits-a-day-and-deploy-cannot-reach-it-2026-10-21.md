@@ -459,6 +459,25 @@ Each finding read against 122eb9623:
   protected computer is always admitted, but without a reservation other
   wakes do not count it.
 
+As built: `trackedBootConfig` and `bootTracked` (`internal/vmctl/ownership.go`)
+start a tracked instance whose manager state is not `running`, `pending` or
+unreported through `RefreshVM` with a freshly requested gateway token, from
+`startAdmittedVM` and `recoverOrRestartActiveVM`; a live one keeps
+`RecoverVM`. `startExistingVM` admits host memory for any start that adds a
+VM (untracked, or tracked and not live), and `rescueBoot` admits always (it
+never starts over a live guest). Tests, each failing on 122eb9623:
+`TestSweepAfterADeferredDeployBootsTheCurrentDeployNotTheHungConfig` (the
+deferred deploy, the wedge stop, the always-on warm; and a visit's start),
+`TestStartsOfAStoppedTrackedInstanceAreAdmittedForHostMemory` (rescue and
+sweep). Mutation checks: refresh, the fresh token, sweep admission and
+rescue admission each fail their test when removed. Four existing tests
+that asserted `RecoverVM` for a dead tracked instance (failed, stopped,
+hibernated after a snapshot fallback; the platform warmer's stale-booting
+recovery) now assert the same fresh realization through `RefreshVM`; none
+asserted the stored config. Behavior change (introduced): a hibernated
+computer's snapshot resume of a tracked instance now takes a host memory
+admission; protected classes are still always admitted.
+
 ## Residuals recorded by the review (not fixed here)
 
 - The rescue's final `/health` check is identity for a non-layered computer and
@@ -468,11 +487,11 @@ Each finding read against 122eb9623:
   3.3; the host does not attest planned-ness yet).
 - `saveLocked` does not fsync and only logs errors (restart ledger L1b); a
   crash between a spend and its write can lose the spend or the grant.
-- The always-on sweep (`resumeVMForDesktop`) and a visit's recovery still
-  recover a tracked stopped instance with `RecoverVM`, which keeps the stored
-  config. Only the deploy rescue refreshes onto the current deploy's artifacts
-  (A3). After a deploy that deferred the paper's refresh, a sweep boot of a
-  tracked instance can still run the stored (older) image.
+- (Repaired after Argon 1.) The always-on sweep and a visit's start used to
+  recover a tracked stopped instance with `RecoverVM` and its stored config;
+  they now refresh it onto the current deploy. Still on the stored config:
+  the recovery of a live tracked guest (crash recovery) and the operator /
+  maintenance `recoverVMForDesktop`.
 - The always-on sweep still boots a `vmctl-restart` stop or a hibernated
   computer without an allowance (a host act, not a failure); only the rescue
   charges and converts a hard failure.
