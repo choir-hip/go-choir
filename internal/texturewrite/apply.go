@@ -579,7 +579,7 @@ func (w *writer) citation(t Token) (texturedoc.Node, bool) {
 	}
 	if t.Kind == TokenRef {
 		if _, ok := w.entities[t.Handle]; !ok {
-			w.errs.add(t.Line, "{{ref %s}} names no source of this document; {{ref}} only keeps a citation the frame shows", t.Handle)
+			w.errs.add(t.Line, "{{ref %s}} names no source of this document; {{ref}} only keeps a citation the frame shows, by its source id (%s). To cite a source from your records, write {{cite rN.cM \"exact quote\"}} with its frame handle", t.Handle, w.entityIDList())
 			return texturedoc.Node{}, false
 		}
 		return texturedoc.Node{Type: "source_ref", Attrs: map[string]any{"id": w.newID("ref", ""), "source_entity_id": t.Handle, "display_mode": "numbered_ref"}}, true
@@ -836,4 +836,23 @@ func dropWholeCaptureEmbeds(nodes []texturedoc.Node) []texturedoc.Node {
 		out = append(out, n)
 	}
 	return out
+}
+
+// entityIDList names this document's source ids for a refusal, a few at
+// most, sorted.
+func (w *writer) entityIDList() string {
+	ids := make([]string, 0, len(w.entities))
+	for id := range w.entities {
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		return "this document has none yet"
+	}
+	sort.Strings(ids)
+	more := ""
+	if len(ids) > 6 {
+		more = fmt.Sprintf(" and %d more", len(ids)-6)
+		ids = ids[:6]
+	}
+	return strings.Join(ids, ", ") + more
 }
