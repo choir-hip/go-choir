@@ -1289,3 +1289,27 @@ the prompt fix does not hold on the next drill.
 
 Also seen: Texture re-casts without limit while every round fails fast
 (five rounds in 25 minutes). Recorded as a residual.
+
+### Failure 19 after the prompt fix (deploy d31403fd5, label sonnet-slides-1021b, 05:23-05:28 UTC)
+
+Management now writes `"network": "ecosystem_proxy"`, but it wrote it on
+round 1, with the objective "apply the carried first-round rewrite patch",
+on a fresh trajectory that had no first round. Engineering found no patch
+and refused in 27 s. The round-2 Cast left the field out (the claude mode)
+but asked engineering to "verify the platform Git checkout and carried
+patch". So the prompt line ("ecosystem_proxy for a round that must run npm
+or a build") overcorrected: every rewrite request asks for a build, so
+management read round 1 as the build round.
+
+A second cause sits in the drill's own brief (`scripts/reeng_tracer.mjs`,
+the rewrite request), not in Choir. It demanded "git diff --stat must show
+the file changed", and a capsule has no `.git`; engineering treated the
+missing baseline as a reason to make no writes. It also described the two
+rounds in prose without saying what each Cast's network field is.
+
+Changes: the brief now names both rounds and each round's network field,
+and replaces the git check with `diff -u` against a copy saved before the
+change. The management prompt is unchanged for now; if the next run still
+casts round 1 as `ecosystem_proxy`, the prompt names the two-round order
+explicitly, and after that the mechanical default (a carried-patch round
+gets `ecosystem_proxy`) is the fix.
