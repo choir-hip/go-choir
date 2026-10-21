@@ -219,7 +219,7 @@ now:
     verify through the segment store (separate goal file
     choir-tape-segments-a2-repack-2026-10-21.md). Items 0-3 have landed;
     the rewrites are running.
-  source_ref: main 0212dcfa9 (local b96c4755f, unpushed code 73922d044, 4312569e7, 9c31920e6)
+  source_ref: main 0212dcfa9 (local b96c4755f, unpushed code 73922d044, f2004ed56, 85250d067)
   deploy_identity: staging cbef56155 (CI 39543206946 success, deployed 04:30 UTC)
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
   conjecture:
@@ -266,7 +266,7 @@ now:
     next_observation: SlidesApp drill outcome; Taiwan row's first poll; restore drill platform piece.
   blocker: none
   next_action: >-
-    Land 73922d044, 4312569e7 and 9c31920e6 after the SlidesApp drill ends
+    Land 73922d044, f2004ed56 and 85250d067 after the SlidesApp drill ends
     (a deploy mid-drill restarts the host services it reads); then the next
     app rewrite.
 

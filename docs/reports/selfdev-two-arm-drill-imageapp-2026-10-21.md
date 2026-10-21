@@ -63,7 +63,7 @@ docs/problems/engineering-completion-path-cluster-2026-10-20.md, section
 "First carried-patch drill on staging":
 
 - secret-named and sandbox-mask files rode in the carried patch (fixed
-  test-first in 9c31920e6, not yet deployed);
+  test-first in 85250d067, not yet deployed);
 - `choir.Exec` runs with working directory `/`;
 - a long synchronous `choir.Exec` dies on the broker timeout;
 - the tracer's deadline path threw "phase is not defined" (fixed in
