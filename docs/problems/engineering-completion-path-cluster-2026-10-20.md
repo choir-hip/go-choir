@@ -1663,3 +1663,34 @@ and the build job links them when the package files match (df93ab7f7,
 deployed). A delegate rewrite is one round; a rewrite that changes
 dependencies keeps the two-round path. The SlidesApp drill on the
 delegate test computer is the acceptance.
+
+## Failures 27 and 28: the first one-round drill (label sonnet-slides-1021i, deploy 219535ef3, 10:21-10:24 UTC)
+
+Read from the trace (bundle outside the repo, trajectory
+dbadbdfd-579b-5358-a477-b024bd6de6d7, assignment
+assignment-f138ade610d43435de66afeb):
+
+- The frontend build job linked the image's dependencies and ended done
+  with exit 0 in about 17 seconds, in a capsule with no network at all.
+  The one-round build mechanism works.
+- **Failure 27, management withheld the network.** Management cast with
+  `"network": "forbidden"`, though the drill brief says to leave the
+  field out, so the capsule had no delegate and the engineering desk
+  (GPT-6 Luna) edited the file itself. Management's overlay still says a
+  delegate capsule cannot run a frontend build ("no npm install or
+  frontend build runs there"), stale since df93ab7f7, and offers
+  "forbidden" beside it. Hypothesis, not confirmed by its reasoning text
+  (the cell shows only the Cast): it chose the option that read as
+  sufficient and least privileged.
+- **Failure 28, Freeze refused the running binary.** `choir.Freeze` was
+  refused: "the running binary was built from 219535ef3 but the capsule
+  source is pinned to 4c2d66c38; build bin/autoputer"
+  (`internal/capsule/release_binary.go`, `PlanReleaseBinaryReuse`). The
+  delegate test computer's source is versioned on its own and has stayed
+  at its creation commit (2026-10-20, 215 commits behind) while its
+  guest image follows every deploy. A frontend-only freeze reuses the
+  running binary only when the two commits match, so on this computer
+  every frontend change needs bin/autoputer built from the workspace
+  source. The engineering overlay and the drill brief both say a
+  frontend-only change needs no bin/autoputer, so engineering completed
+  as blocked. The refusal is correct; the instructions are what is wrong.
