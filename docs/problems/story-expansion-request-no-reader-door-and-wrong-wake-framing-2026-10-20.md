@@ -172,3 +172,44 @@ and, when a request is open, paper reads (bounded here by returning only the
 newest request to a public reader); the global 12 a day can still be spent by
 twelve different addresses; there is no CAPTCHA. The owner said not to worry
 about abuse for now.
+
+## P4. The door can never reach Texture: the paper's document read has no computer id (staging, 2026-10-21 02:31 UTC)
+
+Evidence. Deploy 7b55b19a7 (CI 39532380202, staging deployed at 02:30:29
+UTC) turned on `PROXY_EXPAND_PUBLIC`. The deployed spec
+(`frontend/tests/autopaper-expand-deployed.spec.js`, `EXPAND_PUBLIC=on`) on
+the FCA near-miss story (`pub-e61662f3299f634504fbcef7eef6773f`, 101 words,
+2 sources) passed the unknown-route refusal, the read (`allowed: true`)
+and the phone-width button, then got 502 `unavailable` on the POST. The
+proxy log: `expand: read document: paper document has no lifecycle head`,
+then `request=rx-4b600d44b21e ... requester=public
+outcome=paper_unavailable`.
+
+Cause (code, confirmed by reading both sides). `paperDocument`
+(`internal/proxy/platform_expand.go:445`) requires `current_revision_id`,
+`computer_id` and `trajectory_id` in the paper's `GET
+/api/texture/documents/{id}`. The guest's `textureDocumentResponse`
+(`internal/textureowner/texture.go:151`) has `trajectory_id` and
+`current_revision_id` but no `computer_id` field at all, so the check
+fails on every story. The proxy needs the document's own computer id
+because the paper names the owner revision
+`uuid.NewSHA1(owner, doc.ComputerID, doc.TrajectoryID, client_request_id)`
+(`texture_agent_revision.go:156`), and the "already asked" check
+recomputes that id. The proxy's unit tests stub a paper that returns
+`computer_id`, so they pass against a contract the real paper does not
+serve. This affects the owner-only door as well; it has never worked on
+staging, and nobody noticed because the deployed spec had never run.
+
+Consequence. No request reached the paper: nothing was written on its
+chain, and the proxy ledger released the entry (no `accepted`). The
+reader saw "the paper is not reachable right now", which is wrong: the
+paper was reachable and the contract was broken.
+
+Fix (smallest). Add `computer_id` (the document's own scope) to the
+guest's document read, pinned by a textureowner test, so the paper serves
+what the proxy already expects. Additive; old proxies ignore it. The
+paper must take the new guest build (a `public_platform` computer takes a
+planned refresh while busy). Rollback: revert; the door returns to this
+502. Related lesson: a proxy test that fakes the guest should be built
+from the guest's response type, not a hand-written map; recorded, not
+done here.
