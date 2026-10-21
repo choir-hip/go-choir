@@ -37,6 +37,15 @@ import (
 //     (TestDerivedKeysIgnoreStrayStoredColumns).
 //  9. Replay and witness extraction: internal/computerversion.
 // 10. Op labels (TestEngineOpsNameTheirKind) and plan shape (TestDerivedKeyPlansUseTheirIndexes).
+// 11. A withdrawal (a failed maintenance, a malformed write) lands while a
+//     pass publishes and is overwritten by it
+//     (TestPassPublicationKeepsAConcurrentWithdrawal,
+//     TestPassPublicationKeepsAConcurrentMalformedWrite).
+// 12. A read admitted to the side table before a writer withdraws the family
+//     reads it anyway; the production projector takes no engine mutex, so
+//     holding the mutex does not order them
+//     (TestReadSeesAMalformedWriteCommittedAfterItsAdmission,
+//     TestReadSeesAWithdrawalCommittedAfterItsAdmission).
 
 const (
 	testRunKind       = ObjectKind("choir.run")
@@ -1076,5 +1085,195 @@ func assertSideMatchesTruthSample(t *testing.T, db *sql.DB) {
 			}
 		}
 		rows.Close()
+	}
+}
+
+// projectorPut writes og_objects the way the production projector does: in
+// its own transaction, without the engine mutex, maintaining the side table
+// inside it. failMaintain stands for a maintenance statement that failed:
+// the row is written and the family withdrawn, with no key row.
+func projectorPut(t *testing.T, db *sql.DB, d *DerivedKeys, obj Object, failMaintain bool) {
+	t.Helper()
+	ctx := context.Background()
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, upsertObjectSQL, upsertObjectArgs(obj)...); err != nil {
+		t.Fatalf("projector put %s: %v", obj.CanonicalID, err)
+	}
+	if failMaintain {
+		d.Invalidate(derivedFamilyForKind(obj.ObjectKind).Name, "test: maintenance failed")
+	} else {
+		d.Maintain(ctx, tx, obj.CanonicalID, obj.ObjectKind)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// once wraps a seam so the writer runs at the first matching call only.
+func once(family string, fn func()) func(string) {
+	var fired bool
+	return func(name string) {
+		if name == family && !fired {
+			fired = true
+			fn()
+		}
+	}
+}
+
+func TestPassPublicationKeepsAConcurrentWithdrawal(t *testing.T) {
+	ctx := context.Background()
+	db, store := openDerivedStore(t)
+	at := time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)
+	if err := store.PutObject(ctx, keyedObj{id: "run-1", kind: testRunKind, meta: map[string]any{"agent_id": "a"}, body: `{}`, at: at}.object(t)); err != nil {
+		t.Fatal(err)
+	}
+	// While the pass publishes, the projector writes a run and its
+	// maintenance fails: the family is withdrawn and the run has no key row.
+	late := keyedObj{id: "run-2", kind: testRunKind, meta: map[string]any{"agent_id": "a"}, body: `{}`, at: at.Add(time.Second)}
+	fired := false
+	store.derived.beforePublish = once(KeyRunAgentID, func() {
+		fired = true
+		projectorPut(t, db, store.derived, late.object(t), true)
+	})
+	if err := store.ValidateDerivedKeys(ctx, DerivedKeyValidation{}); err != nil {
+		t.Fatal(err)
+	}
+	store.derived.beforePublish = nil
+	if !fired {
+		t.Fatal("test premise: the seam did not run")
+	}
+	if store.derived.Validated(KeyRunAgentID) {
+		t.Fatal("the pass published over a withdrawal that landed while it published")
+	}
+	ids, err := pageIDs(t, store, testRunKind, "agent_id", "a", 10)
+	if err != nil || !reflect.DeepEqual(ids, []string{"run-1", "run-2"}) {
+		t.Fatalf("read after the withdrawal = %v, %v; want both runs", ids, err)
+	}
+}
+
+func TestPassPublicationKeepsAConcurrentMalformedWrite(t *testing.T) {
+	ctx := context.Background()
+	db, store := openDerivedStore(t)
+	at := time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)
+	if err := store.PutObject(ctx, keyedObj{id: "rec-good", kind: commitmentRecordKind, meta: map[string]any{}, body: `{"addressee":"a"}`, at: at}.object(t)); err != nil {
+		t.Fatal(err)
+	}
+	// While the pass publishes, the projector commits a record whose body is
+	// not JSON: the family must keep the JSON path, whose read errors.
+	bad := keyedObj{id: "rec-bad", kind: commitmentRecordKind, meta: map[string]any{}, body: `not json`, at: at.Add(time.Second)}
+	fired := false
+	store.derived.beforePublish = once(KeyCommitmentAddressee, func() {
+		fired = true
+		projectorPut(t, db, store.derived, bad.object(t), false)
+	})
+	if err := store.ValidateDerivedKeys(ctx, DerivedKeyValidation{}); err != nil {
+		t.Fatal(err)
+	}
+	store.derived.beforePublish = nil
+	if !fired {
+		t.Fatal("test premise: the seam did not run")
+	}
+	if store.derived.readable(KeyCommitmentAddressee) {
+		t.Fatal("the pass published the family readable over a malformed write that landed while it published")
+	}
+	if _, err := bodyIDs(t, store, "o1", "a", 10); err == nil || !strings.Contains(err.Error(), "Invalid JSON text") {
+		t.Fatalf("read with a malformed row present = %v, want the JSON read's error", err)
+	}
+}
+
+func TestReadSeesAMalformedWriteCommittedAfterItsAdmission(t *testing.T) {
+	ctx := context.Background()
+	db, store := openDerivedStore(t)
+	at := time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)
+	if err := store.PutObject(ctx, keyedObj{id: "rec-good", kind: commitmentRecordKind, meta: map[string]any{}, body: `{"addressee":"a"}`, at: at}.object(t)); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ValidateDerivedKeys(ctx, DerivedKeyValidation{}); err != nil {
+		t.Fatal(err)
+	}
+	if !store.derived.readable(KeyCommitmentAddressee) {
+		t.Fatal("test premise: the family is readable")
+	}
+	// The read has chosen the side table and holds the engine mutex; the
+	// projector, which does not take it, commits a malformed record.
+	bad := keyedObj{id: "rec-bad", kind: commitmentRecordKind, meta: map[string]any{}, body: `not json`, at: at.Add(time.Second)}
+	fired := false
+	store.derived.beforeRead = once(KeyCommitmentAddressee, func() {
+		fired = true
+		projectorPut(t, db, store.derived, bad.object(t), false)
+	})
+	_, err := bodyIDs(t, store, "o1", "a", 10)
+	store.derived.beforeRead = nil
+	if !fired {
+		t.Fatal("test premise: the seam did not run")
+	}
+	if err == nil || !strings.Contains(err.Error(), "Invalid JSON text") {
+		t.Fatalf("read admitted before a malformed commit = %v, want the JSON read's error", err)
+	}
+}
+
+func TestReadSeesAWithdrawalCommittedAfterItsAdmission(t *testing.T) {
+	at := time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name        string
+		family      string
+		first, late keyedObj
+		read        func(t *testing.T, s *DoltStore) ([]string, error)
+	}{
+		{
+			name: "run by agent_id", family: KeyRunAgentID,
+			first: keyedObj{id: "run-1", kind: testRunKind, meta: map[string]any{"agent_id": "a"}, body: `{}`, at: at},
+			late:  keyedObj{id: "run-2", kind: testRunKind, meta: map[string]any{"agent_id": "a"}, body: `{}`, at: at.Add(time.Second)},
+			// One page: a caller that pages on would find the row on its
+			// next page, from the JSON path, and hide the missed one.
+			read: func(t *testing.T, s *DoltStore) ([]string, error) {
+				objs, err := s.ListObjectsByMetadataPage(context.Background(), string(testRunKind), "$.agent_id", "a", "", 10)
+				ids := make([]string, 0, len(objs))
+				for _, o := range objs {
+					ids = append(ids, o.CanonicalID)
+				}
+				return ids, err
+			},
+		},
+		{
+			name: "records by addressee", family: KeyCommitmentAddressee,
+			first: keyedObj{id: "rec-1", kind: commitmentRecordKind, meta: map[string]any{}, body: `{"addressee":"a"}`, at: at},
+			late:  keyedObj{id: "rec-2", kind: commitmentRecordKind, meta: map[string]any{}, body: `{"addressee":"a"}`, at: at.Add(time.Second)},
+			read: func(t *testing.T, s *DoltStore) ([]string, error) {
+				ids, err := bodyIDs(t, s, "o1", "a", 10)
+				sort.Strings(ids)
+				return ids, err
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			db, store := openDerivedStore(t)
+			if err := store.PutObject(ctx, tc.first.object(t)); err != nil {
+				t.Fatal(err)
+			}
+			if err := store.ValidateDerivedKeys(ctx, DerivedKeyValidation{}); err != nil {
+				t.Fatal(err)
+			}
+			// Admitted to the side table, then the projector commits a row
+			// whose maintenance failed: no key row, family withdrawn.
+			fired := false
+			store.derived.beforeRead = once(tc.family, func() {
+				fired = true
+				projectorPut(t, db, store.derived, tc.late.object(t), true)
+			})
+			ids, err := tc.read(t, store)
+			store.derived.beforeRead = nil
+			if !fired {
+				t.Fatal("test premise: the seam did not run")
+			}
+			if want := []string{tc.first.id, tc.late.id}; err != nil || !reflect.DeepEqual(ids, want) {
+				t.Fatalf("read admitted before a withdrawal = %v, %v; want %v", ids, err, want)
+			}
+		})
 	}
 }

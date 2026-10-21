@@ -130,6 +130,10 @@ type DerivedKeys struct {
 	mismatches    map[string]*atomic.Uint64
 	passMu        sync.Mutex
 	wake          chan struct{}
+	// Test seams, nil in production: beforeRead runs as a side-table read
+	// starts, beforePublish once a pass has read its counters and is about to
+	// publish. The interleaving tests put a writer at each.
+	beforeRead, beforePublish func(name string)
 }
 
 func newDerivedKeys() *DerivedKeys {
@@ -366,6 +370,9 @@ type derivedIDRow struct {
 // table: the family is withdrawn and ok is false, and the caller answers
 // from the JSON path. The caller holds the engine mutex.
 func (s *DoltStore) readDerived(ctx context.Context, fam *derivedFamily, query string, args []any) (objs []Object, ok bool, err error) {
+	if hook := s.derived.beforeRead; hook != nil {
+		hook(fam.Name)
+	}
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable, ReadOnly: true})
 	if err != nil {
 		return nil, false, fmt.Errorf("objectgraph dolt: begin key index tx: %w", err)
@@ -601,11 +608,16 @@ func (s *DoltStore) validateFamily(ctx context.Context, fam *derivedFamily, opt 
 	}
 
 	elapsed := time.Since(p.started).Round(time.Millisecond)
-	if d.invalidations[fam.Name].Load() != startInvalidations {
+	withdrawn := d.invalidations[fam.Name].Load() != startInvalidations
+	bad := p.sawBad || d.badWrites[fam.Name].Load() != startBadWrites
+	if hook := d.beforePublish; hook != nil {
+		hook(fam.Name)
+	}
+	if withdrawn {
 		p.logf("derived keys %s: pass over %d rows ended in %s but the family was withdrawn during it; it will be run again", fam.Name, p.checked, elapsed)
 		return nil
 	}
-	d.bad[fam.Name].Store(p.sawBad || d.badWrites[fam.Name].Load() != startBadWrites)
+	d.bad[fam.Name].Store(bad)
 	d.validated[fam.Name].Store(true)
 	p.logf("derived keys %s: validated %d rows in %s (%d re-derived, %d orphans dropped, malformed rows %t)", fam.Name, p.checked, elapsed, p.rederived, p.orphan, d.bad[fam.Name].Load())
 	return nil
