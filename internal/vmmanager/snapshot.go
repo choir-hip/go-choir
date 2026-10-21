@@ -740,6 +740,14 @@ func (m *Manager) ensureSnapshotRoom(vmID string, need int64) bool {
 // is measured on the file system the new snapshot lands on (a vault has its
 // own, smaller floor: only snapshots live there).
 func (m *Manager) ensureSnapshotRoomAt(root, vmID string, need int64) bool {
+	return m.ensureSnapshotRoomFor(root, m.isVaultRoot(root), vmID, need)
+}
+
+// ensureSnapshotRoomFor measures free space at statPath (a vault capture
+// passes the path through its held directory) with the vault's floor when
+// vaultFloor.
+func (m *Manager) ensureSnapshotRoomFor(statPath string, vaultFloor bool, vmID string, need int64) bool {
+	root := statPath
 	budget := m.snapshotBudgetBytes()
 	if need > budget {
 		return false
@@ -773,7 +781,7 @@ func (m *Manager) ensureSnapshotRoomAt(root, vmID string, need int64) bool {
 		return false
 	}
 	floor := snapshotDiskFloorBytes
-	if m.isVaultRoot(root) {
+	if vaultFloor {
 		floor = snapshotVaultFloorBytes
 	}
 	return avail-need >= floor
@@ -850,6 +858,9 @@ func (m *Manager) SweepOrphanSnapshots(keep func(vmID string) bool) []string {
 	for _, root := range m.snapshotRoots() {
 		removed = append(removed, m.sweepSnapshotRoot(root, keep)...)
 	}
+	// A recorded vault root that is no longer configured and now holds no
+	// snapshot is dropped from the record (finding B2).
+	m.dropEmptyVaultRoots()
 	return removed
 }
 
