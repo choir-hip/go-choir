@@ -122,9 +122,10 @@ func (h *Handler) handleLifecycleOwnerRevision(w http.ResponseWriter, r *http.Re
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: "lifecycle has multiple open desk target work items"})
 		return
 	}
-	if targetWorkItemID == "" && textureWorkSettledByDesk(snapshot, doc.DocID) {
-		// The desk completed its work on a live document; owner input is new
-		// work (texture-settled-work-refuses-owner-revise-2026-10-09).
+	if targetWorkItemID == "" && (textureWorkSettledByDesk(snapshot, doc.DocID) || storyTextureDeskLive(snapshot, doc.DocID)) {
+		// The desk completed its work on a live document, or a living story
+		// (which has no work items by design, problem doc P5) has a live
+		// desk; owner input is new work (texture-settled-work-refuses-owner-revise-2026-10-09).
 		// A lost race to another reopen is fine: the re-read below joins
 		// whichever single open item won.
 		if _, reopenErr := h.reopenTextureWorkForOwner(r.Context(), ownerID, doc, clientRequestID); reopenErr != nil {
@@ -234,6 +235,28 @@ func ownerRevisionTarget(snapshot types.LifecycleSnapshot, docID string) (profil
 		profile, workItemID = p, work.WorkItemID
 	}
 	return profile, workItemID, false
+}
+
+// storyTextureDeskLive reports a live living-story trajectory whose document
+// is docID and whose Texture desk agent texture:<docID> exists, and which is
+// not engineering-bound. Only such a story opens Texture work for an owner
+// revise when it has none.
+func storyTextureDeskLive(snapshot types.LifecycleSnapshot, docID string) bool {
+	trajectory := snapshot.Trajectory
+	if trajectory.Status != types.TrajectoryLive || trajectory.Kind != types.TrajectoryKindStory || trajectory.SubjectRefs["doc_id"] != docID {
+		return false
+	}
+	textureAgentID := agentprofile.Texture + ":" + docID
+	deskLive := false
+	for _, agent := range snapshot.Agents {
+		if agent.AgentID == agentprofile.Engineering+":"+docID && agent.LifecycleVersion > 0 {
+			return false
+		}
+		if agent.AgentID == textureAgentID && agent.LifecycleVersion > 0 {
+			deskLive = true
+		}
+	}
+	return deskLive
 }
 
 // textureWorkSettledByDesk reports a live document whose Texture desk
