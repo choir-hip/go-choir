@@ -63,6 +63,10 @@ type DeskSessionWorkerConfig struct {
 	// Refused reports a frame the daemon refused (outside the desk's table,
 	// a forged token, a stale epoch) so the host can record it on the trace.
 	Refused func(ctx context.Context, r FrameRefusal)
+	// Confinement is the OS boundary the worker runs inside
+	// (desk_cell_confinement.go). The zero value confines as far as the
+	// spawner can; it is never weaker than that.
+	Confinement CellConfinement
 }
 
 // FrameRefusal is one refused worker frame.
@@ -107,6 +111,8 @@ type DeskSessionWorker struct {
 	// slotToken is the secret the host generated for this worker at spawn
 	// and handed it through its environment (ARCH-07).
 	slotToken []byte
+	// cellTmpDir is the worker's private tmp dir, removed at reap.
+	cellTmpDir string
 }
 
 // workerExitGrace is how long the host waits, after the session socket
@@ -147,8 +153,13 @@ func SpawnDeskSessionWorker(cfg DeskSessionWorkerConfig) (*DeskSessionWorker, er
 	if workerArg == "" {
 		return nil, fmt.Errorf("desk worker arg required (worker mode entrypoint)")
 	}
+	plan, err := planCellConfinement(cfg)
+	if err != nil {
+		return nil, err
+	}
 	fds, err := unixSocketpairFiles()
 	if err != nil {
+		removeCellTmpDir(plan.tmpDir)
 		return nil, fmt.Errorf("desk session socketpair: %w", err)
 	}
 	parentFile := fds[0]
@@ -157,21 +168,23 @@ func SpawnDeskSessionWorker(cfg DeskSessionWorkerConfig) (*DeskSessionWorker, er
 	_ = parentFile.Close()
 	if err != nil {
 		_ = childFile.Close()
+		removeCellTmpDir(plan.tmpDir)
 		return nil, fmt.Errorf("desk session parent socket: %w", err)
 	}
 	token := make([]byte, 32)
 	if _, err := rand.Read(token); err != nil {
 		_ = parentConn.Close()
 		_ = childFile.Close()
+		removeCellTmpDir(plan.tmpDir)
 		return nil, fmt.Errorf("desk session slot token: %w", err)
 	}
 	var stdoutBuf, stderrBuf bytes.Buffer
 	cmd := exec.Command(bin, workerArg)
-	if cfg.Session.AllowedRoot != "" {
-		cmd.Dir = cfg.Session.AllowedRoot
-	}
-	cmd.SysProcAttr = workerSysProcAttr(cfg.ProcessGroup)
-	cmd.Env = append(append([]string{"PATH=/usr/bin:/bin:/usr/local/bin", "TMPDIR=/tmp"}, cfg.sessionEnv()...), cfg.ExtraEnv...)
+	cmd.Dir = plan.dir
+	cmd.SysProcAttr = plan.attr
+	// The confinement env comes last: its TMPDIR (the private tmp dir)
+	// wins over the default (exec.Cmd keeps the last duplicate).
+	cmd.Env = append(append(append([]string{"PATH=/usr/bin:/bin:/usr/local/bin", "TMPDIR=/tmp"}, cfg.sessionEnv()...), cfg.ExtraEnv...), plan.env...)
 	// The slot token rides the environment, never argv (argv is visible to
 	// every process through /proc).
 	cmd.Env = append(cmd.Env, sessionEnvPrefix(cfg.EnvPrefix)+"SLOT_TOKEN="+hex.EncodeToString(token))
@@ -182,15 +195,17 @@ func SpawnDeskSessionWorker(cfg DeskSessionWorkerConfig) (*DeskSessionWorker, er
 	if err := cmd.Start(); err != nil {
 		_ = childFile.Close()
 		_ = parentConn.Close()
+		removeCellTmpDir(plan.tmpDir)
 		return nil, fmt.Errorf("start desk session worker: %w", err)
 	}
 	_ = childFile.Close()
 	w := &DeskSessionWorker{
-		cmd:    cmd,
-		framed: NewFramedConn(parentConn),
-		pid:    cmd.Process.Pid,
-		cfg:    cfg,
-		stderr: &stderrBuf,
+		cmd:        cmd,
+		framed:     NewFramedConn(parentConn),
+		pid:        cmd.Process.Pid,
+		cfg:        cfg,
+		stderr:     &stderrBuf,
+		cellTmpDir: plan.tmpDir,
 		// The worker returns the hex form; the host compares that.
 		slotToken: []byte(hex.EncodeToString(token)),
 	}
@@ -254,14 +269,6 @@ func SessionWorkerConfigFromEnv(getenv func(string) string, prefix string) Sessi
 		KeepCellOutput:   getenv(prefix+"KEEP_CELL_OUTPUT") == "1",
 		SlotToken:        getenv(prefix + "SLOT_TOKEN"),
 	}
-}
-
-// sessionEnvPrefix defaults the worker environment prefix.
-func sessionEnvPrefix(prefix string) string {
-	if prefix == "" {
-		return "CHOIR_DESK_SESSION_"
-	}
-	return prefix
 }
 
 // parseUint64Env parses a numeric env value; malformed input reads as 0
@@ -647,6 +654,7 @@ func (w *DeskSessionWorker) reapLocked(hostReason string, grace time.Duration) {
 		return
 	}
 	w.reaped = true
+	defer removeCellTmpDir(w.cellTmpDir)
 	done := make(chan error, 1)
 	go func() { done <- w.cmd.Wait() }()
 	if w.transportLost {
@@ -737,4 +745,13 @@ func unixSocketpairFiles() ([2]*os.File, error) {
 		return out, fmt.Errorf("desk session socketpair: nil file")
 	}
 	return out, nil
+}
+
+// removeCellTmpDir removes a worker's private tmp dir once its process is
+// gone. Only directories the spawner created (choir-cell-*) are removed.
+func removeCellTmpDir(dir string) {
+	if dir == "" || !strings.Contains(dir, "choir-cell-") {
+		return
+	}
+	_ = os.RemoveAll(dir)
 }

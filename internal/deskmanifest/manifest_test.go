@@ -2,7 +2,9 @@ package deskmanifest
 
 import (
 	"fmt"
+	"os"
 	"reflect"
+	"regexp"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -290,5 +292,35 @@ func TestRestartContractIsUniform(t *testing.T) {
 		if d.Restart != RestartContract {
 			t.Errorf("desk %s restart contract %q", name, d.Restart)
 		}
+	}
+}
+
+// The guest image declares one user per desk worker class so operators see
+// names; the spawner uses the manifest's number. They must be the same
+// number, or an operator reading `ps` is told the wrong desk.
+func TestGuestImageUsersMatchTheManifest(t *testing.T) {
+	raw, err := os.ReadFile("../../nix/autoputer-vm.nix")
+	if err != nil {
+		t.Skipf("nix/autoputer-vm.nix not readable from the package: %v", err)
+	}
+	nix := string(raw)
+	for _, desk := range []string{Management, Texture, Research} {
+		d, _ := Lookup(desk)
+		name := "choir-cell-" + desk
+		uidRe := regexp.MustCompile(`users\.users\.` + name + ` = \{[^}]*uid = (\d+);`)
+		gidRe := regexp.MustCompile(`users\.groups\.` + name + ` = \{ gid = (\d+); \}`)
+		m := uidRe.FindStringSubmatch(nix)
+		g := gidRe.FindStringSubmatch(nix)
+		if m == nil || g == nil {
+			t.Errorf("guest image does not declare user and group %s with numeric ids", name)
+			continue
+		}
+		want := fmt.Sprint(d.Sandbox.UID)
+		if m[1] != want || g[1] != want {
+			t.Errorf("%s: image uid %s gid %s, manifest uid %s", name, m[1], g[1], want)
+		}
+	}
+	if !strings.Contains(nix, `CHOIR_DESK_CELL_CONFINEMENT = "required";`) {
+		t.Error("the guest image does not set CHOIR_DESK_CELL_CONFINEMENT=required")
 	}
 }
