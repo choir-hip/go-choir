@@ -720,3 +720,29 @@ with this. either edit node-a or the mike repo").
     111,985,828,263 (the pack sum also counts pack headers, so it errs high,
     the safe side for the 80% quota alert). Failure mode 10 in the snapshot
     test; `curl` joins the unit's PATH.
+21. **Snapshot restore drill on the new path: passed (04:59 to 05:04 UTC
+    on 2026-10-21).** `off-host-restore-drill.sh 0a731df5 snap` in the
+    capped unit (MemoryHigh 8G, MemoryMax 10G, idle I/O). The first
+    attempt exited at once: a `systemd-run` unit on NixOS has no
+    coreutils on its PATH (`install: command not found`), so the unit
+    needs `-p Environment=PATH=/run/current-system/sw/bin`. Then, from
+    node-a, each store was restored into scratch and opened with Dolt,
+    as after a power cut:
+    - corpus: 3.7 GB in 36 s; head `s3517bp4…` found, 31 tables; it is
+      the head run 5 recorded.
+    - platform: 31 GB in 4 min 18 s; head `614mf7rf…` found, 70 tables;
+      it is the head run 5 recorded.
+    The unit peaked at 7 GB, with no swap. Each restore was deleted before
+    the next. This is the drill the migration waited for, so the retired
+    copies were removed at 05:06 UTC: `corpus-dolt.pre-subvolume-*`
+    (7.0 GB), `platform-dolt/platform.pre-subvolume-*` (31 GB),
+    `corpus-dolt/.choir-backup` (3.5 GB, the old sync's target), the
+    drill's restic cache, and the one-off `/root` scripts
+    (`off-host-backup.sh`, `dolt-data-to-subvolume.sh`,
+    `offhost-unlock.sh`). `dolt-backup-20261015-pre-2.4.2` is kept. All
+    Dolt servers, corpusd and vmctl stayed active, and the Dolt liveness
+    probe passed. Free space on `/` went from 139 GB to 143 GB at once;
+    the reflinked extents the old copies shared with the live stores are
+    not freed, by design. Still open: the tape and image pieces of the
+    drill on this snapshot, and the weekly verify's cost, which waits for
+    the segment store (`choir-tape-segments-a2-repack-2026-10-21.md`).
