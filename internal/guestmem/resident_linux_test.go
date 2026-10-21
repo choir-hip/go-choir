@@ -3,6 +3,7 @@
 package guestmem
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -33,7 +34,7 @@ func TestResidentBytesCountsCachedPagesWithoutFaultingThemIn(t *testing.T) {
 		t.Skipf("fadvise: %v", err)
 	}
 	for i := 0; i < 2; i++ {
-		got, err := residentBytes(path, size)
+		got, _, err := residentBytes(path, size, newScan(context.Background(), DefaultLimits))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -44,7 +45,7 @@ func TestResidentBytesCountsCachedPagesWithoutFaultingThemIn(t *testing.T) {
 	if _, err := os.ReadFile(path); err != nil {
 		t.Fatal(err)
 	}
-	got, err := residentBytes(path, size)
+	got, _, err := residentBytes(path, size, newScan(context.Background(), DefaultLimits))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +56,38 @@ func TestResidentBytesCountsCachedPagesWithoutFaultingThemIn(t *testing.T) {
 	if err := os.WriteFile(empty, nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := residentBytes(empty, 0); err != nil || got != 0 {
+	if got, _, err := residentBytes(empty, 0, newScan(context.Background(), DefaultLimits)); err != nil || got != 0 {
 		t.Fatalf("empty = %d, %v", got, err)
+	}
+}
+
+// A file bigger than the probe's chunk is read chunk by chunk, and the probe
+// stops, reporting incomplete, when the request's probe-byte budget or
+// deadline is spent, instead of mapping and scanning the whole file.
+func TestResidentBytesIsChunkedAndCapped(t *testing.T) {
+	page := int64(os.Getpagesize())
+	path := filepath.Join(t.TempDir(), "big")
+	size := 5 * page
+	if err := os.WriteFile(path, make([]byte, size), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	l := DefaultLimits
+	l.ProbeChunkBytes = 2 * page
+	l.MaxProbeBytes = 4 * page
+	s := newScan(context.Background(), l)
+	if _, complete, err := residentBytes(path, size, s); err != nil || complete {
+		t.Fatalf("a 5-page file against a 4-page budget: complete=%t err=%v", complete, err)
+	}
+	if s.probeLeft != 0 {
+		t.Fatalf("probe budget left = %d, want it spent", s.probeLeft)
+	}
+	l.MaxProbeBytes = 100 * page
+	if _, complete, err := residentBytes(path, size, newScan(context.Background(), l)); err != nil || !complete {
+		t.Fatalf("within budget: complete=%t err=%v", complete, err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, complete, _ := residentBytes(path, size, newScan(ctx, l)); complete {
+		t.Fatal("a cancelled request must stop the probe")
 	}
 }
