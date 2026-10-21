@@ -116,6 +116,19 @@ func mustRead(t *testing.T, r *Reader, id string, ns NS, want []byte) Source {
 	return src
 }
 
+// mustFallback asserts a segment error served from a digest-verified legacy
+// copy and counted (round 5).
+func mustFallback(t *testing.T, r *Reader, id string, ns NS, want []byte) {
+	t.Helper()
+	before := r.Stats().SegmentErrorFallbacks
+	if src := mustRead(t, r, id, ns, want); src != SourceLegacy {
+		t.Fatalf("served from %v, want the legacy fallback", src)
+	}
+	if r.Stats().SegmentErrorFallbacks != before+1 {
+		t.Fatalf("fallback not counted: %+v", r.Stats())
+	}
+}
+
 func mustCorrupt(t *testing.T, r *Reader, id string, ns NS, want []byte) {
 	t.Helper()
 	got, _, err := r.Read(id, ns, sum(want))
@@ -161,13 +174,13 @@ func TestSegmentRoundTripSealedAndOpen(t *testing.T) {
 	}
 }
 
-// FM1: a bit flip in a sealed segment's record is corruption, even though an
-// intact legacy copy exists.
+// FM1: a bit flip in a sealed segment's record is corruption. With no legacy
+// copy the read fails closed (round 5: a digest-verified legacy copy would
+// be served and counted, reader_fallback_test.go).
 func TestFM1BitFlipInSealedSegmentFailsClosed(t *testing.T) {
 	root := t.TempDir()
 	pl := body("payload that will rot %s", strings.Repeat("x", 200))
 	entries := build(t, root, cid, 1, true, rec{NSPayload, pl})
-	legacyPut(t, root, NSPayload, pl)
 	off := entries[openKey{NSPayload, sha256.Sum256(pl)}].off
 	patchFile(t, segPath(root, cid, 1), func(b []byte) []byte { b[off+recHeaderSize+10] ^= 0x40; return b })
 	mustCorrupt(t, NewReader(root), cid, NSPayload, pl)
@@ -207,8 +220,9 @@ func TestFM3TruncatedSealedSegment(t *testing.T) {
 			legacyPut(t, root, NSPayload, a)
 			legacyPut(t, root, NSPayload, b)
 			patchFile(t, segPath(root, cid, 1), func(raw []byte) []byte { return raw[:c.cut(entries, len(raw))] })
-			mustCorrupt(t, NewReader(root), cid, NSPayload, a)
-			mustCorrupt(t, NewReader(root), cid, NSPayload, b)
+			// Round 5: the verified legacy copies are served, counted.
+			mustFallback(t, NewReader(root), cid, NSPayload, a)
+			mustFallback(t, NewReader(root), cid, NSPayload, b)
 			// A digest in neither segment nor legacy still probes the broken
 			// segment and fails closed rather than answering not-found.
 			if _, _, err := NewReader(root).Read(cid, NSPayload, sum([]byte("unrelated"))); !errors.Is(err, ErrCorrupt) {
@@ -411,6 +425,15 @@ func TestFM6IndexSegmentMismatch(t *testing.T) {
 			legacyPut(t, root, NSPayload, a)
 			legacyPut(t, root, NSPayload, b)
 			c.do(t, root, e)
+			// Round 5: the verified legacy copies are served, counted; with
+			// them gone the read fails closed.
+			mustFallback(t, NewReader(root), cid, NSPayload, a)
+			mustFallback(t, NewReader(root), cid, NSPayload, b)
+			for _, x := range [][]byte{a, b} {
+				if err := os.Remove(filepath.Join(root, filepath.FromSlash(NSPayload.LegacyRel(sum(x))))); err != nil {
+					t.Fatal(err)
+				}
+			}
 			mustCorrupt(t, NewReader(root), cid, NSPayload, a)
 			mustCorrupt(t, NewReader(root), cid, NSPayload, b)
 		})
@@ -497,11 +520,18 @@ func TestFM8DigestInBothLayouts(t *testing.T) {
 	if _, src, err := NewReader(root).Read(cid, NSPayload, sum(pl)); err != nil || src != SourceSegment {
 		t.Fatalf("segment copy not served over rotten legacy: %v %v", src, err)
 	}
-	// Segment rot with an intact legacy copy fails closed.
+	// Segment rot with an intact legacy copy serves the verified legacy copy
+	// and counts it (round 5); ReadSegment still reports the rot.
 	legacyPut(t, root, NSPayload, pl)
 	off := entries[openKey{NSPayload, sha256.Sum256(pl)}].off
 	patchFile(t, segPath(root, cid, 1), func(b []byte) []byte { b[off+recHeaderSize+1] ^= 1; return b })
-	mustCorrupt(t, NewReader(root), cid, NSPayload, pl)
+	rotten := NewReader(root)
+	if src := mustRead(t, rotten, cid, NSPayload, pl); src != SourceLegacy || rotten.Stats().SegmentErrorFallbacks != 1 {
+		t.Fatalf("segment rot: served from %v, stats %+v", src, rotten.Stats())
+	}
+	if _, _, err := rotten.ReadSegment(cid, NSPayload, sum(pl)); !errors.Is(err, ErrCorrupt) {
+		t.Fatalf("ReadSegment over segment rot = %v", err)
+	}
 	// A different computer has no segment for it, so it reads legacy.
 	if src := mustRead(t, NewReader(root), "computer-b", NSPayload, pl); src != SourceLegacy {
 		t.Fatalf("other computer served from %v", src)

@@ -154,9 +154,14 @@ func TestSegmentReadsEventsPage(t *testing.T) {
 		t.Fatalf("corrupt segment = %v, want ErrCorrupt naming a sequence", err)
 	}
 	// Sequence 4's event is in both layouts; its segment copy is rotten, so
-	// reading from sequence 4 on must fail rather than answer from legacy.
-	if _, err := artifacts.EventsPage(context.Background(), id, 3, 1); !errors.Is(err, tapestore.ErrCorrupt) {
-		t.Fatalf("event in both layouts with a rotten segment copy = %v, want ErrCorrupt", err)
+	// it is served from its digest-verified legacy copy and counted (round 5,
+	// choir-tape-segments-a2-repack-2026-10-21.md round_5_design).
+	before := service.tapeReader().Stats().SegmentErrorFallbacks
+	if page, err := artifacts.EventsPage(context.Background(), id, 3, 1); err != nil || len(page) != 1 || page[0].Request.Event.Sequence != 4 {
+		t.Fatalf("event in both layouts with a rotten segment copy = %v, %v, want the legacy copy", page, err)
+	}
+	if service.tapeReader().Stats().SegmentErrorFallbacks <= before {
+		t.Fatal("the legacy fallback was not counted")
 	}
 	if err := store.putTapeTombstone(context.Background(), TapeTombstone{ComputerID: id, Status: tapeTombstoneArchived, HeadSequence: 5, CanonicalEventHead: platformTestDigest('1'), ManifestRun: "ts-x", ManifestSHA256: platformTestDigest('2'), ArchivePath: "/archive/x.tar.zst", ProofJSON: "{}"}); err != nil {
 		t.Fatal(err)
@@ -214,8 +219,13 @@ func TestSegmentReadsFetchPayload(t *testing.T) {
 	}
 
 	corruptSegments(t, service.artifactsRoot, id)
-	if _, err := artifacts.FetchPayload(id, dBoth); !errors.Is(err, tapestore.ErrCorrupt) {
-		t.Fatalf("payload in both layouts with a rotten segment = %v, want ErrCorrupt (no legacy fallback)", err)
+	// Round 5: the payload in both layouts is served from its verified
+	// legacy copy; a segment-only payload behind the rot fails closed.
+	if got, err := artifacts.FetchPayload(id, dBoth); err != nil || string(got) != string(both) {
+		t.Fatalf("payload in both layouts with a rotten segment = %q, %v, want the legacy copy", got, err)
+	}
+	if _, err := artifacts.FetchPayload(id, dSeg); !errors.Is(err, tapestore.ErrCorrupt) {
+		t.Fatalf("segment-only payload behind a rotten segment = %v, want ErrCorrupt", err)
 	}
 	if err := store.putTapeTombstone(context.Background(), TapeTombstone{ComputerID: id, Status: tapeTombstoneDeleted, HeadSequence: 1, CanonicalEventHead: platformTestDigest('1'), ManifestRun: "ts-x", ManifestSHA256: platformTestDigest('2'), ProofJSON: "{}"}); err != nil {
 		t.Fatal(err)
@@ -311,7 +321,13 @@ func TestSegmentReadsValidateEventPins(t *testing.T) {
 				t.Fatalf("segment-resident pins refused: %v", err)
 			}
 			corruptSegments(t, service.artifactsRoot, id)
-			if err := artifacts.ValidateEventPins(context.Background(), request); !errors.Is(err, tapestore.ErrCorrupt) {
+			err := artifacts.ValidateEventPins(context.Background(), request)
+			if len(seg) == 0 {
+				// Round 5: every pin has a verified legacy copy.
+				if err != nil {
+					t.Fatalf("corrupt segment with every pin in legacy = %v, want the legacy copies", err)
+				}
+			} else if !errors.Is(err, tapestore.ErrCorrupt) {
 				t.Fatalf("corrupt segment = %v, want ErrCorrupt", err)
 			}
 		})
