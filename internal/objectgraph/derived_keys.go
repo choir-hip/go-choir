@@ -291,15 +291,15 @@ func (d *DerivedKeys) Drop(ctx context.Context, x DerivedKeyExecer, canonicalID 
 // table unready, which keeps every read on the JSON path and every writer's
 // maintenance off; it does not stop the boot.
 func (s *DoltStore) ensureDerivedKeysTable(ctx context.Context) {
-	start := time.Now()
-	log.Printf("objectgraph dolt: ensuring %s (empty create, step start)", DerivedKeysTable)
-	if _, err := s.db.ExecContext(ctx, derivedKeysDDL); err != nil {
+	done := BootPhase("store: open", "objectgraph-schema/derived-keys-table")
+	_, err := s.db.ExecContext(ctx, derivedKeysDDL)
+	done(err)
+	if err != nil {
 		s.derived.tableReady.Store(false)
 		log.Printf("objectgraph dolt: %s unavailable, reads keep the JSON path: %v", DerivedKeysTable, err)
 		return
 	}
 	s.derived.tableReady.Store(true)
-	log.Printf("objectgraph dolt: ensured %s in %s", DerivedKeysTable, time.Since(start).Round(time.Millisecond))
 }
 
 // --- reads ----------------------------------------------------------------

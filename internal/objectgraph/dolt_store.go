@@ -133,7 +133,9 @@ func (s *DoltStore) EnsureSchema(ctx context.Context) error {
 	}
 	s.engineMu.Lock()
 	defer s.engineMu.Unlock()
+	doneDDL := BootPhase("store: open", "objectgraph-schema/schema-ddl")
 	_, err := s.db.ExecContext(ctx, SchemaDDL)
+	doneDDL(err)
 	if err != nil {
 		return fmt.Errorf("objectgraph dolt: ensure schema: %w", err)
 	}
@@ -141,15 +143,19 @@ func (s *DoltStore) EnsureSchema(ctx context.Context) error {
 	// (texture-latency-layered-evidence-2026-10-01): snapshot phase 1 filters
 	// on (owner_id, computer_id[, object_kind]); ListObjects filters on
 	// object_kind + owner_id + computer_id. Both are idempotent DDL.
+	doneIndexes := BootPhase("store: open", "objectgraph-schema/og-objects-indexes")
 	if _, err := s.db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_og_objects_owner_computer_kind ON og_objects(owner_id, computer_id, object_kind)`); err != nil {
 		// Index DDL failure must not brick a booting guest: fall back to the
 		// unindexed scan and report via the returned error only when the
 		// schema itself is unusable.
+		doneIndexes(err)
 		return fmt.Errorf("objectgraph dolt: ensure owner/computer index: %w", err)
 	}
 	if _, err := s.db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_og_objects_kind_owner_computer ON og_objects(object_kind, owner_id, computer_id)`); err != nil {
+		doneIndexes(err)
 		return fmt.Errorf("objectgraph dolt: ensure kind/owner/computer index: %w", err)
 	}
+	doneIndexes(nil)
 	// The derived-key side table is created empty: nothing here scales with
 	// og_objects. Its rows are written by the writers and checked online
 	// after the listener is up (derived_keys.go).
@@ -162,7 +168,9 @@ func (s *DoltStore) EnsureSchema(ctx context.Context) error {
 	// which the boot runs with a health heartbeat.
 	var anyRow int
 	empty := s.db.QueryRowContext(ctx, `SELECT 1 FROM og_objects LIMIT 1`).Scan(&anyRow) == sql.ErrNoRows
+	doneColumns := BootPhase("store: open", "objectgraph-schema/metadata-columns")
 	s.ensureMetadataColumns(ctx, empty)
+	doneColumns(nil)
 	return nil
 }
 
@@ -197,7 +205,9 @@ func (s *DoltStore) EnsureRecordIndexes(ctx context.Context, heartbeat func()) e
 	s.engineMu.Lock()
 	defer s.engineMu.Unlock()
 	start := time.Now()
+	done := BootPhase("store: object graph indexes", "record-indexes")
 	s.ensureMetadataColumns(ctx, true)
+	done(nil)
 	log.Printf("objectgraph dolt: record indexes ensured in %s (live: %v)", time.Since(start).Round(time.Millisecond), s.liveNames())
 	return nil
 }
@@ -416,10 +426,17 @@ func (s *DoltStore) ensureGeneratedColumns(ctx context.Context, columns []genera
 	}
 	start := time.Now()
 	clauses := make([]string, len(missing))
+	names := make([]string, len(missing))
 	for i, column := range missing {
 		clauses[i] = "ADD COLUMN " + column.Name + " " + column.Def
+		names[i] = column.Name
 	}
-	if _, err := s.db.ExecContext(ctx, `ALTER TABLE og_objects `+strings.Join(clauses, ", ")); err == nil {
+	// A STORED column rewrites every row: say so before it starts, so a hang
+	// in it is named by the log.
+	doneAlter := BootPhase("store: open", "objectgraph-schema/add-generated-columns "+strings.Join(names, ","))
+	_, alterErr := s.db.ExecContext(ctx, `ALTER TABLE og_objects `+strings.Join(clauses, ", "))
+	doneAlter(alterErr)
+	if err := alterErr; err == nil {
 		for _, column := range missing {
 			present[column.Name] = true
 		}
@@ -448,7 +465,9 @@ func (s *DoltStore) ensureGeneratedIndex(ctx context.Context, index, columns str
 		index).Scan(&count)
 	if err == nil && count == 0 {
 		start := time.Now()
+		doneIndex := BootPhase("store: open", "objectgraph-schema/build-index "+index)
 		_, err = s.db.ExecContext(ctx, fmt.Sprintf(`CREATE INDEX %s ON og_objects(%s)`, index, columns))
+		doneIndex(err)
 		if err == nil {
 			log.Printf("objectgraph dolt: built index %s in %s", index, time.Since(start).Round(time.Millisecond))
 		}

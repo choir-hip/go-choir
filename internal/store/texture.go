@@ -356,8 +356,10 @@ func configureEmbeddedDoltDB(db *sql.DB) {
 
 // bootstrapTexture applies the texture schema DDL to the embedded workspace.
 func (s *Store) bootstrapTexture() error {
-	_, err := s.textureHandle().Exec(textureSchemaDDL)
-	if err != nil {
+	if err := bootSubstep("texture-schema", "apply-ddl", func() error {
+		_, err := s.textureHandle().Exec(textureSchemaDDL)
+		return err
+	}); err != nil {
 		return fmt.Errorf("apply texture schema: %w", err)
 	}
 	// texture_decisions is retired: decisions live on the canonical event
@@ -382,7 +384,7 @@ func (s *Store) bootstrapTexture() error {
 	if err := s.ensureTextureColumn("texture_agent_mutations", "computer_id", "VARCHAR(255) NOT NULL DEFAULT ''"); err != nil {
 		return err
 	}
-	if err := s.ensureTextureAgentMutationPrimaryKey(); err != nil {
+	if err := bootSubstep("texture-schema", "agent-mutation-primary-key", s.ensureTextureAgentMutationPrimaryKey); err != nil {
 		return err
 	}
 	if _, err := s.textureHandle().Exec(`CREATE INDEX IF NOT EXISTS idx_texture_mutations_scope ON texture_agent_mutations(owner_id, computer_id, doc_id, state)`); err != nil {
@@ -406,16 +408,16 @@ func (s *Store) bootstrapTexture() error {
 	if err := s.ensureTextureColumn("texture_document_aliases", "computer_id", "VARCHAR(255) NOT NULL DEFAULT ''"); err != nil {
 		return err
 	}
-	if err := s.ensureTextureDocumentAliasesPrimaryKey(); err != nil {
+	if err := bootSubstep("texture-schema", "document-aliases-primary-key", s.ensureTextureDocumentAliasesPrimaryKey); err != nil {
 		return err
 	}
-	if err := s.ensureTextureDocumentAliasDocIndex(); err != nil {
+	if err := bootSubstep("texture-schema", "document-alias-doc-index", s.ensureTextureDocumentAliasDocIndex); err != nil {
 		return err
 	}
 	if _, err := s.textureHandle().Exec(`CREATE INDEX IF NOT EXISTS idx_texture_revs_doc_version ON texture_revisions(doc_id, owner_id, version_number)`); err != nil {
 		return fmt.Errorf("create texture revision version index: %w", err)
 	}
-	if err := s.backfillTextureRevisionVersionNumbers(); err != nil {
+	if err := bootSubstep("texture-schema", "backfill-revision-version-numbers", s.backfillTextureRevisionVersionNumbers); err != nil {
 		return err
 	}
 	return nil
@@ -437,7 +439,10 @@ WHERE table_schema = DATABASE()
 	if count > 0 {
 		return nil
 	}
-	if _, err := s.textureHandle().Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, name, ddl)); err != nil {
+	done := objectgraph.BootPhase("store: open", "texture-schema/add-column "+table+"."+name)
+	_, err := s.textureHandle().Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, name, ddl))
+	done(err)
+	if err != nil {
 		return fmt.Errorf("alter %s add %s: %w", table, name, err)
 	}
 	return nil
