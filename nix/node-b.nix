@@ -1157,13 +1157,8 @@ in
   # oneshot asks Jev to score new or revised front stories and writes
   # /var/lib/go-choir/front-importance/scores.json atomically; corpusd only
   # reads that file. Failures just log; a missing file leaves the front page
-  # ranked by recency. It reaches Jev through the gateway's host route
-  # (/provider/v1/host/judgments, SEC-16) with the host-internal credential
-  # and loads no provider environment, so the gateway is the one holder and
-  # meter of the OpenRouter key; no other unit depends on it. Rollback while
-  # the old path exists in code: add `EnvironmentFile =
-  # "-/var/lib/go-choir/gateway-provider.env"` and
-  # `FRONT_IMPORTANCE_DIRECT=1` back and redeploy.
+  # ranked by recency. It reads the OpenRouter key from the gateway's
+  # provider environment file (never logged) and no other unit depends on it.
   systemd.services.go-choir-front-importance = {
     description = "Autopaper front-page importance scores (Jev)";
     after = [ "network-online.target" "go-choir-corpusd.service" ];
@@ -1180,12 +1175,14 @@ in
       StateDirectory = "go-choir/front-importance";
       StateDirectoryMode = "0755";
       ReadWritePaths = [ "/var/lib/go-choir/front-importance" ];
-      InaccessiblePaths = hiddenSecretsExcept [ ];
+      InaccessiblePaths = hiddenSecretsExcept [ "codexAuth" ];
+      EnvironmentFile = "-/var/lib/go-choir/gateway-provider.env";
       LoadCredential = internalTokenCredential;
       Environment = [
         internalAuthEnv
         "FRONT_IMPORTANCE_FRONT_URL=http://127.0.0.1:8086/internal/platform/publications/front?limit=100"
         "FRONT_IMPORTANCE_SCORES_PATH=/var/lib/go-choir/front-importance/scores.json"
+        "GATEWAY_JEV_RECEIPT_PATH=/var/lib/go-choir/front-importance/jev-receipts.jsonl"
       ];
     };
   };
