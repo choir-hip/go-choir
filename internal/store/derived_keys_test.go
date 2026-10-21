@@ -28,6 +28,9 @@ import (
 //  2. The three reads still scan after validation, or leave the JSON path
 //     before it (TestHotReadsLeaveTheJSONScansOnceValidated).
 //  3. A replayed workspace reads stale keys (TestReplayProjectionWithdrawsTheFamilies).
+//  4. A family with a malformed row stays on the JSON path after the row is
+//     repaired, because the background loop never runs another pass
+//     (TestRepairedMalformedRowRestoresTheSideRead).
 
 var ogWriterStatement = regexp.MustCompile(`(?i)\b(INSERT(\s+IGNORE)?\s+INTO|REPLACE\s+INTO|UPDATE|DELETE\s+FROM)\s+og_objects\b`)
 
@@ -367,4 +370,59 @@ func TestReplayProjectionWithdrawsTheFamilies(t *testing.T) {
 	if opCallsContaining(productStore, "keyindex") == 0 {
 		t.Fatal("the validated family does not read the side table")
 	}
+}
+
+func TestRepairedMalformedRowRestoresTheSideRead(t *testing.T) {
+	s := openTestStore(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	kind := objectgraph.ObjectKind("choir.commitment_record")
+	now := time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)
+	put := func(name, body string, at time.Time) {
+		t.Helper()
+		id, err := objectgraph.BuildCanonicalID(kind, storyOwner, name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		meta := []byte(`{}`)
+		if err := s.ogStore.PutObject(ctx, objectgraph.Object{CanonicalID: id, ObjectKind: kind, OwnerID: storyOwner, ComputerID: storyComputer, VersionID: "v",
+			ContentHash: objectgraph.ContentHash(kind, []byte(body), meta), Body: []byte(body), Metadata: meta, CreatedAt: at, UpdatedAt: at}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	read := func() error {
+		_, err := s.ogStore.ListObjectsByOwnerAndBody(ctx, string(kind), storyOwner,
+			[]objectgraph.JSONFieldMatch{{JSONPath: "$.addressee", Value: "a"}}, 10)
+		return err
+	}
+	put("good", `{"addressee":"a"}`, now)
+	put("bad", `not json`, now.Add(time.Second))
+
+	d := s.derivedKeys()
+	s.StartDerivedKeyValidation(ctx)
+	waitFor := func(what string, cond func() bool) {
+		t.Helper()
+		deadline := time.Now().Add(10 * time.Second) // well under the 30 s recheck
+		for !cond() {
+			if time.Now().After(deadline) {
+				t.Fatalf("not within 10 s: %s", what)
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+	waitFor("the first pass validates the family", func() bool { return d.Validated(objectgraph.KeyCommitmentAddressee) })
+	if err := read(); err == nil {
+		t.Fatal("test premise: with a malformed record the read errors, as the JSON read does")
+	}
+	keyedBefore := opCallsContaining(s, "keyindex")
+
+	// The owner repairs the record. The family should return to the side
+	// table without waiting for an unrelated withdrawal or a restart.
+	put("bad", `{"addressee":"b"}`, now.Add(time.Minute))
+	waitFor("a repaired family reads the side table again", func() bool {
+		if err := read(); err != nil {
+			t.Fatalf("read after the repair: %v", err)
+		}
+		return opCallsContaining(s, "keyindex") > keyedBefore
+	})
 }
