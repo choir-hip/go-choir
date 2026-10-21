@@ -62,22 +62,20 @@ daemon's Dolt engine and gRPC in its image.
 
 ## FP0 steps (not done here)
 
-1. **Ship the binary (unverified, no nix in the agents VM).** The code falls
-   back to re-executing the autoputer binary, so nothing changes until
-   this is applied. In `flake.nix`: add `"cmd/desk-worker"` to
-   `goServiceSubPackages`; add `extraBins ? [ ]` to `mkGoService` and
-   `${pkgs.lib.concatMapStrings (b: "cp ${goServicesAll}/bin/${b} $out/bin/\n") extraBins}`
-   after the `cp` of the main binary; give the `autoputer` package
-   `extraBins = [ "desk-worker" ];`. The layered-release path
-   (`nix/autoputer-vm.nix` ~lines 125-240, which execs a release binary)
-   finds no sibling and keeps using the autoputer: confirm what that does
-   to the saving. A nix cgo build of `desk-worker` will link ICU unless
-   `CGO_ENABLED=0` is set for it; measure RSS on staging.
+1. Packaging is done in flake.nix (commit "the autoputer package carries the
+   desk-worker binary beside it"), unverified by a nix build here (no nix in
+   the agents VM). FP0 to confirm: the nix build of `desk-worker` does not
+   link ICU (`CGO_ENABLED=0` if it does), and what the layered-release path
+   (`nix/autoputer-vm.nix`, finds no sibling) does to the saving.
 2. Measure on the paper computer: `VmRSS` of the `desk-session` children
    before and after, and that an idle computer holds 0 workers 30 minutes
    after its last cell (trace: pool count).
 
 ## now
 
-Reaper and shared worker entrypoint landed on the lane branch; the nix
-packaging of `desk-worker` is the FP0 step above. Done for this lane.
+Ported onto FP2 (lane/res17-on-fp2). `internal/deskworker` Run() does FP2
+startup: gomemlimit.ApplyDeskWorker, ConfineDeskSessionWorker (exit 3 on
+error), RunDeskCellSelfTestIfRequested, then serving; cmd/desk-worker and
+`autoputer desk-session` both go through it; deskworker_test.go fails if it
+serves unconfined. `release` stops the reaper timer when no sessions remain.
+Packaging landed. Remaining: FP0 steps 1-2 above.
