@@ -41,6 +41,9 @@ type Config struct {
 	// ids whose auto stories the front list shows; unset shows every
 	// owner's (ParseAutopaperOwners).
 	AutopaperOwnersRaw string
+	// PublicBaseURL is CORPUSD_PUBLIC_BASE_URL: the host a published
+	// piece's read_url names (default https://choir.news).
+	PublicBaseURL string
 	// FrontImportancePath is CORPUSD_FRONT_IMPORTANCE_PATH: the scores file
 	// the host front-importance timer writes (cmd/front-importance). The
 	// front list attaches its scores read-only; a missing or bad file
@@ -67,6 +70,7 @@ func LoadConfig() (*Config, error) {
 		TapeSweepMode:         os.Getenv("PLATFORM_TAPE_SWEEP_MODE"),
 		TapeSweepArchiveDir:   os.Getenv("PLATFORM_TAPE_SWEEP_ARCHIVE_DIR"),
 		AutopaperOwnersRaw:    os.Getenv("CORPUSD_AUTOPAPER_OWNERS"),
+		PublicBaseURL:         os.Getenv("CORPUSD_PUBLIC_BASE_URL"),
 		FrontImportancePath:   envOr("CORPUSD_FRONT_IMPORTANCE_PATH", DefaultFrontImportancePath),
 	}
 	if err := cfg.validate(); err != nil {

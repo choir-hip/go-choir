@@ -64,6 +64,9 @@ type Service struct {
 	// owners' stories (CORPUSD_AUTOPAPER_OWNERS).
 	frontMu         sync.RWMutex
 	autopaperOwners map[string]bool
+	// publicBaseURL is the host a published piece's read_url names
+	// (CORPUSD_PUBLIC_BASE_URL); empty means DefaultPublicBaseURL.
+	publicBaseURL string
 	// frontImportance attaches model-judged importance scores to front
 	// rows when its scores file is present (publication_front_importance.go).
 	frontImportance frontImportanceCache

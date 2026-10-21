@@ -46,7 +46,7 @@ func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 		OwnerID string `json:"owner_id,omitempty"`
 	}
 	return toolregistry.Tool{Name: "search_wire_corpus",
-		Description: "Search this computer's own corpus by topic, title, outlet or keywords: the world events it has resolved (events: event_id, headline, outlets, origins, corroborated, first_seen, last_seen, capture_ids), its stories (results: doc_id, title, snippet) and its captures (captures: capture_id, title, url, outlet, language, topic, fetched_at), strongest and newest matches first. A capture_id is a citable handle. Search here before the web.",
+		Description: "Search this computer's own corpus by topic, title, outlet or keywords: the world events it has resolved (events: event_id, headline, outlets, origins, corroborated, first_seen, last_seen, capture_ids), its stories (results: doc_id, title, snippet) and its captures (captures: capture_id, title, url, outlet, language, topic, fetched_at), strongest and newest matches first. A capture_id is a citable handle. It also lists published Autopaper stories and opinion pieces by any author (published: route_path, title, snippet, kind story|opinion, author, read_url); to cite one, Read its read_url and cite the capture_id that returns, never the snippet. Search here before the web.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"query":    map[string]any{"type": "string", "description": "Search terms: topic, title, entity, outlet, or keywords"},
 			"limit":    map[string]any{"type": "integer", "description": "Max results per list (default 10, at most 25)"},
@@ -109,7 +109,14 @@ func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 			if err != nil {
 				events, eventsNote = []CorpusEvent{}, "events not searched: "+err.Error()
 			}
-			body := map[string]any{"events": events, "event_count": len(events), "results": out, "count": len(out), "query": query, "captures": captures, "capture_count": len(captures)}
+			// Published Autopaper stories and opinion pieces, from every
+			// computer: citable once Read captures their read_url.
+			published, publishedNote := searchPublished(ctx, deps, query, limit)
+			body := map[string]any{"events": events, "event_count": len(events), "results": out, "count": len(out), "query": query, "captures": captures, "capture_count": len(captures),
+				"published": published, "published_count": len(published)}
+			if publishedNote != "" {
+				body["published_note"] = publishedNote
+			}
 			if note != "" {
 				body["captures_note"] = note
 			}

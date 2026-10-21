@@ -280,6 +280,37 @@ func (h *Handler) HandleInternalRetrievalSearch(w http.ResponseWriter, r *http.R
 	writeJSON(w, http.StatusOK, resp)
 }
 
+// HandleInternalPublishedSearch serves GET /internal/platform/published/search
+// ?q=&limit=: the published Autopaper stories and opinion pieces whose words
+// match, for research (a bound guest reaches it through the proxy's read-only
+// carve-out). It reads Store B alone.
+func (h *Handler) HandleInternalPublishedSearch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	if !trustedInternalCaller(r) {
+		writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
+		return
+	}
+	limit := 0
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 0 {
+			writeJSON(w, http.StatusBadRequest, apiError{Error: "limit must be a non-negative integer"})
+			return
+		}
+		limit = n
+	}
+	resp, err := h.service.SearchPublishedPieces(r.Context(), r.URL.Query().Get("q"), limit)
+	if err != nil {
+		log.Printf("corpusd: published search: %v", err)
+		writeJSON(w, http.StatusInternalServerError, apiError{Error: "failed to search published pieces"})
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
 func (h *Handler) HandleInternalPublicationProposal(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
@@ -566,6 +597,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/platform/publications/related", h.HandleInternalRelatedStories)
 	s.HandleFunc("/internal/platform/publications/related-backfill", h.HandleInternalRelatedBackfill)
 	s.HandleFunc("/internal/platform/retrieval/search", h.HandleInternalRetrievalSearch)
+	s.HandleFunc("/internal/platform/published/search", h.HandleInternalPublishedSearch)
 	s.HandleFunc("/internal/platform/proposal-deliveries/state", h.HandleInternalProposalDeliveryState)
 	s.HandleFunc("/internal/platform/publications/", h.HandleInternalPublicationProposal)
 	s.HandleFunc("/internal/platform/texture/sync", h.HandleInternalSyncTextureDocument)

@@ -66,6 +66,7 @@ func main() {
 	// The Autopaper front lists only these owners' auto stories when
 	// CORPUSD_AUTOPAPER_OWNERS is set; every owner's when unset.
 	svc.SetAutopaperOwners(platform.ParseAutopaperOwners(cfg.AutopaperOwnersRaw))
+	svc.SetPublicBaseURL(cfg.PublicBaseURL)
 	// Front rows carry importance scores when the host scorer's file is
 	// present; absent or unreadable, the front list is unchanged.
 	svc.SetFrontImportancePath(cfg.FrontImportancePath)

@@ -111,6 +111,8 @@ type frontPublicationMeta struct {
 	RoutePath     string `json:"route_path"`
 	PublishMode   string `json:"publish_mode"`
 	OwnerID       string `json:"owner_id"`
+	// AuthorLabel is an opinion piece's byline, fixed by its first version.
+	AuthorLabel string `json:"author_label"`
 }
 
 // ParseAutopaperOwners splits CORPUSD_AUTOPAPER_OWNERS: comma-separated

@@ -166,6 +166,19 @@ func (h *Handler) HandlePlatformPublicationExport(w http.ResponseWriter, r *http
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to export publication"})
 		return
 	}
+	// raw=1 returns a text format's body as itself, so choir.Read can
+	// capture a published piece (it refuses the JSON envelope).
+	if r.URL.Query().Get("raw") == "1" {
+		if status != http.StatusOK || out.Content == "" || out.ContentBase64 != "" {
+			writeJSON(w, http.StatusBadRequest, errorResponse{Error: "raw export needs a text format (txt, md or html)"})
+			return
+		}
+		w.Header().Set("Content-Type", firstNonEmptyString(out.MediaType, "text/plain; charset=utf-8"))
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, out.Content)
+		h.lifecycle.record("platform_publication.export", lifecycleHTTPStatus(status), time.Since(started))
+		return
+	}
 	writeJSON(w, status, out)
 	h.lifecycle.record("platform_publication.export", lifecycleHTTPStatus(status), time.Since(started))
 }

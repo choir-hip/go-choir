@@ -60,6 +60,13 @@ func (h *Handler) requirePlatformObjectGraphCaller(r *http.Request) error {
 		if strings.HasPrefix(r.URL.Path, "/internal/platform/captures/") {
 			return nil
 		}
+		// Published Autopaper stories and opinion pieces are public: any
+		// bound guest searches them (research's SearchWireCorpus). This one
+		// path is the whole carve-out; corpusd serves only pieces a reader
+		// can already open.
+		if r.URL.Path == "/internal/platform/published/search" {
+			return nil
+		}
 		// An object list is scoped to the guest's own owner and computer;
 		// corpusd sees this request as the proxy's, so the proxy enforces it
 		// (auth-boundary-gaps F5). No guest lists edges.

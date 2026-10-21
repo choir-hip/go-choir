@@ -633,8 +633,10 @@ func (s *Service) SearchPublished(ctx context.Context, query string) (*Retrieval
 	query = strings.TrimSpace(query)
 	lowerQuery := strings.ToLower(query)
 
-	// List all publication objects, then follow edges to get route + version + blob.
-	pubObjs, err := og.ListObjects(ctx, objectgraph.ListFilter{Kind: "choir.publication", Limit: 100})
+	// Every publication, newest first, up to the scan cap (this read used to
+	// stop at the first 100 rows), then follow edges to get route + version +
+	// blob.
+	pubObjs, _, err := s.scanPublicationRows(ctx, publishedPieceScanMax)
 	if err != nil {
 		return nil, fmt.Errorf("platform retrieval: list publications: %w", err)
 	}
