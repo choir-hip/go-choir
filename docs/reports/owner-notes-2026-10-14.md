@@ -1037,3 +1037,12 @@ with its app package and is the sole agent writer of its app's object
 kinds), the owner, verbatim: "Yes, the doctrine change is good." Applied to
 docs/choir-doctrine.md I26, CLAUDE.md "Desk Ontology",
 docs/agent-product-doctrine.md and docs/choir-vision.md (checklist ARCH-01).
+
+On publishing security work in the public repo before it is fixed (raised by
+the iMac session before pushing the desk-cell branches), the owner,
+verbatim: "note that we're still really pre-launch, so I'm sure there are
+some security vulnerabilities in this repo, and I'm not that concerned
+about it because we're still going to do hardening before we really
+launch." Taken as: security findings and fix branches may be pushed to the
+public repo pre-launch (secrets never); the checklist's P0 hardening lands
+before launch.
