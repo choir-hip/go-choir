@@ -27,6 +27,11 @@
 #  H12 The mount point holds some other file system: left alone, exit 1.
 #  H13 The size reaches truncate as given.
 #  H14 scan reports counts, never the canary.
+#  H15 (finding B4 of the bunch 4b review) scan reports zero hits only when
+#      every requested byte was read: a file grep cannot read, a subtree
+#      find cannot enter, or a device node it did not read makes the scan
+#      fail (exit 1, "read errors: N"), never "hit: 0" with exit 0. A socket,
+#      fifo or symlink holds no bytes of its own: it is counted as skipped.
 #
 # Run: bash scripts/snapshot-vault-test.sh
 set -u
@@ -238,5 +243,30 @@ check "H14 scan counts a single file with a hit" "$([ "$RC" = 0 ] && printf '%s'
 check "H14 scan never prints the canary" "$(! printf '%s' "$OUT" | grep -q -F "$CANARY"; echo $?)"
 run scan scan "$WORK/scan/canary" "$WORK/scan/tree/miss"
 check "H14 scan of a clean file reports zero" "$([ "$RC" = 0 ] && printf '%s' "$OUT" | grep -q 'hit: 0'; echo $?)"
+
+# H15: read failures are failures. Permission bits do not stop root, so the
+# unreadable cases run only as an ordinary user.
+if [ "$(id -u)" != 0 ]; then
+  mkdir -p "$WORK/scan/t2/locked"
+  echo nothing > "$WORK/scan/t2/clean"
+  echo secret-looking > "$WORK/scan/t2/unreadable"; chmod 000 "$WORK/scan/t2/unreadable"
+  run scan scan "$WORK/scan/canary" "$WORK/scan/t2/unreadable"
+  check "H15 an unreadable file fails the scan" "$([ "$RC" = 1 ] && printf '%s' "$OUT" | grep -q 'read errors: 1' && ! printf '%s' "$OUT" | grep -q 'hit: 0'; echo $?)"
+  run scan scan "$WORK/scan/canary" "$WORK/scan/t2"
+  check "H15 an unreadable file under a directory fails the scan" "$([ "$RC" = 1 ] && printf '%s' "$OUT" | grep -q 'read errors: [1-9]'; echo $?)"
+  chmod 644 "$WORK/scan/t2/unreadable"
+  echo hidden > "$WORK/scan/t2/locked/inner"; chmod 000 "$WORK/scan/t2/locked"
+  run scan scan "$WORK/scan/canary" "$WORK/scan/t2"
+  check "H15 a subtree find cannot enter fails the scan" "$([ "$RC" = 1 ] && printf '%s' "$OUT" | grep -q 'read errors: [1-9]'; echo $?)"
+  chmod 755 "$WORK/scan/t2/locked"
+fi
+mkdir -p "$WORK/scan/t3"
+echo nothing > "$WORK/scan/t3/clean"
+ln -s clean "$WORK/scan/t3/link"
+mkfifo "$WORK/scan/t3/fifo" 2>/dev/null || true
+run scan scan "$WORK/scan/canary" "$WORK/scan/t3"
+check "H15 a clean tree with a link and a fifo passes with zero hits and the skips counted" "$([ "$RC" = 0 ] && printf '%s' "$OUT" | grep -q 't3: hit: 0' && printf '%s' "$OUT" | grep -q 'read errors: 0' && printf '%s' "$OUT" | grep -q 'skipped non-file entries: [1-9]'; echo $?)"
+run scan scan "$WORK/scan/canary" "$WORK/scan/absent"
+check "H15 a path that does not exist fails" "$([ "$RC" != 0 ]; echo $?)"
 
 if [ "$fails" = 0 ]; then echo "all passed"; else echo "$fails failed"; exit 1; fi
