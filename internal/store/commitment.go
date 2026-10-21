@@ -249,26 +249,42 @@ func (s *Store) SettleRulePrecommits(ctx context.Context, ownerID, computerID, a
 // GetCommitmentRecord returns the stored record body for one record id,
 // or nil when absent. Read-only — used by the learning-claims gate to
 // check whether a verifier ref names a scored record.
+//
+// It reads the record's object by its key: every writer keys a commitment
+// record on (owner, computer, record id), the identity CommitmentRecordExists
+// already trusts as the crash-recovery witness. It used to scan every record
+// body of the owner for $.record_id, 2.3 s per call under the engine mutex on
+// the paper (docs/problems/research-more-slow-and-hidden-2026-10-21.md, E6).
 func (s *Store) GetCommitmentRecord(ctx context.Context, ownerID, computerID, recordID string) (*types.CommitmentRecord, error) {
 	ownerID, computerID, recordID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(recordID)
 	if ownerID == "" || computerID == "" || recordID == "" {
 		return nil, nil
 	}
-	objs, err := s.ogListByOwnerAndBody(ctx, ogKindCommitmentRecord, ownerID, []objectgraph.JSONFieldMatch{{JSONPath: "$.record_id", Value: recordID}}, 1)
+	if s == nil || s.ogStore == nil {
+		return nil, fmt.Errorf("commitment record lookup: object graph not initialized")
+	}
+	canonicalID, err := lifecycleCanonicalID(ogKindCommitmentRecord, ownerID, computerID, recordID)
 	if err != nil {
 		return nil, err
 	}
-	for _, obj := range objs {
-		if obj.Tombstone || strings.TrimSpace(obj.ComputerID) != computerID {
-			continue
-		}
-		var rec types.CommitmentRecord
-		if err := ogDecode(obj, &rec); err != nil {
-			return nil, fmt.Errorf("commitment record decode %s: %w", obj.CanonicalID, err)
-		}
-		return &rec, nil
+	obj, err := s.ogStore.GetObject(ctx, canonicalID)
+	if errors.Is(err, objectgraph.ErrNotFound) {
+		return nil, nil
 	}
-	return nil, nil
+	if err != nil {
+		return nil, err
+	}
+	if obj.Tombstone || obj.ObjectKind != ogKindCommitmentRecord || strings.TrimSpace(obj.ComputerID) != computerID {
+		return nil, nil
+	}
+	var rec types.CommitmentRecord
+	if err := ogDecode(obj, &rec); err != nil {
+		return nil, fmt.Errorf("commitment record decode %s: %w", obj.CanonicalID, err)
+	}
+	if rec.RecordID != recordID {
+		return nil, nil
+	}
+	return &rec, nil
 }
 
 // ListCalibrationRecords lists agent calibration records (claims and their
