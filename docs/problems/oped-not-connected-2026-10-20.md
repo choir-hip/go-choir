@@ -108,15 +108,15 @@ Step 3, Opinion mode:
 
 | # | Failure mode | Guard |
 |---|---|---|
-| F1 | An op-ed counted as a news story: it enters the news front, the related-stories walk, the two-outlet/corroboration inputs, or gets the AI disclosure. `isAutopaperStory` must stay false for opinion mode, the default front list must not contain it, and the story page must show the human-author line, not the AI disclosure. | `TestOpinionPublicationIsNotAnAutopaperStory`, `TestFrontDefaultListExcludesOpinion` (platform); `texture-ai-disclosure` unit case for kind opinion (frontend) |
-| F2 | An anonymous or API-key caller publishes to Opinion; a body field flips the mode. | `TestOpinionPublishRequiresCookieSession` (proxy: no auth 401, API key 403, body `publish_mode` rejected as unknown field) |
-| F3 | One user floods Opinion. | `TestOpinionDailyLimit` (platform: the 6th new piece in 24h is refused, a new version of piece 1 is not, another user is not) |
-| F4 | Opinion listed with the kill switch off, or publishable with it off. | `TestOpinionKillSwitchOff` (platform: publish refused, front bucket empty, search has no opinion hits) |
+| F1 | An op-ed counted as a news story: it enters the news front, the related-stories walk, the two-outlet/corroboration inputs, or gets the AI disclosure. `isAutopaperStory` must stay false for opinion mode, the default front list must not contain it, and the story page must show the human-author line, not the AI disclosure. | `TestOpinionPublicationIsNotAnAutopaperStory`, `TestResolvedPublicationNamesOpinionKindAndAuthor` (platform); `frontend/tests/oped-opinion-label.spec.js` (O1-O5, mocked) |
+| F2 | An anonymous or API-key caller publishes to Opinion; a body field flips the mode. | `TestOpinionPublishRequiresCookieSessionAndRefusesBodyPolicy` (proxy: no auth 401, API key 403, `publish_mode`, `owner_id`, `access_policy`, `author_label` in the body rejected as unknown fields) |
+| F3 | One user floods Opinion. | `TestOpinionDailyLimit`, `TestOpinionHTTPStatuses` (platform: the piece past the limit is refused with 429, a new version of an existing piece is not, another user is not, a day later it resets) |
+| F4 | Opinion listed with the kill switch off, or publishable with it off. | `TestOpinionKillSwitchOff`, `TestOpinionListingSwitchParsesOnlyOn` (platform: publish refused with 409, front bucket empty, search has no opinion hits) |
 | F5 | Published search returns pieces that were never published: owner-mode drafts, a publication whose state is not `published`, a withdrawn route, or a version that failed to publish. Only published versions; only Autopaper stories and opinion pieces on the research route. | `TestSearchPublishedPiecesOnlyPublishedStoriesAndOpinion` |
-| F6 | Search scans only 100 items: the 101st-newest publication is never found. Results must stay bounded. | `TestSearchPublishedPiecesPastTheFirstHundred`, `TestSearchPublishedPiecesBoundedResults` |
-| F7 | Research cites a published piece without a capture (cites a snippet). The result must carry a `read_url` that `choir.Read` can capture (plain text), and the verb summary must tell research to Read it and cite the capture id. | `TestPublicationExportRawIsPlainText` (proxy), `TestSearchWireCorpusIncludesPublished` (researchtools: read_url present, summary names Read) |
+| F6 | Search scans only 100 items: the 101st-newest publication is never found. Results must stay bounded. | `TestSearchPublishedPiecesPastTheFirstWindow`, `TestSearchPublishedPiecesBoundedResults` |
+| F7 | Research cites a published piece without a capture (cites a snippet). The result must carry a `read_url` that `choir.Read` can capture (plain text), and the verb summary must tell research to Read it and cite the capture id. | `TestPublicationExportRawIsPlainText` (proxy), `TestSearchWireCorpusIncludesPublished`, `TestSearchWireCorpusPublishedFailureIsNotEmpty` (researchtools), `TestSearchWireCorpusSummaryTellsResearchToReadAPublishedPiece` (yaegikernel) |
 | F8 | A guest calls a corpusd route outside the carve-out through the new path: other methods, the unfiltered `/retrieval/search`, `/publications/owned`, publish routes. | `TestGuestPublishedSearchCarveOutIsNarrow` (proxy) |
-| F9 | The email leaks into the byline. | `TestOpinionAuthorLabelNeverEmail` (proxy) |
+| F9 | The email leaks into the byline. | `TestOpinionAuthorLabel` (platform: empty, email-shaped, markup and over-long labels refused; the label is fixed by the first version), the byline assertions in `TestOpinionPublishRequiresCookieSessionAndRefusesBodyPolicy` (proxy: a handle derived from the user id, no email part) |
 
 ## Standing questions (docs/standing-questions.md), short answers
 
@@ -144,3 +144,14 @@ Step 3, Opinion mode:
 - Reader corrections (section 30) and moderation or unpublish of opinion
   pieces are not in this change. The kill switch hides all opinion pieces at
   once; it is the only takedown lever until moderation is built.
+
+## Landed (2026-10-20)
+
+Commits on `feat/oped-connect`: this doc; research search (orange); opinion
+mode (red); frontend; the deployed spec `frontend/tests/oped-deployed.spec.js`
+(written, not run: it needs a deploy with `CORPUSD_OPINION_LISTING=on`).
+Extra guard beyond the table: publishing as opinion a Texture first published as
+a plain link is refused (409, `ErrOpinionModeConflict`), because a publication
+keeps its first mode for good and would otherwise stay silently unlisted.
+Off-switch without a deploy: write `CORPUSD_OPINION_LISTING=off` to
+`/var/lib/go-choir/corpusd-retrieval.env` and restart corpusd.
