@@ -18,13 +18,19 @@ definition_version: 4
 # node B and as many as we have resources for." The batch plan it runs is
 # docs/launch-checklist-2026-10-21.md "Batch plan"; the security and
 # density items are docs/security-density-architecture-checklist-2026-10-21.md.
-readiness: drafted
+# Authority to execute: the owner's statements above (an owner statement is a
+# named authority under skills/throughline/SKILL.md "Readiness"). Review
+# round 1 ran on git blob 9a813197 (commit 26c4e1ed0), before the owner's
+# rescope: GPT-6.1-sol send_back, Gemini 4 Argon accept with edits, Devin
+# failed (a tool call needing confirmation). Adjudication is the section
+# "Review round 1, adjudicated" below; round 2 runs on the repaired file.
+readiness: executable
 
 review:
-  reviewer: none yet; a convergent round (Gemini 4 Argon, GPT-6.1-sol, Devin read-only) runs on this file's first commit
-  frozen_ref: none
-  verdict: none
-  evidence_ref: none
+  reviewer: agentic-consensus round 1 (omp-gpt61-sol, omp-gemini38 pinned to gemini-4-argon-high; devin failed)
+  frozen_ref: git blob 9a813197646dfcd24d63067b434374c02482f703 (this file at 26c4e1ed0)
+  verdict: send_back
+  evidence_ref: scratchpad/panel-fp/run (session diagnostics); adjudication below
 
 metamission:
   stations:
@@ -38,8 +44,11 @@ metamission:
         main, watches CI and the deploy, uses Node B, runs deployed proofs,
         and sends red candidates to a panel. Its own items: B1 (time each
         landing: queue, build, image, refresh, proof; script the staging
-        proof), L1-02 (measure the paper's memory: daemon RSS, per-desk
-        workers, page cache), and the capture-label read (c893a956a).
+        proof) with SDC SEC-14 (CI deploys as root with host-key checking
+        off), SDC RES-07 and RES-19 (measure the paper's memory: daemon
+        RSS, per-desk workers, page cache; before and after), the live
+        dual-model census for L3-05, and the capture-label read
+        (c893a956a, landed).
     - id: FP1
       path: docs/definitions/choir-launch-fp1-store-throughput-2026-10-21.md (the lane's first commit)
       readiness: intent
@@ -132,7 +141,7 @@ metamission:
         precondition for the engineering desk's delegate beyond its one
         test computer. Lane worktree lanes/b7-gateway.
     - id: FP8
-      path: to be authored when a slot frees
+      path: to be authored when a slot frees (the first slot that frees)
       readiness: intent
       status: pending
       depends_on: [FP3]
@@ -151,7 +160,9 @@ metamission:
       note: >-
         The rest of the checklist when a slot frees: SEC-14 (CI deploys as
         root, with FP0's B1), RES-07 and RES-19 (FP0 measures), RES-17,
-        RES-18 (with FP1), and the P2 items (NET-03, NET-04, RES-08, RES-10,
+        RES-18 (with FP1), the second half of B8 (NET-01's host fetch
+        service, NET-02, NET-05, NET-10, closing general guest egress; it
+        follows FP6), and the P2 items (NET-03, NET-04, RES-08, RES-10,
         RES-13, RES-15, RES-20 to RES-22, ARCH-06, ARCH-08, ARCH-09,
         ARCH-11 to ARCH-15), each decided item by item. Autopaper, accounts
         and Autoradio items are out of this pass (owner notes §38).
@@ -189,6 +200,12 @@ start:
       owner: FP1 to FP5, one worker each
       touch: goal_owned
       recovery: branches lane/<name>, created from c893a956a
+    - path: scratchpad/* (every other worktree and file, from this session's earlier missions)
+      status: unknown
+      class: other_agent_wip
+      owner: earlier missions of this session
+      touch: forbidden
+      recovery: leave in place; some hold credential files, so workers never read them
 
 finish:
   deliver: >-
@@ -233,9 +250,11 @@ value:
 
 homotopy:
   realism_axis: >-
-    A candidate in a lane worktree with focused local tests, then a frozen
-    and reviewed candidate, then landed with a deployed proof on staging,
-    then a day of the paper's real load on it.
+    Load and adversarial depth on the same deployed paths: from focused
+    tests on a candidate, to the paper's real traffic after the deploy, to
+    adversarial probes (forged frames, escapes, cross-tenant and metadata
+    destinations, out-of-memory) run by FP0 against named disposable test
+    computers, to a day of the paper's load.
 
 boundaries:
   mutation_class: green (this file); each station names its own, most are red
@@ -245,7 +264,11 @@ boundaries:
     - the launch checklist's batch plan and owner-decision defaults OD-01 to OD-09
   must_preserve:
     - Locally five to seven agents in all (owner, 2026-10-21: "the rule is 5 to 7 agents running locally"): six Sonnet workers and the orchestrator. Workers work only in their own lane worktree and branch; they never push, never use Node B or staging credentials, never read secrets, never touch another worktree, never run git commit -a, never bypass hooks.
-    - Only FP0 lands. A deploy carries at most one red batch; orange and green work may ride with it.
+    - Only FP0 lands. A deploy carries at most one red batch; green work may ride with it. FP1's store batch counts as red for landing (the store schema is a protected surface) and gets a deploy of its own.
+    - The landing order: rebase the candidate onto current main, run focused checks, freeze base, scoped paths and digest, independent review on that frozen identity, check it is unchanged, land, deployed proof. A rebase or repair that changes reviewed lines is reviewed again. Before a station settles complete, the consensus gate runs on its landed candidate with the deployed evidence.
+    - An activation lease: from a deploy to the end of its proof (or its rollback), no other deploy and no drill.
+    - Recovery first: FP3's group 1 (a rollback can always reach a protected computer, and a failure-stopped always-on computer retries after a deploy) lands before FP1's store changes, and before any other boot-path risk.
+    - Workers never run git fetch, gc, prune, stash, tag, remote, update-ref or config, any worktree command, or any gh command; never read the rest of the scratchpad (it holds credential files); never edit ACTIVE, the mission graph, the doc authority manifest or the two checklists (FP0 ticks them at landing). Red code fails closed. Live adversarial probes are FP0's.
     - Problem documentation first; the test before the code (CLAUDE.md Testing).
     - No boot-path step that rewrites or scans all of og_objects; schema changes are online and rollback-safe.
     - No boot-time resumer without a planned-restart marker.
@@ -272,6 +295,14 @@ now:
     base: c893a956a
     digest: none
     scope: []
+  bridge_conjecture: >-
+    If the security and density batches land with deployed proofs and
+    independent review, then the owner's second pass starts from a computer
+    whose desks are confined, whose network and gateway refuse other
+    tenants, and whose store and memory leave room for more desks; so the
+    launch's remaining work is the app and owner items, not foundations.
+    It fails if the pass ends with most security items still open, or if a
+    landed item needs reworking at the second pass.
   conjecture:
     id: C-FP-landing
     claim: >-
@@ -304,7 +335,9 @@ now:
   blocker_or_risk: >-
     Two red batches waiting for one deploy slot; a worker straying outside
     its lane; the paper's boot path (any store schema change).
-  next_action: start the five lane workers and the panel on this file.
+  next_action: >-
+    Run review round 2 on the repaired file; meanwhile land each lane's
+    first frozen batch as it comes, FP3 group 1 first.
 
 receipts:
   - id: capture-label-key-read
@@ -312,7 +345,16 @@ receipts:
     identity: c893a956a
     proof_refs: [internal/store/capture_label_key_read_test.go]
     rollback_ref: git revert c893a956a
-    disposition: pushed; CI and deploy pending
+    disposition: >-
+      landed; the capture-label scan is gone from the paper's engine
+      (70% busy over 122 s from 17:58:57 UTC; the reads that remain are
+      FP1's)
+    landing:
+      source_commit: c893a956a66f3305216cd3b2f73778c65f35296e
+      ci_ref: GitHub Actions run 39645339172, success
+      deploy_ref: the same run's Deploy to Staging (Node B), success
+      environment_identity: the paper's observability build.commit c893a956a, deployed_at 2026-10-21T17:49:03Z
+      deployed_acceptance: 27 source polls between 17:49 and 18:01 UTC, all ok; 66 schedules active; no capture-label op in the engine counters
 ---
 
 # The launch first pass
@@ -334,3 +376,64 @@ with the evidence.
 **Why landing is the constraint.** Building is parallel. Landing is not:
 each red batch gets a deploy of its own, so the order of landing is the
 order of the batch plan, and B1 measures where each landing's time goes.
+
+## Coverage of the security and density checklist
+
+Every item has one owner in this pass or a stated disposition.
+
+| Station | Items |
+|---|---|
+| FP0, orchestrator | SEC-14, RES-07, RES-19, RES-21; B1 timing; the L3-05 live census |
+| FP1, store | L1-01 (the three hot reads, boot-path logs, engine concurrency), RES-18, L3-05 inside `internal/store` |
+| FP2, desk boundary | ARCH-02, ARCH-05, ARCH-07, SEC-01, SEC-02, SEC-13, SEC-15, RES-01 to RES-04; the guest side of SEC-09 and SEC-10 |
+| FP3, host | the two vmctl recovery defects (group 1); SEC-03, the host side of SEC-09 and SEC-10, NET-07 (group 2, B4); REC-02, SEC-11, SEC-12 (group 3, B5) |
+| FP4, self-development | ARCH-10, ARCH-04, ARCH-03 (design until ARCH-02 lands) |
+| FP6, network | SEC-07 (by deleting Obscura), NET-01's inventory, SEC-06 |
+| FP7, gateway | SEC-05, SEC-08 Option K, RES-11, SEC-16, RES-12 |
+| FP8, queued (B6) | RES-05, SEC-04, NET-08, RES-16, RES-06, RES-09, RES-14 |
+| FP9, queued (B9) | NET-06, NET-09 |
+| FP10, queued | RES-17; B8's second half (NET-01's fetch service, NET-02, NET-05, NET-10); the P2 items NET-03, NET-04, RES-08, RES-10, RES-13, RES-15, RES-20, RES-22, ARCH-06, ARCH-08, ARCH-09, ARCH-11 to ARCH-15 |
+| Done before this pass | REC-01, ARCH-01 |
+| Owner decisions | DEC-01, DEC-05, DEC-06, DEC-07 (defaults stand) |
+
+## Review round 1, adjudicated
+
+Two of three seats answered: GPT-6.1-sol (send back) and Gemini 4 Argon
+(accept with edits). Devin failed again on a tool call that needs
+confirmation. Both reviewed the file before the owner's rescope, so the
+findings about the mobile lane, the S6 slices and B11 coverage are moot.
+
+Adopted:
+- The landing order: rebase first, then freeze and review the rebased
+  candidate, land, prove; review again if reviewed lines change; the
+  completion gate on landed candidates (both seats).
+- FP3's recovery fixes land before FP1's store changes (sol).
+- FP1's batch gets a deploy of its own (Argon).
+- An activation lease: no deploy or drill during another's proof (both).
+- File ownership between lanes: FP2 owns the guest side of
+  `nix/autoputer-vm.nix` and the desk-cell confinement commits 07abf0351
+  and 9cee80a2d; FP3 owns the host egress commit 61f4da20f, the
+  quick-containment commits and the owner-act flip; FP4's ARCH-03 waits
+  for FP2's manifest; FP1's L3-05 stays inside `internal/store` (Argon,
+  sol). Argon had the two confinement commits the other way round;
+  corrected from the commits themselves.
+- Worker rules, sent to all six workers at about 18:20 UTC: no shared git
+  state or gh commands, nothing outside their worktree (the scratchpad
+  holds credential files), no registry or checklist edits, every Dolt link
+  through the build limiter (which now sets the Go limits itself), red
+  code fails closed, live probes are FP0's (both).
+- SEC-14 and the before-and-after memory measurements belong to FP0;
+  B8's second half has an owner (FP10); a coverage table (both).
+- The queue fills dependency-ready, B6 first (sol).
+- Format: a bridge conjecture, a load-and-adversarial realism axis, the
+  landing block on the receipt, a catch-all for the scratchpad, a
+  companion ledger, the authority manifest entry, and a single valid
+  entrypoint (the live doc check passes) (both).
+
+Not adopted:
+- "S6-0's commits are not on main" (Argon): they are; checked with
+  `git branch -r --contains`.
+- "Pause workers during review" (sol): panels run as remote calls with
+  small local processes; the build limiter is the memory control. If the
+  Mac's pressure rises, workers pause first.
+- "Move L4-03 out of FP10" (both): moot after the rescope.

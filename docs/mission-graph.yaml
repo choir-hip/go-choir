@@ -564,7 +564,7 @@ nodes:
     ledger: ''
     status: working
     kind: product_completion
-    entrypoint: true
+    entrypoint: false  # 2026-10-21: a product_completion is not an entrypoint shape (doccheck L5); the launch first pass is the entrypoint
     execution_mode: mission_orchestrator
     depends_on: []
     enables: []

@@ -712,6 +712,33 @@ documents:
     witnesses: [docs/mission-graph.yaml, docs/ACTIVE.md]
     refresh_triggers: [mission_state_change, owner_ratification_change, deployed_acceptance]
 
+  - path: docs/definitions/choir-launch-first-pass-metamission-2026-10-21.md
+    claim_scope: current
+    is_root: [authority, entry]
+    is_evidence: false
+    annotations: {doc_role: definition, authority: working_mission_contract, lifecycle: living, entrypoint: true}
+    depends_on: [docs/choir-doctrine.md, docs/launch-checklist-2026-10-21.md, docs/security-density-architecture-checklist-2026-10-21.md]
+    witnesses: [docs/mission-graph.yaml, docs/ACTIVE.md, docs/reports/owner-notes-2026-10-14.md]
+    refresh_triggers: [mission_state_change, owner_ratification_change, deployed_acceptance]
+
+  - path: docs/launch-checklist-2026-10-21.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: register, authority: support, lifecycle: living}
+    depends_on: [docs/security-density-architecture-checklist-2026-10-21.md, docs/reports/owner-notes-2026-10-14.md]
+    witnesses: [docs/ACTIVE.md]
+    refresh_triggers: [owner_ratification_change, deployed_acceptance]
+
+  - path: docs/security-density-architecture-checklist-2026-10-21.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: register, authority: support, lifecycle: living}
+    depends_on: [docs/choir-doctrine.md, docs/reports/owner-notes-2026-10-14.md]
+    witnesses: [docs/ACTIVE.md, docs/launch-checklist-2026-10-21.md]
+    refresh_triggers: [owner_ratification_change, deployed_acceptance]
+
   - path: docs/definitions/choir-lp-s6-commit-gate-2026-10-20.md
     claim_scope: current
     is_root: []
