@@ -248,6 +248,32 @@
         '';
       };
 
+      # The frontend's locked dependencies alone (node_modules plus the two
+      # package files they were built from), for capsule frontend builds
+      # without the package registry: a Claude delegate's capsule links them
+      # when its package files match (docs/design/delegate-one-round-build-2026-10-21.md).
+      # Same lockfile, so the same npmDepsHash as frontendPkg.
+      frontendDepsPkg = pkgs.buildNpmPackage {
+        pname = "go-choir-frontend-deps";
+        version = goModuleVersion;
+        src = pkgs.lib.cleanSourceWith {
+          src = ./frontend;
+          filter = path: type:
+            let
+              base = baseNameOf path;
+            in
+            type != "directory" && (base == "package.json" || base == "package-lock.json");
+        };
+        npmDepsHash = frontendPkg.npmDepsHash;
+        dontNpmBuild = true;
+        PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1";
+        installPhase = ''
+          mkdir -p $out
+          cp package.json package-lock.json $out/
+          cp -r node_modules $out/node_modules
+        '';
+      };
+
       rustyV8Archive = pkgs.fetchurl {
         url = "https://github.com/denoland/rusty_v8/releases/download/v137.3.0/librusty_v8_release_x86_64-unknown-linux-gnu.a.gz";
         hash = "sha256-omgf3lMBir0zZgGPEyYX3VmAAt948VbHvG0v9gi1ZWc=";
@@ -444,6 +470,7 @@
           includeFrontend = true;
         };
         frontend = frontendPkg;
+        frontendDeps = frontendDepsPkg;
         obscura = obscuraPkg;
         zot = zotPkg;
         # Host Go module proxy for engineering capsules; carries the deployed

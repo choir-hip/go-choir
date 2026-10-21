@@ -879,6 +879,10 @@ EOF
       # the store is read-only through the capsule's lower root
       # (docs/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md, option B).
       CHOIR_CAPSULE_BUILD_PATH = lib.makeBinPath (with pkgs; [ gcc binutils pkg-config ]);
+      # The frontend's locked dependencies, carried to capsule workloads like
+      # the toolchain above, so a frontend build whose package files match
+      # needs no package registry (docs/design/delegate-one-round-build-2026-10-21.md).
+      CHOIR_FRONTEND_DEPS = "${goChoirPackages.frontendDeps}";
       RUNTIME_SKILLS_ROOT = "${goChoirPackages.autoputer}/share/go-choir/skills";
       CHOIR_BASELINE_RELEASE_ROOT = "${goChoirPackages.autoputer}";
       # Autoputer identity token: read through the file on the root-only

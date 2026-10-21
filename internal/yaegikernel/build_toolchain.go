@@ -13,6 +13,26 @@ import (
 // (docs/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md, option B).
 const BuildToolchainPathEnv = "CHOIR_CAPSULE_BUILD_PATH"
 
+// FrontendDepsEnv names the guest's Nix-built frontend dependencies (its
+// node_modules and the package files it was built from). It rides the same
+// carry as the toolchain, only as an absolute store path, so the frontend
+// build job can link it instead of reaching the registry
+// (docs/design/delegate-one-round-build-2026-10-21.md).
+const FrontendDepsEnv = "CHOIR_FRONTEND_DEPS"
+
+// frontendDeps returns the carried FrontendDepsEnv entry, or nothing when
+// the value is not a clean absolute path strictly inside /nix/store.
+func frontendDeps(lookup func(string) (string, bool)) []string {
+	value, ok := lookup(FrontendDepsEnv)
+	if !ok || strings.ContainsAny(value, "\x00\n\r \t") {
+		return nil
+	}
+	if !strings.HasPrefix(value, "/nix/store/") || filepath.Clean(value) != value || strings.Contains(value, "..") {
+		return nil
+	}
+	return []string{FrontendDepsEnv + "=" + value}
+}
+
 // BuildToolchainKeys are the cgo variables that point a capsule build at the
 // guest's ICU headers and libraries (cmd/autoputer links
 // dolthub/go-icu-regex). Values are store paths, never credentials.
@@ -33,7 +53,7 @@ func BuildToolchainCarry(lookup func(string) (string, bool)) []string {
 			out = append(out, key+"="+value)
 		}
 	}
-	return out
+	return append(out, frontendDeps(lookup)...)
 }
 
 // WorkloadToolchainEnv returns the PATH a workload command runs with (base,
@@ -63,5 +83,5 @@ func WorkloadToolchainEnv(base string, lookup func(string) (string, bool)) (stri
 			extra = append(extra, key+"="+value)
 		}
 	}
-	return path, extra
+	return path, append(extra, frontendDeps(lookup)...)
 }
