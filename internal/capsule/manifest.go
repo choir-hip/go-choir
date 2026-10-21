@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 )
 
 // walkUpperdir walks the overlay upperdir and records the manifest of every
@@ -67,7 +68,56 @@ func walkUpperdir(ctx context.Context, upperDir string) ([]FileManifest, error) 
 		return manifests[i].Path < manifests[j].Path
 	})
 
-	return manifests, nil
+	return dropPristineReleaseScaffold(manifests), nil
+}
+
+// dropPristineReleaseScaffold removes the directories that
+// prepareCapsuleReleaseDir pre-creates in the upper (var, var/lib,
+// var/lib/artifact and the release leaf) while nothing lives under them.
+//
+// They are spawn scaffolding, not something the capsule did: left in, a
+// capsule that built nothing would diff as four added directories, so its
+// bundle's OrderedFileEffects (and digest) would change and would no longer
+// be empty. The walk never reads xattrs, so the leaf's opaque marker is not
+// a signal and Diff cannot turn it into deletions of lower files (Diff only
+// compares upper-layer manifests; overlay deletions would surface as
+// whiteout device entries, and an opaque dir has none).
+//
+// A directory is dropped only if everything beneath it in the manifest is
+// itself dropped, from the leaf up. Once the capsule writes anything under
+// the release prefix (or under a parent, e.g. /var/lib/other), the chain
+// stays in the manifest exactly as it did before the pre-creation: copy-up
+// or mkdir -p put the same directories in the upper. The release staging
+// loop skips directories, and the classifier ignores them.
+func dropPristineReleaseScaffold(manifests []FileManifest) []FileManifest {
+	chain := []string{"var", "var/lib", "var/lib/artifact", strings.TrimSuffix(ReleaseTreePrefix, "/")}
+	dropped := map[string]bool{}
+	for i := len(chain) - 1; i >= 0; i-- {
+		occupied := false
+		isDir := false
+		for _, fm := range manifests {
+			switch {
+			case fm.Path == chain[i]:
+				isDir = fm.Type == "dir"
+			case strings.HasPrefix(fm.Path, chain[i]+"/") && !dropped[fm.Path]:
+				occupied = true
+			}
+		}
+		if occupied || !isDir {
+			break
+		}
+		dropped[chain[i]] = true
+	}
+	if len(dropped) == 0 {
+		return manifests
+	}
+	kept := manifests[:0:0]
+	for _, fm := range manifests {
+		if !dropped[fm.Path] {
+			kept = append(kept, fm)
+		}
+	}
+	return kept
 }
 
 // diffManifests compares the current manifest against the last committed

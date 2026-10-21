@@ -478,6 +478,12 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 	}
 	caps.SourceSnapshotDigest = sourceDigest
 	lowerLayers := sourceLower + ":" + e.lowerDir
+	// The lowest layer is the guest's own root: hide its release tree behind
+	// an empty capsule-owned directory so a build can write the release
+	// (Failure 21, engineering-completion-path-cluster-2026-10-20.md).
+	if err := prepareCapsuleReleaseDir(caps.UpperDir, capsuleNamespaceHostID, capsuleNamespaceHostID); err != nil {
+		return nil, err
+	}
 	if err := MountOverlayFS(caps.MergedDir, caps.UpperDir, caps.WorkDir, lowerLayers); err != nil {
 		return nil, err
 	}
