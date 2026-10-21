@@ -55,3 +55,42 @@ func TestObservabilityGoroutineDumpIsOptInAndBounded(t *testing.T) {
 		t.Fatalf("bounded dump = %q", cut)
 	}
 }
+
+// The memory breakdown is opt-in (it walks the store and the nix store) and
+// splits the page cache by this computer's store and the shared nix store.
+// Failure modes: the default request paying for the walk; the store tree
+// missing from the split; the store path's parent walked instead of the
+// store.
+func TestObservabilityMemoryDetailIsOptInAndSplitsTheStore(t *testing.T) {
+	rt := telemetryRuntime(t, "computer-memory-detail")
+	read := func(query string) map[string]any {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, "/api/runtime/observability"+query, nil)
+		req.Header.Set("X-Authenticated-User", "owner-telemetry")
+		rec := httptest.NewRecorder()
+		(&APIHandler{rt: rt}).HandleGuestObservability(rec, req)
+		var obs map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &obs); err != nil || rec.Code != http.StatusOK {
+			t.Fatalf("observability%s = %d %s", query, rec.Code, rec.Body.String())
+		}
+		return obs
+	}
+	if _, ok := read("")["memory_detail"]; ok {
+		t.Fatal("memory_detail present without ?memory=detail")
+	}
+	detail, _ := read("?memory=detail")["memory_detail"].(map[string]any)
+	if detail == nil {
+		t.Fatal("memory_detail missing with ?memory=detail")
+	}
+	splits, _ := detail["page_cache"].([]any)
+	labels := map[string]string{}
+	for _, s := range splits {
+		m, _ := s.(map[string]any)
+		label, _ := m["label"].(string)
+		root, _ := m["root"].(string)
+		labels[label] = root
+	}
+	if labels["store"] != rt.cfg.StorePath || labels["nix_store"] != "/nix/store" {
+		t.Fatalf("page_cache trees = %v, want store at %q and the nix store", labels, rt.cfg.StorePath)
+	}
+}
