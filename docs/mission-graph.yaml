@@ -1265,7 +1265,7 @@ nodes:
     title: Tape segments A2 — the production segment writer behind a flag, then a copy-only repack, so the weekly backup verify stops walking 9.7M files
     path: docs/definitions/choir-tape-segments-a2-repack-2026-10-21.md
     ledger: ''
-    status: blocked  # 2026-10-21 05:15 UTC: three review rounds each found a new fsync-recovery hole; owner chooses the recovery design (now card)
+    status: working  # 2026-10-21 05:50 UTC: fail-stop redesign reviewed 'land flag-off now'; two P1s block turning the flag on (now card)
     kind: side
     entrypoint: false
     execution_mode: mission_orchestrator
