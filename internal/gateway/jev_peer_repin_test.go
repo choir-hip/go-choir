@@ -205,19 +205,18 @@ func TestJevRouteFollowsTheComputerAfterTheHostReEnsuresItsCredential(t *testing
 	}
 }
 
-// Batch 1 review, finding 13 of the SEC-05 record: the pin is shared by every
-// route, so the Jev route may write a first-use pin only where the mode
-// allows one (enforce, and off, the pre-SEC-05 behavior). In strict an
-// unpinned bearer is refused and in observe it passes with nothing written;
-// a mismatch is Jev's own 403 in every mode.
-func TestJevRouteWritesAPinOnlyWhereTheModeAllowsOne(t *testing.T) {
+// SEC-05 findings 13 and 14: the Jev route keeps its first-use pin in every
+// mode but strict (its pre-SEC-05 boundary; observe must not open it), and
+// strict refuses an unpinned bearer, so Jev cannot write a pin that opens the
+// other routes there. A mismatch is Jev's own 403 in every mode.
+func TestJevRouteKeepsItsFirstUsePinInEveryModeButStrict(t *testing.T) {
 	cases := []struct {
 		mode     BindingMode
 		wantCode int
 		wantPin  bool
 	}{
 		{BindingOff, http.StatusOK, true},
-		{BindingObserve, http.StatusOK, false},
+		{BindingObserve, http.StatusOK, true},
 		{BindingEnforce, http.StatusOK, true},
 		{BindingStrict, http.StatusForbidden, false},
 	}
@@ -264,6 +263,13 @@ func TestJevRouteWritesAPinOnlyWhereTheModeAllowsOne(t *testing.T) {
 				t.Fatalf("%s: first use did not pin (pin %q)", tc.mode, got)
 			case !tc.wantPin && got != "":
 				t.Fatalf("%s: the Jev route wrote a pin (%q) the mode forbids", tc.mode, got)
+			}
+			if tc.wantPin {
+				// Finding 14: a copied bearer from another guest is refused
+				// before the host's ensure, as it was before SEC-05.
+				if code := judge(secondBootPeer); code != http.StatusForbidden {
+					t.Fatalf("%s: a copied bearer from another guest before the host's ensure = %d, want 403", tc.mode, code)
+				}
 			}
 			if tc.mode == BindingStrict {
 				// The refused Jev call did not open inference either.
