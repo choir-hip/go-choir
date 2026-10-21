@@ -19,7 +19,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/apihandler"
-	"github.com/yusefmosiah/go-choir/internal/browsercontrol"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/desktopstate"
@@ -217,8 +216,6 @@ func Run() {
 	}()
 
 	bus := events.NewEventBus()
-	browserHandler := browsercontrol.NewHandler(rtRuntimeCfg, db, bus)
-	defer browserHandler.Close()
 	desktopHandler := desktopstate.NewHandler(db, bus)
 	contentService := content.NewService(db, bus)
 	mediaHandler := mediastate.NewHandler(db, bus)
@@ -616,7 +613,7 @@ func Run() {
 	bootMark("runtime_built")
 	runtimeHandler := agentcore.NewAPIHandler(rt.Runtime)
 	apiHandler := apihandler.NewHandler(rt.Runtime.Store())
-	apihandler.RegisterRoutes(s, runtimeHandler, textureHandler, apiHandler, browserHandler, desktopHandler, contentService, mediaHandler, rtRuntimeCfg.EnableTestAPIs)
+	apihandler.RegisterRoutes(s, runtimeHandler, textureHandler, apiHandler, desktopHandler, contentService, mediaHandler, rtRuntimeCfg.EnableTestAPIs)
 	// SMG: the management desk reaches the product API in-cell via
 	// choir.ProductAPI (broker ActionProductAPI); the typed
 	// product_api_request tool is deleted. The canonical route table is
@@ -837,8 +834,6 @@ func buildRuntimeConfig(cfg Config, rtRuntimeCfg provideriface.Config, filesRoot
 		LLMModel:                        rtRuntimeCfg.LLMModel,
 		LLMReasoningEffort:              rtRuntimeCfg.LLMReasoningEffort,
 		ModelPolicyPath:                 rtRuntimeCfg.ModelPolicyPath,
-		ObscuraPath:                     rtRuntimeCfg.ObscuraPath,
-		ObscuraCDPScreenshots:           rtRuntimeCfg.ObscuraCDPScreenshots,
 		EnableTestAPIs:                  rtRuntimeCfg.EnableTestAPIs,
 		RunMemoryContextThresholdTokens: rtRuntimeCfg.RunMemoryContextThresholdTokens,
 		RunMemoryKeepRecentTokens:       rtRuntimeCfg.RunMemoryKeepRecentTokens,

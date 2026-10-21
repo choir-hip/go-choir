@@ -115,12 +115,7 @@ func LoadConfig() Config {
 		LLMModel:           os.Getenv("RUNTIME_LLM_MODEL"),
 		LLMReasoningEffort: os.Getenv("RUNTIME_LLM_REASONING_EFFORT"),
 		ModelPolicyPath:    os.Getenv("RUNTIME_MODEL_POLICY_PATH"),
-		ObscuraPath:        envOr("CHOIR_OBSCURA_BIN", os.Getenv("OBSCURA_BIN")),
-		ObscuraCDPScreenshots: boolOr(
-			"CHOIR_OBSCURA_CDP_SCREENSHOTS",
-			boolOr("OBSCURA_CDP_SCREENSHOTS", false),
-		),
-		EnableTestAPIs: boolOr("RUNTIME_ENABLE_TEST_APIS", false),
+		EnableTestAPIs:     boolOr("RUNTIME_ENABLE_TEST_APIS", false),
 		RunMemoryContextThresholdTokens: intOr(
 			"RUNTIME_RUN_MEMORY_CONTEXT_THRESHOLD_TOKENS",
 			DefaultRunMemoryContextThresholdTokens,
