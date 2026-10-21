@@ -1123,6 +1123,21 @@ when the retry spawns.
 - Whether the offer should also name the patch to management and Texture in
   the assignment's final Report (not only in the run record) is open.
 
+**Red ceremony (2026-10-21, at landing).** Conjecture delta: before, a
+retry starts from the clean base and redoes the failed round's work;
+after, a retry starts from the clean base with the failed round's diff
+offered read-only, and an engineer that applies it reaches its report
+sooner. Protected surfaces: the engineering capsule spawn (a new read-only
+mount), the run context the desk reads, the freeze path's inputs (only
+what the engineer chooses to apply). Admissible evidence: a deployed
+two-round drill on a test computer where round 2's run context names the
+patch and its digest, and the frozen tree contains round 1's change; unit
+tests are shaping only. Rollback: revert; the feature is fail-open.
+Heresy delta: discovered, a failed round's work is durable but no retry
+could see it; repaired, by this slice once the drill passes; introduced,
+none intended (the patch is inert until applied in the engineer's own
+capsule).
+
 **Option A implementation notes (branch `feat/carried-patch-retry`, not yet
 pushed or deployed).** Seams used: `Store.ListEngineeringSubjectCandidates`
 (`internal/store/engineering_assignments.go`), `capsule.DiffTreesToPatch`,
