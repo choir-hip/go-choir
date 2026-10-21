@@ -1,9 +1,11 @@
 package guestmem
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -21,7 +23,12 @@ import (
 //   - a symlink followed out of the walked root;
 //   - a walk that overruns its budget instead of stopping and saying so;
 //   - a file the residency probe cannot read aborting the walk;
-//   - a cgroup without memory files reported as using nothing.
+//   - a cgroup without memory files reported as using nothing;
+//   - one request spending a separate budget per tree, or walking an
+//     unbounded directory or process table, instead of one deadline and one
+//     entry budget for the whole read, reported as truncation;
+//   - a residency probe that maps and scans a whole huge file in one go;
+//   - concurrent requests multiplying the work of a diagnostic read.
 // The kernel half (mincore over a mapping, never faulting pages in) is in
 // resident_linux_test.go.
 
@@ -71,7 +78,7 @@ func TestProcessGroupsSumsRSSByNameAndBounds(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	groups := ProcessGroups(root, 2)
+	groups := processGroups(newScan(context.Background(), DefaultLimits), root, 2)
 	if len(groups) != 3 {
 		t.Fatalf("groups = %+v, want two named and one other", groups)
 	}
@@ -117,19 +124,26 @@ func TestPageCacheDedupesHardlinksSkipsSymlinksAndProbeErrors(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	probe := func(path string, size int64) (int64, error) {
+	probe := func(path string, size int64, _ *scan) (int64, bool, error) {
 		if strings.HasSuffix(path, "unreadable") {
-			return 0, errors.New("permission denied")
+			return 0, false, errors.New("permission denied")
 		}
-		return size / 2, nil
+		return size / 2, true, nil
 	}
-	got := pageCache("store", root, time.Second, 100, probe)
+	got := pageCache(newScan(context.Background(), DefaultLimits), "store", root, 100, probe)
 	if got.Files != 2 || got.Bytes != 4096 || got.ResidentBytes != 2048 {
 		t.Fatalf("split = %+v, want one deduplicated lib.so and an empty file", got)
 	}
 	if got.Errors != 1 || got.Truncated {
 		t.Fatalf("errors=%d truncated=%t", got.Errors, got.Truncated)
 	}
+}
+
+func lim(budget time.Duration, entries int) Limits {
+	l := DefaultLimits
+	l.Budget = budget
+	l.MaxEntries = entries
+	return l
 }
 
 func TestPageCacheStopsAtItsBoundsAndSaysSo(t *testing.T) {
@@ -139,16 +153,91 @@ func TestPageCacheStopsAtItsBoundsAndSaysSo(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	probe := func(string, int64) (int64, error) { return 1, nil }
-	if got := pageCache("nix", root, time.Second, 3, probe); !got.Truncated || got.Files != 3 {
+	probe := func(string, int64, *scan) (int64, bool, error) { return 1, true, nil }
+	if got := pageCache(newScan(context.Background(), DefaultLimits), "nix", root, 3, probe); !got.Truncated || got.Files != 3 {
 		t.Fatalf("file cap: %+v", got)
 	}
-	slow := func(string, int64) (int64, error) { time.Sleep(20 * time.Millisecond); return 1, nil }
-	if got := pageCache("nix", root, 30*time.Millisecond, 100, slow); !got.Truncated || got.Files >= 10 {
+	slow := func(string, int64, *scan) (int64, bool, error) {
+		time.Sleep(20 * time.Millisecond)
+		return 1, true, nil
+	}
+	if got := pageCache(newScan(context.Background(), lim(30*time.Millisecond, 1000)), "nix", root, 100, slow); !got.Truncated || got.Files >= 10 {
 		t.Fatalf("time budget: %+v", got)
 	}
-	if got := pageCache("missing", filepath.Join(root, "nope"), time.Second, 100, probe); got.Files != 0 || got.Errors != 1 {
+	if got := pageCache(newScan(context.Background(), DefaultLimits), "missing", filepath.Join(root, "nope"), 100, probe); got.Files != 0 || got.Errors != 1 {
 		t.Fatalf("missing root: %+v", got)
+	}
+}
+
+// The budget is the request's, not the tree's: a second tree gets what the
+// first left, and a spent budget truncates it before it reads anything.
+func TestOneDeadlineAndEntryBudgetSpanTheWholeRead(t *testing.T) {
+	a, b := t.TempDir(), t.TempDir()
+	for i := 0; i < 6; i++ {
+		for _, root := range []string{a, b} {
+			if err := os.WriteFile(filepath.Join(root, string(rune('a'+i))), []byte("x"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	probe := func(string, int64, *scan) (int64, bool, error) { return 1, true, nil }
+	s := newScan(context.Background(), lim(time.Minute, 8))
+	first := pageCache(s, "a", a, 100, probe)
+	second := pageCache(s, "b", b, 100, probe)
+	if first.Files+second.Files >= 12 || !second.Truncated {
+		t.Fatalf("entry budget must be shared: first=%+v second=%+v", first, second)
+	}
+
+	s = newScan(context.Background(), lim(time.Nanosecond, 1000))
+	time.Sleep(time.Millisecond)
+	if got := pageCache(s, "late", a, 100, probe); !got.Truncated || got.Files != 0 {
+		t.Fatalf("spent deadline: %+v", got)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if got := pageCache(newScan(ctx, DefaultLimits), "cancelled", a, 100, probe); !got.Truncated || got.Files != 0 {
+		t.Fatalf("cancelled request must stop the walk: %+v", got)
+	}
+}
+
+func TestProcessTableAndCgroupWalkAreBoundedAndReportTruncation(t *testing.T) {
+	root := t.TempDir()
+	for i := 1; i <= 50; i++ {
+		writeProc(t, root, strconv.Itoa(i), "p", "VmRSS:\t1 kB\n")
+	}
+	s := newScan(context.Background(), lim(time.Minute, 10))
+	groups := processGroups(s, root, 5)
+	var seen int
+	for _, g := range groups {
+		seen += g.Processes
+	}
+	if seen > 10 || !s.truncated["processes"] {
+		t.Fatalf("saw %d processes, truncated=%v", seen, s.truncated)
+	}
+
+	cg := t.TempDir()
+	for i := 0; i < 30; i++ {
+		dir := filepath.Join(cg, "g"+strconv.Itoa(i))
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "memory.current"), []byte("1\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s = newScan(context.Background(), lim(time.Minute, 10))
+	if got := cgroups(s, cg, 2, 100); len(got) > 10 || !s.truncated["cgroups"] {
+		t.Fatalf("cgroups=%d truncated=%v", len(got), s.truncated)
+	}
+}
+
+func TestReadAllowsOneCollectionAtATime(t *testing.T) {
+	readGate <- struct{}{}
+	defer func() { <-readGate }()
+	got := Read(context.Background(), nil, DefaultLimits)
+	if !got.Busy {
+		t.Fatalf("a concurrent read must be refused as busy, not multiplied: %+v", got)
 	}
 }
 
@@ -176,7 +265,7 @@ func TestCgroupsReadsCurrentAndStatAndSkipsDirsWithoutMemory(t *testing.T) {
 	mk("init.scope", "", "")
 	mk("capsule.slice/a/b/too-deep", "5\n", "anon 5\n")
 
-	got := Cgroups(root, 2, 10)
+	got := cgroups(newScan(context.Background(), DefaultLimits), root, 2, 10)
 	if len(got) != 2 {
 		t.Fatalf("cgroups = %+v", got)
 	}
@@ -186,7 +275,7 @@ func TestCgroupsReadsCurrentAndStatAndSkipsDirsWithoutMemory(t *testing.T) {
 	if got[1].Path != "system.slice/autoputer.service" || got[1].CurrentBytes != 700 {
 		t.Fatalf("second = %+v", got[1])
 	}
-	if top := Cgroups(root, 2, 1); len(top) != 1 || top[0].Path != "system.slice" {
+	if top := cgroups(newScan(context.Background(), DefaultLimits), root, 2, 1); len(top) != 1 || top[0].Path != "system.slice" {
 		t.Fatalf("bounded = %+v", top)
 	}
 }

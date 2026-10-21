@@ -837,7 +837,7 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 		resp.Goroutines = goroutineDump()
 	}
 	if r.URL.Query().Get("memory") == "detail" {
-		resp.MemoryDetail = guestmem.Read([]guestmem.Tree{
+		resp.MemoryDetail = guestmem.Read(r.Context(), []guestmem.Tree{
 			{Label: "store", Root: h.rt.cfg.StorePath},
 			{Label: "nix_store", Root: "/nix/store"},
 		}, guestmem.DefaultLimits)
