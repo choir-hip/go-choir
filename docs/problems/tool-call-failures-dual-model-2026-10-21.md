@@ -73,6 +73,44 @@ on a delegate (6), a quote not found in its capture (5 texture), a wrong
 field or method on a result (`p.Results`, 12 across desks), reflect and
 nil-assertion panics in yaegi (9), arity mismatches (8).
 
+## First dual-pool census (runs since 2026-10-21 14:00)
+
+The pool hashes Texture desks and pooled trajectories. Of the last 120 runs,
+18 of 92 pool-hashed runs were deepseek-v4.1-flash (Texture 15 of 71). The
+management task runs are pinned to gpt-6-luna. Failures per cell in the
+sample:
+
+| Model, desk | Runs | Cells | Failures |
+|---|---|---|---|
+| luna, management | 35 | 246 | 24 (9.8%) |
+| luna, research | 12 | 145 | 10 (6.9%) |
+| luna, texture | 8 | 18 | 11 |
+| deepseek, texture | 2 | 9 | 5 |
+
+The deepseek sample is too small to compare rates. Families seen so far:
+
+- Both models: a wrong field on a result value (`r.Summary`, `u.Payload`
+  for deepseek; `p.Results` and others for luna in the baseline). The hint
+  already names the fields of the value's type.
+- deepseek: a quote not found in its capture (1).
+- luna: `{{ref 1}}` (4; two before the T4 text deployed), packet map
+  literals (T3, 4), and T5 below.
+
+### T5. A capture id copied with a chunk missing (texture, luna 3)
+
+Texture cited a capture by its full id rather than the frame handle, and
+dropped a chunk from the middle of it:
+`obj:choir.web_capture:ZTU5…NGUx:key-a36e…` for the frame's
+`obj:choir.web_capture:ZTU5…NGUxZGIx:key-a36e…`. The refusal says "is not
+captured … Ask research to Read it", which is wrong: the source is captured
+and in the frame, so the advice sends Texture off to ask research again. The
+id is about 140 characters; its owner segment is the same base64 for every
+capture in the computer, and its `key-<sha256>` suffix is unique.
+
+Candidate (tool API, model-independent): when a cited id is not captured
+but exactly one frame source has the same `key-<hash>` suffix, cite that
+source; otherwise the refusal names the frame handle of the nearest source.
+
 ## Next
 
 1. Fix T1 in the store (model-independent, latency).
@@ -83,6 +121,6 @@ nil-assertion panics in yaegi (9), arity mismatches (8).
 
 ## Heresy delta
 
-- discovered: T1 to T4.
+- discovered: T1 to T5.
 - introduced: none.
 - repaired: none.
