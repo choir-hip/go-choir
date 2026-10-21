@@ -147,7 +147,13 @@ now:
   slice: >-
     All five asks built and committed on lane/b8-network; nothing is pushed or
     deployed. The orchestrator sends the red commits to a panel, lands them in
-    order, and runs the deployed proof below.
+    order, and runs the deployed proof below. Batch-1 review edits (GPT-6.1-sol,
+    accept with edits) are made: memory=detail now has one request-wide
+    deadline and entry budget, batched directory reads, chunked and capped
+    mincore probing, a one-at-a-time gate and reported truncation; a stored
+    snapshot is shown and imported only while the address is the one it was
+    taken from (import always uses that original URL). The frontend spec was
+    written but not run: playwright/node_modules are absent in this lane.
   source_ref: a38eb7f67
   deploy_identity: unknown to this lane
   candidate:
