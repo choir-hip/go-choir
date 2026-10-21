@@ -448,7 +448,7 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 
 	// RES-11: take a slot for the whole call, a stream included. The release
 	// runs on every exit, a panic too.
-	release, ok := h.scheduleModelCall(w, r, computerID, false)
+	release, r, ok := h.scheduleModelCall(w, r, computerID, false)
 	if !ok {
 		return
 	}

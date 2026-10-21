@@ -159,7 +159,7 @@ func (h *Handler) HandleOpenAIChatCompletions(w http.ResponseWriter, r *http.Req
 	log.Printf("gateway: openai-compatible chat request from autoputer %s (provider=%s model=%s messages=%d tools=%d reasoning=%s stream=%v)",
 		computerID, p.Name(), gwReq.Model, len(gwReq.Messages), len(gwReq.Tools), gwReq.ReasoningEffort, gwReq.Stream)
 
-	release, ok := h.scheduleModelCall(w, r, computerID, true)
+	release, r, ok := h.scheduleModelCall(w, r, computerID, true)
 	if !ok {
 		return
 	}

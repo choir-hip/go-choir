@@ -419,6 +419,11 @@ func TestModelSchedulerConfigDefaultsAndParsing(t *testing.T) {
 	if bad != d {
 		t.Fatalf("unreadable values must fall back to the defaults: %+v", bad)
 	}
+	// A wait that would eat the call's whole deadline is capped, so a long
+	// wait still ends in a 429 the guest retries, never a silent hang-up.
+	if long := ModelSchedulerConfigFromGetenv(get(map[string]string{"GATEWAY_MODEL_QUEUE_WAIT": "1h"})); long.MaxWait != maxModelQueueWait || maxModelQueueWait > inferenceTimeout/2 {
+		t.Fatalf("a 1h wait resolved to %v (cap %v, call deadline %v)", long.MaxWait, maxModelQueueWait, inferenceTimeout)
+	}
 	// A per-computer cap above the global cap is the global cap.
 	if s := NewModelScheduler(ModelSchedulerConfig{Global: 2, PerComputer: 9}); s.cfg.PerComputer != 2 {
 		t.Fatalf("per-computer cap %d above the global 2", s.cfg.PerComputer)
@@ -649,5 +654,84 @@ func TestModelSchedulerLeavesSearchOnTheOldLimiter(t *testing.T) {
 	_ = search()
 	if code := search(); code != http.StatusTooManyRequests {
 		t.Fatalf("search lost its rate bucket under the scheduler: %d", code)
+	}
+}
+
+// deadlineProvider records the deadline each call's context carries; the
+// first call blocks on gate so a test can make the next one queue.
+type deadlineProvider struct {
+	gateProvider
+	mu        sync.Mutex
+	deadlines []time.Time
+}
+
+func (d *deadlineProvider) Call(ctx context.Context, req provider.LLMRequest) (*provider.LLMResponse, error) {
+	dl, _ := ctx.Deadline()
+	d.mu.Lock()
+	d.deadlines = append(d.deadlines, dl)
+	d.mu.Unlock()
+	return d.gateProvider.Call(ctx, req)
+}
+
+func (d *deadlineProvider) Stream(ctx context.Context, req provider.LLMRequest, onChunk func(provider.StreamChunk)) (*provider.LLMResponse, error) {
+	resp, err := d.Call(ctx, req)
+	if err == nil {
+		onChunk(provider.StreamChunk{Type: "content_block_delta", Delta: "ok"})
+	}
+	return resp, err
+}
+
+// Batch 1 review, RES-11 finding 11: the queue wait counts against the call's
+// deadline, so wait plus call stay inside inferenceTimeout and therefore inside
+// the 10m30s write and guest client timeouts.
+func TestModelSchedulerQueueWaitCountsAgainstTheCallDeadline(t *testing.T) {
+	const queued = 250 * time.Millisecond
+	cases := []struct {
+		name string
+		call func(h *Handler, raw string) int
+	}{
+		{"inference", func(h *Handler, raw string) int { return inferAs(h, raw, false).Code }},
+		{"inference stream", func(h *Handler, raw string) int { return inferAs(h, raw, true).Code }},
+		{"openai chat", func(h *Handler, raw string) int {
+			body := `{"model":"m","messages":[{"role":"user","content":"hi"}]}`
+			req := httptest.NewRequest(http.MethodPost, "/provider/openai/v1/chat/completions", strings.NewReader(body))
+			req.Header.Set("Authorization", "Bearer "+raw)
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			h.HandleOpenAIChatCompletions(w, req)
+			return w.Code
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dp := &deadlineProvider{gateProvider: gateProvider{name: "bedrock", gate: make(chan struct{})}}
+			s := newTestScheduler(1, 1, 4, time.Minute)
+			h, reg := schedulerHandler(t, dp, nil, s)
+			a, _ := reg.IssueCredential("computer-a")
+			first := make(chan int, 1)
+			go func() { first <- tc.call(h, a.RawToken) }()
+			waitUntil(t, "the first call to hold the slot", func() bool { return s.Stats().InFlight == 1 })
+			asked := time.Now()
+			second := make(chan int, 1)
+			go func() { second <- tc.call(h, a.RawToken) }()
+			waitUntil(t, "the second call to queue", func() bool { return s.Stats().Queued == 1 })
+			time.Sleep(queued)
+			releaseOne(t, &dp.gateProvider)
+			if code := <-first; code != http.StatusOK {
+				t.Fatalf("first call: %d", code)
+			}
+			releaseOne(t, &dp.gateProvider)
+			if code := <-second; code != http.StatusOK {
+				t.Fatalf("second call: %d", code)
+			}
+			dp.mu.Lock()
+			defer dp.mu.Unlock()
+			if len(dp.deadlines) != 2 || dp.deadlines[1].IsZero() {
+				t.Fatalf("deadlines seen: %v", dp.deadlines)
+			}
+			if budget := dp.deadlines[1].Sub(asked); budget > inferenceTimeout+queued/2 {
+				t.Fatalf("the queued call's deadline is %v after it asked for a slot; want at most %v (the wait must count)", budget, inferenceTimeout)
+			}
+		})
 	}
 }
