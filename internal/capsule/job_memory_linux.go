@@ -77,6 +77,12 @@ func (e *Executor) boostJobMemory(capsuleID, jobID string, bytes int64, release 
 	if err := e.admitCapsuleMemoryLocked(bytes); err != nil {
 		return fmt.Errorf("job memory_mib %d: %w", bytes>>20, err)
 	}
+	// Under doctrine the aggregate follows the live budget the boost was
+	// admitted against (a memory lease may have raised it) before any leaf
+	// rises (review B4); if it cannot, the boost is refused.
+	if err := e.ensureCapsuleAggregateLocked(); err != nil {
+		return fmt.Errorf("job memory_mib %d: %w", bytes>>20, err)
+	}
 	cg := e.cgroupMemoryOf(caps)
 	if cg == nil {
 		return fmt.Errorf("capsule %s cgroup memory controls are unavailable", capsuleID)
@@ -198,33 +204,34 @@ func (e *Executor) capsuleAggregateMemory() cgroupMemory {
 	return cgroupMemoryDir("/sys/fs/cgroup/capsule")
 }
 
-// setCapsuleAggregateLocked caps the capsules aggregate at the live capsule
-// budget under doctrine, where admission counts requests and a capsule may
-// reach twice its request (Q2). It is written only when the capsules' usage
-// fits under it, so the kernel never kills across capsules for it (Q7); under
-// observe it is not written (admission already bounds every memory.max).
-// Callers hold e.mu.
-func (e *Executor) setCapsuleAggregateLocked() {
+// ensureCapsuleAggregateLocked caps the capsules aggregate at the live
+// capsule budget under doctrine, where admission counts requests and a
+// capsule may reach twice its request (Q2). Doctrine admits nothing new
+// without that bound (review B5): a usage it cannot read, a usage above the
+// budget (the aggregate is never lowered under usage, Q7, so the kernel
+// never kills across capsules for it) and a failed write are errors. Raising
+// it is always safe. Under observe it is not written (admission already
+// bounds every memory.max) and never fails. Callers hold e.mu.
+func (e *Executor) ensureCapsuleAggregateLocked() error {
 	if e.memoryPolicy != CapsuleMemoryDoctrine {
-		return
+		return nil
 	}
 	budget := e.memoryBudgetLocked()
 	agg := e.capsuleAggregateMemory()
 	if budget <= 0 || agg == nil {
-		return
+		return fmt.Errorf("capsules aggregate: no budget (%d) or no aggregate cgroup", budget)
 	}
 	current, err := agg.Current()
 	if err != nil {
-		log.Printf("capsule: aggregate memory: %v; memory.max not written", err)
-		return
+		return fmt.Errorf("capsules aggregate: read usage: %w", err)
 	}
 	if current > budget {
-		log.Printf("capsule: aggregate memory: usage %d MiB is above the budget %d MiB; memory.max left as it is", current>>20, budget>>20)
-		return
+		return fmt.Errorf("capsules aggregate: usage %d MiB is above the budget %d MiB", current>>20, budget>>20)
 	}
 	if err := agg.SetMax(budget); err != nil {
-		log.Printf("capsule: aggregate memory.max %d MiB: %v", budget>>20, err)
+		return fmt.Errorf("capsules aggregate: memory.max %d MiB: %w", budget>>20, err)
 	}
+	return nil
 }
 
 const memoryReceiptsKept = 16
