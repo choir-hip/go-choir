@@ -137,10 +137,9 @@ if (!['static', 'go', 'go-served', 'rewrite'].includes(CHANGE)) {
 // props, events, exported API, routes and visible behaviour unchanged. It is
 // a frontend-only change (no Go probe, no bin/autoputer, no served marker
 // file). With --delegate, engineering writes the rewrite through the Claude
-// delegate, whose network mode refuses npm, so the build runs in a second
-// round with network ecosystem_proxy whose capsule is offered the first
-// round's diff as a carried patch (docs/problems/
-// claude-delegate-resume-sonnet-2026-10-20.md, design option (a)).
+// delegate; the build job links the guest's Nix-built dependencies, so the
+// same round builds, freezes and completes
+// (docs/design/delegate-one-round-build-2026-10-21.md).
 const APP = arg('app', 'ImageApp');
 const DELEGATE = flag('delegate');
 const REWRITE = CHANGE === 'rewrite';
@@ -1288,16 +1287,15 @@ function engineeringStory(token) {
   if (CHANGE === 'rewrite') {
     const file = `frontend/src/lib/${APP}.svelte`;
     const delegate = DELEGATE ? [
-      'This takes two engineering rounds.',
-      `Round 1: management's Cast leaves the spec's "network" field out, so the capsule is in the claude mode and the Claude delegate is available; engineering saves a copy of the file, writes the rewrite through the delegate (choir-delegate start with a brief naming the absolute path /workspace/platform/${file}), and reviews the diff against the copy.`,
-      'The claude mode refuses npm, so round 1 Completes as failed with the rewrite left in the capsule.',
-      'Round 2: after that report, management Casts again with "network": "ecosystem_proxy"; its capsule holds round 1\'s diff at /selfdev/carried/source.patch: save a copy of the file, apply the patch with git -C /workspace/platform apply, check the diff against the copy, run the frontend build job (with its release copy), record the toolchain, Freeze, and Complete with the frozen bundle. Once those checks pass, round 2 freezes; it does not stop to ask for provenance.',
+      'This takes one engineering round.',
+      `Management's Cast leaves the spec's "network" field out, so the capsule is in the claude mode and the Claude delegate is available; engineering saves a copy of the file, writes the rewrite through the delegate (choir-delegate start with a brief naming the absolute path /workspace/platform/${file}), and reviews the diff against the copy.`,
+      'Then, in the same round, engineering runs the frontend build job (with its release copy): package.json and package-lock.json are unchanged, so it links this computer\'s locked dependencies and needs no network. It records the toolchain, Freezes, and Completes with the frozen bundle. Once those checks pass, the round freezes; it does not stop to ask for provenance.',
     ] : [];
     return [
       `Change this computer itself: rewrite ${file} in the platform workspace for clarity, accessibility (labels, keyboard focus, alt text), and maintainability.`,
       'Keep its props, events, exported API, routes and visible behaviour unchanged. Touch only that file (and a small helper module next to it if clearly needed). Change nothing else.',
       'Deterministic checks, to run in the capsule before freezing, from /workspace/platform/frontend:',
-      `npm ci && npm run build must pass, run as the frontend build job that also copies dist into the release tree; and diff -u against a copy of ${file} saved before the change must show it changed: diff -u exits 1 when the file changed, and that exit 1 is the passing result.`,
+      `the frontend build job (which also copies dist into the release tree) must end done with exit code 0; and diff -u against a copy of ${file} saved before the change must show it changed: diff -u exits 1 when the file changed, and that exit 1 is the passing result.`,
       'The capsule has no .git: git diff and git status cannot run there, and a missing .git is expected, never a blocker.',
       'This change touches the frontend only, so the release tree needs the frontend release tree only (no bin/autoputer).',
       ...delegate,
