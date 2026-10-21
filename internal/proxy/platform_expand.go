@@ -631,6 +631,13 @@ func (h *Handler) HandlePlatformPublicationExpand(w http.ResponseWriter, r *http
 			}
 			_ = json.Unmarshal(body, &apiErr)
 			msg := strings.ToLower(apiErr.Error)
+			// The paper's refusal names its cause; the reader sees only the
+			// mapped status (problem doc P5).
+			reason := apiErr.Error
+			if len(reason) > 160 {
+				reason = reason[:160]
+			}
+			log.Printf("proxy: expand: request=%s paper refused revise (409): %q", requestID, reason)
 			switch {
 			case strings.Contains(msg, "digest conflict"):
 				// The same request id with different content: the earlier
