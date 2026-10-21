@@ -153,6 +153,11 @@ func (rt *Runtime) admitEngineeringAssignment(ctx context.Context, assignment ty
 // is expired before admission (expireOverdueEngineeringRequests).
 func (rt *Runtime) deferEngineeringAdmission(ctx context.Context, assignment types.EngineeringAssignment, wake delegatedAssignmentSpawnDeadline, objective string, busy *engineeringAdmissionBusy) error {
 	binding := assignment.Binding
+	if wake.Nudge != "" {
+		// A one-shot nudge: the request's own retry chain still runs.
+		log.Printf("runtime: engineering admission: nudge for %s found the slot busy behind %s (%s)", assignment.AssignmentID, busy.BlockedBy, busy.Why)
+		return nil
+	}
 	retry := wake.Retry + 1
 	if !rt.kernelMode || rt.scheduleActor == nil {
 		return fmt.Errorf("no wake available to retry the request: %w", busy)
@@ -260,4 +265,48 @@ func (rt *Runtime) expireOverdueEngineeringRequests(ctx context.Context, assignm
 		return errEngineeringRequestExpired
 	}
 	return nil
+}
+
+// wakeNextQueuedEngineeringRequest asks the first queued request of the
+// computer, in arrival order, to try admission now, after freed (an
+// assignment that just turned terminal) left the slot; otherwise it would wait
+// for its next backoff retry. The wake is a one-shot (Nudge) with an identity
+// per freed assignment. Admission still decides under the saga mutex, so a
+// nudge is only ever early, never wrong. A pre-boot request after a crash boot
+// is never woken: the crash rule closes it instead.
+func (rt *Runtime) wakeNextQueuedEngineeringRequest(ctx context.Context, freed types.EngineeringAssignment) {
+	if rt == nil || rt.store == nil || !rt.kernelMode || rt.scheduleActor == nil || !freed.Disposition.Terminal() {
+		return
+	}
+	assignments, err := rt.store.ListEngineeringAssignmentsForComputer(ctx, freed.Binding.ComputerID)
+	if err != nil {
+		log.Printf("runtime: engineering admission: list requests after %s ended: %v", freed.AssignmentID, err)
+		return
+	}
+	now := time.Now().UTC()
+	var next *types.EngineeringAssignment
+	for i := range assignments {
+		a := assignments[i]
+		if sameEngineeringAssignment(a, freed) || a.Disposition != types.EngineeringAssignmentOpen ||
+			a.CapsuleDisposition != types.EngineeringCapsuleUnbound || strings.TrimSpace(a.BoundRunID) != "" {
+			continue
+		}
+		if !rt.bootRestartPlanned && a.CreatedAt.Before(rt.bootedAt) {
+			continue
+		}
+		if next == nil || engineeringRequestQueuedAhead(a, *next, now) {
+			next = &assignments[i]
+		}
+	}
+	if next == nil || engineeringRequestExpired(*next, now) {
+		return
+	}
+	content, err := json.Marshal(delegatedAssignmentSpawnDeadline{AssignmentID: next.AssignmentID, Attempt: next.Binding.Attempt, Nudge: freed.AssignmentID})
+	if err != nil {
+		return
+	}
+	if err := rt.scheduleActor(ctx, next.Binding.OwnerID, next.Binding.ComputerID, next.Binding.ParentAgentID,
+		delegatedAssignmentSpawnDeadlineUpdateKind, string(content), next.Binding.TrajectoryID, "", now); err != nil {
+		log.Printf("runtime: engineering admission: wake %s after %s ended: %v", next.AssignmentID, freed.AssignmentID, err)
+	}
 }
