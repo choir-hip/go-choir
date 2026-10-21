@@ -77,20 +77,30 @@ item below:
 
 ## 0. Recover and land existing work
 
-- [ ] **REC-01 · P0 · red — Recover `fix/desk-cell-confinement`**
-  - Now: the branch (commits 790d5e2c1, 0400a37dd, fedb7656c) is not on
-    origin and not in any ref here; `docs/reports/selfdev-readiness-2026-10-15.md:569-571`
-    says it was "local to the owner's machine". Paused 10-15 as "needs a
-    rebase and Linux Docker tests" (`docs/reports/handoff-2026-10-15.md:372`);
-    conflicts with main in `internal/vmmanager/manager.go`.
+- [x] **REC-01 · P0 · red — Recover `fix/desk-cell-confinement`**
+  - Done 2026-10-21: recovered from the owner's iMac (`~/go-choir`) and
+    pushed by a session there with the owner's approval:
+    `origin/fix/desk-cell-confinement` at fedb7656c (11d257d53 problem doc,
+    790d5e2c1 desk-cell confinement, 0400a37dd host guest-egress policy,
+    fedb7656c repair record; 973 commits behind main) and
+    `origin/land/desk-cell-confinement` at 9cee80a2d (the same three
+    commits rebased onto 133de45fa as 07abf0351, 61f4da20f, 398f4ba71, plus
+    432cbede0 landing record and 9cee80a2d owner-only guest isolation
+    self-test and staging probe; 831 behind). Backup bundle:
+    iCloud Drive "Choir Backups/desk-cell-confinement-2026-10-21.bundle"
+    (verified). Landing is SEC-01 and SEC-03: start from `land/`.
+  - Before: the branch was local to the owner's machine
+    (`docs/reports/selfdev-readiness-2026-10-15.md:569-571`); paused 10-15
+    as "needs a rebase and Linux Docker tests"
+    (`docs/reports/handoff-2026-10-15.md:372`).
   - Contents per docs: a separate unprivileged user per desk,
     `no_new_privs`, Landlock V5, an empty network namespace, seccomp
     `DeskCellSeccompFilter` (no socket/connect/exec/fork/ptrace/mount/bpf/
     io_uring; `clone` only with `CLONE_THREAD`), and the host-side guest
     egress (mangle) policy (`docs/reports/boundary-strength-ladder-2026-10-15.md:188-205`;
     `selfdev-readiness-2026-10-15.md:335-350`).
-  - Action: the owner pushes the branch to origin; if it is lost, rebuild
-    from the ladder description. Then SEC-01 and SEC-03.
+  - Next: SEC-01 and SEC-03 land it, rebased from `land/` onto current
+    main.
 - [ ] **REC-02 · P0 · red — Land `origin/security/quick-containment`**
   - Commits 9f337a3ac (PID 1 and D-Bus sockets and EnvironmentFile-only env
     files hidden from host units; vmctl read-only on
@@ -116,7 +126,9 @@ item below:
     (`internal/yaegikernel/desk_worker_spawn_linux.go:27-32`); the entry
     point drops nothing (`internal/autoputer/desk_session.go:18-41`); the
     guest runtime unit has no `User=` (`nix/autoputer-vm.nix:928-941`).
-  - Existing work: REC-01.
+  - Existing work: `origin/land/desk-cell-confinement` (9cee80a2d; REC-01),
+    rebased 10-15 and 831 commits behind main; its own landing record
+    (432cbede0) lists what the rebase found.
   - Plans: [desk-cells-run-as-guest-root-and-egress-is-open-2026-10-14.md](problems/desk-cells-run-as-guest-root-and-egress-is-open-2026-10-14.md)
     (needs inventory, failure modes 1-9); security review F4 and M4; ladder
     rung 1; ACTIVE landing order item 6; owner notes §31 (landed before
@@ -154,7 +166,7 @@ item below:
     5. Drop guest access to maild 8087 if no guest caller exists.
     6. Confirm no IPv6 path reaches host services.
     7. The mangle-table guest egress policy from the desk-cells doc
-       (code was on REC-01's branch).
+       (code: 61f4da20f on `origin/land/desk-cell-confinement`).
     Public internet egress stays open (see "Networking must enable, not
     starve"); prove capabilities 1-6 still work after the deploy.
   - Now: partial. F7 landed (efbd69e27: forward default-deny over the whole
@@ -204,7 +216,7 @@ item below:
     but follows redirects unguarded (`:746-757`). Guarded today:
     `sourcefetch.Client` paths (fetch_url, Read, content, sources).
   - Plans: review F5; desk-cells residual (claims a host policy that was on
-    the lost branch); [research-fetch-url-has-no-address-guard-2026-10-10.md](problems/research-fetch-url-has-no-address-guard-2026-10-10.md)
+    the unlanded `land/desk-cell-confinement` branch); [research-fetch-url-has-no-address-guard-2026-10-10.md](problems/research-fetch-url-has-no-address-guard-2026-10-10.md)
     (no "fixed" status line; its egressTables cache leak still "not fixed").
   - Plan update owed: a problem record for browser and Obscura paths.
 - [ ] **SEC-08 · P0 · red — Claude delegate launch posture**
@@ -437,9 +449,11 @@ item below:
     the oversubscription probe were never run. Run before and after the P0
     resource items.
 - [ ] **RES-20 · P2 · red — Cloud Hypervisor behind a backend seam**
-  - Now: not started. `internal/vmmanager/vmbackend` is on no ref; the
-    vm-backend-interface report's "What landed" section is not true of any
-    branch. ACTIVE item 10's condition (items 4 and 5 landed) is met.
+  - Now: not on main. The seam was built 10-14 and never pushed until
+    2026-10-21: `origin/recovered/vmbackend-2026-10-14` at b6f27ded4
+    (99e69fe07 report, b6f27ded4 Backend interface, Firecracker and Cloud
+    Hypervisor backends, conformance suite, no caller; 977 behind main).
+    ACTIVE item 10's condition (items 4 and 5 landed) is met.
   - Why CH: VFIO/GPU (video app desks), copy-on-write restore and live
     migration, balloon resize, `vm.resize`; it has no jailer, so Choir
     builds the cage (review §5). Base-OS sharing (RES-08) does not need CH.
@@ -488,6 +502,10 @@ item below:
     contract) has no desk; the email desk design never mentions packages.
     Install registers the desk from the package's desk manifest (ARCH-02);
     manifest-declared grants (S7 addendum, S4) attach to that desk.
+  - Existing work: `origin/feat/s7-0-app-packages` at 4bc762102 (d9340a9a0
+    S7-0a seam design, 5fe486f52 failure-mode tests, 4bc762102 wip
+    implementation, paused and unreviewed; 831 behind main), recovered from
+    the owner's iMac 2026-10-21. Its design predates app desks.
   - Plan update: S7 and the email desk report now cross-reference this
     (this change). Still owed in S7: apply owner ruling D1 (install is a
     tape fact, not part of the release closure; owner notes §23) and the
@@ -593,9 +611,8 @@ Still owed:
 ## 6. Owner decisions
 
 - **DEC-01** Push `fix/desk-cell-confinement` from your machine, or confirm
-  it is lost (REC-01). Owner, 2026-10-21: handle it from the iMac; a
-  session there is searching for it, `feat/s7-0-app-packages` and the
-  `vmbackend` work, and pushes what it finds as new branches.
+  it is lost (REC-01). Done 2026-10-21: an iMac session found all three
+  and pushed them with the owner's approval (REC-01, ARCH-03, RES-20).
 - **DEC-02** Decided 2026-10-21: the owner approved the app-desk wording;
   applied in e5ea2404d (ARCH-01).
 - **DEC-03** Decided 2026-10-21: the Claude delegate stays on the one test
@@ -613,7 +630,9 @@ Still owed:
 
 | Branch | Unmerged | Relevance |
 |---|---|---|
-| `fix/desk-cell-confinement` | not on origin | REC-01 |
+| `fix/desk-cell-confinement` | 4 (pushed 2026-10-21 from the iMac) | REC-01 |
+| `land/desk-cell-confinement` | 5 (rebased 10-15; pushed 2026-10-21) | REC-01, SEC-01, SEC-03 |
+| `recovered/vmbackend-2026-10-14` | 2 (pushed 2026-10-21) | RES-20 |
 | `security/quick-containment` | 2 | REC-02 |
 | `feat/visual-evidence-2026-10-20` | 11 | ARCH-09 (product); its teardown reclaim already on main |
 | `protocol-p2c` | 3 (WIP) | record protocol, not ARCH-07 |
@@ -621,5 +640,5 @@ Still owed:
 | `feat/s6-0-release-witness` | 3 | LP S6; not in scope |
 | `feat/cast-request-to-engineering` | 2 | not in scope |
 | `ops/dolt-module-bump-r2` | 1 | dependency bump |
-| `feat/s7-0-app-packages` | never pushed | ARCH-03; cited in LP S6 `:41-46, 390` |
+| `feat/s7-0-app-packages` | 3 (pushed 2026-10-21 from the iMac) | ARCH-03; cited in LP S6 `:41-46, 390` |
 | all others | 0 | merged |

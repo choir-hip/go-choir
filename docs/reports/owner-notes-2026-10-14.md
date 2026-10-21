@@ -1046,3 +1046,10 @@ about it because we're still going to do hardening before we really
 launch." Taken as: security findings and fix branches may be pushed to the
 public repo pre-launch (secrets never); the checklist's P0 hardening lands
 before launch.
+
+Then, verbatim: "push them." The owner approved the pushes in the iMac
+session, which pushed `fix/desk-cell-confinement` (fedb7656c),
+`land/desk-cell-confinement` (9cee80a2d), `feat/s7-0-app-packages`
+(4bc762102) and `recovered/vmbackend-2026-10-14` (b6f27ded4) as new
+branches, and saved a verified bundle of the two desk-cell branches to
+iCloud Drive "Choir Backups" (checklist REC-01, ARCH-03, RES-20).
