@@ -293,3 +293,74 @@ fmt.Println(string(b), err)`
 		}
 	}
 }
+
+// spendingChildProvider: objective "two-calls" runs one cell, then ends;
+// objective "one-call" ends at once. Every call reports fixed usage.
+type spendingChildProvider struct {
+	provideriface.Provider
+}
+
+func (p *spendingChildProvider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
+	raw := rawMessagesForTest(req.Messages)
+	if strings.Contains(raw, "two-calls") && !strings.Contains(raw, "call-spend-cell") {
+		args, _ := json.Marshal(map[string]any{"source": `fmt.Println("working")`})
+		return &provideriface.ToolLoopResponse{StopReason: "tool_use", ToolCalls: []types.ToolCall{{ID: "call-spend-cell", Name: "desk_go_eval", Arguments: args}}, Model: "test-model",
+			Usage: provideriface.TokenUsage{InputTokens: 100, OutputTokens: 10, CachedInputTokens: 40}}, nil
+	}
+	return &provideriface.ToolLoopResponse{StopReason: "end_turn", Text: "done", Model: "test-model",
+		Usage: provideriface.TokenUsage{InputTokens: 200, OutputTokens: 20, CachedInputTokens: 150}}, nil
+}
+
+// ARCH-08 slice 1 (docs/design/agent-tree-budgets-2026-10-21.md; problem
+// docs/problems/agent-tree-budgets-are-time-only-2026-10-21.md): track a
+// tree's spending, never cap it. Failure modes pinned: the parent cell
+// cannot see what a child spent; a child's spending is its last call's, not
+// the sum of its loop; a child refused before it ran reports tokens; the
+// tree's total is not the sum of its children; a tree is refused or cut
+// short for what it spent.
+func TestResearchChildrenReportTheirSpending(t *testing.T) {
+	deskTestWorkerBin(t)
+	rt := &Runtime{
+		provider:           &spendingChildProvider{},
+		modelPolicy:        modelpolicy.NewManager(modelpolicy.ManagerConfig{}),
+		researchChildCalls: &callSpacer{},
+		researchDeps:       &researchtools.Dependencies{Search: stubSearchClient{}},
+	}
+	tool := newDeskGoEvalTool(rt, newDeskSessionWorkers(), agentprofile.Research)
+	execCtx := deskEvalExecCtx(t)
+	execCtx.RunID = "run-research-spend"
+	execCtx.Profile = agentprofile.Research
+	execCtx.Role = agentprofile.Research
+	ctx := toolregistry.WithExecutionContext(context.Background(), execCtx)
+	src := `res, err := choir.Research([]map[string]string{{"objective": "two-calls"}, {"objective": "one-call"}, {"objective": "refused", "model": "no-such-model"}})
+b, _ := json.Marshal(res)
+fmt.Println(string(b), err)`
+	out, err := tool.Func(ctx, json.RawMessage(`{"source":`+cellSource(src)+`}`))
+	if err != nil {
+		t.Fatalf("desk_go_eval: %v", err)
+	}
+	var cell struct{ Stdout, Error string }
+	if err := json.Unmarshal([]byte(out), &cell); err != nil || cell.Error != "" {
+		t.Fatalf("cell failed: %v %s", err, out)
+	}
+	line := strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(cell.Stdout), "<nil>"))
+	var results []yaegikernel.ResearchChildResult
+	if err := json.Unmarshal([]byte(line), &results); err != nil || len(results) != 3 {
+		t.Fatalf("decode results from %q: %v", cell.Stdout, err)
+	}
+	if r := results[0]; r.Findings != "done" || r.InputTokens != 300 || r.OutputTokens != 30 || r.CachedInputTokens != 190 {
+		t.Fatalf("a two-call child did not report the sum of its loop: %+v", r)
+	}
+	if r := results[1]; r.Findings != "done" || r.InputTokens != 200 || r.OutputTokens != 20 || r.CachedInputTokens != 150 {
+		t.Fatalf("a one-call child did not report its spending: %+v", r)
+	}
+	if r := results[2]; r.Error == "" || r.InputTokens != 0 || r.OutputTokens != 0 || r.CachedInputTokens != 0 {
+		t.Fatalf("a refused child reported spending: %+v", r)
+	}
+	tree := researchTreeSpendLine("run-research-spend", results, 1500*time.Millisecond)
+	for _, want := range []string{"root=run-research-spend", "children=3", "errors=1", "input_tokens=500", "output_tokens=50", "cached_input_tokens=340", "duration_ms=1500"} {
+		if !strings.Contains(tree, want) {
+			t.Fatalf("tree line %q lacks %q", tree, want)
+		}
+	}
+}
