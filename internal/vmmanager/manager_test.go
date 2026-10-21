@@ -947,10 +947,13 @@ func TestTapReachableHostServicePortsIncludeHostPrivateServices(t *testing.T) {
 
 func TestTapHostServiceInputRuleSpec(t *testing.T) {
 	// The guest's own source is part of the ACCEPT (F14 in
-	// hostfirewall_test.go): a forged source never matches it.
-	got := tapHostServiceInputRuleSpec("vm-deadbeef-tap", "10.200.3.2", "8087", "go-choir-vm-vm-deadbeef-tap")
+	// hostfirewall_test.go): a forged source never matches it. The
+	// destination is the loopback service its own tap DNATs to (SEC-03 H7 in
+	// host_floor_test.go): not another tap's host address.
+	got := tapHostServiceInputRuleSpec("vm-deadbeef-tap", "10.200.3.2", "tcp", "8087", "go-choir-vm-vm-deadbeef-tap")
 	want := []string{
 		"-s", "10.200.3.2/32",
+		"-d", "127.0.0.1/32",
 		"-i", "vm-deadbeef-tap",
 		"-p", "tcp", "-m", "tcp", "--dport", "8087",
 		"-m", "comment", "--comment", "go-choir-vm-vm-deadbeef-tap",

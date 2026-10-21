@@ -15,9 +15,11 @@ import (
 // and filter see it, mangle PREROUTING sends it through CHOIR-GUEST-EGRESS:
 //
 //	ESTABLISHED,RELATED                      RETURN  replies to host->guest flows
-//	to a host address, TCP service ports     RETURN  tapReachableHostServicePorts
-//	to a host address, TCP 80/443            RETURN  the public front door (caddy)
-//	to a host address, anything else         DROP    sshd, Dolt, caddy admin, ...
+//	to its own tap's host address,
+//	  TCP service ports                      RETURN  tapReachableHostServicePorts
+//	  UDP and TCP 53                         RETURN  the host resolver (SEC-10)
+//	to a host address, anything else         DROP    sshd, Caddy 80/443, Dolt,
+//	                                                 another tap's host address
 //	to private/link-local/metadata/CGNAT/
 //	  loopback/multicast/reserved ranges     DROP    includes every other guest
 //	TCP 25/465/587                           DROP    no mail from Node B's address
@@ -42,11 +44,20 @@ import (
 //
 // What it does not do: the internet is still any public TCP destination,
 // because research reads any public URL from the guest. A host allowlist
-// needs the recording proxy (S4).
+// needs the recording proxy (S4) and NET-01's host fetch service.
+//
+// SEC-03 (docs/problems/host-egress-floor-fails-open-2026-10-21.md): the
+// public front door (80/443) is no longer a guest destination on any host
+// address; host RETURNs hold only for the address of the tap the packet
+// came in on (addrtype --limit-iface-in); and every failure is returned,
+// so a VM whose policy did not install does not start. A rebuild runs
+// behind a DROP guard: guests lose packets for its duration, never gain
+// reach.
 
 const (
-	guestEgressChain   = "CHOIR-GUEST-EGRESS"
-	guestEgressComment = "go-choir-guest-egress"
+	guestEgressChain        = "CHOIR-GUEST-EGRESS"
+	guestEgressComment      = "go-choir-guest-egress"
+	guestEgressGuardComment = "go-choir-guest-egress-rebuild"
 )
 
 // guestBlockedDestinations are never reachable from a guest. They are a
@@ -77,8 +88,9 @@ func guestEgressRuleSpecs() [][]string {
 	services := strings.Join(tapReachableHostServicePorts(), ",")
 	rules := [][]string{
 		append(withEgressComment("-m", "conntrack", "--ctstate", "ESTABLISHED,RELATED"), "-j", "RETURN"),
-		append(withEgressComment("-p", "tcp", "-m", "addrtype", "--dst-type", "LOCAL", "-m", "multiport", "--dports", services), "-j", "RETURN"),
-		append(withEgressComment("-p", "tcp", "-m", "addrtype", "--dst-type", "LOCAL", "-m", "multiport", "--dports", "80,443"), "-j", "RETURN"),
+		append(withEgressComment("-p", "tcp", "-m", "addrtype", "--dst-type", "LOCAL", "--limit-iface-in", "-m", "multiport", "--dports", services), "-j", "RETURN"),
+		append(withEgressComment("-p", "udp", "-m", "addrtype", "--dst-type", "LOCAL", "--limit-iface-in", "-m", "udp", "--dport", "53"), "-j", "RETURN"),
+		append(withEgressComment("-p", "tcp", "-m", "addrtype", "--dst-type", "LOCAL", "--limit-iface-in", "-m", "tcp", "--dport", "53"), "-j", "RETURN"),
 		append(withEgressComment("-m", "addrtype", "--dst-type", "LOCAL"), "-j", "DROP"),
 	}
 	for _, cidr := range guestBlockedDestinations {
@@ -102,6 +114,10 @@ func guestIPv6DropSpec() []string {
 	return append(withEgressComment("-i", guestIfaceWildcardEgress), "-j", "DROP")
 }
 
+func guestEgressGuardSpec() []string {
+	return []string{"-m", "comment", "--comment", guestEgressGuardComment, "-j", "DROP"}
+}
+
 // guestIfaceWildcardEgress matches every tap this package creates
 // (tapNameForVMID: "vm-" + base32).
 const guestIfaceWildcardEgress = "vm-+"
@@ -115,22 +131,26 @@ type guestEgressInstaller struct {
 	ip6t string
 }
 
-// ensureGuestEgressPolicy installs or repairs the policy. It runs at vmctl
-// start (reconcileAtStart), for every tap set up and for every guest
-// reattached, so a lost chain or an older policy is corrected while guests
-// run. A failure is logged: the per-tap rules still install, as before this
-// policy existed.
+// ensureGuestEgressPolicy re-ensures the policy for guests already running
+// (reattach). A failure is logged and the guest keeps running: a computer
+// that is on stays on; the next VM start fails closed on the same error
+// (setupHostNetworking).
 func (m *Manager) ensureGuestEgressPolicy() {
-	m.net().ensureGuestEgress()
+	if err := m.net().ensureGuestEgress(); err != nil {
+		log.Printf("vmmanager: WARNING: guest egress policy not repaired for running guests: %v", err)
+	}
 }
 
-func (h *hostNet) ensureGuestEgress() {
+// ensureGuestEgress installs or repairs the policy. It runs at vmctl start
+// (reconcileAtStart), before every tap is set up and for every guest
+// reattached, so a lost chain or an older policy is corrected while guests
+// run. A hostNet without an installer has no policy: that is an error, so
+// no tap is set up without one.
+func (h *hostNet) ensureGuestEgress() error {
 	if h == nil || h.egress == nil {
-		return
+		return fmt.Errorf("guest egress policy installer missing")
 	}
-	if err := h.egress.ensure(); err != nil {
-		log.Printf("vmmanager: WARNING: guest egress policy not installed, guest egress is open: %v", err)
-	}
+	return h.egress.ensure()
 }
 
 func (g *guestEgressInstaller) ensure() error {
@@ -140,16 +160,8 @@ func (g *guestEgressInstaller) ensure() error {
 		return fmt.Errorf("create %s: %v (%s)", guestEgressChain, err, strings.TrimSpace(string(out)))
 	}
 	if !g.chainMatches() {
-		// Rebuild in place. During the rebuild the chain admits more than
-		// the policy, never less than before it existed.
-		if out, err := g.run(g.ipt, "-t", "mangle", "-F", guestEgressChain); err != nil {
-			return fmt.Errorf("flush %s: %v (%s)", guestEgressChain, err, strings.TrimSpace(string(out)))
-		}
-		for _, spec := range guestEgressRuleSpecs() {
-			args := append([]string{"-t", "mangle", "-A", guestEgressChain}, spec...)
-			if out, err := g.run(g.ipt, args...); err != nil {
-				return fmt.Errorf("append to %s: %v (%s) [%s]", guestEgressChain, err, strings.TrimSpace(string(out)), strings.Join(spec, " "))
-			}
+		if err := g.rebuildLocked(); err != nil {
+			return err
 		}
 	}
 	jump := guestEgressJumpSpec()
@@ -158,12 +170,51 @@ func (g *guestEgressInstaller) ensure() error {
 			return fmt.Errorf("jump to %s: %v (%s)", guestEgressChain, err, strings.TrimSpace(string(out)))
 		}
 	}
+	// IPv6 is part of the floor: sshd listens on :: and a guest root can
+	// bring up link-local on its NIC.
 	drop6 := guestIPv6DropSpec()
 	if _, err := g.run(g.ip6t, append([]string{"-t", "mangle", "-C", "PREROUTING"}, drop6...)...); err != nil {
 		if out, err := g.run(g.ip6t, append([]string{"-t", "mangle", "-I", "PREROUTING", "1"}, drop6...)...); err != nil {
-			log.Printf("vmmanager: warning: guest IPv6 drop not installed: %v (%s)", err, strings.TrimSpace(string(out)))
+			return fmt.Errorf("guest IPv6 drop: %v (%s)", err, strings.TrimSpace(string(out)))
 		}
 	}
+	return nil
+}
+
+// rebuildLocked replaces the chain's content behind a DROP guard: guard at
+// position 1, old rules deleted from position 2, the policy appended, the
+// guard removed. A failed step returns with the guard still in place, so
+// guests lose packets, never gain reach.
+func (g *guestEgressInstaller) rebuildLocked() error {
+	out, err := g.run(g.ipt, "-t", "mangle", "-S", guestEgressChain)
+	if err != nil {
+		return fmt.Errorf("list %s: %v (%s)", guestEgressChain, err, strings.TrimSpace(string(out)))
+	}
+	old := 0
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "-A ") {
+			old++
+		}
+	}
+	guard := guestEgressGuardSpec()
+	if out, err := g.run(g.ipt, append([]string{"-t", "mangle", "-I", guestEgressChain, "1"}, guard...)...); err != nil {
+		return fmt.Errorf("guard %s: %v (%s)", guestEgressChain, err, strings.TrimSpace(string(out)))
+	}
+	for i := 0; i < old; i++ {
+		if out, err := g.run(g.ipt, "-t", "mangle", "-D", guestEgressChain, "2"); err != nil {
+			return fmt.Errorf("clear %s (guard stays): %v (%s)", guestEgressChain, err, strings.TrimSpace(string(out)))
+		}
+	}
+	for _, spec := range guestEgressRuleSpecs() {
+		args := append([]string{"-t", "mangle", "-A", guestEgressChain}, spec...)
+		if out, err := g.run(g.ipt, args...); err != nil {
+			return fmt.Errorf("append to %s (guard stays): %v (%s) [%s]", guestEgressChain, err, strings.TrimSpace(string(out)), strings.Join(spec, " "))
+		}
+	}
+	if out, err := g.run(g.ipt, append([]string{"-t", "mangle", "-D", guestEgressChain}, guard...)...); err != nil {
+		return fmt.Errorf("remove %s guard: %v (%s)", guestEgressChain, err, strings.TrimSpace(string(out)))
+	}
+	log.Printf("vmmanager: installed guest egress policy %s", guestEgressChain)
 	return nil
 }
 

@@ -3,6 +3,7 @@ package vmmanager
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -25,8 +26,22 @@ import (
 //  6. a second ensure rewrites an equal chain (a fail-open window), or a
 //     changed chain is left stale;
 //  7. the jump is not first in mangle PREROUTING, or is duplicated;
-//  8. IPv6 from guests is not dropped, or a host without ip6tables fails
-//     the whole ensure.
+//  8. IPv6 from guests is not dropped;
+//
+// SEC-03 (docs/problems/host-egress-floor-fails-open-2026-10-21.md), also
+// written before the code:
+//  9. the host's public front door (80/443) stays reachable from a guest;
+//     it is not a guest service, and Caddy would see a guest as a private
+//     source;
+//  10. a guest reaches another tap's host address on a service port (the
+//      host RETURNs must hold only for the address of the tap the packet
+//      came in on);
+//  11. DNS to the guest's own host resolver (UDP and TCP 53 on its tap
+//      host address) is dropped;
+//  12. an install or repair step fails and the guests are left open: a
+//      rebuild that flushes first, an error that is logged, not returned;
+//  13. a host without ip6tables is tolerated, so IPv6 to host services
+//      (sshd on ::) stays open with no error.
 
 // fakeNetfilter is a minimal in-memory iptables: per binary, per table,
 // per chain, an ordered list of rule specs.
@@ -34,6 +49,10 @@ type fakeNetfilter struct {
 	chains  map[string][]string // "bin/table/chain" -> rules
 	calls   []string
 	missing map[string]bool // binaries that fail every call
+	// fail makes a matching call ("bin -t table -X chain spec") fail.
+	fail func(call string) bool
+	// afterMutation runs after every successful rule change (invariants).
+	afterMutation func(call string)
 }
 
 func newFakeNetfilter() *fakeNetfilter {
@@ -44,10 +63,25 @@ func newFakeNetfilter() *fakeNetfilter {
 }
 
 func (f *fakeNetfilter) run(bin string, args ...string) ([]byte, error) {
-	f.calls = append(f.calls, bin+" "+strings.Join(args, " "))
+	call := bin + " " + strings.Join(args, " ")
+	f.calls = append(f.calls, call)
 	if f.missing[bin] {
 		return nil, fmt.Errorf("exec: %q: executable file not found", bin)
 	}
+	if f.fail != nil && f.fail(call) {
+		return []byte("injected failure"), fmt.Errorf("exit status 1")
+	}
+	out, err := f.apply(bin, args)
+	if err == nil && f.afterMutation != nil {
+		switch {
+		case strings.Contains(call, " -A "), strings.Contains(call, " -I "), strings.Contains(call, " -D "), strings.Contains(call, " -F "):
+			f.afterMutation(call)
+		}
+	}
+	return out, err
+}
+
+func (f *fakeNetfilter) apply(bin string, args []string) ([]byte, error) {
 	table := "filter"
 	if len(args) >= 2 && args[0] == "-t" {
 		table, args = args[1], args[2:]
@@ -87,12 +121,31 @@ func (f *fakeNetfilter) run(bin string, args ...string) ([]byte, error) {
 		if !exists {
 			return nil, fmt.Errorf("no chain %s", key)
 		}
-		pos := rest[0]
-		spec = strings.Join(rest[1:], " ")
-		if pos != "1" {
-			return nil, fmt.Errorf("fake supports -I 1 only")
+		pos, err := strconv.Atoi(rest[0])
+		if err != nil || pos < 1 || pos > len(rules)+1 {
+			return nil, fmt.Errorf("fake -I needs a valid position: %v", rest)
 		}
-		f.chains[key] = append([]string{spec}, rules...)
+		spec = strings.Join(rest[1:], " ")
+		next := append([]string{}, rules[:pos-1]...)
+		next = append(next, spec)
+		f.chains[key] = append(next, rules[pos-1:]...)
+	case "-D":
+		if !exists {
+			return nil, fmt.Errorf("no chain %s", key)
+		}
+		idx := slices.Index(rules, spec)
+		if len(rest) == 1 {
+			if n, err := strconv.Atoi(rest[0]); err == nil {
+				idx = n - 1
+				if idx < 0 || idx >= len(rules) {
+					return nil, fmt.Errorf("index of deletion too big")
+				}
+			}
+		}
+		if idx < 0 {
+			return nil, fmt.Errorf("exit status 1")
+		}
+		f.chains[key] = append(append([]string{}, rules[:idx]...), rules[idx+1:]...)
 	case "-F":
 		if !exists {
 			return nil, fmt.Errorf("no chain %s", key)
@@ -126,12 +179,25 @@ func TestGuestEgressChainShape(t *testing.T) {
 	if !strings.Contains(joined[0], "--ctstate ESTABLISHED,RELATED") || !strings.HasSuffix(joined[0], "-j RETURN") {
 		t.Fatalf("first rule %q does not admit established flows", joined[0])
 	}
-	// (1) one source for the host service ports.
+	// (1) one source for the host service ports; (10) only on the tap's own
+	// address.
 	want := strings.Join(tapReachableHostServicePorts(), ",")
 	if !slices.ContainsFunc(joined, func(r string) bool {
-		return strings.Contains(r, "--dst-type LOCAL") && strings.Contains(r, "--dports "+want) && strings.HasSuffix(r, "-j RETURN")
+		return strings.Contains(r, "--dst-type LOCAL --limit-iface-in") && strings.Contains(r, "--dports "+want) && strings.HasSuffix(r, "-j RETURN")
 	}) {
-		t.Fatalf("no LOCAL RETURN for the tap service ports %s in %q", want, joined)
+		t.Fatalf("no own-tap LOCAL RETURN for the tap service ports %s in %q", want, joined)
+	}
+	for _, r := range joined {
+		if strings.Contains(r, "--dst-type LOCAL") && strings.HasSuffix(r, "-j RETURN") && !strings.Contains(r, "--limit-iface-in") {
+			t.Fatalf("(10) host RETURN %q is not limited to the incoming tap", r)
+		}
+	}
+	// (11) DNS to the guest's own host resolver.
+	for _, proto := range []string{"udp", "tcp"} {
+		rule := "-p " + proto + " -m addrtype --dst-type LOCAL --limit-iface-in -m " + proto + " --dport 53 -m comment --comment " + guestEgressComment + " -j RETURN"
+		if !slices.Contains(joined, rule) {
+			t.Errorf("(11) no %s DNS RETURN to the tap host: want %q in %q", proto, rule, joined)
+		}
 	}
 	// (3) every other local port drops, after the admitted ones.
 	localDrop := slices.IndexFunc(joined, func(r string) bool {
@@ -144,7 +210,7 @@ func TestGuestEgressChainShape(t *testing.T) {
 		if strings.Contains(r, "--dst-type LOCAL") && strings.HasSuffix(r, "-j RETURN") && i > localDrop {
 			t.Fatalf("a host RETURN %q follows the host DROP", r)
 		}
-		for _, port := range []string{"22", "2019", "13306", "13307", "19090", "6333", "8888"} {
+		for _, port := range []string{"22", "80", "443", "2019", "13306", "13307", "19090", "6333", "8888"} {
 			if strings.Contains(r, "--dst-type LOCAL") && strings.HasSuffix(r, "-j RETURN") && slices.Contains(strings.Split(dportsOf(r), ","), port) {
 				t.Fatalf("host port %s admitted by %q", port, r)
 			}
@@ -233,12 +299,19 @@ func TestGuestEgressEnsureInstallsOnceAndRepairs(t *testing.T) {
 }
 
 // (14) The policy is in place from vmctl start, before any guest is
-// reattached, and every tap setup re-ensures it; a hostNet without an
-// installer (the fakes) runs nothing against the host.
+// reattached, and every tap setup re-ensures it. A hostNet without an
+// installer cannot set a tap up (12): it never runs a guest without the
+// policy.
 func TestGuestEgressEnsuredAtStartAndOnTapSetup(t *testing.T) {
 	ipt := newFakeIPTables(t)
 	h := newFakeHostNet(t, ipt, newFakeIP(map[string]string{}))
-	h.reconcileAtStart() // no installer: must not panic or run anything
+	h.egress = nil
+	h.reconcileAtStart() // no installer: logs, must not panic
+	noPolicy := &Manager{hostNet: h}
+	noPolicy.hostNetOnce.Do(func() {})
+	if err := noPolicy.setupHostNetworking("vm-abcdefghijkl", "10.200.0.1", 12000, "10.200.0.2", 8085); err == nil {
+		t.Fatal("(12) tap set up with no egress policy installer")
+	}
 	f := newFakeNetfilter()
 	h.egress = &guestEgressInstaller{run: f.run, ipt: "iptables", ip6t: "ip6tables"}
 	h.reconcileAtStart()
@@ -256,14 +329,75 @@ func TestGuestEgressEnsuredAtStartAndOnTapSetup(t *testing.T) {
 	}
 }
 
-func TestGuestEgressEnsureWithoutIP6Tables(t *testing.T) {
+// (13) No ip6tables is an error: the IPv6 drop is part of the floor.
+func TestGuestEgressEnsureWithoutIP6TablesFails(t *testing.T) {
 	f := newFakeNetfilter()
 	f.missing["ip6tables"] = true
 	g := &guestEgressInstaller{run: f.run, ipt: "iptables", ip6t: "ip6tables"}
-	if err := g.ensure(); err != nil {
-		t.Fatalf("(8) a host without ip6tables failed the IPv4 policy: %v", err)
+	if err := g.ensure(); err == nil {
+		t.Fatal("(13) ensure succeeded with no ip6tables: guest IPv6 to host services stays open")
 	}
-	if len(f.chains["iptables/mangle/"+guestEgressChain]) == 0 {
-		t.Fatal("IPv4 policy not installed")
+}
+
+// (12) A stale chain is rebuilt behind a DROP guard: at no step does the
+// chain admit more than the old or the new policy, and a failed step
+// leaves the guard (guests fail closed) and returns the error.
+func TestGuestEgressRebuildIsGuarded(t *testing.T) {
+	want := make([]string, 0, len(guestEgressRuleSpecs()))
+	for _, spec := range guestEgressRuleSpecs() {
+		want = append(want, strings.Join(spec, " "))
+	}
+	guard := strings.Join(guestEgressGuardSpec(), " ")
+	key := "iptables/mangle/" + guestEgressChain
+	for _, tc := range []struct {
+		name  string
+		stale func([]string) []string
+	}{
+		{"older policy", func(w []string) []string { return append([]string{"-j RETURN"}, w[1:]...) }},
+		{"flushed under a live jump", func([]string) []string { return []string{} }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFakeNetfilter()
+			g := &guestEgressInstaller{run: f.run, ipt: "iptables", ip6t: "ip6tables"}
+			if err := g.ensure(); err != nil {
+				t.Fatal(err)
+			}
+			stale := tc.stale(want)
+			f.chains[key] = append([]string{}, stale...)
+			f.afterMutation = func(call string) {
+				got := f.chains[key]
+				if !strings.Contains(call, guestEgressChain) {
+					return
+				}
+				if slices.Equal(got, want) || (len(got) > 0 && got[0] == guard) {
+					return
+				}
+				t.Fatalf("after %q the chain is neither guarded nor the policy: %q", call, got)
+			}
+			if err := g.ensure(); err != nil {
+				t.Fatalf("repair: %v", err)
+			}
+			if got := f.chains[key]; !slices.Equal(got, want) {
+				t.Fatalf("not rebuilt: %q", got)
+			}
+
+			// A failed append leaves the guard in place and is returned.
+			f.afterMutation = nil
+			f.chains[key] = append([]string{}, stale...)
+			appends := 0
+			f.fail = func(call string) bool {
+				if strings.Contains(call, " -A "+guestEgressChain+" ") {
+					appends++
+					return appends == 3
+				}
+				return false
+			}
+			if err := g.ensure(); err == nil {
+				t.Fatal("(12) a failed append was not returned")
+			}
+			if got := f.chains[key]; len(got) == 0 || got[0] != guard {
+				t.Fatalf("(12) failed rebuild left the chain unguarded: %q", got)
+			}
+		})
 	}
 }

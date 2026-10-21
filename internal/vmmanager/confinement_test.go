@@ -95,6 +95,9 @@ func jailedManager(t *testing.T, stateDir string) (*Manager, *chownRecorder) {
 		NoFile:       DefaultJailerNoFile,
 	}
 	mgr := NewManager(cfg)
+	// The host floor fails a start whose rules do not install (SEC-03):
+	// tap networking runs against the fakes, never the host.
+	mgr.hostNet = newFakeHostNet(t, newFakeIPTables(t), newFakeIP(nil))
 	mgr.jailerHostErr = nil
 	rec := &chownRecorder{}
 	mgr.chownFn = rec.chown
