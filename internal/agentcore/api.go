@@ -728,6 +728,10 @@ type guestObservabilityResponse struct {
 	// and why not (docs/design/claude-delegate-slice1-2026-10-14.md). Never
 	// the token.
 	ClaudeDelegate *capsule.ClaudeDelegateStatus `json:"claude_delegate,omitempty"`
+	// CapsuleMemory is the last capsules' memory receipts (RES-04): the
+	// policy, request, limits, memory.peak and memory.events of each at its
+	// end, and whether doctrine's memory.high would have throttled it.
+	CapsuleMemory []capsule.CapsuleMemoryReceipt `json:"capsule_memory,omitempty"`
 	// Unanswered names the reads that did not return within
 	// observabilityReadBudget, most likely waiting on a held lock; the rest
 	// of the response is still current (failure 9).
@@ -869,6 +873,11 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 			resp.ClaudeDelegate = &status
 		} else {
 			unanswered("claude_delegate")
+		}
+		if receipts, ok := boundedObservabilityRead(observabilityReadBudget, h.rt.capsuleExecutor.MemoryReceipts); ok {
+			resp.CapsuleMemory = receipts
+		} else {
+			unanswered("capsule_memory")
 		}
 	}
 	if identity, ok := boundedObservabilityRead(observabilityReadBudget, func() EffectiveRelease {

@@ -917,6 +917,12 @@ EOF
       # aggregate the daemon sets at start (internal/autoputer/desk_cgroup.go).
       # Required mode refuses to start a worker without it.
       CHOIR_DESK_CGROUP_ROOT = "/sys/fs/cgroup/choir-desks";
+      # Capsule memory per doctrine (SDC RES-04, internal/capsule/capsule_memory.go):
+      # observe keeps memory.max = the capsule's size and admission against it,
+      # and records each capsule's memory.peak and memory.events with what
+      # doctrine (memory.high = request, memory.max = 2x) would have done.
+      # "doctrine" applies it, after the receipts show builds fit.
+      CHOIR_CAPSULE_MEMORY_POLICY = "observe";
       PATH = lib.mkForce (lib.makeBinPath (with pkgs; [
         busybox
         bash
