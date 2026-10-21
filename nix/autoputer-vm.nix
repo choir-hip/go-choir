@@ -260,6 +260,41 @@ in
   # line of those computers only. Inert without the device.
   boot.kernelModules = [ "overlay" "virtio_balloon" "virtio_mem" ];
 
+  # Guest kernel hardening (SDC SEC-15; the guest set no sysctls before).
+  # Each is a default-off-for-attackers setting that nothing in the guest
+  # needs: kernel addresses and the kernel log are hidden from unprivileged
+  # processes, unprivileged BPF and kexec are off, perf events are
+  # restricted, the root user's magic SysRq is off, links and fifos in
+  # sticky directories are protected, and the network stack ignores source
+  # routes and redirects and checks reverse paths (the guest has one
+  # interface and one route). A key the kernel lacks is logged by
+  # systemd-sysctl and skipped, never a boot failure. Deliberately not set:
+  # user.max_user_namespaces (the runtime makes each capsule's user
+  # namespace) and kernel.io_uring_disabled (pending the capsule workload
+  # inventory).
+  boot.kernel.sysctl = {
+    "kernel.kptr_restrict" = 2;
+    "kernel.dmesg_restrict" = 1;
+    "kernel.unprivileged_bpf_disabled" = 1;
+    "net.core.bpf_jit_harden" = 2;
+    "kernel.kexec_load_disabled" = 1;
+    "kernel.sysrq" = 0;
+    "kernel.perf_event_paranoid" = 2;
+    "fs.protected_symlinks" = 1;
+    "fs.protected_hardlinks" = 1;
+    "fs.protected_fifos" = 1;
+    "fs.protected_regular" = 1;
+    "net.ipv4.conf.all.rp_filter" = 1;
+    "net.ipv4.conf.default.rp_filter" = 1;
+    "net.ipv4.conf.all.accept_source_route" = 0;
+    "net.ipv4.conf.all.accept_redirects" = 0;
+    "net.ipv4.conf.default.accept_redirects" = 0;
+    "net.ipv4.conf.all.send_redirects" = 0;
+    "net.ipv6.conf.all.accept_redirects" = 0;
+    "net.ipv6.conf.all.accept_source_route" = 0;
+    "net.ipv4.tcp_syncookies" = 1;
+  };
+
   # ── microvm configuration ────────────────────────────────────────────
   microvm = {
     # Firecracker as the hypervisor. The actual hypervisor binary is not
@@ -288,8 +323,10 @@ in
     }];
 
     # Use upstream microvm.nix API for the nix store disk.
-    # erofs provides a shared nix store that can be shared
-    # across VMs with KSM deduplication on the host.
+    # erofs provides one read-only nix store image that every VM reads: the
+    # host keeps a single copy of it in its page cache. Guest RAM is not
+    # deduplicated: KSM is off on the host and nothing here relies on it
+    # (SDC SEC-09; it was a side channel and it merged nothing).
     storeOnDisk = true;
     storeDiskType = "erofs";
     # Favor deploy-loop speed over maximum image compaction. microvm.nix's
@@ -306,7 +343,8 @@ in
     # This is more efficient than virtiofs for our use case because:
     # - No virtiofsd daemon needed on the host
     # - erofs disk is a single shared file referenced by all VMs
-    # - Combined with KSM (shared=off), identical pages are deduplicated
+    # - The host page cache holds the image once for all guests; KSM is off,
+    #   so identical guest pages are not merged (SDC SEC-09)
     shares = [];
   };
 
@@ -336,6 +374,7 @@ in
       set -euo pipefail
       client_ip=""
       gateway_ip=""
+      dns_ip=""
 
       for param in $(cat /proc/cmdline); do
         case "$param" in
@@ -344,6 +383,18 @@ in
             IFS=':' read -r client_ip _ gateway_ip _ _ _ _ <<EOF
 $value
 EOF
+            ;;
+          # SDC SEC-10: the host names this computer's resolver (a host
+          # service on the tap peer) with choir.dns=<ipv4>. Only a plain
+          # IPv4 address is accepted; anything else is ignored and the guest
+          # keeps its fallback resolvers, as before the host serves DNS.
+          choir.dns=*)
+            candidate="''${param#choir.dns=}"
+            if printf '%s' "$candidate" | grep -Eq '^([0-9]{1,3}[.]){3}[0-9]{1,3}$'; then
+              dns_ip="$candidate"
+            else
+              echo "go-choir-configure-network: ignoring malformed choir.dns" >&2
+            fi
             ;;
         esac
       done
@@ -365,6 +416,9 @@ DHCP=no
 IPv6AcceptRA=no
 LinkLocalAddressing=no
 EOF
+      if [ -n "$dns_ip" ]; then
+        echo "DNS=$dns_ip" >> /run/systemd/network/10-vm-runtime.network
+      fi
     '';
   };
 
