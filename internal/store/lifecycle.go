@@ -638,7 +638,7 @@ func actorWakeOutboxFromObject(obj objectgraph.Object, objects []objectgraph.Obj
 		// post-commit arm can no longer strand the row open+unbound. Owner
 		// and delegated casts share this wake; the handler re-reads durable
 		// state and derives objective/candidate from the work item/binding.
-		// The six-hour bound deadline is re-armed at bind
+		// The six-hour bound deadline is armed at bind, from bind time
 		// (armAssignedEngineeringDeadline), not here.
 		if assignment.Disposition == types.EngineeringAssignmentOpen && assignment.LifecycleVersion == 1 {
 			spawnContent, spawnErr := json.Marshal(actorWakeEngineeringDeadlineContent{AssignmentID: assignment.AssignmentID, Attempt: assignment.Binding.Attempt})

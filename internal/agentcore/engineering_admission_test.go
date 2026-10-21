@@ -470,3 +470,53 @@ func TestEngineeringAdmissionCrashRestartClosesQueuedRequest(t *testing.T) {
 		t.Fatalf("a crash boot armed %d spawn wakes for the queued request", len(armed))
 	}
 }
+
+// Review finding B3: the bound assignment's execution deadline runs from bind,
+// not from arrival, so time spent in the queue never shortens the run; and
+// the bind-time deadline wake has an identity of its own, so it cannot dedup
+// into the {assignment_id, attempt} wake an open or a fate watchdog minted
+// (which may already be consumed).
+func TestEngineeringBoundDeadlineRunsFromBindNotArrival(t *testing.T) {
+	t.Setenv("CHOIR_ASSIGNMENT_DEADLINE", "300ms")
+	f := newAdmissionFixture(t, 1)
+	wakes := captureAdmissionWakes(f.rt)
+	f.open(0)
+	time.Sleep(400 * time.Millisecond) // waited in the queue past the deadline
+	boundAt := time.Now().UTC()
+	bound := f.bind(0)
+	ctx := context.Background()
+
+	*wakes = nil
+	f.rt.armAssignedEngineeringDeadline(bound)
+	if len(*wakes) != 1 || (*wakes)[0].kind != assignedEngineeringFateDeadlineUpdateKind {
+		t.Fatalf("bind armed %d deadline wakes, want one: %+v", len(*wakes), *wakes)
+	}
+	armed := (*wakes)[0]
+	legacy, err := encodeAssignedEngineeringFateDeadline(bound.AssignmentID, bound.Binding.Attempt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if armed.content == legacy {
+		t.Fatalf("the bind-time deadline wake has the open-time identity %s; it would dedup into a consumed wake", legacy)
+	}
+	if armed.notBefore.Before(boundAt.Add(300 * time.Millisecond)) {
+		t.Fatalf("bound deadline due %s, before bind (%s) plus the deadline: queue wait counted against the run", armed.notBefore, boundAt)
+	}
+
+	// The open-time (legacy) wake fires at arrival plus the deadline: the run
+	// has barely started and must not be failed.
+	if err := f.rt.HandleAssignedEngineeringFateDeadline(ctx, f.seed.OwnerID, f.computer, f.seed.ParentAgentID, legacy); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.get(0); got.Disposition != types.EngineeringAssignmentBound {
+		t.Fatalf("a run bound after a long queue wait was failed at arrival plus the deadline: %s (%q)", got.Disposition, got.DispositionReason)
+	}
+
+	time.Sleep(400 * time.Millisecond)
+	if err := f.rt.HandleAssignedEngineeringFateDeadline(ctx, f.seed.OwnerID, f.computer, f.seed.ParentAgentID, armed.content); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.get(0); got.Disposition != types.EngineeringAssignmentCancelled || !strings.Contains(got.DispositionReason, "deadline") {
+		t.Fatalf("the bound deadline did not fail the run closed at bind plus the deadline: %s (%q)", got.Disposition, got.DispositionReason)
+	}
+}
