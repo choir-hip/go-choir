@@ -27,3 +27,18 @@ func TestEngineeringCapsuleMemoryHoldsTheLinkAndFitsTheDefaultGuest(t *testing.T
 		t.Fatalf("engineering capsule memory %d exceeds the default guest's admission budget %d", engineeringAssignmentMemoryMax, defaultGuestAdmission)
 	}
 }
+
+// RES-04: under the doctrine capsule memory policy the request becomes the
+// capsule's memory.high, and with no swap a memory.high below the link's
+// anonymous peak throttles the build for minutes (the 1 GiB drill). The
+// request must hold the DWARF link peak and admit what admission counted
+// before RES-04, so the policy changes the ceiling, never what fits.
+func TestEngineeringCapsuleMemoryRequestHoldsTheDWARFLink(t *testing.T) {
+	const dwarfLinkPeak = int64(1891288) << 10
+	if engineeringAssignmentMemoryRequest < dwarfLinkPeak {
+		t.Fatalf("engineering capsule memory request %d is below the measured DWARF link peak %d", engineeringAssignmentMemoryRequest, dwarfLinkPeak)
+	}
+	if engineeringAssignmentMemoryRequest != engineeringAssignmentMemoryMax {
+		t.Fatalf("engineering capsule memory request %d differs from the admission before RES-04 (%d)", engineeringAssignmentMemoryRequest, engineeringAssignmentMemoryMax)
+	}
+}

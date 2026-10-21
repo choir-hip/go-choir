@@ -84,6 +84,22 @@ func (e *Executor) boostJobMemory(capsuleID, jobID string, bytes int64, release 
 	if err := cg.SetMax(caps.MemoryMax + boostedBytesLocked(caps) + bytes); err != nil {
 		return fmt.Errorf("raise capsule %s memory.max: %w", capsuleID, err)
 	}
+	// Under doctrine memory.high rises with it, or the job is throttled
+	// under its own boost (RES-04, Q4). A memory.high that cannot rise
+	// refuses the boost and puts memory.max back.
+	if caps.MemoryHigh > 0 {
+		hc, ok := cg.(cgroupMemoryHigh)
+		var err error
+		if !ok {
+			err = fmt.Errorf("no memory.high control")
+		} else {
+			err = hc.SetHigh(caps.MemoryHigh + boostedBytesLocked(caps) + bytes)
+		}
+		if err != nil {
+			_ = cg.SetMax(caps.MemoryMax + boostedBytesLocked(caps))
+			return fmt.Errorf("raise capsule %s memory.high: %w", capsuleID, err)
+		}
+	}
 	if caps.memoryBoosts == nil {
 		caps.memoryBoosts = map[string]*jobMemoryBoost{}
 	}
@@ -111,6 +127,10 @@ func (e *Executor) endJobMemory(capsuleID, jobID string) {
 	}
 	cg := e.cgroupMemoryOf(caps)
 	limit := caps.MemoryMax + boostedBytesLocked(caps) - b.bytes
+	high := int64(0)
+	if caps.MemoryHigh > 0 {
+		high = caps.MemoryHigh + boostedBytesLocked(caps) - b.bytes
+	}
 	e.mu.Unlock()
 
 	// Reclaim can take a while: never under the executor lock. The job is
@@ -127,6 +147,13 @@ func (e *Executor) endJobMemory(capsuleID, jobID string) {
 		e.mu.Unlock()
 		log.Printf("capsule: job %s memory boost of %d MiB retained until capsule %s ends: its usage does not fit %d MiB (err=%v)", jobID, b.bytes>>20, capsuleID, limit>>20, err)
 		return
+	}
+	// memory.high follows memory.max down (Q5); a failure leaves it high,
+	// which throttles less, never more.
+	if hc, ok := cg.(cgroupMemoryHigh); ok && high > 0 {
+		if err := hc.SetHigh(high); err != nil {
+			log.Printf("capsule: job %s: lower capsule %s memory.high to %d MiB: %v", jobID, capsuleID, high>>20, err)
+		}
 	}
 	delete(caps.memoryBoosts, jobID)
 	e.vmMemoryUsed -= b.bytes
@@ -149,4 +176,83 @@ func (e *Executor) returnMemoryBoostsLocked(caps *Capsule) []func() {
 		delete(caps.memoryBoosts, jobID)
 	}
 	return releases
+}
+
+// SetMemoryPolicy sets the capsule memory shape for capsules spawned from now
+// on (RES-04, capsule_memory.go). Capsules already live keep theirs.
+func (e *Executor) SetMemoryPolicy(policy CapsuleMemoryPolicy) {
+	if policy != CapsuleMemoryDoctrine {
+		policy = CapsuleMemoryObserve
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.memoryPolicy = policy
+}
+
+// capsuleAggregateMemory is the capsules aggregate cgroup, the parent of
+// every /capsule/<id> (namespace.go).
+func (e *Executor) capsuleAggregateMemory() cgroupMemory {
+	if e.capsuleAggregateFor != nil {
+		return e.capsuleAggregateFor()
+	}
+	return cgroupMemoryDir("/sys/fs/cgroup/capsule")
+}
+
+// setCapsuleAggregateLocked caps the capsules aggregate at the live capsule
+// budget under doctrine, where admission counts requests and a capsule may
+// reach twice its request (Q2). It is written only when the capsules' usage
+// fits under it, so the kernel never kills across capsules for it (Q7); under
+// observe it is not written (admission already bounds every memory.max).
+// Callers hold e.mu.
+func (e *Executor) setCapsuleAggregateLocked() {
+	if e.memoryPolicy != CapsuleMemoryDoctrine {
+		return
+	}
+	budget := e.memoryBudgetLocked()
+	agg := e.capsuleAggregateMemory()
+	if budget <= 0 || agg == nil {
+		return
+	}
+	current, err := agg.Current()
+	if err != nil {
+		log.Printf("capsule: aggregate memory: %v; memory.max not written", err)
+		return
+	}
+	if current > budget {
+		log.Printf("capsule: aggregate memory: usage %d MiB is above the budget %d MiB; memory.max left as it is", current>>20, budget>>20)
+		return
+	}
+	if err := agg.SetMax(budget); err != nil {
+		log.Printf("capsule: aggregate memory.max %d MiB: %v", budget>>20, err)
+	}
+}
+
+const memoryReceiptsKept = 16
+
+// recordMemoryReceiptLocked reads and logs a destroyed capsule's memory
+// receipt and keeps the last few for observability. Callers hold e.mu.
+func (e *Executor) recordMemoryReceiptLocked(caps *Capsule) {
+	policy := caps.memoryPolicy
+	if policy == "" {
+		policy = CapsuleMemoryObserve
+	}
+	plan := capsuleMemoryPlan{Admit: caps.admittedMemory(), High: caps.MemoryHigh, Max: caps.MemoryMax}
+	var cg any
+	if m := e.cgroupMemoryOf(caps); m != nil {
+		cg = m
+	}
+	r := readCapsuleMemoryReceipt(policy, plan, caps.Spec.MemoryRequest, cg)
+	r.CapsuleID = caps.ID
+	log.Printf("capsule %s memory: %s", caps.ID, r)
+	e.memoryReceipts = append(e.memoryReceipts, r)
+	if n := len(e.memoryReceipts); n > memoryReceiptsKept {
+		e.memoryReceipts = append([]CapsuleMemoryReceipt(nil), e.memoryReceipts[n-memoryReceiptsKept:]...)
+	}
+}
+
+// MemoryReceipts returns the last capsules' memory receipts, newest last.
+func (e *Executor) MemoryReceipts() []CapsuleMemoryReceipt {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return append([]CapsuleMemoryReceipt(nil), e.memoryReceipts...)
 }

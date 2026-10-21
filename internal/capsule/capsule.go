@@ -32,7 +32,8 @@ type Capsule struct {
 	WorkDir              string
 	SourceSnapshotDigest string
 	MergedDir            string
-	MemoryMax            int64 // memory budget for admission control accounting
+	MemoryMax            int64 // the cgroup's memory.max before job boosts
+	MemoryHigh           int64 // the cgroup's memory.high before job boosts; 0 unset (observe)
 	State                CapsuleState
 	CommitEpoch          uint64         // audit metadata (not enforced for exec/read/write)
 	LastManifest         []FileManifest // last committed snapshot
@@ -65,6 +66,21 @@ type Capsule struct {
 	// memoryBoosts are the job memory raises this capsule's cgroup holds,
 	// by job id (job_memory_linux.go); guarded by the executor's lock.
 	memoryBoosts map[string]*jobMemoryBoost
+
+	// memoryAdmitted is what the spawn counted against the budget (RES-04:
+	// the request under doctrine, MemoryMax otherwise); memoryPolicy is the
+	// policy it was spawned under. Guarded by the executor's lock.
+	memoryAdmitted int64
+	memoryPolicy   CapsuleMemoryPolicy
+}
+
+// admittedMemory is what a destroy returns to the budget: what the spawn
+// counted (Q6). A capsule without the field counts its MemoryMax.
+func (c *Capsule) admittedMemory() int64 {
+	if c.memoryAdmitted > 0 {
+		return c.memoryAdmitted
+	}
+	return c.MemoryMax
 }
 
 // Exec executes a command in the capsule via the broker.

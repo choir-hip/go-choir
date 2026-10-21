@@ -15,16 +15,20 @@ const ReleaseTreePrefix = "var/lib/artifact/release/"
 
 // SpawnSpec describes the desired state of a new capsule.
 type SpawnSpec struct {
-	CapsuleID  string       // unique capsule identifier (UUID)
-	MemoryMax  int64        // total budget: RSS + tmpfs + kmem (bytes)
-	CpuQuota   int64        // CPU quota (microseconds per period)
-	CpuPeriod  int64        // CPU period (default 100000)
-	PidsMax    int64        // max processes in capsule
-	DiskMax    int64        // tmpfs sub-budget of MemoryMax (bytes)
-	Env        []string     // environment variables for broker/workload
-	WorkingDir string       // initial working directory
-	OwnerRunID string       // agent run that owns this capsule
-	Tier       ResourceTier // resource tier preset
+	CapsuleID string // unique capsule identifier (UUID)
+	MemoryMax int64  // total budget: RSS + tmpfs + kmem (bytes)
+	// MemoryRequest is doctrine's request (RES-04, capsule_memory.go): under
+	// the doctrine policy memory.high = request, memory.max = 2 x request,
+	// admission against the request. 0 keeps the MemoryMax shape.
+	MemoryRequest int64
+	CpuQuota      int64        // CPU quota (microseconds per period)
+	CpuPeriod     int64        // CPU period (default 100000)
+	PidsMax       int64        // max processes in capsule
+	DiskMax       int64        // tmpfs sub-budget of MemoryMax (bytes)
+	Env           []string     // environment variables for broker/workload
+	WorkingDir    string       // initial working directory
+	OwnerRunID    string       // agent run that owns this capsule
+	Tier          ResourceTier // resource tier preset
 
 	// SourceArtifactRef and ExpectedSubjectDigest are trusted-runtime inputs.
 	// Spawn materializes exactly this preflighted content-addressed subject and
