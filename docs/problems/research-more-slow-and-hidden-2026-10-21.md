@@ -125,7 +125,14 @@ share: research's model calls are 1 to 3 s each at low effort.
    owner overrides it.
 2. The button in the Texture toolbar for published stories, and a
    responsive toolbar that wraps at phone width and large text (orange,
-   E2). The standalone page's fate is the owner's call.
+   E2). Landed on branch research-more-toolbar (owner, 2026-10-21: "Get rid
+   of the standalone page"): the button is in the toolbar of a published
+   story's Texture window, `AutopaperRoute` is deleted, old `/autopaper`
+   links are replaced with `/pub/texture/<slug>[/v<n>]` (and `/autopaper`
+   with `/`), and the digest email links to `/pub/texture/<slug>`. A story
+   opened at its public Texture route has no Autopaper window context, so
+   the resolve bundle now names an Autopaper story (`publication.kind`
+   `"story"`) and the reader shows the AI-written disclosure from that.
 3. The ask goes straight to research, which reports to Texture (red,
    E4); research sends a packet as soon as it has a read source and
    finishes with the final report (prompt, E5).
