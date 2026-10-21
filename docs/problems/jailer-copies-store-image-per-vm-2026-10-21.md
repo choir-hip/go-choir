@@ -4,7 +4,7 @@ Date: 2026-10-21. Found while auditing memory density for the
 [security, density and architecture checklist](../security-density-architecture-checklist-2026-10-21.md)
 (item RES-05). Read from code at `origin/main` 8f71f9c64; nothing was run,
 and the page-cache effect is inference from Linux semantics, not a
-measurement. Status: documented; no fix yet. Mutation class of any fix:
+measurement. Status: fix built on lane/fp8-image-jailer (FP8, see "As built" below), not deployed; it acts only on jailed launches, and the jailer is off. Mutation class of any fix:
 **red** (vmctl, VM lifecycle, tenant isolation).
 
 ## What is shared today
@@ -63,3 +63,26 @@ A root-owned read-only hard link into the jail when the jail and the image
 share a filesystem, or a read-only bind mount of the one image file into the
 jail's mount namespace; then measure host RSS with several jailed VMs
 against the same count unjailed.
+
+## As built (FP8, 2026-10-21, lane/fp8-image-jailer)
+
+`internal/vmmanager/jail_shared.go`: vmctl keeps one copy of each read-only
+artifact (kernel, initrd, store image) per source identity (path, device,
+inode, size, mtime) under `<jail base>/.shared/`, root-owned 0444, built once
+by reflink (else byte copy) and fsynced, and hard-links that inode into each
+jail. Every jailed VM reads the store through one inode. A copy no jail links
+is swept at the next launch; a file there that is not vmctl's 0444 regular
+file is rebuilt, never linked. If the shared copy cannot be built or linked,
+the launch falls back to today's private copy and logs why. The receipt's
+`jail_files` says `store.img=shared` (or `shared(reflink)` when this launch
+built it).
+
+Failure modes: (1) closed: one inode. (2) one copy per deploy, not per
+launch. (3) closed: root-owned 0444, the VMM uid cannot write or chmod it; it
+can only unlink its own name. (4) closed: a new source identity is a new
+copy; running jails keep the old inode until they relaunch. (5) closed: the
+copy is keyed by the same identity `snapshotBoundPaths` binds, and a restore
+whose source changed is refused before the jail is built.
+
+Test: `TestPrepareJailSharesReadOnlyArtifacts`. Proof (FP0): the station
+file's "FP0 proof steps", RES-05.
