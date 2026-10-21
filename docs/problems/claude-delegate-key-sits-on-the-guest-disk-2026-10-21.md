@@ -97,6 +97,35 @@ unconfined desk cell.
    to another credential instead of refusing.
 10. Moving the key changes who may run the delegate or where. It must not.
 
+## Review findings, batch 1 (2026-10-21, candidate b80a9bcac)
+
+Found by the batch 1 panel (GPT-6.1-sol reproduced both through the
+candidate's own handler code with an overlay probe; Gemini 4 Argon found the
+first independently). No deployed evidence: the relay is dark on staging
+(no key, no identities, no window), which bounds today's exposure and does
+not satisfy failure mode 8.
+
+11. **The relay trusts the general binding's rollout mode.**
+    `HandleAnthropicRelay` authenticates with `authenticateAutoputer`, whose
+    peer check follows `GATEWAY_BEARER_BINDING`. In `observe` (the mode nix
+    stages) or `off`, a bearer copied from an allowlisted computer is served
+    from any guest address: the probe pinned the bearer to `10.200.0.2`,
+    called from `10.200.1.2` in observe, and got 200 with one upstream
+    request while the log said "would refuse". Failure mode 8 is therefore
+    open whenever the relay is enabled before enforce, or binding is rolled
+    back after. Repair: the relay checks the pin itself, in every mode, and
+    serves only a bearer whose identity is pinned (host-attested or already
+    bound) to the caller's address; an unpinned or mismatched identity is
+    refused and nothing is relayed.
+12. **A disabled or unlisted relay call writes the shared pin.**
+    `authenticateAutoputer` runs before the relay checks whether it is
+    configured, whether the identity is listed and whether the window is
+    open; in `enforce` it pins an unpinned bearer on first use. The probe:
+    relay off, an unlisted identity, answer 403, and its pin was now the
+    caller's address, which every other route then honors. Repair: the relay
+    never writes identity state; bearer validation is non-mutating, and the
+    configuration, allowlist and window are checked before the pin is read.
+
 ## Heresy delta
 
 - Discovered: the subscription token cannot be intermediated, so "the

@@ -449,6 +449,30 @@ closed "interrupted by a restart", never re-dispatched, but its usage is still
 recorded. Build after the scheduler has run on staging; the scheduler's
 queue and `/health` counters are its measurement.
 
+## Batch 1 review (2026-10-21, candidate b80a9bcac)
+
+GPT-6.1-sol sent the candidate back; Gemini 4 Argon accepted with edits.
+Their blocking findings, recorded before any fix:
+- SEC-08 findings 11 and 12
+  ([record](../problems/claude-delegate-key-sits-on-the-guest-disk-2026-10-21.md)):
+  the relay followed the general binding mode (a copied bearer was served in
+  observe), and a disabled or unlisted relay call wrote the shared pin.
+- SEC-05 finding 13
+  ([record](../problems/gateway-bearer-works-from-any-computer-2026-10-21.md)):
+  the Jev route wrote the shared pin on first use in every mode, bypassing
+  strict and writing in observe.
+- SEC-16 landing order: the candidate carried the nix commit that removes
+  `EnvironmentFile` from `go-choir-front-importance` (8c8bd7e54) in the same
+  batch as the host route, so the first deploy would remove the
+  `FRONT_IMPORTANCE_DIRECT=1` rollback before deployed proof 7 has shown the
+  route works, contradicting section 4 and the rollback text above. Repair:
+  the batch reverts that commit; FP0 re-applies it (cherry-pick 8c8bd7e54)
+  as a separate landing after proof 7 passes.
+- RES-11 finding 11
+  ([record](../problems/gateway-model-calls-have-no-scheduler-2026-10-21.md)),
+  non-blocking: the queue wait sits outside the call's ten-minute deadline,
+  so wait plus call can pass the 10m30s write timeout.
+
 ## Deployed proofs for FP0 (exact steps; none needs a secret)
 
 SEC-05, after deploy with `observe`:
