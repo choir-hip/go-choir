@@ -703,7 +703,7 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           printf '%s' "$NODE_B_KNOWN_HOSTS" >~/.ssh/node_b_known_hosts
           if timeout 30 ssh -i ~/.ssh/deploy_key -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=yes -o HostKeyAlias=go-choir-node-b -o UserKnownHostsFile=~/.ssh/node_b_known_hosts \
-            "root@${{ secrets.OVH_NODE_B_HOST }}" 'cat /var/lib/go-choir/deploy-receipt.json' >"$receipt_json" 2>/dev/null; then
+            "choir-deploy@${{ secrets.OVH_NODE_B_HOST }}" receipt >"$receipt_json" 2>/dev/null </dev/null; then
             echo "Read Node B deploy receipt (target $(jq -r '.target_commit // "unknown"' "$receipt_json" 2>/dev/null))"
           else
             : >"$receipt_json"
@@ -820,7 +820,7 @@ jobs:
           cat > ~/.ssh/config <<EOF
           Host go-choir-node-b
             HostName ${{ secrets.OVH_NODE_B_HOST }}
-            User root
+            User choir-deploy
             IdentityFile ~/.ssh/deploy_key
             HostKeyAlias go-choir-node-b
             UserKnownHostsFile ~/.ssh/node_b_known_hosts
@@ -836,17 +836,12 @@ jobs:
           DEPLOY_HOST: ${{ needs.deploy-impact.outputs.deploy_host }}
           DEPLOY_HOST_OS: ${{ needs.deploy-impact.outputs.deploy_host_os }}
           HOST_SERVICES: ${{ needs.deploy-impact.outputs.host_services }}
+        # choir-deploy's forced command is the gate (scripts/node-b-ci-gate):
+        # it runs .github/scripts/node-b-ci-prebuild from this commit, once
+        # it has checked the commit is on main (SEC-14).
         run: |
-          remote_env=(
-            "DEPLOY_COMMIT=$DEPLOY_COMMIT"
-            "DEPLOY_FRONTEND=$DEPLOY_FRONTEND"
-            "DEPLOY_HOST=$DEPLOY_HOST"
-            "DEPLOY_HOST_OS=$DEPLOY_HOST_OS"
-            "HOST_SERVICES=$HOST_SERVICES"
-          )
-          printf -v remote_env_q '%q ' "${remote_env[@]}"
-          ssh go-choir-node-b \
-            "${remote_env_q}bash -s" <.github/scripts/node-b-ci-prebuild
+          request="prebuild DEPLOY_COMMIT=${DEPLOY_COMMIT} DEPLOY_FRONTEND=${DEPLOY_FRONTEND} DEPLOY_HOST=${DEPLOY_HOST} DEPLOY_HOST_OS=${DEPLOY_HOST_OS} HOST_SERVICES=${HOST_SERVICES}"
+          ssh -n go-choir-node-b "$request"
 
       - name: Cleanup SSH
         if: always()
@@ -880,7 +875,7 @@ jobs:
           cat > ~/.ssh/config <<EOF
           Host go-choir-node-b
             HostName ${{ secrets.OVH_NODE_B_HOST }}
-            User root
+            User choir-deploy
             IdentityFile ~/.ssh/deploy_key
             HostKeyAlias go-choir-node-b
             UserKnownHostsFile ~/.ssh/node_b_known_hosts
@@ -920,22 +915,12 @@ jobs:
           REFRESH_ACTIVE_COMPUTERS: ${{ github.event_name == 'workflow_dispatch' && inputs.refresh_active_computers && 'true' || 'false' }}
           DEPLOY_HOST_OS: ${{ needs.deploy-impact.outputs.deploy_host_os }}
           HOST_SERVICES: ${{ needs.deploy-impact.outputs.host_services }}
+        # choir-deploy's forced command is the gate (scripts/node-b-ci-gate):
+        # it runs .github/scripts/node-b-ci-deploy from this commit, as root,
+        # once it has checked the commit is on main (SEC-14).
         run: |
-          remote_env=(
-            "DEPLOY_COMMIT=$DEPLOY_COMMIT"
-            "DEPLOY_RUN_ID=$DEPLOY_RUN_ID"
-            "DEPLOY_RUN_ATTEMPT=$DEPLOY_RUN_ATTEMPT"
-            "DEPLOY_HOST=$DEPLOY_HOST"
-            "DEPLOY_FRONTEND=$DEPLOY_FRONTEND"
-            "DEPLOY_VMCTL_RESTART=$DEPLOY_VMCTL_RESTART"
-            "DEPLOY_ACTIVE_VM_REFRESH=$DEPLOY_ACTIVE_VM_REFRESH"
-            "REFRESH_ACTIVE_COMPUTERS=$REFRESH_ACTIVE_COMPUTERS"
-            "DEPLOY_HOST_OS=$DEPLOY_HOST_OS"
-            "HOST_SERVICES=$HOST_SERVICES"
-          )
-          printf -v remote_env_q '%q ' "${remote_env[@]}"
-          ssh go-choir-node-b \
-            "${remote_env_q}bash -s" <.github/scripts/node-b-ci-deploy
+          request="deploy DEPLOY_COMMIT=${DEPLOY_COMMIT} DEPLOY_RUN_ID=${DEPLOY_RUN_ID} DEPLOY_RUN_ATTEMPT=${DEPLOY_RUN_ATTEMPT} DEPLOY_HOST=${DEPLOY_HOST} DEPLOY_FRONTEND=${DEPLOY_FRONTEND} DEPLOY_VMCTL_RESTART=${DEPLOY_VMCTL_RESTART} DEPLOY_ACTIVE_VM_REFRESH=${DEPLOY_ACTIVE_VM_REFRESH} REFRESH_ACTIVE_COMPUTERS=${REFRESH_ACTIVE_COMPUTERS} DEPLOY_HOST_OS=${DEPLOY_HOST_OS} HOST_SERVICES=${HOST_SERVICES}"
+          ssh -n go-choir-node-b "$request"
 
       - name: Cleanup SSH
         if: always()
