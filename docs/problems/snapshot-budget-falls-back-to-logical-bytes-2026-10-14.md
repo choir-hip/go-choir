@@ -2,7 +2,11 @@
 
 Date: 2026-10-14. Found while writing the VM density report
 ([vm-density-limits](../reports/vm-density-limits-2026-10-14.md)).
-Status: documented; no fix yet. Mutation class of any fix: red (vmctl unit
+Status (2026-10-21): partly fixed, unverified. The unprivileged FIEMAP
+bound landed (9001e9842), and vmctl's unit gained `CAP_SYS_ADMIN` for the
+jailer (10e9f18e1), which may let the exact method succeed; no staging read
+records which method hibernates now log. Tracked as RES-14 in the
+[checklist](../security-density-architecture-checklist-2026-10-21.md). Mutation class of any fix: red (vmctl unit
 capabilities or the snapshot path).
 
 ## Evidence (read-only, Node B, 2026-10-14 ~15:00 UTC)

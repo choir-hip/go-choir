@@ -953,3 +953,57 @@ Taken as:
   holds the segments; about three days with zero segment-error fallbacks.
   First batch one computer, then faster. The first delete still takes an
   explicit owner yes (irreversible).
+
+## 35. Isolation, egress and memory become one checklist; app agents get desks; agent trees scale out (2026-10-21)
+
+After a review comparing Choir with a "one microVM per user, many sandboxed
+agents inside" design, the owner, verbatim:
+
+- Goal: "a secure and lightweight way to have a dense multi-agent system
+  per user, but many agents per user. And I know that the micro VM is the
+  real security boundary, and there are ways to escape the Yaegi, and you
+  could escape the Linux sandboxing, but ideally, the point is that it
+  would be very hard to escape every layer." Also: "I'm very concerned
+  about being as resource efficient as possible, and we do have to be
+  careful to provide the right amount of networking. Like, researcher needs
+  networking, and engineering desk also needs some limited networking. You
+  have a grant system, but you can consider and reconsider how that works
+  as well."
+- App desks: "the plan is to add more desks. For example, we will add more
+  app agents. Texture is the first app agent. Mail will become an app
+  agent, as will other apps. You can imagine a video editing app agent.
+  Calendar, Slides app, everything will become an app agent to the extent
+  that it's actually used a bit more. And app agents get their own desks."
+- Scale-out: "the research desk could become a hierarchical tree of agents
+  with 100 or 1,000 leaf agents, and we'll need to figure out a way to
+  scale this across processes, whether they be capsules or across VMs, and
+  then eventually across hosts as well."
+- "I really want the architecture to be solid, secure, resource efficient,
+  and future-proof before we launch next week."
+- "we're already sharing the base OS across guests. That may be one reason
+  to accelerate the move or defaulting to Cloud Hypervisor." And: "we should
+  also look into our plans to move to app packages, because those two
+  things are related."
+- "I'm really going to prioritize getting all these fixes for security and
+  resource utilization done ASAP. So let's make it a checklist ... the
+  checklist should refer to whether it's work or plans that already exist.
+  And those plans should be updated as needed."
+
+Taken as:
+
+- The checklist is
+  [`docs/security-density-architecture-checklist-2026-10-21.md`](../security-density-architecture-checklist-2026-10-21.md);
+  P0 items land before launch, one red deploy at a time.
+- App agents are desks (as §5 already said); §23's "no new desks" was about
+  coordinator-invented desks, not app desks. Doctrine still names four
+  desks, so the app-desk tier needs the owner's wording (checklist ARCH-01).
+  App packages (S7) and app desks are one plan: a package carries its desk
+  (S7 addendum 2026-10-21).
+- Lead note on base-OS sharing: guests share one EROFS store image on disk
+  and in the host page cache, but each guest keeps its own decompressed
+  copy in guest RAM; sharing it in RAM needs virtio-pmem with DAX (density
+  L10), which both Firecracker and Cloud Hypervisor have, so it does not by
+  itself require Cloud Hypervisor. The jailer as built would also break the
+  host-side sharing (checklist RES-05). Cloud Hypervisor's own case is
+  VFIO/GPU, copy-on-write restore, live migration and balloon resize
+  (RES-20).

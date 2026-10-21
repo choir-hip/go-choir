@@ -33,6 +33,18 @@ patch. Reading: [selfdev update architecture](reports/selfdev-update-architectur
 the [S6 station definition](definitions/choir-appdev-s6-commit-gate-full-release-2026-10-01.md),
 and the S7 definition for what follows.
 
+## Security, density and architecture checklist (2026-10-21; owner: as soon as possible)
+
+[`security-density-architecture-checklist-2026-10-21.md`](security-density-architecture-checklist-2026-10-21.md)
+is the tick list for desk isolation, guest egress, memory and the app-desk
+and scale-out architecture: each item says what is on main, on branches and
+in plans, with **P0** items before launch and a suggested P0 order. It
+found that the desk-cell confinement branch (landing order item 6 below) is
+not on origin, and two new problems:
+[desk frame actions are not role-checked by the daemon](problems/desk-frame-actions-not-role-checked-by-host-2026-10-21.md)
+and [the jailer copies the shared store image per VM](problems/jailer-copies-store-image-per-vm-2026-10-21.md).
+Owner direction: [owner notes §35](reports/owner-notes-2026-10-14.md).
+
 ## Overnight run (2026-10-20 → 10-21, owner notes section 32)
 
 **Goal:** [`definitions/choir-overnight-research-oped-sources-2026-10-20.md`](definitions/choir-overnight-research-oped-sources-2026-10-20.md)
@@ -79,6 +91,12 @@ next; branches built in parallel, landed in dependency order):
 9. account recovery (LA slice 1);
 10. VM backend interface + Cloud Hypervisor slice — design now, code after
     4 and 5 land (same files).
+Status 2026-10-21 (see the checklist above): 1 half done (F7 landed; the
+established-only inbound rule is not built); 2 enforces, Dolt auth at
+stage "users"; 4 landed and off, rollout authorized, and the jail copies
+the store image per VM; 5 landed; 6 not landed, its branch is not on
+origin; 9 landed; 10 not started in code (the `vmbackend` package is on no
+ref).
 Alongside, no deploy: self-development drill rerun, claims E0 + E6a,
 Autoradio prototype (branch), teaching series (docs/learn/).
 Owner decisions list: delivered as the 2026-10-20 digest and answered; the
@@ -117,8 +135,8 @@ scaling our utilization until we improve our efficiency to the point of
 diminishing marginal returns." Optimizations now come first: the artifact
 store leak (docs/problems/artifact-store-grows-12gb-a-day-2026-10-14.md),
 snapshot budget by real bytes, cached-token measurement and prompt-cache
-hits, guest memory right-sizing, the daemon's store memory, KSM, disk
-cleanup; then Autopaper scaling. "Always on" is renamed **available**
+hits, guest memory right-sizing, the daemon's store memory, KSM (to be turned
+off, not used: checklist SEC-09), disk cleanup; then Autopaper scaling. "Always on" is renamed **available**
 (running, or snapshot-hibernated and waking in under a second).
 
 **Owner priorities (earlier 2026-10-14):** Autopaper scaling first; the data

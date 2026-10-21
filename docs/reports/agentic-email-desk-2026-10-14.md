@@ -4,6 +4,13 @@ Date: 2026-10-14 (late evening). Status: **design only.** No product code
 was written. Mutation class of this note: **green** (docs only). The slices
 it proposes are orange and red (§8, each classed where it appears).
 
+Related plan (note added 2026-10-21): the Mail app is also a first-party
+app package in S7-0
+([choir-appdev-s7-app-packages-2026-10-01.md](../definitions/choir-appdev-s7-app-packages-2026-10-01.md),
+addendum "App packages carry app-agent desks"). The email desk below should
+be the desk that package carries. Tracked as ARCH-01 to ARCH-05 in the
+[checklist](../security-density-architecture-checklist-2026-10-21.md).
+
 Evidence labels: **code** (read in this repository at `c3c9b4cf8`, with a
 path), **doc** (a dated Choir document), **web** (a vendor or standards page,
 cited by URL, fetched 2026-10-14), **inference** (reasoning, not tested),

@@ -2,7 +2,11 @@
 
 Date: 2026-10-14. Found by the load and density measurements (raw data and
 summary outside the repo, in the session scratchpad `perf/load_density_*`).
-Status: documented; no fix yet. Mutation class of any fix: red (vmctl).
+Status (2026-10-21): the fix designed below landed as density levers L2
+and L1 (b6f19a284:
+reclaim on sustained pressure, admission by measured use), active on Node B
+(`VMCTL_PRESSURE_RECLAIM_MODE=active`, `VMCTL_ADMISSION_MODE=measured`).
+Mutation class of the fix: red (vmctl).
 
 ## What happened
 
