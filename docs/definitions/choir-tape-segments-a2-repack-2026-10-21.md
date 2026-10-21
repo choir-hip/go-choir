@@ -136,7 +136,7 @@ heresy_delta:
   repaired: none
 
 now:
-  status: blocked
+  status: working
   slice: >-
     A2 writer built test-first on feat/tape-segments-a2 (tape-wt) and
     reviewed three times by gpt-6.1-sol. Not landed: each round found a new
@@ -194,6 +194,22 @@ now:
     rather than adding to it. Cost: an fsync error disables segment writes
     until restart, which is acceptable because the legacy path stays
     available.
+  round_4: >-
+    2026-10-21 05:50 UTC. Option (a), fail-stop, built test-first
+    (4d3720c30 tests, 8864a1c5a fix on feat/tape-segments-a2-failstop;
+    tapestore -race -count=2 and platform tests pass) and reviewed by
+    gpt-6.1-sol: "land flag-off now". Round 3's two findings closed,
+    re-checked with real second processes; flag-off path legacy-identical;
+    reuse-lock fallback race-free. Two P1s must close before the flag is
+    turned on: (1) a recovery refusal for a corrupt unsealed segment falls
+    back to legacy and acknowledges a pin the segment-first reader then
+    cannot read; (2) a sealed suspect tail can shadow its valid legacy copy.
+    Both point to one fix: a digest-verified fallback to the legacy copy when
+    a segment record fails verification, or treating recovery refusal as a
+    hard error. P2: process-wide poison does not stop calls already inside
+    build. Inherited: legacy writeBlob does not fsync (service.go).
+    Decision under No Blocking Asks: land flag-off (reversible, dormant),
+    after the SlidesApp drill; the flag stays off.
   owner_choice: >-
     (a) build fail-stop and review it once more, then land flag-off;
     (b) land db96e07a1 flag-off now with round 3's P1 as a named residual
@@ -208,7 +224,7 @@ now:
       legacy files are repacked.
     main_uncertainty: whether fail-stop closes the class in one more review round.
     next_observation: the owner's choice.
-  blocker: owner decision on the A2 recovery design (above)
-  next_action: On (a), build fail-stop test-first on feat/tape-segments-a2 and run one gpt-6.1-sol review.
+  blocker: none for flag-off landing; the two enabled-mode P1s (round_4) block turning the flag on
+  next_action: Land land/tape-a2 (ten commits on main) with the flag off after the SlidesApp drill; deployed flag-off acceptance (no tape-seg files, legacy counts grow).
 
 receipts: []
