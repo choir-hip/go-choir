@@ -131,3 +131,24 @@ document-tool child. Not in this batch: making the guest daemon non-root.
 - RES-04 and the capsules aggregate of RES-01: open; the mechanism needs
   `memory.events` from real builds to set values (a `memory.high` below the
   link's anonymous peak throttles the build).
+
+## Second batch (lane `lane/b3-desk-boundary-2`), 2026-10-21
+
+Designs and failure modes are in the FP2 goal file, "Second batch". Two
+findings from reading the code again for it:
+
+- **SEC-15's non-root daemon is not one slice.** The capsule executor (mounts,
+  user and network namespaces, cgroups, overlay roots, the broker's ambient
+  capabilities, `internal/capsule/executor.go:611-667`) is called in process
+  from 55 sites in `internal/agentcore` and `internal/autoputer`; desk cell
+  spawn switches to the cell uids (`desk_cell_confinement_linux.go:63`) and
+  the desks cgroup is written by the daemon. A non-root daemon needs all of
+  these behind a privileged helper first. This batch lands the capability
+  floor under it (the daemon keeps 15 named capabilities and drops the rest
+  from its bounding set) and the document-tool sandbox; the split stays a
+  named residual.
+- **The daemon's bounding set is full.** It runs with every capability
+  (no `CapabilityBoundingSet` in the unit, `nix/autoputer-vm.nix`, unlike
+  `go-choir-updater`'s empty set), so a compromised daemon or any child can
+  load a kernel module, use raw I/O on the guest's block devices, or set the
+  clock, none of which any guest code needs.

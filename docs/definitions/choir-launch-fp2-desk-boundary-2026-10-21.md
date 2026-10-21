@@ -580,3 +580,132 @@ first on the paper.
   half of MemTotal while capsule admission independently allows three quarters
   (`internal/capsule/job_memory.go`); `MemoryMin=512M` is not OOM immunity
   (sol).
+
+## Second batch (lane/b3-desk-boundary-2): RES-04 and SEC-15
+
+Started 2026-10-21 on top of the first batch (5fcf59e21), which is under
+review and is not changed here. Built in the Choir agents VM on node-a
+(uid 1000, no root, Landlock and unprivileged user namespaces available, no
+Nix builds): every nix change in this batch is unevaluated. Each item is a
+separate red commit, tests first, off or in observe mode in the image until
+FP0 has the probe on a test computer.
+
+### RES-04: capsule memory per doctrine
+
+Doctrine (`docs/choir-doctrine.md:406-408`): `memory.high` is the request,
+`memory.max` twice that, admission counts the request, `memory.events` is
+feedback. Code admits and caps at `MemoryMax`. The two cannot simply be
+swapped: an engineering capsule's link peaks at 1.50 to 1.80 GiB anonymous
+with no swap, so a `memory.high` below that throttles the build for minutes
+(the 1 GiB drill thrashed for 14). So the mechanism lands with a policy
+switch, `CHOIR_CAPSULE_MEMORY_POLICY`:
+
+- `observe` (the default and the image's value): the cgroup and admission are
+  exactly as before (`memory.max` = `MemoryMax`, admission against it). At
+  destroy, the executor reads the capsule's `memory.events` (`high`, `max`,
+  `oom`, `oom_kill`) and `memory.peak` and logs a memory receipt that names
+  what doctrine would have done: the request, the `memory.high` it would set,
+  and whether the peak would have crossed it. These receipts are the
+  measurement the values need.
+- `doctrine`: a spec that declares `MemoryRequest` gets `memory.high` =
+  request, `memory.max` = 2 x request, admission against the request, and a
+  job memory boost raises both. The capsules aggregate (`/sys/fs/cgroup/capsule`,
+  the RES-01 half the first batch left) gets `memory.max` = the live capsule
+  budget, so the overcommit doctrine allows is bounded by the same number
+  admission uses. A spec with no request keeps the observe shape.
+- Any other value is `observe`: the narrower shape.
+
+The engineering assignment declares a request of 2 GiB (above the measured
+1.80 GiB peak, so `memory.high` does not throttle the link): admission is
+unchanged at 2 GiB and, under `doctrine`, the ceiling becomes 4 GiB.
+
+Failure modes, written before code: Q1 a `memory.high` below a build's
+anonymous peak throttles it with no swap (why the default is observe); Q2
+admission against the request lets the sum of ceilings exceed the budget (the
+aggregate bounds it, doctrine only); Q3 a spec with no request silently
+doubles its ceiling under doctrine (it keeps the observe shape); Q4 a boost
+raises `memory.max` but not `memory.high` and the job throttles under its
+own boost (both are raised); Q5 a boost's end lowers a limit under usage
+(`memory.max` comes down only when usage fits, as before; `memory.high`
+follows it); Q6 accounting drift: spawn adds one number and destroy subtracts
+another (the admitted bytes are stored on the capsule); Q7 the aggregate is
+written below the subtree's usage and the kernel kills across capsules (it is
+written only when the usage fits and never lowered under it); Q8 a policy typo
+widens (unknown is observe); Q9 `memory.events` or `memory.peak` unreadable
+(old kernel): the receipt says unknown and destroy never fails for it; Q10
+request <= 0 or 2 x request overflowing under doctrine: the spawn is refused.
+
+### SEC-15: the document-tool sandbox
+
+`pdftotext`, `pdfinfo` and `pandoc` parse untrusted bytes as guest root with
+the guest's network (`internal/content/extract.go:215`). The fix is the
+design named in the first batch's residuals: the daemon runs each tool
+through a re-exec helper (`autoputer doc-tool-sandbox`) that it starts as a
+numeric sandbox user (uid and gid 61010, `choir-doctool`, declared in the
+image for operators and pinned by a test), in an empty network and IPC
+namespace, in a cgroup of its own under the desks cgroup (`w-doctool-*`, so
+the boot sweep of the first batch removes a crashed run's leftover; hard
+`memory.max` 1 GiB, a guess to be set from the probe, pids 64, no swap). The
+helper sets no_new_privs, rlimits (no core, 64 open files, CPU 60 s), Landlock
+V5 (read and execute the tool's roots, `/nix/store` on the guest; read the
+one input directory and its own `/proc/<pid>`; write nothing; no TCP), a
+seccomp deny list (ptrace, mount, namespaces, `CLONE_NEWUSER`, `clone3`
+answering ENOSYS, bpf, keyrings, io_uring, kernel modules and the like, and
+`socket`), then execs the tool. The input is a 0400 file in a 0700 directory
+the sandbox user owns; output is the tool's stdout through a pipe, capped at
+64 MiB.
+
+`CHOIR_DOCUMENT_TOOL_SANDBOX`: unset or `off` runs the tools as before;
+`observe` (the image's value) runs them sandboxed and, when the sandbox
+cannot be set up, runs the tool as before and adds the warning
+`document_tool_sandbox_fallback: <reason>` to the extraction (so the probe
+can count them); `required` runs sandboxed or not at all (warning
+`document_tool_sandbox_refused: <reason>`, and the extraction falls back to
+its pure-Go projection as it does today when a tool is missing); any other
+value is `required`.
+
+Failure modes, written before code: D1 the tool runs as root or with network;
+D2 it reads a secret (credential disk, store, another desk's directory, the
+daemon's `/proc`); D3 it writes anywhere; D4 it exhausts memory or processes;
+D5 it creates namespaces, traces, or loads kernel code; D6 a sandbox that
+cannot be set up runs the tool unsandboxed in required mode; D7 a crashed run
+leaks its directory or cgroup; D8 the helper entry is reachable without the
+daemon's environment (argv alone does nothing); D9 a kernel without Landlock
+V5 passes required mode; D10 the helper runs a tool as root (it refuses in
+required mode); D11 unbounded output fills the daemon's memory.
+
+### SEC-15: the daemon's capability floor (a first step, not non-root)
+
+Making the daemon non-root is the split the first batch designed (an
+unprivileged API and orchestration process, a small privileged helper for
+capsules, cgroups and cell spawn, over a unix socket with peer credentials).
+It is not a slice this lane can land safely: the capsule executor alone is
+reached from 55 call sites in agentcore and autoputer, in process. Recorded,
+not built; see the problem record. What lands is the floor under it: the
+daemon keeps only the capabilities the inventory names, each with the code
+that needs it, and drops the rest from its bounding set, so neither it nor any
+child (git, go, node, libreoffice, a capsule's user namespace) can regain
+them. Kept: CHOWN, DAC_OVERRIDE, DAC_READ_SEARCH, FOWNER, FSETID, KILL,
+SETGID, SETUID, SETPCAP, NET_BIND_SERVICE, NET_ADMIN, SYS_CHROOT, SYS_PTRACE,
+SYS_ADMIN, SYS_RESOURCE. Dropped: every other, among them SYS_MODULE,
+SYS_RAWIO, SYS_BOOT, SYS_TIME, MKNOD, NET_RAW, BPF, PERFMON, SYSLOG,
+MAC_ADMIN, MAC_OVERRIDE, LINUX_IMMUTABLE, AUDIT_*, CHECKPOINT_RESTORE.
+
+The bounding set is per thread and a cgo binary cannot change every thread at
+once, so the daemon drops on a locked thread at the top of `main` and
+re-executes itself once, marked; the new image inherits the set on every
+thread. `CHOIR_RUNTIME_CAPABILITY_FLOOR`: unset or `off` changes nothing;
+`observe` (the image's value) logs what it would drop and reports the
+daemon's uid and `CapBnd` in the isolation self-test; `enforce` drops,
+re-executes, and after the re-exec refuses to start if any thread still holds
+a capability outside the inventory; any other value is `enforce`.
+
+Failure modes, written before code: K1 a needed capability is dropped and
+capsules or desks fail (observe first, the inventory names a reason for each
+kept capability, and a test computer runs a capsule and every desk under
+`enforce` before the paper); K2 only the calling thread drops (the re-exec);
+K3 a re-exec loop (the marker; a marked start never re-executes); K4 a
+marked start that still holds extra capabilities (refused under enforce);
+K5 a child that needed a dropped capability (none known: no Mknod, raw I/O,
+module or time call in the guest code); K6 calling this non-root (it is not;
+the receipt says root with a floor).
