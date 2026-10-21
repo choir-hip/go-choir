@@ -96,6 +96,48 @@ round 2 at 11:25:55. Texture can do nothing until then.
   story. Cause unknown; hypothesis: the run's completion write and the
   report's wake wait behind the scans in E1.
 
+### E6 again, on the research-first path (2026-10-21 13:28, after 73b84cb78)
+
+A logged-out ask on the quiet sumo story (`rx-88c4b74b2040`, from v5):
+research's run started at 13:28:51, 15 s after the ask, with no Texture
+turn before it (E4 is gone). It sent interim packets at 13:29:45, 13:30:12
+and 13:30:38 and the final Report at 13:31:34 (E5 is gone: the first packet
+came 50 s after the ask). All four records reached `texture:db96d4ac…`
+(inbox head 8, cursor 4). Texture's run did not start until 13:48:34, 19
+minutes after the first packet; it committed v6 at 13:49:37. The ask took
+21 minutes, and about 19 of them were the wait for Texture's wake.
+
+What the ledger shows: the wake outbox had 0 unprojected rows at 13:40, so
+the wake left the outbox; the obligations surface showed 162 actor updates
+due (45 of kind `inbox_record`), 718 deferred, and 6 runs running. The
+paper ran Texture turns for other stories throughout (the recent runs list).
+
+Hypotheses, not findings (no trace yet shows which):
+
+- H1: the actor dispatcher's 8 activation slots (`MaxConcurrent`, default
+  8, `internal/actor/dispatcher.go`) are held by activations that run a
+  whole desk turn synchronously (`ExecuteActivationSyncChecked` for a
+  reactivated Texture run, `internal/actorruntime/handler.go`), so a due
+  update waits for a slot behind minutes-long turns.
+- H2: `PendingAgents` has no order (`SELECT DISTINCT … WHERE processed_at IS
+  NULL`), and each pass fills the slots from the head of that list, so some
+  actors can wait many passes. The run mix since 12:25 is not skewed by
+  doc-id prefix, so this is not shown.
+- H3: deferred updates whose backoff expired re-enter the due set and take
+  slots, retrying and deferring again.
+
+Instrument before fixing: the dispatcher logs an activation whose oldest
+due update waited 30 s or more, with the slots in use and the due count.
+
+### E9. Texture's Write cites with `{{ref N}}` and is refused
+
+In the same run Texture's first Write was refused: "`{{ref 1}}` names no
+source of this document; `{{ref}}` only keeps a citation the frame shows"
+(three times). Its second Write committed, and v6 cites the same three
+sources as v5: research's newly read Japan Times source did not reach the
+story. A failed tool call for the dual-model evaluation (owner notes
+section 35): check whether deepseek-v4.1-flash makes it too.
+
 ### E7. Texture asked for a second round
 
 France: Texture judged the first report thin ("The first research pass
@@ -158,6 +200,6 @@ share: research's model calls are 1 to 3 s each at low effort.
 
 ## Heresy delta
 
-- discovered: E1 to E8.
+- discovered: E1 to E9.
 - introduced: none.
 - repaired: none.
