@@ -327,3 +327,105 @@ func TestEngineeringAdmissionFreeSlotProceedsToSpawn(t *testing.T) {
 		t.Fatalf("a free slot armed %d retry wakes", len(*wakes))
 	}
 }
+
+// spawnWakesFor decodes the spawn wakes armed for assignment index.
+func (f *admissionFixture) spawnWakesFor(wakes []admissionWake, index int) []delegatedAssignmentSpawnDeadline {
+	f.t.Helper()
+	var out []delegatedAssignmentSpawnDeadline
+	for _, wake := range wakes {
+		if wake.kind != delegatedAssignmentSpawnDeadlineUpdateKind {
+			continue
+		}
+		var armed delegatedAssignmentSpawnDeadline
+		if err := json.Unmarshal([]byte(wake.content), &armed); err != nil {
+			f.t.Fatal(err)
+		}
+		if armed.AssignmentID == f.opens[index].AssignmentID {
+			out = append(out, armed)
+		}
+	}
+	return out
+}
+
+// restart makes the fixture's runtime a fresh boot after the rows it holds:
+// planned (the marker was present) or a crash.
+func (f *admissionFixture) restart(planned bool) {
+	f.rt.bootedAt = time.Now().UTC().Add(time.Second)
+	f.rt.bootRestartPlanned = planned
+}
+
+// Review finding B1: a request queued behind a live assignment that finished
+// just before a planned restart must survive the restart. The boot reconcile
+// used to read every pre-boot open, unbound row as an interrupted spawn strand
+// and cancel it ("restart acknowledged absent pre-bind assignment capsule").
+// A planned boot keeps the row, arms its one resume (a spawn wake with an
+// identity of its own, so it cannot dedup into a consumed row), and a later
+// reconcile of the trajectory in the same process leaves it alone too.
+func TestEngineeringAdmissionPlannedRestartKeepsQueuedRequest(t *testing.T) {
+	f := newAdmissionFixture(t, 2)
+	wakes := captureAdmissionWakes(f.rt)
+	f.open(0)
+	f.bind(0)
+	f.open(1)
+	requireBusy(t, f, 1, 0, "fixture: the request is queued behind the live assignment")
+	f.finish(0)
+	f.restart(true)
+	*wakes = nil
+
+	f.rt.reconcileEngineeringAssignmentCapsulesAfterRestart(context.Background())
+
+	queued := f.get(1)
+	if queued.Disposition != types.EngineeringAssignmentOpen || queued.CapsuleDisposition != types.EngineeringCapsuleUnbound {
+		t.Fatalf("a planned restart closed the queued request: %s/%s (%q)", queued.Disposition, queued.CapsuleDisposition, queued.DispositionReason)
+	}
+	armed := f.spawnWakesFor(*wakes, 1)
+	if len(armed) != 1 {
+		t.Fatalf("planned boot armed %d spawn wakes for the queued request, want exactly one: %+v", len(armed), *wakes)
+	}
+	if armed[0].Boot == 0 {
+		t.Fatalf("the boot resume wake has no boot identity; it would dedup into the open-time wake: %+v", armed[0])
+	}
+	if armed[0].Attempt != queued.Binding.Attempt {
+		t.Fatalf("boot resume wake attempt = %d, want %d", armed[0].Attempt, queued.Binding.Attempt)
+	}
+
+	// A later reconcile in the same process (a run-end kick, a work wake) is
+	// not a restart of the request either.
+	if err := f.rt.ReconcileEngineeringAssignmentsForTrajectory(context.Background(), queued.Binding.OwnerID, queued.Binding.ComputerID, queued.Binding.TrajectoryID); err != nil {
+		t.Fatal(err)
+	}
+	if again := f.get(1); again.Disposition != types.EngineeringAssignmentOpen {
+		t.Fatalf("a post-planned-boot reconcile closed the queued request: %s (%q)", again.Disposition, again.DispositionReason)
+	}
+	// The resumed wake is an ordinary admission attempt: the slot is free, so
+	// the request enters the spawn saga.
+	content, _ := json.Marshal(armed[0])
+	err := f.rt.HandleDelegatedAssignmentSpawnDeadline(context.Background(), f.seed.OwnerID, f.computer, f.seed.ParentAgentID, string(content))
+	if err == nil || !strings.Contains(err.Error(), "capsule authority unavailable") {
+		t.Fatalf("the boot resume wake did not reach the spawn saga: %v", err)
+	}
+}
+
+// The crash half of B1 is unchanged: a markerless boot closes the queued
+// request as interrupted_by_restart and arms nothing (CLAUDE.md, Restarts End
+// Work).
+func TestEngineeringAdmissionCrashRestartClosesQueuedRequest(t *testing.T) {
+	f := newAdmissionFixture(t, 2)
+	wakes := captureAdmissionWakes(f.rt)
+	f.open(0)
+	f.bind(0)
+	f.open(1)
+	f.finish(0)
+	f.restart(false)
+	*wakes = nil
+
+	f.rt.reconcileEngineeringAssignmentCapsulesAfterRestart(context.Background())
+
+	queued := f.get(1)
+	if !queued.Disposition.Terminal() || !strings.Contains(queued.DispositionReason, engineeringInterruptedByRestart) {
+		t.Fatalf("a crash boot left the queued request %s (%q), want terminal %s", queued.Disposition, queued.DispositionReason, engineeringInterruptedByRestart)
+	}
+	if armed := f.spawnWakesFor(*wakes, 1); len(armed) != 0 {
+		t.Fatalf("a crash boot armed %d spawn wakes for the queued request", len(armed))
+	}
+}
