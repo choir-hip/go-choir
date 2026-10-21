@@ -244,3 +244,51 @@ func TestLoadFromEnv(t *testing.T) {
 		})
 	}
 }
+
+// SEC-11: the credential reaches the proxy (8082) on loopback, so the
+// proxy's internal routes can require it; still never a guest DNAT port.
+func TestMarkInternalSendsCredentialToTheProxyPort(t *testing.T) {
+	defer SetForTesting(ModeEnforce, "markinternal-proxy-port-token-0123456789abcdef")()
+	for url, want := range map[string]bool{
+		"http://127.0.0.1:8082/internal/platform/objects": true,
+		"http://127.0.0.1:9077/":                          false,
+		"http://10.200.1.2:8082/":                         false,
+	} {
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		MarkInternal(req)
+		if got := req.Header.Get(Header) != ""; got != want {
+			t.Errorf("MarkInternal(%s) sent the credential = %v, want %v", url, got, want)
+		}
+	}
+}
+
+// SEC-11: AuthorizeAtMost caps the configured mode for one route.
+func TestAuthorizeAtMost(t *testing.T) {
+	const token = "authorize-at-most-token-0123456789abcdef0123"
+	check := func(configured, routeCap Mode, presented string) bool {
+		defer SetForTesting(configured, token)()
+		var got bool
+		req := httptest.NewRequest(http.MethodGet, "/internal/x", nil)
+		if presented != "" {
+			req.Header.Set(Header, presented)
+		}
+		Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { got = AuthorizeAtMost(r, routeCap) })).
+			ServeHTTP(httptest.NewRecorder(), req)
+		return got
+	}
+	if check(ModeEnforce, ModeEnforce, "") {
+		t.Fatal("enforce/enforce passed without a credential")
+	}
+	if !check(ModeEnforce, ModeEnforce, token) {
+		t.Fatal("enforce/enforce refused the credential")
+	}
+	if !check(ModeEnforce, ModeObserve, "") {
+		t.Fatal("a route capped at observe refused")
+	}
+	if !check(ModeObserve, ModeEnforce, "") {
+		t.Fatal("a route cannot raise the service's observe to enforce")
+	}
+	if !check(ModeOff, ModeEnforce, "") {
+		t.Fatal("hostauth off must stay off")
+	}
+}
