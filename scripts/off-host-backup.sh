@@ -218,6 +218,16 @@ restic_env() { # $1 = daily | archive
   export RESTIC_COMPRESSION=auto RESTIC_PACK_SIZE=64 RESTIC_READ_CONCURRENCY=2
   export GOGC=50
 }
+# The repository's stored bytes, as the sum of the pack sizes the
+# rest-server lists (REST API v2). `restic stats --mode raw-data` walks every
+# snapshot's trees and held the unit at its memory line (problem doc section
+# 13 item 19). The password goes to curl on stdin, never on its command line.
+repo_pack_bytes() { # $1 = daily | archive
+  printf 'user = "%s:%s"\n' "$REST_USER" "$RESTIC_REST_PASSWORD" |
+    curl -fsS --max-time 120 -K - -H 'Accept: application/vnd.x.restic.rest.v2' \
+      "http://127.0.0.1:$LOCAL_PORT/$REST_USER/$1/data/" 2>/dev/null |
+    jq -r '[.[].size] | add // 0' 2>/dev/null || echo 0
+}
 # --limit-upload is a global restic flag; there is no environment variable.
 R() { if [ "$UPLOAD_LIMIT_KIB" != 0 ]; then restic --limit-upload "$UPLOAD_LIMIT_KIB" "$@"; else restic "$@"; fi; }
 
@@ -416,7 +426,7 @@ EOF
   # No `restic check` here: walking every tree of a 9.7 million file
   # source runs past the unit's memory line for hours (problem doc section
   # 13 item 18). The weekly verify carries the structural check.
-  local raw; raw="$(R stats --mode raw-data --json 2>/dev/null | jq -r '.total_size // 0')"
+  local raw; raw="$(repo_pack_bytes daily)"
   local skipped_json; skipped_json="$(printf '%s\n' "${SKIPPED[@]:-}" | jq -R . | jq -sc 'map(select(length>0))')"
   status_merge <<EOF
 {"last_attempt_result":"$result","last_snapshot_id":"${sid:-}","last_bytes_added":${added:-0},"repo_raw_bytes":${raw:-0},"skipped":$skipped_json,"duration_seconds":$(( $(now) - started ))}

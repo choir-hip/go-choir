@@ -21,6 +21,9 @@
 #     for hours): never; the structural check is the weekly verify's.
 #  8. The weekly verify downloads every tree pack into a throwaway cache:
 #     never; it checks with the run's cache.
+# 10. The daily run walks every snapshot's trees to size the repository
+#     (`restic stats --mode raw-data`, 10 GB and 7 minutes on run 5):
+#     never; the size is the sum of the pack sizes the rest-server lists.
 #  9. A lock left by a killed run (its tunnel dies with it, so restic cannot
 #     delete the lock) blocks the next run: never; the run removes stale
 #     locks before it opens the repository.
@@ -44,8 +47,15 @@ setup() { # name, subvolumes (space separated: platform corpus), snapshot mode (
   case " $2 " in *" platform "*) subs="$subs $root/platform-dolt/platform" ;; esac
   case " $2 " in *" corpus "*) subs="$subs $root/corpus-dolt" ;; esac
   for t in ssh sqlite3; do printf '#!/bin/sh\nexit 0\n' > "$R/bin/$t"; done
+  cat > "$R/bin/curl" <<EOF
+#!/bin/sh
+cat >/dev/null
+echo "curl \$*" | grep -o 'data/' >> "$R/calls"
+echo '[{"name":"a","size":1000},{"name":"b","size":2345}]'
+EOF
   cat > "$R/bin/restic" <<EOF
 #!/bin/sh
+case " \$* " in *" stats "*) echo stats >> "$R/calls" ;; esac
 case " \$* " in *" unlock "*) echo unlock >> "$R/calls" ;; *" cat config "*) echo "cat config" >> "$R/calls" ;; esac
 case " \$* " in *" check "*) echo "restic check \$*" | grep -o -- 'check.*' >> "$R/calls" ;; esac
 case "\$*" in *" backup "*) echo "restic backup \$*" | grep -o -- '--exclude [^ ]*choir-backup[^ ]*' | sed 's#.*/staging/#--exclude staging/#' >> "$R/calls" ;; esac
@@ -96,6 +106,7 @@ check "snapshots are deleted at exit" "$([ -z "$(left)" ] && has 'delete platfor
 check "the corpus snapshot's .choir-backup is excluded" "$(has '--exclude staging/dolt/corpus/.choir-backup'; echo $?)"
 check "a clean run is ok" "$([ "$RC" = 0 ]; echo $?)"
 check "stale locks are removed before the repository is opened" "$(calls | grep -q '^unlock|cat config|'; echo $?)"
+check "the repository is sized from the pack list, not stats" "$(has 'data/' && ! has stats && [ "$(jq -r .repo_raw_bytes "$R/root/offhost-backup/status.json")" = 3345 ]; echo $?)"
 check "the daily run does not walk the trees" "$(! grep -q '^check' "$R/calls"; echo $?)"
 
 # 8: the weekly verify checks with the run's cache.
