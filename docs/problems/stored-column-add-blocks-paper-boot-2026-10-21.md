@@ -29,6 +29,34 @@ Evidence, read-only from Node B:
   (one of two vCPUs saturated), 68 GB read and 6.9 GB written, guest RSS
   8.3 GB.
 
+### What followed (all UTC, read-only from Node B)
+
+- 16:39: the CI run of 90e567936 (a docs commit on top of 51667a3ce)
+  deployed the same column code. It passed: the paper was deferred.
+- 16:44:54: vmctl's wedge detector stopped the paper ("refused connections
+  for 5m0s; stopped, it boots again"). The boot at 16:45:01 had no
+  planned-restart marker, so it closed the open work as interrupted by a
+  restart (CLAUDE.md, restarts end work), then started the same rewrite.
+  Its listener did not come up either; by 16:51 it had read 21 GB.
+- 16:53: the revert (f2c4a3ec3) deployed. It did not reach the paper: the
+  new vmctl found it "outside the registry; reattach pending" (it was
+  unhealthy when vmctl restarted), so the deploy neither refreshed nor
+  stopped it.
+- 16:59:09: the wedge detector stopped it again, "it boots again on resume".
+
+A second problem, then: **a rollback deploy cannot reach a protected
+computer that hangs during boot.** Reattach needs a computer vmctl stopped
+on its own restart (`internal/vmctl/host_capacity.go:155-157`); a
+protected computer outside the registry stays as it is until the wedge
+detector stops it. The rollback path that CLAUDE.md names (revert, then
+deploy) therefore depended on the wedge detector's five-minute bound,
+and each stop it made was unplanned, which closed the paper's open work.
+
+Measured afterwards on 20,000 local rows: adding a plain nullable column
+takes 8 ms and indexing it 94 ms; adding a stored generated column over
+metadata takes 2.3 s and over the body 3.6 s; backfilling a plain column
+costs about 0.4 ms a row.
+
 ## Belief
 
 Each `ALTER TABLE og_objects ADD COLUMN ... STORED` rewrites every row of
@@ -62,3 +90,6 @@ the start and the end of the step.
    writers of `og_objects` (dolt_store.go PutObject and its batch path,
    store/project.go, vocab_migrate_og.go), backfilled the same way.
 3. A boot-path step that can take longer than a minute logs its progress.
+4. A deploy refreshes a protected computer that is unhealthy outside the
+   registry instead of leaving it: the rollback must reach the computer
+   that the bad release broke.
