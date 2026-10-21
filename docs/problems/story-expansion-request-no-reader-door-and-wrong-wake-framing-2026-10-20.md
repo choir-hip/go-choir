@@ -259,3 +259,31 @@ and the fate line, which key on the owner revision id. Mutation class red
 (Texture canonical writes: the owner revision on a story). Heresy delta:
 discovered, the story ontology and the owner revise door disagree about
 work items; repaired by the fix; introduced, none intended.
+
+P5 fix, revised before landing. The first cut (a story revise accepted
+with no work item) reached 202, but a throwaway probe showed the wake
+dropped downstream: `ResolveTextureActorOccurrence` refuses an occurrence
+without a target work identity (`texture_controller.go`, about line
+1410), and four more sites on the run path need a work item. So the fix
+takes the existing settled-work reopen path instead: a live story whose
+`texture:<doc>` is live (not engineering-bound) gets a real Texture work
+item from `reopenTextureWorkForOwner`, and the wake resolves and
+reconciles as it does for a finished task document. Checked by reading
+and by the tests: `OpenLifecycleWork` accepts a work item on a story
+trajectory (it checks only liveness and the agent), and a story still
+never settles (`lifecycleSettlementReady` returns false for stories before
+it reads work items). Tests pin four failure modes
+(`texture_story_owner_revision_test.go`): F1 a story revise is 202 and a
+run for `texture:<doc>` carries the reopened work id; F2 a refused task
+document still refuses; F3 the revision id matches the proxy's formula
+and a stale repeat adds nothing; F4 the guard refuses absent, unborn,
+wrong-document, non-story and engineering-bound cases.
+
+Residual (inferred, untested): if a story's Texture turn is running on
+the records route when the ask arrives, the reconcile refuses the wake
+("does not authorize active candidate", `texture_controller.go` about
+line 280), because that run has no work id. The owner revision stays as
+the head and the reopened item stays open; whether the next records-route
+turn takes it up is not established. The deployed spec asks on stories
+that are not mid-turn; the fate line will show "no new version" if this
+bites.
