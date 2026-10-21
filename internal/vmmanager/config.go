@@ -113,6 +113,7 @@ func LoadConfigFromEnv() ManagerConfig {
 		log.Printf("vmmanager: VM_DATA_DISCARD is on but the Firecracker binary does not report 1.17.0 or newer; data drive discard stays off for the pinned build")
 	}
 	cfg.DataDiscardOnly = parseComputerSelector(os.Getenv("VM_DATA_DISCARD_ONLY"))
+	loadGuestReclaimFromEnv(&cfg)
 	if v := os.Getenv("VM_BALLOON_STATS_POLLING_INTERVAL_S"); v != "" {
 		// Firecracker's field is a u16: refuse out-of-range values rather
 		// than fail every boot.
