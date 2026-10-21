@@ -215,8 +215,9 @@ item below:
   - Plans: [design/claude-delegate-slice1-2026-10-14.md](design/claude-delegate-slice1-2026-10-14.md)
     (I19 exception, one week, now two);
     `reports/claude-agent-sdk-in-choir-2026-10-14.md` Options R/T/K.
-  - Decide: stay on one test computer until SEC-01 lands; then Option K
-    (key held by the gateway) before any wider use.
+  - Decided (owner, 2026-10-21, owner notes §35): the delegate stays on
+    the one test computer until desk-cell confinement (SEC-01) lands.
+    Before any wider use, Option K (key held by the gateway).
 - [ ] **SEC-09 · P0 · green/red — KSM off, stale comments fixed**
   - Now: nothing in nix sets KSM; the last reading (`run=1`, nothing
     merged) predates the 10-15 host reboot. Comments still claim KSM
@@ -590,10 +591,12 @@ Still owed:
 ## 6. Owner decisions
 
 - **DEC-01** Push `fix/desk-cell-confinement` from your machine, or confirm
-  it is lost (REC-01).
+  it is lost (REC-01). Owner, 2026-10-21: handle it from the iMac; a
+  session there is searching for it, `feat/s7-0-app-packages` and the
+  `vmbackend` work, and pushes what it finds as new branches.
 - **DEC-02** Wording for the app-desk tier in doctrine (ARCH-01).
-- **DEC-03** Claude delegate until SEC-01 lands: one test computer only
-  (recommended), or wider (SEC-08).
+- **DEC-03** Decided 2026-10-21: the Claude delegate stays on the one test
+  computer until SEC-01 lands (SEC-08).
 - **DEC-04** Which P1 items block launch, beyond the P0 list.
 - **DEC-05** Cross-tenant shared pages (pmem DAX, shared snapshot templates):
   a side channel of the same class as KSM; run the security panel

@@ -1020,3 +1020,13 @@ allowlist for research reads; moving a path to the host changes the route,
 not the capability; a list of capabilities each network item must prove
 still works; and item NET-10 (app-agent ingress and egress in the desk
 manifest).
+
+On the checklist's owner decisions, the owner, verbatim: "I'm not in a good
+position to push stuff right now. I think if you have iMac connection, you
+could handle that yourself." And: "Yeah, I do want to keep the Claude
+delegate just on the test computer until confinement lands." Taken as:
+DEC-01, a session on the owner's iMac finds the unpushed branches
+(`fix/desk-cell-confinement`, `feat/s7-0-app-packages`, the `vmbackend`
+work) and pushes them to origin as new branches without touching any
+working tree; DEC-03, the delegate stays on its one test computer until
+desk-cell confinement lands (checklist SEC-08).
