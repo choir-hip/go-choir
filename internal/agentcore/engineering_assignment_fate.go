@@ -553,6 +553,12 @@ func (rt *Runtime) reconcileEngineeringAssignmentsForTrajectory(ctx context.Cont
 				// Only an assignment opened before this boot is a restart strand.
 				continue
 			}
+			if rt.plannedBootKeepsQueuedRequest(assignment, exec) {
+				// A queued request (engineering_admission.go), not a spawn
+				// strand: a planned boot keeps it for its one resume, which
+				// the boot sweep arms.
+				continue
+			}
 			if assignment.CapsuleDisposition == types.EngineeringCapsuleUnbound {
 				intent := "capsule-revoke-intent:" + objectgraph.SHA256([]byte(assignment.AssignmentID+"\x00restart-pre-bind"))
 				requested, fateErr := rt.store.SetEngineeringCapsuleDisposition(ctx, engineeringFateRequest(assignment, types.EngineeringCapsuleRevokeRequested, intent, ""))
@@ -736,6 +742,9 @@ func (rt *Runtime) reconcileEngineeringAssignmentCapsulesAfterRestart(ctx contex
 		if err := rt.reconcileEngineeringAssignmentsForTrajectory(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignment.Binding.TrajectoryID, !planned); err != nil {
 			log.Printf("runtime: boot Engineering assignment capsule sweep trajectory %s: %v", assignment.Binding.TrajectoryID, err)
 		}
+	}
+	if _, planned := rt.BootWasPlannedRestart(); planned {
+		rt.resumeQueuedEngineeringRequestsAtPlannedBoot(ctx, computerID)
 	}
 }
 

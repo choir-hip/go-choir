@@ -43,6 +43,10 @@ type delegatedAssignmentSpawnDeadline struct {
 	// derived from its content: a retry with unchanged content would dedup
 	// into the consumed row.
 	Retry int `json:"retry,omitempty"`
+	// Boot is set (the boot's start, unix nanoseconds) on the one resume a
+	// planned boot arms for a queued request, and carried by its retries, so
+	// that chain has ids of its own (engineering_admission.go).
+	Boot int64 `json:"boot,omitempty"`
 }
 
 // cellTerminalDeadline is the complete reduction identity needed to terminate
