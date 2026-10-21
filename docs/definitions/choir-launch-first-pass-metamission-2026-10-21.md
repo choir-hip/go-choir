@@ -236,7 +236,7 @@ boundaries:
     - Broad Go test runs go through scratchpad/bin/heavy (two slots machine-wide) with GOMAXPROCS=2 GOFLAGS=-p=2.
   excluded:
     - The second pass; the owner plans it after reviewing this one.
-    - Owner items (B0 lead times, OD rulings), B13 (needs Xcode, absent on this Mac, and a physical iPhone), L2-05 red teaming (needs fork re-keying and the vault), and running an account deletion (black).
+    - Owner items (B0 lead times, OD rulings); B13, the iPhone app (owner 2026-10-21: "I don't think we need to proceed with iPhone just yet"; corrected the same day: Xcode is installed, only the command-line tools are selected); L2-05 red teaming (needs fork re-keying and the vault); and running an account deletion (black).
   protected_surfaces: [vmctl, guest desk confinement, gateway and provider calls, auth and session, the object store schema, deployment routing]
 
 now:
