@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/capfloor"
 	"github.com/yusefmosiah/go-choir/internal/doctool"
 	"github.com/yusefmosiah/go-choir/internal/gomemlimit"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
@@ -60,10 +61,13 @@ type isolationSelfTestResponse struct {
 	FrameBoundary yaegikernel.FrameBoundaryReceipt `json:"frame_boundary"`
 	// DocumentTool is the document-tool sandbox's probe (SEC-15).
 	DocumentTool doctool.SelfTestReceipt `json:"document_tool"`
-	Egress       []isolationEgressProbe  `json:"egress"`
-	EgressHost   string                  `json:"egress_host,omitempty"`
-	OK           bool                    `json:"ok"`
-	Failures     []string                `json:"failures,omitempty"`
+	// RuntimeCapabilities is the daemon's own capability state (SEC-15's
+	// floor): under enforce its bounding set holds nothing outside the floor.
+	RuntimeCapabilities capfloor.Status        `json:"runtime_capabilities"`
+	Egress              []isolationEgressProbe `json:"egress"`
+	EgressHost          string                 `json:"egress_host,omitempty"`
+	OK                  bool                   `json:"ok"`
+	Failures            []string               `json:"failures,omitempty"`
 }
 
 // HandleIsolationSelfTest runs the desk cell and guest egress self-tests.
@@ -99,6 +103,10 @@ func (h *APIHandler) HandleIsolationSelfTest(w http.ResponseWriter, r *http.Requ
 	resp.DocumentTool = doctool.SelfTest(ctx, deskWorkerBinary(), append([]string{"/etc/passwd"}, cellCfg.ExtraReads...))
 	for _, f := range resp.DocumentTool.Failures {
 		resp.Failures = append(resp.Failures, "document_tool: "+f)
+	}
+	resp.RuntimeCapabilities = capfloor.Snapshot()
+	if resp.RuntimeCapabilities.Mode == capfloor.ModeEnforce && len(resp.RuntimeCapabilities.Extra) != 0 {
+		resp.Failures = append(resp.Failures, "runtime_capabilities: enforce, but the daemon holds "+strings.Join(resp.RuntimeCapabilities.Extra, " "))
 	}
 	host, targets := guestEgressTargets(os.Getenv("RUNTIME_GATEWAY_URL"))
 	resp.EgressHost = host

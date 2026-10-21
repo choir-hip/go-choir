@@ -939,6 +939,12 @@ EOF
       # runs it as before with the extraction warning
       # document_tool_sandbox_fallback. "required" refuses instead.
       CHOIR_DOCUMENT_TOOL_SANDBOX = "observe";
+      # The daemon's capability floor (SDC SEC-15, internal/capfloor): it keeps
+      # 15 named capabilities and drops the rest from its bounding set.
+      # observe logs what it would drop and the isolation self-test reports
+      # the set; "enforce" drops it (one re-exec at start) after a test
+      # computer has run a capsule and every desk under enforce.
+      CHOIR_RUNTIME_CAPABILITY_FLOOR = "observe";
       PATH = lib.mkForce (lib.makeBinPath (with pkgs; [
         busybox
         bash

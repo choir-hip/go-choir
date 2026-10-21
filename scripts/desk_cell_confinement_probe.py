@@ -22,7 +22,9 @@ its isolation self-test (POST /api/runtime/isolation-selftest, owner only):
    the document-tool sandbox (uid 61010, empty network namespace, Landlock,
    seccomp; SEC-15), acting as a hostile tool: reads, writes, sockets,
    namespaces, mount, ptrace.
-3. egress: the guest runtime (guest root) dials host :22, :13306, :2019,
+3. runtime_capabilities: the daemon's own bounding set against the floor
+   (SEC-15); judged only when the image says enforce.
+4. egress: the guest runtime (guest root) dials host :22, :13306, :2019,
    169.254.169.254:80 and another guest's address (must be dropped), and the
    gateway :8084, corpusd :8086 and 1.1.1.1:443 (must stay open).
 
@@ -252,6 +254,20 @@ def judge_document_tool(dt):
     return fails
 
 
+# The daemon's capability floor (SEC-15, internal/capfloor), written out here.
+CAPFLOOR = "00000000012c15ff"
+
+
+def judge_runtime_capabilities(rc):
+    """Report-only under observe; under enforce the daemon's set is the floor."""
+    rc = rc or {}
+    if rc.get("floor") and rc.get("floor") != CAPFLOOR:
+        return ["runtime_capabilities: the daemon's floor is %r, the probe's %r" % (rc.get("floor"), CAPFLOOR)]
+    if rc.get("mode") == "enforce" and (rc.get("extra") or rc.get("cap_bnd") != CAPFLOOR):
+        return ["runtime_capabilities: enforce, but CapBnd %r holds %r" % (rc.get("cap_bnd"), rc.get("extra"))]
+    return []
+
+
 def judge_egress(eg):
     fails = []
     got = {e.get("name"): e for e in eg or []}
@@ -301,7 +317,8 @@ def main():
         finish(2, "self-test unavailable (HTTP %s)" % code)
     receipt["server"] = body
     fails = (judge_desk_cells(body.get("desk_cells") or {}) + judge_frames(body.get("frame_boundary"))
-             + judge_document_tool(body.get("document_tool")))
+             + judge_document_tool(body.get("document_tool"))
+             + judge_runtime_capabilities(body.get("runtime_capabilities")))
     if args.skip_egress:
         receipt["egress_judged"] = False
         server_fails = [f for f in (body.get("failures") or []) if not f.startswith("egress:")]

@@ -1,9 +1,11 @@
 package main
 
 import (
+	"log"
 	"os"
 
 	"github.com/yusefmosiah/go-choir/internal/autoputer"
+	"github.com/yusefmosiah/go-choir/internal/capfloor"
 	"github.com/yusefmosiah/go-choir/internal/doctool"
 )
 
@@ -26,6 +28,14 @@ func main() {
 	if len(os.Args) > 1 && os.Args[1] == doctool.ProbeArg {
 		// The isolation self-test's probe tool, run inside that sandbox.
 		os.Exit(doctool.RunProbe(os.Args[2:]))
+	}
+	// The daemon's capability floor (SDC SEC-15): before anything starts,
+	// drop every capability outside the inventory from the bounding set
+	// (enforce re-executes once). Enforce refuses to start rather than run
+	// above the floor.
+	if err := capfloor.Apply(capfloor.ModeFromEnv(os.Getenv)); err != nil {
+		log.Printf("autoputer: %v", err)
+		os.Exit(1)
 	}
 	autoputer.Run()
 }
