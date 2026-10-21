@@ -251,7 +251,7 @@ if [ "$(id -u)" != 0 ]; then
   echo nothing > "$WORK/scan/t2/clean"
   echo secret-looking > "$WORK/scan/t2/unreadable"; chmod 000 "$WORK/scan/t2/unreadable"
   run scan scan "$WORK/scan/canary" "$WORK/scan/t2/unreadable"
-  check "H15 an unreadable file fails the scan" "$([ "$RC" = 1 ] && printf '%s' "$OUT" | grep -q 'read errors: 1' && ! printf '%s' "$OUT" | grep -q 'hit: 0'; echo $?)"
+  check "H15 an unreadable file fails the scan" "$([ "$RC" = 1 ] && printf '%s' "$OUT" | grep -q 'read errors: 1' && ! printf '%s' "$OUT" | grep -q ': hit: 0'; echo $?)"
   run scan scan "$WORK/scan/canary" "$WORK/scan/t2"
   check "H15 an unreadable file under a directory fails the scan" "$([ "$RC" = 1 ] && printf '%s' "$OUT" | grep -q 'read errors: [1-9]'; echo $?)"
   chmod 644 "$WORK/scan/t2/unreadable"

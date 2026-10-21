@@ -191,28 +191,64 @@ cmd_status() {
 }
 
 # --- scan -------------------------------------------------------------------
-cmd_scan() { # canary-file, paths... : counts only
+# Counts only, and zero only when every requested byte was read (finding B4):
+# grep's status 2, a subtree find cannot enter, and a device node under a
+# directory (not read) are read errors; any read error exits 1. A socket, fifo
+# or symlink has no bytes of its own and is counted as skipped. An explicit
+# path may be a regular file or a block device (the raw backing device).
+SCAN_ERRORS=0
+scan_file() { # canary, file -> 0 hit, 1 none; counts a read error
+  grep -a -q -F -f "$1" -- "$2" 2>/dev/null
+  case $? in
+    0) return 0 ;;
+    1) return 1 ;;
+    *) err "cannot read $2"; SCAN_ERRORS=$((SCAN_ERRORS + 1)); return 1 ;;
+  esac
+}
+cmd_scan() { # canary-file, paths...
   need grep find wc tr
   local canary="${1:-}"; shift || true
   [ -n "$canary" ] && [ -s "$canary" ] && [ "$#" -gt 0 ] || { err "usage: scan CANARY_FILE PATH..."; exit 2; }
-  local path hits total=0 f n
+  local path hits total=0 skipped=0 f listing rc n
+  local before
   for path in "$@"; do
     hits=0
+    before=$SCAN_ERRORS
     if [ -d "$path" ]; then
+      # find's own status is the last line, so a traversal error is seen.
+      listing="$(find "$path" -type f 2>/dev/null; echo "find-rc=$?")"
+      rc="${listing##*find-rc=}"
+      listing="${listing%find-rc=*}"
+      if [ "$rc" != 0 ]; then
+        err "find could not traverse all of $path"; SCAN_ERRORS=$((SCAN_ERRORS + 1))
+      fi
       while IFS= read -r f; do
-        grep -a -q -F -f "$canary" -- "$f" 2>/dev/null && hits=$((hits + 1))
-      done < <(find "$path" -type f 2>/dev/null)
-    elif [ -f "$path" ]; then
-      n="$(grep -a -c -F -f "$canary" -- "$path" 2>/dev/null)"
-      [ "${n:-0}" -gt 0 ] && hits=1
+        [ -n "$f" ] || continue
+        scan_file "$canary" "$f" && hits=$((hits + 1))
+      done <<< "$listing"
+      n="$(find "$path" \( -type b -o -type c \) 2>/dev/null | wc -l | tr -d ' ')"
+      if [ "${n:-0}" -gt 0 ]; then
+        err "$path holds $n device node(s) that were not read"; SCAN_ERRORS=$((SCAN_ERRORS + n))
+      fi
+      n="$(find "$path" \( -type l -o -type p -o -type s \) 2>/dev/null | wc -l | tr -d ' ')"
+      skipped=$((skipped + ${n:-0}))
+    elif [ -f "$path" ] || [ -b "$path" ]; then
+      scan_file "$canary" "$path" && hits=1
     else
-      err "$path is neither a file nor a directory"
+      err "$path is neither a file, a block device nor a directory"
       exit 1
     fi
-    echo "$path: hit: $hits"
+    if [ "$SCAN_ERRORS" = "$before" ]; then
+      echo "$path: hit: $hits"
+    else
+      echo "$path: incomplete, $((SCAN_ERRORS - before)) read error(s), hits among what was read: $hits"
+    fi
     total=$((total + hits))
   done
   echo "files with a hit: $total"
+  echo "skipped non-file entries: $skipped"
+  echo "read errors: $SCAN_ERRORS"
+  [ "$SCAN_ERRORS" = 0 ] || { err "the scan did not read every requested byte; its counts are not evidence"; exit 1; }
 }
 
 case "${1:-}" in
