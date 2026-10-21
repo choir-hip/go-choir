@@ -37,7 +37,11 @@ type publicationHead struct {
 		State         string `json:"state"`
 		PublishMode   string `json:"publish_mode"`
 		AuthorLabel   string `json:"author_label"`
+		OwnerID       string `json:"owner_id"`
 	}
+	// story is the server's record that this is an Autopaper story
+	// (isAutopaperStory), set where the head is resolved.
+	story    bool
 	versions []publishedVersion
 	ref      publishedVersion
 }
@@ -88,6 +92,7 @@ func (s *Service) resolvePublicationHead(ctx context.Context, routePath string, 
 	if h.pubMeta.State != "published" {
 		return nil, sql.ErrNoRows
 	}
+	h.story = s.isAutopaperStory(frontPublicationMeta{PublishMode: h.pubMeta.PublishMode, OwnerID: h.pubMeta.OwnerID})
 
 	// 2. The version: n, or the latest when the link is bare.
 	h.versions, err = publishedVersions(ctx, og, pubObj.CanonicalID)
@@ -116,6 +121,8 @@ func (h *publicationHead) publication() PublicationSummary {
 	out := PublicationSummary{ID: h.pubMeta.PublicationID, Title: h.pubMeta.Title, Slug: h.pubMeta.Slug, State: h.pubMeta.State}
 	if h.pubMeta.PublishMode == PublishModeOpinion {
 		out.Kind, out.AuthorLabel = "opinion", h.pubMeta.AuthorLabel
+	} else if h.story {
+		out.Kind = "story"
 	}
 	return out
 }

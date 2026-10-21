@@ -97,7 +97,10 @@ type PublicationSummary struct {
 	Slug  string `json:"slug"`
 	State string `json:"state"`
 	// Kind is "opinion" for an opinion piece, whose page shows the Opinion
-	// label and AuthorLabel in place of the AI disclosure; empty otherwise.
+	// label and AuthorLabel in place of the AI disclosure, and "story" for
+	// an Autopaper story (isAutopaperStory), whose page shows the AI
+	// disclosure whichever address it was opened at; empty otherwise (a
+	// hand-published Texture).
 	Kind        string `json:"kind,omitempty"`
 	AuthorLabel string `json:"author_label,omitempty"`
 }

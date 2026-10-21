@@ -12,7 +12,7 @@ import (
 // The digest message (design section 4.4): a fixed template over the selected
 // stories. All story text is model-written, so it is escaped, stripped of
 // control characters and URL schemes, and never reaches a link: every link is
-// https://<primary domain>/autopaper/<slug> built from the slug.
+// https://<primary domain>/pub/texture/<slug> built from the slug.
 const (
 	digestSubjectMaxRunes = 120
 	digestTitleMaxRunes   = 200
@@ -96,7 +96,7 @@ func digestBase(domain string) string {
 }
 
 func digestStoryLink(domain, slug string) string {
-	return digestBase(domain) + "/autopaper/" + slug
+	return digestBase(domain) + "/pub/texture/" + slug
 }
 
 func digestMeta(s digestStory, now time.Time) string {
