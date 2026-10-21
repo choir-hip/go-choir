@@ -204,12 +204,12 @@ heresy_delta:
 now:
   status: working
   slice: >-
-    ARCH-10 launch half: the problem record and this file (first commit), then
-    the failing tests, then the admission function, the retry wake, and the
-    deletion of the supersede cancel.
-  source_ref: f399a2e8c
+    ARCH-10 launch half is built and tested locally (admission function, retry
+    wake, supersede cancel deleted); the staging drill is the orchestrator's.
+    Next: ARCH-04, one writer per object kind.
+  source_ref: lane/b10-selfdev (see receipts)
   deploy_identity: unknown to this lane
-  candidate: {id: none, state: none, ref: lane/b10-selfdev, base: f399a2e8c, digest: none, scope: []}
+  candidate: {id: arch10-admission, state: ready, ref: lane/b10-selfdev, base: f399a2e8c, digest: none, scope: [internal/agentcore/engineering_admission.go, internal/agentcore/engineering_assignment_runtime.go, internal/agentcore/continuation_schedule.go]}
   conjecture:
     id: FP4-C1
     claim: >-
@@ -229,13 +229,15 @@ now:
     scope_if_supported: >-
       Sequential admission of records Casts on one computer, kernel mode;
       not N concurrent capsules, not the legacy coagent spawn path.
-    status: proposed
-    evidence_refs: [docs/problems/engineering-admission-supersedes-live-assignment-2026-10-21.md]
+    status: testing
+    evidence_refs:
+      - docs/problems/engineering-admission-supersedes-live-assignment-2026-10-21.md
+      - "local: TestEngineeringAdmissionDoesNotCancelLiveAssignment failed on f399a2e8c with 'cancelled (superseded by a fresh implementation assignment; capsule budget reclaimed)' and passes on the fix"
   decision:
     what: >-
       Queue by durable open request and retry the spawn; do not refuse the
       Cast at open (a refused open writes nothing and leaves the retry to a
-      model).
+      model). Never supersede, same trajectory included.
     kind: architecture
     status: proposal
     evidence_ref: docs/choir-doctrine.md management admission ledger; docs/computer-ontology.md:378-385
@@ -245,18 +247,21 @@ now:
       question below, default in force.
   belief:
     believed_state: >-
-      Admission correctness is a small change in the spawn saga; the harder
-      parts are the wake's retry identity and the stuck-live-assignment wait.
+      Admission correctness was a small change in the spawn saga; the retry
+      identity (a retry count in the wake content) and the expiry were the
+      parts that needed care. A stuck live assignment now holds the slot to
+      its six-hour deadline or an explicit Cancel.
     main_uncertainty: >-
-      Whether anything depends on supersede to recover a stuck assignment
-      (the staging drill and the paper's engineering history would show it).
-    next_observation: The failing focused test, then the drill.
+      Whether anything relied on supersede to recover a zombie bound
+      assignment whose run died without a fate. The drill and the paper's
+      engineering history would show it.
+    next_observation: The staging drill: two Casts in a row, rows read after each step.
   blocker_or_risk: >-
-    A stuck live assignment now blocks the queue until its six-hour deadline or
-    an explicit Cancel; accepted, recorded as a residual.
+    A stuck live assignment blocks the queue until its six-hour deadline or an
+    explicit Cancel; accepted, recorded as a residual. A bound assignment
+    whose run is terminal but whose row is not is the case to watch.
   next_action: >-
-    Commit the problem record and this file, then write the failing admission
-    tests.
+    ARCH-04: the writer column on the object graph kind registry, test first.
 
 slices:
   ARCH-10:

@@ -300,7 +300,17 @@ func (rt *Runtime) openDelegatedCastAssignment(ctx context.Context, plan enginee
 // assignment. The deterministic capability re-derives the exact digest the
 // binding committed.
 func (rt *Runtime) resumeDelegatedCastAssignment(ctx context.Context, assignment types.EngineeringAssignment, req assignmentSpawnRequest) (AssignedEngineeringStart, error) {
-	if rt == nil || rt.capsuleExecutor == nil {
+	if rt == nil || rt.store == nil {
+		return AssignedEngineeringStart{}, fmt.Errorf("assigned Engineering runtime unavailable")
+	}
+	// Admission comes first, before the capsule authority, the preflight and
+	// anything that could cancel: a request that has to wait stays open and
+	// unbound, and the live assignment is never touched. It reads only the
+	// assignment rows.
+	if err := rt.admitEngineeringAssignment(ctx, assignment); err != nil {
+		return AssignedEngineeringStart{}, err
+	}
+	if rt.capsuleExecutor == nil {
 		return AssignedEngineeringStart{}, fmt.Errorf("assigned Engineering capsule authority unavailable")
 	}
 	preflight, err := rt.capsuleExecutor.PreflightSourceSnapshot(ctx, assignment.Binding.SourceArtifactRef)
@@ -477,8 +487,13 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 	// One live assignment capsule at a time: prior capsules are reclaimed
 	// here, in the saga, so the open itself writes nothing but its own
 	// transaction (C1e D4).
-	if err := rt.reclaimSupersededAssignmentCapsules(ctx, types.RunRecord{OwnerID: ownerID, ComputerID: computerID}, assignmentID); err != nil {
-		return AssignedEngineeringStart{}, cancelOpen(fmt.Errorf("reclaim superseded capsules: %w", err))
+	if err := rt.reclaimTerminalAssignmentCapsules(ctx, types.RunRecord{OwnerID: ownerID, ComputerID: computerID}, assignmentID); err != nil {
+		if errors.Is(err, ErrEngineeringAdmissionBusy) {
+			// Defense in depth: admission already ran under the same mutex. A
+			// request that has to wait is never cancelled here.
+			return AssignedEngineeringStart{}, err
+		}
+		return AssignedEngineeringStart{}, cancelOpen(fmt.Errorf("reclaim terminal capsules: %w", err))
 	}
 	var created *capsule.Capsule
 	if rt.capsuleExecutor.HasCapsule(capsuleID) {
@@ -648,13 +663,19 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 	return AssignedEngineeringStart{Assignment: bound.Assignment, Run: run}, nil
 }
 
-// reclaimSupersededAssignmentCapsules enforces one live assignment capsule at
-// a time. Every prior assignment on this computer whose capsule disposition is
-// not already revoked (and that is not the assignment being opened) is durably
-// cancelled through the existing fate path, which revokes its capsule and
-// releases admission budget before the new capsule spawns. Fail closed: a
-// reclaim failure must not open a new assignment on a leaked budget.
-func (rt *Runtime) reclaimSupersededAssignmentCapsules(ctx context.Context, parent types.RunRecord, currentAssignmentID string) error {
+// reclaimTerminalAssignmentCapsules revokes the capsules that terminal
+// assignments left behind, so a fresh capsule never spawns on a leaked
+// admission budget. It never cancels live work: a non-terminal assignment that
+// holds a capsule makes it refuse with the retryable busy error. Admission
+// (admitEngineeringAssignment) has already refused the request by then, under
+// the same mutex; this is the second line. Fail closed: a reclaim failure must
+// not open a new assignment on a leaked budget.
+//
+// Until 2026-10-21 this function cancelled every other assignment that held a
+// capsule, "superseded by a fresh implementation assignment", against the
+// doctrine's FIFO admission with a retryable refusal (SDC ARCH-10,
+// docs/problems/engineering-admission-supersedes-live-assignment-2026-10-21.md).
+func (rt *Runtime) reclaimTerminalAssignmentCapsules(ctx context.Context, parent types.RunRecord, currentAssignmentID string) error {
 	assignments, err := rt.store.ListEngineeringAssignmentsForComputer(ctx, parent.ComputerID)
 	if err != nil {
 		return err
@@ -667,35 +688,31 @@ func (rt *Runtime) reclaimSupersededAssignmentCapsules(ctx context.Context, pare
 			assignment.CapsuleDisposition == types.EngineeringCapsuleUnbound {
 			continue
 		}
+		if !assignment.Disposition.Terminal() {
+			return &engineeringAdmissionBusy{AssignmentID: currentAssignmentID, BlockedBy: assignment.AssignmentID, Why: "live"}
+		}
+		if assignment.BoundRunID == "" {
+			// A terminal assignment that never bound a run has no capsule to
+			// revoke through the fate path.
+			continue
+		}
+		// A terminal assignment whose capsule was never revoked still holds
+		// admission budget: revoke the capsule directly through the fate path.
 		// Prior assignments may have been opened by a different persistent-Management
-		// run identity (e.g. before a restart reactivated the actor). Reclaim
-		// through the exact parent recorded on each assignment binding, not the
-		// current caller, so the fate path's parent-identity check passes.
+		// run identity (e.g. before a restart reactivated the actor), so the
+		// parent is the one recorded on each assignment binding, not the
+		// current caller, and the fate path's parent-identity check passes.
 		reclaimParent := parent
 		reclaimParent.RunID = assignment.Binding.ParentRunID
 		reclaimParent.AgentID = assignment.Binding.ParentAgentID
-		if assignment.Disposition.Terminal() && assignment.BoundRunID != "" {
-			// A terminal assignment whose capsule was never revoked still holds
-			// admission budget. cancelAssignedEngineering replays without revoking
-			// for terminal dispositions, so revoke the capsule directly through
-			// the fate path.
-			reclaimed, err := rt.revokeAssignedCapsule(ctx, assignment,
-				"terminal assignment capsule budget reclaimed for fresh assignment")
-			if err != nil {
-				return fmt.Errorf("reclaim terminal %s (capsule %s): %w",
-					assignment.AssignmentID, assignment.Binding.CapsuleID, err)
-			}
-			log.Printf("runtime: reclaimed terminal assignment capsule %s (capsule %s) disposition=%s",
-				assignment.AssignmentID, assignment.Binding.CapsuleID, reclaimed.CapsuleDisposition)
-			continue
-		}
-		result, err := rt.cancelAssignedEngineering(ctx, reclaimParent, assignment.AssignmentID, assignment.Binding.Attempt,
-			"superseded by a fresh implementation assignment; capsule budget reclaimed")
+		reclaimed, err := rt.revokeAssignedCapsule(ctx, assignment,
+			"terminal assignment capsule budget reclaimed for fresh assignment")
 		if err != nil {
-			return fmt.Errorf("reclaim %s (capsule %s): %w", assignment.AssignmentID, assignment.Binding.CapsuleID, err)
+			return fmt.Errorf("reclaim terminal %s (capsule %s): %w",
+				assignment.AssignmentID, assignment.Binding.CapsuleID, err)
 		}
-		log.Printf("runtime: reclaimed superseded assignment capsule %s (capsule %s) disposition=%s",
-			assignment.AssignmentID, assignment.Binding.CapsuleID, result.Assignment.CapsuleDisposition)
+		log.Printf("runtime: reclaimed terminal assignment capsule %s (capsule %s) disposition=%s",
+			assignment.AssignmentID, assignment.Binding.CapsuleID, reclaimed.CapsuleDisposition)
 	}
 	return nil
 }

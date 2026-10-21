@@ -40,7 +40,7 @@ func TestReclaimSkipsCurrentAndAlreadyRevoked(t *testing.T) {
 
 	// Reclaim targeting the current assignment ID must not touch it. Both
 	// assignments are unbound (never spawned), so reclaim skips them entirely.
-	if err := rt.reclaimSupersededAssignmentCapsules(ctx, parent, current.AssignmentID); err != nil {
+	if err := rt.reclaimTerminalAssignmentCapsules(ctx, parent, current.AssignmentID); err != nil {
 		t.Fatalf("reclaim: %v", err)
 	}
 

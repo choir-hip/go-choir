@@ -648,6 +648,17 @@ wait, instead of killing work the owner is waiting on. Red (assignment
 admission); after the hang is fixed, because each supersede today ends in
 the teardown that hangs.
 
+*Update 2026-10-21 (FP4, ARCH-10):* the supersede is removed, for every
+trajectory, not only another trajectory's. The reclaim is now
+`reclaimTerminalAssignmentCapsules` (terminal assignments' leaked capsules
+only), and a new Cast waits in FIFO order behind the live assignment and
+older open requests, with a retryable refusal and a retry wake
+(`internal/agentcore/engineering_admission.go`;
+[engineering-admission-supersedes-live-assignment-2026-10-21.md](engineering-admission-supersedes-live-assignment-2026-10-21.md)).
+The candidate above (supersede a same-trajectory re-Cast) is not taken:
+a re-Cast of a request whose assignment is still live now waits for that
+assignment's fate or its deadline.
+
 ## Failure 3 located: the teardown's memory.reclaim write never returns (424ee13f7, 15:30 UTC)
 
 Observed, not inferred. Deploy 424ee13f7; both drill computers hung at the
