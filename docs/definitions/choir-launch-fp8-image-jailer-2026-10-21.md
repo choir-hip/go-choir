@@ -243,7 +243,7 @@ puts today's headroom at about 100 more users.
 | records | 4f12b86d6 | this file, P1 to P7 | n/a |
 | RES-05 | e01d5423e | jails hard-link one root-owned 0444 copy per source identity (`jail_shared.go`) | the jailer is on |
 | SEC-04 | 8e373bdd0 | `selectsComputer` (ids, `class:<class>`, `*`); `VMCTL_JAILER_ONLY=class:test` works | `VMCTL_JAILER=on` |
-| NET-08, RES-16 | b4293aaec | `VM_FIRECRACKER_NEXT_BIN`/`_ONLY`, per-VM `vmm-build.json`; discard per launched build, `VM_DATA_DISCARD_ONLY`; `nix/firecracker-next.nix` (UNEVALUATED, fakeHash x2, imported nowhere) | NEXT env set |
+| NET-08, RES-16 | b4293aaec, 859cfe6cc | `VM_FIRECRACKER_NEXT_BIN`/`_ONLY`, per-VM `vmm-build.json`; discard per launched build, `VM_DATA_DISCARD_ONLY`; `nix/firecracker-next.nix` (UNEVALUATED, fakeHash x2, imported nowhere) | NEXT env set |
 | RES-06 | f6d31783d | `damon_reclaim.*` boot args for `VM_GUEST_RECLAIM_ONLY` computers | ONLY env set |
 | RES-09 | db7587bcc | vmctl reads the boot class (refreshing the test tier) before the hotplug selection | live on deploy (class:test only) |
 | RES-14 | c46df4522 | stale comment only; the item is a reading | n/a |
