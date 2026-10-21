@@ -163,6 +163,57 @@ def judge_desk_cells(dc):
     return fails
 
 
+# The host-served actions the daemon must serve to each desk, and nothing else.
+# Written out here, not read from the guest: this is the authority the batch
+# must not widen (internal/deskmanifest, internal/yaegikernel/frame_role_test.go).
+FRAME_ALLOWED = {
+    "management": {"product_api", "read_capture", "stories"},
+    "texture": {"read_capture"},
+    "research": {"search_start", "read", "search_wire_corpus", "save_evidence", "read_evidence", "list_evidence",
+                 "get_run_memory_entry", "research", "poll_source", "read_capture", "system1", "source_api"},
+    "research_child": {"search_start", "read", "read_capture", "search_wire_corpus", "read_evidence", "list_evidence"},
+    "management_task": {"read_capture", "stories"},
+}
+FRAME_ACTIONS = {"exec", "read_file", "write_file", "list_dir", "message", "search_start", "read", "search_wire_corpus",
+                 "save_evidence", "read_evidence", "list_evidence", "get_run_memory_entry", "product_api", "research",
+                 "poll_source", "read_capture", "stories", "system1", "source_api"}
+
+
+def judge_frames(fb):
+    """The forged-frame probe: raw observations of the daemon's frame admission."""
+    fails = []
+    roles = {r.get("role"): r for r in (fb or {}).get("roles") or []}
+    for role, allowed in FRAME_ALLOWED.items():
+        r = roles.get(role)
+        p = "frames %s: " % role
+        if not r:
+            fails.append(p + "no observations")
+            continue
+        if r.get("error"):
+            fails.append(p + r["error"])
+            continue
+        served, refused = set(r.get("served") or []), set(r.get("refused") or [])
+        if served != allowed:
+            fails.append(p + "served %r, want exactly %r (extra: %r, missing: %r)" % (
+                sorted(served), sorted(allowed), sorted(served - allowed), sorted(allowed - served)))
+        if (served | refused) != FRAME_ACTIONS or (served & refused):
+            fails.append(p + "served and refused do not partition the actions: %r %r" % (sorted(served), sorted(refused)))
+        for case in ("wrong_token", "missing_token", "foreign_token", "stale_epoch", "bad_protocol", "emit_stream", "bad_version_header"):
+            if not str(r.get(case, "")).startswith("refused"):
+                fails.append(p + "%s = %r, want a refusal" % (case, r.get(case)))
+        if role != "management" and not str(r.get("claimed_other_desk", "")).startswith("refused"):
+            fails.append(p + "claiming management got %r, want a refusal" % r.get("claimed_other_desk"))
+        if role == "management" and r.get("claimed_other_desk") != "served":
+            fails.append(p + "management's own product_api was %r" % r.get("claimed_other_desk"))
+        if not r.get("wrong_token_killed"):
+            fails.append(p + "a wrong slot token did not end the worker")
+        if r.get("refused_reached_handler"):
+            fails.append(p + "%d refused frames reached a handler" % r["refused_reached_handler"])
+        if not r.get("refusals_reported"):
+            fails.append(p + "no refusal was reported to the host's trace hook")
+    return fails
+
+
 def judge_egress(eg):
     fails = []
     got = {e.get("name"): e for e in eg or []}
@@ -211,7 +262,7 @@ def main():
     if code != 200:
         finish(2, "self-test unavailable (HTTP %s)" % code)
     receipt["server"] = body
-    fails = judge_desk_cells(body.get("desk_cells") or {})
+    fails = judge_desk_cells(body.get("desk_cells") or {}) + judge_frames(body.get("frame_boundary"))
     if args.skip_egress:
         receipt["egress_judged"] = False
         server_fails = [f for f in (body.get("failures") or []) if not f.startswith("egress:")]
