@@ -3672,3 +3672,9 @@ func (m *Manager) checkAllHealth() {
 		}
 	}
 }
+
+// tightenDataImageMode is pending (FP9 mode change): it makes no change yet.
+func tightenDataImageMode(path string) error {
+	_, err := regularFileInfo(path)
+	return err
+}
