@@ -43,7 +43,7 @@ start:
       encryption layer (problems/data-at-rest-snapshots-images-escrow-key-
       plaintext-2026-10-21.md, evidence list).
     - >-
-      data.img is created 0644 in a 0755 directory (manager.go:883, :2997);
+      data.img is created 0644 in a 0750 directory (manager.go:842, :2997);
       the escrow private key is a plaintext base64 file read by corpusd and
       checkpointd (keyescrow.go:68-111); corpusd generates a new key when
       the file is absent (cmd/corpusd/main.go:159); the daily backup holds
@@ -238,7 +238,7 @@ receipts: []
 See the problem record for the evidence list with file and line. In one
 paragraph: guest RAM is written to the main file system in plaintext and kept
 up to 36 hours; every data image is a plaintext ext4 file with a 0644 mode in
-a 0755 directory; the escrow key that unwraps every computer's data key is a
+a 0750 directory; the escrow key that unwraps every computer's data key is a
 plaintext file; the same restic password opens the keys and the data. Every
 host secret sits on the same unencrypted root file system, so a key stored
 there protects nothing against that disk. Only a key that never exists on a
@@ -249,7 +249,7 @@ adds anything.
 
 | Asset | Change in this station | State | Switch |
 |---|---|---|---|
-| data.img and the VM directory modes | create 0600 and 0700; tighten existing images at boot | built (commit 2) | none (always on) |
+| data.img, staged and quarantined image modes | create 0600; tighten existing images at boot and on quarantine | built (commit 2) | none (always on) |
 | Snapshot `mem` and `vmstate` | capture into a verified dm-crypt plain mount, else refuse | built, dark (commit 3) | `VM_SNAPSHOT_VAULT_DIR`, `VM_SNAPSHOT_VAULT_ONLY` |
 | The vault itself | nix module, verify script | built, not imported (commit 4) | FP0 imports it |
 | Escrow private key | sealed under a KEK from outside the artifacts volume | built, dark (commit 5) | `CHOIR_KEY_ESCROW_SEAL`, `CHOIR_KEY_ESCROW_KEK_PATH` |
@@ -347,15 +347,16 @@ Neither is started here. The mode change and the vault do not depend on them.
 
 ## Failure modes, written before code
 
-Mode change (commit 2).
+Mode change (commits 2 and 3 of the branch: tests, then fix).
 1. A new image is created 0644. 2. An existing 0644 image stays 0644 after a
-boot. 3. The VM directory is created 0755. 4. The tightening follows a
-symlink and changes another file's mode (must refuse a non-regular file).
-5. The tightening changes the snapshot disk identity (it must not: identity is
-size, mtime, inode, device). 6. A jailed VM loses access (the jail chowns the
-inode to the VMM uid, so a root-owned 0600 is only the unjailed case; tests
-use the existing fake chown). 7. A chmod error stops a boot (it must not; it
-logs, the parent directory remains the barrier).
+boot. 3. A staged or quarantined image keeps a loose mode. 4. The tightening
+follows a symlink and changes another file's mode (it opens O_NOFOLLOW and
+refuses a non-regular file). 5. The tightening changes the snapshot disk
+identity (it must not: identity is size, mtime, inode, device; chmod moves
+ctime only). 6. A jailed VM loses access (the jail chowns the inode to the VMM
+uid, so a 0600 root-owned file is only the unjailed case). 7. A chmod error
+stops a boot (it must not; it logs, the parent directory remains the barrier).
+The VM directory itself is already 0750 and is left alone.
 
 Snapshot vault (commit 3).
 V1 The vault path is a plain directory because the mount did not happen.
