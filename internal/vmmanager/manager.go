@@ -446,6 +446,11 @@ type Manager struct {
 	// vaultProbe checks that the snapshot vault is an encrypted mount
 	// (snapshot_vault.go); tests replace it.
 	vaultProbe func(dir string, acceptAnyCrypt bool) error
+	// vaultHandleCheck verifies the vault directory a capture holds open
+	// (snapshot_vault.go); nil is the production check. Tests replace it.
+	vaultHandleCheck func(h *os.File, dir string, acceptAnyCrypt bool) error
+	// vaultRootsMu serializes changes to the vault root record.
+	vaultRootsMu sync.Mutex
 }
 
 func (m *Manager) StateDir() string {

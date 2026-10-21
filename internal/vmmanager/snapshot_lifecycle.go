@@ -118,17 +118,41 @@ func (m *Manager) captureSnapshot(vmID string, cfg VMConfig, hostURL string, tl 
 	jailed := conf.jailed()
 	// The snapshot vault (snapshot_vault.go): a computer the vault serves is
 	// captured into the vault or not at all. These checks come before the
-	// fence, so a refusal never pauses the guest.
-	vault := m.vaultSelected(vmID, cfg.ComputerID)
-	root := m.cfg.StateDir
-	if vault {
-		if jailed {
-			return nil, false, snapshotReasonVaultJailed, fmt.Errorf("a jailed VMM captures inside its jail on the main file system; vault computers are not supported under the jailer")
-		}
-		if err := m.probeVault(); err != nil {
-			return nil, false, snapshotReasonVaultUnavailable, err
-		}
-		root = m.cfg.SnapshotVaultDir
+	// fence, so a refusal never pauses the guest. The vault directory is
+	// opened and verified once and held until the commit is synced; every
+	// path of the capture resolves through it (finding B1).
+	if !m.vaultSelected(vmID, cfg.ComputerID) {
+		return m.captureSnapshotInto(vmID, cfg, hostURL, tl, snap, conf, nil)
+	}
+	if jailed {
+		return nil, false, snapshotReasonVaultJailed, fmt.Errorf("a jailed VMM captures inside its jail on the main file system; vault computers are not supported under the jailer")
+	}
+	vh, err := m.openVault(m.cfg.SnapshotVaultDir)
+	if err != nil {
+		return nil, false, snapshotReasonVaultUnavailable, err
+	}
+	defer vh.close()
+	if err := m.recordVaultRoot(m.cfg.SnapshotVaultDir); err != nil {
+		return nil, false, snapshotReasonVaultUnavailable, fmt.Errorf("record the vault root: %w", err)
+	}
+	meta, stopped, reason, err := m.captureSnapshotInto(vmID, cfg, hostURL, tl, snap, conf, vh)
+	if reason != "" {
+		// Whatever the capture wrote is removed where it was written: in the
+		// held vault directory, even if the path now names another one.
+		_ = os.RemoveAll(snapshotPartialDirIn(vh.self, vmID))
+		_ = os.RemoveAll(snapshotDirIn(vh.self, vmID))
+		_ = os.Remove(filepath.Join(vh.self, vmID))
+	}
+	return meta, stopped, reason, err
+}
+
+// captureSnapshotInto is captureSnapshot after the vault decision: vh is the
+// held vault directory, or nil for the state directory.
+func (m *Manager) captureSnapshotInto(vmID string, cfg VMConfig, hostURL string, tl *BootTimeline, snap *SnapshotTimeline, conf *ConfinementReceipt, vh *vaultHandle) (*SnapshotMeta, bool, string, error) {
+	jailed := conf.jailed()
+	root, vmmRoot := m.cfg.StateDir, m.cfg.StateDir
+	if vh != nil {
+		root, vmmRoot = vh.self, vh.vmm
 	}
 	sock := m.apiSocketPath(vmID)
 	if jailed {
@@ -153,7 +177,7 @@ func (m *Manager) captureSnapshot(vmID string, cfg VMConfig, hostURL string, tl 
 		return nil, false, snapshotReasonLaunchConfig, err
 	}
 	need := int64(cfg.MachineMemSizeMib)<<20 + snapshotStateOverheadBytes
-	if !m.ensureSnapshotRoomAt(root, vmID, need) {
+	if !m.ensureSnapshotRoomFor(root, vh != nil, vmID, need) {
 		return nil, false, snapshotReasonDiskBudget, fmt.Errorf("no room for %d bytes within budget %d", need, m.snapshotBudgetBytes())
 	}
 	tl.mark("budget_ok")
@@ -199,8 +223,10 @@ func (m *Manager) captureSnapshot(vmID string, cfg VMConfig, hostURL string, tl 
 	if err := os.Chmod(partial, 0o700); err != nil {
 		return nil, false, snapshotReasonCreateFailed, err
 	}
-	statePath := filepath.Join(partial, snapshotStateName)
-	memPath := filepath.Join(partial, snapshotMemName)
+	// The VMM resolves its paths itself; for a vault capture they go through
+	// vmctl's held vault directory.
+	statePath := filepath.Join(snapshotPartialDirIn(vmmRoot, vmID), snapshotStateName)
+	memPath := filepath.Join(snapshotPartialDirIn(vmmRoot, vmID), snapshotMemName)
 	// A jailed VMM writes inside its jail, to a capture dir its uid owns;
 	// the files move to the host partial dir once it has stopped.
 	jailPartial := ""
@@ -254,7 +280,7 @@ func (m *Manager) captureSnapshot(vmID string, cfg VMConfig, hostURL string, tl 
 		tl.mark("snapshot_moved_from_jail")
 	}
 
-	meta, err := m.commitSnapshot(vmID, root, vault, cfg, hostURL, hostPort, launchConfig, prepared, snap, conf)
+	meta, err := m.commitSnapshot(vmID, root, vh, cfg, hostURL, hostPort, launchConfig, prepared, snap, conf)
 	if err != nil {
 		return nil, true, snapshotReasonCommitFailed, err
 	}
@@ -266,14 +292,20 @@ func (m *Manager) captureSnapshot(vmID string, cfg VMConfig, hostURL string, tl 
 // disk identities taken after Firecracker stopped, metadata, then one rename
 // of snapshot.partial/ to snapshot/. An interrupted commit leaves only the
 // partial dir, which is never loaded.
-func (m *Manager) commitSnapshot(vmID, root string, vault bool, cfg VMConfig, hostURL string, hostPort int, launchConfig []byte, prepared guestHibernatePrepareResponse, snap *SnapshotTimeline, conf *ConfinementReceipt) (*SnapshotMeta, error) {
+func (m *Manager) commitSnapshot(vmID, root string, vh *vaultHandle, cfg VMConfig, hostURL string, hostPort int, launchConfig []byte, prepared guestHibernatePrepareResponse, snap *SnapshotTimeline, conf *ConfinementReceipt) (*SnapshotMeta, error) {
+	vault := vh != nil
+	partial := snapshotPartialDirIn(root, vmID)
 	if vault {
-		// The vault must still be the encrypted mount the capture started on.
-		if err := m.probeVault(); err != nil {
+		// The vault must still be the encrypted mount the capture started on,
+		// the held directory must still be the one at its path, and the
+		// captured files must be on its device.
+		if err := vh.verify(m); err != nil {
 			return nil, fmt.Errorf("snapshot vault lost before the commit: %w", err)
 		}
+		if err := vh.onDevice(filepath.Join(partial, snapshotStateName), filepath.Join(partial, snapshotMemName)); err != nil {
+			return nil, err
+		}
 	}
-	partial := snapshotPartialDirIn(root, vmID)
 	for _, name := range []string{snapshotStateName, snapshotMemName} {
 		path := filepath.Join(partial, name)
 		if err := os.Chmod(path, 0o600); err != nil {
@@ -369,7 +401,8 @@ func (m *Manager) ResumeVMFromSnapshot(vmID string, expect VMConfig, issue Resum
 		return nil, &SnapshotFallbackError{VMID: vmID, Reason: reason, Err: err}
 	}
 
-	dir, inVault := m.locateSnapshot(vmID)
+	dir, vaultRoot := m.locateSnapshot(vmID)
+	inVault := vaultRoot != ""
 	meta, err := readSnapshotMeta(dir)
 	if errors.Is(err, os.ErrNotExist) {
 		// An interrupted capture is never resumable.
@@ -397,7 +430,7 @@ func (m *Manager) ResumeVMFromSnapshot(vmID string, expect VMConfig, issue Resum
 	}
 	switch {
 	case inVault:
-		if err := m.probeVault(); err != nil {
+		if err := m.probeVaultDir(vaultRoot); err != nil {
 			return fallback(snapshotReasonVaultUnavailable, err)
 		}
 	case m.vaultSelected(vmID, computerID):
