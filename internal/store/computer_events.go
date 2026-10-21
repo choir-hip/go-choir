@@ -237,6 +237,16 @@ func (s *Store) finalizeBatch(ctx context.Context, computerID, eventDigest strin
 	if allowLegacyTextureBootstrap {
 		return nil
 	}
+	ops := 0
+	if batch != nil {
+		ops = len(batch.Ops)
+	}
+	s.noteCheckpointFinalize(ops)
+	if s.checkpointDebounced() {
+		// The background committer owns the cadence; this writer and every
+		// writer behind it do not wait on a history commit.
+		return nil
+	}
 	every := s.doltCheckpointEvery
 	if every == 0 {
 		every = defaultFinalizeCheckpointEvery
@@ -246,7 +256,7 @@ func (s *Store) finalizeBatch(ctx context.Context, computerID, eventDigest strin
 		return nil
 	}
 	s.finalizeSinceCheckpoint = 0
-	return s.commitDoltCheckpoint(ctx, "finalize computer event "+eventDigest)
+	return s.commitDoltCheckpointAt(ctx, "finalize computer event "+eventDigest, checkpointSiteInline)
 }
 
 // CommitReplay makes the complete replay working set addressable by Dolt

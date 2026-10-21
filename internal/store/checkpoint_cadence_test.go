@@ -107,7 +107,10 @@ func TestCheckpointDebouncedCommitsInBackground(t *testing.T) {
 	if got := s.CheckpointStats(); got.InlineCommits != 0 || got.InlineNanos != 0 {
 		t.Fatalf("debounced mode committed on the write path: %+v", got)
 	}
-	waitForCheckpoint(t, "a background commit", func() bool { return s.CheckpointStats().BackgroundCommits >= 1 })
+	waitForCheckpoint(t, "a background commit of every event", func() bool {
+		st := s.CheckpointStats()
+		return st.BackgroundCommits >= 1 && st.EventsSinceCommit == 0
+	})
 	if historyCommits(t, s, computerID) < 1 {
 		t.Fatal("the background commit did not reach Dolt history")
 	}
