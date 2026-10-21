@@ -274,6 +274,48 @@ its real engine share before and after, and the deploy.
    of a test computer shows the second pass finishing in seconds.
 6. On a test computer, the product replay probe lists no unknown table.
 
+## Panel findings on the frozen candidate 8cadecc7e (2026-10-21)
+
+Two reviewers (GPT-6.1-sol: send back; Gemini 4 Argon: accept, with the
+same race as a non-blocking finding). FP0 adjudicated: fix P1 and P2 in this
+lane; the boot ALTER (sol A1) is pre-existing and has its own record,
+[boot-alters-og-objects-when-older-columns-missing-2026-10-21.md](boot-alters-og-objects-when-older-columns-missing-2026-10-21.md).
+These are static code proofs, not staging incidents.
+
+**P1. Withdrawing a family races with reads and with validation
+publication** (sol A2, Argon's first finding).
+
+- *Read admission.* `ListObjectsByOwnerAndBody` and
+  `ListObjectsByMetadataPage` decide that a family is readable before they
+  take the engine mutex. A writer that holds the mutex (or the production
+  projector, which does not take it at all) commits a malformed record and
+  sets `bad`; the reader then reads the side table on the decision it made
+  before. The malformed row's key is NULL, so it is not in the result and
+  the tripwire never sees it: the side read returns normally where the JSON
+  read errors. The same holds for a maintenance failure that withdraws the
+  family.
+- *Publication.* `validateFamily` compares the invalidation and bad-write
+  counters and then stores `bad` and `validated` in separate atomic writes.
+  An `Invalidate` (failed maintenance, a tripwire) between the comparison
+  and `validated.Store(true)` is overwritten, and a malformed write between
+  the bad-write load and `bad.Store(false)` is lost. Either leaves a family
+  readable that must not be.
+- *Fix shape.* One small mutex over `Invalidate`, the bad-flag update in
+  maintenance, and the pass's final check-and-set; and readability checked
+  again inside the read transaction, after its snapshot is taken, so a
+  writer that committed before the snapshot (it sets the flags before its
+  commit) is always seen. Each interleaving gets a deterministic failing
+  test first.
+
+**P2. A family with a malformed row stays on the JSON path after the row is
+repaired** (sol, non-blocking). Maintenance sets `bad`; only a validation
+pass clears it, and the background loop runs a pass only for a family that
+is not validated. A family that is validated and bad never gets one, so
+repairing the row does not restore the indexed read until another
+withdrawal or a restart. Fix shape: a successful maintenance or drop of a
+family that is bad asks for another pass (without aborting one in flight),
+and the loop runs passes for such a family, at its recheck interval.
+
 ## Residuals
 
 - A rollback to a binary without the extractor change leaves `og_key_index`
