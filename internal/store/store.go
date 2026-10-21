@@ -179,6 +179,9 @@ type Store struct {
 	// on in this process (telemetry_sealer.go).
 	telemetryStats telemetryCounters
 	telemetry      atomic.Pointer[telemetrySealer]
+	// searchIdx caches tokenized head text for SearchDocuments
+	// (search_index.go).
+	searchIdx searchIndex
 }
 
 type eventSeqKey struct{ runID, ownerID string }

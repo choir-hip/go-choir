@@ -910,7 +910,20 @@ func (rt *Runtime) Start(ctx context.Context) {
 	// a slow or unreachable Qdrant cannot block runtime startup; the dedup
 	// path also ensures the collection lazily on first use.
 	go rt.ensureProductionQdrantCollectionBestEffort(ctx)
+	// The corpus search cache is derived and rebuilt here so the first
+	// research search after a boot does not read every story's head
+	// (docs/problems/research-more-slow-and-hidden-2026-10-21.md E1).
+	go rt.warmCorpusSearchIndex(ctx)
 	log.Printf("runtime: started (autoputer=%s)", rt.cfg.ComputerID)
+}
+
+func (rt *Runtime) warmCorpusSearchIndex(ctx context.Context) {
+	if rt.store == nil {
+		return
+	}
+	started := time.Now()
+	docs, reads, err := rt.store.WarmSearchIndex(ctx)
+	log.Printf("runtime: corpus search index warm docs=%d heads_read=%d dur=%s err=%v", docs, reads, time.Since(started).Round(time.Millisecond), err)
 }
 
 // maintenanceHeld reports whether the guest runtime was booted under a

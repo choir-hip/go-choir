@@ -555,11 +555,13 @@ type SearchResult struct {
 }
 
 // SearchDocuments searches the Texture corpus by title and head revision
-// content, title matches first. Searches across all owners when ownerID is
+// content, ranked by BM25 with title terms weighted up; a document sharing no
+// query term is not returned. Searches across all owners when ownerID is
 // empty. Lifecycle documents (stories) are searched too, their heads read
-// through the lifecycle getter (L2a R2-8: the earlier "published" filter
-// tested revision metadata no revision carries, and the document list
-// skipped every story, so the search found nothing of the paper's own).
+// through the lifecycle getter (L2a R2-8). Head text comes from searchIdx,
+// which reads a head once per revision (search_index.go): the earlier scan
+// read every head on every query and kept only documents holding every term
+// (docs/problems/research-more-slow-and-hidden-2026-10-21.md E1).
 func (s *Store) SearchDocuments(ctx context.Context, query string, ownerID string, limit int) ([]SearchResult, error) {
 	if limit <= 0 {
 		limit = 20
@@ -568,85 +570,11 @@ func (s *Store) SearchDocuments(ctx context.Context, query string, ownerID strin
 	if query == "" {
 		return nil, nil
 	}
-
-	// Split query into terms for multi-term matching.
-	terms := strings.Fields(strings.ToLower(query))
-	if len(terms) == 0 {
-		return nil, nil
-	}
-	if len(terms) > 8 {
-		terms = terms[:8]
-	}
-
 	docs, err := s.searchableTextureDocuments(ctx, strings.TrimSpace(ownerID))
 	if err != nil {
 		return nil, fmt.Errorf("search texture documents: load docs: %w", err)
 	}
-
-	// Helper: check if all terms match a string.
-	matchesAllTerms := func(text string) bool {
-		lower := strings.ToLower(text)
-		for _, term := range terms {
-			if !strings.Contains(lower, term) {
-				return false
-			}
-		}
-		return true
-	}
-
-	seen := map[string]bool{}
-	var results []SearchResult
-
-	// Phase 1: title matching.
-	for _, doc := range docs {
-		if matchesAllTerms(doc.Title) {
-			seen[doc.DocID] = true
-			results = append(results, SearchResult{
-				DocID:       doc.DocID,
-				Title:       doc.Title,
-				OwnerID:     doc.OwnerID,
-				UpdatedAt:   doc.UpdatedAt,
-				MatchSource: "title",
-			})
-			if len(results) >= limit {
-				return results, nil
-			}
-		}
-	}
-
-	// Phase 2: content matching for remaining capacity.
-	for _, doc := range docs {
-		if seen[doc.DocID] {
-			continue
-		}
-		if doc.CurrentRevisionID == "" {
-			continue
-		}
-		rev, err := s.searchHeadRevision(ctx, doc)
-		if err != nil {
-			continue
-		}
-		if matchesAllTerms(rev.Content) {
-			snippet := rev.Content
-			if len(snippet) > 200 {
-				snippet = strings.ToValidUTF8(snippet[:200], "")
-			}
-			seen[doc.DocID] = true
-			results = append(results, SearchResult{
-				DocID:       doc.DocID,
-				Title:       doc.Title,
-				OwnerID:     doc.OwnerID,
-				UpdatedAt:   doc.UpdatedAt,
-				Snippet:     snippet,
-				MatchSource: "content",
-			})
-			if len(results) >= limit {
-				break
-			}
-		}
-	}
-
-	return results, nil
+	return rankDocuments(query, docs, s.searchEntries(ctx, docs), limit), nil
 }
 
 // searchableTextureDocuments lists the Texture documents a search reads,
