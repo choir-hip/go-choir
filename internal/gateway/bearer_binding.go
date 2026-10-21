@@ -123,6 +123,20 @@ func (h *Handler) bindingHealth() *gatewayBindingHealth {
 	}
 }
 
+// gatewayCredentialHealth is the credentials' remaining life as /health
+// reports it. It names no computer and no secret.
+type gatewayCredentialHealth struct {
+	Active       int   `json:"active"`
+	Expiring7d   int   `json:"expiring_within_7d"`
+	SoonestHours int   `json:"soonest_expiry_hours"`
+	Renewals     int64 `json:"renewals"`
+}
+
+func (h *Handler) credentialHealth() *gatewayCredentialHealth {
+	active, soon, soonest, renewals := h.registry.CredentialLifetime()
+	return &gatewayCredentialHealth{Active: active, Expiring7d: soon, SoonestHours: int(soonest.Hours()), Renewals: renewals}
+}
+
 // The errors are logged by the caller on every refusal and answered to the
 // client as a generic 401; they carry no address and no computer.
 var (
