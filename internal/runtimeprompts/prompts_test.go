@@ -246,6 +246,12 @@ func TestRLMEngineeringOverlayTeachesCapsuleJobs(t *testing.T) {
 		if !strings.Contains(script, "rm -rf node_modules dist") {
 			t.Errorf("J5: the npm build job does not clean up after itself: %q", script)
 		}
+		// Failure 24: a job that failed before its cleanup left node_modules
+		// and dist behind, so the next job changed the workspace while it ran
+		// and Freeze refused its receipt. The cleanup runs on failure too.
+		if !strings.Contains(script, "s=$?; rm -rf node_modules dist; exit $s") {
+			t.Errorf("failure 24: the npm build job cleans up only when it succeeds: %q", script)
+		}
 	}
 	if !startedBuild {
 		t.Errorf("J5: no choir.Start recipe runs the npm build")
