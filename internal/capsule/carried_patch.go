@@ -50,13 +50,32 @@ type CarriedPatch struct {
 // installs, version-control metadata and tool caches.
 var carriedPatchExcludedDirs = map[string]bool{"node_modules": true, ".git": true, ".cache": true}
 
+// secretBearingPath reports whether a slash path names a file the capsule
+// release refuses as secret-bearing: any element .env or .env.*, .npmrc,
+// .netrc, credentials.json, auth.json, id_rsa or id_ed25519, or a .pem, .key,
+// .p12 or .pfx extension, ignoring case. The release and the carried patch
+// share it, so a patch never carries what the release would refuse
+// (failure 16).
+func secretBearingPath(path string) bool {
+	for _, component := range strings.Split(filepath.ToSlash(path), "/") {
+		base := strings.ToLower(component)
+		extension := filepath.Ext(base)
+		if base == ".env" || strings.HasPrefix(base, ".env.") || base == ".npmrc" || base == ".netrc" ||
+			base == "credentials.json" || base == "auth.json" || base == "id_rsa" || base == "id_ed25519" ||
+			extension == ".pem" || extension == ".key" || extension == ".p12" || extension == ".pfx" {
+			return true
+		}
+	}
+	return false
+}
+
 type carriedTreeFile struct {
 	data []byte
 }
 
 // readCarriedTree reads the regular text files of a source tree. Excluded
-// directories, symlinks and binary files are not read; they are named in
-// omitted instead. A file above maxBytes refuses the whole tree.
+// directories, secret-bearing paths, symlinks and binary files are not read;
+// they are named in omitted instead. A file above maxBytes refuses the whole tree.
 func readCarriedTree(ctx context.Context, root string, maxBytes int, omitted map[string]string) (map[string]carriedTreeFile, error) {
 	files := map[string]carriedTreeFile{}
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
@@ -79,6 +98,10 @@ func readCarriedTree(ctx context.Context, root string, maxBytes int, omitted map
 				omitted[rel] = "excluded directory"
 				return filepath.SkipDir
 			}
+			return nil
+		}
+		if secretBearingPath(rel) {
+			omitted[rel] = "secret-bearing path"
 			return nil
 		}
 		info, err := entry.Info()
@@ -143,6 +166,13 @@ func DiffTreesToPatch(ctx context.Context, baseRoot, candidateRoot string, maxBy
 		old, hadOld := base[rel]
 		now, hasNew := candidate[rel]
 		if hadOld && hasNew && bytes.Equal(old.data, now.data) {
+			continue
+		}
+		// A new empty file carries no work; the delegate's sandbox leaves
+		// them behind as masks (failure 16). A file the candidate emptied is
+		// still a change.
+		if !hadOld && hasNew && len(now.data) == 0 {
+			omitted[rel] = "new empty file"
 			continue
 		}
 		files = append(files, sourcePatchFile{Rel: rel, Old: old.data, OldExists: hadOld, New: now.data, NewExists: hasNew})

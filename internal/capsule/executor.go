@@ -1692,18 +1692,7 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 			_ = input.Close()
 			return nil, err
 		}
-		secretPath := false
-		for _, component := range strings.Split(filepath.ToSlash(clean), "/") {
-			base := strings.ToLower(component)
-			extension := strings.ToLower(filepath.Ext(base))
-			if base == ".env" || strings.HasPrefix(base, ".env.") || base == ".npmrc" || base == ".netrc" ||
-				base == "credentials.json" || base == "auth.json" || base == "id_rsa" || base == "id_ed25519" ||
-				extension == ".pem" || extension == ".key" || extension == ".p12" || extension == ".pfx" {
-				secretPath = true
-				break
-			}
-		}
-		if secretPath {
+		if secretBearingPath(clean) {
 			_ = input.Close()
 			return nil, fmt.Errorf("capsule release refuses secret-bearing path %q", change.Path)
 		}
