@@ -241,12 +241,6 @@ var metadataIndexColumns = []metadataIndexColumn{
 	{Field: "inbox", Column: "og_rec_inbox", Kind: commitmentRecordKind, MaxChars: generatedColumnMaxChars, KeysetIndex: true},
 	{Field: "sender_inbox", Column: "og_rec_sender_inbox", Kind: commitmentRecordKind, MaxChars: generatedColumnMaxChars, KeysetIndex: true},
 	{Field: "conversation_id", Column: "og_rec_conversation_id", Kind: commitmentRecordKind, MaxChars: generatedColumnMaxChars, KeysetIndex: true},
-	// The steady-state equalities of docs/problems/research-more-slow-and-hidden-2026-10-21.md
-	// E6: a desk's newest run (GetLatestActiveRunByAgent), a capture's
-	// labels, a document's source refs.
-	{Field: "agent_id", Column: "og_meta_agent_id", Kind: "choir.run", MaxChars: generatedColumnMaxChars, KeysetIndex: true},
-	{Field: "capture_id", Column: "og_meta_capture_id", Kind: "choir.capture_label", MaxChars: generatedColumnMaxChars, KeysetIndex: true},
-	{Field: "doc_id", Column: "og_meta_doc_id", Kind: "choir.source_ref", MaxChars: generatedColumnMaxChars, KeysetIndex: true},
 }
 
 // Record-scoped access paths that are not single-field equality lookups.
@@ -260,11 +254,6 @@ const (
 	// (ListCommitmentClaimObjects) as a reverse index walk.
 	recordClaimColumn = "og_rec_claim"
 	recordClaimIndex  = "idx_og_objects_rec_claim"
-	// recordAddresseeIndex serves a desk's newest records by the body's
-	// addressee (ListObjectsByOwnerAndBody with the one match $.addressee,
-	// each Texture turn's evidence read) as a reverse index walk.
-	recordAddresseeColumn = "og_rec_addressee"
-	recordAddresseeIndex  = "idx_og_objects_rec_addressee"
 )
 
 // recordClaimPredicate is the body predicate the claim pack filtered with
@@ -283,9 +272,6 @@ var recordColumns = []generatedColumn{
 	{Name: recordClaimColumn, Def: fmt.Sprintf(
 		`BOOLEAN GENERATED ALWAYS AS (CASE WHEN object_kind = '%s' AND (body IS NULL OR JSON_VALID(CAST(body AS CHAR))) THEN %s END) STORED`,
 		string(commitmentRecordKind), recordClaimPredicate)},
-	{Name: recordAddresseeColumn, Def: fmt.Sprintf(
-		`VARCHAR(255) GENERATED ALWAYS AS (CASE WHEN object_kind = '%s' AND JSON_VALID(CAST(body AS CHAR)) THEN LEFT(JSON_UNQUOTE(JSON_EXTRACT(CAST(CAST(body AS CHAR) AS JSON), '$.addressee')), %d) END) STORED`,
-		string(commitmentRecordKind), generatedColumnMaxChars)},
 }
 
 // generatedColumn is one STORED generated column of og_objects: its name
@@ -359,10 +345,6 @@ func (s *DoltStore) ensureMetadataColumns(ctx context.Context, records bool) {
 	if present[recordClaimColumn] &&
 		index(recordClaimIndex, "object_kind, owner_id, "+recordClaimColumn+", updated_at, canonical_id", records) {
 		live[recordClaimIndex] = true
-	}
-	if present[recordAddresseeColumn] &&
-		index(recordAddresseeIndex, "object_kind, owner_id, "+recordAddresseeColumn+", updated_at, canonical_id", records) {
-		live[recordAddresseeIndex] = true
 	}
 	s.liveColumns.Store(&live)
 }
@@ -1316,18 +1298,6 @@ func (s *DoltStore) ListObjectsByOwnerAndBody(ctx context.Context, kind, ownerID
 	for _, m := range matches {
 		paths = append(paths, m.JSONPath)
 	}
-	if len(matches) == 1 && matches[0].JSONPath == "$.addressee" && !matches[0].MissingMatchesEmpty {
-		if query, args, ok := s.addresseeSQL(kind, ownerID, matches[0].Value, limit); ok {
-			op := "(*DoltStore).ListObjectsByOwnerAndBody " + kind + " $.addressee index"
-			s.engineMu.LockAs(op)
-			defer s.engineMu.UnlockAs(op)
-			objects, err := s.queryObjects(ctx, query, args...)
-			if err != nil {
-				return nil, fmt.Errorf("objectgraph dolt: list by owner and body: %w", err)
-			}
-			return objects, nil
-		}
-	}
 	op := "(*DoltStore).ListObjectsByOwnerAndBody " + kind + " " + strings.Join(paths, ",")
 	s.engineMu.LockAs(op)
 	defer s.engineMu.UnlockAs(op)
@@ -1367,22 +1337,6 @@ func (s *DoltStore) ListObjectsByOwnerAndBody(ctx context.Context, kind, ownerID
 		out = append(out, obj)
 	}
 	return out, rows.Err()
-}
-
-// addresseeSQL is the column read of a body match on $.addressee: a reverse
-// walk of (object_kind, owner_id, og_rec_addressee, updated_at,
-// canonical_id), so the engine stops after limit rows. Rows with equal
-// updated_at (second precision) come by canonical_id descending; the body
-// read left their order to the engine. ok is false when the index is not
-// live, for another kind, or for a value the column cannot hold whole.
-func (s *DoltStore) addresseeSQL(kind, ownerID, addressee string, limit int) (string, []any, bool) {
-	if kind != string(commitmentRecordKind) || !s.live(recordAddresseeIndex) || utf8.RuneCountInString(addressee) >= generatedColumnMaxChars {
-		return "", nil, false
-	}
-	return `SELECT ` + objectColumnsSQL + ` FROM og_objects
-		 WHERE object_kind = ? AND owner_id = ? AND ` + recordAddresseeColumn + ` = ?
-		 ORDER BY object_kind DESC, owner_id DESC, ` + recordAddresseeColumn + ` DESC, updated_at DESC, canonical_id DESC LIMIT ?`,
-		[]any{kind, ownerID, addressee, NormalizedLimit(limit)}, true
 }
 
 // recordsByInboxSeqSQL is ListRecordsByInboxSeq's query: an index range on
