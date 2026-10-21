@@ -47,8 +47,12 @@ const (
 	defaultModelPerComputer = 6
 	defaultModelQueueDepth  = 256
 	defaultModelQueueWait   = 120 * time.Second
-	modelQueueFullRetry     = 10 // seconds, the Retry-After of a full queue
-	modelQueueWaitRetry     = 5  // seconds, the Retry-After of an exceeded wait
+	// maxModelQueueWait caps the wait: the wait counts against the call's
+	// inferenceTimeout (scheduleModelCall), so a longer one would leave a
+	// call no time to run and end in a hang-up instead of a 429.
+	maxModelQueueWait   = 5 * time.Minute
+	modelQueueFullRetry = 10 // seconds, the Retry-After of a full queue
+	modelQueueWaitRetry = 5  // seconds, the Retry-After of an exceeded wait
 )
 
 // ModelSchedulerConfig bounds the scheduler. Zero or negative values are
@@ -75,6 +79,9 @@ func (c ModelSchedulerConfig) resolve() ModelSchedulerConfig {
 	}
 	if c.MaxWait <= 0 {
 		c.MaxWait = defaultModelQueueWait
+	}
+	if c.MaxWait > maxModelQueueWait {
+		c.MaxWait = maxModelQueueWait
 	}
 	return c
 }
@@ -327,16 +334,24 @@ func (h *Handler) schedulerOn() bool { return h.modelScheduler != nil }
 // 429 with Retry-After when the queue is full or the wait ran out; nothing
 // when the caller has gone. With no scheduler it is a no-op that always
 // succeeds, so the old limiter remains the only gate.
-func (h *Handler) scheduleModelCall(w http.ResponseWriter, r *http.Request, computerID string, openAI bool) (func(), bool) {
+//
+// The returned request carries a deadline of inferenceTimeout from the moment
+// the call asked for a slot, so the queue wait counts against the call's
+// budget: wait plus call stay inside the gateway's 10m30s write timeout and
+// the guest's client timeout (RES-11 record, finding 11). The handlers'
+// own inferenceTimeout contexts derive from it, so the earlier deadline wins.
+func (h *Handler) scheduleModelCall(w http.ResponseWriter, r *http.Request, computerID string, openAI bool) (func(), *http.Request, bool) {
 	if h.modelScheduler == nil {
-		return func() {}, true
+		return func() {}, r, true
 	}
-	release, _, err := h.modelScheduler.Acquire(r.Context(), computerID)
+	ctx, cancel := context.WithTimeout(r.Context(), inferenceTimeout)
+	release, _, err := h.modelScheduler.Acquire(ctx, computerID)
 	if err == nil {
-		return release, true
+		return func() { release(); cancel() }, r.WithContext(ctx), true
 	}
+	cancel()
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		return nil, false // the caller went away; nobody reads a response
+		return nil, nil, false // the caller went away; nobody reads a response
 	}
 	retry := modelQueueWaitRetry
 	msg := "model calls for this autoputer waited too long for a slot; retry"
@@ -350,7 +365,7 @@ func (h *Handler) scheduleModelCall(w http.ResponseWriter, r *http.Request, comp
 	} else {
 		writeGatewayJSON(w, http.StatusTooManyRequests, ErrorResponse{Error: msg})
 	}
-	return nil, false
+	return nil, nil, false
 }
 
 // gatewaySchedulerHealth is the scheduler as /health reports it.
