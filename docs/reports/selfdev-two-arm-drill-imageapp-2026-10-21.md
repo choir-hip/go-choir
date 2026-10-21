@@ -77,4 +77,10 @@ Run one at a time on the delegate test computer, smallest app first, with
 
 | App | Lines | Label | Result |
 |---|---|---|---|
-| SlidesApp | 810 | sonnet-slides-1021 | running (round 1 failed by design at 04:47; round 2 cast 04:48) |
+| SlidesApp | 810 | sonnet-slides-1021 (cbef56155) | stopped 05:08 after five rounds: management never cast a round with npm access (failure 19) |
+| SlidesApp | 810 | sonnet-slides-1021b (d31403fd5) | stopped 05:28: after the prompt fix, management cast round 1 as the build round; the brief demanded `git diff` in a capsule without `.git` |
+| SlidesApp | 810 | sonnet-slides-1021c (d31403fd5, brief fixed) | stopped 05:50: round 1 delegate rewrite (25 turns, $0.28); round 2 applied the carried patch, `npm ci` and `vite build` ran; the release copy failed on `fchmodat2` (failure 20) |
+
+Each stop is a Choir or drill defect found and fixed, in order; none is
+about the delegate's work. The rewrites of Pdf, Epub, Podcast, Calendar and
+FileBrowser wait until SlidesApp reaches a freeze.
