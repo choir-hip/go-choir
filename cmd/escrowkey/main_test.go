@@ -32,7 +32,7 @@ func TestEscrowKeyToolRoundTrip(t *testing.T) {
 	if err := os.WriteFile(keyPath, []byte(encoded+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	kekPath := filepath.Join(dir, "kek")
+	kekPath := filepath.Join(dir, "key-escrow-kek")
 	fp := keyescrow.Fingerprint(pub)
 	env := map[string]string{keyescrow.EnvKEKPath: kekPath, "CHOIR_KEY_ESCROW_KEY_PATH": keyPath}
 
@@ -103,6 +103,13 @@ func TestEscrowKeyToolRefusals(t *testing.T) {
 	}
 	if _, err := os.Stat(missing); !os.IsNotExist(err) {
 		t.Fatal("check created a key file")
+	}
+	// B3: kek-generate refuses a name the backup does not exclude.
+	if code, _, _ := runTool(t, nil, "kek-generate", "--kek", filepath.Join(dir, "custom-kek")); code == 0 {
+		t.Fatal("kek-generate wrote a KEK the backup would carry")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "custom-kek")); !os.IsNotExist(err) {
+		t.Fatal("kek-generate created a misnamed KEK")
 	}
 	// Flags override the environment.
 	code, out, _ = runTool(t, nil, "check", "--key", missing)
