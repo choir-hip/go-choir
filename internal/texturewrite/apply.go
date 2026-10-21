@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -569,6 +570,50 @@ func (w *writer) inline(lines []Line) []texturedoc.Node {
 	return out
 }
 
+// captureKeyRE is the unique tail of a capture id: its content key.
+var captureKeyRE = regexp.MustCompile(`:key-[0-9a-f]{64}$`)
+
+// frameSourceByCaptureKey finds the one frame source a mistyped capture id
+// means. A capture id is about 140 characters: an owner segment the same
+// for every capture in the computer, then key-<sha256>. A model copying it
+// can drop a chunk of the owner segment (T5 in
+// docs/problems/tool-call-failures-dual-model-2026-10-21.md). The match is
+// the whole key suffix, and every matching frame source must name the
+// same capture; anything else is no match.
+func (w *writer) frameSourceByCaptureKey(id string) (Source, bool) {
+	suffix := captureKeyRE.FindString(id)
+	if suffix == "" {
+		return Source{}, false
+	}
+	var found Source
+	for _, src := range w.in.Handles {
+		if src.CaptureID == "" || !strings.HasSuffix(src.CaptureID, suffix) {
+			continue
+		}
+		if found.CaptureID != "" && found.CaptureID != src.CaptureID {
+			return Source{}, false
+		}
+		found = src
+	}
+	return found, found.CaptureID != ""
+}
+
+// frameHandleList names the frame's citable handles for a refusal.
+func (w *writer) frameHandleList() string {
+	handles := make([]string, 0, len(w.in.Handles))
+	for h := range w.in.Handles {
+		handles = append(handles, h)
+	}
+	if len(handles) == 0 {
+		return "your frame lists none"
+	}
+	sort.Strings(handles)
+	if len(handles) > 6 {
+		return strings.Join(handles[:6], ", ") + fmt.Sprintf(" and %d more", len(handles)-6)
+	}
+	return strings.Join(handles, ", ")
+}
+
 // citation resolves one token to a source_ref node.
 func (w *writer) citation(t Token) (texturedoc.Node, bool) {
 	if prior, ok := w.existing[tokenKey(t)]; ok {
@@ -593,9 +638,15 @@ func (w *writer) citation(t Token) (texturedoc.Node, bool) {
 		return texturedoc.Node{}, false
 	}
 	capture, err := w.capture(key)
+	if errors.Is(err, ErrNotCaptured) {
+		if src, ok := w.frameSourceByCaptureKey(key); ok {
+			key = src.Key()
+			capture, err = w.capture(key)
+		}
+	}
 	if err != nil {
 		if errors.Is(err, ErrNotCaptured) {
-			w.errs.add(t.Line, "%s is not captured: a citation needs a captured copy of the source to check its quote against. Ask research to Read it, or cite a captured source", label)
+			w.errs.add(t.Line, "%s is not captured: a citation needs a captured copy of the source to check its quote against. Cite a frame source by its handle (%s), or ask research to Read it", label, w.frameHandleList())
 		} else {
 			w.errs.add(t.Line, "%s could not be read from the capture store: %v", label, err)
 		}
