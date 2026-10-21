@@ -44,6 +44,9 @@ func RunDeskSessionWorker() int {
 		fmt.Fprintf(os.Stderr, "desk-session: confinement: %v\n", err)
 		return 3
 	}
+	// Only the isolation self-test's spawner asks for this (staging proof of
+	// the confinement above); a production desk worker skips it.
+	yaegikernel.RunDeskCellSelfTestIfRequested(nil, "")
 	yaegikernel.ExecuteWorkerSessionConn(conn, cfg)
 	return 0
 }
