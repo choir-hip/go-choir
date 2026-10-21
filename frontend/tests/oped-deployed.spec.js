@@ -121,7 +121,7 @@ test('a signed-in account publishes an op-ed that a logged-out reader finds unde
   const reader = await context.browser().newContext({ storageState: { cookies: [], origins: [] } });
   try {
     const front = await reader.newPage();
-    await front.goto(`${BASE_URL}/autopaper`, { waitUntil: 'domcontentloaded' });
+    await front.goto(`${BASE_URL}/`, { waitUntil: 'domcontentloaded' });
     const section = front.locator('[data-autopaper-opinion]');
     await expect(section).toBeVisible({ timeout: 60_000 });
     await expect(section.locator('[data-autopaper-opinion-heading]')).toHaveText('Opinion');
@@ -132,7 +132,7 @@ test('a signed-in account publishes an op-ed that a logged-out reader finds unde
     await expect(rowLocator.locator('[data-autopaper-byline]')).toContainText(row.author);
     await expect(front.locator('[data-autopaper-grid]')).not.toContainText(title);
 
-    const pagePath = `${BASE_URL}/autopaper/${slug}`;
+    const pagePath = `${BASE_URL}/pub/texture/${slug}`;
     const story = await reader.newPage();
     await story.goto(pagePath, { waitUntil: 'domcontentloaded' });
     const article = story.locator('[data-texture-published-reader]');

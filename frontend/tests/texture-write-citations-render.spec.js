@@ -138,7 +138,7 @@ test('a Write revision renders bold, a stored embed as a marker and its cite quo
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(bundle()) }),
   );
 
-  await page.goto(`${BASE_URL}/autopaper/${SLUG}`);
+  await page.goto(`${BASE_URL}/pub/texture/${SLUG}`);
   const reader = page.locator('[data-texture-published-reader]');
   await expect(reader).toBeVisible({ timeout: 30_000 });
   const doc = reader;

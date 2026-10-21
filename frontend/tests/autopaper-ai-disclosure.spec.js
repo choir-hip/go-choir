@@ -37,7 +37,7 @@ function bundle(slug, title) {
   const text = Array.from({ length: 8 }, (_, i) => `Paragraph ${i + 1} of ${title}.`).join('\n\n');
   return {
     route: { path: route, state: 'active', bare: route, permalink: `${route}/v1` },
-    publication: { id: `pub-${slug}`, title, slug, state: 'published' },
+    publication: { id: `pub-${slug}`, title, slug, state: 'published', kind: 'story' },
     version: { id: `ver-${slug}-1`, content_hash: `hash-${slug}`, manifest_hash: `manifest-${slug}` },
     artifact: { content: text, body_doc: null },
     retrieval: {}, citations: [], source_entities: [], transclusions: [], policy: {}, proposals: {}, provenance: {},
@@ -74,7 +74,7 @@ test.describe('the disclosure on a story page', () => {
 
   test('closes the article, after the last paragraph and before related stories, and survives a related link (D1, D2, D4, D5)', async ({ page }) => {
     await mockRoutes(page);
-    await page.goto(`${BASE_URL}/autopaper/story-a`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${BASE_URL}/pub/texture/story-a`, { waitUntil: 'domcontentloaded' });
     const reader = page.locator('[data-texture-published-reader]');
     await expect(reader).toBeVisible({ timeout: 30_000 });
     const label = reader.locator('[data-texture-ai-disclosure]');
@@ -96,7 +96,7 @@ test.describe('the disclosure on a story page', () => {
     expect(await reader.evaluate((el) => el.lastElementChild?.hasAttribute('data-texture-related'))).toBe(true);
 
     await reader.locator('[data-related-link]').first().click();
-    await expect(page).toHaveURL(/\/autopaper\/story-b$/);
+    await expect(reader).toContainText("Paragraph 1 of Story story-b", { timeout: 30_000 });
     await expect(reader.locator('[data-texture-ai-disclosure]')).toHaveText(AI_DISCLOSURE_TEXT, { timeout: 15_000 });
   });
 });

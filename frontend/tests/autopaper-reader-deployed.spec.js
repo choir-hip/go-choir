@@ -14,8 +14,9 @@
  *     importance x depth x recency when most stories are scored, else
  *     recency lifted by versions; this device has no section habit, and the
  *     front page is the default section), each marked "Updated" when a
- *     story has more than one version, and a story clicked there opens at
- *     /autopaper/<slug> as the standalone Texture published view;
+ *     story has more than one version, and a story clicked there opens as a
+ *     Texture published window (the standalone /autopaper page is gone, and
+ *     an old /autopaper/<slug> link lands on /pub/texture/<slug>);
  *   - the text carries only numbered citation markers; the numbered source
  *     list stays closed until the toolbar's Sources button opens it above the
  *     text;
@@ -168,8 +169,8 @@ test('Autopaper front list and stories as Texture published views, logged out at
     expect(times[i], `story ${i} is not newer than story ${i - 1}`).toBeLessThanOrEqual(times[i - 1]);
   }
 
-  // Front list.
-  await page.goto(`${BASE_URL}/autopaper`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+  // Front list, in the logged-out home's Autopaper window.
+  await page.goto(`${BASE_URL}/`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
   await expect(page.locator('[data-autopaper-front]')).toBeVisible({ timeout: 30_000 });
   const rows = page.locator('[data-autopaper-story-row]');
   await expect(rows.first()).toBeVisible({ timeout: 30_000 });
@@ -184,13 +185,13 @@ test('Autopaper front list and stories as Texture published views, logged out at
   await expectNoHorizontalScroll(page, 'front list');
   await shoot(page, testInfo, 'autopaper-front', '[data-autopaper]');
 
-  // The lead's headline opens the story as the Texture published view.
+  // The lead's headline opens the story as a Texture published window.
   await rows.first().locator('[data-autopaper-headline] a').click();
-  await expect(page).toHaveURL(new RegExp(`/autopaper/${slugOf(ranked[0].route.bare)}$`));
-  const opened = page.locator('[data-texture-published-reader]');
+  const opened = page.locator('[data-texture-app] [data-texture-published-reader]').last();
   await expect(opened).toBeVisible({ timeout: 30_000 });
+  await expect(opened).toHaveAttribute('data-publication-route', ranked[0].route.bare);
   await expectServesLatest(opened, ranked[0].latest_revision, 'lead story');
-  await expect(page.locator('[data-autopaper-story-title]')).toHaveText(ranked[0].title.trim());
+  await expect(page.locator('[data-window]').filter({ has: opened }).locator('[data-window-titlebar]')).toContainText(ranked[0].title.trim().slice(0, 24));
 
   // Each story: numbered sources, quotes in their source blocks, badges, embeds.
   const checked = [];
@@ -200,7 +201,7 @@ test('Autopaper front list and stories as Texture published views, logged out at
     const anchors = Array.isArray(manifestOf(bundle).anchors) ? manifestOf(bundle).anchors : [];
     expect(bundle.nav?.latest, `${slug}: bare link serves the latest`).toBeGreaterThanOrEqual(story.latest_revision);
 
-    await page.goto(`${BASE_URL}/autopaper/${slug}`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+    await page.goto(`${BASE_URL}/pub/texture/${slug}`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
     const reader = page.locator('[data-texture-published-reader]');
     await expect(reader).toBeVisible({ timeout: 30_000 });
     await expectServesLatest(reader, story.latest_revision, slug);
@@ -270,7 +271,7 @@ test('Autopaper front list and stories as Texture published views, logged out at
     return;
   }
   const slug = slugOf(versioned.route.bare);
-  await page.goto(`${BASE_URL}/autopaper/${slug}`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+  await page.goto(`${BASE_URL}/pub/texture/${slug}`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
   const reader = page.locator('[data-texture-published-reader]');
   const latestRevision = await expectServesLatest(reader, versioned.latest_revision, slug);
   const prev = page.locator('[data-texture-prev]');
@@ -278,7 +279,6 @@ test('Autopaper front list and stories as Texture published views, logged out at
   await expect(page.locator('[data-texture-next]')).toBeDisabled();
   await expect(page.locator('[data-texture-new-version]')).toHaveCount(0);
   await prev.click();
-  await expect(page).toHaveURL(new RegExp(`/autopaper/${slug}/v\\d+$`));
   await expect(reader).not.toHaveAttribute('data-publication-revision', String(latestRevision), { timeout: 30_000 });
   const olderRevision = Number(await reader.getAttribute('data-publication-revision'));
   expect(olderRevision).toBeLessThan(latestRevision);
@@ -289,13 +289,13 @@ test('Autopaper front list and stories as Texture published views, logged out at
   await shoot(page, testInfo, 'autopaper-story-older-version');
 
   await page.locator('[data-texture-new-version]').click();
-  await expect(page).toHaveURL(new RegExp(`/autopaper/${slug}$`));
   await expect(reader).not.toHaveAttribute('data-publication-revision', String(olderRevision), { timeout: 30_000 });
   await expectServesLatest(reader, latestRevision, `${slug} latest again`);
 
-  // Back returns to the older version.
-  await page.goBack();
-  await expect(page).toHaveURL(new RegExp(`/autopaper/${slug}/v${olderRevision}$`));
+  // An old /autopaper link lands on the same story's public Texture route,
+  // at its version when the link names one.
+  await page.goto(`${BASE_URL}/autopaper/${slug}/v${olderRevision}`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+  await expect(page).toHaveURL(`${BASE_URL}/pub/texture/${slug}/v${olderRevision}`, { timeout: 30_000 });
   await expect(reader).toHaveAttribute('data-publication-revision', String(olderRevision), { timeout: 30_000 });
 });
 
@@ -311,12 +311,12 @@ test('the edge compresses the story bundle, the page, and its scripts and styles
   test.skip(stories.length === 0, 'no Autopaper story is published yet');
   const largest = [...stories].sort((a, b) => (b.source_count || 0) - (a.source_count || 0))[0];
   const bundlePath = `/api/platform/publications/resolve?route=${encodeURIComponent(largest.route.bare)}`;
-  const page = await request.get(`${BASE_URL}/autopaper`, { headers, timeout: 30_000 });
+  const page = await request.get(`${BASE_URL}/`, { headers, timeout: 30_000 });
   expect(page.status()).toBe(200);
   const html = await page.text();
   const assets = [...new Set(html.match(/\/assets\/[A-Za-z0-9._-]+\.(?:js|css)/g) || [])];
   expect(assets.length, 'the page names its scripts and styles').toBeGreaterThan(0);
-  for (const path of ['/autopaper', bundlePath, ...assets]) {
+  for (const path of ['/', bundlePath, ...assets]) {
     const res = await request.get(`${BASE_URL}${path}`, { headers, timeout: 30_000 });
     expect(res.status(), `${path} status`).toBe(200);
     expect(res.headers()['content-encoding'] || '', `${path} is compressed`).toMatch(/^(gzip|br)$/);

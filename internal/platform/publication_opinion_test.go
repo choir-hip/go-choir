@@ -214,8 +214,10 @@ func TestOpinionPublishOfAPlainPublicationIsRefused(t *testing.T) {
 }
 
 // The story page labels a piece from the server's record, never from the
-// link: an opinion piece resolves as kind "opinion" with its byline, and a
-// story carries neither (so a crafted link cannot hide the AI disclosure).
+// link: an opinion piece resolves as kind "opinion" with its byline, an
+// Autopaper story as kind "story" (so the reader shows the AI disclosure at
+// /pub/texture/<slug> as it did at the retired /autopaper/<slug>, and a
+// crafted link cannot hide it), and a hand-published Texture as neither.
 func TestResolvedPublicationNamesOpinionKindAndAuthor(t *testing.T) {
 	f := newFrontFixture(t)
 	f.svc.SetOpinionListing(true)
@@ -235,8 +237,13 @@ func TestResolvedPublicationNamesOpinionKindAndAuthor(t *testing.T) {
 		}
 	}
 	story, err := f.svc.GetPublicationBundleByRoute(context.Background(), f.routes["doc-harbor"])
-	if err != nil || story.Publication.Kind != "" || story.Publication.AuthorLabel != "" {
+	if err != nil || story.Publication.Kind != "story" || story.Publication.AuthorLabel != "" {
 		t.Fatalf("story bundle publication = %+v, %v", story.Publication, err)
+	}
+	plain := publishAs(t, f.svc, "writer-2", PublishModeOwner, "doc-hand", 1, "By hand", "My own words.", nil)
+	hand, err := f.svc.GetPublicationBundleByRoute(context.Background(), plain.RoutePath)
+	if err != nil || hand.Publication.Kind != "" || hand.Publication.AuthorLabel != "" {
+		t.Fatalf("hand-published bundle publication = %+v, %v (a person's own Texture is not AI-written)", hand.Publication, err)
 	}
 }
 

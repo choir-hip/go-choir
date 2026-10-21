@@ -42,6 +42,11 @@ test.describe('opinion label helpers', () => {
     expect(opinionLabelHTML(null)).toBe('');
     expect(pieceDisclosureHTML({ autopaperStory: true }, { id: 'p' })).toBe(aiDisclosureHTML({ autopaperStory: true }));
     expect(pieceDisclosureHTML({}, { id: 'p' })).toBe('');
+    // The server's record names a story (kind "story"), so a story opened at
+    // its public Texture route, with no Autopaper window context, still
+    // carries the AI line; a person's own published Texture does not.
+    expect(pieceDisclosureHTML({}, { id: 'p', kind: 'story' })).toBe(aiDisclosureHTML({ autopaperStory: true }));
+    expect(pieceDisclosureHTML({ publishedReadOnly: true }, { id: 'p', kind: '' })).toBe('');
   });
 
   test('the byline is escaped (O5)', () => {
@@ -76,7 +81,7 @@ async function mockPublished(page) {
     if (url.searchParams.get('view') === 'nav') {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ nav: { revision: 1, latest: 1 } }) });
     }
-    const publication = slug === 'my-view' ? { kind: 'opinion', author_label: 'writer-aa11bb' } : {};
+    const publication = slug === 'my-view' ? { kind: 'opinion', author_label: 'writer-aa11bb' } : { kind: 'story' };
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(bundle(slug, `Piece ${slug}`, publication)) });
   });
 }
@@ -84,9 +89,9 @@ async function mockPublished(page) {
 test.describe('the opinion page', () => {
   test.use({ viewport: { width: 375, height: 812 }, storageState: { cookies: [], origins: [] } });
 
-  test('shows the Opinion label and byline, not the AI disclosure, even from an /autopaper link (O1, O2)', async ({ page }) => {
+  test('shows the Opinion label and byline, not the AI disclosure, even for a piece opened at its public Texture route (O1, O2)', async ({ page }) => {
     await mockPublished(page);
-    await page.goto(`${BASE_URL}/autopaper/my-view`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${BASE_URL}/pub/texture/my-view`, { waitUntil: 'domcontentloaded' });
     const reader = page.locator('[data-texture-published-reader]');
     await expect(reader).toBeVisible({ timeout: 30_000 });
     await expect(reader.locator('[data-texture-opinion-label]')).toContainText('Opinion');
@@ -97,7 +102,7 @@ test.describe('the opinion page', () => {
 
   test('a story opened the same way keeps the AI disclosure and no opinion label (O3)', async ({ page }) => {
     await mockPublished(page);
-    await page.goto(`${BASE_URL}/autopaper/a-story?opinion=1`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${BASE_URL}/pub/texture/a-story?opinion=1`, { waitUntil: 'domcontentloaded' });
     const reader = page.locator('[data-texture-published-reader]');
     await expect(reader).toBeVisible({ timeout: 30_000 });
     await expect(reader.locator('[data-texture-ai-disclosure]')).toBeVisible();
@@ -128,7 +133,7 @@ test.describe('the front page', () => {
 
   test('lists opinion pieces apart from the news, with label and byline (O2, O4)', async ({ page }) => {
     await mockFront(page, [story('my-view', 'My view on the harbor', { kind: 'opinion', author: 'writer-aa11bb' })]);
-    await page.goto(`${BASE_URL}/autopaper`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${BASE_URL}/`, { waitUntil: 'domcontentloaded' });
     const section = page.locator('[data-autopaper-opinion]');
     await expect(section).toBeVisible({ timeout: 30_000 });
     await expect(section.locator('[data-autopaper-opinion-heading]')).toHaveText('Opinion');
@@ -144,7 +149,7 @@ test.describe('the front page', () => {
 
   test('shows no Opinion heading when the server lists none (O4)', async ({ page }) => {
     await mockFront(page, []);
-    await page.goto(`${BASE_URL}/autopaper`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${BASE_URL}/`, { waitUntil: 'domcontentloaded' });
     await expect(page.locator('[data-autopaper-grid]')).toBeVisible({ timeout: 30_000 });
     await expect(page.locator('[data-autopaper-opinion]')).toHaveCount(0);
   });

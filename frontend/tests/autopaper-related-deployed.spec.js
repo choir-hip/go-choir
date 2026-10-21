@@ -27,7 +27,8 @@
  *   - scrolled to its end, the article shows [data-texture-related] below
  *     the last paragraph, headed "More on this", with 1 to 5 links, and
  *     nothing scrolls horizontally at 375px;
- *   - a click on the first link opens /autopaper/<slug>, the reader's
+ *   - a click on the first link (a real anchor to /pub/texture/<slug>) moves the
+ *     Texture window to that story, the reader's
  *     publication id changes, and the new story renders;
  *   - a story with an empty list renders no [data-texture-related] and no
  *     heading.
@@ -204,7 +205,7 @@ test('a story with links shows "More on this" after the article, and a click ope
     if (req.url().includes('/api/platform/publications/related')) log.push({ kind: 'related-started', at: Date.now() });
   });
 
-  await page.goto(`${BASE_URL}/autopaper/${slugOf(story.route.bare)}`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+  await page.goto(`${BASE_URL}/pub/texture/${slugOf(story.route.bare)}`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
   const reader = page.locator('[data-texture-published-reader]');
   await expect(reader).toBeVisible({ timeout: 30_000 });
   await expect(reader).toHaveAttribute('data-publication-route', story.route.bare, { timeout: 30_000 });
@@ -240,9 +241,8 @@ test('a story with links shows "More on this" after the article, and a click ope
   const first = anchors.first();
   const href = await first.getAttribute('href');
   const target = linked.related.links[0];
-  expect(href).toBe(`/autopaper/${slugOf(target.route.bare)}`);
+  expect(href).toBe(`/pub/texture/${slugOf(target.route.bare)}`);
   await first.click();
-  await expect(page).toHaveURL(new RegExp(`/autopaper/${slugOf(target.route.bare)}$`), { timeout: 30_000 });
   await expect(reader).toHaveAttribute('data-publication-route', target.route.bare, { timeout: 30_000 });
   expect(await reader.getAttribute('data-publication-id'), 'the reader moved to another publication').not.toBe(firstId);
   await expect(reader).not.toBeEmpty();
@@ -254,7 +254,7 @@ test('a story with no related links shows no block and no heading', async ({ pag
   const empty = answers.find((a) => a.related.links.length === 0 && !a.related.partial && a.related.basis.mode !== 'off');
   test.skip(!empty, 'every story has related links');
 
-  await page.goto(`${BASE_URL}/autopaper/${slugOf(empty.story.route.bare)}`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+  await page.goto(`${BASE_URL}/pub/texture/${slugOf(empty.story.route.bare)}`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
   const reader = page.locator('[data-texture-published-reader]');
   await expect(reader).toBeVisible({ timeout: 30_000 });
   await expect(reader).toHaveAttribute('data-publication-route', empty.story.route.bare, { timeout: 30_000 });

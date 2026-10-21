@@ -707,7 +707,7 @@ func TestDigestPreviewSendsAndWritesNothing(t *testing.T) {
 	if !pv.Preview || pv.Status != "ok" || pv.RankedBy != "importance" || len(pv.Stories) != 4 || pv.Subject == "" || pv.Text == "" {
 		t.Fatalf("preview = %+v", pv)
 	}
-	if pv.Stories[0].PublicationID != "s1" || pv.Stories[0].Link != "https://choir.news/autopaper/slug-s1" || pv.Stories[0].Rank != 1 {
+	if pv.Stories[0].PublicationID != "s1" || pv.Stories[0].Link != "https://choir.news/pub/texture/slug-s1" || pv.Stories[0].Rank != 1 {
 		t.Fatalf("preview lead = %+v", pv.Stories[0])
 	}
 	if d.resend.calls() != 0 {

@@ -10,7 +10,7 @@ package maild
 //	    the slug, never from model text.
 //	R1  Remote content. The message carries no remote image, web font,
 //	    tracking pixel, redirecting link or http: link. Every story link is
-//	    https://<primary domain>/autopaper/<slug>.
+//	    https://<primary domain>/pub/texture/<slug>.
 //	R2  The subject runs away. It is cut to 120 characters (runes, not bytes,
 //	    so a multi-byte headline is not cut mid-character).
 //	R3  The disclosure and the way out are missing. The footer carries the AI
@@ -95,7 +95,7 @@ func TestDigestRenderHasNoRemoteContentAndOnlyOwnLinks(t *testing.T) {
 		}
 	}
 	urlRe := regexp.MustCompile(`https?://[^\s"'<>)]+`)
-	allowed := regexp.MustCompile(`^https://choir\.news/(autopaper/[A-Za-z0-9._~-]+|\?app=email(&digest=off)?)$`)
+	allowed := regexp.MustCompile(`^https://choir\.news/(pub/texture/[A-Za-z0-9._~-]+|\?app=email(&digest=off)?)$`)
 	for _, body := range []string{m.Text, m.HTML} {
 		for _, link := range urlRe.FindAllString(strings.ReplaceAll(body, "&amp;", "&"), -1) {
 			if !allowed.MatchString(link) {
@@ -103,7 +103,7 @@ func TestDigestRenderHasNoRemoteContentAndOnlyOwnLinks(t *testing.T) {
 			}
 		}
 	}
-	for _, s := range []string{"https://choir.news/autopaper/slug-one", "https://choir.news/autopaper/slug-four"} {
+	for _, s := range []string{"https://choir.news/pub/texture/slug-one", "https://choir.news/pub/texture/slug-four"} {
 		if !strings.Contains(m.Text, s) || !strings.Contains(m.HTML, s) {
 			t.Fatalf("missing link %s", s)
 		}

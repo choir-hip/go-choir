@@ -69,7 +69,7 @@ test.describe('renderRelatedHTML', () => {
     expect(html).not.toContain('<img');
     expect(html).not.toContain('<script');
     expect(html).toContain('&lt;img src=x onerror=alert(1)&gt; &amp; &quot;quotes&quot;');
-    expect(html).toContain('href="/autopaper/story-b"');
+    expect(html).toContain('href="/pub/texture/story-b"');
     expect(html).toContain('data-related-link');
     expect(html).toContain('data-related-reason="capture"');
     expect(html).toContain('3 h ago · World');
@@ -178,7 +178,7 @@ test.describe('the block on a story page', () => {
 
   test('sits at the end of the scrolling article, below the last paragraph (U6, U8)', async ({ page }) => {
     await mockRoutes(page, () => related([link('b'), link('c'), link('d')]));
-    await page.goto(`${BASE_URL}/autopaper/story-a`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${BASE_URL}/pub/texture/story-a`, { waitUntil: 'domcontentloaded' });
     const reader = page.locator('[data-texture-published-reader]');
     await expect(reader).toBeVisible({ timeout: 30_000 });
     const block = reader.locator('[data-texture-related]');
@@ -203,7 +203,7 @@ test.describe('the block on a story page', () => {
   test('is fetched after the article is on screen and never holds it up (U4)', async ({ page }) => {
     const log = [];
     await mockRoutes(page, () => ({ delayMs: 2500, body: related([link('b')]) }), log);
-    await page.goto(`${BASE_URL}/autopaper/story-a`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${BASE_URL}/pub/texture/story-a`, { waitUntil: 'domcontentloaded' });
     const reader = page.locator('[data-texture-published-reader]');
     await expect(reader).toBeVisible({ timeout: 30_000 });
     await expect(reader).toContainText('Paragraph 1 of Story A');
@@ -226,7 +226,7 @@ test.describe('the block on a story page', () => {
     ]) {
       await page.unrouteAll({ behavior: 'ignoreErrors' });
       await mockRoutes(page, () => answer);
-      await page.goto(`${BASE_URL}/autopaper/story-a`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${BASE_URL}/pub/texture/story-a`, { waitUntil: 'domcontentloaded' });
       const reader = page.locator('[data-texture-published-reader]');
       await expect(reader).toContainText('Paragraph 1 of Story A', { timeout: 30_000 });
       await page.waitForTimeout(600);
@@ -238,13 +238,20 @@ test.describe('the block on a story page', () => {
 
   test('a late answer for the story the reader left is dropped (U5)', async ({ page }) => {
     await mockRoutes(page, (slug) => (slug === 'story-a' ? { delayMs: 2000, body: related([link('late')]) } : related([])));
-    await page.goto(`${BASE_URL}/autopaper/story-a`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${BASE_URL}/pub/texture/story-a`, { waitUntil: 'domcontentloaded' });
     const reader = page.locator('[data-texture-published-reader]');
     await expect(reader).toContainText('Paragraph 1 of Story A', { timeout: 30_000 });
-    // The reader moves to story B before A's list arrives.
-    await page.evaluate(() => {
-      window.history.pushState({}, '', '/autopaper/story-b');
-      window.dispatchEvent(new PopStateEvent('popstate'));
+    // The reader moves the window to story B before A's list arrives, as a
+    // related link does.
+    await reader.evaluate((el) => {
+      const a = document.createElement('a');
+      a.href = '/pub/texture/story-b';
+      a.setAttribute('data-related-link', '');
+      a.setAttribute('data-related-route', '/pub/texture/story-b');
+      a.setAttribute('data-related-title', 'Story B');
+      a.textContent = 'Story B';
+      el.appendChild(a);
+      a.click();
     });
     await expect(reader).toContainText('Paragraph 1 of Story B', { timeout: 30_000 });
     await page.waitForTimeout(3000);
@@ -253,20 +260,22 @@ test.describe('the block on a story page', () => {
 
   test('a click moves to the linked story at its top; a modified click is left alone (U7)', async ({ page, context }) => {
     await mockRoutes(page, (slug) => (slug === 'story-a' ? related([link('b')]) : related([])));
-    await page.goto(`${BASE_URL}/autopaper/story-a`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${BASE_URL}/pub/texture/story-a`, { waitUntil: 'domcontentloaded' });
     const reader = page.locator('[data-texture-published-reader]');
     await expect(reader).toContainText('Paragraph 1 of Story A', { timeout: 30_000 });
     const anchor = reader.locator('[data-related-link]').first();
-    await expect(anchor).toHaveAttribute('href', '/autopaper/story-b');
+    await expect(anchor).toHaveAttribute('href', '/pub/texture/story-b');
     await reader.evaluate((el) => { el.scrollTop = el.scrollHeight; });
 
-    // A ctrl-click is the browser's: no navigation inside this page.
+    // A ctrl-click is the browser's: this window stays on story A.
     await anchor.click({ modifiers: ['Control'], noWaitAfter: true });
     await page.waitForTimeout(300);
-    await expect(page).toHaveURL(/\/autopaper\/story-a$/);
+    await expect(page).toHaveURL(/\/pub\/texture\/story-a$/);
+    await expect(reader).toContainText('Paragraph 1 of Story A');
 
+    // A plain click moves this window to story B (the desktop keeps the
+    // address of the window it opened).
     await anchor.click();
-    await expect(page).toHaveURL(/\/autopaper\/story-b$/, { timeout: 15_000 });
     await expect(reader).toContainText('Paragraph 1 of Story B', { timeout: 30_000 });
     await expect(reader).toHaveAttribute('data-publication-id', 'pub-story-b');
     expect(await reader.evaluate((el) => el.scrollTop), 'the new story opens at its top').toBe(0);

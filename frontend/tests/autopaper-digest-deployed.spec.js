@@ -22,7 +22,7 @@
  *      fewer than 3 or more than 8 stories, or an order unlike the front
  *      page's own rank (rankFrontStories in frontend/src/lib/autopaper.ts).
  *   A4 The rendered text carries a script, an image tag, an http: link, or a
- *      link that is not https://choir.news/autopaper/<slug> (the manage link
+ *      link that is not https://choir.news/pub/texture/<slug> (the manage link
  *      aside).
  *   A5 send-now sends without a provider message id, is not limited to one an
  *      hour, or sends after the owner unsubscribed.
@@ -55,7 +55,7 @@ const RUN_ID = `${Date.now().toString(36)}${Math.floor(Math.random() * 1296).toS
 const QA_EMAIL = `delivered+digest${RUN_ID}@resend.dev`;
 const STATE_PATH = path.resolve('playwright', '.auth', 'digest-qa.storage.json');
 const DIGEST = '/api/email/digest';
-const LINK_OK = /^https:\/\/choir\.news\/autopaper\/[A-Za-z0-9._~-]+$/;
+const LINK_OK = /^https:\/\/choir\.news\/pub\/texture\/[A-Za-z0-9._~-]+$/;
 const MANAGE_OK = /^https:\/\/choir\.news\/\?app=email(&digest=off)?$/;
 
 async function api(page, route, options = {}) {

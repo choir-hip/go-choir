@@ -13,8 +13,9 @@
  *   - four columns at 1280px, one column at 390px with a 16px gutter and no
  *     horizontal overflow, and no headline (CJK, Arabic, a long unbroken
  *     word) wider than its column;
- *   - every headline links to /autopaper/<slug>, every version line to
- *     /autopaper/<slug>/v<n>, and a headline click opens the story page;
+ *   - every headline links to /pub/texture/<slug>, every version line to
+ *     /pub/texture/<slug>/v<n>, and a headline click opens the story in a
+ *     Texture window;
  *   - "Older stories" appears with next_cursor and pages in the rest;
  *   - the empty and error states sit under the masthead;
  *   - the logged-out home opens straight to Autopaper: no intro deck, the
@@ -174,7 +175,7 @@ async function openFront(page, viewport, fx, theme = '', mockOptions = {}) {
   await page.setViewportSize(viewport);
   await useTheme(page, theme);
   await mockFront(page, fx, mockOptions);
-  await page.goto(`${BASE_URL}/autopaper`);
+  await page.goto(`${BASE_URL}/`);
   await expect(page.locator('[data-autopaper-grid]')).toBeVisible({ timeout: 20_000 });
 }
 
@@ -630,9 +631,9 @@ test.describe('Autopaper front page', () => {
     const headlines = front.locator('[data-autopaper-headline]');
     await expect(headlines).toHaveText(ranked.map((s) => s.title));
     const hrefs = await headlines.locator('a').evaluateAll((links) => links.map((a) => a.getAttribute('href')));
-    expect(hrefs).toEqual(ranked.map((s) => `/autopaper/${slugOf(s.route.bare)}`));
+    expect(hrefs).toEqual(ranked.map((s) => `/pub/texture/${slugOf(s.route.bare)}`));
     const versionHrefs = await front.locator('[data-autopaper-version-link]').evaluateAll((links) => links.map((a) => a.getAttribute('href')));
-    expect(versionHrefs).toEqual(ranked.map((s) => `/autopaper/${slugOf(s.route.bare)}/v${s.latest_revision}`));
+    expect(versionHrefs).toEqual(ranked.map((s) => `/pub/texture/${slugOf(s.route.bare)}/v${s.latest_revision}`));
     await expect(front.locator('[data-updated-marker]')).toHaveCount(fx.first.filter((s) => s.version_count > 1).length);
 
     // Tiers: deks for the lead and top tier, none for briefs and more.
@@ -704,10 +705,10 @@ test.describe('Autopaper front page', () => {
     await expect(older).toHaveCount(0);
     await expect(front.locator('h2')).toHaveCount(1);
 
-    // A headline opens the story page at /autopaper/<slug>.
+    // A headline opens the story in a Texture window, at its published route.
     await page.locator('[data-autopaper-lead] h2 a').click();
-    await expect(page).toHaveURL(`${BASE_URL}/autopaper/story-storm`);
-    await expect(page.locator('[data-autopaper-route]')).toHaveAttribute('data-autopaper-view', 'story');
+    await expect(page.locator('[data-window-app-id="texture"]')).toHaveCount(1, { timeout: 15_000 });
+    await expect(page.locator('[data-window-app-id="texture"] [data-texture-app]')).toHaveCount(1);
   });
 
   test('one column at 390px with a 16px gutter and no horizontal scroll', async ({ page }, testInfo) => {
@@ -723,7 +724,9 @@ test.describe('Autopaper front page', () => {
     const first = page.locator('[data-autopaper-grid] > .ap-cell').first();
     await expect(first).toHaveAttribute('data-autopaper-lead', '');
     await expect(first.locator('h2')).toHaveText(ranked[0].title);
-    const gutter = await page.locator('[data-autopaper-masthead] h1').evaluate((el) => Math.round(el.getBoundingClientRect().left));
+    // The gutter is the page's own, measured from the Autopaper window's edge.
+    const gutter = await page.locator('[data-autopaper-masthead] h1').evaluate((el) =>
+      Math.round(el.getBoundingClientRect().left - el.closest('[data-autopaper]').getBoundingClientRect().left));
     expect(gutter).toBe(16);
     await expectNoHorizontalOverflow(page, '390px');
     await expect(page.locator('[data-autopaper-more]')).toBeVisible();
@@ -757,7 +760,7 @@ test.describe('Autopaper front page', () => {
   test('empty and error states sit under the masthead', async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await mockFront(page, fixture(), { empty: true });
-    await page.goto(`${BASE_URL}/autopaper`);
+    await page.goto(`${BASE_URL}/`);
     await expect(page.locator('[data-autopaper-masthead] h1')).toHaveText('Autopaper');
     await expect(page.locator('[data-autopaper-empty]')).toHaveText('No stories yet.');
     await expect(page.locator('[data-autopaper-updated]')).toHaveCount(0);
@@ -766,7 +769,7 @@ test.describe('Autopaper front page', () => {
 
     await page.unrouteAll({ behavior: 'ignoreErrors' });
     await mockFront(page, fixture(), { status: 503 });
-    await page.goto(`${BASE_URL}/autopaper`);
+    await page.goto(`${BASE_URL}/`);
     await expect(page.locator('[data-autopaper-error]')).toContainText('Could not load stories');
     await expect(page.locator('[data-autopaper-masthead] h1')).toHaveText('Autopaper');
   });

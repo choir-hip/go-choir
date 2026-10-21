@@ -1,7 +1,11 @@
 /**
  * "More research" on a published story (story expansion design, phase 1,
  * docs/reports/story-expansion-request-design-2026-10-20.md), against the
- * built frontend with the platform routes mocked. The deployed proof is
+ * built frontend with the platform routes mocked. The control is a button in
+ * the toolbar of the story's Texture window (owner, 2026-10-21: "More
+ * research should be a button in the texture toolbar"; the standalone
+ * /autopaper page is gone), so every case here opens the story the way a
+ * logged-out reader does: /pub/texture/<slug> on the desktop. The deployed proof is
  * autopaper-expand-deployed.spec.js; this spec pins the UI's own failure
  * modes. The failure modes below come from the design (section 7) and were
  * listed before the component; the component and this spec were then written
@@ -18,8 +22,10 @@
  *      does not know shows a stray line.
  *   X6 Polling never stops after a settled fate, never starts for an open
  *      one, or runs faster than 30 seconds.
- *   X7 The header overflows a phone sideways, or the button is too small to
- *      tap (under 44 px).
+ *   X7 The toolbar overflows a phone sideways, or the button is too small to
+ *      tap (under 44 px on a touch screen).
+ *   X9 The button shows in a Texture window that is not a published story
+ *      (a private document), or asks the server about it.
  *   X8 A refused ask (429 limit, 409 already asked) leaves the button stuck
  *      or the reader without a word.
  *
@@ -136,11 +142,11 @@ async function mockRoutes(page, state) {
 const allowed = (extra = {}) => ({ allowed: true, route: '/pub/texture/story-a', asked: false, requests: [], ...extra });
 const requestOf = (state, extra = {}) => ({ request_id: 'rx-1', state, asked_at: '2026-10-20T12:00:00Z', from_version: 1, ...extra });
 
-test.describe('the control on a story page', () => {
-  test.use({ viewport: { width: 375, height: 812 }, storageState: { cookies: [], origins: [] } });
+test.describe('the control in a story window\'s toolbar', () => {
+  test.use({ viewport: { width: 375, height: 812 }, hasTouch: true, isMobile: true, storageState: { cookies: [], origins: [] } });
 
   async function openStory(page, slug = 'story-a') {
-    await page.goto(`${BASE_URL}/autopaper/${slug}`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${BASE_URL}/pub/texture/${slug}`, { waitUntil: 'domcontentloaded' });
     await expect(page.locator('[data-texture-published-reader]')).toContainText(`Paragraph 1 of Story ${slug.replace('story-', '').toUpperCase()}`, { timeout: 30_000 });
   }
 
@@ -169,12 +175,12 @@ test.describe('the control on a story page', () => {
     const state = { read: allowed(), ask: { status: 202, delayMs: 300, body: { status: 'asked', request_id: 'rx-1' } } };
     await mockRoutes(page, state);
     await openStory(page);
-    const button = page.locator('[data-autopaper-expand-button]');
+    const button = page.locator('[data-texture-toolbar] [data-autopaper-expand-button]');
     await expect(button).toBeVisible();
     await expect(button).toHaveText('More research');
     const box = await button.boundingBox();
     expect(box.height, 'tap target height').toBeGreaterThanOrEqual(44);
-    const overflow = await page.evaluate(() => [document.scrollingElement.scrollWidth, document.scrollingElement.clientWidth, document.querySelector('.ap-header').scrollWidth, document.querySelector('.ap-header').clientWidth]);
+    const overflow = await page.evaluate(() => [document.scrollingElement.scrollWidth, document.scrollingElement.clientWidth, document.querySelector('[data-texture-toolbar]').scrollWidth, document.querySelector('[data-texture-toolbar]').clientWidth]);
     expect(overflow[0]).toBeLessThanOrEqual(overflow[1] + 1);
     expect(overflow[2]).toBeLessThanOrEqual(overflow[3] + 1);
 
@@ -186,7 +192,7 @@ test.describe('the control on a story page', () => {
     await expect(button).toBeDisabled();
     await expect(button).toHaveText('Asked for more');
     // The line still fits a phone.
-    const after = await page.evaluate(() => [document.querySelector('.ap-header').scrollWidth, document.querySelector('.ap-header').clientWidth]);
+    const after = await page.evaluate(() => [document.querySelector('[data-texture-toolbar]').scrollWidth, document.querySelector('[data-texture-toolbar]').clientWidth]);
     expect(after[0]).toBeLessThanOrEqual(after[1] + 1);
   });
 
@@ -241,12 +247,32 @@ test.describe('the control on a story page', () => {
     const state = { read: (slug) => (slug === 'story-a' ? { delayMs: 2000, body: allowed() } : { allowed: false }) };
     await mockRoutes(page, state);
     await openStory(page);
-    await page.evaluate(() => {
-      window.history.pushState({}, '', '/autopaper/story-b');
-      window.dispatchEvent(new PopStateEvent('popstate'));
+    // The reader moves the window to story B, as a related link does.
+    await page.locator('[data-texture-published-reader]').evaluate((el) => {
+      const a = document.createElement('a');
+      a.href = '/pub/texture/story-b';
+      a.setAttribute('data-related-link', '');
+      a.setAttribute('data-related-route', '/pub/texture/story-b');
+      a.setAttribute('data-related-title', 'Story B');
+      a.textContent = 'Story B';
+      el.appendChild(a);
+      a.click();
     });
     await expect(page.locator('[data-texture-published-reader]')).toContainText('Paragraph 1 of Story B', { timeout: 30_000 });
     await page.waitForTimeout(3000);
     await expect(page.locator('[data-autopaper-expand]'), 'story A\'s late read must not show on story B').toHaveCount(0);
+  });
+
+  test('a Texture window on a private document has no button and asks nothing (X9)', async ({ page }) => {
+    const state = { read: allowed() };
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await mockRoutes(page, state);
+    await page.route('**/api/platform/publications/front*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{"stories":[]}' }));
+    await page.goto(`${BASE_URL}/`, { waitUntil: 'domcontentloaded' });
+    await page.locator('[data-desktop-icon-id="texture"]').click({ timeout: 20_000 });
+    await expect(page.locator('[data-texture-toolbar]')).toBeVisible({ timeout: 20_000 });
+    await page.waitForTimeout(500);
+    await expect(page.locator('[data-autopaper-expand]')).toHaveCount(0);
+    expect(state.reads, 'no expansion read for a private document').toHaveLength(0);
   });
 });

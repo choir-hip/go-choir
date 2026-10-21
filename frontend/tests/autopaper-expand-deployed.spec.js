@@ -157,29 +157,29 @@ test('an API key on the allowlisted account is refused; a non-story route is a 4
 });
 
 test.describe('the page at phone width', () => {
-  test.use({ viewport: { width: 375, height: 812 } });
+  test.use({ viewport: { width: 375, height: 812 }, hasTouch: true, isMobile: true });
 
   test('the allowlisted reader has a tappable button and a signed-out reader has none', async ({ browser }) => {
     test.skip(!ALLOWED_STATE || !TARGET_ROUTE, 'EXPAND_ALLOWED_STATE and EXPAND_TARGET_ROUTE are needed');
     const slug = slugOf(TARGET_ROUTE);
-    const context = await browser.newContext({ storageState: ALLOWED_STATE, viewport: { width: 375, height: 812 } });
+    const context = await browser.newContext({ storageState: ALLOWED_STATE, viewport: { width: 375, height: 812 }, hasTouch: true, isMobile: true });
     const page = await context.newPage();
-    await page.goto(`${BASE_URL}/autopaper/${slug}`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+    await page.goto(`${BASE_URL}/pub/texture/${slug}`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
     await expect(page.locator('[data-texture-published-reader]')).toBeVisible({ timeout: 30_000 });
-    const button = page.locator('[data-autopaper-expand-button]');
+    const button = page.locator('[data-texture-toolbar] [data-autopaper-expand-button]');
     await expect(button).toBeVisible({ timeout: 30_000 });
     expect((await button.boundingBox()).height).toBeGreaterThanOrEqual(44);
     const overflow = await page.evaluate(() => [document.scrollingElement.scrollWidth, document.scrollingElement.clientWidth]);
     expect(overflow[0]).toBeLessThanOrEqual(overflow[1] + 1);
     await context.close();
 
-    const anonymous = await browser.newContext({ storageState: { cookies: [], origins: [] }, viewport: { width: 375, height: 812 } });
+    const anonymous = await browser.newContext({ storageState: { cookies: [], origins: [] }, viewport: { width: 375, height: 812 }, hasTouch: true, isMobile: true });
     const apage = await anonymous.newPage();
-    await apage.goto(`${BASE_URL}/autopaper/${slug}`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+    await apage.goto(`${BASE_URL}/pub/texture/${slug}`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
     await expect(apage.locator('[data-texture-published-reader]')).toBeVisible({ timeout: 30_000 });
     await apage.waitForTimeout(1500);
     if (PUBLIC_ON) {
-      await expect(apage.locator('[data-autopaper-expand-button]')).toBeVisible({ timeout: 30_000 });
+      await expect(apage.locator('[data-texture-toolbar] [data-autopaper-expand-button]')).toBeVisible({ timeout: 30_000 });
     } else {
       await expect(apage.locator('[data-autopaper-expand]')).toHaveCount(0);
     }
@@ -194,10 +194,10 @@ test('a logged-out reader sees the button, asks once, and a second ask is refuse
   expect(read.allowed, 'a logged-out reader may ask').toBe(true);
 
   // The button, at phone width, for a reader with no session.
-  const context = await browser.newContext({ storageState: { cookies: [], origins: [] }, viewport: { width: 375, height: 812 } });
+  const context = await browser.newContext({ storageState: { cookies: [], origins: [] }, viewport: { width: 375, height: 812 }, hasTouch: true, isMobile: true });
   const page = await context.newPage();
-  await page.goto(`${BASE_URL}/autopaper/${slugOf(PUBLIC_ROUTE)}`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
-  const button = page.locator('[data-autopaper-expand-button]');
+  await page.goto(`${BASE_URL}/pub/texture/${slugOf(PUBLIC_ROUTE)}`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+  const button = page.locator('[data-texture-toolbar] [data-autopaper-expand-button]');
   await expect(button).toBeVisible({ timeout: 30_000 });
   expect((await button.boundingBox()).height).toBeGreaterThanOrEqual(44);
   await context.close();
