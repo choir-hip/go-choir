@@ -22,7 +22,7 @@ func testKEK(t *testing.T, fill byte) []byte {
 
 func writeKEKFile(t *testing.T, dir string, kek []byte, mode os.FileMode, asBase64 bool) string {
 	t.Helper()
-	path := filepath.Join(dir, "kek")
+	path := filepath.Join(dir, "key-escrow-kek")
 	content := kek
 	if asBase64 {
 		content = []byte(base64.StdEncoding.EncodeToString(kek) + "\n")
@@ -229,7 +229,7 @@ func TestLoadKEK(t *testing.T) {
 		}
 	}
 	dir := t.TempDir()
-	short := filepath.Join(dir, "short")
+	short := filepath.Join(dir, "key-escrow-kek-short")
 	if err := os.WriteFile(short, kek[:16], 0o400); err != nil {
 		t.Fatal(err)
 	}
@@ -237,7 +237,7 @@ func TestLoadKEK(t *testing.T) {
 		t.Fatal("16-byte KEK accepted")
 	}
 	real := writeKEKFile(t, dir, kek, 0o400, false)
-	link := filepath.Join(dir, "link")
+	link := filepath.Join(dir, "key-escrow-kek-link")
 	if err := os.Symlink(real, link); err != nil {
 		t.Fatal(err)
 	}
@@ -439,7 +439,7 @@ func TestInspectKeyFileStates(t *testing.T) {
 
 func TestGenerateKEKFile(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "kek")
+	path := filepath.Join(dir, "key-escrow-kek")
 	if err := GenerateKEKFile(path); err != nil {
 		t.Fatal(err)
 	}
@@ -487,5 +487,53 @@ func TestLoaderErrorsCarryNoKeyMaterial(t *testing.T) {
 	_, _, err = LoadPrivateKey(path, SealConfig{Mode: SealPermit, KEKPath: kekPath})
 	if err == nil || strings.Contains(err.Error(), "secret-looking") {
 		t.Fatalf("corrupt plaintext: err = %v", err)
+	}
+}
+
+// B3 (bunch 4b review): the backup excludes KEK files by name, so a KEK is
+// accepted, and generated, only under that name. A KEK at
+// /var/lib/go-choir/secrets/custom-kek would ride in the backup beside the
+// sealed key.
+func TestKEKNameIsEnforced(t *testing.T) {
+	kek := testKEK(t, 0x41)
+	dir := t.TempDir()
+	for _, name := range []string{"custom-kek", "kek", "escrow-kek", "key-escrow-ke"} {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, kek, 0o400); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := LoadKEK(path); err == nil {
+			t.Fatalf("a KEK named %q was accepted", name)
+		}
+		if err := GenerateKEKFile(filepath.Join(dir, "new-"+name)); err == nil {
+			t.Fatalf("a KEK named new-%q was generated", name)
+		}
+	}
+	for _, name := range []string{"key-escrow-kek", "key-escrow-kek.2026"} {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, kek, 0o400); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := LoadKEK(path); err != nil {
+			t.Fatalf("a KEK named %q was refused: %v", name, err)
+		}
+	}
+	// Under permit a misnamed KEK is a configuration error at start.
+	plain := filepath.Join(dir, "key-escrow-key")
+	writePlainKey(t, plain)
+	if _, _, err := LoadPrivateKey(plain, SealConfig{Mode: SealPermit, KEKPath: filepath.Join(dir, "custom-kek")}); err == nil {
+		t.Fatal("permit started with a misnamed KEK")
+	}
+}
+
+// B3: the name the loader requires and the pattern the daily backup
+// excludes are one rule; this keeps them from drifting apart.
+func TestKEKNameMatchesTheBackupExclusion(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "scripts", "off-host-backup.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"`+KEKNamePrefix+`*"`) {
+		t.Fatalf("scripts/off-host-backup.sh does not exclude %q", KEKNamePrefix+"*")
 	}
 }
