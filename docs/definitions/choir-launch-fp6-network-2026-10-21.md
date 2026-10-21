@@ -52,7 +52,7 @@ finish:
     the Web Lens launcher (orange); the deletion of internal/browsercontrol,
     its routes, config, callers and tests, and the two guest environment
     lines (red); the image change that drops the obscura package (red, its
-    own commit and its own deploy); a guest network inventory report under docs/reports/
+    own commit and its own deploy); docs/reports/guest-network-inventory-2026-10-21.md
     linked from SDC NET-01 (green); and the SEC-06 change or design (red or
     green, decided in the item).
   acceptance:
@@ -78,7 +78,18 @@ finish:
     - action: the paper's schedules and polls read before and after the deploy
       proves: the deletion did not take the paper down
       evidence_class: deployed proof
-    - action: go test of internal/apihandler, internal/autoputer, internal/provideriface, internal/types, internal/store (focused), and go vet ./internal/...
+    - action: >-
+        On a test computer, from an implementation capsule: pip download of a
+        small package, npm view, git ls-remote over https, one huggingface_hub
+        download; then a TLS client that CONNECTs to github.com and sends the
+        server name pypi.org (steps below)
+      proves: the tunnel-identity binding (SEC-06) refuses a name mismatch and
+        leaves the ecosystem toolchains working
+      evidence_class: deployed proof
+    - action: the deploy's image build output, before and after the image commit
+      proves: the obscura derivation and its closure are gone, and by how much the image shrank
+      evidence_class: deployed proof
+    - action: go test of internal/apihandler, internal/provideriface, internal/capsule; go vet of the touched packages; the Web Lens Playwright spec on a built frontend; the two SBOM test scripts
       proves: the tree builds without the package and the route table no longer carries the browser routes
       evidence_class: local test
   rollback: >-
@@ -132,19 +143,31 @@ boundaries:
   protected_surfaces: [guest boundary and egress, deployment image, the capsule egress proxy, routes served to owners]
 
 now:
-  status: working
+  status: checkpoint_incomplete
   slice: >-
-    L2-06 steps 1 to 4 (problem record, launcher, deletion), then step 5,
-    then the NET-01 inventory, then SEC-06
-  source_ref: 26c4e1ed0
+    All five asks built and committed on lane/b8-network; nothing is pushed or
+    deployed. The orchestrator sends the red commits to a panel, lands them in
+    order, and runs the deployed proof below.
+  source_ref: a38eb7f67
   deploy_identity: unknown to this lane
   candidate:
-    id: none
-    state: none
+    id: fp6-network
+    state: ready
     ref: lane/b8-network
     base: 26c4e1ed0
     digest: none
-    scope: []
+    scope:
+      - frontend/src/lib/BrowserApp.svelte
+      - frontend/src/lib/source-url.ts
+      - frontend/tests/browser-app.spec.js
+      - internal/apihandler/routes.go
+      - internal/autoputer/run.go
+      - internal/provideriface/
+      - internal/capsule/egress.go
+      - internal/capsule/egress_tls.go
+      - nix/autoputer-vm.nix
+      - flake.nix
+      - .github/scripts/
   conjecture:
     id: C-obscura-unused
     claim: >-
@@ -161,7 +184,7 @@ now:
       through the CLI, would show whether anyone used the button; production
       SQL is off limits, so the check is the deployed proof above.
     scope_if_supported: the guest image and routes at the deployed SHA
-    status: active
+    status: testing
     evidence_refs: [docs/problems/obscura-untrusted-javascript-as-guest-root-2026-10-21.md]
   decision:
     what: delete Obscura and browsercontrol; Web Lens becomes a launcher (checklist default)
@@ -171,20 +194,59 @@ now:
     owner_ratification_ref: not_applicable
   belief:
     believed_state: >-
-      The only caller of Obscura is the Web Lens frontend; the guest runs it
-      as root with no address guard; nothing else needs it.
+      The only caller of Obscura was the Web Lens frontend; it ran as guest
+      root with no address guard; the deletion builds and passes its tests;
+      the egress tunnel is bound to its CONNECT name in tests.
     main_uncertainty: >-
-      Whether anything outside this tree (a stored prompt, an owner's saved
-      window, a source entity) still sends the user to the backend mode; the
-      launcher must degrade for those without a request to /api/browser.
-    next_observation: the frontend test of the launcher with /api/browser requests failing the test
+      Whether a real toolchain in a deployed capsule sends something the
+      ClientHello check refuses (a GREASE Encrypted Client Hello, no SNI), and
+      whether the frontend's route-mocked spec matches the deployed desktop.
+    next_observation: the deployed proof steps below, run by FP0 on staging
   blocker_or_risk: >-
-    The frontend cannot be built in this worktree until node_modules are
-    installed; the Playwright suite needs the local service stack, so the
-    launcher is checked with a route-mocked spec and the deployed proof.
-  next_action: write the launcher spec first, then the launcher
+    The image commit edits nix/autoputer-vm.nix, which the desk-boundary lane
+    owns this pass (three Obscura-only removals); the frontend spec
+    desktop-shell-core.spec.js needs the local service stack and was not run
+    here. The stored browser-session accessors, types and six event kinds
+    remain as frozen vocabulary.
+  next_action: FP0 reviews and lands the commits in the order in "Landing order"
 
-receipts: []
+receipts:
+  - id: problem-record-and-goal
+    boundary: define
+    identity: 53de206e8
+    proof_refs: [docs/problems/obscura-untrusted-javascript-as-guest-root-2026-10-21.md]
+    rollback_ref: git revert 53de206e8
+    disposition: committed
+  - id: web-lens-launcher
+    boundary: implement
+    identity: 126ba5e48
+    proof_refs: [frontend/tests/browser-app.spec.js]
+    rollback_ref: git revert 126ba5e48
+    disposition: committed; 12 route-mocked specs pass locally
+  - id: browsercontrol-deleted
+    boundary: implement
+    identity: e57b7e3cb
+    proof_refs: [internal/apihandler/routes_test.go]
+    rollback_ref: git revert e57b7e3cb
+    disposition: committed; apihandler and provideriface tests pass locally
+  - id: guest-network-inventory
+    boundary: implement
+    identity: b780689e9
+    proof_refs: [docs/reports/guest-network-inventory-2026-10-21.md]
+    rollback_ref: git revert b780689e9
+    disposition: committed
+  - id: obscura-image
+    boundary: implement
+    identity: c2da85986
+    proof_refs: [.github/scripts/build-sboms-differential-test, .github/scripts/verify-sbom-candidate-test]
+    rollback_ref: git revert c2da85986
+    disposition: committed; SBOM scripts pass locally; image not built here
+  - id: egress-tunnel-identity
+    boundary: implement
+    identity: a38eb7f67
+    proof_refs: [internal/capsule/egress_tls_test.go]
+    rollback_ref: git revert a38eb7f67
+    disposition: committed; internal/capsule tests pass locally; six proxy tests fail with the check off
 ---
 
 # FP6: the host-mediated network, first half
@@ -205,3 +267,52 @@ beside the daemon, no `/api/browser` routes, about 508 MiB less image
 
 **What this lane does not do.** It does not close guest egress. The
 inventory (NET-01) is the table that lets a later station do that safely.
+
+## Landing order and deployed proof (written for FP0; no secrets)
+
+Order: 126ba5e48 (launcher; works with or without the routes), e57b7e3cb
+(route and package deletion), b780689e9 and 53de206e8 (docs, any time),
+c2da85986 (the image; its own deploy, touches `nix/autoputer-vm.nix` on three
+Obscura lines only), a38eb7f67 (egress; its own deploy as a red change on the
+capsule boundary). 0314e100b and the goal-file commit are docs.
+
+1. **Identity.** Staging reports the pushed SHA (the usual deploy check).
+2. **Routes gone.** With a `read:runtime` API key: `GET /api/browser/capabilities`
+   returns 404; with a `write:runtime` key: `POST /api/browser/sessions`
+   with body `{}` returns 404. Without a key both return 401 as before.
+3. **Web Lens, in a browser against staging.** Sign in with the test account;
+   open Web Lens; enter `https://example.com/`; assert the Open original link
+   has `href="https://example.com/"`, `target="_blank"` and a `rel` that
+   contains `noopener` and `noreferrer`; press Source Viewer snapshot; assert
+   the Source window shows page text and the network log has one
+   `POST /api/content/import-url` and no request under `/api/browser`. Enter
+   `javascript:alert(1)` and assert an error and no link.
+4. **Capabilities kept.** Research Read of an arbitrary public URL from the
+   owner's computer; `POST /api/content/import-url` with `{"url":"https://example.com"}`
+   returns 200 with text; read `GET /api/autopaper/sources/schedules` before
+   and after the deploy and see the same schedules polling.
+5. **Image.** The deploy's build output shows no obscura derivation; record the
+   guest image size before and after.
+6. **Egress (after a38eb7f67), on a test computer, from an implementation
+   capsule.** Ecosystem builds: `pip download` of a small package, `npm view
+   left-pad`, `git ls-remote https://github.com/golang/go HEAD`, one
+   `huggingface_hub` file download; each succeeds and the egress ledger shows
+   outcome `ok`. Mismatch: run
+
+   ```python
+   import socket, ssl
+   s = socket.create_connection(("127.0.0.1", 3128))
+   s.sendall(b"CONNECT github.com:443 HTTP/1.1\r\nHost: github.com:443\r\n\r\n")
+   print(s.recv(200))
+   try:
+       ssl.create_default_context().wrap_socket(s, server_hostname="pypi.org")
+       print("UNEXPECTED: handshake completed")
+   except Exception as e:
+       print("refused:", type(e).__name__)
+   ```
+
+   Expected: `200 Connection Established`, then `refused:`; the ledger shows
+   outcome `refused` with a reason naming the SNI and the CONNECT host, and
+   no bytes from the upstream. If an ecosystem build is refused, the ledger
+   reason says whether it was a GREASE Encrypted Client Hello or no SNI;
+   revert `a38eb7f67` and report the tool.
