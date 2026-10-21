@@ -55,6 +55,86 @@ refuse() {
 
 accept "receipt" "verb=receipt"
 
+# 10: the host floor (bunch 4b, B1). After step 3 an ancestor deploy would
+# restore root's CI key, so the gate refuses any commit that does not descend
+# from its floor (the floor file, or the seed without one), and a deploy
+# raises the floor to its commit. Throwaway history: c0 - c1 - c2 on main,
+# s1 a side commit off c1.
+floor_dir=$(mktemp -d)
+trap 'rm -rf "$floor_dir"' EXIT
+frepo="$floor_dir/repo"
+git init -q "$frepo"
+fcommit() {
+  git -C "$frepo" -c user.name=t -c user.email=t@t commit -q --allow-empty -m "$1"
+  git -C "$frepo" rev-parse HEAD
+}
+c0=$(fcommit c0)
+c1=$(fcommit c1)
+git -C "$frepo" branch -q side
+c2=$(fcommit c2)
+git -C "$frepo" checkout -q side
+s1=$(fcommit s1)
+ffile="$floor_dir/ci-gate-floor"
+
+floor_ok() {
+  local mode="$1" seed="$2" commit="$3" out
+  out=$("$gate" "$mode" "$frepo" "$ffile" "$seed" "$commit" 2>&1) ||
+    fail "$mode refused ${commit} (seed ${seed}, floor $(cat "$ffile" 2>/dev/null || echo none)): $out"
+}
+floor_refused() {
+  local mode="$1" seed="$2" commit="$3" want="$4" out status=0
+  out=$("$gate" "$mode" "$frepo" "$ffile" "$seed" "$commit" 2>&1) || status=$?
+  [ "$status" -eq 2 ] || fail "$mode: status $status (want 2) for ${commit}: $out"
+  [[ "$out" == "node-b-ci-gate: refused: "*"$want"* ]] || fail "$mode: want refusal '$want' for ${commit}, got: $out"
+}
+
+rm -f "$ffile"
+floor_ok --test-floor "$c0" "$c1"
+floor_ok --test-floor "$c0" "$c0"
+floor_refused --test-floor "$c1" "$c0" "below the seed floor"
+floor_refused --test-floor "$c2" "$s1" "below the seed floor"
+
+printf '%s\n' "$c1" >"$ffile"
+floor_refused --test-floor "$c0" "$c0" "below the floor"
+floor_ok --test-floor "$c0" "$c1"
+floor_ok --test-floor "$c0" "$c2"
+floor_ok --test-floor "$c0" "$s1"
+printf '%s\n' "$c2" >"$ffile"
+floor_refused --test-floor "$c0" "$c1" "below the floor"
+floor_refused --test-floor "$c0" "$s1" "below the floor"
+
+for bad in "" "main" "${c1^^}" "${c1:0:39}" "0123456789abcdef0123456789abcdef01234567"; do
+  printf '%s\n' "$bad" >"$ffile"
+  floor_refused --test-floor "$c0" "$c2" "floor"
+done
+printf '%s\n%s\n' "$c1" "$c2" >"$ffile"
+floor_refused --test-floor "$c0" "$c2" "floor"
+
+# A deploy raises the floor; a refused deploy leaves it alone.
+rm -f "$ffile"
+floor_ok --test-advance "$c0" "$c1"
+[ "$(cat "$ffile")" = "$c1" ] || fail "advance did not record ${c1}"
+floor_refused --test-advance "$c0" "$c0" "below the floor"
+[ "$(cat "$ffile")" = "$c1" ] || fail "a refused advance changed the floor"
+floor_ok --test-advance "$c0" "$c2"
+[ "$(cat "$ffile")" = "$c2" ] || fail "advance did not raise the floor to ${c2}"
+floor_refused --test-advance "$c0" "$s1" "below the floor"
+floor_refused --test-advance "$c0" "$c1" "below the floor"
+[ "$(cat "$ffile")" = "$c2" ] || fail "the floor went down"
+
+# The test modes take exactly four arguments and a full commit.
+status=0
+"$gate" --test-floor "$frepo" "$ffile" "$c0" >/dev/null 2>&1 || status=$?
+[ "$status" -eq 2 ] || fail "--test-floor with three arguments: status $status, want 2"
+floor_refused --test-floor "$c0" "main" "invalid commit"
+
+# The live path checks the floor before reading the program, and only a
+# deploy raises it.
+grep -Fq 'check_floor "$repo" "$commit"' "$gate" || fail "run() does not check the floor"
+grep -Fq '[ "$verb" = deploy ] && advance_floor "$commit"' "$gate" || fail "run() does not raise the floor on deploy"
+grep -Eq '^seed_floor=[0-9a-f]{40}$' "$gate" || fail "the gate has no seed floor"
+grep -Fq 'floor_file=/var/lib/go-choir/ci-gate-floor' "$gate" || fail "the gate's floor file moved"
+
 accept "$prebuild_ok" "verb=prebuild
 repo=/opt/go-choir-prebuild
 script=.github/scripts/node-b-ci-prebuild
