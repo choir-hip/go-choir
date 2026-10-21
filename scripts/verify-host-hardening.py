@@ -391,6 +391,49 @@ def check_modes():
         record("modes", path, ok, f"mode={mode:o} uid={st.st_uid} want<={want:o} root")
 
 
+def _run(*cmd):
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return subprocess.CompletedProcess(cmd, 127, "", str(exc))
+
+
+def check_guest_floor(dns_port=8053):
+    """FP3 group 2 (SEC-03, SEC-09, SEC-10 host side, NET-07)."""
+    # SEC-09: KSM not running (2 = stopped and unmerged, 0 = stopped).
+    ksm = _read_trim("/sys/kernel/mm/ksm/run")
+    record("guest-floor", "ksm run", ksm in ("0", "2"), f"run={ksm or 'absent'}")
+    # NET-07: /dev/kvm is not world-accessible.
+    try:
+        st = os.stat("/dev/kvm")
+        mode = stat.S_IMODE(st.st_mode)
+        record("guest-floor", "/dev/kvm mode", (mode & 0o007) == 0 and st.st_uid == 0,
+               f"mode={mode:o} uid={st.st_uid} gid={st.st_gid} want 660 root:kvm")
+    except OSError:
+        record("guest-floor", "/dev/kvm mode", False, "absent")
+    # SEC-03: the mangle egress policy, its jump, the IPv6 drop, the
+    # reply-only FORWARD chain.
+    chain = _run("iptables", "-t", "mangle", "-S", "CHOIR-GUEST-EGRESS").stdout
+    rules = [l for l in chain.splitlines() if l.startswith("-A ")]
+    record("guest-floor", "egress chain", len(rules) > 0 and all("80,443" not in l for l in rules)
+           and any("--limit-iface-in" in l for l in rules), f"{len(rules)} rules")
+    pre = _run("iptables", "-t", "mangle", "-S", "PREROUTING").stdout.splitlines()
+    record("guest-floor", "egress jump first", len(pre) > 1 and "CHOIR-GUEST-EGRESS" in pre[1],
+           pre[1] if len(pre) > 1 else "no rules")
+    pre6 = _run("ip6tables", "-t", "mangle", "-S", "PREROUTING").stdout
+    record("guest-floor", "guest IPv6 drop", "-i vm-+" in pre6 and "-j DROP" in pre6, "ip6tables mangle PREROUTING")
+    fwd = _run("iptables", "-S", "FORWARD").stdout
+    record("guest-floor", "reply-only FORWARD jump", "-o vm-+" in fwd and "CHOIR-GUEST-RET" in fwd, "FORWARD -o vm-+")
+    per_tap = [l for l in fwd.splitlines() if re.match(r"-A FORWARD -o vm-[a-z2-7]{12} ", l)]
+    record("guest-floor", "no per-tap FORWARD ACCEPT", not per_tap, f"{len(per_tap)} left")
+    # SEC-10 host side: the resolver answers on loopback.
+    active = _run("systemctl", "is-active", "unbound").stdout.strip()
+    record("guest-floor", "unbound active", active == "active", active)
+    listening = _run("ss", "-Hlnu", f"sport = :{dns_port}").stdout.strip()
+    record("guest-floor", f"resolver on 127.0.0.1:{dns_port}", "127.0.0.1:" + str(dns_port) in listening,
+           listening or "not listening")
+
+
 # ── boot state: installed but not booted ────────────────────────────────────
 # Mirrors internal/hostboot (Go). Keep the two in step: TestPythonParity in
 # internal/hostboot compares their JSON on the same fixture trees.
@@ -643,6 +686,8 @@ def main():
     ap.add_argument("--with-credential", action="store_true",
                     help="also run positive controls using the root-only credential files (never printed)")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--expect-guest-floor", action="store_true",
+                    help="also check FP3 group 2: guest egress floor, KSM off, /dev/kvm 0660, the guest resolver")
     ap.add_argument("--allow-reboot-pending", action="store_true",
                     help="report a pending host reboot without failing (the baseline before a planned reboot)")
     ap.add_argument("--boot-state-json", action="store_true",
@@ -664,6 +709,8 @@ def main():
     check_paper_probe()
     check_modes()
     check_boot(args.allow_reboot_pending)
+    if args.expect_guest_floor:
+        check_guest_floor()
     if args.json:
         print(json.dumps(results, indent=2))
     else:

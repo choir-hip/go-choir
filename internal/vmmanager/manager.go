@@ -258,8 +258,9 @@ type ManagerConfig struct {
 
 	// StoreDiskPath is the path to the erofs store disk image built by
 	// microvm.nix. This disk contains the shared read-only nix store
-	// closure. All VMs reference the same store disk, and KSM on the
-	// host deduplicates identical pages across VMs.
+	// closure. All VMs reference the same store disk file; guests share its
+	// host page cache, not guest memory (KSM is off on the host, SEC-09:
+	// merged guest pages are a cross-tenant side channel).
 	// When set, the Firecracker config includes this as a virtio-blk drive
 	// mounted read-only at /nix/store by the guest init.
 	StoreDiskPath string
