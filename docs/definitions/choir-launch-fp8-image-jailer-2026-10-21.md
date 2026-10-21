@@ -91,16 +91,19 @@ boundaries:
 
 now:
   status: working
-  slice: problem records (this commit), then RES-05
-  source_ref: 122eb9623
-  deploy_identity: unchanged
+  slice: >-
+    built, not frozen: every item has its code, tests and FP0 proof steps;
+    only FP0 steps (freeze, panel, land, deployed proof) and the owner's cap
+    number remain
+  source_ref: 122eb9623 (lane base; rebase onto main after FP3 group 1 lands)
+  deploy_identity: unchanged (nothing of FP8 is deployed)
   candidate:
     id: FP8-B6
-    state: drafting
+    state: built, unreviewed
     ref: lane/fp8-image-jailer
     base: 122eb9623
     digest: none
-    scope: [internal/vmmanager, internal/vmctl, nix/node-b.nix]
+    scope: [internal/vmmanager, internal/vmctl/ownership.go, internal/auth, nix/node-b.nix, nix/firecracker-next.nix]
   conjecture:
     id: C-FP8-per-computer
     claim: >-
@@ -232,3 +235,160 @@ computer cannot start right now" with a retry
 stays full. Registered users cost disk (about 560 MB per hibernated
 computer, `reports/vm-density-limits-2026-10-14.md:62-76`); the checklist
 puts today's headroom at about 100 more users.
+
+## As built (lane/fp8-image-jailer)
+
+| Item | Commit | What | Off until |
+|---|---|---|---|
+| records | 4f12b86d6 | this file, P1 to P7 | n/a |
+| RES-05 | e01d5423e | jails hard-link one root-owned 0444 copy per source identity (`jail_shared.go`) | the jailer is on |
+| SEC-04 | 8e373bdd0 | `selectsComputer` (ids, `class:<class>`, `*`); `VMCTL_JAILER_ONLY=class:test` works | `VMCTL_JAILER=on` |
+| NET-08, RES-16 | b4293aaec | `VM_FIRECRACKER_NEXT_BIN`/`_ONLY`, per-VM `vmm-build.json`; discard per launched build, `VM_DATA_DISCARD_ONLY`; `nix/firecracker-next.nix` (UNEVALUATED, fakeHash x2, imported nowhere) | NEXT env set |
+| RES-06 | f6d31783d | `damon_reclaim.*` boot args for `VM_GUEST_RECLAIM_ONLY` computers | ONLY env set |
+| RES-09 | db7587bcc | vmctl reads the boot class (refreshing the test tier) before the hotplug selection | live on deploy (class:test only) |
+| RES-14 | c46df4522 | stale comment only; the item is a reading | n/a |
+| L4-03 | 85f8ce067 | `AUTH_REGISTRATION_CAP` + `registration_waitlist` table | cap set |
+
+Tests (local, Linux, this lane): `go test ./internal/vmmanager` passes except
+`TestLaunchThreadPolicyReachesOnlyItsChild`, which needs `/bin/cat` (absent
+in this sandbox; untouched code); `go test ./internal/vmctl`,
+`./internal/auth`, `./cmd/auth` pass; `go build ./cmd/vmctl` passes.
+
+Only RES-09 changes live behavior on deploy, and only for test accounts'
+computers (a freshly minted test computer's first boot gets the hotplug
+region it was already meant to get). Everything else is inert until an
+environment line names a computer.
+
+## FP0 proof steps
+
+Mint a disposable test computer with `node scripts/qa_test_computer.mjs
+--label fp8-<item>`; read its VM id from `GET /internal/vmctl/list` on Node
+B (the same curl `scripts/memory_hotplug_probe.py:53,111` uses). "Turn on"
+below is a reviewed `nix/node-b.nix` change and a deploy; each is one red
+activation under the metamission's lease. Record outputs under
+`docs/evidence/fp8-<item>-<date>.*`.
+
+### Landing (all items)
+
+1. Rebase onto main after FP3 group 1 lands (`internal/vmctl/ownership.go`
+   is touched by both; the FP8 hunks are in `reserveFreshVMConfig` and the
+   new-computer `BootVM` literal). Freeze, panel, land as one red batch.
+2. Deployed identity, then confirm no computer changed: a non-test
+   computer's `vm-state/<vm>/fc-config.json` sha256 is unchanged across the
+   deploy at its next launch (the boot timeline's launch hash), and vmctl's
+   log has no `next Firecracker build` line.
+
+### RES-09 (live on deploy)
+
+1. `scripts/memory_hotplug_probe.py --out docs/evidence/fp8-res09-<date>.json`
+   (mints its own test computer). Pass: no "not selected" refusal; the
+   computer's `fc-config.json` has `memory-hotplug` and its boot args end in
+   `memhp_default_state=online_movable`; the grow, job and shrink checks run.
+2. If it still refuses, read the list entry for that computer (`state`,
+   `warmness_class`, `memory_hotplug_selected`): 403 means the probe's
+   token header, non-active means timing, class primary means the auth DB
+   read; record which, as the P5 hypothesis's verdict.
+
+### RES-05 and SEC-04 (jailer, one test computer, then class:test)
+
+1. Turn on: `"VMCTL_JAILER=on"` and `"VMCTL_JAILER_ONLY=<test computer id>"`.
+   vmctl log: `jailer ready`, not `JAILER UNAVAILABLE`.
+2. Stop/start the test computer. `scripts/vmm_confinement_verify.py --ssh
+   node-b --vm <vm> --expect jailer --out docs/evidence/vmm-confinement-<date>.json`
+   passes; its boot timeline's `confinement.jail_files` shows
+   `store.img=shared(reflink)` (first launch) or `store.img=shared`.
+3. Mint a second test computer, add its id to `VMCTL_JAILER_ONLY`, start it.
+   On Node B: `stat -c '%d:%i %U %a %h' /var/lib/go-choir/vm-state/.jail/firecracker/<vm1>/root/store.img
+   /var/lib/go-choir/vm-state/.jail/firecracker/<vm2>/root/store.img`: the
+   same `dev:inode`, owner root, mode 444, link count >= 3. And
+   `ls -la /var/lib/go-choir/vm-state/.jail/.shared/` holds one store copy.
+4. Lifecycle on the first: hibernate by snapshot and wake
+   (`scripts/s3_snapshot_probe.py` pattern; expect `snapshot_resume`),
+   stop/start, `systemctl restart go-choir-vmctl` and confirm reattach,
+   then the assumed-breach probe (problem record step 3).
+5. Then `VMCTL_JAILER_ONLY=class:test`; a fresh `qa_test_computer.mjs`
+   computer comes up jailed with no id in the list. Owner decision before
+   dropping the list (step 4 of the rollout cold boots every hibernated
+   computer once).
+
+### NET-08 and RES-16 (Firecracker 1.17 and discard, one test computer)
+
+1. Host step: fill both hashes in `nix/firecracker-next.nix` (build it on
+   Node B or the Mac; each fakeHash failure prints the real hash; check the
+   latest 1.17.x tag first). Then in `nix/node-b.nix`:
+   `firecrackerNext = import ./firecracker-next.nix { inherit pkgs; };` and
+   the four lines in the vmctl comment block, naming one test computer id
+   in both `_ONLY` lists.
+2. vmctl log: `next Firecracker build ... (Firecracker v1.17.x) for <id>;
+   data discard allowed=true`. Stop/start the test computer. Its boot
+   timeline names the next binary; `fc-config.json`'s `data` drive has
+   `"discard": true, "io_engine": "Sync"`; another computer's has neither.
+3. In the guest: `/sys/block/vdb/queue/discard_max_bytes` non-zero and
+   `choir-data-fstrim.timer` active (the guest needs the current image).
+4. Hibernate and wake it: expect `snapshot_resume` (same build both sides).
+   Then remove the test id from `VM_FIRECRACKER_NEXT_ONLY` and wake again:
+   expect `firecracker_version_mismatch` and a cold boot.
+5. RES-16 measurement (guest-data-image-never-trims record, "How to prove
+   it"): hourly for 6 hours, `du -k data.img` against the live store; pass
+   within about 1.5x and no hourly latency regression.
+
+### RES-06 (guest reclaim, one test computer)
+
+1. Owed first (free page reporting, LR report steps 3 to 5): on a test
+   computer without reclaim, host `VmRSS` of its Firecracker
+   (`/proc/<pid>/status`) and guest procmem at settle, at a burst peak, and
+   after 10 idle minutes.
+2. Turn on `"VM_GUEST_RECLAIM_ONLY=<second test computer id>"`; cold boot
+   it. In the guest: `cat /sys/module/damon_reclaim/parameters/enabled` is
+   `Y` and `kdamond_pid` is non-negative; boot args contain the six
+   `damon_reclaim.*` entries.
+3. Repeat step 1's three reads on it. Pass: idle host RSS materially below
+   the control at equal guest usage; guest `Cached` falls after 5 idle
+   minutes; kdamond CPU under about 1% of one core; desk turn latency and
+   store reads not regressed (DAMON evicting hot store pages would show as
+   disk reads in the guest's `/proc/vmstat` `pgmajfault`).
+4. If `enabled` reads `N`, the kernel did not take boot-time enabling;
+   record it, and the next slice is a guest unit that writes the
+   parameters (needs an image change).
+
+### RES-14 (a reading)
+
+1. Hibernate one test computer by snapshot. `journalctl -u go-choir-vmctl
+   | grep 'hibernated VM <vm>'`: expected `disk_bytes_method=btrfs_extents`
+   (vmctl holds CAP_SYS_ADMIN since 10e9f18e1); record `bytes` and
+   `disk_bytes`.
+2. `scripts/snapshot_disk_measure_compare.py` on that `snapshot/mem` (as
+   in the problem record) and compare. Then the owner revisits
+   `VM_SNAPSHOT_BUDGET_GIB=48` and the 36 h max age with the real per-snapshot
+   size.
+
+### L4-03 (sign-up cap)
+
+1. Read the number of users holding a passkey (`SELECT COUNT(DISTINCT
+   user_id) FROM credentials` on a copy of `auth.db`, or the auth log).
+   Recommended first cap: that count plus 75 (the checklist's ~100 users
+   of headroom today, less a margin for the paper and test computers).
+   Owner confirms the number.
+2. Set `"AUTH_REGISTRATION_CAP=<n>"`. Probe with a cap one above the
+   current count on a test deploy, or by reading: a sign-up begun with a
+   fresh `@example.test` address at the cap gets 403 with `code
+   registration_waitlist`, no `users` row appears, and
+   `registration_waitlist` holds the email; the owner can still log in;
+   an existing user adding nothing sees no change.
+3. Host admission stays the second layer (`VMCTL_ADMISSION_MODE=measured`,
+   pressure reclaim active).
+
+## Residuals
+
+- Snapshot resume validates against the class recorded at hibernate time:
+  a computer whose class changed while hibernated keeps its old selection
+  until its next cold boot.
+- `nix/firecracker-next.nix` is unevaluated; `fetchCargoVendor`'s argument
+  names follow current nixpkgs and may need adjusting to the locked rev.
+- Boot-time enabling of DAMON_RECLAIM and `skip_anon` on the guest kernel
+  (6.18) is from kernel documentation, not observed.
+- The waitlist has no owner view or invite action; QA sign-ups at the cap
+  are refused like anyone's (an `@example.test` exemption would be a bypass:
+  those addresses are unverifiable).
+- Lane base is the FP3 round-3 candidate; FP8 must be rebased after it
+  lands (one shared file, `internal/vmctl/ownership.go`).
