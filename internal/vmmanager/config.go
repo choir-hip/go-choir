@@ -141,6 +141,7 @@ func LoadConfigFromEnv() ManagerConfig {
 	cfg.FirecrackerNext = loadFirecrackerNextFromEnv(cfg.FirecrackerBinPath, envFlagOn("VM_DATA_DISCARD"))
 	cfg.ClaudeDelegate = loadClaudeDelegateConfig(os.Getenv)
 	cfg.VisualCapture = loadVisualCaptureConfig(os.Getenv)
+	cfg.CapsuleMirrors = loadCapsuleMirrorConfig(os.Getenv)
 
 	// virtio-mem hotplug (memory_hotplug.go). Off by default; vmctl also
 	// selects each computer, so this flag alone adds no device.

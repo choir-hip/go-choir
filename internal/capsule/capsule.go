@@ -44,6 +44,7 @@ type Capsule struct {
 	wait                 func() error
 	listener             net.Listener
 	egress               *EgressProxy // ecosystem_proxy (L2) capsules only
+	mirrors              []string     // ecosystems routed to the host package mirror (mirror.go)
 	processDone          chan struct{}
 	processErr           error
 	Pinned               bool

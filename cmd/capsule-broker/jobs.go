@@ -53,6 +53,7 @@ func newJobManager(brokerBin string, egress bool) *capsulejob.Manager {
 	env = append(env, capsule.CaptureJobEnv(os.LookupEnv)...)
 	if egress {
 		env = append(env, capsule.EgressProxyEnv()...)
+		env = append(env, capsule.MirrorClientEnv(os.LookupEnv)...)
 	}
 	return &capsulejob.Manager{
 		Root: capsulejob.Root,

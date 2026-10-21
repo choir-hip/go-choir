@@ -307,6 +307,8 @@
         "cmd/platform-dolt-squash"
         "cmd/choir-updater" "cmd/choir-receipt-signer" "cmd/capsule-broker"
         "cmd/autoputer" "cmd/choir-builder" "cmd/goproxy"
+        # capsule package mirror (station FP10)
+        "cmd/pkgmirror"
         # claude delegate (docs/design/claude-delegate-slice1-2026-10-14.md)
         "cmd/choir-delegate"
         # visual capture (docs/design/visual-evidence-slice-2026-10-15.md)
@@ -462,6 +464,12 @@
           pname = "goproxy";
           subPackage = "cmd/goproxy";
           includeGoSum = true;
+        };
+        # Host package mirror for engineering capsules (npm, PyPI, crates, git;
+        # station FP10, docs/definitions/choir-launch-fp10-net02-mirrors-2026-10-21.md).
+        pkgmirror = mkGoService {
+          pname = "pkgmirror";
+          subPackage = "cmd/pkgmirror";
         };
       };
 

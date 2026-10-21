@@ -453,6 +453,16 @@ var EgressProxyKeys = []string{
 	"GOPROXY", "GOSUMDB", "GOFLAGS",
 }
 
+// MirrorClientKeys are the package mirror client settings a broker gives an
+// L2 capsule's workloads on a granted computer (capsule.MirrorClientEnv,
+// station FP10). Commands a cell runs inherit the ones the worker has; on
+// an ungranted computer it has none.
+var MirrorClientKeys = []string{
+	"npm_config_registry", "npm_config_replace_registry_host", "npm_config_audit", "npm_config_fund", "npm_config_update_notifier",
+	"PIP_INDEX_URL", "PIP_TRUSTED_HOST", "UV_DEFAULT_INDEX", "UV_INSECURE_HOST",
+	"GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0", "GIT_CONFIG_KEY_1", "GIT_CONFIG_VALUE_1", "GIT_CONFIG_KEY_2", "GIT_CONFIG_VALUE_2",
+}
+
 // cellExecEnv is the clean environment of an exec action: a safe baseline,
 // the build toolchain when the worker carries one
 // (docs/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md,
@@ -478,7 +488,7 @@ func cellExecEnv(payloadEnv map[string]string, lookup func(string) (string, bool
 
 func egressProxyEnvFromWorker() []string {
 	var env []string
-	for _, key := range EgressProxyKeys {
+	for _, key := range append(append([]string(nil), EgressProxyKeys...), MirrorClientKeys...) {
 		if value, ok := os.LookupEnv(key); ok {
 			env = append(env, key+"="+value)
 		}
