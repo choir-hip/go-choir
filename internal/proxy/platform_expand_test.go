@@ -385,14 +385,14 @@ func TestExpandAsksTheStoriesOwnDeskAsTheStoriesOwnerWithFixedText(t *testing.T)
 	if call.Body.Prompt != wantPrompt || strings.Contains(call.Body.Prompt, "cats") {
 		t.Fatalf("prompt = %q", call.Body.Prompt)
 	}
-	for _, must := range []string{"[expansion " + rid + "]", "more research", "additional outlets", "citations from sources you have read", "change nothing and say why in a note to management"} {
+	for _, must := range []string{"[expansion " + rid + "]", "more research", "additional distinct outlets", "citations from sources you have read", "change nothing and say why in a note to management"} {
 		if !strings.Contains(call.Body.Prompt, must) {
 			t.Fatalf("request text lacks %q: %q", must, call.Body.Prompt)
 		}
 	}
 	// E10: the log line has the request id and a hash, never the user id or text.
 	line := logs.String()
-	if !strings.Contains(line, rid) || strings.Contains(line, expandTestOwner) || strings.Contains(line, "additional outlets") {
+	if !strings.Contains(line, rid) || strings.Contains(line, expandTestOwner) || strings.Contains(line, "additional distinct outlets") {
 		t.Fatalf("log line = %q", line)
 	}
 }

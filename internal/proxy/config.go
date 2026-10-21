@@ -161,6 +161,7 @@ func LoadConfig() (*Config, error) {
 		PlatformShellRoot:         envOr("PROXY_PLATFORM_SHELL_ROOT", "/var/www/go-choir/frontend-current"),
 		ExpandRequesters:          ParseExpandRequesters(os.Getenv("PROXY_EXPAND_REQUESTERS")),
 		ExpandOff:                 strings.EqualFold(strings.TrimSpace(os.Getenv("PROXY_EXPAND")), "off"),
+		ExpandPublic:              strings.EqualFold(strings.TrimSpace(os.Getenv("PROXY_EXPAND_PUBLIC")), "on"),
 	}
 
 	if err := cfg.validate(); err != nil {

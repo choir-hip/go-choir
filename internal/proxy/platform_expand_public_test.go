@@ -229,6 +229,7 @@ func TestExpandPublicAddressComesFromTheEdgeNotFromTheClient(t *testing.T) {
 		}
 		f.advance(time.Minute)
 	}
+	f.advance(31 * time.Minute) // the global in-flight window has passed; the address hour has not
 	route := f.addStory(4)
 	for _, xff := range []string{"1.2.3.4, 203.0.113.9", "203.0.113.9", "9.9.9.9,   203.0.113.9"} {
 		w := f.postFrom("", route, "127.0.0.1:5000", xff)
@@ -455,7 +456,7 @@ func TestExpansionReadForAPublicReaderReturnsOnlyTheNewestRequest(t *testing.T) 
 func TestExpansionRequestTextAsksResearchToDigDeeper(t *testing.T) {
 	text := expansionRequestText("rx-abc", expandProvenancePublic)
 	for _, must := range []string{
-		"[expansion rx-abc]", "provenance: public reader", "search the web", "primary documents",
+		"[expansion rx-abc]", "provenance: public reader", "Search the web", "primary documents",
 		"additional distinct outlets", "new reporting", "citations",
 		"Keep the story's existing text, structure and citations",
 		"change nothing and say why in a note to management",

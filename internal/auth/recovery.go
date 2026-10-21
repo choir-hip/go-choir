@@ -54,6 +54,12 @@ func sha256SumHex(s string) string {
 	return fmt.Sprintf("%x", h)
 }
 
+// ClientIP is the address a request came from, as the edge reports it: the
+// last X-Forwarded-For entry (Caddy appends the real peer, so entries the
+// client wrote before it are ignored), else the peer address. The auth rate
+// limiters and the proxy's per-address throttles share this one derivation.
+func ClientIP(r *http.Request) string { return clientIP(r) }
+
 func clientIP(r *http.Request) string {
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 		if idx := strings.LastIndexByte(xff, ','); idx >= 0 {

@@ -219,6 +219,7 @@ type Handler struct {
 	// expandRequesters holds a user id and expandOff is false.
 	expandRequesters map[string]bool
 	expandOff        bool
+	expandPublic     bool
 	expandMu         sync.Mutex
 	expand           *expandLedger
 }
@@ -457,6 +458,7 @@ func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 		ownerActSigner:             ownerActSigner,
 		expandRequesters:           expandRequesterSet(cfg.ExpandRequesters),
 		expandOff:                  cfg.ExpandOff,
+		expandPublic:               cfg.ExpandPublic,
 	}
 	if authStore != nil {
 		h.apiKeyValidator = authStore

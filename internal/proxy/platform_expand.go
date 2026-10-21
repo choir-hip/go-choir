@@ -18,6 +18,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/yusefmosiah/go-choir/internal/auth"
 	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
@@ -31,8 +32,16 @@ import (
 // story's owner with a fixed request text. Texture decides what to do with
 // it; the reader sees a fate line. Management is not a hop.
 //
-// Dark by default: PROXY_EXPAND_REQUESTERS empty means off, and
-// PROXY_EXPAND=off is the kill switch.
+// Dark by default: PROXY_EXPAND_REQUESTERS empty and PROXY_EXPAND_PUBLIC off
+// means off, and PROXY_EXPAND=off is the kill switch.
+//
+// The public door (owner 2026-10-20, section 32 of the owner notes; problem
+// doc "Public door"): with PROXY_EXPAND_PUBLIC=on a reader with no owner
+// session may ask too. The paper still sees the owner's act, with the
+// provenance "public reader" in the request text; nothing about the reader
+// reaches the guest. A public reader is throttled per address on top of the
+// global limits. The counters live in proxy memory, so a restart resets them
+// (an accepted residual).
 
 const (
 	// expandInFlightMax and expandDailyMax are soft limits held in proxy
@@ -48,23 +57,33 @@ const (
 	expandKeep = 48 * time.Hour
 	// expandShowRecent is how many of a story's requests a read returns.
 	expandShowRecent = 5
+	// Per-address limits for public readers. The address is auth.ClientIP
+	// (the edge's last X-Forwarded-For entry, else the peer). Owners are not
+	// counted. Held in proxy memory beside the ledger: a restart resets them.
+	expandAddrHourMax = 3
+	expandAddrDayMax  = 10
+	expandAddrWindow  = time.Hour
 )
 
 // Request states a reader can see.
 const (
-	expandStateAsked     = "asked"
-	expandStateAccepted  = "accepted"
-	expandStateRevised   = "revised"
-	expandStateNoNew     = "no_new_version"
-	expandStateUnknown   = "unknown"
-	expandStatusAsked    = "asked"
-	expandStatusAlready  = "already_asked"
-	expandStatusLimit    = "limit"
-	expandStatusBusy     = "busy"
-	expandStatusChanged  = "changed"
-	expandStatusUnavail  = "unavailable"
-	expandNotFoundBody   = "not found"
-	expandAskedHeaderMsg = "owner session required: asking a story to be expanded needs the owner's signed-in session, not an API key"
+	expandStateAsked    = "asked"
+	expandStateAccepted = "accepted"
+	expandStateRevised  = "revised"
+	expandStateNoNew    = "no_new_version"
+	expandStateUnknown  = "unknown"
+	expandStatusAsked   = "asked"
+	expandStatusAlready = "already_asked"
+	expandStatusLimit   = "limit"
+	expandStatusBusy    = "busy"
+	expandStatusChanged = "changed"
+	expandStatusUnavail = "unavailable"
+	// expandStatusAddrLimit is the typed refusal for a public reader whose
+	// address has used its allowance.
+	expandStatusAddrLimit = "address_limit"
+	expandAddrLimitMsg    = "too many requests from your address; try later"
+	expandNotFoundBody    = "not found"
+	expandAskedHeaderMsg  = "owner session required: asking a story to be expanded needs the owner's signed-in session, not an API key"
 )
 
 const (
@@ -73,13 +92,20 @@ const (
 )
 
 // expansionRequestText is the fixed request, with the marker a person or a
-// trace search can find (design 4.4). The last sentence gives Texture an
-// honest way to decline.
+// trace search can find (design 4.4) and the provenance of the asker: "owner"
+// or "public reader", never an identity. It asks for an expansion, not a
+// rewrite, and to dig: search the web for what the story does not yet use.
+// The last sentence gives Texture an honest way to decline.
 func expansionRequestText(requestID, provenance string) string {
-	_ = provenance
-	return "[expansion " + requestID + "] The owner asked for this story to be expanded with more research. " +
-		"Look for additional outlets, primary sources and missing context. " +
-		"Add what you can support with citations from sources you have read. " +
+	asker := "The owner"
+	if provenance == expandProvenancePublic {
+		asker = "A reader"
+	}
+	return "[expansion " + requestID + "] Expansion request (provenance: " + provenance + "). " +
+		asker + " asked for this story to be expanded with more research. " +
+		"Search the web for new reporting, primary documents and additional distinct outlets that the story does not yet cite, and read them. " +
+		"Add what is new, with citations from sources you have read. " +
+		"Expand the story; do not rewrite it. " +
 		"Keep the story's existing text, structure and citations unless a new source corrects them. " +
 		"If there is nothing new to add, change nothing and say why in a note to management."
 }
@@ -97,6 +123,9 @@ type expandRequest struct {
 	RevisionID  string
 	FromVersion int
 	AskedAt     time.Time
+	// Addr is a hash of a public reader's address, for the per-address
+	// throttle only; empty for an owner. It is never logged or sent on.
+	Addr string
 	// settled is set once a read found the story revised, which frees the
 	// in-flight slot and stops the reads that go to the paper.
 	settled bool
@@ -144,6 +173,8 @@ const (
 	expandAlready
 	expandInFlightFull
 	expandDayFull
+	expandAddrHourFull
+	expandAddrDayFull
 )
 
 // reserve records a request about to be made. A second request for the same
@@ -162,6 +193,26 @@ func (l *expandLedger) reserve(req *expandRequest) (*expandRequest, expandVerdic
 		return existing, expandAlready
 	}
 	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	if req.Addr != "" {
+		hour, day := 0, 0
+		for _, old := range l.byKey {
+			if old.Addr != req.Addr {
+				continue
+			}
+			if now.Sub(old.AskedAt) < expandAddrWindow {
+				hour++
+			}
+			if !old.AskedAt.Before(dayStart) {
+				day++
+			}
+		}
+		if hour >= expandAddrHourMax {
+			return nil, expandAddrHourFull
+		}
+		if day >= expandAddrDayMax {
+			return nil, expandAddrDayFull
+		}
+	}
 	inFlight, today := 0, 0
 	for _, old := range l.byKey {
 		if !old.settled && now.Sub(old.AskedAt) < expandSilenceAfter {
@@ -180,6 +231,31 @@ func (l *expandLedger) reserve(req *expandRequest) (*expandRequest, expandVerdic
 	req.AskedAt = now
 	l.byKey[key] = req
 	return req, expandOK
+}
+
+// addrRetryAfter is how long until a public reader's address may ask again,
+// for the verdict that refused it.
+func (l *expandLedger) addrRetryAfter(addr string, verdict expandVerdict) time.Duration {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	now := l.now()
+	if verdict == expandAddrHourFull {
+		var oldest time.Time
+		for _, old := range l.byKey {
+			if old.Addr == addr && now.Sub(old.AskedAt) < expandAddrWindow && (oldest.IsZero() || old.AskedAt.Before(oldest)) {
+				oldest = old.AskedAt
+			}
+		}
+		if !oldest.IsZero() {
+			return oldest.Add(expandAddrWindow).Sub(now)
+		}
+	}
+	return nextUTCMidnight(now).Sub(now)
+}
+
+func nextUTCMidnight(now time.Time) time.Time {
+	next := now.UTC().Add(24 * time.Hour)
+	return time.Date(next.Year(), next.Month(), next.Day(), 0, 0, 0, 0, time.UTC)
 }
 
 // release forgets a request that never reached the paper's desk.
@@ -233,10 +309,10 @@ func (h *Handler) expandLedger() *expandLedger {
 	return h.expand
 }
 
-// expandEnabled is the feature switch: dark when nobody is allowlisted or
-// PROXY_EXPAND=off.
+// expandEnabled is the feature switch: dark when nobody is allowlisted and
+// the public door is shut, or PROXY_EXPAND=off.
 func (h *Handler) expandEnabled() bool {
-	return h != nil && !h.expandOff && len(h.expandRequesters) > 0
+	return h != nil && !h.expandOff && (len(h.expandRequesters) > 0 || h.expandPublic)
 }
 
 // expandOwnerSession authenticates an allowlisted browser session. An API key
@@ -251,6 +327,35 @@ func (h *Handler) expandOwnerSession(r *http.Request) (*AuthResult, int) {
 		return nil, http.StatusForbidden
 	}
 	return authResult, 0
+}
+
+// expandCaller is who is asking: an allowlisted owner session, or, with the
+// public door open, any other reader. A public reader carries only a hash of
+// the address the edge reports, for the per-address throttle; the session
+// user id of a signed-in stranger is deliberately dropped.
+type expandCaller struct {
+	owner bool
+	// requester is the log label: a hash of the owner id, or "public".
+	requester string
+	addr      string
+}
+
+// expandAskers resolves the caller. A nil caller carries the refusal status
+// (401 when there is no session, 403 when the session may not ask).
+func (h *Handler) expandAskers(r *http.Request) (*expandCaller, int) {
+	authResult, refused := h.expandOwnerSession(r)
+	if authResult != nil {
+		return &expandCaller{owner: true, requester: hashedRequester(authResult.UserID)}, 0
+	}
+	if !h.expandPublic {
+		return nil, refused
+	}
+	ip := strings.TrimSpace(auth.ClientIP(r))
+	if ip == "" {
+		ip = "unknown"
+	}
+	sum := sha256.Sum256([]byte("expand-addr\x00" + ip))
+	return &expandCaller{requester: "public", addr: hex.EncodeToString(sum[:])[:16]}, 0
 }
 
 // expansionSource asks corpusd which paper document a public route publishes.
@@ -380,8 +485,8 @@ func (h *Handler) HandlePlatformPublicationExpand(w http.ResponseWriter, r *http
 		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
 		return
 	}
-	authResult, refused := h.expandOwnerSession(r)
-	if authResult == nil {
+	caller, refused := h.expandAskers(r)
+	if caller == nil {
 		if refused == http.StatusUnauthorized {
 			outcome = "unauthorized"
 			writeJSON(w, refused, errorResponse{Error: "authentication required"})
@@ -395,7 +500,11 @@ func (h *Handler) HandlePlatformPublicationExpand(w http.ResponseWriter, r *http
 		writeJSON(w, refused, errorResponse{Error: msg})
 		return
 	}
-	requester = hashedRequester(authResult.UserID)
+	requester = caller.requester
+	provenance := expandProvenanceOwner
+	if !caller.owner {
+		provenance = expandProvenancePublic
+	}
 
 	var in expandPostRequest
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<12)).Decode(&in); err != nil || strings.TrimSpace(in.Route) == "" {
@@ -423,6 +532,7 @@ func (h *Handler) HandlePlatformPublicationExpand(w http.ResponseWriter, r *http
 	entry := &expandRequest{
 		RequestID: requestID, Route: src.Route, PublicationID: src.PublicationID, StoryOwnerID: src.OwnerID,
 		DocID: src.SourceDocID, SourceRevisionID: src.SourceRevisionID, FromVersion: src.LatestRevision,
+		Addr: caller.addr,
 	}
 	existing, verdict := led.reserve(entry)
 	switch verdict {
@@ -430,13 +540,16 @@ func (h *Handler) HandlePlatformPublicationExpand(w http.ResponseWriter, r *http
 		outcome = "already_asked"
 		writeJSON(w, http.StatusConflict, expandAnswer{Status: expandStatusAlready, Error: "this version of the story was already asked to be expanded", RequestID: existing.RequestID, RevisionID: existing.RevisionID, Route: src.Route})
 		return
+	case expandAddrHourFull, expandAddrDayFull:
+		outcome = "address_limit"
+		w.Header().Set("Retry-After", fmt.Sprintf("%d", int(led.addrRetryAfter(caller.addr, verdict).Seconds())+1))
+		writeJSON(w, http.StatusTooManyRequests, expandAnswer{Status: expandStatusAddrLimit, Error: expandAddrLimitMsg})
+		return
 	case expandInFlightFull, expandDayFull:
 		outcome = "limit"
 		retry := "1800"
 		if verdict == expandDayFull {
-			next := led.now().UTC().Add(24 * time.Hour)
-			next = time.Date(next.Year(), next.Month(), next.Day(), 0, 0, 0, 0, time.UTC)
-			retry = fmt.Sprintf("%d", int(next.Sub(led.now()).Seconds()))
+			retry = fmt.Sprintf("%d", int(nextUTCMidnight(led.now()).Sub(led.now()).Seconds()))
 		}
 		w.Header().Set("Retry-After", retry)
 		writeJSON(w, http.StatusTooManyRequests, expandAnswer{Status: expandStatusLimit, Error: "too many expansion requests right now; try again later"})
@@ -487,7 +600,7 @@ func (h *Handler) HandlePlatformPublicationExpand(w http.ResponseWriter, r *http
 		}
 
 		status, body, err := h.paperCall(r.Context(), base, http.MethodPost, "/api/texture/documents/"+url.PathEscape(src.SourceDocID)+"/revise", src.OwnerID, map[string]string{
-			"prompt":                    expansionRequestText(requestID, expandProvenanceOwner),
+			"prompt":                    expansionRequestText(requestID, provenance),
 			"client_request_id":         clientRequestID,
 			"expected_head_revision_id": doc.CurrentRevisionID,
 		})
@@ -607,7 +720,8 @@ func (h *Handler) HandlePlatformPublicationExpansion(w http.ResponseWriter, r *h
 		writeJSON(w, http.StatusOK, deny)
 		return
 	}
-	if authResult, _ := h.expandOwnerSession(r); authResult == nil {
+	caller, _ := h.expandAskers(r)
+	if caller == nil {
 		writeJSON(w, http.StatusOK, deny)
 		return
 	}
@@ -624,7 +738,13 @@ func (h *Handler) HandlePlatformPublicationExpansion(w http.ResponseWriter, r *h
 	led := h.expandLedger()
 	_, asked := led.lookup(src.PublicationID, src.SourceRevisionID)
 	out := expansionRead{Allowed: true, Route: src.Route, Asked: asked, Requests: []expandFateItem{}}
-	for _, req := range led.forStory(src.PublicationID) {
+	recent := led.forStory(src.PublicationID)
+	if !caller.owner && len(recent) > 1 {
+		// A public poll follows only the newest request, so an anonymous
+		// reader cannot fan one read out into several reads of the paper.
+		recent = recent[:1]
+	}
+	for _, req := range recent {
 		out.Requests = append(out.Requests, h.expansionFateItem(r.Context(), led, req, src))
 	}
 	writeJSON(w, http.StatusOK, out)
