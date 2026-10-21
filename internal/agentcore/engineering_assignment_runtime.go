@@ -286,12 +286,7 @@ func (rt *Runtime) openDelegatedCastAssignment(ctx context.Context, plan enginee
 	if open.CommandDigest, err = store.ComputeOpenEngineeringAssignmentDigest(open); err != nil {
 		return types.EngineeringAssignmentCommandResult{}, err
 	}
-	opened, err := rt.store.OpenEngineeringAssignment(ctx, open)
-	if err != nil {
-		return types.EngineeringAssignmentCommandResult{}, err
-	}
-	rt.armAssignedEngineeringDeadline(opened.Assignment)
-	return opened, nil
+	return rt.store.OpenEngineeringAssignment(ctx, open)
 }
 
 // resumeDelegatedCastAssignment re-drives the spawn/bind saga for an
