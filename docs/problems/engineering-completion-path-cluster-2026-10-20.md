@@ -1345,3 +1345,45 @@ Fix (decided): allow `fchmodat2`, the same permission class as the allowed
 `fchmodat`, and add a test that every allowed call's newer variant known to
 the library is allowed too, so the next kernel addition fails a test
 instead of a build.
+
+## Failure 21: the release copy still fails after 4d45601d0; the cause is ownership, not seccomp (label sonnet-slides-1021d, 05:57-06:03 UTC)
+
+Correction to failure 20. Deploy 4d45601d0 (which allows `fchmodat2`)
+did not fix the copy. On trajectory b5475247-02b0-5527-8e87-d805a3b6d2f5,
+round 1 ran as designed (the Sonnet delegate's rewrite, reviewed against a
+saved copy). Round 2's first build job failed with the same "cp: setting
+permissions … Operation not permitted". A second job then succeeded,
+because the first had already left the files. Freeze correctly refused it:
+the first job's leftover `node_modules` and `dist`, removed by the second,
+meant "the workspace changed while the job ran". Round 3 failed the copy
+again. Failure 20's seccomp attribution was a hypothesis I wrote as
+"strongly supported"; it did not hold. The three syscalls it allowed are
+harmless siblings of allowed calls and stay.
+
+Cause (code reading; the guest filesystem was not read):
+`nix/autoputer-vm.nix` sets `CHOIR_CAPSULE_LOWER_ROOT = "/"`. The capsule
+overlay is the subject tree over the guest's own root
+(`executor.go`, `lowerLayers := sourceLower + ":" + e.lowerDir`). The
+capsule's root is mapped to host uid 65534 (`capsuleNamespaceHostID`), so
+anything under the guest's `/var/lib/artifact/release` is owned by an
+unmapped uid inside the capsule. A computer that has applied a release has
+that tree; the transaction classifier names `/var/lib/artifact` as a
+ledger class. `cp` over an existing release file can write it, but it
+cannot set the mode of a file it does not own: EPERM. A freshly minted
+computer has no such tree, which explains why arm B's copy passed and the
+delegate computer's fails. The earlier fix design anticipated this case
+(`adopt-1418-…-2026-10-15.md`: "lower dirs would not be [writable], but
+none exist here"). They exist now.
+
+Consequence: on any computer that has applied one release, no later
+frontend build can freeze. Every Sonnet rewrite on the delegate computer
+is blocked here.
+
+Fix (decided): each capsule starts with an empty release directory of its
+own. Before the overlay mounts, the executor creates
+`<upper>/var/lib/artifact/release` owned by the capsule's mapped uid and
+marks it opaque (`user.overlay.opaque=y`, the userxattr form the mount
+uses), so the guest's release tree never shows through and a build writes
+only capsule-owned files. Freeze already reads only the upper layer, so it
+sees exactly what the capsule built. Red (capsule isolation surface);
+test-first.
