@@ -18,6 +18,14 @@ const (
 	SourceTypePolymarket SourceType = "polymarket"
 )
 
+// SourceStandingSocialLead marks a row whose items are social posts (a
+// Bluesky account, a Mastodon tag feed): a lead to follow, never an outlet.
+// A post's URL names no outlet (internal/outlet isSocialPost), so a capture
+// of one cannot count toward the two-outlet publish rule
+// (agentcore.MinPublishOutlets); the account may be cited as the speaker of a
+// claim (owner 2026-10-20, notes section 30). Not official, never licensed.
+const SourceStandingSocialLead = "social_lead"
+
 // TOSClassTestFixture marks a registry entry that serves test data (L2a
 // R2-7). A schedule on it starts only when the request is marked as a
 // fixture run, and research's PollSource refuses it.

@@ -6217,6 +6217,700 @@
       "license": "us-federal-public-domain",
       "official": true,
       "source_standing": "primary_government"
+    },
+    {
+      "id": "social:bsky:apnews.com",
+      "type": "rss",
+      "name": "Bluesky @apnews.com (The Associated Press), social lead",
+      "url": "https://bsky.app/profile/did:plc:a67zdrt4nl2tv2qojpngogbq/rss",
+      "verticals": [
+        "news"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 1800,
+      "max_items_per_poll": 20,
+      "rate_limit": "30m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 30,
+      "source_standing": "social_lead"
+    },
+    {
+      "id": "social:bsky:reuters.com",
+      "type": "rss",
+      "name": "Bluesky @reuters.com (Reuters), social lead",
+      "url": "https://bsky.app/profile/did:plc:jbvnehrrdqoulco4rf5gxg5r/rss",
+      "verticals": [
+        "news",
+        "finance"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 1800,
+      "max_items_per_poll": 20,
+      "rate_limit": "30m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 30,
+      "source_standing": "social_lead"
+    },
+    {
+      "id": "social:bsky:afp.com",
+      "type": "rss",
+      "name": "Bluesky @afp.com (Agence France-Presse), social lead",
+      "url": "https://bsky.app/profile/did:plc:ffccycfh6c6pmxwkhvq5clkv/rss",
+      "verticals": [
+        "news"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 1800,
+      "max_items_per_poll": 20,
+      "rate_limit": "30m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 30,
+      "source_standing": "social_lead"
+    },
+    {
+      "id": "social:bsky:npr.org",
+      "type": "rss",
+      "name": "Bluesky @npr.org (NPR), social lead",
+      "url": "https://bsky.app/profile/did:plc:ln72v57ivz2g46uqf4xxqiuh/rss",
+      "verticals": [
+        "news",
+        "politics"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 1800,
+      "max_items_per_poll": 20,
+      "rate_limit": "30m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 30,
+      "source_standing": "social_lead"
+    },
+    {
+      "id": "social:bsky:aljazeera.com",
+      "type": "rss",
+      "name": "Bluesky @aljazeera.com (Al Jazeera English), social lead",
+      "url": "https://bsky.app/profile/did:plc:2lofqead276vtc5647ye7sl2/rss",
+      "verticals": [
+        "news",
+        "conflict"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 1800,
+      "max_items_per_poll": 20,
+      "rate_limit": "30m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 30,
+      "source_standing": "social_lead"
+    },
+    {
+      "id": "social:bsky:theguardian.com",
+      "type": "rss",
+      "name": "Bluesky @theguardian.com (The Guardian), social lead",
+      "url": "https://bsky.app/profile/did:plc:vovinwhtulbsx4mwfw26r5ni/rss",
+      "verticals": [
+        "news",
+        "politics"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 1800,
+      "max_items_per_poll": 20,
+      "rate_limit": "30m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 30,
+      "source_standing": "social_lead"
+    },
+    {
+      "id": "social:bsky:france24.com",
+      "type": "rss",
+      "name": "Bluesky @france24.com (FRANCE 24), social lead",
+      "url": "https://bsky.app/profile/did:plc:wkreszch2k4mumsrlkeaflgn/rss",
+      "verticals": [
+        "news",
+        "conflict"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 1800,
+      "max_items_per_poll": 20,
+      "rate_limit": "30m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 30,
+      "source_standing": "social_lead"
+    },
+    {
+      "id": "social:bsky:spiegel.de",
+      "type": "rss",
+      "name": "Bluesky @spiegel.de (DER SPIEGEL), social lead",
+      "url": "https://bsky.app/profile/did:plc:6xofcnvvojjnmggqx43zghwh/rss",
+      "verticals": [
+        "news",
+        "politics"
+      ],
+      "languages": [
+        "de"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 1800,
+      "max_items_per_poll": 20,
+      "rate_limit": "30m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 30,
+      "source_standing": "social_lead"
+    },
+    {
+      "id": "social:bsky:lemonde.fr",
+      "type": "rss",
+      "name": "Bluesky @lemonde.fr (Le Monde), social lead",
+      "url": "https://bsky.app/profile/did:plc:qqxqxgdu5z3he2piqfbfaku4/rss",
+      "verticals": [
+        "news",
+        "politics"
+      ],
+      "languages": [
+        "fr"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 1800,
+      "max_items_per_poll": 20,
+      "rate_limit": "30m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 30,
+      "source_standing": "social_lead"
+    },
+    {
+      "id": "social:bsky:elpais.com",
+      "type": "rss",
+      "name": "Bluesky @elpais.com (EL PAIS), social lead",
+      "url": "https://bsky.app/profile/did:plc:u6mkbcgviwlbhuwqirmhcgu3/rss",
+      "verticals": [
+        "news",
+        "politics"
+      ],
+      "languages": [
+        "es"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 1800,
+      "max_items_per_poll": 20,
+      "rate_limit": "30m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 30,
+      "source_standing": "social_lead"
+    },
+    {
+      "id": "social:bsky:kyivindependent.com",
+      "type": "rss",
+      "name": "Bluesky @kyivindependent.com (The Kyiv Independent), social lead",
+      "url": "https://bsky.app/profile/did:plc:yazbevg3wkzp5llnzb44tqgh/rss",
+      "verticals": [
+        "news",
+        "conflict"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 1800,
+      "max_items_per_poll": 20,
+      "rate_limit": "30m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 30,
+      "source_standing": "social_lead"
+    },
+    {
+      "id": "social:bsky:meduza.io",
+      "type": "rss",
+      "name": "Bluesky @meduza.io (Meduza in English), social lead",
+      "url": "https://bsky.app/profile/did:plc:kpkqu7odzhelr2idxytethe7/rss",
+      "verticals": [
+        "news",
+        "conflict"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 1800,
+      "max_items_per_poll": 20,
+      "rate_limit": "30m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 30,
+      "source_standing": "social_lead"
+    },
+    {
+      "id": "social:bsky:timesofisrael.com",
+      "type": "rss",
+      "name": "Bluesky @timesofisrael.com (The Times of Israel), social lead",
+      "url": "https://bsky.app/profile/did:plc:pcqzb7h2f5f3hyxvjuphjvdm/rss",
+      "verticals": [
+        "news",
+        "conflict"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 1800,
+      "max_items_per_poll": 20,
+      "rate_limit": "30m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 30,
+      "source_standing": "social_lead"
+    },
+    {
+      "id": "social:bsky:thehindu.com",
+      "type": "rss",
+      "name": "Bluesky @thehindu.com (The Hindu), social lead",
+      "url": "https://bsky.app/profile/did:plc:ppvk7zgqniviafvy46nl6op3/rss",
+      "verticals": [
+        "news",
+        "politics"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 1800,
+      "max_items_per_poll": 20,
+      "rate_limit": "30m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 30,
+      "source_standing": "social_lead"
+    },
+    {
+      "id": "social:bsky:japantimes.co.jp",
+      "type": "rss",
+      "name": "Bluesky @japantimes.co.jp (The Japan Times), social lead",
+      "url": "https://bsky.app/profile/did:plc:rddeinqb45gzem3n3zyma7im/rss",
+      "verticals": [
+        "news",
+        "politics"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 1800,
+      "max_items_per_poll": 20,
+      "rate_limit": "30m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 30,
+      "source_standing": "social_lead"
+    },
+    {
+      "id": "social:bsky:bellingcat.com",
+      "type": "rss",
+      "name": "Bluesky @bellingcat.com (Bellingcat), social lead",
+      "url": "https://bsky.app/profile/did:plc:sb54dpdfefflykmf5bcfvr7t/rss",
+      "verticals": [
+        "conflict",
+        "security"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 1800,
+      "max_items_per_poll": 20,
+      "rate_limit": "30m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 30,
+      "source_standing": "social_lead"
+    },
+    {
+      "id": "social:bsky:icij.org",
+      "type": "rss",
+      "name": "Bluesky @icij.org (ICIJ), social lead",
+      "url": "https://bsky.app/profile/did:plc:qnhy4hutfhm2lyx4geipgoer/rss",
+      "verticals": [
+        "news",
+        "policy"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 1800,
+      "max_items_per_poll": 20,
+      "rate_limit": "30m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 30,
+      "source_standing": "social_lead"
+    },
+    {
+      "id": "social:bsky:occrp.org",
+      "type": "rss",
+      "name": "Bluesky @occrp.org (Organized Crime and Corruption Reporting Project), social lead",
+      "url": "https://bsky.app/profile/did:plc:axqfxntrrgfanh4pguuhsknp/rss",
+      "verticals": [
+        "news",
+        "security"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 1800,
+      "max_items_per_poll": 20,
+      "rate_limit": "30m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 30,
+      "source_standing": "social_lead"
+    },
+    {
+      "id": "social:bsky:globalvoices.org",
+      "type": "rss",
+      "name": "Bluesky @globalvoices.org (Global Voices), social lead",
+      "url": "https://bsky.app/profile/did:plc:5x3a6jke5p3ni7mnpd57ijhw/rss",
+      "verticals": [
+        "news",
+        "regional_sentiment"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 1800,
+      "max_items_per_poll": 20,
+      "rate_limit": "30m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 30,
+      "source_standing": "social_lead"
+    },
+    {
+      "id": "social:bsky:restofworld.org",
+      "type": "rss",
+      "name": "Bluesky @restofworld.org (Rest of World), social lead",
+      "url": "https://bsky.app/profile/did:plc:hbdc3q6k5lforao5vyuarvsp/rss",
+      "verticals": [
+        "technology",
+        "regional_sentiment"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 1800,
+      "max_items_per_poll": 20,
+      "rate_limit": "30m poll",
+      "conditional_request_mode": "none",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 30,
+      "source_standing": "social_lead"
+    },
+    {
+      "id": "social:mastodon:mastodon.social:tag:news",
+      "type": "rss",
+      "name": "Mastodon #news on mastodon.social, social lead",
+      "url": "https://mastodon.social/tags/news.rss",
+      "verticals": [
+        "news"
+      ],
+      "languages": [
+        "multi"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 1800,
+      "max_items_per_poll": 20,
+      "rate_limit": "30m poll",
+      "conditional_request_mode": "etag",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 30,
+      "source_standing": "social_lead"
+    },
+    {
+      "id": "social:mastodon:mastodon.social:tag:breaking",
+      "type": "rss",
+      "name": "Mastodon #breaking on mastodon.social, social lead",
+      "url": "https://mastodon.social/tags/breaking.rss",
+      "verticals": [
+        "news"
+      ],
+      "languages": [
+        "multi"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 1800,
+      "max_items_per_poll": 20,
+      "rate_limit": "30m poll",
+      "conditional_request_mode": "etag",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 30,
+      "source_standing": "social_lead"
+    },
+    {
+      "id": "social:mastodon:mastodon.social:tag:breakingnews",
+      "type": "rss",
+      "name": "Mastodon #breakingnews on mastodon.social, social lead",
+      "url": "https://mastodon.social/tags/breakingnews.rss",
+      "verticals": [
+        "news"
+      ],
+      "languages": [
+        "multi"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 1800,
+      "max_items_per_poll": 20,
+      "rate_limit": "30m poll",
+      "conditional_request_mode": "etag",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 30,
+      "source_standing": "social_lead"
+    },
+    {
+      "id": "social:mastodon:mastodon.social:tag:osint",
+      "type": "rss",
+      "name": "Mastodon #osint on mastodon.social, social lead",
+      "url": "https://mastodon.social/tags/osint.rss",
+      "verticals": [
+        "conflict",
+        "security"
+      ],
+      "languages": [
+        "multi"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 3600,
+      "max_items_per_poll": 20,
+      "rate_limit": "60m poll",
+      "conditional_request_mode": "etag",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 30,
+      "source_standing": "social_lead"
+    },
+    {
+      "id": "social:mastodon:journa.host:tag:news",
+      "type": "rss",
+      "name": "Mastodon #news on journa.host, social lead",
+      "url": "https://journa.host/tags/news.rss",
+      "verticals": [
+        "news"
+      ],
+      "languages": [
+        "multi"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 1800,
+      "max_items_per_poll": 20,
+      "rate_limit": "30m poll",
+      "conditional_request_mode": "etag",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 30,
+      "source_standing": "social_lead"
+    },
+    {
+      "id": "social:mastodon:journa.host:tag:breaking",
+      "type": "rss",
+      "name": "Mastodon #breaking on journa.host, social lead",
+      "url": "https://journa.host/tags/breaking.rss",
+      "verticals": [
+        "news"
+      ],
+      "languages": [
+        "multi"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 1800,
+      "max_items_per_poll": 20,
+      "rate_limit": "30m poll",
+      "conditional_request_mode": "etag",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 30,
+      "source_standing": "social_lead"
+    },
+    {
+      "id": "social:mastodon:newsie.social:tag:news",
+      "type": "rss",
+      "name": "Mastodon #news on newsie.social, social lead",
+      "url": "https://newsie.social/tags/news.rss",
+      "verticals": [
+        "news"
+      ],
+      "languages": [
+        "multi"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 1800,
+      "max_items_per_poll": 20,
+      "rate_limit": "30m poll",
+      "conditional_request_mode": "etag",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 30,
+      "source_standing": "social_lead"
     }
   ]
 }

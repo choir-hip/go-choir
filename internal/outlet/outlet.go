@@ -12,6 +12,7 @@ package outlet
 
 import (
 	"net/url"
+	"regexp"
 	"strings"
 )
 
@@ -54,6 +55,9 @@ func Of(raw string) string {
 	if wrapped, ok := unwrapProxy(host, raw); ok {
 		return Of(wrapped)
 	}
+	if isSocialPost(host, u.Path) {
+		return ""
+	}
 	if platform, ok := platformAliases[strings.TrimPrefix(host, "www.")]; ok {
 		account := firstPathSegment(u.Path, platform)
 		if account == "" {
@@ -74,6 +78,27 @@ func Of(raw string) string {
 		return ""
 	}
 	return key
+}
+
+// socialPostPaths match the post URLs of the open social networks Autopaper
+// ingests (docs/reports/social-source-seeds-and-pivot-2026-10-20.md): a
+// Mastodon post at /@user/<numeric id> (any instance, the origin URL a tag
+// feed's items carry), an ActivityPub status at /users/<user>/statuses/<id>.
+// A Bluesky post is matched by host.
+var (
+	mastodonPostPath = regexp.MustCompile(`^/@[^/]+/\d{10,}/?$`)
+	statusPostPath   = regexp.MustCompile(`^/users/[^/]+/statuses/\d+/?$`)
+)
+
+// isSocialPost reports whether a URL is one post on Bluesky or the
+// Fediverse. A post is a lead, not an outlet: a story still needs two
+// distinct outlets, and the account is cited as the speaker of a claim
+// (owner §30, docs/reports/owner-notes-2026-10-14.md).
+func isSocialPost(host, path string) bool {
+	if host == "bsky.app" || strings.HasSuffix(host, ".bsky.app") {
+		return true
+	}
+	return mastodonPostPath.MatchString(path) || statusPostPath.MatchString(path)
 }
 
 // unwrapProxy returns the URL a reader proxy or archive wraps:

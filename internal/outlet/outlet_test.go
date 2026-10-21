@@ -75,3 +75,39 @@ func TestOf(t *testing.T) {
 		}
 	}
 }
+
+// docs/reports/social-source-seeds-and-pivot-2026-10-20.md: a social post is a
+// lead, not an outlet (owner §30). Ways it could fail, written before the
+// code:
+//   - S1 a Bluesky post (bsky.app/profile/<handle>/post/<id>) names bsky.app
+//     as an outlet, so one post plus one real outlet publishes a story;
+//   - S2 a Mastodon-style post (https://<any instance>/@user/<digits>, the
+//     origin URL a tag feed's items carry) names its instance as an outlet,
+//     so a story cites "journa.host" or "c.im" as corroboration;
+//   - S3 the post rule over-reaches and drops a real outlet whose path looks
+//     like it (a Medium author page, a /@name profile that is not a post).
+func TestSocialPostsNameNoOutlet(t *testing.T) {
+	for _, post := range []string{ // S1, S2
+		"https://bsky.app/profile/apnews.com/post/3mydqg6nu3y2a",
+		"https://bsky.app/profile/did:plc:a67zdrt4nl2tv2qojpngogbq/post/3mydqg6nu3y2a",
+		"https://c.im/@BBC/117475958177254767",
+		"https://journa.host/@someone/116000000000000001",
+		"https://mastodon.social/@someone@other.example/115000000000000002",
+		"https://backend.newsmast.org/@newsmast/117473481867527856",
+		"https://instance.example/users/someone/statuses/115000000000000003",
+	} {
+		if got := Of(post); got != "" {
+			t.Errorf("Of(%q) = %q, want no outlet (a social post is a lead)", post, got)
+		}
+	}
+	for raw, want := range map[string]string{ // S3
+		"https://medium.com/@writer/a-long-slug-9f8e7d6c5b4a":      "medium.com",
+		"https://medium.com/@writer":                               "medium.com",
+		"https://www.theguardian.com/world/2026/oct/20/story":      "theguardian.com",
+		"https://example.org/@2026/116000000000000004/extra/parts": "example.org",
+	} {
+		if got := Of(raw); got != want {
+			t.Errorf("Of(%q) = %q, want %q", raw, got, want)
+		}
+	}
+}
