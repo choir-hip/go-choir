@@ -127,9 +127,10 @@ metamission:
       note: >-
         Batch B7, red: SDC SEC-05 (the gateway bearer bound to its
         computer), SEC-08 Option K (the gateway holds the delegate's key),
-        RES-11, then SEC-16 and RES-12. With SEC-01 (FP2) it is what lets
-        agents run on Node B beyond the one delegate test computer. Lane
-        worktree lanes/b7-gateway.
+        RES-11, then SEC-16 and RES-12. Option K moves the owner's Claude
+        token off the guest credential disk; with SEC-01 (FP2) it is the
+        precondition for the engineering desk's delegate beyond its one
+        test computer. Lane worktree lanes/b7-gateway.
     - id: FP8
       path: to be authored when a slot frees
       readiness: intent
@@ -243,7 +244,7 @@ boundaries:
     - docs/choir-doctrine.md and CLAUDE.md
     - the launch checklist's batch plan and owner-decision defaults OD-01 to OD-09
   must_preserve:
-    - Locally five to seven agents in all (owner, 2026-10-21): six Sonnet workers and the orchestrator. Workers work only in their own lane worktree and branch; they never push, never use Node B or staging credentials, never read secrets, never touch another worktree, never run git commit -a, never bypass hooks.
+    - Locally five to seven agents in all (owner, 2026-10-21: "the rule is 5 to 7 agents running locally"): six Sonnet workers and the orchestrator. Workers work only in their own lane worktree and branch; they never push, never use Node B or staging credentials, never read secrets, never touch another worktree, never run git commit -a, never bypass hooks.
     - Only FP0 lands. A deploy carries at most one red batch; orange and green work may ride with it.
     - Problem documentation first; the test before the code (CLAUDE.md Testing).
     - No boot-path step that rewrites or scans all of og_objects; schema changes are online and rollback-safe.
@@ -255,7 +256,8 @@ boundaries:
     - The second pass; the owner plans it after reviewing this one.
     - Everything outside the security and density checklist (owner notes §38), including the iPhone app (B13), the voice pipeline (the owner's own project in ~/mike), accounts and Autoradio's server (B11, B12), Autopaper phase 5, and the S6 slices. Xcode is installed (corrected 2026-10-21; xcodebuild failed only because the Nix shell's SDK is the selected developer directory).
     - Owner items (B0 lead times, OD rulings); L2-05 red teaming (needs fork re-keying and the vault); running an account deletion (black).
-    - Agents on the Node B host. Owner 2026-10-21: "We can run more agents on node B and as many as we have resources for." They run inside computers, never as host processes (the host holds every tenant and the secrets). Today that is the one Claude delegate test computer (SDC DEC-03); SEC-01 (FP2) and SEC-08 Option K (FP7) unlock more.
+    - Lane work on Node B. Owner 2026-10-21: "We can run more agents on node B and as many as we have resources for", then: "I don't want the Claude on Node B to just be doing arbitrary work and making PRs. Instead, we should reserve it for actual work within the scope of the engineering desk." The delegate does engineering-desk self-development only, never lane work; agents never run as Node B host processes. FP7's SEC-08 Option K changes how the delegate's key is held, not who uses it.
+    - Node A. The owner suggested a remote dev VM on node-a for more parallel lanes. Node A is a shared host whose NixOS config belongs to the owner's other project, which runs the voice work (`~/mike`) there (docs/node-a-shared-host.md; owner 2026-10-21: "Node B is all choir. Node A is hosting mic"); Choir uses it only as Node B's builder and the encrypted backup target, and does not change it. A dev VM needs a handover to that project's agent and the owner's own model login, so it waits for the owner. (FP0 logged in once, read-only, for nproc, free, df and uptime, before finding that rule; it changed nothing.)
   protected_surfaces: [vmctl, guest desk confinement, gateway and provider calls, auth and session, the object store schema, deployment routing]
 
 now:
