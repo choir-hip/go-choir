@@ -129,6 +129,36 @@ for the host to move a stale pin.
 - Later the binding moves from the source address to the vsock context ID
   (NET-03), which the guest cannot spoof at all.
 
+## Review finding, batch 1 (2026-10-21, candidate b80a9bcac)
+
+Found by the batch 1 panel (Gemini 4 Argon, blocking), confirmed by reading
+the code; no deployed evidence, the candidate never left the lane.
+
+13. **The Jev route writes the shared pin in every mode.** The candidate
+    unified the Jev-only pin into the identity's one pin
+    (`AutoputerIdentity.PeerIP`, JSON key `JevPeerIP`), which every route now
+    reads. `HandleJudgment` still calls `BindPeer`, which is
+    `CheckPeer(..., bindIfUnpinned=true)`, before the body is read. So:
+    - in `strict`, an unpinned bearer refused on inference can send one `{}`
+      to `/provider/v1/judgments`, pin itself to its caller's address, and
+      then pass every other route (strict's whole point, refusing a pin the
+      host did not attest, is bypassed);
+    - in `observe`, a Jev call writes a pin although observe promises to
+      write none, so the observe counts no longer measure what enforce
+      would do.
+    The must-preserve line "the Jev route's strict pin is unchanged in every
+    mode" was written when the Jev pin was Jev's alone; once the pin is
+    shared, an unchanged first-use write on one route is a write for all of
+    them. Repair: the Jev route keeps its own refusal (403) for a mismatch
+    in every mode, and writes a first-use pin only where the mode allows
+    one (`enforce`, and `off`, which is the pre-SEC-05 behavior); in
+    `observe` an unpinned bearer passes and nothing is written; in `strict`
+    it is refused. Residual this accepts: in `observe`, between a cold boot
+    and the host's ensure, an unpinned Jev bearer is accepted from any
+    guest address, where before the first caller's address won the pin.
+    The host's ensure pins it right after the boot, and observe is a
+    measured, temporary mode.
+
 ## Heresy delta
 
 - Discovered: the Jev pin's trust-on-first-use is an unplanned authority

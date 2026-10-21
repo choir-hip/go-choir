@@ -81,6 +81,22 @@ the provider is a bound on concurrent calls.
 10. The wait is invisible: nothing says how long calls queued, so a
     regression is only found when the paper slows.
 
+## Review finding, batch 1 (2026-10-21, candidate b80a9bcac)
+
+Found by both panel reviewers (non-blocking), confirmed by reading the code.
+
+11. **The queue wait is outside the call's deadline.** With the scheduler
+    on, a call may wait up to 120 s for a slot (`defaultModelQueueWait`),
+    and only then does the handler start its ten-minute `inferenceTimeout`.
+    The gateway's `SERVER_WRITE_TIMEOUT` and the guest's
+    `gatewayClientTimeout` are both 10m30s. A call that queued more than
+    30 s and then ran long is cut by the write timeout (the guest sees EOF)
+    before the gateway's own deadline fires, so the provider is still billed
+    for an answer nobody receives. Repair: the deadline starts when the call
+    asks for a slot, so wait plus call stay inside `inferenceTimeout`, which
+    is inside both 10m30s bounds. The scheduler is off by default, so this
+    is a precondition of turning it on, not a live defect.
+
 ## Heresy delta
 
 - Discovered: two clocks (guest pacing and gateway window) for one decision.
