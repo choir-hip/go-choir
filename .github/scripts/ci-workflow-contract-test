@@ -115,7 +115,9 @@ fi
 
 require "$ci" 'needs: [plan, check]'
 
-prebuild_segment="$(sed -n '/^  prebuild-staging:/,/^  deploy-staging:/p' "$ci")"
+# The job plus the program it runs on Node B (.github/scripts/node-b-ci-prebuild,
+# read from the prebuilt commit; SEC-14).
+prebuild_segment="$(sed -n '/^  prebuild-staging:/,/^  deploy-staging:/p' "$ci"; cat "$root/.github/scripts/node-b-ci-prebuild")"
 for pattern in \
   'continue-on-error: true' \
   'group: staging-prebuild-node-b' \
