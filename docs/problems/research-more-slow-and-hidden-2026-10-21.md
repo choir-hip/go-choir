@@ -240,6 +240,28 @@ Two more findings from the same paper log (14:07 to 15:17):
   minute, in arrival order. A separate lane for I/O-bound polls is a
   candidate, not yet decided.
 
+Measured after c038df7c6 (all of the above, plus the source-poll lane and
+the lazy Report list) on the paper, 2 vCPUs, 155 s from 15:50:40, five
+minutes after boot: the engine mutex was held 70% of the time (from 96 to
+100%). The indexed snapshot read costs 9.4 ms (115 calls); the body scan for
+`$.record_id` and the outbox listing are gone from the top. What holds it
+now, named by the new counters:
+
+| Read | Calls | Held | Per call |
+|---|---|---|---|
+| body `$.addressee` on commitment records (Texture's evidence sources, per turn) | 17 | 27.7 s | 1.6 s |
+| `choir.run` by `$.agent_id`, JSON (`GetLatestActiveRunByAgent`, per wake and run end) | 121 | 22.6 s | 187 ms |
+| `choir.capture_label` by `$.capture_id`, JSON | 276 | 14.9 s | 54 ms |
+| `ListObjects` (unlabeled) | 9 | 10.8 s | 1.2 s |
+| `choir.source_ref` by `$.doc_id`, JSON | 4 | 4.1 s | 1.0 s |
+
+Each is an equality on a field with no index, the same gap the 10-14 record
+named. The repair is the existing one: kind-scoped STORED generated
+columns, built after the tape replay behind the health gate, each read
+keeping its JSON path until its column is live. Its cost is one table
+rewrite at the first boot (about 50 us CPU per row per column, measured
+10-14); after that the engine computes the columns on every write.
+
 ### E9. Texture's Write cites with `{{ref N}}` and is refused
 
 In the same run Texture's first Write was refused: "`{{ref 1}}` names no
