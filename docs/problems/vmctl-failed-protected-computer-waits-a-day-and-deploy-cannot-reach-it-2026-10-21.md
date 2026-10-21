@@ -248,6 +248,67 @@ Mutation checks: reverting each of the four fixes fails the test named for it.
   target: the spend is charged to the same allowance, a start the manager
   refuses refunds it, and the rescue for the same target then finds it spent.
 
+## Review round 3 (2026-10-21, GPT-6.1-sol on bcdb74659): sent back; one cause
+
+Four findings, each a source-level interleaving (not reproduced on Firecracker):
+
+- **R3-P1a.** A visit's resolve of a stopped computer marks only
+  `pendingWaiters[key]` and boots outside the lock; `claimRescue` reads
+  `refreshing` and `starting`, not `pendingWaiters`, so a rescue can
+  `RefreshVM` the visit's first boot (a markerless kill and reboot). And
+  `ResumeVMForDesktop` calls `endStart` before it publishes `State=active`,
+  so the same window reopens between the boot's return and the publish.
+- **R3-P1b.** Spending and starting are separate decisions. (1) The warm
+  sweep snapshots a `vmctl-restart` stop as `afterFailure=false`, waits in
+  its route guard; a rescue spends, fails hard and relabels the stop
+  `recovery_failed`; the sweep resumes on its stale flag and boots
+  uncharged past an exhausted allowance. (2) While a rescue holds
+  `refreshing`, the sweep can still spend (`spendRetry` ignores claims); the
+  rescue then answers "skipped: spent", the pending rescue and its identity
+  check are lost, and the sweep later boots the old config through
+  `RecoverVM` or refunds.
+- **R3-P1c (A5 rejected as a residual).** A deploy refresh that fails to
+  boot sets `State=failed` itself; a corrective deploy neither lists nor
+  rescues a failed protected computer and the warmer skips it, so the paper
+  can stay down until a visit or an operator act. The deploy path produces
+  this state, so the outage timeline not passing through it is no excuse.
+- **R3-P2.** `DeployGrantTargets` keeps the last 8 targets. Inside one retry
+  window, consume A..I with failure stops between, post A again: A was
+  evicted and re-arms. Eight strings are not a once-per-consumed-target
+  ledger.
+
+**Common cause (Convergence Before Patching; this is the third round on
+this group, and rounds 1 and 2 each closed one interleaving and opened the
+next).** One computer's lifecycle is guarded by three separate in-registry
+mechanisms, each added by a different change: `refreshing` (refresh,
+hibernate, rescue), `starting` (resume, recover; added in round 2),
+`pendingWaiters` (a visit's resolve, the platform warmer). No mechanism is
+read by every start path, and the release points differ (`endStart` before
+the publish, `defer` after it). The retry allowance is spent in a fourth
+locked step that reads none of them. So every pair of paths that do not
+share a mechanism is an interleaving, and patching pairs does not converge.
+The bound on consumed targets has the same shape: a cap chosen for memory,
+not for the window the safety argument needs.
+
+**Substrate fix (this round).** One lifecycle claim per computer
+(`r.lifecycle[key]`), taken under `r.mu` by every path that boots an
+existing computer — a visit's resolve (stopped and readiness paths), resume,
+recover, the always-on warm sweep, the retry sweep and the deploy refresh
+(through refresh or rescue) — and by hibernate, and released in the same
+critical section that publishes the resulting state (or on the failure
+path). The always-on sweep re-reads eligibility, charges the allowance and
+takes the claim in one locked step; the rescue takes the claim with its
+eligibility re-read and charges only while holding it, and a spend that
+does not hold the claim refuses. `refreshing` and `starting` are deleted.
+Failed protected computers are rescue candidates with the same gates
+(holds, typed recovery admission, live-process protection, per-target
+charging). The consumed-target memory keeps every target granted within the
+retry window and refuses a new grant beyond a cap rather than evicting one.
+`pendingWaiters` stays as the waiter list for collapsed resolves; it is no
+longer an exclusion mechanism on its own. The handler's deploy-refresh
+`inFlight` set stays: it guards the guest marker conversation (a
+request-level dedup before any claim), not a boot.
+
 ## Residuals recorded by the review (not fixed here)
 
 - The rescue's final `/health` check is identity for a non-layered computer and
