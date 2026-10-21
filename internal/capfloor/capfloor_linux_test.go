@@ -144,3 +144,39 @@ func TestEnforceWithoutPrivilegeIsRefused(t *testing.T) {
 		t.Fatal("enforce without CAP_SETPCAP succeeded")
 	}
 }
+
+// Review (Argon, non-blocking): observe never stops the daemon from
+// starting, even when /proc/self/status cannot be read; enforce does.
+func TestObserveNeverFailsTheStart(t *testing.T) {
+	old := statusPath
+	statusPath = "/nonexistent/capfloor-status"
+	defer func() { statusPath = old }()
+	if err := Apply(ModeObserve); err != nil {
+		t.Fatalf("observe with an unreadable status: %v", err)
+	}
+	if err := Apply(ModeEnforce); err == nil {
+		t.Fatal("enforce with an unreadable status passed")
+	}
+}
+
+// Review (Argon, non-blocking): an enforce start whose reading thread is
+// already within the floor still checks every thread.
+func TestEnforceWithinTheFloorStillVerifiesThreads(t *testing.T) {
+	dir := t.TempDir()
+	floor := "CapBnd:\t" + Hex(keptMask()) + "\n"
+	if err := os.WriteFile(dir+"/status", []byte(floor), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(dir+"/task/1", 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(dir+"/task/1/status", []byte("CapBnd:\t000001ffffffffff\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	oldS, oldT := statusPath, taskStatusGlob
+	statusPath, taskStatusGlob = dir+"/status", dir+"/task/*/status"
+	defer func() { statusPath, taskStatusGlob = oldS, oldT }()
+	if err := Apply(ModeEnforce); err == nil || !strings.Contains(err.Error(), "still holds") {
+		t.Fatalf("a thread above the floor passed: %v", err)
+	}
+}
