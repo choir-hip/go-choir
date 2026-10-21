@@ -30,6 +30,7 @@ import (
 	"sync"
 	"syscall"
 	"testing"
+	"time"
 )
 
 func TestReaderCacheSurvivesAFailedFsyncAndLaterRewrites(t *testing.T) {
@@ -324,4 +325,66 @@ func TestReaderRetiresOpenScanStateWhenASegmentIsSealed(t *testing.T) {
 	if len(r.open) > 1 {
 		t.Fatalf("the reader keeps scan state for %d open segments after %d were sealed", len(r.open), len(r.sealed))
 	}
+}
+
+// V2 (tapestore half): AppendFunc's build step runs inside the writer's lock,
+// so it never reads the open segment while another call is mid-batch, and
+// what it reads includes a failed call's whole records, which the same call
+// then makes durable.
+func TestAppendFuncBuildsOnlyBetweenOtherCalls(t *testing.T) {
+	root := t.TempDir()
+	a := NewAppender(root)
+	p := body("payload of the call that fails its fsync")
+	entered, release := make(chan struct{}), make(chan struct{})
+	var aDone, buildSawDone bool
+	var mu sync.Mutex
+	a.syncFile = func(f *os.File) error {
+		select {
+		case <-entered:
+			return f.Sync()
+		default:
+		}
+		close(entered)
+		<-release
+		return syscall.EIO
+	}
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = a.Append(cid, Item{NSPayload, p})
+		mu.Lock()
+		aDone = true
+		mu.Unlock()
+	}()
+	<-entered
+	var sawP bool
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := a.AppendFunc(cid, func() ([]Item, error) {
+			mu.Lock()
+			buildSawDone = aDone
+			mu.Unlock()
+			_, found, err := NewReader(root).ReadSegment(cid, NSPayload, sum(p))
+			sawP = found
+			if err != nil {
+				return nil, err
+			}
+			return nil, nil // P is present: write nothing, only make it durable
+		})
+		if err != nil {
+			t.Errorf("AppendFunc: %v", err)
+		}
+	}()
+	time.Sleep(150 * time.Millisecond)
+	close(release)
+	wg.Wait()
+	if !buildSawDone {
+		t.Fatal("build ran while another call was still inside its batch")
+	}
+	if !sawP {
+		t.Fatal("build did not see the failed call's whole record")
+	}
+	mustRead(t, NewReader(root), cid, NSPayload, p)
 }

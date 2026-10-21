@@ -74,6 +74,10 @@ type computerLog struct {
 	segno   uint64
 	size    int64
 	entries map[openKey]idxEntry
+	// suspect are whole records written by calls that then failed; they
+	// outlive cache invalidation (see appendLocked).
+	suspect    map[openKey]suspectRec
+	suspectSeg uint64
 }
 
 // NewAppender returns a writer over the artifacts root with the production
@@ -114,12 +118,29 @@ func (a *Appender) logFor(id string) *computerLog {
 // one fsync covering them. An item already in the open segment is skipped.
 // An error means none of the call's records is acknowledged.
 func (a *Appender) Append(computerID string, items ...Item) error {
-	if !ValidComputerID(computerID) {
-		return fmt.Errorf("tapestore: invalid computer id %q", computerID)
-	}
 	if len(items) == 0 {
 		return errors.New("tapestore: nothing to append")
 	}
+	return a.appendFunc(computerID, items, nil)
+}
+
+// AppendFunc is Append for a caller that must decide what to write by
+// reading the store. build runs with the computer's write lock held (the
+// mutex and the directory lock), after the open segment has been recovered
+// and before anything is written, so what it reads of the open segment is
+// stable and complete: no other writer is mid-batch, and a batch that failed
+// has left only whole records, which this call rewrites and fsyncs before
+// it returns. build returns the items to append; none is allowed (the call
+// then only makes the segment durable). An error from build aborts the call
+// with nothing written. build must not call the Appender.
+func (a *Appender) AppendFunc(computerID string, build func() ([]Item, error)) error {
+	if build == nil {
+		return errors.New("tapestore: AppendFunc needs a build function")
+	}
+	return a.appendFunc(computerID, nil, build)
+}
+
+func checkItems(items []Item) error {
 	for _, it := range items {
 		if !it.NS.valid() {
 			return fmt.Errorf("tapestore: invalid namespace %d", uint8(it.NS))
@@ -128,10 +149,20 @@ func (a *Appender) Append(computerID string, items ...Item) error {
 			return fmt.Errorf("tapestore: record of %d bytes exceeds the %d byte limit", len(it.Body), MaxRecordBytes)
 		}
 	}
+	return nil
+}
+
+func (a *Appender) appendFunc(computerID string, items []Item, build func() ([]Item, error)) error {
+	if !ValidComputerID(computerID) {
+		return fmt.Errorf("tapestore: invalid computer id %q", computerID)
+	}
+	if err := checkItems(items); err != nil {
+		return err
+	}
 	l := a.logFor(computerID)
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if err := a.appendLocked(l, computerID, items); err != nil {
+	if err := a.appendLocked(l, computerID, items, build); err != nil {
 		a.errs.Add(1)
 		return err
 	}
@@ -139,7 +170,7 @@ func (a *Appender) Append(computerID string, items ...Item) error {
 	return nil
 }
 
-func (a *Appender) appendLocked(l *computerLog, id string, items []Item) error {
+func (a *Appender) appendLocked(l *computerLog, id string, items []Item, build func() ([]Item, error)) error {
 	dir := filepath.Join(a.root, SegDirName, id)
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return fmt.Errorf("tapestore: create %s: %w", dir, err)
@@ -161,6 +192,17 @@ func (a *Appender) appendLocked(l *computerLog, id string, items []Item) error {
 			return err
 		}
 	}
+	a.pruneSuspect(l)
+	if build != nil {
+		built, err := build()
+		if err != nil {
+			return err
+		}
+		if err := checkItems(built); err != nil {
+			return err
+		}
+		items = built
+	}
 	// Rotation: a full open segment is sealed before this call writes.
 	if l.size >= a.sealBytes || len(l.entries) >= a.sealRecords {
 		if err := a.seal(l, dir, id, d); err != nil {
@@ -180,15 +222,31 @@ func (a *Appender) appendLocked(l *computerLog, id string, items []Item) error {
 	}
 	defer f.Close()
 
-	start := l.size
-	off := start
-	pending := map[openKey]idxEntry{}
+	// Records left by a failed call are whole and may be cached by readers, so
+	// they are never removed or moved; but the kernel may have dropped their
+	// dirty pages when the fsync failed, so rewrite their identical bytes
+	// before the fsync that this call acknowledges.
+	if err := a.redirty(l, f); err != nil {
+		l.valid = false
+		return err
+	}
+	off := l.size
+	pending := map[openKey]suspectRec{}
 	var wrote uint64
-	fail := func(err error) error {
-		// Nothing of this call is acknowledged: cut the segment back to where
-		// the call began so the bytes are not left to be mistaken for a
-		// record, and drop the cache so the next call revalidates.
-		_ = f.Truncate(start)
+	fail := func(err error, cut bool) error {
+		// Nothing of this call is acknowledged. A record written whole stays
+		// (a reader may hold its location); only a partial record is cut off,
+		// which no reader has cached. The next call revalidates from disk.
+		if cut {
+			_ = f.Truncate(off)
+		}
+		if l.suspect == nil {
+			l.suspect = map[openKey]suspectRec{}
+		}
+		l.suspectSeg = l.segno
+		for k, r := range pending {
+			l.suspect[k] = r
+		}
 		l.valid = false
 		return err
 	}
@@ -213,9 +271,9 @@ func (a *Appender) appendLocked(l *computerLog, id string, items []Item) error {
 			werr = io.ErrShortWrite
 		}
 		if werr != nil {
-			return fail(fmt.Errorf("tapestore: append record: %w", werr))
+			return fail(fmt.Errorf("tapestore: append record: %w", werr), true)
 		}
-		pending[key] = idxEntry{digest: digest, ns: it.NS, off: uint64(off), length: uint32(len(it.Body))}
+		pending[key] = suspectRec{off: off, rec: rec}
 		off += int64(len(rec))
 		wrote++
 	}
@@ -229,15 +287,55 @@ func (a *Appender) appendLocked(l *computerLog, id string, items []Item) error {
 		serr = f.Sync()
 	}
 	if serr != nil {
-		return fail(fmt.Errorf("tapestore: fsync segment: %w", serr))
+		return fail(fmt.Errorf("tapestore: fsync segment: %w", serr), false)
 	}
 	a.syncs.Add(1)
-	for k, e := range pending {
-		l.entries[k] = e
+	start := l.size
+	for k, r := range pending {
+		l.entries[k] = idxEntry{digest: k.digest, ns: k.ns, off: uint64(r.off), length: uint32(len(r.rec) - recHeaderSize)}
 	}
 	l.size = off
+	l.suspect = nil
 	a.records.Add(wrote)
 	a.bytes.Add(uint64(off - start))
+	return nil
+}
+
+// suspectRec is a whole record of a failed call: its offset and exact bytes.
+type suspectRec struct {
+	off int64
+	rec []byte
+}
+
+// pruneSuspect forgets suspect records that recovery did not find at their
+// offset in the current open segment (a crash or a truncation took them).
+func (a *Appender) pruneSuspect(l *computerLog) {
+	for k, r := range l.suspect {
+		e, ok := l.entries[k]
+		if l.suspectSeg != l.segno || !ok || int64(e.off) != r.off {
+			delete(l.suspect, k)
+		}
+	}
+}
+
+// redirty rewrites the identical bytes of the suspect records at their
+// offsets, so that the next fsync has dirty pages to write.
+func (a *Appender) redirty(l *computerLog, f *os.File) error {
+	for _, r := range l.suspect {
+		var n int
+		var err error
+		if a.writeAt != nil {
+			n, err = a.writeAt(f, r.rec, r.off)
+		} else {
+			n, err = f.WriteAt(r.rec, r.off)
+		}
+		if err == nil && n != len(r.rec) {
+			err = io.ErrShortWrite
+		}
+		if err != nil {
+			return fmt.Errorf("tapestore: rewrite unsynced record: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -404,9 +502,13 @@ func (a *Appender) seal(l *computerLog, dir, id string, d *os.File) error {
 		return fmt.Errorf("tapestore: open segment %d to seal: %w", l.segno, err)
 	}
 	defer f.Close()
+	if err := a.redirty(l, f); err != nil {
+		return err
+	}
 	if err := f.Sync(); err != nil {
 		return fmt.Errorf("tapestore: fsync segment: %w", err)
 	}
+	l.suspect = nil
 	if err := sealIndex(dir, l.segno, id, l.size, l.entries, a.syncDirPath); err != nil {
 		return err
 	}

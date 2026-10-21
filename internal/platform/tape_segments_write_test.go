@@ -386,7 +386,11 @@ func TestTapeSegmentsCollisionsAcrossBothStores(t *testing.T) {
 		if err := pinBatch(f, payload); err == nil || !strings.Contains(err.Error(), "immutable digest collision") {
 			t.Fatalf("pin = %v, want an immutable digest collision", err)
 		}
-		requireNoSegments(t, f.root)
+		// The reuse checks run inside the writer's lock, which may have created
+		// the computer's empty first segment; no record may have been appended.
+		if n := len(segmentRecords(t, f.root, id)); n != 0 {
+			t.Fatalf("a refused pin appended %d records", n)
+		}
 	})
 	t.Run("same bytes in a segment is a no-op", func(t *testing.T) {
 		f := newWriteFixture(t, "write", true)
