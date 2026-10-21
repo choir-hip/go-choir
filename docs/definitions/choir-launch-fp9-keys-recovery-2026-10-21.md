@@ -177,9 +177,9 @@ heresy_delta:
     and sets the switch.
 
 now:
-  status: open_handoff
+  status: working
   slice: >-
-    Commits 1 to 7 built on lane/b9-keys (the vault, its host script and
+    Repair round 1 (bunch 4b findings B1 to B4, below). Before it: commits 1 to 7 built on lane/b9-keys (the vault, its host script and
     nix module, the mode change, sealed escrow keys with the escrowkey
     tool, taperepack, the drill steps). Every remaining step is FP0's
     (landing, the flake entries, deployed proofs) or the owner's (open
@@ -571,6 +571,69 @@ checkpoint job opens an escrowed key. 4. Flip to `require`. 5. Exclude the KEK
 from the backup and take a backup; a restore of `platform-artifacts` without
 the KEK fails `escrowkey check`. 6. Rollback drill: `escrowkey unseal`, set
 `off`, restart: same fingerprint.
+
+## Review round 1 (bunch 4b, frozen 3bd691a6b): findings and dispositions
+
+Sol sent the candidate back; Argon accepted. Every blocking finding is
+accepted; the evidence is the code as frozen. The fixes follow in later
+commits, tests first.
+
+B1 (high, accepted). The vault probe does not protect the writes after it.
+`captureSnapshot` probes the path (snapshot_lifecycle.go:128) and then
+creates `snapshot.partial` and hands Firecracker string paths under
+`m.cfg.SnapshotVaultDir` (:192-223); the commit re-probes only after guest
+RAM is written (:272). If the vault is unmounted in between (for example
+`snapshot-vault.sh down` while the computer is being fenced, which succeeds
+because nothing holds the mount), the path resolves to the plain directory
+under the mount point on the main file system and guest RAM lands there in
+plaintext; the commit probe then refuses, but removing the files does not
+remove the blocks. A second point-in-time probe cannot close this. Fix:
+open the vault root once, verify that open directory (its device is the
+dm-crypt plain device the mount table names, and it is the probed
+directory), and resolve every capture and commit path through that open
+directory (`/proc/self/fd/N/...` for vmctl, `/proc/<vmctl pid>/fd/N/...` for
+the unjailed VMM), holding it until the commit's rename is synced. The open
+directory is also the coordinated teardown: a plain `umount` (what `down`
+runs) fails with EBUSY while it is held, and a lazy unmount leaves the held
+directory on the still-open encrypted device, so a write can never fall
+through to the main file system. The files are checked at commit to be on
+the vault's device.
+
+B2 (medium, accepted). Unsetting `VM_SNAPSHOT_VAULT_DIR` strands vault
+snapshots: `snapshotRoots`, `locateSnapshot`, `snapshotAnyDirs` and the sweep
+consult only the configured path (snapshot_vault.go:250-274), contrary to
+this file's rollback promise. Fix: separate write selection (the switch)
+from discovery: when vmctl writes into a vault it records the vault root in
+`<state>/snapshot-vault-roots`; discovery, listing, budget, discard and the
+sweep use the configured root plus the recorded roots; a recorded root that
+is no longer configured is never written, a snapshot in it resumes only if
+it still probes as an encrypted mount, and the sweep drops the record once
+that root holds no snapshot.
+
+B3 (medium, accepted). The backup excludes the name `key-escrow-kek*`, but
+`LoadKEK`, `GenerateKEKFile` and the CLI accept any file name, so a KEK at
+`/var/lib/go-choir/secrets/custom-kek` is backed up beside the sealed key.
+Fix: the name is enforced where the key is accepted (the KEK file's name
+must start with `key-escrow-kek`, for loading and generating), a Go test
+keeps the backup pattern and that prefix equal, and the backup also
+excludes the actual persistent source of a `key-escrow-kek` credential (and
+any `CHOIR_KEY_ESCROW_KEK_PATH`) it reads from the corpusd and checkpointd
+units, so a systemd source file under another name is excluded too.
+
+B4 (medium, accepted). `snapshot-vault.sh scan` suppresses `grep` read
+errors (`2>/dev/null`, a non-zero status read as "no hit") and ignores
+`find`'s traversal errors, so it can print zero hits and exit 0 having
+inspected nothing. Fix: grep's status 2 and a failed find are counted as
+read errors; a non-regular entry that is not inspected is counted; any
+read error makes the scan exit 1 with "read errors: N"; a hit count of zero
+is reported only when every requested byte was read.
+
+Non-blocking (Argon), fixed here because they are cheap: the file named
+`scripts/snapshot-vault-verify.sh` that does not exist (the script is
+`scripts/snapshot-vault.sh status` and `scan`), and landing step 1 (FP0's
+flake commit already adds the two commands). Sol's non-blocking notes need
+no change (the census proves manifest equality, not chain completeness; the
+station already requires the receipt-count comparison).
 
 ## Landing steps for FP0
 
