@@ -321,7 +321,9 @@ now:
     FP0: panel the frozen diff, rebase, land with its own deploy, run the FP2 report's
     probe steps on a disposable test computer before the paper refreshes. The second
     batch lands after the first, in a deploy of its own; its proof is "Second batch,
-    staging steps" below. Owner or FP0: whether and when the three observe switches
+    staging steps" below. Review round (bunch 4b, frozen e2a88e4ee) repaired on the
+    lane: five blocking findings fixed, none refuted ("Second batch, review round:
+    outcome"); FP0 re-freezes and re-reviews the new head. Owner or FP0: whether and when the three observe switches
     move to doctrine, required and enforce (each after its probe).
 
 receipts:
@@ -769,12 +771,13 @@ to 5.
    NoNewPrivs 1, Seccomp 2, CapEff 0, and every probe denied (never by
    ENOENT). `runtime_capabilities` is report-only under observe: record
    `cap_bnd`, `extra` and `missing`. `missing` should be empty.
-2. Document tools under observe: read a PDF (a research turn that opens
-   one, or a capture of one), then count `document_tool_sandbox_fallback`
-   and `document_tool_sandbox_divergence` in the extractions'
-   `extraction_warnings`. Both should be zero. Read the run's `w-doctool-*`
-   memory with the desks cgroup log line, and set `toolMemoryMax` from it
-   if 1 GiB is wrong.
+2. Document tools under observe (revised in the review round): read PDFs
+   (a research turn that opens one, or captures). Then run the probe again
+   and read `document_tool.observe`: `runs`, `equal`, `diverged`,
+   `sandbox_failed`, `setup_failed`, `skipped`, `max_rss_bytes`,
+   `over_budget`. Required is ready when `diverged`, `sandbox_failed`,
+   `setup_failed` and `over_budget` are all zero over real reads. The
+   extractions themselves carry no sandbox warning under observe.
 3. Capsule memory under observe: run one engineering assignment to its end.
    `GET /api/runtime/observability` then has a `capsule_memory` receipt
    with policy observe, request 2048 MiB, its `peak_bytes`, `events_max`
@@ -877,3 +880,40 @@ is accepted. None is refuted.
   already within the floor still verifies every thread.
 - **Non-blocking (sol): "sandbox fallback does not establish observe
   equivalence."** Covered by B3's fix (shadow comparison).
+
+### Second batch, review round: outcome
+
+| finding | outcome | commit |
+|---|---|---|
+| B1 non-Linux build | fixed | 67d12cab7 (orange) |
+| B2 converter charged to the desks aggregate | fixed | 399ed8171 (red) |
+| B3 observe changes stored results (TZ) | fixed | 399ed8171 (red) |
+| B4 aggregate does not follow a hotplug boost | fixed | cb2a0b374 (red) |
+| B5 doctrine admission ignores aggregate failures | fixed | cb2a0b374 (red) |
+| Argon: observe status read, enforce thread check | fixed | b4b2439e5 (red) |
+
+Observe semantics after the round. Capsule memory under observe never
+reads or writes the aggregate. The capability floor under observe never
+fails the start. Document tools under observe return the direct run byte
+for byte, add no warning, and create no cgroup; the shadow is counted only.
+One deliberate change remains under observe: one extra sandboxed process
+per extraction (one at a time; a second is skipped), in the daemon's own
+cgroup, after the result is returned. That adds bounded load but does not
+change today's kill domain or any result.
+
+The design text above, in "SEC-15: the document-tool sandbox", still
+describes the first version: the desks cgroup and observe fallback
+warnings. It is superseded by this round. Required mode's cgroups are
+`t-*` children of `CHOIR_DOCTOOL_CGROUP_ROOT` (`/sys/fs/cgroup/choir-doctools`,
+a 2 GiB aggregate), made at daemon start only when the sandbox is on.
+
+Residuals added in this round:
+- A darwin build of the whole `internal/agentcore` package could not run
+  here: this VM has no darwin cgo toolchain, and Dolt's cgo dependencies
+  stop the build first. The gap B1 named was reproduced and closed with a
+  darwin-typechecked probe. `internal/doctool`, `capfloor` and `capsule`
+  pass `GOOS=darwin GOARCH=arm64 go vet`. FP0 should run the darwin build
+  on the Mac.
+- The shadow doubles converter CPU work under observe, after the request
+  returns. Turning observe off removes it.
+- `toolAggregateMax` (2 GiB) is a first value, like `toolMemoryMax`.
