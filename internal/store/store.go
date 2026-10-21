@@ -690,6 +690,9 @@ func Open(dbPath string) (*Store, error) {
 		// silently falls back to a JSON_EXTRACT full scan (measured:
 		// ~1.4s/call under drain).
 		s.ogReadStore.InheritMetadataColumns(ogDoltStore)
+		// The read store must see which derived-key families the write store
+		// has validated, and withdraw them on a stale read.
+		s.ogReadStore.ShareDerivedKeys(ogDoltStore)
 	}
 	s.og = objectgraph.NewService(objectgraph.Config{
 		Durable: ogDoltStore,

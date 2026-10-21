@@ -34,15 +34,20 @@ type projectedSessionIdentity struct {
 	ViewportProfile string `json:"viewport_profile,omitempty"`
 }
 
-func projectBatch(ctx context.Context, tx *sql.Tx, batch computerevent.ProjectionBatch) error {
-	return projectBatchWithReplayTextureBootstrap(ctx, tx, batch, false, strings.TrimSpace(batch.ComputerID))
+// projectBatch applies a batch inside tx. derived, when set, keeps the
+// og_key_index side table in step with every object it writes, in the same
+// transaction. The replay path passes nil: a replayed workspace is checked
+// and filled online after boot (objectgraph.ValidateDerivedKeys), off the
+// boot path, and the caller withdraws the families.
+func projectBatch(ctx context.Context, tx *sql.Tx, batch computerevent.ProjectionBatch, derived *objectgraph.DerivedKeys) error {
+	return projectBatchWithReplayTextureBootstrap(ctx, tx, batch, false, strings.TrimSpace(batch.ComputerID), derived)
 }
 
 func projectBatchForReplay(ctx context.Context, tx *sql.Tx, batch computerevent.ProjectionBatch) error {
-	return projectBatchWithReplayTextureBootstrap(ctx, tx, batch, true, strings.TrimSpace(batch.ComputerID))
+	return projectBatchWithReplayTextureBootstrap(ctx, tx, batch, true, strings.TrimSpace(batch.ComputerID), nil)
 }
 
-func projectBatchWithReplayTextureBootstrap(ctx context.Context, tx *sql.Tx, batch computerevent.ProjectionBatch, allowReplayTextureBootstrap bool, replayComputerID string) error {
+func projectBatchWithReplayTextureBootstrap(ctx context.Context, tx *sql.Tx, batch computerevent.ProjectionBatch, allowReplayTextureBootstrap bool, replayComputerID string, derived *objectgraph.DerivedKeys) error {
 	if tx == nil {
 		return fmt.Errorf("computer event projection: missing transaction")
 	}
@@ -54,19 +59,19 @@ func projectBatchWithReplayTextureBootstrap(ctx context.Context, tx *sql.Tx, bat
 		computerID = replayComputerID
 	}
 	for i, op := range batch.Ops {
-		if err := projectOp(ctx, tx, op, allowReplayTextureBootstrap, replayComputerID, computerID); err != nil {
+		if err := projectOp(ctx, tx, op, allowReplayTextureBootstrap, replayComputerID, computerID, derived); err != nil {
 			return fmt.Errorf("computer event projection: op %d: %w", i, err)
 		}
 	}
 	return nil
 }
 
-func projectOp(ctx context.Context, tx *sql.Tx, op computerevent.ProjectionOp, allowReplayTextureBootstrap bool, replayComputerID, computerID string) error {
+func projectOp(ctx context.Context, tx *sql.Tx, op computerevent.ProjectionOp, allowReplayTextureBootstrap bool, replayComputerID, computerID string, derived *objectgraph.DerivedKeys) error {
 	switch strings.TrimSpace(op.Kind) {
 	case computerevent.ProjectionOpDesktopState:
 		return projectDesktopState(ctx, tx, op.Body, computerID)
 	case computerevent.ProjectionOpObject:
-		return projectObject(ctx, tx, op.Body)
+		return projectObject(ctx, tx, op.Body, derived)
 	case computerevent.ProjectionOpObjectEdge:
 		return projectObjectEdge(ctx, tx, op.Body)
 	case computerevent.ProjectionOpRunMemoryEntry:
@@ -207,7 +212,7 @@ func projectDesktopState(ctx context.Context, tx *sql.Tx, body json.RawMessage, 
 	return nil
 }
 
-func projectObject(ctx context.Context, tx *sql.Tx, body json.RawMessage) error {
+func projectObject(ctx context.Context, tx *sql.Tx, body json.RawMessage, derived *objectgraph.DerivedKeys) error {
 	var obj objectgraph.Object
 	if err := json.Unmarshal(body, &obj); err != nil {
 		return fmt.Errorf("decode object: %w", err)
@@ -246,6 +251,7 @@ func projectObject(ctx context.Context, tx *sql.Tx, body json.RawMessage) error 
 		created, updated, obj.Tombstone, obj.SupersededBy); err != nil {
 		return fmt.Errorf("project object: %w", err)
 	}
+	derived.Maintain(ctx, tx, obj.CanonicalID, obj.ObjectKind)
 	return nil
 }
 
