@@ -48,6 +48,15 @@ gpt-6-luna pool (1 to 3), the dispatcher's oldest-due-first order, and
 three store reads moved off scans. Next: measure the paper after each
 deploy, then the remaining hot reads, then engine concurrency.
 
+## Launch checklist (2026-10-21; first draft for owner review)
+
+[`launch-checklist-2026-10-21.md`](launch-checklist-2026-10-21.md) is the
+outer checklist: every launch feature and requirement in the intended order,
+from the Apple developer account to the Autoradio app, by way of the voice
+pipeline, self-development, accounts and the App Store submission (target
+2026-10-31). Its phase 2 points at the security checklist below without
+copying it.
+
 ## Security, density and architecture checklist (2026-10-21; owner: as soon as possible)
 
 [`security-density-architecture-checklist-2026-10-21.md`](security-density-architecture-checklist-2026-10-21.md)
