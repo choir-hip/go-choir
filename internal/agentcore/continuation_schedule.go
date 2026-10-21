@@ -54,6 +54,11 @@ type delegatedAssignmentSpawnDeadline struct {
 	// planned boot arms for a queued request, and carried by its retries, so
 	// that chain has ids of its own (engineering_admission.go).
 	Boot int64 `json:"boot,omitempty"`
+	// Nudge names the assignment whose end freed the slot, on the wake that
+	// asks the next queued request to try now. It is a one-shot: a nudge that
+	// finds the slot busy again arms nothing, because the request's own retry
+	// chain still runs.
+	Nudge string `json:"nudge,omitempty"`
 }
 
 // cellTerminalDeadline is the complete reduction identity needed to terminate

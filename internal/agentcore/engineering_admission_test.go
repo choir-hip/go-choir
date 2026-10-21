@@ -520,3 +520,74 @@ func TestEngineeringBoundDeadlineRunsFromBindNotArrival(t *testing.T) {
 		t.Fatalf("the bound deadline did not fail the run closed at bind plus the deadline: %s (%q)", got.Disposition, got.DispositionReason)
 	}
 }
+
+// When the live assignment ends, the next queued request is woken now rather
+// than at its next backoff retry (up to a minute later). Ways it can fail,
+// written before the code: no wake; the wrong request (not first in arrival
+// order) is woken; the nudge dedups into a consumed wake; a nudge that finds
+// the slot busy again starts a second retry chain; a nudge after a crash boot
+// resumes a pre-boot request (CLAUDE.md, Restarts End Work).
+func TestEngineeringAdmissionSlotFreeWakesTheNextQueuedRequest(t *testing.T) {
+	f := newAdmissionFixture(t, 3)
+	wakes := captureAdmissionWakes(f.rt)
+	f.open(0)
+	f.bind(0)
+	f.open(1)
+	f.open(2)
+	*wakes = nil
+	before := time.Now()
+
+	f.finish(0)
+
+	next := f.spawnWakesFor(*wakes, 1)
+	if len(next) != 1 {
+		t.Fatalf("the slot freed and %d wakes were armed for the next request, want one: %+v", len(next), *wakes)
+	}
+	if next[0].Nudge != f.opens[0].AssignmentID {
+		t.Fatalf("the nudge does not name the assignment that freed the slot: %+v", next[0])
+	}
+	if later := f.spawnWakesFor(*wakes, 2); len(later) != 0 {
+		t.Fatalf("a request behind the next one was woken too: %+v", later)
+	}
+	for _, wake := range *wakes {
+		if wake.kind == delegatedAssignmentSpawnDeadlineUpdateKind && wake.notBefore.After(before.Add(time.Second)) {
+			t.Fatalf("the nudge is not due now: %s", wake.notBefore)
+		}
+	}
+}
+
+func TestEngineeringAdmissionNudgeFindingTheSlotBusyArmsNoSecondChain(t *testing.T) {
+	f := newAdmissionFixture(t, 2)
+	wakes := captureAdmissionWakes(f.rt)
+	f.open(0)
+	f.bind(0)
+	queued := f.open(1)
+	*wakes = nil
+
+	content, _ := json.Marshal(delegatedAssignmentSpawnDeadline{AssignmentID: queued.AssignmentID, Attempt: queued.Binding.Attempt, Nudge: "assignment-gone"})
+	if err := f.rt.HandleDelegatedAssignmentSpawnDeadline(context.Background(), f.seed.OwnerID, f.computer, f.seed.ParentAgentID, string(content)); err != nil {
+		t.Fatal(err)
+	}
+	if armed := f.spawnWakesFor(*wakes, 1); len(armed) != 0 {
+		t.Fatalf("a nudge that found the slot busy re-armed %d wakes; the request's own retry chain already runs", len(armed))
+	}
+	if got := f.get(1); got.Disposition != types.EngineeringAssignmentOpen {
+		t.Fatalf("the nudged request did not stay open: %s", got.Disposition)
+	}
+}
+
+func TestEngineeringAdmissionSlotFreeAfterACrashBootWakesNoPreBootRequest(t *testing.T) {
+	f := newAdmissionFixture(t, 2)
+	wakes := captureAdmissionWakes(f.rt)
+	f.open(0)
+	f.bind(0)
+	f.open(1)
+	f.restart(false)
+	*wakes = nil
+
+	f.finish(0)
+
+	if armed := f.spawnWakesFor(*wakes, 1); len(armed) != 0 {
+		t.Fatalf("after a crash boot a freed slot woke a pre-boot request: %+v", armed)
+	}
+}
