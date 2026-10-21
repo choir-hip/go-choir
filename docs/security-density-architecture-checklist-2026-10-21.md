@@ -280,6 +280,9 @@ item below:
     for `clone3` and deny `CLONE_NEWUSER`. Plans: ladder items.
 - [ ] **SEC-14 · P1 · red — CI deploys as root with host-key checking off**
   - Now: `ci.yml:686-689, 800-806, 945-951`. Plans: review F13 (partial).
+  - First half landed 2026-10-21 (6bfe06fcf): every CI ssh to Node B checks
+    pinned host keys (`NODE_B_KNOWN_HOSTS`, `HostKeyAlias go-choir-node-b`,
+    strict checking); ssh-keyscan is gone. Open: CI still deploys as root.
 - [ ] **SEC-15 · P1 · red — Non-root guest runtime and guest sysctls**
   - Now: the guest daemon runs as root; pdftotext and Obscura run
     unsandboxed; no guest sysctls; `route_localnet=1` per tap. Plans:
@@ -399,6 +402,9 @@ item below:
     slices), so free page reporting has free pages to return.
   - Now: only capsule teardown reclaim (5d228ecfd, 1f71940f8). The paper
     computer still holds about 7.9 GiB host-side, mostly guest page cache.
+    Read again 2026-10-21 18:50 UTC: 7,970 MiB host RSS against about
+    2.8 GB used in the guest (about 5.5 GB available); Node B 9.3 of
+    31.1 GiB available.
   - Owed first: the after-burst measurement of free page reporting
     (`evidence/guest-memory-split-balloon-2026-10-14.md:38-46`).
   - Plans: density L5; `reports/lr-guest-memory-return-2026-10-14.md`
