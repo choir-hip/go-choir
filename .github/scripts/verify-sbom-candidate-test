@@ -8,7 +8,7 @@ trap 'rm -rf "$tmpdir"' EXIT
 
 source_commit=1111111111111111111111111111111111111111
 run_id=123456
-packages=(auth proxy gateway maild maildctl corpusd autoputer vmctl frontend obscura zot)
+packages=(auth proxy gateway maild maildctl corpusd autoputer vmctl frontend zot)
 required_packages=" auth proxy gateway maild maildctl corpusd autoputer vmctl frontend zot "
 semantic_packages=" auth proxy gateway maild maildctl corpusd autoputer vmctl frontend "
 
@@ -155,7 +155,7 @@ make_rebound_bundle() {
   make_bundle "$candidate"
   jq -c \
     --arg previous_commit "$baseline_commit" '
-      if (.package == "obscura" or .package == "zot") then
+      if .package == "zot" then
         .previous_commit = $previous_commit
       else
         .status = "rebound"
@@ -168,7 +168,7 @@ make_rebound_bundle() {
   jq \
     --arg previous_commit "$baseline_commit" '
       .previous_commit = $previous_commit
-      | .packages |= map(if (.package == "obscura" or .package == "zot") then . else .status = "rebound" end)
+      | .packages |= map(if .package == "zot" then . else .status = "rebound" end)
     ' "$candidate/diff.json" > "$candidate/diff.next"
   mv "$candidate/diff.next" "$candidate/diff.json"
 }

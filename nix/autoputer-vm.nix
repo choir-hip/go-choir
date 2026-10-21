@@ -852,7 +852,6 @@ EOF
         libreoffice
         pandoc
         poppler-utils
-        goChoirPackages.obscura
         goChoirPackages.zot
       ]));
       # VM health checks and host forwarding reach the guest via its tap IP,
@@ -915,9 +914,6 @@ EOF
       GOMODCACHE = "/mnt/persistent/go/pkg/mod";
       GOCACHE = "/mnt/persistent/go-build-cache";
       GOTOOLCHAIN = "local";
-      # Obscura is the guest-local browser and extraction substrate.
-      CHOIR_OBSCURA_BIN = "${goChoirPackages.obscura}/bin/obscura";
-      OBSCURA_BIN = "${goChoirPackages.obscura}/bin/obscura";
       CHOIR_ZOT_PATH = "${goChoirPackages.zot}/bin/zot";
       # Explicit runtime-selected model. Provider credentials remain host-side;
       # guest LLM calls route through the gateway token above.
