@@ -213,6 +213,10 @@ func (rt *Runtime) HandleDelegatedAssignmentSpawnDeadline(ctx context.Context, o
 		}
 	}
 	if _, resumeErr := rt.resumeDelegatedCastAssignment(ctx, assignment, assignmentSpawnRequest{Objective: objective}); resumeErr != nil {
+		if errors.Is(resumeErr, errEngineeringRequestExpired) {
+			// The request waited past its deadline and is now cancelled.
+			return nil
+		}
 		// Admission refused the request because the slot is busy or an older
 		// request goes first: the work stays pending, the wake is consumed
 		// and a retry is armed (or the request expires). Nothing is cancelled.
