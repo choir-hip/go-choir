@@ -133,7 +133,7 @@ func TestSnapshotResumeWakesSameRealizationWithoutColdBoot(t *testing.T) {
 
 func TestSnapshotResumeFailureColdBootsWithFreshEpoch(t *testing.T) {
 	mock := &snapshotMockVMManager{mockVMManager: &mockVMManager{
-		recoverResponse: &VMInstanceInfo{HostURL: "http://127.0.0.1:9043", Epoch: 7, Healthy: true, State: "running"},
+		refreshResponse: &VMInstanceInfo{HostURL: "http://127.0.0.1:9043", Epoch: 7, Healthy: true, State: "running"},
 		getVMs:          make(map[string]*VMInstanceInfo),
 	}}
 	reg, _ := newSnapshotTestRegistry(t, mock, "user-snap-fail")
@@ -143,8 +143,10 @@ func TestSnapshotResumeFailureColdBootsWithFreshEpoch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResumeVM after a failed snapshot resume: %v", err)
 	}
-	if len(mock.snapshotCalls) != 1 || len(mock.recovers) != 1 {
-		t.Fatalf("snapshot calls=%d recovers=%d, want 1 and 1", len(mock.snapshotCalls), len(mock.recovers))
+	// The cold boot of the tracked hibernated instance is on the current
+	// deploy (RefreshVM), not its stored config.
+	if len(mock.snapshotCalls) != 1 || len(mock.refreshes) != 1 || len(mock.recovers) != 0 {
+		t.Fatalf("snapshot calls=%d refreshes=%d recovers=%d, want 1, 1, 0", len(mock.snapshotCalls), len(mock.refreshes), len(mock.recovers))
 	}
 	if own.State != VMStateActive || own.Epoch != 7 {
 		t.Fatalf("cold boot ownership state=%s epoch=%d, want active epoch 7", own.State, own.Epoch)

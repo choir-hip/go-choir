@@ -2506,7 +2506,7 @@ func TestOwnershipRegistry_ResolveRecoversFailedManagerInstanceForHibernatedDesk
 				State:   "failed",
 			},
 		},
-		recoverResponse: &VMInstanceInfo{
+		refreshResponse: &VMInstanceInfo{
 			HostURL: "http://127.0.0.1:9046",
 			Epoch:   8,
 			Healthy: true,
@@ -2519,8 +2519,9 @@ func TestOwnershipRegistry_ResolveRecoversFailedManagerInstanceForHibernatedDesk
 	if err != nil {
 		t.Fatalf("ResolveOrAssignDesktop: %v", err)
 	}
-	if len(mock.recovers) != 1 || mock.recovers[0] != own.VMID {
-		t.Fatalf("recovers = %+v, want [%s]", mock.recovers, own.VMID)
+	// The failed instance's process is gone: it starts on the current deploy.
+	if len(mock.refreshes) != 1 || mock.refreshes[0] != own.VMID || len(mock.recovers) != 0 {
+		t.Fatalf("refreshes = %+v recovers = %+v, want one refresh of %s", mock.refreshes, mock.recovers, own.VMID)
 	}
 	if len(mock.boots) != 0 {
 		t.Fatalf("expected recovery of failed manager instance, got %d boot calls", len(mock.boots))
@@ -2541,7 +2542,7 @@ func TestOwnershipRegistry_ResolveRecoversFailedManagerInstanceForHibernatedDesk
 
 func TestOwnershipRegistry_StartsFreshRealizationThroughVMManager(t *testing.T) {
 	mock := &mockVMManager{
-		recoverResponse: &VMInstanceInfo{
+		refreshResponse: &VMInstanceInfo{
 			HostURL: "http://127.0.0.1:9043",
 			Epoch:   5,
 			Healthy: true,
@@ -2560,8 +2561,8 @@ func TestOwnershipRegistry_StartsFreshRealizationThroughVMManager(t *testing.T) 
 	if err != nil {
 		t.Fatalf("ResumeVM: %v", err)
 	}
-	if len(mock.recovers) != 1 {
-		t.Fatalf("expected 1 fresh realization recovery call, got %d", len(mock.recovers))
+	if len(mock.refreshes) != 1 || len(mock.recovers) != 0 {
+		t.Fatalf("expected 1 fresh realization on the current deploy, got refreshes %d recovers %d", len(mock.refreshes), len(mock.recovers))
 	}
 	if own.ComputerURL != "http://127.0.0.1:9043" || own.Epoch != 5 {
 		t.Errorf("fresh realization = %+v", own)

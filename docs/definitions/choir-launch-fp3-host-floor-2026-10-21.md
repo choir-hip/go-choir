@@ -111,8 +111,10 @@ now:
   slice: >-
     group 1 review round 3 (GPT-6.1-sol sent bcdb74659 back): the common
     cause recorded first (d02ca2832), then the substrate fix, one lifecycle
-    claim per computer; ready for FP0's re-review (a second reviewer, Gemini
-    4 Argon, may add findings), then groups 2 and 3
+    claim per computer (122eb9623); Gemini 4 Argon's review mapped onto it
+    (1c7497990) and its two open items fixed (a dead tracked instance boots
+    onto the current deploy with a fresh token; tracked starts are admitted
+    for host memory); ready for FP0's re-review, then groups 2 and 3
   source_ref: bcdb74659 (round-2 candidate, rebased on main)
   deploy_identity: unchanged (nothing of group 1 is deployed)
   candidate:

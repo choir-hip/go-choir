@@ -145,7 +145,8 @@ func TestEnsureUniversalWirePlatformComputerRecoversPersistedBootingWithoutWaite
 				State: "failed",
 			},
 		},
-		recoverResponse: &VMInstanceInfo{
+		// A dead tracked instance starts on the current deploy (RefreshVM).
+		refreshResponse: &VMInstanceInfo{
 			HostURL: "http://10.200.99.2:8085",
 			Epoch:   59,
 			Healthy: true,
@@ -168,11 +169,11 @@ func TestEnsureUniversalWirePlatformComputerRecoversPersistedBootingWithoutWaite
 	if err != nil {
 		t.Fatalf("EnsureUniversalWirePlatformComputer: %v", err)
 	}
-	if len(mgr.recovers) != 1 || mgr.recovers[0] != UniversalWirePlatformVMID {
-		t.Fatalf("expected recovery for %s, got %#v", UniversalWirePlatformVMID, mgr.recovers)
+	if len(mgr.refreshes) != 1 || mgr.refreshes[0] != UniversalWirePlatformVMID || len(mgr.recovers) != 0 {
+		t.Fatalf("expected a fresh realization of %s on the current deploy, got refreshes %#v recovers %#v", UniversalWirePlatformVMID, mgr.refreshes, mgr.recovers)
 	}
-	if len(mgr.recoverCfgs) != 1 || mgr.recoverCfgs[0].ComputerKind != "platform" {
-		t.Fatalf("expected platform recovery config, got %#v", mgr.recoverCfgs)
+	if len(mgr.refreshCfgs) != 1 || mgr.refreshCfgs[0].ComputerKind != "platform" {
+		t.Fatalf("expected platform recovery config, got %#v", mgr.refreshCfgs)
 	}
 	own := reg.ownerships[key]
 	if own.State != VMStateActive {
@@ -293,8 +294,10 @@ func (m *blockingPlatformRecoverManager) RecoverVM(string, VMManagerConfig) (*VM
 	return m.recovered, nil
 }
 
-func (m *blockingPlatformRecoverManager) RefreshVM(string, VMManagerConfig) (*VMInstanceInfo, error) {
-	return nil, errors.New("refresh should not be called")
+// RefreshVM is how a dead tracked instance starts (on the current deploy);
+// it is counted with RecoverVM as one fresh realization.
+func (m *blockingPlatformRecoverManager) RefreshVM(vmID string, cfg VMManagerConfig) (*VMInstanceInfo, error) {
+	return m.RecoverVM(vmID, cfg)
 }
 
 func (m *blockingPlatformRecoverManager) DestroyVMState(string) error {

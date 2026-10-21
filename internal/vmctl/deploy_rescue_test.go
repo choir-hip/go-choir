@@ -976,11 +976,11 @@ func TestRescueDefersWhileAVisitBootsTheStoppedComputer(t *testing.T) {
 func TestDeployRefreshDefersWhileAVisitBootsAnActiveComputer(t *testing.T) {
 	f := newRescueFixture(t, true)
 	// The registry says active, the manager says stopped: a visit's readiness
-	// check starts it (startExistingVM recovers the tracked instance).
+	// check starts it (startExistingVM boots the tracked instance).
 	f.mock.mu.Lock()
 	f.mock.getVMs[f.own().VMID] = &VMInstanceInfo{HostURL: "http://127.0.0.1:9001", State: "stopped"}
-	f.mock.recoverStarted, f.mock.recoverRelease = make(chan struct{}), make(chan struct{})
-	started, release := f.mock.recoverStarted, f.mock.recoverRelease
+	f.mock.refreshStarted, f.mock.refreshRelease = make(chan struct{}), make(chan struct{})
+	started, release := f.mock.refreshStarted, f.mock.refreshRelease
 	f.mock.mu.Unlock()
 	visitDone := make(chan error, 1)
 	go func() {
@@ -991,7 +991,7 @@ func TestDeployRefreshDefersWhileAVisitBootsAnActiveComputer(t *testing.T) {
 	case <-started:
 	case <-time.After(5 * time.Second):
 		close(release)
-		t.Fatal("the visit never reached RecoverVM")
+		t.Fatal("the visit never reached the manager")
 	}
 	answered := make(chan deployRefreshResponse, 1)
 	go func() {
@@ -1183,5 +1183,94 @@ func TestConsumedTargetIsRememberedForTheWholeRetryWindow(t *testing.T) {
 	}
 	if reg.GrantDeployRetry("vm-paper", "A") {
 		t.Fatal("A re-armed inside the retry window after eight other targets were consumed")
+	}
+}
+
+// Second reviewer (Gemini 4 Argon) on bcdb74659, written before the fix:
+//
+//   - the deploy's grant clears the allowance before it defers; when the wedge
+//     detector then stops the guest, the idle sweeper's always-on warm (which
+//     runs before the retry sweep) spends that retry and recovers the stopped
+//     instance with RecoverVM: the stored config of the hung build and no
+//     gateway token. A stopped instance the manager still tracks must boot
+//     onto the current deploy (RefreshVM) with a fresh token, from every start
+//     path, not only the rescue;
+//   - a stopped tracked instance holds no memory, so booting it adds a VM:
+//     the rescue and the sweep skipped host memory admission for it, and
+//     other wakes did not see the reservation.
+
+func (f *rescueFixture) bootCalls() (recovers int, refreshCfgs []VMManagerConfig) {
+	f.mock.mu.Lock()
+	defer f.mock.mu.Unlock()
+	return len(f.mock.recovers), append([]VMManagerConfig(nil), f.mock.refreshCfgs...)
+}
+
+func TestSweepAfterADeferredDeployBootsTheCurrentDeployNotTheHungConfig(t *testing.T) {
+	f := newRescueFixture(t, true)
+	// The rollback reaches the paper while its guest refuses connections: no
+	// answer to the marker request, so the deploy defers after its grant.
+	f.fake.mu.Lock()
+	f.fake.outcome = guestMarkUnavailable
+	f.fake.mu.Unlock()
+	if _, resp := f.deploy(t, "T-good"); resp.Outcome != deployRefreshDeferred {
+		t.Fatalf("deploy to an unanswering guest: %+v, want deferred", resp)
+	}
+	// The wedge detector stops it and the manager keeps the stopped instance;
+	// the idle sweeper's always-on warm runs next.
+	f.failStop(stoppedByWedged)
+	if got := f.reg.WarmAlwaysOnDesktops(t.Context(), allowAllRoutes); got != 1 {
+		t.Fatalf("warmed = %d, want the one retry", got)
+	}
+	recovers, refreshes := f.bootCalls()
+	if recovers != 0 {
+		t.Fatalf("recovers = %d: the sweep booted the hung build's stored config", recovers)
+	}
+	if len(refreshes) != 1 || !strings.HasPrefix(refreshes[0].GatewayToken, "gw-token-") {
+		t.Fatalf("refreshes = %+v, want one boot onto the current deploy with a fresh gateway token", refreshes)
+	}
+
+	// A visit's start of a stopped tracked instance boots the same way.
+	g := newRescueFixture(t, true)
+	g.failStop(stoppedByWedged)
+	if _, err := g.reg.ResolveOrAssignDesktopContext(t.Context(), rescueUser, PrimaryDesktopID); err != nil {
+		t.Fatal(err)
+	}
+	recovers, refreshes = g.bootCalls()
+	if recovers != 0 || len(refreshes) != 1 || !strings.HasPrefix(refreshes[0].GatewayToken, "gw-token-") {
+		t.Fatalf("visit start: recovers=%d refreshes=%+v, want one refresh with a fresh token", recovers, refreshes)
+	}
+}
+
+func TestStartsOfAStoppedTrackedInstanceAreAdmittedForHostMemory(t *testing.T) {
+	for _, path := range []string{"rescue", "sweep"} {
+		f := newRescueFixture(t, true)
+		f.reg.SetPressureReclaimConfig(PressureReclaimConfig{
+			Mode: PressureReclaimModeActive, Signal: PressureReclaimSignalSustained, MinMemoryAvailableBytes: 4 * gib,
+		})
+		f.reg.SetHostAdmissionConfig(measuredAdmission())
+		f.reg.setPressureSamplerForTest(func(PressureReclaimConfig) HostPressureSample {
+			return HostPressureSample{MemoryTotalBytes: 32 * gib, MemoryAvailableBytes: 16 * gib, MemoryAvailablePercent: 50}
+		})
+		f.failStop(stoppedByWedged)
+		vmID := f.own().VMID
+		switch path {
+		case "rescue":
+			if _, resp := f.deploy(t, "A"); resp.Outcome != deployRefreshRefreshed {
+				t.Fatalf("rescue: %+v", resp)
+			}
+		case "sweep":
+			if got := f.reg.WarmAlwaysOnDesktops(t.Context(), allowAllRoutes); got != 1 {
+				t.Fatalf("sweep warmed %d", got)
+			}
+		}
+		admitted := false
+		for _, d := range f.reg.HostAdmissionSummary().Recent {
+			if d.VMID == vmID {
+				admitted = true
+			}
+		}
+		if !admitted {
+			t.Fatalf("%s booted a stopped tracked instance without a host memory admission", path)
+		}
 	}
 }

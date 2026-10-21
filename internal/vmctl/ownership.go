@@ -1429,11 +1429,11 @@ func (r *OwnershipRegistry) recoverOrRestartActiveVM(own *VMOwnership, mgr VMMan
 	if err := r.admitRecoveryStart(own, false); err != nil {
 		return nil, err
 	}
-	cfg, err := r.reserveFreshVMConfig(own, "", mgr)
+	cfg, refresh, err := r.trackedBootConfig(own, mgr)
 	if err != nil {
 		return nil, err
 	}
-	recovered, err := mgr.RecoverVM(own.VMID, cfg)
+	recovered, err := bootTracked(mgr, own.VMID, cfg, refresh)
 	if err != nil {
 		if mgr.GetVM(own.VMID) == nil {
 			return r.startExistingVM(own, mgr)
@@ -1464,8 +1464,9 @@ func (r *OwnershipRegistry) startExistingVM(own *VMOwnership, mgr VMManager) (*V
 		}
 	}
 	var ticket *admissionTicket
-	if mgr.GetVM(own.VMID) == nil {
-		// Booting adds a VM; recovering a tracked one replaces it in place.
+	if tracked := mgr.GetVM(own.VMID); tracked == nil || !managedGuestMayLive(tracked.State) {
+		// Booting adds a VM, and so does starting a tracked instance whose
+		// guest is not running; recovering a live one replaces it in place.
 		r.mu.RLock()
 		class := warmnessClassForOwnership(own, r.warmnessPolicy)
 		r.mu.RUnlock()
@@ -1492,11 +1493,11 @@ func (r *OwnershipRegistry) startAdmittedVM(own *VMOwnership, mgr VMManager) (*V
 		return info, nil
 	}
 	if mgr.GetVM(own.VMID) != nil {
-		cfg, err := r.reserveFreshVMConfig(own, "", mgr)
+		cfg, refresh, err := r.trackedBootConfig(own, mgr)
 		if err != nil {
 			return nil, err
 		}
-		info, err := mgr.RecoverVM(own.VMID, cfg)
+		info, err := bootTracked(mgr, own.VMID, cfg, refresh)
 		if err != nil {
 			return nil, r.noteRecoveryStartFailure(own, err)
 		}
@@ -1513,6 +1514,32 @@ func (r *OwnershipRegistry) startAdmittedVM(own *VMOwnership, mgr VMManager) (*V
 	}
 	r.clearRecoveryCondition(own)
 	return info, nil
+}
+
+// trackedBootConfig prepares the start of an instance the manager still
+// tracks. A guest that is not live (stopped by the wedge detector, failed,
+// hibernated without a usable snapshot) boots onto the current deploy with a
+// freshly issued gateway token (refresh true: RefreshVM, refreshBootConfig),
+// never on the stored config of the boot that hung; a live guest is
+// recovered in place (RecoverVM), as crash recovery always did
+// (docs/problems/vmctl-failed-protected-computer-waits-a-day-and-deploy-cannot-reach-it-2026-10-21.md,
+// Argon 1).
+func (r *OwnershipRegistry) trackedBootConfig(own *VMOwnership, mgr VMManager) (VMManagerConfig, bool, error) {
+	info := mgr.GetVM(own.VMID)
+	refresh := info != nil && !managedGuestMayLive(info.State)
+	token := ""
+	if refresh {
+		token = r.issueGatewayToken(own.VMID)
+	}
+	cfg, err := r.reserveFreshVMConfig(own, token, mgr)
+	return cfg, refresh, err
+}
+
+func bootTracked(mgr VMManager, vmID string, cfg VMManagerConfig, refresh bool) (*VMInstanceInfo, error) {
+	if refresh {
+		return mgr.RefreshVM(vmID, cfg)
+	}
+	return mgr.RecoverVM(vmID, cfg)
 }
 
 // resumeFromSnapshot wakes a hibernated, unheld computer from its memory
@@ -3677,16 +3704,14 @@ func (r *OwnershipRegistry) rescueBoot(own VMOwnership, mgr VMManager) (*VMOwner
 		return nil, fmt.Errorf("VM realization authority is unavailable")
 	}
 	tracked := mgr.GetVM(own.VMID) != nil
-	var ticket *admissionTicket
-	if !tracked {
-		r.mu.RLock()
-		class := warmnessClassForOwnership(&own, r.warmnessPolicy)
-		r.mu.RUnlock()
-		admitted, err := r.admitHostMemory(&own, class)
-		if err != nil {
-			return nil, err
-		}
-		ticket = admitted
+	// A rescue never starts over a live guest (deployRescue defers), so the
+	// boot always adds a VM, tracked or not: admit it and reserve its memory.
+	r.mu.RLock()
+	class := warmnessClassForOwnership(&own, r.warmnessPolicy)
+	r.mu.RUnlock()
+	ticket, err := r.admitHostMemory(&own, class)
+	if err != nil {
+		return nil, err
 	}
 	info, err := r.rescueLaunch(&own, mgr, tracked)
 	ticket.finish(err == nil && info != nil)
