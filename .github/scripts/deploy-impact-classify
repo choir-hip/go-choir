@@ -112,7 +112,7 @@ mark_host_os_only() {
 
 for path in "${changed[@]}"; do
   case "$path" in
-    .gitignore|LICENSE|NOTICE|cmd/doccheck/*|scripts/doccheck|scripts/node-b-deploy-disk-preflight)
+    .gitignore|LICENSE|NOTICE|cmd/doccheck/*|scripts/doccheck|scripts/node-b-deploy-disk-preflight|scripts/node-b-ci-gate-probe)
       add_explanation "$path -> ignored (repo metadata or docs checker tooling)"
       continue
       ;;
@@ -134,6 +134,11 @@ for path in "${changed[@]}"; do
       ;;
     start-services.sh)
       add_explanation "$path -> ignored (local developer service harness)"
+      continue
+      ;;
+    scripts/node-b-ci-gate)
+      mark_host_os_only
+      add_explanation "$path -> host OS only (the CI deploy gate, builtins.readFile input of nix/node-b.nix)"
       continue
       ;;
     scripts/node-b-sync-service-pointers)

@@ -1,0 +1,185 @@
+#!/usr/bin/env bash
+# The CI deploy gate on Node B (SDC SEC-14;
+# docs/problems/ci-deploys-to-node-b-as-root-2026-10-21.md).
+#
+# CI logs in as choir-deploy, whose only authorized key is forced to run
+# `sudo -n <this gate> -- "$SSH_ORIGINAL_COMMAND"` (nix/node-b.nix). The
+# caller picks a verb and typed values, never a program:
+#
+#   receipt
+#   prebuild DEPLOY_COMMIT=<sha> DEPLOY_FRONTEND=<bool> DEPLOY_HOST=<bool>
+#            DEPLOY_HOST_OS=<bool> HOST_SERVICES=<names>
+#   deploy   the prebuild keys plus DEPLOY_RUN_ID=<n> DEPLOY_RUN_ATTEMPT=<n>
+#            DEPLOY_VMCTL_RESTART=<bool> DEPLOY_ACTIVE_VM_REFRESH=<bool>
+#            REFRESH_ACTIVE_COMPUTERS=<bool>
+#
+# For prebuild and deploy the gate fetches main and the commit, refuses a
+# commit that is not an ancestor of origin/main (GitHub serves fork pull
+# request heads by SHA too), and runs .github/scripts/node-b-ci-<verb> as
+# read from that commit, as root, with only the typed values in its
+# environment. Anything else is refused with status 2.
+#
+# `--print-plan <request>` parses and prints the plan without running it
+# (.github/scripts/node-b-ci-gate-test).
+set -euo pipefail
+export PATH=/run/wrappers/bin:/run/current-system/sw/bin:/usr/bin:/bin
+umask 022
+
+repo_url=https://github.com/choir-hip/go-choir.git
+receipt=/var/lib/go-choir/deploy-receipt.json
+max_request=2048
+
+refuse() {
+  echo "node-b-ci-gate: refused: $*" >&2
+  exit 2
+}
+
+prebuild_keys=(DEPLOY_COMMIT DEPLOY_FRONTEND DEPLOY_HOST DEPLOY_HOST_OS HOST_SERVICES)
+deploy_keys=(DEPLOY_COMMIT DEPLOY_RUN_ID DEPLOY_RUN_ATTEMPT DEPLOY_HOST DEPLOY_FRONTEND
+  DEPLOY_VMCTL_RESTART DEPLOY_ACTIVE_VM_REFRESH REFRESH_ACTIVE_COMPUTERS DEPLOY_HOST_OS HOST_SERVICES)
+
+value_ok() {
+  local key="$1"
+  local value="$2"
+  case "$key" in
+    DEPLOY_COMMIT) [[ "$value" =~ ^[0-9a-f]{40}$ ]] ;;
+    DEPLOY_RUN_ID | DEPLOY_RUN_ATTEMPT) [[ "$value" =~ ^[1-9][0-9]{0,19}$ ]] ;;
+    HOST_SERVICES) [[ "$value" =~ ^([a-z][a-z0-9-]{0,39}(,[a-z][a-z0-9-]{0,39}){0,31})?$ ]] ;;
+    *) [[ "$value" == true || "$value" == false ]] ;;
+  esac
+}
+
+# parse REQUEST: sets verb, repo, script and the env array (KEY=value, in
+# the verb's fixed key order), or refuses.
+parse() {
+  local request="$1"
+  if ((${#request} > max_request)); then
+    refuse "request longer than ${max_request} bytes"
+  fi
+  # One space between words, no other whitespace, a closed alphabet. This
+  # alone keeps every shell metacharacter, glob and newline out.
+  if ! [[ "$request" =~ ^[a-z]+(\ [A-Z_]+=[a-z0-9,-]*)*$ ]]; then
+    refuse "malformed request"
+  fi
+  local words
+  read -r -a words <<<"$request"
+  verb="${words[0]}"
+  local keys
+  case "$verb" in
+    receipt)
+      ((${#words[@]} == 1)) || refuse "receipt takes no arguments"
+      repo=
+      script=
+      env=()
+      return 0
+      ;;
+    prebuild)
+      repo=/opt/go-choir-prebuild
+      keys=("${prebuild_keys[@]}")
+      ;;
+    deploy)
+      repo=/opt/go-choir
+      keys=("${deploy_keys[@]}")
+      ;;
+    *) refuse "unknown verb" ;;
+  esac
+  script=".github/scripts/node-b-ci-${verb}"
+
+  local -A given=()
+  local word key value
+  for word in "${words[@]:1}"; do
+    key="${word%%=*}"
+    value="${word#*=}"
+    local known=false k
+    for k in "${keys[@]}"; do
+      [ "$k" = "$key" ] && known=true
+    done
+    [ "$known" = true ] || refuse "unknown key ${key} for ${verb}"
+    [ -z "${given[$key]+set}" ] || refuse "duplicate key ${key}"
+    value_ok "$key" "$value" || refuse "invalid value for ${key}"
+    given[$key]="$value"
+  done
+  env=()
+  for key in "${keys[@]}"; do
+    [ -n "${given[$key]+set}" ] || refuse "missing key ${key} for ${verb}"
+    env+=("${key}=${given[$key]}")
+  done
+}
+
+print_plan() {
+  echo "verb=${verb}"
+  [ "$verb" = receipt ] && return 0
+  echo "repo=${repo}"
+  echo "script=${script}"
+  local entry
+  for entry in "${env[@]}"; do
+    echo "env=${entry}"
+  done
+}
+
+commit_from_env() {
+  local entry
+  for entry in "${env[@]}"; do
+    case "$entry" in
+      DEPLOY_COMMIT=*) printf '%s\n' "${entry#DEPLOY_COMMIT=}" ;;
+    esac
+  done
+}
+
+run() {
+  if [ "$verb" = receipt ]; then
+    exec cat "$receipt"
+  fi
+  [ "$(id -u)" -eq 0 ] || refuse "the gate runs as root (through sudo)"
+  local commit
+  commit=$(commit_from_env)
+
+  export HOME=/root
+  if [ ! -d "$repo/.git" ]; then
+    git clone --quiet "$repo_url" "$repo" >&2
+  fi
+  git config --global --add safe.directory "$repo"
+  # The origin URL is the trust root for "on main"; never take it from the
+  # checkout.
+  git -C "$repo" remote set-url origin "$repo_url"
+  git -C "$repo" fetch --quiet --no-tags origin \
+    "+refs/heads/main:refs/remotes/origin/main" "$commit" >&2
+  if ! git -C "$repo" merge-base --is-ancestor "$commit" refs/remotes/origin/main; then
+    refuse "commit ${commit} is not on main"
+  fi
+
+  local program
+  program=$(mktemp /run/go-choir-ci-gate.XXXXXX)
+  trap 'rm -f "$program"' EXIT
+  git -C "$repo" show "${commit}:${script}" >"$program" ||
+    refuse "commit ${commit} has no ${script}"
+
+  echo "node-b-ci-gate: ${verb} ${commit} as root from ${script}" >&2
+  # A clean root environment, as a NixOS root login would have it, plus the
+  # typed values. The program reads itself from stdin, as it did over ssh.
+  local status=0
+  env -i HOME=/root USER=root LOGNAME=root SHELL=/run/current-system/sw/bin/bash \
+    PATH=/run/wrappers/bin:/run/current-system/sw/bin "${env[@]}" \
+    /run/current-system/sw/bin/bash -c \
+    'if [ -r /etc/set-environment ]; then . /etc/set-environment; fi; exec /run/current-system/sw/bin/bash -s' \
+    <"$program" || status=$?
+  exit "$status"
+}
+
+mode="${1:-}"
+case "$mode" in
+  --print-plan | --) ;;
+  *) refuse "usage: node-b-ci-gate (--print-plan | --) <request>" ;;
+esac
+[ "$#" -eq 2 ] || refuse "usage: node-b-ci-gate (--print-plan | --) <request>"
+
+verb=
+repo=
+script=
+env=()
+parse "$2"
+if [ "$mode" = --print-plan ]; then
+  print_plan
+  exit 0
+fi
+run
