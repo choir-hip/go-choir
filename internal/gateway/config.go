@@ -517,7 +517,7 @@ func (r *IdentityRegistry) CheckPeer(computerID, peerIP string, bindIfUnpinned b
 // address. Subsequent use from any other guest peer is refused. This binding
 // is persisted alongside the token hash so a gateway restart cannot widen the
 // bearer to every runtime VM again. The Jev route no longer calls it: its
-// first-use write follows the binding mode (Handler.jevPeerAllowed).
+// first-use pin is skipped only in strict (Handler.jevPeerAllowed).
 func (r *IdentityRegistry) BindPeer(computerID, peerIP string) error {
 	if strings.TrimSpace(computerID) == "" || strings.TrimSpace(peerIP) == "" {
 		return fmt.Errorf("Jev peer binding requires computer and peer")
