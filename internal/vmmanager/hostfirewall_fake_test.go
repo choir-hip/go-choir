@@ -126,7 +126,7 @@ func normalizeFakeSpec(spec []string) ([]string, bool) {
 		val string
 		set bool
 	}
-	var s, d, in, out, proto, dport, uidOwner, comment, target, toDest opt
+	var s, d, in, out, proto, dport, ctstate, uidOwner, comment, target, toDest opt
 	neg := false
 	for i := 0; i < len(spec); i++ {
 		tok := spec[i]
@@ -156,12 +156,14 @@ func normalizeFakeSpec(spec []string) ([]string, bool) {
 			dst = &comment
 		case "--uid-owner":
 			dst = &uidOwner
+		case "--ctstate":
+			dst = &ctstate
 		case "-j":
 			dst = &target
 		case "--to-destination":
 			dst = &toDest
 		case "-m":
-			if val != "tcp" && val != "comment" && val != "owner" {
+			if val != "tcp" && val != "udp" && val != "comment" && val != "owner" && val != "conntrack" {
 				return nil, false
 			}
 			i++
@@ -193,8 +195,16 @@ func normalizeFakeSpec(spec []string) ([]string, bool) {
 	add(out, "-o")
 	add(proto, "-p")
 	if dport.set {
-		outFields = append(outFields, "-m", "tcp")
+		module := "tcp"
+		if proto.val == "udp" {
+			module = "udp"
+		}
+		outFields = append(outFields, "-m", module)
 		add(dport, "--dport")
+	}
+	if ctstate.set {
+		outFields = append(outFields, "-m", "conntrack")
+		add(ctstate, "--ctstate")
 	}
 	if uidOwner.set {
 		outFields = append(outFields, "-m", "owner")
@@ -457,6 +467,8 @@ type fakePacket struct {
 	src, dst string
 	proto    string
 	dport    string
+	// state is the conntrack state; "" is NEW.
+	state string
 }
 
 // verdict walks a packet through filter/<chain> and returns ACCEPT, DROP,
@@ -529,6 +541,15 @@ func fakeMatches(fields []string, p fakePacket) bool {
 			ok = p.proto == val
 		case "--dport":
 			ok = p.dport == val
+		case "--ctstate":
+			state := p.state
+			if state == "" {
+				state = "NEW"
+			}
+			ok = false
+			for _, st := range strings.Split(val, ",") {
+				ok = ok || st == state
+			}
 		default:
 			i++
 			neg = false
@@ -638,10 +659,19 @@ func (f *fakeIP) has(name string) bool {
 }
 
 func newFakeHostNet(t *testing.T, ipt *fakeIPTables, ip *fakeIP) *hostNet {
+	h, _ := newFakeHostNetWithEgress(t, ipt, ip)
+	return h
+}
+
+// newFakeHostNetWithEgress also returns the fake behind the guest egress
+// policy (mangle and ip6tables), so tests can inject its failures.
+func newFakeHostNetWithEgress(t *testing.T, ipt *fakeIPTables, ip *fakeIP) (*hostNet, *fakeNetfilter) {
+	nf := newFakeNetfilter()
 	return &hostNet{
 		iptables:  ipt.runWithNew,
 		ip:        ip.run,
 		writeProc: func(string, string) error { return nil },
 		pool:      guestPoolCIDRs(),
-	}
+		egress:    &guestEgressInstaller{run: nf.run, ipt: "iptables", ip6t: "ip6tables"},
+	}, nf
 }

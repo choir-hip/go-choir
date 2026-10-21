@@ -169,6 +169,14 @@ func LoadConfigFromEnv() ManagerConfig {
 		}
 	}
 
+	if v := strings.TrimSpace(os.Getenv("VMCTL_GUEST_DNS_PORT")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n < 65536 {
+			cfg.GuestDNSPort = n
+		} else {
+			log.Printf("vmmanager: ignoring VMCTL_GUEST_DNS_PORT=%q: not a port", v)
+		}
+	}
+
 	if v := os.Getenv("VM_SOURCE_SEED_REPO"); v != "" {
 		cfg.SourceSeedRepoPath = strings.TrimSpace(v)
 	} else if _, err := os.Stat("/opt/go-choir/.git"); err == nil {

@@ -602,8 +602,9 @@ func (m *Manager) ResumeVMFromSnapshot(vmID string, expect VMConfig, issue Resum
 		memPath = "/" + snapshotDirName + "/" + snapshotMemName
 		m.mu.Lock()
 		m.recordConfinementLocked(vmID, receipt)
-		m.prepareVMNetwork(vmID, meta.HostPort, cfg.GuestPort, receipt.UID)
-		err = m.startJailedFirecracker(vmID, receipt, jailFirecrackerRestoreArgs())
+		if err = m.prepareVMNetwork(vmID, meta.HostPort, cfg.GuestPort, receipt.UID); err == nil {
+			err = m.startJailedFirecracker(vmID, receipt, jailFirecrackerRestoreArgs())
+		}
 		m.mu.Unlock()
 	} else {
 		var ok bool
@@ -614,8 +615,9 @@ func (m *Manager) ResumeVMFromSnapshot(vmID string, expect VMConfig, issue Resum
 		m.mu.Lock()
 		m.recordConfinementLocked(vmID, receipt)
 		m.reclaimDirectOwnership(vmID)
-		m.prepareVMNetwork(vmID, meta.HostPort, cfg.GuestPort, -1)
-		err = m.startFirecrackerProcess(vmID, firecrackerRestoreArgs(vmID, sock))
+		if err = m.prepareVMNetwork(vmID, meta.HostPort, cfg.GuestPort, -1); err == nil {
+			err = m.startFirecrackerProcess(vmID, firecrackerRestoreArgs(vmID, sock))
+		}
 		m.mu.Unlock()
 	}
 	if err != nil {

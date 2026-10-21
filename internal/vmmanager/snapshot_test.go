@@ -238,6 +238,9 @@ func newSnapshotFixture(t *testing.T) *snapshotFixture {
 	cfg.BootReadyTimeout = 2 * time.Second
 	cfg.HealthCheckTimeout = time.Second
 	mgr := NewManager(cfg)
+	// The host floor fails a start whose rules do not install (SEC-03):
+	// tap networking runs against the fakes, never the host.
+	mgr.hostNet = newFakeHostNet(t, newFakeIPTables(t), newFakeIP(nil))
 	prevStatfs := statfsAvailable
 	statfsAvailable = func(string) (int64, error) { return 1 << 50, nil }
 	t.Cleanup(func() { statfsAvailable = prevStatfs })

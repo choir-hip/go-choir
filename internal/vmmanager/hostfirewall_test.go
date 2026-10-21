@@ -43,6 +43,8 @@ import (
 //	F16 a crash teardown races a relaunch and deletes the new VM's tap;
 //	F17 hostNet changes the host's FORWARD policy or deletes chains it does
 //	    not own.
+//	F18 (SEC-03) a new connection is forwarded towards a guest: `-o <tap>`
+//	    must admit replies (ESTABLISHED,RELATED) only.
 
 const nodeBFixture = "testdata/node-b-iptables-2026-10-14.txt"
 
@@ -153,9 +155,15 @@ func assertIsolated(t *testing.T, ipt *fakeIPTables, taps []testTap) {
 		if v := ipt.verdict("FORWARD", spoof); v != "DROP" {
 			t.Fatalf("guest %s forged-source egress: verdict %q, want DROP", a.name, v)
 		}
-		reply := fakePacket{in: "eno1", out: a.name, src: "1.1.1.1", dst: a.guest, proto: "tcp", dport: "50000"}
-		if v := ipt.verdict("FORWARD", reply); v != "ACCEPT" && v != "policy ACCEPT" {
-			t.Fatalf("reply to guest %s: verdict %q, want accepted", a.name, v)
+		reply := fakePacket{in: "eno1", out: a.name, src: "1.1.1.1", dst: a.guest, proto: "tcp", dport: "50000", state: "ESTABLISHED"}
+		if v := ipt.verdict("FORWARD", reply); v != "ACCEPT" {
+			t.Fatalf("reply to guest %s: verdict %q, want ACCEPT", a.name, v)
+		}
+		// SEC-03 (F8): towards a guest, only replies are forwarded.
+		inbound := reply
+		inbound.state = ""
+		if v := ipt.verdict("FORWARD", inbound); v != "DROP" {
+			t.Fatalf("new connection forwarded to guest %s: verdict %q, want DROP\n%s", a.name, v, ipt.dump())
 		}
 	}
 }
@@ -454,6 +462,10 @@ func TestEnsureTapMigratesLegacyLiveTapRules(t *testing.T) {
 		if v := ipt.verdict("FORWARD", crossGuest(tp, other)); v != "DROP" {
 			t.Fatalf("after %v cross-guest verdict %q", step, v)
 		}
+		reply := fakePacket{in: "eno1", out: tp.name, src: "1.1.1.1", dst: tp.guest, proto: "tcp", dport: "50000", state: "ESTABLISHED"}
+		if v := ipt.verdict("FORWARD", reply); v != "ACCEPT" && v != "policy ACCEPT" {
+			t.Fatalf("after %v replies to the guest dropped: %q", step, v)
+		}
 	}
 	if err := h.ensureTap(tp.name, tp.guest); err != nil {
 		t.Fatal(err)
@@ -468,9 +480,10 @@ func TestEnsureTapMigratesLegacyLiveTapRules(t *testing.T) {
 			forward = append(forward, line)
 		}
 	}
-	want := []string{"-A FORWARD -o vm-lackej5pmie2 -m comment --comment go-choir-vm-vm-lackej5pmie2 -j ACCEPT"}
-	if !reflect.DeepEqual(forward, want) {
-		t.Fatalf("FORWARD rules for the migrated tap = %#v, want %#v", forward, want)
+	// SEC-03: replies go through CHOIR-GUEST-RET; no per-tap FORWARD rule
+	// is left.
+	if len(forward) != 0 {
+		t.Fatalf("FORWARD rules for the migrated tap = %#v, want none", forward)
 	}
 	for _, line := range ipt.rules("filter", "INPUT") {
 		if ruleOwnerTap(iptablesRuleFields(line)[2:]) == tp.name && strings.Contains(line, "-j ACCEPT") && !strings.Contains(line, "-s 10.200.114.2/32") {

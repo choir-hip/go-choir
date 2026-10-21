@@ -17,14 +17,25 @@ import (
 
 // Host firewall for guest taps (S1a boundary).
 //
-// Guest-originated forwarding is default-deny. FORWARD gets one jump, for
-// every guest interface (vm-+), into a chain this code owns:
+// Guest-originated forwarding is default-deny, and so is forwarding towards
+// a guest except replies. FORWARD gets two jumps, for every guest interface
+// (vm-+), into chains this code owns:
 //
 //	FORWARD           -i vm-+ -j CHOIR-GUEST-FWD                  (position 1)
+//	                  -o vm-+ -j CHOIR-GUEST-RET                  (position 1)
 //	CHOIR-GUEST-FWD   -d <each guest pool CIDR> -j DROP           (no guest->guest)
 //	                  -j CHOIR-GUEST-TAPS
 //	                  -j DROP                                     (fail closed)
 //	CHOIR-GUEST-TAPS  -s <guest>/32 -i <tap> -j ACCEPT            (one per live tap)
+//	CHOIR-GUEST-RET   --ctstate RELATED,ESTABLISHED -j ACCEPT     (replies only, SEC-03)
+//	                  -j DROP
+//
+// Host services: INPUT holds, per tap, an anti-spoof DROP and one ACCEPT per
+// service port bound to the guest's source and to the loopback destination
+// its own tap DNATs to. What a guest may send at all is narrowed first, in
+// mangle PREROUTING (guest_egress.go). Every install step reports its
+// failure and a VM whose rules did not all install does not start
+// (setupHostNetworking; docs/problems/host-egress-floor-fails-open-2026-10-21.md).
 //
 // The pool CIDRs come from the allocator's range (vmSubnetSecondOctetBase,
 // vmSubnetSecondOctetCount), so the deny always covers every address
@@ -48,6 +59,7 @@ import (
 const (
 	guestForwardChain   = "CHOIR-GUEST-FWD"
 	guestTapsChain      = "CHOIR-GUEST-TAPS"
+	guestReplyChain     = "CHOIR-GUEST-RET"
 	guestBaseComment    = "go-choir-guest"
 	guestRebuildComment = "go-choir-guest-rebuild"
 	tapCommentPrefix    = "go-choir-vm-"
@@ -94,6 +106,20 @@ func guestJumpSpec() []string {
 	return []string{"-i", guestIfaceWildcard, "-m", "comment", "--comment", guestBaseComment, "-j", guestForwardChain}
 }
 
+func guestReplyJumpSpec() []string {
+	return []string{"-o", guestIfaceWildcard, "-m", "comment", "--comment", guestBaseComment, "-j", guestReplyChain}
+}
+
+// guestReplyChainSpecs: towards a guest, only replies to its own flows (and
+// their ICMP errors) are forwarded. Host processes reach a guest through
+// the OUTPUT DNAT, which never crosses FORWARD.
+func guestReplyChainSpecs() [][]string {
+	return [][]string{
+		{"-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-m", "comment", "--comment", guestBaseComment, "-j", "ACCEPT"},
+		{"-m", "comment", "--comment", guestBaseComment, "-j", "DROP"},
+	}
+}
+
 func guestForwardChainSpecs(pool []string) [][]string {
 	specs := make([][]string, 0, len(pool)+2)
 	for _, cidr := range pool {
@@ -116,13 +142,16 @@ func tapInputDropSpec(tap, guestIP string) []string {
 }
 
 // tapHostServiceInputRuleSpec admits the guest, by its own source address,
-// to one host service port. The source match makes the ACCEPT safe whatever
-// its position relative to the anti-spoof DROP.
-func tapHostServiceInputRuleSpec(tap, guestIP, port, comment string) []string {
+// to one host service port on loopback, which only its own tap's DNAT
+// reaches (another tap's host address is not loopback). The source match
+// makes the ACCEPT safe whatever its position relative to the anti-spoof
+// DROP.
+func tapHostServiceInputRuleSpec(tap, guestIP, proto, port, comment string) []string {
 	return []string{
 		"-s", guestIP + "/32",
+		"-d", "127.0.0.1/32",
 		"-i", tap,
-		"-p", "tcp", "-m", "tcp", "--dport", port,
+		"-p", proto, "-m", proto, "--dport", port,
 		"-m", "comment", "--comment", comment,
 		"-j", "ACCEPT",
 	}
@@ -133,19 +162,14 @@ func tapForwardAcceptSpec(tap, guestIP string) []string {
 	return []string{"-s", guestIP + "/32", "-i", tap, "-m", "comment", "--comment", tapComment(tap), "-j", "ACCEPT"}
 }
 
-// tapForwardReturnSpec admits forwarded traffic towards the guest (replies to
-// its egress). Cross-guest packets never get here: they are dropped on the
-// ingress side by CHOIR-GUEST-FWD.
-func tapForwardReturnSpec(tap string) []string {
-	return []string{"-o", tap, "-m", "comment", "--comment", tapComment(tap), "-j", "ACCEPT"}
-}
-
 type natRuleSpec struct {
 	chain string
 	spec  []string
 }
 
-func tapNATSpecs(tap, hostIP, guestIP string, hostPort, guestPort int) []natRuleSpec {
+// tapNATSpecs: dnsPort > 0 also sends the guest's DNS, to its tap host
+// address port 53, to the host resolver on 127.0.0.1:dnsPort (SEC-10).
+func tapNATSpecs(tap, hostIP, guestIP string, hostPort, guestPort, dnsPort int) []natRuleSpec {
 	comment := tapComment(tap)
 	subnet := guestIP + "/30"
 	if _, n, err := net.ParseCIDR(subnet); err == nil {
@@ -162,6 +186,12 @@ func tapNATSpecs(tap, hostIP, guestIP string, hostPort, guestPort int) []natRule
 	for _, port := range tapReachableHostServicePorts() {
 		specs = append(specs, natRuleSpec{"PREROUTING", []string{"-d", hostIP + "/32", "-p", "tcp", "-m", "tcp", "--dport", port,
 			"-m", "comment", "--comment", comment, "-j", "DNAT", "--to-destination", "127.0.0.1:" + port}})
+	}
+	if dnsPort > 0 {
+		for _, proto := range []string{"udp", "tcp"} {
+			specs = append(specs, natRuleSpec{"PREROUTING", []string{"-d", hostIP + "/32", "-p", proto, "-m", proto, "--dport", "53",
+				"-m", "comment", "--comment", comment, "-j", "DNAT", "--to-destination", fmt.Sprintf("127.0.0.1:%d", dnsPort)}})
+		}
 	}
 	return specs
 }
@@ -208,7 +238,7 @@ func ruleOptions(spec []string) (opts map[string]string, extra []string) {
 			continue
 		}
 		switch tok {
-		case "-s", "-d", "-i", "-o", "-p", "--dport", "--comment", "-j", "--to-destination":
+		case "-s", "-d", "-i", "-o", "-p", "--dport", "--comment", "-j", "--to-destination", "--ctstate":
 			if i+1 >= len(spec) {
 				extra = append(extra, tok)
 				continue
@@ -216,6 +246,11 @@ func ruleOptions(spec []string) (opts map[string]string, extra []string) {
 			val := spec[i+1]
 			if tok == "-s" || tok == "-d" {
 				val = canonicalCIDR(val)
+			}
+			if tok == "--ctstate" {
+				states := strings.Split(val, ",")
+				sort.Strings(states)
+				val = strings.Join(states, ",")
 			}
 			key := tok
 			if neg {
@@ -285,6 +320,9 @@ type hostNet struct {
 	ip        func(args ...string) ([]byte, error)
 	writeProc func(path, value string) error
 	pool      []string
+	// guestDNSPort is the host resolver's loopback port guests reach at
+	// their tap host address port 53 (SEC-10); 0 means none.
+	guestDNSPort int
 	// egress is the guest egress policy (guest_egress.go). Nil in tests that
 	// fake the command runners, so they never touch the host's netfilter.
 	egress *guestEgressInstaller
@@ -323,6 +361,7 @@ func (m *Manager) net() *hostNet {
 	m.hostNetOnce.Do(func() {
 		if m.hostNet == nil {
 			m.hostNet = newSystemHostNet()
+			m.hostNet.guestDNSPort = m.cfg.GuestDNSPort
 		}
 	})
 	return m.hostNet
@@ -380,23 +419,30 @@ func (h *hostNet) ensureBaseLocked() error {
 	if err := h.ensureChainLocked(guestTapsChain); err != nil {
 		return err
 	}
-	if err := h.ensureChainLocked(guestForwardChain); err != nil {
-		return err
-	}
-	current, err := h.listChainLocked("filter", guestForwardChain)
-	if err != nil {
-		return err
-	}
-	want := guestForwardChainSpecs(h.pool)
-	if !sameRules(current, want) {
-		if err := h.rebuildForwardChainLocked(current, want); err != nil {
+	for _, base := range []struct {
+		chain string
+		want  [][]string
+		jump  []string
+	}{
+		{guestForwardChain, guestForwardChainSpecs(h.pool), guestJumpSpec()},
+		{guestReplyChain, guestReplyChainSpecs(), guestReplyJumpSpec()},
+	} {
+		if err := h.ensureChainLocked(base.chain); err != nil {
 			return err
 		}
-	}
-	jump := guestJumpSpec()
-	if _, err := h.ipt("filter", append([]string{"-C", "FORWARD"}, jump...)...); err != nil {
-		if _, err := h.ipt("filter", append([]string{"-I", "FORWARD", "1"}, jump...)...); err != nil {
-			return fmt.Errorf("install guest forward jump: %w", err)
+		current, err := h.listChainLocked("filter", base.chain)
+		if err != nil {
+			return err
+		}
+		if !sameRules(current, base.want) {
+			if err := h.rebuildBaseChainLocked(base.chain, current, base.want); err != nil {
+				return err
+			}
+		}
+		if _, err := h.ipt("filter", append([]string{"-C", "FORWARD"}, base.jump...)...); err != nil {
+			if _, err := h.ipt("filter", append([]string{"-I", "FORWARD", "1"}, base.jump...)...); err != nil {
+				return fmt.Errorf("install FORWARD jump to %s: %w", base.chain, err)
+			}
 		}
 	}
 	return nil
@@ -414,32 +460,32 @@ func sameRules(current []listedRule, want [][]string) bool {
 	return true
 }
 
-func (h *hostNet) rebuildForwardChainLocked(current []listedRule, want [][]string) error {
+func (h *hostNet) rebuildBaseChainLocked(chain string, current []listedRule, want [][]string) error {
 	guard := guestRebuildGuardSpec()
 	guarded := len(current) > 0
 	if guarded {
-		if _, err := h.ipt("filter", append([]string{"-I", guestForwardChain, "1"}, guard...)...); err != nil {
-			return fmt.Errorf("guard %s rebuild: %w", guestForwardChain, err)
+		if _, err := h.ipt("filter", append([]string{"-I", chain, "1"}, guard...)...); err != nil {
+			return fmt.Errorf("guard %s rebuild: %w", chain, err)
 		}
 		// Only this code writes the chain, under h.mu: rule 2 onward is the
 		// old content.
 		for range current {
-			if _, err := h.ipt("filter", "-D", guestForwardChain, "2"); err != nil {
-				return fmt.Errorf("clear %s (guard stays, forwarding fails closed): %w", guestForwardChain, err)
+			if _, err := h.ipt("filter", "-D", chain, "2"); err != nil {
+				return fmt.Errorf("clear %s (guard stays, forwarding fails closed): %w", chain, err)
 			}
 		}
 	}
 	for _, spec := range want {
-		if _, err := h.ipt("filter", append([]string{"-A", guestForwardChain}, spec...)...); err != nil {
-			return fmt.Errorf("fill %s (guard stays, forwarding fails closed): %w", guestForwardChain, err)
+		if _, err := h.ipt("filter", append([]string{"-A", chain}, spec...)...); err != nil {
+			return fmt.Errorf("fill %s (guard stays, forwarding fails closed): %w", chain, err)
 		}
 	}
 	if guarded {
-		if _, err := h.ipt("filter", append([]string{"-D", guestForwardChain}, guard...)...); err != nil {
-			return fmt.Errorf("remove %s rebuild guard: %w", guestForwardChain, err)
+		if _, err := h.ipt("filter", append([]string{"-D", chain}, guard...)...); err != nil {
+			return fmt.Errorf("remove %s rebuild guard: %w", chain, err)
 		}
 	}
-	log.Printf("vmmanager: installed guest forward chain %s (pool %s)", guestForwardChain, strings.Join(h.pool, ","))
+	log.Printf("vmmanager: installed guest chain %s (pool %s)", chain, strings.Join(h.pool, ","))
 	return nil
 }
 
@@ -501,10 +547,11 @@ func (h *hostNet) reconcileTapChainLocked(table, chain, tap string, desired []de
 }
 
 // ensureTap installs a live tap's filter rules: its CHOIR-GUEST-TAPS egress
-// ACCEPT (before the base, so egress never drops), the base, its INPUT
-// anti-spoof DROP and source-bound service ACCEPTs, and the FORWARD return
-// ACCEPT. Older rule shapes for the tap are removed only after the new ones
-// are in. Idempotent.
+// ACCEPT (before the base, so egress never drops), the base (whose reply
+// chain carries every guest's return traffic), and its INPUT anti-spoof
+// DROP and source- and loopback-bound service ACCEPTs. Older rule shapes
+// for the tap (its per-tap FORWARD return ACCEPT) are removed only after
+// the new ones are in. Idempotent.
 func (h *hostNet) ensureTap(tap, guestIP string) error {
 	if !isOwnedTapName(tap) {
 		return fmt.Errorf("refuse firewall rules for %q: not a guest tap name", tap)
@@ -525,12 +572,19 @@ func (h *hostNet) ensureTap(tap, guestIP string) error {
 	}
 	input := []desiredRule{{spec: tapInputDropSpec(tap, guestIP), insertAt: 1}}
 	for _, port := range tapReachableHostServicePorts() {
-		input = append(input, desiredRule{spec: tapHostServiceInputRuleSpec(tap, guestIP, port, tapComment(tap)), insertAt: 1})
+		input = append(input, desiredRule{spec: tapHostServiceInputRuleSpec(tap, guestIP, "tcp", port, tapComment(tap)), insertAt: 1})
+	}
+	if h.guestDNSPort > 0 {
+		for _, proto := range []string{"udp", "tcp"} {
+			input = append(input, desiredRule{spec: tapHostServiceInputRuleSpec(tap, guestIP, proto, fmt.Sprintf("%d", h.guestDNSPort), tapComment(tap)), insertAt: 1})
+		}
 	}
 	if err := h.reconcileTapChainLocked("filter", "INPUT", tap, input); err != nil {
 		return err
 	}
-	return h.reconcileTapChainLocked("filter", "FORWARD", tap, []desiredRule{{spec: tapForwardReturnSpec(tap)}})
+	// No per-tap FORWARD rule any more: CHOIR-GUEST-RET admits replies for
+	// every tap. This removes the older `-o <tap> -j ACCEPT`.
+	return h.reconcileTapChainLocked("filter", "FORWARD", tap, nil)
 }
 
 // ensureNAT installs a tap's nat rules, each only if missing.
@@ -538,7 +592,7 @@ func (h *hostNet) ensureNAT(tap, hostIP, guestIP string, hostPort, guestPort int
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	var firstErr error
-	for _, r := range tapNATSpecs(tap, hostIP, guestIP, hostPort, guestPort) {
+	for _, r := range tapNATSpecs(tap, hostIP, guestIP, hostPort, guestPort, h.guestDNSPort) {
 		if _, err := h.ipt("nat", append([]string{"-C", r.chain}, r.spec...)...); err == nil {
 			continue
 		}
@@ -622,9 +676,11 @@ func (h *hostNet) reconcileAtStart() {
 		}
 	}
 	if err := h.ensureBaseLocked(); err != nil {
-		log.Printf("vmmanager: warning: guest forward default-deny not installed: %v", err)
+		log.Printf("vmmanager: WARNING: guest forward default-deny not installed (no VM starts until it is): %v", err)
 	}
-	h.ensureGuestEgress()
+	if err := h.ensureGuestEgress(); err != nil {
+		log.Printf("vmmanager: WARNING: guest egress policy not installed (no VM starts until it is): %v", err)
+	}
 }
 
 // deleteMatching deletes rules of one chain whose listed text contains match.
