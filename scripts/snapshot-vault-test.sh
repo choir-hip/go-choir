@@ -82,6 +82,10 @@ EOF
 #!/bin/sh
 echo "mount $*" >> "$STATE/calls.log"
 [ -f "$STATE/fail_mount" ] && exit 1
+# A fresh ext4's root directory is 0755: the mount replaces the directory the
+# script prepared, as the kernel does.
+for last; do :; done
+chmod 755 "$last"
 : > "$STATE/mounted"; exit 0
 EOF
   cat > "$box/bin/umount" <<'EOF'
@@ -99,7 +103,9 @@ EOF
   cat > "$box/bin/truncate" <<'EOF'
 #!/bin/sh
 echo "truncate $*" >> "$STATE/calls.log"
-: > "$3"; exit 0
+# Created with whatever mode the caller's umask gives; make it loose so the
+# script's own chmod is what the test sees.
+: > "$3"; chmod 644 "$3"; exit 0
 EOF
   for t in cryptsetup losetup mkfs.ext4 mount umount mountpoint truncate; do chmod +x "$box/bin/$t"; done
 }
