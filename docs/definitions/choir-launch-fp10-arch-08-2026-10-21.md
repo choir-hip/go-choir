@@ -87,9 +87,30 @@ boundaries:
 
 now:
   status: checkpoint_incomplete
-  slice: problem record, design and station file committed; the slice-1 test and code follow.
-  source_ref: e4b792b7f
+  slice: >-
+    Slice 1 built and committed on lane/fp10-arch08-budgets, not deployed:
+    491ce4275 (docs), d8990fdee (test, does not build alone), 6580f9916
+    (code). go test ./internal/agentcore -run TestResearch passes. go test
+    ./internal/yaegikernel has 10 failures in this lane, every one a
+    spawned worker failing to load libicui18n.so.76 (the worker runs with
+    a cleaned environment, without this machine's Nix ICU path); the diff
+    there is a comment and three omitempty fields. FP0: run the yaegikernel
+    tests where the worker finds ICU (CI), send 6580f9916 to a panel, land
+    the three commits together, and run the deployed proof in the design.
+    Slices 2 to 5 wait on DEC-07 or other lanes (design table).
+  source_ref: 6580f9916
   deploy_identity: unknown to this lane
+  candidate:
+    id: fp10-arch08-slice1
+    state: ready
+    ref: lane/fp10-arch08-budgets
+    base: e4b792b7f
+    digest: none
+    scope:
+      - internal/agentcore/research_children.go
+      - internal/agentcore/research_children_test.go
+      - internal/yaegikernel/broker_protocol.go
+      - internal/yaegikernel/choir.go
   conjecture:
     id: C-budget-is-scheduling
     claim: >-
