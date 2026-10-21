@@ -189,6 +189,7 @@ EXCLUDES=(
   "$ART/sha256/projection-base"   # 47 GB, rebuilt from the tape
   "$ART/checkpoint-scratch"       # regenerable scratch
   "$ROOT/secrets/offhost-backup"  # holds this backup's own key
+  "key-escrow-kek*"                # opens the sealed escrow key; the owner keeps it offline (FP9)
   "$ROOT/mail/mail.db"            # captured consistently via sqlite3 .backup
   "$ROOT/mail/mail.db-wal"
   "$ROOT/mail/mail.db-shm"
