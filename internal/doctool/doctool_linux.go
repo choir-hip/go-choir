@@ -39,37 +39,42 @@ const (
 var defaultExecRoots = []string{"/nix/store", "/usr", "/lib", "/lib64", "/bin"}
 
 // passedEnv are the daemon's variables a tool may see; nothing else crosses.
-var passedEnv = []string{"LANG", "LC_ALL", "LOCALE_ARCHIVE", "TZDIR"}
+// TZ crosses: pdfinfo prints dates in it, and observe compares outputs
+// (review B3).
+var passedEnv = []string{"LANG", "LC_ALL", "LOCALE_ARCHIVE", "TZ", "TZDIR"}
 
-// runSandboxed runs the tool through the helper. setupErr is non-nil when the
-// sandbox could not be set up and the tool did not run.
-func runSandboxed(ctx context.Context, opts runOptions, tool, toolPath string, prefixArgs []string, ext string, raw []byte, suffixArgs []string) (out string, warnings []string, setupErr error) {
+// runSandboxed runs the tool through the helper. budget puts it in a cgroup
+// of its own under the document tools' root (required); without it the tool
+// stays in the daemon's cgroup, as a direct run does (observe's shadow).
+// maxRSS is the tool's peak RSS. setupErr is non-nil when the sandbox could
+// not be set up and the tool did not run.
+func runSandboxed(ctx context.Context, opts runOptions, budget bool, tool, toolPath string, prefixArgs []string, ext string, raw []byte, suffixArgs []string) (out string, warnings []string, maxRSS int64, setupErr error) {
 	resolved, err := filepath.EvalSymlinks(toolPath)
 	if err != nil {
-		return "", nil, setupErrorf("resolve %s: %v", tool, err)
+		return "", nil, 0, setupErrorf("resolve %s: %v", tool, err)
 	}
 	// D1: the identity switch needs a root spawner. Never run as root
 	// instead.
 	root := os.Geteuid() == 0
 	if !root && !opts.testUserNamespace {
-		return "", nil, setupErrorf("running tools as uid %d needs a root spawner (running as uid %d)", SandboxUID, os.Geteuid())
+		return "", nil, 0, setupErrorf("running tools as uid %d needs a root spawner (running as uid %d)", SandboxUID, os.Geteuid())
 	}
 	helperBin := opts.helperBin
 	if helperBin == "" {
 		if helperBin, err = os.Executable(); err != nil {
-			return "", nil, setupErrorf("helper binary: %v", err)
+			return "", nil, 0, setupErrorf("helper binary: %v", err)
 		}
 	}
 
 	// D4: the memory and process budget, part of the sandbox.
 	var cg *toolCgroup
-	if !opts.testNoCgroup {
+	if budget && !opts.testNoCgroup {
 		cgRoot := os.Getenv(cgroupRootEnv)
 		if cgRoot == "" {
-			return "", nil, setupErrorf("no memory budget: %s is unset (no desks cgroup)", cgroupRootEnv)
+			return "", nil, 0, setupErrorf("no memory budget: %s is unset (no document tools cgroup)", cgroupRootEnv)
 		}
 		if cg, err = newToolCgroup(cgRoot); err != nil {
-			return "", nil, setupErrorf("%v", err)
+			return "", nil, 0, setupErrorf("%v", err)
 		}
 		defer cg.remove()
 	}
@@ -77,20 +82,20 @@ func runSandboxed(ctx context.Context, opts runOptions, tool, toolPath string, p
 	// The input: a 0400 file in a 0700 directory the sandbox user owns.
 	dir, err := os.MkdirTemp("", "choir-doctool-")
 	if err != nil {
-		return "", nil, setupErrorf("input dir: %v", err)
+		return "", nil, 0, setupErrorf("input dir: %v", err)
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
 	input := filepath.Join(dir, "input"+safeExt(ext))
 	if err := os.WriteFile(input, raw, 0o400); err != nil {
-		return "", nil, setupErrorf("input file: %v", err)
+		return "", nil, 0, setupErrorf("input file: %v", err)
 	}
 	if err := os.Chmod(dir, 0o700); err != nil {
-		return "", nil, setupErrorf("input dir mode: %v", err)
+		return "", nil, 0, setupErrorf("input dir mode: %v", err)
 	}
 	if root && !opts.testUserNamespace {
 		for _, p := range []string{dir, input} {
 			if err := os.Lchown(p, SandboxUID, SandboxUID); err != nil {
-				return "", nil, setupErrorf("input owner: %v", err)
+				return "", nil, 0, setupErrorf("input owner: %v", err)
 			}
 		}
 	}
@@ -136,16 +141,19 @@ func runSandboxed(ctx context.Context, opts runOptions, tool, toolPath string, p
 	cmd.WaitDelay = 2 * time.Second
 
 	if err := cmd.Start(); err != nil {
-		return "", nil, setupErrorf("start: %v", err)
+		return "", nil, 0, setupErrorf("start: %v", err)
 	}
 	err = cmd.Wait()
+	if ru, ok := cmd.ProcessState.SysUsage().(*syscall.Rusage); ok && ru != nil {
+		maxRSS = ru.Maxrss << 10 // KiB
+	}
 	if stdout.overflow {
-		return "", []string{fmt.Sprintf("%s_output_exceeds_cap: %d MiB", tool, limit>>20)}, nil
+		return "", []string{fmt.Sprintf("%s_output_exceeds_cap: %d MiB", tool, limit>>20)}, maxRSS, nil
 	}
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) && exitErr.ExitCode() == helperSetupExit {
 		if msg, ok := strings.CutPrefix(stderr.buf.String(), helperSetupPrefix); ok {
-			return "", nil, setupErrorf("%s", strings.TrimSpace(truncate(msg, 500)))
+			return "", nil, maxRSS, setupErrorf("%s", strings.TrimSpace(truncate(msg, 500)))
 		}
 	}
 	if err != nil {
@@ -155,9 +163,9 @@ func runSandboxed(ctx context.Context, opts runOptions, tool, toolPath string, p
 				w += fmt.Sprintf(" (killed by its memory budget, memory.max %d MiB)", toolMemoryMax>>20)
 			}
 		}
-		return "", []string{w}, nil
+		return "", []string{w}, maxRSS, nil
 	}
-	return stdout.buf.String(), nil, nil
+	return stdout.buf.String(), nil, maxRSS, nil
 }
 
 func helperEnv(tool, dir, resolved string) []string {
@@ -189,7 +197,49 @@ func safeExt(ext string) string {
 	return b.String()
 }
 
-// toolCgroup is one run's cgroup under the desks cgroup.
+// EnsureToolCgroupRoot makes the document tools' cgroup root at daemon
+// start: the memory and pids controllers for its children, its aggregate
+// memory.max, and the removal of tool cgroups a crashed daemon left (t-*,
+// in this root only; tools die with the daemon, nothing resumes). It lists
+// one directory.
+func EnsureToolCgroupRoot(root string) error {
+	if root == "" {
+		return fmt.Errorf("document tools cgroup root is not set")
+	}
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		return fmt.Errorf("document tools cgroup %s: %w", root, err)
+	}
+	enable := func(dir string) error {
+		err := os.WriteFile(filepath.Join(dir, "cgroup.subtree_control"), []byte("+memory +pids"), 0o644)
+		if err != nil && !strings.Contains(err.Error(), "device or resource busy") {
+			return fmt.Errorf("document tools cgroup: enable controllers in %s: %w", dir, err)
+		}
+		return nil
+	}
+	if err := enable(filepath.Dir(root)); err != nil {
+		return err
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return fmt.Errorf("document tools cgroup: list %s: %w", root, err)
+	}
+	for _, e := range entries {
+		if e.IsDir() && strings.HasPrefix(e.Name(), toolCgroupPrefix) {
+			p := filepath.Join(root, e.Name())
+			_ = os.WriteFile(filepath.Join(p, "cgroup.kill"), []byte("1"), 0o644)
+			_ = os.RemoveAll(p) // a real cgroup is removed by rmdir; RemoveAll does that for an empty one
+		}
+	}
+	if err := enable(root); err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(root, "memory.max"), []byte(strconv.Itoa(toolAggregateMax)), 0o644); err != nil {
+		return fmt.Errorf("document tools cgroup: memory.max: %w", err)
+	}
+	return nil
+}
+
+// toolCgroup is one run's cgroup under the document tools' root.
 type toolCgroup struct {
 	path string
 	dir  *os.File

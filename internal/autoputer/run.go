@@ -164,6 +164,7 @@ func Run() {
 	// memory limit once, at first use (docs/reports/lr-guest-memory-return-2026-10-14.md).
 	log.Printf("autoputer: gomemlimit %s", gomemlimit.ApplyDaemon(doltmemlimit.Init, doltmemlimit.NodeCacheSize))
 	ensureDeskCgroups()
+	ensureDocToolCgroups()
 	cfg := LoadConfig()
 	installHostFetchRoute(cfg.ComputerID)
 

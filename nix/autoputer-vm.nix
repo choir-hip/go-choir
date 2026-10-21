@@ -934,11 +934,14 @@ EOF
       # "doctrine" applies it, after the receipts show builds fit.
       CHOIR_CAPSULE_MEMORY_POLICY = "observe";
       # The document-tool sandbox (SDC SEC-15, internal/doctool): observe runs
-      # each tool as uid 61010 in an empty network namespace, a cgroup under
-      # the desks cgroup, Landlock and seccomp, and when that cannot be set up
-      # runs it as before with the extraction warning
-      # document_tool_sandbox_fallback. "required" refuses instead.
+      # each tool as before (that is the result) and then a sandboxed shadow of
+      # it (uid 61010, empty network namespace, Landlock, seccomp; no cgroup)
+      # whose outcome is only counted. "required" runs sandboxed in its own
+      # cgroup or refuses.
       CHOIR_DOCUMENT_TOOL_SANDBOX = "observe";
+      # The document tools' own cgroup root (never the desks'): required mode
+      # and the isolation self-test run each tool in a child of it.
+      CHOIR_DOCTOOL_CGROUP_ROOT = "/sys/fs/cgroup/choir-doctools";
       # The daemon's capability floor (SDC SEC-15, internal/capfloor): it keeps
       # 15 named capabilities and drops the rest from its bounding set.
       # observe logs what it would drop and the isolation self-test reports

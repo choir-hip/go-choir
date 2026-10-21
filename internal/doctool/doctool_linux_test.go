@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -44,6 +45,10 @@ func TestMain(m *testing.M) {
 			}
 			syscall.Close(fd)
 			os.Stdout.WriteString("ok")
+			os.Exit(0)
+		case "doctool-test-env":
+			// A tool whose output depends on its environment.
+			os.Stdout.WriteString("TZ=" + os.Getenv("TZ") + " HOME=" + os.Getenv("HOME"))
 			os.Exit(0)
 		case "doctool-test-flood":
 			chunk := make([]byte, 1<<16)
@@ -148,30 +153,20 @@ func TestRequiredModeRefusesWhatItCannotSandbox(t *testing.T) {
 	if _, err := os.Stat(marker); err == nil {
 		t.Fatal("the tool ran although the sandbox was refused")
 	}
-	// The cgroup budget is part of required mode: a test namespace with no
-	// desks cgroup is refused too.
+	// The cgroup budget is part of required mode, and it is the document
+	// tools' own root, never the desks' (review B2): with only a desks
+	// cgroup named, required refuses and writes nothing under it.
 	opts = unprivilegedSpawn(t)
 	opts.testNoCgroup = false
 	opts.mode = ModeRequired
+	desks := t.TempDir()
+	t.Setenv("CHOIR_DESK_CGROUP_ROOT", desks)
 	t.Setenv(cgroupRootEnv, "")
 	if _, warnings := run(context.Background(), opts, "/bin/sh", []string{"-c", "true"}, ".pdf", []byte("x"), nil); len(warnings) != 1 || !strings.Contains(warnings[0], cgroupRootEnv) {
 		t.Fatalf("required mode without a cgroup: warnings %v", warnings)
 	}
-}
-
-// Observe runs what it cannot sandbox as before and says so in a warning the
-// extraction keeps, so the staging probe can count fallbacks.
-func TestObserveFallsBackVisibly(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("as root the identity switch is possible")
-	}
-	opts := runOptions{helperBin: selfBin(t), mode: ModeObserve}
-	out, warnings := run(context.Background(), opts, selfBin(t), []string{"doctool-test-echo"}, ".pdf", []byte("hello"), nil)
-	if out != "hello" {
-		t.Fatalf("observe fallback output %q, warnings %v", out, warnings)
-	}
-	if len(warnings) != 1 || !strings.HasPrefix(warnings[0], "document_tool_sandbox_fallback: ") {
-		t.Fatalf("warnings %v", warnings)
+	if entries, _ := os.ReadDir(desks); len(entries) != 0 {
+		t.Fatalf("required mode wrote under the desks cgroup: %v", entries)
 	}
 }
 
@@ -262,23 +257,104 @@ func TestSelfTestFailsClosedAndJudges(t *testing.T) {
 	}
 }
 
-// Observe never makes an extraction worse: a tool that fails only inside the
-// sandbox is run again as before, and the divergence is a warning the
-// staging probe can count before required mode is turned on.
-func TestObserveRecordsASandboxDivergence(t *testing.T) {
+// Observe keeps today's result and today's kill domain (review B2, B3): the
+// direct run is the result, unchanged and with no warning added; the
+// sandboxed run is a shadow that only counts. It never runs in a cgroup,
+// the desks' or any other.
+func observeRun(t *testing.T, tool string, args ...string) (string, []string, ShadowStats) {
+	t.Helper()
+	opts := unprivilegedSpawn(t)
+	opts.mode = ModeObserve
+	opts.testNoCgroup = false // production cgroup choice: observe must make none
+	opts.syncShadow = true
+	desks, tools := t.TempDir(), t.TempDir()
+	t.Setenv("CHOIR_DESK_CGROUP_ROOT", desks)
+	t.Setenv(cgroupRootEnv, tools)
+	before := ShadowSnapshot()
+	out, warnings := run(context.Background(), opts, tool, args, ".pdf", []byte("observe"), nil)
+	for _, dir := range []string{desks, tools} {
+		if entries, _ := os.ReadDir(dir); len(entries) != 0 {
+			t.Fatalf("observe made a cgroup under %s: %v", dir, entries)
+		}
+	}
+	return out, warnings, ShadowSnapshot().Sub(before)
+}
+
+func TestObserveKeepsTheDirectResult(t *testing.T) {
 	if kernelLandlockABI() < 5 {
 		t.Skip("kernel offers no Landlock V5")
 	}
-	opts := unprivilegedSpawn(t)
-	opts.mode = ModeObserve
-	out, warnings := run(context.Background(), opts, selfBin(t), []string{"doctool-test-socket"}, ".pdf", []byte("x"), nil)
-	if out != "ok" || len(warnings) != 1 || !strings.HasPrefix(warnings[0], "document_tool_sandbox_divergence: ") {
-		t.Fatalf("observe divergence: %q %v", out, warnings)
+	// Equal: the shadow agrees, and its peak memory is recorded.
+	out, warnings, d := observeRun(t, selfBin(t), "doctool-test-echo")
+	if out != "observe" || len(warnings) != 0 || d.Runs != 1 || d.Equal != 1 || d.MaxRSSBytes <= 0 {
+		t.Fatalf("equal: %q %v %+v", out, warnings, d)
 	}
-	// Required mode keeps the sandbox's answer.
+	// The tool needs what the sandbox refuses: the result is the direct
+	// one, no warning; the shadow's failure is counted.
+	out, warnings, d = observeRun(t, selfBin(t), "doctool-test-socket")
+	if out != "ok" || len(warnings) != 0 || d.SandboxFailed != 1 {
+		t.Fatalf("sandbox failed: %q %v %+v", out, warnings, d)
+	}
+	// The output differs inside the sandbox (its HOME): counted as a
+	// divergence, the direct output returned.
+	t.Setenv("HOME", "/home/direct")
+	out, warnings, d = observeRun(t, selfBin(t), "doctool-test-env")
+	if !strings.Contains(out, "HOME=/home/direct") || len(warnings) != 0 || d.Diverged != 1 {
+		t.Fatalf("diverged: %q %v %+v", out, warnings, d)
+	}
+}
+
+// A spawner that cannot sandbox still returns today's result, unwarned.
+func TestObserveSetupFailureKeepsTheDirectResult(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("as root the identity switch is possible")
+	}
+	before := ShadowSnapshot()
+	opts := runOptions{helperBin: selfBin(t), mode: ModeObserve, syncShadow: true}
+	out, warnings := run(context.Background(), opts, selfBin(t), []string{"doctool-test-echo"}, ".pdf", []byte("hello"), nil)
+	if out != "hello" || len(warnings) != 0 {
+		t.Fatalf("observe setup failure: %q %v", out, warnings)
+	}
+	if d := ShadowSnapshot().Sub(before); d.SetupFailed != 1 || d.Runs != 1 {
+		t.Fatalf("stats %+v", d)
+	}
+}
+
+// Review B3: TZ crosses into the sandbox (pdfinfo prints dates in it).
+func TestSandboxKeepsTZ(t *testing.T) {
+	if kernelLandlockABI() < 5 {
+		t.Skip("kernel offers no Landlock V5")
+	}
+	t.Setenv("TZ", "America/New_York")
+	opts := unprivilegedSpawn(t)
 	opts.mode = ModeRequired
-	out, warnings = run(context.Background(), opts, selfBin(t), []string{"doctool-test-socket"}, ".pdf", []byte("x"), nil)
-	if out != "" || len(warnings) != 1 || !strings.Contains(warnings[0], "_failed") {
-		t.Fatalf("required: %q %v", out, warnings)
+	out, warnings := run(context.Background(), opts, selfBin(t), []string{"doctool-test-env"}, ".pdf", []byte("x"), nil)
+	if !strings.HasPrefix(out, "TZ=America/New_York ") || len(warnings) != 0 {
+		t.Fatalf("sandboxed TZ: %q %v", out, warnings)
+	}
+}
+
+// The document tools' cgroup root: made at daemon start, its own aggregate,
+// and a boot sweep of t-* leftovers in it alone.
+func TestEnsureToolCgroupRoot(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "choir-doctools")
+	if err := os.MkdirAll(filepath.Join(root, toolCgroupPrefix+"leftover"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(root, "other"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := EnsureToolCgroupRoot(root); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, toolCgroupPrefix+"leftover")); !os.IsNotExist(err) {
+		t.Fatalf("leftover tool cgroup not swept: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "other")); err != nil {
+		t.Fatalf("the sweep removed a directory it does not own: %v", err)
+	}
+	if raw, _ := os.ReadFile(filepath.Join(root, "memory.max")); strings.TrimSpace(string(raw)) != strconv.Itoa(toolAggregateMax) {
+		t.Fatalf("aggregate memory.max %q", raw)
 	}
 }

@@ -47,19 +47,22 @@ func TestGuestImageDeclaresTheSandboxUser(t *testing.T) {
 	if uid == nil || gid == nil || uid[1] != "61010" || gid[1] != "61010" || SandboxUID != 61010 {
 		t.Fatalf("image user %v group %v, spawner uid %d: want 61010 everywhere", uid, gid, SandboxUID)
 	}
+	if !strings.Contains(nix, `CHOIR_DOCTOOL_CGROUP_ROOT = "/sys/fs/cgroup/choir-doctools";`) {
+		t.Fatal("the guest image does not name the document tools' cgroup root")
+	}
 	if !strings.Contains(nix, `CHOIR_DOCUMENT_TOOL_SANDBOX = "observe";`) {
 		t.Fatal(`the guest image does not set CHOIR_DOCUMENT_TOOL_SANDBOX = "observe"`)
 	}
 }
 
-// D7: a crashed run's cgroup is removed by the desks cgroup's boot sweep,
-// which removes children named w-* (internal/yaegikernel/desk_cgroup.go).
-func TestToolCgroupIsSweptAtBoot(t *testing.T) {
-	if !strings.HasPrefix(toolCgroupPrefix, "w-") {
-		t.Fatalf("tool cgroup prefix %q is not swept by EnsureDeskCgroupRoot (w-*)", toolCgroupPrefix)
+// Review B2: a tool's cgroup is never under the desks cgroup; the document
+// tools have their own root, swept by its own name pattern.
+func TestToolCgroupRootIsNotTheDesks(t *testing.T) {
+	if cgroupRootEnv == "CHOIR_DESK_CGROUP_ROOT" || cgroupRootEnv != "CHOIR_DOCTOOL_CGROUP_ROOT" {
+		t.Fatalf("cgroup root env %q", cgroupRootEnv)
 	}
-	if cgroupRootEnv != "CHOIR_DESK_CGROUP_ROOT" {
-		t.Fatalf("cgroup root env %q is not the desks cgroup's", cgroupRootEnv)
+	if strings.HasPrefix(toolCgroupPrefix, "w-") {
+		t.Fatalf("tool cgroup prefix %q collides with the desks' w-*", toolCgroupPrefix)
 	}
 }
 

@@ -122,7 +122,7 @@ func probeErr(err error) string {
 // the report. mustNotRead are paths the tool must not open (they are probed
 // only if they exist, so a denial is never an ENOENT).
 func SelfTest(ctx context.Context, bin string, mustNotRead []string) SelfTestReceipt {
-	receipt := SelfTestReceipt{Mode: ModeFromEnv(nil)}
+	receipt := SelfTestReceipt{Mode: ModeFromEnv(nil), Observe: ShadowSnapshot()}
 	var reads []string
 	for _, p := range mustNotRead {
 		if p = strings.TrimSpace(p); p == "" {
@@ -133,6 +133,7 @@ func SelfTest(ctx context.Context, bin string, mustNotRead []string) SelfTestRec
 		}
 	}
 	out, warnings := run(ctx, runOptions{mode: ModeRequired, helperBin: bin}, bin, []string{ProbeArg}, ".pdf", []byte("%PDF-1.7 doc-tool self-test"), reads)
+	// The probe runs in required mode, so in the tools' own cgroup.
 	receipt.Warnings = warnings
 	if len(warnings) != 0 {
 		receipt.Failures = append(receipt.Failures, "the sandboxed probe did not run cleanly: "+strings.Join(warnings, "; "))
