@@ -25,6 +25,14 @@ runs: a few minutes per deploy, idle otherwise. If node-a is unreachable,
 Node B builds locally, so deploys keep working, just with more load on the
 production host.
 
+## The Choir agents VM (2026-10-21)
+
+The other project's config also runs a scratch microVM for Choir's coding
+agents (`agents`, 8 vCPU, 10 GiB; owner notes §39). It is not a Choir host:
+it holds a go-choir checkout, the owner's Claude login and a GitHub token,
+and reaches the internet only through node-a's logging proxy. Choir still
+does not change node-a's config; the owner and the other project do.
+
 ## Rules for another project on this host
 
 1. **Keep the builder module.** If your project takes over the NixOS

@@ -1256,3 +1256,38 @@ Taken as:
   ever built here: the repo holds design documents and an unpushed browser
   prototype (`prototype/autoradio-2026-10-14`).
 - **The owner plans the second pass** after reviewing the first.
+
+## 39. Intermission: a clean checkout and an agents VM on node-a (2026-10-21, night)
+
+The owner paused the first pass to clean the Mac and to give the agents
+more room, then resumed it. In session:
+
+> "can you send messages to agents on node-a? and vice versa? like you can
+> with local subagents. if we can set that up, its much better."
+
+> "eh, we can just let it push to main i think. we will probably get rid of
+> this in a week or two. and if you tell claude to make prs it is
+> consistent 99.99%"
+
+> "we can do security critical work on the vm as well. i dont care if it
+> gets exposed on github. we arent launching until we patch all security
+> holes. obscurity wont save us in the agentic era."
+
+> "use sonnet agents for stuff that is linear wrt the plan or is
+> optimization of a metric"
+
+Taken as:
+
+- **Lane workers may run in the Choir agents VM on node-a** (8 vCPU,
+  10 GiB, `ssh choir-agents`; its NixOS module is the owner's other
+  project's `infra/node-a/choir-agents.nix`, set up by the owner). It is a
+  scratch machine, not a Choir host: no Choir service runs there and Choir
+  does not change node-a's config. The orchestrator stays on the Mac and
+  alone lands.
+- **VM workers push only their lane branch** to GitHub so the orchestrator
+  can land it; they never push main (the token could; the instruction is
+  what holds). Security work runs there too; its branches are public.
+- **Sonnet for plan-linear and metric work, Opus where the design is open.**
+- The checkout was cleaned: main at origin/main, the 80 old agent
+  worktrees and the pre-October branches and stashes removed, every
+  local branch first bundled to node-a (`/root/choir-lane-backups`).

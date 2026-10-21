@@ -181,36 +181,21 @@ start:
       paper booted 17:10:07 UTC and had polled its sources 24 times by
       17:28:44. The deploy of c893a956a is in flight.
   worktrees:
-    - path: /Users/wiz/go-choir
-      status: dirty
-      class: other_agent_wip
-      owner: unknown (untracked sourcecycled, ograph-bench, cmd/desktop/frontend/)
-      touch: forbidden
-      recovery: leave in place
-    - path: /Users/wiz/go-choir/.claude/worktrees/agent-afa78ad83c0aab149
-      status: unknown
-      class: other_agent_wip
-      owner: another agent (branch ops/patch-lanes)
-      touch: forbidden
-      recovery: leave in place
-    - path: scratchpad/backup-wt
+    # Recaptured 2026-10-21 22:45 UTC after the owner's Mac restart and
+    # cleanup (owner notes §39); the lane worktrees under /private/tmp were
+    # lost with the restart and every lane branch survived.
+    - path: /Users/wiz/Dev/go-choir (also reached as ~/go-choir)
       status: clean
       class: goal_candidate
       owner: FP0
       touch: goal_owned
-      recovery: branch ops/offhost-backup-path tracks origin/main
-    - path: scratchpad/lanes/{b2-store,b3-desk-boundary,host-vmctl-b4-b5,b10-selfdev,b11-mobile-server}
-      status: clean
+      recovery: main tracks origin/main; every local branch bundled to node-a /root/choir-lane-backups
+    - path: lane worktrees, recreated by FP0 from branches lane/<name> (on the Mac or in the node-a agents VM)
+      status: absent until recreated
       class: goal_candidate
-      owner: FP1 to FP5, one worker each
+      owner: FP1 to FP4, FP6, FP7, FP9, one worker each
       touch: goal_owned
-      recovery: branches lane/<name>, created from c893a956a
-    - path: scratchpad/* (every other worktree and file, from this session's earlier missions)
-      status: unknown
-      class: other_agent_wip
-      owner: earlier missions of this session
-      touch: forbidden
-      recovery: leave in place; some hold credential files, so workers never read them
+      recovery: branches lane/b2-store, lane/b3-desk-boundary, lane/host-vmctl-b4-b5, lane/b10-selfdev, lane/b8-network (and stage/fp6-batch1), lane/b7-gateway, lane/b9-keys
 
 finish:
   deliver: >-
@@ -274,7 +259,8 @@ boundaries:
     - docs/choir-doctrine.md and CLAUDE.md
     - the launch checklist's batch plan and owner-decision defaults OD-01 to OD-09
   must_preserve:
-    - Locally five to seven agents in all (owner, 2026-10-21: "the rule is 5 to 7 agents running locally"): six Sonnet workers and the orchestrator. Workers work only in their own lane worktree and branch; they never push, never use Node B or staging credentials, never read secrets, never touch another worktree, never run git commit -a, never bypass hooks.
+    - 'Locally five to seven agents in all (owner, 2026-10-21: "the rule is 5 to 7 agents running locally"): six Sonnet workers and the orchestrator. Workers work only in their own lane worktree and branch; they never push, never use Node B or staging credentials, never read secrets, never touch another worktree, never run git commit -a, never bypass hooks.'
+    - Workers in the node-a agents VM (owner notes §39) follow the same rules, with one exception: they push their own lane branch to GitHub so FP0 can land it, and never push main. Sonnet for plan-linear or metric work, Opus where the design is open. The VM's slots do not count against the Mac's five to seven.
     - Only FP0 lands. A deploy carries at most one red batch; green work may ride with it. FP1's store batch counts as red for landing (the store schema is a protected surface) and gets a deploy of its own.
     - The landing order: rebase the candidate onto current main, run focused checks, freeze base, scoped paths and digest, independent review on that frozen identity, check it is unchanged, land, deployed proof. A rebase or repair that changes reviewed lines is reviewed again. Before a station settles complete, the consensus gate runs on its landed candidate with the deployed evidence.
     - An activation lease: from a deploy to the end of its proof (or its rollback), no other deploy and no drill.
@@ -290,22 +276,24 @@ boundaries:
     - The second pass; the owner plans it after reviewing this one.
     - Everything outside the security and density checklist (owner notes §38), including the iPhone app (B13), the voice pipeline (the owner's own project in ~/mike), accounts and Autoradio's server (B11, B12), Autopaper phase 5, and the S6 slices. Xcode is installed (corrected 2026-10-21; xcodebuild failed only because the Nix shell's SDK is the selected developer directory).
     - Owner items (B0 lead times, OD rulings); L2-05 red teaming (needs fork re-keying and the vault); running an account deletion (black).
-    - Lane work on Node B. Owner 2026-10-21: "We can run more agents on node B and as many as we have resources for", then: "I don't want the Claude on Node B to just be doing arbitrary work and making PRs. Instead, we should reserve it for actual work within the scope of the engineering desk." The delegate does engineering-desk self-development only, never lane work; agents never run as Node B host processes. FP7's SEC-08 Option K changes how the delegate's key is held, not who uses it.
-    - Node A. The owner suggested a remote dev VM on node-a for more parallel lanes. Node A is a shared host whose NixOS config belongs to the owner's other project, which runs the voice work (`~/mike`) there (docs/node-a-shared-host.md; owner 2026-10-21: "Node B is all choir. Node A is hosting mic"); Choir uses it only as Node B's builder and the encrypted backup target, and does not change it. A dev VM needs a handover to that project's agent and the owner's own model login, so it waits for the owner. (FP0 logged in once, read-only, for nproc, free, df and uptime, before finding that rule; it changed nothing.)
+    - 'Lane work on Node B. Owner 2026-10-21: "We can run more agents on node B and as many as we have resources for", then: "I don''t want the Claude on Node B to just be doing arbitrary work and making PRs. Instead, we should reserve it for actual work within the scope of the engineering desk." The delegate does engineering-desk self-development only, never lane work; agents never run as Node B host processes. FP7''s SEC-08 Option K changes how the delegate''s key is held, not who uses it.'
+    - Node A's own config and services. Since owner notes §39 (2026-10-21, night) lane workers may run in the Choir agents VM there (`ssh choir-agents`, 8 vCPU, 10 GiB), a scratch machine set up by the owner through the other project's config (docs/node-a-shared-host.md). Choir never changes node-a's config or touches its other services; a change to the VM goes to the owner.
   protected_surfaces: [vmctl, guest desk confinement, gateway and provider calls, auth and session, the object store schema, deployment routing]
 
 now:
   status: working
-  slice: FP1, FP2, FP3, FP4, FP6 and FP7 in parallel; FP0 lands c893a956a and reviews this file
-  source_ref: c893a956a
-  deploy_identity: f2c4a3ec3 serving; c893a956a deploying
+  slice: >-
+    Resume after the intermission (owner notes §39): recreate the lane
+    worktrees, land FP3 group 1, then FP6 batch 1, FP1, FP2, FP7, FP4
+  source_ref: 0cb66b4cb
+  deploy_identity: c893a956a serving (6bfe06fcf and 0cb66b4cb changed only the workflow and docs)
   candidate:
-    id: none
-    state: none
-    ref: none
-    base: c893a956a
+    id: FP3-group-1
+    state: frozen, review round 2 fixes applied; Argon's two findings (rescue through RecoverVM with the old boot config; ResumeVMForDesktop without a booting claim) to be confirmed fixed by re-review
+    ref: lane/host-vmctl-b4-b5 4ca5cd6cc
+    base: cf9751f36 (rebase onto 0cb66b4cb before freezing)
     digest: none
-    scope: []
+    scope: [internal/vmctl]
   bridge_conjecture: >-
     If the security and density batches land with deployed proofs and
     independent review, then the owner's second pass starts from a computer
@@ -336,19 +324,20 @@ now:
     owner_ratification_ref: not_applicable
   belief:
     believed_state: >-
-      The paper is up and publishing on f2c4a3ec3; the store's capture-label
-      scan is gone at c893a956a; every other batch is open.
+      The paper is up on c893a956a. Six lanes have built candidates on
+      their branches (FP1, FP2, FP3, FP4, FP6, FP7; FP9 checkpointed); none
+      has landed. SEC-14's first half landed (6bfe06fcf).
     main_uncertainty: >-
-      whether six lanes on 16 GB stay inside memory while they run Go
-      builds: at 18:15 the Mac already had 15.7 GB of swap in use and
-      about 4.9 GB in the compressor, before the first build wave.
-    next_observation: the Mac's memory pressure and the heavy-slot wait times once all five lanes are building.
+      whether the node-a agents VM plus the Mac carry the lanes without
+      memory pressure on the Mac, and whether one deploy slot every 25
+      minutes is enough for six red candidates.
+    next_observation: the time from a lane's frozen candidate to its deployed proof, per landing (B1).
   blocker_or_risk: >-
     Two red batches waiting for one deploy slot; a worker straying outside
     its lane; the paper's boot path (any store schema change).
   next_action: >-
-    Run review round 2 on the repaired file; meanwhile land each lane's
-    first frozen batch as it comes, FP3 group 1 first.
+    Recreate the lane worktrees; rebase FP3 group 1 onto 0cb66b4cb,
+    re-review it on its frozen identity, land it and prove it on staging.
 
 receipts:
   - id: capture-label-key-read
