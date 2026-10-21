@@ -17,6 +17,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/gomemlimit"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
@@ -407,6 +408,12 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 				Emit: func(emitCtx context.Context, payload yaegikernel.EmitPayload) (yaegikernel.EmitResult, error) {
 					return rt.deskEmitSignal(emitCtx, payload)
 				},
+				// A refused frame (outside the desk's table, a forged token, a
+				// stale epoch) is a trace event, not only a model-visible
+				// error: the refusal is evidence (SEC-02).
+				Refused: func(refCtx context.Context, r yaegikernel.FrameRefusal) {
+					rt.recordDeskRefusal(refCtx, execCtx, workers.sessionLabel(sessionKey), r)
+				},
 				// Egress services the cell's host-mediated verbs
 				// (choir.* → StreamBrokerEgress). Evidence/run-memory actions
 				// resolve through rt-bound tools; the management desk's
@@ -419,6 +426,14 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 					cellExec := toolregistry.ExecutionContextFrom(egrCtx)
 					if cellExec.RunID == "" && cellExec.RunRecord == nil {
 						cellExec = execCtx
+					}
+					// The transport already refused any action outside the
+					// desk's manifest row (yaegikernel admitFrame). This is the
+					// second check, on the host handler itself, so no caller of
+					// the handler can serve a desk an action its row lacks
+					// (SEC-02, defense in depth).
+					if !deskmanifest.FrameAllowed(deskRole, string(action)) {
+						return nil, fmt.Errorf("refused: desk %q may not call %s", deskRole, action)
 					}
 					started := time.Now().UTC()
 					requestID, pid := yaegikernel.EgressFrameFromContext(egrCtx)
@@ -1087,6 +1102,27 @@ func (rt *Runtime) deskEgress(egrCtx context.Context, deskRole string, cellExec 
 		return nil, fmt.Errorf("%s host unavailable", action)
 	}
 	return rt.researchDeps.HostEgress(egrCtx, string(action), payload)
+}
+
+// recordDeskRefusal records a frame the daemon refused from a desk worker as a
+// desk.egress event with refused=true, on the run the evaluating cell belongs
+// to. The refusal is also logged: a forged frame ends the worker.
+func (rt *Runtime) recordDeskRefusal(ctx context.Context, fallback toolregistry.ExecutionContext, session string, r yaegikernel.FrameRefusal) {
+	exec := toolregistry.ExecutionContextFrom(ctx)
+	if exec.RunID == "" && exec.RunRecord == nil {
+		exec = fallback
+	}
+	level := "refused"
+	if r.Forged {
+		level = "forged"
+	}
+	log.Printf("desk frame %s: desk %q action %s (worker pid %d, run %s): %s", level, r.Role, r.Action, r.WorkerPID, exec.RunID, r.Reason)
+	rt.recordDeskEvent(context.WithoutCancel(ctx), exec, types.EventDeskEgress, map[string]any{
+		"request_id": r.RequestID, "response_request_id": r.RequestID,
+		"verb": string(r.Action), "desk_session": session, "worker_pid": r.WorkerPID,
+		"run_id": exec.RunID, "finished_at": time.Now().UTC(),
+		"is_error": true, "refused": true, "forged": r.Forged, "desk": r.Role, "error": r.Reason,
+	})
 }
 
 // recordDeskEvent persists a desk.cell or desk.egress run event for the trace

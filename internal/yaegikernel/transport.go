@@ -2,6 +2,7 @@ package yaegikernel
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -18,9 +19,11 @@ import (
 // share an unstructured byte pipe.
 //
 // Frame wire format: 8-byte header + payload.
-// Header: payload length uint32 big-endian, stream byte, 3 reserved bytes.
-// Max payload is 4 MiB; larger payloads are a protocol error, never silently
-// truncated.
+// Header: payload length uint32 big-endian, stream byte, version byte
+// (FrameVersion), 2 reserved bytes that must be zero. A peer on another
+// version, or with a reserved byte set, is refused from the header alone
+// (ARCH-07). Max payload is 4 MiB; larger payloads are a protocol error,
+// never silently truncated.
 
 // Worker streams multiplexed over the session socket.
 const (
@@ -60,6 +63,13 @@ const MaxFramePayload = 4 << 20
 
 const frameHeaderLen = 8
 
+// FrameVersion is the wire version in header byte 5.
+const FrameVersion = 1
+
+// ErrFrameVersion is the typed refusal for a header with another version or
+// non-zero reserved bytes.
+var ErrFrameVersion = errors.New("frame: unsupported version or reserved bytes")
+
 // FramedConn is a concurrency-safe framed Unix socket endpoint. Writes from
 // multiple goroutines serialize; reads are single-owner (one reader loop).
 type FramedConn struct {
@@ -81,6 +91,7 @@ func (c *FramedConn) WriteFrame(stream byte, payload []byte) error {
 	var hdr [frameHeaderLen]byte
 	binary.BigEndian.PutUint32(hdr[0:4], uint32(len(payload)))
 	hdr[4] = stream
+	hdr[5] = FrameVersion
 	c.wmu.Lock()
 	defer c.wmu.Unlock()
 	if _, err := c.conn.Write(hdr[:]); err != nil {
@@ -98,6 +109,12 @@ func (c *FramedConn) ReadFrame() (byte, []byte, error) {
 	var hdr [frameHeaderLen]byte
 	if _, err := io.ReadFull(c.conn, hdr[:]); err != nil {
 		return 0, nil, fmt.Errorf("frame: read header: %w", err)
+	}
+	// The version and the reserved bytes are checked before the length is
+	// trusted or any payload is read: an unsupported peer is refused from
+	// eight bytes.
+	if hdr[5] != FrameVersion || hdr[6] != 0 || hdr[7] != 0 {
+		return 0, nil, fmt.Errorf("%w: version %d, reserved %d %d (want version %d, reserved 0 0)", ErrFrameVersion, hdr[5], hdr[6], hdr[7], FrameVersion)
 	}
 	length := binary.BigEndian.Uint32(hdr[0:4])
 	if length > MaxFramePayload {

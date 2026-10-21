@@ -3,7 +3,11 @@ package yaegikernel
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -12,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -55,6 +60,22 @@ type DeskSessionWorkerConfig struct {
 	// read_capture). The host resolves the call against its deps and
 	// returns the bounded result. Nil refuses the verb.
 	Egress func(ctx context.Context, action BrokerAction, payload json.RawMessage) (json.RawMessage, error)
+	// Refused reports a frame the daemon refused (outside the desk's table,
+	// a forged token, a stale epoch) so the host can record it on the trace.
+	Refused func(ctx context.Context, r FrameRefusal)
+}
+
+// FrameRefusal is one refused worker frame.
+type FrameRefusal struct {
+	Role      string
+	Action    BrokerAction
+	Stream    byte
+	Reason    string
+	RequestID string
+	WorkerPID int
+	// Forged marks a frame that proves tampering (wrong or missing slot
+	// token): the worker is ended, not only refused.
+	Forged bool
 }
 
 // sessionReadyTimeout bounds the worker's post-prebind ready handshake. A
@@ -83,6 +104,9 @@ type DeskSessionWorker struct {
 	transportLost bool
 	reaped        bool
 	exitCause     string
+	// slotToken is the secret the host generated for this worker at spawn
+	// and handed it through its environment (ARCH-07).
+	slotToken []byte
 }
 
 // workerExitGrace is how long the host waits, after the session socket
@@ -135,6 +159,12 @@ func SpawnDeskSessionWorker(cfg DeskSessionWorkerConfig) (*DeskSessionWorker, er
 		_ = childFile.Close()
 		return nil, fmt.Errorf("desk session parent socket: %w", err)
 	}
+	token := make([]byte, 32)
+	if _, err := rand.Read(token); err != nil {
+		_ = parentConn.Close()
+		_ = childFile.Close()
+		return nil, fmt.Errorf("desk session slot token: %w", err)
+	}
 	var stdoutBuf, stderrBuf bytes.Buffer
 	cmd := exec.Command(bin, workerArg)
 	if cfg.Session.AllowedRoot != "" {
@@ -142,6 +172,9 @@ func SpawnDeskSessionWorker(cfg DeskSessionWorkerConfig) (*DeskSessionWorker, er
 	}
 	cmd.SysProcAttr = workerSysProcAttr(cfg.ProcessGroup)
 	cmd.Env = append(append([]string{"PATH=/usr/bin:/bin:/usr/local/bin", "TMPDIR=/tmp"}, cfg.sessionEnv()...), cfg.ExtraEnv...)
+	// The slot token rides the environment, never argv (argv is visible to
+	// every process through /proc).
+	cmd.Env = append(cmd.Env, sessionEnvPrefix(cfg.EnvPrefix)+"SLOT_TOKEN="+hex.EncodeToString(token))
 	cmd.ExtraFiles = []*os.File{childFile}
 	cmd.Stdin = nil
 	cmd.Stdout = &stdoutBuf
@@ -158,6 +191,8 @@ func SpawnDeskSessionWorker(cfg DeskSessionWorkerConfig) (*DeskSessionWorker, er
 		pid:    cmd.Process.Pid,
 		cfg:    cfg,
 		stderr: &stderrBuf,
+		// The worker returns the hex form; the host compares that.
+		slotToken: []byte(hex.EncodeToString(token)),
 	}
 	timeout := cfg.ReadyTimeout
 	if timeout <= 0 {
@@ -202,9 +237,7 @@ func SessionWorkerConfigFromEnv(getenv func(string) string, prefix string) Sessi
 	if getenv == nil {
 		getenv = os.Getenv
 	}
-	if prefix == "" {
-		prefix = "CHOIR_DESK_SESSION_"
-	}
+	prefix = sessionEnvPrefix(prefix)
 	var epoch uint64
 	if v := getenv(prefix + "EPOCH"); v != "" {
 		fmt.Sscanf(v, "%d", &epoch)
@@ -219,7 +252,16 @@ func SessionWorkerConfigFromEnv(getenv func(string) string, prefix string) Sessi
 		Slot:             getenv(prefix + "SLOT"),
 		MemoryLimitBytes: parseUint64Env(getenv(prefix + "MEMORY_LIMIT_BYTES")),
 		KeepCellOutput:   getenv(prefix+"KEEP_CELL_OUTPUT") == "1",
+		SlotToken:        getenv(prefix + "SLOT_TOKEN"),
 	}
+}
+
+// sessionEnvPrefix defaults the worker environment prefix.
+func sessionEnvPrefix(prefix string) string {
+	if prefix == "" {
+		return "CHOIR_DESK_SESSION_"
+	}
+	return prefix
 }
 
 // parseUint64Env parses a numeric env value; malformed input reads as 0
@@ -289,6 +331,9 @@ func (w *DeskSessionWorker) awaitReady(timeout time.Duration) error {
 		if err := json.Unmarshal(r.payload, &res); err != nil || res.ID != "ready" {
 			return fmt.Errorf("desk session worker ready: bad handshake")
 		}
+		if subtle.ConstantTimeCompare([]byte(res.SlotToken), w.slotToken) != 1 || len(w.slotToken) == 0 {
+			return fmt.Errorf("desk session worker ready: slot token does not match the process the host started")
+		}
 		return nil
 	case <-timer.C:
 		return fmt.Errorf("desk session worker ready: timed out")
@@ -346,14 +391,20 @@ func (w *DeskSessionWorker) EvalCell(ctx context.Context, source string, inbox [
 			// the durable channel write + recipient wake, then answers and keeps
 			// waiting for the cell's StreamCell result.
 			if stream == StreamBrokerEmit {
-				w.serviceEmit(ctx, payload)
+				if forged := w.serviceEmit(ctx, payload); forged {
+					ch <- result{err: errForgedFrame}
+					return
+				}
 				continue
 			}
 			// Mid-cell host-mediated network verbs (search_start / read /
 			// read_capture) ride the shared egress stream; the host resolves
 			// them and answers, then keeps waiting for the StreamCell result.
 			if stream == StreamBrokerEgress {
-				w.serviceEgress(ctx, payload)
+				if forged := w.serviceEgress(ctx, payload); forged {
+					ch <- result{err: errForgedFrame}
+					return
+				}
 				continue
 			}
 			if stream != StreamCell {
@@ -371,6 +422,13 @@ func (w *DeskSessionWorker) EvalCell(ctx context.Context, source string, inbox [
 	}()
 	select {
 	case r := <-ch:
+		if errors.Is(r.err, errForgedFrame) {
+			// A conforming worker never sends a frame it cannot sign: the
+			// process is not the one the host started, or it has been taken
+			// over. End it now rather than grant it a grace period.
+			w.killLocked()
+			return SessionResult{}, r.err
+		}
 		if r.err != nil {
 			w.dead = true
 			w.transportLost = true
@@ -396,24 +454,29 @@ func (w *DeskSessionWorker) EvalCell(ctx context.Context, source string, inbox [
 // channel write + recipient wake via cfg.Emit (host authority, never the
 // worker's in-memory tray), then replies on StreamBrokerEmitResult so the
 // blocked cell resumes.
-func (w *DeskSessionWorker) serviceEmit(ctx context.Context, payload []byte) {
+func (w *DeskSessionWorker) serviceEmit(ctx context.Context, payload []byte) (forged bool) {
 	var req BrokerRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		w.writeEmitResult(req.RequestID, nil, fmt.Errorf("emit decode request: %w", err))
-		return
+		return false
+	}
+	if reason, forged := w.admitFrame(ctx, StreamBrokerEmit, req); reason != "" {
+		w.writeEmitResult(req.RequestID, nil, errors.New(reason))
+		return forged
 	}
 	var emit EmitPayload
 	if err := json.Unmarshal(req.Payload, &emit); err != nil {
 		w.writeEmitResult(req.RequestID, nil, fmt.Errorf("emit decode payload: %w", err))
-		return
+		return false
 	}
 	handler := w.cfg.Emit
 	if handler == nil {
 		w.writeEmitResult(req.RequestID, nil, fmt.Errorf("emit host unavailable"))
-		return
+		return false
 	}
 	res, err := handler(ctx, emit)
 	w.writeEmitResult(req.RequestID, &res, err)
+	return false
 }
 
 func (w *DeskSessionWorker) writeEmitResult(requestID string, res *EmitResult, cause error) {
@@ -436,19 +499,67 @@ func (w *DeskSessionWorker) writeEmitResult(requestID string, res *EmitResult, c
 // BrokerRequest whose action names a host-mediated network verb; the host
 // resolves it via cfg.Egress (the deps-bound handler in agentcore) and
 // replies on StreamBrokerEgressResult so the blocked cell resumes.
-func (w *DeskSessionWorker) serviceEgress(ctx context.Context, payload []byte) {
+func (w *DeskSessionWorker) serviceEgress(ctx context.Context, payload []byte) (forged bool) {
 	var req BrokerRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		w.writeEgressResult(req.RequestID, nil, fmt.Errorf("egress decode request: %w", err))
-		return
+		return false
+	}
+	if reason, forged := w.admitFrame(ctx, StreamBrokerEgress, req); reason != "" {
+		w.writeEgressResult(req.RequestID, nil, errors.New(reason))
+		return forged
 	}
 	handler := w.cfg.Egress
 	if handler == nil {
 		w.writeEgressResult(req.RequestID, nil, fmt.Errorf("%s host unavailable", req.Action))
-		return
+		return false
 	}
 	res, err := handler(withEgressFrame(ctx, req.RequestID, w), req.Action, req.Payload)
 	w.writeEgressResult(req.RequestID, res, err)
+	return false
+}
+
+// errForgedFrame ends an EvalCell whose worker sent a frame that proves it is
+// not the process the host started.
+var errForgedFrame = errors.New("desk worker sent a forged frame")
+
+// admitFrame is the daemon's check on every host-served frame (SEC-02,
+// ARCH-07). Who sent the frame is decided by the worker the host spawned,
+// never by a field in the frame: the role is the one in cfg.Session (set by
+// the host from the run), the epoch is the worker's, and the slot token is the
+// secret the host generated at spawn. A frame is served only when the desk's
+// manifest table names its action; an unknown desk is served nothing.
+//
+// It returns a non-empty reason to refuse. forged is true when the frame
+// proves tampering (a wrong or missing slot token): the worker is ended.
+func (w *DeskSessionWorker) admitFrame(ctx context.Context, stream byte, req BrokerRequest) (reason string, forged bool) {
+	refuse := func(reason string, forged bool) (string, bool) {
+		if w.cfg.Refused != nil {
+			w.cfg.Refused(ctx, FrameRefusal{Role: w.cfg.Session.Role, Action: req.Action, Stream: stream,
+				Reason: reason, RequestID: req.RequestID, WorkerPID: w.pid, Forged: forged})
+		}
+		return reason, forged
+	}
+	if len(w.slotToken) == 0 {
+		return refuse("refused: the host holds no slot token for this worker", false)
+	}
+	if subtle.ConstantTimeCompare([]byte(req.SlotToken), w.slotToken) != 1 {
+		return refuse("refused: slot token does not match the worker the host started", true)
+	}
+	if req.ProtocolVersion != ProtocolVersion {
+		return refuse(fmt.Sprintf("refused: protocol version %d, the host speaks %d", req.ProtocolVersion, ProtocolVersion), false)
+	}
+	if req.Epoch != w.cfg.Session.Epoch {
+		return refuse(fmt.Sprintf("refused: epoch %d is not this worker's epoch %d", req.Epoch, w.cfg.Session.Epoch), false)
+	}
+	if stream == StreamBrokerEmit && req.Action != ActionEmit {
+		return refuse(fmt.Sprintf("refused: the emit stream carries only %s, not %s", ActionEmit, req.Action), false)
+	}
+	role := w.cfg.Session.Role
+	if !deskmanifest.FrameAllowed(role, string(req.Action)) {
+		return refuse(fmt.Sprintf("refused: desk %q may not call %s", role, req.Action), false)
+	}
+	return "", false
 }
 
 type egressFrameKey struct{}

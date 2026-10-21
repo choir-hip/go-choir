@@ -1,5 +1,7 @@
 package capsule
 
+import "github.com/yusefmosiah/go-choir/internal/deskmanifest"
+
 // AgentRole determines the fixed broker verb set granted by guest core.
 type AgentRole string
 
@@ -20,19 +22,21 @@ type VerbSet map[string]bool
 // covers the rest. A grant without a handler only turns a role check into
 // "unknown verb"
 // (docs/problems/p5-go-served-0825-engineering-never-freezes-2026-10-15.md).
-var RoleVerbSets = map[AgentRole]VerbSet{
-	RoleManagement: {},
-	RoleEngineering: {
-		"exec": true, "read_file": true, "write_file": true,
-		"list_dir": true, "stat": true, "mkdir": true, "remove": true,
-		"kill_session": true, "go_eval": true,
-		"init_session": true, "close_session": true,
-		"job_start": true, "job_status": true, "job_stop": true,
-	},
-	RoleResearch: {
-		"read_file": true, "list_dir": true, "stat": true, "go_eval": true,
-	},
-}
+var RoleVerbSets = func() map[AgentRole]VerbSet {
+	sets := map[AgentRole]VerbSet{}
+	// A role the manifest does not name has no entry, so HasVerb is false
+	// for every verb: unknown roles fail closed.
+	for _, role := range []AgentRole{RoleManagement, RoleEngineering, RoleResearch} {
+		set := VerbSet{}
+		if d, ok := deskmanifest.Lookup(string(role)); ok {
+			for _, verb := range d.CapsuleVerbs {
+				set[verb] = true
+			}
+		}
+		sets[role] = set
+	}
+	return sets
+}()
 
 func (r AgentRole) HasVerb(verb string) bool {
 	return RoleVerbSets[r][verb]
