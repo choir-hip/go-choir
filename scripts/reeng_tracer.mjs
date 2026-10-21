@@ -1288,15 +1288,16 @@ function engineeringStory(token) {
   if (CHANGE === 'rewrite') {
     const file = `frontend/src/lib/${APP}.svelte`;
     const delegate = DELEGATE ? [
-      `Engineering writes the rewrite through the Claude delegate (choir-delegate start with a brief naming the absolute path /workspace/platform/${file}), then reviews the diff itself.`,
-      'The delegate\'s network mode refuses npm; if the build cannot run in that round, Complete the round as failed with the rewrite left in the capsule,',
-      'and management Casts a second round with network ecosystem_proxy, whose capsule is offered the first round\'s diff as a carried patch: apply it, build, check, freeze.',
+      'This takes two engineering rounds.',
+      `Round 1: management's Cast leaves the spec's "network" field out, so the capsule is in the claude mode and the Claude delegate is available; engineering saves a copy of the file, writes the rewrite through the delegate (choir-delegate start with a brief naming the absolute path /workspace/platform/${file}), and reviews the diff against the copy.`,
+      'The claude mode refuses npm, so round 1 Completes as failed with the rewrite left in the capsule.',
+      'Round 2: after that report, management Casts again with "network": "ecosystem_proxy"; its capsule holds round 1\'s diff at /selfdev/carried/source.patch: save a copy of the file, apply the patch with git -C /workspace/platform apply, build, check, freeze.',
     ] : [];
     return [
       `Change this computer itself: rewrite ${file} in the platform workspace for clarity, accessibility (labels, keyboard focus, alt text), and maintainability.`,
       'Keep its props, events, exported API, routes and visible behaviour unchanged. Touch only that file (and a small helper module next to it if clearly needed). Change nothing else.',
       'Deterministic checks, to run in the capsule before freezing, from /workspace/platform/frontend:',
-      `npm ci && npm run build must pass, and git diff --stat must show ${file} changed.`,
+      `npm ci && npm run build must pass, and diff -u against a copy of ${file} saved before the change must show it changed (the capsule has no .git, so git diff and git status cannot show changes).`,
       'This change touches the frontend only, so the release tree needs the frontend release tree only (no bin/autoputer).',
       ...delegate,
       'Only engineering can change this computer: Cast this request to management verbatim in your first cell, with a one-paragraph plan revision,',
