@@ -239,14 +239,6 @@ type Config struct {
 	// remain the platform fallback; this file is the user-computer policy.
 	ModelPolicyPath string
 
-	// ObscuraPath is an optional path or executable name for the backend browser
-	// provider. Empty means the backend browser substrate is not configured.
-	ObscuraPath string
-
-	// ObscuraCDPScreenshots enables the opt-in CDP screenshot substrate for the
-	// backend Browser app. The default remains CLI snapshot extraction only.
-	ObscuraCDPScreenshots bool
-
 	// EnableTestAPIs exposes local-only browser test hooks. These endpoints are
 	// disabled by default and should never be enabled on deployed environments.
 	EnableTestAPIs bool
