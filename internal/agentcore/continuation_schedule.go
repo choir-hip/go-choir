@@ -37,6 +37,12 @@ type delegatedAssignmentSpawnDeadline struct {
 	Attempt      uint64 `json:"attempt"`
 	Objective    string `json:"objective"`
 	CandidateID  string `json:"candidate_id,omitempty"`
+	// Retry counts the admission retries of a request that had to wait for the
+	// engineering slot (engineering_admission.go). Zero is the wake the open
+	// commit minted. It is part of the content because a wake's update id is
+	// derived from its content: a retry with unchanged content would dedup
+	// into the consumed row.
+	Retry int `json:"retry,omitempty"`
 }
 
 // cellTerminalDeadline is the complete reduction identity needed to terminate
@@ -203,6 +209,13 @@ func (rt *Runtime) HandleDelegatedAssignmentSpawnDeadline(ctx context.Context, o
 		}
 	}
 	if _, resumeErr := rt.resumeDelegatedCastAssignment(ctx, assignment, assignmentSpawnRequest{Objective: objective}); resumeErr != nil {
+		// Admission refused the request because the slot is busy or an older
+		// request goes first: the work stays pending, the wake is consumed
+		// and a retry is armed (or the request expires). Nothing is cancelled.
+		var busy *engineeringAdmissionBusy
+		if errors.As(resumeErr, &busy) {
+			return rt.deferEngineeringAdmission(ctx, assignment, deadline, objective, busy)
+		}
 		return fmt.Errorf("spawn saga for %s: %w", deadline.AssignmentID, resumeErr)
 	}
 	return nil
