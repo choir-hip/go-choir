@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/yusefmosiah/go-choir/internal/doctool"
 	"github.com/yusefmosiah/go-choir/internal/gomemlimit"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
@@ -42,4 +43,25 @@ func ensureDeskCgroups() {
 		return
 	}
 	log.Printf("autoputer: desk cgroup %s memory.max %d MiB memory.high %d MiB", root, max>>20, high>>20)
+}
+
+// ensureDocToolCgroups makes the document tools' cgroup root (SEC-15) when
+// the sandbox is on: their own aggregate, never the desks' (review B2). Only
+// required mode puts a tool in it; the isolation self-test does too. A
+// failure is logged: required mode then refuses every tool (the extraction
+// falls back to its pure-Go projection), observe is unaffected.
+func ensureDocToolCgroups() {
+	if doctool.ModeFromEnv(os.Getenv) == doctool.ModeOff {
+		return
+	}
+	root := os.Getenv("CHOIR_DOCTOOL_CGROUP_ROOT")
+	if root == "" {
+		log.Printf("autoputer: document tools cgroup: CHOIR_DOCTOOL_CGROUP_ROOT unset; required mode will refuse document tools")
+		return
+	}
+	if err := doctool.EnsureToolCgroupRoot(root); err != nil {
+		log.Printf("autoputer: document tools cgroup %s: %v; required mode will refuse document tools", root, err)
+		return
+	}
+	log.Printf("autoputer: document tools cgroup %s ready", root)
 }

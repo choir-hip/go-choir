@@ -5,7 +5,8 @@
 // and no limits (internal/content/extract.go). Now, when the mode allows, the
 // daemon re-executes itself as a helper (`autoputer doc-tool-sandbox`) that
 // it starts as the sandbox user (SandboxUID, no capabilities) in an empty
-// network and IPC namespace and a cgroup of its own under the desks cgroup.
+// network and IPC namespace (under required, also in a cgroup of its own
+// under the document tools' cgroup root, never the desks').
 // The helper sets rlimits, no_new_privs, Landlock V5 (read and execute the
 // tool's roots; read its one input directory and its own /proc entry; write
 // nothing; no TCP) and a seccomp deny list, then execs the tool. The tool's
@@ -21,9 +22,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -36,10 +39,10 @@ type Mode string
 const (
 	// ModeOff runs the tool directly, as before SEC-15.
 	ModeOff Mode = "off"
-	// ModeObserve sandboxes the tool and, when the sandbox cannot be set
-	// up, runs it directly with the warning document_tool_sandbox_fallback;
-	// a tool that fails only inside the sandbox is run again directly with
-	// the warning document_tool_sandbox_divergence.
+	// ModeObserve runs the tool directly, as before: that run is the result,
+	// unchanged. A sandboxed shadow run of the same input follows (one at a
+	// time, no cgroup, so today's kill domain is unchanged) and only counts:
+	// equal, diverged, failed in the sandbox, or not set up (ShadowSnapshot).
 	ModeObserve Mode = "observe"
 	// ModeRequired sandboxes the tool or does not run it (warning
 	// document_tool_sandbox_refused); the extraction falls back to its
@@ -73,12 +76,16 @@ const (
 	HelperArg = "doc-tool-sandbox"
 	ProbeArg  = "doc-tool-probe"
 
-	// cgroupRootEnv is the desks cgroup the daemon makes at start
-	// (yaegikernel.DeskCgroupRootEnv). A tool's cgroup is a child named
-	// toolCgroupPrefix*, which the desks cgroup's boot sweep removes after
-	// a crash, as it removes a desk worker's.
-	cgroupRootEnv    = "CHOIR_DESK_CGROUP_ROOT"
-	toolCgroupPrefix = "w-doctool-"
+	// cgroupRootEnv names the document tools' own cgroup root, which the
+	// daemon makes at start (EnsureToolCgroupRoot). Under required a tool's
+	// cgroup is a child named toolCgroupPrefix*, swept from this root alone
+	// at the next start. Never the desks cgroup: a converter charged there
+	// could get a desk worker killed (review B2).
+	cgroupRootEnv    = "CHOIR_DOCTOOL_CGROUP_ROOT"
+	toolCgroupPrefix = "t-"
+	// toolAggregateMax bounds all sandboxed tools together (two at their
+	// budget); a first value, like toolMemoryMax.
+	toolAggregateMax = 2 * toolMemoryMax
 
 	// toolMemoryMax is a tool's hard memory budget (a guess: the staging
 	// probe reads memory.peak of real runs); toolPidsMax its process cap.
@@ -109,6 +116,8 @@ type runOptions struct {
 	// neither.
 	testUserNamespace bool
 	testNoCgroup      bool
+	// syncShadow makes observe wait for its shadow run (tests).
+	syncShadow bool
 }
 
 // RunOnTempFile runs tool with prefixArgs, the input's path, and suffixArgs,
@@ -123,27 +132,112 @@ func run(ctx context.Context, opts runOptions, tool string, prefixArgs []string,
 	if err != nil {
 		return "", []string{tool + "_unavailable"}
 	}
-	if opts.mode == "" || opts.mode == ModeOff {
+	switch opts.mode {
+	case "", ModeOff:
 		return runDirect(ctx, tool, toolPath, prefixArgs, ext, raw, suffixArgs)
-	}
-	out, warnings, setupErr := runSandboxed(ctx, opts, tool, toolPath, prefixArgs, ext, raw, suffixArgs)
-	if setupErr == nil {
-		if opts.mode == ModeObserve && len(warnings) != 0 {
-			// Observe never makes an extraction worse: a tool that failed
-			// inside the sandbox runs again as before, and if that works the
-			// divergence is the warning (the sandbox refused something the
-			// tool needs, or the input is hostile).
-			if direct, directWarnings := runDirect(ctx, tool, toolPath, prefixArgs, ext, raw, suffixArgs); len(directWarnings) == 0 {
-				return direct, []string{"document_tool_sandbox_divergence: " + strings.Join(warnings, "; ")}
-			}
-		}
+	case ModeObserve:
+		// Today's run is the result (review B3): nothing the shadow sees
+		// reaches the extraction.
+		out, warnings := runDirect(ctx, tool, toolPath, prefixArgs, ext, raw, suffixArgs)
+		observeShadow(opts, tool, toolPath, prefixArgs, ext, raw, suffixArgs, out, len(warnings) == 0)
 		return out, warnings
 	}
-	if opts.mode == ModeObserve {
-		out, warnings := runDirect(ctx, tool, toolPath, prefixArgs, ext, raw, suffixArgs)
-		return out, append([]string{"document_tool_sandbox_fallback: " + setupErr.Error()}, warnings...)
+	out, warnings, _, setupErr := runSandboxed(ctx, opts, true, tool, toolPath, prefixArgs, ext, raw, suffixArgs)
+	if setupErr != nil {
+		return "", []string{"document_tool_sandbox_refused: " + setupErr.Error()}
 	}
-	return "", []string{"document_tool_sandbox_refused: " + setupErr.Error()}
+	return out, warnings
+}
+
+// ShadowStats counts observe's shadow runs since start: what required mode
+// would have returned compared with what the tool returned directly.
+type ShadowStats struct {
+	Runs          int64 `json:"runs"`
+	Equal         int64 `json:"equal"`          // same output, or both failed
+	Diverged      int64 `json:"diverged"`       // both succeeded, outputs differ
+	SandboxFailed int64 `json:"sandbox_failed"` // succeeded directly, failed in the sandbox
+	SetupFailed   int64 `json:"setup_failed"`   // the sandbox could not be set up
+	Skipped       int64 `json:"skipped"`        // a shadow was already running
+	// MaxRSSBytes is the largest shadow's peak RSS; OverBudget counts shadows
+	// whose peak passed toolMemoryMax (required mode would have killed them).
+	MaxRSSBytes int64 `json:"max_rss_bytes"`
+	OverBudget  int64 `json:"over_budget"`
+}
+
+// Sub is s minus an earlier snapshot (MaxRSSBytes is s's).
+func (s ShadowStats) Sub(o ShadowStats) ShadowStats {
+	return ShadowStats{Runs: s.Runs - o.Runs, Equal: s.Equal - o.Equal, Diverged: s.Diverged - o.Diverged,
+		SandboxFailed: s.SandboxFailed - o.SandboxFailed, SetupFailed: s.SetupFailed - o.SetupFailed,
+		Skipped: s.Skipped - o.Skipped, MaxRSSBytes: s.MaxRSSBytes, OverBudget: s.OverBudget - o.OverBudget}
+}
+
+var (
+	shadowMu    sync.Mutex
+	shadowStats ShadowStats
+	// shadowSlot lets one shadow run at a time: observe adds at most one
+	// converter's memory to the daemon's cgroup, never a pile of them.
+	shadowSlot = make(chan struct{}, 1)
+)
+
+// ShadowSnapshot returns observe's shadow counts since start.
+func ShadowSnapshot() ShadowStats {
+	shadowMu.Lock()
+	defer shadowMu.Unlock()
+	return shadowStats
+}
+
+// observeShadow runs the sandboxed shadow of a direct run that already
+// returned out (ok: without warnings), after the request, and counts the
+// outcome. It never touches the result.
+func observeShadow(opts runOptions, tool, toolPath string, prefixArgs []string, ext string, raw []byte, suffixArgs []string, out string, ok bool) {
+	select {
+	case shadowSlot <- struct{}{}:
+	default:
+		shadowMu.Lock()
+		shadowStats.Skipped++
+		shadowMu.Unlock()
+		return
+	}
+	shadow := func() {
+		defer func() { <-shadowSlot }()
+		sOut, sWarnings, maxRSS, setupErr := runSandboxed(context.Background(), opts, false, tool, toolPath, prefixArgs, ext, raw, suffixArgs)
+		outcome := "equal"
+		switch {
+		case setupErr != nil:
+			outcome = "setup_failed: " + setupErr.Error()
+		case ok && len(sWarnings) != 0:
+			outcome = "sandbox_failed: " + strings.Join(sWarnings, "; ")
+		case ok && sOut != out:
+			outcome = "diverged"
+		}
+		shadowMu.Lock()
+		shadowStats.Runs++
+		switch {
+		case setupErr != nil:
+			shadowStats.SetupFailed++
+		case strings.HasPrefix(outcome, "sandbox_failed"):
+			shadowStats.SandboxFailed++
+		case outcome == "diverged":
+			shadowStats.Diverged++
+		default:
+			shadowStats.Equal++
+		}
+		if maxRSS > shadowStats.MaxRSSBytes {
+			shadowStats.MaxRSSBytes = maxRSS
+		}
+		if maxRSS > toolMemoryMax {
+			shadowStats.OverBudget++
+		}
+		shadowMu.Unlock()
+		if outcome != "equal" {
+			log.Printf("doctool: observe: %s shadow %s (peak %d MiB)", tool, truncate(outcome, 300), maxRSS>>20)
+		}
+	}
+	if opts.syncShadow {
+		shadow()
+		return
+	}
+	go shadow()
 }
 
 // errSetup marks a sandbox that could not be set up (as opposed to a tool
