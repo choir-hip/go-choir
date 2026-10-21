@@ -1183,6 +1183,9 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/health/{service}", h.HandleServiceHealth)
 	s.HandleFunc("/provider/v1/inference", h.HandleInference)
 	s.HandleFunc("/provider/v1/judgments", h.HandleJudgment)
+	// SEC-16: host jobs (front-importance) reach Jev through the gateway
+	// with the host-internal credential instead of holding the key.
+	s.HandleFunc("/provider/v1/host/judgments", h.HandleHostJudgment)
 	s.HandleFunc("/provider/openai/v1/chat/completions", h.HandleOpenAIChatCompletions)
 	s.HandleFunc("/provider/openai/v1/models", h.HandleOpenAIModels)
 	s.HandleFunc("/provider/v1/models", h.HandleModels)
