@@ -332,6 +332,11 @@ data-flow rule are defined once in S4 ("Egress capability model"). S7 adds:
 - renewal;
 - operation contracts for `visible-write` endpoints.
 
+The manifest's `egress` and `ingress` blocks, the install and upgrade
+approval rules, and the rule that ingress always lands on a host service and
+reaches the desk as records are in
+[app-agent-network-policy-2026-10-21.md](../design/app-agent-network-policy-2026-10-21.md) (NET-10).
+
 ## Owner direction, 2026-10-14: convert the existing apps first
 
 "We need to do the app packages upgrade even before we build anything new.
