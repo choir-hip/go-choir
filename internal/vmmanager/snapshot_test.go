@@ -79,6 +79,8 @@ type fakeFirecrackerAPI struct {
 	root string
 	// loadFilesPresent records that both load paths existed at load time.
 	loadFilesPresent bool
+	// onCreate, when set, runs after the snapshot files are written.
+	onCreate func(statePath, memPath string)
 }
 
 func (f *fakeFirecrackerAPI) hostPath(p string) string {
@@ -110,6 +112,9 @@ func (f *fakeFirecrackerAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		mem, _ := body["mem_file_path"].(string)
 		_ = os.WriteFile(f.hostPath(state), []byte("vmstate"), 0o644)
 		_ = os.WriteFile(f.hostPath(mem), make([]byte, f.memBytes), 0o644)
+		if f.onCreate != nil {
+			f.onCreate(f.hostPath(state), f.hostPath(mem))
+		}
 	case "/snapshot/load":
 		f.mu.Lock()
 		f.loadState, _ = body["snapshot_path"].(string)

@@ -40,8 +40,18 @@ func TestVaultCaptureIsBoundToTheVerifiedDirectoryNotThePath(t *testing.T) {
 			t.Errorf("plain mount point: %v", err)
 		}
 	}
+	// Where guest RAM lands at the moment it is written is the property;
+	// a later cleanup cannot remove blocks already written.
+	memInHeld, memAtPath := false, false
+	f.fc.onCreate = func(_, _ string) {
+		memInHeld = exists(filepath.Join(held, f.vmID, snapshotPartialDirName, snapshotMemName))
+		memAtPath = exists(filepath.Join(f.vault, f.vmID, snapshotPartialDirName, snapshotMemName))
+	}
 	if err := f.mgr.HibernateVM(f.vmID); err != nil {
 		t.Fatal(err)
+	}
+	if memAtPath || !memInHeld {
+		t.Fatalf("guest RAM was written at the vault path (%v) / not in the held vault (%v)", memAtPath, !memInHeld)
 	}
 	if f.guest.prepares != 1 {
 		t.Fatalf("prepares = %d", f.guest.prepares)
@@ -130,6 +140,7 @@ func TestVaultHandleCheckOverFixtures(t *testing.T) {
 		if err := os.MkdirAll(dm, 0o755); err != nil {
 			t.Fatal(err)
 		}
+		_ = os.Remove(filepath.Join(dm, "uuid"))
 		if err := os.WriteFile(filepath.Join(dm, "uuid"), []byte(uuid+"\n"), 0o444); err != nil {
 			t.Fatal(err)
 		}
