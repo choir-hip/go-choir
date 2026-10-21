@@ -111,3 +111,23 @@ read from the manifest; a cgroup tree with a hard budget per worker; capsule
 `memory.high`/`memory.max` mechanism with values from measurement; `clone3`
 answering `ENOSYS` and `CLONE_NEWUSER` refused; guest sysctls and a sandboxed
 document-tool child. Not in this batch: making the guest daemon non-root.
+
+## Status by item (lane `lane/b3-desk-boundary`, not deployed)
+
+- ARCH-07: wire version byte 1 and zero reserved bytes enforced in
+  `FramedConn`; a per-spawn slot token in the ready handshake and on every
+  host-bound request. Done on the lane.
+- ARCH-05: taint class per manifest row; no shared uid, pool or process across
+  classes (tests); the data-flow record is in the FP2 goal file. Done on the lane.
+- RES-02 and the desks half of RES-01: a cgroup per worker with a hard
+  memory.max from the manifest, an aggregate desks cgroup, `MemoryMin` for the
+  daemon. Done on the lane; real values come from the staging probe.
+- RES-03: the capsule session worker volunteers for the OOM kill and holds a
+  soft and an address-space bound. Done on the lane.
+- SEC-13: clone3 ENOSYS and no CLONE_NEWUSER in every capsule filter. Done on
+  the lane.
+- SEC-15: guest sysctls done; the non-root daemon and the document-tool sandbox
+  are open (designs in the FP2 goal file).
+- RES-04 and the capsules aggregate of RES-01: open; the mechanism needs
+  `memory.events` from real builds to set values (a `memory.high` below the
+  link's anonymous peak throttles the build).

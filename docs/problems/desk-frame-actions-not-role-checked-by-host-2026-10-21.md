@@ -68,3 +68,22 @@ checks every frame action against that desk's role table before serving
 it; unknown desks fail closed (as `choir.go` already does for unknown roles
 in the worker). The table should come from the desk manifest the checklist
 proposes (ARCH-02), so app desks get it by construction.
+
+## Repair (lane `lane/b3-desk-boundary`, not deployed)
+
+The daemon now decides what a worker may ask for from the worker it spawned,
+never from the frame (`internal/yaegikernel/desk_session_worker.go`,
+`admitFrame`): the role and epoch are the host's, the slot token is a 32-byte
+secret the host generated at spawn, and the table is the desk's row in
+`internal/deskmanifest`. Each of the six failure modes above is a test:
+1 and 4 `TestFrameRoleTableEveryDeskEveryAction` and
+`TestFrameRoleResearchChildIsNarrower`; 2 `TestForgedFrameClaimsAnotherDesk`;
+3 `TestSlotTokenWrongMissingOrReplayed` and `TestFrameEpochAndProtocolVersion`;
+5 `TestHandleScopesAreExactlyTheDesksTable` (exec and write_file are
+engineering's only, message and emit nobody's); 6
+`TestFrameRoleUnknownDeskServesNothing` and `TestUnknownDeskHasNoAuthority`. A
+refusal is a `desk.egress` trace event with `refused: true`
+(`TestDeskRefusalIsRecordedOnTheRunTrace`); a wrong slot token also ends the
+worker. The deployed binary's own admission is probed from the isolation
+self-test (`frame_boundary`). Status: fixed on the lane branch; staging proof
+owed (FP2 goal file, "Staging probe steps").

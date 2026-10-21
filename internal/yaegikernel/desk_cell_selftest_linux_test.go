@@ -100,7 +100,7 @@ func runSelfTest(t *testing.T, cfg DeskCellSelfTestConfig) DeskCellSelfTestRecei
 // still refused (another uid's 0700 tmp dir).
 func TestDeskCellSelfTestPassesTheProductionShape(t *testing.T) {
 	if os.Geteuid() != 0 || !haveCellUsers() {
-		t.Skip("needs a root spawner and the choir-cell-* users")
+		t.Skip("needs a root spawner")
 	}
 	rec := runSelfTest(t, selfTestBase(t, CellConfinementAuto))
 	// A sample receipt for checking the staging script's judge
