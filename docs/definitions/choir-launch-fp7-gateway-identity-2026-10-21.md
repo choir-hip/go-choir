@@ -132,7 +132,7 @@ boundaries:
     - docs/design/claude-delegate-slice1-2026-10-14.md and the Anthropic terms quoted in docs/reports/claude-agent-sdk-in-choir-2026-10-14.md section 2.2
   must_preserve:
     - Nothing here makes a call succeed that was refused before. A change that cannot decide refuses.
-    - The Jev route refuses a mismatched pin in every mode (its 403). Since the pin is shared by every route, its first-use write follows the mode (batch 1 review, SEC-05 finding 13).
+    - The Jev route refuses a mismatched pin in every mode (its 403). It pins an unpinned bearer on first use in every mode but strict, which refuses it (SEC-05 findings 13 and 14).
     - The Anthropic relay serves only a bearer already pinned to the caller's address, in every binding mode, and never writes identity state (batch 1 review, SEC-08 findings 11 and 12).
     - Who may run the delegate, and where, does not change: one test computer, the existing expiry.
     - No secret in the repository, a log, a test, a response or a guest disk; tests use fake keys.
@@ -185,7 +185,7 @@ now:
       relay allowlist is keyed by gateway identity (the VM id vmctl issues
       bearers for), because the gateway does not know the ComputerID. Batch 1
       review: the relay's pin check is its own and ignores the rollout mode;
-      the Jev route's first-use write follows the mode; the SEC-16 nix removal
+      the Jev route keeps its first-use pin in every mode but strict, which refuses an unpinned bearer; the SEC-16 nix removal
       is a separate, later landing.
     kind: operational
     status: settled
@@ -214,9 +214,8 @@ now:
     clients taught to wait; (2) a brand-new interactive VM's first
     resolveDesktopContext issues its credential before boot and never
     ensures it, so it stays unpinned until the next resolve (refused in
-    strict; strict must wait for a vmctl fix); (3) in observe, between a cold
-    boot and the host's ensure, an unpinned Jev bearer is accepted from any
-    guest address (finding 13's accepted cost); (4) scheduler on: decoded
+    strict; strict must wait for a vmctl fix); (3) withdrawn (bunch 4b: Jev
+    pins on first use in observe again); (4) scheduler on: decoded
     bodies (no MaxBytesReader) sit in memory while queued, up to 256 per
     computer, and Acquire does not check an already-cancelled context; both
     are preconditions of turning the scheduler on; (5) scorer.go sets the
@@ -308,8 +307,9 @@ source address with the pin and refuses a mismatch.
 | `strict` | refused (429 + Retry-After 2) | passes | refused (429 + Retry-After 2) |
 
 The Jev route follows the same columns with its own 403 for every refusal,
-and writes a first-use pin only in `enforce` and `off` (`off` is the
-pre-SEC-05 Jev behavior). The Anthropic relay ignores the mode: it serves only
+and writes a first-use pin in `off`, `observe` and `enforce`, as it did
+before SEC-05; only `strict` refuses an unpinned bearer (bunch 4b review,
+SEC-05 finding 14, which corrects finding 13's observe reading). The Anthropic relay ignores the mode: it serves only
 a pinned bearer from its pin's address and writes nothing (batch 1 review).
 
 A binding refusal is still a refusal (the call never reaches a provider,
@@ -511,6 +511,17 @@ Their blocking findings, recorded before any fix:
   ([record](../problems/gateway-model-calls-have-no-scheduler-2026-10-21.md)),
   non-blocking: the queue wait sits outside the call's ten-minute deadline,
   so wait plus call can pass the 10m30s write timeout.
+
+## Bunch 4b review (2026-10-21, candidate 6dafee596)
+
+GPT-6.1-sol sent the delta back with one blocking finding; Gemini 4 Argon
+accepted. Accepted: SEC-05 finding 14
+([record](../problems/gateway-bearer-works-from-any-computer-2026-10-21.md)),
+observe mode had dropped Jev's first-use pin, so a copied bearer was served
+before the host's ensure. Repair: Jev pins on first use in every mode but
+strict; strict still refuses an unpinned bearer. Argon's non-blocking note
+(`BindPeer` has no production caller) stays as a residual: its registry
+tests still cover the pin semantics, so it can be deleted later.
 
 ## Deployed proofs for FP0 (exact steps; none needs a secret)
 
