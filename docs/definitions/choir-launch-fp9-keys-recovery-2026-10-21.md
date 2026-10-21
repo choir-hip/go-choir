@@ -170,16 +170,23 @@ heresy_delta:
     (hypothesis); one backup secret opens keys and data together; the F12
     retention and 36 hour figures are stale (problem record).
   introduced: none
-  repaired: none
+  repaired: >-
+    Under CHOIR_KEY_ESCROW_SEAL=permit or require, a missing escrow key file
+    is an error instead of a new key (still regenerated under off, as today);
+    data images are created 0600 (commit 2). Neither is live until FP0 lands
+    and sets the switch.
 
 now:
-  status: working
+  status: open_handoff
   slice: >-
-    Commit 1 (this file and the problem record). Next: commit 2, the mode
-    change, tests first.
+    Commits 1 to 7 built on lane/b9-keys (the vault, its host script and
+    nix module, the mode change, sealed escrow keys with the escrowkey
+    tool, taperepack, the drill steps). Every remaining step is FP0's
+    (landing, the flake entries, deployed proofs) or the owner's (open
+    questions 1 to 4).
   source_ref: origin/main 0cb66b4cb
   deploy_identity: unknown
-  candidate: {id: none, state: none, ref: lane/b9-keys, base: 0cb66b4cb, digest: none, scope: [internal/vmmanager, internal/keyescrow, internal/platform, cmd/corpusd, cmd/checkpointd, cmd/escrowkey, internal/taperepack, cmd/taperepack, nix/snapshot-vault.nix, scripts, docs]}
+  candidate: {id: FP9-lane, state: built_locally, ref: lane/b9-keys, base: 0cb66b4cb, digest: none (FP0 freezes it at review), scope: [internal/vmmanager, internal/keyescrow, internal/taperepack, internal/tapestore (W10 test only), cmd/corpusd, cmd/checkpointd, cmd/escrowkey, cmd/taperepack, nix/snapshot-vault.nix, scripts, docs]}
   conjecture:
     id: FP9-C1
     claim: >-
@@ -200,22 +207,39 @@ now:
       after (FP0) bounds it, and only full-disk encryption removes it.
     scope_if_supported: snapshot hibernate of computers selected for the vault, unjailed VMM, one host
     status: proposed
-    evidence_refs: []
+    evidence_refs: [local tests only; see receipts]
+  conjectures_also:
+    - id: FP9-C2
+      claim: >-
+        Once the escrow key is sealed and its KEK is kept out of the backup,
+        a copy of platform-artifacts or of the backup does not yield the
+        escrow key. Not claimed: a read of the root file system that also
+        holds the KEK.
+      status: proposed
+    - id: FP9-C3
+      claim: >-
+        Every eligible legacy pin of a test computer has an equal-bytes
+        segment copy read with the fallback off, and a restore of its
+        tape-seg passes the same census. Edge: the manifest sees receipted
+        pins only; FP0 compares its per-computer count with the computer's
+        append receipts.
+      status: proposed
   decision:
     what: >-
       Snapshot memory goes to an ephemeral-key dm-crypt plain volume (the
       review's section 4.8 recommendation), selected per computer, refusing
-      when the probe fails; data volumes and the escrow key's unlock are
-      left as owner decisions with the design below.
+      when the probe fails; the escrow key may rest sealed under a KEK kept
+      out of the backup; data volumes and how the host unlocks after a
+      reboot are left as owner decisions with the design below.
     kind: architecture
     status: proposal
     evidence_ref: this file
     owner_ratification_ref: pending (FP0 relays the open questions)
   belief:
     believed_state: >-
-      No snapshot, image or key at rest is encrypted on Node B; the only
-      at-rest protection that works without an outside root of trust is the
-      snapshot vault; the rest needs a key delivered from outside the host.
+      No snapshot, image or key at rest is encrypted on Node B today; the
+      code to change that for snapshots and the escrow key exists on this
+      branch, dark; data volumes need a key delivered from outside the host.
     main_uncertainty: >-
       Whether Node B's kernel reports CRYPT-PLAIN- in /sys/dev/block/*/dm/uuid
       for a plain mapping (code from cryptsetup's source, not observed), and
@@ -223,12 +247,25 @@ now:
       namespace.
     next_observation: FP0's verify script output on a host with the vault up (uuid prefix, findmnt, vmctl's view).
   blocker_or_risk: >-
-    None for local work. The nix module cannot be evaluated against Node B's
-    full configuration here; it is not imported by node-b.nix so it cannot
-    break a deploy until FP0 wires it.
-  next_action: Write the failing mode tests, then the mode change.
+    None for local work. The nix module cannot be evaluated here (no Nix in
+    the lane VM; its evaluation test skips); it is not imported by
+    node-b.nix so it cannot break a deploy until FP0 wires it. escrowkey and
+    taperepack are not in the flake's goServiceSubPackages yet (FP0 step).
+  next_action: FP0 reviews the frozen lane, lands it with the switches off, then runs "Landing steps for FP0" below.
 
-receipts: []
+receipts:
+  - kind: local_tests
+    at: 2026-10-21
+    ref: lane/b9-keys
+    evidence: >-
+      go test ./internal/vmmanager -run 'Vault|Snapshot|DataImage',
+      ./internal/keyescrow, ./cmd/escrowkey, ./cmd/checkpointd,
+      ./internal/taperepack, ./cmd/taperepack, ./internal/tapestore: ok.
+      scripts/snapshot-vault-test.sh, off-host-backup-kek-exclude-test.sh,
+      off-host-backup-preflight-test.sh: pass. Break-once: the require
+      refusal and the KEK mode check (keyescrow), the census fallback and
+      the plan hash check (taperepack) each made a test fail.
+
 ---
 
 # Station FP9: keys and recovery
@@ -482,15 +519,23 @@ memory caps apply):
 
 1. Pick a test computer with segments (the flag is on): note its id, the
    segment file count and total bytes under `tape-seg/<id>/` (counts only).
-2. `taperepack plan --root <artifacts> --computer <id> --out <scratch>` and
-   `taperepack copy` for the same id; then `taperepack census` against the
-   live root: all equal.
+2. `taperepack plan --root <artifacts> --computer <id> --out <scratch>/manifest.jsonl`
+   (the manifest must be outside the artifacts root; the tool refuses
+   otherwise). Record the counts line. Compare `per_computer[<id>]` with
+   the computer's append-receipt count (FP9-C3's edge). Then
+   `taperepack census --root <artifacts> --manifest <manifest> --computer <id>`
+   once before the copy: it must exit 3 with everything missing (the
+   census reads no legacy file as a segment copy). Then
+   `taperepack copy --root <artifacts> --manifest <manifest> --computer <id>`
+   (idle IO: `nice -n 19 ionice -c3`), and the census again: exit 0, all
+   equal. A second copy must report `records_written` 0.
 3. Run the daily backup (or take the latest snapshot id after it).
 4. `restic restore <snap>:/var/lib/go-choir/platform-artifacts/tape-seg/<id>`
    into a scratch directory outside any live path.
-5. `taperepack census --root <scratch root> --manifest <manifest> --segments-only`
-   (the restored tree has the segments; the legacy files are compared from
-   the live root with `--legacy-root`): all equal, zero missing.
+5. `taperepack census --root <scratch root> --legacy-root <artifacts>
+   --manifest <manifest> --computer <id>` (segments from the restored tree,
+   the legacy bytes from the live root): exit 0, `equal` equal to
+   `records`, zero missing, corrupt, different, legacy_bad.
 6. Delete the scratch restore and the scratch manifest. Record counts only.
 7. Do not delete, move or edit any file under `platform-artifacts`.
 
@@ -526,6 +571,27 @@ checkpoint job opens an escrowed key. 4. Flip to `require`. 5. Exclude the KEK
 from the backup and take a backup; a restore of `platform-artifacts` without
 the KEK fails `escrowkey check`. 6. Rollback drill: `escrowkey unseal`, set
 `off`, restart: same fingerprint.
+
+## Landing steps for FP0
+
+All switches ship off; with them unset the lane is byte-identical in
+behavior to main (must_preserve 1).
+
+1. Add `"cmd/escrowkey"` and `"cmd/taperepack"` to `goServiceSubPackages`
+   in `flake.nix` (the lane VM cannot run a Nix build, so the lane does not
+   touch the flake), or run both from a `go build` in a nix shell on the
+   host for the proofs only.
+2. Snapshot vault: the "Deployed proof" steps below.
+3. Escrow sealing: the corpusd and checkpointd units read
+   `CHOIR_KEY_ESCROW_SEAL` and `CHOIR_KEY_ESCROW_KEK_PATH`; give the KEK as
+   `LoadCredential=key-escrow-kek:/var/lib/go-choir/secrets/key-escrow-kek`
+   and set `CHOIR_KEY_ESCROW_KEK_PATH=%d/key-escrow-kek`. Generate it with
+   `escrowkey kek-generate --kek /var/lib/go-choir/secrets/key-escrow-kek`
+   (mode 0400, refuses to overwrite). The daily backup already excludes any
+   `key-escrow-kek*` name. Then the escrow sealing steps below, using
+   `escrowkey check|seal|unseal --key <key path> --kek <kek path>` with
+   corpusd stopped and no checkpoint job running during seal and unseal.
+4. Tape: the restore drill on the segment snapshot (L2-04 above).
 
 ## Open owner questions (defaults stand; nothing blocks)
 
