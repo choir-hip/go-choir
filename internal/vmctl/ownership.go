@@ -1395,6 +1395,10 @@ func (r *OwnershipRegistry) reserveFreshVMConfig(own *VMOwnership, gatewayToken 
 	if own == nil || mgr == nil {
 		return VMManagerConfig{}, fmt.Errorf("VM realization authority is unavailable")
 	}
+	// The class first: bootWarmnessClass refreshes the test tier for an
+	// account minted since the sweep, and the hotplug selection below reads
+	// that tier (RES-09).
+	warmness := r.bootWarmnessClass(own)
 	epoch, err := mgr.ReserveBootEpoch(own.VMID, own.Epoch+1)
 	if err != nil {
 		return VMManagerConfig{}, err
@@ -1414,7 +1418,7 @@ func (r *OwnershipRegistry) reserveFreshVMConfig(own *VMOwnership, gatewayToken 
 	corpusdURL := r.corpusdURL
 	r.mu.Unlock()
 
-	cfg.WarmnessClass = string(r.bootWarmnessClass(own))
+	cfg.WarmnessClass = string(warmness)
 	cfg.ComputerCredentialEnvelope = issueComputerCredentialEnvelope(corpusdURL, cfg.ComputerID, cfg.RealizationID, cfg.Epoch)
 	if cfg.ComputerCredentialEnvelope == "" && strings.TrimSpace(corpusdURL) != "" {
 		return VMManagerConfig{}, fmt.Errorf("realization credential unavailable")
@@ -2256,6 +2260,9 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 			err = fmt.Errorf("realization credential unavailable")
 		} else {
 			shapeCPU, shapeMem := interactiveMachineShape()
+			// The class before the hotplug selection, which reads the test
+			// tier the class lookup refreshes (RES-09).
+			warmness := r.bootWarmnessClass(own)
 			info, err = mgr.BootVM(VMManagerConfig{
 				VMID:                       vmID,
 				ComputerID:                 own.ComputerID,
@@ -2270,7 +2277,7 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 				ComputerKind:               "active",
 				OwnerID:                    userID,
 				DesktopID:                  desktopID,
-				WarmnessClass:              string(r.bootWarmnessClass(own)),
+				WarmnessClass:              string(warmness),
 			})
 		}
 		if err != nil {

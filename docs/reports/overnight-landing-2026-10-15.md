@@ -134,7 +134,12 @@ deploy-time regressions seen.
 
 Tracer `go-served-1143` (build `7b8944f03`): first full loop, 17 of 18 checks.
 Memory hotplug probe: refused ("computer is not selected for memory hotplug");
-the feature is flag-off by design, so there is no hotplug proof yet. Exa: still
+the feature is flag-off by design, so there is no hotplug proof yet.
+(Corrected 2026-10-21, FP8: the flag was on for class:test from c9621a721.
+The refusal is the probe's own message; the likely cause is that vmctl read
+the hotplug selection before refreshing the test tier, so a freshly minted
+test account cold booted without the device. See P5 in
+`docs/definitions/choir-launch-fp8-image-jailer-2026-10-21.md`.) Exa: still
 `exa=error` in the gateway search summary after the deploy (4 lines, from the
 tracer computer's searches); the failing step is not named in the summary line;
 cap 150 stays.
