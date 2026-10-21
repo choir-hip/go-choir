@@ -93,3 +93,42 @@ the start and the end of the step.
 4. A deploy refreshes a protected computer that is unhealthy outside the
    registry instead of leaving it: the rollback must reach the computer
    that the bad release broke.
+
+## Fix design (proposed, 2026-10-21; panel pending)
+
+Measured: a plain nullable column adds in 8 ms; a BEFORE INSERT trigger
+fills it, but a BEFORE UPDATE trigger does not fire on our
+`INSERT ... ON DUPLICATE KEY UPDATE` upsert (the row kept its old value),
+so the engine cannot maintain it for us. The columns are therefore filled
+by the writers, from one shared expression.
+
+1. **Columns.** Plain `VARCHAR(255) NULL` columns with the same meaning as
+   the reverted generated ones: `og_meta_agent_id` (choir.run,
+   metadata `$.agent_id`), `og_meta_capture_id` (choir.capture_label),
+   `og_meta_doc_id` (choir.source_ref), `og_rec_addressee`
+   (commitment_record, body `$.addressee`, guarded by `JSON_VALID`), and a
+   marker `og_derived_v INT NULL`: the version of the derived-column set
+   the row was written with.
+2. **One expression, every writer.** A single Go helper renders each
+   column's SQL expression over the statement's own parameters (kind,
+   metadata, body) exactly as the generated column did, so Go never
+   re-implements JSON semantics. Every `og_objects` writer uses it: the two
+   upserts in `objectgraph/dolt_store.go`, `store/project.go`, and the two
+   UPDATEs in `store/vocab_migrate_og.go`. The upsert's update arm copies
+   `VALUES(col)`. A test fails if any `INSERT INTO og_objects` or
+   `UPDATE og_objects` in the guest packages does not go through it.
+3. **Online backfill.** After boot, behind the open gate, a background
+   task fills rows whose marker is older than the current version, in
+   canonical-id batches of a few hundred. It takes the engine mutex per
+   batch only, logs progress (rows done, rows left, rate), and resumes
+   from where it stopped after a restart because the marker is durable.
+4. **Reads switch only when complete.** A column read is used when the
+   column and its index exist and no row of that column's kind has an old
+   marker; until then, the JSON path. The check is one indexed probe.
+5. **Indexes.** Built after the backfill completes, one at a time, each
+   timed and logged. Open question for the panel: an index build is one
+   pass that holds the single connection; on the paper that may take
+   minutes.
+6. **Boot.** Boot only adds the plain columns (milliseconds). Nothing that
+   scales with the table runs on the boot path, and any boot step that can
+   pass a minute logs progress.
