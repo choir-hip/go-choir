@@ -31,6 +31,10 @@ import (
 // ErrEngineeringAdmissionBusy is the retryable refusal: the request waits.
 var ErrEngineeringAdmissionBusy = errors.New("engineering admission busy")
 
+// errEngineeringRequestExpired settles a spawn wake whose request waited past
+// the assignment deadline: the request is cancelled, nothing is spawned.
+var errEngineeringRequestExpired = errors.New("engineering request expired before admission")
+
 // engineeringAdmissionBusy names the request that must wait and what it waits
 // behind. It matches ErrEngineeringAdmissionBusy under errors.Is.
 type engineeringAdmissionBusy struct {
@@ -121,6 +125,11 @@ func (rt *Runtime) admitEngineeringAssignment(ctx context.Context, assignment ty
 		return fmt.Errorf("engineering admission: list assignments: %w", err)
 	}
 	now := time.Now().UTC()
+	if assignment.Disposition == types.EngineeringAssignmentOpen && engineeringRequestExpired(assignment, now) {
+		// Defense in depth: the saga expires an overdue request before it
+		// asks for admission.
+		return errEngineeringRequestExpired
+	}
 	// The slot first: a live assignment outranks any queue position.
 	for _, other := range assignments {
 		if sameEngineeringAssignment(other, assignment) || !engineeringAssignmentHoldsSlot(other) {
@@ -138,24 +147,12 @@ func (rt *Runtime) admitEngineeringAssignment(ctx context.Context, assignment ty
 }
 
 // deferEngineeringAdmission consumes a spawn wake whose request has to wait:
-// it expires the request when it has waited past the deadline, otherwise it
-// re-arms the wake with the next retry count. It returns nil when the wake is
-// settled either way, and an error (so the dispatcher redelivers the original
-// wake) when neither the cancel nor the re-arm could be made.
+// it re-arms the wake with the next retry count. It returns nil when the wake
+// is settled, and an error (so the dispatcher redelivers the original wake)
+// when the re-arm could not be made. An overdue request never gets here: it
+// is expired before admission (expireOverdueEngineeringRequests).
 func (rt *Runtime) deferEngineeringAdmission(ctx context.Context, assignment types.EngineeringAssignment, wake delegatedAssignmentSpawnDeadline, objective string, busy *engineeringAdmissionBusy) error {
 	binding := assignment.Binding
-	if engineeringRequestExpired(assignment, time.Now().UTC()) {
-		parent := types.RunRecord{
-			RunID: binding.ParentRunID, OwnerID: binding.OwnerID, ComputerID: binding.ComputerID, AgentID: binding.ParentAgentID,
-		}
-		reason := fmt.Sprintf("queued request expired: waited past the assignment deadline (%s) behind %s; request remains pending and retryable",
-			assignedEngineeringDeadline(), busy.BlockedBy)
-		if _, err := rt.cancelAssignedEngineering(ctx, parent, assignment.AssignmentID, binding.Attempt, reason); err != nil {
-			return fmt.Errorf("expire queued assignment %s: %w", assignment.AssignmentID, err)
-		}
-		log.Printf("runtime: engineering admission: assignment %s expired in the queue behind %s (%s)", assignment.AssignmentID, busy.BlockedBy, busy.Why)
-		return nil
-	}
 	retry := wake.Retry + 1
 	if !rt.kernelMode || rt.scheduleActor == nil {
 		return fmt.Errorf("no wake available to retry the request: %w", busy)
@@ -220,4 +217,47 @@ func (rt *Runtime) resumeQueuedEngineeringRequestsAtPlannedBoot(ctx context.Cont
 		}
 		log.Printf("runtime: planned boot: queued engineering request %s kept and resumed", a.AssignmentID)
 	}
+}
+
+// expireOverdueEngineeringRequests closes every queued request of the computer
+// that has waited past the assignment deadline, this one included, before
+// admission is asked (review finding B2): expiry does not depend on the slot
+// being busy, and an expired request is never left open while a younger one
+// is admitted. The caller holds engineeringAssignmentOpenMu, so no saga is
+// inside its spawn window. It returns errEngineeringRequestExpired when this
+// request expired, and an error when this request's expiry could not be
+// recorded. Another request's failed expiry is logged; it does not block
+// admission, because an expired request is out of the queue either way.
+func (rt *Runtime) expireOverdueEngineeringRequests(ctx context.Context, assignment types.EngineeringAssignment) error {
+	assignments, err := rt.store.ListEngineeringAssignmentsForComputer(ctx, assignment.Binding.ComputerID)
+	if err != nil {
+		return fmt.Errorf("engineering admission: list assignments: %w", err)
+	}
+	now := time.Now().UTC()
+	selfExpired := false
+	for _, a := range assignments {
+		if a.Disposition != types.EngineeringAssignmentOpen || a.CapsuleDisposition != types.EngineeringCapsuleUnbound ||
+			strings.TrimSpace(a.BoundRunID) != "" || !engineeringRequestExpired(a, now) {
+			continue
+		}
+		self := sameEngineeringAssignment(a, assignment)
+		parent := types.RunRecord{
+			RunID: a.Binding.ParentRunID, OwnerID: a.Binding.OwnerID, ComputerID: a.Binding.ComputerID, AgentID: a.Binding.ParentAgentID,
+		}
+		reason := fmt.Sprintf("queued request expired: waited past the assignment deadline (%s) without admission; request remains pending and retryable",
+			assignedEngineeringDeadline())
+		if _, err := rt.cancelAssignedEngineering(ctx, parent, a.AssignmentID, a.Binding.Attempt, reason); err != nil {
+			if self {
+				return fmt.Errorf("expire queued assignment %s: %w", a.AssignmentID, err)
+			}
+			log.Printf("runtime: engineering admission: expire overdue request %s: %v", a.AssignmentID, err)
+			continue
+		}
+		log.Printf("runtime: engineering admission: assignment %s expired in the queue", a.AssignmentID)
+		selfExpired = selfExpired || self
+	}
+	if selfExpired {
+		return errEngineeringRequestExpired
+	}
+	return nil
 }

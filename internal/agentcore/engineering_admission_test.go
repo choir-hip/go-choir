@@ -194,16 +194,57 @@ func TestEngineeringAdmissionIsFIFO(t *testing.T) {
 	requireBusy(t, f, 2, 1, "third request waits for the second")
 }
 
-// A queued request past the assignment deadline expires: it no longer blocks
-// the younger requests behind it (a stranded request cannot hold the line).
-func TestEngineeringAdmissionExpiredQueuedRequestDoesNotBlock(t *testing.T) {
+// Review finding B2, first half: a request whose deadline passed while it
+// waited, and whose blocker finished before its next retry, is expired by that
+// retry; it never enters the spawn saga because the slot happens to be free.
+func TestEngineeringAdmissionExpiredRequestExpiresWhenTheSlotFrees(t *testing.T) {
 	t.Setenv("CHOIR_ASSIGNMENT_DEADLINE", "1ms")
 	f := newAdmissionFixture(t, 2)
+	wakes := captureAdmissionWakes(f.rt)
 	f.open(0)
-	f.open(1)
+	f.bind(0)
+	queued := f.open(1)
 	time.Sleep(20 * time.Millisecond)
+	f.finish(0)
+	*wakes = nil
 
-	requireAdmitted(t, f, 1, "the older request expired in the queue")
+	content := fmt.Sprintf(`{"assignment_id":%q,"attempt":%d,"retry":3}`, queued.AssignmentID, queued.Binding.Attempt)
+	if err := f.rt.HandleDelegatedAssignmentSpawnDeadline(context.Background(), f.seed.OwnerID, f.computer, f.seed.ParentAgentID, content); err != nil {
+		t.Fatalf("an expired request entered the spawn saga (or its expiry failed): %v", err)
+	}
+	expired := f.get(1)
+	if expired.Disposition != types.EngineeringAssignmentCancelled || !strings.Contains(expired.DispositionReason, "deadline") {
+		t.Fatalf("expired request with a free slot: %s (%q), want cancelled with a deadline reason", expired.Disposition, expired.DispositionReason)
+	}
+	if armed := f.spawnWakesFor(*wakes, 1); len(armed) != 0 {
+		t.Fatalf("an expired request armed %d retries", len(armed))
+	}
+}
+
+// Review finding B2, second half: an older request that expired while still
+// open does not block a younger one (FIFO among non-expired requests), and the
+// younger one's admission closes it under the same mutex, with a reason that
+// blames no one, instead of leaving it open while the younger runs.
+func TestEngineeringAdmissionExpiredOlderRequestIsClosedBeforeAYoungerIsAdmitted(t *testing.T) {
+	t.Setenv("CHOIR_ASSIGNMENT_DEADLINE", "300ms")
+	f := newAdmissionFixture(t, 2)
+	captureAdmissionWakes(f.rt)
+	f.open(0)
+	time.Sleep(400 * time.Millisecond)
+	younger := f.open(1)
+
+	content := fmt.Sprintf(`{"assignment_id":%q,"attempt":%d}`, younger.AssignmentID, younger.Binding.Attempt)
+	err := f.rt.HandleDelegatedAssignmentSpawnDeadline(context.Background(), f.seed.OwnerID, f.computer, f.seed.ParentAgentID, content)
+	if err == nil || !strings.Contains(err.Error(), "capsule authority unavailable") {
+		t.Fatalf("the unexpired younger request did not reach the spawn saga: %v", err)
+	}
+	older := f.get(0)
+	if older.Disposition != types.EngineeringAssignmentCancelled || !strings.Contains(older.DispositionReason, "deadline") {
+		t.Fatalf("the expired older request was left %s (%q) while a younger one was admitted", older.Disposition, older.DispositionReason)
+	}
+	if strings.Contains(older.DispositionReason, younger.AssignmentID) {
+		t.Fatalf("the expired request's reason blames the younger request: %q", older.DispositionReason)
+	}
 }
 
 // The retry is a restart-work kind: a crash boot drops a queued request's

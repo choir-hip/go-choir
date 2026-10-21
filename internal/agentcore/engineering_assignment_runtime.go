@@ -306,7 +306,10 @@ func (rt *Runtime) resumeDelegatedCastAssignment(ctx context.Context, assignment
 	// Admission comes first, before the capsule authority, the preflight and
 	// anything that could cancel: a request that has to wait stays open and
 	// unbound, and the live assignment is never touched. It reads only the
-	// assignment rows.
+	// assignment rows. Expiry comes before admission, whatever the slot.
+	if err := rt.expireOverdueEngineeringRequests(ctx, assignment); err != nil {
+		return AssignedEngineeringStart{}, err
+	}
 	if err := rt.admitEngineeringAssignment(ctx, assignment); err != nil {
 		return AssignedEngineeringStart{}, err
 	}
