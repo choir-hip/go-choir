@@ -7,10 +7,13 @@ definition_version: 4
 readiness: drafted
 
 review:
-  reviewer: none yet; the orchestrator sends the frozen red candidate to a panel before it lands
-  frozen_ref: none
-  verdict: none
-  evidence_ref: none
+  reviewer: FP0's panel, GPT-6.1-sol and Gemini 4 Argon (2026-10-21)
+  frozen_ref: 8cadecc7e
+  verdict: >-
+    sol send back (A1 boot ALTER, A2 withdrawal races), Argon accept (A2 as
+    non-blocking). FP0: fix A2 and the malformed-family recovery on
+    lane/b2-store-b1fix; A1 is pre-existing, recorded, not fixed here.
+  evidence_ref: docs/problems/store-hot-reads-need-a-rollback-safe-side-table-2026-10-21.md (panel findings P1, P2)
 
 start:
   captured_at: 2026-10-21T18:10:00Z
@@ -104,13 +107,17 @@ boundaries:
 
 now:
   status: checkpoint_incomplete
-  slice: B2 built and tested locally on lane/b2-store; awaiting FP0's panel, landing in a deploy of its own after the host lane's vmctl rollback-reachability fix, and the deployed proof
+  slice: >-
+    B2 built and tested locally; the panel's A2 and malformed-recovery
+    findings fixed on lane/b2-store-b1fix (tests first, then the fix);
+    awaiting FP0's re-review, landing in a deploy of its own after the host
+    lane's vmctl rollback-reachability fix, and the deployed proof
   source_ref: see receipts
   deploy_identity: f2c4a3ec3 serving at start; this lane deploys nothing
   candidate:
     id: fp1-b2-store
     state: paused
-    ref: lane/b2-store
+    ref: lane/b2-store-b1fix (on the frozen 8cadecc7e)
     base: f399a2e8c
     digest: none
     scope:
@@ -164,7 +171,12 @@ now:
     Lands only after the host lane's vmctl rollback-reachability fix. A
     rollback to a binary without the extractor change leaves og_key_index as an
     unknown table to that binary (replay-ineligible until dropped).
-  next_action: FP0 reviews and lands; then B2b (docs/design/store-engine-concurrency-2026-10-21.md)
+    Residual, pre-existing and not fixed here: boot can ALTER og_objects
+    STORED on a populated store missing an older generated column
+    (docs/problems/boot-alters-og-objects-when-older-columns-missing-2026-10-21.md);
+    FP0 can check the paper with the query in that record before the deploy.
+    Residual: the validator's COUNT and stray-id lists are not keyset-paged.
+  next_action: FP0 re-reviews e1814ff86 and lands the lane; then B2b (docs/design/store-engine-concurrency-2026-10-21.md)
 
 receipts:
   - id: fp1-side-table
@@ -188,6 +200,18 @@ receipts:
     proof_refs: [docs/design/store-engine-concurrency-2026-10-21.md, internal/objectgraph/engine_concurrency_probe_test.go]
     rollback_ref: git revert 636612d3e
     disposition: design landed in the lane, nothing implemented; next batch named
+  - id: fp1-panel-fixes
+    boundary: implement
+    identity: d3921df4a (problem record), 655262e1b (failing tests), e1814ff86 (fix); adae3e779 (A1 record)
+    proof_refs:
+      - internal/objectgraph/derived_keys_test.go (TestPassPublication*, TestReadSees*)
+      - internal/store/derived_keys_test.go (TestRepairedMalformedRowRestoresTheSideRead)
+      - docs/problems/boot-alters-og-objects-when-older-columns-missing-2026-10-21.md
+    rollback_ref: git revert e1814ff86 655262e1b
+    disposition: >-
+      built and tested locally: the five new cases failed before e1814ff86
+      and pass after; objectgraph and store derived-key tests pass under
+      -race; internal/objectgraph and internal/store whole pass; not landed
 ---
 
 # FP1: store and daemon throughput

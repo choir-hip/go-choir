@@ -316,7 +316,24 @@ withdrawal or a restart. Fix shape: a successful maintenance or drop of a
 family that is bad asks for another pass (without aborting one in flight),
 and the loop runs passes for such a family, at its recheck interval.
 
+Fixed on lane/b2-store-b1fix: failing tests 655262e1b, fix e1814ff86
+(`pubMu`; readability checked after the read's snapshot; `RepairPending`
+and a pass at most every 2 minutes while a malformed family is written;
+replay withdraws again before its commit). The not-uniformly-paged
+validator steps (the kind's COUNT, the stray-id lists) and the rollback
+cost remain as residuals below.
+
 ## Residuals
+
+- The validator's whole-kind COUNT and its stray-id lists are one
+  engine-held statement each, not keyset pages (panel, non-blocking). Cheap
+  on today's stores (no strays are built by the code); page them if FP0's
+  staging reading shows long holds.
+- A family whose malformed row stays costs one validation pass every 2
+  minutes while it is written (P2's fix), at the 25% duty cycle.
+- Boot can still ALTER og_objects when an older generated column is
+  missing: pre-existing, its own record
+  ([boot-alters-og-objects-when-older-columns-missing-2026-10-21.md](boot-alters-og-objects-when-older-columns-missing-2026-10-21.md)).
 
 - A rollback to a binary without the extractor change leaves `og_key_index`
   as an unknown table (finding 3). Landing the extractor commit one deploy
