@@ -988,3 +988,137 @@ download span without a capsule. Fix candidates, not decided: a read-only
 build-cache seed built by the host for the base tree (capsule-long-exec
 design R2, "not built"), more CPU for engineering capsules, or vetting
 only the changed packages.
+
+### Failure 15, problem 1: option A design and failure modes (2026-10-20, written before the code)
+
+Classification: red (engineering capsule spawn, the run context a desk reads,
+the freeze path's inputs). Rollback: revert the commits; the feature is
+fail-open, so removing it returns every retry to a clean base tree.
+
+**Finding that shrinks the design.** The substrate already keeps the failed
+round's work. A terminal Complete whose frozen tree differs from the base
+persists the whole tree as a content-addressed subject artifact
+(`PersistGrantedCandidate`, `capsule-subject:sha256:<digest>`, in the
+executor's durable artifact store) and records an
+`EngineeringSubjectCandidate` on the tape (`choir.co_super_subject_candidate`:
+trajectory, assignment, original and new subject digests, artifact ref,
+source report). That happens for failed, blocked and partial results as well
+as completed ones (`recordAssignedEngineeringReportOnce`,
+`engineering_assignment_fate.go`, the `complete.export_candidate` step). The
+lost-work gap is therefore not "nothing was kept". It is that nothing reads the
+kept candidate when the next assignment on the trajectory spawns. So option A
+needs no new durable store: the carried patch is a pure function of two
+content-addressed trees that are already durable, and it is derived and staged
+when the retry spawns.
+
+**Shape.**
+
+1. *Source of the patch.* At the spawn of an implementation assignment
+   (`spawnBindActivateAssignment`, the one place that builds the `SpawnSpec`,
+   where `AdoptionDir` is already set), the runtime lists the trajectory's
+   subject candidates, drops those of the assignment being spawned and of
+   non-implementation assignments, and takes the newest. If that candidate's
+   report result is `completed`, the chain ended in a finished round and
+   nothing is offered. Older candidates are named in the offer
+   (`older_candidates`) and not diffed: at most one carried patch per chain,
+   newest wins.
+2. *The patch.* `capsule.DiffTreesToPatch(base tree, candidate tree)` renders a
+   git-applicable unified diff with the freeze path's own renderer
+   (`renderSourcePatch`) and proves it reproduces the candidate with the
+   builder's applier (`verifySourcePatch`), exactly as `emitSourcePatch` does
+   for a freeze. The base tree is the failed round's own
+   `Binding.SourceArtifactRef` (`capsule-source-git:<commit>:sha256:<digest>`),
+   re-materialized from the pinned commit. The record binds: patch sha256,
+   base ref, base commit, base subject digest, candidate id and artifact ref,
+   the file list, and anything omitted.
+3. *Offer.* The patch is staged content-addressed and read only at
+   `<updater root>/carried/<sha256>/` (`source.patch`, `carried.json`), and
+   mounted read only at `/selfdev/carried` in the retry's fresh capsule, the
+   same way `/selfdev/adoption` is (copy into the source lower layer, then a
+   read-only bind over the merged path so the overlay upper cannot shadow it).
+   The run context the engineer reads names the patch (digest, file list,
+   source assignment, base) and says: it is the earlier round's unfinished
+   work, not trusted; apply it with `git apply /selfdev/carried/source.patch`
+   from `/workspace/platform` or ignore it; re-run the tests in this capsule
+   either way. Run metadata records `carried_patch_sha256`,
+   `carried_patch_status` (`offered` or `refused: <reason>`), the source
+   assignment and the base refs, so the offer (or the refusal) is on the run
+   record and checkable by management and Texture.
+4. *Nothing is applied.* The capsule's tree is the clean base. Nothing writes
+   the patch into `/workspace/platform`, the live computer's source repository,
+   `incoming/`, or the updater. The only way the patch reaches the live
+   computer is the engineer applying it in the new capsule, then the normal
+   Freeze, verify, owner approval and apply, which judge the new capsule's own
+   diff as any change (and `freezeSourceChangeError` refuses an empty one).
+
+**Failure modes and the guard for each** (tests written first, in
+`internal/capsule/carried_patch_test.go` and
+`internal/agentcore/carried_patch_test.go`):
+
+- *Diff lost when the capsule is destroyed.* The candidate is read from durable
+  artifacts, not the capsule. Test: with the original capsule gone (only the
+  tape record and the artifact tree exist) the retry still gets the patch.
+  Residual: a round that ends with no terminal Report (assignment deadline,
+  capsule crash, restart interruption) writes no candidate, so nothing is
+  carried. Capturing at those edges needs a new durable record written before
+  `ForceDestroy`; deferred, named below.
+- *Patch applied to a different base without saying so.* The retry's base ref
+  is compared with the patch's base. Same base: offered. Different base: the
+  patch is checked with `git apply --check` against the retry's base tree for
+  the touched files; if it applies it is offered with the base change stated,
+  if it does not it is refused with the first conflicting file and both base
+  commits. No 3-way merge is attempted (a 3-way apply could write conflict
+  markers into a source file the engineer then ships); the refusal is the
+  safe default and is reversible by a later decision.
+- *A carried patch that skips a test.* The patch carries no test evidence and
+  the offer says so. The engineer's Freeze still requires distinct build, test
+  and toolchain receipts from cells run in the new capsule after its last
+  write (`freezeReceiptSlotsError`, `freezeReceiptOutcomesError`). Test: the
+  offer text states that tests must be re-run, and no receipt, verdict or
+  evidence ref of the earlier round is copied.
+- *Paths outside the source tree.* The patch is derived from
+  `/workspace/platform` only; it refuses absolute paths, `..`, and `.git`
+  paths, skips `node_modules`, symlinks and binary files (listed under
+  `omitted`, never in the patch), and the staged patch's headers are
+  re-validated at stage and again at spawn. Test: a hand-built patch naming
+  `../x`, `/etc/x` or `.git/config` is refused.
+- *Oversize.* Patch size above 2 MiB is refused with the size, not truncated;
+  the retry then starts clean and its run record says why.
+- *The report naming a patch that does not exist.* The offer is built only
+  from a patch that was staged and re-verified (`verifyStagedCarriedPatch`
+  reads the bytes back and checks the digest) in the same call. A staged
+  directory whose bytes no longer match the digest is refused, never mounted
+  (the `/selfdev/adoption` tamper check, A8). Test: tamper, then the offer is
+  refused and names nothing.
+- *Empty diff.* An empty diff stages nothing and offers nothing; no
+  `carried_patch_*` metadata is written.
+- *Secrets.* The patch is source only: it is derived from a candidate that
+  `PersistGrantedCandidate` already screened (claude-delegate token refusal),
+  carries no environment, no cell output, and no files outside the source
+  tree. It does not carry `node_modules` or build outputs.
+- *Unavailable or corrupt candidate artifact.* Treated as "nothing to carry":
+  the spawn is never blocked, and the run record says
+  `refused: candidate artifact unavailable`. Carrying work forward is an aid;
+  a failure to carry must not fail the retry.
+- *Crash restart.* The candidate and the artifact survive a restart (tape and
+  durable artifact store); the staged directory is re-derivable and
+  re-verified. Nothing auto-resumes: the offer is computed only inside the
+  spawn of an assignment, which only a Cast (an explicit retry) starts. No
+  boot-time code reads candidates. Test: the offer is deterministic across a
+  fresh `Runtime` over the same store, and the spawn of an assignment on a
+  trajectory with a prior failed candidate is the only caller.
+- *Compromised capsule state persisting.* No capsule survives its round
+  (`revokeAssignedCapsule` unchanged). Only a digest-bound text patch does,
+  and it is inert data until an engineer in a fresh capsule chooses to apply
+  it and the gate judges the result.
+
+**Not decided here (named residuals).**
+
+- Rounds that end with no terminal Report (deadline, crash, interruption by
+  restart) carry nothing. A capture before destroy at those edges needs its
+  own durable record; the candidate object cannot be written without a report.
+- A re-cast still carries only management's objective text (shape item 4 of
+  the previous section: the original request text). That is a Cast-authoring
+  change in the management desk, not in this slice.
+- Whether the offer should also name the patch to management and Texture in
+  the assignment's final Report (not only in the run record) is open.
