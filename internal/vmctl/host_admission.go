@@ -26,6 +26,14 @@ import (
 // under one lock, so concurrent wakes cannot all pass the same reading.
 // Protected computers are admitted as before, but reserve.
 //
+// Admission does not reserve a running VM's growth (RES-15). A reservation
+// covers need minus measured RSS only until the settle window ends or the
+// VM's RSS reaches need; after that the VM is just part of MemAvailable. A
+// VM that later grows past its last measured peak (a long agent run, a
+// page-cache fill) is invisible to the next start's check, so admission
+// bounds starts, not total host use. The backstops are pressure reclaim and
+// the memory leases, not this check.
+//
 // Rollback: VMCTL_ADMISSION_MODE=guest-size restores the old rule exactly.
 
 const (
