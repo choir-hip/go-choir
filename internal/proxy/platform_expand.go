@@ -67,10 +67,16 @@ const (
 	expandAskedHeaderMsg = "owner session required: asking a story to be expanded needs the owner's signed-in session, not an API key"
 )
 
+const (
+	expandProvenanceOwner  = "owner"
+	expandProvenancePublic = "public reader"
+)
+
 // expansionRequestText is the fixed request, with the marker a person or a
 // trace search can find (design 4.4). The last sentence gives Texture an
 // honest way to decline.
-func expansionRequestText(requestID string) string {
+func expansionRequestText(requestID, provenance string) string {
+	_ = provenance
 	return "[expansion " + requestID + "] The owner asked for this story to be expanded with more research. " +
 		"Look for additional outlets, primary sources and missing context. " +
 		"Add what you can support with citations from sources you have read. " +
@@ -481,7 +487,7 @@ func (h *Handler) HandlePlatformPublicationExpand(w http.ResponseWriter, r *http
 		}
 
 		status, body, err := h.paperCall(r.Context(), base, http.MethodPost, "/api/texture/documents/"+url.PathEscape(src.SourceDocID)+"/revise", src.OwnerID, map[string]string{
-			"prompt":                    expansionRequestText(requestID),
+			"prompt":                    expansionRequestText(requestID, expandProvenanceOwner),
 			"client_request_id":         clientRequestID,
 			"expected_head_revision_id": doc.CurrentRevisionID,
 		})

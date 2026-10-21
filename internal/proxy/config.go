@@ -79,6 +79,9 @@ type Config struct {
 	// (PROXY_EXPAND=off). See platform_expand.go.
 	ExpandRequesters []string
 	ExpandOff        bool
+	// ExpandPublic opens the door to readers with no owner session
+	// (PROXY_EXPAND_PUBLIC=on; default off). See platform_expand.go.
+	ExpandPublic bool
 }
 
 // ParseExpandRequesters splits PROXY_EXPAND_REQUESTERS: comma-separated user

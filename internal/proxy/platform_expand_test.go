@@ -107,6 +107,17 @@ type expandFixture struct {
 
 func newExpandFixture(t *testing.T, requesters []string, off bool) *expandFixture {
 	t.Helper()
+	return newExpandFixtureWith(t, requesters, off, false)
+}
+
+// newExpandPublicFixture is the fixture with PROXY_EXPAND_PUBLIC on.
+func newExpandPublicFixture(t *testing.T, requesters []string) *expandFixture {
+	t.Helper()
+	return newExpandFixtureWith(t, requesters, false, true)
+}
+
+func newExpandFixtureWith(t *testing.T, requesters []string, off, public bool) *expandFixture {
+	t.Helper()
 	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -131,7 +142,7 @@ func newExpandFixture(t *testing.T, requesters []string, off bool) *expandFixtur
 	t.Cleanup(f.paper.Close)
 	h, err := NewHandler(&Config{AllowDirectAutoputerForTests: true, Port: "0",
 		ComputerURL: f.paper.URL, AuthPublicKeyPath: "/unused", CorpusdURL: f.corpusd.URL,
-		ExpandRequesters: requesters, ExpandOff: off}, pub)
+		ExpandRequesters: requesters, ExpandOff: off, ExpandPublic: public}, pub)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -370,7 +381,7 @@ func TestExpandAsksTheStoriesOwnDeskAsTheStoriesOwnerWithFixedText(t *testing.T)
 		t.Fatalf("client_request_id=%q expected_head=%q, want %q and %q", call.Body.ClientRequestID, call.Body.ExpectedHead, wantCID, expandTestHeadRev)
 	}
 	rid := body["request_id"].(string)
-	wantPrompt := expansionRequestText(rid)
+	wantPrompt := expansionRequestText(rid, expandProvenanceOwner)
 	if call.Body.Prompt != wantPrompt || strings.Contains(call.Body.Prompt, "cats") {
 		t.Fatalf("prompt = %q", call.Body.Prompt)
 	}
