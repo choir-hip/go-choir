@@ -275,6 +275,10 @@ func newVaultFixture(t *testing.T) *vaultFixture {
 	f.mgr.cfg.SnapshotVaultDir = vault
 	calls := 0
 	f.mgr.vaultProbe = func(string, bool) error { calls++; return nil }
+	// The device half of the handle check needs a real dm-crypt device; the
+	// identity half (the open directory is still the one at the path) is the
+	// production code.
+	f.mgr.vaultHandleCheck = func(h *os.File, dir string, _ bool) error { return sameOpenDirectory(h, dir) }
 	f.serveLaunchAPI(t)
 	return &vaultFixture{snapshotFixture: f, vault: vault, calls: &calls}
 }
