@@ -149,7 +149,7 @@ boundaries:
 
 now:
   status: working
-  slice: batch 1 repaired after the panel; waiting for FP0 to re-freeze, re-review, land and prove
+  slice: batch 1 repaired after bunch 4b (SEC-05 finding 14); waiting for FP0 to re-freeze, re-review, land and prove
   source_ref: 26c4e1ed0
   deploy_identity: unknown to this lane
   candidate:
@@ -223,7 +223,7 @@ now:
     newDecider also accepts true and on (the reverted-in unit sets the path
     itself, so it is harmless while the unit is as it is).
   next_action: >-
-    FP0 freezes lane/b7-gateway-b1fix, re-reviews the four repair commits,
+    FP0 freezes lane/b7-gateway-b1fix, re-reviews the repair commits (now including 6f9381bca),
     lands the batch (8c8bd7e54 and its revert 9d53138fc cancel; land them
     together or drop both), runs the deployed proofs below, and only after
     proof 7 passes cherry-picks 8c8bd7e54 as its own landing
@@ -243,7 +243,7 @@ receipts:
     disposition: the panel's findings recorded in the problem records before any fix
   - id: sec-05
     boundary: implement
-    identity: 8434448b6 (+ nix 8f9d8443b, + renewal, see sec-05-renewal, + Jev fix 9d612fffc)
+    identity: 8434448b6 (+ nix 8f9d8443b, + renewal, see sec-05-renewal, + Jev fixes 9d612fffc and 6f9381bca)
     proof_refs: [internal/gateway/bearer_binding_test.go, "go test ./internal/gateway -race: green"]
     rollback_ref: GATEWAY_BEARER_BINDING=off, or git revert
     disposition: built; not deployed; not closed until enforced on staging
