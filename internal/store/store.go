@@ -629,8 +629,9 @@ func (s *Store) ReplaceWorkspace(quarantineDir string) (*Store, WorkspaceReplace
 // dbPath is retained only as inert rollback evidence; serving startup never
 // reads or imports it.
 func Open(dbPath string) (*Store, error) {
-	log.Printf("store: open phase=prepare-path status=starting")
+	donePrepare := objectgraph.BootPhase("store: open", "prepare-path")
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
+		donePrepare(err)
 		return nil, fmt.Errorf("runtime store: create directory: %w", err)
 	}
 
@@ -642,34 +643,37 @@ func Open(dbPath string) (*Store, error) {
 		freshStore = true
 		_ = os.RemoveAll(deriveTextureWorkspacePath(dbPath))
 	}
-	log.Printf("store: open phase=prepare-path status=complete fresh=%t", freshStore)
+	donePrepare(nil)
+	log.Printf("store: open fresh=%t", freshStore)
 
-	log.Printf("store: open phase=workspace-open status=starting")
+	doneWorkspace := objectgraph.BootPhase("store: open", "workspace-open")
 	db, workspacePath, connector, err := openTextureWorkspaceDB(dbPath)
+	doneWorkspace(err)
 	if err != nil {
 		return nil, fmt.Errorf("runtime store: open unified Dolt workspace: %w", err)
 	}
-	log.Printf("store: open phase=workspace-open status=complete")
 
 	readDB := sql.OpenDB(connector)
 	configureEmbeddedDoltDB(readDB)
 
 	s := &Store{db: db, readDB: readDB, path: dbPath, texturePath: workspacePath, doltConnector: connector}
-	log.Printf("store: open phase=runtime-schema status=starting")
+	doneRuntimeSchema := objectgraph.BootPhase("store: open", "runtime-schema")
 	if err := s.bootstrap(); err != nil {
+		doneRuntimeSchema(err)
 		_ = s.Close()
 		return nil, fmt.Errorf("runtime store: bootstrap: %w", err)
 	}
-	log.Printf("store: open phase=runtime-schema status=complete")
+	doneRuntimeSchema(nil)
 
 	// Initialize object-graph persistence on the same private Dolt workspace.
 	ogDoltStore := objectgraph.NewDoltStore(db)
-	log.Printf("store: open phase=objectgraph-schema status=starting")
+	doneOGSchema := objectgraph.BootPhase("store: open", "objectgraph-schema")
 	if err := ogDoltStore.EnsureSchema(context.Background()); err != nil {
+		doneOGSchema(err)
 		_ = s.Close()
 		return nil, fmt.Errorf("runtime store: bootstrap object graph: %w", err)
 	}
-	log.Printf("store: open phase=objectgraph-schema status=complete")
+	doneOGSchema(nil)
 	s.ogStore = ogDoltStore
 	ogDoltStore.SetWriteValidator(s.vocabWriteGuard)
 	// A persisted migration report means this store already cut over: the
@@ -699,22 +703,26 @@ func Open(dbPath string) (*Store, error) {
 	})
 
 	// Apply the texture schema to the embedded Dolt workspace.
-	log.Printf("store: open phase=texture-schema status=starting")
+	doneTextureSchema := objectgraph.BootPhase("store: open", "texture-schema")
 	if err := s.EnsureTextureSchema(); err != nil {
+		doneTextureSchema(err)
 		log.Printf("ERROR EnsureTextureSchema failed: %v", err)
 		_ = s.Close()
 		return nil, fmt.Errorf("runtime store: bootstrap texture: %w", err)
 	}
-	log.Printf("store: open phase=texture-schema status=complete")
+	doneTextureSchema(nil)
 
 	// Persist the running build's store schema epoch inside the workspace so
 	// the updater's pre-mutation state-compat gate (S2-d) can refuse a release
 	// whose binary does not understand this store — the vm-3dc68688
 	// stale-binary failure class.
+	doneEpoch := objectgraph.BootPhase("store: open", "store-schema-epoch")
 	if err := storeschema.Write(workspacePath); err != nil {
+		doneEpoch(err)
 		_ = s.Close()
 		return nil, err
 	}
+	doneEpoch(nil)
 
 	if freshStore {
 		if err := os.WriteFile(dbPath, nil, 0o644); err != nil {
@@ -762,10 +770,21 @@ var retiredTextureTables = []string{
 	"texture_documents", "texture_controller_checkpoints", "content_items", "podcast_subscriptions",
 }
 
+// bootSubstep runs one named step of a boot phase and logs its start, end and
+// duration, so a step that hangs is named by the last line that has no end.
+func bootSubstep(phase, name string, fn func() error) error {
+	done := objectgraph.BootPhase("store: open", phase+"/"+name)
+	err := fn()
+	done(err)
+	return err
+}
+
 // bootstrap applies the schema DDL to the database.
 func (s *Store) bootstrap() error {
-	_, err := s.db.Exec(schemaDDL)
-	if err != nil {
+	if err := bootSubstep("runtime-schema", "apply-ddl", func() error {
+		_, err := s.db.Exec(schemaDDL)
+		return err
+	}); err != nil {
 		return fmt.Errorf("apply schema: %w", err)
 	}
 	// The solitaire tables are retired with the Candidate A solitaire engine
@@ -789,39 +808,47 @@ func (s *Store) bootstrap() error {
 		}
 	}
 
-	if err := s.ensureColumns([]struct {
-		table string
-		name  string
-		ddl   string
-	}{
-		{"co_super_slots", "requested_by_run_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
-		{"events", "agent_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
-		{"events", "channel_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
-		{"events", "trajectory_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
-		{"events", "stream_seq", "BIGINT NOT NULL DEFAULT 0"},
-		{"self_development_operations", "route_receipt", "VARCHAR(128) NOT NULL DEFAULT ''"},
-		{"self_development_operations", "release_digest", "CHAR(64) NOT NULL DEFAULT ''"},
-		{"self_development_operations", "code_ref", "VARCHAR(96) NOT NULL DEFAULT ''"},
-		{"self_development_operations", "artifact_program_ref", "VARCHAR(128) NOT NULL DEFAULT ''"},
-		{"self_development_operations", "decision_receipt", "VARCHAR(255) NOT NULL DEFAULT ''"},
-		{"self_development_operations", "last_intent_error", "LONGTEXT NOT NULL DEFAULT ''"},
-		{"desktop_workspaces", "computer_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
-		{"desktop_sessions", "computer_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
-		{"desktop_app_instances", "computer_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
-		{"desktop_window_placements", "computer_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
+	if err := bootSubstep("runtime-schema", "ensure-columns", func() error { return s.ensureColumns(runtimeColumnMigrations) }); err != nil {
+		return err
+	}
+	if err := bootSubstep("runtime-schema", "events-indexes", func() error {
+		if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_events_owner_stream_seq ON events(owner_id, stream_seq)`); err != nil {
+			return fmt.Errorf("create idx_events_owner_stream_seq: %w", err)
+		}
+		if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_events_trajectory_stream_seq ON events(trajectory_id, stream_seq)`); err != nil {
+			return fmt.Errorf("create idx_events_trajectory_stream_seq: %w", err)
+		}
+		return nil
 	}); err != nil {
 		return err
 	}
-	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_events_owner_stream_seq ON events(owner_id, stream_seq)`); err != nil {
-		return fmt.Errorf("create idx_events_owner_stream_seq: %w", err)
-	}
-	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_events_trajectory_stream_seq ON events(trajectory_id, stream_seq)`); err != nil {
-		return fmt.Errorf("create idx_events_trajectory_stream_seq: %w", err)
-	}
-	if err := s.ensureDesktopPrimaryKeys(); err != nil {
+	if err := bootSubstep("runtime-schema", "desktop-primary-keys", s.ensureDesktopPrimaryKeys); err != nil {
 		return err
 	}
-	return s.backfillDerivedRuntimeState()
+	return bootSubstep("runtime-schema", "backfill-events-stream-seq", s.backfillDerivedRuntimeState)
+}
+
+// runtimeColumnMigrations are the columns added to existing runtime tables.
+var runtimeColumnMigrations = []struct {
+	table string
+	name  string
+	ddl   string
+}{
+	{"co_super_slots", "requested_by_run_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
+	{"events", "agent_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
+	{"events", "channel_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
+	{"events", "trajectory_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
+	{"events", "stream_seq", "BIGINT NOT NULL DEFAULT 0"},
+	{"self_development_operations", "route_receipt", "VARCHAR(128) NOT NULL DEFAULT ''"},
+	{"self_development_operations", "release_digest", "CHAR(64) NOT NULL DEFAULT ''"},
+	{"self_development_operations", "code_ref", "VARCHAR(96) NOT NULL DEFAULT ''"},
+	{"self_development_operations", "artifact_program_ref", "VARCHAR(128) NOT NULL DEFAULT ''"},
+	{"self_development_operations", "decision_receipt", "VARCHAR(255) NOT NULL DEFAULT ''"},
+	{"self_development_operations", "last_intent_error", "LONGTEXT NOT NULL DEFAULT ''"},
+	{"desktop_workspaces", "computer_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
+	{"desktop_sessions", "computer_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
+	{"desktop_app_instances", "computer_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
+	{"desktop_window_placements", "computer_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
 }
 
 func (s *Store) backfillDerivedRuntimeState() error {
@@ -915,8 +942,11 @@ WHERE table_schema = DATABASE()
 		if _, ok := existing[m.table][m.name]; ok {
 			continue
 		}
-		if _, err := s.db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", m.table, m.name, m.ddl)); err != nil {
-			return fmt.Errorf("alter table %s add column %s: %w", m.table, m.name, err)
+		done := objectgraph.BootPhase("store: open", "runtime-schema/add-column "+m.table+"."+m.name)
+		_, alterErr := s.db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", m.table, m.name, m.ddl))
+		done(alterErr)
+		if alterErr != nil {
+			return fmt.Errorf("alter table %s add column %s: %w", m.table, m.name, alterErr)
 		}
 		// Record the addition so a duplicate entry later in the list skips
 		// instead of double-ALTERing (matches old per-column loop semantics).

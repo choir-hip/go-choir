@@ -28,6 +28,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/health"
 	"github.com/yusefmosiah/go-choir/internal/imageblob"
 	"github.com/yusefmosiah/go-choir/internal/mediastate"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/projectionbase"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
@@ -198,18 +199,21 @@ func Run() {
 		boot.fatalf("autoputer: create store directory: %v", err)
 	}
 
-	log.Printf("autoputer: startup phase=dolt-maintenance status=starting")
-	if err := store.MaybeRunDoltGC(filepath.Dir(rtCfg.StorePath), rtCfg.StorePath); err != nil {
-		log.Printf("autoputer: dolt gc maintenance: %v", err)
+	// Every store step before the listener logs its start, end and duration:
+	// a boot that hangs names the step that has no end.
+	doneMaintenance := objectgraph.BootPhase("autoputer: startup", "dolt-maintenance")
+	gcErr := store.MaybeRunDoltGC(filepath.Dir(rtCfg.StorePath), rtCfg.StorePath)
+	doneMaintenance(gcErr)
+	if gcErr != nil {
+		log.Printf("autoputer: dolt gc maintenance: %v", gcErr)
 	}
-	log.Printf("autoputer: startup phase=dolt-maintenance status=complete")
 
-	log.Printf("autoputer: startup phase=runtime-store-open status=starting")
+	doneStoreOpen := objectgraph.BootPhase("autoputer: startup", "runtime-store-open")
 	db, err := store.Open(rtCfg.StorePath)
+	doneStoreOpen(err)
 	if err != nil {
 		boot.fatalf("autoputer: open runtime store: %v", err)
 	}
-	log.Printf("autoputer: startup phase=runtime-store-open status=complete")
 	bootMark("runtime_store_open")
 	defer func() {
 		_ = db.Close()
@@ -696,11 +700,17 @@ func Run() {
 		}
 		// Vocabulary cutover: migrate any retained V1 rows and hold the
 		// serving fence closed before the runtime starts serving authority.
-		if _, err := db.MigrateAndFenceServingVocabulary(ctx, false, nil); err != nil {
-			boot.fatalf("autoputer: vocabulary migration refused: %v", err)
+		doneVocab := objectgraph.BootPhase("autoputer: startup", "vocabulary-migration")
+		_, vocabErr := db.MigrateAndFenceServingVocabulary(ctx, false, nil)
+		doneVocab(vocabErr)
+		if vocabErr != nil {
+			boot.fatalf("autoputer: vocabulary migration refused: %v", vocabErr)
 		}
-		if err := db.EnsureObjectGraphIndexes(ctx, nil); err != nil {
-			log.Printf("autoputer: object graph record indexes deferred: %v", err)
+		doneIndexes := objectgraph.BootPhase("autoputer: startup", "object-graph-record-indexes")
+		indexErr := db.EnsureObjectGraphIndexes(ctx, nil)
+		doneIndexes(indexErr)
+		if indexErr != nil {
+			log.Printf("autoputer: object graph record indexes deferred: %v", indexErr)
 		}
 		startPeriodicDoltGC(ctx, db, rtCfg.StorePath)
 		if err := rt.Start(ctx); err != nil {
@@ -759,7 +769,10 @@ func runReplayPhase(boot *startupFailer, gate *replayHealthGate, appender *compu
 		// forced a full-tape vocabulary rescan.
 		replayed := appender.ReplaySnapshot().AppliedRows > 0
 		bootMark("reconstruct_done") // raw tape apply complete
-		if _, migErr := db.MigrateAndFenceServingVocabulary(bootstrapCtx, replayed, gate.tick); migErr != nil {
+		doneVocab := objectgraph.BootPhase("autoputer: startup", "vocabulary-migration")
+		_, migErr := db.MigrateAndFenceServingVocabulary(bootstrapCtx, replayed, gate.tick)
+		doneVocab(migErr)
+		if migErr != nil {
 			boot.fatalf("autoputer: vocabulary migration refused: %v", migErr)
 		}
 		bootMark("vocab_fenced") // forward-migrate + serving fence complete
@@ -783,8 +796,11 @@ func runReplayPhase(boot *startupFailer, gate *replayHealthGate, appender *compu
 	// og_objects once, which can outlast a health probe that sees nothing.
 	// It runs here, behind the gate, with the gate's heartbeat; a failure
 	// leaves the reads on their unindexed paths and does not stop the boot.
-	if err := db.EnsureObjectGraphIndexes(bootstrapCtx, gate.tick); err != nil {
-		log.Printf("autoputer: object graph record indexes deferred: %v", err)
+	doneIndexes := objectgraph.BootPhase("autoputer: startup", "object-graph-record-indexes")
+	indexErr := db.EnsureObjectGraphIndexes(bootstrapCtx, gate.tick)
+	doneIndexes(indexErr)
+	if indexErr != nil {
+		log.Printf("autoputer: object graph record indexes deferred: %v", indexErr)
 	}
 	bootMark("record_indexes")
 	replaySnap := appender.ReplaySnapshot()
