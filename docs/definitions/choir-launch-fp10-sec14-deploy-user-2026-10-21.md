@@ -77,9 +77,9 @@ boundaries:
   protected_surfaces: [deployment routing, Node B ssh access, sudo]
 
 now:
-  status: working
-  slice: problem record, then tests, then deploy-1 and deploy-2 commits
-  source_ref: 961588290
+  status: checkpoint_incomplete
+  slice: built on the lane; landing, the deploys and the proofs are FP0's (steps below)
+  source_ref: 3fe19b0e9
   deploy_identity: c893a956a
   candidate:
     id: FP10-sec14-deploy-user
@@ -87,28 +87,39 @@ now:
     ref: lane/fp10-sec14-deploy-user
     base: 961588290
     digest: none
-    scope: [nix/node-b.nix, scripts/node-b-ci-gate, .github/workflows/ci.yml, .github/scripts]
+    scope: [nix/node-b.nix, scripts/node-b-ci-gate, scripts/node-b-ci-gate-probe, .github/workflows/ci.yml, .github/scripts]
   conjecture:
     id: C-SEC14-gate
     claim: the three CI remote commands fit a three-verb grammar, and the deploy needs nothing from the root ssh session that the gate's clean environment lacks
-    test: deploy 2's CI run succeeds for its deploy class through the gate
+    test: deploy 2's dispatch run succeeds through the gate
     edge: missing_oracle
-    delta_o: FP0 runs the gate as choir-deploy on Node B before deploy 2 (receipt, then prebuild of the deployed commit)
+    delta_o: scripts/node-b-ci-gate-probe on Node B between deploy 1 and deploy 2, including a real prebuild through the gate
     scope_if_supported: every deploy class
     status: proposed
     evidence_refs: []
   decision:
-    what: dedicated user + forced command + one sudo rule to a gate that runs the deploy program from a main commit; two deploys, root key removed third
+    what: dedicated user + forced command + one sudo rule (runAs root) to a gate that runs the deploy program from a main commit; deploy 1 adds it, deploy 2 switches CI, step 3 removes root's CI key
     kind: safety
     status: proposal
     evidence_ref: docs/problems/ci-deploys-to-node-b-as-root-2026-10-21.md
     owner_ratification_ref: not_applicable
   belief:
-    believed_state: CI's ssh is root with the whole deploy on stdin
-    main_uncertainty: whether the root ssh session carried environment the deploy silently relies on
-    next_observation: the gate run by FP0 on Node B between deploy 1 and deploy 2
-  blocker_or_risk: none
-  next_action: write the gate test and contract-test changes, then the gate
+    believed_state: >-
+      Every CI test passes at each landing point: the gate's grammar, the host
+      wiring, the workflow contracts and the classifier. The moved programs
+      match the heredocs byte for byte. Nothing has been built with Nix or run
+      on Node B; this VM cannot do either.
+    main_uncertainty: >-
+      Whether the NixOS module wiring evaluates and behaves as written (sudo
+      rule rendering, useDefaultShell for a system user, sshd with the
+      restrict key). Also whether the deploy relied on anything in the root
+      ssh session that /etc/set-environment does not restore.
+    next_observation: deploy 1's host OS build and switch, then the probe
+  blocker_or_risk: >-
+    Deploy 2 touches only .github/, so no deploy is selected on push; it needs
+    a workflow_dispatch deploy to prove it. The receipt read is best effort:
+    a gate failure there is silent ("receipt unavailable"), so read that line.
+  next_action: FP0 freezes and reviews deploy 1 (commits e892961cc, 67ef79140), lands it, runs the probe
 
 receipts: []
 ---
@@ -116,3 +127,72 @@ receipts: []
 # FP10: CI deploys as choir-deploy
 
 Problem record: `docs/problems/ci-deploys-to-node-b-as-root-2026-10-21.md`.
+
+## Rollout for FP0 (exact steps)
+
+Commits, oldest first. Land them in three groups, each rebased onto main:
+
+| group | commits | what |
+|---|---|---|
+| deploy 1 | f803872b9 (green docs), e892961cc (tests), 67ef79140 | choir-deploy user, gate, sudo rule; the heredocs move to `.github/scripts/node-b-ci-{prebuild,deploy}`; CI still root |
+| deploy 2 | 11922ea8a (tests), 237d8a1c9 | CI uses choir-deploy and gate requests |
+| step 3 | 3fe19b0e9 | root drops the CI key |
+
+**Deploy 1.**
+1. Push. The classifier selects a host OS deploy (`nix/node-b.nix`,
+   `scripts/node-b-ci-gate`).
+2. In the deploy log, the deploy runs as root from
+   `.github/scripts/node-b-ci-deploy` and ends with "Staging deploy
+   complete". Then check health and the receipt commit.
+3. On Node B as root, from `/opt/go-choir`, run
+   `scripts/node-b-ci-gate-probe <off-main-sha> <deployed-main-sha>`.
+   - `<off-main-sha>`: any full SHA GitHub serves that is not on main, for
+     example this lane's tip before landing, or any `lane/*` tip.
+   - `<deployed-main-sha>`: the deploy-1 commit.
+   - Every line must say PASS and the probe must exit 0. That covers the
+     single restricted key, a single sudo rule `(root) NOPASSWD` to the gate,
+     the receipt read, five refusals (one of them the off-main commit),
+     `sudo bash` refused, and a real prebuild through the gate.
+4. Rollback if the switch or the probe fails: `git revert` the group. Root
+   still deploys.
+
+**Deploy 2.**
+1. Push. No deploy is selected (only `.github/` changed). Push itself proves
+   only the receipt read: the deploy-impact log must say "Read Node B deploy
+   receipt", not "unavailable".
+2. Run CI by `workflow_dispatch` on main (`force_staging_deploy` true,
+   `refresh_active_computers` false). It is a forced full deploy, so it holds
+   the activation lease like any red deploy.
+3. In the log, the deploy step shows
+   `node-b-ci-gate: deploy <sha> as root from .github/scripts/node-b-ci-deploy`
+   and "Staging deploy complete". The prebuild job shows the matching
+   prebuild line. `/var/lib/go-choir/deploy-receipt.json` names the dispatch
+   run id.
+4. On Node B: `journalctl -t sudo --since -1h` shows
+   `choir-deploy : ... COMMAND=/nix/store/...-go-choir-ci-deploy-gate -- deploy ...`.
+   `journalctl -u sshd` shows `Accepted publickey for choir-deploy`, and no
+   root login from the CI key after the switch.
+5. Rollback: `git revert` the group. Root still has the CI key, so the next
+   deploy goes as root.
+
+**Step 3**, after deploy 2's proof. It is red, and it rides the next deploy or
+gets its own.
+1. Push. The classifier selects a host OS deploy, which runs through the gate.
+2. On Node B, `/etc/ssh/authorized_keys.d/root` holds only the operator key.
+3. Check `/root/.ssh/authorized_keys` for a hand-placed copy of the
+   `github-actions-deploy@go-choir` key. If it is there, remove that line (an
+   on-host step for FP0 or the owner).
+4. Rollback: `git revert`. Its deploy also runs through the gate.
+
+## Residuals
+
+- Downgrade: a key holder can deploy any older main commit that carries
+  `.github/scripts/node-b-ci-deploy`. CI's stale-guard covers honest reruns.
+  A host-side check would compare against the receipt's target_commit.
+- A key holder can choose the booleans, including
+  `REFRESH_ACTIVE_COMPUTERS=true`, which interrupts busy computers.
+- Root still runs the deploy program. A NixOS switch needs root; the gate
+  narrows who picks the program, not what the program may do.
+- The gate refuses commits from before the move (they lack the program), so
+  rolling back to such a commit means the owner deploys by hand.
+
