@@ -121,6 +121,15 @@ CREATE INDEX IF NOT EXISTS idx_recovery_tokens_token_hash ON recovery_tokens(tok
 CREATE INDEX IF NOT EXISTS idx_recovery_tokens_expires_at ON recovery_tokens(expires_at);
 CREATE INDEX IF NOT EXISTS idx_recovery_tokens_user_id ON recovery_tokens(user_id);
 
+-- The sign-up waitlist (L4-03, registration_cap.go): emails refused while
+-- AUTH_REGISTRATION_CAP was reached. Additive; nothing else reads it.
+CREATE TABLE IF NOT EXISTS registration_waitlist (
+	email         TEXT PRIMARY KEY,
+	created_at    DATETIME NOT NULL,
+	last_seen_at  DATETIME NOT NULL,
+	attempts      INTEGER NOT NULL DEFAULT 1
+);
+
 CREATE TABLE IF NOT EXISTS owner_root_keys (
 	owner_id   TEXT PRIMARY KEY,
 	created_at DATETIME NOT NULL
