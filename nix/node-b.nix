@@ -605,9 +605,7 @@ in
   # SSH authorized keys — copied EXACTLY from choiros-rs nix/hosts/ovh-node.nix
   users.users.root.openssh.authorizedKeys.keys = [
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILN3IIn6TzBBExWiJTJ7aDlA/LlEMXvjFlSfkKkV02TZ wiz@choiros-ovh"
-    # Until CI deploys as choir-deploy and that is proven (SEC-14 rollout
-    # step 3 removes it), root keeps the CI key so a revert can deploy.
-    ciDeployKey
+    # The CI deploy key logs in only as choir-deploy (SEC-14).
   ];
 
   # The CI deploy user: no password, no pty, no forwarding; the forced
