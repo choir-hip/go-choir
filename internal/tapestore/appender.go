@@ -41,10 +41,34 @@ type AppenderStats struct {
 // then fsyncs the segment once, and returns only after that fsync. The
 // records of one call land in one segment: the rotation limits are checked
 // before a call, never inside it, so a segment may exceed a limit by one
-// call's records. A call that fails part-way truncates the segment back to
-// where the call began, so no part of an unacknowledged batch is left
-// (a failure of that truncation too leaves a torn tail, which the next call
-// finds and truncates on recovery).
+// call's records.
+//
+// A failed call and the fsyncgate rule. After a failed fsync nothing past the
+// last successful fsync is durable, and bytes that can still be read are not
+// proof that they are: the kernel may have dropped the dirty pages and marked
+// them clean, so a second fsync succeeds having written nothing. A reader may
+// also have cached the location of a whole record the failed call wrote.
+// Rewriting those bytes in place is not enough (another writer or a restart
+// would not know to), and truncating them away would let a later record
+// reuse an offset a reader holds. So a failed call ABANDONS its segment's
+// unsynced tail: the segment is cut back to its synced frontier (the size
+// after the last acknowledged call), fsynced, and sealed there with an index
+// of only the acknowledged records. That seal is the durable record of the
+// frontier: any later writer, in this process or another, finds a sealed
+// segment, starts the next one, and writes anything it is asked to append
+// afresh, at offsets that were never used. Offsets of a segment are thus
+// never reused, and no writer ever infers durability from readable bytes of
+// a segment it did not itself see fsynced. If the abandon cannot finish (the
+// disk keeps failing) the writer remembers the frontier and finishes it
+// before it writes anything else, and writes nothing to that segment meanwhile.
+// A call that fails with only a cut-short first record (no whole record
+// written) just cuts it off: no reader can have seen a partial record.
+//
+// Residual: if the process dies, or the abandon cannot finish, and another
+// writer later recovers the segment while the kernel still serves the failed
+// call's pages, the sealed frontier does not exist and that writer cannot
+// tell those bytes from durable ones (docs/definitions/
+// choir-tape-segments-a2-repack-2026-10-21.md).
 //
 // The per-computer state (open segment number, valid size, key set) is a
 // cache. Every call revalidates it against the disk (the segment's size and
@@ -74,10 +98,16 @@ type computerLog struct {
 	segno   uint64
 	size    int64
 	entries map[openKey]idxEntry
-	// suspect are whole records written by calls that then failed; they
-	// outlive cache invalidation (see appendLocked).
-	suspect    map[openKey]suspectRec
-	suspectSeg uint64
+	// retire, when set, is a failed call's segment whose unsynced tail has
+	// not yet been cut back and sealed (see Appender). It is finished before
+	// the next call writes anything.
+	retire *retireTail
+}
+
+// retireTail names a segment to abandon at its synced frontier.
+type retireTail struct {
+	segno    uint64
+	frontier int64
 }
 
 // NewAppender returns a writer over the artifacts root with the production
@@ -129,10 +159,11 @@ func (a *Appender) Append(computerID string, items ...Item) error {
 // mutex and the directory lock), after the open segment has been recovered
 // and before anything is written, so what it reads of the open segment is
 // stable and complete: no other writer is mid-batch, and a batch that failed
-// has left only whole records, which this call rewrites and fsyncs before
-// it returns. build returns the items to append; none is allowed (the call
-// then only makes the segment durable). An error from build aborts the call
-// with nothing written. build must not call the Appender.
+// has had its unsynced tail abandoned (see Appender), so build sees only
+// records that a finished call fsynced and decides to write the rest afresh.
+// build returns the items to append; none is allowed (the call then only
+// fsyncs the segment). An error from build aborts the call with nothing
+// written. build must not call the Appender.
 func (a *Appender) AppendFunc(computerID string, build func() ([]Item, error)) error {
 	if build == nil {
 		return errors.New("tapestore: AppendFunc needs a build function")
@@ -191,13 +222,17 @@ func (a *Appender) appendLocked(l *computerLog, id string, items []Item, build f
 	}
 	defer unlock()
 
+	if l.retire != nil {
+		if err := a.retireSegment(l, dir, id); err != nil {
+			return err
+		}
+	}
 	if !a.cacheCurrent(l, dir) {
 		l.valid = false
 		if err := a.recover(l, dir, id, d); err != nil {
 			return err
 		}
 	}
-	a.pruneSuspect(l)
 	if build != nil {
 		built, err := build()
 		if err != nil {
@@ -210,7 +245,7 @@ func (a *Appender) appendLocked(l *computerLog, id string, items []Item, build f
 	}
 	// Rotation: a full open segment is sealed before this call writes.
 	if l.size >= a.sealBytes || len(l.entries) >= a.sealRecords {
-		if err := a.seal(l, dir, id, d); err != nil {
+		if err := a.seal(l, dir, id); err != nil {
 			l.valid = false
 			return err
 		}
@@ -227,32 +262,24 @@ func (a *Appender) appendLocked(l *computerLog, id string, items []Item, build f
 	}
 	defer f.Close()
 
-	// Records left by a failed call are whole and may be cached by readers, so
-	// they are never removed or moved; but the kernel may have dropped their
-	// dirty pages when the fsync failed, so rewrite their identical bytes
-	// before the fsync that this call acknowledges.
-	if err := a.redirty(l, f); err != nil {
-		l.valid = false
-		return err
-	}
 	off := l.size
-	pending := map[openKey]suspectRec{}
+	pending := map[openKey]pendingRec{}
 	var wrote uint64
-	fail := func(err error, cut bool) error {
-		// Nothing of this call is acknowledged. A record written whole stays
-		// (a reader may hold its location); only a partial record is cut off,
-		// which no reader has cached. The next call revalidates from disk.
-		if cut {
-			_ = f.Truncate(off)
-		}
-		if l.suspect == nil {
-			l.suspect = map[openKey]suspectRec{}
-		}
-		l.suspectSeg = l.segno
-		for k, r := range pending {
-			l.suspect[k] = r
-		}
+	fail := func(err error, partial bool) error {
+		// Nothing of this call is acknowledged. Without a whole record written
+		// there is nothing a reader can hold: cut a partial record off. With one
+		// (or after a failed fsync) the segment's tail is abandoned, never
+		// reused (see Appender).
 		l.valid = false
+		if len(pending) == 0 {
+			if partial {
+				_ = f.Truncate(off)
+			}
+			return err
+		}
+		l.retire = &retireTail{segno: l.segno, frontier: l.size}
+		// A failed abandon stays pending and is retried before the next write.
+		_ = a.retireSegment(l, dir, id)
 		return err
 	}
 	for _, it := range items {
@@ -278,20 +305,14 @@ func (a *Appender) appendLocked(l *computerLog, id string, items []Item, build f
 		if werr != nil {
 			return fail(fmt.Errorf("tapestore: append record: %w", werr), true)
 		}
-		pending[key] = suspectRec{off: off, rec: rec}
+		pending[key] = pendingRec{off: off, rec: rec}
 		off += int64(len(rec))
 		wrote++
 	}
 	// One fsync per call, even when every item was already present: a record
 	// found by recovery may follow a failed fsync and must be made durable
 	// before this call acknowledges it.
-	var serr error
-	if a.syncFile != nil {
-		serr = a.syncFile(f)
-	} else {
-		serr = f.Sync()
-	}
-	if serr != nil {
+	if serr := a.syncF(f); serr != nil {
 		return fail(fmt.Errorf("tapestore: fsync segment: %w", serr), false)
 	}
 	a.syncs.Add(1)
@@ -300,48 +321,64 @@ func (a *Appender) appendLocked(l *computerLog, id string, items []Item, build f
 		l.entries[k] = idxEntry{digest: k.digest, ns: k.ns, off: uint64(r.off), length: uint32(len(r.rec) - recHeaderSize)}
 	}
 	l.size = off
-	l.suspect = nil
 	a.records.Add(wrote)
 	a.bytes.Add(uint64(off - start))
 	return nil
 }
 
-// suspectRec is a whole record of a failed call: its offset and exact bytes.
-type suspectRec struct {
+// pendingRec is a whole record of the call in progress: its offset and bytes.
+type pendingRec struct {
 	off int64
 	rec []byte
 }
 
-// pruneSuspect forgets suspect records that recovery did not find at their
-// offset in the current open segment (a crash or a truncation took them).
-func (a *Appender) pruneSuspect(l *computerLog) {
-	for k, r := range l.suspect {
-		e, ok := l.entries[k]
-		if l.suspectSeg != l.segno || !ok || int64(e.off) != r.off {
-			delete(l.suspect, k)
-		}
+// retireSegment finishes the abandon of a failed call's segment: cut it back
+// to its synced frontier, fsync that, rescan the surviving prefix and seal it.
+// On success the segment is sealed (or was already) and the cache is dropped,
+// so the next call starts the next segment. On failure l.retire stays set.
+func (a *Appender) retireSegment(l *computerLog, dir, id string) error {
+	t := l.retire
+	l.valid = false
+	if _, err := os.Stat(filepath.Join(dir, IndexFileName(t.segno))); err == nil {
+		// Already sealed (an earlier attempt installed the index but could not
+		// make its directory entry durable): recovery's directory sync finishes it.
+		l.retire = nil
+		return nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
 	}
+	f, err := openRegular(filepath.Join(dir, SegmentFileName(t.segno)), os.O_RDWR, 0)
+	if err != nil {
+		return fmt.Errorf("tapestore: open segment %d to abandon its tail: %w", t.segno, err)
+	}
+	defer f.Close()
+	if err := f.Truncate(t.frontier); err != nil {
+		return fmt.Errorf("tapestore: cut segment %d back to its synced frontier: %w", t.segno, err)
+	}
+	if err := a.syncF(f); err != nil {
+		return fmt.Errorf("tapestore: fsync segment %d after cutting it back: %w", t.segno, err)
+	}
+	if err := a.recoverOpen(l, dir, id, t.segno); err != nil {
+		return err
+	}
+	if l.size != t.frontier {
+		return corruptf("computer %s segment %d: synced frontier %d, found %d", id, t.segno, t.frontier, l.size)
+	}
+	if err := a.seal(l, dir, id); err != nil {
+		l.valid = false
+		return err
+	}
+	l.valid = false
+	l.retire = nil
+	return nil
 }
 
-// redirty rewrites the identical bytes of the suspect records at their
-// offsets, so that the next fsync has dirty pages to write.
-func (a *Appender) redirty(l *computerLog, f *os.File) error {
-	for _, r := range l.suspect {
-		var n int
-		var err error
-		if a.writeAt != nil {
-			n, err = a.writeAt(f, r.rec, r.off)
-		} else {
-			n, err = f.WriteAt(r.rec, r.off)
-		}
-		if err == nil && n != len(r.rec) {
-			err = io.ErrShortWrite
-		}
-		if err != nil {
-			return fmt.Errorf("tapestore: rewrite unsynced record: %w", err)
-		}
+// syncF fsyncs a segment file (or the test hook standing in for it).
+func (a *Appender) syncF(f *os.File) error {
+	if a.syncFile != nil {
+		return a.syncFile(f)
 	}
-	return nil
+	return f.Sync()
 }
 
 // cacheCurrent reports whether the cached state still describes the disk:
@@ -554,19 +591,15 @@ func openRegular(path string, flag int, perm os.FileMode) (*os.File, error) {
 }
 
 // seal fsyncs the open segment and writes its index (appendix A.5 rule 3).
-func (a *Appender) seal(l *computerLog, dir, id string, d *os.File) error {
+func (a *Appender) seal(l *computerLog, dir, id string) error {
 	f, err := openRegular(filepath.Join(dir, SegmentFileName(l.segno)), os.O_RDWR, 0)
 	if err != nil {
 		return fmt.Errorf("tapestore: open segment %d to seal: %w", l.segno, err)
 	}
 	defer f.Close()
-	if err := a.redirty(l, f); err != nil {
-		return err
-	}
 	if err := f.Sync(); err != nil {
 		return fmt.Errorf("tapestore: fsync segment: %w", err)
 	}
-	l.suspect = nil
 	if err := sealIndex(dir, l.segno, id, l.size, l.entries, a.syncDirPath); err != nil {
 		return err
 	}

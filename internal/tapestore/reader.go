@@ -207,12 +207,16 @@ func (r *Reader) readSegment(computerID string, ns NS, digest string) ([]byte, b
 		return nil, false, err
 	}
 	last := segs[len(segs)-1].segno
+	// Every sealed segment of the snapshot retires its open-scan state,
+	// whichever segment this lookup ends up visiting: a hit on the newest
+	// segment returns before older ones are probed, and the cache must stay
+	// bounded by the number of open segments regardless.
+	r.retireSealed(dir, segs)
 	for i := len(segs) - 1; i >= 0; i-- {
 		f := segs[i]
 		var body []byte
 		var found bool
 		if f.hasIdx {
-			r.retireOpen(filepath.Join(dir, SegmentFileName(f.segno)))
 			s, err := r.loadSealed(dir, computerID, f.segno)
 			if err != nil {
 				return nil, false, err
@@ -496,12 +500,16 @@ type openSeg struct {
 	entries map[openKey]openLoc
 }
 
-// retireOpen drops the open-scan state of a segment that has been sealed;
-// the sealed index answers from then on.
-func (r *Reader) retireOpen(path string) {
+// retireSealed drops the open-scan state of every sealed segment in a
+// directory snapshot, under one lock.
+func (r *Reader) retireSealed(dir string, segs []segFiles) {
 	r.mu.Lock()
-	delete(r.open, path)
-	r.mu.Unlock()
+	defer r.mu.Unlock()
+	for _, f := range segs {
+		if f.hasIdx {
+			delete(r.open, filepath.Join(dir, SegmentFileName(f.segno)))
+		}
+	}
 }
 
 func (r *Reader) openFor(path string, segno uint64) *openSeg {

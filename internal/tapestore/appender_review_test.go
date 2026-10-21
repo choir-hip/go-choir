@@ -10,7 +10,9 @@ package tapestore
 //      Regression: a reader active during the failed Append, then equal-sized
 //      and larger appends.
 //  V1b Records that survive a failed fsync are not trusted as durable: the
-//      next Append rewrites their identical bytes before it fsyncs.
+//      next Append writes them afresh, in a later segment (second review
+//      round: the first design rewrote them in place, which another writer
+//      could not know to do).
 //  V3  (blocking) Directory durability is part of acknowledging: failures of
 //      the directory fsyncs of the computer directory, tape-seg and the root
 //      (segment creation), and of the segment directory at seal, are
@@ -44,7 +46,12 @@ func TestReaderCacheSurvivesAFailedFsyncAndLaterRewrites(t *testing.T) {
 	if len(first) != len(second) {
 		t.Fatalf("test needs equal lengths: %d vs %d", len(first), len(second))
 	}
-	a.syncFile = func(*os.File) error {
+	failed := false
+	a.syncFile = func(f *os.File) error {
+		if failed {
+			return f.Sync() // the writer's own cleanup after the failure
+		}
+		failed = true
 		mustRead(t, r, cid, NSPayload, first) // the reader caches the unsynced record
 		return syscall.EIO
 	}
@@ -115,6 +122,9 @@ func TestAppenderRewritesUnsyncedRecordsBeforeAcknowledgingThem(t *testing.T) {
 	var offs []int64
 	var lens []int
 	a.writeAt = func(f *os.File, b []byte, off int64) (int, error) {
+		if f.Name() != segPath(root, cid, 2) {
+			t.Errorf("rewrite went to %s, not to a later segment", f.Name())
+		}
 		offs, lens = append(offs, off), append(lens, len(b))
 		return f.WriteAt(b, off)
 	}
@@ -329,8 +339,8 @@ func TestReaderRetiresOpenScanStateWhenASegmentIsSealed(t *testing.T) {
 
 // V2 (tapestore half): AppendFunc's build step runs inside the writer's lock,
 // so it never reads the open segment while another call is mid-batch, and
-// what it reads includes a failed call's whole records, which the same call
-// then makes durable.
+// what it reads excludes a failed call's records (their segment tail was
+// abandoned), which it then writes afresh.
 func TestAppendFuncBuildsOnlyBetweenOtherCalls(t *testing.T) {
 	root := t.TempDir()
 	a := NewAppender(root)
@@ -371,7 +381,10 @@ func TestAppendFuncBuildsOnlyBetweenOtherCalls(t *testing.T) {
 			if err != nil {
 				return nil, err
 			}
-			return nil, nil // P is present: write nothing, only make it durable
+			if found {
+				return nil, nil
+			}
+			return []Item{{NSPayload, p}}, nil // the failed call's tail was abandoned: write P afresh
 		})
 		if err != nil {
 			t.Errorf("AppendFunc: %v", err)
@@ -383,8 +396,8 @@ func TestAppendFuncBuildsOnlyBetweenOtherCalls(t *testing.T) {
 	if !buildSawDone {
 		t.Fatal("build ran while another call was still inside its batch")
 	}
-	if !sawP {
-		t.Fatal("build did not see the failed call's whole record")
+	if sawP {
+		t.Fatal("build saw a record of the failed call: its unsynced tail should have been abandoned, not left readable")
 	}
 	mustRead(t, NewReader(root), cid, NSPayload, p)
 }
