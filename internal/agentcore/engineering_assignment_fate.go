@@ -215,6 +215,7 @@ func (rt *Runtime) cancelAssignedEngineering(ctx context.Context, parent types.R
 		rt.failBoundSelfdevOperation(ctx, assignment.Binding.ComputerID, assignment.AssignmentID, cancel.Reason)
 		rt.stopCancelledAssignmentRun(ctx, cancelled.Assignment, cancel.Reason)
 		rt.settleEngineeringPrecommitsAtTerminal(ctx, cancelled.Assignment, cancel.Reason)
+		rt.wakeNextQueuedEngineeringRequest(ctx, cancelled.Assignment)
 	}
 	return cancelled, nil
 }
@@ -280,6 +281,9 @@ func (rt *Runtime) persistSystemEngineeringCancellation(ctx context.Context, ass
 				// a terminal or missing op converges.
 				rt.failBoundSelfdevOperation(ctx, current.Binding.ComputerID, current.AssignmentID, cancel.Reason)
 				rt.settleEngineeringPrecommitsAtTerminal(ctx, result.Assignment, cancel.Reason)
+				if !silent {
+					rt.wakeNextQueuedEngineeringRequest(ctx, result.Assignment)
+				}
 			}
 			return result, nil
 		}
@@ -600,6 +604,7 @@ func (rt *Runtime) reconcileEngineeringAssignmentsForTrajectory(ctx context.Cont
 			if !cancelled.Replay {
 				rt.failBoundSelfdevOperation(ctx, computerID, assignment.AssignmentID, cancel.Reason)
 				rt.settleEngineeringPrecommitsAtTerminal(ctx, cancelled.Assignment, cancel.Reason)
+				rt.wakeNextQueuedEngineeringRequest(ctx, cancelled.Assignment)
 			}
 			continue
 		}
@@ -644,6 +649,7 @@ func (rt *Runtime) reconcileEngineeringAssignmentsForTrajectory(ctx context.Cont
 			rt.failBoundSelfdevOperation(ctx, computerID, assignment.AssignmentID, cancel.Reason)
 			rt.stopCancelledAssignmentRun(ctx, cancelled.Assignment, cancel.Reason)
 			rt.settleEngineeringPrecommitsAtTerminal(ctx, cancelled.Assignment, cancel.Reason)
+			rt.wakeNextQueuedEngineeringRequest(ctx, cancelled.Assignment)
 		}
 	}
 	// Terminal trajectories close their bound self-development operation here:
@@ -1343,6 +1349,7 @@ func (rt *Runtime) commitAssignedEngineeringReport(ctx context.Context, assignme
 	result, err := rt.store.RecordEngineeringAssignmentReport(ctx, req)
 	if err == nil && !result.Replay && result.Assignment.Disposition.Terminal() {
 		rt.settleEngineeringPrecommitsAtTerminal(ctx, result.Assignment, string(report.Result)+": "+report.Summary)
+		rt.wakeNextQueuedEngineeringRequest(ctx, result.Assignment)
 	}
 	return result, err
 }
