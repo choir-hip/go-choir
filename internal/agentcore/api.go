@@ -20,6 +20,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/guestmem"
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/persistentdisk"
@@ -741,6 +742,12 @@ type guestObservabilityResponse struct {
 	// hotplug lease changes MemTotal, and the staging probe reads it here
 	// instead of over SSH (docs/reports/memory-hotplug-controller-design-2026-10-14.md).
 	Memory *guestMemoryObservability `json:"memory,omitempty"`
+	// MemoryDetail is where the guest's memory goes, only with
+	// ?memory=detail: the meminfo split, resident memory by process name
+	// and by cgroup, and how much of the page cache is this computer's
+	// store versus the shared nix store (SDC RES-07, launch checklist
+	// L1-02). Bounded to a few seconds; it takes no lock.
+	MemoryDetail *guestmem.Detail `json:"memory_detail,omitempty"`
 }
 
 // guestMemoryObservability is the guest's own memory as the kernel reports it.
@@ -828,6 +835,12 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 	}
 	if r.URL.Query().Get("goroutines") == "1" {
 		resp.Goroutines = goroutineDump()
+	}
+	if r.URL.Query().Get("memory") == "detail" {
+		resp.MemoryDetail = guestmem.Read([]guestmem.Tree{
+			{Label: "store", Root: h.rt.cfg.StorePath},
+			{Label: "nix_store", Root: "/nix/store"},
+		}, guestmem.DefaultLimits)
 	}
 	if raw, err := os.ReadFile("/proc/meminfo"); err == nil {
 		resp.Memory = parseGuestMeminfo(string(raw))
