@@ -6,12 +6,15 @@ package proxy
 import (
 	"crypto/ed25519"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"golang.org/x/crypto/ssh"
+
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
 )
 
 // Config holds all runtime configuration for the proxy service, resolved from
@@ -19,6 +22,11 @@ import (
 type Config struct {
 	// Port is the TCP port the proxy service listens on.
 	Port string
+
+	// ObjectGraphInternalAuth caps hostauth for loopback callers of the
+	// object-graph route (PROXY_OBJECT_GRAPH_INTERNAL_AUTH: observe or
+	// enforce; anything else, and unset, is enforce). SEC-11 ships observe.
+	ObjectGraphInternalAuth hostauth.Mode
 
 	// ComputerURL initializes the reverse-proxy transport and supports explicit
 	// package tests. Production served routes must override it with a vmctl
@@ -162,6 +170,7 @@ func LoadConfig() (*Config, error) {
 		ExpandRequesters:          ParseExpandRequesters(os.Getenv("PROXY_EXPAND_REQUESTERS")),
 		ExpandOff:                 strings.EqualFold(strings.TrimSpace(os.Getenv("PROXY_EXPAND")), "off"),
 		ExpandPublic:              strings.EqualFold(strings.TrimSpace(os.Getenv("PROXY_EXPAND_PUBLIC")), "on"),
+		ObjectGraphInternalAuth:   objectGraphInternalAuthFromEnv(),
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -169,6 +178,18 @@ func LoadConfig() (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func objectGraphInternalAuthFromEnv() hostauth.Mode {
+	raw := strings.ToLower(strings.TrimSpace(os.Getenv("PROXY_OBJECT_GRAPH_INTERNAL_AUTH")))
+	switch raw {
+	case "observe":
+		return hostauth.ModeObserve
+	case "", "enforce":
+		return hostauth.ModeEnforce
+	}
+	log.Printf("proxy config: PROXY_OBJECT_GRAPH_INTERNAL_AUTH=%q is not observe or enforce; enforcing", raw)
+	return hostauth.ModeEnforce
 }
 
 // validate checks that the config is consistent and usable.

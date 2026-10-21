@@ -867,6 +867,13 @@ in
       Environment = [
         "SERVER_HOST=0.0.0.0"
         "PROXY_PORT=8082"
+        # SEC-11: loopback callers of the object-graph route
+        # (/internal/platform/objects*, edges, captures, published search,
+        # story verdicts) present the host credential. Observe first: logs
+        # "hostauth: observe: would refuse" per caller and allows. Flip to
+        # "enforce" after a clean day (no such line for these routes).
+        # Rollback: "observe".
+        "PROXY_OBJECT_GRAPH_INTERNAL_AUTH=observe"
         "PROXY_AUTOPUTER_URL=http://127.0.0.1:8085"
         "PROXY_AUTH_PUBLIC_KEY_PATH=${authSigningDir}/ed25519-key.pub"
         "PROXY_AUTH_DB_PATH=/var/lib/go-choir/auth/auth.db"

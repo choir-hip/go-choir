@@ -8,7 +8,9 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"testing"
 
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
@@ -18,6 +20,13 @@ import (
 const maxGuestCaptureRequestBytes = 64 << 20
 
 func trustedInternalProxyTransport(r *http.Request) bool {
+	return trustedInternalProxyTransportFor(r, testing.Testing())
+}
+
+// trustedInternalProxyTransportFor: loopback or a unix socket; TEST-NET-1
+// (httptest's RemoteAddr) only inside a Go test binary, never in
+// production (SEC-11; hostauth.TestNetworkAllowed).
+func trustedInternalProxyTransportFor(r *http.Request, inTestBinary bool) bool {
 	if r == nil {
 		return false
 	}
@@ -29,7 +38,19 @@ func trustedInternalProxyTransport(r *http.Request) bool {
 	if err != nil {
 		host = remoteAddr
 	}
-	return host == "127.0.0.1" || host == "::1" || strings.HasPrefix(host, "192.0.2.")
+	if host == "127.0.0.1" || host == "::1" {
+		return true
+	}
+	ip := net.ParseIP(host).To4()
+	return inTestBinary && ip != nil && ip[0] == 192 && ip[1] == 0 && ip[2] == 2
+}
+
+// objectGraphInternalAuth is the route's hostauth cap; unset is enforce.
+func (h *Handler) objectGraphInternalAuth() hostauth.Mode {
+	if h == nil || h.cfg == nil || h.cfg.ObjectGraphInternalAuth == "" {
+		return hostauth.ModeEnforce
+	}
+	return h.cfg.ObjectGraphInternalAuth
 }
 
 func (h *Handler) boundProxyGuest(r *http.Request) (*vmctl.GuestOwnership, error) {
@@ -45,10 +66,17 @@ func (h *Handler) boundProxyGuest(r *http.Request) (*vmctl.GuestOwnership, error
 
 func (h *Handler) requirePlatformObjectGraphCaller(r *http.Request) error {
 	if trustedInternalProxyTransport(r) {
-		if r.Header.Get("X-Internal-Caller") == "true" {
-			return nil
+		// Loopback is a location, not a credential: a host caller also
+		// presents the host credential (SEC-11;
+		// docs/problems/loopback-is-a-credential-2026-10-14.md). The route's
+		// own mode lets it observe while the proxy enforces elsewhere.
+		if r.Header.Get(hostauth.MarkerHeader) != "true" {
+			return fmt.Errorf("internal caller required")
 		}
-		return fmt.Errorf("internal caller required")
+		if !hostauth.AuthorizeAtMost(r, h.objectGraphInternalAuth()) {
+			return fmt.Errorf("internal caller credential required")
+		}
+		return nil
 	}
 	ownership, err := h.boundProxyGuest(r)
 	if err != nil {
