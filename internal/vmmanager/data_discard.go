@@ -71,8 +71,8 @@ func dataDiscardEnabledFromEnv(flagOn bool, firecrackerBin string) bool {
 // applyDataDriveDiscard adds the discard options to the data drive only.
 // io_engine is set to Sync explicitly: Async (io_uring) does not support
 // discard, and a future default change must not silently break it.
-func applyDataDriveDiscard(cfg ManagerConfig, drive map[string]interface{}) {
-	if !cfg.DataDiscard {
+func applyDataDriveDiscard(on bool, drive map[string]interface{}) {
+	if !on {
 		return
 	}
 	drive["io_engine"] = "Sync"

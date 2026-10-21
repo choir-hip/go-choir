@@ -281,7 +281,7 @@ func (m *Manager) commitSnapshot(vmID string, cfg VMConfig, hostURL string, host
 		Epoch:              cfg.Epoch,
 		HostPort:           hostPort,
 		HostURL:            hostURL,
-		FirecrackerVersion: firecrackerBuildVersion(m.cfg.FirecrackerBinPath),
+		FirecrackerVersion: firecrackerBuildVersion(m.launchedVMM(vmID).Firecracker),
 		HostKernelRelease:  hostKernelRelease(),
 		LaunchConfigSHA256: sha256Hex(launchConfig),
 		Config:             snapshotStoredConfig(cfg),
@@ -378,8 +378,12 @@ func (m *Manager) ResumeVMFromSnapshot(vmID string, expect VMConfig, issue Resum
 
 	tl := newBootTimeline(vmID, "snapshot_resume")
 	tl.mark("boot_begin")
-	tl.FirecrackerBin = m.cfg.FirecrackerBinPath
-	tl.FirecrackerVer = firecrackerBuildVersion(m.cfg.FirecrackerBinPath)
+	// The build this restore would launch; validation refuses a snapshot
+	// taken under another (firecracker_version_mismatch).
+	selectCfg, _ := m.expectedLaunchConfig(meta, expect)
+	vmm := m.vmmFor(selectCfg)
+	tl.FirecrackerBin = vmm.Firecracker
+	tl.FirecrackerVer = firecrackerBuildVersion(vmm.Firecracker)
 	tl.HostKernelRelease = hostKernelRelease()
 	snap := &SnapshotTimeline{
 		Mode:            HibernateModeSnapshot,
@@ -461,6 +465,7 @@ func (m *Manager) ResumeVMFromSnapshot(vmID string, expect VMConfig, issue Resum
 		return fallback(snapshotReasonConsumeFailed, err)
 	}
 	tl.mark("snapshot_consumed")
+	m.recordLaunchedVMM(vmID, vmm)
 	m.reserveHostURLLocked(meta.HostURL)
 	inst := &VMInstance{
 		Config:       cfg,
