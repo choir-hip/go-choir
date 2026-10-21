@@ -1313,3 +1313,35 @@ change. The management prompt is unchanged for now; if the next run still
 casts round 1 as `ecosystem_proxy`, the prompt names the two-round order
 explicitly, and after that the mechanical default (a carried-patch round
 gets `ecosystem_proxy`) is the fix.
+
+## Failure 20: the release copy fails on `fchmodat2`, which the capsule's seccomp filter does not name (label sonnet-slides-1021c, 05:31 UTC)
+
+With the brief naming each round's network field, the two-round protocol
+ran for the first time on the delegate computer. Round 1 (claude mode): the
+Sonnet delegate rewrote `SlidesApp.svelte` (25 turns, $0.28) and
+engineering reviewed the diff against a saved copy. Round 2
+(`ecosystem_proxy`): engineering applied `/selfdev/carried/source.patch`,
+`npm ci` added 59 packages in 4 s, and `vite build` ran. The job then failed
+at `cp -rf --no-preserve=mode,ownership,timestamps dist/.
+/var/lib/artifact/release/frontend/`, with one line per file:
+"cp: setting permissions for '…': Operation not permitted".
+
+Cause (code reading, strongly supported, not yet confirmed on a guest):
+the capsule's seccomp filter (`internal/capsule/seccomp.go`) is
+default-deny with EPERM, and its allowlist names `chmod`, `fchmod` and
+`fchmodat` but not `fchmodat2` (syscall 452, Linux 6.6). Recent glibc
+routes coreutils' permission setting (`lchmod`, `fchmodat` with flags)
+through `fchmodat2`. The seccomp library already knows the name, so the
+omission is ours. The allowlist already has the newer forms of its other
+calls (`openat2`, `faccessat2`, `renameat2`, `clone3`), so this is a
+missing sibling, not a policy choice. Why arm B's release copy passed is
+not established; its command was not read.
+
+Consequence: any engineering build that copies files into the release tree
+with GNU `cp` fails in every capsule mode. It is the last blocker
+between the Sonnet rewrites and a freeze.
+
+Fix (decided): allow `fchmodat2`, the same permission class as the allowed
+`fchmodat`, and add a test that every allowed call's newer variant known to
+the library is allowed too, so the next kernel addition fails a test
+instead of a build.
