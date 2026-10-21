@@ -2,18 +2,21 @@
 # On-host probe of the CI deploy gate (SDC SEC-14), for FP0 between deploy 1
 # and deploy 2. Run as root on Node B, from the deployed checkout:
 #
-#   scripts/node-b-ci-gate-probe <off-main-sha> [<main-sha-to-prebuild>]
+#   scripts/node-b-ci-gate-probe <off-main-sha> [<main-sha-to-prebuild> [<below-floor-sha>]]
 #
 # <off-main-sha>: a full commit GitHub serves that is not on main (a lane
 # branch tip); the gate must refuse it. With <main-sha-to-prebuild>, the probe
 # also runs a real prebuild through the gate (nix build only, never
-# activates). It runs every request as choir-deploy through the forced
+# activates). With <below-floor-sha> (after step 3: the deploy-1 commit),
+# it checks the host floor exists and the gate refuses that commit as below
+# it (as a prebuild, which never activates). It runs every request as choir-deploy through the forced
 # command from authorized_keys.d, exactly as sshd would, and prints one line
 # per check. Exit 0 only if every check passes.
 set -uo pipefail
 
 off_main="${1:?usage: node-b-ci-gate-probe <off-main-sha> [<main-sha-to-prebuild>]}"
 prebuild_sha="${2:-}"
+below_floor="${3:-}"
 keys=/etc/ssh/authorized_keys.d/choir-deploy
 failures=0
 
@@ -74,6 +77,21 @@ if [ -n "$prebuild_sha" ]; then
   status=0
   as_deploy "prebuild DEPLOY_COMMIT=${prebuild_sha} DEPLOY_FRONTEND=false DEPLOY_HOST=false DEPLOY_HOST_OS=false HOST_SERVICES=proxy" || status=$?
   [ "$status" -eq 0 ] && pass "prebuild of ${prebuild_sha} through the gate" || failc "prebuild through the gate: status ${status}"
+fi
+
+if [ -n "$below_floor" ]; then
+  floor=$(cat /var/lib/go-choir/ci-gate-floor 2>/dev/null || true)
+  [[ "$floor" =~ ^[0-9a-f]{40}$ ]] && pass "host floor is ${floor}" || failc "host floor missing or malformed: ${floor}"
+  status=0
+  # A prebuild, never a deploy: the floor guards both verbs, and if it failed
+  # here a prebuild only builds, where a deploy would activate the old commit.
+  err=$(as_deploy "prebuild DEPLOY_COMMIT=${below_floor} DEPLOY_FRONTEND=false DEPLOY_HOST=false DEPLOY_HOST_OS=false HOST_SERVICES=" 2>&1 >/dev/null) || status=$?
+  if [ "$status" -eq 2 ] && grep -q 'refused: commit .* is below the floor' <<<"$err"; then
+    pass "refused: a commit below the floor"
+  else
+    failc "a commit below the floor was not refused (status ${status}): ${err:0:200}"
+  fi
+  [ "$(cat /var/lib/go-choir/ci-gate-floor 2>/dev/null)" = "$floor" ] && pass "the floor is unchanged" || failc "the floor moved"
 fi
 
 echo "failures=${failures}"
