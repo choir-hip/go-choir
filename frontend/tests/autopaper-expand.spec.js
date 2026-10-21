@@ -66,6 +66,7 @@ test.describe('fate lines and polling decisions', () => {
     expect(askNotice(409, 'already_asked')).toContain('already asked');
     expect(askNotice(429, 'limit')).toContain('Try again later');
     expect(askNotice(429, '')).toContain('Try again later');
+    expect(askNotice(429, 'address_limit')).toBe('Too many requests from your address; try later.');
     expect(askNotice(409, 'busy')).toContain('busy');
     expect(askNotice(502, 'unavailable')).toContain('not reachable');
     expect(askNotice(403, '')).toContain('not available');
@@ -225,6 +226,15 @@ test.describe('the control on a story page', () => {
     state.read = allowed({ asked: true, requests: [requestOf('accepted')] });
     await button.click();
     await expect(page.locator('[data-autopaper-expand-line]')).toContainText('already asked', { timeout: 10_000 });
+  });
+
+  test('an address over its allowance is told so in the fate line (X8)', async ({ page }) => {
+    const state = { read: allowed(), ask: { status: 429, body: { status: 'address_limit', error: 'too many requests from your address; try later' } } };
+    await mockRoutes(page, state);
+    await openStory(page);
+    await page.locator('[data-autopaper-expand-button]').click();
+    await expect(page.locator('[data-autopaper-expand-line]')).toHaveText('Too many requests from your address; try later.', { timeout: 10_000 });
+    await expect(page.locator('[data-autopaper-expand-button]')).toBeEnabled();
   });
 
   test('a late read for the story the reader left is dropped (X4)', async ({ page }) => {

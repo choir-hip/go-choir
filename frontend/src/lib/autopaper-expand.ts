@@ -1,7 +1,8 @@
 // "More research" on a published story (story expansion design, phase 1,
-// docs/reports/story-expansion-request-design-2026-10-20.md). An allowlisted
-// owner asks the paper to expand one story; the proxy decides who may, and
-// answers allowed:false to everyone else, so the page shows nothing to them.
+// docs/reports/story-expansion-request-design-2026-10-20.md). A reader asks the
+// paper to expand one story; no sign-in is needed when the public door is on.
+// The proxy decides who may, and answers allowed:false when the feature is
+// off or the route is not a story, so the page shows nothing then.
 // Everything here is display: the server's answer is text, never HTML, and
 // any failure means "show nothing" or a plain notice, never a broken story.
 
@@ -61,6 +62,7 @@ export type AskResult = { ok: boolean; status: string; message: string };
 const DECLINED: Record<string, string> = {
   already_asked: 'This version was already asked to be expanded.',
   limit: 'Too many expansion requests right now. Try again later.',
+  address_limit: 'Too many requests from your address; try later.',
   busy: 'The story\'s desk is busy. Try again shortly.',
   changed: 'The story just changed. Try again.',
   unavailable: 'The paper is not reachable right now. Try again shortly.',

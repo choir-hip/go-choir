@@ -18,10 +18,23 @@
  *                               the refusal checks and the browser check run.
  *   EXPAND_WINDOW_MINUTES       how long to follow the fate; default 20
  *   AUTOPAPER_EXPAND_ARTIFACT_DIR  where to write the JSON artifact
+ *   EXPAND_PUBLIC               set to "on" when staging runs with
+ *                               PROXY_EXPAND_PUBLIC=on (the public door,
+ *                               owner 2026-10-20 section 32): a logged-out
+ *                               reader then may ask, so the refusal checks
+ *                               for anonymous callers invert
+ *   EXPAND_PUBLIC_ROUTE         with EXPAND_PUBLIC=on: the bare route of a
+ *                               second old story (not EXPAND_TARGET_ROUTE: one
+ *                               request per published version) that the
+ *                               logged-out check may really ask to expand
  *
  * Ways this could fail (the design's section 7, as checked here):
  *   F3 A non-owner asks: anonymous (POST 401, read allowed:false), an
  *      ordinary account (403), an API key on the allowlisted account (403).
+ *      With EXPAND_PUBLIC=on the anonymous half becomes the public door:
+ *      read allowed:true, POST 202 once and 409 after, an unknown route 404.
+ *      The per-address throttle (3 an hour, 10 a day) is pinned by proxy
+ *      unit tests and is not spent against staging here.
  *   F9 A route that is not a story answers differently from an unknown one.
  *   E5 A second ask for the same published version sends a second revise.
  *   F1 The expansion rewrites or shortens the story: the new latest version
@@ -55,6 +68,8 @@ const API_KEY = process.env.EXPAND_API_KEY || '';
 const TARGET_ROUTE = process.env.EXPAND_TARGET_ROUTE || '';
 const WINDOW_MS = Number(process.env.EXPAND_WINDOW_MINUTES || 20) * 60_000;
 const ARTIFACT_DIR = process.env.AUTOPAPER_EXPAND_ARTIFACT_DIR || '';
+const PUBLIC_ON = String(process.env.EXPAND_PUBLIC || '').toLowerCase() === 'on';
+const PUBLIC_ROUTE = process.env.EXPAND_PUBLIC_ROUTE || '';
 const POLL_MS = 30_000;
 
 test.describe.configure({ mode: 'serial', timeout: WINDOW_MS + 300_000 });
@@ -101,14 +116,24 @@ test('anonymous callers and ordinary accounts are refused (F3)', async () => {
   const anonymous = await asAccount('');
   const read = await anonymous.get(readPath(route));
   expect(read.status()).toBe(200);
-  expect((await read.json()).allowed).toBe(false);
-  const post = await anonymous.post('/api/platform/publications/expand', { data: { route } });
-  expect(post.status(), 'anonymous POST').toBe(401);
+  if (PUBLIC_ON) {
+    // The public door: an unknown route is still not askable, and says so
+    // the same way for everyone.
+    const missing = await anonymous.post('/api/platform/publications/expand', { data: { route: '/pub/texture/never-published-zzzzzz' } });
+    expect(missing.status(), 'anonymous POST on an unknown route').toBe(404);
+    expect((await (await anonymous.get(readPath('/pub/texture/never-published-zzzzzz'))).json()).allowed).toBe(false);
+    record.refusals = { anonymous_unknown_route_post: 404 };
+  } else {
+    expect((await read.json()).allowed).toBe(false);
+    const post = await anonymous.post('/api/platform/publications/expand', { data: { route } });
+    expect(post.status(), 'anonymous POST').toBe(401);
+  }
 
   test.skip(!ORDINARY_STATE, 'EXPAND_ORDINARY_STATE not set: the ordinary-account check is skipped');
   const ordinary = await asAccount(ORDINARY_STATE);
   const oread = await ordinary.get(readPath(route));
   expect(oread.status()).toBe(200);
+  if (PUBLIC_ON) return; // a signed-in ordinary account is a public reader now
   expect((await oread.json()).allowed).toBe(false);
   expect((await ordinary.post('/api/platform/publications/expand', { data: { route } })).status(), 'ordinary POST').toBe(403);
   record.refusals = { anonymous_post: 401, ordinary_post: 403 };
@@ -123,7 +148,7 @@ test('an API key on the allowlisted account is refused; a non-story route is a 4
   expect(handNote.status()).toBe(404);
   expect(await handNote.text(), 'unknown and non-story routes answer alike').toBe(await unknown.text());
 
-  if (API_KEY) {
+  if (API_KEY && !PUBLIC_ON) { // with the public door on, a key is just another reader
     const keyed = await pwRequest.newContext({ baseURL: BASE_URL, extraHTTPHeaders: { Authorization: `Bearer ${API_KEY}` }, storageState: { cookies: [], origins: [] } });
     const res = await keyed.post('/api/platform/publications/expand', { data: { route: TARGET_ROUTE || '/pub/texture/none' } });
     expect(res.status(), 'API key POST').toBe(403);
@@ -153,9 +178,50 @@ test.describe('the page at phone width', () => {
     await apage.goto(`${BASE_URL}/autopaper/${slug}`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
     await expect(apage.locator('[data-texture-published-reader]')).toBeVisible({ timeout: 30_000 });
     await apage.waitForTimeout(1500);
-    await expect(apage.locator('[data-autopaper-expand]')).toHaveCount(0);
+    if (PUBLIC_ON) {
+      await expect(apage.locator('[data-autopaper-expand-button]')).toBeVisible({ timeout: 30_000 });
+    } else {
+      await expect(apage.locator('[data-autopaper-expand]')).toHaveCount(0);
+    }
     await anonymous.close();
   });
+});
+
+test('a logged-out reader sees the button, asks once, and a second ask is refused (public door)', async ({ browser }) => {
+  test.skip(!PUBLIC_ON || !PUBLIC_ROUTE, 'EXPAND_PUBLIC=on and EXPAND_PUBLIC_ROUTE are needed');
+  const anonymous = await asAccount('');
+  const read = await (await anonymous.get(readPath(PUBLIC_ROUTE))).json();
+  expect(read.allowed, 'a logged-out reader may ask').toBe(true);
+
+  // The button, at phone width, for a reader with no session.
+  const context = await browser.newContext({ storageState: { cookies: [], origins: [] }, viewport: { width: 375, height: 812 } });
+  const page = await context.newPage();
+  await page.goto(`${BASE_URL}/autopaper/${slugOf(PUBLIC_ROUTE)}`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+  const button = page.locator('[data-autopaper-expand-button]');
+  await expect(button).toBeVisible({ timeout: 30_000 });
+  expect((await button.boundingBox()).height).toBeGreaterThanOrEqual(44);
+  await context.close();
+
+  record.public_asked_at = new Date().toISOString();
+  const first = await anonymous.post('/api/platform/publications/expand', { data: { route: PUBLIC_ROUTE } });
+  expect(first.status(), await first.text()).toBe(202);
+  const asked = await first.json();
+  expect(asked.status).toBe('asked');
+  expect(asked.request_id).toMatch(/^rx-[0-9a-f]{12}$/);
+  record.public_request_id = asked.request_id;
+  record.public_owner_revision_id = asked.revision_id;
+
+  const second = await anonymous.post('/api/platform/publications/expand', { data: { route: PUBLIC_ROUTE } });
+  expect(second.status()).toBe(409);
+  expect((await second.json()).status).toBe('already_asked');
+
+  // The read now shows the request, still without a session.
+  const after = await (await anonymous.get(readPath(PUBLIC_ROUTE))).json();
+  expect(after.allowed).toBe(true);
+  expect(after.asked).toBe(true);
+  expect((after.requests || []).some((r) => r.request_id === asked.request_id)).toBe(true);
+  // The trace half (the request text carries "provenance: public reader" and
+  // no address) is an operator step over the window this artifact records.
 });
 
 test('ask once, a second ask is refused, and the story keeps what it had (E5, F1, F2)', async () => {

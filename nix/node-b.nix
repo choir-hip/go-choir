@@ -790,6 +790,13 @@ in
         # the page shows no button). Not a secret. To turn on, set the owner's
         # user id here and deploy. Kill switch: PROXY_EXPAND=off.
         "PROXY_EXPAND_REQUESTERS="
+        # Public door (owner 2026-10-20, owner notes section 32): readers who
+        # are not logged in may ask an Autopaper story to be expanded. They
+        # are limited to 3 an hour and 10 a UTC day per address (counted in
+        # proxy memory, reset by a restart) on top of the global 3 in flight
+        # and 12 a day. Turn off with "off" or by removing the line;
+        # PROXY_EXPAND=off still wins over everything.
+        "PROXY_EXPAND_PUBLIC=on"
         # Unsigned / and /assets/* serve this host tree (picker/auth chrome).
         # Authenticated computer surface is selected after vmctl resolve.
         "PROXY_PLATFORM_SHELL_ROOT=${frontendCurrent}"

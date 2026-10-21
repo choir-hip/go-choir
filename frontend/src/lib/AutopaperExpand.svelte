@@ -2,8 +2,9 @@
   AutopaperExpand — the "More research" control in a story's header.
 
   It shows nothing unless the proxy says this reader may ask
-  (GET /api/platform/publications/expansion allowed:true): phase 1 ships dark
-  with only the owner allowlisted. A click asks the paper to expand the
+  (GET /api/platform/publications/expansion allowed:true). With the public
+  door on that includes readers who are not signed in; with it off only the
+  allowlisted owner sees it. A click asks the paper to expand the
   story; the line under it follows the request while it is open. The server's
   words are never rendered as HTML, and every failure leaves the story alone.
 -->
