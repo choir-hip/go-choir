@@ -349,6 +349,17 @@ status=0
 "$gate" -- "receipt" extra >/dev/null 2>&1 || status=$?
 [ "$status" -eq 2 ] || fail "extra argument: status $status, want 2"
 
+# The workflow's request templates, filled with sample values, parse.
+workflow="$root/.github/workflows/ci.yml"
+DEPLOY_COMMIT=$sha DEPLOY_FRONTEND=true DEPLOY_HOST=true DEPLOY_HOST_OS=false HOST_SERVICES=autoputer,proxy
+DEPLOY_RUN_ID=18712345678 DEPLOY_RUN_ATTEMPT=2 DEPLOY_VMCTL_RESTART=true DEPLOY_ACTIVE_VM_REFRESH=true REFRESH_ACTIVE_COMPUTERS=false
+for verb in prebuild deploy; do
+  template=$(sed -n "s/^ *request=\"\(${verb} [^\"]*\)\"\$/\1/p" "$workflow")
+  [ -n "$template" ] || fail "ci.yml has no ${verb} request template"
+  request=$(eval "printf '%s' \"$template\"")
+  "$gate" --print-plan "$request" >/dev/null || fail "ci.yml ${verb} request does not parse: $request"
+done
+
 # The host wiring (nix/node-b.nix): the key is forced to the gate through
 # sudo with the request as one argument after "--", and the gate is the
 # deploy user's only sudo rule.
