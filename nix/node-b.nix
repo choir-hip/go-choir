@@ -139,7 +139,9 @@ let
   # shows the previous stage healthy. Rollback: the previous stage; "locked"
   # is undone by hand: ALTER USER 'root'@'localhost' IDENTIFIED BY ''
   # (connect with the root password from the file below).
-  doltAuthStage = "users";
+  # Stage 2 "clients" (SEC-12, FP3 group 3, 2026-10-21): after "users"
+  # verified healthy (verify-host-hardening --expect-dolt users).
+  doltAuthStage = "clients";
   doltAppUser = "choir";
   doltAppPasswordFile = "/var/lib/go-choir/secrets/dolt-app-password";
   doltRootPasswordFile = "/var/lib/go-choir/secrets/dolt-root-password";
