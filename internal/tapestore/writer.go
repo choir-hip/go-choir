@@ -10,11 +10,11 @@ import (
 
 // SegmentWriter appends records to one segment and seals it with an index.
 //
-// A1 status: THIS IS NOT WIRED INTO ANY PRODUCTION PATH. It exists for test
-// fixtures and for offline tools (the byte-identical repack tool, deferred).
-// A guard test fails if a non-test source outside this package references it.
-// A2 adds the platform write path, which will extend this type with a
-// per-computer lock and open-segment recovery (truncate a torn tail on open).
+// THIS IS NOT THE PRODUCTION WRITER. It exists for test fixtures and for
+// offline tools (the byte-identical repack tool, deferred). A guard test
+// fails if a non-test source outside this package references it. The
+// production writer, with the per-computer lock, open-segment recovery and
+// rotation, is Appender (appender.go).
 //
 // A writer is not safe for concurrent use.
 type SegmentWriter struct {
@@ -92,8 +92,21 @@ func (w *SegmentWriter) Seal() error {
 	if err := w.f.Sync(); err != nil {
 		return fmt.Errorf("tapestore: fsync segment: %w", err)
 	}
-	idx := encodeIndex(w.segno, w.computerID, uint64(w.off), sortedEntries(w.entries))
-	final := filepath.Join(w.dir, IndexFileName(w.segno))
+	if err := sealIndex(w.dir, w.segno, w.computerID, w.off, w.entries); err != nil {
+		return err
+	}
+	w.sealed = true
+	err := w.f.Close()
+	w.f = nil
+	return err
+}
+
+// sealIndex writes seg-<segno>.idx for a segment that is already fsynced:
+// temp file, fsync, rename, fsync of the directory (appendix A.5 rule 3). A
+// crash before the rename leaves the segment open, which readers scan.
+func sealIndex(dir string, segno uint64, computerID string, size int64, entries map[openKey]idxEntry) error {
+	idx := encodeIndex(segno, computerID, uint64(size), sortedEntries(entries))
+	final := filepath.Join(dir, IndexFileName(segno))
 	tmp := final + ".tmp"
 	t, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o640)
 	if err != nil {
@@ -113,16 +126,13 @@ func (w *SegmentWriter) Seal() error {
 	if err := os.Rename(tmp, final); err != nil {
 		return fmt.Errorf("tapestore: install index: %w", err)
 	}
-	if d, err := os.Open(w.dir); err == nil {
+	if d, err := os.Open(dir); err == nil {
 		_ = d.Sync()
 		d.Close()
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
-	w.sealed = true
-	err = w.f.Close()
-	w.f = nil
-	return err
+	return nil
 }
 
 // Close releases the file and leaves the segment unsealed (open).

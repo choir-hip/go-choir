@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode"
 
@@ -54,7 +55,14 @@ type Service struct {
 	// (event_artifacts.go tapeReader).
 	tapeReaderMu  sync.Mutex
 	tapeReaderVal *tapestore.Reader
-	graphStore    *PublicationGraphStore // graph-native dual-write target
+	// tapeAppenderVal is the segment writer (tape_segments_write.go), under
+	// the same lock and root rule as the reader. tapeSegMode is
+	// PLATFORM_TAPE_SEGMENTS (0 off, 1 write); tapeCount are the diagnostics
+	// counters. A zero Service is mode off.
+	tapeAppenderVal *tapestore.Appender
+	tapeSegMode     atomic.Int32
+	tapeCount       tapeCounters
+	graphStore      *PublicationGraphStore // graph-native dual-write target
 	// captureBodies reads cited captures' blocks at publish, to pin them.
 	captureBodies *CaptureBodyStore
 	// overlay supplies the live check overlay served beside a version.
@@ -935,6 +943,7 @@ func (s *Service) writeBlob(storageRef string, data []byte) error {
 		_ = os.Remove(tmp)
 		return fmt.Errorf("platform artifact: install blob: %w", err)
 	}
+	s.tapeCount.blobFiles.Add(1)
 	return nil
 }
 

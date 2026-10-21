@@ -41,7 +41,9 @@ func (s *EventArtifactService) PinEvent(_ context.Context, computerID string, ca
 	if event.ComputerID != computerID || event.RequestCommitment != requestCommitment {
 		return computerevent.PinResult{}, fmt.Errorf("event artifact service: event scope mismatch")
 	}
-	return s.pin(computerID, canonicalEvent, "application/vnd.choir.computer-event+json", "computer-event", "private", "request_commitment", requestCommitment)
+	// Only a projection_batch_recorded event is segment-eligible (section 4.2).
+	segmentable := event.EventKind == computerevent.EventProjectionBatchRecorded
+	return s.pin(computerID, canonicalEvent, "application/vnd.choir.computer-event+json", "computer-event", "private", "request_commitment", requestCommitment, segmentable)
 }
 
 func (s *EventArtifactService) pinPayload(_ context.Context, computerID string, payload []byte, mediaType, privacyClass, requestCommitment string) (computerevent.PinResult, error) {
@@ -57,16 +59,40 @@ func (s *EventArtifactService) pinPayload(_ context.Context, computerID string, 
 			return computerevent.PinResult{}, fmt.Errorf("event artifact service: invalid private artifact envelope")
 		}
 	}
-	return s.pin(computerID, payload, mediaType, "computer-event-payload", privacyClass, "pin_intent_commitment", requestCommitment)
+	// Only a projection batch payload is segment-eligible (section 4.2).
+	segmentable := mediaType == computerevent.ProjectionBatchMediaType
+	return s.pin(computerID, payload, mediaType, "computer-event-payload", privacyClass, "pin_intent_commitment", requestCommitment, segmentable)
 }
 
-func (s *EventArtifactService) pin(computerID string, payload []byte, mediaType, namespace, privacyClass, commitmentField, commitment string) (computerevent.PinResult, error) {
+// pin writes the artifact and its signed pin receipt. segmentable says the
+// caller's kind is eligible for the segment store; the artifact and its
+// receipt go to the computer's segment only when it is eligible, the flag is
+// PLATFORM_TAPE_SEGMENTS=write and the computer id can name a segment
+// directory. Otherwise the legacy files are written exactly as before the
+// flag existed.
+func (s *EventArtifactService) pin(computerID string, payload []byte, mediaType, namespace, privacyClass, commitmentField, commitment string, segmentable bool) (computerevent.PinResult, error) {
 	if computerID == "" || commitmentField == "" || !computerevent.IsSHA256(commitment) {
 		return computerevent.PinResult{}, fmt.Errorf("event artifact service: computer and request commitment are required")
 	}
+	segmented := segmentable && s.platform.tapeSegmentable(computerID)
 	digest := computerevent.DigestBytes(payload)
 	storageRef := filepath.Join("sha256", namespace, digest)
-	if err := s.writeImmutable(storageRef, payload); err != nil {
+	var artifactItem *tapestore.Item
+	if segmented {
+		// The reuse lock is held from the collision checks to the append, as
+		// writeImmutable holds it for legacy files.
+		s.platform.store.casReuseMu.RLock()
+		defer s.platform.store.casReuseMu.RUnlock()
+		ns := tapestore.NSPayload
+		if namespace == "computer-event" {
+			ns = tapestore.NSEvent
+		}
+		item, err := s.stageSegmented(computerID, ns, payload)
+		if err != nil {
+			return computerevent.PinResult{}, err
+		}
+		artifactItem = item
+	} else if err := s.writeImmutable(storageRef, payload); err != nil {
 		return computerevent.PinResult{}, err
 	}
 	fields := map[string]any{
@@ -84,9 +110,35 @@ func (s *EventArtifactService) pin(computerID string, payload []byte, mediaType,
 		return computerevent.PinResult{}, err
 	}
 	receiptDigest := computerevent.DigestBytes(receiptJSON)
+	if segmented {
+		receiptItem, err := s.stageSegmented(computerID, tapestore.NSReceipt, receiptJSON)
+		if err != nil {
+			return computerevent.PinResult{}, err
+		}
+		// One fsync covers the artifact and its receipt, and returns before
+		// the guest can send the head CAS that names them. Append always
+		// syncs, so a no-op artifact found in the open segment is made
+		// durable here too.
+		items := make([]tapestore.Item, 0, 2)
+		if artifactItem != nil {
+			items = append(items, *artifactItem)
+		}
+		if receiptItem != nil {
+			items = append(items, *receiptItem)
+		}
+		if len(items) == 0 {
+			items = append(items, tapestore.Item{NS: tapestore.NSReceipt, Body: receiptJSON})
+		}
+		if err := s.platform.tapeAppender().Append(computerID, items...); err != nil {
+			return computerevent.PinResult{}, fmt.Errorf("event artifact service: append to segment: %w", err)
+		}
+		s.platform.tapeCount.segmentPins.Add(1)
+		return computerevent.PinResult{ArtifactDigest: digest, Receipt: receipt}, nil
+	}
 	if err := s.writeImmutable(filepath.Join("sha256", "pin-receipts", receiptDigest+".json"), receiptJSON); err != nil {
 		return computerevent.PinResult{}, err
 	}
+	s.platform.tapeCount.legacyPins.Add(1)
 	return computerevent.PinResult{ArtifactDigest: digest, Receipt: receipt}, nil
 }
 
@@ -281,5 +333,9 @@ func (s *EventArtifactService) writeImmutable(storageRef string, payload []byte)
 	if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	return s.platform.writeBlob(storageRef, payload)
+	if err := s.platform.writeBlob(storageRef, payload); err != nil {
+		return err
+	}
+	s.platform.tapeCount.legacyFiles.Add(1)
+	return nil
 }

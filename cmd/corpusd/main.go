@@ -97,6 +97,10 @@ func main() {
 	// PLATFORM_TAPE_SWEEP_MODE=active; on demand only, at
 	// /internal/platform/artifact-gc/tape. The destroyed proof needs vmctl.
 	svc.SetTapeSweepPolicy(platform.TapeSweepPolicy{Mode: cfg.TapeSweepMode, ArchiveDir: cfg.TapeSweepArchiveDir})
+	// Tape segments (stage A2): off unless PLATFORM_TAPE_SEGMENTS=write. The
+	// read path is segment first, legacy second whatever this says.
+	svc.SetTapeSegmentsMode(cfg.TapeSegments)
+	log.Printf("corpusd: tape segments: %s", svc.TapeSegmentsMode())
 	handler := platform.NewHandler(svc)
 	if cfg.VmctlURL != "" {
 		svc.SetComputerRegistry(platform.NewVmctlComputerRegistry(vmctl.NewClient(cfg.VmctlURL)))

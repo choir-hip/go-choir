@@ -37,6 +37,10 @@ type Config struct {
 	// PLATFORM_TAPE_SWEEP_ARCHIVE_DIR (default <artifacts>/tape-sweep-archive).
 	TapeSweepMode       string
 	TapeSweepArchiveDir string
+	// TapeSegments is PLATFORM_TAPE_SEGMENTS: off (default) or write. Write
+	// puts projection batch events, payloads and their pin receipts in the
+	// computer's tape segment instead of one file each (tape_segments_write.go).
+	TapeSegments string
 	// AutopaperOwnersRaw is CORPUSD_AUTOPAPER_OWNERS: comma-separated owner
 	// ids whose auto stories the front list shows; unset shows every
 	// owner's (ParseAutopaperOwners).
@@ -75,6 +79,7 @@ func LoadConfig() (*Config, error) {
 		ArtifactGCNamespaces:  os.Getenv("PLATFORM_ARTIFACT_GC_ACTIVE_NAMESPACES"),
 		TapeSweepMode:         os.Getenv("PLATFORM_TAPE_SWEEP_MODE"),
 		TapeSweepArchiveDir:   os.Getenv("PLATFORM_TAPE_SWEEP_ARCHIVE_DIR"),
+		TapeSegments:          os.Getenv("PLATFORM_TAPE_SEGMENTS"),
 		AutopaperOwnersRaw:    os.Getenv("CORPUSD_AUTOPAPER_OWNERS"),
 		PublicBaseURL:         os.Getenv("CORPUSD_PUBLIC_BASE_URL"),
 		OpinionListingRaw:     os.Getenv("CORPUSD_OPINION_LISTING"),

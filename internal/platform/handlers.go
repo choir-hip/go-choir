@@ -37,6 +37,10 @@ type healthResponse struct {
 	// Retrieval counts and times Store B retrieval calls since start
 	// (docs/problems/corpus-retrieval-windowed-unindexed-untimed-2026-10-14.md).
 	Retrieval *RetrievalSnapshot `json:"retrieval,omitempty"`
+	// Tape is the tape segment flag and the file/record counters of the pin
+	// path and the reader (docs/reports/tape-volume-forward-fix-and-surgery-2026-10-19.md
+	// section 4.5): files created per 1,000 pins without SSH.
+	Tape *TapeDiagnostics `json:"tape,omitempty"`
 }
 
 type apiError struct {
@@ -105,6 +109,10 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	if h != nil && h.service != nil && h.service.store != nil {
 		snap := h.service.store.RetrievalSnapshot()
 		resp.Retrieval = &snap
+	}
+	if h != nil && h.service != nil {
+		tape := h.service.TapeDiagnostics()
+		resp.Tape = &tape
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
