@@ -901,3 +901,26 @@ Owner, before sleep. The order is backup and disk cleanup first, then:
 - Briefing questions 6 to 12 wait until after 2026-10-21 ("wakeup 5:15,
   leave 6:15, home by 7-8pm").
 - Goal: docs/definitions/choir-overnight-research-oped-sources-2026-10-20.md.
+
+## 33. Overnight changes: Sonnet-only app rewrites; shard the flat artifact directories (2026-10-21, ~03:20 UTC)
+
+Owner, verbatim: "actually, after #5, stop testing luna, but still rewrite
+more apps with sonnet. files, podcast, pdf, calendar, epub, slides, / and
+yes, we should shard the flat directories... we need a durable fix for the
+backup verify".
+
+Taken as:
+
+- After the two-arm drill (Sonnet through the Claude delegate versus GPT-6
+  Luna, ImageApp), no more Luna arms. Sonnet through the delegate then
+  rewrites, one at a time on test computers, FileBrowser, PodcastApp,
+  PdfApp, CalendarApp, EpubApp and SlidesApp (`frontend/src/lib/`), smallest
+  first (Slides 810 lines, Pdf 842, Epub 892, Podcast 1,076, Calendar 1,125,
+  FileBrowser 1,172). Same limits as section 32: test computers only,
+  frontend-only rewrites; mail, settings, Autopaper and Texture stay as they
+  are.
+- The durable backup verify fix is sharding the three flat directories of
+  the artifact store (`sha256/pin-receipts`, `sha256/computer-event`,
+  `sha256/computer-event-payload`; 9.2 million files), problem record first
+  (docs/problems/no-off-host-backup-2026-10-20.md section 13 item 18,
+  option c).
