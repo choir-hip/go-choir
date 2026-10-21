@@ -136,11 +136,15 @@ type VMOwnership struct {
 	// retry on this computer after a wedged or recovery_failed stop. Interim
 	// bound until the boot ledger (restart station L1b).
 	FailureWarmedAt string `json:"failure_warmed_at,omitempty"`
-	// DeployGrantTarget is the last deploy target that re-armed this
-	// computer's automatic failure retry (GrantDeployRetry). A deploy of a
-	// different build is an external event with a fresh allowance of one
-	// retry; the same target never grants twice.
-	DeployGrantTarget string `json:"deploy_grant_target,omitempty"`
+	// DeployGrantTargets are the deploy targets that already re-armed this
+	// computer's automatic failure retry (GrantDeployRetry), oldest first and
+	// bounded to the last deployGrantTargetsKept. A deploy of a different
+	// build is an external event with a fresh allowance of one retry; a target
+	// in the set never grants again, so A, B, A re-arms A once.
+	DeployGrantTargets []string `json:"deploy_grant_targets,omitempty"`
+	// failureWarmGen counts the changes to FailureWarmedAt (spend, grant) in
+	// this process, so a refund only restores the spend it belongs to.
+	failureWarmGen uint64
 	// HoldStatus, when non-nil, places the computer under a durable
 	// host-authoritative maintenance hold. vmctl refuses any automatic
 	// lifecycle action (boot/recover/refresh/reattach/resume/reclaim/
@@ -3403,6 +3407,9 @@ func failureWarmAllowed(lastWarmedAt string, now time.Time) bool {
 	return !now.Before(last.Add(failureWarmWindow))
 }
 
+// deployGrantTargetsKept bounds the memory of consumed deploy targets.
+const deployGrantTargetsKept = 8
+
 // recordFailureWarm durably spends the automatic retry before the boot, so
 // a crash between the record and the boot loses the retry rather than
 // repeating it. It refuses if the retry was already spent.
@@ -3411,34 +3418,73 @@ func (r *OwnershipRegistry) recordFailureWarm(vmID string) bool {
 	return ok
 }
 
-// spendFailureWarm is recordFailureWarm returning the value it replaced, so a
-// start that is refused before anything spawns can give the retry back
-// (refundFailureWarm).
-func (r *OwnershipRegistry) spendFailureWarm(vmID string) (previous string, ok bool) {
+// failureWarmReceipt identifies one spend of the automatic retry: the value
+// it replaced and the generation it wrote. A refund restores the old value
+// only while the generation is still current.
+type failureWarmReceipt struct {
+	previous string
+	gen      uint64
+}
+
+// spendFailureWarm is the always-on sweep's spend: only a computer stopped by
+// a failure is charged (any other stop returns ok without charging).
+func (r *OwnershipRegistry) spendFailureWarm(vmID string) (failureWarmReceipt, bool) {
+	return r.spendRetry(vmID, false)
+}
+
+// spendDeployRetry is a deploy rescue's spend: every rescue that spawns a
+// process is charged against the target's allowance whatever the stop reason
+// (vmctl-restart included).
+func (r *OwnershipRegistry) spendDeployRetry(vmID string) (failureWarmReceipt, bool) {
+	return r.spendRetry(vmID, true)
+}
+
+func (r *OwnershipRegistry) spendRetry(vmID string, anyStop bool) (failureWarmReceipt, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	own, found := r.vmByID[vmID]
-	if !found || own == nil || !stoppedByFailure(own.StoppedBy) {
-		return "", found
+	if !found || own == nil {
+		return failureWarmReceipt{}, false
+	}
+	if !anyStop && !stoppedByFailure(own.StoppedBy) {
+		return failureWarmReceipt{}, true
 	}
 	now := r.now()
 	if !failureWarmAllowed(own.FailureWarmedAt, now) {
-		return own.FailureWarmedAt, false
+		return failureWarmReceipt{previous: own.FailureWarmedAt, gen: own.failureWarmGen}, false
 	}
-	previous = own.FailureWarmedAt
+	rec := failureWarmReceipt{previous: own.FailureWarmedAt}
 	own.FailureWarmedAt = now.UTC().Format(time.RFC3339Nano)
+	own.failureWarmGen++
+	rec.gen = own.failureWarmGen
 	r.saveLocked()
-	return previous, true
+	return rec, true
 }
 
-// refundFailureWarm restores the retry spent by spendFailureWarm. It is for a
-// start refused by admission (host memory pressure, a live guest still
-// reattaching): nothing spawned, so nothing was spent.
-func (r *OwnershipRegistry) refundFailureWarm(vmID, previous string) {
+// refundFailureWarm gives back a retry spent by a start that was refused
+// before anything spawned (host memory pressure, a live guest still
+// reattaching). It is a compare-and-restore: if a later grant or spend has
+// touched FailureWarmedAt since this receipt, the newer state stands.
+func (r *OwnershipRegistry) refundFailureWarm(vmID string, rec failureWarmReceipt) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if own, ok := r.vmByID[vmID]; ok && own != nil {
-		own.FailureWarmedAt = previous
+	own, ok := r.vmByID[vmID]
+	if !ok || own == nil || rec.gen == 0 || own.failureWarmGen != rec.gen {
+		return
+	}
+	own.FailureWarmedAt = rec.previous
+	own.failureWarmGen++
+	r.saveLocked()
+}
+
+// markRecoveryFailed turns a stop by a vmctl restart into a recovery failure
+// after a rescue boot failed hard, so the always-on sweep's bound applies to
+// it instead of retrying the boot every pass.
+func (r *OwnershipRegistry) markRecoveryFailed(vmID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if own, ok := r.vmByID[vmID]; ok && own != nil && own.State == VMStateStopped && own.StoppedBy == stoppedByVMCTLRestart {
+		own.StoppedBy = stoppedByRecoveryFailed
 		r.saveLocked()
 	}
 }
@@ -3457,15 +3503,18 @@ func transientStartRefusal(err error) bool {
 	return false
 }
 
-// GrantDeployRetry is the effect of a deploy on a failure-stopped always-on
-// computer: a deploy of a build the computer has not been re-armed for is an
-// external event (docs/restart-subsystem-design-2026-10-13.md section 1), so
-// it opens a new episode with a fresh allowance of one automatic retry. It
-// clears FailureWarmedAt once per distinct target; the same target posted
-// again (a CI re-run, the retry sweep, a duplicate request) never re-arms, so
-// the bound is one automatic boot per (computer, deploy target) after a
-// failure stop, plus the failureWarmWindow backstop. It applies only to
-// protected, unheld computers. It reports whether it re-armed.
+// GrantDeployRetry is the effect of a real deploy on a failure-stopped
+// always-on computer: a deploy of a build the computer has not been re-armed
+// for is an external event (docs/restart-subsystem-design-2026-10-13.md
+// section 1), so it opens a new episode with a fresh allowance of one
+// automatic retry. It clears FailureWarmedAt once per distinct target and
+// remembers the last deployGrantTargetsKept targets, so the same target
+// posted again (a CI re-run, the retry sweep, a duplicate request) and A, B,
+// A never re-arm. The bound is one automatic boot per (computer, deploy
+// target) after a failure stop, plus the failureWarmWindow backstop. It
+// applies only to protected, unheld computers. The store compaction is a
+// maintenance refresh, not a deploy, and never calls it. It reports whether
+// it re-armed.
 func (r *OwnershipRegistry) GrantDeployRetry(vmID, target string) bool {
 	target = strings.TrimSpace(target)
 	if target == "" {
@@ -3480,11 +3529,17 @@ func (r *OwnershipRegistry) GrantDeployRetry(vmID, target string) bool {
 	if !protectedWarmnessClass(warmnessClassForOwnership(own, r.warmnessPolicy)) {
 		return false
 	}
-	if own.DeployGrantTarget == target {
-		return false
+	for _, seen := range own.DeployGrantTargets {
+		if seen == target {
+			return false
+		}
 	}
-	own.DeployGrantTarget = target
+	own.DeployGrantTargets = append(own.DeployGrantTargets, target)
+	if extra := len(own.DeployGrantTargets) - deployGrantTargetsKept; extra > 0 {
+		own.DeployGrantTargets = append([]string(nil), own.DeployGrantTargets[extra:]...)
+	}
 	own.FailureWarmedAt = ""
+	own.failureWarmGen++
 	r.saveLocked()
 	log.Printf("vmctl: deploy target %s re-arms the automatic retry of protected computer vm=%s", target, vmID)
 	return true
@@ -3523,7 +3578,7 @@ func (r *OwnershipRegistry) alwaysOnWarmTargets() []alwaysOnWarmTarget {
 		// without the owner (ruling 2026-10-10), a rollback can land, and a
 		// repeating fault cannot loop. Interim bound until the boot ledger
 		// (restart station L1b) replaces it; delete FailureWarmedAt and
-		// DeployGrantTarget then.
+		// DeployGrantTargets then.
 		afterFailure := stoppedByFailure(own.StoppedBy)
 		if afterFailure && !failureWarmAllowed(own.FailureWarmedAt, now) {
 			continue
@@ -3553,19 +3608,19 @@ func (r *OwnershipRegistry) WarmAlwaysOnDesktops(ctx context.Context, guard Comp
 			log.Printf("vmctl: warmness policy refused always-on desktop vm=%s user=%s desktop=%s: %v", target.vmID, target.userID, target.desktopID, err)
 			continue
 		}
-		var previousWarm string
+		var receipt failureWarmReceipt
 		spentRetry := false
 		if target.afterFailure {
-			previous, ok := r.spendFailureWarm(target.vmID)
+			rec, ok := r.spendFailureWarm(target.vmID)
 			if !ok {
 				continue
 			}
-			previousWarm, spentRetry = previous, true
+			receipt, spentRetry = rec, true
 			log.Printf("vmctl: warmness policy spends the automatic retry for always-on desktop vm=%s after a failure stop; the next is allowed after %s or for the next deploy target", target.vmID, failureWarmWindow)
 		}
 		if _, err := r.ResumeVMForDesktop(target.userID, target.desktopID); err != nil {
 			if spentRetry && transientStartRefusal(err) {
-				r.refundFailureWarm(target.vmID, previousWarm)
+				r.refundFailureWarm(target.vmID, receipt)
 			}
 			log.Printf("vmctl: warmness policy failed to resume always-on desktop vm=%s user=%s desktop=%s: %v", target.vmID, target.userID, target.desktopID, err)
 			continue

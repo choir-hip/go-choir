@@ -1608,15 +1608,22 @@ jobs:
                     # read as "already current" below, so it never takes this
                     # shortcut: vmctl decides, and the commit is verified after
                     # a refresh (docs/problems/vmctl-failed-protected-computer-waits-a-day-and-deploy-cannot-reach-it-2026-10-21.md).
-                    if [ "$refresh_rescue" = "true" ]; then
-                      refresh_expected_commit="$autoputer_runtime_commit"
-                    else
-                      refresh_expected_commit=$(curl -fsS --max-time 10 "${refresh_computer_url}/health" 2>/dev/null | jq -r '.build.commit // empty' || true)
+                    #
+                    # The shortcut also requires that /health ANSWERED with a
+                    # commit: an active computer that refuses connections (a
+                    # hang at boot) answers nothing, and that is not "already
+                    # current" either. With no answer the script posts to
+                    # vmctl, which decides (defers, or waits for the wedge
+                    # detector) and records it for the retry sweep.
+                    refresh_health_commit=""
+                    if [ "$refresh_rescue" != "true" ]; then
+                      refresh_health_commit=$(curl -fsS --max-time 10 "${refresh_computer_url}/health" 2>/dev/null | jq -r '.build.commit // empty' || true)
                     fi
+                    refresh_expected_commit="$refresh_health_commit"
                     if [ -z "$refresh_expected_commit" ]; then
                       refresh_expected_commit="$autoputer_runtime_commit"
                     fi
-                    if [ "$refresh_expected_commit" = "$autoputer_runtime_commit" ] && [ "$refresh_rescue" != "true" ]; then
+                    if [ -n "$refresh_health_commit" ] && [ "$refresh_health_commit" = "$autoputer_runtime_commit" ]; then
                       echo "    ${refresh_vm_id}: already serves ${autoputer_runtime_commit}; nothing to refresh"
                       echo "current" > "${refresh_outcomes_dir}/${refresh_vm_id}"
                       exit 0

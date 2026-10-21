@@ -127,7 +127,7 @@ Defect B:
 
 ## As built (2026-10-21)
 
-- `internal/vmctl/ownership.go`: `VMOwnership.DeployGrantTarget`;
+- `internal/vmctl/ownership.go`: `VMOwnership.DeployGrantTargets` (the last 8 consumed targets, see "Review round 1");
   `GrantDeployRetry`; `spendFailureWarm`/`refundFailureWarm`/`transientStartRefusal`
   (the always-on sweep also refunds a retry on a refusal that spawned nothing);
   `alwaysOnBootClass`.
@@ -150,6 +150,49 @@ Defect B:
   marker is requested (B7). Mutation checks: dropping the same-target guard,
   the protected-class guard, or the live-guest guard each fails a named test.
   The live-guest case is also guarded one layer down by `startExistingVM`.
+
+## Review round 1 (2026-10-21, independent panel): four blocking findings, fixed
+
+- **B1.** `DeployGrantTarget` remembered only the last target, so A, B, A
+  re-armed A; and the store compaction (`compactStore` calls
+  `deployRefreshWith` with Target `store-compaction`) granted and rescued like a
+  deploy. Fix: `DeployGrantTargets` remembers the last `deployGrantTargetsKept`
+  (8) consumed targets, and the grant and the rescue run only for a real deploy
+  request (`maintenance == nil`). Tests: `TestDeployGrantRemembersEveryConsumedTargetNotOnlyTheLast`,
+  `TestStoreCompactionNeverGrantsOrRescues`.
+- **B2.** A refund restored the value it replaced even after a newer grant and
+  spend. Fix: spends return a receipt (previous value, a per-computer
+  generation); a refund is a compare-and-restore on the generation. Test:
+  `TestStaleRefundCannotEraseANewerGrantOrSpend` (the interleaving is driven
+  explicitly: sweep spend, deploy grant and spend, late refund).
+- **B3.** A rescue of a computer stopped by `vmctl-restart` spent nothing. Fix:
+  `spendDeployRetry` charges every rescue that spawns a process, whatever the
+  stop reason; adoption of a live guest spawns nothing and stays free; a hard
+  boot failure of a `vmctl-restart` stop becomes `recovery_failed`, so the
+  always-on sweep's bound applies to it instead of re-trying every pass. Tests:
+  `TestRescueFromVMCTLRestartIsChargedAgainstTheTarget`,
+  `TestAdoptionWithoutASpawnSpendsNothing`.
+- **B4.** In `ci.yml` an unreachable `/health` of an active computer still read
+  as "already serves; nothing to refresh". Now the shortcut needs `/health` to
+  have answered with the target commit; on no answer the script posts to vmctl.
+  Checked with a stubbed `curl` over the four cases (no answer, current, old
+  commit, rescue).
+
+Mutation checks: reverting each of the four fixes fails the test named for it.
+
+## Residuals recorded by the review (not fixed here)
+
+- The rescue's final `/health` wait accepts any commit (liveness, not identity),
+  because a layered computer keeps serving its retained app-layer release and
+  a stopped computer had no commit to compare beforehand.
+- A planned-restart marker written by an earlier refresh could survive into a
+  rescue boot (the inherited marker weakness of the restart design, section
+  3.3; the host does not attest planned-ness yet).
+- `saveLocked` does not fsync and only logs errors (restart ledger L1b); a
+  crash between a spend and its write can lose the spend or the grant.
+- The always-on sweep still boots a `vmctl-restart` stop or a hibernated
+  computer without an allowance (a host act, not a failure); only the rescue
+  charges and converts a hard failure.
 
 ## Not fixed here (residuals, named)
 
