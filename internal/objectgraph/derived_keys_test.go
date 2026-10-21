@@ -970,3 +970,111 @@ func TestValidatorPagesAKindsPrimaryKeyRangeAndFindsStrays(t *testing.T) {
 		t.Fatalf("side %v\nJSON %v (%v)", ids, want, err)
 	}
 }
+
+// The first pass over a store that has rows and no key rows (the paper the day
+// this ships) derives everything; every later pass compares narrow columns and
+// derives nothing. Measured here on 18,000 rows so the numbers are in the log
+// of every run; the assertions are loose on purpose (a slow laptop must not
+// fail them) and tight on the shape: bounded pages, and a repeat pass much
+// cheaper than the first.
+func TestValidatorFirstPassAndRepeatPassOnManyRows(t *testing.T) {
+	ctx := context.Background()
+	db, store := openDerivedStore(t)
+	at := time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)
+	const perKind = 6000
+	insert := func(kind ObjectKind, make func(i int) (meta, body string)) {
+		tx, err := db.Begin()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for start := 0; start < perKind; start += 400 {
+			var sb strings.Builder
+			var args []any
+			sb.WriteString(`INSERT INTO og_objects (canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by) VALUES `)
+			for i := start; i < start+400; i++ {
+				if i > start {
+					sb.WriteString(",")
+				}
+				sb.WriteString("(?,?,?,?,?,?,?,?,?,?,?,?)")
+				id, err := BuildCanonicalID(kind, "o1", fmt.Sprintf("key-%06d", i))
+				if err != nil {
+					t.Fatal(err)
+				}
+				meta, body := make(i)
+				args = append(args, id, string(kind), "o1", "c1", "v", ContentHash(kind, []byte(body), []byte(meta)), body, meta, at.Add(time.Duration(i)*time.Second), at.Add(time.Duration(i)*time.Second), false, "")
+			}
+			if _, err := tx.Exec(sb.String(), args...); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	filler := strings.Repeat("evidence text, a sentence a record carries. ", 30) // ~1.3 KB
+	insert(testRunKind, func(i int) (string, string) { return fmt.Sprintf(`{"agent_id":"texture:%d"}`, i%300), `{}` })
+	insert(commitmentRecordKind, func(i int) (string, string) {
+		return `{}`, fmt.Sprintf(`{"addressee":"texture:%d","text":%q}`, i%300, filler)
+	})
+	insert(testSourceRefKind, func(i int) (string, string) { return fmt.Sprintf(`{"doc_id":"doc-%d"}`, i%500), `{}` })
+
+	first := time.Now()
+	var lines []string
+	logf := func(f string, a ...any) { lines = append(lines, fmt.Sprintf(f, a...)) }
+	if err := store.ValidateDerivedKeys(ctx, DerivedKeyValidation{PageSize: 200, Logf: logf}); err != nil {
+		t.Fatal(err)
+	}
+	firstTook := time.Since(first)
+	page := store.EngineMutexStats()[derivedKeysPageOpName]
+	t.Logf("first pass over %d rows: %s (%.0f rows/s), %d engine holds, longest hold %s, mean hold %s",
+		3*perKind, firstTook.Round(time.Millisecond), float64(3*perKind)/firstTook.Seconds(), page.Calls,
+		time.Duration(page.MaxHoldNanos).Round(time.Millisecond), time.Duration(page.HoldNanos/page.Calls).Round(time.Millisecond))
+	assertSideMatchesTruthSample(t, db)
+
+	second := time.Now()
+	for name := range store.derived.validated {
+		store.derived.setValidated(name, false)
+	}
+	if err := store.ValidateDerivedKeys(ctx, DerivedKeyValidation{PageSize: 200, Logf: logf}); err != nil {
+		t.Fatal(err)
+	}
+	secondTook := time.Since(second)
+	t.Logf("repeat pass over the same rows: %s (%.0f rows/s)", secondTook.Round(time.Millisecond), float64(3*perKind)/secondTook.Seconds())
+	if hold := time.Duration(store.EngineMutexStats()[derivedKeysPageOpName].MaxHoldNanos); hold > 5*time.Second {
+		t.Fatalf("a page held the engine %s", hold)
+	}
+	if secondTook*2 > firstTook {
+		t.Errorf("the repeat pass (%s) is not much cheaper than the first (%s): the comparison is deriving again", secondTook, firstTook)
+	}
+}
+
+// assertSideMatchesTruthSample checks a spread of rows against the recomputation
+// (the full recomputation of 18,000 rows one query at a time is the slow part).
+func assertSideMatchesTruthSample(t *testing.T, db *sql.DB) {
+	t.Helper()
+	got := readSideRows(t, db)
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM og_objects WHERE object_kind IN ('choir.run','choir.commitment_record','choir.source_ref')`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != n {
+		t.Fatalf("%d key rows for %d keyed objects", len(got), n)
+	}
+	for _, fam := range derivedFamilies {
+		rows, err := db.Query(`SELECT canonical_id, LEFT(`+fam.expr+`, 255) FROM og_objects WHERE object_kind = ? ORDER BY canonical_id LIMIT 300`, string(fam.Kind))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for rows.Next() {
+			var id string
+			var v sql.NullString
+			if err := rows.Scan(&id, &v); err != nil {
+				t.Fatal(err)
+			}
+			if g := got[id+"|"+fam.Name]; g.Value != v || !g.OK {
+				t.Fatalf("%s %s: key row %+v, expression %v", fam.Name, id, g, v)
+			}
+		}
+		rows.Close()
+	}
+}
