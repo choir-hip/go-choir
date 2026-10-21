@@ -198,6 +198,29 @@ func TestBootVMDoesNotChmodThroughASymlinkedDataImage(t *testing.T) {
 	}
 }
 
+// The helper itself never chmods through a link (the boot path already refuses
+// a symlinked image before it gets here, so this pins the helper on its own).
+func TestTightenDataImageModeDoesNotFollowASymlink(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target")
+	if err := os.WriteFile(target, make([]byte, 16), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(target, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "data.img")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	if err := tightenDataImageMode(link); err == nil {
+		t.Fatal("a symlink was accepted as a data image")
+	}
+	if got := modeOf(t, target); got != 0o644 {
+		t.Fatalf("the link target's mode changed to %o", got)
+	}
+}
+
 // ensure the helper rejects a directory or device rather than chmod-ing it.
 func TestTightenDataImageModeRefusesNonRegularFiles(t *testing.T) {
 	dir := t.TempDir()

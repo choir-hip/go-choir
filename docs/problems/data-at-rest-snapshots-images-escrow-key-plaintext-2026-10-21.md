@@ -58,8 +58,10 @@ obtains, not about live root.
 
 - Creation: `os.OpenFile(path, O_CREATE|O_EXCL|O_RDWR, 0o644)` then
   `mkfs.ext4`: `internal/vmmanager/manager.go:2997` and `:3020`. The
-  per-computer directory is created `0o755` (`manager.go:883`); an existing
-  image is never re-moded.
+  per-computer directory is created `0750` (`manager.go:842`; the later
+  `0o755` `MkdirAll` at `:883` is a no-op on an existing directory); an
+  existing image is never re-moded. Correction of the first draft of this
+  record, which said the directory was `0755`.
 - The state directory above is `0750` (`nix/node-b.nix:1253`;
   `scripts/verify-host-hardening.py:375` checks the same), so a non-root
   user cannot traverse to the image today. The review's point stands: the
