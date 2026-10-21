@@ -295,13 +295,23 @@ now:
       legacy files are repacked.
     main_uncertainty: whether fail-stop closes the class in one more review round.
     next_observation: the owner's choice.
+  r1_and_flag: >-
+    2026-10-21 late morning. r1 landed test-first (tests, then 687867fd5,
+    deployed with CI green): a pin answered by a segment record writes a
+    synced legacy copy first, counted as reuse_legacy_writes. Owner notes
+    34 chose flag option B (on for every computer after r1) and repack
+    option A with evidence-gated deletes. The flag went to write in
+    d9649b191 (deployed with 219535ef3). Pre-flip counters on that build's
+    predecessor: 2,076 legacy pins, 4,152 legacy files, reader 4,153 legacy
+    hits, 0 corrupt, 0 segment_error_fallbacks.
   blocker: >-
-    none for flag-off; round 4's two enabled-mode P1s are closed by round 5.
-    Turning the flag on, the repack and the legacy delete are owner steps;
-    residuals r1 and r4 should close before the repack.
+    none. The repack tool is not built; the legacy delete waits on the
+    evidence gate of owner notes 34 and the owner's yes.
   next_action: >-
-    Deploy b13846ae2 flag-off and check the health tape block
-    (segment_error_fallbacks 0, legacy reads growing, no segment reads);
-    then r1 test-first, then the owner's flag decision.
+    Read the health tape block after the flip (segment_pins growing,
+    files per pin falling toward 0, segment_fallbacks, corrupt and
+    segment_error_fallbacks 0, appender not poisoned); confirm replay after
+    the next deploy's planned restart and a checkpoint publish read from
+    segments; then build the repack (dry run, copy only, census), r4 first.
 
 receipts: []

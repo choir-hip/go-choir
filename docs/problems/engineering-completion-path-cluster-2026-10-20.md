@@ -1651,3 +1651,15 @@ in the delegate's capsule (the delegate stage stays refused); otherwise
 option 2. Until the owner decides, the five remaining app rewrites (Pdf,
 Epub, Podcast, Calendar, FileBrowser) wait, because each would hit the
 same handoff.
+
+## Decision on failure 26 (2026-10-21, owner notes 34)
+
+The owner chose option 1. The security panel on its design
+([delegate-one-round-build-2026-10-21.md](../design/delegate-one-round-build-2026-10-21.md))
+showed that registry egress inside the delegate's capsule could not be
+confined to the build, so option 1 landed in a narrower form with no new
+egress: the guest image carries the frontend's Nix-built dependencies
+and the build job links them when the package files match (df93ab7f7,
+deployed). A delegate rewrite is one round; a rewrite that changes
+dependencies keeps the two-round path. The SlidesApp drill on the
+delegate test computer is the acceptance.

@@ -52,9 +52,11 @@ Sonnet rewrites of Slides, Pdf, Epub, Podcast, Calendar and FileBrowser, one
 at a time; and a durable fix for the backup verify through the tape segment
 store, goal
 [`definitions/choir-tape-segments-a2-repack-2026-10-21.md`](definitions/choir-tape-segments-a2-repack-2026-10-21.md)
-(fail-stop landed flag-off; round 5, a digest-verified legacy fallback,
-closes round 4's two enabled-mode P1s; the flag flip, repack and legacy
-delete stay owner steps; see its now card).
+(round 5 and r1 landed; owner notes 34: the write flag is on for every
+computer, repack next, legacy deletes gated on evidence and the owner's
+yes; see its now card). The delegate's one-round build landed
+(design/delegate-one-round-build-2026-10-21.md); the Sonnet rewrites
+resume with SlidesApp.
 
 ## Foundations push (2026-10-14 evening → 10-15 15:00; owner: deepen foundations)
 
