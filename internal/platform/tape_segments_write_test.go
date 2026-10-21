@@ -392,11 +392,14 @@ func TestTapeSegmentsCollisionsAcrossBothStores(t *testing.T) {
 			t.Fatalf("a refused pin appended %d records", n)
 		}
 	})
-	t.Run("same bytes in a segment is a no-op", func(t *testing.T) {
+	t.Run("same bytes in a segment appends nothing and leaves a legacy copy (r1)", func(t *testing.T) {
 		f := newWriteFixture(t, "write", true)
 		payload := projectionPayload("segment resident")
 		if err := pinBatch(f, payload); err != nil {
 			t.Fatal(err)
+		}
+		if len(legacyTree(t, f.root)) != 0 {
+			t.Fatal("legacy files appeared on the first pin")
 		}
 		if err := pinBatch(f, payload); err != nil {
 			t.Fatal(err)
@@ -404,8 +407,8 @@ func TestTapeSegmentsCollisionsAcrossBothStores(t *testing.T) {
 		if n := segmentRecords(t, f.root, id)[segItem{tapestore.NSPayload, computerevent.DigestBytes(payload)}]; n != 1 {
 			t.Fatalf("payload records = %d, want exactly 1", n)
 		}
-		if len(legacyTree(t, f.root)) != 0 {
-			t.Fatal("legacy files appeared")
+		if got := legacyTree(t, f.root)["sha256/computer-event-payload/"+computerevent.DigestBytes(payload)]; !bytes.Equal(got, payload) {
+			t.Fatal("a pin answered from a segment record left no legacy copy of it")
 		}
 	})
 	t.Run("a segment record that does not hold its digest sends the pin the legacy way and appends nothing", func(t *testing.T) {
