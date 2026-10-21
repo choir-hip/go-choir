@@ -1590,3 +1590,64 @@ management, that the new capsule finds them at
 or looks for the patch, and that a report awaiting round two or the
 carried patch means: Cast the next round. Test-first, beside
 `TestManagementOverlayNamesEveryCastNetworkMode`.
+
+## Failure 26 and the structural assessment: eight SlidesApp drills, no freeze (label sonnet-slides-1021h, deploy 10132ed5b, 08:20-08:30 UTC)
+
+Drill h (trajectory in the trace bundle outside the repo):
+
+- Round 1 ran as designed (delegate rewrite; completed as failed).
+- After Texture's re-cast, management cast round 1 again, in claude
+  mode, and the delegate rewrote the file a second time (10 turns,
+  $0.26). Management did cast after the failure 25 fix, but the round it
+  cast was the wrong one.
+- Round 3 got the carried patch (mounted, 18100 bytes). Engineering then
+  called `choir.WriteFile(".../SlidesApp.svelte", "")`, found it could not
+  restore the file without git, and completed as blocked over
+  "provenance". That word came from management's cast, which asked it to
+  locate "saved-copy comparison provenance".
+
+Clustering assessment (the repo rule: three or more iterations without
+convergence means stop patching and escalate):
+
+- Eight drills (a-h) produced failures 19-26. The Sonnet delegate's own
+  work succeeded every time: 10-25 turns, $0.13-0.28 a round.
+- The substrate defects were real and are fixed: the xattr errno that
+  broke every first release copy (24), a Complete that could end a round
+  in the middle of its build (23), a failed build that poisoned the next
+  one's receipt (24), a capsule seeing the guest's release (21), and the
+  carried patch's secret and mask files (16).
+- The stops that remain are reasoning failures across a handoff that
+  takes three desk turns: engineering reports "awaiting round two",
+  management decides what that means and writes a new brief, and a fresh
+  engineering capsule decides whether to trust the patch. Each turn
+  restates the task in its own words ("provenance", "round 1 again",
+  "freeze only if every check passes"), and each restatement is a new
+  chance to stop. Engineering and management run GPT-6 Luna, at low and
+  high effort. A prompt change moves the odds for one wording. The next
+  wording finds the next stop.
+- The root is structural: the delegate's capsule cannot build, so every
+  delegate rewrite needs a second, model-mediated round.
+
+Options for the owner (not patched; this needs a decision):
+
+1. One round. The claude-mode capsule keeps the delegate's sandbox
+   refusing npm, and the engineering desk's own build job in the same
+   capsule reaches the package ecosystem through the ecosystem proxy.
+   The delegate writes, engineering builds and freezes, and nothing is
+   handed off. Cost: the claude-mode capsule's jobs get package-registry
+   egress (proxied and allowlisted, as in `ecosystem_proxy`). This is a
+   network-grant decision (security first).
+2. A platform-driven round 2. When a claude-mode round completes as
+   failed with a changed tree, the platform itself opens the
+   `ecosystem_proxy` round with a fixed recipe: apply the carried patch,
+   run the overlay's build job, Freeze, Complete. No desk restates
+   anything. Cost: a harness step that knows about delegate rounds.
+3. Raise the engineering desk's reasoning effort for self-development
+   assignments (model policy). This is the cheapest change, and it moves
+   only the odds.
+
+Recommendation: option 1, if the owner accepts registry egress for jobs
+in the delegate's capsule (the delegate stage stays refused); otherwise
+option 2. Until the owner decides, the five remaining app rewrites (Pdf,
+Epub, Podcast, Calendar, FileBrowser) wait, because each would hit the
+same handoff.

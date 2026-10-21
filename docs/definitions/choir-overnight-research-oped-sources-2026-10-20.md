@@ -219,8 +219,8 @@ now:
     verify through the segment store (separate goal file
     choir-tape-segments-a2-repack-2026-10-21.md). Items 0-3 have landed;
     the rewrites are running.
-  source_ref: main 16a5aa0e0 (failures 23 and 24 fixes; drill f row c231894df local)
-  deploy_identity: staging f9ad90709 (deployed 07:15 UTC); 16a5aa0e0 in CI
+  source_ref: main 10132ed5b (failures 23-25 fixed; failure 26 and the structural assessment in the cluster doc)
+  deploy_identity: staging 10132ed5b (CI 39566819880 success, deployed 08:16 UTC)
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
   conjecture:
     id: ON-C1
@@ -268,11 +268,15 @@ now:
       (conjecture from the trace: cp fails on new files, passes on
       existing ones); whether the build round now freezes on its first
       job; P6's cause.
-    next_observation: SlidesApp drill g on 16a5aa0e0, first build job's copy and Freeze.
-  blocker: none
+    next_observation: owner's choice among the three structural options for the delegate handoff.
+  blocker: >-
+    Escalated (dead-end rule): eight SlidesApp drills, no freeze; the
+    remaining stops are desk reasoning failures across the two-round
+    delegate handoff. Owner chooses: one-round build in the delegate's
+    capsule (registry egress for jobs), a platform-driven round 2, or a
+    higher engineering reasoning effort.
   next_action: >-
-    Deploy 16a5aa0e0, run SlidesApp drill g; if it freezes, applies and
-    restores, continue Pdf, Epub, Podcast, Calendar, FileBrowser in that
-    order.
+    On the owner's choice, build it test-first, then rerun SlidesApp, then
+    Pdf, Epub, Podcast, Calendar and FileBrowser.
 
 receipts: []
