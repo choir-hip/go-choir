@@ -196,8 +196,36 @@ EXCLUDES=(
   "$DOLT_SNAPS/corpus/.choir-backup" # Store B's old sync copy, inside its data directory
   "$DOLT_SNAPS/**/sql-server.info"   # the live server's lock note; a restore starts without it
 )
+# The escrow KEK the units actually load (finding B3): the source file of a
+# key-escrow-kek* credential and an absolute CHOIR_KEY_ESCROW_KEK_PATH, read
+# from the units, are excluded whatever their file names. The name pattern
+# above covers the documented layout; this covers the configured one. A
+# host without systemctl adds nothing (development).
+KEK_UNITS="${OFFHOST_KEK_UNITS:-go-choir-corpusd.service go-choir-checkpointd.service}"
+kek_sources() { # prints one path per line
+  command -v systemctl >/dev/null 2>&1 || return 0
+  local unit line tok
+  for unit in $KEK_UNITS; do
+    systemctl show -p LoadCredential -p LoadCredentialEncrypted -p Environment "$unit" 2>/dev/null |
+    while IFS= read -r line; do
+      case "$line" in
+        LoadCredential=key-escrow-kek*:/*|LoadCredentialEncrypted=key-escrow-kek*:/*)
+          printf '%s\n' "${line#*:}" ;;
+        Environment=*)
+          for tok in ${line#Environment=}; do
+            case "$tok" in CHOIR_KEY_ESCROW_KEK_PATH=/*) printf '%s\n' "${tok#*=}" ;; esac
+          done ;;
+      esac
+    done
+  done
+}
+
 resolve_paths() {
   PATHS=(); SKIPPED=(); REQUIRED_MISSING=0
+  local kek
+  while IFS= read -r kek; do
+    [ -n "$kek" ] && EXCLUDES+=("$kek")
+  done < <(kek_sources)
   add_path "$ART" required
   # A snapshotted store travels in $STAGING; its old sync copy is not read.
   is_subvolume "$PLATFORM_DOLT_DATA" || add_path "$ROOT/platform-dolt/.choir-backup/platform" required
