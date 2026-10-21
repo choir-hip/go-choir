@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	doltmemlimit "github.com/dolthub/dolt/go/libraries/doltcore/memlimit"
 	"github.com/yusefmosiah/go-choir/internal/actorruntime"
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
@@ -161,7 +162,7 @@ func Run() {
 	bootMark("process_main_entry")
 	// First, before anything opens Dolt: Dolt sizes its caches from the Go
 	// memory limit once, at first use (docs/reports/lr-guest-memory-return-2026-10-14.md).
-	log.Printf("autoputer: gomemlimit %s", gomemlimit.ApplyDaemon())
+	log.Printf("autoputer: gomemlimit %s", gomemlimit.ApplyDaemon(doltmemlimit.Init, doltmemlimit.NodeCacheSize))
 	ensureDeskCgroups()
 	cfg := LoadConfig()
 
