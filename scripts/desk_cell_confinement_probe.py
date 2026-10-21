@@ -18,7 +18,11 @@ its isolation self-test (POST /api/runtime/isolation-selftest, owner only):
    world-readable canary in another desk's live tmp dir. The runtime reads
    each worker's /proc status and namespaces from outside, then runs one
    plain cell in it.
-2. egress: the guest runtime (guest root) dials host :22, :13306, :2019,
+2. document_tool: the guest runs its own binary as a document tool through
+   the document-tool sandbox (uid 61010, empty network namespace, Landlock,
+   seccomp; SEC-15), acting as a hostile tool: reads, writes, sockets,
+   namespaces, mount, ptrace.
+3. egress: the guest runtime (guest root) dials host :22, :13306, :2019,
    169.254.169.254:80 and another guest's address (must be dropped), and the
    gateway :8084, corpusd :8086 and 1.1.1.1:443 (must stay open).
 
@@ -214,6 +218,40 @@ def judge_frames(fb):
     return fails
 
 
+# The document-tool sandbox (SEC-15, internal/doctool): the uid is written out
+# here for the same reason as DESK_UIDS.
+DOCTOOL_UID = 61010
+DOCTOOL_DENIED = ["write_input_dir", "write_tmp", "socket_inet", "socket_unix",
+                  "unshare_user", "unshare_net", "mount", "ptrace_parent"]
+
+
+def judge_document_tool(dt):
+    """The daemon's binary run as a hostile document tool inside the sandbox."""
+    fails = []
+    r = (dt or {}).get("report")
+    if not r:
+        return ["document_tool: no report (warnings %r, failures %r)" % (
+            (dt or {}).get("warnings"), (dt or {}).get("failures"))]
+    if r.get("uid") != DOCTOOL_UID or r.get("gid") != DOCTOOL_UID:
+        fails.append("document_tool: ran as uid %r gid %r, want %d" % (r.get("uid"), r.get("gid"), DOCTOOL_UID))
+    st = r.get("status") or {}
+    if st.get("NoNewPrivs") != "1" or st.get("Seccomp") != "2" or st.get("CapEff") != "0000000000000000":
+        fails.append("document_tool: status %r" % st)
+    probes = r.get("probes") or {}
+    if probes.get("read_input") != "":
+        fails.append("document_tool: could not read its input: %r" % probes.get("read_input"))
+    reads = [k for k in probes if k.startswith("read:")]
+    if "read:/etc/passwd" not in reads:
+        fails.append("document_tool: /etc/passwd (only Landlock refuses it) was not probed")
+    for name in DOCTOOL_DENIED + reads:
+        got = probes.get(name)
+        if got is None:
+            fails.append("document_tool: probe %s missing" % name)
+        elif got == "" or got.startswith("ENOENT"):
+            fails.append("document_tool: probe %s = %r, want a denial" % (name, got))
+    return fails
+
+
 def judge_egress(eg):
     fails = []
     got = {e.get("name"): e for e in eg or []}
@@ -262,7 +300,8 @@ def main():
     if code != 200:
         finish(2, "self-test unavailable (HTTP %s)" % code)
     receipt["server"] = body
-    fails = judge_desk_cells(body.get("desk_cells") or {}) + judge_frames(body.get("frame_boundary"))
+    fails = (judge_desk_cells(body.get("desk_cells") or {}) + judge_frames(body.get("frame_boundary"))
+             + judge_document_tool(body.get("document_tool")))
     if args.skip_egress:
         receipt["egress_judged"] = False
         server_fails = [f for f in (body.get("failures") or []) if not f.startswith("egress:")]

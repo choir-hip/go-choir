@@ -557,6 +557,16 @@ EOF
     uid = 61003;
     group = "choir-cell-research";
   };
+  # Document tools (pdftotext, pdfinfo, pandoc) parse untrusted bytes as this
+  # user, never as root, in an empty network namespace under Landlock and
+  # seccomp (SDC SEC-15, internal/doctool). The spawner uses the number; a
+  # test pins it.
+  users.groups.choir-doctool = { gid = 61010; };
+  users.users.choir-doctool = {
+    isSystemUser = true;
+    uid = 61010;
+    group = "choir-doctool";
+  };
 
   systemd.tmpfiles.rules = [
     "d /mnt/persistent/choir-updater 0700 root root -"
@@ -923,6 +933,12 @@ EOF
       # doctrine (memory.high = request, memory.max = 2x) would have done.
       # "doctrine" applies it, after the receipts show builds fit.
       CHOIR_CAPSULE_MEMORY_POLICY = "observe";
+      # The document-tool sandbox (SDC SEC-15, internal/doctool): observe runs
+      # each tool as uid 61010 in an empty network namespace, a cgroup under
+      # the desks cgroup, Landlock and seccomp, and when that cannot be set up
+      # runs it as before with the extraction warning
+      # document_tool_sandbox_fallback. "required" refuses instead.
+      CHOIR_DOCUMENT_TOOL_SANDBOX = "observe";
       PATH = lib.mkForce (lib.makeBinPath (with pkgs; [
         busybox
         bash

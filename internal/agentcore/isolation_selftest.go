@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/doctool"
 	"github.com/yusefmosiah/go-choir/internal/gomemlimit"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
@@ -27,6 +28,9 @@ import (
 //     desk_go_eval config, CHOIR_DESK_CELL_CONFINEMENT from the guest image),
 //     each acting as an escaped cell before its first cell
 //     (yaegikernel.DeskCellSelfTest);
+//   - document_tool: the daemon's own binary run as a document tool through
+//     the document-tool sandbox (SEC-15, internal/doctool) in required mode,
+//     acting as a hostile tool would;
 //   - egress: TCP dials from the guest runtime itself (guest root, which a
 //     guest-side firewall could not bind) to host ports that must be dropped
 //     and to ones that must stay open.
@@ -54,10 +58,12 @@ type isolationSelfTestResponse struct {
 	// daemon's frame admission per desk, judged by the staging script against
 	// a table it holds itself.
 	FrameBoundary yaegikernel.FrameBoundaryReceipt `json:"frame_boundary"`
-	Egress        []isolationEgressProbe           `json:"egress"`
-	EgressHost    string                           `json:"egress_host,omitempty"`
-	OK            bool                             `json:"ok"`
-	Failures      []string                         `json:"failures,omitempty"`
+	// DocumentTool is the document-tool sandbox's probe (SEC-15).
+	DocumentTool doctool.SelfTestReceipt `json:"document_tool"`
+	Egress       []isolationEgressProbe  `json:"egress"`
+	EgressHost   string                  `json:"egress_host,omitempty"`
+	OK           bool                    `json:"ok"`
+	Failures     []string                `json:"failures,omitempty"`
 }
 
 // HandleIsolationSelfTest runs the desk cell and guest egress self-tests.
@@ -88,6 +94,11 @@ func (h *APIHandler) HandleIsolationSelfTest(w http.ResponseWriter, r *http.Requ
 		if r.Error != "" {
 			resp.Failures = append(resp.Failures, "frame_boundary: "+r.Role+": "+r.Error)
 		}
+	}
+	cellCfg := deskCellSelfTestConfig(h.rt.cfg.ComputerID)
+	resp.DocumentTool = doctool.SelfTest(ctx, deskWorkerBinary(), append([]string{"/etc/passwd"}, cellCfg.ExtraReads...))
+	for _, f := range resp.DocumentTool.Failures {
+		resp.Failures = append(resp.Failures, "document_tool: "+f)
 	}
 	host, targets := guestEgressTargets(os.Getenv("RUNTIME_GATEWAY_URL"))
 	resp.EgressHost = host

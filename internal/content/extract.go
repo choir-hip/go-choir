@@ -7,15 +7,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
-	"os/exec"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/doctool"
 )
 
 const ExtractionAdapterVersion = 1
@@ -212,42 +210,10 @@ func extractPPTXDocument(ctx context.Context, sourceName string, raw []byte) Ext
 	return extraction
 }
 
+// runDocumentToolOnTempFile runs a document tool on raw bytes, sandboxed
+// as CHOIR_DOCUMENT_TOOL_SANDBOX says (SDC SEC-15, internal/doctool).
 func runDocumentToolOnTempFile(ctx context.Context, tool string, prefixArgs []string, ext string, raw []byte, suffixArgs []string) (string, []string) {
-	if _, err := exec.LookPath(tool); err != nil {
-		return "", []string{tool + "_unavailable"}
-	}
-	tmp, err := os.CreateTemp("", "choir-document-*"+ext)
-	if err != nil {
-		return "", []string{"tempfile_create_failed: " + err.Error()}
-	}
-	tmpPath := tmp.Name()
-	defer func() { _ = os.Remove(tmpPath) }()
-	if _, err := tmp.Write(raw); err != nil {
-		_ = tmp.Close()
-		return "", []string{"tempfile_write_failed: " + err.Error()}
-	}
-	if err := tmp.Close(); err != nil {
-		return "", []string{"tempfile_close_failed: " + err.Error()}
-	}
-	toolCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-	args := append([]string{}, prefixArgs...)
-	args = append(args, tmpPath)
-	args = append(args, suffixArgs...)
-	cmd := exec.CommandContext(toolCtx, tool, args...)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		warning := tool + "_failed"
-		if msg := strings.TrimSpace(stderr.String()); msg != "" {
-			warning += ": " + TruncateString(msg, 500)
-		} else {
-			warning += ": " + err.Error()
-		}
-		return "", []string{warning}
-	}
-	return string(out), nil
+	return doctool.RunOnTempFile(ctx, tool, prefixArgs, ext, raw, suffixArgs)
 }
 
 func extractDOCXTextFromOOXML(raw []byte) string {
