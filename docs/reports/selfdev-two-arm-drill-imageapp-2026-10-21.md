@@ -84,7 +84,10 @@ Run one at a time on the delegate test computer, smallest app first, with
 | SlidesApp | 810 | sonnet-slides-1021e (871c3c145, own release dir) | stalled 06:54: round 1 delegate rewrite (15 turns, $0.20); round 2 applied the patch and `npm ci && npm run build` passed, then completed as blocked on the `diff -u` exit code and the missing `.git`, with no release tree and no freeze; round 3 had no carried patch (failure 22, a brief defect) |
 | SlidesApp | 810 | sonnet-slides-1021f (f9ad90709, brief fixed) | stopped 07:29 after four rounds: round 1 delegate rewrite (19 turns, $0.20); round 2 completed while its build job ran (failure 23); rounds 3 and 4 hit `cp` EPERM on new files from refused xattr calls; round 4's retry built and copied, but Freeze refused it because the failed first job had left build outputs in the workspace (failure 24) |
 | SlidesApp | 810 | sonnet-slides-1021g (16a5aa0e0, xattr EOPNOTSUPP, Complete guard) | stalled 07:54 after round 1 (21 turns, $0.21): management read "awaiting the carried patch" as an input it had to supply and refused to cast the build round (failure 25) |
+| SlidesApp | 810 | sonnet-slides-1021h (10132ed5b, management prompt) | stopped 08:30: management cast round 1 twice; round 3 had the carried patch but emptied the file while inspecting it and stopped on "provenance" (failure 26). Escalated: structural assessment in the cluster doc |
 
 Each stop is a Choir or drill defect found and fixed, in order; none is
 about the delegate's work. The rewrites of Pdf, Epub, Podcast, Calendar and
-FileBrowser wait until SlidesApp reaches a freeze.
+FileBrowser wait for the owner's choice among the three structural
+options in the cluster doc (failure 26), because each would hit the same
+two-round handoff.
