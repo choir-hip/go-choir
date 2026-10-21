@@ -287,13 +287,15 @@ func (m PoolMember) SlotWeight() int {
 // model after any 429, so its free-tier 429s parked the keys deepseek uses
 // (docs/reports/chatgpt-cache-ratio-2026-10-15.md §7.3). The owner weighted
 // it 1:3 the same day. Owner 2026-10-16: "we are using Opencode too much. We
-// will hit our weekly limit soon. Let's go 100% gpt-6 luna for now." Every
-// thread runs on gpt-6-luna; deepseek-v4.1-flash is only its failover.
+// will hit our weekly limit soon. Let's go 100% gpt-6 luna for now." Owner
+// 2026-10-21: "We have Opencode quota now"; the dual pool is back at 1:3, so
+// the same kinds of task run on both models and the tool-call failures they
+// share are fixed in the tool surface rather than tuned to one model.
 func Pools() map[string][]PoolMember {
 	return map[string][]PoolMember{
 		DefaultPool: {
-			{Provider: "chatgpt", Model: "gpt-6-luna"},
-			{Provider: "opencode-go", Model: "deepseek-v4.1-flash", FallbackOnly: true},
+			{Provider: "opencode-go", Model: "deepseek-v4.1-flash", Weight: 1},
+			{Provider: "chatgpt", Model: "gpt-6-luna", Weight: 3},
 		},
 	}
 }

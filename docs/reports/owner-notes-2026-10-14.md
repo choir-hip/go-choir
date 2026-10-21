@@ -953,3 +953,46 @@ Taken as:
   holds the segments; about three days with zero segment-error fallbacks.
   First batch one computer, then faster. The first delete still takes an
   explicit owner yes (irreversible).
+
+## 35. More research skips Texture and reports as it goes; BM25; the dual pool returns for shared-failure evaluation (2026-10-21, midday)
+
+The owner, verbatim, in order:
+
+- "More research should be a button in the texture toolbar. And the
+  toolbar should be responsive for mobile — currently it overflows with
+  large text."
+- "Yes, it should skip texture. But research should also be faster, and
+  send iterative reports to texture, not wait until after multiple
+  searches. (This is our ordinary policy)"
+- "How is corpus search so slow? That's a bug to investigate and fix" and,
+  asked BM25 or embeddings: "Get rid of the standalone page. Bm25 it is.
+  And Yes, do the plan in order."
+- "we should have a better api to get full multidesk/multiagent traces
+  (as well as an app to display them inside choir; but this is another
+  task for later)".
+- "let's monitor it and evaluate the traces, looking for failed tool
+  calls, and if we could remediate that with maybe a prompting tweak or a
+  change to the tool API ... I think we should start using the dual-model
+  pool again. Re-enabling DeepSeek-v4.1-flash via Opencode go. I'd rather
+  not tune prompts to a single model failure, but run the same task with
+  both models and fix where they make the same error." Then: "We have
+  Opencode quota now."
+- "The toolbar should have a “3 dots” menu that expands if the content is
+  too wide for the screen".
+
+Taken as:
+
+- Corpus story search is a BM25 index over title and head text (landed
+  753e178f9). Embeddings stay behind the 2026-10-14 ladder.
+- The standalone `/autopaper/<story>` page is gone; More research is in a
+  published story's Texture toolbar (48fd642d2); the toolbar keeps one row
+  and moves what does not fit into a three-dots menu (follow-up).
+- A reader's ask is a Cast to the story's research desk, not a Texture
+  turn; research sends a packet after its first read source
+  (docs/design/research-more-goes-to-research-2026-10-21.md).
+- The default pool is deepseek-v4.1-flash and gpt-6-luna at the owner's
+  earlier 1:3 again. Trace evaluation compares the two models on the same
+  kind of task; a tool-call failure both make is fixed in the tool
+  description or the Go function, and a failure only one makes is recorded,
+  not prompted around. This outranks the SlidesApp rewrites.
+- The multi-desk trace API and an in-Choir trace viewer are a later task.
