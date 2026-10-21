@@ -4,8 +4,10 @@ package capsule
 
 import (
 	"fmt"
+	"runtime"
 
 	"github.com/elastic/go-seccomp-bpf"
+	"github.com/elastic/go-seccomp-bpf/arch"
 	"golang.org/x/sys/unix"
 )
 
@@ -25,7 +27,7 @@ var capsuleAllowedSyscalls = []string{
 	"inotify_init", "inotify_init1", "inotify_add_watch", "inotify_rm_watch",
 	"socketpair", "connect", "bind", "listen", "accept", "accept4", "shutdown", "sendto", "recvfrom", "sendmsg", "recvmsg",
 	"getsockname", "getpeername", "setsockopt", "getsockopt",
-	"clone", "clone3", "fork", "vfork", "setpgid", "getpgid", "getpgrp", "setsid", "getsid", "execve", "execveat", "exit", "exit_group", "wait4", "waitid",
+	"fork", "vfork", "setpgid", "getpgid", "getpgrp", "setsid", "getsid", "execve", "execveat", "exit", "exit_group", "wait4", "waitid",
 	"getpid", "getppid", "gettid", "getuid", "geteuid", "getgid", "getegid", "getresuid", "getresgid", "getgroups",
 	"setuid", "setgid", "setreuid", "setregid", "setresuid", "setresgid", "setgroups", "setfsuid", "setfsgid",
 	"kill", "tkill", "tgkill", "prctl", "capget", "capset", "set_tid_address", "set_robust_list", "rseq",
@@ -38,6 +40,37 @@ var capsuleAllowedSyscalls = []string{
 	"clock_gettime", "clock_getres", "gettimeofday", "time", "times", "getitimer", "setitimer", "alarm",
 	"getrlimit", "setrlimit", "prlimit64", "getrusage", "sysinfo", "uname", "getrandom",
 	"sendfile", "copy_file_range", "splice", "tee", "vmsplice", "memfd_create", "arch_prctl",
+}
+
+// cloneNewUser is CLONE_NEWUSER, the flag a workload must never pass to clone.
+const cloneNewUser = 0x10000000
+
+// refuseENOSYS answers a syscall as if the kernel lacked it. clone3 gets it
+// (SEC-13): its flags are in a struct seccomp cannot read, so allowing it
+// would admit any CLONE_NEW* flag unconditionally. libc and the Go runtime
+// fall back to clone, whose flags the filter reads.
+var refuseENOSYS = seccomp.ActionErrno | seccomp.Action(unix.ENOSYS)
+
+// archSyscalls returns names as this architecture knows them. The lists are
+// written for amd64, the guest's architecture, where nothing is dropped and a
+// misspelt name still fails the load; arm64 (a dev host) lacks the legacy
+// names (open, fork, dup2, poll, ...) and drops them, since its libc reaches
+// the same calls through their *at and newer forms, which the lists carry.
+func archSyscalls(names []string) []string {
+	if runtime.GOARCH != "arm64" {
+		return names
+	}
+	info, err := arch.GetInfo("")
+	if err != nil {
+		return names
+	}
+	out := make([]string, 0, len(names))
+	for _, n := range names {
+		if _, ok := info.SyscallNames[n]; ok {
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 // capsuleXattrSyscalls stay refused, but with EOPNOTSUPP rather than the
@@ -87,9 +120,18 @@ func seccompFilterAllowing(allowed []string, inet bool) seccomp.Filter {
 		Policy: seccomp.Policy{
 			DefaultAction: denyEPERM,
 			Syscalls: []seccomp.SyscallGroup{
-				{Action: seccomp.ActionAllow, Names: allowed},
+				{Action: seccomp.ActionAllow, Names: archSyscalls(allowed)},
 				{Action: seccomp.ActionAllow, NamesWithCondtions: socketRules},
-				{Action: refuseEOPNOTSUPP, Names: capsuleXattrSyscalls},
+				// SEC-13: clone, but never into a new user namespace (a
+				// nested user namespace hands the workload a full capability
+				// set inside it); CLONE_NEWPID and the other flags the broker
+				// uses to start its children are unchanged. clone3 answers
+				// ENOSYS so libc falls back to clone.
+				{Action: seccomp.ActionAllow, NamesWithCondtions: []seccomp.NameWithConditions{
+					{Name: "clone", Conditions: seccomp.ArgumentConditions{{Argument: 0, Operation: seccomp.BitsNotSet, Value: cloneNewUser}}},
+				}},
+				{Action: refuseENOSYS, Names: []string{"clone3"}},
+				{Action: refuseEOPNOTSUPP, Names: archSyscalls(capsuleXattrSyscalls)},
 			},
 		},
 	}
