@@ -36,6 +36,10 @@ type gatewayHealthResponse struct {
 	// BearerBinding is the SEC-05 bearer binding: its mode, how many active
 	// computers are pinned, and what it has refused or would refuse.
 	BearerBinding *gatewayBindingHealth `json:"bearer_binding,omitempty"`
+	// Credentials is how long the active gateway credentials have left. A
+	// bearer that is only ever refreshed expires one TTL after its last cold
+	// boot unless the host's ensure renews it.
+	Credentials *gatewayCredentialHealth `json:"credentials,omitempty"`
 	// AnthropicRelay is "off" (no key), "dark" (a key, but no identity or no
 	// open window) or "on". It names neither the key nor an identity.
 	AnthropicRelay string `json:"anthropic_relay,omitempty"`
@@ -254,6 +258,7 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp.BearerBinding = h.bindingHealth()
+	resp.Credentials = h.credentialHealth()
 	resp.AnthropicRelay = h.anthropicRelay.status()
 	resp.ModelScheduler = h.schedulerHealth()
 

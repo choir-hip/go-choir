@@ -197,6 +197,7 @@ type IdentityRegistry struct {
 	identities      map[string]*AutoputerIdentity // computer_id -> identity
 	tokenTTL        time.Duration
 	persistencePath string
+	renewals        int64 // host-attested renewals since start
 }
 
 // NewIdentityRegistry creates a new identity registry with the given
@@ -283,6 +284,9 @@ type CredentialEnsureResult struct {
 	// JevPeerMoved reports that the ensure moved the Jev pin to the peer it
 	// named (EnsureCredentialForPeer).
 	JevPeerMoved bool `json:"jev_peer_moved,omitempty"`
+	// Renewed reports that the ensure extended the credential's expiry
+	// because less than half its life was left (EnsureCredentialForPeer).
+	Renewed bool `json:"renewed,omitempty"`
 }
 
 // IssueCredential creates a new credential for the given autoputer ID.
@@ -374,12 +378,28 @@ func (r *IdentityRegistry) EnsureCredentialForPeer(rawToken, peerIP string) (*Cr
 			return nil, fmt.Errorf("credential expired")
 		}
 		moved := peerIP != "" && existing.PeerIP != peerIP
-		if moved {
-			previous := existing.PeerIP
-			existing.PeerIP = peerIP
+		// The host vouches for a live computer each time it ensures its
+		// credential, so an ensure also renews a credential with less than
+		// half its life left. Without it a computer that is only ever
+		// refreshed or recovered (both keep the token) loses its gateway one
+		// TTL after its last cold boot. Only this host-internal route
+		// renews; using a bearer never does, and an expired or revoked
+		// credential was already refused above.
+		renewed := r.tokenTTL > 0 && existing.ExpiresAt.Sub(now) < r.tokenTTL/2
+		if moved || renewed {
+			previousPeer, previousExpires := existing.PeerIP, existing.ExpiresAt
+			if moved {
+				existing.PeerIP = peerIP
+			}
+			if renewed {
+				existing.ExpiresAt = now.Add(r.tokenTTL)
+			}
 			if err := r.persistLocked(); err != nil {
-				existing.PeerIP = previous
+				existing.PeerIP, existing.ExpiresAt = previousPeer, previousExpires
 				return nil, err
+			}
+			if renewed {
+				r.renewals++
 			}
 		}
 		return &CredentialEnsureResult{
@@ -387,6 +407,7 @@ func (r *IdentityRegistry) EnsureCredentialForPeer(rawToken, peerIP string) (*Cr
 			Status:       "already_active",
 			ExpiresAt:    existing.ExpiresAt,
 			JevPeerMoved: moved,
+			Renewed:      renewed,
 		}, nil
 	}
 
@@ -528,6 +549,30 @@ func (r *IdentityRegistry) PinCounts() (pinned, unpinned int) {
 		}
 	}
 	return pinned, unpinned
+}
+
+// CredentialLifetime summarizes the active credentials' remaining life for
+// /health: how many are active, how many expire within seven days, the time
+// to the soonest expiry, and the host-attested renewals since start. It names
+// no computer and no secret.
+func (r *IdentityRegistry) CredentialLifetime() (active, expiringWithin7d int, soonest time.Duration, renewals int64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	now := time.Now()
+	for _, id := range r.identities {
+		if !id.Active || !now.Before(id.ExpiresAt) {
+			continue
+		}
+		active++
+		left := id.ExpiresAt.Sub(now)
+		if left < 7*24*time.Hour {
+			expiringWithin7d++
+		}
+		if active == 1 || left < soonest {
+			soonest = left
+		}
+	}
+	return active, expiringWithin7d, soonest, r.renewals
 }
 
 // hashesEqual compares two hex-encoded credential hashes in constant time.
