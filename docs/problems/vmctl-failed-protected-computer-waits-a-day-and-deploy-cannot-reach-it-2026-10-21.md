@@ -226,7 +226,7 @@ Mutation checks: reverting each of the four fixes fails the test named for it.
   cases (target, layered other commit, non-layered old commit, no layered
   field, no answer, layered without a commit). This retires the earlier
   residual "the rescue's final /health accepts any commit".
-- **A5 (residual).** A protected computer in `VMStateFailed` (a failed deploy
+- **A5 (residual; fixed in round 3, R3-P1c).** A protected computer in `VMStateFailed` (a failed deploy
   refresh sets `State=failed, StoppedBy=""`; the platform warmer sets
   `recovery_failed` with `State=failed`; `loadLocked` keeps it) is skipped by
   `selectDeployRefresh`, `deployRescueStopped`, `alwaysOnWarmTargets` and
@@ -309,6 +309,106 @@ longer an exclusion mechanism on its own. The handler's deploy-refresh
 `inFlight` set stays: it guards the guest marker conversation (a
 request-level dedup before any claim), not a boot.
 
+### As built (round 3)
+
+- `internal/vmctl/ownership.go`: `OwnershipRegistry.lifecycle`
+  (`map[key]lifecycleHolder`) replaces `refreshing` and `starting`;
+  `lifecycleConflictLocked`, `releaseLifecycle[Locked]`,
+  `lifecycleRebootingLocked` (lookups report booting under any claim but a
+  visit's). A visit's resolve takes the `visit start` claim next to
+  `pendingWaiters[key]` on both existing-computer branches (stopped and
+  readiness) and releases it at every exit, in the section that publishes;
+  another visit still joins through `pendingWaiters`, any other holder
+  refuses. `resumeVMForDesktop(…, alwaysOn)`: the sweep's eligibility
+  (`alwaysOnWarmEligibleLocked`), its charge of a failure stop
+  (`spendRetryLocked`) and the claim are one locked step; the refund of a
+  transient refusal and the release happen under the lock after the boot;
+  the release is in the publish section (the round-2 `endStart` before the
+  publish is gone). Recover and refresh take the claim (released after the
+  publish by `defer`), hibernate takes it. `spendDeployRetry` charges only
+  while the caller holds the `deploy rescue` claim; a standalone
+  `spendFailureWarm` refuses while anyone holds it. `DeployGrants`
+  (target, granted_at) replaces `DeployGrantTargets`: entries are kept for
+  `failureWarmWindow`, and a 65th target inside one window is refused
+  (`deployGrantsCap`), never by evicting an older one.
+- `internal/vmctl/deploy_refresh.go`: `deployRescueStopped` includes
+  `VMStateFailed` (any stop label) for an always-on class; `rescueCause`;
+  a rescue defers when the manager still tracks the instance in
+  `running`, `pending` or an unreported state (`managedGuestMayLive`, the
+  same liveness test vmmanager uses); a deploy refresh refused by another
+  path's claim answers `deferred` (kept pending) instead of `failed`.
+  Holds, typed recovery admission (`admitRecoveryStart` in `rescueLaunch`)
+  and the per-target charge apply to failed computers unchanged.
+- `.github/workflows/ci.yml`: unchanged. CI keys on the `rescue` flag, not
+  the state, so a failed candidate takes the same path. Its comment at the
+  rescue step still says a candidate "is stopped"; it should read "is
+  stopped (…) or failed" (the lane's push token cannot update workflow
+  files; FP0 may fold it in).
+- Tests (`internal/vmctl/deploy_rescue_test.go`), each failing on
+  bcdb74659 for its stated reason before the fix:
+  `TestRescueDefersWhileAVisitBootsTheStoppedComputer` (R3-P1a),
+  `TestDeployRefreshDefersWhileAVisitBootsAnActiveComputer` (R3-P1a,
+  ordinary refresh vs a visit's readiness boot),
+  `TestSweepOnAStaleSnapshotCannotBootPastAnAllowanceARescueSpent`
+  (R3-P1b.1, the sweep held in its route guard),
+  `TestNoSpendWhileARescueHoldsTheComputer` (R3-P1b.2, the rescue held
+  between its claim and its charge),
+  `TestDeployRescuesAProtectedComputerItsOwnFailedRefreshLeftFailed` and
+  `TestDeployNeverBootsOverALiveTrackedGuestOfAFailedComputer` (R3-P1c),
+  `TestConsumedTargetIsRememberedForTheWholeRetryWindow` (R3-P2). Changed
+  on purpose: `TestSpendRefusesUnless…` (a rescue spend needs the claim; a
+  failed computer is now the rescue's to charge), `TestDeployGrantRemembers…`
+  (cap and window instead of eviction). The mock's `BootVM` now locks its
+  record (two boots can race in these tests).
+- Mutation checks: removing each of the nine pieces (visit claim on the
+  stopped branch, on the readiness branch, the sweep's locked re-read and
+  charge, the claim check of a standalone spend, the claim requirement of a
+  rescue spend, failed as a rescue, the live tracked guard, the window
+  memory, refresh-busy as deferred) fails the test named for it. **Not
+  covered by a deterministic test:** the resume releasing its claim before
+  the publish (R3-P1a's second half). Nothing runs in that window, so no
+  hook can stop a goroutine there; the fix is structural (release and
+  publish share one critical section) and the mutation passes the suite.
+- Runs: `go test ./internal/vmctl` whole (258 tests) and `-race -count=5` on
+  the lifecycle, rescue, sweep, resume, recover, refresh and hibernate
+  tests, all passing; `go build` of cmd/vmctl, cmd/choir, cmd/corpusd and
+  internal/platform (the exported field rename has no other user).
+
+### Behavior changes a reviewer should weigh (introduced)
+
+- A claim now refuses more callers: `StopVMForDesktop`, `LogoutVMForDesktop`,
+  `RemoveOwnershipForDesktop`, `MarkUnhealthyForDesktop` and hibernate were
+  refused only during a refresh or hibernate; they are now also refused
+  during a visit's start or readiness check, a resume, a recovery or a
+  rescue (`… is already in progress`, transient). A visit's resolve is
+  refused during a resume, recovery or rescue boot, where it used to start
+  a second boot of the same computer.
+- A visit's readiness check of an active computer holds the claim for its
+  `CheckHealth` probe; a deploy refresh posted in that window now defers to
+  the retry sweep (one minute) instead of racing a possible readiness boot.
+
+### Discovered, not fixed (heresy delta: discovered)
+
+- The held branch of `resolveDesktopContext` sets `pendingWaiters[key] = nil`
+  and returns without deleting it, so a later resolve of that computer
+  waits on a channel nobody signals until its context ends (also after the
+  hold is cleared). It takes no lifecycle claim, so it cannot block a
+  deploy or the sweep; it predates this lane.
+- The public platform computer's warmer (`ensureUniversalWirePlatformOwnership`)
+  still serializes by `State=booting` and `pendingWaiters`, without the
+  claim. A deploy rescue never reaches that class (`alwaysOnBootClass`
+  excludes `public_platform`), and the deploy refresh needs `active`, but
+  the operator refresh accepts `booting` and can race it.
+- Reattach (`ReattachManagedVMs`, reconcile) adopts a live process and
+  publishes `active` without the claim. It never boots; a rescue that holds
+  the claim makes its own reattach attempt first.
+- The always-on sweep still skips a failed computer; only a deploy, a visit
+  or an operator act brings it back.
+- (Reviewer, non-blocking.) "A freshly issued gateway token" in A3 is
+  conditional: `issueGatewayToken` answers "" when issuance fails and the
+  boot continues on the guest's existing token. The rescue requests a fresh
+  token; it does not require one.
+
 ## Residuals recorded by the review (not fixed here)
 
 - The rescue's final `/health` check is identity for a non-layered computer and
@@ -318,7 +418,7 @@ request-level dedup before any claim), not a boot.
   3.3; the host does not attest planned-ness yet).
 - `saveLocked` does not fsync and only logs errors (restart ledger L1b); a
   crash between a spend and its write can lose the spend or the grant.
-- The always-on sweep (`ResumeVMForDesktop`) and a visit's recovery still
+- The always-on sweep (`resumeVMForDesktop`) and a visit's recovery still
   recover a tracked stopped instance with `RecoverVM`, which keeps the stored
   config. Only the deploy rescue refreshes onto the current deploy's artifacts
   (A3). After a deploy that deferred the paper's refresh, a sweep boot of a

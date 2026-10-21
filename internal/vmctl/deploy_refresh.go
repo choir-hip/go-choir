@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -191,7 +192,8 @@ type deployRefreshCandidate struct {
 	Reason        string `json:"reason,omitempty"`
 	// Rescue marks a protected always-on computer that is not active but
 	// that a deploy must reach: stopped by a failure (wedged, recovery
-	// failed) or by a vmctl restart that did not reattach it. CI posts it
+	// failed) or by a vmctl restart that did not reattach it, or failed (a
+	// deploy refresh that did not boot leaves it so). CI posts it
 	// without the "already serves" shortcut, which an unreachable /health
 	// would satisfy by mistake.
 	Rescue bool `json:"rescue,omitempty"`
@@ -218,18 +220,30 @@ func deployRefreshAllowsBusy(class WarmnessClass) bool {
 	return false
 }
 
-// deployRescueStopped reports whether a stopped computer is one a deploy
-// reaches: an always-on computer (alwaysOnBootClass) stopped by a failure or
-// by a vmctl restart. A computer stopped by an idle sweep, a logout or an
-// owner act is left to its next start, as before.
+// deployRescueStopped reports whether a computer that is not running is one
+// a deploy reaches: an always-on computer (alwaysOnBootClass) stopped by a
+// failure or by a vmctl restart, or failed (whatever failed it, including a
+// deploy refresh that did not boot). A computer stopped by an idle sweep, a
+// logout or an owner act is left to its next start, as before.
 func deployRescueStopped(state VMState, stoppedBy string, class WarmnessClass, desktopID string) bool {
-	if state != VMStateStopped {
-		return false
-	}
-	if !stoppedByFailure(stoppedBy) && stoppedBy != stoppedByVMCTLRestart {
+	switch state {
+	case VMStateFailed:
+	case VMStateStopped:
+		if !stoppedByFailure(stoppedBy) && stoppedBy != stoppedByVMCTLRestart {
+			return false
+		}
+	default:
 		return false
 	}
 	return alwaysOnBootClass(class, desktopID)
+}
+
+// rescueCause names why a rescue candidate is down, for reasons and logs.
+func rescueCause(state VMState, stoppedBy string) string {
+	if state == VMStateFailed {
+		return "failed"
+	}
+	return "stopped by " + stoppedBy
 }
 
 // deployRescueEligible is deployRescueStopped for a registry record: unheld,
@@ -263,7 +277,7 @@ func selectDeployRefresh(ownerships []ownershipResponse) deployRefreshPlan {
 			if !deployRescueStopped(VMState(own.State), own.StoppedBy, WarmnessClass(own.WarmnessClass), desktopID) {
 				continue
 			}
-			entry.Reason = "stopped by " + own.StoppedBy
+			entry.Reason = rescueCause(VMState(own.State), own.StoppedBy)
 			if own.Held {
 				entry.Reason = "held"
 				plan.Skipped = append(plan.Skipped, entry)
@@ -422,6 +436,10 @@ func (h *Handler) deployRefreshWith(ctx context.Context, req deployRefreshReques
 			// The marker must not outlive a restart that did not happen.
 			marker.clear(ctx, own)
 		}
+		if errors.Is(err, errLifecycleBusy) {
+			// Another start of this computer holds it; nothing was killed.
+			return reply(deployRefreshDeferred, err.Error()+"; the retry sweep asks again", http.StatusConflict)
+		}
 		status := http.StatusInternalServerError
 		if RecoveryRefusalFrom(err) != nil {
 			status = http.StatusConflict
@@ -446,7 +464,7 @@ func (h *Handler) deployRefreshWith(ctx context.Context, req deployRefreshReques
 }
 
 // deployRescue reaches a protected always-on computer that a failure or a
-// vmctl restart left stopped (docs/problems/vmctl-failed-protected-computer-waits-a-day-and-deploy-cannot-reach-it-2026-10-21.md).
+// vmctl restart left stopped, or that is failed (docs/problems/vmctl-failed-protected-computer-waits-a-day-and-deploy-cannot-reach-it-2026-10-21.md).
 // done reports that the answer is final; done false means a live guest
 // outside the registry reattached, and the caller continues with the ordinary
 // planned refresh of an active computer.
@@ -492,13 +510,21 @@ func (h *Handler) deployRescue(ctx context.Context, req deployRefreshRequest, ow
 		resp, status := reply(deployRefreshDeferred, "runs outside the registry and did not answer reattach; the wedge detector ends it on evidence, then vmctl boots it on "+req.Target, http.StatusConflict)
 		return resp, status, true
 	}
+	if mgr != nil {
+		if info := mgr.GetVM(own.VMID); info != nil && managedGuestMayLive(info.State) {
+			// The manager still runs a guest behind a stopped or failed
+			// record: never booted over or killed here (B1).
+			resp, status := reply(deployRefreshDeferred, "the manager still runs this computer's guest (state="+info.State+"); the wedge detector or an owner act ends it first", http.StatusConflict)
+			return resp, status, true
+		}
+	}
 	// Every rescue that spawns a process is charged against this target's
 	// allowance, whether the stop was a failure or a vmctl restart; adoption
 	// (above) spawns nothing and is free. The spend judges the registry's
 	// entry under the lock.
 	receipt, ok := reg.spendDeployRetry(own.VMID)
 	if !ok {
-		resp, status := reply(deployRefreshSkipped, "stopped by "+own.StoppedBy+" and the automatic retry for this deploy target is spent; a different deploy target or an owner act boots it", http.StatusConflict)
+		resp, status := reply(deployRefreshSkipped, rescueCause(own.State, own.StoppedBy)+" and the automatic retry for this deploy target is spent; a different deploy target or an owner act boots it", http.StatusConflict)
 		return resp, status, true
 	}
 	refreshed, err := reg.rescueBoot(own, mgr)
@@ -520,7 +546,7 @@ func (h *Handler) deployRescue(ctx context.Context, req deployRefreshRequest, ow
 	}
 	return deployRefreshResponse{
 		Outcome:     deployRefreshRefreshed,
-		Reason:      "stopped by " + own.StoppedBy + "; booted onto the current deploy as a crash boot (no planned-restart marker)",
+		Reason:      rescueCause(own.State, own.StoppedBy) + "; booted onto the current deploy as a crash boot (no planned-restart marker)",
 		BusyAllowed: deployRefreshAllowsBusy(reg.WarmnessClassForOwnership(&own)),
 		VMID:        refreshed.VMID,
 		ComputerID:  stableComputerID(refreshed.UserID, refreshed.DesktopID, refreshed.ComputerID),
@@ -529,4 +555,14 @@ func (h *Handler) deployRescue(ctx context.Context, req deployRefreshRequest, ow
 		ComputerURL: refreshed.ComputerURL,
 		State:       string(refreshed.State),
 	}, http.StatusOK, true
+}
+
+// managedGuestMayLive reports a manager instance state that may have a live
+// guest process: running, pending, or unreported.
+func managedGuestMayLive(state string) bool {
+	switch strings.ToLower(strings.TrimSpace(state)) {
+	case "", "running", "pending":
+		return true
+	}
+	return false
 }
