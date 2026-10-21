@@ -428,7 +428,7 @@ type Manager struct {
 	// jailSharedMu serializes building, linking and sweeping the shared
 	// read-only artifacts under <jail base>/.shared (jail_shared.go).
 	jailSharedMu sync.Mutex
-	cgroupRoot    string
+	cgroupRoot   string
 	// chownFn and fileOwnerFn are chown(2) and the owner lookup; tests that
 	// cannot change owners replace them.
 	chownFn     func(path string, uid, gid int) error
