@@ -116,7 +116,11 @@ now:
       ssh session that /etc/set-environment does not restore.
     next_observation: deploy 1's host OS build and switch, then the probe
   blocker_or_risk: >-
-    Deploy 2 touches only .github/, so no deploy is selected on push; it needs
+    The lane branch is not on GitHub: the agents VM's token lacks the
+    `workflow` scope, so GitHub refuses any push that changes
+    .github/workflows/ci.yml. FP0 takes the commits from this worktree
+    (lanes/fp10-sec14-deploy-user on the agents VM) or pushes them with a
+    workflow-scoped credential. Deploy 2 touches only .github/, so no deploy is selected on push; it needs
     a workflow_dispatch deploy to prove it. The receipt read is best effort:
     a gate failure there is silent ("receipt unavailable"), so read that line.
   next_action: FP0 freezes and reviews deploy 1 (commits e892961cc, 67ef79140), lands it, runs the probe
