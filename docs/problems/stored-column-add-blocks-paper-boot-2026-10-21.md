@@ -43,6 +43,21 @@ Evidence, read-only from Node B:
   unhealthy when vmctl restarted), so the deploy neither refreshed nor
   stopped it.
 - 16:59:09: the wedge detector stopped it again, "it boots again on resume".
+  Its one automatic retry had been spent at 16:44:54 ("the next is allowed
+  after 24h0m0s"), and API-key requests never boot a stopped computer
+  ("api key computer realization unavailable"), so nothing would.
+- 17:09:24: with the owner's go-ahead ("you can access node b as needed"),
+  the session called `/internal/vmctl/resolve` on Node B for the paper's
+  dedicated account, the path a visit takes (caller
+  `operator.resume-paper`, the credential passed as a header file and
+  never printed). vmctl admitted it (`admit_protected`) and booted it at
+  17:10:07 on f2c4a3ec3. Boot closed the open runs as interrupted by a
+  crash restart, as the restart rule requires; all 66 source schedules
+  stayed active. The paper was down from 16:20 to 17:10.
+
+The 24-hour retry window is the 2026-10-15 problem's item 2
+([paper-computer-disk-full-outage-2026-10-15.md](paper-computer-disk-full-outage-2026-10-15.md)),
+still unfixed: this is its second outage.
 
 A second problem, then: **a rollback deploy cannot reach a protected
 computer that hangs during boot.** Reattach needs a computer vmctl stopped

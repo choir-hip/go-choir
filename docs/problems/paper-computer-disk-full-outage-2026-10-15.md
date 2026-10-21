@@ -6,7 +6,7 @@ paper). Owner rule: "we need paper publishing 24/7, even after crashes."
 ## Timeline (vmctl journal, guest console, deploy log; counts and states only)
 
 - **21:53**: deploy 2d9e2b00c's health probe of vm-1669020a…
-  (computer-1355b83b…, the owner's always-on computer that runs Autopaper)
+  (computer-1355b83b…, the always-on computer that runs Autopaper; it belongs to a dedicated Autopaper account, not the owner's, per reports/reeng-autopaper-paper-computer-2026-10-13.md; wording corrected 2026-10-21)
   reports `persistent_disk.used_bytes` ≈ 33.4 GB of a 33.5 GB cap. The
   disk is nearly full hours before any failure.
 - **23:22**: vmmanager health checks start failing every 15 s.
