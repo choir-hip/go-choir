@@ -219,8 +219,8 @@ now:
     verify through the segment store (separate goal file
     choir-tape-segments-a2-repack-2026-10-21.md). Items 0-3 have landed;
     the rewrites are running.
-  source_ref: main 0212dcfa9 (local b96c4755f, unpushed code 73922d044, f2004ed56, 85250d067)
-  deploy_identity: staging cbef56155 (CI 39543206946 success, deployed 04:30 UTC)
+  source_ref: main 16a5aa0e0 (failures 23 and 24 fixes; drill f row c231894df local)
+  deploy_identity: staging f9ad90709 (deployed 07:15 UTC); 16a5aa0e0 in CI
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
   conjecture:
     id: ON-C1
@@ -253,21 +253,26 @@ now:
     read.
   belief:
     believed_state: >-
-      Backup daily path clean (run 5, 36 minutes, no check); snapshot
-      restore drill running (corpus passed). Research more and op-ed
-      deployed and proven. Wave-1 plus social rows active; Taiwan row
-      started 04:52 (first poll ok: 100 fetched, 25 new). Arm B (Luna) applied and restored; arm A (Sonnet) had
-      the carried patch apply in round 2 and was stopped by the tracer
-      deadline mid-build. Sonnet SlidesApp drill running.
+      Backup daily path clean (run 5, 36 minutes); snapshot restore drill
+      passed 04:50-04:56 (corpus 31 tables, platform 70). Research more and
+      op-ed deployed and proven. 66 source schedules active, none overdue,
+      one failing (VentureBeat 429 since October 13); Taiwan row polling.
+      Segment store A2 landed flag-off (8791f9b8f). Sonnet SlidesApp: six
+      drills (a-f), each stopped by a Choir or drill defect, failures 19
+      to 24, each documented then fixed; the delegate's rewrite itself
+      succeeded every time (15-25 turns, about $0.20-0.28). Drill f round
+      4 built and copied the release on a retry and reached Freeze; Freeze
+      refused the receipt (failure 24).
     main_uncertainty: >-
-      Whether a two-round Sonnet rewrite reaches frozen and applied inside
-      110 minutes; P6's cause; whether the 13 single failures at 04:58 were
-      the 04:30 planned restart.
-    next_observation: SlidesApp drill outcome; Taiwan row's first poll; restore drill platform piece.
+      Whether EOPNOTSUPP for xattr calls is the whole release-copy cause
+      (conjecture from the trace: cp fails on new files, passes on
+      existing ones); whether the build round now freezes on its first
+      job; P6's cause.
+    next_observation: SlidesApp drill g on 16a5aa0e0, first build job's copy and Freeze.
   blocker: none
   next_action: >-
-    Land 73922d044, f2004ed56 and 85250d067 after the SlidesApp drill ends
-    (a deploy mid-drill restarts the host services it reads); then the next
-    app rewrite.
+    Deploy 16a5aa0e0, run SlidesApp drill g; if it freezes, applies and
+    restores, continue Pdf, Epub, Podcast, Calendar, FileBrowser in that
+    order.
 
 receipts: []
