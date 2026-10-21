@@ -41,7 +41,8 @@ import (
 //
 // The schema migration on an existing store is measured by dropping the
 // record columns from the built fixture, reopening it (Open leaves a store
-// with rows alone) and timing EnsureObjectGraphIndexes, the boot's call.
+// with rows alone) and timing the explicit derived-column migration
+// (boot is discovery only).
 func TestStoreScanCost(t *testing.T) {
 	records, _ := strconv.Atoi(os.Getenv("CHOIR_STORE_SCAN_BENCH"))
 	if records <= 0 {
@@ -98,13 +99,14 @@ func TestStoreScanCost(t *testing.T) {
 	t.Logf("reopen (no record migration in Open): wall %v cpu %v", time.Since(openStart), cpuTime()-openCPU)
 	migrateCPU, migrateStart := cpuTime(), time.Now()
 	var beats atomic.Int64
-	if err := s.EnsureObjectGraphIndexes(ctx, func() { beats.Add(1) }); err != nil {
+	if _, err := s.ogStore.MigrateAccessPaths(ctx, func(objectgraph.AccessPathStep) { beats.Add(1) }); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
+	s.inheritAccessPaths()
 	out["migration_wall_ms"] = ms(time.Since(migrateStart))
 	out["migration_cpu_ms"] = ms(cpuTime() - migrateCPU)
-	out["migration_heartbeats"] = beats.Load()
-	t.Logf("record index migration: wall %v cpu %v heartbeats %d", time.Since(migrateStart), cpuTime()-migrateCPU, beats.Load())
+	out["migration_steps"] = beats.Load()
+	t.Logf("record index migration: wall %v cpu %v steps %d", time.Since(migrateStart), cpuTime()-migrateCPU, beats.Load())
 	if size, err := dirSize(workspace); err == nil {
 		out["workspace_mib"] = size >> 20
 	}

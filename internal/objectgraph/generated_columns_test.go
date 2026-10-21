@@ -227,7 +227,7 @@ func TestRecordColumnsMigrateExistingStore(t *testing.T) {
 		putTestObject(t, old, fmt.Sprintf("old-%02d", i), commitmentRecordKind, map[string]any{"inbox": fmt.Sprintf("texture:doc-%d", i%3)}, `{}`, at)
 	}
 	// Opening a store with rows does not rewrite it: the record paths stay
-	// on JSON (and still answer correctly) until EnsureRecordIndexes.
+	// on JSON (and still answer correctly) until MigrateAccessPaths.
 	opened := NewDoltStore(db)
 	if err := opened.EnsureSchema(ctx); err != nil {
 		t.Fatal(err)
@@ -244,7 +244,7 @@ func TestRecordColumnsMigrateExistingStore(t *testing.T) {
 	reader := NewDoltStore(db) // a second handle on the engine, like the read pool
 	reader.ShareEngineMutex(opened)
 	reader.InheritMetadataColumns(opened)
-	if err := opened.EnsureRecordIndexes(ctx, func() {}); err != nil {
+	if _, err := opened.MigrateAccessPaths(ctx, nil); err != nil {
 		t.Fatal(err)
 	}
 	reader.InheritMetadataColumns(opened)
@@ -256,7 +256,7 @@ func TestRecordColumnsMigrateExistingStore(t *testing.T) {
 		if err := store.EnsureSchema(ctx); err != nil {
 			t.Fatalf("open %d: %v", open, err)
 		}
-		if err := store.EnsureRecordIndexes(ctx, nil); err != nil {
+		if _, err := store.MigrateAccessPaths(ctx, nil); err != nil {
 			t.Fatalf("open %d: %v", open, err)
 		}
 		for _, mc := range metadataIndexColumns {
