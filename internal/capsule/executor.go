@@ -76,6 +76,9 @@ type Executor struct {
 	// goModuleProxy is where L2 capsules' GoProxyRouteHost goes; invalid
 	// (unset) leaves the route out of the policy.
 	goModuleProxy netip.AddrPort
+	// tunnelIdentity is how L2 and claude-mode capsules' CONNECT tunnels are
+	// bound to their name (egress_tls.go); the zero value is observe.
+	tunnelIdentity TunnelIdentityMode
 	// mirrorAddr and mirrorGrantDir are where L2 capsules' MirrorRouteHost
 	// goes and where the host's grant for it is read (mirror.go); without
 	// both, and a grant, capsules get no mirror.
@@ -158,6 +161,15 @@ func (e *Executor) SetGoModuleProxy(addr netip.AddrPort) {
 	e.goModuleProxy = addr
 }
 
+// SetEgressTunnelIdentity sets how capsules' CONNECT tunnels are bound to
+// their name (egress_tls.go): off, observe or enforce; anything else is
+// observe. It applies to capsules spawned afterwards.
+func (e *Executor) SetEgressTunnelIdentity(mode TunnelIdentityMode) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.tunnelIdentity = mode.normalized()
+}
+
 // SetCapsuleMirrors routes granted L2 capsules' MirrorRouteHost to the host
 // package mirror at addr, reading the grant from grantDir (mirror.go). It
 // applies to capsules spawned afterwards.
@@ -194,6 +206,7 @@ func (e *Executor) egressPolicyLocked(claude bool, mirrors mirrorgrant.Status) E
 	if claude {
 		policy = ClaudeEgressPolicy()
 	}
+	policy.TunnelIdentity = e.tunnelIdentity.normalized()
 	if e.goModuleProxy.IsValid() {
 		policy.Routes = map[string]netip.AddrPort{GoProxyRouteHost: e.goModuleProxy}
 	}

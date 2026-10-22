@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/netip"
@@ -97,10 +98,13 @@ func hostServiceAddr(explicit, gatewayURL string, port uint16, what string) (add
 // Routes map a fixed name to a configured address that is dialed without
 // DNS or the public-address check, for plain-HTTP GET/HEAD only: host
 // services a capsule may use (today only GoProxyRouteHost). The executor
-// fills Routes from its own configuration, never from the capsule.
+// fills Routes and TunnelIdentity from its own configuration, never from
+// the capsule. TunnelIdentity is how CONNECT tunnels are bound to their name
+// (egress_tls.go); the zero value is observe.
 type EgressPolicy struct {
 	Hosts            []string
 	Routes           map[string]netip.AddrPort
+	TunnelIdentity   TunnelIdentityMode
 	MaxUploadBytes   int64
 	MaxDownloadBytes int64
 	MaxConnections   int
@@ -172,6 +176,11 @@ type EgressRecord struct {
 	DurationMS int64     `json:"duration_ms"`
 	Outcome    string    `json:"outcome"`
 	Reason     string    `json:"reason,omitempty"`
+	// TunnelIdentity is a CONNECT tunnel's verdict (egress_tls.go): pass,
+	// would_refuse (observe relayed it) or refused; empty when the check is
+	// off or the connection never reached it.
+	TunnelIdentity       string `json:"tunnel_identity,omitempty"`
+	TunnelIdentityReason string `json:"tunnel_identity_reason,omitempty"`
 }
 
 // EgressProxy serves one capsule's egress socket. Every decision is made
@@ -186,6 +195,8 @@ type EgressProxy struct {
 	// helloTimeout bounds how long a CONNECT tunnel may stay silent before
 	// its ClientHello arrives (egress_tls.go); zero means the default.
 	helloTimeout time.Duration
+	// logf takes the once-per-host observe log line; log.Printf by default.
+	logf func(format string, args ...any)
 
 	mu          sync.Mutex
 	closed      bool
@@ -194,6 +205,9 @@ type EgressProxy struct {
 	connections int
 	up, down    int64
 	spent       bool
+	// wouldRefuseLogged holds the hosts whose observe would-refuse has been
+	// logged for this capsule.
+	wouldRefuseLogged map[string]bool
 }
 
 func NewEgressProxy(capsuleID string, policy EgressPolicy, record func(EgressRecord)) *EgressProxy {
@@ -207,6 +221,7 @@ func NewEgressProxy(capsuleID string, policy EgressPolicy, record func(EgressRec
 			return net.DefaultResolver.LookupNetIP(ctx, "ip", host)
 		},
 		dial: dialer.DialContext,
+		logf: log.Printf,
 		live: map[net.Conn]struct{}{},
 	}
 }
@@ -427,10 +442,12 @@ func (p *EgressProxy) serveConn(client net.Conn) {
 			return
 		}
 		// The tunnel is bound to the name the CONNECT asked for: its first
-		// record must be a ClientHello for exactly that name, or the tunnel
-		// is closed before a byte reaches the upstream (egress_tls.go).
-		if reason := p.verifyTunnel(client, br, rec.Host); reason != "" {
-			finish(EgressOutcomeRefused, reason)
+		// record must be a ClientHello for exactly that name. Under enforce
+		// the tunnel is closed before a byte reaches the upstream; under
+		// observe the verdict is recorded and the tunnel relayed unchanged
+		// (egress_tls.go).
+		if !p.checkTunnel(client, br, &rec) {
+			finish(EgressOutcomeRefused, rec.TunnelIdentityReason)
 			return
 		}
 	} else {

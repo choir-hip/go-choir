@@ -160,6 +160,7 @@ func (e *Executor) SetJobCompletionHandler(func(JobCompletion)) {}
 func (e *Executor) SetJobAdmission(JobAdmission)                {}
 func (e *Executor) SetLiveMemoryBudget(func() int64)            {}
 func (e *Executor) SetMemoryPolicy(CapsuleMemoryPolicy)         {}
+func (e *Executor) SetEgressTunnelIdentity(TunnelIdentityMode)  {}
 func (e *Executor) MemoryReceipts() []CapsuleMemoryReceipt      { return nil }
 func (e *Executor) StartJob(context.Context, string, string, JobRequest) (yaegikernel.JobView, error) {
 	return yaegikernel.JobView{}, stubErr("start job")
