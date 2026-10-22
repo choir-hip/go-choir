@@ -35,6 +35,18 @@ func newRepo(t *testing.T) (string, string) {
 	}
 	dir := t.TempDir()
 	git(t, dir, "init", "-q")
+	// No background writer of our own: git commit otherwise starts a detached
+	// "maintenance run --auto" whose objects/maintenance.lock can outlive the
+	// commit and move the fingerprint while PatchedTree is under test. The
+	// index settings keep a runner's global config from adding index writers.
+	for _, kv := range [][2]string{
+		{"maintenance.auto", "false"},
+		{"gc.auto", "0"},
+		{"core.untrackedCache", "false"},
+		{"core.fsmonitor", "false"},
+	} {
+		git(t, dir, "config", kv[0], kv[1])
+	}
 	if err := os.MkdirAll(filepath.Join(dir, "frontend"), 0o755); err != nil {
 		t.Fatal(err)
 	}
