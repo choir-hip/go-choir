@@ -112,9 +112,11 @@ close is unchanged. Item 3 lands as a read-only `selfdev` section on
 `/health` reports, and `stalled` for any open operation idle longer
 than 30 minutes, with its last refusal.
 
-## Now (FP4 follow-up lane, lane/fp4-freeze-failure-closes)
+## Now (FP4 lanes: lane/fp4-freeze-failure-closes, then lane/fp4-freeze-followup)
 
-- state: code and tests on the lane branch; FP0 lands and proves.
+- state: lane/fp4-freeze-failure-closes (950adaed0) accepted in bunch
+  19 and going to deploy G. Its reviewers' low findings are on
+  lane/fp4-freeze-followup (from 950adaed0); FP0 lands and proves.
 - review bunch 15 (Devin, 2026-10-22): F1 the close now also runs at
   the report entry point on every success, so the early replay returns
   converge after a crash before the close; F2 every give-up logs; F3
@@ -127,14 +129,34 @@ than 30 minutes, with its last refusal.
   states never closed, and a tape conflict between two stores. The
   last failed 3 of 3: the close gave up on `ErrProjectionMismatch`;
   it now re-reads and retries it like `ErrConflict`.
+- bunch 19 follow-up (DeepSeek, Devin, flash): `failSelfdevOperation`
+  (the cancellation close, assignment and trajectory) now reads the
+  current state, closes from it, retries a lost race (`ErrConflict` or
+  `ErrProjectionMismatch`) up to three times and logs every give-up
+  (`TestCancellationCloseRetriesATapeConflict` failed 3 of 3 before).
+  The assignment-end close keeps a 15 s deadline instead of none
+  (`TestAssignmentEndCloseIsBounded` hung before). The "never closes a
+  decided operation" invariant is scoped to the assignment-end close:
+  cancellation closes `awaiting_approval` on purpose.
 - deployed proof (FP0, TEST computer only): see the lane report.
 - residual: the stamp write (`RecordIntentError`) is direct SQL, off
   the tape; the terminal error now carries the stamp onto the tape at
   the close. A stall that is not an ended assignment (an open
   assignment whose run is alive but idle) is only detected, not
   closed. `idle_seconds` reads 0 if `updated_at` fails to parse (it
-  round-trips in practice). `failSelfdevOperation` (the cancellation
-  close) also stops on `ErrProjectionMismatch` instead of re-reading;
-  it is not reachable in one process (shared write mutex) and is left
-  for a follow-up. The same-digest slot replay return is closed by the
-  entry-point close but has no test of its own.
+  round-trips in practice). Closed on the follow-up lane: the
+  cancellation close stopping on `ErrProjectionMismatch`. The earlier
+  rationale here ("not reachable in one process, shared write mutex")
+  was wrong: the write mutex is per `selfdev.Store`, and rematerialize
+  swaps `rt.selfdevOperations` for a new Store
+  (`internal/agentcore/rematerialize.go:268`) while the old one may
+  still be writing, so two writers without a shared mutex can race in
+  one process. Still open: the same-digest slot replay return
+  (`recordAssignedEngineeringReportOnce`, the `SlotTerminalReport`
+  match) has no test. It matches only a stored terminal report with
+  the same proposition under another report id, a row recorded before
+  report ids were derived from the proposition; the store now refuses
+  a mismatched id ("report_id mismatch"), so no public API builds that
+  row, and a test would have to forge object-graph rows. The
+  entry-point close covers every successful return of that function,
+  this one included.
