@@ -231,19 +231,24 @@ receipts:
       -race; internal/objectgraph and internal/store whole pass; not landed
   - id: fp1-health-bounded
     boundary: implement
-    identity: 2531f3b0d (problem record F1, green), 393547879 (failing tests, yellow), fda627de8 (fix, orange); branch lane/fp1-health-bounded on a55660c0d
+    identity: 4b4656f44 (problem record F1, green), d375134b6 (failing tests, yellow), 8550227a4 (fix, orange), e870e721f (bunch 18 tests, yellow), 579362834 (updater, orange), 2722cf27d (ci.yml, orange); branch lane/fp1-health-bounded rebased on d23dfaa2d
     proof_refs:
       - internal/agentcore/api_health_bounded_test.go (TestHandleHealthAnswers503NamingHolderWhenStoreStalled, TestHandleHealthUnheldStoreAnswers200WithUnchangedBody, TestHandleHealthStalledStoreLeaksNoGoroutines)
       - docs/problems/paper-unreachable-minutes-after-every-boot-2026-10-22.md (F1, the caller table)
-    rollback_ref: git revert fda627de8
+      - internal/updater/runtime_probe_store_stall_test.go (TestHTTPHealthProberWaitsOutAStoreStallAsLongAsTimeoutsDid, TestHTTPHealthProberStoreStallFailsAtTheTimeoutBudget)
+    rollback_ref: git revert 2722cf27d 579362834 8550227a4
     disposition: >-
       built and tested locally: the two stall tests failed at their bound
       before fda627de8 and pass after (-race, count 3); the 200 baseline
       passes on both. Not landed. FP0: land (orange, independent of B2),
       then sample /health during the next boot window or online GC pass: it
       answers in about 1 s, 200 or 503 store_stalled with the holder, never
-      000. Residual: the updater's post-apply probe and CI's deploy waits
-      count attempts, so a stall spends their budget about 3x faster.
+      000. Bunch 18 (Gemini flash, Devin accept; DeepSeek accept with
+      edits): its High is repaired. The updater charges store_stalled by wall
+      time (579362834), and CI sleeps out a fast store_stalled (2722cf27d).
+      Its leak-test flake risk is repaired by counting only readHealthStore
+      goroutines (e870e721f). Its other Low (an in-flight statement holds
+      the connection past the deadline) is documented and left as is.
 ---
 
 # FP1: store and daemon throughput

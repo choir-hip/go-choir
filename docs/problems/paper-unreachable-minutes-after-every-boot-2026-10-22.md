@@ -503,11 +503,19 @@ not 1 s per read in sequence, because the proxy's runtime probe gives up at
 
 No caller turns a fast 503 into a different lifecycle decision than a
 timeout. Two attempt-counted waits (the updater's post-apply probe and CI's
-deploy waits) have about a third of today's wall-time budget during a
-stall. During a real stall today, the paper's 4 to 6 minute window would
-already exceed the updater's 180 s, so this is no regression for that
-window. But a stall of 1 to 3 minutes would now fail an apply's health
-probe where it passed before. This is a residual, recorded here and not
-fixed in this lane: changing the updater's or CI's retry budget to wall
-time is a separate change to a protected surface (the updater's apply
-verdict; deployment routing).
+deploy waits) had about a third of their wall-time budget during a stall:
+about 60 s instead of about 180 s, and about 4 min instead of about 12 min.
+That would fail the documented 4 to 6 minute boot window in CI, where today
+it passes (bunch 18 review, DeepSeek, High).
+
+**Repaired in the lane (bunch 18):**
+- The updater charges a run of `store_stalled` answers by wall time
+  against `attempts x (client timeout + interval)`, the time the same
+  attempts took as timeouts. It does not count them one attempt each. A
+  deadline, not a sleep, so the probe still polls every second and passes
+  at the first healthy answer. Other failures count attempts as before.
+- CI's `wait_for_autoputer_commit` and the rescue loop call one helper,
+  `guest_health`, which sleeps 4 s after a `store_stalled` 503, so the try
+  costs what the timeout did. A sleep, not a deadline: a deadline would
+  also stretch the non-stall fast failures (refused connection, other
+  503s) from about 2 min to 12 min.
