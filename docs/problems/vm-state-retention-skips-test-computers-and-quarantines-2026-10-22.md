@@ -198,6 +198,17 @@ Reproduced or confirmed by reading the code at 7430e1f31:
   names vanish from the report (Sonnet F8); no floor on the minimum ages
   (F9); concurrent passes write a false `failed` line for an already-removed
   quarantine (F7, part 1).
+- R2-8 (found by the round-2 tests, 2026-10-22; live today). The existing
+  `orphan_state_dir` rule, which runs **active** on Node B
+  (`VMCTL_RETENTION_PRUNE_MODE=active`, `ORPHAN_MIN_AGE=6h`), destroys any
+  `vm-*` or `candidate-*` dir with no ownership record after six hours,
+  through `DestroyVMState` (the whole dir). It does not look inside. If the
+  candidate-fleet dir holding the owner's 10-07 pre-restore images ever
+  loses its ownership record (a moved realization, a registry reset, an id
+  mismatch), the next sweep deletes those possibly unique images. Today they
+  survive only because that dir still resolves to an ownership. The
+  round-2 test that put an ownerless candidate-fleet quarantine beside the
+  age-out rule saw the orphan rule plan the dir for destruction.
 - Low findings kept as residuals: the ephemeral rule ignores selectors and
   runs first (pre-existing); the report's verdicts are not bounded by
   `MAX_DELETES`/`MAX_BYTES`; the manifest lives on the filesystem it frees
