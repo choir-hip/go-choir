@@ -84,8 +84,9 @@ finish:
     then git revert, newest first, of each round's record, fix and tests
     together: the round-2 and round-4 tests do not compile without their
     fix, and the round-3 tests compile but fail on behavior, so a fix
-    reverted alone leaves red tests. Round 4 - its green record, cf2dc9d90,
-    ed56fdc0e; round 3 - 40f1422a7, b0ea5d1c0, 1a0fb4c13; round 2 -
+    reverted alone leaves red tests (the round-5 tests compile on round 4
+    and fail there on behavior). Round 5 - its green record, 4d42ba082,
+    d529f6a94; round 4 - 75f3a9a46, cf2dc9d90, ed56fdc0e; round 3 - 40f1422a7, b0ea5d1c0, 1a0fb4c13; round 2 -
     2b964182e, a95e8ff16, ba875fab5; then f298f7484 and d1ec806e2. Nothing
     persistent changes shape: no schema, no witness, no tape format.
   landing:
@@ -189,6 +190,34 @@ now:
     a background commit after Close is not attempted (tested). (5) the age
     check applies only while events are pending. (6) rollback reverts
     yellow and red together.
+  review_round_5_bunch_52: >-
+    2026-10-22, DeepSeek v4.1 flash send back (reproduced High), Gemini
+    flash accept with edits. Tests d529f6a94, fix 4d42ba082 (red), this
+    record. (1) fixed - Close and Reopen serialized on closeMu; every
+    Close ends with the commit-lock fence by the hard deadline; the nil
+    shortcut on a retried Close is gone. (2) fixed - count mode takes the
+    same fence. (3) one hard deadline bounds the whole Close; the code at
+    75f3a9a46 already shared one context, the test pins the bound. (4)
+    one count per cut commit and per failing Close. (5) test and record
+    claims narrowed; the callers residual corrected. (6) Reopen refuses a
+    store that is not closed. Re-run - go test ./internal/store -run
+    'Checkpoint|Finalize|Close|Reopen' ok; the store package in four -run
+    groups (466 tests) ok; autoputer ok; under ~/heavy-test.lock with
+    GOMAXPROCS=2 GOFLAGS=-p=1, -race store Checkpoint|Finalize|Close|Reopen
+    ok (108 s) and the agentcore seam tests ok (134 s); gates hang-guards,
+    decode-roots, heresies, v1-writer-purity ok; guest-data-fstrim not
+    runnable here (no nix binary; the lane touches no nix file).
+  structural_assessment: >-
+    Round 5 on Close (CLAUDE.md escalation rule - 3+ rounds without
+    convergence). The rounds found doors one at a time because Close had
+    no single lifecycle authority - the cadence's closed flag, the
+    closeLive channel and the unlocked pool teardown each guarded part of
+    it. Round 5 makes it one - closeMu over Close and Reopen, and the
+    commit lock as the only fence before teardown - so the claim reduces
+    to one invariant - no pool closes while doltCommitMu is held by
+    anyone else. If a further door is found, FP0 should escalate to the
+    owner rather than patch - the alternative is to drop the debounced
+    closing commit and leave Close to the fence alone.
   review_round_4_bunch_50: >-
     2026-10-22, DeepSeek v4.1 flash accept with edits on 40f1422a7. Tests
     ed56fdc0e, fix cf2dc9d90 (red), this record. (1) fixed: Close waits for
@@ -254,9 +283,16 @@ now:
       After a Close that failed closed (a commit still running at the
       deadline) the store stays open with its cadence closed: finalize
       commits inline and mode reads "closed" until a Close and Reopen
-      succeed. Every caller (planned restart, rematerialize, projection-base
-      rebase) stops on Close's error, so this lasts until the process exits
-      or retries the Close.
+      succeed. The callers differ. The planned restart ignores Close's
+      error and exits, and process exit reclaims the store. The
+      projection-base rebase returns the error and boot fails.
+      Rematerialize returns the error and the guest stays up on the open
+      store, so a later Close may be retried while an inline commit runs;
+      that retried Close is fenced like any other (round 5).
+    - >-
+      A commit that holds the commit lock past the deadline forever keeps
+      every Close failing closed and Reopen refusing; nothing in the
+      process recovers it (no watchdog). Process exit does.
     - >-
       Close is not a write fence (review item 3, kept as a residual, not
       fixed): CancelDerivedColumnMigration only signals, closeCheckpoint
@@ -340,12 +376,17 @@ Problem: [guest-checkpoint-on-the-write-path-2026-10-21](../problems/guest-check
    once. The commit runs outside `eventMu` and the appender mutex, but on
    the store's one connection, so a finalize that starts during it waits
    (counted, above; the commit pins the connection, so the count is
-   exact for the connection hold). Close stops the timer, cancels a
-   background commit in flight and waits for it, then commits once, all
-   within a 10 s close deadline plus a 250 ms grace. If a commit is still
-   running then, Close fails closed: it returns ErrCheckpointCommitLive
-   and leaves the pools, connector and engine open (process exit reclaims
-   them), and Reopen refuses until a later Close succeeds. Turning the setting off stops the
+   exact for the connection hold). Close and Reopen are serialized on
+   the store (a second Close waits for the first). Close stops the timer,
+   cancels a background commit in flight and waits for it, in debounced
+   mode commits once (again on a retried Close), and then, in every
+   mode, takes the commit lock under which every Dolt commit runs and
+   holds it while the pools and the connector close. One hard deadline,
+   a 10 s close deadline plus one 250 ms grace, bounds all of it. If a
+   commit is still running or holds the lock then, Close fails closed:
+   it returns ErrCheckpointCommitLive and leaves the pools, connector and
+   engine open (process exit reclaims them), and Reopen refuses until a
+   later Close succeeds. Reopen also refuses a store that is not closed. Turning the setting off stops the
    timer and returns to counted inline commits.
 
 ## Failure modes, written before the code
@@ -371,13 +412,31 @@ Problem: [guest-checkpoint-on-the-write-path-2026-10-21](../problems/guest-check
   Close does not wait for a connection in use, and the connector's Close
   shuts the engine, DoltDB and NomsBlockStore; that ordering is no driver
   contract, could panic, and NomsBlockStore.Close can block on nbs.mu.
-  So Close never closes the pools while a commit runs: it fails closed
-  instead. Tests: in this process an open while the commit is held is
-  refused by Dolt's lock (the engine is intact), and after release the
-  late commit is not applied (TestCheckpointNextOpenWhileCommitterHeld);
-  a child process that fails closed and exits with the commit held
-  leaves a store the next process opens with no lock error at the
-  pre-close head (TestCheckpointNextProcessOpenAfterFailedClose).
+  So Close never closes the pools while a Dolt commit holds the commit
+  lock, in either mode and on any Close: it fails closed instead. (A
+  finalize transaction or migration step that is not a commit is not
+  fenced; that is the write-fence residual.) Tests: in this process an
+  open while the commit is held is refused by Dolt's lock (the engine is
+  intact), and after release a retried Close commits the pending rows
+  (TestCheckpointNextOpenWhileCommitterHeld; the held stand-in returns
+  before DOLT_COMMIT with its context cancelled, so this does not show
+  what a real DOLT_COMMIT already inside Dolt would do); a child process
+  that fails closed and exits with the commit held leaves a store the
+  next process opens with no lock error at the pre-close head
+  (TestCheckpointNextProcessOpenAfterFailedClose; this shows process
+  exit reclaims the store, not that an in-Dolt commit does not land).
+- A second Close, a retried Close, or a count-mode Close closes the pools
+  under a live commit. Tests: a concurrent Close waits for the first and
+  both fail closed; a retried Close under an inline FinalizeBatch commit
+  fails closed; a count-mode Close under an inline commit fails closed;
+  readDB answers a ping after each
+  (TestCheckpointConcurrentCloseFailsClosed,
+  TestCheckpointRetriedCloseUnderInlineCommitFailsClosed,
+  TestCheckpointCountModeCloseFailsClosedUnderInlineCommit).
+- Close waits a grace per wait. Test: one hard deadline bounds the whole
+  Close (TestCheckpointCloseBoundIsOneDeadline).
+- Reopen over an open store orphans its handles. Test:
+  TestCheckpointReopenRequiresAClosedStore.
 - The close deadline is a context deadline, not a wall-clock bound on the
   commit itself: DOLT_COMMIT does not check its context mid-write, so a
   commit already running inside Dolt runs to its end. Close does not wait
@@ -390,7 +449,8 @@ Problem: [guest-checkpoint-on-the-write-path-2026-10-21](../problems/guest-check
   wedged DOLT_COMMIT (read from dolt/go, per the reviewer).
 - A planned restart reads as failures. A background commit cancelled by
   Close, a closing commit skipped or cut, and a Close that failed closed
-  count apart (TestCheckpointPlannedCloseCountsNoFailure).
+  count apart (TestCheckpointPlannedCloseCountsNoFailure), each once per
+  commit or per failing Close (TestCheckpointOverrunClosingCommitCountsOnce).
 - Count mode drifts from today's cadence. Test: the existing
   `doltCheckpointEvery` test still passes, and the inline counter counts
   exactly one commit per `every` events.
