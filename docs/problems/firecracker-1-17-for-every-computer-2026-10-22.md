@@ -1,0 +1,250 @@
+# Firecracker 1.17 as the host's pinned build, after deploy D4 (2026-10-22)
+
+Status: problem record and plan, before code. Mutation class of the fix:
+**red** (VM lifecycle: the VMM binary and jailer every computer launches).
+Lane: `lane/fp0-firecracker-117-fleet`, on `lane/fp0-deployD4` (2de635109).
+Related:
+[guest-data-image-never-trims-2026-10-20.md](guest-data-image-never-trims-2026-10-20.md)
+(RES-16; "Proof on one test computer"; "Every computer, the paper
+included"),
+[node-b-disk-fills-from-the-paper-data-image-2026-10-22.md](node-b-disk-fills-from-the-paper-data-image-2026-10-22.md),
+[firecracker-1-16-1-virtio-mem-restore-bugs-2026-10-22.md](firecracker-1-16-1-virtio-mem-restore-bugs-2026-10-22.md),
+[memory-hotplug-cannot-work-on-node-b-39-bit-cpu-2026-10-22.md](memory-hotplug-cannot-work-on-node-b-39-bit-cpu-2026-10-22.md),
+and the FP8 definition (P3, and "NET-08 and RES-16").
+
+## Problem
+
+The owner asked on 2026-10-22, about 22:30 UTC, for Firecracker 1.17 on
+every computer as soon as reasonably possible. At 22:40 the owner ruled
+that resource use comes ahead of short-term availability ("Discard for the
+paper is important. Let's accelerate that."). Deploy D4 (stage
+`lane/fp0-deployD4`, 2de635109) does that through the per-computer second
+build: `VM_FIRECRACKER_NEXT_ONLY=*` and `VM_DATA_DISCARD_ONLY=*`. Every
+computer, the paper included, launches 1.17.0 from `nix/firecracker-next.nix`
+with discard on its data drive.
+
+After D4 the host still **pins Firecracker and jailer 1.16.2**:
+`flake.nix` `choirFirecrackerRelease`, the bound `choirFirecrackerBelow =
+"1.17"`, and `VM_FIRECRACKER_BIN` and `VM_JAILER_BIN` in `nix/node-b.nix`
+(commit 23a67ff0e, deploy KF). No computer runs that build any more. The
+staging seam (`internal/vmmanager/vmm_next.go`) is carrying the whole
+fleet, and the next version would have no seam left to be staged through.
+The pinned 1.16.2 path is also a trap: if the next selector is narrowed or
+its binary is refused at load (a missing file, or a different file name),
+those computers silently fall back to 1.16.2 with no discard. Each of them
+then cold boots on a version the fleet has left.
+
+The follow-up: make 1.17.0 the pinned build, retire `firecracker-next.nix`
+and the `VM_FIRECRACKER_NEXT_*` lines, and keep discard for every computer.
+Owner and FP0 constraint: **a computer already on 1.17 with discard must
+keep the same launch-config hash and the same Firecracker banner**, so its
+snapshot is not refused a second time.
+
+### Trial and D4 results (reported by FP0)
+
+computer-9648031f, in D3: 1.17.0 booted, the store opened and Texture
+answered. Only its data drive got `Sync` and `discard`. The first trim
+punched 1.67 GiB, and `/health` answered all 93 of its probes at 10 s
+intervals across that trim. The guest-data-image record holds D4's own
+cost, monitoring and rollback. Neither this lane nor any record shows a 1.17
+hibernate and wake (`snapshot_resume` under `Firecracker v1.17.0`, FP8
+NET-08 step 4). That is part of this lane's proof, because the whole point
+of this change is that such snapshots stay loadable.
+
+## What decides the build, and what a version change does
+
+- **Pin and bound.** `mkChoirFirecracker` overrides nixpkgs' firecracker
+  with `choirFirecrackerRelease`'s version, source hash and vendor hash. It
+  does this only while nixpkgs is older than that version, so a later
+  nixpkgs at or above the pin is taken as is. The assertion keeps the
+  result below `choirFirecrackerBelow`, which stops a weekly nixpkgs bump
+  from moving the host up a minor version without review. Patch releases
+  on the pinned line still go through, as they did on 1.16.x.
+- **Jailer.** `VM_JAILER_BIN` is `${pkgs.firecracker}/bin/jailer`, the same
+  derivation as the VMM, so it moves with the pin. `VMCTL_JAILER=off`
+  today, so no launch uses it yet (FP8 SEC-04 turns it on per computer
+  later). The jail directory is named after the binary, `firecracker` in
+  both versions.
+- **Per-VM build record.** Each launch writes `vmm-build.json` in the VM's
+  state dir: the binary path, the jailer and whether it was the next build.
+  The snapshot's `firecracker_version` is the recorded binary's
+  `--version` banner. A restore under another banner is refused before
+  Firecracker starts (`validateSnapshot`, exact string compare, reason
+  `firecracker_version_mismatch`). The snapshot is discarded and the
+  computer cold boots. A 1.16.2 snapshot is never loaded by 1.17, and a
+  1.17 snapshot is never loaded by 1.16.2.
+- **Launch-config hash.** The snapshot also records the sha256 of the
+  Firecracker JSON config. The config holds no binary path or version, but
+  it does hold the data drive's `discard` and `io_engine`. So turning
+  discard on or off for a computer also refuses its snapshot
+  (`launch_config_mismatch`) and cold boots it once.
+- **Discard gate.** `VM_DATA_DISCARD=1` takes effect only when the binary
+  reports 1.17.0 or newer (`dataDiscardEnabledFromEnv`), and then only for
+  the computers `VM_DATA_DISCARD_ONLY` names. An empty selector means every
+  computer. A 1.16.x binary never receives the field, because Firecracker
+  rejects unknown fields and the boot would fail.
+- **Deploy classes** (`.github/scripts/deploy-impact-classify`). A change
+  to `flake.nix` or to `nix/*` other than `node-b.nix`, `hardware.nix` and `disks.nix` counts as a guest
+  boot contract change. That means a host switch, a vmctl restart (running
+  Firecracker children survive it), and a **deploy refresh of every active
+  computer**: a planned restart backed by a marker. An idle computer
+  restarts now. A busy one is retried at its next idle moment. The paper
+  and other `critical_protected` and `public_platform` computers take it
+  while busy and resume their work once, but never during a
+  self-development apply or while a capsule is live. A change to
+  `nix/node-b.nix` alone is a host OS change plus a vmctl restart, with no
+  refresh: a running computer keeps its VMM and config until its next cold
+  boot.
+- **Memory hotplug.** `VM_MEMORY_HOTPLUG_ONLY=class:test` is unchanged.
+  The hotplug region is at 512 GiB in 1.15.1 through 1.17.0, so no
+  computer can plug memory on Node B under either version. 1.17.0 also
+  bounds hotplug sizes to 32 bits (#6076), and 4096 MiB is well inside
+  that. No step here may count a hotplug failure against 1.17.
+- **Other places that name a version.** `.github/workflows/patch-watch.yml`
+  compares the declared version with upstream's latest. After this change they
+  match (1.17.0 is the latest tag, checked with `git ls-remote`). The
+  `scripts/proofs/fp8-image-jailer.sh` step 7 checks for the "next
+  Firecracker build" log line, which no longer appears once this change removes
+  the next build. The proof below covers what step 7 was for. Comments
+  in `data_discard.go` and `nix/node-b.nix` describe 1.16.x as the pinned
+  line.
+
+### 1.17.0 against 1.16.2
+
+The CHANGELOG at the v1.17.0 tag (source
+`sha256-1HL13XL8CvwGTcm8uIJxgW31hUXXLZ8F2+jV7FEgxEY=`) lists every 1.16.2
+fix: #6174 and #6176 (virtio-mem restore), #6086 and #6143 (the logger
+deadlock on SIGPIPE), #6120 (CPUID before MSRs on 6.18 hosts) and #6100.
+Its Deprecated and Removed sections are empty. Its additions are opt-in,
+except two that every block device now offers the guest:
+`VIRTIO_BLK_F_BLK_SIZE` and `VIRTIO_BLK_F_TOPOLOGY` (#6098). The
+computer-9648031f trial booted with them. Moving to 1.17 drops none of
+1.16.2's fixes.
+
+
+### The pinned build is the build D4 launches
+
+Raising `choirFirecrackerRelease` to 1.17.0, with the source and vendor
+hashes from `nix/firecracker-next.nix`, gives the same store path as D4's
+next build. `nix eval .#nixosConfigurations.go-choir-b.pkgs.firecracker.outPath`
+gives `/nix/store/jbzvr6c965zyby7ldj73yi0zvibgd65b-firecracker-1.17.0`
+after the change. D4's `VM_FIRECRACKER_NEXT_BIN` is under that same path,
+which FP0 built on Node B before D3 and is in use there. Three things
+follow:
+
+- the deploy builds no Firecracker;
+- the binary and the jailer that every computer runs after this change are
+  byte for byte the ones it ran under D4, and a computer's
+  `vmm-build.json` (written under D4 as `next: true`) names the same path;
+- the banner is the same (`Firecracker v1.17.0`), so `validateSnapshot`
+  accepts every snapshot taken under D4.
+
+The discard decision is the same too. Under D4 it reads the next build's
+gate (`FirecrackerNext.DataDiscard`: the flag is on and the binary is
+1.17), and `*` selects every computer. Under this change it reads the
+pinned build's gate (`DataDiscard`: the flag is on and the binary is 1.17),
+and `*` still selects every computer. Every data drive gets `Sync` and
+`discard` in both, and nothing else in the Firecracker config depends on
+which build was chosen. So every launch-config hash is unchanged.
+`TestPinned117KeepsTheLaunchConfigOfTheNextBuild` checks this.
+
+## Plan
+
+One change, one deploy, and no new cold boot for any computer that has
+already launched under D4:
+
+- `choirFirecrackerRelease` becomes 1.17.0 with the
+  `firecracker-next.nix` hashes, and `choirFirecrackerBelow` becomes 1.18.
+- `nix/firecracker-next.nix`, its import in `nix/node-b.nix`, and the
+  `VM_FIRECRACKER_NEXT_BIN` and `VM_FIRECRACKER_NEXT_ONLY` lines are
+  removed. `VM_DATA_DISCARD=1` and `VM_DATA_DISCARD_ONLY=*` stay.
+- The Go seam stays (`vmm_next.go`, inert while `VM_FIRECRACKER_NEXT_BIN`
+  is unset), so 1.18 can be staged on one test computer later with a fresh
+  `firecracker-next.nix`.
+
+Why remove the file rather than keep it: its own header says to drop it
+when the host moves to 1.17. Kept, it would be a second copy of the
+pinned hashes. It would override a package that is already 1.17.0, and its
+`*` selector would launch the same binary under a "next" label.
+
+### What restarts
+
+- The host switches and vmctl restarts. There is no host reboot (the host
+  kernel is unchanged), and running Firecracker children survive the vmctl
+  restart.
+- `flake.nix` and `nix/*` changes are guest boot contract changes
+  (`.github/scripts/deploy-impact-classify`). So **the deploy refreshes
+  every running computer** with the planned, marker-backed restart, as
+  every code deploy does. Idle computers restart now and busy ones at their
+  next idle moment. The paper and other `critical_protected` or
+  `public_platform` computers restart while busy and resume their work
+  once, but never during a self-development apply or while a capsule is
+  live. Each refresh is a cold boot on the same binary with the same
+  config. Landing this together with the next code deploy costs nothing
+  extra.
+- **A hibernated computer with a D4 snapshot resumes it**: the banner and
+  the launch-config hash both match.
+- A hibernated computer still holding a 1.16.x snapshot from before D4
+  cold boots once at its next wake (`firecracker_version_mismatch`). That
+  is D4's cost, not this change's, and it is paid only once.
+
+### Rollback
+
+- Back to D4's shape: revert the fix commit and redeploy. The host goes
+  back to pinning 1.16.2, and every computer is back on the next build
+  (`*`) with the same binary, banner and discard. No snapshot is refused.
+  Running computers take the usual deploy refresh.
+- All the way back to 1.16.2: also revert D4's selector commit (2de635109)
+  and redeploy. Every computer then cold boots once more on 1.16.2 with no
+  discard, because 1.16.2 refuses its 1.17 snapshot. The guest-data-image
+  record has D4's own rollback.
+- 1.16.2 (`/nix/store/5nh9p1bhzhljbshbp8dibb5qd4qz1nxb-firecracker-1.16.2`)
+  is in no public cache. After this change no host generation needs it, so
+  the deploy preflight's reclaim may collect it. Then a full rollback
+  rebuilds it on Node B, which takes minutes of cargo build. **Before this
+  deploy, add a GC root for that path** if a full rollback must stay quick.
+  The one-commit rollback to D4's shape needs only the 1.17.0 path, which
+  stays in use.
+
+### Proof (FP0, after the deploy)
+
+0. Before: `scripts/check-host-firecracker-pin.sh` passes on the lane head
+   with `EXPECT_OUT=/nix/store/jbzvr6c965zyby7ldj73yi0zvibgd65b-firecracker-1.17.0`.
+   Record `sha256sum fc-config.json` for the paper and one test computer
+   that run under D4, and the snapshot meta of one hibernated D4 computer.
+1. On Node B, `VM_FIRECRACKER_BIN` and `VM_JAILER_BIN` (from `systemctl show
+   go-choir-vmctl -p Environment`) are under `jbzvr6c9…-firecracker-1.17.0`,
+   and no `VM_FIRECRACKER_NEXT_BIN` is set. The vmctl journal has no "next
+   Firecracker build" line and no "VM_DATA_DISCARD is on but" line.
+2. The same launch config: the paper's and the test computer's
+   `fc-config.json` hashes after their refresh equal the ones from step 0.
+   Their data drives have `Sync` and `discard`.
+3. No second refusal: the hibernated D4 computer from step 0 wakes with
+   `snapshot_resume` under `Firecracker v1.17.0`. After the deploy time, no
+   wake shows `fallback_cold` with `firecracker_version_mismatch` or
+   `launch_config_mismatch` for a snapshot taken after D4.
+4. One 1.17 snapshot cycle: hibernate a test computer by snapshot, then
+   wake it, and expect `snapshot_resume`.
+5. The paper: `/health` is ok after its refresh, its hourly
+   `choir-data-fstrim` reports bytes trimmed, and its Texture work and
+   Autopaper polls continue.
+
+### Steps B and C of the first draft
+
+The first draft of this record staged discard over three deploys: A pins
+1.17 with discard on one computer, B adds `class:test`, C sets `*`. D4
+replaced B and C on the owner's ruling, so this lane has only the pin.
+
+## Ceremony
+
+- Mutation class: **red**. The protected surface is the VMM binary and
+  jailer for every computer (VM lifecycle). Snapshot validation, vmctl
+  lifecycle code, the guest image, Texture, auth and routing are not
+  touched.
+- Admissible evidence: local `nix eval` of the host (version, store path,
+  environment, assertions), `nix-instantiate --parse` of the changed
+  files, and focused `internal/vmmanager` tests. The deployed proof is the
+  list above, on Node B.
+- Heresy delta. Discovered: after D4, the pinned 1.16.2 build is a silent
+  fallback that no computer should take. Introduced: none. Repaired: the
+  host runs one Firecracker build again, and it is the pinned one.
