@@ -246,7 +246,7 @@ receipts:
     identity: 8434448b6 (+ nix 8f9d8443b, + renewal, see sec-05-renewal, + Jev fixes 9d612fffc and 6f9381bca)
     proof_refs: [internal/gateway/bearer_binding_test.go, "go test ./internal/gateway -race: green"]
     rollback_ref: GATEWAY_BEARER_BINDING=off, or git revert
-    disposition: built; not deployed; not closed until enforced on staging
+    disposition: built; observe deployed; the enforce flip is lane/fp0-fp7-enforce (see "SEC-05 enforce flip"); not closed until enforced on staging and step 5 runs
   - id: sec-05-renewal
     boundary: implement
     identity: c84fe6fe8
@@ -525,19 +525,42 @@ tests still cover the pin semantics, so it can be deleted later.
 
 ## SEC-05 enforce flip (FP0, 2026-10-22)
 
-**The readings.** The gateway's `/health` `bearer_binding` on Node B, in observe:
+Revised after review (bunch 54: flash accept; DeepSeek and a Sonnet reviewer accept with edits; their texts are in FP0's run folder `_runs/bunch54`).
 
-| when (UTC) | after | pinned | unpinned | first_use_bound | would_refuse | refused |
-|---|---|---|---|---|---|---|
-| 07:25 | the gateway's 07:10:45 restart; the paper made 179 model calls | 51 | 221 | 0 | 0 | 0 |
-| 12:00 | deploys L, M and N, each a planned refresh of the paper and the test computers | 51 | 221 | 0 | 0 | 0 |
-| 12:31 | deploy O (planned refresh of the paper, the candidate fleet and a primary computer); the owner's computer cold booted at 12:08 (new credential, ensured); three vmctl restarts with reattach (12:10 to 12:14); test computer 71afbf14 cold booted three times | 51 | 221 | 0 | 0 | 0 |
+**The counters reset with the gateway.** `would_refuse` and `refused` are in-memory counters, and the gateway restarts at every deploy. So each reading covers only the current gateway process. The table gives each process's start time and the pin moves inside it. Each move is a journal line `Jev bearer of autoputer <vm> moved to its current guest address <addr>`, written when vmctl's ensure moves a stale pin to the guest's new address. A move means the stale-pin window (guest healthy, pin not yet moved) occurred for that computer inside the counted window.
 
-**The criterion.** The conjecture's test asks for `would_refuse` at 0 for the paper and the test computers across deploys and refreshes, and pinned at least the number of running computers (six run; 51 are pinned). Both hold. The stale-pin window after a refresh (the blocker's residual 1) was the open measurement: five planned refreshes of the paper and several test computer boots and wakes show no would-refuse event, so no client met a stale pin.
+| gateway process (start, UTC) | pin moves inside it (journal) | reading | would_refuse | refused |
+|---|---|---|---|---|
+| 07:10:45 | (not collected) | 07:25 | 0 | 0 |
+| 11:26:13 (deploy N) | 4: the fleet 11:26:35, vm-48bc0981 11:26:47, the paper 11:27:21, 71afbf14 11:28:37 | 12:00 | 0 | 0 |
+| 12:05:41 (deploy O) | 7: vm-48bc0981 12:06:00, the fleet 12:06:16, the paper 12:07:08, the owner's computer 12:09:06 (cold boot), 71afbf14 12:13:13, 12:14:38, 12:15:41 (cold boots during the wake-orphan proof) | 12:31 | 0 | 0 |
+| 12:32:09 (deploy P) | 6: 71afbf14 12:32:27, the owner's computer 12:32:36, the paper 12:33:10, the fleet 12:34:27, vm-48bc0981 12:34:38, the FP2 test computer 12:34:53 (wake) | 12:50 | 0 | 0 |
 
-**Why not wait for "unpinned has drained".** The rollout paragraph above also says to wait until `unpinned` drains. The 221 unpinned are credentials of computers that do not run (hibernated or stopped test computers), and the count did not move across five hours and four deploys. They leave only at the credential TTL (720 h) or when their computer boots and vmctl ensures its address. Enforce treats an unpinned bearer exactly as observe does today (first use binds it, and the host's next ensure overwrites a wrong first-use pin), so draining them buys nothing for enforce. It is the criterion for strict, which refuses unpinned bearers and waits for the vmctl fix in residual 2.
+Earlier processes on 2026-10-22 (10:39:54, 10:56:47) show the same pattern: four moves each, all after the gateway's start.
 
-**The flip.** `gatewayBearerBindingMode = "enforce"` in `nix/node-b.nix`, alone in its deploy (one live red). Proof: steps 4 and 5 below. Step 4 (a test computer's model call passes, `refused` stays 0, and the paper keeps publishing) is FP0's without a guest shell. Step 5 (a token copied between two test computers is refused) needs a guest shell on two disposable test computers; FP0 has no no-SSH route to a guest shell, so step 5 waits for one and is recorded as a residual if not run. Watch for an hour after the flip: `refused` must stay 0 for running computers. Rollback: set `observe` and redeploy (a nix revert).
+**What this shows and what it does not.**
+- Every computer running at 12:50 had its pin moved by the current process: the paper, the owner's computer, the fleet, vm-48bc0981, 71afbf14, and the FP2 test computer. So the six running computers are among the 51 pinned, with pins at their current addresses. The bare count did not show that.
+- In 17 pin moves across three counted processes, no call met a stale pin.
+- This bounds the window in practice. It does not prove the window is empty. Zero hits in 17 moves still allows a per-move hit rate of up to about 16% (95%).
+- The argument for enforce is therefore not that the window is empty. It is that a hit fails closed and heals: a 429 with `Retry-After: 2`, and vmctl's ensure moves the pin within the refresh. The cost of a hit is the residual below.
+
+**What enforce changes for an unpinned bearer.** Observe passes an unpinned bearer and writes nothing. Enforce passes it and writes a first-use pin to the caller's address (`bearer_binding.go:194`, `CheckPeer` with bind true; `first_use_bound` counts it). If that write fails, enforce answers 503 and writes no pin, where observe would have passed the call. A first-use pin moves to the true address at the host's next ensure for that computer. Until then, the legitimate guest is refused if a different runtime peer (loopback included) used the bearer first. A pinned bearer also becomes usable on the Anthropic relay, which accepts a bearer pinned to the caller's address. The relay is dark today (no key, empty allowlist), so this changes nothing yet. The 221 unpinned bearers are credentials of computers that do not run, so none of this touches running computers. Draining them remains strict's criterion.
+
+**Accepted residuals.**
+- **A hit costs non-model calls more.** Only `Provider.call` (non-streaming inference) waits out a 429, for up to about 20 s. Streaming inference, guest search, source-api and host-fetch fail at once. An exhausted wait is booked as a model failover for that run.
+- **The paper is the most exposed computer.** It takes a planned refresh while busy and resumes at once. A hit there costs a failed source poll or a failover, not data.
+- **A failed ensure has no retry timer.** vmctl retries it only on its next trigger: a boot, a refresh, a reattach, or a status lookup. A failed ensure can therefore leave a stale pin until one of those.
+
+**The watch after the flip** replaces "refused stays 0", which would misread a healed window as a failure. For one hour:
+- read `/health` `bearer_binding` (`mode` enforce, `refused`, `first_use_bound`);
+- read the gateway journal's `bearer binding enforce: refused <vm> from <addr>` lines beside the `moved to its current guest address` lines;
+- read the paper's failed source polls and model-failover retries.
+
+A refusal is the design while its computer's pin is stale. The rollback trigger is a computer still refused after the journal shows its pin moved to its current address, or the paper's polls failing for more than one cycle. Proof step 4 now reads it that way (`scripts/proofs/fp7-gateway.sh step_4`).
+
+**Step 5 is the security proof, and it is not yet run.** Step 5 shows that a token copied between two test computers is refused. Step 4 proves only that nothing breaks. Unit tests cover the refusal on every route (`TestBearerBindingRefusesAnotherComputersAddressOnEveryRoute`, `TestBearerBindingOwnCallsPassAndOthersFailEndToEnd`). On staging it needs a shell in two disposable test guests. FP0 will try it after the flip through a host-side shell into two test guests. If FP0 has no such route, it stays an owner-visible residual: SEC-05 stays unticked in the checklist until step 5 runs.
+
+**Rollback.** Set `observe` and redeploy. There is no runtime switch: the mode is read at gateway start. Pins written under enforce persist, and in observe they are only counted. Re-enforcing after a rollback can refuse a legitimate computer whose first-use pin was written by another caller, until that computer's next ensure moves it. A refresh of that computer clears it.
 
 ## Deployed proofs for FP0 (exact steps; none needs a secret)
 
