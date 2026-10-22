@@ -572,3 +572,94 @@ func TestParseStoreOverlayUnescapesPaths(t *testing.T) {
 		t.Fatalf("got %+v ok=%v", got, ok)
 	}
 }
+
+// Review bunch 20 (DeepSeek), round 4:
+//  21. The newer mount API appends layers with lowerdir+= and datadir+=
+//      options; they hide layers the read cannot see: stacked.
+//  22. Stacking is judged from the set of mounts at the store, not their
+//      order: an overlay under a later plain mount (or under another
+//      overlay) is a layer the read cannot see, wherever it is listed.
+//  23. Every partitioned=false path states its reason, and a partitioned
+//      read states none; the probe and the report quote these strings.
+//  24. Commas in overlay option values: the kernel escapes them as \054 in
+//      mountinfo, so they parse; a literal comma truncates the value, which
+//      fails closed through the upper-does-not-resolve check.
+
+func TestParseStoreOverlayAppendedLayerOptionsAreStacked(t *testing.T) {
+	for _, opt := range []string{"lowerdir+=/a", "datadir+=/a"} {
+		mi := overlayLine(41, "/nix/store", "lowerdir=/nix/store,"+opt+",upperdir=/u,workdir=/w")
+		got, ok := parseStoreOverlay(mi, "/nix/store")
+		if !ok || !got.Stacked {
+			t.Fatalf("%s: got %+v ok=%v, want stacked", opt, got, ok)
+		}
+	}
+	got, _ := parseStoreOverlay(overlayLine(41, "/nix/store", "lowerdir=/nix/store,upperdir=/u,workdir=/w"), "/nix/store")
+	if got.Stacked {
+		t.Fatalf("plain single-lower overlay is stacked: %+v", got)
+	}
+}
+
+func TestParseStoreOverlayStackingIgnoresMountOrder(t *testing.T) {
+	erofs := "24 1 254:0 / /nix/store ro - erofs /dev/vda ro\n"
+	ovl := overlayLine(41, "/nix/store", "lowerdir=/nix/store,upperdir=/u,workdir=/w")
+	ovl2 := overlayLine(42, "/nix/store", "lowerdir=/nix/store,upperdir=/u2,workdir=/w2")
+	cases := []struct {
+		name, mi string
+		stacked  bool
+	}{
+		{"erofs then overlay (the layered store)", erofs + ovl, false},
+		{"overlay then erofs on top (overlay hidden)", ovl + erofs, true},
+		{"overlay, erofs, overlay", ovl + erofs + ovl2, true},
+		{"two overlays", ovl + ovl2, true},
+		{"erofs over erofs (nothing hidden that the read could count)", erofs + erofs, false},
+	}
+	for _, c := range cases {
+		got, ok := parseStoreOverlay(c.mi, "/nix/store")
+		if !ok || got.Stacked != c.stacked {
+			t.Fatalf("%s: stacked = %v (ok=%v), want %v: %+v", c.name, got.Stacked, ok, c.stacked, got)
+		}
+	}
+}
+
+func TestPageCacheLayeringReasons(t *testing.T) {
+	store, persistent := t.TempDir(), t.TempDir()
+	upper := filepath.Join(persistent, "u")
+	writeFile(t, filepath.Join(upper, "bbb", "y"), 10)
+	writeFile(t, filepath.Join(store, "aaa", "x"), 10)
+	erofs := fmt.Sprintf("24 1 254:0 / %s ro - erofs /dev/vda ro\n", store)
+	cases := []struct {
+		name, mi, fstype, reason string
+		partitioned              bool
+	}{
+		{"unreadable mountinfo", "", "", "mountinfo unreadable", false},
+		{"no store mount", "30 1 254:16 / /mnt/persistent rw - ext4 /dev/vdb rw\n", "", "no store mount in mountinfo", false},
+		{"stacked overlay", erofs + overlayLine(41, store, fmt.Sprintf("lowerdir=%s,lowerdir+=/x,upperdir=%s,workdir=%s-w", store, upper, upper)), "overlay", "stacked overlay", false},
+		{"hidden overlay", overlayLine(41, store, fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s-w", store, upper, upper)) + erofs, "erofs", "stacked overlay", false},
+		{"overlay without upper", overlayLine(41, store, "lowerdir="+store), "overlay", "overlay without a parsed upperdir", false},
+		{"upper does not resolve", overlayLine(41, store, fmt.Sprintf("lowerdir=%s,upperdir=%s/absent,workdir=%s/absent-w", store, persistent, persistent)), "overlay", "overlay upper does not resolve", false},
+		{"plain erofs store", erofs, "erofs", "", true},
+		{"layered store", erofs + overlayLine(41, store, fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s-w", store, upper, upper)), "overlay", "", true},
+	}
+	for _, c := range cases {
+		useGuestPaths(t, store, persistent, c.mi)
+		l := layeringRead(t)
+		if l == nil || l.Partitioned != c.partitioned || l.Reason != c.reason || l.FSType != c.fstype {
+			t.Fatalf("%s: store_layering = %+v, want fstype %q partitioned %v reason %q", c.name, l, c.fstype, c.partitioned, c.reason)
+		}
+	}
+}
+
+func TestParseStoreOverlayCommasInOptionValues(t *testing.T) {
+	// The kernel prints a comma inside an option value as \054.
+	got, ok := parseStoreOverlay(overlayLine(41, "/nix/store", `lowerdir=/nix/store,upperdir=/mnt/p\054q/store,workdir=/mnt/p\054q/work`), "/nix/store")
+	if !ok || got.Stacked || got.Upper != "/mnt/p,q/store" || got.Work != "/mnt/p,q/work" {
+		t.Fatalf("escaped comma: got %+v ok=%v", got, ok)
+	}
+	// A literal comma ends the value early: the path is truncated, never
+	// extended, so it cannot name a different existing directory by accident
+	// of a longer match; the stray fragment is ignored.
+	got, ok = parseStoreOverlay(overlayLine(41, "/nix/store", "lowerdir=/nix/store,upperdir=/mnt/p,q/store,workdir=/mnt/w"), "/nix/store")
+	if !ok || got.Upper != "/mnt/p" || got.Work != "/mnt/w" {
+		t.Fatalf("literal comma: got %+v ok=%v", got, ok)
+	}
+}
