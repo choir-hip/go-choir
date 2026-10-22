@@ -87,6 +87,11 @@ type Validator struct {
 	// words, so the Texture authoring rules on text do not apply and links
 	// are kept as marks (see ValidateWorld).
 	world bool
+	// ownerText validates a document the store synthesizes from the owner's
+	// own input text (see ValidateOwnerText): the owner's words are literal,
+	// so the Texture authoring rules on text do not apply. Every other rule
+	// of the schema still does.
+	ownerText bool
 }
 
 // Validate checks that the structured Texture document is well-formed and that
@@ -109,6 +114,29 @@ func Validate(doc StructuredTextureDoc, entities []SourceEntity, unusedSourceEnt
 		}
 		validator.unused[id] = true
 	}
+	return validator.validateDoc(doc)
+}
+
+// ValidateOwnerText validates a document the store synthesizes from the
+// owner's own input text (the first revision of a new lifecycle: the prompt
+// bar's text, a new document's initial text). It is Validate without the
+// Texture authoring rules on text: "[1]", "sys.argv[1]", a markdown footnote,
+// a "Source:" line and "{{source:" are the owner's literal words, not
+// citations an agent forgot to write as a source_ref. The document has no
+// source entities, so a source_ref node is still refused. Text an agent
+// authors is validated with Validate.
+func ValidateOwnerText(doc StructuredTextureDoc) error {
+	validator, err := newValidator(nil)
+	if err != nil {
+		return err
+	}
+	validator.ownerText = true
+	return validator.validateDoc(doc)
+}
+
+// validateDoc checks the document and then that every material source entity
+// is referenced (or intentionally unused).
+func (v *Validator) validateDoc(doc StructuredTextureDoc) error {
 	if strings.TrimSpace(doc.Schema) != SchemaV1 {
 		return fmt.Errorf("schema %q is not %q", doc.Schema, SchemaV1)
 	}
@@ -122,13 +150,13 @@ func Validate(doc StructuredTextureDoc, entities []SourceEntity, unusedSourceEnt
 		return fmt.Errorf("doc content must contain at least one block")
 	}
 	for i := range doc.Doc.Content {
-		if err := validator.validateBlock(doc.Doc.Content[i], "doc.content"); err != nil {
+		if err := v.validateBlock(doc.Doc.Content[i], "doc.content"); err != nil {
 			return err
 		}
 	}
-	for sourceEntityID := range validator.entities {
-		if !validator.refs[sourceEntityID] {
-			if validator.unused[sourceEntityID] {
+	for sourceEntityID := range v.entities {
+		if !v.refs[sourceEntityID] {
+			if v.unused[sourceEntityID] {
 				// mark_source_unused declares the entity is intentionally not cited
 				// in the body (immaterial source). It still appears in the source
 				// toolbar but does not require a source_ref node.
@@ -346,7 +374,7 @@ var legacySourceSyntaxes = []struct {
 // A world document's text is the page's own words: footnote markers such
 // as "[12]" and "Source:" lines are real page text there.
 func (v *Validator) validateText(text, path string) error {
-	if v.world {
+	if v.world || v.ownerText {
 		return nil
 	}
 	return validateTextPayload(text, path)

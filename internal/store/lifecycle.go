@@ -1448,7 +1448,7 @@ func (s *Store) StartLifecycle(ctx context.Context, req types.StartLifecycleRequ
 	if revision.AuthorKind == "" {
 		revision.AuthorKind = types.AuthorAppAgent
 	}
-	revision, _, _, err = prepareTextureRevisionV2(revision)
+	revision, _, _, err = prepareOwnerInputTextureRevisionV2(revision)
 	if err != nil {
 		return types.LifecycleResult{}, fmt.Errorf("lifecycle start: prepare initial revision: %w", err)
 	}
