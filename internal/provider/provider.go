@@ -1093,7 +1093,9 @@ func NewOpenCodeZenProviderFromEnv(modelID string) (*OpenCodeProvider, error) {
 // openCodeAPIKeyFromEnv is the first configured key, the presence check
 // for the env constructors; calls draw from sharedOpenCodeKeyPool.
 func openCodeAPIKeyFromEnv() string {
-	if keys := openCodeKeysFromEnv(); len(keys) > 0 {
+	keys := openCodeKeysFromEnv()
+	logOpenCodeKeysInService(keys)
+	if len(keys) > 0 {
 		return keys[0].value
 	}
 	return ""
