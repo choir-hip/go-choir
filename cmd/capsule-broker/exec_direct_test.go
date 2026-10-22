@@ -194,18 +194,27 @@ func TestDirectExecAndWorkerEnvCarryGoBounds(t *testing.T) {
 	}
 }
 
-// A job (the long build) gets the bounds from the broker's own environment.
+// A job (the long build) gets the bounds from the broker's own environment,
+// as GOMAXPROCS and GOMEMLIMIT, never under the carry names. The job env
+// legitimately carries other CHOIR_ names (the frontend deps, and visual
+// capture on a granted computer); the broker's environment is set here so
+// the test does not depend on the one it runs in.
 func TestJobEnvCarriesGoBounds(t *testing.T) {
 	t.Setenv(yaegikernel.CapsuleGoMaxProcsEnv, "1")
 	t.Setenv(yaegikernel.CapsuleGoMemLimitEnv, "1342177280")
+	t.Setenv(yaegikernel.BuildToolchainPathEnv, "/nix/store/aaa-gcc-wrapper/bin")
+	t.Setenv(yaegikernel.FrontendDepsEnv, "/nix/store/eee-frontend-deps")
 	env := "\n" + strings.Join(newJobManager("/run/capsule/broker", true).Env, "\n") + "\n"
-	for _, want := range []string{"\nGOMAXPROCS=1\n", "\nGOMEMLIMIT=1342177280\n", "\nGOFLAGS=-mod=mod\n"} {
+	for _, want := range []string{"\nGOMAXPROCS=1\n", "\nGOMEMLIMIT=1342177280\n", "\nGOFLAGS=-mod=mod\n",
+		"\n" + yaegikernel.FrontendDepsEnv + "=/nix/store/eee-frontend-deps\n"} {
 		if !strings.Contains(env, want) {
 			t.Errorf("job env missing %q in %q", strings.TrimSpace(want), env)
 		}
 	}
-	if strings.Contains(env, "CHOIR_") {
-		t.Errorf("job env has a CHOIR_ name: %q", env)
+	for _, carry := range []string{yaegikernel.CapsuleGoMaxProcsEnv, yaegikernel.CapsuleGoMemLimitEnv} {
+		if strings.Contains(env, "\n"+carry+"=") {
+			t.Errorf("job env exposes the carry %s: %q", carry, env)
+		}
 	}
 }
 
