@@ -195,6 +195,9 @@ type storeCompactorIface interface {
 type storeCompactRequest struct {
 	UserID    string `json:"user_id"`
 	DesktopID string `json:"desktop_id,omitempty"`
+	// Force passes the per-computer gap (an operator's by-hand call); the
+	// host free-space floor and the guest's refusals still apply.
+	Force bool `json:"force,omitempty"`
 }
 
 type storeCompactResponse struct {
@@ -233,6 +236,9 @@ type storeCompactState struct {
 	// trigger's gap; store_compaction_pressure.go).
 	attemptsMu sync.Mutex
 	attempts   *storeCompactAttempts
+	// allocatedBytes reads a data image's host allocation (a test hook;
+	// nil: allocatedBytesOf).
+	allocatedBytes func(path string) uint64
 }
 
 func (h *Handler) storeCompaction() *storeCompactState {
@@ -261,18 +267,33 @@ func (s *storeCompactState) attemptsRecord() *storeCompactAttempts {
 	return s.attempts
 }
 
-// compactStore compacts one computer's store as a planned restart.
-func (h *Handler) compactStore(ctx context.Context, own ownershipResponse) (storeCompactResponse, int) {
+// compactStore compacts one computer's store as a planned restart. Before
+// the guest is asked it refuses, in order: below the host free-space floor
+// (507), inside the computer's gap unless force (429), and when the attempts
+// record cannot be written (507), so no restart is spent on a compaction
+// that cannot run or record itself.
+func (h *Handler) compactStore(ctx context.Context, own ownershipResponse, force bool, now time.Time) (storeCompactResponse, int) {
 	state := h.storeCompaction()
 	if !state.mu.TryLock() {
 		return storeCompactResponse{deployRefreshResponse: deployRefreshResponse{Outcome: deployRefreshDeferred, Reason: "another store compaction is running", VMID: own.VMID}}, http.StatusConflict
 	}
 	defer state.mu.Unlock()
+	refuse := func(reason string, status int) (storeCompactResponse, int) {
+		log.Printf("vmctl: store compaction %s (computer %s): refused: %s", own.VMID, own.ComputerID, reason)
+		return storeCompactResponse{deployRefreshResponse: deployRefreshResponse{Outcome: deployRefreshSkipped, Reason: reason, VMID: own.VMID, ComputerID: own.ComputerID}}, status
+	}
 	if refusal := state.hostFloorRefusal(); refusal != "" {
-		log.Printf("vmctl: store compaction %s (computer %s): refused: %s", own.VMID, own.ComputerID, refusal)
-		return storeCompactResponse{deployRefreshResponse: deployRefreshResponse{Outcome: deployRefreshSkipped, Reason: refusal, VMID: own.VMID, ComputerID: own.ComputerID}}, http.StatusInsufficientStorage
+		return refuse(refusal, http.StatusInsufficientStorage)
+	}
+	if !force {
+		if refusal := h.storeCompactGapRefusal(own.VMID, now); refusal != "" {
+			return refuse(refusal, http.StatusTooManyRequests)
+		}
 	}
 	attempts := state.attemptsRecord()
+	if err := attempts.checkWritable(); err != nil {
+		return refuse("attempts record not writable: "+err.Error(), http.StatusInsufficientStorage)
+	}
 	head := ""
 	if own.ReportedRelease != nil {
 		head = own.ReportedRelease.CanonicalEventHead
@@ -282,13 +303,21 @@ func (h *Handler) compactStore(ctx context.Context, own ownershipResponse) (stor
 	maintenance := func(dataImagePath string) error {
 		// The guest took the planned restart and the VM is down: this is an
 		// attempt, recorded before the compaction so a vmctl crash during it
-		// still holds the pressure trigger's gap.
-		if err := attempts.record(own.VMID, time.Now()); err != nil {
-			report, compactErr = nil, err
-			return err
+		// still holds the gap. The VM is already down, so a failed write
+		// (checked writable a moment ago) does not stop the compaction; the
+		// attempt stays in memory.
+		att := storeCompactAttempt{VMID: own.VMID, At: now, FileBytesBefore: state.allocated(dataImagePath)}
+		if err := attempts.record(att); err != nil {
+			log.Printf("vmctl: store compaction %s: attempt kept in memory only: %v", own.VMID, err)
 		}
 		r, err := state.compactor.Compact(context.Background(), own.VMID, dataImagePath, own.ComputerID, head)
 		report, compactErr = &r, err
+		if err == nil {
+			att.FileBytesAfter = state.allocated(dataImagePath)
+			if werr := attempts.record(att); werr != nil {
+				log.Printf("vmctl: store compaction %s: result kept in memory only: %v", own.VMID, werr)
+			}
+		}
 		return err
 	}
 	req := deployRefreshRequest{UserID: own.UserID, DesktopID: normalizeDesktopID(own.DesktopID), Target: storeCompactTarget}
@@ -387,7 +416,7 @@ func (h *Handler) HandleCompactStore(w http.ResponseWriter, r *http.Request) {
 	desktopID := normalizeDesktopID(req.DesktopID)
 	for _, own := range ownerships {
 		if own.UserID == strings.TrimSpace(req.UserID) && normalizeDesktopID(own.DesktopID) == desktopID {
-			resp, status := h.compactStore(r.Context(), own)
+			resp, status := h.compactStore(r.Context(), own, req.Force, time.Now())
 			writeVMCTLJSON(w, status, resp)
 			return
 		}
@@ -398,7 +427,9 @@ func (h *Handler) HandleCompactStore(w http.ResponseWriter, r *http.Request) {
 // HandleCompactSweep serves POST /internal/vmctl/compact-sweep
 // {"min_file_bytes","dry_run"}: compact, one at a time, every active, unheld
 // interactive computer whose data image holds at least min_file_bytes on the
-// host. A busy refusal is a deferral; the next day's sweep tries again.
+// host. A busy refusal is a deferral; the next day's sweep tries again. A
+// computer inside its gap is skipped. A refusal at the host free-space floor
+// answers 507, so the timer unit fails and says why.
 func (h *Handler) HandleCompactSweep(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
@@ -424,11 +455,18 @@ func (h *Handler) HandleCompactSweep(w http.ResponseWriter, r *http.Request) {
 	h.fillDataImageStats(ownerships)
 	selected, skipped, picks := selectStoreCompaction(ownerships, req.MinFileBytes)
 	resp := storeCompactSweepResponse{MinFileBytes: req.MinFileBytes, DryRun: req.DryRun, Selected: selected, Skipped: skipped}
+	status := http.StatusOK
 	if !req.DryRun {
 		for i, own := range picks {
-			result, _ := h.compactStore(r.Context(), own)
+			result, code := h.compactStore(r.Context(), own, false, time.Now())
 			resp.Selected[i].Result = &result
+			if code == http.StatusInsufficientStorage {
+				// No room (or no writable attempts record): the timer unit
+				// must fail and say why, not exit 0 having done nothing.
+				status = code
+				log.Printf("vmctl: store compaction sweep refused %s (computer %s): %s", own.VMID, own.ComputerID, result.Reason)
+			}
 		}
 	}
-	writeVMCTLJSON(w, http.StatusOK, resp)
+	writeVMCTLJSON(w, status, resp)
 }

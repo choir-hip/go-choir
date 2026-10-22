@@ -282,8 +282,8 @@ func main() {
 			log.Printf("vmctl: store compaction pressure refuses every compaction: %v", err)
 		}
 		handler.StartStoreCompactPressure(context.Background())
-		log.Printf("vmctl: store compaction pressure mode=%s interval=%s host_free_below=%d fill_fraction=%.2f min_gap=%s attempts=%q",
-			cfg.Mode, cfg.Interval, cfg.HostFreeBelow, cfg.FillFraction, cfg.MinGap, attemptsPath)
+		log.Printf("vmctl: store compaction pressure mode=%s interval=%s host_free_below=%d fill_fraction=%.2f min_image=%d min_gap=%s attempts=%q",
+			cfg.Mode, cfg.Interval, cfg.HostFreeBelow, cfg.FillFraction, cfg.MinImageBytes, cfg.MinGap, attemptsPath)
 	}
 	// The pressure monitor samples host pressure and VM memory; under the
 	// sustained signal it also runs the gated reclaim. Off with reclaim off.

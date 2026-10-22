@@ -1667,15 +1667,19 @@ in
         # Store compaction on host disk pressure (docs/problems/node-b-disk-
         # fills-from-the-paper-data-image-2026-10-22.md): observe only logs
         # "would compact <vm> ... reason=..." for a platform computer whose
-        # image holds 60% of its cap or when host free is under 64 GiB, at
-        # most once per computer per 6 h. Rollback: PRESSURE=off. Every
-        # compaction (timer, by hand, pressure) refuses under the floor:
-        # the compacted copy needs room. FLOOR=0 turns the floor off.
+        # image holds at least 32 GiB and 60% of its cap, or when host free
+        # is under 64 GiB. Every compaction (timer, by hand, pressure) keeps
+        # a 6 h gap per computer (24 h after one that gave back under 8 GiB;
+        # a by-hand "force" passes it) and refuses under the 24 GiB floor:
+        # the compacted copy (14.45 GB on 10-22) needs room. A timer run
+        # refused at the floor fails its unit (HTTP 507). Full rollback:
+        # PRESSURE=off and MIN_HOST_FREE_GIB=0.
         "VMCTL_STORE_COMPACT_PRESSURE=observe"
         "VMCTL_STORE_COMPACT_PRESSURE_HOST_FREE_GIB=64"
         "VMCTL_STORE_COMPACT_PRESSURE_FILL_FRACTION=0.6"
+        "VMCTL_STORE_COMPACT_PRESSURE_MIN_IMAGE_GIB=32"
         "VMCTL_STORE_COMPACT_PRESSURE_MIN_GAP=6h"
-        "VMCTL_STORE_COMPACT_MIN_HOST_FREE_GIB=32"
+        "VMCTL_STORE_COMPACT_MIN_HOST_FREE_GIB=24"
         "VMCTL_ADMISSION_MODE=measured"
         # A proof-account computer busy longer than this (e.g. stuck
         # mid-apply) loses busy protection under host pressure.
@@ -1825,7 +1829,10 @@ in
   # whose data image holds at least 32 GiB on the host, as a planned restart
   # with offline maintenance; a busy refusal waits for the next day. The
   # paper grows about 6 GB a day, so it is compacted every few days. An
-  # account's computer is never compacted by the timer.
+  # account's computer is never compacted by the timer. A run refused at
+  # vmctl's host free-space floor answers 507, so curl fails the unit and
+  # the journal carries the reason; a computer inside its 6 h gap (after a
+  # pressure compaction) is skipped without failing.
   systemd.services.go-choir-store-compaction = {
     description = "go-choir guest store compaction sweep";
     after = [ "go-choir-vmctl.service" ];
