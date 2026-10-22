@@ -409,6 +409,24 @@ deploy rescue does not reach that fate; its sweep does.
    address. The computer serves.
 7. Negative control: a test computer that was active at the same restart is
    reattached as before (`vmctl-restart`, then reattached), not closed.
+8. Repeated interruption (round 2, F1). Never the paper or any platform
+   computer: use a test computer made always-on for the proof
+   (critical_protected or premium_always_on primary), or a test computer
+   driven by owner wakes. Interrupt its start once (steps 3 to 5): the row
+   reads `stopped_by: interrupted-by-vmctl-restart`,
+   `start_interruptions: 1`, no `failure_warmed_at`, and the next sweep (or
+   wake) boots it without a `spent the automatic retry` line. Interrupt
+   that re-boot too, before it publishes: the journal shows `closed VM <vm>
+   ... 2 starts in a row; stopped_by=start-interrupted-repeatedly-by-vmctl-restart,
+   the automatic retry is spent`, the row carries `failure_warmed_at`, and
+   for the next ten minutes no sweep warms it (no `started VM <vm>` line).
+   An owner wake then boots it, and the row's `start_interruptions` is gone
+   (reset by the publish). If the always-on class cannot be set on a test
+   computer without touching a real one, record step 8 as not run and say
+   so; the unit test is the evidence.
+9. Shield (round 2, F2), only if a reap failure can be produced on a test
+   computer without SSH: while the close is open, an owner recover answers
+   409 with `retry shortly` and the row keeps its fate. Otherwise not run.
 
 ### Heresy delta
 
@@ -430,9 +448,8 @@ deploy rescue does not reach that fate; its sweep does.
   persisted `booting` row now reads as a claim.
 - H2 is unchanged: a boot without a fresh gateway token falls back to the
   previous boot's token file.
-- The platform computer's first-ever boot has no row before `BootVM`. Its
-  orphan is reaped by the orphan reaper on its second sighting, and the
-  ensure boots it again. This is unchanged.
+- ~~The platform computer's first-ever boot has no row before `BootVM`.~~
+  Fixed in review round 2 (F3): it persists its booting row first.
 - A refresh whose publish is refused because the row changed under it keeps
   its claim. A later restart closes that realization. This is deliberate:
   the start was never published.
@@ -441,3 +458,66 @@ deploy rescue does not reach that fate; its sweep does.
   names the wedge detector. This is cosmetic.
 - The L1b boot ledger (`docs/restart-subsystem-design-2026-10-13.md`) is
   still the substrate this claim anticipates: a grant without a boot result.
+
+## Review round 2 (bunch 37, 2026-10-22)
+
+Reviewers: Gemini flash accepted; DeepSeek accepted with edits that gate the
+deploy (~/runs/wakeorph-r1-deepseek.md on FP0's VM); Devin's findings were
+pending at this round. Tests first in 14c53fa58 (yellow: F1, F2, F3 and F4
+fail on 611223b30; the publishedIn guard and claim-write tests pass there,
+as coverage), fix in 8a9ad074b (red, ceremony in its message).
+
+### Dispositions
+
+- **F1 (gate), repeated interrupted starts unbounded: fixed.** The row
+  counts consecutive interrupted starts (`start_interruptions`, reset by
+  every publish). The first close is free. The second is
+  `start-interrupted-repeatedly-by-vmctl-restart`, a failure, and the close
+  charges `failure_warmed_at`; the always-on sweep, the platform warm and
+  the platform ensure leave it for 24 h or the next deploy's re-arm, and an
+  owner act boots it. Test: `TestRepeatedInterruptedStartsAreBoundedLikeAFailure`.
+- **F2 (gate), shield dropped before the replacement is proven: fixed.**
+  `spawnClaimed` keeps the shield and refuses (a transient
+  `guest_reattach_pending` refusal) while the close is open. The platform
+  warm, the platform ensure and the direct recover (owner and maintenance)
+  refuse before touching the row while the close is open or an untracked
+  process lives, and a refusal restores the row. Also found and fixed: the
+  warm `ResumeVM`'d a VM the manager no longer tracks (any VM after a vmctl
+  restart) into `recovery_failed`; it now boots it as the ensure does.
+  Test: DeepSeek's repro, `TestPlatformWarmAndRecoverRefuseWhileAnInterruptedStartIsOpen`.
+- **F3 (medium), platform first boot unclaimed: fixed.** The first boot
+  persists its booting row before `BootVM` (a failed first boot removes it,
+  as before). The startup ensure retries transient refusals every 15 s
+  inside its 10-minute timeout. Test:
+  `TestPlatformFirstBootInterruptedByARestartIsClosedAndEnsuredAgain`.
+- **F4 (medium), claims not start-scoped: fixed.** The platform warm takes
+  the lifecycle claim and the ensure's pending slot and refuses while
+  either is held; the ensure refuses while a lifecycle claim is held. A
+  publish drops only a claim the published row records (epoch compare,
+  `publishStartLocked`); vmmanager publishes the config's epoch, so the
+  compare is exact. Test: `TestPlatformWarmAndOwnerStartNeverBothSpawn`.
+- **Low, ResumeVM lock comment: fixed (comment), lock not taken.**
+  `ResumeVM` acts only on a VM the manager tracks and the close's kill
+  refuses those, so the kill and a `ResumeVM` never meet; changing
+  vmmanager's lock order to take the per-VM lock under `m.mu` is a
+  deadlock risk out of this lane's scope.
+- **Low, unclaimed spawn without a persistence path: fixed (loud log),
+  refusal declined.** Every in-memory registry (most tests, host-process
+  mode) has no path; refusing would break them. Production sets
+  `VMCTL_OWNERSHIP_PATH` or `VM_STATE_DIR`.
+- **Low, missing tests: fixed.** `TestStaleClaimOnAPublishedRowIsDroppedNotClosed`
+  (publishedIn on an active row), `TestStartIsRefusedWhenItsClaimCannotBeWritten`.
+- **Low, `closeInterruptedStarts` reads UserID after unlock: declined.**
+  UserID is immutable on a row; DeepSeek rates it style.
+- **Pre-existing, `saveLocked` only logs write errors: residual, unchanged
+  this round.** A publish whose write fails leaves the pre-publish claim on
+  disk; the next crash then closes a computer that was serving.
+
+### Residuals added this round
+
+- The count is written by the close's save, not at load: a vmctl that
+  dies again between load and close does not count that load. The claim is
+  still on disk, so the next load closes it; the bound can lag by one.
+- An old binary (rollback) reads `start-interrupted-repeatedly-by-vmctl-restart`
+  as an unknown, non-failure stop, so its sweep would re-boot such a row.
+- `saveLocked` (above).
