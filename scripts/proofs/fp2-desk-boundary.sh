@@ -14,7 +14,7 @@
 #
 #   CHOIR_API_KEY=... scripts/proofs/fp2-desk-boundary.sh --computer computer-<test> [--commit SHA]
 #       [--probe scripts/desk_cell_confinement_probe.py] [--egress yes] [--out docs/evidence/fp2-desk-boundary-<date>.json]
-#       [--label before|after] [--dry-run | --list | --step N [--mutate]] [--evidence FILE]
+#       [--oom-out docs/evidence/fp2-desk-oom-<date>.json] [--dry-run | --list | --step N [--mutate]] [--evidence FILE]
 set -uo pipefail
 PROOF_NAME=fp2-desk
 . "$(dirname "$0")/lib.sh"
@@ -22,11 +22,11 @@ PROOF_NAME=fp2-desk
 step_def 1 ro "deployed commit: platform /health and the test computer's observability"
 step_def 2 mut "the isolation self-test on the test computer, judged by the confinement probe"
 step_def 3 ro-after "trace refusals (read by hand)"
-step_def 4 ro-after "out-of-memory: daemon identity before and after a runaway research cell"
+step_def 4 mut "out-of-memory: the isolation self-test's OOM leg (a research worker killed by its cgroup; daemon and sibling live)"
 step_def 5 mut "real turns: the Texture acceptance spec on the test computer"
 step_def 6 ro-after "rollback"
 
-: "${OPT_probe:=scripts/desk_cell_confinement_probe.py}" "${OPT_egress:=no}" "${OPT_label:=before}" "${OPT_commit:=}" "${OPT_out:=}"
+: "${OPT_probe:=scripts/desk_cell_confinement_probe.py}" "${OPT_egress:=no}" "${OPT_commit:=}" "${OPT_out:=}" "${OPT_oom_out:=}"
 
 fp2_need_computer() {
 	[ -n "${OPT_computer:-}" ] || die 2 "this step needs --computer (the disposable test computer)"
@@ -84,28 +84,40 @@ step_3() {
 	manual "a run of the test computer after step 2 expects nothing; a real refusal appears as a desk.egress run event with refused: true (read the run's events in the product)"
 }
 
-fp2_state_file() { printf '%s/fp2-daemon-%s.json' "${TMPDIR:-/tmp}" "$OPT_computer"; }
-
+# Step 4 runs the self-test's OOM leg (POST /api/runtime/isolation-selftest?leg=oom):
+# no model is in the loop, since the deployed desks refuse a runaway prompt
+# (docs/problems/fp2-step4-deployed-oom-not-drivable-desk-refuses-runaway-2026-10-22.md).
+# The daemon's identity comes from the daemon process (pid, /proc/self/stat
+# start time, boot id), not from observability's steps.recent. A desk worker's
+# cgroup reports memory.max and memory.events; memory.peak is logged only for
+# capsules.
 step_4() {
-	local obs now state
+	local cred rc out
 	fp2_need_computer
-	obs=$(api_get /api/runtime/observability "$OPT_computer")
-	[ "$PROOF_DRY" = 1 ] && return 0
-	# The daemon's identity: whatever the observability answer carries about
-	# process start, pid or uptime, compared before and after.
-	now=$(printf '%s' "$obs" | jq -S -c '[paths(scalars) as $p | {path: ($p | map(tostring) | join(".")), value: getpath($p)}] | map(select(.path | test("(^|\\.)(started_at|start_time|boot_time|pid|process_start|uptime)"; "i")))')
-	state=$(fp2_state_file)
-	info "daemon identity fields: $now"
-	if [ "$OPT_label" = before ]; then
-		printf '%s\n' "$now" >"$state"
-		info "saved to $state"
-		manual "run a research desk turn whose cell allocates without end (a prompt that asks for a cell: for { keep = append(keep, make([]byte, 8<<20)) }); expect the cell result \"cell's worker died ... killed by its memory budget (memory.max 768 MiB ...)\"; then rerun this step with --label after"
-	else
-		[ -s "$state" ] || die 2 "no saved 'before' reading at $state (run with --label before first)"
-		[ "$now" = "$(cat "$state")" ] && pass "the daemon's start identity is unchanged (the worker was killed, not the daemon)" || fail "the daemon identity changed: before $(cat "$state") after $now"
-		printf '%s' "$obs" | jq -r '.recent_log[]? | select(test("memory budget|memory.peak|desk cgroup"))' | while IFS= read -r l; do info "log $l"; done
-		manual "the next turn of the same desk works; read each worker's memory.peak from the daemon's desk cgroup log lines above"
+	out=${OPT_oom_out:-docs/evidence/fp2-desk-oom-$(date -u +%Y%m%d).json}
+	will "POST /api/runtime/isolation-selftest?leg=oom on $OPT_computer through $OPT_probe (a throwaway research worker allocates until its 768 MiB cgroup kills it; one attempt, never retried), writing $out"
+	if [ "$PROOF_DRY" = 1 ]; then
+		info "\$ python3 $OPT_probe --cred <0600 temp file from CHOIR_API_KEY and --computer> --out $out --leg oom"
+		return 0
 	fi
+	[ -f "$OPT_probe" ] || die 2 "$OPT_probe is not in this tree; pass --probe PATH"
+	[ -n "${CHOIR_API_KEY:-}" ] || die 2 "CHOIR_API_KEY is not set in the environment"
+	cred=$(umask 077 && mktemp "${TMPDIR:-/tmp}/fp2-cred.XXXXXX") || die 2 "mktemp failed"
+	trap 'rm -f "${cred:-}"' EXIT
+	jq -nc --arg k "$CHOIR_API_KEY" --arg c "$OPT_computer" '{api_key:$k, computer_id:$c}' >"$cred"
+	python3 -I "$OPT_probe" --cred "$cred" --out "$out" --leg oom >/dev/null
+	rc=$?
+	rm -f "$cred"
+	case "$rc" in
+	0) pass "OOM leg proven (exit 0): the worker was killed by its cgroup, the daemon and the sibling lived; receipt $out" ;;
+	1) fail "OOM leg: a check failed or the guest gave no answer (exit 1); receipt $out" ;;
+	*) fail "OOM leg: not deployed or computer unreachable (exit $rc); nothing proven" ;;
+	esac
+	if [ -s "$out" ]; then
+		jq -c '.server.oom // {} | {oom_kill: .worker.oom_kill, worker_memory_max: .worker.cgroup.memory_max, worker_memory_high: .worker.cgroup.memory_high, slice_memory_max: .slice.memory_max, slice_memory_high: .slice.memory_high, exit_cause: .worker.exit_cause, sibling_after: .sibling.after_answered, daemon_before: .daemon_before, daemon_after: .daemon_after}' "$out" 2>/dev/null | while IFS= read -r l; do info "oom $l"; done
+		jq -c '.failures // []' "$out" 2>/dev/null | while IFS= read -r l; do info "failures $l"; done
+	fi
+	manual "the next real research turn on this computer works (step 5)"
 }
 
 step_5() {
