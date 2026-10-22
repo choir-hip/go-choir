@@ -1,0 +1,200 @@
+{
+  "started_at": "2026-10-22T02:23:25.050Z",
+  "checks": {
+    "T1_list": {
+      "at": "2026-10-22T02:23:43.144Z",
+      "status": [
+        200,
+        200
+      ],
+      "ms": [
+        26,
+        26
+      ],
+      "count": 0
+    },
+    "T2a_first_draft": {
+      "at": "2026-10-22T02:28:43.893Z",
+      "pass": false,
+      "seconds": 300,
+      "appagent_revisions": 0,
+      "document": {
+        "doc_id": "18d8d80f-4fd0-588d-956d-0d4cee8dde01",
+        "owner_id": "f25b01e7-3cfd-48ec-8a09-433773a88850",
+        "title": "Acceptance 1792635823088",
+        "computer_id": "computer-1f86c71951398a342fea71201db721dc",
+        "trajectory_id": "f4b2ae4f-e7b4-55d4-ad8a-35909bea9c88",
+        "current_revision_id": "1c4587a1-5e03-50ce-93f5-223b1416f5f7",
+        "current_version_number": 0,
+        "created_at": "2026-10-22T02:23:43.127Z",
+        "updated_at": "2026-10-22T02:23:43.127Z",
+        "revision_count": 1,
+        "last_editor": "f25b01e7-3cfd-48ec-8a09-433773a88850",
+        "last_author_kind": "user"
+      },
+      "obligations": {
+        "computer_id": "computer-1f86c71951398a342fea71201db721dc",
+        "generated_at": "2026-10-22T02:28:43.859679734Z",
+        "restart": {
+          "kind": "crash_or_stop"
+        },
+        "wakes": {
+          "unprojected": 0,
+          "retrying": 0,
+          "exhausted": 0
+        },
+        "runs": {
+          "passivated": 1
+        },
+        "oldest_run_at": {
+          "passivated": "2026-10-22T02:23:57Z"
+        },
+        "open_work_items": {
+          "count": 0
+        },
+        "actors": {
+          "due": 0,
+          "deferred": 3,
+          "max_defer_count": 0,
+          "oldest_unprocessed_at": "2026-10-22T02:23:43Z",
+          "next_not_before": "2026-10-22T03:23:43Z",
+          "by_kind": {
+            "activation_budget_deadline": 1,
+            "cell_terminal_deadline": 2
+          },
+          "samples": [
+            {
+              "update_id": "3c0232fd-be89-53da-a412-575f2a467aba",
+              "to_agent_id": "f25b01e7-3cfd-48ec-8a09-433773a88850\u0000computer-1f86c71951398a342fea71201db721dc\u0000texture:18d8d80f-4fd0-588d-956d-0d4cee8dde01",
+              "kind": "activation_budget_deadline",
+              "created_at": "2026-10-22T02:23:43Z",
+              "not_before": "2026-10-22T03:23:43Z",
+              "defer_count": 0,
+              "attempts": 0
+            },
+            {
+              "update_id": "50e598d6-9045-5d7c-b12d-1447a0ec085d",
+              "to_agent_id": "f25b01e7-3cfd-48ec-8a09-433773a88850\u0000computer-1f86c71951398a342fea71201db721dc\u0000texture:18d8d80f-4fd0-588d-956d-0d4cee8dde01",
+              "kind": "cell_terminal_deadline",
+              "created_at": "2026-10-22T02:23:53Z",
+              "not_before": "2026-10-22T03:23:43Z",
+              "defer_count": 0,
+              "attempts": 0
+            },
+            {
+              "update_id": "b6677dcd-cf37-5c45-86e0-111de28a0367",
+              "to_agent_id": "f25b01e7-3cfd-48ec-8a09-433773a88850\u0000computer-1f86c71951398a342fea71201db721dc\u0000texture:18d8d80f-4fd0-588d-956d-0d4cee8dde01",
+              "kind": "cell_terminal_deadline",
+              "created_at": "2026-10-22T02:23:57Z",
+              "not_before": "2026-10-22T03:23:43Z",
+              "defer_count": 0,
+              "attempts": 0
+            }
+          ]
+        }
+      }
+    },
+    "T2b_revise": {
+      "at": "2026-10-22T02:28:59.718Z",
+      "pass": true,
+      "seconds": 16,
+      "appagent_revisions": 1
+    },
+    "T3_chevrons": {
+      "at": "2026-10-22T02:28:59.934Z",
+      "reads": [
+        {
+          "id": "84404c61-d04b-5adf-a824-d121ebf6745c",
+          "status": 200,
+          "ms": 52
+        },
+        {
+          "id": "0c5b4e25-0be3-5d3c-adff-dfed3287edc3",
+          "status": 200,
+          "ms": 45
+        },
+        {
+          "id": "1c4587a1-5e03-50ce-93f5-223b1416f5f7",
+          "status": 200,
+          "ms": 48
+        }
+      ]
+    },
+    "T4_reload_idle": {
+      "at": "2026-10-22T02:29:15.154Z",
+      "pending_reads": [
+        false,
+        false,
+        false
+      ]
+    },
+    "T5_cancel": {
+      "at": "2026-10-22T02:29:17.031Z",
+      "pending_seen": true,
+      "cancel_status": 200,
+      "cleared": true,
+      "seconds_to_clear": 1,
+      "appagent_before": 1
+    },
+    "T5b_revise_after_cancel": {
+      "at": "2026-10-22T02:29:17.075Z",
+      "pass": false,
+      "status": 409,
+      "body": {
+        "error": "durable lifecycle state is unavailable or terminal"
+      }
+    },
+    "T6_research": {
+      "at": "2026-10-22T02:34:41.655Z",
+      "landed": true,
+      "revision": "fce28c9f-13ea-5208-954d-2ecd1525a292",
+      "source_entities": 4,
+      "source_refs": 7
+    },
+    "T6_idle": {
+      "at": "2026-10-22T02:34:41.735Z",
+      "idle": true,
+      "pending": false
+    },
+    "T7_crash_interrupts": {
+      "at": "2026-10-22T02:36:53.840Z",
+      "refresh": "{\"vm_id\":\"vm-fdcb6a457f1c003913e344bb1ec92f64\",\"computer_id\":\"computer-1f86c71951398a342fea71201db721dc\",\"user_id\":\"f25b01e7-3cfd-48ec-8a09-433773a88850\",\"desktop_id\":\"primary\",\"kind\":\"interactive\",\"computer_url\":\"http://10.201.77.2:8085\",\"state\":\"active\"}",
+      "back": true,
+      "interrupted": true,
+      "pending": false,
+      "appagent_before": 2,
+      "appagent_after": 2
+    },
+    "T8_obligations_after_crash": {
+      "at": "2026-10-22T02:36:53.880Z",
+      "status": 200,
+      "ms": 31,
+      "restart": {
+        "kind": "crash_or_stop"
+      },
+      "wakes": {
+        "unprojected": 0,
+        "retrying": 0,
+        "exhausted": 0
+      },
+      "runs": {},
+      "open_work_items": {
+        "count": 1,
+        "oldest_at": "2026-10-22T02:29:17Z"
+      }
+    },
+    "summary": {
+      "at": "2026-10-22T02:36:53.894Z",
+      "result": "fail",
+      "failed": [
+        "T2a_first_draft",
+        "T5b_revise_after_cancel"
+      ]
+    }
+  },
+  "base_url": "https://choir.news",
+  "doc_id": "18d8d80f-4fd0-588d-956d-0d4cee8dde01",
+  "doc_id_research": "5d227ff6-8b4c-54a9-9e7d-1e12f1e10190",
+  "result": "fail",
+  "finished_at": "2026-10-22T02:36:53.894Z"
+}
