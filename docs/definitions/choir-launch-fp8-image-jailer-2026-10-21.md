@@ -94,7 +94,9 @@ now:
   slice: >-
     built, not frozen: every item has its code, tests and FP0 proof steps;
     only FP0 steps (freeze, panel, land, deployed proof) and the owner's cap
-    number remain
+    number remain. P4 follow-up (lane/fp8-damon-report, 2026-10-22):
+    guest procmem reports DAMON and reporting state (orange, read only) and
+    a burst-then-idle probe for FP0; FP0 lands, deploys and runs it
   source_ref: 122eb9623 (lane base; rebase onto main after FP3 group 1 lands)
   deploy_identity: unchanged (nothing of FP8 is deployed)
   candidate:
@@ -377,6 +379,24 @@ activation under the metamission's lease. Record outputs under
    an existing user adding nothing sees no change.
 3. Host admission stays the second layer (`VMCTL_ADMISSION_MODE=measured`,
    pressure reclaim active).
+
+## Lane fp8-damon-report (2026-10-22): P4 made observable
+
+The 13:06 reading (ledger) could not tell "DAMON reclaim not running" from
+"DAMON frees, reporting does not return". Record:
+[guest-damon-reclaim-state-unreported-2026-10-22.md](../problems/guest-damon-reclaim-state-unreported-2026-10-22.md).
+The guest's host-only procmem route now carries `memory_return` (DAMON
+reclaim parameters and counters, kdamond CPU, `page_reporting_order` and
+whether a device registered, the balloon's negotiated reporting bit,
+reclaim/refault vmstat, free memory by block order); read only, absent
+files absent. `scripts/fp8_memory_return_probe.py` samples it with host
+RSS and the RES-10 reader every 30 s across a burst and 20 idle minutes;
+outcomes and levers in
+[guest-memory-return-outcomes-2026-10-22.md](../reports/guest-memory-return-outcomes-2026-10-22.md).
+Found while testing on a 6.18.37 kernel: `page_reporting_order` reads -1
+until a reporting device registers, so -1 on a guest means nothing is
+being reported. Orange, guest image only; FP0 deploys, then runs the probe
+on 71afbf14 and an unselected control.
 
 ## Residuals
 
