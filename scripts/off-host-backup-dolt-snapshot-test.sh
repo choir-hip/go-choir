@@ -37,6 +37,12 @@
 #     the dolt_rows field but no Store A entry. A manifest with no dolt_rows
 #     field at all (written before the marker) still passes on the head.
 #     (Same record, review round 2 R9.)
+# 13. A recorded count the drill cannot trust (negative, non-numeric, more
+#     than 15 digits, or the key twice) passes the freshness check or fails
+#     it as a stale restore: never; the drill fails and names the manifest.
+# 14. The drill's scratch directory override is / or relative, so it chmods
+#     / or scatters a restore under the caller's directory: never; it refuses
+#     before creating anything. (Same record, review round 3 F1 to F3.)
 #  9. A lock left by a killed run (its tunnel dies with it, so restic cannot
 #     delete the lock) blocks the next run: never; the run removes stale
 #     locks before it opens the repository.
@@ -191,5 +197,33 @@ drill empty '{"dolt_heads":"corpus=h1 platform=h1","dolt_rows":""}' 41
 check "the drill fails a marker manifest with no Store A count" "$([ "$RC" = 1 ]; echo $?)"
 drill premarker '{"dolt_heads":"corpus=h1 platform=h1"}' 41
 check "a manifest from before the marker still passes on the head" "$([ "$RC" = 0 ] && printf '%s' "$OUT" | grep -q 'before the marker'; echo $?)"
+
+# 13: a recorded count the drill cannot trust fails, naming the manifest.
+drill negative '{"dolt_heads":"corpus=h1 platform=h1","dolt_rows":"platform=-1"}' 41
+check "the drill fails a negative recorded count" "$([ "$RC" = 1 ] && printf '%s' "$OUT" | grep -q 'recorded receipt count .* is not'; echo $?)"
+drill nonnumeric '{"dolt_heads":"corpus=h1 platform=h1","dolt_rows":"platform=4x1"}' 41
+check "the drill fails a non-numeric recorded count, naming the manifest" "$([ "$RC" = 1 ] && printf '%s' "$OUT" | grep -q 'recorded receipt count .* is not'; echo $?)"
+drill oversized '{"dolt_heads":"corpus=h1 platform=h1","dolt_rows":"platform=1234567890123456"}' 41
+check "the drill fails a recorded count of more than 15 digits" "$([ "$RC" = 1 ] && printf '%s' "$OUT" | grep -q 'recorded receipt count .* is not'; echo $?)"
+drill duplicate '{"dolt_heads":"corpus=h1 platform=h1","dolt_rows":"platform=41 platform=41"}' 41
+check "the drill fails a manifest that records the count twice" "$([ "$RC" = 1 ] && printf '%s' "$OUT" | grep -q 'more than once'; echo $?)"
+drill zero '{"dolt_heads":"corpus=h1 platform=h1","dolt_rows":"platform=0"}' 0
+check "a recorded count of 0 against an empty restore passes" "$([ "$RC" = 0 ]; echo $?)"
+
+# 14: the drill refuses a scratch directory that is / or relative, before
+# creating anything (install is a stub that records and fails, so a drill
+# that does not refuse stops there and never touches /).
+drill_dir() { # name, OFFHOST_DRILL_DIR
+  R="$WORK/dir-$1"; mkdir -p "$R/bin" "$R/sec" "$R/cwd"; : > "$R/calls"
+  printf '#!/bin/sh\necho "install $*" >> "%s"\nexit 1\n' "$R/calls" > "$R/bin/install"
+  for t in ssh restic dolt; do printf '#!/bin/sh\necho %s >> "%s"\nexit 0\n' "$t" "$R/calls" > "$R/bin/$t"; done
+  chmod +x "$R/bin/"*
+  OUT="$(cd "$R/cwd" && PATH="$R/bin:$PATH" OFFHOST_SECRETS_DIR="$R/sec" OFFHOST_DRILL_DIR="$2" \
+    bash "$HERE/off-host-restore-drill.sh" s1 snap 2>&1)"; RC=$?
+}
+for d in / // /. /tmp/.. relative ./x; do
+  drill_dir "$(printf '%s' "$d" | tr '/.' 'sd')" "$d"
+  check "the drill refuses OFFHOST_DRILL_DIR=$d before creating anything" "$([ "$RC" != 0 ] && [ ! -s "$R/calls" ] && printf '%s' "$OUT" | grep -q OFFHOST_DRILL_DIR; echo $?)"
+done
 
 [ "$fails" = 0 ] && echo "all dolt snapshot checks passed" || { echo "$fails failed"; exit 1; }
