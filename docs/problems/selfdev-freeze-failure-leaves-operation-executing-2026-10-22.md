@@ -61,3 +61,63 @@ needs a markerless restart that nothing schedules.
    not busy.
 3. Detector: an active self-development operation with no transition for
    more than N minutes appears on the obligations surface as stalled.
+
+## Cause, read in code and reproduced by test (FP4 follow-up, 2026-10-22)
+
+The operation belongs to its engineering assignment (C1e D2, keyed
+`EngineeringFreezeIdempotencyKey(assignment)`). A freeze refusal only
+stamps `last_intent_error` and leaves the operation executing, on
+purpose: while the assignment lives, the desk may fix its receipts and
+freeze again (`TestFreezeRefusalStampsOperationIntentError` pins
+"intent refusal must not move state"). So the refusal itself is not
+the moment the operation becomes dead.
+
+The operation becomes dead when its assignment ends. Every
+cancellation path closes it (`failBoundSelfdevOperation` from
+`persistSystemEngineeringCancellation` and the management cancel; the
+run-death settle goes through the same cancel). The **report** path
+does not: `commitAssignedEngineeringReport` turns the assignment
+`completed` or `failed` and never touches the operation. An assignment
+whose freeze was refused and which then reported (completed or
+failed) leaves its operation executing with nothing able to advance
+it. `TestAssignmentEndClosesItsUnfrozenOperation` reproduces this for
+both results before the fix.
+
+Hypothesis, not yet confirmed from the ledger: selfdev-20d9baa5… is
+this case (its assignment reported after the freeze refusal at
+10:23:39). FP0 can confirm from the assignment row for that operation's
+freeze key (disposition and report id); a still-open assignment with a
+live run would be a different cause.
+
+## Repair shape (deviation from item 2 above, stated)
+
+Item 2 asked to close the operation in the transaction that records
+the error. That would kill the in-assignment retry the design keeps.
+Instead the operation shares its assignment's fate at the report:
+
+- assignment ends `completed` with the operation `requested` or
+  `executing` -> operation `failed`, terminal error "assignment
+  completed before its candidate froze; last refusal: <the stamp>";
+- assignment ends `failed` -> the same, and a `frozen` or `verified`
+  candidate also closes (management verifies only a completed
+  assignment's candidate);
+- a completed assignment's frozen candidate stays for Verify.
+
+The close is an ordinary `Transition` (on the tape like every other)
+and runs on report replays too, so a crash between the report and the
+close converges. A re-freeze of the same assignment finds the failed
+operation and is refused; a new assignment opens its own. Crash-boot
+close is unchanged. Item 3 lands as a read-only `selfdev` section on
+`GET /api/runtime/obligations`: open operations, the busy count
+`/health` reports, and `stalled` for any open operation idle longer
+than 30 minutes, with its last refusal.
+
+## Now (FP4 follow-up lane, lane/fp4-freeze-failure-closes)
+
+- state: code and tests on the lane branch; FP0 lands and proves.
+- deployed proof (FP0, TEST computer only): see the lane report.
+- residual: the stamp write (`RecordIntentError`) is direct SQL, off
+  the tape; the terminal error now carries the stamp onto the tape at
+  the close. A stall that is not an ended assignment (an open
+  assignment whose run is alive but idle) is only detected, not
+  closed.
