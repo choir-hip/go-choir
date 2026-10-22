@@ -138,6 +138,18 @@ than 30 minutes, with its last refusal.
   (`TestAssignmentEndCloseIsBounded` hung before). The "never closes a
   decided operation" invariant is scoped to the assignment-end close:
   cancellation closes `awaiting_approval` on purpose.
+- bunch 24 follow-up (DeepSeek, Devin), on lane/fp4-freeze-followup
+  after 5f8fe18d7: the cancellation close carries the same 15 s
+  deadline as the assignment-end close, at its one seam
+  (`failSelfdevOperation`, through `selfdevCloseContext`), so a wedged
+  tape append no longer holds the Store's write mutex, or
+  `engineeringAssignmentOpenMu` on the reconcile paths, forever
+  (`TestCancellationCloseIsBounded` hung before). A failed read in
+  `failBoundSelfdevOperation` is logged. Both bounded-close tests
+  assert a timed-out close leaves the operation whole in its prior
+  state. The slot replay now has its test (below). The two-Store tape
+  races run 8 iterations instead of 30: under `-race` each iteration
+  hit the conflict 28 to 30 times in 30.
 - deployed proof (FP0, TEST computer only): see the lane report.
 - residual: the stamp write (`RecordIntentError`) is direct SQL, off
   the tape; the terminal error now carries the stamp onto the tape at
@@ -151,12 +163,13 @@ than 30 minutes, with its last refusal.
   swaps `rt.selfdevOperations` for a new Store
   (`internal/agentcore/rematerialize.go:268`) while the old one may
   still be writing, so two writers without a shared mutex can race in
-  one process. Still open: the same-digest slot replay return
+  one process. Closed in bunch 24: the same-digest slot replay return
   (`recordAssignedEngineeringReportOnce`, the `SlotTerminalReport`
-  match) has no test. It matches only a stored terminal report with
-  the same proposition under another report id, a row recorded before
-  report ids were derived from the proposition; the store now refuses
-  a mismatched id ("report_id mismatch"), so no public API builds that
-  row, and a test would have to forge object-graph rows. The
-  entry-point close covers every successful return of that function,
-  this one included.
+  match) now has a test, `TestSlotReplayClosesTheOperation`. The
+  bunch 19 note here said no public API could build its row; that was
+  wrong. The store's report_id check runs only when the request carries
+  a proposition digest (`internal/store/engineering_assignments.go`,
+  `RecordEngineeringAssignmentReport`), and the store keeps the
+  caller's report id, so a report recorded with an empty digest and
+  another id builds it. The test pins existing behaviour: it passes
+  with the entry-point close and fails without it.
