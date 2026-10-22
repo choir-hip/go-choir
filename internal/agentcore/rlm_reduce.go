@@ -820,7 +820,10 @@ func (r *rlmCallReduction) commit(ctx context.Context, intents []yaegikernel.Sta
 		return r.recordFate(ctx, cellFateSuccess, "tray recovered")
 	}
 	if err := r.commitTray(ctx, intents, highWater); err != nil {
-		return err
+		// A freeze that committed before the failing intent is named, so
+		// the completion guard does not keep a stale refusal (review round
+		// 4b; moved here in 4c so every caller of commit carries it).
+		return withCommittedFreeze(err, r.freezeResult)
 	}
 	return r.recordFate(ctx, cellFateSuccess, "tray committed")
 }
@@ -1762,12 +1765,18 @@ func (r *rlmCallReduction) commitCompleteIntent(ctx context.Context, in yaegiker
 	// frozen candidate (C1e step 4).
 	// The live saga holds the assignment, so the fate wake's resume of the
 	// same staged proposal defers instead of racing it.
-	saga := rt.assignmentSagaMutex(metadataStringValue(r.rec.Metadata, "assignment_id"), uint64(metadataIntValue(r.rec.Metadata, "assignment_attempt")))
-	saga.Lock()
-	_, err = rt.recordAssignedEngineeringReport(ctx, r.rec, intentIdentity, report)
-	saga.Unlock()
+	assignmentID, attempt := metadataStringValue(r.rec.Metadata, "assignment_id"), uint64(metadataIntValue(r.rec.Metadata, "assignment_attempt"))
+	committed, err := func() (types.EngineeringAssignmentCommandResult, error) {
+		saga := rt.assignmentSagaMutex(assignmentID, attempt)
+		saga.Lock()
+		defer saga.Unlock() // a recovered panic must not leave it held
+		return rt.recordAssignedEngineeringReport(ctx, r.rec, intentIdentity, report)
+	}()
 	if err != nil {
 		return false, err
+	}
+	if committed.Assignment.Disposition.Terminal() {
+		rt.releaseAssignmentSaga(assignmentID, attempt)
 	}
 	return result != types.EngineeringResultPartial, nil
 }

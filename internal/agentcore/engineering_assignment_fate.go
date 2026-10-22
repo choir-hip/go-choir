@@ -792,7 +792,13 @@ func (rt *Runtime) rearmBoundEngineeringDeadlinesAtPlannedBoot(ctx context.Conte
 	}
 }
 
-func (rt *Runtime) recordAssignedEngineeringReport(ctx context.Context, rec *types.RunRecord, toolCallID string, report types.EngineeringAssignmentReport) (types.EngineeringAssignmentCommandResult, error) {
+func (rt *Runtime) recordAssignedEngineeringReport(ctx context.Context, rec *types.RunRecord, toolCallID string, report types.EngineeringAssignmentReport) (result types.EngineeringAssignmentCommandResult, err error) {
+	defer func() {
+		// Every failure exit leaves a re-drive while the fate is still owed.
+		if err != nil {
+			rt.armFateRedriveAfterFailure(ctx, rec)
+		}
+	}()
 	var lastErr error
 	for attempt := 0; attempt < 4; attempt++ {
 		result, err := rt.recordAssignedEngineeringReportOnce(ctx, rec, toolCallID, report)
@@ -1221,15 +1227,33 @@ func (rt *Runtime) armAssignedEngineeringFateWatchdog(assignment types.Engineeri
 	// The durable not_before wake is the continuation authority under kernel
 	// mode; the dispatcher fires HandleAssignedEngineeringFateDeadline at the
 	// deadline. No process-local timer remains.
-	rt.scheduleContinuation(context.Background(), ownerID, computerID, assignment.Binding.ParentAgentID,
-		assignedEngineeringFateDeadlineUpdateKind, content, assignment.Binding.TrajectoryID, "", deadline)
+	// The redrive hook: the G9 wake minted at the pending-fate commit has
+	// this same content, so a plain schedule dedups into it once it was
+	// consumed. The redrive hook mints a new generation when every wake of
+	// the family is processed, and nothing while one is still pending
+	// (review round 4c).
+	rt.deliveryHooksMu.RLock()
+	schedule := rt.scheduleActorRedrive
+	rt.deliveryHooksMu.RUnlock()
+	if schedule == nil || !rt.kernelMode {
+		rt.scheduleContinuation(context.Background(), ownerID, computerID, assignment.Binding.ParentAgentID,
+			assignedEngineeringFateDeadlineUpdateKind, content, assignment.Binding.TrajectoryID, "", deadline)
+		return
+	}
+	if err := schedule(context.Background(), ownerID, computerID, assignment.Binding.ParentAgentID,
+		assignedEngineeringFateDeadlineUpdateKind, content, assignment.Binding.TrajectoryID, "", deadline); err != nil {
+		log.Printf("runtime: arm assignment %s fate re-drive: %v", assignmentID, err)
+	}
 }
 
-// resumeStrandedFateAssignmentIfPending re-reads the assignment and finishes
-// the stranded terminal saga when the strand predicate still holds.
-// errAssignmentSagaHeld reports that the assignment's live terminal saga
-// holds it; the fate-wake re-drive defers to that saga.
-var errAssignmentSagaHeld = errors.New("the assignment's live terminal saga holds it")
+// ErrAssignmentSagaHeld reports that the assignment's live terminal saga
+// holds it. The fate wake that meets it must not be consumed: actorruntime
+// maps it to a dispatcher deferral, which re-delivers the same wake with
+// backoff (review round 4c: returning nil consumed it, and nothing
+// re-drove a saga that then failed).
+var ErrAssignmentSagaHeld = errors.New("the assignment's live terminal saga holds it")
+
+var errAssignmentSagaHeld = ErrAssignmentSagaHeld
 
 // assignmentSagaMutex serializes the drivers of one assignment's terminal
 // report in this process: the worker's Complete and the fate wake's resume
@@ -1237,10 +1261,56 @@ var errAssignmentSagaHeld = errors.New("the assignment's live terminal saga hold
 // host process (capsule cells reduce there, and the fate wake is handled
 // there). The worker waits for it; the resume only tries it.
 func (rt *Runtime) assignmentSagaMutex(assignmentID string, attempt uint64) *sync.Mutex {
-	mu, _ := rt.assignmentSagas.LoadOrStore(assignmentID+"\x00"+strconv.FormatUint(attempt, 10), new(sync.Mutex))
+	mu, _ := rt.assignmentSagas.LoadOrStore(assignmentSagaKey(assignmentID, attempt), new(sync.Mutex))
 	return mu.(*sync.Mutex)
 }
 
+func assignmentSagaKey(assignmentID string, attempt uint64) string {
+	return assignmentID + "\x00" + strconv.FormatUint(attempt, 10)
+}
+
+// releaseAssignmentSaga drops the saga entry of an assignment that no longer
+// owes a terminal report, so the map does not grow for the process lifetime
+// (review round 4c). It drops it only when nobody holds it. A driver that
+// already loaded the old mutex can still lock it while a newcomer makes a
+// fresh one; both then meet a settled assignment, whose report path replays.
+func (rt *Runtime) releaseAssignmentSaga(assignmentID string, attempt uint64) {
+	key := assignmentSagaKey(assignmentID, attempt)
+	value, ok := rt.assignmentSagas.Load(key)
+	if !ok {
+		return
+	}
+	mu := value.(*sync.Mutex)
+	if !mu.TryLock() {
+		return
+	}
+	rt.assignmentSagas.Delete(key)
+	mu.Unlock()
+}
+
+// armFateRedriveAfterFailure leaves a re-drive behind a failed terminal
+// report saga whose assignment still owes its fate. Several failure exits of
+// the saga armed nothing (the frozen capsule's capability, its digest, the
+// receipt binding, the candidate export, the revoke path), and the one arm
+// that existed deduped into the consumed G9 wake (review round 4c).
+func (rt *Runtime) armFateRedriveAfterFailure(ctx context.Context, rec *types.RunRecord) {
+	if rt == nil || rt.store == nil || rec == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), selfdevCloseTimeout)
+	defer cancel()
+	assignmentID := metadataStringValue(rec.Metadata, "assignment_id")
+	attempt := uint64(metadataIntValue(rec.Metadata, "assignment_attempt"))
+	current, err := rt.store.GetEngineeringAssignment(ctx, rec.OwnerID, rec.ComputerID, assignmentID, attempt)
+	if err != nil {
+		log.Printf("runtime: assignment %s: read after a failed terminal report, to arm its re-drive: %v", assignmentID, err)
+		return
+	}
+	rt.armAssignedEngineeringFateWatchdog(current)
+}
+
+// resumeStrandedFateAssignmentIfPending re-reads the assignment and finishes
+// the stranded terminal saga when the strand predicate still holds.
 func (rt *Runtime) resumeStrandedFateAssignmentIfPending(ctx context.Context, ownerID, computerID, assignmentID string, attempt uint64) error {
 	assignment, err := rt.store.GetEngineeringAssignment(ctx, ownerID, computerID, assignmentID, attempt)
 	if err != nil {
@@ -1250,17 +1320,18 @@ func (rt *Runtime) resumeStrandedFateAssignmentIfPending(ctx context.Context, ow
 		return err
 	}
 	if !assignedEngineeringFatePending(assignment) {
+		rt.releaseAssignmentSaga(assignmentID, attempt)
 		return nil
 	}
 	if resumeErr := rt.resumeStrandedFrozenAssignmentCommit(ctx, assignment); resumeErr != nil {
 		if errors.Is(resumeErr, errAssignmentSagaHeld) {
-			// The live saga either commits the report or, on failure, arms
-			// the fate watchdog, which re-drives once it is free.
-			log.Printf("runtime: assignment %s fate re-drive deferred: %v", assignmentID, resumeErr)
-			return nil
+			// Not consumed: the dispatcher re-delivers this wake, which then
+			// finds the report committed (a no-op) or the saga free to drive.
+			log.Printf("runtime: assignment %s fate re-drive waits for the live saga: %v", assignmentID, resumeErr)
 		}
 		return resumeErr
 	}
+	rt.releaseAssignmentSaga(assignmentID, attempt)
 	log.Printf("runtime: assignment %s fate watchdog re-drove stranded %s proposal", assignmentID, assignment.CapsuleDisposition)
 	return nil
 }

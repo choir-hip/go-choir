@@ -53,6 +53,9 @@ type actorHandler struct {
 	applyHoldUntil     time.Time
 	applyMaterializing func(context.Context) bool
 	now                func() time.Time
+	// fateDeadline handles an assigned_engineering_fate_deadline wake; nil
+	// is the runtime's handler (a test seam).
+	fateDeadline func(ctx context.Context, ownerID, computerID, agentID, content string) error
 }
 
 // applyHoldWindow bounds how long work waits for an apply's checkpoint. It
@@ -293,7 +296,16 @@ func (h *actorHandler) handleAssignedEngineeringFateDeadline(ctx context.Context
 	if err != nil {
 		return nil, fmt.Errorf("actorruntime: resolve assigned Engineering fate deadline scope: %w", err)
 	}
-	if err := h.rt.HandleAssignedEngineeringFateDeadline(ctx, ownerID, computerID, agentID, u.Content); err != nil {
+	fateDeadline := h.fateDeadline
+	if fateDeadline == nil {
+		fateDeadline = h.rt.HandleAssignedEngineeringFateDeadline
+	}
+	if err := fateDeadline(ctx, ownerID, computerID, agentID, u.Content); err != nil {
+		if errors.Is(err, agentcore.ErrAssignmentSagaHeld) {
+			// The live saga holds the assignment: re-deliver this wake with
+			// backoff, never consume it (review round 4c).
+			return nil, fmt.Errorf("%w: %v", actor.ErrDeferUnprocessed, err)
+		}
 		return nil, fmt.Errorf("actorruntime: assigned Engineering fate deadline: %w", err)
 	}
 	return memory, nil
