@@ -83,13 +83,16 @@ boundaries:
   protected_surfaces: []
 
 now:
-  status: working
-  slice: station file, library, then one script per station in the lane brief's order
+  status: checkpoint_complete
+  slice: >-
+    library, eight scripts (FP1, FP2, FP3 group 1, FP4, FP7, FP8, NET-01,
+    NET-02) and a stub self-test (101 cases, all pass); waiting for FP0's first
+    read-only run on staging
   source_ref: d1c60ad87
   deploy_identity: none (nothing here deploys)
   candidate:
     id: fp0-proof-scripts
-    state: building
+    state: built
     ref: lane/fp0-proof-scripts
     base: d1c60ad87
     digest: none
@@ -106,8 +109,10 @@ now:
     believed_state: the written steps are specific enough to script; the steps that need a shell inside a guest or a model turn stay MANUAL lines with the exact instruction
     main_uncertainty: whether staging's endpoints answer as the code on main says (paths, field names)
     next_observation: FP0's first read-only run of fp3-group1-wedge.sh and fp1-store.sh
-  blocker_or_risk: none known
-  next_action: write scripts/proofs/lib.sh
+  blocker_or_risk: >-
+    Unverified against staging (this lane cannot reach it); the assumptions are
+    listed under "Assumptions FP0 should check on the first run" below.
+  next_action: FP0 runs `scripts/proofs/fp3-group1-wedge.sh --computer <test> --step 0` and `fp1-store.sh --step 1 --label before`, reports any path or field that differs
 
 receipts: []
 ---
@@ -128,3 +133,48 @@ Conventions every script follows:
   prints a `WILL DO` block of exactly what it will do first.
 - Evidence lines: `<UTC timestamp> <script> <LEVEL> step=N <text>`, LEVEL one
   of INFO, PASS, FAIL, MANUAL, WILL. The exit status is 1 if any FAIL.
+
+## The scripts
+
+| Script | Station source | Mutating steps |
+|---|---|---|
+| `fp3-group1-wedge.sh` | FP3 group 1, "deployed proof steps" | 2, 4, 6 (wedge by iptables REJECT; step 6 also POSTs deploy-refresh) |
+| `fp1-store.sh` | FP1 problem record, "Deployed proof" and the A1 pre-check | 6 (operator refresh of a test computer) |
+| `fp2-desk-boundary.sh` | FP2 "Staging probe steps" | 2 (isolation self-test via the station's probe), 5 (Texture acceptance spec) |
+| `fp4-selfdev-admission.sh` | FP4 drill | 3 (planned refresh), 6 (crash boot of a throwaway) |
+| `fp7-gateway.sh` | FP7 "Deployed proofs for FP0" | none (guest acts are MANUAL lines) |
+| `fp8-image-jailer.sh` | FP8 "FP0 proof steps" | 2 (the hotplug probe mints a test computer) |
+| `net01-host-fetch.sh` | NET-01 "FP0 proof steps" | 1, 4 (the station's api mode changes the test computer) |
+| `net02-mirrors.sh` | NET-02 "Landing and proof" | none (the probe runs inside a capsule; judge its saved stdout) |
+
+Every `ro-after` step is read-only but only meaningful after an earlier
+mutating or manual act; it runs only with `--step N`. `--list` prints the
+kind of each step. Nix "turn on" edits, deploys, cold boots and any act that
+needs a shell in a guest or a model turn are `MANUAL` evidence lines with the
+exact instruction; the script then reads the counters or journal lines the
+act should have moved.
+
+## Assumptions FP0 should check on the first run
+
+- vmctl's `/health` on 127.0.0.1:8083 reports a commit under `.build.commit`
+  (FP3 step 1); the FP3 station file names `/internal/vmctl/ownerships`, the
+  code serves `GET /internal/vmctl/list` and the scripts use that.
+- Journal units: `go-choir-vmctl`, `go-choir-gateway` (the NET-01 tool's own
+  default), `go-choir-front-importance`, `go-choir-pkgmirror`; override with
+  `PROOF_UNIT_VMCTL` and `PROOF_UNIT_GATEWAY`.
+- The guest's `/api/runtime/observability` answers on its `computer_url` from
+  Node B with `X-Internal-Caller`, `X-Authenticated-User` and
+  `X-Authenticated-Computer`, as vmctl's own recovery verifier calls it, and
+  carries `engine_mutex` and `recent_log`.
+- The log phrases each station file quotes (`phase=... status=complete
+  duration=`, `derived keys ... validated N rows in`, `waits behind`, `planned
+  boot: queued engineering request ... kept and resumed`) are verbatim; a
+  phrase that is absent shows as a FAIL to read against the real log.
+- The station tools `host-fetch-proof.py`, `capsule-mirror-probe.sh` and
+  `desk_cell_confinement_probe.py` are on the lane branches, not main: pass
+  `--tool` / `--probe` / `--probe-output` until they land.
+- `ssh node-b` logs in as a user that can read the internal-service header
+  file, run iptables and systemd-run, and read the journal (the existing probe
+  scripts assume the same).
+- Not scripted, on purpose: anything that needs a shell inside a guest (FP7
+  steps 5, 6 and 8's guest half; RES-06's guest reads) and model turns.
