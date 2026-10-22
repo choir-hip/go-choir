@@ -350,10 +350,18 @@ func copyImmutableSourceTree(ctx context.Context, source, target string) (string
 }
 
 func copyImmutableCommitTree(ctx context.Context, source, commit, target string) (string, error) {
+	return copyImmutableCommitTreeTimed(ctx, source, commit, target, nil)
+}
+
+// copyImmutableCommitTreeTimed is copyImmutableCommitTree with a phase line
+// per pass on timer (nil logs nothing). Each blob is one git process, and the
+// tree is read twice: once to copy, once to recompute the commit digest.
+func copyImmutableCommitTreeTimed(ctx context.Context, source, commit, target string, timer *spawnPhaseTimer) (string, error) {
 	tracked, err := immutableCommitInventory(ctx, source, commit)
 	if err != nil {
 		return "", err
 	}
+	timer.phase("source_inventory", fmt.Sprintf("files=%d", len(tracked)))
 	if err := os.MkdirAll(target, 0o755); err != nil {
 		return "", err
 	}
@@ -393,17 +401,21 @@ func copyImmutableCommitTree(ctx context.Context, source, commit, target string)
 			return "", errors.Join(copyErr, closeErr)
 		}
 	}
+	timer.phase("source_blobs", gitProcsDetail(len(tracked))...)
 	digest, err := digestCanonicalSubjectTree(ctx, target)
 	if err != nil {
 		return "", err
 	}
+	timer.phase("source_digest_copy")
 	expected, err := canonicalImmutableCommitDigest(ctx, source, commit)
 	if err != nil || expected != digest {
 		return "", fmt.Errorf("source snapshot canonical digest mismatch")
 	}
+	timer.phase("source_digest_commit", gitProcsDetail(len(tracked))...)
 	if err := makeSubjectTreeReadOnly(target); err != nil {
 		return "", err
 	}
+	timer.phase("source_read_only")
 	return digest, nil
 }
 
