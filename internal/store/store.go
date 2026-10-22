@@ -249,9 +249,8 @@ func (s *Store) commitDoltCheckpointLocking(ctx context.Context, message string,
 
 	if boundedLock {
 		if err := s.lockDoltCommitBy(ctx); err != nil {
-			err = fmt.Errorf("runtime store: dolt checkpoint: commit lock: %w", err)
-			s.checkpoint.recordFailure(err)
-			return err
+			s.checkpoint.recordCutAtClose(site)
+			return fmt.Errorf("runtime store: dolt checkpoint: %w: %v", errCommitLockTimeout, err)
 		}
 	} else {
 		s.doltCommitMu.Lock()
@@ -272,12 +271,15 @@ func (s *Store) commitDoltCheckpointLocking(ctx context.Context, message string,
 	started := time.Now()
 	// Pin the store's one connection for the commit, and mark the commit
 	// in flight only while it holds it, so a finalize waiting at BeginTx
-	// is counted exactly when it waits on this commit
-	// (noteFinalizeConnWait).
+	// is counted exactly for the connection hold (noteFinalizeConnWait;
+	// the instants between Conn returning and the mark, and between the
+	// unmark and the release, are not). A pinned sql.Conn does not retry
+	// on driver.ErrBadConn as DB.ExecContext does: such a commit fails and
+	// the debounce window retries it.
 	conn, err := s.textureHandle().Conn(ctx)
 	if err != nil {
 		err = fmt.Errorf("runtime store: dolt checkpoint: %w", err)
-		s.checkpoint.recordFailure(err)
+		s.recordCheckpointError(ctx, site, err)
 		return err
 	}
 	s.checkpoint.commitsStarted.Add(1)
@@ -292,12 +294,22 @@ func (s *Store) commitDoltCheckpointLocking(ctx context.Context, message string,
 	noop := err != nil && strings.Contains(err.Error(), "nothing to commit")
 	if err != nil && !noop {
 		err = fmt.Errorf("runtime store: dolt checkpoint: %w", err)
-		s.checkpoint.recordFailure(err)
+		s.recordCheckpointError(ctx, site, err)
 		return err
 	}
 	s.cleanGen = gen
 	s.checkpoint.recordCommit(site, time.Since(started), events, ops, noop)
 	return nil
+}
+
+// recordCheckpointError counts a commit error: a background or closing
+// commit cut by Close (its context done after the cadence closed) counts
+// apart, so a planned restart leaves failures at 0.
+func (s *Store) recordCheckpointError(ctx context.Context, site checkpointSite, err error) {
+	if ctx.Err() != nil && s.checkpoint.isClosed() && s.checkpoint.recordCutAtClose(site) {
+		return
+	}
+	s.checkpoint.recordFailure(err)
 }
 
 // lockDoltCommitBy takes doltCommitMu, giving up when ctx is done. It
@@ -1033,6 +1045,9 @@ func (s *Store) Reopen(path string) error {
 	if s == nil {
 		return fmt.Errorf("runtime store: reopen requires a store")
 	}
+	if err := s.checkpoint.leftOpen(); err != nil {
+		return fmt.Errorf("runtime store: reopen: %w", err)
+	}
 	s.CancelDerivedColumnMigration()
 	live, err := Open(path)
 	if err != nil {
@@ -1077,9 +1092,14 @@ func (s *Store) Close() error {
 	// fail on the closed pool. Cancel it before the closing checkpoint so
 	// no new step starts after that final commit, and commit the
 	// checkpoint before the pools below close, since it writes through
-	// s.db.
+	// s.db. If a Dolt commit is still running at the close deadline, Close
+	// fails closed: closing the pools would tear the embedded engine down
+	// under it, so they stay open (process exit reclaims them) and Close
+	// returns ErrCheckpointCommitLive. Close again once it finishes.
 	s.CancelDerivedColumnMigration()
-	s.closeCheckpoint()
+	if err := s.closeCheckpoint(); err != nil {
+		return err
+	}
 	var err error
 	if closeErr := s.closeDepositUpcastLedger(); closeErr != nil {
 		err = closeErr

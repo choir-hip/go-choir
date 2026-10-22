@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"log"
 	"os"
 	"strconv"
@@ -44,10 +45,21 @@ const (
 	// one commit never carries an unbounded working set.
 	defaultCheckpointMaxOps uint64 = 10000
 	checkpointCommitTimeout        = 2 * time.Minute
-	// checkpointCloseTimeout caps the closing commit, which Close (planned
-	// restart, projection-base rebase) waits on.
+	// checkpointCloseTimeout caps how long Close (planned restart,
+	// projection-base rebase) waits for the background commit it cancels
+	// and for the closing commit; checkpointCloseGrace is the extra wait,
+	// after the deadline, for a commit that honors it to return.
 	checkpointCloseTimeout = 10 * time.Second
+	checkpointCloseGrace   = 250 * time.Millisecond
 )
+
+// ErrCheckpointCommitLive is Close's answer when a Dolt commit is still
+// running at the close deadline: the store is left open (pools, connector
+// and engine), because closing them would tear the engine down under the
+// commit. Reopen refuses until a later Close succeeds.
+var ErrCheckpointCommitLive = errors.New("runtime store: close left the store open: a Dolt commit is still running")
+
+var errCommitLockTimeout = errors.New("commit lock not taken by the close deadline")
 
 // CheckpointConfig is the checkpoint cadence's runtime configuration. Zero
 // Debounce and MaxOps take the defaults.
@@ -88,14 +100,22 @@ type CheckpointStats struct {
 	BackgroundNanos   uint64 `json:"background_ns"`
 	BackgroundMaxNs   uint64 `json:"background_max_ns"`
 	// OtherCommits are the synchronous commits outside finalize: history
-	// reads, discarded prepares, replay and Close.
+	// reads, discarded prepares, replay and Close. CancelledAtClose are
+	// background commits Close cancelled; ClosingCommitsSkipped are
+	// closing commits skipped or cut by the close deadline; ClosesLeftOpen
+	// are Closes that failed closed (ErrCheckpointCommitLive). None of
+	// them is a failure.
 	OtherCommits uint64 `json:"other_commits"`
 	// NoopCommits are commits Dolt answered "nothing to commit"; they are
 	// in no commit count above, but their time is in their site's ns.
-	NoopCommits uint64 `json:"noop_commits"`
+	NoopCommits           uint64 `json:"noop_commits"`
+	CancelledAtClose      uint64 `json:"cancelled_at_close"`
+	ClosingCommitsSkipped uint64 `json:"closing_commits_skipped"`
+	ClosesLeftOpen        uint64 `json:"closes_left_open"`
 	// FinalizeCommitWaits counts finalizes whose BeginTx wait overlapped a
 	// commit holding the store's one connection (the commit pins it, and
-	// is counted in flight only while it does): a writer waiting on a
+	// is counted in flight only while it does: exact for the connection
+	// hold, not for the instants around it): a writer waiting on a
 	// commit, inline or not. The ns are the whole BeginTx waits of those
 	// finalizes; writers queued behind them on eventMu are not added.
 	FinalizeCommitWaits     uint64 `json:"finalize_commit_waits"`
@@ -116,6 +136,8 @@ const (
 	checkpointSiteOther checkpointSite = iota
 	checkpointSiteInline
 	checkpointSiteBackground
+	// checkpointSiteClose is the closing commit; it counts as other.
+	checkpointSiteClose
 )
 
 // checkpointCadence holds the mode, the timer and the counters. mu is a
@@ -132,6 +154,11 @@ type checkpointCadence struct {
 	// (closeCheckpoint).
 	inFlight       bool
 	cancelInFlight context.CancelFunc
+	// inFlightDone is closed when the background commit in flight returns.
+	inFlightDone chan struct{}
+	// closeLive, set when Close failed closed, is closed when the commit
+	// it left running returns.
+	closeLive chan struct{}
 
 	// events and ops are finalized since boot; committedEvents and
 	// committedOps are their values when the last successful commit read
@@ -142,6 +169,7 @@ type checkpointCadence struct {
 	inlineCommits, inlineNanos, inlineMax             atomic.Uint64
 	backgroundCommits, backgroundNanos, backgroundMax atomic.Uint64
 	otherCommits, noopCommits, failures               atomic.Uint64
+	cancelledAtClose, closingSkipped, closesLeftOpen  atomic.Uint64
 	// commitsStarted and commitsEnded bracket every DOLT_COMMIT while it
 	// holds the pinned connection, so a finalize can tell whether its
 	// BeginTx waited on one.
@@ -233,14 +261,18 @@ func (s *Store) fireCheckpoint() {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), checkpointCommitTimeout)
 	defer cancel()
+	done := make(chan struct{})
 	c.inFlight = true
 	c.cancelInFlight = cancel
+	c.inFlightDone = done
 	c.mu.Unlock()
 	err := s.commitDoltCheckpointAt(ctx, "guest snapshot (debounced)", checkpointSiteBackground)
 	c.mu.Lock()
 	c.inFlight = false
 	c.cancelInFlight = nil
+	c.inFlightDone = nil
 	c.mu.Unlock()
+	close(done)
 	if err != nil {
 		log.Printf("runtime store: background checkpoint: %v", err)
 	}
@@ -265,14 +297,28 @@ func (s *Store) checkpointTimerArmed() bool {
 }
 
 // closeCheckpoint stops the timer and, in debounced mode, commits what is
-// pending once. Count mode keeps its old Close (no commit). A background
-// commit in flight is cancelled, and the closing commit waits for the
-// commit lock and runs only until the close deadline; past it the closing
-// commit is skipped and counted as a failure. The deadline is a context:
-// a DOLT_COMMIT that does not check it mid-write runs to its end.
-func (s *Store) closeCheckpoint() {
+// pending once. Count mode keeps its old Close (no commit). It cancels a
+// background commit in flight and waits for it, then takes the commit lock
+// and runs the closing commit, all within the close deadline (plus a short
+// grace for a commit that honors it). If a commit is still running then,
+// it returns ErrCheckpointCommitLive and the caller must not close the
+// pools: the deadline is a context, and a DOLT_COMMIT that does not check
+// it mid-write runs on. A later call returns nil once that commit is done
+// (the closing commit is not retried).
+func (s *Store) closeCheckpoint() error {
 	c := &s.checkpoint
 	c.mu.Lock()
+	if live := c.closeLive; live != nil {
+		select {
+		case <-live:
+			c.closeLive = nil
+			c.mu.Unlock()
+			return nil
+		default:
+			c.mu.Unlock()
+			return ErrCheckpointCommitLive
+		}
+	}
 	debounced := c.debounced && !c.closed
 	c.closed = true
 	if c.timer != nil {
@@ -282,19 +328,97 @@ func (s *Store) closeCheckpoint() {
 	if c.cancelInFlight != nil {
 		c.cancelInFlight()
 	}
-	c.mu.Unlock()
-	if !debounced {
-		return
-	}
+	committer := c.inFlightDone
 	limit := checkpointCloseTimeout
 	if c.closeTimeout > 0 {
 		limit = c.closeTimeout
 	}
+	c.mu.Unlock()
+	if !debounced {
+		return nil
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), limit)
 	defer cancel()
-	if err := s.commitDoltCheckpointLocking(ctx, "guest snapshot at close", checkpointSiteOther, true); err != nil {
+	if committer != nil && !waitClose(ctx, committer) {
+		c.closingSkipped.Add(1)
+		return c.leaveOpen(committer, "the cancelled background commit has not returned")
+	}
+	finished := make(chan struct{})
+	var err error
+	go func() {
+		defer close(finished)
+		err = s.commitDoltCheckpointLocking(ctx, "guest snapshot at close", checkpointSiteClose, true)
+	}()
+	if !waitClose(ctx, finished) {
+		c.closingSkipped.Add(1)
+		return c.leaveOpen(finished, "the closing commit has not returned")
+	}
+	if errors.Is(err, errCommitLockTimeout) {
+		// Another commit holds the lock, so it is running on the engine.
+		free := make(chan struct{})
+		go func() {
+			s.doltCommitMu.Lock()
+			s.doltCommitMu.Unlock()
+			close(free)
+		}()
+		return c.leaveOpen(free, "another commit holds the commit lock")
+	}
+	if err != nil {
 		log.Printf("runtime store: checkpoint at close: %v", err)
 	}
+	return nil
+}
+
+// waitClose waits for done until ctx is done, then a short grace.
+func waitClose(ctx context.Context, done <-chan struct{}) bool {
+	select {
+	case <-done:
+		return true
+	case <-ctx.Done():
+	}
+	grace := time.NewTimer(checkpointCloseGrace)
+	defer grace.Stop()
+	select {
+	case <-done:
+		return true
+	case <-grace.C:
+		return false
+	}
+}
+
+func (c *checkpointCadence) leaveOpen(live chan struct{}, why string) error {
+	c.mu.Lock()
+	c.closeLive = live
+	c.mu.Unlock()
+	c.closesLeftOpen.Add(1)
+	log.Printf("runtime store: close left the store open: %s", why)
+	return ErrCheckpointCommitLive
+}
+
+// leftOpen reports ErrCheckpointCommitLive while a Close that failed
+// closed has not been followed by one that succeeded.
+func (c *checkpointCadence) leftOpen() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closeLive != nil {
+		return ErrCheckpointCommitLive
+	}
+	return nil
+}
+
+// recordCutAtClose counts a background commit cancelled by Close, or a
+// closing commit cut or skipped by the close deadline. It reports false
+// for other sites, whose errors stay failures.
+func (c *checkpointCadence) recordCutAtClose(site checkpointSite) bool {
+	switch site {
+	case checkpointSiteBackground:
+		c.cancelledAtClose.Add(1)
+	case checkpointSiteClose:
+		c.closingSkipped.Add(1)
+	default:
+		return false
+	}
+	return true
 }
 
 // reopenCheckpoint undoes closeCheckpoint for a Store that Reopen brings
@@ -415,6 +539,9 @@ func (s *Store) CheckpointStats() CheckpointStats {
 	out.BackgroundMaxNs = c.backgroundMax.Load()
 	out.OtherCommits = c.otherCommits.Load()
 	out.NoopCommits = c.noopCommits.Load()
+	out.CancelledAtClose = c.cancelledAtClose.Load()
+	out.ClosingCommitsSkipped = c.closingSkipped.Load()
+	out.ClosesLeftOpen = c.closesLeftOpen.Load()
 	out.FinalizeCommitWaits = c.finalizeWaits.Load()
 	out.FinalizeCommitWaitNanos = c.finalizeWaitNanos.Load()
 	out.FinalizeCommitWaitMaxNs = c.finalizeWaitMaxNanos.Load()
