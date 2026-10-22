@@ -1508,8 +1508,12 @@ in
         # boots once (its snapshot is from the other VMM build). The 1.17
         # hotplug objection is gone: the hotplug region is the same in 1.16.x
         # (docs/problems/memory-hotplug-cannot-work-on-node-b-39-bit-cpu-
-        # 2026-10-22.md). Rollback: empty both lists and redeploy (the named
-        # computer cold boots on the pinned build with no discard).
+        # 2026-10-22.md). Rollback: delete all four lines and redeploy (the
+        # named computer cold boots on the pinned build with no discard).
+        # Never leave VM_DATA_DISCARD=1 with an empty VM_DATA_DISCARD_ONLY:
+        # once the pinned build is 1.17 or newer, an empty selector means
+        # every computer, every data drive gains discard, every launch-config
+        # hash changes, and the whole fleet's snapshots are refused.
         "VM_FIRECRACKER_NEXT_BIN=${firecrackerNext}/bin/firecracker"
         "VM_FIRECRACKER_NEXT_ONLY=computer-9648031f92e131adc1fb65ec455c5903"
         "VM_DATA_DISCARD=1"

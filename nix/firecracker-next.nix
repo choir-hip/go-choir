@@ -11,7 +11,7 @@
 #
 # 1.17.0 (2026-09-10) adds opt-in virtio-blk discard for writable Sync
 # drives (CHANGELOG 1.17.0, PR #6142). Check the latest 1.17.x patch release
-# before filling the hashes, and drop this file once nixpkgs packages >= 1.17.
+# before bumping, and drop this file once nixpkgs packages >= 1.17.
 { pkgs }:
 pkgs.firecracker.overrideAttrs (finalAttrs: old: {
   version = "1.17.0";
