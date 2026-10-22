@@ -494,3 +494,28 @@ Recorded before the fixes. Reviews: `~/runs/reviews/bunch75-{sonnet,deepseek,fla
 | R7 Store B conditional | stated | §4 |
 | R8 record vs code on the squash | corrected with R1 | §4 |
 | (found while fixing) the classifier sent the audit and backup scripts to the conservative guest-image path | fixed: host activation for the two scripts read into nix; drill and script tests deploy nothing | `deploy-impact-classify` (+ test `f45e4248e`) |
+
+## Review round 2 (bunch 90, DeepSeek), 2026-10-22
+
+Recorded before any fix.
+
+- **R9 (medium, confirmed): an unread receipt count passes the drill.**
+  `scripts/off-host-backup.sh` `record_rows` (lines 382 to 386 at
+  `3c6c42c92`) logs "receipt count unread" and records nothing when the
+  count query fails or returns a non-number, so the manifest's
+  `dolt_rows` has no `platform=` entry. `scripts/off-host-restore-drill.sh`
+  (`snap`, lines 132 to 134) reads a missing entry as a manifest from
+  before the marker, prints that freshness rests on the head, and passes.
+  With snapshots off the head is frozen, so a run that could not read the
+  count leaves the drill with no freshness check at all: R2's hole again,
+  silently. A manifest written before this lane has no `dolt_rows` field
+  at all; one written by this lane always has the field, so the two cases
+  can be told apart.
+- **R10 (low-medium, note): the audit's "newgen" wording and its shared
+  line.** `scripts/dolt-history-audit.sh` computes newgen as `noms` minus
+  `oldgen` and its header calls that "the working set's divergence from
+  HEAD". After a GC newgen holds what the working set needs that HEAD does
+  not (§1), but between GCs the figure also counts the journal (which has
+  its own line) and chunks no GC has collected yet, so it is an upper
+  bound on D, not D. The 8 GiB line is one value for every store the unit
+  audits (Store A and corpus-dolt).
