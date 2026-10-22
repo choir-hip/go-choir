@@ -390,3 +390,62 @@ nix comments e07fdf76d (green).
 - **DeepSeek F5, fixed in wording.** The station's section 6 now says
   observe applies to the model limit only; `in_flight`, the share and the
   body deadlines bind in every mode.
+
+## Review findings, bunch 116 (2026-10-22, candidate 982a70f3a)
+
+Sonnet 5.5 accepted the bunch 109 repair with one required fix; Gemini 3.8
+approved, naming two residuals already recorded (the share is per
+computer, the decode slots are not fair across callers). FP0 checked the
+findings below against the code; they are recorded here before any fix.
+
+- **F1 (Sonnet), medium, required: the decoded base64 is outside the
+  stated worst case.** `prepareImageSource` (`internal/provider/media.go`)
+  decodes an image's base64 into `raw`, up to `MaxImageInputBytes`
+  (20 MiB), before `decodeAndDownscale` takes a decode slot, so every call
+  queued for a slot holds its `raw` outside both the "4 x 620 MB" pixel
+  term and the 3 GiB body term: about 0.5 GiB with the scheduler on
+  (24 calls), about 0.75 GiB with it off (about 38 calls of 27 MB bodies
+  inside the 1 GiB `in_flight`). The worst case is then about
+  6.3-6.6 GiB, over `GOMEMLIMIT=6GiB` (the collector runs flat out) though
+  under `MemoryMax=8G`; the "about 5.8 GiB" in the nix comment, this record
+  and the station text is not the worst case. FP0 found the same term in
+  `SummarizeMedia`, which the inference handler calls for its log line
+  before the provider call: it decodes each base64 image whole to hash it,
+  one 20 MiB `raw` per call at a time, outside any slot.
+- **F2 (Sonnet; Gemini residual 2), medium: the decode-slot wait ignores
+  the call's context and is not fair across callers.** The wait
+  (`imageDecodeSlots <- struct{}{}`) runs while the call holds a scheduler
+  slot and its body bytes; a client that goes away or a call past its
+  deadline stays queued. One computer can keep 6 calls x 20 tiny-on-the-wire
+  50 Mpx 16-bit PNGs (a flat-colour PNG is a few KB) queued, about 120
+  decodes at 1-3 s each over 4 slots, so every other tenant's image calls
+  wait behind that FIFO for tens of seconds, on CPU the guest paid nothing
+  for.
+- **F3 (Sonnet), low: a caller over its own share is counted as global
+  exhaustion.** The 429 at the body deadline is counted and logged as
+  `refused.in_flight` (`limit=in_flight`) whether the budget was full or
+  the waiter was passed over because its own caller held its share; proof
+  step 10 and an operator cannot tell a noisy tenant from a full budget.
+- **F4 (Sonnet), low:** `grantLocked` does O(waiters) work under `b.mu` on
+  every acquire and release; bounded by the scheduler (24) when it is on,
+  only by connections for 60 s when it is off.
+- **F5 (Sonnet), low:** the share counts every route against one number,
+  so a computer holding about 256 MiB of model bodies sees its own small
+  search, jev and source bodies wait and answer 429. Self-inflicted and
+  bounded.
+- **F6 (Sonnet), info:** a client that disconnects during the `in_flight`
+  wait is not noticed until the deadline, because net/http starts no
+  background read before the body is consumed; pre-existing.
+- **F7 (FP0, found while checking F1), medium for the arithmetic: each
+  call's downscaled images live outside both bounds for the whole call.**
+  `prepareMediaRequest` returns a new request whose downscaled images are
+  fresh base64 strings (up to `MaxImageBytes` 5 MiB, 6.7 MiB as base64,
+  each), while the gateway's decoded request, counted in `in_flight`, keeps
+  the originals; the adapter's serialization of the request to the
+  upstream is another copy for the call's life. A downscaled PNG can be
+  several times its JPEG input, so a call of 20 compact large-dimension
+  JPEGs (about 27 MB on the wire) can hold up to about 133 MiB of
+  downscaled base64 plus its upstream body. With the scheduler on (24
+  calls, 6 per computer) that is up to about 3 GiB more, about 0.8 GiB per
+  computer; with it off it is bounded only by how many such calls fit in
+  `in_flight`. No figure in the current arithmetic counts it.
