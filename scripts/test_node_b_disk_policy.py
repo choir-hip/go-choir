@@ -90,7 +90,7 @@ class NixPolicy(unittest.TestCase):
         src = nix_src()
         pre = (HERE / "node-b-deploy-disk-preflight").read_text()
         for name, text in (("node-b.nix", src), ("preflight", pre)):
-            self.assertNotRegex(text, r"--delete-generations\s+\+\d", name)
+            self.assertIsNone(re.search(r"--delete-generations\s+\+\d", text), name + " still prunes generations itself")
         self.assertIn("../scripts/node-b-nix-retention", src)
         self.assertIn("node-b-nix-retention", pre)
         self.assertIn("nixRetention", block(src, "systemd.services.go-choir-nix-gc ="))

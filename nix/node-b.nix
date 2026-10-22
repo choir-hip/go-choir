@@ -243,9 +243,19 @@ let
     export VMCTL_CORPUSD_URL="http://127.0.0.1:8086"
     exec ${serviceExec "vmctl" goChoirPackages.vmctl} "$@"
   '';
+  # Store retention, the one place that decides which system generations and
+  # builder-release GC roots stay (scripts/node-b-nix-retention; tests:
+  # scripts/test-node-b-nix-retention.sh;
+  # docs/problems/node-b-nix-store-and-host-disk-policy-2026-10-22.md).
+  # Called by go-choir-nix-gc, the disk-gc sweep and the deploy preflight;
+  # each runs `nix store gc` after it. GO_CHOIR_NIX_RETENTION_MODE=observe
+  # keeps the newest 4 generations as before and logs what enforce (newest 3,
+  # stale builder-release roots unrooted) would do.
+  nixRetention = pkgs.writeShellScript "go-choir-nix-retention"
+    (builtins.readFile ../scripts/node-b-nix-retention);
   diskRetentionSweep = pkgs.writeShellScript "go-choir-disk-retention-sweep" ''
     set -euo pipefail
-    export PATH="${lib.makeBinPath [ pkgs.coreutils pkgs.curl pkgs.gnugrep pkgs.nix pkgs.systemd ]}:$PATH"
+    export PATH="${lib.makeBinPath [ pkgs.coreutils pkgs.curl pkgs.gawk pkgs.gnugrep pkgs.gnused pkgs.nix pkgs.systemd ]}:$PATH"
 
     emergency_min_free_kib="''${GO_CHOIR_DISK_GC_MIN_FREE_KIB:-125829120}"
     target_free_kib="''${GO_CHOIR_DISK_GC_TARGET_FREE_KIB:-188743680}"
@@ -259,7 +269,7 @@ let
     fi
     curl -fsS -X POST -H 'X-Internal-Caller: true' "''${internal_auth[@]}" http://127.0.0.1:8083/internal/vmctl/reclaim || true
     journalctl --vacuum-size=256M || true
-    nix-env -p /nix/var/nix/profiles/system --delete-generations +4 || true
+    ${nixRetention} || true
 
     avail_kib="$(df --output=avail -k / | tail -n 1 | tr -d ' ')"
     if [ -z "''${avail_kib}" ] || [ "''${avail_kib}" -lt "''${emergency_min_free_kib}" ]; then
@@ -1781,6 +1791,7 @@ in
         # routine Nix GC before storage pressure reaches recovery territory.
         "GO_CHOIR_DISK_GC_MIN_FREE_KIB=125829120"
         "GO_CHOIR_DISK_GC_TARGET_FREE_KIB=188743680"
+        "GO_CHOIR_NIX_RETENTION_MODE=observe"
       ];
     };
   };
@@ -1798,23 +1809,24 @@ in
   # Nix store retention between the daily sweeps. Every deploy adds a system
   # generation whose closure roots a new 3.26 GB guest image; at ~20 deploys a
   # day the daily sweep let 25 generations (~80 GB of images) pile up
-  # (docs/problems/artifact-store-grows-12gb-a-day-2026-10-14.md). Keep the
-  # newest 4 system generations (current, the deploy rollback target
-  # recorded in deploy-receipt-previous.json, and two spares) and collect
-  # unrooted paths every 4 hours. Builder release and prebuild out-links
-  # stay GC roots. Only Nix state is touched: no VM, journal or vmctl work.
-  # Rollback: remove this unit and timer (the daily sweep remains).
+  # (docs/problems/artifact-store-grows-12gb-a-day-2026-10-14.md). Which
+  # generations and builder-release roots stay is nixRetention's (above);
+  # this unit runs it and collects unrooted paths every 4 hours. Prebuild
+  # and deploy out-links stay GC roots. Only Nix state is touched: no VM,
+  # journal or vmctl work. Rollback: remove this unit and timer (the daily
+  # sweep remains).
   systemd.services.go-choir-nix-gc = {
     description = "go-choir Nix generation and store retention";
     serviceConfig = {
       Type = "oneshot";
       Nice = 19;
       IOSchedulingClass = "idle";
+      Environment = [ "GO_CHOIR_NIX_RETENTION_MODE=observe" ];
       ExecStart = pkgs.writeShellScript "go-choir-nix-gc" ''
         set -euo pipefail
-        export PATH="${lib.makeBinPath [ pkgs.coreutils pkgs.nix ]}:$PATH"
+        export PATH="${lib.makeBinPath [ pkgs.coreutils pkgs.gawk pkgs.gnused pkgs.nix ]}:$PATH"
         df -h /
-        nix-env -p /nix/var/nix/profiles/system --delete-generations +4
+        ${nixRetention}
         nix store gc
         df -h /
       '';
@@ -1867,6 +1879,45 @@ in
       OnCalendar = "daily";
       RandomizedDelaySec = "1h";
       Persistent = true;
+    };
+  };
+
+  # Host disk alarm (scripts/node-b-host-disk-alarm; tests:
+  # scripts/test-node-b-host-disk-alarm.sh;
+  # docs/problems/node-b-nix-store-and-host-disk-policy-2026-10-22.md). Every
+  # 15 minutes, one journal line with root free space, btrfs unallocated
+  # space and metadata use: priority warning under the deploy floor (48 GiB)
+  # or 20 GiB unallocated (go-choir-btrfs-headroom balances under 30), error
+  # under nix min-free (24 GiB) or 10 GiB unallocated, or when a reading
+  # fails. Read-only; always exits 0. See alarms:
+  #   journalctl -u go-choir-host-disk-alarm -p warning
+  # Rollback: remove this service and timer.
+  systemd.services.go-choir-host-disk-alarm = {
+    description = "go-choir host disk alarm (free space, btrfs unallocated)";
+    serviceConfig = {
+      Type = "oneshot";
+      Nice = 19;
+      IOSchedulingClass = "idle";
+      TimeoutStartSec = "1min";
+      Environment = [
+        "PATH=${lib.makeBinPath [ pkgs.coreutils pkgs.gawk pkgs.btrfs-progs ]}"
+        "HOST_DISK_WARN_FREE_GIB=48"
+        "HOST_DISK_WARN_UNALLOC_GIB=20"
+        "HOST_DISK_ERR_FREE_GIB=24"
+        "HOST_DISK_ERR_UNALLOC_GIB=10"
+      ];
+      ExecStart = pkgs.writeShellScript "go-choir-host-disk-alarm"
+        (builtins.readFile ../scripts/node-b-host-disk-alarm);
+    };
+  };
+
+  systemd.timers.go-choir-host-disk-alarm = {
+    description = "go-choir host disk alarm every 15 minutes";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "*:0/15";
+      # A missed reading is not resumed; the next one is current.
+      Persistent = false;
     };
   };
 
@@ -2819,11 +2870,23 @@ in
   # Nix settings
   nix.settings = {
     experimental-features = [ "nix-command" "flakes" ];
-    auto-optimise-store = false;
-    # min-free sat above the disk's actual free space (120 GB vs 107 GB), so
-    # every build started a store GC. GC when below 80 GB, up to 100 GB.
-    min-free = 85899345920;
-    max-free = 107374182400;
+    # Hard-link each new store path's files as it is added instead of
+    # waiting for the weekly nix.optimise below (docs/problems/node-b-nix-
+    # store-and-host-disk-policy-2026-10-22.md item 1). Costs a hash of each
+    # new file at build or substitution time.
+    auto-optimise-store = true;
+    # nix GCs inside a build when free space falls under min-free, up to
+    # max-free, and that GC deletes the build's own not-yet-rooted inputs
+    # (2026-09-17: min-free above the deploy floor looped a deploy). So the
+    # band sits below the deploy floor in
+    # scripts/node-b-deploy-disk-preflight by at least a deploy's footprint
+    # (bounded 8 GiB): floor 48 >= max-free 40 + 8, and nix GCs only near
+    # real exhaustion. Coupled; scripts/test_node_b_disk_policy.py checks it.
+    # The floor falls to 48 GiB in the commit after this one, once this band
+    # is live. Rollback: 80 GiB / 100 GiB (85899345920 / 107374182400), and
+    # the floor back to 90 GiB first.
+    min-free = 25769803776;
+    max-free = 42949672960;
     # CI builds run on the production host beside guests: two derivations at
     # a time, six cores each, inside the bounded nix-daemon slice below.
     max-jobs = 2;
@@ -2915,6 +2978,8 @@ in
   # doc above). To turn it off, uncomment and reboot:
   # boot.kernelParams = [ "nosmt=force" ];
 
+  # Weekly whole-store optimise. With auto-optimise-store on it only catches
+  # what the per-path optimise missed; kept as the backstop.
   nix.optimise = {
     automatic = true;
     dates = [ "Sun 03:30" ];
