@@ -121,10 +121,20 @@ than 30 minutes, with its last refusal.
   the close ignores a cancelled request; F4 a test drives the outer
   replay path and failed before F1; F5 the obligations list says when
   it is truncated.
+- DeepSeek review of bunch 15: its replay finding is the same gap as
+  F1, closed by the entry-point close. Added tests: the close on the
+  projection tape, a late freeze racing the close (one store), decided
+  states never closed, and a tape conflict between two stores. The
+  last failed 3 of 3: the close gave up on `ErrProjectionMismatch`;
+  it now re-reads and retries it like `ErrConflict`.
 - deployed proof (FP0, TEST computer only): see the lane report.
 - residual: the stamp write (`RecordIntentError`) is direct SQL, off
   the tape; the terminal error now carries the stamp onto the tape at
   the close. A stall that is not an ended assignment (an open
   assignment whose run is alive but idle) is only detected, not
   closed. `idle_seconds` reads 0 if `updated_at` fails to parse (it
-  round-trips in practice).
+  round-trips in practice). `failSelfdevOperation` (the cancellation
+  close) also stops on `ErrProjectionMismatch` instead of re-reading;
+  it is not reachable in one process (shared write mutex) and is left
+  for a follow-up. The same-digest slot replay return is closed by the
+  entry-point close but has no test of its own.
