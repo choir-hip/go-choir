@@ -193,9 +193,9 @@ units (`GO_CHOIR_NIX_RETENTION_MODE=enforce`) and the preflight's default.
 |---|---|---|---|
 | nix `min-free` | 80 GiB | **24 GiB** | 24 GiB |
 | nix `max-free` | 100 GiB | **40 GiB** | 40 GiB |
-| deploy floor default (`DEPLOY_MIN_FREE_KIB`) | 90 GiB | 90 GiB | **56 GiB** |
+| deploy floor default (`DEPLOY_MIN_FREE_KIB`) | 90 GiB | 90 GiB | **60 GiB** |
 | preflight guard | none | floor ≥ live `min-free` + 10 GiB; unreadable → 90 GiB | same |
-| alarm: warning | none | free < 56 GiB, unallocated < 20 GiB, metadata unreadable | same |
+| alarm: warning | none | free < 60 GiB, unallocated < 20 GiB, metadata unreadable | same |
 | alarm: error | none | free < 24 GiB, unallocated < 10 GiB, a failed reading | same |
 
 nix runs a GC inside a build whenever free space falls under `min-free`, and
@@ -204,13 +204,35 @@ that GC deletes the build's own unrooted inputs ("not a valid path"; the
 that starts at the floor must end above `min-free` with everything that can
 overlap it:
 
-    56 ≥ min-free 24 + deploy 8 + guest store compaction 14 + paper regrowth 10
+    60 ≥ min-free 24 + deploy 8 + guest store compaction 14 + paper regrowth 10 + margin 4
 
 The compaction's peak new allocation is about its compacted size (13.5 GiB
 today, ledger 16:34) and nothing stops it overlapping a deploy (DS-2); the
 paper regrows at 85 to 290 MiB/min, ~10 GiB over a 30-minute deploy. The
 first version's 48 GiB covered the footprint only (48 − 8 − 13.5 = 26.5,
-2.5 GiB above min-free). 56 also keeps `floor − footprint ≥ max-free`.
+2.5 GiB above min-free). 56, the sum of the terms with no margin, was
+round 2's figure; round 2b (DS2b-3) adds a 4 GiB margin: **60 GiB**. 60
+also keeps `floor − footprint ≥ max-free`.
+
+**When a term runs over.** The guard is the margin, and step 0 is the
+check on the margin's main unknown. If one deploy's footprint exceeds
+8 GiB, or a compaction peak exceeds 14 GiB, or the paper outruns 10 GiB
+during a deploy, by up to 4 GiB in total, the build still ends above
+`min-free` and nothing happens. Beyond that, free space can cross 24 GiB
+mid-build; nix's auto-GC then runs inside the build, deletes its
+not-yet-rooted inputs, and the build fails with "not a valid path" (the
+2026-09-17 failure). That failure is loud and not destructive: the switch
+never happens, the running system and the previous generation are
+untouched, the 4-hourly GC would have collected the same unrooted paths,
+and the alarm's error line fires under 24 GiB. Recovery is to free space
+(or wait for the compaction to finish) and re-run the deploy. The terms
+that can run over are measured, not assumed: step 0 measures the deploy
+footprint and holds deploy 2 if it exceeds 8 GiB; the compaction peak is
+the paper's compacted size, which vmctl logs at each compaction
+(`file_bytes_after`); the paper's rate is FP0's reading of its image growth.
+If any measurement exceeds its term, raise the floor by the excess before
+deploy 2 lands, together with the matching constant in
+`scripts/test_node_b_disk_policy.py`.
 `scripts/test_node_b_disk_policy.py` checks both inequalities. A flake.lock
 or nixpkgs bump can bring ~20 GiB of new host closure (S-F3): give such a
 deploy ~70 GiB free by hand.
@@ -224,7 +246,7 @@ as now. So deploy 2 is safe whether it lands after deploy 1, with it, or
 outlives a revert of it; landing them in order still matters for the
 footprint gate below. Rollback needs no order either: reverting deploy 1
 puts `min-free` back to 80 and the guard lifts the floor to 90 at the next
-deploy. At the paper's rate, 56 GiB buys landings, not runway; the pressure
+deploy. At the paper's rate, 60 GiB buys landings, not runway; the pressure
 trigger and discard are the runway.
 
 ### 4. btrfs `compress=zstd` for `/nix/store`: evaluated, not implemented
@@ -277,9 +299,11 @@ depend on vmctl running. Every 15 minutes, one journal line; the priority is
 the alarm (`journalctl -u go-choir-host-disk-alarm -p warning` shows alarms
 only; the unfiltered `journalctl -u go-choir-host-disk-alarm` shows every
 reading, so a missing quarter hour there means the timer did not run). The
-free warning equals deploy 2's floor (56 GiB), so after deploy 2 a warning
-means the next deploy is refused; between the deploys the floor is still
-90. The unallocated warning sits under `go-choir-btrfs-headroom`'s 30 GiB
+free warning equals deploy 2's floor (60 GiB), so after deploy 2 a warning
+means the next deploy is refused. Between the deploys the floor is still
+90 GiB and a deploy refused at 60 to 90 GiB gets no alarm warning, only the
+preflight's own refusal (DS2b-4: accepted for the hours between the two
+deploys rather than teaching the alarm to read the live floor). The unallocated warning sits under `go-choir-btrfs-headroom`'s 30 GiB
 balance line. Metadata use is printed, not thresholded (unallocated space
 is the metadata headroom signal), but an unreadable metadata line is a
 warning (DS-4). Limits (S-F8): it is a journal line, nothing pages, and a
@@ -294,7 +318,7 @@ nix eval $c.nix.settings.min-free                 # 25769803776
 nix eval $c.nix.settings.max-free                 # 42949672960
 nix eval $c.nix.settings.auto-optimise-store      # true
 nix eval --raw $c.systemd.timers.go-choir-host-disk-alarm.timerConfig.OnCalendar   # *:0/15
-nix eval --json $c.systemd.services.go-choir-host-disk-alarm.serviceConfig.Environment  # ...WARN_FREE_GIB=56...
+nix eval --json $c.systemd.services.go-choir-host-disk-alarm.serviceConfig.Environment  # ...WARN_FREE_GIB=60...
 nix eval --json $c.systemd.services.go-choir-nix-gc.serviceConfig.Environment      # ["GO_CHOIR_NIX_RETENTION_MODE=observe"]
 nix eval --json $c.systemd.services.go-choir-disk-gc.serviceConfig.Environment     # ... "GO_CHOIR_NIX_RETENTION_MODE=observe"
 nix eval --raw $c.system.build.toplevel.drvPath   # the whole host evaluates
@@ -303,34 +327,35 @@ bash scripts/test-node-b-nix-retention.sh && bash scripts/test-node-b-host-disk-
 ```
 
 At the deploy 1 head the same evals hold; `test_node_b_disk_policy.py`
-fails exactly its two floor = 56 GiB checks there (n3, n5), which deploy 2
-satisfies. deploy 2 does not touch `nix/node-b.nix`.
+fails exactly its two floor = 60 GiB checks there (n3, n5), which deploy 2
+satisfies. Deploy 2 does not touch `nix/node-b.nix`.
 
 ## Deploy classes (`.github/scripts/deploy-impact-classify`, S-F7)
 
-- **Deploy 1 is a full deploy.** `scripts/node-b-nix-retention`,
-  `scripts/node-b-host-disk-alarm` and the new `scripts/test-node-b-*.sh`
-  are not in the classifier's tables, so they fall to "unknown deployed
-  path": host OS switch, a guest image rebuild (~3.9 GiB), the frontend,
-  the autoputer service and a refresh of every active computer, the paper
-  included (on the planned-restart marker path). It is the heaviest deploy
-  class, which makes it a good footprint measurement, and it runs under the
-  old 90 GiB floor. Lighter alternative: `ci-wiring.patch` in the worktree
-  root (FP0 applies it under `.github`) maps the two scripts to
-  `mark_host_os_only` (host switch and a vmctl restart, no guest refresh)
-  and the test scripts to "ignored"; landed before or with deploy 1, it
-  makes deploy 1 a host-OS deploy (host switch and a vmctl restart). The
-  patch has two parts that land at different times:
-  `git apply --include='.github/scripts/*' ci-wiring.patch` (the classifier
-  and its test; `bash .github/scripts/deploy-impact-classify-test` passes)
-  before or with deploy 1, and
-  `git apply --include=.github/workflows/ci.yml ci-wiring.patch` (a "Run
-  Node B disk policy tests" step in the Vocabulary Gates job) with or after
-  deploy 2, because `test_node_b_disk_policy.py` checks the 56 GiB floor.
-  The CI and deploy workflow contract tests pass with both parts.
+- **Deploy 1 is a host-OS deploy.** 1a729b00e (in the deploy 1 group,
+  committed under `.github/scripts`) maps `scripts/node-b-nix-retention`
+  and `scripts/node-b-host-disk-alarm` to `mark_host_os_only`, as
+  `scripts/node-b-sync-service-pointers` already is, and the
+  `scripts/test-node-b-*.sh` tests to "ignored". The deploy 1 range
+  classifies as `deploy_host_os=true deploy_vmctl_restart=true
+  deploy_active_vm_refresh=false deploy_frontend=false
+  deploy_host_service=false`: a host switch and a vmctl restart, no guest
+  image rebuild, no computer refresh. Without 1a729b00e the two scripts
+  were "unknown deployed path" and deploy 1 was a full deploy (a guest image
+  rebuild and a refresh of every active computer, the paper included).
+- **The CI test step is a patch, not a commit:**
+  `docs/evidence/node-b-disk-policy-ci-wiring-2026-10-22.patch` (tracked in
+  the deploy 1 group; workers cannot push `.github/workflows`). FP0 commits
+  it from the Mac with or after deploy 2, because
+  `test_node_b_disk_policy.py` checks the 60 GiB floor:
+  `git apply docs/evidence/node-b-disk-policy-ci-wiring-2026-10-22.patch`.
+  It adds a "Run Node B disk policy tests" step to the Vocabulary Gates job;
+  the CI and deploy workflow contract tests pass with it. (Round 2 left this
+  and the classifier as one uncommitted `ci-wiring.patch` in the worktree
+  root, which the branch did not carry: DS2b-2.)
 - **Deploy 2 is no deploy.** It changes only
   `scripts/node-b-deploy-disk-preflight`, which the classifier ignores, so
-  no deploy runs for it; the 56 GiB floor takes effect at the next deploy
+  no deploy runs for it; the 60 GiB floor takes effect at the next deploy
   that runs for any reason (the preflight is read from that checkout). It
   no longer edits `node-b.nix`, so it causes no vmctl restart.
 - `auto-optimise-store` (S-F9): every `nix store gc` now ends with a pass
@@ -349,18 +374,25 @@ paper regrows 5 to 16 GiB an hour):
    Also note the paper's growth over the same window
    (`stat -c %b*%B` of its data image, or vmctl's file_bytes) and whether a
    store compaction ran. Footprint = (free before − free after) − paper
-   growth. **Deploy 2 proceeds only if the footprint is ≤ 8 GiB.** If it is
-   larger, deploy 2's floor becomes 24 + footprint + 14 + 10 (rounded up),
-   and the test's footprint constant with it, before it lands.
+   growth. Deploy 1 is now host-only, so add the size of one guest image to
+   it (`nix path-info -S $(readlink -f /var/lib/go-choir/guest)`, ~3.9 GiB):
+   that is the footprint of a full deploy. **Deploy 2 proceeds only if that
+   sum is ≤ 8 GiB.** If it is larger, deploy 2's floor becomes
+   24 + footprint + 14 + 10 + 4 (rounded up), and the test's footprint
+   constant with it, before it lands.
 1. The CI deploy log's preflight line:
    `live_min_free_kib=83886080 min_required_kib=94371840` (the guard reads
    the old band and keeps 90 GiB).
-2. After the switch: `grep -E '^(min-free|max-free|auto-optimise-store)' /etc/nix/nix.conf`
+2. **A hold for deploy 2** (DS2b-7: the preflight's guard reads the file,
+   not the running daemon). After the switch:
+   `grep -E '^(min-free|max-free|auto-optimise-store)' /etc/nix/nix.conf`
    → `25769803776`, `42949672960`, `true`; `systemctl show nix-daemon -p ActiveEnterTimestamp`
-   after the switch.
+   after the switch. Deploy 2 waits until the daemon's start time is after
+   the switch; a file at 24 GiB with a daemon started before the switch is
+   still running 80.
 3. `systemctl start go-choir-host-disk-alarm.service; journalctl -u go-choir-host-disk-alarm -n 2 -o short-iso`
    → `host disk ok: free N GiB, btrfs unallocated M GiB, metadata P% of S GiB`
-   (or a `<4>` line naming 56 GiB if free is under it), N and M matching
+   (or a `<4>` line naming 60 GiB if free is under it), N and M matching
    `df -BG /` and `btrfs filesystem usage -b / | grep unallocated`.
 4. Retention in observe, by hand (it runs the same `nix-env +4` the old
    units ran): `/opt/go-choir/scripts/node-b-nix-retention` →
@@ -375,15 +407,15 @@ paper regrows 5 to 16 GiB an hour):
 
 Deploy 2 (the next deploy after it lands, with step 0 passed):
 
-6. The CI deploy log: `live_min_free_kib=25165824 min_required_kib=58720256`.
+6. The CI deploy log: `live_min_free_kib=25165824 min_required_kib=62914560`.
 7. auto-optimise on new paths: `stat -c '%h %n' $(readlink -f /var/lib/go-choir/guest)/storedisk.erofs`
    on a guest image built after deploy 1 → link count ≥ 2.
-8. The first deploy that starts with free space between 56 and 90 GiB:
+8. The first deploy that starts with free space between 60 and 90 GiB:
    builds complete, no `not a valid path` in the log, and
    `journalctl -u nix-daemon --since '<deploy start>' | grep -iE 'deleting|freed'`
    shows no auto-GC during the build. Record the post-switch free space.
 9. Alarm under pressure (whenever it happens): a `-p warning` line names
-   `below 56 GiB (the deploy floor)` before any refused deploy; a refused
+   `below 60 GiB (the deploy floor)` before any refused deploy; a refused
    deploy's log ends with the alarm's last line.
 
 ## Open for the owner
@@ -404,20 +436,35 @@ Deploy 2 (the next deploy after it lands, with step 0 passed):
   the floor reserves for the compaction instead of coordinating with it.
 - `DEPLOY_MIN_FREE_KIB` has no break-glass path in ci.yml; a floor change
   is a commit (the guard keeps it from going under live min-free + 10).
+- The guard trusts `/etc/nix/nix.conf`, not the running daemon (DS2b-7);
+  step 2 is the hold. nix offers no cheap read of the daemon's effective
+  `min-free`, and on NixOS the file is a store symlink whose mtime cannot be
+  compared with the daemon's start.
+- The retention log's deletion list is a model of nix's `+N` at the moment
+  of the listing (DS2b-6); a concurrent `nix-env --set` can make the log
+  differ from what nix deletes, which is always nix's own rule. An old
+  booted *generation link* can be deleted; the booted store closure stays
+  rooted by `/run/booted-system`.
 
-## Now card (2026-10-22, round 2)
+## Now card (2026-10-22, round 2b)
 
 - Station: FP0's Nix store and host disk policy lane. Mutation class: red
-  (host Nix config, deploy routing via the preflight).
-- Deploy 1 group: ddd5a3c07 (change), d3e8b5cd3 (review findings), 473f8a451
-  (tests), 0284b76db (fixes), and this docs commit (the deploy 1 head).
-  Deploy 2: the one commit after it (floor 56 GiB, preflight only).
-  `ci-wiring.patch` (worktree root, not committed) for FP0 under `.github`.
-- Tests: retention 48/48, alarm 17/17, preflight 9/9, policy 8/8 at the
-  deploy 2 head (6/8 at the deploy 1 head: the two floor checks).
-- Next: FP0 evals, re-review of the delta, lands deploy 1, proves steps 0
-  to 5; deploy 2 only if step 0's footprint is ≤ 8 GiB; then steps 6 to 9;
-  then the enforce decision.
+  (host Nix config, deploy routing via the preflight and the classifier).
+- Deploy 1 group (everything up to the deploy 1 head): 044693eeb (problem),
+  2a0cde15d (tests), ddd5a3c07 (change), 678c4c10c (policy docs),
+  d3e8b5cd3 (round 2 findings), 473f8a451 (tests), 0284b76db (fixes),
+  cc25aed8c (docs), 326a2860b (round 2b findings), a9937a8a5 (tests),
+  997bc4e89 (preflight fail-closed, alarm 60), 1a729b00e (classifier), and this docs
+  commit (the deploy 1 head). Deploy 2: the one commit after it (floor
+  60 GiB, preflight only). The ci.yml step:
+  `docs/evidence/node-b-disk-policy-ci-wiring-2026-10-22.patch`, for FP0.
+- Tests at the deploy 2 head: retention 48/48, alarm 17/17, preflight
+  15/15, policy 8/8, `.github/scripts/deploy-impact-classify-test` ok. At
+  the deploy 1 head the same but policy 6/8 (the two floor checks).
+- Next: FP0 evals, re-review of the delta, lands deploy 1 (host-only),
+  proves steps 0 to 5 with step 2 as a hold; deploy 2 only if step 0's
+  footprint plus one guest image is ≤ 8 GiB; then steps 6 to 9; then the
+  enforce decision.
 
 ## Review round 2 findings (bunch 74: Gemini flash, DeepSeek, Sonnet), recorded before the fixes
 
@@ -474,13 +521,13 @@ Recorded as found; dispositions follow in the commits after this one.
 |---|---|
 | S-F1 / DS-3 | Fixed (0284b76db): both modes call nix's own `+N`; tests R12 (Sonnet's 1..8/current 5 case, a rolled-back 102), R13, R14 failed first on the old code. |
 | S-F2 / DS-1 | Fixed (0284b76db): preflight guard on the live `min-free`, fail closed to 90 GiB; `scripts/test-node-b-deploy-disk-preflight.sh` P1 to P3 failed first. |
-| DS-2 | Fixed (deploy 2): floor 56 GiB reserves the compaction peak and regrowth; test N7. |
+| DS-2 | Fixed (deploy 2): floor 56 GiB reserves the compaction peak and regrowth; test N7. Raised to 60 in round 2b. |
 | S-F3 / DS-7 | Docs: proof step 0 measures deploy 1's footprint by btrfs free space and gates deploy 2. |
 | S-F4 | Corrected here and in the script header. |
 | DS-6 | Fixed: a non-plain builder root refuses; a failed stat keeps the link (R15, R16). An empty value already meant the default path (`${VAR:-…}`), never `/*`; the test asserts that. |
 | DS-4 / DS-5 | Fixed: unreadable metadata is a warning (A8); comments name both journal views. |
 | S-F5 | Tests: R17 (keep count when all releases are old), R18 (shipped defaults), R14, A6/A7 (exit codes, exact thresholds). |
-| S-F6 | `ci-wiring.patch` (worktree root; workers cannot push `.github`). |
+| S-F6 | Round 2b: `docs/evidence/node-b-disk-policy-ci-wiring-2026-10-22.patch` (tracked), for FP0 to commit under `.github/workflows`. |
 | S-F7 | Recorded under "Deploy classes"; deploy 2 no longer touches `node-b.nix`; the patch also maps the scripts to host-OS-only. |
 | S-F8 | Recorded (alarm limits). Refused deploys print the alarm's last line. |
 | S-F9 | Recorded: watch `nix store gc` duration in the prebuild. |
@@ -514,3 +561,16 @@ Recorded as found; dispositions follow in the commits after this one.
 - **DS2b-7**, the guard trusts `/etc/nix/nix.conf`, not the running daemon:
   a switch that writes the new file but fails to restart `nix-daemon`
   leaves file 24 / daemon 80, and the guard computes the lower floor.
+
+## Review round 2b dispositions
+
+| Finding | Disposition |
+|---|---|
+| DS2b-1 preflight fail-open on garbage `df` | Fixed: every numeric read (free space before and after the reclaim, `DEPLOY_MIN_FREE_KIB`, live `min-free`) fails closed; tests P6 (garbage, empty, garbage after the reclaim) and P7 failed first (a9937a8a5). |
+| DS2b-2 `ci-wiring.patch` not delivered | Fixed: the classifier part is commit 1a729b00e in the deploy 1 group (its test failed first in a9937a8a5); the ci.yml part is tracked at `docs/evidence/node-b-disk-policy-ci-wiring-2026-10-22.patch` for FP0. The untracked root copy is gone. |
+| DS2b-3 56 = the exact sum | The margin is the guard: floor 60 GiB (4 GiB over the terms); step 0 checks the main unknown and holds deploy 2; "When a term runs over" says what a larger term does (a failed, non-destructive build) and how each term is measured. |
+| DS2b-4 alarm 60 vs floor 90 between deploys | Accepted for the hours between the two deploys; stated in section 5. |
+| DS2b-5 now card list | Fixed. |
+| DS2b-6 log is a model; booted generation link | Stated in residuals. |
+| DS2b-7 guard trusts the file | Step 2 is now a hold for deploy 2; residual stated. |
+| Flash (bunch 80) | ACCEPT; no edits asked. |
