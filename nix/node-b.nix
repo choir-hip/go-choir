@@ -1449,10 +1449,14 @@ in
         #   "VM_DATA_DISCARD=1"
         #   "VM_DATA_DISCARD_ONLY=<test computer id>"
         # with firecrackerNext = import ./firecracker-next.nix { inherit pkgs; }.
-        # Only the named computers launch 1.17 and get discard. Never name a
-        # VM_MEMORY_HOTPLUG_ONLY computer: 1.17's hotplug region (512 GiB)
-        # is past this CPU's 39-bit physical limit (firecracker #6255).
-        # Memory hotplug (virtio-mem) for test computers only: a selected
+        # Only the named computers launch 1.17 and get discard. Name a
+        # computer outside VM_MEMORY_HOTPLUG_ONLY (one variable per test).
+        # Hotplug cannot plug on this host under any Firecracker since 1.15.1:
+        # the region sits at 512 GiB, past this CPU's 39-bit limit
+        # (firecracker #6255; docs/problems/memory-hotplug-cannot-work-on-
+        # node-b-39-bit-cpu-2026-10-22.md).
+        # Memory hotplug (virtio-mem) for test computers only (it cannot plug
+        # on Node B's 39-bit CPU; see the problem record above): a selected
         # computer boots with a 4 GiB unplugged region and grows under
         # admitted, TTL-bound leases (capsule jobs that declare memory_mib).
         # Takes effect at each test computer's next cold boot. Rollback:

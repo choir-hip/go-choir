@@ -22,5 +22,5 @@ Stay on the 6.18 LTS line (supported to about December 2028; Firecracker tests 6
 
 ## Related
 
-- The Node B CPU has 39-bit physical addresses (`grep 'address sizes' /proc/cpuinfo`, read 2026-10-22). Firecracker 1.17 places the virtio-mem hotplug region at 512 GiB, which a 39-bit CPU cannot address (firecracker issue #6255, open). NET-08's 1.17 move breaks virtio-mem hotplug here until that is patched. Firecracker 1.16.2 fixes two virtio-mem snapshot-restore bugs and changes the snapshot format; it is the nearer upgrade.
+- The Node B CPU has 39-bit physical addresses (`grep 'address sizes' /proc/cpuinfo`, read 2026-10-22). Firecracker places the virtio-mem hotplug region at 512 GiB, which a 39-bit CPU cannot address (firecracker issue #6255, open). **Corrected 2026-10-22:** this line first blamed 1.17. The placement is the same in 1.15.1, 1.16.1, 1.16.2 and 1.17.0, so hotplug cannot plug on Node B today either ([memory-hotplug-cannot-work-on-node-b-39-bit-cpu-2026-10-22.md](memory-hotplug-cannot-work-on-node-b-39-bit-cpu-2026-10-22.md)). Firecracker 1.16.2 fixes two virtio-mem snapshot-restore bugs and changes the snapshot format; it is the nearer upgrade.
 - docs/problems/host-kernel-216-days-unpatched-2026-10-15.md (the floor's origin).

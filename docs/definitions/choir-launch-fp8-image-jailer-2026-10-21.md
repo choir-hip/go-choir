@@ -167,12 +167,15 @@ hibernate snapshot at once (`firecracker_version_mismatch`), with no canary.
 `--enable-pci` half is already done; every launch and restore passes it in
 both modes (`snapshot.go:319-329`, `confinement.go:300-311`, since
 f240251b6). nixpkgs at the lock still packages 1.16.1.
-Hotplug blocker found 2026-10-22: Firecracker 1.17 places the virtio-mem
-hotplug region at 512 GiB, and Node B's Xeon E-2236 has 39-bit physical
-addresses (2^39 = 512 GiB), so a 1.17 computer cannot hotplug on this host
-(firecracker issue #6255, open). The host moves to 1.16.2 instead
-([firecracker-1-16-1-virtio-mem-restore-bugs-2026-10-22.md](../problems/firecracker-1-16-1-virtio-mem-restore-bugs-2026-10-22.md));
-NET-08 stays off hotplug computers until #6255 is fixed.
+Hotplug on this host (corrected 2026-10-22): Firecracker places the
+virtio-mem hotplug region at 512 GiB in every version from 1.15.1 to
+1.17.0, not only in 1.17. Node B's Xeon E-2236 has 39-bit physical
+addresses (2^39 = 512 GiB), so no computer can plug memory on this host
+under any of them (firecracker issue #6255, open;
+[memory-hotplug-cannot-work-on-node-b-39-bit-cpu-2026-10-22.md](../problems/memory-hotplug-cannot-work-on-node-b-39-bit-cpu-2026-10-22.md)).
+The host moves to 1.16.2 for its other fixes
+([firecracker-1-16-1-virtio-mem-restore-bugs-2026-10-22.md](../problems/firecracker-1-16-1-virtio-mem-restore-bugs-2026-10-22.md)).
+1.17 does not change hotplug here, either way.
 
 ### P4 (RES-06). Guest page cache is never reclaimed while the guest is busy
 
@@ -319,12 +322,16 @@ activation under the metamission's lease. Record outputs under
 
 ### NET-08 and RES-16 (Firecracker 1.17 and discard, one test computer)
 
-0. Precondition (2026-10-22): the NET-08 test computer must not be in
-   `VM_MEMORY_HOTPLUG_ONLY`. Firecracker 1.17 puts the hotplug region at
-   512 GiB, past the E-2236's 39-bit physical address limit
-   (`grep 'address sizes' /proc/cpuinfo`; firecracker #6255, open). Do not
-   move a hotplug computer to 1.17 until #6255 is fixed. Re-check the
-   latest 1.17.x release notes for it before filling the hashes.
+0. Precondition (corrected 2026-10-22): pick a NET-08 test computer that
+   is not in `VM_MEMORY_HOTPLUG_ONLY`, to keep one variable per test. The
+   earlier reason (1.17 moves the hotplug region past the E-2236's 39-bit
+   limit) was wrong. Every version from 1.15.1 to 1.17.0 puts it at
+   512 GiB, so hotplug fails on Node B with or without 1.17
+   ([memory-hotplug-cannot-work-on-node-b-39-bit-cpu-2026-10-22.md](../problems/memory-hotplug-cannot-work-on-node-b-39-bit-cpu-2026-10-22.md)).
+   No NET-08 step may count a hotplug failure against 1.17. Before
+   filling the hashes, check whether the latest 1.17.x release fixes
+   #6255. The host's `choirFirecrackerBelow` bound in `flake.nix` keeps
+   `pkgs.firecracker` below 1.17; NET-08 uses its own package.
 1. Host step: fill both hashes in `nix/firecracker-next.nix` (build it on
    Node B or the Mac; each fakeHash failure prints the real hash; check the
    latest 1.17.x tag first). Then in `nix/node-b.nix`:

@@ -135,9 +135,11 @@
       # the locked nixpkgs ships 1.16.1. 1.16.2 fixes two virtio-mem
       # snapshot-restore bugs and changes the snapshot format, so it voids
       # every hibernate snapshot (vmctl refuses them as
-      # firecracker_version_mismatch and cold boots). Not 1.17: its hotplug
-      # region at 512 GiB is past the E-2236's 39-bit physical limit
-      # (firecracker #6255; NET-08 stays on nix/firecracker-next.nix). Same
+      # firecracker_version_mismatch and cold boots). Not 1.17 host-wide:
+      # NET-08 stages it per computer (nix/firecracker-next.nix). (Hotplug is
+      # not the reason: every version since 1.15.1 puts its region at
+      # 512 GiB, past the E-2236's 39-bit limit, docs/problems/memory-
+      # hotplug-cannot-work-on-node-b-39-bit-cpu-2026-10-22.md.) Same
       # pattern as choirDolt: the base's recipe with a newer version, source
       # hash and vendor hash, applied only while the given nixpkgs is older.
       #
