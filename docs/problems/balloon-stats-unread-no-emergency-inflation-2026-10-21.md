@@ -1,7 +1,10 @@
 # Balloon stats are never read and there is no emergency inflation, 2026-10-21
 
-Checklist item RES-10 (P2, red). Status: documented; design in
-`docs/definitions/choir-launch-fp10-res-10-2026-10-21.md`. No fix yet.
+Checklist item RES-10 (P2, red). Status: steps 1 and 2 built on lane
+fp10-res10-reader (stats per selected computer, read-only reader; inert
+until `VM_BALLOON_STATS_ONLY` names a computer); staging proof is FP0's.
+Step 3 (inflation) not built. Design in
+`docs/definitions/choir-launch-fp10-res-10-2026-10-21.md`.
 
 ## Evidence (code at e4b792b7f)
 
@@ -138,3 +141,71 @@ device's config, stats interval included, in the snapshot and restores it.
 14. **Stats cost.** UNVERIFIED (problem record above): one descriptor
     exchange per interval per selected guest; selection keeps it to test
     computers until FP0 has measured it.
+
+## Built (steps 1 and 2, lane fp10-res10-reader)
+
+- **Stats per computer.** `Manager.firecrackerBalloonConfig(cfg)`
+  (`balloon.go`) sends `stats_polling_interval_s` =
+  `VM_BALLOON_STATS_POLLING_INTERVAL_S` (default 5, 1..65535) only for a
+  computer `VM_BALLOON_STATS_ONLY` names (VM id, computer id, `class:test`
+  or `*`; `computer_select.go`), else 0. The interval variable alone no
+  longer turns stats on (it was unset on every host). No device is added
+  when free page reporting is off.
+  - Unselected boot sends, byte-for-byte as at 58e705802:
+    `"balloon":{"amount_mib":0,"deflate_on_oom":true,"free_page_reporting":true,"stats_polling_interval_s":0}`
+    (whole-config golden: `internal/vmmanager/testdata/balloon-unselected-fc-config-58e705802.json`).
+  - Selected boot sends the same four fields with
+    `"stats_polling_interval_s":5` (or the configured value); nothing else
+    in the config changes.
+- **Snapshot restore.** The balloon is in the launch-config hash, so
+  selecting (or deselecting) a hibernated computer refuses its snapshot
+  (`snapshot_reason=launch_config`) and it cold boots once. A restored guest
+  therefore always has the stats state of its snapshot, which matched the
+  selection at hibernate. The reader asks the VMM (`GET /balloon`) and
+  reports `stats_disabled` for interval 0, never zeros.
+- **Reader.** `fcAPIClient.Balloon` / `BalloonStatistics` (`fcapi.go`);
+  `Manager.GuestMemoryStats(vmID)` (`balloon_stats.go`): `tryLockVMOperation`
+  (busy is a reason), `runningAPISocket` (jailed path included), 2 s bound
+  on both calls. Reasons: `not_running`, `no_api_socket`, `no_balloon_device`,
+  `stats_disabled`, `not_reported_yet`, `busy`, `timeout`, `api_error`.
+  Firecracker's field names and units are kept (memory fields in bytes).
+- **vmctl surface.** `GET /internal/vmctl/memory/balloon[?vm_id=|computer_id=]`
+  (`internal/vmctl/balloon_stats.go`): host only (`isInternalCaller`), GET
+  only, one entry per computer with a `reading` or a `reason`, fanned out in
+  parallel; no vmctl loop calls it. vmctl has no Prometheus surface; this
+  JSON route is the per-VM reading, next to `/internal/vmctl/memory`.
+- **Probe.** `scripts/res10_balloon_stats_probe.sh --computer-id <test id>`:
+  the reading beside the guest's `procmem` meminfo and the VMM's RSS, in
+  MiB; refuses a computer vmctl does not class `test`.
+
+Rollback: leave `VM_BALLOON_STATS_ONLY` unset (the default; nothing in
+nix/node-b.nix sets it), or delete it and cold boot the named computer;
+`git revert` of the lane's commits.
+
+## FP0 staging steps (RES-10 steps 1 and 2)
+
+1. Land the lane; confirm CI and the deployed SHA. With no selector,
+   nothing changes: `GET /internal/vmctl/memory/balloon` lists every
+   computer with `stats_disabled` (snapshot mode gives every VM an API
+   socket). Spot-check that hibernated computers still wake by
+   `snapshot_resume` (unselected hash unchanged).
+2. Pick one disposable test computer (never the paper or the owner's
+   computer). Add `"VM_BALLOON_STATS_ONLY=<that computer id>"` to
+   nix/node-b.nix beside the commented block, deploy, then stop/start it
+   (cold boot; a snapshot is refused by hash anyway).
+3. Within a minute of boot, run
+   `scripts/res10_balloon_stats_probe.sh --computer-id <id> --label cold-boot --out <file>`:
+   expect `stats_polling_interval_s` 5, `available_memory` > 0 and below
+   `total_memory`, and available/disk caches/total within a few percent of
+   the guest's MemAvailable / Cached+Buffers / MemTotal (the guest samples
+   every 5 s; MemTotal differs from balloon total only by reserved memory).
+   Repeat after 15 minutes of use; record against the VMM RSS (the 07:41
+   stall's question: how much of the RSS is guest cache).
+4. Restore question: hibernate the selected computer by snapshot, wake it,
+   confirm `snapshot_resume`, run the probe. Expected: stats still reported
+   (Firecracker restores the device with its interval). Record the answer
+   either way; if it says `stats_disabled`, the restore drops the interval
+   and the reason is honest.
+5. Run the probe on an unselected test computer: expect `stats_disabled`
+   and no numbers. Then optional: `VM_BALLOON_STATS_ONLY=class:test`
+   (every test computer cold boots once at next wake).
