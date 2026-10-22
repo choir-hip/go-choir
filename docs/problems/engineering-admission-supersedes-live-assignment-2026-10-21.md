@@ -228,3 +228,42 @@ B1 7e24b0889, B2 d5055214a, B3 a46ed9a9b, writer-gate counts on
 seeding's writer accounting is left for the enforce flip (residual). Each
 fix's test failed on b0f872bd6 before the fix. The staging drill is still the
 only trace evidence.
+
+## Round 2 review findings (2026-10-22, c494f5aac on deploy G)
+
+Panel bunch 30: Gemini flash accept, Devin accept with nits, DeepSeek v4.1
+flash accept with edits (`~/runs/fp4-r1-deepseek.md`, `~/runs/fp4-r1-devin.md`
+on FP0's machine). FP0 asked for the six edits below before the lane lands as
+deploy H's live red. Recorded before any fix; R1, R2, R4 and R5 are from code
+reading and become findings when their tests fail on c494f5aac. Mutation
+class of this section: green.
+
+- **R1 (medium).** `admitEngineeringAssignment` reads the clock again after
+  `expireOverdueEngineeringRequests`. If the request's deadline passes
+  between the two readings, admission returns `errEngineeringRequestExpired`
+  without cancelling, and `HandleDelegatedAssignmentSpawnDeadline` takes
+  that error to mean "already cancelled" and returns nil. The row stays
+  open and unbound, its wake is consumed, and no retry is armed.
+- **R2 (medium; Devin finding 3 is the same hole).** The bound deadline is
+  armed after the bind commit (`spawnBindActivateAssignment`). A planned
+  restart, or a `scheduleActor` failure, between the commit and the arm
+  leaves a bound assignment with no deadline wake, and the planned-boot
+  reconcile leaves a bound, usable assignment alone. A stuck run is then
+  unbounded until management cancels it.
+- **R3 (medium, operational; interaction with deploy G's freeze close).**
+  After assignment A completes with a frozen candidate, deploy G's close
+  leaves A's operation open for management's Verify and the owner's
+  decision, and selfdev allows one open operation per computer. The woken
+  B binds, but every B freeze is refused `ErrOperationOpen` until A's
+  operation is decided, and B can spend its six-hour deadline retrying.
+  The one-open-operation rule stays; the refusal must be visible and the
+  wait bounded.
+- **R4 (low).** The nudge (`wakeNextQueuedEngineeringRequest`) picks the
+  earliest open row without filtering expired ones, then returns because
+  that row is expired: the first live request waits for its own retry.
+- **R5 (low).** The queued-expiry and bound-deadline cancel reasons say
+  "request remains pending and retryable" on a row that is cancelled.
+- **R6 (low, forward wiring).** `RegisterKindChecked` works on a
+  `*Registry`, but `DefaultRegistry()` returns a fresh copy and the
+  registry `CheckWriteAs` reads (`writeRegistry`) is unexported. No package
+  install can register a kind the gate reads.
