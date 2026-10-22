@@ -595,15 +595,21 @@ let
   # B7 gateway request body caps (internal/gateway/body_caps.go;
   # docs/problems/gateway-request-bodies-unbounded-2026-10-22.md). Every
   # route's body is capped and refused 413 unread past its cap. This mode
-  # governs only the model routes (inference, OpenAI chat; limit 64 MiB):
-  #   "observe"  serve a model body over 64 MiB, up to the 576 MiB ceiling,
+  # governs only the model routes (inference, OpenAI chat; limit 160 MiB):
+  #   "observe"  serve a model body over 160 MiB, up to the 576 MiB ceiling,
   #              and log `body cap would_refuse` with its size and route;
   #   "enforce"  refuse it.
   # Search (1 MiB), source-api (64 KiB), Jev (1 MiB) and the operator
-  # routes (64 KiB) enforce in every mode. Observe for one deploy, then
-  # enforce if /health body_caps.would_refuse.model stays 0 and max_seen
-  # stays under the limit. An unset or unknown value enforces in code.
-  # Limits: GATEWAY_BODY_LIMITS, e.g. "model=96MiB". Rollback: "observe".
+  # routes (64 KiB) enforce in every mode, and so do the two bounds below.
+  # Observe for one deploy, then enforce if /health
+  # body_caps.would_refuse.model stays 0 and max_seen stays under the
+  # limit. An unset or unknown value enforces in code. In every mode the
+  # bytes of all bodies held at once are bounded (limits.in_flight, 1 GiB,
+  # whatever the scheduler's mode) and a body must arrive within 60 s of
+  # its slot (GATEWAY_BODY_READ_TIMEOUT). Limits: GATEWAY_BODY_LIMITS, e.g.
+  # "model=256MiB,in_flight=2GiB". Rollback: "observe" only while
+  # gatewayModelScheduler is "off" or with in_flight unchanged; otherwise
+  # raise GATEWAY_BODY_LIMITS model= in enforce.
   gatewayBodyCaps = "observe";
   # claude delegate (docs/design/claude-delegate-slice1-2026-10-14.md): the
   # owner's setup-token token, root 0400, written by the owner only. Every
@@ -2262,6 +2268,17 @@ in
       Restart = "on-failure";
       RestartSec = 3;
       TimeoutStopSec = "11min";
+      # B7 review (bunch 88, F1): a backstop under the in_flight body bound,
+      # never the bound itself. No measurement of the gateway's normal RSS
+      # is in the repo, so this is set generously: bodies in flight are at
+      # most 1 GiB (about 3 GiB with the JSON decoder's buffer and the
+      # decoded copy), plus one decoded image per call (up to 50 Mpx, about
+      # 200 MB). MemoryMax without MemoryHigh, as the squash unit: throttling
+      # would stall every tenant's calls; GOMEMLIMIT (below) makes the Go
+      # collector work harder before the kill. Tighten after /health and
+      # MemoryPeak (proof 10) give a measurement.
+      MemoryMax = "8G";
+      MemorySwapMax = "0";
       # Provider credentials (LLM and search) are injected via an EnvironmentFile
       # that lives in a writable runtime location outside the Nix store. The file is
       # created/updated by the deploy script and never committed to git.
@@ -2328,6 +2345,8 @@ in
         "GATEWAY_BEARER_BINDING=${gatewayBearerBindingMode}"
         "GATEWAY_MODEL_SCHEDULER=${gatewayModelScheduler}"
         "GATEWAY_BODY_CAPS=${gatewayBodyCaps}"
+        # Under MemoryMax 8G (above): the collector runs harder past 6 GiB.
+        "GOMEMLIMIT=6GiB"
         # SearXNG self-hosted meta-search (free, no credits). SearXNGProvider
         # is first in the provider list, so this absorbs the majority of
         # search load. Paid providers (Tavily, Brave, etc.) act as fallback.
