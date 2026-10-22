@@ -75,7 +75,31 @@ fp4_traj() { # a|b: the trajectory id for A or B
 	fi
 }
 fp4_snapshot() { api_get "/api/trajectories/$1" "${OPT_computer:-}"; }
-fp4_events() { api_get "/api/trajectories/$1/events?limit=1000" "${OPT_computer:-}"; }
+# fp4_events ID: ALL the trajectory's lifecycle events as {"events":[...]}.
+# The handler returns {events, next_cursor, watermark} (ListLifecycleEventPage,
+# limit capped at 1000); the stream ends when next_cursor >= watermark or a page
+# is empty. It follows next_cursor, with a hard cap of FP4_MAX_PAGES pages.
+# Returns 1 (printing nothing) on a read error (a 409 cursor-expired included),
+# a page that does not advance, or the cap: the caller FAILS, never passes.
+FP4_MAX_PAGES=50
+fp4_events() {
+	local id=$1 after=0 page n=0 all='[]' next wm cnt
+	if [ "$PROOF_DRY" = 1 ]; then api_get "/api/trajectories/$id/events?limit=1000" "${OPT_computer:-}"; return 0; fi
+	while :; do
+		n=$((n + 1))
+		if [ "$n" -gt "$FP4_MAX_PAGES" ]; then echo "events of $id: more than $FP4_MAX_PAGES pages" >&2; return 1; fi
+		page=$(api_get "/api/trajectories/$id/events?limit=1000&after=$after" "${OPT_computer:-}") || { echo "events of $id: read failed after cursor $after" >&2; return 1; }
+		printf '%s' "$page" | jq -e '(.events | type) == "array"' >/dev/null 2>&1 || { echo "events of $id: page is not an events page" >&2; return 1; }
+		all=$(jq -nc --argjson a "$all" --argjson p "$page" '$a + $p.events')
+		next=$(printf '%s' "$page" | jq -r '.next_cursor // 0')
+		wm=$(printf '%s' "$page" | jq -r '.watermark // 0')
+		cnt=$(printf '%s' "$page" | jq '.events | length')
+		if [ "$cnt" = 0 ] || [ "$next" -ge "$wm" ]; then break; fi
+		if [ "$next" -le "$after" ]; then echo "events of $id: cursor did not advance past $after" >&2; return 1; fi
+		after=$next
+	done
+	jq -nc --argjson a "$all" '{events:$a}'
+}
 
 # fp4_row SNAPSHOT_JSON ASSIGNMENT_ID_OR_EMPTY: print the one assignment row.
 # Returns 1 (prints nothing) when absent or when several rows remain and no id
@@ -124,7 +148,10 @@ fp4_load() {
 		return 0
 	fi
 	snap=$(fp4_snapshot "$traj")
-	evs=$(fp4_events "$traj")
+	if ! evs=$(fp4_events "$traj"); then
+		fail "$up: could not read the complete event stream of trajectory $traj (read error, expired cursor, no progress, or over $FP4_MAX_PAGES pages): no step can claim anything about bind events"
+		return 1
+	fi
 	FP4_ROW=""
 	FP4_BOUND="[]"
 	if ! FP4_ROW=$(fp4_row "$snap" "$id"); then
