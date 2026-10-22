@@ -53,7 +53,7 @@ jobs:
       - name: Set up Go
         uses: ./.github/actions/setup-go-build-cache
         with:
-          lane: non-runtime-race-${{ matrix.shard < 2 && 'store' || (matrix.shard == 2 && '6' || '7') }}
+          lane: non-runtime-race-${{ matrix.shard < 2 && 'split' || (matrix.shard == 2 && '6' || '7') }}
 
       - name: Go test non-runtime shard with -race
         shell: bash
