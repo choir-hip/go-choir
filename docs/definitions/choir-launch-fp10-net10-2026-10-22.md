@@ -94,10 +94,81 @@ boundaries:
   protected_surfaces: [none touched in this station; the plan touches gateway and provider calls, auth (owner acts), the object store schema]
 
 now:
-  status: working
-  slice: green design; then the unwired red slice
-  source_ref: 51cb3a8cd
+  status: checkpoint_incomplete
+  slice: >-
+    Design and build plan committed; W0 (internal/appnet) built, tested
+    locally and pushed, unwired and off. FP0 reviews the red commit in the
+    next bunch, lands it with an inert set under that set's no-effect
+    proof (§8 step 0). W1 to W7 are not started.
+  source_ref: 2fd854616
   deploy_identity: unknown to this lane
+  candidate:
+    id: fp10-net10-w0
+    state: ready
+    ref: lane/fp10-net10-app-policy
+    base: 51cb3a8cd
+    digest: none
+    inert: true (a new unwired package; nothing imports it)
+    scope:
+      - internal/appnet/appnet.go
+      - internal/appnet/appnet_test.go
+      - docs/problems/app-package-cannot-declare-network-2026-10-22.md
+      - docs/definitions/choir-launch-fp10-net10-2026-10-22.md
+      - docs/design/app-agent-network-policy-2026-10-21.md (one status line)
+  conjecture:
+    id: C-declare-is-a-grant-request
+    claim: >-
+      An app manifest's network block needs no second validator: every
+      egress entry is an egressgrant app-desk declaration at L1, and the
+      host can enforce it with egressgrant.Check alone.
+    test: W5's host route on a test computer (§8 steps 2-4)
+    edge: missing_oracle
+    delta_o: the host's refusal lines for out-of-scope uses in §8 step 4
+    scope_if_supported: app desks on granted test computers
+    status: supported locally (validation and requests); enforcement untested
+    evidence_refs: [internal/appnet/appnet_test.go]
+  decision:
+    what: >-
+      W0 only; app egress at L1 on its own gateway route (not NET-01's open
+      verb); ingress source mail only; any credential, money and
+      irreversible refused until W7
+    kind: safety
+    status: settled for this pass (conservative defaults; owner questions in §9)
+    evidence_ref: this file §2, §4, §9
+    owner_ratification_ref: not_applicable
+  belief:
+    believed_state: >-
+      The declaration and its rules exist as pure code; nothing enforces or
+      reads them; appdesk still refuses all egress.
+    main_uncertainty: >-
+      Whether W1's install event shape (approved grant ids) fits S7-0's
+      package event when it lands; whether host-side desk attribution
+      (NET-03) is needed before the first real app agent.
+    next_observation: FP0's review verdict on 2fd854616
+  blocker_or_risk: >-
+    W5 depends on NET-01 landing (lane/fp10-net01-host-fetch); W1 depends on
+    S7-0's install events reaching main.
+  next_action: FP0 reviews 2fd854616 with the bunch panel and lands it inert
+
+receipts:
+  - id: problem-record-and-design
+    boundary: define
+    identity: f4cbe5573
+    proof_refs: [docs/problems/app-package-cannot-declare-network-2026-10-22.md]
+    rollback_ref: git revert f4cbe5573
+    disposition: committed
+  - id: tests-first
+    boundary: implement
+    identity: a2580dcb2
+    proof_refs: [internal/appnet/appnet_test.go]
+    rollback_ref: git revert a2580dcb2
+    disposition: committed (does not build alone; the next commit adds the code)
+  - id: appnet-w0
+    boundary: implement
+    identity: 2fd854616
+    proof_refs: [go test ./internal/appnet ok, -race ok, go vet clean; go test ./internal/egressgrant ./internal/appdesk ./internal/deskmanifest ok; no importer of internal/appnet]
+    rollback_ref: git revert 2fd854616
+    disposition: committed
 ---
 
 # FP10 NET-10: network policy for app agents
