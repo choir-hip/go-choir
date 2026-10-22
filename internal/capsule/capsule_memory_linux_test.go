@@ -172,3 +172,54 @@ func (f *fakeAggregate) SetMax(n int64) error {
 	f.max = n
 	return nil
 }
+
+// failingRestoreCgroup is a doctrine leaf whose memory.high cannot rise and
+// whose memory.max then cannot come back down.
+type failingRestoreCgroup struct {
+	fakeCgroupMemoryHigh
+	maxCalls int
+}
+
+func (f *failingRestoreCgroup) SetMax(n int64) error {
+	f.maxCalls++
+	if f.maxCalls > 1 {
+		return errFake
+	}
+	return f.fakeCgroupMemoryHigh.SetMax(n)
+}
+
+func (f *failingRestoreCgroup) SetHigh(int64) error { return errFake }
+
+// Review E6: a boost refused because memory.high could not rise, whose
+// memory.max could not be put back, leaves a raised ceiling. It is counted
+// against the budget until the capsule ends, never left uncounted, and the
+// error names it.
+func TestRefusedBoostWithAStuckCeilingIsCounted(t *testing.T) {
+	cg := &failingRestoreCgroup{fakeCgroupMemoryHigh: fakeCgroupMemoryHigh{fakeCgroupMemory: fakeCgroupMemory{current: 512 * mib, max: 4096 * mib}, high: 2048 * mib}}
+	caps := &Capsule{ID: "capsule-stuck", State: StateActive, MemoryMax: 4096 * mib, MemoryHigh: 2048 * mib, memoryAdmitted: 2048 * mib}
+	e := &Executor{
+		capsules:        map[string]*Capsule{caps.ID: caps},
+		vmMemoryTotal:   6144 * mib,
+		vmMemoryUsed:    2048 * mib,
+		cgroupMemoryFor: func(*Capsule) cgroupMemory { return cg },
+	}
+	released := false
+	err := e.boostJobMemory(caps.ID, "job-a", 1024*mib, func() { released = true })
+	if err == nil || !strings.Contains(err.Error(), "memory.max") {
+		t.Fatalf("boost error %v: want a refusal naming the stuck memory.max", err)
+	}
+	if cg.max != 5120*mib {
+		t.Fatalf("leaf memory.max %d MiB: the fake should have kept the raise", cg.max>>20)
+	}
+	if e.vmMemoryUsed != 3072*mib || boostedBytesLocked(caps) != 1024*mib {
+		t.Fatalf("stuck raise uncounted: used %d MiB, boosted %d MiB", e.vmMemoryUsed>>20, boostedBytesLocked(caps)>>20)
+	}
+	if released {
+		t.Fatal("the refused job's lease share was released by the boost")
+	}
+	// The job's own id stays free; its end does not return the stuck raise.
+	e.endJobMemory(caps.ID, "job-a")
+	if e.vmMemoryUsed != 3072*mib {
+		t.Fatalf("ending the refused job returned the stuck raise: used %d MiB", e.vmMemoryUsed>>20)
+	}
+}

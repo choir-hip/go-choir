@@ -24,6 +24,11 @@ func TestMain(m *testing.M) {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
 		case HelperArg:
+			// An fd without close-on-exec, as a careless spawner or library
+			// would leave one (review E8): the tool must not inherit it.
+			if _, err := syscall.Dup(2); err != nil {
+				os.Exit(3)
+			}
 			os.Exit(RunHelper(os.Args[2:]))
 		case ProbeArg:
 			os.Exit(RunProbe(os.Args[2:]))
@@ -49,6 +54,39 @@ func TestMain(m *testing.M) {
 		case "doctool-test-env":
 			// A tool whose output depends on its environment.
 			os.Stdout.WriteString("TZ=" + os.Getenv("TZ") + " HOME=" + os.Getenv("HOME"))
+			os.Exit(0)
+		case "doctool-test-failhome":
+			// A tool that fails only outside the sandbox (review E3).
+			if os.Getenv("HOME") == "/home/direct" {
+				os.Stderr.WriteString("direct run fails")
+				os.Exit(1)
+			}
+			os.Stdout.WriteString("sandboxed")
+			os.Exit(0)
+		case "doctool-test-fds":
+			// Prints the fds it holds above stderr, but for the one that
+			// lists them and its own Go runtime's poller (opened after the
+			// exec, by the open below).
+			dir, err := os.Open("/proc/self/fd")
+			if err != nil {
+				os.Stderr.WriteString(err.Error())
+				os.Exit(1)
+			}
+			names, err := dir.Readdirnames(-1)
+			if err != nil {
+				os.Stderr.WriteString(err.Error())
+				os.Exit(1)
+			}
+			var held []string
+			for _, name := range names {
+				if n, _ := strconv.Atoi(name); n > 2 && uintptr(n) != dir.Fd() {
+					target, _ := os.Readlink("/proc/self/fd/" + name)
+					if target != "anon_inode:[eventpoll]" && target != "anon_inode:[eventfd]" {
+						held = append(held, name+"->"+target)
+					}
+				}
+			}
+			os.Stdout.WriteString(strings.Join(held, " "))
 			os.Exit(0)
 		case "doctool-test-flood":
 			chunk := make([]byte, 1<<16)
@@ -257,25 +295,22 @@ func TestSelfTestFailsClosedAndJudges(t *testing.T) {
 	}
 }
 
-// Observe keeps today's result and today's kill domain (review B2, B3): the
-// direct run is the result, unchanged and with no warning added; the
-// sandboxed run is a shadow that only counts. It never runs in a cgroup,
-// the desks' or any other.
+// Observe keeps today's result (review B2, B3): the direct run is the
+// result, unchanged and with no warning added; the sandboxed run is a shadow
+// that only counts. It never touches the desks' cgroup root. (Its own
+// cgroup, review E2, is TestObserveShadowIsBounded; a non-root test cannot
+// make a real one, so these runs have none.)
 func observeRun(t *testing.T, tool string, args ...string) (string, []string, ShadowStats) {
 	t.Helper()
 	opts := unprivilegedSpawn(t)
 	opts.mode = ModeObserve
-	opts.testNoCgroup = false // production cgroup choice: observe must make none
 	opts.syncShadow = true
-	desks, tools := t.TempDir(), t.TempDir()
+	desks := t.TempDir()
 	t.Setenv("CHOIR_DESK_CGROUP_ROOT", desks)
-	t.Setenv(cgroupRootEnv, tools)
 	before := ShadowSnapshot()
 	out, warnings := run(context.Background(), opts, tool, args, ".pdf", []byte("observe"), nil)
-	for _, dir := range []string{desks, tools} {
-		if entries, _ := os.ReadDir(dir); len(entries) != 0 {
-			t.Fatalf("observe made a cgroup under %s: %v", dir, entries)
-		}
+	if entries, _ := os.ReadDir(desks); len(entries) != 0 {
+		t.Fatalf("observe made a cgroup under the desks root: %v", entries)
 	}
 	return out, warnings, ShadowSnapshot().Sub(before)
 }
@@ -301,6 +336,73 @@ func TestObserveKeepsTheDirectResult(t *testing.T) {
 	out, warnings, d = observeRun(t, selfBin(t), "doctool-test-env")
 	if !strings.Contains(out, "HOME=/home/direct") || len(warnings) != 0 || d.Diverged != 1 {
 		t.Fatalf("diverged: %q %v %+v", out, warnings, d)
+	}
+	// Review E3: the direct run fails and the sandbox succeeds. Required
+	// would store a different extraction, so it is a divergence, never
+	// "equal"; the result is still the direct one.
+	out, warnings, d = observeRun(t, selfBin(t), "doctool-test-failhome")
+	if out != "" || len(warnings) == 0 || d.Diverged != 1 || d.Equal != 0 {
+		t.Fatalf("direct failed, sandbox succeeded: %q %v %+v", out, warnings, d)
+	}
+}
+
+// Review E2: the shadow is bounded. It asks for a cgroup of its own under
+// the document tools' root (1 GiB, 64 pids, oom.group; never the desks'),
+// and a shadow that cannot get one does not run: it is counted as not set
+// up, and the result is the direct one.
+func TestObserveShadowIsBounded(t *testing.T) {
+	opts := unprivilegedSpawn(t)
+	opts.mode = ModeObserve
+	opts.testNoCgroup = false // production cgroup choice
+	opts.syncShadow = true
+	desks := t.TempDir()
+	t.Setenv("CHOIR_DESK_CGROUP_ROOT", desks)
+	t.Setenv(cgroupRootEnv, "")
+	before := ShadowSnapshot()
+	out, warnings := run(context.Background(), opts, selfBin(t), []string{"doctool-test-echo"}, ".pdf", []byte("bounded"), nil)
+	if d := ShadowSnapshot().Sub(before); out != "bounded" || len(warnings) != 0 || d.Runs != 1 || d.SetupFailed != 1 || d.Equal != 0 {
+		t.Fatalf("no tools root: %q %v %+v", out, warnings, d)
+	}
+	// With a root, the shadow's cgroup is made there. A temp dir is not
+	// cgroupfs, so its start fails and is counted as not set up.
+	tools := t.TempDir()
+	t.Setenv(cgroupRootEnv, tools)
+	before = ShadowSnapshot()
+	out, warnings = run(context.Background(), opts, selfBin(t), []string{"doctool-test-echo"}, ".pdf", []byte("bounded"), nil)
+	if d := ShadowSnapshot().Sub(before); out != "bounded" || len(warnings) != 0 || d.SetupFailed != 1 {
+		t.Fatalf("fake tools root: %q %v %+v", out, warnings, d)
+	}
+	entries, _ := os.ReadDir(tools)
+	if len(entries) != 1 || !strings.HasPrefix(entries[0].Name(), toolCgroupPrefix) {
+		t.Fatalf("the shadow did not ask the tools root for its cgroup: %v", entries)
+	}
+	if entries, _ := os.ReadDir(desks); len(entries) != 0 {
+		t.Fatalf("the shadow touched the desks root: %v", entries)
+	}
+}
+
+// Review E8: the tool inherits no fd above stderr, even one the helper
+// held without close-on-exec.
+func TestSandboxedToolInheritsNoFDs(t *testing.T) {
+	if kernelLandlockABI() < 5 {
+		t.Skip("kernel offers no Landlock V5")
+	}
+	opts := unprivilegedSpawn(t)
+	opts.mode = ModeRequired
+	out, warnings := run(context.Background(), opts, selfBin(t), []string{"doctool-test-fds"}, ".pdf", []byte("x"), nil)
+	if len(warnings) != 0 || out != "" {
+		t.Fatalf("the tool holds fds %q (warnings %v)", out, warnings)
+	}
+}
+
+// Review E4: a directory the probe can list is a read that succeeded, even
+// an empty one; only the sandbox's denial makes it fail.
+func TestProbeReadOfADirectory(t *testing.T) {
+	if got := probeRead(t.TempDir()); got != "" {
+		t.Fatalf("an empty readable directory probed as %q", got)
+	}
+	if got := probeRead(filepath.Join(t.TempDir(), "absent")); !strings.HasPrefix(got, "ENOENT") {
+		t.Fatalf("an absent path probed as %q", got)
 	}
 }
 
@@ -353,6 +455,19 @@ func TestEnsureToolCgroupRoot(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, "other")); err != nil {
 		t.Fatalf("the sweep removed a directory it does not own: %v", err)
+	}
+	// Review E5: the sweep is cgroup.kill and rmdir, never a recursive
+	// unlink (cgroupfs files cannot be unlinked; a directory with anything
+	// else in it is not a cgroup and is left).
+	notCgroup := filepath.Join(root, toolCgroupPrefix+"notcgroup")
+	if err := os.MkdirAll(filepath.Join(notCgroup, "nested"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := EnsureToolCgroupRoot(root); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(notCgroup, "nested")); err != nil {
+		t.Fatalf("the sweep unlinked recursively: %v", err)
 	}
 	if raw, _ := os.ReadFile(filepath.Join(root, "memory.max")); strings.TrimSpace(string(raw)) != strconv.Itoa(toolAggregateMax) {
 		t.Fatalf("aggregate memory.max %q", raw)

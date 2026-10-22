@@ -1,7 +1,9 @@
 package capfloor
 
 import (
+	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -38,7 +40,7 @@ func TestModeFromEnv(t *testing.T) {
 func TestKeptCapabilitiesAreTheInventory(t *testing.T) {
 	want := []string{"CAP_CHOWN", "CAP_DAC_OVERRIDE", "CAP_DAC_READ_SEARCH", "CAP_FOWNER", "CAP_FSETID", "CAP_KILL",
 		"CAP_SETGID", "CAP_SETUID", "CAP_SETPCAP", "CAP_NET_BIND_SERVICE", "CAP_NET_ADMIN", "CAP_SYS_CHROOT",
-		"CAP_SYS_PTRACE", "CAP_SYS_ADMIN", "CAP_SYS_RESOURCE"}
+		"CAP_SYS_PTRACE", "CAP_SYS_ADMIN", "CAP_SYS_RESOURCE", "CAP_SYS_TIME"}
 	if len(Kept) != len(want) {
 		t.Fatalf("kept %d capabilities, want %d", len(Kept), len(want))
 	}
@@ -55,7 +57,7 @@ func TestKeptCapabilitiesAreTheInventory(t *testing.T) {
 		}
 	}
 	// The capabilities a compromised daemon reaches for first are dropped.
-	for _, c := range []int{capSysModule, capSysRawio, capSysBoot, capSysTime, capMknod, capNetRaw, capBPF, capPerfmon} {
+	for _, c := range []int{capSysModule, capSysRawio, capSysBoot, capMknod, capNetRaw, capBPF, capPerfmon} {
 		if _, kept := Kept[c]; kept {
 			t.Errorf("%s is kept", Name(c))
 		}
@@ -118,5 +120,85 @@ func TestStagingProbeHoldsTheFloor(t *testing.T) {
 	}
 	if want := `CAPFLOOR = "` + Hex(keptMask()) + `"`; !strings.Contains(string(raw), want) {
 		t.Fatalf("the probe script lacks %s", want)
+	}
+}
+
+// privilegedCalls are the syscalls that need a capability, as the daemon's
+// Go source spells them, with the capability each needs (capabilities(7)).
+var privilegedCalls = map[string]int{
+	"Settimeofday(": capSysTime, "ClockSettime(": capSysTime, "Adjtimex(": capSysTime,
+	"Mount(": capSysAdmin, "Unmount(": capSysAdmin, "Setns(": capSysAdmin, "PivotRoot(": capSysAdmin,
+	"Sethostname(": capSysAdmin, "Chroot(": capSysChroot, "Mknod(": capMknod, "Mknodat(": capMknod,
+	"Reboot(": capSysBoot, "Iopl(": capSysRawio, "Ioperm(": capSysRawio,
+	"InitModule(": capSysModule, "FinitModule(": capSysModule, "DeleteModule(": capSysModule,
+	"Klogctl(": capSyslog, "Acct(": capSysPacct,
+}
+
+// probeFiles call privileged syscalls to prove they are denied; the floor
+// must not grant them.
+var probeFiles = map[string]string{
+	"internal/doctool/probe_linux.go":                  "the document-tool sandbox's probe expects every call denied",
+	"internal/yaegikernel/desk_cell_selftest_linux.go": "the desk cell self-test expects every call denied",
+}
+
+// K1, review E1: every capability-needing syscall the guest daemon makes on
+// its own paths (and the capsule broker it starts, which can hold no more)
+// is under a kept capability. The hibernate resume steps the clock with
+// settimeofday; without CAP_SYS_TIME enforce answers it 500 and the host
+// cold-boots the guest.
+func TestKeptCoversTheDaemonsPrivilegedSyscalls(t *testing.T) {
+	root := "../.."
+	if _, err := os.Stat(filepath.Join(root, "go.mod")); err != nil {
+		t.Skipf("repository root not readable: %v", err)
+	}
+	seen := map[string]bool{}
+	for _, dir := range []string{"internal", "cmd/autoputer", "cmd/capsule-broker"} {
+		err := filepath.WalkDir(filepath.Join(root, dir), func(path string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+				return err
+			}
+			rel, _ := filepath.Rel(root, path)
+			rel = filepath.ToSlash(rel)
+			if _, probe := probeFiles[rel]; probe {
+				return nil
+			}
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			for _, line := range strings.Split(string(raw), "\n") {
+				for call, c := range privilegedCalls {
+					if !strings.Contains(line, "unix."+call) && !strings.Contains(line, "syscall."+call) {
+						continue
+					}
+					seen[call] = true
+					if _, kept := Kept[c]; !kept {
+						t.Errorf("%s calls %s, which needs %s; the floor drops it", rel, strings.TrimSuffix(call, "("), Name(c))
+					}
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The scan sees the calls it is meant to see.
+	for _, call := range []string{"Settimeofday(", "Mount("} {
+		if !seen[call] {
+			t.Errorf("the scan found no %s; it no longer reads the daemon's source", call)
+		}
+	}
+}
+
+// Review E8: a Mode the floor does not know is refused, never a silent no-op
+// (ModeFromEnv maps unknown text to enforce; a caller passing a raw Mode
+// must not get off).
+func TestApplyRefusesAnUnknownMode(t *testing.T) {
+	if err := Apply(Mode("enforced")); err == nil {
+		t.Fatal("Apply accepted an unknown mode")
+	}
+	if err := Apply(ModeOff); err != nil {
+		t.Fatalf("off: %v", err)
 	}
 }
