@@ -21,7 +21,10 @@ import (
 //   - the blob pass does not say how many files and git processes it ran;
 //   - the timed copy changes the digest or the error the untimed copy gives;
 //   - a nil timer (the carried-patch and test callers) panics;
-//   - a failed spawn logs no total, so a timeout looks like silence.
+//   - a failed spawn logs no total, so a timeout looks like silence;
+//   - a spawn that panics logs ok=true (it returns no error);
+//   - git_procs miscounts the git processes a phase ran (the ls-tree);
+//   - a nil timer still formats its details (it allocates).
 
 func captureLog(t *testing.T) *bytes.Buffer {
 	t.Helper()
@@ -88,6 +91,7 @@ func TestSpawnPhaseTimerLogsEachSourcePhaseUnderTheCapsule(t *testing.T) {
 	if timed != untimed {
 		t.Fatalf("timed digest %q != untimed %q", timed, untimed)
 	}
+	timer.markOK()
 	timer.done(nil)
 
 	out := buf.String()
@@ -101,12 +105,17 @@ func TestSpawnPhaseTimerLogsEachSourcePhaseUnderTheCapsule(t *testing.T) {
 			t.Errorf("no %s phase line in:\n%s", phase, out)
 		}
 	}
+	// The inventory is one `git ls-tree`.
+	if !regexp.MustCompile(`phase=source_inventory took=\S+ files=3 git_procs=1`).MatchString(out) {
+		t.Errorf("inventory phase does not count its ls-tree:\n%s", out)
+	}
 	// One `git cat-file --batch` per pass, not one git process per file.
 	if !regexp.MustCompile(`phase=source_blobs took=\S+ files=3 git_procs=1`).MatchString(out) {
 		t.Errorf("blob phase does not count files and git processes:\n%s", out)
 	}
-	// With no expected digest the copy re-derives the commit's (one batch).
-	if !regexp.MustCompile(`phase=source_digest_commit took=\S+ files=3 git_procs=1`).MatchString(out) {
+	// With no expected digest the copy re-derives the commit's: its own
+	// `git ls-tree`, then one batch.
+	if !regexp.MustCompile(`phase=source_digest_commit took=\S+ files=3 git_procs=2`).MatchString(out) {
 		t.Errorf("commit digest phase does not count files and git processes:\n%s", out)
 	}
 	if !regexp.MustCompile(`(?m)^capsule capsule-timing-test spawn total=\S+ ok=true$`).MatchString(out) {
@@ -118,9 +127,14 @@ func TestSpawnPhaseTimerNilIsSilentAndFailureLogsTotal(t *testing.T) {
 	buf := captureLog(t)
 	var none *spawnPhaseTimer
 	none.phase("anything")
+	none.phaseGit("anything", 3, 1)
+	none.markOK()
 	none.done(errors.New("ignored"))
 	if buf.Len() != 0 {
 		t.Fatalf("nil timer logged: %q", buf.String())
+	}
+	if allocs := testing.AllocsPerRun(100, func() { none.phaseGit("source_inventory", 3, 1) }); allocs != 0 {
+		t.Fatalf("nil timer formatted its details: %v allocs per call", allocs)
 	}
 	timer := newSpawnPhaseTimer("capsule-fail-test")
 	timer.phase("preflight", "detail=x")
@@ -131,6 +145,21 @@ func TestSpawnPhaseTimerNilIsSilentAndFailureLogsTotal(t *testing.T) {
 	}
 	if !regexp.MustCompile(`capsule capsule-fail-test spawn total=\S+ ok=false err=broker readiness timed out`).MatchString(out) {
 		t.Fatalf("failure total missing: %q", out)
+	}
+}
+
+// A panicking spawn returns no error but never reaches its successful
+// return, so it must not log ok=true.
+func TestSpawnPhaseTimerWithoutSuccessIsNotOK(t *testing.T) {
+	buf := captureLog(t)
+	timer := newSpawnPhaseTimer("capsule-panic-test")
+	func() {
+		defer func() { _ = recover() }()
+		defer func() { timer.done(nil) }()
+		panic("spawn crashed")
+	}()
+	if !regexp.MustCompile(`capsule capsule-panic-test spawn total=\S+ ok=false err=spawn did not return \(panic\)`).MatchString(buf.String()) {
+		t.Fatalf("panicked spawn total = %q", buf.String())
 	}
 }
 
