@@ -34,6 +34,25 @@ CAPTURE_ID = re.compile(r'obj:choir\.web_capture:[A-Za-z0-9_=-]+:[A-Za-z0-9_.~-]
 ASSIGN = re.compile(r'(\w+)\s*:?=\s*"(obj:choir\.web_capture:[^"]+|https?://[^"]+)"')
 
 
+def cell_sources(evs):
+    """The source of each cell of one run, in event order.
+
+    tool.invoked is a bus-only line since journal cut R3: a new tape's
+    tool.result carries the call's arguments. An old tape has the invoked row
+    (and a result without arguments); a tape that crosses the cutover has
+    both, and a call is counted once."""
+    ordered = sorted(evs, key=lambda e: e.get("seq", 0))
+    invoked = {(e.get("payload") or {}).get("call_id") for e in ordered if e.get("kind") == "tool.invoked"}
+    sources = []
+    for e in ordered:
+        p = e.get("payload") or {}
+        if e.get("kind") == "tool.invoked" or (
+            e.get("kind") == "tool.result" and isinstance(p.get("arguments"), dict) and p.get("call_id") not in invoked
+        ):
+            sources.append((p.get("arguments") or {}).get("source", "") or "")
+    return sources
+
+
 def literal(m):
     if m.group(2) is not None:
         try:
@@ -72,10 +91,8 @@ def main():
     data = json.load(open(args.events))
     out = []
     for run_id, evs in sorted(data["events"].items()):
-        cells = [e for e in sorted(evs, key=lambda e: e.get("seq", 0)) if e.get("kind") == "tool.invoked"]
         calls = []  # (cell index, name, literal arg)
-        for ci, e in enumerate(cells):
-            src = (e.get("payload", {}).get("arguments", {}) or {}).get("source", "") or ""
+        for ci, src in enumerate(cell_sources(evs)):
             names = {m.group(1): m.group(2) for m in ASSIGN.finditer(src)}
             for m in CALL.finditer(src):
                 calls.append((ci, m.group(1), literal(m)))

@@ -25,6 +25,11 @@ const (
 // event_durability_test.go fails if an EventKind constant has no entry, so a
 // new kind cannot ship unclassified.
 //
+// types.LiveOnly (event_live_only.go) names the lines the runtime no longer
+// appends at all (tool.invoked, the Texture progress copy, the request-side
+// loop.progress); they stay classified here because old tapes hold them and
+// another caller may still append them.
+//
 // Ten kinds batch: the per-step trace lines. Every other kind is a run state
 // transition, an owner act, evidence, or a Texture canonical-revision event,
 // and stays one acknowledged write (design section 3.1).

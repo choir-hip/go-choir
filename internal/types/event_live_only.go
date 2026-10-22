@@ -25,6 +25,10 @@ func LiveOnly(kind EventKind, phase string) bool {
 	switch kind {
 	case EventTextureAgentRevisionProgress:
 		return true
+	case EventToolInvoked:
+		// The call's arguments, start and duration ride the tool.result
+		// (journal cut R3); the prompt ticker reads this line on the bus.
+		return true
 	case EventRunProgress:
 		return phase == ProgressPhaseProviderCall
 	}

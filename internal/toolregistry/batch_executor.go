@@ -65,6 +65,9 @@ func executeOneTool(ctx context.Context, registry *ToolRegistry, call types.Tool
 	if len(args) == 0 {
 		args = json.RawMessage(`{}`)
 	}
+	// tool.invoked is published on the bus for the live ticker and is not
+	// appended (types.LiveOnly, journal cut R3): the arguments and the start
+	// ride the tool.result below.
 	invokedPayload, _ := json.Marshal(map[string]any{
 		"tool":      call.Name,
 		"call_id":   call.ID,
@@ -78,7 +81,8 @@ func executeOneTool(ctx context.Context, registry *ToolRegistry, call types.Tool
 	callCtx := WithExecutionContext(ctx, execution)
 	toolStart := time.Now()
 	output, err := registry.Execute(callCtx, call.Name, call.Arguments)
-	if elapsed := time.Since(toolStart); elapsed > slowToolLogThreshold {
+	elapsed := time.Since(toolStart)
+	if elapsed > slowToolLogThreshold {
 		// A single tool call that holds the serialized store lock for
 		// tens of seconds stalls a Management drain carrier's whole
 		// iteration. Log which call owns the stall so a slow-path
@@ -106,6 +110,10 @@ func executeOneTool(ctx context.Context, registry *ToolRegistry, call types.Tool
 		"is_error":   isError,
 		"output_len": len(visibleOutput),
 		"output":     visibleOutput,
+		// What tool.invoked carried and pairing the two gave (journal cut R3).
+		"arguments":   args,
+		"started_at":  toolStart.UTC(),
+		"duration_ms": elapsed.Milliseconds(),
 	}
 	if projection != nil {
 		resultPayloadData["output_projection"] = projection.Metadata
