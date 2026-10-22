@@ -206,6 +206,20 @@ exec_line=$(grep -nF '<"/dev/null"' <<<"$run_body" | head -n 1 | cut -d: -f1 || 
   fail "run() lacks the lock, check, swap or closed-stdin run (lock=${lock_line} check=${check_line} swap=${advance_line} run=${exec_line})"
 [ "$lock_line" -lt "$check_line" ] && [ "$check_line" -lt "$advance_line" ] && [ "$advance_line" -lt "$exec_line" ] ||
   fail "run() order must be lock, check, swap, run"
+# A deploy takes the lock before its first git command (bunch 33 item 3). A
+# running deploy's program fetches, resets and cleans /opt/go-choir under
+# the lock, so a second deploy's clone, set-url or fetch there must wait for
+# it rather than race it.
+first_git_line=$(grep -vE '^[[:space:]]*#' <<<"$run_body" | grep -nE '(^|[[:space:]!])git ' | head -n 1 | cut -d: -f1 || true)
+lock_line_nc=$(grep -vE '^[[:space:]]*#' <<<"$run_body" | grep -n 'lock_gate' | head -n 1 | cut -d: -f1 || true)
+[ -n "$first_git_line" ] && [ -n "$lock_line_nc" ] || fail "run() lacks a git command or the lock"
+[ "$lock_line_nc" -lt "$first_git_line" ] ||
+  fail "a deploy must take the lock before its first git command (lock=${lock_line_nc} git=${first_git_line})"
+grep -Fq '[ "$verb" = deploy ] && lock_gate' <<<"$run_body" || fail "only a deploy takes the gate lock in run()"
+# Under the lock, the clone and the fetch close the lock fd, as the program
+# does: an automatic gc that git detaches after them must not hold the lock.
+grep -F 'git clone' <<<"$run_body" | grep -Fq '9>&-' || fail "the gate's clone inherits the lock fd"
+grep -A1 -F 'fetch --quiet' <<<"$run_body" | grep -Fq '9>&-' || fail "the gate's fetch inherits the lock fd"
 grep -Fq '9>&-' <<<"$run_body" || fail "the program inherits the lock fd"
 grep -Fq 'bash -s' <<<"$run_body" && fail "the program still reads itself from stdin"
 grep -Eq '>[^&]*"?\$bootstrap_file' "$gate" && fail "the gate writes the bootstrap marker"
