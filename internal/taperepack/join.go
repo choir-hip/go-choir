@@ -200,6 +200,7 @@ func (e *engine) file(bc *bucketCtx, f listRec) error {
 	case sha256.Sum256(raw) != f.digest:
 		v.class = classLegacyBad
 	default:
+		v.size = int64(len(raw))
 		e.decide(bc, &v, raw)
 	}
 	bc.part.countGlobal(f.ns, v.class)

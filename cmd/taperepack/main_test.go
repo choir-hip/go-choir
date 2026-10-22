@@ -106,6 +106,42 @@ func TestTaperepackToolPath(t *testing.T) {
 	if code, _, _ = tool(append([]string{"census"}, base...)...); code != 3 {
 		t.Fatalf("census with B uncopied: exit %d", code)
 	}
+	// The delete: refused without the census digest, a dry run by default, and
+	// only the files with a verified copy go when applied.
+	var cen struct {
+		Receipt string `json:"receipt"`
+	}
+	code, out, _ = tool(append([]string{"census", "--computer", "computer-a"}, base...)...)
+	if err := json.Unmarshal([]byte(out), &cen); err != nil || code != 0 || len(cen.Receipt) != 64 {
+		t.Fatalf("census of A: %d %q", code, out)
+	}
+	if code, _, _ = tool(append([]string{"delete", "--apply"}, base...)...); code == 0 {
+		t.Fatal("delete --apply ran without a census receipt")
+	}
+	if code, _, _ = tool(append([]string{"delete", "--census-receipt", strings.Repeat("0", 64), "--apply"}, base...)...); code == 0 {
+		t.Fatal("delete accepted an unknown census receipt")
+	}
+	count := func() int {
+		n := 0
+		_ = filepath.WalkDir(filepath.Join(root, "sha256"), func(_ string, d os.DirEntry, _ error) error {
+			if !d.IsDir() {
+				n++
+			}
+			return nil
+		})
+		return n
+	}
+	before := count()
+	if code, out, errs = tool(append([]string{"delete", "--census-receipt", cen.Receipt, "--computer", "computer-a", "--pause", "1ms"}, base...)...); code != 0 || count() != before {
+		t.Fatalf("delete dry run: exit %d, %d -> %d files, %q", code, before, count(), errs)
+	}
+	if code, out, errs = tool(append([]string{"delete", "--census-receipt", cen.Receipt, "--computer", "computer-a", "--apply", "--pause", "1ms"}, base...)...); code != 0 {
+		t.Fatalf("delete: exit %d %q", code, errs)
+	}
+	// A's 3 payloads and their 3 receipts are gone; B's payload and receipt stay.
+	if got := count(); got != 2 {
+		t.Fatalf("after the delete %d legacy files remain, want B's payload and receipt", got)
+	}
 	// The work directory may not be inside the artifacts root.
 	if code, _, _ = tool("census", "--root", root, "--work-dir", filepath.Join(root, "w"), "--quiet"); code == 0 {
 		t.Fatal("a work dir inside the root was accepted")
