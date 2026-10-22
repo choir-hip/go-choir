@@ -423,7 +423,7 @@ func TestAssignmentEndCloseRetriesATapeConflict(t *testing.T) {
 	freezer.BindProjectionSink(productStore)
 	rt := &Runtime{selfdevOperations: closer}
 	authorized := func(context.Context) error { return nil }
-	for i := 0; i < 30; i++ {
+	for i := 0; i < tapeRaceIterations; i++ {
 		assignmentID := fmt.Sprintf("assignment-tape-race-%d", i)
 		opened, err := openFreezeCandidate(ctx, closer, authorized, computerID, "trajectory-"+assignmentID, assignmentID, "objective")
 		if err != nil {
@@ -475,7 +475,7 @@ func TestCancellationCloseRetriesATapeConflict(t *testing.T) {
 	freezer.BindProjectionSink(productStore)
 	rt := &Runtime{selfdevOperations: closer}
 	authorized := func(context.Context) error { return nil }
-	for i := 0; i < 30; i++ {
+	for i := 0; i < tapeRaceIterations; i++ {
 		assignmentID := fmt.Sprintf("assignment-cancel-race-%d", i)
 		opened, err := openFreezeCandidate(ctx, closer, authorized, computerID, "trajectory-"+assignmentID, assignmentID, "objective")
 		if err != nil {
@@ -505,6 +505,12 @@ func TestCancellationCloseRetriesATapeConflict(t *testing.T) {
 	}
 }
 
+// tapeRaceIterations is how many two-Store races a tape-conflict test runs.
+// Measured 2026-10-22 under -race (GOMAXPROCS=2): the losing CAS was a
+// projection mismatch on 28 to 30 of 30 iterations per run, so eight
+// iterations miss the race with probability about 0.07^8.
+const tapeRaceIterations = 8
+
 // blockingProjectionSink never commits: it waits for its context to end.
 type blockingProjectionSink struct{}
 
@@ -532,5 +538,101 @@ func TestAssignmentEndCloseIsBounded(t *testing.T) {
 	case <-done:
 	case <-time.After(20 * time.Second):
 		t.Fatal("the close did not return within 20s of a wedged tape append; it has no deadline")
+	}
+	assertOperationUntouched(t, rt, computerID, store.EngineeringFreezeOperationID(computerID, assignment.AssignmentID), selfdev.StateExecuting)
+}
+
+// assertOperationUntouched checks a close that gave up left the operation
+// in its prior state, whole: still open, so the obligations surface shows
+// it stalled, and never half-written.
+func assertOperationUntouched(t *testing.T, rt *Runtime, computerID, operationID, state string) {
+	t.Helper()
+	operation, err := rt.selfdevOperations.Get(context.Background(), computerID, operationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if operation.State != state || operation.TerminalError != "" {
+		t.Fatalf("a close that timed out changed the operation: %s %q, want %s with no terminal error", operation.State, operation.TerminalError, state)
+	}
+}
+
+// Bunch 24 item 2: the cancellation close (failSelfdevOperation, behind
+// every assignment and trajectory cancellation) holds selfdev.Store's write
+// mutex, and on the reconcile paths engineeringAssignmentOpenMu, across the
+// tape append. A wedged append must not hold them forever.
+func TestCancellationCloseIsBounded(t *testing.T) {
+	rt, _ := testRuntime(t)
+	computerID := rt.TextureComputerID()
+	assignment := endedAssignment(computerID, "assignment-cancel-bounded", types.EngineeringAssignmentCancelled)
+	operationID := seedAssignmentOperation(t, rt, assignment, selfdev.StateExecuting, "")
+	rt.selfdevOperations.BindProjectionSink(blockingProjectionSink{})
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		rt.failBoundSelfdevOperation(context.Background(), computerID, assignment.AssignmentID, "management cancelled the assignment")
+	}()
+	select {
+	case <-done:
+	case <-time.After(20 * time.Second):
+		t.Fatal("the cancellation close did not return within 20s of a wedged tape append; it has no deadline")
+	}
+	assertOperationUntouched(t, rt, computerID, operationID, selfdev.StateExecuting)
+}
+
+// Bunch 24 item 1: the same-digest slot replay return in
+// recordAssignedEngineeringReportOnce. A stored terminal report with the
+// same proposition under another report id is a row the store still
+// builds: its report_id check is gated on a non-empty proposition digest in
+// the request, and it keeps the caller's id. The re-delivered report's
+// derived id is not stored, so the slot scan matches and returns the
+// recorded receipt early; the entry-point close must still close.
+func TestSlotReplayClosesTheOperation(t *testing.T) {
+	ctx := context.Background()
+	rt, s, _ := c1eRuntime(t)
+	operations, err := selfdev.NewStore(s, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt.selfdevOperations = operations
+	seed, err := store.SeedEngineeringAssignmentAuthority(s, "owner-slot-replay", rt.TextureComputerID(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assignment, run := c1eOpenBound(t, s, seed, 0)
+	operationID := seedAssignmentOperation(t, rt, assignment, selfdev.StateExecuting, "freeze: refused")
+
+	derived := pinnedAssignmentReport(assignment, types.EngineeringResultCompleted)
+	legacy := derived
+	legacy.ReportID = "report-legacy-" + assignment.AssignmentID
+	legacy.PropositionDigest = ""
+	req := types.RecordEngineeringAssignmentReportRequest{
+		CommandID: "engineering-report:" + assignment.AssignmentID + ":" + legacy.ReportID,
+		OwnerID:   assignment.Binding.OwnerID, ComputerID: assignment.Binding.ComputerID,
+		AssignmentID: assignment.AssignmentID, Attempt: assignment.Binding.Attempt,
+		ExpectedLifecycleVersion: assignment.LifecycleVersion, Report: legacy,
+	}
+	req.CommandDigest, _ = store.ComputeRecordEngineeringAssignmentReportDigest(req)
+	committed, err := s.RecordEngineeringAssignmentReport(ctx, req)
+	if err != nil || !committed.Assignment.Disposition.Terminal() {
+		t.Fatalf("legacy-id report = %+v, %v", committed.Assignment.Disposition, err)
+	}
+	if _, err := s.GetEngineeringAssignmentReport(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, derived.ReportID); err == nil {
+		t.Fatal("setup: the derived report id is stored; the replay would not take the slot path")
+	}
+	matchID, _, _, err := s.SlotTerminalReport(ctx, c1eGet(t, s, assignment), derived.PropositionDigest)
+	if err != nil || matchID != legacy.ReportID {
+		t.Fatalf("setup: slot match = %q, %v; want the legacy-id report", matchID, err)
+	}
+
+	if _, err := rt.recordAssignedEngineeringReport(ctx, &run, "tool-call:slot-replay", derived); err != nil {
+		t.Fatalf("slot replay: %v", err)
+	}
+	operation, err := operations.Get(ctx, assignment.Binding.ComputerID, operationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if operation.State != selfdev.StateFailed || !strings.Contains(operation.TerminalError, "before its candidate froze") {
+		t.Fatalf("operation after the slot replay = %s %q, want failed", operation.State, operation.TerminalError)
 	}
 }
