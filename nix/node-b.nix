@@ -504,10 +504,11 @@ let
   #              unpinned one to its first caller.
   #   "strict"   enforce, and refuse an unpinned bearer.
   #   "off"      the old behavior.
-  # Flip to "enforce" once would_refuse has stayed 0 for the paper and the
-  # test computers across a planned refresh and a deploy. Rollback: the
-  # previous mode and redeploy. An unset or unknown value enforces in code.
-  gatewayBearerBindingMode = "observe";
+  # Flipped to "enforce" on 2026-10-22: would_refuse stayed 0 for the paper
+  # and the test computers across deploys L to O (FP7 definition, "SEC-05
+  # enforce flip"). Rollback: "observe" and redeploy. An unset or unknown
+  # value enforces in code.
+  gatewayBearerBindingMode = "enforce";
   # RES-11 gateway model-call scheduler (internal/gateway/model_scheduler.go;
   # docs/problems/gateway-model-calls-have-no-scheduler-2026-10-21.md): "on"
   # replaces the per-computer 60/minute window for inference and chat calls
