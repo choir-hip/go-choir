@@ -239,16 +239,27 @@ node_journal() {
 
 # api_get PATH [COMPUTER]: GET a product route with CHOIR_API_KEY. The key is
 # handed to curl through a descriptor (not argv) and is never printed.
+# api_with_computer PATH COMPUTER: the product API selects a computer with the
+# computer_id query parameter (an X-Choir-Computer header is refused with 403).
+# On a machine whose BASH_ENV sources per-developer secrets, every bash
+# re-exports the owner-wide CHOIR_API_KEY over the one a caller passes in.
+# Run proofs as: BASH_ENV= CHOIR_API_KEY=<test key> scripts/proofs/<station>.sh
+api_with_computer() {
+	local path=$1 computer=${2:-}
+	[ -n "$computer" ] || { printf '%s' "$path"; return; }
+	case $path in *\?*) printf '%s&computer_id=%s' "$path" "$computer" ;; *) printf '%s?computer_id=%s' "$path" "$computer" ;; esac
+}
+
 api_get() {
 	local path=$1 computer=${2:-}
 	proof_guard_value "$computer" 0
 	if [ "$PROOF_DRY" = 1 ]; then
-		info "\$ curl -fsS -H 'Authorization: Bearer <CHOIR_API_KEY>'${computer:+ -H 'X-Choir-Computer: $computer'} '$PROOF_API_HOST$path'"
+		info "\$ curl -fsS -H 'Authorization: Bearer <CHOIR_API_KEY>' '$PROOF_API_HOST$(api_with_computer "$path" "$computer")'"
 		return 0
 	fi
 	[ -n "${CHOIR_API_KEY:-}" ] || die 2 "CHOIR_API_KEY is not set in the environment"
 	if [ -n "$computer" ]; then
-		"$PROOF_CURL_BIN" -fsS --max-time 60 -H @<(printf 'Authorization: Bearer %s\n' "$CHOIR_API_KEY") -H "X-Choir-Computer: $computer" "$PROOF_API_HOST$path"
+		"$PROOF_CURL_BIN" -fsS --max-time 60 -H @<(printf 'Authorization: Bearer %s\n' "$CHOIR_API_KEY") "$PROOF_API_HOST$(api_with_computer "$path" "$computer")"
 	else
 		"$PROOF_CURL_BIN" -fsS --max-time 60 -H @<(printf 'Authorization: Bearer %s\n' "$CHOIR_API_KEY") "$PROOF_API_HOST$path"
 	fi
