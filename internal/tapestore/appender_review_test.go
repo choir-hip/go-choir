@@ -231,16 +231,18 @@ func TestAppendFuncBuildsOnlyBetweenOtherCalls(t *testing.T) {
 		}
 		close(entered)
 		<-release
-		return f.Sync()
+		err := f.Sync()
+		// Still inside the writer's lock: the batch is over once this returns.
+		mu.Lock()
+		aDone = true
+		mu.Unlock()
+		return err
 	}
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		_ = a.Append(cid, Item{NSPayload, p})
-		mu.Lock()
-		aDone = true
-		mu.Unlock()
 	}()
 	<-entered
 	var sawP bool
