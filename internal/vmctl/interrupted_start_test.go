@@ -35,8 +35,9 @@ import (
 //   - a published start, or a failed one, leaves a record behind that makes
 //     a later restart close a running computer or relabel a stopped one.
 //   Every start path is covered: a visit's wake of a hibernated computer
-//   (the incident), a resume, a deploy refresh of an active computer, a
-//   recovery of a failed one, and a new computer's first boot.
+//   (the incident's cold boot, and a resume from its memory snapshot), a
+//   resume, a deploy refresh of an active computer, a recovery of a failed
+//   one, and a new computer's first boot.
 
 const (
 	interruptedOrphanPID = 4099850
@@ -54,7 +55,7 @@ var errVMCTLStoppedMidBoot = errors.New("vmctl stopped mid-boot")
 // mid-boot: the manager spawns the guest and never returns while the test
 // runs, as waitForGuestReady does for a replaying guest. It returns the VM
 // being started once the spawn is under way.
-func startInterruptedByRestart(t *testing.T, path string, seed *VMOwnership, tracked bool, start func(*OwnershipRegistry) error) string {
+func startInterruptedByRestart(t *testing.T, path string, seed *VMOwnership, tracked, snapshot bool, start func(*OwnershipRegistry) error) string {
 	t.Helper()
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 	if err := reg.SetPersistencePath(path); err != nil {
@@ -88,7 +89,11 @@ func startInterruptedByRestart(t *testing.T, path string, seed *VMOwnership, tra
 	if tracked && seed != nil {
 		mgr.getVMs[seed.VMID] = &VMInstanceInfo{HostURL: staleRealizationURL, Epoch: seed.Epoch, Healthy: true, State: "running"}
 	}
-	reg.SetVMManager(mgr)
+	if snapshot {
+		reg.SetVMManager(&blockingSnapshotVMManager{mockVMManager: mgr, spawned: spawned, release: release})
+	} else {
+		reg.SetVMManager(mgr)
+	}
 
 	done := make(chan error, 1)
 	go func() { done <- start(reg) }()
@@ -109,6 +114,20 @@ func startInterruptedByRestart(t *testing.T, path string, seed *VMOwnership, tra
 		t.Fatal("timed out waiting for the start to spawn")
 	}
 	return ""
+}
+
+// blockingSnapshotVMManager resumes from a memory snapshot and, like the
+// boot above, never returns while the test runs.
+type blockingSnapshotVMManager struct {
+	*mockVMManager
+	spawned chan<- string
+	release <-chan struct{}
+}
+
+func (m *blockingSnapshotVMManager) ResumeVMFromSnapshot(vmID string, _ VMManagerConfig, _ func() (string, error)) (*VMInstanceInfo, error) {
+	m.spawned <- vmID
+	<-m.release
+	return nil, errVMCTLStoppedMidBoot
 }
 
 // restartedVMCTL is the vmctl systemd starts after the restart: it loads the
@@ -162,10 +181,11 @@ func requireStartSettled(t *testing.T, reg *OwnershipRegistry, mgr *processContr
 }
 
 type interruptedStartCase struct {
-	name    string
-	seed    func() *VMOwnership // nil: a new computer
-	tracked bool                // the old manager ran the guest being replaced
-	start   func(*OwnershipRegistry) error
+	name     string
+	seed     func() *VMOwnership // nil: a new computer
+	tracked  bool                // the old manager ran the guest being replaced
+	snapshot bool                // the old manager resumes from a memory snapshot
+	start    func(*OwnershipRegistry) error
 }
 
 func interruptedStartCases() []interruptedStartCase {
@@ -181,6 +201,15 @@ func interruptedStartCases() []interruptedStartCase {
 		{
 			name: "visit wake of a hibernated computer",
 			seed: seed(VMStateHibernated, "idle"),
+			start: func(reg *OwnershipRegistry) error {
+				_, err := reg.ResolveOrAssignDesktopContext(context.Background(), "batching-e2e-1022", PrimaryDesktopID)
+				return err
+			},
+		},
+		{
+			name:     "visit wake of a hibernated computer from its memory snapshot",
+			seed:     seed(VMStateHibernated, "idle"),
+			snapshot: true,
 			start: func(reg *OwnershipRegistry) error {
 				_, err := reg.ResolveOrAssignDesktopContext(context.Background(), "batching-e2e-1022", PrimaryDesktopID)
 				return err
@@ -231,7 +260,7 @@ func TestStartInterruptedByVMCTLRestartIsAdoptedOrClosedNeverOrphaned(t *testing
 				seed = tc.seed()
 				prior = seed.StoppedBy
 			}
-			vmID := startInterruptedByRestart(t, path, seed, tc.tracked, tc.start)
+			vmID := startInterruptedByRestart(t, path, seed, tc.tracked, tc.snapshot, tc.start)
 
 			reg, mgr, now := restartedVMCTL(t, path, vmID)
 			reg.ReattachManagedVMs(context.Background(), allowAllRoutes)
@@ -276,7 +305,7 @@ func TestOwnerActAfterAnInterruptedWakeBootsAFreshRealization(t *testing.T) {
 	tc := interruptedStartCases()[0]
 	path := filepath.Join(t.TempDir(), "ownerships.json")
 	seed := tc.seed()
-	vmID := startInterruptedByRestart(t, path, seed, false, tc.start)
+	vmID := startInterruptedByRestart(t, path, seed, false, false, tc.start)
 
 	reg, mgr, _ := restartedVMCTL(t, path, vmID)
 	reg.ReattachManagedVMs(context.Background(), allowAllRoutes)
@@ -306,7 +335,7 @@ func TestInterruptedStartWhoseProcessSurvivesTheCloseIsClosedByTheNextRestart(t 
 	tc := interruptedStartCases()[0]
 	path := filepath.Join(t.TempDir(), "ownerships.json")
 	seed := tc.seed()
-	vmID := startInterruptedByRestart(t, path, seed, false, tc.start)
+	vmID := startInterruptedByRestart(t, path, seed, false, false, tc.start)
 
 	reg, mgr, now := restartedVMCTL(t, path, vmID)
 	mgr.reapFails = true
@@ -335,7 +364,7 @@ func TestInterruptedStartWhoseProcessSurvivesTheCloseIsClosedByTheNextRestart(t 
 // running computer is reattached as before, never closed, and a computer
 // hibernated after its wake stays hibernated.
 func TestPublishedStartIsReattachedByTheNextRestartNotClosed(t *testing.T) {
-	for _, tc := range interruptedStartCases()[:3] {
+	for _, tc := range []interruptedStartCase{interruptedStartCases()[0], interruptedStartCases()[2], interruptedStartCases()[3]} {
 		t.Run(tc.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "ownerships.json")
 			seed := tc.seed()
