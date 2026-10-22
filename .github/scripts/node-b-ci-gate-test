@@ -223,7 +223,6 @@ grep -A1 -F 'fetch --quiet' <<<"$run_body" | grep -Fq '9>&-' || fail "the gate's
 grep -Fq '9>&-' <<<"$run_body" || fail "the program inherits the lock fd"
 grep -Fq 'bash -s' <<<"$run_body" && fail "the program still reads itself from stdin"
 grep -Eq '>[^&]*"?\$bootstrap_file' "$gate" && fail "the gate writes the bootstrap marker"
-grep -Fq 'ci-gate-floor-bootstrap' "$root/nix/node-b.nix" || fail "nix/node-b.nix has no bootstrap activation"
 
 accept "$prebuild_ok" "verb=prebuild
 repo=/opt/go-choir-prebuild
@@ -381,5 +380,9 @@ root_keys=$(sed -n '/users\.users\.root\.openssh\.authorizedKeys\.keys = \[/,/\]
 [ -n "$root_keys" ] || fail "nix/node-b.nix: root's key list not found"
 grep -Eq 'ciDeployKey|github-actions-deploy' <<<"$root_keys" && fail "root still accepts the CI deploy key"
 [ "$(grep -c 'github-actions-deploy@go-choir' "$nix_file")" -eq 1 ] || fail "the CI key must appear once, in ciDeployKey"
+
+# Step 3 also removes the floor bootstrap activation (re-review F2): no
+# commit at or above step 3 can write the marker, so a lost floor refuses.
+grep -Fq 'ci-gate-floor-bootstrap' "$nix_file" && fail "step 3 keeps the floor bootstrap activation"
 
 echo "node-b-ci-gate tests passed"

@@ -620,22 +620,6 @@ in
       ''restrict,command="${ciDeployForcedCommand}" ${ciDeployKey}''
     ];
   };
-  # One-time bootstrap of the CI gate's floor (SEC-14, re-review F2). With no
-  # floor file and no marker the gate refuses everything; with the marker it
-  # takes the marker's commit (a main commit from before the gate) as the
-  # floor. The first deploy through the gate
-  # records its own commit as the floor and deletes the marker. Only this
-  # activation writes the marker, and only while the floor file is missing.
-  # Step 3 removes this block, so after step 3 every commit that would write
-  # the marker is below the floor, and a lost floor is restored by hand.
-  system.activationScripts.go-choir-ci-gate-floor-bootstrap = ''
-    if [ ! -e /var/lib/go-choir/ci-gate-floor ] && [ ! -L /var/lib/go-choir/ci-gate-floor ]; then
-      ${pkgs.coreutils}/bin/install -d -m 0755 /var/lib/go-choir
-      printf '%s\n' 961588290c0cc8c889e7b1d2832ef6d85ea7dda5 >/var/lib/go-choir/ci-gate-floor-bootstrap.tmp
-      ${pkgs.coreutils}/bin/mv -f /var/lib/go-choir/ci-gate-floor-bootstrap.tmp /var/lib/go-choir/ci-gate-floor-bootstrap
-    fi
-  '';
-
   security.sudo.extraRules = [
     {
       users = [ "choir-deploy" ];
