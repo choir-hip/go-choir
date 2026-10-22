@@ -267,6 +267,11 @@ type vaultFixture struct {
 // and whose probe says yes. Tests replace f.mgr.vaultProbe to refuse.
 func newVaultFixture(t *testing.T) *vaultFixture {
 	t.Helper()
+	// A vault capture resolves its paths through /proc/<pid>/fd (finding
+	// B1); only Linux has it. The vault is refused on any other host.
+	if runtime.GOOS != "linux" {
+		t.Skip("the snapshot vault needs Linux /proc/<pid>/fd")
+	}
 	f := newSnapshotFixture(t)
 	vault := shortStateDir(t)
 	if err := os.Chmod(vault, 0o700); err != nil {
