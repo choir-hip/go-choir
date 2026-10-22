@@ -412,20 +412,52 @@ func (rt *Runtime) failTrajectorySelfdevOperations(ctx context.Context, computer
 	}
 }
 
+// failSelfdevOperation closes one operation from whichever lawful
+// pre-terminal state it is in now. It re-reads and retries a lost race,
+// in-process (ErrConflict) or on the tape (ErrProjectionMismatch: a writer
+// without this Store's write mutex, as in the rematerialize rebind window),
+// with the same bound as closeEndedAssignmentSelfdevOperation, and logs a
+// give-up.
 func (rt *Runtime) failSelfdevOperation(ctx context.Context, operation selfdev.Operation, reason string) {
 	trimmedReason := strings.TrimSpace(reason)
-	for _, from := range []string{selfdev.StateExecuting, selfdev.StateFrozen, selfdev.StateVerified, selfdev.StateAwaitingApproval, selfdev.StateRequested} {
-		_, transErr := rt.selfdevOperations.Transition(ctx, operation.ComputerID, operation.OperationID, from, selfdev.StateFailed, func(next *selfdev.Operation) error {
+	closable := []string{selfdev.StateExecuting, selfdev.StateFrozen, selfdev.StateVerified, selfdev.StateAwaitingApproval, selfdev.StateRequested}
+	for attempt := 0; attempt < selfdevCloseAttempts; attempt++ {
+		current, err := rt.selfdevOperations.Get(ctx, operation.ComputerID, operation.OperationID)
+		if err != nil {
+			log.Printf("selfdev: fail %s: read: %v", operation.OperationID, err)
+			return
+		}
+		if !slices.Contains(closable, current.State) {
+			return
+		}
+		_, err = rt.selfdevOperations.Transition(ctx, current.ComputerID, current.OperationID, current.State, selfdev.StateFailed, func(next *selfdev.Operation) error {
 			next.TerminalError = trimmedReason
 			return nil
 		})
-		if transErr == nil {
+		if err == nil {
 			return
 		}
-		if errors.Is(transErr, selfdev.ErrInvalidTransition) || !errors.Is(transErr, selfdev.ErrConflict) {
+		if !selfdevCloseRetryable(err) {
+			log.Printf("selfdev: fail %s from %s: %v", current.OperationID, current.State, err)
 			return
 		}
+		log.Printf("selfdev: fail %s from %s: state moved, re-reading: %v", current.OperationID, current.State, err)
 	}
+	log.Printf("selfdev: fail %s: gave up after repeated state conflicts", operation.OperationID)
+}
+
+// selfdevCloseAttempts bounds the re-reads of a close that keeps losing races.
+const selfdevCloseAttempts = 3
+
+// selfdevCloseTimeout bounds a post-commit close detached from its request,
+// as settleRulePrecommits bounds settlement.
+const selfdevCloseTimeout = 15 * time.Second
+
+// selfdevCloseRetryable reports a lost race: in-process (ErrConflict) or a
+// tape CAS lost to a writer without this Store's write mutex
+// (ErrProjectionMismatch).
+func selfdevCloseRetryable(err error) bool {
+	return errors.Is(err, selfdev.ErrConflict) || errors.Is(err, computerevent.ErrProjectionMismatch)
 }
 
 // ReconcileEngineeringAssignmentsForTrajectory closes restart gaps without a
@@ -1362,19 +1394,26 @@ func (rt *Runtime) commitAssignedEngineeringReport(ctx context.Context, assignme
 // a failed one cannot be verified, so its candidate closes too. Cancellation
 // closes through failBoundSelfdevOperation. The close is a normal Transition,
 // on the tape like every other, and a terminal operation is left alone. It
-// runs after the report committed, so a cancelled request must not stop it,
-// and every give-up is logged.
+// runs after the report committed, so a cancelled request must not stop it;
+// it keeps a deadline of its own, and every give-up is logged.
+//
+// Invariant, scoped to this close: it never closes a decided operation
+// (awaiting_approval, accepted, materializing, applied, rollback_pending,
+// degraded). Cancellation is different on purpose: failSelfdevOperation,
+// for an assignment's or a trajectory's cancellation, also closes
+// awaiting_approval.
 func (rt *Runtime) closeEndedAssignmentSelfdevOperation(ctx context.Context, assignment types.EngineeringAssignment) {
 	if rt == nil || rt.selfdevOperations == nil || !assignment.Disposition.Terminal() {
 		return
 	}
-	ctx = context.WithoutCancel(ctx)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), selfdevCloseTimeout)
+	defer cancel()
 	closable := []string{selfdev.StateRequested, selfdev.StateExecuting}
 	if assignment.Disposition != types.EngineeringAssignmentCompleted {
 		closable = append(closable, selfdev.StateFrozen, selfdev.StateVerified)
 	}
 	computerID := assignment.Binding.ComputerID
-	for attempt := 0; attempt < 3; attempt++ {
+	for attempt := 0; attempt < selfdevCloseAttempts; attempt++ {
 		operation, found, err := rt.selfdevOperations.GetByIdempotency(ctx, computerID, store.EngineeringFreezeIdempotencyKey(assignment.AssignmentID))
 		if err != nil {
 			log.Printf("selfdev: close the operation of ended assignment %s: read: %v", assignment.AssignmentID, err)
@@ -1401,7 +1440,7 @@ func (rt *Runtime) closeEndedAssignmentSelfdevOperation(ctx context.Context, ass
 		// A competing writer in this process loses as ErrConflict; one that
 		// does not share the store's write mutex loses its tape CAS as
 		// ErrProjectionMismatch. Both re-read and retry.
-		if !errors.Is(err, selfdev.ErrConflict) && !errors.Is(err, computerevent.ErrProjectionMismatch) {
+		if !selfdevCloseRetryable(err) {
 			log.Printf("selfdev: close %s of ended assignment %s: %v", operation.OperationID, assignment.AssignmentID, err)
 			return
 		}
