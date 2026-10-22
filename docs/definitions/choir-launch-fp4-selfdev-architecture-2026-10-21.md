@@ -247,7 +247,11 @@ now:
     failed report saga on a fate-pending assignment arms a re-drive through
     the redrive hook; the worker's lock pinned and deferred; the freeze
     wrap moved into commit; the marker counts only in tool errors; the saga
-    map trimmed; residual E6. Next: FP0 re-runs drill
+    map trimmed; residual E6. Review bunch 92 M1 (DeepSeek): a fate
+    re-drive that keeps failing is a dispatcher deferral and, on its sixth
+    failure, revokes the capsule and cancels the assignment with the
+    report's failure as the reason (it was dead-lettered after eight hot
+    retries and the assignment stayed bound). Next: FP0 re-runs drill
     step 6 (A completes, its candidate stays open, B's freeze is refused
     and B reports failed). Before that:
     Capsule memory (lane/fp4-capsule-memory, base main 71ec8e704): A's
@@ -277,7 +281,7 @@ now:
     cancel/admission race, real-handler and lane tests, a range for the
     latency test, a state-neutral guard reason. Earlier: round 2 (R1 to
     R6), batch 1 (B1 to B3), writer-gate counts, the nudge.
-  source_ref: a32e7652f on lane/fp4-r4 (base main 6c60685cc)
+  source_ref: 6a1ee89ec on lane/fp4-r4 (base main 6c60685cc)
   deploy_identity: unknown to this lane
   candidate: {id: arch10-admission-r3, state: ready_for_review, ref: lane/fp4-r3-nudge, base: 7448bf899, digest: none, scope: [internal/agentcore/engineering_admission.go, internal/agentcore/engineering_assignment_runtime.go, internal/agentcore/engineering_assignment_fate.go, internal/agentcore/continuation_schedule.go, internal/agentcore/api.go, internal/agentcore/freeze_candidate.go, internal/agentcore/runtime.go, internal/actorruntime/adapter.go, internal/actorruntime/handler.go, internal/objectgraph/writer.go]}
   conjecture:

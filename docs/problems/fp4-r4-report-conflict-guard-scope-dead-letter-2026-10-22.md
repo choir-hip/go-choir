@@ -233,3 +233,40 @@ fate visible to the owner.
 The reviewer's two options: give the re-drive a distinct generation so the
 pending wake does not swallow it, or defer on a resume failure and, when
 the retries run out, cancel the assignment terminally with a true reason.
+
+### M1 disposition (lane/fp4-r4)
+
+Tests 1be4159f7 (the agentcore test failed on c6f597b0f: the assignment
+was still bound after 24 failed re-drives, at freeze_requested and at
+frozen; the actorruntime test did not compile there), fix 6a1ee89ec.
+
+- **Repaired, by the reviewer's second option.** A failed re-drive of the
+  staged report (anything but the held saga) returns
+  `ErrFateRedriveRetry`, which actorruntime maps to a dispatcher deferral:
+  the same wake comes back with backoff (0.5 s doubling) and is kept out
+  of the MaxAttempts budget. On the sixth failure the wake takes the saga,
+  revokes the capsule and cancels the assignment, not silently, with the
+  reason "the terminal report could not be committed after N re-drives;
+  the capsule is revoked and the assignment cancelled: <the last error>".
+  Six is below MaxAttempts (8), so the wake reaches a fate even if its
+  failure reached the dispatcher as a plain error. A failure of the revoke
+  or the cancel is retried by the same wake.
+- **The first option was not taken.** A distinct generation would add a
+  second wake that fails the same way and is dead-lettered the same way;
+  it gives no terminal fate. The redrive hook's "nothing while one is
+  pending" stays: the pending wake is the re-drive, and it now ends in a
+  fate.
+- **The count is in-process.** A crash boot closes the assignment anyway;
+  a planned boot resumes it once and, if a deferred wake survives, starts
+  a fresh count of six. Crash restarts resume nothing.
+- **Residual.** The deferral budget (MaxDeferrals 64) is shared with
+  held-saga deferrals. A wake that spent most of it waiting for a live
+  saga could be dead-lettered before its sixth failure. Narrow: a saga
+  holds the mutex for one attempt, and the backoff reaches 30 s within
+  seven deferrals. A revoke that fails every time (the executor cannot
+  destroy the capsule) also ends in a dead letter with no fate; the
+  system cancel requires a durable revoke, so that case needs the
+  executor, not the wake.
+- **Not exercised on a computer.** The test drives the handler in process
+  with an absent capsule; the dispatcher's deferral is pinned by the
+  actorruntime test.
