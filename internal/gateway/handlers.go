@@ -428,9 +428,11 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 
 	// Step 3: Decode the request, under the model body cap (B7).
 	var req ProviderRequest
-	if err := h.decodeBody(w, r, bodyRouteModel, computerID, &req, false); err != nil {
-		if isBodyTooLarge(err) {
-			writeGatewayJSON(w, http.StatusRequestEntityTooLarge, ErrorResponse{Error: err.Error()})
+	releaseBody, err := h.decodeBodyHeld(w, r, bodyRouteModel, computerID, &req, false)
+	defer releaseBody() // the decoded request lives for the whole call (F1)
+	if err != nil {
+		if status, ok := bodyRefusal(w, err); ok {
+			writeGatewayJSON(w, status, ErrorResponse{Error: err.Error()})
 			return
 		}
 		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid request body"})
@@ -656,8 +658,8 @@ func (h *Handler) HandleIssueCredential(w http.ResponseWriter, r *http.Request) 
 		ComputerID string `json:"computer_id"`
 	}
 	if err := h.decodeBody(w, r, bodyRouteOperator, "host", &req, false); err != nil {
-		if isBodyTooLarge(err) {
-			writeGatewayJSON(w, http.StatusRequestEntityTooLarge, ErrorResponse{Error: err.Error()})
+		if status, ok := bodyRefusal(w, err); ok {
+			writeGatewayJSON(w, status, ErrorResponse{Error: err.Error()})
 			return
 		}
 		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid request body"})
@@ -701,8 +703,8 @@ func (h *Handler) HandleEnsureCredential(w http.ResponseWriter, r *http.Request)
 		PeerIP string `json:"peer_ip,omitempty"`
 	}
 	if err := h.decodeBody(w, r, bodyRouteOperator, "host", &req, false); err != nil {
-		if isBodyTooLarge(err) {
-			writeGatewayJSON(w, http.StatusRequestEntityTooLarge, ErrorResponse{Error: err.Error()})
+		if status, ok := bodyRefusal(w, err); ok {
+			writeGatewayJSON(w, status, ErrorResponse{Error: err.Error()})
 			return
 		}
 		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid request body"})
@@ -925,8 +927,8 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 	// Step 3: Decode the request.
 	var req SearchRequest
 	if err := h.decodeBody(w, r, bodyRouteSearch, computerID, &req, false); err != nil {
-		if isBodyTooLarge(err) {
-			writeGatewayJSON(w, http.StatusRequestEntityTooLarge, ErrorResponse{Error: err.Error()})
+		if status, ok := bodyRefusal(w, err); ok {
+			writeGatewayJSON(w, status, ErrorResponse{Error: err.Error()})
 			return
 		}
 		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid request body"})
@@ -1134,8 +1136,8 @@ func (h *Handler) HandleSearchHealthReset(w http.ResponseWriter, r *http.Request
 	}
 	var req searchHealthResetRequest
 	if err := h.decodeBody(w, r, bodyRouteOperator, "host", &req, false); err != nil {
-		if isBodyTooLarge(err) {
-			writeGatewayJSON(w, http.StatusRequestEntityTooLarge, ErrorResponse{Error: err.Error()})
+		if status, ok := bodyRefusal(w, err); ok {
+			writeGatewayJSON(w, status, ErrorResponse{Error: err.Error()})
 			return
 		}
 		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid request body"})
@@ -1199,8 +1201,8 @@ func (h *Handler) HandleProviderBreakerReset(w http.ResponseWriter, r *http.Requ
 	}
 	var req searchHealthResetRequest
 	if err := h.decodeBody(w, r, bodyRouteOperator, "host", &req, false); err != nil {
-		if isBodyTooLarge(err) {
-			writeGatewayJSON(w, http.StatusRequestEntityTooLarge, ErrorResponse{Error: err.Error()})
+		if status, ok := bodyRefusal(w, err); ok {
+			writeGatewayJSON(w, status, ErrorResponse{Error: err.Error()})
 			return
 		}
 		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid request body"})
