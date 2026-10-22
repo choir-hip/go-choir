@@ -131,3 +131,83 @@ Guest console (Node B, read-only), runtime lines:
    management's activation.
 3. A focused test that holds management in an activation while the
    nudge fires, and asserts B's bind within the nudge bound.
+
+## Cause confirmed (lane/fp4-r3-nudge, 2026-10-22)
+
+The hypothesis holds, in code and in a test.
+
+- Code: the dispatcher runs one activation per mailbox at a time
+  (`dispatchPending` skips a mailbox in `d.running`,
+  internal/actor/dispatcher.go), and a management activation runs its
+  whole tool loop inside `HandleUpdate` (internal/actorruntime/handler.go).
+  An update addressed to management therefore waits until the current
+  activation returns. The nudge, the backoff retry and the planned-boot
+  resume were all addressed to `binding.ParentAgentID`, which is
+  management.
+- Test: `TestEngineeringAdmissionNudgeDoesNotWaitBehindManagementActivation`
+  (internal/agentcore/engineering_admission_dispatch_test.go, 80634bd09)
+  runs a real actor dispatcher over a SQLite kernel log and holds
+  management's mailbox in one activation while A ends. On main the nudge
+  is armed on time to `management:owner-admission`, does not run within
+  5 s, and runs 18 ms after management's activation is released.
+
+## What admission needs from management's lane
+
+Nothing. Read before choosing the fix:
+
+- Locks: `HandleDelegatedAssignmentSpawnDeadline` takes
+  `engineeringAssignmentOpenMu`, a process mutex, whatever mailbox
+  delivers the wake.
+- Rows: it re-reads the assignment; the expiry cancel, the terminal
+  capsule reclaim and the bind are store commits, each guarded by the
+  assignment's `ExpectedLifecycleVersion` CAS.
+- Actor state: it returns management's memory unchanged.
+- Restart rules: the crash rule (`preBootWorkOccurrence`, the outbox's
+  `preBootWorkWake`) and the apply hold key on the update kind
+  (`delegated_assignment_spawn_deadline` is restart work), not on the
+  mailbox.
+
+## Fix: the second of the two shapes (admission on its own mailbox)
+
+Tests b557b2d64 (failed on main 7448bf899), fix cf7ed5072.
+
+Admission's own wakes (the backoff retry, the nudge, the planned-boot
+resume) go to a mailbox of their own, `engineering-admission`
+(`agentcore.EngineeringAdmissionMailbox`), with a dispatcher lane of one,
+as source polls have. The handler accepts a wake on either that mailbox or
+the casting agent's.
+
+Why this shape and not admitting B inline at A's terminal commit:
+
+- `wakeNextQueuedEngineeringRequest` is called from paths that already
+  hold `engineeringAssignmentOpenMu` (the trajectory reconcile's cancels)
+  and from A's report tool call. An inline admission would re-enter the
+  mutex (deadlock) or run B's capsule spawn and bind inside A's report
+  commit, with its failures folded into A's fate.
+- The mailbox change keeps every rule where it was: admission still runs
+  under the saga mutex, after expiry (R1, R4), against the one-slot rule,
+  and a crash boot still drops the wake as restart work.
+
+`TestEngineeringAdmissionWakeOffManagementKeepsTheSlotRule` shows a nudge
+on the new mailbox still leaves B open and unbound while A holds the slot.
+
+Every admission wake now logs, at the handler: `actorruntime: engineering
+admission wake latency mailbox=<mailbox> update=<id> waited=<due to
+handled> content=<wake>`.
+
+## Disposition
+
+Repaired for the nudge, the retry and the boot resume. Residual: the
+open-time spawn wake is minted by the store in the open commit
+(internal/store/lifecycle.go, `appendWake(":spawn",
+assignment.Binding.ParentAgentID, …)`) and still goes to management's
+mailbox, so a request's first admission attempt waits for the casting
+activation to end. Moving it changes the store's outbox target; a request
+refused busy is re-armed onto the admission mailbox from then on.
+
+Rollback: revert the fix commit. A wake already on the admission mailbox
+is then delivered to a handler that drops a mailbox other than the casting
+agent's, so the request loses that wake. A planned restart (the deploy
+that carries the revert) resumes kept queued requests on management's
+mailbox; a crash boot closes them interrupted_by_restart. Either way the
+request gets a fate.

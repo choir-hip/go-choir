@@ -207,19 +207,19 @@ heresy_delta:
 now:
   status: checkpoint
   slice: >-
-    Round 2 repair on deploy G (lane/fp4-on-g, rebased from
-    lane/b10-selfdev-b1fix e71cf6259 onto 39c2ba642 with no conflicts).
-    Panel bunch 30 (Gemini flash accept, Devin accept, DeepSeek accept with
-    edits) asked for six edits; recorded first (783cd578c), tests
-    (6f1861830, R1 to R5 failed on c494f5aac), fix (11dfea955).
-    Dispositions in the problem record's round 2 section: R1, R2 (planned
-    restart), R4, R5 repaired; R3 made visible on B's run and bounded by
-    its deadline; R6 recorded as an ARCH-03 install and enforce-flip
-    precondition. Earlier: batch 1 repair B1 to B3, writer-gate counts on
-    observability, next-request nudge.
-  source_ref: 11dfea955 on lane/fp4-on-g (base stage/deploy-g 39c2ba642)
+    Round 3 repair from the deployed drill on 71afbf14 (lane/fp4-r3-nudge,
+    base main 7448bf899). P1: the nudge waited behind management's own
+    activation (B bound 305 s after A ended); the cause is confirmed in a
+    test, and admission's own wakes now go to an engineering-admission
+    mailbox with its own dispatcher lane, and every admission wake logs its
+    dispatch latency. P2: the R3 refusal advised "partial", which ends in a
+    completion-guard cancel; it now advises failed with the refusal as the
+    reason, and the guard's reason names the open candidate. Tests first
+    (yellow), then the fix (red), then this record. Earlier: round 2 (R1 to
+    R6), batch 1 (B1 to B3), writer-gate counts, the nudge.
+  source_ref: cf7ed5072 on lane/fp4-r3-nudge (base main 7448bf899)
   deploy_identity: unknown to this lane
-  candidate: {id: arch10-admission-r2, state: ready_for_review, ref: lane/fp4-on-g, base: 39c2ba642, digest: none, scope: [internal/agentcore/engineering_admission.go, internal/agentcore/engineering_assignment_runtime.go, internal/agentcore/engineering_assignment_fate.go, internal/agentcore/continuation_schedule.go, internal/agentcore/api.go, internal/agentcore/freeze_candidate.go, internal/objectgraph/writer.go]}
+  candidate: {id: arch10-admission-r3, state: ready_for_review, ref: lane/fp4-r3-nudge, base: 7448bf899, digest: none, scope: [internal/agentcore/engineering_admission.go, internal/agentcore/engineering_assignment_runtime.go, internal/agentcore/engineering_assignment_fate.go, internal/agentcore/continuation_schedule.go, internal/agentcore/api.go, internal/agentcore/freeze_candidate.go, internal/agentcore/runtime.go, internal/actorruntime/adapter.go, internal/actorruntime/handler.go, internal/objectgraph/writer.go]}
   conjecture:
     id: FP4-C1
     claim: >-
@@ -243,6 +243,7 @@ now:
     evidence_refs:
       - docs/problems/engineering-admission-supersedes-live-assignment-2026-10-21.md (review findings section)
       - "local: the B1, B2 and B3 tests failed on b0f872bd6 and pass at 059924c7e; go test ./internal/agentcore -run 'Engineering|Assignment|Restart|Boot|C1e|PreBind|Deadline|Records|Cast' ok; go test ./internal/objectgraph ok"
+      - "local: the round 3 tests (engineering_admission_dispatch_test.go, freeze_refusal_fate_test.go, actorruntime admission_wake_latency_test.go) failed on 7448bf899 and pass at cf7ed5072; on main the nudge ran only 18 ms after management's held activation was released, at the fix 95 ms after A ended with management still held; GOMAXPROCS=2 go test -race ./internal/agentcore -run 'Engineering|Admission|Assignment|Selfdev|Freeze|Obligation|Nudge|Guard|Completion' ok; go test ./internal/actor ok; go test ./internal/actorruntime ok"
       - "local: the round 2 tests (engineering_admission_review2_test.go) failed on c494f5aac and pass at 11dfea955; GOMAXPROCS=2 go test -race ./internal/agentcore -run 'Engineering|Admission|Assignment|Selfdev|Freeze|Obligation' ok; go test ./internal/objectgraph ok; go vet agentcore, objectgraph, platform clean"
   decision:
     what: >-
@@ -275,20 +276,30 @@ now:
     completes with a frozen candidate, B binds but cannot freeze until the
     owner decides A (R3; residual for L3-07). A scheduleActor failure after
     the bind commit, without a restart, still leaves a bound run without
-    its deadline wake (R2 residual).
+    its deadline wake (R2 residual). The open-time spawn wake is still minted
+    on management's mailbox by the store, so a request's first admission
+    attempt waits for the casting activation (P1 residual).
   next_action: >-
-    FP0: re-review 783cd578c..11dfea955 (the round 2 edits), land as deploy
-    H, then the drill: (1) Cast A, wait for its capsule bound;
+    FP0: review the round 3 commits on lane/fp4-r3-nudge, land, then re-run
+    drill steps 4 and 6 (the others passed on deploys J and K): (1) Cast A, wait for its capsule bound;
     (2) Cast B; read rows: A bound, B open/unbound, log "waits behind A";
     (3) trigger a planned refresh of the test computer while A is live
     (critical_protected or deferred refresh); read rows after boot: B still
     open, log "planned boot: queued engineering request B kept and resumed";
     (4) let A finish or Cancel it; B binds within seconds (nudge), not at the
-    next minute retry; (5) GET /api/runtime/observability and read
+    next minute retry, while management is still reading A's report; in the
+    guest log read "actorruntime: engineering admission wake latency
+    mailbox=engineering-admission … waited=…" for B's nudge (content carries
+    "nudge":"<A>"): waited is a few seconds at most, and mailbox is not
+    management's; (5) GET /api/runtime/observability and read
     objectgraph_writer_gate {mode: observe, counts}; (6) with A completed
     and its candidate frozen, have B freeze: B's run shows the refusal
-    naming A's operation and "cannot freeze until", and the guest log has
-    "selfdev: assignment B cannot freeze". Crash half: on a
+    naming A's operation, "cannot freeze until" and "Complete with result
+    failed", and the guest log has "selfdev: assignment B cannot freeze"; B
+    ends failed with the refusal as its reason, or, if the model reports
+    partial, cancelled with a reason that names A's candidate ("the freeze
+    was refused: self-development candidate selfdev-… is awaiting_approval"),
+    never the bare guard name. Crash half: on a
     throwaway computer, kill the guest with B queued; after boot B is
     cancelled interrupted_by_restart.
 slices:
@@ -350,6 +361,11 @@ receipts:
     identity: 783cd578c (findings), 6f1861830 (tests), 11dfea955 (fix)
     proof_refs: [internal/agentcore/engineering_admission_review2_test.go]
     rollback_ref: git revert 11dfea955 (no schema, no new kind)
+  - id: arch10-r3
+    boundary: implement
+    identity: b557b2d64 (tests), cf7ed5072 (fix), on lane/fp4-r3-nudge
+    proof_refs: [internal/agentcore/engineering_admission_dispatch_test.go, internal/agentcore/freeze_refusal_fate_test.go, internal/actorruntime/admission_wake_latency_test.go]
+    rollback_ref: git revert cf7ed5072 (no schema, no new kind; a wake already on the admission mailbox is dropped and the request gets its fate at the next planned or crash boot)
   - id: arch04-observability
     boundary: implement
     identity: bbd19192c
