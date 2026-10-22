@@ -82,7 +82,7 @@ finish:
         as before (Close returns nil, the flip happens, the store reopens on
         the staged workspace and serves); and, if FP0 can arrange it, one
         while an online DOLT_GC or a long statement is running - the owner
-        act returns an error starting "runtime store: close left the store
+        act returns an error containing "runtime store: close left the store
         open" (an ErrCloseLeftOpen naming its cause - a running commit
         behind a GC, or a statement holding a pool's connection) within
         about 10.25 s past the telemetry drain, the journal shows "close left the
@@ -118,7 +118,9 @@ finish:
     passes there, it pins a bound round 4 already had; the round-6 test
     fails on round 5 on behavior; four of the five round-7 tests fail on
     round 6 on behavior, the fence-restore test pins round-6 behavior).
-    Round 7c - its green record, 8e68ece69, 564dc81ec (564dc81ec does
+    Round 7d - its green record, a6396a2fe, b7067604a, d6c81da3f
+    (b7067604a does not compile without a6396a2fe; d6c81da3f does);
+    round 7c - 92450f670, 8e68ece69, 564dc81ec (564dc81ec does
     not compile without 8e68ece69); round 8 - 776bfe5ac, 7078b0561, 949fb1467 (949fb1467 does
     not compile without 7078b0561); round 7 - eb8185144, 6dbdf815d, 1aaa5e7c9 (this alone reverts
     the pinning; the commit-lock fence stays); round 6 - 3b220fa02,
@@ -300,6 +302,46 @@ now:
       decided_at: 2026-10-22
       relayed_by: FP0
       status: built in round 7 (tests 1aaa5e7c9, fix 6dbdf815d), on top of 3b220fa02; FP0 lands it after deploy R
+  round_7d_review: >-
+    2026-10-22, the reviews of round 7 complete (3b220fa02..92450f670) -
+    Gemini flash accept, DeepSeek v4.1 flash and Sonnet accept with
+    edits. Tests d6c81da3f (compile on 92450f670; four fail there on
+    behavior) and b7067604a, fix a6396a2fe (red), this record.
+    DeepSeek F1 (required) and Sonnet F4 - fixed: errWorkspaceGone wraps
+    ErrCloseLeftOpen; the abandoned engine is remembered, counted
+    (closes_left_open, new engines_left_open), a second Close returns the
+    same error, Reopen refuses; child tests remove the whole workspace,
+    only the database's .dolt/noms (the mirror's shape) or only the
+    database directory. DeepSeek F2 and Sonnet F1 - fixed: the vacuous
+    TestOpenFailureReleasesTheWorkspace is replaced by engine-level tests
+    (closed once after the retries; left open with Close's error joined
+    when the statement outlasts them; the statement's own error
+    checked) and a seam test of closeFailedOpen; the no-retry,
+    dropped-error and retry-on-any-error mutants are killed. DeepSeek F3
+    - corrected: the up-to-three-Close-waits cost of a failed Open is not
+    production-reachable; Open starts no background statement and the
+    cadence is count mode at Open time (ConfigureCheckpoint runs after
+    boot), so a failed Open's Close is a no-op closing commit plus an
+    uncontended fence and pin; were it reached, each attempt would also
+    re-run the telemetry drain (not attached at Open time). DeepSeek F4 -
+    fixed: Reopen closes the store it opened when adoption fails.
+    DeepSeek F5 - "on every Store.Close path". DeepSeek F6 and Sonnet F2
+    on the reader stall - accepted by the owner, recorded. Sonnet F2 -
+    fixed: both finer doltWorkspaceIntact branches tested (M17, M18
+    killed). Sonnet F3 - accepted as is (Sonnet's own recommendation):
+    Close's budget-spent classification is tested only at pinPools, so
+    the mutant that drops Close's branch (M16) survives; it is a
+    message-level distinction on a path that needs the closing commit to
+    spend the whole budget. Sonnet F5 - "containing". Sonnet F6 - the
+    record already says the test commits need their fix to compile.
+    Sonnet F7 - TestMain removes the per-process test directory. Re-run -
+    under both ~/heavy-mirror.lock and
+    ~/heavy-test.lock with a per-run TMPDIR, GOMAXPROCS=2 GOFLAGS=-p=1,
+    the whole internal/store package under -race on this Linux VM ok
+    (1101 s) and the agentcore seam tests ok (128 s), re-run after the
+    17:35 VM restart; gates hang-guards, decode-roots, heresies,
+    v1-writer-purity ok; guest-data-fstrim not runnable here (no nix
+    binary).
   round_7c_review: >-
     2026-10-22, round 7 review (DeepSeek v4.1 flash and Sonnet accept with
     edits; no correctness defect), folded in on top of 776bfe5ac. Tests
@@ -313,10 +355,11 @@ now:
     during a failing Close is in the landing note and the problem
     record; FP0 carries it into the launch doc (this lane does not edit
     docs/launch-checklist-2026-10-21.md). Sonnet F3 - a pin failure is
-    ErrPoolStatementLive; every fail-closed error wraps ErrCloseLeftOpen.
-    Sonnet F4 - Open's failure paths retry a fail-closed Close (up to
-    three in all), log and return its error; tested (the next Open of the
-    path works). DeepSeek F1, F2 - the Close and pinPools comments fixed;
+    ErrPoolStatementLive; every fail-closed error wraps ErrCloseLeftOpen
+    (the Close over a removed workspace did not until round 7d). Sonnet
+    F4 - Open's failure paths retry a fail-closed Close (up to three in
+    all), log and return its error; tested (the next Open of the path
+    works - round 7d found that test vacuous and replaced it). DeepSeek F1, F2 - the Close and pinPools comments fixed;
     F3 - the problem record no longer says round 7 is not built; F4 - a
     spent budget is named (errCloseBudgetSpent). The F1 tests pass on
     776bfe5ac by design (they pin its behavior); the F3/F4 tests and the
@@ -341,7 +384,9 @@ now:
     panics identically on 3b220fa02 (overlay), and FP0's 01:16 record
     (agentcore-store-open-tables-changed-under-load) shows the same crash;
     round 7's teardown order is not the cause (the engine closes once,
-    last, after every pinned connection is released, on every path).
+    last, after every pinned connection is released, on every
+    Store.Close path - engines outside the Store, such as the offline GC,
+    squash and the state extractor, keep their own close).
     Tests 949fb1467 (Close over a removed workspace and an Open failing
     after the engine is up, both in child processes; test paths per
     process), fix 7078b0561 (Close checks the workspace's .dolt/noms is
@@ -446,7 +491,10 @@ now:
     - >-
       A store whose workspace is removed under its open engine leaks the
       engine until process exit (round 8): Close returns errWorkspaceGone
-      instead of crashing. The check and the engine close are not atomic,
+      instead of crashing. Since round 7d that is a fail-closed Close that
+      never clears - every later Close returns it, Reopen refuses, and
+      closes_left_open and engines_left_open count it - so the store is
+      closed for good in-process and the engine is abandoned to exit. The check and the engine close are not atomic,
       so a removal between them still crashes; and Dolt can still crash
       on a removed workspace on any write-path flush, which no Close
       change covers. Removing a live store's workspace is not a product
