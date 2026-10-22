@@ -1082,3 +1082,48 @@ Residuals added in round 2:
   does not run without it). Staging step 2 is its first real run: a
   shadow whose cgroup cannot be made shows as `setup_failed`, and
   `setup_failed` must be zero before required.
+
+### Second batch, review round 3 (DeepSeek, bunch 43, reviewed b5b33cf43; lane head 861e765a3): findings
+
+Gemini flash accepted. DeepSeek accepts with edits; Devin's review is still
+running. The references were checked against 861e765a3 (the rebase moved
+only conflict context). Every finding is accepted; fixes follow this
+record.
+
+- **F1, medium-low: the tool cgroup fails without a swap controller.**
+  Accepted. `newToolCgroup` (`internal/doctool/doctool_linux.go`) writes
+  `memory.swap.max` = 0 and treats any write error as a setup failure. On a
+  kernel without the swap controller every observe shadow is then
+  `setup_failed`, and staging step 2's gate (setup_failed zero) can never
+  pass. The desk worker cgroup already tolerates exactly this
+  (`internal/yaegikernel/desk_cgroup.go`, "No swap controller means no
+  swap to bound"). Fix: ignore ENOENT for `memory.swap.max` only.
+- **F2, low: E7 is partly applied.** Accepted. The round-1 outcome still
+  says document tools under observe "create no cgroup; the shadow is
+  counted only", which E2 contradicts; the problem record
+  `docs/problems/desk-boundary-residuals-2026-10-21.md` cites f414e3ca7,
+  e9de19687 and 4ab63a8f2 (not ancestors), names the old lane, and one
+  line says 15 capabilities. And the rebase onto a84b39bac moved every
+  batch-2 SHA again, so the station's tables cite pre-rebase hashes too.
+  Fix: re-point every hash to the head's ancestors and check each with
+  `git merge-base --is-ancestor`.
+- **F3, low: a second stuck boost for one job id leaks the first.**
+  Accepted. E6's fix keys the stuck raise `stuck:<job>` and overwrites it,
+  while `vmMemoryUsed += bytes` always runs, so a second stuck attempt
+  for the same job id leaves the first attempt's bytes counted after
+  `returnMemoryBoostsLocked` has returned only the last. Fix: accumulate
+  into the existing entry.
+- **F4, low: the E1 source scan is a list of spellings.** Accepted. It
+  matches `unix.<Name>(` and `syscall.<Name>(` in text: a raw
+  `unix.Syscall(unix.SYS_*)`, an aliased import, or a comment evades it,
+  and a comment could satisfy its sentinel. Two privileged calls it does
+  not name: `cmd/capsule-broker/egress.go` (IoctlIfreq SIOCSIFFLAGS,
+  CAP_NET_ADMIN) and `internal/capsule/capsule_release_dir.go` (Fsetxattr).
+  Fix: read the source with go/parser (comments are not code; import
+  aliases resolve), add IoctlIfreq, the setxattr family, the set*id
+  family and raw SYS_* numbers as the first argument of a Syscall, and
+  narrow K5's wording to the named calls, the enforce trial being the
+  backstop.
+- **F5, info: close_range needs no fallback under the Landlock V5 gate.**
+  Accepted; a residual line (Landlock V5 needs kernel 6.7, close_range
+  with CLOSE_RANGE_CLOEXEC 5.11).
