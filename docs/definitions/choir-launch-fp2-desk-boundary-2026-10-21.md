@@ -199,6 +199,16 @@ now:
     Not yet run: TestDeskOOMSelfTestKillsTheWorkerAtItsBudget needs root and
     cgroup v2 (FP0's Linux mirror run). Then the deployed leg on a test
     computer, which can tick RES-01 and RES-02.
+  selftest_seccomp_leg: >-
+    2026-10-22, same lane, on FP0's call. POST
+    /api/runtime/isolation-selftest?leg=seccomp re-execs the daemon's
+    binary once per capsule filter. Each child loads the capsule's own
+    filter (same constructor, BPF hash checked) and tries clone3 (ENOSYS)
+    and a clone and an unshare into a new user namespace (EPERM); fork+exec
+    and os/exec must still work. The receipt reports the kernel release.
+    Proof step 7 runs it. It proves SEC-13's filters on the deployed kernel.
+    It does not prove that a live capsule loads them, nor RES-03. Local:
+    passes unprivileged on Linux 6.18, through cmd/autoputer.
   batch1_fix: >-
     Reviewer edits applied on lane/b3-desk-boundary-b1fix: (1) prlimit64 is
     read-only for a confined worker (pid 0 or self, null new_limit);
@@ -487,6 +497,12 @@ first on the paper.
    tests/texture-acceptance-deployed.spec.js` with the test computer's session),
    and one engineering assignment completes (this proves the capsule seccomp,
    the session worker's new limits, and that nothing inside needed `clone3`).
+7. Capsule seccomp: `scripts/proofs/fp2-desk-boundary.sh --computer <test>
+   --step 7 --mutate`, which runs `desk_cell_confinement_probe.py --leg
+   seccomp`. Pass is exit 0: for each of the six capsule filters, the loaded
+   BPF hash equals the daemon's, Seccomp is 2, clone3 is ENOSYS, clone and
+   unshare into a new user namespace are EPERM, and fork+exec and os/exec
+   work. This is SEC-13 on the deployed kernel, not inside a live capsule.
 6. Rollback: `git revert` the lane's commits and the Landing Loop; the guest
    image carries the unit environment, so a revert is a deploy.
 

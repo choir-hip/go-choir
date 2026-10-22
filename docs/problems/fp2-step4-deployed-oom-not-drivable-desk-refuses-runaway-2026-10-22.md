@@ -253,7 +253,7 @@ It does not prove:
 
 - that a live capsule loads these filters. The child is not a capsule: it
   has no namespaces, no Landlock and no broker. That a capsule installs the
-  filter is code (`cmd/capsule-broker/main.go:171-180`) plus the Linux
+  filter is code (`cmd/capsule-broker/main.go:172-187`) plus the Linux
   container tests, and step 5's engineering assignment shows that nothing
   in a capsule needs `clone3`.
 - anything about RES-03, the exec-go-session worker's bounds (rlimit,
@@ -286,5 +286,12 @@ It does not prove:
   ProductAPI allowlist.
 - **S6. The judge trusts the server.** The staging script holds its own list
   of the six filters and the expected errno for each probe. It requires
-  each child's hash to equal the daemon's expected hash and to be the same
-  across the two calls a proof makes.
+  each child's hash to equal the daemon's expected hash and the six
+  programs to be distinct.
+
+Built 2026-10-22 on `lane/fp2-selftest-oom`: `internal/capsule/seccomp_selftest*.go`, the
+`capsule-seccomp-selftest` mode in `cmd/autoputer/main.go`, `?leg=seccomp`, and
+`desk_cell_confinement_probe.py --leg seccomp` (FP2 proof step 7). Local
+evidence, unprivileged on Linux 6.18: `TestSeccompSelfTestThroughAChild` and
+`TestIsolationSelfTestSeccompLegThroughTheRealBinary` pass. The deployed run
+is FP0's.
