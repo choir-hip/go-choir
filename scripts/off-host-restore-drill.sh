@@ -28,8 +28,9 @@
 set -euo pipefail
 SNAP="${1:?snapshot}"; PIECE="${2:?tape|dolt|image|snap}"
 A=/var/lib/go-choir/platform-artifacts/sha256
-S=/var/lib/go-choir/secrets/offhost-backup
-D=/var/lib/go-choir-restore-drill
+# Overridable only for scripts/off-host-backup-dolt-snapshot-test.sh.
+S="${OFFHOST_SECRETS_DIR:-/var/lib/go-choir/secrets/offhost-backup}"
+D="${OFFHOST_DRILL_DIR:-/var/lib/go-choir-restore-drill}"
 install -d -m 0700 "$D"
 CTL="$D/ssh2.ctl"
 ssh -i "$S/ssh-key" -o IdentitiesOnly=yes -o BatchMode=yes -o UserKnownHostsFile="$S/known-hosts" \
