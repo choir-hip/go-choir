@@ -301,6 +301,12 @@ receipts:
     proof_refs: [docs/problems/gateway-request-bodies-unbounded-2026-10-22.md "Repair of the review findings (bunch 109)", "internal/gateway/body_caps_test.go TestBodyCapsOneCallerCannotHoldTheWholeInFlight, TestBodyCapsAPanicInTheDecodeGivesItsBytesBack, TestBodyCapsReadWindowStartsWhenTheBodyFits and internal/provider/media_test.go TestNormalizeImageDecodesAtMostABoundedNumberAtOnce: each failed on 2e9ebc5eb", "go test -race ./internal/gateway -run 'TestBodyCaps|TestModelScheduler': green", "go test ./internal/gateway/... ./internal/provider/...: green"]
     rollback_ref: git revert of 9f9e1e658; GATEWAY_BODY_LIMITS per_caller= (up to in_flight) loosens the share without a code change
     disposition: F-A fixed (per_caller = in_flight/4, first body always fits), DeepSeek F1 fixed (4 decodes at once; MaxImagePixels kept; nix arithmetic corrected), F-B, F-C and DeepSeek F3 fixed, F5 wording fixed; DeepSeek F2 and F4 declined with reasons in the problem record
+  - id: b7-body-caps-review-round-3
+    boundary: implement
+    identity: a3d04df9d (+ nix comment 2e9329f22; findings 281cfa3e1, tests 0317092cb)
+    proof_refs: [docs/problems/gateway-request-bodies-unbounded-2026-10-22.md "Repair of the review findings (bunch 116)", "internal/provider/media_test.go TestPrepareImageDecodesItsBase64InsideADecodeSlot, TestImageDecodeSlotWaitEndsWithTheCallsContext, TestImageDecodesOneCallerHoldsAtMostItsShareOfTheSlots, TestSummarizeMediaHashesWithoutDecodingTheWholeImage and internal/gateway/body_caps_test.go TestBodyCapsModelCallNamesItsComputerAsTheImageDecodeCaller, TestBodyCapsOneCallerCannotHoldTheWholeInFlight (refused.per_caller): neither package builds on 982a70f3a (new API); with only the API shimmed onto 982a70f3a each fails behaviorally", "go test -race ./internal/gateway -run 'TestBodyCaps|TestModelScheduler': green", "go test ./internal/gateway/... ./internal/provider/...: green"]
+    rollback_ref: git revert of a3d04df9d (the round 2 code stays)
+    disposition: F1 fixed (base64 decoded inside the slot; SummarizeMedia streams), F2 fixed (ctx-aware wait; 2 of 4 slots per computer), F3 fixed (refused.per_caller); F4 declined, F5 and F6 recorded; F7 (downscaled copies held for the call) and DeepSeek round 3 findings recorded as named residuals in the problem record
   - id: res-12
     boundary: define
     identity: this file, section 5
@@ -558,11 +564,16 @@ unread. The wait lasts at most `GATEWAY_BODY_READ_TIMEOUT` (60 s) from
 a long queue wait no longer spends the server's 120 s read timeout; the
 read then has its own 60 s from the moment the body fits, and a body cut
 there is answered 503 with `Retry-After`. Both are transient to the guest.
+A body passed over to its deadline because its own caller held its share
+is counted `refused.per_caller`, not `refused.in_flight` (bunch 116).
 Images are decoded at most 4 at once process-wide
-(`provider.MaxConcurrentImageDecodes`). The gateway unit has
-`MemoryMax=8G` and `GOMEMLIMIT=6GiB` as a backstop; the worst case is
-about 5.8 GiB (the arithmetic is in the nix comment and the problem
-record).
+(`provider.MaxConcurrentImageDecodes`), at most 2 of them for one computer
+(`MaxImageDecodesPerCaller`), each from its base64 inside its slot, and a
+call whose context ends while it waits for a slot leaves the queue. The
+gateway unit has `MemoryMax=8G` and `GOMEMLIMIT=6GiB` as a backstop; the
+bodies and the decodes together are at most about 5.8 GiB, and each call's
+downscaled copies are not yet counted (bunch 116 F7; the arithmetic is in
+the nix comment and the problem record).
 
 **Observe first, for the model routes only.** The model limit is below the
 media contract's ceiling, so it could refuse a real call: a long
@@ -593,9 +604,10 @@ ceiling is no bound.
 
 **Residuals.** (a) Closed in code by the bunch 88 round: `in_flight` is
 the aggregate bound with the scheduler off. (b) Bounded by the bunch 109
-round: images are decoded at most 4 at once, about 620 MB each at 50 Mpx;
-the slots are not fair across callers, and the share is per computer, not
-per owner. (c) The refusal log has one
+and 116 rounds: images are decoded at most 4 at once, at most 2 for one
+computer, about 620 MB each at 50 Mpx; the shares are per computer, not
+per owner; each call's downscaled images (up to about 0.27 GiB a call with
+their upstream copy) are outside both bounds (F7). (c) The refusal log has one
 line per refusal and no throttle. (d) No real body sizes have been measured
 yet. The observe deploy's `max_seen.model` is the first measurement.
 (e) Proof 11 reads no large under-ceiling model body (review F6). (f) The
@@ -719,7 +731,8 @@ B7 body caps (`scripts/proofs/fp7-gateway.sh --step 10|11|12`; run before
 the scheduler flip):
 10. After the deploy with `gatewayBodyCaps = "observe"`: `/health`
     `body_caps.mode=observe`, limits model 167772160, search 1048576,
-    `in_flight` and `per_caller` present; the
+    `in_flight` and `per_caller` present, `refused.in_flight` and
+    `refused.per_caller` read apart; the
     journal has `gateway: body caps: mode=observe ...`; the gateway's
     `MemoryCurrent` and `MemoryPeak` are saved as the baseline.
 11. From a disposable test computer's guest shell, as root:

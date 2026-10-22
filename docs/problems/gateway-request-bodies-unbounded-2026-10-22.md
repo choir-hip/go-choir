@@ -449,3 +449,90 @@ findings below against the code; they are recorded here before any fix.
   calls, 6 per computer) that is up to about 3 GiB more, about 0.8 GiB per
   computer; with it off it is bounded only by how many such calls fit in
   `in_flight`. No figure in the current arithmetic counts it.
+
+## Repair of the review findings (bunch 116)
+
+Tests 0317092cb (yellow), code a3d04df9d (red), nix comment 2e9329f22
+(green). Neither package builds on 982a70f3a with the new tests (new API);
+with only the API shimmed onto 982a70f3a (checked, then discarded) each
+new check fails behaviorally, as the test commit says. DeepSeek v4.1 flash
+reviewed the same delta and accepted it with three low findings, folded in
+below (D1 to D3).
+
+- **F1, fixed.** `prepareImageSource` takes a decode slot before it
+  decodes an image's base64, and normalizes, downscales and re-encodes it
+  inside the same slot; `NormalizeImage` takes a slot itself and
+  `decodeAndDownscale` no longer does, so every image (not only one it
+  downscales) holds its up to 20 MiB `raw` only inside one of the 4 slots.
+  The "4 x 620 MB" term already carried the 20 MiB input, so it now holds,
+  and the nix comment says the input is decoded inside the slot.
+  `SummarizeMedia` hashes through `base64.NewDecoder` into sha256, never
+  holding the image whole (the test allocates under 1 MiB for an 8 MiB
+  image; it was 8 MiB). A small image now waits for a slot too; its work
+  in the slot is a base64 decode and `DecodeConfig`, milliseconds.
+- **F2, fixed: the context, and a per-computer share of the slots.**
+  `prepareMediaRequest` takes the provider call's context (all eight call
+  sites have one). The wait selects on `ctx.Done()` and returns
+  `provider.ErrImageDecodeWait` wrapping the context's error: not a
+  `MediaError`, so not a 400, and `providerFailureCounts` does not count
+  it against the breaker (the call never reached the upstream). The
+  gateway answers it as any failed provider call (502), which the guest
+  treats as transient; a client already gone reads nothing.
+  `scheduleModelCall` names the computer as the call's decode caller
+  (`provider.WithImageDecodeCaller`) with the scheduler on and off, keyed
+  as the body share is, and a caller holds or waits on at most
+  `MaxImageDecodesPerCaller` = 2 of the 4 process slots: it takes one of
+  its own 2 tokens first, so its queued images wait on its own tokens and
+  never stand in the process queue. The finding's hostile computer now
+  delays its own images and leaves 2 slots to everyone else. A caller-less
+  context (`NormalizeImage`, callers outside the gateway) takes the process
+  slot only. Residual: the shares are per computer, as the body share is.
+- **F3, fixed.** At the body deadline, a waiter whose caller holds bytes
+  and would pass its share with this body is answered with its own reason
+  ("this caller's request bodies already hold its share of the gateway;
+  retry", 429 with `Retry-After`) and counted `refused.per_caller` with
+  `limit=per_caller` in the log; a true full budget stays
+  `refused.in_flight`. Proof step 10 prints both.
+- **F4, declined.** The O(waiters) loop runs under `b.mu` over at most
+  the scheduler's 24 queued calls when it is on; off, the waiters are
+  bounded by the connections the 60 s deadline lets accumulate, and each
+  pass is a few comparisons per waiter. Per-caller sub-queues would add a
+  second structure to a red path for a cost not yet seen; revisit if
+  `/health` or a profile shows `grantLocked`.
+- **F5 and DeepSeek D3, recorded (by design).** The share counts every
+  route against one number. A computer holding one enforce model body of
+  more than 96 MiB (or any observe body over the share) is over 256 MiB
+  with a second full 160 MiB body, so its second full model body and its
+  own small search, jev and source bodies wait behind its first and answer
+  429 at 60 s if it is still running. Before the share, two full enforce
+  bodies fit. This is self-inflicted, transient and settable
+  (`GATEWAY_BODY_LIMITS per_caller=`, for example 320MiB for an
+  image-heavy computer, which loosens the share for everyone). Exempting
+  the 1 MiB routes from the share was not taken: a stalled guest could
+  then hold `in_flight` with many small declared bodies.
+- **F6, recorded (pre-existing).** A client that goes away during the
+  `in_flight` wait is noticed only at the deadline, because net/http
+  starts no background read before the body is read; the wait is bounded
+  by the 60 s deadline and the waiter holds no bytes.
+- **F7 and DeepSeek D2, a named residual.** Each call's downscaled images
+  (up to 20 x 6.7 MiB of base64) and the adapter's upstream serialization
+  of the request live for the whole call outside `in_flight` and the
+  decode slots, up to about 0.27 GiB a call. One computer can hold 6 such
+  calls with the scheduler on (about 1.6 GiB, on top of its 256 MiB share
+  times 3 and its 2 decode slots, about 3.6 GiB in all, under
+  `MemoryMax`); several computers together, 24 calls (about 6.4 GiB) with
+  the scheduler on, and more with it off, which with the bodies and the
+  decodes is past `MemoryMax=8G`. The "about 5.8 GiB" is the worst case of
+  the bodies and the decodes only, and the nix comment and the station text
+  now say so. Candidate repairs, not taken in this round: re-encode an
+  opaque downscaled image as JPEG (a few hundred KB at 1568 px, a change
+  to what the upstream sees), or a process-wide byte budget for
+  downscaled output that a call waits on like the slots. The observe
+  deploy's `MemoryPeak` (proof 10) is the first measurement.
+- **DeepSeek D1, recorded.** The round 2 receipt said each test "failed
+  on 2e9ebc5eb"; the provider test did not build there (no hook or
+  bound), a build failure, not a behavioral one. This round's receipt
+  says which kind each failure was.
+- **Gemini 3.8** approved with no required finding; its two residuals (the
+  share per computer, the decode slots unfair across callers) are the
+  per-owner residual above and F2.
