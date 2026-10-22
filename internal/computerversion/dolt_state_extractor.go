@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -159,6 +160,10 @@ func (e DoltStateExtractor) Extract(ctx context.Context, request ExtractRequest)
 		}
 		tables = kept
 	}
+	tables, err = omitEmptyOptionalTables(ctx, db, tables)
+	if err != nil {
+		return ObservationSet{}, fmt.Errorf("dolt state extraction: %w", err)
+	}
 
 	observations := make([]Observation, 0, 1+len(tables)*2+1)
 
@@ -234,6 +239,51 @@ func (e DoltStateExtractor) Extract(ctx context.Context, request ExtractRequest)
 		Required:     []ObservationKind{ObservationDoltHead},
 		Observations: observations,
 	}, nil
+}
+
+// optionalTables are tables that are not observed while they are empty: not
+// in the schema observations, not in the content observations, and so not in
+// content_root, exactly as IgnoredTables leaves a table out. A table here was
+// added after checkpoints were already witnessed; while it is empty, the
+// witness is the one a binary without the table produced for the same head,
+// so those checkpoints stay restorable
+// (docs/design/choir-event-table-f-c-2026-10-22.md section 3.3). It is a
+// package-level set, not extractor config, so no construction site can forget
+// it: a site that did would still pass live against replay while every older
+// checkpoint became unrestorable.
+var optionalTables = map[string]struct{}{
+	"choir_events": {},
+}
+
+// OptionalTables returns the tables an extraction omits while empty, sorted.
+func OptionalTables() []string {
+	out := make([]string, 0, len(optionalTables))
+	for table := range optionalTables {
+		out = append(out, table)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// omitEmptyOptionalTables drops each optional table that holds no row. Only a
+// table SHOW TABLES returned is probed, so a workspace without the table
+// needs no probe and cannot fail one.
+func omitEmptyOptionalTables(ctx context.Context, db *sql.DB, tables []string) ([]string, error) {
+	kept := tables[:0]
+	for _, table := range tables {
+		if _, optional := optionalTables[table]; optional {
+			var one int
+			err := db.QueryRowContext(ctx, fmt.Sprintf("SELECT 1 FROM `%s` LIMIT 1", table)).Scan(&one)
+			if errors.Is(err, sql.ErrNoRows) {
+				continue
+			}
+			if err != nil {
+				return nil, fmt.Errorf("probe optional table %s: %w", table, err)
+			}
+		}
+		kept = append(kept, table)
+	}
+	return kept, nil
 }
 
 // openDoltWorkspace opens an embedded Dolt connection to the named database
