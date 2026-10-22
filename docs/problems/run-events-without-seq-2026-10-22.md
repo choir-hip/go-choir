@@ -252,3 +252,10 @@ Noted, not fixed:
 - `AllocateEventSeq` being exported (DeepSeek 6).
 - A seed-read failure now fails the projection closed, which Devin judged
   acceptable.
+
+Round 1 fixed: `AllocateEventSeq` takes `eventMu` first and returns only
+when both `Seq` and `StreamSeq` are set (`allocateEventSeqLocked` always
+sets `StreamSeq`, so a retry still takes no second number). Two tests
+fail on 31280c3ef and pass now. The two doc errors are corrected in the
+review section above; plan item 3's premise (the digest covers the event)
+is withdrawn, and so is the run-end two-events residual.
