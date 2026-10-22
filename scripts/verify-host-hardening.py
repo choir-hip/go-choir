@@ -41,6 +41,7 @@ otherwise. Expectations:
 
 import argparse
 import datetime
+import grp
 import hashlib
 import json
 import os
@@ -408,12 +409,18 @@ def check_guest_floor(dns_port=8053):
     # SEC-09: KSM not running (2 = stopped and unmerged, 0 = stopped).
     ksm = _read_trim("/sys/kernel/mm/ksm/run")
     record("guest-floor", "ksm run", ksm in ("0", "2"), f"run={ksm or 'absent'}")
-    # NET-07: /dev/kvm is not world-accessible.
+    # NET-07: /dev/kvm is exactly 0660 root:kvm (the kvm group is NixOS's
+    # default, gid 302). Direct VMMs run as root; jailed VMMs mknod their own
+    # node in the jail.
     try:
         st = os.stat("/dev/kvm")
         mode = stat.S_IMODE(st.st_mode)
-        record("guest-floor", "/dev/kvm mode", (mode & 0o007) == 0 and st.st_uid == 0,
-               f"mode={mode:o} uid={st.st_uid} gid={st.st_gid} want 660 root:kvm")
+        try:
+            kvm_gid = grp.getgrnam("kvm").gr_gid
+        except KeyError:
+            kvm_gid = None
+        record("guest-floor", "/dev/kvm mode", mode == 0o660 and st.st_uid == 0 and kvm_gid is not None and st.st_gid == kvm_gid,
+               f"mode={mode:o} uid={st.st_uid} gid={st.st_gid} kvm_gid={kvm_gid} want 660 root:kvm")
     except OSError:
         record("guest-floor", "/dev/kvm mode", False, "absent")
     # SEC-03: the mangle egress policy, its jump, the IPv6 drop, the
