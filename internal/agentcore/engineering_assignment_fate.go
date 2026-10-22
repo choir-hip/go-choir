@@ -11,6 +11,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -1397,10 +1398,14 @@ func (rt *Runtime) closeEndedAssignmentSelfdevOperation(ctx context.Context, ass
 			log.Printf("selfdev: %s closed from %s: %s", operation.OperationID, operation.State, reason)
 			return
 		}
-		if !errors.Is(err, selfdev.ErrConflict) {
+		// A competing writer in this process loses as ErrConflict; one that
+		// does not share the store's write mutex loses its tape CAS as
+		// ErrProjectionMismatch. Both re-read and retry.
+		if !errors.Is(err, selfdev.ErrConflict) && !errors.Is(err, computerevent.ErrProjectionMismatch) {
 			log.Printf("selfdev: close %s of ended assignment %s: %v", operation.OperationID, assignment.AssignmentID, err)
 			return
 		}
+		log.Printf("selfdev: close %s of ended assignment %s: state moved, re-reading: %v", operation.OperationID, assignment.AssignmentID, err)
 	}
 	log.Printf("selfdev: close the operation of ended assignment %s: gave up after repeated state conflicts", assignment.AssignmentID)
 }
