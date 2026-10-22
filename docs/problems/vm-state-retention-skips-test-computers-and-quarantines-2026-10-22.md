@@ -361,7 +361,10 @@ DeepSeek accepts with edits; Gemini accepts.
 
 FP0 ran `scripts/proofs/fp0-vm-retention.sh --commit 674460d15` on staging
 after deploy D2 (evidence `_runs/deployD2-retention-after.txt`, outside
-the repo). Steps 1, 2 and 4 passed. One check failed:
+the repo). Steps 1 and 2 passed. Step 4 printed no candidate check (the
+plan had none), only its MANUAL "nothing to check" line, so its
+no-candidate rule remains unproven (corrected for R6-1). One check
+failed:
 
 ```text
 INFO step=0 vmctl build.commit=
@@ -441,3 +444,26 @@ corrections). Its findings:
   separately requires 2xx, but the check no longer proves the endpoint
   answered.
 - R6-5 (nit). fp3 step 1's wrong-service branch has no selftest case.
+
+## Review dispositions (218e192db, b525673fb)
+
+- R6-1: fixed in the D2 section above: steps 1 and 2 passed; step 4
+  printed only a MANUAL line, so its no-candidate rule remains unproven
+  on staging. (The metamission ledger's D2 entry carries the same
+  wording; it is FP0's ledger, outside this lane, and is left to FP0.)
+- R6-2: fixed in the proof-scripts station: vmctl's identity is the
+  `X-Choir-Build-Commit` / `X-Choir-Build-Service` headers of a 2xx
+  `/health`; its body has no build field.
+- R6-3: fixed. Step 0's check text names the observed commit, service
+  and status, and each negative case asserts them, so the cases fail on
+  6476fea46 (which they did).
+- R6-4: fixed. `vmctl_build_identity` also reads the status with
+  `-w '\nX-Choir-Probe-Status: %{http_code}\n'`, the deploy's own read;
+  step 0 and fp3 step 1 require a 2xx. New cases: a 401 with vmctl's
+  headers fails both.
+- R6-5: fixed. fp3 step 1 has a wrong-service case (it passed on
+  6476fea46 too; it pins the branch).
+
+selftest: 157 passed, 1 failed (the pre-existing `fp1 step 1 computes a
+busy share`). The proof stays read-only; the next staging run of step 0
+is the deployed check.

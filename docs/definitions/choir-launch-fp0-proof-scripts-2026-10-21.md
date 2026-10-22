@@ -156,8 +156,13 @@ act should have moved.
 
 ## Assumptions FP0 should check on the first run
 
-- vmctl's `/health` on 127.0.0.1:8083 reports a commit under `.build.commit`
-  (FP3 step 1); the FP3 station file names `/internal/vmctl/ownerships`, the
+- vmctl's build identity is the `X-Choir-Build-Commit` and
+  `X-Choir-Build-Service: vmctl` headers of a 2xx `/health` on
+  127.0.0.1:8083 (`server.WithBuildIdentity`; FP0 VM retention step 0,
+  FP3 step 1). Its `/health` body has no build field (refuted by D2, R5-1
+  in the VM retention problem record); the guest observability body and
+  the public platform `/health` do carry `build.commit`, vmctl does not.
+  The FP3 station file names `/internal/vmctl/ownerships`, the
   code serves `GET /internal/vmctl/list` and the scripts use that.
 - Journal units: `go-choir-vmctl`, `go-choir-gateway` (the NET-01 tool's own
   default), `go-choir-front-importance`, `go-choir-pkgmirror`; override with
