@@ -3,9 +3,12 @@ package provider
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"hash/crc32"
 	"image"
 	"image/color"
@@ -13,6 +16,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -79,7 +83,7 @@ func TestOptedOutModelRefusesImageBeforeUpstream(t *testing.T) {
 
 // FM3: an uncatalogued model is not assumed to see.
 func TestUncataloguedModelRefusesImage(t *testing.T) {
-	_, err := prepareMediaRequest("fireworks", "accounts/fireworks/models/kimi-k2p6", imageRequest("x", testPNG(t, 2, 2, color.White)))
+	_, err := prepareMediaRequest(context.Background(), "fireworks", "accounts/fireworks/models/kimi-k2p6", imageRequest("x", testPNG(t, 2, 2, color.White)))
 	if err == nil || !strings.Contains(err.Error(), "not in the Choir model catalog") {
 		t.Fatalf("err = %v", err)
 	}
@@ -103,7 +107,7 @@ func TestPrepareMediaRequestRejectsBadSources(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			req := LLMRequest{Messages: []Message{{Role: "user", Content: []Block{{Type: "image", Source: tc.source}}}}}
-			_, err := prepareMediaRequest(tc.provider, "gpt-6-luna", req)
+			_, err := prepareMediaRequest(context.Background(), tc.provider, "gpt-6-luna", req)
 			if err == nil || !strings.Contains(err.Error(), tc.want) || !IsMediaError(err) {
 				t.Fatalf("err = %v, want media error containing %q", err, tc.want)
 			}
@@ -118,7 +122,7 @@ func TestPrepareMediaRequestCapsImageCount(t *testing.T) {
 	for i := 0; i <= MaxImagesPerRequest; i++ {
 		blocks = append(blocks, Block{Type: "image", Source: &MediaSource{Kind: "base64", Data: base64.StdEncoding.EncodeToString(raw)}})
 	}
-	_, err := prepareMediaRequest("chatgpt", "gpt-6-luna", LLMRequest{Messages: []Message{{Role: "user", Content: blocks}}})
+	_, err := prepareMediaRequest(context.Background(), "chatgpt", "gpt-6-luna", LLMRequest{Messages: []Message{{Role: "user", Content: blocks}}})
 	if err == nil || !strings.Contains(err.Error(), "the limit is 20") {
 		t.Fatalf("err = %v", err)
 	}
@@ -131,11 +135,11 @@ func TestPrepareMediaRequestDownscalesLargeImages(t *testing.T) {
 	raw := testPNG(t, 2000, 1000, color.RGBA{R: 200, G: 10, B: 10, A: 255})
 	req := imageRequest("gpt-6-luna", raw)
 	original := req.Messages[0].Content[1].Source.Data
-	first, err := prepareMediaRequest("chatgpt", "gpt-6-luna", req)
+	first, err := prepareMediaRequest(context.Background(), "chatgpt", "gpt-6-luna", req)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := prepareMediaRequest("chatgpt", "gpt-6-luna", req)
+	second, err := prepareMediaRequest(context.Background(), "chatgpt", "gpt-6-luna", req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,7 +167,7 @@ func TestPrepareMediaRequestDownscalesLargeImages(t *testing.T) {
 	}
 	// A small image passes byte for byte.
 	small := testPNG(t, 8, 8, color.White)
-	out, err := prepareMediaRequest("chatgpt", "gpt-6-luna", imageRequest("gpt-6-luna", small))
+	out, err := prepareMediaRequest(context.Background(), "chatgpt", "gpt-6-luna", imageRequest("gpt-6-luna", small))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,7 +242,7 @@ func TestOpenCodeChatCompletionsSendsImageURLPart(t *testing.T) {
 func TestChatGPTResponsesSendsInputImage(t *testing.T) {
 	p := &ChatGPTProvider{modelID: "gpt-6-luna", reasoning: "low"}
 	raw := testPNG(t, 4, 4, color.RGBA{B: 255, A: 255})
-	req, err := prepareMediaRequest("chatgpt", "gpt-6-luna", imageRequest("gpt-6-luna", raw))
+	req, err := prepareMediaRequest(context.Background(), "chatgpt", "gpt-6-luna", imageRequest("gpt-6-luna", raw))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -293,7 +297,7 @@ func TestNormalizeImageDecodesAtMostABoundedNumberAtOnce(t *testing.T) {
 	raw := testPNG(t, MaxImageLongEdge*2, 64, color.RGBA{R: 200, A: 255})
 	var mu sync.Mutex
 	var now, peak int
-	imageDecodeHook = func() {
+	imageDecodeHook = func(string) {
 		mu.Lock()
 		now++
 		peak = max(peak, now)
@@ -318,4 +322,208 @@ func TestNormalizeImageDecodesAtMostABoundedNumberAtOnce(t *testing.T) {
 	if peak == 0 || peak > MaxConcurrentImageDecodes {
 		t.Fatalf("%d images decoded at once, want 1 to %d", peak, MaxConcurrentImageDecodes)
 	}
+}
+
+// --- review round (bunch 116): F1 base64 inside the slot, F2 context and
+// per-caller share of the decode slots ---
+
+// slotProbe blocks every decode slot holder in the hook until open, and
+// counts the holders per caller.
+type slotProbe struct {
+	mu     sync.Mutex
+	active map[string]int
+	peak   map[string]int
+	gate   chan struct{}
+	once   sync.Once
+	wg     sync.WaitGroup
+}
+
+func newSlotProbe(t *testing.T) *slotProbe {
+	t.Helper()
+	p := &slotProbe{active: map[string]int{}, peak: map[string]int{}, gate: make(chan struct{})}
+	imageDecodeHook = func(caller string) {
+		p.mu.Lock()
+		p.active[caller]++
+		p.peak[caller] = max(p.peak[caller], p.active[caller])
+		p.mu.Unlock()
+		<-p.gate
+		p.mu.Lock()
+		p.active[caller]--
+		p.mu.Unlock()
+	}
+	t.Cleanup(func() {
+		p.open()
+		p.wg.Wait()
+		imageDecodeHook = nil
+	})
+	return p
+}
+
+func (p *slotProbe) open() { p.once.Do(func() { close(p.gate) }) }
+
+func (p *slotProbe) count(caller string) (active, peak int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.active[caller], p.peak[caller]
+}
+
+func (p *slotProbe) total() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	n := 0
+	for _, v := range p.active {
+		n += v
+	}
+	return n
+}
+
+// fill takes every decode slot with a caller-less NormalizeImage of an
+// image it must downscale, blocked in the hook.
+func (p *slotProbe) fill(t *testing.T) {
+	t.Helper()
+	raw := testPNG(t, MaxImageLongEdge*2, 8, color.White)
+	for i := 0; i < MaxConcurrentImageDecodes; i++ {
+		p.wg.Add(1)
+		go func() {
+			defer p.wg.Done()
+			_, _, _ = NormalizeImage(raw)
+		}()
+	}
+	waitFor(t, "every decode slot to be held", func() bool { return p.total() == MaxConcurrentImageDecodes })
+}
+
+func waitFor(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for !cond() {
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for %s", what)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// F1: a base64 image is decoded from base64 inside a decode slot, so the
+// up to 20 MiB raw copy of every call queued for a slot is not held
+// outside the 4-slot arithmetic. Fails on 982a70f3a (beyond the new ctx
+// parameter): a small base64 image is decoded and returned at once while
+// every slot is held, since only a downscale took a slot.
+func TestPrepareImageDecodesItsBase64InsideADecodeSlot(t *testing.T) {
+	p := newSlotProbe(t)
+	p.fill(t)
+	req := imageRequest("gpt-6-luna", testPNG(t, 4, 4, color.White))
+	done := make(chan error, 1)
+	go func() {
+		_, err := prepareMediaRequest(context.Background(), "chatgpt", "gpt-6-luna", req)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		t.Fatalf("a base64 image was prepared (err %v) while every decode slot was held", err)
+	case <-time.After(200 * time.Millisecond):
+	}
+	p.open()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("the image was never prepared after the slots were given back")
+	}
+}
+
+// F2: a call waiting for a decode slot leaves the queue when its context
+// ends, with the context's error, not a MediaError (which would be a
+// non-transient 400). Fails on 982a70f3a: prepareMediaRequest takes no
+// context and the wait ignores it.
+func TestImageDecodeSlotWaitEndsWithTheCallsContext(t *testing.T) {
+	p := newSlotProbe(t)
+	p.fill(t)
+	req := imageRequest("gpt-6-luna", testPNG(t, MaxImageLongEdge*2, 8, color.White))
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		_, err := prepareMediaRequest(ctx, "chatgpt", "gpt-6-luna", req)
+		done <- err
+	}()
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) || IsMediaError(err) || !errors.Is(err, ErrImageDecodeWait) {
+			t.Fatalf("a cancelled slot wait = %v, want ErrImageDecodeWait wrapping context.Canceled, not a MediaError", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("a cancelled call stayed queued for a decode slot")
+	}
+}
+
+// F2: one caller holds or waits on at most MaxImageDecodesPerCaller of
+// the decode slots, so another caller's image is decoded while the first
+// keeps more queued. Fails on 982a70f3a: there is no caller in the
+// context, and one caller takes every slot.
+func TestImageDecodesOneCallerHoldsAtMostItsShareOfTheSlots(t *testing.T) {
+	p := newSlotProbe(t)
+	raw := testPNG(t, MaxImageLongEdge*2, 8, color.White)
+	prepare := func(caller string, done chan<- error) {
+		p.wg.Add(1)
+		go func() {
+			defer p.wg.Done()
+			_, err := prepareMediaRequest(WithImageDecodeCaller(context.Background(), caller), "chatgpt", "gpt-6-luna", imageRequest("gpt-6-luna", raw))
+			done <- err
+		}()
+	}
+	hog := make(chan error, 2*MaxConcurrentImageDecodes)
+	for i := 0; i < 2*MaxConcurrentImageDecodes; i++ {
+		prepare("computer-hog", hog)
+	}
+	waitFor(t, "the hog to hold its share", func() bool { a, _ := p.count("computer-hog"); return a >= MaxImageDecodesPerCaller })
+	time.Sleep(100 * time.Millisecond)
+	if a, _ := p.count("computer-hog"); a != MaxImageDecodesPerCaller {
+		t.Fatalf("one caller holds %d decode slots, want at most %d", a, MaxImageDecodesPerCaller)
+	}
+	other := make(chan error, 1)
+	prepare("computer-other", other)
+	waitFor(t, "another caller's image to take a slot", func() bool { a, _ := p.count("computer-other"); return a == 1 })
+	p.open()
+	for i := 0; i < 2*MaxConcurrentImageDecodes; i++ {
+		if err := <-hog; err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := <-other; err != nil {
+		t.Fatal(err)
+	}
+	if _, peak := p.count("computer-hog"); peak > MaxImageDecodesPerCaller {
+		t.Fatalf("one caller held %d decode slots at once, want at most %d", peak, MaxImageDecodesPerCaller)
+	}
+}
+
+// F1: the log summary hashes a base64 image without decoding it whole.
+// Fails on 982a70f3a: SummarizeMedia decodes the whole image (8 MiB here)
+// outside any slot.
+func TestSummarizeMediaHashesWithoutDecodingTheWholeImage(t *testing.T) {
+	raw := bytes.Repeat([]byte{0x89, 'P', 'N', 'G'}, 2<<20) // 8 MiB
+	msgs := imageRequest("m", raw).Messages
+	want := sha256Prefix(raw)
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	stats := SummarizeMedia(msgs)
+	runtime.ReadMemStats(&after)
+	if stats.Images != 1 || stats.Bytes != len(raw) || len(stats.Refs) != 1 || stats.Refs[0] != want {
+		t.Fatalf("summary = %+v, want 1 image of %d bytes named %s", stats, len(raw), want)
+	}
+	if alloc := after.TotalAlloc - before.TotalAlloc; alloc > 1<<20 {
+		t.Fatalf("SummarizeMedia allocated %d bytes for an 8 MiB image, want under 1 MiB", alloc)
+	}
+	if got := SummarizeMedia([]Message{{Content: []Block{{Type: "image", Source: &MediaSource{Kind: "base64", Data: "not base64!"}}}}}); len(got.Refs) != 1 || got.Refs[0] != "invalid" {
+		t.Fatalf("invalid base64 summary = %+v, want ref invalid", got)
+	}
+}
+
+func sha256Prefix(raw []byte) string {
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:])[:12]
 }

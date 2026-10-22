@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -556,7 +557,8 @@ func budgetHeldAndQueued(h *Handler) (held, queued int64) {
 // F-A: one caller that declares large bodies and sends nothing holds at
 // most its share of in_flight; another caller's body is taken in at once,
 // and the first caller's body over its share waits, then is answered 429
-// with Retry-After. Fails on 2e9ebc5eb: the stalled caller's two bodies
+// with Retry-After, counted as refused.per_caller (bunch 116 F3; fails on
+// 982a70f3a, which counts it as refused.in_flight). Fails on 2e9ebc5eb: the stalled caller's two bodies
 // hold 400 of 512 KiB and the other caller's body waits its whole deadline
 // and is answered 429.
 func TestBodyCapsOneCallerCannotHoldTheWholeInFlight(t *testing.T) {
@@ -601,6 +603,15 @@ func TestBodyCapsOneCallerCannotHoldTheWholeInFlight(t *testing.T) {
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("the stalled caller's body over its share was never answered")
+	}
+	// Bunch 116 F3: a body turned away because its own caller held its
+	// share is counted as per_caller, not as a full in_flight.
+	caps := bodyCapsHealth(t, h)
+	if got := healthNumber(t, caps, "refused", "per_caller"); got != 1 {
+		t.Fatalf("body_caps.refused.per_caller = %d, want 1", got)
+	}
+	if got := healthNumber(t, caps, "refused", "in_flight"); got != 0 {
+		t.Fatalf("body_caps.refused.in_flight = %d, want 0: the budget was never full", got)
 	}
 	_ = pw1.CloseWithError(errors.New("test done"))
 	<-done1
@@ -670,5 +681,56 @@ func TestBodyCapsReadWindowStartsWhenTheBodyFits(t *testing.T) {
 	r := <-res
 	if r.err != nil || r.code != http.StatusOK {
 		t.Fatalf("a body that arrived within the read window after its wait = %d %q (%v), want 200", r.code, r.body, r.err)
+	}
+}
+
+// --- review round (bunch 116): F2 the decode slots' caller ---
+
+// callerProvider records the image decode caller its call's context
+// carries.
+type callerProvider struct{ got chan string }
+
+func (c *callerProvider) Name() string { return "bedrock" }
+func (c *callerProvider) IsReal() bool { return true }
+func (c *callerProvider) Call(ctx context.Context, req provider.LLMRequest) (*provider.LLMResponse, error) {
+	c.got <- provider.ImageDecodeCaller(ctx)
+	return &provider.LLMResponse{ID: "r", Text: "ok", Model: "m", StopReason: "end_turn", ProviderName: "bedrock"}, nil
+}
+func (c *callerProvider) Stream(ctx context.Context, req provider.LLMRequest, onChunk func(provider.StreamChunk)) (*provider.LLMResponse, error) {
+	return c.Call(ctx, req)
+}
+
+// F2: a model call's provider context names its computer as the image
+// decode caller, keyed as the body share is, so one computer holds at
+// most its share of the decode slots; with the scheduler on and off, on
+// both model routes. Fails on 982a70f3a: there is no decode caller.
+func TestBodyCapsModelCallNamesItsComputerAsTheImageDecodeCaller(t *testing.T) {
+	for _, on := range []bool{false, true} {
+		cp := &callerProvider{got: make(chan string, 1)}
+		var s *ModelScheduler
+		if on {
+			s = NewModelScheduler(ModelSchedulerConfig{})
+		}
+		h, reg := schedulerHandler(t, cp, nil, s)
+		if rec := inferWithBody(t, h, reg, "computer-decoder", largeInferenceBody(t, 16)); rec.Code != http.StatusOK {
+			t.Fatalf("scheduler on=%v: inference = %d %s", on, rec.Code, rec.Body.String())
+		}
+		if got := <-cp.got; got != "computer-decoder" {
+			t.Fatalf("scheduler on=%v: inference decode caller = %q, want computer-decoder", on, got)
+		}
+		cred, err := reg.IssueCredential("computer-openai-decoder")
+		if err != nil {
+			t.Fatal(err)
+		}
+		req := httptest.NewRequest(http.MethodPost, "/provider/openai/v1/chat/completions", strings.NewReader(`{"model":"m","messages":[{"role":"user","content":"hi"}]}`))
+		req.Header.Set("Authorization", "Bearer "+cred.RawToken)
+		rec := httptest.NewRecorder()
+		h.HandleOpenAIChatCompletions(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("scheduler on=%v: openai chat = %d %s", on, rec.Code, rec.Body.String())
+		}
+		if got := <-cp.got; got != "computer-openai-decoder" {
+			t.Fatalf("scheduler on=%v: openai chat decode caller = %q, want computer-openai-decoder", on, got)
+		}
 	}
 }
