@@ -283,19 +283,20 @@ boundaries:
 now:
   status: working
   slice: >-
-    Land FP3 group 1 (bfac3f52a plus the contract fix 94b656fdb) and run
-    its deployed proof on the test computer; then FP1 as T2; review bunch
-    5 (FP4 delta, ARCH-03, RES-17 on FP2, FP1-A1; then FP8 and FP3 groups
-    2-3) while the bunch 4b repairs run
-  source_ref: 94b656fdb
-  deploy_identity: 53a691be6 serving (FP6 batch 1); bfac3f52a and 94b656fdb in CI
+    Land the live-red queue one per deploy, each with its deployed proof on
+    a test computer: P (FP2 batch 2) in CI, then FP4 round 3, the FP7
+    enforce flip, SEC-14 deploys 1 to 3, FP3 cuts 2 to 4. Inert and orange
+    work rides along (RES-13 L3a, ARCH-13, FP0 ops visibility). Measure
+    busy-then-idle guest memory to decide page-cache reclaim for the paper.
+  source_ref: 966d3f519
+  deploy_identity: 358ce87c0 serving (deploy O, the wake-orphan fix); 966d3f519 (deploy P) in CI
   candidate:
-    id: FP3-group-1
-    state: landed on main, CI running after the contract-test fix; accepted by both reviewers in bunch 4a
-    ref: bfac3f52a (main), test fix 94b656fdb
-    base: 53a691be6
-    digest: delta bcdb74659..f6914992e sha256 bfeae4df36a26ded5524dd5600ca77c88567098cc503f60d7851d6ec6d06025d
-    scope: [internal/vmctl, .github/workflows/ci.yml, internal/computertiers]
+    id: FP2-batch-2
+    state: on main, CI running; three accepts (review round 3), mirror PASS on 7abd8f211
+    ref: 966d3f519 (main)
+    base: 358ce87c0
+    digest: tree of 7abd8f211 plus the ledger (the mirrored tree; only the ledger differs)
+    scope: [internal/capsule, internal/doctool, internal/capfloor, internal/content, internal/agentcore, cmd/autoputer, nix]
   bridge_conjecture: >-
     If the security and density batches land with deployed proofs and
     independent review, then the owner's second pass starts from a computer
@@ -326,24 +327,29 @@ now:
     owner_ratification_ref: not_applicable
   belief:
     believed_state: >-
-      The paper and owner computer run 53a691be6 (FP6 batch 1). FP3 group
-      1 is on main and deploying. Accepted and waiting for a deploy slot:
-      FP1 (bed24b526), FP2 batch 1 (27d39057d). In review: bunch 5a.
-      Sent back and being repaired in the VM: FP7, SEC-14, FP9, FP2 batch
-      2. Six VM workers and one Mac worker (NET-01) are running.
+      Deploys L to O are live and proved on staging (decision-409; FP3 cut
+      1, the host egress floor; SEC-16 and inert NET-01; the wake-orphan
+      fix, guard path only). The owner's computer was restarted at the
+      owner's request at 12:08 and its 16-hour self-development operation
+      closed as interrupted. P is in CI. FP4 round 3 has three accepts and
+      a small edit round. ARCH-13 is in round 5 (retried Close fails open).
+      RES-13 L3a round 2 is in review. SEC-14 deploy 1 passed its mirror.
+      FP3 cuts 2 to 4 are built and mirrored, waiting for slots.
     main_uncertainty: >-
-      whether the FP3 rescue behaves on staging as the tests say (the
-      proof wedges a test computer), and whether one deploy slot every
-      25 to 40 minutes lands the queue before the pass ends.
-    next_observation: the FP3 proof steps 1-4 on computer-7dcdf5e2, then FP1's deploy as T2 for steps 5-6.
+      whether one live red per deploy (about 40 to 60 minutes with its
+      proof) lands the queue in this pass, and whether guest page-cache
+      reclaim returns host memory at all while freed guest pages stay
+      resident on the host.
+    next_observation: deploy P's identity on staging, then its confinement probe and document-tool receipts on the FP2 test computer.
   blocker_or_risk: >-
-    A landing's CI checks that no lane runs locally (the workflow
-    contract tests caught one); the paper's boot path on FP1's store
-    change; reviewers sending back the same lane a third time.
+    Landing is the bottleneck (conjecture C-FP-landing holds so far).
+    The VM has 10 GiB, so mirrors run one at a time behind a lock; three
+    OOM kills on 2026-10-22 were fixed by the locks. A graceful vmctl
+    restart cannot interrupt a 10 s boot, so the wake-orphan in-flight
+    branch has no staging proof.
   next_action: >-
-    Confirm bfac3f52a and 94b656fdb deployed and the paper healthy, run
-    the FP3 proof, land FP1 as T2, read bunch 5a.
-
+    Prove P; land FP4 round 3 as Q and re-run its drill steps 4 and 6;
+    then the FP7 flip and SEC-14.
 receipts:
   - id: capture-label-key-read
     boundary: implement
