@@ -66,3 +66,21 @@ func TestCompletionGuardReasonNamesTheOpenCandidate(t *testing.T) {
 		t.Fatalf("a run whose freeze was never refused got reason %q", plain)
 	}
 }
+
+// Round 3b (bunch 51, DeepSeek 5): the reason names the candidate and the
+// state the refusal gave, and claims nothing about what that state waits
+// for (an executing candidate is not waiting for management's Verify).
+func TestCompletionGuardReasonIsStateNeutral(t *testing.T) {
+	refusal := `cannot freeze until the open candidate settles (another self-development operation is open on this computer: selfdev-77aa is executing)`
+	reason := engineeringTerminalFateGuardReason(guardTestMessages(t, refusal))
+	for _, want := range []string{"selfdev-77aa", "executing"} {
+		if !strings.Contains(reason, want) {
+			t.Fatalf("the guard's reason does not say %q: %q", want, reason)
+		}
+	}
+	for _, wrong := range []string{"Verify", "owner's decision"} {
+		if strings.Contains(reason, wrong) {
+			t.Fatalf("the guard's reason claims %q for an executing candidate: %q", wrong, reason)
+		}
+	}
+}
