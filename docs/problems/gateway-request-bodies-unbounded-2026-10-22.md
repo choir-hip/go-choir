@@ -577,3 +577,77 @@ What the sizing has to face, recorded before the fix:
   call must reserve once, before its first decode slot, for its worst case
   (its base64 images x 6.67 MiB), and give back what it did not use after
   the last image.
+
+## Repair of F7 (FP0 round 5)
+
+Decision and sizing e06f5364e (green), tests ae30081c0 (yellow, neither
+package builds on 142c17bd1; with only the API shimmed onto it, checked
+then discarded, each check fails behaviorally), code cd6c1cd6e (red), nix
+comment 15e00ccad (green).
+
+- **The output budget.** `provider.imageOutput` bounds the downscaled
+  images all calls hold, as base64, at `MaxImageOutputBytes` = 192 MiB,
+  and one caller's at `MaxImageOutputBytesPerCaller` = 96 MiB, keyed by
+  the same decode caller (the computer) as the slots and the body share,
+  with the body budget's grant rule: oldest first, a caller over its share
+  passed over, its first reservation always within its share. 192 MiB
+  takes one full call (20 x 6.67 MiB = 133.3 MiB) with 58 MiB to spare.
+- **Reserve once, before any slot.** `prepareMediaRequest` reserves
+  `ImageOutputPerImage` (6.67 MiB) per base64 image in one acquire before
+  its first decode slot, then decodes the images one at a time, then cuts
+  the reservation to the new base64 its request carries (0 for an image
+  that passes unchanged, which keeps the original string). No call holds
+  output while it waits for more, and no slot holder waits for output, so
+  the budget, the slots, the body budget and the scheduler slot are taken
+  in one order and never in a cycle. The cost: while a call is being
+  prepared it holds its worst case, a few milliseconds per small image.
+- **Held for the call.** `prepareMediaRequest` returns a release (never
+  nil, once only); all eight adapter call sites defer it right after the
+  call, so the bytes stay counted until the upstream call, a stream
+  included, returns.
+- **Context, errors and panics.** A wait for output that ends with the
+  call's context returns `ErrImageDecodeWait` (now "call ended while
+  waiting for image decode capacity") wrapping the context's error: not a
+  `MediaError`, not counted by the breaker, the same answer as the decode
+  slot wait. A grant that arrives together with the cancellation is given
+  back. An error after the reservation (a refused image) and a panic in the
+  decode give it back from a defer. The test hook now runs after the
+  slot's release is deferred, so a panic there gives the slot back too
+  (before, a panicking hook kept its slot; production has no hook).
+- **`/health` `image_media`.** `decode_slots`, `decode_slots_per_caller`,
+  `decode_in_use`, `decode_waited`, `decode_refused`, `output_limit`,
+  `output_per_caller`, `output_in_use`, `output_peak`, `output_waited`,
+  `output_refused`. "waited" counts waits that did not get their slot or
+  bytes at once; "refused" counts waits that ended with the call's
+  context. Proof step 10 checks the block is present.
+- **The room, from the decode slots.** Four slots left 0.19 GiB under
+  `GOMEMLIMIT`, less than one full call's output (about 0.4 GiB at three
+  copies). `MaxConcurrentImageDecodes` is now 3 (1.73 GiB) and
+  `MaxImageDecodesPerCaller` 1, so one computer's images leave two slots to
+  every other computer, as the bunch 116 F2 share of 2 of 4 did. A
+  computer's own image calls now decode one image at a time; one call
+  already decoded its images one at a time, so only its parallel image
+  calls wait on each other. The other options were kept out: shrinking
+  `in_flight` reopens the per-caller share's reasoning, shrinking
+  `MaxImagePixels` turns real phone photos into 400s, and removing the
+  RGBA copy in `downscale` changes the downscaled bytes (a prompt-cache
+  miss for every re-sent image) on a red path.
+- **The full arithmetic.** Every term at its bound at once: bodies 3 x
+  1 GiB = 3.00 GiB (each held body is in its decode, with the decoder's
+  buffer up to twice its size, or in its call, with its decoded request and
+  its upstream body; never both, so about three copies); decodes 3 x
+  about 620 MB (400 MB 16-bit decode + 200 MB RGBA copy + 20 MiB input) =
+  1.73 GiB; downscaled output 3 x 192 MiB (the string, its upstream copy,
+  the encoder's growth by doubling) = 0.56 GiB; the runtime and everything
+  else about 0.5 GiB. About 5.80 GiB: 0.2 GiB under `GOMEMLIMIT=6GiB` and
+  1.65 GiB under `MemoryMax=8G`. `TestBodyCapsUnitMemoryArithmeticFitsUnderGOMEMLIMIT`
+  computes it from the constants, so a later change to any of them fails a
+  test before it fails the unit.
+- **Residuals.** The worst case is computed, not measured; the observe
+  deploy's `MemoryPeak` (proof 10) is the first measurement, and the
+  0.5 GiB runtime term is an estimate. The margin under `GOMEMLIMIT` is
+  thin by construction: at the bound the collector works hard, which is
+  what `GOMEMLIMIT` is for, and `MemoryMax` is 1.65 GiB further. The
+  output budget is a second copy of the body budget's grant code (the
+  provider cannot import the gateway); one shared byte-budget package is
+  a clean-up for later. Shares are per computer, not per owner.
