@@ -1,6 +1,6 @@
 # The release apply-check test saw the repository change under CI and failed deploy I's second run
 
-Date: 2026-10-22. Status: **documented; cause not yet found**. Found by FP0 while
+Date: 2026-10-22. Status: **documented; not reproduced locally; writer narrowed (see Reproduction)**. Found by FP0 while
 landing deploy I (freeze round 5). Evidence class: CI (GitHub Actions), not
 staging. Mutation class of this record: green.
 
@@ -68,3 +68,63 @@ matter.
    PatchedTree` with `GOMAXPROCS=2`, and with a busy CPU) to find the writer.
 3. Fix the writer if it is `PatchedTree`; fix the fingerprint if it is the
    test. Do not weaken the check to pass.
+
+## Reproduction attempts (2026-10-22, lane fp0-release-flake)
+
+Diagnostic first: `ed2ca1ed5` makes both PatchedTree fingerprint checks name
+the part that moved (index sizes and sha256, added and removed paths under
+`.git/objects`, HEAD, status). What the tests require is unchanged.
+
+Local git is 2.54.0 (Nix); Go 1.26.4; 8 CPUs. The global config here sets only
+`user.*` and gh credential helpers; no `/etc/gitconfig`. CI runs ubuntu-latest's
+own git (version not recorded in the run) with `TMPDIR=/dev/shm`. All runs use
+the race-built test binary, `-run PatchedTree`, both tests per iteration:
+
+| Condition | Count | Result |
+|---|---|---|
+| `GOMAXPROCS=2` | 300 | pass |
+| `GOMAXPROCS=2`, 8 × `yes > /dev/null` | 300 | pass |
+| same, `TMPDIR=/dev/shm` | 300 | pass |
+| same, empty global config (`HOME` at an empty temp dir) | 300 | pass |
+| same, global `feature.manyFiles=true` | 300 | pass |
+| same, global `core.untrackedCache=true` | 300 | pass |
+| same, global `gc.auto=1` | 300 | pass |
+| same, global `maintenance.strategy=incremental` | 300 | pass |
+| fingerprint polled 10 times right after `newRepo`, CPU hog, `/dev/shm` | 1000 | pass |
+
+Not reproduced in 3,400 iterations. (`HOME` reaches PatchedTree's git as well
+as the test's; `GIT_CONFIG_GLOBAL` would not, since `gitOutput` strips `GIT_*`.)
+
+### What strace shows (`strace -f` over one run of both tests)
+
+- PatchedTree's own git processes (`rev-parse --verify`, `rev-parse
+  --git-common-dir`, `read-tree`, `apply --cached`, `write-tree`) create,
+  rename, link and unlink only under the scratch `choir-release-tree-*`
+  directory: `index.lock`, `index`, `objects/xx/tmp_obj_*` and the objects.
+  Nothing under the source repository. Hypothesis 2 has no support on 2.54.
+- The one other process that writes under the source repository's
+  `.git/objects` is the auto maintenance `git commit` starts in `newRepo`:
+  `git maintenance run --auto --quiet --detach`. It creates
+  `.git/objects/maintenance.lock`, forks a `setsid` child, and (on 2.54) the
+  parent unlinks the lock before `git commit` returns. The detached child
+  keeps running after that and, at exit, tries to unlink the lock again.
+- The git list carries a fix, "builtin/maintenance: fix locking with
+  `--detach`" (Patrick Steinhardt, v3 2026-05-13), that hands the lock to the
+  detached child (`lock_file_reassign_owner`) so it covers the background
+  tasks. Git 2.55.0 has since been released. Whether the fix is in 2.55 is
+  **not confirmed here**. With that behavior, `maintenance.lock` stays in
+  `.git/objects` after `git commit` returns, until the detached child exits.
+  A child slowed by a loaded runner would remove it between the two
+  fingerprints: an "objects: removed [maintenance.lock]" failure, rare and
+  load-dependent, as observed.
+
+### Hypotheses, ranked after these runs
+
+1. (most likely) The detached auto maintenance from `newRepo`'s commit
+   (hypothesis 1, through hypothesis 3's mechanism): its `maintenance.lock`
+   in `.git/objects` outlives `git commit` on the runner's git. It is outside
+   PatchedTree.
+2. Another background step of the same child: on 2.54 it only reads, and in a
+   3-object repository no gc, commit-graph or pack task is due.
+3. PatchedTree or gitOutput writes the source repository: no write seen in
+   strace, and it would fail every run.
