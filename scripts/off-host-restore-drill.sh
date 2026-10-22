@@ -32,6 +32,12 @@ A=/var/lib/go-choir/platform-artifacts/sha256
 # Overridable only for scripts/off-host-backup-dolt-snapshot-test.sh.
 S="${OFFHOST_SECRETS_DIR:-/var/lib/go-choir/secrets/offhost-backup}"
 D="${OFFHOST_DRILL_DIR:-/var/lib/go-choir-restore-drill}"
+# The drill chmods $D and deletes under it: an absolute path below / only
+# (review round 3 F3 of
+# docs/problems/platform-dolt-oldgen-rate-and-squash-window-2026-10-22.md).
+case "$D" in /*) ;; *) echo "OFFHOST_DRILL_DIR must be an absolute path, not '$D'" >&2; exit 2 ;; esac
+case "$D/" in */../*|*/./*) echo "OFFHOST_DRILL_DIR must not contain . or .. components: '$D'" >&2; exit 2 ;; esac
+[ -n "$(printf '%s' "$D" | tr -d /)" ] || { echo "OFFHOST_DRILL_DIR must not be /" >&2; exit 2; }
 install -d -m 0700 "$D"
 CTL="$D/ssh2.ctl"
 ssh -i "$S/ssh-key" -o IdentitiesOnly=yes -o BatchMode=yes -o UserKnownHostsFile="$S/known-hosts" \
@@ -130,9 +136,19 @@ snap)
     # entry, a number or "unread" (review round 2 R9); only one with no
     # field at all predates the marker.
     want_rows="$(printf '%s\n' $rows | sed -n "s/^$store=//p")"
-    if [ "$want_rows" = unread ]; then
+    n_rows="$(printf '%s\n' $rows | grep -c "^$store=" || true)"
+    if [ "$n_rows" -gt 1 ]; then
+      echo "$store: the manifest records the receipt count more than once ($(printf '%s' "$want_rows" | tr '\n' ' ')); the restore's freshness is unproven"; exit 1
+    elif [ "$want_rows" = unread ]; then
       echo "$store: the run could not read the receipt count; the restore's freshness is unproven"; exit 1
     elif [ -n "$want_rows" ]; then
+      # Round 3 F1, F2: the recorded count must be 1 to 15 decimal digits
+      # before it is compared, or a negative passes and a malformed one
+      # fails as a stale restore.
+      case "$want_rows" in *[!0-9]*) bad_rows=1 ;; *) bad_rows=0 ;; esac
+      if [ "$bad_rows" = 1 ] || [ "${#want_rows}" -gt 15 ]; then
+        echo "$store: the manifest's recorded receipt count '${want_rows:0:40}' is not 1 to 15 decimal digits; the restore's freshness is unproven"; exit 1
+      fi
       got_rows="$(cd "$repo" && HOME="$D/dolt-restored" dolt sql -r csv -q 'select count(*) from computer_event_append_receipts' | tail -1)"
       echo "$store receipts: restored ${got_rows:-unread}, recorded $want_rows"
       case "$got_rows" in ''|*[!0-9]*) echo "$store: the receipt count could not be read in the restore"; exit 1 ;; esac
