@@ -76,3 +76,53 @@ Management: cast this once and do not re-cast, cancel or replace request A; repo
 
 ## Steps
 
+
+Drill steps are numbered as in FP0's drill (0-6). The script step
+(`fp4-selfdev-admission.sh --step N`) is named where one was run. Times
+are UTC. The build column is the guest `/health` `build.deployed_commit`
+at that time; J is a84b39bac (deployed 09:49:51) and K is 5289387c9
+(deployed 10:16:04).
+
+| Step | Time | Call | Code | Rows read | Log line | Build | Result |
+|---|---|---|---|---|---|---|---|
+| 0 wake | 09:49:43, health 09:52:16 | `POST lifecycle/start` (idempotency `fp4-proof-wake-20261022T0950`), then GET /health, obligations, operations | 201, 200 | busy 0; obligations selfdev {0,0,0}; `selfdev_active_operations` absent; operations: 5e28993f `failed`, bb0cebfa `rejected` | vmctl: snapshot resume refused (launch_config_mismatch), cold boot | J | PASS |
+| 1 cast A | 09:53:30 cast, A opened about 09:54:20, bound 09:54:42.188 | `choir run start` (idempotency `fp4aq-cast-A-20261022T0955`), prompt A | exit 0 | A `assignment-a6fa7243…` open/unbound at 09:54:23, then bound/active at 09:54:45 (5 s row poll) | n/a | J | PASS |
+| 2 cast B | 09:54:53 cast; B opened 09:55:35; script 09:55:48-51 | `choir run start` (`fp4aq-cast-B-20261022T0955`), prompt B; `--step 2` | exit 0; script "no failed checks" | A bound, capsule active, not terminal, 1 bound event; B open, capsule unbound, no bound event | 09:55:38 "engineering admission: assignment assignment-932f7ac2… waits behind assignment-a6fa7243… (live); retry 1 in 10s"; retries continued to "retry 18 in 1m0s" at 10:10:48 | J | PASS |
+| 5 writer gate (on J) | 09:56:04 | GET /api/runtime/observability | 200 | `objectgraph_writer_gate` {"mode":"observe","counts":{"choir.texture_document\|undeclared\|undeclared_writer":2,"choir.texture_revision\|undeclared\|undeclared_writer":2}} | n/a | J | PASS (observe, counts present) |
+| A ends | A froze 10:11:16; terminal_at 10:11:20.297; candidate awaiting_approval 10:14:00.9 | (no call; A's own run) | n/a | A completed, capsule revoked; selfdev-0593136f executing (10:11:05), then frozen (10:11:16), then `awaiting_approval` (10:14:02) | 10:11:20 "assignment … terminal report attempt failed: … err=lifecycle command digest conflict" (a retry recorded the report) | J | as planned |
+| 3 planned refresh (natural, B queued, A not live) | deferred 10:05:58 to 10:14:57; restart 10:15:57; boot 10:16:07 | none by me: vmctl deploy K retry-sweep | vmctl `outcome=refreshed planned_restart=true busy_allowed=false` | B row at 10:16:10: open, capsule unbound; A completed | guest 10:15:57 "host requested a planned restart (platform update 5289387c9…; allow_busy=false, interrupting 0 running run(s))"; 10:16:06 "restart kind=planned … marker_age_at_process_start=8s consumed_after=1s"; 10:16:07 "planned boot: queued engineering request assignment-932f7ac2… kept and resumed" | J then K | PASS (rows and log) |
+| 4 nudge | B bound 10:16:25.618; script 10:19:33 | `--step 5` | script FAIL | A terminal_at 10:11:20.297, B bound 10:16:25.618: **305.3 s** against the 30 s bound | no admission line from 10:10:48 to the restart; 10:15:39 "dispatcher: activation wait agent=management:… waited=4m19s updates=30 slots=2/8" | J (wait) / K (bind) | **FAIL**, recorded in f683cc241 |
+| 6 B freezes against A's frozen candidate | 10:16:48.8 | B's `choir.Freeze` (B's own run) | tool_error | operations after the drill: still 3 (no operation for B); selfdev-0593136f `awaiting_approval` | tool error "…cannot freeze until the open candidate settles (another self-development operation is open on this computer: selfdev-0593136f3ac2d894e21abd97132276d1 is awaiting_approval)…"; guest 10:16:49 "selfdev: assignment assignment-932f7ac2… cannot freeze: …" | K | PASS |
+| B's end | reports 10:17:02.5 and 10:17:09.8; cancel 10:17:19.08 | B's `choir.Complete("partial", …)` twice | n/a | B `cancelled`, reason `tool loop: completion guard "engineering_overlay_terminal_fate_required" was not satisfied after 2 retries`; capsule revoked | event `engineering-system-cancel:assignment-932f7ac2…:1:1` | K | finding, recorded in f683cc241 |
+| 5 writer gate (on K) | 10:27:22 | `--step 1` | script "no failed checks" | {"mode":"observe","counts":{}}: counters reset by the 10:16 cold boot | n/a | K | PASS |
+| crash half | not run | none | n/a | n/a | n/a | n/a | skipped: no throwaway computer (FP0 rule) |
+
+Notes:
+
+- Script step 4 (B still open after the boot) was judged from the rows
+  read at 10:16:10. It was not run as a script step, because B had bound
+  by the time the step could run. The script's mutating step 3 was not
+  run either; the refresh was deploy K's own.
+- Step 4 failed, so the drill was not judged a pass.
+  - Problem record:
+    docs/problems/fp4-nudge-waits-behind-management-activation-2026-10-22.md.
+    The nudge and the retry are wakes on management's mailbox, which was
+    in a 4-minute activation that began at A's terminal_at. The cause is a
+    hypothesis, supported by timing.
+  - B bound only through deploy K's planned boot.
+- B's end follows R3's own "partial" advice. The completion guard
+  system-cancelled it.
+  - Problem record:
+    docs/problems/fp4-r3-partial-advice-ends-in-system-cancel-2026-10-22.md.
+- Left open on purpose:
+  - candidate selfdev-0593136f3ac2d894e21abd97132276d1 (A's) is
+    `awaiting_approval`. It was not approved, and it holds the computer's
+    one operation slot until the owner decides.
+  - the computer is up on K: `running_runs` 0 at 10:23, and
+    `selfdev_active_operations` absent.
+- Evidence files are in the monitor's scratchpad (`mon/fqproof/`):
+  - acts.log, poll.log, build.log;
+  - step2-out.txt, step5-out.txt, step1-K-102722.txt;
+  - s0-*, s5-observability-095604.txt;
+  - s4-events-A/B-101817.txt, s4-snap-A/B-101817.txt;
+  - trace-A.json, trace-B.json, post-ops-*.txt, post-health-*.txt.
