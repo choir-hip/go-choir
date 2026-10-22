@@ -44,6 +44,34 @@ func DebounceFromEnv(env string) time.Duration {
 	return DefaultDebounce
 }
 
+// Mode says whether a Committer makes snapshot commits at all.
+type Mode string
+
+const (
+	// ModeCommit snapshots on the debounce cadence and at boundaries (the
+	// default).
+	ModeCommit Mode = "commit"
+	// ModeOff never calls DOLT_COMMIT. For a store whose commit history has
+	// no reader: every snapshot retains the rows it changed in oldgen, where
+	// no GC can drop them while a commit reaches them (docs/problems/
+	// platform-dolt-oldgen-rate-and-squash-window-2026-10-22.md). SQL COMMIT
+	// stays the durability; the working set is persisted and backed up whole.
+	ModeOff Mode = "off"
+)
+
+// ParseMode reads a mode value. Empty is ModeCommit. An unknown value
+// returns ModeCommit with an error, so a typo keeps the snapshots.
+func ParseMode(raw string) (Mode, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", string(ModeCommit):
+		return ModeCommit, nil
+	case string(ModeOff):
+		return ModeOff, nil
+	default:
+		return ModeCommit, fmt.Errorf("doltbatch: unknown snapshot mode %q (want commit or off); snapshots stay on", raw)
+	}
+}
+
 // Committer serializes DOLT_COMMIT for one *sql.DB. Dolt commits are
 // branch-wide, so a single committer snapshots the whole working set
 // regardless of which connection wrote.
@@ -51,6 +79,7 @@ type Committer struct {
 	db       *sql.DB
 	scope    string
 	debounce time.Duration
+	mode     Mode
 	logf     func(format string, args ...any)
 
 	mu        sync.Mutex
@@ -67,22 +96,40 @@ type Committer struct {
 // New returns a Committer for db. scope prefixes commit messages and log
 // lines (e.g. "platform", "cycle"). debounce <= 0 uses DefaultDebounce.
 func New(db *sql.DB, scope string, debounce time.Duration) *Committer {
+	return NewWithMode(db, scope, debounce, ModeCommit)
+}
+
+// NewWithMode is New with a snapshot mode. In ModeOff every method is a
+// no-op that returns nil: callers keep their Mark and CommitNow calls.
+func NewWithMode(db *sql.DB, scope string, debounce time.Duration, mode Mode) *Committer {
 	if debounce <= 0 {
 		debounce = DefaultDebounce
+	}
+	if mode != ModeOff {
+		mode = ModeCommit
 	}
 	return &Committer{
 		db:       db,
 		scope:    scope,
 		debounce: debounce,
+		mode:     mode,
 		logf:     log.Printf,
 	}
+}
+
+// Mode returns the committer's snapshot mode. Nil-safe.
+func (c *Committer) Mode() Mode {
+	if c == nil {
+		return ModeCommit
+	}
+	return c.mode
 }
 
 // Mark records a mutation reason and schedules a debounced snapshot commit.
 // It never blocks on the commit itself: SQL COMMIT already made the write
 // durable; the snapshot is bookkeeping.
 func (c *Committer) Mark(reason string) {
-	if c == nil {
+	if c == nil || c.mode == ModeOff {
 		return
 	}
 	c.mu.Lock()
@@ -101,7 +148,7 @@ func (c *Committer) Mark(reason string) {
 // addressable snapshot should exist at the boundary. "Nothing to commit" is
 // success — the working set already matches HEAD.
 func (c *Committer) CommitNow(ctx context.Context, reason string) error {
-	if c == nil {
+	if c == nil || c.mode == ModeOff {
 		return nil
 	}
 	c.mu.Lock()
@@ -116,7 +163,7 @@ func (c *Committer) CommitNow(ctx context.Context, reason string) error {
 
 // Flush commits any pending dirty state synchronously. Nil-safe.
 func (c *Committer) Flush(ctx context.Context) error {
-	if c == nil {
+	if c == nil || c.mode == ModeOff {
 		return nil
 	}
 	return c.commit(ctx)
@@ -135,7 +182,7 @@ func (c *Committer) LastError() (error, time.Time) {
 // Close stops the debounce timer and performs a final synchronous commit of
 // any pending dirty state. Marks after Close are dropped.
 func (c *Committer) Close(ctx context.Context) error {
-	if c == nil {
+	if c == nil || c.mode == ModeOff {
 		return nil
 	}
 	c.mu.Lock()

@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -275,6 +277,14 @@ func openStore(ctx context.Context, dsn, corpusDSN string, bootstrap bool) (*Sto
 		s.corpusDB = corpusDB
 		s.corpusCommitter = doltbatch.New(corpusDB, "platform-corpus", doltbatch.DebounceFromEnv("DOLT_SNAPSHOT_DEBOUNCE"))
 	}
+	mode, modeErr := doltbatch.ParseMode(os.Getenv(StoreASnapshotModeEnv))
+	if modeErr != nil {
+		log.Printf("platform store: %s: %v", StoreASnapshotModeEnv, modeErr)
+	}
+	s.useStoreASnapshotMode(mode)
+	if mode == doltbatch.ModeOff {
+		log.Printf("platform store: Store A snapshot commits off (%s=off); SQL COMMIT is the durability", StoreASnapshotModeEnv)
+	}
 	if bootstrap {
 		if err := s.Bootstrap(ctx); err != nil {
 			_ = s.Close()
@@ -282,6 +292,28 @@ func openStore(ctx context.Context, dsn, corpusDSN string, bootstrap bool) (*Sto
 		}
 	}
 	return s, nil
+}
+
+// StoreASnapshotModeEnv switches Store A's DOLT_COMMIT snapshots: "commit"
+// (the default) or "off". Nothing reads Store A's commit history, and every
+// snapshot keeps the rows it changed in oldgen for good (docs/problems/
+// platform-dolt-oldgen-rate-and-squash-window-2026-10-22.md). Store B's
+// committer is not affected.
+const StoreASnapshotModeEnv = "PLATFORM_DOLT_SNAPSHOTS"
+
+// useStoreASnapshotMode replaces the Store A committer with one in mode.
+// With a shared pool (no corpus DSN) both stores are the one database, so the
+// corpus committer follows; a separate Store B committer is left as it is.
+func (s *Store) useStoreASnapshotMode(mode doltbatch.Mode) {
+	if s == nil || s.committer == nil || s.committer.Mode() == mode {
+		return
+	}
+	old := s.committer
+	s.committer = doltbatch.NewWithMode(s.db, "platform", doltbatch.DebounceFromEnv("DOLT_SNAPSHOT_DEBOUNCE"), mode)
+	if s.corpusCommitter == old {
+		s.corpusCommitter = s.committer
+	}
+	_ = old.Close(context.Background())
 }
 
 func NewStore(db *sql.DB) *Store {
