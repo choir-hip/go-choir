@@ -127,9 +127,9 @@ func TestGuestClientNeverFallsBackToDirectEgress(t *testing.T) {
 	deadURL := dead.URL
 	dead.Close()
 	for name, rt := range map[string]http.RoundTripper{
-		"gateway down":       &Transport{BaseURL: deadURL, Token: func() string { return "tok" }, Base: http.DefaultTransport},
-		"no gateway":         Refusing("granted but no gateway"),
-		"empty token":        &Transport{BaseURL: deadURL, Token: func() string { return "" }},
+		"gateway down":        &Transport{BaseURL: deadURL, Token: func() string { return "tok" }, Base: http.DefaultTransport},
+		"no gateway":          Refusing("granted but no gateway"),
+		"empty token":         &Transport{BaseURL: deadURL, Token: func() string { return "" }},
 		"transport no fields": &Transport{},
 	} {
 		withRoute(t, rt)
@@ -156,7 +156,7 @@ func TestGuestClientSeesAHostAbortAsAnError(t *testing.T) {
 	e.MaxBody = 100
 	gw := newTestGateway(t, e)
 	withRoute(t, &Transport{BaseURL: gw.url, Token: func() string { return "tok" }})
-	resp, err := sourcefetch.Client(5 * time.Second).Get("https://example.com/")
+	resp, err := sourcefetch.Client(5 * time.Second).Get("http://example.com/")
 	if err == nil {
 		_, err = io.ReadAll(resp.Body)
 		resp.Body.Close()

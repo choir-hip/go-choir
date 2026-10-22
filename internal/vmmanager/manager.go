@@ -364,6 +364,10 @@ type ManagerConfig struct {
 	// (CHOIR_VISUAL_CAPTURE_COMPUTERS; empty by default). See
 	// visual_capture.go.
 	VisualCapture VisualCaptureConfig
+
+	// HostFetch is the host fetch route grant switch
+	// (CHOIR_HOST_FETCH_COMPUTERS; empty by default). See host_fetch.go.
+	HostFetch HostFetchConfig
 }
 
 // DefaultManagerConfig returns a sensible default configuration.
@@ -931,6 +935,18 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 			log.Printf("vmmanager: visual capture for computer %s (VM %s): %s", cfg.ComputerID, cfg.VMID, captureStatus)
 		}
 		for name, content := range captureFiles {
+			if delegateFiles == nil {
+				delegateFiles = map[string][]byte{}
+			}
+			delegateFiles[name] = content
+		}
+		// Host fetch route (SDC NET-01): a granted computer's disk carries
+		// the grant; its guest then fetches through the gateway.
+		fetchFiles, fetchStatus := m.cfg.HostFetch.hostFetchMaterial(cfg.ComputerID, cfg.WarmnessClass, time.Now())
+		if fetchStatus != "" {
+			log.Printf("vmmanager: host fetch route for computer %s (VM %s): %s", cfg.ComputerID, cfg.VMID, fetchStatus)
+		}
+		for name, content := range fetchFiles {
 			if delegateFiles == nil {
 				delegateFiles = map[string][]byte{}
 			}

@@ -173,6 +173,7 @@ func Run() {
 	// memory limit once, at first use (docs/reports/lr-guest-memory-return-2026-10-14.md).
 	log.Printf("autoputer: gomemlimit %s", gomemlimit.ApplyDaemon())
 	cfg := LoadConfig()
+	installHostFetchRoute(cfg.ComputerID)
 
 	s := server.NewServer("autoputer", cfg.Port)
 	boot := newStartupFailer(s, cfg.ComputerID)
