@@ -137,12 +137,15 @@ Why it is on management's today (read):
 What changes if it moves: the first admission attempt runs beside
 management's still-open activation instead of after it. That pair already
 exists for every retry and nudge (the nudge record's "Cancel against
-admission" residual: both write under the CAS, the loser fails closed). A
-second cast in the same management turn can now wait on the executor's
-`e.mu` (held for the whole spawn, cold-start record "Adjacent findings")
-through `ClaudeDelegateStatus`; before, it never overlapped a spawn. That
-is a latency shift for management, not a deadlock: the spawn does not wait
-on anything management holds.
+admission" residual: both write under the CAS, the loser fails closed).
+(Corrected in review round 2: an earlier version said a second cast in the
+same turn could wait on the executor's `e.mu` through
+`ClaudeDelegateStatus`. It cannot: `ClaudeDelegateStatus` reads an
+`atomic.Pointer` and never takes `e.mu` (internal/capsule/executor.go,
+`claudeDelegateSource`, failure 9 of the completion-path cluster), and
+`PreflightSourceSnapshot` takes no `e.mu` either. The `e.mu` readers that
+do wait behind a spawn (`HasCapsule`, `InspectCapsuleRaw`, `MemoryBudget`,
+the job verbs) are not on management's cast path.)
 
 Rollback of the move: a wake already minted to `engineering-admission` is
 still handled by the reverted binary (the handler accepts that mailbox).
@@ -169,9 +172,14 @@ before the boot's nanosecond `bootedAt`.
   the first second after `bootedAt`, and `initial_dispatch` is a backstop
   for `rt.activate`'s own send.
 - Not changed here: it is the crash rule's input (red, and the brief keeps
-  the crash rule). Candidate fixes for a later slice: compare against
-  `bootedAt` cut to the second, or read the mint time (`MintedAt`) for
-  wakes minted after the source's first version. The F2 test sets the
+  the crash rule). The current behaviour errs closed (a post-boot wake in
+  the boot's own second is closed), which is the safe direction, and any
+  later fix must keep it. (Corrected in review round 2: the two candidate
+  fixes named here earlier both fail. Comparing against `bootedAt` cut to
+  the second fails open: work created before a crash in the same wall
+  second as the new boot would no longer be closed. `MintedAt` is the
+  outbox row's `updated_at`, also whole seconds, so it does not help. The
+  only sound fix is a nanosecond source time.) The F2 test sets the
   runtime's boot an hour back to model a computer that has been up a while.
 
 ## Disposition (tests 94f829bfc, fix b7c5d7c97)
@@ -222,3 +230,108 @@ Overlap: lane/fp4-r4 edits the poison lines in the same function; this fix
 touches only the handle branch's tail (`holdAfterFailure` before the
 `break`), the struct, `NewDispatcher`, `Run`'s timer and `dispatchPending`'s
 skip, so FP0's rebase should be mechanical.
+
+## Review round 2 (bunch 79: DeepSeek send back, Flash and Sonnet accept with edits)
+
+All three seats found the same blocker. Problem documentation first: this
+section comes before the test and the fix.
+
+### R2-1 (high, blocker): an expired hold that cannot be dispatched spins `Run`
+
+**Confirmed (code, and measured by two seats).**
+
+- `heldUntil` entries were deleted only in `heldLocked`. `dispatchPending`
+  reaches `heldLocked` only after the mailbox is not busy and has room
+  (`busy || !hasRoomLocked(agentID) || heldLocked(agentID)` short-circuits).
+- `nextHeld` returned the earliest entry whether or not it had expired.
+- So when a hold ends while the shared pool or the mailbox's lane is full,
+  or while the agent is not in the projection at all (its update settled
+  another way, or `PendingAgents` errs), `nextHeld` keeps returning a past
+  time. `Run` arms a zero-delay timer, `dispatchPending` skips the
+  mailbox, and the loop repeats until a slot frees.
+- Measured: Sonnet's probe (MaxConcurrent 1, PollInterval 250 ms, the only
+  slot held past the hold) read 8,055 `PendingAgents` and 8,054 `NextDue`
+  calls in 2 s, against 8 and 8 with no hold: about 4,000 loop iterations a
+  second, each two SQLite reads. DeepSeek measured 18,004 reads in 1 s.
+- main cannot do this: `NextDue` returns only future `not_before` values.
+- Harm: on a busy computer (eight desks in their tool loops, or the
+  admission lane of one held by a spawn of up to 90 s) the dispatcher burns
+  a core and hammers the actor log's SQLite, competing with the very
+  activations that hold the slots. An availability regression, not a
+  correctness one: the held retry is not lost.
+- The lane's tests never filled the slot at the hold's end, so they missed it.
+
+Fix to build: `nextHeld` drops expired entries instead of returning them
+(an expired hold is no hold; the mailbox is dispatched when a slot frees,
+because the finishing activation calls `Notify`). Also test `heldLocked`
+before `hasRoomLocked`, so an expired hold is forgotten whenever the
+mailbox is seen. Ordering and the attempt limit are unchanged.
+
+### R2-2 (low): the F2 test can fail under load
+
+**Confirmed (mechanism, and one observed failure by DeepSeek).** The
+sweep logs a latency line also when the dispatch itself took 2 s or more
+(`time.Since(dispatchStarted) >= wakeLatencyLogAfter`), and `MintedAt` is
+second-rounded. If the sweep starts more than about a second after the
+bind (a loaded host), `waited` legitimately reaches 2 s and the fixed
+`< 2 s` bound fails. Fix: bound `waited` by the time since the bind plus
+the rounding (1.5 s); on main `waited` is still 3 s more than that.
+
+### R2-3 (low): the new const took a function's doc comment
+
+`store.EngineeringAdmissionMailbox` was inserted between
+`actorWakeOutboxFromObject`'s doc comment and the function, so Go attached
+that comment to the const. Move the const above it.
+
+### R2-4 (low): the shared admission mailbox stalls all admissions while one wake backs off
+
+Every admission wake (the open-time spawn wake now, retries, nudges, boot
+resumes) shares one mailbox with a lane of one. While a failing admission
+update waits out its backoff, every other admission waits too: up to
+12.9 to 25.75 s in total if it fails all 8 times, against about a second
+before (and the open-time wake, before F3, stalled management's mailbox
+instead).
+
+**Accepted, not reduced.** Why:
+
+- It is the price of keeping the mailbox's order, which is the point of a
+  per-mailbox hold. A per-update delay on this mailbox would let a younger
+  request's wake be admitted ahead of an older one's retry, and admission's
+  FIFO is decided under the saga mutex anyway, so it would buy nothing.
+- Admission was already serial: `engineeringAssignmentOpenMu` serializes
+  every spawn wake, so a nudge already waited behind a spawn of up to 90 s.
+  The hold adds at most 10 s per wait to that.
+- A spawn-saga error already cancels the open (`spawnBindActivateAssignment`'s
+  `cancelOpen`), so the redelivery after a saga failure is a no-op and the
+  stall is one wait (125 to 250 ms), not the whole window. The whole window
+  is reached only by an error that persists across eight deliveries: the
+  store or the executor unavailable, which stalls admission whatever the
+  backoff, or a malformed wake.
+- Residual (hardening, not built): a malformed wake (a content decode
+  error, or no `assignment_id` or `attempt`, continuation_schedule.go) can
+  never succeed and could return `actor.ErrDurableInvalid` to be dropped at
+  once instead of burning the window. No such wake is minted by the code
+  today: every producer marshals the struct.
+
+### R2-5 (low): the hold is not on the "what is owed" surface
+
+A held mailbox shows as due work with `attempts > 0` and no reason, for up
+to 10 s per wait. The only trace is the `dispatcher: retry … in …` console
+line. Residual: surface `held_until` in the obligations sample (no-SSH
+operability). Not built here.
+
+### Heresy delta (corrected; the record lacked one)
+
+- discovered: the crash rule's second-rounded input (above); the held-mailbox
+  spin (R2-1, found in review).
+- introduced: the held-mailbox spin, by b7c5d7c97; a failing admission
+  update stalls all admissions for its backoff (R2-4, accepted).
+- repaired: no-backoff redelivery (F1), latency from the source's age (F2),
+  the open-time spawn wake on management's mailbox (F3); the spin, by the
+  round 2 fix.
+
+Protected surfaces: the actor dispatcher's retry path and its loop timer
+(red), the wake outbox's target for `delegated_assignment_spawn_deadline`,
+the sweep's latency log. Not touched: the crash rule, the planned-restart
+resume, the attempt and deferral limits, Texture canonical writes, vmctl,
+the gateway.
