@@ -108,10 +108,15 @@ boundaries:
 now:
   status: checkpoint_incomplete
   slice: >-
-    B2 built and tested locally; the panel's A2 and malformed-recovery
-    findings fixed on lane/b2-store-b1fix (tests first, then the fix);
-    awaiting FP0's re-review, landing in a deploy of its own after the host
-    lane's vmctl rollback-reachability fix, and the deployed proof
+    Follow-up (2026-10-22, lane/fp1-boot-window): the paper is unreachable 4
+    to 6 minutes after every boot. Code read, no runtime change: /health
+    makes three unbudgeted reads on the store's one write connection; the
+    online Dolt GC's first pass, started just before rt.Start, is the leading
+    holder (H4); the validator is ruled out as holder. Measurements and fix
+    candidates F1-F3 appended to
+    docs/problems/paper-unreachable-minutes-after-every-boot-2026-10-22.md;
+    probe scripts/paper_boot_window_probe.py. Earlier slice: B2 landed
+    (bed24b526) with its deployed proof read at 00:52 (ledger).
   source_ref: see receipts
   deploy_identity: f2c4a3ec3 serving at start; this lane deploys nothing
   candidate:
@@ -160,13 +165,19 @@ now:
     owner_ratification_ref: the orchestrator's panel on the frozen candidate
   belief:
     believed_state: >-
-      The three scans (40.1 s of the 85 s held) are replaced by indexed reads
-      that are exact or absent; the first validation pass is seconds of engine
-      time per 100,000 rows, in 40 ms pages.
+      The boot window is a store hold, not CPU or memory alone: /health
+      cannot answer while s.db is held, and the two waiters in the log
+      released in the same second. Most likely holder: the online
+      CALL DOLT_GC() at runtime start (hypothesis; one counter-fact: rt.Start
+      finished before the silence).
     main_uncertainty: >-
-      The paper's real row counts and engine share after the deploy; whether
-      the paper carries the reverted release's stray STORED columns.
-    next_observation: FP0's 120 s engine-mutex reading on the paper after the deploy (steps in the problem record)
+      Whether an online GC ran in the window, and how long; if not, which
+      statement held the engine.
+    next_observation: >-
+      M0a (now): the paper console's "store: dolt gc (boot|online)" lines for
+      the 01:12, 02:18 and 02:52:59 boots; M0b: observability engine_mutex
+      max_hold_ns since 02:52:59; then M1-M3 with the probe in the next boot
+      window.
   blocker_or_risk: >-
     Lands only after the host lane's vmctl rollback-reachability fix. A
     rollback to a binary without the extractor change leaves og_key_index as an
@@ -176,9 +187,18 @@ now:
     (docs/problems/boot-alters-og-objects-when-older-columns-missing-2026-10-21.md);
     FP0 can check the paper with the query in that record before the deploy.
     Residual: the validator's COUNT and stray-id lists are not keyset-paged.
-  next_action: FP0 re-reviews e1814ff86 and lands the lane; then B2b (docs/design/store-engine-concurrency-2026-10-21.md)
-
+  next_action: >-
+    FP0 reads M0a/M0b; if H4 holds, this lane builds F2 (online GC does not
+    collect a large journal while serving; red, tests first) and F1
+    (/health bounded, 503 store_stalled; orange). If not, the probe in the
+    next boot window names the holder.
 receipts:
+  - id: fp1-boot-window-reading
+    boundary: define
+    identity: 29c175738 (problem record append), 601e90c2a (probe)
+    proof_refs: [docs/problems/paper-unreachable-minutes-after-every-boot-2026-10-22.md, scripts/test_paper_boot_window_probe.py]
+    rollback_ref: git revert 601e90c2a 29c175738
+    disposition: docs and read-only tooling; no runtime change
   - id: fp1-side-table
     boundary: implement
     identity: aa1e2a4f4 (objectgraph), 14c1a62db (store wiring), 3aa4b543e (extractors)
