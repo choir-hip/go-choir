@@ -365,6 +365,11 @@ func (s *Store) LatestComputerEventByIdempotencyPrefix(ctx context.Context, comp
 	if s == nil || s.db == nil {
 		return computerevent.Event{}, false, fmt.Errorf("computer event projection: nil store")
 	}
+	// No utf8mb4 key starts with a prefix that is not UTF-8, and the engine
+	// refuses one as a parameter.
+	if !utf8.ValidString(prefix) {
+		return computerevent.Event{}, false, nil
+	}
 	query, args := idempotencyFamilySQL(computerID, prefix)
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -419,7 +424,8 @@ func idempotencyFamilySQL(computerID, prefix string) (string, []any) {
 // starting with prefix: prefix with its last incrementable rune incremented
 // (surrogates skipped) and what follows it dropped. ok is false when no rune
 // can be incremented (an empty prefix, or only U+10FFFF) or the prefix is not
-// UTF-8, and then the family is unbounded above.
+// UTF-8, and then the family is unbounded above (the caller returns absence
+// for a prefix that is not UTF-8 before reading).
 func prefixUpperBound(prefix string) (string, bool) {
 	if !utf8.ValidString(prefix) {
 		return "", false
