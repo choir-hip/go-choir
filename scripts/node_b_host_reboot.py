@@ -58,6 +58,7 @@ within --boot-timeout (go to the console; see the runbook).
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -303,6 +304,15 @@ def iso_ts(v):
         return datetime.strptime(v[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc).timestamp()
     except ValueError:
         return None
+
+
+def kernel_security_floor():
+    # The flake's kernel floor assertion reads the same file. No fallback:
+    # a missing or malformed floor must stop the run, not lower the bar.
+    floor = (REPO / "nix" / "kernel-security-floor").read_text().strip()
+    if not re.fullmatch(r"\d+\.\d+\.\d+", floor):
+        raise SystemExit("nix/kernel-security-floor: %r is not a kernel version" % floor)
+    return floor
 
 
 def vtuple(v):
@@ -563,7 +573,8 @@ def main():
                     help="reboot even if some computers stay busy (their work ends interrupted_by_restart)")
     ap.add_argument("--no-markers", action="store_true",
                     help="write no planned-restart markers: every boot is a crash boot (the conservative choice)")
-    ap.add_argument("--min-kernel", default="6.18.45")
+    ap.add_argument("--min-kernel", default=kernel_security_floor(),
+                    help="lowest acceptable staged and booted kernel (default: nix/kernel-security-floor, the flake's floor)")
     ap.add_argument("--busy-wait", type=int, default=600, help="seconds to wait for busy computers to go idle")
     ap.add_argument("--boot-timeout", type=int, default=1200, help="seconds to wait for ssh after the reboot")
     ap.add_argument("--settle-wait", type=int, default=300, help="seconds for systemd and vmctl to settle")
