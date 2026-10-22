@@ -148,14 +148,16 @@
       # pattern as choirDolt: the base's recipe with a newer version, source
       # hash and vendor hash, applied only while the given nixpkgs is older.
       #
-      # Both hashes were computed on the Mac (2026-10-22): the source by
-      # `nix flake prefetch`, the vendored crates from the hash mismatch of
-      # fetchCargoVendor's fixed-output staging step, which is the same on
-      # every system.
+      # The source hash was computed on the Mac with `nix flake prefetch`.
+      # The vendored crates' hash comes from the hash mismatch of
+      # fetchCargoVendor's fixed-output staging step on Node B's builder
+      # with this flake's own package set (deploy KF's prebuild,
+      # 2026-10-22 19:09). The Mac's first value differed: compute it with
+      # the flake's pkgs on Linux, never with a local nixpkgs.
       choirFirecrackerRelease = {
         version = "1.16.2";
         hash = "sha256-BJ1WD6D/tsoBNUpIGjE/w5RgxFKRYkB7HKAi/TGXqbU=";
-        cargoHash = "sha256-xr/DxDNpwfOhI7w+Ms7RXbIEV6cNEE2iedtxxuearEI=";
+        cargoHash = "sha256-pCkwOhpV//sGmZWlG20bBCo1iPmD2rrthrqIcX+728I=";
       };
       mkChoirFirecracker = p:
         if p.lib.versionAtLeast p.firecracker.version choirFirecrackerRelease.version then p.firecracker
