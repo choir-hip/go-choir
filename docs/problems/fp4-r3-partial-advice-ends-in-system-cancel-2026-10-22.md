@@ -89,3 +89,36 @@ so the engineering desk did what both the prompt and the tool error said.
 Design reading (hypothesis): option 1 is the smallest change and keeps
 R3's intent. Options 2 and 3 move fate decisions into the runtime and
 need the round-2 reviewers.
+
+## Cause confirmed and fix (lane/fp4-r3-nudge, 2026-10-22)
+
+Tests b557b2d64 (failed on main 7448bf899), fix cf7ed5072.
+
+The code read above holds: a partial report is not a terminal fate
+(`terminal := report.Result != types.EngineeringResultPartial`), so the
+completion guard retries and then fails the tool loop, and the system
+cancel takes the guard's reason.
+
+Fix, both halves of what FP0 asked for:
+
+1. Option 1 of the record: the refusal now reads "report the work as
+   failed: Complete with result failed and this refusal as the reason,
+   instead of retrying the freeze". It no longer mentions partial
+   (`TestFreezeRefusalAdvisesAFailedReport`).
+2. The guard's reason names the candidate when the run's freeze was
+   refused by one, so a model that still reports partial ends with a fate
+   that says why: `tool loop: completion guard
+   "engineering_overlay_terminal_fate_required; the freeze was refused:
+   self-development candidate selfdev-… is awaiting_approval and waits for
+   management's Verify and the owner's decision" was not satisfied after 2
+   retries`. Its reminder then tells the run to Complete failed with the
+   refusal. The reason is read from the run's tool results
+   (`engineeringTerminalFateGuardReason`), and a run with no refused freeze
+   keeps the old reason (`TestCompletionGuardReasonNamesTheOpenCandidate`).
+
+Options 2 and 3 (the runtime deciding the fate) were not taken. The guard
+still decides nothing new: it ends the run exactly as before, with a true
+reason.
+
+Disposition: repaired. The fate is still a system cancel when the model
+ignores the advice, but its reason now names the open candidate.
