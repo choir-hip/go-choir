@@ -10,12 +10,14 @@ product API, to run its isolation self-test (POST
 /api/runtime/isolation-selftest, owner only). Legs 3 and 4 load the guest on
 purpose and are host-internal: they POST
 /internal/runtime/isolation-selftest?leg=oom|seccomp on the guest's own
-address from Node B over ssh, with the internal service token header file
-passed to curl by path. That file is read only by curl on Node B. No API key
-is used. The public edge refuses /internal/*, the proxy never forwards it, and
-the guest admits only its host peer (its default gateway on the tap). The
-deployed guest runs hostauth in off mode and ignores the token header; only
-the transport check gates the route (review bunch 27 E1).
+address from Node B over ssh, with no credential and no marker header: the
+host-internal service token is never sent to a guest
+(docs/problems/host-internal-token-sent-to-guests-by-fp0-probes-2026-10-22.md).
+No API key is used. The public edge refuses /internal/*, the proxy never
+forwards it, and the guest admits only its host peer (its default gateway on
+the tap). The deployed guest runs hostauth in off mode, so only that
+transport check gates the route (review bunch 27 E1;
+HandleInternalIsolationSelfTest: GuestHostCaller, then hostauth.Authorize).
 
 1. desk_cells: the guest spawns one worker per desk (management, Texture,
    research) through the production spawner and entrypoint. Each worker
@@ -422,18 +424,15 @@ def judge_egress(eg):
     return fails
 
 
-TOKEN_HEADER_FILE = "/var/lib/go-choir/secrets/internal-service-token.header"
 GUEST_URL = re.compile(r"^http://[0-9]{1,3}(\.[0-9]{1,3}){3}:[0-9]{1,5}$")
 
 
 def internal_post(ssh_host, guest_url, leg):
-    """POST the guest's internal self-test route from Node B. The internal
-    service token header file is read by curl on Node B, by path; it is never
-    read here and never crosses to this machine. One attempt. Returns
-    (http status or 0 for no answer, parsed body)."""
-    script = ("AUTH=; test -r %s && AUTH='-H @%s'; "
-              "curl -sS -m 170 -X POST -H 'X-Internal-Caller: true' $AUTH -w '\\nhttp_status=%%{http_code}\\n' "
-              "'%s/internal/runtime/isolation-selftest?leg=%s'") % (TOKEN_HEADER_FILE, TOKEN_HEADER_FILE, guest_url, leg)
+    """POST the guest's internal self-test route from Node B. It carries no
+    credential and no marker: the guest's source-address check is the gate.
+    One attempt. Returns (http status or 0 for no answer, parsed body)."""
+    script = ("curl -sS -m 170 -X POST -w '\\nhttp_status=%%{http_code}\\n' "
+              "'%s/internal/runtime/isolation-selftest?leg=%s'") % (guest_url, leg)
     try:
         p = subprocess.run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15", ssh_host, script],
                            capture_output=True, text=True, timeout=200)
