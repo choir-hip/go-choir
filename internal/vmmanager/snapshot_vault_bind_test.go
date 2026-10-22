@@ -243,6 +243,9 @@ func rolledBack(f *vaultFixture, probe func(dir string, accept bool) error) *Man
 	cfg.SnapshotVaultOnly = nil
 	m := NewManager(cfg)
 	m.vaultProbe = probe
+	// The host floor fails a start whose rules do not install (SEC-03): the
+	// rolled-back manager keeps the fixture's fake tap networking.
+	m.hostNet = f.mgr.hostNet
 	m.vms[f.vmID] = f.inst
 	return m
 }
