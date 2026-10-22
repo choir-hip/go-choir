@@ -1448,7 +1448,7 @@ in
         # computer's boot and the resume config). Rollback for a named
         # computer: empty the list and redeploy (it cold boots into
         # observe); the image line set to off does not override it.
-        "VM_CAPSULE_TUNNEL_ENFORCE_ONLY="
+        "VM_CAPSULE_TUNNEL_ENFORCE_ONLY=computer-9648031f92e131adc1fb65ec455c5903"
         # Data drive discard (VM_DATA_DISCARD=1) is deliberately NOT set: the
         # pinned Firecracker is 1.16.1, which has no virtio-blk discard
         # (vmmanager ignores the flag on an older binary). Guest side:
