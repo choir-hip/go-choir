@@ -849,6 +849,9 @@ func TestReattachVMAdoptsByIdentity(t *testing.T) {
 	if err != nil || inst.State != StateRunning || !inst.Healthy || inst.PID != pid || inst.Config.Epoch != 9 || inst.LastHealthyAt.IsZero() {
 		t.Fatalf("healthy adopt = %+v, %v", inst, err)
 	}
+	if inst.coldOrigin {
+		t.Fatal("a reattached process is never cold origin (L3a: vmctl did not see its launch)")
+	}
 
 	fake("vm-busy")
 	inst, err = mgr.ReattachVM("vm-busy", "http://127.0.0.1:1", 3)
