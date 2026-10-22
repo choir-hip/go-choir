@@ -249,7 +249,9 @@ now:
     code; the enforce trial now includes a hibernate and resume), the observe
     shadow in its own cgroup (E2), E3-E6 and E8 fixed, the station's text and
     hashes re-pointed (E7). Switches still ship observe. See "Second batch,
-    review round 2: outcome".
+    review round 2: outcome". Rebased onto a84b39bac (861e765a3). Round 3
+    (DeepSeek, bunch 43) F1-F5 fixed or recorded ("Second batch, review round
+    3: outcome"); Devin's review is still running.
   slice: >-
     hand-off to FP0: two candidates. The first batch is lane/b3-desk-boundary
     (under review, unchanged). The second batch is lane/b3-desk-boundary-2 on top
@@ -621,8 +623,8 @@ first on the paper.
 
 Started 2026-10-21 on top of the first batch (5fcf59e21), which is under
 review and is not changed here. Replayed 2026-10-22 onto origin/main
-b7d79a082 as lane/fp2-b2-on-main (cherry-pick, no conflicts); every hash
-below is the replayed one. Built in the Choir agents VM on node-a
+b7d79a082 as lane/fp2-b2-on-main (cherry-pick, no conflicts), then
+rebased onto a84b39bac; every commit hash below is on the lane head. Built in the Choir agents VM on node-a
 (uid 1000, no root, Landlock and unprivileged user namespaces available, no
 Nix builds): every nix change in this batch is unevaluated. Each item is a
 separate red commit, tests first, off or in observe mode in the image until
@@ -759,32 +761,34 @@ version said "none known: no Mknod, raw I/O, module or time call in the
 guest code", and that was false: the hibernate resume calls settimeofday
 (`internal/agentcore/hibernate_clock_linux.go`) on every resume after a
 snapshot (review E1). CAP_SYS_TIME is kept for it, and
-`TestKeptCoversTheDaemonsPrivilegedSyscalls` now scans the daemon's source
+`TestKeptCoversTheDaemonsPrivilegedSyscalls` now parses the daemon's source
 (internal, cmd/autoputer, cmd/capsule-broker; the two denial probes
-excepted) for every capability-needing syscall and fails if its capability
-is dropped. Children that exec other binaries (git, go, node) are not
-covered by the scan; the enforce trial covers them. K6 calling this non-root (it is not;
+excepted) for the named capability-needing calls into syscall and
+x/sys/unix (a list in the test, raw SYS_* numbers included; review F4) and
+fails if a call's capability is dropped. It is a list, not every call:
+calls it does not name, syscalls reached through cgo, and binaries the
+daemon execs (git, go, node) are the enforce trial's to find. K6 calling this non-root (it is not;
 the receipt says root with a floor).
 
 ### Second batch: what was built
 
-Commits, replayed onto origin/main b7d79a082 as lane/fp2-b2-on-main
-(originally on lane/b3-desk-boundary-2, base 5fcf59e21; pre-rebase
-copies cited here before were f7a1e17de, f414e3ca7, e9de19687, 4ab63a8f2):
+Commits on lane/fp2-b2-on-main (replayed from lane/b3-desk-boundary-2,
+whose base was the first batch, 5fcf59e21; every commit listed below is
+an ancestor of the lane head):
 
-- a7f98faa8 docs: the designs and failure modes above (green).
-- 1906e6658 RES-04: `internal/capsule/capsule_memory.go`, the policy, the
+- 9c637ae8b docs: the designs and failure modes above (green).
+- d36a1b78d RES-04: `internal/capsule/capsule_memory.go`, the policy, the
   receipts (`capsule_memory` in `/api/runtime/observability`), the
   capsules aggregate under doctrine; the engineering request (red).
-- e40340528 SEC-15 document tools: `internal/doctool`, the helper and probe
+- 911da25ad SEC-15 document tools: `internal/doctool`, the helper and probe
   entries in `cmd/autoputer/main.go`, `internal/content/extract.go` through
   it, `document_tool` in the isolation self-test and the probe script, the
   `choir-doctool` user (red). Its first observe (sandboxed result, with
   fallback and divergence warnings) was replaced in the review round by
-  the direct result and a counted shadow (03d8a1578); no
+  the direct result and a counted shadow (c97a577e1); no
   `document_tool_sandbox_fallback` or `document_tool_sandbox_divergence`
   warning exists.
-- b44ef6589 SEC-15 capability floor: `internal/capfloor`, `Apply` at the
+- e2acf6025 SEC-15 capability floor: `internal/capfloor`, `Apply` at the
   top of the daemon's `main`, `runtime_capabilities` in the isolation
   self-test and the probe script (red).
 
@@ -927,17 +931,19 @@ is accepted. None is refuted.
 
 | finding | outcome | commit |
 |---|---|---|
-| B1 non-Linux build | fixed | 53763eee7 (orange) |
-| B2 converter charged to the desks aggregate | fixed | 03d8a1578 (red) |
-| B3 observe changes stored results (TZ) | fixed | 03d8a1578 (red) |
-| B4 aggregate does not follow a hotplug boost | fixed | 0e00153e6 (red) |
-| B5 doctrine admission ignores aggregate failures | fixed | 0e00153e6 (red) |
-| Argon: observe status read, enforce thread check | fixed | 289556b47 (red) |
+| B1 non-Linux build | fixed | 1dc74153f (orange) |
+| B2 converter charged to the desks aggregate | fixed | c97a577e1 (red) |
+| B3 observe changes stored results (TZ) | fixed | c97a577e1 (red) |
+| B4 aggregate does not follow a hotplug boost | fixed | 62f39cc5f (red) |
+| B5 doctrine admission ignores aggregate failures | fixed | 62f39cc5f (red) |
+| Argon: observe status read, enforce thread check | fixed | f3fac0bc4 (red) |
 
 Observe semantics after the round. Capsule memory under observe never
 reads or writes the aggregate. The capability floor under observe never
 fails the start. Document tools under observe return the direct run byte
-for byte, add no warning, and create no cgroup; the shadow is counted only.
+for byte, add no warning, and (after this round) created no cgroup; round
+2 (E2) gave the shadow a cgroup of its own, below. The shadow is counted
+only.
 One deliberate change remains under observe: one extra sandboxed process
 per extraction (one at a time; a second is skipped), after the result is
 returned. This round put it in the daemon's own cgroup and called that
@@ -1035,37 +1041,39 @@ record.
 
 ### Second batch, review round 2: outcome
 
-Replayed onto origin/main b7d79a082 as lane/fp2-b2-on-main. Old lane
-commits (origin/lane/b3-desk-boundary-2) to replayed commits:
+Replayed onto origin/main as lane/fp2-b2-on-main (first onto b7d79a082,
+then rebased onto a84b39bac with conflicts in imports and the probe
+script only). The batch's commits on this head (the superseded copies on
+origin/lane/b3-desk-boundary-2 are mapped by `git cherry`):
 
-| lane/b3-desk-boundary-2 | lane/fp2-b2-on-main | subject |
-|---|---|---|
-| d44537881 | a7f98faa8 | docs: the designs and failure modes (green) |
-| d19c4d1e0 | 1906e6658 | feat(capsule): capsule memory per doctrine (red) |
-| 08fc031ad | e40340528 | feat(doctool): the document-tool sandbox (red) |
-| 737c77eb0 | b44ef6589 | feat(capfloor): the capability floor (red) |
-| 813d7e454 | 5b04e3a1d | docs: second batch built (green) |
-| ab6c704d2 | b3c801ca1 | docs: review round (bunch 4b) findings (green) |
-| 1f3566bce | 53763eee7 | fix(doctool): portable probe report and judge (orange) |
-| 1375a846a | 03d8a1578 | fix(doctool): observe returns today's run; own cgroup root (red) |
-| 6ffe027d2 | 0e00153e6 | fix(capsule): the aggregate before any capsule or boost (red) |
-| 97caf55d6 | 289556b47 | fix(capfloor): observe never fails the start (red) |
-| 50e8c229d | 38c43f397 | docs: review round repaired (green) |
-| 5c7615904 | dcc274ab1 | test(capfloor): LD_LIBRARY_PATH for the stand-in daemon (yellow) |
+| commit | subject |
+|---|---|
+| 9c637ae8b | docs: the designs and failure modes (green) |
+| d36a1b78d | feat(capsule): capsule memory per doctrine (red) |
+| 911da25ad | feat(doctool): the document-tool sandbox (red) |
+| e2acf6025 | feat(capfloor): the capability floor (red) |
+| 8cbc30692 | docs: second batch built (green) |
+| 78c7b2e4a | docs: review round (bunch 4b) findings (green) |
+| 1dc74153f | fix(doctool): portable probe report and judge (orange) |
+| c97a577e1 | fix(doctool): observe returns today's run; own cgroup root (red) |
+| 62f39cc5f | fix(capsule): the aggregate before any capsule or boost (red) |
+| f3fac0bc4 | fix(capfloor): observe never fails the start (red) |
+| ac7a10956 | docs: review round repaired (green) |
+| 320f85820 | test(capfloor): LD_LIBRARY_PATH for the stand-in daemon (yellow) |
 
-Round 2: problem record 967d086a0 (green), failing tests 502dc20b6
+Round 2: problem record d0d49cd7c (green), failing tests 099e5e0b4
 (yellow), then the fixes.
 
 | finding | disposition | commit |
 |---|---|---|
-| E1 CAP_SYS_TIME dropped; hibernate resume needs it (high, blocked enforce) | fixed: kept with the hibernate reason (fast resume stays); floor `00000000032c15ff`; probe constant, image comment, K5 and enforce trial step 4 (a hibernate and resume) updated; source scan test | e76c1131d (red) |
-| E2 observe shadow has no memory or process bound (medium) | fixed: the shadow runs in a `t-*` cgroup under the document tools' root or not at all; "bounded load" corrected; memory named in the residual. RLIMIT_AS not set (pandoc's GHC runtime reserves a large address space at start; the cgroup bounds memory); RLIMIT_NPROC not set (per uid; pids.max bounds the tool) | 852e22b59 (red) |
-| E3 direct failed, sandbox succeeded counted equal (low/medium) | fixed: counted as diverged, so staging step 2's gate sees it | 852e22b59 (red) |
-| E4 directory read probe false denial (low) | fixed: a directory is listed, never read; the judge and the probe script take only EACCES or EPERM as a read denial | 852e22b59 (red) |
-| E5 boot sweep uses os.RemoveAll (low) | fixed: cgroup.kill (written, never created), then rmdir with the per-run removal's retry; a leftover is logged | 852e22b59 (red) |
-| E6 SetMax(old) error discarded (low) | fixed: a raise that cannot be put back is counted until the capsule ends (`stuck:<job>`) and the error and a log line name it | b864fa79e (red) |
-| E7 docs contradict the code; pre-rebase hashes (docs) | fixed: design text rewritten to the code; every hash re-pointed (tables above) | the round-2 outcome commit (green) |
-| E8 Apply no-ops on an unknown Mode; inherited fds (info) | fixed: Apply refuses an unknown Mode (Linux and elsewhere); the helper marks fds from 3 up close-on-exec before the exec | e76c1131d, 852e22b59 (red) |
+| E1 CAP_SYS_TIME dropped; hibernate resume needs it (high, blocked enforce) | fixed: kept with the hibernate reason (fast resume stays); floor `00000000032c15ff`; probe constant, image comment, K5 and enforce trial step 4 (a hibernate and resume) updated; source scan test | b1cee0a10 (red) |
+| E2 observe shadow has no memory or process bound (medium) | fixed: the shadow runs in a `t-*` cgroup under the document tools' root or not at all; "bounded load" corrected; memory named in the residual. RLIMIT_AS not set (pandoc's GHC runtime reserves a large address space at start; the cgroup bounds memory); RLIMIT_NPROC not set (per uid; pids.max bounds the tool) | a40b6db09 (red) |
+| E3 direct failed, sandbox succeeded counted equal (low/medium) | fixed: counted as diverged, so staging step 2's gate sees it | a40b6db09 (red) |
+| E4 directory read probe false denial (low) | fixed: a directory is listed, never read; the judge and the probe script take only EACCES or EPERM as a read denial | a40b6db09 (red) |
+| E5 boot sweep uses os.RemoveAll (low) | fixed: cgroup.kill (written, never created), then rmdir with the per-run removal's retry; a leftover is logged | a40b6db09 (red) |
+| E6 SetMax(old) error discarded (low) | fixed: a raise that cannot be put back is counted until the capsule ends (`stuck:<job>`) and the error and a log line name it | 9d8f1d5c9 (red) |
+| E7 docs contradict the code; pre-rebase hashes (docs) | fixed: design text rewritten to the code; every hash re-pointed (tables above; completed in round 3, F2) | 861e765a3 (green) |
+| E8 Apply no-ops on an unknown Mode; inherited fds (info) | fixed: Apply refuses an unknown Mode (Linux and elsewhere); the helper marks fds from 3 up close-on-exec before the exec | b1cee0a10, a40b6db09 (red) |
 
 Shipped defaults are unchanged: all three switches observe. Enforce for
 the capability floor is no longer blocked by E1 in the code; it still
@@ -1073,8 +1081,8 @@ waits for staging step 4 on a test computer, now including the hibernate
 and resume.
 
 Residuals added in round 2:
-- The source scan (E1's test) reads the daemon's own Go source for direct
-  syscalls. It does not see capabilities used by binaries the daemon
+- The source scan (E1's test) reads the daemon's own Go source for the
+  named calls (round 3, F4). It does not see capabilities used by binaries the daemon
   execs (git, go, node, libreoffice) or by syscalls reached through cgo
   libraries; the enforce trial is the evidence for those.
 - The shadow's `t-*` cgroup could not be exercised as uid 1000 here (a
@@ -1101,9 +1109,9 @@ record.
 - **F2, low: E7 is partly applied.** Accepted. The round-1 outcome still
   says document tools under observe "create no cgroup; the shadow is
   counted only", which E2 contradicts; the problem record
-  `docs/problems/desk-boundary-residuals-2026-10-21.md` cites f414e3ca7,
-  e9de19687 and 4ab63a8f2 (not ancestors), names the old lane, and one
-  line says 15 capabilities. And the rebase onto a84b39bac moved every
+  `docs/problems/desk-boundary-residuals-2026-10-21.md` cites three
+  pre-rebase hashes (not ancestors), names the old lane, and one line
+  says 15 capabilities. And the rebase onto a84b39bac moved every
   batch-2 SHA again, so the station's tables cite pre-rebase hashes too.
   Fix: re-point every hash to the head's ancestors and check each with
   `git merge-base --is-ancestor`.
@@ -1127,3 +1135,40 @@ record.
 - **F5, info: close_range needs no fallback under the Landlock V5 gate.**
   Accepted; a residual line (Landlock V5 needs kernel 6.7, close_range
   with CLOSE_RANGE_CLOEXEC 5.11).
+
+### Second batch, review round 3: outcome
+
+Problem record d5a2eacc9 (green), failing tests eb5671925 (yellow), then
+the fixes.
+
+| finding | disposition | commit |
+|---|---|---|
+| F1 tool cgroup fails without a swap controller (medium-low) | fixed: ENOENT on `memory.swap.max` alone is skipped, as the desk worker cgroup does; any other error fails closed | 40b58db59 (red) |
+| F2 E7 partly applied (low) | fixed: the round-1 observe sentence, the problem record's capability count, lane name and hashes; every batch-2 hash in this file and the problem record re-pointed to the head, each checked with `git merge-base --is-ancestor` (the only non-ancestors left are identities, not batch-2 commits: the reviewed heads e2a88e4ee, 5c7615904 and b5b33cf43, the first batch's 5fcf59e21 and bb50792d0, and origin/land/desk-cell-confinement's 9cee80a2d) | this round's outcome commit (green) |
+| F3 second stuck boost for one job leaks the first (low) | fixed: the stuck entry accumulates | 9624975f9 (red) |
+| F4 the E1 scan is a list of spellings (low) | fixed in the test: go/parser, aliases resolved, comments ignored, dot imports refused, IoctlIfreq, setxattr, set*id and raw SYS_* added, call sentinels; K5 narrowed to "the named calls" | eb5671925 (yellow) |
+| F5 close_range needs no fallback (info) | recorded below | this round's outcome commit (green) |
+
+F4, each call the parsed scan finds that the text scan did not. Every
+process that makes them runs under the floor: the daemon, and the capsule
+broker, which the daemon starts and which inherits its bounding set. None
+needs a dropped capability, so none blocks enforce.
+- `cmd/capsule-broker/egress.go:32` and `:36`, `unix.IoctlIfreq` on
+  "lo" (SIOCGIFFLAGS, then SIOCSIFFLAGS to bring loopback up in a
+  capsule's network namespace). The set needs CAP_NET_ADMIN, which is
+  kept and is in the broker's ambient set with egress.
+- `internal/capsule/capsule_release_dir.go:57`, `unix.Fsetxattr` of
+  `user.overlay.opaque` (the const at `:16`; the review said
+  trusted.overlay.opaque, but the code writes the user.* form, which
+  MountOverlayFS mounts with). A user.* xattr needs only ownership of the
+  file or CAP_FOWNER; the test still counts the setxattr family under
+  CAP_SYS_ADMIN, the strongest need (for trusted.*), and both are kept.
+  Run by the daemon's capsule executor, in process.
+The text scan already saw the rest (Settimeofday, Mount, Unmount); no raw
+SYS_* call with a privileged number and no set*id wrapper call exists in
+the scanned source.
+
+Residual added in round 3:
+- F5: `close_range(3, ~0, CLOSE_RANGE_CLOEXEC)` in the helper has no
+  fallback; it needs Linux 5.11, and the sandbox already refuses a kernel
+  without Landlock V5 (6.7), so no kernel that runs the sandbox lacks it.
