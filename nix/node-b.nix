@@ -605,8 +605,10 @@ let
   # body_caps.would_refuse.model stays 0 and max_seen stays under the
   # limit. An unset or unknown value enforces in code. In every mode the
   # bytes of all bodies held at once are bounded (limits.in_flight, 1 GiB,
-  # whatever the scheduler's mode) and a body must arrive within 60 s of
-  # its slot (GATEWAY_BODY_READ_TIMEOUT). Limits: GATEWAY_BODY_LIMITS, e.g.
+  # whatever the scheduler's mode), one computer holds at most a quarter of
+  # them (limits.per_caller, 256 MiB, or its one first body), a body waits
+  # at most 60 s for room and then has 60 s to arrive
+  # (GATEWAY_BODY_READ_TIMEOUT). Limits: GATEWAY_BODY_LIMITS, e.g.
   # "model=256MiB,in_flight=2GiB". Rollback: "observe" only while
   # gatewayModelScheduler is "off" or with in_flight unchanged; otherwise
   # raise GATEWAY_BODY_LIMITS model= in enforce.
@@ -2268,12 +2270,18 @@ in
       Restart = "on-failure";
       RestartSec = 3;
       TimeoutStopSec = "11min";
-      # B7 review (bunch 88, F1): a backstop under the in_flight body bound,
-      # never the bound itself. No measurement of the gateway's normal RSS
-      # is in the repo, so this is set generously: bodies in flight are at
-      # most 1 GiB (about 3 GiB with the JSON decoder's buffer and the
-      # decoded copy), plus one decoded image per call (up to 50 Mpx, about
-      # 200 MB). MemoryMax without MemoryHigh, as the squash unit: throttling
+      # B7 review (bunch 88, F1; bunch 109): a backstop under the in_flight
+      # body bound and the image decode bound, never a bound itself. No
+      # measurement of the gateway's normal RSS is in the repo. The
+      # arithmetic: bodies in flight are at most 1 GiB, about 3 GiB with the
+      # JSON decoder's buffer and the decoded copy; images are decoded at
+      # most 4 at once process-wide (provider.MaxConcurrentImageDecodes),
+      # each up to 50 Mpx: 400 MB decoded (16-bit PNG) + 200 MB RGBA copy +
+      # 20 MiB input, about 620 MB, so 4 x 620 MB = about 2.3 GiB; with
+      # about 0.5 GiB for the runtime and everything else, about 5.8 GiB,
+      # under GOMEMLIMIT 6GiB and 2 GiB under MemoryMax. Without the decode
+      # bound, 24 calls (scheduler on) or 60 (off) decoding at once were
+      # 7 to 18 GB. MemoryMax without MemoryHigh, as the squash unit: throttling
       # would stall every tenant's calls; GOMEMLIMIT (below) makes the Go
       # collector work harder before the kill. Tighten after /health and
       # MemoryPeak (proof 10) give a measurement.
