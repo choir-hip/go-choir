@@ -37,7 +37,7 @@ func hostFetchTestHandler(t *testing.T, upstream http.Handler, perMinute, inFlig
 	}
 	registry := NewIdentityRegistry(time.Hour)
 	h := NewHandlerWithRateLimit(registry, nil, nil)
-	h.hostFetch = newHostFetchService(exec, perMinute, inFlight)
+	h.hostFetch = newHostFetchService(exec, map[string]bool{"computer-fetch-a": true, "computer-fetch-b": true}, perMinute, inFlight)
 	return h, registry
 }
 
@@ -155,5 +155,54 @@ func TestHostFetchBoundsConcurrencyPerComputer(t *testing.T) {
 	}
 	if w := callHostFetch(h, a, "http://example.com/"); w.Code != http.StatusOK {
 		t.Fatalf("a's slot not released: %d", w.Code)
+	}
+}
+
+// The verb is off at the host unless the host lists the caller: a guest's
+// grant is the guest's choice, the list is the host's
+// (docs/problems/host-fetch-verb-open-to-every-guest-2026-10-22.md).
+func TestHostFetchRefusesIdentitiesTheHostDoesNotList(t *testing.T) {
+	logs := captureGatewayLog(t)
+	h, reg := hostFetchTestHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, "page")
+	}), 100, 4)
+	listed, unlisted := issue(t, reg, "computer-fetch-a"), issue(t, reg, "vm-not-listed")
+	if w := callHostFetch(h, listed, "http://example.com/"); w.Code != http.StatusOK {
+		t.Fatalf("listed: %d", w.Code)
+	}
+	w := callHostFetch(h, unlisted, "http://example.com/secret-path?q=1")
+	var body struct {
+		Error string `json:"error"`
+		Code  string `json:"code"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &body)
+	if w.Code != http.StatusForbidden || body.Code != hostFetchNotGrantedCode || body.Error == "" {
+		t.Fatalf("unlisted: status %d body %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(logs.String(), "fetch refused computer=vm-not-listed reason=not_granted") || strings.Contains(logs.String(), "secret-path") {
+		t.Fatalf("log: %q", logs.String())
+	}
+}
+
+func TestHostFetchEmptyListRefusesEveryone(t *testing.T) {
+	var hits int
+	h, reg := hostFetchTestHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hits++ }), 100, 4)
+	h.hostFetch = newHostFetchService(h.hostFetch.exec, loadHostFetchAllowList(func(string) string { return "" }), 100, 4)
+	for _, id := range []string{"computer-fetch-a", "vm-any"} {
+		if w := callHostFetch(h, issue(t, reg, id), "http://example.com/"); w.Code != http.StatusForbidden {
+			t.Fatalf("%s with an empty list: %d", id, w.Code)
+		}
+	}
+	if hits != 0 {
+		t.Fatalf("upstream reached %d times with an empty list", hits)
+	}
+	got := loadHostFetchAllowList(func(k string) string {
+		if k == EnvHostFetchVMs {
+			return "vm-a, vm-b\nclass:test"
+		}
+		return ""
+	})
+	if !got["vm-a"] || !got["vm-b"] || got["class:test"] || len(got) != 2 {
+		t.Fatalf("allow list = %v (class tokens are not identities)", got)
 	}
 }
