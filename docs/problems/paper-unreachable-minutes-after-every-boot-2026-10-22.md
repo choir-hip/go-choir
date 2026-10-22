@@ -64,3 +64,72 @@ to see whether the window is growing.
 
 The fix belongs to FP1's store throughput work, or to the post-boot
 admission ramp. Deploy B did not cause it.
+
+## Holder found by trace (2026-10-22 03:45 UTC, deploy C boot)
+
+The 3c16f7c33 refresh booted the paper at 03:39:46, and the runtime started
+at 03:41:01. The console went silent and `/health` timed out from 03:40. The
+host-side sampler (`_runs/bootwin/poll.sh`, read-only) shows the guest
+observability route answering throughout. So the HTTP server is not starved
+(H2 refuted). `/health` blocks because `HandleHealth`
+(`internal/agentcore/api.go:636`) reads the store per request
+(`pendingDeskMutations`, `activeSelfdevOperations`, and `Store.Head` under
+`EffectiveRelease`), after `WriteHeader` and with no deadline.
+
+A goroutine dump taken through the host-only pprof route at 03:44:56, mid-stall
+(46 goroutines), shows:
+- 12 goroutines in `objectgraph.(*engineMutex).lockAs` for 3 minutes:
+  `DoltStore.GetObject` from 8 dispatcher activations.
+- One goroutine, created by `Runtime.Start` (`runtime.go:882`), in a Dolt row
+  scan (`prollyIndexIter.Next` → zstd decompress) inside
+  `Store.LatestComputerEventByIdempotencyPrefix`
+  (`internal/store/computer_events.go:360`). Its call chain is
+  `resumePendingPlatformUpdateAfterReady` → `settleOrResumePlatformUpdate`
+  → `resumePendingPlatformUpdate` → `resumeStrandedPlatformUpdateTail`
+  (`internal/agentcore/platform_update.go:882`).
+
+The query:
+`SELECT event_json FROM computer_event_index WHERE computer_id=? AND
+status='finalized' AND idempotency_key LIKE 'platform-update-applied-%'
+ORDER BY sequence DESC LIMIT 1`.
+The table has `UNIQUE(computer_id, idempotency_key)`. But `ORDER BY sequence
+DESC LIMIT 1` steers the plan onto `idx_computer_event_index_status
+(computer_id, status, sequence)`. That walks every finalized event
+newest-first and fetches each row (with `event_json`) to test the key. When
+no applied platform update exists, it reads the whole event index. That is
+the paper's case, if it has never applied one. The paper takes a planned
+refresh on every deploy, so this runs on every boot, after ready.
+
+M0a result (console GC lines): no online Dolt GC ran in the 02:54:31 to
+02:59:12 window. The first came at 03:02:35. So H4 (GC) is not this
+window's holder.
+
+### A second, separate finding: the online GC every 10 minutes
+
+The paper's journal grows past 1 GiB every 10 minutes:
+- 03:02:35: 1034 MiB, 19 s;
+- 03:17:35: 1772 MiB, 31 s;
+- 03:27:35: 1613 MiB, 28 s;
+- 03:37:35: 1634 MiB, 30 s.
+
+Each pass stalls the store for 20 to 30 s. `/health` failed at 03:37:53,
+inside the 03:37:35 to 03:38:05 pass. About 1.6 GiB of journal per 10
+minutes is its own question: write amplification on the paper.
+
+### Repair (orange: one query, same result)
+
+`LatestComputerEventByIdempotencyPrefix` range-scans the unique
+`(computer_id, idempotency_key)` key for the prefix. It selects only
+`sequence` and `event_digest`, keeps the highest finalized sequence in Go,
+then reads that one event by digest. The prefix family has one row per
+transition, so the scan is bounded by the family, not the table. Tests
+first:
+- latest-of-several;
+- absence;
+- a prefix that is a LIKE metacharacter;
+- a non-finalized newer row ignored;
+- a store with thousands of unrelated events, which must not walk them
+  (a call-count or EXPLAIN check, whichever the store test kit supports).
+
+Separately, F1 (health reads bounded, with a fast 503) stays a candidate,
+so that any future slow holder can't make `/health` hang.
