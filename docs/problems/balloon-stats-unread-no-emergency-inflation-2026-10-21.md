@@ -36,3 +36,29 @@ only pages the guest has already freed.
   interval; v1.15.1 fixed oversized-descriptor stall #5794).
 - Inflation is guest-cooperative: a hostile guest can ignore it, so it is a
   density lever, not an isolation control.
+
+## Staging evidence, 2026-10-22 07:41 to 07:46 UTC (FP0)
+
+A host memory stall 14 minutes after deploy H's planned refresh of the
+paper (boot 07:30:42). The self-development monitor saw the vmctl list
+call, a test computer's /health and the public API time out for 30 to 60 s
+at 07:44 to 07:45, with host `/proc/pressure/memory` full stall about 18%
+over the minute before 07:46; vmctl logged the paper's VM unhealthy at
+07:41:38 and 07:45:23. Everything recovered by 07:46 with no kill. Read at
+07:50: full avg300 6.02%, MemAvailable 9.1 GiB of 31 GiB, swap 15 GiB with
+190 MiB used.
+
+Firecracker resident sizes at 07:50: the paper (vm-1669020a, 8 GiB guest)
+8,093 MiB, the owner's computer (vm-4a9afa23, stuck self-development
+operation) 3,930 MiB, a candidate fleet VM 2,177 MiB, the test computer
+(vm-c5c801f8, refreshed at 07:34) 1,618 MiB, another user's computer
+1,330 MiB; go-choir-vmctl.service peak 25,614 MiB, current 19,690 MiB.
+
+Inside the paper the guest reported MemAvailable 5.2 to 6.0 GiB the whole
+time (FP0's boot-window sampler, every 20 s), so about 5 GiB of the 8 GiB
+the host holds for it is guest page cache the guest would give back if
+asked. Fourteen minutes after a cold boot the paper's VMM was already at
+its whole guest size. That is this record's gap: the host has no signal
+and no lever for memory a guest holds only as cache (RES-10 emergency
+inflation, RES-08 shared store pages, RES-07's split). No new record; the
+cause class is this one plus node-b-memory-overcommitted-swap-2026-10-09.md.
