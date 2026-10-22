@@ -97,10 +97,12 @@ now:
   status: checkpoint_incomplete
   slice: >-
     Design and build plan committed; W0 (internal/appnet) built, tested
-    locally and pushed, unwired and off. FP0 reviews the red commit in the
-    next bunch, lands it with an inert set under that set's no-effect
-    proof (§8 step 0). W1 to W7 are not started.
-  source_ref: 2fd854616
+    locally and pushed, unwired and off. Bunch 11: flash accept, Devin
+    accept with edits; the edits are 77b53456f (tests) and 77a6e6d7b (fix),
+    and this file records the Parse size cap as W1's. FP0 reviews the
+    delta, lands W0 with an inert set under that set's no-effect proof
+    (§8 step 0). W1 to W7 are not started.
+  source_ref: 77a6e6d7b
   deploy_identity: unknown to this lane
   candidate:
     id: fp10-net10-w0
@@ -144,11 +146,11 @@ now:
       Whether W1's install event shape (approved grant ids) fits S7-0's
       package event when it lands; whether host-side desk attribution
       (NET-03) is needed before the first real app agent.
-    next_observation: FP0's review verdict on 2fd854616
+    next_observation: FP0's delta review of 77a6e6d7b
   blocker_or_risk: >-
     W5 depends on NET-01 landing (lane/fp10-net01-host-fetch); W1 depends on
     S7-0's install events reaching main.
-  next_action: FP0 reviews 2fd854616 with the bunch panel and lands it inert
+  next_action: FP0 reviews the bunch 11 delta (77b53456f, 77a6e6d7b) and lands W0 inert
 
 receipts:
   - id: problem-record-and-design
@@ -168,6 +170,12 @@ receipts:
     identity: 2fd854616
     proof_refs: [go test ./internal/appnet ok, -race ok, go vet clean; go test ./internal/egressgrant ./internal/appdesk ./internal/deskmanifest ok; no importer of internal/appnet]
     rollback_ref: git revert 2fd854616
+    disposition: committed
+  - id: bunch-11-edits
+    boundary: review
+    identity: 77a6e6d7b (tests 77b53456f)
+    proof_refs: [go test -race ./internal/appnet ./internal/egressgrant ok (GOMAXPROCS=2 GOFLAGS=-p=1), go vet clean]
+    rollback_ref: git revert 77a6e6d7b 77b53456f
     disposition: committed
 ---
 
@@ -224,7 +232,9 @@ verb) and `[now, now + renewal_days)`. So one validator decides it:
 - `data_ceiling` is required (NET-05 leaves it optional);
 - `effect_class` `money` and `irreversible` are refused in this pass:
   they need per-use owner confirmation, which does not exist;
-- a `read` entry may not list `PUT`, `PATCH` or `DELETE`;
+- a `read` entry lists `GET` and `HEAD` only: POST is dual-use (a POST to
+  calendar/v3 creates events) and OPTIONS is refused conservatively; a
+  read-over-POST API is a new effect class, not a read (bunch 11 review);
 - `credential` must name a platform-held credential; the registry is empty
   in this pass, so any credential is refused (the first credentialed app is
   its own red mission, with the gateway injecting the secret);
@@ -237,7 +247,7 @@ package cannot weaken any of it:
 
 | source | host service | authenticity | taint | record | address grammar |
 |---|---|---|---|---|---|
-| `mail` | maild | Svix HMAC (Resend) | untrusted_input (the package floor) | one observation record to the desk's inbox per batch, listing payload ids | `<package>` or `<package>-<suffix>`, lower case |
+| `mail` | maild | Svix HMAC (Resend) | untrusted_input (the package floor) | one observation record to the desk's inbox per batch, listing payload ids | `<package>` or `<package>.<suffix>`, lower case; disjoint because package names and suffixes never contain `.` (`+` stays maild's secret-alias marker) |
 
 Webhooks and push are not sources yet (earlier design, open question 2:
 none before launch). Parsing refuses unknown fields, so a manifest that
@@ -325,13 +335,14 @@ diff.
 2. A destination that egressgrant refuses: wildcard, IP literal,
    `localhost`, `*.internal`, a non-https scheme, a relative path prefix.
 3. No effect class; `money` or `irreversible`; `visible-write` with no
-   operation contract; a `read` entry listing PUT, PATCH or DELETE.
+   operation contract; a `read` entry listing anything but GET and HEAD.
 4. No data ceiling, or an unknown one.
 5. Any credential (the registry is empty).
 6. Budget missing, zero or over the hard cap; renewal 0 or over 90 days.
 7. More than 16 egress or 8 ingress entries.
 8. An ingress source other than `mail`; an address outside the package's
-   namespace; a duplicate `(source, address)`.
+   namespace, including one in another package's namespace (package `mail`
+   claiming `mail-calendar-inbox`); a duplicate `(source, address)`.
 9. Unknown JSON fields (`port`, `listen`, `forward`, `tunnel`, `host_service`,
    `taint`) refused at parse.
 10. Mode off (unset, or anything but `declare`): any non-empty policy refused.
@@ -339,14 +350,15 @@ diff.
     method, a higher effect class or ceiling, a changed credential or
     contract, a larger budget, a longer renewal, a new verb or ingress key.
 12. A grant request that egressgrant would not accept, or one whose holder
-    is not `app:<package>`.
+    is not `app:<package>`; any grant request minted with the mode off
+    (`Requests` runs `Admit` first, so `Admit` is the only path).
 
 ## 7. Build plan (each its own red mission, off or observe first)
 
 | Step | What | Touches | Size | Depends on |
 |---|---|---|---|---|
 | W0 (this station) | `internal/appnet`: types, `Parse`, `Validate`, `Admit(mode)`, `Requests`, `Widening`; unwired, `CHOIR_APP_NETWORK` off | new package | small | NET-05 (landed) |
-| W1 | `appdesk.Manifest.Network` replaces `Egress`; `Validate` calls `appnet.Validate`; install event carries approved grant ids and ingress keys; `Derive` fills `Desk.Egress` | appdesk, deskmanifest | small | W0, S7-0 install events |
+| W1 | `appdesk.Manifest.Network` replaces `Egress`; bound the manifest's size before `appnet.Parse` (it has no input cap of its own; bunch 11 review); `Validate` calls `appnet.Admit`; install event carries approved grant ids and ingress keys; `Derive` fills `Desk.Egress` | appdesk, deskmanifest | small | W0, S7-0 install events |
 | W2 | grant store kind `choir.egress_grant` (online, new kind only) and the `egress.grant.decide` owner act at the proxy (NET-05 §5.1, §5.2) | store, owneract, proxy | medium | NET-05 |
 | W3 | Texture approval card per entry, the pairing flag, the widening diff shown | Texture, frontend | medium | W1, W2 |
 | W4 | `Egress` verb, `app_egress` frame action, daemon check | deskmanifest, yaegikernel | small | W1 |
@@ -387,7 +399,7 @@ routes and observability flags unchanged, boot logs clean). Also confirm
    computer (capability 1) and it succeeds.
 6. Ingress: send mail to `netfixture@<owner domain>`: one observation
    record in the desk's inbox, no listener in the guest
-   (`ss -ltn` in P shows no new port). Mail to `netfixture-x@...`
+   (`ss -ltn` in P shows no new port). Mail to `netfixture.x@...`
    (unrouted) is dropped on the host with a counted receipt.
 7. Upgrade: reinstall with the destination widened to `https://example.org/`
    plus `https://example.com/`: expect the widening held pending, the old
@@ -401,7 +413,7 @@ routes and observability flags unchanged, boot logs clean). Also confirm
 
 1. App-desk egress always at L1 through the host (default), or may an app
    desk ever hold L3 through the capsule proxy? Default: L1 only.
-2. Ingress addresses are package-namespaced (`<package>[-suffix]`).
+2. Ingress addresses are package-namespaced (`<package>[.suffix]`).
    Default: yes; a vanity alias is a later owner act.
 3. Grant renewal for app desks: owner act each period (default) or a
    standing renewal policy.
@@ -411,4 +423,6 @@ routes and observability flags unchanged, boot logs clean). Also confirm
 Discovered: the earlier NET-10 design states `internal/deskmanifest` does
 not exist (stale since ARCH-02 landed); the host fetch verb cannot carry a
 grant, so app egress needs its own route. Introduced: none. Repaired: none
-(W0 is the declaration only).
+(W0 is the declaration only). Bunch 11 discovered and repaired three
+W0 defects: POST under read, overlapping ingress namespaces, grant requests
+minted with the mode off.
