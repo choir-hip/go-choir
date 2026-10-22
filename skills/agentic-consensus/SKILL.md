@@ -192,7 +192,7 @@ devin --print [PROMPT]
 Runner contract:
 
 ```bash
-devin --permission-mode smart -p "$PROMPT"
+devin --permission-mode dangerous --sandbox --respect-workspace-trust false -p "$PROMPT"
 ```
 
 Optional model override:
@@ -203,7 +203,7 @@ Optional model override:
 
 Notes:
 
-- `--permission-mode smart` auto-approves read-only tools and auto-runs actions a fast model judges safe. `auto` rejected the review's own read commands in non-interactive mode, so Devin returned no review (owner, 2026-10-22).
+- `--permission-mode dangerous --sandbox` (owner, 2026-10-22: "run Devin on dangerous not smart mode then. Smart isn't smart"). `auto` rejected the review's own read commands in non-interactive mode, and `smart` still stopped partway on a confirmation it could not get, so both returned no or half a review. `--sandbox` keeps the run from writing outside its sandbox; give it `--cwd` an empty directory (the reviewed repo is read by absolute path) so a review cannot touch a worktree.
 - Help says non-interactive mode disables workspace-trust prompting by default.
 - Devin is unpinned and serves the account default (`swe-2-max` as of 2026-10-08). Panel behavior follows the account default if it changes; pass `--devin-model` only for a deliberate one-off override.
 
