@@ -51,7 +51,8 @@ narrow what legitimate toolchains reach, so it is built first:
    refuses, and closes the tunnel before a byte reaches the upstream: no TLS,
    no name, more than one name, a name in another form, a hidden name
    (Encrypted Client Hello), a hello split across records, a malformed hello,
-   and a client that stays silent for ten seconds. It applies to every
+   and a client that has not sent a complete first record within ten
+   seconds (one deadline, not renewed by partial reads). It applies to every
    policy that uses the proxy, the Claude delegate's included. Code:
    `internal/capsule/egress_tls.go`; tests: `internal/capsule/egress_tls_test.go`
    (a table of malformed hellos, a real `crypto/tls` hello, and six tests
@@ -96,7 +97,8 @@ ships off or in observe, so the check now has a mode
 - `observe` (the default): the proxy reads the tunnel's first record and
   judges it exactly as enforce does, writes the verdict on the capsule's
   egress ledger entry, logs a would-refuse once per capsule and host, and
-  relays the record and the tunnel unchanged. The entry's `outcome` stays
+  relays the record's bytes and the tunnel unchanged (but not at once: see
+  the known cost below). The entry's `outcome` stays
   `ok`; `tunnel_identity` is `pass` or `would_refuse`, and
   `tunnel_identity_reason` names why (for a mismatch: `ClientHello SNI
   "pypi.org" is not the CONNECT host "github.com"`).
@@ -111,56 +113,124 @@ it at start (`internal/autoputer/capsule_executor_linux.go`) and the executor
 writes it on every egress policy it builds, the Claude delegate's included
 (`egressPolicyLocked`). Unset and unknown values are observe. A capsule never
 supplies a policy, so the mode cannot be set from inside one. Known cost of
-observe: a client that stays silent (a server-speaks-first protocol) is
-relayed after the 10 s hello timeout instead of at once; TLS clients speak
-first.
+observe: nothing is relayed either way until the first record is judged, so
+a client that has not sent a complete first record (a silent client, or one
+waiting for a server that speaks first) is relayed only after the 10 s hello
+timeout; TLS clients speak first and are judged as soon as the hello arrives.
+`TestEgressObserveDelaysAServerFirstGreetingUntilTheTimeout` pins it.
 
 Commits on `lane/fp6-sec06-on-main`: `e20c92b6c` (the replay, red),
 `d8d88ae5f` (tests first, yellow), `e0efea302` (the mode, red, full
 ceremony in its message), and the docs commit carrying this section and
 `scripts/capsule-tunnel-identity-probe.sh`.
 
-**FP0's deployed proof (observe).** On a test computer, from an
-implementation capsule (a capsule job):
+The deployed proof first written here is superseded by the runbook in
+"Review round and per-computer enforce (2026-10-22)" below, which adds the
+mirror precondition, the enforce computer and the Claude delegate gate.
 
-1. Identity: staging reports the landed SHA; the guest log at boot has
-   `capsule executor: egress tunnel identity observe`.
-2. Run `bash scripts/capsule-tunnel-identity-probe.sh`. It runs `pip
-   download` of `six==1.16.0` from `https://pypi.org/simple`, `npm view
-   left-pad version` against `https://registry.npmjs.org/`, `git ls-remote
-   https://github.com/golang/go HEAD`, a `huggingface_hub` install and one
-   `hf_hub_download("openai-community/gpt2", "config.json")`, each pointed
-   at the public host so a mirror grant does not route it around CONNECT.
-   Expect every toolchain check `"got":"pass"` and `"failures":0`.
-3. The mismatch, in the same script: a TLS client CONNECTs to github.com and
-   sends the server name pypi.org. Under observe the line reads `HTTP/1.1
-   200 Connection Established | SSLCertVerificationError` (the tunnel was
-   relayed and github.com answered with its own certificate).
-4. Read the capsule's egress ledger
-   (`/mnt/persistent/capsule-artifacts/egress/<capsule>.jsonl` in the guest,
-   or the `capsule-egress:` lines in the guest log) and count verdicts per
-   host:
+## Review round and per-computer enforce (2026-10-22, station FP6)
+
+The panel on `3b5c9e982` (Flash accept; DeepSeek and Sonnet accept with
+edits, outputs outside the repo) and the owner rule of 2026-10-22 ("a new
+enforcing rule ships in observe everywhere, plus enforce on one selected test
+computer in the same deploy, where a per-computer selector exists") changed
+the slice as follows. Commits: `824a3f09e` (tests, yellow), `e97b1b0db`
+(code, red, ceremony in its message), then the docs commit with this section.
+
+**Per-computer enforce.** vmctl's `VM_CAPSULE_TUNNEL_ENFORCE_ONLY`
+(`internal/vmmanager/capsule_tunnel_identity.go`; the same
+`computer_select.go` tokens as `VM_GUEST_RECLAIM_ONLY`: VM id, computer id,
+`class:<class>`, `*`) puts the kernel boot argument
+`choir.capsule_egress_tunnel_identity=enforce` on the launch of each computer
+it names. The guest boot script in `nix/autoputer-vm.nix` copies only that
+exact value into `/run/go-choir-autoputer.env`, and that environment file
+overrides the unit's `observe`. No guest process or capsule can set its own
+boot arguments. Boot arguments are part of the launch-config hash, so a
+newly named computer cold boots once; the boot arguments of computers not
+named stay byte-identical. `nix/node-b.nix` sets the list empty; FP0 names one
+test computer at landing. Rollback: empty the list and redeploy.
+
+**Other edits.** The name comparison lowercases ASCII only (it was
+`strings.EqualFold`; Unicode folding matched `ſ.github.com` to
+`s.github.com`). The daemon logs a WARNING at start for a set value other
+than off, observe or enforce. Only a checked CONNECT gets the full-record
+reader (16901 bytes); other requests keep 4 KiB. New tests kill the
+reviewers' surviving mutants. M32: an upstream-side byte counter shows 0 bytes
+on every enforce refusal. M30: valid 9 KiB and 16384-byte hellos pass in both
+modes. M13, M20, M28: a duplicate extension, bytes after the extension block,
+and bytes after the SNI list are all refused. The image line and the boot-script
+case are pinned by tests.
+
+**Scope.** The check binds name to name. It does not see an HTTP Host
+header inside the TLS session, so even under enforce it closes only the
+plain variant of this problem (a ClientHello naming another host). The
+durable fix is the fetch service per ecosystem (NET-02). Exact host matching
+is still the named residual.
+
+**Runbook for FP0's deployed proof (pending; nothing below has been run).**
+Precondition: each computer used has no package-mirror grant, or its grant
+is not `mirrors_only`. Under `mirrors_only` the proxy refuses CONNECT to
+pypi.org, registry.npmjs.org and github.com with 403, and no tunnel is judged.
+
+1. Identity: staging reports the landed SHA. vmctl's environment has
+   `VM_CAPSULE_TUNNEL_ENFORCE_ONLY=<one test computer id>`. That computer has
+   cold booted since; its guest log says `capsule executor: egress tunnel
+   identity enforce`. Every other computer's guest log says `... observe`
+   and carries no WARNING line.
+2. Observe, on a second test computer (not the one selected), from an
+   implementation capsule (a capsule job): `bash
+   scripts/capsule-tunnel-identity-probe.sh observe`. The script runs `pip
+   download six==1.16.0` from `https://pypi.org/simple`, `npm view left-pad
+   version` against `https://registry.npmjs.org/`, `git ls-remote
+   https://github.com/golang/go HEAD` with the mirror's `GIT_CONFIG_*`
+   insteadOf rewrite dropped for that command, a `huggingface_hub` install,
+   and `hf_hub_download("openai-community/gpt2", "config.json")`. Expected:
+   every check `"got":"pass"`; the `sni-mismatch` line shows `HTTP/1.1 200
+   Connection Established | SSLCertVerificationError` (the tunnel was relayed
+   and github.com answered with its own certificate); `"failures":0`.
+3. Read that capsule's egress ledger: either
+   `/mnt/persistent/capsule-artifacts/egress/<capsule>.jsonl` in the guest,
+   or the `capsule-egress:` lines in the guest log. Count verdicts per host:
    `jq -s 'map(select(.method=="CONNECT")) | group_by(.host) | map({host:.[0].host, n:length, pass:(map(select(.tunnel_identity=="pass"))|length), would_refuse:(map(select(.tunnel_identity=="would_refuse"))|length)})'`.
-   Expect `would_refuse` 0 for every host but github.com (pypi.org,
-   files.pythonhosted.org, registry.npmjs.org, huggingface.co and any hf.co
-   storage host), with every toolchain entry `pass` and outcome `ok`; and
-   for github.com, `would_refuse` exactly 1 (git's tunnels are `pass`): the
-   mismatch, outcome `ok`, with a `tunnel_identity_reason` naming the SNI
-   `pypi.org` and the CONNECT host `github.com`. The guest log has one `tunnel identity
-   (observe) would refuse capsule <id> host github.com` line.
+   Expected on a computer with no mirror grant:
+   - `would_refuse` 0 on every host except github.com (pypi.org,
+     files.pythonhosted.org, registry.npmjs.org, huggingface.co, and any hf.co
+     storage host), with every toolchain entry `pass` and outcome `ok`;
+   - on github.com, git's tunnels `pass` and exactly one `would_refuse`:
+     outcome `ok`, with a `tunnel_identity_reason` naming the SNI `pypi.org`
+     and the CONNECT host `github.com`;
+   - one `tunnel identity (observe) would refuse capsule <id> host
+     github.com` line in the guest log.
+4. Enforce, on the selected computer, from an implementation capsule: `bash
+   scripts/capsule-tunnel-identity-probe.sh enforce`. Expected: the
+   toolchain checks pass, and the `sni-mismatch` line shows `HTTP/1.1 200
+   Connection Established` followed by `SSLEOFError`, `SSLZeroReturnError`,
+   `ConnectionResetError` or `BrokenPipeError`. The ledger's toolchain
+   entries are `pass`. The mismatch entry is outcome `refused` and
+   `tunnel_identity` `refused`, with the SNI reason, `bytes_up` 0 and
+   `bytes_down` 0.
+5. If a toolchain records `would_refuse` (or `refused` on the selected
+   computer), the reason says which case it is: no SNI, an Encrypted Client
+   Hello, a split hello, or an incomplete first record. Record the tool and
+   the reason here, and empty the selector if it was the selected computer.
 
-If a toolchain records `would_refuse`, the reason says which (no SNI, an
-Encrypted Client Hello, a split hello); record the tool and the reason here
-before any flip.
+**The global enforce gate.** Enforce does not become the image default (`CHOIR_CAPSULE_EGRESS_TUNNEL_IDENTITY
+= "enforce"` in `nix/autoputer-vm.nix`, a later deploy) until all three
+hold:
+(a) the observe ledgers show zero `would_refuse` for real toolchains: this
+probe, and ordinary engineering traffic on the test computers;
+(b) the selected computer has run enforce with its toolchains passing;
+(c) a real claude-mode (Claude delegate) capsule session shows
+`tunnel_identity` `pass` for `api.anthropic.com` on its own ledger. The
+delegate's client stack (Bun/Node) is not exercised by the probe, and one
+GREASE ECH from it would end every delegate session under enforce. Do not
+select the Claude delegate's allowlisted computer for enforce before (c)
+holds.
 
-**The enforce flip** is a later deploy: set
-`CHOIR_CAPSULE_EGRESS_TUNNEL_IDENTITY = "enforce"` in `nix/autoputer-vm.nix`
-once the observe ledger shows zero `would_refuse` for real toolchains (this
-probe, and the test computer's ordinary engineering traffic). Its proof is the
-same script: the toolchains pass, the mismatch line ends in `SSLEOFError` or
-`ConnectionResetError`, and the ledger entry is outcome `refused` with
-`tunnel_identity` `refused` and no bytes down. Rollback at either stage:
-`off` (or `observe`) in the same line and a deploy; `git revert e0efea302`
-returns to enforce-always; reverting `e20c92b6c` as well removes the check.
-SEC-06's CONNECT variant counts as repaired only at the enforce flip; until
-then observe closes nothing.
+Rollback at any stage: empty the selector; set `off` (or `observe`) in the
+image line and deploy; `git revert e97b1b0db` removes the selector and this
+round's edits; `git revert e0efea302` returns to enforce everywhere;
+reverting `e20c92b6c` as well removes the check. SEC-06's plain CONNECT
+variant counts as repaired only where enforce runs: on the selected computer
+at landing, everywhere at the global flip. Until then, observe closes
+nothing.

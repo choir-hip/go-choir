@@ -148,7 +148,10 @@ now:
     2026-10-22: SEC-06 replayed onto main and made observe-first on
     lane/fp6-sec06-on-main (e20c92b6c replay, d8d88ae5f tests, e0efea302 the
     off/observe/enforce mode, default observe; see "SEC-06 on main, observe
-    first"); pushed, not landed or deployed. Before that: all five asks built
+    first"); review round on 3b5c9e982 done (824a3f09e tests, e97b1b0db the
+    per-computer enforce selector VM_CAPSULE_TUNNEL_ENFORCE_ONLY, empty, and
+    the panel's edits; see "SEC-06 review round and per-computer enforce");
+    pushed, not landed or deployed. Before that: all five asks built
     and committed on lane/b8-network; nothing is pushed or
     deployed. The orchestrator sends the red commits to a panel, lands them in
     order, and runs the deployed proof below. Batch-1 review edits (GPT-6.1-sol,
@@ -224,8 +227,10 @@ now:
   next_action: >-
     FP0 reviews and lands the commits in the order in "Landing order"; for
     SEC-06, land lane/fp6-sec06-on-main (three code commits and the docs
-    commit) in place of a38eb7f67, run the observe proof, and flip to enforce
-    in a later deploy once observe shows zero would_refuse for real toolchains
+    commit) in place of a38eb7f67 with one test computer named in
+    VM_CAPSULE_TUNNEL_ENFORCE_ONLY, run the runbook in the problem record
+    (observe on a second computer, enforce on the named one), and make
+    enforce the image default only through the three-part gate there
 
 receipts:
   - id: problem-record-and-goal
@@ -270,6 +275,12 @@ receipts:
     proof_refs: [internal/capsule/egress_tls_mode_test.go, internal/capsule/egress_tls_mode_linux_test.go, scripts/capsule-tunnel-identity-probe.sh]
     rollback_ref: CHOIR_CAPSULE_EGRESS_TUNNEL_IDENTITY=off in nix/autoputer-vm.nix and a deploy; or git revert e0efea302 (enforce-always), then e20c92b6c (no check)
     disposition: pushed on lane/fp6-sec06-on-main (e20c92b6c, d8d88ae5f, e0efea302); go test ./internal/capsule and its -race run pass locally; not deployed
+  - id: egress-tunnel-identity-enforce-selector
+    boundary: implement
+    identity: e97b1b0db
+    proof_refs: [internal/vmmanager/capsule_tunnel_identity_test.go, internal/capsule/egress_tls_mode_test.go, internal/capsule/egress_tls_test.go, scripts/capsule-tunnel-identity-probe.sh]
+    rollback_ref: empty VM_CAPSULE_TUNNEL_ENFORCE_ONLY in nix/node-b.nix and redeploy; or git revert e97b1b0db
+    disposition: pushed on lane/fp6-sec06-on-main (824a3f09e tests, e97b1b0db code); go test of internal/capsule and internal/vmmanager and the -race run of internal/capsule, internal/autoputer and internal/vmmanager pass locally; the deployed runbook has not been run
 ---
 
 # FP6: the host-mediated network, first half
@@ -368,22 +379,56 @@ surfaces, admissible evidence, rollback and heresy delta in its message),
 then the docs commit carrying this section, the problem record's "Observe
 first" section and `scripts/capsule-tunnel-identity-probe.sh`.
 
-**FP0's deployed proof** is written step by step in
-[the problem record](../problems/egress-proxy-tunnel-identity-2026-10-21.md),
-"Observe first": on a test computer, from an implementation capsule, `bash
-scripts/capsule-tunnel-identity-probe.sh` runs pip download, npm view, git
-ls-remote and a huggingface_hub fetch (all succeed), then a TLS client that
-CONNECTs to github.com with the server name pypi.org; the egress ledger then
-shows would_refuse counts per host, zero for every real toolchain, and one
-github.com entry `would_refuse` with the SNI reason and outcome `ok`.
-
-**The enforce flip** is a later deploy (one line in `nix/autoputer-vm.nix`),
-once observe shows zero would_refuse for real toolchains; its proof is step 6
-above with the ledger's `tunnel_identity` `refused`. Heresy delta for this
-slice: discovered none, introduced none, repaired none until the flip.
+**FP0's deployed proof** has not been run. Its runbook, with the expected
+results, is in [the problem record](../problems/egress-proxy-tunnel-identity-2026-10-21.md),
+"Review round and per-computer enforce (2026-10-22)". Nothing in this file
+records a result from it.
 
 Residuals: `scripts/check-guest-data-fstrim.sh` could not run in this lane
 (no `nix` binary on the VM), so the one-line `nix/autoputer-vm.nix` addition
 is not evaluated here; the mode defaults to observe in code if the line is
 absent. Exact host matching and the per-ecosystem fetch service stay as named
 in the problem record.
+
+## SEC-06 review round and per-computer enforce (2026-10-22)
+
+The panel on `3b5c9e982` (Flash accept; DeepSeek and Sonnet accept with
+edits). Under the owner rule of 2026-10-22, observe ships everywhere and
+enforce runs on one selected test computer in the same deploy. Commits on
+`lane/fp6-sec06-on-main`: `824a3f09e` (tests, yellow) and `e97b1b0db` (code,
+red, ceremony in its message), then the docs commit with this section.
+
+- **Selector:** vmctl's `VM_CAPSULE_TUNNEL_ENFORCE_ONLY`
+  (`internal/vmmanager/capsule_tunnel_identity.go`, `computer_select.go`
+  tokens). It writes the boot argument
+  `choir.capsule_egress_tunnel_identity=enforce`. The guest boot script
+  copies only that exact value into the daemon's environment file, which
+  overrides the image's `observe`. `nix/node-b.nix` sets the list empty; FP0
+  names one test computer at landing.
+- **Edits:** ASCII-only name comparison (Sonnet F6). A boot WARNING for an
+  unknown mode (F7). The full-record reader only for a checked CONNECT (F8).
+  Comments and test header state the observe delay, which a test pins (F1),
+  and the "complete first record within ten seconds" wording (DeepSeek F6).
+- **Tests:** an upstream byte counter on every enforce refusal (M32). 9 KiB
+  and 16384-byte hellos in both modes (M30). Duplicate extension, bytes
+  after the extension block, bytes after the SNI list (M13, M20, M28). Pins
+  for the image line and the boot-script case (DeepSeek F4). The selector on
+  both boot paths, byte-identical boot args for computers not named, and
+  node-b never `*`.
+- **Probe:** `scripts/capsule-tunnel-identity-probe.sh observe|enforce`.
+  - git drops the mirror's insteadOf rewrite (DeepSeek F2).
+  - Precondition: a computer with no mirror grant, or one whose grant is not
+    `mirrors_only` (DeepSeek F3).
+  - The mismatch check needs the CONNECT answered 200 before it judges.
+- **Global enforce gate** (Sonnet F2), in the problem record. Enforce becomes
+  the image default only after three things hold: zero `would_refuse` for real
+  toolchains on the observe ledgers; the selected computer passing under
+  enforce; and a real claude-mode session showing `tunnel_identity` `pass`
+  for `api.anthropic.com` on its own ledger.
+- **Scope** (Sonnet F10): enforce closes the plain variant only (a hello
+  naming another host). A Host header inside TLS is not seen. NET-02 is the
+  durable fix.
+
+Residuals: no `nix` binary on this VM, so neither nix file was evaluated.
+The guest boot-script case arm was run in bash against three command lines.
+The mode defaults to observe in code if the image line is absent.
