@@ -566,9 +566,11 @@ class RebootNotDone(unittest.TestCase):
         self.assertEqual(fake.unmarked, [])
 
     def test_host_never_back_exits_4_and_keeps_the_markers(self):
-        code, fake, _ = self.run_reboot(255, [None], stderr="Connection to node-b closed by remote host.")
-        self.assertEqual(code, 4)
-        self.assertEqual(fake.unmarked, [])
+        for err in ("Connection to node-b closed by remote host.", "Read from remote host node-b: Connection timed out",
+                    "Timeout, server node-b not responding.", "client_loop: send disconnect: Broken pipe"):
+            code, fake, _ = self.run_reboot(255, [None], stderr=err)
+            self.assertEqual(code, 4, err)
+            self.assertEqual(fake.unmarked, [], err)
 
     def test_ssh_that_never_connected_clears_and_exits_3(self):
         """R2: a connect or auth failure means the reboot was never sent."""
