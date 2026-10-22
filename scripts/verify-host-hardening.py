@@ -490,7 +490,10 @@ MODE_EXPECT = [
     ("/var/lib/go-choir/corpus-dolt", 0o750, True),
     ("/var/lib/go-choir/platform-artifacts", 0o750, True),
     (UNIT_ENV_DIR, 0o700, True),
-    (UNIT_ENV_DIR + "/deploy.env", 0o600, True),
+    # The first import has completed; the env readers assert it.
+    (UNIT_ENV_DIR + "/.imported", 0o600, True),
+    # Optional, as the proxy's EnvironmentFile is.
+    (UNIT_ENV_DIR + "/deploy.env", 0o600, False),
     (UNIT_ENV_DIR + "/corpus-dsn.env", 0o600, True),
     (UNIT_ENV_DIR + "/sandbox-gateway-token.env", 0o600, True),
     # The retrieval kill switch exists only while an operator has it on.
