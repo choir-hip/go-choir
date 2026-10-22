@@ -18,7 +18,10 @@ func TestWarmUniversalWirePlatformComputerPersistsResumeFailure(t *testing.T) {
 	if err := reg.SetPersistencePath(path); err != nil {
 		t.Fatalf("SetPersistencePath: %v", err)
 	}
-	reg.SetVMManager(&mockVMManager{resumeError: errors.New("missing managed instance")})
+	// The manager tracks the stopped VM, so the warm resumes it (an untracked
+	// VM is booted like the ensure does: interrupted_start_test.go).
+	reg.SetVMManager(&mockVMManager{resumeError: errors.New("missing managed instance"),
+		getVMs: map[string]*VMInstanceInfo{UniversalWirePlatformVMID: {State: "stopped", Epoch: 1146}}})
 	key := ownershipKey(UniversalWirePlatformOwnerID, UniversalWirePlatformDesktopID)
 	reg.mu.Lock()
 	reg.ownerships[key] = &VMOwnership{

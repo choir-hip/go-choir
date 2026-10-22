@@ -778,6 +778,10 @@ func envBool(key string, fallback bool) bool {
 	}
 }
 
+// platformEnsureRetryInterval spaces the startup ensure's retries after a
+// transient refusal.
+const platformEnsureRetryInterval = 15 * time.Second
+
 func startUniversalWirePlatformComputer(registry *vmctl.OwnershipRegistry, guard vmctl.ComputerVersionRouteGuard) {
 	if !envBool("VMCTL_PLATFORM_WIRE_ENABLED", false) {
 		return
@@ -799,8 +803,28 @@ func startUniversalWirePlatformComputer(registry *vmctl.OwnershipRegistry, guard
 			log.Printf("vmctl: universal wire platform computer refused: %v", err)
 			return
 		}
-		if err := registry.EnsureUniversalWirePlatformComputer(ctx); err != nil {
-			log.Printf("vmctl: universal wire platform computer: %v", err)
+		// A refusal that spawned nothing (an interrupted start's close still
+		// open, a live guest still reattaching, host memory pressure, another
+		// start in progress) clears by itself: retry it inside the timeout
+		// instead of leaving the platform computer down until a request
+		// (wake-during-deploy-vmctl-restart-orphans-the-vm-2026-10-22.md,
+		// review round 2, F3). Any other error is final, as before.
+		for {
+			err := registry.EnsureUniversalWirePlatformComputer(ctx)
+			if err == nil {
+				return
+			}
+			if !vmctl.IsTransientStartRefusal(err) {
+				log.Printf("vmctl: universal wire platform computer: %v", err)
+				return
+			}
+			log.Printf("vmctl: universal wire platform computer refused for now, retrying in %s: %v", platformEnsureRetryInterval, err)
+			select {
+			case <-ctx.Done():
+				log.Printf("vmctl: universal wire platform computer: gave up after %s: %v", timeout, err)
+				return
+			case <-time.After(platformEnsureRetryInterval):
+			}
 		}
 	}()
 }
