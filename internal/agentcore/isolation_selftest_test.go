@@ -5,23 +5,72 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
 	"github.com/yusefmosiah/go-choir/internal/server"
 )
 
-// The OOM leg is selected only by an enum; anything else is refused before
-// any worker starts (docs/problems/fp2-step4-deployed-oom-not-drivable-desk-refuses-runaway-2026-10-22.md, O6, O7).
-func TestIsolationSelfTestLegSelector(t *testing.T) {
-	for raw, want := range map[string]string{"": "", "leg=oom": "oom", "leg=seccomp": "seccomp"} {
-		r := httptest.NewRequest(http.MethodPost, "/api/runtime/isolation-selftest?"+raw, nil)
-		got, err := isolationSelfTestLeg(r)
+// The legs are selected only by an enum on the internal route; anything
+// else is refused before any worker starts (docs/problems/fp2-step4-deployed-oom-not-drivable-desk-refuses-runaway-2026-10-22.md, O6, O7).
+func TestInternalIsolationSelfTestLegSelector(t *testing.T) {
+	for raw, want := range map[string]string{"leg=oom": "oom", "leg=seccomp": "seccomp"} {
+		r := httptest.NewRequest(http.MethodPost, internalIsolationSelfTestPath+"?"+raw, nil)
+		got, err := internalIsolationSelfTestLeg(r)
 		if err != nil || got != want {
 			t.Errorf("%q: leg=%q err=%v, want %q", raw, got, err, want)
 		}
 	}
-	for _, raw := range []string{"leg=OOM", "leg=capsule", "leg=seccomp&filter=workload", "leg=oom&leg=oom", "leg=", "source=for{}"} {
-		r := httptest.NewRequest(http.MethodPost, "/api/runtime/isolation-selftest?"+raw, nil)
-		if leg, err := isolationSelfTestLeg(r); err == nil {
+	for _, raw := range []string{"", "leg=OOM", "leg=capsule", "leg=oom&leg=oom", "leg=", "leg=oom&source=for{}", "leg=seccomp&filter=workload"} {
+		r := httptest.NewRequest(http.MethodPost, internalIsolationSelfTestPath+"?"+raw, nil)
+		if leg, err := internalIsolationSelfTestLeg(r); err == nil {
 			t.Errorf("%q: accepted as %q", raw, leg)
+		}
+	}
+}
+
+// Review bunch 22 item 1: the owner-facing /api route runs only the
+// confinement legs; a leg there is refused before anything runs.
+func TestIsolationSelfTestAPIRouteRefusesTheLegs(t *testing.T) {
+	h := &APIHandler{}
+	for _, leg := range []string{"oom", "seccomp"} {
+		r := httptest.NewRequest(http.MethodPost, "/api/runtime/isolation-selftest?leg="+leg, nil)
+		r.Header.Set("X-Authenticated-User", "owner")
+		w := httptest.NewRecorder()
+		h.HandleIsolationSelfTest(w, r)
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("leg=%s on /api: status = %d, want 400", leg, w.Code)
+		}
+	}
+}
+
+// Review bunch 22 item 1: the internal route admits only the host peer
+// holding the internal service credential.
+func TestInternalIsolationSelfTestRefusesNonHostCallers(t *testing.T) {
+	t.Setenv(server.EnvGuestTrustLoopback, "")
+	const token = "selftest-gate-test-token-0123456789abcdef0123456"
+	restore := hostauth.SetForTesting(hostauth.ModeEnforce, token)
+	defer restore()
+	h := &APIHandler{}
+	gate := hostauth.Middleware(http.HandlerFunc(h.HandleInternalIsolationSelfTest))
+	for _, tc := range []struct {
+		name, addr, token, query string
+		want                     int
+	}{
+		{"stranger with the token", "203.0.113.9:4000", token, "leg=oom", http.StatusForbidden},
+		{"in-guest loopback with the token", "127.0.0.1:4000", token, "leg=oom", http.StatusForbidden},
+		{"host peer without the token", "192.0.2.1:4000", "", "leg=seccomp", http.StatusForbidden},
+		{"host peer with a wrong token", "192.0.2.1:4000", "wrong-token-0123456789abcdef0123456789abcdef", "leg=oom", http.StatusForbidden},
+		// Passes the gate, then the selector refuses before anything runs.
+		{"host peer with the token, bad leg", "192.0.2.1:4000", token, "leg=bogus", http.StatusBadRequest},
+	} {
+		r := httptest.NewRequest(http.MethodPost, internalIsolationSelfTestPath+"?"+tc.query, nil)
+		r.RemoteAddr = tc.addr
+		if tc.token != "" {
+			r.Header.Set(hostauth.Header, tc.token)
+		}
+		w := httptest.NewRecorder()
+		gate.ServeHTTP(w, r)
+		if w.Code != tc.want {
+			t.Errorf("%s: status = %d, want %d", tc.name, w.Code, tc.want)
 		}
 	}
 }
