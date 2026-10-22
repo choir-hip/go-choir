@@ -1238,52 +1238,6 @@ func buildEventObject(rec *types.EventRecord, now time.Time) (objectgraph.Object
 	}, nil
 }
 
-// ListEventsOG lists events for a run from the object graph.
-func (s *Store) ListEventsOG(ctx context.Context, runID string, limit int) ([]types.EventRecord, error) {
-	s.beforeEventRead(ctx)
-	if limit <= 0 {
-		limit = 100
-	}
-	objs, err := s.ogListByMetadata(ctx, ogKindEvent, "run_id", runID, limit)
-	if err != nil {
-		return nil, err
-	}
-	events := make([]types.EventRecord, 0, len(objs))
-	for _, obj := range objs {
-		var rec types.EventRecord
-		if err := ogDecode(obj, &rec); err != nil {
-			return nil, err
-		}
-		events = append(events, rec)
-	}
-	return events, nil
-}
-
-// ListEventsByOwnerOG lists events by owner from the object graph.
-func (s *Store) ListEventsByOwnerOG(ctx context.Context, ownerID string, limit int) ([]types.EventRecord, error) {
-	s.beforeEventRead(ctx)
-	if limit <= 0 {
-		limit = 100
-	}
-	objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
-		Kind:    ogKindEvent,
-		OwnerID: ownerID,
-		Limit:   limit,
-	})
-	if err != nil {
-		return nil, err
-	}
-	events := make([]types.EventRecord, 0, len(objs))
-	for _, obj := range objs {
-		var rec types.EventRecord
-		if err := ogDecode(obj, &rec); err != nil {
-			return nil, err
-		}
-		events = append(events, rec)
-	}
-	return events, nil
-}
-
 // =========================================================================
 // Trajectories — object graph implementation
 // =========================================================================
