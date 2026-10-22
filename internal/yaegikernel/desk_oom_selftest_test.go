@@ -2,8 +2,12 @@ package yaegikernel
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"io"
 	"strings"
 	"testing"
+	"time"
 )
 
 // The OOM leg of the isolation self-test (docs/problems/
@@ -169,5 +173,45 @@ func TestDeskOOMSelfTestAbortsWhenTheSiblingCannotStart(t *testing.T) {
 	}
 	if rec.Worker.PID != 0 || rec.Worker.CellSent {
 		t.Fatalf("the runaway started without a live sibling: %+v", rec.Worker)
+	}
+}
+
+// Review bunch 27 E3: cell_sent is true only when the cell frame is known to
+// have been written. Eval's refusals before the write (the worker was already
+// dead, the frame would not marshal, the write failed) do not count; every
+// error after the write does.
+func TestDeskOOMRunawayCellSentIsFalseWhenEvalRefusesBeforeTheWrite(t *testing.T) {
+	// A worker that is already dead makes the real Eval answer "desk session
+	// worker dead" before it writes anything, with no process or cgroup.
+	w := &DeskSessionWorker{dead: true, budget: &workerCgroup{path: t.TempDir()}}
+	var out DeskOOMWorker
+	runDeskOOMRunaway(context.Background(), w, "print(1)", time.Second, func() bool { return false }, &out)
+	if !strings.Contains(out.Result, "desk session worker dead") {
+		t.Fatalf("the real Eval did not refuse a dead worker as expected: %q", out.Result)
+	}
+	if out.CellSent {
+		t.Fatalf("cell_sent is true though Eval refused before the frame write: %+v", out)
+	}
+}
+
+func TestDeskEvalNotSentNamesTheRefusalsBeforeTheWrite(t *testing.T) {
+	for _, tc := range []struct {
+		err     error
+		notSent bool
+	}{
+		{nil, false},
+		{errors.New("desk session worker dead"), true},
+		{errors.New("desk eval marshal: json: unsupported value"), true},
+		{fmt.Errorf("desk eval write: %w", io.ErrClosedPipe), true},
+		// After the write: the read side, the host, the timeout.
+		{io.EOF, false},
+		{errors.New("desk eval decode: invalid character"), false},
+		{errors.New("desk eval: id mismatch got \"a\" want \"b\""), false},
+		{context.DeadlineExceeded, false},
+		{errForgedFrame, false},
+	} {
+		if got := deskEvalNotSent(tc.err); got != tc.notSent {
+			t.Errorf("deskEvalNotSent(%v) = %v, want %v", tc.err, got, tc.notSent)
+		}
 	}
 }

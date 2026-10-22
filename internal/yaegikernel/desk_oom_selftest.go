@@ -376,8 +376,8 @@ func runDeskOOMRunaway(ctx context.Context, w *DeskSessionWorker, cell string, t
 	cellCtx, cancel := context.WithTimeout(ctx, timeout)
 	res, evalErr := w.Eval(cellCtx, cell)
 	cancel()
-	// Sent unless the frame write itself failed.
-	out.CellSent = evalErr == nil || !strings.HasPrefix(evalErr.Error(), "desk eval write")
+	// Sent unless Eval refused before it wrote the frame (deskEvalNotSent).
+	out.CellSent = !deskEvalNotSent(evalErr)
 	switch {
 	case evalErr != nil:
 		out.Result = "transport: " + evalErr.Error()
@@ -393,6 +393,21 @@ func runDeskOOMRunaway(ctx context.Context, w *DeskSessionWorker, cell string, t
 	out.OOMKill = out.Cgroup.Events["oom_kill"]
 	w.Close()
 	out.ExitCause = w.ExitCause()
+}
+
+// deskEvalNotSent reports whether err is one of Eval's refusals before the
+// cell frame reached the worker: the worker was already dead, the frame would
+// not marshal, or the frame write failed (desk_session_worker.go, EvalCell).
+// Every other Eval error (a read failure, a forged or mismatched frame, the
+// context ending) comes after the write.
+func deskEvalNotSent(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return msg == "desk session worker dead" ||
+		strings.HasPrefix(msg, "desk eval marshal") ||
+		strings.HasPrefix(msg, "desk eval write")
 }
 
 func deskOOMPing(ctx context.Context, w *DeskSessionWorker) (bool, string) {
