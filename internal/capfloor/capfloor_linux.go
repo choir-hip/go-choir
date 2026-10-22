@@ -22,12 +22,18 @@ var (
 )
 
 // Apply runs at the top of the daemon's main, before anything else starts.
-// Off and observe return nil; enforce either returns nil with every thread
+// Off and observe return nil, an unknown mode an error; enforce either returns nil with every thread
 // at the floor or an error (the daemon must not start), or never returns
 // (it re-executes the binary).
 func Apply(mode Mode) error {
-	if mode != ModeObserve && mode != ModeEnforce {
+	switch mode {
+	case ModeOff:
 		return nil
+	case ModeObserve, ModeEnforce:
+	default:
+		// Review E8: a Mode this floor does not know is refused, never a
+		// silent off.
+		return fmt.Errorf("capfloor: unknown mode %q", mode)
 	}
 	raw, err := os.ReadFile(statusPath)
 	var bnd uint64

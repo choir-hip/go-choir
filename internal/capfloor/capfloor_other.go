@@ -4,10 +4,14 @@ package capfloor
 
 import "fmt"
 
-// Apply is Linux only: enforce refuses elsewhere; off and observe do nothing.
+// Apply is Linux only: enforce and an unknown mode refuse elsewhere; off
+// and observe do nothing.
 func Apply(mode Mode) error {
-	if mode == ModeEnforce {
+	switch mode {
+	case ModeOff, ModeObserve:
+		return nil
+	case ModeEnforce:
 		return fmt.Errorf("capfloor: enforce needs Linux")
 	}
-	return nil
+	return fmt.Errorf("capfloor: unknown mode %q", mode)
 }
