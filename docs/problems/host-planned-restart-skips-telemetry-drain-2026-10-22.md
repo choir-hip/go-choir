@@ -1,6 +1,8 @@
 # The host's planned restart writes the marker without draining batched telemetry
 
-Date: 2026-10-22. Status: **documented, not fixed** (found by FP0's phase 1
+Date: 2026-10-22. Status: **fixed in code (first candidate), proven
+locally; staging proof owed** (lane `lane/fp1-planned-restart-drain`, see
+"The fix" below). Originally documented, not fixed (found by FP0's phase 1
 staging gate of run-telemetry batching, lane `lane/fp0-batching-e2e`). Class of
 the eventual fix: red (tape write path, restart handling). Evidence class: code
 reading on `840e1a701` (unchanged in `d991907e6`), plus vmctl's journal line
@@ -99,7 +101,7 @@ this record stands on the code path above.
 4. vmctl clears the marker after a failed refresh (`marker.clear`): synchronous
    mode must be undone too, or batching stays off until the next boot.
 
-## Candidate fixes (not applied)
+## Candidate fixes (the first is applied)
 
 - In `HandleInternalPlannedRestart`, call the same `drainTelemetryForRestart`
   before `WritePlannedRestartMarker` and set `TelemetryDrainFailed` from it;
@@ -108,5 +110,48 @@ this record stands on the code path above.
 - Or make vmctl's deploy refresh a graceful stop (SIGTERM, bounded wait) before
   the kill. Broader, touches vmctl and every refresh.
 
-Until one lands, do not turn `telemetry.batch` on for a computer of class
-`critical_protected` or `public_platform`.
+Until the fix below is on staging and proven there, do not turn
+`telemetry.batch` on for a computer of class `critical_protected` or
+`public_platform`.
+
+## The fix (lane `lane/fp1-planned-restart-drain`)
+
+The smallest candidate. `HandleInternalPlannedRestart` calls
+`holdHostRestartTelemetry` (`internal/agentcore/telemetry_batching.go`), which
+is `drainTelemetryForRestart` with its undo kept on the runtime, after the busy
+check and before `WritePlannedRestartMarker`; the marker's
+`TelemetryDrainFailed` comes from that drain and the 200 response echoes it.
+`releaseHostRestartTelemetry` undoes synchronous mode on the `DELETE` path, on
+a busy refusal, and when the marker write fails. The failure modes resolve as:
+
+1. Queue sealed before the marker is durable; synchronous mode stays on until
+   the kill, so later telemetry is acknowledged.
+2. Drain failure or timeout: marker still written with
+   `telemetry_drain_failed`, so `passivatedOnRestartPayload` names the gap.
+3. A busy refusal never enters synchronous mode (the busy check comes first),
+   and it **undoes** one an earlier host request left on: a refused computer
+   is not restarting, so it goes back to batching. The retry enters it again.
+4. `marker.clear` undoes it.
+
+With batching off (every computer today) the hold returns before any call:
+no sealer, no drain, no latency, marker and response bytes unchanged.
+
+Proven locally (`go test -race ./internal/agentcore -run
+'PlannedRestart|Telemetry|Marker'`, 23 pass), in
+`internal/agentcore/planned_restart_telemetry_test.go`: one test per failure
+mode 1-4 (each failed on `origin/main`) and the flag-off pin (passes either
+side, by design).
+
+Needs a staging proof (FP0): a `critical_protected` or `public_platform`
+computer with `telemetry.batch` on, busy, taken through a deploy refresh; the
+planned boot's passivation records must carry no gap (or the gap sentence if
+the drain failed), and stream_seq must show no hole beyond the boot reseed.
+The staging test computer cannot show it (see above).
+
+Residuals: synchronous mode is one flag in the store, not a count. If a
+guest self-development apply (`markPlannedRestart`) and a host request both
+hold it, the first undo turns it off for both. The host refuses while an apply
+is mid-transaction, so the overlap needs an apply to start after the host's
+200 and before the kill. The cost is a window of queued, not lost-by-design,
+telemetry. The restore restart (`writeRestoreRestartMarker`) still does not
+record a failed drain (unchanged; its SIGTERM reaches the shutdown drain).
