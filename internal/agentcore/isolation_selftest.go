@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/gomemlimit"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
@@ -35,7 +36,11 @@ import (
 // (yaegikernel.DeskOOMSelfTest): a throwaway research worker under its real
 // budget cgroup runs a fixed allocating cell until the kernel kills it
 // (docs/problems/fp2-step4-deployed-oom-not-drivable-desk-refuses-runaway-2026-10-22.md).
-// The leg is an enum; the route takes no cell.
+// With ?leg=seccomp it runs only the capsule seccomp leg
+// (capsule.SeccompSelfTest): the daemon re-execs its own binary once per
+// capsule filter; each child loads the filter and tries clone3 and a new user
+// namespace (SEC-13 on the deployed kernel; not inside a live capsule).
+// Legs are an enum; the route takes no cell and no filter.
 //
 // Owner-only: server.AuthenticatedOwner admits only the host peer (the
 // guest's default gateway, where the proxy and vmctl dial from) carrying
@@ -58,9 +63,11 @@ type isolationEgressProbe struct {
 
 type isolationSelfTestResponse struct {
 	ComputerID string `json:"computer_id"`
-	// Leg is "" for the confinement legs, "oom" for the out-of-memory leg.
+	// Leg is "" for the confinement legs, "oom" for the out-of-memory leg,
+	// "seccomp" for the capsule seccomp leg.
 	Leg       string                              `json:"leg,omitempty"`
 	OOM       *yaegikernel.DeskOOMSelfTestReceipt `json:"oom,omitempty"`
+	Seccomp   *capsule.SeccompSelfTestReceipt     `json:"seccomp,omitempty"`
 	DeskCells yaegikernel.DeskCellSelfTestReceipt `json:"desk_cells"`
 	// FrameBoundary is the forged-frame probe: raw observations of the
 	// daemon's frame admission per desk, judged by the staging script against
@@ -106,6 +113,16 @@ func (h *APIHandler) HandleIsolationSelfTest(w http.ResponseWriter, r *http.Requ
 		writeAPIJSON(w, http.StatusOK, resp)
 		return
 	}
+	if leg == isolationLegSeccomp {
+		rec := capsule.SeccompSelfTest(ctx, deskWorkerBinary())
+		resp.Seccomp = &rec
+		for _, f := range rec.Failures {
+			resp.Failures = append(resp.Failures, "seccomp: "+f)
+		}
+		resp.OK = len(resp.Failures) == 0
+		writeAPIJSON(w, http.StatusOK, resp)
+		return
+	}
 	resp.DeskCells = yaegikernel.DeskCellSelfTest(ctx, deskCellSelfTestConfig(h.rt.cfg.ComputerID))
 	for _, f := range resp.DeskCells.Failures {
 		resp.Failures = append(resp.Failures, "desk_cells: "+f)
@@ -131,20 +148,26 @@ func (h *APIHandler) HandleIsolationSelfTest(w http.ResponseWriter, r *http.Requ
 	writeAPIJSON(w, http.StatusOK, resp)
 }
 
-const isolationLegOOM = "oom"
+const (
+	isolationLegOOM     = "oom"
+	isolationLegSeccomp = "seccomp"
+)
 
 // isolationSelfTestLeg reads the one input the route takes: no query (the
-// confinement legs) or exactly leg=oom. Anything else is refused before a
-// worker starts.
+// confinement legs) or exactly one of leg=oom, leg=seccomp. Anything else is
+// refused before a worker starts.
 func isolationSelfTestLeg(r *http.Request) (string, error) {
 	q := r.URL.Query()
 	if len(q) == 0 {
 		return "", nil
 	}
-	if len(q) == 1 && len(q["leg"]) == 1 && q.Get("leg") == isolationLegOOM {
-		return isolationLegOOM, nil
+	if len(q) == 1 && len(q["leg"]) == 1 {
+		switch leg := q.Get("leg"); leg {
+		case isolationLegOOM, isolationLegSeccomp:
+			return leg, nil
+		}
 	}
-	return "", errors.New("unknown self-test leg: the only selector is leg=oom")
+	return "", errors.New("unknown self-test leg: the selectors are leg=oom and leg=seccomp")
 }
 
 // deskOOMSelfTestConfig is the OOM leg's: the research desk (untrusted input)
