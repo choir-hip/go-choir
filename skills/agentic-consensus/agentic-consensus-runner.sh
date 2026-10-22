@@ -46,6 +46,7 @@ Panel selection:
     omp-claude-opus46 Anthropic route via antigravity, independent of the
                       `claude` CLI's credential path.
     omp-deepseek-v4-pro, omp-kimi-k3, omp-minimax-m3
+    omp-minimax-m31-flash  MiniMax M3.1 Flash (free tier via opencode-go); default panel.
                       Additional independent families for the full sub-panel.
 
 Model overrides, optional:
@@ -65,6 +66,7 @@ Model overrides, optional:
   --omp-deepseek-v4-pro-model MODEL Default: opencode-go/deepseek-v4-pro.
   --omp-kimi-k3-model MODEL     Default: opencode-go/kimi-k3.
   --omp-minimax-m3-model MODEL  Default: opencode-go/minimax-m3.
+  --omp-minimax-m31-flash-model MODEL Default: opencode-go/minimax-m3.1-flash-free.
 
   Thinking levels, each with its default:
   --omp-gpt61-sol-thinking LEVEL      xhigh
@@ -77,6 +79,7 @@ Model overrides, optional:
   --omp-deepseek-v4-pro-thinking LEVEL high
   --omp-kimi-k3-thinking LEVEL        high
   --omp-minimax-m3-thinking LEVEL     high
+  --omp-minimax-m31-flash-thinking LEVEL high
 
 Execution:
   --cwd DIR                     Working directory/context root. Default: current directory.
@@ -96,8 +99,8 @@ Output:
 USAGE
 }
 
-DEFAULT_INCLUDE="codex,devin,claude,opencode,omp-gpt61-sol,omp-gpt6-luna,omp-gemini38,omp-muse-spark,omp-deepseek-v41-flash,omp-glm53-flash"
-SUPPORTED_AGENTS=(codex devin claude cursor opencode omp-gpt61-sol omp-gpt6-luna omp-gemini38 omp-claude-opus46 omp-muse-spark omp-deepseek-v41-flash omp-glm53-flash omp-deepseek-v4-pro omp-kimi-k3 omp-minimax-m3)
+DEFAULT_INCLUDE="codex,devin,claude,opencode,omp-gpt61-sol,omp-gpt6-luna,omp-gemini38,omp-muse-spark,omp-deepseek-v41-flash,omp-glm53-flash,omp-minimax-m31-flash"
+SUPPORTED_AGENTS=(codex devin claude cursor opencode omp-gpt61-sol omp-gpt6-luna omp-gemini38 omp-claude-opus46 omp-muse-spark omp-deepseek-v41-flash omp-glm53-flash omp-deepseek-v4-pro omp-kimi-k3 omp-minimax-m3 omp-minimax-m31-flash)
 
 PROMPT=""
 PROMPT_FILE=""
@@ -130,6 +133,7 @@ OMP_GLM53_FLASH_MODEL="opencode-go/glm-5.3-flash"
 OMP_DEEPSEEK_V4_PRO_MODEL="opencode-go/deepseek-v4-pro"
 OMP_KIMI_K3_MODEL="opencode-go/kimi-k3"
 OMP_MINIMAX_M3_MODEL="opencode-go/minimax-m3"
+OMP_MINIMAX_M31_FLASH_MODEL="opencode-go/minimax-m3.1-flash-free"
 OMP_GPT61_SOL_THINKING="xhigh"
 OMP_GPT6_LUNA_THINKING="max"
 OMP_GEMINI38_THINKING="high"
@@ -140,6 +144,7 @@ OMP_GLM53_FLASH_THINKING="high"
 OMP_DEEPSEEK_V4_PRO_THINKING="high"
 OMP_KIMI_K3_THINKING="high"
 OMP_MINIMAX_M3_THINKING="high"
+OMP_MINIMAX_M31_FLASH_THINKING="high"
 
 # Self-check: every supported omp-* id must resolve to a pinned model and
 # thinking level under the mechanical name mapping used by build_cmd. This is
@@ -189,6 +194,8 @@ OMP_FLAG_VARS=(
   "omp-kimi-k3-thinking:OMP_KIMI_K3_THINKING"
   "omp-minimax-m3-model:OMP_MINIMAX_M3_MODEL"
   "omp-minimax-m3-thinking:OMP_MINIMAX_M3_THINKING"
+  "omp-minimax-m31-flash-model:OMP_MINIMAX_M31_FLASH_MODEL"
+  "omp-minimax-m31-flash-thinking:OMP_MINIMAX_M31_FLASH_THINKING"
 )
 
 

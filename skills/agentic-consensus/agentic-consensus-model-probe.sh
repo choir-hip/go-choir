@@ -51,6 +51,7 @@ DEFAULT_SPECS=(
   "opencode-go/muse-spark-1.3-contributor:max"
   "opencode-go/deepseek-v4.1-flash:max"
   "opencode-go/glm-5.3-flash:high"
+  "opencode-go/minimax-m3.1-flash-free:high"
 )
 ALL_SPECS=(
   "${DEFAULT_SPECS[@]}"

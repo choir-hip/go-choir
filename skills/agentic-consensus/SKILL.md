@@ -25,7 +25,7 @@ skill://agentic-consensus/agentic-consensus-model-probe.sh --all      # every an
 
 ## Default Panel
 
-The default panel is 10 members, all verified live with exact served-model
+The default panel is 11 members, all verified live with exact served-model
 identity:
 
 1. `codex` CLI with its configured default model.
@@ -38,6 +38,7 @@ identity:
 8. OMP `opencode-go/muse-spark-1.3-contributor` with `--thinking max`.
 9. OMP `opencode-go/deepseek-v4.1-flash` with `--thinking max`.
 10. OMP `opencode-go/glm-5.3-flash` with `--thinking high`.
+11. OMP `opencode-go/minimax-m3.1-flash-free` with `--thinking high` (added 2026-10-22 by owner direction; free tier, probed OK).
 
 `claude` is in the default panel, pinned to `opus`. `fable` is request-only: pass `--claude-model fable` when the user explicitly asks for it — never in the default panel.
 
@@ -86,6 +87,7 @@ omp-glm53-flash (default)
 omp-deepseek-v4-pro
 omp-kimi-k3
 omp-minimax-m3
+omp-minimax-m31-flash (default)
 ```
 
 An unsupported id in `--include` is a **hard error**, not a silent drop: a
@@ -336,6 +338,7 @@ Optional overrides — one `--<id-without-omp->-model` and
 --omp-deepseek-v4-pro-model MODEL --omp-deepseek-v4-pro-thinking LEVEL
 --omp-kimi-k3-model MODEL         --omp-kimi-k3-thinking LEVEL
 --omp-minimax-m3-model MODEL      --omp-minimax-m3-thinking LEVEL
+--omp-minimax-m31-flash-model MODEL --omp-minimax-m31-flash-thinking LEVEL
 --no-tools-omp
 ```
 
