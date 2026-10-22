@@ -917,3 +917,70 @@ Residuals added in this round:
 - The shadow doubles converter CPU work under observe, after the request
   returns. Turning observe off removes it.
 - `toolAggregateMax` (2 GiB) is a first value, like `toolMemoryMax`.
+
+### Second batch, review round 2 (DeepSeek, bunch 39, head 5c7615904): findings
+
+Flash and Devin accepted the repaired candidate. DeepSeek accepts it for its
+shipped configuration (all three switches observe) with edits, and finds one
+that blocks enforce. The full review is FP0's (`~/runs/fp2b2-deepseek.md`).
+The lane was replayed onto origin/main as lane/fp2-b2-on-main before any
+fix. Every finding is accepted; none is refuted. Fixes come after this
+record.
+
+- **E1, high, blocks enforce: the floor drops CAP_SYS_TIME, which the
+  daemon uses on every hibernate resume.** Accepted. `capfloor.Kept` has no
+  `capSysTime`. `POST /internal/runtime/hibernate/resumed`
+  (`internal/agentcore/hibernate.go`, `resumeFromHibernate`) steps the clock
+  with `settimeofday` (`hibernate_clock_linux.go`) whenever host and guest
+  differ by 1 s or more, which is always after a snapshot. Under enforce
+  that is EPERM, the handler answers 500, and the host kills the guest and
+  cold-boots it (`internal/vmmanager/snapshot.go`, resume fallback). K5's
+  premise above ("no ... time call in the guest code") is false, and the
+  enforce trial (staging step 4) runs no hibernate, so it would not catch
+  this. Fix direction: keep CAP_SYS_TIME with the hibernate reason (fast
+  resume stays); a test ties the inventory to every capability-needing
+  syscall in the daemon's source; the probe constant, K5 and the enforce
+  trial (a hibernate and resume) follow.
+- **E2, medium: the observe shadow has no memory or process bound.**
+  Accepted. The shadow runs with no cgroup (review B2's fix) and the helper
+  sets only core, open-file and CPU rlimits. A crafted PDF can grow the
+  shadow until the daemon's own cgroup runs out, after the result was
+  returned. The direct run has the same exposure today, so this is not a
+  new class, but "That adds bounded load" (outcome above) is false and the
+  residual names CPU only. Fix direction: the shadow runs in a `t-*` cgroup
+  under the document tools' own root (1 GiB, 64 pids, oom.group, no swap),
+  which B2 allows (it forbade the desks aggregate); a shadow that cannot get
+  one is counted as not set up and does not run.
+- **E3, low/medium: "direct failed, sandbox succeeded" counts as equal.**
+  Accepted. `observeShadow` falls through to Equal when the direct run
+  failed and the sandbox succeeded. Under required that case changes the
+  stored extraction, and the staging gate (step 2) reads only `diverged`,
+  `sandbox_failed`, `setup_failed` and `over_budget`. Fix: count it as
+  diverged.
+- **E4, low: a directory read probe can report a false denial.** Accepted.
+  `probeRead` on an empty directory returns EISDIR, and `JudgeProbe`
+  accepts any errno but ENOENT as a denial, so the store and signers
+  directory probes prove nothing without Landlock. Fix: a directory is read
+  with ReadDir (an empty one reads as success), and the judge accepts only
+  EACCES or EPERM as a read denial.
+- **E5, low: the boot sweep of `t-*` uses os.RemoveAll.** Accepted. On
+  cgroupfs a recursive unlink is meaningless and the final rmdir can fail
+  while the killed cgroup drains, with no retry. Fix: cgroup.kill, then
+  rmdir with the per-run removal's short retry.
+- **E6, low: a failed memory.high rise discards the memory.max restore's
+  error.** Accepted (`job_memory_linux.go`, `boostJobMemory`). The boost is
+  refused, but if `SetMax(old)` also fails, the leaf's ceiling stays raised
+  and nothing counts it. Fix: such a raise is retained and counted until the
+  capsule ends (as `endJobMemory` already does for a boost that cannot come
+  down), and the error says so.
+- **E7, docs: the station contradicts the repaired code and cites
+  pre-rebase hashes.** Accepted. The design text still describes
+  `document_tool_sandbox_fallback` and promises
+  `document_tool_sandbox_divergence`, which the code does not emit; "what
+  was built" and the outcome table cite commits that are not ancestors of
+  the head. Fix: re-point every hash to the replayed SHAs.
+- **E8, info.** Accepted. `capfloor.Apply` no-ops on a Mode it does not
+  know (closed today: `ModeFromEnv` maps unknown to enforce); it should
+  refuse. The helper inherits any fd without close-on-exec; marking every
+  fd from 3 up close-on-exec before the tool's exec is cheap defense in
+  depth.
