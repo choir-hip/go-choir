@@ -59,7 +59,11 @@ J
 J
 	;;
 */internal/vmctl/retention-plan)
-	echo '{"mode":"active","decision":"observe","config":{"mode":"active","test_idle_mode":"off","quarantine_mode":"off"},"inventory":{}}'
+	if [ -f "$ST/badplan" ]; then
+		echo '{"mode":"active","decision":"will_prune","config":{"mode":"active","test_idle_mode":"off","quarantine_mode":"off"},"inventory":{},"candidates":[{"vm_id":"candidate-fleet-x","reason":"orphan_state_dir"}]}'
+	else
+		echo '{"mode":"active","decision":"observe","config":{"mode":"active","test_idle_mode":"off","quarantine_mode":"off"},"inventory":{"kept_state_dirs":1},"candidates":[{"vm_id":"vm-plain","reason":"orphan_state_dir"}],"kept_state_dirs":[{"vm_id":"candidate-fleet-x","rule":"orphan_state_dir","size_bytes":1,"reasons":["holds_quarantine"],"release":"an owner act"}]}'
+	fi
 	;;
 *:8084/health) echo '{"status":"ok","bearer_binding":{"mode":"observe","pinned":3,"unpinned":0,"would_refuse":0,"refused":0},"anthropic_relay":"off","model_scheduler":{"mode":"on","queued":0,"in_flight":0,"granted":5},"credentials":{"active":3}}' ;;
 */api/runtime/observability|*/api/runtime/observability\?*)
@@ -241,6 +245,18 @@ t "fp0-vm-retention reads both shadow rules in dry-run" grep -q 'PASS.*shadow qu
 t "fp0-vm-retention lists a kept test computer with its reasons" grep -q 'test-class computer-1111111111111111111111111111111f.*verdict=keep reasons=state_active,idle_below_min_age' "$WORK/out"
 t "fp0-vm-retention lists the quarantine and why it is kept" grep -q 'quarantine .*data.img.quarantine-1-ab.*verdict=keep reasons=journal_missing' "$WORK/out"
 t "fp0-vm-retention checks the active plan is unchanged" grep -q 'PASS.*no test_class_idle candidate in the active plan' "$WORK/out"
+mkdir -p "$WORK/vmstate/candidate-fleet-x" "$WORK/vmstate/vm-plain"
+touch "$WORK/vmstate/candidate-fleet-x/data.img.quarantine-1-a"
+reset_state
+"$HERE/fp0-vm-retention.sh" --step 4 --state-dir "$WORK/vmstate" >"$WORK/out" 2>&1
+t "fp0-vm-retention step 4 lists the recovery dir" grep -q 'recovery-dir candidate-fleet-x artifacts=1' "$WORK/out"
+t "fp0-vm-retention step 4 shows the kept-dir report" grep -q 'kept candidate-fleet-x rule=orphan_state_dir.*reasons=holds_quarantine' "$WORK/out"
+t "fp0-vm-retention step 4 passes when no recovery dir is a candidate" grep -q 'PASS.*no dir holding recovery state is a deletion candidate' "$WORK/out"
+reset_state
+touch "$ST/badplan"
+"$HERE/fp0-vm-retention.sh" --step 4 --state-dir "$WORK/vmstate" >"$WORK/out" 2>&1
+t "fp0-vm-retention step 4 fails when a recovery dir is a candidate" grep -q 'FAIL.*candidates: candidate-fleet-x' "$WORK/out"
+rm -f "$ST/badplan"
 t "fp0-vm-retention has no mutating step" bash -c "! '$HERE/fp0-vm-retention.sh' --list | awk -F'\t' '\$2 == \"mut\"' | grep -q ."
 
 printf '\n%d passed, %d failed\n' "$PASSN" "$FAILN"
