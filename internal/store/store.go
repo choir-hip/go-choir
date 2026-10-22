@@ -98,6 +98,44 @@ type doltConnector interface {
 	Close() error
 }
 
+// testHookAfterWorkspaceOpen runs in Open right after the engine is up
+// (tests only).
+var testHookAfterWorkspaceOpen func(workspacePath string)
+
+// errWorkspaceGone is Close's answer when the workspace's Dolt files are
+// gone from disk under the open engine.
+var errWorkspaceGone = errors.New("runtime store: the Dolt workspace is gone under the open engine; the engine is left open")
+
+// doltWorkspaceIntact reports whether the workspace root and every Dolt
+// database's .dolt/noms in it are still on disk. Closing an engine whose
+// noms directory is gone makes Dolt crash the process: the journal cannot
+// flush its root to the manifest, and every SQL-engine database is set to
+// crash on that fatal I/O error (doltdb.SetCrashOnFatalError).
+func doltWorkspaceIntact(root string) error {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return fmt.Errorf("%w: %v", errWorkspaceGone, err)
+	}
+	found := false
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		dotDolt := filepath.Join(root, entry.Name(), ".dolt")
+		if _, err := os.Stat(dotDolt); err != nil {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(dotDolt, "noms")); err != nil {
+			return fmt.Errorf("%w: %v", errWorkspaceGone, err)
+		}
+		found = true
+	}
+	if !found {
+		return fmt.Errorf("%w: no Dolt database under %s", errWorkspaceGone, root)
+	}
+	return nil
+}
+
 // poolConnector hands a Dolt connector to database/sql without its Close,
 // so DB.Close never tears the embedded engine down. Store.Close closes the
 // engine itself, last, after every pinned connection is back in a closed
@@ -814,6 +852,9 @@ func Open(dbPath string) (*Store, error) {
 		return nil, fmt.Errorf("runtime store: open unified Dolt workspace: %w", err)
 	}
 
+	if hook := testHookAfterWorkspaceOpen; hook != nil {
+		hook(workspacePath)
+	}
 	readDB := sql.OpenDB(poolConnector{connector})
 	configureEmbeddedDoltDB(readDB)
 
@@ -1232,6 +1273,15 @@ func (s *Store) Close() error {
 	// the engine still up; then the engine closes with no connection open.
 	for _, conn := range pinned {
 		_ = conn.Close()
+	}
+	// Close the engine only over its files: if the workspace was removed
+	// under it, closing it crashes the process (doltWorkspaceIntact), so
+	// it is left open for process exit to reclaim and Close says so.
+	if s.doltConnector != nil && s.texturePath != "" {
+		if goneErr := doltWorkspaceIntact(s.texturePath); goneErr != nil {
+			log.Printf("%v", goneErr)
+			return errors.Join(err, goneErr)
+		}
 	}
 	if connector := s.doltConnector; connector != nil {
 		if closeErr := connector.Close(); closeErr != nil && err == nil {
