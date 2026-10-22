@@ -145,7 +145,7 @@ step_6() {
 		manual "attempt one checkpoint publication on the TEST computer (an owner recovery checkpoint): it must be refused as replay-ineligible; nothing else changes"
 		;;
 	recovered)
-		manual "recover publication on the TEST computer by ONE of: a forward deploy to deploy 1 or later; the rollback build (T=$(mktemp -d); git show TIP:scripts/rollback/fc-deploy1-rollback.sh >$T/r.sh, because the revert deletes the script; git revert deploy 1's commits; bash $T/r.sh apply --from TIP, which installs the tested boot step that drops an empty choir_events; rehearse the sequence first with bash $T/r.sh rehearse TIP BASE); the restore of a pre-deploy-1 checkpoint. Record which. For the rollback build, the boot log must show phase=runtime-schema/drop-empty-choir-events status=complete"
+		manual "recover publication on the TEST computer by ONE of: a forward deploy to deploy 1 or later; the rollback build (T=\$(mktemp -d); git show TIP:scripts/rollback/fc-deploy1-rollback.sh >\$T/r.sh, because the revert deletes the script; git revert deploy 1's commits; bash \$T/r.sh apply --from TIP, which installs the tested boot step that drops an empty choir_events; rehearse the sequence first with bash \$T/r.sh rehearse TIP BASE); the restore of a pre-deploy-1 checkpoint. Record which. For the rollback build, the boot log must show phase=runtime-schema/drop-empty-choir-events status=complete"
 		will "read the TEST computer's replay report after the recovery"
 		[ "$PROOF_DRY" = 1 ] && return 0
 		report=$(guest_get "/api/computers/$T_COMPUTER/self-development/replay-completeness")
