@@ -132,7 +132,9 @@ func (s *Store) finalizeBatch(ctx context.Context, computerID, eventDigest strin
 	receiptDigest := computerevent.DigestBytes(receiptJSON)
 	s.eventMu.Lock()
 	defer s.eventMu.Unlock()
+	connWait := s.checkpoint.startFinalizeConnWait()
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
+	s.checkpoint.noteFinalizeConnWait(connWait)
 	if err != nil {
 		return err
 	}

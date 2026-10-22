@@ -124,9 +124,9 @@ type Store struct {
 	// (checkpoint_cadence.go).
 	checkpoint checkpointCadence
 	// checkpointExecHook runs after a commit reads the dirty generation and
-	// before DOLT_COMMIT; an error from it stands for a failed commit
-	// (tests only).
-	checkpointExecHook func() error
+	// before DOLT_COMMIT with the commit's context; an error from it stands
+	// for a failed commit (tests only).
+	checkpointExecHook func(context.Context) error
 	// actorWakeSignal wakes the outbox projector after committed wake
 	// writes (SL slice 2, actor_wake_signal.go).
 	actorWakeSignal     chan struct{}
@@ -249,20 +249,25 @@ func (s *Store) commitDoltCheckpointAt(ctx context.Context, message string, site
 	}
 	events, ops := s.checkpoint.events.Load(), s.checkpoint.ops.Load()
 	started := time.Now()
+	// The commit holds the store's one connection; a finalize that
+	// starts meanwhile waits for it (noteFinalizeConnWait).
+	s.checkpoint.commitsStarted.Add(1)
 	var err error
 	if hook := s.checkpointExecHook; hook != nil {
-		err = hook()
+		err = hook(ctx)
 	}
 	if err == nil {
 		_, err = s.textureHandle().ExecContext(ctx, "CALL DOLT_COMMIT('-Am', ?)", message)
 	}
-	if err != nil && !strings.Contains(err.Error(), "nothing to commit") {
+	s.checkpoint.commitsEnded.Add(1)
+	noop := err != nil && strings.Contains(err.Error(), "nothing to commit")
+	if err != nil && !noop {
 		err = fmt.Errorf("runtime store: dolt checkpoint: %w", err)
 		s.checkpoint.recordFailure(err)
 		return err
 	}
 	s.cleanGen = gen
-	s.checkpoint.recordCommit(site, time.Since(started), events, ops)
+	s.checkpoint.recordCommit(site, time.Since(started), events, ops, noop)
 	return nil
 }
 

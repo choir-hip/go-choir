@@ -23,17 +23,30 @@ import (
 // CHOIR_GUEST_CHECKPOINT=debounced) never commits in finalizeBatch: a mark
 // arms a timer, an ops bound kicks it early, and the commit runs on the
 // timer's goroutine outside eventMu and the appender mutex. Either way the
-// dirty mark is a generation counter, so a write never waits on a commit.
+// dirty mark is a generation counter, so a mark never waits on a commit.
+//
+// A debounced commit still runs on the store's one connection
+// (configureEmbeddedDoltDB pins MaxOpenConns to 1), so a finalize that
+// starts during it waits at BeginTx while holding eventMu, and every other
+// writer waits behind that. Debounced mode bounds how often that happens
+// (once per window or ops bound); it does not remove it. The finalize
+// commit-wait counters make the wait visible. Removing it needs a second
+// connection or the store split (SA slice 5).
 
 const (
 	CheckpointModeCount     = "count"
 	CheckpointModeDebounced = "debounced"
+	// CheckpointModeClosed is reported between Close and Reopen.
+	CheckpointModeClosed = "closed"
 
 	defaultCheckpointDebounce = time.Minute
 	// defaultCheckpointMaxOps kicks a commit early on a busy computer, so
 	// one commit never carries an unbounded working set.
 	defaultCheckpointMaxOps uint64 = 10000
 	checkpointCommitTimeout        = 2 * time.Minute
+	// checkpointCloseTimeout caps the closing commit, which Close (planned
+	// restart, projection-base rebase) waits on.
+	checkpointCloseTimeout = 10 * time.Second
 )
 
 // CheckpointConfig is the checkpoint cadence's runtime configuration. Zero
@@ -76,14 +89,24 @@ type CheckpointStats struct {
 	BackgroundMaxNs   uint64 `json:"background_max_ns"`
 	// OtherCommits are the synchronous commits outside finalize: history
 	// reads, discarded prepares, replay and Close.
-	OtherCommits      uint64 `json:"other_commits"`
-	Failures          uint64 `json:"failures"`
-	LastError         string `json:"last_error,omitempty"`
-	LastErrorAt       string `json:"last_error_at,omitempty"`
-	EventsSinceCommit uint64 `json:"events_since_commit"`
-	OpsSinceCommit    uint64 `json:"ops_since_commit"`
-	LastCommitAt      string `json:"last_commit_at,omitempty"`
-	LastCommitAgeMS   int64  `json:"last_commit_age_ms,omitempty"`
+	OtherCommits uint64 `json:"other_commits"`
+	// NoopCommits are commits Dolt answered "nothing to commit"; they are
+	// in no commit count above, but their time is in their site's ns.
+	NoopCommits uint64 `json:"noop_commits"`
+	// FinalizeCommitWaits counts finalizes whose BeginTx overlapped a
+	// commit holding the store's one connection: a writer waiting on a
+	// commit, inline or not. The ns are the BeginTx waits of those
+	// finalizes; writers queued behind them on eventMu are not added.
+	FinalizeCommitWaits     uint64 `json:"finalize_commit_waits"`
+	FinalizeCommitWaitNanos uint64 `json:"finalize_commit_wait_ns"`
+	FinalizeCommitWaitMaxNs uint64 `json:"finalize_commit_wait_max_ns"`
+	Failures                uint64 `json:"failures"`
+	LastError               string `json:"last_error,omitempty"`
+	LastErrorAt             string `json:"last_error_at,omitempty"`
+	EventsSinceCommit       uint64 `json:"events_since_commit"`
+	OpsSinceCommit          uint64 `json:"ops_since_commit"`
+	LastCommitAt            string `json:"last_commit_at,omitempty"`
+	LastCommitAgeMS         int64  `json:"last_commit_age_ms,omitempty"`
 }
 
 type checkpointSite int
@@ -115,10 +138,16 @@ type checkpointCadence struct {
 
 	inlineCommits, inlineNanos, inlineMax             atomic.Uint64
 	backgroundCommits, backgroundNanos, backgroundMax atomic.Uint64
-	otherCommits, failures                            atomic.Uint64
-	lastCommitAt                                      atomic.Int64 // unix nanos
-	lastErr                                           string       // guarded by mu
-	lastErrAt                                         time.Time    // guarded by mu
+	otherCommits, noopCommits, failures               atomic.Uint64
+	// commitsStarted and commitsEnded bracket every DOLT_COMMIT, so a
+	// finalize can tell whether its BeginTx overlapped one.
+	commitsStarted, commitsEnded                           atomic.Uint64
+	finalizeWaits, finalizeWaitNanos, finalizeWaitMaxNanos atomic.Uint64
+	// closeTimeout overrides checkpointCloseTimeout (tests only).
+	closeTimeout time.Duration
+	lastCommitAt atomic.Int64 // unix nanos
+	lastErr      string       // guarded by mu
+	lastErrAt    time.Time    // guarded by mu
 }
 
 // ConfigureCheckpoint sets the cadence. Turning debounced mode off stops its
@@ -238,7 +267,11 @@ func (s *Store) closeCheckpoint() {
 	if !debounced {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), checkpointCommitTimeout)
+	limit := checkpointCloseTimeout
+	if c.closeTimeout > 0 {
+		limit = c.closeTimeout
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), limit)
 	defer cancel()
 	if err := s.commitDoltCheckpointAt(ctx, "guest snapshot at close", checkpointSiteOther); err != nil {
 		log.Printf("runtime store: checkpoint at close: %v", err)
@@ -257,26 +290,64 @@ func (s *Store) reopenCheckpoint() {
 	s.armCheckpoint()
 }
 
-func (c *checkpointCadence) recordCommit(site checkpointSite, elapsed time.Duration, events, ops uint64) {
+// recordCommit counts a commit at its site. A no-op ("nothing to commit")
+// counts apart, keeps its time in its site's ns (a writer waited on it all
+// the same) and leaves the last commit time alone.
+func (c *checkpointCadence) recordCommit(site checkpointSite, elapsed time.Duration, events, ops uint64, noop bool) {
 	ns := uint64(elapsed.Nanoseconds())
 	if ns == 0 {
 		ns = 1
 	}
+	count := uint64(1)
+	if noop {
+		count = 0
+		c.noopCommits.Add(1)
+	}
 	switch site {
 	case checkpointSiteInline:
-		c.inlineCommits.Add(1)
+		c.inlineCommits.Add(count)
 		c.inlineNanos.Add(ns)
 		storeMax(&c.inlineMax, ns)
 	case checkpointSiteBackground:
-		c.backgroundCommits.Add(1)
+		c.backgroundCommits.Add(count)
 		c.backgroundNanos.Add(ns)
 		storeMax(&c.backgroundMax, ns)
 	default:
-		c.otherCommits.Add(1)
+		c.otherCommits.Add(count)
 	}
 	c.committedEvents.Store(events)
 	c.committedOps.Store(ops)
-	c.lastCommitAt.Store(time.Now().UnixNano())
+	if !noop {
+		c.lastCommitAt.Store(time.Now().UnixNano())
+	}
+}
+
+// finalizeConnWait is what a finalize reads before BeginTx.
+type finalizeConnWait struct {
+	at             time.Time
+	started, ended uint64
+}
+
+func (c *checkpointCadence) startFinalizeConnWait() finalizeConnWait {
+	// Ended before started: a commit that ends between the two loads
+	// cannot look in flight when it was not.
+	ended := c.commitsEnded.Load()
+	return finalizeConnWait{at: time.Now(), started: c.commitsStarted.Load(), ended: ended}
+}
+
+// noteFinalizeConnWait counts the finalize's BeginTx wait if a commit was
+// in flight when it began or ended while it waited.
+func (c *checkpointCadence) noteFinalizeConnWait(w finalizeConnWait) {
+	if w.started == w.ended && c.commitsEnded.Load() == w.ended {
+		return
+	}
+	ns := uint64(time.Since(w.at).Nanoseconds())
+	if ns == 0 {
+		ns = 1
+	}
+	c.finalizeWaits.Add(1)
+	c.finalizeWaitNanos.Add(ns)
+	storeMax(&c.finalizeWaitMaxNanos, ns)
 }
 
 func (c *checkpointCadence) recordFailure(err error) {
@@ -309,6 +380,9 @@ func (s *Store) CheckpointStats() CheckpointStats {
 		out.DebounceMS = c.debounce.Milliseconds()
 		out.MaxOps = c.maxOps
 	}
+	if c.closed {
+		out.Mode = CheckpointModeClosed
+	}
 	out.LastError = c.lastErr
 	if !c.lastErrAt.IsZero() {
 		out.LastErrorAt = c.lastErrAt.Format(time.RFC3339Nano)
@@ -321,6 +395,10 @@ func (s *Store) CheckpointStats() CheckpointStats {
 	out.BackgroundNanos = c.backgroundNanos.Load()
 	out.BackgroundMaxNs = c.backgroundMax.Load()
 	out.OtherCommits = c.otherCommits.Load()
+	out.NoopCommits = c.noopCommits.Load()
+	out.FinalizeCommitWaits = c.finalizeWaits.Load()
+	out.FinalizeCommitWaitNanos = c.finalizeWaitNanos.Load()
+	out.FinalizeCommitWaitMaxNs = c.finalizeWaitMaxNanos.Load()
 	out.Failures = c.failures.Load()
 	out.EventsSinceCommit = subFloor(c.events.Load(), c.committedEvents.Load())
 	out.OpsSinceCommit = subFloor(c.ops.Load(), c.committedOps.Load())
