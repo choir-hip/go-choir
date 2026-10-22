@@ -411,7 +411,9 @@ EOF
   [ "$REQUIRED_MISSING" = 0 ] || { err "a required path is absent: ${SKIPPED[*]}"; result=partial; }
   local args=()
   for ex in "${EXCLUDES[@]}"; do args+=(--exclude "$ex"); done
-  R backup --host "$RESTIC_HOST_TAG" --tag daily --tag "run-$RUN_ID" --json "${args[@]}" "${PATHS[@]}" \
+  # --no-scan: the scanner only feeds progress totals, and walks and
+  # lstats all 9.7M files a second time beside the backup's own walk.
+  R backup --host "$RESTIC_HOST_TAG" --tag daily --tag "run-$RUN_ID" --json --no-scan "${args[@]}" "${PATHS[@]}" \
     > "$STATE/run/backup.json" 2> "$STATE/run/backup.err"
   rc=$?
   if [ "$rc" -eq 3 ]; then result=partial; err "restic: some files were unreadable"
