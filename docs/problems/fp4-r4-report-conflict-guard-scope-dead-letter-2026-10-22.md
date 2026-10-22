@@ -297,3 +297,38 @@ ab433bf9c.
   process lifetime: the invariant
   `TestSagaEntryIsReleasedOnceTheAssignmentIsSettled` pins for the other
   settle paths.
+
+### Bunch 107 disposition (lane/fp4-r4)
+
+Test 6cd241749 (failed on ab433bf9c: the resume's re-read returned
+"context canceled" as a plain error), fix e91e28926. A cancelled context
+stands in for the store stall in the test.
+
+- **107-2 repaired.** The three reads (the handler's, the resume's re-read,
+  the cancel's re-read) wrap a non-NotFound failure in
+  `ErrFateRedriveRetry` through `fateWakeReadRetry`, so the wake is
+  deferred with backoff and kept out of MaxAttempts. The test drives
+  sixteen stalled deliveries (none consumes the wake or ends the
+  assignment), then recovered ones, which cancel the assignment on the
+  sixth failed re-drive as before.
+- **One part of the suggested fix not taken: read failures are not
+  counted toward the six-failure cancel.** A read failure says nothing
+  about the staged report, and the cancel needs the same read, so counting
+  it could only cancel a valid report during a store stall (the review's
+  own risk note: the cancel window is about 15.5 s). A stall that outlives
+  the deferral budget (MaxDeferrals 64, about half an hour at the 30 s
+  cap) dead-letters the wake; the next restart closes the assignment.
+- **107-3 repaired.** The cancel releases the saga after unlocking it,
+  both when it cancels and when it finds the assignment already settled;
+  `releaseAssignmentSaga` drops the count too. The same test asserts no
+  saga entry is left.
+- **Residuals, not changed here.** The bound deadline's own cancel
+  (`cancelAssignedEngineering` in `HandleAssignedEngineeringFateDeadline`)
+  still returns a plain error on failure, so a bound, active assignment
+  whose deadline cancel keeps failing is dead-lettered after eight hot
+  retries; it is the bound-deadline path, not the fate path, and keeps its
+  earlier behaviour. The review's unlisted residual stands as written: a
+  planned boot whose one-shot resume fails only logs, and the bound
+  deadline's re-arm skips fate-pending rows, so the fix relies on a
+  surviving deferred wake there.
+- **Not exercised on a computer.**
