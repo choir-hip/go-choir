@@ -141,7 +141,12 @@ for path in "${changed[@]}"; do
       add_explanation "$path -> host OS activation and immutable service-pointer synchronization"
       continue
       ;;
-    scripts/check-*.sh|scripts/test-platform-dolt-squash.sh|scripts/m3_*|scripts/mail-*|scripts/*_probe.mjs|scripts/*.py|scripts/ograph-bench/*)
+    scripts/node-b-nix-retention|scripts/node-b-host-disk-alarm)
+      mark_host_os_only
+      add_explanation "$path -> host OS activation (a host unit script read into the system closure)"
+      continue
+      ;;
+    scripts/check-*.sh|scripts/test-platform-dolt-squash.sh|scripts/test-node-b-*.sh|scripts/m3_*|scripts/mail-*|scripts/*_probe.mjs|scripts/*.py|scripts/ograph-bench/*)
       add_explanation "$path -> ignored (CI/local/operator tooling; not deployed to host or guest closures)"
       continue
       ;;
