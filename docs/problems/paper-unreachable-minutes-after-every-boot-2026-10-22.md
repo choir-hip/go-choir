@@ -264,3 +264,61 @@ with `scripts/paper_boot_window_probe.py`:
   of zero. It does not help if one statement holds the engine for minutes.
 - **Not proposed: making the validator yield more.** It held nothing in
   this window (above).
+
+## Repair built (FP1, 2026-10-22, lane/fp1-boot-window)
+
+Written against FP0's "Holder found by trace" section (origin/main
+53c8bb181, which this worktree could not fetch; the lane is rebased on
+664ce049a and FP0 rebases it). The holder: `resumeStrandedPlatformUpdateTail`
+(`internal/agentcore/platform_update.go:882`) calls
+`Store.LatestComputerEventByIdempotencyPrefix` after ready, and its
+`LIKE ? ORDER BY sequence DESC LIMIT 1` walks
+`idx_computer_event_index_status (computer_id, status, sequence)`
+newest-first and reads `event_json` for every row to test the LIKE. A
+family whose newest member is old (one `platform-update-applied-*` per
+deploy) costs the whole finalized index, with the one `s.db` connection
+held.
+
+- **Tests first** (`internal/store/computer_event_prefix_test.go`, b6523c170,
+  37cab03d4): the newest finalized member of several, with a newer prepared
+  member ignored; absence (empty, prepared only, another family, another
+  computer); `_`, `%` and `\` literal; neighbouring keys (`.` after `-`, the
+  prefix minus a byte, a multi-byte member); the right answer among 5,000
+  newer unrelated events; and the plan. Against the old query the five
+  behaviour tests passed (it was correct, only slow) and the plan test failed
+  with `index: [computer_id, status, sequence]`.
+- **Why EXPLAIN and not a time bound:** a time bound on the embedded engine
+  under `-race` is noise, and it does not say which rows were read. The plan
+  says it: a range on the unique `(computer_id, idempotency_key)` key, no
+  Sort or TopN, no `event_json` in the family read. The cost is the
+  family's size, not the computer's event count.
+- **Fix** (40cdc19fc, orange): one range read `idempotency_key >= prefix AND
+  idempotency_key < upper` on the unique key, selecting `sequence,
+  event_digest, status, idempotency_key`; the newest finalized member
+  picked in Go; then `EventByDigest` for that one event. `upper` is the
+  prefix with its last rune incremented (code-point order, which the
+  column's `utf8mb4_0900_bin` keeps; surrogates skipped; a non-UTF-8 or
+  all-U+10FFFF prefix is unbounded above), and `strings.HasPrefix` keeps the
+  result literal under any collation. `escapeLikePrefix` is deleted (no
+  other caller). No schema change.
+- **Siblings:** no other caller of the function and no other
+  `LIKE`-prefix read of `computer_event_index` (git grep).
+  `FinalizedDecisionForOperation` (`internal/store/computer_event_recovery.go:12`)
+  has a related shape: it walks finalized `effect_accepted`/`effect_rejected`
+  events newest-first through the same status index and decodes
+  `event_json` per row until one matches the operation. It is bounded by the
+  number of decisions, not all events, and it is not on the boot path
+  (self-development API, materializer, standing consensus, release witness).
+  Residual: give it an indexed key (the operation id) if its counters ever
+  show it.
+- **Rollback:** `git revert 40cdc19fc`.
+
+**Next candidate, not built: F1, bounded `/health` reads** (orange; above).
+This repair removes the boot-window holder. It does not stop any other long
+`s.db` holder from silencing `/health` the same way.
+
+**FP0's deployed proof:** in the next paper boot window, `/health` answers
+200 within seconds of "runtime: started" (no window of failures after it),
+and the console shows no `actor wake outbox list` line with a minutes-long
+`dur`. If it fails, run `scripts/paper_boot_window_probe.py` from runtime
+start and keep its goroutine dump: the holder's frame is in it.
