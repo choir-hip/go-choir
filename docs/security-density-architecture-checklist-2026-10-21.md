@@ -163,7 +163,20 @@ item below:
     [desk-frame-actions-not-role-checked-by-host-2026-10-21.md](problems/desk-frame-actions-not-role-checked-by-host-2026-10-21.md)
     (this change). The role table should come from the desk manifest
     (ARCH-02).
-- [ ] **SEC-03 · P0 · red — Host egress floor for guest taps**
+- [x] **SEC-03 · P0 · red — Host egress floor for guest taps**
+  - Done 2026-10-22: FP3 cut 1 deployed as 8cb7e1acb (deploy M). Proof
+    (FP0, `_runs/fp3cut1`): `verify-host-hardening.py --expect-guest-floor`
+    all PASS on the guest-floor section (24-rule egress chain, service ports
+    exactly 8082-8084 and 8086-8089, jump first in mangle PREROUTING, IPv6
+    drop, reply-only FORWARD, no per-tap ACCEPT, KSM run 2, /dev/kvm 660);
+    no "host networking for … failed" in vmctl's journal;
+    `host_floor_probe.py` from a test computer cold booted after the deploy
+    matched 23 of 23 (own services and public 443 open; host 22/80/443,
+    Dolt 13306/13307, another tap, another guest, metadata, private, CGNAT
+    and SMTP closed); a reattached computer answers through the floor; a
+    research run read GitHub and searched the web; the paper kept
+    publishing. Item 5: maild 8087 stays open (Mail drafts are a guest
+    caller). `--expect-guest-floor` is mandatory after every later deploy.
   - Target, in `internal/vmmanager/hostfirewall.go`:
     1. `-o <tap>` accepts only `ESTABLISHED,RELATED` (F8; ACTIVE item 1's
        unbuilt half; review N1).
@@ -252,7 +265,9 @@ item below:
     the one test computer until desk-cell confinement (SEC-01) lands.
     Before any wider use, Option K (key held by the gateway): SEC-01 alone
     does not unlock wider use.
-- [ ] **SEC-09 · P0 · green/red — KSM off, stale comments fixed**
+- [x] **SEC-09 · P0 · green/red — KSM off, stale comments fixed**
+  - Done 2026-10-22: bd4b47201 (KSM off, comments corrected) deployed in
+    deploy M (8cb7e1acb); the guest-floor check reads KSM run 2 (unmerge).
   - Now: nothing in nix sets KSM; the last reading (`run=1`, nothing
     merged) predates the 10-15 host reboot. Comments still claim KSM
     dedups guests: `internal/vmmanager/manager.go:259-262`,
@@ -261,6 +276,10 @@ item below:
   - Plan update: ACTIVE framed KSM as an optimization (fixed by this
     change).
 - [ ] **SEC-10 · P1 · red — Guest DNS**
+  - 2026-10-22: host side done in deploy M (8cb7e1acb): unbound on
+    127.0.0.1:8053, DNAT at VM start; the probe reaches the host resolver
+    over TCP. Remaining: the guest network unit's line (FP2), then no public
+    resolver.
   - Now: no `DNS=` in the guest network unit (`nix/autoputer-vm.nix:357-366`);
     per the desk-cells inventory the guest uses public resolvers.
   - Target: a host resolver only (then none, once NET-01 removes general
