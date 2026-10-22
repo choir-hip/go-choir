@@ -237,3 +237,40 @@ Reproduced or confirmed by reading the code at 7430e1f31:
 - R2-7: tests added. Each named mutant compiles and is killed.
 - R2-8: fixed. The orphan rule never takes a dir holding recovery state.
 - F8 and F9: fixed. Low residuals are listed in the station file.
+
+## Review round 3 (bunch86, at dd9ae4d07): findings, recorded before the fixes
+
+DeepSeek and Gemini flash, both accept with edits.
+
+- R3-1 (medium). The R2-8 destroy-time recheck is untested. The R2-8 test
+  creates the quarantine before the plan, so the plan-time skip removes the
+  candidate and the destroy-time guard is never reached. DeepSeek's mutant
+  deleting the guard survives.
+- R3-2 (medium, live). R2-8 changes the live orphan rule, but it has no
+  deployed proof and no report. The plan records nothing about a dir it
+  now keeps: `orphan_state_dirs` counts it, `candidates` omits it, and no
+  reason or bytes appear. After the deploy, FP0 cannot tell "kept by R2-8"
+  from "not orphaned".
+- R3-3 (medium, live, pre-existing). The active ephemeral rule
+  (`ephemeral_test_primary`; example.com/example.test,
+  `diagnostic-`/`sourcemaxx-proof-`, 24 h) destroys whole dirs through
+  `DestroyVMState` with no recovery-state check. An ephemeral computer idle
+  over a day whose dir holds a pre-swap, failed or journal-less quarantine
+  loses it. This is the R2-5/R2-8 failure on a rule that runs today. Its
+  destroy-time path also takes no lifecycle claim.
+- R3-4 (low). Off Linux the quarantine age is zero by design (fail
+  closed). So the tests that expect a quarantine to age out fail on darwin
+  (3 to 5 of them, per the reviewers).
+- R3-5 (low). Kept orphan dirs are invisible. A `rec-*.journal` is never
+  deleted after a recovery, so an orphan dir that ever cold-recovered is
+  pinned forever, `data.img` included.
+- R3-6 (low). test_class_idle treats a finished quarantine as safe and
+  destroys the dir, so a quarantine whose recovery finished minutes ago
+  goes at once. The age-out rule would have kept it for `QuarantineMinAge`.
+- R3-7 (info). Comments in retention_test_class.go, retention_prune.go and
+  cmd/vmctl/main.go still say only `VM_*_ONLY`.
+- Residual named by DeepSeek, for the owner: the orphan rule still removes
+  an ownerless dir holding only a plain `data.img` (a computer that lost its
+  ownership and never cold-recovered) after 6 h. That is the rule's purpose
+  since before this lane, but the R2-8 premise (a registry reset, a moved
+  realization) applies to it too.
