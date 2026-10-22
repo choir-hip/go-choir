@@ -257,3 +257,29 @@ How the "after" estimates are built:
 3. **Low: the empty-discovery branch has no regression test.** The planner
    fails when split-package discovery succeeds but lists no test names, but
    `.github/scripts/go-shard-discovery-test` never drives that branch.
+
+### Review bunch 101: dispositions
+
+All three fixed, no finding declined.
+
+- `f52ef0545` (yellow): the checks, written first.
+- `a1619795c` (orange): the planner fix. Rollback: revert it, then the
+  test commit.
+
+1. **Fixed (contract).** `ci-workflow-contract-test` now derives the
+   matrix from `TOTAL_SHARDS`: in ci.yml's go-test and race.yml's
+   go-test-race, the shard matrix must hold every index
+   0..TOTAL_SHARDS-1 exactly once. Mutating ci.yml locally to drop, repeat
+   or add an index fails the test. This check passes on the old tip
+   because its matrix was whole; it guards against regression.
+2. **Fixed (planner).** With `SHARD_INDEX` set, an empty split or whole
+   selection now fails, with the cause (`TOTAL_SHARDS` exceeds the
+   packages or test names dealt). CI's 8- and 4-shard layouts never select
+   nothing, so no real shard changes behavior. The unsharded local run
+   already failed on an empty package list. `go-shard-discovery-test`
+   checks both empty cases: more shards than split test names, and one
+   whole package for two whole shards. Both passed on the old tip.
+3. **Fixed (test).** The fake `go` has an `EMPTY_DISCOVERY` mode that
+   prints only the `ok` package lines. The split shard must fail with "no
+   tests" and run nothing. The branch already failed closed, so this check
+   passes on the old tip; it guards against regression.
