@@ -504,6 +504,14 @@ item below:
   default (`internal/gomemlimit/gomemlimit.go:63-65`);
   [guest-appender-retains-every-projection-payload-2026-10-19.md](problems/guest-appender-retains-every-projection-payload-2026-10-19.md);
   `GOMEMLIMIT` fixed at boot (J14).
+  - Now (2026-10-22): measured on the paper, no lever landed
+    ([daemon-memory-res18-2026-10-22.md](problems/daemon-memory-res18-2026-10-22.md)).
+    The appender leak is fixed on main (b36519198). The daemon's largest
+    retained term is Dolt's table-file indexes (about 0.5 GiB at a 20 GiB
+    store), not the node cache (full at 256 MiB). The guest is filled by
+    cold Dolt page cache, so daemon knobs do not lower the paper's host
+    RSS until guest reclaim (RES-06) is on. The knob has no per-computer
+    path; J14 matters only with RES-09's small base.
 - [ ] **RES-19 · P1 · green — Density benchmark and LR measurements**
   - The density benchmark (`vm-density-limits` §4), the LR source sweep and
     the oversubscription probe were never run. Run before and after the P0
