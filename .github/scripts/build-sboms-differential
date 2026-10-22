@@ -7,8 +7,8 @@ output_dir="${1:-sboms}"
 baseline_dir="${2:-}"
 source_commit="${3:-$(git rev-parse HEAD)}"
 
-packages=(auth proxy gateway maild maildctl corpusd autoputer vmctl frontend obscura zot)
-required_packages=" auth proxy gateway maild maildctl corpusd autoputer vmctl frontend zot "
+packages=(auth proxy gateway maild maildctl corpusd autoputer vmctl frontend obscura)
+required_packages=" auth proxy gateway maild maildctl corpusd autoputer vmctl frontend "
 semantic_packages=" auth proxy gateway maild maildctl corpusd autoputer vmctl frontend "
 
 rm -rf "$output_dir"

@@ -109,7 +109,7 @@ type openAIError struct {
 
 // HandleOpenAIChatCompletions adapts OpenAI Chat Completions requests to the
 // autoputer-authenticated Choir gateway provider contract for OpenAI-compatible
-// clients such as Zot.
+// clients.
 func (h *Handler) HandleOpenAIChatCompletions(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeGatewayJSON(w, http.StatusMethodNotAllowed, openAIErrorResponse("method not allowed"))
@@ -191,9 +191,8 @@ func (h *Handler) HandleOpenAIChatCompletions(w http.ResponseWriter, r *http.Req
 // reports when the provider did not.
 const defaultOpenAICompatModel = "gpt-6-luna"
 
-// HandleOpenAIModels returns a minimal OpenAI-compatible models response. Zot
-// primarily uses launch flags here, but this keeps model discovery healthy for
-// clients that probe the base URL.
+// HandleOpenAIModels returns a minimal OpenAI-compatible models response; it
+// keeps model discovery healthy for clients that probe the base URL.
 func (h *Handler) HandleOpenAIModels(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeGatewayJSON(w, http.StatusMethodNotAllowed, openAIErrorResponse("method not allowed"))

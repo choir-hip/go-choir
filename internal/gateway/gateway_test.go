@@ -1420,7 +1420,7 @@ func TestHandleOpenAIChatCompletions_RoutesThroughGateway(t *testing.T) {
 	body := `{
 		"model":"gpt-6-luna",
 		"messages":[
-			{"role":"system","content":"You are Zot inside Choir."},
+			{"role":"system","content":"You are a client inside Choir."},
 			{"role":"user","content":"Say hello"}
 		],
 		"reasoning_effort":"medium",
@@ -1445,7 +1445,7 @@ func TestHandleOpenAIChatCompletions_RoutesThroughGateway(t *testing.T) {
 	if chatProvider.lastReq.ReasoningEffort != "medium" {
 		t.Fatalf("reasoning = %q, want medium", chatProvider.lastReq.ReasoningEffort)
 	}
-	if chatProvider.lastReq.System != "You are Zot inside Choir." {
+	if chatProvider.lastReq.System != "You are a client inside Choir." {
 		t.Fatalf("system = %q", chatProvider.lastReq.System)
 	}
 

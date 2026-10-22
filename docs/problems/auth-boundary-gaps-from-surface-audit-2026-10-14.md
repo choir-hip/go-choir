@@ -132,6 +132,9 @@ exploit found).
   A root child with `CAP_NET_ADMIN` could add the gateway address to `lo`
   and source from it. Closing loopback removes the casual path; the full
   boundary needs that S1 uid split. Named, not repaired here.
+  (2026-10-22: zot and its Console PTY are removed,
+  `docs/problems/remove-zot-2026-10-22.md`; no terminal or zot child
+  remains in production, so the residual is the other guest children.)
 - **Failure modes of the repair:** a host caller that reaches the guest
   through `127.0.0.1:<hostPort>` DNAT (`hostfirewall.go:157-158`) instead
   of the tap address would now be refused; none was found in code (vmctl,

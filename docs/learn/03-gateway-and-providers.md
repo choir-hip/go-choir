@@ -167,7 +167,7 @@ reach it through their tap's host-side address.
 The routes are registered in one place (code: `RegisterRoutes`,
 `internal/gateway/handlers.go:1074-1091`): inference
 (`/provider/v1/inference`), an OpenAI-compatible adapter for third-party
-clients such as Zot (`/provider/openai/v1/chat/completions`,
+clients (`/provider/openai/v1/chat/completions`,
 `internal/gateway/openai_compat.go`), Jev judgements
 (`/provider/v1/judgments`), search and its health, credential issue and
 ensure, and breaker inspection and reset.

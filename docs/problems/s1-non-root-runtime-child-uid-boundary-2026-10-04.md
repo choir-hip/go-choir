@@ -65,6 +65,13 @@ consequences the S1 station names:
   stays scrubbed (done).
 - `kernel.yama.ptrace_scope=2` (or verified non-zero) pinned in the image.
 
+## Update 2026-10-22
+
+zot and the Management Console's PTY are removed
+(`docs/problems/remove-zot-2026-10-22.md`): no terminal or zot child is
+spawned in production any more. The "terminal children" item above has no
+member left; the uid split still matters for the other guest children.
+
 ## Rollback
 
 Revert the unit/ownership change; the env scrub and credential-disk

@@ -140,7 +140,7 @@ func TestDiagHTTPProbeRefusesGuestCaller(t *testing.T) {
 }
 
 // An in-guest caller (loopback) is refused: the diag oracle is a host-peer
-// instrument only. Terminal/zot/capsule children must not run host-internal
+// instrument only. Guest children and capsule workloads must not run host-internal
 // probes from inside the guest even though they share the guest's tap address.
 func TestDiagHTTPProbeRefusesLoopbackCaller(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/internal/diag/tcp-dial?addr=127.0.0.1:8083&mode=http", nil)

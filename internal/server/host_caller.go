@@ -64,7 +64,7 @@ func HostSourcedCaller(r *http.Request) bool {
 // itself (the guest's default gateway on the tap link) qualifies. In-guest
 // callers — loopback and the guest's own services — do not, so diagnostic
 // surfaces like /internal/diag/tcp-dial cannot be driven by untrusted guest
-// children (terminal, zot, capsule workloads). Synthetic callers (empty and
+// children (capsule workloads, any guest child). Synthetic callers (empty and
 // TEST-NET-1 addresses) still pass for tests; loopback does not.
 func HostPeerCaller(r *http.Request) bool {
 	if r == nil {
