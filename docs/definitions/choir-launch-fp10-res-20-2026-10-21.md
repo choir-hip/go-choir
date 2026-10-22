@@ -90,12 +90,31 @@ boundaries:
 now:
   status: checkpoint_incomplete
   slice: >-
-    Station opened; problem record written. The design is next.
-  source_ref: d1c60ad87
+    Design written (docs/reports/vm-hypervisor-seam-design-2026-10-21.md);
+    nothing built, by brief. The seam sits inside vmmanager between the
+    decision (MachineSpec) and the VMM (Backend formats, Cage confines,
+    Start execs); FP8's vmm-build.json and selector become the one launch
+    record and selector; CH runs only inside a Go cage built from the
+    jailer substrate on main, and only for test-class computers.
+  source_ref: d1c60ad87 (+ FP8 lane/fp8-image-jailer ee2dcf0a3, read only)
   deploy_identity: unknown to this lane
-  next_action: write docs/reports/vm-hypervisor-seam-design-2026-10-21.md
+  decision: >-
+    Conservative choices taken without the owner (No Blocking Asks): Go
+    cage over a systemd unit; no CH outside the cage even on test
+    computers; selection applies at cold boot and a restore honours the
+    snapshot's backend.
+  blocker_or_risk: >-
+    M0 waits for FP8 to land (it re-captures the golden from post-FP8
+    vmmanager). CH facts at the pin (PVH note, tap fd, device names,
+    virtio-mem and balloon endpoints) are unverified until a KVM host runs
+    real_linux_test.go. CH density unmeasured.
+  next_action: >-
+    After FP8 lands, a lane takes M0 (yellow, no caller) and M1 (red) from
+    the design's section 8; FP0 or the owner amends the supervised
+    metamission's CH and hotplug exclusion.
 
-receipts: []
+receipts:
+  - fe1ebc970 station and problem record (green)
 ---
 
 # FP10 RES-20: Cloud Hypervisor behind a backend seam
