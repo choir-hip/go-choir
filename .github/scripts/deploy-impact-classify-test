@@ -49,6 +49,19 @@ lockscope_output="$(run_classifier "cmd/lockscope/main.go" "cmd/lockscope/baseli
 assert_contains "$lockscope_output" "deploy_needed=false"
 assert_contains "$lockscope_output" "cmd/lockscope/main.go -> ignored (CI lock-scope checker; not installed on Node B or guest closures)"
 
+node_b_disk_policy_output="$(
+  run_classifier \
+    "scripts/node-b-nix-retention" \
+    "scripts/node-b-host-disk-alarm" \
+    "scripts/test-node-b-nix-retention.sh" \
+    "scripts/test_node_b_disk_policy.py"
+)"
+assert_contains "$node_b_disk_policy_output" "deploy_host_os=true"
+assert_contains "$node_b_disk_policy_output" "deploy_active_vm_refresh=false"
+assert_contains "$node_b_disk_policy_output" "scripts/node-b-nix-retention -> host OS activation (a host unit script read into the system closure)"
+assert_contains "$node_b_disk_policy_output" "scripts/test-node-b-nix-retention.sh -> ignored (CI/local/operator tooling; not deployed to host or guest closures)"
+assert_not_contains "$node_b_disk_policy_output" "unknown deployed path"
+
 doccheck_tooling_output="$(
   run_classifier \
     ".gitignore" \
