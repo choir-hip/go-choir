@@ -256,7 +256,7 @@ func openTextureWorkspaceDB(path string) (*sql.DB, string, doltConnector, error)
 		if err != nil {
 			lastErr = fmt.Errorf("texture workspace: new database connector: %w", err)
 		} else {
-			db := sql.OpenDB(dbConnector)
+			db := sql.OpenDB(poolConnector{dbConnector})
 			configureEmbeddedDoltDB(db)
 			if pingErr := db.Ping(); pingErr == nil {
 				return db, workspacePath, dbConnector, nil

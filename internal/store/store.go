@@ -98,6 +98,12 @@ type doltConnector interface {
 	Close() error
 }
 
+// poolConnector hands a Dolt connector to database/sql without its Close,
+// so DB.Close never tears the embedded engine down. Store.Close closes the
+// engine itself, last, after every pinned connection is back in a closed
+// pool (pinPools).
+type poolConnector struct{ driver.Connector }
+
 // defaultFinalizeCheckpointEvery bounds Dolt commit growth: one checkpoint per
 // hundred finalized events instead of one per event (2026-09-03: 138k tape
 // rows / ~6k commits backed a 9.8 GB journal for ~0.5 GB of live data).
@@ -305,6 +311,30 @@ func (s *Store) commitDoltCheckpointLocking(ctx context.Context, message string,
 	s.cleanGen = gen
 	s.checkpoint.recordCommit(site, time.Since(started), events, ops, noop)
 	return nil
+}
+
+// pinPools checks out the single connection of each open pool (both are
+// MaxOpenConns 1) by ctx. On failure it returns what it pinned and an
+// error; the caller must not close anything.
+func (s *Store) pinPools(ctx context.Context) ([]*sql.Conn, error) {
+	var pinned []*sql.Conn
+	for _, pool := range []struct {
+		name string
+		db   *sql.DB
+	}{{"texture", s.textureDB}, {"read", s.readDB}, {"write", s.db}} {
+		if pool.db == nil {
+			continue
+		}
+		conn, err := pool.db.Conn(ctx)
+		if err != nil {
+			for _, held := range pinned {
+				_ = held.Close()
+			}
+			return nil, fmt.Errorf("%s pool: %w", pool.name, err)
+		}
+		pinned = append(pinned, conn)
+	}
+	return pinned, nil
 }
 
 // undoFailedClose restores what a Close that failed closed changed, so a
@@ -776,7 +806,7 @@ func Open(dbPath string) (*Store, error) {
 		return nil, fmt.Errorf("runtime store: open unified Dolt workspace: %w", err)
 	}
 
-	readDB := sql.OpenDB(connector)
+	readDB := sql.OpenDB(poolConnector{connector})
 	configureEmbeddedDoltDB(readDB)
 
 	s := &Store{db: db, readDB: readDB, path: dbPath, texturePath: workspacePath, doltConnector: connector}
@@ -1152,6 +1182,16 @@ func (s *Store) Close() error {
 		return err
 	}
 	defer s.doltCommitMu.Unlock()
+	// Pin the pools (owner decision of 2026-10-22): check out each pool's
+	// single connection by the same deadline, so no statement that is not
+	// a commit (a statement in flight, an open transaction) is using the
+	// engine when it closes. Waiters are failed by the pool closes below.
+	pinned, pinErr := s.pinPools(fence)
+	if pinErr != nil {
+		err := s.checkpoint.leaveOpen("a statement holds a pool's connection: " + pinErr.Error())
+		s.undoFailedClose(wasClosed, telemetryStopped)
+		return err
+	}
 	s.checkpoint.clearLeftOpen()
 	s.closedOK = true
 	var err error
@@ -1179,6 +1219,11 @@ func (s *Store) Close() error {
 		if closeErr := db.Close(); closeErr != nil && err == nil {
 			err = closeErr
 		}
+	}
+	// Released into closed pools, the pinned connections are closed, with
+	// the engine still up; then the engine closes with no connection open.
+	for _, conn := range pinned {
+		_ = conn.Close()
 	}
 	if connector := s.doltConnector; connector != nil {
 		if closeErr := connector.Close(); closeErr != nil && err == nil {
