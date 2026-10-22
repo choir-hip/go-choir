@@ -75,3 +75,16 @@ writer shares. The observe counters below settle it.
 ## Chosen first slice
 
 See [the FP10 station file](../definitions/choir-launch-fp10-arch-13-2026-10-21.md).
+
+## Review finding: Reopen after Close leaves the cadence closed (2026-10-22)
+
+Found by FP0's first-pass reviewer on candidate 6d059b885 (blocking).
+`Store.Close` runs `closeCheckpoint`, which sets `checkpointCadence.closed`.
+`internal/autoputer/projection_base.go:174-196` closes the live store,
+rebases it, then calls `Store.Reopen` on the same `*Store`. `Reopen` swaps
+the handles but never clears `closed`, so with debounced mode on:
+`checkpointDebounced` returns false and finalize falls back to inline
+commits; `armCheckpoint` and the ops bound do nothing; and
+`CheckpointStats().Mode` still says `debounced`. The writer stall comes
+back without a word, and the mode report says it hasn't. Fix: `Reopen`
+reopens the cadence and arms it for the adopted (dirty) workspace.
