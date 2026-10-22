@@ -400,11 +400,14 @@ func readLegacyRecord(rd *tapestore.Reader, ns tapestore.NS, digest string, leng
 	return body, nil
 }
 
+// Plan and Census only read (legacy files and segments) and take no lock.
+//
 // Copy appends the named computers' manifest records to their segments
 // through the production appender (per-computer lock, one fsync per batch,
 // fail-stop), skipping records already in a segment, then reads every
-// record of the batch back from the segments only. It never writes, moves
-// or deletes a legacy file.
+// record of the batch back from the segments only. Before each batch it
+// refuses if a writer holds the computer's segment lock (refuseLiveWriter).
+// It never writes, moves or deletes a legacy file.
 func Copy(opts CopyOptions) (CopyCounts, error) {
 	want, err := computerSet(opts.Computers)
 	if err != nil {
@@ -436,6 +439,9 @@ func Copy(opts CopyOptions) (CopyCounts, error) {
 	for _, computer := range order {
 		list := byComputer[computer]
 		for start := 0; start < len(list); start += batch {
+			if err := refuseLiveWriter(root, computer); err != nil {
+				return counts, err
+			}
 			end := min(start+batch, len(list))
 			var recs []record
 			for _, e := range list[start:end] {
