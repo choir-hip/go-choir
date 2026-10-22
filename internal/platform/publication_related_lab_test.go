@@ -39,6 +39,10 @@ func newRelatedLab(t *testing.T) *relatedLab {
 	store, root := openTestPlatformStore(t)
 	artifactsRoot := filepath.Join(root, "artifacts")
 	svc := NewService(store, artifactsRoot, filepath.Join(root, "signing.key"))
+	// A loaded -race runner can overrun the 400 ms production budget, and an
+	// overrun answers empty (related-stories-test-overruns-its-budget-under-ci-2026-10-22.md).
+	// The budget test sets its own values.
+	svc.related.tuning.Budget = 30 * time.Second
 	bodies := &CaptureBodyStore{root: CaptureBodiesRoot(artifactsRoot)}
 	return &relatedLab{
 		t: t, svc: svc, store: store, artifactsRoot: artifactsRoot,
@@ -161,6 +165,9 @@ func (l *relatedLab) related(route string) *RelatedStories {
 	out, err := l.svc.RelatedStories(context.Background(), route, 0)
 	if err != nil {
 		l.t.Fatalf("related %s: %v", route, err)
+	}
+	if out.Partial {
+		l.t.Fatalf("related %s: over its %s budget (partial), not a result", route, l.svc.related.tuning.Budget)
 	}
 	return out
 }
