@@ -196,10 +196,16 @@ The script runs these steps in order:
    markers are written and before this step ends (a failed receipt
    save, an interrupt, a closed terminal's SIGHUP, a SIGTERM) also clears
    them. **Exit 4 keeps the markers armed**, because the host may still
-   be rebooting: if the console shows it never went down, clear them by
-   hand (`DELETE <computer_url>/internal/runtime/planned-restart` for
-   each computer in `marks.may_hold_marker`) before 15 minutes pass, or a
-   crash in that window boots as planned. A SIGKILL skips every clear.
+   be rebooting. A marker is honoured for 900 s (15 minutes,
+   `plannedRestartMaxAge`) after the final pass. At the defaults exit 4
+   lands about 1230 s after it (30 s sleep plus `--boot-timeout` 1200 s),
+   so every marker is already stale and a crash boots as a crash: nothing
+   to clear. The manual clear matters only when `--boot-timeout` is under
+   900 s: then, if the console shows the host never went down, clear them
+   by hand (`DELETE <computer_url>/internal/runtime/planned-restart` for
+   each computer in `marks.may_hold_marker`) before the 900 s pass, or a
+   crash in that window boots as planned. `--down-wait` must be above 0
+   and below `--boot-timeout`. A SIGKILL skips every clear.
 4. **Post-checks** (below). The receipt JSON goes to
    `$TMPDIR/node-b-host-reboot-<UTC>.json`.
 
