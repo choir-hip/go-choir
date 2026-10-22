@@ -40,7 +40,9 @@ type RetentionPruneConfig struct {
 	TestIdleMinAge   time.Duration
 	QuarantineMode   string
 	QuarantineMinAge time.Duration
-	// SelectorNamed holds the VM and computer ids VM_*_ONLY selectors name;
+	// SelectorNamed holds the VM and computer ids that per-computer
+	// selectors name (VM_*_ONLY, VMCTL_*_ONLY, CHOIR_*_COMPUTERS,
+	// CHOIR_*_ONLY; selectorEnvKeyRE);
 	// neither new rule touches them.
 	SelectorNamed []string
 	// ManifestPath is the removal manifest; default <StateDir>/retention-manifest.jsonl.
@@ -82,6 +84,8 @@ type RetentionPruneInventory struct {
 	QuarantineBytes            int64 `json:"quarantine_bytes,omitempty"`
 	QuarantineWouldRemove      int   `json:"quarantine_would_remove,omitempty"`
 	QuarantineWouldRemoveBytes int64 `json:"quarantine_would_remove_bytes,omitempty"`
+	KeptStateDirs              int   `json:"kept_state_dirs,omitempty"`
+	KeptStateDirBytes          int64 `json:"kept_state_dir_bytes,omitempty"`
 }
 
 type RetentionPruneCandidate struct {
@@ -104,6 +108,24 @@ type RetentionProtectedState struct {
 	VMID        string `json:"vm_id"`
 }
 
+// RetentionKeptStateDir is a dir a destroying rule (orphan_state_dir or
+// ephemeral_test_primary) would otherwise take but keeps, because it holds
+// recovery state that may be the only copy of a computer's data.
+type RetentionKeptStateDir struct {
+	VMID      string   `json:"vm_id"`
+	UserID    string   `json:"user_id,omitempty"`
+	Rule      string   `json:"rule"`
+	SizeBytes int64    `json:"size_bytes"`
+	Reasons   []string `json:"reasons"`
+	// Release says what lets the dir go: vmctl never does on its own.
+	Release string `json:"release"`
+}
+
+const (
+	retentionReleaseOrphan    = "an owner act: read the dir (a quarantine may be the only copy of a computer's data), then delete it or restore its ownership; no rule releases it"
+	retentionReleaseEphemeral = "the recovery finishing (journal done, quarantine older than the quarantine minimum age), or an owner act"
+)
+
 type RetentionPrunePlan struct {
 	Mode                    string                    `json:"mode"`
 	Decision                string                    `json:"decision"`
@@ -113,10 +135,13 @@ type RetentionPrunePlan struct {
 	ProtectedDetachedLegacy []RetentionProtectedState `json:"protected_detached_legacy,omitempty"`
 	// TestClass and Quarantines list every test-class computer and every
 	// quarantined data image while their rule is not off, removable or not.
-	TestClass   []RetentionTestClassEntry   `json:"test_class,omitempty"`
-	Quarantines []RetentionQuarantineEntry  `json:"quarantines,omitempty"`
-	Config      RetentionPruneConfigSummary `json:"config"`
-	Warnings    []string                    `json:"warnings,omitempty"`
+	TestClass []RetentionTestClassEntry `json:"test_class,omitempty"`
+	// KeptStateDirs lists every dir the orphan or ephemeral rule keeps for
+	// its recovery state (review round 3, R3-2 and R3-5).
+	KeptStateDirs []RetentionKeptStateDir     `json:"kept_state_dirs,omitempty"`
+	Quarantines   []RetentionQuarantineEntry  `json:"quarantines,omitempty"`
+	Config        RetentionPruneConfigSummary `json:"config"`
+	Warnings      []string                    `json:"warnings,omitempty"`
 }
 
 type RetentionPruneResult struct {
@@ -296,11 +321,12 @@ func retentionPrunePlanFromSnapshot(cfg RetentionPruneConfig, warmness WarmnessP
 	plan.Inventory.Ownerships = len(ownerships)
 	plan.Inventory.DetachedRollbackStateDirs = len(detached)
 	candidates := make([]RetentionPruneCandidate, 0)
-	orphans, stateDirCount, orphanCount, orphanWarnings := retentionOrphanCandidates(cfg, ownedVMs, now)
+	orphans, kept, stateDirCount, orphanCount, orphanWarnings := retentionOrphanCandidates(cfg, ownedVMs, now)
 	plan.Inventory.StateDirs = stateDirCount
 	plan.Inventory.OrphanStateDirs = orphanCount
 	plan.Warnings = append(plan.Warnings, orphanWarnings...)
 	candidates = append(candidates, orphans...)
+	plan.KeptStateDirs = append(plan.KeptStateDirs, kept...)
 	for _, own := range ownerships {
 		email := strings.TrimSpace(emails[own.UserID])
 		if retentionOwnershipEphemeral(own, email, cfg) {
@@ -310,6 +336,15 @@ func retentionPrunePlanFromSnapshot(cfg RetentionPruneConfig, warmness WarmnessP
 			continue
 		}
 		size := vmStateDirUsageBytes(cfg.StateDir, own.VMID)
+		// R3-3: the ephemeral rule destroys the whole dir; never one holding
+		// recovery state the age-out rule would keep.
+		if reasons := vmDirRecoveryKeepReasons(cfg.StateDir, own.VMID, now, cfg.QuarantineMinAge); len(reasons) > 0 {
+			plan.KeptStateDirs = append(plan.KeptStateDirs, RetentionKeptStateDir{
+				VMID: own.VMID, UserID: own.UserID, Rule: "ephemeral_test_primary",
+				SizeBytes: size, Reasons: reasons, Release: retentionReleaseEphemeral,
+			})
+			continue
+		}
 		candidates = append(candidates, RetentionPruneCandidate{
 			VMID:           own.VMID,
 			UserID:         own.UserID,
@@ -379,6 +414,10 @@ func retentionPrunePlanFromSnapshot(cfg RetentionPruneConfig, warmness WarmnessP
 			}
 		}
 	}
+	for _, k := range plan.KeptStateDirs {
+		plan.Inventory.KeptStateDirs++
+		plan.Inventory.KeptStateDirBytes += k.SizeBytes
+	}
 	sortRetentionCandidates(candidates)
 	plan.Inventory.Candidates = len(candidates)
 	for _, candidate := range candidates {
@@ -443,19 +482,20 @@ func (r *OwnershipRegistry) retentionShadowSnapshot() (RetentionPruneConfig, []*
 	return cfg, ownerships, emails, detached, true
 }
 
-func retentionOrphanCandidates(cfg RetentionPruneConfig, ownedVMs map[string]bool, now time.Time) ([]RetentionPruneCandidate, int, int, []string) {
+func retentionOrphanCandidates(cfg RetentionPruneConfig, ownedVMs map[string]bool, now time.Time) ([]RetentionPruneCandidate, []RetentionKeptStateDir, int, int, []string) {
 	root := filepath.Clean(cfg.StateDir)
 	if root == "." || root == string(os.PathSeparator) {
-		return nil, 0, 0, []string{"retention prune refused unsafe state dir"}
+		return nil, nil, 0, 0, []string{"retention prune refused unsafe state dir"}
 	}
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, 0, 0, nil
+			return nil, nil, 0, 0, nil
 		}
-		return nil, 0, 0, []string{fmt.Sprintf("read state dir: %v", err)}
+		return nil, nil, 0, 0, []string{fmt.Sprintf("read state dir: %v", err)}
 	}
 	var candidates []RetentionPruneCandidate
+	var kept []RetentionKeptStateDir
 	stateDirCount := 0
 	orphanCount := 0
 	for _, entry := range entries {
@@ -475,7 +515,11 @@ func retentionOrphanCandidates(cfg RetentionPruneConfig, ownedVMs map[string]boo
 		orphanCount++
 		// R2-8: a dir holding recovery state (a quarantine may be the only
 		// copy of a computer's data) is never an orphan to destroy.
-		if retentionDirHoldsRecoveryState(root, vmID) {
+		if reasons := retentionOrphanKeepReasons(root, vmID); len(reasons) > 0 {
+			kept = append(kept, RetentionKeptStateDir{
+				VMID: vmID, Rule: "orphan_state_dir", SizeBytes: vmStateDirUsageBytes(root, vmID),
+				Reasons: reasons, Release: retentionReleaseOrphan,
+			})
 			continue
 		}
 		info, err := entry.Info()
@@ -494,7 +538,7 @@ func retentionOrphanCandidates(cfg RetentionPruneConfig, ownedVMs map[string]boo
 			ProposedAction: "destroy_unowned_vm_state",
 		})
 	}
-	return candidates, stateDirCount, orphanCount, nil
+	return candidates, kept, stateDirCount, orphanCount, nil
 }
 
 func retentionOwnershipEphemeral(own *VMOwnership, email string, cfg RetentionPruneConfig) bool {
@@ -666,25 +710,15 @@ func (r *OwnershipRegistry) destroyRetentionCandidate(candidate RetentionPruneCa
 	if mgr == nil || detached {
 		return false
 	}
-	if current != nil {
-		loaded, warnings := loadRetentionEmailsFromAuthDB(cfg.AuthDBPath)
-		for _, warning := range warnings {
-			log.Printf("vmctl: retention prune warning: %s", warning)
-		}
-		if loadedEmail := strings.TrimSpace(loaded[current.UserID]); loadedEmail != "" {
-			email = loadedEmail
-		}
-		if !retentionOwnershipReclaimable(cloneOwnership(current), email, cfg, time.Now()) ||
-			retentionOwnershipProtected(current, r.warmnessPolicySnapshot()) {
+	if current == nil {
+		if candidate.Reason != "orphan_state_dir" {
 			return false
 		}
-	} else if candidate.Reason != "orphan_state_dir" {
-		return false
-	}
-	if current == nil {
 		r.mu.RLock()
 		defer r.mu.RUnlock()
-		if r.vmByID[candidate.VMID] != nil || retentionDirHoldsRecoveryState(cfg.StateDir, candidate.VMID) {
+		// R2-8 and R3-1: re-read under the lock; recovery state that
+		// appeared after the plan keeps the dir.
+		if r.vmByID[candidate.VMID] != nil || len(retentionOrphanKeepReasons(cfg.StateDir, candidate.VMID)) > 0 {
 			return false
 		}
 		if err := mgr.DestroyVMState(candidate.VMID); err != nil {
@@ -693,6 +727,33 @@ func (r *OwnershipRegistry) destroyRetentionCandidate(candidate RetentionPruneCa
 		}
 		return true
 	}
+	loaded, warnings := loadRetentionEmailsFromAuthDB(cfg.AuthDBPath)
+	for _, warning := range warnings {
+		log.Printf("vmctl: retention prune warning: %s", warning)
+	}
+	if loadedEmail := strings.TrimSpace(loaded[current.UserID]); loadedEmail != "" {
+		email = loadedEmail
+	}
+	// R3-3: every check is re-read under the registry lock, the dir's
+	// recovery state included, and the computer's lifecycle is claimed, so
+	// a visit, resume or refresh cannot start it while its state goes.
+	now := r.retentionNow()
+	r.mu.Lock()
+	cur := r.vmByID[candidate.VMID]
+	warmness := normalizeWarmnessPolicyConfig(r.warmnessPolicy)
+	if cur == nil || !retentionOwnershipReclaimable(cur, email, cfg, now) || retentionOwnershipProtected(cur, warmness) ||
+		len(vmDirRecoveryKeepReasons(cfg.StateDir, cur.VMID, now, cfg.QuarantineMinAge)) > 0 {
+		r.mu.Unlock()
+		return false
+	}
+	key := ownershipKey(cur.UserID, cur.DesktopID)
+	if r.lifecycleConflictLocked(key) != nil {
+		r.mu.Unlock()
+		return false
+	}
+	r.lifecycle[key] = lifecycleRetention
+	r.mu.Unlock()
+	defer r.releaseLifecycle(key, lifecycleRetention)
 	if err := mgr.DestroyVMState(candidate.VMID); err != nil {
 		log.Printf("vmctl: retention prune skipped %s: %v", candidate.VMID, err)
 		return false
@@ -747,24 +808,41 @@ func emailDomain(email string) string {
 	return strings.TrimSpace(email[at+1:])
 }
 
-// retentionDirHoldsRecoveryState reports whether a VM dir holds anything a
-// cold recovery left: a quarantined or staging data image, or a recovery
-// journal. An unreadable dir counts as holding some.
-func retentionDirHoldsRecoveryState(stateDir, vmID string) bool {
+// retentionOrphanKeepReasons is why the orphan rule keeps an ownerless
+// dir: anything a cold recovery left (a quarantined or staging data image,
+// a recovery journal) or an unreadable dir. A journal is never deleted, so a
+// dir that ever cold-recovered stays until an owner act
+// (retentionReleaseOrphan).
+func retentionOrphanKeepReasons(stateDir, vmID string) []string {
 	root := filepath.Clean(stateDir)
 	if root == "." || root == string(os.PathSeparator) || vmID == "" || filepath.Base(vmID) != vmID {
-		return true
+		return []string{"unreadable"}
 	}
 	files, err := os.ReadDir(filepath.Join(root, vmID))
 	if err != nil {
-		return !os.IsNotExist(err)
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return []string{"unreadable"}
+	}
+	seen := map[string]bool{}
+	var reasons []string
+	add := func(reason string) {
+		if !seen[reason] {
+			seen[reason] = true
+			reasons = append(reasons, reason)
+		}
 	}
 	for _, file := range files {
 		name := file.Name()
-		if strings.HasPrefix(name, "data.img.quarantine-") || strings.HasPrefix(name, "data.img.staging-") ||
-			(strings.HasPrefix(name, "rec-") && strings.HasSuffix(name, ".journal")) {
-			return true
+		switch {
+		case strings.HasPrefix(name, "data.img.quarantine-"):
+			add("holds_quarantine")
+		case strings.HasPrefix(name, "data.img.staging-"):
+			add("holds_staging_image")
+		case strings.HasPrefix(name, "rec-") && strings.HasSuffix(name, ".journal"):
+			add("holds_recovery_journal")
 		}
 	}
-	return false
+	return reasons
 }
