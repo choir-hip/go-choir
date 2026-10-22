@@ -207,17 +207,19 @@ heresy_delta:
 now:
   status: checkpoint
   slice: >-
-    Batch 1 repair. Both reviewers (Sol, Argon) sent b0f872bd6 back. Findings
-    recorded first (e832951b0), then fixed tests-first, one commit each: B1
-    planned restart keeps queued requests (7e24b0889); B2 expiry under the
-    saga mutex before admission, whatever the slot (d5055214a); B3 the bound
-    deadline runs from bind and its wake has its own identity (a46ed9a9b).
-    Small extras: the writer gate's mode and counts on
-    /api/runtime/observability (bbd19192c); the next queued request is woken
-    when an assignment ends (059924c7e).
-  source_ref: 059924c7e on lane/b10-selfdev-b1fix
+    Round 2 repair on deploy G (lane/fp4-on-g, rebased from
+    lane/b10-selfdev-b1fix e71cf6259 onto 39c2ba642 with no conflicts).
+    Panel bunch 30 (Gemini flash accept, Devin accept, DeepSeek accept with
+    edits) asked for six edits; recorded first (783cd578c), tests
+    (6f1861830, R1 to R5 failed on c494f5aac), fix (11dfea955).
+    Dispositions in the problem record's round 2 section: R1, R2 (planned
+    restart), R4, R5 repaired; R3 made visible on B's run and bounded by
+    its deadline; R6 recorded as an ARCH-03 install and enforce-flip
+    precondition. Earlier: batch 1 repair B1 to B3, writer-gate counts on
+    observability, next-request nudge.
+  source_ref: 11dfea955 on lane/fp4-on-g (base stage/deploy-g 39c2ba642)
   deploy_identity: unknown to this lane
-  candidate: {id: arch10-admission-b1fix, state: ready_for_review, ref: lane/b10-selfdev-b1fix, base: b0f872bd6, digest: none, scope: [internal/agentcore/engineering_admission.go, internal/agentcore/engineering_assignment_runtime.go, internal/agentcore/engineering_assignment_fate.go, internal/agentcore/continuation_schedule.go, internal/agentcore/api.go, internal/objectgraph/writer.go]}
+  candidate: {id: arch10-admission-r2, state: ready_for_review, ref: lane/fp4-on-g, base: 39c2ba642, digest: none, scope: [internal/agentcore/engineering_admission.go, internal/agentcore/engineering_assignment_runtime.go, internal/agentcore/engineering_assignment_fate.go, internal/agentcore/continuation_schedule.go, internal/agentcore/api.go, internal/agentcore/freeze_candidate.go, internal/objectgraph/writer.go]}
   conjecture:
     id: FP4-C1
     claim: >-
@@ -241,6 +243,7 @@ now:
     evidence_refs:
       - docs/problems/engineering-admission-supersedes-live-assignment-2026-10-21.md (review findings section)
       - "local: the B1, B2 and B3 tests failed on b0f872bd6 and pass at 059924c7e; go test ./internal/agentcore -run 'Engineering|Assignment|Restart|Boot|C1e|PreBind|Deadline|Records|Cast' ok; go test ./internal/objectgraph ok"
+      - "local: the round 2 tests (engineering_admission_review2_test.go) failed on c494f5aac and pass at 11dfea955; GOMAXPROCS=2 go test -race ./internal/agentcore -run 'Engineering|Admission|Assignment|Selfdev|Freeze|Obligation' ok; go test ./internal/objectgraph ok; go vet agentcore, objectgraph, platform clean"
   decision:
     what: >-
       Queue by durable open request and retry the spawn; never supersede. A
@@ -268,17 +271,24 @@ now:
     A stuck live assignment blocks the queue until its deadline (six hours
     from bind) or an explicit Cancel; accepted residual. After a planned
     restart a surviving pre-boot retry chain and the boot resume chain can
-    both run until admission (bounded; both no-op after bind).
+    both run until admission (bounded; both no-op after bind). After A
+    completes with a frozen candidate, B binds but cannot freeze until the
+    owner decides A (R3; residual for L3-07). A scheduleActor failure after
+    the bind commit, without a restart, still leaves a bound run without
+    its deadline wake (R2 residual).
   next_action: >-
-    FP0: re-review the frozen diff b0f872bd6..059924c7e (the two reviewers'
-    findings), land, then the drill: (1) Cast A, wait for its capsule bound;
+    FP0: re-review 783cd578c..11dfea955 (the round 2 edits), land as deploy
+    H, then the drill: (1) Cast A, wait for its capsule bound;
     (2) Cast B; read rows: A bound, B open/unbound, log "waits behind A";
     (3) trigger a planned refresh of the test computer while A is live
     (critical_protected or deferred refresh); read rows after boot: B still
     open, log "planned boot: queued engineering request B kept and resumed";
     (4) let A finish or Cancel it; B binds within seconds (nudge), not at the
     next minute retry; (5) GET /api/runtime/observability and read
-    objectgraph_writer_gate {mode: observe, counts}. Crash half: on a
+    objectgraph_writer_gate {mode: observe, counts}; (6) with A completed
+    and its candidate frozen, have B freeze: B's run shows the refusal
+    naming A's operation and "cannot freeze until", and the guest log has
+    "selfdev: assignment B cannot freeze". Crash half: on a
     throwaway computer, kill the guest with B queued; after boot B is
     cancelled interrupted_by_restart.
 slices:
@@ -335,6 +345,11 @@ receipts:
     identity: e832951b0 (problem record), 7e24b0889 (B1), d5055214a (B2), a46ed9a9b (B3), 059924c7e (nudge)
     proof_refs: [internal/agentcore/engineering_admission_test.go]
     rollback_ref: git revert of the five commits in reverse order; no schema, no new kind
+  - id: arch10-r2
+    boundary: implement
+    identity: 783cd578c (findings), 6f1861830 (tests), 11dfea955 (fix)
+    proof_refs: [internal/agentcore/engineering_admission_review2_test.go]
+    rollback_ref: git revert 11dfea955 (no schema, no new kind)
   - id: arch04-observability
     boundary: implement
     identity: bbd19192c
