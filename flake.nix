@@ -54,16 +54,19 @@
       # One kernel line for host and guest, from the kernel-only input above.
       # Pinned to the 6.18 LTS series, not linuxPackages, whose default can
       # move to the next LTS: a series change (and its guest kernel config
-      # review) is a deliberate edit here. Security floor 6.18.45: Vghost
-      # (6.18.45), CVE-2026-53362 and Januscape (6.18.38), CVE-2026-53266
-      # (6.18.36), Copy Fail (6.18.22). The assertion keeps a lock
-      # regression from silently shipping an older kernel.
+      # review) is a deliberate edit here. Security floor 6.18.57: the
+      # guest-reachable virtio-net checksum fix "ipv4: validate checksum_start
+      # before completing checksum" (6.18.57; docs/problems/kernel-pin-behind-
+      # guest-reachable-checksum-fix-2026-10-22.md), Vghost (6.18.45),
+      # CVE-2026-53362 and Januscape (6.18.38), CVE-2026-53266 (6.18.36),
+      # Copy Fail (6.18.22). The assertion keeps a lock regression from
+      # silently shipping an older kernel.
       choirKernelPackages = (import nixpkgs-kernel { inherit system; }).linuxPackages_6_18;
       choirKernelModule = { lib, ... }: {
         boot.kernelPackages = choirKernelPackages;
         assertions = [{
-          assertion = lib.versionAtLeast choirKernelPackages.kernel.version "6.18.45";
-          message = "choir kernel ${choirKernelPackages.kernel.version} is below the 6.18.45 security floor (docs/problems/host-kernel-216-days-unpatched-2026-10-15.md)";
+          assertion = lib.versionAtLeast choirKernelPackages.kernel.version "6.18.57";
+          message = "choir kernel ${choirKernelPackages.kernel.version} is below the 6.18.57 security floor (docs/problems/kernel-pin-behind-guest-reachable-checksum-fix-2026-10-22.md)";
         }];
       };
 
