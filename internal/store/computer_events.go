@@ -111,7 +111,11 @@ func (s *Store) DryRunProjectionBatch(ctx context.Context, computerID string, ba
 		return fmt.Errorf("computer event projection: dry-run begin: %w", err)
 	}
 	defer tx.Rollback()
-	if err := projectBatch(ctx, tx, *batch, nil); err != nil {
+	pos, err := dryRunTapePosition(ctx, tx, computerID)
+	if err != nil {
+		return err
+	}
+	if err := projectBatch(ctx, tx, *batch, pos, nil); err != nil {
 		return err
 	}
 	return nil
@@ -221,12 +225,12 @@ func (s *Store) finalizeBatch(ctx context.Context, computerID, eventDigest strin
 			// families (a replayed row would otherwise read as missing) and
 			// let the online pass fill it.
 			s.derivedKeys().InvalidateAll("replay projection")
-			projectErr = projectBatchForReplay(ctx, tx, *batch)
+			projectErr = projectBatchForReplay(ctx, tx, *batch, sequence)
 			// Again before the commit, so a pass that published while the
 			// batch was written cannot leave a family readable.
 			s.derivedKeys().InvalidateAll("replay projection")
 		} else {
-			projectErr = projectBatch(ctx, tx, *batch, s.derivedKeys())
+			projectErr = projectBatch(ctx, tx, *batch, sequence, s.derivedKeys())
 		}
 		if projectErr != nil {
 			return projectErr
