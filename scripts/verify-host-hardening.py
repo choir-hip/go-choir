@@ -254,7 +254,7 @@ def check_units():
 # files read only through EnvironmentFile=, and vmctl's read-only view.
 SYSTEMD_SOCKETS = ["/run/systemd/private", "/run/dbus/system_bus_socket"]
 SYSTEMD_SOCKET_UNITS = {"go-choir-vmctl", "go-choir-dolt-liveness-probe"}  # they run systemctl
-# The env files live in one directory every unit hides as a directory
+# The env files live in one directory the host units hide as a directory
 # (nix/node-b.nix unitEnvDir): a file hidden on its own reappears in a
 # running unit when it is replaced by rename or created after the unit
 # started (docs/problems/host-containment-gaps-after-fp3-cut-2-2026-10-22.md).
@@ -310,6 +310,23 @@ def check_legacy_env_paths(root="/"):
                    f"a regular file no unit reads; the units read {UNIT_ENV_DIR}/{name}: merge it there and remove it")
         else:
             record("containment", f"{path} is a link into {UNIT_ENV_DIR} or absent", True, "absent")
+
+
+def check_unit_env_strays(root="/"):
+    """A file the activation quarantined (unit-env/<name>.stray.*: found at an
+    old path after the import, or in unit-env before it) waits for the
+    operator: merge what is wanted into unit-env/<name>, then remove it."""
+    d = os.path.join(root, UNIT_ENV_DIR.lstrip("/"))
+    try:
+        strays = sorted(n for n in os.listdir(d) if ".stray." in n)
+    except OSError as err:
+        strays = []
+        if not isinstance(err, FileNotFoundError):
+            record("containment", f"no quarantined file waits in {UNIT_ENV_DIR}", False, f"unreadable: {err}")
+            return
+    record("containment", f"no quarantined file waits in {UNIT_ENV_DIR}", not strays,
+           ("waiting: " + ", ".join(strays) + "; merge what is wanted into unit-env/<name>, then remove each")
+           if strays else "none")
 
 
 # The issuer credential (internal/hostauth/issuer.go) reaches only vmctl,
@@ -819,6 +836,7 @@ def main():
     check_units()
     check_containment()
     check_legacy_env_paths()
+    check_unit_env_strays()
     check_issuer_credential()
     check_dolt(args.expect_dolt, args.with_credential)
     check_dolt_probe()
