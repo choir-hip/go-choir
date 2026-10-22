@@ -298,3 +298,35 @@ DeepSeek and Gemini flash, both accept with edits.
 - R3-7: fixed.
 - Open for the owner: whether ownerless dirs holding only a plain
   `data.img` should also be kept.
+
+## Review round 4 (bunch97, at 2ffb6c3ad): findings, recorded before the fixes
+
+DeepSeek accepts with edits; Gemini accepts.
+
+- R4-1 (medium, proof integrity, confirmed). Proof step 4 can pass
+  without checking anything. `scripts/proofs/fp0-vm-retention.sh:118-127`
+  runs under `set -uo` (no `-e`) and ignores the exit status of the plan
+  read (`vmctl_get` fails on a curl error). An empty or non-JSON plan
+  leaves the candidate list empty, so the only check passes. A wrong or
+  unreadable `--state-dir` does the same: the remote script does
+  `cd ... || exit 0` and the recovery-dir list comes back empty. An empty
+  candidate list or an empty recovery-dir list also prints PASS, though
+  nothing was compared. For the deployed proof of a live rule, a vacuous
+  PASS cannot be told from a real one.
+- R4-2 (low, DeepSeek F2). The retention lifecycle claim is released by a
+  defer after the ownership row is deleted and the lock dropped, so a
+  resolve in that window can see the stale claim and get a retryable
+  "already in progress".
+- R4-3 (low, DeepSeek F3). The station says the selftest reports 132
+  passed; it reports 131 passed and 1 failed, the failure being the
+  pre-existing `fp1 step 1 computes a busy share`.
+- R4-4 (low, DeepSeek F4). The station gives no disposition when step 4
+  fails before the deploy (the old binary lacks the ephemeral keep).
+- R4-5 (info, DeepSeek F5). The owned destroy path does not re-read
+  `cfg.Mode == active`, so the comment "every check is re-read" is broad.
+- R4-6 (info, DeepSeek F6). `kept_state_dirs` order is not stable, so
+  before/after `kept` lines do not diff line for line.
+- R4-7 (low, Gemini). A dir that ever cold-recovered is pinned by its
+  journal forever (R3-5 restated); an ownerless dir with only a plain
+  `data.img` still goes after 6 h (the open owner question restated);
+  `vmDirRecoveryKeepReasons` reads the dir under the registry lock.
