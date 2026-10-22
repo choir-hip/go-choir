@@ -24,6 +24,20 @@ func Project(doc StructuredTextureDoc, entities []SourceEntity, unusedSourceEnti
 	if err := Validate(doc, entities, unusedSourceEntityIDs...); err != nil {
 		return Projection{}, err
 	}
+	return project(doc, entities), nil
+}
+
+// ProjectOwnerText is Project for a document synthesized from the owner's
+// own input text: it validates with ValidateOwnerText, so the owner's literal
+// "[1]" and "Source:" words are projected as written.
+func ProjectOwnerText(doc StructuredTextureDoc) (Projection, error) {
+	if err := ValidateOwnerText(doc); err != nil {
+		return Projection{}, err
+	}
+	return project(doc, nil), nil
+}
+
+func project(doc StructuredTextureDoc, entities []SourceEntity) Projection {
 	entityByID := make(map[string]SourceEntity, len(entities))
 	for _, entity := range entities {
 		entityByID[entity.SourceEntityID] = entity
@@ -41,7 +55,7 @@ func Project(doc StructuredTextureDoc, entities []SourceEntity, unusedSourceEnti
 	return Projection{
 		Text:       strings.TrimRight(projector.builder.String(), "\n"),
 		SourceRefs: projector.refs,
-	}, nil
+	}
 }
 
 type projector struct {

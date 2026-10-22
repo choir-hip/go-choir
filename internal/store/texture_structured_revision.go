@@ -10,6 +10,22 @@ import (
 )
 
 func prepareTextureRevisionV2(rev types.Revision) (types.Revision, string, string, error) {
+	return prepareTextureRevision(rev, false)
+}
+
+// prepareOwnerInputTextureRevisionV2 prepares the first revision of a new
+// lifecycle. When the owner authored it as plain text (no body_doc), that text
+// is the owner's literal input and is not checked against the Texture
+// authoring rules on text: "[1]", "sys.argv[1]", a footnote and a "Source:"
+// line are the owner's words, not citations an agent forgot to write as
+// source_ref nodes. A revision with a body_doc, and any revision an agent
+// authors, is prepared exactly as prepareTextureRevisionV2 does. Receipt:
+// docs/problems/prompt-bar-refuses-bracketed-index-as-server-error-2026-10-22.md.
+func prepareOwnerInputTextureRevisionV2(rev types.Revision) (types.Revision, string, string, error) {
+	return prepareTextureRevision(rev, true)
+}
+
+func prepareTextureRevision(rev types.Revision, ownerInput bool) (types.Revision, string, string, error) {
 	hasBodyDoc := len(strings.TrimSpace(string(rev.BodyDoc))) > 0
 	sourceEntitiesRaw := strings.TrimSpace(string(rev.SourceEntities))
 
@@ -17,6 +33,9 @@ func prepareTextureRevisionV2(rev types.Revision) (types.Revision, string, strin
 		doc      texturedoc.StructuredTextureDoc
 		entities []texturedoc.SourceEntity
 		err      error
+		// literalOwnerText is set for a plain-text owner revision of a new
+		// lifecycle: the store builds its document from the owner's text.
+		literalOwnerText bool
 	)
 	if hasBodyDoc {
 		doc, entities, err = decodeStructuredTextureRevision(rev.BodyDoc, rev.SourceEntities, rev.Metadata)
@@ -32,13 +51,19 @@ func prepareTextureRevisionV2(rev types.Revision) (types.Revision, string, strin
 		}
 		doc = userAuthoredTextStructuredTextureDoc(rev.DocID, rev.RevisionID, rev.Content)
 		entities = []texturedoc.SourceEntity{}
+		literalOwnerText = ownerInput
 	}
 	if err := rejectLegacySourceSidecars(rev); err != nil {
 		return types.Revision{}, "", "", err
 	}
 
 	unusedIDs := textureRevisionUnusedSourceEntityIDs(rev.Metadata)
-	projection, err := texturedoc.Project(doc, entities, unusedIDs...)
+	var projection texturedoc.Projection
+	if literalOwnerText {
+		projection, err = texturedoc.ProjectOwnerText(doc)
+	} else {
+		projection, err = texturedoc.Project(doc, entities, unusedIDs...)
+	}
 	if err != nil {
 		return types.Revision{}, "", "", fmt.Errorf("%w: %v", ErrInvalidTextureRevision, err)
 	}
