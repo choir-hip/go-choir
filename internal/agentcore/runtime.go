@@ -2654,7 +2654,7 @@ func (rt *Runtime) passivateInterruptedActivations(ctx context.Context) {
 			passivated := *rec
 			passivated.State = types.RunPassivated
 			rt.closeManagementTaskOfEndedRun(ctx, &passivated)
-			log.Printf("runtime: closed management task run %s (was %s) at a planned restart", rec.RunID, was)
+			log.Printf("runtime: closed management task run %s (was %s) at a planned restart dur=%s", rec.RunID, was, time.Since(now).Round(time.Millisecond))
 			return true
 		}
 		rec.State = types.RunPassivated
@@ -2663,13 +2663,10 @@ func (rt *Runtime) passivateInterruptedActivations(ctx context.Context) {
 		rec.FinishedAt = nil
 		rec.Metadata = cloneMetadata(rec.Metadata)
 		rec.Metadata["passivated_reason"] = "runtime_restarted"
-		if item, err := rt.ensureSpawnedCoagentWorkItem(ctx, rec, nil, "passivated_spawned_work_item_id"); err != nil {
-			log.Printf("runtime: boot passivation: create spawned work item for run %s: %v", rec.RunID, err)
-		} else if item.WorkItemID == "" && spawnedCoagentWorkItemProfile(agentProfileForRun(rec)) {
-			skippedProfile := agentProfileForRun(rec)
-			log.Printf("runtime: boot passivation: spawned work item skipped for run=%s profile=%s trajectory=%s agent=%s requested_by=%s",
-				rec.RunID, skippedProfile, trajectoryIDForRun(rec), rec.AgentID, rec.RequestedByRunID)
-		}
+		// No spawned work item here: the spawn created it (ensure at
+		// spawnCoagent), and the resume reads only the state and reason.
+		// Ensuring it again looked it up by a JSON scan of every work item,
+		// 75 s on the paper (docs/problems/paper-post-refresh-health-windows-2026-10-22.md A3).
 		if err := rt.store.UpdateRun(ctx, *rec); err != nil {
 			log.Printf("runtime: boot passivation: update run %s: %v", rec.RunID, err)
 			return false
@@ -2681,7 +2678,8 @@ func (rt *Runtime) passivateInterruptedActivations(ctx context.Context) {
 		}
 		rt.emitEvent(ctx, rec, types.EventRunPassivated, events.CauseSupervisorRecovery,
 			passivatedOnRestartPayload(rt.bootRestart))
-		log.Printf("runtime: passivated run %s (was %s) after restart", rec.RunID, was)
+		// Each run's duration and profile, so a slow step names itself.
+		log.Printf("runtime: passivated run %s (was %s) after restart profile=%s dur=%s", rec.RunID, was, agentProfileForRun(rec), time.Since(now).Round(time.Millisecond))
 		return true
 	})
 }
