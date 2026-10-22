@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -282,5 +283,39 @@ func TestSummarizeMediaCarriesNoImageData(t *testing.T) {
 	}
 	if !strings.Contains(line, "images=1") || !strings.Contains(line, "image_bytes=") {
 		t.Fatalf("summary = %s", line)
+	}
+}
+
+// Bunch 109 (DeepSeek F1): decoded pixels are outside the gateway's body
+// budget, so at most MaxConcurrentImageDecodes images are decoded at once
+// process-wide. Fails on 2e9ebc5eb: there is no bound (and no hook).
+func TestNormalizeImageDecodesAtMostABoundedNumberAtOnce(t *testing.T) {
+	raw := testPNG(t, MaxImageLongEdge*2, 64, color.RGBA{R: 200, A: 255})
+	var mu sync.Mutex
+	var now, peak int
+	imageDecodeHook = func() {
+		mu.Lock()
+		now++
+		peak = max(peak, now)
+		mu.Unlock()
+		time.Sleep(20 * time.Millisecond)
+		mu.Lock()
+		now--
+		mu.Unlock()
+	}
+	defer func() { imageDecodeHook = nil }()
+	var wg sync.WaitGroup
+	for i := 0; i < 4*MaxConcurrentImageDecodes; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, _, err := NormalizeImage(raw); err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+	wg.Wait()
+	if peak == 0 || peak > MaxConcurrentImageDecodes {
+		t.Fatalf("%d images decoded at once, want 1 to %d", peak, MaxConcurrentImageDecodes)
 	}
 }
