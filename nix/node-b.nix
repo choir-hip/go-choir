@@ -495,10 +495,28 @@ let
     # "yes") so a tool that probes $HOME (git) sees ENOENT, not EACCES.
     ProtectHome = "tmpfs";
   };
+  # Env files that units read only through EnvironmentFile=, kept in one
+  # root-only directory that every unit hides as a directory. Hiding them one
+  # by one failed (docs/problems/host-containment-gaps-after-fp3-cut-2-2026-10-22.md):
+  # InaccessiblePaths mounts over a file when the unit's namespace is made,
+  # so a file replaced by rename later (the deploy's rewrite of deploy.env),
+  # or created after the unit started ("-" skips an absent path), is
+  # visible to that unit until its next restart. A rename or a create
+  # inside a hidden directory stays hidden. The activation snippet
+  # go-choir-unit-env moved the files here from /var/lib/go-choir and leaves
+  # a link at each old path. Operators write and remove unit-env/<name>: a
+  # `>` through an old path's link lands here too, but `rm` of an old path
+  # removes only the link (the file, and a switch it holds, stays).
+  unitEnvDir = "/var/lib/go-choir/unit-env";
+  unitEnvNames = [ "deploy.env" "corpus-dsn.env" "corpusd-retrieval.env" "sandbox-gateway-token.env" ];
+  unitEnvFile = name: "-${unitEnvDir}/${name}";
   # Host secrets a unit does not read stay out of its mount view
   # (InaccessiblePaths; "-" tolerates an absent file). Each unit removes
   # what it needs. EnvironmentFile= and LoadCredential= are read by systemd
   # before the namespace exists, so files only used that way stay hidden.
+  # A file entry is hidden only while the inode the unit saw at its start
+  # stays in place: the gateway's renames of codex-auth.json and
+  # gateway-identities.json are open (the same problem record, item 3).
   hostSecretPaths = {
     jwtKey = "-${authSigningDir}/ed25519-key";
     providerEnv = "-/var/lib/go-choir/gateway-provider.env";
@@ -511,12 +529,10 @@ let
     escrowKey = "-${platformArtifactsDir}/key-escrow-key";
     mail = "-${mailDir}";
     # Env files read only through EnvironmentFile= (systemd reads them before
-    # the namespace exists): hidden everywhere, so a unit that can write
-    # /var/lib/go-choir cannot rewrite another unit's environment for its
-    # next start.
-    deployEnv = "-/var/lib/go-choir/deploy.env";
-    corpusDsnEnv = "-/var/lib/go-choir/corpus-dsn.env";
-    sandboxGatewayEnv = "-/var/lib/go-choir/sandbox-gateway-token.env";
+    # the namespace exists), hidden everywhere as one directory (unitEnvDir),
+    # so a unit that can write /var/lib/go-choir can neither read them nor
+    # write another unit's environment for its next start.
+    unitEnv = "-${unitEnvDir}";
     # PID 1's private socket and the system bus: a root unit that can reach
     # either can ask systemd to run a command outside its own sandbox. Only
     # units that run systemctl keep them (vmctl's store compaction, the Dolt
@@ -807,6 +823,23 @@ in
     };
   };
 
+  # The host units that come from NixOS modules hide the same set as the
+  # go-choir units (docs/problems/host-containment-gaps-after-fp3-cut-2-2026-10-22.md,
+  # problems 2 and 5). None runs as root and none uses D-Bus or PID 1's
+  # socket: caddy proxies to loopback and reloads through its own admin
+  # API, qdrant and unbound serve loopback (unbound also the guests, through
+  # the tap DNAT), searx and searx-init read their settings from /run/searx;
+  # name lookups go through nscd. searx and searx-init keep their own
+  # searxng.env (FP0's ruling; hiding it gains nothing, the process holds
+  # SEARXNG_SECRET in its environment and settings). The first deploy of
+  # this restarts each of them once (a unit-file change); caddy's restart
+  # drops open edge connections, which clients reopen.
+  systemd.services.caddy.serviceConfig.InaccessiblePaths = hiddenSecretsExcept [ ];
+  systemd.services.qdrant.serviceConfig.InaccessiblePaths = hiddenSecretsExcept [ ];
+  systemd.services.unbound.serviceConfig.InaccessiblePaths = hiddenSecretsExcept [ ];
+  systemd.services.searx.serviceConfig.InaccessiblePaths = hiddenSecretsExcept [ "searxngEnv" ];
+  systemd.services.searx-init.serviceConfig.InaccessiblePaths = hiddenSecretsExcept [ "searxngEnv" ];
+
   # ── Systemd services ──────────────────────────────────────────────────
   # Host services: auth, proxy, vmctl, gateway, autoputer, maild and
   # corpusd.
@@ -900,7 +933,7 @@ in
       ExecStart = "${serviceExec "proxy" goChoirPackages.proxy}";
       Restart = "on-failure";
       RestartSec = 3;
-      EnvironmentFile = "-/var/lib/go-choir/deploy.env";
+      EnvironmentFile = unitEnvFile "deploy.env";
       LoadCredential = internalTokenCredential ++ [ "choir-owner-act-key:${ownerActKeyFile}" ];
       # Proxy reads only the public key (PROXY_AUTH_PUBLIC_KEY_PATH) and the
       # auth DB (SQLite needs write access for its -wal/-shm). It never
@@ -1148,13 +1181,15 @@ in
         # (docs/runbooks/platform-dolt-authority-split-2026-09-18.md). Absent
         # until the corpus store is populated; corpusd then shares the
         # Store A pool for corpus tables.
-        "-/var/lib/go-choir/corpus-dsn.env"
+        (unitEnvFile "corpus-dsn.env")
         # Retrieval rollback switch, flippable without a deploy
         # (docs/problems/corpus-retrieval-windowed-unindexed-untimed-2026-10-14.md):
-        # write CORPUSD_CAPTURE_SEARCH=off here and restart corpusd; the
-        # search and URL routes refuse and every guest falls back to the
-        # window of its newest captures. Absent: the routes answer.
-        "-/var/lib/go-choir/corpusd-retrieval.env"
+        # write CORPUSD_CAPTURE_SEARCH=off to
+        # /var/lib/go-choir/unit-env/corpusd-retrieval.env and restart
+        # corpusd; the search and URL routes refuse and every guest falls
+        # back to the window of its newest captures. Absent: the routes
+        # answer.
+        (unitEnvFile "corpusd-retrieval.env")
       ];
       Environment = [
         "SERVER_HOST=0.0.0.0"
@@ -1172,7 +1207,7 @@ in
         # labelled op-ed, listed in the Opinion section and found by research
         # (docs/problems/oped-not-connected-2026-10-20.md). Kill switch, no
         # deploy: write CORPUSD_OPINION_LISTING=off to
-        # /var/lib/go-choir/corpusd-retrieval.env (an EnvironmentFile
+        # /var/lib/go-choir/unit-env/corpusd-retrieval.env (an EnvironmentFile
         # overrides Environment) and restart corpusd; every opinion piece
         # leaves the front, research search and the publish route at once,
         # direct links keep working. New opinion pieces per user per 24 hours
@@ -1264,7 +1299,7 @@ in
       StateDirectoryMode = "0700";
       ReadWritePaths = [ platformArtifactsDir "/var/lib/go-choir/checkpointd" ];
       InaccessiblePaths = hiddenSecretsExcept [ "platformSigningKey" "escrowKey" ];
-      EnvironmentFile = [ "-/var/lib/go-choir/corpus-dsn.env" ];
+      EnvironmentFile = [ (unitEnvFile "corpus-dsn.env") ];
       LoadCredential = doltClientCredential;
       Environment = doltClientEnv ++ [
         "HOME=/var/lib/go-choir/checkpointd"
@@ -2305,6 +2340,61 @@ in
     done
   '';
 
+  # The env directory (unitEnvDir). Activation runs at boot before units
+  # start and in a switch before units restart, so every unit's namespace
+  # is made with the directory present and hidden. Its first run moves the
+  # env files in from /var/lib/go-choir (a rename on one filesystem: the
+  # inode and contents are kept); later runs never adopt a file found at an
+  # old path, so a unit that can write /var/lib/go-choir (gateway, vmctl)
+  # cannot plant one for a later activation to take. Each old path keeps a
+  # link to unit-env/<name>: a rollback past this commit reads through it
+  # (systemd follows the link; inside a unit's namespace it leads into the
+  # hidden directory), and an old runbook's `>` writes through it. A
+  # regular file at an old path is left alone (no unit reads it) and fails
+  # verify-host-hardening.py. A link or file planted at the directory's own
+  # path is moved aside, never followed. Remove this block and the links
+  # once no rollback can reach a commit from before the move.
+  system.activationScripts.go-choir-unit-env = ''
+    (
+      set -eu
+      state=/var/lib/go-choir
+      d="$state/unit-env"
+      if [ -L "$d" ] || { [ -e "$d" ] && [ ! -d "$d" ]; }; then
+        mv "$d" "$d.invalid.$(date +%s)"
+        echo "go-choir: $d was not a directory; moved it aside" >&2
+      fi
+      mkdir -p "$d"
+      if [ "$(id -u)" = 0 ]; then chown root:root "$d"; fi
+      chmod 0700 "$d"
+      if [ ! -e "$d/.imported" ]; then
+        for name in ${lib.concatStringsSep " " unitEnvNames}; do
+          if [ -f "$state/$name" ] && [ ! -L "$state/$name" ] && [ ! -e "$d/$name" ] && [ ! -L "$d/$name" ]; then
+            mv "$state/$name" "$d/$name"
+            echo "go-choir: moved $state/$name into $d"
+          fi
+        done
+        : > "$d/.imported"
+      fi
+      for name in ${lib.concatStringsSep " " unitEnvNames}; do
+        if [ -f "$d/$name" ] && [ ! -L "$d/$name" ]; then
+          if [ "$(id -u)" = 0 ]; then chown root:root "$d/$name"; fi
+          chmod 0600 "$d/$name"
+        fi
+        link="$state/$name"
+        if [ -L "$link" ]; then
+          if [ "$(readlink "$link")" != "unit-env/$name" ]; then
+            rm -f "$link"
+            ln -s "unit-env/$name" "$link"
+          fi
+        elif [ -e "$link" ]; then
+          echo "go-choir: $link is a file no unit reads (units read $d/$name)" >&2
+        else
+          ln -s "unit-env/$name" "$link"
+        fi
+      done
+    )
+  '';
+
   # Go module proxy for engineering capsules
   # (docs/reports/capsule-go-module-proxy-design-2026-10-14.md). Capsules
   # reach it only through their egress route goproxy.choir.internal, which
@@ -2348,6 +2438,8 @@ in
       MemoryMax = "1G";
       # Under host memory pressure the kernel kills this cache before a guest.
       OOMScoreAdjust = 500;
+      # Guest-reachable through the tap; reads nothing of the host's.
+      InaccessiblePaths = hiddenSecretsExcept [ ];
     };
   };
 
@@ -2394,6 +2486,8 @@ in
       MemoryMax = "1G";
       # Under host memory pressure the kernel kills this cache before a guest.
       OOMScoreAdjust = 500;
+      # Guest-reachable through the tap; reads nothing of the host's.
+      InaccessiblePaths = hiddenSecretsExcept [ ];
     };
   };
 
@@ -2589,9 +2683,11 @@ in
     "z /var/lib/go-choir/auth/auth.db 0600 root root -"
     "z /var/lib/go-choir/auth/auth.db-wal 0600 root root -"
     "z /var/lib/go-choir/auth/auth.db-shm 0600 root root -"
-    "z /var/lib/go-choir/corpus-dsn.env 0600 root root -"
-    "z /var/lib/go-choir/deploy.env 0600 root root -"
-    "z /var/lib/go-choir/sandbox-gateway-token.env 0600 root root -"
+    # The env directory (unitEnvDir), before any unit starts at boot; the
+    # activation snippet go-choir-unit-env also makes it before a switch
+    # restarts units.
+    "d ${unitEnvDir} 0700 root root -"
+  ] ++ map (name: "z ${unitEnvDir}/${name} 0600 root root -") unitEnvNames ++ [
     "d /var/lib/go-choir/vm-state 0750 root root -"
     "d ${platformDoltDir} 0750 root root -"
     "d ${platformDoltDBDir} 0750 root root -"
