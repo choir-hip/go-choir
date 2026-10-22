@@ -32,7 +32,7 @@
     options = [ "subvol=@swap" "noatime" ];
   };
 
-  swapDevices = [{
-    device = "/swap/swapfile";
-  }];
+  # No host swap (owner, 2026-10-22, FP9 Q4; docs/problems/node-b-host-swap-
+  # 2026-10-22.md). The /swap mount and the 16 GiB file stay for rollback:
+  # re-add swapDevices = [{ device = "/swap/swapfile"; }];
 }
