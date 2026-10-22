@@ -121,10 +121,11 @@ step_5() {
 # and checkpoint publication (self-development apply, platform-follow's
 # post-apply checkpoint, owner recovery checkpoints) is refused. Nothing is
 # corrupted. Publication comes back by any of: a forward deploy to deploy 1
-# or later (the empty table is again not observed); the rollback recipe (the
-# revert plus the boot-time drop of an empty choir_events,
-# TestEventTableRollbackRecipe); the restore of a pre-deploy-1 checkpoint,
-# whose workspace swap removes the table.
+# or later (the empty table is again not observed); the rollback build (the
+# revert plus scripts/rollback/fc-deploy1-rollback.sh apply, whose boot step
+# drops an empty choir_events; TestEventTableRollbackRecipe and
+# TestEventTableRollbackArtifact* keep it tested); the restore of a
+# pre-deploy-1 checkpoint, whose workspace swap removes the table.
 step_6() {
 	local report
 	ft_target 1
@@ -141,7 +142,7 @@ step_6() {
 		manual "attempt one checkpoint publication on the TEST computer (an owner recovery checkpoint): it must be refused as replay-ineligible; nothing else changes"
 		;;
 	recovered)
-		manual "recover publication on the TEST computer by ONE of: a forward deploy to deploy 1 or later; the rollback recipe build (revert plus the boot-time drop of an empty choir_events); the restore of a pre-deploy-1 checkpoint. Record which"
+		manual "recover publication on the TEST computer by ONE of: a forward deploy to deploy 1 or later; the rollback build (git revert of deploy 1's commits, then scripts/rollback/fc-deploy1-rollback.sh apply, which installs the tested boot step from internal/store/testdata/fc-deploy1-rollback/ that drops an empty choir_events); the restore of a pre-deploy-1 checkpoint. Record which. For the rollback build, the boot log must show phase=runtime-schema/drop-empty-choir-events status=complete"
 		will "read the TEST computer's replay report after the recovery"
 		[ "$PROOF_DRY" = 1 ] && return 0
 		report=$(guest_get "/api/computers/$T_COMPUTER/self-development/replay-completeness")
