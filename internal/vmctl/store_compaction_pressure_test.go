@@ -42,6 +42,7 @@ func pressureConfig(mode string) StoreCompactPressureConfig {
 		HostFreeBelow: 64 << 30,
 		FillFraction:  0.6,
 		MinGap:        6 * time.Hour,
+		MinImageBytes: 32 << 30,
 	}
 }
 
@@ -59,7 +60,7 @@ func TestStoreCompactPressureConfigFromEnv(t *testing.T) {
 	}
 	cfg := StoreCompactPressureConfigFromEnv(env(nil))
 	if cfg.Mode != StoreCompactPressureOff || cfg.Interval != 5*time.Minute || cfg.HostFreeBelow != 64<<30 ||
-		cfg.FillFraction != 0.6 || cfg.MinGap != 6*time.Hour {
+		cfg.FillFraction != 0.6 || cfg.MinGap != 6*time.Hour || cfg.MinImageBytes != 32<<30 {
 		t.Fatalf("defaults = %+v", cfg)
 	}
 	cfg = StoreCompactPressureConfigFromEnv(env(map[string]string{
@@ -79,22 +80,24 @@ func TestStoreCompactPressureConfigFromEnv(t *testing.T) {
 	cfg = StoreCompactPressureConfigFromEnv(env(map[string]string{
 		"VMCTL_STORE_COMPACT_PRESSURE":               "yes",
 		"VMCTL_STORE_COMPACT_PRESSURE_MIN_GAP":       "5m",
+		"VMCTL_STORE_COMPACT_PRESSURE_INTERVAL":      "1ns",
 		"VMCTL_STORE_COMPACT_PRESSURE_FILL_FRACTION": "1.5",
 		"VMCTL_STORE_COMPACT_PRESSURE_HOST_FREE_GIB": "lots",
 	}))
-	if cfg.Mode != StoreCompactPressureOff || cfg.MinGap != time.Hour || cfg.FillFraction != 0.6 || cfg.HostFreeBelow != 64<<30 {
+	if cfg.Mode != StoreCompactPressureOff || cfg.MinGap != time.Hour || cfg.FillFraction != 0.6 || cfg.HostFreeBelow != 64<<30 ||
+		cfg.Interval != 30*time.Second {
 		t.Fatalf("guarded = %+v", cfg)
 	}
 }
 
 func TestStoreCompactMinHostFreeFromEnv(t *testing.T) {
-	if got := storeCompactMinHostFreeFromEnv(func(string) string { return "" }); got != 32<<30 {
-		t.Fatalf("default floor = %d, want 32 GiB", got)
+	if got := storeCompactMinHostFreeFromEnv(func(string) string { return "" }); got != 24<<30 {
+		t.Fatalf("default floor = %d, want 24 GiB", got)
 	}
 	if got := storeCompactMinHostFreeFromEnv(func(string) string { return "0" }); got != 0 {
 		t.Fatalf("floor 0 = %d, want off", got)
 	}
-	if got := storeCompactMinHostFreeFromEnv(func(string) string { return "bad" }); got != 32<<30 {
+	if got := storeCompactMinHostFreeFromEnv(func(string) string { return "bad" }); got != 24<<30 {
 		t.Fatalf("invalid floor = %d, want the default", got)
 	}
 }
@@ -141,7 +144,7 @@ func TestStoreCompactPressureNotDueDoesNothing(t *testing.T) {
 }
 
 func TestStoreCompactPressureHostFreeTriggers(t *testing.T) {
-	h, _, _, _ := pressureFixture(t, "paper-free", 20, 50)
+	h, _, _, _ := pressureFixture(t, "paper-free", 40, 50)
 	if err := h.SetStoreCompactPressure(pressureConfig(StoreCompactPressureObserve), ""); err != nil {
 		t.Fatal(err)
 	}
@@ -256,20 +259,25 @@ func TestStoreCompactPressureUnreadableAttemptsRefuses(t *testing.T) {
 	}
 }
 
-// An attempts record that cannot be written fails the maintenance hook
-// before the compaction: the computer boots its untouched image.
-func TestStoreCompactAttemptWriteFailureSkipsCompaction(t *testing.T) {
-	h, mgr, _, compactor := pressureFixture(t, "paper-ro", 80, 72)
+// An attempts record that cannot be written refuses before the guest is
+// asked: no planned restart is spent on a compaction that cannot record
+// itself (round 2, finding 2).
+func TestStoreCompactUnwritableAttemptsRefusesBeforeAskingGuest(t *testing.T) {
+	h, mgr, marker, compactor := pressureFixture(t, "paper-ro", 80, 72)
 	attempts := filepath.Join(t.TempDir(), "missing-dir", "store-compact-attempts.json")
 	if err := h.SetStoreCompactPressure(pressureConfig(StoreCompactPressureOn), attempts); err != nil {
 		t.Fatal(err)
 	}
 	d := h.storeCompactPressureTick(context.Background(), time.Now())
-	if len(d) != 1 || d[0].Result == nil || d[0].Result.Compaction == nil || !strings.Contains(d[0].Result.Compaction.Error, "attempt") {
-		t.Fatalf("decisions = %+v", d)
+	if len(d) != 1 || d[0].Result == nil || d[0].Result.Outcome != deployRefreshSkipped || !strings.Contains(d[0].Result.Reason, "attempts record not writable") {
+		t.Fatalf("pressure decisions = %+v", d)
 	}
-	if len(compactor.calls) != 0 || len(mgr.refreshes) != 1 {
-		t.Fatalf("compactions=%v refreshes=%v; want no compaction and the computer booted", compactor.calls, mgr.refreshes)
+	code, resp := postCompactStore(t, h, `{"user_id":"paper-ro","desktop_id":"primary"}`)
+	if code != http.StatusInsufficientStorage || resp.Outcome != deployRefreshSkipped || !strings.Contains(resp.Reason, "attempts record not writable") {
+		t.Fatalf("compact-store: %d %+v", code, resp)
+	}
+	if len(marker.marks) != 0 || len(mgr.refreshes) != 0 || len(compactor.calls) != 0 {
+		t.Fatalf("marks=%v refreshes=%v compactions=%v; want the guest never asked", marker.marks, mgr.refreshes, compactor.calls)
 	}
 }
 
