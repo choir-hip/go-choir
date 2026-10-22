@@ -118,6 +118,10 @@ Notes:
   - candidate selfdev-0593136f3ac2d894e21abd97132276d1 (A's) is
     `awaiting_approval`. It was not approved, and it holds the computer's
     one operation slot until the owner decides.
+    - Settled since (added at round 3b): FP0 rejected it on 2026-10-22 at
+      11:32 UTC (idempotency key fp0-reject-0593136f-20261022, HTTP 200,
+      event 12880a34…, receipt 01a16361…; the computer's head went from
+      6726 to 6728). It no longer holds the slot.
   - the computer is up on K: `running_runs` 0 at 10:23, and
     `selfdev_active_operations` absent.
 - Evidence files are in the monitor's scratchpad (`mon/fqproof/`):
@@ -134,6 +138,14 @@ The run above is kept as recorded. Its request B told the desk to
 repair, whose primary branch is a failed report. This plan replaces only
 request B; request A, the computer, the rules and steps 0 to 2 and 5 are
 as above, on the build that carries round 3.
+
+Precondition: no self-development operation is open on 71afbf14 before A
+is cast. FP0 checks it with `choir self-dev show/head` just before the
+cast. The first run's candidate selfdev-0593136f was rejected at 11:32
+UTC, so the slot should be free; if any operation is open, settle it or
+use a fresh test computer before casting. Otherwise A's own freeze is
+refused, A never produces the candidate B's refusal is meant to name, and
+the step 6 expectations below cannot be met.
 
 Request B for the re-run (send verbatim):
 

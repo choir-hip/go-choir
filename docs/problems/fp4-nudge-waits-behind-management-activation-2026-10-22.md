@@ -210,26 +210,40 @@ Further residuals (review bunch 51, DeepSeek 2, Devin F4):
 - **The emitter's commit boundary.** A wake scheduled inside an actor
   activation is buffered and becomes durable only when that activation
   commits (internal/actorruntime/adapter.go, the `EmissionsFromCtx` branch
-  of the dispatch path, about line 423). A nudge minted from a
-  management-initiated Cancel is emitted inside management's activation,
-  so it waits for that activation to commit whatever mailbox it targets;
-  the mailbox move does not remove that wait. The staging case is fixed
+  of the dispatch path, about line 423). Hypothesis, reasoned from code
+  (internal/agentcore/rlm_reduce.go, about line 1070, passes the
+  activation's context down to `wakeNextQueuedEngineeringRequest`) and not
+  drilled: a nudge minted from a management-initiated Cancel is emitted
+  inside management's activation, so it waits for that activation to
+  commit whatever mailbox it targets, and the mailbox move does not remove
+  that wait. The staging case is fixed
   because A's terminal report, and so the nudge, is emitted inside A's own
   engineering activation (`commitAssignedEngineeringReport`,
   internal/agentcore/engineering_assignment_fate.go), not management's.
   The drill's "let A finish or Cancel it" step therefore covers only the
   finish branch; the Cancel branch is the uncovered path, and the re-run
-  plan lets A finish.
+  plan lets A finish. A buffered emission also dies if the emitting
+  activation's handler errors or defers, and the redelivered report is a
+  Replay, which does not re-mint the nudge (`!result.Replay`,
+  engineering_assignment_fate.go, about line 1426). B then falls back to
+  its own retry chain, up to about 60 s, not a few seconds; B is not
+  stranded (review bunch 54, Sonnet F4).
 - **Cancel against admission is a new concurrent pair.** A management
   cell-verb Cancel (internal/agentcore/tools_engineering_assignment.go →
   `cancelAssignedEngineering`) does not take `engineeringAssignmentOpenMu`.
   While admission ran on management's mailbox the two could not overlap;
   now they can. Both write the assignment under its `LifecycleVersion`
-  CAS, so the loser gets a command conflict: a cancel that loses re-reads,
-  and a bind that loses goes through the saga's capsule cleanup, which
+  CAS, so the loser gets a command conflict. A cancel that loses returns
+  the conflict to management's reducer (rlm_reduce.go, about lines
+  1070-1072), so management's cell sees an error, and a re-read happens
+  only if management re-issues the Cancel; a bind that loses goes through the saga's capsule cleanup, which
   destroys the just-spawned capsule and records the revoke. It fails
   closed: the end state is a lawful fate (cancelled unbound, or bound then
   cancelled), and no capsule is stranded.
+- **Known test limit** (review bunch 54, Sonnet F3):
+  `TestKernelDispatcherHasTheAdmissionLane` checks
+  `kernelDispatcherOptions`, not that `New` uses it, so inlining lane-less
+  options back into `New` would leave it green.
 
 Rollback: revert the fix commit. A wake already on the admission mailbox
 is then delivered to a handler that drops a mailbox other than the casting
