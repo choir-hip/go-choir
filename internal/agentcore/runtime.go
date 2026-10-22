@@ -179,6 +179,10 @@ type Runtime struct {
 	// only in kernel mode, where NotBefore is interpreted by the dispatcher.
 	scheduleActor        func(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string, notBefore time.Time) error
 	scheduleActorRedrive func(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string, notBefore time.Time) error
+	// admissionNow is the clock engineering admission reads to decide a
+	// queued request's expiry. Nil is the wall clock; tests set it so expiry
+	// does not depend on how fast the test runs.
+	admissionNow func() time.Time
 
 	desktopState    *desktopstate.Handler
 	content         *contentowner.Service

@@ -98,6 +98,14 @@ func engineeringRequestExpired(a types.EngineeringAssignment, now time.Time) boo
 	return !a.CreatedAt.IsZero() && now.After(a.CreatedAt.Add(assignedEngineeringDeadline()))
 }
 
+// engineeringAdmissionNow is the clock admission decides expiry by.
+func (rt *Runtime) engineeringAdmissionNow() time.Time {
+	if rt.admissionNow != nil {
+		return rt.admissionNow().UTC()
+	}
+	return time.Now().UTC()
+}
+
 // engineeringRequestQueuedAhead reports whether other is an open, unbound,
 // unexpired request that arrived before this one.
 func engineeringRequestQueuedAhead(other, this types.EngineeringAssignment, now time.Time) bool {
@@ -124,7 +132,7 @@ func (rt *Runtime) admitEngineeringAssignment(ctx context.Context, assignment ty
 	if err != nil {
 		return fmt.Errorf("engineering admission: list assignments: %w", err)
 	}
-	now := time.Now().UTC()
+	now := rt.engineeringAdmissionNow()
 	if assignment.Disposition == types.EngineeringAssignmentOpen && engineeringRequestExpired(assignment, now) {
 		// Defense in depth: the saga expires an overdue request before it
 		// asks for admission.
@@ -238,7 +246,7 @@ func (rt *Runtime) expireOverdueEngineeringRequests(ctx context.Context, assignm
 	if err != nil {
 		return fmt.Errorf("engineering admission: list assignments: %w", err)
 	}
-	now := time.Now().UTC()
+	now := rt.engineeringAdmissionNow()
 	selfExpired := false
 	for _, a := range assignments {
 		if a.Disposition != types.EngineeringAssignmentOpen || a.CapsuleDisposition != types.EngineeringCapsuleUnbound ||
@@ -283,7 +291,7 @@ func (rt *Runtime) wakeNextQueuedEngineeringRequest(ctx context.Context, freed t
 		log.Printf("runtime: engineering admission: list requests after %s ended: %v", freed.AssignmentID, err)
 		return
 	}
-	now := time.Now().UTC()
+	now := rt.engineeringAdmissionNow()
 	var next *types.EngineeringAssignment
 	for i := range assignments {
 		a := assignments[i]
