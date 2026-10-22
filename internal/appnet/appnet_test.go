@@ -114,6 +114,12 @@ func TestEffectClassRules(t *testing.T) {
 		{"read with DELETE", func(e *EgressEntry) { e.Methods = []string{"GET", "DELETE"} }},
 		{"read with PUT", func(e *EgressEntry) { e.Methods = []string{"PUT"} }},
 		{"read with patch, lower case", func(e *EgressEntry) { e.Methods = []string{"patch"} }},
+		// POST is dual-use (a POST to calendar/v3 creates events), so a read
+		// is GET and HEAD only; OPTIONS is refused conservatively.
+		{"read with POST", func(e *EgressEntry) { e.Methods = []string{"GET", "POST"} }},
+		{"read with post, lower case", func(e *EgressEntry) { e.Methods = []string{"post"} }},
+		{"read with OPTIONS", func(e *EgressEntry) { e.Methods = []string{"OPTIONS"} }},
+		{"read with an unknown method", func(e *EgressEntry) { e.Methods = []string{"QUERY"} }},
 	}
 	for _, c := range cases {
 		p := goodPolicy()
@@ -189,7 +195,7 @@ func TestEntryCaps(t *testing.T) {
 	}
 	p = Policy{}
 	for i := 0; i < MaxIngressEntries+1; i++ {
-		p.Ingress = append(p.Ingress, IngressEntry{Source: SourceMail, Address: "calendar-" + string(rune('a'+i))})
+		p.Ingress = append(p.Ingress, IngressEntry{Source: SourceMail, Address: "calendar." + string(rune('a'+i))})
 	}
 	if ps := Validate("calendar", p); !hasCode(ps, CodeTooMany) {
 		t.Errorf("ingress cap: want %s, got %v", CodeTooMany, codes(ps))
@@ -205,7 +211,7 @@ func TestIngressRules(t *testing.T) {
 			t.Errorf("source %q: want %s, got %v", src, CodeIngressSource, codes(ps))
 		}
 	}
-	for _, addr := range []string{"", "owner", "mail", "calendarx", "calendar-", "Calendar", "calendar-a b", "calendar@evil.test", "calendar-" + strings.Repeat("a", 64)} {
+	for _, addr := range []string{"", "owner", "mail", "calendarx", "calendar-", "calendar-invites", "calendar.", "calendar.-x", "calendar.a.b", "calendar.A", "calendar+x", "Calendar", "calendar.a b", "calendar@evil.test", "calendar." + strings.Repeat("a", 64)} {
 		p := goodPolicy()
 		p.Ingress[0].Address = addr
 		if ps := Validate("calendar", p); !hasCode(ps, CodeIngressAddress) {
@@ -213,7 +219,7 @@ func TestIngressRules(t *testing.T) {
 		}
 	}
 	p := goodPolicy()
-	p.Ingress = append(p.Ingress, IngressEntry{Source: SourceMail, Address: "calendar-invites"})
+	p.Ingress = append(p.Ingress, IngressEntry{Source: SourceMail, Address: "calendar.invites"})
 	if ps := Validate("calendar", p); len(ps) != 0 {
 		t.Errorf("suffixed address refused: %v", ps)
 	}
@@ -322,7 +328,7 @@ func TestWideningIsConservative(t *testing.T) {
 		{"upload up", func(p *Policy) { p.Egress[0].Budget.MaxUploadBytes++ }},
 		{"renewal longer", func(p *Policy) { p.Egress[0].RenewalDays = 31 }},
 		{"new ingress", func(p *Policy) {
-			p.Ingress = append(p.Ingress, IngressEntry{Source: SourceMail, Address: "calendar-x"})
+			p.Ingress = append(p.Ingress, IngressEntry{Source: SourceMail, Address: "calendar.x"})
 		}},
 		{"invalid new entry", func(p *Policy) { p.Egress[0].Destinations[0].Host = "*" }},
 	}
@@ -380,7 +386,7 @@ func TestWideningIsConservative(t *testing.T) {
 
 // Failure mode 12: requests are app-desk grants that egressgrant accepts.
 func TestRequestsAreRequestedAppDeskGrants(t *testing.T) {
-	gs, err := Requests("calendar", "computer-a", goodPolicy(), t0)
+	gs, err := Requests(ModeDeclare, "calendar", "computer-a", goodPolicy(), t0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -410,13 +416,68 @@ func TestRequestsAreRequestedAppDeskGrants(t *testing.T) {
 
 	bad := goodPolicy()
 	bad.Egress[0].Credential = "x"
-	if _, err := Requests("calendar", "computer-a", bad, t0); err == nil {
+	if _, err := Requests(ModeDeclare, "calendar", "computer-a", bad, t0); err == nil {
 		t.Error("requests built from an invalid policy")
 	}
-	if _, err := Requests("calendar", "", goodPolicy(), t0); err == nil {
+	if _, err := Requests(ModeDeclare, "calendar", "", goodPolicy(), t0); err == nil {
 		t.Error("requests built with no computer")
 	}
-	if gs, err := Requests("calendar", "computer-a", Policy{Ingress: goodPolicy().Ingress}, t0); err != nil || len(gs) != 0 {
+	if gs, err := Requests(ModeDeclare, "calendar", "computer-a", Policy{Ingress: goodPolicy().Ingress}, t0); err != nil || len(gs) != 0 {
 		t.Errorf("ingress-only policy: %d grants, %v", len(gs), err)
+	}
+}
+
+// Ingress namespaces are disjoint: package names may contain "-" but never
+// ".", so an address names exactly one package (the text before its first
+// "."). Without that, package mail would claim mail-calendar-inbox, which
+// belongs to package mail-calendar.
+func TestIngressNamespacesAreDisjoint(t *testing.T) {
+	mailPolicy := func(addr string) Policy {
+		return Policy{Ingress: []IngressEntry{{Source: SourceMail, Address: addr}}}
+	}
+	if ps := Validate("mail", mailPolicy("mail-calendar-inbox")); !hasCode(ps, CodeIngressAddress) {
+		t.Errorf("package mail claimed mail-calendar-inbox: %v", codes(ps))
+	}
+	if ps := Validate("mail", mailPolicy("mail-calendar.inbox")); !hasCode(ps, CodeIngressAddress) {
+		t.Errorf("package mail claimed mail-calendar.inbox: %v", codes(ps))
+	}
+	if ps := Validate("mail-calendar", mailPolicy("mail-calendar.inbox")); len(ps) != 0 {
+		t.Errorf("package mail-calendar refused its own address: %v", ps)
+	}
+	if ps := Validate("mail", mailPolicy("mail.calendar-inbox")); len(ps) != 0 {
+		t.Errorf("package mail refused its own address: %v", ps)
+	}
+
+	pkgs := []string{"mail", "mail-calendar", "mail-calendar-inbox", "ma", "mail-c", "calendar", "calendar-x", "x1", "a-b", "a-b-c"}
+	var addrs []string
+	for _, p := range pkgs {
+		addrs = append(addrs, p)
+		for _, q := range pkgs {
+			addrs = append(addrs, p+"."+q, p+"-"+q, p+"."+q+"."+q)
+		}
+	}
+	for _, addr := range addrs {
+		var owners []string
+		for _, p := range pkgs {
+			if len(Validate(p, mailPolicy(addr))) == 0 {
+				owners = append(owners, p)
+			}
+		}
+		if len(owners) > 1 {
+			t.Errorf("address %q is in %d namespaces: %v", addr, len(owners), owners)
+		}
+	}
+}
+
+// Admit is the only path: with the mode off, no grant request is minted,
+// even for a valid policy.
+func TestRequestsRefusedWithModeOff(t *testing.T) {
+	for _, m := range []Mode{ModeOff, "", "on", "weird"} {
+		if gs, err := Requests(m, "calendar", "computer-a", goodPolicy(), t0); err == nil || len(gs) != 0 {
+			t.Errorf("mode %q: %d grants, err %v; want refusal", m, len(gs), err)
+		}
+	}
+	if gs, err := Requests(ModeOff, "calendar", "computer-a", Policy{}, t0); err != nil || len(gs) != 0 {
+		t.Errorf("mode off, empty policy: %d grants, err %v; want none and no error", len(gs), err)
 	}
 }
