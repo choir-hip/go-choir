@@ -1486,6 +1486,15 @@ in
       Environment = [
         "VMCTL_PORT=8083"
         "VMCTL_GUEST_DNS_PORT=${toString guestDnsPort}"
+        # SEC-10 guest side (internal/vmmanager/guest_dns.go): the computers
+        # named here boot with choir.dns=<their tap host address> and resolve
+        # through Unbound above; the rest keep their fallback resolvers and
+        # their snapshots. Empty: none. Name computer ids only, one test
+        # computer first; never "*" (public 53 leaves the floor only after a
+        # cold-boot cycle and a probe). A named computer cold boots once (boot
+        # arguments are in the launch-config hash). Rollback: empty the list
+        # and redeploy before taking the port or Unbound away.
+        "VMCTL_GUEST_DNS_ONLY="
         # D-ROUTE and immutable ComputerVersion inputs are tables on the same
         # corpusd world-wire SQL server. vmctl is the sole route CAS writer.
         "VMCTL_ROUTE_DSN=root@tcp(127.0.0.1:13306)/platform?parseTime=true&multiStatements=true&clientFoundRows=true"

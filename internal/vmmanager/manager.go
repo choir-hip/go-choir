@@ -414,6 +414,9 @@ type ManagerConfig struct {
 	// 0, the default, means none). With it set, a guest's DNS to its tap host
 	// address port 53 is DNAT'd there (SEC-10, hostfirewall.go).
 	GuestDNSPort int
+	// GuestDNSOnly names the computers that boot pointed at that resolver
+	// (VMCTL_GUEST_DNS_ONLY; empty selects none). See guest_dns.go.
+	GuestDNSOnly []string
 
 	// VisualCapture is the visual capture grant switch
 	// (CHOIR_VISUAL_CAPTURE_COMPUTERS; empty by default). See
@@ -1944,6 +1947,7 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 		}
 		runtimeArgs = append(runtimeArgs, m.guestReclaimKernelParams(cfg)...)
 		runtimeArgs = append(runtimeArgs, m.capsuleTunnelIdentityKernelParams(cfg)...)
+		runtimeArgs = append(runtimeArgs, m.guestDNSKernelParams(cfg, hostIP)...)
 		bootArgs = strings.Join(append([]string{kernelParams}, runtimeArgs...), " ")
 	} else {
 		// Legacy approach with custom init script. Keep the same runtime service
@@ -1975,6 +1979,9 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 			bootArgs += " " + arg
 		}
 		for _, arg := range m.capsuleTunnelIdentityKernelParams(cfg) {
+			bootArgs += " " + arg
+		}
+		for _, arg := range m.guestDNSKernelParams(cfg, hostIP) {
 			bootArgs += " " + arg
 		}
 	}
