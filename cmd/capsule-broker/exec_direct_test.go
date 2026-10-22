@@ -171,6 +171,41 @@ func TestDirectExecEnvCarriesBuildToolchain(t *testing.T) {
 	}
 }
 
+// The capsule's Go bounds reach direct exec and jobs (both build their
+// environment here) as GOMAXPROCS and GOMEMLIMIT, and the session worker as
+// the carry, with or without the C toolchain
+// (docs/problems/capsule-release-build-runs-at-the-2gib-ceiling-2026-10-22.md, G1).
+func TestDirectExecAndWorkerEnvCarryGoBounds(t *testing.T) {
+	broker := map[string]string{yaegikernel.CapsuleGoMaxProcsEnv: "1", yaegikernel.CapsuleGoMemLimitEnv: "1342177280"}
+	direct := "\n" + strings.Join(directExecEnvFrom(toolchainLookup(broker), nil), "\n") + "\n"
+	for _, want := range []string{"\nGOMAXPROCS=1\n", "\nGOMEMLIMIT=1342177280\n"} {
+		if !strings.Contains(direct, want) {
+			t.Errorf("direct env missing %q in %q", strings.TrimSpace(want), direct)
+		}
+	}
+	if strings.Contains(direct, yaegikernel.CapsuleGoMaxProcsEnv) {
+		t.Errorf("direct env exposes the carry: %q", direct)
+	}
+	worker := "\n" + strings.Join(sessionWorkerEnv(true, toolchainLookup(broker)), "\n") + "\n"
+	for _, want := range []string{"\n" + yaegikernel.CapsuleGoMaxProcsEnv + "=1\n", "\n" + yaegikernel.CapsuleGoMemLimitEnv + "=1342177280\n"} {
+		if !strings.Contains(worker, want) {
+			t.Errorf("worker env missing %q in %q", strings.TrimSpace(want), worker)
+		}
+	}
+}
+
+// A job (the long build) gets the bounds from the broker's own environment.
+func TestJobEnvCarriesGoBounds(t *testing.T) {
+	t.Setenv(yaegikernel.CapsuleGoMaxProcsEnv, "1")
+	t.Setenv(yaegikernel.CapsuleGoMemLimitEnv, "1342177280")
+	env := "\n" + strings.Join(newJobManager("/run/capsule/broker", true).Env, "\n") + "\n"
+	for _, want := range []string{"\nGOMAXPROCS=1\n", "\nGOMEMLIMIT=1342177280\n", "\nGOFLAGS=-mod=mod\n"} {
+		if !strings.Contains(env, want) {
+			t.Errorf("job env missing %q in %q", strings.TrimSpace(want), env)
+		}
+	}
+}
+
 // The session worker is spawned with the toolchain carry, so its exec action
 // (cellExecEnv) can hand it to every choir.Exec a cell runs.
 func TestSessionWorkerEnvCarriesBuildToolchain(t *testing.T) {
