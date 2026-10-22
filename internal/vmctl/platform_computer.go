@@ -72,7 +72,9 @@ func (r *OwnershipRegistry) WarmUniversalWirePlatformComputer(ctx context.Contex
 		mgr := r.vmManager
 		r.mu.Unlock()
 		if mgr != nil {
-			info, err := mgr.ResumeVM(snapshot.VMID)
+			info, err := r.spawnClaimed(snapshot.VMID, bootClaimResume, snapshot.Epoch, func() (*VMInstanceInfo, error) {
+				return mgr.ResumeVM(snapshot.VMID)
+			})
 			if err != nil {
 				r.mu.Lock()
 				current, ok := r.ownerships[key]
@@ -92,6 +94,7 @@ func (r *OwnershipRegistry) WarmUniversalWirePlatformComputer(ctx context.Contex
 				current.Epoch = info.Epoch
 				current.State = VMStateActive
 				current.LastActiveAt = time.Now()
+				current.BootClaim = nil
 				r.saveLocked()
 			}
 			r.mu.Unlock()
@@ -133,6 +136,7 @@ func (r *OwnershipRegistry) ensureUniversalWirePlatformOwnership(ctx context.Con
 				}
 				current.State = VMStateActive
 				current.LastActiveAt = time.Now()
+				current.BootClaim = nil
 				r.saveLocked()
 				vmID := current.VMID
 				r.mu.Unlock()
@@ -189,6 +193,7 @@ func (r *OwnershipRegistry) ensureUniversalWirePlatformOwnership(ctx context.Con
 				current.State = VMStateActive
 				current.LastActiveAt = time.Now()
 				current.StoppedBy = ""
+				current.BootClaim = nil
 				r.saveLocked()
 				vmID := current.VMID
 				result := cloneOwnership(current)
@@ -273,6 +278,7 @@ func (r *OwnershipRegistry) ensureUniversalWirePlatformOwnership(ctx context.Con
 			current.State = VMStateActive
 			current.LastActiveAt = time.Now()
 			current.StoppedBy = ""
+			current.BootClaim = nil
 			r.saveLocked()
 			vmID := current.VMID
 			waiters := r.pendingWaiters[key]
@@ -325,6 +331,7 @@ func (r *OwnershipRegistry) ensureUniversalWirePlatformOwnership(ctx context.Con
 			current.State = VMStateActive
 			current.LastActiveAt = time.Now()
 			current.StoppedBy = ""
+			current.BootClaim = nil
 			r.saveLocked()
 			vmID := current.VMID
 			result := cloneOwnership(current)

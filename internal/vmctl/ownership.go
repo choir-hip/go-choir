@@ -130,8 +130,15 @@ type VMOwnership struct {
 	Epoch int64 `json:"epoch"`
 
 	// StoppedBy indicates why the VM was stopped. Empty if running.
-	// Valid values: "idle", "logout", "recovery", "manual".
+	// Values include "idle", "logout", "recovery", "manual", "wedged",
+	// "recovery_failed", "vmctl-restart" (running at a vmctl restart) and
+	// "interrupted-by-vmctl-restart" (a start in flight at one).
 	StoppedBy string `json:"stopped_by,omitempty"`
+	// BootClaim is the durable record of a start whose result is not yet
+	// published, written before the manager spawns (boot_claim.go). A vmctl
+	// that loads a row with an open claim closes the start; it never adopts
+	// it.
+	BootClaim *BootClaim `json:"boot_claim,omitempty"`
 	// FailureWarmedAt is when the always-on sweep last spent its automatic
 	// retry on this computer after a wedged or recovery_failed stop. Interim
 	// bound until the boot ledger (restart station L1b).
@@ -557,6 +564,9 @@ type OwnershipRegistry struct {
 	// (docs/problems/vmctl-failed-protected-computer-waits-a-day-and-deploy-cannot-reach-it-2026-10-21.md,
 	// "Review round 3").
 	lifecycle map[string]lifecycleHolder
+	// interruptedStarts holds the claim of each start a vmctl restart
+	// interrupted, from load until its process is gone (boot_claim.go).
+	interruptedStarts map[string]*BootClaim
 
 	// vmManager is the optional Firecracker VM lifecycle manager.
 	// When nil, the registry operates in host-process autoputer mode where
@@ -602,6 +612,7 @@ func NewOwnershipRegistry(autoputerURLBase string) *OwnershipRegistry {
 		gatewayCredentialNextCheck: make(map[string]time.Time),
 		gatewayCredentialPeer:      make(map[string]string),
 		lifecycle:                  make(map[string]lifecycleHolder),
+		interruptedStarts:          make(map[string]*BootClaim),
 		autoputerURLBase:           autoputerURLBase,
 		idleTimeout:                0, // no idle timeout by default
 		pressureReclaim:            DefaultPressureReclaimConfig(),
@@ -660,6 +671,7 @@ func (r *OwnershipRegistry) loadLocked() error {
 	r.ownerships = make(map[string]*VMOwnership)
 	r.vmByID = make(map[string]*VMOwnership)
 	r.pendingWaiters = make(map[string][]chan *VMOwnership)
+	r.interruptedStarts = make(map[string]*BootClaim)
 	maxEpoch := r.epochCounter
 	for _, loaded := range state.Ownerships {
 		if loaded == nil || strings.TrimSpace(loaded.VMID) == "" || strings.TrimSpace(loaded.UserID) == "" {
@@ -676,7 +688,10 @@ func (r *OwnershipRegistry) loadLocked() error {
 		if own.Kind == "" {
 			own.Kind = VMKindInteractive
 		}
-		if own.State == "" || own.State == VMStateBooting || own.State == VMStateActive || own.State == VMStateDegraded || own.State == VMStateStopping {
+		// A start in flight at the restart is closed, never adopted: its row
+		// does not describe the process it spawned (boot_claim.go).
+		interrupted := interruptStartAtLoadLocked(&own, time.Now())
+		if !interrupted && (own.State == "" || own.State == VMStateActive || own.State == VMStateDegraded || own.State == VMStateStopping) {
 			own.State = VMStateStopped
 			if own.StoppedBy == "" {
 				own.StoppedBy = stoppedByVMCTLRestart
@@ -694,6 +709,10 @@ func (r *OwnershipRegistry) loadLocked() error {
 		ptr := &own
 		r.ownerships[ownershipKey(own.UserID, own.DesktopID)] = ptr
 		r.vmByID[own.VMID] = ptr
+		if interrupted {
+			r.interruptedStarts[own.VMID] = own.BootClaim
+			log.Printf("vmctl: VM %s (user %s): its %s of epoch %d was in flight at the vmctl restart; closing it, stopped_by=%s", own.VMID, own.UserID, own.BootClaim.Kind, own.BootClaim.Epoch, stoppedByStartInterrupted)
+		}
 	}
 	if state.EpochCounter > maxEpoch {
 		maxEpoch = state.EpochCounter
@@ -761,9 +780,13 @@ func (r *OwnershipRegistry) VMManagerHandle() VMManager {
 	return r.vmManager
 }
 
-// ReattachManagedVMs adopts VM processes that survived vmctl restart only
-// after their owner/computer D-ROUTE has been independently authorized.
+// ReattachManagedVMs first closes the starts the restart interrupted
+// (boot_claim.go), then adopts VM processes of computers that were running,
+// only after their owner/computer D-ROUTE has been independently authorized.
 func (r *OwnershipRegistry) ReattachManagedVMs(ctx context.Context, guard ComputerVersionRouteGuard) int {
+	// The starts the restart interrupted are closed before anything is
+	// adopted or served.
+	r.closeInterruptedStarts()
 	r.mu.RLock()
 	mgr := r.vmManager
 	candidates := make([]VMOwnership, 0)
@@ -810,6 +833,12 @@ func (r *OwnershipRegistry) reattachOwnership(own VMOwnership, mgr VMManager) bo
 }
 
 func (r *OwnershipRegistry) reattachOwnershipInfo(own VMOwnership, mgr VMManager) (*VMInstanceInfo, bool) {
+	if r.startInterrupted(own.VMID) {
+		// The process belongs to a start no row describes: its address and
+		// readiness are unknown. Only the close ends it.
+		log.Printf("vmctl: reattach refused for VM %s: its start was interrupted by a vmctl restart and is being closed", own.VMID)
+		return nil, false
+	}
 	info, err := mgr.ReattachVM(own.VMID, own.ComputerURL, own.Epoch)
 	if err != nil {
 		log.Printf("vmctl: reattach skipped for VM %s: %v", own.VMID, err)
@@ -1437,7 +1466,9 @@ func (r *OwnershipRegistry) recoverOrRestartActiveVM(own *VMOwnership, mgr VMMan
 	if err != nil {
 		return nil, err
 	}
-	recovered, err := bootTracked(mgr, own.VMID, cfg, refresh)
+	recovered, err := r.spawnClaimed(own.VMID, bootClaimBoot, cfg.Epoch, func() (*VMInstanceInfo, error) {
+		return bootTracked(mgr, own.VMID, cfg, refresh)
+	})
 	if err != nil {
 		if mgr.GetVM(own.VMID) == nil {
 			return r.startExistingVM(own, mgr)
@@ -1501,7 +1532,9 @@ func (r *OwnershipRegistry) startAdmittedVM(own *VMOwnership, mgr VMManager) (*V
 		if err != nil {
 			return nil, err
 		}
-		info, err := bootTracked(mgr, own.VMID, cfg, refresh)
+		info, err := r.spawnClaimed(own.VMID, bootClaimBoot, cfg.Epoch, func() (*VMInstanceInfo, error) {
+			return bootTracked(mgr, own.VMID, cfg, refresh)
+		})
 		if err != nil {
 			return nil, r.noteRecoveryStartFailure(own, err)
 		}
@@ -1512,7 +1545,7 @@ func (r *OwnershipRegistry) startAdmittedVM(own *VMOwnership, mgr VMManager) (*V
 	if err != nil {
 		return nil, err
 	}
-	info, err := mgr.BootVM(cfg)
+	info, err := r.spawnClaimed(own.VMID, bootClaimBoot, cfg.Epoch, func() (*VMInstanceInfo, error) { return mgr.BootVM(cfg) })
 	if err != nil {
 		return nil, r.noteRecoveryStartFailure(own, err)
 	}
@@ -1561,7 +1594,9 @@ func (r *OwnershipRegistry) resumeFromSnapshot(own *VMOwnership, mgr VMManager) 
 	// The selection the snapshot's launch hash must match (a changed
 	// selection cold boots).
 	resumeCfg.MemoryHotplugMiB = r.memoryHotplugMiBFor(own)
-	info, err := resumer.ResumeVMFromSnapshot(own.VMID, resumeCfg, r.resumeCredentialIssuer(own))
+	info, err := r.spawnClaimed(own.VMID, bootClaimResume, own.Epoch, func() (*VMInstanceInfo, error) {
+		return resumer.ResumeVMFromSnapshot(own.VMID, resumeCfg, r.resumeCredentialIssuer(own))
+	})
 	if err != nil {
 		log.Printf("vmctl: computer %s (VM %s) not resumed from snapshot; cold boot follows: %v", own.ComputerID, own.VMID, err)
 		return nil, false
@@ -2052,6 +2087,7 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 				current.State = VMStateActive
 				current.LastActiveAt = time.Now()
 				current.StoppedBy = ""
+				current.BootClaim = nil
 				r.saveLocked()
 				vmID := current.VMID
 				result := cloneOwnership(current)
@@ -2149,6 +2185,7 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 			current.State = VMStateActive
 			current.LastActiveAt = time.Now()
 			current.StoppedBy = ""
+			current.BootClaim = nil
 			r.saveLocked()
 			waiters := r.pendingWaiters[key]
 			delete(r.pendingWaiters, key)
@@ -3049,6 +3086,7 @@ func (r *OwnershipRegistry) resumeVMForDesktop(userID, desktopID string, alwaysO
 	own.State = VMStateActive
 	own.LastActiveAt = time.Now()
 	own.StoppedBy = ""
+	own.BootClaim = nil
 	r.saveLocked()
 	log.Printf("vmctl: started VM %s for user %s desktop %s (epoch=%d)", own.VMID, userID, own.DesktopID, own.Epoch)
 	ensureVMID = own.VMID
@@ -3144,12 +3182,12 @@ func (r *OwnershipRegistry) recoverVMForDesktop(userID, desktopID string, mainte
 		cfg.MaintenanceHold = held
 		cfg.RecoveryReplayOnly = replayOnly
 		if wasStopped {
-			info, err = mgr.BootVM(cfg)
+			info, err = r.spawnClaimed(vmid, bootClaimBoot, cfg.Epoch, func() (*VMInstanceInfo, error) { return mgr.BootVM(cfg) })
 			if err != nil {
 				return nil, fmt.Errorf("failed to boot recovered VM %s: %w", vmid, r.noteRecoveryStartFailure(&snapshot, err))
 			}
 		} else {
-			info, err = mgr.RecoverVM(vmid, cfg)
+			info, err = r.spawnClaimed(vmid, bootClaimBoot, cfg.Epoch, func() (*VMInstanceInfo, error) { return mgr.RecoverVM(vmid, cfg) })
 			if err != nil {
 				return nil, fmt.Errorf("failed to recover VM %s: %w", vmid, r.noteRecoveryStartFailure(&snapshot, err))
 			}
@@ -3172,6 +3210,7 @@ func (r *OwnershipRegistry) recoverVMForDesktop(userID, desktopID string, mainte
 	own.State = VMStateActive
 	own.LastActiveAt = time.Now()
 	own.StoppedBy = ""
+	own.BootClaim = nil
 	r.saveLocked()
 	log.Printf("vmctl: recovered VM %s for user %s desktop %s (new_epoch=%d, fresh-boot)", own.VMID, userID, own.DesktopID, own.Epoch)
 	ensureVMID = own.VMID
@@ -3256,12 +3295,15 @@ func (r *OwnershipRegistry) refreshVMForDesktop(userID, desktopID string, mainte
 		if err != nil {
 			return nil, fmt.Errorf("reserve refresh realization for VM %s: %w", snapshot.VMID, err)
 		}
-		if missingManagerInstance {
-			info, err = mgr.BootVM(cfg)
-		} else {
+		if !missingManagerInstance {
 			cfg.OfflineMaintenance = maintenance
-			info, err = mgr.RefreshVM(snapshot.VMID, cfg)
 		}
+		info, err = r.spawnClaimed(snapshot.VMID, bootClaimBoot, cfg.Epoch, func() (*VMInstanceInfo, error) {
+			if missingManagerInstance {
+				return mgr.BootVM(cfg)
+			}
+			return mgr.RefreshVM(snapshot.VMID, cfg)
+		})
 		if err != nil {
 			r.mu.Lock()
 			current := r.ownerships[key]
@@ -3299,6 +3341,7 @@ func (r *OwnershipRegistry) refreshVMForDesktop(userID, desktopID string, mainte
 	own.State = VMStateActive
 	own.LastActiveAt = time.Now()
 	own.StoppedBy = ""
+	own.BootClaim = nil
 	r.saveLocked()
 	log.Printf("vmctl: refreshed VM %s for user %s desktop %s (new_epoch=%d, deploy-image-refresh)", own.VMID, userID, own.DesktopID, own.Epoch)
 	ensureVMID = own.VMID
@@ -3614,7 +3657,7 @@ func (r *OwnershipRegistry) spendRetryLocked(own *VMOwnership, anyStop bool) (fa
 	case own.State == VMStateFailed && anyStop:
 	case own.State != VMStateStopped:
 		return failureWarmReceipt{}, false
-	case !stoppedByFailure(own.StoppedBy) && !(anyStop && own.StoppedBy == stoppedByVMCTLRestart):
+	case !stoppedByFailure(own.StoppedBy) && !(anyStop && stoppedByRestart(own.StoppedBy)):
 		return failureWarmReceipt{}, false
 	}
 	now := r.now()
@@ -3742,6 +3785,7 @@ func (r *OwnershipRegistry) rescueBoot(own VMOwnership, mgr VMManager) (*VMOwner
 	cur.State = VMStateActive
 	cur.LastActiveAt = time.Now()
 	cur.StoppedBy = ""
+	cur.BootClaim = nil
 	r.saveLocked()
 	log.Printf("vmctl: rescued VM %s for user %s desktop %s onto the current deploy (epoch=%d, crash boot)", cur.VMID, cur.UserID, cur.DesktopID, cur.Epoch)
 	result := cloneOwnership(cur)
@@ -3758,12 +3802,12 @@ func (r *OwnershipRegistry) rescueLaunch(own *VMOwnership, mgr VMManager, tracke
 	if err != nil {
 		return nil, err
 	}
-	var info *VMInstanceInfo
-	if tracked {
-		info, err = mgr.RefreshVM(own.VMID, cfg)
-	} else {
-		info, err = mgr.BootVM(cfg)
-	}
+	info, err := r.spawnClaimed(own.VMID, bootClaimBoot, cfg.Epoch, func() (*VMInstanceInfo, error) {
+		if tracked {
+			return mgr.RefreshVM(own.VMID, cfg)
+		}
+		return mgr.BootVM(cfg)
+	})
 	if err != nil {
 		return nil, r.noteRecoveryStartFailure(own, err)
 	}
@@ -3777,7 +3821,7 @@ func (r *OwnershipRegistry) rescueLaunch(own *VMOwnership, mgr VMManager, tracke
 func (r *OwnershipRegistry) markRecoveryFailed(vmID string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if own, ok := r.vmByID[vmID]; ok && own != nil && own.State == VMStateStopped && own.StoppedBy == stoppedByVMCTLRestart {
+	if own, ok := r.vmByID[vmID]; ok && own != nil && own.State == VMStateStopped && stoppedByRestart(own.StoppedBy) {
 		own.StoppedBy = stoppedByRecoveryFailed
 		r.saveLocked()
 	}

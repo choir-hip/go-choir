@@ -81,7 +81,8 @@ func protectedWarmnessClass(class WarmnessClass) bool {
 // priority. A process behind a stopped ownership is reattached when its
 // guest answers; otherwise, unless the computer is protected or held, it is
 // powered off after the grace period. A process with no ownership at all is
-// powered off on its second sighting.
+// powered off on its second sighting. A process a start interrupted by a
+// vmctl restart left behind is only ever closed (boot_claim.go).
 func (r *OwnershipRegistry) ReconcileVMProcesses(ctx context.Context, guard ComputerVersionRouteGuard) VMProcessReconcileResult {
 	var res VMProcessReconcileResult
 	r.mu.RLock()
@@ -91,6 +92,9 @@ func (r *OwnershipRegistry) ReconcileVMProcesses(ctx context.Context, guard Comp
 	if !ok || pc == nil {
 		return res
 	}
+	// Retry the close of every start a vmctl restart interrupted whose
+	// process survived the kill (boot_claim.go).
+	r.closeInterruptedStarts()
 	live := pc.LiveFirecrackerVMs()
 	vmIDs := make([]string, 0, len(live))
 	for vmID := range live {
@@ -145,6 +149,13 @@ func (r *OwnershipRegistry) ReconcileVMProcesses(ctx context.Context, guard Comp
 		}
 		r.mu.Unlock()
 
+		if r.startInterrupted(vmID) {
+			// What an interrupted start left behind is neither the computer
+			// to adopt nor evidence of its wedge; the close above retries.
+			res.Pending++
+			log.Printf("vmctl: VM %s runs outside the registry for %s after its start was interrupted by a vmctl restart; the close is retried", vmID, now.Sub(first).Round(time.Second))
+			continue
+		}
 		if own == nil {
 			if !known {
 				res.Pending++
