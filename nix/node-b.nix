@@ -1462,6 +1462,8 @@ in
         #   - rootfs.ext4 (boot disk / guest root filesystem)
         #   - initrd (for systemd module loading)
         #   - storedisk.erofs (shared nix store)
+        # pkgs.firecracker is 1.16.2 via flake.nix choirFirecrackerModule
+        # (one package: this binary and VM_JAILER_BIN below move together).
         "VM_FIRECRACKER_BIN=${pkgs.firecracker}/bin/firecracker"
         # VMM jailer slice 1: off until staging proves it on one test
         # computer. Rollout (FP8 station, SEC-04): VMCTL_JAILER=on with
@@ -1549,7 +1551,7 @@ in
         # observe); the image line set to off does not override it.
         "VM_CAPSULE_TUNNEL_ENFORCE_ONLY=computer-9648031f92e131adc1fb65ec455c5903"
         # Data drive discard (VM_DATA_DISCARD=1) is deliberately NOT set: the
-        # pinned Firecracker is 1.16.1, which has no virtio-blk discard
+        # pinned Firecracker is 1.16.2, which has no virtio-blk discard
         # (vmmanager ignores the flag on an older binary). Guest side:
         # choir-data-fstrim timer in nix/autoputer-vm.nix
         # (docs/problems/guest-data-image-never-trims-2026-10-20.md).
@@ -1560,7 +1562,9 @@ in
         #   "VM_DATA_DISCARD=1"
         #   "VM_DATA_DISCARD_ONLY=<test computer id>"
         # with firecrackerNext = import ./firecracker-next.nix { inherit pkgs; }.
-        # Only the named computers launch 1.17 and get discard.
+        # Only the named computers launch 1.17 and get discard. Never name a
+        # VM_MEMORY_HOTPLUG_ONLY computer: 1.17's hotplug region (512 GiB)
+        # is past this CPU's 39-bit physical limit (firecracker #6255).
         # Memory hotplug (virtio-mem) for test computers only: a selected
         # computer boots with a 4 GiB unplugged region and grows under
         # admitted, TTL-bound leases (capsule jobs that declare memory_mib).

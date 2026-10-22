@@ -60,3 +60,49 @@ until #6255 is fixed or the region is placed below the CPU's limit; check
 Pin Firecracker 1.16.2 for both the binary and the jailer (one package),
 land it with the 6.18.57 kernel bump, and verify after the deploy (the
 deploy note, below, added with the fix).
+
+As built: `flake.nix` `choirFirecrackerRelease` / `choirFirecrackerModule`
+(an overlay on the Node B host only, the Dolt pattern), so
+`pkgs.firecracker` is 1.16.2 for `VM_FIRECRACKER_BIN`, `VM_JAILER_BIN` and
+the host's `firecracker` package. Both hashes are `lib.fakeHash`: FP0
+fills them on the Mac before landing. `nix/firecracker-next.nix` (NET-08)
+overrides the same package and is unaffected. Test:
+`internal/vmmanager/snapshot_test.go`
+`TestResumeRefusesSnapshotFromOtherFirecrackerPatch` (a 1.16.1 snapshot on
+a 1.16.2 host is refused before Firecracker starts, discarded, and the
+computer cold boots with `firecracker_version_mismatch` on its timeline).
+
+## Deploy note
+
+- Lands in the same deploy as the host kernel 6.18.57 bump, after 19:00
+  UTC. Both void every snapshot; one deploy means one cold boot per
+  computer instead of two.
+- Every computer cold boots at its next refresh or wake: its snapshot is
+  refused (`firecracker_version_mismatch`, and `host_kernel_mismatch` after
+  the reboot) and discarded, never loaded. The binary is chosen at launch,
+  so a computer still running is on 1.16.1 until its refresh (or the
+  kernel reboot) relaunches it.
+- The paper (`critical_protected`) takes a planned, marker-backed refresh
+  while busy and resumes its work after the cold boot; any snapshot it
+  holds is refused like every other.
+- Rollback: revert the flake commit and redeploy. Snapshots taken on
+  1.16.2 are refused on 1.16.1 the same way (cold boots, no load).
+
+## FP0 verifies after the deploy
+
+1. On Node B: `$(systemctl show go-choir-vmctl -p Environment | tr ' ' '\n'
+   | sed -n 's/^VM_FIRECRACKER_BIN=//p') --version` prints
+   `Firecracker v1.16.2`; the same for `VM_JAILER_BIN` (`jailer --version`).
+2. A test computer: hibernate by snapshot, then wake. Expect boot kind
+   `snapshot_resume`, and the snapshot meta's `firecracker_version` (and the
+   timeline's) `Firecracker v1.16.2`.
+3. virtio-mem across hibernate on a test computer in
+   `VM_MEMORY_HOTPLUG_ONLY`: plug memory, hibernate, wake (`snapshot_resume`),
+   confirm the guest's plugged size survived; unplug, hibernate, wake again,
+   and confirm the guest sees the unplugged size and stays healthy (the
+   #6174 path: unplugged memory is no longer writable after restore).
+4. No 1.16.1 snapshot loaded: every wake after the deploy whose snapshot
+   predates it shows `fallback_cold` with reason
+   `firecracker_version_mismatch` or `host_kernel_mismatch` on its boot
+   timeline, and no `snapshot_resume` timeline anywhere records
+   `Firecracker v1.16.1` after the deploy time.

@@ -10,6 +10,9 @@
 # 1.17.0 (2026-09-10) adds opt-in virtio-blk discard for writable Sync
 # drives (CHANGELOG 1.17.0, PR #6142). Check the latest 1.17.x patch release
 # before filling the hashes, and drop this file once nixpkgs packages >= 1.17.
+# Not for hotplug computers: 1.17 puts the virtio-mem region at 512 GiB, past
+# Node B's 39-bit physical address limit (firecracker #6255, open 2026-10-22;
+# docs/problems/firecracker-1-16-1-virtio-mem-restore-bugs-2026-10-22.md).
 { pkgs }:
 pkgs.firecracker.overrideAttrs (finalAttrs: old: {
   version = "1.17.0";
