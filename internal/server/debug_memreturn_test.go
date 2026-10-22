@@ -33,6 +33,10 @@ import (
 //  9. page_reporting_order reads -1 until a reporting device registers (seen
 //     on 6.18.37 without a balloon): no order is reportable then, so no
 //     reportable total is claimed.
+// 10. page_reporting_order is set by the page_reporting.page_reporting_order
+//     boot argument with no device registered (review bunch 87): a
+//     non-negative order is not a registered device, so registered needs the
+//     balloon bound with VIRTIO_BALLOON_F_REPORTING negotiated.
 
 func writeFakeMemoryReturn(t *testing.T) (sysRoot, procRoot string) {
 	t.Helper()
@@ -228,6 +232,41 @@ func TestReadMemoryReturnUnregisteredReportingClaimsNothing(t *testing.T) {
 	}
 	if got.FreeBlocks == nil || got.FreeBlocks.ReportableKiB != nil {
 		t.Fatalf("free_blocks = %+v, want blocks but no reportable total", got.FreeBlocks)
+	}
+}
+
+func TestReadMemoryReturnBootArgOrderWithoutDeviceIsNotRegistered(t *testing.T) {
+	for name, edit := range map[string]func(sysRoot string) error{
+		// The balloon negotiated features without bit 5.
+		"reporting not negotiated": func(sysRoot string) error {
+			return os.WriteFile(filepath.Join(sysRoot, "bus/virtio/drivers/virtio_balloon/virtio3/features"),
+				[]byte("0110000000000000000000000000000000000000000000000000000000000000\n"), 0o644)
+		},
+		// No balloon bound at all.
+		"no balloon": func(sysRoot string) error {
+			return os.RemoveAll(filepath.Join(sysRoot, "bus/virtio/drivers/virtio_balloon"))
+		},
+		// Bound, but the features file is too short to say.
+		"reporting unknown": func(sysRoot string) error {
+			return os.WriteFile(filepath.Join(sysRoot, "bus/virtio/drivers/virtio_balloon/virtio3/features"), []byte("011\n"), 0o644)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			sysRoot, procRoot := writeFakeMemoryReturn(t) // order 9, as the boot argument would set it
+			if err := edit(sysRoot); err != nil {
+				t.Fatal(err)
+			}
+			got := readMemoryReturn(sysRoot, procRoot, 4)
+			if !got.PageReporting.Present || got.PageReporting.Order == nil || *got.PageReporting.Order != 9 {
+				t.Fatalf("page_reporting = %+v, want present with order 9", got.PageReporting)
+			}
+			if got.PageReporting.Registered {
+				t.Fatalf("registered = true with order 9 but no reporting balloon: %+v balloon %+v", got.PageReporting, got.Balloon)
+			}
+			if got.FreeBlocks == nil || got.FreeBlocks.ReportableKiB != nil {
+				t.Fatalf("free_blocks = %+v, want blocks but no reportable total", got.FreeBlocks)
+			}
+		})
 	}
 }
 
