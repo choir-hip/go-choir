@@ -18,7 +18,7 @@ The paper's Dolt journal grows about 1.6 GiB per 10 minutes (docs/problems/paper
 
 - Firecracker 1.16.1 has no virtio-blk discard. nix/node-b.nix says so where it deliberately leaves VM_DATA_DISCARD unset. So the guest's frees never reach the host.
 - **Hypothesis (unconfirmed):** the guest filesystem keeps writing to blocks it never used before, so the host's sparse image grows until the whole 128 GiB is allocated. No guest-side reading of its free space was taken.
-- The real fix is RES-16 (data images that shrink: discard), which needs Firecracker 1.17. Node B's CPU has 39-bit physical addresses, and Firecracker 1.17 breaks virtio-mem hotplug on such CPUs (issue #6255; docs/problems/firecracker-1-16-1-virtio-mem-restore-bugs-2026-10-22.md).
+- The real fix is RES-16 (data images that shrink: discard), which needs Firecracker 1.17. Node B's CPU has 39-bit physical addresses. An earlier line here said Firecracker 1.17 breaks virtio-mem hotplug on such CPUs (issue #6255). Corrected 2026-10-22: every version since 1.15.1 places the region the same way, so 1.17 changes nothing for hotplug on Node B, and hotplug does not work there today ([memory-hotplug-cannot-work-on-node-b-39-bit-cpu-2026-10-22.md](memory-hotplug-cannot-work-on-node-b-39-bit-cpu-2026-10-22.md)).
 
 ## Consequences
 

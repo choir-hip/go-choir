@@ -11,8 +11,9 @@ Status: problem record, before code. Mutation class of the fix: **red**
 Node B runs `pkgs.firecracker` from the locked nixpkgs, **Firecracker
 1.16.1**, for every computer and the jailer (`nix/node-b.nix`
 `VM_FIRECRACKER_BIN`, `VM_JAILER_BIN`). Computers hibernate to Firecracker
-snapshots, and test computers use virtio-mem hotplug
-(`VM_MEMORY_HOTPLUG_ONLY`). Firecracker 1.16.2
+snapshots, and test computers boot with a virtio-mem hotplug device
+(`VM_MEMORY_HOTPLUG_ONLY`; it cannot plug on this CPU, see the NET-08
+section). Firecracker 1.16.2
 (https://github.com/firecracker-microvm/firecracker/releases/tag/v1.16.2)
 fixes two virtio-mem bugs on exactly that path:
 
@@ -46,14 +47,20 @@ boot per computer.
 
 ## Why 1.16.2 and not 1.17 (NET-08)
 
-Firecracker 1.17 places the virtio-mem hotplug region at 512 GiB guest
-physical. Node B's Xeon E-2236 has **39-bit physical addresses** (512 GiB
-is exactly 2^39, one past the top), so the region is unaddressable and
-hotplug breaks on this host (firecracker issue #6255, open on 2026-10-22).
-NET-08 (Firecracker 1.17 for data-drive discard,
-`nix/firecracker-next.nix`) must not move any hotplug computer to 1.17
-until #6255 is fixed or the region is placed below the CPU's limit; check
-`grep 'address sizes' /proc/cpuinfo` on the host before that step.
+1.16.2 is the nearer upgrade: a patch release on the line Node B already
+runs. 1.17 is NET-08's staged per-computer move for data-drive discard
+(`nix/firecracker-next.nix`), one test computer first. The flake asserts
+the host stays below 1.17 (`choirFirecrackerBelow`).
+
+**Corrected 2026-10-22** ([memory-hotplug-cannot-work-on-node-b-39-bit-cpu-2026-10-22.md](memory-hotplug-cannot-work-on-node-b-39-bit-cpu-2026-10-22.md)).
+This section first said 1.17 moves the virtio-mem hotplug region to
+512 GiB, past the E-2236's 39-bit limit (#6255). That was wrong. The
+region is at 512 GiB in v1.15.1, v1.16.1, v1.16.2 and v1.17.0 alike
+(`layout.rs` `FIRST_ADDR_PAST_64BITS_MMIO`, the `past_mmio64_memory`
+allocator). So 1.17 changes nothing for hotplug here, and hotplug cannot
+plug on Node B under 1.16.x either. #6255's reporter just happened to run
+1.17.0. The NET-08 precondition "not a hotplug computer" no longer rests
+on 1.17. It stays as a way to keep one variable per test.
 
 ## Fix
 
@@ -96,11 +103,13 @@ computer cold boots with `firecracker_version_mismatch` on its timeline).
 2. A test computer: hibernate by snapshot, then wake. Expect boot kind
    `snapshot_resume`, and the snapshot meta's `firecracker_version` (and the
    timeline's) `Firecracker v1.16.2`.
-3. virtio-mem across hibernate on a test computer in
-   `VM_MEMORY_HOTPLUG_ONLY`: plug memory, hibernate, wake (`snapshot_resume`),
-   confirm the guest's plugged size survived; unplug, hibernate, wake again,
-   and confirm the guest sees the unplugged size and stays healthy (the
-   #6174 path: unplugged memory is no longer writable after restore).
+3. **Removed (2026-10-22): no hotplug step.** A plug cannot succeed on
+   Node B under any Firecracker version
+   ([memory-hotplug-cannot-work-on-node-b-39-bit-cpu-2026-10-22.md](memory-hotplug-cannot-work-on-node-b-39-bit-cpu-2026-10-22.md)),
+   so a plug, hibernate and wake check would fail for that reason, not
+   because of 1.16.2. Do not roll back the KF deploy on a hotplug failure.
+   The #6174 and #6176 paths stay unproven on Node B; they need a host
+   that can plug.
 4. No 1.16.1 snapshot loaded: every wake after the deploy whose snapshot
    predates it shows `fallback_cold` with reason
    `firecracker_version_mismatch` or `host_kernel_mismatch` on its boot
