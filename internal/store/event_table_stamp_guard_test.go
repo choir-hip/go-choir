@@ -25,14 +25,28 @@ import (
 // no production code sets ProjectionOp.Table. The guard is type-based (round
 // 1c, DeepSeek): a syntactic check missed elided literals such as
 // []computerevent.ProjectionOp{{Table: "choir_events"}}, the style most
-// writers use. Every non-test package under internal/ and cmd/ that depends
-// on computerevent is type-checked from source against the build's export
-// data, and the guard flags, by type:
+// writers use. Every non-test package under internal/, cmd/ and scripts/
+// that depends on computerevent, on this host's build tags, is type-checked
+// from source against the build's export data, and the guard flags, by type:
 //   - any composite literal of type ProjectionOp (or *ProjectionOp), written
 //     out or elided, keyed or positional, whose Table is not the constant "";
 //   - any assignment to the Table field of a ProjectionOp, other than the
 //     constant "";
-//   - any conversion to ProjectionOp from another type.
+//   - any conversion to ProjectionOp, or to a pointer, slice, array or map
+//     built on it, from a type that is not identical (round 1d, DeepSeek).
+//     Go converts a struct or a pointer to one from any struct with the
+//     same fields, which can carry a Table in. A slice, array or map
+//     converts only from a type with an identical underlying type, so its
+//     elements are already ProjectionOp; those conversions are flagged
+//     anyway, to keep the rule one line.
+//
+// Boundary: the guard reads source. A ProjectionOp decoded from JSON
+// (computerevent.DecodeProjectionBatch; json:"table,omitempty") can carry a
+// Table without any literal. In deploy 1 the only producer of a projection
+// batch is projectionTape.appendOpsAs, whose ops this guard covers; the
+// decoders (the appender's dry run and replay) read batches already on the
+// tape. A test fails if a type-check error appears or if a required package
+// drops out of the checked set, so the guard cannot thin out silently.
 //
 // The lifecycle fold (F8) is covered like every other writer. Deploy 2 adds
 // its writer's file to projectionTableStampers, with the setting that gates
@@ -64,7 +78,7 @@ func listExportData(t *testing.T) []listedPackage {
 	root := repoRoot(t)
 	exportDataOnce.Do(func() {
 		cmd := exec.Command("go", "list", "-e", "-export", "-deps",
-			"-json=ImportPath,Dir,Export,GoFiles,Deps,Standard", "./internal/...", "./cmd/...")
+			"-json=ImportPath,Dir,Export,GoFiles,Deps,Standard", "./internal/...", "./cmd/...", "./scripts/...")
 		cmd.Dir = root
 		var stderr bytes.Buffer
 		cmd.Stderr = &stderr
@@ -117,16 +131,34 @@ func newStampChecker(t *testing.T) *stampChecker {
 	return &stampChecker{fset: fset, imp: importer.ForCompiler(fset, "gc", lookup)}
 }
 
-// check type-checks one package. Type errors are tolerated (a cgo file left
-// out, say): every expression whose type resolves is still checked.
-func (c *stampChecker) check(path string, files []*ast.File) *types.Info {
+// check type-checks one package and returns its type errors. The tree
+// guard fails on any (round 1d): an expression whose type does not resolve
+// is an expression the guard cannot judge.
+func (c *stampChecker) check(path string, files []*ast.File) (*types.Info, []error) {
 	info := &types.Info{
 		Types:      map[ast.Expr]types.TypeAndValue{},
 		Selections: map[*ast.SelectorExpr]*types.Selection{},
 	}
-	conf := types.Config{Importer: c.imp, Error: func(error) {}, FakeImportC: true}
+	var errs []error
+	conf := types.Config{Importer: c.imp, Error: func(err error) { errs = append(errs, err) }, FakeImportC: true}
 	_, _ = conf.Check(path, c.fset, files, info)
-	return info
+	return info, errs
+}
+
+// holdsProjectionOp reports whether t is ProjectionOp or a pointer, slice,
+// array or map (key or element) built on it.
+func holdsProjectionOp(t types.Type) bool {
+	switch u := types.Unalias(t).(type) {
+	case *types.Pointer:
+		return holdsProjectionOp(u.Elem())
+	case *types.Slice:
+		return holdsProjectionOp(u.Elem())
+	case *types.Array:
+		return holdsProjectionOp(u.Elem())
+	case *types.Map:
+		return holdsProjectionOp(u.Key()) || holdsProjectionOp(u.Elem())
+	}
+	return isProjectionOp(t)
 }
 
 func isProjectionOp(t types.Type) bool {
@@ -201,10 +233,10 @@ func (c *stampChecker) tableStamps(files []*ast.File, info *types.Info) []token.
 					}
 				}
 			case *ast.CallExpr:
-				// A conversion to ProjectionOp from another struct type could
-				// carry a Table value in.
-				if fun, ok := info.Types[node.Fun]; ok && fun.IsType() && isProjectionOp(fun.Type) && len(node.Args) == 1 {
-					if arg, ok := info.Types[node.Args[0]]; !ok || !isProjectionOp(arg.Type) {
+				// A conversion to ProjectionOp, or to a container of it, from
+				// another struct type could carry a Table value in.
+				if fun, ok := info.Types[node.Fun]; ok && fun.IsType() && holdsProjectionOp(fun.Type) && len(node.Args) == 1 {
+					if arg, ok := info.Types[node.Args[0]]; !ok || !types.Identical(arg.Type, fun.Type) {
 						found = append(found, c.fset.Position(node.Pos()))
 					}
 				}
@@ -230,8 +262,8 @@ func dependsOn(p listedPackage, path string) bool {
 func TestEventTableNothingStampsInDeploy1(t *testing.T) {
 	root := repoRoot(t)
 	c := newStampChecker(t)
-	checked := 0
-	var unexpected []string
+	checked := map[string]bool{}
+	var unexpected, typeErrors []string
 	for _, p := range listExportData(t) {
 		if p.Standard || !strings.HasPrefix(p.Dir, root+string(filepath.Separator)) || !dependsOn(p, computereventPath) {
 			continue
@@ -244,8 +276,11 @@ func TestEventTableNothingStampsInDeploy1(t *testing.T) {
 			}
 			files = append(files, file)
 		}
-		info := c.check(p.ImportPath, files)
-		checked++
+		info, errs := c.check(p.ImportPath, files)
+		for _, err := range errs {
+			typeErrors = append(typeErrors, p.ImportPath+": "+err.Error())
+		}
+		checked[p.ImportPath] = true
 		for _, pos := range c.tableStamps(files, info) {
 			rel, _ := filepath.Rel(root, pos.Filename)
 			rel = filepath.ToSlash(rel)
@@ -254,8 +289,24 @@ func TestEventTableNothingStampsInDeploy1(t *testing.T) {
 			}
 		}
 	}
-	if checked < 20 {
-		t.Fatalf("type-checked only %d packages that depend on computerevent; the guard is not reading the tree", checked)
+	if len(typeErrors) > 0 {
+		t.Fatalf("the guard cannot judge packages with type errors:\n%s", strings.Join(typeErrors, "\n"))
+	}
+	// The writers of projection batches and the packages around them must be
+	// in the checked set; a build-tag or pattern change that drops one fails
+	// here rather than thinning the guard (round 1d, DeepSeek).
+	const module = "github.com/yusefmosiah/go-choir/"
+	for _, required := range []string{
+		"internal/computerevent", "internal/store", "internal/agentcore", "internal/autoputer",
+		"internal/textureowner", "internal/selfdev", "internal/platform", "internal/projectionbase",
+		"internal/updater", "scripts/ograph-bench",
+	} {
+		if !checked[module+required] {
+			t.Errorf("%s was not type-checked; the guard does not cover it", required)
+		}
+	}
+	if len(checked) < 40 {
+		t.Fatalf("type-checked only %d packages that depend on computerevent; the guard is not reading the tree", len(checked))
 	}
 	sort.Strings(unexpected)
 	if len(unexpected) > 0 {
@@ -267,7 +318,7 @@ func TestEventTableNothingStampsInDeploy1(t *testing.T) {
 // on ones that do not stamp, type-checked against the real computerevent.
 func TestEventTableStampGuardCatchesEveryForm(t *testing.T) {
 	c := newStampChecker(t)
-	const header = "package x\n\nimport ce \"" + computereventPath + "\"\n\ntype alias = ce.ProjectionOp\n\ntype other struct{ Table string }\n\nconst stamp = \"choir_events\"\n\nvar table string\n\nfunc use(...any) {}\n\nfunc f() {\n"
+	const header = "package x\n\nimport (\n\t\"encoding/json\"\n\n\tce \"" + computereventPath + "\"\n)\n\nvar _ json.RawMessage\n\ntype alias = ce.ProjectionOp\n\ntype other struct{ Table string }\n\nconst stamp = \"choir_events\"\n\nvar table string\n\nfunc use(...any) {}\n\nfunc f() {\n"
 	stamps := map[string]string{
 		"keyed":                      `op := ce.ProjectionOp{Kind: "object_recorded", Table: "choir_events"}; use(op)`,
 		"keyed, a constant":          `op := ce.ProjectionOp{Kind: "object_recorded", Table: stamp}; use(op)`,
@@ -288,7 +339,11 @@ func TestEventTableStampGuardCatchesEveryForm(t *testing.T) {
 		"assigned in a slice":        `ops := make([]ce.ProjectionOp, 1); ops[0].Table = stamp; use(ops)`,
 		"appended to":                `var op ce.ProjectionOp; op.Table += "x"; use(op)`,
 		"tuple assignment":           `var op ce.ProjectionOp; op.Table, op.Kind = "choir_events", "k"; use(op)`,
-		"converted":                  `op := ce.ProjectionOp(struct{ Kind, CanonicalID, Table string; Body []byte }{Table: "choir_events"}); use(op)`,
+		"converted to a slice":       `type opList []ce.ProjectionOp; var rs opList; ops := []ce.ProjectionOp(rs); use(ops)`,
+		"converted to an array":      `type opArray [1]ce.ProjectionOp; var rs opArray; ops := [1]ce.ProjectionOp(rs); use(ops)`,
+		"converted to a map":         `type opMap map[string]ce.ProjectionOp; var rs opMap; ops := map[string]ce.ProjectionOp(rs); use(ops)`,
+		"converted to a pointer":     `r := &struct{ Kind, CanonicalID, Table string; Body json.RawMessage }{Table: "choir_events"}; op := (*ce.ProjectionOp)(r); use(op)`,
+		"converted":                  `op := ce.ProjectionOp(struct{ Kind, CanonicalID, Table string; Body json.RawMessage }{Table: "choir_events"}); use(op)`,
 	}
 	clean := map[string]string{
 		"keyed, no table":           `op := ce.ProjectionOp{Kind: "object_recorded", CanonicalID: "id"}; use(op)`,
@@ -300,6 +355,7 @@ func TestEventTableStampGuardCatchesEveryForm(t *testing.T) {
 		"elided, another type":      `os := []other{{Table: "choir_events"}}; use(os)`,
 		"reading the table":         `var op ce.ProjectionOp; t := op.Table; use(t)`,
 		"copying a whole op":        `var a, b ce.ProjectionOp; a = b; use(a)`,
+		"converting a slice of ops": `var a []alias; b := []ce.ProjectionOp(a); use(b)`,
 		"converting a ProjectionOp": `var a alias; b := ce.ProjectionOp(a); use(b)`,
 	}
 	run := func(name, body string) []token.Position {
@@ -308,7 +364,11 @@ func TestEventTableStampGuardCatchesEveryForm(t *testing.T) {
 			t.Fatalf("%s: parse: %v", name, err)
 		}
 		files := []*ast.File{file}
-		return c.tableStamps(files, c.check("example.com/x/"+strings.ReplaceAll(name, " ", "_"), files))
+		info, errs := c.check("example.com/x/"+strings.ReplaceAll(name, " ", "_"), files)
+		if len(errs) > 0 {
+			t.Fatalf("%s: the sample does not type-check: %v", name, errs)
+		}
+		return c.tableStamps(files, info)
 	}
 	for name, body := range stamps {
 		if len(run(name, body)) == 0 {
