@@ -28,6 +28,11 @@ is deleted, FP0 can read what would go and why the rest stays.
 | 03e212674 | yellow | tests T1 to T10 (internal/vmctl/retention_test_class_test.go, computertiers) |
 | de3f616e6 | red | the two rules, the report, the manifest, the env wiring, node-b.nix shadow observe |
 | fc7bdb950 | yellow | scripts/proofs/fp0-vm-retention.sh and its selftest |
+| 9c4e28e38 | green | review round 2 (bunch76) findings R2-1 to R2-7 in the problem record |
+| c8f129da5 | yellow | round-2 tests (failing on 7430e1f31, or killing the surviving mutants) |
+| 7f375704c | green | R2-8: the live orphan rule would destroy recovery state |
+| cdb7521d5 | yellow | R2-8 test |
+| 77af30099 | red | round-2 fixes R2-1 to R2-5, R2-8, F8, F9 |
 
 The design:
 
@@ -39,10 +44,18 @@ The design:
     domains/prefixes) or when computer-tiers.json's new optional
     `test_computers` list names it. Platform and paid computers keep their
     own class even if listed;
-  - it is stopped, hibernated or failed;
+  - it is the interactive computer on the account's primary desktop;
+  - it is stopped, hibernated or failed, and not stopped by
+    `recover_current`;
   - it is not held;
-  - it has been idle for at least N;
-  - no `VM_*_ONLY` selector names it by VM id or computer id.
+  - it has been idle for at least N (a zero `LastActiveAt` is not idle);
+  - its dir holds no unfinished, unreadable or journal-less quarantine,
+    no staging image and no unfinished recovery journal;
+  - no per-computer selector names it by VM id or computer id: any
+    `VM_*_ONLY` or `VMCTL_*_ONLY` (`VMCTL_JAILER_ONLY`), `CHOIR_*_COMPUTERS`
+    (`CHOIR_CLAUDE_DELEGATE_COMPUTERS`, `CHOIR_VISUAL_CAPTURE_COMPUTERS`,
+    `CHOIR_CAPSULE_MIRROR_COMPUTERS`) or `CHOIR_*_ONLY`
+    (`CHOIR_CAPSULE_MIRRORS_ONLY`).
 
   Removal is `destroyRetentionCandidate`'s path: `DestroyVMState`, then
   the ownership is dropped. It runs under a new lifecycle claim (a visit
@@ -51,15 +64,27 @@ The design:
 - **quarantine_age_out.** Switch `VMCTL_RETENTION_QUARANTINE_MODE`
   (default off) and `_MIN_AGE` (default 168h). The rule removes a
   `data.img.quarantine-*` only if all of these hold:
-  - its recovery journal is `done` or its status is `active`;
-  - its age, read from the rename's ctime, is at least N;
-  - its computer is not protected, not held and not selector-named.
+  - it is in a `vm-*` or `candidate-*` dir that has an ownership record
+    (ownerless: `no_ownership`; other dirs are never scanned);
+  - the owner is test class (a real account's `done` quarantine may still
+    be the only copy: the 10-09 484-path record);
+  - its recovery journal is finished: phase `done` or status `active`, not
+    `failed` (`swapped` and `booted` are kept);
+  - the journal names the owner's own computer, and that computer is not
+    the paper or any platform computer, not a paid account's computer, and
+    not any protected ownership's computer;
+  - its age, read from the rename's ctime on Linux, is at least N (off
+    Linux the age is zero, so nothing ages out);
+  - its owner is not held, not recovering and not selector-named.
 
-  It keeps pre-swap, failed and journal-less quarantines: each may be the
-  only copy of the computer's data.
+  The candidate-fleet 10-07 pair is kept by these checks whether or not
+  its dir still resolves to the owner.
+- **The live orphan rule (R2-8).** `orphan_state_dir`, active on Node B
+  today, no longer plans or destroys a dir holding a quarantine, a staging
+  image or a recovery journal.
 - **Removal gates and bounds.** Active removal needs both the retention
   mode and the rule's switch set to active. Removals share the pass's
-  `MAX_DELETES` and `MAX_BYTES`.
+  `MAX_DELETES` and `MAX_BYTES`. Both minimum ages have a 24 h floor.
 - **Manifest.** `<state dir>/retention-manifest.jsonl` gets a `removing`
   line before each unlink or destroy, then a `removed` (or `failed`) line.
   Each line records what was removed, when it was quarantined or last
@@ -70,14 +95,25 @@ The design:
   `will_remove`, plus reasons and bytes) and inventory totals. The shadow
   plan forces both rules to dry-run.
 
-Deploy shape: **inert**. The active switches stay unset, and
-`test_computers` is empty. node-b.nix sets the two `VMCTL_RETENTION_SHADOW_*`
-rule modes to dry-run, which only changes the GET-only shadow plan. With
-both switches off, the active plan is unchanged (T10).
+Deploy shape: **not inert since round 2, but it only removes deletions.**
+The two new rules are as before: the active switches stay unset,
+`test_computers` is empty, and node-b.nix sets only the GET-only shadow
+plan's rule modes to dry-run. The plan's config block gains the new keys
+(functionally, not byte-, identical). The one running-path change is
+R2-8: the live `orphan_state_dir` rule now keeps a dir that holds
+recovery state. It deletes nothing it did not delete before. FP0 decides
+whether that counts as inert for batching; the no-effect proof should add
+"vmctl's retention log shows no orphan prune of a dir that holds a
+quarantine".
 
-Tests: `go test ./internal/vmctl ./internal/computertiers ./cmd/vmctl`
-passes, and the new tests pass under `-race`. `scripts/proofs/selftest.sh`
-reports 128 passed.
+Tests:
+- `go test ./internal/vmctl ./internal/computertiers ./cmd/vmctl` passes.
+- The retention tests pass under `-race`.
+- Mutants M07, M08, M09, M10, M12, M29 and M33 each compile and are killed.
+- `scripts/proofs/selftest.sh` reports 128 passed.
+- A darwin build cannot run on this host (Dolt cgo does not cross-compile).
+  `GOOS=darwin go list` selects `retention_stat_other.go`, and a source
+  test forbids Linux-only stat fields outside `_linux.go` files.
 
 ## Deployed proof (FP0)
 
@@ -116,9 +152,14 @@ reports 128 passed.
   pressure reclaim, matches `VM_MEMORY_HOTPLUG_ONLY=class:test`, and gives
   them the visual capture grant. It is a reviewed commit, the owner's or
   FP0's call.
-- **The two 2026-10-07 quarantines** stay `keep` if their journals are
-  missing or pre-swap. Deleting them then is a manual, owner-approved act
-  (black-adjacent: they may be the only copy).
+- **The two 2026-10-07 quarantines** are now always `keep`: the owner's
+  account is paid, so they never age out, and if their dir loses its
+  ownership they are `no_ownership`. Deleting them is a manual,
+  owner-approved act (black-adjacent: they may be the only copy, and the
+  484-path check of 10-09 never closed).
+- **Real accounts' quarantines** never age out under this rule (R2-3).
+  Reclaiming them needs either a positive completeness signal (a verified
+  file-root hydration) or an owner act.
 
 ## Residuals
 
@@ -131,11 +172,21 @@ reports 128 passed.
   "no transition for N days" and not "no owner use for N days".
 - An active test computer that is stuck busy is never taken. That is
   pressure reclaim's job.
+- These round-2 findings are kept as residuals:
+  - the ephemeral rule ignores selectors and runs first (pre-existing);
+  - the report's verdicts are not bounded by `MAX_DELETES` or `MAX_BYTES`;
+  - the manifest lives on the filesystem it frees, and its new directory
+    entry is not fsynced;
+  - concurrent passes can write a false `failed` line for an
+    already-removed quarantine, and a quarantine unlink can race a cold
+    recovery's own count prune on the same VM (Sonnet F7);
+  - the newest rollback quarantine of a test computer can age out
+    (DeepSeek 5).
 
 ```yaml
 now:
   status: waiting_on_fp0
-  slice: lane complete; the inert deploy and its read-only proof are FP0's
-  next_action: FP0 rebases, reviews and lands de3f616e6 with fc7bdb950 as an inert red batch, then runs scripts/proofs/fp0-vm-retention.sh
-  blocker_or_risk: none for the inert deploy; enforce waits on the shadow report and the owner questions above
+  slice: review round 2 fixed (head after this commit); the deploy and its read-only proof are FP0's
+  next_action: FP0 re-reviews the round-2 delta (9c4e28e38..head), lands it (the orphan-rule change R2-8 is a live but deletion-reducing red change), then runs scripts/proofs/fp0-vm-retention.sh
+  blocker_or_risk: enforce waits on the shadow report and the owner questions above
 ```

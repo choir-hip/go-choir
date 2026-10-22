@@ -215,3 +215,25 @@ Reproduced or confirmed by reading the code at 7430e1f31:
   and its new directory entry is not fsynced; a quarantine unlink racing a
   cold recovery's own count prune on the same VM (F7, part 2); the newest
   rollback quarantine of a test computer can age out (DeepSeek 5).
+
+## Round 2 dispositions (77af30099)
+
+- R2-1: fixed. ctime is read in retention_stat_linux.go; off Linux the age
+  is zero (nothing ages out). A source test forbids Linux-only stat fields
+  outside `_linux.go` files.
+- R2-2: fixed. Only `vm-*` and `candidate-*` dirs are scanned. An ownerless
+  quarantine is kept (`no_ownership`). The journal's computer id is
+  checked: missing, protected (platform, a paid account's computer by
+  stable id, a protected ownership's computer) or not the owner's own
+  computer means keep.
+- R2-3: fixed. Only a test-class owner's quarantine ages out.
+- R2-4: fixed. Selectors are `VM_*_ONLY`, `VMCTL_*_ONLY`,
+  `CHOIR_*_COMPUTERS` and `CHOIR_*_ONLY`.
+- R2-5: fixed. test_class_idle takes only the interactive computer on the
+  primary desktop. It keeps a computer stopped by `recover_current`, and
+  any dir holding unfinished or unreadable recovery state (re-read at
+  destroy time).
+- R2-6: fixed in this record (the phase paragraph).
+- R2-7: tests added. Each named mutant compiles and is killed.
+- R2-8: fixed. The orphan rule never takes a dir holding recovery state.
+- F8 and F9: fixed. Low residuals are listed in the station file.
