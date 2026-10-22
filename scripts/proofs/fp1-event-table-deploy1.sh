@@ -10,7 +10,7 @@
 # missing. Deploy 1 ships alone (owner Q5) and stays at least one staging day
 # and one paper boot before deploy 2 exists anywhere.
 #
-# Everything but step 5 is read-only. The computer defaults to the paper (the
+# Everything but steps 5 and 6 is read-only. The computer defaults to the paper (the
 # read-only steps may read it); step 5 refuses the paper and the owner's
 # computer and needs a test computer.
 #
@@ -19,7 +19,10 @@
 #
 # Order: step 2 --label before --run <a finished run> --out before.json
 # BEFORE the deploy; deploy 1 as its own deploy; then steps 0, 1, 2 --label
-# after (same run), 3, 4; step 5 on a test computer.
+# after (same run), 3, 4; step 5 on a test computer. Step 6 is the rollback
+# rehearsal on a test computer (round 1b review): run it with --phase old
+# while the computer runs the previous build over its deploy-1 store, and
+# with --phase recovered after the recovery.
 set -uo pipefail
 PROOF_NAME=fp1-event-table-deploy1
 . "$(dirname "$0")/lib.sh"
@@ -30,8 +33,9 @@ step_def 2 ro "event reads unchanged: one finished run's events (count and last 
 step_def 3 ro "the union reads are live: store.event_table.* engine-mutex ops appear with short holds"
 step_def 4 ro "the computer is active; schedules keep polling (manual look)"
 step_def 5 mut "restart a TEST computer: it boots, its replay report stays eligible and equivalent, the table stays unobserved"
+step_def 6 mut "rollback rehearsal on a TEST computer: the previous build over a deploy-1 store runs but cannot publish; what restores publishing"
 
-: "${OPT_computer:=$PROOF_PAPER}" "${OPT_label:=after}" "${OPT_out:=}" "${OPT_run:=}"
+: "${OPT_computer:=$PROOF_PAPER}" "${OPT_label:=after}" "${OPT_out:=}" "${OPT_run:=}" "${OPT_phase:=old}"
 
 ft_target() { resolve_target "$OPT_computer" "${1:-0}"; }
 ft_observability() { guest_get /api/runtime/observability; }
@@ -108,6 +112,47 @@ step_5() {
 	step_1
 	manual "on the test computer, restore a checkpoint taken BEFORE deploy 1 through the owner restore route: it must be accepted (the empty table is not observed, design 3.3 F4)"
 }
+# step_6: what a rollback below deploy 1 does, rehearsed (design status
+# section). The epoch fences only the updater's Apply of an epoch-declaring
+# release; a CI revert (deploy-refresh), a platform-follow offer and the
+# updater's restorePrior reach the older binary unfenced. Over a deploy-1
+# store that binary runs (Open rewrites the receipt to 1) but its manifest
+# calls the empty choir_events unknown, so the computer is replay-ineligible
+# and checkpoint publication (self-development apply, platform-follow's
+# post-apply checkpoint, owner recovery checkpoints) is refused. Nothing is
+# corrupted. Publication comes back by any of: a forward deploy to deploy 1
+# or later (the empty table is again not observed); the rollback recipe (the
+# revert plus the boot-time drop of an empty choir_events,
+# TestEventTableRollbackRecipe); the restore of a pre-deploy-1 checkpoint,
+# whose workspace swap removes the table.
+step_6() {
+	local report
+	ft_target 1
+	case "$OPT_phase" in
+	old)
+		manual "put the previous build (pre-deploy-1, epoch 1) on the TEST computer $T_COMPUTER, which has booted deploy 1 at least once. No vmctl route does this per computer (deploy-refresh's target is a label); use the path FP0 has, and record which: the updater's Apply of a layered epoch-1 release is the fenced path and must be REFUSED with 'newer than release' (record that refusal as evidence too); the unfenced paths are restorePrior after a failed health probe, a platform-follow offer, or the platform image itself"
+		will "read the TEST computer's health and replay report under the previous build"
+		[ "$PROOF_DRY" = 1 ] && return 0
+		[ "$T_STATE" = active ] && pass "$T_COMPUTER is active under the previous build (runtime-safe)" || fail "$T_COMPUTER state is $T_STATE under the previous build"
+		report=$(guest_get "/api/computers/$T_COMPUTER/self-development/replay-completeness")
+		printf '%s' "$report" | jq -c '{manifest_version: .eligibility.manifest_version, eligible: .eligibility.eligible, reason: .eligibility.reason, unknown: .eligibility.unknown_tables}' | while IFS= read -r l; do info "replay $l"; done
+		printf '%s' "$report" | jq -e '.eligibility.manifest_version == 3' >/dev/null && pass "manifest version 3: the previous build is serving" || fail "manifest version is not 3: the previous build is not serving"
+		printf '%s' "$report" | jq -e '(.eligibility.eligible | not) and ((.eligibility.unknown_tables // []) | index("choir_events"))' >/dev/null && pass "ineligible with choir_events unknown: checkpoint publication is refused (fail-closed, as the design says)" || fail "the previous build did not report choir_events unknown and ineligible: the rehearsal disagrees with the design"
+		manual "attempt one checkpoint publication on the TEST computer (an owner recovery checkpoint): it must be refused as replay-ineligible; nothing else changes"
+		;;
+	recovered)
+		manual "recover publication on the TEST computer by ONE of: a forward deploy to deploy 1 or later; the rollback recipe build (revert plus the boot-time drop of an empty choir_events); the restore of a pre-deploy-1 checkpoint. Record which"
+		will "read the TEST computer's replay report after the recovery"
+		[ "$PROOF_DRY" = 1 ] && return 0
+		report=$(guest_get "/api/computers/$T_COMPUTER/self-development/replay-completeness")
+		printf '%s' "$report" | jq -c '{manifest_version: .eligibility.manifest_version, eligible: .eligibility.eligible, reason: .eligibility.reason, unknown: .eligibility.unknown_tables}' | while IFS= read -r l; do info "replay $l"; done
+		printf '%s' "$report" | jq -e '(.eligibility.unknown_tables // []) | index("choir_events") | not' >/dev/null && pass "choir_events is no longer unknown" || fail "choir_events is still unknown after the recovery"
+		printf '%s' "$report" | jq -e '.eligibility.eligible' >/dev/null && pass "replay-eligible again: checkpoint publication can resume" || fail "still replay-ineligible after the recovery"
+		;;
+	*) die 2 "--phase is old or recovered" ;;
+	esac
+}
+
 ft_is_active() { [ "$(proof_row_json "$T_COMPUTER" | jq -r '.state // ""')" = active ]; }
 
 proof_main "$@"
