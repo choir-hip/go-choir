@@ -274,3 +274,27 @@ DeepSeek and Gemini flash, both accept with edits.
   ownership and never cold-recovered) after 6 h. That is the rule's purpose
   since before this lane, but the R2-8 premise (a registry reset, a moved
   realization) applies to it too.
+
+## Round 3 dispositions (b55cf98f3, f93535204)
+
+- R3-1: tested. A quarantine created after the plan stops the orphan
+  removal, and the mutant that deletes the destroy-time recheck is killed.
+- R3-2: fixed. The plan's `kept_state_dirs` gives the rule, reasons, bytes
+  and release for every kept dir. Proof step 4 runs before and after the
+  deploy: it lists every dir on Node B holding recovery state and checks
+  that none is a candidate.
+- R3-3: fixed. The live ephemeral rule keeps a dir holding unfinished or
+  unreadable recovery state, a staging image, an unfinished journal, or a
+  young finished quarantine. It does this at plan time and again under the
+  lock and a lifecycle claim at destroy time.
+- R3-4: fixed. Tests that need a quarantine to age out skip off Linux,
+  with the reason.
+- R3-5: fixed (reported). An orphan dir kept for recovery state is
+  released only by an owner act: read it, then delete it or restore its
+  ownership. A journal is never deleted, so a dir that ever cold-recovered
+  stays until then.
+- R3-6: fixed. test_class_idle keeps a dir with a finished quarantine
+  younger than the quarantine minimum age.
+- R3-7: fixed.
+- Open for the owner: whether ownerless dirs holding only a plain
+  `data.img` should also be kept.
