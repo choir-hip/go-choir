@@ -715,7 +715,7 @@ func (r *OwnershipRegistry) loadLocked() error {
 		r.vmByID[own.VMID] = ptr
 		if interrupted {
 			r.interruptedStarts[own.VMID] = own.BootClaim
-			log.Printf("vmctl: VM %s (user %s): its %s of epoch %d was in flight at the vmctl restart; closing it, stopped_by=%s", own.VMID, own.UserID, own.BootClaim.Kind, own.BootClaim.Epoch, stoppedByStartInterrupted)
+			log.Printf("vmctl: VM %s (user %s): its %s of epoch %d was in flight at the vmctl restart; closing it, stopped_by=%s (%d interrupted starts in a row)", own.VMID, own.UserID, own.BootClaim.Kind, own.BootClaim.Epoch, own.StoppedBy, own.StartInterruptions)
 		}
 	}
 	if state.EpochCounter > maxEpoch {
@@ -3182,8 +3182,11 @@ func (r *OwnershipRegistry) recoverVMForDesktop(userID, desktopID string, mainte
 			return nil, fmt.Errorf("recover VM %s: %w", vmid, err)
 		}
 		// Authorized maintenance recovery (the B14 replay-only drive) is an
-		// explicit operator path and stays exempt: refusing it would remove the
-		// evidence-gathering repair boot. Automatic recovery is gated.
+		// explicit operator path and stays exempt from the recovery-bound
+		// admission below: refusing it would remove the evidence-gathering
+		// repair boot. It is not exempt from the open-close refusal above,
+		// which spawned nothing and clears with the close. Automatic recovery
+		// is gated by both.
 		if !maintenance {
 			if refusal := r.admitRecoveryStart(&snapshot, false); refusal != nil {
 				return nil, refusal

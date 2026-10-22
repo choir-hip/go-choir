@@ -87,8 +87,9 @@ func (r *OwnershipRegistry) WarmUniversalWirePlatformComputer(ctx context.Contex
 		return 0
 	}
 	if r.repeatedInterruptionBoundLocked(own) {
+		msg := fmt.Sprintf("vmctl: refuse platform computer warm vm=%s: its starts were interrupted by vmctl restarts %d times in a row (stopped_by=%s); the automatic retry is spent until %s after %s, or until a deploy of a new target re-arms it and the deploy rescue boots it", own.VMID, own.StartInterruptions, own.StoppedBy, failureWarmWindow, own.FailureWarmedAt)
 		r.mu.Unlock()
-		log.Printf("vmctl: refuse platform computer warm vm=%s: its starts were interrupted by vmctl restarts %d times in a row (stopped_by=%s); the automatic retry is spent until %s after %s or the next deploy", own.VMID, own.StartInterruptions, own.StoppedBy, failureWarmWindow, own.FailureWarmedAt)
+		log.Print(msg)
 		return 0
 	}
 	mgr := r.vmManager
@@ -544,7 +545,7 @@ func (r *OwnershipRegistry) refusePlatformStartLocked(key string, own *VMOwnersh
 		return errStartInterruptedOpen(own.VMID)
 	}
 	if r.repeatedInterruptionBoundLocked(own) {
-		return fmt.Errorf("platform computer %s: its starts were interrupted by vmctl restarts %d times in a row (stopped_by=%s); the automatic retry is spent until %s after %s or the next deploy", own.VMID, own.StartInterruptions, own.StoppedBy, failureWarmWindow, own.FailureWarmedAt)
+		return fmt.Errorf("platform computer %s: its starts were interrupted by vmctl restarts %d times in a row (stopped_by=%s); the automatic retry is spent until %s after %s, or until a deploy of a new target re-arms it and the deploy rescue boots it", own.VMID, own.StartInterruptions, own.StoppedBy, failureWarmWindow, own.FailureWarmedAt)
 	}
 	return nil
 }
