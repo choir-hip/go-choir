@@ -45,8 +45,10 @@ Phases (--phase all runs them in order):
           15-minute TTL (plannedRestartMaxAge) and re-checks for a new
           apply or capsule; a computer that does not write again aborts
           the run. An abort or any failure clears the marker on every
-          computer asked, and a failed clear is logged and kept in the
-          receipt. Each computer's outcome is logged and kept in the
+          computer that may hold the host's (a 200 in any round, a lost
+          answer, a 5xx); a computer that refused is not cleared, since
+          the marker file is shared with the guest's own apply. A failed
+          clear is logged and kept in the receipt. Each computer's outcome is logged and kept in the
           receipt; post reports the marker age. A marker that expires
           turns that boot into a crash boot, the safe fallback.
           --no-allow-busy sends no allow_busy (markers only to idle
@@ -603,6 +605,7 @@ def phase_mark(args, receipt):
     comp = list_computers(args.host, n_pre)
     target = "host-reboot kernel %s" % receipt["pre"]["facts"]["current_kernel"]
     m = receipt["marks"] = {"target": target, "skipped": bool(args.no_markers), "sent": [], "sent_items": [],
+                            "may_hold_marker": [], "in_flight": [],
                             "marked": [], "unmarked": [], "marked_at": None, "outcomes": {}, "worst": {}, "unasked": {}}
     if "error" in comp:
         log("ABORT: vmctl computer list unreadable: %s" % comp["error"])
@@ -622,9 +625,11 @@ def phase_mark(args, receipt):
         return mark_rounds(args, m, items, sent, target)
     except BaseException as e:
         # An ssh drop or timeout may lose answers from guests that wrote:
-        # clear every computer asked, then fail.
+        # clear every computer that may hold a marker, then fail.
         m["error"] = repr(e)
-        log("MARK FAILED (%r): clearing the marker on every computer asked" % e)
+        # A call that failed in flight may have written on any guest in it.
+        m["may_hold_marker"] = sorted(set(m["may_hold_marker"]) | set(m["in_flight"]))
+        log("MARK FAILED (%r): clearing the marker on every computer that may hold one" % e)
         clear_markers(args, m, sent)
         raise
 
@@ -658,7 +663,9 @@ def mark_rounds(args, m, items, sent, target):
         m["sent"] = sorted(sent)
         m["sent_items"] = [{"vm_id": vm, "computer_url": sent[vm]["computer_url"]} for vm in sorted(sent)]
         sent_at = time.time()
+        m["in_flight"] = sorted(it["vm_id"] for it in batch)
         res = remote(args.host, "mark", json.dumps({"items": batch, "target": target}), timeout=mark_timeout(len(batch)))
+        m["in_flight"] = []
         got = {r["vm_id"]: r for r in res if r.get("vm_id") in items}
         answers = {}
         for it in batch:
@@ -666,6 +673,12 @@ def mark_rounds(args, m, items, sent, target):
             r = got.get(vm, {"status": 0, "body": "no answer in the remote result"})
             a = classify_marker_answer(r["status"], r["body"], it["allow_busy"])
             a["warmness_class"] = it["warmness_class"]
+            if r["status"] == 200 or r["status"] == 0 or r["status"] >= 500:
+                # A 200 wrote the host's marker; a lost answer or a 5xx (a
+                # write that failed after the rename) may have. Any other
+                # answer is a refusal before the write: the host wrote
+                # nothing there (D1).
+                m["may_hold_marker"] = sorted(set(m["may_hold_marker"]) | {vm})
             if a["outcome"] == "written":
                 # Stamped when the request went out: the guest's RequestedAt
                 # is no earlier, so the age post reports is no smaller.
@@ -729,13 +742,15 @@ def mark_rounds(args, m, items, sent, target):
         before = set(written)
         answers, sent_at = ask(list(items.values()))
         written = {vm for vm, a in answers.items() if a["outcome"] == "written"}
-        m["marked_at"] = now(sent_at)
         lost = {vm: answers[vm]["outcome"] for vm in before - written}
         blocked = reboot_blockers(standing(), args.allow_crash_close, args.allow_crash_unverified)
         if lost or blocked:
-            blocked.update({vm: "%s in the final pass (was written)" % o for vm, o in lost.items()})
+            for vm, o in lost.items():
+                if blocked.get(vm) != "unsafe":
+                    blocked[vm] = "marker not renewed in the final pass (answered %s)" % o
             abort(args, m, blocked, sent)
             return False
+        m["marked_at"] = now(sent_at)
     m["marked"] = sorted(written)
     m["unmarked"] = sorted(set(items) - written)
     log("MARK outcomes:")
@@ -763,9 +778,10 @@ def abort(args, m, blocked, sent):
         flag = CRASH_FLAG.get(o)
         why = ("%s would accept it" % flag if flag else
                "no flag reboots through a self-development apply or a live capsule" if o == "unsafe" else
+               "a computer marked earlier must write again; rerun once it answers" if o.startswith("marker not renewed") else
                "no flag accepts it")
         log("ABORT: %s: %s (%s)" % (vm, o, why))
-    log("ABORT: %d computer(s) stop the reboot. Clearing the marker on every computer asked." % len(blocked))
+    log("ABORT: %d computer(s) stop the reboot. Clearing the marker on every computer that may hold one." % len(blocked))
     m["blocked"] = blocked
     clear_markers(args, m, sent)
 
@@ -780,8 +796,18 @@ def clear_receipt_markers(args, receipt):
 
 
 def clear_markers(args, m, sent):
-    """DELETE the marker on every computer POSTed to, whatever it answered
-    (a lost answer may hide a written marker), and report each failure."""
+    """DELETE the marker on every computer POSTed to that may hold the
+    host's marker (m["may_hold_marker"]: a 200 in any round, a lost answer,
+    a 5xx, a call that failed in flight), and report each failure. A
+    computer whose answer was a refusal is not cleared: the host wrote
+    nothing there, and the marker file is shared with the guest's own
+    self-development apply (markPlannedRestart), which a DELETE would
+    clear (D1)."""
+    possible = set(m.get("may_hold_marker") or [])
+    skipped = sorted(vm for vm in sent if vm not in possible)
+    if skipped:
+        log("Not clearing %s: each refused before writing, and a DELETE could clear the guest's own apply marker" % skipped)
+    sent = {vm: it for vm, it in sent.items() if vm in possible}
     items = list(sent.values())
     m["cleared"], m["unmark_failed"] = True, {}
     if not items:
@@ -804,7 +830,7 @@ def clear_markers(args, m, sent):
 
 def reboot_after_mark(args, receipt, save):
     """Everything after the markers are written: save the receipt, then
-    reboot. Any failure clears every marker (a crash in the next 15
+    reboot. Any failure clears every host marker (a crash in the next 15
     minutes must not boot as planned); clearing a computer that already
     rebooted is harmless."""
     try:
@@ -970,7 +996,8 @@ def main():
     ap.add_argument("--allow-crash-unverified", action="store_true",
                     help="also reboot through computers that could not say whether a self-development apply or a "
                          "live capsule is running (no answer, 503, other 5xx, 404/405, unreadable obligations): "
-                         "the reboot may cut an apply or destroy a capsule")
+                         "the reboot may cut an apply or destroy a capsule. It does not cover a computer that wrote "
+                         "its marker earlier and does not write again in the final pass: that always aborts")
     ap.add_argument("--no-allow-busy", action="store_true",
                     help="never send allow_busy: busy critical_protected and public_platform computers refuse "
                          "their marker like any other (the behaviour before 2026-10-22)")
