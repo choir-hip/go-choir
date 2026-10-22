@@ -13,6 +13,12 @@
 #
 #   0, 1, 2          the inert deploy: identity, the shadow report, the active plan unchanged
 #   --step 3         after an enforce deploy: manifest lines and journal lines
+#   4                the live orphan and ephemeral rules (R2-8, R3-3): no dir
+#                    holding recovery state is a candidate; run it BEFORE the
+#                    deploy and AFTER it (--evidence before.txt / after.txt),
+#                    and the recovery-dir lists must match
+#
+#   [--state-dir DIR]  vm-state on Node B (default /var/lib/go-choir/vm-state)
 set -uo pipefail
 PROOF_NAME=fp0-vm-retention
 . "$(dirname "$0")/lib.sh"
@@ -21,8 +27,9 @@ step_def 0 ro "identity: vmctl runs the commit, and the shadow plan has both rul
 step_def 1 ro "the shadow report: every test-class computer and quarantined image, with bytes, age, verdict and reasons"
 step_def 2 ro "the active plan is today's: no new candidate, no manifest"
 step_def 3 ro-after "after enforce: manifest lines and vmctl's journal lines"
+step_def 4 ro "live rules: no dir holding recovery state is a deletion candidate; the kept-dir report"
 
-: "${OPT_commit:=}" "${OPT_since:=2 hours ago}"
+: "${OPT_commit:=}" "${OPT_since:=2 hours ago}" "${OPT_state_dir:=/var/lib/go-choir/vm-state}"
 
 # commit_matches A B: one is a prefix of the other (short or full SHAs).
 commit_matches() {
@@ -91,6 +98,34 @@ step_3() {
 		while IFS= read -r l; do info "manifest $l"; done
 	node_journal "$PROOF_UNIT_VMCTL" "$OPT_since" "retention (test_class_idle|quarantine_age_out)" 60
 	manual "pair each removing line with a removed line (a lone removing line is a removal interrupted by a crash); compare df/du of /var/lib/go-choir/vm-state before and after; btrfs may free less than size_bytes when extents are shared"
+}
+
+step_4() {
+	local dirs plan cands bad d
+	case "$OPT_state_dir" in *"'"*) die 2 "refusing a state dir with a single quote" ;; esac
+	# Every vm-* or candidate-* dir holding a quarantine, a staging image or
+	# a recovery journal, with its size. Read-only (ls and du).
+	dirs=$(node_b_q "cd '$OPT_state_dir' 2>/dev/null || exit 0
+for d in vm-* candidate-*; do
+	[ -d \"\$d\" ] || continue
+	n=\$(ls -1 \"\$d\" 2>/dev/null | grep -cE '^(data\\.img\\.quarantine-|data\\.img\\.staging-|rec-.*\\.journal\$)')
+	[ \"\$n\" -gt 0 ] || continue
+	printf '%s %s %s\\n' \"\$d\" \"\$n\" \"\$(du -sk \"\$d\" 2>/dev/null | cut -f1)\"
+done")
+	printf '%s\n' "$dirs" | while read -r d n kib; do
+		[ -n "$d" ] && info "recovery-dir $d artifacts=$n kib=$kib"
+	done
+	plan=$(vmctl_get /internal/vmctl/retention-plan)
+	info "active plan decision=$(printf '%s' "$plan" | jq -r '.decision // ""' 2>/dev/null) candidates=$(printf '%s' "$plan" | jq -r '[.candidates[]?] | length' 2>/dev/null) kept_state_dirs=$(printf '%s' "$plan" | jq -r '.inventory.kept_state_dirs // 0' 2>/dev/null)"
+	printf '%s' "$plan" | jq -r '.kept_state_dirs[]? | "kept \(.vm_id) rule=\(.rule) gib=\((.size_bytes // 0) / 1073741824 * 10 | floor / 10) reasons=\((.reasons // []) | join(",")) release=\(.release)"' 2>/dev/null |
+		while IFS= read -r l; do info "$l"; done
+	cands=$(printf '%s' "$plan" | jq -r '.candidates[]?.vm_id' 2>/dev/null)
+	bad=""
+	for d in $(printf '%s\n' "$dirs" | awk '{print $1}'); do
+		if printf '%s\n' "$cands" | grep -qx "$d"; then bad="$bad $d"; fi
+	done
+	[ "$PROOF_DRY" = 1 ] || check "no dir holding recovery state is a deletion candidate${bad:+ (candidates:$bad)}" test -z "$bad"
+	manual "run this step before the deploy and after it, with --evidence; every recovery-dir line before must still be there after (the 10-07 candidate-fleet quarantines included), and after the deploy each ownerless one must appear as a kept line with rule orphan_state_dir"
 }
 
 proof_main "$@"
