@@ -178,3 +178,70 @@ The other review findings (F5 rollback wording, F6 proof step 11 never
 reads a large model body under the ceiling, F7 the observe 413 names the
 ceiling, /health counters across tenants, "every body through one helper"
 wording) are low and are dispositioned with the fix.
+
+## Repair of the review findings (bunch 88)
+
+Tests a843f5e14 (yellow, each failing on 02010a2e0), code a303a223e (red),
+nix 95240b65c (red).
+
+- **F1, fixed.** `body_caps.go` keeps one process-wide byte budget,
+  `limits.in_flight` (`DefaultBodyInFlight`, 1 GiB, never below the model
+  ceiling). Every decoded body reserves its declared `Content-Length` (or
+  its route's cap when chunked, shrunk to what was read once decoded); the
+  model routes keep their bytes reserved until the handler returns, because
+  the decoded request lives for the whole call. A body that does not fit
+  waits, oldest first; at its body deadline it is answered **429 with
+  `Retry-After: 5`, unread**, and counted in `refused.in_flight`. `/health`
+  `body_caps` shows `limits.in_flight` and `in_flight_bytes`. This holds
+  whatever the scheduler's mode. **Deviation from the brief, stated:** FP0
+  asked for observe mode to log what enforce would refuse. The budget
+  enforces in observe too, because the review's point was that observe with
+  the scheduler off is exactly the unbounded window. It waits before it
+  refuses, so a legitimate call is delayed, not failed, unless the gateway
+  holds a gigabyte of bodies for a whole minute; every wait is logged
+  (`body in_flight waited`). Backstop: the gateway unit now has
+  `MemoryMax=8G`, `MemorySwapMax=0` and `GOMEMLIMIT=6GiB`. No measurement
+  of the gateway's normal RSS exists in the repo, so 8G is deliberately
+  generous (1 GiB of bodies is about 3 GiB with the JSON decoder's buffer
+  and the decoded copy, plus one decoded image per call, up to about
+  200 MB); no `MemoryHigh`, since throttling would stall every tenant.
+  Tighten it from proof 10's `MemoryPeak`.
+- **F2 and F4, fixed.** `decodeBody` sets the connection's read deadline
+  to now + `GATEWAY_BODY_READ_TIMEOUT` (`DefaultBodyReadTimeout`, 60 s:
+  576 MiB at 100 Mbit/s is 48 s) through `http.ResponseController`. On the
+  model routes it runs right after the scheduler grants the slot, so the
+  deadline is measured from acquisition: a call that queued past the
+  server's 120 s `ReadTimeout` reads its body normally (the test grants the
+  slot 600 ms after a 300 ms server timeout and gets 200). The wait for
+  `in_flight` and the read share that deadline. A body cut by it is
+  answered **503 with `Retry-After: 5`**, transient to the guest
+  (`gatewayHTTPStatusError.Transient`), counted in `refused.read_deadline`,
+  and its slot is freed. A trickling guest now holds a slot at most 60 s,
+  not 120 s.
+- **F3, decided: the enforce limit is raised from 64 MiB to 160 MiB**
+  (`DefaultModelBodyLimit`, which cites this paragraph). The arithmetic: the
+  gateway accepts `MaxImagesPerRequest` = 20 images and downscales each to
+  `MaxImageBytes` = 5 MiB. Twenty images already at that bound are
+  100 MiB, 100 × 4/3 = 133.3 MiB as base64; a full 1M-token context is
+  about 16 MiB of JSON; together about 149.3 MiB, rounded up to 160 MiB. A
+  body whose every image is already within the gateway's own output bound
+  is a body the contract clearly allows, and 64 MiB refused it with a
+  non-transient 413. Above 160 MiB (images between 5 and 20 MiB each, up to
+  the 576 MiB ceiling) is still a 413 in enforce; the observe deploy's
+  `max_seen.model` and `would_refuse.model` decide whether that range is
+  real before the flip. Memory is bounded by `in_flight`, not by this
+  limit, so raising it does not widen the aggregate bound.
+- **F5, fixed in wording.** The nix comment now says rollback to observe
+  is safe only while the scheduler is off (or with `in_flight` unchanged,
+  which now bounds observe too); otherwise raise `model=` in enforce.
+- **F6, declined for this round.** Proof step 11 still reads no large
+  under-ceiling model body. With `in_flight` bounding every body, the
+  memory check's bound changes with the body size; a streamed 300 MiB
+  observe step needs its own expected peak. Named residual for the proof
+  author.
+- **F7, partly declined.** (a) The observe 413 names the ceiling because
+  that is the limit it refused against; kept. (b) `/health` counters are
+  aggregate per route class, never per computer, consistent with the
+  scheduler's; kept. (c) The wording "every decoded body goes through one
+  helper" excludes host fetch and the relay, which the station text
+  already lists as keeping their own caps.

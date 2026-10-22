@@ -289,6 +289,12 @@ receipts:
     proof_refs: [docs/problems/gateway-request-bodies-unbounded-2026-10-22.md, internal/gateway/body_caps_test.go, internal/gateway/model_scheduler_test.go TestModelSchedulerRefusesAnAlreadyCancelledCaller, "go test -race ./internal/gateway/...: green", "every new test failed on main a35b3586f by behaviour; two mutations (no Content-Length check, no would_refuse count) each fail them"]
     rollback_ref: gatewayBodyCaps observe (model routes), GATEWAY_BODY_LIMITS to raise a limit, or git revert of both commits
     disposition: built on lane/fp7-gateway-body-caps; observe for the model routes on the first deploy, every other route enforces; not closed until proofs 10 to 12 pass in enforce
+  - id: b7-body-caps-review-round
+    boundary: implement
+    identity: a303a223e (+ nix 95240b65c; findings d5abe8f22, tests a843f5e14)
+    proof_refs: [docs/problems/gateway-request-bodies-unbounded-2026-10-22.md "Repair of the review findings (bunch 88)", "internal/gateway/body_caps_test.go TestBodyCapsBoundTheBytesInFlightWithTheSchedulerOff, TestBodyCapsQueuedCallReadsItsBodyAfterTheServerReadTimeout, TestBodyCapsTrickledBodyIsCutAtTheBodyReadDeadline, TestBodyCapsEnvOverridesAndHealth: each failed on 02010a2e0", "go test -race ./internal/gateway -run 'TestBodyCaps|TestModelScheduler': green"]
+    rollback_ref: git revert of a303a223e and 95240b65c; GATEWAY_BODY_LIMITS in_flight= or GATEWAY_BODY_READ_TIMEOUT to loosen without a code change
+    disposition: F1, F2, F4 fixed, F3 decided (160 MiB), F5 wording fixed; F6 and part of F7 declined with reasons in the problem record
   - id: res-12
     boundary: define
     identity: this file, section 5
@@ -522,7 +528,7 @@ limit is <size>`.
 
 | route class | routes | limit | evidence for the limit |
 |---|---|---|---|
-| model | inference, OpenAI chat | 64 MiB (ceiling 576 MiB in observe) | a 1M-token context is about 16 MiB of JSON; one visual bundle is 24 MiB, 32 MiB as base64; together about 48 MiB. The ceiling is the media contract's maximum, 20 images of 20 MiB as base64 plus a context |
+| model | inference, OpenAI chat | 160 MiB (ceiling 576 MiB in observe) | 20 images at the gateway's own 5 MiB downscale bound are 133.3 MiB as base64, plus a 16 MiB 1M-token context: about 150 MiB (raised from 64 MiB in the bunch 88 round, F3; `DefaultModelBodyLimit`). The ceiling is the media contract's maximum, 20 images of 20 MiB as base64 plus a context |
 | search | search | 1 MiB | a query, a count, a depth |
 | source_api | source-api | 64 KiB (as before) | its own `sourceAPIMaxRequest` |
 | judgment | Jev, host judgments | 1 MiB (as before) | `jevTransportMaxBodySize` |
@@ -533,11 +539,21 @@ keep their own caps. `GATEWAY_BODY_LIMITS` (e.g. `model=96MiB`) overrides a
 limit, read once when the handler is built; an unreadable value is logged
 and the default kept.
 
+**Two bounds in every mode (bunch 88 round).** `limits.in_flight` (1 GiB)
+bounds the bytes of all bodies held at once, whatever the scheduler's mode;
+a model body stays counted until its call ends. A body that does not fit
+waits, then is answered 429 with `Retry-After`, unread. Each body must
+arrive within `GATEWAY_BODY_READ_TIMEOUT` (60 s) of `decodeBody`, which on
+the model routes runs after the slot is granted, so a long queue wait no
+longer spends the server's 120 s read timeout; a body cut there is answered
+503 with `Retry-After`. Both are transient to the guest. The gateway unit
+has `MemoryMax=8G` and `GOMEMLIMIT=6GiB` as a backstop.
+
 **Observe first, for the model routes only.** The model limit is below the
 media contract's ceiling, so it could refuse a real call: a long
 conversation that keeps many uploaded photos. A 413 is not transient to the
 guest, so that turn would fail. `GATEWAY_BODY_CAPS=observe` (the nix value
-for the first deploy) serves a model body between 64 MiB and 576 MiB and
+for the first deploy) serves a model body between 160 MiB and 576 MiB and
 logs `body cap would_refuse route=model caller=<vm> bytes=<n> limit=<l>`;
 over 576 MiB it is refused. Unset or unknown enforces. Every other route
 enforces in every mode: no legitimate body comes near its cap. `/health`
@@ -549,8 +565,7 @@ stays under the limit for a day of observe.
 **The scheduler.** Inference and OpenAI chat now take their RES-11 slot
 before they read the body. A queued call holds an unread socket, not a
 decoded body. With the scheduler on, body memory is bounded by the global
-cap (24) times the body cap: about 3 GiB at 64 MiB in enforce, including
-the decoder's copy. Off, the slot is a no-op and the order does not
+cap (24) times the body cap, and in every mode by `in_flight`. Off, the slot is a no-op and the order does not
 matter. `ModelScheduler.Acquire` now returns the context's error at once
 for a caller already gone, never queued and never granted. A slot that
 arrives together with the cancellation is given back.
@@ -561,13 +576,14 @@ then flip the scheduler on and run proof 9. While the scheduler is on, the
 caps should already be in enforce: in observe, 24 slots times the 576 MiB
 ceiling is no bound.
 
-**Residuals.** (a) With the scheduler off, concurrency is bounded only by
-the 60-per-minute window and the 120 s read timeout. That is about 120
-bodies in flight per computer, each up to the cap. The scheduler is the
-aggregate bound. (b) `prepareMediaRequest` decodes each image to pixels, up
+**Residuals.** (a) Closed in code by the bunch 88 round: `in_flight` is
+the aggregate bound with the scheduler off. (b) `prepareMediaRequest` decodes each image to pixels, up
 to 50 Mpx, about 200 MB of RGBA, one at a time. (c) The refusal log has one
 line per refusal and no throttle. (d) No real body sizes have been measured
 yet. The observe deploy's `max_seen.model` is the first measurement.
+(e) Proof 11 reads no large under-ceiling model body (review F6). (f) The
+gateway's normal RSS is unmeasured; `MemoryMax=8G` is generous until
+proof 10 records `MemoryPeak`.
 
 ## Batch 1 review (2026-10-21, candidate b80a9bcac)
 
@@ -685,7 +701,8 @@ RES-11, after flipping `GATEWAY_MODEL_SCHEDULER=on`:
 B7 body caps (`scripts/proofs/fp7-gateway.sh --step 10|11|12`; run before
 the scheduler flip):
 10. After the deploy with `gatewayBodyCaps = "observe"`: `/health`
-    `body_caps.mode=observe`, limits model 67108864 and search 1048576; the
+    `body_caps.mode=observe`, limits model 167772160, search 1048576 and
+    `in_flight` present; the
     journal has `gateway: body caps: mode=observe ...`; the gateway's
     `MemoryCurrent` and `MemoryPeak` are saved as the baseline.
 11. From a disposable test computer's guest shell, as root:
@@ -706,7 +723,7 @@ the scheduler flip):
 12. After a day of observe: `would_refuse.model` is 0 (or raise the limit
     past `max_seen.model`); flip `gatewayBodyCaps` to `enforce` as its own
     deploy; rerun: mode enforce; repeat 11 (b) with 200 MiB streamed
-    instead of declared: 413 `the model limit is 64 MiB`, and the memory
+    instead of declared: 413 `the model limit is 160 MiB`, and the memory
     peak rises at most about twice the limit.
 
 Mutation class: red. Protected surfaces: gateway and provider calls, the
