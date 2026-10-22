@@ -120,7 +120,7 @@ until step 0 has been done in the same window.** The script refuses
   `critical_protected` or `public_platform` computer (the paper, the
   platform computer) is asked with `allow_busy` and takes the marker with
   runs running. The script retries for `--busy-wait` (600 s) and then
-  aborts, clearing the marker on every computer it asked.
+  aborts, clearing the marker on every computer that may hold one.
   `--allow-crash-close` reboots anyway through computers busy with runs,
   and their work ends `interrupted_by_restart`. A guest that cannot say
   whether an apply or a capsule is live (no answer, a timeout, a 503,
@@ -161,8 +161,13 @@ The script runs these steps in order:
    apply or capsule that started meanwhile; a computer that does not
    write again aborts the run. `marks.marked_at` is that last send. An
    abort, or any failure in this step (an ssh drop or timeout), clears
-   the marker on every computer it POSTed to, whatever it answered;
-   a clear that fails is logged and kept under `marks.unmark_failed`
+   the marker on every computer that may hold the host's: one that
+   answered 200 in any round, gave no answer, answered 5xx, or was in a
+   call that failed (`marks.may_hold_marker`). A computer that refused
+   (409, 400, 403, 404, 405) is not cleared: the host wrote nothing
+   there, and the marker file is shared with the guest's own
+   self-development apply, whose marker a DELETE would remove. A clear
+   that fails is logged and kept under `marks.unmark_failed`
    (clear those by hand: such a marker would make a crash in the next 15
    minutes boot as planned). Held computers, and every computer under
    `--no-markers`, are not asked; the script reads their
@@ -175,7 +180,7 @@ The script runs these steps in order:
    rounds. A `WARNING` line before the reboot names every unasked
    computer whose live capsules were not checked. A final-pass abort
    (a computer that wrote earlier answers anything else, even `busy` or
-   a passing 503) clears every marker: resolve the contention and rerun
+   a passing 503) clears the markers: resolve the contention and rerun
    from the pre-checks.
 3. **Reboot.** It runs `ssh node-b systemctl reboot` and waits up to
    `--boot-timeout` (1200 s) for ssh with a new `boot_id`. If ssh exits

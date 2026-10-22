@@ -432,3 +432,36 @@ aborts anyway.
 
 D5 (nit). `marks.marked_at` is set even when the final pass aborts and
 the markers are cleared.
+
+### Fix, DeepSeek round (lane `lane/fp0-reboot-script-r2`)
+
+- D1 fixed. The receipt keeps `marks.may_hold_marker`: every computer
+  that answered 200 in any round, gave no answer (status 0), answered
+  5xx (`writeHostPlannedRestartMarker` can fail after the rename), or was
+  in a mark call that failed in flight (`marks.in_flight`). Every clear
+  (an abort, a failure in the mark phase, a refused reboot, a host that
+  did not go down, a failure after marking) DELETEs only those, and logs
+  the ones it skips. A computer that refused before writing (a readable
+  409, 400, 403, 404, 405) is not cleared, so the guest's own apply
+  marker survives. Choice, stated: a computer that wrote earlier and then
+  refuses (for example `unsafe` in the final pass) is still cleared. Its
+  file may now hold the apply's marker rather than the host's, but it
+  may also still hold the host's, and leaving that would let a crash in
+  the next 15 minutes boot as planned. The crash-never-resumes rule wins;
+  the cost is that the apply's restart may become a crash boot.
+- D2 is N1, fixed in round 3.
+- D3 fixed. A computer the final pass did not renew is logged as
+  "marker not renewed in the final pass (answered <outcome>)", with "a
+  computer marked earlier must write again; rerun once it answers". An
+  `unsafe` final answer keeps its own message.
+- D4 fixed. The `--allow-crash-unverified` help says it does not cover a
+  computer that wrote earlier and does not write again in the final
+  pass; the runbook already said so.
+- D5 fixed. `marks.marked_at` is set only when the final pass succeeds.
+- Tests: six more (59 in all). Four earlier expectations that a refusing
+  computer is cleared now expect that it is not.
+
+Residual: a guest cannot tell the host's marker from its apply's
+(one file, one unconditional DELETE). Clearing only the host's own
+marker would need the DELETE to match the reason or target it was
+written with, which is a guest change, not this script's.
