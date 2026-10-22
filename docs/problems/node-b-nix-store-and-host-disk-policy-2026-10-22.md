@@ -574,3 +574,35 @@ Recorded as found; dispositions follow in the commits after this one.
 | DS2b-6 log is a model; booted generation link | Stated in residuals. |
 | DS2b-7 guard trusts the file | Step 2 is now a hold for deploy 2; residual stated. |
 | Flash (bunch 80) | ACCEPT; no edits asked. |
+
+## Review round 3 findings (bunch 95: DeepSeek, confirmed), recorded before the fixes
+
+All three are in `scripts/node-b-deploy-disk-preflight` at the deploy 2
+head (0aa462439).
+
+- **R3-F1, the numeric reads have no length cap, so a big number fails
+  open.** The `^[0-9]+$` checks (lines 25, 30, 50, 84) admit any length.
+  A 20-digit `DEPLOY_MIN_FREE_KIB` passes the check, then makes every `[`
+  that compares it error (status 2); an `if` whose test errors is false, so
+  the guard (line 38) never raises it, and after the reclaim the refusal
+  (line 88) is skipped: exit 0 and the deploy proceeds. The same holds for
+  a 20-digit `df` reading. A `min-free` of `9223372036854775808` passes the
+  check and `$((live_min_free / 1024))` wraps negative in bash's 64-bit
+  arithmetic, so the guard computes a floor under the default and admits
+  the deploy at 60 GiB whatever nix runs with. A leading zero makes
+  `$(( ))` read the value as octal. Any arithmetic or test error must
+  refuse the deploy.
+- **R3-F2, the guard's margin is a fixed 10 GiB, not the floor's terms.**
+  The default floor is min-free + 36 GiB (deploy 8 + compaction 14 + paper
+  regrowth 10 + margin 4, section 3), but the guard keeps only live
+  min-free + 10 GiB. For a live min-free between 24 and 50 GiB the guard
+  floor is at or under the default 60, and from 50 GiB up it is min-free
+  + 10: in both ranges a deploy can start with less than 36 GiB above
+  min-free, so the overlapping work no longer fits and nix's auto-GC can
+  run inside the build (2026-09-17). Example: min-free 40 GiB, floor 60,
+  65 GiB free is admitted with 25 GiB above min-free.
+- **R3-F3, the guard reads `/etc/nix/nix.conf`, not the running daemon's
+  value** (the same gap as DS2b-7, now asked for in code). Either read the
+  daemon's effective value with the file as a fallback that fails closed on
+  disagreement, or record why the file is authoritative here, with the
+  evidence.
