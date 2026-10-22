@@ -310,15 +310,18 @@ The panel was Gemini flash, DeepSeek and Devin, and it sent back
    /internal/runtime/isolation-selftest?leg=oom|seccomp`:
    - the public edge refuses `/internal/*`, and the proxy never forwards it;
    - the guest admits only its host peer (`server.GuestHostCaller`: the
-     default gateway, never loopback or any other in-guest address) holding
-     the internal service credential (`hostauth.Authorize`), as
-     `/internal/debug/pprof/` does;
+     default gateway, never loopback or any other in-guest address), then
+     calls `hostauth.Authorize`, the pairing `/internal/debug/pprof/` uses.
+     Round 2 found that the deployed guest runs hostauth in off mode, where
+     `Authorize` returns true, so the credential is not checked there: the
+     transport check alone is the gate (see "Review bunch 27" below);
    - the `/api` route answers 400 to a `leg`, and the proxy refuses any
      `leg` on it with 404 before the guest, for cookie sessions and API keys
      alike.
 
    The probe and the FP2 proof steps reach the internal route from Node B
-   over ssh, with the token header file passed to curl by path.
+   over ssh, with the token header file passed to curl by path (the guest
+   ignores it while hostauth is off).
 2. **No free-memory guard.** The leg now refuses when MemAvailable is below
    the budget plus 1 GiB headroom: 512 MiB is the daemon's `MemoryMin`, and
    512 MiB covers the other desk workers' growth and the store's page cache.
@@ -343,3 +346,39 @@ The seccomp children's timeout now kills the child's whole process group
 
 Not yet proved: the root kill test, and both legs on the deployed guest
 (FP0).
+
+## Review bunch 27 (2026-10-22): the deployed gate is the transport check alone
+
+DeepSeek v4.1 flash accepted round 2 with edits. Its E1 was a doc-accuracy
+finding, and it is right. Checked against the code:
+
+- `nix/autoputer-vm.nix` sets neither `CHOIR_INTERNAL_AUTH_MODE` nor an
+  internal credential. Only `nix/node-b.nix` does (`internalAuthMode =
+  "enforce"`, for the host services). No Go code sets the variable either.
+- `hostauth` treats an empty mode as `off` (`internal/hostauth/hostauth.go`),
+  and `Authorize` returns true in off mode. Its doc comment says to call it
+  only after the transport check.
+- So on a deployed guest the handler's gate,
+  `server.GuestHostCaller(r) && hostauth.Authorize(r)`, is
+  `GuestHostCaller` alone: the request must come from the guest's default
+  gateway, the host's address on the tap. That is the same rule as the
+  planned-restart routes (`requireInternalRuntimeCaller`). `/internal/debug/pprof/`
+  pairs `Authorize` with `HostSourcedCaller`, which is looser (it also admits
+  loopback).
+
+What this changes in the text above: "holding the internal service
+credential" overclaims for the deployed default. It is corrected in the
+handler comment (`internal/agentcore/isolation_selftest.go`), the probe
+docstring, and the FP2 definition. What it does not change: the gate's
+behavior, or the guest's auth mode. Setting enforce mode and loading a
+credential on guests would be a red change of its own and is not taken here.
+
+Residual, named: **guest internal routes rely on the transport gate; enforce
+mode on guests is a follow-up.** A guest-root process with CAP_NET_ADMIN could
+assign the gateway address locally and pass `GuestHostCaller`. A confined desk
+cell cannot: it is non-root, in a private network namespace, and its seccomp
+filter has no socket or connect. The same residual already applies to pprof
+and the planned-restart routes. Reviewer's lower-severity notes, recorded and
+not acted on: any Node B process can run the legs on any guest (the paper
+guard lives in `scripts/proofs/lib.sh`, not the route), and the legs' Linux-only
+runtime paths are covered by unit tests and inspection until FP0's Linux run.

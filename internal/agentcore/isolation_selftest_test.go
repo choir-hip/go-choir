@@ -42,8 +42,10 @@ func TestIsolationSelfTestAPIRouteRefusesTheLegs(t *testing.T) {
 	}
 }
 
-// Review bunch 22 item 1: the internal route admits only the host peer
-// holding the internal service credential.
+// Review bunch 22 item 1: the internal route admits only the host peer. This
+// test runs hostauth in enforce mode, so it also checks the credential, which
+// the deployed guest does not yet require (it runs off mode: the transport
+// check alone gates the route; review bunch 27 E1).
 func TestInternalIsolationSelfTestRefusesNonHostCallers(t *testing.T) {
 	t.Setenv(server.EnvGuestTrustLoopback, "")
 	const token = "selftest-gate-test-token-0123456789abcdef0123456"

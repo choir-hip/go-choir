@@ -191,8 +191,9 @@ now:
     under its real 768 MiB cgroup runs a fixed allocating cell. The leg
     reports oom_kill from memory.events, the worker's and the slice's
     limits, the daemon's pid, start ticks and boot id before and after, and
-    whether a sibling answers. Callers: the guest's host peer holding the
-    internal service credential only (see review_bunch_22). FP2 step 4 runs
+    whether a sibling answers. Callers: the guest's host peer only (the
+    transport check, server.GuestHostCaller; see review_bunch_22 and
+    review_bunch_27). FP2 step 4 runs
     it through desk_cell_confinement_probe.py --leg oom from Node B. The capsule leg (SEC-13,
     RES-03) is not built: a capsule is not reachable safely from the
     self-test (file:line in
@@ -204,13 +205,24 @@ now:
     Sent back on bb50792d0, repaired on the same lane. The oom and seccomp
     legs moved to the host-internal POST
     /internal/runtime/isolation-selftest?leg=... The guest admits its host
-    peer with the internal credential only. The proxy refuses a leg on
+    peer only (the credential check is inert on guests; see review_bunch_27).
+    The proxy refuses a leg on
     /api; the probe and proof steps 4 and 6 run from Node B over ssh. The
     OOM leg gained: a MemAvailable guard (budget + 1 GiB), a sibling gate, a
     cgroup path saved before Eval (the timeout panic), a host-recorded start
     marker, and mode required in both judges. Seccomp children: group kill
     at the timeout. Proof steps renumbered: 6 is seccomp, 7 is rollback.
     Still FP0's: the root kill test, and both legs deployed.
+  review_bunch_27: >-
+    Round 2 accepted with edits (DeepSeek v4.1 flash). Doc accuracy (E1): the
+    deployed guest runs hostauth in off mode (nix/autoputer-vm.nix sets
+    neither CHOIR_INTERNAL_AUTH_MODE nor a credential; Authorize returns true
+    in off mode), so the effective gate on the internal route is
+    server.GuestHostCaller alone, the planned-restart rule. "Holding the
+    internal service credential" was wrong for the deployed default and is
+    removed here, in the handler comment and in the problem record. Named
+    residual: guest internal routes rely on the transport gate; enforce mode
+    on guests is a follow-up (red, not taken here).
   selftest_seccomp_leg: >-
     2026-10-22, same lane, on FP0's call. POST
     /internal/runtime/isolation-selftest?leg=seccomp re-execs the daemon's
@@ -525,6 +537,15 @@ first on the paper.
 
 ## Residuals named now
 
+- Guest internal routes rely on the transport gate; enforce mode on guests is
+  a follow-up. The guest runs hostauth in off mode, so the self-test's
+  internal route (like pprof and the planned-restart routes) is gated by
+  `server.GuestHostCaller` alone: the request must come from the host's
+  gateway address on the tap. A guest-root process with CAP_NET_ADMIN could
+  assign that address and pass. A confined desk cell (non-root, private
+  netns, seccomp without socket or connect) cannot. Setting enforce mode
+  and loading a credential on the guest is a separate red decision (review
+  bunch 27 E1); it is not taken here.
 - The guest daemon still runs as root (SEC-15's main part). Design: split the
   runtime into an unprivileged API/orchestration process and a small
   privileged helper that creates capsules and cgroups, reached over a unix
