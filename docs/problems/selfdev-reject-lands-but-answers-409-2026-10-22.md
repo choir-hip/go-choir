@@ -226,3 +226,130 @@ materialize (found in code).**
   refuse a `materializing` or `applied` operation. Both have to be fixed.
 - H1 and H2 are not needed to explain the evidence. The hypotheses
   section is kept as written at the time.
+
+## Fix (c4fdeb3cb, red; tests 90b10b2ab, yellow)
+
+- **The race branch reads the right operation.** `decideSelfDevelopment`
+  binds Transition's result to `decided` and no longer overwrites
+  `operation`. The re-read after an `ErrConflict` uses the operation id
+  the handler already holds.
+- **One matcher, logged.** The handler's race branch and
+  `recoverSelfDevelopmentDecision`'s conflict branch share
+  `selfDevelopmentDecisionNotCarried` (self_development_decision_binding.go).
+  It checks event, receipt, descending state, then the verifier, in that
+  order. When the match fails, both writers log the first comparison that
+  failed. The values logged are the operation's state, decision_event and
+  decision_receipt, and this decision's event digest, receipt id and next
+  state. No secrets.
+  - The handler line starts `selfdev decision: operation <id>: <decision>
+    lost its transition…`.
+  - The observer line starts `selfdev decision recovery: …`.
+- **Heads bind only in the decision's own state.**
+  `verifyFinalizedSelfDevelopmentDecision` compares the operation's heads
+  with the decision's next heads only while the operation is `accepted`
+  or `rejected`. From `materializing` on, the materializer owns the heads.
+  The event, receipt and actor joins stay exact in every state. This fixes
+  part 1 for both the race branch and the approve replay.
+- **Replay from the witness.** The release witness's `decision` now also
+  carries `expected_pending_transition_ref`,
+  `expected_desired_state_commitment` and
+  `expected_effective_state_commitment` (additive JSON). With the two
+  expected heads already there, that is the whole decision-time binding.
+- **CLI replay.** `choir self-dev reject` and `choir self-dev approve` post
+  a replay with the caller's key when the operation is already in the
+  state that decision leaves it in:
+  - reject: `rejected`;
+  - approve: `accepted`, `materializing` or `applied`.
+
+  The replay carries the landed decision's binding from the witness, not
+  today's head. An approve replay never re-arms accept_once. Any other
+  state is refused before any write, as before. So is a witness with no
+  decision of that kind. The server's exact-match replay rule is
+  unchanged: a different key, or the same key with a different reason,
+  decision or binding, still answers 409.
+
+## Tests
+
+- `TestSelfDevDecisionObserverWinsRaceAnswersDecidedOperation`
+  (internal/agentcore/selfdev_decision_observer_race_test.go), for reject
+  and for approve. It runs on the P4 fixture: real appender, post-commit
+  observer, materializer, mode CAS with owner acts. A nil-in-production
+  seam lets the observer finalize the decision between the append and the
+  Transition. For approve, the observer applies the candidate in that
+  window. The test asserts:
+  - the observer really won;
+  - the handler answers 200 with the decided operation carrying the
+    tape's decision event;
+  - a same-key replay rebuilt from the release witness answers 200 and
+    appends no decision;
+  - a same-key replay with today's head, a different key, and the same
+    key with a changed reason or decision all answer 409.
+
+  Before the fix it fails with staging's exact body.
+- `TestSelfDevDecisionReplaysALandedDecisionWithItsOriginalBinding`
+  (cmd/choir/selfdev_test.go) checks that:
+  - the replay posts the witness binding;
+  - an approve replay does not touch the mode;
+  - a reject of an applied operation, an approve of a rejected one, a
+    decided state with no decision on the tape, `failed`, and `executing`
+    are all refused with GETs only.
+- Runs:
+  - `GOMAXPROCS=2 GOFLAGS=-p=2 go test -race ./internal/agentcore -run
+    'SelfDev|Decision|Selfdev' -count=1`: ok (119.6s);
+  - `go test ./internal/agentcore -run
+    'Witness|StandingConsensus|Materializ|Rollback|Effects|Release|Freeze|Capsule'`:
+    ok;
+  - `go test ./cmd/choir -count=1`: ok;
+  - `go test ./internal/proxy -run 'SelfDev|Decision'`: ok;
+  - `go vet ./internal/agentcore ./cmd/choir`: clean.
+
+## Rollback
+
+`git revert c4fdeb3cb`. No stored shape changed, and the witness fields
+are additive. The test commit 90b10b2ab can stay. Its seam is nil in
+production, and its tests would fail again after a revert, which is the
+intended signal.
+
+## Staging proof (FP0, test computer only)
+
+A forced observer race is not cheap on staging. The cheapest real check
+is a same-key replay of the landed reject. It needs the deployed guest
+(the witness fields) and a CLI built from this commit.
+
+1. Confirm the test computer runs the deployed SHA: health/build identity
+   for `computer-71afbf1461dffabcce8eeebe558d03bd`.
+2. Record `choir self-dev head --computer computer-71afbf14…` (sequence S).
+3. Replay: `choir self-dev reject --computer computer-71afbf14…
+   --operation selfdev-bb0cebfa9edc224e29045f4921763db9
+   --idempotency-key fp4ff-reject-bb0cebfa-20261022 --reason "<the exact
+   08:03:09 reason>"`, with the test computer's owner key on stdin.
+   - Expect exit 0 and a body with state `rejected`, decision_event
+     `cdc10b03…` and decision_receipt `01a162a2…`.
+   - The reason must be byte-identical, because the decision ref digests
+     it.
+4. Read `choir self-dev head` again. Expect no new `effect_rejected` on
+   the tape. The sequence may move only by projection batches, not by a
+   decision.
+5. Negative checks (both must answer `http 409`, with the head
+   unchanged):
+   - the same command with `--reason "different"`;
+   - the same command with `--idempotency-key fp4ff-reject-other`.
+6. If any approve on a test computer was landed by the CLI and reached
+   `applied`, replay it: `choir self-dev approve --computer … --operation
+   <id>`, with the same key; the default key `cli-approve:<id>` is
+   deterministic. Expect 200 with state `applied`. Before the fix this
+   answered 409 "decision idempotency key reused with different binding",
+   so this checks part 1 on the product path.
+7. Afterwards, grep the guest log for `selfdev decision:`. Any line there
+   names a race whose match failed, with the comparison that failed.
+
+## Residuals
+
+- The H1/H2 shapes (a different store view, or a projection without
+  fields) are not needed to explain the evidence. They are also not ruled
+  out on staging. The new log line is the detector.
+- The `found` replay path still answers a generic 409 text when its
+  verifier fails. It does not log the failed comparison.
+- An approve replay is accepted by the CLI only in `accepted`,
+  `materializing` or `applied`. A landed approval that later `failed` or
+  rolled back is refused client-side, as before.
