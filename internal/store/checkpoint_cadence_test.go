@@ -474,7 +474,7 @@ func TestCheckpointCloseCommitIsBoundedByCloseTimeout(t *testing.T) {
 	if ok := <-sawDeadline; !ok {
 		t.Fatal("the closing commit ran without a deadline")
 	}
-	if st := s.CheckpointStats(); st.ClosingCommitsSkipped < 1 || st.Failures != 0 || st.LastError != "" {
+	if st := s.CheckpointStats(); st.ClosingCommitsSkipped != 1 || st.Failures != 0 || st.LastError != "" {
 		t.Fatalf("a closing commit cut by the close deadline must count as skipped, not a failure: %+v", st)
 	}
 }
@@ -644,9 +644,11 @@ func doltHead(t *testing.T, s *Store) string {
 
 // While a commit Close left running is held, the store stays open: a
 // second open in this process is refused by Dolt's lock (the engine was
-// not torn down). Once the commit is released and Close succeeds, the
-// next open sees the pre-close head: the late commit, cancelled by Close,
-// is not applied.
+// not torn down). Once the commit is released, Close succeeds and its
+// closing commit is HEAD. What this shows about the late commit is
+// narrow: the stand-in returns before DOLT_COMMIT and its context is
+// cancelled, so it never reaches Dolt; a real DOLT_COMMIT that ignores
+// its context mid-write runs to its end and may advance HEAD.
 func TestCheckpointNextOpenWhileCommitterHeld(t *testing.T) {
 	path := testStorePath(t)
 	cleanupTestStorePath(path)
@@ -678,9 +680,21 @@ func TestCheckpointNextOpenWhileCommitterHeld(t *testing.T) {
 		t.Fatalf("open after the store closed: %v", err)
 	}
 	defer after.Close()
-	if got := doltHead(t, after); got != preClose {
-		t.Fatalf("the late commit was applied: head %s, want the pre-close head %s", got, preClose)
+	if got := doltHead(t, after); got == preClose {
+		t.Fatalf("the retried Close did not commit the pending rows: head is still the pre-close head %s", preClose)
 	}
+	if msg := doltHeadMessage(t, after); msg != "guest snapshot at close" {
+		t.Fatalf("HEAD after the retried Close = %q, want the closing commit", msg)
+	}
+}
+
+func doltHeadMessage(t *testing.T, s *Store) string {
+	t.Helper()
+	var msg string
+	if err := s.db.QueryRowContext(context.Background(), `SELECT message FROM dolt_log LIMIT 1`).Scan(&msg); err != nil {
+		t.Fatalf("read the Dolt head message: %v", err)
+	}
+	return msg
 }
 
 // openWithPendingCheckpoint opens a debounced store with a 100ms close cap,
@@ -709,7 +723,9 @@ const failedCloseChildEnv = "CHOIR_TEST_FAILED_CLOSE_CHILD"
 // The restart after a Close that failed closed: a child process holds a
 // background commit, Close fails closed, and the process exits with the
 // commit still held (a planned restart's exit). The next process opens with
-// no lock error and sees the pre-close head; the held commit never lands.
+// no lock error and sees the pre-close head. This proves that process exit
+// reclaims the store; the held stand-in never reached Dolt, so it says
+// nothing about a DOLT_COMMIT already inside Dolt at the exit.
 func TestCheckpointNextProcessOpenAfterFailedClose(t *testing.T) {
 	if path := os.Getenv(failedCloseChildEnv); path != "" {
 		s, preClose := openWithPendingCheckpoint(t, path, "computer-cadence-nextprocess")
@@ -834,5 +850,326 @@ func TestCheckpointCommitAfterCloseIsNotAttempted(t *testing.T) {
 	}
 	if attempted {
 		t.Fatal("a background commit ran after Close")
+	}
+}
+
+// prepareOneFinalize prepares one event on computerID and returns its
+// finalize, to run while the test holds a commit.
+func prepareOneFinalize(t *testing.T, s *Store, computerID string) func() error {
+	t.Helper()
+	ctx := context.Background()
+	head, err := s.Head(ctx, computerID)
+	if err != nil || head == nil {
+		t.Fatalf("head: %v", err)
+	}
+	eventID, err := computerevent.NewEventID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	event, digest := prepareProjectionEvent(t, s, *head, eventID, "held-"+eventID)
+	batch := testBatchCheckpointBatch(t, computerID, event.EventID, digest)
+	receipt := signedReceipt(t, computerID, digest, event.Sequence)
+	return func() error { return s.FinalizeBatch(ctx, computerID, digest, receipt, &batch) }
+}
+
+// holdNextCommit makes the next commit hold the connection, ignoring its
+// context, until released.
+func holdNextCommit(t *testing.T, s *Store) (held <-chan struct{}, release func()) {
+	t.Helper()
+	heldCh := make(chan struct{})
+	releaseCh := make(chan struct{})
+	var once sync.Once
+	release = func() { once.Do(func() { close(releaseCh) }) }
+	t.Cleanup(release)
+	var mu sync.Mutex
+	armed := true
+	s.checkpointExecHook = func(context.Context) error {
+		mu.Lock()
+		hold := armed
+		armed = false
+		mu.Unlock()
+		if hold {
+			close(heldCh)
+			select {
+			case <-releaseCh:
+			case <-time.After(20 * time.Second):
+			}
+		}
+		return nil
+	}
+	return heldCh, release
+}
+
+func readDBAnswers(t *testing.T, s *Store) error {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return s.readDB.PingContext(ctx)
+}
+
+// A second Close while the first waits on a live commit does not close
+// the pools: it waits for the first and fails closed too.
+func TestCheckpointConcurrentCloseFailsClosed(t *testing.T) {
+	path := testStorePath(t)
+	cleanupTestStorePath(path)
+	t.Cleanup(func() { cleanupTestStorePath(path) })
+	s, _ := openWithPendingCheckpoint(t, path, "computer-cadence-concurrentclose")
+	s.checkpoint.closeTimeout = 300 * time.Millisecond
+	_, releaseCommit, background := holdBackgroundCommit(t, s)
+
+	first := make(chan error, 1)
+	go func() { first <- s.Close() }()
+	waitForCheckpoint(t, "the first Close to start", s.checkpoint.isClosed)
+	second := make(chan error, 1)
+	go func() { second <- s.Close() }()
+	for name, ch := range map[string]chan error{"first": first, "second": second} {
+		select {
+		case err := <-ch:
+			if !errors.Is(err, ErrCheckpointCommitLive) {
+				t.Errorf("%s Close with a live commit = %v, want ErrCheckpointCommitLive", name, err)
+			}
+		case <-time.After(10 * time.Second):
+			releaseCommit()
+			t.Fatalf("%s Close did not return", name)
+		}
+	}
+	if err := readDBAnswers(t, s); err != nil {
+		t.Fatalf("a Close closed the pools under a live commit: %v", err)
+	}
+	if got := s.CheckpointStats().ClosesLeftOpen; got != 2 {
+		t.Fatalf("closes_left_open = %d, want 2 (one per failing Close)", got)
+	}
+	releaseCommit()
+	select {
+	case <-background:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the background commit did not finish after release")
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close after the commit finished: %v", err)
+	}
+}
+
+// After a Close that failed closed the store stays usable and finalize
+// commits inline; a retried Close while that inline commit runs fails
+// closed too.
+func TestCheckpointRetriedCloseUnderInlineCommitFailsClosed(t *testing.T) {
+	path := testStorePath(t)
+	cleanupTestStorePath(path)
+	t.Cleanup(func() { cleanupTestStorePath(path) })
+	const computerID = "computer-cadence-retriedclose"
+	s, _ := openWithPendingCheckpoint(t, path, computerID)
+	s.doltCheckpointEvery = 1
+	_, releaseBackground, background := holdBackgroundCommit(t, s)
+	if err := s.Close(); !errors.Is(err, ErrCheckpointCommitLive) {
+		t.Fatalf("first Close = %v, want ErrCheckpointCommitLive", err)
+	}
+	releaseBackground()
+	select {
+	case <-background:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the background commit did not finish after release")
+	}
+
+	finalize := prepareOneFinalize(t, s, computerID)
+	held, releaseInline := holdNextCommit(t, s)
+	finalized := make(chan error, 1)
+	go func() { finalized <- finalize() }()
+	select {
+	case <-held:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the inline commit never started")
+	}
+	if err := s.Close(); !errors.Is(err, ErrCheckpointCommitLive) {
+		releaseInline()
+		t.Fatalf("retried Close under an inline commit = %v, want ErrCheckpointCommitLive", err)
+	}
+	if err := readDBAnswers(t, s); err != nil {
+		t.Fatalf("the retried Close closed the pools under the inline commit: %v", err)
+	}
+	releaseInline()
+	select {
+	case err := <-finalized:
+		if err != nil {
+			t.Fatalf("the inline commit failed: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the finalize did not finish after release")
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close after the inline commit finished: %v", err)
+	}
+}
+
+// Count mode (the default) fences Close the same way: a live inline
+// commit keeps the pools open and Close fails closed.
+func TestCheckpointCountModeCloseFailsClosedUnderInlineCommit(t *testing.T) {
+	path := testStorePath(t)
+	cleanupTestStorePath(path)
+	t.Cleanup(func() { cleanupTestStorePath(path) })
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.doltCheckpointEvery = 1
+	s.checkpoint.closeTimeout = 100 * time.Millisecond
+	const computerID = "computer-cadence-countclose"
+	_, _ = prepareGenesis(t, s, computerID, "genesis-cadence-countclose")
+	finalize := prepareOneFinalize(t, s, computerID)
+	held, releaseInline := holdNextCommit(t, s)
+	finalized := make(chan error, 1)
+	go func() { finalized <- finalize() }()
+	select {
+	case <-held:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the inline commit never started")
+	}
+	if err := s.Close(); !errors.Is(err, ErrCheckpointCommitLive) {
+		releaseInline()
+		t.Fatalf("count-mode Close under an inline commit = %v, want ErrCheckpointCommitLive", err)
+	}
+	if err := readDBAnswers(t, s); err != nil {
+		t.Fatalf("count-mode Close closed the pools under the inline commit: %v", err)
+	}
+	releaseInline()
+	select {
+	case err := <-finalized:
+		if err != nil {
+			t.Fatalf("the inline commit failed: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the finalize did not finish after release")
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close after the inline commit finished: %v", err)
+	}
+}
+
+// One deadline bounds the whole Close: the close deadline plus one grace,
+// not a grace per wait. The background commit ignores its cancel and
+// returns inside the grace; the closing commit then has no time left and
+// is skipped (counted once), and Close returns within the bound.
+func TestCheckpointCloseBoundIsOneDeadline(t *testing.T) {
+	path := testStorePath(t)
+	cleanupTestStorePath(path)
+	t.Cleanup(func() { cleanupTestStorePath(path) })
+	s, _ := openWithPendingCheckpoint(t, path, "computer-cadence-onedeadline")
+	const limit = 400 * time.Millisecond
+	s.checkpoint.closeTimeout = limit
+	var mu sync.Mutex
+	call := 0
+	var closeStarted time.Time
+	held := make(chan struct{})
+	s.checkpointExecHook = func(ctx context.Context) error {
+		mu.Lock()
+		call++
+		n := call
+		mu.Unlock()
+		if n != 1 {
+			return nil
+		}
+		close(held)
+		for giveUp := time.Now().Add(20 * time.Second); time.Now().Before(giveUp); time.Sleep(5 * time.Millisecond) {
+			mu.Lock()
+			started := closeStarted
+			mu.Unlock()
+			if !started.IsZero() && time.Since(started) >= limit+150*time.Millisecond {
+				return nil
+			}
+		}
+		return nil
+	}
+	background := make(chan struct{})
+	go func() {
+		s.fireCheckpoint()
+		close(background)
+	}()
+	select {
+	case <-held:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the background commit never started")
+	}
+	mu.Lock()
+	closeStarted = time.Now()
+	mu.Unlock()
+	err := s.Close()
+	elapsed := time.Since(closeStarted)
+	if err != nil {
+		t.Fatalf("Close after the background commit returned inside the grace: %v", err)
+	}
+	if bound := limit + checkpointCloseGrace + 75*time.Millisecond; elapsed > bound {
+		t.Fatalf("Close took %s, past one close deadline plus one grace (%s)", elapsed, bound)
+	}
+	if st := s.CheckpointStats(); st.ClosingCommitsSkipped != 1 || st.Failures != 0 {
+		t.Fatalf("the closing commit with no time left must count once as skipped: %+v", st)
+	}
+	select {
+	case <-background:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the background commit did not finish")
+	}
+}
+
+// Reopen requires a closed store: on an open one it would orphan the open
+// handles.
+func TestCheckpointReopenRequiresAClosedStore(t *testing.T) {
+	path := testStorePath(t)
+	cleanupTestStorePath(path)
+	t.Cleanup(func() { cleanupTestStorePath(path) })
+	other := path + "-other"
+	cleanupTestStorePath(other)
+	t.Cleanup(func() { cleanupTestStorePath(other) })
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	if err := s.Reopen(other); err == nil {
+		t.Fatal("Reopen on an open store succeeded")
+	}
+	if err := readDBAnswers(t, s); err != nil {
+		t.Fatalf("a refused Reopen disturbed the open store: %v", err)
+	}
+}
+
+func commitLockFree(s *Store) bool {
+	if s.doltCommitMu.TryLock() {
+		s.doltCommitMu.Unlock()
+		return true
+	}
+	return false
+}
+
+// A closing commit that overruns the deadline and later returns with its
+// context error counts once as skipped, and the failing Close once as
+// left open.
+func TestCheckpointOverrunClosingCommitCountsOnce(t *testing.T) {
+	path := testStorePath(t)
+	cleanupTestStorePath(path)
+	t.Cleanup(func() { cleanupTestStorePath(path) })
+	s, _ := openWithPendingCheckpoint(t, path, "computer-cadence-overrun")
+	s.markDoltHistoryDirty()
+	held, release := holdNextCommit(t, s)
+	closed := make(chan error, 1)
+	go func() { closed <- s.Close() }()
+	select {
+	case <-held:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the closing commit never started")
+	}
+	select {
+	case err := <-closed:
+		if !errors.Is(err, ErrCheckpointCommitLive) {
+			t.Fatalf("Close with an overrunning closing commit = %v, want ErrCheckpointCommitLive", err)
+		}
+	case <-time.After(10 * time.Second):
+		release()
+		t.Fatal("Close did not return")
+	}
+	release()
+	waitForCheckpoint(t, "the overrunning closing commit to return", func() bool { return commitLockFree(s) })
+	st := s.CheckpointStats()
+	if st.ClosingCommitsSkipped != 1 || st.ClosesLeftOpen != 1 || st.Failures != 0 {
+		t.Fatalf("one overrunning closing commit must count once: %+v", st)
 	}
 }
