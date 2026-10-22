@@ -97,6 +97,18 @@ the product API and `choir trace export`.
   13:44:16, 13:44:57 and 13:58:54. Hypothesis: these timeouts are linked to
   the memory pressure. That is not confirmed.
 
+- At the same time, a management wake for the fate deadline was
+  dead-lettered three times. Guest log:
+  - 14:01:07: `actor wake latency kind=assigned_engineering_fate_deadline
+    … waited=23m1s`;
+  - 14:01:10, 14:01:27 and 14:01:29: `dispatcher: poison` and
+    `dead letter: delivery_failed for update
+    58a5b36c-e071-538b-82cc-70b5bdfb6cc7` (then `#redrive-1`,
+    `#redrive-2`).
+  - The handler's error is not logged.
+  - Hypothesis: the fate-deadline handler failed on the same unbindable
+    report. Its log does not show this.
+
 ## Next probes
 
 1. In `reduceComplete`, deduplicate execution refs, or refuse duplicates
