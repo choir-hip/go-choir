@@ -441,3 +441,74 @@ the verifier test), fix c756a14eb (red), proof steps in the station file
 - F10, recorded. Proof step 0 checks before the deploy that unit-env does
   not exist and what is at the old paths. The other assumptions stand as
   stated.
+
+## Round 2b findings (DeepSeek, bunch 85, on 368ffec70), before any fix
+
+DeepSeek v4.1 flash: ACCEPT (conditional), `_runs/bunch85/out/omp-deepseek-v41-flash.out`.
+Its third finding is F2 (fixed in c756a14eb) and its fourth is F6 (the
+classifier, with FP0 and the owner). The rest of its findings round 2 does
+not cover:
+
+- **DS1 (medium): the directory is hidden fail-open.**
+  `hostSecretPaths.unitEnv` is `"-/var/lib/go-choir/unit-env"`, and the
+  "-" makes systemd skip the mask when the directory is missing.
+  switch-to-configuration runs the activation, records a failure and still
+  starts and restarts units. So if the snippet's `mkdir` or `chmod` fails
+  (ENOSPC, a read-only filesystem), every unit runs with the real
+  directory unmasked as soon as it appears. Only the verifier would notice,
+  after the fact.
+- **DS2 (medium): the first import is not failure-atomic.** Each file
+  moves separately under `set -e`, and the marker is written after all
+  four. An ENOSPC or IO failure after some moves aborts the activation, but
+  units still start, and their EnvironmentFile paths point into a
+  directory that lacks the unmoved names. The proxy loses its overrides;
+  corpusd and checkpointd fall back to Store A for corpus tables. The
+  deploy retries the switch once and its activation may finish the import,
+  but units started in between keep the partial view: checkpointd on its
+  minute timer, and any unit that restarts.
+- **DS5 (low): the verifier requires deploy.env, but the proxy does not.**
+  The verifier newly requires `unit-env/deploy.env`, while the proxy's
+  EnvironmentFile is optional ("-"). The base verifier never checked
+  deploy.env (this is F8).
+- **DS6 (low): the corrected DSN runbook still creates the file 0644.** It
+  writes corpus-dsn.env with `cat >`, which creates the file at the
+  operator's umask (0644) inside the 0700 directory. The modes check fails
+  until the next activation sets 0600.
+- **DS7 (low): one test does not test what it says.** `test_N1_keeps_are_real`
+  says it rejects a keep that the unit hides anyway, but never checks the
+  unit's hidden list. The gateway's keep of the JWT key is one such
+  keep: the gateway hides the whole auth-signing directory. The test file
+  also has no case for both paths holding the same content before the
+  import, and none for a partial import.
+
+Planned dispositions, tests first:
+
+- DS1: the entry loses its "-", so a unit whose directory is missing
+  refuses to start. The directory exists before any unit starts: the
+  activation creates it at boot before systemd starts units and in a
+  switch before units restart, and tmpfiles creates it as well.
+- DS2: the partial state heals itself and is loud and safe. The marker is
+  still written last, so the next activation (a boot, or the deploy's
+  switch retry) continues the import of what is left. The three units that
+  read an env file from the directory (go-choir-proxy, go-choir-corpusd,
+  go-choir-checkpointd) get `AssertPathExists=` on the marker, so they
+  refuse to start, loudly, until the import is complete.
+
+  I did not take the staged, atomic directory swap. It needs either a
+  hard link per file, which detaches the old-view masks during the landing
+  (F5), or a directory exchange (`mv --exchange`). The assert keeps the
+  per-file rename that carries the masks, and it guarantees that no reader
+  starts on a partial import.
+- DS5: deploy.env becomes optional in the verifier, matching the unit.
+  corpus-dsn.env and sandbox-gateway-token.env stay required, as in the
+  base verifier; Node B has both, and a missing corpus-dsn.env is a real
+  regression there. The marker is added as required.
+- DS6: the runbook writes the file with `install -m 0600 /dev/stdin`.
+- DS7:
+  - The test asserts that no kept path is hidden after all, whether by
+    the exact entry or by a hidden parent directory. A path counts as
+    hidden when a parent directory is, so the gateway's JWT-key keep
+    goes.
+  - New cases: both paths holding the same content before the import,
+    and a failure after the second move (injected with a `mv` shim on the
+    snippet's PATH).
