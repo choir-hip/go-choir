@@ -15,20 +15,24 @@ import (
 func goodDeskOOMReceipt() DeskOOMSelfTestReceipt {
 	id := DaemonIdentity{PID: 812, StartTicks: 4411, BootID: "2adf3e7d-f8a9-421e-9fb8-005c6573e3da"}
 	return DeskOOMSelfTestReceipt{
-		Kind:        "desk_oom_selftest",
-		Role:        "research",
-		BudgetBytes: 768 << 20,
-		Slice:       DeskOOMCgroup{Path: "/sys/fs/cgroup/choir-desks", MemoryMax: "4294967296", MemoryHigh: "3221225472"},
+		Kind:                   "desk_oom_selftest",
+		Mode:                   "required",
+		Role:                   "research",
+		BudgetBytes:            768 << 20,
+		MemAvailableBytes:      5 << 30,
+		RequiredAvailableBytes: 768<<20 + deskOOMHeadroomBytes,
+		Slice:                  DeskOOMCgroup{Path: "/sys/fs/cgroup/choir-desks", MemoryMax: "4294967296", MemoryHigh: "3221225472"},
 		Worker: DeskOOMWorker{
-			PID:       900,
-			Cgroup:    DeskOOMCgroup{Path: "/sys/fs/cgroup/choir-desks/w-1", MemoryMax: "805306368", MemoryHigh: "max", Events: map[string]uint64{"oom_kill": 1, "oom": 1}},
-			CellSent:  true,
-			Result:    "transport: EOF",
-			Dead:      true,
-			ExitCause: "exited on its own (signal: killed); killed by its memory budget (memory.max 768 MiB, oom_kill 1)",
-			OOMKill:   1,
+			PID:         900,
+			Cgroup:      DeskOOMCgroup{Path: "/sys/fs/cgroup/choir-desks/w-1", MemoryMax: "805306368", MemoryHigh: "max", Events: map[string]uint64{"oom_kill": 1, "oom": 1}},
+			CellSent:    true,
+			CellStarted: true,
+			Result:      "transport: EOF",
+			Dead:        true,
+			ExitCause:   "exited on its own (signal: killed); killed by its memory budget (memory.max 768 MiB, oom_kill 1)",
+			OOMKill:     1,
 		},
-		Sibling:      DeskOOMSibling{Role: "research", PID: 899, BeforeAnswered: true, AfterAnswered: true},
+		Sibling:      DeskOOMSibling{Role: "research", PID: 899, BeforeAnswered: true, AfterAnswered: true, OutputBefore: "cell 42", OutputAfter: "cell 42"},
 		DaemonBefore: id,
 		DaemonAfter:  id,
 	}
@@ -128,5 +132,42 @@ func TestParseProcStatStartTicks(t *testing.T) {
 	}
 	if _, err := parseProcStatStartTicks("812 (short) S 1"); err == nil {
 		t.Fatal("a truncated stat line parsed")
+	}
+}
+
+// Review bunch 22 item 2: the runaway is refused when the guest has less
+// available memory than the budget plus the headroom, before any worker
+// starts; both numbers are in the receipt.
+func TestDeskOOMSelfTestRefusesWhenTheGuestIsShortOfMemory(t *testing.T) {
+	restore := deskOOMMemAvailable
+	deskOOMMemAvailable = func() (uint64, error) { return 1 << 30, nil }
+	defer func() { deskOOMMemAvailable = restore }()
+	rec := DeskOOMSelfTest(context.Background(), DeskOOMSelfTestConfig{
+		Base: DeskSessionWorkerConfig{Bin: "/nonexistent/never-spawned", WorkerArg: "desk-session", CgroupRoot: t.TempDir()},
+	})
+	if rec.OK || rec.Worker.CellSent || rec.Worker.PID != 0 || rec.Sibling.PID != 0 {
+		t.Fatalf("the leg ran with 1 GiB available: %+v", rec)
+	}
+	if rec.MemAvailableBytes != 1<<30 || rec.RequiredAvailableBytes != 768<<20+deskOOMHeadroomBytes {
+		t.Fatalf("receipt numbers: available %d required %d", rec.MemAvailableBytes, rec.RequiredAvailableBytes)
+	}
+	if !strings.Contains(rec.Worker.Error, "MemAvailable") {
+		t.Fatalf("refusal does not name MemAvailable: %q", rec.Worker.Error)
+	}
+}
+
+// Review bunch 22 item 3: no sibling, no runaway.
+func TestDeskOOMSelfTestAbortsWhenTheSiblingCannotStart(t *testing.T) {
+	restore := deskOOMMemAvailable
+	deskOOMMemAvailable = func() (uint64, error) { return 64 << 30, nil }
+	defer func() { deskOOMMemAvailable = restore }()
+	rec := DeskOOMSelfTest(context.Background(), DeskOOMSelfTestConfig{
+		Base: DeskSessionWorkerConfig{Bin: "/nonexistent/never-spawned", WorkerArg: "desk-session", CgroupRoot: t.TempDir()},
+	})
+	if rec.OK || rec.Sibling.Error == "" {
+		t.Fatalf("sibling spawn did not fail: %+v", rec.Sibling)
+	}
+	if rec.Worker.PID != 0 || rec.Worker.CellSent {
+		t.Fatalf("the runaway started without a live sibling: %+v", rec.Worker)
 	}
 }
