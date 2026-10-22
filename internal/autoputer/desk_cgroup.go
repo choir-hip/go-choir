@@ -46,10 +46,11 @@ func ensureDeskCgroups() {
 }
 
 // ensureDocToolCgroups makes the document tools' cgroup root (SEC-15) when
-// the sandbox is on: their own aggregate, never the desks' (review B2). Only
-// required mode puts a tool in it; the isolation self-test does too. A
-// failure is logged: required mode then refuses every tool (the extraction
-// falls back to its pure-Go projection), observe is unaffected.
+// the sandbox is on: their own aggregate, never the desks' (review B2).
+// Required runs, observe's shadows (review E2) and the isolation self-test
+// each run in a child of it. A failure is logged: required mode then refuses
+// every tool (the extraction falls back to its pure-Go projection); observe
+// returns the direct run as always and runs no shadow.
 func ensureDocToolCgroups() {
 	if doctool.ModeFromEnv(os.Getenv) == doctool.ModeOff {
 		return

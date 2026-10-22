@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -82,17 +83,23 @@ func RunProbe(args []string) int {
 	return 0
 }
 
+// probeRead reads one byte of a file or lists a directory; "" is success.
+// A directory is listed, never read (review E4): its read fails with
+// EISDIR whether or not the sandbox denies it.
 func probeRead(path string) string {
 	f, err := os.Open(path)
 	if err != nil {
 		return probeErr(err)
 	}
 	defer f.Close()
-	buf := make([]byte, 1)
-	if _, err := f.Read(buf); err != nil && !errors.Is(err, os.ErrClosed) {
-		if _, derr := f.ReadDir(1); derr == nil {
-			return ""
+	if st, err := f.Stat(); err == nil && st.IsDir() {
+		if _, err := f.ReadDir(1); err != nil && !errors.Is(err, io.EOF) {
+			return probeErr(err)
 		}
+		return ""
+	}
+	buf := make([]byte, 1)
+	if _, err := f.Read(buf); err != nil && !errors.Is(err, io.EOF) {
 		return probeErr(err)
 	}
 	return ""

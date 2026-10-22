@@ -935,12 +935,12 @@ EOF
       CHOIR_CAPSULE_MEMORY_POLICY = "observe";
       # The document-tool sandbox (SDC SEC-15, internal/doctool): observe runs
       # each tool as before (that is the result) and then a sandboxed shadow of
-      # it (uid 61010, empty network namespace, Landlock, seccomp; no cgroup)
-      # whose outcome is only counted. "required" runs sandboxed in its own
-      # cgroup or refuses.
+      # it (uid 61010, empty network namespace, Landlock, seccomp, in its own
+      # cgroup under the document tools' root) whose outcome is only counted.
+      # "required" runs sandboxed in its own cgroup or refuses.
       CHOIR_DOCUMENT_TOOL_SANDBOX = "observe";
-      # The document tools' own cgroup root (never the desks'): required mode
-      # and the isolation self-test run each tool in a child of it.
+      # The document tools' own cgroup root (never the desks'): required runs,
+      # observe's shadows and the isolation self-test each run in a child of it.
       CHOIR_DOCTOOL_CGROUP_ROOT = "/sys/fs/cgroup/choir-doctools";
       # The daemon's capability floor (SDC SEC-15, internal/capfloor): it keeps
       # 16 named capabilities and drops the rest from its bounding set.

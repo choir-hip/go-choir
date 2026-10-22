@@ -387,6 +387,9 @@ def judge_document_tool(dt):
             fails.append("document_tool: probe %s missing" % name)
         elif got == "" or got.startswith("ENOENT"):
             fails.append("document_tool: probe %s = %r, want a denial" % (name, got))
+        elif name.startswith("read:") and not got.startswith(("EACCES", "EPERM")):
+            # EISDIR or ELOOP fail outside the sandbox too (review E4).
+            fails.append("document_tool: probe %s = %r, want EACCES or EPERM" % (name, got))
     return fails
 
 
