@@ -739,3 +739,40 @@ func TestModelSchedulerQueueWaitCountsAgainstTheCallDeadline(t *testing.T) {
 		})
 	}
 }
+
+// A caller that has already gone away is never handed a slot, even when one
+// is free, and returns at once (B7,
+// docs/problems/gateway-request-bodies-unbounded-2026-10-22.md).
+func TestModelSchedulerRefusesAnAlreadyCancelledCaller(t *testing.T) {
+	s := newTestScheduler(4, 4, 8, time.Minute)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	started := time.Now()
+	for i := 0; i < 200; i++ {
+		release, _, err := s.Acquire(ctx, "gone")
+		if err == nil {
+			release()
+			t.Fatalf("try %d: a cancelled caller was handed a slot", i)
+		}
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("try %d: err = %v, want context.Canceled", i, err)
+		}
+	}
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("200 cancelled acquires took %s", elapsed)
+	}
+	if st := s.Stats(); st.Granted != 0 || st.InFlight != 0 || st.Queued != 0 {
+		t.Fatalf("cancelled callers left a mark: %+v", st)
+	}
+	// With the computer's slots taken, a cancelled caller is not queued.
+	holders := []func(){mustAcquire(t, s, "busy"), mustAcquire(t, s, "busy"), mustAcquire(t, s, "busy"), mustAcquire(t, s, "busy")}
+	if _, _, err := s.Acquire(ctx, "busy"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("a cancelled caller behind a full computer: %v", err)
+	}
+	if st := s.Stats(); st.Queued != 0 {
+		t.Fatalf("a cancelled caller was queued: %+v", st)
+	}
+	for _, release := range holders {
+		release()
+	}
+}
