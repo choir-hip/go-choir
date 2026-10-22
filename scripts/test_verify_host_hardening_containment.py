@@ -17,7 +17,9 @@ Failure modes pinned here:
     socket checks or left out of the units checked;
   - a regular file left at an old env path (nothing reads it; a unit can
     see it) passes, or the compatibility link into the directory fails;
-  - the modes check still names the old paths, or not the directory.
+  - the modes check still names the old paths, or not the directory;
+  - (round 2) a file the activation quarantined into the directory
+    (<name>.stray.<epoch>) does not show in the proof.
 """
 
 import importlib.util
@@ -134,6 +136,32 @@ class LegacyPaths(unittest.TestCase):
         bad = [k for k, r in got.items() if not r["ok"]]
         self.assertEqual(len(bad), 1, got)
         self.assertIn("deploy.env", bad[0])
+
+
+class Strays(unittest.TestCase):
+    """Round 2 (F1, F2): a file the activation quarantined waits in the hidden
+    directory for the operator; the proof must show it."""
+
+    def run_strays(self, names):
+        with tempfile.TemporaryDirectory() as root:
+            d = os.path.join(root, UNIT_ENV_DIR.lstrip("/"))
+            os.makedirs(d)
+            for n in names:
+                open(os.path.join(d, n), "w").close()
+            vhh.results.clear()
+            vhh.check_unit_env_strays(root)
+            return [r for r in vhh.results if r["section"] == "containment"]
+
+    def test_no_stray_passes(self):
+        got = self.run_strays(["deploy.env", ".imported"])
+        self.assertEqual(len(got), 1)
+        self.assertTrue(got[0]["ok"], got)
+
+    def test_a_stray_fails_and_is_named(self):
+        got = self.run_strays(["deploy.env", "deploy.env.stray.1761140000"])
+        self.assertEqual(len(got), 1)
+        self.assertFalse(got[0]["ok"], got)
+        self.assertIn("deploy.env.stray.1761140000", got[0]["detail"])
 
 
 class Modes(unittest.TestCase):
