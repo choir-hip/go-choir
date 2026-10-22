@@ -348,3 +348,52 @@ func TestSquashAndGCMissingDatabase(t *testing.T) {
 		t.Fatal("a missing database changed the store's files")
 	}
 }
+
+// Review round 1 R1 (docs/problems/platform-dolt-oldgen-rate-and-squash-window-2026-10-22.md):
+// with Store A's snapshots off, HEAD never moves after a squash, so the next
+// run meets at most two commits and a working set ahead of HEAD. It must
+// commit that working set, keep the root and leave at most two commits, not
+// refuse after mutation (which the script answers with a full restore).
+func TestSquashAndGCSquashesAgainWithSnapshotsOff(t *testing.T) {
+	parent := storeAFixture(t)
+	first, err := SquashAndGC(context.Background(), squashOptions(parent))
+	if err != nil {
+		t.Fatalf("first squash: %v", err)
+	}
+	if first.CommitsAfter > 2 {
+		t.Fatalf("first squash left %d commits", first.CommitsAfter)
+	}
+
+	// Snapshots off: writes reach the working set and no commit is made.
+	storeAExec(t, parent,
+		"REPLACE INTO og_objects VALUES (100, 'after the first squash')",
+		"REPLACE INTO computer_event_heads VALUES ('computer-a', 21, 'head-21')")
+	second, err := SquashAndGC(context.Background(), squashOptions(parent))
+	if err != nil {
+		t.Fatalf("second squash with the working set ahead of HEAD: %v (refused before mutation: %v)", err, IsRefusedBeforeMutation(err))
+	}
+	if second.RootBefore != second.RootAfter {
+		t.Fatalf("root changed: %q -> %q", second.RootBefore, second.RootAfter)
+	}
+	if !second.Squashed {
+		t.Fatal("the second squash did not commit the working set")
+	}
+	if second.CommitsAfter > 2 {
+		t.Fatalf("second squash left %d commits; want at most 2", second.CommitsAfter)
+	}
+	if got := storeAScalar(t, parent, "SELECT body FROM og_objects WHERE id = 100"); got != "after the first squash" {
+		t.Fatalf("row written after the first squash: %q", got)
+	}
+	if got := storeAScalar(t, parent, "SELECT COUNT(*) FROM dolt_status"); got != "0" {
+		t.Fatalf("dolt_status rows = %s; want HEAD to hold the working set", got)
+	}
+
+	// A third run on a clean store with two commits changes nothing and succeeds.
+	third, err := SquashAndGC(context.Background(), squashOptions(parent))
+	if err != nil {
+		t.Fatalf("third squash on a clean store: %v", err)
+	}
+	if third.RootBefore != third.RootAfter || third.CommitsAfter > 2 {
+		t.Fatalf("third squash: root %q -> %q, commits %d", third.RootBefore, third.RootAfter, third.CommitsAfter)
+	}
+}
