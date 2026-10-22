@@ -387,6 +387,15 @@ happens first (FP0's and the owner's choice):
   still passes (the 15:35 run is not in the record, so no gap and no
   `force` are needed).
 
+**Superseded by measurement (FP0 sampler, 18:02 UTC):** Node B had 172 GB
+free at 18:02 and free space was flat for the preceding hour. The times
+above assumed the 15:00 fall rates (about 185 MiB/min) continued after
+15:35; they did not, so none of those crossings (18:50, 21:15, 00:55,
+04:00, 08:30) holds, and nothing forces the `on` decision tonight. Why the
+fall stopped is not established here (not read from a trace). The next
+projection should start from the sampler's series, not from the 15:00
+rates.
+
 ## Round 2 (FP0's review of 4515538eb; fixes 8873d9c52 tests, 5c6b59894 code)
 
 | # | Finding | Disposition |
@@ -419,7 +428,7 @@ ca135c22b removes it.
 | S-N6 / D-3 | A future-dated attempt silently blocks the timer | Fixed: clamped to now (logged, persisted); attempt times stored UTC |
 | S-N7 | `force` not named in the 429, not logged; main.go "refuses every compaction" | Fixed: 429 names `{"force":true}`; `forced past the gap` and `forced=true` logged; main.go says "every pressure compaction" |
 | S-N8 | Corrupt-record heal before a compaction is certain; rename unchecked | Fixed: the preflight writes a probe file only; the record is replaced only inside the hook; a failed move leaves it in place; a failed write after a move moves it back |
-| S-N9 / D-1 | Observe-then-`on` cannot happen tonight before the deploy floor closes | Docs: § Sequencing on Node B tonight; the decision is FP0's and the owner's |
+| S-N9 / D-1 | Observe-then-`on` cannot happen tonight before the deploy floor closes | Docs: § Sequencing on Node B tonight; superseded by FP0's 18:02 sample (172 GB free, flat for an hour) |
 | D-5 | A stale `.compacting` copy can hold the host under the floor | Fixed: removed under the lock before the floor check |
 | D-6 | A failed attempt holds the timer for 6 h | Fixed: the timer retries after a failed attempt; the loop and by hand keep the gap |
 | D-8 | The sweep fails the unit only on 507 | Fixed: a failed compaction answers 500 |
