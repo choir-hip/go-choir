@@ -403,7 +403,7 @@ receipts:
     boundary: implement
     identity: 8f0a46562 (record), 94f829bfc (tests), b7c5d7c97 (fix), e62dcf2b4 (round 2 record), f9aa36794 (round 2 tests), da66f915f (round 2 fix: an ended hold no longer spins the loop), on lane/fp4-actor-retry-backoff
     proof_refs: [internal/actor/dispatcher_retry_backoff_test.go, internal/agentcore/actor_wake_mint_time_test.go]
-    rollback_ref: git revert b7c5d7c97 (no schema, no new kind; the hold is process memory; a wake already on engineering-admission is still handled)
+    rollback_ref: git revert da66f915f f9aa36794 b7c5d7c97 94f829bfc, in that order (newest first; the round 2 fix sits on b7c5d7c97's lines, so b7c5d7c97 alone no longer reverts; the four restore internal/ to the lane base and the tests go with the fix they pin); no schema, no new kind; the hold is process memory; a wake already on engineering-admission is still handled
   - id: arch03-design
     boundary: define
     identity: 58f369309
