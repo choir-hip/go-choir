@@ -14,7 +14,7 @@
 #
 #   CHOIR_API_KEY=... scripts/proofs/fp2-desk-boundary.sh --computer computer-<test> [--commit SHA]
 #       [--probe scripts/desk_cell_confinement_probe.py] [--egress yes] [--out docs/evidence/fp2-desk-boundary-<date>.json]
-#       [--oom-out docs/evidence/fp2-desk-oom-<date>.json] [--dry-run | --list | --step N [--mutate]] [--evidence FILE]
+#       [--oom-out docs/evidence/fp2-desk-oom-<date>.json] [--seccomp-out docs/evidence/fp2-capsule-seccomp-<date>.json] [--dry-run | --list | --step N [--mutate]] [--evidence FILE]
 set -uo pipefail
 PROOF_NAME=fp2-desk
 . "$(dirname "$0")/lib.sh"
@@ -25,8 +25,9 @@ step_def 3 ro-after "trace refusals (read by hand)"
 step_def 4 mut "out-of-memory: the isolation self-test's OOM leg (a research worker killed by its cgroup; daemon and sibling live)"
 step_def 5 mut "real turns: the Texture acceptance spec on the test computer"
 step_def 6 ro-after "rollback"
+step_def 7 mut "capsule seccomp on the deployed kernel: the isolation self-test's seccomp leg (SEC-13)"
 
-: "${OPT_probe:=scripts/desk_cell_confinement_probe.py}" "${OPT_egress:=no}" "${OPT_commit:=}" "${OPT_out:=}" "${OPT_oom_out:=}"
+: "${OPT_probe:=scripts/desk_cell_confinement_probe.py}" "${OPT_egress:=no}" "${OPT_commit:=}" "${OPT_out:=}" "${OPT_oom_out:=}" "${OPT_seccomp_out:=}"
 
 fp2_need_computer() {
 	[ -n "${OPT_computer:-}" ] || die 2 "this step needs --computer (the disposable test computer)"
@@ -130,6 +131,39 @@ step_5() {
 
 step_6() {
 	manual "rollback is git revert of the lane's commits and the Landing Loop; the guest image carries the unit environment, so a revert is a deploy"
+}
+
+# Step 7 runs the self-test's seccomp leg (POST /api/runtime/isolation-selftest?leg=seccomp):
+# one child per capsule filter loads the capsule's own filter and tries clone3
+# and a new user namespace. It proves the filters on the deployed kernel, not
+# that a live capsule loads them, and nothing about the session worker's
+# bounds (RES-03).
+step_7() {
+	local cred rc out
+	fp2_need_computer
+	out=${OPT_seccomp_out:-docs/evidence/fp2-capsule-seccomp-$(date -u +%Y%m%d).json}
+	will "POST /api/runtime/isolation-selftest?leg=seccomp on $OPT_computer through $OPT_probe (six throwaway children, one per capsule filter; nothing persists), writing $out"
+	if [ "$PROOF_DRY" = 1 ]; then
+		info "\$ python3 $OPT_probe --cred <0600 temp file from CHOIR_API_KEY and --computer> --out $out --leg seccomp"
+		return 0
+	fi
+	[ -f "$OPT_probe" ] || die 2 "$OPT_probe is not in this tree; pass --probe PATH"
+	[ -n "${CHOIR_API_KEY:-}" ] || die 2 "CHOIR_API_KEY is not set in the environment"
+	cred=$(umask 077 && mktemp "${TMPDIR:-/tmp}/fp2-cred.XXXXXX") || die 2 "mktemp failed"
+	trap 'rm -f "${cred:-}"' EXIT
+	jq -nc --arg k "$CHOIR_API_KEY" --arg c "$OPT_computer" '{api_key:$k, computer_id:$c}' >"$cred"
+	python3 -I "$OPT_probe" --cred "$cred" --out "$out" --leg seccomp >/dev/null
+	rc=$?
+	rm -f "$cred"
+	case "$rc" in
+	0) pass "seccomp leg proven (exit 0): every capsule filter answers clone3 ENOSYS and refuses a new user namespace on the deployed kernel; receipt $out" ;;
+	1) fail "seccomp leg: a check failed (exit 1); receipt $out" ;;
+	*) fail "seccomp leg: not deployed or computer unreachable (exit $rc); nothing proven" ;;
+	esac
+	if [ -s "$out" ]; then
+		jq -c '.server.seccomp // {} | {kernel, filters: [.filters[]? | {name, bpf_sha256, seccomp, probes}]}' "$out" 2>/dev/null | while IFS= read -r l; do info "seccomp $l"; done
+		jq -c '.failures // []' "$out" 2>/dev/null | while IFS= read -r l; do info "failures $l"; done
+	fi
 }
 
 proof_main "$@"
