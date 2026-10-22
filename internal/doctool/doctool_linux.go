@@ -248,6 +248,12 @@ type toolCgroup struct {
 	dir  *os.File
 }
 
+// writeToolCgroupFile writes one control file of a tool cgroup (tests
+// replace it).
+var writeToolCgroupFile = func(dir, name, value string) error {
+	return os.WriteFile(filepath.Join(dir, name), []byte(value), 0o644)
+}
+
 func newToolCgroup(root string) (*toolCgroup, error) {
 	id := make([]byte, 6)
 	if _, err := rand.Read(id); err != nil {
@@ -263,7 +269,13 @@ func newToolCgroup(root string) (*toolCgroup, error) {
 		{"memory.oom.group", "1"},
 		{"pids.max", strconv.Itoa(toolPidsMax)},
 	} {
-		if err := os.WriteFile(filepath.Join(path, s.file), []byte(s.value), 0o644); err != nil {
+		err := writeToolCgroupFile(path, s.file, s.value)
+		if err != nil && s.file == "memory.swap.max" && errors.Is(err, os.ErrNotExist) {
+			// No swap controller means no swap to bound (review F1; as the
+			// desk worker cgroup does).
+			continue
+		}
+		if err != nil {
 			_ = os.Remove(path)
 			return nil, fmt.Errorf("tool cgroup %s: %s: %w", path, s.file, err)
 		}
