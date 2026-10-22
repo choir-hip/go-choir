@@ -24,8 +24,15 @@ const (
 	// stoppedByVMCTLRestart marks a computer that was running when vmctl
 	// restarted; reattach adopts its surviving process.
 	stoppedByVMCTLRestart = "vmctl-restart"
-	wedgedAfterDefault    = 5 * time.Minute
-	wedgeProbeTimeout     = 3 * time.Second
+	// stoppedByStartInterrupted marks a computer whose start (a wake, a
+	// resume, a recovery, a refresh, a first boot) was in flight when vmctl
+	// restarted: its process was powered off, never adopted (boot_claim.go).
+	// It is not a failure of the computer: the always-on sweep boots it
+	// without spending the failure retry, and a deploy rescue charges it like
+	// a stop by a vmctl restart.
+	stoppedByStartInterrupted = "interrupted-by-vmctl-restart"
+	wedgedAfterDefault        = 5 * time.Minute
+	wedgeProbeTimeout         = 3 * time.Second
 )
 
 // guestAcceptsConnection reports whether the guest's service port accepts a

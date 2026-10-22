@@ -222,14 +222,14 @@ func deployRefreshAllowsBusy(class WarmnessClass) bool {
 
 // deployRescueStopped reports whether a computer that is not running is one
 // a deploy reaches: an always-on computer (alwaysOnBootClass) stopped by a
-// failure or by a vmctl restart, or failed (whatever failed it, including a
+// failure or by a vmctl restart (of it running, or of a start in flight), or failed (whatever failed it, including a
 // deploy refresh that did not boot). A computer stopped by an idle sweep, a
 // logout or an owner act is left to its next start, as before.
 func deployRescueStopped(state VMState, stoppedBy string, class WarmnessClass, desktopID string) bool {
 	switch state {
 	case VMStateFailed:
 	case VMStateStopped:
-		if !stoppedByFailure(stoppedBy) && stoppedBy != stoppedByVMCTLRestart {
+		if !stoppedByFailure(stoppedBy) && !stoppedByRestart(stoppedBy) {
 			return false
 		}
 	default:
