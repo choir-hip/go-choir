@@ -27,7 +27,10 @@ import (
 //  5. A neighbouring key that sorts inside a naive range (prefix plus a
 //     higher byte) or a key of another computer is returned.
 //  6. It still reads rows outside the family: the plan does not range the
-//     unique (computer_id, idempotency_key) key, or it sorts.
+//     unique (computer_id, idempotency_key) key, has no upper bound, or it
+//     sorts.
+//  7. A prefix that is not UTF-8 is an error rather than absence: no
+//     utf8mb4 key starts with it, and the engine refuses it as a parameter.
 
 // insertEventIndexRow writes one computer_event_index row directly: these
 // tests pin the read's semantics over the table, not the append protocol
@@ -118,6 +121,14 @@ func TestLatestEventByPrefixExcludesNeighbouringKeys(t *testing.T) {
 	}
 }
 
+func TestLatestEventByPrefixNotUTF8IsAbsence(t *testing.T) {
+	s := openTestStore(t)
+	insertEventIndexRow(t, s, "computer-test", 1, "a-1", "finalized")
+	if event, found := latestByPrefix(t, s, "computer-test", "a\xff"); found {
+		t.Fatalf("a prefix that is not UTF-8 matched %+v", event)
+	}
+}
+
 func TestLatestEventByPrefixAmongThousandsOfUnrelatedEvents(t *testing.T) {
 	s := openTestStore(t)
 	insertEventIndexRow(t, s, "computer-test", 1, "platform-update-applied-first", "finalized")
@@ -168,11 +179,14 @@ func TestLatestEventByPrefixPlanRangesTheIdempotencyKey(t *testing.T) {
 		!strings.Contains(plan, "index: [computer_event_index.computer_id,computer_event_index.idempotency_key]") {
 		t.Fatalf("family read does not range the (computer_id, idempotency_key) key:\n%s", plan)
 	}
+	if !strings.Contains(plan, "platform-update-applied.)") {
+		t.Fatalf("family read has no upper bound, so it reads every key from the prefix on:\n%s", plan)
+	}
 	if strings.Contains(plan, "TopN") || strings.Contains(plan, "Sort(") {
 		t.Fatalf("family read sorts:\n%s", plan)
 	}
 	if strings.Contains(strings.ToLower(query), "event_json") {
-		t.Fatalf("family read selects event_json for every member:\n%s", query)
+		t.Fatalf("family read's SQL names event_json:\n%s", query)
 	}
 }
 
@@ -186,7 +200,7 @@ func TestPrefixUpperBound(t *testing.T) {
 		{"a퟿", "a", true}, // skips the surrogates
 		{"\U0010FFFF", "", false},
 		{"", "", false},
-		{"a\xff", "", false}, // not UTF-8: unbounded above, the prefix check decides
+		{"a\xff", "", false}, // not UTF-8: the method returns absence before reading
 	} {
 		upper, ok := prefixUpperBound(c.prefix)
 		if upper != c.upper || ok != c.ok {
