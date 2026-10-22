@@ -79,8 +79,11 @@ dials `choir.news`); the cost of dropping them is that a guest cannot read
   resolver (UDP and TCP 53 on the tap host address; public UDP 53 stays
   until the guest-side line lands); replies only on `-o <tap>`; INPUT
   service ACCEPTs bound to the DNAT'd loopback destination.
-- Every install step (filter, nat, mangle, IPv6) fails the VM start; boot
-  and restore tear the tap down. Reattach of an already-running guest logs
+- Every install step (filter, nat, mangle, IPv6) fails the VM start. A
+  cold boot tears the tap and its rules down; a snapshot restore does not
+  start the VMM and falls back to a cold boot, which reuses the tap, re-runs
+  the install, and fails (and tears down) if the floor still does not
+  install. Reattach of an already-running guest logs
   and keeps it running (a crash-free computer is not stopped for a rule).
 - Guest DNS: a host-side Unbound on loopback, reached at the tap host
   address port 53 through DNAT, answering only the guest pool, with

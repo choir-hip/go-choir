@@ -61,7 +61,7 @@ boundaries:
 
 now:
   status: working
-  slice: rebased onto main 5efe46672 as lane/host-b4-b5-on-main; waiting on FP0 (DeepSeek review, land, deployed proof)
+  slice: DeepSeek round 2 edits made; waiting on FP0 (land cuts 1-3, cut 4 entry gate, deployed proof)
   candidate:
     ref: lane/host-b4-b5-on-main (base origin/main 5efe46672; the cherry-pick replay of lane/host-b4-b5 2ccd33847)
     reviews: flash (accept with edits) and Devin (accept) at 1d1dc2c00; DeepSeek not yet
@@ -77,7 +77,7 @@ now:
       cut_2_group_3: 239a23c02 .. 93205a30d = 239a23c02 655bd9eae c5d08d8a0 ec28ac0db 93205a30d
       cut_3_dolt_locked: 6365f329b .. 6365f329b
       cut_4_owner_act_enforce: de193cf8d .. de193cf8d
-      docs_and_probe: d8b8139fc and the 8089 commit 87597d1a3 ride with cut 1 (scripts and tests only); this card's commit rides with any cut
+      docs_and_probe: d8b8139fc, 87597d1a3, d43422458 and b7eef4039 ride with cut 1 (scripts and tests only); the card commits ride with any cut
     scope: [internal/vmmanager, internal/hostauth, internal/proxy, internal/platform (test + one gate), internal/vmctl/ownership.go (one line, 3777a3b47), nix/node-b.nix, nix/autoputer-vm.nix (comments), flake.nix (comments), scripts]
   replay_check: >-
     Eight files changed on both sides since the lane base 7c61ce078
@@ -116,18 +116,40 @@ now:
     ok; go build ./... and go vet on the five packages clean;
     python3 -m py_compile on both probe scripts and bash -n on
     vmmanager-netfilter-test.sh clean. The real-netfilter script was not
-    re-run (needs root netns).
+    re-run then (it was re-run in round 2: see round_2). Round 2 at
+    b7eef4039, same filters: vmmanager, hostauth, proxy, vmctl, platform
+    (347 s) all ok with -race -count=1; vet, py_compile, bash -n clean.
+  round_2 (DeepSeek bunch 41: cuts 1-3 accept with edits, cut 4 accept on a gate): >-
+    M1 kvm group: NixOS declares it for every system
+    (nixos/modules/config/users-groups.nix at the flake's locked nixpkgs
+    fe1324228: users.groups.kvm.gid = ids.gids.kvm, 302 in
+    nixos/modules/misc/ids.nix, "default udev rules from systemd requires
+    these"), matching Node B's getent kvm:x:302; no declaration added.
+    0660 root:kvm cannot break a boot: direct VMMs are started by vmctl
+    (root) with no uid drop (no SysProcAttr credential in vmmanager), and
+    jailed VMMs open the jail's own node, which Firecracker's jailer mknods
+    in the chroot (env.rs mknod_and_own_dev(DEV_KVM), 0600, chowned to the
+    jail uid); nothing in vmmanager binds or opens the host /dev/kvm as
+    another uid. Only local Nix builds with the kvm feature (nixbld) lose
+    it; those go to node-a (residual below). M2: re-run on this worker
+    (unprivileged user+net+mount namespace; no sudo needed) at d43422458,
+    which adds 8089 dials to the real test:
+    docs/evidence/host-floor-real-netfilter-2026-10-22.txt, both tests
+    PASS, the chain carries seven ports, own tap :8089 reachable, another
+    tap's :8089 not. M3 and M4: FP0 proof section. L1 and L2: b7eef4039.
+    L3: noted, no change (AuthorizeAtMost(r, ModeOff) has no caller that
+    passes it). L4: reworded here and in the problem record.
   conjecture: >-
     If the floor is enforcing and fails closed, and the guest's services,
     DNS, goproxy, the package mirror and public TCP still work, then SEC-03
     holds without starving any capability. Local evidence: fake verdict
     tests and a real kernel netfilter run
-    (docs/evidence/host-floor-real-netfilter-2026-10-21.txt, taken before
-    8089 joined the list).
+    (docs/evidence/host-floor-real-netfilter-2026-10-22.txt, seven ports;
+    the 10-21 file is the six-port run).
   belief: >-
     Group 2 is right on packets (real netfilter) but its nix half is
     unevaluated here (no nix binary on the worker; CI evaluates it).
-  next_action: FP0 sends the replay to DeepSeek, then lands the cuts in order and runs the steps below, cut 1 first.
+  next_action: FP0 lands cuts 1-3 in order with the mandatory --expect-guest-floor check after each; cut 4 only after its entry gate (step 6) holds.
 ---
 
 # FP3 groups 2 and 3
@@ -145,8 +167,11 @@ Group 2 (B4), one deploy:
 
 - 039e74655, the host egress commit 61f4da20f cherry-picked (mangle
   CHOIR-GUEST-EGRESS).
-- e52a29345, SEC-03: every install step fails the VM start (boot and
-  restore), tap and rules torn down; reattach only logs. Replies-only
+- e52a29345, SEC-03: every install step fails the VM start. A cold boot
+  tears the tap and its rules down; a restore does not start the VMM and
+  falls back to a cold boot that reuses the tap and fails the same way if
+  the floor still does not install (snapshot_lifecycle.go restoreFailed);
+  reattach only logs. Replies-only
   forwarding towards guests (CHOIR-GUEST-RET), own-tap host services only
   (`--limit-iface-in`, INPUT bound to the loopback DNAT), no host 80/443,
   guarded rebuild, IPv6 drop required, DNS DNAT to a host resolver when
@@ -167,7 +192,19 @@ addendum); ec28ac0db (SEC-11, route mode `observe`); 93205a30d (Dolt stage
 
 ## FP0 deployed proof
 
-Cut 1 (group 2: fb571bba5 .. f916265e3, with d8b8139fc and the 8089 probe commit 87597d1a3), after the deploy (Node B, root):
+After every deploy of any cut (and every later deploy while the lane's
+code is live), mandatory, Node B as root:
+`python3 - --expect-guest-floor [the cut's --expect-internal/--expect-dolt flags] < scripts/verify-host-hardening.py`,
+and the guest-floor section must be all PASS. Why: the floor fails closed
+only at a VM start. Reattaching a running guest (every vmctl restart, so
+every deploy) repairs the egress chain and the tap rules but only logs a
+failed repair (guest_egress.go, hostfirewall.go reconcile), so a running
+computer, the paper included, could keep unfenced egress until its next
+start while the deploy otherwise looks green. This check is the only
+thing that catches that; a FAIL there is a deploy failure: run
+`systemctl restart go-choir-vmctl` once and re-check, then roll back.
+
+Cut 1 (group 2: fb571bba5 .. f916265e3, with d8b8139fc and the probe/test commits 87597d1a3, d43422458, b7eef4039), after the deploy (Node B, root):
 
 1. `python3 - --expect-internal enforce --expect-dolt users --expect-guest-floor < scripts/verify-host-hardening.py`:
    the guest-floor section passes (KSM run 0 or 2, /dev/kvm 660, egress
@@ -211,9 +248,47 @@ Cut 2 (group 3: 239a23c02 .. 93205a30d), after the deploy:
    (one line; then the curl without the credential answers 403).
 5. Cut 3, 6365f329b (Dolt locked), own deploy: gate `--expect-dolt clients`
    healthy; proof `--expect-dolt locked`, the next backup run succeeds.
-6. Cut 4, de193cf8d (owner-act enforce), own deploy: gate is a journal window
-   with real owner acts and no "owner-act: observe: would refuse"; proof
-   in the commit message.
+6. Cut 4, de193cf8d (owner-act enforce), own deploy. Entry gate (DeepSeek
+   M4, bunch 41): do not land until a positive observe window exists on
+   the currently deployed head (ownerActMode = "observe"). Window W runs
+   from T0 (`T0="$(date -u '+%F %T')"` before step a) to T1 (the same, after step d; UTC, the format both journalctl and the DATETIME(6) columns take), on a
+   test computer (`class:test`; never the paper or the delegate computer):
+   a. The proxy holds the signing key:
+      `journalctl -u go-choir-proxy -b --no-pager | grep -E 'proxy: owner-act key host-owner-act-[^ ]+ loaded from '`
+      prints one line, and
+      `journalctl -u go-choir-proxy -b --no-pager | grep -cE 'owner-act key unusable|no owner-act key at'`
+      prints 0. corpusd agrees:
+      `journalctl -u go-choir-corpusd -b --no-pager | grep 'corpusd: owner acts: mode=observe'`
+      names the same key id.
+   b. One real owner mode write through the proxy: as the test computer's
+      owner in the browser on https://choir.news, arm self-development
+      accept_once for one operation (the UI's approve; it is a PUT to
+      `/api/computers/<computer>/self-development/mode`, which the proxy
+      signs). It answers 2xx.
+   c. One accepted effect: let that operation apply and its effect be
+      accepted (an `effect_accepted` event on the computer's tape whose
+      authority is the mode receipt from b).
+   d. One Texture owner edit through the proxy on the same computer (edit
+      and save a document as the owner); it saves. (This is a control:
+      owner-act does not gate Texture saves, so it must still work and log
+      nothing.)
+   e. Zero refusals in W:
+      `journalctl -u go-choir-corpusd --since "$T0 UTC" --until "$T1 UTC" --no-pager | grep -c 'owner-act: observe: would refuse'`
+      prints 0, and
+      `journalctl -u go-choir-corpusd --since "$T0 UTC" --until "$T1 UTC" --no-pager | grep -cE 'owner-act: observe: (effect_accepted authority lookup failed|record admission failed)'`
+      prints 0.
+   f. Positive rows (the platform Dolt corpusd writes, 127.0.0.1:13306 database platform, read-only, as the app user):
+      `SELECT receipt_id, act_kind, created_at FROM owner_act_receipts WHERE computer_id='<computer>' AND created_at >= '<T0>';`
+      returns at least one row (b's receipt, act_kind selfdev.approve), and
+      `SELECT receipt_digest, owner_act_receipt_digest, admitted_event_digest FROM self_development_mode_receipts WHERE computer_id='<computer>' AND created_at >= '<T0>';`
+      returns a row with owner_act_receipt_digest and admitted_event_digest
+      both set (c admitted against b).
+   Land only when a-f all hold; keep the journal excerpts and query output
+   as the gate artifact. Proof after the deploy: corpusd logs
+   `owner acts: mode=enforce` with the key loaded; repeat b-d on the test
+   computer (all succeed, no `owner-act: enforce: refused` line); a direct
+   corpusd owner-mode write with the internal credential but no act is
+   refused. Rollback: `ownerActMode = "observe"` and redeploy.
 
 ## Residuals and owner questions
 
