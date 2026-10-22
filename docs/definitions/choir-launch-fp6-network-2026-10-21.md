@@ -145,7 +145,11 @@ boundaries:
 now:
   status: checkpoint_incomplete
   slice: >-
-    All five asks built and committed on lane/b8-network; nothing is pushed or
+    2026-10-22: SEC-06 replayed onto main and made observe-first on
+    lane/fp6-sec06-on-main (e20c92b6c replay, d8d88ae5f tests, e0efea302 the
+    off/observe/enforce mode, default observe; see "SEC-06 on main, observe
+    first"); pushed, not landed or deployed. Before that: all five asks built
+    and committed on lane/b8-network; nothing is pushed or
     deployed. The orchestrator sends the red commits to a panel, lands them in
     order, and runs the deployed proof below. Batch-1 review edits (GPT-6.1-sol,
     accept with edits) are made: memory=detail now has one request-wide
@@ -154,7 +158,7 @@ now:
     snapshot is shown and imported only while the address is the one it was
     taken from (import always uses that original URL). The frontend spec was
     written but not run: playwright/node_modules are absent in this lane.
-  source_ref: a38eb7f67
+  source_ref: e0efea302 (lane/fp6-sec06-on-main, base origin/main 966d3f519); a38eb7f67 on lane/b8-network
   deploy_identity: unknown to this lane
   candidate:
     id: fp6-network
@@ -207,14 +211,21 @@ now:
       Whether a real toolchain in a deployed capsule sends something the
       ClientHello check refuses (a GREASE Encrypted Client Hello, no SNI), and
       whether the frontend's route-mocked spec matches the deployed desktop.
-    next_observation: the deployed proof steps below, run by FP0 on staging
+    The SEC-06 half is now measured before it can refuse: observe writes the
+    would_refuse verdict on the egress ledger.
+    next_observation: the deployed proof steps below, run by FP0 on staging;
+      for SEC-06, the observe proof in "SEC-06 on main, observe first"
   blocker_or_risk: >-
     The image commit edits nix/autoputer-vm.nix, which the desk-boundary lane
     owns this pass (three Obscura-only removals); the frontend spec
     desktop-shell-core.spec.js needs the local service stack and was not run
     here. The stored browser-session accessors, types and six event kinds
     remain as frozen vocabulary.
-  next_action: FP0 reviews and lands the commits in the order in "Landing order"
+  next_action: >-
+    FP0 reviews and lands the commits in the order in "Landing order"; for
+    SEC-06, land lane/fp6-sec06-on-main (three code commits and the docs
+    commit) in place of a38eb7f67, run the observe proof, and flip to enforce
+    in a later deploy once observe shows zero would_refuse for real toolchains
 
 receipts:
   - id: problem-record-and-goal
@@ -252,7 +263,13 @@ receipts:
     identity: a38eb7f67
     proof_refs: [internal/capsule/egress_tls_test.go]
     rollback_ref: git revert a38eb7f67
-    disposition: committed; internal/capsule tests pass locally; six proxy tests fail with the check off
+    disposition: committed; internal/capsule tests pass locally; six proxy tests fail with the check off; superseded for landing by the replay e20c92b6c
+  - id: egress-tunnel-identity-observe
+    boundary: implement
+    identity: e0efea302
+    proof_refs: [internal/capsule/egress_tls_mode_test.go, internal/capsule/egress_tls_mode_linux_test.go, scripts/capsule-tunnel-identity-probe.sh]
+    rollback_ref: CHOIR_CAPSULE_EGRESS_TUNNEL_IDENTITY=off in nix/autoputer-vm.nix and a deploy; or git revert e0efea302 (enforce-always), then e20c92b6c (no check)
+    disposition: pushed on lane/fp6-sec06-on-main (e20c92b6c, d8d88ae5f, e0efea302); go test ./internal/capsule and its -race run pass locally; not deployed
 ---
 
 # FP6: the host-mediated network, first half
@@ -280,7 +297,8 @@ Order: 126ba5e48 (launcher; works with or without the routes), e57b7e3cb
 (route and package deletion), b780689e9 and 53de206e8 (docs, any time),
 c2da85986 (the image; its own deploy, touches `nix/autoputer-vm.nix` on three
 Obscura lines only), a38eb7f67 (egress; its own deploy as a red change on the
-capsule boundary). 0314e100b and the goal-file commit are docs.
+capsule boundary; since 2026-10-22 landed as `lane/fp6-sec06-on-main`
+instead, in observe mode: see "SEC-06 on main, observe first"). 0314e100b and the goal-file commit are docs.
 
 1. **Identity.** Staging reports the pushed SHA (the usual deploy check).
 2. **Routes gone.** With a `read:runtime` API key: `GET /api/browser/capabilities`
@@ -300,7 +318,9 @@ capsule boundary). 0314e100b and the goal-file commit are docs.
 5. **Image.** The deploy's build output shows no obscura derivation; record the
    guest image size before and after.
 6. **Egress (after a38eb7f67), on a test computer, from an implementation
-   capsule.** Ecosystem builds: `pip download` of a small package, `npm view
+   capsule.** Superseded on 2026-10-22: the check lands in observe, so the
+   proof is the one in "SEC-06 on main, observe first" below; what follows is
+   the enforce-flip proof. Ecosystem builds: `pip download` of a small package, `npm view
    left-pad`, `git ls-remote https://github.com/golang/go HEAD`, one
    `huggingface_hub` file download; each succeeds and the egress ledger shows
    outcome `ok`. Mismatch: run
@@ -322,3 +342,48 @@ capsule boundary). 0314e100b and the goal-file commit are docs.
    no bytes from the upstream. If an ecosystem build is refused, the ledger
    reason says whether it was a GREASE Encrypted Client Hello or no SNI;
    revert `a38eb7f67` and report the tool.
+
+## SEC-06 on main, observe first (2026-10-22)
+
+**Replayed onto main.** `a38eb7f67` (bind a CONNECT tunnel to its name) never
+landed. It is replayed onto `origin/main` `966d3f519` with `git am -3` as
+`e20c92b6c`; it applied cleanly over FP2's second batch (`capsule.go`,
+`executor.go`, `types.go`), message kept, and `go test ./internal/capsule`
+passes on it.
+
+**Observe first.** The check refuses traffic and a wrong refusal breaks
+builds (a GREASE Encrypted Client Hello, a client with no SNI), so under the
+metamission rule it now has a mode: `off`, `observe` (default) or `enforce`,
+set by `CHOIR_CAPSULE_EGRESS_TUNNEL_IDENTITY` in the guest daemon's
+environment (`nix/autoputer-vm.nix`, beside `CHOIR_CAPSULE_MEMORY_POLICY`),
+read at start in `internal/autoputer/capsule_executor_linux.go`, and written
+by the executor on every egress policy it builds. Under observe each CONNECT
+ledger entry carries `tunnel_identity` (`pass` or `would_refuse`) and
+`tunnel_identity_reason`, a would-refuse is logged once per capsule and host,
+and the tunnel is relayed unchanged. Enforce refuses as `a38eb7f67` did.
+
+Commits on `lane/fp6-sec06-on-main`: `e20c92b6c` replay (red), `d8d88ae5f`
+tests first (yellow), `e0efea302` the mode (red; conjecture delta, protected
+surfaces, admissible evidence, rollback and heresy delta in its message),
+then the docs commit carrying this section, the problem record's "Observe
+first" section and `scripts/capsule-tunnel-identity-probe.sh`.
+
+**FP0's deployed proof** is written step by step in
+[the problem record](../problems/egress-proxy-tunnel-identity-2026-10-21.md),
+"Observe first": on a test computer, from an implementation capsule, `bash
+scripts/capsule-tunnel-identity-probe.sh` runs pip download, npm view, git
+ls-remote and a huggingface_hub fetch (all succeed), then a TLS client that
+CONNECTs to github.com with the server name pypi.org; the egress ledger then
+shows would_refuse counts per host, zero for every real toolchain, and one
+github.com entry `would_refuse` with the SNI reason and outcome `ok`.
+
+**The enforce flip** is a later deploy (one line in `nix/autoputer-vm.nix`),
+once observe shows zero would_refuse for real toolchains; its proof is step 6
+above with the ledger's `tunnel_identity` `refused`. Heresy delta for this
+slice: discovered none, introduced none, repaired none until the flip.
+
+Residuals: `scripts/check-guest-data-fstrim.sh` could not run in this lane
+(no `nix` binary on the VM), so the one-line `nix/autoputer-vm.nix` addition
+is not evaluated here; the mode defaults to observe in code if the line is
+absent. Exact host matching and the per-ecosystem fetch service stay as named
+in the problem record.
