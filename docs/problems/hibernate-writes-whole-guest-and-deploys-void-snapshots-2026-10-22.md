@@ -539,6 +539,13 @@ tests 4d97cc4be, fix in the red commit after it.
 - F5: tests pin that a reattached process is never cold origin and that a
   jailed Diff error clears the jail's capture dir. F6: the wake's timeline
   records `snapshot_type` and `cold_origin`.
+- Follow-up (round 2 accepts; Sonnet's mutation tests): the hotplug
+  subtest now asserts the hibernate took Diff, and a jailed Diff success
+  and a jailed wrong-length fallback are tested. Each new test kills a
+  mutant the earlier suite let through (the create-time length without the
+  hotplug term; the create-time stat on the host partial dir instead of
+  the jail's). The design no longer says the pause adds no file read: the
+  create-time stat runs inside it.
 
 Known limit: a vmctl restart reattaches running guests with
 `cold_origin` false (vmctl did not see their launch), so after any deploy
