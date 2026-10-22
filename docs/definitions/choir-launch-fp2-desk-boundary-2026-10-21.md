@@ -242,6 +242,14 @@ now:
     (3) memory.swap.max tolerates ENOENT. Not yet proved on a live guest: the
     sibling-rlimit denial is proved by confined-worker probes and a filter unit
     test only. The second batch is on lane/b3-desk-boundary-2.
+  batch2_round2: >-
+    2026-10-22: the second batch replayed onto origin/main b7d79a082 as
+    lane/fp2-b2-on-main, and DeepSeek's round 2 (bunch 39) edits E1-E8 made
+    there: CAP_SYS_TIME kept for the hibernate resume (E1, unblocks enforce in
+    code; the enforce trial now includes a hibernate and resume), the observe
+    shadow in its own cgroup (E2), E3-E6 and E8 fixed, the station's text and
+    hashes re-pointed (E7). Switches still ship observe. See "Second batch,
+    review round 2: outcome".
   slice: >-
     hand-off to FP0: two candidates. The first batch is lane/b3-desk-boundary
     (under review, unchanged). The second batch is lane/b3-desk-boundary-2 on top
@@ -251,7 +259,7 @@ now:
   source_ref: f399a2e8c
   deploy_identity: none of this batch is deployed
   candidate:
-    id: fp2-desk-boundary (first batch); fp2-desk-boundary-2 (second batch, ref lane/b3-desk-boundary-2, base 5fcf59e21, adds internal/doctool, internal/capfloor, internal/content, cmd/autoputer and the capsule, agentcore, nix and probe-script changes listed in "Second batch")
+    id: fp2-desk-boundary (first batch); fp2-desk-boundary-2 (second batch, ref lane/fp2-b2-on-main, replayed onto origin/main b7d79a082 from lane/b3-desk-boundary-2, adds internal/doctool, internal/capfloor, internal/content, cmd/autoputer and the capsule, agentcore, nix and probe-script changes listed in "Second batch")
     state: ready
     ref: lane/b3-desk-boundary
     base: f399a2e8c
@@ -323,7 +331,12 @@ now:
     batch lands after the first, in a deploy of its own; its proof is "Second batch,
     staging steps" below. Review round (bunch 4b, frozen e2a88e4ee) repaired on the
     lane: five blocking findings fixed, none refuted ("Second batch, review round:
-    outcome"); FP0 re-freezes and re-reviews the new head. Owner or FP0: whether and when the three observe switches
+    outcome"); FP0 re-freezes and re-reviews the new head. Review round 2 (DeepSeek,
+    bunch 39, head 5c7615904) accepted it for observe with edits E1-E8; the lane was
+    replayed onto origin/main as lane/fp2-b2-on-main and every edit is made there
+    ("Second batch, review round 2: outcome"). FP0: land it in a deploy of its own
+    and run "Second batch, staging steps", including step 4's hibernate and resume
+    before any enforce. Owner or FP0: whether and when the three observe switches
     move to doctrine, required and enforce (each after its probe).
 
 receipts:
@@ -348,6 +361,7 @@ receipts:
     proof_refs:
       - go test ./internal/capsule ./internal/doctool ./internal/capfloor ./internal/content on the node-a agents VM (linux/amd64, kernel 6.18, Landlock V5, uid 1000, unprivileged user namespaces)
       - go test ./internal/agentcore -run 'TestIsolation|TestGuestEgress|TestEngineeringCapsule' (all pass except TestIsolationSelfTestDeskCellsThroughTheRealWorker, a first-batch test that fails on this VM; see "Second batch, residuals")
+      - review round 2 on lane/fp2-b2-on-main (node-a agents VM, linux, uid 1000, Landlock V5): GOMAXPROCS=2 GOFLAGS=-p=2 go test -race of internal/capfloor, doctool, capsule, content, agentprofile, and internal/agentcore -run 'Hibernate|TestIsolation|DocTool|Doctool|DocumentTool|RuntimeCapabilit'; go vet of the changed packages; go build ./cmd/autoputer
     rollback_ref: git revert of the second batch's commits
     disposition: candidate ready for review; not landed
     landing:
@@ -606,7 +620,9 @@ first on the paper.
 ## Second batch (lane/b3-desk-boundary-2): RES-04 and SEC-15
 
 Started 2026-10-21 on top of the first batch (5fcf59e21), which is under
-review and is not changed here. Built in the Choir agents VM on node-a
+review and is not changed here. Replayed 2026-10-22 onto origin/main
+b7d79a082 as lane/fp2-b2-on-main (cherry-pick, no conflicts); every hash
+below is the replayed one. Built in the Choir agents VM on node-a
 (uid 1000, no root, Landlock and unprivileged user namespaces available, no
 Nix builds): every nix change in this batch is unevaluated. Each item is a
 separate red commit, tests first, off or in observe mode in the image until
@@ -665,23 +681,30 @@ design named in the first batch's residuals: the daemon runs each tool
 through a re-exec helper (`autoputer doc-tool-sandbox`) that it starts as a
 numeric sandbox user (uid and gid 61010, `choir-doctool`, declared in the
 image for operators and pinned by a test), in an empty network and IPC
-namespace, in a cgroup of its own under the desks cgroup (`w-doctool-*`, so
-the boot sweep of the first batch removes a crashed run's leftover; hard
-`memory.max` 1 GiB, a guess to be set from the probe, pids 64, no swap). The
+namespace, in a cgroup of its own (`t-*`) under the document tools' own root
+`CHOIR_DOCTOOL_CGROUP_ROOT` (`/sys/fs/cgroup/choir-doctools`, a 2 GiB
+aggregate, never the desks' root: review B2; swept of `t-*` leftovers at
+daemon start; per run a hard `memory.max` 1 GiB, a guess to be set from the
+probe, pids 64, `memory.oom.group`, no swap). The
 helper sets no_new_privs, rlimits (no core, 64 open files, CPU 60 s), Landlock
 V5 (read and execute the tool's roots, `/nix/store` on the guest; read the
 one input directory and its own `/proc/<pid>`; write nothing; no TCP), a
 seccomp deny list (ptrace, mount, namespaces, `CLONE_NEWUSER`, `clone3`
 answering ENOSYS, bpf, keyrings, io_uring, kernel modules and the like, and
-`socket`), then execs the tool. The input is a 0400 file in a 0700 directory
+`socket`), marks every fd from 3 up close-on-exec (review E8), then execs
+the tool. The input is a 0400 file in a 0700 directory
 the sandbox user owns; output is the tool's stdout through a pipe, capped at
 64 MiB.
 
 `CHOIR_DOCUMENT_TOOL_SANDBOX`: unset or `off` runs the tools as before;
-`observe` (the image's value) runs them sandboxed and, when the sandbox
-cannot be set up, runs the tool as before and adds the warning
-`document_tool_sandbox_fallback: <reason>` to the extraction (so the probe
-can count them); `required` runs sandboxed or not at all (warning
+`observe` (the image's value) runs each tool as before, and that run is the
+extraction, byte for byte, with no warning added (review B3); a sandboxed
+shadow of the same input then runs, one at a time, in its own `t-*` cgroup
+(review E2; a shadow that cannot get one does not run), and its outcome is
+only counted: equal, diverged (outputs differ, or only the sandbox
+succeeded: review E3), sandbox failed, not set up, skipped, over budget
+(`ShadowSnapshot`, reported in the isolation self-test as
+`document_tool.observe`); `required` runs sandboxed or not at all (warning
 `document_tool_sandbox_refused: <reason>`, and the extraction falls back to
 its pure-Go projection as it does today when a tool is missing); any other
 value is `required`.
@@ -707,11 +730,13 @@ not built; see the problem record. What lands is the floor under it: the
 daemon keeps only the capabilities the inventory names, each with the code
 that needs it, and drops the rest from its bounding set, so neither it nor any
 child (git, go, node, libreoffice, a capsule's user namespace) can regain
-them. Kept: CHOWN, DAC_OVERRIDE, DAC_READ_SEARCH, FOWNER, FSETID, KILL,
-SETGID, SETUID, SETPCAP, NET_BIND_SERVICE, NET_ADMIN, SYS_CHROOT, SYS_PTRACE,
-SYS_ADMIN, SYS_RESOURCE. Dropped: every other, among them SYS_MODULE,
-SYS_RAWIO, SYS_BOOT, SYS_TIME, MKNOD, NET_RAW, BPF, PERFMON, SYSLOG,
-MAC_ADMIN, MAC_OVERRIDE, LINUX_IMMUTABLE, AUDIT_*, CHECKPOINT_RESTORE.
+them. Kept (16, floor `00000000032c15ff`): CHOWN, DAC_OVERRIDE,
+DAC_READ_SEARCH, FOWNER, FSETID, KILL, SETGID, SETUID, SETPCAP,
+NET_BIND_SERVICE, NET_ADMIN, SYS_CHROOT, SYS_PTRACE, SYS_ADMIN,
+SYS_RESOURCE, and SYS_TIME (the hibernate resume steps the clock with
+settimeofday; review E1). Dropped: every other, among them SYS_MODULE,
+SYS_RAWIO, SYS_BOOT, MKNOD, NET_RAW, BPF, PERFMON, SYSLOG, MAC_ADMIN,
+MAC_OVERRIDE, LINUX_IMMUTABLE, AUDIT_*, CHECKPOINT_RESTORE.
 
 The bounding set is per thread and a cgo binary cannot change every thread at
 once, so the daemon drops on a locked thread at the top of `main` and
@@ -720,7 +745,8 @@ thread. `CHOIR_RUNTIME_CAPABILITY_FLOOR`: unset or `off` changes nothing;
 `observe` (the image's value) logs what it would drop and reports the
 daemon's uid and `CapBnd` in the isolation self-test; `enforce` drops,
 re-executes, and after the re-exec refuses to start if any thread still holds
-a capability outside the inventory; any other value is `enforce`.
+a capability outside the inventory; any other value is `enforce`
+(`Apply` itself refuses a mode it does not know: review E8).
 
 Failure modes, written before code: K1 a needed capability is dropped and
 capsules or desks fail (observe first, the inventory names a reason for each
@@ -728,34 +754,45 @@ kept capability, and a test computer runs a capsule and every desk under
 `enforce` before the paper); K2 only the calling thread drops (the re-exec);
 K3 a re-exec loop (the marker; a marked start never re-executes); K4 a
 marked start that still holds extra capabilities (refused under enforce);
-K5 a child that needed a dropped capability (none known: no Mknod, raw I/O,
-module or time call in the guest code); K6 calling this non-root (it is not;
+K5 a child or a daemon path that needed a dropped capability. The first
+version said "none known: no Mknod, raw I/O, module or time call in the
+guest code", and that was false: the hibernate resume calls settimeofday
+(`internal/agentcore/hibernate_clock_linux.go`) on every resume after a
+snapshot (review E1). CAP_SYS_TIME is kept for it, and
+`TestKeptCoversTheDaemonsPrivilegedSyscalls` now scans the daemon's source
+(internal, cmd/autoputer, cmd/capsule-broker; the two denial probes
+excepted) for every capability-needing syscall and fails if its capability
+is dropped. Children that exec other binaries (git, go, node) are not
+covered by the scan; the enforce trial covers them. K6 calling this non-root (it is not;
 the receipt says root with a floor).
 
 ### Second batch: what was built
 
-Commits on lane/b3-desk-boundary-2 (base 5fcf59e21):
+Commits, replayed onto origin/main b7d79a082 as lane/fp2-b2-on-main
+(originally on lane/b3-desk-boundary-2, base 5fcf59e21; pre-rebase
+copies cited here before were f7a1e17de, f414e3ca7, e9de19687, 4ab63a8f2):
 
-- f7a1e17de docs: the designs and failure modes above (green).
-- f414e3ca7 RES-04: `internal/capsule/capsule_memory.go`, the policy, the
+- a7f98faa8 docs: the designs and failure modes above (green).
+- 1906e6658 RES-04: `internal/capsule/capsule_memory.go`, the policy, the
   receipts (`capsule_memory` in `/api/runtime/observability`), the
   capsules aggregate under doctrine; the engineering request (red).
-- e9de19687 SEC-15 document tools: `internal/doctool`, the helper and probe
+- e40340528 SEC-15 document tools: `internal/doctool`, the helper and probe
   entries in `cmd/autoputer/main.go`, `internal/content/extract.go` through
   it, `document_tool` in the isolation self-test and the probe script, the
-  `choir-doctool` user (red). One addition to the design above: observe
-  never makes an extraction worse. A tool that fails only inside the
-  sandbox runs again as before, and the warning is
-  `document_tool_sandbox_divergence`.
-- 4ab63a8f2 SEC-15 capability floor: `internal/capfloor`, `Apply` at the
+  `choir-doctool` user (red). Its first observe (sandboxed result, with
+  fallback and divergence warnings) was replaced in the review round by
+  the direct result and a counted shadow (03d8a1578); no
+  `document_tool_sandbox_fallback` or `document_tool_sandbox_divergence`
+  warning exists.
+- b44ef6589 SEC-15 capability floor: `internal/capfloor`, `Apply` at the
   top of the daemon's `main`, `runtime_capabilities` in the isolation
   self-test and the probe script (red).
 
 The three switches ship in observe (`CHOIR_CAPSULE_MEMORY_POLICY=observe`,
 `CHOIR_DOCUMENT_TOOL_SANDBOX=observe`, `CHOIR_RUNTIME_CAPABILITY_FLOOR=observe`).
 Under observe the capsule memory policy and the capability floor change no
-behavior. The document-tool sandbox under observe changes how tools run
-(sandboxed, as uid 61010) but never what an extraction returns. All nix is
+behavior. The document-tool sandbox under observe adds a counted,
+cgroup-bounded shadow run but never changes what an extraction returns. All nix is
 unevaluated.
 
 ### Second batch, staging steps (FP0; no secrets here)
@@ -787,10 +824,15 @@ to 5.
    `CHOIR_RUNTIME_CAPABILITY_FLOOR=enforce` there (an image built with it,
    or the env file `/run/go-choir-autoputer.env`, if FP0's tooling writes
    it without SSH; otherwise this step waits for an image). Then: the
-   daemon starts (log `capfloor: enforced: bounding set 00000000012c15ff`),
+   daemon starts (log `capfloor: enforced: bounding set 00000000032c15ff`),
    the probe passes with `runtime_capabilities` judged, one engineering
    assignment with egress completes, and a management, research and
-   Texture turn each complete. If something fails, its log names the
+   Texture turn each complete. Then hibernate and resume the test computer
+   (review E1): the host's snapshot and `POST
+   /internal/runtime/hibernate/resumed` must answer 200 with a
+   `clock_step_ms`, the resume must be a fast resume (no
+   `guest_resumed_failed` snapshot fallback, no cold boot in the vmctl log),
+   and a turn after it completes. If something fails, its log names the
    capability; add it back to `capfloor.Kept` with its reason.
 5. Moving switches to doctrine, required or enforce on the paper is a
    separate decision, each after its own probe (FP0 or owner).
@@ -885,27 +927,30 @@ is accepted. None is refuted.
 
 | finding | outcome | commit |
 |---|---|---|
-| B1 non-Linux build | fixed | 67d12cab7 (orange) |
-| B2 converter charged to the desks aggregate | fixed | 399ed8171 (red) |
-| B3 observe changes stored results (TZ) | fixed | 399ed8171 (red) |
-| B4 aggregate does not follow a hotplug boost | fixed | cb2a0b374 (red) |
-| B5 doctrine admission ignores aggregate failures | fixed | cb2a0b374 (red) |
-| Argon: observe status read, enforce thread check | fixed | b4b2439e5 (red) |
+| B1 non-Linux build | fixed | 53763eee7 (orange) |
+| B2 converter charged to the desks aggregate | fixed | 03d8a1578 (red) |
+| B3 observe changes stored results (TZ) | fixed | 03d8a1578 (red) |
+| B4 aggregate does not follow a hotplug boost | fixed | 0e00153e6 (red) |
+| B5 doctrine admission ignores aggregate failures | fixed | 0e00153e6 (red) |
+| Argon: observe status read, enforce thread check | fixed | 289556b47 (red) |
 
 Observe semantics after the round. Capsule memory under observe never
 reads or writes the aggregate. The capability floor under observe never
 fails the start. Document tools under observe return the direct run byte
 for byte, add no warning, and create no cgroup; the shadow is counted only.
 One deliberate change remains under observe: one extra sandboxed process
-per extraction (one at a time; a second is skipped), in the daemon's own
-cgroup, after the result is returned. That adds bounded load but does not
-change today's kill domain or any result.
+per extraction (one at a time; a second is skipped), after the result is
+returned. This round put it in the daemon's own cgroup and called that
+"bounded load"; it was not (review round 2, E2: no memory or process
+bound). Since round 2 it runs in a `t-*` cgroup of its own under the
+document tools' root (1 GiB, 64 pids, oom.group, no swap) or not at all.
+It changes no result; its kill domain is its own cgroup.
 
-The design text above, in "SEC-15: the document-tool sandbox", still
-describes the first version: the desks cgroup and observe fallback
-warnings. It is superseded by this round. Required mode's cgroups are
-`t-*` children of `CHOIR_DOCTOOL_CGROUP_ROOT` (`/sys/fs/cgroup/choir-doctools`,
-a 2 GiB aggregate), made at daemon start only when the sandbox is on.
+The design text above, in "SEC-15: the document-tool sandbox", was
+rewritten in round 2 to describe the code (review E7). Required mode's and
+the shadow's cgroups are `t-*` children of `CHOIR_DOCTOOL_CGROUP_ROOT`
+(`/sys/fs/cgroup/choir-doctools`, a 2 GiB aggregate), made at daemon start
+only when the sandbox is on.
 
 Residuals added in this round:
 - A darwin build of the whole `internal/agentcore` package could not run
@@ -915,7 +960,10 @@ Residuals added in this round:
   pass `GOOS=darwin GOARCH=arm64 go vet`. FP0 should run the darwin build
   on the Mac.
 - The shadow doubles converter CPU work under observe, after the request
-  returns. Turning observe off removes it.
+  returns, and holds up to 1 GiB of memory (its cgroup's `memory.max`)
+  while it runs, inside the 2 GiB document tools aggregate, which is not
+  carved out of the desks' or capsules' budgets. Turning observe off
+  removes both.
 - `toolAggregateMax` (2 GiB) is a first value, like `toolMemoryMax`.
 
 ### Second batch, review round 2 (DeepSeek, bunch 39, head 5c7615904): findings
@@ -984,3 +1032,53 @@ record.
   refuse. The helper inherits any fd without close-on-exec; marking every
   fd from 3 up close-on-exec before the tool's exec is cheap defense in
   depth.
+
+### Second batch, review round 2: outcome
+
+Replayed onto origin/main b7d79a082 as lane/fp2-b2-on-main. Old lane
+commits (origin/lane/b3-desk-boundary-2) to replayed commits:
+
+| lane/b3-desk-boundary-2 | lane/fp2-b2-on-main | subject |
+|---|---|---|
+| d44537881 | a7f98faa8 | docs: the designs and failure modes (green) |
+| d19c4d1e0 | 1906e6658 | feat(capsule): capsule memory per doctrine (red) |
+| 08fc031ad | e40340528 | feat(doctool): the document-tool sandbox (red) |
+| 737c77eb0 | b44ef6589 | feat(capfloor): the capability floor (red) |
+| 813d7e454 | 5b04e3a1d | docs: second batch built (green) |
+| ab6c704d2 | b3c801ca1 | docs: review round (bunch 4b) findings (green) |
+| 1f3566bce | 53763eee7 | fix(doctool): portable probe report and judge (orange) |
+| 1375a846a | 03d8a1578 | fix(doctool): observe returns today's run; own cgroup root (red) |
+| 6ffe027d2 | 0e00153e6 | fix(capsule): the aggregate before any capsule or boost (red) |
+| 97caf55d6 | 289556b47 | fix(capfloor): observe never fails the start (red) |
+| 50e8c229d | 38c43f397 | docs: review round repaired (green) |
+| 5c7615904 | dcc274ab1 | test(capfloor): LD_LIBRARY_PATH for the stand-in daemon (yellow) |
+
+Round 2: problem record 967d086a0 (green), failing tests 502dc20b6
+(yellow), then the fixes.
+
+| finding | disposition | commit |
+|---|---|---|
+| E1 CAP_SYS_TIME dropped; hibernate resume needs it (high, blocked enforce) | fixed: kept with the hibernate reason (fast resume stays); floor `00000000032c15ff`; probe constant, image comment, K5 and enforce trial step 4 (a hibernate and resume) updated; source scan test | e76c1131d (red) |
+| E2 observe shadow has no memory or process bound (medium) | fixed: the shadow runs in a `t-*` cgroup under the document tools' root or not at all; "bounded load" corrected; memory named in the residual. RLIMIT_AS not set (pandoc's GHC runtime reserves a large address space at start; the cgroup bounds memory); RLIMIT_NPROC not set (per uid; pids.max bounds the tool) | 852e22b59 (red) |
+| E3 direct failed, sandbox succeeded counted equal (low/medium) | fixed: counted as diverged, so staging step 2's gate sees it | 852e22b59 (red) |
+| E4 directory read probe false denial (low) | fixed: a directory is listed, never read; the judge and the probe script take only EACCES or EPERM as a read denial | 852e22b59 (red) |
+| E5 boot sweep uses os.RemoveAll (low) | fixed: cgroup.kill (written, never created), then rmdir with the per-run removal's retry; a leftover is logged | 852e22b59 (red) |
+| E6 SetMax(old) error discarded (low) | fixed: a raise that cannot be put back is counted until the capsule ends (`stuck:<job>`) and the error and a log line name it | b864fa79e (red) |
+| E7 docs contradict the code; pre-rebase hashes (docs) | fixed: design text rewritten to the code; every hash re-pointed (tables above) | the round-2 outcome commit (green) |
+| E8 Apply no-ops on an unknown Mode; inherited fds (info) | fixed: Apply refuses an unknown Mode (Linux and elsewhere); the helper marks fds from 3 up close-on-exec before the exec | e76c1131d, 852e22b59 (red) |
+
+Shipped defaults are unchanged: all three switches observe. Enforce for
+the capability floor is no longer blocked by E1 in the code; it still
+waits for staging step 4 on a test computer, now including the hibernate
+and resume.
+
+Residuals added in round 2:
+- The source scan (E1's test) reads the daemon's own Go source for direct
+  syscalls. It does not see capabilities used by binaries the daemon
+  execs (git, go, node, libreoffice) or by syscalls reached through cgo
+  libraries; the enforce trial is the evidence for those.
+- The shadow's `t-*` cgroup could not be exercised as uid 1000 here (a
+  temp dir is not cgroupfs; the test proves the shadow asks for it and
+  does not run without it). Staging step 2 is its first real run: a
+  shadow whose cgroup cannot be made shows as `setup_failed`, and
+  `setup_failed` must be zero before required.
