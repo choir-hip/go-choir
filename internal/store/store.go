@@ -99,8 +99,12 @@ type doltConnector interface {
 }
 
 // testHookAfterWorkspaceOpen runs in Open right after the engine is up
-// (tests only).
-var testHookAfterWorkspaceOpen func(workspacePath string)
+// and the store exists; an error from it fails the Open (tests only).
+var testHookAfterWorkspaceOpen func(s *Store) error
+
+// testHookWrapConnector wraps each Dolt connector the store's pools are
+// built on (tests only).
+var testHookWrapConnector func(doltConnector) doltConnector
 
 // errWorkspaceGone is Close's answer when the workspace's Dolt files are
 // gone from disk under the open engine.
@@ -359,10 +363,14 @@ func (s *Store) commitDoltCheckpointLocking(ctx context.Context, message string,
 	return nil
 }
 
-// pinPools checks out the single connection of each open pool (both are
-// MaxOpenConns 1) by ctx. On failure it returns what it pinned and an
-// error; the caller must not close anything.
+// pinPools checks out the single connection of each open pool (all are
+// MaxOpenConns 1) by ctx. On failure it releases what it pinned and
+// returns nil and an error (errCloseBudgetSpent if ctx was already done
+// before any pool was tried); the caller must not close anything.
 func (s *Store) pinPools(ctx context.Context) ([]*sql.Conn, error) {
+	if ctx.Err() != nil {
+		return nil, errCloseBudgetSpent
+	}
 	var pinned []*sql.Conn
 	for _, pool := range []struct {
 		name string
@@ -381,6 +389,23 @@ func (s *Store) pinPools(ctx context.Context) ([]*sql.Conn, error) {
 		pinned = append(pinned, conn)
 	}
 	return pinned, nil
+}
+
+// closeFailedOpen closes a store whose Open failed and returns Open's
+// error. Nobody else holds the store, so a Close that fails closed (work
+// the Open started still holds a connection) is retried a bounded number
+// of times to release the engine and the workspace lock; a Close error
+// that remains is logged and joined to Open's.
+func (s *Store) closeFailedOpen(openErr error) error {
+	err := s.Close()
+	for attempt := 0; attempt < 2 && errors.Is(err, ErrCloseLeftOpen); attempt++ {
+		err = s.Close()
+	}
+	if err != nil {
+		log.Printf("runtime store: close after a failed open: %v", err)
+		return errors.Join(openErr, err)
+	}
+	return openErr
 }
 
 // undoFailedClose restores what a Close that failed closed changed, so a
@@ -852,18 +877,19 @@ func Open(dbPath string) (*Store, error) {
 		return nil, fmt.Errorf("runtime store: open unified Dolt workspace: %w", err)
 	}
 
-	if hook := testHookAfterWorkspaceOpen; hook != nil {
-		hook(workspacePath)
-	}
 	readDB := sql.OpenDB(poolConnector{connector})
 	configureEmbeddedDoltDB(readDB)
 
 	s := &Store{db: db, readDB: readDB, path: dbPath, texturePath: workspacePath, doltConnector: connector}
+	if hook := testHookAfterWorkspaceOpen; hook != nil {
+		if err := hook(s); err != nil {
+			return nil, s.closeFailedOpen(fmt.Errorf("runtime store: open: %w", err))
+		}
+	}
 	doneRuntimeSchema := objectgraph.BootPhase("store: open", "runtime-schema")
 	if err := s.bootstrap(); err != nil {
 		doneRuntimeSchema(err)
-		_ = s.Close()
-		return nil, fmt.Errorf("runtime store: bootstrap: %w", err)
+		return nil, s.closeFailedOpen(fmt.Errorf("runtime store: bootstrap: %w", err))
 	}
 	doneRuntimeSchema(nil)
 
@@ -872,8 +898,7 @@ func Open(dbPath string) (*Store, error) {
 	doneOGSchema := objectgraph.BootPhase("store: open", "objectgraph-schema")
 	if err := ogDoltStore.EnsureSchema(context.Background()); err != nil {
 		doneOGSchema(err)
-		_ = s.Close()
-		return nil, fmt.Errorf("runtime store: bootstrap object graph: %w", err)
+		return nil, s.closeFailedOpen(fmt.Errorf("runtime store: bootstrap object graph: %w", err))
 	}
 	doneOGSchema(nil)
 	s.ogStore = ogDoltStore
@@ -909,8 +934,7 @@ func Open(dbPath string) (*Store, error) {
 	if err := s.EnsureTextureSchema(); err != nil {
 		doneTextureSchema(err)
 		log.Printf("ERROR EnsureTextureSchema failed: %v", err)
-		_ = s.Close()
-		return nil, fmt.Errorf("runtime store: bootstrap texture: %w", err)
+		return nil, s.closeFailedOpen(fmt.Errorf("runtime store: bootstrap texture: %w", err))
 	}
 	doneTextureSchema(nil)
 
@@ -921,15 +945,13 @@ func Open(dbPath string) (*Store, error) {
 	doneEpoch := objectgraph.BootPhase("store: open", "store-schema-epoch")
 	if err := storeschema.Write(workspacePath); err != nil {
 		doneEpoch(err)
-		_ = s.Close()
-		return nil, err
+		return nil, s.closeFailedOpen(err)
 	}
 	doneEpoch(nil)
 
 	if freshStore {
 		if err := os.WriteFile(dbPath, nil, 0o644); err != nil {
-			_ = s.Close()
-			return nil, fmt.Errorf("runtime store: write marker: %w", err)
+			return nil, s.closeFailedOpen(fmt.Errorf("runtime store: write marker: %w", err))
 		}
 	}
 
@@ -1207,12 +1229,15 @@ func (s *Store) Close() error {
 	// no new step starts after that final commit, and commit the
 	// checkpoint before the pools below close, since it writes through
 	// s.db. One deadline (the close deadline plus one grace) bounds the
-	// checkpoint waits and the commit-lock fence; the telemetry drain above
-	// (its own 10 s), the wait for closeMu and the pool teardown below are
-	// outside it. If a Dolt commit is still running at it, Close fails
-	// closed: closing the pools would tear the embedded engine down under
-	// it, so they stay open (process exit reclaims them) and Close returns
-	// ErrCheckpointCommitLive. Close again once it finishes.
+	// checkpoint waits, the commit-lock fence and the pin; the telemetry
+	// drain above (its own 10 s), the wait for closeMu and the pool
+	// teardown below are outside it. If a Dolt commit or another statement
+	// is still using the engine at it, Close fails closed: closing the
+	// pools would tear the embedded engine down under it, so they stay
+	// open (process exit reclaims them) and Close returns an
+	// ErrCloseLeftOpen naming the cause. Close again once it finishes.
+	// While Close waits, readers wait too: the pin holds the read pool's
+	// connection while it waits for the write pool's.
 	s.CancelDerivedColumnMigration()
 	deadline := time.Now().Add(s.checkpoint.closeLimit())
 	hard := deadline.Add(checkpointCloseGrace)
@@ -1226,7 +1251,7 @@ func (s *Store) Close() error {
 	fence, cancelFence := context.WithDeadline(context.Background(), hard)
 	defer cancelFence()
 	if err := s.lockDoltCommitBy(fence); err != nil {
-		err = s.checkpoint.leaveOpen("a Dolt commit holds the commit lock")
+		err = s.checkpoint.leaveOpen(fmt.Errorf("%w (a Dolt commit holds the commit lock)", ErrCheckpointCommitLive))
 		s.undoFailedClose(wasClosed, telemetryStopped)
 		return err
 	}
@@ -1237,7 +1262,13 @@ func (s *Store) Close() error {
 	// engine when it closes. Waiters are failed by the pool closes below.
 	pinned, pinErr := s.pinPools(fence)
 	if pinErr != nil {
-		err := s.checkpoint.leaveOpen("a statement holds a pool's connection: " + pinErr.Error())
+		var leftErr error
+		if errors.Is(pinErr, errCloseBudgetSpent) {
+			leftErr = fmt.Errorf("%w (%v)", ErrCloseLeftOpen, pinErr)
+		} else {
+			leftErr = fmt.Errorf("%w (%v)", ErrPoolStatementLive, pinErr)
+		}
+		err := s.checkpoint.leaveOpen(leftErr)
 		s.undoFailedClose(wasClosed, telemetryStopped)
 		return err
 	}
