@@ -38,7 +38,17 @@ with edits) is folded in too: the stamp guard is type-based (go/types over
 every package that depends on `computerevent`, elided literals included),
 the rollback step ships as a tested artifact with an apply script, the
 test hook is guarded as test-only, two claims are narrowed, and the
-citations are swept.
+citations are swept. Round 1d (DeepSeek, bunch 84: accept deploy 1, with
+edits before the rollback recipe is relied on) is folded in: the rollback
+sequence survives its own revert (`apply --from <tip>`, rehearsed end to
+end), the guard covers container conversions, fails on type errors and
+pins its package set, and the step names its table exactly. The guard
+checks every non-test package under `internal/`, `cmd/` and `scripts/`
+that depends on `computerevent`, on the host's build tags (linux on the
+VM and in CI); files behind other build tags are not read, and a
+`ProjectionOp` decoded from JSON can carry a `Table` without any literal.
+In deploy 1 the only producer of a projection batch is
+`projectionTape.appendOpsAs`.
 
 Deploy 1's staging proof is a no-effect proof:
 `scripts/proofs/fp1-event-table-deploy1.sh` (boot log; replay report at
@@ -97,12 +107,36 @@ a snippet here:
   the whole file the revert commit adds to `internal/store`. It needs only
   `database/sql`, `errors` and `log`, which the pre-deploy-1 store package
   already imports.
-- `scripts/rollback/fc-deploy1-rollback.sh apply`, run after the git revert
-  (it refuses while `choirEventsDDL` is still defined): it copies the file
-  in, inserts the boot substep `runtime-schema/drop-empty-choir-events`
-  after the `retiredRuntimeTables` loop (failing unless it finds exactly
-  that one anchor, unchanged since `6c60685cc`), and builds
-  `internal/store`.
+- `scripts/rollback/fc-deploy1-rollback.sh apply --from <tip>`, run after
+  the git revert (it refuses while `choirEventsDDL` is still defined): it
+  reads the file from the deploy-1 tip with `git show`, inserts the boot
+  substep `runtime-schema/drop-empty-choir-events` after the
+  `retiredRuntimeTables` loop (failing unless it finds exactly that one
+  anchor, unchanged since `6c60685cc`), and builds `internal/store`.
+
+**The sequence** (corrected in round 1d, DeepSeek). Deploy 1 adds the
+script and the artifact, so the revert removes both before `apply` could
+run from the tree. The rollback therefore takes both from the deploy-1
+tip, `TIP` being the last deploy-1 commit on main:
+
+```sh
+T=$(mktemp -d)
+git show "$TIP:scripts/rollback/fc-deploy1-rollback.sh" >"$T/fc-deploy1-rollback.sh"
+git revert --no-edit <deploy 1's commits>
+bash "$T/fc-deploy1-rollback.sh" apply --from "$TIP"
+git add internal/store/store.go internal/store/fc_deploy1_rollback.go
+git commit -m "rollback below F-c deploy 1: drop an empty choir_events at boot"
+```
+
+`fc-deploy1-rollback.sh rehearse TIP BASE` runs that sequence in a
+throwaway `git clone --shared` (nothing in the working tree changes): it
+checks that the revert removed the script and the artifact, applies
+`--from TIP`, and checks that `choirEventsDDL` is gone, that the step is in
+`bootstrap` once, that the installed file is byte-identical to the
+artifact at `TIP`, and that `go build` and `go vet` of `internal/store`
+pass. On the lane, `rehearse 051bc0af2 6c60685cc` reverted 20 commits and
+passed in 9 s. FP0 runs it again on main's landed range before relying on
+the recipe.
 - Three tests keep it from rotting. `TestEventTableRollbackRecipe`
   rehearses the function. On a deploy-1 store with no stamped op, the drop
   gives back a witness equal to one the deploy-1 extractor takes of the
@@ -115,9 +149,15 @@ a snippet here:
   `TestEventTableRollbackArtifactBuildsInTheStorePackage` runs the script's
   patch on `store.go`, checks the call lands in `bootstrap`, and builds the
   store package with it through `go build -overlay`.
+  `TestEventTableRollbackRecipeNamesTheTableExactly` (round 1d) checks the
+  step names the table exactly: `SHOW TABLES LIKE 'choir_events'` reads the
+  underscore as a wildcard, so beside a lookalike table and with
+  `choir_events` gone it would fail a boot; the step reads
+  `information_schema.tables` by exact name.
 
-Its cost at boot is one `SHOW TABLES` and, for an empty table, one probe and
-one drop of an empty table; it never reads `og_objects`.
+Its cost at boot is one `information_schema.tables` count and, for an empty
+table, one probe and one drop of an empty table; it never reads
+`og_objects`.
 
 **Decision: shipped as a tested artifact, installed only by a revert; not
 in deploy 1's code.** The drop must run in the binary below deploy 1, and
@@ -127,13 +167,17 @@ would remove it anyway. A revert must run the script: a bare revert leaves
 publication refused until a forward deploy. The artifact does not help the
 `restorePrior` path, as above. The proof script's step 6 rehearses the
 previous build over a deploy-1 store on a test computer, and its
-`recovered` phase names the script.
+`recovered` phase names the sequence above.
 
 **Open for the panel** (round 1c, DeepSeek, dissent): fencing
 `restorePrior` with `checkStateCompatibility`, so that the updater's
 automatic recovery cannot reach a binary below the store's epoch, is not
 part of deploy 1. If the panel wants automatic recovery closed before any
-op is stamped, it is a gate for deploy 2's card.
+op is stamped, it is a gate for deploy 2's card. DeepSeek (bunch 84) sides
+with deferral: deploy 1 writes no rows, so the downgrade is content-safe
+and fails closed, and a fence would also refuse the updater's own recovery
+on an epoch-2 store, wedging a computer whose new release failed its
+probe. Deploy 2's card owns the decision.
 
 Once deploy 2 stamps any op, deploy 1 is the floor (section 4.5). The
 recipe does not apply there: the table is not empty, and the old binary
