@@ -1,5 +1,5 @@
 ---
-definition_version: 5
+definition_version: 6
 
 # Station FP10, item RES-10, of the launch first pass
 # (choir-launch-first-pass-metamission-2026-10-21.md). Item: balloon stats
@@ -64,10 +64,17 @@ Three steps, each shippable alone, each off until FP0 proves it on staging.
    `GET /balloon/statistics` (`target_pages`, `actual_pages`, `free_memory`,
    `available_memory`, `total_memory`, `swap_in/out`, `major_faults`,
    `disk_caches`). Expose it as `Manager.GuestMemoryStats(vmID)` through the
-   existing `runningAPISocket` helper (memory_hotplug.go), and export per-VM
-   gauges on the vmctl metrics surface. Read only, no mutation. Test first as
-   an httptest fake of the socket, then one E2E: boot a guest on staging,
-   fetch stats, assert `available_memory > 0` and bounded by `total_memory`.
+   existing `runningAPISocket` helper (memory_hotplug.go). Built surface
+   (revised 2026-10-22): not gauges. vmctl has no metrics endpoint (no
+   Prometheus or expvar surface), and the existing per-VM memory readings
+   are host-only JSON routes (`/internal/vmctl/memory`, `/internal/vmctl/list`
+   memory fields), so the reading is the JSON route
+   `GET /internal/vmctl/memory/balloon[?vm_id=|computer_id=]` beside them:
+   one entry per computer with a reading or a reason, read on demand (no
+   sampling loop, so a stuck VMM never stalls vmctl). Read only, no
+   mutation. Test first as an httptest fake of the socket, then one E2E:
+   boot a guest on staging, fetch stats, assert `available_memory > 0` and
+   bounded by `total_memory`.
 3. **Emergency inflation (red, flag `VM_BALLOON_EMERGENCY=observe|on`,
    default off).** `Manager.SetBalloonTargetMiB` = `PATCH /balloon
    {amount_mib: N}`, N capped to `mem_size_mib - floor` (floor from the
@@ -118,4 +125,7 @@ restore question). Step 3 waits for that evidence and for RES-09 (one
 controller owning guest memory targets). Residuals: stats cost per guest
 (UNVERIFIED), `MemTotal` under inflation (step 3), whether a restored
 balloon keeps its interval (FP0 step 4 answers it; code is honest either
-way). No owner question blocks steps 1 and 2.
+way); `class:` tokens do not match the platform computer or a resumed boot
+(problem record, "Residuals"). Review round 2 (bunch 40) closed: probe
+sends no credential to guests and fails loudly on non-2xx; no_api_socket
+names its path. No owner question blocks steps 1 and 2.
