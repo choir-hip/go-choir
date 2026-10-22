@@ -284,19 +284,20 @@ now:
   status: working
   slice: >-
     Land the live-red queue one per deploy, each with its deployed proof on
-    a test computer: P (FP2 batch 2) in CI, then FP4 round 3, the FP7
-    enforce flip, SEC-14 deploys 1 to 3, FP3 cuts 2 to 4. Inert and orange
-    work rides along (RES-13 L3a, ARCH-13, FP0 ops visibility). Measure
-    busy-then-idle guest memory to decide page-cache reclaim for the paper.
-  source_ref: 966d3f519
-  deploy_identity: 358ce87c0 serving (deploy O, the wake-orphan fix); 966d3f519 (deploy P) in CI
+    a test computer: Q (FP4 round 3, with RES-13 L3a inert, the FP2
+    self-test fix and FP0 ops visibility riding along) in CI; then the FP7
+    enforce flip, SEC-06 in observe, ARCH-13 (now live), SEC-14 deploys 1
+    to 3, FP3 cuts 2 to 4. Reviews use flash, DeepSeek and Devin or a
+    Sonnet subagent in the third seat (owner, 2026-10-22).
+  source_ref: d206fdd40
+  deploy_identity: 966d3f519 serving (deploy P, FP2 batch 2); d206fdd40 (deploy Q) in CI
   candidate:
-    id: FP2-batch-2
-    state: on main, CI running; three accepts (review round 3), mirror PASS on 7abd8f211
-    ref: 966d3f519 (main)
-    base: 358ce87c0
-    digest: tree of 7abd8f211 plus the ledger (the mirrored tree; only the ledger differs)
-    scope: [internal/capsule, internal/doctool, internal/capfloor, internal/content, internal/agentcore, cmd/autoputer, nix]
+    id: deploy-Q
+    state: on main, CI running; mirror PASS on 64ce90ba2 (34 commits on 966d3f519, every lane's hunks identical); FP4 round 3 has three accepts and its 3b delta three accepts with docs edits
+    ref: d206fdd40 (main)
+    base: 966d3f519
+    digest: the mirrored tree 64ce90ba2 plus the ledger and this card
+    scope: [internal/agentcore, internal/actorruntime, internal/vmmanager, internal/vmctl, scripts, docs]
   bridge_conjecture: >-
     If the security and density batches land with deployed proofs and
     independent review, then the owner's second pass starts from a computer
@@ -327,29 +328,28 @@ now:
     owner_ratification_ref: not_applicable
   belief:
     believed_state: >-
-      Deploys L to O are live and proved on staging (decision-409; FP3 cut
-      1, the host egress floor; SEC-16 and inert NET-01; the wake-orphan
-      fix, guard path only). The owner's computer was restarted at the
-      owner's request at 12:08 and its 16-hour self-development operation
-      closed as interrupted. P is in CI. FP4 round 3 has three accepts and
-      a small edit round. ARCH-13 is in round 5 (retried Close fails open).
-      RES-13 L3a round 2 is in review. SEC-14 deploy 1 passed its mirror.
-      FP3 cuts 2 to 4 are built and mirrored, waiting for slots.
+      Deploys L to P are live and proved on staging. P's proof found that
+      the document-tool and seccomp self-tests ran the dedicated desk-worker
+      binary (an FP2 and RES-17 interaction); production extraction is
+      unaffected (observe: 2 runs, 2 equal, 0 failed); the fix rides in Q.
+      Queued and reviewed: the FP7 flip (three accepts with edits, done),
+      SEC-06 observe (in review), ARCH-13 rounds 5 and 6 (three accepts on
+      5, a delta review on 6; now a live red; a design choice is with the
+      owner). FP3 cuts 2 to 4 and SEC-14 are built and mirrored.
     main_uncertainty: >-
-      whether one live red per deploy (about 40 to 60 minutes with its
-      proof) lands the queue in this pass, and whether guest page-cache
-      reclaim returns host memory at all while freed guest pages stay
-      resident on the host.
-    next_observation: deploy P's identity on staging, then its confinement probe and document-tool receipts on the FP2 test computer.
+      whether the landing queue (about nine live reds at 40 to 60 minutes
+      each) fits the pass; whether guest page-cache reclaim returns host
+      memory (busy phase: both guests rose about 1 GiB on the host and
+      kept it).
+    next_observation: Q's identity on staging, the FP4 drill steps 4 and 6 re-run on 71afbf14, and P's step 1 and seccomp leg re-run on the FP2 test computer.
   blocker_or_risk: >-
-    Landing is the bottleneck (conjecture C-FP-landing holds so far).
-    The VM has 10 GiB, so mirrors run one at a time behind a lock; three
-    OOM kills on 2026-10-22 were fixed by the locks. A graceful vmctl
-    restart cannot interrupt a 10 s boot, so the wake-orphan in-flight
-    branch has no staging proof.
+    Landing is the bottleneck (conjecture C-FP-landing holds). Cross-lane
+    interactions appear only when lanes meet on staging (P's self-test);
+    the combined-stage mirror and the deployed proof are the catch. FP7
+    step 5 (a copied token refused) has no route without a guest shell.
   next_action: >-
-    Prove P; land FP4 round 3 as Q and re-run its drill steps 4 and 6;
-    then the FP7 flip and SEC-14.
+    Prove Q; then the FP7 flip as R; SEC-06 observe and ARCH-13 as their
+    reviews close; then SEC-14.
 receipts:
   - id: capture-label-key-read
     boundary: implement
