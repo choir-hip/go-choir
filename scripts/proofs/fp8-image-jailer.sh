@@ -153,7 +153,7 @@ step_8() {
 	fi
 	pid=$(node_b_q "for p in \$(pgrep -f 'firecracker.*--id $T_VM'); do [ \"\$(cat /proc/\$p/comm)\" = firecracker ] && echo \$p && break; done")
 	[ "$PROOF_DRY" = 1 ] || info "host firecracker VmRSS: $(node_b_q "grep VmRSS /proc/${pid:-0}/status 2>/dev/null || echo unreadable")"
-	manual "in the guest: /sys/module/damon_reclaim/parameters/enabled is Y and kdamond_pid >= 0; repeat the three RSS reads at settle, burst peak and after 10 idle minutes; pass = idle host RSS materially below the control at equal guest usage, kdamond CPU < ~1% of a core, no pgmajfault growth. If enabled reads N the kernel did not take boot-time enabling: record it"
+	manual "guest DAMON state is on procmem now (memory_return: enabled, kdamond_pid, bytes_reclaimed_regions, page reporting, balloon reporting bit): run scripts/fp8_memory_return_probe.py --computer-id <this test computer> --burst capsule --cred-file <its cred file> --out docs/evidence/fp8-memory-return-<id>-<date>.csv (about 25 min), then the same on an unselected test computer as the control; read the outcome in docs/reports/guest-memory-return-outcomes-2026-10-22.md. Pass = outcome C at idle with no workingset_refault_file / pgmajfault growth and kdamond CPU < ~1% of a core"
 }
 
 step_9() {
