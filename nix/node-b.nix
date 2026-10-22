@@ -2620,12 +2620,18 @@ in
     builders-use-substitutes = true;
   };
 
-  # Builds go to node-a (12 cores, 31 GiB, no guests; 0.5 ms away) so CI
-  # compiles stop competing with guests for this host's memory and CPU
+  # Builds go to node-a (12 cores, 31 GiB; 0.5 ms away) so CI compiles stop
+  # competing with guests for this host's memory and CPU
   # (docs/problems/ci-deploy-latency-per-service-go-builds-2026-10-09.md,
   # proposal item 3). The key is node-b-local (/root/.ssh, not in the repo);
   # node-a restricts it to `nix-daemon --stdio`. If node-a is unreachable,
   # Nix builds locally under the budget above.
+  # node-a also runs the agents VM (about 10.5 GB resident) and Mike's
+  # staging and its container builds, with no memory limits. With 8 jobs a
+  # host build plus a Mike build ran node-a out of memory and its OOM
+  # killer took the agents VM (2026-10-22 17:35;
+  # docs/problems/node-a-oom-kills-agents-vm-during-node-b-builds-2026-10-22.md).
+  # 3 jobs keeps a host build's Go compiles to a few GiB.
   nix.distributedBuilds = true;
   nix.buildMachines = [{
     hostName = "node-a-builder";
@@ -2633,7 +2639,7 @@ in
     sshUser = "root";
     sshKey = "/root/.ssh/nix-builder-node-a";
     system = "x86_64-linux";
-    maxJobs = 8;
+    maxJobs = 3;
     speedFactor = 10;
     supportedFeatures = [ "benchmark" "big-parallel" "kvm" "nixos-test" ];
   }];
