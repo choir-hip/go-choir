@@ -164,3 +164,22 @@ commit), the counters' "exact" claim was stronger than the code, the
 rollback rationale was wrong for round 3, and one test synced on a sleep.
 Fixed in cf2dc9d90 after failing tests in ed56fdc0e; dispositions in the
 station's now card.
+
+## Review round 5: the fail-closed state had fail-open doors (2026-10-22)
+
+FP0's bunch 52 (DeepSeek v4.1 flash send back, reproduced; Gemini flash
+accept with edits, same hole) on 75f3a9a46. A second Close while the
+first waited, and a retried Close after a fail-closed Close while an
+inline `FinalizeBatch` commit ran, both returned nil and closed the
+pools, the connector and the engine under the live commit (probe: ping
+after it, `sql: database is closed`; the inline commit then failed with
+`*NomsBlockStore is closed`). Cause: `closeCheckpoint` set `closed`
+before it knew no commit was live, and the `closeLive` guard existed
+only after the first Close gave up. Count mode closed the pools under a
+live inline commit the same way. One cut closing commit counted twice;
+Reopen over an open store would orphan its handles; the record's
+"callers stop on Close's error" was wrong for the planned restart, and
+two test claims were broader than the tests. The failing tests are
+d529f6a94; the fix is 4d42ba082 (Close and Reopen serialized, the
+commit-lock fence on every Close). This is the fifth round on Close; the
+station's now card carries the structural assessment.
