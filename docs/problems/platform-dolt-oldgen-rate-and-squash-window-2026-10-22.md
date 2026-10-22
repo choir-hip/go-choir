@@ -1,8 +1,8 @@
 # platform-dolt's oldgen: the rate, its cause, and the squash window (2026-10-22)
 
 Date: 2026-10-22, 17:00 UTC. Lane: FP0 platform Dolt oldgen
-(`lane/fp0-platform-dolt-oldgen`). Status: open; problem record before any
-code. Companion to FP0's record
+(`lane/fp0-platform-dolt-oldgen`). Status: open; problem record first (381b7ee5f), then the switch
+(`90ea1e378`, inert) and the runbook. Companion to FP0's record
 [platform-dolt-oldgen-grows-every-auto-gc-2026-10-22.md](platform-dolt-oldgen-grows-every-auto-gc-2026-10-22.md)
 (on `lane/fp0-disk-pressure`), which reads the GC mechanism in Dolt's code;
 this record takes the next questions: why the rate, what the supervised squash
@@ -182,6 +182,160 @@ day. Either way it grows without bound until a squash and a full GC, and
 the only alarm (the daily audit at 50 GiB oldgen) has no consumer. At 36 GiB
 it is the largest single reclaimable holder on the host after the VM
 images.
+
+## 3. Runbook: one supervised squash and full GC, server stopped (green; every step on Node B is the owner's call)
+
+The tool is on main since `aab89bfe0` (2026-10-19; FP0 confirms the unit with `systemctl cat`):
+`go-choir-platform-dolt-squash.service` runs
+`scripts/platform-dolt-squash.sh` (stop, reflink backup, squash to one
+commit, bounded full GC `--archive-level 0 --incremental-file-size
+268435456` under `MemoryMax=10G` and a 5 GiB Go limit, root-hash check,
+restore on any failure, restart, query check, keep the newest backup).
+Its record ([store-a-weekly-squash-2026-10-20.md](store-a-weekly-squash-2026-10-20.md),
+"Supervised first run") has the operator commands; what follows is
+what changed or was not there.
+
+**Window.** After the paper's 04:00 compaction has finished (the paper is
+then freshly compacted and appends less), not between 02:30 and the end of
+the off-host backup (it calls `DOLT_BACKUP` on Store A and is not stopped
+by the script: it only `After=`s Dolt), no deploy in flight, no computer
+creation or refresh planned. Store A down 10 to 30 minutes, estimated:
+stops under 1 min (each unit's `TimeoutStopSec` is 20 s), the reflink
+backup about a minute (36 GiB of large archive files), the squash seconds,
+the full GC proportional to the **live** set, not the history (the paper's
+52 GB to 8 GB took 2 min 19 s; Store A's live set is unknown, at most the
+36 GiB, likely a few GB since the corpus moved to Store B), restart and
+query check under 2 min. Abort past 45 min (`systemctl stop
+go-choir-platform-dolt-squash.service`; the backup is restored).
+
+**Free space.** The backup is a reflink, so the run needs free space for
+the new oldgen only: the live set L, at most 36 GiB. Two binding
+conditions, both read just before the start:
+
+- `df` free at least **90 GiB + L + 10 GiB**, so a deploy is not refused
+  afterwards (take L = 36 GiB unless the reading below gives less):
+  about 136 GiB. The paper regrows 85 to 140 MiB a minute; start soon
+  after its compaction.
+- `btrfs filesystem usage /`: metadata under 90% used and at least 20 GiB
+  unallocated (metadata was DUP at 84% of 18.6 GiB, 38 GiB unallocated at
+  14:55). A reflink copy adds extent references to metadata; a CoW GC
+  allocates data chunks. If either fails, do not start; a balance is a
+  separate owner call.
+
+**The space comes back only when the backup goes.** The script keeps the
+newest backup, which pins all of the old 36 GiB. After the run, free space
+is *lower* by L until the owner deletes
+`/var/lib/go-choir/platform-dolt-squash-backups/platform-dolt.<ts>` after a
+day's soak; then about 36 GiB minus L returns.
+
+**What is down in the window** (read in `nix/node-b.nix`):
+
+- Down: `go-choir-platform-dolt` (Store A) and what `Requires=` it:
+  `go-choir-corpusd`, `go-choir-checkpointd` (+ timer),
+  `go-choir-platform-dolt-history-audit` (+ timer);
+  `go-choir-platform-dolt-users` is `PartOf=` Dolt and restarts with it.
+  With corpusd down: every computer's event append
+  (`/internal/computers/events/append`), checkpoints and file roots, the
+  Autopaper front list and reader and publishing, capture search, the
+  object graph routes (Store B itself stays up), key escrow, owner acts,
+  corpusd's credential issuance (a computer created or refreshed in the
+  window fails to get its credential), maild's digest reads.
+- Up: auth and sessions (`auth.db`, SQLite; no Dolt), the proxy (static
+  site and login; its corpusd routes return errors), the gateway (model
+  calls), vmctl and running guests (vmctl only `Wants=` Dolt; its route
+  database reads fail in the window: open hypothesis), Store B
+  (`go-choir-corpus-dolt`).
+- Hypotheses the supervised run settles: what a guest does when an event
+  append fails (`internal/computerevent/http_client.go` does not retry; a
+  desk run may fail and be closed); what vmctl does with its route
+  database down. Watch `journalctl -fu go-choir-vmctl` and the paper's
+  health through the window.
+
+**Steps** (in addition to the squash record's 1 to 8):
+
+0. FP0's readings of §1 (read-only) and `test -s
+   /var/lib/go-choir/corpus-dsn.env` (the split is live). If oldgen is
+   still growing past 45 GiB before the window, the 50 GiB audit will
+   fail: that is a signal only.
+1. Preconditions as in the record, plus the free-space and btrfs checks
+   above, plus `ls /var/lib/go-choir/platform-dolt/platform/.dolt/sql-server.info`
+   absent after the stop (the tool refuses on it).
+2. `sudo systemctl start go-choir-platform-dolt-squash.service` in the
+   foreground, the watchers in a second terminal.
+3. Verify: `last-run.json` with `"squashed":true`, `root_before ==
+   root_after`, `commits_after` 1 or 2; the units active; `du -sh
+   /var/lib/go-choir/platform-dolt` (new oldgen about L; the total drops
+   only in this directory, not on the disk, while the backup lives);
+   `https://choir.news/health`; a paper source poll succeeding within
+   30 minutes; vmctl `NRestarts` unchanged; the Dolt liveness probe clean.
+4. Soak a day, then the owner deletes the backup (above), and runs
+   `dolt fsck` on a reflink copy under `systemd-run -p MemoryMax=8G` if a
+   check of the version skew (embedded module 2.2.0, server 2.4.2) is
+   wanted.
+
+**Rollback.** In the window: stop the squash unit; the script restores the
+backup and restarts everything. After services have run on the squashed
+store: stop corpusd and Dolt, `mv` the data dir aside, `cp -a
+--reflink=always` the backup back, start; every write since the window is
+lost, so only for a store that is wrong.
+
+## 4. A lasting cadence: stop the snapshots at the source, squash rarely
+
+**The fix (built, red, inert: `90ea1e378`).** `PLATFORM_DOLT_SNAPSHOTS=off`
+stops Store A's `DOLT_COMMIT` snapshots: `doltbatch` gains a mode in which
+`Mark`, `CommitNow`, `Flush` and `Close` are no-ops returning nil, and
+`platform.openStore` applies it to the Store A committer only. corpusd and
+checkpointd load the optional
+`/var/lib/go-choir/platform-dolt-snapshots.env`; absent (as deployed),
+nothing changes. With it, oldgen stops growing between squashes: a Default
+auto GC with no new commit adds nothing to oldgen and rewrites in newgen
+only what the working set has that HEAD lacks (the divergence D). Store A's
+size is then bounded by its live set plus D, whatever the event rate, so
+H1 or H2 stops mattering.
+
+Why it is safe, read in code: nothing reads Store A's commits (§1); SQL
+`COMMIT` is the durability (the doltbatch drill on 2.1.9; the new test
+`TestModeOffWriteSurvivesReopen` on the embedded 2.2.0); auto GC still runs
+(its hook fires on working-set updates); the off-host backup copies the
+working set; the squash tool commits the working set (`-A`) and checks
+HEAD root equals the WORKING root it recorded.
+
+What it costs: each auto GC copies D, which grows by Store A's net live
+change (mostly new event receipts) until the next squash folds it into
+oldgen. Auto GC then runs less often (it waits until the store has grown
+by more than newgen) and each run takes longer. Watch the Dolt journal's
+`Successfully completed auto GC of database platform in …` durations.
+
+**Order (each step the owner's or FP0's):**
+
+1. Land `90ea1e378` (inert; the deploy restarts corpusd and checkpointd
+   with the same behaviour). No-effect proof: the paper polls, corpusd
+   healthy, `dolt_log` keeps growing as before (audit line).
+2. Flip, observe first on the readings: `echo PLATFORM_DOLT_SNAPSHOTS=off
+   | sudo tee /var/lib/go-choir/platform-dolt-snapshots.env && sudo chmod
+   0600 … && sudo systemctl restart go-choir-corpusd`. corpusd logs
+   `Store A snapshot commits off`. Over the next day: the oldgen `du` is
+   flat across auto GCs (no new oldgen file), the audit's commit count is
+   flat, newgen (`du -sk …/.dolt/noms` minus oldgen) grows slowly, auto GC
+   durations stay under a minute, the liveness probe never aborts, the
+   02:30 off-host backup succeeds.
+   Stop rule: an auto GC over 2 minutes, a liveness abort, or corpusd
+   errors: `sudo rm` the env file and restart corpusd (the next snapshot
+   commits the whole working set; nothing is lost).
+3. The supervised squash (§3), once, to drop the history already there.
+   It can run before or after step 2; after is better (the oldgen it
+   rewrites stops moving).
+4. Cadence afterwards: the squash only folds D into oldgen, so it is
+   needed rarely: monthly, or when newgen passes a few GiB, or when auto GC
+   durations grow. Keep `platformDoltSquashTimerEnabled = false` while
+   snapshots are off; each run is a 10 to 30 minute Store A outage.
+   If the owner keeps snapshots on instead, the weekly timer is the
+   bound: under H1 that retains about 11 to 18 GB a week; under H2 weekly
+   is too slow and the timer needs a daily calendar, at a daily outage.
+
+Not changed: the history audit's thresholds (the alarm stays at 50 GiB);
+Store B's committer (`platform-corpus`, corpus-dolt 6.3 GB) has the same
+mechanism and is out of this lane's scope (named residual).
 
 ## Open questions
 
