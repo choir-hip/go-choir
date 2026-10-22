@@ -5,7 +5,7 @@ No host, no ssh: the marker phase runs against a fake `remote`. Run:
 python3 scripts/test_node_b_host_reboot.py
 
 Problem: docs/problems/paper-crash-boot-holds-work-six-minutes-2026-10-22.md
-(findings R1 to R3, review round 2 F1 to F9, round 3 N1 to N6).
+(findings R1 to R3, review round 2 F1 to F9, round 3 N1 to N6, DeepSeek D1 to D5).
 """
 import argparse
 import importlib.util
@@ -246,14 +246,16 @@ class MarkPhase(unittest.TestCase):
         ok, receipt = run_mark(fake, no_allow_busy=True)
         self.assertFalse(ok)
         self.assertFalse(any(it.get("allow_busy") for it in fake.sent))
-        self.assertEqual(sorted(fake.unmarked), sorted([PAPER, PRIMARY]))
+        # The paper's readable 409 proves no host marker: it is not cleared (D1).
+        self.assertEqual(fake.unmarked, [PRIMARY])
         self.assertEqual(receipt["marks"]["outcomes"][PAPER]["outcome"], "busy")
 
     def test_apply_in_flight_blocks_the_reboot_even_with_allow_crash_close(self):
         fake = FakeHost([row(PAPER, "critical_protected"), row(PRIMARY, "primary")], guest(unsafe={PAPER}))
         ok, receipt = run_mark(fake, allow_crash_close=True)
         self.assertFalse(ok)
-        self.assertEqual(sorted(fake.unmarked), sorted([PAPER, PRIMARY]))
+        # A DELETE would clear the apply's own marker (D1).
+        self.assertEqual(fake.unmarked, [PRIMARY])
         self.assertEqual(receipt["marks"]["outcomes"][PAPER]["outcome"], "unsafe")
         self.assertTrue(receipt["marks"]["cleared"])
 
@@ -391,7 +393,7 @@ class ClearOnFailure(unittest.TestCase):
         ok, receipt = run_mark(fake)
         self.assertFalse(ok)
         self.assertFalse(receipt["marks"]["cleared"])
-        self.assertEqual(sorted(receipt["marks"]["unmark_failed"]), sorted([PAPER, PRIMARY]))
+        self.assertEqual(sorted(receipt["marks"]["unmark_failed"]), [PAPER])
 
 
 class UnaskedComputers(unittest.TestCase):
@@ -467,7 +469,7 @@ class Relisted(unittest.TestCase):
                         later_rows=[row(PAPER, "critical_protected"), row(PRIMARY, "primary")])
         ok, _ = run_mark(fake, allow_crash_close=True, allow_crash_unverified=True)
         self.assertFalse(ok)
-        self.assertEqual(sorted(fake.unmarked), sorted([PAPER, PRIMARY]))
+        self.assertEqual(fake.unmarked, [PAPER])
 
     def test_newly_running_unreadable_under_no_markers_needs_the_flag(self):
         fake = FakeHost([], scripted({}), later_rows=[row(PRIMARY, "primary", selfdev_busy=None)])
@@ -522,7 +524,8 @@ def reboot_args(**kw):
 def marked_receipt():
     url = "http://10.200.1.2:8085"
     return {"pre": {"facts": {"boot_id": "old"}},
-            "marks": {"marked": [PAPER], "sent": [PAPER], "sent_items": [{"vm_id": PAPER, "computer_url": url}]}}
+            "marks": {"marked": [PAPER], "sent": [PAPER, PRIMARY], "may_hold_marker": [PAPER],
+                      "sent_items": [{"vm_id": PAPER, "computer_url": url}, {"vm_id": PRIMARY, "computer_url": url}]}}
 
 
 class RebootNotDone(unittest.TestCase):
@@ -571,6 +574,60 @@ class RebootNotDone(unittest.TestCase):
             with self.assertRaises(OSError):
                 reboot.reboot_after_mark(reboot_args(), receipt, save)
         self.assertEqual(fake.unmarked, [PAPER])
+
+
+class ClearOnlyPossibleMarkers(unittest.TestCase):
+    """D1: the host clears only computers that may hold its marker (a 200
+    in any round, a lost answer, a 5xx, a call that failed in flight); a
+    readable refusal proves it wrote nothing, and a DELETE there could
+    clear the guest's own apply marker."""
+
+    def test_refusals_are_not_cleared(self):
+        for ans in (UNSAFE, BUSY, (404, ""), (405, ""), (400, "{}"), (403, "{}")):
+            fake = FakeHost([row(PAPER, "critical_protected"), row(PRIMARY, "primary")], scripted({PRIMARY: [ans]}))
+            ok, receipt = run_mark(fake)
+            self.assertFalse(ok, ans)
+            self.assertEqual(fake.unmarked, [PAPER], ans)
+            self.assertEqual(receipt["marks"]["may_hold_marker"], [PAPER], ans)
+
+    def test_lost_or_failed_writes_are_cleared(self):
+        for ans in (TIMEOUT, (500, "planned restart marker: rename"), (502, "")):
+            fake = FakeHost([row(PRIMARY, "primary")], scripted({PRIMARY: [ans]}))
+            ok, _ = run_mark(fake)
+            self.assertFalse(ok, ans)
+            self.assertEqual(fake.unmarked, [PRIMARY], ans)
+
+    def test_written_then_refused_is_still_cleared(self):
+        fake = FakeHost([row(PAPER, "critical_protected")], scripted({PAPER: [WRITTEN, UNSAFE]}))
+        ok, _ = run_mark(fake)
+        self.assertFalse(ok)
+        self.assertEqual(fake.unmarked, [PAPER])
+
+    def test_receipt_clear_skips_computers_without_a_host_marker(self):
+        fake = FakeHost([], scripted({}))
+        receipt = marked_receipt()
+        with mock.patch.object(reboot, "remote", fake.remote):
+            reboot.clear_receipt_markers(reboot_args(), receipt)
+        self.assertEqual(fake.unmarked, [PAPER])
+
+
+class FinalPassAbortReport(unittest.TestCase):
+    def test_not_renewed_marker_says_so(self):
+        """D3: the abort names a marker the final pass did not renew."""
+        lines = []
+        fake = FakeHost([row(PAPER, "critical_protected")], scripted({PAPER: [WRITTEN, TIMEOUT]}))
+        with mock.patch.object(reboot, "log", lines.append):
+            ok, _ = run_mark(fake, allow_crash_unverified=True)
+        self.assertFalse(ok)
+        self.assertTrue(any("not renewed" in l and PAPER in l for l in lines), lines)
+        self.assertFalse(any("no flag accepts it" in l for l in lines), lines)
+
+    def test_marked_at_only_on_success(self):
+        """D5: an aborted final pass leaves no marking time in the receipt."""
+        fake = FakeHost([row(PAPER, "critical_protected")], scripted({PAPER: [WRITTEN, UNSAFE]}))
+        ok, receipt = run_mark(fake)
+        self.assertFalse(ok)
+        self.assertIsNone(receipt["marks"]["marked_at"])
 
 
 if __name__ == "__main__":
