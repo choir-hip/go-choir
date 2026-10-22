@@ -43,7 +43,7 @@ func serveDebugPprof(w http.ResponseWriter, r *http.Request) {
 	switch name {
 	case "":
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		fmt.Fprintln(w, "profiles: profile?seconds=N (cpu), trace?seconds=N, cmdline, symbol, procmem (per-process memory)")
+		fmt.Fprintln(w, "profiles: profile?seconds=N (cpu), trace?seconds=N, cmdline, symbol, procmem (per-process memory), pagecache (page-cache residency by filesystem)")
 		for _, p := range rpprof.Profiles() {
 			fmt.Fprintf(w, "%s (%d)\n", p.Name(), p.Count())
 		}
@@ -57,6 +57,8 @@ func serveDebugPprof(w http.ResponseWriter, r *http.Request) {
 		pprof.Symbol(w, r)
 	case "procmem":
 		serveProcMem(w)
+	case "pagecache":
+		servePageCache(w)
 	default:
 		if rpprof.Lookup(name) == nil {
 			http.NotFound(w, r)
