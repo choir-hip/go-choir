@@ -64,6 +64,7 @@ func TestActorWakeLatencyCountsFromTheWakesOwnMint(t *testing.T) {
 	if _, err := s.BindEngineeringAssignment(ctx, store.SeedEngineeringBindRequest(open, "run:"+open.AssignmentID, "opaque-wake-mint")); err != nil {
 		t.Fatal(err)
 	}
+	boundAt := time.Now()
 
 	var buf bytes.Buffer
 	previous := log.Writer()
@@ -85,7 +86,11 @@ func TestActorWakeLatencyCountsFromTheWakesOwnMint(t *testing.T) {
 		if m == nil {
 			t.Fatalf("latency line without waited: %s", line)
 		}
-		if waited, err := time.ParseDuration(m[1]); err != nil || waited >= 2*time.Second {
+		// Measured from the bind's commit, waited is at most the time since
+		// the bind plus the store's second rounding. A slow sweep may log a
+		// line (it also logs a dispatch that took 2 s), so the bound moves
+		// with it (review round 2, R2-2); on main waited is 3 s more.
+		if waited, err := time.ParseDuration(m[1]); err != nil || waited > time.Since(boundAt)+1500*time.Millisecond {
 			t.Fatalf("initial_dispatch projected at once reads waited=%s: measured from the assignment's open, not the bind that minted it: %s", m[1], line)
 		}
 	}
