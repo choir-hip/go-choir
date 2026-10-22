@@ -2,19 +2,25 @@
 
 package server
 
-import "errors"
+import (
+	"errors"
+	"io/fs"
+	"time"
+)
 
-type fileResidencyResult struct {
-	dev, ino       uint64
-	uid            uint32
-	size, resident int64
+type fileID struct {
+	dev, ino uint64
+	uid      uint32
+	size     int64
 }
 
 var errPageCacheUnsupported = errors.New("pagecache: mincore residency is read on Linux only")
 
 func fileDevice(string) (uint64, bool) { return 0, false }
 
-func fileResidency(string) (fileResidencyResult, bool) { return fileResidencyResult{}, false }
+func fileIdentity(fs.DirEntry) (fileID, bool) { return fileID{}, false }
+
+func fileResidency(string, fileID, time.Time) (int64, int) { return 0, residencyFailed }
 
 func pageCacheSupported() error { return errPageCacheUnsupported }
 
