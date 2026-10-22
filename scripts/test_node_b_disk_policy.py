@@ -20,6 +20,10 @@ written before the change:
   E1  the estimator counts a hard link or a symlink as reclaimable
   E2  the estimator walks /nix/store/.links (already deduplicated)
   E3  the estimator writes anything
+  N7  the floor leaves no room for a guest store compaction (13.5 GiB peak)
+      or the paper's regrowth overlapping a deploy (review round 2, DS-2)
+  E4  the estimator hashes files over its size cap (the guest images,
+      through the shared page cache; S-F10)
 """
 
 import importlib.util
@@ -76,15 +80,18 @@ class NixPolicy(unittest.TestCase):
         min_free = int(nix_setting(src, "min-free"))
         max_free = int(nix_setting(src, "max-free"))
         floor = preflight_floor_bytes()
-        # A deploy writes at most ~8 GiB (one guest image of 3.9 GiB plus the
-        # host closure delta, bounded in the problem record). After it, free
-        # space must still sit above max-free, so the build never crosses
-        # min-free and nix's auto-GC never runs inside it.
+        # A deploy that starts at the floor must end above min-free, so
+        # nix's auto-GC never runs inside the build, even when the guest
+        # store compaction (peak new allocation ~13.5 GiB) and the paper's
+        # regrowth (up to ~290 MiB/min over a 30 min deploy) overlap it.
         footprint = 8 * GiB
+        compaction = 14 * GiB
+        regrowth = 10 * GiB
         self.assertGreater(min_free, 0)
         self.assertGreater(max_free, min_free)
+        self.assertGreaterEqual(floor - footprint - compaction - regrowth, min_free)
         self.assertGreaterEqual(floor - footprint, max_free)
-        self.assertEqual(floor, 48 * GiB)
+        self.assertEqual(floor, 56 * GiB)
 
     def test_n4_one_generation_count(self):
         src = nix_src()
@@ -102,7 +109,7 @@ class NixPolicy(unittest.TestCase):
         svc = block(src, "systemd.services.go-choir-host-disk-alarm =")
         timer = block(src, "systemd.timers.go-choir-host-disk-alarm =")
         self.assertIn("../scripts/node-b-host-disk-alarm", svc)
-        self.assertIn('"HOST_DISK_WARN_FREE_GIB=48"', svc)
+        self.assertIn('"HOST_DISK_WARN_FREE_GIB=56"', svc)
         self.assertIn('"HOST_DISK_WARN_UNALLOC_GIB=20"', svc)
         self.assertIn('"HOST_DISK_ERR_FREE_GIB=24"', svc)
         self.assertIn('"HOST_DISK_ERR_UNALLOC_GIB=10"', svc)
@@ -110,7 +117,7 @@ class NixPolicy(unittest.TestCase):
         self.assertRegex(timer, r"Persistent\s*=\s*false;")
         # The free warning is the deploy floor: a warning means the next
         # deploy is refused.
-        self.assertEqual(48 * GiB, preflight_floor_bytes())
+        self.assertEqual(56 * GiB, preflight_floor_bytes())
 
     def test_n6_retention_observe(self):
         src = nix_src()
@@ -140,9 +147,9 @@ class DedupEstimate(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def run_tool(self):
+    def run_tool(self, *extra):
         out = subprocess.run(
-            [sys.executable, "-I", str(HERE / "nix-store-dedup-estimate.py"), "--root", str(self.root), "--json"],
+            [sys.executable, "-I", str(HERE / "nix-store-dedup-estimate.py"), "--root", str(self.root), "--json", *extra],
             check=True, capture_output=True, text=True,
         ).stdout
         import json
@@ -159,6 +166,13 @@ class DedupEstimate(unittest.TestCase):
         self.assertEqual(r["files"], 6)
         after = sorted((p, p.lstat().st_mtime_ns) for p in self.root.rglob("*"))
         self.assertEqual(before, after, "E3: the estimator changed the tree")
+
+    def test_e4_size_cap(self):
+        r = self.run_tool("--max-file-bytes", "1000")
+        # A (5000 bytes) is over the cap: only C's duplicate counts, and the
+        # skipped bytes are reported, not hidden.
+        self.assertEqual(r["reclaimable_bytes"], self.size_c)
+        self.assertEqual(r["skipped_over_cap_files"], 4)
 
 
 if __name__ == "__main__":

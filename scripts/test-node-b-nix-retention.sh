@@ -19,6 +19,16 @@
 #       booted system or the current guest image uses
 #   R10 an unknown mode acts as enforce
 #   R11 a ".." path escapes the builder releases root
+#   R12 observe is not exactly the legacy `nix-env --delete-generations +4`
+#       (nix keeps every generation newer than current, current, and N-1
+#       older; review round 2 S-F1, reproduced with real nix-env)
+#   R13 enforce deletes the generation just below a rolled-back current
+#   R14 generation numbers compare as text (99 after 100)
+#   R15 an empty, relative or "/" builder root classifies every root as a
+#       builder release (DS-6)
+#   R16 a failed stat reads as mtime 0 and unroots the link (DS-6)
+#   R17 the keep count is not a guard when every release is old (S-F5)
+#   R18 the shipped default protect list loses an entry (S-F5)
 set -u
 here="$(cd "$(dirname "$0")" && pwd)"
 script="$here/node-b-nix-retention"
@@ -29,6 +39,15 @@ root="$(mktemp -d)"
 trap 'rm -rf "$root"' EXIT
 
 mkdir -p "$root/bin"
+cat >"$root/bin/stat" <<'EOF'
+#!/usr/bin/env bash
+# fake stat: fails for the path in $FAKE_STAT_FAIL, else the real one.
+for a in "$@"; do [ -n "${FAKE_STAT_FAIL:-}" ] && [ "$a" = "$FAKE_STAT_FAIL" ] && exit 1; done
+exec "$REAL_STAT" "$@"
+EOF
+chmod +x "$root/bin/stat"
+REAL_STAT="$(command -v stat)"
+export REAL_STAT
 cat >"$root/bin/nix-env" <<'EOF'
 #!/usr/bin/env bash
 # fake nix-env: --list-generations prints $FAKE_DIR/generations;
@@ -115,7 +134,8 @@ deleted_gens() { grep -- '--delete-generations' "$case_dir/nix-env.log" | sed 's
 new_case enforce
 run_script GO_CHOIR_NIX_RETENTION_MODE=enforce
 check "enforce exits 0" '[ "$(cat "$case_dir/rc")" = 0 ]'
-check "R2 enforce keeps newest 3 (deletes 101 102 103)" '[ "$(deleted_gens)" = "101 102 103" ]'
+check "R2 enforce runs nix-env +3" '[ "$(deleted_gens)" = "+3" ]'
+check "R2 enforce logs 101 102 103" 'grep -q "deleting system generations (nix-env +3): 101 102 103" "$case_dir/out"'
 check "R7 old releases unrooted (c1 c2 c3)" '[ ! -e "$case_dir/rel/c1/out/builder-result" ] && [ ! -L "$case_dir/rel/c1/out/builder-result" ] && [ ! -L "$case_dir/rel/c2/out/builder-result" ] && [ ! -L "$case_dir/rel/c3/out/builder-result" ]'
 check "R7 newest two releases kept" '[ -L "$case_dir/rel/c4/out/builder-result" ] && [ -L "$case_dir/rel/c5/out/builder-result" ]'
 check "R8 release directories kept" '[ -d "$case_dir/rel/c1/out" ]'
@@ -133,7 +153,8 @@ check "R7 keep=1: c3 (10d) unrooted" '[ ! -L "$case_dir/rel/c3/out/builder-resul
 new_case observe
 run_script
 check "R10 default mode is observe" 'grep -q "mode=observe" "$case_dir/out"'
-check "R5 observe deletes only past the newest 4 (101 102)" '[ "$(deleted_gens)" = "101 102" ]'
+check "R12 observe runs exactly nix-env +4" '[ "$(deleted_gens)" = "+4" ]'
+check "R12 observe logs 101 102" 'grep -q "deleting system generations (nix-env +4): 101 102" "$case_dir/out"'
 check "R5 observe logs what keep=3 would delete (103)" 'grep -q "would delete system generations: 103" "$case_dir/out"'
 check "R5 observe unroots nothing" '[ -L "$case_dir/rel/c1/out/builder-result" ] && [ -L "$case_dir/rel/c3/out/builder-result" ]'
 check "R5 observe logs would unroot c1" 'grep -q "would unroot .*rel/c1/out/builder-result" "$case_dir/out"'
@@ -153,7 +174,29 @@ cat >"$case_dir/generations" <<'EOF'
    106   2026-10-22 10:00:00
 EOF
 run_script GO_CHOIR_NIX_RETENTION_MODE=enforce
-check "R1 current 102 kept after a rollback" '[ "$(deleted_gens)" = "101 103" ]'
+check "R1/R13 enforce after a rollback to 102: newer and 101 kept, nothing deleted" '[ -z "$(deleted_gens)" ]'
+new_case rollback-observe
+cp "$root/case-rollback/generations" "$case_dir/generations"
+run_script
+check "R12 observe after a rollback to 102 deletes nothing (nix +4 keeps 101)" '[ -z "$(deleted_gens)" ]'
+
+# ---- R12 Sonnet's real-nix case: 1..8, current 5; nix +4 deletes only 1 ------
+new_case sonnet
+for g in 1 2 3 4 6 7 8; do printf '   %s   2026-10-0%s 10:00:00\n' "$g" "$g"; done >"$case_dir/generations"
+printf '   5   2026-10-05 10:00:00   (current)\n' >>"$case_dir/generations"
+run_script
+check "R12 observe: nix-env +4 (real nix deletes only 1)" '[ "$(deleted_gens)" = "+4" ] && grep -q "deleting system generations (nix-env +4): 1 (current 5)" "$case_dir/out"'
+check "R12 observe logs what +3 would add: 2" 'grep -q "would delete system generations: 2 (keep 3, current 5)" "$case_dir/out"'
+new_case sonnet-enforce
+cp "$root/case-sonnet/generations" "$case_dir/generations"
+run_script GO_CHOIR_NIX_RETENTION_MODE=enforce
+check "R13 enforce keeps 4 3 (current and previous) and 6 7 8" '[ "$(deleted_gens)" = "+3" ] && grep -q "deleting system generations (nix-env +3): 1 2 (current 5)" "$case_dir/out"'
+
+# ---- R14 numeric order across 99/100 ------------------------------------------
+new_case numeric
+printf '   98   a b\n   99   a b\n   100   a b\n   101   a b\n   102   a b   (current)\n' >"$case_dir/generations"
+run_script GO_CHOIR_NIX_RETENTION_MODE=enforce
+check "R14 enforce deletes 98 99, not 100" 'grep -q "deleting system generations (nix-env +3): 98 99 (current 102)" "$case_dir/out"'
 
 # ---- R3 a keep count under 2 or not a number prunes no generation ------------
 new_case keep1
@@ -172,6 +215,35 @@ new_case fewer
 printf '   106   2026-10-22 10:00:00   (current)\n   105   2026-10-21 10:00:00\n' >"$case_dir/generations"
 run_script GO_CHOIR_NIX_RETENTION_MODE=enforce
 check "only two generations: nothing deleted" '[ -z "$(deleted_gens)" ]'
+new_case garbage-observe
+printf 'error: cannot open profile\n' >"$case_dir/generations"
+run_script
+check "R4 observe: no current generation found, nothing deleted" '[ -z "$(deleted_gens)" ]'
+
+# ---- R15 a bad builder root refuses the builder step --------------------------
+for bad in "" "/" "rel" "/./"; do
+  new_case "badroot-$(printf '%s' "$bad" | tr -c 'a-z' x)"
+  run_script GO_CHOIR_NIX_RETENTION_MODE=enforce NIX_RETENTION_BUILDER_ROOT="$bad"
+  check "R15 builder root \"$bad\" refused, nothing unrooted" 'grep -q "builder roots refused" "$case_dir/out" && [ -L "$case_dir/prebuild/nixos-result" ] && [ -L "$case_dir/tmp/go-choir-nixos-result" ] && [ -L "$case_dir/rel/c1/out/builder-result" ]'
+done
+
+# ---- R16 a failed stat keeps the link ------------------------------------------
+new_case statfail
+run_script GO_CHOIR_NIX_RETENTION_MODE=enforce FAKE_STAT_FAIL="$root/case-statfail/rel/c1/out/builder-result"
+check "R16 c1 kept when its stat fails" '[ -L "$case_dir/rel/c1/out/builder-result" ] && grep -q "cannot stat" "$case_dir/out"'
+check "R16 c2 still unrooted" '[ ! -L "$case_dir/rel/c2/out/builder-result" ]'
+
+# ---- R17 every release old: the default keep count is the guard ----------------
+new_case allold
+for c in 1 2 3 4 5; do touch -h -d "@$(( $(date +%s) - (40 - c) * 86400 ))" "$case_dir/rel/c$c/out/builder-result"; done
+run_script GO_CHOIR_NIX_RETENTION_MODE=enforce
+check "R17 the newest two (c5 c4) stay when all are over 7 days" '[ -L "$case_dir/rel/c5/out/builder-result" ] && [ -L "$case_dir/rel/c4/out/builder-result" ]'
+check "R17 c3 c2 c1 unrooted" '[ ! -L "$case_dir/rel/c3/out/builder-result" ] && [ ! -L "$case_dir/rel/c2/out/builder-result" ] && [ ! -L "$case_dir/rel/c1/out/builder-result" ]'
+
+# ---- R18 the shipped defaults ---------------------------------------------------
+case_dir="$root"; : >"$root/out"
+check "R18 default protect list names current, booted and guest" 'grep -qF "protect=\"\${NIX_RETENTION_PROTECT:-/run/current-system /run/booted-system /var/lib/go-choir/guest}\"" "$script"'
+check "R18 default builder keep 2, min age 7, keep generations 3" 'grep -qF "NIX_RETENTION_BUILDER_KEEP:-2}" "$script" && grep -qF "NIX_RETENTION_BUILDER_MIN_AGE_DAYS:-7}" "$script" && grep -qF "NIX_RETENTION_KEEP_GENERATIONS:-3}" "$script"'
 
 # ---- R9 a release whose store path a protected link uses stays ----------------
 new_case protected
@@ -198,7 +270,7 @@ check "R8 c3 still unrooted" '[ ! -L "$case_dir/rel/c3/out/builder-result" ]'
 new_case empty
 rm -rf "$case_dir/rel" "$case_dir/gcroots"
 run_script GO_CHOIR_NIX_RETENTION_MODE=enforce
-check "no builder root: exits 0, generations still pruned" '[ "$(cat "$case_dir/rc")" = 0 ] && [ "$(deleted_gens)" = "101 102 103" ]'
+check "no builder root: exits 0, generations still pruned" '[ "$(cat "$case_dir/rc")" = 0 ] && [ "$(deleted_gens)" = "+3" ]'
 
 echo "node-b-nix-retention: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
