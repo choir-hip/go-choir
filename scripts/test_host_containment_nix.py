@@ -22,11 +22,20 @@ Failure modes pinned here:
      directory, or a unit hides it as a file: a rename or a late create
      then reaches every running unit (the deploy.env case).
   N4 The env directory is not created 0700 root before units start.
-  N5 The activation snippet does not move the files on its first run, does
-     not leave a link at each old path (a rollback past the move reads
-     through it, and an old runbook's `>` writes through it), imports a
-     file planted at an old path after its first run, or follows a planted
-     link at the directory.
+  N5 The activation snippet does not move the files on its first run (by
+     rename, keeping the inode), does not leave a link at each old path (a
+     rollback past the move reads through it, and an old runbook's `>`
+     writes through it), imports a file planted at an old path after its
+     first run, or follows a planted link at the directory.
+  N6 (round 2) It returns 0 while a regular file sits at an old path after
+     the import (F1, F2): such a file must be quarantined into the hidden
+     directory as <name>.stray.<epoch>, the old path relinked, and every
+     activation must fail while a stray is there (the deploy retries a
+     failed switch once). A file identical to the one in unit-env (a
+     reverted deploy's scrub) is only relinked. Before the import the old
+     path wins. A link to a file elsewhere is imported on the first run and
+     quarantined after it (F3); links are replaced through a temporary name
+     and never entered when they point at a directory (F4).
 """
 
 import importlib.util
@@ -199,9 +208,12 @@ class Activation(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def run_snippet(self):
+    def run_snippet(self, rc=0):
         proc = subprocess.run(["bash", "-c", self.script], capture_output=True, text=True, check=False)
-        self.assertEqual(proc.returncode, 0, proc.stderr)
+        if rc == 0:
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+        else:
+            self.assertNotEqual(proc.returncode, 0, "the snippet passed a state it must fail: " + proc.stderr)
         return proc.stderr
 
     def write(self, path, body):
@@ -213,71 +225,210 @@ class Activation(unittest.TestCase):
         with open(path) as fh:
             return fh.read()
 
+    def old(self, name):
+        return os.path.join(self.state, name)
+
+    def new(self, name):
+        return os.path.join(self.d, name)
+
+    def strays(self, name=None):
+        return sorted(n for n in os.listdir(self.d)
+                      if ".stray." in n and (name is None or n.startswith(name + ".stray.")))
+
+    def assert_linked(self, name):
+        self.assertTrue(os.path.islink(self.old(name)), name)
+        self.assertEqual(os.readlink(self.old(name)), f"unit-env/{name}")
+
+    def assert_no_temp_links(self):
+        left = [n for n in os.listdir(self.state) if ".link." in n]
+        self.assertEqual(left, [])
+
+    def landed(self, **files):
+        """A first run over these files at their old paths."""
+        for key, body in files.items():
+            self.write(self.old(key), body)
+        self.run_snippet()
+
+    # -- first run --------------------------------------------------------
+
     def test_first_run_moves_and_links(self):
-        self.write(os.path.join(self.state, "deploy.env"), "A=1\n")
-        self.write(os.path.join(self.state, "corpus-dsn.env"), "B=2\n")
+        self.write(self.old("deploy.env"), "A=1\n")
+        self.write(self.old("corpus-dsn.env"), "B=2\n")
         self.run_snippet()
         self.assertEqual(stat.S_IMODE(os.lstat(self.d).st_mode), 0o700)
         for name, body in (("deploy.env", "A=1\n"), ("corpus-dsn.env", "B=2\n")):
-            new = os.path.join(self.d, name)
-            self.assertEqual(self.read(new), body)
-            self.assertEqual(stat.S_IMODE(os.lstat(new).st_mode), 0o600)
-            old = os.path.join(self.state, name)
-            self.assertTrue(os.path.islink(old))
-            self.assertEqual(os.readlink(old), f"unit-env/{name}")
-            self.assertEqual(self.read(old), body)  # a rollback reads through the link
+            self.assertEqual(self.read(self.new(name)), body)
+            self.assertEqual(stat.S_IMODE(os.lstat(self.new(name)).st_mode), 0o600)
+            self.assert_linked(name)
+            self.assertEqual(self.read(self.old(name)), body)  # a rollback reads through the link
         for name in ("corpusd-retrieval.env", "sandbox-gateway-token.env"):
             # Absent files get a link too, so an operator who follows an old
             # runbook (`echo X=off > /var/lib/go-choir/corpusd-retrieval.env`)
             # writes into the hidden directory, where the unit reads it.
-            self.assertEqual(os.readlink(os.path.join(self.state, name)), f"unit-env/{name}")
-            self.assertFalse(os.path.lexists(os.path.join(self.d, name)), name)
-        self.write(os.path.join(self.state, "corpusd-retrieval.env"), "CORPUSD_CAPTURE_SEARCH=off\n")
-        self.assertEqual(self.read(os.path.join(self.d, "corpusd-retrieval.env")), "CORPUSD_CAPTURE_SEARCH=off\n")
+            self.assert_linked(name)
+            self.assertFalse(os.path.lexists(self.new(name)), name)
+        self.assertEqual(self.strays(), [])
+        self.assert_no_temp_links()
+        self.write(self.old("corpusd-retrieval.env"), "CORPUSD_CAPTURE_SEARCH=off\n")
+        self.assertEqual(self.read(self.new("corpusd-retrieval.env")), "CORPUSD_CAPTURE_SEARCH=off\n")
+
+    def test_first_run_keeps_the_inode(self):
+        # A rename moves the dentry that carries old-view masks (F4, F5).
+        self.write(self.old("deploy.env"), "A=1\n")
+        ino = os.lstat(self.old("deploy.env")).st_ino
+        self.run_snippet()
+        self.assertEqual(os.lstat(self.new("deploy.env")).st_ino, ino)
 
     def test_second_run_changes_nothing(self):
-        self.write(os.path.join(self.state, "deploy.env"), "A=1\n")
+        self.write(self.old("deploy.env"), "A=1\n")
         self.run_snippet()
-        ino = os.lstat(os.path.join(self.d, "deploy.env")).st_ino
+        ino = os.lstat(self.new("deploy.env")).st_ino
         self.run_snippet()
-        self.assertEqual(os.lstat(os.path.join(self.d, "deploy.env")).st_ino, ino)
-        self.assertEqual(os.readlink(os.path.join(self.state, "deploy.env")), "unit-env/deploy.env")
+        self.assertEqual(os.lstat(self.new("deploy.env")).st_ino, ino)
+        self.assert_linked("deploy.env")
 
-    def test_a_file_planted_after_the_import_is_never_adopted(self):
-        self.write(os.path.join(self.state, "deploy.env"), "A=1\n")
-        self.run_snippet()
-        # A unit that can write the state directory plants env files.
-        os.unlink(os.path.join(self.state, "deploy.env"))
-        self.write(os.path.join(self.state, "deploy.env"), "EVIL=1\n")
-        os.unlink(os.path.join(self.state, "corpusd-retrieval.env"))  # the link
-        self.write(os.path.join(self.state, "corpusd-retrieval.env"), "CHOIR_OWNER_ACT_MODE=off\n")
+    def test_F3_first_run_imports_the_target_of_a_link_elsewhere(self):
+        target = os.path.join(self.tmp, "operator-corpus-dsn.env")
+        self.write(target, "B=2\n")
+        os.symlink(target, self.old("corpus-dsn.env"))
         err = self.run_snippet()
-        self.assertEqual(self.read(os.path.join(self.d, "deploy.env")), "A=1\n")
-        self.assertFalse(os.path.lexists(os.path.join(self.d, "corpusd-retrieval.env")))
-        self.assertEqual(self.read(os.path.join(self.state, "deploy.env")), "EVIL=1\n")  # left for the verifier
-        self.assertIn("deploy.env", err)
+        self.assertEqual(self.read(self.new("corpus-dsn.env")), "B=2\n")
+        self.assertEqual(stat.S_IMODE(os.lstat(self.new("corpus-dsn.env")).st_mode), 0o600)
+        self.assert_linked("corpus-dsn.env")
+        self.assertEqual(self.read(target), "B=2\n")  # the operator's file is left in place
+        self.assertIn(target, err)  # and named, so it can be removed
+
+    def test_first_run_prefers_the_old_path_and_quarantines_an_unexpected_file(self):
+        # Before the import the units read the old path; a file already in
+        # unit-env is of unknown origin (F10).
+        os.makedirs(self.d)
+        self.write(self.new("corpusd-retrieval.env"), "CHOIR_OWNER_ACT_MODE=off\n")
+        self.write(self.old("corpusd-retrieval.env"), "CORPUSD_CAPTURE_SEARCH=off\n")
+        err = self.run_snippet(rc=1)
+        self.assertEqual(self.read(self.new("corpusd-retrieval.env")), "CORPUSD_CAPTURE_SEARCH=off\n")
+        (stray,) = self.strays("corpusd-retrieval.env")
+        self.assertEqual(self.read(self.new(stray)), "CHOIR_OWNER_ACT_MODE=off\n")
+        self.assert_linked("corpusd-retrieval.env")
+        self.assertIn("corpusd-retrieval.env", err)
+
+    def test_an_aborted_first_run_is_finished_by_the_next(self):
+        self.write(self.old("deploy.env"), "A=1\n")
+        self.write(self.old("corpus-dsn.env"), "B=2\n")
+        self.run_snippet()
+        os.unlink(os.path.join(self.d, ".imported"))  # as if the run stopped before the marker
+        self.run_snippet()
+        self.assertEqual(self.read(self.new("corpus-dsn.env")), "B=2\n")
+        self.assertEqual(self.strays(), [])
+
+    # -- after the import: F1, F2 ------------------------------------------
+
+    def test_F1_a_file_planted_after_the_import_is_quarantined_and_fails(self):
+        self.landed(**{"deploy.env": "A=1\n"})
+        # A unit that can write the state directory, or an operator's sed -i,
+        # replaces links with regular files.
+        os.unlink(self.old("deploy.env"))
+        self.write(self.old("deploy.env"), "EVIL=1\n")
+        os.unlink(self.old("corpusd-retrieval.env"))
+        self.write(self.old("corpusd-retrieval.env"), "CHOIR_OWNER_ACT_MODE=off\n")
+        err = self.run_snippet(rc=1)
+        self.assertEqual(self.read(self.new("deploy.env")), "A=1\n")  # never adopted
+        self.assertFalse(os.path.lexists(self.new("corpusd-retrieval.env")))
+        for name, body in (("deploy.env", "EVIL=1\n"), ("corpusd-retrieval.env", "CHOIR_OWNER_ACT_MODE=off\n")):
+            self.assert_linked(name)  # nothing secret is left at the old path
+            (stray,) = self.strays(name)
+            self.assertEqual(self.read(self.new(stray)), body)
+            self.assertEqual(stat.S_IMODE(os.lstat(self.new(stray)).st_mode), 0o600)
+            self.assertIn(self.old(name), err)
+        self.assert_no_temp_links()
+
+    def test_F2_a_file_moved_back_with_the_marker_left_fails(self):
+        # The old rollback text: files moved back, marker left behind.
+        self.landed(**{"corpus-dsn.env": "B=2\n"})
+        os.replace(self.new("corpus-dsn.env"), self.old("corpus-dsn.env"))
+        err = self.run_snippet(rc=1)
+        self.assertIn(self.old("corpus-dsn.env"), err)
+        self.assertEqual(len(self.strays("corpus-dsn.env")), 1)
+
+    def test_F2_a_stray_keeps_every_activation_failing(self):
+        # The deploy retries a failed switch once; the retry must fail too.
+        self.landed(**{"deploy.env": "A=1\n"})
+        os.unlink(self.old("deploy.env"))
+        self.write(self.old("deploy.env"), "EVIL=1\n")
+        self.run_snippet(rc=1)
+        err = self.run_snippet(rc=1)
+        (stray,) = self.strays("deploy.env")
+        self.assertIn(stray, err)
+        os.unlink(self.new(stray))  # the operator resolves it
+        self.run_snippet()
+
+    def test_F2_rollback_by_the_corrected_text_reimports(self):
+        self.landed(**{"deploy.env": "A=1\n", "corpus-dsn.env": "B=2\n"})
+        for name in ("deploy.env", "corpus-dsn.env"):
+            os.replace(self.new(name), self.old(name))
+        os.unlink(os.path.join(self.d, ".imported"))
+        self.run_snippet()
+        self.assertEqual(self.read(self.new("deploy.env")), "A=1\n")
+        self.assertEqual(self.read(self.new("corpus-dsn.env")), "B=2\n")
+        self.assert_linked("deploy.env")
+        self.assertEqual(self.strays(), [])
+
+    def test_F2_a_reverted_deploys_scrub_is_relinked_quietly(self):
+        # The old deploy program rewrote deploy.env by rename over the link:
+        # the same content as unit-env/deploy.env.
+        self.landed(**{"deploy.env": "A=1\n"})
+        os.unlink(self.old("deploy.env"))
+        self.write(self.old("deploy.env"), "A=1\n")
+        self.run_snippet()
+        self.assert_linked("deploy.env")
+        self.assertEqual(self.read(self.new("deploy.env")), "A=1\n")
+        self.assertEqual(self.strays(), [])
+
+    def test_F3_after_the_import_a_link_elsewhere_is_not_adopted(self):
+        self.landed(**{"deploy.env": "A=1\n"})
+        target = os.path.join(self.tmp, "planted.env")
+        self.write(target, "EVIL=1\n")
+        os.unlink(self.old("deploy.env"))
+        os.symlink(target, self.old("deploy.env"))
+        err = self.run_snippet(rc=1)
+        self.assertEqual(self.read(self.new("deploy.env")), "A=1\n")
+        (stray,) = self.strays("deploy.env")
+        self.assertEqual(self.read(self.new(stray)), "EVIL=1\n")
+        self.assert_linked("deploy.env")
+        self.assertIn(target, err)
+
+    # -- links -----------------------------------------------------------
 
     def test_a_link_at_the_directory_is_moved_aside(self):
         elsewhere = os.path.join(self.tmp, "elsewhere")
         os.makedirs(elsewhere)
         os.symlink(elsewhere, self.d)
-        self.write(os.path.join(self.state, "deploy.env"), "A=1\n")
+        self.write(self.old("deploy.env"), "A=1\n")
         self.run_snippet()
         self.assertFalse(os.path.islink(self.d))
         self.assertTrue(os.path.isdir(self.d))
         self.assertEqual(os.listdir(elsewhere), [])
-        self.assertEqual(self.read(os.path.join(self.d, "deploy.env")), "A=1\n")
+        self.assertEqual(self.read(self.new("deploy.env")), "A=1\n")
         aside = [n for n in os.listdir(self.state) if n.startswith("unit-env.invalid.")]
         self.assertEqual(len(aside), 1)
 
-    def test_a_wrong_link_at_an_old_path_is_repointed(self):
-        self.write(os.path.join(self.state, "deploy.env"), "A=1\n")
+    def test_a_dangling_wrong_link_is_repointed(self):
+        self.landed(**{"deploy.env": "A=1\n"})
+        os.unlink(self.old("deploy.env"))
+        os.symlink(os.path.join(self.tmp, "nowhere.env"), self.old("deploy.env"))
         self.run_snippet()
-        old = os.path.join(self.state, "deploy.env")
-        os.unlink(old)
-        os.symlink("/tmp/elsewhere.env", old)
+        self.assert_linked("deploy.env")
+        self.assert_no_temp_links()
+
+    def test_F4_a_link_to_a_directory_is_replaced_not_entered(self):
+        self.landed(**{"deploy.env": "A=1\n"})
+        elsewhere = os.path.join(self.tmp, "a-dir")
+        os.makedirs(elsewhere)
+        os.unlink(self.old("deploy.env"))
+        os.symlink(elsewhere, self.old("deploy.env"))
         self.run_snippet()
-        self.assertEqual(os.readlink(old), "unit-env/deploy.env")
+        self.assert_linked("deploy.env")
+        self.assertEqual(os.listdir(elsewhere), [])
+        self.assert_no_temp_links()
 
 
 if __name__ == "__main__":
