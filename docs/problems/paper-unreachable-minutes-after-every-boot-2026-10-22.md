@@ -290,9 +290,11 @@ with `scripts/paper_boot_window_probe.py`:
   `unanswered`, `memory`, and in the goroutine dump the frames
   `runOnlineDoltGC`, `DOLT_GC`, `database/sql.(*DB).conn`,
   `engineMutex).lockAs`, `HandleHealth`, `finalizeBatch`.
-- M3. `/internal/debug/pprof/procmem` (host-sourced; the host credential
-  when the guest enforces it): RSS by process, which says whether desk
-  workers fill the guest.
+- M3. `/internal/debug/pprof/procmem` (host-sourced: the guest gates it on
+  the host source address, and guests run hostauth off, so it takes the
+  marker header only; never send a guest the host-internal token,
+  docs/problems/host-internal-token-sent-to-guests-by-fp0-probes-2026-10-22.md):
+  RSS by process, which says whether desk workers fill the guest.
 - Reading: observability answers and the dump shows `runOnlineDoltGC`
   while `/health` hangs → H4. It answers and names another holder → H1
   with that holder. It does not answer either → H2 or H3; read M3 and
