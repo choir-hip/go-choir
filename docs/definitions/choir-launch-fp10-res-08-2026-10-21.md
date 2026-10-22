@@ -42,7 +42,7 @@ finish:
     decision thresholds that turn the numbers into go, per-tenant go, or
     close in favour of L5.
   acceptance:
-    - action: go test ./internal/server -run 'PageCache|DebugPprof'
+    - action: go test ./internal/server -run 'PageCache|ProcMem|DebugPprof' (passes at b12f48e7b)
       proves: the residency read sums only resident pages, refuses non-host callers, never reads file contents, and stops at its bounds
       evidence_class: unit
     - action: FP0 runs the measurement steps in the design report §5 on staging after the read deploys
@@ -99,42 +99,55 @@ boundaries:
   protected_surfaces: [none touched; the design names vmmanager drives, the guest image and the jailer as the surfaces a later slice touches]
 
 now:
-  status: working
-  slice: problem record and station file; next the design report, then the residency read (tests first)
+  status: checkpoint (lane work done; FP0 steps and the panel remain)
+  slice: >-
+    Done: problem record and station (d3f87c771); the host-only guest
+    page-cache residency read, tests first (b12f48e7b); the design, threat
+    analysis and FP0's probe script (6255c0b32). Next is FP0's: land
+    b12f48e7b, run the §5 reads, then convene the DEC-05 panel on the report
+    if the thresholds say so.
   source_ref: d1c60ad87
-  deploy_identity: unchanged
+  deploy_identity: unchanged (nothing of this lane is deployed)
   candidate:
     id: FP10-RES-08-measure
-    state: not built
+    state: built, not frozen, not reviewed
     ref: lane/fp10-res08-pmem-dax
     base: d1c60ad87
     digest: none
-    scope: [docs, internal/server]
+    scope: [internal/server/debug_pagecache*.go, internal/server/debug_pprof.go, scripts/res08_pagecache_probe.py, docs]
   conjecture:
     id: C-RES-08-store-share
     claim: >-
       Most of an idle guest's page cache (about 640 MiB) is base-OS store
       pages, so a shared DAX image saves 0.3 GiB or more per idle guest net
       of its memmap cost.
-    test: the guest residency read split by filesystem on idle and busy staging computers
-    edge: missing_oracle (no residency read exists in the guest today)
-    delta_o: the pagecache debug read plus FP0's host fincore of the image
+    test: the report §5 reads (idle-30m, cold-boot, busy-run) and its threshold table
+    edge: missing_oracle until b12f48e7b deploys
+    delta_o: FP0's res08_pagecache_probe.py receipts
     scope_if_supported: Node B guests on one release
     status: active
     evidence_refs:
       - docs/reports/vm-density-limits-2026-10-14.md finding 3 and residuals
+      - internal/server/debug_pagecache_test.go (9 failure modes; the no-fault test fails if the read reads files)
   decision:
-    what: Whether guests of different tenants may share one physical copy of base-OS pages (DEC-05)
+    what: Whether guests in different trust domains may share one physical copy of base-OS pages (DEC-05)
     kind: security
-    status: open (panel)
-    evidence_ref: docs/reports/res-08-shared-base-os-pmem-dax-design-2026-10-22.md
+    status: open (panel); the lane proposes O2 (per-domain inode) or O3 (L5 instead), never O1
+    evidence_ref: docs/reports/res-08-shared-base-os-pmem-dax-design-2026-10-22.md §3, §4, §7
     owner_ratification_ref: pending
   belief:
-    believed_state: the base OS is private per guest in RAM; its size is unmeasured
-    main_uncertainty: whether the store or the Dolt data dominates idle guest page cache
-    next_observation: FP0's residency read after the route deploys
-  blocker_or_risk: the panel (DEC-05) and FP8's ownership of vmmanager and the image
-  next_action: write the design report
+    believed_state: >-
+      The base OS is private per guest in RAM; its size is unmeasured. The
+      guest daemon runs as root with no capability bound, so the store is
+      measurable by mincore. Linux 5.2+ would otherwise report every page
+      resident, and the read fails closed to "unmeasured".
+    main_uncertainty: whether the store or the Dolt data dominates idle guest page cache, and how much of the store is mapped code (what L5 cannot reclaim)
+    next_observation: FP0's idle-30m read after b12f48e7b deploys
+  blocker_or_risk: >-
+    The panel (DEC-05), and FP8's ownership of vmmanager and the image for any
+    build slice. The Firecracker 1.16.1 pmem facts marked "verify" in the
+    report are unproven.
+  next_action: FP0 lands b12f48e7b, deploys, and runs report §5 step 1.
 
 receipts: []
 ---
