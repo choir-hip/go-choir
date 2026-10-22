@@ -24,6 +24,10 @@
 # the owner's or the delegate (lib.sh's guard; the row-reading steps refuse the
 # paper and the owner too).
 #
+# Events are matched to rows by command_id == "engineering-bind:<assignment id>"
+# (work_item_id is null on real events). Steps 2, 4 and 7 first assert the join
+# found a bound event for A; "B was never bound" is never read off an empty join.
+#
 # A and B are named by flag, not discovered: the trajectory list
 # (GET /api/trajectories) carries no assignment kind or order, so "the two
 # newest" is a guess, and a guess here would judge the wrong row.
@@ -82,13 +86,27 @@ fp4_row() {
 		| if length == 1 then .[0] else empty end' 2>/dev/null
 }
 
-# fp4_bound_event EVENTS_JSON ROW_JSON: the row's co_super_assignment_bound
-# event(s), matched on the assigned work item (the event carries work_item_id,
-# not the assignment id); prints a JSON array.
+# fp4_bound_events EVENTS_JSON ROW_JSON: the row's co_super_assignment_bound
+# events, as a JSON array. On the real tape (2026-10-22) work_item_id is null
+# on every event and empty on every row, and the join that matches is
+# command_id == "engineering-bind:" + assignment_id. A non-empty work_item_id
+# equal to the row's assigned work item also matches; an empty one never does.
 fp4_bound_events() {
 	printf '%s' "$1" | jq -c --argjson row "$2" '
-		[(.events // [])[] | select(.kind == "co_super_assignment_bound"
-			and .work_item_id == $row.binding.assigned_work_item_id)]' 2>/dev/null
+		($row.binding.assigned_work_item_id // "") as $wi
+		| [(.events // [])[] | select(.kind == "co_super_assignment_bound"
+			and (.command_id == ("engineering-bind:" + $row.assignment_id)
+				or ($wi != "" and .work_item_id == $wi)))]' 2>/dev/null
+}
+
+# fp4_unmatched_bound EVENTS_JSON ROW_JSON: the command_ids of bound events
+# that are not this row's (they belong to another assignment).
+fp4_unmatched_bound() {
+	printf '%s' "$1" | jq -r --argjson row "$2" '
+		($row.binding.assigned_work_item_id // "") as $wi
+		| [(.events // [])[] | select(.kind == "co_super_assignment_bound"
+			and ((.command_id == ("engineering-bind:" + $row.assignment_id)
+				or ($wi != "" and .work_item_id == $wi)) | not)) | .command_id // "<none>"] | join(",")' 2>/dev/null
 }
 
 # fp4_load a|b: read the trajectory snapshot and events for A or B, set
@@ -114,7 +132,21 @@ fp4_load() {
 		return 1
 	fi
 	FP4_BOUND=$(fp4_bound_events "$evs" "$FP4_ROW") || FP4_BOUND="[]"
-	info "$up row $(printf '%s' "$FP4_ROW" | jq -c '{assignment_id, disposition, disposition_reason, capsule_disposition, terminal_at, work_item: .binding.assigned_work_item_id}') bound_events=$(printf '%s' "$FP4_BOUND" | jq -c 'map({created_at, run_id})')"
+	FP4_FOREIGN=$(fp4_unmatched_bound "$evs" "$FP4_ROW")
+	info "$up row $(printf '%s' "$FP4_ROW" | jq -c '{assignment_id, disposition, disposition_reason, capsule_disposition, terminal_at, work_item: .binding.assigned_work_item_id}') bound_events=$(printf '%s' "$FP4_BOUND" | jq -c 'map({created_at, command_id})')"
+	if [ -n "$FP4_FOREIGN" ]; then info "$up: bound events that are NOT this row's (command_id matches another assignment): $FP4_FOREIGN"; fi
+}
+
+# fp4_load_a_sane: load A and assert the bound-event join found at least one
+# bound event for A. Without that, "B has no bound event" would be what a join
+# that matches nothing also says, so every "never bound" claim stops here.
+fp4_load_a_sane() {
+	fp4_load a || return 1
+	if [ "$(printf '%s' "$FP4_BOUND" | jq 'length')" = 0 ]; then
+		fail "the bound-event join found no co_super_assignment_bound event for A (command_id engineering-bind:<assignment id>): a 'B was never bound' result would be vacuous, so it is not asserted"
+		return 1
+	fi
+	pass "the bound-event join found $(printf '%s' "$FP4_BOUND" | jq 'length') bound event(s) for A"
 }
 
 fp4_rowf() { printf '%s' "$FP4_ROW" | jq -r "$1"; }
@@ -156,11 +188,11 @@ step_2() {
 	manual "(1) ask management on ${OPT_computer:-the test computer} to Cast an engineering request A; wait until A's capsule is bound (the assignment row shows a bound capsule)"
 	manual "(2) while A is working, Cast a second engineering request B; then rerun this step with --trajectory-a/--trajectory-b (and --assignment-a/-b)"
 	if [ "$PROOF_DRY" = 1 ]; then fp4_load a; fp4_load b; fp4_info_log 'waits behind'; return 0; fi
-	if fp4_load a; then
+	if fp4_load_a_sane; then
 		check "A's row is bound with its capsule live (not revoked) and not terminal" fp4_a_is_live
-	fi
-	if fp4_load b; then
-		check "B's row is open, capsule unbound, with no co_super_assignment_bound event" fp4_b_is_waiting
+		if fp4_load b; then
+			check "B's row is open, capsule unbound, with no co_super_assignment_bound event" fp4_b_is_waiting
+		fi
 	fi
 	fp4_info_log 'waits behind'
 }
@@ -179,8 +211,8 @@ step_3() {
 step_4() {
 	fp4_target 1
 	proof_poll 300 30 "ownership is active after the refresh" fp4_is_active
-	if [ "$PROOF_DRY" = 1 ]; then fp4_load b; fp4_info_log 'planned boot: queued engineering request .* kept and resumed'; return 0; fi
-	if fp4_load b; then
+	if [ "$PROOF_DRY" = 1 ]; then fp4_load a; fp4_load b; fp4_info_log 'planned boot: queued engineering request .* kept and resumed'; return 0; fi
+	if fp4_load_a_sane && fp4_load b; then
 		check "after the planned boot B's row is still open, capsule unbound, never bound" fp4_b_is_waiting
 	fi
 	fp4_info_log 'planned boot: queued engineering request .* kept and resumed'
@@ -224,8 +256,8 @@ fp4_b_cancelled_by_restart() {
 step_7() {
 	fp4_target 1
 	proof_poll 300 30 "ownership is active after the crash boot" fp4_is_active
-	if [ "$PROOF_DRY" = 1 ]; then fp4_load b; fp4_info_log 'interrupted_by_restart|interrupted by a restart'; return 0; fi
-	if fp4_load b; then
+	if [ "$PROOF_DRY" = 1 ]; then fp4_load a; fp4_load b; fp4_info_log 'interrupted_by_restart|interrupted by a restart'; return 0; fi
+	if fp4_load_a_sane && fp4_load b; then
 		check "B's row is cancelled with reason interrupted_by_restart and has no co_super_assignment_bound event" fp4_b_cancelled_by_restart
 	fi
 	fp4_info_log 'interrupted_by_restart|interrupted by a restart'
