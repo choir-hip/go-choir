@@ -119,6 +119,18 @@ func (f *retentionFixture) vm(user string) string { return f.own[user].VMID }
 // backdates nothing: the age is the fixture clock against the file's ctime.
 func (f *retentionFixture) quarantine(t *testing.T, vmID string, generation int, op, phase, status string) string {
 	t.Helper()
+	computerID := "computer-of-" + vmID
+	for _, own := range f.own {
+		if own.VMID == vmID {
+			computerID = own.ComputerID
+		}
+	}
+	return f.quarantineNaming(t, vmID, generation, op, phase, status, computerID)
+}
+
+// quarantineNaming writes a quarantine whose journal names computerID.
+func (f *retentionFixture) quarantineNaming(t *testing.T, vmID string, generation int, op, phase, status, computerID string) string {
+	t.Helper()
 	dir := filepath.Join(f.stateDir, vmID)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
@@ -132,7 +144,7 @@ func (f *retentionFixture) quarantine(t *testing.T, vmID string, generation int,
 			"recovery_id":    "rec-" + strconv.Itoa(generation) + "-" + op,
 			"phase":          phase,
 			"status":         status,
-			"computer_id":    "computer-of-" + vmID,
+			"computer_id":    computerID,
 			"vm_id":          vmID,
 			"canonical_head": "head-" + op,
 			"fencing_token":  map[string]any{"secret": "never-in-a-report"},
@@ -292,7 +304,7 @@ func TestShadowPlanReportsButNeverEnforces(t *testing.T) {
 		TestIdleMinAge:   7 * 24 * time.Hour,
 		QuarantineMinAge: 7 * 24 * time.Hour,
 	})
-	name := f.quarantine(t, f.vm(rtRealUser), 1, "aa", "done", "active")
+	name := f.quarantine(t, f.vm(rtTesterRecent), 1, "aa", "done", "active")
 	plan := f.reg.RetentionShadowPlan()
 	if e := testClassEntry(plan, f.vm(rtTesterA)); e == nil || e.Verdict != "would_remove" { // T5
 		t.Fatalf("shadow tester-a = %+v, want would_remove", e)
@@ -304,31 +316,65 @@ func TestShadowPlanReportsButNeverEnforces(t *testing.T) {
 	if len(f.mgr.destroys) != 0 {
 		t.Fatalf("shadow config deleted: %v", f.mgr.destroys)
 	}
-	if _, err := os.Stat(filepath.Join(f.stateDir, f.vm(rtRealUser), name)); err != nil {
+	if _, err := os.Stat(filepath.Join(f.stateDir, f.vm(rtTesterRecent), name)); err != nil {
 		t.Fatalf("shadow config removed a quarantine: %v", err)
 	}
 }
 
 func TestQuarantineAgeOutKeepsEverythingThatMayBeTheOnlyCopy(t *testing.T) {
 	f := newRetentionFixture(t, RetentionPruneModeActive, RetentionPruneModeOff, RetentionPruneModeDryRun)
-	real := f.vm(rtRealUser)
+	real := f.vm(rtTesterRecent) // a test computer's dir: the only class whose quarantines age out
 	done := f.quarantine(t, real, 1, "done1", "done", "active")
 	preSwap := f.quarantine(t, real, 2, "pre1", "staging", "")
+	swapped := f.quarantine(t, real, 5, "swap1", "swapped", "")
 	noJournal := f.quarantine(t, real, 3, "nojournal", "", "")
 	failed := f.quarantine(t, real, 4, "failed1", "verified", "failed")
 	paperQ := f.quarantine(t, f.vm(rtPaperUser), 1, "paper1", "done", "active")
 	selQ := f.quarantine(t, f.vm(rtTesterSel), 1, "sel1", "done", "active")
-	orphanQ := f.quarantine(t, "candidate-fleet", 1, "orph1", "done", "active")
+	// R2-2: an ownerless candidate-fleet dir holding the owner's done
+	// recovery (the 10-07 pair), and one naming the paper.
+	ownerComputer := f.own[rtOwnerUser].ComputerID
+	orphanQ := f.quarantineNaming(t, "candidate-fleet-e15cb89f", 1, "orph1", "done", "active", ownerComputer)
+	orphanPaperQ := f.quarantineNaming(t, "candidate-fleet-e15cb89f", 2, "orph2", "done", "active", f.own[rtPaperUser].ComputerID)
+	// R2-2: a test computer's dir whose journal names the paper or the
+	// owner's computer (a moved realization) is kept.
+	misPaper := f.quarantineNaming(t, real, 6, "mispaper", "done", "active", f.own[rtPaperUser].ComputerID)
+	misOwner := f.quarantineNaming(t, real, 7, "misowner", "done", "active", stableComputerID(rtOwnerUser, PrimaryDesktopID, ""))
+	misOther := f.quarantineNaming(t, real, 8, "misother", "done", "active", "computer-someone-else-0000")
+	// R2-3: a real (non-test) account's done quarantine is kept.
+	realQ := f.quarantine(t, f.vm(rtRealUser), 1, "real1", "done", "active")
+	ownerQ := f.quarantine(t, f.vm(rtOwnerUser), 1, "own1", "done", "active")
+	// Sonnet F8: names that do not parse and non-regular files are listed, kept.
+	if err := os.WriteFile(filepath.Join(f.stateDir, real, "data.img.quarantine-old"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(f.stateDir, real, "data.img.quarantine-9-adir"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// R2-2: an operator-saved dir is not VM state and is never scanned.
+	saved := f.quarantine(t, "saved-by-operator", 1, "saved1", "done", "active")
 
 	plan := f.reg.RetentionPrunePlan()
 	cases := map[string]struct{ verdict, reason string }{
-		done:      {"would_remove", ""},
-		orphanQ:   {"would_remove", ""},
-		preSwap:   {"keep", "journal_phase_staging"},
-		noJournal: {"keep", "journal_missing"},
-		failed:    {"keep", "recovery_failed"},
-		paperQ:    {"keep", "owner_protected_class"},
-		selQ:      {"keep", "selector_named"},
+		done:                         {"would_remove", ""},
+		orphanQ:                      {"keep", "no_ownership"},
+		orphanPaperQ:                 {"keep", "no_ownership"},
+		misPaper:                     {"keep", "journal_computer_protected"},
+		misOwner:                     {"keep", "journal_computer_protected"},
+		misOther:                     {"keep", "journal_computer_mismatch"},
+		realQ:                        {"keep", "owner_not_test_class"},
+		ownerQ:                       {"keep", "owner_protected_class"},
+		preSwap:                      {"keep", "journal_phase_staging"},
+		swapped:                      {"keep", "journal_phase_swapped"},
+		noJournal:                    {"keep", "journal_missing"},
+		failed:                       {"keep", "recovery_failed"},
+		paperQ:                       {"keep", "owner_protected_class"},
+		selQ:                         {"keep", "selector_named"},
+		"data.img.quarantine-old":    {"keep", "unparsed_name"},
+		"data.img.quarantine-9-adir": {"keep", "not_regular"},
+	}
+	if e := quarantineEntry(plan, saved); e != nil {
+		t.Errorf("an operator-saved dir was scanned: %+v", e)
 	}
 	for name, want := range cases {
 		e := quarantineEntry(plan, name)
@@ -338,8 +384,11 @@ func TestQuarantineAgeOutKeepsEverythingThatMayBeTheOnlyCopy(t *testing.T) {
 		if e.Verdict != want.verdict || (want.reason != "" && !hasReason(e.Reasons, want.reason)) { // T7
 			t.Errorf("%s = %s %v, want %s %s", name, e.Verdict, e.Reasons, want.verdict, want.reason)
 		}
-		if e.SizeBytes <= 0 || e.QuarantinedAt == "" || e.VMID == "" {
+		if want.verdict != "keep" && (e.SizeBytes <= 0 || e.QuarantinedAt == "" || e.VMID == "") {
 			t.Errorf("%s entry lacks size, time or vm: %+v", name, e)
+		}
+		if e.VMID == "" {
+			t.Errorf("%s entry lacks its vm: %+v", name, e)
 		}
 	}
 	if e := quarantineEntry(plan, done); e.RecoveryID != "rec-1-done1" || e.JournalPhase != "done" || e.CanonicalHead != "head-done1" {
@@ -366,9 +415,11 @@ func TestQuarantineAgeOutKeepsEverythingThatMayBeTheOnlyCopy(t *testing.T) {
 
 func TestQuarantineAgeOutEnforceRemovesAndWritesTheManifest(t *testing.T) {
 	f := newRetentionFixture(t, RetentionPruneModeActive, RetentionPruneModeOff, RetentionPruneModeActive)
-	real := f.vm(rtRealUser)
+	real := f.vm(rtTesterRecent)
 	done := f.quarantine(t, real, 1, "done1", "done", "active")
 	preSwap := f.quarantine(t, real, 2, "pre1", "staging", "")
+	saved := f.quarantine(t, "saved-by-operator", 1, "saved1", "done", "active")
+	orphan := f.quarantineNaming(t, "candidate-fleet-e15cb89f", 1, "orph1", "done", "active", f.own[rtOwnerUser].ComputerID)
 	plan := f.reg.RetentionPrunePlan()
 	if e := quarantineEntry(plan, done); e == nil || e.Verdict != "will_remove" {
 		t.Fatalf("done quarantine = %+v, want will_remove", e)
@@ -385,6 +436,11 @@ func TestQuarantineAgeOutEnforceRemovesAndWritesTheManifest(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(f.stateDir, real, "data.img")); err != nil {
 		t.Fatalf("the live data image was touched: %v", err)
+	}
+	for _, p := range []string{filepath.Join("saved-by-operator", saved), filepath.Join("candidate-fleet-e15cb89f", orphan)} { // R2-2
+		if _, err := os.Stat(filepath.Join(f.stateDir, p)); err != nil {
+			t.Fatalf("%s removed: %v", p, err)
+		}
 	}
 	if result.QuarantinesRemoved != 1 || result.QuarantineBytesRemoved <= 0 || len(f.mgr.destroys) != 0 {
 		t.Fatalf("result = %+v destroys=%v", result, f.mgr.destroys)
@@ -411,7 +467,7 @@ func TestQuarantineAgeOutEnforceRemovesAndWritesTheManifest(t *testing.T) {
 
 func TestBothSwitchesOffLeaveThePlanAsToday(t *testing.T) {
 	f := newRetentionFixture(t, RetentionPruneModeActive, RetentionPruneModeOff, RetentionPruneModeOff)
-	f.quarantine(t, f.vm(rtRealUser), 1, "done1", "done", "active")
+	f.quarantine(t, f.vm(rtTesterRecent), 1, "done1", "done", "active")
 	plan := f.reg.RetentionPrunePlan()
 	if len(plan.TestClass) != 0 || len(plan.Quarantines) != 0 || len(plan.Candidates) != 0 { // T10
 		t.Fatalf("switches off, yet the plan reports or plans: test=%d quarantines=%d candidates=%+v", len(plan.TestClass), len(plan.Quarantines), plan.Candidates)
@@ -435,8 +491,13 @@ func TestSelectorNamedComputersFromEnviron(t *testing.T) {
 		"VMCTL_PORT=8083",
 		"NOT_VM_X_ONLY=computer-zzz",
 		"VM_ONLY=computer-yyy",
+		"CHOIR_CLAUDE_DELEGATE_COMPUTERS=computer-delegate",
+		"CHOIR_VISUAL_CAPTURE_COMPUTERS=computer-visual",
+		"VMCTL_JAILER_ONLY=computer-jailer vm-jailer",
+		"CHOIR_CAPSULE_MIRROR_COMPUTERS=computer-mirror",
+		"CHOIR_CAPSULE_MIRRORS_ONLY=computer-mirror2",
 	})
-	want := []string{"computer-aaa", "computer-bbb", "vm-123"}
+	want := []string{"computer-aaa", "computer-bbb", "computer-delegate", "computer-jailer", "computer-mirror", "computer-mirror2", "computer-visual", "vm-123", "vm-jailer"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("selector-named = %v, want %v (T3: class: and * name no computer)", got, want)
 	}
