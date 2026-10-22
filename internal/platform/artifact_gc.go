@@ -90,8 +90,10 @@ type ArtifactGCReport struct {
 	BytesDeleted int64                                `json:"bytes_deleted"`
 	Namespaces   map[string]ArtifactGCNamespaceReport `json:"namespaces"`
 	Warnings     []string                             `json:"warnings,omitempty"`
-	StartedAt    time.Time                            `json:"started_at"`
-	DurationMs   int64                                `json:"duration_ms"`
+	// LogRotation summarizes the GC-log compression of this pass (active).
+	LogRotation *ArtifactGCLogRotation `json:"log_rotation,omitempty"`
+	StartedAt   time.Time              `json:"started_at"`
+	DurationMs  int64                  `json:"duration_ms"`
 }
 
 var hexDigestRE = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -160,6 +162,25 @@ type gcCandidate struct {
 // a durable intent record in the deletion log and re-checked under the CAS
 // reuse lock. Dry-run reports the full eligible set without deleting.
 func (s *Service) RunArtifactGC(ctx context.Context, cfg ArtifactGCConfig) (ArtifactGCReport, error) {
+	report, err := s.runArtifactGC(ctx, cfg)
+	if report.Mode == ArtifactGCModeActive && s != nil && s.artifactsRoot != "" && ctx.Err() == nil {
+		// F6: compress old daily logs, after artifactGCMu is released. Best
+		// effort: a failure is a warning and never fails the pass (the
+		// original is kept).
+		s.artifactGCLogMu.Lock()
+		rot, rotErr := s.rotateArtifactGCLogs(ctx, time.Now())
+		s.artifactGCLogMu.Unlock()
+		if rot.Compressed > 0 {
+			report.LogRotation = &rot
+		}
+		if rotErr != nil {
+			report.Warnings = append(report.Warnings, "artifact-gc-log rotation: "+rotErr.Error())
+		}
+	}
+	return report, err
+}
+
+func (s *Service) runArtifactGC(ctx context.Context, cfg ArtifactGCConfig) (ArtifactGCReport, error) {
 	started := time.Now()
 	cfg = normalizeArtifactGCConfig(cfg)
 	report := ArtifactGCReport{
