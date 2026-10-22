@@ -207,6 +207,10 @@ type Store struct {
 	searchIdx searchIndex
 	// storyKinds caches trajectory kinds for the story library (stories.go).
 	storyKinds storyKindCache
+
+	// dryRunPositionHook, set only by tests, sees the tape position the
+	// projection dry run passes to projectBatch (event_table.go, F6).
+	dryRunPositionHook func(pos uint64)
 }
 
 type eventSeqKey struct{ runID, ownerID string }
