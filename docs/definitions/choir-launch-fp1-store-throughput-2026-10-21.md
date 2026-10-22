@@ -186,16 +186,16 @@ now:
   followup: >-
     Journal growth (lane/fp1-journal-growth, 2026-10-22): problem record
     docs/problems/paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md.
-    Each tape event runs three guest transactions (a rolled-back dry run,
-    prepare, finalize) over about 33 prolly trees, 13 per og_objects row;
-    the dry run's chunks reach the journal (measured locally: 90 KiB per
-    rolled-back insert on a 13-tree table). About 240 to 310 KiB per event,
-    so 2.0 to 2.7 MiB/s is about 7 to 12 events/s. The online GC holds the
-    only write connection for its 20 to 30 s pass. No runtime change. Next:
-    FP0's six readings in the record (event_head.sequence and the store's
-    bytes 600 s apart, telemetry_batching, engine_mutex, dolt_gc), then F-a
-    (telemetry.batch on a test computer) or F-c (choir.event out of
-    og_objects, a design of its own).
+    FP0 asked for the dry-run fix; the tests-first measurement on the real
+    tape harness showed the dry run costs about 5% (133/141/136 KiB per
+    event without/with/without), because finalize rewrites the same chunks
+    and the journal stores a chunk once. Not built; the record carries the
+    correction. Measured instead: telemetry batching 141 -> 97 KiB per event
+    at 6 ops per batch, floor 91 KiB (the og_objects row, 13 trees, one
+    statement per op); a multi-row statement cuts a row 100 -> 63 KiB.
+    Next: F-a (telemetry.batch on a test computer), then F-e (multi-row
+    og_objects upserts in projectBatch, red, small), then F-c as a design;
+    FP0's six readings in the record.
 
 receipts:
   - id: fp1-boot-window-repair

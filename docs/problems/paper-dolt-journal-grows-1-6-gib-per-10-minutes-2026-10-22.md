@@ -65,7 +65,9 @@ Two defects, one cause.
   persists the memtable. So a **rolled-back transaction still writes its
   chunks to the journal**. Measured locally (section "Local measurement"):
   a rolled-back insert costs the same journal bytes as a committed one,
-  once the next commit lands.
+  once the next commit lands. (But when a later commit writes the same
+  row into the same tree, its chunks are the same and cost nothing again:
+  see the correction.)
 - The journal deduplicates by content: `ChunkJournal.Persist` skips chunks
   the store already has (`store/nbs/journal.go:293-321`) **[V]**. Rewriting
   an identical row costs nothing; any changed byte (an `updated_at`)
@@ -127,7 +129,7 @@ constants:
 | Finalize (heads, index row and status index, `og_objects` insert) | about 16 | about 115 to 150 KiB |
 | **Total** | | **about 240 to 310 KiB** |
 
-The dry run is about 35 to 40% of it.
+The dry-run row of this table is **wrong**; see the correction below.
 
 Cross-check from an earlier measurement **[M]**: on 10-15 the GC stopped at
 10-14 13:00 and the journal reached 27.2 GB at 10-15 00:20
@@ -146,7 +148,71 @@ after deploy C it ran research 8/8 and sources 4/4 slots with 67 due agents
 carries the growth is the main open question; FP0's first measurement
 below splits it.
 
-## Causes, ranked
+## Correction (2026-10-22, second pass): the dry run costs about 5%, not 35 to 40%
+
+The estimate above counted the dry run's chunks as extra bytes. They are
+mostly not extra. A Dolt prolly tree's shape depends only on its contents,
+not on the order of writes, and the journal stores a chunk once
+(`journal.go:293-321`). The dry run inserts the same `og_objects` row into
+the same committed tree that finalize inserts it into a moment later, under
+the same appender mutex. So finalize produces the same chunks and writes
+none of them again. Only the dry run's table and root chunks, and any value
+that differs between the two passes (a `time.Now()` default for a missing
+timestamp, `project.go:107`, `:230`, `:272`, `:598`), are new.
+
+Measured locally on the real path (the store's tape harness,
+`internal/store/telemetry_harness_test.go`: a real `Store`, the real
+appender, recording pin and CAS, 3,000 seed events, then 150 `loop.delta`
+events per sample through `Store.AppendEvent`; probe tests run and deleted):
+
+| Sample | Journal per event |
+|---|---|
+| Without the dry run (switched off for the probe) | 133 KiB |
+| With the dry run | 141 KiB |
+| Without the dry run, again | 136 KiB |
+
+The same holds on the raw-table probe: prepare plus finalize 119 KiB per
+event, with a rolled-back dry run of the same row first 126 KiB. **The dry run
+is about 5 to 8 KiB per event, about 4 to 6%.** The 90 KiB of a rolled-back
+insert measured earlier is real only when nothing later writes the same row.
+F-b is withdrawn: it would be a red change to tape validation for about 5%.
+
+What the remaining bytes are, measured on the same harness with telemetry
+batching on and one batch of k events forced by `DrainTelemetry`:
+
+| Ops per tape event (k) | Journal per event |
+|---|---|
+| 1 (batching off) | 141 KiB |
+| 3 | 105 KiB |
+| 6 | 97 KiB |
+| 12 | 93 KiB |
+| 64 | 91 KiB |
+
+Batching removes the per-event prepare and finalize overhead (about
+45 KiB). The floor of about 90 KiB is the `og_objects` insert itself. That
+insert stays per op even inside one transaction, because each op is its own
+statement, and each statement flushes its own path in all 13 trees
+(`prolly_table_writer.go:320-326`). The raw-table probe confirms this: 6
+rows as 6 statements in one transaction cost 100 KiB per row; the same 6
+rows as one multi-row INSERT cost 63 KiB per row.
+
+### The ranking after the correction
+
+1. **The `og_objects` row: 13 trees, one statement per op** (about 90 of the
+   141 KiB). Levers: F-c (`choir.event` out of `og_objects`, fewer trees,
+   sequential key), and a new smaller one, F-e: in `projectBatch`, write
+   consecutive unguarded `og_objects` upserts of a batch as one multi-row
+   statement (about -37% per row at k = 6 on the raw probe; only useful with
+   batching on).
+2. **Prepare and finalize per event** (about 45 KiB). Lever: F-a, telemetry
+   batching, built and off: -31% per event at k = 6, measured.
+3. The dry run: about 5%. No change.
+
+Recommendation, revised: F-a on a test computer first (built; measured
+-25% to -35% for telemetry events locally), then F-e (small, red, inside
+`projectBatch`), then F-c as the substrate design.
+
+## Causes, ranked (first pass; see the correction above)
 
 1. **Per-event transaction amplification (top).** Three transactions per
    durable write, each rewriting a root-to-leaf path in every touched
@@ -188,7 +254,7 @@ below splits it.
    - Source polling and the outbox write through the same tape path, so
      they are part of the event rate in cause 2, not a separate writer.
 
-## Proposed fixes for the top cause (none implemented here)
+## Proposed fixes, first pass (none implemented here; superseded by the correction's ranking)
 
 Smallest first. Each needs FP0's measurement first: if bytes per event are
 far above about 400 KiB, this model is wrong and none of these is the fix.
@@ -196,7 +262,7 @@ far above about 400 KiB, this model is wrong and none of these is the fix.
 | # | Fix | Effect (derived) | Class | Rollback |
 |---|---|---|---|---|
 | F-a | Turn on telemetry batching for the paper (`telemetry.batch`, already built) | One dry run, prepare and finalize per sealed batch of up to 64 ops. `og_objects` inserts stay one per op but share the batch's upper-level chunks; the three-transaction overhead falls by k. Expect the `choir.event` share of the journal to fall 2x to 4x (volume design §4a) | red (tape write path; the design's own class) | setting off |
-| F-b | Stop the dry run writing chunks: validate with a read-only check where the op cannot fail at the engine (unguarded `choir.event` and run-memory inserts), keep the full dry run for guarded ops | Removes about 35 to 40% of the journal for those ops (local measurement) | red (tape append validation; a projection that fails after the CAS wedges the computer) | revert |
+| F-b (withdrawn, see the correction) | Stop the dry run writing chunks: validate with a read-only check where the op cannot fail at the engine (unguarded `choir.event` and run-memory inserts), keep the full dry run for guarded ops | Removes about 35 to 40% of the journal for those ops (local measurement) | red (tape append validation; a projection that fails after the CAS wedges the computer) | revert |
 | F-c | Move `choir.event` (append-only telemetry) out of `og_objects` into its own table with a sequential key and the 1 or 2 indexes its readers use | About 33 trees to about 10 per telemetry event (13 to about 2 in both dry run and finalize): the largest single lever, about two thirds of a telemetry event's journal | red (store schema, content witness, replay, every `choir.event` reader) | dual-read; a design of its own |
 | F-d | Sequential key for `computer_event_index` (volume design b2) | History, not journal | red (schema, witness) | migration |
 
@@ -238,8 +304,11 @@ All are existing routes or logs **[V]**; none changes the computer.
    generation does not change, so Δbytes is the journal growth. Read both
    samples inside one GC interval (after a pass ends, before the next tick
    that runs).
-3. **Bytes per event** = (2) / (1). Prediction: 220 to 310 KiB. Above about
-   400 KiB means a writer or a blob rewrite this record missed.
+3. **Bytes per event** = (2) / (1). Prediction, revised: the real path
+   measured 141 KiB per `loop.delta` event on a small local store; the
+   paper's deeper trees and larger rows put it at about 150 to 250 KiB,
+   which makes 2.0 to 2.7 MiB/s about 8 to 18 events/s. Above about 400 KiB
+   means a writer or a blob rewrite this record missed.
 4. **Kind mix and batching state.** The same observability response,
    `telemetry_batching`: `enabled`, `events_appended_by_kind`,
    `tape_events`, `tape_ops`, `ops_per_tape_event`,
@@ -263,9 +332,10 @@ and gives the kind mix, which decides between F-a and F-c.
 
 ## Heresy delta
 
-- discovered: a rolled-back dry-run transaction per tape event writes its
-  chunks to the journal (the shared memtable; measured locally, 90 KiB per
-  rolled-back insert on a 13-tree table); the online GC holds the only
-  write connection for its whole pass.
+- discovered: the online GC holds the only write connection for its whole
+  pass; each projected op is its own statement, so batching cannot share
+  the 13-tree path of an `og_objects` row. (The first pass also listed the
+  dry run's journal cost as a defect; the correction measures it at about
+  5%, so it is not one.)
 - introduced: none.
 - repaired: none.
