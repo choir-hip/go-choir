@@ -85,6 +85,10 @@ func commitChain(t *testing.T, n int) (string, []string) {
 	runSourceGit(t, source, "init")
 	runSourceGit(t, source, "config", "user.name", "Test")
 	runSourceGit(t, source, "config", "user.email", "test@example.invalid")
+	// No detached auto-maintenance racing the test's own reads (the round 2
+	// flake's hypothesis).
+	runSourceGit(t, source, "config", "maintenance.auto", "false")
+	runSourceGit(t, source, "config", "gc.auto", "0")
 	commits := make([]string, 0, n)
 	for i := 0; i < n; i++ {
 		if err := os.WriteFile(filepath.Join(source, "counter"), []byte(fmt.Sprint(i)), 0o644); err != nil {
@@ -159,5 +163,13 @@ func TestCommitDigestCacheIsBoundedAndRightUnderConcurrency(t *testing.T) {
 	close(errs)
 	for err := range errs {
 		t.Error(err)
+	}
+}
+
+func TestInventoryErrorCarriesGitStderr(t *testing.T) {
+	source, _ := commitChain(t, 1)
+	_, err := immutableCommitInventory(context.Background(), source, strings.Repeat("0", 40))
+	if err == nil || !strings.Contains(err.Error(), "exit status 128") || !strings.Contains(strings.ToLower(err.Error()), "fatal") {
+		t.Fatalf("inventory error %v does not carry git's exit and stderr", err)
 	}
 }
