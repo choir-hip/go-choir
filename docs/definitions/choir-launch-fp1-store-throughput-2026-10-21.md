@@ -196,13 +196,16 @@ now:
     store.event_table, tests F17 and F18 first; F17's local ratio at most
     0.5 gates it). Rollback below deploy 1 is runtime-safe, not
     rollback-safe (round 1b): the epoch fences only the updater's Apply of
-    an epoch-declaring release; a CI revert, a platform-follow offer and the
+    an epoch-declaring release; a CI revert, a platform-follow offer that
+    declares no epoch and the
     updater's restorePrior boot the old binary, which runs but refuses
     checkpoint publication over the empty choir_events until a forward
-    deploy, the rollback recipe (the revert plus a boot-time drop of an
-    empty choir_events, quoted in the design's status section and
-    rehearsed by TestEventTableRollbackRecipe; it must ride in the revert
-    commit) or a pre-deploy-1 restore. Rehearse it with the proof's step 6
+    deploy, the rollback build (the git revert, then
+    scripts/rollback/fc-deploy1-rollback.sh apply, which installs the
+    tested boot step from internal/store/testdata/fc-deploy1-rollback/ that
+    drops an empty choir_events; a bare revert is not enough) or a
+    pre-deploy-1 restore. Open for the panel: fencing the updater's
+    restorePrior as a deploy-2 gate. Rehearse it with the proof's step 6
     on a test computer. Once deploy 2 stamps, deploy 1 is the floor.
   followup: >-
     Journal growth (lane/fp1-journal-growth, 2026-10-22): problem record
@@ -229,8 +232,10 @@ receipts:
       fix), all red; 04d055014 and 17736c304 (test repairs, yellow);
       3900eed5c (proof script, yellow); c4508ef82 (docs, green). Round 1b:
       2ea0613a9 and 0e8f72cad (F14 lock pin, stamp guard, F6 hook),
-      3fe5e810f (rollback recipe rehearsal, proof step 6), then the
-      round 1b docs commit
+      3fe5e810f (rollback recipe rehearsal, proof step 6), fbb6d74a8
+      (round 1b docs). Round 1c: the type-based stamp guard and the
+      test-only hook guard, the rollback artifact and script, then the
+      round 1c docs commit
     proof_refs:
       - internal/store/event_table_test.go
       - internal/store/event_table_guard_test.go

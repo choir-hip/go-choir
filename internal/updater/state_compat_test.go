@@ -249,7 +249,7 @@ func TestApplyVerifiesEntrypointBuildCommit(t *testing.T) {
 // declares epoch 1. Apply refuses it before mutation on a store whose
 // receipt is this build's epoch. This is the only path the epoch fences:
 // restorePrior (after a failed health probe) skips checkStateCompatibility,
-// a platform-follow offer declares no epoch, and a CI revert never reads the
+// a platform-follow offer may declare no epoch, and a CI revert never reads the
 // receipt. Those reach the older binary, which runs but cannot publish a
 // checkpoint until a forward deploy or the design's rollback recipe (round
 // 1b review).

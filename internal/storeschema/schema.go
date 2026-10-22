@@ -31,7 +31,7 @@ import (
 //     binary ignores ProjectionOp.Table and calls the table unknown. The
 //     epoch fences only the updater's Apply of a release that declares an
 //     epoch: Apply refuses an epoch-1 release on an epoch-2 store. A CI
-//     revert (deploy-refresh), a platform-follow offer (no declared epoch)
+//     revert (deploy-refresh), a platform-follow offer that declares no epoch
 //     and the updater's own restorePrior after a failed health probe reach
 //     the older binary unfenced; its Open rewrites the receipt to 1. That
 //     binary runs, but checkpoint publication is refused until a forward
