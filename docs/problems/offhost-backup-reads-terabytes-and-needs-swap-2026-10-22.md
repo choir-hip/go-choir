@@ -359,7 +359,7 @@ Pass:
 | Drill `snap` | both stores `found=1` | passed 2026-10-21 |
 | Drill `tape` | 200 of 200 identical, both sqlite `integrity=ok` | passed 2026-10-20 |
 | Verify | `Result=success`, `last_verify_result: ok`, `MemorySwapPeak` 0, `MemoryPeak` under 12 GiB | 10.3 GB + 4 GB swap (item 18, as the daily check) |
-| status.json on a failure | `last_*_result: failed` with `last_*_cause`; never a stale `ok`; `running` only while its process lives (otherwise freshness flags it); valid JSON with both units' keys when backup and verify overlap (round 3) | a kill left the previous `ok` |
+| status.json on a failure | `last_*_result: failed` with `last_*_cause`; never a stale `ok`; `running` only while its process lives (otherwise freshness flags it); valid JSON with both units' keys when backup and verify overlap, a guarantee that depends on util-linux `flock` (on the units' PATH; without it the script warns and writes unlocked) (rounds 3, 4) | a kill left the previous `ok` |
 
 If the run is OOM-killed at 12G (the conjecture is wrong: the live set is
 above 10 GB): read the "Consumed" CPU line (the collector at its cap shows
@@ -457,9 +457,12 @@ Gemini flash and DeepSeek accept with edits; Devin pending at writing.
    start, end and exit; `status_merge` was an unlocked read-modify-write
    through one fixed `status.json.tmp`. It now holds `flock` on
    `status.json.lock` beside the file only around the read-merge-write
-   (never across restic; after 60 s it writes without the lock and logs
-   it), and writes through its own `mktemp` in the same directory before
-   the rename; a failed merge removes its temp.
+   (never across restic; round 4: it waits without a timeout and never
+   writes unlocked when `flock` exists), and writes through its own
+   `mktemp` in the same directory before the rename. Round 4: a failed jq
+   or a failed rename removes the temp, and under the lock any
+   `status.json.??????` over an hour old (a writer SIGKILLed mid-merge)
+   is deleted.
    `scripts/off-host-backup-status-lock-test.sh` runs the script's own
    status-file section with two concurrent writers of 60 keys each: 61 of
    120 keys survived before the fix; 120 of 120, valid JSON, no temp left
@@ -474,6 +477,30 @@ Gemini flash and DeepSeek accept with edits; Devin pending at writing.
    round 2 above and in the script's comment: the mark follows the tool
    preflight, the exit trap and (verify) `install -d`, and precedes the
    disk guard, the tunnel and every restic call.
+
+## Review round 4 (panel bunch 35), dispositions
+
+Flash accept; DeepSeek accept with edits. Test first in 7904d3b13 (it
+failed 2 of 7 on f67d64c85), fix in 645a07439.
+
+1. **Medium: the 60 s fail-open.** Fixed: `flock 9` with no timeout. The
+   holder runs one jq on a small file, and the unit's `TimeoutStartSec`
+   (12 h) bounds a stuck holder: the waiting unit is then killed and its
+   mark reads as interrupted. If `flock` itself errors, nothing is
+   written. Test: a holder keeps the lock 65 s and merges what it read
+   before sleeping; the waiter's key and the holder's both survive.
+2. **Medium-low: the silent no-flock branch.** Fixed: the owner hand-run
+   line (`NIX_SHELL_LINE`) includes `util-linux`, and without `flock` on
+   PATH `status_merge` warns on stderr that overlapping backup and verify
+   can lose each other's marks, then writes (a developer host case).
+3. **Low: the lock test on hosts without flock.** Fixed: it prints
+   `SKIP: no flock on this host` and exits 0 (checked with an empty
+   PATH). The Linux run, 7 of 7 in 66 s, is the evidence.
+4. **Low: temp cleanup.** Fixed: explicit removal after a failed jq or a
+   failed `mv`, and the hour-old reap under the lock (tested: a 2-hour-old
+   temp goes, a fresh one stays). Round 3's sentence above now says this.
+5. **Low: the pass table's overlap guarantee.** The row now names the
+   util-linux `flock` dependency.
 
 ## Heresy delta
 
