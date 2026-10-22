@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -49,11 +50,31 @@ const (
 	minStoreCompactPressureGap        = time.Hour
 	minStoreCompactPressureTicker     = 30 * time.Second
 	defaultStoreCompactPressureTicker = 5 * time.Minute
-	// A compaction that gave back less than this backs the next one off to
-	// storeCompactBackoffFactor times the gap: compacting again soon would
-	// restart the computer for nothing (round 2, finding 4).
-	storeCompactSmallReclaim  = 8 << 30
-	storeCompactBackoffFactor = 4
+	// After a compaction that gave back less than this, the pressure loop
+	// waits until the image has regrown by as much again: compacting before
+	// that would restart the computer for nothing (round 2 finding 4; round
+	// 3 N2 made it regrowth-based, not a wall-clock span that aliased with
+	// the daily timer). The timer and by-hand calls are never backed off.
+	storeCompactSmallReclaim = 8 << 30
+	// The floor is at least the last compacted store plus this margin
+	// (round 3 N1): the store grows about 5 GB a day, so a fixed floor
+	// loses its margin in days.
+	storeCompactFloorMargin = 10 << 30
+	// A compaction that has not finished by this deadline is ended and the
+	// computer boots its untouched image (round 3 N4). Observed runs take 6
+	// to 11 minutes. A run past the guest's 15 min planned-restart window
+	// is a crash boot either way.
+	defaultStoreCompactTimeout = 45 * time.Minute
+)
+
+// storeCompactCaller is who asked for a compaction: the gap and back-off
+// rules differ by caller.
+type storeCompactCaller string
+
+const (
+	storeCompactByPressure storeCompactCaller = "pressure"
+	storeCompactByTimer    storeCompactCaller = "timer"
+	storeCompactByHand     storeCompactCaller = "by-hand"
 )
 
 // StoreCompactPressureConfig is the pressure loop's host setting.
@@ -131,17 +152,34 @@ func storeCompactMinHostFreeFromEnv(getenv func(string) string) uint64 {
 	return defaultStoreCompactMinHostFree
 }
 
+// storeCompactTimeoutFromEnv reads VMCTL_STORE_COMPACT_TIMEOUT (a
+// duration, at least a minute; default 45m).
+func storeCompactTimeoutFromEnv(getenv func(string) string) time.Duration {
+	v := strings.TrimSpace(getenv("VMCTL_STORE_COMPACT_TIMEOUT"))
+	if d, err := time.ParseDuration(v); err == nil && d >= time.Minute {
+		return d
+	}
+	if v != "" {
+		log.Printf("vmctl: VMCTL_STORE_COMPACT_TIMEOUT=%q is not a duration of at least 1m; the deadline stays %s", v, defaultStoreCompactTimeout)
+	}
+	return defaultStoreCompactTimeout
+}
+
 func fmtGiB(b uint64) string {
 	return fmt.Sprintf("%.1f GiB", float64(b)/(1<<30))
 }
 
-// storeCompactAttempt is one computer's last compaction attempt: when, and
-// the image's host allocation before and after (0: not known).
+// storeCompactAttempt is one computer's last compaction attempt: when, the
+// image's host allocation before and after (0: not known), the compacted
+// store's size the tool reported (carried over from earlier attempts while
+// unknown), and whether the compaction failed.
 type storeCompactAttempt struct {
 	VMID            string    `json:"-"`
 	At              time.Time `json:"at"`
 	FileBytesBefore uint64    `json:"file_bytes_before,omitempty"`
 	FileBytesAfter  uint64    `json:"file_bytes_after,omitempty"`
+	StoreBytesAfter uint64    `json:"store_bytes_after,omitempty"`
+	Failed          bool      `json:"failed,omitempty"`
 }
 
 // storeCompactAttempts is the last compaction attempt of each computer,
@@ -151,8 +189,10 @@ type storeCompactAttempts struct {
 	path string
 	last map[string]storeCompactAttempt
 	// loadErr: the record on disk could not be read. The pressure trigger
-	// refuses while it is set; the next successful write keeps the bad
-	// file aside as <path>.corrupt and clears it.
+	// refuses while it is set. It is cleared only when an attempt is
+	// recorded inside the maintenance hook (a compaction is certain): the
+	// bad file is first moved to <path>.corrupt, and if it cannot be moved
+	// it is not overwritten.
 	loadErr error
 	// writeFile writes the record (writeFileAtomic; a test hook).
 	writeFile func(path string, raw []byte) error
@@ -195,6 +235,13 @@ func writeFileAtomic(path string, raw []byte) error {
 	return nil
 }
 
+func (a *storeCompactAttempts) write(path string, raw []byte) error {
+	if a.writeFile != nil {
+		return a.writeFile(path, raw)
+	}
+	return writeFileAtomic(path, raw)
+}
+
 // persistLocked writes the record; a.mu is held.
 func (a *storeCompactAttempts) persistLocked() error {
 	if a.last == nil {
@@ -203,19 +250,25 @@ func (a *storeCompactAttempts) persistLocked() error {
 	if a.path == "" {
 		return nil
 	}
+	moved := false
 	if a.loadErr != nil {
-		// Keep the unreadable record as evidence before replacing it.
-		_ = os.Rename(a.path, a.path+".corrupt")
+		// Keep the unreadable record as evidence before replacing it; if it
+		// cannot be kept, leave it in place.
+		if err := os.Rename(a.path, a.path+".corrupt"); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("store compaction attempts record %s is unreadable and could not be moved aside (%v); left in place", a.path, err)
+		}
+		moved = true
 	}
 	raw, err := json.Marshal(a.last)
 	if err != nil {
 		return err
 	}
-	write := a.writeFile
-	if write == nil {
-		write = writeFileAtomic
-	}
-	if err := write(a.path, raw); err != nil {
+	if err := a.write(a.path, raw); err != nil {
+		if moved {
+			// Put the unreadable record back: a missing file would read as
+			// an empty history at the next start (fail open).
+			_ = os.Rename(a.path+".corrupt", a.path)
+		}
 		return fmt.Errorf("store compaction attempts record %s: %w", a.path, err)
 	}
 	a.loadErr = nil
@@ -229,16 +282,26 @@ func (a *storeCompactAttempts) record(att storeCompactAttempt) error {
 	if a.last == nil {
 		a.last = map[string]storeCompactAttempt{}
 	}
+	att.At = att.At.UTC()
 	a.last[att.VMID] = att
 	return a.persistLocked()
 }
 
-// checkWritable rewrites the record as it is, so a compaction learns before
-// it asks the guest for a restart that it can record itself.
+// checkWritable writes and removes a probe file beside the record, so a
+// compaction learns before it asks the guest for a restart that it can
+// record itself. It leaves the record (even an unreadable one) untouched.
 func (a *storeCompactAttempts) checkWritable() error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return a.persistLocked()
+	if a.path == "" {
+		return nil
+	}
+	probe := a.path + ".probe"
+	if err := a.write(probe, []byte("{}")); err != nil {
+		return fmt.Errorf("store compaction attempts record %s: %w", a.path, err)
+	}
+	_ = os.Remove(probe)
+	return nil
 }
 
 func (a *storeCompactAttempts) lastAttempt(vmID string) (storeCompactAttempt, bool, error) {
@@ -246,6 +309,26 @@ func (a *storeCompactAttempts) lastAttempt(vmID string) (storeCompactAttempt, bo
 	defer a.mu.Unlock()
 	t, ok := a.last[vmID]
 	return t, ok, a.loadErr
+}
+
+// clampFuture moves an attempt dated after now (a clock step, a hand edit)
+// to now and persists that, so it blocks for at most one gap.
+func (a *storeCompactAttempts) clampFuture(vmID string, now time.Time) storeCompactAttempt {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	att := a.last[vmID]
+	if !att.At.After(now) {
+		return att
+	}
+	log.Printf("vmctl: store compaction %s: last attempt dated %s is in the future; clamped to %s", vmID, att.At.UTC().Format(time.RFC3339), now.UTC().Format(time.RFC3339))
+	att.At = now.UTC()
+	a.last[vmID] = att
+	if a.loadErr == nil {
+		if err := a.persistLocked(); err != nil {
+			log.Printf("vmctl: store compaction %s: clamped attempt kept in memory only: %v", vmID, err)
+		}
+	}
+	return att
 }
 
 // allocatedBytesOf is the host allocation of path (0 when unreadable).
@@ -264,49 +347,72 @@ func (s *storeCompactState) allocated(path string) uint64 {
 	return allocatedBytesOf(path)
 }
 
-// gapRefusal says why vmID may not be compacted again yet, or "". The gap
-// is the pressure config's MinGap, times storeCompactBackoffFactor when the
-// last compaction gave back little.
-func (h *Handler) storeCompactGapRefusal(vmID string, now time.Time) string {
+func (s *storeCompactState) compactTimeout() time.Duration {
+	if s.timeout > 0 {
+		return s.timeout
+	}
+	return defaultStoreCompactTimeout
+}
+
+// storeCompactGapRefusal says why vmID may not be compacted again yet, or
+// "". Every caller keeps the pressure config's MinGap since the last
+// attempt, except the timer after a failed attempt (it retries). The
+// pressure loop alone is also backed off after a small reclaim until the
+// image (currentFileBytes) has regrown.
+func (h *Handler) storeCompactGapRefusal(vmID string, now time.Time, caller storeCompactCaller, currentFileBytes uint64) string {
 	gap := h.storeCompactPressure.MinGap
 	if gap <= 0 {
 		return ""
 	}
-	last, seen, _ := h.storeCompaction().attemptsRecord().lastAttempt(vmID)
+	attempts := h.storeCompaction().attemptsRecord()
+	last, seen, _ := attempts.lastAttempt(vmID)
 	if !seen {
 		return ""
 	}
-	note := ""
-	if last.FileBytesBefore > 0 && last.FileBytesAfter > 0 {
+	if last.At.After(now) {
+		last = attempts.clampFuture(vmID, now)
+	}
+	if caller == storeCompactByTimer && last.Failed {
+		return ""
+	}
+	if now.Sub(last.At) < gap {
+		return fmt.Sprintf("last compaction attempt %s, next after %s; a by-hand {\"force\":true} passes the gap",
+			last.At.UTC().Format(time.RFC3339), last.At.Add(gap).UTC().Format(time.RFC3339))
+	}
+	if caller == storeCompactByPressure && last.FileBytesBefore > 0 && last.FileBytesAfter > 0 {
 		var reclaimed uint64
 		if last.FileBytesBefore > last.FileBytesAfter {
 			reclaimed = last.FileBytesBefore - last.FileBytesAfter
 		}
-		if reclaimed < storeCompactSmallReclaim {
-			gap *= storeCompactBackoffFactor
-			note = fmt.Sprintf("; the last compaction reclaimed %s (under %s), so the gap is %s", fmtGiB(reclaimed), fmtGiB(storeCompactSmallReclaim), gap)
+		if reclaimed < storeCompactSmallReclaim && currentFileBytes < last.FileBytesAfter+storeCompactSmallReclaim {
+			return fmt.Sprintf("the last compaction reclaimed %s (under %s); due again once the image regrows to %s (now %s)",
+				fmtGiB(reclaimed), fmtGiB(storeCompactSmallReclaim), fmtGiB(last.FileBytesAfter+storeCompactSmallReclaim), fmtGiB(currentFileBytes))
 		}
 	}
-	if now.Sub(last.At) >= gap {
-		return ""
-	}
-	return fmt.Sprintf("last compaction attempt %s, next after %s%s",
-		last.At.UTC().Format(time.RFC3339), last.At.Add(gap).UTC().Format(time.RFC3339), note)
+	return ""
 }
 
-// hostFloorRefusal says why a compaction may not run now, or "" when it may:
-// the compaction writes the squashed store into a reflink copy, and every
-// block it writes is new host allocation until the swap.
-func (s *storeCompactState) hostFloorRefusal() string {
-	if s.minHostFree == 0 {
+// hostFloorRefusal says why a compaction of vmID may not run now, or ""
+// when it may: the compaction writes the compacted store into a reflink
+// copy, and every block it writes is new host allocation until the swap.
+// The floor is the configured minimum, raised to the computer's last
+// compacted store size plus storeCompactFloorMargin (0 turns it off).
+func (s *storeCompactState) hostFloorRefusal(vmID string) string {
+	floor := s.minHostFree
+	if floor == 0 {
 		return ""
+	}
+	note := ""
+	if last, ok, _ := s.attemptsRecord().lastAttempt(vmID); ok && last.StoreBytesAfter > 0 && last.StoreBytesAfter+storeCompactFloorMargin > floor {
+		floor = last.StoreBytesAfter + storeCompactFloorMargin
+		note = fmt.Sprintf(" (last compacted store %s + %s)", fmtGiB(last.StoreBytesAfter), fmtGiB(storeCompactFloorMargin))
 	}
 	free, err := s.hostFree()
 	if err != nil {
 		return fmt.Sprintf("host free space unreadable (%v); the compaction needs room for the compacted copy", err)
 	}
-	if free < s.minHostFree {
-		return fmt.Sprintf("host free %s below the compaction floor %s; the compaction needs room for the compacted copy", fmtGiB(free), fmtGiB(s.minHostFree))
+	if free < floor {
+		return fmt.Sprintf("host free %s below the compaction floor %s%s; the compaction needs room for the compacted copy", fmtGiB(free), fmtGiB(floor), note)
 	}
 	return ""
 }
@@ -384,25 +490,29 @@ func (h *Handler) storeCompactPressureTick(ctx context.Context, now time.Time) [
 		}
 		d := storeCompactPressureDecision{VMID: own.VMID, ComputerID: own.ComputerID, Reason: reason}
 		_, _, loadErr := state.attemptsRecord().lastAttempt(own.VMID)
-		gapRefusal := h.storeCompactGapRefusal(own.VMID, now)
+		gapRefusal := h.storeCompactGapRefusal(own.VMID, now, storeCompactByPressure, own.DataImage.FileBytes)
 		switch {
 		case loadErr != nil:
 			d.Action, d.Reason = pressureActionRefused, reason+"; "+loadErr.Error()
 		case gapRefusal != "":
 			d.Action, d.Reason = pressureActionRateLimited, reason+"; "+gapRefusal
-		default:
-			if refusal := state.hostFloorRefusal(); refusal != "" {
+		case cfg.Mode == StoreCompactPressureObserve:
+			if refusal := state.hostFloorRefusal(own.VMID); refusal != "" {
 				d.Action, d.Reason = pressureActionRefused, reason+"; "+refusal
-			} else if cfg.Mode == StoreCompactPressureObserve {
-				d.Action = pressureActionObserve
-			} else if !acted {
-				d.Action = pressureActionCompact
-				result, _ := h.compactStore(ctx, own, false, now)
-				d.Result = &result
-				acted = true
 			} else {
-				// One compaction per tick; the next tick takes the next.
-				continue
+				d.Action = pressureActionObserve
+			}
+		case acted:
+			// One compaction per tick; the next tick takes the next.
+			continue
+		default:
+			// compactStore removes a stale copy and checks the floor under
+			// the compaction lock; a floor refusal is reported as refused.
+			result, code := h.compactStore(ctx, own, storeCompactByPressure, false, now)
+			acted = true
+			d.Action, d.Result = pressureActionCompact, &result
+			if code == http.StatusInsufficientStorage {
+				d.Action, d.Reason = pressureActionRefused, reason+"; "+result.Reason
 			}
 		}
 		switch d.Action {

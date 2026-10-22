@@ -279,7 +279,7 @@ func main() {
 		cfg := vmctl.StoreCompactPressureConfigFromEnv(os.Getenv)
 		attemptsPath := vmctl.StoreCompactAttemptsPath(stateDir)
 		if err := handler.SetStoreCompactPressure(cfg, attemptsPath); err != nil {
-			log.Printf("vmctl: store compaction pressure refuses every compaction: %v", err)
+			log.Printf("vmctl: store compaction pressure refuses every pressure compaction until the next timer or by-hand compaction rewrites the record: %v", err)
 		}
 		handler.StartStoreCompactPressure(context.Background())
 		log.Printf("vmctl: store compaction pressure mode=%s interval=%s host_free_below=%d fill_fraction=%.2f min_image=%d min_gap=%s attempts=%q",

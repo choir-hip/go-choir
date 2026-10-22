@@ -129,8 +129,18 @@ func (c *hostStoreCompactor) cleanupStale(ctx context.Context, vmID, copyPath, m
 	_ = os.Remove(copyPath)
 }
 
+// CleanupStale removes what an interrupted run left for dataImagePath (its
+// unit, mount and copy); compactStore calls it under the compaction lock
+// before the floor check, so a stale copy cannot hold the host under the
+// floor forever.
+func (c *hostStoreCompactor) CleanupStale(ctx context.Context, vmID, dataImagePath string) {
+	c.cleanupStale(ctx, vmID, dataImagePath+storeCompactCopySuffix, filepath.Join(c.mountRoot, vmID))
+}
+
 // Compact compacts dataImagePath through a reflink copy and swaps it in.
-// Every error before the rename leaves dataImagePath as it was.
+// Every error before the rename leaves dataImagePath as it was. A deadline
+// on ctx also bounds the transient unit (RuntimeMaxSec), so systemd stops
+// a stuck tool even if vmctl's wait is cut.
 func (c *hostStoreCompactor) Compact(ctx context.Context, vmID, dataImagePath, computerID, canonicalHead string) (storeCompactionReport, error) {
 	var report storeCompactionReport
 	started := time.Now()
@@ -145,11 +155,19 @@ func (c *hostStoreCompactor) Compact(ctx context.Context, vmID, dataImagePath, c
 	if canonicalHead == "" {
 		canonicalHead = "unreported"
 	}
-	out, err := c.run.Run(ctx, c.bin("systemd-run"), "--quiet", "--wait", "--pipe", "--collect",
-		"--unit="+c.unitName(vmID),
-		"-p", "MemoryMax="+c.memoryMax, "-p", "MemorySwapMax=0",
-		c.bin("sh"), "-c", storeCompactScript, "sh",
+	args := []string{"--quiet", "--wait", "--pipe", "--collect",
+		"--unit=" + c.unitName(vmID),
+		"-p", "MemoryMax=" + c.memoryMax, "-p", "MemorySwapMax=0"}
+	if deadline, ok := ctx.Deadline(); ok {
+		secs := int(time.Until(deadline).Seconds())
+		if secs < 1 {
+			secs = 1
+		}
+		args = append(args, "-p", fmt.Sprintf("RuntimeMaxSec=%d", secs))
+	}
+	args = append(args, c.bin("sh"), "-c", storeCompactScript, "sh",
 		mountDir, copyPath, c.compactBin, filepath.Join(mountDir, "state.texture"), computerID, canonicalHead)
+	out, err := c.run.Run(ctx, c.bin("systemd-run"), args...)
 	if decodeErr := json.Unmarshal(lastJSONLine(out), &report); decodeErr != nil && err == nil {
 		err = fmt.Errorf("unreadable report: %w", decodeErr)
 	}
@@ -190,6 +208,12 @@ func lastJSONLine(out []byte) []byte {
 
 type storeCompactorIface interface {
 	Compact(ctx context.Context, vmID, dataImagePath, computerID, canonicalHead string) (storeCompactionReport, error)
+}
+
+// storeCompactStaleCleaner is a compactor that can remove an interrupted
+// run's leftovers before a new compaction is considered.
+type storeCompactStaleCleaner interface {
+	CleanupStale(ctx context.Context, vmID, dataImagePath string)
 }
 
 type storeCompactRequest struct {
@@ -239,6 +263,8 @@ type storeCompactState struct {
 	// allocatedBytes reads a data image's host allocation (a test hook;
 	// nil: allocatedBytesOf).
 	allocatedBytes func(path string) uint64
+	// timeout bounds one compaction (0: defaultStoreCompactTimeout).
+	timeout time.Duration
 }
 
 func (h *Handler) storeCompaction() *storeCompactState {
@@ -247,6 +273,7 @@ func (h *Handler) storeCompaction() *storeCompactState {
 			h.storeCompact = &storeCompactState{
 				compactor:   newHostStoreCompactor(),
 				minHostFree: storeCompactMinHostFreeFromEnv(os.Getenv),
+				timeout:     storeCompactTimeoutFromEnv(os.Getenv),
 				// Free space on the filesystem holding the data images.
 				freeBytes: func() (uint64, error) {
 					free, _, err := statfsAvailable(h.registry.DataImageStateDir())
@@ -267,28 +294,37 @@ func (s *storeCompactState) attemptsRecord() *storeCompactAttempts {
 	return s.attempts
 }
 
-// compactStore compacts one computer's store as a planned restart. Before
-// the guest is asked it refuses, in order: below the host free-space floor
-// (507), inside the computer's gap unless force (429), and when the attempts
-// record cannot be written (507), so no restart is spent on a compaction
-// that cannot run or record itself.
-func (h *Handler) compactStore(ctx context.Context, own ownershipResponse, force bool, now time.Time) (storeCompactResponse, int) {
+// compactStore compacts one computer's store as a planned restart. Under
+// the compaction lock it first removes an interrupted run's leftovers, then
+// refuses before the guest is asked, in order: below the host free-space
+// floor (507), inside the computer's gap unless force (429), and when the
+// attempts record cannot be written (507), so no restart is spent on a
+// compaction that cannot run or record itself.
+func (h *Handler) compactStore(ctx context.Context, own ownershipResponse, caller storeCompactCaller, force bool, now time.Time) (storeCompactResponse, int) {
 	state := h.storeCompaction()
 	if !state.mu.TryLock() {
 		return storeCompactResponse{deployRefreshResponse: deployRefreshResponse{Outcome: deployRefreshDeferred, Reason: "another store compaction is running", VMID: own.VMID}}, http.StatusConflict
 	}
 	defer state.mu.Unlock()
 	refuse := func(reason string, status int) (storeCompactResponse, int) {
-		log.Printf("vmctl: store compaction %s (computer %s): refused: %s", own.VMID, own.ComputerID, reason)
+		log.Printf("vmctl: store compaction %s (computer %s, %s): refused: %s", own.VMID, own.ComputerID, caller, reason)
 		return storeCompactResponse{deployRefreshResponse: deployRefreshResponse{Outcome: deployRefreshSkipped, Reason: reason, VMID: own.VMID, ComputerID: own.ComputerID}}, status
 	}
-	if refusal := state.hostFloorRefusal(); refusal != "" {
+	if cleaner, ok := state.compactor.(storeCompactStaleCleaner); ok {
+		cleaner.CleanupStale(ctx, own.VMID, filepath.Join(h.registry.DataImageStateDir(), own.VMID, dataImageFileName))
+	}
+	if refusal := state.hostFloorRefusal(own.VMID); refusal != "" {
 		return refuse(refusal, http.StatusInsufficientStorage)
 	}
-	if !force {
-		if refusal := h.storeCompactGapRefusal(own.VMID, now); refusal != "" {
+	var currentFileBytes uint64
+	if own.DataImage != nil {
+		currentFileBytes = own.DataImage.FileBytes
+	}
+	if refusal := h.storeCompactGapRefusal(own.VMID, now, caller, currentFileBytes); refusal != "" {
+		if !force {
 			return refuse(refusal, http.StatusTooManyRequests)
 		}
+		log.Printf("vmctl: store compaction %s (computer %s, %s): forced past the gap: %s", own.VMID, own.ComputerID, caller, refusal)
 	}
 	attempts := state.attemptsRecord()
 	if err := attempts.checkWritable(); err != nil {
@@ -300,23 +336,44 @@ func (h *Handler) compactStore(ctx context.Context, own ownershipResponse, force
 	}
 	var report *storeCompactionReport
 	var compactErr error
-	maintenance := func(dataImagePath string) error {
+	maintenance := func(dataImagePath string) (hookErr error) {
+		// A panic here would unwind past the boot and leave the computer
+		// killed and unbooted; as an error, the manager boots the image
+		// the compaction left, which is the original until the rename.
+		defer func() {
+			if r := recover(); r != nil {
+				hookErr = fmt.Errorf("store compaction panicked: %v", r)
+				compactErr = hookErr
+				log.Printf("vmctl: store compaction %s: %v (booting the image it left)", own.VMID, hookErr)
+			}
+		}()
 		// The guest took the planned restart and the VM is down: this is an
 		// attempt, recorded before the compaction so a vmctl crash during it
-		// still holds the gap. The VM is already down, so a failed write
-		// (checked writable a moment ago) does not stop the compaction; the
-		// attempt stays in memory.
-		att := storeCompactAttempt{VMID: own.VMID, At: now, FileBytesBefore: state.allocated(dataImagePath)}
+		// still holds the gap. A failed write (checked a moment ago) does not
+		// stop the compaction; the attempt stays in memory.
+		prev, _, _ := attempts.lastAttempt(own.VMID)
+		att := storeCompactAttempt{VMID: own.VMID, At: now, FileBytesBefore: state.allocated(dataImagePath), StoreBytesAfter: prev.StoreBytesAfter}
 		if err := attempts.record(att); err != nil {
 			log.Printf("vmctl: store compaction %s: attempt kept in memory only: %v", own.VMID, err)
 		}
-		r, err := state.compactor.Compact(context.Background(), own.VMID, dataImagePath, own.ComputerID, head)
+		timeout := state.compactTimeout()
+		cctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		r, err := state.compactor.Compact(cctx, own.VMID, dataImagePath, own.ComputerID, head)
+		if err != nil && cctx.Err() != nil {
+			err = fmt.Errorf("compaction deadline (%s) passed, booting the original image: %w", timeout, err)
+		}
 		report, compactErr = &r, err
 		if err == nil {
 			att.FileBytesAfter = state.allocated(dataImagePath)
-			if werr := attempts.record(att); werr != nil {
-				log.Printf("vmctl: store compaction %s: result kept in memory only: %v", own.VMID, werr)
+			if r.BytesAfter > 0 {
+				att.StoreBytesAfter = uint64(r.BytesAfter)
 			}
+		} else {
+			att.Failed = true
+		}
+		if werr := attempts.record(att); werr != nil {
+			log.Printf("vmctl: store compaction %s: result kept in memory only: %v", own.VMID, werr)
 		}
 		return err
 	}
@@ -332,7 +389,7 @@ func (h *Handler) compactStore(ctx context.Context, own ownershipResponse, force
 			status = http.StatusInternalServerError
 		}
 	}
-	log.Printf("vmctl: store compaction %s (computer %s): outcome=%s reason=%q compaction=%+v", own.VMID, own.ComputerID, resp.Outcome, resp.Reason, out.Compaction)
+	log.Printf("vmctl: store compaction %s (computer %s, %s): outcome=%s reason=%q forced=%t compaction=%+v", own.VMID, own.ComputerID, caller, resp.Outcome, resp.Reason, force, out.Compaction)
 	return out, status
 }
 
@@ -416,7 +473,7 @@ func (h *Handler) HandleCompactStore(w http.ResponseWriter, r *http.Request) {
 	desktopID := normalizeDesktopID(req.DesktopID)
 	for _, own := range ownerships {
 		if own.UserID == strings.TrimSpace(req.UserID) && normalizeDesktopID(own.DesktopID) == desktopID {
-			resp, status := h.compactStore(r.Context(), own, req.Force, time.Now())
+			resp, status := h.compactStore(r.Context(), own, storeCompactByHand, req.Force, time.Now())
 			writeVMCTLJSON(w, status, resp)
 			return
 		}
@@ -429,7 +486,8 @@ func (h *Handler) HandleCompactStore(w http.ResponseWriter, r *http.Request) {
 // interactive computer whose data image holds at least min_file_bytes on the
 // host. A busy refusal is a deferral; the next day's sweep tries again. A
 // computer inside its gap is skipped. A refusal at the host free-space floor
-// answers 507, so the timer unit fails and says why.
+// answers 507 and a failed compaction 500, so the timer unit fails and says
+// why. The timer is never backed off, and retries a failed attempt.
 func (h *Handler) HandleCompactSweep(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
@@ -458,13 +516,23 @@ func (h *Handler) HandleCompactSweep(w http.ResponseWriter, r *http.Request) {
 	status := http.StatusOK
 	if !req.DryRun {
 		for i, own := range picks {
-			result, code := h.compactStore(r.Context(), own, false, time.Now())
+			result, code := h.compactStore(r.Context(), own, storeCompactByTimer, false, time.Now())
 			resp.Selected[i].Result = &result
-			if code == http.StatusInsufficientStorage {
+			switch {
+			case code == http.StatusInsufficientStorage:
 				// No room (or no writable attempts record): the timer unit
 				// must fail and say why, not exit 0 having done nothing.
 				status = code
 				log.Printf("vmctl: store compaction sweep refused %s (computer %s): %s", own.VMID, own.ComputerID, result.Reason)
+			case result.Outcome == deployRefreshFailed || (result.Compaction != nil && result.Compaction.Error != ""):
+				if status != http.StatusInsufficientStorage {
+					status = http.StatusInternalServerError
+				}
+				detail := result.Reason
+				if result.Compaction != nil && result.Compaction.Error != "" {
+					detail = result.Compaction.Error
+				}
+				log.Printf("vmctl: store compaction sweep: compaction of %s (computer %s) failed: %s", own.VMID, own.ComputerID, detail)
 			}
 		}
 	}

@@ -293,7 +293,7 @@ func TestStoreCompactionStateFromEnvReadsStatfs(t *testing.T) {
 		t.Fatalf("hostFree = %d, %v; statfs says %d", free, err, want)
 	}
 	reg.SetPressureReclaimConfig(PressureReclaimConfig{StateDir: filepath.Join(dir, "missing")})
-	if r := state.hostFloorRefusal(); !strings.Contains(r, "unreadable") {
+	if r := state.hostFloorRefusal("vm-x"); !strings.Contains(r, "unreadable") {
 		t.Fatalf("missing state dir: refusal %q", r)
 	}
 }
