@@ -10,6 +10,10 @@ package gateway
 // Unlike /provider/v1/source-api the guest names the URL: there is no
 // allowlist for research reads (SDC, "Networking must enable, not starve").
 // The guard refuses non-public answers and the host's own addresses.
+//
+// Off at the host: only a VM on the host's own list (CHOIR_HOST_FETCH_VMS,
+// the list vmctl's grant uses) may call it; an empty list refuses everyone
+// (docs/problems/host-fetch-verb-open-to-every-guest-2026-10-22.md).
 
 import (
 	"log"
@@ -24,6 +28,12 @@ import (
 )
 
 const (
+	// EnvHostFetchVMs is the host's list of VM IDs (gateway identities)
+	// admitted to the verb, shared with vmctl. Empty or unset: every call
+	// is refused.
+	EnvHostFetchVMs = hostfetch.EnvVMs
+	// hostFetchNotGrantedCode is the typed refusal for an unlisted caller.
+	hostFetchNotGrantedCode = "host_fetch_not_granted"
 	// EnvHostFetchPerMinute overrides the per-computer hops a minute.
 	EnvHostFetchPerMinute = "CHOIR_HOST_FETCH_PER_MINUTE"
 	// hostFetchDefaultPerMinute is sized for the paper: about 180 feeds a
@@ -35,7 +45,10 @@ const (
 )
 
 type hostFetchService struct {
-	exec     *hostfetch.Executor
+	exec *hostfetch.Executor
+	// allowed is the host's list; a caller not on it is refused before
+	// any budget or upstream work.
+	allowed  map[string]bool
 	limiter  *PerAutoputerRateLimiter
 	maxSlots int
 
@@ -43,13 +56,21 @@ type hostFetchService struct {
 	inFlight map[string]int
 }
 
-func newHostFetchService(exec *hostfetch.Executor, perMinute, inFlight int) *hostFetchService {
+func newHostFetchService(exec *hostfetch.Executor, allowed map[string]bool, perMinute, inFlight int) *hostFetchService {
+	if allowed == nil {
+		allowed = map[string]bool{}
+	}
 	return &hostFetchService{
 		exec:     exec,
+		allowed:  allowed,
 		limiter:  NewPerAutoputerRateLimiter(perMinute, time.Minute),
 		maxSlots: inFlight,
 		inFlight: map[string]int{},
 	}
+}
+
+func loadHostFetchAllowList(getenv func(string) string) map[string]bool {
+	return hostfetch.ParseVMList(getenv(EnvHostFetchVMs))
 }
 
 func defaultHostFetchPerMinute(getenv func(string) string) int {
@@ -69,7 +90,7 @@ func (h *Handler) hostFetchService() *hostFetchService {
 		return h.hostFetch
 	}
 	defaultHostFetchOnce.Do(func() {
-		defaultHostFetchSvc = newHostFetchService(&hostfetch.Executor{}, defaultHostFetchPerMinute(os.Getenv), hostFetchInFlight)
+		defaultHostFetchSvc = newHostFetchService(&hostfetch.Executor{}, loadHostFetchAllowList(os.Getenv), defaultHostFetchPerMinute(os.Getenv), hostFetchInFlight)
 	})
 	return defaultHostFetchSvc
 }
@@ -105,6 +126,14 @@ func (h *Handler) HandleHostFetch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	svc := h.hostFetchService()
+	if !svc.allowed[computerID] {
+		log.Printf("gateway: fetch refused computer=%s reason=not_granted", computerID)
+		writeGatewayJSON(w, http.StatusForbidden, struct {
+			Error string `json:"error"`
+			Code  string `json:"code"`
+		}{Error: "host fetch is not enabled for this computer", Code: hostFetchNotGrantedCode})
+		return
+	}
 	if !svc.limiter.Record(computerID) {
 		_, _, resetIn := svc.limiter.Status(computerID)
 		w.Header().Set("Retry-After", strconv.Itoa(max(1, int(resetIn.Seconds()))))

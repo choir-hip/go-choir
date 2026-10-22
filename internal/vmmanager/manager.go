@@ -409,7 +409,7 @@ type ManagerConfig struct {
 	CapsuleMirrors CapsuleMirrorConfig
 
 	// HostFetch is the host fetch route grant switch
-	// (CHOIR_HOST_FETCH_COMPUTERS; empty by default). See host_fetch.go.
+	// (CHOIR_HOST_FETCH_VMS; empty by default). See host_fetch.go.
 	HostFetch HostFetchConfig
 }
 
@@ -1022,7 +1022,7 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 		}
 		// Host fetch route (SDC NET-01): a granted computer's disk carries
 		// the grant; its guest then fetches through the gateway.
-		fetchFiles, fetchStatus := m.cfg.HostFetch.hostFetchMaterial(cfg.ComputerID, cfg.WarmnessClass, time.Now())
+		fetchFiles, fetchStatus := m.cfg.HostFetch.hostFetchMaterial(cfg.ComputerID, cfg.VMID, time.Now())
 		if fetchStatus != "" {
 			log.Printf("vmmanager: host fetch route for computer %s (VM %s): %s", cfg.ComputerID, cfg.VMID, fetchStatus)
 		}
