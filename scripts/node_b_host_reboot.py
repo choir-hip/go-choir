@@ -70,10 +70,13 @@ Phases (--phase all runs them in order):
           snapshots, so each cold-boots as a crash boot at its next wake.
   reboot  (--execute) systemctl reboot. Waits for ssh with a new boot_id
           (--boot-timeout). If ssh reports that systemctl refused (an exit
-          status other than 0 or ssh's own 255), or the old boot_id still
+          status other than 0 or ssh's own 255), ssh's stderr shows it
+          never connected or authenticated, or the old boot_id still
           answers after --down-wait, the host did not go down: the markers
           are cleared and the run exits 3. Any failure after the markers
-          are written (a failed receipt save, an interrupt) clears them.
+          are written (a failed receipt save, an interrupt, SIGHUP or
+          SIGTERM) clears them. Exit 4 keeps them: the host may be
+          rebooting.
   post    read-only. Booted kernel = staged kernel; nested=N; booted system
           = current system; units back; md clean; vmctl healthy; firewall
           chains re-created; no new verify-host-hardening failures; staging
@@ -95,6 +98,7 @@ import argparse
 import json
 import os
 import re
+import signal
 import subprocess
 import sys
 import time
@@ -483,6 +487,54 @@ def classify_unasked(r):
     return out
 
 
+def answer_may_have_written(status, body):
+    """Whether a POST answer leaves the host's marker possibly on disk: a
+    200 wrote it; a lost answer (0) or a 5xx (a write that failed after the
+    rename) may have. Every other answer is a refusal before the write
+    (D1), and so are the guest's own two 503s, both sent before
+    writeHostPlannedRestartMarker (HandleInternalPlannedRestart):
+    {"error":"planned restart surface unavailable"} and
+    {"error":"planned restart: <err>"} when plannedRestartBusy cannot
+    read its state (R1). A 503 with any other body (a proxy, an older
+    guest) may have written."""
+    if status == 200 or status == 0:
+        return True
+    if status == 503:
+        try:
+            err = (json.loads(body) or {}).get("error") if body else None
+        except (ValueError, AttributeError):
+            err = None
+        if isinstance(err, str) and (err == "planned restart surface unavailable" or err.startswith("planned restart: ")):
+            return False
+        return True
+    return status >= 500
+
+
+# ssh's stderr when it never connected or authenticated, so the remote
+# command never ran (R2). A refused or timed-out connect reads "ssh:
+# connect to host <h> port 22: ..."; a bare "Connection timed out" or "No
+# route to host" can also follow "Read from remote host" mid-session, and
+# "Connection to <h> closed by remote host" is the session dropping as
+# the host goes down, so neither is here.
+SSH_NOT_SENT = ("connect to host", "Permission denied", "Could not resolve hostname", "Host key verification failed",
+                "kex_exchange_identification", "Too many authentication failures")
+
+
+def ssh_never_connected(stderr):
+    return any(p in (stderr or "") for p in SSH_NOT_SENT)
+
+
+class Interrupted(KeyboardInterrupt):
+    """SIGHUP or SIGTERM, raised like Ctrl-C so the clear paths run (R3)."""
+
+
+def install_signal_handlers():
+    def handler(signum, frame):
+        raise Interrupted("signal %d" % signum)
+    for sig in (signal.SIGHUP, signal.SIGTERM):
+        signal.signal(sig, handler)
+
+
 def mark_timeout(n):
     """ssh timeout for one mark or unmark call: each guest may take 25 s."""
     return 60 + 30 * n
@@ -673,11 +725,7 @@ def mark_rounds(args, m, items, sent, target):
             r = got.get(vm, {"status": 0, "body": "no answer in the remote result"})
             a = classify_marker_answer(r["status"], r["body"], it["allow_busy"])
             a["warmness_class"] = it["warmness_class"]
-            if r["status"] == 200 or r["status"] == 0 or r["status"] >= 500:
-                # A 200 wrote the host's marker; a lost answer or a 5xx (a
-                # write that failed after the rename) may have. Any other
-                # answer is a refusal before the write: the host wrote
-                # nothing there (D1).
+            if answer_may_have_written(r["status"], r["body"]):
                 m["may_hold_marker"] = sorted(set(m["may_hold_marker"]) | {vm})
             if a["outcome"] == "written":
                 # Stamped when the request went out: the guest's RequestedAt
@@ -851,9 +899,16 @@ def phase_reboot(args, receipt):
     try:
         p = subprocess.run(["ssh", *SSH_OPTS, args.host, "systemctl", "reboot"], capture_output=True, text=True, timeout=60)
         rc, err = p.returncode, (p.stderr or "").strip()
-    except subprocess.TimeoutExpired:
-        rc, err = None, "timeout"  # the connection drops as the host goes down
-    receipt["reboot"] = {"requested_at": now(), "boot_id_before": before, "ssh_exit": rc}
+    except subprocess.TimeoutExpired as e:
+        # Usually the connection hanging as the host goes down.
+        err = e.stderr.decode("utf-8", "replace") if isinstance(e.stderr, bytes) else (e.stderr or "")
+        rc, err = None, err.strip()
+    receipt["reboot"] = {"requested_at": now(), "boot_id_before": before, "ssh_exit": rc, "ssh_stderr": err[-300:]}
+    if rc in (255, None) and ssh_never_connected(err):
+        log("REBOOT NOT SENT: ssh never reached %s (%s). The host did not go down." % (args.host, err[-300:]))
+        receipt["reboot"]["not_sent"] = True
+        clear_receipt_markers(args, receipt)
+        return 3
     if rc not in (0, 255, None):
         # 255 is ssh's own error (the connection dropping as the host goes
         # down); any other status is systemctl's answer: it refused.
@@ -1076,6 +1131,9 @@ def main():
             log("REFUSED: --execute needs --console-verified (open the OVH IPMI/KVM console first; runbook step 0)")
             save()
             return 2
+        # From here markers may be written: a closed terminal or a kill
+        # must reach the clear paths too.
+        install_signal_handlers()
         if not phase_mark(args, receipt):
             save()
             return 3
