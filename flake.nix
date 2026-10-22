@@ -60,13 +60,16 @@
       # guest-reachable-checksum-fix-2026-10-22.md), Vghost (6.18.45),
       # CVE-2026-53362 and Januscape (6.18.38), CVE-2026-53266 (6.18.36),
       # Copy Fail (6.18.22). The assertion keeps a lock regression from
-      # silently shipping an older kernel.
+      # silently shipping an older kernel. The floor lives in one file,
+      # nix/kernel-security-floor, which scripts/node_b_host_reboot.py also
+      # reads as its --min-kernel default.
+      choirKernelSecurityFloor = nixpkgs.lib.fileContents ./nix/kernel-security-floor;
       choirKernelPackages = (import nixpkgs-kernel { inherit system; }).linuxPackages_6_18;
       choirKernelModule = { lib, ... }: {
         boot.kernelPackages = choirKernelPackages;
         assertions = [{
-          assertion = lib.versionAtLeast choirKernelPackages.kernel.version "6.18.57";
-          message = "choir kernel ${choirKernelPackages.kernel.version} is below the 6.18.57 security floor (docs/problems/kernel-pin-behind-guest-reachable-checksum-fix-2026-10-22.md)";
+          assertion = lib.versionAtLeast choirKernelPackages.kernel.version choirKernelSecurityFloor;
+          message = "choir kernel ${choirKernelPackages.kernel.version} is below the ${choirKernelSecurityFloor} security floor (nix/kernel-security-floor; docs/problems/kernel-pin-behind-guest-reachable-checksum-fix-2026-10-22.md)";
         }];
       };
 
