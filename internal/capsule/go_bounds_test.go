@@ -1,3 +1,5 @@
+//go:build linux
+
 package capsule
 
 import (
@@ -19,7 +21,8 @@ import (
 //	    instead of memory.high, the limit that throttles;
 //	H3. a capsule with no quota or no memory gets a bound of 0, which Go
 //	    reads as "no limit" (GOMEMLIMIT=0 is a 0-byte limit: GC forever);
-//	H4. the broker process gets GOMAXPROCS or GOMEMLIMIT itself.
+//	H4. the broker process gets GOMAXPROCS or GOMEMLIMIT itself;
+//	H5. a small capsule gets a GOMEMLIMIT under the 64 MiB floor.
 func TestCapsuleGoBoundsEnv(t *testing.T) {
 	for _, tc := range []struct {
 		name                    string
@@ -33,6 +36,8 @@ func TestCapsuleGoBoundsEnv(t *testing.T) {
 		{"period 0 is the cgroup default 100000", 100000, 0, 2 << 30, "1", "1342177280"},
 		{"H3: no quota, no GOMAXPROCS", 0, 100000, 2 << 30, "", "1342177280"},
 		{"H3: no memory, no GOMEMLIMIT", 100000, 100000, 0, "1", ""},
+		{"H5: 5/8 of 64 MiB is under the floor", 100000, 100000, 64 << 20, "1", ""},
+		{"H5: 5/8 of 128 MiB is above it", 100000, 100000, 128 << 20, "1", "83886080"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			env := goBoundsBrokerEnv(tc.quota, tc.period, tc.memory)

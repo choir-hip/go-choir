@@ -48,3 +48,18 @@ func TestBrokerProcessEnvCarriesBuildToolchain(t *testing.T) {
 		t.Fatalf("without an autoputer PATH: %q", plain)
 	}
 }
+
+// G8 (internal/yaegikernel/go_bounds_test.go): the broker launch never takes
+// the Go bounds from the autoputer's own environment; only the executor
+// sets them, from the capsule (capsuleBrokerGoBoundsEnv).
+func TestBrokerProcessEnvIgnoresAmbientGoBounds(t *testing.T) {
+	autoputer := map[string]string{
+		yaegikernel.BuildToolchainPathEnv: "/nix/store/y-gcc/bin",
+		yaegikernel.CapsuleGoMaxProcsEnv:  "64",
+		yaegikernel.CapsuleGoMemLimitEnv:  "1073741824",
+	}
+	env := BrokerProcessEnv(func(key string) (string, bool) { v, ok := autoputer[key]; return v, ok })
+	if joined := strings.Join(env, "\n"); strings.Contains(joined, "CHOIR_CAPSULE_GO") {
+		t.Fatalf("broker env took ambient bounds: %q", env)
+	}
+}

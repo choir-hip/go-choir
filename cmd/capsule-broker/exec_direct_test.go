@@ -204,6 +204,26 @@ func TestJobEnvCarriesGoBounds(t *testing.T) {
 			t.Errorf("job env missing %q in %q", strings.TrimSpace(want), env)
 		}
 	}
+	if strings.Contains(env, "CHOIR_") {
+		t.Errorf("job env has a CHOIR_ name: %q", env)
+	}
+}
+
+// The documented override for a job: `env NAME=value` in its argv. Run with
+// the job manager's own environment, the command sees the override for
+// GOMAXPROCS and the default for GOMEMLIMIT.
+func TestJobArgvEnvOverridesGoBounds(t *testing.T) {
+	t.Setenv(yaegikernel.CapsuleGoMaxProcsEnv, "1")
+	t.Setenv(yaegikernel.CapsuleGoMemLimitEnv, "1342177280")
+	cmd := exec.Command("env", "GOMAXPROCS=4", "sh", "-c", "echo $GOMAXPROCS:$GOMEMLIMIT")
+	cmd.Env = newJobManager("/run/capsule/broker", false).Env
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if got := strings.TrimSpace(string(out)); got != "4:1342177280" {
+		t.Fatalf("job saw %q, want 4:1342177280", got)
+	}
 }
 
 // The session worker is spawned with the toolchain carry, so its exec action
