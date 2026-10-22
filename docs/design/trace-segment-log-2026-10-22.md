@@ -714,6 +714,73 @@ workload.
 7. **The paper (S5).** Only steps 1 to 4. No drills on the paper. The
    evidence goes in `docs/evidence/trace-log-<step>-<date>.json`.
 
+### 9.2 Build notes for S0 and S1: where the code forces a change (2026-10-22)
+
+Written before the S1 code, from reading `internal/tapestore/appender.go`
+and its fail-stop history (`docs/definitions/choir-tape-segments-a2-repack-2026-10-21.md`,
+rounds 1 to 5). Each item names the design text it changes. None changes
+a ruling or the S2 to S7 plan.
+
+1. **The library does not import `types`** (3.1, S1 "standard library
+   only"). `internal/tracelog` takes a `Meta` (event id, run, owner,
+   trajectory, kind, `seq`, `stream_seq`, timestamp, `after_tape_seq`, boot
+   id) and the line's bytes. It never decodes the line. The record's type 1
+   body is therefore a small binary envelope (the `Meta`, varint encoded)
+   followed by the line bytes, not "the `EventRecord` JSON plus two
+   envelope fields" as 3.1 reads. The reason is that a segment found
+   without its `.tidx` is re-indexed by scanning envelopes alone, and an
+   append encodes with no reflection and no allocation. S2 serializes the
+   `EventRecord` once and passes the bytes.
+2. **The `.tidx` holds the entries in append order with a string table,
+   not two sorted lists** (3.1). At 50,000 records per segment, building
+   per-run and per-trajectory lookups in memory at load costs less than the
+   code to keep sorted lists on disk. The summary (ranges, bytes and count
+   by kind, each run's and trajectory's `seq` and `stream_seq` range, the
+   owner set, `sealed_at`) is stored in front of the entries, so a query
+   skips a segment without loading its entries. A trajectory summary is
+   added to 3.1's list, because the trajectory lookup needs it to skip.
+3. **The writer holds the directory lock for the life of the process, and
+   takes it without waiting** (4.3, F12). tapestore locks per call because
+   many computers share one root. Here one process owns one directory, and
+   round 3's hole (a writer's memory outliving a lock release) cannot arise
+   if the lock is never released. A second `Open` fails at once with
+   `ErrLocked`, and the caller falls back to the tape.
+4. **Recovery never truncates** (4.2, F4). tapestore's round 4 still cuts a
+   torn tail. Here the next writer seals the segment it did not write, at
+   the end of the last whole, CRC-verified record, and records that offset
+   in the `.tidx` (`valid_end`). The bytes after it stay on disk and no
+   reader serves them. No offset is reused, there is no truncate to fail,
+   and a bad record followed by good ones is cut at the first bad record
+   and counted (`damaged_tails`) instead of refused. Refusing, as
+   tapestore does, would leave the log dead until someone repaired a disk
+   they cannot reach (standing question 8). A segment whose header is not
+   a prefix of a valid header is renamed `seg-N.tlog.bad`, counted, and
+   removed by retention with the other old files.
+5. **Segments are created on the first write, not at `Open`** (3.1). An
+   idle computer then makes no empty segment per boot. The boundary record
+   (`open` or `crash_recovered`) is the first record of that segment.
+   `crash_recovered` means an unsealed segment was found, since a clean
+   `Close` always seals.
+6. **Retention deletes the `.tlog` first, then the `.tidx`** (5). A crash
+   between them leaves an orphan `.tidx`, which is ignored and removed; the
+   reverse order would leave a `.tlog` without an index that looks unsealed.
+   Age is measured from `sealed_at`, which is in the `.tidx`.
+7. **A poisoned log refuses `Maintain` and `Retain` too** (4.3). "Touches no
+   file again" is kept without exceptions, as tapestore keeps it. A
+   poisoned process stops growing the log and does not shrink it. The
+   next process does both. S4 may relax this for retention alone.
+8. **The disk-critical drop (4.3, F6) is S4's**, with the rest of the
+   `AppendEvent` wiring. S1 ships `Retain` and the byte cap it uses.
+9. **S0 builds two of its three counters.** `event_payload_bytes_by_kind`
+   and `events_by_sink` are built. `tape_choir_event_ops_by_kind` is not:
+   the projection ops carry the object-graph kind inside their body, so
+   counting it needs a decode on the tape path, which S0 (observability
+   only) must not add. The problem record's `tape_ops_by_kind` already
+   separates `object_recorded` from the rest; FP0 reads the `choir.event`
+   share from the `events_by_sink.tape` kind counts instead. The line size
+   S0 reports is the payload size. The stored line adds the envelope of
+   about 0.3 KB, which the S1 benchmark reports.
+
 ## 10. Failure modes, written before any code, each with its test
 
 The harness is the store's tape harness
