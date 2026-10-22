@@ -130,3 +130,19 @@ the operation opened would still strand it.
 The monitor did not restart, stop, or change the computer. The owner
 restarts it (owner-authorized repair 1 in the first record). The expected
 result after that boot is in the first record.
+
+## Update, 04:25 UTC
+
+lane/fp4-freeze-failure-closes reached the same cause on its own
+(b005f4bfe, the first record's cause section rewritten to the report path).
+The test 72347ed78 fails first, and the fix is 4851efbb8:
+`closeEndedAssignmentSelfdevOperation`, called after a terminal report and
+on replays. The warning above about repair 2 is resolved. The trace table
+here is that fix's staging evidence: after it deploys, a failed assignment's
+operation should log `selfdev: <op> closed from executing: assignment failed
+before its candidate froze`, and no operation should stay executing past its
+assignment's terminal_at.
+
+The fix acts when a report commits. It does not close selfdev-20d9baa5…,
+whose report committed on 10-21. That operation still needs the owner's
+restart (repair 1 of the first record).
