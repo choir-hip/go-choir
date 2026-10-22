@@ -28,10 +28,16 @@ import (
 //   - 1: the unified Dolt workspace.
 //   - 2: choir_events, run telemetry in its own table
 //     (docs/design/choir-event-table-f-c-2026-10-22.md, deploy 1). An older
-//     binary ignores ProjectionOp.Table and calls the table unknown, so the
-//     updater refuses an epoch-1 release on an epoch-2 store. The minimum
-//     epoch a release migrates from stays 1: deploy 1 migrates an epoch-1
-//     store by creating the empty table.
+//     binary ignores ProjectionOp.Table and calls the table unknown. The
+//     epoch fences only the updater's Apply of a release that declares an
+//     epoch: Apply refuses an epoch-1 release on an epoch-2 store. A CI
+//     revert (deploy-refresh), a platform-follow offer (no declared epoch)
+//     and the updater's own restorePrior after a failed health probe reach
+//     the older binary unfenced; its Open rewrites the receipt to 1. That
+//     binary runs, but checkpoint publication is refused until a forward
+//     deploy or the design's rollback recipe. The minimum epoch a release
+//     migrates from stays 1: deploy 1 migrates an epoch-1 store by creating
+//     the empty table.
 const Version uint64 = 2
 
 // File is the receipt filename inside the unified Dolt workspace
