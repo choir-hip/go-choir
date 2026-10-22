@@ -228,6 +228,13 @@ from traces and code: root-cause first, then change. Use agentic-consensus
 panels where the answer is genuinely uncertain, not as ceremony on settled
 or low-risk slices.
 
+**Investigate eagerly; act deliberately** (owner, 2026-10-22: "always
+investigate these things. we can decide when to act on it, but we should
+investigate eagerly, as that provides more information, and sometimes leads
+to bigger discoveries"). An unexplained number (a wait, a size, a rate) gets
+a read-only investigation and a record when it is seen, not when it hurts.
+Whether and when to act on the finding is a separate decision.
+
 **Escalate on dead ends.** If you've been working on the same problem for 3+
 iterations or 2+ days without convergence, stop patching. Write a structural
 assessment — dependency graph, whether a substrate-level fix would eliminate the

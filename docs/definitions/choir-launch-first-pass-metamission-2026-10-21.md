@@ -285,20 +285,19 @@ now:
   slice: >-
     Land the live-red queue one deploy at a time (two disjoint live reds
     allowed, owner 13:35), each with its deployed proof on a test computer:
-    R (FP7 enforce + ARCH-13) is live and proved; S (SEC-06 observe with
-    enforce on the FP2 test computer, plus the CI guards) is in CI; then T
-    (FP3 cut 2), U (SEC-14 deploy 1), and after 19:00 UTC KF (kernel
-    6.18.57 + Firecracker 1.16.2, then the Node B reboot with the owner's
-    go). Reviews use flash, DeepSeek and Devin or a Sonnet subagent.
-  source_ref: 71ec8e704
-  deploy_identity: f0b1ee313 serving (deploy T, proved 17:05 with two containment gaps recorded); deploy U in CI
+    R to U are live and proved; V (SEC-14 deploy 2, the CI switch to the
+    gate) goes alone; after 19:00 UTC KF (kernel 6.18.57 + Firecracker
+    1.16.2, the canary before the paper, then the Node B reboot with the
+    owner's go). Reviews use flash, DeepSeek and Devin or a Sonnet subagent.
+  source_ref: 273d139c9
+  deploy_identity: 273d139c9 serving (deploy U, SEC-14 deploy 1, proved 17:40 with the gate probe 13 PASS)
   candidate:
-    id: deploy-U
-    state: on main, CI running; mirror deployul PASS (SEC-14 deploy 1, 19 commits; rebuilt on f0b1ee313 with every lane's hunks identical)
-    ref: deploy U's landing commit on main
-    base: f0b1ee313
-    digest: the mirrored tree plus the ledger and this card
-    scope: [.github/scripts, .github/workflows, nix/node-b.nix, scripts, docs]
+    id: deploy-V
+    state: staged on 273d139c9 (SEC-14 deploy 2, 2 commits, hunks identical to lane/fp10-sec14-on-g); a .github-only push selects no deploy, then a workflow_dispatch deploys through the gate
+    ref: deploy V's landing commit on main
+    base: 273d139c9
+    digest: the two SEC-14 deploy-2 commits plus the ledger, this card and the node-a OOM record
+    scope: [.github/scripts, .github/workflows, docs]
   bridge_conjecture: >-
     If the security and density batches land with deployed proofs and
     independent review, then the owner's second pass starts from a computer
@@ -329,29 +328,29 @@ now:
     owner_ratification_ref: not_applicable
   belief:
     believed_state: >-
-      Deploys L to S are live and proved on staging. S put SEC-06 in
-      observe everywhere and enforce on the FP2 test computer: real
-      toolchains pass, the SNI mismatch is would_refuse in observe and
-      refused with no bytes in enforce. R proved the FP7 bearer binding in
-      enforce and ARCH-13's store Close. Node B's disk was the blocker at
-      14:28; the owner approved an early compaction and deleting the old
-      backup, and free space is about 125 GiB.
+      Deploys L to U are live and proved on staging. U put the deploy gate
+      on Node B (the choir-deploy user, one sudo rule, a locked floor, the
+      bootstrap marker); CI still deploys as root until V. Node B has about
+      165 GiB free after the owner-approved deletions. node-a's OOM killer
+      took the agents VM at 17:35 when Node B's build, Mike's deploy and the
+      VM overlapped; the workers were resumed from their sessions.
     main_uncertainty: >-
-      whether the disk holds until the pressure trigger lands (the paper
-      regrows about 140 MiB a minute; platform-dolt's oldgen grows about 2
-      GiB an hour with nothing collecting it); whether the new kernel's
-      config (module signing, lockdown built in) boots the guest image.
-    next_observation: U's deploy log (root runs .github/scripts/node-b-ci-deploy) and scripts/node-b-ci-gate-probe on Node B: every line PASS, a real prebuild through the gate, "bootstrap marker present".
+      whether the disk holds until the pressure trigger lands (a sampler
+      now measures the rate); whether the new kernel's config (module
+      signing, lockdown built in) boots the guest image; whether node-a's
+      memory holds while Node B builds there.
+    next_observation: V's dispatch run log (node-b-ci-gate deploy as root from .github/scripts/node-b-ci-deploy, "Staging deploy complete"), the receipt naming the dispatch run, the floor file holding the commit, and the bootstrap marker gone.
   blocker_or_risk: >-
-    Landing is the bottleneck. The agents VM's memory bounds mirrors to one
-    at a time. FP7 step 5 has no route without a guest shell. A capsule's
-    platform source can lag the deployed commit (the SEC-06 runbook now
-    fetches the probe at the deployed commit).
+    Landing is the bottleneck. node-a's memory is shared by the agents VM,
+    Mike's staging and Node B's remote builds (record
+    node-a-oom-kills-agents-vm-during-node-b-builds-2026-10-22). FP7 step 5
+    has no route without a guest shell.
   next_action: >-
-    Prove T; land U (SEC-14 deploy 1, the deploy gate); KF after 19:00 UTC
-    with a test-computer canary before the paper; then F-c deploy 1
-    (alone), FP4 round 4b, ARCH-13 round 7c, capsule memory, the
-    disk-pressure trigger in observe.
+    Land and prove V; KF after 19:00 UTC with the round 3b canary plan; ask
+    the owner for the reboot go; then discard on the FP2 test computer
+    (Firecracker 1.17 builds on Node B), F-c deploy 1 (alone), FP4 round
+    4c, ARCH-13 round 7d, capsule memory, the disk-pressure trigger in
+    observe, nix store policy round 2.
 receipts:
   - id: capture-label-key-read
     boundary: implement

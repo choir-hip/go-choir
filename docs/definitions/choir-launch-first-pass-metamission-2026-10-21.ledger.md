@@ -698,3 +698,96 @@ Append-only. One terse entry per orchestrator pass.
     - caddy, go-choir-goproxy, qdrant and searx have no InaccessiblePaths at all, so they can reach PID 1's private socket, the system bus and three env files.
   - Step 2 (SEC-11 observe) PASS. The marker alone answers 200 and logs "hostauth: observe: would refuse … missing credential". The marker plus the credential answers 200 and logs nothing. The runbook omits the marker: the credential alone answers 403 "internal caller required".
   - Step 3 PASS: no "issuer: would refuse" after the boots of the paper, vm-48bc0981 and the fleet on T.
+- 17:04:20. Deploy U pushed as 273d139c9 (CI waiter running). It carries the containment-gaps problem record.
+- 17:05. Owner: "YES to ALL three" (the one-time deletions).
+  - (a) Quarantined images: candidate-fleet-e15cb89f…/data.img.quarantine-1-39ddc7f2… (32 GiB allocated) and …-e3dacdac… (406 MiB), both from 10-07. No process held them open; the fleet VM was running on its live data.img.
+  - candidate-control-20260717-j (July) deleted too. Together these freed 33 GiB, leaving 161 GiB free.
+  - (b) Test computers: vmctl /internal/vmctl/remove (caller fp0-owner-approved-test-computer-removal) answered 200 for computer-1f86c719 (vm-fdcb6a45), computer-7dcdf5e2 (vm-7bb38d0c) and computer-2bd23366 (vm-f2588c7b).
+    - vmctl's retention plan then listed vm-7bb38d0c as an orphan to prune (will_prune, 1.4 GB).
+    - FP0 deleted the other two state dirs by hand. Their mtimes had moved to the removal time, so they did not yet meet the 6 h orphan age.
+    - Free: 165.6 GiB at 17:10.
+  - (c) Nix's store dedupe runs tonight after the kernel deploy and reboot, at idle priority.
+- 17:08. Owner rule, standing: "always investigate these things. we can decide when to act on it, but we should investigate eagerly, as that provides more information, and sometimes leads to bigger discoveries". Recorded for CLAUDE.md's Convergence Before Patching.
+  - First use: the capsule cold start (17 to 18 s from admission to "session worker ready", with no log line in between) is an investigation lane, coldstart (lane/fp4-capsule-coldstart). It adds per-phase timing logs (orange) and explains the other waits in the same window:
+    - an admission wake that waited 13.5 s after a fresh boot;
+    - an initial_dispatch that waited 31 s;
+    - fate-deadline wakes that waited about 1 minute;
+    - a "dispatcher: poison" on management's mailbox at 16:13:35 on 71afbf14.
+- 17:12. Reviews:
+  - FP4 round 4b: DeepSeek sends it back (bunch 69) and Sonnet accepts with edits. Both found the same High: the resume's deferral consumes the fate wake, and the watchdog's re-arm has the same identity, so ON CONFLICT drops it. Some live-saga failure exits never arm at all. Round 4c is with fp4r4c.
+  - ARCH-13 round 7 (bunch 68): flash accepts. DeepSeek accepts with edits; its F1 is required: the workspace-gone Close is fail-closed but outside the fail-closed contract. Sonnet accepts with edits (test gaps; a second Close returns nil beside the leaked engine). This is queued for the worker.
+  - Disk pressure round 2 (bunch 70): DeepSeek accepts with edits, and Sonnet accepts with edits ("would deploy it in observe as it stands"). The edits before `on`:
+    - N1, the floor from the last bytes_after;
+    - N2, the 24 h back-off aliasing with the 24 h timer;
+    - N4, no compaction deadline.
+  - F-c deploy 1 round 1b (bunch 71): DeepSeek accepts with edits. Required: the stamp guard misses elided literals. Round 1c is with evtable1c.
+  - KF round 2 (bunch 66): DeepSeek accepts with edits. Required: the flake reads the floor file without validating it, so an empty or malformed file silently disables the floor. Round 3 is with kf3, due about 18:45.
+  - Capsule memory round 2 (bunch 67): DeepSeek accepts with two low edits (an over-broad CHOIR_ test assertion, and the documented rollback order).
+- 17:09. KF round 3 (lane/fp0-kf-r2 37b5695b8):
+  - The flake now fails evaluation unless nix/kernel-security-floor is exactly MAJOR.MINOR.PATCH, and the reboot script validates both the file and --min-kernel.
+  - The canary plan caps the paper hold at 30 minutes with an unhold on EXIT, requires a hibernate-and-wake on 1.16.2, and names a fallback canary.
+  - FP0's eval: the system drvPath evaluates, assertions [], firecracker 1.16.2. On a scratch copy each of '', ' 6.18.57', 'v6.18.57', '6.18' and a two-line file fails with "must be exactly MAJOR.MINOR.PATCH".
+  - DeepSeek delta is bunch 73; mirror kfr3m (q70).
+- 17:11. Deploy U (273d139c9) has no CI run: GitHub created no workflow runs and no check suites for the push. githubstatus.com reads Actions "degraded_performance". A waiter polls until about 17:26; if no run appears, FP0 dispatches CI on main with force_staging_deploy off, so the normal classification decides the deploy.
+- 17:13. Nix store policy lane (lane/fp0-nix-store-policy dac6a0fc5):
+  - 044693eeb: the record.
+  - 2a0cde15d: the tests.
+  - ddd5a3c07, deploy 1:
+    - retention in observe;
+    - auto-optimise-store;
+    - nix min-free/max-free 24/40 GiB, from 80/100;
+    - a 15-minute host disk alarm (warn at free < 48 GiB or unallocated < 20 GiB);
+    - a dedupe estimator.
+  - 6c9152c4c, deploy 2, after deploy 1: the deploy floor goes from 90 to 48 GiB.
+  - Findings:
+    - The builder/releases/*/out roots are stale; their only writer was deleted 10-12.
+    - A one-time optimise saves only 1 to 5 GiB, because nix.optimise already runs weekly. Tonight's extra run is dropped.
+    - Compression should be the btrfs property on /nix/store only, never the mount option (it would hit VM images) and never defragment -czstd (it unshares reflinks).
+  - FP0's eval at 6c9152c4c: min-free 25769803776, max-free 42949672960, auto-optimise true, the alarm *:0/15, nix-gc env has GO_CHOIR_NIX_RETENTION_MODE=observe, the system evaluates. The three test scripts pass on the Mac.
+  - Reviews: bunch 74 (flash, DeepSeek) and a Sonnet seat. Mirror nixpolm (q71) PASS (5f627e0c4).
+  - FP0 slip: bunch 74's first patch was cut against origin/main after U moved it, so it showed U's changes reversed. It was regenerated against the lane's base f0b1ee313, the runners restarted, and the Sonnet seat corrected.
+- 17:15. Owner: "while we are waiting on ci, what can we do? we can write a bunch of code in advance". Building ahead:
+  - VM: ARCH-13 round 7d (arch13l), disk pressure round 3 (diskp3), capsule memory round 3 (capmem3).
+  - Mac: the FP3 containment-gaps fix (lane/fp3-containment-gaps; it edits .github/workflows, which only the Mac can push), the prompt-bar refusal fix (lane/fp0-prompt-bar-refusal), and an audit of checklist items that can be built now.
+- 17:14. Three investigation lanes finished:
+  - Capsule cold start (lane/fp4-capsule-coldstart 94ad33125: 752192b93 record, 94ad33125 orange timing logs):
+    - Almost all of the 17 to 18 s is one `git cat-file` process per source file: about 3,400 per pass, about 2.1 ms each. Three passes run between admission and ready (the admission preflight, the copy, the copy's digest check through git), and one more at cast time inside management's turn, about 7 s.
+    - One `git cat-file --batch` reads the whole tree in 0.16 s.
+    - The 13.5 s admission wait is management's turn: the first spawn wake goes to management's mailbox.
+    - The "31 s" and "1m4s" waits are measurement artefacts: the wake's creation time is copied from the assignment's open time.
+    - The 16:13:35 poison happens because the dispatcher redelivers a failed handler at once, with no backoff. Eight attempts take about a second, then the update is dead-lettered.
+    - Executor.Spawn holds the executor lock for the whole copy.
+    - Started: coldfix (lane/fp4-capsule-coldfix: batch reads plus no repeated digests; red, source pinning) and backoff (lane/fp4-actor-retry-backoff: retry backoff with jitter, latency from the wake's own creation, the first spawn wake on engineering-admission; red, actor runtime). Review of the timing logs: bunch 77 (DeepSeek).
+  - Platform Dolt (lane/fp0-platform-dolt-oldgen 752856812):
+    - Store A commits DOLT_COMMIT -Am within 45 s of every event append and at each checkpoint step, and nothing reads that history.
+    - PLATFORM_DOLT_SNAPSHOTS=off, read from an optional env file and inert while the file is absent, stops those commits.
+    - The "25 to 35×" rate is probably a misreading: Dolt merges table files once a store holds more than 256, so the 25.7 GB file is likely old history repacked. The 6.2 GB file is unexplained.
+    - Also a squash runbook. Store A is down 10 to 30 min, and the run needs about 136 GiB free until the reflink backup is deleted.
+    - Owner decisions: flip the switch; the squash window.
+    - Reviews: bunch 75 (flash, DeepSeek) and a Sonnet seat.
+  - VM retention (lane/fp0-vm-retention 7430e1f31):
+    - A test-computer idle rule and a quarantine age-out, both off in the active plan and dry-run in the shadow plan.
+    - A removal manifest; images that may be the only copy are kept.
+    - Owner question: register the test accounts in a test_computers list?
+    - Reviews: bunch 76 (flash, DeepSeek) and a Sonnet seat.
+  - Mirrors for all three (q72).
+- 17:23:44. GitHub Actions created U's runs (19 minutes after the push; GitHub was degraded). CI run 39822263499.
+- 17:33:16. Firecracker 1.17 pre-build on Node B (unit fp0-build-firecracker-next, lane/fp0-discard-test ff401aa65) failed only on the vendored crates' hash: specified TR5hi7…, got rqKOD/4c… with the flake's own package set. FP0 slip: the Mac's value came from a different package set, and the comment claimed it was the same on every system. Fixed on the lane as 7d75cba68 (orange); the rebuild waits for Mike's deploy on node-a to finish, capped at 4 cores.
+- 17:35:12. node-a ran out of memory and its OOM killer killed the agents VM (cloud-hypervisor, 10.5 GB anon RSS; microvm@agents "Failed with result 'oom-kill'"); it rebooted at 17:35:45.
+  - Overlap on node-a (31 GiB): the agents VM, Mike's staging deploy (sudo mike-staging deploy-sha at 17:33:42, a buildah container build; the OOM report names cpuset buildah), and Node B's deploy U, whose host build started at 17:35:12. Node B sends its Nix builds to node-a (`ssh-ng://root@node-a-builder`).
+  - Lost: six VM workers (arch13l, backoff, coldfix, evtable1c, fcd2b, fp4r4c) and the mirror queue (q68 to q73). diskp3 had finished at 17:3x.
+  - Mike: its backend restarted at 17:37:36 inside its own deploy. Its containers kept reporting health; FP0 changed nothing on node-a.
+  - Resumed: the six workers at 17:41 in their saved sessions, with a restart note; the owed mirrors as one queue q74 (kfr3m, diskp3m, capmem3m, coldstartm, pdoltm, retentionm) at 17:42.
+  - Open problem (to record): Node B's build offload shares node-a's memory with Mike's staging and the agents VM, and node-a's OOM killer picks the largest process. Options need the owner (node-a stays as is): Node B builds locally, a memory cap on the builder's nix-daemon, an OOM score for the agents VM, or not deploying while Mike deploys.
+- 17:37:47. Deploy U live (staging build 273d139c9).
+  - Deploy log: the deploy ran `.github/scripts/node-b-ci-deploy` as root and ended "Staging deploy complete" (17:36:39); activation receipts name 273d139c9.
+  - 17:40:39. `scripts/node-b-ci-gate-probe ff401aa65… 273d139c9…` as root on Node B from /opt/go-choir (at 273d139c9): 13 PASS, failures=0, exit 0. It includes the single restricted key, one (root) NOPASSWD rule to the gate, the receipt read, five refusals (one the off-main commit), sudo refusing a shell, "no floor file yet; bootstrap marker present", and a real prebuild through the gate. Evidence `_runs/deployU-probe.txt`. The prebuild's disk reclaim deleted 236 store paths (14.8 GiB).
+  - SEC-14 deploy 1 proved. Next: deploy 2 (CI switch, workflow_dispatch), alone.
+- 17:42. Node B free 165.7 GiB. diskp3's projection (90 GiB floor crossed at about 18:50) used older numbers; a 5-minute sampler now records free space, the paper's image and platform-dolt (`_runs/diskrate-20261022.txt`).
+- 17:43. Reviews in:
+  - Bunch 73 (KF round 3 delta, DeepSeek): accept with edits. Five procedure fixes: the trap's unhold had no body (400); the unconditional 30-minute unhold could fall before the refresh selection and hand the paper the untested image; unhold only clears; the trap contradicted holding through a revert; one script message. Note: the fallback canary example vm-4a9afa23 is the owner's computer. FP0 applied all as round 3b, b58b9a43b; delta review bunch 78 (DeepSeek).
+  - Bunch 74 (nix store policy): flash ACCEPT (sequential deploys), DeepSeek and Sonnet accept with edits. Sonnet F1 (medium): observe mode deletes generations 1 to 4 where `nix-env --delete-generations +4` deletes only 1 after a manual rollback, reproduced with real nix-env. F2 (medium): the floor-after-min-free order is enforced only by people. Round 2 to the nixpol worker (17:46).
+  - Bunch 76 (VM retention): DeepSeek send back (a paper-named quarantine with no owner is will_remove; phase drift), flash accept with edits. Sonnet seat still running.
+  - Bunch 77 (coldstart timing logs): DeepSeek accept with edits. The logs are safe to land as orange. The record's admission-wait hypothesis is wrong: `waited` runs from the actor update's creation, after the open, so the cast preflight cannot be in it. Also a nonexistent symbol name and a test the stated command does not select.
+  - Audit of buildable-ahead items (Sonnet): top by value over size are gateway request-body caps (orange, S), DAMON reclaim reporting (orange, S), SEC-10 DNS wiring (red, S), Obscura removal (an unpushed local commit c2da85986), and jailer activation on test computers (red config plus proof, after KF).
+- 17:49. Deploy V staged: SEC-14 deploy 2 (85098d62b tests, b549daeae the CI switch) on 273d139c9, hunks identical to lane/fp10-sec14-on-g c6c1ed35f and 6b0f843a7. The contract test passes on the Mac; the gate test needs Linux flock (it passed in U's CI). The only Node B reaches left in ci.yml are the receipt, the prebuild and the deploy request, all as choir-deploy. With it, the node-a OOM record. A .github-only push selects no deploy; FP0 then dispatches the deploy.
