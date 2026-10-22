@@ -324,3 +324,55 @@ func readTrim(p string) string {
 	}
 	return strings.TrimSpace(string(b))
 }
+
+// kernelVersionRE finds the version in a NixOS kernel store name:
+// <hash>-linux-6.18.37, <hash>-linux-hardened-6.12.9, <hash>-linux-6.18.37-modules.
+var kernelVersionRE = regexp.MustCompile(`-linux(?:-[a-z]+)*-([0-9]+\.[0-9]+(?:\.[0-9]+)?(?:-rc[0-9]+)?)(?:[-/]|$)`)
+
+// KernelVersion is the kernel version named by a store path, or "" when the
+// path names none.
+func KernelVersion(path string) string {
+	if m := kernelVersionRE.FindStringSubmatch(path); m != nil {
+		return m[1]
+	}
+	return ""
+}
+
+// LogLine is the state as one journal line: the alarm a host writes without
+// anyone asking (docs/problems/host-kernel-216-days-unpatched-2026-10-15.md,
+// 2026-10-22). A pending reboot starts with WARNING, an overdue one says
+// OVERDUE.
+func (s State) LogLine() string {
+	if !s.Available {
+		return "host boot state unavailable: " + s.Error
+	}
+	orUnknown := func(v string) string {
+		if v == "" {
+			return "unknown"
+		}
+		return v
+	}
+	head := "host boot state: booted is activated"
+	if s.RebootPending {
+		head = "WARNING host reboot pending: booted system older than the activated one"
+		if s.PendingOverdue {
+			head = "WARNING host reboot pending, OVERDUE (over 7 days): booted system older than the activated one"
+		}
+	}
+	fields := []string{
+		head,
+		"booted_system=" + orUnknown(s.BootedSystem),
+		"current_system=" + orUnknown(s.CurrentSystem),
+		"booted_kernel=" + orUnknown(KernelVersion(s.BootedKernel)),
+		"current_kernel=" + orUnknown(KernelVersion(s.CurrentKernel)),
+		"running_kernel=" + orUnknown(s.RunningKernelRelease),
+		"booted_at=" + orUnknown(s.BootedAt),
+	}
+	if s.RebootPending {
+		fields = append(fields,
+			"reasons="+strings.Join(s.Reasons, ","),
+			"pending_since="+orUnknown(s.PendingSince),
+			"overdue="+strconv.FormatBool(s.PendingOverdue))
+	}
+	return strings.Join(fields, " ")
+}

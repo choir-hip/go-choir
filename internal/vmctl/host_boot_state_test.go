@@ -1,12 +1,16 @@
 package vmctl
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/hostboot"
 )
@@ -74,5 +78,40 @@ func TestHostBootStateRoute(t *testing.T) {
 	h.HandleHostBootState(rec, httptest.NewRequest(http.MethodPost, HostBootStatePath, nil))
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("POST: %d, want 405", rec.Code)
+	}
+}
+
+// The boot-state journal line is written at start, again every interval, and
+// never after the context ends: the lag shows in the journal without anyone
+// calling the route (docs/problems/host-kernel-216-days-unpatched-2026-10-15.md,
+// 2026-10-22).
+func TestHostBootStateLogAtStartAndOnInterval(t *testing.T) {
+	prev := hostBootRoot
+	hostBootRoot = t.TempDir()
+	t.Cleanup(func() { hostBootRoot = prev })
+
+	lines := make(chan string, 16)
+	logf := func(format string, args ...any) { lines <- fmt.Sprintf(format, args...) }
+	ctx, cancel := context.WithCancel(context.Background())
+	StartHostBootStateLog(ctx, 20*time.Millisecond, logf)
+
+	for i := 0; i < 2; i++ {
+		select {
+		case line := <-lines:
+			if !strings.HasPrefix(line, "vmctl: host boot state unavailable: booted system unreadable") {
+				t.Fatalf("line %d = %q", i, line)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("line %d never written", i)
+		}
+	}
+	cancel()
+	time.Sleep(50 * time.Millisecond)
+	for len(lines) > 0 {
+		<-lines
+	}
+	time.Sleep(60 * time.Millisecond)
+	if len(lines) != 0 {
+		t.Fatalf("logged after cancel: %q", <-lines)
 	}
 }

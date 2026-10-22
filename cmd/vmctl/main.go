@@ -264,6 +264,9 @@ func main() {
 		handler.StartDeployRefreshRetry(context.Background(), vmctl.DeployRefreshRetryInterval)
 		log.Printf("vmctl: deploy refresh retry every %s (pending=%q)", vmctl.DeployRefreshRetryInterval, pendingPath)
 	}
+	// The booted-vs-activated kernel lag goes to the journal at start and
+	// daily (docs/problems/host-kernel-216-days-unpatched-2026-10-15.md).
+	vmctl.StartHostBootStateLog(context.Background(), vmctl.HostBootStateLogInterval, log.Printf)
 	// The pressure monitor samples host pressure and VM memory; under the
 	// sustained signal it also runs the gated reclaim. Off with reclaim off.
 	registry.StartPressureMonitor(context.Background(), handler.AuthorizeComputerVersionRoute)
