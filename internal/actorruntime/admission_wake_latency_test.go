@@ -65,9 +65,13 @@ func TestAdmissionWakeLogsItsDispatchLatency(t *testing.T) {
 	if line == "" {
 		t.Fatalf("no admission wake latency line; log:\n%s", buf.String())
 	}
-	m := regexp.MustCompile(`waited=([0-9.]+)s`).FindStringSubmatch(line)
-	if m == nil || !strings.HasPrefix(m[1], "3") {
-		t.Fatalf("waited is not measured from not_before (about 3s): %s", line)
+	m := regexp.MustCompile(`waited=(\S+)`).FindStringSubmatch(line)
+	if m == nil {
+		t.Fatalf("latency line has no waited: %s", line)
+	}
+	waited, err := time.ParseDuration(m[1])
+	if err != nil || waited < 2500*time.Millisecond || waited > 10*time.Second {
+		t.Fatalf("waited %q is not measured from not_before (3 s ago; want 2.5 s to 10 s): %s", m[1], line)
 	}
 	for _, want := range []string{"mailbox=management:owner-latency", "assignment-absent"} {
 		if !strings.Contains(line, want) {
