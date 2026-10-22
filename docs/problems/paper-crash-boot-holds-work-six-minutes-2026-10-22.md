@@ -708,3 +708,8 @@ Fix: both saves in `main`'s `BaseException` path are best effort. A save
 that fails is logged, the clear still runs, and the original exception is
 re-raised. Nit: the runbook's "lands 1200 s after the reboot request"
 becomes "at least 1200 s" (`t0` is taken after the reboot ssh returns).
+
+Round 8 landed on the lane: `try_save` wraps both saves, and the clear
+runs between them. A new test (fails on fa40b3884) makes every receipt
+write raise after the mark and expects one unmark and the original
+exception; 77 tests pass. The runbook says "at least 1200 s".
