@@ -42,6 +42,10 @@ type Service struct {
 	// explicit projection-base pins only. It must never be writeMu: a sweep
 	// lasts minutes and would block credential issuance and VM boots.
 	artifactGCMu sync.Mutex
+	// artifactGCLogMu serializes GC-log rotation. It is deliberately not
+	// artifactGCMu: compressing a large log takes minutes and that lock also
+	// serializes projection-base pins.
+	artifactGCLogMu sync.Mutex
 	// artifactGCPolicy is the configured GC policy; the on-demand endpoint
 	// may narrow it but never exceed it.
 	artifactGCPolicyMu sync.Mutex
