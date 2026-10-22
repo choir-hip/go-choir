@@ -3,6 +3,7 @@ package gateway
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -302,12 +303,14 @@ func TestBodyCapsEnvOverridesAndHealth(t *testing.T) {
 		wantModel    int64
 		refuse128K   bool
 	}{
-		{mode: "", limits: "", wantMode: "enforce", wantModel: 64 << 20},
+		// F3 (bunch 88): 20 images at the 5 MiB downscale bound, as base64,
+		// plus a full context is about 150 MiB.
+		{mode: "", limits: "", wantMode: "enforce", wantModel: 160 << 20},
 		{mode: "bogus", limits: "model=64KiB", wantMode: "enforce", wantModel: 64 << 10, refuse128K: true},
 		{mode: "enforce", limits: "model=64KiB", wantMode: "enforce", wantModel: 64 << 10, refuse128K: true},
 		{mode: "enforce", limits: "model=1048576", wantMode: "enforce", wantModel: 1 << 20},
 		// An unreadable override keeps the default and is logged.
-		{mode: "enforce", limits: "model=lots,search=-1", wantMode: "enforce", wantModel: 64 << 20},
+		{mode: "enforce", limits: "model=lots,search=-1", wantMode: "enforce", wantModel: 160 << 20},
 	}
 	for _, tc := range cases {
 		t.Run(fmt.Sprintf("mode=%q limits=%q", tc.mode, tc.limits), func(t *testing.T) {
@@ -379,5 +382,159 @@ func TestModelSchedulerQueuedCallReadsNoBody(t *testing.T) {
 				t.Fatalf("the queued %s call = %d %s, want 200", route, rec.Code, rec.Body.String())
 			}
 		})
+	}
+}
+
+// --- review round (bunch 88): F1 aggregate bound, F2/F4 body read deadline ---
+
+// bodyServer serves h's inference route on a real listener with the given
+// server read timeout, so read deadlines behave as they do in production.
+func bodyServer(t *testing.T, serve http.HandlerFunc, readTimeout time.Duration) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewUnstartedServer(serve)
+	srv.Config.ReadTimeout = readTimeout
+	srv.Start()
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+type postResult struct {
+	code       int
+	retryAfter string
+	body       string
+	err        error
+}
+
+func postAsync(url, token string, body io.Reader) chan postResult {
+	out := make(chan postResult, 1)
+	go func() {
+		req, _ := http.NewRequest(http.MethodPost, url, body)
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := (&http.Client{Timeout: 5 * time.Second}).Do(req)
+		if err != nil {
+			out <- postResult{err: err}
+			return
+		}
+		b, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		out <- postResult{code: resp.StatusCode, retryAfter: resp.Header.Get("Retry-After"), body: string(b)}
+	}()
+	return out
+}
+
+// F2: a call that waited in the queue longer than the server's read
+// timeout still reads its body: the body's deadline starts when the slot
+// is granted. Fails on 02010a2e0: the read hits the server's absolute
+// deadline and the handler answers 400.
+func TestBodyCapsQueuedCallReadsItsBodyAfterTheServerReadTimeout(t *testing.T) {
+	t.Setenv("GATEWAY_BODY_CAPS", "enforce")
+	t.Setenv("GATEWAY_BODY_LIMITS", "")
+	s := newTestScheduler(1, 1, 16, time.Minute)
+	h, reg := schedulerHandler(t, &mockProvider{name: "bedrock", real: true, response: &provider.LLMResponse{ID: "r", Text: "ok", Model: "m", StopReason: "end_turn"}}, nil, s)
+	cred, _ := reg.IssueCredential("computer-late")
+	srv := bodyServer(t, h.HandleInference, 300*time.Millisecond)
+	hold := mustAcquire(t, s, "computer-late")
+
+	pr, pw := io.Pipe()
+	res := postAsync(srv.URL+"/provider/v1/inference", cred.RawToken, pr)
+	waitUntil(t, "the call to queue", func() bool { return s.Stats().Queued == 1 })
+	time.Sleep(600 * time.Millisecond) // past the server's read timeout
+	hold()
+	go func() {
+		_, _ = pw.Write([]byte(`{"messages":[{"role":"user","content":[{"type":"text","text":"hi"}]}]}`))
+		_ = pw.Close()
+	}()
+	r := <-res
+	if r.err != nil || r.code != http.StatusOK {
+		t.Fatalf("a call granted after the server read timeout = %d %q (%v), want 200", r.code, r.body, r.err)
+	}
+}
+
+// F4: a body trickled after the slot is granted is cut at the body read
+// deadline and answered with a status the guest retries; the slot is
+// freed. Fails on 02010a2e0: the slot is held until the server's read
+// timeout (here longer than the client waits).
+func TestBodyCapsTrickledBodyIsCutAtTheBodyReadDeadline(t *testing.T) {
+	t.Setenv("GATEWAY_BODY_CAPS", "enforce")
+	t.Setenv("GATEWAY_BODY_LIMITS", "")
+	t.Setenv("GATEWAY_BODY_READ_TIMEOUT", "300ms")
+	s := newTestScheduler(1, 1, 16, time.Minute)
+	h, reg := schedulerHandler(t, &mockProvider{name: "bedrock", real: true, response: &provider.LLMResponse{ID: "r", Text: "ok", Model: "m", StopReason: "end_turn"}}, nil, s)
+	cred, _ := reg.IssueCredential("computer-trickle")
+	srv := bodyServer(t, h.HandleInference, 30*time.Second)
+
+	pr, pw := io.Pipe()
+	defer pw.Close()
+	// The client cannot give up while its body write is blocked, so the
+	// test ends the body itself after 4 s.
+	giveUp := time.AfterFunc(4*time.Second, func() { _ = pw.CloseWithError(errors.New("test gave up")) })
+	defer giveUp.Stop()
+	res := postAsync(srv.URL+"/provider/v1/inference", cred.RawToken, pr)
+	_, _ = pw.Write([]byte(`{"messages":`)) // then nothing
+	r := <-res
+	if r.err != nil || !giveUp.Stop() {
+		t.Fatalf("a trickled body was not answered within 4 s: %d %q (%v)", r.code, r.body, r.err)
+	}
+	if r.code != http.StatusServiceUnavailable || r.retryAfter == "" {
+		t.Fatalf("a trickled body = %d (Retry-After %q) %q, want 503 with Retry-After (transient to the guest)", r.code, r.retryAfter, r.body)
+	}
+	waitUntil(t, "the slot to free", func() bool { return s.Stats().InFlight == 0 })
+}
+
+// F1: with the scheduler off, the total bytes of bodies in flight are
+// bounded process-wide, in observe mode too. A body that does not fit
+// waits, then is answered 429 with Retry-After, unread. Fails on
+// 02010a2e0: the in_flight limit is unknown and the second body is read
+// and reaches the provider.
+func TestBodyCapsBoundTheBytesInFlightWithTheSchedulerOff(t *testing.T) {
+	t.Setenv("GATEWAY_BODY_CAPS", "observe")
+	t.Setenv("GATEWAY_BODY_LIMITS", "model=64KiB,model_ceiling=256KiB,in_flight=256KiB")
+	t.Setenv("GATEWAY_BODY_READ_TIMEOUT", "300ms")
+	gp := &gateProvider{name: "bedrock", gate: make(chan struct{})}
+	h, reg := schedulerHandler(t, gp, nil, nil)
+	defer close(gp.gate)
+
+	first := make(chan int, 1)
+	go func() { first <- inferWithBody(t, h, reg, "computer-a", largeInferenceBody(t, 200<<10)).Code }()
+	waitUntil(t, "the first call to reach the provider", func() bool { return gp.calls.Load() == 1 })
+
+	cred, _ := reg.IssueCredential("computer-b")
+	body := &countingBody{r: bytes.NewReader(largeInferenceBody(t, 200<<10))}
+	req := httptest.NewRequest(http.MethodPost, "/provider/v1/inference", body)
+	req.ContentLength = int64(len(largeInferenceBody(t, 200<<10)))
+	req.Header.Set("Authorization", "Bearer "+cred.RawToken)
+	rec := httptest.NewRecorder()
+	second := make(chan struct{})
+	go func() { h.HandleInference(rec, req); close(second) }()
+	select {
+	case <-second:
+	case <-time.After(3 * time.Second):
+		t.Fatalf("the second 200 KiB body was taken in while the first held 200 of 256 KiB (provider calls %d)", gp.calls.Load())
+	}
+	if rec.Code != http.StatusTooManyRequests || rec.Header().Get("Retry-After") == "" {
+		t.Fatalf("a body over the bytes in flight = %d (Retry-After %q) %s, want 429 with Retry-After", rec.Code, rec.Header().Get("Retry-After"), rec.Body.String())
+	}
+	if n := body.read.Load(); n != 0 {
+		t.Fatalf("the refused body was read: %d bytes", n)
+	}
+	caps := bodyCapsHealth(t, h)
+	if got := healthNumber(t, caps, "limits", "in_flight"); got != 256<<10 {
+		t.Fatalf("body_caps.limits.in_flight = %d, want %d", got, 256<<10)
+	}
+	if got := healthNumber(t, caps, "refused", "in_flight"); got != 1 {
+		t.Fatalf("body_caps.refused.in_flight = %d, want 1", got)
+	}
+
+	// The first call's bytes are given back when it ends.
+	releaseOne(t, gp)
+	if code := <-first; code != http.StatusOK {
+		t.Fatalf("the first call = %d, want 200", code)
+	}
+	third := make(chan int, 1)
+	go func() { third <- inferWithBody(t, h, reg, "computer-b", largeInferenceBody(t, 200<<10)).Code }()
+	releaseOne(t, gp)
+	if code := <-third; code != http.StatusOK {
+		t.Fatalf("a call after the first ended = %d, want 200", code)
 	}
 }
