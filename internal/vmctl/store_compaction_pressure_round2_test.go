@@ -184,7 +184,7 @@ func TestCompactSweepFailsLoudlyBelowFloor(t *testing.T) {
 
 // Finding 4: low host free space alone does not restart a computer whose
 // image is too small to give much back.
-func TestPressureDueNeedsMinimumImage(t *testing.T) {
+func TestStoreCompactPressureDueNeedsMinimumImage(t *testing.T) {
 	cfg := pressureConfig(StoreCompactPressureOn)
 	small := &dataImageResponse{FileBytes: 20 << 30, CapBytes: 125 << 30}
 	big := &dataImageResponse{FileBytes: 40 << 30, CapBytes: 125 << 30}
@@ -196,7 +196,9 @@ func TestPressureDueNeedsMinimumImage(t *testing.T) {
 	}
 }
 
-// Finding 4: a compaction that gave back little backs the next one off.
+// Finding 4, revised in round 3 (N2): a compaction that gave back little
+// backs the pressure loop off until the image has regrown, not for a span
+// of wall-clock time that could alias with the daily timer.
 func TestStoreCompactPressureBacksOffAfterSmallReclaim(t *testing.T) {
 	h, _, _, compactor := pressureFixture(t, "paper-backoff", 80, 72)
 	var calls atomic.Int32
@@ -213,18 +215,26 @@ func TestStoreCompactPressureBacksOffAfterSmallReclaim(t *testing.T) {
 	if d := h.storeCompactPressureTick(context.Background(), t0); len(d) != 1 || d[0].Action != pressureActionCompact {
 		t.Fatalf("first = %+v", d)
 	}
-	d := h.storeCompactPressureTick(context.Background(), t0.Add(7*time.Hour))
-	if len(d) != 1 || d[0].Action != pressureActionRateLimited || !strings.Contains(d[0].Reason, "reclaimed 4.0 GiB") {
-		t.Fatalf("after a small reclaim = %+v, want backed off", d)
+	// The image (80 GiB) has not regrown 8 GiB past the 76 GiB the
+	// compaction left: backed off, however long it has been.
+	for _, after := range []time.Duration{7 * time.Hour, 25 * time.Hour, 49 * time.Hour} {
+		d := h.storeCompactPressureTick(context.Background(), t0.Add(after))
+		if len(d) != 1 || d[0].Action != pressureActionRateLimited || !strings.Contains(d[0].Reason, "reclaimed 4.0 GiB") {
+			t.Fatalf("+%s after a small reclaim = %+v, want backed off", after, d)
+		}
 	}
-	if d := h.storeCompactPressureTick(context.Background(), t0.Add(25*time.Hour)); len(d) != 1 || d[0].Action != pressureActionCompact || len(compactor.calls) != 2 {
-		t.Fatalf("after the back-off = %+v", d)
+	// Regrown to 85 GiB (9 GiB past 76): due again.
+	h.dataImageStatsFor = func(string) (DataImageStats, bool) {
+		return DataImageStats{FileBytes: 85 << 30, CapBytes: 125 << 30}, true
+	}
+	if d := h.storeCompactPressureTick(context.Background(), t0.Add(7*time.Hour)); len(d) != 1 || d[0].Action != pressureActionCompact || len(compactor.calls) != 2 {
+		t.Fatalf("after regrowth = %+v", d)
 	}
 }
 
 // Mutant M8: the attempt is kept in memory even when its write fails inside
 // the hook (the VM is already down; the compaction proceeds).
-func TestAttemptKeptInMemoryWhenHookWriteFails(t *testing.T) {
+func TestStoreCompactAttemptKeptInMemoryWhenHookWriteFails(t *testing.T) {
 	h, _, _, compactor := pressureFixture(t, "paper-m8", 80, 72)
 	path := filepath.Join(t.TempDir(), "store-compact-attempts.json")
 	if err := h.SetStoreCompactPressure(pressureConfig(StoreCompactPressureOn), path); err != nil {
@@ -248,7 +258,7 @@ func TestAttemptKeptInMemoryWhenHookWriteFails(t *testing.T) {
 
 // Mutant M9d: a compaction that fails still counts as an attempt, and the
 // log names its error.
-func TestFailedCompactionStillCountsAsAttempt(t *testing.T) {
+func TestStoreCompactFailedCompactionStillCountsAsAttempt(t *testing.T) {
 	h, _, _, compactor := pressureFixture(t, "paper-m9", 80, 72)
 	compactor.err = errors.New("projection-compact: refused")
 	if err := h.SetStoreCompactPressure(pressureConfig(StoreCompactPressureOn), ""); err != nil {
@@ -290,7 +300,7 @@ func TestStoreCompactionStateFromEnvReadsStatfs(t *testing.T) {
 
 // Mutant M13: observe never records an attempt; turning the trigger on
 // afterwards compacts at once.
-func TestObserveNeverRecordsAnAttempt(t *testing.T) {
+func TestStoreCompactObserveNeverRecordsAnAttempt(t *testing.T) {
 	h, _, _, compactor := pressureFixture(t, "paper-m13", 80, 72)
 	path := filepath.Join(t.TempDir(), "store-compact-attempts.json")
 	if err := h.SetStoreCompactPressure(pressureConfig(StoreCompactPressureObserve), path); err != nil {
