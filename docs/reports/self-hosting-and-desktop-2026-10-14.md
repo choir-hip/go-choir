@@ -93,8 +93,11 @@ From reading `flake.nix`, `nix/*.nix` and `.github/workflows/ci.yml`:
   change it to `kvm-amd`. Node B today is a Xeon E-2236 (6 cores, 12
   threads) ([vm-density-limits-2026-10-14.md](vm-density-limits-2026-10-14.md) §4).
   The `hardware.nix` comment saying "E-2136 / 32GB" is stale.
-- **Memory:** guests are 4 CPU / 8 GiB interactive and 2 CPU / 4 GiB
-  default (`nix/node-b.nix` vmctl env). A 4 GiB guest thrashed on a
+- **Memory:** guests are 4 CPU / 8 GiB interactive on Node B
+  (`VM_INTERACTIVE_CPU_COUNT=4`, `VM_INTERACTIVE_MEM_MIB=8192` in
+  `nix/node-b.nix`; the code defaults are 2 CPU / 2 GiB,
+  `internal/vmctl/ownership.go`) and 2 CPU / 4 GiB platform
+  (`platformVMMemSizeMib`, no override). A 4 GiB guest thrashed on a
   compacted owner store. vmctl reserves `MemoryLow=14G` for guests. A
   realistic floor for one owner and the shared paper computer is about
   32 GB of RAM.

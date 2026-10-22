@@ -522,7 +522,7 @@ use NAT plus vsock.
 |---|---|---|
 | macOS plus the user's apps | 6–8 GB | — |
 | Host sidecars (Dolt about 0.3–0.5 GB; Go services about 50–150 MB each) | about 1 GB | platform Dolt and artifacts: grows with use |
-| One computer guest | 4 GiB by default; 6 GiB is safer (a 4 GiB guest thrashed on a compacted owner store) | data.img 5–8 GiB; shared erofs store; a snapshot equal to memory if save/restore is used |
+| One computer guest | 4 GiB is a platform computer's size and thrashed on a compacted owner store, so 6 GiB is safer (Node B's interactive guests are 8 GiB; the code default is 2 GiB) | data.img 5–8 GiB; shared erofs store; a snapshot equal to memory if save/restore is used |
 | A local 8B model | about 5–6 GB | about 5 GB |
 
 - **A 16 GB Mac** (the base MacBook Air since late 2024) runs one computer
