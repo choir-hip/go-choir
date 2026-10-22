@@ -1444,7 +1444,10 @@ in
         # global flip is the image line, behind the gate in
         # docs/problems/egress-proxy-tunnel-identity-2026-10-21.md. A named
         # computer cold boots once (boot arguments are in the launch-config
-        # hash). Rollback: empty the list and redeploy.
+        # hash). Name computer ids only (a class: token misses the platform
+        # computer's boot and the resume config). Rollback for a named
+        # computer: empty the list and redeploy (it cold boots into
+        # observe); the image line set to off does not override it.
         "VM_CAPSULE_TUNNEL_ENFORCE_ONLY="
         # Data drive discard (VM_DATA_DISCARD=1) is deliberately NOT set: the
         # pinned Firecracker is 1.16.1, which has no virtio-blk discard

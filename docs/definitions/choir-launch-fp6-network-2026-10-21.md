@@ -399,8 +399,9 @@ enforce runs on one selected test computer in the same deploy. Commits on
 red, ceremony in its message), then the docs commit with this section.
 
 - **Selector:** vmctl's `VM_CAPSULE_TUNNEL_ENFORCE_ONLY`
-  (`internal/vmmanager/capsule_tunnel_identity.go`, `computer_select.go`
-  tokens). It writes the boot argument
+  (`internal/vmmanager/capsule_tunnel_identity.go`). Name computer ids only:
+  a `class:` token misses the platform computer's boot and the resume
+  config. It writes the boot argument
   `choir.capsule_egress_tunnel_identity=enforce`. The guest boot script
   copies only that exact value into the daemon's environment file, which
   overrides the image's `observe`. `nix/node-b.nix` sets the list empty; FP0

@@ -138,9 +138,8 @@ the slice as follows. Commits: `824a3f09e` (tests, yellow), `e97b1b0db`
 (code, red, ceremony in its message), then the docs commit with this section.
 
 **Per-computer enforce.** vmctl's `VM_CAPSULE_TUNNEL_ENFORCE_ONLY`
-(`internal/vmmanager/capsule_tunnel_identity.go`; the same
-`computer_select.go` tokens as `VM_GUEST_RECLAIM_ONLY`: VM id, computer id,
-`class:<class>`, `*`) puts the kernel boot argument
+(`internal/vmmanager/capsule_tunnel_identity.go`) takes a list of computer
+ids and puts the kernel boot argument
 `choir.capsule_egress_tunnel_identity=enforce` on the launch of each computer
 it names. The guest boot script in `nix/autoputer-vm.nix` copies only that
 exact value into `/run/go-choir-autoputer.env`, and that environment file
@@ -148,7 +147,14 @@ overrides the unit's `observe`. No guest process or capsule can set its own
 boot arguments. Boot arguments are part of the launch-config hash, so a
 newly named computer cold boots once; the boot arguments of computers not
 named stay byte-identical. `nix/node-b.nix` sets the list empty; FP0 names one
-test computer at landing. Rollback: empty the list and redeploy.
+test computer at landing. Name computer ids only. The shared selector
+(`computer_select.go`) also takes `class:<class>`, but a `class:` token
+misses the platform computer's boot and the resume config, which never set
+the warmness class. `*` is the global flip, which goes through the gate below
+instead. Rollback: empty the list and redeploy. The named computer's launch
+config hash moves back, so it cold boots into observe
+(`TestCapsuleTunnelEnforceSelectionRefusesAnObserveSnapshot` pins the hash
+link).
 
 **Other edits.** The name comparison lowercases ASCII only (it was
 `strings.EqualFold`; Unicode folding matched `ſ.github.com` to
@@ -227,8 +233,13 @@ GREASE ECH from it would end every delegate session under enforce. Do not
 select the Claude delegate's allowlisted computer for enforce before (c)
 holds.
 
-Rollback at any stage: empty the selector; set `off` (or `observe`) in the
-image line and deploy; `git revert e97b1b0db` removes the selector and this
+Rollback at any stage. For a named computer, the deterministic rollback is
+emptying the selector (or removing its id) and redeploying. Its launch config
+hash changes, so it cold boots without the boot argument and runs the image's
+mode. Setting the image line to `off` is not enough there: the boot script's
+environment file overrides the unit's `Environment=`, so a computer that is
+still named stays in enforce. For every other computer, set `off` (or
+`observe`) in the image line and deploy. Also: `git revert e97b1b0db` removes the selector and this
 round's edits; `git revert e0efea302` returns to enforce everywhere;
 reverting `e20c92b6c` as well removes the check. SEC-06's plain CONNECT
 variant counts as repaired only where enforce runs: on the selected computer
