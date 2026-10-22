@@ -132,6 +132,10 @@ type Runtime struct {
 	// assignmentSagas holds one mutex per assignment attempt for its terminal
 	// report's drivers (assignmentSagaMutex).
 	assignmentSagas sync.Map
+	// fateRedriveFailures counts, per assignment attempt, the fate wake's
+	// failed re-drives since the last success in this process
+	// (resumeStrandedFateAssignmentIfPending).
+	fateRedriveFailures sync.Map
 	// productAPISrv is the canonical product API route table the management
 	// desk's choir.ProductAPI verb serves through (SMG). Bound at autoputer
 	// boot via SetProductAPIHandler; nil in tests that never call the verb.

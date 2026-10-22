@@ -301,9 +301,11 @@ func (h *actorHandler) handleAssignedEngineeringFateDeadline(ctx context.Context
 		fateDeadline = h.rt.HandleAssignedEngineeringFateDeadline
 	}
 	if err := fateDeadline(ctx, ownerID, computerID, agentID, u.Content); err != nil {
-		if errors.Is(err, agentcore.ErrAssignmentSagaHeld) {
-			// The live saga holds the assignment: re-deliver this wake with
-			// backoff, never consume it (review round 4c).
+		if errors.Is(err, agentcore.ErrAssignmentSagaHeld) || errors.Is(err, agentcore.ErrFateRedriveRetry) {
+			// The live saga holds the assignment (review round 4c), or the
+			// re-drive failed and will be retried until it cancels the
+			// assignment (review bunch 92, M1): re-deliver this wake with
+			// backoff, never consume it, and keep it out of MaxAttempts.
 			return nil, fmt.Errorf("%w: %v", actor.ErrDeferUnprocessed, err)
 		}
 		return nil, fmt.Errorf("actorruntime: assigned Engineering fate deadline: %w", err)
