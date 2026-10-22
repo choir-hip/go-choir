@@ -80,3 +80,80 @@ credential alone the route answers 403 "internal caller required".
    each), or narrow the verifier to the units cut 2 covers and record the
    four as a residual with a reason.
 3. Correct FP3's runbook step 2 to send the marker with the credential.
+
+## Addendum: more of the same class, found while fixing 1 and 2 (2026-10-22, before any fix)
+
+Found by the lane worker on lane/fp3-containment-gaps (base 273d139c9),
+reading code and the evaluated host configuration
+(`nix eval .#nixosConfigurations.go-choir-b.config.systemd.services`). None
+of these was observed on Node B; each is confirmed in code and stays a
+hypothesis about the live host until FP0's probe.
+
+### 3. The gateway replaces two hidden files by rename itself
+
+`hostSecretPaths` hides `gateway-identities.json` and `codex-auth.json` as
+files from every unit but the gateway. The gateway rewrites both by rename:
+
+- `IdentityRegistry.persistLocked` (internal/gateway/config.go:248-266)
+  writes `gateway-identities.json.tmp` and renames it over the store on
+  every credential issue, rotation and revocation, so on most computer
+  boots. The file holds SHA-256 hashes of bearer tokens and their pinned
+  addresses.
+- `ChatGPTAuth.write` (internal/provider/provider.go:3003-3033) creates a
+  temp file beside `codex-auth.json` and renames it over the file on every
+  ChatGPT token refresh. The file holds the owner's ChatGPT OAuth tokens,
+  refresh token included.
+
+By problem 1's mechanism, after the gateway's first such write following a
+unit's start, that unit sees the new file until its next restart. Every
+go-choir unit runs as uid 0 without capabilities, and a 0600 root file is
+readable by its owner, so the proxy, auth, maild, corpusd, vmctl and both
+Dolt servers could read the owner's ChatGPT tokens. vmctl (which can write
+`/var/lib/go-choir`) could also rewrite the identity store. The verifier
+does not check either path, so deploy T's proof could not see it.
+
+Probe (FP0, Node B, root; prints inode and mode, never content):
+
+```
+for f in codex-auth.json gateway-identities.json; do
+  echo "host $(stat -c '%i %a' /var/lib/go-choir/$f)"
+  for u in go-choir-proxy go-choir-vmctl go-choir-corpusd; do
+    pid=$(systemctl show -p MainPID --value $u)
+    echo "$u $(nsenter -t $pid -m -- stat -c '%i %a' /var/lib/go-choir/$f 2>&1)"
+  done
+done
+```
+
+A unit line showing the host's inode means that unit can read the file.
+
+### 4. corpusd-retrieval.env can be planted for corpusd's next start
+
+corpusd reads `/var/lib/go-choir/corpusd-retrieval.env` through
+`EnvironmentFile=` (the retrieval and opinion kill switch). The file is
+normally absent and is not hidden from any unit. go-choir-gateway and
+go-choir-vmctl have `/var/lib/go-choir` writable (`ReadWritePaths`) as
+uid 0, so either can create it, and corpusd takes it at its next start. An
+EnvironmentFile overrides `Environment=`, so the file can set any corpusd
+variable, `CHOIR_OWNER_ACT_MODE` and `CORPUSD_DOLT_DSN` among them. The same
+holds for every hidden file that is absent when a unit starts: the "-"
+prefix skips an absent path, so nothing is mounted over it, and a file
+created later is visible to the unit (and, if the unit can write
+`/var/lib/go-choir`, creatable by it).
+
+### 5. Two long-running host units are outside the verifier and hide nothing
+
+go-choir-pkgmirror (NET-02; guests reach it on their tap at 8089) and
+unbound (the guests' resolver from FP3 cut 1; guests reach it on 53) have
+no `InaccessiblePaths` and are not in the verifier's `UNITS`. The oneshot
+searx-init (it renders searx's settings) has none either. These are the
+host services most exposed to guests.
+
+### Exposure of problem 2's units
+
+caddy runs as the user caddy; go-choir-goproxy, go-choir-pkgmirror, qdrant
+and searx as dynamic users; unbound as unbound. None is root. PID 1 refuses
+a connection on its private socket from a peer that is not root, polkit is
+off on Node B, and `/var/lib/go-choir` is 0750 root, so these units could
+not use what the verifier saw (it stats as root inside the namespace). The
+system bus is still reachable to them. Hiding stays the floor for every
+host unit, but problem 2 is a defense-in-depth gap, not an open path.
