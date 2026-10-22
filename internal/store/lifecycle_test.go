@@ -312,7 +312,7 @@ func TestUpdateRunWithEventFoldsEventIntoProjectionBatch(t *testing.T) {
 		t.Fatalf("run state = %s, want completed", got.State)
 	}
 	// The choir.event landed in the same commit.
-	events, err := s.ListEventsOG(ctx, run.RunID, 10)
+	events, err := s.ListEventsAfter(ctx, run.RunID, 0, 10)
 	if err != nil {
 		t.Fatalf("list events: %v", err)
 	}
@@ -321,6 +321,11 @@ func TestUpdateRunWithEventFoldsEventIntoProjectionBatch(t *testing.T) {
 		if e.EventID == "ev-fold-1" && e.Kind == types.EventRunCompleted {
 			found = true
 		}
+	}
+	// F8 (event-table design): the fold's event stays in og_objects, where
+	// its absent-condition reads.
+	if n := tableCount(t, s, "choir_events", ""); n != 0 {
+		t.Fatalf("the lifecycle fold wrote %d choir_events rows", n)
 	}
 	if !found {
 		t.Fatalf("folded choir.event missing: %+v", events)

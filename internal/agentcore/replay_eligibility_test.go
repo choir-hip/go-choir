@@ -175,3 +175,54 @@ func TestDesktopAndOGAreEventProjectionAfterLiveResidueImport(t *testing.T) {
 		t.Fatal("presence_volatile class was admitted — that would weaken the nonempty gate")
 	}
 }
+
+// F12 (docs/design/choir-event-table-f-c-2026-10-22.md section 3.3): the
+// optional event projection class. Absent from both sets is eligible (an
+// empty table is not observed); present in both with equal hashes is
+// eligible; present on one side only is schema drift.
+func TestReplayEligibilityOptionalEventTable(t *testing.T) {
+	head := &computerevent.Head{ComputerID: "computer", Sequence: 1, CanonicalEventHead: "head"}
+	result := computerversion.EquivalenceResult{Status: computerversion.EquivalenceEquivalent}
+	manifest := CurrentReplayAirworthinessManifest()
+	if manifest.Version != 4 || manifest.Entries["choir_events"] != ReplayEventProjectionOptional {
+		t.Fatalf("manifest version %d, choir_events %q", manifest.Version, manifest.Entries["choir_events"])
+	}
+	if err := manifest.Validate(); err != nil {
+		t.Fatalf("Validate refuses the optional class: %v", err)
+	}
+	without := func() computerversion.ObservationSet {
+		set := replayManifestObservationSet()
+		kept := set.Observations[:0]
+		for _, o := range set.Observations {
+			if o.Key != "dolt:texture:schema:choir_events" && o.Key != "dolt:texture:table:choir_events" {
+				kept = append(kept, o)
+			}
+		}
+		set.Observations = kept
+		return set
+	}
+	with := func(content string) computerversion.ObservationSet {
+		set := without()
+		set.Observations = append(set.Observations,
+			computerversion.Observation{Kind: computerversion.ObservationDoltHead, Key: "dolt:texture:schema:choir_events", Value: "schema:choir_events"},
+			computerversion.Observation{Kind: computerversion.ObservationDoltHead, Key: "dolt:texture:table:choir_events", Value: content},
+		)
+		return set
+	}
+	if e := replayEligibility(head, head, without(), without(), result); !e.Eligible {
+		t.Fatalf("absent from both sets: %#v", e)
+	}
+	if e := replayEligibility(head, head, with("rows"), with("rows"), result); !e.Eligible {
+		t.Fatalf("present in both with content: %#v", e)
+	}
+	if e := replayEligibility(head, head, with("rows"), without(), result); e.Eligible || !slices.Contains(e.SchemaDrift, "choir_events") {
+		t.Fatalf("live only: %#v", e)
+	}
+	if e := replayEligibility(head, head, without(), with("rows"), result); e.Eligible || !slices.Contains(e.SchemaDrift, "choir_events") {
+		t.Fatalf("replay only: %#v", e)
+	}
+	bad := ReplayAirworthinessManifest{Version: 4, Entries: map[string]ReplayObservationClass{"choir_events": "event_projection_maybe"}}
+	if bad.Validate() == nil {
+		t.Fatal("Validate accepted an unknown class")
+	}
+}

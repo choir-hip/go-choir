@@ -684,10 +684,6 @@ func TestConsistentReadSealsPending(t *testing.T) {
 			e, err := h.store.ListEventsByTrajectory(c, "owner-1", "trajectory-run-rd", 10)
 			return len(e), err
 		},
-		"ListEventsByTrajectoryAfter": func(c context.Context) (int, error) {
-			e, err := h.store.ListEventsByTrajectoryAfter(c, "owner-1", "trajectory-run-rd", 0, 10)
-			return len(e), err
-		},
 	}
 	names := make([]string, 0, len(reads))
 	for name := range reads {

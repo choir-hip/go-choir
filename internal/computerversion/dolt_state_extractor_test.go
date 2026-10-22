@@ -293,3 +293,50 @@ func TestDoltExtractorLeavesIgnoredTablesOut(t *testing.T) {
 		t.Fatal("test premise: the derived table's rows should change the content root when it is not ignored")
 	}
 }
+
+// F4 (docs/design/choir-event-table-f-c-2026-10-22.md section 3.3): an empty
+// choir_events is not observed, so a checkpoint witnessed before the table
+// existed still matches. A workspace without the table needs no probe; a
+// table with a row is state. The rule is a package-level set, so every
+// extractor built anywhere applies it.
+func TestDoltExtractorOmitsAnEmptyOptionalTable(t *testing.T) {
+	const events = "CREATE TABLE choir_events (tape_seq BIGINT UNSIGNED NOT NULL, op_index INT UNSIGNED NOT NULL, body LONGBLOB NOT NULL, PRIMARY KEY (tape_seq, op_index))"
+	records := "CREATE TABLE records (id INT PRIMARY KEY, v VARCHAR(64) NOT NULL)"
+	without := openTestDoltWorkspace(t, "testdb", records, []string{"INSERT INTO records VALUES (1, 'a')"})
+	empty := openTestDoltWorkspace(t, "testdb", records+"; "+events, []string{"INSERT INTO records VALUES (1, 'a')"})
+	filled := openTestDoltWorkspace(t, "testdb", records+"; "+events, []string{"INSERT INTO records VALUES (1, 'a')", "INSERT INTO choir_events VALUES (7, 0, 'x')"})
+	version := ComputerVersion{CodeRef: "test-code-ref", ArtifactProgramRef: "test-artifact-ref"}
+	extract := func(workspace string) ObservationSet {
+		set, err := (DoltStateExtractor{WorkspacePath: workspace, Database: "testdb"}).Extract(context.Background(), ExtractRequest{Name: "optional", Version: version})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return set
+	}
+	value := func(set ObservationSet, key string) string {
+		for _, o := range set.Observations {
+			if o.Key == key {
+				return o.Value
+			}
+		}
+		return "<absent>"
+	}
+	a, b, c := extract(without), extract(empty), extract(filled)
+	for _, key := range []string{"dolt:testdb:table:choir_events", "dolt:testdb:schema:choir_events"} {
+		if value(b, key) != "<absent>" {
+			t.Fatalf("%s is observed for an empty table", key)
+		}
+		if value(c, key) == "<absent>" {
+			t.Fatalf("%s is not observed for a table with a row", key)
+		}
+	}
+	if value(a, "dolt:testdb:content_root") != value(b, "dolt:testdb:content_root") {
+		t.Fatal("an empty optional table changed the content root")
+	}
+	if value(b, "dolt:testdb:content_root") == value(c, "dolt:testdb:content_root") {
+		t.Fatal("a row in the optional table did not change the content root")
+	}
+	if got := OptionalTables(); len(got) != 1 || got[0] != "choir_events" {
+		t.Fatalf("OptionalTables() = %v", got)
+	}
+}
