@@ -126,7 +126,8 @@ status_write() { # $1 JSON object
 }
 
 # ---- attempt marks -----------------------------------------------------
-# A run is marked running before it does any work, and every way out of it
+# A run is marked running after its tool preflight and before the disk
+# guard, the tunnel or any restic call, and every way out of it
 # leaves a result: the normal paths write theirs, the EXIT trap turns a
 # running mark of this run into failed (a signal, or set -u), and a SIGKILL
 # of bash itself leaves running, which the freshness check reads against
