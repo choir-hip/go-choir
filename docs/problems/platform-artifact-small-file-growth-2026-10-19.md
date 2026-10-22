@@ -435,3 +435,222 @@ dual-read and the unchanged legacy files until the census for B).
   lock (`dolt_store.go:841-849`).
 - introduced: none (docs only).
 - repaired: none.
+
+## Repack tool v2: plan and failure modes, written before the code (FP10, 2026-10-22)
+
+Why a second tool. `cmd/taperepack` and `internal/taperepack` (FP9, `plan`,
+`copy`, `census` over a manifest) are on main. They were proven on test
+computers, and they do not hold at the size Node B measured at 23:15 UTC on
+2026-10-22: 4.88 million pin receipts, 2.44 million events, 2.44 million
+payloads, about 46 GB by `du`, in three flat directories. Read from the
+code, as hypotheses until the synthetic run below measures them:
+
+- `Plan` keeps every manifest entry in memory (`entries []Entry`, about 200
+  bytes each, two per pin) and, with `--count-unreceipted`, a 32 byte key
+  per receipted digest; `ReadManifest` loads the whole file. Millions of
+  entries are gigabytes. The host's memory line is the reason the backup
+  verify was moved to weekly.
+- `Copy` and `Census` call `Reader.ReadSegment` per record. Each call lists
+  the computer's segment directory and, for an absent digest, opens and
+  searches every sealed index of that computer (hundreds). At 10 million
+  records that is billions of opens.
+- The census counts records in a manifest. It does not count the legacy
+  files that no manifest line names, and it has no per-namespace or
+  per-computer "no verified copy" answer a delete step could consume. A
+  later delete step could treat "not in the manifest" or "missing" as
+  something other than "not deletable". That is the r4 gap.
+- `refuseLiveWriter` refuses when the writer holds the lock at that instant;
+  on a live host that makes a run fail at random instead of waiting its turn
+  on the lock the appender already takes.
+
+Classification: orange to red. The tool writes only through the production
+`tapestore.Appender` into `tape-seg/` (Trace/evidence, red) and never touches
+a legacy file. Mutation class red; protected surfaces: computer events, event
+payloads, pin receipts, replay, checkpointd, ledger witness. Rollback: delete
+nothing; `tape-seg/<computer>` can be dropped to restore today (the reader
+falls back to the legacy file). Heresy delta: discovered above; introduced
+none; repaired: the tool's memory and r4 gap.
+
+### Design
+
+One streaming engine, three phases, bounded memory. The work directory is
+outside the artifacts root and holds spill files only.
+
+1. **List.** Stream the three legacy directories with `ReadDir(1024)` and
+   write `(namespace, digest)` records into 256 spill files keyed by the first
+   byte of the digest. No file is opened. Names that are not a digest (or
+   digest plus `.json` for receipts), directories and links count as
+   `other_files`.
+2. **Edges.** Read each pin receipt once. The signed receipt is the only
+   authority for which computer pinned an artifact and under which media
+   type (a payload's own bytes can name any computer; a guest can pin them).
+   Write one edge `(artifact digest, namespace, computer, length, eligible)`
+   per receipt into 256 spill files keyed by the artifact's first digest
+   byte. Eligible is the production rule of `pin` in `event_artifacts.go`: an
+   event, or a payload whose media type is the projection batch type.
+3. **Join per bucket.** For bucket b, load that bucket's edges and, for every
+   computer that has segments, the records of its sealed indexes (by the
+   index's fanout range for byte b, so no index is read whole twice) and its
+   open segment. The bucket holds about 1/256 of the records. Then, for each
+   legacy file of the bucket: read it, check that it hashes to its name,
+   decide the computers that need it (a receipt: the computer it names; an
+   artifact: every eligible edge's computer, after the length and event
+   scope checks), and decide a verdict from the segments of each. Copy mode
+   appends what is missing, in bounded batches, through `Appender.AppendFunc`;
+   it re-checks presence inside the build function, under the computer's
+   lock, then reads each appended record back from the segments.
+
+Verdict per (file, computer), and per file (the worst across computers):
+`covered` (every segment copy of that record verifies and equals the legacy
+bytes), `uncovered` (eligible, no copy), `corrupt` (a copy fails its crc,
+hash or index, or differs from the legacy bytes), `blocked` (the computer's
+segment store cannot be read: a bad index, a bad header, a non-final
+unsealed segment), `legacy_bad` (the file does not hash to its name),
+`too_large`, `ineligible` (an edge exists and none is eligible, or the event
+is another kind or names another computer), `unreceipted` (no receipt names
+it: an orphan the tape sweep owns), `vanished` (gone between list and read).
+Only `covered` is deletable.
+
+**r4, enforced by the type, not by a count.** `Verdict` has unexported fields;
+its zero value is not deletable; only the engine builds one; `Deletable()` is
+true only for `covered`, which the engine sets only after reading the
+segment bytes and comparing them with the legacy bytes in the same bucket
+pass. Any later delete step must obtain its verdicts by running the engine
+(the verdict is recomputed at delete time) and cannot construct one. A file
+with several copies is covered only if every copy verifies, because
+`Reader.readSegment` answers with the newest copy and stops at the first
+error (residual r2). A computer with any segment-level error blocks every one
+of its files. A guard test fails if the package calls `os.Remove`,
+`os.RemoveAll`, `syscall.Unlink` or `os.Rename` outside `workdir.go`, which
+refuses any path under the artifacts root.
+
+Dry run is the default. `copy` writes only with `--apply`, and only for
+computers named with `--computer` (the owner's and the paper's computers are
+never copied without the owner naming them). `census` and a dry-run `copy`
+write nothing outside the work directory.
+
+Resumable and idempotent. Copy state (`state.json`: root, computers, phase
+done flags, the computer table, buckets done, one result file per bucket)
+lives in the work directory. A rerun with the same root and computers
+resumes at the first undone bucket. A bucket interrupted mid-way is redone,
+and the presence check (under the lock, against the live segments) finds the
+records already written, so no record is written twice, and a second full run
+writes nothing. `--fresh` discards the state. `census` and dry run always
+list afresh.
+
+Live writer. The repack takes no lock of its own on a computer's directory; it
+uses the appender's: a blocking exclusive `flock` per computer, held for one
+append. The platform's appender validates its cached segment under that lock
+before every append; when the repack's call has sealed the platform's open
+segment (the repack is "another writer" and seals an unsealed segment it did
+not write before it starts its own), the platform's next pin re-establishes
+(seals the repack's segment, starts a new one). The cost is two small files
+per handoff, bounded by the live pin rate (about 4 events an hour on Node B at
+23:15 UTC). The repack seals its own open segment per computer when it
+finishes (`Appender.Seal`, new, same lock and fail-stop rules), so a computer
+nobody writes again does not keep an unsealed tail. A failed write or fsync
+poisons the repack's appender: the run stops, the state says where, nothing is
+retried in that process.
+
+Memory. The resident set is the bucket's edge and index slice, the
+computers' open-segment key maps (at most one segment each), at most 64 MiB
+of pending append bodies, and one legacy file at a time (a legacy file larger
+than `tapestore.MaxRecordBytes` is `too_large`). It does not depend on the
+number of files. Measured on a 200,000+ file synthetic tree (below).
+
+### Failure modes (each gets a test that fails on the base)
+
+- **P1** A legacy file whose segment copy fails verification (crc, hash,
+  index, or bytes different from the legacy bytes) is counted `corrupt` and is
+  not deletable. A legacy file with one good and one corrupt copy is `corrupt`.
+- **P2** A computer with an unreadable segment (bad index, header, or a
+  non-final unsealed segment) blocks all its files; none is deletable.
+- **P3** An absent copy is `uncovered`, never `covered`; a legacy file nobody
+  receipted is `unreceipted`, never `covered`.
+- **P4** `Verdict` cannot be forged outside the package and its zero value is
+  not deletable; the package has no unlink or rename outside `workdir.go`.
+- **P5** A payload whose own bytes name another computer is attributed by its
+  receipt, not by its bytes; its copy lands under the receipt's computer.
+- **P6** A legacy file that no longer hashes to its name is `legacy_bad`, is
+  never copied, and is never covered.
+- **P7** An event of another kind, or whose computer differs from its
+  receipt's, is `ineligible`; a payload with another media type is
+  `ineligible`; neither is copied.
+- **P8** Dry run writes nothing: no segment, index, lock file or change under
+  the artifacts root (tree snapshot, mtimes included), and counts what it
+  would copy. `copy` with no `--computer` or with no `--apply` writes nothing.
+- **P9** A second `copy --apply` writes zero records; a run killed after a
+  bucket's append and before its result file is rerun and writes none of that
+  bucket's records again; a resumed run reports the same totals as an
+  uninterrupted one.
+- **P10** A run for computer A writes nothing under computer B.
+- **P11** A legacy file removed between list and read is `vanished`, not an
+  error and not covered.
+- **P12** A live writer appending during a copy loses no acknowledged record and
+  the copy neither fails nor duplicates (race test, two goroutines on one
+  root, `-race`).
+- **P13** A poisoned appender (injected fsync failure) stops the run with an
+  error; records already acknowledged still read back.
+- **P14** Copied records read back through the production `Reader.Read` and
+  pass `Reader.Scan`; the copy is byte-identical.
+- **P15** A bucket's results sum to the whole: the report's per-computer and
+  global tallies equal the files on disk (counted independently in the test).
+- **P16** Memory: the resident set on 200,000+ files stays flat (measured, not
+  asserted in `go test`).
+- **P17** A receipt that is not a signed-shape `PinReceipt` by `corpusd`, or whose
+  length is implausible, makes no edge; its artifact is `unreceipted` for
+  that receipt.
+- **P18** An empty census is not ok (nothing was proven).
+
+Residuals named now. (1) Event-namespace receipts are copied whatever the
+event's kind (the receipt does not say), which writes a few receipt records
+the production path would leave as files; harmless, covered the same way. (2)
+Orphan pins are copied like any other receipted file; the orphan sweep and
+this tool are independent. (3) The platform's `reuse` rule: a pin answered by
+a record the repack wrote writes one synced legacy copy (counted as
+`reuse_legacy_writes`), for a digest that is pinned again with no legacy file.
+That cannot happen for a digest whose legacy file is still present.
+
+### Owner ruling on the delete (2026-10-22)
+
+FP0, 23:20 UTC, relaying the owner in session: "4. yes", answering "deleting
+the 46 GB of legacy tape files once the repack census shows every one has a
+verified copy". The ruling is for the legacy delete of files that the census
+marks deletable; it gates on the census, not on a date. It is a follow-on
+command (`taperepack delete`), built in its own commit after the census, dry
+run by default, and run by FP0 only after the census is read.
+
+### Delete command design (follow-on, red, its own commit)
+
+`taperepack delete --root R --work-dir W --census-receipt <digest>
+[--computer ids] [--apply]`. The census writes its report to
+`W/census-<digest>.json`, where the digest is the SHA-256 of the report's
+canonical JSON (the census receipt digest, printed with the report). The
+delete command:
+
+1. refuses unless the receipt file's bytes hash to the digest given, the
+   report names the same root, the report is a complete census (every bucket
+   done, `ok` for store errors: no `corrupt`, `blocked` or segment error),
+   and it is not older than 24 hours;
+2. does not trust the receipt for any file: it runs the engine again, and
+   each legacy file is unlinked only when the freshly computed `Verdict` is
+   `covered` (`Deletable()`), checked once more immediately before the
+   unlink on the same bytes it just compared;
+3. dry run by default: counts what it would unlink and unlinks nothing;
+   `--apply` and the digest together unlink; the digest alone, or `--apply`
+   alone, do nothing;
+4. unlinks in bounded batches with a pause between batches, writes a deletion
+   log in the work directory (namespace, digest, computer, bytes), stops at the
+   first unlink error, and never removes a directory.
+
+Failure modes (tests first): D1 no digest or a wrong digest refuses; D2
+`--apply` without a digest does nothing; D3 a corrupt copy, a missing copy, a
+blocked computer, a `legacy_bad` file, an `unreceipted` file and an
+`ineligible` file are never unlinked, even when the receipt lists a clean
+census; D4 a stale receipt (older than 24 hours) or one for another root
+refuses; D5 a copy that turns corrupt between the census and the delete is
+caught by the recomputed verdict; D6 the dry run unlinks nothing; D7 an
+unlinked file is gone and its record still reads through `Reader.Read` from
+the segment; D8 files outside the three tape namespaces are untouched; D9 a
+rerun after a partial delete deletes the rest and no more; D10 the deletion
+log has one line per unlinked file.

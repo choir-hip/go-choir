@@ -304,9 +304,29 @@ now:
     d9649b191 (deployed with 219535ef3). Pre-flip counters on that build's
     predecessor: 2,076 legacy pins, 4,152 legacy files, reader 4,153 legacy
     hits, 0 corrupt, 0 segment_error_fallbacks.
+  owner_ruling_delete: >-
+    2026-10-22 23:20 UTC (FP0, relaying the owner in session): "4. yes",
+    answering "deleting the 46 GB of legacy tape files once the repack
+    census shows every one has a verified copy". The first-delete yes that
+    owner notes 34 held back is given; the gate is the census (a verified
+    segment copy of each file), not a date. Node B measured at 23:15 UTC:
+    pin-receipts 4.88 million files, computer-event 2.44 million,
+    computer-event-payload 2.44 million, about 46 GB by du; new loose files
+    nearly stopped (about 40 in 10 minutes); tape-seg holds 10 computers
+    and 8 GB. Owner, 2026-10-22: "Anything which improves resource
+    utilization on a forward and ongoing basis should be prioritized over
+    stability, availability, or uptime in the short term."
+  repack_v2: >-
+    2026-10-22. The FP9 taperepack (plan, copy, census over an in-memory
+    manifest) does not scale to 10 million flat files and cannot give a
+    delete step a per-file verdict. A streaming, bounded-memory engine with an
+    unforgeable Verdict (r4) replaces it; plan and failure modes P1 to P18 in
+    docs/problems/platform-artifact-small-file-growth-2026-10-19.md, "Repack
+    tool v2". A census-gated `taperepack delete` follows in its own commit
+    (D1 to D10 there).
   blocker: >-
-    none. The repack tool is not built; the legacy delete waits on the
-    evidence gate of owner notes 34 and the owner's yes.
+    none. The repack tool v2 is in build (lane/fp10-tape-repack); the legacy
+    delete is owner-approved (owner_ruling_delete) and waits on the census.
   next_action: >-
     Read the health tape block after the flip (segment_pins growing,
     files per pin falling toward 0, segment_fallbacks, corrupt and
