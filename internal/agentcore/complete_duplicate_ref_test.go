@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -88,6 +89,9 @@ func seedExecutionReceipt(t *testing.T, root, runID, capsuleID, command string) 
 // A partial report resolves its receipts without a frozen capsule, through
 // the same refs commitCompleteIntent builds, so this pins that line.
 func TestCompleteCitingOneRefTwiceRecordsOneCommandPerReceipt(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("execution receipts open only on the Linux guest kernel (capsule's non-Linux stub refuses them)")
+	}
 	f := newAdmissionFixture(t, 1)
 	f.open(0)
 	bound := f.bind(0)

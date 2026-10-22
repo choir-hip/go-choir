@@ -146,3 +146,62 @@ func TestSameCommandReplayLogsDifferingEvidence(t *testing.T) {
 		t.Fatalf("no line says the replayed writer's evidence differs:\n%s", buf.String())
 	}
 }
+
+// Review round 4c (Sonnet E4): each replay check and each evidence leg on its
+// own, so dropping any one of them fails a test.
+func TestSameCommandReplayChecksAndEvidenceLegsEachHold(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	f := installEngineeringAssignmentAuthority(t, s, 1)
+	open := engineeringOpenRequest(f, f.seed.AssignmentIDs[0], "cap-replay-legs", "capsule-replay-legs")
+	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.BindEngineeringAssignment(ctx, bindEngineeringRequest(open, f.assignedRunIDs[0], "cap-replay-legs")); err != nil {
+		t.Fatal(err)
+	}
+	base := assignmentReportRequest(open, 2, "report-placeholder", open.Binding.SubjectDigest, types.EngineeringResultCompleted, types.EngineeringVerdictNone)
+	digest, err := ComputeTerminalPropositionDigest(open.Binding.SubjectDigest, base.Report.Result, base.Report.Verdict, base.Report.Commands, base.Report.Outputs, base.Report.EvidenceRefs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A report id derived from the proposition, as the runtime commits it.
+	base.Report.ReportID = TerminalReportID(open.Binding.OwnerID, open.Binding.ComputerID, open.AssignmentID, open.Binding.Attempt, digest)
+	base.CommandID = "engineering-report:" + open.AssignmentID + ":" + base.Report.ReportID
+	base.CommandDigest, _ = ComputeRecordEngineeringAssignmentReportDigest(base)
+	first, err := s.RecordEngineeringAssignmentReport(ctx, base)
+	if err != nil {
+		t.Fatalf("first terminal: %v", err)
+	}
+	// The digest check alone: a derived report id, a wrong stated digest.
+	wrong := base
+	wrong.ExpectedLifecycleVersion = first.Assignment.LifecycleVersion
+	wrong.Report.PropositionDigest = objectgraph.SHA256([]byte("a stated digest the report does not compute"))
+	wrong.OutcomeRefs = []string{"selfdev-operation:other-writer"}
+	wrong.CommandDigest, _ = ComputeRecordEngineeringAssignmentReportDigest(wrong)
+	if _, err := s.RecordEngineeringAssignmentReport(ctx, wrong); !errors.Is(err, ErrEngineeringAssignmentInvalid) {
+		t.Fatalf("a wrong stated digest with a derived report id = %v, want ErrEngineeringAssignmentInvalid", err)
+	}
+	// Each evidence leg alone is named.
+	committed := *first.Report
+	for leg, mutate := range map[string]func(*types.RecordEngineeringAssignmentReportRequest){
+		"candidate": func(r *types.RecordEngineeringAssignmentReportRequest) {
+			r.Report.CandidateArtifactRef = "capsule-subject:other"
+		},
+		"mutations": func(r *types.RecordEngineeringAssignmentReportRequest) {
+			r.Report.Mutations = []types.EngineeringRecordedMutation{{SubjectBytesChanged: true, AfterDigest: objectgraph.SHA256([]byte("other"))}}
+		},
+		"attestations": func(r *types.RecordEngineeringAssignmentReportRequest) {
+			r.ExecutionAttestations = append(r.ExecutionAttestations, types.EngineeringExecutionAttestation{})
+		},
+	} {
+		req := base
+		req.Report = committed
+		req.Report.Mutations = append([]types.EngineeringRecordedMutation(nil), committed.Mutations...)
+		req.ExecutionAttestations = append([]types.EngineeringExecutionAttestation(nil), committed.ExecutionAttestations...)
+		mutate(&req)
+		if got := reportEvidenceDifferences(committed, req); len(got) != 1 || got[0] != leg {
+			t.Fatalf("evidence leg %s: differences = %q", leg, got)
+		}
+	}
+}

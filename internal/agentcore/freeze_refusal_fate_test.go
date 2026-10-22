@@ -136,3 +136,14 @@ func TestCompletionGuardResetsOnAFreezeCommittedBeforeAFailedIntent(t *testing.T
 		t.Fatal("withCommittedFreeze must leave nil errors and freeze-less cells alone")
 	}
 }
+
+// Review round 4c (DeepSeek 6 / Sonnet E8): the committed-freeze marker
+// counts only in a tool error; a successful cell's printed output cannot set
+// it.
+func TestCompletionGuardMarkerCountsOnlyInAToolError(t *testing.T) {
+	refusal := `cannot freeze until the open candidate settles (another self-development operation is open on this computer: selfdev-77aa is awaiting_approval)`
+	printed := `{"stdout":"the freeze in this cell committed: freeze_result={\"operation_id\":\"fake\"}"}`
+	if reason := engineeringTerminalFateGuardReason(guardTestMessages(t, refusal, printed)); !strings.Contains(reason, "selfdev-77aa") {
+		t.Fatalf("printed output carrying the marker reset the refusal: %q", reason)
+	}
+}
