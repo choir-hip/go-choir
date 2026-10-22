@@ -63,10 +63,19 @@ wait
 check "a writer waits out a slow holder: both keys survive" "$(jq -e '.holder == 1 and .waiter == 1' "$STATUS" >/dev/null 2>&1; echo $?)"
 
 # 5: stale temps are reaped under the lock; a fresh one is left alone.
-printf x > "$STATUS.AbC123"; touch -d '2 hours ago' "$STATUS.AbC123"
+# Back-dating: GNU touch -d first (Node B), then touch -t with a stamp from
+# BSD date -v (darwin); with neither, the age check is skipped and says so.
+printf x > "$STATUS.AbC123"
+aged=1
+touch -d '2 hours ago' "$STATUS.AbC123" 2>/dev/null ||
+  touch -t "$(date -v-2H +%Y%m%d%H%M 2>/dev/null)" "$STATUS.AbC123" 2>/dev/null || aged=0
 printf x > "$STATUS.XyZ789"
 status_merge <<<'{"reap":1}'
-check "a temp over an hour old is removed" "$([ ! -e "$STATUS.AbC123" ]; echo $?)"
+if [ "$aged" = 1 ]; then
+  check "a temp over an hour old is removed" "$([ ! -e "$STATUS.AbC123" ]; echo $?)"
+else
+  echo "SKIP a temp over an hour old is removed (this touch cannot back-date a file)"
+fi
 check "a recent temp (a live writer's) is kept" "$([ -e "$STATUS.XyZ789" ]; echo $?)"
 
 [ "$fails" = 0 ] && echo "all status lock checks passed" || { echo "$fails failed"; exit 1; }
