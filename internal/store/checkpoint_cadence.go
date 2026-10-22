@@ -129,6 +129,9 @@ type CheckpointStats struct {
 	CancelledAtClose      uint64 `json:"cancelled_at_close"`
 	ClosingCommitsSkipped uint64 `json:"closing_commits_skipped"`
 	ClosesLeftOpen        uint64 `json:"closes_left_open"`
+	// EnginesLeftOpen counts engines a Close abandoned for process exit
+	// because their workspace was gone from disk.
+	EnginesLeftOpen uint64 `json:"engines_left_open"`
 	// FinalizeCommitWaits counts finalizes whose BeginTx wait overlapped a
 	// commit holding the store's one connection (the commit pins it, and
 	// is counted in flight only while it does: exact for the connection
@@ -186,6 +189,7 @@ type checkpointCadence struct {
 	backgroundCommits, backgroundNanos, backgroundMax atomic.Uint64
 	otherCommits, noopCommits, failures               atomic.Uint64
 	cancelledAtClose, closingSkipped, closesLeftOpen  atomic.Uint64
+	enginesLeftOpen                                   atomic.Uint64
 	// commitsStarted and commitsEnded bracket every DOLT_COMMIT while it
 	// holds the pinned connection, so a finalize can tell whether its
 	// BeginTx waited on one.
@@ -557,6 +561,7 @@ func (s *Store) CheckpointStats() CheckpointStats {
 	out.CancelledAtClose = c.cancelledAtClose.Load()
 	out.ClosingCommitsSkipped = c.closingSkipped.Load()
 	out.ClosesLeftOpen = c.closesLeftOpen.Load()
+	out.EnginesLeftOpen = c.enginesLeftOpen.Load()
 	out.FinalizeCommitWaits = c.finalizeWaits.Load()
 	out.FinalizeCommitWaitNanos = c.finalizeWaitNanos.Load()
 	out.FinalizeCommitWaitMaxNs = c.finalizeWaitMaxNanos.Load()
