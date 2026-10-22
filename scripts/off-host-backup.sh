@@ -237,9 +237,10 @@ resolve_paths() {
   add_path "$ROOT/maild.env" optional
   add_path "$ROOT/searxng.env" optional
   add_path "$ROOT/gateway-identities.json" optional
-  add_path "$ROOT/corpus-dsn.env" optional
-  add_path "$ROOT/deploy.env" optional
-  add_path "$ROOT/sandbox-gateway-token.env" optional
+  # deploy.env, corpus-dsn.env, corpusd-retrieval.env and
+  # sandbox-gateway-token.env (nix/node-b.nix unitEnvDir); the links left at
+  # their old paths hold nothing.
+  add_path "$ROOT/unit-env" optional
   add_path "$ROOT/mail" optional
   add_path "$ROOT/files" optional
   add_path "$VM_STATE/ownerships.json" optional

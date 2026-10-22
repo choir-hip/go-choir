@@ -76,13 +76,14 @@ UNITS = [
     "go-choir-auth", "go-choir-proxy", "go-choir-gateway", "go-choir-corpusd",
     "go-choir-maild", "go-choir-vmctl", "go-choir-platform-dolt",
     "go-choir-corpus-dolt", "go-choir-checkpointd", "go-choir-front-importance",
-    "go-choir-goproxy", "searx", "qdrant", "caddy",
+    "go-choir-goproxy", "go-choir-pkgmirror", "searx", "qdrant", "caddy", "unbound",
 ]
 # Root services expected to hold no capabilities after the hardening commit.
 NO_CAP_UNITS = {
     "go-choir-auth", "go-choir-proxy", "go-choir-gateway", "go-choir-corpusd",
     "go-choir-maild", "go-choir-platform-dolt", "go-choir-corpus-dolt",
     "go-choir-checkpointd", "go-choir-front-importance", "go-choir-goproxy",
+    "go-choir-pkgmirror",
 }
 # The host services a guest reaches on its own tap host address: the floor's
 # one list, internal/vmmanager tapReachableHostServicePorts (8089 is
@@ -253,8 +254,16 @@ def check_units():
 # files read only through EnvironmentFile=, and vmctl's read-only view.
 SYSTEMD_SOCKETS = ["/run/systemd/private", "/run/dbus/system_bus_socket"]
 SYSTEMD_SOCKET_UNITS = {"go-choir-vmctl", "go-choir-dolt-liveness-probe"}  # they run systemctl
-ENV_FILES = ["/var/lib/go-choir/deploy.env", "/var/lib/go-choir/corpus-dsn.env",
-             "/var/lib/go-choir/sandbox-gateway-token.env"]
+# The env files live in one directory every unit hides as a directory
+# (nix/node-b.nix unitEnvDir): a file hidden on its own reappears in a
+# running unit when it is replaced by rename or created after the unit
+# started (docs/problems/host-containment-gaps-after-fp3-cut-2-2026-10-22.md).
+# A hidden directory reads as mode 0 (systemd's empty inaccessible node).
+UNIT_ENV_DIR = "/var/lib/go-choir/unit-env"
+UNIT_ENV_NAMES = ["deploy.env", "corpus-dsn.env", "corpusd-retrieval.env", "sandbox-gateway-token.env"]
+ENV_FILES = [f"{UNIT_ENV_DIR}/{name}" for name in UNIT_ENV_NAMES]
+# Where they lived before: a link into the directory, or nothing.
+LEGACY_ENV_FILES = [f"/var/lib/go-choir/{name}" for name in UNIT_ENV_NAMES]
 VMCTL_READ_ONLY = ["/var/lib/go-choir/services", "/var/lib/go-choir/guest"]
 
 
@@ -271,7 +280,7 @@ def check_containment():
         if pid in ("", "0"):
             continue  # not running now (a oneshot); its view is checked when it runs
         hidden = [] if unit in SYSTEMD_SOCKET_UNITS else SYSTEMD_SOCKETS
-        for path in hidden + ENV_FILES:
+        for path in hidden + [UNIT_ENV_DIR] + ENV_FILES:
             mode = mode_in_namespace(pid, path)
             record("containment", f"{unit} cannot reach {path}", mode in ("0", "absent"),
                    f"mode inside the unit's namespace: {mode}")
@@ -282,6 +291,25 @@ def check_containment():
             continue
         record("containment", f"go-choir-vmctl cannot write {path}", not writable_in_namespace(pid, path),
                "writable inside vmctl's namespace" if writable_in_namespace(pid, path) else "read-only")
+
+
+def check_legacy_env_paths(root="/"):
+    """An old env path holds the link into UNIT_ENV_DIR or nothing. A regular
+    file there is read by no unit and visible to every unit that started
+    before it appeared; the activation snippet never adopts it."""
+    for path in LEGACY_ENV_FILES:
+        name = os.path.basename(path)
+        at = os.path.join(root, path.lstrip("/"))
+        want = f"unit-env/{name}"
+        if os.path.islink(at):
+            target = os.readlink(at)
+            record("containment", f"{path} is a link into {UNIT_ENV_DIR} or absent", target == want,
+                   f"link to {target}; want {want}")
+        elif os.path.lexists(at):
+            record("containment", f"{path} is a link into {UNIT_ENV_DIR} or absent", False,
+                   f"a regular file no unit reads; the units read {UNIT_ENV_DIR}/{name}: merge it there and remove it")
+        else:
+            record("containment", f"{path} is a link into {UNIT_ENV_DIR} or absent", True, "absent")
 
 
 # The issuer credential (internal/hostauth/issuer.go) reaches only vmctl,
@@ -430,28 +458,35 @@ def check_dolt(expect, with_credential):
             record("dolt", f":{port} app user choir on {db}", outcome == "accepted", outcome)
 
 
+# (path, mode at most, must exist).
+MODE_EXPECT = [
+    ("/var/lib/go-choir", 0o750, True),
+    (SECRETS, 0o700, True),
+    (TOKEN_FILE, 0o600, True),
+    (TOKEN_FILE + ".header", 0o600, True),
+    (DOLT_APP_PASSWORD_FILE, 0o600, True),
+    (SECRETS + "/dolt-root-password", 0o600, True),
+    ("/var/lib/go-choir/auth", 0o750, True),
+    ("/var/lib/go-choir/auth/auth.db", 0o600, True),
+    ("/var/lib/go-choir/vm-state", 0o750, True),
+    ("/var/lib/go-choir/platform-dolt", 0o750, True),
+    ("/var/lib/go-choir/corpus-dolt", 0o750, True),
+    ("/var/lib/go-choir/platform-artifacts", 0o750, True),
+    (UNIT_ENV_DIR, 0o700, True),
+    (UNIT_ENV_DIR + "/deploy.env", 0o600, True),
+    (UNIT_ENV_DIR + "/corpus-dsn.env", 0o600, True),
+    (UNIT_ENV_DIR + "/sandbox-gateway-token.env", 0o600, True),
+    # The retrieval kill switch exists only while an operator has it on.
+    (UNIT_ENV_DIR + "/corpusd-retrieval.env", 0o600, False),
+]
+
+
 def check_modes():
-    expect = [
-        ("/var/lib/go-choir", 0o750),
-        (SECRETS, 0o700),
-        (TOKEN_FILE, 0o600),
-        (TOKEN_FILE + ".header", 0o600),
-        (DOLT_APP_PASSWORD_FILE, 0o600),
-        (SECRETS + "/dolt-root-password", 0o600),
-        ("/var/lib/go-choir/auth", 0o750),
-        ("/var/lib/go-choir/auth/auth.db", 0o600),
-        ("/var/lib/go-choir/vm-state", 0o750),
-        ("/var/lib/go-choir/platform-dolt", 0o750),
-        ("/var/lib/go-choir/corpus-dolt", 0o750),
-        ("/var/lib/go-choir/platform-artifacts", 0o750),
-        ("/var/lib/go-choir/corpus-dsn.env", 0o600),
-        ("/var/lib/go-choir/sandbox-gateway-token.env", 0o600),
-    ]
-    for path, want in expect:
+    for path, want, required in MODE_EXPECT:
         try:
             st = os.stat(path)
         except OSError:
-            record("modes", path, False, "absent")
+            record("modes", path, not required, "absent" + ("" if required else " (optional)"))
             continue
         mode = stat.S_IMODE(st.st_mode)
         # "at most": a tighter mode passes, a looser one fails.
@@ -783,6 +818,7 @@ def main():
     check_credential_delivery(args.expect_internal)
     check_units()
     check_containment()
+    check_legacy_env_paths()
     check_issuer_credential()
     check_dolt(args.expect_dolt, args.with_credential)
     check_dolt_probe()

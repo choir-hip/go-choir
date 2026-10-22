@@ -1034,14 +1034,11 @@
   fi
   mv "$receipt_tmp" /var/lib/go-choir/deploy-receipt.json
   chmod 0644 /var/lib/go-choir/deploy-receipt.json
-  # Deployment identity no longer belongs in the service environment.
-  # Preserve operator-managed keys while deleting obsolete target
-  # assertions after the independent receipt is durable.
-  if [ -f /var/lib/go-choir/deploy.env ]; then
-    grep -v -E '^CHOIR_DEPLOYED_(AT|COMMIT)=' /var/lib/go-choir/deploy.env > /var/lib/go-choir/deploy.env.tmp || true
-    mv /var/lib/go-choir/deploy.env.tmp /var/lib/go-choir/deploy.env
-    chmod 0644 /var/lib/go-choir/deploy.env
-  fi
+  # The deploy does not touch the proxy's env file. Its old scrub of
+  # CHOIR_DEPLOYED_AT/COMMIT (nothing has written them since the receipt,
+  # f2d1d330c) replaced the file by rename after the units restarted, which
+  # put it under every running unit's hidden mount
+  # (docs/problems/host-containment-gaps-after-fp3-cut-2-2026-10-22.md).
   echo "==> Published activation receipt for ${DEPLOY_COMMIT}"
   cat /var/lib/go-choir/deploy-receipt.json
   note_phase "activation receipt"
