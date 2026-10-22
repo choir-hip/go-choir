@@ -183,6 +183,20 @@ now:
     FP0 rebases lane/fp1-boot-window onto 53c8bb181, lands 40cdc19fc and its
     tests (orange), and reads the next boot window. Then F1 if the owner or
     FP0 wants it.
+  followup: >-
+    Journal growth (lane/fp1-journal-growth, 2026-10-22): problem record
+    docs/problems/paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md.
+    Each tape event runs three guest transactions (a rolled-back dry run,
+    prepare, finalize) over about 33 prolly trees, 13 per og_objects row;
+    the dry run's chunks reach the journal (measured locally: 90 KiB per
+    rolled-back insert on a 13-tree table). About 240 to 310 KiB per event,
+    so 2.0 to 2.7 MiB/s is about 7 to 12 events/s. The online GC holds the
+    only write connection for its 20 to 30 s pass. No runtime change. Next:
+    FP0's six readings in the record (event_head.sequence and the store's
+    bytes 600 s apart, telemetry_batching, engine_mutex, dolt_gc), then F-a
+    (telemetry.batch on a test computer) or F-c (choir.event out of
+    og_objects, a design of its own).
+
 receipts:
   - id: fp1-boot-window-repair
     boundary: implement
@@ -196,6 +210,12 @@ receipts:
     proof_refs: [docs/problems/paper-unreachable-minutes-after-every-boot-2026-10-22.md, scripts/test_paper_boot_window_probe.py]
     rollback_ref: git revert 601e90c2a 29c175738
     disposition: docs and read-only tooling; no runtime change
+  - id: fp1-journal-growth
+    boundary: define
+    identity: lane/fp1-journal-growth (problem record commits)
+    proof_refs: [docs/problems/paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md]
+    rollback_ref: git revert of the record commits (docs only)
+    disposition: problem documented, causes ranked, fixes proposed; nothing implemented
   - id: fp1-side-table
     boundary: implement
     identity: aa1e2a4f4 (objectgraph), 14c1a62db (store wiring), 3aa4b543e (extractors)
