@@ -140,7 +140,8 @@ type telemetrySealer struct {
 
 	mu            sync.Mutex // leaf; protects everything below
 	enabled       bool
-	synchronous   bool
+	synchronous   bool // syncHolds > 0
+	syncHolds     int  // planned-restart holders of synchronous mode
 	stopped       bool
 	window        time.Duration
 	queue         []telemetryRecord
@@ -201,6 +202,18 @@ func (s *Store) TelemetryBatchingEnabled() bool {
 	return sl.enabled && !sl.synchronous && !sl.stopped
 }
 
+// TelemetryBatchingOn reports whether batching is switched on, whether or not
+// a planned restart holds synchronous mode right now.
+func (s *Store) TelemetryBatchingOn() bool {
+	sl := s.telemetry.Load()
+	if sl == nil {
+		return false
+	}
+	sl.mu.Lock()
+	defer sl.mu.Unlock()
+	return sl.enabled && !sl.stopped
+}
+
 // TelemetryBatchingConfigured reports whether the sealer exists in this
 // process, which is when a crash can have lost a telemetry window.
 func (s *Store) TelemetryBatchingConfigured() bool { return s.telemetry.Load() != nil }
@@ -229,16 +242,24 @@ func (s *Store) DrainTelemetry(ctx context.Context) error {
 	}
 }
 
-// SetTelemetrySynchronous puts the sealer in (or out of) synchronous mode: new
-// batched-kind events take the acknowledged path. Entering it drains first.
-// The planned-restart path uses it so nothing new queues behind the drain.
+// SetTelemetrySynchronous takes (on) or releases (off) one hold on
+// synchronous mode: while any hold is taken, new batched-kind events take the
+// acknowledged path. Taking a hold drains first. The planned-restart paths use
+// it so nothing new queues behind the drain; a guest apply and the host's
+// request can hold it at once, and the first release must not reopen the
+// queue for the other. A release with no hold taken does nothing.
 func (s *Store) SetTelemetrySynchronous(ctx context.Context, on bool) error {
 	sl := s.telemetry.Load()
 	if sl == nil {
 		return nil
 	}
 	sl.mu.Lock()
-	sl.synchronous = on
+	if on {
+		sl.syncHolds++
+	} else if sl.syncHolds > 0 {
+		sl.syncHolds--
+	}
+	sl.synchronous = sl.syncHolds > 0
 	sl.mu.Unlock()
 	if on {
 		return s.DrainTelemetry(ctx)
