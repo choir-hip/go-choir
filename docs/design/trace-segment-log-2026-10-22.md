@@ -668,6 +668,81 @@ yellow commit.
 | **S6** compression | the zstd reader first, then the zstd seal, in two releases | orange (the guest disk; the log's own format) | trace reads | retained days on the paper reach 7 under the cap; trace pages unchanged | revert the writer; the reader stays |
 | S7 follow-on, not R7 | the multi-desk trace API (owner §35) over the `.tidx` trajectory lists; a lasting spend total if O5 says so; retiring F-c deploy 3 for log kinds | — | — | — | — |
 
+**Status (2026-10-22, lane `lane/fp1-trace-log-s0s1`).**
+
+- **S0 built** (`ceb063983`, orange). `TelemetryStats` serves
+  `event_payload_bytes_by_kind`, `mean_event_payload_bytes_by_kind` and
+  `events_by_sink` (`tape`, `trace_log`, `dropped`, each by kind, all three
+  always present) beside `events_appended_by_kind`. Every event counts as
+  `tape` today (the sealer is a tape writer); a failed append counts as
+  appended and as no sink. Tests:
+  `TestTelemetryStatsReportPayloadBytesAndSinkByKind` (flag off and
+  batching on) and `TestTelemetryStatsSinkIsNotCountedForAFailedAppend`.
+  `tape_choir_event_ops_by_kind` is not built (9.2 item 9).
+- **S1 built** (`9e68fcc4f`, orange). `internal/tracelog` has no production
+  caller; `TestNoProductionPackageImportsTracelogYet` fails if one appears,
+  and S2 changes its allow-list in the commit that adds the caller. The
+  failure modes covered, each with its test in the package: F4 (torn tail
+  at every byte of the last record, zero and garbage tails, damage before
+  valid records, torn and foreign headers), F5 (failed fsync, failed and
+  short write, failed directory fsync, failed seal, a timer fsync failure,
+  a poisoned writer and the next one, appends racing a failing fsync), F7
+  (age and byte bounds, orphans, a reader across a retention pass, queries
+  racing append, rotation and retention), F8 (a power-loss property over 40
+  seeds: survivors are a prefix and include every synced line), F12 (a
+  second writer in the process and in a second process), F13, F16
+  (benchmarks), F18. F6, F9 to F11, F14, F15, F17 and F19 to F22 belong to
+  S2 to S4.
+- **Measured** (S1 benchmarks, Apple M1, GOMAXPROCS 2, load average about
+  13, so the figures are upper bounds): an append is 10 µs at best and
+  20 to 37 µs under that load for a 160 B to 2 KiB line, with 0
+  allocations per append in steady state; the fsync after one append is
+  5 to 8 ms on darwin (`F_FULLFSYNC`; Linux is not measured here); a run's
+  page across 168 sealed segments is 2.5 ms against the 50 ms bar.
+
+**What S2 needs from S1.**
+
+1. The store passes `Meta` and the serialized `EventRecord`; `AfterTapeSeq`
+   comes from the appender and `BootID` from the process.
+2. `Open` returns `ErrLocked` or an error: the store runs without the log,
+   as if the setting were off. Never fail the store's open on it.
+3. The ordering barrier calls `Log.Sync()`, which is a no-op when clean and
+   does not hold the append mutex while it fsyncs. `Stats().SyncNanosMax`
+   and `SyncNanosTotal` feed the p99 bar.
+4. The seeds read `Reader.MaxStreamSeq()` and `Reader.MaxRunSeq(owner,
+   run)`, then add the 512 gap.
+5. The union: `ListEventsAfter` to `ByRun` (afterSeq, limit),
+   `ListEventsByOwnerAfter` to `ByOwnerAfter`, `ListEventsByOwner` to
+   `ByOwnerNewest` (newest first), `ListEventsByTrajectory` to
+   `ByTrajectory`. Each returns at most `limit` records. Dedupe by
+   `event_id` in the store.
+6. `Log.Close` in `Store.Close`; `AppendBoundary(ReasonRestore, head)` after
+   a restore; the directory is a sibling of the workspace (F19).
+7. The observability block comes from `Stats()`, `Reader.Segments()` and
+   `Reader.Floor()`.
+8. `Log.Maintain()` on the 5-minute tick seals an aged idle segment and runs
+   retention (S4).
+
+**Residuals S1 leaves.**
+
+- **Sealing happens under the append mutex**, with its fsyncs and the index
+  write, once per segment (hourly on the paper). It is a stall of tens of
+  milliseconds, outside the append p99, but under `eventMu` once S4 wires
+  it. A background seal would have to keep the fail-stop rules; not done.
+- **Lines written but unsynced when the log is poisoned are not re-sent.**
+  `Stats().UnsyncedLinesAtPoison` counts them. S4 decides whether the store
+  re-emits them to the tape.
+- **A poisoned log does not run retention** (9.2 item 7).
+- **A recovered tail's durability is as good as the kernel makes it.** The
+  next process re-reads the previous writer's tail from the page cache and
+  fsyncs it before sealing; if the kernel had dropped those pages, the
+  fsync can succeed on nothing. This is the host writer's residual r1, here
+  harmless because trace lines are loss-tolerant and the segment digest
+  (4.5) is written from what was sealed.
+- **The `.tidx` of a segment is loaded whole** when a query needs its
+  entries (about 3 MB at 50,000 records), with four kept in memory. The
+  summaries of all sealed segments are kept.
+
 ### 9.1 The proof for S4 (test computer) and S5 (the paper)
 
 The test computer is minted as F-c and the batching gate did it
