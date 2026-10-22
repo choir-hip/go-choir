@@ -137,17 +137,7 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 	// forever. The sink is a scoped mailbox whose handler dead-letters once with a
 	// log line (delivery_failed / delivery_invalid in actorruntime/handler.go).
 	sinkMailbox := scopedActorMailboxID(cfg.ComputerID, cfg.ComputerID, "delivery-poison")
-	a.actorRT = actor.NewKernelRuntime(actorLog, actorLog, handler, actorOpts, actor.DispatcherOptions{
-		MaxAttempts:  8,
-		MaxDeferrals: 64,
-		ErrorSink:    sinkMailbox,
-		// Source polls are network I/O up to the poll timeout; their own
-		// lane keeps them out of the slots desks wait for
-		// (docs/problems/research-more-slow-and-hidden-2026-10-21.md, E6).
-		// Engineering admission has its own lane too, so a nudge never
-		// waits for a desk's slot (docs/problems/fp4-nudge-waits-behind-management-activation-2026-10-22.md).
-		Lanes: []actor.Lane{{Prefix: "source:", MaxConcurrent: sourcePollLane}, {Prefix: agentcore.EngineeringAdmissionMailbox, MaxConcurrent: 1}},
-	})
+	a.actorRT = actor.NewKernelRuntime(actorLog, actorLog, handler, actorOpts, kernelDispatcherOptions(sinkMailbox))
 	rt.SetKernelMode()
 
 	// Wire the dispatch function. From this point, rt.activate(rec)
@@ -160,6 +150,22 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 	rt.SetActorObligationsReader(a.actorObligations)
 
 	return a
+}
+
+// kernelDispatcherOptions bounds the dispatcher the adapter runs: delivery
+// attempts, deferrals, the dead-letter sink and the lanes.
+func kernelDispatcherOptions(sinkMailbox string) actor.DispatcherOptions {
+	return actor.DispatcherOptions{
+		MaxAttempts:  8,
+		MaxDeferrals: 64,
+		ErrorSink:    sinkMailbox,
+		// Source polls are network I/O up to the poll timeout; their own
+		// lane keeps them out of the slots desks wait for
+		// (docs/problems/research-more-slow-and-hidden-2026-10-21.md, E6).
+		// Engineering admission has its own lane too, so a nudge never
+		// waits for a desk's slot (docs/problems/fp4-nudge-waits-behind-management-activation-2026-10-22.md).
+		Lanes: []actor.Lane{{Prefix: "source:", MaxConcurrent: sourcePollLane}, {Prefix: agentcore.EngineeringAdmissionMailbox, MaxConcurrent: 1}},
+	}
 }
 
 // actorObligations is the actor tape's share of the "what is owed" surface:
