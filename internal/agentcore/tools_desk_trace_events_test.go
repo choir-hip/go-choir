@@ -85,27 +85,39 @@ for i := 0; i < 3; i++ {
 	if cells[0]["desk_session"] == "" || cells[0]["worker_pid"] == float64(0) || cells[0]["started_at"] == nil {
 		t.Fatalf("desk.cell lacks session, worker or timing: %v", cells[0])
 	}
+	// Journal cut R4: a cell's per-call egress rows ride its desk.cell event
+	// (egress[]), one durable record per cell. Only the async end of a search
+	// (search_done, which outlives the cell) and refusals stay standalone.
 	var starts, dones []map[string]any
-	for _, e := range egress {
-		switch e["verb"] {
-		case "search_start":
-			starts = append(starts, e)
-		case "search_done":
-			dones = append(dones, e)
+	rows, _ := cells[0]["egress"].([]any)
+	for _, r := range rows {
+		e, _ := r.(map[string]any)
+		if e["verb"] != "search_start" {
+			t.Fatalf("folded egress row with unexpected verb: %v", e)
 		}
+		starts = append(starts, e)
 	}
-	if len(starts) != 3 || len(dones) != 3 || len(egress) != 6 {
-		t.Fatalf("want three search_start and three search_done desk.egress events, got %d and %d of %d", len(starts), len(dones), len(egress))
+	for _, e := range egress {
+		if e["verb"] != "search_done" {
+			t.Fatalf("a per-call egress row was appended standalone: %v", e)
+		}
+		dones = append(dones, e)
+	}
+	if len(starts) != 3 || len(dones) != 3 || len(egress) != 3 {
+		t.Fatalf("want three search_start rows on the desk.cell event and three standalone search_done events, got %d and %d of %d", len(starts), len(dones), len(egress))
 	}
 	seen := map[any]bool{}
 	for _, e := range starts {
 		id := e["request_id"]
 		if id == "" || id == nil || id != e["response_request_id"] || seen[id] {
-			t.Fatalf("egress event needs a distinct request id echoed on its result: %v", e)
+			t.Fatalf("egress row needs a distinct request id echoed on its result: %v", e)
 		}
 		seen[id] = true
-		if e["worker_pid"] != cells[0]["worker_pid"] {
-			t.Fatalf("egress event worker mismatch: %v", e)
+		if e["worker_pid"] != cells[0]["worker_pid"] || e["desk_session"] != cells[0]["desk_session"] || e["run_id"] != cells[0]["run_id"] {
+			t.Fatalf("egress row session, worker or run mismatch: %v", e)
+		}
+		if e["started_at"] == nil || e["finished_at"] == nil || e["is_error"] != false {
+			t.Fatalf("egress row lacks timing or outcome: %v", e)
 		}
 	}
 	searchIDs := map[any]bool{}

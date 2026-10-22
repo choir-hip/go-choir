@@ -212,7 +212,6 @@ func TestToolLoopFileReadWithRuntime(t *testing.T) {
 	// row, so poll briefly instead of assuming a single read is enough.
 	var (
 		evts          []types.EventRecord
-		toolInvoked   bool
 		toolResult    bool
 		taskCompleted bool
 	)
@@ -224,22 +223,13 @@ func TestToolLoopFileReadWithRuntime(t *testing.T) {
 			t.Fatalf("list events: %v", err)
 		}
 
-		toolInvoked = false
 		toolResult = false
 		taskCompleted = false
 		for _, ev := range evts {
 			switch ev.Kind {
 			case types.EventToolInvoked:
-				toolInvoked = true
-				// Verify the payload contains the tool name.
-				var payload map[string]any
-				if err := json.Unmarshal(ev.Payload, &payload); err != nil {
-					t.Errorf("unmarshal tool.invoked payload: %v", err)
-				} else if payload["tool"] != "file_read" {
-					t.Errorf("tool.invoked tool: got %q, want file_read", payload["tool"])
-				} else if payload["arguments"] == nil {
-					t.Error("tool.invoked payload should include full arguments")
-				}
+				// tool.invoked is a bus-only line (journal cut R3).
+				t.Errorf("tool.invoked was persisted: %s", ev.Payload)
 			case types.EventToolResult:
 				toolResult = true
 				var payload map[string]any
@@ -252,21 +242,21 @@ func TestToolLoopFileReadWithRuntime(t *testing.T) {
 					if isError, _ := payload["is_error"].(bool); isError {
 						t.Error("tool.result should not be an error")
 					}
+					if payload["arguments"] == nil {
+						t.Error("tool.result payload should include the call's full arguments")
+					}
 				}
 			case types.EventRunCompleted:
 				taskCompleted = true
 			}
 		}
 
-		if toolInvoked && toolResult && taskCompleted {
+		if toolResult && taskCompleted {
 			break
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
 
-	if !toolInvoked {
-		t.Error("expected persisted tool.invoked event")
-	}
 	if !toolResult {
 		t.Error("expected persisted tool.result event")
 	}
@@ -664,7 +654,6 @@ func TestToolLoopEndToEndWithRuntime(t *testing.T) {
 	waitForEvents(t, s, rec.RunID, []types.EventKind{
 		types.EventRunSubmitted,
 		types.EventRunStarted,
-		types.EventToolInvoked,
 		types.EventToolResult,
 		types.EventRunProgress,
 		types.EventRunCompleted,

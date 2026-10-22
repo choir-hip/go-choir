@@ -97,6 +97,10 @@ func TestInternalRunEventAppendAcceptsOnlyEmailEvidenceEvents(t *testing.T) {
 func TestTextureRunProjectsLifecycleEvents(t *testing.T) {
 	rt, _ := testAPISetup(t)
 	trajectoryID := seedDurableTextureSubject(t, rt.Store(), "user-texture-events", "doc-event-projection")
+	// Texture progress is published on the live bus and not appended
+	// (journal cut R1): the Texture stream reads the bus.
+	liveProgress := rt.EventBus().SubscribeWithBuffer(512)
+	defer rt.EventBus().Unsubscribe(liveProgress)
 	rec, err := rt.StartRunWithMetadata(context.Background(), "revise the document", "user-texture-events", map[string]any{
 		runMetadataAgentProfile: agentprofile.Texture,
 		runMetadataAgentRole:    agentprofile.Texture,
@@ -108,7 +112,26 @@ func TestTextureRunProjectsLifecycleEvents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("start Texture run: %v", err)
 	}
-	progress := waitForTextureLifecycleEvent(t, rt, "user-texture-events", rec.RunID, types.EventTextureAgentRevisionProgress)
+	var progress types.EventRecord
+	for found := false; !found; {
+		select {
+		case ev := <-liveProgress:
+			if ev.Record.RunID == rec.RunID && ev.Record.Kind == types.EventTextureAgentRevisionProgress {
+				progress, found = ev.Record, true
+			}
+		case <-time.After(3 * time.Second):
+			t.Fatal("timed out waiting for Texture progress on the live bus")
+		}
+	}
+	stored, err := rt.Store().ListEvents(context.Background(), rec.RunID, 200)
+	if err != nil {
+		t.Fatalf("list Texture run events: %v", err)
+	}
+	for _, ev := range stored {
+		if ev.Kind == types.EventTextureAgentRevisionProgress {
+			t.Fatalf("Texture progress was appended: %s", ev.Payload)
+		}
+	}
 	var progressPayload map[string]string
 	if err := json.Unmarshal(progress.Payload, &progressPayload); err != nil {
 		t.Fatalf("decode Texture progress: %v", err)

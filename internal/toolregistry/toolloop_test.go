@@ -1603,3 +1603,51 @@ func isContextOverflowError(err error) bool {
 			strings.Contains(text, "length") ||
 			strings.Contains(text, "window"))
 }
+
+// Journal cut R1: the progress line written before a model call is a bus-only
+// line, so the response line carries what a reader of the pair used to get:
+// how long the call took (the latency probe), and what was sent (the request
+// shape and the hashes that show a prompt prefix changed).
+func TestRunToolLoopResponseLineCarriesCallLatencyAndRequestShape(t *testing.T) {
+	provider := newMockToolLoopProvider(&provideriface.ToolLoopResponse{
+		StopReason: "end_turn",
+		Text:       "done",
+		Usage:      provideriface.TokenUsage{InputTokens: 1, OutputTokens: 1},
+		Model:      "test-model",
+	})
+	var response map[string]any
+	var phases []string
+	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
+		if kind != types.EventRunProgress {
+			return
+		}
+		phases = append(phases, phase)
+		if phase == "tool_loop" {
+			_ = json.Unmarshal(payload, &response)
+		}
+	}
+	_, _, err := RunToolLoop(context.Background(), provider, nil, []json.RawMessage{json.RawMessage(`{"role":"user","content":"hi"}`)},
+		"You are helpful.", 0, emit, nil)
+	if err != nil {
+		t.Fatalf("run tool loop: %v", err)
+	}
+	if len(phases) < 2 || phases[0] != "provider_call" || phases[1] != "tool_loop" {
+		t.Fatalf("progress phases = %v, want provider_call then tool_loop (the request line is still emitted, for the bus)", phases)
+	}
+	if ms, ok := response["provider_call_ms"].(float64); !ok || ms < 0 {
+		t.Fatalf("provider_call_ms = %v", response["provider_call_ms"])
+	}
+	for key, want := range map[string]float64{"messages": 1, "tools": 0} {
+		if got, ok := response[key].(float64); !ok || got != want {
+			t.Fatalf("%s = %v, want %v", key, response[key], want)
+		}
+	}
+	for _, key := range []string{"system_sha256", "last_user_sha256"} {
+		if got, _ := response[key].(string); len(got) != 64 {
+			t.Fatalf("%s = %v, want a sha256 hex digest", key, response[key])
+		}
+	}
+	if response["input_tokens"] == nil || response["stop_reason"] == nil {
+		t.Fatalf("the cost fields moved: %v", response)
+	}
+}

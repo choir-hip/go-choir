@@ -17,7 +17,9 @@ import (
 //
 // Ways this could fail, written first: the phase is dropped on persist; a
 // payload that already names a phase is overwritten; a non-object payload is
-// corrupted; tool events gain a phase they never had.
+// corrupted; tool events gain a phase they never had. (tool.invoked is a
+// bus-only line since journal cut R3, so the tool event checked here is the
+// stored tool.result.)
 func TestRunEventEmitterPersistsPhase(t *testing.T) {
 	rt, s := testRuntime(t)
 	rec := &types.RunRecord{RunID: "run-phase", AgentID: "research:phase", OwnerID: "owner-1"}
@@ -29,7 +31,7 @@ func TestRunEventEmitterPersistsPhase(t *testing.T) {
 	emit(types.EventRunProgress, "tool_loop", own)
 	emit(types.EventRunProgress, "tool_loop", json.RawMessage(`"not an object"`))
 	call, _ := json.Marshal(map[string]any{"tool": "desk_go_eval"})
-	emit(types.EventToolInvoked, "tool_loop", call)
+	emit(types.EventToolResult, "tool_loop", call)
 
 	evs, err := s.ListEvents(context.Background(), rec.RunID, 10)
 	if err != nil || len(evs) != 4 {

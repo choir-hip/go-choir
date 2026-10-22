@@ -659,6 +659,35 @@ test('I5: no load is unknown; overlapping cells on one desk fail; egress from an
   assert.equal(checkI5(cleanErr).verdict, 'pass');
 });
 
+test('I5 derives egress calls from the rows folded into desk.cell events (journal cut R4), as it did from desk.egress events', () => {
+  const b = buildCleanBundle();
+  const want = checkI5(b);
+  assert.equal(want.verdict, 'pass');
+  // A new build appends one desk.cell per cell with its calls in egress[];
+  // the bundle's layers are then derived from run_events alone.
+  const folded = structuredClone(b);
+  delete folded.layers.egress;
+  delete folded.layers.cells;
+  const events = folded.layers.run_events.items;
+  for (const e of events.filter((x) => x.kind === 'desk.egress')) {
+    const cell = events.find((c) => c.kind === 'desk.cell' && c.loop_id === e.loop_id && c.payload.desk_session === e.payload.desk_session
+      && Date.parse(c.payload.started_at) <= Date.parse(e.payload.started_at) && Date.parse(e.payload.finished_at) <= Date.parse(c.payload.finished_at));
+    assert.ok(cell, `a cell holds egress ${e.payload.request_id}`);
+    (cell.payload.egress ||= []).push(e.payload);
+  }
+  folded.layers.run_events.items = events.filter((x) => x.kind !== 'desk.egress');
+  const got = checkI5(folded);
+  assert.equal(got.verdict, 'pass', JSON.stringify(got.halves));
+  assert.equal(got.halves.request_id.verdict, 'pass');
+  assert.equal(got.halves.request_id.reason, want.halves.request_id.reason);
+  assert.equal(got.load.appeared, want.load.appeared);
+  // The rule still bites on a folded row: another caller's request id fails.
+  const crossed = structuredClone(folded);
+  const holder = crossed.layers.run_events.items.find((x) => x.kind === 'desk.cell' && x.payload.egress);
+  holder.payload.egress[0].response_request_id = 'someone-else';
+  assert.equal(checkI5(crossed).verdict, 'fail');
+});
+
 // --- CLIs
 
 test('checker CLI: exit 0 on clean, 1 on a planted copy, 2 on unreadable input; --json writes the report', () => {
