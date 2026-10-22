@@ -352,3 +352,36 @@ the gateway.
 - **R2-5 residual:** `held_until` is not on the owed surface.
 - The `ClaudeDelegateStatus` claim, the residual's candidate fixes and the
   heresy delta are corrected above.
+
+### Round 3 review (bunch 93): the rollback line was stale
+
+The FP4 definition's rollback for this side lane still read
+`git revert b7c5d7c97`. On the lane tip that commit no longer reverts on
+its own: the round 2 fix (da66f915f) edits the same lines, and
+`git show b7c5d7c97 | git apply -R --check` fails at
+`internal/store/lifecycle.go` and `internal/actor/dispatcher.go:326`.
+Corrected: `git revert da66f915f f9aa36794 b7c5d7c97 94f829bfc`, newest
+first. Checked on 3e301c514: the four apply cleanly, `internal/` then
+equals the lane's merge base with main, and `go build ./internal/...`
+passes. The tests are reverted with the fix because they fail without it.
+The docs commits need no revert for a code rollback.
+
+The same review saw one failed `go test -race ./internal/actorruntime` run
+of four, with the test name lost. Re-run on 3e301c514: the first full run
+failed in `TestAdapterStartDeliversDurableLifecycleOccurrenceAfterPlannedRestart`
+(`adapter_test.go:598: durable lifecycle occurrence was not dispatched`,
+the test's 5 s wait for the provider call after the planned restart).
+Run alone with `-race`: 2 failures in 120 on the lane, 0 in 120 on
+origin/main (ad2812fcc), which is not a significant difference. The lane is
+not on that path: no handler fails in the test's window (no
+`dispatcher: handle`, `retry`, `poison` or `deferred` line), so no hold is
+set, and with no hold the loop arms the timer exactly as before; the
+spawn-wake move and `MintedAt` do not touch a research or Texture mailbox.
+Hypothesis, not confirmed by a trace: the reactivated research run's
+pre-provider work (`ReconcileParkedLifecycleCoagentWake` under
+`lifecycleWorkReconcileMu`, then the activation's store writes) competes
+with the boot's asynchronous wake outbox migration and the Texture
+re-drive, and under `-race` it sometimes does not reach the provider
+within 5 s. In both failing iterations the Texture re-drive also landed
+late (+4 s against +1 s when passing). Not fixed here; a residual for the
+test, not for this lane.
