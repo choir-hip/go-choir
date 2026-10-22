@@ -271,10 +271,13 @@ func walkPageCacheRoot(spec pageCacheRootSpec, lim pageCacheLimits, deadline tim
 // parseStoreOverlay reads the topmost mount at mountpoint from a
 // /proc/self/mountinfo body: its filesystem type and, for an overlay, its
 // upper and work directories, and whether overlays are stacked. ok is false
-// when no mount is found. Topmost is the last matching line: mountinfo lists
-// a namespace's mounts in mount order, which is an ordering the kernel
-// keeps but does not document as a guarantee; a stacked store fails closed
-// either way.
+// when no mount is found. The reported mount is the last matching line, and
+// mountinfo lists a namespace's mounts in mount order, an ordering the kernel
+// keeps but does not document. So stacking is judged without it: Stacked is
+// set for more than one overlay at the store, for an overlay under a later
+// plain mount, and for any lowerdir with several layers or lowerdir+= /
+// datadir+= option. A comma in an option value is printed by the kernel as
+// \054, which is decoded after the split; a literal comma truncates the value.
 func parseStoreOverlay(mountinfo, mountpoint string) (PageCacheLayering, bool) {
 	var got PageCacheLayering
 	found, overlays := false, 0
@@ -297,7 +300,9 @@ func parseStoreOverlay(mountinfo, mountpoint string) (PageCacheLayering, bool) {
 		overlays++
 		for _, opt := range strings.Split(f[sep+3], ",") {
 			if v, ok := strings.CutPrefix(opt, "lowerdir="); ok && strings.Contains(v, ":") {
-				got.Stacked = true // several lower layers (an escaped colon also lands here: fail closed)
+				got.Stacked = true // several lower layers (a colon inside a path also lands here: fail closed)
+			} else if strings.HasPrefix(opt, "lowerdir+=") || strings.HasPrefix(opt, "datadir+=") {
+				got.Stacked = true // layers appended through the newer mount API
 			} else if v, ok := strings.CutPrefix(opt, "upperdir="); ok {
 				got.Upper = unescapeMountinfo(v)
 			} else if v, ok := strings.CutPrefix(opt, "workdir="); ok {
@@ -305,7 +310,10 @@ func parseStoreOverlay(mountinfo, mountpoint string) (PageCacheLayering, bool) {
 			}
 		}
 	}
-	if overlays > 1 && got.FSType == "overlay" {
+	// Judged from the set of mounts at the store, not their order: more than
+	// one overlay, or an overlay anywhere under a later plain mount, is a
+	// layer whose files the read cannot attribute.
+	if overlays > 1 || (overlays == 1 && got.FSType != "overlay") {
 		got.Stacked = true
 	}
 	return got, found
@@ -350,7 +358,7 @@ func readGuestPageCache() (PageCache, error) {
 		switch {
 		case !found:
 			layering.Reason = "no store mount in mountinfo"
-		case layering.FSType == "overlay" && layering.Stacked:
+		case layering.Stacked:
 			layering.Reason = "stacked overlay"
 		case layering.FSType == "overlay" && layering.Upper == "":
 			layering.Reason = "overlay without a parsed upperdir"
