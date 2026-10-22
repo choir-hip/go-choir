@@ -1,6 +1,8 @@
 # CI critical path: two heavy race shards, a 20-runner queue, and the Node B build floor (2026-10-22)
 
-Date: 2026-10-22. Status: open; fix on `lane/fp0-ci-shard-balance`.
+Date: 2026-10-22. Status: fix committed on `lane/fp0-ci-shard-balance`
+(`c442f3221`), not yet on main; the CI timing proof comes with the first runs
+after it lands.
 Mutation class of the fix: orange (CI workflow and the test shard planner;
 no product behavior). Rollback: revert the fix commit.
 
@@ -128,35 +130,112 @@ that arrives during a run waits for that run's tail, which is the later of
 the deploy end (750) and the SBOM acceptance end (735). The longest wait
 observed before plan started was 529 s.
 
-## Fix in this lane
+## Fix (lane/fp0-ci-shard-balance, not yet on main)
+
+Commits:
+
+- `627f3645b` (yellow): the planner contract test, written first. It fails
+  on the old planner, whose discovery covers only store.
+- `ceae5b28c` (yellow): the workflow contract for report-only jobs and the
+  split lane.
+- `c442f3221` (orange): the fix. Rollback: revert it, and then the two test
+  commits, which fail without it.
 
 1. **Shard planner** (findings 1 and 2):
-   - A tracked list, `scripts/go-test-split-packages`, names the packages
-     that are split by test name: store, platform, objectgraph,
-     projectionbase and actorruntime. Shards 0-5 run them all in one
-     `go test`, so their binaries run in parallel.
+   - `scripts/go-test-split-packages` names store, platform, objectgraph,
+     projectionbase and actorruntime. Shards 0-5 run them in one `go test`,
+     sharded by test name, so their binaries run in parallel.
    - Each test name goes to one shard for every listed package that has it,
-     so each (package, test) pair runs exactly once.
-   - Every other package runs whole on shard 6 or 7.
-   - The run fails, instead of passing, when `go list` fails, when test
-     discovery fails, or when the list names a package that is not a
-     non-runtime package.
+     so each (package, test) pair runs once even if two packages share a
+     name. No names are shared today.
+   - The other 137 packages run whole on shard 6 or 7.
    - Discovery also lists `Fuzz` targets, whose seed corpora `-run` already
-     executes.
-   - `.github/scripts/go-shard-discovery-test` is extended first, so that no
-     package or test can be dropped or run twice.
-2. **Report-only jobs** (finding 3): govulncheck and npm audit wait for
-   `check` and run unless the run is cancelled. This frees two of the 20
-   slots in the first two minutes. In the replay the prebuild then starts at
-   69 s instead of 115 s, and the deploy ends 39 s earlier (median per run;
-   up to 77 s).
-   No gate changes: neither job feeds `check` or the deploy.
-3. **Not changed in this lane, recorded as residuals:**
-   - The Node B host closure build (about 440 s) is the deploy floor.
-   - The deploy tail after the build: active computer refresh about 125 s,
-     service activation 12-62 s.
-   - Cache eviction (finding 4).
-   - Queueing between runs and the 584 s SBOM candidate (finding 5).
-   - Starting the prebuild from inside deploy-impact so it never queues for
-     a slot. That would change the prebuild's concurrency group and a
-     red-class contract.
+     executes. There are none in the repo today.
+   - The cache lane for shards 0-5 is renamed from `store` to `split` (also
+     in race.yml), so the first run after landing is cold for that lane.
+2. **The planner now fails closed (discovered while writing the test).**
+   The old planner read `go list` through process substitution. When
+   `go list` failed, it printed "No non-agentcore packages found" and exited
+   0, so every non-runtime shard passed having tested nothing (reproduced
+   with a fake `go`). The new planner fails when `go list` fails, when
+   discovery fails or finds nothing, and when the split list names a package
+   that is not a non-runtime package.
+3. **Report-only jobs** (finding 3): govulncheck and npm audit need
+   `[plan, check]` with `!cancelled()`, so they still run when `check` fails.
+   This frees two of the 20 slots in the first two minutes. In the replay
+   the prebuild starts at 69 s instead of 115 s, and the deploy ends 39 s
+   earlier (median per run; up to 77 s). No gate changes: neither job feeds
+   `check` or the deploy.
+
+### Proof (local; CI timing comes with the first runs after landing)
+
+- `.github/scripts/go-shard-discovery-test` exercises the real planners with
+  a fake `go`. It covers 8 shards (ci.yml), 4 (race.yml), 3, 2 and no
+  `SHARD_INDEX`. It fails if any package or (package, test) pair runs on
+  zero shards or on two, if a name shared by split packages runs twice, if a
+  runtime package appears, if flags miss discovery or execution, or if a
+  failed `go list`, a failed discovery or a stale split entry passes.
+- These pass: `ci-workflow-contract-test`, `deploy-workflow-contract-test`,
+  `deploy-impact-classify-test`, `ci-impact-classify-test`, the SBOM and
+  deploy script tests, and `bash -n`.
+- `node-b-ci-gate-test` cannot run on macOS (`flock` is missing) and is
+  untouched.
+- actionlint 1.7.12 and shellcheck 0.11.0 are clean.
+- Real package set (real `go list` and discovery, executions recorded, 8
+  shards):
+  - all 142 non-runtime packages are covered;
+  - the 137 whole packages run exactly once;
+  - the 918 split (package, test) pairs are each selected exactly once.
+- Split shard 3 run for real, without `-race`, on macOS: 153 tests in the 5
+  packages, exit 0, 124 s. The store slice took 100 s, and the others
+  27-59 s in parallel.
+
+### Per-shard estimate (race; CI medians of the per-test and per-package times above)
+
+| Shard | Before: job, median of 27 | After: test seconds per package | After: job, estimate |
+|---|---|---|---|
+| 0 | 175 | store 104; others 5-36 | ~150 |
+| 1 | 175 | store 164; others 14-42 | ~210 |
+| 2 | 200 | store 164; others 11-60 | ~210 |
+| 3 | 186 | store 92; objectgraph 65; others 23-49 | ~150 |
+| 4 | 207 | store 134; objectgraph 57; others 23-42 | ~180 |
+| 5 | 179 | store 183; objectgraph 90; others 16-42 | ~230-250 |
+| 6 | 296 (last 8 runs 340-540) | 69 packages, 185 package-seconds, longest 36 | ~150-180 |
+| 7 | 355 (last 8 runs 190-320) | 68 packages, 293 package-seconds, longest 56 | ~170-210 |
+| runtime 0-7 | 218-283 | unchanged | 218-283 |
+
+How the "after" estimates are built:
+
+- Store's slices are the same as today's: store's tests come first in
+  discovery order, so the round-robin assigns them as before.
+- On a split shard the other packages' slices run beside store's, so the
+  store slice sets the shard's length.
+- The estimate adds 15-40 s for linking five test binaries and for sharing 4
+  CPUs between them.
+- The longest non-runtime shard should drop from 296-355 s at the median (up
+  to 540 s) to about 250 s. That is within about a minute of the others and
+  no longer than the runtime shards, which become the test floor.
+
+### Residuals
+
+- **The deploy floor is the Node B host closure build** (about 440 s,
+  finding 2). After this fix, the tests end before the prebuild in nearly
+  every run. The next deploy-latency gain is in the Node B build itself or
+  in starting the prebuild sooner.
+- **The prebuild still queues for a runner.** In the replay it starts at
+  69 s, not 12 s. Starting it at 12 s needs at most 21 jobs ready when plan
+  ends, or the prebuild started from inside deploy-impact. The second option
+  changes the prebuild's concurrency group, which is a red-class contract.
+- **The deploy tail after the build:** active computer refresh about 125 s,
+  service activation 12-62 s.
+- **Cache eviction (finding 4)**: 10.5 GB in use of 10 GB. Race lanes are
+  evicted between race runs, and a cold run costs about 250 s on `check`.
+  Two vet-build entries take 3.9 GB.
+- **Queueing between runs (finding 5)** and the 584 s SBOM candidate, the
+  run's tail.
+- **Store's slices are uneven** (92-183 s), because the round-robin
+  ignores test weight. Weight-aware assignment would need recorded timings.
+- **Store now shares the runner** with four other test binaries for its
+  first 30-90 s. A store test that is sensitive to load would show up as a
+  new flake. The `go-test-scale` quarantine is the existing path for such
+  tests.
