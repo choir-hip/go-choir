@@ -618,3 +618,80 @@ Each is read-only. FP0 does the host and paper reads.
   index on `run_memory_entries`.
 - introduced: none.
 - repaired: none.
+
+## Build: journal cuts R1 to R4 (2026-10-22, lane `lane/fp1-journal-cuts`)
+
+Date: 2026-10-22. Builder for FP0. Based on `73718ec65`. Mutation class: R1,
+R3 and R4 are **red** (they change what the Trace records); R2 is orange; this
+section is green.
+
+Owner, 2026-10-22: "we can't continue with the paper writing a gigabyte every
+10 to 20 minutes... resolve it." And: "Anything which improves resource
+utilization on a forward and ongoing basis should be prioritized over
+stability, availability, or uptime in the short term." Owner ruling that trace
+lines are loss-tolerant: notes section 27 item 18
+(`docs/reports/owner-notes-2026-10-14.md`, "a crash may lose up to the batch
+window of telemetry"), carried in `internal/types/event_durability.go` and
+`docs/reports/telemetry-batching-design-2026-10-20.md`. The cuts below lean on
+it: a crash loses at most what a crash already loses, and a bus-only line is
+lost the same way.
+
+Not built: R5 (store schema change, its own lane), R6, R7.
+
+### The grep, kind by kind
+
+Searched the whole checkout: Go (`internal`, `cmd`), `frontend/` (`*.svelte`,
+`*.ts`, `*.js`, Playwright specs, helpers), `scripts/`, `skills/`, `nix/`,
+`load/`, and `docs/` for a reader contract. Evidence JSON under
+`docs/evidence/` and `docs/archive/` are dated captures, not readers.
+
+**Correction to the record's R1.** The second investigation found no reader of
+`provider_call_started` "in Go, frontend, scripts or cmd". There is one in
+`scripts/`: `management_latency_probe.py` `model_calls` pairs the request
+`loop.progress` (the one with `message_roles`/`messages` and no `input_tokens`)
+with the next response `loop.progress` of the same iteration to get per-call
+latency. The record's grep was for the phase string; the probe tests for the
+payload field. So R1 does not simply delete the durable line: the reader moves
+to the replacement (below).
+
+| Kind | Durable readers found | Live readers | Decision |
+|---|---|---|---|
+| `loop.progress` phase `provider_call_started` | `scripts/management_latency_probe.py:216-235` (latency pairing). `docs/reports/reeng-cut0-measurements-2026-10-12.md` section 2 defines "a model turn" by the pairing (a dated method, not code). `docs/problems/prompt-cache-breaks-across-turns-2026-10-14.md:234` used `system_preview` once to verify a fix. Go: none (`llmcost/aggregator.go:72-83` takes phase `tool_loop` only; `toolregistry/toolloop_test.go:242-281` tests the emit, not a stored row) | none in the frontend; Texture's `synth_progress` stream sees its `texture.agent_revision.progress` copy on the bus | **Bus-only.** The response line (`tool_loop`) gains `provider_call_ms`, `messages`, `tools`, `system_sha256`, `last_user_sha256`. The probe reads `provider_call_ms` and keeps the old pairing for old tapes |
+| `texture.agent_revision.progress` | none. `agentcore/internal_run_event_api_test.go:111` reads it from the store (test, moves to the bus). `docs/design/choir-event-table-f-c-2026-10-22.md:231` names it in a kind list | `textureowner/texture.go:1698,1790` (`Bus.SubscribeWithBuffer`, `textureStreamEventFromRecord` maps it to `synth_progress` / `synth_completed`); `agentcore/live_ws.go:110` (bus) | **Bus-only.** One cost: the live WebSocket catch-up (`live_ws.go:80`, `ListEventsByOwnerAfter`) can no longer replay a progress tick after a reconnect. Ticks are advisory; the revision events that matter stay acknowledged |
+| `tool.invoked` | `scripts/reeng_tracer_checks.mjs:85` (`goTestCells` takes the cell source from the invoked row, matches it to the result by `call_id`); `scripts/retrieval_eval_extract.py:75` (cell sources); `scripts/management_latency_probe.py:297` and `scripts/l2a_window_pairs.py:158` (regex over the text of invoked and result rows); `scripts/reeng_tracer.mjs:442` (`cellInFlight`: invoked minus results = a cell is running, for the crash drill); `cmd/choir/trace.go` (lists every run event, no per-kind logic); tests (`toolloopvalidation_test.go`, `toolloop_test.go`, `batch_executor_test.go`, `reeng_*_test.mjs`) | `frontend/src/lib/PromptSurface.svelte:139,159` (the ticker, "agent called tool"), fed by `live_ws.go` from the bus. Same WebSocket catch-up caveat as above | **Merged into `tool.result`.** The result carries `arguments`, `started_at`, `duration_ms`. `tool.invoked` is still published on the bus for the ticker and is no longer appended. Readers move to the result with a fallback to the old invoked row. `cellInFlight` has no durable signal left and reports "not served" (its existing 8 s fallback) |
+| `desk.egress` | `cmd/choir/trace.go:364` (the bundle's `egress` layer), which `scripts/reeng_invariants.mjs` (I5, `deskItems`) consumes; `scripts/reeng_tracer.mjs:1025-1026` (search start/done counts from raw events); `scripts/reeng_ttl_session.mjs:212`; `docs/reports/reeng-trace-bundle-format-2026-10-12.md` (the contract: "one item per `desk.egress` run event"); `docs/definitions/choir-launch-fp2-desk-boundary-2026-10-21.md` (a refusal is a `desk.egress` event with `refused: true`) | none (desk events were never published on the bus: `recordDeskEvent`) | **Folded** into the `egress[]` array of the cell's `desk.cell` event: the synchronous per-call rows, same field names. Stays standalone: `refused` rows (SEC-02 evidence, the fp2 contract), the async `search_done` row (it outlives the cell), and any row that arrives after its cell event closed. The `egress` layer of the trace bundle is built from both shapes, so the bundle contract and I5 are unchanged |
+| `desk.cell` | `cmd/choir/trace.go:363`, `scripts/management_latency_probe.py:295`, `reeng_invariants.mjs`, `reeng_ttl_session.mjs`, `reeng_tracer.mjs` | none | **Kept**, gains `egress[]`. Readers of the old fields are unaffected |
+| `inbox_cursor` run-memory entry (R2) | `LoadInboxCursorForDesk` (`rlm_reduce.go:516`, takes the maximum), `recoverPartialActCommit` (`:888`, reads the same maximum), `LoadInboxCursor` (runID keyed, tests only) | n/a | **Skipped when the cursor did not move** (`highWater <= scope.Cursor`). The reader takes a maximum, so an equal value changes nothing; recovery compares `cursor < highWater`, which a skipped write never affects |
+
+Replay and restore: every old tape still holds `tool.invoked`,
+`desk.egress`, standalone progress lines. No reader is changed to require the
+new shape. Readers accept both. No stored event is edited.
+
+What the Trace loses, plainly:
+
+- The prompt text of each model call (`system_preview` 2,000 chars,
+  `last_user_text` 4,000 chars), `message_roles`, `tool_names`, `max_tokens`,
+  `tool_choice`. The run-memory messages still hold what the model was sent;
+  the hashes on the response line show whether the prefix changed.
+- A tool call that started and never produced a result (a crash mid-tool) no
+  longer leaves a `tool.invoked` row. The assistant run-memory message that
+  holds the call is written before the tool runs and stays.
+- The live ticker and the Texture progress stream lose their WebSocket
+  catch-up replay for these three bus-only lines after a reconnect.
+
+### Plan and evidence
+
+Order: this section (green); tests that fail on `73718ec65` (yellow); one fix
+commit per cut: R1 (red), R2 (orange), R3 (red), R4 (red); a closing record
+update. Each red commit carries conjecture delta, protected surfaces,
+admissible evidence, rollback (revert that commit) and heresy delta.
+
+Admissible evidence for each red cut, taken by FP0 on a test computer under
+comparable load over a window of about 500 s, as in reading 4 above:
+`events_appended_by_kind` and `tape_ops_by_kind` per second, before and after.
+Expected: `loop.progress` from about 1.8/s to about 0.9/s;
+`texture.agent_revision.progress` to 0; `tool.invoked` to 0; `desk.egress` to
+the refusals and `search_done` rows only; `tool.result`, `desk.cell` and
+`loop.progress` phase `tool_loop` unchanged in count; `llmcost` totals
+unchanged. The tests in the lane assert the same counts on a canned run
+against the real store counters.
