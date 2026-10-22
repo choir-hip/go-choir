@@ -21,7 +21,7 @@ import (
 //   - test_class_idle: a test-class computer (live tiers: a test account, or
 //     a computer computer-tiers.json names as a test computer), stopped,
 //     hibernated or failed, not held, idle at least TestIdleMinAge, and not
-//     named by any VM_*_ONLY selector. Removal is the ephemeral rule's path
+//     named by any per-computer selector (selectorEnvKeyRE). Removal is the ephemeral rule's path
 //     (DestroyVMState, then the ownership) under a lifecycle claim, with
 //     every check repeated at destroy time.
 //   - quarantine_age_out: a data.img.quarantine-* of a cold recovery that
@@ -210,53 +210,77 @@ func testIdleKeepReasons(own *VMOwnership, cfg RetentionPruneConfig, warmness Wa
 	}
 	// DestroyVMState removes the whole dir: never one that holds a
 	// quarantine the age-out rule would keep, or a recovery in flight.
-	if vmDirHoldsUnfinishedRecovery(cfg.StateDir, own.VMID) {
-		reasons = append(reasons, "holds_unfinished_recovery")
-	}
+	reasons = append(reasons, vmDirRecoveryKeepReasons(cfg.StateDir, own.VMID, now, cfg.QuarantineMinAge)...)
 	return reasons
 }
 
-// vmDirHoldsUnfinishedRecovery reports whether a VM dir holds anything of a
-// cold recovery that may be the only copy of the computer's data: a
-// quarantine whose recovery did not finish (or that cannot be read), a
-// staging image, or a journal whose recovery is neither done nor failed.
-// An unreadable dir counts as holding one.
-func vmDirHoldsUnfinishedRecovery(stateDir, vmID string) bool {
+// vmDirRecoveryKeepReasons is why a rule that destroys an owned computer's
+// whole dir (test_class_idle, the ephemeral rule) must keep it:
+//   - holds_unfinished_recovery: a quarantine whose recovery did not finish
+//     or cannot be read (no journal, failed, pre-swap, swapped, booted), a
+//     staging image, a journal whose recovery is neither done nor failed,
+//     or an unreadable dir; any of these may be the only copy;
+//   - holds_young_quarantine: a finished recovery's quarantine younger
+//     than minAge, the age-out rule's own minimum (off Linux every
+//     quarantine is young: no ctime).
+func vmDirRecoveryKeepReasons(stateDir, vmID string, now time.Time, minAge time.Duration) []string {
 	root := filepath.Clean(stateDir)
 	if root == "." || root == string(os.PathSeparator) || vmID == "" || filepath.Base(vmID) != vmID {
-		return true
+		return []string{"holds_unfinished_recovery"}
 	}
 	vmDir := filepath.Join(root, vmID)
 	files, err := os.ReadDir(vmDir)
 	if err != nil {
-		return !os.IsNotExist(err)
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return []string{"holds_unfinished_recovery"}
 	}
+	unfinished, young := false, false
 	for _, file := range files {
 		name := file.Name()
 		switch {
 		case strings.HasPrefix(name, "data.img.staging-"):
-			return true
+			unfinished = true
 		case strings.HasPrefix(name, "data.img.quarantine-"):
 			generation, operation, ok := parseQuarantineName(name)
 			if !ok || !file.Type().IsRegular() {
-				return true
+				unfinished = true
+				continue
 			}
 			journal, ok := readQuarantineJournal(vmDir, generation, operation)
 			if !ok || !recoveryFinished(journal) {
-				return true
+				unfinished = true
+				continue
+			}
+			info, err := file.Info()
+			if err != nil {
+				unfinished = true
+				continue
+			}
+			if now.Sub(inodeChangeTime(info, now)) < minAge {
+				young = true
 			}
 		case strings.HasPrefix(name, "rec-") && strings.HasSuffix(name, ".journal"):
 			var j quarantineJournal
 			body, err := os.ReadFile(filepath.Join(vmDir, name))
 			if err != nil || json.Unmarshal(body, &j) != nil {
-				return true
+				unfinished = true
+				continue
 			}
 			if !recoveryFinished(j) && j.Status != "failed" {
-				return true
+				unfinished = true
 			}
 		}
 	}
-	return false
+	var reasons []string
+	if unfinished {
+		reasons = append(reasons, "holds_unfinished_recovery")
+	}
+	if young {
+		reasons = append(reasons, "holds_young_quarantine")
+	}
+	return reasons
 }
 
 // recoveryFinished: the journal's phase is done or its status active, and

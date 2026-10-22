@@ -721,7 +721,8 @@ func retentionPruneConfigFromEnv() (vmctl.RetentionPruneConfig, bool) {
 
 // retentionRulesFromEnv reads the test_class_idle and quarantine_age_out
 // switches (default off) and their minimum ages under prefix, and the ids
-// every VM_*_ONLY selector names, which neither rule touches.
+// every per-computer selector names (VM_*_ONLY, VMCTL_*_ONLY,
+// CHOIR_*_COMPUTERS, CHOIR_*_ONLY), which neither rule touches.
 func retentionRulesFromEnv(cfg *vmctl.RetentionPruneConfig, prefix string) {
 	cfg.TestIdleMode = os.Getenv(prefix + "TEST_IDLE_MODE")
 	cfg.QuarantineMode = os.Getenv(prefix + "QUARANTINE_MODE")
