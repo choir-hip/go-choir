@@ -199,3 +199,11 @@ d36230506 (test 9d2523727); the first is a landing-class change recorded
 in the station. Non-commit statements (a statement in flight, an open
 write transaction) are still not fenced; that is an owner decision
 between pinning the pools and never closing the engine in-process.
+
+## Owner decision: pin the pools (2026-10-22)
+
+The owner chose option (a) for the non-commit class: before teardown,
+Close checks out each pool's single connection under the hard deadline,
+so no statement, transaction, commit or GC is in flight when the engine
+closes. Option (b), never closing the engine in-process, is not pursued.
+It is built in the next round on this station, after round 6 lands.

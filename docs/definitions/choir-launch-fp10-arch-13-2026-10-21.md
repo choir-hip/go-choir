@@ -223,7 +223,8 @@ now:
     record. (1) fixed - Close and Reopen serialized on closeMu; every
     Close ends with the commit-lock fence by the hard deadline; the nil
     shortcut on a retried Close is gone. (2) fixed - count mode takes the
-    same fence. (3) one hard deadline bounds the whole Close; the code at
+    same fence. (3) one hard deadline bounds the checkpoint waits and the
+    fence (round 6 narrowed this from "the whole Close"); the code at
     75f3a9a46 already shared one context, the test pins the bound. (4)
     one count per cut commit and per failing Close. (5) test and record
     claims narrowed; the callers residual corrected. (6) Reopen refuses a
@@ -254,6 +255,26 @@ now:
     seam tests ok (136 s); gates hang-guards, decode-roots, heresies,
     v1-writer-purity ok; guest-data-fstrim not runnable here (no nix
     binary; the lane touches no nix file).
+  owner_decisions:
+    - what: >-
+        Fence non-commit statements by pinning the pools - before teardown,
+        Close checks out each pool's single connection (s.db, s.readDB)
+        under the hard deadline, else fails closed - option (a); not
+        option (b), never closing the engine in-process
+      kind: safety
+      decided_by: owner
+      decided_at: 2026-10-22
+      relayed_by: FP0
+      status: decided, not built; the next round on this station, after round 6 lands
+  review_round_7: >-
+    2026-10-22, DeepSeek v4.1 flash accept with edits on c10afb2d3 (the
+    behavior is right; three stale statements). Fixed - the left-open
+    residual now says a failed Close restores the cadence and the sealer;
+    the Store.Close code comment and the failure-mode bullet say the hard
+    deadline bounds the checkpoint waits and the fence, not the whole
+    Close. Not done in this round (FP0 scoped it to the three statements)
+    - DeepSeek F4 (no test of the undo on the fence-failure path) and F5
+    (no deployed acceptance for rematerialize).
   structural_assessment: >-
     Round 5 on Close (CLAUDE.md escalation rule - 3+ rounds without
     convergence). The rounds found doors one at a time because Close had
@@ -320,7 +341,9 @@ now:
       reopens the cadence and arms it (TestCheckpointReopenAfterCloseStaysDebounced).
   residuals:
     - >-
-      OWNER DECISION - non-commit statements are not fenced (Sonnet r5 F2,
+      OWNER DECIDED 2026-10-22 - option (a), pin the pools. Not built in
+      this round; it is the next round, after this one lands. The class:
+      non-commit statements are not fenced (Sonnet r5 F2,
       the same class as the commit fence, one rung wider). The fence is
       the commit lock; a statement that is not a commit (a SELECT SLEEP
       in flight, an open write transaction, a finalize transaction, a
@@ -337,8 +360,8 @@ now:
       restart with the durable marker; larger, deletes the fence,
       closeMu, ErrCheckpointCommitLive and the left-open state (DeepSeek
       notes rematerialize renames the workspace in-process today, so (b)
-      moves that flip to boot). FP0 puts this to the owner; no patch
-      round here.
+      moves that flip to boot). FP0 put this to the owner, who chose (a)
+      on 2026-10-22; (b) is not pursued.
     - >-
       A commit queued behind the Close fence (an inline finalize commit,
       the online GC, a texture history read) takes the commit lock once
@@ -359,9 +382,11 @@ now:
       the store split, SA slice 5 (excluded).
     - >-
       After a Close that failed closed (a commit still running at the
-      deadline) the store stays open with its cadence closed: finalize
-      commits inline and mode reads "closed" until a Close and Reopen
-      succeed. The callers differ. The planned restart ignores Close's
+      deadline) the store stays open and serving, with the checkpoint
+      cadence and the telemetry sealer restored to what they were before
+      the Close (round 6); Reopen refuses until a later Close succeeds,
+      and a retried Close is fenced like any other. Only a derived-column
+      migration the Close cancelled stays cancelled. The callers differ. The planned restart ignores Close's
       error and exits, and process exit reclaims the store. The
       projection-base rebase returns the error and boot fails.
       Rematerialize returns the error and the guest stays up on the open
@@ -517,8 +542,9 @@ Problem: [guest-checkpoint-on-the-write-path-2026-10-21](../problems/guest-check
   (TestCheckpointConcurrentCloseFailsClosed,
   TestCheckpointRetriedCloseUnderInlineCommitFailsClosed,
   TestCheckpointCountModeCloseFailsClosedUnderInlineCommit).
-- Close waits a grace per wait. Test: one hard deadline bounds the whole
-  Close (TestCheckpointCloseBoundIsOneDeadline).
+- Close waits a grace per wait. Test: one hard deadline bounds the
+  checkpoint waits and the fence (TestCheckpointCloseBoundIsOneDeadline);
+  it does not bound the telemetry drain, the closeMu wait or the teardown.
 - Reopen over an open store orphans its handles. Test:
   TestCheckpointReopenRequiresAClosedStore.
 - The close deadline is a context deadline, not a wall-clock bound on the
