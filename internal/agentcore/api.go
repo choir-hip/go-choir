@@ -858,6 +858,10 @@ type guestObservabilityResponse struct {
 	// inline commits (time writers waited) and background commits, and
 	// what is not yet committed (ARCH-13). Read-only.
 	GuestCheckpoint *store.CheckpointStats `json:"guest_checkpoint,omitempty"`
+	// EventTable is store.event_table as applied (event_table.go): the host
+	// grant, the owner's setting, and whether the writer stamps. Absent on a
+	// computer with neither, so the response is unchanged there.
+	EventTable *EventTableStatus `json:"event_table,omitempty"`
 	// ClaudeDelegate is the Claude delegate's availability on this computer
 	// and why not (docs/design/claude-delegate-slice1-2026-10-14.md). Never
 	// the token.
@@ -1012,6 +1016,9 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 		resp.StreamSeqLease = &lease
 		checkpoint := h.rt.store.CheckpointStats()
 		resp.GuestCheckpoint = &checkpoint
+		if st := h.rt.eventTableStatus(); st.HostGranted || st.Setting {
+			resp.EventTable = &st
+		}
 		if tasks, ok := boundedObservabilityRead(observabilityReadBudget, func() *managementTaskObservability {
 			return h.rt.managementTaskObservability(r.Context(), ownerID, h.rt.TextureComputerID())
 		}); ok {

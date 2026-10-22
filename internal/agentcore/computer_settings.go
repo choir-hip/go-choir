@@ -102,8 +102,11 @@ func (h *APIHandler) HandleComputerSettings(w http.ResponseWriter, r *http.Reque
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
 			return
 		}
-		if key == store.SettingTelemetryBatch {
+		switch key {
+		case store.SettingTelemetryBatch:
 			rt.applyTelemetryBatchingSetting(value)
+		case store.SettingEventTable:
+			rt.applyEventTableSetting(value)
 		}
 		if key == store.SettingDebouncedCheckpoint {
 			rt.applyGuestCheckpointSetting(value)
