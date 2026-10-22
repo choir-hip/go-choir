@@ -55,9 +55,10 @@ Research has to be re-run once OpenCode serves the test computer's
 sessions.
 
 Repair:
-1. Code (red: gateway and provider calls). A 401 or 403 parks the key as
-   a dead credential, for 6 h like out of funds, and the call is retried
-   on the next key. The error and the log name the key's variable, never
+1. Code (red: gateway and provider calls). A 401 parks the key as a
+   dead credential, for 6 h like out of funds, and the call is retried on
+   the next key. A 403 does not park: OpenCode also answers 403 for a
+   model the plan does not cover, and the pool is shared by every model. The error and the log name the key's variable, never
    its value. Tests first: a pool with one key that answers 401 serves
    every session from the other key, and with every key dead no upstream
    call loops.
