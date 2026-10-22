@@ -77,7 +77,7 @@ run_alarm 24 10
 check "A7 free 24 and unallocated 10 exactly: warning, not error" 'grep -q "^<4>host disk WARNING: " "$root/out" && ! grep -q "^<3>" "$root/out"'
 
 run_alarm 100 38 FAKE_NO_META=1
-check "A8 no metadata line: warning" 'grep -q "^<4>host disk WARNING: cannot read btrfs metadata" "$root/out" && [ "$(cat "$root/rc")" = 0 ]'
+check "A8 no metadata line: warning" 'grep -q "^<4>host disk WARNING: cannot read btrfs metadata" "$root/out"  && grep -q "metadata unknown$" "$root/out" && [ "$(cat "$root/rc")" = 0 ]'
 
 run_alarm 55 38
 check "A1 free 55 < 56: warning priority" 'grep -q "^<4>host disk WARNING: free 55 GiB below 56 GiB" "$root/out"'

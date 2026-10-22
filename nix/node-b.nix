@@ -1768,7 +1768,7 @@ in
   # scripts/test-node-b-host-disk-alarm.sh;
   # docs/problems/node-b-nix-store-and-host-disk-policy-2026-10-22.md). Every
   # 15 minutes, one journal line with root free space, btrfs unallocated
-  # space and metadata use: priority warning under the deploy floor (48 GiB)
+  # space and metadata use: priority warning under the deploy floor (56 GiB)
   # or 20 GiB unallocated (go-choir-btrfs-headroom balances under 30), error
   # under nix min-free (24 GiB) or 10 GiB unallocated, or when a reading
   # fails. Read-only; always exits 0. See alarms:
@@ -1783,7 +1783,7 @@ in
       TimeoutStartSec = "1min";
       Environment = [
         "PATH=${lib.makeBinPath [ pkgs.coreutils pkgs.gawk pkgs.btrfs-progs ]}"
-        "HOST_DISK_WARN_FREE_GIB=48"
+        "HOST_DISK_WARN_FREE_GIB=56"
         "HOST_DISK_WARN_UNALLOC_GIB=20"
         "HOST_DISK_ERR_FREE_GIB=24"
         "HOST_DISK_ERR_UNALLOC_GIB=10"
@@ -2602,13 +2602,13 @@ in
     # nix GCs inside a build when free space falls under min-free, up to
     # max-free, and that GC deletes the build's own not-yet-rooted inputs
     # (2026-09-17: min-free above the deploy floor looped a deploy). So the
-    # band sits below the deploy floor in
-    # scripts/node-b-deploy-disk-preflight by at least a deploy's footprint
-    # (bounded 8 GiB): floor 48 >= max-free 40 + 8, and nix GCs only near
-    # real exhaustion. Coupled; scripts/test_node_b_disk_policy.py checks it.
-    # The floor falls to 48 GiB in the commit after this one, once this band
-    # is live. Rollback: 80 GiB / 100 GiB (85899345920 / 107374182400), and
-    # the floor back to 90 GiB first.
+    # deploy floor in scripts/node-b-deploy-disk-preflight sits above this
+    # band by a deploy's footprint, a guest store compaction and the paper's
+    # regrowth (scripts/test_node_b_disk_policy.py checks the inequality),
+    # and the preflight also reads the live min-free from /etc/nix/nix.conf
+    # and never takes a floor under it plus 10 GiB. Rollback: 80 GiB /
+    # 100 GiB (85899345920 / 107374182400); the preflight's guard raises its
+    # floor back to 90 GiB on its own at the next deploy.
     min-free = 25769803776;
     max-free = 42949672960;
     # CI builds run on the production host beside guests: two derivations at
