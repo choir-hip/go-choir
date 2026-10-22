@@ -62,3 +62,79 @@ its whole guest size. That is this record's gap: the host has no signal
 and no lever for memory a guest holds only as cache (RES-10 emergency
 inflation, RES-08 shared store pages, RES-07's split). No new record; the
 cause class is this one plus node-b-memory-overcommitted-swap-2026-10-09.md.
+
+## Failure modes before code (steps 1 and 2, 2026-10-22, lane fp10-res10-reader)
+
+Written before the tests and the code. Step 1 is stats on per computer
+(`VM_BALLOON_STATS_ONLY`, the FP8 selector of `computer_select.go`); step 2
+is the read-only reader. Step 3 (inflation) is out of scope.
+
+Facts this list rests on (code at 58e705802): staging runs
+`VM_BALLOON_FREE_PAGE_REPORTING=1` and `VM_HIBERNATE_MODE=snapshot`
+(nix/node-b.nix), so every guest has a balloon and an API socket; the
+snapshot launch-config hash (`snapshot.go` `launchConfigHash`) is the sha256
+of the whole Firecracker config, balloon included, recomputed from today's
+selection at restore (`expectedLaunchConfig`); Firecracker saves the balloon
+device's config, stats interval included, in the snapshot and restores it.
+
+1. **Stats on for an unselected computer.** `VM_BALLOON_STATS_POLLING_INTERVAL_S`
+   alone (today's global meaning), a selector parse slip, or an empty list
+   read as "all" turns stats on everywhere. Every guest's config and every
+   snapshot hash change: the paper and the owner's computer cold boot at
+   their next wake. Guard: the interval applies only to computers the list
+   names; empty list, no stats.
+2. **Unselected config not byte-identical.** A new key, an int that becomes
+   another type, or a changed default alters the JSON of every launch and
+   refuses every snapshot (`snapshot_reason=launch_config`). Guard: a test
+   compares the unselected balloon object and the whole config JSON with
+   today's bytes.
+3. **A selected boot Firecracker refuses.** An interval out of u16 range or
+   an extra field (BalloonDeviceConfig denies unknown fields) fails the boot.
+   Guard: the interval is validated 1..65535 at load, the field set is
+   unchanged.
+4. **Selection with the balloon off.** Selecting stats must not add a balloon
+   device (that is the free page reporting rollout's switch). Guard: no
+   balloon, no stats; the reader then says "no balloon device".
+5. **A restored guest reports zeros or the wrong state.** A restored guest
+   keeps its saved device: a guest snapshotted without stats has none after
+   restore. Selecting it changes its hash, so its snapshot is refused and it
+   cold boots once with stats (the same cost as `VM_GUEST_RECLAIM_ONLY`);
+   deselecting does the same in reverse. The reader must ask the VMM what
+   the device has (`GET /balloon`, `stats_polling_interval_s`), not trust
+   what vmctl believes it launched (vmctl restarts reattach without the
+   launch config). Interval 0 reports "stats disabled at boot", never zeros.
+6. **Absent fields decoded as 0.** Before the guest driver's first report,
+   or for a tag the guest kernel does not send, Firecracker omits the field.
+   A plain `uint64` would show 0 available memory, which a later inflation
+   step would read as "this guest has nothing to give" or worse "total 0".
+   Guard: optional fields are pointers; an absent `available_memory` or
+   `total_memory` is the reason "guest has not reported stats yet".
+7. **No API socket** (kill hibernate mode without a hotplug device, a
+   jailed VM whose socket path is the jail's). Reason "no API socket", via
+   `runningAPISocket`, which already resolves the jailed path.
+8. **A stuck VMM stalls vmctl.** An API call that never answers holds a
+   handler goroutine. Guard: the read has a 2 s deadline for both calls; no
+   vmctl loop calls it (on demand only); the all-VM read fans out in
+   parallel so one stuck VMM costs the request 2 s, not 2 s times N.
+9. **Racing a lifecycle operation.** Reading while boot, hibernate or
+   restore holds the VM could talk to a socket being torn down. Guard:
+   `tryLockVMOperation`; busy is the reason "VM operation in progress", it
+   never waits.
+10. **A guest reads the host's view of other guests.** Co-tenant memory use
+    is a side channel. Guard: host-only route (`isInternalCaller`: loopback
+    or the unix socket plus the host credential); no guest route; no proxy
+    path.
+11. **Mutation creep.** The reader must never send `PATCH /balloon` or
+    `PATCH /balloon/statistics` (the latter changes the interval live).
+    Guard: a test's fake socket fails on any method but GET.
+12. **Unit confusion.** Firecracker reports `free_memory`, `available_memory`,
+    `total_memory`, `disk_caches`, `swap_in`, `swap_out` in bytes,
+    `target_pages`/`actual_pages` in 4 KiB pages, `target_mib`/`actual_mib`
+    in MiB, and faults as counts (docs/ballooning.md, v1.15). The reader
+    keeps Firecracker's names and units and says so; the probe converts to
+    MiB once, labeled.
+13. **Errors that look like readings.** Every failure is a reason string
+    with no numbers beside it; a reading carries `observed_at`.
+14. **Stats cost.** UNVERIFIED (problem record above): one descriptor
+    exchange per interval per selected guest; selection keeps it to test
+    computers until FP0 has measured it.
