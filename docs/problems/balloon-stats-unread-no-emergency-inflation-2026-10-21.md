@@ -176,7 +176,12 @@ device's config, stats interval included, in the snapshot and restores it.
   JSON route is the per-VM reading, next to `/internal/vmctl/memory`.
 - **Probe.** `scripts/res10_balloon_stats_probe.sh --computer-id <test id>`:
   the reading beside the guest's `procmem` meminfo and the VMM's RSS, in
-  MiB; refuses a computer vmctl does not class `test`.
+  MiB; refuses a computer vmctl does not class `test`. The guest read
+  carries no host credential (the guest gate is the source address;
+  `hostauth.MarkInternal` never sends the credential to a guest). A vmctl
+  answer that is not 2xx or has no entry for the computer exits 2 with the
+  status and body; a failed guest read exits 3. Tested against a fake ssh
+  host: `scripts/test_res10_balloon_stats_probe.sh`.
 
 Rollback: leave `VM_BALLOON_STATS_ONLY` unset (the default; nothing in
 nix/node-b.nix sets it), or delete it and cold boot the named computer;
@@ -186,8 +191,8 @@ nix/node-b.nix sets it), or delete it and cold boot the named computer;
 
 1. Land the lane; confirm CI and the deployed SHA. With no selector,
    nothing changes: `GET /internal/vmctl/memory/balloon` lists every
-   computer with `stats_disabled` (snapshot mode gives every VM an API
-   socket). Spot-check that hibernated computers still wake by
+   running computer with `stats_disabled` (snapshot mode gives every VM an
+   API socket); stopped or hibernated computers list `not_running`. Spot-check that hibernated computers still wake by
    `snapshot_resume` (unselected hash unchanged).
 2. Pick one disposable test computer (never the paper or the owner's
    computer). Add `"VM_BALLOON_STATS_ONLY=<that computer id>"` to
@@ -209,3 +214,23 @@ nix/node-b.nix sets it), or delete it and cold boot the named computer;
 5. Run the probe on an unselected test computer: expect `stats_disabled`
    and no numbers. Then optional: `VM_BALLOON_STATS_ONLY=class:test`
    (every test computer cold boots once at next wake).
+
+## Residuals (steps 1 and 2)
+
+- **`class:` selectors miss some boots** (Devin, review bunch 40; shared by
+  every FP8 `*_ONLY` selector: `VMCTL_JAILER_ONLY`, `VM_GUEST_RECLAIM_ONLY`,
+  `VM_DATA_DISCARD_ONLY`, `VM_FIRECRACKER_NEXT_ONLY`, `VM_BALLOON_STATS_ONLY`).
+  `vmManagerConfigForOwnership` (internal/vmctl/ownership.go:1611-1634)
+  never sets `WarmnessClass`. The user boot path sets it afterwards
+  (ownership.go:1421), but the platform computer's boot
+  (platform_computer.go:365) and the resume config (ownership.go:1560) do
+  not, so a `class:` token cannot match them (for the paper,
+  `class:public_platform` selects nothing). VM ids and computer ids match
+  everywhere. Not fixed here: it is FP8's selector contract, and today it
+  fails safe (unselected).
+- **Another probe sends the credential to guests.** Discovered in this
+  round: `scripts/res08_pagecache_probe.py` `guest_read` passes the
+  internal-service-token header to `http://<guest>:8085`. Not changed here
+  (another station's script); same fix as this probe's.
+- Stats cost per guest, `MemTotal` under inflation, and whether a restored
+  balloon keeps its interval: as above (UNVERIFIED until FP0's steps).
