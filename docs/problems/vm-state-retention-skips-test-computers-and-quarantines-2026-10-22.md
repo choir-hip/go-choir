@@ -331,7 +331,7 @@ DeepSeek accepts with edits; Gemini accepts.
   `data.img` still goes after 6 h (the open owner question restated);
   `vmDirRecoveryKeepReasons` reads the dir under the registry lock.
 
-## Round 4 dispositions (289262db0, 2094f73d2)
+## Round 4 dispositions (956efc1e1, 2094f73d2)
 
 - R4-1: fixed. Step 4 fails when the state dir cannot be read, when it
   holds no `vm-*`/`candidate-*` dir while the plan counts some, when the
@@ -340,6 +340,8 @@ DeepSeek accepts with edits; Gemini accepts.
   a MANUAL "nothing to check" line, never a PASS. Eighteen selftest cases
   cover it; each failed on 2ffb6c3ad. The default selftest pass now
   points step 4 at a stub state dir (it passed vacuously before).
+  The tests are 956efc1e1; the fix commit's message names 289262db0,
+  that commit before an unpushed amend.
 - R4-3: fixed in the station (149 passed, 1 pre-existing fp1 failure).
 - R4-4: fixed in the station: how to read each step 4 outcome, and what
   a FAIL before the deploy means.
