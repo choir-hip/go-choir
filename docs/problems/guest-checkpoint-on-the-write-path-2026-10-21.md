@@ -216,3 +216,28 @@ transaction - each made Close return nil on 3b220fa02), fix 6dbdf815d.
 Close checks out each pool's single connection after the commit-lock
 fence and fails closed when it cannot; the pools no longer close the
 engine themselves, and the engine closes last with no connection open.
+
+## Round 8: the arch13j mirror panic, Close over a removed workspace (2026-10-22)
+
+FP0's Linux -race mirror of eb8185144 (arch13j, on main 0bf8a097d)
+panicked in internal/store: TestComputerEventProjectionPersistsRevocationEpochAcrossRestart's
+Open failed with "database not found: texture", Open called Close, and
+closing the engine crashed the process in Dolt's NomsBlockStore.Close
+("fatal error closing table persister": the journal could not write a
+manifest temp file in the missing .dolt/noms; Dolt sets every SQL-engine
+database to crash on that fatal I/O error).
+
+The workspace had been removed under the open engine. Store test paths
+were `os.TempDir()/go-choir-m3-store-test/<TestName>`, the same for every
+test process of the package on the VM, so another process's cleanup of
+the same test is the likely remover; the whole package passed under
+-race in one process on this VM (1033 s), and no store code or test
+removes another test's path. The crash itself is pre-existing: the same
+test panics identically on 3b220fa02, and
+[agentcore-store-open-tables-changed-under-load-2026-10-22](agentcore-store-open-tables-changed-under-load-2026-10-22.md)
+records the same crash in Close after a failed open (its hypothesis 3).
+Round 7's teardown order is not the cause.
+
+Fixed in 7078b0561 (tests 949fb1467): Close checks the workspace's
+.dolt/noms is on disk before closing the engine and otherwise leaves the
+engine for process exit and returns an error; test paths are per process.
