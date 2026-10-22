@@ -92,12 +92,72 @@ boundaries:
 now:
   status: blocked
   slice: >-
-    Design and FP0's read-only readings written (design section 4);
-    nothing built. The build waits on the readings and on FP8 releasing
-    vmmanager; two owner questions with defaults (design section 5).
-  source_ref: d1c60ad87
-  deploy_identity: unchanged
-  candidate: {id: none, state: none, ref: none, base: d1c60ad87, digest: none, scope: []}
+    FP0's section 4 readings are in (2026-10-22 04:45 to 06:45Z, Node B,
+    read only), recorded in the two problem records: R1 to R7, the R6 PSI
+    sample across three hibernates, R5 on FP0's own test computer
+    (computer-2bd23366, vm-f2588c7b) cold and restored, S1, S3, S4 (two
+    reads), S5. S2 runs until about 2026-10-23 06:45Z (FP0's Mac, PID
+    63419, /Users/wiz/Dev/lanes/_runs/res22/slab-2026-10-22.log). Nothing
+    built; the build still waits on FP8 releasing vmmanager.
+  gates:
+    L3a: >-
+      Readings pass, with two design corrections. R2: guest memory cannot
+      swap today (every Firecracker VmSwap 0; their leaf cgroup
+      go-choir-vmctl.service/supervisor has no memory controller, so the
+      service's memory.swap.max 0 bounds them), but the design's check reads
+      the leaf's memory.swap.max, which does not exist; it must walk up to
+      the nearest ancestor that sets 0. Repeat R2 under FP8's jailer. R4:
+      Firecracker 1.16.1 (above the 1.15.0 floor), snapshot-editor
+      installed, KSM off; host THP is madvise, not never, but every guest
+      mapping reads THPeligible 0, so the condition should test the guest
+      mapping. R5: a cold guest holds 14 to 17% of its 8 GiB (1.15 to
+      1.37 GiB, all anonymous), so a Diff writes about 1.4 GiB where Full
+      writes 8 GiB. Remaining gate: FP8 lands, the two corrections, then
+      the build and its proof.
+    L3b: >-
+      snapshot-editor is installed. New fact: a healthy resume already
+      unlinks the snapshot (the restored mapping reads "(deleted)"), so L3b
+      must link the memory file to snapshot.base/mem in place of that
+      discard; the design's paragraph says the directory survives until the
+      next hibernate, which is wrong on main. A restored guest's touched
+      memory is mostly clean file pages (201,872 of 237,240 kB), so the
+      ColdOrigin guard is needed. Gate unchanged: L3a's proof plus a week.
+    L4: >-
+      Needs L3, plus a new prerequisite: API-key traffic neither wakes a
+      hibernated computer (502 "api key computer realization unavailable",
+      by design in internal/proxy/api_key_computer_authority.go) nor, by
+      the trace, moves the idle clock (hibernated 32 min after the boot,
+      25.5 min after the last key request). At 10 minutes, key-driven
+      computers would hibernate between calls and answer 502 until a
+      lifecycle start. PSI: a quiet-host Full hibernate stalled 22 to 36
+      ms/s for 6 s (avg10 peak 1.03); on the pressured host the two
+      reclaim hibernates added no visible step. R6 has only two wakes,
+      too few to set a timeout.
+    L20: >-
+      R1's timing: in 58 h (the journal's span, not 7 days) 8 hibernates,
+      0 resumes until FP0's test, 2 wakes both launch_config_mismatch, each
+      found at the wake 11 to 13 minutes after the last of 6 and 12
+      deploys. 76 deploy targets in 58 h; every commit is a new guest image
+      (kernel-params init= and build_commit change), so every deploy voids
+      every snapshot. FP0's own snapshot was voided 31 s after it was taken
+      (deploy 8fabec36a), and the only resume came from waking within 3 s.
+      At this cadence L3 saves the write but the snapshot is almost never
+      loaded; L20 is what lets snapshots pay off. R7: a release is 3.9 GiB
+      (storedisk.erofs 3.5 GiB), /var/lib/go-choir/guest is a symlink to
+      its Nix store path, and the store already holds 11 releases with
+      little sharing, so a GC root on the store path may replace the
+      reflinked releases directory. Owner question Q2 still open.
+    RES-22: >-
+      S1: slab 1.21 GiB, btrfs_inode 294 MiB (9.75 and 5.9 GiB on 10-14),
+      not near the guests' working set; no vfs_cache_pressure change is
+      called for. S3: 47.0 GiB unallocated, growing about 3 GiB a day;
+      metadata 82.3% used, 2.7 points under the alert slice's 85% line, so
+      the alert slice is worth landing. S4: the tape's flat directories
+      grow far slower than on 10-16 (numbers in the slab record). S2 is the
+      remaining reading, read against S5's walker windows.
+  source_ref: 9cbed1aa2
+  deploy_identity: not changed by this lane (read only; staging served 8fabec36a during the readings)
+  candidate: {id: none, state: none, ref: none, base: 9cbed1aa2, digest: none, scope: []}
   conjecture:
     id: C-FP10-sparse
     claim: >-
@@ -108,8 +168,12 @@ now:
       On a test computer: write a known pattern into guest memory, hibernate
       by Diff, wake, check the pattern and the guest's health; compare
       st_blocks, write time and PSI with a Full hibernate of the same guest.
-    edge: missing_oracle (no reading of the resident fraction or of the jailer cgroup's swap setting)
-    delta_o: design section 4, readings R2 and R5
+    edge: >-
+      missing_oracle, narrowed: R2 and R5 are read (no swap today, 14 to
+      17% resident). Still unread: the jailer cgroup's swap bound, and
+      whether Firecracker's mincore path writes a complete image of a
+      virtio-mem guest.
+    delta_o: R2 under FP8's jailer; L3a's proof step
     scope_if_supported: cold-booted computers on Node B, class:test first
     status: active
     evidence_refs: [docs/problems/hibernate-writes-whole-guest-and-deploys-void-snapshots-2026-10-22.md]
@@ -121,17 +185,29 @@ now:
     owner_ratification_ref: not_applicable
   belief:
     believed_state: >-
-      L3 is a small vmmanager change behind a flag once two readings come
-      back. L4 is config, gated on L3. L20 is a medium change across
-      vmmanager, the deploy and node-b.nix, and has an owner question. The
-      btrfs file growth already has its substrate fix (tape segments, on);
-      what RES-22 lacks is the reading that shows it worked, and an alert.
-    main_uncertainty: whether the jailer (FP8) keeps guest memory out of swap, and how much of a cold guest is resident.
-    next_observation: FP0's section 4 readings.
-  blocker_or_risk: FP8 holds vmmanager; Node B readings are FP0's.
-  next_action: FP0 takes readings R1 to R7 and S1 to S5; then the L3 slice once FP8 lands.
+      L3a is ready to build once FP8 lands, with the swap check walking up
+      the cgroup tree and the THP condition testing the guest mapping. L4
+      needs API-key activity to count before its timeout shrinks. L20
+      matters more than its place in the order suggests: at tonight's
+      deploy cadence no snapshot lives to be loaded without it. RES-22
+      needs no slab knob today; the alert is the useful slice.
+    main_uncertainty: whether S2 shows btrfs_inode rising at the backup or GC windows; whether the jailer keeps the swap bound.
+    next_observation: S2's log at 2026-10-23 06:45Z; R2 under FP8's jailer.
+  blocker_or_risk: >-
+    FP8 holds vmmanager. Residual for FP0: the slice order (L20 before
+    L4) is an open choice the readings raise; it is not changed here.
+  next_action: >-
+    FP0 reads S2's log against S5's windows when it ends; FP10 amends the
+    design (swap check walks up; THP tests the guest mapping; L3b links
+    the base before the resume discards it; L4 gains the API-key idle
+    prerequisite; L3a's proof wakes through lifecycle/start, since a key
+    read cannot wake; L20 may use the Nix store path); then the L3a slice
+    once FP8 lands.
 
-receipts: []
+receipts:
+  - id: fp0-res13-res22-readings-2026-10-22
+    ref: docs/problems/hibernate-writes-whole-guest-and-deploys-void-snapshots-2026-10-22.md, docs/problems/node-b-host-slab-btrfs-inode-cache-2026-10-22.md
+    result: partial (every section 4 reading taken but S2, which runs to 2026-10-23 06:45Z; R5 cold and restored on FP0's own test computer; one snapshot resume)
 ---
 
 # FP10: snapshot levers and host slab
