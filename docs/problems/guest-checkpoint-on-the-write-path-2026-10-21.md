@@ -207,3 +207,12 @@ Close checks out each pool's single connection under the hard deadline,
 so no statement, transaction, commit or GC is in flight when the engine
 closes. Option (b), never closing the engine in-process, is not pursued.
 It is built in the next round on this station, after round 6 lands.
+
+## Round 7: pin the pools, built (2026-10-22)
+
+The owner's option (a) is built: tests 1aaa5e7c9 (Sonnet's round-5
+probes - a SELECT SLEEP in flight on either pool and an open write
+transaction - each made Close return nil on 3b220fa02), fix 6dbdf815d.
+Close checks out each pool's single connection after the commit-lock
+fence and fails closed when it cannot; the pools no longer close the
+engine themselves, and the engine closes last with no connection open.
