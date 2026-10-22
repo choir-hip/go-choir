@@ -162,8 +162,16 @@ now:
     credential). Local: nix test 12/12, verifier tests 12/12, contract and
     CI script tests pass (the gate test needs Linux flock), drvPath
     evaluates. Next: FP0 lands it as its own deploy and runs "Containment
-    gaps after cut 2" steps 1-7. Open: problem 3, the gateway's renames of
+    gaps after cut 2" steps 0-7. Open: problem 3, the gateway's renames of
     codex-auth.json and gateway-identities.json, waits on its probe.
+    Round 2 (bunch 85: Sonnet accept with edits, flash accept, DeepSeek
+    pending): findings recorded in ac8dd5caa, tests 202a5996e, fix
+    c756a14eb (red). The activation quarantines anything at an old path
+    it must not adopt and fails every activation while a stray waits; a
+    link's target is imported on the first run; relinks are atomic. The
+    rollback text is corrected. Proof step 0 (before the deploy) is added,
+    and step 2 runs after the gateway's restart. F6 (classifier) is with
+    FP0 and the owner. Local: nix test 22/22, verifier tests 14/14.
 ---
 
 # FP3 groups 2 and 3
@@ -330,24 +338,46 @@ evaluated host configuration and the activation snippet on a temp tree,
 (12/12), `.github/scripts/deploy-workflow-contract-test`, and the toplevel
 drvPath evaluates.
 
-FP0 deployed proof (Node B, root). Deploy D1 lands 844e0026b. Use the
-verifier's flags for the stage then current; at T they were
+FP0 deployed proof (Node B, root). Deploy D1 lands the lane (through the
+round 2 fix c756a14eb). Use the verifier's flags for the stage then
+current; at T they were
 `--expect-internal enforce --expect-dolt clients --expect-guest-floor --allow-reboot-pending`.
 
+0. Before the deploy (round 2, F10): `ls -la /var/lib/go-choir/unit-env`
+   must fail (no such directory). Each old path in
+   `ls -l /var/lib/go-choir/{deploy,corpus-dsn,corpusd-retrieval,sandbox-gateway-token}.env`
+   must be a regular file or absent: deploy.env, corpus-dsn.env and
+   sandbox-gateway-token.env present, corpusd-retrieval.env normally
+   absent. If corpusd-retrieval.env exists, it is what corpusd reads today;
+   know why it is there before the first import adopts it.
 1. The layout, names and modes only:
    `ls -la /var/lib/go-choir/unit-env; ls -l /var/lib/go-choir/{deploy,corpus-dsn,corpusd-retrieval,sandbox-gateway-token}.env`.
    Expect:
    - unit-env is 0700 root, holding deploy.env, corpus-dsn.env and
      sandbox-gateway-token.env (each 0600) and `.imported`;
    - each old path is a link `-> unit-env/<name>`;
-   - the switch output in the deploy log shows "go-choir: moved ... into
-     /var/lib/go-choir/unit-env" once per file.
-2. `python3 - <flags> < scripts/verify-host-hardening.py`. Expect no
-   `[containment]` FAIL (T had 28). That covers:
+   - the switch output in the deploy log shows "go-choir-unit-env:
+     imported ... into /var/lib/go-choir/unit-env/<name>" once per file,
+     and no "FAIL" line;
+   - `journalctl -t go-choir-unit-env --since <deploy>` is empty.
+
+   A FAIL there stops the deploy at the switch, and its retry fails too.
+   Read the named stray (`unit-env/<name>.stray.*`). Merge what is wanted
+   into `unit-env/<name>` (`install -m 0600`), remove the stray, and
+   redeploy.
+2. After the gateway's restart, the last in the deploy (round 2, F5:
+   until then the gateway still has its old view, in which unit-env is not
+   masked), run `python3 - <flags> < scripts/verify-host-hardening.py`.
+   Expect no `[containment]` FAIL (T had 28). That covers:
    - "cannot reach /var/lib/go-choir/unit-env" and its four files for
      every running unit, go-choir-pkgmirror and unbound included;
    - both sockets for every unit except vmctl and the Dolt probe;
-   - the four "is a link into /var/lib/go-choir/unit-env or absent" lines.
+   - the four "is a link into /var/lib/go-choir/unit-env or absent" lines;
+   - "no quarantined file waits in /var/lib/go-choir/unit-env".
+
+   Firecracker VMMs started before vmctl's restart keep their old view
+   until their guest next boots; the verifier does not check VMMs. This
+   landing's active-computer refresh relaunches them (F6).
 
    `[modes]` passes for unit-env and its files.
 3. The environments still load (key names only, never values):
@@ -381,6 +411,12 @@ verifier's flags for the stage then current; at T they were
    no `[containment]` FAIL.
 7. Problem 3 probe (in the problem record): read only. Its result decides
    the gateway-state fix.
+
+Operator note (F9): write a kill switch with
+`install -m 0600 /dev/stdin /var/lib/go-choir/unit-env/corpusd-retrieval.env`.
+A `>` through the old path's link works but leaves the file at the
+shell's umask until the next activation, and `rm` of an old path removes
+only the link.
 
 Rollback: revert the fix and redeploy, and move no files. The links keep
 the old paths working for the reverted units, and a later landing relinks

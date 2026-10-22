@@ -394,3 +394,50 @@ each name present. Also run `rm /var/lib/go-choir/unit-env/.imported`, so
 that the next landing imports them again as on its first run. The red
 commit's message (844e0026b) gives the older text, which left the marker
 behind; this text supersedes it.
+
+### Round 2 dispositions (lane fp3-containment-gaps)
+
+Findings ac8dd5caa (green), tests 202a5996e (yellow, failing on the round
+1 snippet: 6 failures and 1 error of 22 in the nix test, 2 errors of 14 in
+the verifier test), fix c756a14eb (red), proof steps in the station file
+(this commit).
+
+- F1 and F2, fixed. After the import, a regular file at an old path (or a
+  link to one elsewhere) is never adopted. It is moved, or its target
+  copied, into unit-env as `<name>.stray.<epoch>.<pid>` (0600), and the
+  old path is relinked. Each case logs a line to stderr and to the
+  journal (`journalctl -t go-choir-unit-env`) naming the path. The
+  activation fails while any stray waits, so the deploy's one switch retry
+  fails too. The deploy stops at the switch, before it restarts the proxy,
+  corpusd and the other units marked restartIfChanged = false.
+  - A file with the same content as `unit-env/<name>` (a reverted deploy's
+    scrub) is only relinked.
+  - Before the import, the old path wins over an unexpected file in
+    unit-env, which becomes the stray.
+  - The verifier fails while a stray waits ("no quarantined file waits in
+    /var/lib/go-choir/unit-env").
+  - Rollback text corrected (above).
+  - What the switch already did is not undone. A unit that the switch
+    restarted, or a timer-started oneshot such as checkpointd, runs
+    without a file whose name is missing from unit-env until the operator
+    resolves the stray. For corpus-dsn.env that is the Store A fallback,
+    reachable only by moving a file back and leaving the marker (the old
+    rollback text).
+- F3, fixed. On the first run, a link's target is imported by copy and
+  named; after the import, it becomes a stray.
+- F4, fixed as far as it goes without losing F5's masks. Links are
+  replaced through a temporary name and a rename, and a link to a
+  directory is removed first. A first import's move and link are
+  adjacent: two system calls.
+- F5, recorded. Proof step 2 runs after the gateway's restart; VMMs are
+  not checked, and the landing's refresh relaunches them.
+- F6: FP0 and the owner; the classifier is unchanged.
+- F7, fixed in the comments and in this record.
+- F8, recorded, unchanged. Node B has deploy.env; a fresh host would fail
+  the modes section until it has one.
+- F9, recorded. The station file's operator note says to use
+  `install -m 0600` into unit-env. The two older records are left as
+  history; this record and node-b.nix carry the current paths.
+- F10, recorded. Proof step 0 checks before the deploy that unit-env does
+  not exist and what is at the old paths. The other assumptions stand as
+  stated.
