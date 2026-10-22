@@ -5,7 +5,8 @@ Date: 2026-10-14. Found while writing the VM density report
 Status (2026-10-21): partly fixed, unverified. The unprivileged FIEMAP
 bound landed (9001e9842), and vmctl's unit gained `CAP_SYS_ADMIN` for the
 jailer (10e9f18e1), which may let the exact method succeed; no staging read
-records which method hibernates now log. Tracked as RES-14 in the
+records which method hibernates now log. The 2026-10-22 audit at the end
+names what the budget counts, two small gaps and FP0's probe. Tracked as RES-14 in the
 [checklist](../security-density-architecture-checklist-2026-10-21.md). Mutation class of any fix: red (vmctl unit
 capabilities or the snapshot path).
 
@@ -120,3 +121,142 @@ hibernate line's `disk_bytes` (`fiemap_bound`) with the script's
 the truth, the next step is sparse snapshots (density report, lever L3),
 which make zero pages holes so that every measure is close. The privileged
 helper is the fallback after that.
+
+## Audit, 2026-10-22 (RES-14, FP10): what the budget counts against what the disk holds
+
+Code read at lane base `51cb3a8cd`; no Node B reading was taken by this
+lane (FP0 runs the probe below). Status after this audit: the count is in
+the safe direction everywhere except two small, bounded gaps (G1, G2), and
+which measure runs on Node B is still unread.
+
+### What the budget adds up
+
+- The admission check is `ensureSnapshotRoom`
+  (`internal/vmmanager/snapshot.go:723-757`). It sums `entry.bytes` of every
+  committed snapshot except the capturing VM's own (`:734`), adds `need`,
+  evicts oldest-first until the sum fits `VM_SNAPSHOT_BUDGET_GIB`
+  (48 GiB, `nix/node-b.nix:1350`), then requires
+  `statfs.Bavail - need >= 16 GiB` (`:756`, floor at `:71`).
+- `entry.bytes` is `meta.DiskBytes` from the snapshot's `meta.json`
+  (`snapshot.go:697`), measured once, at commit, after both files are
+  fsynced (`snapshot_lifecycle.go:261, 275`). Only a meta without
+  `disk_bytes` (written before `a110fe782`) is re-measured at each listing
+  (`snapshot.go:698-699`). The figure is never refreshed afterwards.
+- `need` for the new snapshot is the logical worst case,
+  `MachineMemSizeMib<<20 + 64 MiB` (`snapshot_lifecycle.go:140`, overhead
+  at `:31`), because its compressed size is unknown until written.
+- `dirDiskBytes` (`snapshot_disk.go:79-104`) sums every regular file of
+  `snapshot/` (`mem`, `vmstate`, `meta.json`) through
+  `measureFileDiskBytes` (`snapshot_disk_linux.go:29-67`), which tries in
+  order:
+  1. `btrfs_extents` (`snapshot_disk_linux.go:48`,
+     `snapshot_disk.go:112-154`): `BTRFS_IOC_TREE_SEARCH` over the inode's
+     `EXTENT_DATA` items in the fd's own subvolume; each distinct
+     `disk_bytenr` counts its `disk_num_bytes` once (`:146-150`), holes
+     count zero, inline extents their inline length, preallocated extents
+     their allocation. That is the file's **referenced compressed bytes**,
+     exactly what compsize reports. Needs `CAP_SYS_ADMIN`.
+  2. `fiemap_bound` (`snapshot_disk_linux.go:54-59`,
+     `snapshot_disk.go:247-286`): FIEMAP extents, each ENCODED extent
+     bounded by the gap to the file's next physical start, clamped to
+     `st_blocks` (`:281-286`). An upper bound of (1); no privilege.
+  3. `st_blocks*512` (`snapshot_disk_linux.go:65`; `snapshot_disk.go:93`
+     when a file cannot be opened): allocated uncompressed bytes. For a Full
+     Firecracker snapshot (`fcapi.go:126`), which writes every page,
+     zeros included, this equals the apparent size.
+
+### Which measure Node B now runs (hypothesis, unread)
+
+vmctl runs as root (no `User=`), and since `10e9f18e1` its unit's bounding
+set includes `CAP_SYS_ADMIN` (`nix/node-b.nix:1207-1210`, for the jailer)
+and the syscall filter allows `ioctl`. So measure (1) should now succeed and
+every hibernate line should read `disk_bytes_method=btrfs_extents`. No
+journal line since that deploy has been read. Two code comments and one log
+hint still describe the old unit and are now stale:
+`snapshot_disk.go:12-14`, `snapshot_disk_linux.go:25-26` and the EPERM hint
+at `snapshot_disk.go:306` ("outside vmctl's capability bounding set").
+Green, left for whoever next holds vmmanager (FP8 holds it in this pass).
+
+### Apparent, allocated, compressed, shared, exclusive
+
+| quantity | what the code uses it for |
+|---|---|
+| apparent (`st_size`) | `meta.Bytes` (`dirLogicalBytes`), logged as `bytes=`; not budgeted |
+| allocated (`st_blocks*512`) | the last fallback; equals apparent for a Full snapshot; blind to compression |
+| referenced compressed (tree search) | the budget, when measure (1) runs |
+| FIEMAP bound | the budget, when (1) fails; between (1) and allocated |
+| exclusive (bytes freed if the snapshot is deleted) | not measured |
+
+Referenced equals exclusive only if no other file or subvolume snapshot
+shares the extents. Snapshot files are written fresh by Firecracker; a
+jailed capture is moved out of the jail by `rename`
+(`snapshot_lifecycle.go:228-231`), not copied or reflinked; Node B's
+config creates no btrfs subvolume snapshots of `@` (`nix/disks.nix`; no
+snapper or btrbk) and restic copies data rather than sharing extents. So
+referenced should equal exclusive. The probe checks this (FIEMAP `SHARED`
+flag per extent): a nonzero shared count means a deleted snapshot frees
+less than the budget subtracts, and the budget overstates what eviction
+reclaims.
+
+### Gaps between the count and the disk
+
+- **G1. Resumed VMs' memory files are not counted.** After a resume the
+  snapshot names are removed, but Firecracker keeps `mem` mapped
+  `MAP_PRIVATE` for its whole life (`snapshot_lifecycle.go:594-597`), so its
+  extents stay allocated until that VMM exits. The budget never sees them.
+  Only the 16 GiB free-space floor does (via `statfs`), which is what the
+  comment at `snapshot.go:68-70` relies on. Size: one snapshot's
+  compressed bytes (about 0.5 GiB, per the 2026-10-14 compsize reading) per
+  running resumed VM. Bounded by running VMs; safe while the floor holds.
+- **G2. `need` may omit the hotplug region (hypothesis).**
+  `need` uses `MachineMemSizeMib` only. A test computer with
+  `VM_MEMORY_HOTPLUG` carries a 4 GiB virtio-mem region
+  (`cfg.MemoryHotplugMiB`, `snapshot.go:462`). If Firecracker's Full memory
+  file includes that region, the logical worst case is 4 GiB larger than
+  `need`, and both the budget reservation and the floor check under-reserve
+  by up to that much. The region is shrunk to base before the snapshot
+  (`snapshot_lifecycle.go:158-163`), unplugged blocks are zeros and zstd
+  stores them at about 1/32, so the real exposure is small. The probe
+  decides it: on a hotplug computer, compare the `mem` apparent size with
+  `meta.mem_size_mib`. If it is larger, the fix is one line
+  (`need` adds `cfg.MemoryHotplugMiB<<20`), red, for the vmmanager holder.
+- **G3. Metadata is not counted.** Each 128 KiB compressed extent costs an
+  `EXTENT_DATA` item, an extent item and checksums in btrfs metadata (an
+  estimate of 150 to 200 bytes, doubled under a DUP metadata profile): on
+  the order of 10 to 25 MiB per 8 GiB snapshot, a few percent of its
+  compressed bytes. It comes from the metadata chunks the headroom timer
+  guards (`nix/node-b.nix:1520-1555`), not from data.
+- **G4. Stale figures age out.** A snapshot committed under an older
+  measure keeps its recorded figure until it is resumed, evicted or ages
+  out (`VM_SNAPSHOT_MAX_AGE=36h`). Those figures are overcounts (safe).
+- **Partial captures** (`snapshot.partial/`) are not counted, but each is
+  removed before the next capture of that VM (`snapshot_lifecycle.go:177`)
+  and by the startup sweep (`snapshot.go:836-872`); at most one 8 GiB
+  partial per interrupted capture, until vmctl's next start.
+
+Over-reservation is deliberate: `need` is the logical size (8 GiB) while a
+committed snapshot is expected around 0.5 GiB, so with measure (1) running
+the budget holds about (48 - 8) / 0.5 = 80 committed snapshots. At that
+point the free-space floor and the 36 h age, not the 48 GiB figure, are the
+real bounds. Revisiting 48 GiB and 36 h (the checklist's next step) needs
+the probe's per-snapshot compressed bytes and Node B's free space.
+
+### No code fix in this pass
+
+The count is wrong in the unsafe direction only in G1 (covered by the
+floor) and possibly G2 (bounded, unproven). Neither is shown wrong by a
+reading yet, and vmmanager is FP8's in this pass. The probe below takes
+the readings that decide them.
+
+### Probe (FP0, read-only, Node B)
+
+`scripts/snapshot_budget_bytes_probe.py` prints, for every
+`<state>/<vm>/snapshot` and `snapshot.partial`: the recorded `bytes`,
+`disk_bytes` and `disk_bytes_method` from `meta.json`; the apparent,
+allocated, FIEMAP bound, tree search (referenced compressed) and exclusive
+bytes it measures itself; the shared extent count; then the totals the
+budget sees against the totals the disk holds, the deleted memory files
+still mapped by running VMMs (G1), and `statfs` free space. It opens files
+read-only, issues only FIEMAP (without `FIEMAP_FLAG_SYNC`) and the tree
+search ioctl, reads `/proc`, and writes nothing. Steps are in the
+[station file](../definitions/choir-launch-fp10-res-14-2026-10-22.md).
