@@ -343,3 +343,56 @@ Owner, 2026-10-22: "Anything which improves resource utilization on a forward an
 Focused, with `-race`, `GOMAXPROCS=2 GOFLAGS=-p=1`: `go test ./cmd/checkpointd` and `go test ./internal/platform -run 'FileRoot|GCLog|ProjectionJobs|ArtifactGC'`. No host, no staging, no SQL against a production store. Test commit first; it fails on this lane's base `d381440ce` (F1: does not build, `sweepOrphanScratch` undefined; F4 and F6: the sweep neither retires rows nor compresses logs).
 
 Heresy delta of this plan: discovered none; introduced none; repaired none (docs only).
+
+## 9. Built: F1, F4 and F6 (lane `lane/fp10-artifact-retention-fixes`, 2026-10-22)
+
+Status: built and tested locally; not deployed. Nothing was read from or run against Node B, staging or any store. F2, F3, F5, F7, F8 and F9 are untouched. Commits, in order: plan (green) `03a718a43`; tests (yellow); F1 (orange); F4 (orange); F6 (orange: it removes files in-process after the check; the plan said green/yellow only for a script).
+
+Tests: `GOMAXPROCS=2 GOFLAGS=-p=1 go test -race ./cmd/checkpointd` and `go test -race ./internal/platform -run 'ArtifactGC|FileCAS|FileRoot|TapeSweep|GCLog|ProjectionJob|Checkpoint|ProjectionBasePin'`; all pass. The test commit does not build on the plan commit (the new functions are undefined), which is how it fails there.
+
+### F1 as built
+
+- `cmd/checkpointd/scratch_sweep.go`; called from `runCheckpointWorker` before the claim (the checkpointd timer fires every minute, so that is every minute) and from the 45 s tick at most every 15 minutes during a long job.
+- Held and so never removed: the row's generation with `queued`, `running` or `retry`; a generation newer than the row's; any name not shaped `<computer>-<digits>`; anything modified in the last 48 h; plain files.
+- Genesis-repair guard, as planned: a sibling `<dir>.genesis-repair` marker (written by the worker for a genesis-repair job, removed with the directory on a successful publish) or a row with `genesis_repair` at that generation keeps the directory, logged once a day as `scratch_kept`. The marker is a sibling because the scratch directory is packed into the published base blob. A marker whose directory is gone is deleted. Because checkpointd has no ownership authority, no genesis-repair directory is removed for any computer; the owner's yes is needed for all of them.
+- Crash safety: rename to `.sweeping-<name>`, then remove; the next sweep finishes a leftover. The removal log must open before anything is removed.
+- Declined: scoping the keep rule to owner computers (see the plan; fail closed). A directory of a computer with a `failed` job at the current generation is removed, since the next admission starts a new generation and never resumes it.
+
+### F4 as built
+
+- `internal/platform/file_cas_retire.go`, called from `RunArtifactGC`. A plain `DELETE` on `computer_file_roots`: no schema, DDL or migration change, so nothing was deferred.
+- Owner-data guard, named: for every computer, owner or not, a root is retired only if it is older than `max(grace, 7 days)` **and** is not the computer's latest root. There is no weaker rule for any class of computer. A computer with one root loses nothing.
+- `MaxDeletes` (10,000) caps rows retired per pass, so the first clean-up may take more than one hourly pass. The namespace report carries `retired`.
+- A correction to the record's F4 text: the chunk sweep already keeps only the latest root plus roots inside the window (`fileCASRootsForGC`), so retiring rows does not free chunks; it frees the rows and the manifest files, whose sweep was blocked only by the all-rows-live rule.
+
+### F6 as built
+
+- `internal/platform/artifact_gc_log.go`. FP0 asked for "days older than 2", not the record's 7: a `YYYY-MM-DD.jsonl` whose day is before today minus 2 days is compressed, so today, yesterday and 2 days ago stay plain.
+- `rotateArtifactGCLogs` runs after each active pass, outside `artifactGCMu` (which also serializes projection-base pins), under its own mutex. Verification is the sha256 and length of the decompressed file against the original, done before the rename and again after it.
+- Only the exact daily-file name is touched. `tape-sweep-<run>.manifest.jsonl` and `checkpoint-scratch-<day>.jsonl` never are.
+- No code reads the log; `openArtifactGCLog` reads both forms and is the one entry point the tests and any future reader use.
+- The expected 8 to 12 times ratio is a hypothesis from the record; the report's `log_rotation` records the real before and after.
+
+### Expected bytes on Node B (estimates from section 1 measurements, not measured)
+
+| Fix | One time | Per day |
+|---|---|---|
+| F1 scratch | up to 6.4 GB, minus directories held by a live job, less than 48 h old, or genesis-repair | keeps the store near 0; before the 10-15 fix it grew about 1 GB a day, the residual is not measured |
+| F4 roots | up to about 2.5 GiB of manifests (several hourly passes at 10,000 deletes per pass) | about 0.1 GB |
+| F6 log | about 1.4 GB (1.7 GB less the last 3 days, at 8 to 12 times) | the daily file shrinks by about 90 percent three days after it is written |
+
+### What FP0 reads after deploy
+
+All read-only.
+
+- F1: `journalctl -u go-choir-checkpointd --since <deploy> | grep 'checkpoint scratch sweep'` (removed count, bytes, kept genesis count); `du -sk $A/checkpoint-scratch`; `jq -c . $A/artifact-gc-log/checkpoint-scratch-*.jsonl` for each `scratch_removed` (path, bytes) and `scratch_kept` (reason); `ls $A/checkpoint-scratch/*.genesis-repair`. Proof of the guard: no directory with a marker or a `genesis_repair` job row is gone, and every held `<computer>-<generation>` of a queued, running or retry job in `computer_projection_jobs` still exists.
+- F4: the corpusd journal line `artifact gc:` with `.namespaces["file-cas-roots"].retired` and `.deleted`; `du -sk $A/sha256/file-cas-roots`; `jq 'select(.op=="root_retired")' $A/artifact-gc-log/<day>.jsonl`; `SELECT computer_id, COUNT(*), MAX(created_at) FROM computer_file_roots GROUP BY computer_id` shows every computer that had a root still has at least one, and no row younger than 7 days is missing from the retired list. The first pass is about 10 minutes after the corpusd restart.
+- F6: the same `artifact gc:` report's `.log_rotation` (`logs_compressed`, `log_bytes_before`, `log_bytes_after`); `ls -l $A/artifact-gc-log` shows `<day>.jsonl.zst` for days before today minus 2 and no `.jsonl` beside them; `zstd -dc <day>.jsonl.zst | head` is the original JSONL; the tape-sweep manifests are unchanged.
+
+### Deferred
+
+- Nothing in the three items was deferred for a schema or migration change.
+- Not done, by instruction: F2/F3 dead computers, F5 file-cas window, F7 capture-bodies, F8 owner checkpoint, F9.
+- Open: the genesis-repair keep rule leaves a throwaway computer's genesis scratch in place until a human removes it. If the host read finds many, a narrower rule needs an ownership source inside checkpointd (the vmctl registry), which is its own change.
+
+Heresy delta of this build: discovered none new; introduced none; repaired: the scratch sweep missing terminal and dead computers (section 8's F1 class), `file-cas-roots` rows with no retention, and `artifact-gc-log` with no rotation. Mutation class: orange (checkpointd housekeeping, GC live set and a row delete on `computer_file_roots`, GC-log file rotation); protected surfaces touched: none of the red list (no Texture canonical write, no checkpoint publication or route change).
