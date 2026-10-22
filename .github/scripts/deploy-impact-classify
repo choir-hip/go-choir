@@ -141,7 +141,7 @@ for path in "${changed[@]}"; do
       add_explanation "$path -> host OS activation and immutable service-pointer synchronization"
       continue
       ;;
-    scripts/check-*.sh|scripts/test-platform-dolt-squash.sh|scripts/m3_*|scripts/mail-*|scripts/*_probe.mjs|scripts/*.py|scripts/ograph-bench/*)
+    scripts/check-*.sh|scripts/test-platform-dolt-squash.sh|scripts/test-dolt-history-audit.sh|scripts/off-host-backup-*-test.sh|scripts/off-host-restore-drill.sh|scripts/m3_*|scripts/mail-*|scripts/*_probe.mjs|scripts/*.py|scripts/ograph-bench/*)
       add_explanation "$path -> ignored (CI/local/operator tooling; not deployed to host or guest closures)"
       continue
       ;;
@@ -201,6 +201,10 @@ for path in "${changed[@]}"; do
     cmd/projection-compact/*)
       mark_host_os_only
       add_explanation "$path -> projection-compact host package in Node B system environment"
+      ;;
+    scripts/dolt-history-audit.sh|scripts/off-host-backup.sh)
+      mark_host_os_only
+      add_explanation "$path -> host oneshot script read into nix/node-b.nix (Dolt history audit, off-host backup)"
       ;;
     cmd/platform-dolt-squash/*|scripts/platform-dolt-squash.sh)
       mark_host_os_only

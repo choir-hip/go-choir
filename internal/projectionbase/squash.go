@@ -211,7 +211,16 @@ func SquashAndGC(ctx context.Context, o SquashOptions) (SquashResult, error) {
 	if result.CommitsBefore, err = countRows(ctx, db, label, "commits", "SELECT COUNT(*) FROM dolt_log"); err != nil {
 		return fail(err)
 	}
-	if result.CommitsBefore > 2 {
+	headBefore, err := rootHash(ctx, db, label, "HEAD")
+	if err != nil {
+		return fail(err)
+	}
+	// Squash when there is history to drop, or when the working set is ahead
+	// of HEAD: a store that makes no snapshot commits (Store A with
+	// PLATFORM_DOLT_SNAPSHOTS=off) keeps two commits after its first squash
+	// and holds every later write only in the working set. Resetting to the
+	// root first keeps the log at two commits either way.
+	if result.CommitsBefore > 2 || headBefore != rootBefore {
 		if _, err := db.ExecContext(ctx, "CALL DOLT_RESET('--soft', ?)", roots[0]); err != nil {
 			return fail(fmt.Errorf("%s: soft reset to root: %w", label, err))
 		}
@@ -237,7 +246,7 @@ func SquashAndGC(ctx context.Context, o SquashOptions) (SquashResult, error) {
 		return fail(err)
 	}
 	if headSquashed != rootBefore {
-		return fail(fmt.Errorf("%s: refused: root changed by the squash commit: working before %s, head after %s", label, rootBefore, headSquashed))
+		return fail(fmt.Errorf("%s: refused: HEAD differs from the working set after the squash (state a commit cannot hold, such as dolt_ignore'd tables): working before %s, head after %s", label, rootBefore, headSquashed))
 	}
 	if _, err := db.ExecContext(ctx, "CALL DOLT_GC('--full', '--archive-level', '0', '--incremental-file-size', ?)", gcIncrementalFileSize); err != nil {
 		return fail(fmt.Errorf("%s: full gc: %w", label, err))
