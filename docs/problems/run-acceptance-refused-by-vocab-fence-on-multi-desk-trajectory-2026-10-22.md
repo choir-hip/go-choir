@@ -1,7 +1,8 @@
 # Run acceptance cannot be written for a trajectory that used two desks
 
 Date: 2026-10-22. Status: **fixed in lane `lane/fp0-acceptance-vocab-path` (commit
-`fe4c58050`), not yet proved on staging**. Found by FP0's phase 1
+`fe4c58050`, on main as `1ddcfbd00`, deploy H `43e318712`), proved on staging
+2026-10-22 07:47 UTC (see "Staging proof" under Proof plan)**. Found by FP0's phase 1
 staging gate of run-telemetry batching (lane `lane/fp0-batching-e2e`), while
 running design section 9 step 6. Not caused by batching: the refusal is a
 vocabulary check on a metadata string, and batching does not change it.
@@ -88,6 +89,48 @@ cutover (not the paper):
    record whose `authority_profile` is `texture > research`; record the id.
 4. Repeat on a restart-interrupted Texture trajectory that opened research
    (the batching gate's step 6 case).
+
+### Staging proof (FP0, 2026-10-22 07:47 UTC)
+
+Run by the self-development monitor for FP0 on the test computer
+`computer-71afbf1461dffabcce8eeebe558d03bd` (vm-c5c801f8…, warmness
+`test`). The calls went owner-authenticated through the proxy
+(`https://choir.news`) with the test computer's key.
+
+- Build identity:
+  - proxy `x-choir-build-commit: 43e318712553e2a69d5da87d37d41963223d0424`;
+  - guest /health at 07:47:19: status ready, running_runs 0, build and
+    deployed commit `43e318712…`, deployed_at 07:34:14Z.
+  - vmctl's `deploy refresh caller=deploy` round for 43e318712 ran at
+    07:31:36. It deferred this computer, which was busy with the
+    freeze-close drill. The retry sweep refreshed it at 07:34:17
+    (`outcome=refreshed planned_restart=true`).
+- Plan step 2 was not re-run. Both trajectories are the ones that
+  answered 400 under `d991907e6` (Evidence above), and each already had
+  a research run.
+- Before: the computer held one acceptance, `runacc-ab663015caa2cba0087b`
+  (trajectory 87837770), with `authority_profile` `texture`, state
+  `blocked`, docs-level, and health commit `d991907e6`.
+
+| call (body: `target_mission_id` `fp0-batching-phase1-staging-2026-10-22`) | time (UTC) | code | record | `authority_profile` | state, level |
+|---|---|---|---|---|---|
+| `POST /api/run-acceptances/synthesize`, `trajectory_id` `87837770-4f79-5414-9c4b-2d5352658a1f` | 07:47:35 | **202** | `runacc-ab663015caa2cba0087b` (the same record, upserted) | **`texture > research`** | blocked, staging-smoke-level |
+| `POST /api/run-acceptances/synthesize`, `trajectory_id` `a3015be4-976a-55d5-b46b-1130f2ef5f13` (restart-interrupted) | 07:47:46 | **202** | `runacc-c6d55bcaf418abe61210` (new) | **`texture > research`** | blocked, staging-smoke-level |
+
+- Neither call returned a vocabfence error.
+- Both records name health and deployment commit `43e318712…`.
+- In both records:
+  - checkpoints `submitted` and `texture_opened` passed;
+  - the invariants `trajectory_path_observed`, `capsule_effect_bounded`,
+    `core_acceptance_not_claimed` and `checkpoint_causal_order` passed.
+- `blocked` is the record's own verdict, not a refusal: "RunAcceptance is
+  trajectory diagnostics only; self-development acceptance requires
+  canonical event, checkpoi…".
+- `GET /api/run-acceptances/<id>` at 07:47 read both records back
+  (200, `texture > research`).
+
+Result: plan steps 3 and 4 pass on staging. The multi-desk path writes
+through the cutover write guard, and it reads back.
 
 ## Residual
 
