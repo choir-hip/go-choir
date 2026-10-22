@@ -21,7 +21,8 @@ written before the change:
   E2  the estimator walks /nix/store/.links (already deduplicated)
   E3  the estimator writes anything
   N7  the floor leaves no room for a guest store compaction (13.5 GiB peak)
-      or the paper's regrowth overlapping a deploy (review round 2, DS-2)
+      or the paper's regrowth overlapping a deploy (review round 2, DS-2),
+      with no margin beyond the terms (round 2b, DS2b-3)
   E4  the estimator hashes files over its size cap (the guest images,
       through the shared page cache; S-F10)
 """
@@ -89,9 +90,10 @@ class NixPolicy(unittest.TestCase):
         regrowth = 10 * GiB
         self.assertGreater(min_free, 0)
         self.assertGreater(max_free, min_free)
-        self.assertGreaterEqual(floor - footprint - compaction - regrowth, min_free)
+        margin = 4 * GiB
+        self.assertGreaterEqual(floor - footprint - compaction - regrowth - margin, min_free)
         self.assertGreaterEqual(floor - footprint, max_free)
-        self.assertEqual(floor, 56 * GiB)
+        self.assertEqual(floor, 60 * GiB)
 
     def test_n4_one_generation_count(self):
         src = nix_src()
@@ -109,7 +111,7 @@ class NixPolicy(unittest.TestCase):
         svc = block(src, "systemd.services.go-choir-host-disk-alarm =")
         timer = block(src, "systemd.timers.go-choir-host-disk-alarm =")
         self.assertIn("../scripts/node-b-host-disk-alarm", svc)
-        self.assertIn('"HOST_DISK_WARN_FREE_GIB=56"', svc)
+        self.assertIn('"HOST_DISK_WARN_FREE_GIB=60"', svc)
         self.assertIn('"HOST_DISK_WARN_UNALLOC_GIB=20"', svc)
         self.assertIn('"HOST_DISK_ERR_FREE_GIB=24"', svc)
         self.assertIn('"HOST_DISK_ERR_UNALLOC_GIB=10"', svc)
@@ -117,7 +119,7 @@ class NixPolicy(unittest.TestCase):
         self.assertRegex(timer, r"Persistent\s*=\s*false;")
         # The free warning is the deploy floor: a warning means the next
         # deploy is refused.
-        self.assertEqual(56 * GiB, preflight_floor_bytes())
+        self.assertEqual(60 * GiB, preflight_floor_bytes())
 
     def test_n6_retention_observe(self):
         src = nix_src()

@@ -6,7 +6,7 @@
 #
 # Failure modes (docs/problems/node-b-nix-store-and-host-disk-policy-2026-10-22.md),
 # written before the script:
-#   A1  free under the deploy floor (56 GiB) is not a warning
+#   A1  free under the deploy floor (60 GiB) is not a warning
 #   A2  btrfs unallocated under 20 GiB is not a warning
 #   A3  free under nix min-free (24 GiB) or unallocated under 10 GiB is not
 #       an error-priority line
@@ -71,16 +71,16 @@ run_alarm 139 38
 check "A5 healthy: one info line with the numbers" '[ "$(wc -l <"$root/out")" = 1 ] && grep -q "^<6>host disk ok: free 139 GiB, btrfs unallocated 38 GiB, metadata 84% of 18.6 GiB" "$root/out"'
 check "A6 healthy exits 0" '[ "$(cat "$root/rc")" = 0 ]'
 
-run_alarm 56 20
-check "A7 free 56 and unallocated 20 exactly: ok" 'grep -q "^<6>host disk ok: free 56 GiB, btrfs unallocated 20 GiB" "$root/out"'
+run_alarm 60 20
+check "A7 free 60 and unallocated 20 exactly: ok" 'grep -q "^<6>host disk ok: free 60 GiB, btrfs unallocated 20 GiB" "$root/out"'
 run_alarm 24 10
 check "A7 free 24 and unallocated 10 exactly: warning, not error" 'grep -q "^<4>host disk WARNING: " "$root/out" && ! grep -q "^<3>" "$root/out"'
 
 run_alarm 100 38 FAKE_NO_META=1
 check "A8 no metadata line: warning" 'grep -q "^<4>host disk WARNING: cannot read btrfs metadata" "$root/out"  && grep -q "metadata unknown$" "$root/out" && [ "$(cat "$root/rc")" = 0 ]'
 
-run_alarm 55 38
-check "A1 free 55 < 56: warning priority" 'grep -q "^<4>host disk WARNING: free 55 GiB below 56 GiB" "$root/out"'
+run_alarm 59 38
+check "A1 free 59 < 60: warning priority" 'grep -q "^<4>host disk WARNING: free 59 GiB below 60 GiB" "$root/out"'
 check "A6 warning exits 0" '[ "$(cat "$root/rc")" = 0 ]'
 
 run_alarm 100 19
@@ -92,7 +92,7 @@ check "A6 error exits 0" '[ "$(cat "$root/rc")" = 0 ]'
 run_alarm 60 9
 check "A3 unallocated 9 < 10: error priority" 'grep -q "^<3>host disk ERROR: .*btrfs unallocated 9 GiB below 10 GiB" "$root/out"'
 run_alarm 30 15
-check "A1+A2 both named in one warning line" '[ "$(grep -c "^<4>" "$root/out")" = 1 ] && grep -q "free 30 GiB below 56 GiB" "$root/out" && grep -q "unallocated 15 GiB below 20 GiB" "$root/out"'
+check "A1+A2 both named in one warning line" '[ "$(grep -c "^<4>" "$root/out")" = 1 ] && grep -q "free 30 GiB below 60 GiB" "$root/out" && grep -q "unallocated 15 GiB below 20 GiB" "$root/out"'
 
 run_alarm 100 38 HOST_DISK_WARN_FREE_GIB=120
 check "thresholds come from the environment" 'grep -q "^<4>host disk WARNING: free 100 GiB below 120 GiB" "$root/out"'
