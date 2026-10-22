@@ -255,7 +255,7 @@ step touches; each is proved on a test computer before the step widens.
 | N1 | NET-01's host fetch verb on for every computer, guest-side fetch route deleted | per NET-01 | C1, C3 | NET-01's proof | NET-01's |
 | N2 | NET-02 mirrors only for capsules; L2 CONNECT to the internet off | per NET-02 | C5 | NET-02's probe | NET-02's |
 | N3 | the delegate's model API through the gateway (SEC-08 Option K) | per SEC-08 | C5 | delegate one-round build | SEC-08's |
-| N4 | the Management Console's zot and shell (inventory A9): **owner decision** — run them in a capsule with grants, or gateway-only | owner | none of the seven | — | — |
+| N4 | the Management Console's zot and shell (inventory A9): **removed** (owner, 2026-10-22: "just remove zot") | — | none of the seven | — | — |
 | N5 | time without NTP: kvm-clock plus `ptp_kvm` and chrony reading `/dev/ptp0` (**unverified** on Firecracker 1.16.1 x86_64; fallback: a host time verb over vsock); resolver none (nothing in the guest resolves once N1-N3 hold) | per computer | all, indirectly (TLS, token expiry) | clock offset logged before and after on a test computer for a day | selector |
 | N6 | the tap's forward chain drops everything for selected computers; the NIC is present and dead; the diag oracle is removed | per computer | all | a week of the paper and the owner computer with zero dropped packets that matter (drops logged by destination) | delete the rule |
 | N7 | no `network-interfaces` block, no tap, no `/30`, no `ip=` parameters for selected computers; cold boot only | per computer, test first, then all; hibernated computers cold-boot once | all | the seven capabilities on staging; the paper a full day | selector; the next cold boot has a NIC |
@@ -280,9 +280,11 @@ the host, so it rides N1 and NET-05's host proxy; no NIC needed.
 
 ## 10. What this design does not settle
 
-- **A9, the console's zot and shell** (N4): an owner decision; NET-04
-  cannot finish without it. Default if no ruling: zot keeps its gateway
-  model route over vsock and loses general egress at N6.
+- **A9, the console's zot and shell** (N4): settled by the owner
+  (2026-10-22 02:25 UTC): "For the zot question, we should actually just
+  remove zot." zot is deleted (the Console's repair window, its
+  `/api/super-console/ws` route, `internal/zot`, `cmd/zot`, the
+  `zot-session` mode), so N4 needs no egress row.
 - **Unverified at the pin**, each read on a KVM host in V1 before it is
   relied on: the snapshot reset and `uds_path` re-bind (§7), the
   busy-spin fixes in 1.16.1 (§8), `ptp_kvm` (N5), the vsock socket's
