@@ -152,3 +152,73 @@ still handled by the reverted binary (the handler accepts that mailbox).
 Tests first (yellow, failing on main by behaviour), then the fix (red: the
 actor runtime substrate and the wake outbox), then this record's
 disposition.
+
+## Residual found while writing the F2 test: the crash rule reads a second-rounded source time
+
+**Confirmed (local test, not staging).** On a runtime booted at
+17:28:37.286, an assignment opened 3 s later and bound 3 s after that
+had its bind's `initial_dispatch` wake closed as "pre-boot wake …
+interrupted_by_restart". The wake body's `created_at` was `17:28:37Z`:
+the open time after the store's round trip, cut to the second, which is
+before the boot's nanosecond `bootedAt`.
+
+- So on an unplanned boot (every first boot and every crash boot), a wake
+  of a restart-work kind whose source was created in the boot's own wall
+  second is closed as pre-boot work, whatever version minted it.
+- Harm in production is small (hypothesis): it needs a source created in
+  the first second after `bootedAt`, and `initial_dispatch` is a backstop
+  for `rt.activate`'s own send.
+- Not changed here: it is the crash rule's input (red, and the brief keeps
+  the crash rule). Candidate fixes for a later slice: compare against
+  `bootedAt` cut to the second, or read the mint time (`MintedAt`) for
+  wakes minted after the source's first version. The F2 test sets the
+  runtime's boot an hour back to model a computer that has been up a while.
+
+## Disposition (tests 94f829bfc, fix b7c5d7c97)
+
+- **F1 repaired.** On a handler error short of the limit, the dispatcher
+  holds that mailbox for `handlerRetryBackoff(attempts)`: 250 ms, doubled
+  per attempt, capped at 10 s, times jitter in [0.5, 1). It logs
+  `dispatcher: retry <agent>/<update> after attempt N in <d>`.
+  - The hold is a timestamp in process memory. The activation returns at
+    once and frees its slot; no lock is held while waiting; `Run` wakes at
+    the hold's end (the due-index timer takes the earlier of the two).
+  - The whole mailbox waits, so a later update of it never runs past the
+    failed one; other mailboxes run (test: agent-b's update ran during
+    agent-a's hold, agent-a ran `[a1 a1 a2]`).
+  - The limit is unchanged (8 in the kernel). **The retry window is now
+    12.9 to 25.75 s** (the seven waits before the eighth delivery:
+    0.25 + 0.5 + 1 + 2 + 4 + 8 + 10 s, each times 0.5 to 1), plus handler
+    time. On main it was about one second (30 ms in the local test).
+  - The crash rule is unchanged: a restart forgets the hold, and the boot
+    decides what is delivered (crash: restart work closed by kind; planned:
+    resumed once). The durable attempt count keeps the budget across a
+    restart. Deferrals, durable-invalid and both poison branches are
+    unchanged.
+- **F2 repaired.** `ActorWakeOutbox.MintedAt` is read from the outbox
+  row's `updated_at` (never in the body), and the sweep's `actor wake
+  latency` line measures from it. The body's `created_at`, which the crash
+  rule and the body comparison read, is unchanged. Precision is a second
+  (the store rounds `updated_at`).
+- **F3 repaired.** The open commit's `:spawn` wake goes to
+  `engineering-admission` (`store.EngineeringAdmissionMailbox`, aliased by
+  agentcore). It is safe for the reasons under "Why it is on management's
+  today". The handler still accepts a wake on the casting agent's mailbox,
+  minted before the move.
+
+Staging probes for FP0 (after deploy):
+
+1. Cast one assignment on the test computer. Expect `engineering admission
+   wake latency mailbox=engineering-admission … "attempt":1` within about
+   a second of the open (not 13.5 s).
+2. Expect `actor wake latency kind=initial_dispatch` and
+   `kind=assigned_engineering_fate_deadline` lines with `waited` under 2 s,
+   or no line at all.
+3. If a fate-deadline conflict recurs: `dispatcher: retry … after attempt
+   N in …` lines spaced 0.125 s and up, then a handle with no poison.
+   `grep -c 'dispatcher: poison'` over the drill should be 0.
+
+Overlap: lane/fp4-r4 edits the poison lines in the same function; this fix
+touches only the handle branch's tail (`holdAfterFailure` before the
+`break`), the struct, `NewDispatcher`, `Run`'s timer and `dispatchPending`'s
+skip, so FP0's rebase should be mechanical.

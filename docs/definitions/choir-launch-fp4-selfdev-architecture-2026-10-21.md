@@ -206,6 +206,14 @@ heresy_delta:
 
 now:
   status: checkpoint
+  side_lane: >-
+    lane/fp4-actor-retry-backoff (base main 273d139c9): a failed actor
+    handler's mailbox backs off before redelivery (retry window 12.9 to
+    25.75 s under 8 attempts, was about 1 s); wake latency counts from the
+    wake's own mint; the open-time spawn wake goes to engineering-admission.
+    Record docs/problems/fp4-actor-retry-no-backoff-wake-latency-spawn-mailbox-2026-10-22.md;
+    ready for FP0 to rebase with lane/fp4-r4 and land; staging probes in
+    the record.
   slice: >-
     Round 3 repair from the deployed drill on 71afbf14 (lane/fp4-r3-nudge,
     base main 7448bf899). P1: the nudge waited behind management's own
@@ -390,6 +398,11 @@ receipts:
     identity: bbd19192c
     proof_refs: [internal/agentcore/writer_gate_observability_test.go]
     rollback_ref: git revert bbd19192c (an additive JSON field)
+  - id: actor-retry-backoff
+    boundary: implement
+    identity: 8f0a46562 (record), 94f829bfc (tests), b7c5d7c97 (fix), on lane/fp4-actor-retry-backoff
+    proof_refs: [internal/actor/dispatcher_retry_backoff_test.go, internal/agentcore/actor_wake_mint_time_test.go]
+    rollback_ref: git revert b7c5d7c97 (no schema, no new kind; the hold is process memory; a wake already on engineering-admission is still handled)
   - id: arch03-design
     boundary: define
     identity: 58f369309
