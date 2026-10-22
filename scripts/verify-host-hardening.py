@@ -90,6 +90,12 @@ NO_CAP_UNITS = {
 # keeps the two in step.
 TAP_SERVICE_PORTS = ("8082", "8083", "8084", "8086", "8087", "8088", "8089")
 FORBIDDEN_SYSCALLS = ["bpf", "chroot", "acct", "setuid", "capset"]
+# Units whose filter allows @privileged on purpose, with the reason. Every
+# other go-choir unit must exclude it.
+PRIVILEGED_SYSCALLS_ALLOWED = {
+    "go-choir-vmctl": "the VMM jailer it runs needs them (chroot/pivot_root, setuid/setgid "
+                      "uid drop, capset bounding cut): 10e9f18e1, nix/node-b.nix vmctl SystemCallFilter",
+}
 
 results = []
 
@@ -227,8 +233,12 @@ def check_units():
             allowed = set(filt.lstrip("~").split())
             is_allow_list = not filt.startswith("~")
             leaked = [s for s in FORBIDDEN_SYSCALLS if is_allow_list and s in allowed]
-            record("unit", f"{unit} syscall filter excludes @privileged", not leaked,
-                   f"privileged syscalls still allowed: {leaked}" if leaked else "ok")
+            if unit in PRIVILEGED_SYSCALLS_ALLOWED:
+                record("unit", f"{unit} syscall filter allows @privileged (intended)", True,
+                       f"allowed: {leaked or 'none'}; reason: {PRIVILEGED_SYSCALLS_ALLOWED[unit]}")
+            else:
+                record("unit", f"{unit} syscall filter excludes @privileged", not leaked,
+                       f"privileged syscalls still allowed: {leaked}" if leaked else "ok")
     for unit in ("go-choir-proxy", "go-choir-vmctl", "go-choir-gateway"):
         pid = systemctl_show(unit, ["MainPID"]).get("MainPID", "0")
         if pid in ("", "0"):
