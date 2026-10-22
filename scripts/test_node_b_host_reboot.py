@@ -14,6 +14,8 @@ import os
 import re
 import signal
 import subprocess
+import sys
+import tempfile
 import unittest
 from unittest import mock
 
@@ -538,7 +540,10 @@ class RebootNotDone(unittest.TestCase):
         receipt = marked_receipt()
         done = subprocess.CompletedProcess(["ssh"], rc, "", stderr)
 
+        self.run_kwargs = []
+
         def run(*a, **k):
+            self.run_kwargs.append(k)
             if hang:
                 raise subprocess.TimeoutExpired("ssh", 60, stderr=stderr)
             return done
@@ -590,6 +595,11 @@ class RebootNotDone(unittest.TestCase):
                                         hang=True)
         self.assertEqual(code, 3)
         self.assertEqual(fake.unmarked, [PAPER])
+
+    def test_reboot_ssh_runs_in_the_c_locale(self):
+        """F4: OpenSSH localizes its stderr, so the phrases only match under LC_ALL=C."""
+        self.run_reboot(255, [None, "new"])
+        self.assertEqual(self.run_kwargs[0].get("env", {}).get("LC_ALL"), "C")
 
     def test_ssh_timeout_after_connecting_waits(self):
         code, fake, _ = self.run_reboot(None, [None, "new"], stderr="", hang=True)
@@ -643,6 +653,16 @@ class ClearOnlyPossibleMarkers(unittest.TestCase):
             ok, _ = run_mark(fake)
             self.assertFalse(ok, ans)
             self.assertEqual(fake.unmarked, [PRIMARY], ans)
+
+    def test_unknown_4xx_is_cleared(self):
+        """F6: only the guest's own pre-write answers are refusals; a 408 or
+        429 from a proxy in front of the guest may follow a write."""
+        for ans in ((408, ""), (429, "{}"), (413, ""), (418, "")):
+            fake = FakeHost([row(PRIMARY, "primary")], scripted({PRIMARY: [ans]}))
+            ok, receipt = run_mark(fake)
+            self.assertFalse(ok, ans)
+            self.assertEqual(fake.unmarked, [PRIMARY], ans)
+            self.assertEqual(receipt["marks"]["may_hold_marker"], [PRIMARY], ans)
 
     def test_written_then_refused_is_still_cleared(self):
         fake = FakeHost([row(PAPER, "critical_protected")], scripted({PAPER: [WRITTEN, UNSAFE]}))
@@ -700,6 +720,87 @@ class Signals(unittest.TestCase):
             with self.assertRaises(KeyboardInterrupt):
                 reboot.reboot_after_mark(reboot_args(), receipt, save)
         self.assertEqual(fake.unmarked, [PAPER])
+
+    def test_signal_while_reading_the_answers_clears(self):
+        """F1: a signal after remote() returns and before may_hold_marker is
+        filled must not leave the sent computers uncleared."""
+        fake = FakeHost([row(PAPER, "critical_protected"), row(PRIMARY, "primary")], scripted({}))
+
+        def hup(status, body):
+            raise reboot.Interrupted("SIGHUP")
+        with mock.patch.object(reboot, "answer_may_have_written", hup):
+            with self.assertRaises(KeyboardInterrupt):
+                run_mark(fake)
+        self.assertEqual(sorted(fake.unmarked), sorted([PAPER, PRIMARY]))
+
+
+class MainInterrupts(unittest.TestCase):
+    """F2: main clears and saves the receipt on an interrupt, not only on an Exception."""
+
+    def run_main(self, name, fn):
+        fake = FakeHost([], scripted({}))
+        marks = marked_receipt()["marks"]
+
+        class Pre:
+            def failed(self):
+                return []
+
+        def mark(args, receipt):
+            receipt["marks"] = marks
+            return True
+        with tempfile.TemporaryDirectory() as d:
+            state = os.path.join(d, "receipt.json")
+            argv = ["x", "--execute", "--console-verified", "--min-kernel", "6.18.57", "--state", state]
+            with mock.patch.object(sys, "argv", argv), mock.patch.object(reboot, "remote", fake.remote), \
+                    mock.patch.object(reboot, "phase_pre", lambda a, r: Pre()), \
+                    mock.patch.object(reboot, "phase_mark", mark), \
+                    mock.patch.object(reboot, "install_signal_handlers", lambda: None), \
+                    mock.patch.object(reboot, "log", lambda m: None), mock.patch.object(reboot, name, fn):
+                with self.assertRaises(KeyboardInterrupt):
+                    reboot.main()
+            saved = None
+            if os.path.exists(state):
+                with open(state) as f:
+                    saved = json.load(f)
+        return fake, saved
+
+    def test_interrupt_between_mark_and_reboot_clears_and_saves(self):
+        def hup(args, receipt, save):
+            raise reboot.Interrupted("SIGHUP")
+        fake, saved = self.run_main("reboot_after_mark", hup)
+        self.assertEqual(fake.unmarked, [PAPER])
+        self.assertIsNotNone(saved)
+        self.assertIn("Interrupted", saved["error"])
+
+    def test_interrupt_cleared_in_reboot_is_saved_and_cleared_once(self):
+        def hup(args, receipt):
+            raise reboot.Interrupted("SIGTERM")
+        fake, saved = self.run_main("phase_reboot", hup)
+        self.assertEqual(fake.unmarked, [PAPER])
+        self.assertIsNotNone(saved)
+        self.assertIn("Interrupted", saved["error"])
+
+
+class OptionChecks(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
+    def test_down_wait_must_be_under_boot_timeout(self):
+        """F5: a down-wait that cannot expire before the boot timeout leaves the down-wait branch dead."""
+        for extra in (["--down-wait", "1200"], ["--down-wait", "0"], ["--boot-timeout", "200"],
+                      ["--boot-timeout", "300", "--down-wait", "300"]):
+            # No host may be reached if the check is missing: ssh and remote fail the test.
+            def no_host(*a, **k):
+                raise AssertionError("reached a host")
+            state = os.path.join(self.tmp.name, "receipt.json")
+            with mock.patch.object(sys, "argv", ["x", "--state", state] + extra), \
+                    mock.patch.object(sys, "stderr", open(os.devnull, "w")), \
+                    mock.patch.object(reboot.subprocess, "run", no_host), mock.patch.object(reboot, "remote", no_host), \
+                    mock.patch.object(reboot, "phase_pre", no_host):
+                with self.assertRaises(SystemExit) as cm:
+                    reboot.main()
+            self.assertEqual(cm.exception.code, 2, extra)
 
 
 if __name__ == "__main__":
