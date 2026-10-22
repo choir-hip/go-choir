@@ -391,3 +391,27 @@ This repair removes the boot-window holder. It does not stop any other long
 and the console shows no `actor wake outbox list` line with a minutes-long
 `dur`. If it fails, run `scripts/paper_boot_window_probe.py` from runtime
 start and keep its goroutine dump: the holder's frame is in it.
+
+## Deployed result (FP0, 2026-10-22 05:13 UTC, deploy E d991907e6)
+
+The repair is on main as 8388838ee, with DeepSeek's edit 18e02d303: a prefix
+that is not UTF-8 is absence. It was deployed in CI 39725541974.
+
+| Boot | Kill | Boot | /health 200 | Boot to healthy |
+|---|---|---|---|---|
+| deploy C (before) | 03:39 | 03:39:46 | 03:46:11 | about 6.5 min |
+| deploy D, first | 04:18:54 | 04:19:27 | 04:21:36 | about 2 min |
+| deploy D, second | 04:29:35 | 04:30:08 | 04:32:30 | about 2.4 min |
+| deploy E (repair) | 05:12:26 | 05:12:59 | 05:13:29 | about 30 s |
+
+vmctl logged three unhealthy probes in the deploy E window (05:12:58,
+05:13:13 and 05:13:28), all within the first 30 s after boot. Then /health
+stayed 200 through the derived-key validation passes, which ran from 05:13:34
+on. The slowest boot phase is still passivate_interrupted_activations, at 52 s
+(48 s on deploy D). The pass condition holds: /health answers 200 within
+seconds of "runtime: started", which the guest clock logged at 05:13:32.
+
+Still open: F1 (bounded `/health` reads, lane/fp1-health-bounded, in review
+edits for its callers' attempt budgets). F2 is the online GC's 11 to 30 s
+store stall every 10 to 17 minutes; telemetry batching's staging gate is
+the first lever against it.
