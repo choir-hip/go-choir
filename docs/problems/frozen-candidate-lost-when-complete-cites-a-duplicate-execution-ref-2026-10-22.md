@@ -129,3 +129,19 @@ Tests b79cab192 (failed on main 6c60685cc), fix 4e6f96833.
 - Not proven locally: the Freeze-then-Complete path needs a real frozen
   capsule. The staging re-run (A completes citing a repeated ref and keeps
   its candidate) is the proof.
+
+## Round 4b
+
+- Wiring test (both reviewers): `TestCompleteCitingOneRefTwiceRecordsOneCommandPerReceipt`
+  runs a partial Complete through `commitCompleteIntent` with seeded
+  receipts and a real store, citing one ref twice. With the main line
+  (`trimNonEmptyStrings`) restored it fails by behaviour: the store
+  refuses "duplicate command_id". So on main a partial Complete with a
+  repeated ref was refused too, not only the post-freeze one.
+- **Residual (DeepSeek 4):** a pending proposal staged by a build before
+  this fix keeps its repeated refs, and `resumeStrandedFrozenAssignmentCommit`
+  re-drives it verbatim, so its count check still fails on resume. It is
+  narrow (an assignment stranded mid-saga across the upgrade with a
+  repeated ref), fails closed, and now names the counts. Deduplicating on
+  resume is not trivial: dropping commands changes the proposition digest,
+  which then no longer matches the staged freeze intent.
