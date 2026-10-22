@@ -122,8 +122,19 @@ func (c *fcAPIClient) Pause(ctx context.Context) error {
 // CreateFullSnapshot writes the VM state and the full guest memory. The VM
 // must be paused.
 func (c *fcAPIClient) CreateFullSnapshot(ctx context.Context, statePath, memPath string) error {
+	return c.createSnapshot(ctx, snapshotTypeFull, statePath, memPath)
+}
+
+// CreateDiffSnapshot writes the VM state and only the resident guest pages
+// (mincore, with dirty tracking off) into a sparse memory file (L3a,
+// snapshot_diff.go). The VM must be paused.
+func (c *fcAPIClient) CreateDiffSnapshot(ctx context.Context, statePath, memPath string) error {
+	return c.createSnapshot(ctx, snapshotTypeDiff, statePath, memPath)
+}
+
+func (c *fcAPIClient) createSnapshot(ctx context.Context, snapshotType, statePath, memPath string) error {
 	return c.do(ctx, http.MethodPut, "/snapshot/create", map[string]string{
-		"snapshot_type": "Full",
+		"snapshot_type": snapshotType,
 		"snapshot_path": statePath,
 		"mem_file_path": memPath,
 	})

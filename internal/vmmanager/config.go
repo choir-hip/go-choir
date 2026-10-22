@@ -132,6 +132,10 @@ func LoadConfigFromEnv() ManagerConfig {
 			cfg.SnapshotBudgetGiB = n
 		}
 	}
+	// L3a Diff snapshots (snapshot_diff.go): full unless set to diff, and
+	// then only for the computers VM_SNAPSHOT_DIFF_ONLY names.
+	cfg.SnapshotType = normalizeSnapshotTypeConfig(os.Getenv("VM_SNAPSHOT_TYPE"))
+	cfg.SnapshotDiffOnly = parseComputerSelector(os.Getenv("VM_SNAPSHOT_DIFF_ONLY"))
 	if v := os.Getenv("VM_SNAPSHOT_MAX_AGE"); v != "" {
 		if d, err := time.ParseDuration(strings.TrimSpace(v)); err == nil && d > 0 {
 			cfg.SnapshotMaxAge = d

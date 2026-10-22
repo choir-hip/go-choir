@@ -218,6 +218,12 @@ type SnapshotMeta struct {
 	// Vault records that the snapshot was written into the snapshot vault.
 	// Observability only: where a snapshot is found decides where it is read.
 	Vault bool `json:"vault,omitempty"`
+	// SnapshotType is Full or Diff (L3a, snapshot_diff.go); empty in metas
+	// from before L3a, which are Full. ColdOrigin records that the captured
+	// process was cold booted; a Diff loads only with it. Additive fields,
+	// no version bump.
+	SnapshotType string `json:"snapshot_type,omitempty"`
+	ColdOrigin   bool   `json:"cold_origin,omitempty"`
 }
 
 // snapshotConfinement is the confinement a snapshot was captured under.
@@ -248,6 +254,11 @@ type SnapshotTimeline struct {
 	Credential string `json:"credential,omitempty"`
 	// Vault: the snapshot was written into the snapshot vault.
 	Vault bool `json:"vault,omitempty"`
+	// SnapshotType is what the hibernate committed (Full or Diff);
+	// DiffRefused says why it was not a Diff (snapshot_diff.go).
+	SnapshotType string `json:"snapshot_type,omitempty"`
+	ColdOrigin   bool   `json:"cold_origin,omitempty"`
+	DiffRefused  string `json:"diff_refused,omitempty"`
 }
 
 // --- paths ---------------------------------------------------------------
@@ -569,6 +580,9 @@ func (m *Manager) validateSnapshot(dir string, meta *SnapshotMeta, v snapshotVal
 		if info, err := os.Stat(filepath.Join(dir, name)); err != nil || !info.Mode().IsRegular() {
 			return snapshotReasonFilesMissing
 		}
+	}
+	if reason := m.diffSnapshotRefusalReason(dir, meta); reason != "" {
+		return reason
 	}
 	if len(meta.Disks) == 0 {
 		return snapshotReasonDisk

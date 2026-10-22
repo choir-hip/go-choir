@@ -71,14 +71,15 @@ func (m *Manager) hibernateVMSnapshot(vmID string) error {
 		snap.Bytes = meta.Bytes
 		snap.DiskBytes = meta.DiskBytes
 		snap.DiskBytesMethod = meta.DiskBytesMethod
+		snap.SnapshotType = meta.SnapshotType
 		snap.CreatedAt = meta.CreatedAt.UTC().Format(time.RFC3339Nano)
 		if !meta.ResumeDeadline.IsZero() {
 			snap.ResumeDeadline = meta.ResumeDeadline.UTC().Format(time.RFC3339Nano)
 		}
 		tl.finish("hibernated", nil)
 		m.persistHibernateTimeline(tl)
-		log.Printf("vmmanager: hibernated VM %s by snapshot (fence=%dms pause=%dms snapshot=%dms bytes=%d disk_bytes=%d disk_bytes_method=%s resume_deadline=%s)",
-			vmID, snap.FenceMS, snap.PauseMS, snap.SnapshotMS, snap.Bytes, snap.DiskBytes, snap.DiskBytesMethod, snap.ResumeDeadline)
+		log.Printf("vmmanager: hibernated VM %s by snapshot (fence=%dms pause=%dms snapshot=%dms bytes=%d disk_bytes=%d disk_bytes_method=%s resume_deadline=%s snapshot_type=%s diff_refused=%s)",
+			vmID, snap.FenceMS, snap.PauseMS, snap.SnapshotMS, snap.Bytes, snap.DiskBytes, snap.DiskBytesMethod, snap.ResumeDeadline, snap.SnapshotType, snap.DiffRefused)
 		return nil
 	}
 
@@ -247,9 +248,37 @@ func (m *Manager) captureSnapshotInto(vmID string, cfg VMConfig, hostURL string,
 		statePath = "/" + snapshotPartialDirName + "/" + snapshotStateName
 		memPath = "/" + snapshotPartialDirName + "/" + snapshotMemName
 	}
+	// L3a (snapshot_diff.go): a Diff when every condition holds; a Diff
+	// error falls back to Full inside this same pause.
+	m.mu.Lock()
+	coldOrigin, pid := false, 0
+	if inst := m.vms[vmID]; inst != nil {
+		coldOrigin, pid = inst.coldOrigin, inst.PID
+	}
+	m.mu.Unlock()
+	snap.ColdOrigin = coldOrigin
+	snap.DiffRefused = m.diffSnapshotRefusal(cfg, coldOrigin, pid, firecrackerBuildVersion(m.launchedVMM(vmID).Firecracker))
 	createStart := time.Now()
 	createCtx, cancel := context.WithTimeout(context.Background(), snapshotCreateTimeout)
-	err = api.CreateFullSnapshot(createCtx, statePath, memPath)
+	snap.SnapshotType = snapshotTypeFull
+	if snap.DiffRefused == "" {
+		if err = api.CreateDiffSnapshot(createCtx, statePath, memPath); err == nil {
+			snap.SnapshotType = snapshotTypeDiff
+		} else {
+			log.Printf("vmmanager: Diff snapshot of VM %s failed (%v); taking Full in the same pause", vmID, err)
+			snap.DiffRefused = diffRefusedCreateFailed
+			hostPartial := partial
+			if jailed {
+				hostPartial = jailPartial
+			}
+			for _, name := range []string{snapshotStateName, snapshotMemName} {
+				_ = os.Remove(filepath.Join(hostPartial, name))
+			}
+		}
+	}
+	if snap.SnapshotType == snapshotTypeFull {
+		err = api.CreateFullSnapshot(createCtx, statePath, memPath)
+	}
 	cancel()
 	snap.SnapshotMS = time.Since(createStart).Milliseconds()
 	if err != nil {
@@ -357,6 +386,8 @@ func (m *Manager) commitSnapshot(vmID, root string, vh *vaultHandle, cfg VMConfi
 		SnapshotMS:         snap.SnapshotMS,
 		Confinement:        ConfinementDirect,
 		Vault:              vault,
+		SnapshotType:       snap.SnapshotType,
+		ColdOrigin:         snap.ColdOrigin,
 	}
 	if conf.jailed() {
 		meta.Confinement = ConfinementJailer
