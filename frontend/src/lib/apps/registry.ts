@@ -260,7 +260,7 @@ export const LAUNCHER_APPS = APP_REGISTRY
   .sort((a, b) => a.launcher.order - b.launcher.order);
 
 export const DESKTOP_ICON_APPS = APP_REGISTRY
-  .filter((app) => app.launcher.menutopIcon)
+  .filter((app) => app.launcher.desktopIcon)
   .sort((a, b) => a.launcher.order - b.launcher.order);
 
 export const HEAVY_APP_IDS = new Set(APP_REGISTRY.filter((app) => app.window.heavy).map((app) => app.id));
