@@ -196,6 +196,16 @@ reset_state
 t "fp1 step 2 parses a Go duration (1m5.2s < 2m)" grep -q 'PASS.*runtime-store-open under two minutes' "$WORK/out"
 t "fp1 step 6 refuses the paper by default" rc_is 3 "$HERE/fp1-store.sh" --step 6 --mutate
 
+# ---- FP1 F-c deploy 1: step 6's messages are text, not shell (review bunch 99) -
+EVT=$HERE/fp1-event-table-deploy1.sh
+t "bash -n fp1-event-table-deploy1" bash -n "$EVT"
+for phase in old recovered; do
+	reset_state
+	t "fp1 event-table step 6 --phase $phase runs (dry run)" rc_is 0 "$EVT" --step 6 --phase "$phase" --mutate --computer $TEST --dry-run
+done
+t "fp1 event-table step 6 recovered prints the rollback sequence literally" grep -qF 'T=$(mktemp -d); git show TIP:scripts/rollback/fc-deploy1-rollback.sh >$T/r.sh' "$WORK/out"
+t "fp1 event-table step 6 --phase is old or recovered" rc_is 2 "$EVT" --step 6 --phase bogus --mutate --computer $TEST --dry-run
+
 # ---- FP7 -------------------------------------------------------------------------
 reset_state
 TMPDIR=$WORK "$HERE/fp7-gateway.sh" --step 1 >"$WORK/out" 2>&1
