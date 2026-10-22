@@ -943,7 +943,7 @@ EOF
       # and the isolation self-test run each tool in a child of it.
       CHOIR_DOCTOOL_CGROUP_ROOT = "/sys/fs/cgroup/choir-doctools";
       # The daemon's capability floor (SDC SEC-15, internal/capfloor): it keeps
-      # 15 named capabilities and drops the rest from its bounding set.
+      # 16 named capabilities and drops the rest from its bounding set.
       # observe logs what it would drop and the isolation self-test reports
       # the set; "enforce" drops it (one re-exec at start) after a test
       # computer has run a capsule and every desk under enforce.

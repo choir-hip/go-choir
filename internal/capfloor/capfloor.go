@@ -9,7 +9,7 @@
 // thread at once (AllThreadsSyscall refuses with cgo), so Apply drops on one
 // locked thread at the top of main and re-executes the binary, marked; the
 // new image starts with that thread's set on every thread. This is not a
-// non-root daemon: root keeps the fifteen capabilities below. The split that
+// non-root daemon: root keeps the sixteen capabilities below. The split that
 // would make it non-root is a named residual
 // (docs/definitions/choir-launch-fp2-desk-boundary-2026-10-21.md, "Second
 // batch", with failure modes K1-K6).
@@ -149,6 +149,7 @@ var Kept = map[int]string{
 	capSysChroot:      "capsule root setup inside its mount namespace; kept until the enforce probe shows it unused",
 	capSysPtrace:      "reading desk workers' /proc status and namespace links from outside (the isolation self-test, desk_cell_selftest_linux.go)",
 	capSysResource:    "rlimits and oom_score_adj of children of other uids (desk worker memory limits); kept until the enforce probe shows it unused",
+	capSysTime:        "the hibernate resume steps CLOCK_REALTIME to the host's wall time with settimeofday (internal/agentcore/hibernate_clock_linux.go, POST /internal/runtime/hibernate/resumed); without it the resume answers 500 and the host cold-boots the guest (review E1)",
 }
 
 func keptMask() uint64 {

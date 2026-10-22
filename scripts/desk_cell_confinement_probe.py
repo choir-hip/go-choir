@@ -391,7 +391,7 @@ def judge_document_tool(dt):
 
 
 # The daemon's capability floor (SEC-15, internal/capfloor), written out here.
-CAPFLOOR = "00000000012c15ff"
+CAPFLOOR = "00000000032c15ff"
 
 
 def judge_runtime_capabilities(rc):
