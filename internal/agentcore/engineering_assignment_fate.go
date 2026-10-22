@@ -390,7 +390,11 @@ func (rt *Runtime) failBoundSelfdevOperation(ctx context.Context, computerID, as
 		return
 	}
 	operation, found, err := rt.selfdevOperations.GetByIdempotency(ctx, computerID, store.EngineeringFreezeIdempotencyKey(assignmentID))
-	if err != nil || !found {
+	if err != nil {
+		log.Printf("selfdev: fail the operation of assignment %s: read: %v", assignmentID, err)
+		return
+	}
+	if !found {
 		return
 	}
 	rt.failSelfdevOperation(ctx, operation, reason)
@@ -417,8 +421,13 @@ func (rt *Runtime) failTrajectorySelfdevOperations(ctx context.Context, computer
 // in-process (ErrConflict) or on the tape (ErrProjectionMismatch: a writer
 // without this Store's write mutex, as in the rematerialize rebind window),
 // with the same bound as closeEndedAssignmentSelfdevOperation, and logs a
-// give-up.
+// give-up. It is the one seam every cancellation close passes, so it also
+// carries the close's deadline: a wedged tape append must not hold the
+// Store's write mutex (and, on the reconcile paths,
+// engineeringAssignmentOpenMu) forever.
 func (rt *Runtime) failSelfdevOperation(ctx context.Context, operation selfdev.Operation, reason string) {
+	ctx, cancel := selfdevCloseContext(ctx)
+	defer cancel()
 	trimmedReason := strings.TrimSpace(reason)
 	closable := []string{selfdev.StateExecuting, selfdev.StateFrozen, selfdev.StateVerified, selfdev.StateAwaitingApproval, selfdev.StateRequested}
 	for attempt := 0; attempt < selfdevCloseAttempts; attempt++ {
@@ -452,6 +461,12 @@ const selfdevCloseAttempts = 3
 // selfdevCloseTimeout bounds a post-commit close detached from its request,
 // as settleRulePrecommits bounds settlement.
 const selfdevCloseTimeout = 15 * time.Second
+
+// selfdevCloseContext is a close's context: detached from the request's
+// cancellation (the close runs after a commit) with its own deadline.
+func selfdevCloseContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), selfdevCloseTimeout)
+}
 
 // selfdevCloseRetryable reports a lost race: in-process (ErrConflict) or a
 // tape CAS lost to a writer without this Store's write mutex
@@ -1406,7 +1421,7 @@ func (rt *Runtime) closeEndedAssignmentSelfdevOperation(ctx context.Context, ass
 	if rt == nil || rt.selfdevOperations == nil || !assignment.Disposition.Terminal() {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), selfdevCloseTimeout)
+	ctx, cancel := selfdevCloseContext(ctx)
 	defer cancel()
 	closable := []string{selfdev.StateRequested, selfdev.StateExecuting}
 	if assignment.Disposition != types.EngineeringAssignmentCompleted {
