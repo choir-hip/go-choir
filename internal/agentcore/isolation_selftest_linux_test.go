@@ -5,6 +5,7 @@ package agentcore
 import (
 	"context"
 	"net"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -22,6 +23,14 @@ import (
 // the real `autoputer desk-session` binary with the desk_go_eval config, and
 // that entrypoint runs the probes after its confinement.
 func TestIsolationSelfTestDeskCellsThroughTheRealWorker(t *testing.T) {
+	if os.Geteuid() != 0 {
+		// Desks are kept apart by distinct uids, which only a root spawner
+		// can switch to: under a non-root spawner every desk shares one uid
+		// and the cross-desk canary read succeeds. The guest daemon spawns
+		// as root; the deployed self-test is the acceptance
+		// (docs/problems/fp2-batch1-ci-red-isolation-selftest-and-worker-stdout-race-2026-10-22.md).
+		t.Skip("the cross-desk refusals need a root spawner")
+	}
 	deskTestWorkerBin(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()

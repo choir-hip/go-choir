@@ -106,7 +106,7 @@ type DeskSessionWorker struct {
 	cfg    DeskSessionWorkerConfig
 	// stderr carries only crash diagnostics; it is read once the process
 	// is reaped, when the copy into it has finished.
-	stderr *bytes.Buffer
+	stderr *lockedBuffer
 	// transportLost: the session socket failed before the host ended the
 	// worker, so the process may have exited on its own.
 	transportLost bool
@@ -212,7 +212,7 @@ func SpawnDeskSessionWorker(cfg DeskSessionWorkerConfig) (*DeskSessionWorker, er
 		removeCellTmpDir(plan.tmpDir)
 		return nil, fmt.Errorf("desk session slot token: %w", err)
 	}
-	var stdoutBuf, stderrBuf bytes.Buffer
+	var stdoutBuf, stderrBuf lockedBuffer
 	cmd := exec.Command(bin, workerArg)
 	cmd.Dir = plan.dir
 	cmd.SysProcAttr = plan.attr
@@ -817,4 +817,25 @@ func removeCellTmpDir(dir string) {
 		return
 	}
 	_ = os.RemoveAll(dir)
+}
+
+// lockedBuffer is the worker's stdout or stderr sink. exec.Cmd copies the
+// child's output into it from its own goroutine while the process runs, so
+// a reader before the reap (the spawn error path, a test) must not race the
+// copy.
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }

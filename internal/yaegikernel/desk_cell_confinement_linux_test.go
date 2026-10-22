@@ -3,7 +3,6 @@
 package yaegikernel
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -241,7 +240,7 @@ func procStatus(t *testing.T, pid int) map[string]string {
 
 func workerProbes(t *testing.T, w *DeskSessionWorker) probeResults {
 	t.Helper()
-	buf, _ := w.cmd.Stdout.(*bytes.Buffer)
+	buf, _ := w.cmd.Stdout.(*lockedBuffer)
 	if buf == nil {
 		t.Fatal("worker stdout not captured")
 	}
