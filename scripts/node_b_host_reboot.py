@@ -26,17 +26,24 @@ Phases (--phase all runs them in order):
           verify-host-hardening.py baseline; the computers that are running.
   mark    (--execute) asks every running, non-held computer to write its
           planned-restart marker (POST /internal/runtime/planned-restart,
-          the same request deploy-refresh makes). A busy guest refuses
-          (409). Busy ones are retried until --busy-wait runs out. Then the
-          run aborts and clears the markers already written, unless
+          the same request deploy-refresh makes). For critical_protected
+          and public_platform computers it asks with allow_busy, vmctl's
+          rule (deployRefreshAllowsBusy): their running runs park for the
+          planned boot's one resume (CLAUDE.md: always-busy computers take
+          a planned refresh while busy). Other busy guests refuse (409).
+          Busy ones are retried until --busy-wait runs out. Then the run
+          aborts and clears the markers already written, unless
           --allow-crash-close accepts that their work ends "interrupted by
-          a restart". A marker counts only if its computer boots within
-          15 minutes (plannedRestartMaxAge), so this runs immediately before
-          the reboot, and post reports the marker age. A marker that expires
-          turns that boot into a crash boot, the safe fallback. Markers are
-          written only to idle guests, so they can resume parked work (wakes,
-          schedule generations) but never re-dispatch an in-flight run.
-          --no-markers skips this phase: every boot is a crash boot.
+          a restart". A guest that refuses for a self-development
+          operation mid-transaction or a live capsule (any tier) always
+          aborts the run: no restart may cut those. Each computer's
+          outcome is logged and kept in the receipt. A marker counts only
+          if its computer boots within 15 minutes (plannedRestartMaxAge),
+          so this runs immediately before the reboot, and post reports the
+          marker age. A marker that expires turns that boot into a crash
+          boot, the safe fallback. --no-allow-busy sends no allow_busy
+          (markers only to idle guests, the old rule). --no-markers skips
+          this phase: every boot is a crash boot.
   reboot  (--execute) systemctl reboot. Waits for ssh with a new boot_id
           (--boot-timeout).
   post    read-only. Booted kernel = staged kernel; nested=N; booted system
@@ -74,6 +81,11 @@ SSH_OPTS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "-o", "ServerAlive
 # Warmness classes vmctl wakes on its own after vmctl starts (alwaysOnWarmTargets
 # and the platform computer); every other computer boots on its next request.
 AUTO_WARM_CLASSES = {"premium_always_on", "critical_protected", "public_platform"}
+# Classes asked with allow_busy: vmctl's deployRefreshAllowsBusy
+# (internal/vmctl/deploy_refresh.go), the one rule; the test reads it from
+# the Go source. vmctl list's warmness_class is the class that rule reads
+# (WarmnessClassForOwnership).
+BUSY_ALLOWED_CLASSES = {"critical_protected", "public_platform"}
 
 # ---------------------------------------------------------------------------
 # Remote side: runs as root on Node B via `ssh host python3 - <mode>`. The
@@ -167,8 +179,8 @@ def facts():
     for chain in ("FORWARD", "CHOIR-GUEST-FWD", "CHOIR-GUEST-TAPS", "nixos-fw"):
         rc, rules, _ = sh("iptables -S %s" % chain)
         fw[chain] = rules.splitlines() if rc == 0 else None
-    fwd = [r for r in (fw["FORWARD"] or []) if r.startswith("-A FORWARD")]
-    out["fw_guest_jump_first"] = bool(fwd) and "-i vm-+" in fwd[0] and fwd[0].endswith("-j CHOIR-GUEST-FWD")
+    # The FORWARD order is judged on the workstation (forward_guest_jumps).
+    out["fw_forward_rules"] = fw["FORWARD"]
     gf = [r for r in (fw["CHOIR-GUEST-FWD"] or []) if r.startswith("-A ")]
     out["fw_guest_fwd_fails_closed"] = bool(gf) and gf[-1].endswith("-j DROP") and any("-j CHOIR-GUEST-TAPS" in r for r in gf)
     out["fw_guest_taps_chain"] = fw["CHOIR-GUEST-TAPS"] is not None
@@ -225,9 +237,13 @@ def mark(items, target, method):
     results = []
     for it in items:
         url = it["computer_url"].rstrip("/") + "/internal/runtime/planned-restart"
+        if method == "POST" and it.get("allow_busy"):
+            # A query parameter, as vmctl sends it (httpGuestMarker.mark):
+            # older guests ignore it and keep their busy refusal.
+            url += "?allow_busy=1"
         body = {"target": target} if method == "POST" else None
         st, text = http(method, url, {"X-Internal-Caller": "true"}, body, timeout=25)
-        results.append({"vm_id": it["vm_id"], "status": st, "body": text[:300]})
+        results.append({"vm_id": it["vm_id"], "status": st, "body": text[:2000]})
     return results
 
 mode = sys.argv[1]
@@ -326,6 +342,77 @@ def vtuple(v):
         return (0,)
 
 
+def marker_allows_busy(warmness_class, no_allow_busy=False):
+    """Whether the marker request carries allow_busy: only the always-busy
+    tiers (owner, 2026-10-15), never under --no-allow-busy."""
+    return not no_allow_busy and warmness_class in BUSY_ALLOWED_CLASSES
+
+
+def classify_marker_answer(status, body, sent_allow_busy):
+    """One guest answer to POST planned-restart, as an outcome:
+    written (200), busy (409 for running runs only: --allow-crash-close may
+    cut them), unsafe (409 for a self-development operation mid-transaction
+    or a live capsule, or a 409 the script cannot read: never rebooted
+    through), unsupported (404/405: the guest predates the endpoint), or
+    unavailable (anything else)."""
+    out = {"status": status, "allow_busy": bool(sent_allow_busy)}
+    try:
+        doc = json.loads(body) if body else {}
+    except ValueError:
+        doc = None
+    if not isinstance(doc, dict):
+        doc = None
+    if status == 200:
+        out["outcome"] = "written"
+        out["interrupted_running_runs"] = (doc or {}).get("interrupted_running_runs", 0)
+        out["detail"] = "marker written%s" % (
+            ", %d running run(s) park for the planned boot's one resume" % out["interrupted_running_runs"]
+            if out["interrupted_running_runs"] else "")
+        return out
+    if status == 409:
+        keys = ("running_runs", "selfdev_active_operations", "live_capsules")
+        if doc is None or not all(isinstance(doc.get(k), int) for k in keys):
+            out["outcome"] = "unsafe"
+            out["detail"] = "refused, answer unreadable (counted as an apply or a live capsule): %s" % (body or "")[:160]
+            return out
+        for k in keys:
+            out[k] = doc[k]
+        if doc["selfdev_active_operations"] or doc["live_capsules"]:
+            out["outcome"] = "unsafe"
+            out["detail"] = "refused: %d self-development operation(s) mid-transaction, %d live capsule(s), %d running run(s)" % (
+                doc["selfdev_active_operations"], doc["live_capsules"], doc["running_runs"])
+            return out
+        out["outcome"] = "busy"
+        out["detail"] = "busy: %d running run(s)" % doc["running_runs"]
+        if sent_allow_busy and not doc.get("allow_busy"):
+            out["detail"] += " (the guest ignored allow_busy: an older build)"
+        return out
+    if status in (404, 405):
+        out["outcome"] = "unsupported"
+        out["detail"] = "guest predates the planned-restart endpoint (HTTP %s)" % status
+        return out
+    out["outcome"] = "unavailable"
+    out["detail"] = "HTTP %s %s" % (status, (body or "")[:160])
+    return out
+
+
+def forward_guest_jumps(rules):
+    """FORWARD must begin with the two guest jumps in the order vmctl
+    installs them at start (ensureBaseLocked, internal/vmmanager/
+    hostfirewall.go: the CHOIR-GUEST-FWD jump goes in at position 1, then
+    the CHOIR-GUEST-RET jump at position 1): rule 1 `-o vm-+ ... -j
+    CHOIR-GUEST-RET`, rule 2 `-i vm-+ ... -j CHOIR-GUEST-FWD`. Anything
+    else, an unreadable chain included, fails."""
+    if rules is None:
+        return False, "iptables -S FORWARD unreadable"
+    fwd = [r for r in rules if r.startswith("-A FORWARD")]
+    want = [("-o vm-+", "-j CHOIR-GUEST-RET"), ("-i vm-+", "-j CHOIR-GUEST-FWD")]
+    got = fwd[:2]
+    ok = len(got) == 2 and all((" %s " % iface) in (" %s " % r) and r.endswith(jump)
+                               for r, (iface, jump) in zip(got, want))
+    return ok, got or "no FORWARD rules"
+
+
 class Checks:
     def __init__(self):
         self.items = []
@@ -368,7 +455,8 @@ def phase_pre(args, receipt):
     inactive = {u: s for u, s in f["go_choir_units"].items() if not s.startswith("active")}
     c.add("go-choir units active", not inactive, inactive or "%d units" % len(f["go_choir_units"]), blocking=False)
     c.add("vmctl /health", f["vmctl_health"] == 200, f["vmctl_health"])
-    c.add("firewall: FORWARD jumps vm-+ to CHOIR-GUEST-FWD first", f["fw_guest_jump_first"], blocking=False)
+    c.add("firewall: FORWARD begins vm-+ CHOIR-GUEST-RET then CHOIR-GUEST-FWD", *forward_guest_jumps(f.get("fw_forward_rules")),
+          blocking=False)
     c.add("firewall: CHOIR-GUEST-FWD fails closed", f["fw_guest_fwd_fails_closed"], blocking=False)
     st = receipt["pre"]["staging"]
     c.add("staging /health", st.get("status") == "ok", st, blocking=False)
@@ -384,7 +472,11 @@ def phase_pre(args, receipt):
                   "class=%s held=%s health=%s runs=%s auto-warm=%s" % (
                       r.get("warmness_class"), bool(r.get("held")), r.get("health"), r.get("runs"),
                       r.get("warmness_class") in AUTO_WARM_CLASSES), False)
-            if busy:
+            if busy and marker_allows_busy(r.get("warmness_class"), args.no_allow_busy):
+                c.add("computer %s busy, asked with allow_busy" % r["vm_id"], True,
+                      "%d running run(s) park for the planned boot's one resume; a self-development apply "
+                      "or a live capsule still refuses" % busy, False)
+            elif busy:
                 c.add("computer %s idle" % r["vm_id"], False, "%d running run(s): the marker will be refused until idle" % busy, False)
             booted, installed = iso_ts(r.get("booted_at")), f.get("guest_image_installed_at")
             if booted and installed and booted < installed:
@@ -414,26 +506,37 @@ def phase_mark(args, receipt):
     comp = remote(args.host, "computers")
     targets = [r for r in running_computers(comp) if not r.get("held")]
     target = "host-reboot kernel %s" % receipt["pre"]["facts"]["current_kernel"]
-    marked, busy = [], {r["vm_id"]: r for r in targets}
+    items = {r["vm_id"]: {"vm_id": r["vm_id"], "computer_url": r["computer_url"], "warmness_class": r.get("warmness_class"),
+                          "allow_busy": marker_allows_busy(r.get("warmness_class"), args.no_allow_busy)} for r in targets}
+    marked, busy, outcomes = [], dict(items), {}
     deadline = time.time() + args.busy_wait
-    log("MARK: asking %d running computer(s) for planned-restart markers (target %r)" % (len(targets), target))
+    log("MARK: asking %d running computer(s) for planned-restart markers (target %r; allow_busy for %s)" % (
+        len(targets), target, "none (--no-allow-busy)" if args.no_allow_busy else sorted(BUSY_ALLOWED_CLASSES)))
     while busy:
         res = remote(args.host, "mark", json.dumps({"items": list(busy.values()), "target": target}))
         for r in res:
-            if r["status"] == 200:
-                log("  marked %s" % r["vm_id"])
+            a = classify_marker_answer(r["status"], r["body"], busy[r["vm_id"]]["allow_busy"])
+            a["warmness_class"] = busy[r["vm_id"]]["warmness_class"]
+            outcomes[r["vm_id"]] = a
+            log("  %s %s (class=%s allow_busy=%s): %s" % (a["outcome"], r["vm_id"], a["warmness_class"], a["allow_busy"], a["detail"]))
+            if a["outcome"] == "written":
                 marked.append(busy.pop(r["vm_id"]))
-            elif r["status"] == 409:
-                log("  busy %s: %s" % (r["vm_id"], r["body"][:160]))
-            else:
-                log("  no marker for %s: HTTP %s %s" % (r["vm_id"], r["status"], r["body"][:160]))
         if not busy or time.time() >= deadline:
             break
         time.sleep(15)
     receipt["marks"] = {"target": target, "marked": [m["vm_id"] for m in marked],
-                        "unmarked": list(busy), "marked_at": now()}
-    if busy and not args.allow_crash_close:
-        log("ABORT: %d computer(s) still busy or unmarkable: %s. Clearing markers written so far." % (len(busy), list(busy)))
+                        "unmarked": list(busy), "marked_at": now(), "outcomes": outcomes}
+    log("MARK outcomes:")
+    for vm, a in outcomes.items():
+        log("  %s: %s, class=%s, allow_busy=%s, %s" % (vm, a["outcome"], a["warmness_class"], a["allow_busy"], a["detail"]))
+    # A refusal for a self-development apply or a live capsule (or one the
+    # script cannot read) is never rebooted through, --allow-crash-close or
+    # not: the restart would destroy the capsule or cut the apply.
+    unsafe = [vm for vm in busy if outcomes.get(vm, {}).get("outcome") == "unsafe"]
+    if busy and (unsafe or not args.allow_crash_close):
+        why = ("%d computer(s) refused for a self-development apply or a live capsule: %s" % (len(unsafe), unsafe)
+               if unsafe else "%d computer(s) still busy or unmarkable: %s" % (len(busy), list(busy)))
+        log("ABORT: %s. Clearing markers written so far." % why)
         if marked:
             remote(args.host, "unmark", json.dumps({"items": marked}))
         receipt["marks"]["cleared"] = True
@@ -514,7 +617,7 @@ def phase_post(args, receipt):
     c.add("go-choir units active again", not regressed, regressed or "%d units" % len(f["go_choir_units"]))
     c.add("md RAID arrays clean", f["md_clean"], f["md_arrays"])
     c.add("vmctl /health", f["vmctl_health"] == 200, f["vmctl_health"])
-    c.add("firewall: FORWARD jumps vm-+ to CHOIR-GUEST-FWD first", f["fw_guest_jump_first"])
+    c.add("firewall: FORWARD begins vm-+ CHOIR-GUEST-RET then CHOIR-GUEST-FWD", *forward_guest_jumps(f.get("fw_forward_rules")))
     c.add("firewall: CHOIR-GUEST-FWD fails closed (TAPS then DROP)", f["fw_guest_fwd_fails_closed"])
     c.add("firewall: CHOIR-GUEST-TAPS exists", f["fw_guest_taps_chain"])
     c.add("firewall: nixos-fw exists", f["fw_nixos_chain"])
@@ -576,6 +679,9 @@ def main():
                     help="operator statement: the OVH IPMI/KVM console for this server was opened in this window")
     ap.add_argument("--allow-crash-close", action="store_true",
                     help="reboot even if some computers stay busy (their work ends interrupted_by_restart)")
+    ap.add_argument("--no-allow-busy", action="store_true",
+                    help="never send allow_busy: busy critical_protected and public_platform computers refuse "
+                         "their marker like any other (the behaviour before 2026-10-22)")
     ap.add_argument("--no-markers", action="store_true",
                     help="write no planned-restart markers: every boot is a crash boot (the conservative choice)")
     ap.add_argument("--min-kernel", default=None,
@@ -626,8 +732,13 @@ def main():
             if args.no_markers:
                 log("  1. write no markers (--no-markers): every computer boots as a crash boot")
             else:
-                log("  1. POST planned-restart markers to %d running computer(s): %s" % (len(running), running))
-                log("     (busy ones retried for %ds, then abort unless --allow-crash-close)" % args.busy_wait)
+                rows = [r for r in running_computers(receipt["pre"]["computers"]) if not r.get("held")]
+                log("  1. POST planned-restart markers to %d running computer(s):" % len(running))
+                for r in rows:
+                    log("       %s class=%s allow_busy=%s" % (r["vm_id"], r.get("warmness_class"),
+                                                            marker_allows_busy(r.get("warmness_class"), args.no_allow_busy)))
+                log("     (busy ones retried for %ds, then abort unless --allow-crash-close; a refusal for a "
+                    "self-development apply or a live capsule always aborts)" % args.busy_wait)
             log("  2. ssh %s systemctl reboot; wait up to %ds for a new boot_id" % (args.host, args.boot_timeout))
             log("  3. run the post-checks (or later: --phase post --state %s)" % state)
             save()
