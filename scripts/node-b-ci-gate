@@ -209,22 +209,28 @@ run() {
   local commit
   commit=$(commit_from_env)
 
+  # A deploy holds the lock from before its first git command through its
+  # run: the floor check (F1), and the clone and fetch of /opt/go-choir,
+  # which a running deploy's program resets and cleans under the lock
+  # (bunch 33). Prebuild only checks: it never activates and never moves
+  # the floor.
+  [ "$verb" = deploy ] && lock_gate
+
   export HOME=/root
+  # The clone and the fetch do not inherit the lock fd: an automatic gc or
+  # maintenance that git detaches after them must not hold the lock.
   if [ ! -d "$repo/.git" ]; then
-    git clone --quiet "$repo_url" "$repo" >&2
+    git clone --quiet "$repo_url" "$repo" >&2 9>&-
   fi
   git config --global --add safe.directory "$repo"
   # The origin URL is the trust root for "on main"; never take it from the
   # checkout.
   git -C "$repo" remote set-url origin "$repo_url"
   git -C "$repo" fetch --quiet --no-tags origin \
-    "+refs/heads/main:refs/remotes/origin/main" "$commit" >&2
+    "+refs/heads/main:refs/remotes/origin/main" "$commit" >&2 9>&-
   if ! git -C "$repo" merge-base --is-ancestor "$commit" refs/remotes/origin/main; then
     refuse "commit ${commit} is not on main"
   fi
-  # A deploy holds the lock from the floor check through its run (F1).
-  # Prebuild only checks: it never activates and never moves the floor.
-  [ "$verb" = deploy ] && lock_gate
   checked_floor=
   check_floor "$repo" "$commit"
 
