@@ -48,6 +48,9 @@ type ProcMem struct {
 	// second or two of one core (debug_pagecache.go).
 	PageCache      *PageCache `json:"page_cache,omitempty"`
 	PageCacheError string     `json:"page_cache_error,omitempty"`
+	// MemoryReturn is DAMON reclaim, free page reporting and the balloon as
+	// the guest sees them (debug_memreturn.go). A few dozen small reads.
+	MemoryReturn *MemoryReturn `json:"memory_return,omitempty"`
 }
 
 var procMeminfoKeys = []string{"MemTotal", "MemFree", "MemAvailable", "Buffers", "Cached", "Shmem", "Slab", "AnonPages"}
@@ -134,6 +137,8 @@ func serveProcMem(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusNotImplemented)
 		return
 	}
+	mr := readMemoryReturn("/sys", "/proc", int64(os.Getpagesize())/1024)
+	mem.MemoryReturn = &mr
 	if r.URL.Query().Get("pagecache") == "1" {
 		if pc, err := readGuestPageCache(); err != nil {
 			mem.PageCacheError = err.Error()
