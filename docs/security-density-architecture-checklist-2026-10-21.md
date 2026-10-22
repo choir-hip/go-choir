@@ -124,7 +124,8 @@ item below:
 
 ## 1. Security
 
-- [ ] **SEC-01 · P0 · red — Confine desk workers**
+- [x] **SEC-01 · P0 · red — Confine desk workers**
+  - Done: FP2 batch 1, 564840fcf with CI fix 7c61ce078, deploy CI 39702960215 (2026-10-22 01:12 UTC), evidence docs/evidence/fp2-desk-boundary-20261022.json (desk cells ok in mode required; Seccomp 2, NoNewPrivs 1 and socket EPERM in every desk; cross-desk canary reads refused under the guest's root spawner). Residual: the per-desk memory budget proof is RES-02's step 4; the non-root daemon is SEC-15.
   - Target: every desk-session worker runs as a non-root identity with
     `no_new_privs`, Landlock (read-only system paths, its own scratch
     only), seccomp with `AF_UNIX` only and no exec/fork, an empty network
@@ -147,7 +148,8 @@ item below:
     (`definitions/choir-appdev-s1-security-floor-2026-10-01.md`) does not
     mention F4; the staging Landlock proof is owed (the Docker kernel has no
     Landlock).
-- [ ] **SEC-02 · P0 · red — The daemon checks the role on every frame action**
+- [x] **SEC-02 · P0 · red — The daemon checks the role on every frame action**
+  - Done: FP2 batch 1, 564840fcf with CI fix 7c61ce078, deploy CI 39702960215 (2026-10-22 01:12 UTC), evidence docs/evidence/fp2-desk-boundary-20261022.json (frame_boundary: every desk but management refused when claiming management's product_api; wrong, missing and foreign slot tokens refused and the worker ended; emit_stream refused for management).
   - Target: the daemon binds each worker to the run record it spawned and
     serves a frame only if the desk's role table allows that action;
     unknown desks fail closed; `ActionExec` and `ActionWriteFile` leave
@@ -218,9 +220,10 @@ item below:
     principle 2, threats T1/T8).
   - Plan update owed: cross-reference the mirror argument; NET-02 is the
     durable fix.
-- [ ] **SEC-07 · P0 · red — Address guard on browser and Obscura fetches**
+- [x] **SEC-07 · P0 · red — Address guard on browser and Obscura fetches**
   (red, corrected 2026-10-21: an egress boundary on untrusted URLs, like
   SEC-03 and NET-01)
+  - Done: FP6 batch 1, 53a691be6, deploy CI 39692787991 (2026-10-21 23:36 UTC), evidence docs/definitions/choir-launch-first-pass-metamission-2026-10-21.ledger.md (23:36: GET /api/browser/capabilities and POST /api/browser/sessions answer 404; the unguarded browsercontrol and Obscura fetch routes are deleted; import-url still serves). Capability 4 is the Web Lens launcher.
   - Now: browser navigate checks only the scheme
     (`internal/browsercontrol/handler.go:79-93, 272`); the follow fetch uses
     a plain client (`:817-826, 920-930`); the alternate fetch pre-checks
@@ -488,11 +491,12 @@ item below:
   - Plan update: the report now says nothing landed (this change). Still
     owed: `definitions/choir-supervised-app-development-metamission-2026-10-01.md:536`
     still excludes CH and hotplug.
-- [ ] **RES-21 · P2 · green — Reconcile guest sizes in docs**: the code
+- [x] **RES-21 · P2 · green — Reconcile guest sizes in docs**: the code
   defaults are 2 GiB interactive and 4 GiB platform
   (`internal/vmctl/ownership.go:1734, 1743`); Node B overrides interactive
   computers to 8 GiB (`nix/node-b.nix:1308`, `VM_INTERACTIVE_MEM_MIB=8192`);
   several docs say 4 GiB test computers. (Corrected 2026-10-21.)
+  - Done: 57a994549 (docs).
 - [ ] **RES-22 · P2 · red — Host slab and btrfs metadata** (density L19;
   [node-b-btrfs-metadata-exhausted-small-artifact-files-2026-10-16.md](problems/node-b-btrfs-metadata-exhausted-small-artifact-files-2026-10-16.md)).
 
@@ -506,7 +510,8 @@ item below:
     get their own desks, and the plan is to add many (owner notes §36).
     The §23 "no new desks" ruling was about coordinator-invented desks
     ("story writer", "triage"), not app desks.
-- [ ] **ARCH-02 · P1 · red — A desk manifest instead of hardcoded desks**
+- [x] **ARCH-02 · P1 · red — A desk manifest instead of hardcoded desks**
+  - Done: FP2 batch 1, 564840fcf with CI fix 7c61ce078, deploy CI 39702960215 (2026-10-22 01:12 UTC), evidence docs/evidence/fp2-desk-boundary-20261022.json (the self-test spawns one worker per manifest desk role: management, texture, research, research_child, management_task).
   - Now: desks are hardcoded across `internal/agentprofile/agentprofile.go`,
     `internal/agentcore/tool_profiles.go`, `internal/capsule/roles.go`,
     `internal/agentcore/inbox_records.go`, `internal/yaegikernel/choir.go`
@@ -548,9 +553,10 @@ item below:
     (tenant, desk class, taint class, tree).
   - Plans: PD2 (`definitions/choir-pd2-desk-sessions-outlive-runs-2026-10-11.md`);
     PD3.
-- [ ] **ARCH-07 · P1 · red — Versioned, authenticated frame protocol**
+- [x] **ARCH-07 · P1 · red — Versioned, authenticated frame protocol**
   (red, corrected 2026-10-21: it authenticates the worker-to-daemon
   boundary SEC-02 relies on)
+  - Done: FP2 batch 1, 564840fcf with CI fix 7c61ce078, deploy CI 39702960215 (2026-10-22 01:12 UTC), evidence docs/evidence/fp2-desk-boundary-20261022.json (a protocol version 2 hello and a version-2 frame header both refused; per-slot tokens enforced).
   - Now: 8-byte header, no version, no authentication
     (`internal/yaegikernel/transport.go:14-23`). The RLM consensus asked for
     a version byte from day one (`reviews/rlm-implementation-consensus-2026-08-29.md:246-251`).
