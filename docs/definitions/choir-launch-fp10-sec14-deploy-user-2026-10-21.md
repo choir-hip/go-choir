@@ -123,7 +123,7 @@ now:
     workflow-scoped credential. Deploy 2 touches only .github/, so no deploy is selected on push; it needs
     a workflow_dispatch deploy to prove it. The receipt read is best effort:
     a gate failure there is silent ("receipt unavailable"), so read that line.
-  next_action: FP0 rebases the two floor commits into the deploy-1 group, re-reviews the delta (scripts/node-b-ci-gate, its test, the probe), lands deploy 1 and runs the probe
+  next_action: FP0 rebases the four floor commits into the deploy-1 group and cc944c3f8 into the step-3 group, re-reviews the delta, lands deploy 1 and runs the probe
 
 receipts: []
 ---
@@ -143,9 +143,9 @@ there.
 
 | group | commits | what |
 |---|---|---|
-| deploy 1 | ae4791f36 (docs), 707226549 (tests), 0fca75329, + floor test, + floor fix | choir-deploy user, gate with host floor, sudo rule; programs moved; CI still root |
+| deploy 1 | ae4791f36 (docs), 707226549 (tests), 0fca75329, then this lane's 7155bb066, b7d472ad2 (floor), d69a6b09f, bb1abdc70 (lock, compare-and-swap, bootstrap, stdin) | choir-deploy user, gate with a locked host floor, the bootstrap activation, sudo rule; programs moved; CI still root |
 | deploy 2 | cafbfbe2f (tests), 7637ad240 | CI uses choir-deploy and gate requests; the first gate deploy writes the floor |
-| step 3 | d948c3ecd | root drops the CI key; its deploy raises the floor to step 3 or above |
+| step 3 | d948c3ecd, then this lane's cc944c3f8 | root drops the CI key and the bootstrap activation goes; its deploy raises the floor to step 3 or above |
 
 **Deploy 1.**
 1. Push. The classifier selects a host OS deploy (`nix/node-b.nix`,
@@ -164,7 +164,8 @@ there.
      - five refusals, one of them the off-main commit;
      - `sudo bash` refused;
      - a real prebuild through the gate.
-   - No floor file exists yet; the seed applies.
+   - No floor file exists yet. The probe must report "bootstrap marker
+     present" (the deploy-1 activation wrote it).
 4. Rollback: `git revert` the group. Root still deploys.
 
 **Deploy 2.**
@@ -175,7 +176,8 @@ there.
 3. In the log, look for `node-b-ci-gate: deploy <sha> as root from
    .github/scripts/node-b-ci-deploy` and "Staging deploy complete".
    `/var/lib/go-choir/deploy-receipt.json` names the dispatch run. Also,
-   `/var/lib/go-choir/ci-gate-floor` holds the dispatched commit.
+   `/var/lib/go-choir/ci-gate-floor` holds the dispatched commit, and
+   `/var/lib/go-choir/ci-gate-floor-bootstrap` is gone (consumed).
 4. On Node B, check the logs:
    - `journalctl -t sudo --since -1h` shows `choir-deploy : ...
      COMMAND=/nix/store/...-go-choir-ci-deploy-gate -- deploy ...`;
@@ -186,7 +188,8 @@ there.
 **Step 3**, after deploy 2's proof.
 1. Push. The host OS deploy runs through the gate and raises the floor to the
    step-3 commit.
-2. On Node B, `/etc/ssh/authorized_keys.d/root` holds only the operator key.
+2. On Node B, `/etc/ssh/authorized_keys.d/root` holds only the operator key,
+   and `/var/lib/go-choir/ci-gate-floor-bootstrap` does not exist.
 3. Check `/root/.ssh/authorized_keys` for a hand-placed
    `github-actions-deploy@go-choir` line, and remove it if present.
 4. Run `scripts/node-b-ci-gate-probe <off-main-sha> "" <deploy-1-main-sha>`.
@@ -198,15 +201,16 @@ there.
    Deploy 2's sha (7637ad240's landed identity) must be refused the same way.
 5. Rollback: `git revert`, which is forward, so above the floor.
 
-**Step 4 (recommended follow-up, green-sized red):** set `seed_floor` in
-`scripts/node-b-ci-gate` to the landed step-3 sha. The floor then holds even
-if `/var/lib/go-choir/ci-gate-floor` is lost.
-
 ## Residuals
 
-- Floor file loss: if `/var/lib/go-choir/ci-gate-floor` is deleted, the seed
-  (961588290) applies, and it is below deploy 1, so the escape reopens. Step 4
-  closes this.
+- Floor file loss after step 3: the gate refuses every prebuild and deploy
+  (fail closed, re-review F2). Root restores it by writing a main sha at or
+  above step 3 to `/var/lib/go-choir/ci-gate-floor`.
+- Before step 3, losing the floor re-creates the bootstrap marker on the next
+  activation, so commits back to 961588290 become deployable. Root still has
+  the CI key in that window anyway.
+- A failed deploy leaves the floor raised (it rises before the run).
+  Rollback is forward, with git revert.
 - Booleans: a key holder can choose them, including
   `REFRESH_ACTIVE_COMPUTERS=true`, which interrupts busy computers.
 - Root still runs the deploy program: a NixOS switch needs root. The gate
@@ -214,10 +218,8 @@ if `/var/lib/go-choir/ci-gate-floor` is lost.
 - Pre-move commits: the gate refuses commits from before the move (and below
   the floor), so a rollback to them is the owner's by hand. The rollback path
   is git revert (forward).
-- Stdin (N2): the program is run as `bash -s` from a file, which keeps the
-  heredoc's transport. `bash "$program" </dev/null` would stop a future
-  stdin read swallowing script lines. Deferred, because it can't be tested
-  off Node B.
+- Stdin (N2) is fixed: the program runs as `bash <file> </dev/null`. This
+  is untested on Node B until deploy 2's dispatch.
 
 ## Review bunch 4b (frozen 646f6488a): findings and dispositions
 
