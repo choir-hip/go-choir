@@ -650,3 +650,28 @@ and 3 was still pending. This round changes no code.
   a cold boot of the 4 GiB platform computer.
 - Between deploys, a repeated-fated platform computer waits up to 24 h, by
   design.
+
+## Observed in the staging proof (2026-10-22, 12:10 to 12:15 UTC, FP0)
+
+Mutation class of this section: green.
+
+- **The plan's row checks are unreadable as written.** Steps 5 and 8 read
+  `boot_claim`, `start_interruptions` and `failure_warmed_at` from the
+  ownership row. `GET /internal/vmctl/list` serves `ownershipResponse`
+  (`internal/vmctl/handlers.go:95`), which carries none of them, so the
+  list never shows them, set or not. "No `boot_claim`" in step 5 is
+  therefore vacuous through the list, and the step 8 values cannot be read
+  without SQL. At 12:15 FP0 polled the list each second through a boot and
+  saw none of the fields. Lane fp0-ops-visibility adds the three fields to
+  the list projection (omitempty; read-only operator visibility, no
+  behaviour change).
+- **The in-flight close was not exercised on staging.** A cold boot of the
+  test computer took about 10 s, which fits inside vmctl's 10 s graceful
+  shutdown wait (`internal/server/server.go:104`, `defaultShutdownTimeout`).
+  A graceful vmctl restart therefore lets the boot publish before the
+  process exits: the restart then finds an active row and reattaches it,
+  the guard path, not the close. Three attempts (12:10 to 12:14 UTC) all
+  took the guard path. The close branch remains proven by the unit tests
+  only. Reaching it on staging needs a boot longer than the shutdown wait
+  (the 07:10 snapshot-fallback cold boot was about 35 s) or a non-graceful
+  vmctl stop; neither is a no-SSH act today.
