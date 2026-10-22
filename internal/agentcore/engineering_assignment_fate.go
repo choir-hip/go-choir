@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"slices"
 	"strings"
 	"time"
 
@@ -1076,6 +1077,7 @@ func (rt *Runtime) recordAssignedEngineeringReportOnce(ctx context.Context, rec 
 		rt.armAssignedEngineeringFateWatchdog(assignment)
 		return types.EngineeringAssignmentCommandResult{}, err
 	}
+	rt.closeEndedAssignmentSelfdevOperation(ctx, result.Assignment)
 	return result, nil
 }
 
@@ -1335,7 +1337,59 @@ func (rt *Runtime) commitAssignedEngineeringReport(ctx context.Context, assignme
 	if err == nil && !result.Replay && result.Assignment.Disposition.Terminal() {
 		rt.settleEngineeringPrecommitsAtTerminal(ctx, result.Assignment, string(report.Result)+": "+report.Summary)
 	}
+	if err == nil {
+		// Replays included: a crash between the report and this close
+		// leaves the operation for the replay to converge.
+		rt.closeEndedAssignmentSelfdevOperation(ctx, result.Assignment)
+	}
 	return result, err
+}
+
+// closeEndedAssignmentSelfdevOperation closes the self-development operation
+// of an assignment its own report just turned terminal. A freeze refusal is
+// retryable while the assignment lives, so it only stamps
+// last_intent_error; once the assignment ends nothing can freeze, verify or
+// decide the operation, and an executing one pinned the busy probe and every
+// deploy refresh for 17 hours
+// (docs/problems/selfdev-freeze-failure-leaves-operation-executing-2026-10-22.md).
+// A completed assignment keeps a frozen candidate for management's Verify;
+// a failed one cannot be verified, so its candidate closes too. Cancellation
+// closes through failBoundSelfdevOperation. The close is a normal Transition,
+// on the tape like every other, and a terminal operation is left alone.
+func (rt *Runtime) closeEndedAssignmentSelfdevOperation(ctx context.Context, assignment types.EngineeringAssignment) {
+	if rt == nil || rt.selfdevOperations == nil || !assignment.Disposition.Terminal() {
+		return
+	}
+	closable := []string{selfdev.StateRequested, selfdev.StateExecuting}
+	if assignment.Disposition != types.EngineeringAssignmentCompleted {
+		closable = append(closable, selfdev.StateFrozen, selfdev.StateVerified)
+	}
+	computerID := assignment.Binding.ComputerID
+	for attempt := 0; attempt < 3; attempt++ {
+		operation, found, err := rt.selfdevOperations.GetByIdempotency(ctx, computerID, store.EngineeringFreezeIdempotencyKey(assignment.AssignmentID))
+		if err != nil || !found || !slices.Contains(closable, operation.State) {
+			return
+		}
+		reason := fmt.Sprintf("assignment %s before its candidate froze", assignment.Disposition)
+		if operation.State == selfdev.StateFrozen || operation.State == selfdev.StateVerified {
+			reason = fmt.Sprintf("assignment %s; its candidate cannot be verified", assignment.Disposition)
+		}
+		if last := strings.TrimSpace(operation.LastIntentError); last != "" {
+			reason += "; last refusal: " + last
+		}
+		_, err = rt.selfdevOperations.Transition(ctx, computerID, operation.OperationID, operation.State, selfdev.StateFailed, func(next *selfdev.Operation) error {
+			next.TerminalError = reason
+			return nil
+		})
+		if err == nil {
+			log.Printf("selfdev: %s closed from %s: %s", operation.OperationID, operation.State, reason)
+			return
+		}
+		if !errors.Is(err, selfdev.ErrConflict) {
+			log.Printf("selfdev: close %s of ended assignment %s: %v", operation.OperationID, assignment.AssignmentID, err)
+			return
+		}
+	}
 }
 
 // assignmentOutcomeRefs names, on a terminal report, the candidate the
