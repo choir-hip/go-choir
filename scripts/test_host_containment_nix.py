@@ -36,6 +36,11 @@ Failure modes pinned here:
      path wins. A link to a file elsewhere is imported on the first run and
      quarantined after it (F3); links are replaced through a temporary name
      and never entered when they point at a directory (F4).
+  N7 (round 2b) The env directory is hidden with "-" (fail-open when it is
+     missing: DS1); a unit that reads an env file from it starts without
+     AssertPathExists on the import marker, so a partial first import (an
+     IO failure after some moves) starts it on a partial view (DS2); a keep
+     the unit hides anyway goes unnoticed (DS7).
 """
 
 import importlib.util
@@ -69,8 +74,10 @@ KEEPS = {
                               "-/var/lib/go-choir/platform-artifacts/key-escrow-key"], "platform receipts and escrow"),
     "go-choir-vmctl": (SOCKETS, "it runs systemctl (store compaction)"),
     "go-choir-dolt-liveness-probe": (SOCKETS, "it runs systemctl (restarts a wedged Dolt)"),
-    "go-choir-gateway": (["-/var/lib/go-choir/codex-auth.json", "-/var/lib/go-choir/gateway-identities.json",
-                          "-/var/lib/go-choir/auth-signing/ed25519-key"], "its provider auth and identity store"),
+    # Its JWT key entry is replaced by the whole auth-signing directory,
+    # which covers it (round 2b, DS7).
+    "go-choir-gateway": (["-/var/lib/go-choir/codex-auth.json", "-/var/lib/go-choir/gateway-identities.json"],
+                         "its provider auth and identity store"),
     # FP0's ruling: searx's own secret stays visible to it. Hiding it would
     # gain nothing: the process holds SEARXNG_SECRET in its environment and
     # in /run/searx/settings.yml.
@@ -95,6 +102,7 @@ in {
       hidden = asList (s.InaccessiblePaths or null);
       envFiles = asList (s.EnvironmentFile or null);
       type = s.Type or "simple";
+      asserts = asList (u.unitConfig.AssertPathExists or null);
     };
   }) sel);
   tmpfiles = c.systemd.tmpfiles.rules;
@@ -103,6 +111,17 @@ in {
 '''
 
 _CONFIG = None
+
+
+def covered(path, hidden):
+    """Whether a unit hiding `hidden` cannot reach `path`: the entry itself,
+    or a hidden parent directory (with or without the "-" prefix)."""
+    bare = path.lstrip("-")
+    for h in hidden:
+        hb = h.lstrip("-")
+        if hb == bare or bare.startswith(hb.rstrip("/") + "/"):
+            return True
+    return False
 
 
 def config():
@@ -135,25 +154,44 @@ class HostUnits(unittest.TestCase):
         self.reference = set(self.units["go-choir-proxy"]["hidden"])
 
     def test_reference_hides_sockets_and_the_env_directory(self):
-        for path in SOCKETS + ["-" + UNIT_ENV_DIR, "-/var/lib/go-choir/secrets"]:
+        for path in SOCKETS + [UNIT_ENV_DIR, "-/var/lib/go-choir/secrets"]:
             self.assertIn(path, self.reference)
+
+    def test_DS1_the_env_directory_is_hidden_fail_closed(self):
+        # Without "-", a unit whose directory is missing refuses to start
+        # instead of running with it unmasked once it appears.
+        for name in covered_units(self.units):
+            hidden = self.units[name]["hidden"]
+            self.assertIn(UNIT_ENV_DIR, hidden, name)
+            self.assertNotIn("-" + UNIT_ENV_DIR, hidden, name)
+
+    def test_DS2_env_readers_assert_the_import_marker(self):
+        # A partial first import (an IO failure after some moves) must not
+        # start a unit that reads an env file from the directory.
+        readers = sorted(n for n, u in self.units.items()
+                         if any(ef.lstrip("-").startswith(UNIT_ENV_DIR + "/") for ef in u["envFiles"]))
+        self.assertEqual(readers, ["go-choir-checkpointd", "go-choir-corpusd", "go-choir-proxy"])
+        for name in readers:
+            self.assertIn(UNIT_ENV_DIR + "/.imported", self.units[name]["asserts"], name)
 
     def test_N1_every_unit_hides_the_reference_set_but_its_keeps(self):
         problems = []
         for name in covered_units(self.units):
             keep = set(KEEPS.get(name, ([], ""))[0])
-            missing = sorted(self.reference - keep - set(self.units[name]["hidden"]))
+            missing = sorted(p for p in self.reference - keep if not covered(p, self.units[name]["hidden"]))
             if missing:
                 problems.append(f"{name} does not hide {missing}")
         self.assertEqual(problems, [])
 
     def test_N1_keeps_are_real(self):
-        # A keep that the unit hides anyway, or that is not in the reference
-        # set, is a stale record.
+        # A keep that the unit hides anyway (by the entry or a hidden parent
+        # directory), or that is not in the reference set, is a stale record.
         for name, (keep, _why) in KEEPS.items():
             self.assertIn(name, self.units, name)
             for path in keep:
                 self.assertIn(path, self.reference, f"{name}: {path}")
+                self.assertFalse(covered(path, self.units[name]["hidden"]),
+                                 f"{name} keeps {path} but hides it anyway")
 
     def test_N2_every_long_running_unit_is_verified(self):
         for name, u in self.units.items():
@@ -310,6 +348,50 @@ class Activation(unittest.TestCase):
         self.assertEqual(self.read(self.new(stray)), "CHOIR_OWNER_ACT_MODE=off\n")
         self.assert_linked("corpusd-retrieval.env")
         self.assertIn("corpusd-retrieval.env", err)
+
+    def test_DS2_a_failure_after_the_second_move_heals_on_the_next_run(self):
+        # An IO failure (ENOSPC) on the third file's move, injected with a mv
+        # shim on the snippet's PATH. The marker stays absent, so the env
+        # readers' AssertPathExists keeps them down; the next activation
+        # finishes the import.
+        for name, body in (("deploy.env", "A=1\n"), ("corpus-dsn.env", "B=2\n"),
+                           ("corpusd-retrieval.env", "C=3\n")):
+            self.write(self.old(name), body)
+        shim = os.path.join(self.tmp, "shim")
+        os.makedirs(shim)
+        with open(os.path.join(shim, "mv"), "w") as fh:
+            fh.write("#!/bin/bash\n"
+                     'for a in "$@"; do if [ "$a" = "$FAIL_MV_SOURCE" ]; then '
+                     'echo "mv: injected failure for $a" >&2; exit 1; fi; done\n'
+                     f'exec {shutil.which("mv")} "$@"\n')
+        os.chmod(os.path.join(shim, "mv"), 0o755)
+        env = dict(os.environ, PATH=shim + os.pathsep + os.environ["PATH"],
+                   FAIL_MV_SOURCE=self.old("corpusd-retrieval.env"))
+        proc = subprocess.run(["bash", "-c", self.script], capture_output=True, text=True, env=env, check=False)
+        self.assertNotEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("injected failure", proc.stderr)
+        self.assertFalse(os.path.exists(os.path.join(self.d, ".imported")))
+        self.assertEqual(self.read(self.new("deploy.env")), "A=1\n")
+        self.assertEqual(self.read(self.new("corpus-dsn.env")), "B=2\n")
+        self.assertFalse(os.path.islink(self.old("corpusd-retrieval.env")))
+        self.assertEqual(self.read(self.old("corpusd-retrieval.env")), "C=3\n")  # nothing lost
+        self.run_snippet()
+        self.assertTrue(os.path.exists(os.path.join(self.d, ".imported")))
+        for name, body in (("deploy.env", "A=1\n"), ("corpus-dsn.env", "B=2\n"),
+                           ("corpusd-retrieval.env", "C=3\n")):
+            self.assertEqual(self.read(self.new(name)), body)
+            self.assert_linked(name)
+        self.assertEqual(self.strays(), [])
+        self.assert_no_temp_links()
+
+    def test_DS7_both_paths_with_the_same_content_before_the_import(self):
+        os.makedirs(self.d)
+        self.write(self.new("deploy.env"), "A=1\n")
+        self.write(self.old("deploy.env"), "A=1\n")
+        self.run_snippet()
+        self.assert_linked("deploy.env")
+        self.assertEqual(self.read(self.new("deploy.env")), "A=1\n")
+        self.assertEqual(self.strays(), [])
 
     def test_an_aborted_first_run_is_finished_by_the_next(self):
         self.write(self.old("deploy.env"), "A=1\n")
