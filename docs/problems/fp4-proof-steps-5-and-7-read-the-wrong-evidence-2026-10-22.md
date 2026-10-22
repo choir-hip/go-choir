@@ -148,3 +148,25 @@ in the judging.
 5. The product-API path (choir.news with a test key) was not exercised. It
    serves the same handler (HandleTrajectoryDetail), so the same JSON is
    expected, but it was not observed.
+
+### Re-check at 745ac55e2, 04:53 UTC
+
+fba078fe7 and 745ac55e2 take residuals 1 (nine-digit fixtures) and 4 (follow
+`next_cursor` to the watermark, fail on a read error, a stalled cursor or
+more than 50 pages). For the re-check, the fake curl served the same real
+tape with the store's page rules (ListLifecycleEventPage: events with
+`reducer_seq > after`, at most `limit`, `next_cursor` = last served,
+`watermark` = the trajectory's last seq). It was run twice: once with the
+real cap (1000, one page per trajectory), and once with a cap of 4, which
+splits each real trajectory into 5 to 10 pages.
+
+- The lane self-test passes 37 of 37 on macOS.
+- Five cases were run at each cap: S2, S5 at 30 and 90 s, S5 across two
+  trajectories, and S7 on a 4-row trajectory. The PASS/FAIL results are the
+  same at both caps and match the 5a84c7512 run. The loop ends on the real
+  cursor values (18/18, 31/31, 38/38 at cap 1000).
+- Evidence: _runs/digests/selfdev-monitor-fp4-proof-fix-replay2-20261022T045338Z.log.
+
+Open from the list above: residuals 2 (no real queued or crash-cancelled
+row yet), 3 (step 7 may false-FAIL on a non-live trajectory; conservative)
+and 5 (the choir.news path is not exercised).
