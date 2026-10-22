@@ -309,8 +309,16 @@ item below:
   - Now: the guest daemon runs as root; pdftotext and Obscura run
     unsandboxed; no guest sysctls; `route_localnet=1` per tap. Plans:
     review F5; S1 remainder.
-- [ ] **SEC-16 · P2 · orange — Host-side callers that bypass the gateway**
-  - Now: the front-importance timer calls OpenRouter with the provider env
+- [x] **SEC-16 · P2 · orange — Host-side callers that bypass the gateway**
+  - Done 2026-10-22: the scorer reaches Jev through the gateway's host route
+    (FP7, live since deploy K; "Jev reached by gateway" every run), and
+    deploy N (4bc3aa3ec, 9174af033) removed its EnvironmentFile: the unit
+    loads no provider environment and gateway-provider.env is an
+    InaccessiblePath. First run after N (11:30:17): Jev reached by gateway,
+    9 scored, 0 failed, scores.json rewritten, three host judgments served
+    and receipts written by the gateway. The OpenRouter key is held only by
+    the gateway.
+  - Was: the front-importance timer called OpenRouter with the provider env
     (`docs/learn/03-gateway-and-providers.md:303-307`).
 
 ## 2. Network shape (after the floor)
@@ -320,6 +328,9 @@ item below:
     podcast and YouTube fetches run on the host behind a verb, with the
     address guard, budgets and logging enforced there. Then the guest needs
     no general internet route.
+  - 2026-10-22: the host fetch verb is on main (deploy N, 4bc3aa3ec), off:
+    no computer is listed, and N logged no fetch and no grant. Next: list
+    one test computer and run scripts/proofs/net01-host-fetch.sh.
   - Now: all of these fetch from the guest through open tap egress
     (`internal/researchtools/read.go:105-121`; `internal/sources/*.go`;
     `internal/content/content.go`). Search and keyed source APIs already
