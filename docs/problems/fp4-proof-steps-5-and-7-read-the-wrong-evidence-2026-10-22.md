@@ -44,3 +44,40 @@ are read-only.
 - Steps 2 and 4: also read the rows. In step 2, A is bound with capsule
   not revoked, and B is open with no `_bound` event. In step 4, B is still
   open after the boot. Keep the log lines as corroboration.
+
+## Update, 04:45 UTC: the repair's event join never matches real events
+
+lane/fp0-fp4-proof-fix 4571778e9 judges the rows and events, as above. It
+finds a row's bound events by
+`.work_item_id == $row.binding.assigned_work_item_id` (`fp4_bound_events`).
+Real tape data does not carry those fields.
+
+Evidence: computer-ad1b46d4's trajectory dbadbdfd…, read 04:20 UTC through
+the same two routes. Every `co_super_assignment_opened`, `_bound` and
+`_reported` event has `"work_item_id": null`. Both assignment rows have
+`binding.assigned_work_item_id: ""`. In jq, `null == ""` is false, so the
+join matches no event:
+
+- steps 2 and 4: "B never bound" passes whether or not B bound (**false
+  PASS**);
+- step 5: "B has no co_super_assignment_bound event" always (**always
+  FAIL**);
+- step 7: the "never bound" half passes vacuously.
+
+The same events carry the assignment id in `command_id`:
+`engineering-bind:<assignment_id>` (engineering_assignment_runtime.go:645
+on the FP4 lane, unchanged by FP4). Opens and reports use
+`engineering-open:<id>` and `engineering-report:<id>:<report id>`. Joining
+on `command_id == "engineering-bind:" + .assignment_id` matched each row
+to its own bound event on the real data.
+
+The script's self-test (fp4-selfdev-admission-test.sh) builds its fixtures
+with `work_item_id` set on events and rows. That is why it passes. Fixtures
+copied from a real `/events` page (null work_item_id, command_id set) would
+have caught it.
+
+Caveat: this data came from the delegate's build (219535ef…), not from
+FP4's. FP4's scope (engineering_admission.go, engineering_assignment_runtime.go,
+engineering_assignment_fate.go, continuation_schedule.go, api.go,
+objectgraph/writer.go) does not touch the lifecycle event writer. So the
+same shape is expected, but it is not yet observed on FP4's build.
