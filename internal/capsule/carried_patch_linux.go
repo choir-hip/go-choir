@@ -43,7 +43,7 @@ func (e *Executor) withSourceRefTree(ctx context.Context, ref string, fn func(ro
 		}
 		defer removePrivateTree(temporary)
 		target := filepath.Join(temporary, "workspace", "platform")
-		copied, err := copyImmutableCommitTree(ctx, e.sourceDir, commit, target)
+		copied, err := copyImmutableCommitTreeTimed(ctx, e.sourceDir, commit, target, digest, nil)
 		if err != nil || copied != digest {
 			return fmt.Errorf("capsule source artifact is unavailable or corrupt: %s", ref)
 		}

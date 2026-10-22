@@ -1,7 +1,6 @@
 package capsule
 
 import (
-	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -47,8 +46,4 @@ func (t *spawnPhaseTimer) done(err error) {
 		return
 	}
 	log.Printf("capsule %s spawn total=%s ok=true", t.capsuleID, total)
-}
-
-func gitProcsDetail(files int) []string {
-	return []string{fmt.Sprintf("files=%d", files), fmt.Sprintf("git_procs=%d", files)}
 }
