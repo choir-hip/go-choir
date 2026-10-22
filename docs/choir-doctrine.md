@@ -308,8 +308,9 @@ reliable failures.
 `I12` Supporting docs and tests must not normalize retired ontology.
 
 `I13` Trace, Terminal, and Browser are not normal user-facing product apps.
-Trace is an evidence substrate. Raw Terminal is replaced by singleton Super
-Console/zot as an exceptional repair surface. Manual Browser is replaced in the
+Trace is an evidence substrate. Raw Terminal is retired, and so is the Super
+Console/zot repair surface that replaced it (removed 2026-10-22,
+`docs/problems/remove-zot-2026-10-22.md`). Manual Browser is replaced in the
 source path by Source Viewer/reader artifacts plus explicit Web Lens
 live/original inspection.
 
@@ -540,7 +541,8 @@ updates are part of architecture missions).
 
 **Retired app surfaces** (`I13`). `H027` Trace as a user-facing app (trace
 evidence APIs, run bundles, acceptance records instead). `H028` raw Terminal as
-an app or manual shell workflow (singleton Super Console, backed by zot). `H029`
+an app or manual shell workflow (the Super Console/zot that replaced it was
+removed 2026-10-22). `H029`
 Browser as default source reader (Texture source marker -> transcluded expansion
 -> Source Viewer/reader -> explicit Web Lens inspection).
 

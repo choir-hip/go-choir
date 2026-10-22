@@ -2390,7 +2390,6 @@ in
     icu.dev
     goChoirPackages.maildctl
     goChoirPackages.projectionCompact
-    goChoirPackages.zot
     procps
     lsof
     strace

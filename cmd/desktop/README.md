@@ -81,10 +81,10 @@ get a small offline page and API calls get JSON 502.
 ### Known gaps
 
 - **WebSockets.** The frontend opens `ws://${location.host}/api/ws` (live
-  events) and `/api/super-console/ws` (terminal). From `wails://localhost`
-  that targets the user's own machine, and the Wails asset server answers
-  WebSocket upgrades with 501. Live updates and the terminal do not work in
-  the app yet; see the design report for the fix.
+  events). From `wails://localhost` that targets the user's own machine, and
+  the Wails asset server answers WebSocket upgrades with 501. Live updates do
+  not work in the app yet; see the design report for the fix. (The terminal's
+  `/api/super-console/ws` was removed with zot on 2026-10-22.)
 - **Session lifetime.** The cookie jar lasts only for the process: relaunching
   requires signing in again.
 

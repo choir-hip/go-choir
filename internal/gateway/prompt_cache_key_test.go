@@ -56,7 +56,7 @@ func TestHandleOpenAIChatCompletionsPassesPromptCacheKey(t *testing.T) {
 	body, _ := json.Marshal(map[string]any{
 		"model":            "gpt-6-luna",
 		"messages":         []map[string]string{{"role": "user", "content": "hi"}},
-		"prompt_cache_key": "zot-thread-1",
+		"prompt_cache_key": "client-thread-1",
 	})
 	req := httptest.NewRequest(http.MethodPost, "/provider/openai/v1/chat/completions", strings.NewReader(string(body)))
 	req.Header.Set("Authorization", "Bearer "+credential.RawToken)
@@ -66,7 +66,7 @@ func TestHandleOpenAIChatCompletionsPassesPromptCacheKey(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
 	}
-	if chatProvider.lastReq == nil || chatProvider.lastReq.CacheKey != "zot-thread-1" {
-		t.Fatalf("provider request = %+v, want cache key zot-thread-1", chatProvider.lastReq)
+	if chatProvider.lastReq == nil || chatProvider.lastReq.CacheKey != "client-thread-1" {
+		t.Fatalf("provider request = %+v, want cache key client-thread-1", chatProvider.lastReq)
 	}
 }

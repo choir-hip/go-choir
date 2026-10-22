@@ -13,7 +13,7 @@ import (
 // EnvGuestTrustLoopback opts a single-host development stack, where the proxy
 // reaches the autoputer over 127.0.0.1, into treating loopback as the host
 // side of the guest boundary. The guest image never sets it: inside a computer,
-// loopback is every in-guest process (terminal, zot, capsule workloads), and
+// loopback is every in-guest process (capsule workloads, any guest child), and
 // none of them is the owner.
 const EnvGuestTrustLoopback = "CHOIR_GUEST_TRUST_LOOPBACK"
 

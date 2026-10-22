@@ -9,7 +9,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/server"
 )
 
-// An in-guest process (terminal, zot, a capsule workload) reaches the guest
+// An in-guest process (a capsule workload, any guest child) reaches the guest
 // on loopback and can set any header. It must not act as the owner on any
 // owner route, nor drive the internal routes that write the planned-restart
 // marker, hibernate, append run events or read Texture documents

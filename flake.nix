@@ -295,27 +295,6 @@
         doCheck = false;
       };
 
-      zotPkg = buildChoirGoModule {
-        pname = "zot";
-        version = "0.2.6";
-        src = pkgs.fetchFromGitHub {
-          owner = "patriceckhart";
-          repo = "zot";
-          rev = "v0.2.6";
-          hash = "sha256-bWezjuuXh0e600KHxpABnLzA4XHYmef669IXbKLsZfA=";
-        };
-        vendorHash = "sha256-glcP2rMtb2mJooRhJqctPg18L9KjsJDyREL9WtFmmjE=";
-        subPackages = [ "cmd/zot" ];
-        ldflags = [
-          "-s"
-          "-w"
-          "-X main.version=0.2.6"
-          "-X main.commit=917da8c414e183118e68034e0e8c6f6b746f0132"
-          "-X main.date=2026-05-30T17:33:08Z"
-        ];
-        doCheck = false;
-      };
-
       # One Go compile for every service (docs/problems/ci-deploy-latency-per-
       # service-go-builds-2026-10-09.md). Fifteen per-service buildGoModule
       # derivations each compiled the whole dependency graph (embedded Dolt
@@ -472,7 +451,6 @@
         frontend = frontendPkg;
         frontendDeps = frontendDepsPkg;
         obscura = obscuraPkg;
-        zot = zotPkg;
         # Host Go module proxy for engineering capsules; carries the deployed
         # go.sum it pre-warms and verifies on start
         # (docs/reports/capsule-go-module-proxy-design-2026-10-14.md).

@@ -234,7 +234,6 @@ per-user computer runtime
   -> appagents own canonical semantic artifacts when needed
   -> desk actors and capsule-scoped sub-RLMs create evidence; capsule effects remain inert candidates
   -> embedded Dolt owns private computer product state
-  -> zot can run as a Super Console subprocess when configured
 ```
 
 Important boundary rules:
@@ -765,9 +764,10 @@ and retains every event. Concurrent causal observations may append, but any
 changed desired/effective state projection makes an acceptance or rollback
 request stale and refuses it.
 
-Super Console and ordinary agents do not patch or restart the core VM directly.
+Agents do not patch or restart the core VM directly (the Super Console/zot
+repair session was removed 2026-10-22, `docs/problems/remove-zot-2026-10-22.md`).
 Diagnosis and control use supported public APIs/CLI and event/receipt
-inspection. Host access, `zot`, SSH, raw vmctl, candidate VM, mutable branch,
+inspection. Host access, SSH, raw vmctl, candidate VM, mutable branch,
 AppChangePackage/AppAdoption/lineage, and internal APIs are not repair or
 self-development fallbacks.
 
