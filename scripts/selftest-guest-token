@@ -67,8 +67,8 @@ SKIP_FILES = {"scripts/selftest-guest-token", "scripts/choir_internal.py", "scri
 # A verbatim copy of the Python helper, for a file piped alone to the host;
 # check_copies proves it is the helper.
 PROVEN_COPIES = {"scripts/density/host_collect.py"}
-HELPER_CALL = re.compile(r"\b(?:internal_headers|internal_curl_flags|choir_internal_curl|choir_internal_token_allowed)\b")
-HELPER_DEF = re.compile(r"^\s*(?:def\s+(?:internal_headers|internal_curl_flags|token_allowed)\s*\(|(?:choir_internal_curl|choir_internal_token_allowed)\s*\(\)\s*\{)")
+HELPER_CALL = re.compile(r"\b(?:internal_headers|internal_curl_flags|internal_urlopen|choir_internal_curl|choir_internal_token_allowed)\b")
+HELPER_DEF = re.compile(r"^\s*(?:def\s+(?:internal_headers|internal_curl_flags|internal_urlopen|token_allowed)\s*\(|(?:choir_internal_curl|choir_internal_token_allowed)\s*\(\)\s*\{)")
 VERB = re.compile(r"\bcurl\b|\bwget\b|\bRequest\(|\burlopen\(|\bhttp_json\(|(?<![\w.])http\(|(?<![\w.])get\(|\bfetch\(|\brequests\.\w+\(")
 URL = re.compile(r"https?://([^/\s'\"`?#]+)")
 BARE = re.compile(r"(?<![\w/.@:-])(localhost|127\.0\.0\.1|\[::1\]):(\d+)")
@@ -264,8 +264,22 @@ def global_names_of(texts):
     return out
 
 
-def git(*args):
-    return subprocess.run(["git", "-C", REPO, *args], capture_output=True, text=True, check=False).stdout
+class ScanError(Exception):
+    """The scan has nothing to stand on: it must fail, never pass empty."""
+
+
+def git(*args, ok=(0,)):
+    r = subprocess.run(["git", "-C", REPO, *args], capture_output=True, text=True, check=False)
+    if r.returncode not in ok:
+        raise ScanError(f"git {args[0]} exited {r.returncode}: {r.stderr.strip()[:200]}")
+    return r.stdout
+
+
+def require_repo(rev):
+    if git("rev-parse", "--is-inside-work-tree", ok=(0, 128)).strip() != "true":
+        raise ScanError(f"{REPO} is not a git work tree")
+    if rev and not git("rev-parse", "--verify", "--quiet", rev + "^{commit}", ok=(0, 1)).strip():
+        raise ScanError(f"no such revision: {rev}")
 
 
 def tracked(rev, patterns):
@@ -275,7 +289,8 @@ def tracked(rev, patterns):
     if rev:
         args.append(rev)
     args += ["--", ".", ":!*.go"]
-    paths = [p.split(":", 1)[1] if rev else p for p in git(*args).splitlines()]
+    # git grep exits 1 for no match; anything else is an error, not "none".
+    paths = [p.split(":", 1)[1] if rev else p for p in git(*args, ok=(0, 1)).splitlines()]
     return [p for p in paths if p not in SKIP_FILES]
 
 
@@ -287,7 +302,11 @@ def read(rev, path):
 
 
 def scan_repo(rev=None):
+    require_repo(rev)
     seeds = tracked(rev, [TOKEN_PATH, TOKEN_NAME])
+    if not seeds:
+        # The problem record names the header file, so a real tree has one.
+        raise ScanError("no tracked file names the header file or the token header: nothing to scan")
     texts = {p: read(rev, p) for p in seeds}
     globals_ = global_names_of(texts)
     if globals_:
@@ -345,8 +364,80 @@ def check_python_helper(header_file):
         check(f"internal_curl_flags({url}) {'names' if want else 'omits'} the header file",
               (header_file in flags) == want, flags)
         check(f"internal_curl_flags({url}) sends the marker", "X-Internal-Caller: true" in flags)
+        if want:
+            check(f"internal_curl_flags({url}) uses no proxy and no redirect",
+                  "--noproxy '*'" in flags and "--max-redirs 0" in flags, flags)
     h = choir_internal.internal_headers("http://127.0.0.1:8083/x", header_file=header_file + ".missing")
     check("internal_headers with no readable header file sends the marker only", h == {"X-Internal-Caller": "true"}, repr(sorted(h)))
+
+
+def check_urlopen():
+    """internal_urlopen: a token-bearing request follows no redirect and
+    takes no proxy from the environment; a plain one is plain urlopen."""
+    import http.server  # noqa: PLC0415
+    import threading  # noqa: PLC0415
+    import urllib.error  # noqa: PLC0415
+    import urllib.request  # noqa: PLC0415
+    sys.path.insert(0, HERE)
+    try:
+        import choir_internal  # noqa: PLC0415
+    except ImportError:
+        return
+    seen = []
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            seen.append((self.path, self.headers.get(TOKEN_NAME)))
+            if self.path == "/redirect":
+                self.send_response(302)
+                self.send_header("Location", "/landed")
+                self.end_headers()
+                return
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"ok")
+
+        def log_message(self, *a):
+            pass
+
+    srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{srv.server_address[1]}"
+    saved = {k: os.environ.get(k) for k in ("http_proxy", "HTTP_PROXY", "no_proxy", "NO_PROXY")}
+    try:
+        os.environ["http_proxy"] = os.environ["HTTP_PROXY"] = "http://127.0.0.1:9"  # nothing listens
+        os.environ.pop("no_proxy", None)
+        os.environ.pop("NO_PROXY", None)
+        tok = {TOKEN_NAME: "sekrit-value", "X-Internal-Caller": "true"}
+        try:
+            r = choir_internal.internal_urlopen(urllib.request.Request(base + "/direct", headers=tok), timeout=5)
+            ok = r.read() == b"ok"
+        except Exception as e:  # noqa: BLE001
+            ok = False
+            print("     ", e)
+        check("internal_urlopen sends a token-bearing request direct, past an environment proxy", ok)
+        seen.clear()
+        try:
+            choir_internal.internal_urlopen(urllib.request.Request(base + "/redirect", headers=tok), timeout=5)
+            refused = False
+        except urllib.error.HTTPError as e:
+            refused = e.code == 302
+        except Exception:  # noqa: BLE001 - any other error is a failure, not a crash
+            refused = False
+        check("internal_urlopen refuses a token-bearing request's redirect",
+              refused and [p for p, _ in seen] == ["/redirect"], repr(seen))
+        os.environ["no_proxy"] = os.environ["NO_PROXY"] = "127.0.0.1"
+        seen.clear()
+        r = choir_internal.internal_urlopen(urllib.request.Request(base + "/redirect", headers={"X-Internal-Caller": "true"}), timeout=5)
+        check("internal_urlopen follows a plain request's redirect, as urlopen does",
+              r.read() == b"ok" and [p for p, _ in seen] == ["/redirect", "/landed"], repr(seen))
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        srv.shutdown()
 
 
 def check_copies(header_file):
@@ -356,15 +447,17 @@ def check_copies(header_file):
     except ImportError:
         return
     import importlib.util  # noqa: PLC0415
-    import inspect  # noqa: PLC0415
     for rel in sorted(PROVEN_COPIES):
         spec = importlib.util.spec_from_file_location("copy", os.path.join(REPO, rel))
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
-        for name in ("token_allowed", "internal_headers"):
-            same = hasattr(mod, name) and inspect.getsource(getattr(mod, name)) == inspect.getsource(getattr(choir_internal, name))
-            check(f"{rel} {name} is scripts/choir_internal.py's, verbatim", same)
-        for const in ("TOKEN_HEADER_FILE", "MARKER", "LOOPBACK_HOSTS", "INTERNAL_PORTS"):
+        with open(choir_internal.__file__) as f:
+            helper = f.read()
+        block = helper[helper.index("TOKEN_HEADER_FILE = "):helper.index("def internal_curl_flags(")].rstrip()
+        with open(os.path.join(REPO, rel)) as f:
+            check(f"{rel} carries scripts/choir_internal.py from TOKEN_HEADER_FILE to internal_urlopen, verbatim",
+                  block in f.read())
+        for const in ("TOKEN_HEADER_FILE", "MARKER", "LOOPBACK_HOSTS", "INTERNAL_PORTS", "TOKEN_HEADER_NAME"):
             check(f"{rel} {const} is the helper's", getattr(mod, const, None) == getattr(choir_internal, const))
         if not hasattr(mod, "internal_headers"):
             continue
@@ -393,6 +486,8 @@ def check_shell_helper(header_file, work):
                   r.returncode == 0 and (("@" + header_file) in argv) == want, r.stdout + r.stderr)
             check(f"{shell} choir_internal_curl {url} sends the marker and the URL",
                   "X-Internal-Caller: true" in argv and argv[-1:] == [url])
+            if want:
+                check(f"{shell} choir_internal_curl {url} uses no proxy", argv[:2] == ["--noproxy", "*"], repr(argv[:2]))
     r = subprocess.run(["bash", "-c", f'. "$1"; choir_internal_curl http://127.0.0.1:8083/x -L', "bash", lib],
                        capture_output=True, text=True, env={**os.environ, "PATH": work + os.pathsep + os.environ["PATH"]})
     check("choir_internal_curl refuses -L (curl resends custom headers on a redirect)", r.returncode != 0)
@@ -525,7 +620,11 @@ def check_not_vacuous(work):
 
 def main():
     if sys.argv[1:2] == ["--rev"]:
-        findings = scan_repo(sys.argv[2])
+        try:
+            findings = scan_repo(sys.argv[2])
+        except ScanError as e:
+            print(f"FAIL {e}")
+            return 2
         for p, n, why in findings:
             print(f"{p}:{n}: {why}")
         return 1 if findings else 0
@@ -535,6 +634,7 @@ def main():
             f.write(f"{TOKEN_NAME}: sekrit-value\n")
         check_python_helper(header_file)
         check_copies(header_file)
+        check_urlopen()
         check_shell_helper(header_file, work)
         check_not_vacuous(work)
     for name, (path, text) in SENDERS.items():
@@ -543,11 +643,15 @@ def main():
     for name, (path, text) in LEGIT.items():
         f = scan(path, text)
         check(f"scanner passes the loopback use: {name}", not f, repr(f))
-    findings = scan_repo()
-    for p, n, why in findings:
-        print(f"     {p}:{n}: {why}")
-    check("no tracked script or doc sends the token outside loopback internal ports", not findings,
-          f"{len(findings)} finding(s)")
+    try:
+        findings = scan_repo()
+    except ScanError as e:
+        check("the repository scan has files to scan", False, str(e))
+    else:
+        for p, n, why in findings:
+            print(f"     {p}:{n}: {why}")
+        check("no tracked script or doc sends the token outside loopback internal ports", not findings,
+              f"{len(findings)} finding(s)")
     print(f"\n{len(PASS)} passed, {len(FAIL)} failed")
     return 1 if FAIL else 0
 

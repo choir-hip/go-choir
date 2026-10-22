@@ -74,13 +74,14 @@ def ksm():
     return out
 
 
-# A copy of scripts/choir_internal.py (token_allowed, internal_headers), so this
+# A copy of scripts/choir_internal.py (token_allowed .. internal_urlopen), so this
 # file still runs piped alone to the host; scripts/selftest-guest-token
 # fails if the copy differs.
 TOKEN_HEADER_FILE = "/var/lib/go-choir/secrets/internal-service-token.header"
 MARKER = {"X-Internal-Caller": "true"}
 LOOPBACK_HOSTS = ("127.0.0.1", "::1", "localhost")
 INTERNAL_PORTS = ("8083", "8084", "8086", "8087")
+TOKEN_HEADER_NAME = "X-Choir-Internal-Token"
 
 
 def token_allowed(url):
@@ -112,10 +113,24 @@ def internal_headers(url, header_file=TOKEN_HEADER_FILE):
     return h
 
 
+class _RefuseRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None  # urllib raises HTTPError: the token never follows a redirect
+
+
+def internal_urlopen(req, timeout=None):
+    """urlopen, except that a request carrying the token goes direct (no
+    proxy from the environment) and a redirect is an error, not followed."""
+    if not req.has_header(TOKEN_HEADER_NAME.capitalize()):
+        return urllib.request.urlopen(req, timeout=timeout)
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _RefuseRedirect())
+    return opener.open(req, timeout=timeout)
+
+
 def http_json(url, timeout=8):
     req = urllib.request.Request(url, headers=internal_headers(url))
     try:
-        return json.load(urllib.request.urlopen(req, timeout=timeout))
+        return json.load(internal_urlopen(req, timeout=timeout))
     except Exception as e:  # noqa: BLE001 - reported, never raised
         return {"error": f"{type(e).__name__}: {e}"[:200]}
 

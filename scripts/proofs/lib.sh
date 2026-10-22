@@ -199,12 +199,13 @@ node_b_sh() {
 }
 
 # node_b_q SCRIPT: like node_b_sh but quiet, for reads whose output a step
-# parses. Dry-run prints the command and returns an empty answer.
+# parses. It sends PROOF_INTERNAL_LIB ahead of SCRIPT. Dry-run prints both,
+# exactly as sent, and returns an empty answer.
 node_b_q() {
 	if [ "$PROOF_DRY" = 1 ]; then
 		{
 			info "\$ ssh $PROOF_SSH_HOST sh -s <<'EOF'"
-			printf '%s\n' "$1" | sed 's/^/    | /'
+			printf '%s\n%s\n' "$PROOF_INTERNAL_LIB" "$1" | sed 's/^/    | /'
 		} >&2
 		return 0
 	fi

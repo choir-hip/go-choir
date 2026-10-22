@@ -36,8 +36,12 @@ import re
 import subprocess
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from choir_internal import internal_curl_flags  # noqa: E402
+try:
+    sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+    from choir_internal import internal_curl_flags
+except ImportError:  # copied alone: the marker only, never the token
+    def internal_curl_flags(url):
+        return "-H 'X-Internal-Caller: true'"
 
 HOST_READ = r'''
 import glob, json, os, re, subprocess

@@ -1,8 +1,9 @@
 # shellcheck shell=sh
-# Host-internal curl for host-side shell, mirroring hostauth.MarkInternal
-# (internal/hostauth/hostauth.go): the marker header always, and the
-# internal service token header file only when the URL is a loopback host
-# on an internal service port. The token never goes to a guest (directly, or
+# Host-internal curl for host-side shell, after hostauth.MarkInternal
+# (internal/hostauth/hostauth.go) but narrower: the marker header always,
+# and the internal service token header file only when the URL is
+# 127.0.0.1, ::1 or localhost on an internal service port (MarkInternal
+# accepts all of 127.0.0.0/8 and any case of localhost). The token never goes to a guest (directly, or
 # through a 127.0.0.1 DNAT port) or the internet; guest routes gate on the
 # host source address and need only the marker. POSIX sh, so it runs under
 # `sh -s` on Node B and bash 3.2 on a Mac. Sourced, never executed.
@@ -30,8 +31,9 @@ choir_internal_token_allowed() {
 }
 
 # choir_internal_curl URL [curl args...]: curl URL with the marker, and the
-# header file (read by curl, when readable) only for an allowed URL. Refuses
-# -L: curl resends custom headers to a redirect's host.
+# header file (read by curl, when readable) only for an allowed URL, then with
+# no proxy from the environment. Refuses -L: curl resends custom headers to a
+# redirect's host.
 choir_internal_curl() {
 	_ci_url=$1
 	shift
@@ -45,7 +47,7 @@ choir_internal_curl() {
 		esac
 	done
 	if [ -r "$CHOIR_INTERNAL_TOKEN_HEADER" ] && choir_internal_token_allowed "$_ci_url"; then
-		curl -H 'X-Internal-Caller: true' -H "@$CHOIR_INTERNAL_TOKEN_HEADER" "$@" "$_ci_url"
+		curl --noproxy '*' -H 'X-Internal-Caller: true' -H "@$CHOIR_INTERNAL_TOKEN_HEADER" "$@" "$_ci_url"
 	else
 		curl -H 'X-Internal-Caller: true' "$@" "$_ci_url"
 	fi
