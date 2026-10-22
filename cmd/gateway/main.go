@@ -102,6 +102,9 @@ func main() {
 	handler.SetAnthropicRelay(relay)
 	log.Printf("gateway: anthropic relay: %s", relay.Status())
 	log.Printf("gateway: source api: %s", handler.SourceAPIStatus())
+	// B7: request body caps, read from GATEWAY_BODY_CAPS and
+	// GATEWAY_BODY_LIMITS when the handler was built.
+	log.Printf("gateway: body caps: %s", handler.BodyCapsStatus())
 
 	// The Jev Decisions route is independently gated. Its OpenRouter key stays
 	// in the gateway environment; disabled transport never falls back to an
