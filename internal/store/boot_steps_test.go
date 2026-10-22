@@ -73,8 +73,8 @@ func TestOpenLogsEveryStoreStepWithItsDuration(t *testing.T) {
 		"prepare-path", "workspace-open",
 		"runtime-schema", "runtime-schema/apply-ddl", "runtime-schema/ensure-columns", "runtime-schema/events-indexes",
 		"runtime-schema/desktop-primary-keys", "runtime-schema/backfill-events-stream-seq",
-		"objectgraph-schema", "objectgraph-schema/schema-ddl", "objectgraph-schema/og-objects-indexes",
-		"objectgraph-schema/derived-keys-table", "objectgraph-schema/metadata-columns",
+		"objectgraph-schema", "objectgraph-schema/schema-ddl",
+		"objectgraph-schema/derived-keys-table", "objectgraph-schema/discover-access-paths",
 		"texture-schema", "texture-schema/apply-ddl", "texture-schema/backfill-revision-version-numbers",
 		"store-schema-epoch",
 	} {
