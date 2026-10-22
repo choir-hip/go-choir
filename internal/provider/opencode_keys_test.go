@@ -132,7 +132,8 @@ func TestOpenCodeProviderAllKeysParkedMakesNoCall(t *testing.T) {
 // like an empty account and the call retried on another key, so no session
 // stays pinned to it (docs/problems/opencode-401-key-never-parked-2026-10-22.md).
 func TestOpenCodeProviderRetriesOnAnotherKeyAfterDeadCredential(t *testing.T) {
-	for _, status := range []int{http.StatusUnauthorized} {
+	{
+		status := http.StatusUnauthorized
 		var mu sync.Mutex
 		seen := map[string]int{}
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -164,17 +165,17 @@ func TestOpenCodeProviderRetriesOnAnotherKeyAfterDeadCredential(t *testing.T) {
 
 func TestOpenCodeKeyPoolParksDeadCredentialForHours(t *testing.T) {
 	now := time.Unix(1000, 0)
-	pool := newOpenCodeKeyPool([]openCodeKey{{name: "A", value: "a"}})
+	pool := newOpenCodeKeyPool([]openCodeKey{{name: "A", value: "a"}, {name: "B", value: "b"}})
 	pool.now = func() time.Time { return now }
 	if !pool.park("A", http.StatusUnauthorized) {
 		t.Fatal("401 did not park")
 	}
 	now = now.Add(openCodeRateLimitPark + time.Second)
-	if _, ok := pool.pick("s", nil); ok {
-		t.Fatal("a dead credential recovered after a rate-limit park")
+	if k, ok := pool.pick("s", map[string]bool{"B": true}); ok {
+		t.Fatalf("a dead credential recovered after a rate-limit park: %s", k.name)
 	}
 	now = now.Add(openCodeCredentialPark)
-	if _, ok := pool.pick("s", nil); !ok {
+	if _, ok := pool.pick("s", map[string]bool{"B": true}); !ok {
 		t.Fatal("a dead credential never recovers (a renewed key must be tried again)")
 	}
 	// A 403 can be a model the plan does not cover; the pool is shared by
@@ -183,5 +184,26 @@ func TestOpenCodeKeyPoolParksDeadCredentialForHours(t *testing.T) {
 		if pool.park("A", status) {
 			t.Fatalf("status %d parked the key", status)
 		}
+	}
+}
+
+// A 401 that is not about one credential (an upstream auth outage, a proxy
+// rejection) answers on every key: it must never bench the whole pool for
+// hours, so the last healthy key is never parked on a 401 and the pool then
+// behaves as it did before 401 parked at all.
+func TestOpenCodeKeyPoolNeverParksTheLastKeyOn401(t *testing.T) {
+	pool := newOpenCodeKeyPool([]openCodeKey{{name: "A", value: "a"}, {name: "B", value: "b"}})
+	if !pool.park("A", http.StatusUnauthorized) {
+		t.Fatal("the first 401 key was not parked")
+	}
+	if pool.park("B", http.StatusUnauthorized) {
+		t.Fatal("a 401 parked the last healthy key")
+	}
+	if k, ok := pool.pick("s", nil); !ok || k.name != "B" {
+		t.Fatalf("pick = %v %v, want B still in service", k.name, ok)
+	}
+	// 402 and 429 still park the last key: their meaning is per-account.
+	if !pool.park("B", http.StatusPaymentRequired) {
+		t.Fatal("402 must still park the last key")
 	}
 }
