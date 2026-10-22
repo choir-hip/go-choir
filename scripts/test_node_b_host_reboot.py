@@ -146,7 +146,8 @@ class FakeHost:
     which mark call this is (1-based). fail_on_call raises from that mark
     call after the guests answered (an ssh drop that lost the answers)."""
 
-    def __init__(self, rows, answer, clock=None, fail_on_call=None, unmark_status=200, later_rows=None):
+    def __init__(self, rows, answer, clock=None, fail_on_call=None, unmark_status=200, later_rows=None,
+                 unmark_interrupts=0):
         self.rows, self.answer, self.clock = rows, answer, clock
         self.fail_on_call, self.unmark_status = fail_on_call, unmark_status
         # later_rows: what vmctl lists from the second computers call on
@@ -154,6 +155,9 @@ class FakeHost:
         self.later_rows = later_rows
         self.sent, self.unmarked, self.calls, self.timeouts = [], [], [], []
         self.listings, self.list_timeouts = 0, []
+        # The first unmark_interrupts unmark calls raise Interrupted (a signal
+        # during the ssh) before anything is recorded as cleared.
+        self.unmark_interrupts, self.unmark_calls = unmark_interrupts, 0
 
     def remote(self, host, mode, *args, timeout=180):
         if mode == "computers":
@@ -165,6 +169,9 @@ class FakeHost:
             return {"counts": {}, "computers": rows}
         req = json.loads(args[0])
         if mode == "unmark":
+            self.unmark_calls += 1
+            if self.unmark_calls <= self.unmark_interrupts:
+                raise reboot.Interrupted("signal 1")
             self.unmarked += [it["vm_id"] for it in req["items"]]
             return [{"vm_id": it["vm_id"], "status": self.unmark_status, "body": ""} for it in req["items"]]
         self.timeouts.append(timeout)
@@ -734,11 +741,15 @@ class Signals(unittest.TestCase):
         self.assertEqual(sorted(fake.unmarked), sorted([PAPER, PRIMARY]))
 
 
+def no_host(*a, **k):
+    raise AssertionError("reached a host")
+
+
 class MainInterrupts(unittest.TestCase):
     """F2: main clears and saves the receipt on an interrupt, not only on an Exception."""
 
-    def run_main(self, name, fn):
-        fake = FakeHost([], scripted({}))
+    def run_main(self, name, fn, **fake_kw):
+        fake = FakeHost([], scripted({}), **fake_kw)
         marks = marked_receipt()["marks"]
 
         class Pre:
@@ -755,9 +766,12 @@ class MainInterrupts(unittest.TestCase):
                     mock.patch.object(reboot, "phase_pre", lambda a, r: Pre()), \
                     mock.patch.object(reboot, "phase_mark", mark), \
                     mock.patch.object(reboot, "install_signal_handlers", lambda: None), \
+                    mock.patch.object(reboot.subprocess, "run", no_host), mock.patch.object(reboot, "ssh_ok", no_host), \
+                    mock.patch.object(reboot, "staging_health", no_host), \
                     mock.patch.object(reboot, "log", lambda m: None), mock.patch.object(reboot, name, fn):
-                with self.assertRaises(KeyboardInterrupt):
+                with self.assertRaises(BaseException) as cm:
                     reboot.main()
+            self.raised = cm.exception
             saved = None
             if os.path.exists(state):
                 with open(state) as f:
@@ -768,6 +782,7 @@ class MainInterrupts(unittest.TestCase):
         def hup(args, receipt, save):
             raise reboot.Interrupted("SIGHUP")
         fake, saved = self.run_main("reboot_after_mark", hup)
+        self.assertIsInstance(self.raised, KeyboardInterrupt)
         self.assertEqual(fake.unmarked, [PAPER])
         self.assertIsNotNone(saved)
         self.assertIn("Interrupted", saved["error"])
@@ -776,9 +791,57 @@ class MainInterrupts(unittest.TestCase):
         def hup(args, receipt):
             raise reboot.Interrupted("SIGTERM")
         fake, saved = self.run_main("phase_reboot", hup)
+        self.assertIsInstance(self.raised, KeyboardInterrupt)
         self.assertEqual(fake.unmarked, [PAPER])
         self.assertIsNotNone(saved)
         self.assertIn("Interrupted", saved["error"])
+
+    def test_interrupt_during_the_clear_is_cleared_again(self):
+        """F2-a: a clear that a signal cut short is not recorded as done, so
+        main clears again: two attempts, cleared only after the second."""
+        def hup(args, receipt):
+            raise reboot.Interrupted("SIGTERM")
+        fake, saved = self.run_main("phase_reboot", hup, unmark_interrupts=1)
+        self.assertEqual(fake.unmark_calls, 2)
+        self.assertEqual(fake.unmarked, [PAPER])
+        self.assertTrue(saved["marks"]["cleared"])
+
+    def test_error_is_saved_before_the_recovery_clear(self):
+        """F2-c: a second interrupt during main's clear still leaves the error in the receipt."""
+        def boom(args, receipt, save):
+            raise RuntimeError("disk full")
+        fake, saved = self.run_main("reboot_after_mark", boom, unmark_interrupts=1)
+        self.assertIsInstance(self.raised, reboot.Interrupted)
+        self.assertIsNotNone(saved)
+        self.assertIn("RuntimeError", saved["error"])
+
+
+class ClearBookkeeping(unittest.TestCase):
+    def test_interrupted_clear_is_not_recorded_as_done(self):
+        """F2-a: cleared is set only when the unmark succeeded."""
+        fake = FakeHost([], scripted({}), unmark_interrupts=1)
+        receipt = marked_receipt()
+        with mock.patch.object(reboot, "remote", fake.remote), mock.patch.object(reboot, "log", lambda m: None):
+            with self.assertRaises(reboot.Interrupted):
+                reboot.clear_receipt_markers(reboot_args(), receipt)
+            self.assertFalse(receipt["marks"]["cleared"])
+            self.assertTrue(reboot.clear_receipt_markers(reboot_args(), receipt))
+        self.assertTrue(receipt["marks"]["cleared"])
+        self.assertEqual((fake.unmark_calls, fake.unmarked), (2, [PAPER]))
+
+    def test_reboot_after_mark_does_not_clear_after_the_host_is_back(self):
+        """F2-b: a host that came back consumed its markers; a DELETE could clear a fresh apply marker."""
+        def save():
+            raise OSError("disk full")
+        for mutate in (lambda r: r.setdefault("reboot", {}).update(back_at="2026-10-22T20:00:00Z"),
+                       lambda r: r["marks"].update(cleared=True)):
+            fake = FakeHost([], scripted({}))
+            receipt = marked_receipt()
+            mutate(receipt)
+            with mock.patch.object(reboot, "remote", fake.remote), mock.patch.object(reboot, "log", lambda m: None):
+                with self.assertRaises(OSError):
+                    reboot.reboot_after_mark(reboot_args(), receipt, save)
+            self.assertEqual(fake.unmarked, [])
 
 
 class OptionChecks(unittest.TestCase):
