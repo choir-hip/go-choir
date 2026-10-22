@@ -28,6 +28,8 @@ func TestPodcastSearchUsesConfiguredProvider(t *testing.T) {
 	}))
 	defer provider.Close()
 	t.Setenv("CHOIR_PODCAST_SEARCH_URL", provider.URL+"/search")
+	previous := sourcefetch.SetAllowPrivateNetworkForTests(true)
+	t.Cleanup(func() { sourcefetch.SetAllowPrivateNetworkForTests(previous) })
 
 	_, handler := testAPISetup(t)
 	w := runtimeHandlerRequest(t, handler.HandlePodcastSearch, http.MethodGet, "/api/podcast/search?q=mission%20gradient&limit=5", "", "user-podcast")
@@ -43,6 +45,23 @@ func TestPodcastSearchUsesConfiguredProvider(t *testing.T) {
 	}
 	if resp.Results[0].FeedURL != "https://example.com/mission-gradient.rss" {
 		t.Fatalf("feed url = %q", resp.Results[0].FeedURL)
+	}
+}
+
+// Podcast search goes through the guarded client (row B1 of the guest
+// network inventory), so it takes the host fetch route on a granted
+// computer and never dials a private address.
+func TestPodcastSearchRefusesAPrivateProviderAddress(t *testing.T) {
+	hit := false
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hit = true }))
+	defer provider.Close()
+	t.Setenv("CHOIR_PODCAST_SEARCH_URL", provider.URL+"/search")
+	_, handler := testAPISetup(t)
+	w := runtimeHandlerRequest(t, handler.HandlePodcastSearch, http.MethodGet, "/api/podcast/search?q=anything", "", "user-podcast")
+	var resp podcastSearchResponse
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if hit || resp.ProviderStatus != "error" {
+		t.Fatalf("private provider dialed=%v status=%q", hit, resp.ProviderStatus)
 	}
 }
 
