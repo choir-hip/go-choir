@@ -109,3 +109,89 @@ comparison failed is not observable: nothing logs it.
 4. A test that has the observer win the Transition and asserts 200. The
    existing comment claims this case, so a test may already exist. If it
    does, it does not cover the shape staging produced.
+
+## Cause (read in code, origin/main 54040b730)
+
+Two parts. The approve part is found in code. The reject part is not:
+for a reject, every comparison in the race branch agrees with what the
+observer writes, so the test below is built to tell the cases apart.
+
+**1. Approve: the race check refuses every operation that has started to
+materialize (found in code).**
+
+- The race branch in `decideSelfDevelopment`
+  (internal/agentcore/api_self_development.go:606-617) re-reads the
+  operation and runs `verifyFinalizedSelfDevelopmentDecision(current,
+  transition)`.
+- That verifier compares the operation's heads with the heads the
+  decision produced, for every state past `awaiting_approval`
+  (internal/agentcore/self_development_decision_binding.go:122-127,
+  "operation head projection mismatch").
+- The observer does not stop at `accepted`. `reconcileSelfDevelopmentMaterialization`
+  recovers the decision (self_development_materializer.go:210) and, in
+  the same pass, moves the operation to `materializing`. That move
+  rewrites the heads to the head after `effect_started`
+  (self_development_materializer.go:389). `applied` rewrites them again
+  (:853).
+- So when the observer wins and has started the apply, the four checks
+  are: `DecisionEvent` equal, `DecisionReceipt` equal, the state check
+  passes (`materializing` and `applied` descend from `accepted`,
+  self_development_decision_binding.go:136), and the verifier fails on
+  the heads. The handler returns the Transition's own `ErrConflict` text.
+  The owner is told 409 for a candidate that is being applied.
+- The same check breaks the idempotent replay of an approve. The `found`
+  branch (api_self_development.go:356-370) runs the same verifier on the
+  current operation. Once the operation is `materializing` or `applied`,
+  a replay with the same key answers 409 "decision idempotency key
+  reused with different binding".
+- The release witness already knows this. It runs the verifier as the
+  decision-time operation for exactly this reason
+  (selfdev_release_witness.go:592-601: "once the operation has
+  materialized those legitimately differ"). The decision path did not
+  get the same treatment.
+
+**2. Reject: not found in code.**
+
+- On a reject the observer recovers the operation to `rejected` and stops
+  (self_development_materializer.go:220). Nothing else writes a rejected
+  operation's decision fields or heads.
+- `recoverSelfDevelopmentDecision` (self_development_materializer.go:283-290)
+  writes `DecisionEvent = transition.Request.EventDigest`. The handler
+  checks that this equals `eventDigest` before its own Transition
+  (api_self_development.go:585). It writes `DecisionReceipt =
+  transition.Receipt.ReceiptID` from the same row,
+  `FinalizedDecisionForOperation`, which is deterministic
+  (internal/store/computer_event_recovery.go:12). It writes the same
+  actor and heads.
+- The projection writes the row in one statement
+  (internal/store/project.go:424). `selfDevelopmentDecisionStateDescends("rejected",
+  "rejected")` is true.
+- So for an observer-written `rejected` row, all four comparisons match
+  in code.
+- One branch is silent and unexplained: the re-read's `getErr`. If the
+  re-read `Get` fails, the branch falls through to the 409 with the
+  Transition's text and logs nothing (api_self_development.go:607).
+- H1 and H2 above stay open as hypotheses. H3 is answered for approve
+  (part 1). It is not answered for reject.
+- Discriminator: the new test forces the observer to win between the
+  append and the Transition, for both decisions.
+  - If the reject case passes before the fix, staging's reject took a
+    path the test does not model.
+  - The fix's log line then names the comparison that failed: get
+    error, event, receipt, state, or verifier error. The next reject 409
+    on a computer becomes a trace instead of a guess.
+
+**3. The CLI cannot learn that its first call succeeded (found in code).**
+
+- `selfDevDecisionBinding` (cmd/choir/selfdev.go:194) refuses any state
+  other than `awaiting_approval` before it posts.
+- It also builds the expected heads from the *current* head
+  (selfdev.go:200-211). The decision event has moved that head. The
+  server's replay match is exact on the original expected heads and
+  commitments (`exactSelfDevelopmentDecisionRequestMatches`,
+  api_self_development.go:647-656). So a replay built from today's head
+  would be refused even if the client posted it.
+- A replay has to carry the decision's original bindings. The CLI has no
+  read for them today. The release witness exposes only the two expected
+  event heads, not the pending ref or the state commitments
+  (selfdev_release_witness.go:272).
