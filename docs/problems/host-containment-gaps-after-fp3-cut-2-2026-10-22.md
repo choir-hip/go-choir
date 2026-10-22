@@ -512,3 +512,45 @@ Planned dispositions, tests first:
   - New cases: both paths holding the same content before the import,
     and a failure after the second move (injected with a `mv` shim on the
     snippet's PATH).
+
+### Round 2b dispositions (lane fp3-containment-gaps)
+
+Findings 8b6b45c02 (green); tests be8a09abb (yellow). On the round 2 code
+the nix test had 3 failures of 26 and the verifier test 1 of 14. The
+partial-import and both-alike cases already passed there, because the
+snippet heals and relinks; DS2's safety comes from the assert. Fix
+580c98f28 (red); this commit carries the docs.
+
+- **DS1, fixed.** The directory is hidden without "-", so a unit whose
+  directory is missing refuses to start (226/NAMESPACE). The activation (at
+  boot and in a switch, before units start or restart) and tmpfiles both
+  make it. An activation that cannot make it takes the host's units down,
+  loudly. The rendered proxy unit has
+  `InaccessiblePaths=/var/lib/go-choir/unit-env`.
+- **DS2, fixed.** It heals itself and is loud and safe; it is not atomic.
+  - proxy, corpusd and checkpointd assert `unit-env/.imported`, so they
+    do not start while the first import is incomplete. The nix test pins
+    them as the only readers.
+  - The next activation finishes the import. The temp-tree test injects
+    a mv failure on the third file: the first two are in unit-env, the
+    third is still at its old path, there is no marker, and the run exits
+    non-zero; the next run completes it.
+  - An atomic swap was not taken: hard links would detach the masks units
+    still on their old view rely on during the landing (F5), and an
+    exchange needs `mv --exchange`.
+  - Never remove the marker except as the rollback text says.
+- **DS5, fixed.** This also changes F8. The verifier checks deploy.env as
+  optional, matching the proxy's EnvironmentFile, and requires the marker.
+  corpus-dsn.env and sandbox-gateway-token.env stay required, as in the
+  base verifier.
+- **DS6, fixed.** The runbook writes corpus-dsn.env with
+  `install -m 0600 -o root -g root /dev/stdin`.
+- **DS7, fixed.** A path counts as hidden when a hidden parent directory
+  covers it. A keep the unit hides anyway fails the test, so the gateway's
+  JWT-key keep is gone. Both paths with the same content before the import
+  relink without a stray. The partial import has its test (DS2).
+- DS3 is F2 (fixed in round 2). DS4 is F6, which stays with FP0 and the
+  owner.
+- FP0's proof gains two checks: that the directory entry carries no "-",
+  and the asserts. It also says what the two intended loud states mean and
+  how to clear them.

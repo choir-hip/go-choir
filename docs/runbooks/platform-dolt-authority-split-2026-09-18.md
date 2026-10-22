@@ -68,10 +68,11 @@ mysql -h 127.0.0.1 -P 13307 -u root corpus \
 # counts must match the pre-dump live values.
 
 # 6. Flip the DSNs (host-local env file; no redeploy). Since 2026-10-22 the
-#    file lives in /var/lib/go-choir/unit-env, which every unit hides as a
-#    directory (docs/problems/host-containment-gaps-after-fp3-cut-2-2026-10-22.md);
-#    /var/lib/go-choir/corpus-dsn.env is only a link to it.
-cat > /var/lib/go-choir/unit-env/corpus-dsn.env <<'EOF'
+#    file lives in /var/lib/go-choir/unit-env, which the host units hide as
+#    a directory (docs/problems/host-containment-gaps-after-fp3-cut-2-2026-10-22.md);
+#    /var/lib/go-choir/corpus-dsn.env is only a link to it. install, not
+#    cat >: the file must be 0600 from its first byte.
+install -m 0600 -o root -g root /dev/stdin /var/lib/go-choir/unit-env/corpus-dsn.env <<'EOF'
 CORPUSD_CORPUS_DOLT_DSN=root@tcp(127.0.0.1:13307)/corpus?parseTime=true&multiStatements=true&clientFoundRows=true
 SOURCECYCLED_DOLT_DSN=root@tcp(127.0.0.1:13307)/corpus?parseTime=true&multiStatements=true&clientFoundRows=true
 EOF

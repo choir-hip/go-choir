@@ -172,6 +172,13 @@ now:
     rollback text is corrected. Proof step 0 (before the deploy) is added,
     and step 2 runs after the gateway's restart. F6 (classifier) is with
     FP0 and the owner. Local: nix test 22/22, verifier tests 14/14.
+    Round 2b (DeepSeek: accept, conditional): findings 8b6b45c02, tests
+    be8a09abb, fix 580c98f28 (red). unit-env is hidden without "-" (fail
+    closed). proxy, corpusd and checkpointd assert the import marker. A
+    partial first import heals on the next activation (temp-tree test
+    with an injected mv failure). deploy.env is optional in the verifier,
+    and the DSN runbook uses install -m 0600. Local: nix test 26/26,
+    verifier tests 14/14.
 ---
 
 # FP3 groups 2 and 3
@@ -355,11 +362,25 @@ current; at T they were
    Expect:
    - unit-env is 0700 root, holding deploy.env, corpus-dsn.env and
      sandbox-gateway-token.env (each 0600) and `.imported`;
+   - `systemctl show -p InaccessiblePaths go-choir-proxy` lists
+     `/var/lib/go-choir/unit-env` without "-", and
+     `systemctl show -p Asserts go-choir-proxy go-choir-corpusd go-choir-checkpointd`
+     names the marker (round 2b);
    - each old path is a link `-> unit-env/<name>`;
    - the switch output in the deploy log shows "go-choir-unit-env:
      imported ... into /var/lib/go-choir/unit-env/<name>" once per file,
      and no "FAIL" line;
    - `journalctl -t go-choir-unit-env --since <deploy>` is empty.
+
+   Two loud states are on purpose (round 2b):
+   - every unit failing with 226/NAMESPACE means unit-env is missing;
+   - proxy, corpusd or checkpointd failing with "Assertion failed" means
+     the first import has not completed (no marker).
+
+   In both, read the activation's lines (`journalctl -t go-choir-unit-env`
+   and the deploy log). Fix the cause (space, the filesystem), and run
+   `/run/current-system/activate` or redeploy; the import resumes where it
+   stopped.
 
    A FAIL there stops the deploy at the switch, and its retry fails too.
    Read the named stray (`unit-env/<name>.stray.*`). Merge what is wanted
