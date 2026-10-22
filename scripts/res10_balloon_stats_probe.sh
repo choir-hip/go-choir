@@ -4,19 +4,21 @@
 # them from Firecracker beside the guest's own /proc/meminfo and the VMM's
 # host RSS, so FP0 can compare the two views of the same guest.
 #
-#   host   GET localhost:8083/internal/vmctl/memory/balloon?computer_id=ID
-#          (host only; Firecracker GET /balloon + GET /balloon/statistics)
+#   host   GET http://127.0.0.1:8083/internal/vmctl/memory/balloon?computer_id=ID
+#          (host only; Firecracker GET /balloon + GET /balloon/statistics),
+#          through choir_internal_curl (scripts/lib/choir_internal.sh)
 #   host   VmRSS of that computer's firecracker process
 #   guest  GET <guest>:8085/internal/debug/pprof/procmem (meminfo, KiB),
-#          with NO credential or internal-caller header: the guest gate is
-#          the source address (HostSourcedCaller), and the host credential
-#          is never sent to a guest (internal/hostauth MarkInternal)
+#          a plain curl with NO credential and no internal-caller marker:
+#          the guest gate is the source address (HostSourcedCaller)
 #
 # Refuses any computer vmctl does not class as "test". Boots, stops,
-# selects and writes nothing; never PATCHes a balloon. The internal service
-# token header file is passed to curl by path on the host and never read or
-# printed here; it is sent only to vmctl on localhost. Output: a table on
-# stderr and one JSON receipt on stdout (and in --out FILE).
+# selects and writes nothing; never PATCHes a balloon. Each remote command
+# runs under `ssh HOST sh -s` with the helper's text sent ahead of it (as
+# scripts/proofs/lib.sh does). The helper attaches the internal service
+# token only for 127.0.0.1, ::1 or localhost on an internal service port,
+# never to a guest; this script never reads or prints the token. Output: a
+# table on stderr and one JSON receipt on stdout (and in --out FILE).
 #
 # Exit: 0 a reading or a reason (stats_disabled, ...); 2 usage, refusal, or
 # a vmctl answer that is not 2xx or has no entry for the computer (status
@@ -36,7 +38,11 @@ SSH_HOST=node-b
 COMPUTER_ID=""
 OUT=""
 LABEL=""
-TOKEN_HEADER_FILE=/var/lib/go-choir/secrets/internal-service-token.header
+VMCTL=http://127.0.0.1:8083
+CHOIR_INTERNAL_LIB=$(cat "$(dirname "${BASH_SOURCE[0]}")/lib/choir_internal.sh") || {
+	echo "res10_balloon_stats_probe: cannot read scripts/lib/choir_internal.sh" >&2
+	exit 2
+}
 
 die() { echo "res10_balloon_stats_probe: $*" >&2; exit 2; }
 
@@ -56,16 +62,16 @@ done
 [[ "$LABEL" =~ ^[A-Za-z0-9._:-]*$ ]] || die "bad label"
 command -v python3 >/dev/null || die "python3 is required locally"
 
-# Host credential: vmctl on localhost only.
-AUTH="-H 'X-Internal-Caller: true' \$(test -r $TOKEN_HEADER_FILE && echo -H @$TOKEN_HEADER_FILE)"
-remote() { ssh -o BatchMode=yes "$SSH_HOST" "$1"; }
+# remote SCRIPT: run SCRIPT on the host under sh -s, after the helper.
+remote() { printf '%s\n%s\n' "$CHOIR_INTERNAL_LIB" "$1" | ssh -o BatchMode=yes "$SSH_HOST" sh -s; }
 
-# fetch URL [curl args...]: sets BODY and STATUS (the HTTP status, or
+# fetch CURL URL [curl args...]: CURL is choir_internal_curl (vmctl) or
+# curl (the guest). Sets BODY and STATUS (the HTTP status, or
 # "ssh-or-curl-failed"). curl prints the status on the last line.
 fetch() {
-	local url=$1 raw
-	shift
-	if ! raw=$(remote "curl -sS $* -w '\n%{http_code}' '$url'"); then
+	local via=$1 url=$2 raw
+	shift 2
+	if ! raw=$(remote "$via '$url' -sS $* -w '\n%{http_code}'"); then
 		BODY=$raw STATUS=ssh-or-curl-failed
 		return
 	fi
@@ -75,7 +81,7 @@ fetch() {
 }
 ok2xx() { [[ "$STATUS" =~ ^2[0-9][0-9]$ ]]; }
 vmctl_get() { # path -> BODY, or die with status and body
-	fetch "localhost:8083$1" -m 20 "$AUTH"
+	fetch choir_internal_curl "$VMCTL$1" -m 20
 	ok2xx || die "vmctl GET $1: status $STATUS: $(printf '%s' "$BODY" | head -c 400)"
 }
 
@@ -122,8 +128,9 @@ rss_kib=$(remote "for p in \$(pgrep -f 'firecracker.*$VM_ID'); do [ \"\$(cat /pr
 procmem=""
 procmem_error=""
 if [[ "$GUEST" =~ ^[0-9.]+$ ]]; then
-	# No $AUTH: never send the host credential to a guest.
-	fetch "http://$GUEST:8085/internal/debug/pprof/procmem" -m 30
+	# Plain curl: no token, no marker. (choir_internal_curl would never
+	# attach the token to a guest either; the guest needs neither.)
+	fetch curl "http://$GUEST:8085/internal/debug/pprof/procmem" -m 30
 	if ok2xx; then
 		procmem=$BODY
 	else
