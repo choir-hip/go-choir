@@ -695,3 +695,65 @@ the refusals and `search_done` rows only; `tool.result`, `desk.cell` and
 `loop.progress` phase `tool_loop` unchanged in count; `llmcost` totals
 unchanged. The tests in the lane assert the same counts on a canned run
 against the real store counters.
+
+### Build result (lane `lane/fp1-journal-cuts`)
+
+What each cut became, in commit order after the plan and the tests:
+
+| Cut | Commit | Class | What it is now |
+|---|---|---|---|
+| R1 | `9804f0d57` | red | `types.LiveOnly` names `loop.progress` under emit phase `provider_call` and `texture.agent_revision.progress`. `runEventEmitter` publishes them on the bus and does not append. The tool loop still emits both. The response line (phase `tool_loop`) gains `provider_call_ms`, `messages`, `tools`, `system_sha256`, `last_user_sha256`. The latency probe reads `provider_call_ms` and keeps the pairing for old tapes |
+| R2 | `920c57c5f` | orange | `commitTray` writes the `inbox_cursor` run-memory entry only when `highWater > scope.Cursor` |
+| R3 | `39da1adec` | red | `tool.invoked` is in `LiveOnly`. `tool.result` carries `arguments`, `started_at`, `duration_ms`. Readers (tracer checks, retrieval extractor, the in-flight gauge) take the source from the result, with the old invoked row as fallback |
+| R4 | `36187fa3b` | red | a cell's synchronous egress rows are written in its `desk.cell` event (`egress[]`, same fields). Refusals, `search_done` and a row that arrives after its cell event stay standalone. The bundle's `egress` layer reads both shapes |
+
+Local counters (the real store counters, a canned run of 2 model calls and 1
+tool call, `TestRunAppendsOnlyWhatReadersReadDurably`):
+
+| `events_appended_by_kind` | before (`55bf2abf2`) | after |
+|---|---|---|
+| `loop.progress` | 4 | 2 |
+| `tool.invoked` | 1 | 0 |
+| `tool.result` | 1 | 1 |
+
+A Texture run additionally stopped appending one `texture.agent_revision.progress`
+per progress line (`TestTextureProgressIsPublishedNotAppended`). A desk cell
+with three `choir.SearchStart` calls appends one `desk.cell` plus three
+`search_done` events instead of one plus six (`TestDeskCellAndEgressRecordRunEvents`).
+
+Saved, from the record's section 4 constants and not measured: R1 about
+240 KiB/s, R2 up to 75, R3 about 135, R4 about 130: **about 580 KiB/s, 32% of
+the 1,810 KiB/s model**. The share of R2 depends on how often the cursor does
+not move, which is still unmeasured. The measured version is reading 4 above,
+taken by FP0 on a test computer.
+
+Tests run: `go test ./internal/types ./internal/toolregistry ./internal/llmcost
+./cmd/choir`; `go test ./internal/agentcore -run 'Event|Trace|Live|Acceptance|ToolLoop|Progress|Cursor|Desk|Reduc|Texture'`;
+`go test ./internal/textureowner -run 'Workflow|Progress|Stream|Verifier|Texture'`;
+`node --test scripts/reeng_invariants_test.mjs scripts/reeng_tracer_*_test.mjs`;
+`python3 -I scripts/journal_cuts_readers_test.py`. The frontend is unchanged
+(the ticker reads the bus), so no frontend test was run.
+
+Declined or left:
+
+- R5 (duplicate index): its own lane, a store schema change.
+- The prompt text of each model call (`system_preview`, `last_user_text`) is
+  no longer durable. The hashes on the response line replace "did the prefix
+  change". Putting the preview back on the response line would bring back most
+  of the bytes, so it was not.
+- The WebSocket catch-up cannot replay the three bus-only lines after a
+  reconnect. A catch-up would need a bounded ring on the bus; not built.
+- `docs/reports/reeng-cut0-measurements-2026-10-12.md` still defines a model
+  turn by the two-line pairing. It is a dated measurement; not edited.
+- No frontend or Playwright reader of any cut kind exists besides the ticker
+  (`tool.invoked`, bus), so nothing there moved.
+- Not run: anything on a test computer or staging. The before/after rates per
+  kind (reading 4) are FP0's to take.
+
+Heresy delta (build): discovered: the record's R1 reader grep missed a script
+that tests a payload field instead of the phase string; `tool.invoked` had five
+script readers. Introduced: the crash-mid-tool and crash-mid-cell evidence
+losses and the lost reconnect replay named under each cut, all inside the
+owner's loss-tolerant ruling (notes section 27 item 18). Repaired: three
+disposable lines, one redundant cursor entry and one row per cell no longer pay
+a tape event each.
