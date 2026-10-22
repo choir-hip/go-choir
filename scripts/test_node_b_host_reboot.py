@@ -815,6 +815,24 @@ class MainInterrupts(unittest.TestCase):
         self.assertIsNotNone(saved)
         self.assertIn("RuntimeError", saved["error"])
 
+    def test_failed_save_still_clears_the_markers(self):
+        """Round 8: a receipt save that raises in main's interrupt path must not skip the clear."""
+        fail = {"on": False}
+        real = reboot.Path.write_text
+
+        def write_text(path, *a, **kw):
+            if fail["on"]:
+                raise OSError("read-only file system")
+            return real(path, *a, **kw)
+
+        def boom(args, receipt, save):
+            fail["on"] = True
+            raise RuntimeError("disk full")
+        with mock.patch.object(reboot.Path, "write_text", write_text):
+            fake, _ = self.run_main("reboot_after_mark", boom)
+        self.assertIsInstance(self.raised, RuntimeError)
+        self.assertEqual((fake.unmark_calls, fake.unmarked), (1, [PAPER]))
+
 
 class ClearBookkeeping(unittest.TestCase):
     def test_interrupted_clear_is_not_recorded_as_done(self):
