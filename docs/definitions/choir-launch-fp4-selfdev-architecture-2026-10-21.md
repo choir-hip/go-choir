@@ -226,6 +226,18 @@ now:
     slot spun the loop); ready for FP0 to rebase with lane/fp4-r4 and land;
     staging probes in the record.
   slice: >-
+    Round 4 (lane/fp4-r4, base main 6c60685cc), from the round 3 re-run on
+    deploy Q (B bound 17.2 s after A's terminal report, was 305 s). P1: a
+    Complete citing one execution ref twice lost A's frozen candidate;
+    Complete now collapses repeats and the count errors name their cause.
+    P2: a landed report answered "digest conflict" (the worker and the
+    fate wake's resume share its command id); the store now replays the
+    same proposition. P3: the guard reads only refusals after the last
+    successful freeze. P4: dead letters log their cause. Records:
+    docs/problems/frozen-candidate-lost-when-complete-cites-a-duplicate-execution-ref-2026-10-22.md,
+    docs/problems/fp4-r4-report-conflict-guard-scope-dead-letter-2026-10-22.md.
+    Next: FP0 re-runs drill step 6 (A completes, its candidate stays open,
+    B's freeze is refused and B reports failed). Before that:
     Capsule memory (lane/fp4-capsule-memory, base main 71ec8e704): A's
     release build in the round 3 re-run ran at its capsule's 2 GiB ceiling
     with 2 OOM kills. Cause confirmed in code: the capsule's /sys mask hides
@@ -253,7 +265,7 @@ now:
     cancel/admission race, real-handler and lane tests, a range for the
     latency test, a state-neutral guard reason. Earlier: round 2 (R1 to
     R6), batch 1 (B1 to B3), writer-gate counts, the nudge.
-  source_ref: 5c2c8032c on lane/fp4-r3-nudge (base main 7448bf899)
+  source_ref: 4e6f96833 on lane/fp4-r4 (base main 6c60685cc)
   deploy_identity: unknown to this lane
   candidate: {id: arch10-admission-r3, state: ready_for_review, ref: lane/fp4-r3-nudge, base: 7448bf899, digest: none, scope: [internal/agentcore/engineering_admission.go, internal/agentcore/engineering_assignment_runtime.go, internal/agentcore/engineering_assignment_fate.go, internal/agentcore/continuation_schedule.go, internal/agentcore/api.go, internal/agentcore/freeze_candidate.go, internal/agentcore/runtime.go, internal/actorruntime/adapter.go, internal/actorruntime/handler.go, internal/objectgraph/writer.go]}
   conjecture:
