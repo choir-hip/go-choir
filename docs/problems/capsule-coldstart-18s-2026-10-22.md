@@ -412,3 +412,142 @@ Expected:
 - The `spawn total=` line is a few seconds at most.
 
 If any of those phases still takes seconds, the residual is there.
+
+## Review bunch 91 and round 2 (2026-10-22)
+
+Three reviewers accepted 1523b07fd: flash ACCEPT, deepseek ACCEPT, sonnet
+APPROVE (~/runs/reviews/bunch91-*.out). Round 2 fixes two findings, with
+tests first, and records the rest here.
+
+**Fixed in round 2:**
+
+- **Sonnet F1, the refusal hides its cause.**
+  - Where: Spawn (internal/capsule/executor.go, after the source copy).
+  - What was wrong: every copy failure became the fixed string "capsule
+    source changed after durable preflight". That string is also the
+    saga's `cancelOpen` reason and the `spawn total=… ok=false err=…`
+    line. So an object-id mismatch, a missing object, a git exit, a 90 s
+    deadline and a digest mismatch all read the same, to the logs and to
+    the owner.
+  - Why it matters now: the copy is where the defence lives after option
+    2, and the "no-SSH operability" standing question is not met there.
+  - The copy's own mismatch error (`source snapshot canonical digest
+    mismatch`) carried no digests either.
+  - Fix: the refusal stays a refusal. It now wraps the cause with %w and
+    names the expected digest and, on a mismatch, the copied one.
+    Digests are not secrets.
+- **Sonnet F2, two cache claims had no test.** The record says the cache
+  is "keyed by (version, commit)" and "bounded at 64". Two mutants
+  survived the lane's tests:
+  - a key that ignores the commit;
+  - a cache that never evicts.
+
+  A key that ignores the commit cannot pin a wrong tree, because the copy
+  is checked against the binding. But it would make every cast on a new
+  commit bind the old commit's digest, and the spawn would then refuse
+  them until the process restarted.
+
+  Fix: two tests.
+  - Different commits get their own digests.
+  - More commits than the limit, read from 8 goroutines (also under
+    -race), never leave more than `commitDigestCacheLimit` entries, and
+    every answer is still right.
+
+**Recorded, not fixed in this round:**
+
+- **Sonnet F3, deepseek F3: the cache also serves later casts and resumes
+  on the same commit.**
+  - A store that goes bad after the first proof is no longer caught at
+    cast or resume time. It is caught at spawn.
+  - So the "defence removed" above also covers repeat casts on one
+    commit, not only the resume preflight.
+  - Integrity holds: the copy is checked against the binding.
+  - What changes is when and how the refusal lands (next item).
+  - Cheap restore if wanted: on a cache hit, check that the commit still
+    resolves with one `git ls-tree` (about 6 ms). Or cache only the
+    pinned-ref resume path, so a cast reads the store (one batch, about
+    0.6-0.8 s). Not taken: the copy is the authority, and F1 now makes
+    the spawn refusal readable.
+- **Sonnet F8, the disposition changes.**
+  - Before: a store change caught by the resume preflight returned an
+    error without `cancelOpen`. The dispatcher retried the open request
+    with no backoff until the update was poisoned (see "The poison"
+    above).
+  - Now: the same condition reaches the spawn. The spawn cancels the
+    assignment with a reason, which F1 now makes say what failed.
+  - A transient git failure at spawn already cancelled before this patch.
+    It is now the only place a fault between cast and spawn shows up.
+- **Deepseek F1, sonnet F6: cleanup runs only for a target this call
+  created.**
+  - A failed copy into a target that already exists leaves what it wrote.
+    The opposite mutant (always delete) also survives the tests.
+  - No live caller reaches this:
+    - Spawn refuses an existing state dir, and its `source-lower/workspace/platform` is new.
+    - `withSourceRefTree` uses a fresh `MkdirTemp`.
+    - The callers' `removePrivateTree` cleans the rest.
+  - Latent API hazard: a future caller that pre-creates the target would
+    see `O_EXCL` fail on every retry.
+  - Fix later, with one test for each direction: treat a target that
+    already exists as owned by the caller, or refuse it.
+- **Deepseek F2, replace refs.**
+  - `git ls-tree` and `git cat-file --batch` honour `refs/replace/*`.
+  - A blob-level replace is refused: the object-id check fails. So any
+    replace ref on a blob now blocks every cast on that commit.
+  - A tree-level replace passes the per-blob check. The digest is then a
+    function of the replace refs, not of the commit id alone.
+  - The binding stays self-consistent. A replace ref added after the cast
+    is refused at spawn by the digest comparison.
+  - Nothing in the platform uses `git replace`.
+  - Fix later: run the three git commands with `GIT_NO_REPLACE_OBJECTS=1`,
+    so the pin is a pure function of the commit id.
+- **Sonnet F4, symlink blobs are read unbounded.**
+  - Both the digest pass and the copy run `io.ReadAll` on a symlink blob
+    before its object id is checked at the end. An 8 MiB symlink blob
+    allocated 48-64 MiB.
+  - Not a regression: the old `strings.Builder` read was unbounded too.
+  - A target over PATH_MAX cannot be created anyway.
+  - Fix later: read through `io.LimitReader(blob, 4097)`, refuse if it
+    fills, then drain.
+- **Sonnet F5, an empty `expected` means "derive".**
+  - `copyImmutableCommitTreeTimed` treats an empty expected digest as "no
+    pin". So the red function fails closed only because both production
+    callers compare the result again:
+    - Spawn: `sourceDigest != source.SubjectDigest`;
+    - `withSourceRefTree`: `copied != digest`.
+  - A ref with an empty digest is still refused today.
+  - Fix later: a separate unpinned entry point, and an empty `expected` on
+    the pinned path as an error.
+- **Sonnet F7, pre-existing, not introduced: a symlink path escape needs
+  an attacker-authored commit at the pinned id.** The exact shape:
+  - `symlinkEscapesTree` judges each link lexically.
+  - A malformed tree object can hold both a symlink blob `s` and a tree
+    entry `s/…` under the same name. The probe tree was:
+    - symlink `p/q -> ..`;
+    - symlink `s -> p/q/../..`;
+    - file `s/pwn`.
+  - In that tree, the copy's `MkdirAll` and `OpenFile` for `s/pwn` follow
+    the symlink `s` that was already written. The file lands two levels
+    above the target.
+  - The copy then fails with a digest mismatch. The new cleanup removes
+    the target but not the escaped file, so "never a partial tree" holds
+    for the target only.
+  - Who can reach it: someone who can author that commit and get its id
+    pinned in a binding, in the guest's own Source repository
+    (`/mnt/persistent/files/Source/platform`). Git's own checkout refuses
+    such a tree, but `ls-tree` lists it.
+  - The old per-file copy behaved the same.
+  - Fix (a separate red change):
+    - refuse any inventory where a tracked symlink path is a proper
+      prefix of another tracked path, or holds a duplicate name;
+    - or create entries with `openat2(RESOLVE_BENEATH|RESOLVE_NO_SYMLINKS)`.
+- **Smaller points, recorded:**
+  - Deepseek F4, sonnet F9: `git_procs=1` is a literal. Each pass is two
+    processes, `ls-tree` (logged under `source_inventory`) plus `cat-file`.
+  - Sonnet F9: the version inside the cache key is a constant, a
+    convention with no runtime check.
+  - Sonnet F9: the same commit written in upper case gets a second cache
+    entry.
+  - Sonnet F9: `copyImmutableSourceTree` has no non-test caller.
+  - Deepseek F5: the header read is unbounded, and `ParseInt` accepts
+    `+5`. Neither is reachable from a benign git, and both fail closed
+    on the object-id check.
