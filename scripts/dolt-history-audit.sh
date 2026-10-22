@@ -6,8 +6,8 @@
 # A nonzero exit fails the unit: a signal that the squash runbook is due.
 #
 # With Store A's snapshot commits off (PLATFORM_DOLT_SNAPSHOTS=off) oldgen
-# stops growing and growth moves to newgen (the working set's divergence from
-# HEAD) and the journal, so both have lines too; a journal past its line means
+# stops growing and growth moves to newgen (noms minus oldgen: an upper bound on the working set's divergence from HEAD, as it also counts the journal and uncollected chunks)
+# and the journal, so both have lines too; a journal past its line means
 # auto GC is not running (docs/problems/platform-dolt-oldgen-rate-and-squash-
 # window-2026-10-22.md, review round 1 R4).
 #
