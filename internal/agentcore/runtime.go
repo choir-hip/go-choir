@@ -22,6 +22,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	contentowner "github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/desktopstate"
+	"github.com/yusefmosiah/go-choir/internal/eventtablegrant"
 	"github.com/yusefmosiah/go-choir/internal/imageblob"
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/projectionbase"
@@ -295,6 +296,13 @@ type Runtime struct {
 	// telemetryDrainDeadline bounds the planned-restart telemetry drain; zero
 	// means the default (telemetry_batching.go).
 	telemetryDrainDeadline time.Duration
+	// eventTableGrantDir overrides where the store.event_table host grant is
+	// read (event_table.go); eventTableGrant is the grant this boot read and
+	// eventTableState the switch as last applied, under eventTableMu.
+	eventTableGrantDir string
+	eventTableMu       sync.Mutex
+	eventTableGrant    *eventtablegrant.Status
+	eventTableState    EventTableStatus
 	// hostRestartTelemetryRestore releases the hold on synchronous mode the
 	// host's planned-restart request took; nil when no host request holds it.
 	// hostRestartDrainFailed records that the hold's drain lost records.
@@ -879,6 +887,9 @@ func (rt *Runtime) Start(ctx context.Context) {
 	// the sequence reseed gap applies to every number seeded after a crash.
 	rt.configureTelemetryBatching(ctx)
 	rt.configureGuestCheckpoint(ctx)
+	// So is the event-table writer (store.event_table): the host grant and
+	// the owner's setting, read once here.
+	rt.configureEventTable(ctx)
 	if rt.maintenanceHeld() {
 		log.Printf("runtime: maintenance hold active (RUNTIME_MAINTENANCE_HOLD=1); refusing run admission + agent rewake while held")
 		return
