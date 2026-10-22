@@ -2,6 +2,7 @@ package provider
 
 import (
 	"hash/fnv"
+	"log"
 	"net/http"
 	"os"
 	"sort"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 )
 
 // OpenCode key pool (docs/problems/opencode-key-exhausted-no-failover-2026-10-15.md).
@@ -31,6 +33,12 @@ const (
 	// shared by every model.
 	openCodeCredentialPark = 6 * time.Hour
 	openCodeAltKeyPrefix   = "OPENCODE_API_KEY_ALT_"
+	// openCodeKeysPolicyEnv is the gateway policy naming which configured key
+	// variables serve (comma or space separated). Unset, every configured key
+	// serves; set, only the listed ones, so a list naming no configured key
+	// leaves OpenCode with none. It is policy, set in the gateway unit, never
+	// in the credential file (owner, 2026-10-22).
+	openCodeKeysPolicyEnv = "GATEWAY_OPENCODE_KEYS"
 )
 
 type openCodeKey struct {
@@ -57,7 +65,19 @@ var (
 // sharedOpenCodeKeyPool is the process-wide pool from the environment, shared
 // by every OpenCode Go and Zen provider so a parked key is parked for all.
 func sharedOpenCodeKeyPool() *openCodeKeyPool {
-	envOpenCodeKeysOnce.Do(func() { envOpenCodeKeys = newOpenCodeKeyPool(openCodeKeysFromEnv()) })
+	envOpenCodeKeysOnce.Do(func() {
+		keys := openCodeKeysFromEnv()
+		names := make([]string, len(keys))
+		for i, k := range keys {
+			names[i] = k.name
+		}
+		policy := "unset, every configured key"
+		if openCodeKeysPolicy() != nil {
+			policy = os.Getenv(openCodeKeysPolicyEnv)
+		}
+		log.Printf("provider: OpenCode keys in service: [%s] (%s: %s)", strings.Join(names, " "), openCodeKeysPolicyEnv, policy)
+		envOpenCodeKeys = newOpenCodeKeyPool(keys)
+	})
 	return envOpenCodeKeys
 }
 
@@ -66,7 +86,11 @@ func sharedOpenCodeKeyPool() *openCodeKeyPool {
 func openCodeKeysFromEnv() []openCodeKey {
 	var keys []openCodeKey
 	seen := map[string]bool{}
+	allowed := openCodeKeysPolicy()
 	add := func(name string) {
+		if allowed != nil && !allowed[name] {
+			return
+		}
 		value := strings.TrimSpace(os.Getenv(name))
 		if value == "" || seen[value] {
 			return
@@ -95,6 +119,20 @@ func openCodeKeysFromEnv() []openCodeKey {
 		add(a.name)
 	}
 	return keys
+}
+
+// openCodeKeysPolicy returns the key variable names the policy admits, or
+// nil when no policy is set (every configured key serves).
+func openCodeKeysPolicy() map[string]bool {
+	raw, ok := os.LookupEnv(openCodeKeysPolicyEnv)
+	if !ok || strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	allowed := map[string]bool{}
+	for _, name := range strings.FieldsFunc(raw, func(r rune) bool { return r == ',' || unicode.IsSpace(r) }) {
+		allowed[name] = true
+	}
+	return allowed
 }
 
 func (p *openCodeKeyPool) size() int {
