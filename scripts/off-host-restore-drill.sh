@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Off-host backup restore drill (docs/problems/no-off-host-backup-2026-10-20.md
 # section 9), run on Node B as root inside a memory-capped unit, for example:
-#   systemd-run --wait --collect -p MemoryHigh=8G -p MemoryMax=10G \
-#     -p MemorySwapMax=0 -p OOMScoreAdjust=1000 -p Environment=GOMEMLIMIT=6GiB \
+#   systemd-run --wait --collect -p MemoryHigh=10G -p MemoryMax=12G \
+#     -p MemorySwapMax=0 -p OOMScoreAdjust=1000 -p Environment=GOMEMLIMIT=8GiB \
 #     -p Environment=PATH=/run/current-system/sw/bin -p Nice=19 -p IOSchedulingClass=idle \
 #     bash scripts/off-host-restore-drill.sh <snapshot> tape|dolt|image|snap [vm]
-# restic needs about 8 GB to walk a 9.6M-file snapshot, so never run it
-# uncapped beside the guests. Everything lands under a scratch directory,
+# restic needs about 8 GB to walk a 9.6M-file snapshot (the snap piece
+# peaked at 7 GB with no swap, no-off-host-backup record section 13 item
+# 21), so the Go limit is 8 GiB under the backup unit's own 10G and 12G
+# lines; never run it uncapped beside the guests. Everything lands under a scratch directory,
 # never a live path, and each piece deletes its restore before it exits.
 #   tape:  200 random tape files compared byte for byte with live, and the
 #          two sqlite stores' integrity checks.

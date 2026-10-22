@@ -392,12 +392,14 @@ let
       # terabytes. No swap now (docs/problems/offhost-backup-reads-
       # terabytes-and-needs-swap-2026-10-22.md): the Go heap is held under
       # GOMEMLIMIT (offHostBackupEnv), the unit throttles at 10G and is
-      # killed inside its own cgroup at 12G, loudly, and in a host OOM it
-      # dies before any guest (at +1000, tied only with builds and checkpointd).
+      # killed inside its own cgroup at 12G, loudly. OOMPolicy=continue: an
+      # OOM kill of restic is left to the script, which records it in
+      # status.json, instead of systemd stopping the unit around it. The
+      # backup and verify units add OOMScoreAdjust (below).
       MemoryHigh = "10G";
       MemoryMax = "12G";
       MemorySwapMax = "0";
-      OOMScoreAdjust = 1000;
+      OOMPolicy = "continue";
       TimeoutStartSec = "12h";
       # Creates ${offHostBackup.stateDir} (status.json, restic cache, staging)
       # and keeps it writable under ProtectSystem=strict.
@@ -1794,6 +1796,10 @@ in
   # replayed at boot (CLAUDE.md, "Restarts End Work").
   systemd.services.go-choir-offhost-backup = lib.mkIf offHostBackup.enable (offHostBackupUnit
     "go-choir daily encrypted backup to node-a (restic, append-only)" "backup" {
+      # In a host OOM the backup dies before any guest. At +1000 it ties
+      # only with nix-daemon builds, checkpointd and front-importance, and
+      # outscores them by size.
+      OOMScoreAdjust = 1000;
       LoadCredential = offHostBackupCredentials ++ [ "dolt-root-password:${doltRootPasswordFile}" ];
     } // {
       after = [ "network-online.target" "go-choir-platform-dolt.service" "go-choir-corpus-dolt.service" ];
@@ -1813,6 +1819,12 @@ in
   # Weekly: re-read and re-hash a rotating tenth of the repository.
   systemd.services.go-choir-offhost-backup-verify = lib.mkIf offHostBackup.enable
     (offHostBackupUnit "go-choir weekly off-host backup verification (restic check, rotating subset)" "verify" {
+      OOMScoreAdjust = 1000;
+      # Fewer tree loaders in `restic check` (connections + GOMAXPROCS + 1,
+      # each holding a decoded tree; the script sets two connections): its
+      # 10.3 GB plus 4 GB of swap (no-off-host-backup record, section 13
+      # item 18) has no swap to go to now.
+      Environment = offHostBackupEnv ++ [ "GOMAXPROCS=2" ];
       LoadCredential = offHostBackupCredentials;
     });
 
