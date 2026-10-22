@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -18,9 +19,42 @@ func SetAllowPrivateNetworkForTests(allow bool) bool {
 	return previous
 }
 
+// route, when set, carries every Client's requests instead of a direct dial:
+// on a computer granted the host fetch route (internal/hostfetch), each hop
+// goes to the host gateway, which runs the same guard there. Redirects stay
+// here, re-checked by CheckRedirect, so each hop crosses the host once.
+var route atomic.Pointer[http.RoundTripper]
+
+// SetRoute installs rt as every later Client's transport (nil restores the
+// direct guarded dial) and returns the previous route. The guest daemon sets
+// it once at boot; it is never set on the host.
+func SetRoute(rt http.RoundTripper) http.RoundTripper {
+	var prev *http.RoundTripper
+	if rt == nil {
+		prev = route.Swap(nil)
+	} else {
+		prev = route.Swap(&rt)
+	}
+	if prev == nil {
+		return nil
+	}
+	return *prev
+}
+
 func Client(timeout time.Duration) *http.Client {
+	if rt := route.Load(); rt != nil {
+		return &http.Client{Timeout: timeout, Transport: *rt, CheckRedirect: checkRedirect}
+	}
 	dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
 	return clientWith(timeout, net.DefaultResolver.LookupIPAddr, dialer.DialContext)
+}
+
+// GuardedClient is Client's direct guarded dial with the resolver and dialer
+// given, and with extraBlocked refusing more addresses (the host passes its
+// own interface addresses). It never uses the route: the host fetch verb
+// dials with it.
+func GuardedClient(timeout time.Duration, lookup func(context.Context, string) ([]net.IPAddr, error), dial func(context.Context, string, string) (net.Conn, error), extraBlocked func(net.IP) bool) *http.Client {
+	return guardedClient(timeout, lookup, dial, extraBlocked)
 }
 
 // clientWith resolves each dial target once, refuses the dial when any
@@ -29,6 +63,10 @@ func Client(timeout time.Duration) *http.Client {
 // (research-fetch-url-has-no-address-guard-2026-10-10.md, D2). TLS still
 // verifies the URL's hostname: the transport takes SNI from the request.
 func clientWith(timeout time.Duration, lookup func(context.Context, string) ([]net.IPAddr, error), dial func(context.Context, string, string) (net.Conn, error)) *http.Client {
+	return guardedClient(timeout, lookup, dial, nil)
+}
+
+func guardedClient(timeout time.Duration, lookup func(context.Context, string) ([]net.IPAddr, error), dial func(context.Context, string, string) (net.Conn, error), extraBlocked func(net.IP) bool) *http.Client {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.Proxy = nil
 	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
@@ -53,6 +91,9 @@ func clientWith(timeout time.Duration, lookup func(context.Context, string) ([]n
 			if AddressBlocked(addr.IP) && !allowPrivateNetworkForTests {
 				return nil, fmt.Errorf("source fetch host resolves to forbidden address")
 			}
+			if extraBlocked != nil && extraBlocked(addr.IP) {
+				return nil, fmt.Errorf("source fetch host resolves to forbidden address")
+			}
 		}
 		var lastErr error
 		for _, addr := range addrs {
@@ -64,19 +105,17 @@ func clientWith(timeout time.Duration, lookup func(context.Context, string) ([]n
 		}
 		return nil, lastErr
 	}
-	return &http.Client{
-		Timeout:   timeout,
-		Transport: transport,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if len(via) >= 5 {
-				return fmt.Errorf("source fetch redirect limit exceeded")
-			}
-			if req == nil || req.URL == nil {
-				return fmt.Errorf("source fetch redirect target is invalid")
-			}
-			return ValidateURL(req.URL.String())
-		},
+	return &http.Client{Timeout: timeout, Transport: transport, CheckRedirect: checkRedirect}
+}
+
+func checkRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= 5 {
+		return fmt.Errorf("source fetch redirect limit exceeded")
 	}
+	if req == nil || req.URL == nil {
+		return fmt.Errorf("source fetch redirect target is invalid")
+	}
+	return ValidateURL(req.URL.String())
 }
 
 func ValidateURL(raw string) error {

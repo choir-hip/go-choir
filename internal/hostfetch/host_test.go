@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 // Ways the host side could fail, written before the code:
@@ -66,12 +67,12 @@ func TestHostFetchDialsTheCheckedPublicAddress(t *testing.T) {
 		w.Header().Set("X-Upstream", "yes")
 		_, _ = io.WriteString(w, "<p>hello</p>")
 	}), publicIP)
-	w, res := serveFetch(e, Request{Method: "GET", URL: "https://example.com/page?q=1"})
+	w, res := serveFetch(e, Request{Method: "GET", URL: "http://example.com/page?q=1"})
 	if w.Code != http.StatusOK || w.Header().Get(StatusHeader) != "200" {
 		t.Fatalf("status %d, upstream %q: %s", w.Code, w.Header().Get(StatusHeader), w.Body.String())
 	}
-	if got := dialed.Load().(string); got != net.JoinHostPort(publicIP, "443") {
-		t.Fatalf("dialed %q, want the checked address on 443", got)
+	if got := dialed.Load().(string); got != net.JoinHostPort(publicIP, "80") {
+		t.Fatalf("dialed %q, want the checked address on 80", got)
 	}
 	hdr, err := DecodeHeaders(w.Header().Get(HeadersHeader))
 	if err != nil || hdr.Get("X-Upstream") != "yes" || hdr.Get("Content-Type") != "text/html" {
@@ -142,11 +143,16 @@ func TestHostFetchForwardsCallerHeadersButNotHopByHopOrBearer(t *testing.T) {
 	h.Set("Proxy-Authorization", "Basic abc")
 	h.Set("Keep-Alive", "300")
 	h.Set("Upgrade", "websocket")
-	w, _ := serveFetch(e, Request{Method: "POST", URL: "https://www.youtube.com/youtubei/v1/player", Header: h, Body: []byte(`{"videoId":"x"}`)})
+	w, _ := serveFetch(e, Request{Method: "POST", URL: "http://www.youtube.com/youtubei/v1/player", Header: h, Body: []byte(`{"videoId":"x"}`)})
 	if w.Code != http.StatusOK {
 		t.Fatalf("status %d: %s", w.Code, w.Body.String())
 	}
-	got := <-seen
+	var got http.Header
+	select {
+	case got = <-seen:
+	case <-time.After(5 * time.Second):
+		t.Fatal("upstream never reached")
+	}
 	if got.Get("User-Agent") != "ChoirTest/1" || got.Get("Content-Type") != "application/json" {
 		t.Fatalf("caller headers lost: %v", got)
 	}
@@ -163,12 +169,17 @@ func TestHostFetchForwardsCallerHeadersButNotHopByHopOrBearer(t *testing.T) {
 func TestHostFetchDropsTheGatewayBearer(t *testing.T) {
 	seen := make(chan string, 1)
 	e, _ := upstreamExecutor(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { seen <- r.Header.Get("Authorization") }), publicIP)
-	body, _ := json.Marshal(Request{Method: "GET", URL: "https://example.com/"})
+	body, _ := json.Marshal(Request{Method: "GET", URL: "http://example.com/"})
 	r := httptest.NewRequest(http.MethodPost, Path, bytes.NewReader(body))
 	r.Header.Set("Authorization", "Bearer gateway-token")
 	e.Serve(httptest.NewRecorder(), r)
-	if got := <-seen; got != "" {
-		t.Fatalf("gateway bearer reached upstream: %q", got)
+	select {
+	case got := <-seen:
+		if got != "" {
+			t.Fatalf("gateway bearer reached upstream: %q", got)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("upstream never reached")
 	}
 }
 
@@ -185,7 +196,7 @@ func TestHostFetchBoundsRequestAndResponseBodies(t *testing.T) {
 		_, _ = w.Write(bytes.Repeat([]byte("b"), 1000))
 	}), publicIP)
 	big.MaxBody = 100
-	w, res = serveFetch(big, Request{Method: "GET", URL: "https://example.com/"})
+	w, res = serveFetch(big, Request{Method: "GET", URL: "http://example.com/"})
 	if w.Code != http.StatusBadGateway || w.Header().Get(StatusHeader) != "" || res.Refused == "" {
 		t.Fatalf("declared over cap: status %d upstream %q result %+v", w.Code, w.Header().Get(StatusHeader), res)
 	}
@@ -203,7 +214,7 @@ func TestHostFetchBoundsRequestAndResponseBodies(t *testing.T) {
 			t.Fatalf("undeclared over cap: recovered %v, want http.ErrAbortHandler", p)
 		}
 	}()
-	serveFetch(chunked, Request{Method: "GET", URL: "https://example.com/"})
+	serveFetch(chunked, Request{Method: "GET", URL: "http://example.com/"})
 	t.Fatal("undeclared over cap: the relay completed")
 }
 
@@ -222,5 +233,21 @@ func TestDecodeHeadersRefusesGarbage(t *testing.T) {
 	out, err := DecodeHeaders(enc)
 	if err != nil || out.Get("Content-Type") != "text/html; charset=utf-8" || len(out["X-Odd"]) != 2 || out["X-Odd"][0] != "café" {
 		t.Fatalf("round trip: %v %v", out, err)
+	}
+}
+
+// A HEAD answer declares a length it carries no body for: the relay must not
+// promise those bytes, or the guest reads a broken body.
+func TestHostFetchHeadDeclaresNoRelayLength(t *testing.T) {
+	e, _ := upstreamExecutor(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", "1000")
+	}), publicIP)
+	w, res := serveFetch(e, Request{Method: "HEAD", URL: "http://example.com/"})
+	if w.Code != http.StatusOK || w.Header().Get(StatusHeader) != "200" || w.Header().Get("Content-Length") != "" || res.Bytes != 0 {
+		t.Fatalf("status %d upstream %q relay length %q bytes %d", w.Code, w.Header().Get(StatusHeader), w.Header().Get("Content-Length"), res.Bytes)
+	}
+	hdr, _ := DecodeHeaders(w.Header().Get(HeadersHeader))
+	if hdr.Get("Content-Length") != "1000" {
+		t.Fatalf("the upstream length is lost: %v", hdr)
 	}
 }
