@@ -607,3 +607,39 @@ as a refusal before the write. An unknown 4xx (408 or 429 from something
 in front of the guest) is then never cleared. Unreachable with today's
 guest, whose pre-write answers are 400, 403, 404, 405, 409 and the two
 503s.
+
+### Fix, round 5 (lane `lane/fp0-reboot-script-r2`)
+
+- F1 fixed. `ask` empties `m["in_flight"]` at its end, after the loop
+  that fills `may_hold_marker`, so a signal or error while reading the
+  answers still clears every computer in the batch. The test raises an
+  `Interrupted` at the first `answer_may_have_written` and expects both
+  computers cleared (it failed on `d1e5d5819`: nothing cleared).
+- F2 fixed. `main` catches `BaseException`. If the receipt has sent
+  computers, no clear ran (`marks.cleared` unset or false), the host is
+  not back and the phase is not `post`, it clears them, then saves the
+  receipt with the error and re-raises. A clear that already ran is not
+  repeated, so a failed one is retried and a good one is not doubled.
+  Tests: an interrupt between the mark phase and the reboot, and one
+  that `reboot_after_mark` already cleared, both leave the receipt
+  saved with the error and the computer cleared once.
+- F3 fixed (doc). The runbook states the 900 s marker life and that exit
+  4 lands about 1230 s after the final pass at the defaults, so the
+  manual clear matters only when `--boot-timeout` is under 900 s.
+- F4 fixed. The `systemctl reboot` ssh runs with `LC_ALL=C`, so its
+  stderr phrases match whatever the operator's locale. The test reads
+  the env passed to `subprocess.run`.
+- F5 fixed. `ap.error` unless `0 < --down-wait < --boot-timeout`. The
+  test runs `main` with the host calls patched to fail the test, so the
+  check is exercised without reaching a host.
+- F6 fixed. `answer_may_have_written` whitelists the guest's own
+  pre-write statuses (400, 403, 404, 405, 409, and the two 503 bodies);
+  any other answer may have written and is cleared. A 408, 429, 413 or
+  418 is covered by a test.
+- Tests: 6 more (72 in all). Heresy delta: discovered F1 (a fail-open
+  window in the clear bookkeeping), repaired F1 to F6.
+- Process note: while shaping the F5 test, a first version called `main`
+  with only the new flags and no host patches, and on the then-unfixed
+  check it ran the script's read-only pre-phase (a dry run; no marker was
+  written, no reboot) against `node-b` over ssh. The test now patches
+  `subprocess.run`, `remote` and `phase_pre` to fail if a host is reached.
