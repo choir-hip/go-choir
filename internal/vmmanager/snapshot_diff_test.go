@@ -403,7 +403,12 @@ func TestValidateSnapshotDiffRules(t *testing.T) {
 		d.mgr.mu.Unlock()
 		d.launchWithHotplugDevice(t)
 		d.fc.diffLen = int64(d.cfg.MachineMemSizeMib+4) << 20
-		meta, _ := d.hibernateAndRead(t)
+		meta, tl := d.hibernateAndRead(t)
+		// The hibernate itself must have taken Diff: a Full fallback would
+		// also pass the load rule below (N1, review round 2).
+		if got := strings.Join(d.fc.createTypes(), ","); got != "Diff" || meta.SnapshotType != "Diff" {
+			t.Fatalf("create types = %s meta=%q refused=%q, want Diff", got, meta.SnapshotType, tl.Snapshot.DiffRefused)
+		}
 		if got := d.mgr.diffSnapshotRefusalReason(d.mgr.snapshotDir(d.vmID), meta); got != "" {
 			t.Fatalf("diff rule = %q for base+hotplug length", got)
 		}
@@ -685,4 +690,46 @@ func TestDiffResumeTimelineRecordsImageType(t *testing.T) {
 	if tl.Snapshot == nil || tl.Snapshot.SnapshotType != "Diff" || !tl.Snapshot.ColdOrigin {
 		t.Fatalf("resume timeline snapshot = %+v", tl.Snapshot)
 	}
+}
+
+// Round 2 follow-up, N2: a jailed Diff succeeds. The create-time length
+// check must read the jail's capture dir, where the jailed VMM wrote the
+// file; reading the host partial dir would turn every jailed Diff into a
+// silent Full. Also the jailed wrong-length path (DeepSeek round 2, low 3).
+func TestJailedDiffSnapshot(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		jf := newJailedSnapshotFixture(t)
+		d := armDiff(t, jf.snapshotFixture)
+		if err := d.mgr.HibernateVM(d.vmID); err != nil {
+			t.Fatalf("HibernateVM: %v", err)
+		}
+		tl := readHibernateTimeline(t, d.mgr, d.vmID)
+		if got := strings.Join(d.fc.createTypes(), ","); got != "Diff" {
+			t.Fatalf("create types = %s refused=%q, want Diff", got, tl.Snapshot.DiffRefused)
+		}
+		meta, err := readSnapshotMeta(d.mgr.snapshotDir(d.vmID))
+		if err != nil || meta.SnapshotType != "Diff" || !meta.ColdOrigin || meta.Confinement != ConfinementJailer {
+			t.Fatalf("meta = %+v, %v", meta, err)
+		}
+		info, err := os.Stat(filepath.Join(d.mgr.snapshotDir(d.vmID), snapshotMemName))
+		if err != nil || info.Size() != int64(d.cfg.MachineMemSizeMib)<<20 {
+			t.Fatalf("committed Diff mem = %v, %v", info, err)
+		}
+	})
+	t.Run("wrong length", func(t *testing.T) {
+		jf := newJailedSnapshotFixture(t)
+		d := armDiff(t, jf.snapshotFixture)
+		d.fc.diffLen = int64(d.cfg.MachineMemSizeMib) << 19
+		if err := d.mgr.HibernateVM(d.vmID); err != nil {
+			t.Fatalf("HibernateVM: %v", err)
+		}
+		if got := strings.Join(d.fc.createTypes(), ","); got != "Diff,Full" {
+			t.Fatalf("create types = %s, want Diff,Full", got)
+		}
+		tl := readHibernateTimeline(t, d.mgr, d.vmID)
+		meta, err := readSnapshotMeta(d.mgr.snapshotDir(d.vmID))
+		if err != nil || meta.SnapshotType != "Full" || tl.Snapshot.DiffRefused != diffRefusedLengthAtCreate {
+			t.Fatalf("meta = %+v refused=%q, %v", meta, tl.Snapshot.DiffRefused, err)
+		}
+	})
 }
