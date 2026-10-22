@@ -933,6 +933,12 @@ EOF
       # doctrine (memory.high = request, memory.max = 2x) would have done.
       # "doctrine" applies it, after the receipts show builds fit.
       CHOIR_CAPSULE_MEMORY_POLICY = "observe";
+      # Egress tunnel identity (SDC SEC-06, internal/capsule/egress_tls.go):
+      # observe judges each CONNECT tunnel's first TLS record (a ClientHello
+      # whose only server_name is the CONNECT host), writes the verdict on the
+      # capsule's egress ledger and relays it unchanged. "enforce" refuses,
+      # after observe shows zero would_refuse for real toolchains.
+      CHOIR_CAPSULE_EGRESS_TUNNEL_IDENTITY = "observe";
       # The document-tool sandbox (SDC SEC-15, internal/doctool): observe runs
       # each tool as before (that is the result) and then a sandboxed shadow of
       # it (uid 61010, empty network namespace, Landlock, seccomp, in its own

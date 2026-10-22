@@ -69,6 +69,12 @@ func configuredCapsuleExecutor() (*capsule.Executor, bool, error) {
 	memoryPolicy := capsule.CapsuleMemoryPolicyFromEnv(nil)
 	executor.SetMemoryPolicy(memoryPolicy)
 	log.Printf("capsule executor: memory policy %s", memoryPolicy)
+	// Egress tunnel identity (SDC SEC-06, internal/capsule/egress_tls.go):
+	// observe records what binding a CONNECT tunnel to its name would refuse
+	// and relays it; enforce refuses.
+	tunnelIdentity := capsule.TunnelIdentityModeFromEnv(nil)
+	executor.SetEgressTunnelIdentity(tunnelIdentity)
+	log.Printf("capsule executor: egress tunnel identity %s", tunnelIdentity)
 	// L2 capsules reach the host Go module proxy through a fixed egress
 	// route; the address is the guest's tap peer unless set explicitly
 	// (docs/reports/capsule-go-module-proxy-design-2026-10-14.md).
