@@ -300,3 +300,46 @@ Total reachable from 1 to 6 without touching the owner computer: roughly **15 to
 - discovered: `file_cas_roots` rows and `file-cas-roots` files have no retention; pins have no release path; `capture-bodies` and `artifact-gc-log` have no collector; the GC live set never asks whether a computer still exists; the scratch sweep misses terminal and dead computers.
 - introduced: none.
 - repaired: none (docs only).
+
+## 8. Build plan for F1, F4 and F6 (lane `lane/fp10-artifact-retention-fixes`, 2026-10-22)
+
+Owner, 2026-10-22: "Anything which improves resource utilization on a forward and ongoing basis should be prioritized over stability, availability, or uptime in the short term." FP0 asked for ranked items 1, 3 and 4 only (F1 scratch, F4 roots, F6 log). Nothing else in section 5 is touched. Documented before any code, per Problem Documentation First.
+
+### F1: checkpoint-scratch sweep (orange)
+
+- Where: `cmd/checkpointd` (a `scratch_sweep.go` beside `scratch.go`), called from `runCheckpointWorker` at start (before the claim) and from the existing 45 s worker tick at most every 15 minutes. One new read-only store method, `Store.ListProjectionJobs` (a plain SELECT of `computer_projection_jobs`; no schema change).
+- What it removes: a direct child of the scratch root named exactly `<computer>-<digits>` (the S1 to S3 shape rule of the 10-15 record is kept) that no job holds.
+- Held (never removed): the computer's job row has the same generation and status `queued`, `running` or `retry`; a generation newer than the row's (out of order, fail closed); any name not of the exact shape; anything not a directory.
+- Genesis-repair guard (kept, logged as `scratch_kept`): a directory is genesis-repair scratch when the job row has `genesis_repair` and the same generation, or when the directory holds a `.genesis-repair` marker. The worker now writes that marker when it creates the directory of a genesis-repair job, so the guard survives the row moving to a later generation. The guard does not try to narrow itself to "computers that ever had an owner account": checkpointd has no ownership authority (that is vmctl's registry, used only by the tape sweep), so it fails closed and keeps every genesis-repair directory of every computer. Cost: a genesis-repair scratch of a throwaway computer stays until a human removes it. That is the safe side of the record's "needs the owner's yes".
+- Age gate: the record's gate (c), directory mtime older than 48 h, is kept as a second guard.
+- Order of reads: list the directories first, read the job rows second. A job claimed after the listing creates a directory that was not listed; a job that existed at the read is held.
+- Crash safety: a candidate is first renamed to `.sweeping-<name>` (atomic), then removed. The held name never names a half-deleted tree. A `.sweeping-*` leftover from a crash is finished at the next sweep. Removal errors are logged and never fail the job.
+- Log: each removal (`scratch_removed`, bytes) and each kept genesis directory (`scratch_kept`, reason) is appended as a JSONL record to `artifact-gc-log/checkpoint-scratch-<UTC day>.jsonl`. A separate file, not the corpusd day file: corpusd's buffered writer can split a line across two writes, and a second process appending to the same file could land inside it. The name does not match the log rotation of F6, so it stays plain (a few lines a day).
+- Failure modes written before the code: a held directory is removed; a genesis-repair directory is removed; a non-shaped name is removed; a crash leaves a half-deleted held name; an orphan is never removed; a sweep error fails the checkpoint job.
+- Rollback: `git revert`. The content is derived data (a rebuild from the seed base, minutes; hours only for a genesis repair, which is exactly what is kept).
+
+### F4: retire old file-cas roots (orange)
+
+- Where: `internal/platform/artifact_gc.go`, inside `RunArtifactGC`, before the live sets are read, only in `active` mode and only when `file-cas-roots` is in the active namespaces (it is by default).
+- Rule: for each computer, keep its latest root (by `created_at`, then `root`, as `LatestFileRoots` orders) and every root newer than the retention window. Delete the other rows of `computer_file_roots` with a plain `DELETE` (no schema or migration change; the rows stay in Dolt history). The window is `max(grace, 7 days)`: a short test grace cannot shorten it.
+- Owner-data guard: the rule is the same for every computer, owner computers included: never the latest root, never a root inside 7 days. There is no weaker rule for computers without an owner account, so no ownership lookup is needed and none can misclassify.
+- Effect on the sweep: once a row is gone its manifest is no longer in the `file-cas-roots` live set, and the existing sweep deletes the manifest file when it is past grace. The chunk sweep already ignores old roots (`fileCASRootsForGC` keeps the latest root plus roots inside the window), so retiring rows does not change which chunks are live. The record's wording "so the chunk GC can collect chunks no live root references" is already true today; what retirement adds is the manifests and the rows.
+- Guards in the SQL: `created_at` older than the window and `root` not the computer's latest, evaluated per computer, capped at `MaxDeletes` rows per run. The report gains `retired` on the namespace (dry-run reports what it would retire).
+- Log: each retired row is appended to the day's artifact GC log as `root_retired` (computer, root, manifest ref).
+- Failure modes written before the code: the latest root is retired; a root inside the window is retired; dry-run retires; a computer with one old root loses it; an old root is retired while another computer's row is touched; a retired row's manifest is not collected afterwards.
+- Rollback: `git revert`; deleted rows can be read back from Dolt history; deleted manifest files do not come back, but they name chunks that are already past the window.
+- Stop condition: if retiring needed a schema or migration change, this item would be deferred here instead. It does not.
+
+### F6: compress the artifact GC log (green/yellow in intent; the rotation runs in-process, so orange for deploy)
+
+- Where: `internal/platform` (`artifact_gc_log.go`), called at the end of `RunArtifactGC` in `active` mode, so it runs hourly with the GC and once at the first pass after a deploy.
+- Rule: a file named exactly `YYYY-MM-DD.jsonl` whose UTC day is more than 2 days before today is written to `YYYY-MM-DD.jsonl.zst.tmp`, read back and compared byte for byte (sha256) with the original, renamed to `.zst`, and only then is the original removed. A mismatch, error or crash keeps the original and removes the temporary file. If `.jsonl` and `.jsonl.zst` both exist (a crash after the rename), the `.zst` is verified again before the original goes.
+- Skipped: everything not matching that exact name, so the `tape-sweep-<run>.manifest.jsonl` files (a tape-sweep apply names a manifest by sha256) and the F1 scratch log are never touched.
+- Readers: no code reads the log (the 10-22 grep). The new `openArtifactGCLog` reads both forms (plain, or `.zst`) and is what the round-trip check and the tests use, so any future reader has one entry point.
+- Rollback: `git revert`, then `zstd -d` the `.zst` files (the original bytes are exactly reproduced; that is the round-trip check).
+
+### Test plan
+
+Focused, with `-race`, `GOMAXPROCS=2 GOFLAGS=-p=1`: `go test ./cmd/checkpointd` and `go test ./internal/platform -run 'FileRoot|GCLog|ProjectionJobs|ArtifactGC'`. No host, no staging, no SQL against a production store. Test commit first; it fails on this lane's base `d381440ce` (F1: does not build, `sweepOrphanScratch` undefined; F4 and F6: the sweep neither retires rows nor compresses logs).
+
+Heresy delta of this plan: discovered none; introduced none; repaired none (docs only).
