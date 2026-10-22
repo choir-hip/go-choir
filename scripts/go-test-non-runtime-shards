@@ -18,9 +18,10 @@
 # Below 4 shards every package runs whole, dealt by list index. Without
 # SHARD_INDEX one process runs every package whole.
 #
-# A failed `go list` or test discovery, or a split list entry that go list
-# does not report as a non-runtime package, fails the shard: a shard never
-# passes having tested less than its share
+# A failed `go list` or test discovery, a split list entry that go list
+# does not report as a non-runtime package, or a shard whose selection is
+# empty (TOTAL_SHARDS larger than the packages or test names it deals) fails
+# the shard: a shard never passes having tested less than its share
 # (docs/problems/ci-critical-path-race-shards-2026-10-22.md).
 #
 # Usage in CI:
@@ -127,8 +128,8 @@ run_split_shard() {
   done
 
   if (( ${#selected[@]} == 0 )); then
-    echo "No split-package tests selected for split shard ${shard_index}/${split_shards}"
-    return 0
+    echo "No split-package tests selected for split shard ${shard_index}/${split_shards}: TOTAL_SHARDS exceeds the ${k} split test names" >&2
+    return 1
   fi
 
   local regex
@@ -173,8 +174,8 @@ for i in "${!deal_packages[@]}"; do
   fi
 done
 if (( ${#selected[@]} == 0 )); then
-  echo "No packages selected for ${label} ${deal_index}/${deal_count} (CI shard ${shard_index}/${total_shards})"
-  exit 0
+  echo "No packages selected for ${label} ${deal_index}/${deal_count} (CI shard ${shard_index}/${total_shards}): TOTAL_SHARDS exceeds the ${#deal_packages[@]} packages to deal" >&2
+  exit 1
 fi
 echo "Running ${#selected[@]} of ${#deal_packages[@]} packages whole in ${label} ${deal_index}/${deal_count} (CI shard ${shard_index}/${total_shards})"
 "$(dirname "$0")/go-test-with-timing" -count=1 "${timeout_args[@]}" "${selected[@]}" "$@"
