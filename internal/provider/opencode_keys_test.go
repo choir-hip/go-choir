@@ -127,3 +127,61 @@ func TestOpenCodeProviderAllKeysParkedMakesNoCall(t *testing.T) {
 		t.Fatalf("error leaks a key: %v", err)
 	}
 }
+
+// A revoked or expired credential answers 401 on every call: the key is parked
+// like an empty account and the call retried on another key, so no session
+// stays pinned to it (docs/problems/opencode-401-key-never-parked-2026-10-22.md).
+func TestOpenCodeProviderRetriesOnAnotherKeyAfterDeadCredential(t *testing.T) {
+	for _, status := range []int{http.StatusUnauthorized} {
+		var mu sync.Mutex
+		seen := map[string]int{}
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			auth := r.Header.Get("Authorization")
+			mu.Lock()
+			seen[auth]++
+			mu.Unlock()
+			if auth == "Bearer key-dead" {
+				w.WriteHeader(status)
+				_, _ = io.WriteString(w, `{"error":{"message":"invalid api key"}}`)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"id":"x","model":"deepseek-v4.1-flash","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`)
+		}))
+		pool := newOpenCodeKeyPool([]openCodeKey{{name: "OPENCODE_API_KEY", value: "key-dead"}, {name: "OPENCODE_API_KEY_ALT_0", value: "key-live"}})
+		p := &OpenCodeProvider{keys: pool, modelID: "deepseek-v4.1-flash", baseURL: srv.URL, providerName: "opencode-go", httpClient: srv.Client()}
+		for _, session := range []string{"s1", "s2", "s3", "s4", "s5", "s6"} {
+			if _, err := p.Call(context.Background(), LLMRequest{ConversationID: session, Messages: []Message{{Role: "user", Content: []Block{{Type: "text", Text: "hi"}}}}}); err != nil {
+				t.Fatalf("status %d, %s: %v", status, session, err)
+			}
+		}
+		srv.Close()
+		if seen["Bearer key-dead"] != 1 {
+			t.Fatalf("status %d: dead key called %d times, want exactly 1 (then parked)", status, seen["Bearer key-dead"])
+		}
+	}
+}
+
+func TestOpenCodeKeyPoolParksDeadCredentialForHours(t *testing.T) {
+	now := time.Unix(1000, 0)
+	pool := newOpenCodeKeyPool([]openCodeKey{{name: "A", value: "a"}})
+	pool.now = func() time.Time { return now }
+	if !pool.park("A", http.StatusUnauthorized) {
+		t.Fatal("401 did not park")
+	}
+	now = now.Add(openCodeRateLimitPark + time.Second)
+	if _, ok := pool.pick("s", nil); ok {
+		t.Fatal("a dead credential recovered after a rate-limit park")
+	}
+	now = now.Add(openCodeCredentialPark)
+	if _, ok := pool.pick("s", nil); !ok {
+		t.Fatal("a dead credential never recovers (a renewed key must be tried again)")
+	}
+	// A 403 can be a model the plan does not cover; the pool is shared by
+	// every model, so it must not bench the key.
+	for _, status := range []int{http.StatusForbidden, http.StatusInternalServerError} {
+		if pool.park("A", status) {
+			t.Fatalf("status %d parked the key", status)
+		}
+	}
+}
