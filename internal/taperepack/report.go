@@ -52,6 +52,7 @@ type Verdict struct {
 	digest    string
 	class     class
 	computers []string
+	size      int64
 }
 
 // NS is the legacy namespace of the file.
@@ -63,6 +64,9 @@ func (v Verdict) Digest() string { return v.digest }
 // Class names the outcome: covered, uncovered, corrupt, blocked, ineligible,
 // unreceipted, legacy_bad, too_large, vanished, out_of_scope, or unverified.
 func (v Verdict) Class() string { return v.class.String() }
+
+// Size is the legacy file's size in bytes, when it was read.
+func (v Verdict) Size() int64 { return v.size }
 
 // Computers are the computers whose segments were checked.
 func (v Verdict) Computers() []string { return append([]string(nil), v.computers...) }

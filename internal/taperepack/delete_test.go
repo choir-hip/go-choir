@@ -116,7 +116,9 @@ func TestD3OnlyCoveredFilesAreUnlinked(t *testing.T) {
 	if !w.legacyExists(tapestore.NSEvent, otherKind) || !w.legacyExists(tapestore.NSEvent, orphanDigest) {
 		t.Fatal("D3: an ineligible or an unreceipted file was deleted")
 	}
-	if rep.Deleted != int64(w.eligibleA) || rep.Mode != "delete-apply" {
+	// A's 12 plus the receipt of the other-kind event, which the copy writes
+	// to the segments too (residual 1 of the plan) and which is then covered.
+	if rep.Deleted != int64(w.eligibleA)+1 || rep.Mode != "delete-apply" {
 		t.Fatalf("D3: %+v", rep)
 	}
 	if rep.Refused["uncovered"] != 4 || rep.Refused["unreceipted"] != 1 || rep.Refused["ineligible"] < 1 {
