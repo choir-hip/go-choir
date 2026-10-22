@@ -160,3 +160,69 @@ Residuals:
   operator's explicit choice of pure crash semantics.
 - Not run against any host. The next reboot is the first live proof that
   the paper boots `planned` with its runs resumed once.
+
+## Findings: review round 2 on the reboot script (bunch 114), 2026-10-22
+
+Sonnet review of lane tip 4d1a201a7 (`_runs/bunch114/sonnet.out`).
+Recorded before any fix. Class of the fix: red, as before.
+
+F1. **"Cannot tell" is rebooted through.** `classify_marker_answer` files
+a 503, a timeout or connection error (status 0) and any other 5xx under
+`unavailable`, and `--allow-crash-close` reboots through every
+non-unsafe outcome. A 503 is the guest saying it cannot tell:
+`plannedRestartBusy` fails closed with "cannot read self-development
+operations" or "cannot read engineering assignments"
+(`internal/agentcore/planned_restart.go`). So an operator who passes
+`--allow-crash-close` for an ordinary busy computer also cuts an apply
+or a capsule on any guest whose store is contended or whose answer timed
+out. A 404/405 (`unsupported`) guest is in the same position: it never
+said whether an apply runs.
+
+F2. **Each retry round overwrites the last outcome.** `outcomes[vm]` is
+replaced every round, and the abort reads only the last one. An `unsafe`
+refusal in round 1 followed by a timeout in round 2 becomes
+`unavailable`, which `--allow-crash-close` reboots through.
+
+F3. **Markers are not refreshed before the reboot.** A marker written in
+round 1 is never re-sent. With `--busy-wait 600`, a marker written at
+t=0 while another computer stays busy is 10 to 13 minutes old when the
+loop ends, before `systemctl reboot`, the host's POST and boot, vmctl
+start and the guest's start; `plannedRestartMaxAge` is 15 minutes, so
+the paper very likely boots as a crash (safe, but the patch's purpose is
+lost while the log says "marked"). An apply or capsule that starts after
+round 1 is also never seen. `marks.marked_at` is stamped after the loop,
+not at each write, so the post-check understates the age.
+
+F4. **A failure inside the mark phase leaves markers behind.** (a) An
+ssh error (`RuntimeError`) or `subprocess.TimeoutExpired` from
+`remote()` (180 s, while each guest may take 25 s: more than seven hung
+guests exceed it after the guests have written) propagates to `main()`
+with no unmark and no `marks` entry in the receipt. (b) The abort unmarks
+only the computers whose 200 came back; a POST whose answer was lost
+(status 0) may have written a marker and is not cleared. (c) The unmark
+answers are never read, so a failed DELETE still logs "Clearing markers"
+and sets `cleared: true`. A stale marker lasts up to 15 minutes, during
+which a real crash would boot as planned and resume work, against the
+"crash never resumes" rule.
+
+F5. **Some computers reboot with no apply or capsule check.** (a)
+`--no-markers` sends nothing, so nothing is checked. (b) Held computers
+are not asked. (c) Only active, degraded and booting computers are
+listed; the pre-check prints run counts only. Yet the runbook says "No
+computer is rebooted through a self-development apply or a live
+capsule", which is too broad.
+
+F6 (low). The `--allow-crash-close` line logs only a count, so a
+`busy` and an `unavailable` computer look alike there.
+
+F7 (low, tests). No test for unsafe-then-unavailable across rounds, a
+503 or timeout under `--allow-crash-close`, retry progress with
+`busy_wait > 0`, a `remote()` exception, marker refresh, held computers,
+or `--no-markers`.
+
+F8 (low). An older guest whose 409 body lacks `live_capsules` is read as
+unsafe (fail closed), so such a guest can never be marked while busy.
+Undocumented.
+
+F9 (nit). The tier test reads only the first `case ...: return true` in
+`deployRefreshAllowsBusy`.
