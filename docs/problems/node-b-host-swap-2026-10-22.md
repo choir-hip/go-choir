@@ -31,13 +31,13 @@ Earlier owner direction (2026-10-09,
 | 2 | The floor | `VMCTL_PRESSURE_MIN_MEMORY_AVAILABLE_PERCENT=15` (`nix/node-b.nix:1400`); 15% of MemTotal is the 4779 MiB floor. Not a swap number. | Nothing. |
 | 3 | Guest cgroups (FP8 jailer) | `internal/vmmanager/confinement.go:333-336` sets only `pids.max` and `cpu.weight` on the jailed leaf. Swap is bounded by the ancestor: the vmctl unit has `MemorySwapMax = "0"` (`nix/node-b.nix:1225`), and cgroup v2 `memory.swap.max` is hierarchical. `vm-density-limits` L3 also relies on "guests cannot swap" (:314). | Nothing. Guests already never swap; the paper's 8 GiB guest (`VM_INTERACTIVE_MEM_MIB=8192`, :1305-1311) behaves the same. |
 | 4 | Units with `MemorySwapMax = "0"` | platform-dolt (:881), corpus-dolt (:924), checkpointd (:1091), vmctl (:1225), dolt-squash (:1671), nix-daemon (:2316), store-compaction (`internal/vmctl/store_compaction.go:150`). | No-op. Already unswappable. |
-| 5 | `go-choir-offhost-backup`, `nix/node-b.nix:386-393` | `MemorySwapMax = "4G"`; comment says restic exceeding the line "fails loudly instead of paging". Restic measured about 13 GB against `MemoryMax=12G`. | The 4G swap allowance disappears. A run that outgrows 12G is killed at `MemoryMax` either way; the 4G of paging only delayed that. The comment goes stale (follow-up F2). No functional regression: it fails at `MemoryMax` either way. |
+| 5 | `go-choir-offhost-backup`, `nix/node-b.nix:386-393`; the restore drill `scripts/off-host-restore-drill.sh:4-6` documents the same `MemorySwapMax=4G` | `MemorySwapMax = "4G"` on top of `MemoryMax=12G`: under cgroup v2 `memory.max` caps resident memory and `memory.swap.max` allows swap beyond it, so the effective ceiling today is 16G. Restic measured about 13 GB (`no-off-host-backup-2026-10-20.md:466-474`) and the tape is growing. | **A real regression, corrected from the first draft.** The effective ceiling drops from 16G to 12G. A run that would page 1-4 GB today and complete is OOM-killed at 12G after this change. Fix, one of: raise `MemoryMax` to 16G (F2, preferred, lands before the next backup run) or treat the next backup run as a gated check. The restore drill's 4G is a no-op after removal (same class, comment only). |
 | 6 | Units with no swap limit: gateway (:1857), proxy (:736), auth (:691), maild (:808), corpusd (:953), goproxy (:2035, `MemoryMax=1G`), front-importance (:1137, `MemoryMax=512M`), sshd, systemd | Cold anonymous pages of these can be paged out today (the ~186 MiB). | Those pages stay resident (a few hundred MiB at most). Under cgroup `MemoryMax` the two capped units are OOM-killed instead of paging first. Both are non-critical and already `OOMScoreAdjust` 500/1000. |
 | 7 | `vm.swappiness = 1`, `nix/node-b.nix:2319` | Tuning for a swapped host. | Inert with `SwapTotal=0`. Leave it: it is harmless, and a rollback to swap then keeps the low-swappiness behavior. (F3: delete it later.) |
 | 8 | oomd / earlyoom / zram / zswap in `nix/` | None configured (grep of `nix/` and `flake.nix`). NixOS ships `systemd-oomd` with `enableRootSlice`/`enableSystemSlice`/`enableUserSlices` off, so it monitors nothing. Unverified on the host. | Nothing expected. FP0 confirms with `oomctl` (probe step 4). |
 | 9 | Balloon and hotplug, `VM_BALLOON_FREE_PAGE_REPORTING=1` (:1324-1328), `VM_MEMORY_HOTPLUG=on` (:1341); `internal/vmctl/memory_hotplug.go:908` (`hostBelowMemoryFloor`) | Uses host `MemAvailable` against the floor. No swap term. | Nothing. |
 | 10 | Pressure reclaim, `pressure_reclaim.go:21-27` | PSI memory `some` avg and `MemAvailable`. | PSI will not be inflated by swap IO any more. Thresholds unchanged. |
-| 11 | Deploy activation, `.github/workflows/ci.yml:1311-1323` (`switch-to-configuration switch`) | `swapDevices` becomes a `swap-swapfile.swap` unit. A switch that drops the entry stops that unit: `swapoff /swap/swapfile`, which pages the in-use ~186 MiB back in. | `swapoff` runs live during the deploy. With about 14 GB available it should take seconds. If `swapoff` fails (pages cannot be placed), the unit stays failed and the switch reports it (non-zero exit risk). Mitigation: FP0 runs `swapoff /swap/swapfile` by hand before the deploy and confirms `SwapTotal: 0`. Bounded by the sequencing below. |
+| 11 | Deploy activation, `.github/workflows/ci.yml:1311-1323` (`switch-to-configuration switch`) | Swap is fstab-only (no `.swap` unit for this entry). The host's `switch-to-configuration` (0.1.0, NG) calls `swapoff(2)` directly on a swap that disappeared from the config, which pages the in-use ~186 MiB back in. | Corrected from the first draft: it stops no unit and **does not set a non-zero exit** on failure; it only prints `Failed to stop swapping to ...` (per reviewer reading of its `main.rs`). A `swapoff` that cannot place pages leaves swap on, the switch exits 0 and CI reports success. The only proof is `swapon --show` empty and `SwapTotal: 0` after the deploy. If FP0 did the manual `swapoff` first, the switch's own `swapoff` errors and prints that same line with exit 0: expected. |
 | 12 | Docs and probes that read swap | `scripts/dolt-liveness-probe.sh:115` reads `VmSwap` from `/proc/<pid>/status` as a diagnostic (reads 0). `scripts/vmm_confinement_verify.py:155` reads the leaf's `memory.swap.max` (reads ancestor-derived `max`, unchanged). `docs/evidence/playwright-capsule-memory-2026-10-15/run.sh:24` sets its own. `docs/problems/store-a-weekly-squash-2026-10-20.md:74` and `no-off-host-backup-2026-10-20.md:528` record past swap as evidence, history only. | None. |
 | 13 | RES-13 R2 and FP9 vault-canary / secret-in-swap reasoning | Searched `docs/**` for "secret in swap", "vault canary" and swap; no document makes a reasoning step that depends on swap existing. Where swap would matter for secrets, removal helps: secrets in guest and gateway memory can no longer reach a disk-backed swapfile. | A mild gain. FP9 may now state "no host swap" as a fact once FP0 confirms `SwapTotal: 0` on the host. |
 | 14 | `/swap` mount (`nix/disks.nix:29-33`) and 16 GiB file | Only used as the swap backing. | Kept (decision below). |
@@ -59,7 +59,7 @@ probe step 3):
 | next | ordinary (unprotected) Firecracker guests | +500 | `internal/vmmanager/process_control.go:22`, `host_capacity.go:36` |
 | next | goproxy | +500 | `nix/node-b.nix:2064` |
 | middle | gateway, proxy, auth, maild, corpusd, corpus-dolt, dolt-squash, offhost-backup | 0 (unset) | no `OOMScoreAdjust` in those units |
-| late | protected-class Firecracker guests (owner, `critical_protected`, `public_platform`) | -400 | `host_capacity.go:37`, set by vmctl's process reconcile (:128) |
+| late | protected-class Firecracker guests (owner, `critical_protected` incl. the paper, `public_platform`) | -400 | `host_capacity.go:37`, set by vmctl's process reconcile (:128) |
 | late | platform-dolt (Store A) | -500 | `nix/node-b.nix:882` |
 | last | vmctl | -900 | `nix/node-b.nix:1230` |
 
@@ -71,7 +71,7 @@ Findings:
   Corpus-dolt (adj 0, up to `MemoryMax=7G`) scores about its RSS, far below
   an ordinary guest's RSS plus the +500 bonus. Gateway and proxy have no
   `MemoryMax` at all (F1).
-- Protected computers (the paper if classed `public_platform`) sit at -400.
+- Protected computers (the paper is `critical_protected`) sit at -400.
   An 8 GiB guest at -400 scores about 8 GiB minus 12.4 GiB, below zero, so it
   is clamped to 1: effectively last, in the same bucket as Dolt A.
 - vmctl's `MemoryLow=14G` reserves guest memory against reclaim from other
@@ -100,7 +100,8 @@ btrfs space that stays allocated until the file is deleted by hand later (F4).
 
 ## Verdict: standalone deploy
 
-Safe as a standalone deploy, with one hand step and one caveat:
+Safe as a standalone deploy, with one hand step and one caveat (the
+offhost-backup ceiling drops from 16G to 12G, F2):
 
 1. The dependent budget (ceilings, `OOMScoreAdjust`, `MemorySwapMax=0` on
    guests and on all big services, admission by `MemAvailable`) already
@@ -109,32 +110,43 @@ Safe as a standalone deploy, with one hand step and one caveat:
 2. Guests and every large service are already swap-free, so removal changes
    behavior only for a few hundred MiB of cold pages in small services.
 3. The only live-risk step is `swapoff` of about 186 MiB during the switch.
-   FP0 does that by hand first (below) so the switch has nothing to stop.
+   FP0 does that by hand first (below) so the switch's own `swapoff` has
+   nothing to do.
 4. Restart behavior: no service unit changes, so no restarts are caused by
-   this change; the switch only stops one `.swap` unit. A crash or
+   this change; the switch only calls `swapoff` once. A crash or
    planned-restart marker is not involved.
 
 ### Rollback
 
-Re-add the `swapDevices = [{ device = "/swap/swapfile"; }];` block to
-`nix/disks.nix` (the subvolume, mount and file are untouched) and deploy;
-or live: `swapon /swap/swapfile`. Git revert of the red commit is the repo
-path.
+Live and fast: `swapon /swap/swapfile` (the subvolume, mount and file are
+untouched, so it is valid). Durable: re-add
+`swapDevices = [{ device = "/swap/swapfile"; }];` to `nix/disks.nix` and
+deploy (or reboot). Re-add plus deploy alone does not turn swap on: NixOS
+writes swap only to fstab and `switch-to-configuration` turns off swaps that
+disappeared but never `swapon`s a new fstab entry, so `SwapTotal` stays 0
+until a `swapon` or a reboot. Git revert of the red commit is the repo path.
 
 ## FP0 steps and probe (not run by this lane)
 
-1. Before: `free -m`, `cat /proc/meminfo | grep -E 'MemAvailable|Swap'`,
-   `swapon --show`; record the top swap users:
+0. Runbook, before the deploy: read `swapon --show` and `MemAvailable`
+   (`grep -E 'MemAvailable|Swap' /proc/meminfo`). Proceed only if
+   `MemAvailable` is well above the swap in use.
+1. Record the top swap users:
    `for p in /proc/[0-9]*; do awk '/^VmSwap/{s=$2} /^Name/{n=$2} END{if(s>0)print s,n}' $p/status; done | sort -rn | head`.
-2. `swapoff /swap/swapfile` by hand, confirm `SwapTotal: 0 kB`, and that
-   vmctl `/health` and the paper are healthy.
+2. `swapoff /swap/swapfile` by hand (needs `MemAvailable` above the swap in
+   use), confirm `SwapTotal: 0 kB`, and that vmctl `/health` and the paper
+   are healthy.
 3. Read live OOM scores: for vmctl, gateway, proxy, auth, corpusd, platform-dolt,
    corpus-dolt and each firecracker pid, `cat /proc/<pid>/oom_score_adj
    /proc/<pid>/oom_score`; compare to the table above.
 4. `oomctl` (confirm no monitored slices) and `systemctl status systemd-oomd`.
-5. Deploy; confirm the switch stopped `swap-swapfile.swap` and exited 0,
-   `swapon --show` empty, `SwapTotal: 0`, `vm.swappiness` unchanged, and
-   `/swap` still mounted.
+5. Deploy. Do not look for a stopped swap unit and do not trust the switch
+   exit code: after the deploy `swapon --show` must be empty and
+   `SwapTotal: 0`. If not, run `swapoff /swap/swapfile` by hand once
+   `MemAvailable` exceeds the swap in use. A `Failed to stop swapping to
+   /swap/swapfile` line in the switch output is expected if step 2 already
+   ran (exit 0, harmless); `SwapTotal: 0` is the only proof. Also confirm
+   `/swap` is still mounted.
 6. Soak: watch memory PSI `some avg60` and `MemAvailable` through a normal
    busy period and one deploy-refresh; no oom-kill lines in `journalctl -k`.
 
@@ -143,8 +155,10 @@ path.
 - F1: no `MemoryMax` or `OOMScoreAdjust` on gateway, proxy and auth. With no
   swap a runaway one OOMs the host rather than thrashing it. Give each a
   generous ceiling and adj to place them in the late bucket.
-- F2: update the stale offhost-backup comment (`nix/node-b.nix:386-393`) and
-  drop `MemorySwapMax = "4G"` (no-op now).
+- F2: offhost-backup loses 4G of effective ceiling (16G to 12G): raise
+  `MemoryMax` to 16G (`nix/node-b.nix:386-393`) before the next backup run,
+  drop `MemorySwapMax = "4G"` and fix its comment; same comment fix in
+  `scripts/off-host-restore-drill.sh:4-6`.
 - F3: delete `vm.swappiness` and the stale "Host swap is bounded" sentence
   (`nix/node-b.nix:1305`) once removal has soaked.
 - F4: delete the 16 GiB swapfile and the `@swap` subvolume once the soak is
