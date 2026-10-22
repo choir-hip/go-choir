@@ -527,3 +527,25 @@ Recorded before any fix.
 | R9 unread count passes the drill | fixed: the backup records `platform=unread`; the drill fails on it and on a `dolt_rows` field with no Store A entry; no field at all (pre-marker) keeps the head-only pass. The snapshot test now runs the drill's `snap` piece against stub restic, dolt and ssh (the drill takes `OFFHOST_SECRETS_DIR` and `OFFHOST_DRILL_DIR`, defaults unchanged); three checks failed on `3c6c42c92` | `off-host-backup.sh`, `off-host-restore-drill.sh`, `off-host-backup-dolt-snapshot-test.sh` item 12 (`4b7128bf6`, `e16099811`) |
 | R10 newgen wording | fixed in the audit's header: newgen (noms minus oldgen) is an upper bound on D, since it also counts the journal and uncollected chunks | `dolt-history-audit.sh` (`e16099811`) |
 | R10 one 8 GiB line for every store | residual, not changed: a per-store line needs the script to take a line per spec and the nix unit to pass it, more than a one-line change. Covered meanwhile by §4 step 1 (FP0 reads both stores' `noms` and `oldgen` before landing and sets `GO_CHOIR_DOLT_MAX_NEWGEN_KIB` if corpus-dolt is near the line). Because newgen also counts the journal, a stuck journal can trip the newgen line before or with the journal line; both messages then appear in the unit's log in turn as each is fixed | §4 step 1 |
+
+## Review round 3 (bunch 103, DeepSeek, delta review), 2026-10-22
+
+Recorded before any fix.
+
+- **F1 (low, red fail-closed gap): the recorded count is not validated.**
+  `scripts/off-host-restore-drill.sh` (`snap`, line 139 at `ed1cdd341`)
+  compares `[ "$got_rows" -ge "$want_rows" ]` after validating only
+  `got_rows`. A manifest with `platform=-1` (or `platform=0`-like values a
+  hand edit or a bug could write) passes the freshness check against any
+  restore, the same vacuous pass R2 and R9 closed.
+- **F2 (low): a malformed recorded count fails with the wrong message.**
+  A duplicated `platform=` key (two lines out of the `sed`), a non-numeric
+  value, or one too large for the shell's integers makes `[` itself error,
+  and the `||` branch prints "the restore holds fewer receipts than the
+  run recorded". The drill does fail, but it names a stale restore when
+  the manifest is the problem.
+- **F3 (note): the drill directory is not checked.** The drill runs
+  `install -d -m 0700 "$D"` on `OFFHOST_DRILL_DIR` (an override for the
+  script test) and later `rm -rf "$D/r" ...`. A value of `/` or a relative
+  path would chmod `/` or land the scratch tree under the caller's working
+  directory.
