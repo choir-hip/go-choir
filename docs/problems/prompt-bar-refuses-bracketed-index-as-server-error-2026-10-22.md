@@ -74,14 +74,19 @@ metamission).
 
 ## Residual (named, not fixed here)
 
-- R1. The owner's literal text now exists in a revision whose body would
-  not pass the agent rules. A Texture `Write` that keeps such a block
-  unchanged is re-validated as a whole document
-  (`texture_cell_author.go` `commitTextureWrite`, and the store's
-  `prepareTextureRevisionV2` at commit), and is refused for the carried
-  `[N]` text. The agent can rewrite the block. A durable fix is a
-  marker that travels with owner-literal nodes, or validating only the
-  text a Write changed (`texturewrite.ChangedBlocks`).
+- R1 (hypothesis, read from code, not exercised). The owner's literal
+  text now exists in a revision whose body would not pass the agent
+  rules. A Texture `Write` that keeps such a block unchanged is
+  re-validated as a whole document (`texture_cell_author.go`
+  `commitTextureWrite` runs `texturedoc.Project` on the result, and the
+  store's `prepareTextureRevisionV2` validates it again at commit), so it
+  would be refused for the carried `[N]` text, and the agent can only
+  rewrite the block. A Write that replaces the owner's text is
+  unaffected. A durable fix is a marker that travels with owner-literal
+  nodes, or validating only the text a Write changed
+  (`texturewrite.ChangedBlocks`). To be confirmed from a run's ledger
+  (turn-commit reasons and `choir.Write` refusals) on a prompt that
+  contains `[N]` and asks the desk to extend it.
 - R2. `code_block` text and `code`-marked text are checked against the
   numbered-citation rule too. `argv[1]` in a code block is not a
   citation, for agents either. Out of scope for this lane.
@@ -92,6 +97,77 @@ metamission).
   document with a 400 and reason. That is a deliberate contract today
   (it stops flattening a citation projection into text) and is not
   changed.
+
+## Fix (as landed on lane/fp0-prompt-bar-refusal)
+
+Mutation class: orange (the owner's input into a Texture lifecycle; sits
+next to the red surface "Texture canonical writes", so FP0 may land it as
+red). Protected surface adjacent: the validation that stands in front of a
+canonical Texture revision.
+
+- Option (a), taken. `texturedoc.ValidateOwnerText` / `ProjectOwnerText`
+  are `Validate` / `Project` without the authoring rules on text; every
+  other rule (schema, node ids, node shapes, marks, no `source_ref`
+  because the doc has no source entities) still applies. The store's
+  `StartLifecycle` prepares the initial revision with
+  `prepareOwnerInputTextureRevisionV2`: when the revision is user-authored
+  with no `body_doc`, the store builds the one-paragraph doc from the
+  owner's text as before and validates it with the owner-text rule. A
+  revision with a `body_doc`, any agent-authored revision, and
+  `CreateRevision` / the editor save path are prepared as before. Why (a):
+  the owner's words are stored exactly (the same content as before for
+  text that has no bracket), the start request and its digest are
+  unchanged, so command replay is unaffected, and nothing about an agent's
+  output is relaxed. The alternatives were rejected: escaping or splitting
+  the text into several text nodes would change the owner's words or only
+  hide the text from the validator and fail again when `texturewrite`
+  re-derives the block; a flag in `types.StartLifecycleRequest` or a
+  marker attribute in the doc would change the digest or have to survive
+  the editor's rebuild of the doc (`serializeEditorStructuredDoc`
+  rewrites node attrs).
+- Option (b), also done. `promptBarSubmitFailure` is the one mapping from
+  a failed submit to a status: command conflicts 409, pre-genesis 503
+  (both unchanged), `store.ErrInvalidTextureRevision` 400 with
+  `prompt refused: <the validator's reason>` (the internal wrapping is
+  cut), everything else 500 `failed to submit prompt`. After (a) no
+  prompt text reaches (b) today; it is the floor for the next validation
+  rule.
+- Owner-start surfaces now equal: `POST /api/texture/lifecycle-documents`
+  (owner create) reaches the same `StartLifecycle` branch with
+  user-authored plain text, so its initial text is literal too (it
+  answered 400 "lifecycle Texture create rejected" before).
+
+Tests (behaviour, against a real store through the HTTP handler):
+`TestHandlePromptBarKeepsOwnersBracketedTextVerbatim` (six prompts, each
+202 and the stored initial revision equal to the prompt),
+`TestHandlePromptBarReplaysBracketedPrompt`,
+`TestStartLifecycleKeepsOwnerLiteralInitialText` (owner text kept, replay
+stable, agent-authored initial `[1]` still refused with no trajectory
+persisted), `TestPromptBarSubmitFailureStatusAndReason` (the mapping). The
+first three fail on 273d139c9 with HTTP 500 and "contains legacy ...
+syntax". The pre-existing `TestTextureCreateRevisionRejectsLegacySource...`
+cases and `TestTextureRevisionAPIAcceptsStructuredBodyAndRejectsLegacySourceSyntax`
+still pass: the editor path is unchanged.
+
+Heresy delta. Discovered: R1 to R4 above. Introduced: owner-literal text
+now sits in a stored revision that the agent text rules would refuse (R1).
+Repaired: an owner's ordinary prompt answered as a server error with no
+reason.
+
+## Proof for FP0 on a test computer (not run by the lane)
+
+1. After deploy, as the owner of a test computer:
+   `POST /api/prompt-bar` with
+   `{"text":"import sys\nprint(sys.argv[1])\nSummarize values[1] and [2]."}`
+   expects 202 with `doc_id` and `revision_id`.
+2. `GET /api/texture/documents/<doc_id>` (or the revision) shows the
+   initial revision content equal to the text sent, with `[1]` and `[2]`
+   intact; the guest log has no "prepare initial revision" line.
+3. A Texture desk run starts for the document (`initial_loop_id` in
+   `GET /api/prompt-bar/submissions/<id>` decision). Whether the desk's
+   first `choir.Write` succeeds on this text is R1's check.
+4. Regression: the same text through the editor's content-only save of an
+   existing document still answers 400 with the reason.
 
 Rollback: `git revert` of the fix commit. No schema, no stored-data
 migration. A revision stored under the exemption keeps its text; after a
