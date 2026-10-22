@@ -2,62 +2,203 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 python3 - <<'PY'
-import json, os, pathlib, subprocess, tempfile
+import collections, json, os, pathlib, shutil, subprocess, tempfile
 
 # Exercise the actual shard runners; fake only the expensive Go toolchain.
+#
+# Ways the non-runtime planner can lose or repeat coverage
+# (docs/problems/ci-critical-path-race-shards-2026-10-22.md), each checked
+# below over every shard of every layout CI uses:
+#   1. a non-runtime package runs on no shard;
+#   2. a package runs whole on two shards, or whole and split;
+#   3. a test of a split package is selected by no shard;
+#   4. a (package, test) pair runs on two shards, including a test name two
+#      split packages share;
+#   5. agentcore or textureowner (scripts/go-test-runtime-shards) runs here;
+#   6. `go list` fails and the shard passes having tested nothing;
+#   7. test discovery fails and the shard runs a partial selection;
+#   8. the split list names a package that is not a non-runtime package;
+#   9. build flags (-race, tags) miss discovery or execution;
+#  10. a test failure or a bad SHARD_INDEX does not fail the shard;
+#  11. Fuzz targets (their seed corpora run under -run) are not discovered.
+MODULE = 'github.com/yusefmosiah/go-choir/'
+RUNTIME = {'internal/agentcore', 'internal/textureowner'}
+
+def short(package):
+    return package.removeprefix(MODULE).removeprefix('./')
+
+split_list = pathlib.Path('scripts/go-test-split-packages')
+assert split_list.is_file(), 'scripts/go-test-split-packages must list the split packages'
+SPLIT = [short(line.strip()) for line in split_list.read_text().splitlines()
+         if line.strip() and not line.lstrip().startswith('#')]
+assert 'internal/store' in SPLIT, SPLIT
+assert len(SPLIT) == len(set(SPLIT)), 'split list repeats a package'
+for package in SPLIT:
+    # The tracked list names real non-runtime packages with tests.
+    assert package not in RUNTIME, package + ' runs in scripts/go-test-runtime-shards'
+    assert any(pathlib.Path(package).glob('*_test.go')), package + ' has no tests'
+
+WHOLE = ['cmd/tool', 'internal/alpha', 'internal/beta', 'internal/gamma',
+         'internal/delta', 'internal/epsilon', 'internal/zeta']
+
+def tests_for(package):
+    if package in RUNTIME:
+        return ['TestCase%02d' % i for i in range(12)]
+    names = ['Test%sCase%02d' % (package.split('/')[-1].title(), i) for i in range(9)]
+    # Shared names: every split package has TestShared and TestCase00, so a
+    # name-per-package assignment would run them on two shards.
+    return names + ['TestShared', 'TestCase00', 'ExampleThing', 'FuzzDecode']
+
 with tempfile.TemporaryDirectory() as directory:
     root = pathlib.Path(directory)
-    fake = root / 'go'
+    fake = root / 'bin' / 'go'
+    fake.parent.mkdir()
     fake.write_text('''#!/usr/bin/env python3
-import json, os, sys
+import json, os, re, sys
 args = sys.argv[1:]
 with open(os.environ['GO_CALLS'], 'a') as f: f.write(json.dumps(args) + '\\n')
+tests = json.loads(os.environ['FAKE_TESTS'])
+module = 'github.com/yusefmosiah/go-choir/'
+def short(p): return p.removeprefix(module).removeprefix('./')
 if args[0] == 'list':
- print('github.com/yusefmosiah/go-choir/internal/store')
- print('github.com/yusefmosiah/go-choir/internal/other')
+    for p in tests: print(module + p)
+    if os.environ.get('FAIL_LIST'): sys.exit(9)
 elif '-list' in args:
- print('\\n'.join('TestCase%02d' % i for i in range(12)))
- if os.environ.get('FAIL_DISCOVERY'): sys.exit(7)
+    pattern = re.compile(args[args.index('-list') + 1])
+    for p in [a for a in args[1:] if a.startswith('./') or a.startswith(module)]:
+        for name in tests[short(p)]:
+            if pattern.search(name): print(name)
+        print('ok  \\t' + module + short(p) + '\\t0.010s')
+    if os.environ.get('FAIL_DISCOVERY'): sys.exit(7)
 elif os.environ.get('FAIL_EXECUTION'): sys.exit(8)
 ''')
     fake.chmod(0o755)
     calls = root / 'calls'
-    env = dict(os.environ, PATH=directory + os.pathsep + os.environ['PATH'],
-               GO_CALLS=str(calls), TOTAL_SHARDS='4', SHARD_INDEX='0')
-    env.pop('QUARANTINE_FILE', None)
-    def run(script, **extra):
+    packages = SPLIT + WHOLE + sorted(RUNTIME)
+    base_env = dict(os.environ, PATH=str(fake.parent) + os.pathsep + os.environ['PATH'],
+                    GO_CALLS=str(calls), FAKE_TESTS=json.dumps({p: tests_for(p) for p in packages}))
+    base_env.pop('QUARANTINE_FILE', None)
+    # A login BASH_ENV (the repo's dev shell) re-prepends the real toolchain.
+    base_env.pop('BASH_ENV', None)
+    base_env.pop('ENV', None)
+
+    def run(script, total, shard, **extra):
         calls.write_text('')
+        env = dict(base_env, TOTAL_SHARDS=str(total), **extra)
+        if shard is None:
+            env.pop('SHARD_INDEX', None)
+        else:
+            env['SHARD_INDEX'] = str(shard)
         result = subprocess.run(['bash', script, '-race', '-tags=ci_probe'],
-                                env=dict(env, **extra), capture_output=True, text=True)
+                                env=env, capture_output=True, text=True)
         return result, [json.loads(s) for s in calls.read_text().splitlines()]
-    for script in ['scripts/go-test-runtime-shards', 'scripts/go-test-non-runtime-shards']:
-        selections = {}
-        shards = 4 if 'runtime-shards' in script and 'non-runtime' not in script else 2
-        for shard in range(shards):
-            result, invocations = run(script, SHARD_INDEX=str(shard))
-            assert result.returncode == 0, result.stderr
-            for call in invocations:
-                if call[0] != 'test': continue
-                assert '-race' in call and '-tags=ci_probe' in call, call
-                if '-run' in call:
-                    package = next(x for x in call if x.startswith('./internal/'))
-                    selected = call[call.index('-run') + 1][2:-2].split('|')
-                    selections.setdefault(package, []).extend(selected)
-        for names in selections.values():
-            assert sorted(names) == ['TestCase%02d' % i for i in range(12)], names
-        assert selections
-        result, invocations = run(script, FAIL_DISCOVERY='1')
-        assert result.returncode != 0, 'partial failed discovery must fail closed'
-        assert not any('-run' in call for call in invocations), invocations
-        result, _ = run(script, FAIL_EXECUTION='1')
-        assert result.returncode != 0, 'test failure must propagate'
-        result, _ = run(script, SHARD_INDEX='4')
-        assert result.returncode != 0, 'out-of-range shard must fail'
+
+    def call_packages(call):
+        return [short(a) for a in call[1:] if a.startswith('./') or a.startswith(MODULE)]
+
+    def executions(invocations):
+        return [c for c in invocations if c[0] == 'test' and '-list' not in c]
+
+    # Runtime runner: every agentcore/textureowner test runs exactly once.
+    script = 'scripts/go-test-runtime-shards'
+    selections = {}
+    for shard in range(4):
+        result, invocations = run(script, 4, shard)
+        assert result.returncode == 0, result.stderr
+        for call in invocations:
+            if call[0] != 'test': continue
+            assert '-race' in call and '-tags=ci_probe' in call, call
+            if '-run' in call:
+                package = next(x for x in call if x.startswith('./internal/'))
+                selected = call[call.index('-run') + 1][2:-2].split('|')
+                selections.setdefault(package, []).extend(selected)
+    assert sorted(selections) == ['./internal/agentcore', './internal/textureowner'], selections
+    for names in selections.values():
+        assert sorted(names) == ['TestCase%02d' % i for i in range(12)], names
+    result, invocations = run(script, 4, 0, FAIL_DISCOVERY='1')
+    assert result.returncode != 0, 'runtime: partial failed discovery must fail closed'
+    assert not any('-run' in call for call in invocations), invocations
+    result, _ = run(script, 4, 0, FAIL_EXECUTION='1')
+    assert result.returncode != 0, 'runtime: test failure must propagate'
+    result, _ = run(script, 4, 4)
+    assert result.returncode != 0, 'runtime: out-of-range shard must fail'
     quarantine = root / 'quarantine'
     quarantine.write_text('^TestCase00$\n')
-    result, invocations = run('scripts/go-test-runtime-shards', QUARANTINE_FILE=str(quarantine))
+    result, invocations = run(script, 4, 0, QUARANTINE_FILE=str(quarantine))
     assert result.returncode == 0
     for call in invocations:
         if '-run' in call: assert 'TestCase00' not in call[call.index('-run') + 1]
+
+    # Non-runtime runner: 8 shards (ci.yml), 4 (race.yml), 3 and 2 (local).
+    script = 'scripts/go-test-non-runtime-shards'
+    expected = {p: set(tests_for(p)) for p in SPLIT + WHOLE}
+    for total in (8, 4, 3, 2):
+        ran = collections.Counter()
+        whole_runs = collections.Counter()
+        for shard in range(total):
+            result, invocations = run(script, total, shard)
+            assert result.returncode == 0, (total, shard, result.stdout, result.stderr)
+            discovery = [c for c in invocations if c[0] == 'test' and '-list' in c]
+            for call in discovery + executions(invocations):
+                assert '-race' in call and '-tags=ci_probe' in call, call
+                assert not set(call_packages(call)) & RUNTIME, ('runtime package in non-runtime shard', call)
+            if total >= 4 and shard < total - 2:
+                assert len(discovery) == 1, discovery
+                assert sorted(call_packages(discovery[0])) == sorted(SPLIT), discovery
+                assert 'Fuzz' in discovery[0][discovery[0].index('-list') + 1], discovery
+            for call in executions(invocations):
+                pkgs = call_packages(call)
+                if '-run' in call:
+                    assert sorted(pkgs) == sorted(SPLIT), ('only split packages are run by name', call)
+                    names = call[call.index('-run') + 1][2:-2].split('|')
+                    assert len(names) == len(set(names)), names
+                    for p in pkgs:
+                        for name in names:
+                            if name in expected[p]: ran[(p, name)] += 1
+                else:
+                    for p in pkgs:
+                        whole_runs[p] += 1
+                        for name in expected[p]: ran[(p, name)] += 1
+        for p, names in expected.items():
+            for name in names:
+                assert ran[(p, name)] == 1, (total, p, name, ran[(p, name)])
+        assert set(p for p, _ in ran) == set(expected), (total, sorted(ran))
+        if total >= 4:
+            assert not set(whole_runs) & set(SPLIT), (total, 'split package also ran whole', whole_runs)
+            assert all(whole_runs[p] == 1 for p in WHOLE), (total, whole_runs)
+        else:
+            assert all(whole_runs[p] == 1 for p in SPLIT + WHOLE), (total, whole_runs)
+
+    # No SHARD_INDEX: one process runs every non-runtime package whole.
+    result, invocations = run(script, 8, None)
+    assert result.returncode == 0, result.stderr
+    assert [sorted(call_packages(c)) for c in executions(invocations)] == [sorted(SPLIT + WHOLE)], invocations
+
+    for shard in (0, 7):
+        result, invocations = run(script, 8, shard, FAIL_LIST='1')
+        assert result.returncode != 0, 'failed go list must fail closed, never pass with nothing tested'
+        assert not executions(invocations), invocations
+        result, _ = run(script, 8, shard, FAIL_EXECUTION='1')
+        assert result.returncode != 0, 'test failure must propagate'
+    result, invocations = run(script, 8, 0, FAIL_DISCOVERY='1')
+    assert result.returncode != 0, 'partial failed discovery must fail closed'
+    assert not executions(invocations), invocations
+    for bad in ('8', '-1', 'x'):
+        result, _ = run(script, 8, bad)
+        assert result.returncode != 0, 'out-of-range shard must fail: ' + bad
+
+    # A split list naming a package go list does not report (a typo, a
+    # deleted or renamed package, a runtime package) fails every shard.
+    copy = root / 'scripts'
+    copy.mkdir()
+    for name in ('go-test-non-runtime-shards', 'go-test-with-timing'):
+        shutil.copy2('scripts/' + name, copy / name)
+    for stale in ('./internal/plaform', './internal/agentcore'):
+        (copy / 'go-test-split-packages').write_text('\n'.join(['./' + p for p in SPLIT] + [stale]) + '\n')
+        for shard in (0, 7):
+            result, invocations = run(str(copy / 'go-test-non-runtime-shards'), 8, shard)
+            assert result.returncode != 0, ('stale split entry must fail closed', stale, shard)
+            assert stale.removeprefix('./') in result.stderr, result.stderr
+            assert not executions(invocations), invocations
 print('go-shard-discovery: all tests passed')
 PY

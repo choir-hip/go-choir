@@ -1,0 +1,13 @@
+# Split packages: non-runtime packages whose tests are sharded by test name
+# across the split shards of scripts/go-test-non-runtime-shards (shards 0 to
+# TOTAL_SHARDS-3) instead of running whole on one shard. One package per
+# line. List a package here when its serial test binary alone would set a
+# shard's length; every other non-runtime package runs whole on one of the
+# last two shards. A line naming a package that go list does not report as
+# non-runtime fails every shard (docs/problems/
+# ci-critical-path-race-shards-2026-10-22.md has the per-package times).
+./internal/store
+./internal/platform
+./internal/objectgraph
+./internal/projectionbase
+./internal/actorruntime
