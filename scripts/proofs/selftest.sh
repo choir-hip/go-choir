@@ -49,6 +49,18 @@ J
 	fi
 	;;
 *:8083/health) echo '{"status":"ok","build":{"commit":"t1sha"}}' ;;
+*/internal/vmctl/retention-shadow-plan)
+	cat <<J
+{"mode":"dry-run","decision":"would_prune","config":{"mode":"dry-run","test_idle_mode":"dry-run","test_idle_min_age_seconds":604800,"quarantine_mode":"dry-run","quarantine_min_age_seconds":604800},
+"inventory":{"test_class_computers":2,"test_class_bytes":3,"test_class_would_remove":1,"test_class_would_remove_bytes":1,"quarantines":1,"quarantine_bytes":2,"quarantine_would_remove":0},
+"test_class":[{"vm_id":"vm-test1","computer_id":"computer-0123456789abcdef0123456789abcdef","state":"hibernated","idle_seconds":900000,"size_bytes":1,"verdict":"would_remove"},
+{"vm_id":"vm-test2","computer_id":"computer-1111111111111111111111111111111f","state":"active","idle_seconds":60,"size_bytes":2,"verdict":"keep","reasons":["state_active","idle_below_min_age"]}],
+"quarantines":[{"vm_id":"candidate-fleet","path":"/var/lib/go-choir/vm-state/candidate-fleet/data.img.quarantine-1-ab","quarantined_at":"2026-10-07T00:00:00Z","age_seconds":1300000,"size_bytes":2,"verdict":"keep","reasons":["journal_missing"]}]}
+J
+	;;
+*/internal/vmctl/retention-plan)
+	echo '{"mode":"active","decision":"observe","config":{"mode":"active","test_idle_mode":"off","quarantine_mode":"off"},"inventory":{}}'
+	;;
 *:8084/health) echo '{"status":"ok","bearer_binding":{"mode":"observe","pinned":3,"unpinned":0,"would_refuse":0,"refused":0},"anthropic_relay":"off","model_scheduler":{"mode":"on","queued":0,"in_flight":0,"granted":5},"credentials":{"active":3}}' ;;
 */api/runtime/observability|*/api/runtime/observability\?*)
 	c=$(cat "$ST/obs.n" 2>/dev/null || echo 0); c=$((c + 1)); echo $c >"$ST/obs.n"
@@ -117,7 +129,7 @@ rc_is() { # want name command...
 }
 reset_state() { rm -f "$ST/rule" "$ST/list.n" "$ST/obs.n" "$ST/wedged" "$ST/curl.log" "$ST/ssh.log"; : >"$ST/seq.log"; }
 
-SCRIPTS="fp1-store fp2-desk-boundary fp3-group1-wedge fp4-selfdev-admission fp7-gateway fp8-image-jailer net01-host-fetch net02-mirrors"
+SCRIPTS="fp0-vm-retention fp1-store fp2-desk-boundary fp3-group1-wedge fp4-selfdev-admission fp7-gateway fp8-image-jailer net01-host-fetch net02-mirrors"
 
 # ---- syntax and shellcheck -----------------------------------------------
 for s in lib $SCRIPTS; do
@@ -219,6 +231,17 @@ for mode in empty garbage nonzero; do
 	t "memory_hotplug_probe with $mode mint output names the mint, no traceback" bash -c "grep -qi 'mint' '$WORK/out' && ! grep -q Traceback '$WORK/out'"
 	t "memory_hotplug_probe with $mode mint output writes no passing receipt" bash -c "! grep -q '\"pass\": true' '$WORK/hp-$mode.json' 2>/dev/null"
 done
+
+# ---- FP0 VM retention: the shadow report, read-only -----------------------
+reset_state
+"$HERE/fp0-vm-retention.sh" --commit t1sha >"$WORK/out" 2>&1
+rc=$?
+t "fp0-vm-retention read-only pass completes" test "$rc" = 0
+t "fp0-vm-retention reads both shadow rules in dry-run" grep -q 'PASS.*shadow quarantine_mode is dry-run' "$WORK/out"
+t "fp0-vm-retention lists a kept test computer with its reasons" grep -q 'test-class computer-1111111111111111111111111111111f.*verdict=keep reasons=state_active,idle_below_min_age' "$WORK/out"
+t "fp0-vm-retention lists the quarantine and why it is kept" grep -q 'quarantine .*data.img.quarantine-1-ab.*verdict=keep reasons=journal_missing' "$WORK/out"
+t "fp0-vm-retention checks the active plan is unchanged" grep -q 'PASS.*no test_class_idle candidate in the active plan' "$WORK/out"
+t "fp0-vm-retention has no mutating step" bash -c "! '$HERE/fp0-vm-retention.sh' --list | awk -F'\t' '\$2 == \"mut\"' | grep -q ."
 
 printf '\n%d passed, %d failed\n' "$PASSN" "$FAILN"
 [ "$FAILN" -eq 0 ]
