@@ -208,8 +208,9 @@ type Store struct {
 	// storyKinds caches trajectory kinds for the story library (stories.go).
 	storyKinds storyKindCache
 
-	// dryRunPositionHook, set only by tests, sees the tape position the
-	// projection dry run passes to projectBatch (event_table.go, F6).
+	// dryRunPositionHook, set only by tests, sees the tape position that
+	// DryRunProjectionBatch (computer_events.go) passes to projectBatch
+	// (project.go); F6 in event_table_test.go reads it.
 	// TestEventTableDryRunHookIsTestOnly keeps non-test code from setting it.
 	// It runs inside the dry run's transaction: a hook that did store I/O
 	// would block on the embedded connection.

@@ -200,12 +200,15 @@ now:
     declares no epoch and the
     updater's restorePrior boot the old binary, which runs but refuses
     checkpoint publication over the empty choir_events until a forward
-    deploy, the rollback build (the git revert, then
-    scripts/rollback/fc-deploy1-rollback.sh apply, which installs the
-    tested boot step from internal/store/testdata/fc-deploy1-rollback/ that
-    drops an empty choir_events; a bare revert is not enough) or a
-    pre-deploy-1 restore. Open for the panel: fencing the updater's
-    restorePrior as a deploy-2 gate. Rehearse it with the proof's step 6
+    deploy, the rollback build or a pre-deploy-1 restore. The rollback
+    build: extract scripts/rollback/fc-deploy1-rollback.sh from the deploy-1
+    tip with git show into a temp dir (the revert deletes it), git revert
+    deploy 1's commits, then run the extracted script's apply --from
+    <tip>, which installs the tested boot step that drops an empty
+    choir_events; a bare revert is not enough. Before relying on it, run
+    fc-deploy1-rollback.sh rehearse <tip> <base> on main's landed range
+    (it passed on the lane: 051bc0af2 over 6c60685cc, 20 commits, 9 s).
+    Fencing the updater's restorePrior is left to deploy 2's card. Rehearse it with the proof's step 6
     on a test computer. Once deploy 2 stamps, deploy 1 is the floor.
   followup: >-
     Journal growth (lane/fp1-journal-growth, 2026-10-22): problem record
@@ -234,8 +237,11 @@ receipts:
       2ea0613a9 and 0e8f72cad (F14 lock pin, stamp guard, F6 hook),
       3fe5e810f (rollback recipe rehearsal, proof step 6), fbb6d74a8
       (round 1b docs). Round 1c: the type-based stamp guard and the
-      test-only hook guard, the rollback artifact and script, then the
-      round 1c docs commit
+      test-only hook guard (d5cc7dcde), the rollback artifact and script
+      (e07613ae5), bf56262e7 (round 1c docs). Round 1d: 03ec9e0f5 (guard:
+      container conversions, type errors, pinned package set), 051bc0af2
+      (rollback survives its revert: apply --from, rehearse, exact table
+      name), then the round 1d docs commit
     proof_refs:
       - internal/store/event_table_test.go
       - internal/store/event_table_guard_test.go
