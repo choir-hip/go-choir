@@ -84,3 +84,21 @@ func TestCompletionGuardReasonIsStateNeutral(t *testing.T) {
 		}
 	}
 }
+
+// FP4 round 4, P3: a refusal before a later successful freeze no longer
+// shapes the reason or the instruction. A cell whose freeze committed
+// returns a top-level freeze_result with the operation id.
+func TestCompletionGuardReasonIgnoresARefusalBeforeASuccessfulFreeze(t *testing.T) {
+	refusal := `cannot freeze until the open candidate settles (another self-development operation is open on this computer: selfdev-77aa is awaiting_approval)`
+	frozen := `{"output":"ok","freeze_result":{"operation_id":"selfdev-88bb","state":"frozen","bundle_digest":"sha256:x"}}`
+	if reason := engineeringTerminalFateGuardReason(guardTestMessages(t, refusal, frozen)); reason != engineeringTerminalFateRequired {
+		t.Fatalf("a refusal before a successful freeze still names a candidate: %q", reason)
+	}
+	if reason := engineeringTerminalFateGuardReason(guardTestMessages(t, frozen, refusal)); !strings.Contains(reason, "selfdev-77aa") {
+		t.Fatalf("a refusal after a successful freeze is not named: %q", reason)
+	}
+	echoed := `{"output":"I saw \"freeze_result\" earlier","freeze_result":null}`
+	if reason := engineeringTerminalFateGuardReason(guardTestMessages(t, refusal, echoed)); !strings.Contains(reason, "selfdev-77aa") {
+		t.Fatalf("output text mentioning freeze_result reset the scan: %q", reason)
+	}
+}
