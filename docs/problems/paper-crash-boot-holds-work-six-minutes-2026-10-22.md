@@ -304,3 +304,42 @@ Residuals after round 2:
   boots as a crash (safe fallback); the final pass only moves the start
   of the TTL to the last moment.
 - Still not run against any host.
+
+## Findings: review round 3 on the reboot script (bunch 118), 2026-10-22
+
+Sonnet review of lane tip 6b4e1b76e (`_runs/bunch118/sonnet.out`): F1 to
+F9 closed. New findings, recorded before any fix. Class: red.
+
+N1. **The computer list is read once, before the busy-wait.** The
+unasked check (held computers; every computer under `--no-markers`)
+and the set of computers to ask are taken at t=0 and never refreshed.
+(A) A held computer, or any computer under `--no-markers`, checked
+clean at t=0 can start a self-development apply during the up-to-600 s
+wait, and the reboot cuts it. (B) A hibernated or stopped computer that
+a user request wakes during the wait is neither asked nor checked, and
+the reboot crashes it unexamined.
+
+N2. **The reboot command's exit status is ignored, and nothing clears
+the markers after `phase_mark` succeeds.** If `systemctl reboot` is
+refused (an inhibitor, a bus error), ssh exits non-zero with the host
+up; the script then waits `--boot-timeout` (20 minutes) while the old
+boot_id answers, and exits 4 "HOST DID NOT RETURN" though the host never
+went down. The markers stay armed for up to 15 minutes, so a crash in
+that window boots as planned and resumes work. An exception between
+`phase_mark` returning and the reboot (a failed receipt save, an
+interrupt) leaves the same armed markers.
+
+N3 (low). In the final pass a computer that was written and now
+answers `busy` aborts even under `--allow-crash-close`. Fail closed;
+the operator reruns.
+
+N4 (low). The `computers` remote call keeps the fixed 180 s ssh
+timeout though it makes an 8 s health and a 15 s obligations request
+per running guest in turn; about eight hung guests exceed it.
+
+N5 (low). Live capsules on unasked computers are not checked (an
+accepted residual), but the only notice is in each computer's own log
+line; there is no summary before the reboot.
+
+N6 (nit). A 404/405 (`unsupported`) guest is asked again every 15 s for
+the whole `--busy-wait` though its answer cannot change.
