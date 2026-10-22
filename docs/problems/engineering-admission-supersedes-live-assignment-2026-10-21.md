@@ -267,3 +267,46 @@ class of this section: green.
   `*Registry`, but `DefaultRegistry()` returns a fresh copy and the
   registry `CheckWriteAs` reads (`writeRegistry`) is unexported. No package
   install can register a kind the gate reads.
+
+### Round 2 dispositions (lane/fp4-on-g)
+
+Findings 783cd578c, tests 6f1861830 (R1 to R5 each failed on c494f5aac),
+fix 11dfea955.
+
+- **R1: repaired.** Admission's own expiry check cancels the request with
+  the sweep's cancel (`expireQueuedEngineeringRequest`) before it returns
+  `errEngineeringRequestExpired`.
+- **R2: repaired for a planned restart.** A planned boot re-arms the bound
+  deadline of every bound, active assignment
+  (`rearmBoundEngineeringDeadlinesAtPlannedBoot`); the wake carries the
+  bind-time content, so a surviving wake dedups. It only arms a deadline
+  and a crash boot never reaches it. Residual: a `scheduleActor` failure
+  after the bind commit without a restart still leaves the run without a
+  deadline wake until the next planned boot (the same post-commit shape the
+  open-time arm had before this lane); minting the wake in the bind commit
+  is the full fix and needs a store change.
+- **R3: made visible and bounded, not removed.** Of the two options (keep B
+  queued while an operation is open, or say why B's freeze is refused), the
+  smaller and safer is the second: admission and selfdev's
+  one-open-operation rule are unchanged, and an assignment that does not
+  freeze is not held back. `openFreezeCandidate` turns `ErrOperationOpen`
+  into a refusal on B's own run (the tool result in its transcript) that
+  names the open candidate, says it waits for management's Verify and the
+  owner's decision, and tells the run to report partial or failed instead
+  of retrying; it logs the refusal too. The six-hour bound deadline still
+  bounds the wait. **Residual for L3-07** (several app agents built at
+  once): while one candidate waits for the owner, every other assignment on
+  the computer can work but not freeze, so N app agents are built one
+  owner decision at a time. Lifting that is a change to the
+  one-open-operation rule (per-app operations or a candidate queue), an
+  owner decision this lane does not make.
+- **R4: repaired.** The nudge skips expired rows when it picks the next
+  request.
+- **R5: repaired.** The queued-expiry reason ends "the request is
+  cancelled", the bound-deadline reason "the assignment is cancelled".
+- **R6: recorded, no code.** Precondition for ARCH-03's package install and
+  for the gate's enforce flip: the install path must register its kinds in
+  the registry `CheckWriteAs` reads (export a registration on
+  `writeRegistry`, or make `DefaultRegistry()` the shared instance), with a
+  test that a kind registered at install is refused for another writer in
+  enforce mode. Observe mode refuses nothing, so nothing is wrong today.
