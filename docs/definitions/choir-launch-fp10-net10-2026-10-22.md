@@ -99,7 +99,9 @@ now:
     Design and build plan committed; W0 (internal/appnet) built, tested
     locally and pushed, unwired and off. Bunch 11: flash accept, Devin
     accept with edits; the edits are 339907d4c (tests) and ef277e818 (fix),
-    and this file records the Parse size cap as W1's. FP0 reviews the
+    and this file records the Parse size cap as W1's. Owner ruling Q3
+    (owner notes §40): preset policies; §5.1 maps them onto egressgrant
+    and names W2's changes (docs only). FP0 reviews the
     delta, lands W0 with an inert set under that set's no-effect proof
     (§8 step 0). W1 to W7 are not started.
   source_ref: ef277e818
@@ -150,7 +152,10 @@ now:
   blocker_or_risk: >-
     W5 depends on NET-01 landing (lane/fp10-net01-host-fetch); W1 depends on
     S7-0's install events reaching main.
-  next_action: FP0 reviews the bunch 11 delta (339907d4c, ef277e818) and lands W0 inert
+  next_action: >-
+    FP0 reviews the bunch 11 delta (339907d4c, ef277e818) and lands W0
+    inert. The owner's Q3 ruling (preset policies, §5.1) changes the W1
+    and W2 plans only; W0 needs no change to land.
 
 receipts:
   - id: problem-record-and-design
@@ -212,8 +217,7 @@ optional member, `network`, replacing `egress_verbs`:
     "effect_class": "read",
     "data_ceiling": "owner-private",
     "credential": "",
-    "budget": {"max_requests": 2000, "max_download_bytes": 67108864, "max_upload_bytes": 1048576},
-    "renewal_days": 30
+    "budget": {"period": "day", "max_requests": 2000, "max_download_bytes": 67108864, "max_upload_bytes": 1048576}
   }],
   "ingress": [{"source": "mail", "address": "calendar"}]
 }
@@ -222,10 +226,11 @@ optional member, `network`, replacing `egress_verbs`:
 **Egress entry** (`appnet.EgressEntry`). Each entry is the NET-05
 declaration minus the fields the platform fills in (holder, computer,
 level, window): `verb`, `destinations`, `methods`, `effect_class`,
-`operation_contract`, `data_ceiling`, `credential`, `budget`,
-`renewal_days`. The platform sets holder `{app_desk, app:<package>}`,
-the installing computer, level `L1` (one hop through the host fetch
-verb) and `[now, now + renewal_days)`. So one validator decides it:
+`operation_contract`, `data_ceiling`, `credential`, `budget`. The
+platform sets holder `{app_desk, app:<package>}`, the installing
+computer, level `L1` (one hop through the host fetch verb) and an
+install-bound lifetime from the install time (§5.1; owner ruling Q3).
+So one validator decides it:
 `egressgrant.Request`. NET-10 adds only what is package-specific:
 
 - the verb is `<package>.<name>`, so two packages never share a verb;
@@ -238,7 +243,12 @@ verb) and `[now, now + renewal_days)`. So one validator decides it:
 - `credential` must name a platform-held credential; the registry is empty
   in this pass, so any credential is refused (the first credentialed app is
   its own red mission, with the gateway injecting the secret);
-- `renewal_days` is 1 to 90; at most 16 entries, no duplicate verbs.
+- the budget is per period (`day`), not per lifetime (§5.1);
+- at most 16 entries, no duplicate verbs.
+
+W0 as built (`internal/appnet` at ef277e818) still has `renewal_days`
+(1 to 90) and a lifetime budget, from before the ruling. W1 replaces them
+as planned in §7; no code changes in this docs step.
 
 **Ingress entry** (`appnet.IngressEntry`): `source` and `address` only.
 The source names a host service from a closed list; the platform fixes
@@ -298,9 +308,9 @@ is the authority.
    gateway already authenticates, mapped by vmctl), and runs
    `egressgrant.Check` on the hop's method, host, port and path. A redirect
    comes back as a 3xx; the next hop is checked again.
-3. **Budget.** The host counts requests and bytes per grant; past the
-   budget the grant is `exhausted` (the host refuses; the tape record
-   follows). Counted against the computer's NET-01 per-minute budget too.
+3. **Budget.** The host counts requests and bytes per grant per period
+   (§5.1 b); past the period's budget it refuses until the period rolls,
+   and the grant stays granted. Counted against the computer's NET-01 per-minute budget too.
 4. **Operation contract.** For `visible-write`, the host checks the
    request body against the declared schema digest before dialing.
 5. **Credential.** Injected by the gateway from the platform store; the
@@ -324,10 +334,81 @@ anything the diff does not recognise is a widening. Per egress verb:
 narrower means every new destination lies under an old one (same scheme,
 host and port, path under the old prefix), methods a subset, effect class
 and data ceiling not higher, the same credential and operation contract,
-each budget field not higher, renewal not longer. A new verb or a new
+each budget field not higher over a period no shorter. A new verb or a new
 ingress `(source, address)` widens; a removed one narrows. A widening entry
 stays at its old approval (or off, if new) until the owner approves the
 diff.
+
+### 5.1 Preset policies (owner ruling Q3, owner notes §40, 2026-10-22)
+
+The owner: "not renewed by me (human) but perhaps renewed by mgmt desk? Or
+may be needless ceremony for network that is required for appagent desk
+duties; other networking shouldn't be allowed anyway. I lean towards preset
+policies for each appagent by default". Taken as:
+
+- **Each app agent ships a preset network policy** in its reviewed
+  package: the `network` block of §2. The owner approves it at install
+  (one owner act for the package, listing the approved entries) and never
+  renews it. The earlier design's §3.6 (renewal by owner act or a
+  pre-approved policy) is withdrawn for app desks.
+- **The preset is all the network an app desk has.** An app desk never
+  requests a grant at run time; there is no `request_grant` for app desks.
+  More network ships as a package upgrade.
+- **Any widening is still an owner act** (§5's diff). A narrowing upgrade
+  needs none.
+- **A preset grant lives as long as its install.** It ends when the owner
+  revokes it, the package is disabled or uninstalled, or an upgrade drops
+  or replaces the entry. It does not expire on a clock.
+- **Whether management re-checks preset grants is open, not a default**
+  (§9 Q4). Nothing in the plan builds it.
+
+**How a preset grant maps onto `internal/egressgrant` today, exactly.**
+It does not fit without a change:
+
+1. The grant id is the digest of the whole declaration, window included
+   (`grantID` over `CanonicalJSON` of the `Declaration`, which carries
+   `not_before` and `expires_at`). A renewed window is a different grant.
+2. `validateDeclaration` requires a non-zero `not_before` and
+   `expires_at`, `expires_at` after `not_before`, and at most
+   `MaxAppDeskLifetime` (90 days) for an app desk.
+3. `Decide` takes one owner-act receipt whose subject is exactly
+   `{grant_id, decision}`, and refuses to grant at or past `expires_at`.
+4. `Check` refuses at or past `expires_at` (`ErrExpired`); `Close` moves a
+   granted grant to `expired` or `exhausted`, both terminal.
+5. `Budget` (`max_requests`, `max_download_bytes`, `max_upload_bytes`) is a
+   total for the grant's life; spending it is `exhausted`, terminal.
+
+So with today's code a preset grant would be a 90-day grant that dies on
+its clock, or on its budget, and comes back only by a new owner act per
+grant: the renewal ceremony the owner ruled out, and an app agent that
+stops working on day 90 or at its 2001st request.
+
+**The W2 change it implies (planned, not built):**
+
+- a. `Declaration.Lifetime`: `window` (today's rule, the only one for
+  engineering) or `install` (app desks; required for `HolderAppDesk`). An
+  `install` grant has `not_before` set to the install time and
+  `expires_at` zero; validation refuses an `expires_at` on it and refuses
+  `install` on any other holder. The id still digests the declaration, so a
+  reinstall is new grants. `Check` skips the clock for `install`; `expired`
+  is unreachable for it. `MaxAppDeskLifetime` goes away.
+- b. `Budget.Period` (`day`), required for `install`: the host counts per
+  period and refuses past the limit until the period rolls
+  (`budget_period_exhausted` in the log), without closing the grant.
+  `exhausted` stays terminal and stays for `window` grants only.
+- c. A package decide: one owner-act subject
+  `{package, manifest_digest, grant_ids, decision}` decides every listed
+  preset grant at install (a subset if the owner approves only some
+  entries). The NET-05 design already named a batch subject as a later
+  change; this is it, bound to the install event.
+- d. `Narrow(old, next)`: a narrowing upgrade's grant is granted without an
+  owner act, carrying the old decision and `narrowed_from: <old id>`, only
+  when `appnet.Widening` reports no widening for that entry; the old grant
+  closes `revoked` with reason "narrowed by upgrade". A widening entry
+  stays a `requested` grant until the owner decides it.
+- e. Disable and uninstall revoke with `Revoke` (exists). A crash keeps
+  granted preset grants (a standing intent); only an undecided request
+  closes `interrupted` (exists).
 
 ## 6. Failure modes (written before the tests)
 
@@ -338,7 +419,9 @@ diff.
    operation contract; a `read` entry listing anything but GET and HEAD.
 4. No data ceiling, or an unknown one.
 5. Any credential (the registry is empty).
-6. Budget missing, zero or over the hard cap; renewal 0 or over 90 days.
+6. Budget missing, zero or over the hard cap; renewal 0 or over 90 days
+   (W0 as built; W1 replaces renewal with an unknown field and a missing or
+   unknown `budget.period`, §5.1).
 7. More than 16 egress or 8 ingress entries.
 8. An ingress source other than `mail`; an address outside the package's
    namespace, including one in another package's namespace (package `mail`
@@ -348,7 +431,8 @@ diff.
 10. Mode off (unset, or anything but `declare`): any non-empty policy refused.
 11. A widening reported as narrower: a broader path, a new host, a new
     method, a higher effect class or ceiling, a changed credential or
-    contract, a larger budget, a longer renewal, a new verb or ingress key.
+    contract, a larger budget, a longer renewal (W1: a shorter budget
+    period), a new verb or ingress key.
 12. A grant request that egressgrant would not accept, or one whose holder
     is not `app:<package>`; any grant request minted with the mode off
     (`Requests` runs `Admit` first, so `Admit` is the only path).
@@ -358,9 +442,9 @@ diff.
 | Step | What | Touches | Size | Depends on |
 |---|---|---|---|---|
 | W0 (this station) | `internal/appnet`: types, `Parse`, `Validate`, `Admit(mode)`, `Requests`, `Widening`; unwired, `CHOIR_APP_NETWORK` off | new package | small | NET-05 (landed) |
-| W1 | `appdesk.Manifest.Network` replaces `Egress`; bound the manifest's size before `appnet.Parse` (it has no input cap of its own; bunch 11 review); `Validate` calls `appnet.Admit`; install event carries approved grant ids and ingress keys; `Derive` fills `Desk.Egress` | appdesk, deskmanifest | small | W0, S7-0 install events |
-| W2 | grant store kind `choir.egress_grant` (online, new kind only) and the `egress.grant.decide` owner act at the proxy (NET-05 §5.1, §5.2) | store, owneract, proxy | medium | NET-05 |
-| W3 | Texture approval card per entry, the pairing flag, the widening diff shown | Texture, frontend | medium | W1, W2 |
+| W1 | `appdesk.Manifest.Network` replaces `Egress`; bound the manifest's size before `appnet.Parse` (it has no input cap of its own; bunch 11 review); in `appnet`, drop `renewal_days` (then refused as an unknown field), add `budget.period`, `Requests` sets the install lifetime, `Widening` compares periods instead of renewal; `Validate` calls `appnet.Admit`; install event carries approved grant ids and ingress keys; `Derive` fills `Desk.Egress` | appdesk, appnet, deskmanifest | small | W0, W2a (the lifetime field), S7-0 install events |
+| W2 | `egressgrant`: the install lifetime, per-period budgets, the package decide subject and `Narrow` (§5.1 a-e); grant store kind `choir.egress_grant` (online, new kind only); the package decide owner act at the proxy at install (NET-05 §5.1, §5.2) | egressgrant, store, owneract, proxy | medium | NET-05 |
+| W3 | Texture approval card at install (the preset, per entry, with the pairing flag) and on a widening upgrade (the diff); no renewal card, no expiry reminder | Texture, frontend | medium | W1, W2 |
 | W4 | `Egress` verb, `app_egress` frame action, daemon check | deskmanifest, yaegikernel | small | W1 |
 | W5 | host grant table and `POST /provider/v1/app-egress`, `CHOIR_EGRESS_GRANTS=off\|observe\|enforce` | gateway, hostfetch | medium | NET-01 landed, W2 |
 | W6 | maild route table and per-desk delivery from the install act | maild, vmctl channel | medium | W2, the email desk |
@@ -381,15 +465,15 @@ routes and observability flags unchanged, boot logs clean). Also confirm
 `CHOIR_EGRESS_GRANTS=observe`, then `enforce`:
 
 1. Install a fixture package `netfixture` declaring one `read` egress verb
-   `netfixture.get` to `https://example.org/` (GET, small budget, 1-day
-   renewal) and one mail ingress `netfixture`. Expect one install event, one
-   requested grant and one ingress route request, and the approval card
-   showing both.
+   `netfixture.get` to `https://example.org/` (GET, a small daily budget)
+   and one mail ingress `netfixture`. Expect one install event, one
+   requested grant with lifetime `install` and no `expires_at`, one ingress
+   route request, and the approval card showing both.
 2. Before approval, call `Egress("netfixture.get", ...)` from the desk:
    expect the daemon's refusal (`verb not approved`) and no gateway line.
    POST `/provider/v1/app-egress` directly from P's guest root with the
    declaration: expect 403 `grant_not_granted` and one refused log line.
-3. Approve. Call again: expect the page as data and one gateway line
+3. Approve (one package owner act). Call again: expect the page as data and one gateway line
    `app-egress computer=<V> grant=<id> host=example.org status=200`.
 4. Out of scope: from the desk ask for `https://example.org.evil.test/`,
    `https://example.com/`, `http://169.254.169.254/` and a POST: each
@@ -404,8 +488,12 @@ routes and observability flags unchanged, boot logs clean). Also confirm
 7. Upgrade: reinstall with the destination widened to `https://example.org/`
    plus `https://example.com/`: expect the widening held pending, the old
    grant still serving example.org, example.com refused.
-8. Expiry and revocation: revoke the grant: the next call is refused;
-   uninstall: the ingress route is gone and mail is dropped with a receipt.
+8. Budget, revocation, uninstall: spend the daily budget: the next call is
+   refused `budget_period_exhausted` and the grant stays `granted`. Narrow
+   upgrade (drop the path to `https://example.org/a/`): the new grant is
+   granted with no owner act and `narrowed_from` the old one. Revoke: the
+   next call is refused. Uninstall: the ingress route is gone and mail is
+   dropped with a receipt.
 9. Restart: crash-restart P mid-call: the call closes "interrupted by a
    restart"; the grant (a standing intent) survives; no call is retried.
 
@@ -415,8 +503,15 @@ routes and observability flags unchanged, boot logs clean). Also confirm
    desk ever hold L3 through the capsule proxy? Default: L1 only.
 2. Ingress addresses are package-namespaced (`<package>[.suffix]`).
    Default: yes; a vanity alias is a later owner act.
-3. Grant renewal for app desks: owner act each period (default) or a
-   standing renewal policy.
+3. Grant renewal for app desks. **Ruled (owner notes §40, 2026-10-22):**
+   preset policies, approved at install, never renewed by the owner;
+   widening stays an owner act (§5.1).
+4. Should management re-check preset grants (for example after an
+   incident, or flag ones unused for a long time)? **Open, no default**;
+   nothing in the plan builds it. If adopted, management may only narrow
+   (flag or revoke), never extend or widen.
+
+Q1 and Q2 were confirmed in owner notes §40.
 
 ## Heresy delta
 
@@ -425,4 +520,6 @@ not exist (stale since ARCH-02 landed); the host fetch verb cannot carry a
 grant, so app egress needs its own route. Introduced: none. Repaired: none
 (W0 is the declaration only). Bunch 11 discovered and repaired three
 W0 defects: POST under read, overlapping ingress namespaces, grant requests
-minted with the mode off.
+minted with the mode off. Owner ruling Q3 (§5.1) discovered that a NET-05
+app-desk grant cannot outlive 90 days or its lifetime budget without a new
+owner act per grant; W2 repairs it (planned).
