@@ -22,6 +22,14 @@ that branch holds. ACTIVE item
 10's condition (jailer slice 1 and admission landed) is now met. Tracked as
 RES-20 in the [checklist](../security-density-architecture-checklist-2026-10-21.md).
 
+**Superseding design (2026-10-21).** Where this report and
+[vm-hypervisor-seam-design-2026-10-21](vm-hypervisor-seam-design-2026-10-21.md)
+disagree, the later one holds: it fits the seam to the jailer and
+virtio-mem now on main and to FP8's per-computer build, replaces
+`vm-backend.json` and `VM_BACKENDS_ENABLED` with FP8's record and selector,
+and re-sequences section 9. The capability matrix below predates
+Firecracker virtio-mem on main.
+
 **What landed.** A new package, `internal/vmmanager/vmbackend`, that nothing
 imports yet:
 
