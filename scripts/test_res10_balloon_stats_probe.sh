@@ -75,7 +75,11 @@ LIST='{"ownerships":[{"vm_id":"vm-t1","computer_id":"computer-t1","warmness_clas
 READING='{"vms":[{"vm_id":"vm-t1","computer_id":"computer-t1","reading":{"vm_id":"vm-t1","stats_polling_interval_s":5,"observed_at":"2026-10-22T10:00:00Z","stats":{"target_pages":0,"actual_pages":0,"target_mib":0,"actual_mib":0,"available_memory":6012954214,"total_memory":8589934592,"free_memory":1073741824,"disk_caches":4831838208}}}],"units":"bytes"}'
 REASON='{"vms":[{"vm_id":"vm-t1","computer_id":"computer-t1","reason":"stats_disabled","detail":"balloon booted with stats_polling_interval_s 0"}],"units":"bytes"}'
 DENIED='{"error":"vmctl control endpoints are not publicly accessible"}'
-PROCMEM='{"meminfo":{"MemTotal":8167000,"MemFree":1048000,"MemAvailable":5870000,"Cached":4600000,"Buffers":10000}}'
+# The guest's shape (internal/server/debug_procmem.go: <key>_kib), read from
+# test computer 71afbf14 on 2026-10-22; PROCMEM_LEGACY is an older guest's
+# bare names.
+PROCMEM='{"meminfo":{"AnonPages_kib":143732,"Buffers_kib":6804,"Cached_kib":640484,"MemAvailable_kib":7608712,"MemFree_kib":7187332,"MemTotal_kib":8133468,"Shmem_kib":11884,"Slab_kib":52220}}'
+PROCMEM_LEGACY='{"meminfo":{"MemTotal":8167000,"MemFree":1048000,"MemAvailable":5870000,"Cached":4600000,"Buffers":10000}}'
 case "$url" in
 http://127.0.0.1:8083/internal/vmctl/list)
 	case "$FAKE_CASE" in list403) answer 403 "$DENIED" ;; *) answer 200 "$LIST" ;; esac ;;
@@ -87,7 +91,7 @@ http://127.0.0.1:8083/internal/vmctl/memory/balloon*)
 	*) answer 200 "$READING" ;;
 	esac ;;
 http://10.200.*:8085/internal/debug/pprof/procmem)
-	case "$FAKE_CASE" in procmem403) answer 403 'profiles are served to host-sourced callers only' ;; *) answer 200 "$PROCMEM" ;; esac ;;
+	case "$FAKE_CASE" in procmem403) answer 403 'profiles are served to host-sourced callers only' ;; legacy) answer 200 "$PROCMEM_LEGACY" ;; *) answer 200 "$PROCMEM" ;; esac ;;
 *) echo "fake curl: unexpected URL $url" >&2; exit 99 ;;
 esac
 FAKE
@@ -117,6 +121,13 @@ check "guest procmem is fetched" "$(is '[ -n "$guest_calls" ]')"
 check "no guest request carries the token or the marker" "$(is '! printf "%s" "$guest_calls" | grep -Eq "token\.header|X-Internal-Caller|X-Choir-Internal-Token"')"
 check "vmctl requests go to 127.0.0.1:8083 with the marker and the token" "$(is '[ $(printf "%s\n" "$vmctl_calls" | wc -l) -eq 2 ] && ! printf "%s\n" "$vmctl_calls" | grep -vq "\[@$WORK/token.header\]" && ! printf "%s\n" "$vmctl_calls" | grep -vq "\[X-Internal-Caller: true\]"')"
 check "the probe holds no token variable or header-file path" "$(is '! grep -Eq "internal-service-token|AUTH=|\\\$AUTH" "$PROBE"')"
+
+# Guest columns, MiB: _kib keys (Cached+Buffers 647288 KiB = 632.1), and an
+# older guest's bare names (4610000 KiB = 4502.0).
+guest_col() { printf '%s' "$out" | python3 -c 'import json,sys; print({r["what"]: r["guest_meminfo"] for r in json.load(sys.stdin)["compare_mib"]})'; }
+check "guest meminfo read from the _kib keys" "$(is '[ "$(guest_col)" = "{'"'"'available'"'"': 7430.4, '"'"'disk caches'"'"': 632.1, '"'"'total'"'"': 7942.8, '"'"'free'"'"': 7018.9}" ]')"
+run legacy computer-t1
+check "an older guest's bare meminfo names still read" "$(is '[ $rc -eq 0 ] && [ "$(guest_col)" = "{'"'"'available'"'"': 5732.4, '"'"'disk caches'"'"': 4502.0, '"'"'total'"'"': 7975.6, '"'"'free'"'"': 1023.4}" ]')"
 
 run balloon403 computer-t1
 check "balloon route 403 exits non-zero" "$(is '[ $rc -ne 0 ]')"

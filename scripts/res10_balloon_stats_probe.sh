@@ -157,11 +157,16 @@ def b2m(v):
     return None if v is None else round(v / MIB, 1)
 def k2m(v):
     return None if v is None else round(v / 1024, 1)
+def kib(k):
+    # The guest serves <key>_kib (internal/server/debug_procmem.go); an
+    # older guest, the bare name.
+    v = mi.get(k + "_kib")
+    return mi.get(k) if v is None else v
 rows = [
-    ("available", b2m(st.get("available_memory")), k2m(mi.get("MemAvailable")), "balloon available_memory vs MemAvailable"),
-    ("disk caches", b2m(st.get("disk_caches")), k2m((mi.get("Cached") or 0) + (mi.get("Buffers") or 0)) if mi else None, "balloon disk_caches vs Cached+Buffers"),
-    ("total", b2m(st.get("total_memory")), k2m(mi.get("MemTotal")), "balloon total_memory vs MemTotal"),
-    ("free", b2m(st.get("free_memory")), k2m(mi.get("MemFree")), "balloon free_memory vs MemFree"),
+    ("available", b2m(st.get("available_memory")), k2m(kib("MemAvailable")), "balloon available_memory vs MemAvailable"),
+    ("disk caches", b2m(st.get("disk_caches")), k2m((kib("Cached") or 0) + (kib("Buffers") or 0)) if mi else None, "balloon disk_caches vs Cached+Buffers"),
+    ("total", b2m(st.get("total_memory")), k2m(kib("MemTotal")), "balloon total_memory vs MemTotal"),
+    ("free", b2m(st.get("free_memory")), k2m(kib("MemFree")), "balloon free_memory vs MemFree"),
 ]
 rss = os.environ.get("RSS_KIB", "").strip()
 out = {
