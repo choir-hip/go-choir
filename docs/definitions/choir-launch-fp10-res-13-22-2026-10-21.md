@@ -90,15 +90,15 @@ boundaries:
   protected_surfaces: [vmctl, deployment routing]
 
 now:
-  status: working
+  status: blocked
   slice: >-
-    L3a build on lane/fp10-res13-l3a (base 7448bf899; FP8's vmmanager work
-    is on main). Owner notes §40: RES-13 defaults hold; L4 is 10 minutes
-    only after L3 is on everywhere; L20 ships off. The design carries the
-    readings' corrections (R2 swap walk, R4 THP on the guest mapping, R3
-    length with the hotplug region, R5 resume unlinks, wake by
-    lifecycle/start). Next: the six failure modes as failing tests, then
-    the inert red fix (default full, no computer selected).
+    L3a built on lane/fp10-res13-l3a (base 7448bf899), tests first
+    (b0072c20e, ff96a7bf2), the inert red fix c657c0220 (default full, no
+    computer selected), this green commit (record, proof steps, nix lines
+    VM_SNAPSHOT_TYPE=full and VM_SNAPSHOT_DIFF_ONLY empty). Only FP0 steps
+    remain: panel on the frozen diff, land, then the proof below on a test
+    computer FP0 chooses. Owner notes §40: L4 is 10 minutes only after L3
+    is on everywhere; L20 ships off.
   gates:
     L3a: >-
       Readings pass, with two design corrections. R2: guest memory cannot
@@ -157,7 +157,7 @@ now:
       remaining reading, read against S5's walker windows.
   source_ref: 9cbed1aa2
   deploy_identity: not changed by this lane (read only; staging served 8fabec36a during the readings)
-  candidate: {id: none, state: none, ref: none, base: 9cbed1aa2, digest: none, scope: []}
+  candidate: {id: FP10-L3a, state: built, not frozen, ref: lane/fp10-res13-l3a, base: 7448bf899, digest: none, scope: [internal/vmmanager, nix/node-b.nix, docs]}
   conjecture:
     id: C-FP10-sparse
     claim: >-
@@ -197,13 +197,10 @@ now:
     FP8 holds vmmanager. Residual for FP0: the slice order (L20 before
     L4) is an open choice the readings raise; it is not changed here.
   next_action: >-
-    FP0 reads S2's log against S5's windows when it ends; FP10 amends the
-    design (swap check walks up; THP tests the guest mapping; L3b links
-    the base before the resume discards it; L4 gains the API-key idle
-    prerequisite; L3a's proof wakes through lifecycle/start, since a key
-    read cannot wake; L20 may use the Nix store path); then the L3a slice
-    once FP8 lands.
-
+    FP0 freezes lane/fp10-res13-l3a, sends c657c0220 to the bunch panel,
+    lands it (it shares internal/vmmanager with deploy M: the files are
+    listed in "L3a: files and proof"), then runs the proof with one test
+    computer named in VM_SNAPSHOT_DIFF_ONLY.
 receipts:
   - id: fp0-res13-res22-readings-2026-10-22
     ref: docs/problems/hibernate-writes-whole-guest-and-deploys-void-snapshots-2026-10-22.md, docs/problems/node-b-host-slab-btrfs-inode-cache-2026-10-22.md
@@ -220,3 +217,47 @@ and
 [node-b-host-slab-btrfs-inode-cache-2026-10-22.md](../problems/node-b-host-slab-btrfs-inode-cache-2026-10-22.md);
 the btrfs metadata record is
 [node-b-btrfs-metadata-exhausted-small-artifact-files-2026-10-16.md](../problems/node-b-btrfs-metadata-exhausted-small-artifact-files-2026-10-16.md).
+
+## L3a: files and proof (FP0)
+
+Files touched by the lane: `internal/vmmanager/snapshot_diff.go` (new),
+`internal/vmmanager/snapshot_diff_test.go` (new), small hunks in
+`internal/vmmanager/{config.go,fcapi.go,manager.go,snapshot.go,snapshot_lifecycle.go,snapshot_test.go}`
+(the last: the fake Firecracker API's Diff mode), `nix/node-b.nix` (two
+lines after `VM_SNAPSHOT_MAX_AGE`), and docs. Not touched:
+`snapshot_vault_bind_test.go`, the host-network start, `cmd/vmctl`,
+`internal/vmctl`.
+
+The proof, on one test computer T that FP0 chooses (never the paper
+`computer-1355b83b…`, the owner's `computer-ad1b46d4…` or the delegate):
+
+1. If T runs under the jailer, repeat reading R2 for T's Firecracker pid
+   first; every ancestor walk must reach a `memory.swap.max` of 0.
+2. Deploy with `VM_SNAPSHOT_TYPE=diff` and
+   `VM_SNAPSHOT_DIFF_ONLY=<T's computer id>`. A vmctl restart reattaches
+   running guests with cold origin false, so T must cold boot after this
+   deploy: stop it, then `POST /api/computers/{T}/lifecycle/start`.
+   No deploy between this boot and step 4.
+3. In T (its terminal or engineering capsule; no block device): write
+   1 GiB of random bytes to `/dev/shm/l3a.bin`, record its `sha256sum`
+   and `/proc/meminfo`.
+4. Hibernate T (`POST /internal/vmctl/hibernate` with its computer id, or
+   the idle sweep). Sample `/proc/pressure/memory` each second across it.
+   Expect the journal line `hibernated VM … by snapshot (… snapshot_type=Diff diff_refused=)`;
+   `stat -c '%s %b %B' …/snapshot/mem` with size `12884901888` (8 + 4 GiB
+   on a hotplugged test computer) and `blocks × 512` near 2.5 GiB (about
+   1.4 GiB resident plus the 1 GiB file), against Full's 8 GiB; `snapshot=`
+   ms against R6's Full baseline (about 6 s, PSI some avg10 1.03).
+   `meta.json` reads `"snapshot_type":"Diff","cold_origin":true`.
+5. Within minutes, before any deploy, wake T with
+   `POST /api/computers/{T}/lifecycle/start` (an API-key read cannot wake
+   it). Expect `resumed VM … from snapshot`, not `cold boot … after
+   snapshot fallback`. In T: `sha256sum /dev/shm/l3a.bin` matches step 3,
+   `/health` is ok, and one prompt-bar call completes.
+6. Hibernate T again: the journal must say `snapshot_type=Full
+   diff_refused=not_cold_origin` (failure mode 1 on staging).
+7. Rollback either way: `VM_SNAPSHOT_DIFF_ONLY=` (empty) and deploy.
+
+Pass: steps 4 to 6 as stated. A `diff_refused` other than empty at step
+4 is not a failure of the guard but a refusal to read: record it (it
+names the condition) and stop.
