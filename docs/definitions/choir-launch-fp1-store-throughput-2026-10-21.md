@@ -252,6 +252,21 @@ receipts:
       built and tested locally: the five new cases failed before e1814ff86
       and pass after; objectgraph and store derived-key tests pass under
       -race; internal/objectgraph and internal/store whole pass; not landed
+  - id: fp1-health-bounded
+    boundary: implement
+    identity: 2531f3b0d (problem record F1, green), 393547879 (failing tests, yellow), fda627de8 (fix, orange); branch lane/fp1-health-bounded on a55660c0d
+    proof_refs:
+      - internal/agentcore/api_health_bounded_test.go (TestHandleHealthAnswers503NamingHolderWhenStoreStalled, TestHandleHealthUnheldStoreAnswers200WithUnchangedBody, TestHandleHealthStalledStoreLeaksNoGoroutines)
+      - docs/problems/paper-unreachable-minutes-after-every-boot-2026-10-22.md (F1, the caller table)
+    rollback_ref: git revert fda627de8
+    disposition: >-
+      built and tested locally: the two stall tests failed at their bound
+      before fda627de8 and pass after (-race, count 3); the 200 baseline
+      passes on both. Not landed. FP0: land (orange, independent of B2),
+      then sample /health during the next boot window or online GC pass: it
+      answers in about 1 s, 200 or 503 store_stalled with the holder, never
+      000. Residual: the updater's post-apply probe and CI's deploy waits
+      count attempts, so a stall spends their budget about 3x faster.
 ---
 
 # FP1: store and daemon throughput
