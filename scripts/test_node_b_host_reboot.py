@@ -5,13 +5,14 @@ No host, no ssh: the marker phase runs against a fake `remote`. Run:
 python3 scripts/test_node_b_host_reboot.py
 
 Problem: docs/problems/paper-crash-boot-holds-work-six-minutes-2026-10-22.md
-(findings R1 to R3, review round 2 F1 to F9, round 3 N1 to N6, DeepSeek D1 to D5).
+(findings R1 to R3, review round 2 F1 to F9, round 3 N1 to N6, DeepSeek D1 to D5, round 4 R1 to R3).
 """
 import argparse
 import importlib.util
 import json
 import os
 import re
+import signal
 import subprocess
 import unittest
 from unittest import mock
@@ -531,14 +532,19 @@ def marked_receipt():
 class RebootNotDone(unittest.TestCase):
     """N2: a reboot that did not happen clears the markers and exits 3."""
 
-    def run_reboot(self, rc, boot_ids):
+    def run_reboot(self, rc, boot_ids, stderr="Failed to reboot: inhibited", hang=False):
         fake, clock = FakeHost([], scripted({})), Clock()
         ids = iter(boot_ids)
         receipt = marked_receipt()
-        done = subprocess.CompletedProcess(["ssh"], rc, "", "Failed to reboot: inhibited")
+        done = subprocess.CompletedProcess(["ssh"], rc, "", stderr)
+
+        def run(*a, **k):
+            if hang:
+                raise subprocess.TimeoutExpired("ssh", 60, stderr=stderr)
+            return done
         with mock.patch.object(reboot, "remote", fake.remote), mock.patch.object(reboot.time, "sleep", clock.sleep), \
                 mock.patch.object(reboot.time, "time", clock.time), \
-                mock.patch.object(reboot.subprocess, "run", lambda *a, **k: done), \
+                mock.patch.object(reboot.subprocess, "run", run), \
                 mock.patch.object(reboot, "ssh_ok", lambda host, timeout=15: next(ids, boot_ids[-1])):
             code = reboot.phase_reboot(reboot_args(), receipt)
         return code, fake, receipt
@@ -560,8 +566,32 @@ class RebootNotDone(unittest.TestCase):
         self.assertEqual(fake.unmarked, [])
 
     def test_host_never_back_exits_4_and_keeps_the_markers(self):
-        code, fake, _ = self.run_reboot(255, [None])
+        code, fake, _ = self.run_reboot(255, [None], stderr="Connection to node-b closed by remote host.")
         self.assertEqual(code, 4)
+        self.assertEqual(fake.unmarked, [])
+
+    def test_ssh_that_never_connected_clears_and_exits_3(self):
+        """R2: a connect or auth failure means the reboot was never sent."""
+        for err in ("ssh: connect to host node-b port 22: Connection refused",
+                    "ssh: connect to host node-b port 22: Connection timed out",
+                    "root@node-b: Permission denied (publickey).",
+                    "kex_exchange_identification: read: Connection reset by peer",
+                    "ssh: Could not resolve hostname node-b: nodename nor servname provided",
+                    "Host key verification failed."):
+            code, fake, receipt = self.run_reboot(255, [None], stderr=err)
+            self.assertEqual(code, 3, err)
+            self.assertEqual(fake.unmarked, [PAPER], err)
+            self.assertTrue(receipt["reboot"]["not_sent"], err)
+
+    def test_ssh_timeout_before_connecting_clears(self):
+        code, fake, _ = self.run_reboot(None, [None], stderr="ssh: connect to host node-b port 22: Connection timed out",
+                                        hang=True)
+        self.assertEqual(code, 3)
+        self.assertEqual(fake.unmarked, [PAPER])
+
+    def test_ssh_timeout_after_connecting_waits(self):
+        code, fake, _ = self.run_reboot(None, [None, "new"], stderr="", hang=True)
+        self.assertEqual(code, 0)
         self.assertEqual(fake.unmarked, [])
 
     def test_failure_between_mark_and_reboot_clears(self):
@@ -589,6 +619,21 @@ class ClearOnlyPossibleMarkers(unittest.TestCase):
             self.assertFalse(ok, ans)
             self.assertEqual(fake.unmarked, [PAPER], ans)
             self.assertEqual(receipt["marks"]["may_hold_marker"], [PAPER], ans)
+
+    def test_pre_write_503_is_not_cleared(self):
+        """R1: the guest's two 503s come before the write."""
+        for ans in (CANNOT_TELL, (503, json.dumps({"error": "planned restart surface unavailable"}))):
+            fake = FakeHost([row(PAPER, "critical_protected"), row(PRIMARY, "primary")], scripted({PRIMARY: [ans]}))
+            ok, receipt = run_mark(fake)
+            self.assertFalse(ok, ans)
+            self.assertEqual(fake.unmarked, [PAPER], ans)
+
+    def test_other_503_is_cleared(self):
+        for ans in ((503, "<html>Service Unavailable</html>"), (503, json.dumps({"error": "upstream down"}))):
+            fake = FakeHost([row(PRIMARY, "primary")], scripted({PRIMARY: [ans]}))
+            ok, _ = run_mark(fake)
+            self.assertFalse(ok, ans)
+            self.assertEqual(fake.unmarked, [PRIMARY], ans)
 
     def test_lost_or_failed_writes_are_cleared(self):
         for ans in (TIMEOUT, (500, "planned restart marker: rename"), (502, "")):
@@ -628,6 +673,31 @@ class FinalPassAbortReport(unittest.TestCase):
         ok, receipt = run_mark(fake)
         self.assertFalse(ok)
         self.assertIsNone(receipt["marks"]["marked_at"])
+
+
+
+class Signals(unittest.TestCase):
+    """R3: SIGHUP and SIGTERM raise into the clear paths."""
+
+    def test_hup_and_term_raise_an_interrupt(self):
+        got = {}
+        with mock.patch.object(reboot.signal, "signal", lambda sig, fn: got.__setitem__(sig, fn)):
+            reboot.install_signal_handlers()
+        self.assertEqual(set(got), {signal.SIGHUP, signal.SIGTERM})
+        for fn in got.values():
+            with self.assertRaises(KeyboardInterrupt):
+                fn(signal.SIGHUP, None)
+
+    def test_signal_after_marking_clears(self):
+        fake = FakeHost([], scripted({}))
+        receipt = marked_receipt()
+
+        def save():
+            raise reboot.Interrupted("SIGHUP")
+        with mock.patch.object(reboot, "remote", fake.remote):
+            with self.assertRaises(KeyboardInterrupt):
+                reboot.reboot_after_mark(reboot_args(), receipt, save)
+        self.assertEqual(fake.unmarked, [PAPER])
 
 
 if __name__ == "__main__":
