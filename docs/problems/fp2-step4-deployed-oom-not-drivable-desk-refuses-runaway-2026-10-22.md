@@ -154,19 +154,19 @@ Items: RES-01 (in-guest cgroup tree), RES-02 (hard per-worker budget).
   reads its own pid, `/proc/self/stat` start time and the boot id before the
   runaway and after it, from the process and never from observability's
   `steps.recent` (the step-4 defect above). If the daemon died, the HTTP
-  answer never arrives, and the script reports exit 2, not a pass.
+  answer never arrives, and the probe reports exit 1 (a failure), not a
+  pass.
 - **O5. The kill reaches a sibling.** This could come from `oom.group` on the
   wrong cgroup or a slice-level OOM. A sibling worker of the same class is
   spawned before the runaway and must answer the check cell after it.
 - **O6. The leg becomes a way to run code.** The cell is a constant in the
   binary and the route takes no source. The only input is the leg selector,
-  an enum, and any other value is refused with 400. The route stays
-  host-peer owner only (`server.AuthenticatedOwner`: the request must come
-  from the guest's default gateway, which is where the proxy and vmctl dial
-  from, with `X-Authenticated-User`). It is not on the ProductAPI allowlist
-  (`internal/agentcore/tools_product_api.go`), so no desk can call it. One
-  self-test runs at a time (`isolationSelfTestMu`).
-- **O7. The leg runs by accident.** It runs only with `?leg=oom`. The default
+  an enum, and any other value is refused with 400. One self-test runs at a
+  time (`isolationSelfTestMu`). Who can call it was first written as "the
+  owner route stays host-peer only". Review bunch 22 showed that was false;
+  see the next section for the corrected caller rule.
+- **O7. The leg runs by accident.** It runs only with `leg=oom` on the
+  internal route. The default
   self-test (`POST` with no leg) answers exactly as before, so step 2 on any
   computer never allocates.
 - **O8. A worker or cgroup leaks.** Both workers are closed before the
@@ -282,8 +282,7 @@ It does not prove:
   the control needs nothing else on the guest.
 - **S5. The leg takes caller input.** It doesn't. The filter names are
   compiled in, the route takes only `leg=seccomp`, and the caller rule is
-  the OOM leg's: host peer only, one self-test at a time, not on the
-  ProductAPI allowlist.
+  the OOM leg's (see the review bunch 22 section).
 - **S6. The judge trusts the server.** The staging script holds its own list
   of the six filters and the expected errno for each probe. It requires
   each child's hash to equal the daemon's expected hash and the six
@@ -295,3 +294,52 @@ Built 2026-10-22 on `lane/fp2-selftest-oom`: `internal/capsule/seccomp_selftest*
 evidence, unprivileged on Linux 6.18: `TestSeccompSelfTestThroughAChild` and
 `TestIsolationSelfTestSeccompLegThroughTheRealBinary` pass. The deployed run
 is FP0's.
+
+## Review bunch 22 (2026-10-22): what was wrong and how it was repaired
+
+The panel was Gemini flash, DeepSeek and Devin, and it sent back
+`bb50792d0`. What was wrong, and the repair for each:
+
+1. **Reachability.** "Host peer only" was false at the authorization layer.
+   The proxy forwards every authenticated `/api/*` call to the guest and
+   injects the owner (`internal/proxy/handlers.go`, `HandleProtectedAPI`).
+   So any owner browser session, or any API key with `write:runtime`, could
+   POST `?leg=oom`, including on the always-on paper.
+
+   The OOM and seccomp legs now live on `POST
+   /internal/runtime/isolation-selftest?leg=oom|seccomp`:
+   - the public edge refuses `/internal/*`, and the proxy never forwards it;
+   - the guest admits only its host peer (`server.GuestHostCaller`: the
+     default gateway, never loopback or any other in-guest address) holding
+     the internal service credential (`hostauth.Authorize`), as
+     `/internal/debug/pprof/` does;
+   - the `/api` route answers 400 to a `leg`, and the proxy refuses any
+     `leg` on it with 404 before the guest, for cookie sessions and API keys
+     alike.
+
+   The probe and the FP2 proof steps reach the internal route from Node B
+   over ssh, with the token header file passed to curl by path.
+2. **No free-memory guard.** The leg now refuses when MemAvailable is below
+   the budget plus 1 GiB headroom: 512 MiB is the daemon's `MemoryMin`, and
+   512 MiB covers the other desk workers' growth and the store's page cache.
+   It checks before any worker starts and again before the cell. Both
+   numbers are in the receipt.
+3. **The runaway could run without a live sibling.** A sibling that fails to
+   spawn, or does not answer its first ping, now ends the leg before the
+   runaway spawns.
+4. **A nil-pointer panic on the timeout path.** A cell timeout reaped the
+   worker and released its cgroup (`w.budget = nil`) before the leg read
+   `w.budget.path`. The path is now saved before `Eval`.
+5. **A kill before the cell ran could pass.** The fixed cell's first act is
+   `choir.ReadCapture("choir-oom-selftest-start")`. It reaches the host as
+   a broker frame mid-cell, and the self-test's own egress hook records it.
+   Both judges require this start marker.
+6. **The judge accepted any confinement mode.** Both judges now require mode
+   `required`, the guest's production mode. A test spawned in auto mode
+   therefore fails only on the mode.
+
+The seccomp children's timeout now kills the child's whole process group
+(`cmd.Cancel`).
+
+Not yet proved: the root kill test, and both legs on the deployed guest
+(FP0).
