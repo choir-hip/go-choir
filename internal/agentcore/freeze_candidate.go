@@ -52,11 +52,13 @@ func openFreezeCandidate(ctx context.Context, operations *selfdev.Store, authori
 		// candidate stays open for management's Verify and the owner's
 		// decision, so the next assignment cannot freeze until then. Say so
 		// on this assignment's run, so it reports instead of retrying until
-		// its deadline (review round 2, R3).
+		// its deadline (review round 2, R3). The advice is a failed report:
+		// a partial one does not end the assignment, and the completion
+		// guard then cancels it (FP4 round 3, P2).
 		log.Printf("selfdev: assignment %s cannot freeze: %v", assignmentID, err)
 		return selfdev.Operation{}, fmt.Errorf("self-development candidate: assignment %s cannot freeze until the open candidate settles (%w); "+
 			"a frozen, verified or awaiting_approval candidate waits for management's Verify and the owner's decision, which this assignment cannot make; "+
-			"report the work as partial or failed instead of retrying the freeze", assignmentID, err)
+			"report the work as failed: Complete with result failed and this refusal as the reason, instead of retrying the freeze", assignmentID, err)
 	}
 	if err != nil {
 		return selfdev.Operation{}, fmt.Errorf("self-development candidate: open: %w", err)

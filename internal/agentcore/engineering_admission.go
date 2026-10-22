@@ -28,6 +28,18 @@ import (
 // work: a stuck live assignment ends at its own deadline or by management's
 // explicit Cancel.
 
+// EngineeringAdmissionMailbox is the mailbox admission's own wakes go to:
+// the backoff retry, the nudge when an assignment ends, and the planned-boot
+// resume. Admission needs nothing from management's actor lane (it takes
+// engineeringAssignmentOpenMu and writes assignment rows under their
+// lifecycle CAS), and management is always in an activation when an
+// assignment ends, reading its report, so a wake on management's mailbox
+// waited for that run
+// (docs/problems/fp4-nudge-waits-behind-management-activation-2026-10-22.md).
+// The open-time spawn wake, minted by the store in the open commit, still
+// goes to the casting agent; the handler accepts both.
+const EngineeringAdmissionMailbox = "engineering-admission"
+
 // ErrEngineeringAdmissionBusy is the retryable refusal: the request waits.
 var ErrEngineeringAdmissionBusy = errors.New("engineering admission busy")
 
@@ -184,7 +196,7 @@ func (rt *Runtime) deferEngineeringAdmission(ctx context.Context, assignment typ
 		return err
 	}
 	delay := engineeringAdmissionRetryDelay(retry)
-	if err := rt.scheduleActor(ctx, binding.OwnerID, binding.ComputerID, binding.ParentAgentID,
+	if err := rt.scheduleActor(ctx, binding.OwnerID, binding.ComputerID, EngineeringAdmissionMailbox,
 		delegatedAssignmentSpawnDeadlineUpdateKind, string(content), binding.TrajectoryID, "", time.Now().UTC().Add(delay)); err != nil {
 		return fmt.Errorf("re-arm the admission retry for %s: %w", assignment.AssignmentID, err)
 	}
@@ -230,7 +242,7 @@ func (rt *Runtime) resumeQueuedEngineeringRequestsAtPlannedBoot(ctx context.Cont
 		if err != nil {
 			continue
 		}
-		if err := rt.scheduleActor(ctx, a.Binding.OwnerID, a.Binding.ComputerID, a.Binding.ParentAgentID,
+		if err := rt.scheduleActor(ctx, a.Binding.OwnerID, a.Binding.ComputerID, EngineeringAdmissionMailbox,
 			delegatedAssignmentSpawnDeadlineUpdateKind, string(content), a.Binding.TrajectoryID, "", now); err != nil {
 			log.Printf("runtime: planned boot: resume queued engineering request %s: %v", a.AssignmentID, err)
 			continue
@@ -332,7 +344,7 @@ func (rt *Runtime) wakeNextQueuedEngineeringRequest(ctx context.Context, freed t
 	if err != nil {
 		return
 	}
-	if err := rt.scheduleActor(ctx, next.Binding.OwnerID, next.Binding.ComputerID, next.Binding.ParentAgentID,
+	if err := rt.scheduleActor(ctx, next.Binding.OwnerID, next.Binding.ComputerID, EngineeringAdmissionMailbox,
 		delegatedAssignmentSpawnDeadlineUpdateKind, string(content), next.Binding.TrajectoryID, "", now); err != nil {
 		log.Printf("runtime: engineering admission: wake %s after %s ended: %v", next.AssignmentID, freed.AssignmentID, err)
 	}
