@@ -28,8 +28,9 @@ func Project(doc StructuredTextureDoc, entities []SourceEntity, unusedSourceEnti
 }
 
 // ProjectOwnerText is Project for a document synthesized from the owner's
-// own input text: it validates with ValidateOwnerText, so the owner's literal
-// "[1]" and "Source:" words are projected as written.
+// own input text: it validates with ValidateOwnerText (which accepts only the
+// store's synthesized one-paragraph shape), so the owner's literal "[1]" and
+// "Source:" words are projected as written.
 func ProjectOwnerText(doc StructuredTextureDoc) (Projection, error) {
 	if err := ValidateOwnerText(doc); err != nil {
 		return Projection{}, err

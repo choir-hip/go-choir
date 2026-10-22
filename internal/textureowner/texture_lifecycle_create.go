@@ -102,7 +102,7 @@ func (h *Handler) HandleTextureLifecycleCreate(w http.ResponseWriter, r *http.Re
 		Agent:           types.AgentRecord{AgentID: agentID, OwnerID: ownerID, ComputerID: computerID, Profile: deskProfile, Role: deskProfile, ChannelID: docID, CreatedAt: now, UpdatedAt: now},
 	}
 	start.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(start)
-	result, err := h.Store.StartLifecycle(r.Context(), start)
+	result, err := h.Store.StartLifecycle(ownerTextContext(r.Context(), r), start)
 	if err != nil {
 		if errors.Is(err, store.ErrLifecycleCommandConflict) {
 			writeAPIJSON(w, http.StatusConflict, apiError{Error: "create occurrence conflicts with its durable receipt"})
