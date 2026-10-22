@@ -77,6 +77,9 @@ type ArtifactGCNamespaceReport struct {
 	// between classification and the locked unlink.
 	KeptOnRecheck int `json:"kept_on_recheck"`
 	Errors        int `json:"errors"`
+	// Retired counts file_cas root rows retired (active) or that would be
+	// retired (dry-run) this run (file-cas-roots only).
+	Retired int `json:"retired,omitempty"`
 }
 
 // ArtifactGCReport is the deployed-proof receipt for one sweep.
@@ -179,6 +182,23 @@ func (s *Service) RunArtifactGC(ctx context.Context, cfg ArtifactGCConfig) (Arti
 	}
 	cutoff := started.UTC().Add(-cfg.Grace)
 
+	allowed := map[string]bool{}
+	for _, ns := range cfg.ActiveNamespaces {
+		allowed[ns] = true
+	}
+
+	// F4: retire old file-cas root rows before the live sets are read, so the
+	// manifests of retired rows are unreachable in this same pass. Dry-run only
+	// counts.
+	rootsRetired := 0
+	if len(cfg.ActiveNamespaces) == 0 || allowed["file-cas-roots"] {
+		n, err := s.retireFileCASRoots(ctx, started, cfg.Grace, cfg.MaxDeletes, cfg.Mode == ArtifactGCModeActive)
+		rootsRetired = n
+		if err != nil {
+			report.Warnings = append(report.Warnings, "file-cas-roots retire: "+err.Error())
+		}
+	}
+
 	// A live set that fails to load aborts the whole sweep — sweeping with a
 	// missing set deletes live artifacts (s0-gc-og-wrong-store-deletion,
 	// 2026-10-05).
@@ -189,10 +209,6 @@ func (s *Service) RunArtifactGC(ctx context.Context, cfg ArtifactGCConfig) (Arti
 		return report, fmt.Errorf("artifact gc: live set unavailable: %s", strings.Join(warnings, "; "))
 	}
 
-	allowed := map[string]bool{}
-	for _, ns := range cfg.ActiveNamespaces {
-		allowed[ns] = true
-	}
 	var selected []gcCandidate
 	deletedCount := 0
 	var deletedBytes int64
@@ -215,6 +231,9 @@ func (s *Service) RunArtifactGC(ctx context.Context, cfg ArtifactGCConfig) (Arti
 		if ns != "file-cas-chunks" && len(live[ns]) == 0 && rep.Eligible > 0 {
 			report.Warnings = append(report.Warnings, fmt.Sprintf("%s: live set is empty but %d old entries exist (namespace not swept)", ns, rep.Eligible))
 			participates = false
+		}
+		if ns == "file-cas-roots" {
+			rep.Retired = rootsRetired
 		}
 		rep.Mode = ArtifactGCModeDryRun
 		if participates && cfg.Mode == ArtifactGCModeActive {
@@ -680,6 +699,7 @@ type artifactGCLogRecord struct {
 	Bytes     int64  `json:"bytes,omitempty"`
 	ModTime   string `json:"mtime,omitempty"`
 	Error     string `json:"error,omitempty"`
+	Reason    string `json:"reason,omitempty"`
 }
 
 // deleteArtifactCandidates removes the selected candidates. For each batch it
