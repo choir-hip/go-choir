@@ -356,3 +356,37 @@ DeepSeek accepts with edits; Gemini accepts.
 - R4-7: no change. The journal pin is R3-5 (reported, an owner act), the
   plain `data.img` orphan is the open owner question, and the dir read
   under the lock touches fewer than ten entries.
+
+## Deployed proof after D2 (main 674460d15): a proof-script defect, recorded before the fix
+
+FP0 ran `scripts/proofs/fp0-vm-retention.sh --commit 674460d15` on staging
+after deploy D2 (evidence `_runs/deployD2-retention-after.txt`, outside
+the repo). Steps 1, 2 and 4 passed. One check failed:
+
+```text
+INFO step=0 vmctl build.commit=
+FAIL step=0 vmctl runs 674460d15
+```
+
+- R5-1 (medium, proof integrity, confirmed). Step 0 reads
+  `.build.commit` from the JSON body of vmctl's `/health`. That body
+  (`vmctlHealthResponse`, `internal/vmctl/handlers.go` HandleHealth) has
+  no build field, so the check can never pass, on any commit. vmctl's
+  build identity is the `X-Choir-Build-Commit` response header that
+  `server.WithBuildIdentity` (`internal/server/server.go`) sets on every
+  response, with `X-Choir-Build-Service: vmctl`. The deploy reads that
+  header to write vmctl's activation receipt entry
+  (`.github/scripts/node-b-ci-deploy`, "Activation receipt:
+  service=vmctl"). The selftest missed it because its fake curl answers
+  `:8083/health` with a body that carries `build.commit`, which real
+  vmctl never sends.
+- R5-2 (low, proof procedure). Step 4's before/after comparison needs a
+  run before the deploy. FP0 did not make one for D2, so only the after
+  half exists (no risk: the active plan is observe with no candidates).
+  Step 4's closing MANUAL line says "run this step before the deploy and
+  after it", which reads as advice, not as a precondition.
+- R5-3 (low, proof integrity, discovered with R5-1). The same wrong read
+  is in `scripts/proofs/fp3-group1-wedge.sh` step 1: "vmctl health names
+  T1" searches the `/health` body's strings for the commit, so it too can
+  never pass on real vmctl. Its selftest passes only on the same
+  wrong-shaped fake.
