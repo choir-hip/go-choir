@@ -197,7 +197,9 @@ commits after this one.
     check and its result>`.
   - The lane's token cannot push `.github/workflows`, so FP0 adds this
     step to the Vocabulary Gates job (which `check`, and so the deploy,
-    requires), in its own commit:
+    requires), in its own commit. The patch is
+    `docs/evidence/fc-deploy2-ci-schema-floor-step.patch` (`git apply`
+    from the repository root):
 
 ```yaml
       - name: Run store floor guard
