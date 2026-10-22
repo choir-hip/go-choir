@@ -258,3 +258,13 @@ Nothing here changes the rotation decision (Next 1).
    above that sends it to a guest.
 3. FP0's own scripts (`bootwin/poll.sh`, the reaper watches) drop the
    header.
+
+## 2026-10-22: the scanner runs only by hand
+
+`scripts/selftest-guest-token` (fix item 2) is the only guard that a tracked
+script keeps the token on loopback internal ports, and no CI job runs it. A
+script change that sends the header to a guest URL lands green unless
+someone remembers to run it. Fix (lane `fp0-ci-guards`, yellow): run
+`python3 -I scripts/selftest-guest-token` in the CI job that already runs
+the script gates (Vocabulary Gates, `v1-inventory`), which runs on every
+non-docs change and is skipped on docs-only pushes, like the other gates.

@@ -196,3 +196,21 @@ code; nothing was changed.
     markers are still fresh (15-minute TTL);
   - the cost of nosmt for density: estimated in status item 2, not
     measured.
+
+## 2026-10-22: the lag recurs and nobody sees it unless they ask
+
+Reported by FP0 on 2026-10-22: Node B again runs a booted system older than
+the activated one. The detector exists three times over
+(`internal/hostboot`, vmctl's internal `GET /internal/vmctl/host/boot-state`,
+`scripts/verify-host-hardening.py --boot-state-json`), and the staging deploy
+prints a `Host reboot pending` warning. All of them answer only when someone
+asks: nothing on the host says it on its own, at boot or while the host sits
+between deploys. The 216 days happened in exactly that gap.
+
+Fix (lane `fp0-ci-guards`, orange: vmctl runtime, read-only, log only): vmctl
+writes one journal line from `hostboot.Read` at start and every 24 hours,
+naming booted_system, current_system, the booted and activated kernel
+versions, the reasons, and since when the reboot has been pending (a
+`WARNING` line when pending, `OVERDUE` past 7 days). It stays off public
+`/health`, as the internal route does: a public "kernel X, reboot pending"
+names the exploits that work. Rollback: revert the commit; nothing persists.
