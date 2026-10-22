@@ -30,7 +30,11 @@ import (
 //     connection is invisible to the counters;
 //   - a wedged closing commit holds Close for the full commit timeout;
 //   - a "nothing to commit" answer is counted as a commit;
-//   - the mode report says debounced after Close.
+//   - the mode report says debounced after Close;
+//   - Close waits out a background commit already holding the commit lock;
+//   - a background commit that passed the closed check runs after Close;
+//   - a finalize is counted as waiting on a commit that did not hold the
+//     connection.
 
 // finalizeTestEvents appends n events after the head of computerID.
 func finalizeTestEvents(t *testing.T, s *Store, computerID string, n int) {
@@ -377,15 +381,12 @@ func TestCheckpointFinalizeWaitOnCommitIsCounted(t *testing.T) {
 	const hold = 150 * time.Millisecond
 	held := make(chan struct{})
 	release := make(chan struct{})
-	s.checkpointExecHook = func(ctx context.Context) error {
-		// Stand in for DOLT_COMMIT holding the connection.
-		conn, err := s.db.Conn(ctx)
-		if err != nil {
-			return err
-		}
+	s.checkpointExecHook = func(context.Context) error {
+		// Runs while the commit holds the store's one connection: a
+		// stand-in for a slow DOLT_COMMIT.
 		close(held)
 		<-release
-		return conn.Close()
+		return nil
 	}
 	s.markDoltHistoryDirty()
 	commitDone := make(chan error, 1)
@@ -513,5 +514,107 @@ func TestCheckpointModeReportsClosedAfterClose(t *testing.T) {
 	}
 	if got := s.CheckpointStats().Mode; got != CheckpointModeClosed {
 		t.Fatalf("mode after Close = %q, want %q", got, CheckpointModeClosed)
+	}
+}
+
+// A background commit already in flight (holding the commit lock, and
+// ignoring its context, as DOLT_COMMIT may) does not hold Close past the
+// close cap: Close skips the closing commit and counts the failure.
+func TestCheckpointCloseIsBoundedBehindABackgroundCommit(t *testing.T) {
+	path := testStorePath(t)
+	cleanupTestStorePath(path)
+	t.Cleanup(func() { cleanupTestStorePath(path) })
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.ConfigureCheckpoint(CheckpointConfig{Debounced: true, Debounce: time.Hour, MaxOps: 1 << 30})
+	s.checkpoint.closeTimeout = 100 * time.Millisecond
+	const computerID = "computer-cadence-closebehind"
+	_, _ = prepareGenesis(t, s, computerID, "genesis-cadence-closebehind")
+	finalizeTestEvents(t, s, computerID, 1)
+
+	held := make(chan struct{})
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseCommit := func() { releaseOnce.Do(func() { close(release) }) }
+	t.Cleanup(releaseCommit)
+	var calls sync.Mutex
+	first := true
+	s.checkpointExecHook = func(context.Context) error {
+		calls.Lock()
+		isFirst := first
+		first = false
+		calls.Unlock()
+		if isFirst {
+			close(held)
+			select {
+			case <-release:
+			case <-time.After(10 * time.Second):
+			}
+		}
+		return nil
+	}
+	background := make(chan struct{})
+	go func() {
+		s.fireCheckpoint()
+		close(background)
+	}()
+	select {
+	case <-held:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the background commit never started")
+	}
+	s.markDoltHistoryDirty()
+	failuresBefore := s.CheckpointStats().Failures
+	started := time.Now()
+	closed := make(chan error, 1)
+	go func() { closed <- s.Close() }()
+	select {
+	case <-closed:
+	case <-time.After(3 * time.Second):
+		releaseCommit()
+		<-closed
+		t.Fatalf("Close waited %s behind the background commit with a 100ms close cap", time.Since(started))
+	}
+	if s.CheckpointStats().Failures <= failuresBefore {
+		t.Fatal("the skipped closing commit was not counted as a failure")
+	}
+	releaseCommit()
+	select {
+	case <-background:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the background commit did not finish after release")
+	}
+}
+
+// A background commit that reaches the commit lock after Close (it passed
+// the closed check before Close ran) is not attempted.
+func TestCheckpointCommitAfterCloseIsNotAttempted(t *testing.T) {
+	path := testStorePath(t)
+	cleanupTestStorePath(path)
+	t.Cleanup(func() { cleanupTestStorePath(path) })
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.ConfigureCheckpoint(CheckpointConfig{Debounced: true, Debounce: time.Hour, MaxOps: 1 << 30})
+	const computerID = "computer-cadence-afterclose"
+	_, _ = prepareGenesis(t, s, computerID, "genesis-cadence-afterclose")
+	finalizeTestEvents(t, s, computerID, 1)
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	attempted := false
+	s.checkpointExecHook = func(context.Context) error {
+		attempted = true
+		return nil
+	}
+	s.markDoltHistoryDirty()
+	if err := s.commitDoltCheckpointAt(context.Background(), "late", checkpointSiteBackground); err != nil {
+		t.Fatalf("a background commit after Close: %v", err)
+	}
+	if attempted {
+		t.Fatal("a background commit ran after Close")
 	}
 }
