@@ -53,6 +53,12 @@ type BootClaim struct {
 	// fresh boot, the row's own epoch for a resume.
 	Epoch     int64  `json:"epoch"`
 	ClaimedAt string `json:"claimed_at,omitempty"`
+	// Counted marks a claim a load already counted in the row's
+	// StartInterruptions. A restart while its close is still open (the
+	// process survived the kill) reloads the same claim and must not count
+	// the one interrupted start twice. Set only at load, before the claim is
+	// shared.
+	Counted bool `json:"counted,omitempty"`
 }
 
 const (
@@ -92,7 +98,15 @@ func interruptStartAtLoadLocked(own *VMOwnership, now time.Time) bool {
 		own.BootClaim = &BootClaim{Kind: bootClaimFirstBoot, Epoch: own.Epoch, ClaimedAt: now.UTC().Format(time.RFC3339Nano)}
 	}
 	own.State = VMStateStopped
-	own.StartInterruptions++
+	if !own.BootClaim.Counted {
+		// One count per interrupted start, however many restarts its close
+		// spans.
+		own.StartInterruptions++
+		own.BootClaim.Counted = true
+	}
+	if own.StartInterruptions < 1 {
+		own.StartInterruptions = 1
+	}
 	own.StoppedBy = stoppedByStartInterrupted
 	if own.StartInterruptions >= 2 {
 		own.StoppedBy = stoppedByStartInterruptedRepeatedly
@@ -264,18 +278,16 @@ func (r *OwnershipRegistry) closeInterruptedStarts() {
 				own.failureWarmGen++
 			}
 		}
+		// Read for the log under the lock: a start released by the close
+		// may write the row as soon as it is unlocked.
+		userID, stoppedBy, interruptions := "", stoppedByStartInterrupted, 0
+		if own != nil {
+			userID, stoppedBy, interruptions = own.UserID, own.StoppedBy, own.StartInterruptions
+		}
 		r.saveLocked()
 		r.mu.Unlock()
-		userID := ""
-		if own != nil {
-			userID = own.UserID
-		}
-		stoppedBy, interruptions := stoppedByStartInterrupted, 0
-		if own != nil {
-			stoppedBy, interruptions = own.StoppedBy, own.StartInterruptions
-		}
 		if stoppedBy == stoppedByStartInterruptedRepeatedly {
-			log.Printf("vmctl: closed VM %s (user %s): its %s of epoch %d was interrupted by a vmctl restart (%s), %d starts in a row; stopped_by=%s, the automatic retry is spent: the sweep leaves it for %s or the next deploy, an owner act boots it", vmID, userID, claim.Kind, claim.Epoch, ended, interruptions, stoppedBy, failureWarmWindow)
+			log.Printf("vmctl: closed VM %s (user %s): its %s of epoch %d was interrupted by a vmctl restart (%s), %d starts in a row; stopped_by=%s, the automatic retry is spent: the sweep leaves it for %s, a deploy of a new target re-arms it and the deploy rescue boots it, an owner act boots it", vmID, userID, claim.Kind, claim.Epoch, ended, interruptions, stoppedBy, failureWarmWindow)
 			continue
 		}
 		log.Printf("vmctl: closed VM %s (user %s): its %s of epoch %d was interrupted by a vmctl restart (%s); stopped_by=%s, the next start boots fresh", vmID, userID, claim.Kind, claim.Epoch, ended, stoppedBy)

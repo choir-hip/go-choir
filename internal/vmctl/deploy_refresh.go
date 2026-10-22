@@ -221,7 +221,7 @@ func deployRefreshAllowsBusy(class WarmnessClass) bool {
 }
 
 // deployRescueStopped reports whether a computer that is not running is one
-// a deploy reaches: an always-on computer (alwaysOnBootClass) stopped by a
+// a deploy reaches: a rescue-class computer (deployRescueClass) stopped by a
 // failure or by a vmctl restart (of it running, or of a start in flight), or failed (whatever failed it, including a
 // deploy refresh that did not boot). A computer stopped by an idle sweep, a
 // logout or an owner act is left to its next start, as before.
@@ -235,7 +235,24 @@ func deployRescueStopped(state VMState, stoppedBy string, class WarmnessClass, d
 	default:
 		return false
 	}
-	return alwaysOnBootClass(class, desktopID)
+	return deployRescueClass(class, desktopID, stoppedBy)
+}
+
+// deployRescueClass reports whether a deploy rescue reaches a computer of
+// this class with this stop: every always-on boot class (alwaysOnBootClass),
+// and the public_platform computer only when its starts kept crashing vmctl
+// (stoppedByStartInterruptedRepeatedly, boot_claim.go). That fate gates the
+// platform's own warm and ensure for failureWarmWindow, and a deploy of a
+// new target is its escape: GrantDeployRetry re-arms it and the rescue boots
+// it once. The platform's other stops keep their own escape (the warm and
+// the ensure), so a deploy does not take them over, and alwaysOnBootClass is
+// not widened: the always-on sweep would then retry the platform inside the
+// window and undo the bound (review round 3, E1).
+func deployRescueClass(class WarmnessClass, desktopID, stoppedBy string) bool {
+	if alwaysOnBootClass(class, desktopID) {
+		return true
+	}
+	return class == WarmnessClassPublicPlatform && stoppedBy == stoppedByStartInterruptedRepeatedly
 }
 
 // rescueCause names why a rescue candidate is down, for reasons and logs.
