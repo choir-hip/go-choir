@@ -166,8 +166,19 @@
             hash = choirFirecrackerRelease.cargoHash;
           };
         });
-      choirFirecrackerModule = { ... }: {
+      # Upper bound: mkChoirFirecracker takes any nixpkgs firecracker at or
+      # above 1.16.2, so a base bump that brings 1.17 would ship it host-wide
+      # with no review. Every version change voids every hibernate snapshot,
+      # and 1.17 is NET-08's staged per-computer move (nix/firecracker-next.nix,
+      # one test computer first), not a host-wide one. Raise the bound here,
+      # deliberately, when the host itself moves.
+      choirFirecrackerBelow = "1.17";
+      choirFirecrackerModule = { lib, pkgs, ... }: {
         nixpkgs.overlays = [ (final: prev: { firecracker = mkChoirFirecracker prev; }) ];
+        assertions = [{
+          assertion = lib.versionOlder pkgs.firecracker.version choirFirecrackerBelow;
+          message = "host Firecracker ${pkgs.firecracker.version} is not below ${choirFirecrackerBelow}: a Firecracker version change voids every hibernate snapshot (firecracker_version_mismatch, every computer cold boots), and 1.17 is NET-08's staged per-computer move (nix/firecracker-next.nix; docs/definitions/choir-launch-fp8-image-jailer-2026-10-21.md, NET-08). Keep the host on 1.16.x or raise choirFirecrackerBelow in flake.nix deliberately.";
+        }];
       };
 
       # Qdrant lane (docs/problems/weekly-nixpkgs-bump-qdrant-build-failure-
