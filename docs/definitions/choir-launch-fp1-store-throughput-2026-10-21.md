@@ -108,15 +108,13 @@ boundaries:
 now:
   status: checkpoint_incomplete
   slice: >-
-    Follow-up (2026-10-22, lane/fp1-boot-window): the paper is unreachable 4
-    to 6 minutes after every boot. Code read, no runtime change: /health
-    makes three unbudgeted reads on the store's one write connection; the
-    online Dolt GC's first pass, started just before rt.Start, is the leading
-    holder (H4); the validator is ruled out as holder. Measurements and fix
-    candidates F1-F3 appended to
-    docs/problems/paper-unreachable-minutes-after-every-boot-2026-10-22.md;
-    probe scripts/paper_boot_window_probe.py. Earlier slice: B2 landed
-    (bed24b526) with its deployed proof read at 00:52 (ledger).
+    Follow-up (2026-10-22, lane/fp1-boot-window): the paper is unreachable
+    minutes after every boot. FP0's trace found the holder:
+    LatestComputerEventByIdempotencyPrefix walking every finalized event
+    (H4, the online GC, refuted by M0a). Repair built, tests first: one range
+    on the unique (computer_id, idempotency_key) key (40cdc19fc). F1 (bounded
+    /health reads) recorded as the next candidate, not built. Earlier slice:
+    B2 landed (bed24b526).
   source_ref: see receipts
   deploy_identity: f2c4a3ec3 serving at start; this lane deploys nothing
   candidate:
@@ -165,19 +163,13 @@ now:
     owner_ratification_ref: the orchestrator's panel on the frozen candidate
   belief:
     believed_state: >-
-      The boot window is a store hold, not CPU or memory alone: /health
-      cannot answer while s.db is held, and the two waiters in the log
-      released in the same second. Most likely holder: the online
-      CALL DOLT_GC() at runtime start (hypothesis; one counter-fact: rt.Start
-      finished before the silence).
-    main_uncertainty: >-
-      Whether an online GC ran in the window, and how long; if not, which
-      statement held the engine.
+      The boot-window hold was the newest-first walk in
+      LatestComputerEventByIdempotencyPrefix after ready; the range read
+      costs the family's size (plan test).
+    main_uncertainty: whether another long s.db holder remains after this read is gone
     next_observation: >-
-      M0a (now): the paper console's "store: dolt gc (boot|online)" lines for
-      the 01:12, 02:18 and 02:52:59 boots; M0b: observability engine_mutex
-      max_hold_ns since 02:52:59; then M1-M3 with the probe in the next boot
-      window.
+      FP0, next paper boot window: /health 200 within seconds of "runtime:
+      started"; if not, the probe's goroutine dump.
   blocker_or_risk: >-
     Lands only after the host lane's vmctl rollback-reachability fix. A
     rollback to a binary without the extractor change leaves og_key_index as an
@@ -188,11 +180,16 @@ now:
     FP0 can check the paper with the query in that record before the deploy.
     Residual: the validator's COUNT and stray-id lists are not keyset-paged.
   next_action: >-
-    FP0 reads M0a/M0b; if H4 holds, this lane builds F2 (online GC does not
-    collect a large journal while serving; red, tests first) and F1
-    (/health bounded, 503 store_stalled; orange). If not, the probe in the
-    next boot window names the holder.
+    FP0 rebases lane/fp1-boot-window onto 53c8bb181, lands 40cdc19fc and its
+    tests (orange), and reads the next boot window. Then F1 if the owner or
+    FP0 wants it.
 receipts:
+  - id: fp1-boot-window-repair
+    boundary: implement
+    identity: b6523c170, 37cab03d4 (tests), 40cdc19fc (fix), 0084139d6 (record)
+    proof_refs: [internal/store/computer_event_prefix_test.go]
+    rollback_ref: git revert 40cdc19fc
+    disposition: built and tested locally (-race); not landed
   - id: fp1-boot-window-reading
     boundary: define
     identity: 29c175738 (problem record append), 601e90c2a (probe)
