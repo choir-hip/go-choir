@@ -171,14 +171,12 @@ func OpenTextureWorkspace(path string) (*Store, error) {
 	}
 	s := &Store{path: path, textureDB: db, texturePath: workspacePath, doltConnector: connector}
 	if err := s.bootstrapTexture(); err != nil {
-		_ = s.Close()
-		return nil, fmt.Errorf("texture workspace: bootstrap: %w", err)
+		return nil, s.closeFailedOpen(fmt.Errorf("texture workspace: bootstrap: %w", err))
 	}
 	// Initialize the object graph service on the texture workspace.
 	ogDoltStore := objectgraph.NewDoltStore(db)
 	if err := ogDoltStore.EnsureSchema(context.Background()); err != nil {
-		_ = s.Close()
-		return nil, fmt.Errorf("texture workspace: bootstrap object graph: %w", err)
+		return nil, s.closeFailedOpen(fmt.Errorf("texture workspace: bootstrap object graph: %w", err))
 	}
 	s.ogStore = ogDoltStore
 	ogDoltStore.SetWriteValidator(s.vocabWriteGuard)
@@ -256,15 +254,19 @@ func openTextureWorkspaceDB(path string) (*sql.DB, string, doltConnector, error)
 		if err != nil {
 			lastErr = fmt.Errorf("texture workspace: new database connector: %w", err)
 		} else {
-			db := sql.OpenDB(poolConnector{dbConnector})
+			var engine doltConnector = dbConnector
+			if wrap := testHookWrapConnector; wrap != nil {
+				engine = wrap(engine)
+			}
+			db := sql.OpenDB(poolConnector{engine})
 			configureEmbeddedDoltDB(db)
 			if pingErr := db.Ping(); pingErr == nil {
-				return db, workspacePath, dbConnector, nil
+				return db, workspacePath, engine, nil
 			} else {
 				lastErr = fmt.Errorf("texture workspace: ping database: %w", pingErr)
 			}
 			_ = db.Close()
-			_ = dbConnector.Close()
+			_ = engine.Close()
 		}
 
 		if !strings.Contains(strings.ToLower(lastErr.Error()), "non 0 lock") {
