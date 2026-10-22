@@ -1,6 +1,6 @@
 # App agent network policy: egress declarations and ingress as records (NET-10)
 
-Status: design, green (no code). Date: 2026-10-21. Checklist item: NET-10 in
+Status: design, green (no code). Date: 2026-10-21. Superseded in part (2026-10-22): §2 field list and §7 order by [FP10 NET-10](../definitions/choir-launch-fp10-net10-2026-10-22.md). Checklist item: NET-10 in
 [security, density and architecture checklist](../security-density-architecture-checklist-2026-10-21.md).
 Joins: S4 "Egress capability model", S7 "Appagent egress grants" and "App
 packages carry app-agent desks", the [email desk design](../reports/agentic-email-desk-2026-10-14.md)
