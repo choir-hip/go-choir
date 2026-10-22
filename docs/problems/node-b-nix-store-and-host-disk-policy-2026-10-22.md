@@ -486,3 +486,31 @@ Recorded as found; dispositions follow in the commits after this one.
 | S-F9 | Recorded: watch `nix store gc` duration in the prebuild. |
 | S-F10 | Fixed: 1 GiB hash cap, page cache dropped after each hash, `stat.S_ISREG` (E4). |
 | Flash: mandatory sequential deployment | Kept as the plan; no longer load-bearing for safety (the guard), still the footprint gate. |
+
+## Review round 2b findings (bunch 80: Gemini flash ACCEPT, DeepSeek accept with edits), recorded before the fixes
+
+- **DS2b-1, the preflight fails open on a non-numeric `df` reading.** A
+  `df` that exits 0 with a non-numeric last line makes both `[` tests
+  error, the `if` is false and the script exits 0: a deploy proceeds with
+  no free-space check (DeepSeek reproduced `root_available_kib=garbage` →
+  rc 0). Both reads (before and after the reclaim) have it. Pre-existing on
+  main, but it is the red gate.
+- **DS2b-2, `ci-wiring.patch` was cited but not delivered.** It sat
+  uncommitted in the lane worktree's root, so a reviewer of the branch could
+  not see it and FP0's `git apply` steps could not run from the branch.
+- **DS2b-3, 56 GiB is exactly the sum of its terms** (24 + 8 + 14 + 10); the
+  only slack is rounding (~1.8 GiB). A footprint over 8 GiB, a compaction
+  peak over 14 GiB, a deploy over 30 minutes or the paper above 290 MiB/min
+  crosses min-free; step 0's footprint gate is manual and gates only
+  deploy 2.
+- **DS2b-4**, between the deploys the alarm warns at 56 while the floor is
+  still 90; a deploy refused at 56 to 90 gets no warning.
+- **DS2b-5**, the now card's deploy 1 list omits 678c4c10c, 044693eeb and
+  2a0cde15d.
+- **DS2b-6**, the retention log's deletion set is a snapshot model (a
+  concurrent `nix-env --set` can make it differ from what nix's `+N`
+  deletes; the deletion itself is nix's). An old booted *generation link*
+  can be deleted; the booted closure survives through `/run/booted-system`.
+- **DS2b-7**, the guard trusts `/etc/nix/nix.conf`, not the running daemon:
+  a switch that writes the new file but fails to restart `nix-daemon`
+  leaves file 24 / daemon 80, and the guard computes the lower floor.
