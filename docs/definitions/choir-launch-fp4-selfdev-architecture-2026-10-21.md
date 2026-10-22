@@ -216,7 +216,17 @@ now:
     cached. Waiting on FP0 to land it and grep the spawn phase lines on
     staging. Option 6 is recorded, not built.
   slice: >-
-    Round 3 repair from the deployed drill on 71afbf14 (lane/fp4-r3-nudge,
+    Capsule memory (lane/fp4-capsule-memory, base main 71ec8e704): A's
+    release build in the round 3 re-run ran at its capsule's 2 GiB ceiling
+    with 2 OOM kills. Cause confirmed in code: the capsule's /sys mask hides
+    cpu.max from Go, so go build runs -p 4 in one CPU of quota, with no
+    GOMEMLIMIT and a cold cache. Fix (orange, the 2 GiB cap kept): capsule
+    Go workloads get GOMAXPROCS from the quota and GOMEMLIMIT at 5/8 of the
+    throttling limit; locally a capsule-shaped cold build went from an anon
+    peak of 1.27 GiB to 846 MiB and from 9 m 32 s to 7 m 53 s. Problem
+    record 3680eacc3, tests 55e9ac1ae, fix fd8337941; sizing in
+    docs/evidence/res04-capsule-memory-sizing-2026-10-22.md.
+    Before that: round 3 repair from the deployed drill on 71afbf14 (lane/fp4-r3-nudge,
     base main 7448bf899). P1: the nudge waited behind management's own
     activation (B bound 305 s after A ended); the cause is confirmed in a
     test, and admission's own wakes now go to an engineering-admission
@@ -299,7 +309,14 @@ now:
     60 s); a management Cancel and an admission can now race, and the
     lifecycle CAS makes the loser fail closed (P1 residuals b, c).
   next_action: >-
-    FP0: review the round 3 and 3b commits on lane/fp4-r3-nudge, land, then
+    Capsule memory: FP0 lands fd8337941 with its problem record and tests,
+    then runs the deployed proof in
+    docs/evidence/res04-capsule-memory-sizing-2026-10-22.md ("Deployed
+    proof"). That is an FP4 request A re-run on 71afbf14. Its cell and job
+    both print GOMAXPROCS=1 GOMEMLIMIT=1342177280. Pass: A's capsule_memory
+    receipt shows oom_kill=0. Record the build job's wall time from A's
+    trace against the earlier run's about 20 minutes. It can share a run
+    with the round 3 re-run below. Earlier: FP0: review the round 3 and 3b commits on lane/fp4-r3-nudge, land, then
     re-run drill steps 4 and 6 with the re-run plan in
     docs/evidence/fp4-admission-queue-deployed-proof-2026-10-22.md ("Re-run
     plan for steps 4 and 6 after FP4 round 3"). Precondition: no
@@ -394,6 +411,11 @@ receipts:
     identity: f55f1588a (dispatcher options extracted), f9732b3de (tests), 1b21dc6c8 (guard reason text)
     proof_refs: [internal/actorruntime/admission_mailbox_test.go, internal/actorruntime/admission_wake_latency_test.go, internal/agentcore/freeze_refusal_fate_test.go]
     rollback_ref: git revert 1b21dc6c8 (text only); the other two change no behaviour
+  - id: capsule-go-bounds
+    boundary: implement
+    identity: 3680eacc3 (problem record), 55e9ac1ae (tests), fd8337941 (fix), on lane/fp4-capsule-memory
+    proof_refs: [internal/yaegikernel/go_bounds_test.go, internal/capsule/go_bounds_test.go, cmd/capsule-broker/exec_direct_test.go, docs/evidence/res04-capsule-memory-sizing-2026-10-22.md]
+    rollback_ref: git revert fd8337941 (no schema, no stored state; workloads go back to Go's defaults)
   - id: arch04-observability
     boundary: implement
     identity: bbd19192c
