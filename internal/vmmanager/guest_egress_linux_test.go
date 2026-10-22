@@ -367,7 +367,8 @@ func TestHostFloorOnRealNetfilter(t *testing.T) {
 	// The host: services on loopback, sshd and Caddy on every address, the
 	// resolver on loopback.
 	listenTCP(t, "", "127.0.0.1:8084")
-	listenTCP(t, "", "0.0.0.0:8086") // a service bound too widely
+	listenTCP(t, "", "127.0.0.1:8089") // the package mirror (NET-02)
+	listenTCP(t, "", "0.0.0.0:8086")   // a service bound too widely
 	listenTCP(t, "", "0.0.0.0:22")
 	listenTCP(t, "", "0.0.0.0:443")
 	listenTCP(t, "", fmt.Sprintf("127.0.0.1:%d", dnsPort))
@@ -421,6 +422,8 @@ func TestHostFloorOnRealNetfilter(t *testing.T) {
 	}
 	probes := []probe{
 		{"guest: own gateway through DNAT", guestNS, hostA + ":8084", false, true},
+		{"guest: own package mirror through DNAT", guestNS, hostA + ":8089", false, true},
+		{"guest: another tap's package mirror", guestNS, hostB + ":8089", false, false},
 		{"guest: own resolver over TCP through DNAT", guestNS, fmt.Sprintf("%s:53", hostA), false, true},
 		{"guest: internet https", guestNS, worldIP + ":443", true, true},
 		{"guest: host sshd on its tap address", guestNS, hostA + ":22", true, false},
@@ -447,9 +450,12 @@ func TestHostFloorOnRealNetfilter(t *testing.T) {
 		t.Fatalf("setup tap B: %v", err)
 	}
 	for _, p := range probes {
-		if got := dial(p.ns, p.addr); got != p.allowed {
+		got := dial(p.ns, p.addr)
+		if got != p.allowed {
 			t.Errorf("%s (%s): reachable=%v, want %v", p.name, p.addr, got, p.allowed)
+			continue
 		}
+		t.Logf("verdict ok: %s (%s) reachable=%v", p.name, p.addr, got)
 	}
 	if !udpToResolver() {
 		t.Error("guest: own resolver over UDP through DNAT: unreachable")
