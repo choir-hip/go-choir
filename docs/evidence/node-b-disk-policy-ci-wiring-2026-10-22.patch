@@ -1,0 +1,22 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index e7206decd..52caf9355 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -419,6 +419,17 @@ jobs:
+         shell: bash
+         run: python3 -I scripts/selftest-guest-token
+ 
++      # Node B store retention, disk alarm and deploy floor
++      # (docs/problems/node-b-nix-store-and-host-disk-policy-2026-10-22.md).
++      # Fakes only: no Nix, no btrfs, no root.
++      - name: Run Node B disk policy tests
++        shell: bash
++        run: |
++          bash scripts/test-node-b-nix-retention.sh
++          bash scripts/test-node-b-host-disk-alarm.sh
++          bash scripts/test-node-b-deploy-disk-preflight.sh
++          python3 -I scripts/test_node_b_disk_policy.py
++
+   check:
+     name: Go Vet + Test + Build
+     runs-on: ubuntu-latest
