@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
+	"os"
 	"strings"
 	"time"
 )
@@ -26,6 +27,51 @@ import (
 // none of the toolchains an L2 capsule runs (go, pip, npm, git, curl,
 // huggingface_hub) does so by default. A client that does not send SNI is
 // refused; every TLS library sends it for a host name.
+
+// TunnelIdentityMode is how the proxy applies the check. The check refuses
+// traffic and a wrong refusal breaks builds, so it ships in observe (the
+// metamission rule for new red behaviour): observe judges the first record
+// exactly as enforce does, writes the verdict on the egress ledger entry,
+// logs a would-refuse once per capsule and host, and relays the record and
+// the tunnel unchanged. Enforce refuses. Off skips the check. The mode is the
+// executor's, read from the daemon's environment (TunnelIdentityEnv) and
+// written on every policy it builds; a capsule never supplies a policy.
+type TunnelIdentityMode string
+
+const (
+	TunnelIdentityOff     TunnelIdentityMode = "off"
+	TunnelIdentityObserve TunnelIdentityMode = "observe"
+	TunnelIdentityEnforce TunnelIdentityMode = "enforce"
+)
+
+// TunnelIdentityEnv selects the mode: "observe" (also unset and any unknown
+// value), "enforce" or "off".
+const TunnelIdentityEnv = "CHOIR_CAPSULE_EGRESS_TUNNEL_IDENTITY"
+
+// Tunnel identity verdicts on an EgressRecord.
+const (
+	TunnelVerdictPass        = "pass"
+	TunnelVerdictWouldRefuse = "would_refuse"
+	TunnelVerdictRefused     = "refused"
+)
+
+// TunnelIdentityModeFromEnv reads the mode. A value it does not know is
+// observe: a typo neither breaks builds nor removes the evidence.
+func TunnelIdentityModeFromEnv(getenv func(string) string) TunnelIdentityMode {
+	if getenv == nil {
+		getenv = os.Getenv
+	}
+	return TunnelIdentityMode(strings.ToLower(strings.TrimSpace(getenv(TunnelIdentityEnv)))).normalized()
+}
+
+// normalized maps the zero value and unknown values to observe.
+func (m TunnelIdentityMode) normalized() TunnelIdentityMode {
+	switch m {
+	case TunnelIdentityOff, TunnelIdentityEnforce:
+		return m
+	}
+	return TunnelIdentityObserve
+}
 
 const (
 	// maxTunnelRecord is the largest TLS record the protocol allows (2^14 of
@@ -210,10 +256,47 @@ func (h *hello) u16() int {
 	return int(binary.BigEndian.Uint16(t.b))
 }
 
+// checkTunnel applies the policy's mode to a CONNECT tunnel: it judges the
+// first record (verifyTunnel), writes the verdict on rec, and returns false
+// when the tunnel must be closed, which only enforce does. Under observe a
+// would-refuse is logged once per host for this capsule; the record stays in
+// br either way, so a relayed tunnel carries it unchanged.
+func (p *EgressProxy) checkTunnel(client net.Conn, br *bufio.Reader, rec *EgressRecord) bool {
+	mode := p.policy.TunnelIdentity.normalized()
+	if mode == TunnelIdentityOff {
+		return true
+	}
+	reason := p.verifyTunnel(client, br, rec.Host)
+	if reason == "" {
+		rec.TunnelIdentity = TunnelVerdictPass
+		return true
+	}
+	rec.TunnelIdentityReason = reason
+	if mode == TunnelIdentityEnforce {
+		rec.TunnelIdentity = TunnelVerdictRefused
+		return false
+	}
+	rec.TunnelIdentity = TunnelVerdictWouldRefuse
+	p.mu.Lock()
+	first := !p.wouldRefuseLogged[rec.Host]
+	if first {
+		if p.wouldRefuseLogged == nil {
+			p.wouldRefuseLogged = map[string]bool{}
+		}
+		p.wouldRefuseLogged[rec.Host] = true
+	}
+	p.mu.Unlock()
+	if first {
+		p.logf("capsule-egress: tunnel identity (observe) would refuse capsule %s host %s: %s; relayed unchanged, later ones for this host are on the ledger only",
+			p.capsuleID, rec.Host, reason)
+	}
+	return true
+}
+
 // verifyTunnel reads the first TLS record the client sends through a CONNECT
 // tunnel and checks it against the CONNECT host. The record stays in br, so
 // it is forwarded to the upstream unchanged once the check passes. A non-empty
-// reason means the tunnel must be closed.
+// reason means the tunnel fails the check.
 func (p *EgressProxy) verifyTunnel(client net.Conn, br *bufio.Reader, host string) string {
 	timeout := p.helloTimeout
 	if timeout <= 0 {
