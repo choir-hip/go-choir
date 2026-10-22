@@ -6,6 +6,12 @@ logs come in the next commit, and no optimization is built. Each finding is
 marked **confirmed** (by code read and a local measurement, or by arithmetic
 on the logged timestamps) or **hypothesis**.
 
+## Status (2026-10-22, lane/fp4-capsule-coldfix)
+
+Options 1 and 2 are built, tests first: 928ffe243 (yellow, tests),
+1d1556b72 (red, the fix). Options 3 to 6 are not built. Waiting on FP0 to
+land and prove on staging (see "Fix" at the end).
+
 ## Evidence
 
 - FP4 drill on deploy Q
@@ -322,3 +328,87 @@ Prediction for the next deploy, against which the conjecture is judged:
 
 If `broker_ready` or `overlay_mount` is seconds instead, this record is
 wrong about where the time goes, and the next probe is there.
+
+## Fix: options 1 and 2 (lane/fp4-capsule-coldfix, 1d1556b72)
+
+**One process per pass (option 1).**
+
+- `readCommitBlobs` sends every blob id of the `ls-tree` inventory to one
+  `git cat-file --batch --buffer` and `parseBlobBatch` reads the answers in
+  order.
+- It fails closed on:
+  - a missing or ambiguous object, or a non-blob type;
+  - a header for another object, or a bad or negative size;
+  - a short read, a missing terminator, or bytes after the last answer;
+  - a git exit error.
+- Each blob is hashed in git's object format and must give back its id.
+  The per-file path never checked this.
+- A failed copy removes the target it created, so there is never a
+  partial tree and never a digest over partial data.
+- Equality with the per-file digest is tested on this repository (3421
+  files) and on an edge-case tree: symlinks, executable bits, empty files,
+  names with spaces, tabs and newlines, and bodies that look like batch
+  headers.
+
+**No second proof of a digest this process has proved (option 2).**
+
+- Spawn's copy is checked against the binding's `SubjectDigest` (its own
+  in-process hash of the copy), not against a third read of the commit.
+  The phase line now reads `source_digest_commit … git_procs=0
+  against=expected`.
+- The carried-patch base copy is checked against its ref's digest the
+  same way.
+- `Executor.commitDigest` caches the commit's canonical digest:
+  - keyed by `(canonicalTreeDigestVersion, commit)`;
+  - bounded at 64 entries;
+  - failures are never cached.
+- So the cast's preflight serves the admission's resume preflight.
+
+**The defence this removes.** The resume preflight (now cached) and the
+copy recheck no longer read the object store again, so neither notices
+the store changing after the first proof.
+
+**Why the remaining checks cover it:**
+
+- The copy at spawn reads every blob from the store.
+- It checks each blob against its object id.
+- It refuses a tree whose digest is not the binding's.
+
+So a changed or corrupt store still stops the spawn, one step later, and
+leaves no tree (`TestPreflightCachesTheCommitDigestAndTheCopyStillChecksTheStore`).
+A store that was corrupt from before the first proof was never detected
+before; it is now refused.
+
+**Measured locally.** This VM was under load 11 on 8 vCPUs, so the
+absolute numbers run high next to the 7.15 s quiet measurement above. The
+ratios hold. Commit 928ffe243, 3421 files, from
+`CAPSULE_SOURCE_TIMINGS=1 go test ./internal/capsule -run TestSourcePassTimingsBeforeAfter -v`:
+
+| Pass | Before (one git process per file) | After |
+|---|---|---|
+| cast preflight | 21.7 s | 0.81 s (one batch) |
+| resume preflight | 21.7 s | 2 ms when cached, 0.60 s uncached |
+| `source_blobs` + `source_digest_copy` | 39.8 s | 1.41 s, including the in-process digest |
+| `source_digest_commit` | 29.9 s | 0 (compared with the binding's digest) |
+
+**Option 6 (spawn outside `e.mu`): not built.** With the source passes
+under about 1 s, `e.mu` is held for about 1 s per spawn, not 14 s. The
+change still needs an id reservation under the lock, and it is red
+capsule lifecycle work. It stays a prerequisite of N capsules per
+assignment (ARCH-10's second half).
+
+**Staging proof (FP0).**
+
+1. Deploy a main that carries 1d1556b72.
+2. Drive one engineering Cast on a test computer.
+3. Run `grep 'capsule capsule-<id> ' guest.log`.
+
+Expected:
+
+- `cast_preflight`, `resume_preflight`, `source_blobs` and
+  `source_digest_copy` are each under 1 s.
+- `source_digest_commit` is about 0 s, with `git_procs=0 against=expected`.
+- `source_blobs` reports `git_procs=1`.
+- The `spawn total=` line is a few seconds at most.
+
+If any of those phases still takes seconds, the residual is there.

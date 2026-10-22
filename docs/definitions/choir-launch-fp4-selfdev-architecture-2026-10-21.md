@@ -206,6 +206,15 @@ heresy_delta:
 
 now:
   status: checkpoint
+  coldstart_fix: >-
+    Capsule cold start (docs/problems/capsule-coldstart-18s-2026-10-22.md):
+    options 1 and 2 built on lane/fp4-capsule-coldfix. Tests are 928ffe243;
+    the fix is 1d1556b72: one git cat-file --batch per pass with every blob
+    checked against its object id, the copy checked against the binding's
+    digest, and the commit digest cached per process. Measured locally, a
+    pass that took 21.7 to 39.8 s now takes 0.6 to 1.4 s, and 2 ms when
+    cached. Waiting on FP0 to land it and grep the spawn phase lines on
+    staging. Option 6 is recorded, not built.
   slice: >-
     Round 3 repair from the deployed drill on 71afbf14 (lane/fp4-r3-nudge,
     base main 7448bf899). P1: the nudge waited behind management's own
