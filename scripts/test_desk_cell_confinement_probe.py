@@ -126,8 +126,10 @@ GUEST = "http://10.9.7.2:8080"
 
 class ProbeRun(unittest.TestCase):
     """The OOM and seccomp legs are host-internal: the probe reaches the guest
-    from Node B over ssh, with the internal service token header file passed
-    to curl by path. No API key is involved."""
+    from Node B over ssh. It sends the guest no host credential: the
+    internal service token never goes to a guest, and the route needs no
+    marker (docs/problems/host-internal-token-sent-to-guests-by-fp0-probes-2026-10-22.md).
+    No API key is involved."""
 
     @classmethod
     def setUpClass(cls):
@@ -161,7 +163,10 @@ class ProbeRun(unittest.TestCase):
     def assert_internal_call(self, call, leg):
         self.assertIn("node-b", call)
         self.assertIn(GUEST + "/internal/runtime/isolation-selftest?leg=" + leg, call)
-        self.assertIn("-H @" + TOKEN_FILE, call)
+        self.assertNotIn(TOKEN_FILE, call)
+        self.assertNotIn("internal-service-token", call)
+        self.assertNotIn("X-Internal-Caller", call)
+        self.assertNotIn("$AUTH", call)
         self.assertNotIn("/api/", call)
 
     def test_proven(self):
