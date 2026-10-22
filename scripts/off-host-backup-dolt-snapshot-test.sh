@@ -24,6 +24,12 @@
 # 10. The daily run walks every snapshot's trees to size the repository
 #     (`restic stats --mode raw-data`, 10 GB and 7 minutes on run 5):
 #     never; the size is the sum of the pack sizes the rest-server lists.
+# 11. With Store A's snapshot commits off (PLATFORM_DOLT_SNAPSHOTS=off) the
+#     newest dolt_log hash is frozen, so a manifest holding only heads lets a
+#     restore of any age pass the drill: never; the manifest also records
+#     Store A's event receipt count, read before the capture, on both paths.
+#     (docs/problems/platform-dolt-oldgen-rate-and-squash-window-2026-10-22.md
+#     review round 1 R2.)
 #  9. A lock left by a killed run (its tunnel dies with it, so restic cannot
 #     delete the lock) blocks the next run: never; the run removes stale
 #     locks before it opens the repository.
@@ -69,7 +75,7 @@ exit 0
 EOF
   cat > "$R/bin/dolt" <<EOF
 #!/bin/sh
-case "\$*" in *DOLT_BACKUP*) echo "sync \$*" | grep -o 'port [0-9]*' >> "$R/calls" ;; *commit_hash*) echo commit_hash; echo h-\$\$ ;; esac
+case "\$*" in *DOLT_BACKUP*) echo "sync \$*" | grep -o 'port [0-9]*' >> "$R/calls" ;; *commit_hash*) echo commit_hash; echo h-\$\$ ;; *computer_event_append_receipts*) echo "count(*)"; echo 41 ;; esac
 exit 0
 EOF
   cat > "$R/bin/btrfs" <<EOF
@@ -107,6 +113,7 @@ check "the corpus snapshot's .choir-backup is excluded" "$(has '--exclude stagin
 check "a clean run is ok" "$([ "$RC" = 0 ]; echo $?)"
 check "stale locks are removed before the repository is opened" "$(calls | grep -q '^unlock|cat config|'; echo $?)"
 check "the repository is sized from the pack list, not stats" "$(has 'data/' && ! has stats && [ "$(jq -r .repo_raw_bytes "$R/root/offhost-backup/status.json")" = 3345 ]; echo $?)"
+check "a snapshot run records Store A's receipt count" "$(jq -r .dolt_rows "$R/root/offhost-backup/staging/manifest.json" 2>/dev/null | grep -qx 'platform=41'; echo $?)"
 check "the daily run does not walk the trees" "$(! grep -q '^check' "$R/calls"; echo $?)"
 
 # 8: the weekly verify checks with the run's cache.
@@ -116,6 +123,7 @@ check "the weekly verify checks a data subset with the cache" "$(grep -q -- '^ch
 # 2: neither is a subvolume: the sync, as before.
 setup neither "" ok; run
 check "non-subvolume stores fall back to the sync" "$(has 'port 13306' && has 'port 13307' && ! grep -q '^snapshot' "$R/calls"; echo $?)"
+check "a sync run records Store A's receipt count" "$(jq -r .dolt_rows "$R/root/offhost-backup/staging/manifest.json" 2>/dev/null | grep -qx 'platform=41'; echo $?)"
 
 # 2: mid-migration, Store A moved and Store B not.
 setup mixed "platform" ok; run
