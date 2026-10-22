@@ -75,3 +75,45 @@ history, so every crash boot gets slower.
    planned restart with `allow_busy`, which the guest supports
    (`"allow_busy":false` in its refusals at 20:04:16-20:05:19). With it, the
    paper would have booted planned and skipped both closures.
+
+## Findings: the host reboot script (open question 3), 2026-10-22
+
+FP0 review round on `scripts/node_b_host_reboot.py` (lane
+`lane/fp0-reboot-script-r2`). Problem record before any fix. Mutation
+class of the fix: red (the script decides how busy computers restart).
+
+R1. **The script never asks with `allow_busy`.** `phase_mark` sends
+`POST <computer_url>/internal/runtime/planned-restart` with no query, so
+the guest applies its idle-only rule to every computer. The 20:04:16 to
+20:05:19 refusals in `_runs/deployKF/reboot-20261022.log` all say
+`"allow_busy":false,"running_runs":7-8,"selfdev_active_operations":0`:
+the paper was busy only with runs, which the guest lets a host cut when
+it asks with `allow_busy` (`HandleInternalPlannedRestart`,
+`internal/agentcore/planned_restart.go`: the runs park for the planned
+boot's one resume; a self-development operation mid-transaction or a
+live capsule still refuses). vmctl's deploy refresh already asks with
+`allow_busy` for exactly the always-busy tiers
+(`deployRefreshAllowsBusy`, `internal/vmctl/deploy_refresh.go`:
+`critical_protected` and `public_platform`), as CLAUDE.md requires. The
+reboot script had a second, stricter rule, so the paper rebooted
+unmarked under `--allow-crash-close` and booted as a crash: about 23
+minutes without source work (Evidence above). The script's docstring and
+the runbook's marker policy still say markers go only to idle guests.
+
+R2. **The script does not say why a guest refused.** It logs the first
+160 characters of each 409 and treats every refusal alike, so a refusal
+for runs (which `--allow-crash-close` may cut) and a refusal for a
+self-development apply or a live capsule (which the operating contract
+says these computers are never restarted through) look the same, and
+`--allow-crash-close` would crash both.
+
+R3. **The post-check "FORWARD jumps vm-+ to CHOIR-GUEST-FWD first" is
+stale.** After the reboot it failed (the only post-check FAIL) because
+FORWARD's first rule is `-o vm-+ … -j CHOIR-GUEST-RET` (ESTABLISHED
+accept, else DROP), then `-i vm-+ … -j CHOIR-GUEST-FWD`. That is the
+order vmctl installs at start: `ensureBaseLocked`
+(`internal/vmmanager/hostfirewall.go`) inserts the CHOIR-GUEST-FWD jump
+at position 1 and then the CHOIR-GUEST-RET jump at position 1, so on a
+fresh boot RET is rule 1 and FWD rule 2. The check predates the return
+chain (SEC-03, 9256d6368). The firewall is right; the check is wrong, and
+a check that fails on the right state teaches operators to ignore it.
