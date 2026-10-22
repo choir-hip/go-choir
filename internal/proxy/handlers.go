@@ -792,6 +792,14 @@ func (h *Handler) HandleProtectedAPI(w http.ResponseWriter, r *http.Request) {
 	if r != nil && r.URL != nil && r.URL.Path == "/api/prompt-bar" {
 		stagePrefix = "prompt_bar"
 	}
+	// The isolation self-test's oom and seccomp legs load the guest on
+	// purpose and are host-internal (the guest serves them on
+	// /internal/runtime/isolation-selftest, which this proxy never forwards).
+	// No owner session or API key reaches them through /api.
+	if r != nil && r.URL != nil && r.URL.Path == "/api/runtime/isolation-selftest" && r.URL.Query().Has("leg") {
+		writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})
+		return
+	}
 	// Validate auth (cookie JWT or Bearer API key).
 	authStarted := time.Now()
 	authResult, err := h.authenticate(r)

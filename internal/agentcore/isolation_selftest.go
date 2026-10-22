@@ -15,6 +15,8 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/gomemlimit"
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
+	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
@@ -32,21 +34,30 @@ import (
 //     guest-side firewall could not bind) to host ports that must be dropped
 //     and to ones that must stay open.
 //
-// With ?leg=oom it runs only the out-of-memory leg instead
-// (yaegikernel.DeskOOMSelfTest): a throwaway research worker under its real
-// budget cgroup runs a fixed allocating cell until the kernel kills it
-// (docs/problems/fp2-step4-deployed-oom-not-drivable-desk-refuses-runaway-2026-10-22.md).
-// With ?leg=seccomp it runs only the capsule seccomp leg
-// (capsule.SeccompSelfTest): the daemon re-execs its own binary once per
-// capsule filter; each child loads the filter and tries clone3 and a new user
-// namespace (SEC-13 on the deployed kernel; not inside a live capsule).
-// Legs are an enum; the route takes no cell and no filter.
+// Owner route: server.AuthenticatedOwner admits the host peer carrying
+// X-Authenticated-User, which the proxy injects for any owner session or API
+// key with write:runtime. Not on the ProductAPI allowlist, so no desk can call
+// it. It changes no state: the workers and their tmp dirs are gone when it
+// answers. A leg query here is refused (and the proxy refuses it first).
 //
-// Owner-only: server.AuthenticatedOwner admits only the host peer (the
-// guest's default gateway, where the proxy and vmctl dial from) carrying
-// X-Authenticated-User, never an in-guest caller. Not on the ProductAPI
-// allowlist, so no desk can call it. It changes no state: the workers, their
-// cgroups and tmp dirs are gone when it answers.
+// POST /internal/runtime/isolation-selftest?leg=oom|seccomp: the two legs
+// that load the guest on purpose, for the host's internal caller only
+// (review bunch 22, docs/problems/fp2-step4-deployed-oom-not-drivable-desk-refuses-runaway-2026-10-22.md).
+// The public edge refuses /internal/* and the proxy never forwards it; the
+// guest admits only its host peer (server.GuestHostCaller: the default
+// gateway, never loopback or another in-guest address) holding the internal
+// service credential (hostauth.Authorize), as /internal/debug/pprof/ does.
+//
+//   - oom (yaegikernel.DeskOOMSelfTest): a throwaway research worker under its
+//     real budget cgroup runs a fixed allocating cell until the kernel kills
+//     it;
+//   - seccomp (capsule.SeccompSelfTest): the daemon re-execs its own binary
+//     once per capsule filter; each child loads the filter and tries clone3
+//     and a new user namespace (SEC-13 on the deployed kernel; not inside a
+//     live capsule).
+//
+// Legs are an enum; the route takes no cell and no filter. Both routes share
+// one lock: one self-test at a time.
 
 var isolationSelfTestMu sync.Mutex
 
@@ -89,9 +100,8 @@ func (h *APIHandler) HandleIsolationSelfTest(w http.ResponseWriter, r *http.Requ
 		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
 		return
 	}
-	leg, err := isolationSelfTestLeg(r)
-	if err != nil {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+	if r.URL.Query().Has("leg") {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "the self-test's oom and seccomp legs are host-internal (" + internalIsolationSelfTestPath + ")"})
 		return
 	}
 	if !isolationSelfTestMu.TryLock() {
@@ -102,27 +112,7 @@ func (h *APIHandler) HandleIsolationSelfTest(w http.ResponseWriter, r *http.Requ
 	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
 	defer cancel()
 
-	resp := isolationSelfTestResponse{ComputerID: h.rt.cfg.ComputerID, Leg: leg}
-	if leg == isolationLegOOM {
-		rec := yaegikernel.DeskOOMSelfTest(ctx, deskOOMSelfTestConfig(h.rt.cfg.ComputerID))
-		resp.OOM = &rec
-		for _, f := range rec.Failures {
-			resp.Failures = append(resp.Failures, "oom: "+f)
-		}
-		resp.OK = len(resp.Failures) == 0
-		writeAPIJSON(w, http.StatusOK, resp)
-		return
-	}
-	if leg == isolationLegSeccomp {
-		rec := capsule.SeccompSelfTest(ctx, deskWorkerBinary())
-		resp.Seccomp = &rec
-		for _, f := range rec.Failures {
-			resp.Failures = append(resp.Failures, "seccomp: "+f)
-		}
-		resp.OK = len(resp.Failures) == 0
-		writeAPIJSON(w, http.StatusOK, resp)
-		return
-	}
+	resp := isolationSelfTestResponse{ComputerID: h.rt.cfg.ComputerID}
 	resp.DeskCells = yaegikernel.DeskCellSelfTest(ctx, deskCellSelfTestConfig(h.rt.cfg.ComputerID))
 	for _, f := range resp.DeskCells.Failures {
 		resp.Failures = append(resp.Failures, "desk_cells: "+f)
@@ -153,14 +143,57 @@ const (
 	isolationLegSeccomp = "seccomp"
 )
 
-// isolationSelfTestLeg reads the one input the route takes: no query (the
-// confinement legs) or exactly one of leg=oom, leg=seccomp. Anything else is
-// refused before a worker starts.
-func isolationSelfTestLeg(r *http.Request) (string, error) {
-	q := r.URL.Query()
-	if len(q) == 0 {
-		return "", nil
+// internalIsolationSelfTestPath serves the oom and seccomp legs.
+const internalIsolationSelfTestPath = "/internal/runtime/isolation-selftest"
+
+// HandleInternalIsolationSelfTest runs one host-internal leg.
+func (h *APIHandler) HandleInternalIsolationSelfTest(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
 	}
+	if !server.GuestHostCaller(r) || !hostauth.Authorize(r) {
+		writeAPIJSON(w, http.StatusForbidden, apiError{Error: "internal runtime endpoints are not publicly accessible"})
+		return
+	}
+	leg, err := internalIsolationSelfTestLeg(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+		return
+	}
+	if h == nil || h.rt == nil {
+		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "isolation self-test unavailable"})
+		return
+	}
+	if !isolationSelfTestMu.TryLock() {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "an isolation self-test is already running"})
+		return
+	}
+	defer isolationSelfTestMu.Unlock()
+	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
+	defer cancel()
+
+	resp := isolationSelfTestResponse{ComputerID: h.rt.cfg.ComputerID, Leg: leg}
+	var failures []string
+	switch leg {
+	case isolationLegOOM:
+		rec := yaegikernel.DeskOOMSelfTest(ctx, deskOOMSelfTestConfig(h.rt.cfg.ComputerID))
+		resp.OOM, failures = &rec, rec.Failures
+	case isolationLegSeccomp:
+		rec := capsule.SeccompSelfTest(ctx, deskWorkerBinary())
+		resp.Seccomp, failures = &rec, rec.Failures
+	}
+	for _, f := range failures {
+		resp.Failures = append(resp.Failures, leg+": "+f)
+	}
+	resp.OK = len(resp.Failures) == 0
+	writeAPIJSON(w, http.StatusOK, resp)
+}
+
+// internalIsolationSelfTestLeg reads the one input the internal route takes:
+// exactly one of leg=oom, leg=seccomp, and nothing else.
+func internalIsolationSelfTestLeg(r *http.Request) (string, error) {
+	q := r.URL.Query()
 	if len(q) == 1 && len(q["leg"]) == 1 {
 		switch leg := q.Get("leg"); leg {
 		case isolationLegOOM, isolationLegSeccomp:
