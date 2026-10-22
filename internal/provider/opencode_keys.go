@@ -146,7 +146,26 @@ func (p *openCodeKeyPool) park(name string, status int) bool {
 		return false
 	}
 	p.mu.Lock()
+	defer p.mu.Unlock()
+	if status == http.StatusUnauthorized && !p.otherKeyHealthyLocked(name) {
+		// A 401 on the last healthy key may be upstream-wide (an auth outage,
+		// a proxy rejection), not this credential: benching every key for
+		// hours would outlast it, so the call fails as it did before.
+		return false
+	}
 	p.parked[name] = p.now().Add(d)
-	p.mu.Unlock()
 	return true
+}
+
+func (p *openCodeKeyPool) otherKeyHealthyLocked(name string) bool {
+	now := p.now()
+	for _, k := range p.keys {
+		if k.name == name {
+			continue
+		}
+		if until, ok := p.parked[k.name]; !ok || !now.Before(until) {
+			return true
+		}
+	}
+	return false
 }
