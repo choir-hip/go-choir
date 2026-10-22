@@ -373,3 +373,76 @@ func (s *Store) eventTableNewestStreamSeq(ctx context.Context) (int64, error) {
 	}
 	return newest, nil
 }
+
+// Deploy 2: the writer (event-table design 2.2, 4.2). The runtime applies
+// store.event_table (the owner's setting and the host's grant, both required)
+// through SetEventTableWrites. With it on, AppendEvent stamps the op of every
+// event whose kind's storage class is StorageEventTable, on both paths: the
+// acknowledged write (W1, appendStampedEvent) and the sealer (W2,
+// newTelemetryRecord). The lifecycle fold (W3) never stamps. Off, the
+// tape is byte for byte deploy 1's.
+//
+// Rollback once any op is stamped: the setting off (live; events already in
+// choir_events stay there and stay readable), then a binary down to deploy 1.
+// Below deploy 1 is not supported (section 4.5).
+
+// SetEventTableWrites applies store.event_table to the writer. A store with
+// no tape never stamps, whatever this says: it has no tape position.
+func (s *Store) SetEventTableWrites(on bool) {
+	if s != nil {
+		s.eventTableWrites.Store(on)
+	}
+}
+
+// EventTableWritesOn reports the switch as the writer applies it.
+func (s *Store) EventTableWritesOn() bool {
+	return s != nil && s.eventTableWrites.Load()
+}
+
+// stampsEventTable reports whether an event of this kind is stamped now: a
+// bound tape, the switch on, and the kind in the storage class.
+func (s *Store) stampsEventTable(kind types.EventKind) bool {
+	return s.projectionTape != nil && s.eventTableWrites.Load() && kind.Storage() == types.StorageEventTable
+}
+
+// eventObjectOp is the object_recorded op of one choir.event object, stamped
+// for choir_events when stamped is set. It is the only production code that
+// sets ProjectionOp.Table (event_table_guard_test.go).
+func eventObjectOp(obj objectgraph.Object, stamped bool) (computerevent.ProjectionOp, error) {
+	body, err := json.Marshal(obj)
+	if err != nil {
+		return computerevent.ProjectionOp{}, fmt.Errorf("marshal event object: %w", err)
+	}
+	op := computerevent.ProjectionOp{Kind: computerevent.ProjectionOpObject, CanonicalID: obj.CanonicalID, Body: body}
+	if stamped {
+		op.Table = choirEventsTable
+	}
+	return op, nil
+}
+
+// appendStampedEvent is the acknowledged write (W1) of one storage-class
+// event with the stamp. The object is the one AppendEventOG's ogPut builds,
+// the refusals are the ones PutObject applies before its interceptor
+// (PreflightWrite), and the op goes onto the tape as its own projection
+// batch, as the interceptor would put it. Only the Table differs.
+func (s *Store) appendStampedEvent(ctx context.Context, rec *types.EventRecord) error {
+	if s.projectionTape == nil || s.ogStore == nil {
+		return fmt.Errorf("store: a stamped event needs the projection tape")
+	}
+	now := rec.Timestamp
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	obj, err := buildEventObject(rec, now)
+	if err != nil {
+		return fmt.Errorf("store: create object: %w", err)
+	}
+	if err := s.ogStore.PreflightWrite(ctx, []objectgraph.Object{obj}, nil); err != nil {
+		return fmt.Errorf("store: create object: %w", err)
+	}
+	op, err := eventObjectOp(obj, true)
+	if err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+	return s.projectionTape.appendOps(ctx, []computerevent.ProjectionOp{op})
+}

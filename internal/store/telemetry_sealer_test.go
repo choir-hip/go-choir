@@ -106,13 +106,13 @@ func TestSemanticKindsNeverEnterTheQueue(t *testing.T) {
 		rec := h.event(fmt.Sprintf("kind-%d", i), "run-kinds", "owner-1", kind, telemetryBase.Add(time.Duration(i)*time.Millisecond))
 		if kind.Batchable() {
 			batched++
-			if _, err := newTelemetryRecord(rec); err != nil {
+			if _, err := newTelemetryRecord(rec, false); err != nil {
 				t.Errorf("newTelemetryRecord(%s): %v", kind, err)
 			}
 			continue
 		}
 		acknowledged++
-		if _, err := newTelemetryRecord(rec); err == nil {
+		if _, err := newTelemetryRecord(rec, false); err == nil {
 			t.Errorf("newTelemetryRecord accepted acknowledged kind %s", kind)
 		}
 		before := len(h.tape.snapshot())
@@ -131,7 +131,7 @@ func TestSemanticKindsNeverEnterTheQueue(t *testing.T) {
 		t.Fatalf("exercised %d batched and %d acknowledged kinds, want 10 and 33", batched, acknowledged)
 	}
 	// The unknown kind is acknowledged too.
-	if _, err := newTelemetryRecord(h.event("unknown", "run-kinds", "owner-1", types.EventKind("loop.made_up"), telemetryBase)); err == nil {
+	if _, err := newTelemetryRecord(h.event("unknown", "run-kinds", "owner-1", types.EventKind("loop.made_up"), telemetryBase), false); err == nil {
 		t.Fatal("newTelemetryRecord accepted a kind outside the table")
 	}
 }
@@ -1105,7 +1105,7 @@ func TestTelemetryOpEqualsAcknowledgedOp(t *testing.T) {
 	}
 	snap := h.tape.snapshot()
 	acknowledged := h.tape.batchOps(t, snap[len(snap)-1])
-	tr, err := newTelemetryRecord(rec)
+	tr, err := newTelemetryRecord(rec, false)
 	if err != nil {
 		t.Fatal(err)
 	}
