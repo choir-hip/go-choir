@@ -34,20 +34,22 @@ type projectedSessionIdentity struct {
 	ViewportProfile string `json:"viewport_profile,omitempty"`
 }
 
-// projectBatch applies a batch inside tx. derived, when set, keeps the
-// og_key_index side table in step with every object it writes, in the same
-// transaction. The replay path passes nil: a replayed workspace is checked
-// and filled online after boot (objectgraph.ValidateDerivedKeys), off the
-// boot path, and the caller withdraws the families.
-func projectBatch(ctx context.Context, tx *sql.Tx, batch computerevent.ProjectionBatch, derived *objectgraph.DerivedKeys) error {
-	return projectBatchWithReplayTextureBootstrap(ctx, tx, batch, false, strings.TrimSpace(batch.ComputerID), derived)
+// projectBatch applies a batch inside tx. pos is the tape position of the
+// batch's projection_batch_recorded event; a stamped object op is keyed by it
+// in choir_events (event_table.go). derived, when set, keeps the og_key_index
+// side table in step with every object it writes, in the same transaction.
+// The replay path passes nil: a replayed workspace is checked and filled
+// online after boot (objectgraph.ValidateDerivedKeys), off the boot path, and
+// the caller withdraws the families.
+func projectBatch(ctx context.Context, tx *sql.Tx, batch computerevent.ProjectionBatch, pos uint64, derived *objectgraph.DerivedKeys) error {
+	return projectBatchWithReplayTextureBootstrap(ctx, tx, batch, pos, false, strings.TrimSpace(batch.ComputerID), derived)
 }
 
-func projectBatchForReplay(ctx context.Context, tx *sql.Tx, batch computerevent.ProjectionBatch) error {
-	return projectBatchWithReplayTextureBootstrap(ctx, tx, batch, true, strings.TrimSpace(batch.ComputerID), nil)
+func projectBatchForReplay(ctx context.Context, tx *sql.Tx, batch computerevent.ProjectionBatch, pos uint64) error {
+	return projectBatchWithReplayTextureBootstrap(ctx, tx, batch, pos, true, strings.TrimSpace(batch.ComputerID), nil)
 }
 
-func projectBatchWithReplayTextureBootstrap(ctx context.Context, tx *sql.Tx, batch computerevent.ProjectionBatch, allowReplayTextureBootstrap bool, replayComputerID string, derived *objectgraph.DerivedKeys) error {
+func projectBatchWithReplayTextureBootstrap(ctx context.Context, tx *sql.Tx, batch computerevent.ProjectionBatch, pos uint64, allowReplayTextureBootstrap bool, replayComputerID string, derived *objectgraph.DerivedKeys) error {
 	if tx == nil {
 		return fmt.Errorf("computer event projection: missing transaction")
 	}
@@ -59,18 +61,24 @@ func projectBatchWithReplayTextureBootstrap(ctx context.Context, tx *sql.Tx, bat
 		computerID = replayComputerID
 	}
 	for i, op := range batch.Ops {
-		if err := projectOp(ctx, tx, op, allowReplayTextureBootstrap, replayComputerID, computerID, derived); err != nil {
+		if err := projectOp(ctx, tx, op, pos, i, allowReplayTextureBootstrap, replayComputerID, computerID, derived); err != nil {
 			return fmt.Errorf("computer event projection: op %d: %w", i, err)
 		}
 	}
 	return nil
 }
 
-func projectOp(ctx context.Context, tx *sql.Tx, op computerevent.ProjectionOp, allowReplayTextureBootstrap bool, replayComputerID, computerID string, derived *objectgraph.DerivedKeys) error {
+func projectOp(ctx context.Context, tx *sql.Tx, op computerevent.ProjectionOp, pos uint64, opIndex int, allowReplayTextureBootstrap bool, replayComputerID, computerID string, derived *objectgraph.DerivedKeys) error {
 	switch strings.TrimSpace(op.Kind) {
 	case computerevent.ProjectionOpDesktopState:
 		return projectDesktopState(ctx, tx, op.Body, computerID)
 	case computerevent.ProjectionOpObject:
+		// The stamp on the tape decides the table (event-table design 2.2).
+		// Any other Table value keeps today's route: a stricter projector
+		// could refuse a historical tape on replay.
+		if strings.TrimSpace(op.Table) == choirEventsTable {
+			return projectChoirEvent(ctx, tx, op.Body, pos, opIndex)
+		}
 		return projectObject(ctx, tx, op.Body, derived)
 	case computerevent.ProjectionOpObjectEdge:
 		return projectObjectEdge(ctx, tx, op.Body)

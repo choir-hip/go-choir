@@ -503,10 +503,15 @@ func (sl *telemetrySealer) flushThrough(reason sealReason, upTo int64) {
 
 // recheck re-decodes every op and asserts the invariant the constructor
 // already enforces: an object op, of kind choir.event, whose event kind is
-// batched (design 3.4 layer 4). It is the independent second look.
+// batched (design 3.4 layer 4), unstamped or stamped for choir_events. It is the independent second look.
 func recheckTelemetryOp(op computerevent.ProjectionOp) error {
 	if op.Kind != computerevent.ProjectionOpObject {
 		return fmt.Errorf("op kind %q is not an object", op.Kind)
+	}
+	if op.Table != "" && op.Table != choirEventsTable {
+		// A sealed op lands in og_objects or, stamped, in choir_events
+		// (event-table design 2.2); nothing else.
+		return fmt.Errorf("op table %q is not %q", op.Table, choirEventsTable)
 	}
 	var obj objectgraph.Object
 	if err := json.Unmarshal(op.Body, &obj); err != nil {
