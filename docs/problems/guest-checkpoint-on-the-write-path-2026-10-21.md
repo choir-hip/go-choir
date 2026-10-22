@@ -255,3 +255,18 @@ that Open's failure paths dropped Close's error. DeepSeek found two
 stale comments, this record's "built in the next round", and a log line
 that blamed a statement when the deadline was already spent. Tests
 564dc81ec, fix 8e68ece69; every one of the six mutants is now killed.
+
+## Round 7d: the abandoned engine was outside the fail-closed contract (2026-10-22)
+
+The reviews of round 7 complete (3b220fa02..92450f670) accepted it with
+edits. DeepSeek (required) and Sonnet both found that a Close over a
+removed workspace (round 8's fix) returned an error that was not an
+ErrCloseLeftOpen, set nothing Reopen checks, and was followed by a
+second Close returning nil and a Reopen that opened a new engine beside
+the abandoned one (probe: "Reopen after that Close: <nil>"). Sonnet
+found the round-7c test of Open's Close retries vacuous (a failed fresh
+Open writes no marker, so the next Open deletes and recreates the
+workspace whether or not the engine was closed; three mutants
+survived), two untested workspace-check branches, and an untested
+budget-spent label. DeepSeek found Reopen leaked the store it opened
+when adopting it failed. Tests d6c81da3f and b7067604a, fix a6396a2fe.
