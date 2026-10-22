@@ -114,7 +114,13 @@ func (e *Executor) boostJobMemory(capsuleID, jobID string, bytes int64, release 
 				if caps.memoryBoosts == nil {
 					caps.memoryBoosts = map[string]*jobMemoryBoost{}
 				}
-				caps.memoryBoosts[stuckBoostPrefix+jobID] = &jobMemoryBoost{bytes: bytes}
+				// A second stuck raise for the same job adds to the first
+				// (review F3).
+				if stuck := caps.memoryBoosts[stuckBoostPrefix+jobID]; stuck != nil {
+					stuck.bytes += bytes
+				} else {
+					caps.memoryBoosts[stuckBoostPrefix+jobID] = &jobMemoryBoost{bytes: bytes}
+				}
 				e.vmMemoryUsed += bytes
 				log.Printf("capsule: job %s memory boost refused in capsule %s, but memory.max stays raised by %d MiB and is counted until the capsule ends: %v", jobID, capsuleID, bytes>>20, restoreErr)
 				return fmt.Errorf("raise capsule %s memory.high: %w; memory.max could not be put back and stays raised by %d MiB, counted until the capsule ends: %v", capsuleID, err, bytes>>20, restoreErr)
