@@ -260,6 +260,17 @@ updated_at         2026-10-22T08:38:39.241779Z   (149 ms after the report)
   busy (step 5).
 - I will append the outcome of the next refresh round, or of an idle
   hibernate, which uses the same probe, when one happens.
+- **09:07:02, idle hibernate: vmctl "hibernated VM vm-c5c801f8… reason=idle
+  (epoch=13233)"** (snapshot 8660 ms).
+  - Idle selection (`CheckIdleOwnerships`, internal/vmctl/ownership.go:3362)
+    goes through `guestBusy` and `httpGuestBusy`, the same /health probe
+    that defers a deploy refresh.
+  - So with the failed operation on the computer, vmctl's probe answered
+    not busy.
+  - A hibernated computer takes the new build at its next wake: the
+    snapshot is refused on launch config and it cold-boots, as in step 1.
+  - No deploy has run since. A refresh round would not list this
+    computer while it is hibernated.
 
 ## Result
 
