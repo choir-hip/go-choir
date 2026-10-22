@@ -107,7 +107,11 @@ type telemetryRecord struct {
 
 // newTelemetryRecord builds the choir.event object and op for a batched kind,
 // exactly as the acknowledged path (AppendEventOG) would, or returns an error.
-func newTelemetryRecord(rec *types.EventRecord) (telemetryRecord, error) {
+// stamped is the event-table stamp, decided by AppendEvent when it allocated
+// the event's numbers (store.event_table): a record queued with the setting
+// on is sealed stamped even if the setting goes off before its seal, and the
+// reverse.
+func newTelemetryRecord(rec *types.EventRecord, stamped bool) (telemetryRecord, error) {
 	if rec == nil || !rec.Kind.Batchable() {
 		kind := types.EventKind("")
 		if rec != nil {
@@ -123,15 +127,15 @@ func newTelemetryRecord(rec *types.EventRecord) (telemetryRecord, error) {
 	if err != nil {
 		return telemetryRecord{}, err
 	}
-	body, err := json.Marshal(obj)
+	op, err := eventObjectOp(obj, stamped)
 	if err != nil {
-		return telemetryRecord{}, fmt.Errorf("telemetry: marshal event object: %w", err)
+		return telemetryRecord{}, fmt.Errorf("telemetry: %w", err)
 	}
 	return telemetryRecord{
 		kind: rec.Kind, runID: rec.RunID, ownerID: rec.OwnerID, seq: rec.Seq, streamSeq: rec.StreamSeq,
 		object: obj,
-		op:     computerevent.ProjectionOp{Kind: computerevent.ProjectionOpObject, CanonicalID: obj.CanonicalID, Body: body},
-		size:   len(body),
+		op:     op,
+		size:   len(op.Body),
 	}, nil
 }
 

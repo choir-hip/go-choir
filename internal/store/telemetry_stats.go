@@ -68,6 +68,7 @@ type telemetryCounters struct {
 	sinkByKind            [eventSinks]map[string]int64
 	tapeEventsByAuthority map[string]int64
 	tapeOpsByKind         map[string]int64
+	tapeOpsByTable        map[string]int64
 
 	appendedBatchable    atomic.Int64
 	appendedAcknowledged atomic.Int64
@@ -167,6 +168,12 @@ func (c *telemetryCounters) recordTapeEvent(authority string, ops []computereven
 	c.tapeEventsByAuthority[authority]++
 	for _, op := range ops {
 		c.tapeOpsByKind[string(op.Kind)]++
+		if op.Table != "" {
+			if c.tapeOpsByTable == nil {
+				c.tapeOpsByTable = map[string]int64{}
+			}
+			c.tapeOpsByTable[op.Table]++
+		}
 	}
 	c.mu.Unlock()
 }
@@ -242,6 +249,13 @@ type TelemetryStats struct {
 	OpsPerTapeEvent       map[string]int64 `json:"ops_per_tape_event"`
 	TapeEventsByAuthority map[string]int64 `json:"tape_events_by_authority"`
 	TapeOpsByKind         map[string]int64 `json:"tape_ops_by_kind"`
+	// TapeOpsByTable counts the ops stamped for a table other than their
+	// default (event-table design 4.1: choir_events). Unstamped ops are
+	// tape_ops minus these. Absent until an op is stamped, and
+	// EventTableWrites absent while store.event_table is off, so the
+	// response is unchanged on every computer the switch is off on.
+	TapeOpsByTable   map[string]int64 `json:"tape_ops_by_table,omitempty"`
+	EventTableWrites bool             `json:"event_table_writes,omitempty"`
 
 	ReadsConsistent int64 `json:"reads_consistent"`
 	ReadsRelaxed    int64 `json:"reads_relaxed"`
@@ -278,7 +292,11 @@ func (s *Store) TelemetryStats() TelemetryStats {
 	for sink := range c.sinkByKind {
 		out.EventsBySink[eventSinkNames[sink]] = copyCounts(c.sinkByKind[sink])
 	}
+	if len(c.tapeOpsByTable) > 0 {
+		out.TapeOpsByTable = copyCounts(c.tapeOpsByTable)
+	}
 	c.mu.Unlock()
+	out.EventTableWrites = s.EventTableWritesOn()
 	out.EventsAppendedBatchable = c.appendedBatchable.Load()
 	out.EventsAppendedAcknowledged = c.appendedAcknowledged.Load()
 	if total := out.EventsAppendedBatchable + out.EventsAppendedAcknowledged; total > 0 {
