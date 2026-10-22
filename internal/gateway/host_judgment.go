@@ -2,8 +2,6 @@ package gateway
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"log"
 	"net/http"
 	"strings"
@@ -46,11 +44,9 @@ func (h *Handler) HandleHostJudgment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var request JudgmentRequest
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, jevTransportMaxBodySize))
-	if err := decoder.Decode(&request); err != nil {
-		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) {
-			writeGatewayJSON(w, http.StatusRequestEntityTooLarge, ErrorResponse{Error: "judgment request is too large"})
+	if err := h.decodeBody(w, r, bodyRouteJudgment, label, &request, false); err != nil {
+		if isBodyTooLarge(err) {
+			writeGatewayJSON(w, http.StatusRequestEntityTooLarge, ErrorResponse{Error: err.Error()})
 			return
 		}
 		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid judgment request"})

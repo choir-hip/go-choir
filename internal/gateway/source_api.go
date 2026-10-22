@@ -691,9 +691,11 @@ func (h *Handler) HandleSourceAPI(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	var req SourceAPIRequest
-	dec := json.NewDecoder(io.LimitReader(r.Body, sourceAPIMaxRequest))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&req); err != nil {
+	if err := h.decodeBody(w, r, bodyRouteSourceAPI, computerID, &req, true); err != nil {
+		if isBodyTooLarge(err) {
+			writeGatewayJSON(w, http.StatusRequestEntityTooLarge, ErrorResponse{Error: err.Error()})
+			return
+		}
 		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid request body"})
 		return
 	}

@@ -47,6 +47,9 @@ type gatewayHealthResponse struct {
 	// ModelScheduler is the RES-11 model-call scheduler: its mode, the calls
 	// in flight and queued, and what it has granted, refused and cancelled.
 	ModelScheduler *gatewaySchedulerHealth `json:"model_scheduler,omitempty"`
+	// BodyCaps is the request body caps: mode, limits, refusals and the
+	// largest body seen per route class (B7).
+	BodyCaps *gatewayBodyCapsHealth `json:"body_caps,omitempty"`
 }
 
 // gatewayCacheHealth is provider.CacheStats plus its hit rate.
@@ -169,6 +172,9 @@ type Handler struct {
 	// calls (inference and OpenAI-compatible chat) with a fair queue
 	// (model_scheduler.go, RES-11).
 	modelScheduler *ModelScheduler
+	// bodyCaps bounds every request body the gateway decodes
+	// (body_caps.go, B7); nil means the code defaults, enforced.
+	bodyCaps *bodyCaps
 }
 
 const internalCallerHeader = "X-Internal-Caller"
@@ -184,6 +190,7 @@ func NewHandlerWithRateLimit(registry *IdentityRegistry, p provider.Provider, rl
 		providers:    nil,
 		rateLimiter:  rl,
 		searchClient: NewSearchClient(),
+		bodyCaps:     newHandlerBodyCaps(),
 	}
 }
 
@@ -196,6 +203,7 @@ func NewMultiHandlerWithRateLimit(registry *IdentityRegistry, mp *provider.Multi
 		providers:    mp,
 		rateLimiter:  rl,
 		searchClient: NewSearchClient(),
+		bodyCaps:     newHandlerBodyCaps(),
 	}
 }
 
@@ -265,6 +273,7 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	resp.Credentials = h.credentialHealth()
 	resp.AnthropicRelay = h.anthropicRelay.status()
 	resp.ModelScheduler = h.schedulerHealth()
+	resp.BodyCaps = h.bodyCapsHealth()
 
 	if stats := provider.CacheStatsSnapshot(); len(stats) > 0 {
 		resp.PromptCache = make(map[string]gatewayCacheHealth, len(stats))
@@ -408,9 +417,22 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Step 3: Decode the request.
+	// RES-11: take a slot for the whole call, a stream included, before the
+	// body is read, so a queued call holds no body (B7). The release runs
+	// on every exit, a panic too.
+	release, r, ok := h.scheduleModelCall(w, r, computerID, false)
+	if !ok {
+		return
+	}
+	defer release()
+
+	// Step 3: Decode the request, under the model body cap (B7).
 	var req ProviderRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := h.decodeBody(w, r, bodyRouteModel, computerID, &req, false); err != nil {
+		if isBodyTooLarge(err) {
+			writeGatewayJSON(w, http.StatusRequestEntityTooLarge, ErrorResponse{Error: err.Error()})
+			return
+		}
 		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid request body"})
 		return
 	}
@@ -449,14 +471,6 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 	// (problems/models-configured-text-only-2026-10-15.md, FM11).
 	log.Printf("gateway: inference request from autoputer %s (provider=%s model=%s messages=%d tools=%d tool_choice=%s system_chars=%d max_tokens=%d reasoning=%s stream=%v %s)",
 		computerID, p.Name(), req.Model, len(req.Messages), len(req.Tools), req.ToolChoice, len(req.System), req.MaxTokens, req.ReasoningEffort, req.Stream, provider.SummarizeMedia(req.Messages))
-
-	// RES-11: take a slot for the whole call, a stream included. The release
-	// runs on every exit, a panic too.
-	release, r, ok := h.scheduleModelCall(w, r, computerID, false)
-	if !ok {
-		return
-	}
-	defer release()
 
 	ctx, cancel := context.WithTimeout(r.Context(), inferenceTimeout)
 	defer cancel()
@@ -641,7 +655,11 @@ func (h *Handler) HandleIssueCredential(w http.ResponseWriter, r *http.Request) 
 	var req struct {
 		ComputerID string `json:"computer_id"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := h.decodeBody(w, r, bodyRouteOperator, "host", &req, false); err != nil {
+		if isBodyTooLarge(err) {
+			writeGatewayJSON(w, http.StatusRequestEntityTooLarge, ErrorResponse{Error: err.Error()})
+			return
+		}
 		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid request body"})
 		return
 	}
@@ -682,7 +700,11 @@ func (h *Handler) HandleEnsureCredential(w http.ResponseWriter, r *http.Request)
 		// Jev pin to it (EnsureCredentialForPeer). Optional.
 		PeerIP string `json:"peer_ip,omitempty"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := h.decodeBody(w, r, bodyRouteOperator, "host", &req, false); err != nil {
+		if isBodyTooLarge(err) {
+			writeGatewayJSON(w, http.StatusRequestEntityTooLarge, ErrorResponse{Error: err.Error()})
+			return
+		}
 		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid request body"})
 		return
 	}
@@ -902,7 +924,11 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 
 	// Step 3: Decode the request.
 	var req SearchRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := h.decodeBody(w, r, bodyRouteSearch, computerID, &req, false); err != nil {
+		if isBodyTooLarge(err) {
+			writeGatewayJSON(w, http.StatusRequestEntityTooLarge, ErrorResponse{Error: err.Error()})
+			return
+		}
 		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid request body"})
 		return
 	}
@@ -1107,7 +1133,11 @@ func (h *Handler) HandleSearchHealthReset(w http.ResponseWriter, r *http.Request
 		return
 	}
 	var req searchHealthResetRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := h.decodeBody(w, r, bodyRouteOperator, "host", &req, false); err != nil {
+		if isBodyTooLarge(err) {
+			writeGatewayJSON(w, http.StatusRequestEntityTooLarge, ErrorResponse{Error: err.Error()})
+			return
+		}
 		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid request body"})
 		return
 	}
@@ -1168,7 +1198,11 @@ func (h *Handler) HandleProviderBreakerReset(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	var req searchHealthResetRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := h.decodeBody(w, r, bodyRouteOperator, "host", &req, false); err != nil {
+		if isBodyTooLarge(err) {
+			writeGatewayJSON(w, http.StatusRequestEntityTooLarge, ErrorResponse{Error: err.Error()})
+			return
+		}
 		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid request body"})
 		return
 	}

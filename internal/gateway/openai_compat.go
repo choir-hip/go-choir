@@ -121,8 +121,19 @@ func (h *Handler) HandleOpenAIChatCompletions(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	// RES-11: the slot first, so a queued call holds no body (B7).
+	release, r, ok := h.scheduleModelCall(w, r, computerID, true)
+	if !ok {
+		return
+	}
+	defer release()
+
 	var req openAIChatCompletionRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := h.decodeBody(w, r, bodyRouteModel, computerID, &req, false); err != nil {
+		if isBodyTooLarge(err) {
+			writeGatewayJSON(w, http.StatusRequestEntityTooLarge, openAIErrorResponse(err.Error()))
+			return
+		}
 		writeGatewayJSON(w, http.StatusBadRequest, openAIErrorResponse("invalid request body"))
 		return
 	}
@@ -158,12 +169,6 @@ func (h *Handler) HandleOpenAIChatCompletions(w http.ResponseWriter, r *http.Req
 
 	log.Printf("gateway: openai-compatible chat request from autoputer %s (provider=%s model=%s messages=%d tools=%d reasoning=%s stream=%v)",
 		computerID, p.Name(), gwReq.Model, len(gwReq.Messages), len(gwReq.Tools), gwReq.ReasoningEffort, gwReq.Stream)
-
-	release, r, ok := h.scheduleModelCall(w, r, computerID, true)
-	if !ok {
-		return
-	}
-	defer release()
 
 	if req.Stream {
 		if len(llmReq.Tools) > 0 {

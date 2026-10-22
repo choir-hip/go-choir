@@ -177,6 +177,13 @@ func (s *ModelScheduler) Stats() ModelSchedulerStats {
 // error when the caller goes away; in each case no slot is held.
 func (s *ModelScheduler) Acquire(ctx context.Context, computerID string) (func(), time.Duration, error) {
 	started := time.Now()
+	// A caller already gone is never queued or handed a slot (B7).
+	if err := ctx.Err(); err != nil {
+		s.mu.Lock()
+		s.stats.Cancelled++
+		s.mu.Unlock()
+		return nil, 0, err
+	}
 	s.mu.Lock()
 	c := s.computers[computerID]
 	if c == nil {
@@ -204,6 +211,11 @@ func (s *ModelScheduler) Acquire(ctx context.Context, computerID string) (func()
 		failure = ctx.Err()
 	case <-timer.C:
 		failure = ErrModelWaitExceeded
+	}
+	// The slot and the cancellation can arrive together, and select picks
+	// either: a cancelled caller gives the slot back.
+	if failure == nil && ctx.Err() != nil {
+		failure = ctx.Err()
 	}
 	if failure != nil {
 		s.mu.Lock()
