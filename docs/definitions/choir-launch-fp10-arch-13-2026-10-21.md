@@ -113,7 +113,7 @@ now:
     (374 s); the new store tests 3x under -race; the agentcore seam tests and
     every agentcore test file that touches settings or observability green
     under -race.
-  source_ref: 9b8cc35f8
+  source_ref: see git log (review fix after 9b8cc35f8)
   deploy_identity: unknown to this lane
   candidate:
     id: fp10-arch13-debounced-checkpoint
@@ -132,6 +132,11 @@ now:
       - internal/agentcore/computer_settings.go
       - internal/agentcore/runtime.go
       - internal/agentcore/telemetry_batching_test.go
+  review_fixes:
+    - >-
+      2026-10-22, FP0 first-pass reviewer (blocking): Reopen after Close left
+      the cadence closed. Problem recorded, failing test, fixed: Reopen
+      reopens the cadence and arms it (TestCheckpointReopenAfterCloseStaysDebounced).
   residuals:
     - >-
       Behavior change in count mode too, by design: the dirty mark no longer
