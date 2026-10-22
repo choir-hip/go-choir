@@ -326,7 +326,7 @@ func (d *Dispatcher) dispatchPending(ctx context.Context) {
 	d.mu.Unlock()
 	for _, agentID := range agents {
 		d.mu.Lock()
-		if _, busy := d.running[agentID]; busy || !d.hasRoomLocked(agentID) || d.heldLocked(agentID) {
+		if _, busy := d.running[agentID]; busy || d.heldLocked(agentID) || !d.hasRoomLocked(agentID) {
 			d.mu.Unlock()
 			continue
 		}
@@ -381,12 +381,21 @@ func (d *Dispatcher) heldLocked(agentID string) bool {
 	return false
 }
 
-// nextHeld is the earliest end of a retry backoff.
+// nextHeld is the earliest end of a retry backoff still to come. It drops
+// holds that have ended: an ended hold whose mailbox has no slot would
+// otherwise arm a zero-delay timer on every pass and spin Run until a slot
+// frees (review round 2, R2-1). The mailbox then runs when the activation
+// holding the slot ends and calls Notify.
 func (d *Dispatcher) nextHeld() (time.Time, bool) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	now := time.Now()
 	var next time.Time
-	for _, until := range d.heldUntil {
+	for id, until := range d.heldUntil {
+		if !until.After(now) {
+			delete(d.heldUntil, id)
+			continue
+		}
 		if next.IsZero() || until.Before(next) {
 			next = until
 		}

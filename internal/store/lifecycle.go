@@ -573,11 +573,6 @@ func actorWakeOutboxFromWorkerUpdate(worker objectgraph.Object, resolver []objec
 		strings.TrimSpace(update.TrajectoryID), strings.TrimSpace(update.AgentID), "coagent_result", content, time.Time{}, "wake:"+worker.CanonicalID)
 }
 
-// actorWakeOutboxFromObject derives every durable actor wake a committed
-// object owes. Most kinds owe at most one; an engineering assignment at its
-// initial bound commit owes two — the run dispatch (the crash-gap repair for
-// the bind→activate window) and the progress-overdue deadline — so the return
-// is a slice and the caller mints each unprojected entry.
 // EngineeringAdmissionMailbox is the mailbox engineering admission's wakes
 // go to (agentcore.EngineeringAdmissionMailbox), the open commit's spawn wake
 // among them, so a request's first admission attempt does not wait for the
@@ -585,6 +580,11 @@ func actorWakeOutboxFromWorkerUpdate(worker objectgraph.Object, resolver []objec
 // (docs/problems/fp4-actor-retry-no-backoff-wake-latency-spawn-mailbox-2026-10-22.md F3).
 const EngineeringAdmissionMailbox = "engineering-admission"
 
+// actorWakeOutboxFromObject derives every durable actor wake a committed
+// object owes. Most kinds owe at most one; an engineering assignment at its
+// initial bound commit owes two — the run dispatch (the crash-gap repair for
+// the bind→activate window) and the progress-overdue deadline — so the return
+// is a slice and the caller mints each unprojected entry.
 func actorWakeOutboxFromObject(obj objectgraph.Object, objects []objectgraph.Object) ([]objectgraph.Object, error) {
 	switch obj.ObjectKind {
 	case ogKindWorkerUpdate:
