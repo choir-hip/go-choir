@@ -2510,41 +2510,6 @@ func (s *Store) ListEventsByTrajectory(ctx context.Context, ownerID, trajectoryI
 	return eventRecords(events, limit), nil
 }
 
-// ListEventsByTrajectoryAfter returns trajectory-scoped events newer than the
-// provided stream sequence, ordered by stream_seq ascending.
-func (s *Store) ListEventsByTrajectoryAfter(ctx context.Context, ownerID, trajectoryID string, afterSeq int64, limit int) ([]types.EventRecord, error) {
-	s.beforeEventRead(ctx)
-	if limit <= 0 {
-		limit = 500
-	}
-	// Fetch a large window since ogListByMetadata orders by updated_at DESC,
-	// not by stream_seq. We need all matching records to filter by afterSeq
-	// and sort by stream_seq before applying the caller's limit.
-	objs, err := s.ogListByMetadata(ctx, ogKindEvent, "trajectory_id", trajectoryID, 10000)
-	if err != nil {
-		return nil, fmt.Errorf("query events by trajectory after seq: %w", err)
-	}
-	var events []types.EventRecord
-	for _, obj := range objs {
-		var rec types.EventRecord
-		if err := ogDecode(obj, &rec); err != nil {
-			return nil, err
-		}
-		if rec.OwnerID != ownerID {
-			continue
-		}
-		if rec.StreamSeq <= afterSeq {
-			continue
-		}
-		events = append(events, rec)
-	}
-	sort.Slice(events, func(i, j int) bool { return events[i].StreamSeq < events[j].StreamSeq })
-	if len(events) > limit {
-		events = events[:limit]
-	}
-	return events, nil
-}
-
 // AppendChannelMessage persists a message to a coordination channel and assigns the next cursor sequence.
 func (s *Store) AppendChannelMessage(ctx context.Context, message *types.ChannelMessage, ownerID string) error {
 	// Serialize channel message sequence allocation to prevent two
