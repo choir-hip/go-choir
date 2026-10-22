@@ -216,3 +216,61 @@ func TestSagaEntryIsReleasedOnceTheAssignmentIsSettled(t *testing.T) {
 		t.Fatalf("a settled assignment keeps %d saga entries", entries)
 	}
 }
+
+// 6. Review bunch 92 (DeepSeek M1): a fate re-drive whose resume keeps
+// failing must end the assignment, not leave it bound. The dispatcher
+// dead-letters a wake whose handler fails eight times (MaxAttempts=8), and
+// the failure's own re-drive mints nothing while that wake is pending, so
+// the handler must reach a terminal fate in fewer than eight failures, with
+// a reason that says the report could not be committed and why. Ways it can
+// fail: the handler keeps returning the error (dead letter, nonterminal
+// assignment); it cancels on the first failure (a transient error ends
+// work); it consumes the wake without a fate; the reason is not true.
+func TestFateRedriveThatKeepsFailingEndsTheAssignmentWithItsCause(t *testing.T) {
+	const dispatcherMaxAttempts = 8
+	for _, frozen := range []bool{false, true} {
+		t.Run(fmt.Sprintf("frozen=%v", frozen), func(t *testing.T) {
+			f := newAdmissionFixture(t, 1)
+			f.open(0)
+			staged, _ := stageFateProposal(t, f, f.bind(0), frozen)
+			f.rt.capsuleExecutor = capsule.NewExecutor(t.TempDir(), t.TempDir(), "", 0) // no capsule: every resume fails at the capability step
+			captureFateWakes(f.rt)
+			ctx := context.Background()
+			failures := 0
+			for delivery := 1; delivery <= 3*dispatcherMaxAttempts; delivery++ {
+				err := f.rt.HandleAssignedEngineeringFateDeadline(ctx, staged.Binding.OwnerID, staged.Binding.ComputerID, staged.Binding.ParentAgentID, fateDeadlineContent(staged))
+				if err == nil {
+					break
+				}
+				if errors.Is(err, errAssignmentSagaHeld) {
+					t.Fatalf("delivery %d: nothing holds the saga, got %v", delivery, err)
+				}
+				failures++
+				if f.get(0).Disposition.Terminal() {
+					t.Fatalf("delivery %d returned %v after the assignment was already terminal", delivery, err)
+				}
+			}
+			after := f.get(0)
+			if !after.Disposition.Terminal() {
+				t.Fatalf("after %d failed fate re-drives the assignment is still %s/%s: the wake is dead-lettered and nothing ends it",
+					failures, after.Disposition, after.CapsuleDisposition)
+			}
+			if failures >= dispatcherMaxAttempts {
+				t.Fatalf("the assignment ended only after %d failed deliveries; the dispatcher dead-letters the wake at %d", failures, dispatcherMaxAttempts)
+			}
+			if failures < 2 {
+				t.Fatalf("the assignment was cancelled after %d failed re-drive(s); a transient failure must be retried", failures)
+			}
+			if after.Disposition != types.EngineeringAssignmentCancelled || after.CapsuleDisposition != types.EngineeringCapsuleRevoked {
+				t.Fatalf("the unfinishable assignment ended %s/%s, want cancelled with its capsule revoked", after.Disposition, after.CapsuleDisposition)
+			}
+			if !strings.Contains(after.DispositionReason, "terminal report could not be committed") ||
+				!strings.Contains(after.DispositionReason, "capability") {
+				t.Fatalf("the cancel reason does not say the report failed and why: %q", after.DispositionReason)
+			}
+			if err := f.rt.HandleAssignedEngineeringFateDeadline(ctx, staged.Binding.OwnerID, staged.Binding.ComputerID, staged.Binding.ParentAgentID, fateDeadlineContent(staged)); err != nil {
+				t.Fatalf("a fate wake after the cancel returned %v; the settled assignment is a no-op", err)
+			}
+		})
+	}
+}

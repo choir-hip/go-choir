@@ -89,3 +89,41 @@ func TestFateRedriveAfterAConsumedWakeIsDeliverable(t *testing.T) {
 		t.Fatalf("the redrive after a consumed fate wake left %d deliverable rows, want 1", len(rows))
 	}
 }
+
+// Review bunch 92 (DeepSeek M1): a fate wake whose re-drive failed and will
+// be retried is a dispatcher deferral (re-delivered with backoff, outside
+// the MaxAttempts budget), not a plain handler error, which the dispatcher
+// retries at once and dead-letters on the eighth attempt. Any other handler
+// error stays a plain error.
+func TestFateDeadlineRetryableRedriveFailureIsADispatcherDeferral(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "fate-retry.db")
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	adapter := New(provideriface.Config{
+		ComputerID: "autoputer-test", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"), ProviderTimeout: time.Second,
+	}, s, events.NewEventBus(), provider.NewStubProvider(0), nil, WithKernelMode())
+	t.Cleanup(adapter.cleanupLog)
+	handler := newActorHandler(adapter.Runtime, nil)
+	handler.bootAt = time.Now().UTC().Add(-time.Hour)
+	mailbox := scopedActorMailboxID("owner-retry", "autoputer-test", "management:owner-retry")
+	u := actor.Update{UpdateID: "fate-retry-1", ToAgentID: mailbox, Kind: "assigned_engineering_fate_deadline",
+		Content: `{"assignment_id":"assignment-y","attempt":1}`, CreatedAt: time.Now().UTC()}
+
+	handler.fateDeadline = func(context.Context, string, string, string, string) error {
+		return fmt.Errorf("resume: %w: resolve exact assignment capability after freeze intent", agentcore.ErrFateRedriveRetry)
+	}
+	if _, err = handler.HandleUpdate(ctx, mailbox, u, nil); !errors.Is(err, actor.ErrDeferUnprocessed) {
+		t.Fatalf("a retryable re-drive failure returned %v, want a dispatcher deferral", err)
+	}
+	handler.fateDeadline = func(context.Context, string, string, string, string) error {
+		return errors.New("decode assigned Engineering fate deadline: bad content")
+	}
+	if _, err = handler.HandleUpdate(ctx, mailbox, u, nil); err == nil || errors.Is(err, actor.ErrDeferUnprocessed) {
+		t.Fatalf("a non-retryable fate handler error returned %v, want a plain error", err)
+	}
+}
