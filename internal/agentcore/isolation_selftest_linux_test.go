@@ -110,7 +110,7 @@ func TestIsolationSelfTestSeccompLegThroughTheRealBinary(t *testing.T) {
 	deskTestWorkerBin(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	rec := capsule.SeccompSelfTest(ctx, deskWorkerBinary())
+	rec := capsule.SeccompSelfTest(ctx, daemonSelfTestBinary())
 	if !rec.OK {
 		t.Fatalf("seccomp leg through the real binary failed: %v\n%+v", rec.Failures, rec)
 	}

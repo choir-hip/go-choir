@@ -852,6 +852,25 @@ func deskWorkerBinary() string {
 	return "autoputer"
 }
 
+// daemonSelfTestBinary is the daemon's own executable, for the self-test
+// legs that run it with an argument only cmd/autoputer dispatches: the
+// document-tool sandbox's helper and probe (doctool.HelperArg, ProbeArg)
+// and the capsule seccomp child (capsule.SeccompSelfTestArg). Never
+// deskWorkerBinary: the dedicated desk-worker serves only desk-session
+// (docs/problems/doctool-selftest-runs-desk-worker-2026-10-22.md). The
+// override lets tests point at a real compiled autoputer.
+var daemonSelfTestBinOverride string
+
+func daemonSelfTestBinary() string {
+	if daemonSelfTestBinOverride != "" {
+		return daemonSelfTestBinOverride
+	}
+	if bin, err := os.Executable(); err == nil {
+		return bin
+	}
+	return "autoputer"
+}
+
 // deskWorkerBinaryFor is the worker to spawn for a daemon running as exe: the
 // dedicated desk-worker binary beside it (no Dolt engine, no gRPC; RES-17) if
 // there is an executable regular file, else exe itself, which serves
