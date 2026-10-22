@@ -1,10 +1,11 @@
 # Run-state events folded into the lifecycle batch are stored with seq 0 and stream_seq 0
 
-**Status:** confirmed by a store test on `origin/main` 85a8115b1, 2026-10-22. Found by the
+**Status:** fixed on lane `lane/fp1-run-events-seq` (see "Fix landed" at the end), pending
+staging proof. Confirmed by a store test on `origin/main` 85a8115b1, 2026-10-22. Found by the
 reader survey for the trace segment log design
 (`docs/design/trace-segment-log-2026-10-22.md`, heresy delta, branch
-`lane/fp1-trace-segment-design`). No fix in this record's commit; the failing test is in
-`internal/store/run_events_seq_test.go`.
+`lane/fp1-trace-segment-design`). The regression tests are in
+`internal/store/run_events_seq_test.go` and `internal/agentcore/run_state_event_seq_test.go`.
 
 Evidence labels: **[V]** code read at file:line, **[M]** measured by the test,
 **[H]** hypothesis.
@@ -158,3 +159,61 @@ holds numbered and zero rows, as it does today. The trace log design's pre-rollb
   same allocator. The fold bypasses the allocator that record made cheap.
 - Acceptance evidence as a URL, not a copy (design heresy delta) is a separate weakness;
   this record only shows that, for a folded event, the URL points at the wrong event today.
+
+## Fix landed (lane `lane/fp1-run-events-seq`)
+
+**What changed** (`internal/store/store.go` only):
+
+- The allocation block of `AppendEvent` (seed, `rec.Seq`, `rec.StreamSeq`, the system-owner
+  default) moved, unchanged, into `allocateEventSeqLocked`. `AppendEvent` calls it under
+  `eventMu` exactly where the block was.
+- `Store.AllocateEventSeq(ctx, rec)` takes `eventMu`, calls the same helper, and returns at
+  once when `rec.Seq != 0`.
+- `persistLifecycleRunWithEvent` calls `AllocateEventSeq` on a non-nil event after it knows
+  the run is lifecycle-bound and before the request, and so the command digest, is built.
+  A run that is not lifecycle-bound still goes to `AppendEvent`, as before.
+
+**Retry.** The numbers are on the caller's `*EventRecord`. A second `UpdateRunWithEvent`
+with the same event takes none, and the digest is stable across the CAS retries inside
+`projectLifecycleRunWithRetry`. A batch that fails after allocation leaves a gap, never a
+duplicate. `replaceLifecycleActivationWithDeadlineRetry` (`runtime_persistence.go`) was
+checked and needs no change: none of its requests carries an `Event`. The run-end retry
+(`run_end_retry.go`) builds a new event with a new `EventID` on each attempt, so a failed
+attempt costs one number (a gap) and a committed-but-timed-out attempt could still store two
+events **[H]**. That second case was already true (two `EventID`s) and is unchanged; it is a named
+residual, not repaired here.
+
+**The live bus** now carries the numbers: `persistActivationStateAndEmit` publishes the same
+`*EventRecord` it passed down, and the helper mutates it.
+
+**History is not repaired.** Existing rows keep `seq = 0` and `stream_seq = 0`. The bug
+began with `acb85f449` on **2026-09-24**; every run-state event of a lifecycle-bound run
+written from then until this fix deploys has zeros. The readers are not changed to include
+zero rows. A reader that wants them has the unfiltered `ListEventsOG`.
+
+**Tests (yellow commit `d23ab1d08`, failing before the fix):**
+
+- `TestRunEventFoldedIntoLifecycleBatchGetsSeq` (store): stored numbers, run events API
+  and trace export, WebSocket catch-up, trajectory order, acceptance evidence URL.
+- `TestFoldedRunEventRetryTakesOneNumber` (store): a second fold of the same event keeps
+  its numbers, the next append takes the next number, the event is stored once.
+- `TestRunStateEventPublishCarriesStoredSeq` (agentcore): the bus publish carries the numbers
+  that are stored.
+
+**Fix ceremony (red).**
+
+- Mutation class: red. Protected surfaces: run event sequence allocation, the run event read
+  path, and the read path of acceptance evidence (`runEventEvidenceURL` is now correct for
+  new events without a change to it).
+- Conjecture delta: before, "a folded event needs no number because it is committed with the
+  run"; after, "every run event gets a number from the one allocator, whichever path writes
+  it". Refuted by the old behavior; supported by the tests above.
+- Admissible evidence: the three tests; on staging, a finished test-computer run's
+  `GET /api/runs/{id}/events?after=0` lists `run.started` and `run.completed` with
+  `seq > 0`, and its acceptance evidence URL returns the cited event. Not yet run (no staging
+  in this pass).
+- Rollback: revert the fix commit. Numbered rows stay valid; new run-state events go back
+  to `seq 0`.
+- Heresy delta: discovered 0 further (the run-end retry duplicate is a residual that already
+  existed); introduced 0; repaired 1 (new run-state events). Rows written 2026-09-24 to the
+  deploy stay unrepaired.
