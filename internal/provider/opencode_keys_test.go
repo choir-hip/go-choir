@@ -238,4 +238,10 @@ func TestOpenCodeKeysFromEnvHonorsThePolicy(t *testing.T) {
 	if got := names(); got != "" {
 		t.Fatalf("policy naming no configured key: %s, want none", got)
 	}
+	// Set but blank is a list naming no key: none serve (bunch 8b review:
+	// a blank policy must not fail open to every key).
+	t.Setenv(openCodeKeysPolicyEnv, " ")
+	if got := names(); got != "" {
+		t.Fatalf("blank policy: %s, want none", got)
+	}
 }
