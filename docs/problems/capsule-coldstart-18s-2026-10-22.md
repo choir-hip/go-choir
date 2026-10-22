@@ -556,3 +556,22 @@ tests first, and records the rest here.
   - Deepseek F5: the header read is unbounded, and `ParseInt` accepts
     `+5`. Neither is reachable from a benign git, and both fail closed
     on the object-id check.
+
+**Round 2 test flake (2026-10-22).**
+
+- What happened: one `-race` run of the round-2 tests failed in
+  `TestCommitDigestCacheIsBoundedAndRightUnderConcurrency`, which builds a
+  chain of 70 commits. The failure came while the test was computing its
+  expected digests, before the cache was involved:
+  `source snapshot tree inventory: exit status 128`. The run was
+  ~/tmp/coldfix-race2.log on the loaded agents VM.
+- It did not reproduce: 5 plain runs and 6 `-race` runs passed.
+- Hypothesis (not confirmed): `git commit` started git's detached
+  auto-maintenance in the test repository, and it raced the test's own
+  `git ls-tree`.
+- Finding (confirmed by code read): the error drops git's stderr, so the
+  cause cannot be told. That is the same defect as F1, in the inventory
+  step on the spawn path.
+- Fix:
+  - the inventory error carries git's stderr;
+  - the test repositories turn auto-maintenance off.
