@@ -307,11 +307,28 @@ func (s *Store) commitDoltCheckpointLocking(ctx context.Context, message string,
 	return nil
 }
 
-// recordCheckpointError counts a commit error: a background or closing
-// commit cut by Close (its context done after the cadence closed) counts
-// apart, so a planned restart leaves failures at 0.
+// undoFailedClose restores what a Close that failed closed changed, so a
+// store that keeps serving behaves as before it: the checkpoint cadence
+// (open again, its timer re-armed) and the telemetry sealer. A cancelled
+// derived-column migration stays cancelled.
+func (s *Store) undoFailedClose(wasClosed, telemetryStopped bool) {
+	if telemetryStopped {
+		s.resumeTelemetry()
+	}
+	if !wasClosed {
+		s.reopenCheckpoint()
+	}
+}
+
+// recordCheckpointError counts a commit error: a closing commit cut by its
+// close deadline, or a background commit Close cancelled, counts apart, so
+// a planned restart leaves failures at 0. It is judged by what cut the
+// commit's context, not by the cadence state, which a failed Close
+// restores.
 func (s *Store) recordCheckpointError(ctx context.Context, site checkpointSite, err error) {
-	if ctx.Err() != nil && s.checkpoint.isClosed() && s.checkpoint.recordCutAtClose(site) {
+	cut := (site == checkpointSiteClose && ctx.Err() != nil) ||
+		(site == checkpointSiteBackground && errors.Is(context.Cause(ctx), errCancelledAtClose))
+	if cut && s.checkpoint.recordCutAtClose(site) {
 		return
 	}
 	s.checkpoint.recordFailure(err)
@@ -1102,7 +1119,8 @@ func (s *Store) Close() error {
 	}
 	// Graceful close seals the telemetry window first. A crash does not, which
 	// is the loss the ruling allows.
-	s.closeTelemetry()
+	telemetryStopped := s.closeTelemetry()
+	wasClosed := s.checkpoint.isClosed()
 	// A running derived-column migration stops before its next step; a
 	// step in flight is not waited for (database/sql Close does not wait
 	// for a connection in use), so it can land after the closing commit or
@@ -1118,6 +1136,7 @@ func (s *Store) Close() error {
 	deadline := time.Now().Add(s.checkpoint.closeLimit())
 	hard := deadline.Add(checkpointCloseGrace)
 	if err := s.closeCheckpoint(deadline, hard); err != nil {
+		s.undoFailedClose(wasClosed, telemetryStopped)
 		return err
 	}
 	// The fence, in every mode: every Dolt commit (background, inline,
@@ -1126,7 +1145,9 @@ func (s *Store) Close() error {
 	fence, cancelFence := context.WithDeadline(context.Background(), hard)
 	defer cancelFence()
 	if err := s.lockDoltCommitBy(fence); err != nil {
-		return s.checkpoint.leaveOpen("a Dolt commit holds the commit lock")
+		err = s.checkpoint.leaveOpen("a Dolt commit holds the commit lock")
+		s.undoFailedClose(wasClosed, telemetryStopped)
+		return err
 	}
 	defer s.doltCommitMu.Unlock()
 	s.checkpoint.clearLeftOpen()

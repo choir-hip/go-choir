@@ -267,17 +267,37 @@ func (s *Store) SetTelemetrySynchronous(ctx context.Context, on bool) error {
 	return nil
 }
 
-func (s *Store) closeTelemetry() {
+// closeTelemetry drains and stops the sealer. It reports whether this call
+// stopped it, so a Close that then fails closed can resume it.
+func (s *Store) closeTelemetry() bool {
 	sl := s.telemetry.Load()
 	if sl == nil {
-		return
+		return false
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = s.DrainTelemetry(ctx)
 	sl.mu.Lock()
+	was := sl.stopped
 	sl.stopped = true
 	sl.stopTimerLocked()
+	sl.mu.Unlock()
+	return !was
+}
+
+// resumeTelemetry undoes closeTelemetry for a store a Close left open.
+// While stopped, records were written synchronously; what the drain did
+// not seal gets its deadline again.
+func (s *Store) resumeTelemetry() {
+	sl := s.telemetry.Load()
+	if sl == nil {
+		return
+	}
+	sl.mu.Lock()
+	sl.stopped = false
+	if len(sl.queue) > 0 {
+		sl.armTimerLocked()
+	}
 	sl.mu.Unlock()
 }
 
