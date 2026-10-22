@@ -120,9 +120,13 @@ until step 0 has been done in the same window.** The script refuses
   `critical_protected` or `public_platform` computer (the paper, the
   platform computer) is asked with `allow_busy` and takes the marker with
   runs running. The script retries for `--busy-wait` (600 s) and then
-  aborts, clearing the markers it wrote. `--allow-crash-close` reboots
-  anyway, and the busy computers' work ends `interrupted_by_restart`. A
-  refusal for a self-development apply or a live capsule always aborts.
+  aborts, clearing the marker on every computer it asked.
+  `--allow-crash-close` reboots anyway through computers busy with runs,
+  and their work ends `interrupted_by_restart`. A guest that cannot say
+  whether an apply or a capsule is live (no answer, a timeout, a 503,
+  another 5xx, a 404/405) aborts unless `--allow-crash-unverified`
+  accepts that the reboot may cut one. A refusal for a self-development
+  apply or a live capsule always aborts.
 - The paper's source schedules are standing intents and survive any
   restart (`recoverSourceSchedulesAtBoot`). A crash closes only the poll
   in flight. The next tick is armed one interval after boot. A
@@ -150,7 +154,21 @@ The script runs these steps in order:
    The guest writes the marker durably, or answers 409 while busy. The
    script logs each computer's outcome (written, busy, unsafe,
    unsupported, unavailable) and keeps it in the receipt under
-   `marks.outcomes`.
+   `marks.outcomes`, with each computer's worst outcome across the
+   rounds under `marks.worst` (the abort reads the worst). After the
+   rounds it sends every marker again, immediately before the reboot, so
+   each marker's 15-minute TTL starts then and the guest re-checks for an
+   apply or capsule that started meanwhile; a computer that does not
+   write again aborts the run. `marks.marked_at` is that last send. An
+   abort, or any failure in this step (an ssh drop or timeout), clears
+   the marker on every computer it POSTed to, whatever it answered;
+   a clear that fails is logged and kept under `marks.unmark_failed`
+   (clear those by hand: such a marker would make a crash in the next 15
+   minutes boot as planned). Held computers, and every computer under
+   `--no-markers`, are not asked; the script reads their
+   self-development count from the obligations surface (`selfdev.busy`):
+   a nonzero count aborts, an unreadable one needs
+   `--allow-crash-unverified`.
 3. **Reboot.** It runs `ssh node-b systemctl reboot` and waits up to
    `--boot-timeout` (1200 s) for ssh with a new `boot_id`.
 4. **Post-checks** (below). The receipt JSON goes to
@@ -168,9 +186,15 @@ writing will cold-boot on their next wake whatever happens.
 `public_platform` computers, get markers written immediately before the
 reboot, and the post-checks verify the boot happened inside the TTL.
 Other busy computers' work is never carried across: the run waits for
-them to go idle, or it aborts. No computer is rebooted through a
-self-development apply or a live capsule.** Here is why, and what the
-alternatives cost:
+them to go idle, or it aborts. No asked computer is rebooted through a
+self-development apply or a live capsule its guest reports, and by
+default none whose guest cannot say. Unasked running computers (held,
+or all under `--no-markers`) are checked only for self-development
+operations, read-only; their live capsules are not readable without
+asking and are not checked. Computers that are not running are not
+checked: the kernel change invalidates their snapshots, so a hibernated
+computer's in-memory capsule is lost at its next wake.** Here is why,
+and what the alternatives cost:
 
 - The marker lasts 15 minutes (`plannedRestartMaxAge`). That is short for a
   host reboot, and this one's duration is unknown (estimate: 2 to 5
@@ -192,10 +216,19 @@ alternatives cost:
   aborts, even under `--allow-crash-close`. `--no-allow-busy` restores
   the idle-only rule for every computer.
 - `--allow-crash-close` accepts crash semantics for computers still busy
-  after `--busy-wait`. Their in-flight work closes as "interrupted by a
-  restart" and is not resumed.
+  with runs after `--busy-wait`. Their in-flight work closes as
+  "interrupted by a restart" and is not resumed. It does not cover a
+  guest that never answered or could not read its own state.
+- `--allow-crash-unverified` also reboots through computers whose guest
+  could not say whether an apply or a capsule is live. It is the risk
+  the operating contract forbids on purpose: use it only for a guest
+  known dead or wedged, from the console or the obligations surface.
+- A guest built before the 409 body carried `live_capsules` is read as
+  unsafe (fail closed), so it can never be marked while busy.
 - `--no-markers` gives pure crash semantics for every computer. It is the
-  most conservative choice, and parked work closes too. Use it if the
+  most conservative choice, and parked work closes too. It still aborts
+  on a computer whose obligations surface shows a self-development
+  operation mid-transaction; live capsules are not checked. Use it if the
   console shows a slow POST, so the reboot will clearly take more than
   about 12 minutes.
 
