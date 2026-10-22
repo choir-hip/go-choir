@@ -201,5 +201,23 @@
   "ratio_per_op_batched": 0.21171252151187936,
   "ratio_per_op_batched_3_tree": 0.1643784277440982,
   "ratio_per_event_unbatched_3_tree": 0.476165415231288,
-  "go_bar": 0.5
+  "go_bar": 0.5,
+  "rerun_round_2": {
+    "code": "lane/fp1-event-table-d2 ae12f9db9 (rebased on deploy 1 round 1b fbb6d74a8; the store floor, decode after the lock, the cursor reads)",
+    "note": "only the summary survived (the VM restart cleared /tmp); the write path did not change, so the ratios are expected unchanged",
+    "mean_kib_per_event": {
+      "batched_off": 87.6,
+      "batched_off_3tree": 88.2,
+      "batched_on": 18.4,
+      "batched_on_3tree": 14.4,
+      "unbatched_off": 137.9,
+      "unbatched_off_3tree": 138.7,
+      "unbatched_on": 70.5,
+      "unbatched_on_3tree": 66.5
+    },
+    "ratio_per_op_batched": 0.21,
+    "ratio_per_event_unbatched": 0.511,
+    "ratio_per_op_batched_3_tree": 0.164,
+    "ratio_per_event_unbatched_3_tree": 0.479
+  }
 }
