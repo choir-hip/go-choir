@@ -88,3 +88,37 @@ commits; `armCheckpoint` and the ops bound do nothing; and
 `CheckpointStats().Mode` still says `debounced`. The writer stall comes
 back without a word, and the mode report says it hasn't. Fix: `Reopen`
 reopens the cadence and arms it for the adopted (dirty) workspace.
+
+## Review findings: the background commit still stalls writers, and four smaller gaps (2026-10-22)
+
+Found by FP0's review round (DeepSeek, bunch 45, accept with edits) on
+f60daaa09 and checked against the code before any fix.
+
+1. The background commit still holds the store's only connection. `Open`
+   leaves `textureDB` nil, so `textureHandle()` is `s.db`, and
+   `configureEmbeddedDoltDB` pins `s.db` to `MaxOpenConns(1)`
+   (`internal/store/texture.go:352-355`). `finalizeBatch` takes `eventMu`
+   and then calls `s.db.BeginTx` (`internal/store/computer_events.go`).
+   While `DOLT_COMMIT` runs on that connection, the next finalize waits at
+   `BeginTx` holding `eventMu`, and every other writer waits on `eventMu`
+   behind it. Debounced mode bounds how often this happens (once per
+   window, or per ops bound); it does not make it zero. The station's
+   deliver line ("a guest write never waits on a Dolt history commit") is
+   false as written, and the acceptance reads only `inline_commits` and
+   `inline_ns`, which cannot see this wait. The real fix (a second
+   connection, or the store split) is SA slice 5, excluded here.
+2. `closeCheckpoint` runs the closing commit under
+   `context.Background()` with `checkpointCommitTimeout` (2 minutes), so a
+   wedged commit holds `Close` for two minutes on the planned-restart and
+   projection-base rebase paths (`internal/autoputer/projection_base.go`).
+3. `closeCheckpoint` does not wait for work in flight, and
+   `CancelDerivedColumnMigration` only signals; a migration step already
+   queued on the connection can land after the closing commit and stay
+   outside Dolt history until the next commit.
+4. A `DOLT_COMMIT` that answers "nothing to commit" is counted as a
+   commit at its site, and `CheckpointStats.Mode` says `debounced` while
+   the cadence is closed.
+5. Assumption to state: with the checkpoint off the write path,
+   durability rests on SQL `COMMIT` being durable in the embedded Dolt
+   working set. A soak does not test that; a kill -9 of the guest store
+   on a test computer does.
