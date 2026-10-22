@@ -16,6 +16,111 @@ code at the cited `file:line` on this checkout; **[M]** measured, in a cited
 record, not re-measured here; **[H]** hypothesis or derivation, with the
 observation that settles it.
 
+## Status (2026-10-22): deploy 2 built
+
+**Deploy 2 (the writer) is built** on `lane/fp1-event-table-d2`, from
+deploy 1's `c4508ef82`, tests first, not landed. It lands only after deploy
+1 has landed as its own deploy and held (Q5). Commits: the failure-mode
+tests (yellow) and their two repairs (yellow); the store writer (red); the
+host grant (red: vmctl); the runtime switch (red); the proof script
+`scripts/proofs/fp1-event-table-deploy2.sh` (yellow).
+
+**How the switch works (F18).** The writer stamps only when both keys hold:
+
+- **The host names the computer.** `CHOIR_EVENT_TABLE_COMPUTERS` in
+  go-choir-vmctl's Environment (`nix/node-b.nix`, empty as deployed) takes
+  ComputerIDs only. `class:test` and `*` are ignored. vmctl writes
+  `event-table.json` onto the named computer's root-only credential disk at
+  its next cold boot, beside the visual-capture, mirror and host-fetch
+  grants (`internal/vmmanager/event_table_grant.go`). A snapshot resume
+  keeps the old disk. The guest reads the grant once per boot and fails
+  closed (`internal/eventtablegrant`): missing, malformed, withheld, or
+  naming another computer is off.
+- **The owner sets `store.event_table`.** It is set through `POST
+  /api/computer-settings`, stored on the tape, applied at once, and read
+  again at every boot before the first event (beside `telemetry.batch`).
+
+Who cannot turn it on: a desk or model, because `choir.ProductAPI`'s
+allowlist refuses the settings route; any in-guest process, because
+`server.AuthenticatedOwner` refuses loopback callers; an unauthenticated
+caller; and any account owner whose computer the host did not name.
+`/api/runtime/observability` shows `event_table {host_granted, setting,
+writing, reason}` and `telemetry_batching.tape_ops_by_table`. Both are
+absent where the switch is off, so the response is deploy 1's there.
+
+**Turning it off** (the owner's setting off) stops new stamps at once. Rows
+already in `choir_events` stay there and stay readable through the union
+reads; nothing is moved back. Removing the computer from the selector also
+stops stamps, but only from its next cold boot.
+
+**How the test computer is selected.** FP0 mints it (`node
+scripts/qa_test_computer.mjs --label fp1-event-table-d2`), names its
+ComputerID in `CHOIR_EVENT_TABLE_COMPUTERS` (a nix commit, deployed), cold
+boots it (the proof's step 5, an operator refresh), and sets the setting
+with that computer's key (step 2). The paper comes later: it is named the
+same way and takes the grant at a planned refresh, under Q7's conditions
+(step 8).
+
+**F17, the local journal probe:** measured on the deploy-2 code, local tape harness
+(`docs/evidence/fp1-event-table-journal-probe-2026-10-22.json`; 3,000 seed
+rows per table, about 2 KB payloads, the arms alternating over three
+rounds) **[M]**:
+
+| Arm | Setting off | Setting on | Ratio |
+|---|---|---|---|
+| Sealed batches of up to 32 ops (per op: b_ce/b_og, the gate) | 87.6 KiB | 18.5 KiB | **0.21** |
+| One tape event per op, batching off (per event, the paper today) | 142.5 KiB | 74.4 KiB | **0.52** |
+| The same without the trajectory index (3 trees), batched / unbatched | 88.2 / 141.4 KiB | 14.5 / 67.3 KiB | 0.16 / 0.48 |
+
+The gate passes: b_ce/b_og is 0.21 against a bar of 0.5, better than the
+predicted 0.35. The per-event ratio is 0.52 (rounds 0.49, 0.55, 0.52). It
+saves about 68 KiB of about 143 KiB per batched event. The remainder is
+the prepare and finalize overhead per tape event, which F-c leaves as it
+is (2.6, assumption 5). Read as "journal per event, on against off, at
+most 0.5", deploy 2 sits at the bar, not under it. Q2's price is about
+4 KiB per op batched and about 7 KiB per event unbatched. The numbers are
+directional only.
+
+**Tests run (local).** Under `-race`: the store tests matching
+`EventTable|Telemetry|ComputerSetting|FlagOff|Lifecycle` (828 s, pass), and
+the agentcore settings, event-table, telemetry, planned-restart, ProductAPI
+and observability tests (pass). Without `-race`: the whole `internal/store`
+package once; `internal/vmmanager`, `internal/eventtablegrant`,
+`internal/types` and `internal/computerevent` (pass). `scripts/check-*.sh`
+pass, except `check-guest-data-fstrim.sh`, which needs the `nix` binary this
+VM lacks. The flag-off golden tape test passes unchanged.
+
+**Rollback once any op is stamped.** First turn the setting off (live).
+Then revert deploy 2: deploy 1 projects and reads every stamped op.
+Deploy 1 is the floor (section 4.5).
+
+**Where the code differs from this document:**
+
+1. *The selector (4.2).* The setting alone is not enough. A host grant is
+   a second required key. With the setting alone, any account owner could
+   stamp ops and so make deploy 1 their computer's rollback floor without
+   the platform choosing it. This is also what makes deploy 2 inert under
+   the metamission's rule ("off unless a selector names a computer").
+   Section 4.2's "no environment override" holds: nothing turns it on
+   without the owner's setting. The cost: the paper needs a cold boot (a
+   planned refresh) to take the grant before its setting can work.
+2. *Section 2.2's three conditions are four:* a bound tape, the grant, the
+   setting, and the storage class.
+3. *W2's stamp is decided in `AppendEvent`, with the numbers,* not at seal
+   time. A record queued while the setting is on is sealed stamped even if
+   the setting goes off before its seal, and the reverse.
+4. *F2 across off and on is exact only with one owner per run.* The
+   `choir_events` half of the per-run seed reads the run's maximum over
+   every owner (3.5). So after a reseed, a second owner's numbers in a
+   shared run skip ahead: a gap, never a duplicate. The differential test
+   uses one owner per run, and the duplicate test keeps two.
+5. *`tape_ops_by_table` counts stamped ops only* (`choir_events`), and is
+   omitted until one is stamped; unstamped ops are `tape_ops` minus it.
+6. *The F17 gate quantity.* The design gates on b_ce/b_og, the cost per
+   op. The cost per tape event with one op each (batching off, as on the
+   paper) includes the prepare and finalize overhead, so its ratio is
+   higher. The probe reports both.
+
 ## Status (2026-10-22): deploy 1 built
 
 The owner approved the section 8 defaults on 2026-10-22 ("Defaults are

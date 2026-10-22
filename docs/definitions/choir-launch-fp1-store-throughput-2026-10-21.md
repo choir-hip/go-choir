@@ -108,108 +108,93 @@ boundaries:
 now:
   status: checkpoint_incomplete
   slice: >-
-    Follow-up (2026-10-22, lane/fp1-event-table): F-c deploy 1, run
-    telemetry in its own table, inert. Built tests first from the design's
-    section 5 on origin/main 6c60685cc after the owner approved the
-    section 8 defaults ("Defaults are fine"): choir_events (4 trees), the
-    projector route on ProjectionOp.Table, the union readers and both seeds,
-    the witness rule (an empty choir_events is not observed) and manifest
-    class (version 4), both vocabulary fences, store schema epoch 2, the
-    three caller-less methods deleted. No writer stamps an op: deploy 2 (the
-    writer behind store.event_table) is not built. Earlier slices: the
-    boot-window repair (deploy E), B2 (bed24b526).
-  source_ref: lane/fp1-event-table
+    Follow-up (2026-10-22, lane/fp1-event-table-d2): F-c deploy 2, the
+    writer, on deploy 1 (c4508ef82), tests first. With store.event_table
+    on, the writer stamps ProjectionOp.Table "choir_events" on the ten
+    batched kinds, both on the acknowledged write and in the sealer. The
+    switch needs two keys. The host names the computer
+    (CHOIR_EVENT_TABLE_COMPUTERS, ComputerIDs only, empty as deployed; a
+    grant on the credential disk at cold boot). The owner sets the setting
+    (POST /api/computer-settings; applied at once and at boot; refused to
+    ProductAPI, in-guest callers and unauthenticated callers). Off is
+    deploy 1 byte for byte. F17 (local): b_ce/b_og 0.21 per op (bar 0.5,
+    pass); per event with batching off, 0.52 (the per-tape-event overhead
+    is unchanged). Deploy 1 lands first; earlier slices: deploy 1, the
+    boot-window repair (deploy E), B2.
+  source_ref: lane/fp1-event-table-d2
   deploy_identity: this lane deploys nothing; FP0 lands and proves
   candidate:
-    id: fp1-event-table-deploy1
-    state: built, not landed; awaiting FP0's review bunch and mirror
-    ref: lane/fp1-event-table
-    base: 6c60685cc
+    id: fp1-event-table-deploy2
+    state: built, not landed; waits for deploy 1 to land and hold (owner Q5)
+    ref: lane/fp1-event-table-d2
+    base: c4508ef82 (lane/fp1-event-table, deploy 1)
     digest: none
     scope:
       - internal/store/event_table.go
       - internal/store/store.go
-      - internal/store/project.go
-      - internal/store/computer_events.go
-      - internal/store/graph_store.go
-      - internal/store/object_graph_fingerprints.go
+      - internal/store/computer_setting.go
       - internal/store/telemetry_sealer.go
-      - internal/store/vocab_migrate_og.go
-      - internal/store/vocab_replay_fence.go
-      - internal/objectgraph/dolt_store.go
-      - internal/types/event_storage.go
-      - internal/storeschema/schema.go
-      - internal/computerversion/dolt_state_extractor.go
-      - internal/agentcore/replay_eligibility.go
-      - internal/agentcore/system1_verb.go
-      - scripts/proofs/fp1-event-table-deploy1.sh
+      - internal/store/telemetry_stats.go
+      - internal/eventtablegrant/grant.go
+      - internal/vmmanager/event_table_grant.go
+      - internal/vmmanager/config.go
+      - internal/vmmanager/manager.go
+      - nix/node-b.nix
+      - internal/agentcore/event_table.go
+      - internal/agentcore/runtime.go
+      - internal/agentcore/computer_settings.go
+      - internal/agentcore/api.go
+      - scripts/proofs/fp1-event-table-deploy2.sh
   conjecture:
-    id: C-FP1-sidetable
+    id: C-FP1-event-table
     claim: >-
-      A side table maintained by every writer in its transaction and
-      repaired online by a hash-comparing validator answers the three reads
-      exactly as the JSON scans do, and takes the engine mutex from 70% to
-      about half.
+      Moving batched telemetry from the 13-tree og_objects to the 4-tree
+      choir_events cuts its journal per op by more than half, and the
+      paper's whole journal by 20 to 35%.
     test: >-
-      The differential and rollback-simulation tests locally (passing);
-      the engine-mutex counters on the paper before and after (FP0).
+      Locally (F17, directional): per op 87.6 to 18.5 KiB (0.21); per event
+      unbatched 142.5 to 74.4 KiB (0.52). On staging the fit b_ce/b_og <=
+      0.5 (FP0, proof steps 3 and 7); on the paper, readings 1 to 6 before
+      and after (proof step 8).
     edge: missing_oracle
-    delta_o: the validator logs its pass and the tripwire counts hash mismatches, so a missed writer shows as a number
-    scope_if_supported: the guest object store on a computer with the same writers
+    delta_o: the observability counter tape_ops_by_table and the store-bytes snapshots make the fit possible per computer
+    scope_if_supported: the guest store of any computer the host names
     status: testing
-    evidence_refs: [receipts]
+    evidence_refs: [docs/evidence/fp1-event-table-journal-probe-2026-10-22.json]
   decision:
     what: >-
-      Persisted side table, in-memory validated flag, read-time tripwire; the
-      extractors skip the table; replay does not maintain it and withdraws the
-      families. L3-05: T1 was already landed (1db03dacf), T2 is left as is.
+      Two keys for the writer: the host's per-computer grant (ComputerIDs
+      only) and the owner's setting. This is the owner's "observe
+      everywhere, enforce on one test computer" pattern. Each computer that
+      stamps makes deploy 1 its floor, so that is a platform decision.
     kind: architecture
     status: proposal
-    evidence_ref: docs/problems/store-hot-reads-need-a-rollback-safe-side-table-2026-10-21.md
-    owner_ratification_ref: the orchestrator's panel on the frozen candidate
+    evidence_ref: docs/design/choir-event-table-f-c-2026-10-22.md (Status, deploy 2)
+    owner_ratification_ref: the owner's section 8 defaults (2026-10-22) and FP0's brief naming the selector pattern
   belief:
     believed_state: >-
-      The boot-window hold was the newest-first walk in
-      LatestComputerEventByIdempotencyPrefix after ready; the range read
-      costs the family's size (plan test).
-    main_uncertainty: whether another long s.db holder remains after this read is gone
-    next_observation: >-
-      FP0, next paper boot window: /health 200 within seconds of "runtime:
-      started"; if not, the probe's goroutine dump.
+      The writer is correct and inert as deployed. Locally the per-op
+      saving is larger than predicted (sequential keys share leaves within
+      a batch). Unbatched, the saving is about 48% per batched event.
+    main_uncertainty: the paper's batched share of ops and its row share of an event's cost (design section 9)
+    next_observation: FP0, the test computer's fit (proof steps 3 and 7)
   blocker_or_risk: >-
-    Lands only after the host lane's vmctl rollback-reachability fix. A
-    rollback to a binary without the extractor change leaves og_key_index as an
-    unknown table to that binary (replay-ineligible until dropped).
-    Residual, pre-existing and not fixed here: boot can ALTER og_objects
-    STORED on a populated store missing an older generated column
-    (docs/problems/boot-alters-og-objects-when-older-columns-missing-2026-10-21.md);
-    FP0 can check the paper with the query in that record before the deploy.
-    Residual: the validator's COUNT and stray-id lists are not keyset-paged.
+    Deploy 1 must land and hold first (one staging day and one paper boot).
+    Enabling on the paper needs it named in the selector and a cold boot (a
+    planned refresh) before its setting can act. Once any op is stamped on
+    a computer, deploy 1 is that computer's rollback floor. Read as journal
+    per event (on/off) with batching off, deploy 2 sits at the bar (0.52),
+    not under it; the design's gate is per op (0.21).
   next_action: >-
-    FP0: review the deploy-1 set in a bunch (red: store schema, epoch,
-    projector, replay, witness, manifest, fences, event readers), mirror it
-    under -race, land it as its own deploy (owner Q5; the metamission's
-    one-store-batch-per-deploy rule), then run
-    scripts/proofs/fp1-event-table-deploy1.sh (step 2 --label before ahead
-    of the deploy). Keep deploy 1 at least one staging day and one paper
-    boot before deploy 2. Next lane: deploy 2 (the writer and
-    store.event_table, tests F17 and F18 first; F17's local ratio at most
-    0.5 gates it). Rollback below deploy 1 is runtime-safe, not
-    rollback-safe (round 1b): the epoch fences only the updater's Apply of
-    an epoch-declaring release; a CI revert, a platform-follow offer that
-    declares no epoch and the
-    updater's restorePrior boot the old binary, which runs but refuses
-    checkpoint publication over the empty choir_events until a forward
-    deploy, the rollback build or a pre-deploy-1 restore. The rollback
-    build: extract scripts/rollback/fc-deploy1-rollback.sh from the deploy-1
-    tip with git show into a temp dir (the revert deletes it), git revert
-    deploy 1's commits, then run the extracted script's apply --from
-    <tip>, which installs the tested boot step that drops an empty
-    choir_events; a bare revert is not enough. Before relying on it, run
-    fc-deploy1-rollback.sh rehearse <tip> <base> on main's landed range
-    (it passed on the lane: 051bc0af2 over 6c60685cc, 20 commits, 9 s).
-    Fencing the updater's restorePrior is left to deploy 2's card. Rehearse it with the proof's step 6
-    on a test computer. Once deploy 2 stamps, deploy 1 is the floor.
+    FP0: after deploy 1 has landed and held, review deploy 2 in a bunch
+    (red: AppendEvent and the sealer, vmctl credential-disk material, the
+    runtime boot step and settings route), mirror under -race, and land it
+    as its own deploy. Then run scripts/proofs/fp1-event-table-deploy2.sh
+    step 0 on the paper (no effect). Mint a test computer, name it in
+    CHOIR_EVENT_TABLE_COMPUTERS (a nix commit, deployed), cold boot it, and
+    run steps 1 to 7. The paper comes only after that and the panel, under
+    step 8's conditions. Deploy 3 (the multi-row insert) is next for this
+    lane once deploy 2 has staging numbers.
   followup: >-
     Journal growth (lane/fp1-journal-growth, 2026-10-22): problem record
     docs/problems/paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md.
@@ -225,6 +210,24 @@ now:
     FP0's six readings in the record.
 
 receipts:
+  - id: fp1-event-table-deploy2
+    boundary: implement
+    identity: >-
+      lane/fp1-event-table-d2 on c4508ef82: 71016da91 (tests, yellow),
+      b6584694e (test repairs, yellow), c7d7e6e48 (store writer, red),
+      a2e641182 (host grant, red), 4030ef310 (runtime switch, red), the
+      proof script (yellow), then this docs commit (green)
+    proof_refs:
+      - internal/store/event_table_writer_test.go
+      - internal/store/event_table_guard_test.go (TestEventTableOnlyTheWriterStamps)
+      - internal/store/event_table_journal_probe_test.go (F17)
+      - internal/eventtablegrant/grant_test.go
+      - internal/vmmanager/event_table_grant_test.go
+      - internal/agentcore/event_table_setting_test.go (F18)
+      - docs/evidence/fp1-event-table-journal-probe-2026-10-22.json
+      - scripts/proofs/fp1-event-table-deploy2.sh
+    rollback_ref: the setting off (live); git revert of the three red commits returns to deploy 1, which projects and reads every stamped op
+    disposition: built and tested locally, not landed; see the design's deploy 2 status for the tests run
   - id: fp1-event-table-deploy1
     boundary: implement
     identity: >-
