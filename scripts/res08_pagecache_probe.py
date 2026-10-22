@@ -114,26 +114,51 @@ def guest_read(host, ip, name):
 
 
 def summarize(guest):
-    """The numbers the design report's thresholds use, in MiB."""
+    """The numbers the design report's thresholds use, in MiB, and whether
+    the store number may be quoted at all (report §5)."""
     mib = lambda b: round(b / (1 << 20), 1) if b is not None else None
     pm = guest.get("procmem", {})
     pc = pm.get("page_cache") or {}
     roots = {r["name"]: r for r in pc.get("roots", [])}
-    store, pers = roots.get("store", {}), roots.get("persistent", {})
+    store, upper, pers = roots.get("store", {}), roots.get("store_upper", {}), roots.get("persistent", {})
     meminfo = pc.get("meminfo") or {}
+    layering = pc.get("store_layering")
     out = {
         "cached_mib": mib((meminfo.get("Cached_kib") or 0) * 1024),
         "mapped_mib": mib((meminfo.get("Mapped_kib") or 0) * 1024),
+        "store_layering": layering,
         "store_resident_mib": mib(store.get("resident_bytes")),
+        "store_upper_resident_mib": mib(upper.get("resident_bytes")) if upper else None,
         "persistent_resident_mib": mib(pers.get("resident_bytes")),
         "store_apparent_mib": mib(store.get("bytes")),
-        "store_unmeasured_files": store.get("unmeasured_files", 0),
-        "partial": bool(store.get("partial") or pers.get("partial")),
         "anon_mib": mib((pm.get("meminfo", {}).get("AnonPages_kib") or 0) * 1024),
     }
+    floors = []
+    for name, r in (("store", store), ("store_upper", upper), ("persistent", pers)):
+        if not r:
+            continue
+        for k in ("examined_files", "skipped", "skipped_mounts", "unmeasured_files", "partial"):
+            out[f"{name}_{k}"] = r.get(k, False if k == "partial" else 0)
+        if r.get("partial") or r.get("skipped") or r.get("skipped_mounts") or r.get("unmeasured_files"):
+            floors.append(name)
+    out["floors"] = floors  # totals that are lower bounds, not measurements
+    refusals = []
+    if layering is None:
+        refusals.append("no store_layering: the read predates the overlay split, so the release delta may be inside the store and persistent totals")
+    elif not layering.get("partitioned"):
+        refusals.append("store_layering.partitioned is false: the overlay upper may be counted in store and persistent")
+    if store.get("unmeasured_files"):
+        refusals.append(f"{store['unmeasured_files']} store files unmeasured: the daemon lacks ownership or CAP_FOWNER (Linux 5.2+ mincore)")
+    if store.get("partial"):
+        refusals.append("the store walk was cut short by a bound (partial)")
+    if not store.get("present"):
+        refusals.append("no store root")
+    out["refusals"] = refusals
+    out["store_quotable"] = not refusals
     # The guest struct-page array for a DAX pmem region: 64 bytes per 4 KiB
-    # page of the uncompressed image (whose size is the store's apparent bytes).
-    if store.get("bytes"):
+    # page of the uncompressed base image (the base store's apparent bytes;
+    # the release delta in store_upper is not on the image).
+    if out["store_quotable"] and store.get("bytes"):
         out["dax_memmap_cost_mib"] = mib(store["bytes"] // 4096 * 64)
         out["net_saving_mib"] = round(out["store_resident_mib"] - out["dax_memmap_cost_mib"], 1)
     return out

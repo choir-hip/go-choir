@@ -131,10 +131,31 @@ is a floor, not a measurement. Record that and stop. Do not quote the
 number. Today the daemon unit sets no `User` and no
 capability bound (`nix/autoputer-vm.nix:810` onwards), so it runs as guest
 root and the count should be 0. A later move to a non-root runtime would
-make the store unmeasured, and the read would say so. The daemon may see
-`/nix/store` through its private overlay (`nix/autoputer-vm.nix:216-223`).
-Overlay hands `mmap` to the lower file, so residency is the erofs file's
-own.
+make the store unmeasured, and the read would say so.
+
+**Overlay check second** (review bunch 13, finding 2). A layered release
+runs the daemon in a private namespace where `/nix/store` is an overlay:
+the base EROFS is the lower layer, and the updater's private store
+(`$CHOIR_UPDATER_ROOT/store` on `/mnt/persistent`) is the upper
+(`nix/autoputer-vm.nix:216-224`). Overlay hands `mmap` to the real file, so
+residency is right for each file. But files from the upper are the
+release delta, not the base image, and they are also visible under
+`/mnt/persistent`. The read therefore parses the topmost `/nix/store`
+mount, counts upper files as the root `store_upper`, excludes the upper
+and work directories from `persistent`, and reports `store_layering`. The
+probe refuses to quote a store number (`store_quotable: false`, with the
+reasons in `refusals`) when `store_layering` is missing (a read older than
+53c91bc1f), when `partitioned` is false, when store files are unmeasured,
+or when the store walk is partial. The DAX memmap cost uses the base
+store's bytes only.
+
+**Floors.** `skipped` (unreadable directories and files) and
+`skipped_mounts` (mounts below a root, such as the systemd
+`InaccessiblePaths` the daemon unit sets on the signer and credential
+directories) make a root's total a lower bound even when `partial` is
+false. The probe lists such roots in `floors`. A store floor still counts
+as a measurement, because it can only understate the saving; a persistent
+floor is expected (the signer directories are hidden from the daemon).
 
 Run from FP0's machine (the script uses `ssh node-b`; it boots, stops,
 evicts and writes nothing):
@@ -163,8 +184,11 @@ Equivalent manual reads, if the script cannot run:
   `fincore --bytes $(readlink -f /var/lib/go-choir/guest/storedisk.erofs)`
   and `grep -E 'VmRSS|RssAnon|RssFile' /proc/<firecracker-pid>/status`.
 
-**What to record per read** (the script's `summary`): `cached_mib`,
-`mapped_mib`, `store_resident_mib`, `persistent_resident_mib`,
+**What to record per read** (the script's `summary`): `store_quotable`
+and `refusals` first; then `cached_mib`, `mapped_mib`,
+`store_resident_mib`, `store_upper_resident_mib`, `persistent_resident_mib`,
+the per-root `examined_files`, `skipped`, `skipped_mounts`,
+`unmeasured_files` and `partial`, and `floors`;
 `store_apparent_mib` (approximately the uncompressed image),
 `dax_memmap_cost_mib` and `net_saving_mib`; on the host, the resident bytes
 of each image inode.
@@ -224,3 +248,22 @@ decision.
 5. Should the build wait for DEC-06 (SMT and core scheduling)? Until DEC-06
    is closed, C1 is dominated by the L1TF and MDS channels, so the order
    does not change today's risk.
+
+## 8. Residuals
+
+- **The guard is literal only in enforce mode** (review bunch 13,
+  finding 5). The read uses procmem's guard: `HostSourcedCaller`
+  (`internal/server/host_caller.go`) accepts loopback and TEST-NET-1
+  callers as well as the host peer, and `hostauth.Authorize` returns true
+  in `ModeOff` (`internal/hostauth/hostauth.go`). So with hostauth off, an
+  in-guest loopback caller can run the walk without the token. What it
+  reveals is no more than a guest process can already read with its own
+  `mincore`. The cost is one bounded walk (at most 30 s; about 1 to 2 s on
+  today's store), so this is a small denial-of-service surface. It is
+  pre-existing and the same for procmem and every pprof profile. It is not
+  changed here: the fix is hostauth enforce mode, or `HostPeerCaller` for
+  the whole pprof prefix, and it belongs to the hostauth owner.
+- The mount-crossing count (`skipped_mounts`) has no unit test, because a
+  test cannot mount without privileges. The guest read shows it.
+- mountinfo option values are split on commas. An upper or work path that
+  contains an escaped comma would be misparsed. Today's paths have none.
