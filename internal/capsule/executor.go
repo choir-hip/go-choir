@@ -358,8 +358,13 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 	if err := validateSpawnSpec(spec); err != nil {
 		return nil, err
 	}
+	// One log line per phase under the capsule id (log lines only). The
+	// first deferred call runs last, so the total sees the cleanup's error.
+	timer := newSpawnPhaseTimer(spec.CapsuleID)
+	defer func() { timer.done(retErr) }()
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	timer.phase("executor_lock")
 	if e.initErr != nil {
 		return nil, e.initErr
 	}
@@ -389,6 +394,7 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 	if free, err := stateFreeBytes(e.stateDir); err == nil && free < StateFloorBytes {
 		return nil, fmt.Errorf("capsule state volume has %d MiB free, below the %d MiB floor", free>>20, StateFloorBytes>>20)
 	}
+	timer.phase("admit_checks")
 	// A claude-mode capsule takes the delegate token now, or not at all.
 	var claudeToken string
 	if spec.ClaudeDelegate {
@@ -467,12 +473,14 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 	}()
 
 	source := SourcePreflight{SubjectDigest: strings.TrimSpace(spec.ExpectedSubjectDigest), ArtifactRef: strings.TrimSpace(spec.SourceArtifactRef)}
-	if source.SubjectDigest == "" && source.ArtifactRef == "" {
+	spawnPreflight := source.SubjectDigest == "" && source.ArtifactRef == ""
+	if spawnPreflight {
 		source, err = e.PreflightSourceSnapshot(ctx, "")
 		if err != nil {
 			return nil, fmt.Errorf("capsule preflight source: %w", err)
 		}
 	}
+	timer.phase("state_dir", fmt.Sprintf("preflight=%t", spawnPreflight))
 	sourceLower := filepath.Join(base, "source-lower")
 	_ = os.MkdirAll(sourceLower, 0o755)
 	_ = os.Chmod(sourceLower, 0o755)
@@ -488,7 +496,9 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 		if err := copyCanonicalSubjectTree(ctx, artifactRoot, sourceTarget); err != nil {
 			return nil, fmt.Errorf("capsule pin candidate source: %w", err)
 		}
+		timer.phase("source_candidate_copy")
 		sourceDigest, err = digestCanonicalSubjectTree(ctx, sourceTarget)
+		timer.phase("source_digest_copy")
 	} else {
 		const prefix = "capsule-source-git:"
 		raw := strings.TrimPrefix(source.ArtifactRef, prefix)
@@ -501,7 +511,7 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 		if decodeErr != nil || (len(decodedCommit) != 20 && len(decodedCommit) != 32) {
 			return nil, fmt.Errorf("capsule spawn preflight git commit is invalid")
 		}
-		sourceDigest, err = copyImmutableCommitTree(ctx, e.sourceDir, commit, sourceTarget)
+		sourceDigest, err = copyImmutableCommitTreeTimed(ctx, e.sourceDir, commit, sourceTarget, timer)
 	}
 	if err != nil || sourceDigest != source.SubjectDigest {
 		return nil, fmt.Errorf("capsule source changed after durable preflight")
@@ -512,6 +522,7 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 	if err := makeSubjectTreeReadOnly(filepath.Join(sourceLower, "workspace", "platform")); err != nil {
 		return nil, err
 	}
+	timer.phase("source_lower_ready")
 	if spec.VerifierBundleDir != "" {
 		bundleTarget := filepath.Join(sourceLower, "selfdev", "bundle")
 		if err := copyCanonicalSubjectTree(ctx, spec.VerifierBundleDir, bundleTarget); err != nil {
@@ -542,6 +553,7 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 			return nil, err
 		}
 	}
+	timer.phase("selfdev_inputs", fmt.Sprintf("verifier=%t adoption=%t carried=%t", spec.VerifierBundleDir != "", spec.AdoptionDir != "", spec.CarriedPatchDir != ""))
 	caps.SourceSnapshotDigest = sourceDigest
 	lowerLayers := sourceLower + ":" + e.lowerDir
 	// The lowest layer is the guest's own root: hide its release tree behind
@@ -554,12 +566,14 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 		return nil, err
 	}
 	mounted = true
+	timer.phase("overlay_mount")
 	if err := prepareCapsuleRoot(caps.MergedDir, caps.UpperDir); err != nil {
 		return nil, err
 	}
 	if err := installBrokerMount(ctx, e.brokerPath, caps.MergedDir); err != nil {
 		return nil, err
 	}
+	timer.phase("root_prepare")
 	if spec.VerifierBundleDir != "" {
 		// The frozen bundle must not be shadowable through the overlay upper:
 		// a writable verifier cell could otherwise replace /selfdev/bundle and
@@ -612,6 +626,7 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 			return nil, fmt.Errorf("capsule harden carried patch input mount: %w", err)
 		}
 	}
+	timer.phase("selfdev_binds")
 	cgroup, err := createCapsuleCgroup(spec.CapsuleID, spec, memory)
 	if err != nil {
 		return nil, err
@@ -622,12 +637,14 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 	if err := e.ensureCapsuleAggregateLocked(); err != nil {
 		return nil, err
 	}
+	timer.phase("cgroup")
 	if spec.Egress {
 		if err := e.startEgressLocked(caps); err != nil {
 			return nil, err
 		}
+		timer.phase("egress")
 	}
-	if err := e.startBrokerLocked(ctx, caps, claudeToken); err != nil {
+	if err := e.startBrokerLocked(ctx, caps, claudeToken, timer); err != nil {
 		return nil, err
 	}
 
@@ -702,7 +719,7 @@ func BrokerAmbientCaps(egress bool) []uintptr {
 	return ambient
 }
 
-func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule, claudeToken string) error {
+func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule, claudeToken string, timer *spawnPhaseTimer) error {
 	hostSocket := filepath.Join(caps.MergedDir, "run", "capsule", "broker.sock")
 	_ = os.Remove(hostSocket)
 	listener, err := listenUnixAt(hostSocket)
@@ -759,6 +776,7 @@ func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule, claudeT
 	}
 	_ = inheritedListener.Close()
 	_ = cgroupFile.Close()
+	timer.phase("broker_start")
 	caps.Process = cmd.Process
 	caps.PID = cmd.Process.Pid
 	caps.processDone = make(chan struct{})
@@ -780,7 +798,9 @@ func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule, claudeT
 	}
 	deadline := time.Now().Add(10 * time.Second)
 	var lastErr error
+	probes := 0
 	for {
+		probes++
 		// The client keeps the real path and derives a dial address on each
 		// dial, so a re-dial after a transport error never uses a closed
 		// descriptor.
@@ -792,6 +812,7 @@ func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule, claudeT
 			_ = client.Close()
 		} else {
 			caps.broker = client
+			timer.phase("broker_ready", fmt.Sprintf("probes=%d", probes))
 			return nil
 		}
 		if time.Now().After(deadline) {

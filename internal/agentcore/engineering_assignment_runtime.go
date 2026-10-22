@@ -224,10 +224,12 @@ func (rt *Runtime) planEngineeringCast(ctx context.Context, scope ReductionScope
 	assignmentID := "assignment-" + computerevent.DigestBytes([]byte(strings.Join([]string{
 		vocabmigrate.IdentitySeedDelegatedCastRequestV1, ownerID, computerID, trajectoryID, recordID,
 	}, "\x00")))[:24]
+	preflightStarted := time.Now()
 	preflight, err := rt.capsuleExecutor.PreflightSourceSnapshot(ctx, "")
 	if err != nil {
 		return engineeringCastPlan{}, fmt.Errorf("engineering cast: preflight capsule source: %w", err)
 	}
+	preflightTook := time.Since(preflightStarted)
 	subjectDigest := "sha256:" + strings.TrimPrefix(preflight.SubjectDigest, "sha256:")
 	const attempt = uint64(1)
 	opaque := deterministicDocumentAssignmentCapability(assignmentID, attempt)
@@ -268,6 +270,8 @@ func (rt *Runtime) planEngineeringCast(ctx context.Context, scope ReductionScope
 	if err := binding.Validate(); err != nil {
 		return engineeringCastPlan{}, fmt.Errorf("engineering cast: %w", err)
 	}
+	// The cast's preflight runs inside the casting activation.
+	logAssignmentSagaPhase(binding.CapsuleID, assignmentID, "cast_preflight", time.Now().Add(-preflightTook))
 	cast, err := inboxRecordForIntent(scope, in, assignedAgentID, false)
 	if err != nil {
 		return engineeringCastPlan{}, err
@@ -307,12 +311,14 @@ func (rt *Runtime) resumeDelegatedCastAssignment(ctx context.Context, assignment
 	// anything that could cancel: a request that has to wait stays open and
 	// unbound, and the live assignment is never touched. It reads only the
 	// assignment rows. Expiry comes before admission, whatever the slot.
+	phaseStarted := time.Now()
 	if err := rt.expireOverdueEngineeringRequests(ctx, assignment); err != nil {
 		return AssignedEngineeringStart{}, err
 	}
 	if err := rt.admitEngineeringAssignment(ctx, assignment); err != nil {
 		return AssignedEngineeringStart{}, err
 	}
+	phaseStarted = logAssignmentSagaPhase(assignment.Binding.CapsuleID, assignment.AssignmentID, "admission", phaseStarted)
 	if rt.capsuleExecutor == nil {
 		return AssignedEngineeringStart{}, fmt.Errorf("assigned Engineering capsule authority unavailable")
 	}
@@ -320,6 +326,7 @@ func (rt *Runtime) resumeDelegatedCastAssignment(ctx context.Context, assignment
 	if err != nil {
 		return AssignedEngineeringStart{}, fmt.Errorf("preflight resumed assignment subject: %w", err)
 	}
+	logAssignmentSagaPhase(assignment.Binding.CapsuleID, assignment.AssignmentID, "resume_preflight", phaseStarted)
 	if preflight.ArtifactRef != assignment.Binding.SourceArtifactRef ||
 		"sha256:"+strings.TrimPrefix(preflight.SubjectDigest, "sha256:") != assignment.Binding.SubjectDigest {
 		return AssignedEngineeringStart{}, fmt.Errorf("resumed assignment subject drifted from the committed binding")
@@ -459,6 +466,7 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 		}
 		return cause
 	}
+	phaseStarted := time.Now()
 	spawnCtx, cancelSpawn := context.WithTimeout(ctx, 90*time.Second)
 	defer cancelSpawn()
 	memory, cpu, pids := engineeringAssignmentMemoryMax, engineeringAssignmentCPUQuota, engineeringAssignmentPidsMax
@@ -484,11 +492,13 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 		return AssignedEngineeringStart{}, cancelOpen(fmt.Errorf("adoption input: %w", adoptionErr))
 	}
 	spec.AdoptionDir = adoptionDir
+	phaseStarted = logAssignmentSagaPhase(capsuleID, assignmentID, "adoption_input", phaseStarted)
 	// Option A (failure 15, problem 1): an earlier failed round's work on this
 	// trajectory is offered as an inert patch the engineer may apply in this
 	// fresh capsule. Never fatal: a refusal is recorded and the capsule starts
 	// from the clean base tree.
 	spec.CarriedPatchDir = carriedPatchDirForSpawn(rt.offerCarriedPatchForAssignment(ctx, assignment, preflight.ArtifactRef))
+	phaseStarted = logAssignmentSagaPhase(capsuleID, assignmentID, "carried_patch", phaseStarted)
 	// One live assignment capsule at a time: prior capsules are reclaimed
 	// here, in the saga, so the open itself writes nothing but its own
 	// transaction (C1e D4).
@@ -500,6 +510,7 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 		}
 		return AssignedEngineeringStart{}, cancelOpen(fmt.Errorf("reclaim terminal capsules: %w", err))
 	}
+	phaseStarted = logAssignmentSagaPhase(capsuleID, assignmentID, "reclaim", phaseStarted)
 	var created *capsule.Capsule
 	if rt.capsuleExecutor.HasCapsule(capsuleID) {
 		// Resume after a crash between spawn and bind: the capsule already
@@ -597,6 +608,7 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 	if created.ID != capsuleID || created.State != capsule.StateActive {
 		return AssignedEngineeringStart{}, cleanupCapsule(fmt.Errorf("assigned capsule acknowledgement mismatch"))
 	}
+	phaseStarted = logAssignmentSagaPhase(capsuleID, assignmentID, "spawn", phaseStarted)
 	spawnedAt := time.Now().UTC()
 	slot := "implementation"
 	capability, err := rt.capsuleExecutor.MintCapabilityHandle(runID, capsule.RoleEngineering, capsuleID, opaque, 24*time.Hour, slot)
@@ -661,11 +673,23 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 	if err != nil {
 		return AssignedEngineeringStart{}, cleanupCapsule(fmt.Errorf("bind assigned Engineering activation: %w", err))
 	}
+	phaseStarted = logAssignmentSagaPhase(capsuleID, assignmentID, "bind", phaseStarted)
 	rt.armAssignedEngineeringDeadline(bound.Assignment)
 	// The lifecycle Bind receipt is durable before this actor wake. No generic
 	// lifecycle-Management refusal is removed and no pre-cutover mailbox is written.
 	rt.activate(&run)
+	logAssignmentSagaPhase(capsuleID, assignmentID, "activate", phaseStarted)
 	return AssignedEngineeringStart{Assignment: bound.Assignment, Run: run}, nil
+}
+
+// logAssignmentSagaPhase logs one phase of an assignment's capsule start
+// under the capsule id the executor's spawn lines use, and returns the time
+// the next phase starts from. Log lines only
+// (docs/problems/capsule-coldstart-18s-2026-10-22.md).
+func logAssignmentSagaPhase(capsuleID, assignmentID, phase string, started time.Time) time.Time {
+	now := time.Now()
+	log.Printf("capsule %s saga phase=%s took=%s assignment=%s", capsuleID, phase, now.Sub(started).Round(time.Millisecond), assignmentID)
+	return now
 }
 
 // reclaimTerminalAssignmentCapsules revokes the capsules that terminal
