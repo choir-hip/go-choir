@@ -253,9 +253,12 @@ func checkKEKPath(path string) error {
 	return nil
 }
 
-// readBounded reads a regular file without following a final symlink.
+// readBounded reads a regular file without following a final symlink and
+// without blocking on a FIFO or device: open, fstat, refuse non-regular.
 func readBounded(path string) ([]byte, os.FileInfo, error) {
-	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	// O_NONBLOCK: a FIFO or device at the path is opened at once and refused
+	// by the type check below instead of hanging the caller (bunch 31, low).
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return nil, nil, err
 	}
