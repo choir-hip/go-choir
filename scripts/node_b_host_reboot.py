@@ -78,10 +78,12 @@ AUTO_WARM_CLASSES = {"premium_always_on", "critical_protected", "public_platform
 # Remote side: runs as root on Node B via `ssh host python3 - <mode>`. The
 # modes "facts" and "computers" only read. The modes "mark" and "unmark" write
 # or clear guest markers, and the caller sends them only under --execute.
-REMOTE = r'''
+# scripts/choir_internal.py goes first: internal_headers(url) attaches the
+# host-internal token only for a loopback internal port, never a guest.
+with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "choir_internal.py")) as _f:
+    CHOIR_INTERNAL = _f.read()
+REMOTE = CHOIR_INTERNAL + r'''
 import json, os, re, subprocess, sys, urllib.request, urllib.error
-
-TOKEN_HEADER_FILE = "/var/lib/go-choir/secrets/internal-service-token.header"
 
 def sh(cmd, timeout=30):
     try:
@@ -101,14 +103,6 @@ def kernel_version(path):
     m = re.search(r"linux-(\d+\.\d+\.\d+)", path or "")
     return m.group(1) if m else None
 
-def internal_headers():
-    headers = {"X-Internal-Caller": "true"}
-    raw = read(TOKEN_HEADER_FILE)
-    if raw and ":" in raw:
-        name, value = raw.split(":", 1)
-        headers[name.strip()] = value.strip()
-    return headers
-
 def http(method, url, headers=None, body=None, timeout=20):
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, method=method, headers=dict(headers or {}))
@@ -123,7 +117,8 @@ def http(method, url, headers=None, body=None, timeout=20):
         return 0, str(e)
 
 def vmctl_list():
-    status, body = http("GET", "http://127.0.0.1:8083/internal/vmctl/list", internal_headers())
+    url = "http://127.0.0.1:8083/internal/vmctl/list"
+    status, body = http("GET", url, internal_headers(url))
     if status != 200:
         return None, "vmctl list: %s %s" % (status, body[:200])
     return json.loads(body).get("ownerships", []), None

@@ -192,7 +192,10 @@ evicts and writes nothing):
 
 Equivalent manual reads, if the script cannot run:
 - guest, on Node B:
-  `curl -s -H 'X-Internal-Caller: true' -H @/var/lib/go-choir/secrets/internal-service-token.header 'http://<guest-ip>:8085/internal/debug/pprof/procmem?pagecache=1'`
+  `curl -s -H 'X-Internal-Caller: true' 'http://<guest-ip>:8085/internal/debug/pprof/procmem?pagecache=1'`
+  The guest gates the route on the host source address. Never send it the
+  host-internal token header
+  (docs/problems/host-internal-token-sent-to-guests-by-fp0-probes-2026-10-22.md).
   The guest IP is `ip=` in `/var/lib/go-choir/vm-state/<vm>/fc-config.json`
   `boot_args`.
 - host, on Node B:
