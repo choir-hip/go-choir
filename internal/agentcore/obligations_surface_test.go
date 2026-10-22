@@ -189,7 +189,7 @@ func TestObligationsSurfaceReportsStalledSelfdevOperations(t *testing.T) {
 		t.Fatalf("busy = %d; /health counts %d", got.Busy, rt.activeSelfdevOperations(context.Background()))
 	}
 	first := got.Operations[0]
-	if first.OperationID != "op-stalled" || !first.Stalled || first.LastIntentError == "" || first.IdleSeconds < int((16 * time.Hour).Seconds()) {
+	if first.OperationID != "op-stalled" || !first.Stalled || first.LastIntentError == "" || first.IdleSeconds < int((16*time.Hour).Seconds()) {
 		t.Fatalf("stalled operation sample = %+v", first)
 	}
 	if second := got.Operations[1]; second.OperationID != "op-fresh" || second.Stalled {
