@@ -79,30 +79,39 @@ against `http://127.0.0.1:8083`):
    `POST /internal/vmctl/hold {"computer_id":"<paper computer id>","reason":"KF canary: guest kernel 6.18.57","held_by":"fp0"}`.
    `GET /internal/vmctl/deploy-refresh` lists it under `skipped`, reason
    `held`.
-2. Push; CI deploys. Idle computers refresh; the held paper is listed as
-   skipped, reason `held`, and stays on the old image. A hold has no TTL.
+2. Push; CI deploys. Idle computers refresh; the held paper (active
+   then) is listed as skipped, reason `held`, and stays on the old image. A hold has no TTL.
    It persists across deploys and vmctl restarts. While it is set vmctl
    takes no automatic action on the paper: no refresh, no wedge stop
    (`host_capacity.go`), no warm (`ownership.go` `MaintenanceHold`).
    `GET /internal/vmctl/list` shows `held: true` for it (the reason is not
    in the list). The operator is present for the whole window; nothing in
-   this procedure unholds automatically. FP0 writes each act (hold,
-   unhold, refresh request and its answer) to the metamission ledger with
-   the time, the canary state and the paper's state.
+   this procedure unholds automatically. vmctl keeps no record of an
+   unhold, so FP0 writes each act (hold, unhold, refresh request and its
+   answer) to the metamission ledger
+   (`docs/definitions/choir-launch-first-pass-metamission-2026-10-21.ledger.md`,
+   through FP0's ledger draft) with the time, the canary state and the
+   paper's state.
    Unhold only clears the hold. After it, a running paper stays on the
    image it booted; a stopped or hibernated paper is booted by the warmer
    onto the current image; a `failed` paper is never warmed. So every
    unhold below is followed at once by the explicit refresh request of
-   step 5, which handles every state: a running paper takes a planned
-   refresh (`refreshed`, `planned_restart` true) or is `deferred` while
-   busy; a stopped or failed one takes the rescue path (`refreshed`,
+   step 5. Its usual answers: a running paper takes a planned refresh
+   (`refreshed`, `planned_restart` true) or is `deferred` while busy; a
+   stopped or failed one takes the rescue path (`refreshed`,
    `planned_restart` false, reason "crash boot (no planned-restart
-   marker)", `deploy_refresh.go`).
+   marker)": open work closes as interrupted). Any other answer
+   (`skipped` as divergent, not active or retry spent; `failed`) leaves
+   the paper where it is: FP0 records it and decides by hand.
    While the canary has no verdict, watch the paper:
    - Down (its `/health` refuses connections, or its state is `stopped` or
-     `failed`): unhold and send step 5's refresh request at once. The
-     paper boots the untested image; an untested image is better than a
-     paper that is down. Record it.
+     `failed`): unhold and send step 5's refresh request at once, even if
+     no canary can run. The paper boots the untested image; an untested
+     image is better than a paper that is down. A paper that is still
+     `active` but unreachable answers `deferred`: the wedge detector stops
+     it after its 5-minute refusal window and the retry sweep's rescue
+     boots it, about 5 to 6 minutes in all. The host reboot still waits
+     for a passed canary. Record it.
    - Unhealthy but serving: keep the hold, record it, and decide by hand.
      A hold blocks every automatic recovery, so this is FP0's call.
    - Any state this list does not name: keep the hold and decide by hand.
