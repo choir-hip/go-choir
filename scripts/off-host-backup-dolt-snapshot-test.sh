@@ -30,6 +30,13 @@
 #     Store A's event receipt count, read before the capture, on both paths.
 #     (docs/problems/platform-dolt-oldgen-rate-and-squash-window-2026-10-22.md
 #     review round 1 R2.)
+# 12. The count cannot be read at backup time and the manifest silently
+#     lacks it, so the drill takes the run for one from before the marker
+#     and passes on the frozen head alone: never; the backup records
+#     platform=unread and the drill fails on it, and on a manifest that has
+#     the dolt_rows field but no Store A entry. A manifest with no dolt_rows
+#     field at all (written before the marker) still passes on the head.
+#     (Same record, review round 2 R9.)
 #  9. A lock left by a killed run (its tunnel dies with it, so restic cannot
 #     delete the lock) blocks the next run: never; the run removes stale
 #     locks before it opens the repository.
@@ -142,5 +149,47 @@ check "a failed snapshot is named" "$(printf '%s' "$OUT" | grep -q 'snapshot of 
 # 3: killed while snapshotting: nothing left behind.
 setup die "platform corpus" die; run
 check "a killed run leaves no snapshot" "$([ -z "$(left)" ]; echo $?)"
+
+# 12: an unread receipt count is recorded as such.
+setup unread "platform corpus" ok
+sed -i.bak 's/echo 41/echo ERROR/' "$R/bin/dolt"; rm -f "$R/bin/dolt.bak"; run
+check "an unread receipt count is recorded as platform=unread" "$(jq -r .dolt_rows "$R/root/offhost-backup/staging/manifest.json" 2>/dev/null | grep -qx 'platform=unread'; echo $?)"
+
+# 11, 12: the restore drill's snap piece against stub restic and dolt.
+drill() { # name, manifest json, restored receipt count
+  R="$WORK/drill-$1"; mkdir -p "$R/bin" "$R/sec" "$R/d"; : > "$R/calls"
+  printf x > "$R/sec/rest-password"; printf '%s\n' "$2" > "$R/manifest.json"
+  printf '#!/bin/sh\nexit 0\n' > "$R/bin/ssh"
+  cat > "$R/bin/restic" <<EOF
+#!/bin/sh
+t=""; inc=""; prev=""
+for a; do case "\$prev" in --target) t="\$a" ;; --include) inc="\$a" ;; esac; prev="\$a"; done
+if [ -n "\$inc" ]; then mkdir -p "\$t\$(dirname "\$inc")"; cp "$R/manifest.json" "\$t\$inc"; else mkdir -p "\$t/.dolt"; fi
+exit 0
+EOF
+  cat > "$R/bin/dolt" <<EOF
+#!/bin/sh
+case "\$*" in
+  *"commit_hash from dolt_log"*) echo commit_hash; echo h1 ;;
+  *"where commit_hash"*) echo 'count(*)'; echo 1 ;;
+  *"show tables"*) echo Tables; echo t1 ;;
+  *computer_event_append_receipts*) echo 'count(*)'; echo $3 ;;
+esac
+exit 0
+EOF
+  chmod +x "$R/bin/"*
+  OUT="$(PATH="$R/bin:$PATH" OFFHOST_SECRETS_DIR="$R/sec" OFFHOST_DRILL_DIR="$R/d" \
+    bash "$HERE/off-host-restore-drill.sh" s1 snap 2>&1)"; RC=$?
+}
+drill fresh '{"dolt_heads":"corpus=h1 platform=h1","dolt_rows":"platform=41"}' 41
+check "the drill passes a restore holding the recorded receipts" "$([ "$RC" = 0 ]; echo $?)"
+drill stale '{"dolt_heads":"corpus=h1 platform=h1","dolt_rows":"platform=41"}' 40
+check "the drill fails a restore with fewer receipts than recorded" "$([ "$RC" = 1 ]; echo $?)"
+drill unread '{"dolt_heads":"corpus=h1 platform=h1","dolt_rows":"platform=unread"}' 41
+check "the drill fails a manifest whose receipt count was unread" "$([ "$RC" = 1 ] && printf '%s' "$OUT" | grep -q 'could not read'; echo $?)"
+drill empty '{"dolt_heads":"corpus=h1 platform=h1","dolt_rows":""}' 41
+check "the drill fails a marker manifest with no Store A count" "$([ "$RC" = 1 ]; echo $?)"
+drill premarker '{"dolt_heads":"corpus=h1 platform=h1"}' 41
+check "a manifest from before the marker still passes on the head" "$([ "$RC" = 0 ] && printf '%s' "$OUT" | grep -q 'before the marker'; echo $?)"
 
 [ "$fails" = 0 ] && echo "all dolt snapshot checks passed" || { echo "$fails failed"; exit 1; }
