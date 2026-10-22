@@ -148,7 +148,12 @@ second `go build`, `go_eval`) started while the build runs (the
    deployed commit). A shared writable cache lets one capsule poison
    another's builds, so it needs its own design (red).
 
-## Fix (fd8337941 and c68c49a99, orange; tests 55e9ac1ae and 6d937d4fe)
+## Fix (fd8337941 and c68c49a99, orange; tests 55e9ac1ae, 6d937d4fe and 3ec42fd64)
+
+Rollback: `git revert --no-commit 3ec42fd64 6d937d4fe c68c49a99 55e9ac1ae
+fd8337941 && git commit`. All five commits, newest first, as one commit.
+Reverting only the fix commits leaves the tests referring to names that no
+longer exist (review round 3, N2).
 
 Status: local tests and the local measurement above only. **The deployed
 proof is pending**: the FP4 drill re-run on 71afbf14 (next probe 4). Until
