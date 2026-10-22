@@ -33,6 +33,10 @@ is deleted, FP0 can read what would go and why the rest stays.
 | 7f375704c | green | R2-8: the live orphan rule would destroy recovery state |
 | cdb7521d5 | yellow | R2-8 test |
 | 77af30099 | red | round-2 fixes R2-1 to R2-5, R2-8, F8, F9 |
+| 98f1c074b | green | review round 3 (bunch86) findings R3-1 to R3-7 |
+| 35e44c806 | yellow | round-3 tests |
+| b55cf98f3 | red | round-3 fixes: the live ephemeral rule's recovery-state keep and lifecycle claim, the kept-dir report, the young-quarantine keep |
+| f93535204 | yellow | proof step 4 (the live rules, before and after the deploy) |
 
 The design:
 
@@ -90,6 +94,21 @@ The design:
   Each line records what was removed, when it was quarantined or last
   active, why, and its size. If the intent line cannot be written, the
   removal does not happen.
+- **The live ephemeral rule (R3-3).** `ephemeral_test_primary`, active on
+  Node B, keeps a dir that holds unfinished, unreadable, failed or
+  journal-less recovery state, a staging image, an unfinished journal, or
+  a finished quarantine younger than the quarantine minimum age. At
+  destroy time it re-reads everything under the registry lock and claims
+  the computer's lifecycle.
+- **Kept dirs (R3-2, R3-5).** The active plan's `kept_state_dirs` lists
+  every dir the orphan or ephemeral rule keeps, with its rule, reasons,
+  bytes and release. An orphan dir is released only by an owner act: read
+  it, then delete it or restore its ownership. A `rec-*.journal` is never
+  deleted, so an orphan dir that ever cold-recovered stays until then. An
+  ephemeral dir is released when its recovery finishes and the quarantine
+  ages past the minimum, or by an owner act.
+- **test_class_idle (R3-6)** also keeps a dir with a finished quarantine
+  younger than the quarantine minimum age.
 - **Report.** While a rule is not off, the plan carries `test_class[]` and
   `quarantines[]` (every entry, with verdict `keep`, `would_remove` or
   `will_remove`, plus reasons and bytes) and inventory totals. The shadow
@@ -99,25 +118,45 @@ Deploy shape: **not inert since round 2, but it only removes deletions.**
 The two new rules are as before: the active switches stay unset,
 `test_computers` is empty, and node-b.nix sets only the GET-only shadow
 plan's rule modes to dry-run. The plan's config block gains the new keys
-(functionally, not byte-, identical). The one running-path change is
-R2-8: the live `orphan_state_dir` rule now keeps a dir that holds
-recovery state. It deletes nothing it did not delete before. FP0 decides
-whether that counts as inert for batching; the no-effect proof should add
-"vmctl's retention log shows no orphan prune of a dir that holds a
-quarantine".
+(functionally, not byte-, identical). The running-path changes are in two live rules, and both only delete
+less:
+- `orphan_state_dir` (R2-8) keeps a dir that holds recovery state;
+- `ephemeral_test_primary` (R3-3) keeps one too, and its removal now also
+  refuses a concurrent visit, resume or refresh.
+
+The batch is a live red batch, with its own deployed proof: step 4,
+below.
 
 Tests:
-- `go test ./internal/vmctl ./internal/computertiers ./cmd/vmctl` passes.
-- The retention tests pass under `-race`.
-- Mutants M07, M08, M09, M10, M12, M29 and M33 each compile and are killed.
-- `scripts/proofs/selftest.sh` reports 128 passed.
-- A darwin build cannot run on this host (Dolt cgo does not cross-compile).
-  `GOOS=darwin go list` selects `retention_stat_other.go`, and a source
-  test forbids Linux-only stat fields outside `_linux.go` files.
+- On Linux, `go test ./internal/vmctl ./internal/computertiers ./cmd/vmctl`
+  passes, and the retention tests pass under `-race`.
+- Off Linux, the tests that need a quarantine to age out skip with the
+  reason (no ctime there: age zero, fail closed). Everything else runs.
+  The round-3 reviewers built and ran the package on darwin/arm64; this
+  host cannot (Dolt cgo does not cross-compile). A source test forbids
+  Linux-only stat fields outside `_linux.go` files.
+- Mutants each compile and are killed:
+  - round 2: M07, M08, M09, M10, M12, M29 and M33;
+  - round 3: the orphan destroy-time recheck deleted, the ephemeral
+    destroy-time dir recheck deleted, the ephemeral claim not taken, and
+    its conflict check skipped.
+- `scripts/proofs/selftest.sh` reports 132 passed.
 
 ## Deployed proof (FP0)
 
-1. Inert deploy (rides with other inert batches): run
+0. **Before the deploy**, run
+   `scripts/proofs/fp0-vm-retention.sh --step 4 --evidence before.txt`. It
+   lists every `vm-*` or `candidate-*` dir on Node B holding a quarantine,
+   a staging image or a recovery journal (`ls`, `du`), and checks that
+   none is a candidate in the active plan.
+1. Deploy it as a live red batch (its own deploy, or with inert ones). Run
+   `--step 4 --evidence after.txt`. Expect:
+   - the same recovery-dir lines as before (none gone, the candidate-fleet
+     10-07 quarantines included);
+   - every ownerless one is a `kept ... rule=orphan_state_dir` line;
+   - no recovery dir is a candidate.
+
+   Then run
    `scripts/proofs/fp0-vm-retention.sh --commit <sha> --evidence <file>`
    (steps 0 to 2, all read-only). Expect:
    - shadow `test_idle_mode` and `quarantine_mode` are dry-run;
@@ -128,8 +167,8 @@ Tests:
    - the active plan's switches are off, it has no `test_class_idle`
      candidate, and there is no manifest.
 
-   The no-effect proof is the usual one: the paper is healthy and polling,
-   and vmctl's boot log is clean.
+   Also check the paper is healthy and polling, vmctl's boot log is clean,
+   and vmctl's journal shows no retention prune of a recovery dir.
 2. Record in the problem record the kept reasons of the five test
    computers and of the two 2026-10-07 quarantines. This step confirms or
    refutes hypotheses H1 to H3.
@@ -157,6 +196,14 @@ Tests:
   ownership they are `no_ownership`. Deleting them is a manual,
   owner-approved act (black-adjacent: they may be the only copy, and the
   484-path check of 10-09 never closed).
+- **Ownerless dirs holding only a plain `data.img`** (a computer that lost
+  its ownership and never cold-recovered) are still removed by the live
+  orphan rule after 6 h. That has been the rule's purpose since before
+  this lane, but a registry reset or a moved realization (R2-8's premise)
+  would reach them too. Keep the rule as is, or keep every ownerless dir
+  holding a `data.img` until an owner act? Owner's call (DeepSeek round 3).
+- **Releasing a kept orphan dir** is an owner act (read it, then delete it
+  or restore its ownership); vmctl never releases one.
 - **Real accounts' quarantines** never age out under this rule (R2-3).
   Reclaiming them needs either a positive completeness signal (a verified
   file-root hydration) or an owner act.
@@ -186,7 +233,7 @@ Tests:
 ```yaml
 now:
   status: waiting_on_fp0
-  slice: review round 2 fixed (head after this commit); the deploy and its read-only proof are FP0's
-  next_action: FP0 re-reviews the round-2 delta (9c4e28e38..head), lands it (the orphan-rule change R2-8 is a live but deletion-reducing red change), then runs scripts/proofs/fp0-vm-retention.sh
+  slice: review round 3 fixed; the deploy and its proof (step 4 before and after, then steps 0 to 2) are FP0's
+  next_action: FP0 re-reviews the round-3 delta (98f1c074b..head), runs step 4 on Node B, lands it as a live red batch (orphan and ephemeral rules delete less), runs step 4 again and steps 0 to 2
   blocker_or_risk: enforce waits on the shadow report and the owner questions above
 ```
