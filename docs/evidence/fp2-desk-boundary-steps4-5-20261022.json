@@ -1,0 +1,118 @@
+{
+  "kind": "fp2_desk_boundary_steps4_5_receipt",
+  "computer_id": "computer-9648031f92e131adc1fb65ec455c5903",
+  "vm_id": "vm-80b173b9ea3d75571723286e867dc191",
+  "host": "https://choir.news",
+  "platform_health_commit": "840e1a701d27e21dcbd3d1ca6b1189954b638ce3",
+  "guest_build": {
+    "service": "autoputer",
+    "commit": "840e1a701d27e21dcbd3d1ca6b1189954b638ce3",
+    "built_at": "20261022042054",
+    "deployed_at": "2026-10-22T04:40:28Z"
+  },
+  "lane_head_sha": "a55660c0d",
+  "note_commit": "a55660c0d is docs-only (CI ignores docs/** and top-level *.md); the last code commit, which the guest runs, is 840e1a701.",
+  "started_at": "2026-10-22T04:40:20Z",
+  "finished_at": "2026-10-22T04:58:30Z",
+  "boot_context": "The test computer was hibernated; started via POST /api/computers/<id>/lifecycle/start (receipt 01a161e9-...) at 04:40:31, which cold-booted it onto the current guest image (840e1a701). crash_or_stop restart; all pre-boot work interrupted_by_restart.",
+
+  "step_4_out_of_memory": {
+    "verdict": "not_proven_via_product_path",
+    "summary": "The runaway research cell could not be driven through the product path: the deployed Texture desk refused to run or relay the unbounded allocator across three escalating prompts, and no test/debug route runs an arbitrary cell (forbidden to add one). No OOM was triggered; the daemon never restarted. See problem record.",
+    "problem_record": "docs/problems/fp2-step4-deployed-oom-not-drivable-desk-refuses-runaway-2026-10-22.md",
+    "attempts": [
+      {
+        "prompt": "direct ask for the exact runaway cell",
+        "doc_id": "30b02199-2dcb-54a3-bc6a-dc27052a8fc4",
+        "revision_id": "0396671a-811d-5fb5-a39b-78cbfdb5ad70",
+        "texture_run_id": "f39dbfb4-84eb-4b7e-a997-a38f90ee579e",
+        "outcome": "refused; revision note: 'The requested memory-budget self-test was not run: its unbounded 8 MiB allocation loop could exhaust worker memory...'; no cast to research"
+      },
+      {
+        "prompt": "research-desk-framed ask",
+        "revision_id": "d6cb6e5c-96f6-5d66-a050-1a928f545515",
+        "texture_run_id": "4273b482-69a2-49ee-9a89-c45d3e208c24",
+        "outcome": "refused; revision note: 'The requested unbounded allocation loop will not be run...'; cast a sanitized task to engineering (rlm:cast:0), not to research"
+      },
+      {
+        "prompt": "informed ask supplying the true cgroup safety context (memory.max 768 MiB, oom.group=1, worker oom_score_adj=1000)",
+        "revision_id": "e6970558-ad1d-5bbb-ae0f-803bf701b084",
+        "texture_run_ids": ["5da0a4c6-511d-47e0-b30a-e7fbd8da3fe4", "bcdea865-170e-4625-ad57-0cefb8ad765d"],
+        "outcome": "refused; one turn read source files to audit the limit, the other wrote 'No allocation diagnostic was run' and delegated to engineering"
+      }
+    ],
+    "daemon_identity": {
+      "source": "host read on Node B (read-only), the authoritative identity",
+      "before": {"firecracker_pid": 3926651, "guest_bootid": "2adf3e7df8a9421e9fb8005c6573e3da", "server_starts": 5, "epoch": 13221, "at": "2026-10-22T04:41:00Z"},
+      "after": {"firecracker_pid": 3926651, "guest_bootid": "2adf3e7df8a9421e9fb8005c6573e3da", "server_starts": 5, "epoch": 13221, "at": "2026-10-22T04:58:00Z"},
+      "unchanged": true,
+      "caveat": "Unchanged across normal heavy activity (no runaway was triggered), so this does not by itself prove the daemon survives a runaway. The script's automated identity check is a false positive: observability has no daemon started_at/pid/uptime scalar, so it compares steps.recent[].started_at (per-step timestamps)."
+    },
+    "memory_budget": {
+      "research_texture_management_worker_memory_max_mib": 768,
+      "research_child_management_task_worker_memory_max_mib": 384,
+      "source_worker": "internal/deskmanifest/manifest.go WorkerMaxBytes",
+      "desks_root_cgroup_at_boot": {"memory_max_mib": 3971, "memory_high_mib": 2978, "log": "autoputer: desk cgroup /sys/fs/cgroup/choir-desks memory.max 3971 MiB memory.high 2978 MiB"},
+      "memory_peak": "not emitted for desk workers; memory.peak is logged only in the capsule teardown path (internal/capsule/teardown_reclaim.go). Desk workers log memory.max/memory.high at creation and memory.max + oom_kill at death.",
+      "no_worker_memory_peak_observed": true
+    },
+    "containment_coverage_elsewhere": [
+      "internal/agentcore/tools_desk_worker_death_test.go TestDeskWorkerVolunteersForTheOOMKiller (worker oom_score_adj=1000, daemon not)",
+      "internal/yaegikernel/desk_cgroup.go per-worker memory.max + memory.oom.group=1 + CLONE_INTO_CGROUP",
+      "docs/evidence/fp2-desk-boundary-20261022.json step 2 receipt: each desk worker in its own confinement with distinct uid"
+    ]
+  },
+
+  "step_5_real_turns": {
+    "verdict": "proven",
+    "summary": "A management turn completes and an engineering assignment completes on this computer through the product path. Research and Texture turns also completed today (research reconfirmed here). Proves capsule seccomp, the session worker's limits, and that nothing inside needed clone3.",
+    "management": {
+      "verdict": "proven",
+      "completed_turns_in_window": 11,
+      "example_run_id": "fbb085f9-c251-4b14-a0e1-647ae2c3cbb1",
+      "example_detail": "loop.completed; ran 2 desk cells; committed rlm:cast:1 (the cast that opened the first engineering assignment); finished_at 2026-10-22T04:45:18Z",
+      "other_completed_examples": ["6d25c1bf-3470-4c9b-8760-8158a839aff1", "7d2f90f2-1713-40ea-b8f8-2571...", "afe5559c-ca51-49bd-933e-1eb0..."]
+    },
+    "engineering": {
+      "verdict": "proven",
+      "clean_completion": {
+        "run_id": "run:assignment-384e75e9ca3726d8f61a2e4d",
+        "state": "completed",
+        "created_at": "2026-10-22T04:48:25Z",
+        "capsule_id": "capsule (capsule_go_eval)",
+        "terminal_fate": "complete{result:completed, verdict:none}",
+        "summary": "Implemented a standalone browser counter at /workspace/platform/browser-counter.html; verified the inline script in Node.js (0->1->2->3); 13 capsule iterations; terminal_tool_success",
+        "capsule_exec_proof": "cells ran choir.Exec with sh/node inside the capsule, real stdout, exit 0, with executor receipt_refs",
+        "clone3_seccomp_eperm_count": 0
+      },
+      "other_assignment": {
+        "run_id": "run:assignment-a9d67c028e3f8b60988d8bd5",
+        "state": "failed",
+        "note": "Reached a committed terminal fate complete{result:blocked, verdict:none} ('no display/session environment to build/launch a GUI counter'). The capsule ran python3/sh/ls/env cells to real output (fork/exec worked), zero clone3/seccomp/EPERM. The 'failed' run state is the engineering overlay joining a terminal FAILURE (blocked) fate (internal/agentcore/runtime.go:3714-3730), not an infra/capsule failure. One transient 'executor receipt unavailable' on a cell retried and succeeded."
+      },
+      "assignment_completions_total": 2,
+      "clone3_needed": false,
+      "capsule_seccomp": "permits fork/exec inside the capsule (python3, sh, node all ran)"
+    },
+    "research_reconfirmed": {
+      "verdict": "passed",
+      "doc_id": "38deeffc-45c3-5278-afb5-8ce7b04314e9",
+      "cited_revision_id": "638a238b-841c-5780-b281-3508340e1ec3",
+      "source_entities": 1,
+      "source_refs": 1,
+      "note": "A cited research revision landed at 04:47; research turns were previously failing on the OpenCode 401 pinning (docs/problems/opencode-401-key-never-parked-2026-10-22.md) and now serve.",
+      "completed_research_turns_in_window": 4
+    },
+    "texture_prior_today": [
+      "docs/evidence/texture-acceptance-2026-10-22T01-14-09-276Z.json (T2a, T2b pass)",
+      "docs/evidence/texture-acceptance-2026-10-22T02-23-25-049Z.json (T2b, T6 pass)"
+    ]
+  },
+
+  "hard_rules_observed": {
+    "only_computer_used": "computer-9648031f92e131adc1fb65ec455c5903",
+    "paper_delegate_batching_untouched": true,
+    "node_b_read_only": true,
+    "no_secrets_printed": true
+  }
+}
