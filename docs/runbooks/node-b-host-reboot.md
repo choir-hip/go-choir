@@ -198,7 +198,7 @@ The script runs these steps in order:
    them. **Exit 4 keeps the markers armed**, because the host may still
    be rebooting. A marker is honoured for 900 s (15 minutes,
    `plannedRestartMaxAge`) after the final pass. At the defaults exit 4
-   lands 1200 s (`--boot-timeout`; the 30 s pause is inside it) after the
+   lands at least 1200 s (`--boot-timeout`; the 30 s pause is inside it) after the
    reboot request, which itself follows the final pass, so every marker is already stale and a crash boots as a crash: nothing
    to clear. The manual clear matters only when `--boot-timeout` is under
    900 s: then, if the console shows the host never went down, clear them
