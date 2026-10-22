@@ -73,6 +73,11 @@ require_in "$workflow" 'selection="$(.github/scripts/deploy-base-select --after 
 reject 'before="${{ github.event.before }}"'
 reject 'git diff-tree --no-commit-id --name-only -r "$after"'
 reject "jq -r '.build.deployed_commit // empty'"
+# The deploy never rewrites a unit's env file. Its rename of deploy.env put a
+# new file under every running unit's hidden mount (docs/problems/
+# host-containment-gaps-after-fp3-cut-2-2026-10-22.md); the env files now
+# live in /var/lib/go-choir/unit-env, which every unit hides as a directory.
+reject 'deploy.env'
 require_in "$deploy_program" 'Refusing to publish an activation receipt with no verified artifacts'
 require_in "$deploy_program" 'deploy-failures'
 require_in "$deploy_program" 'verify_artifact_manifest'
