@@ -203,5 +203,22 @@ t "fp7 step 1 reads observe mode" grep -q 'PASS.*bearer_binding.mode is observe'
 TMPDIR=$WORK "$HERE/fp7-gateway.sh" --step 2 >"$WORK/out" 2>&1
 t "fp7 step 2 would_refuse unchanged" grep -q 'PASS.*would_refuse did not rise' "$WORK/out"
 
+# ---- FP8 step 2's probe: an empty or malformed mint fails loudly -------------
+for mode in empty garbage nonzero; do
+	mkdir -p "$WORK/mintfake-$mode"
+	case $mode in
+	empty) body='exit 0' ;;
+	garbage) body='echo "not json at all"; exit 0' ;;
+	nonzero) body='echo "boom" >&2; exit 3' ;;
+	esac
+	printf '#!/bin/sh\n%s\n' "$body" >"$WORK/mintfake-$mode/node"
+	chmod +x "$WORK/mintfake-$mode/node"
+	PATH="$WORK/mintfake-$mode:$PATH" python3 -I "$HERE/../memory_hotplug_probe.py" --out "$WORK/hp-$mode.json" >"$WORK/out" 2>&1
+	rc=$?
+	t "memory_hotplug_probe with $mode mint output exits nonzero" test "$rc" -ne 0
+	t "memory_hotplug_probe with $mode mint output names the mint, no traceback" bash -c "grep -qi 'mint' '$WORK/out' && ! grep -q Traceback '$WORK/out'"
+	t "memory_hotplug_probe with $mode mint output writes no passing receipt" bash -c "! grep -q '\"pass\": true' '$WORK/hp-$mode.json' 2>/dev/null"
+done
+
 printf '\n%d passed, %d failed\n' "$PASSN" "$FAILN"
 [ "$FAILN" -eq 0 ]

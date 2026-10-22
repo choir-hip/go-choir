@@ -291,6 +291,23 @@ def job_check(args, c, vm, base, receipt, state):
     log("job_done", **{k: v for k, v in checks.items() if k.startswith("job_")})
 
 
+def parse_mint(mint):
+    """The minted computer's JSON (last non-empty stdout line), or a loud stop."""
+    lines = [ln for ln in mint.stdout.splitlines() if ln.strip()]
+    tail = (mint.stderr or "").strip()[-300:]
+    if mint.returncode != 0:
+        raise SystemExit(f"mint failed: qa_test_computer.mjs exited {mint.returncode}; stderr: {tail}")
+    if not lines:
+        raise SystemExit(f"mint failed: qa_test_computer.mjs printed nothing; stderr: {tail}")
+    try:
+        m = json.loads(lines[-1])
+    except ValueError:
+        raise SystemExit(f"mint failed: last output line is not JSON: {lines[-1][:200]!r}")
+    if not isinstance(m, dict) or not m.get("credential_file"):
+        raise SystemExit(f"mint failed: output has no credential_file: {lines[-1][:200]!r}")
+    return m
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", required=True)
@@ -322,7 +339,7 @@ def main():
     else:
         mint = subprocess.run(["node", os.path.join(REPO, "scripts", "qa_test_computer.mjs"), "--label", label],
                               cwd=REPO, capture_output=True, text=True, timeout=1800)
-        m = json.loads([ln for ln in mint.stdout.splitlines() if ln.strip()][-1])
+        m = parse_mint(mint)
         c = Computer.from_cred(m["credential_file"])
         minted = True
         receipt["build"] = m.get("guest_build_commit")
