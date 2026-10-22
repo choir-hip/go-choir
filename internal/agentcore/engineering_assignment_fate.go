@@ -1335,7 +1335,7 @@ func (rt *Runtime) resumeStrandedFateAssignmentIfPending(ctx context.Context, ow
 		if errors.Is(err, store.ErrNotFound) {
 			return nil
 		}
-		return err
+		return fateWakeReadRetry("the resume's re-read", assignmentID, err)
 	}
 	if !assignedEngineeringFatePending(assignment) {
 		rt.releaseAssignmentSaga(assignmentID, attempt)
@@ -1361,6 +1361,18 @@ func (rt *Runtime) resumeStrandedFateAssignmentIfPending(ctx context.Context, ow
 	return nil
 }
 
+// fateWakeReadRetry turns a failed (not NotFound) read of the assignment on
+// the fate wake path into a dispatcher deferral (review bunch 107, 2): a
+// plain error is retried at once and dead-lettered at MaxAttempts, which
+// leaves a fate-pending assignment with no wake. The read failure is not
+// counted toward the re-drive limit: it says nothing about the staged report,
+// and the cancel needs the same read, so counting it would only cancel a
+// valid report during a store stall. A stall that outlives MaxDeferrals
+// dead-letters the wake; a restart then closes the assignment.
+func fateWakeReadRetry(site, assignmentID string, err error) error {
+	return fmt.Errorf("%w: %s of assignment %s failed: %v", ErrFateRedriveRetry, site, assignmentID, err)
+}
+
 // cancelUnfinishableFateAssignment ends an assignment whose staged terminal
 // report failed every re-drive: its capsule is revoked and the assignment
 // cancelled with the cause, and management is told (not silent). It takes the
@@ -1371,13 +1383,20 @@ func (rt *Runtime) cancelUnfinishableFateAssignment(ctx context.Context, assignm
 	if !saga.TryLock() {
 		return errAssignmentSagaHeld
 	}
-	defer saga.Unlock()
+	settled := false
+	defer func() {
+		saga.Unlock()
+		if settled {
+			// Drops the count and the saga entry (review bunch 107, 3).
+			rt.releaseAssignmentSaga(assignment.AssignmentID, assignment.Binding.Attempt)
+		}
+	}()
 	current, err := rt.store.GetEngineeringAssignment(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignment.AssignmentID, assignment.Binding.Attempt)
 	if err != nil {
-		return err
+		return fateWakeReadRetry("the cancel's re-read", assignment.AssignmentID, err)
 	}
 	if !assignedEngineeringFatePending(current) {
-		rt.fateRedriveFailures.Delete(assignmentSagaKey(assignment.AssignmentID, assignment.Binding.Attempt))
+		settled = true
 		return nil
 	}
 	causeText := cause.Error()
@@ -1396,7 +1415,7 @@ func (rt *Runtime) cancelUnfinishableFateAssignment(ctx context.Context, assignm
 		return fmt.Errorf("%w: cancel after %d failed re-drives: %v", ErrFateRedriveRetry, failures, err)
 	}
 	rt.stopCancelledAssignmentRun(ctx, cancelled.Assignment, reason)
-	rt.fateRedriveFailures.Delete(assignmentSagaKey(assignment.AssignmentID, assignment.Binding.Attempt))
+	settled = true
 	log.Printf("runtime: assignment %s cancelled: %s", assignment.AssignmentID, reason)
 	return nil
 }
