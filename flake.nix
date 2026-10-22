@@ -315,6 +315,9 @@
         "cmd/choir-capture"
         # the desk-session worker without Dolt (RES-17)
         "cmd/desk-worker"
+        # operator tools of station FP9 (escrow key sealing; the copy-only
+        # tape repack and census); installed beside corpusd (extraBins)
+        "cmd/escrowkey" "cmd/taperepack"
       ];
       # Keep source selection structural. Go owns the package dependency graph;
       # repeating it here as per-service internalDirs caused fallback builds to
@@ -409,6 +412,10 @@
         corpusd = mkGoService {
           pname = "corpusd";
           subPackage = "cmd/corpusd";
+          # FP9's operator tools act on corpusd's escrow key and artifacts
+          # root; on Node B they are at
+          # /var/lib/go-choir/services/corpusd/bin/{escrowkey,taperepack}.
+          extraBins = [ "escrowkey" "taperepack" ];
         };
         checkpointd = mkGoService {
           pname = "checkpointd";
