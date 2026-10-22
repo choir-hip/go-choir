@@ -226,3 +226,44 @@ or the record says why not.
   32 GiB sweep threshold remains the lever, and it is driven by host
   allocation the guest inflates (about 10 GB per 2 h on the paper), so it will
   fire more often than the store's real growth warrants.
+
+### Every computer, the paper included (owner, 2026-10-22 22:40 UTC)
+
+Owner: "Discard for the paper is important. Let's accelerate that." and
+"Anything which improves resource utilization on a forward and ongoing
+basis should be prioritized over stability, availability, or uptime in the
+short term." So FP0 widens both selectors to `*` in deploy D4. It does this
+before the trial's six hourly readings and its reverse switch (step 6), on
+the trial's results so far (D3, 85a8115b1):
+
+- computer-9648031f cold booted on Firecracker v1.17.0 (snapshot_fallback
+  firecracker_version_mismatch);
+- only its data drive got `io_engine` Sync and `discard` true;
+- the store opened and Texture answered;
+- /health answered 93 of 93 probes at 10 s across the first trim (slowest
+  5.4 ms);
+- the first trim punched 1.67 GiB out of its data image;
+- a capsule build on the same VMM build (assignment-b5a05cc9…, 22:14-22:30)
+  ended with `oom_kill=0` and a 748 ms spawn.
+
+What it costs:
+
+- Every computer cold boots once at its next launch, because its 1.16.x
+  snapshot is refused. Idle computers do this at their next wake. The paper
+  and the other busy critical or public computers do it through the
+  deploy's planned, marker-backed refresh.
+- Each computer's first trim runs 10 minutes after its boot, on a data image
+  that has never been trimmed. On the paper that is the largest image on
+  Node B.
+- The Sync engine's hole punch runs on the VMM thread that also serves the
+  network, so a slow /health window during the paper's first trim is
+  expected and accepted.
+
+Monitoring: FP0 samples the paper's /health every 10 s from 2 minutes
+before its first trim to 10 minutes after it, and reads host free space and
+the image's allocated size before and after.
+
+Rollback: delete the four lines and redeploy. Every computer then cold boots
+again on the pinned 1.16.2 with no discard (its 1.17 snapshot is refused
+too). The pinned-build change that retires firecracker-next.nix is
+lane/fp0-firecracker-117-fleet.
