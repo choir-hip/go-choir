@@ -509,3 +509,66 @@ func TestPageCacheServedAloneToHostCallers(t *testing.T) {
 		t.Fatalf("read = %+v", got)
 	}
 }
+
+// Review bunch 16 (DeepSeek, late), round 3:
+//  18. Stacked overlays: a second overlay at the store mountpoint, or one
+//      with several lower layers, hides layers whose files the read counts
+//      as base and again under persistent. The read cannot partition them
+//      and must say partitioned false (F5).
+//  19. An overlay whose upperdir did not parse (an escaped comma,
+//      truncated options) puts the release delta in the base store; it must
+//      say partitioned false, not true (F6).
+//  20. Escaped mountinfo paths (\040 space, \134 backslash) parse to the
+//      real paths (F8).
+
+func overlayLine(id int, mountpoint, opts string) string {
+	return fmt.Sprintf("%d 24 0:%d / %s rw - overlay overlay rw,%s\n", id, 40+id, mountpoint, opts)
+}
+
+func layeringRead(t *testing.T) *PageCacheLayering {
+	t.Helper()
+	got, err := readGuestPageCache()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return got.StoreLayering
+}
+
+func TestPageCacheStackedOverlaysAreNotPartitioned(t *testing.T) {
+	store, persistent := t.TempDir(), t.TempDir()
+	upper := filepath.Join(persistent, "choir-updater", "store")
+	writeFile(t, filepath.Join(upper, "bbb", "y"), 10)
+	writeFile(t, filepath.Join(store, "aaa", "x"), 10)
+	base := fmt.Sprintf("24 1 254:0 / %s ro - erofs /dev/vda ro\n", store)
+	cases := map[string]string{
+		"two overlays at the store": base +
+			overlayLine(41, store, fmt.Sprintf("lowerdir=%s,upperdir=%s/older,workdir=%s/older-work", store, persistent, persistent)) +
+			overlayLine(42, store, fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s-work", store, upper, upper)),
+		"several lower layers": base +
+			overlayLine(41, store, fmt.Sprintf("lowerdir=%s/extra:%s,upperdir=%s,workdir=%s-work", persistent, store, upper, upper)),
+	}
+	for name, mi := range cases {
+		useGuestPaths(t, store, persistent, mi)
+		if l := layeringRead(t); l == nil || l.FSType != "overlay" || l.Partitioned {
+			t.Fatalf("%s: store_layering = %+v, want overlay and partitioned false", name, l)
+		}
+	}
+}
+
+func TestPageCacheOverlayWithoutUpperIsNotPartitioned(t *testing.T) {
+	store, persistent := t.TempDir(), t.TempDir()
+	writeFile(t, filepath.Join(store, "aaa", "x"), 10)
+	mi := overlayLine(41, store, fmt.Sprintf("lowerdir=%s", store))
+	useGuestPaths(t, store, persistent, mi)
+	if l := layeringRead(t); l == nil || l.FSType != "overlay" || l.Upper != "" || l.Partitioned {
+		t.Fatalf("store_layering = %+v, want overlay, no upper, partitioned false", l)
+	}
+}
+
+func TestParseStoreOverlayUnescapesPaths(t *testing.T) {
+	mi := `41 24 0:44 / /nix/my\040store rw - overlay overlay rw,lowerdir=/nix/store,upperdir=/mnt/p\040q/st\134ore,workdir=/mnt/p\040q/work` + "\n"
+	got, ok := parseStoreOverlay(mi, "/nix/my store")
+	if !ok || got.Upper != `/mnt/p q/st\ore` || got.Work != "/mnt/p q/work" {
+		t.Fatalf("got %+v ok=%v", got, ok)
+	}
+}

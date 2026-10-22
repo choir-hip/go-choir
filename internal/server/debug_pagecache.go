@@ -61,15 +61,21 @@ type PageCacheRoot struct {
 // runs layered, /nix/store is an overlay whose upper is the updater's
 // private store on /mnt/persistent (nix/autoputer-vm.nix layering): its
 // files are the release delta, not the base image, so they are counted as
-// store_upper and left out of persistent. Partitioned is false when the
-// mount table could not be read, or the store is an overlay whose upper
-// does not resolve in this namespace; then the store and persistent totals may
+// store_upper and left out of persistent. Partitioned is false, with a
+// Reason, when the mount table could not be read or names no store mount,
+// or the store is an overlay that is stacked, has no parsed upper, or whose
+// upper does not resolve in this namespace; then the store and persistent totals may
 // both include the upper and must not be quoted as the base image.
 type PageCacheLayering struct {
-	FSType      string `json:"fstype"`
-	Upper       string `json:"upper,omitempty"`
-	Work        string `json:"work,omitempty"`
+	FSType string `json:"fstype"`
+	Upper  string `json:"upper,omitempty"`
+	Work   string `json:"work,omitempty"`
+	// Stacked is true when more than one overlay is mounted at the store, or
+	// the top one has several lower layers: layers the read cannot see
+	// would be counted as base and again under persistent.
+	Stacked     bool   `json:"stacked,omitempty"`
 	Partitioned bool   `json:"partitioned"`
+	Reason      string `json:"reason,omitempty"` // why partitioned is false
 }
 
 // PageCache is the whole read: meminfo, the store's layering, then each root.
@@ -92,8 +98,11 @@ type pageCacheRootSpec struct {
 }
 
 type pageCacheLimits struct {
-	MaxFiles int           // regular files examined per walk
-	MaxBytes int64         // apparent bytes of distinct inodes per walk; zero stops at once
+	// The file and byte caps are per root (a root and its overlay upper share
+	// one budget), so the guest's two roots may examine up to twice each cap
+	// in all. The deadline is for the whole read.
+	MaxFiles int           // regular files examined per root
+	MaxBytes int64         // apparent bytes of distinct inodes per root; zero stops at once
 	Deadline time.Duration // whole read, checked per directory, per file and per mapped chunk
 	Top      int           // largest resident files listed per ListTop root
 }
@@ -261,10 +270,14 @@ func walkPageCacheRoot(spec pageCacheRootSpec, lim pageCacheLimits, deadline tim
 
 // parseStoreOverlay reads the topmost mount at mountpoint from a
 // /proc/self/mountinfo body: its filesystem type and, for an overlay, its
-// upper and work directories. ok is false when no mount is found.
+// upper and work directories, and whether overlays are stacked. ok is false
+// when no mount is found. Topmost is the last matching line: mountinfo lists
+// a namespace's mounts in mount order, which is an ordering the kernel
+// keeps but does not document as a guarantee; a stacked store fails closed
+// either way.
 func parseStoreOverlay(mountinfo, mountpoint string) (PageCacheLayering, bool) {
 	var got PageCacheLayering
-	found := false
+	found, overlays := false, 0
 	for _, line := range strings.Split(mountinfo, "\n") {
 		f := strings.Fields(line)
 		sep := -1
@@ -281,13 +294,19 @@ func parseStoreOverlay(mountinfo, mountpoint string) (PageCacheLayering, bool) {
 		if got.FSType != "overlay" {
 			continue
 		}
+		overlays++
 		for _, opt := range strings.Split(f[sep+3], ",") {
-			if v, ok := strings.CutPrefix(opt, "upperdir="); ok {
+			if v, ok := strings.CutPrefix(opt, "lowerdir="); ok && strings.Contains(v, ":") {
+				got.Stacked = true // several lower layers (an escaped colon also lands here: fail closed)
+			} else if v, ok := strings.CutPrefix(opt, "upperdir="); ok {
 				got.Upper = unescapeMountinfo(v)
 			} else if v, ok := strings.CutPrefix(opt, "workdir="); ok {
 				got.Work = unescapeMountinfo(v)
 			}
 		}
+	}
+	if overlays > 1 && got.FSType == "overlay" {
+		got.Stacked = true
 	}
 	return got, found
 }
@@ -324,9 +343,20 @@ func servePageCache(w http.ResponseWriter) {
 // readGuestPageCache is the guest read served by pagecache and joined into
 // procmem?pagecache=1 (owner notes §40).
 func readGuestPageCache() (PageCache, error) {
-	layering := PageCacheLayering{}
+	layering := PageCacheLayering{Reason: "mountinfo unreadable"}
 	if mi, err := os.ReadFile(guestMountinfoPath); err == nil {
-		layering, layering.Partitioned = parseStoreOverlay(string(mi), guestStorePath)
+		var found bool
+		layering, found = parseStoreOverlay(string(mi), guestStorePath)
+		switch {
+		case !found:
+			layering.Reason = "no store mount in mountinfo"
+		case layering.FSType == "overlay" && layering.Stacked:
+			layering.Reason = "stacked overlay"
+		case layering.FSType == "overlay" && layering.Upper == "":
+			layering.Reason = "overlay without a parsed upperdir"
+		default:
+			layering.Partitioned = true
+		}
 	}
 	roots := []pageCacheRootSpec{
 		{Name: "store", Path: guestStorePath, ListTop: true, UpperDir: layering.Upper, UpperName: "store_upper"},
@@ -342,7 +372,7 @@ func readGuestPageCache() (PageCache, error) {
 	if layering.Partitioned && layering.FSType == "overlay" && layering.Upper != "" {
 		for _, r := range out.Roots {
 			if r.Name == "store_upper" && !r.Present {
-				layering.Partitioned = false
+				layering.Partitioned, layering.Reason = false, "overlay upper does not resolve"
 			}
 		}
 	}
