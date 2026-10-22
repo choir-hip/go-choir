@@ -382,7 +382,9 @@ dolt_head() { dolt_scalar "$1" "$2" 'select commit_hash from dolt_log limit 1'; 
 record_rows() { # $1 name, $2 port, $3 database
   [ "$3" = platform ] || return 0
   local n; n="$(dolt_scalar "$2" "$3" 'select count(*) from computer_event_append_receipts')"
-  case "$n" in ''|*[!0-9]*) log "dolt $1: receipt count unread"; return 0 ;; esac
+  # An unread count is written as such, so the drill fails it instead of
+  # taking the run for one from before the marker (review round 2 R9).
+  case "$n" in ''|*[!0-9]*) log "dolt $1: receipt count unread"; n=unread ;; esac
   DOLT_ROWS+=("$1=$n")
 }
 snapshot_store() { # $1 name, $2 port, $3 database, $4 data directory (a subvolume)
