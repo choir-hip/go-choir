@@ -194,10 +194,16 @@ now:
     of the deploy). Keep deploy 1 at least one staging day and one paper
     boot before deploy 2. Next lane: deploy 2 (the writer and
     store.event_table, tests F17 and F18 first; F17's local ratio at most
-    0.5 gates it). Rollback below deploy 1: git revert is safe while no op
-    is stamped, but the updater refuses the epoch-1 release on any store
-    this build opened; once deploy 2 stamps, deploy 1 is the floor (design
-    4.5 and its status section).
+    0.5 gates it). Rollback below deploy 1 is runtime-safe, not
+    rollback-safe (round 1b): the epoch fences only the updater's Apply of
+    an epoch-declaring release; a CI revert, a platform-follow offer and the
+    updater's restorePrior boot the old binary, which runs but refuses
+    checkpoint publication over the empty choir_events until a forward
+    deploy, the rollback recipe (the revert plus a boot-time drop of an
+    empty choir_events, quoted in the design's status section and
+    rehearsed by TestEventTableRollbackRecipe; it must ride in the revert
+    commit) or a pre-deploy-1 restore. Rehearse it with the proof's step 6
+    on a test computer. Once deploy 2 stamps, deploy 1 is the floor.
   followup: >-
     Journal growth (lane/fp1-journal-growth, 2026-10-22): problem record
     docs/problems/paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md.
@@ -221,7 +227,10 @@ receipts:
       23d1a4cae (union readers and seeds), 220698ce1 (witness, manifest,
       fingerprints, fences), e287b6e7e (deletions), 21718f62f (plan-shape
       fix), all red; 04d055014 and 17736c304 (test repairs, yellow);
-      3900eed5c (proof script, yellow); then this docs commit (green)
+      3900eed5c (proof script, yellow); c4508ef82 (docs, green). Round 1b:
+      2ea0613a9 and 0e8f72cad (F14 lock pin, stamp guard, F6 hook),
+      3fe5e810f (rollback recipe rehearsal, proof step 6), then the
+      round 1b docs commit
     proof_refs:
       - internal/store/event_table_test.go
       - internal/store/event_table_guard_test.go

@@ -246,9 +246,13 @@ func TestApplyVerifiesEntrypointBuildCommit(t *testing.T) {
 }
 
 // F23 (event-table design section 4.1): a release built before deploy 1
-// declares epoch 1. On a store whose receipt is this build's epoch it is
-// refused before mutation, so the updater never rolls a computer below the
-// rollback floor.
+// declares epoch 1. Apply refuses it before mutation on a store whose
+// receipt is this build's epoch. This is the only path the epoch fences:
+// restorePrior (after a failed health probe) skips checkStateCompatibility,
+// a platform-follow offer declares no epoch, and a CI revert never reads the
+// receipt. Those reach the older binary, which runs but cannot publish a
+// checkpoint until a forward deploy or the design's rollback recipe (round
+// 1b review).
 func TestApplyRefusesPreEventTableReleaseOnEventTableStore(t *testing.T) {
 	blob, err := os.ReadFile(filepath.Join("testdata", "closure-single.nar"))
 	if err != nil {
