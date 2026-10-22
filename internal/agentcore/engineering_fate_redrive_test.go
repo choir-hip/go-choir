@@ -274,3 +274,71 @@ func TestFateRedriveThatKeepsFailingEndsTheAssignmentWithItsCause(t *testing.T) 
 		})
 	}
 }
+
+// 7. Review bunch 107 (DeepSeek 2, 3): a transient read of the assignment on
+// the fate wake path (the handler's first read, the resume's re-read, the
+// cancel's re-read) must be a dispatcher deferral, not a plain error the
+// dispatcher retries hot and dead-letters at MaxAttempts; and the terminal
+// cancel must drop the saga entry. A cancelled context stands in for the
+// store stall: the read fails with a non-NotFound error. Ways it can fail:
+// a read site still returns the error as is (the wake is dead-lettered and
+// the assignment stays bound); the read failure ends the assignment (a
+// store stall cancels a valid report); the wake never ends the assignment
+// once the store recovers; the cancel leaves its saga entry behind.
+func TestFateWakeTransientReadFailureIsDeferredAndTheAssignmentStillEnds(t *testing.T) {
+	const dispatcherMaxAttempts = 8
+	f := newAdmissionFixture(t, 1)
+	f.open(0)
+	staged, _ := stageFateProposal(t, f, f.bind(0), false)
+	f.rt.capsuleExecutor = capsule.NewExecutor(t.TempDir(), t.TempDir(), "", 0) // no capsule: every resume fails
+	captureFateWakes(f.rt)
+	owner, computer, agent := staged.Binding.OwnerID, staged.Binding.ComputerID, staged.Binding.ParentAgentID
+	stalled, stall := context.WithCancel(context.Background())
+	stall()
+
+	if err := f.rt.resumeStrandedFateAssignmentIfPending(stalled, owner, computer, staged.AssignmentID, staged.Binding.Attempt); !errors.Is(err, ErrFateRedriveRetry) {
+		t.Fatalf("the resume's re-read failure returned %v, want a deferral (ErrFateRedriveRetry)", err)
+	}
+	if err := f.rt.cancelUnfinishableFateAssignment(stalled, staged, assignedEngineeringFateRedriveLimit, errors.New("cause")); !errors.Is(err, ErrFateRedriveRetry) {
+		t.Fatalf("the cancel's re-read failure returned %v, want a deferral (ErrFateRedriveRetry)", err)
+	}
+
+	plainFailures := 0 // the dispatcher's MaxAttempts budget; deferrals do not spend it
+	deliver := func(ctx context.Context, delivery int) bool {
+		err := f.rt.HandleAssignedEngineeringFateDeadline(ctx, owner, computer, agent, fateDeadlineContent(staged))
+		if err == nil {
+			return true
+		}
+		if errors.Is(err, ErrFateRedriveRetry) || errors.Is(err, errAssignmentSagaHeld) {
+			return false
+		}
+		plainFailures++
+		if plainFailures >= dispatcherMaxAttempts {
+			after := f.get(0)
+			t.Fatalf("delivery %d: %d plain errors dead-letter the wake and the assignment is stranded %s/%s (last: %v)",
+				delivery, plainFailures, after.Disposition, after.CapsuleDisposition, err)
+		}
+		return false
+	}
+	for delivery := 1; delivery <= 2*dispatcherMaxAttempts; delivery++ { // the store stalls
+		if deliver(stalled, delivery) {
+			t.Fatalf("delivery %d consumed the wake during a store stall", delivery)
+		}
+	}
+	if after := f.get(0); after.Disposition.Terminal() {
+		t.Fatalf("a store stall ended the assignment %s; a read failure is not the report's failure", after.Disposition)
+	}
+	ended := false
+	for delivery := 1; delivery <= 3*dispatcherMaxAttempts && !ended; delivery++ { // the store recovers
+		ended = deliver(context.Background(), delivery)
+	}
+	after := f.get(0)
+	if !ended || after.Disposition != types.EngineeringAssignmentCancelled {
+		t.Fatalf("after the store recovered the assignment is %s/%s, want cancelled", after.Disposition, after.CapsuleDisposition)
+	}
+	entries := 0
+	f.rt.assignmentSagas.Range(func(any, any) bool { entries++; return true })
+	if entries != 0 {
+		t.Fatalf("the cancelled assignment keeps %d saga entries", entries)
+	}
+}
