@@ -183,6 +183,22 @@ boundaries:
 
 now:
   status: checkpoint_incomplete
+  selftest_oom_leg: >-
+    2026-10-22, lane/fp2-selftest-oom (from d23dfaa2d), not landed. The
+    isolation self-test has an OOM leg, POST
+    /api/runtime/isolation-selftest?leg=oom. A throwaway research worker
+    under its real 768 MiB cgroup runs a fixed allocating cell. The leg
+    reports oom_kill from memory.events, the worker's and the slice's
+    limits, the daemon's pid, start ticks and boot id before and after, and
+    whether a sibling answers. Callers: host peer only (AuthenticatedOwner),
+    not on the ProductAPI allowlist. FP2 step 4 now runs it through
+    desk_cell_confinement_probe.py --leg oom. The capsule leg (SEC-13,
+    RES-03) is not built: a capsule is not reachable safely from the
+    self-test (file:line in
+    docs/problems/fp2-step4-deployed-oom-not-drivable-desk-refuses-runaway-2026-10-22.md).
+    Not yet run: TestDeskOOMSelfTestKillsTheWorkerAtItsBudget needs root and
+    cgroup v2 (FP0's Linux mirror run). Then the deployed leg on a test
+    computer, which can tick RES-01 and RES-02.
   batch1_fix: >-
     Reviewer edits applied on lane/b3-desk-boundary-b1fix: (1) prlimit64 is
     read-only for a confined worker (pid 0 or self, null new_limit);
@@ -452,13 +468,20 @@ first on the paper.
 3. The trace shows refusals: for a run of the test computer after step 2 nothing
    is expected (the probe's handlers are counters); a real refusal appears as a
    `desk.egress` run event with `refused: true`.
-4. Out of memory: `GET /api/runtime/observability` before; run a research desk
-   turn whose cell allocates without end (a prompt that asks for a cell
-   `for { keep = append(keep, make([]byte, 8<<20)) }`); expect the cell result
-   "cell's worker died ... killed by its memory budget (memory.max 768 MiB ...)",
-   the daemon's start time unchanged in observability, and the next turn of the
-   same desk working. Read each worker's `memory.peak` (the daemon logs the
-   desk cgroup at start: "desk cgroup /sys/fs/cgroup/choir-desks memory.max ...").
+4. Out of memory: `scripts/proofs/fp2-desk-boundary.sh --computer <test>
+   --step 4 --mutate`, which runs `desk_cell_confinement_probe.py --leg oom`
+   (POST `/api/runtime/isolation-selftest?leg=oom`, once, never retried).
+   No model is in the loop: the deployed desks refuse a runaway prompt
+   (docs/problems/fp2-step4-deployed-oom-not-drivable-desk-refuses-runaway-2026-10-22.md).
+   Pass is exit 0:
+   - the research worker's `memory.max` is 768 MiB and its `memory.events`
+     `oom_kill` is at least 1;
+   - its exit cause names the memory budget;
+   - the desks slice has a hard `memory.max`;
+   - a sibling research worker answers before and after;
+   - the daemon's pid, `/proc/self/stat` start ticks and boot id are
+     unchanged.
+   No answer is exit 1, because the daemon may have died.
 5. Real turns: management, research and Texture each complete a turn on the
    computer (`cd frontend && BASE_URL=https://choir.news npx playwright test
    tests/texture-acceptance-deployed.spec.js` with the test computer's session),
