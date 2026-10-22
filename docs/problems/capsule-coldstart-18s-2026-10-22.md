@@ -11,6 +11,10 @@ on the logged timestamps) or **hypothesis**.
 Options 1 and 2 are built, tests first: 928ffe243 (yellow, tests),
 1d1556b72 (red, the fix). Options 3 to 6 are not built. Waiting on FP0 to
 land and prove on staging (see "Fix" at the end).
+Round 2 after review bunch 91 (all accept): findings 862050ce3, tests
+3280723f1 (yellow), fix fca6c46b8 (red: the spawn refusal wraps its cause
+and names both digests). The rest are recorded in "Review bunch 91 and
+round 2".
 
 ## Evidence
 
@@ -447,7 +451,8 @@ tests first, and records the rest here.
   commit bind the old commit's digest, and the spawn would then refuse
   them until the process restarted.
 
-  Fix: two tests.
+  Fix: two tests (3280723f1). Each kills its mutant, checked by mutating
+  a scratch copy of the code.
   - Different commits get their own digests.
   - More commits than the limit, read from 8 goroutines (also under
     -race), never leave more than `commitDigestCacheLimit` entries, and
