@@ -20,7 +20,10 @@ import collections, json, os, pathlib, shutil, subprocess, tempfile
 #   8. the split list names a package that is not a non-runtime package;
 #   9. build flags (-race, tags) miss discovery or execution;
 #  10. a test failure or a bad SHARD_INDEX does not fail the shard;
-#  11. Fuzz targets (their seed corpora run under -run) are not discovered.
+#  11. Fuzz targets (their seed corpora run under -run) are not discovered;
+#  12. discovery succeeds but lists no test names, and the shard passes;
+#  13. a sharded run selects nothing (more shards than packages or test
+#      names) and reports a green shard that tested nothing.
 MODULE = 'github.com/yusefmosiah/go-choir/'
 RUNTIME = {'internal/agentcore', 'internal/textureowner'}
 
@@ -66,8 +69,9 @@ if args[0] == 'list':
 elif '-list' in args:
     pattern = re.compile(args[args.index('-list') + 1])
     for p in [a for a in args[1:] if a.startswith('./') or a.startswith(module)]:
-        for name in tests[short(p)]:
-            if pattern.search(name): print(name)
+        if not os.environ.get('EMPTY_DISCOVERY'):
+            for name in tests[short(p)]:
+                if pattern.search(name): print(name)
         print('ok  \\t' + module + short(p) + '\\t0.010s')
     if os.environ.get('FAIL_DISCOVERY'): sys.exit(7)
 elif os.environ.get('FAIL_EXECUTION'): sys.exit(8)
@@ -183,6 +187,25 @@ elif os.environ.get('FAIL_EXECUTION'): sys.exit(8)
     result, invocations = run(script, 8, 0, FAIL_DISCOVERY='1')
     assert result.returncode != 0, 'partial failed discovery must fail closed'
     assert not executions(invocations), invocations
+    # Discovery that succeeds but lists only package lines fails closed.
+    result, invocations = run(script, 8, 0, EMPTY_DISCOVERY='1')
+    assert result.returncode != 0, 'empty split discovery must fail closed'
+    assert 'no tests' in result.stderr, result.stderr
+    assert not executions(invocations), invocations
+    # More shards than distinct split test names: a split shard with no
+    # names fails rather than passing with nothing tested.
+    distinct = len({n for p in SPLIT for n in tests_for(p)})
+    result, invocations = run(script, distinct + 4, distinct + 1)
+    assert result.returncode != 0, ('empty split shard must fail', result.stdout)
+    assert not executions(invocations), invocations
+    # One whole package for two whole shards: the empty whole shard fails.
+    few = SPLIT + WHOLE[:1] + sorted(RUNTIME)
+    few_tests = json.dumps({p: tests_for(p) for p in few})
+    result, invocations = run(script, 8, 7, FAKE_TESTS=few_tests)
+    assert result.returncode != 0, ('empty whole shard must fail', result.stdout)
+    assert not executions(invocations), invocations
+    result, _ = run(script, 8, 6, FAKE_TESTS=few_tests)
+    assert result.returncode == 0, result.stderr
     for bad in ('8', '-1', 'x'):
         result, _ = run(script, 8, bad)
         assert result.returncode != 0, 'out-of-range shard must fail: ' + bad
