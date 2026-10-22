@@ -79,7 +79,9 @@ the prepare and finalize overhead per tape event, which F-c leaves as it
 is (2.6, assumption 5). Read as "journal per event, on against off, at
 most 0.5", deploy 2 sits at the bar, not under it. Q2's price is about
 4 KiB per op batched and about 7 KiB per event unbatched. The numbers are
-directional only.
+directional only. Rerun after round 2 (`ae12f9db9`; the write path is
+unchanged): 87.6 → 18.4 KiB per op (**0.21**), 137.9 → 70.5 KiB per event
+unbatched (**0.51**), 3-tree 0.16 / 0.48.
 
 **Review findings on deploy 1 that bear on deploy 2 (2026-10-22, before
 any fix).** These were recorded first; the dispositions follow in the
@@ -127,6 +129,105 @@ commits after this one.
   that lowers `storeschema.Version` fails unless the commit names the
   pre-rollback check in an explicit trailer.
 
+**Dispositions of findings A to H (round 2 of deploy 2, rebased on deploy
+1's round 1b `fbb6d74a8`).**
+
+- **A, repaired: the store floor.**
+  - `storeschema` gains `store-floor.json`, beside the epoch receipt. Only
+    binaries that know it write it, none lowers it, and binaries older than
+    it never touch it.
+  - The writer writes the floor (epoch 2, deploy 1) durably *before*
+    switching on. If it cannot, the writer stays off.
+  - Open floors a workspace whose `choir_events` has a row (one-row probe),
+    and Reopen re-floors an adopted workspace while the switch is on.
+  - The updater refuses, on Apply and on `restorePrior`, a release below
+    the floor, or one declaring no epoch on a floored store. Both refusals
+    come before any mutation, swap or restart. A floored computer whose new
+    release fails its probe therefore stays on that release (which is at or
+    above the floor) until a forward fix.
+  - With no floor (deploy 1 alone) both updater paths keep their behaviour.
+  - The floor keys on "the writer was switched on" (and on rows present),
+    not on the epoch. The epoch did not change in deploy 2.
+  - *Should an old binary refuse to rewrite a newer receipt downward?* From
+    this build on, `storeschema.Write` never lowers a newer receipt. A
+    binary that predates the rule still does, which is why the floor is a
+    separate file. Open also refuses a floor above its own epoch, so a
+    deploy-2 binary cannot run on a store a later binary floored higher.
+- **B and F, repaired.** `readEventTable` scans bytes under the engine
+  mutex and decodes after release (a test hook checks the mutex is free at
+  decode).
+- **C, accepted as a semantic change, named here.** With the writer on,
+  `ListEventsByOwner` (`/api/costs`, the texture diagnosis) cuts og_objects'
+  newest by timestamp against `choir_events`' newest by `stream_seq`. When
+  emitters' timestamps disagree with allocation order, a row at the cut can
+  differ from the newest by timestamp. That is a few rows at the end of a
+  10,000-row cost window or an 80-row diagnosis. The alternative is a fifth
+  tree, `(owner_id, updated_at)`, which round 2 declined (about 7 to 9 KiB
+  per op), and the table's DDL is frozen. The test that pins the
+  divergence stays.
+- **D, kept in the proof.** Step 9 of `fp1-event-table-deploy2.sh` reads
+  every `store.event_table.*` op's calls and holds, with a bar of under a
+  second. A cursor read now takes the lock three times (finding G).
+- **E, repaired in deploy 1** (`0e8f72cad`). Deploy 2 adds the check
+  through the writer: every stamped `tape_seq` is a position the dry run
+  saw inside its transaction.
+- **G, reproduced and repaired.** The hypothesis holds: with a hook between
+  the halves, both `ListEventsAfter` and `ListEventsByOwnerAfter` returned
+  a later `choir_events` event without the og_objects event committed
+  before it, and the cursor skipped it. The cursor reads now run the
+  `choir_events` half, then og_objects, then `choir_events` again. From
+  the second read they keep only rows at or below the highest key the
+  first two saw, so the cursor never passes an event committed before one
+  it returns; the next read returns both. One snapshot (one transaction
+  across both halves) was not chosen: the og_objects half goes through the
+  object-graph service on another connection. What remains is a gap the
+  store has always had, even in one table: numbers are allocated under
+  `eventMu` and committed after it, so an event can commit after one
+  allocated later (heresy delta: discovered, not closed).
+- **H, repaired for every path deploy 2 can reach.**
+  - Apply and `restorePrior` are covered by A.
+  - Platform-follow offers declare no epoch, so a floored computer refuses
+    them until offers declare one (a residual for FP0 before the paper is
+    floored).
+  - Deploy-refresh boots whatever image CI built, and reverting the
+    event-table commits removes every fence inside them. That path is
+    guarded by `scripts/check-store-schema-floor.sh`, run in CI from a
+    commit of its own. It fails a push that lowers `storeschema.Version`
+    unless the head commit carries `Store-Floor-Override: <the pre-rollback
+    check and its result>`.
+  - The lane's token cannot push `.github/workflows`, so FP0 adds this
+    step to the Vocabulary Gates job (which `check`, and so the deploy,
+    requires), in its own commit:
+
+```yaml
+      - name: Run store floor guard
+        shell: bash
+        env:
+          STORE_FLOOR_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          if [ -n "${STORE_FLOOR_BASE//0/}" ]; then
+            git fetch --no-tags --depth=1 origin "$STORE_FLOOR_BASE" || echo "store-floor: base $STORE_FLOOR_BASE not fetchable"
+          fi
+          scripts/check-store-schema-floor.sh
+```
+
+  Every computer's floor is visible as `/api/runtime/observability`
+  `event_table.store_floor` (proof step 10).
+
+**Tests run, round 2 (local, after the VM restart at 17:35 UTC, rerun in
+full).**
+- Under `-race`, through `~/heavy-mirror.lock`: the store tests matching
+  `EventTable|Telemetry|ComputerSetting|FlagOff|Lifecycle|OpenRefuses|EngineMutex`
+  (782 s), and the agentcore event-table, settings, telemetry,
+  planned-restart, ProductAPI, observability, rematerialize and restore
+  tests (215 s). Both pass.
+- `internal/updater` and `internal/storeschema` pass under `-race`.
+- The whole `internal/store` package passes (435 s).
+- `internal/vmmanager`, `eventtablegrant`, `builder` and `platform` pass.
+- The repo checks pass, as does the new `check-store-schema-floor.sh`.
+  `check-guest-data-fstrim.sh` still needs `nix`.
+
 **Tests run (local).** Under `-race`: the store tests matching
 `EventTable|Telemetry|ComputerSetting|FlagOff|Lifecycle` (828 s, pass), and
 the agentcore settings, event-table, telemetry, planned-restart, ProductAPI
@@ -137,8 +238,11 @@ pass, except `check-guest-data-fstrim.sh`, which needs the `nix` binary this
 VM lacks. The flag-off golden tape test passes unchanged.
 
 **Rollback once any op is stamped.** First turn the setting off (live).
-Then revert deploy 2: deploy 1 projects and reads every stamped op.
-Deploy 1 is the floor (section 4.5).
+Then revert deploy 2's red commits: deploy 1 projects and reads every
+stamped op. Deploy 1 is the floor (section 4.5), now enforced: the guest
+refuses to open under a lower binary, the updater refuses it on Apply and
+on recovery, and CI refuses a push that lowers the epoch without the
+override. Keep the CI guard's commit when reverting.
 
 **Where the code differs from this document:**
 

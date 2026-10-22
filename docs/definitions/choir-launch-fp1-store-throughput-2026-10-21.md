@@ -119,15 +119,20 @@ now:
     ProductAPI, in-guest callers and unauthenticated callers). Off is
     deploy 1 byte for byte. F17 (local): b_ce/b_og 0.21 per op (bar 0.5,
     pass); per event with batching off, 0.52 (the per-tape-event overhead
-    is unchanged). Deploy 1 lands first; earlier slices: deploy 1, the
-    boot-window repair (deploy E), B2.
+    is unchanged). Round 2 (rebased on deploy 1's round 1b fbb6d74a8):
+    the store floor (store-floor.json, written before the first stamp,
+    never lowered; Open, Apply and the updater's recovery refuse a binary
+    below it), decode outside the engine lock, cursor reads that cannot
+    skip between their halves, and a CI guard against lowering the epoch
+    (script in the lane; the workflow step is FP0's). Deploy 1 lands
+    first; earlier slices: deploy 1, the boot-window repair (deploy E), B2.
   source_ref: lane/fp1-event-table-d2
   deploy_identity: this lane deploys nothing; FP0 lands and proves
   candidate:
     id: fp1-event-table-deploy2
     state: built, not landed; waits for deploy 1 to land and hold (owner Q5)
     ref: lane/fp1-event-table-d2
-    base: c4508ef82 (lane/fp1-event-table, deploy 1)
+    base: fbb6d74a8 (lane/fp1-event-table, deploy 1 round 1b)
     digest: none
     scope:
       - internal/store/event_table.go
@@ -144,6 +149,10 @@ now:
       - internal/agentcore/runtime.go
       - internal/agentcore/computer_settings.go
       - internal/agentcore/api.go
+      - internal/storeschema/schema.go
+      - internal/storeschema/floor.go
+      - internal/updater/updater.go
+      - scripts/check-store-schema-floor.sh
       - scripts/proofs/fp1-event-table-deploy2.sh
   conjecture:
     id: C-FP1-event-table
@@ -184,12 +193,18 @@ now:
     planned refresh) before its setting can act. Once any op is stamped on
     a computer, deploy 1 is that computer's rollback floor. Read as journal
     per event (on/off) with batching off, deploy 2 sits at the bar (0.52),
-    not under it; the design's gate is per op (0.21).
+    not under it; the design's gate is per op (0.21). A floored computer
+    refuses platform-follow offers until offers declare a store schema
+    epoch; decide before the paper is floored. A floored computer whose new
+    release fails its health probe stays on it (no recovery below the
+    floor) until a forward fix.
   next_action: >-
     FP0: after deploy 1 has landed and held, review deploy 2 in a bunch
     (red: AppendEvent and the sealer, vmctl credential-disk material, the
     runtime boot step and settings route), mirror under -race, and land it
-    as its own deploy. Then run scripts/proofs/fp1-event-table-deploy2.sh
+    as its own deploy. Before it, land the CI store-floor step (the
+    design's deploy 2 status has the YAML) in a commit of its own. Then
+    run scripts/proofs/fp1-event-table-deploy2.sh
     step 0 on the paper (no effect). Mint a test computer, name it in
     CHOIR_EVENT_TABLE_COMPUTERS (a nix commit, deployed), cold boot it, and
     run steps 1 to 7. The paper comes only after that and the panel, under
@@ -213,10 +228,14 @@ receipts:
   - id: fp1-event-table-deploy2
     boundary: implement
     identity: >-
-      lane/fp1-event-table-d2 on c4508ef82: 71016da91 (tests, yellow),
-      b6584694e (test repairs, yellow), c7d7e6e48 (store writer, red),
-      a2e641182 (host grant, red), 4030ef310 (runtime switch, red), the
-      proof script (yellow), then this docs commit (green)
+      lane/fp1-event-table-d2, rebased on fbb6d74a8: cafbc9e29 and
+      d810f6b2f (tests, yellow), 9cd9abb8b (store writer, red), cfe13553c
+      (host grant, red), 931a6f8f2 (runtime switch, red), 4c83665cc (proof,
+      yellow), e3134069f (docs, green); round 2: 9b9434cfe (findings
+      recorded, green), 967cf6595 (tests, yellow), 9f3895f95 (floor,
+      red), 3af82d7d5 (store floor, decode, cursor, red), 0183d3a64
+      (updater, red), 31a5d25b5 (runtime, red), 6680db093 (CI script,
+      orange), the proof update (yellow), then the round 2 docs (green)
     proof_refs:
       - internal/store/event_table_writer_test.go
       - internal/store/event_table_guard_test.go (TestEventTableOnlyTheWriterStamps)
@@ -224,6 +243,8 @@ receipts:
       - internal/eventtablegrant/grant_test.go
       - internal/vmmanager/event_table_grant_test.go
       - internal/agentcore/event_table_setting_test.go (F18)
+      - internal/store/event_table_floor_test.go, internal/storeschema/floor_test.go, internal/updater/store_floor_test.go (finding A)
+      - internal/store/event_table_reads_test.go (findings B/F, E, G)
       - docs/evidence/fp1-event-table-journal-probe-2026-10-22.json
       - scripts/proofs/fp1-event-table-deploy2.sh
     rollback_ref: the setting off (live); git revert of the three red commits returns to deploy 1, which projects and reads every stamped op
