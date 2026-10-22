@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 )
@@ -352,30 +353,89 @@ func (s *Store) EventByDigest(ctx context.Context, computerID, eventDigest strin
 // event whose idempotency key starts with prefix — the sweep surface for
 // transition families that key each phase as <prefix><id>. A missing row is
 // absence, never an error.
+//
+// It reads the family by a range on the unique (computer_id,
+// idempotency_key) key, narrow columns only, picks the newest finalized
+// member in Go and then reads that one event. The earlier LIKE ... ORDER BY
+// sequence DESC LIMIT 1 walked every finalized event of the computer
+// newest-first and read event_json per row, and held the paper's engine for
+// minutes after every boot
+// (docs/problems/paper-unreachable-minutes-after-every-boot-2026-10-22.md).
 func (s *Store) LatestComputerEventByIdempotencyPrefix(ctx context.Context, computerID, prefix string) (computerevent.Event, bool, error) {
 	if s == nil || s.db == nil {
 		return computerevent.Event{}, false, fmt.Errorf("computer event projection: nil store")
 	}
-	var raw string
-	err := s.db.QueryRowContext(ctx, `SELECT event_json FROM computer_event_index WHERE computer_id=? AND status='finalized' AND idempotency_key LIKE ? ESCAPE '\\' ORDER BY sequence DESC LIMIT 1`, computerID, escapeLikePrefix(prefix)+"%").Scan(&raw)
-	if errors.Is(err, sql.ErrNoRows) {
+	query, args := idempotencyFamilySQL(computerID, prefix)
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return computerevent.Event{}, false, fmt.Errorf("computer event projection: read idempotency family: %w", err)
+	}
+	var latestDigest string
+	var latestSequence uint64
+	for rows.Next() {
+		var sequence uint64
+		var digest, status, key string
+		if err := rows.Scan(&sequence, &digest, &status, &key); err != nil {
+			_ = rows.Close()
+			return computerevent.Event{}, false, fmt.Errorf("computer event projection: scan idempotency family: %w", err)
+		}
+		// The range is exact under the column's binary collation; the
+		// prefix check keeps the result literal under any other.
+		if status != "finalized" || !strings.HasPrefix(key, prefix) {
+			continue
+		}
+		if latestDigest == "" || sequence > latestSequence {
+			latestDigest, latestSequence = digest, sequence
+		}
+	}
+	if err := rows.Close(); err != nil {
+		return computerevent.Event{}, false, err
+	}
+	if err := rows.Err(); err != nil {
+		return computerevent.Event{}, false, fmt.Errorf("computer event projection: read idempotency family: %w", err)
+	}
+	if latestDigest == "" {
 		return computerevent.Event{}, false, nil
 	}
+	event, found, err := s.EventByDigest(ctx, computerID, latestDigest)
 	if err != nil {
 		return computerevent.Event{}, false, fmt.Errorf("computer event projection: read latest event by idempotency prefix: %w", err)
 	}
-	event, err := computerevent.DecodeHistoricEvent([]byte(raw))
-	if err != nil {
-		return computerevent.Event{}, false, fmt.Errorf("computer event projection: decode event: %w", err)
-	}
-	return event, true, nil
+	return event, found, nil
 }
 
-// escapeLikePrefix quotes LIKE metacharacters so the caller's prefix is a
-// literal, never a pattern.
-func escapeLikePrefix(prefix string) string {
-	replacer := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
-	return replacer.Replace(prefix)
+// idempotencyFamilySQL is the range read of one idempotency-key family:
+// keys >= prefix and below the least string greater than every string that
+// starts with prefix (code-point order, which the binary collation keeps).
+func idempotencyFamilySQL(computerID, prefix string) (string, []any) {
+	const columns = `SELECT sequence, event_digest, status, idempotency_key FROM computer_event_index WHERE computer_id=? AND idempotency_key >= ?`
+	if upper, ok := prefixUpperBound(prefix); ok {
+		return columns + ` AND idempotency_key < ?`, []any{computerID, prefix, upper}
+	}
+	return columns, []any{computerID, prefix}
+}
+
+// prefixUpperBound returns the least string that sorts after every string
+// starting with prefix: prefix with its last incrementable rune incremented
+// (surrogates skipped) and what follows it dropped. ok is false when no rune
+// can be incremented (an empty prefix, or only U+10FFFF) or the prefix is not
+// UTF-8, and then the family is unbounded above.
+func prefixUpperBound(prefix string) (string, bool) {
+	if !utf8.ValidString(prefix) {
+		return "", false
+	}
+	runes := []rune(prefix)
+	for i := len(runes) - 1; i >= 0; i-- {
+		if runes[i] >= utf8.MaxRune {
+			continue
+		}
+		next := runes[i] + 1
+		if next >= 0xD800 && next <= 0xDFFF {
+			next = 0xE000
+		}
+		return string(runes[:i]) + string(next), true
+	}
+	return "", false
 }
 
 func (s *Store) EventReceiptByIdempotency(ctx context.Context, computerID, idempotencyKey string) (computerevent.Receipt, bool, error) {
