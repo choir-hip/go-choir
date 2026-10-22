@@ -138,6 +138,7 @@ func (s *Store) TakeAnnouncedActorWakes(ctx context.Context) ([]ActorWakeOutbox,
 			return nil, false, fmt.Errorf("decode actor wake outbox %s: %w", obj.CanonicalID, err)
 		}
 		wake.CanonicalID = obj.CanonicalID
+		wake.MintedAt = obj.UpdatedAt.UTC()
 		wakes = append(wakes, wake)
 	}
 	return wakes, false, nil

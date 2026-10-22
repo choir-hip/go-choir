@@ -497,7 +497,13 @@ type ActorWakeOutbox struct {
 	Kind           string    `json:"kind"`
 	Content        string    `json:"content"`
 	NotBefore      time.Time `json:"not_before,omitempty"`
-	CreatedAt      time.Time `json:"created_at"`
+	// CreatedAt is the source object's creation (an assignment's open, kept
+	// by every later version); the crash rule reads it (preBootWorkWake).
+	CreatedAt time.Time `json:"created_at"`
+	// MintedAt is when the source version that minted (or re-armed) this
+	// wake committed: the outbox row's updated_at, read from the row and
+	// never part of the body. Latency is measured from it.
+	MintedAt time.Time `json:"-"`
 }
 
 type actorWakeWorkAssignedContent struct {
@@ -572,6 +578,13 @@ func actorWakeOutboxFromWorkerUpdate(worker objectgraph.Object, resolver []objec
 // initial bound commit owes two — the run dispatch (the crash-gap repair for
 // the bind→activate window) and the progress-overdue deadline — so the return
 // is a slice and the caller mints each unprojected entry.
+// EngineeringAdmissionMailbox is the mailbox engineering admission's wakes
+// go to (agentcore.EngineeringAdmissionMailbox), the open commit's spawn wake
+// among them, so a request's first admission attempt does not wait for the
+// casting agent's turn to end
+// (docs/problems/fp4-actor-retry-no-backoff-wake-latency-spawn-mailbox-2026-10-22.md F3).
+const EngineeringAdmissionMailbox = "engineering-admission"
+
 func actorWakeOutboxFromObject(obj objectgraph.Object, objects []objectgraph.Object) ([]objectgraph.Object, error) {
 	switch obj.ObjectKind {
 	case ogKindWorkerUpdate:
@@ -639,13 +652,16 @@ func actorWakeOutboxFromObject(obj objectgraph.Object, objects []objectgraph.Obj
 		// and delegated casts share this wake; the handler re-reads durable
 		// state and derives objective/candidate from the work item/binding.
 		// The six-hour bound deadline is armed at bind, from bind time
-		// (armAssignedEngineeringDeadline), not here.
+		// (armAssignedEngineeringDeadline), not here. The wake goes to the
+		// admission mailbox, not the casting agent's: admission reads
+		// nothing of the caster's actor state, and on the caster's mailbox
+		// it waited for the casting turn to end.
 		if assignment.Disposition == types.EngineeringAssignmentOpen && assignment.LifecycleVersion == 1 {
 			spawnContent, spawnErr := json.Marshal(actorWakeEngineeringDeadlineContent{AssignmentID: assignment.AssignmentID, Attempt: assignment.Binding.Attempt})
 			if spawnErr != nil {
 				return nil, spawnErr
 			}
-			if err := appendWake(":spawn", assignment.Binding.ParentAgentID, "delegated_assignment_spawn_deadline", string(spawnContent), time.Time{}); err != nil {
+			if err := appendWake(":spawn", EngineeringAdmissionMailbox, "delegated_assignment_spawn_deadline", string(spawnContent), time.Time{}); err != nil {
 				return nil, err
 			}
 			return wakes, nil
@@ -870,6 +886,7 @@ func (s *Store) ListUnprojectedActorWakes(ctx context.Context) ([]ActorWakeOutbo
 			return nil, fmt.Errorf("decode actor wake outbox %s: %w", obj.CanonicalID, err)
 		}
 		wake.CanonicalID = obj.CanonicalID
+		wake.MintedAt = obj.UpdatedAt.UTC()
 		wakes = append(wakes, wake)
 	}
 	return wakes, nil

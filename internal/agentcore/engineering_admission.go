@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -36,9 +37,10 @@ import (
 // assignment ends, reading its report, so a wake on management's mailbox
 // waited for that run
 // (docs/problems/fp4-nudge-waits-behind-management-activation-2026-10-22.md).
-// The open-time spawn wake, minted by the store in the open commit, still
-// goes to the casting agent; the handler accepts both.
-const EngineeringAdmissionMailbox = "engineering-admission"
+// The open-time spawn wake, minted by the store in the open commit, goes
+// here too (store.EngineeringAdmissionMailbox); the handler still accepts a
+// wake on the casting agent's mailbox, minted before that move.
+const EngineeringAdmissionMailbox = store.EngineeringAdmissionMailbox
 
 // ErrEngineeringAdmissionBusy is the retryable refusal: the request waits.
 var ErrEngineeringAdmissionBusy = errors.New("engineering admission busy")
