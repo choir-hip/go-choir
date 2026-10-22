@@ -465,3 +465,49 @@ Residual: a guest cannot tell the host's marker from its apply's
 (one file, one unconditional DELETE). Clearing only the host's own
 marker would need the DELETE to match the reason or target it was
 written with, which is a guest change, not this script's.
+
+## Findings: review round 4 on the reboot script (bunch 120), 2026-10-22
+
+Sonnet review of lane tip 69c2d2515 (`_runs/bunch120/sonnet.out`):
+accept; the earlier findings are closed. New findings, recorded before
+any fix. Class: red.
+
+R1 (low-medium). **A 503 the guest sends before writing is cleared like
+a write.** `may_hold_marker` takes every status >= 500. The guest's two
+503s both come before `writeHostPlannedRestartMarker`
+(`HandleInternalPlannedRestart`, `internal/agentcore/planned_restart.go`):
+`{"error":"planned restart surface unavailable"}` and
+`{"error":"planned restart: <err>"}` when `plannedRestartBusy` cannot
+read its self-development operations or engineering assignments. That
+second 503 is the answer of a guest whose store is contended during an
+apply, so the clear can delete the apply's own marker (D1's case
+again). Only the handler's 500 follows a write attempt.
+
+R2 (low-medium). **An ssh exit 255 or timeout is always read as "the
+host went down".** ssh exits 255 both when the connection drops as the
+host goes down and when it never connected or authenticated
+(connection refused or timed out, MaxStartups, a key refused). In the
+second case the reboot was never sent. If `ssh_ok` then fails for the
+whole `--boot-timeout`, the run exits 4, which keeps the markers, so
+they stay armed for up to 15 minutes against a host that never
+rebooted. The runbook does not say that exit 4 leaves markers armed.
+
+R3 (low). **SIGHUP and SIGTERM skip every clear.** Only Python
+exceptions (KeyboardInterrupt included) reach the clear paths. If the
+operator's terminal or ssh session dies during the busy-wait or the
+final pass, the default SIGHUP action ends the process at once and the
+markers stay for 15 minutes with no reboot.
+
+R4 (low). A host still shutting down (VMs stopping, units waiting out
+their stop timeout, sshd still up) can answer with the old boot_id at
+`--down-wait` (300 s); the run then clears the markers and exits 3 while
+the host goes down, so every computer boots as a crash.
+
+R5 (low). The re-list comes before the final ask, which takes up to
+25 s per guest, so a computer that wakes or a held one that starts an
+apply during the ask is not seen. An asked computer that stopped during
+the wait answers `unavailable` in the final pass and blocks (fail
+closed, noisy).
+
+R6 (nit). A POST that timed out (status 0) can still reach the guest
+after the DELETE that follows it.
