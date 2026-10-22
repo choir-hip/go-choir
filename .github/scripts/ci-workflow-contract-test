@@ -115,6 +115,46 @@ fi
 
 require "$ci" 'needs: [plan, check]'
 
+# Report-only jobs wait for check, so they never hold one of the account's 20
+# runner slots while the gate shards and the deploy prebuild queue for one;
+# they still run when check fails (docs/problems/
+# ci-critical-path-race-shards-2026-10-22.md).
+govulncheck_segment="$(sed -n '/^  govulncheck:/,/^  doccheck:/p' "$ci")"
+npm_audit_segment="$(sed -n '/^  npm-audit:/,/^  deploy-impact:/p' "$ci")"
+for job in govulncheck npm-audit; do
+  segment="$govulncheck_segment"
+  [[ "$job" == npm-audit ]] && segment="$npm_audit_segment"
+  for pattern in \
+    'needs: [plan, check]' \
+    '!cancelled()' \
+    'continue-on-error: true'; do
+    grep -Fq -- "$pattern" <<<"$segment" || {
+      echo "report-only job contract missing in ${job}: $pattern" >&2
+      exit 1
+    }
+  done
+  if grep -Fq -- 'always()' <<<"$segment"; then
+    echo "report-only job ${job} must not outlive a cancelled run (use !cancelled())" >&2
+    exit 1
+  fi
+  if grep -Eq "(^|[ ,\[])${job}([],]|$)" <<<"$(grep -F 'needs:' <<<"$check_segment")"; then
+    echo "check must not wait on report-only job ${job}" >&2
+    exit 1
+  fi
+done
+
+# Shards 0..5 of 8 (0..1 of 4 in race.yml) run the split packages
+# (scripts/go-test-split-packages) and share one build-cache lane.
+go_test_segment="$(sed -n '/^  go-test:/,/^  go-test-runtime:/p' "$ci")"
+grep -Fq -- 'TOTAL_SHARDS: 8' <<<"$go_test_segment" || {
+  echo "go-test must run 8 non-runtime shards (the split lane covers shards 0-5)" >&2
+  exit 1
+}
+require "$ci" "lane: non-runtime-\${{ needs.plan.outputs.race_selected == 'true' && 'race' || 'standard' }}-\${{ matrix.shard < 6 && 'split' || matrix.shard }}"
+require "$race" "lane: non-runtime-race-\${{ matrix.shard < 2 && 'split' ||"
+reject "$ci" "'store'"
+reject "$race" "'store'"
+
 # The job, and the program it runs on Node B (.github/scripts/node-b-ci-prebuild,
 # read from the prebuilt commit; SEC-14). Each required pattern is checked in
 # the part that must hold it (bunch 33 item 4); the forbidden ones in both.
