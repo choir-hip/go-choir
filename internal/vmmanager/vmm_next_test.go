@@ -66,7 +66,7 @@ func TestLoadConfigFromEnv_FirecrackerNext(t *testing.T) {
 		t.Fatal("a 1.17 next build with VM_DATA_DISCARD on must allow discard")
 	}
 	if cfg.DataDiscard {
-		t.Fatal("the pinned 1.16.1 build must not allow discard")
+		t.Fatal("the pinned 1.16.2 build must not allow discard")
 	}
 	if !reflect.DeepEqual(cfg.DataDiscardOnly, []string{"class:test"}) {
 		t.Fatalf("DataDiscardOnly = %q", cfg.DataDiscardOnly)
@@ -93,14 +93,14 @@ func TestLoadConfigFromEnv_FirecrackerNext(t *testing.T) {
 func nextTestManager(t *testing.T, mutate func(*ManagerConfig)) *Manager {
 	t.Helper()
 	return balloonTestManager(t, func(c *ManagerConfig) {
-		c.FirecrackerBinPath = "/nix/store/a-firecracker-1.16.1/bin/firecracker"
+		c.FirecrackerBinPath = "/nix/store/a-firecracker-1.16.2/bin/firecracker"
 		c.FirecrackerNext = FirecrackerNextConfig{
 			BinPath:       "/nix/store/b-firecracker-1.17.0/bin/firecracker",
 			JailerBinPath: "/nix/store/b-firecracker-1.17.0/bin/jailer",
 			Only:          []string{"class:test"},
 			DataDiscard:   true,
 		}
-		c.Jailer.BinPath = "/nix/store/a-firecracker-1.16.1/bin/jailer"
+		c.Jailer.BinPath = "/nix/store/a-firecracker-1.16.2/bin/jailer"
 		if mutate != nil {
 			mutate(c)
 		}

@@ -127,7 +127,7 @@ func (m *Manager) cgroupRootDir() string {
 }
 
 // firecrackerAtLeast reports whether a `firecracker --version` banner
-// ("Firecracker v1.16.1") is at least major.minor. Anything it cannot
+// ("Firecracker v1.16.2") is at least major.minor. Anything it cannot
 // parse is "no".
 func firecrackerAtLeast(banner string, major, minor int) bool {
 	fields := strings.Fields(banner)
