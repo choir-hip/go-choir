@@ -10,11 +10,38 @@ set -euo pipefail
 # prebuild job. 90 GiB keeps ~30x headroom over observed build footprint.
 # The durable fix is host capacity, not a higher floor.
 min_free_kib="${DEPLOY_MIN_FREE_KIB:-94371840}"
+
+# Guard (docs/problems/node-b-nix-store-and-host-disk-policy-2026-10-22.md,
+# review round 2): the floor must sit above the min-free nix runs with *now*,
+# not the one this checkout will install at its switch. Below live min-free
+# plus 10 GiB (the margin the 90/80 GiB pair ran with), nix's auto-GC fires
+# inside the build and deletes its unrooted inputs (2026-09-17). So the floor
+# is the larger of the two; a nix.conf without a readable numeric min-free
+# fails closed to 90 GiB. This keeps a lowered floor safe if it lands with,
+# or outlives, the min-free change it depends on.
+fallback_floor_kib=94371840
+guard_margin_kib=10485760
+nix_conf="${PREFLIGHT_NIX_CONF:-/etc/nix/nix.conf}"
+if ! [[ "$min_free_kib" =~ ^[0-9]+$ ]]; then
+  min_free_kib="$fallback_floor_kib"
+fi
+live_min_free="$(awk -F'[[:space:]]*=[[:space:]]*' '$1 ~ /^[[:space:]]*min-free$/ {v = $2} END {print v}' "$nix_conf" 2>/dev/null || true)"
+if [[ "$live_min_free" =~ ^[0-9]+$ ]]; then
+  live_min_free_kib=$((live_min_free / 1024))
+  guard_floor_kib=$((live_min_free_kib + guard_margin_kib))
+else
+  echo "    cannot read min-free from ${nix_conf}; the floor is at least 90 GiB"
+  live_min_free_kib=unknown
+  guard_floor_kib="$fallback_floor_kib"
+fi
+if [ "$min_free_kib" -lt "$guard_floor_kib" ]; then
+  min_free_kib="$guard_floor_kib"
+fi
 avail_kib="$(df --output=avail -k / | tail -n 1 | tr -d ' ')"
 
 echo "==> Deploy disk preflight"
 df -h / /var/lib/go-choir 2>/dev/null || df -h /
-echo "    root_available_kib=${avail_kib} min_required_kib=${min_free_kib}"
+echo "    root_available_kib=${avail_kib} live_min_free_kib=${live_min_free_kib} min_required_kib=${min_free_kib}"
 
 if [ -n "$avail_kib" ] && [ "$avail_kib" -ge "$min_free_kib" ]; then
   echo "    Disk preflight ok"
@@ -46,6 +73,7 @@ df -h / /var/lib/go-choir 2>/dev/null || df -h /
 echo "    root_available_kib_after_reclaim=${avail_kib}"
 
 if [ -z "$avail_kib" ] || [ "$avail_kib" -lt "$min_free_kib" ]; then
-  echo "Deploy disk preflight failed: root filesystem still below required headroom" >&2
+  echo "Deploy disk preflight failed: root filesystem still below required headroom (${min_free_kib} KiB)" >&2
+  journalctl -u go-choir-host-disk-alarm -n 1 --no-pager >&2 || true
   exit 1
 fi

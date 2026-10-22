@@ -7,14 +7,17 @@
 # `nix store gc` itself; each caller does after it.
 #
 # What stays, and why:
-# - System generations: the newest NIX_RETENTION_KEEP_GENERATIONS (3: the
-#   current system, the previous one, which is the deploy rollback target in
-#   deploy-receipt-previous.json, and one spare for a two-step rollback), and
-#   the current generation wherever it is (after a rollback it is not the
-#   newest). The booted system is a GC root of its own (/run/booted-system).
-# - Builder releases under /var/lib/go-choir/builder/releases: the S2
-#   acceptance probe's out-links (scripts/s2_station_acceptance.sh, deleted
-#   2026-10-12). Nothing reads them now: corpusd's host-build service builds
+# - System generations: nix's own `nix-env --delete-generations +N` rule, with
+#   N = NIX_RETENTION_KEEP_GENERATIONS (3): every generation newer than the
+#   current one, the current one and the N-1 below it (the previous one is
+#   the deploy rollback target in deploy-receipt-previous.json; one spare for
+#   a two-step rollback). After a rollback the generations below the
+#   rolled-back current stay. The booted system is a GC root of its own
+#   (/run/booted-system).
+# - Builder releases under /var/lib/go-choir/builder/releases: out-links of
+#   ci.yml's app-layer release push (e527c1698, 2026-10-04, to a47122de0,
+#   2026-10-09) and of the S2 acceptance probe (scripts/s2_station_acceptance.sh,
+#   deleted 2026-10-12 in b9f195b1c). Nothing reads or writes them now: corpusd's host-build service builds
 #   under host-build/work and drops its own root, and guests replay the
 #   exported closure into their own store. The newest NIX_RETENTION_BUILDER_KEEP
 #   stay, and any younger than NIX_RETENTION_BUILDER_MIN_AGE_DAYS, and any
@@ -27,8 +30,9 @@
 #   (the service pointer is a copy whose binaries name store paths).
 #
 # GO_CHOIR_NIX_RETENTION_MODE: observe (default; any other value is logged and
-# read as observe) keeps the legacy behaviour, generations past the newest 4,
-# and logs what enforce would do; enforce applies the policy above.
+# read as observe) runs exactly the legacy `nix-env --delete-generations +4`
+# and logs what enforce would add; enforce runs `+N` and unroots builder
+# releases as above.
 # Fails closed: a step that cannot read its input deletes nothing.
 set -u
 
@@ -47,32 +51,36 @@ builder_min_age_days="${NIX_RETENTION_BUILDER_MIN_AGE_DAYS:-7}"
 store_prefix="${NIX_RETENTION_STORE_PREFIX:-/nix/store/}"
 protect="${NIX_RETENTION_PROTECT:-/run/current-system /run/booted-system /var/lib/go-choir/guest}"
 
-echo "nix retention: mode=$mode keep_generations=$keep builder_keep=$builder_keep builder_min_age_days=$builder_min_age_days"
+echo "nix retention: mode=$mode keep_generations=$keep builder_root=$builder_root builder_keep=$builder_keep builder_min_age_days=$builder_min_age_days"
 
 # ---- system generations --------------------------------------------------
 
-# gens_to_delete <keep> prints, space-separated, every generation except the
-# newest <keep> and the current one. Reads the listing from $listing.
-gens_to_delete() {
-  local k="$1"
-  printf '%s\n' "$listing" | awk -v k="$k" -v cur="$current" '
-    /^[[:space:]]*[0-9]+[[:space:]]/ { n[++c] = $1 }
+# deleted_by_plus <k> prints, oldest first, the generations
+# `nix-env --delete-generations +k` deletes: nix keeps every generation newer
+# than the current one, the current one and the k-1 below it, and deletes the
+# rest (deleteGenerationsGreaterThan). Only the log lines use this model; the
+# deletion itself is nix's own `+k`. Reads $listing and $current.
+deleted_by_plus() {
+  printf '%s\n' "$listing" | awk -v k="$1" -v cur="$current" '
+    /^[[:space:]]*[0-9]+[[:space:]]/ { n[++c] = $1 + 0 }
     END {
-      # newest first by number
-      for (i = 1; i <= c; i++) for (j = i + 1; j <= c; j++) if (n[j] + 0 > n[i] + 0) { t = n[i]; n[i] = n[j]; n[j] = t }
+      for (i = 1; i <= c; i++) for (j = i + 1; j <= c; j++) if (n[j] > n[i]) { t = n[i]; n[i] = n[j]; n[j] = t }
+      for (i = 1; i <= c && n[i] != cur + 0; i++) ;
       out = ""
-      for (i = k + 1; i <= c; i++) if (n[i] != cur) out = n[i] " " out
-      # oldest first
-      m = split(out, a, " "); s = ""
-      for (i = 1; i <= m; i++) if (a[i] != "") s = s (s == "" ? "" : " ") a[i]
-      print s
+      for (j = c; j >= i + k; j--) out = out (out == "" ? "" : " ") n[j]
+      print out
     }'
 }
 
 prune_generations() {
+  local valid_keep=true
   if ! [[ "$keep" =~ ^[0-9]+$ ]] || [ "$keep" -lt 2 ]; then
-    echo "nix retention: keep_generations=\"$keep\" refused (needs a number of at least 2: the current system and the rollback target); no generation deleted"
-    return 0
+    valid_keep=false
+    echo "nix retention: keep_generations=\"$keep\" refused (needs a number of at least 2: the current system and the rollback target)"
+    if [ "$mode" = enforce ]; then
+      echo "nix retention: no generation deleted"
+      return 0
+    fi
   fi
   if ! listing="$(nix-env -p "$profile" --list-generations 2>&1)"; then
     echo "nix retention: generations skipped: cannot list $profile"
@@ -83,29 +91,39 @@ prune_generations() {
     echo "nix retention: generations skipped: no current generation in the listing"
     return 0
   fi
-  local policy legacy apply
-  policy="$(gens_to_delete "$keep")"
-  legacy="$(gens_to_delete "$legacy_keep")"
+  local n deleted
   if [ "$mode" = enforce ]; then
-    apply="$policy"
+    n="$keep"
   else
-    apply="$legacy"
-    if [ "$policy" != "$legacy" ]; then
-      echo "nix retention: observe: would delete system generations: $(comm -23 <(tr ' ' '\n' <<<"$policy" | sort) <(tr ' ' '\n' <<<"$legacy" | sort) | sort -n | tr '\n' ' ' | sed 's/ $//') (keep $keep, current $current)"
+    n="$legacy_keep"
+    if [ "$valid_keep" = true ]; then
+      local extra
+      extra="$(comm -13 <(tr ' ' '\n' <<<"$(deleted_by_plus "$legacy_keep")" | sort) <(tr ' ' '\n' <<<"$(deleted_by_plus "$keep")" | sort) | sed '/^$/d' | sort -n | tr '\n' ' ' | sed 's/ $//')"
+      if [ -n "$extra" ]; then
+        echo "nix retention: observe: would delete system generations: $extra (keep $keep, current $current)"
+      fi
     fi
   fi
-  if [ -z "$apply" ]; then
-    echo "nix retention: no system generation to delete (current $current)"
+  deleted="$(deleted_by_plus "$n")"
+  if [ -z "$deleted" ]; then
+    echo "nix retention: no system generation to delete (nix-env +$n, current $current)"
     return 0
   fi
-  echo "nix retention: deleting system generations: $apply (current $current)"
-  # shellcheck disable=SC2086 # generation numbers, split on purpose
-  nix-env -p "$profile" --delete-generations $apply || echo "nix retention: nix-env --delete-generations failed"
+  echo "nix retention: deleting system generations (nix-env +$n): $deleted (current $current)"
+  nix-env -p "$profile" --delete-generations "+$n" || echo "nix retention: nix-env --delete-generations +$n failed"
 }
 
 # ---- builder-release GC roots ---------------------------------------------
 
 prune_builder_roots() {
+  case "$builder_root" in
+    /?*) ;;
+    *) echo "nix retention: builder roots refused: builder root \"$builder_root\" is not an absolute path below /"; return 0 ;;
+  esac
+  case "$builder_root/" in
+    *//*|*/./*|*/../*)
+      echo "nix retention: builder roots refused: builder root \"$builder_root\" is not a plain absolute path"; return 0 ;;
+  esac
   if [ ! -d "$auto_dir" ]; then
     echo "nix retention: builder roots skipped: no $auto_dir"
     return 0
@@ -147,11 +165,16 @@ prune_builder_roots() {
     esac
     echo "nix retention: root $link -> $target ($class)"
     if [ "$class" = builder-release ]; then
-      candidates+="$(stat -c %Y -- "$link")"$'\t'"$link"$'\n'
+      local mtime
+      if ! mtime="$(stat -c %Y -- "$link" 2>/dev/null)" || ! [[ "$mtime" =~ ^[0-9]+$ ]]; then
+        echo "nix retention: cannot stat $link; kept"
+        continue
+      fi
+      candidates+="$mtime"$'\t'"$link"$'\n'
     fi
   done
   [ -n "$candidates" ] || return 0
-  local i=0 mtime age
+  local i=0 age
   while IFS=$'\t' read -r mtime link; do
     [ -n "$link" ] || continue
     i=$((i + 1))

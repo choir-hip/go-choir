@@ -172,7 +172,8 @@ class DedupEstimate(unittest.TestCase):
         # A (5000 bytes) is over the cap: only C's duplicate counts, and the
         # skipped bytes are reported, not hidden.
         self.assertEqual(r["reclaimable_bytes"], self.size_c)
-        self.assertEqual(r["skipped_over_cap_files"], 4)
+        # a/x (and its hard link c/x), b/x, d/y: three distinct inodes
+        self.assertEqual(r["skipped_over_cap_files"], 3)
 
 
 if __name__ == "__main__":

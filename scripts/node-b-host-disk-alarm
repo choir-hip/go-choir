@@ -5,13 +5,17 @@
 # Read-only. The priority prefix carries the alarm (journald reads <N> on a
 # unit's stdout): <4> warning when free space is under the deploy floor or
 # unallocated space is under the metadata headroom line, <3> error under nix
-# min-free or 10 GiB unallocated, or when a reading fails; <6> otherwise, so
-# a missing line means the timer did not run. Always exits 0: a failed unit
-# is not the alarm. See alarms:
+# min-free or 10 GiB unallocated, or when a reading fails; <4> when the
+# metadata line cannot be read (metadata use is informational: unallocated
+# space is the alarm input for metadata headroom); <6> otherwise. Always
+# exits 0: a failed unit is not the alarm. Alarms only:
 #   journalctl -u go-choir-host-disk-alarm -p warning
+# Every reading, the <6> ones included (a missing quarter-hour line in this
+# view means the timer did not run):
+#   journalctl -u go-choir-host-disk-alarm
 set -u
 
-warn_free="${HOST_DISK_WARN_FREE_GIB:-48}"
+warn_free="${HOST_DISK_WARN_FREE_GIB:-56}"
 warn_unalloc="${HOST_DISK_WARN_UNALLOC_GIB:-20}"
 err_free="${HOST_DISK_ERR_FREE_GIB:-24}"
 err_unalloc="${HOST_DISK_ERR_UNALLOC_GIB:-10}"
@@ -31,14 +35,18 @@ if ! [[ "$unalloc" =~ ^[0-9]+$ ]]; then
   exit 0
 fi
 unalloc_gib=$((unalloc / GiB))
-meta="$(awk -F'[:, ]+' '/^Metadata,/ {for (i = 1; i <= NF; i++) { if ($i == "Size") s = $(i+1); if ($i == "Used") u = $(i+1) } } END { if (s > 0) printf "metadata %.0f%% of %.1f GiB", u * 100 / s, s / 1073741824; else print "metadata unknown" }' <<<"$usage")"
+meta="$(awk -F'[:, ]+' '/^Metadata,/ {for (i = 1; i <= NF; i++) { if ($i == "Size") s = $(i+1); if ($i == "Used") u = $(i+1) } } END { if (s > 0) printf "metadata %.0f%% of %.1f GiB", u * 100 / s, s / 1073741824 }' <<<"$usage")"
 
-facts="free ${free_gib} GiB, btrfs unallocated ${unalloc_gib} GiB, ${meta}"
 err="" warn=""
 [ "$free_gib" -lt "$err_free" ] && err+="free ${free_gib} GiB below ${err_free} GiB (nix min-free); "
 [ "$unalloc_gib" -lt "$err_unalloc" ] && err+="btrfs unallocated ${unalloc_gib} GiB below ${err_unalloc} GiB; "
 [ "$free_gib" -lt "$warn_free" ] && warn+="free ${free_gib} GiB below ${warn_free} GiB (the deploy floor); "
 [ "$unalloc_gib" -lt "$warn_unalloc" ] && warn+="btrfs unallocated ${unalloc_gib} GiB below ${warn_unalloc} GiB (metadata headroom); "
+if [ -z "$meta" ]; then
+  meta="metadata unknown"
+  warn="cannot read btrfs metadata use; ${warn}"
+fi
+facts="free ${free_gib} GiB, btrfs unallocated ${unalloc_gib} GiB, ${meta}"
 
 if [ -n "$err" ]; then
   echo "<3>host disk ERROR: ${err}${facts}"
