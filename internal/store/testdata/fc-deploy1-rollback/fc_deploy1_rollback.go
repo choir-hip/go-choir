@@ -25,12 +25,14 @@ import (
 // and the repair is forward (design section 4.5). It never reads
 // og_objects.
 func rollbackRecipeDropEmptyChoirEvents(db *sql.DB) error {
-	var name string
-	switch err := db.QueryRow(`SHOW TABLES LIKE 'choir_events'`).Scan(&name); {
-	case errors.Is(err, sql.ErrNoRows):
-		return nil // never created, or already dropped
-	case err != nil:
+	// An exact name: LIKE would read the underscore as a wildcard
+	// (round 1d, DeepSeek).
+	var tables int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'choir_events'`).Scan(&tables); err != nil {
 		return err
+	}
+	if tables == 0 {
+		return nil // never created, or already dropped
 	}
 	var one int
 	switch err := db.QueryRow(`SELECT 1 FROM choir_events LIMIT 1`).Scan(&one); {
