@@ -28,6 +28,13 @@ fails with TS2339 on the broken revision and passes on the fixed one. The repo
 has no frontend typecheck in CI; a `tsc`/svelte-check job with a tsconfig is a
 residual (it would first meet the 754 existing errors).
 
+Rebased 2026-10-22 (FP0 task) onto main a55660c0d, after the zot removal. One
+conflict, in `registry.ts` patch 1: kept main's deletion of the `super-console`
+entry (and the terminal surface), so the lane's `desk`->`menu` rename no longer
+touches it. Re-checked: `tsc --noEmit` on `registry.ts` passes, svelte-check still
+reports 754 errors in 17 files (unchanged), `pnpm build`, `go test -race
+./internal/appverbs` and `go vet` pass.
+
 Rollback: revert the four code commits; none touches state or a protected surface.
 Heresy delta: discovered none, introduced none, repaired none.
 
