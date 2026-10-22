@@ -141,3 +141,33 @@ probe).
    reads "reporting active" for a guest that reports nothing.
 
 Three further low findings in the same bunch are left as they are.
+
+### Disposition (fix 64dd73925; tests 2f6c4ab5b)
+
+1. **Fixed.** `first_reading` compares each window's first and last
+   samples and reads "undeterminable (no fc_rss_mib at the window's end,
+   ...)" when either end lacks host RSS or guest MemFree, and
+   "undeterminable (no samples)" for an empty window; a measured window
+   reads as before. The host-side match is `FC_RSS`/`firecracker_rss`; a
+   miss goes to the sample's `errors` column (so the CSV and the per-sample
+   log line carry it) naming the VM, the pattern (an argument equal to the
+   VM id or ending in `/<vm id>`) and how many firecracker processes were
+   seen; a matched process without VmRSS is named too. Command lines are
+   still never returned. Test: `python3 -I
+   scripts/test_fp8_memory_return_probe.py` (7 pass; 4 fail and 2 error
+   on 53cc7675a).
+2. **Fixed by deriving registration from a source that proves it.**
+   `registered` is now true only when `page_reporting_order` is in range
+   and `virtio_balloon` is bound with `VIRTIO_BALLOON_F_REPORTING` (bit 5)
+   negotiated. The balloon's probe registers page reporting when that
+   feature is negotiated and fails (leaving no bound device) if
+   registration fails, and it is the only reporting device a Firecracker
+   guest has. The JSON and CSV names are unchanged; the reportable total
+   still follows `registered`. Test:
+   `TestReadMemoryReturnBootArgOrderWithoutDeviceIsNotRegistered` (three
+   cases: reporting bit clear, no balloon, features too short), failing on
+   53cc7675a. Residual: the derivation trusts the balloon driver's probe
+   behaviour as read from the kernel source, not observed on 6.18.55.
+
+The three low findings in bunch 87 are left as they are (not part of this
+round's brief).
