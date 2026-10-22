@@ -15,6 +15,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/vocabmigrate"
 )
 
 type runAcceptanceSynthesizeInput struct {
@@ -227,7 +228,7 @@ func acceptanceAuthorityProfile(runs []types.RunRecord) string {
 		seen[role] = true
 		roles = append(roles, role)
 	}
-	return strings.Join(roles, " > ")
+	return strings.Join(roles, vocabmigrate.AuthorityPathSeparator)
 }
 
 func acceptanceGatewayProviderEvidence(rt *Runtime, events []types.EventRecord) string {

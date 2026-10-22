@@ -51,6 +51,33 @@ type Field struct {
 	Value string
 }
 
+// AuthorityPathSeparator joins the distinct desk roles of a trajectory into
+// a run acceptance's authority_profile ("texture > research"). The writer
+// (agentcore acceptanceAuthorityProfile) and the fence split on this one
+// constant.
+const AuthorityPathSeparator = " > "
+
+// AuthorityPathFields presents an authority path to the fence one role per
+// field, so every part must be a live role and a retired role inside a path
+// is still refused. A path with an empty part is presented whole, which the
+// fence refuses: the fence skips empty values, so forwarding an empty part
+// would pass " >  > "
+// (docs/problems/run-acceptance-refused-by-vocab-fence-on-multi-desk-trajectory-2026-10-22.md).
+func AuthorityPathFields(key, path string) []Field {
+	if strings.TrimSpace(path) == "" {
+		return []Field{{Key: key, Value: path}}
+	}
+	parts := strings.Split(path, AuthorityPathSeparator)
+	fields := make([]Field, 0, len(parts))
+	for _, part := range parts {
+		if strings.TrimSpace(part) == "" {
+			return []Field{{Key: key, Value: path}}
+		}
+		fields = append(fields, Field{Key: key, Value: part})
+	}
+	return fields
+}
+
 // VerifyServingVocabulary refuses when any field falls outside the active
 // vocabulary. Frozen-protocol values pass under both vocabularies. The
 // returned error names the first offending field.
