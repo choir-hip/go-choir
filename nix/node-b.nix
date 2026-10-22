@@ -45,6 +45,9 @@ let
   # starts only when this is true. Enable it after the first run has been
   # watched end to end.
   platformDoltSquashTimerEnabled = false;
+  # Store A snapshot switch (PLATFORM_DOLT_SNAPSHOTS=commit|off), read by
+  # corpusd and checkpointd; see the corpusd unit.
+  platformDoltSnapshotsEnv = "/var/lib/go-choir/platform-dolt-snapshots.env";
   platformDoltSquashBackupRoot = "/var/lib/go-choir/platform-dolt-squash-backups";
   corpusDoltDir = "/var/lib/go-choir/corpus-dolt";
   corpusDoltDBDir = "${corpusDoltDir}/corpus";
@@ -1238,6 +1241,13 @@ in
         # back to the window of its newest captures. Absent: the routes
         # answer.
         (unitEnvFile "corpusd-retrieval.env")
+        # Store A snapshot switch, flippable without a deploy
+        # (docs/problems/platform-dolt-oldgen-rate-and-squash-window-2026-10-22.md):
+        # PLATFORM_DOLT_SNAPSHOTS=off here stops Store A's DOLT_COMMIT
+        # snapshots, which nothing reads and which keep every changed row in
+        # oldgen. Restart corpusd after writing it; checkpointd reads the same
+        # file at its next run. Absent: snapshots as before.
+        "-${platformDoltSnapshotsEnv}"
       ];
       Environment = [
         "SERVER_HOST=0.0.0.0"
@@ -1347,7 +1357,7 @@ in
       StateDirectoryMode = "0700";
       ReadWritePaths = [ platformArtifactsDir "/var/lib/go-choir/checkpointd" ];
       InaccessiblePaths = hiddenSecretsExcept [ "platformSigningKey" "escrowKey" ];
-      EnvironmentFile = [ (unitEnvFile "corpus-dsn.env") ];
+      EnvironmentFile = [ (unitEnvFile "corpus-dsn.env") "-${platformDoltSnapshotsEnv}" ];
       LoadCredential = doltClientCredential;
       Environment = doltClientEnv ++ [
         "HOME=/var/lib/go-choir/checkpointd"
