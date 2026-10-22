@@ -85,6 +85,8 @@ type fakeFirecrackerAPI struct {
 	// sparse memory file a Diff create writes (4 KiB of data at offset 0).
 	failDiff bool
 	diffLen  int64
+	// onCall, when set, runs first for every request (outside the lock).
+	onCall func(method, path string)
 }
 
 func (f *fakeFirecrackerAPI) hostPath(p string) string {
@@ -98,6 +100,9 @@ func (f *fakeFirecrackerAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var body map[string]any
 	raw, _ := io.ReadAll(r.Body)
 	_ = json.Unmarshal(raw, &body)
+	if f.onCall != nil {
+		f.onCall(r.Method, r.URL.Path)
+	}
 	f.mu.Lock()
 	f.calls = append(f.calls, fcCall{Method: r.Method, Path: r.URL.Path, Body: body})
 	fail := f.failPath == r.URL.Path
@@ -107,6 +112,11 @@ func (f *fakeFirecrackerAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	f.mu.Unlock()
 	if fail {
+		if diff {
+			// Firecracker may have created the file before failing.
+			mem, _ := body["mem_file_path"].(string)
+			writeSparseMem(f.hostPath(mem), f.diffLen)
+		}
 		w.WriteHeader(http.StatusBadRequest)
 		_, _ = w.Write([]byte(`{"fault_message":"injected failure"}`))
 		return

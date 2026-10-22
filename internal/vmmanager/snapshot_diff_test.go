@@ -44,7 +44,12 @@ type diffFixture struct {
 
 func newDiffFixture(t *testing.T) *diffFixture {
 	t.Helper()
-	f := newSnapshotFixture(t)
+	return armDiff(t, newSnapshotFixture(t))
+}
+
+// armDiff turns on every L3a condition for f's VM.
+func armDiff(t *testing.T, f *snapshotFixture) *diffFixture {
+	t.Helper()
 	f.mgr.cfg.SnapshotType = SnapshotTypeConfigDiff
 	f.mgr.cfg.SnapshotDiffOnly = []string{"computer-s3"}
 	f.fc.diffLen = int64(f.cfg.MachineMemSizeMib) << 20
@@ -396,6 +401,7 @@ func TestValidateSnapshotDiffRules(t *testing.T) {
 		d.mgr.mu.Lock()
 		d.inst.Config.MemoryHotplugMiB = 4
 		d.mgr.mu.Unlock()
+		d.launchWithHotplugDevice(t)
 		d.fc.diffLen = int64(d.cfg.MachineMemSizeMib+4) << 20
 		meta, _ := d.hibernateAndRead(t)
 		if got := d.mgr.diffSnapshotRefusalReason(d.mgr.snapshotDir(d.vmID), meta); got != "" {
@@ -474,5 +480,209 @@ func TestDiffSnapshotConfigFromEnv(t *testing.T) {
 	t.Setenv("VM_SNAPSHOT_TYPE", "sparse")
 	if cfg = LoadConfigFromEnv(); cfg.SnapshotType != SnapshotTypeConfigFull {
 		t.Fatalf("an unknown value must read as full, got %q", cfg.SnapshotType)
+	}
+}
+
+// launchWithHotplugDevice rewrites the fixture's fc-config.json with a
+// virtio-mem device, as a launch with MemoryHotplugMiB > 0 writes it.
+func (d *diffFixture) launchWithHotplugDevice(t *testing.T) {
+	t.Helper()
+	path := filepath.Join(d.mgr.vmStateDir(d.vmID), "fc-config.json")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	cfg["memory-hotplug"] = map[string]any{"total_size_mib": 4, "block_size_mib": 2, "slot_size_mib": 2}
+	out, _ := json.Marshal(cfg)
+	if err := os.WriteFile(path, out, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// countVersionExecs makes the fake Firecracker binary count its --version
+// runs, and returns a reader of the count.
+func countVersionExecs(t *testing.T, mgr *Manager) func() int {
+	t.Helper()
+	counter := filepath.Join(mgr.cfg.StateDir, "version-execs")
+	script := "#!/bin/sh\necho x >> '" + counter + "'\necho '" + testFCVersion + "'\n"
+	if err := os.WriteFile(mgr.cfg.FirecrackerBinPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return func() int {
+		raw, _ := os.ReadFile(counter)
+		return strings.Count(string(raw), "x")
+	}
+}
+
+// Round 2, F2: no hibernate runs `firecracker --version` while the guest is
+// paused: never in full mode (the paper's case), and in diff mode the
+// decision is taken before the pause.
+func TestHibernateNeverExecsVersionInsideThePause(t *testing.T) {
+	for _, mode := range []string{SnapshotTypeConfigFull, SnapshotTypeConfigDiff} {
+		t.Run(mode, func(t *testing.T) {
+			d := newDiffFixture(t)
+			d.mgr.cfg.SnapshotType = mode
+			execs := countVersionExecs(t, d.mgr)
+			atPause, atCreate := -1, -1
+			d.fc.onCall = func(method, path string) {
+				switch method + " " + path {
+				case "PATCH /vm":
+					atPause = execs()
+				case "PUT /snapshot/create":
+					if atCreate < 0 {
+						atCreate = execs()
+					}
+				}
+			}
+			meta, _ := d.hibernateAndRead(t)
+			if atPause < 0 || atCreate < 0 {
+				t.Fatalf("pause or create not seen: %d %d", atPause, atCreate)
+			}
+			if atCreate != atPause {
+				t.Fatalf("%d version exec(s) ran inside the pause", atCreate-atPause)
+			}
+			want := map[string]string{SnapshotTypeConfigFull: "Full", SnapshotTypeConfigDiff: "Diff"}[mode]
+			if meta.SnapshotType != want {
+				t.Fatalf("type = %q, want %q", meta.SnapshotType, want)
+			}
+		})
+	}
+	t.Run("full mode never execs for the Diff decision", func(t *testing.T) {
+		d := newDiffFixture(t)
+		d.mgr.cfg.SnapshotType = SnapshotTypeConfigFull
+		execs := countVersionExecs(t, d.mgr)
+		d.hibernateAndRead(t)
+		// One exec only: the meta's firecracker_version, after the stop.
+		if n := execs(); n != 1 {
+			t.Fatalf("version execs = %d, want 1 (the meta's)", n)
+		}
+	})
+}
+
+// Round 2, F1: Firecracker set_len()s a Diff file, so the reachable length
+// mismatch is the shape (a hotplug region vmctl selected but the launch
+// omitted, or the reverse). The shape is checked before the pause; the
+// length after the create; either falls back to Full in the same pause.
+func TestDiffSnapshotShapeAndLengthCheckedAtCreate(t *testing.T) {
+	t.Run("length mismatch after create", func(t *testing.T) {
+		d := newDiffFixture(t)
+		d.fc.diffLen = int64(d.cfg.MachineMemSizeMib) << 19
+		meta, tl := d.hibernateAndRead(t)
+		if got := strings.Join(d.fc.createTypes(), ","); got != "Diff,Full" {
+			t.Fatalf("create types = %s, want Diff,Full", got)
+		}
+		if got := strings.Count(strings.Join(d.fc.paths(), ","), "PATCH /vm"); got != 1 {
+			t.Fatalf("pauses = %d, want 1", got)
+		}
+		if meta.SnapshotType != "Full" || tl.Snapshot.DiffRefused != diffRefusedLengthAtCreate {
+			t.Fatalf("meta type=%q refused=%q", meta.SnapshotType, tl.Snapshot.DiffRefused)
+		}
+	})
+	t.Run("hotplug selected, device omitted", func(t *testing.T) {
+		d := newDiffFixture(t)
+		d.mgr.mu.Lock()
+		d.inst.Config.MemoryHotplugMiB = 4
+		d.mgr.mu.Unlock()
+		meta, tl := d.hibernateAndRead(t)
+		if got := strings.Join(d.fc.createTypes(), ","); got != "Full" || meta.SnapshotType != "Full" {
+			t.Fatalf("create types = %s meta=%q, want Full", got, meta.SnapshotType)
+		}
+		if tl.Snapshot.DiffRefused != diffRefusedHotplugShape {
+			t.Fatalf("refusal = %q", tl.Snapshot.DiffRefused)
+		}
+	})
+	t.Run("device present, no hotplug selected", func(t *testing.T) {
+		d := newDiffFixture(t)
+		d.launchWithHotplugDevice(t)
+		meta, tl := d.hibernateAndRead(t)
+		if meta.SnapshotType != "Full" || tl.Snapshot.DiffRefused != diffRefusedHotplugShape {
+			t.Fatalf("meta type=%q refused=%q", meta.SnapshotType, tl.Snapshot.DiffRefused)
+		}
+	})
+}
+
+// Round 2, F4: a Diff snapshot loads only while the lever still selects its
+// computer. Turning the lever off (the rollback) cold boots a pending Diff.
+func TestDiffSnapshotRefusedAtLoadWhenLeverOff(t *testing.T) {
+	cases := map[string]func(d *diffFixture){
+		"type full":      func(d *diffFixture) { d.mgr.cfg.SnapshotType = SnapshotTypeConfigFull },
+		"list emptied":   func(d *diffFixture) { d.mgr.cfg.SnapshotDiffOnly = nil },
+		"other computer": func(d *diffFixture) { d.mgr.cfg.SnapshotDiffOnly = []string{"computer-other"} },
+	}
+	for name, off := range cases {
+		t.Run(name, func(t *testing.T) {
+			d := newDiffFixture(t)
+			if meta, _ := d.hibernateAndRead(t); meta.SnapshotType != "Diff" {
+				t.Fatalf("type = %q", meta.SnapshotType)
+			}
+			off(d)
+			started := false
+			d.mgr.firecrackerStarter = func(string, []string) error { started = true; return nil }
+			_, err := d.mgr.ResumeVMFromSnapshot(d.vmID, d.expect, nil)
+			var fb *SnapshotFallbackError
+			if !errors.As(err, &fb) || fb.Reason != snapshotReasonDiffLeverOff {
+				t.Fatalf("resume = %v, want %s", err, snapshotReasonDiffLeverOff)
+			}
+			if started {
+				t.Fatal("a Diff with the lever off must never start Firecracker")
+			}
+		})
+	}
+}
+
+// Round 2, F5: a jailed Diff create error removes what Firecracker wrote in
+// the jail before the Full create.
+func TestJailedDiffCreateErrorClearsJailPartial(t *testing.T) {
+	jf := newJailedSnapshotFixture(t)
+	d := armDiff(t, jf.snapshotFixture)
+	d.fc.failDiff = true
+	jailMem := filepath.Join(d.mgr.jailRoot(d.vmID), snapshotPartialDirName, snapshotMemName)
+	creates, leftover := 0, false
+	d.fc.onCall = func(method, path string) {
+		if path != "/snapshot/create" {
+			return
+		}
+		creates++
+		if creates == 2 {
+			if _, err := os.Stat(jailMem); err == nil {
+				leftover = true
+			}
+		}
+	}
+	if err := d.mgr.HibernateVM(d.vmID); err != nil {
+		t.Fatalf("HibernateVM: %v", err)
+	}
+	if got := strings.Join(d.fc.createTypes(), ","); got != "Diff,Full" {
+		t.Fatalf("create types = %s", got)
+	}
+	if leftover {
+		t.Fatal("the failed Diff's memory file was still in the jail at the Full create")
+	}
+	meta, err := readSnapshotMeta(d.mgr.snapshotDir(d.vmID))
+	if err != nil || meta.SnapshotType != "Full" || meta.Confinement != ConfinementJailer {
+		t.Fatalf("meta = %+v, %v", meta, err)
+	}
+}
+
+// Round 2, F6: the wake's timeline names the image it loaded.
+func TestDiffResumeTimelineRecordsImageType(t *testing.T) {
+	d := newDiffFixture(t)
+	d.hibernateAndRead(t)
+	restoreAPI := &fakeFirecrackerAPI{}
+	var args []string
+	d.restoreStarter(t, restoreAPI, &args)
+	if _, err := d.mgr.ResumeVMFromSnapshot(d.vmID, d.expect, nil); err != nil {
+		t.Fatalf("resume: %v", err)
+	}
+	tl, err := d.mgr.BootTimelineForVM(d.vmID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tl.Snapshot == nil || tl.Snapshot.SnapshotType != "Diff" || !tl.Snapshot.ColdOrigin {
+		t.Fatalf("resume timeline snapshot = %+v", tl.Snapshot)
 	}
 }
