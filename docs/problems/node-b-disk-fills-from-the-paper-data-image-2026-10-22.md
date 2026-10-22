@@ -39,7 +39,18 @@ Date: 2026-10-22, 14:40 UTC. Found by: FP0, when deploy R (main 0bf8a097d, CI 39
   `dolt-backup-20261015-pre-2.4.2` 48.5 GB, swap file 16 GiB (its removal
   waits on tonight's backup proof), corpus-dolt 6.3 GB, builder 5.8 GB.
 
-## Projection with no action (from Evidence 2)
+## Evidence 3: the early compaction (15:35 UTC, owner approval)
+
+The owner approved an early by-hand compaction of the paper. FP0's
+evidence: at 15:35 the store went from 33,020,774,378 to 14,451,421,725
+bytes in 6m11s, root hash unchanged; the paper's host state dir went to
+45.5 GiB, and host free space to about 125 GiB. This is the measurement the
+compaction floor is set from (§ The host free-space floor). The projection
+below was taken before it and no longer describes tonight; the refill rate
+(about 140 MiB a minute for the paper) still holds, so the image climbs
+back toward its cap over the following day.
+
+## Projection with no action (from Evidence 2, before Evidence 3)
 
 - The paper's image stops growing at its cap (about 20:30 UTC), which takes
   about 140 MiB/min off the fall; platform-dolt keeps growing about 45 MiB/min
@@ -87,7 +98,8 @@ The paper's Dolt journal grows about 1.6 GiB per 10 minutes (docs/problems/paper
 
 ## Pressure trigger design
 
-Status: design, before code (lane fp0-disk-pressure). Mutation class: red
+Status: built (ca135c22b), revised after FP0's round 2 review
+(5c6b59894; § Round 2 below). Mutation class: red
 (VM lifecycle: it restarts the paper). It adds a second caller of the
 existing compaction; it does not add a compaction path.
 
@@ -99,22 +111,36 @@ on the VM state dir's filesystem (statfs, `Bavail`) and, for each active,
 unheld interactive **platform** computer (critical_protected,
 public_platform: the sweep's own selection, `selectStoreCompaction` with no
 size threshold), its data image `FileBytes` and `CapBytes`. A computer is
-**due** when either:
+**due** when its image holds at least
+`VMCTL_STORE_COMPACT_PRESSURE_MIN_IMAGE_GIB` (default 32 GiB, the timer's
+own minimum) and either:
 
 - host free < `VMCTL_STORE_COMPACT_PRESSURE_HOST_FREE_GIB` (default 64 GiB), or
 - `FileBytes` >= `VMCTL_STORE_COMPACT_PRESSURE_FILL_FRACTION` x `CapBytes`
-  (default 0.6; the paper at 15:00 is about 0.64).
+  (default 0.6). The paper at 14:40 was 0.602 by vmctl's own numbers
+  (82,721,660,928 of 137,438,953,472); the 0.64 written here before mixed
+  FP0's `du` figure with the guest's 125.7 GiB. So the paper was right at
+  the threshold, not above it.
 
-A due computer is **rate-limited** when its last compaction attempt (any
-caller: this loop, the 04:00 timer, or a by-hand `compact-store`) is less
-than `VMCTL_STORE_COMPACT_PRESSURE_MIN_GAP` (default 6h) ago. The last
-attempt is persisted (`store-compact-attempts.json` beside the ownership
-state) and written in the maintenance hook, after the guest accepted the
-planned restart and before the compaction, so a vmctl crash mid-compaction
-still counts and a restarted vmctl cannot compact again at once. An
-unreadable attempts file refuses every pressure compaction (fail closed)
-and says so. Guest refusals (busy, did not answer) are not attempts: they
-cost a planned-restart request and are asked again at the next tick.
+**The gap, for every caller** (round 2): `compactStore` refuses (429,
+`skipped`, "last compaction attempt …, next after …") when the computer's
+last attempt (by this loop, the 04:00 timer, or by hand) is less than
+`VMCTL_STORE_COMPACT_PRESSURE_MIN_GAP` (default 6h, read even when the loop
+is off) ago. When the last compaction gave back less than 8 GiB of host
+allocation, the gap is four times longer (24 h). A by-hand
+`{"force": true}` passes the gap; nothing else does. The sweep reports a
+computer inside its gap as skipped and does not fail.
+
+The attempt is persisted (`store-compact-attempts.json` beside the
+ownership state): `{vm_id: {at, file_bytes_before, file_bytes_after}}`.
+Before the guest is asked, `compactStore` rewrites the record as it is and
+refuses (507) if it cannot; inside the maintenance hook (the VM is down)
+the attempt is kept in memory first and then written, and a write failure
+there is logged and does not stop the compaction. An unreadable record
+(including JSON `null`, an array, a number or truncated JSON) refuses
+every pressure compaction; the next successful write by the timer or by
+hand keeps it as `<path>.corrupt` and clears the error. Guest refusals
+(busy, did not answer) are not attempts.
 
 Modes, `VMCTL_STORE_COMPACT_PRESSURE`:
 
@@ -130,22 +156,47 @@ Everything the compaction already refuses is unchanged and inherited:
 held, not active, divergent, one refresh per computer at a time, one
 compaction at a time, and the guest's refusal during a self-development
 apply or while an engineering capsule is live (CLAUDE.md "Restarts End
-Work"). The 04:00 timer stays as it is.
+Work"). Two things change for the 04:00 timer: the gap and the floor
+apply to it, and a floor refusal fails its unit. A compaction never
+crash-boots: a guest that cannot write the planned-restart marker defers
+it (a plain deploy refresh of an idle legacy guest is unchanged).
 
 ### The host free-space floor (all callers)
 
 `compactStore` refuses before it asks the guest for a planned restart when
 host free space is below `VMCTL_STORE_COMPACT_MIN_HOST_FREE_GIB` (default
-32 GiB; `0` turns the floor off). The reflink copy shares the original's
-extents, but every block the compaction writes in the copy (the squashed
-store and its GC output, up to the live store size: 12 to 28 GiB for the
-paper today) is new host allocation until the rename drops the original.
-Running it without that room fills the root disk and stops every service.
+**24 GiB**; `0` turns the floor off), or when free space cannot be read.
+
+What the compaction writes (read in `internal/projectionbase/squash.go`):
+a squash commit (small), then `DOLT_GC('--full', '--archive-level', '0',
+'--incremental-file-size', 256 MiB)`, which writes one new copy of every
+reachable chunk, that is the compacted store, before it drops the old
+files. The copy is a reflink of the original, so the old files' blocks are
+shared and freeing them in the copy (and its `fstrim`) frees nothing on
+the host until the rename drops the original. Peak new host allocation is
+therefore about the compacted store's size, not the live size the guest
+reports: 14.45 GB (13.5 GiB) at 15:35 today. The floor is that plus about
+10 GiB for the live set's growth (12.1 GB this morning, 14.45 GB this
+afternoon), ext4 and btrfs metadata, and the rest of the host writing
+during the run's six minutes (platform-dolt about 45 MiB a minute).
+
+Why not 32 or 40 (the reviews): 32 was set from the live size (12 to 28
+GiB) as if the GC wrote it; it writes the compacted size. 40 adds headroom
+for a 28 GiB write that does not happen. Why not 0 to 16: 16 is barely
+above one 13.5 GiB write. A per-caller split (lower for the timer) was
+rejected: the write is the same whichever caller runs it.
+
 The refusal answers `skipped` with the reason
-`host free <n> GiB below the compaction floor <m> GiB; the compaction needs room for the compacted copy`,
-applies to the timer, the by-hand call and the pressure loop, and never
-restarts the computer. It is a new refusal on the existing timer path:
-fail closed.
+`host free <n> GiB below the compaction floor <m> GiB; the compaction needs room for the compacted copy`
+and never restarts the computer. **It is loud for the timer:** a sweep
+with a floor refusal (or an unwritable attempts record) answers HTTP 507,
+`curl --fail-with-body` fails `go-choir-store-compaction.service`, the
+journal carries the body, and vmctl logs
+`store compaction sweep refused <vm> …`.
+
+Not measured: btrfs unallocated space. `statfs` `Bavail` can look healthy
+while metadata chunks cannot grow (the 2026-10-16 incident); vmctl does not
+read `btrfs filesystem usage`. Named residual.
 
 ### Failure modes, written before the code
 
@@ -154,8 +205,8 @@ fail closed.
 2. vmctl crash or restart during or right after a pressure compaction:
    the attempt was persisted before the compaction; the gap holds.
 3. The attempts file cannot be read or written: no pressure compaction;
-   the write failure fails the maintenance hook, so the computer boots its
-   untouched image (the existing failure path).
+   an unwritable record refuses before the guest is asked (round 2; the
+   first build failed the hook after the kill, a restart for nothing).
 4. A compaction while the host has no room for the copy: the floor refuses
    first, for every caller.
 5. A self-development apply or a live capsule: the guest refuses the
@@ -232,7 +283,7 @@ brings back mid-build GC deletions**: every build on a host with less than
   exhaustion, and only to 40 GiB).
 - `DEPLOY_MIN_FREE_KIB` = 48 GiB: after a deploy's footprint (bound 8),
   40 GiB remain, above both nix's `min-free` (24) and the store compaction
-  floor (32). A deploy then never starts a build that crosses `min-free`,
+  floor (24). A deploy then never starts a build that crosses `min-free`,
   and never takes the room the compaction needs.
 - Order: lower `min-free` first (it ships in the deploy itself, so it
   applies after the switch), then the preflight floor in the next commit.
@@ -247,31 +298,59 @@ Built on lane `lane/fp0-disk-pressure` (`internal/vmctl/store_compaction_pressur
 nix sets `VMCTL_STORE_COMPACT_PRESSURE=observe`). After the deploy:
 
 1. vmctl's start line: `journalctl -u go-choir-vmctl | grep 'store compaction pressure mode='`
-   shows `mode=observe interval=5m0s host_free_below=68719476736 fill_fraction=0.60 min_gap=6h0m0s attempts="/var/lib/go-choir/vm-state/store-compact-attempts.json"`.
-2. Within 5 minutes, with the paper's image at or above 60% of its cap:
+   shows `mode=observe interval=5m0s host_free_below=68719476736 fill_fraction=0.60 min_image=34359738368 min_gap=6h0m0s attempts="/var/lib/go-choir/vm-state/store-compact-attempts.json"`.
+2. Within 5 minutes, with the paper's image at least 32 GiB and at or
+   above 60% of its cap (after the 15:35 compaction that is some hours
+   away; host free about 125 GiB will not trigger):
    `vmctl: store compaction pressure (observe): would compact vm-1669020a… (computer …): reason="data image NN% of cap (X GiB of 125.x GiB) >= 60%[; host free Y GiB below 64.0 GiB]" host_free=Y GiB`.
-   If host free is under 32 GiB the line is `refused … the compaction needs room for the compacted copy` instead.
+   If host free is under 24 GiB the line is `refused … the compaction needs room for the compacted copy` instead;
+   within 6 h of the 15:35 compaction (if it was recorded; it predates
+   this code, so it was not) the line is `rate-limited …`.
 3. No action: no `store-compaction` planned-restart marker request in the
    paper's journal, no `vmctl: store compaction vm-…` outcome line, the
-   paper's boot epoch unchanged, and no `store-compact-attempts.json` written.
+   paper's boot epoch unchanged. Observe never writes
+   `store-compact-attempts.json`; the 04:00 timer's run (or a by-hand
+   call) creates it.
 4. Only then, by an owner/FP0 decision: `VMCTL_STORE_COMPACT_PRESSURE=on`
    (a nix change and deploy). The first `on` tick compacts the paper as a
    planned restart (`outcome=refreshed`, `planned_restart: true`), writes the
    attempts record, and later ticks log `rate-limited … next after …` for 6 h.
 
-The floor applies now to the 04:00 timer as well: a timer run under 32 GiB
-free reports the paper `skipped` with the floor reason in
-the sweep's response (the by-hand `compact-store` answers HTTP 507) and does not restart the paper.
+5. The timer's floor refusal, if host free is ever under 24 GiB at 04:00:
+   `systemctl status go-choir-store-compaction` failed, its journal holding
+   the 507 body with the floor reason.
+
+## Round 2 (FP0's review of 4515538eb; fixes 8873d9c52 tests, 5c6b59894 code)
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | JSON `null` record: nil map, `record` panics in the hook after the kill, paper left down | Fixed: null/array/number/truncated are load errors; no write into a nil map; tick under `recover` |
+| 2 | Unwritable record: a planned restart with no compaction, every mode | Fixed: rewrite check before the guest is asked (507); in the hook the attempt is kept in memory and the compaction proceeds |
+| 3 | Floor 32 GiB unmeasured, timer refusal silent | Fixed: 24 GiB from the measured compacted-copy write (above); timer refusal is HTTP 507, unit fails |
+| 4 | Host-free trigger restarts tiny images every 6 h; no back-off | Fixed: 32 GiB minimum image; under 8 GiB reclaimed makes the next gap 24 h |
+| 5 | Gap only in the pressure loop | Fixed: in `compactStore` for every caller; by-hand `force` passes it |
+| 6 | Legacy guest + idle `/health` crash-boots with maintenance | Fixed: deferred when maintenance is set |
+| 7 | No coordination with a deploy build | Residual: vmctl has no host signal for a build in flight (CI serializes with GitHub concurrency groups; no host lock). A pressure compaction (up to about 14 GiB written) during a deploy build can still push free space under nix `min-free`. Next step if it matters: the deploy writes a host marker file vmctl reads |
+| 8 | Corrupt record's error sticky | Fixed: next successful write keeps `<path>.corrupt` and clears it |
+| 9 | Surviving mutants M8, M9d, M11/M12, M13, M16b | Fixed: one test each |
+| 10 | Nits | 0.602 corrected; timer-change contradiction removed; doc comment restored; `compaction_error` in the log; interval minimum 30 s; full rollback stated; the yellow commits 0eef6382c and 8873d9c52 are compile-red until their code commit; round 1 added 15 test functions, not 16 |
+
+Full runtime rollback: `VMCTL_STORE_COMPACT_PRESSURE=off` and
+`VMCTL_STORE_COMPACT_MIN_HOST_FREE_GIB=0`. The gap then still applies to
+the daily timer (harmless at one run a day); reverting 5c6b59894 and
+ca135c22b removes it.
 
 ## Now (lane fp0-disk-pressure, 2026-10-22)
 
 - Done: evidence and projection; platform-dolt oldgen record; trigger
   design; tests; trigger built (observe on staging via nix); deploy-floor
-  proposal (docs only).
+  proposal (docs only); round 2 review findings fixed (7 is a residual).
 - FP0: land, deploy, run the observe proof above; decide `on`.
 - Owner/FP0 decisions open: turning the trigger `on`; the coupled
   `min-free`/deploy-floor change; the first supervised Store A squash.
-- Residuals: the gap is per VM ID (a re-created paper VM starts fresh);
+- Residuals: no deploy-in-flight coordination (finding 7); btrfs
+  unallocated not read; the 15:35 compaction is not in the attempts record;
+  the gap is per VM ID (a re-created paper VM starts fresh);
   observe logs every tick while due (12 lines an hour); free space is
   `statfs` `Bavail` on btrfs, which over-reports when metadata is short
   (watch `btrfs filesystem usage` unallocated alongside).
