@@ -45,7 +45,7 @@ finish:
       proves: capabilities 1 and 3 pass through the host path on staging
       evidence_class: deployed proof
   rollback: >-
-    Empty CHOIR_HOST_FETCH_COMPUTERS and cold-boot the computer (the guest
+    Empty hostFetchVMs in nix/node-b.nix, deploy and cold-boot the computer (the guest
     fetches itself again); git revert of the commits removes the verb.
   landing:
     required: true
@@ -165,7 +165,7 @@ receipts:
     boundary: implement
     identity: 2a73810d4
     proof_refs: [go test ./internal/hostfetch ./internal/sourcefetch ./internal/gateway ./internal/vmmanager ./internal/sources ./internal/researchtools ./internal/content, all ok]
-    rollback_ref: empty CHOIR_HOST_FETCH_COMPUTERS and cold boot; git revert 2a73810d4
+    rollback_ref: empty hostFetchVMs, deploy and cold boot; git revert 2a73810d4
     disposition: committed
   - id: podcast-search-guarded
     boundary: implement
@@ -205,11 +205,20 @@ Problem: [guest-fetches-public-internet-itself-2026-10-21.md](../problems/guest-
   article imports, the Telegram preview, GDELT (inventory rows A1-A6,
   B1-B6). A granted computer with no gateway URL or token refuses every
   fetch; none falls back to its own egress.
-- **The switch.** `CHOIR_HOST_FETCH_COMPUTERS` in go-choir-vmctl's
-  environment (`nix/node-b.nix`, empty). A listed ComputerID, or
-  `class:test` for every test computer, gets `host-fetch.json` on the
-  credential disk at cold boot; the guest reads it next to its gateway
-  token. A snapshot resume keeps the old disk: cold-boot to change.
+- **The switch.** One binding, `hostFetchVMs` in `nix/node-b.nix` (empty),
+  passed as `CHOIR_HOST_FETCH_VMS` to both go-choir-vmctl and
+  go-choir-gateway. It lists **VM IDs** (`vm-...`), because the gateway
+  knows a caller only by its credential identity, which vmctl issues under
+  the VM ID. vmctl writes `host-fetch.json` on a listed VM's credential
+  disk at cold boot (the guest reads it next to its gateway token); the
+  gateway admits the verb only for a listed identity and answers everyone
+  else 403 `{"code":"host_fetch_not_granted"}` with one log line
+  `fetch refused computer=<id> reason=not_granted`. Empty list: every call
+  refused (fix for [host-fetch-verb-open-to-every-guest-2026-10-22.md](../problems/host-fetch-verb-open-to-every-guest-2026-10-22.md)).
+  Class tokens are not honored. If a computer is re-realized under a new
+  VM ID, both halves stop matching together: it fetches by itself again
+  and the gateway refuses the old ID. A snapshot resume keeps the old
+  disk: cold-boot to change.
 
 Not changed: the guest image, any firewall rule, the guest NIC, the store.
 Ungranted computers behave exactly as before.
@@ -217,7 +226,9 @@ Ungranted computers behave exactly as before.
 ## FP0 proof steps
 
 Run after the red commit lands and the deploy's SHA is seen on staging.
-`P` is a test computer's ComputerID (not the paper's for the first pass).
+`P` is a test computer's ComputerID and `V` its current VM ID (vmctl's
+ownerships.json; also the gateway identity in the journal). Not the
+paper's for the first pass.
 
 1. **Ungranted baseline (capability 3 unchanged).** With the list empty:
    `CHOIR_API_KEY=... scripts/host-fetch-proof.py api --computer P`, then on
@@ -225,11 +236,11 @@ Run after the red commit lands and the deploy's SHA is seen on staging.
    Expect every api check PASS and **no** `gateway: fetch` lines. The
    paper's schedules keep polling (the paper liveness probe stays ok).
 2. **Grant one test computer.** Set
-   `"CHOIR_HOST_FETCH_COMPUTERS=P"` in `nix/node-b.nix`, land, deploy, then
+   `hostFetchVMs = "V";` in `nix/node-b.nix`, land, deploy, then
    cold-boot P (stop and start, not a snapshot resume). Expect in the
    vmctl journal `vmmanager: host fetch route for computer P (VM ...):
-   granted (computer)` and in P's guest log `autoputer: host fetch route
-   on (computer)`.
+   granted (vm)` and in P's guest log `autoputer: host fetch route
+   on (vm)`.
 3. **Capabilities 1 and 3 through the host.** Run the api mode again for P.
    Then a research Read of an arbitrary public URL from P's research desk
    (for example ask research to Read
@@ -237,12 +248,16 @@ Run after the red commit lands and the deploy's SHA is seen on staging.
    `http://portquiz.net:8080/`, the second a non-default port).
    Expect every api check PASS and both Reads to return page text.
 4. **The journal shows the hops.** `scripts/host-fetch-proof.py journal
-   --since "<step 3 start>" --identity <P's gateway identity, vm-...>`.
+   --since "<step 3 start>" --identity V`.
    Expect `ok` hops for en.wikipedia.org, www.youtube.com, itunes.apple.com,
    feeds.npr.org, feeds.bbci.co.uk and the article hosts, and `refused`
    lines for the three refusal probes (169.254.169.254, localtest.me,
    10.0.0.1). Keep the artifact JSON.
-5. **Adversarial (FP0's).** From P, Read Node B's own public address on
+5. **Adversarial (FP0's).** From an *unlisted* computer's guest root (or
+   the gateway's test harness with its bearer), POST
+   `/provider/v1/fetch` directly: expect 403 `host_fetch_not_granted` and
+   `fetch refused computer=<its vm id> reason=not_granted`, before and after
+   P is granted. From P, Read Node B's own public address on
    :22 and :443 and a name that resolves to Node B's address. Expect
    `fetch refused ... reason="address: ..."`. Read a page that redirects
    to `http://169.254.169.254/` (any public redirector): expect the guest
