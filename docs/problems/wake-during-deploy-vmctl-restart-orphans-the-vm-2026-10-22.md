@@ -379,6 +379,15 @@ field and ignores it. A row the fix already closed reads
 on its next start: an owner act, or the always-on sweep. The old binary's
 deploy rescue does not reach that fate; its sweep does.
 
+Round 2 and 3 rollback: revert 19a75a8d9, then 8a9ad074b, then
+0469522b4 (the yellow commits' tests fail once their fix is gone). A
+rollback while a row carries an open `boot_claim` (a close in progress or a
+start in flight) loses the claim: the old binary ignores it, and that one
+start replays the original orphan path once (reattach pending at the stale
+address, then the wedge detector's `wedged` and its charged retry). The old
+binary also reads `start-interrupted-repeatedly-by-vmctl-restart` as an
+unknown, non-failure stop, so its sweep re-boots such a row.
+
 ### Staging proof plan (FP0, on a test computer)
 
 1. Land and deploy. The deploy that ships the fix restarts an old vmctl,
@@ -515,9 +524,63 @@ as coverage), fix in 8a9ad074b (red, ceremony in its message).
 
 ### Residuals added this round
 
-- The count is written by the close's save, not at load: a vmctl that
-  dies again between load and close does not count that load. The claim is
-  still on disk, so the next load closes it; the bound can lag by one.
+- ~~The count can lag by one.~~ Superseded in round 3: a claim is counted
+  once (`boot_claim.counted`), whichever restart's save lands it.
 - An old binary (rollback) reads `start-interrupted-repeatedly-by-vmctl-restart`
   as an unknown, non-failure stop, so its sweep would re-boot such a row.
 - `saveLocked` (above).
+
+## Review round 3 (2026-10-22)
+
+Inputs: the CI mirror's hang-guard gate failure and DeepSeek's round-2
+review (accept with edits); Gemini flash accepted round 2; Devin's round-2
+review was still running. Tests first: f84145408 and deab8cb4d (yellow); fix 19a75a8d9 (red, ceremony in its message).
+
+Failing on the prior head (yellow evidence):
+`TestDeployReArmsAndBootsAComputerWhoseStartsKeptCrashingVMCTL/public_platform`
+and `TestDeployRescueReachesAPlatformComputerOnlyForRepeatedInterruptions`
+(on 060482978); `TestRestartDuringAnOpenCloseCountsTheInterruptedStartOnce`
+(on f84145408's boot_claim.go). Passing there, as pins:
+`.../critical_protected` (its deploy escape already worked).
+
+### Dispositions
+
+- **Mirror gate, unbounded fixture wait: fixed.**
+  `blockingSnapshotVMManager.ResumeVMFromSnapshot` waits on its release or
+  two minutes, returning an error naming the fixture; the bound is far past
+  any test's run, so it does not change what the tests prove.
+- **E1 (gate), no escape for public_platform: fixed, by the deploy route.**
+  `deployRescueClass` reaches the public_platform computer only when it is
+  stopped by `start-interrupted-repeatedly-by-vmctl-restart`; it is used by
+  `deployRescueStopped`, so the deploy-refresh candidate list and the rescue
+  claim agree. `GrantDeployRetry` already covered public_platform, so a
+  deploy of a new target re-arms the charge and the rescue boots it once.
+  `alwaysOnBootClass` is unchanged (widening it would let the always-on
+  sweep undo the bound). Why not the other route (exempt the platform's
+  warm and ensure with a backoff): it would add a second retry clock beside
+  `failureWarmWindow`, and a start that crashes vmctl would still be retried
+  automatically with no external event; the deploy route keeps one rule for
+  every class (an automatic retry needs a window or a new build) and is the
+  escape the record already claimed. Logs in the warm, ensure and close now
+  name it. Residual: between deploys the platform waits the window or an
+  owner act.
+- **E2 (required), data race on log reads: fixed.** Values copied under
+  `r.mu` in `closeInterruptedStarts` and the platform warm's refusal.
+- **E3 (required), escape untested: fixed.** The two deploy tests above pin
+  the class difference: critical_protected and public_platform both rescue
+  a repeated-fated computer once; the platform's other stops stay with its
+  warm and ensure.
+- **Low, load log names the wrong fate: fixed.** It logs the fate set and
+  the count.
+- **Low, one start counted twice across a restart during an open close:
+  fixed.** `BootClaim.Counted`, set at load.
+- **Low, the close is retried only by the idle sweeper's reconcile:
+  recorded.** `ReconcileVMProcesses` runs from the idle sweeper, which runs
+  only with `VMCTL_IDLE_TIMEOUT`, pressure reclaim or retention prune set.
+  Node B sets `VMCTL_IDLE_TIMEOUT=30m` and pressure reclaim
+  (`nix/node-b.nix:1448-1461`), so the sweeper, and the close retry, run
+  every minute there. A host without them retries the close only at the
+  next restart (ReattachManagedVMs); the shield holds meanwhile.
+- **Low, rollback with an open claim: recorded** in the Rollback section.
+- **Low, maintenance-exemption comment: fixed.** The B14 path is exempt from
+  the recovery-bound admission only, not from the open-close refusal.
