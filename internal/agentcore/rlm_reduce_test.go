@@ -498,3 +498,59 @@ func TestChannelCastRejectsTextureTarget(t *testing.T) {
 		t.Fatalf("broadcast rejected: %v", err)
 	}
 }
+
+// Journal cut R2: the inbox cursor is a run-memory entry written after every
+// cell, and the reader takes the maximum, so a cell whose inbox snapshot did
+// not move the cursor wrote an entry that changes nothing and costs about 90
+// KiB of journal. Skipped when the cursor did not move.
+//
+// Ways this could fail, written first: the entry is still written on an equal
+// cursor; the entry is skipped when the cursor did move; a skipped write makes
+// the durable cursor read lower than before.
+func TestCommitSkipsInboxCursorEntryWhenCursorDidNotMove(t *testing.T) {
+	rt, _ := testRuntime(t)
+	scope := testReductionScope()
+	ctx := testReductionCtx(scope)
+	count := func() int {
+		t.Helper()
+		entries, err := rt.store.ListRunMemoryEntriesForAgent(ctx, scope.OwnerID, scope.DeskAgentID, []string{string(rlmInboxCursorKind)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return len(entries)
+	}
+	cell := func(cursor, highWater uint64, localID string) {
+		t.Helper()
+		sc := scope
+		sc.Cursor = cursor
+		r := &rlmCallReduction{active: true, mb: rt, st: rt.store, scope: sc, highWater: highWater}
+		if err := r.commit(ctx, []yaegikernel.StagedIntent{
+			{LocalID: localID, Kind: yaegikernel.IntentMessage, ToDesk: "management", Body: localID},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := rt.ChannelCast(ctx, scope.ChannelID, scope.FromAgentID, "", "management", "management", "snapshot-mail"); err != nil {
+		t.Fatal(err)
+	}
+
+	cell(0, 1, "moves-cursor") // 0 -> 1: one entry
+	if got := count(); got != 1 {
+		t.Fatalf("cursor entries after a cell that moved the cursor = %d, want 1", got)
+	}
+	cell(1, 1, "same-cursor-a") // inbox unchanged: no entry
+	cell(1, 0, "same-cursor-b") // a snapshot below the cursor is clamped to it: no entry
+	if got := count(); got != 1 {
+		t.Fatalf("cursor entries after two cells that did not move it = %d, want still 1", got)
+	}
+	if cursor, err := LoadInboxCursorForDesk(ctx, rt.store, scope.OwnerID, scope.DeskAgentID, scope.ChannelID); err != nil || cursor != 1 {
+		t.Fatalf("durable cursor = %d, %v; want 1", cursor, err)
+	}
+	cell(1, 2, "moves-again") // 1 -> 2: a second entry
+	if got := count(); got != 2 {
+		t.Fatalf("cursor entries after the cursor moved again = %d, want 2", got)
+	}
+	if cursor, err := LoadInboxCursorForDesk(ctx, rt.store, scope.OwnerID, scope.DeskAgentID, scope.ChannelID); err != nil || cursor != 2 {
+		t.Fatalf("durable cursor = %d, %v; want 2", cursor, err)
+	}
+}

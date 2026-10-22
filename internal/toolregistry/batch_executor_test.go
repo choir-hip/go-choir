@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -203,5 +204,44 @@ func TestExecuteToolBatchAssignedEngineeringAdmissionGrammar(t *testing.T) {
 	}, func(types.EventKind, string, json.RawMessage) {})
 	if len(executed) != 2 || executed[0] != "eval" || executed[1] != "bash" || results[0].IsError || results[1].IsError {
 		t.Fatalf("eval+companion failed: executed=%v results=%+v", executed, results)
+	}
+}
+
+// Journal cut R3: the runtime publishes tool.invoked on the live bus and does
+// not append it, so the durable tool.result carries what the invoked row
+// carried (the call's arguments) and what pairing the two used to give (when
+// the call started and how long it ran). tool.invoked is still emitted first.
+func TestToolResultCarriesArgumentsAndTiming(t *testing.T) {
+	registry := NewToolRegistry()
+	if err := registry.Register(Tool{Name: "wait", Func: func(context.Context, json.RawMessage) (string, error) {
+		time.Sleep(15 * time.Millisecond)
+		return "ok", nil
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	var order []types.EventKind
+	var result map[string]any
+	before := time.Now().UTC().Add(-time.Second)
+	ExecuteToolBatch(context.Background(), registry, []types.ToolCall{
+		{ID: "c1", Name: "wait", Arguments: json.RawMessage(`{"source":"fmt.Println(1)"}`)},
+	}, func(kind types.EventKind, _ string, raw json.RawMessage) {
+		order = append(order, kind)
+		if kind == types.EventToolResult {
+			_ = json.Unmarshal(raw, &result)
+		}
+	})
+	if len(order) != 2 || order[0] != types.EventToolInvoked || order[1] != types.EventToolResult {
+		t.Fatalf("emitted %v, want tool.invoked then tool.result", order)
+	}
+	args, _ := result["arguments"].(map[string]any)
+	if args["source"] != "fmt.Println(1)" {
+		t.Fatalf("tool.result arguments = %#v", result["arguments"])
+	}
+	started, err := time.Parse(time.RFC3339Nano, fmt.Sprint(result["started_at"]))
+	if err != nil || started.Before(before) {
+		t.Fatalf("started_at = %v (%v)", result["started_at"], err)
+	}
+	if ms, ok := result["duration_ms"].(float64); !ok || ms < 10 {
+		t.Fatalf("duration_ms = %v, want at least the 15 ms the tool slept", result["duration_ms"])
 	}
 }

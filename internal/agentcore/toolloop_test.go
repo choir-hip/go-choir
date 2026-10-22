@@ -215,8 +215,9 @@ func TestRuntimeWithToolRegistryEmitsToolEvents(t *testing.T) {
 
 	// Also check persisted events. Poll since the bus events may arrive
 	// before the store has persisted them (common under -race).
+	// tool.invoked is published above and not persisted (journal cut R3); the
+	// persisted tool.result carries the call's arguments.
 	waitForEvents(t, rt.Store(), rec.RunID, []types.EventKind{
-		types.EventToolInvoked,
 		types.EventToolResult,
 	}, 3*time.Second)
 }

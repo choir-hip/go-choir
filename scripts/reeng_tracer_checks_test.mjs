@@ -151,3 +151,19 @@ test('G1-G7: a passing go test check cell of the completing assignment counts', 
   // A result with no matching invocation does not count.
   assert.equal(goTestCells([cellEvents(ENG, 'c10', SH_TEST, OK)[1]], ENG).length, 0);
 });
+
+test('G8: tool.invoked is a bus-only line (journal cut R3); the result carries the cell source', () => {
+  // The shape a new build writes: no tool.invoked row, the arguments on the result.
+  const resultOnly = (callID, source, result) => [
+    { agent_id: ENG, kind: 'tool.result', payload: { tool: 'capsule_go_eval', call_id: callID, arguments: { source }, started_at: '2026-10-22T19:00:00Z', duration_ms: 40, is_error: false, output: JSON.stringify(result) } },
+  ];
+  assert.deepEqual(goTestCells(resultOnly('r1', SH_TEST, OK), ENG).map((x) => x.call_id), ['r1']);
+  // The same rules hold on the new shape: a failed cell, a cell with no panic, a job receipt.
+  assert.equal(goTestCells(resultOnly('r2', SH_TEST, PANICKED), ENG).length, 0);
+  const noPanic = 'r, _ := choir.Exec("sh", []string{"-c", "cd /workspace/platform && go test ./..."})\nprintln(r.Stdout)';
+  assert.equal(goTestCells(resultOnly('r3', noPanic, OK), ENG).length, 0);
+  assert.equal(goTestCells(resultOnly('r4', SH_TEST, { exit_code: 0, receipt_ref: 'capsule-exec:sha256:x' }), ENG).length, 0);
+  // A tape that holds both shapes (an old run, then a new one) counts each cell once.
+  const both = [...cellEvents(ENG, 'o1', SH_TEST, OK), ...resultOnly('n1', SH_TEST, OK)];
+  assert.deepEqual(goTestCells(both, ENG).map((x) => x.call_id), ['o1', 'n1']);
+});

@@ -119,7 +119,12 @@ func (s *traceStub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if runID == "run-direct" {
 			events = []map[string]any{
 				{"event_id": "e1", "seq": 1, "loop_id": runID, "kind": "tool.invoked", "payload": map[string]any{"tool": "desk_go_eval"}},
-				{"event_id": "e2", "seq": 2, "loop_id": runID, "kind": "desk.cell", "payload": map[string]any{"desk_session": "agent:a", "worker_pid": 7, "run_id": runID, "duration_ms": 5}},
+				{"event_id": "e2", "seq": 2, "loop_id": runID, "kind": "desk.cell", "payload": map[string]any{"desk_session": "agent:a", "worker_pid": 7, "run_id": runID, "duration_ms": 5,
+					// Journal cut R4: a cell's per-call egress rows ride its event.
+					"egress": []map[string]any{
+						{"request_id": "r2", "response_request_id": "r2", "verb": "read", "desk_session": "agent:a", "worker_pid": 7, "run_id": runID, "is_error": false},
+						{"request_id": "r3", "response_request_id": "r3", "verb": "search_start", "desk_session": "agent:a", "worker_pid": 7, "run_id": runID, "is_error": true, "error": "boom"},
+					}}},
 				{"event_id": "e3", "seq": 3, "loop_id": runID, "kind": "desk.egress", "payload": map[string]any{"request_id": "r1", "response_request_id": "r1", "verb": "search_start", "run_id": runID}},
 			}
 		}
@@ -298,8 +303,26 @@ func TestTraceExportHealthyBundleLayers(t *testing.T) {
 	if got := itemIDs(t, layerStatus(t, bundle, "cells"), "worker_pid"); len(got) != 1 || got[0] != "7" {
 		t.Fatalf("cells = %v", got)
 	}
-	if got := itemIDs(t, layerStatus(t, bundle, "egress"), "request_id"); len(got) != 1 || got[0] != "r1" {
-		t.Fatalf("egress = %v", got)
+	// The egress layer is "one item per egress call": the rows folded into a
+	// desk.cell event (journal cut R4), at the cell's place in the run's
+	// order, and the standalone desk.egress events older tapes, refusals and
+	// search_done rows still use.
+	egress := layerStatus(t, bundle, "egress")
+	if got := strings.Join(itemIDs(t, egress, "request_id"), ","); got != "r2,r3,r1" {
+		t.Fatalf("egress = %s, want the cell's folded rows r2,r3 then the standalone r1", got)
+	}
+	if got := strings.Join(itemIDs(t, egress, "cell_event_id"), ","); got != "e2,e2,<nil>" {
+		t.Fatalf("egress cell_event_id = %s, want a folded row to name its cell event", got)
+	}
+	if got := strings.Join(itemIDs(t, egress, "event_id"), ","); got != "e2#egress.0,e2#egress.1,e3" {
+		t.Fatalf("egress event_id = %s", got)
+	}
+	for i, item := range egress.Items {
+		var m map[string]any
+		_ = json.Unmarshal(item, &m)
+		if m["loop_id"] != "run-direct" || m["seq"] == nil || m["ts"] == nil {
+			t.Fatalf("egress item %d lacks the event identity the layer adds: %v", i, m)
+		}
 	}
 	if got := len(layerStatus(t, bundle, "deliveries").Items); got != 2 {
 		t.Fatalf("deliveries = %d items, want the update and the work item", got)
