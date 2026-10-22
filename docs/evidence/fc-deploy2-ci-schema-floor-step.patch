@@ -1,0 +1,26 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 84331c211..293eed831 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -413,6 +413,21 @@ jobs:
+         shell: bash
+         run: scripts/check-test-hang-guards.sh
+ 
++      # The store floor on the deploy path (F-c review finding H): a push
++      # that lowers storeschema.Version fails unless its head commit carries
++      # Store-Floor-Override. Kept out of the event-table commits so that
++      # reverting them never removes it.
++      - name: Run store floor guard
++        shell: bash
++        env:
++          STORE_FLOOR_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
++        run: |
++          set -euo pipefail
++          if [ -n "${STORE_FLOOR_BASE//0/}" ]; then
++            git fetch --no-tags --depth=1 origin "$STORE_FLOOR_BASE" || echo "store-floor: base $STORE_FLOOR_BASE not fetchable"
++          fi
++          scripts/check-store-schema-floor.sh
++
+   check:
+     name: Go Vet + Test + Build
+     runs-on: ubuntu-latest
