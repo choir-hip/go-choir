@@ -613,3 +613,46 @@ Planned dispositions, tests first:
   removed first), 0600, and tmpfiles carries its `z` line.
 - DS11: recorded, with F10.
 - DS12: the comments and this record are corrected with the fix.
+
+### Round 2c dispositions (lane fp3-containment-gaps)
+
+Findings cd2084a75 (green); tests 952be102f (yellow), 6 of 31 failing on
+8b14bc9cc. Fix 3369f64b5 (red); this commit carries the docs. Local: nix
+test 31/31, verifier tests 14/14, `nix eval` of the go-choir-b toplevel
+drvPath passes, and the rendered corpusd unit carries both asserts.
+
+- **DS8, fixed.**
+  - The marker is written after the `fail != 0` exit, so only a first run
+    that passed writes it: no obstruction, no stray, every move done. The
+    obstruction-then-recovery case has its test. After the obstruction is
+    gone, the rerun is still a first import and adopts a file put back at
+    the old path.
+  - corpusd and checkpointd assert `unit-env/corpus-dsn.env` as well as
+    the marker. A required file removed after a good import keeps them
+    down, loudly. The "-" stays on the EnvironmentFile, so the assert is
+    what refuses, with its own message.
+  - The authority-split runbook's rollback writes a file that sets no DSN
+    (an empty `CORPUSD_CORPUS_DOLT_DSN` is Store A) instead of removing
+    it. Its preconditions say so.
+  - Declined in part: the marker is not also gated on the required files'
+    presence. The proxy asserts the marker and reads only the optional
+    deploy.env. That gate would take the site down for a missing corpus
+    DSN, which the per-file assert already covers on the units that read
+    it. sandbox-gateway-token.env has no unit reader; the verifier still
+    requires it.
+  - New consequence: a stray found during the first import (a file in
+    unit-env before it existed on Node B) now keeps the marker absent, so
+    proxy, corpusd and checkpointd stay down until the operator resolves
+    it. Proof step 0 checks that unit-env does not exist before the
+    landing, so on Node B this needs tampering before the deploy.
+- **DS9, fixed.** A stray that is a link is chown'ed with `-h` and not
+  chmod'ed.
+- **DS10, fixed.** Whatever sits at the marker's path is removed first,
+  and the marker is written as a regular file and set to 0600. tmpfiles
+  carries `z unit-env/.imported 0600`.
+- **DS11, recorded** with F10: the nix test still runs only by hand
+  (`python3 -I scripts/test_host_containment_nix.py`, needs nix).
+- **DS12, fixed.** The comments on `unitEnvImported` and on the snippet
+  now say what the marker certifies (a passed first run, not any file).
+  The round 2b text above ("refuse to start ... until the import is
+  complete") is kept as history; this section supersedes it.

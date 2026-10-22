@@ -179,6 +179,13 @@ now:
     with an injected mv failure). deploy.env is optional in the verifier,
     and the DSN runbook uses install -m 0600. Local: nix test 26/26,
     verifier tests 14/14.
+    Round 2c (DeepSeek, bunch 98: accept, conditional on DS8): findings
+    cd2084a75, tests 952be102f, fix 3369f64b5 (red). Only a passing
+    activation writes the marker (a fresh 0600 regular file, with a
+    tmpfiles line); corpusd and checkpointd also assert corpus-dsn.env;
+    a link stray keeps its target's mode. The DSN runbook's rollback
+    writes a file without a DSN instead of removing it. Local: nix test
+    31/31, verifier tests 14/14, toplevel drvPath evaluates.
 ---
 
 # FP3 groups 2 and 3
@@ -365,22 +372,29 @@ current; at T they were
    - `systemctl show -p InaccessiblePaths go-choir-proxy` lists
      `/var/lib/go-choir/unit-env` without "-", and
      `systemctl show -p Asserts go-choir-proxy go-choir-corpusd go-choir-checkpointd`
-     names the marker (round 2b);
+     names the marker (round 2b) for all three, and
+     `unit-env/corpus-dsn.env` for corpusd and checkpointd (round 2c);
    - each old path is a link `-> unit-env/<name>`;
    - the switch output in the deploy log shows "go-choir-unit-env:
      imported ... into /var/lib/go-choir/unit-env/<name>" once per file,
      and no "FAIL" line;
    - `journalctl -t go-choir-unit-env --since <deploy>` is empty.
 
-   Two loud states are on purpose (round 2b):
+   Three loud states are on purpose (round 2b, 2c):
    - every unit failing with 226/NAMESPACE means unit-env is missing;
-   - proxy, corpusd or checkpointd failing with "Assertion failed" means
-     the first import has not completed (no marker).
+   - proxy, corpusd or checkpointd failing with "Assertion failed" on
+     `.imported` means no first import has passed (an IO failure, or a
+     FAIL: an obstruction or a stray);
+   - corpusd or checkpointd failing it on `corpus-dsn.env` means the DSN
+     file is missing from unit-env: restore it (`install -m 0600`, from the
+     off-host backup of unit-env if need be), never start them without it.
 
-   In both, read the activation's lines (`journalctl -t go-choir-unit-env`
-   and the deploy log). Fix the cause (space, the filesystem), and run
-   `/run/current-system/activate` or redeploy; the import resumes where it
-   stopped.
+   In the first two, read the activation's lines (`journalctl -t
+   go-choir-unit-env` and the deploy log). Fix the cause (space, the
+   filesystem, the obstruction or stray named there; a file wanted at an
+   obstructed old path can be put back there before the marker exists),
+   and run `/run/current-system/activate`, then start the failed units, or
+   redeploy; the import resumes where it stopped.
 
    A FAIL there stops the deploy at the switch, and its retry fails too.
    Read the named stray (`unit-env/<name>.stray.*`). Merge what is wanted
