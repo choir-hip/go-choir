@@ -390,3 +390,26 @@ FAIL step=0 vmctl runs 674460d15
   T1" searches the `/health` body's strings for the commit, so it too can
   never pass on real vmctl. Its selftest passes only on the same
   wrong-shaped fake.
+
+## Deployed-proof dispositions (d68279679, 70898c1fe)
+
+- R5-1: fixed. Step 0 reads vmctl's build identity where vmctl carries
+  it: the `X-Choir-Build-Commit` and `X-Choir-Build-Service` headers of
+  `:8083/health` (`vmctl_build_identity` in `scripts/proofs/lib.sh`, the
+  same header read the deploy makes for vmctl's activation receipt). It
+  passes only when the service header is `vmctl` and the commit header
+  matches `--commit`. The selftest's fake vmctl `/health` is now
+  real-shaped (no build field in the body, identity in the headers); the
+  new cases fail on another commit, a missing header and another service
+  on the port, and the read-only pass failed on fd564dbbc.
+- R5-2: fixed in the proof's text. Step 4's closing MANUAL line, and the
+  script header, say a run before the deploy is required and why: the
+  after run has nothing to be compared with otherwise.
+- R5-3: fixed with R5-1. fp3 step 1 reads the same header for "vmctl's
+  build header names T1"; its selftest baseline failed on the
+  real-shaped fake before the fix.
+
+The proof stays read-only. selftest: 154 passed, 1 failed (the
+pre-existing `fp1 step 1 computes a busy share`). D2's step 0 result
+stands as a proof-script FAIL, not a vmctl identity mismatch; the next
+run of step 0 on staging is the deployed check of this fix.
