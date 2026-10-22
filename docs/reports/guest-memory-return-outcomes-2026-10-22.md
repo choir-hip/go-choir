@@ -41,6 +41,14 @@ Two windows in the summary:
 - **idle**: the last 20 minutes. Tests DAMON (step 1) and, if it frees
   anything, steps 2 and 3 again.
 
+A window whose first or last sample has no `fc_rss_mib` or no
+`guest_memfree_mib` reads **undeterminable**, naming the missing side; it
+is never a 0 MiB change. When `fc_rss_mib` is empty, the row's `errors`
+column says why (no firecracker process matched the VM, with the pattern).
+`page_reporting_registered` is true only when the order is set and the
+balloon is bound with reporting negotiated (a boot-argument order alone
+does not count).
+
 Guard against Goodharting: `workingset_refault_file` and `pgmajfault`
 rising in the idle window after DAMON frees cache means it is evicting
 pages the desk still needs (store pages re-read from disk). A host RSS win
