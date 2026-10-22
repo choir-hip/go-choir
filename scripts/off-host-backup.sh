@@ -330,6 +330,7 @@ R() { if [ "$UPLOAD_LIMIT_KIB" != 0 ]; then restic --limit-upload "$UPLOAD_LIMIT
 dolt_sync() { # $1 port, $2 database, $3 target dir
   local port="$1" db="$2" dir="$3" pw home rc hash oldhome="${HOME:-}"
   install -d -m 0700 "$dir"
+  record_rows "$db" "$port" "$db"
   home="$(mktemp -d)"; export HOME="$home"
   pw="$(cat "$(cred dolt-root-password)" 2>/dev/null || true)"
   case "$pw" in *[!A-Za-z0-9]*) pw="" ;; esac
@@ -360,25 +361,39 @@ drop_snapshot() { # $1 path; a read-only snapshot needs btrfs to delete it
   [ -e "$1" ] || return 0
   btrfs subvolume delete "$1" >/dev/null 2>&1 || { err "could not delete snapshot $1"; return 1; }
 }
-dolt_head() { # $1 port, $2 database: the newest commit, as root with its password or passwordless
-  local port="$1" db="$2" pw home oldhome="${HOME:-}" out
+dolt_scalar() { # $1 port, $2 database, $3 query: one value, as root with its password or passwordless
+  local port="$1" db="$2" q="$3" pw home oldhome="${HOME:-}" out
   home="$(mktemp -d)"; export HOME="$home"
   pw="$(cat "$(cred dolt-root-password)" 2>/dev/null || true)"
   case "$pw" in *[!A-Za-z0-9]*) pw="" ;; esac
   if [ -n "$pw" ] && printf 'select 1;\n' | DOLT_CLI_PASSWORD="$pw" dolt --host 127.0.0.1 --port "$port" --no-tls --user root sql >/dev/null 2>&1; then
-    out="$(DOLT_CLI_PASSWORD="$pw" dolt --host 127.0.0.1 --port "$port" --no-tls --user root --use-db "$db" sql -r csv -q 'select commit_hash from dolt_log limit 1' 2>/dev/null | tail -1)"
+    out="$(DOLT_CLI_PASSWORD="$pw" dolt --host 127.0.0.1 --port "$port" --no-tls --user root --use-db "$db" sql -r csv -q "$q" 2>/dev/null | tail -1)"
   else
-    out="$(dolt --host 127.0.0.1 --port "$port" --no-tls --user root --password "" --use-db "$db" sql -r csv -q 'select commit_hash from dolt_log limit 1' 2>/dev/null | tail -1)"
+    out="$(dolt --host 127.0.0.1 --port "$port" --no-tls --user root --password "" --use-db "$db" sql -r csv -q "$q" 2>/dev/null | tail -1)"
   fi
   rm -rf "$home"; export HOME="$oldhome"
   printf '%s' "$out"
+}
+dolt_head() { dolt_scalar "$1" "$2" 'select commit_hash from dolt_log limit 1'; } # the newest commit
+# Store A's freshness marker. With PLATFORM_DOLT_SNAPSHOTS=off its newest
+# commit no longer moves, so the head alone cannot show a restore is recent;
+# the event receipt count only grows. Read before the capture, so the capture
+# holds at least this many (docs/problems/platform-dolt-oldgen-rate-and-
+# squash-window-2026-10-22.md, review round 1 R2).
+record_rows() { # $1 name, $2 port, $3 database
+  [ "$3" = platform ] || return 0
+  local n; n="$(dolt_scalar "$2" "$3" 'select count(*) from computer_event_append_receipts')"
+  case "$n" in ''|*[!0-9]*) log "dolt $1: receipt count unread"; return 0 ;; esac
+  DOLT_ROWS+=("$1=$n")
 }
 snapshot_store() { # $1 name, $2 port, $3 database, $4 data directory (a subvolume)
   local name="$1" dst="$DOLT_SNAPS/$1" hash
   install -d -m 0700 "$DOLT_SNAPS" "$STATE/run"
   drop_snapshot "$dst" || return 1
-  # The head is read first: the snapshot holds it or a later commit.
+  # The head and the receipt count are read first: the snapshot holds them
+  # or later state.
   hash="$(dolt_head "$2" "$3")"
+  record_rows "$name" "$2" "$3"
   if ! btrfs subvolume snapshot -r "$4" "$dst" >/dev/null 2>"$STATE/run/snapshot-$name.err"; then
     err "btrfs snapshot of $name failed: $(head -c 200 "$STATE/run/snapshot-$name.err" | tr -d '\n')"
     drop_snapshot "$dst"; return 1
@@ -411,6 +426,7 @@ stage() {
   local ok=0 src
   install -d -m 0700 "$STAGING/sqlite" "$STAGING/vm-images" "$STATE/run"
   DOLT_HEADS=()
+  DOLT_ROWS=()
   if is_subvolume "$PLATFORM_DOLT_DATA"; then
     snapshot_store platform 13306 platform "$PLATFORM_DOLT_DATA" || ok=1
   elif raise_dolt_memory "$PLATFORM_DOLT_UNIT"; then
@@ -448,8 +464,8 @@ stage() {
     fi
   done
   {
-    printf '{"run_id":"%s","dolt_heads":"%s","restic":"%s","dolt":"%s"}\n' \
-      "$RUN_ID" "${DOLT_HEADS[*]:-}" "$(restic version 2>/dev/null | head -1)" "$(dolt version 2>/dev/null | head -1)"
+    printf '{"run_id":"%s","dolt_heads":"%s","dolt_rows":"%s","restic":"%s","dolt":"%s"}\n' \
+      "$RUN_ID" "${DOLT_HEADS[*]:-}" "${DOLT_ROWS[*]:-}" "$(restic version 2>/dev/null | head -1)" "$(dolt version 2>/dev/null | head -1)"
   } > "$STAGING/manifest.json"
   return "$ok"
 }

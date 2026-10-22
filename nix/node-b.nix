@@ -284,57 +284,15 @@ let
 
     df -h / /var/lib/go-choir 2>/dev/null || df -h /
   '';
+  # The daily history audit (scripts/dolt-history-audit.sh: commits, oldgen,
+  # newgen and journal lines for both stores; a nonzero exit fails the unit).
+  # Audit both stores: platform (Store A) and corpus (Store B); a missing repo
+  # is skipped.
+  platformDoltHistoryAuditScript = pkgs.writeShellScript "dolt-history-audit"
+    (builtins.readFile ../scripts/dolt-history-audit.sh);
   platformDoltHistoryAudit = pkgs.writeShellScript "go-choir-platform-dolt-history-audit" ''
-    set -euo pipefail
-    export PATH="${lib.makeBinPath [ pkgs.coreutils pkgs.dolt pkgs.systemd ]}:$PATH"
-    # Recurrence control for the 2026-08-26 incident: per-mutation
-    # CALL DOLT_COMMIT in internal/platform/store.go and internal/cycle/
-    # storage.go grows reachable commit history that NO dolt gc (shallow or
-    # --full) can collect. See docs/evidence/platform-dolt-oldgen-218g-dead-
-    # history-2026-08-26.md. This audit fails loudly (nonzero exit ->
-    # failed unit -> monitoring) when history regrows past the squash
-    # thresholds, so the squash runbook runs before the disk refills.
-    # Audit both stores: platform (Store A, canonical event/control) and
-    # corpus (Store B, world-wire). The corpus repo is absent until the
-    # authority split deploys it; missing dirs are skipped, not failures.
-    for spec in "platform:${platformDoltDBDir}:${platformDoltDir}" "corpus:${corpusDoltDBDir}:${corpusDoltDir}"; do
-      name="''${spec%%:*}"
-      rest="''${spec#*:}"
-      dbdir="''${rest%%:*}"
-      home="''${rest#*:}"
-      [ -d "$dbdir/.dolt" ] || { echo "$name-dolt history audit: skipped (no repo at $dbdir)"; continue; }
-      commits=$(cd "$dbdir" && HOME="$home" dolt sql -q "SELECT COUNT(*) FROM dolt_log" 2>/dev/null | grep -oE '[0-9]+' | head -1 || echo 0)
-      oldgen_kib=$(du -sk "$dbdir/.dolt/noms/oldgen" 2>/dev/null | cut -f1 || echo 0)
-      noms_kib=$(du -sk "$dbdir/.dolt/noms" 2>/dev/null | cut -f1 || echo 0)
-      echo "$name-dolt history audit: dolt_log commits=''${commits} oldgen=''${oldgen_kib}KiB noms=''${noms_kib}KiB"
-      max_commits="''${GO_CHOIR_DOLT_MAX_COMMITS:-1000000}"
-      max_oldgen_kib="''${GO_CHOIR_DOLT_MAX_OLDGEN_KIB:-52428800}"
-      # Commit-rate SLO (2026-09-19, Move 1): per-mutation DOLT_COMMIT was
-      # replaced by the debounced snapshot committer, so dolt_log should grow
-      # by at most a few thousand commits between daily audit runs (two
-      # daemons x ~45s debounce + checkpoint boundaries). A larger delta means
-      # per-mutation commits regressed — fail before the size floors matter.
-      max_commit_delta="''${GO_CHOIR_DOLT_MAX_COMMIT_DELTA:-10000}"
-      state_file="$home/history-audit-last-count"
-      prev_commits=0
-      if [ -f "$state_file" ]; then
-        prev_commits=$(cat "$state_file" 2>/dev/null || echo 0)
-      fi
-      echo "''${commits:-0}" > "$state_file.tmp" && mv "$state_file.tmp" "$state_file"
-      commit_delta=$(( ''${commits:-0} - ''${prev_commits:-0} ))
-      if [ "''${prev_commits:-0}" -gt 0 ] && [ "$commit_delta" -gt "$max_commit_delta" ]; then
-        echo "$name-dolt history audit FAILED: dolt_log grew $commit_delta commits since last audit (> $max_commit_delta); per-mutation DOLT_COMMIT regressed — check the debounced snapshot committer (internal/doltbatch)" >&2
-        exit 1
-      fi
-      if [ "''${commits:-0}" -gt "$max_commits" ]; then
-        echo "$name-dolt history audit FAILED: $commits commits > $max_commits; run the history-squash runbook (docs/evidence/platform-dolt-oldgen-218g-dead-history-2026-08-26.md)" >&2
-        exit 1
-      fi
-      if [ "''${oldgen_kib:-0}" -gt "$max_oldgen_kib" ]; then
-        echo "$name-dolt history audit FAILED: oldgen ''${oldgen_kib}KiB > ''${max_oldgen_kib}KiB; run the history-squash runbook" >&2
-        exit 1
-      fi
-    done
+    export PATH="${lib.makeBinPath [ pkgs.coreutils pkgs.dolt pkgs.systemd pkgs.gnugrep ]}:$PATH"
+    exec ${platformDoltHistoryAuditScript} "platform:${platformDoltDBDir}:${platformDoltDir}" "corpus:${corpusDoltDBDir}:${corpusDoltDir}"
   '';
 
   # Off-host backup stopgap (owner ruling 2026-10-14, owner-notes section 27

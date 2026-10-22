@@ -20,7 +20,9 @@
 #   snap:  the Dolt stores captured as btrfs snapshots (section 13 item 16):
 #          each restored data directory opened with `dolt sql` (journal
 #          recovery as after a power cut), the head the run recorded found
-#          in its log, and the table count read. One store at a time: disk.
+#          in its log, the table count read, and for Store A the restored
+#          event receipt count at least the one the run recorded (its head
+#          stops moving with PLATFORM_DOLT_SNAPSHOTS=off). One store at a time.
 # Secrets are read from files and never printed. Each piece deletes its
 # restore before the next.
 set -euo pipefail
@@ -101,6 +103,7 @@ snap)
   rm -rf "$D/r"; restic --no-lock restore "$SNAP" --target "$D/r" --include "$M" >"$D/restore.log" 2>&1 \
     || { echo "manifest restore failed: $(tail -c 400 "$D/restore.log")"; exit 1; }
   heads="$(jq -r '.dolt_heads' "$D/r$M")"; echo "manifest dolt heads: $heads"
+  rows="$(jq -r '.dolt_rows // ""' "$D/r$M")"; echo "manifest dolt rows: ${rows:-none}"
   for store in corpus platform; do
     want="$(printf '%s\n' $heads | sed -n "s/^$store=//p")"
     rm -rf "$D/r2" "$D/dolt-restored"; restore "/var/lib/go-choir/offhost-backup/staging/dolt/$store"
@@ -116,6 +119,19 @@ snap)
       || { echo "$store: dolt could not open the restored snapshot"; exit 1; }
     echo "$store restored and opened: $out (recorded head ${want:-unread})"
     case "$out" in *found=1*) ;; *) echo "$store: the recorded head is not in the restored log"; exit 1 ;; esac
+    # Freshness when Store A makes no snapshot commits (PLATFORM_DOLT_SNAPSHOTS=off):
+    # the head no longer moves, so the receipt count read before the capture
+    # must be in the restore (review round 1 R2 of
+    # docs/problems/platform-dolt-oldgen-rate-and-squash-window-2026-10-22.md).
+    want_rows="$(printf '%s\n' $rows | sed -n "s/^$store=//p")"
+    if [ -n "$want_rows" ]; then
+      got_rows="$(cd "$repo" && HOME="$D/dolt-restored" dolt sql -r csv -q 'select count(*) from computer_event_append_receipts' | tail -1)"
+      echo "$store receipts: restored ${got_rows:-unread}, recorded $want_rows"
+      case "$got_rows" in ''|*[!0-9]*) echo "$store: the receipt count could not be read in the restore"; exit 1 ;; esac
+      [ "$got_rows" -ge "$want_rows" ] || { echo "$store: the restore holds fewer receipts than the run recorded"; exit 1; }
+    elif [ "$store" = platform ]; then
+      echo "$store: no receipt count in the manifest (a run before the marker); freshness rests on the head only"
+    fi
     rm -rf "$D/r2" "$D/dolt-restored"
   done
   ;;

@@ -277,14 +277,7 @@ func openStore(ctx context.Context, dsn, corpusDSN string, bootstrap bool) (*Sto
 		s.corpusDB = corpusDB
 		s.corpusCommitter = doltbatch.New(corpusDB, "platform-corpus", doltbatch.DebounceFromEnv("DOLT_SNAPSHOT_DEBOUNCE"))
 	}
-	mode, modeErr := doltbatch.ParseMode(os.Getenv(StoreASnapshotModeEnv))
-	if modeErr != nil {
-		log.Printf("platform store: %s: %v", StoreASnapshotModeEnv, modeErr)
-	}
-	s.useStoreASnapshotMode(mode)
-	if mode == doltbatch.ModeOff {
-		log.Printf("platform store: Store A snapshot commits off (%s=off); SQL COMMIT is the durability", StoreASnapshotModeEnv)
-	}
+	s.applyStoreASnapshotEnv(os.Getenv)
 	if bootstrap {
 		if err := s.Bootstrap(ctx); err != nil {
 			_ = s.Close()
@@ -300,6 +293,21 @@ func openStore(ctx context.Context, dsn, corpusDSN string, bootstrap bool) (*Sto
 // platform-dolt-oldgen-rate-and-squash-window-2026-10-22.md). Store B's
 // committer is not affected.
 const StoreASnapshotModeEnv = "PLATFORM_DOLT_SNAPSHOTS"
+
+// applyStoreASnapshotEnv reads StoreASnapshotModeEnv through getenv and
+// applies it to the Store A committer. An unknown value keeps snapshots on and
+// is logged. It returns the mode applied.
+func (s *Store) applyStoreASnapshotEnv(getenv func(string) string) doltbatch.Mode {
+	mode, err := doltbatch.ParseMode(getenv(StoreASnapshotModeEnv))
+	if err != nil {
+		log.Printf("platform store: %s: %v", StoreASnapshotModeEnv, err)
+	}
+	s.useStoreASnapshotMode(mode)
+	if mode == doltbatch.ModeOff {
+		log.Printf("platform store: Store A snapshot commits off (%s=off); SQL COMMIT is the durability", StoreASnapshotModeEnv)
+	}
+	return mode
+}
 
 // useStoreASnapshotMode replaces the Store A committer with one in mode.
 // With a shared pool (no corpus DSN) both stores are the one database, so the
