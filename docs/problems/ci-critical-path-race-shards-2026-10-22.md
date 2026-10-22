@@ -278,7 +278,8 @@ All three fixed, no finding declined.
    nothing, so no real shard changes behavior. The unsharded local run
    already failed on an empty package list. `go-shard-discovery-test`
    checks both empty cases: more shards than split test names, and one
-   whole package for two whole shards. Both passed on the old tip.
+   whole package for two whole shards. Both fail on the old tip, which
+   exited 0 with nothing tested.
 3. **Fixed (test).** The fake `go` has an `EMPTY_DISCOVERY` mode that
    prints only the `ok` package lines. The split shard must fail with "no
    tests" and run nothing. The branch already failed closed, so this check
