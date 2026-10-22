@@ -1037,8 +1037,14 @@ func (r *rlmCallReduction) commitTray(ctx context.Context, intents []yaegikernel
 		}
 		receipt.Intents = append(receipt.Intents, ReducedIntent{LocalID: in.LocalID, Seq: seq, Kind: in.Kind})
 	}
-	if err := CommitInboxCursor(ctx, r.st, r.scope.OwnerID, r.scope.RunID, r.scope.DeskAgentID, r.scope.ChannelID, highWater); err != nil {
-		return err
+	// A cursor that did not move needs no entry: the durable cursor is the
+	// maximum over the desk's entries (LoadInboxCursorForDesk), so an equal
+	// value changes nothing, and each entry costs about 90 KiB of journal
+	// (journal cut R2). scope.Cursor is the maximum read when the cell began.
+	if highWater > r.scope.Cursor {
+		if err := CommitInboxCursor(ctx, r.st, r.scope.OwnerID, r.scope.RunID, r.scope.DeskAgentID, r.scope.ChannelID, highWater); err != nil {
+			return err
+		}
 	}
 	r.receipt = receipt
 	r.receipt.Cursor = highWater
