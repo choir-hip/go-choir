@@ -3,6 +3,7 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -100,5 +101,38 @@ func TestCompletionGuardReasonIgnoresARefusalBeforeASuccessfulFreeze(t *testing.
 	echoed := `{"output":"I saw \"freeze_result\" earlier","freeze_result":null}`
 	if reason := engineeringTerminalFateGuardReason(guardTestMessages(t, refusal, echoed)); !strings.Contains(reason, "selfdev-77aa") {
 		t.Fatalf("output text mentioning freeze_result reset the scan: %q", reason)
+	}
+}
+
+// Review round 4b (Sonnet): a successful freeze cell resets the refusal
+// even when its own output echoes the refusal text, and a freeze that got
+// as far as a rejected bundle passed the open-candidate check too.
+func TestCompletionGuardResetTakesPrecedenceInTheFreezeCell(t *testing.T) {
+	refusal := `cannot freeze until the open candidate settles (another self-development operation is open on this computer: selfdev-77aa is awaiting_approval)`
+	echo := `{"output":"earlier: cannot freeze until the open candidate settles (another self-development operation is open on this computer: selfdev-77aa is awaiting_approval)","freeze_result":{"operation_id":"selfdev-88bb","state":"frozen"}}`
+	if reason := engineeringTerminalFateGuardReason(guardTestMessages(t, refusal, echo)); reason != engineeringTerminalFateRequired {
+		t.Fatalf("a freeze cell that echoes the old refusal kept it: %q", reason)
+	}
+	rejected := `{"output":"","freeze_result":{"handle":"h","rejected":true,"reject_reason":"bundle too large"}}`
+	if reason := engineeringTerminalFateGuardReason(guardTestMessages(t, refusal, rejected)); reason != engineeringTerminalFateRequired {
+		t.Fatalf("a rejected freeze after the refusal kept the refusal: %q", reason)
+	}
+}
+
+// Review round 4b (DeepSeek): a cell that freezes and then fails a later
+// intent returns an error, not a result, so it carried no freeze_result and
+// the stale refusal survived. The error now carries the committed freeze.
+func TestCompletionGuardResetsOnAFreezeCommittedBeforeAFailedIntent(t *testing.T) {
+	refusal := `cannot freeze until the open candidate settles (another self-development operation is open on this computer: selfdev-77aa is awaiting_approval)`
+	failed := withCommittedFreeze(errors.New("reduce: persist tray-1: assignment command evidence unavailable after durable freeze: 5 cited refs resolved to 4 receipts"),
+		map[string]any{"operation_id": "selfdev-88bb", "state": "frozen"})
+	if failed == nil || !strings.Contains(failed.Error(), "selfdev-88bb") {
+		t.Fatalf("the cell error does not name the committed freeze: %v", failed)
+	}
+	if reason := engineeringTerminalFateGuardReason(guardTestMessages(t, refusal, "tool_error: "+failed.Error())); reason != engineeringTerminalFateRequired {
+		t.Fatalf("a freeze committed before a failed intent did not reset the refusal: %q", reason)
+	}
+	if withCommittedFreeze(nil, map[string]any{"operation_id": "x"}) != nil || withCommittedFreeze(errors.New("e"), nil).Error() != "e" {
+		t.Fatal("withCommittedFreeze must leave nil errors and freeze-less cells alone")
 	}
 }

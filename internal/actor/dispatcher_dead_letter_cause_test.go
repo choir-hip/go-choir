@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"strings"
 	"sync"
@@ -59,3 +60,93 @@ func TestPoisonOnTheLastAttemptLogsTheHandlerError(t *testing.T) {
 type writerFunc func([]byte) (int, error)
 
 func (f writerFunc) Write(p []byte) (int, error) { return f(p) }
+
+// Review round 4b (Sonnet F5, both on the wording): the other two poison
+// lines. A wake whose attempt budget was spent before the handler ran (its
+// deliveries did not complete) and a wake that deferred past MaxDeferrals.
+func TestPoisonBeforeTheHandlerSaysTheDeliveriesDidNotComplete(t *testing.T) {
+	out := captureDispatcherLog(t)
+	klog := testLog(t)
+	ctx := context.Background()
+	if _, err := klog.Append(ctx, Update{UpdateID: "wake-2", ToAgentID: "management", Kind: "k", CreatedAt: time.Now().UTC()}); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ { // two deliveries that never completed
+		if _, err := klog.RecordAttempt(ctx, "management", "wake-2"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ran := make(chan struct{}, 1)
+	sink := make(chan struct{}, 1)
+	handler := HandlerFunc(func(_ context.Context, agentID string, u Update, memory []byte) ([]byte, error) {
+		if agentID == "sink" {
+			select {
+			case sink <- struct{}{}:
+			default:
+			}
+		} else {
+			select {
+			case ran <- struct{}{}:
+			default:
+			}
+		}
+		return memory, nil
+	})
+	runDispatcherUntil(t, klog, handler, DispatcherOptions{PollInterval: 10 * time.Millisecond, MaxAttempts: 1, ErrorSink: "sink"}, sink)
+	select {
+	case <-ran:
+		t.Fatal("the handler ran for a wake whose budget was spent")
+	default:
+	}
+	if line := out(); !strings.Contains(line, "poison management/wake-2") || !strings.Contains(line, "did not complete") || !strings.Contains(line, "failed commit") {
+		t.Fatalf("the pre-handler poison line does not say the deliveries did not complete:\n%s", line)
+	}
+}
+
+func TestPoisonAtTheDeferralLimitLogsTheCause(t *testing.T) {
+	out := captureDispatcherLog(t)
+	klog := testLog(t)
+	ctx := context.Background()
+	if _, err := klog.Append(ctx, Update{UpdateID: "wake-3", ToAgentID: "management", Kind: "k", CreatedAt: time.Now().UTC()}); err != nil {
+		t.Fatal(err)
+	}
+	sink := make(chan struct{}, 1)
+	handler := HandlerFunc(func(_ context.Context, agentID string, u Update, memory []byte) ([]byte, error) {
+		if agentID == "sink" {
+			select {
+			case sink <- struct{}{}:
+			default:
+			}
+			return memory, nil
+		}
+		return nil, fmt.Errorf("%w: waiting on the apply checkpoint", ErrDeferUnprocessed)
+	})
+	runDispatcherUntil(t, klog, handler, DispatcherOptions{PollInterval: 10 * time.Millisecond, MaxDeferrals: 1, ErrorSink: "sink"}, sink)
+	if line := out(); !strings.Contains(line, "poison management/wake-3") || !strings.Contains(line, "waiting on the apply checkpoint") {
+		t.Fatalf("the deferral-limit poison line has no cause:\n%s", line)
+	}
+}
+
+func captureDispatcherLog(t *testing.T) func() string {
+	t.Helper()
+	var buf bytes.Buffer
+	var mu sync.Mutex
+	previous := log.Writer()
+	log.SetOutput(writerFunc(func(p []byte) (int, error) { mu.Lock(); defer mu.Unlock(); return buf.Write(p) }))
+	t.Cleanup(func() { log.SetOutput(previous) })
+	return func() string { mu.Lock(); defer mu.Unlock(); return buf.String() }
+}
+
+func runDispatcherUntil(t *testing.T, klog *SQLiteLog, handler Handler, opts DispatcherOptions, done <-chan struct{}) {
+	t.Helper()
+	rt := NewKernelRuntime(klog, klog, handler, Options{}, opts)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	rt.StartKernel(ctx)
+	defer rt.Stop()
+	select {
+	case <-done:
+	case <-time.After(15 * time.Second):
+		t.Fatal("the wake never reached the dead-letter sink")
+	}
+}
