@@ -280,6 +280,10 @@ type Runtime struct {
 	// telemetryDrainDeadline bounds the planned-restart telemetry drain; zero
 	// means the default (telemetry_batching.go).
 	telemetryDrainDeadline time.Duration
+	// hostRestartTelemetryRestore undoes the synchronous mode the host's
+	// planned-restart request entered; nil when no host request holds it.
+	hostRestartTelemetryMu      sync.Mutex
+	hostRestartTelemetryRestore func()
 	// deliveryHooksMu guards the actor delivery hooks against the projector
 	// goroutine reading them while they are set.
 	deliveryHooksMu sync.RWMutex
