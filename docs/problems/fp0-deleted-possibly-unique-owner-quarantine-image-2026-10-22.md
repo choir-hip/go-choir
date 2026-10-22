@@ -73,3 +73,40 @@ name, hash prefix and directory in `docs/`, and put every record that
 mentions it, with its claim, in the question to the owner. A record that
 says "required for recovery" or "possibly unique" blocks the deletion until
 the owner answers that specific claim.
+
+## What the image held (read-only investigation, 18:25 to 18:40 UTC)
+
+The platform keeps every file-root manifest (paths, sizes, sealed chunk
+digests) for good: corpusd's `computer_file_roots` and the
+`file_root_committed` events on the tape (`internal/platform/file_cas.go`,
+`internal/autoputer/file_sync.go`). Read through corpusd on host loopback
+(`/internal/computers/files/roots`, `/internal/computers/events/replay`,
+`/internal/computers/files/root`); nothing on the guest, no SQL.
+
+- The last root before the 10-07 restore was committed at 07:47
+  (sequence 571764, root `c52da9ef965d…`): 2,152 files, 92,937,359 bytes,
+  the same counts as the 10-09 comparison of the deleted image. The next
+  root is 10-08 00:03 (`04e78177702c…`, 2,385 files).
+- 485 paths of the 07:47 root are absent from the first post-restore root,
+  and 477 from today's root (18:14, `80d6f1387077…`). So the paths were
+  lost at the restore, not deleted later (the 10-09 record's open
+  question).
+- The 477: 432 `Source/platform` (an older checkout of this repo: all 267
+  loose git objects exist in the repo; 143 of 145 working files match a git
+  version's size exactly, the other two are July docs a few bytes off; the
+  rest is the clone's packs, refs and logs), 30 `.choir/zot` (the registry
+  removed in deploy D), 2 `System/model-policy-overlays/*.toml` (450 and
+  475 bytes), and 13 `*.texture` shortcut files (155 to 337 bytes each;
+  pointers to documents in the guest's Texture store, not the documents).
+- Contents are not recoverable from file roots: the artifact GC has
+  collected chunks outside a 7-day window since 2026-10-14, and any
+  surviving chunk is sealed with the computer's key (a two-approval unwrap).
+
+Likely unique loss: the two overlay files, and the shortcuts if their
+documents are gone from the Texture store (the owner can check by title).
+Path lists: FP0 scratch `fileroots/missing.txt` and Node B
+`/root/fp0-fileroots/` (manifests, 0700).
+
+The computer is the owner's premium always-on primary
+(`computer-03335285…`). vmctl lists `vm-4a9afa23` (computer-ad1b46d4…)
+as class `test`; both stay excluded from proofs.
