@@ -64,3 +64,66 @@ probe /health every 2 s with `curl -w '%{http_code} %{time_connect}
 %{time_total}'`, and read the guest's `/proc/net/netstat` ListenOverflows
 and `/proc/pressure/memory` through an existing host-only route if one
 exposes them.
+
+## Steady-state 503s, not only after a refresh (FP0, 21:15)
+
+FP0's 2 s probe of the paper's `/health` from Node B, 20:08 to 21:08
+(`_runs/deployKF/paper-watch-kf.txt`, 3,416 probes): 3,160 answered 200,
+218 answered 503, 19 failed to connect (the 20:05 host reboot), one was a
+probe of the old address. The 503s are not confined to the boot and refresh
+windows (20:54-20:58 holds 27 of them): they come in bursts of 1 to 16 per
+minute every 3 to 10 minutes through the whole hour (for example 20:17,
+20:29, 20:37, 20:44, 21:03-21:04). Each 503 took 1.000 s, exactly /health's
+store-read budget, with a fast connect: the store reads missed the budget,
+the listener did not stall. A five-minute capture of 503 bodies from
+21:09 found none (bursts are intermittent).
+
+At the 21:03-21:04 burst the paper's console shows it fully loaded: all
+eight Texture activation slots busy (`dispatcher: activation wait ...
+slots=8/8 due`, waits of 1m39s-1m47s), story publishes and verdicts several
+per second.
+
+Hypothesis (not yet confirmed from a trace): /health's three store reads
+queue behind the store's writers under full Texture load, so the paper's
+health signal turns 503 in bursts while it is working normally. Why it
+matters: vmmanager polls /health every 15 s, and a run of 503s reads as an
+unhealthy computer to anything that acts on it; the runbook's "paper
+healthy" test would miss it, and an owner-facing status would flap.
+Capture at 21:19:07, 21:19:09 and 21:19:12 (`_runs/paper-503-bodies.txt`):
+all three reads unanswered (`desk_pending_mutations`,
+`selfdev_active_operations`, `effective_release`), `running_runs` 8,
+`engine_mutex_live.waiter_count` 0. So no caller was waiting on the engine
+mutex; the reads were waiting for the store's only connection
+(`internal/store/texture.go:353`, `SetMaxOpenConns(1)`), which some other
+caller held for over a second, three times in five seconds. /health is
+reporting that honestly; the question is what holds the one connection
+that long under full load.
+
+Holders found so far (FP0, 21:30; code read by a worker; the paper's
+console and `/api/runtime/observability`):
+
+- Online `DOLT_GC` (`internal/store/dolt_maintenance.go`, a 5-minute
+  ticker, `CALL DOLT_GC()` on the write connection) ran ten times from
+  19:40 to 21:24, every 10 to 20 minutes, for 10 to 25 s each, each time
+  because the journal had grown past its 1,024 MiB threshold again (1,105 to
+  1,717 MiB). Four 503 bursts sit inside a GC window: 20:17 (GC
+  20:17:09-20), 20:37 (20:37:09-25), 20:52 (20:52:09-24), 21:04
+  (21:04:20-36). So the paper's whole store stops for 10-25 s every 10-20
+  minutes, by design, and the journal grows by over 1 GiB between GCs
+  (about 1-2 MB/s of journal while working; see the disk-pressure record).
+- Inline `DOLT_COMMIT`s are not it: 217 commits, the longest 32 ms
+  (`guest_checkpoint.inline_max_ns`).
+- Not attributed yet: the bursts at 20:29-20:30, 20:44-20:45 and 21:19.
+  Next probe: during one, `GET /api/runtime/observability?goroutines=1`
+  names the goroutine inside the Dolt engine (the health reads wait in
+  `database/sql.(*DB).conn`).
+- Discovered heresy (from the code read): `engineMu` exists because
+  concurrent queries on the shared embedded engine race
+  (`objectgraph/dolt_store.go:63-67`), yet raw `s.db` queries (the
+  /health reads, `finalizeBatch`, `DOLT_COMMIT`, `DOLT_GC`, Texture SQL,
+  selfdev) run beside read-pool object-graph queries without it.
+
+Open: which store calls hold the connection over a second while eight runs
+are live (a per-call hold-time log above a threshold would name them);
+whether /health's three reads should come from memory instead of the
+store, so the health signal stops turning on load.
