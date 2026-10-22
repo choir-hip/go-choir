@@ -12,51 +12,33 @@ import (
 // computer's public web fetches make their network hop through the
 // gateway's /provider/v1/fetch instead of the guest's own egress. The grant
 // is a file vmctl writes on the computer's root-only credential disk at
-// cold boot. Off while the list is empty (nix/node-b.nix, go-choir-vmctl
-// Environment):
-//
-//	CHOIR_HOST_FETCH_COMPUTERS  ComputerIDs and/or class:test, comma or
-//	                            space separated
+// cold boot. The switch is CHOIR_HOST_FETCH_VMS (hostfetch.EnvVMs): VM IDs,
+// because the gateway, which reads the same list from its own environment
+// and refuses every other caller, knows a guest only by its VM ID (the
+// credential identity). Off while empty (nix/node-b.nix, one binding for
+// both units).
 //
 // A snapshot resume keeps the old credential disk, so a changed list
-// reaches a computer at its next cold boot. Rollback: empty the list and
-// cold-boot the computer; it fetches by itself again.
-const hostFetchComputersEnv = "CHOIR_HOST_FETCH_COMPUTERS"
+// reaches a computer at its next cold boot. Rollback: empty the list,
+// deploy, cold-boot the computer; it fetches by itself again.
+const hostFetchVMsEnv = hostfetch.EnvVMs
 
 // HostFetchConfig is the host switch.
 type HostFetchConfig struct {
-	Computers map[string]bool
-	ClassTest bool
+	VMs map[string]bool
 }
 
 func loadHostFetchConfig(getenv func(string) string) HostFetchConfig {
-	cfg := HostFetchConfig{Computers: map[string]bool{}}
-	for _, entry := range strings.FieldsFunc(getenv(hostFetchComputersEnv), func(r rune) bool { return r == ',' || r == ' ' || r == '\n' || r == '\t' }) {
-		if entry == hostfetch.ClassTestToken {
-			cfg.ClassTest = true
-			continue
-		}
-		cfg.Computers[entry] = true
-	}
-	return cfg
+	return HostFetchConfig{VMs: hostfetch.ParseVMList(getenv(hostFetchVMsEnv))}
 }
 
 // hostFetchMaterial is the grant a computer's credential disk carries, or
-// nothing for a computer the switch does not name.
-func (c HostFetchConfig) hostFetchMaterial(computerID, warmnessClass string, now time.Time) (map[string][]byte, string) {
-	computerID = strings.TrimSpace(computerID)
-	if computerID == "" {
+// nothing for a VM the switch does not name.
+func (c HostFetchConfig) hostFetchMaterial(computerID, vmID string, now time.Time) (map[string][]byte, string) {
+	computerID, vmID = strings.TrimSpace(computerID), strings.TrimSpace(vmID)
+	if computerID == "" || vmID == "" || !c.VMs[vmID] {
 		return nil, ""
 	}
-	basis := ""
-	switch {
-	case c.Computers[computerID]:
-		basis = hostfetch.BasisComputer
-	case c.ClassTest && strings.TrimSpace(warmnessClass) == "test":
-		basis = hostfetch.BasisClassTest
-	default:
-		return nil, ""
-	}
-	raw, _ := json.Marshal(hostfetch.Grant{ComputerID: computerID, Status: hostfetch.GrantGranted, Basis: basis, GrantedAt: now.UTC().Format(time.RFC3339)})
-	return map[string][]byte{hostfetch.GrantFile: append(raw, '\n')}, "granted (" + basis + ")"
+	raw, _ := json.Marshal(hostfetch.Grant{ComputerID: computerID, Status: hostfetch.GrantGranted, Basis: hostfetch.BasisVM, GrantedAt: now.UTC().Format(time.RFC3339)})
+	return map[string][]byte{hostfetch.GrantFile: append(raw, '\n')}, "granted (vm)"
 }

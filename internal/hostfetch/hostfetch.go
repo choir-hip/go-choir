@@ -12,8 +12,9 @@
 // hop moves where the check runs, not what is reachable.
 //
 // A computer uses the verb only when vmctl wrote a grant on its credential
-// disk (CHOIR_HOST_FETCH_COMPUTERS; off while empty). A granted computer
-// never falls back to dialing itself.
+// disk, and the gateway admits the verb only for a VM on its own copy of
+// the same host list (CHOIR_HOST_FETCH_VMS; off while empty). A granted
+// computer never falls back to dialing itself.
 package hostfetch
 
 import (
@@ -104,12 +105,28 @@ const (
 	GrantFile = "host-fetch.json"
 	// GrantGranted is the only status that turns the route on.
 	GrantGranted = "granted"
-	// ClassTestToken in the host list grants every test computer.
-	ClassTestToken = "class:test"
-	// BasisComputer and BasisClassTest say why a computer was granted.
-	BasisComputer  = "computer"
-	BasisClassTest = ClassTestToken
+	// BasisVM says the computer's VM was on the host list.
+	BasisVM = "vm"
+	// EnvVMs is the host switch, read by both vmctl (to write the grant)
+	// and the gateway (to admit the verb): VM IDs, the gateway credential
+	// identity, comma or space separated. Empty or unset: off everywhere.
+	EnvVMs = "CHOIR_HOST_FETCH_VMS"
 )
+
+// ParseVMList reads the host switch. Class tokens ("class:...") are
+// dropped: the gateway knows a caller only by its VM ID and cannot check a
+// class, so the list names VMs only
+// (docs/problems/host-fetch-verb-open-to-every-guest-2026-10-22.md).
+func ParseVMList(v string) map[string]bool {
+	out := map[string]bool{}
+	for _, entry := range strings.FieldsFunc(v, func(r rune) bool { return r == ',' || r == ' ' || r == '\n' || r == '\t' }) {
+		if strings.HasPrefix(entry, "class:") {
+			continue
+		}
+		out[entry] = true
+	}
+	return out
+}
 
 // Grant is the record vmctl writes on a granted computer's credential disk.
 type Grant struct {
