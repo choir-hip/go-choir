@@ -1791,6 +1791,7 @@ func runRemovedPartChild(t *testing.T, testName, rel string) string {
 		fmt.Printf("SECOND-LEFT-OPEN %t\n", second != nil && errors.Is(second, ErrCloseLeftOpen))
 		fmt.Printf("REOPEN-REFUSED %t\n", reopen != nil && errors.Is(reopen, ErrCloseLeftOpen))
 		fmt.Printf("CLOSES-LEFT-OPEN %d\n", s.CheckpointStats().ClosesLeftOpen)
+		fmt.Printf("ENGINES-LEFT-OPEN %d\n", s.CheckpointStats().EnginesLeftOpen)
 		os.Exit(3)
 	}
 	path := testStorePath(t)
@@ -1805,7 +1806,7 @@ func runRemovedPartChild(t *testing.T, testName, rel string) string {
 
 func assertRemovedPartFailsClosed(t *testing.T, out string) {
 	t.Helper()
-	for _, want := range []string{"FIRST-LEFT-OPEN true", "SECOND-LEFT-OPEN true", "REOPEN-REFUSED true", "CLOSES-LEFT-OPEN 2"} {
+	for _, want := range []string{"FIRST-LEFT-OPEN true", "SECOND-LEFT-OPEN true", "REOPEN-REFUSED true", "CLOSES-LEFT-OPEN 2", "ENGINES-LEFT-OPEN 1"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q: a Close over a removed workspace must fail closed, stay failed and refuse Reopen:\n%s", want, out)
 		}
@@ -1866,5 +1867,50 @@ func TestReopenClosesTheStoreItOpenedWhenAdoptionFails(t *testing.T) {
 	}
 	if err := closeWithin(t, next, 30*time.Second); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// Sonnet r7 F1: closeFailedOpen retries only a fail-closed Close, at most
+// three Closes in all, and returns Open's error joined with any Close error
+// that remains. Kills the no-retry, the retry-on-any-error and the
+// dropped-error mutants.
+func TestCloseFailedOpenRetriesOnlyAFailClosedClose(t *testing.T) {
+	openErr := errors.New("open failed")
+	plain := errors.New("a close error that is not fail-closed")
+	for _, tc := range []struct {
+		name      string
+		results   []error
+		wantCalls int
+		wantIs    []error
+		wantNotIs []error
+	}{
+		{"plain error, no retry", []error{plain, nil, nil}, 1, []error{openErr, plain}, []error{ErrCloseLeftOpen}},
+		{"left open twice, then closed", []error{ErrPoolStatementLive, ErrCheckpointCommitLive, nil}, 3, []error{openErr}, []error{ErrCloseLeftOpen}},
+		{"left open throughout", []error{ErrPoolStatementLive, ErrPoolStatementLive, ErrPoolStatementLive, nil}, 3, []error{openErr, ErrPoolStatementLive}, nil},
+		{"closed at once", []error{nil}, 1, []error{openErr}, []error{ErrCloseLeftOpen}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := 0
+			closeStoreForFailedOpen = func(*Store) error {
+				err := tc.results[calls]
+				calls++
+				return err
+			}
+			t.Cleanup(func() { closeStoreForFailedOpen = func(s *Store) error { return s.Close() } })
+			got := (&Store{}).closeFailedOpen(openErr)
+			if calls != tc.wantCalls {
+				t.Fatalf("Close was called %d times, want %d", calls, tc.wantCalls)
+			}
+			for _, want := range tc.wantIs {
+				if !errors.Is(got, want) {
+					t.Fatalf("closeFailedOpen = %v, want it to be %v", got, want)
+				}
+			}
+			for _, not := range tc.wantNotIs {
+				if errors.Is(got, not) {
+					t.Fatalf("closeFailedOpen = %v, must not be %v", got, not)
+				}
+			}
+		})
 	}
 }
