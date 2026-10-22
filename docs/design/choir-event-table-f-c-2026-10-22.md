@@ -58,7 +58,7 @@ observed; one finished run's events identical before and after; the
 and polling; a test-computer restart, and the owner restore of a
 pre-deploy-1 checkpoint on it). Section 6.3 is the proof of deploy 2.
 
-Round 1e (DeepSeek, review bunch 99, confirmed; Medium; open): proof step
+Round 1e (DeepSeek, review bunch 99, confirmed; Medium; fixed): proof step
 6 `--phase recovered` cannot run. Its `manual` message
 (`scripts/proofs/fp1-event-table-deploy1.sh:148`) is double-quoted, so the
 shell runs `$(mktemp -d)` while building the message and then expands
@@ -69,7 +69,10 @@ rc 1. No other double-quoted string in the script carries a `$(` or a `$`
 meant as literal text; the other expansions (`$T_COMPUTER`, `$body`,
 `$report`) are meant. The rollback recipe itself (the sequence below and
 `fc-deploy1-rollback.sh`) is unaffected: only the proof's printed copy of
-it is broken.
+it is broken. Fixed by escaping the message's `$(` and `$T`, so it prints
+as text. `scripts/proofs/selftest.sh` now runs step 6 in both phases in a
+dry run against fake ssh and curl and checks that the sequence prints
+literally; those cases fail on `a6fa313bb` and pass after the fix.
 
 **What a rollback below deploy 1 means now** (corrected in review round
 1b; all three reviewers). A rollback below deploy 1 is **runtime-safe, not
