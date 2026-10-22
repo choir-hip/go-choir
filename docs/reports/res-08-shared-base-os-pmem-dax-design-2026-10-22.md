@@ -167,7 +167,8 @@ reports `partitioned: false` with a `reason`, and the probe's refusal
 quotes it. The reasons are: mountinfo unreadable, no store mount, a
 stacked overlay (more than one overlay at the store, or several lower
 layers), an overlay without a parsed upperdir, or an upper that does not
-resolve in the daemon's namespace.
+resolve in the daemon's namespace. These reason strings are pinned by
+`TestPageCacheLayeringReasons`, and a partitioned read states none.
 
 Run from FP0's machine (the script uses `ssh node-b`; it boots, stops,
 evicts and writes nothing):
@@ -284,14 +285,23 @@ decision.
   uncounted. That errs toward a floor, and a store with skips is refused,
   so it cannot flatter a quoted number. erofs, overlay and ext4 return real
   types today.
-- mountinfo option values are split on commas. An upper or work path that
-  contains an escaped comma would be misparsed. It now fails closed: the
-  read reports partitioned false, either for a missing upper or for one
-  that does not resolve. Today's paths have no commas.
+- **Commas and colons in overlay option values** (review bunch 20). The
+  options are split on literal commas. The kernel prints a comma inside a
+  value as the octal escape `\054`, which is decoded after the split, so
+  such an upper or work path parses (tested). A literal comma, if one ever
+  appeared, would truncate the value. The truncated path then either does
+  not exist (the read reports partitioned false, "overlay upper does not
+  resolve") or is absent (partitioned false, "overlay without a parsed
+  upperdir"); it is never extended. A colon inside a lowerdir path is read
+  as a second layer, so it fails closed as stacked. Today's paths have
+  neither.
 - **The caps are per root** (review bunch 16, F4). The file cap (500k)
   and the byte cap (64 GiB) apply to each root (a root and its overlay
   upper share one budget). The guest's two roots may therefore examine up
   to twice each cap in all. The 30 s deadline is for the whole read.
-- The topmost store mount is taken to be the last matching mountinfo line.
-  That is the kernel's mount order, but it is not a documented guarantee.
-  A stacked store (more than one overlay) fails closed whatever the order.
+- The reported store mount is the last matching mountinfo line. That is
+  the kernel's mount order, but it is not a documented guarantee, so
+  stacking is judged from the set of mounts and not their order: more than
+  one overlay, an overlay under a later plain mount, a lowerdir with several
+  layers, and `lowerdir+=` or `datadir+=` options all report partitioned
+  false (reason "stacked overlay").
