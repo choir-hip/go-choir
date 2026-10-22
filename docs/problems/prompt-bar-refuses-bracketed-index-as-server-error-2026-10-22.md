@@ -61,12 +61,13 @@ metamission).
 
 - (a) The owner's prompt, when it becomes the initial revision of a new
   Texture lifecycle, is the owner's literal text. It is not validated
-  against the Texture agent authoring rules on text. It is stored
-  exactly as typed. Scope: the initial revision of `StartLifecycle` when
-  it is user-authored with no `body_doc`; the request shape (and so the
-  start-request digest and command replay) is unchanged. Not changed:
-  the editor save path (content-only user revisions into an existing
-  document keep the existing refusal, pinned by
+  against the Texture agent authoring rules on text. It is stored as
+  typed (line endings as LF, ends trimmed; round 2 F3). Scope: the
+  initial revision of `StartLifecycle` when it is user-authored with no
+  `body_doc` and the caller is not in-process (round 2 F1); the request
+  shape (and so the start-request digest and command replay) is
+  unchanged. Not changed: the editor save path (content-only user
+  revisions into an existing document keep the existing refusal, pinned by
   `TestTextureRevisionAPIAcceptsStructuredBodyAndRejectsLegacySourceSyntax`),
   and every agent-authored revision.
 - (b) Any other `ErrInvalidTextureRevision` from the prompt bar submit is
@@ -74,22 +75,24 @@ metamission).
 
 ## Residual (named, not fixed here)
 
-- R1 (hypothesis, read from code, not exercised). The owner's literal
-  text now exists in a revision whose body would not pass the agent
-  rules. A Texture `Write` that keeps such a block unchanged is
-  re-validated as a whole document (`texture_cell_author.go`
+- R1 (confirmed at the validator, run effect unmeasured; see Round 2 F2).
+  The owner's literal text now exists in a revision whose body would not
+  pass the agent rules. A Texture `Write` that keeps such a block
+  unchanged is re-validated as a whole document (`texture_cell_author.go`
   `commitTextureWrite` runs `texturedoc.Project` on the result, and the
   store's `prepareTextureRevisionV2` validates it again at commit), so it
-  would be refused for the carried `[N]` text, and the agent can only
-  rewrite the block. A Write that replaces the owner's text is
+  is refused for the carried `[N]` text, and the desk can only rewrite the
+  block (`@replace` or `@all`). A Write that replaces the owner's text is
   unaffected. A durable fix is a marker that travels with owner-literal
   nodes, or validating only the text a Write changed
-  (`texturewrite.ChangedBlocks`). To be confirmed from a run's ledger
-  (turn-commit reasons and `choir.Write` refusals) on a prompt that
-  contains `[N]` and asks the desk to extend it.
-- R2. `code_block` text and `code`-marked text are checked against the
-  numbered-citation rule too. `argv[1]` in a code block is not a
-  citation, for agents either. Out of scope for this lane.
+  (`texturewrite.ChangedBlocks`). No desk has been run end to end on such
+  a prompt; the run ledger (turn-commit reasons and `choir.Write`
+  refusals) is the missing evidence, and FP0's proof step 3 collects it.
+- R2 (worse than first written; see Round 2 F2). `code_block` text and
+  `code`-marked text are checked against the numbered-citation rule too:
+  a desk can never write `sys.argv[1]`, even in a code span or a code
+  block, and the refusal does not name the block and tells the desk to
+  use a `source_ref` for code. Out of scope for this lane.
 - R3. A refused prompt leaves its conductor run record behind in
   whatever state `CompletePromptBarDecision` left it (existing behavior
   for any handoff failure).
@@ -190,10 +193,14 @@ no new behaviour.
 
 ## Fix (as landed on lane/fp0-prompt-bar-refusal)
 
-Mutation class: orange (the owner's input into a Texture lifecycle; sits
-next to the red surface "Texture canonical writes", so FP0 may land it as
-red). Protected surface adjacent: the validation that stands in front of a
-canonical Texture revision.
+Mutation class: red (round 2 F5; this section first said orange). The
+change is validation in front of a canonical Texture revision, a
+"Texture canonical writes" surface. Protected surface touched: the
+initial-revision validation of `StartLifecycle`. Conjecture delta: the
+owner's input is not Texture authoring, so refusing it as a citation error
+was a category error; and a caller's identity, not the text, decides which
+rule applies. Admissible evidence class: HTTP handlers and `StartLifecycle`
+against a real store (the tests below); the deployed proof is FP0's.
 
 - Option (a), taken. `texturedoc.ValidateOwnerText` / `ProjectOwnerText`
   are `Validate` / `Project` without the authoring rules on text; every
@@ -205,10 +212,11 @@ canonical Texture revision.
   owner's text as before and validates it with the owner-text rule. A
   revision with a `body_doc`, any agent-authored revision, and
   `CreateRevision` / the editor save path are prepared as before. Why (a):
-  the owner's words are stored exactly (the same content as before for
-  text that has no bracket), the start request and its digest are
-  unchanged, so command replay is unaffected, and nothing about an agent's
-  output is relaxed. The alternatives were rejected: escaping or splitting
+  the owner's words are stored as before (the same content as for text
+  that has no bracket; see F3 below for the line-ending caveat), the start
+  request and its digest are unchanged, so command replay is unaffected,
+  and the text of an agent or a desk is not relaxed (round 1 wrongly
+  claimed this without the in-process marker below). The alternatives were rejected: escaping or splitting
   the text into several text nodes would change the owner's words or only
   hide the text from the validator and fail again when `texturewrite`
   re-derives the block; a flag in `types.StartLifecycleRequest` or a
@@ -219,9 +227,44 @@ canonical Texture revision.
   a failed submit to a status: command conflicts 409, pre-genesis 503
   (both unchanged), `store.ErrInvalidTextureRevision` 400 with
   `prompt refused: <the validator's reason>` (the internal wrapping is
-  cut), everything else 500 `failed to submit prompt`. After (a) no
-  prompt text reaches (b) today; it is the floor for the next validation
-  rule.
+  cut), everything else 500 `failed to submit prompt`. After (a), (b) is
+  live for exactly one caller: an in-process one (next bullet).
+- In-process marker (round 2 F1, the management desk). `HandlePromptBar`
+  and `HandleTextureLifecycleCreate` call `ownerTextContext`: when
+  `strings.TrimSpace(r.RemoteAddr) == ""` (`server.GuestHostCaller`'s
+  documented in-process marker; `choir.ProductAPI` is its only non-test
+  producer, `tools_product_api.go:76`) the context carries
+  `store.WithStrictInitialText`, and `StartLifecycle` then prepares the
+  initial revision with the strict rule (`prepareTextureRevisionV2`)
+  instead of the owner-text rule. A desk-shaped call with `[1]`,
+  `Source:`, `{{source:` or `[source: ...]` gets a 400 `prompt refused:
+  <reason>` it can correct; ordinary desk text still starts a Texture
+  (202). The marker is on the context, not in the request, so the
+  start-request digest and command replay are unchanged. A proxied owner
+  request carries the host gateway address, never an empty one.
+  `SubmitOwnerPrompt` (the computer's own release-adoption request, no
+  HTTP) carries no marker and stays literal: it is the owner's act.
+- Narrowed (round 2 F4). `texturedoc.ValidateOwnerText` accepts only the
+  shape the store synthesizes from plain text, one paragraph of unmarked
+  text and `hard_break` nodes, so a later caller that passes a model-authored
+  document (a `code_block`, a mark, a heading) is refused there and has to
+  pass `Validate`. That guard is unreachable through any handler (the store
+  always builds the shape), and CLAUDE.md says no unit test after code, so
+  it has no test of its own. The owner path still ignores
+  `unused_source_entity_ids` (the synthesized document has no source
+  entities; not owner-controllable).
+- F3 (line endings). The store's plain-text synthesis
+  (`plainTextInlineNodes`, unchanged) turns CRLF and a lone CR into LF, and
+  the handler trims the text's ends. A literal-bytes guarantee for CR needs
+  a different storage shape and is not done. "Stored as typed" in this
+  record means: the text, with line endings as LF and the ends trimmed,
+  exactly as on main for a prompt that has no bracket.
+- F6. A 400 from the prompt bar leaves its conductor run keyed by
+  `command_id` (R3). Resubmit corrected text under a new `command_id`; the
+  same one answers 409.
+- F7. A stored owner revision with `[N]` is not publishable through the
+  structured path (`platform/publication_document.go:99`); it falls back to
+  plain content. Fail-soft.
 - Owner-start surfaces now equal: `POST /api/texture/lifecycle-documents`
   (owner create) reaches the same `StartLifecycle` branch with
   user-authored plain text, so its initial text is literal too (it
@@ -235,14 +278,30 @@ Tests (behaviour, against a real store through the HTTP handler):
 stable, agent-authored initial `[1]` still refused with no trajectory
 persisted), `TestPromptBarSubmitFailureStatusAndReason` (the mapping). The
 first three fail on 273d139c9 with HTTP 500 and "contains legacy ...
-syntax". The pre-existing `TestTextureCreateRevisionRejectsLegacySource...`
+syntax". Round 2 adds
+`TestHandlePromptBarInProcessCallerStaysUnderCitationRules` (five
+desk-shaped texts, each 400 with `prompt refused: ... legacy ...`),
+`TestHandlePromptBarInProcessCallerStillStartsATexture` (ordinary desk
+text 202) and `TestTextureLifecycleCreateOwnerTextLiteralInProcessStrict`
+(owner 201, in-process 400); the first and the last fail at 8c35cefdc
+with 202 and 201 (the desk's text stored as an owner-labelled revision). The pre-existing `TestTextureCreateRevisionRejectsLegacySource...`
 cases and `TestTextureRevisionAPIAcceptsStructuredBodyAndRejectsLegacySourceSyntax`
 still pass: the editor path is unchanged.
 
-Heresy delta. Discovered: R1 to R4 above. Introduced: owner-literal text
-now sits in a stored revision that the agent text rules would refuse (R1).
-Repaired: an owner's ordinary prompt answered as a server error with no
-reason.
+Heresy delta. Discovered: R1 to R4 above; round 2 F1 (the management desk
+reached the owner-text rule through `choir.ProductAPI`, a hole this lane
+had introduced in its first head and closed in round 2), F2 (R1 confirmed,
+R2 worse, refusal path names no block), F3 to F7. Introduced: owner-literal
+text now sits in a stored revision that the agent text rules would refuse
+(R1). Repaired: an owner's ordinary prompt answered as a server error with
+no reason; the desk-reachable relaxation of round 1.
+
+Follow-ups named, not done here (red-adjacent, widen the authoring rule or
+the validator): (1) exempt `code_block` text and code-marked text from the
+numbered-citation rule for agents (R2); (2) carry the block id in the
+validator's path, and say something other than "use a source_ref node"
+when the text is code (F2); (3) the R1 durable fix, a marker that travels
+with owner-literal nodes or validating only the text a Write changed.
 
 ## Proof for FP0 on a test computer (not run by the lane)
 
@@ -253,13 +312,29 @@ reason.
 2. `GET /api/texture/documents/<doc_id>` (or the revision) shows the
    initial revision content equal to the text sent, with `[1]` and `[2]`
    intact; the guest log has no "prepare initial revision" line.
-3. A Texture desk run starts for the document (`initial_loop_id` in
-   `GET /api/prompt-bar/submissions/<id>` decision). Whether the desk's
-   first `choir.Write` succeeds on this text is R1's check.
+3. The Texture desk lands a revision, not just a run (round 2 F2). Wait
+   for the document's head to become a revision authored by the Texture
+   desk (an `app_agent` revision after the owner's v0) on this prompt, and
+   read the run's ledger: turn-commit reasons and any `choir.Write refused`
+   lines. Pass only if a desk revision lands. A run that starts and ends
+   in Write refusals ("contains legacy unresolved numbered citation
+   syntax") is R1 or R2 happening live: record it with the ledger as the
+   evidence for the follow-ups, and treat the proof as failed for the
+   launch claim "an owner can paste a script".
 4. Regression: the same text through the editor's content-only save of an
    existing document still answers 400 with the reason.
+5. Desk caller (round 2 F1), if the test computer's management desk can be
+   cast to do it: a management cast whose objective is to
+   `choir.ProductAPI` `POST /api/prompt-bar` with text containing `[1]`
+   expects the desk to receive 400 `prompt refused: ...`; no document is
+   created for it. The lane's tests prove the same at the handler with an
+   empty `RemoteAddr`.
+6. Retry note (F6): resubmitting corrected text after a 400 needs a new
+   `command_id`.
 
-Rollback: `git revert` of the fix commit. No schema, no stored-data
+Rollback: `git revert` of the fix commits (the round 2 marker commit
+alone reverts to the round 1 behaviour for the desk, which is the F1
+hole; revert both for main's behaviour). No schema, no stored-data
 migration. A revision stored under the exemption keeps its text; after a
 revert only a later whole-document re-validation of that revision's
 blocks could refuse it (R1).
