@@ -226,19 +226,27 @@ func TestEngineeringAdmissionExpiredRequestExpiresWhenTheSlotFrees(t *testing.T)
 // younger one's admission closes it under the same mutex, with a reason that
 // blames no one, instead of leaving it open while the younger runs.
 func TestEngineeringAdmissionExpiredOlderRequestIsClosedBeforeAYoungerIsAdmitted(t *testing.T) {
-	t.Setenv("CHOIR_ASSIGNMENT_DEADLINE", "300ms")
+	t.Setenv("CHOIR_ASSIGNMENT_DEADLINE", "1h")
 	f := newAdmissionFixture(t, 2)
 	captureAdmissionWakes(f.rt)
 	f.open(0)
-	time.Sleep(400 * time.Millisecond)
-	younger := f.open(1)
+	f.open(1)
+	older, younger := f.get(0), f.get(1)
+	if !older.CreatedAt.Before(younger.CreatedAt) {
+		t.Fatalf("fixture: the older request arrived at %s, not before the younger at %s", older.CreatedAt, younger.CreatedAt)
+	}
+	// Admission's clock stands exactly at the younger request's deadline:
+	// expiry is strictly after the deadline, so the younger is still live
+	// and the older, which arrived first, is past its own. No wall-clock
+	// sleep, so a slow (-race, loaded) run cannot cross the window.
+	f.rt.admissionNow = func() time.Time { return younger.CreatedAt.Add(time.Hour) }
 
 	content := fmt.Sprintf(`{"assignment_id":%q,"attempt":%d}`, younger.AssignmentID, younger.Binding.Attempt)
 	err := f.rt.HandleDelegatedAssignmentSpawnDeadline(context.Background(), f.seed.OwnerID, f.computer, f.seed.ParentAgentID, content)
 	if err == nil || !strings.Contains(err.Error(), "capsule authority unavailable") {
 		t.Fatalf("the unexpired younger request did not reach the spawn saga: %v", err)
 	}
-	older := f.get(0)
+	older = f.get(0)
 	if older.Disposition != types.EngineeringAssignmentCancelled || !strings.Contains(older.DispositionReason, "deadline") {
 		t.Fatalf("the expired older request was left %s (%q) while a younger one was admitted", older.Disposition, older.DispositionReason)
 	}
