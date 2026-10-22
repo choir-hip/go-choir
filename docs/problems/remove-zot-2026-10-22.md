@@ -56,11 +56,11 @@ Code and build:
 
 | Citer | Fate |
 | --- | --- |
-| `frontend/src/lib/SuperConsoleApp.svelte` | deleted |
-| `frontend/src/lib/apps/registry.ts` `super-console` entry | deleted (launcher entry goes with it); the `terminal` surface kind stays only if another app uses it |
-| `frontend/src/app.css` `[data-super-console-preview]`, `FloatingWindow.svelte` `super-console` rule | deleted |
-| `frontend/tests/*.spec.js` Console cases (`desktop-shell-core`, `prompt-surface-registry`, `responsive-layout`, `trace-settings-registry`, `desktop-state-persistence`, `terminal-app.spec.js`) | Console cases deleted or the app id swapped for another heavy app; `terminal-app.spec.js` deleted |
-| `internal/proxy/handlers.go` route and `HandleManagementConsoleWS`, `managementConsoleWSURLForTarget` | handler deleted; the path keeps an explicit 404 case so it never reaches the generic `/api/*` forward to guests still on an old image (deferred refresh) |
+| `frontend/src/lib/SuperConsoleApp.svelte`, `frontend/src/lib/stores/terminal.js` (its only user) | deleted |
+| `frontend/src/lib/apps/registry.ts` `super-console` entry | deleted (desk and desktop launcher entries go with it); the `terminal` surface kind had no other app and is deleted with its `AppSurface.svelte` rule |
+| `frontend/src/app.css` `[data-super-console-preview]` and `.terminal-preview`, `FloatingWindow.svelte` `super-console` rule | deleted |
+| `frontend/tests/*.spec.js` Console cases | `terminal-app.spec.js` deleted; `desktop-shell-core`, `prompt-surface-registry`, `trace-settings-registry` now assert the Console is absent (icon count 8 -> 7, desk minimum 15 -> 14); `responsive-layout` opens Settings and `desktop-state-persistence` uses `slides` (another heavy app) in its place |
+| `internal/proxy/handlers.go` route and `HandleManagementConsoleWS`, `managementConsoleWSURLForTarget` | handler deleted; the path keeps an explicit 404 case so it never reaches the generic `/api/*` forward to guests still on an old image (deferred refresh); test `internal/proxy/super_console_removed_test.go` |
 | `internal/proxy/api_key_computer_authority_test.go` super-console cases | deleted |
 | `internal/autoputer/terminal.go`, `terminal_test.go` | deleted (no production caller remains) |
 | `internal/autoputer/run.go` `RunZotSession` and Console registration; `run_test.go` | deleted |
@@ -96,11 +96,73 @@ Docs (current-state docs are fixed; dated records stay as receipts):
   their only in-repo client. Deleting them is a gateway (red) change
   outside this station; candidate for a later deletion slice.
 - `github.com/creack/pty/v2` stays in `go.mod` until a tidy with a
-  recomputed `vendorHash`.
+  recomputed `vendorHash`; likewise the frontend's `ghostty-web`
+  dependency (the Console's terminal renderer) stays in `package.json`
+  until a lockfile change with a recomputed `npmDepsHash`. Neither is
+  imported any more, so neither ships in the built bundle or binary's
+  code paths.
+- Dated records (`docs/definitions/*`, `docs/design/*`, `docs/reports/*`,
+  `docs/desk-rlm-rectification-plan-2026-09-23.md`,
+  `docs/model-pools-design-2026-10-12.md`, older `docs/problems/*`) still
+  mention zot and `super-console` as they were; they are receipts.
 - Old guests keep their `/api/super-console/ws` route until refreshed; the
   proxy's explicit 404 makes it unreachable from the browser in the
   meantime.
 
 ## Now card
 
-(filled in at the end of the lane)
+```yaml
+now:
+  station: FP10 remove zot (lane/fp10-remove-zot)
+  status: candidate pushed; waiting for FP0 review, landing and deployed proof
+  base: 975f1c039
+  commits:
+    - ce29f97be docs: remove zot: decision and deletion record (green)
+    - 61cf540e0 remove zot: the Console window, /api/super-console/ws on both sides, internal/zot, cmd/zot, zot-session (red)
+    - ab61a8bca remove zot: citers in the flake, nix, SBOM scripts, comments and docs (red)
+    - this now card (green)
+  local_evidence:
+    - go build ./... (GOMAXPROCS=2 -p=2): ok
+    - go vet: proxy, autoputer, cmd/autoputer, gateway, server, apihandler: ok
+    - go test: proxy (TestSuperConsoleRouteRemoved, failing before the
+      change, plus the API-key authority matrices), autoputer (run_test,
+      boot timeline), gateway (OpenAI, prompt cache key), server, apihandler: ok
+    - .github/scripts build-sboms-differential-test, verify-sbom-candidate-test,
+      sbom-semantic-fingerprint-test: all pass
+    - frontend npm run build: ok
+    - scripts/check-heresies.sh: exit 0
+  not_run_locally:
+    - Nix evaluation and the guest/Node B closures (no Nix on the lane VM): CI's
+    - the edited Playwright specs (need a running stack): FP0 against staging
+  mutation_class: red (proxy route, guest binary and image, Node B package set)
+  rollback: git revert ab61a8bca 61cf540e0 (the record commits may stay)
+  heresy_delta: {discovered: [], introduced: [], repaired: ["terminal/zot guest children (S1) have no production member"]}
+  owner_questions: none
+  residuals: see Residuals above (gateway OpenAI-compat route, go.mod and package.json tidy, old-guest route until refresh)
+```
+
+## Deployed proof (FP0, after landing)
+
+1. **The route answers 404, anonymous and signed in.**
+   `curl -sS -o /dev/null -w '%{http_code}\n' https://choir.news/api/super-console/ws`
+   prints `404` (before: `401`). With WebSocket upgrade headers:
+   `curl -sS -o /dev/null -w '%{http_code}\n' -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' https://choir.news/api/super-console/ws`
+   prints `404`. Signed in (owner browser console on choir.news):
+   `new WebSocket('wss://choir.news/api/super-console/ws')` fires `error`
+   then `close`, and `(await fetch('/api/super-console/ws')).status` is `404`.
+2. **The Console window is gone.** Logged out, from `frontend/`:
+   `PLAYWRIGHT_BASE_URL=https://choir.news npx playwright test tests/prompt-surface-registry.spec.js -g "carry neither Trace nor"`
+   passes (no `super-console` in the desk sheet). By hand: the desk sheet
+   and the desktop have no "Engineering Console" entry; the served bundle has
+   no Console chunk:
+   `curl -s https://choir.news/ | grep -o 'assets/index-[^"]*\.js' | head -1 | xargs -I{} curl -s https://choir.news/{} | grep -c 'super-console'`
+   prints `0`.
+3. **The guest image carries no zot binary.** In CI's or Node B's Nix (FP0):
+   `nix eval .#packages.x86_64-linux.zot` fails with "does not provide
+   attribute"; `nix path-info -r .#nixosConfigurations.go-choir-autoputer-vm.config.system.build.toplevel | grep -c -- '-zot-'`
+   prints `0`; the same on Node B's system closure prints `0`. On a
+   refreshed computer, the autoputer unit's environment carries no
+   `CHOIR_ZOT_PATH` (`systemctl show autoputer -p Environment`, via the
+   supported diag path, not SSH into a user computer).
+4. **The paper is healthy** after the deploy (the metamission's standing
+   acceptance): schedules and polls read as usual.
