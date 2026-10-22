@@ -47,3 +47,17 @@ Next probe: reproduce on the VM under deliberate load, with
 `-count=50 -race` on this test plus `stress-ng` or a parallel package run.
 Capture the goroutines that hold the workspace's handles when the error
 fires, then confirm or eliminate each hypothesis before any fix.
+
+## Update 2026-10-22 (FP10 ARCH-13 round 8): hypothesis 3 confirmed
+
+The panic half is reproduced and explained. Dolt registers every
+SQL-engine database with `SetCrashOnFatalError`; `NomsBlockStore.Close`
+flushes the journal root into `.dolt/noms`, and an I/O error there
+crashes the process. ARCH-13's arch13j mirror hit it after a store
+workspace was removed under its engine, and
+`TestCloseAfterTheWorkspaceIsRemovedReturnsAnError` reproduces it on
+demand. Commit 7078b0561 makes `Store.Close` leave the engine unclosed
+and return an error when the workspace's `.dolt/noms` is gone. The
+"tables changed" open failure itself (hypotheses 1 and 2) is not
+addressed there; a failed open whose files are intact still closes its
+engine normally.

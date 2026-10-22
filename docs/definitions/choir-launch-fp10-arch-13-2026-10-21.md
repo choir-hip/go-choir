@@ -115,7 +115,8 @@ finish:
     passes there, it pins a bound round 4 already had; the round-6 test
     fails on round 5 on behavior; four of the five round-7 tests fail on
     round 6 on behavior, the fence-restore test pins round-6 behavior).
-    Round 7 - its green record, 6dbdf815d, 1aaa5e7c9 (this alone reverts
+    Round 8 - its green record, 7078b0561, 949fb1467 (949fb1467 does
+    not compile without 7078b0561); round 7 - eb8185144, 6dbdf815d, 1aaa5e7c9 (this alone reverts
     the pinning; the commit-lock fence stays); round 6 - 3b220fa02,
     7ed2ce76a, c10afb2d3, d36230506,
     9d2523727; round 5 - 83f7bc1f1, 4d42ba082, d529f6a94; round 4 - 75f3a9a46, cf2dc9d90, ed56fdc0e; round 3 - 40f1422a7, b0ea5d1c0, 1a0fb4c13; round 2 -
@@ -288,6 +289,32 @@ now:
       decided_at: 2026-10-22
       relayed_by: FP0
       status: built in round 7 (tests 1aaa5e7c9, fix 6dbdf815d), on top of 3b220fa02; FP0 lands it after deploy R
+  round_8_mirror_panic: >-
+    2026-10-22, the arch13j Linux -race mirror of eb8185144 (rebased on
+    main 0bf8a097d) panicked in internal/store. Root cause - the test's
+    workspace was removed under its open engine (store test paths were
+    os.TempDir()/go-choir-m3-store-test/<TestName>, shared by every test
+    process of the package on the VM; not reproduced in one process, the
+    whole package passed under -race here in 1033 s); Open failed
+    ("database not found: texture") and its Close closed the engine; Dolt
+    registers SQL-engine databases with SetCrashOnFatalError, so
+    NomsBlockStore.Close, unable to flush the journal root into the
+    missing .dolt/noms, crashed the process. Pre-existing - the same test
+    panics identically on 3b220fa02 (overlay), and FP0's 01:16 record
+    (agentcore-store-open-tables-changed-under-load) shows the same crash;
+    round 7's teardown order is not the cause (the engine closes once,
+    last, after every pinned connection is released, on every path).
+    Tests 949fb1467 (Close over a removed workspace and an Open failing
+    after the engine is up, both in child processes; test paths per
+    process), fix 7078b0561 (Close checks the workspace's .dolt/noms is
+    on disk before closing the engine, else leaves it and returns
+    errWorkspaceGone). Re-run - under ~/heavy-test.lock with
+    GOMAXPROCS=2 GOFLAGS=-p=1, the whole internal/store package under
+    -race on this Linux VM ok (1261 s) and the agentcore seam tests ok
+    (161 s); go test ./internal/store -run
+    'Checkpoint|Finalize|Close|Reopen|Telemetry' ok; gates hang-guards,
+    decode-roots, heresies, v1-writer-purity ok; guest-data-fstrim not
+    runnable here (no nix binary).
   round_7_pin_the_pools: >-
     2026-10-22, the owner's decision (a). Tests 1aaa5e7c9, fix 6dbdf815d
     (red), this record. Close pins each pool's connection after the
@@ -378,6 +405,14 @@ now:
       the cadence closed. Problem recorded, failing test, fixed: Reopen
       reopens the cadence and arms it (TestCheckpointReopenAfterCloseStaysDebounced).
   residuals:
+    - >-
+      A store whose workspace is removed under its open engine leaks the
+      engine until process exit (round 8): Close returns errWorkspaceGone
+      instead of crashing. The check and the engine close are not atomic,
+      so a removal between them still crashes; and Dolt can still crash
+      on a removed workspace on any write-path flush, which no Close
+      change covers. Removing a live store's workspace is not a product
+      path; it came from test paths shared across processes.
     - >-
       REPAIRED in round 7 (6dbdf815d) by the owner's decision of
       2026-10-22, option (a), pin the pools - Close now checks out each
@@ -591,6 +626,11 @@ Problem: [guest-checkpoint-on-the-write-path-2026-10-21](../problems/guest-check
   it does not bound the telemetry drain, the closeMu wait or the teardown.
 - Reopen over an open store orphans its handles. Test:
   TestCheckpointReopenRequiresAClosedStore.
+- Close crashes the process over a removed workspace: Dolt's
+  crash-on-fatal when the journal cannot flush into a missing .dolt/noms
+  (the arch13j mirror panic). Tests, in child processes:
+  TestCloseAfterTheWorkspaceIsRemovedReturnsAnError,
+  TestOpenFailingAfterTheEngineIsUpReturnsAnError.
 - Close closes the engine under a statement that is not a commit (a
   statement in flight on either pool, an open write transaction). Tests:
   Close fails closed, the statement or transaction completes, and its
