@@ -311,8 +311,9 @@ func TestUpdateRunWithEventFoldsEventIntoProjectionBatch(t *testing.T) {
 	if got.State != types.RunCompleted {
 		t.Fatalf("run state = %s, want completed", got.State)
 	}
-	// The choir.event landed in the same commit.
-	events, err := s.ListEventsAfter(ctx, run.RunID, 0, 10)
+	// The choir.event landed in the same commit. A folded event carries seq
+	// 0, so the cursor starts below it.
+	events, err := s.ListEventsAfter(ctx, run.RunID, -1, 10)
 	if err != nil {
 		t.Fatalf("list events: %v", err)
 	}
