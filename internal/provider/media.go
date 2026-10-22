@@ -35,7 +35,21 @@ const (
 	// MaxImageLongEdge is the long edge a larger PNG/JPEG/GIF is
 	// downscaled to.
 	MaxImageLongEdge = 1568
+	// MaxConcurrentImageDecodes bounds the images decoded at once,
+	// process-wide (docs/problems/gateway-request-bodies-unbounded-2026-10-22.md,
+	// bunch 109). Decoded pixels are outside the gateway's body budget: one
+	// image at MaxImagePixels is up to 400 MB decoded (16-bit RGBA PNG) plus
+	// the 200 MB RGBA copy downscale makes, about 620 MB with its 20 MiB
+	// input; four are about 2.5 GB, which fits beside the body budget's
+	// heap under the gateway unit's GOMEMLIMIT and MemoryMax.
+	MaxConcurrentImageDecodes = 4
 )
+
+// imageDecodeSlots holds one token per image being decoded and downscaled.
+var imageDecodeSlots = make(chan struct{}, MaxConcurrentImageDecodes)
+
+// imageDecodeHook, when set (tests), runs inside a decode slot.
+var imageDecodeHook func()
 
 // MediaError is an image the gateway refused before calling the upstream.
 // It is the caller's error: the gateway answers 400, the guest does not
@@ -201,11 +215,10 @@ func NormalizeImage(raw []byte) ([]byte, string, error) {
 		}
 		return raw, mimeType, nil
 	}
-	src, _, err := image.Decode(bytes.NewReader(raw))
+	scaled, err := decodeAndDownscale(raw)
 	if err != nil {
 		return nil, "", mediaErrorf("decode %s image: %v", mimeType, err)
 	}
-	scaled := downscale(src, MaxImageLongEdge)
 	var buf bytes.Buffer
 	if err := png.Encode(&buf, scaled); err != nil {
 		return nil, "", mediaErrorf("re-encode image: %v", err)
@@ -214,6 +227,22 @@ func NormalizeImage(raw []byte) ([]byte, string, error) {
 		return nil, "", mediaErrorf("image is %d bytes after resizing; the limit is %d", buf.Len(), MaxImageBytes)
 	}
 	return buf.Bytes(), "image/png", nil
+}
+
+// decodeAndDownscale decodes raw and downscales it to MaxImageLongEdge in
+// one of the process's MaxConcurrentImageDecodes slots: the full-size
+// buffers live only inside it.
+func decodeAndDownscale(raw []byte) (*image.RGBA, error) {
+	imageDecodeSlots <- struct{}{}
+	defer func() { <-imageDecodeSlots }()
+	if imageDecodeHook != nil {
+		imageDecodeHook()
+	}
+	src, _, err := image.Decode(bytes.NewReader(raw))
+	if err != nil {
+		return nil, err
+	}
+	return downscale(src, MaxImageLongEdge), nil
 }
 
 // SniffImageType returns the media type of an image Choir forwards, or ""

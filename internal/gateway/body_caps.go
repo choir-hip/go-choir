@@ -35,10 +35,15 @@ import (
 // scheduler's mode (F1): a body that does not fit waits, and past the body
 // deadline it is answered 429 with Retry-After, unread. A model body's bytes
 // are held until its handler returns, since the decoded request lives that
-// long. GATEWAY_BODY_READ_TIMEOUT (default 60 s) is the body's deadline,
-// started when decodeBody runs, which on the model routes is after the
-// scheduler slot is granted (F2, F4): the wait for in_flight and the read
-// both end there, and a read cut by it is answered 503 with Retry-After.
+// long. One caller (the authenticated computer, or the host caller) holds
+// at most per_caller of in_flight (bunch 109, F-A), except that its first
+// body always fits: a caller over its share waits behind its own bodies
+// only, and every other caller's body goes ahead of it.
+// GATEWAY_BODY_READ_TIMEOUT (default 60 s) bounds the wait for in_flight,
+// which starts when decodeBody runs, on the model routes after the
+// scheduler slot is granted (F2, F4); the read then gets its own window of
+// the same length from the moment the body fits (bunch 109, F-C). A read
+// cut by it is answered 503 with Retry-After.
 const (
 	// DefaultModelBodyLimit is the enforced model limit (F3, bunch 88; the
 	// arithmetic is in the problem record): 20 images (MaxImagesPerRequest)
@@ -56,6 +61,14 @@ const (
 	// DefaultBodyInFlight bounds all bodies held at once; never below the
 	// model ceiling, so one ceiling body always fits.
 	DefaultBodyInFlight int64 = 1 << 30
+	// DefaultBodyPerCaller is one caller's share of in_flight, a quarter of
+	// it (bunch 109, F-A; the reasoning is in the problem record). Unset,
+	// per_caller follows in_flight/4; it is never above in_flight. A
+	// caller's first body fits whatever its size, so one caller holds at
+	// most max(per_caller, one body): 256 MiB in enforce (above the
+	// 160 MiB model limit), 576 MiB in observe (one ceiling body), leaving
+	// 768 MiB or 448 MiB for every other caller.
+	DefaultBodyPerCaller = DefaultBodyInFlight / 4
 	// DefaultBodyReadTimeout: 576 MiB at 100 Mbit/s is 48 s; the guest's
 	// tap link is much faster.
 	DefaultBodyReadTimeout = 60 * time.Second
@@ -72,9 +85,11 @@ const (
 	bodyRouteJudgment  = "judgment"
 	bodyRouteOperator  = "operator"
 	// bodyInFlight is the limit on all bodies held at once, and the
-	// refused key of bodies turned away by it; bodyReadDeadline is the
-	// refused key of reads cut by the body deadline.
+	// refused key of bodies turned away by it; bodyPerCaller is one
+	// caller's share of it; bodyReadDeadline is the refused key of reads
+	// cut by the body deadline.
 	bodyInFlight     = "in_flight"
+	bodyPerCaller    = "per_caller"
 	bodyReadDeadline = "read_deadline"
 )
 
@@ -92,6 +107,7 @@ func defaultBodyLimits() map[string]int64 {
 		bodyRouteJudgment:  jevTransportMaxBodySize,
 		bodyRouteOperator:  DefaultOperatorBodyLimit,
 		bodyInFlight:       DefaultBodyInFlight,
+		bodyPerCaller:      DefaultBodyPerCaller,
 	}
 }
 
@@ -114,8 +130,14 @@ func newBodyCaps(mode string, limits map[string]int64) *bodyCaps {
 	if limits[bodyInFlight] < limits[bodyCeilingModel] {
 		limits[bodyInFlight] = limits[bodyCeilingModel]
 	}
+	if limits[bodyPerCaller] <= 0 {
+		limits[bodyPerCaller] = limits[bodyInFlight] / 4
+	}
+	if limits[bodyPerCaller] > limits[bodyInFlight] {
+		limits[bodyPerCaller] = limits[bodyInFlight]
+	}
 	return &bodyCaps{mode: mode, limits: limits, readTimeout: DefaultBodyReadTimeout,
-		budget:  &bodyBudget{size: limits[bodyInFlight]},
+		budget:  &bodyBudget{size: limits[bodyInFlight], share: limits[bodyPerCaller]},
 		refused: map[string]int64{}, wouldRefuse: map[string]int64{}, maxSeen: map[string]int64{}}
 }
 
@@ -132,6 +154,7 @@ func bodyCapsFromGetenv(get func(string) string) *bodyCaps {
 		log.Printf("gateway: GATEWAY_BODY_CAPS=%q is not observe or enforce; enforcing", v)
 	}
 	limits := defaultBodyLimits()
+	perCallerSet := false
 	for _, pair := range strings.Split(get("GATEWAY_BODY_LIMITS"), ",") {
 		pair = strings.TrimSpace(pair)
 		if pair == "" {
@@ -149,6 +172,10 @@ func bodyCapsFromGetenv(get func(string) string) *bodyCaps {
 			continue
 		}
 		limits[key] = n
+		perCallerSet = perCallerSet || key == bodyPerCaller
+	}
+	if !perCallerSet {
+		limits[bodyPerCaller] = 0 // newBodyCaps: in_flight/4
 	}
 	if limits[bodyCeilingModel] < limits[bodyRouteModel] {
 		limits[bodyCeilingModel] = limits[bodyRouteModel]
@@ -295,7 +322,7 @@ func (h *Handler) decodeBodyHeld(w http.ResponseWriter, r *http.Request, route, 
 	if r.ContentLength >= 0 {
 		want = r.ContentLength
 	}
-	held, waited, err := c.budget.acquire(r.Context(), want, deadline)
+	held, waited, err := c.budget.acquire(r.Context(), caller, want, deadline)
 	if err != nil {
 		if errors.Is(err, errBodyBudgetWait) {
 			c.refuse(bodyInFlight, caller, fmt.Sprintf("route=%s bytes=%d waited=%s", route, want, waited.Round(time.Millisecond)), c.limits[bodyInFlight])
@@ -307,10 +334,24 @@ func (h *Handler) decodeBodyHeld(w http.ResponseWriter, r *http.Request, route, 
 		log.Printf("gateway: body in_flight waited route=%s caller=%s bytes=%d wait=%s", route, caller, want, waited.Round(time.Millisecond))
 	}
 	var once sync.Once
-	release := func() { once.Do(func() { c.budget.release(held) }) }
+	release := func() { once.Do(func() { c.budget.release(caller, held) }) }
+	// Every exit but success gives the bytes back, a panic in the decode
+	// too (bunch 109, F-B): the caller's defer is not registered yet.
+	kept := false
+	defer func() {
+		if !kept {
+			release()
+		}
+	}()
 	// The body's own deadline: the server's ReadTimeout runs from the
-	// request's start and a queued call may have spent it (F2).
-	_ = http.NewResponseController(w).SetReadDeadline(deadline)
+	// request's start and a queued call may have spent it (F2). It runs
+	// from the moment the body fits, so a wait for room does not eat the
+	// read (F-C).
+	if err := http.NewResponseController(w).SetReadDeadline(time.Now().Add(c.readTimeout)); err != nil {
+		readDeadlineUnset.Do(func() {
+			log.Printf("gateway: body read deadline not set (%v); a queued model call can hit the server's ReadTimeout", err)
+		})
+	}
 	body := &countingReader{r: http.MaxBytesReader(w, r.Body, readCap)}
 	dec := json.NewDecoder(body)
 	if strict {
@@ -320,23 +361,20 @@ func (h *Handler) decodeBodyHeld(w http.ResponseWriter, r *http.Request, route, 
 	c.seen(route, body.n)
 	var maxBytes *http.MaxBytesError
 	if errors.As(err, &maxBytes) {
-		release()
 		c.refuse(route, caller, fmt.Sprintf("bytes>%d", readCap), readCap)
 		return noop, &errBodyTooLarge{route: route, limit: readCap}
 	}
 	var netErr net.Error
 	if errors.As(err, &netErr) && netErr.Timeout() {
-		release()
 		c.refuse(bodyReadDeadline, caller, fmt.Sprintf("route=%s bytes=%d", route, body.n), int64(c.readTimeout/time.Second))
 		return noop, &errBodyRetry{status: http.StatusServiceUnavailable, msg: "request body not received within " + c.readTimeout.String() + "; retry"}
 	}
 	if err != nil {
-		release()
 		return noop, err
 	}
 	// Hold what was read, not what a chunked body could have been.
 	if body.n < held {
-		c.budget.release(held - body.n)
+		c.budget.release(caller, held-body.n)
 		held = body.n
 	}
 	if err == nil && observe && body.n > limit {
@@ -345,41 +383,52 @@ func (h *Handler) decodeBodyHeld(w http.ResponseWriter, r *http.Request, route, 
 		c.mu.Unlock()
 		log.Printf("gateway: body cap would_refuse route=%s caller=%s bytes=%d limit=%d", route, caller, body.n, limit)
 	}
+	kept = true
 	return release, nil
 }
+
+// readDeadlineUnset logs once that the ResponseWriter cannot take a read
+// deadline (a wrapper without Unwrap; a test recorder).
+var readDeadlineUnset sync.Once
 
 // errBodyBudgetWait: the body waited its whole deadline for room in
 // in_flight.
 var errBodyBudgetWait = errors.New("no room in the request body budget")
 
-// bodyBudget counts the bytes of request bodies held at once against size.
-// Waiters are served in arrival order, so a large body is not starved by
-// small ones.
+// bodyBudget counts the bytes of request bodies held at once against size,
+// and each caller's against share. Waiters are served in arrival order, so
+// a large body is not starved by small ones, with one exception: a waiter
+// whose caller is over its share is passed over (and so are that caller's
+// later waiters, which keep their order), so a caller that holds its share
+// delays only its own bodies (bunch 109, F-A).
 type bodyBudget struct {
-	mu      sync.Mutex
-	size    int64
-	used    int64
-	waiters []*budgetWaiter
+	mu       sync.Mutex
+	size     int64
+	share    int64
+	used     int64
+	byCaller map[string]int64
+	waiters  []*budgetWaiter
 }
 
 type budgetWaiter struct {
+	caller  string
 	n       int64
 	ready   chan struct{}
 	granted bool
 }
 
-// acquire reserves n bytes (at most size) until deadline or ctx ends, and
-// returns what it reserved and how long it waited.
-func (b *bodyBudget) acquire(ctx context.Context, n int64, deadline time.Time) (int64, time.Duration, error) {
+// acquire reserves n bytes (at most size) for caller until deadline or ctx
+// ends, and returns what it reserved and how long it waited.
+func (b *bodyBudget) acquire(ctx context.Context, caller string, n int64, deadline time.Time) (int64, time.Duration, error) {
 	n = max(0, min(n, b.size))
+	w := &budgetWaiter{caller: caller, n: n, ready: make(chan struct{})}
 	b.mu.Lock()
-	if len(b.waiters) == 0 && b.used+n <= b.size {
-		b.used += n
+	b.waiters = append(b.waiters, w)
+	b.grantLocked()
+	if w.granted {
 		b.mu.Unlock()
 		return n, 0, nil
 	}
-	w := &budgetWaiter{n: n, ready: make(chan struct{})}
-	b.waiters = append(b.waiters, w)
 	b.mu.Unlock()
 	started := time.Now()
 	timer := time.NewTimer(time.Until(deadline))
@@ -395,7 +444,7 @@ func (b *bodyBudget) acquire(ctx context.Context, n int64, deadline time.Time) (
 	}
 	b.mu.Lock()
 	if w.granted {
-		b.used -= n
+		b.releaseLocked(caller, n)
 	} else {
 		for i, o := range b.waiters {
 			if o == w {
@@ -409,21 +458,52 @@ func (b *bodyBudget) acquire(ctx context.Context, n int64, deadline time.Time) (
 	return 0, time.Since(started), err
 }
 
-func (b *bodyBudget) release(n int64) {
+func (b *bodyBudget) release(caller string, n int64) {
 	b.mu.Lock()
-	b.used -= n
+	b.releaseLocked(caller, n)
 	b.grantLocked()
 	b.mu.Unlock()
 }
 
+func (b *bodyBudget) releaseLocked(caller string, n int64) {
+	b.used -= n
+	if left := b.byCaller[caller] - n; left > 0 {
+		b.byCaller[caller] = left
+	} else {
+		delete(b.byCaller, caller)
+	}
+}
+
+// grantLocked grants waiters oldest first until one that is within its
+// caller's share does not fit in size. A caller's first body is always
+// within its share, so one body of any admitted size can be taken in.
 func (b *bodyBudget) grantLocked() {
-	for len(b.waiters) > 0 && b.used+b.waiters[0].n <= b.size {
-		w := b.waiters[0]
-		b.waiters = b.waiters[1:]
+	if b.byCaller == nil {
+		b.byCaller = map[string]int64{}
+	}
+	var overShare map[string]bool
+	kept := b.waiters[:0]
+	for i, w := range b.waiters {
+		held := b.byCaller[w.caller]
+		if overShare[w.caller] || (held > 0 && held+w.n > b.share) {
+			if overShare == nil {
+				overShare = map[string]bool{}
+			}
+			overShare[w.caller] = true
+			kept = append(kept, w)
+			continue
+		}
+		if b.used+w.n > b.size {
+			kept = append(kept, b.waiters[i:]...)
+			break
+		}
 		b.used += w.n
+		b.byCaller[w.caller] = held + w.n
 		w.granted = true
 		close(w.ready)
 	}
+	clear(b.waiters[len(kept):])
+	b.waiters = kept
 }
 
 func (b *bodyBudget) inUse() int64 {
