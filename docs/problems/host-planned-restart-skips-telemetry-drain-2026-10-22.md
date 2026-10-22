@@ -3,9 +3,12 @@
 Date: 2026-10-22. Status: **documented, not fixed** (found by FP0's phase 1
 staging gate of run-telemetry batching, lane `lane/fp0-batching-e2e`). Class of
 the eventual fix: red (tape write path, restart handling). Evidence class: code
-reading on `840e1a701` (the deployed build), plus the deploy path's own
-journal line on Node B showing the refresh is a SIGKILL. Not reproduced on a
-computer: see "Why the staging drill cannot show it" below.
+reading on `840e1a701` (unchanged in `d991907e6`), plus vmctl's journal line
+from this gate's kill drill on Node B, `05:25:46 vmmanager: destructive kill
+vm=vm-c5c801f8… cause=refresh … caller=vmctl.(*OwnershipRegistry).refreshVMForDesktop`
+then `signal: killed`: the same `RefreshVMForDesktop` the deploy refresh
+calls is a SIGKILL. Not reproduced with a marker: see "Why the staging drill
+cannot show it" below.
 
 Design: [telemetry-batching-design-2026-10-20.md](../reports/telemetry-batching-design-2026-10-20.md)
 section 4.5 and phase 1 failure mode P1-F14.
