@@ -1,7 +1,9 @@
 # vmctl's retention plan matches nothing while test computers and quarantined data images hold ~70 GiB
 
 Date: 2026-10-22, about 17:00 UTC. Found by: FP0, reading Node B read-only
-after deploy R was refused by the disk floor. Status: open. Mutation class
+after deploy R was refused by the disk floor. Status: fix on lane
+`lane/fp0-vm-retention` (de3f616e6, both rules off, shadow observe), not
+landed; station docs/definitions/choir-launch-fp0-vm-retention-2026-10-22.md. Mutation class
 of the fix: red (VM lifecycle: vmctl deletes VM state).
 
 Related: docs/problems/node-b-disk-fills-from-the-paper-data-image-2026-10-22.md
