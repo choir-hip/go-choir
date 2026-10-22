@@ -99,38 +99,41 @@ boundaries:
   protected_surfaces: [none touched; the design names vmmanager drives, the guest image and the jailer as the surfaces a later slice touches]
 
 now:
-  status: checkpoint (lane work done; FP0 steps and the panel remain)
+  status: checkpoint (review fixes done; FP0 lands them, then the reads)
   slice: >-
-    Done: problem record and station (d3f87c771); the host-only guest
-    page-cache residency read, tests first (888c462bd, rebased from
-    b12f48e7b), joined into procmem?pagecache=1 with a byte cap per owner
-    notes §40 (fa547e9c7); the design, threat
-    analysis and FP0's probe script (6255c0b32). Next is FP0's: land
-    888c462bd and fa547e9c7, run the §5 reads, then convene the DEC-05 panel on the report
-    if the thresholds say so.
-  source_ref: d1c60ad87
-  deploy_identity: unchanged (nothing of this lane is deployed)
+    The read landed in deploy D (fd58229aa, 840e1a701 on main). Review bunch
+    13 (DeepSeek v4.1 Flash) accepted with edits. Its findings 1, 2, 3, 4
+    and 6 are fixed in 53c91bc1f: bounds hold per file, per directory and
+    per mapped chunk; the overlay upper is its own root (store_upper) and is
+    excluded from persistent; skipped mounts and examined files are counted;
+    new tests. 079e11245 makes the probe surface skips and refuse an
+    unpartitioned, unmeasured or partial store number, and records finding 5
+    (procmem's guard is literal only in hostauth enforce mode) as a residual
+    in report §8.
+  source_ref: 840e1a701
+  deploy_identity: deploy D serves the first read (no store_layering); the probe refuses its store numbers
   candidate:
-    id: FP10-RES-08-measure
-    state: built, not frozen, not reviewed
+    id: FP10-RES-08-measure-r2
+    state: built, not frozen; review fixes for bunch 13
     ref: lane/fp10-res08-pmem-dax
-    base: d1c60ad87
+    base: 840e1a701
     digest: none
-    scope: [internal/server/debug_pagecache*.go, internal/server/debug_pprof.go, scripts/res08_pagecache_probe.py, docs]
+    scope: [internal/server/debug_pagecache*.go, scripts/res08_pagecache_probe.py, scripts/test_res08_pagecache_probe.py, docs]
   conjecture:
     id: C-RES-08-store-share
     claim: >-
       Most of an idle guest's page cache (about 640 MiB) is base-OS store
       pages, so a shared DAX image saves 0.3 GiB or more per idle guest net
       of its memmap cost.
-    test: the report §5 reads (idle-30m, cold-boot, busy-run) and its threshold table
-    edge: missing_oracle until fa547e9c7 deploys
+    test: the report §5 reads (idle-30m, cold-boot, busy-run) and its threshold table, quoted only when store_quotable
+    edge: missing_oracle until 53c91bc1f deploys (deploy D's read can double count the overlay upper)
     delta_o: FP0's res08_pagecache_probe.py receipts
     scope_if_supported: Node B guests on one release
     status: active
     evidence_refs:
       - docs/reports/vm-density-limits-2026-10-14.md finding 3 and residuals
-      - internal/server/debug_pagecache_test.go (9 failure modes; the no-fault test fails if the read reads files)
+      - internal/server/debug_pagecache_test.go (failure modes 1-16; nine new tests failed on deploy D's logic)
+      - scripts/test_res08_pagecache_probe.py (refusal rules)
   decision:
     what: Whether guests in different trust domains may share one physical copy of base-OS pages (DEC-05)
     kind: security
@@ -140,16 +143,16 @@ now:
   belief:
     believed_state: >-
       The base OS is private per guest in RAM; its size is unmeasured. The
-      guest daemon runs as root with no capability bound, so the store is
-      measurable by mincore. Linux 5.2+ would otherwise report every page
-      resident, and the read fails closed to "unmeasured".
+      daemon runs as guest root, so the store is measurable. A layered
+      release adds an overlay upper, which the fixed read counts apart.
     main_uncertainty: whether the store or the Dolt data dominates idle guest page cache, and how much of the store is mapped code (what L5 cannot reclaim)
-    next_observation: FP0's idle-30m read after fa547e9c7 deploys
+    next_observation: FP0's idle-30m read after 53c91bc1f deploys, with store_quotable true
   blocker_or_risk: >-
     The panel (DEC-05), and FP8's ownership of vmmanager and the image for any
     build slice. The Firecracker 1.16.1 pmem facts marked "verify" in the
-    report are unproven.
-  next_action: FP0 lands 888c462bd and fa547e9c7, deploys, and runs report §5 step 1.
+    report are unproven. Finding 5 (guard in hostauth off mode) stays with
+    the hostauth owner.
+  next_action: FP0 lands 53c91bc1f and 079e11245, deploys, and runs report §5 step 1.
 
 receipts: []
 ---
