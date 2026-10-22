@@ -651,3 +651,47 @@ comment 15e00ccad (green).
   output budget is a second copy of the body budget's grant code (the
   provider cannot import the gateway); one shared byte-budget package is
   a clean-up for later. Shares are per computer, not per owner.
+
+## Review findings, bunch 121 (2026-10-22, candidate f78ea9f96)
+
+Sonnet 5.5, DeepSeek v4.1 flash and Gemini 3.8 accepted rounds 4 and 5.
+DeepSeek named two required low-cost fixes and Sonnet one nit; they are
+recorded here before any change.
+
+- **D1 (DeepSeek), medium, required: the first-call-over-share rule is not
+  pinned by a test.** With the production values a full call reserves
+  20 x `ImageOutputPerImage` = 139,810,160 bytes, over the 96 MiB
+  (100,663,296) share; only the `held > 0 &&` guard in
+  `imageOutputBudget.grantLocked` admits it. Every output test reserves at
+  most its share, so deleting the guard keeps them green, while in
+  production every full image call would then wait until its context and
+  fail.
+- **D2 (DeepSeek), low, required: the record states the opposite rule.**
+  This record's round 5 repair says a caller's first reservation is
+  "always within its share", the station text says "96 MiB per computer",
+  and the `media_budget.go` comment says the first reservation "always
+  fits within its share". The rule is that a caller's first reservation is
+  granted whatever its size; one computer holds at most max(96 MiB, one
+  call's reservation of up to 133.3 MiB), and the 192 MiB total still
+  holds.
+- **D3 (DeepSeek) and Sonnet F1, low, required: the MemoryMax margin is
+  wrong.** systemd reads `MemoryMax=8G` as 8 GiB, so the 5.80 GiB worst
+  case is 2.20 GiB under it, not the 1.65 GiB the nix comment, the station
+  text and this record state (that figure took 8G as 8 x 10^9 bytes).
+- **D4 (DeepSeek), low-medium:** a call waiting for output holds its
+  scheduler slot and its body bytes, and one 20-image call (133 of
+  192 MiB) holds back every other full image call for its whole upstream
+  call; the record notes the hold, not the blocked scheduler slots.
+- **D5 (DeepSeek), low:** a capacity wait that ends with the call's
+  context is answered 502, though no upstream was contacted; 503 with
+  `Retry-After` would match the body caps.
+- **D6 (DeepSeek), info:** the exported `NormalizeImage` uses
+  `context.Background()` and no caller: uncancellable and outside the
+  per-caller share; no caller outside tests today.
+- **D7 (DeepSeek), info:** the round 5 receipt's rollback names only
+  cd6c1cd6e; reverting it alone leaves ae30081c0's tests on a removed API,
+  so neither package builds.
+- **D8 (DeepSeek), info:** the arithmetic test takes the capacity terms
+  from the constants but the copy factors, the 0.5 GiB runtime and the
+  6 GiB `GOMEMLIMIT` are literals, so a nix `GOMEMLIMIT` change does not
+  fail it.
