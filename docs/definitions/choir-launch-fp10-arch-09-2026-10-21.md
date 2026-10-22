@@ -6,7 +6,7 @@ definition_version: 4
 # (FP10). Item: docs/security-density-architecture-checklist-2026-10-21.md
 # ARCH-09. Problem: docs/problems/app-desks-have-no-compute-chamber-2026-10-21.md.
 # Design: docs/design/app-desk-compute-capsule-2026-10-21.md.
-readiness: drafted
+readiness: built
 
 review:
   reviewer: none yet; FP0's bunch panel reviews the frozen candidate
@@ -57,10 +57,32 @@ boundaries:
   protected_surfaces: [guest desk confinement (design only in S0)]
 
 now:
-  status: working
-  slice: station file and problem record; next the design, then S0 tests and code
+  status: checkpoint_incomplete
+  slice: >-
+    hand-off to FP0. Built: 60bbb0f8d (station file, problem record),
+    867f183a9 (design), 2fb7637db (S0: internal/computecapsule, tests
+    first). Local evidence: GOMAXPROCS=2 GOFLAGS=-p=2 go test
+    ./internal/computecapsule passes (60 subtests); go vet clean.
   source_ref: d1c60ad87
   deploy_identity: none
+  candidate:
+    id: fp10-arch09-s0
+    ref: 2fb7637db
+    lands_after: nothing (a new package; no file shared with any lane)
+    deployed_proof: >-
+      none beyond CI: nothing imports internal/computecapsule, so a deploy
+      changes no runtime behavior; CI's go test of the package is the receipt
+  residuals:
+    - S1 (SpawnSpec.Kind, executor and Freeze refusals, Landlock roots for /in and /out) waits for FP2 batch 2 to land; it edits internal/capsule.
+    - S2 (compute request store and runtime, boot closure as interrupted, pool cap, CHOIR_COMPUTE_CAPSULES off by default) follows S1.
+    - S3 (recipes in the app manifest, the choir.Compute verb) waits for ARCH-03 to land.
+    - S4 (the first recipe's tool in the guest image, deployed proof) waits for FP8.
+    - MaxMemoryMiB (2048) is a stand-in until S3 reads the requesting desk's app floor; the desk-to-package binding is checked in S3 (appdesk.PackageOrigin), not in S0.
+    - Failure modes C13-C19 are untested until their slices.
+  open_owner_questions: >-
+    design §8 defaults stand unless ruled: compute capsules are interrupted
+    by an always-busy computer's planned refresh; the first recipe is a PDF
+    render of a Texture revision; one live compute capsule per computer
 ---
 
 # FP10 ARCH-09: a compute capsule kind for app desks
