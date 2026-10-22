@@ -150,6 +150,28 @@ grep -Fq -- 'TOTAL_SHARDS: 8' <<<"$go_test_segment" || {
   echo "go-test must run 8 non-runtime shards (the split lane covers shards 0-5)" >&2
   exit 1
 }
+# Every shard index 0..TOTAL_SHARDS-1 is in the matrix exactly once, so
+# deleting a matrix entry cannot silently drop that shard's share of the
+# tests (review bunch 101 item 1).
+require_shard_matrix() {
+  local name="$1"
+  local segment="$2"
+  local total matrix expected
+  total="$(grep -Eo 'TOTAL_SHARDS: [0-9]+' <<<"$segment" | awk '{print $2}')"
+  matrix="$(grep -E '^ +shard: \[' <<<"$segment" || true)"
+  if [[ "$(wc -l <<<"$total" | tr -d ' ')" != 1 || -z "$total" || "$(grep -c . <<<"$matrix")" != 1 ]]; then
+    echo "${name} must declare one TOTAL_SHARDS and one shard matrix" >&2
+    exit 1
+  fi
+  matrix="$(sed -E 's/^ +shard: \[//; s/\].*$//; s/[[:space:]]//g' <<<"$matrix" | tr ',' '\n' | sort -n | tr '\n' ' ')"
+  expected="$(seq 0 $((total - 1)) | tr '\n' ' ')"
+  if [[ "$matrix" != "$expected" ]]; then
+    echo "${name} shard matrix must hold every index 0..$((total - 1)) exactly once, got: ${matrix}" >&2
+    exit 1
+  fi
+}
+require_shard_matrix ci.yml-go-test "$go_test_segment"
+require_shard_matrix race.yml-go-test-race "$(sed -n '/^  go-test-race:/,$p' "$race")"
 require "$ci" "lane: non-runtime-\${{ needs.plan.outputs.race_selected == 'true' && 'race' || 'standard' }}-\${{ matrix.shard < 6 && 'split' || matrix.shard }}"
 require "$race" "lane: non-runtime-race-\${{ matrix.shard < 2 && 'split' ||"
 reject "$ci" "'store'"
