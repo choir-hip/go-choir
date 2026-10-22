@@ -523,6 +523,22 @@ strict; strict still refuses an unpinned bearer. Argon's non-blocking note
 (`BindPeer` has no production caller) stays as a residual: its registry
 tests still cover the pin semantics, so it can be deleted later.
 
+## SEC-05 enforce flip (FP0, 2026-10-22)
+
+**The readings.** The gateway's `/health` `bearer_binding` on Node B, in observe:
+
+| when (UTC) | after | pinned | unpinned | first_use_bound | would_refuse | refused |
+|---|---|---|---|---|---|---|
+| 07:25 | the gateway's 07:10:45 restart; the paper made 179 model calls | 51 | 221 | 0 | 0 | 0 |
+| 12:00 | deploys L, M and N, each a planned refresh of the paper and the test computers | 51 | 221 | 0 | 0 | 0 |
+| 12:31 | deploy O (planned refresh of the paper, the candidate fleet and a primary computer); the owner's computer cold booted at 12:08 (new credential, ensured); three vmctl restarts with reattach (12:10 to 12:14); test computer 71afbf14 cold booted three times | 51 | 221 | 0 | 0 | 0 |
+
+**The criterion.** The conjecture's test asks for `would_refuse` at 0 for the paper and the test computers across deploys and refreshes, and pinned at least the number of running computers (six run; 51 are pinned). Both hold. The stale-pin window after a refresh (the blocker's residual 1) was the open measurement: five planned refreshes of the paper and several test computer boots and wakes show no would-refuse event, so no client met a stale pin.
+
+**Why not wait for "unpinned has drained".** The rollout paragraph above also says to wait until `unpinned` drains. The 221 unpinned are credentials of computers that do not run (hibernated or stopped test computers), and the count did not move across five hours and four deploys. They leave only at the credential TTL (720 h) or when their computer boots and vmctl ensures its address. Enforce treats an unpinned bearer exactly as observe does today (first use binds it, and the host's next ensure overwrites a wrong first-use pin), so draining them buys nothing for enforce. It is the criterion for strict, which refuses unpinned bearers and waits for the vmctl fix in residual 2.
+
+**The flip.** `gatewayBearerBindingMode = "enforce"` in `nix/node-b.nix`, alone in its deploy (one live red). Proof: steps 4 and 5 below. Step 4 (a test computer's model call passes, `refused` stays 0, and the paper keeps publishing) is FP0's without a guest shell. Step 5 (a token copied between two test computers is refused) needs a guest shell on two disposable test computers; FP0 has no no-SSH route to a guest shell, so step 5 waits for one and is recorded as a residual if not run. Watch for an hour after the flip: `refused` must stay 0 for running computers. Rollback: set `observe` and redeploy (a nix revert).
+
 ## Deployed proofs for FP0 (exact steps; none needs a secret)
 
 SEC-05, after deploy with `observe`:
