@@ -6,7 +6,8 @@ package store
 // Replay is the one writer the OG write guard does not see, so a fenced store
 // that replayed rows used to pay the whole-table migration and fence: 3 min
 // 44 s on the paper for a one-event tail. Instead, the replay path records
-// the object and edge IDs it writes, and the boot fence re-reads exactly
+// the object and edge IDs it writes (and, for an op stamped for
+// choir_events, its tape position), and the boot fence re-reads exactly
 // those rows. If none of them would change under the migration plan and their
 // role fields pass the fence, the plan's fixpoint is unchanged and the store
 // is still fenced. Anything the narrowed check cannot prove falls back to the
@@ -53,6 +54,16 @@ type vocabReplayTrack struct {
 	overflow bool
 	objects  map[string]struct{}
 	edges    map[string]struct{}
+	// stamped holds the replayed object ops stamped for choir_events, by tape
+	// position: their rows are not in og_objects, and canonical_id is not
+	// indexed there (event-table design 3.6).
+	stamped map[eventTablePosition]struct{}
+}
+
+// eventTablePosition is a choir_events primary key.
+type eventTablePosition struct {
+	tapeSeq uint64
+	opIndex int
 }
 
 func (t *vocabReplayTrack) reset() {
@@ -60,13 +71,14 @@ func (t *vocabReplayTrack) reset() {
 	defer t.mu.Unlock()
 	t.finalized = 0
 	t.opened, t.foreign, t.unfenced, t.overflow = false, false, false, false
-	t.objects, t.edges = nil, nil
+	t.objects, t.edges, t.stamped = nil, nil, nil
 }
 
 // noteVocabReplayDeposit records one replayed event's deposit after the
 // upcast and before it commits. The first call in a process marks a fenced
 // report durably, so a crash after the commit leaves the marker behind.
-func (s *Store) noteVocabReplayDeposit(batch *computerevent.ProjectionBatch) error {
+// sequence is the event's tape position, which keys a stamped op's row.
+func (s *Store) noteVocabReplayDeposit(batch *computerevent.ProjectionBatch, sequence uint64) error {
 	t := &s.vocabReplay
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -93,16 +105,18 @@ func (s *Store) noteVocabReplayDeposit(batch *computerevent.ProjectionBatch) err
 		return nil
 	}
 	if t.objects == nil {
-		t.objects, t.edges = map[string]struct{}{}, map[string]struct{}{}
+		t.objects, t.edges, t.stamped = map[string]struct{}{}, map[string]struct{}{}, map[eventTablePosition]struct{}{}
 	}
-	for _, op := range batch.Ops {
+	for i, op := range batch.Ops {
 		var ids struct {
 			CanonicalID string `json:"canonical_id"`
 			EdgeID      string `json:"edge_id"`
 		}
 		switch strings.TrimSpace(op.Kind) {
 		case computerevent.ProjectionOpObject:
-			if err := json.Unmarshal(op.Body, &ids); err != nil || ids.CanonicalID == "" {
+			if strings.TrimSpace(op.Table) == choirEventsTable {
+				t.stamped[eventTablePosition{tapeSeq: sequence, opIndex: i}] = struct{}{}
+			} else if err := json.Unmarshal(op.Body, &ids); err != nil || ids.CanonicalID == "" {
 				t.overflow = true
 			} else {
 				t.objects[ids.CanonicalID] = struct{}{}
@@ -114,9 +128,9 @@ func (s *Store) noteVocabReplayDeposit(batch *computerevent.ProjectionBatch) err
 				t.edges[ids.EdgeID] = struct{}{}
 			}
 		}
-		if t.overflow || len(t.objects)+len(t.edges) > vocabReplayTrackLimit {
+		if t.overflow || len(t.objects)+len(t.edges)+len(t.stamped) > vocabReplayTrackLimit {
 			t.overflow = true
-			t.objects, t.edges = nil, nil
+			t.objects, t.edges, t.stamped = nil, nil, nil
 			return nil
 		}
 	}
@@ -139,6 +153,10 @@ func (s *Store) vocabReplayStaysFenced(ctx context.Context, prior *MigrationRepo
 	edges := make([]string, 0, len(t.edges))
 	for id := range t.edges {
 		edges = append(edges, id)
+	}
+	stamped := make([]eventTablePosition, 0, len(t.stamped))
+	for pos := range t.stamped {
+		stamped = append(stamped, pos)
 	}
 	t.mu.Unlock()
 	if !ok || prior == nil || prior.FencedAt == "" || prior.ReplayOpenedAt == "" {
@@ -170,22 +188,11 @@ func (s *Store) vocabReplayStaysFenced(ctx context.Context, prior *MigrationRepo
 		return id != "" && hit
 	}
 	var fields []vocabmigrate.Field
-	for _, id := range objects {
-		if progress != nil {
-			progress()
-		}
-		var kind, versionID, supersededBy string
-		var body, metadata []byte
-		err := s.db.QueryRowContext(ctx, `SELECT object_kind, version_id, superseded_by, body, metadata FROM og_objects WHERE canonical_id=?`, id).
-			Scan(&kind, &versionID, &supersededBy, &body, &metadata)
-		if errors.Is(err, sql.ErrNoRows) {
-			continue
-		}
-		if err != nil {
-			return false, fmt.Errorf("vocab replay fence: read %s: %w", id, err)
-		}
+	// check applies the plan's fixpoint and the role fields to one replayed
+	// row; false means the full pass must decide.
+	check := func(id, kind, versionID, supersededBy string, body, metadata []byte) bool {
 		if renamed(id) || renamed(versionID) || renamed(supersededBy) {
-			return false, nil
+			return false
 		}
 		for _, raw := range [][]byte{metadata, body} {
 			var doc any
@@ -193,11 +200,50 @@ func (s *Store) vocabReplayStaysFenced(ctx context.Context, prior *MigrationRepo
 				continue // the plan leaves a non-JSON document untouched
 			}
 			if !vocabReplayLeavesAtFixpoint(doc, seed) {
-				return false, nil
+				return false
 			}
 		}
 		ogRoleFieldsFromJSON(kind, metadata, "metadata.", &fields)
 		ogRoleFieldsFromJSON(kind, body, "body.", &fields)
+		return true
+	}
+	for _, id := range objects {
+		if progress != nil {
+			progress()
+		}
+		var kind, versionID, supersededBy string
+		var body, metadata []byte
+		err := s.db.QueryRowContext(ctx, `SELECT object_kind, version_id, superseded_by, body, metadata FROM `+objectRowTables[0]+` WHERE canonical_id=?`, id).
+			Scan(&kind, &versionID, &supersededBy, &body, &metadata)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return false, fmt.Errorf("vocab replay fence: read %s: %w", id, err)
+		}
+		if !check(id, kind, versionID, supersededBy, body, metadata) {
+			return false, nil
+		}
+	}
+	// A stamped op's row is in choir_events. One that cannot be found is
+	// never skipped: the full pass decides (event-table design 3.6).
+	for _, pos := range stamped {
+		if progress != nil {
+			progress()
+		}
+		var id, kind, versionID, supersededBy string
+		var body, metadata []byte
+		err := s.db.QueryRowContext(ctx, `SELECT canonical_id, object_kind, version_id, superseded_by, body, metadata FROM `+choirEventsTable+` WHERE tape_seq=? AND op_index=?`, pos.tapeSeq, pos.opIndex).
+			Scan(&id, &kind, &versionID, &supersededBy, &body, &metadata)
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		if err != nil {
+			return false, fmt.Errorf("vocab replay fence: read %s %d/%d: %w", choirEventsTable, pos.tapeSeq, pos.opIndex, err)
+		}
+		if !check(id, kind, versionID, supersededBy, body, metadata) {
+			return false, nil
+		}
 	}
 	for _, id := range edges {
 		if progress != nil {
