@@ -81,6 +81,10 @@ type fakeFirecrackerAPI struct {
 	loadFilesPresent bool
 	// onCreate, when set, runs after the snapshot files are written.
 	onCreate func(statePath, memPath string)
+	// failDiff refuses a Diff create only; diffLen is the length of the
+	// sparse memory file a Diff create writes (4 KiB of data at offset 0).
+	failDiff bool
+	diffLen  int64
 }
 
 func (f *fakeFirecrackerAPI) hostPath(p string) string {
@@ -97,6 +101,10 @@ func (f *fakeFirecrackerAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	f.calls = append(f.calls, fcCall{Method: r.Method, Path: r.URL.Path, Body: body})
 	fail := f.failPath == r.URL.Path
+	diff := r.URL.Path == "/snapshot/create" && body["snapshot_type"] == "Diff"
+	if diff && f.failDiff {
+		fail = true
+	}
 	f.mu.Unlock()
 	if fail {
 		w.WriteHeader(http.StatusBadRequest)
@@ -111,7 +119,11 @@ func (f *fakeFirecrackerAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		state, _ := body["snapshot_path"].(string)
 		mem, _ := body["mem_file_path"].(string)
 		_ = os.WriteFile(f.hostPath(state), []byte("vmstate"), 0o644)
-		_ = os.WriteFile(f.hostPath(mem), make([]byte, f.memBytes), 0o644)
+		if diff {
+			writeSparseMem(f.hostPath(mem), f.diffLen)
+		} else {
+			_ = os.WriteFile(f.hostPath(mem), make([]byte, f.memBytes), 0o644)
+		}
 		if f.onCreate != nil {
 			f.onCreate(f.hostPath(state), f.hostPath(mem))
 		}
