@@ -695,3 +695,16 @@ so exit 4 lands at 1200 s. Still over 900 s, so the advice holds.
   old either way.
 - Tests: 4 more (76 in all). The main-level tests also patch
   `subprocess.run`, `ssh_ok` and `staging_health` to fail loudly.
+
+### Round 8 (FP0, review bunch 127)
+
+DeepSeek accepted round 7 with one required guard. F2-c made `main` save
+the receipt before the recovery clear, so a `save()` that raises (a full
+or read-only disk) skips the clear. That is the forbidden state again: no
+reboot, the markers armed for 900 s, no clear. The runbook says a failed
+receipt save also clears them.
+
+Fix: both saves in `main`'s `BaseException` path are best effort. A save
+that fails is logged, the clear still runs, and the original exception is
+re-raised. Nit: the runbook's "lands 1200 s after the reboot request"
+becomes "at least 1200 s" (`t0` is taken after the reboot ssh returns).
