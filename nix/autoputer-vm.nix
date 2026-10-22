@@ -498,6 +498,12 @@ EOF
           choir.runtime_recovery_replay_only=*)
             echo "RUNTIME_RECOVERY_REPLAY_ONLY=''${param#choir.runtime_recovery_replay_only=}" >> "$ENV_FILE"
             ;;
+          # SEC-06: the host selects this computer for enforce
+          # (vmctl's VM_CAPSULE_TUNNEL_ENFORCE_ONLY). The environment file
+          # overrides the unit's observe; only the exact value is copied.
+          choir.capsule_egress_tunnel_identity=enforce)
+            echo "CHOIR_CAPSULE_EGRESS_TUNNEL_IDENTITY=enforce" >> "$ENV_FILE"
+            ;;
           # The gateway token never rides kernel argv; it arrives on the
           # root-only credential disk (S1 security-floor remainder).
         esac
@@ -936,8 +942,11 @@ EOF
       # Egress tunnel identity (SDC SEC-06, internal/capsule/egress_tls.go):
       # observe judges each CONNECT tunnel's first TLS record (a ClientHello
       # whose only server_name is the CONNECT host), writes the verdict on the
-      # capsule's egress ledger and relays it unchanged. "enforce" refuses,
-      # after observe shows zero would_refuse for real toolchains.
+      # capsule's egress ledger and relays it. "enforce" refuses, after the
+      # gate in docs/problems/egress-proxy-tunnel-identity-2026-10-21.md. A
+      # computer the host selects (vmctl's VM_CAPSULE_TUNNEL_ENFORCE_ONLY) is
+      # set to enforce by the boot script's environment file, which overrides
+      # this line.
       CHOIR_CAPSULE_EGRESS_TUNNEL_IDENTITY = "observe";
       # The document-tool sandbox (SDC SEC-15, internal/doctool): observe runs
       # each tool as before (that is the result) and then a sandboxed shadow of

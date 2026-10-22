@@ -348,6 +348,11 @@ type ManagerConfig struct {
 	GuestReclaimOnly    []string
 	GuestReclaimMinAgeS int
 
+	// CapsuleTunnelEnforceOnly runs the capsule egress tunnel-identity check
+	// in enforce on the computers it names (VM_CAPSULE_TUNNEL_ENFORCE_ONLY;
+	// capsule_tunnel_identity.go); everyone else keeps the image's observe.
+	CapsuleTunnelEnforceOnly []string
+
 	// FirecrackerNext is a second VMM build launched only for the computers
 	// it selects (VM_FIRECRACKER_NEXT_*; vmm_next.go). Empty BinPath: off.
 	FirecrackerNext FirecrackerNextConfig
@@ -1938,6 +1943,7 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 			runtimeArgs = append(runtimeArgs, memoryHotplugKernelParam)
 		}
 		runtimeArgs = append(runtimeArgs, m.guestReclaimKernelParams(cfg)...)
+		runtimeArgs = append(runtimeArgs, m.capsuleTunnelIdentityKernelParams(cfg)...)
 		bootArgs = strings.Join(append([]string{kernelParams}, runtimeArgs...), " ")
 	} else {
 		// Legacy approach with custom init script. Keep the same runtime service
@@ -1966,6 +1972,9 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 			bootArgs += " " + memoryHotplugKernelParam
 		}
 		for _, arg := range m.guestReclaimKernelParams(cfg) {
+			bootArgs += " " + arg
+		}
+		for _, arg := range m.capsuleTunnelIdentityKernelParams(cfg) {
 			bootArgs += " " + arg
 		}
 	}

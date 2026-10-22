@@ -1435,6 +1435,18 @@ in
         # against its own pre-DAMON readings at similar guest usage.
         # Rollback: delete this line and redeploy.
         "VM_GUEST_RECLAIM_ONLY=computer-9648031f92e131adc1fb65ec455c5903,computer-71afbf1461dffabcce8eeebe558d03bd"
+        # SEC-06 capsule egress tunnel identity
+        # (internal/vmmanager/capsule_tunnel_identity.go): every computer runs
+        # the check in observe (the guest image's
+        # CHOIR_CAPSULE_EGRESS_TUNNEL_IDENTITY); the computers named here get
+        # the boot argument choir.capsule_egress_tunnel_identity=enforce and
+        # run it in enforce. Owner rule 2026-10-22: one selected test computer
+        # in the same deploy that ships observe. Empty: none. Never "*": the
+        # global flip is the image line, behind the gate in
+        # docs/problems/egress-proxy-tunnel-identity-2026-10-21.md. A named
+        # computer cold boots once (boot arguments are in the launch-config
+        # hash). Rollback: empty the list and redeploy.
+        "VM_CAPSULE_TUNNEL_ENFORCE_ONLY="
         # Data drive discard (VM_DATA_DISCARD=1) is deliberately NOT set: the
         # pinned Firecracker is 1.16.1, which has no virtio-blk discard
         # (vmmanager ignores the flag on an older binary). Guest side:
