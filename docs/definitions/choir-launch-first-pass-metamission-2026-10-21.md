@@ -285,19 +285,20 @@ now:
   slice: >-
     Land the live-red queue one deploy at a time (two disjoint live reds
     allowed, owner 13:35), each with its deployed proof on a test computer:
-    R to U are live and proved; V (SEC-14 deploy 2, the CI switch to the
-    gate) goes alone; after 19:00 UTC KF (kernel 6.18.57 + Firecracker
-    1.16.2, the canary before the paper, then the Node B reboot with the
-    owner's go). Reviews use flash, DeepSeek and Devin or a Sonnet subagent.
-  source_ref: 273d139c9
-  deploy_identity: 273d139c9 serving (deploy U, SEC-14 deploy 1, proved 17:40 with the gate probe 13 PASS)
+    R to V are live and proved (V: CI deploys through the gate as
+    choir-deploy); KF (kernel 6.18.57 + Firecracker 1.16.2) lands with the
+    paper held and a test-computer canary before the paper, then the Node B
+    reboot with the owner's go. Reviews use flash, DeepSeek and Devin or a
+    Sonnet subagent.
+  source_ref: 7ab8d653f
+  deploy_identity: 7ab8d653f serving (deploy V, SEC-14 deploy 2, proved 18:32 through the gate)
   candidate:
-    id: deploy-V
-    state: staged on 273d139c9 (SEC-14 deploy 2, 2 commits, hunks identical to lane/fp10-sec14-on-g); a .github-only push selects no deploy, then a workflow_dispatch deploys through the gate
-    ref: deploy V's landing commit on main
-    base: 273d139c9
-    digest: the two SEC-14 deploy-2 commits plus the ledger, this card and the node-a OOM record
-    scope: [.github/scripts, .github/workflows, docs]
+    id: deploy-KF
+    state: staged on 7ab8d653f (19 KF commits, hunks identical to lane/fp0-kf-r2 94487da7e, plus round 3e and the deleted-image record); Mac eval kernel 6.18.57, firecracker 1.16.2, 0 failed assertions; mirror kfr3m PASS
+    ref: deploy KF's landing commit on main
+    base: 7ab8d653f
+    digest: the staged tree plus the ledger and this card
+    scope: [flake.lock, flake.nix, nix, scripts, internal/vmmanager, docs]
   bridge_conjecture: >-
     If the security and density batches land with deployed proofs and
     independent review, then the owner's second pass starts from a computer
@@ -328,29 +329,29 @@ now:
     owner_ratification_ref: not_applicable
   belief:
     believed_state: >-
-      Deploys L to U are live and proved on staging. U put the deploy gate
-      on Node B (the choir-deploy user, one sudo rule, a locked floor, the
-      bootstrap marker); CI still deploys as root until V. Node B has about
-      165 GiB free after the owner-approved deletions. node-a's OOM killer
-      took the agents VM at 17:35 when Node B's build, Mike's deploy and the
-      VM overlapped; the workers were resumed from their sessions.
+      Deploys L to V are live and proved on staging. V moved CI's deploy
+      onto the gate: CI reaches Node B only as choir-deploy, the gate runs
+      the deploy program as root from a main commit at or above its floor,
+      and the floor holds 7ab8d653f. Node B has about 170 GB free and
+      steady. FP0 deleted an owner quarantine image at 17:06 that the repo
+      recorded as possibly unique; the file-root manifests show the real
+      loss is two small overlay files and maybe 13 Texture shortcuts. The
+      paper took about 4 minutes to answer health after V's refresh.
     main_uncertainty: >-
-      whether the disk holds until the pressure trigger lands (a sampler
-      now measures the rate); whether the new kernel's config (module
-      signing, lockdown built in) boots the guest image; whether node-a's
-      memory holds while Node B builds there.
-    next_observation: V's dispatch run log (node-b-ci-gate deploy as root from .github/scripts/node-b-ci-deploy, "Staging deploy complete"), the receipt naming the dispatch run, the floor file holding the commit, and the bootstrap marker gone.
+      whether the new kernel's config (module signing, lockdown built in)
+      boots the guest image; why the paper's post-refresh health window
+      regressed from about 30 s to about 4 minutes.
+    next_observation: KF's canary on a fresh or woken test computer (console Linux 6.18.57, lockdown none, store opens, a model answer, hibernate and wake on 1.16.2) before the paper is unheld.
   blocker_or_risk: >-
-    Landing is the bottleneck. node-a's memory is shared by the agents VM,
-    Mike's staging and Node B's remote builds (record
-    node-a-oom-kills-agents-vm-during-node-b-builds-2026-10-22). FP7 step 5
-    has no route without a guest shell.
+    Landing is the bottleneck: about fifteen reviewed or nearly reviewed
+    lanes wait for slots. node-a's memory is shared by the agents VM,
+    Mike's staging and Node B's remote builds. A canary that cannot run
+    keeps the paper held and the host unrebooted.
   next_action: >-
-    Land and prove V; KF after 19:00 UTC with the round 3b canary plan; ask
-    the owner for the reboot go; then discard on the FP2 test computer
-    (Firecracker 1.17 builds on Node B), F-c deploy 1 (alone), FP4 round
-    4c, ARCH-13 round 7d, capsule memory, the disk-pressure trigger in
-    observe, nix store policy round 2.
+    Hold the paper, push KF, canary, unhold and refresh the paper, then ask
+    the owner for the reboot go. After the reboot: SEC-14 step 3, the
+    discard trial, F-c deploy 1 (alone), ARCH-13 7d with FP4 4c, capsule
+    memory and coldstart logs, the disk-pressure trigger (observe).
 receipts:
   - id: capture-label-key-read
     boundary: implement
