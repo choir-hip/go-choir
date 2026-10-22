@@ -439,6 +439,9 @@ func (u *Updater) RestartCurrent(ctx context.Context) error {
 // declares a window on a guest with an unwired receipt fails closed —
 // compat cannot be proven.
 func (u *Updater) checkStateCompatibility(manifest ReleaseManifest) error {
+	if err := u.checkStoreFloor(manifest, "apply"); err != nil {
+		return err
+	}
 	if manifest.StoreSchemaVersion == 0 && manifest.MinStoreSchemaVersion == 0 {
 		// No schema window declared; the base-commit join may still apply.
 	} else {
@@ -478,6 +481,34 @@ func (u *Updater) checkStateCompatibility(manifest ReleaseManifest) error {
 // readStoreSchema loads the guest store's persisted schema epoch.
 // found=false means no receipt — the store predates the contract or the
 // workspace is fresh.
+// checkStoreFloor refuses a release below the store floor
+// (storeschema/floor.go), or one that declares no epoch, on a floored store.
+// The floor sits beside the receipt and only binaries that know it write
+// it, so an older binary that already rewrote the receipt downward cannot
+// hide it (review finding A on F-c deploy 1). It runs on Apply and on the
+// automatic recovery (restorePrior); with no floor it passes, so a store no
+// binary has floored keeps today's behaviour. A floor that cannot be read
+// refuses: the floor cannot be proven.
+func (u *Updater) checkStoreFloor(manifest ReleaseManifest, path string) error {
+	if strings.TrimSpace(u.storeSchemaPath) == "" {
+		return nil
+	}
+	floor, found, err := storeschema.ReadFloor(storeschema.FloorPath(u.storeSchemaPath))
+	if err != nil {
+		return fmt.Errorf("updater: %s refused: %w", path, err)
+	}
+	if !found {
+		return nil
+	}
+	if manifest.StoreSchemaVersion == 0 {
+		return fmt.Errorf("updater: %s refused: the guest store floor is %d (%s) and the release declares no store schema epoch, so nothing proves it is at or above the floor", path, floor.Version, floor.Reason)
+	}
+	if manifest.StoreSchemaVersion < floor.Version {
+		return fmt.Errorf("updater: %s refused: release store schema %d is below the guest store floor %d (%s)", path, manifest.StoreSchemaVersion, floor.Version, floor.Reason)
+	}
+	return nil
+}
+
 func (u *Updater) readStoreSchema() (storeschema.Receipt, bool, error) {
 	receipt, found, err := storeschema.Read(u.storeSchemaPath)
 	if err != nil {
@@ -958,6 +989,21 @@ func swapCurrentPointer(root, releaseDir string) error {
 func (u *Updater) restorePrior(ctx context.Context, request ApplyRequest, priorTarget, priorDigest, failedDigest string, cause error, completedAt time.Time, journal *operationJournal, journalPath string) (*computerevent.Receipt, error) {
 	if priorTarget == "" {
 		return nil, fmt.Errorf("updater: initial release failed and no prior release exists: %w", cause)
+	}
+	// The floor holds on recovery too (review finding A on F-c deploy 1):
+	// before any swap or restart, a prior release below the guest store's
+	// floor, or one declaring no epoch on a floored store, is refused. The
+	// guest stays on the release that failed its probe, which is at or
+	// above the floor; a forward fix repairs it. A resumed recovery that
+	// already swapped is past this check.
+	if !journal.RecoverySwapped {
+		priorManifest, err := readReleaseManifest(priorTarget)
+		if err != nil {
+			return nil, fmt.Errorf("updater: read prior release manifest: %w", err)
+		}
+		if err := u.checkStoreFloor(priorManifest, "recovery to the prior release"); err != nil {
+			return nil, err
+		}
 	}
 	if !journal.RecoverySwapped {
 		if err := u.swapCurrent(priorTarget); err != nil {
