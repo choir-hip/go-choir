@@ -1,6 +1,6 @@
 # The release apply-check test saw the repository change under CI and failed deploy I's second run
 
-Date: 2026-10-22. Status: **documented; not reproduced locally; writer narrowed (see Reproduction)**. Found by FP0 while
+Date: 2026-10-22. Status: **test fixed (`0d35db2b4`, yellow); cause most likely, not proven: newRepo's own background auto maintenance; PatchedTree cleared**. Found by FP0 while
 landing deploy I (freeze round 5). Evidence class: CI (GitHub Actions), not
 staging. Mutation class of this record: green.
 
@@ -128,3 +128,41 @@ as the test's; `GIT_CONFIG_GLOBAL` would not, since `gitOutput` strips `GIT_*`.)
    3-object repository no gc, commit-graph or pack task is due.
 3. PatchedTree or gitOutput writes the source repository: no write seen in
    strace, and it would fail every run.
+
+## Cause, fix, tests, rollback
+
+**Cause (most likely, not reproduced).** The writer is the test's own setup,
+not PatchedTree. The `git commit` in `newRepo` starts a detached `git
+maintenance run --auto`, which creates `.git/objects/maintenance.lock`. On a
+git where the detached child holds that lock past the commit's return (the
+fix on the git list), a loaded runner removes it between the two
+fingerprints. Not proven: the runner's git version is not in the CI log, and
+2.54 here releases the lock before `git commit` returns. The diagnostic in
+`ed2ca1ed5` names the part if it moves again.
+
+**PatchedTree's guarantee (I3/A7) holds as far as the evidence reaches.**
+strace shows its git processes write only the scratch directory. No red
+change.
+
+**Fix (`0d35db2b4`, yellow, test only).** `newRepo` sets, in the test
+repository's own config before its commit: `maintenance.auto=false`,
+`gc.auto=0` (no background maintenance or gc), `core.untrackedCache=false`,
+`core.fsmonitor=false` (so a runner's global `feature.manyFiles` or fsmonitor
+cannot add index writers). That excludes exactly git's background work on the
+repository under test. The fingerprint is unchanged and ignores no path: a
+`maintenance.lock`, `tmp_obj_*` or `*.lock` that appears still fails the
+check, and nothing in the test creates them now. The scratch clone in the
+sibling test still runs auto maintenance. It is never fingerprinted.
+
+**Tests.** strace after the fix: no `git maintenance` process starts for
+either fingerprinted repository. `go vet ./internal/release`; `go test -race
+./internal/release -count=1` pass; 300 iterations of `-run PatchedTree` with
+`GOMAXPROCS=2`, `TMPDIR=/dev/shm` and 4 × `yes` pass.
+
+**Evidence that would settle it.** If the check fails again in CI, the
+failure text names the part. `objects: removed [maintenance.lock]` (or
+added) before this fix confirms the cause. Any failure after this fix means
+another writer, and PatchedTree goes back under suspicion first.
+
+**Rollback.** `git revert 0d35db2b4` (the config lines) and, if wanted,
+`ed2ca1ed5` (the diagnostic). Both touch only `internal/release/git_test.go`.
