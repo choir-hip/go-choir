@@ -379,14 +379,35 @@ field and ignores it. A row the fix already closed reads
 on its next start: an owner act, or the always-on sweep. The old binary's
 deploy rescue does not reach that fate; its sweep does.
 
-Round 2 and 3 rollback: revert 19a75a8d9, then 8a9ad074b, then
-0469522b4 (the yellow commits' tests fail once their fix is gone). A
+Full rollback (corrected in round 4): revert the lane's commits newest
+first:
+
+1. 5bf4b37f3 docs (round 3 record)
+2. 19a75a8d9 fix (round 3)
+3. deab8cb4d test (round 3, count once)
+4. f84145408 test (round 3, deploy escape, hang guard)
+5. 060482978 docs (round 2 record)
+6. 8a9ad074b fix (round 2)
+7. 14c53fa58 test (round 2)
+8. 611223b30 docs (round 1 record)
+9. 0469522b4 fix (round 1)
+10. fe9b2db5d test (round 1, snapshot wake)
+11. 20163083e test (round 1)
+12. 4da173c13 docs (cause)
+
+This round's docs commit, which corrects this list, comes first of all.
+Reverting only a fix commit leaves its yellow tests failing, so revert a
+round's tests with its fix. A
 rollback while a row carries an open `boot_claim` (a close in progress or a
 start in flight) loses the claim: the old binary ignores it, and that one
 start replays the original orphan path once (reattach pending at the stale
 address, then the wedge detector's `wedged` and its charged retry). The old
 binary also reads `start-interrupted-repeatedly-by-vmctl-restart` as an
-unknown, non-failure stop, so its sweep re-boots such a row.
+unknown, non-failure stop, so its sweep re-boots such a row. A revert
+followed by a re-apply drops `boot_claim.counted` along with the whole
+claim (the old binary does not write it back), so the start in flight
+across that cycle can be counted once more. That is bounded (one extra
+count, at worst one early charge) and never boots the wrong thing.
 
 ### Staging proof plan (FP0, on a test computer)
 
@@ -563,7 +584,10 @@ and `TestDeployRescueReachesAPlatformComputerOnlyForRepeatedInterruptions`
   every class (an automatic retry needs a window or a new build) and is the
   escape the record already claimed. Logs in the warm, ensure and close now
   name it. Residual: between deploys the platform waits the window or an
-  owner act.
+  owner act. (Corrected in round 4: the platform computer has no owner.
+  Its escapes are a deploy of a new target, the 24 h window, or a resolve
+  or visit of the platform desktop, since `resolveDesktopContext` boots a
+  stopped row.)
 - **E2 (required), data race on log reads: fixed.** Values copied under
   `r.mu` in `closeInterruptedStarts` and the platform warm's refusal.
 - **E3 (required), escape untested: fixed.** The two deploy tests above pin
@@ -581,6 +605,48 @@ and `TestDeployRescueReachesAPlatformComputerOnlyForRepeatedInterruptions`
   (`nix/node-b.nix:1448-1461`), so the sweeper, and the close retry, run
   every minute there. A host without them retries the close only at the
   next restart (ReattachManagedVMs); the shield holds meanwhile.
+  (Corrected in round 4: `ReconcileVMProcesses` is called only by
+  `StartIdleSweeper` (`ownership.go:1141-1144`), not by the pressure
+  monitor (`pressure_sustained.go:252-268`). So the close is retried only
+  when `VMCTL_IDLE_TIMEOUT` is set, and on Node B every 2 minutes, because
+  it sets `VMCTL_IDLE_SWEEP_INTERVAL=2m` (`nix/node-b.nix:1449`). It is
+  not retried every minute.)
 - **Low, rollback with an open claim: recorded** in the Rollback section.
 - **Low, maintenance-exemption comment: fixed.** The B14 path is exempt from
   the recovery-bound admission only, not from the open-close refusal.
+
+## Review round 4 (2026-10-22, record corrections only)
+
+Bunch 46: Gemini flash accepted round 3. DeepSeek accepted with record
+corrections, and confirmed the code claims (E1, E2, E3, `Counted`). It
+also found that a load never writes (`loadLocked`), so loads never double
+count, and "one count per claim" is accurate. Devin's review of rounds 2
+and 3 was still pending. This round changes no code.
+
+### Corrections
+
+- **Close retry cadence and condition.** The close is retried every 2
+  minutes on Node B, not every minute, and only when `VMCTL_IDLE_TIMEOUT`
+  is set. Pressure reclaim does not run the reconcile. Corrected inline
+  above.
+- **The platform computer has no owner.** Between deploys, a
+  repeated-fated platform computer comes back through a deploy of a new
+  target, the 24 h window, or a resolve or visit of the platform desktop.
+  "An owner act" does not apply to it. Corrected inline above.
+- **Rollback.** The full newest-first revert list, and the
+  revert/re-apply effect on `boot_claim.counted`, are in the Rollback
+  section.
+
+### Residuals added
+
+- `newRescueFixture` uses `NewOwnershipRegistry("")`
+  (`deploy_rescue_test.go:57`), so the rescue boots in the round-3 deploy
+  tests run unclaimed. "Platform rescue while a close is open" is not
+  directly exercised.
+- Grant/spend gap: `GrantDeployRetry` clears `FailureWarmedAt` before
+  `claimRescue`/`spendDeployRetry`. A charge that lands in that window
+  consumes the target. The probability is negligible.
+- CI's 120 s rescue `/health` window (`ci.yml:1725-1747`) now also covers
+  a cold boot of the 4 GiB platform computer.
+- Between deploys, a repeated-fated platform computer waits up to 24 h, by
+  design.
