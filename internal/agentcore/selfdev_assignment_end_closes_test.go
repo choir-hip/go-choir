@@ -452,3 +452,55 @@ func TestAssignmentEndCloseRetriesATapeConflict(t *testing.T) {
 		}
 	}
 }
+
+// Bunch 19 (DeepSeek, Devin, flash): the cancellation close,
+// failSelfdevOperation, stopped on ErrProjectionMismatch. Two Stores over
+// one tape do not share a write mutex; production has that shape in the
+// rematerialize rebind window (rematerialize.go swaps rt.selfdevOperations
+// while the old Store may still be writing). A cancelled assignment's
+// operation must end failed whichever writer wins.
+func TestCancellationCloseRetriesATapeConflict(t *testing.T) {
+	ctx := context.Background()
+	computerID := "computer-cancel-tape-race"
+	productStore := tapeBoundStore(t, computerID)
+	closer, err := selfdev.NewStore(productStore, productStore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	closer.BindProjectionSink(productStore)
+	freezer, err := selfdev.NewStore(productStore, productStore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	freezer.BindProjectionSink(productStore)
+	rt := &Runtime{selfdevOperations: closer}
+	authorized := func(context.Context) error { return nil }
+	for i := 0; i < 30; i++ {
+		assignmentID := fmt.Sprintf("assignment-cancel-race-%d", i)
+		opened, err := openFreezeCandidate(ctx, closer, authorized, computerID, "trajectory-"+assignmentID, assignmentID, "objective")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			_, _ = freezer.Transition(ctx, computerID, opened.OperationID, selfdev.StateExecuting, selfdev.StateFrozen, func(next *selfdev.Operation) error {
+				next.BundleDigest = strings.Repeat("f", 64)
+				return nil
+			})
+		}()
+		go func() {
+			defer wg.Done()
+			rt.failBoundSelfdevOperation(ctx, computerID, assignmentID, "management cancelled the assignment")
+		}()
+		wg.Wait()
+		operation, err := closer.Get(ctx, computerID, opened.OperationID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if operation.State != selfdev.StateFailed || operation.TerminalError != "management cancelled the assignment" {
+			t.Fatalf("race %d on the tape: a cancelled assignment's operation = %s %q, want failed", i, operation.State, operation.TerminalError)
+		}
+	}
+}
