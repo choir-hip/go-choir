@@ -14,8 +14,10 @@ import (
 // VM_FIRECRACKER_BIN is one binary for the host, so a Firecracker bump
 // changes every computer in one deploy and refuses every hibernate snapshot
 // at once. The next build is launched only for the computers its selector
-// names, so 1.17 (and data-drive discard, which needs it) can be proven on
-// one test computer first:
+// names, so a new version can be proven on one test computer first. 1.17
+// (and data-drive discard) was proven that way and is now the pinned build
+// (docs/problems/firecracker-1-17-for-every-computer-2026-10-22.md); with
+// VM_FIRECRACKER_NEXT_BIN unset this seam is inert until the next bump:
 //
 //	VM_FIRECRACKER_NEXT_BIN    the next firecracker (same file name as the
 //	                           pinned one: the jail directory is named after it)

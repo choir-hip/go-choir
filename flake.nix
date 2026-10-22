@@ -134,30 +134,37 @@
         nixpkgs.overlays = [ (final: prev: { dolt = mkChoirDolt prev; }) ];
       };
 
-      # Firecracker lane (docs/problems/firecracker-1-16-1-virtio-mem-restore-
-      # bugs-2026-10-22.md). The host's VMM and its jailer are both
+      # Firecracker lane. The host's VMM and its jailer are both
       # pkgs.firecracker (nix/node-b.nix VM_FIRECRACKER_BIN, VM_JAILER_BIN);
-      # the locked nixpkgs ships 1.16.1. 1.16.2 fixes two virtio-mem
-      # snapshot-restore bugs and changes the snapshot format, so it voids
-      # every hibernate snapshot (vmctl refuses them as
-      # firecracker_version_mismatch and cold boots). Not 1.17 host-wide:
-      # NET-08 stages it per computer (nix/firecracker-next.nix). (Hotplug is
-      # not the reason: every version since 1.15.1 puts its region at
-      # 512 GiB, past the E-2236's 39-bit limit, docs/problems/memory-
-      # hotplug-cannot-work-on-node-b-39-bit-cpu-2026-10-22.md.) Same
-      # pattern as choirDolt: the base's recipe with a newer version, source
-      # hash and vendor hash, applied only while the given nixpkgs is older.
+      # the locked nixpkgs ships 1.16.1. The host pins 1.17.0 for every
+      # computer (docs/problems/firecracker-1-17-for-every-computer-
+      # 2026-10-22.md): it carries every 1.16.2 fix (docs/problems/
+      # firecracker-1-16-1-virtio-mem-restore-bugs-2026-10-22.md) and adds
+      # opt-in virtio-blk discard for the data drive (RES-16). Every
+      # version change voids every hibernate snapshot (vmctl refuses them as
+      # firecracker_version_mismatch and cold boots). (Hotplug is not
+      # affected: every version since 1.15.1 puts its region at 512 GiB,
+      # past the E-2236's 39-bit limit, docs/problems/memory-hotplug-cannot-
+      # work-on-node-b-39-bit-cpu-2026-10-22.md.) Same pattern as
+      # choirDolt: the base's recipe with a newer version, source hash and
+      # vendor hash, applied only while the given nixpkgs is older.
       #
-      # The source hash was computed on the Mac with `nix flake prefetch`.
-      # The vendored crates' hash comes from the hash mismatch of
+      # The hashes are the ones the per-computer next build used (NET-08's
+      # trial in D3, every computer in D4; nix/firecracker-next.nix, removed
+      # with this pin): the source from
+      # `nix flake prefetch github:firecracker-microvm/firecracker/v1.17.0`
+      # on the Mac; the vendored crates from the hash mismatch of
       # fetchCargoVendor's fixed-output staging step on Node B's builder
-      # with this flake's own package set (deploy KF's prebuild,
-      # 2026-10-22 19:09). The Mac's first value differed: compute it with
-      # the flake's pkgs on Linux, never with a local nixpkgs.
+      # with this flake's own package set (FP0, 2026-10-22). This recipe
+      # evaluates to the same store path FP0 built on Node B for that
+      # build (/nix/store/jbzvr6c965zyby7ldj73yi0zvibgd65b-firecracker-1.17.0),
+      # so the computers it launched keep the same binary and banner.
+      # Compute a vendor hash with the flake's pkgs on Linux, never with a
+      # local nixpkgs (the Mac's first value differed).
       choirFirecrackerRelease = {
-        version = "1.16.2";
-        hash = "sha256-BJ1WD6D/tsoBNUpIGjE/w5RgxFKRYkB7HKAi/TGXqbU=";
-        cargoHash = "sha256-pCkwOhpV//sGmZWlG20bBCo1iPmD2rrthrqIcX+728I=";
+        version = "1.17.0";
+        hash = "sha256-1HL13XL8CvwGTcm8uIJxgW31hUXXLZ8F2+jV7FEgxEY=";
+        cargoHash = "sha256-rqKOD/4cqOLAOIRAdHvxurMB7JPQktWb6fr9KTs84RI=";
       };
       mkChoirFirecracker = p:
         if p.lib.versionAtLeast p.firecracker.version choirFirecrackerRelease.version then p.firecracker
@@ -176,17 +183,18 @@
           };
         });
       # Upper bound: mkChoirFirecracker takes any nixpkgs firecracker at or
-      # above 1.16.2, so a base bump that brings 1.17 would ship it host-wide
-      # with no review. Every version change voids every hibernate snapshot,
-      # and 1.17 is NET-08's staged per-computer move (nix/firecracker-next.nix,
-      # one test computer first), not a host-wide one. Raise the bound here,
-      # deliberately, when the host itself moves.
-      choirFirecrackerBelow = "1.17";
+      # above 1.17.0, so a base bump that brings 1.18 would ship it host-wide
+      # with no review. Every version change voids every hibernate snapshot;
+      # a new minor version is staged per computer first (a fresh
+      # nix/firecracker-next.nix and VM_FIRECRACKER_NEXT_BIN/_ONLY,
+      # internal/vmmanager/vmm_next.go). Raise the bound here, deliberately,
+      # when the host itself moves.
+      choirFirecrackerBelow = "1.18";
       choirFirecrackerModule = { lib, pkgs, ... }: {
         nixpkgs.overlays = [ (final: prev: { firecracker = mkChoirFirecracker prev; }) ];
         assertions = [{
           assertion = lib.versionOlder pkgs.firecracker.version choirFirecrackerBelow;
-          message = "host Firecracker ${pkgs.firecracker.version} is not below ${choirFirecrackerBelow}: a Firecracker version change voids every hibernate snapshot (firecracker_version_mismatch, every computer cold boots), and 1.17 is NET-08's staged per-computer move (nix/firecracker-next.nix; docs/definitions/choir-launch-fp8-image-jailer-2026-10-21.md, NET-08). Keep the host on 1.16.x or raise choirFirecrackerBelow in flake.nix deliberately.";
+          message = "host Firecracker ${pkgs.firecracker.version} is not below ${choirFirecrackerBelow}: a Firecracker version change voids every hibernate snapshot (firecracker_version_mismatch, every computer cold boots), and a new minor version is staged per computer first (internal/vmmanager/vmm_next.go; docs/problems/firecracker-1-17-for-every-computer-2026-10-22.md). Keep the host on 1.17.x or raise choirFirecrackerBelow in flake.nix deliberately.";
         }];
       };
 
