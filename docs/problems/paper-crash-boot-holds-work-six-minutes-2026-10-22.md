@@ -808,3 +808,50 @@ heads (a new `Store.OpenConversationHeads`, sharing its loop with
 `OpenRoundsAddressedTo`), in conversation-id order. Each closure is
 committed exactly as before (same record, same command id `boot-closure:`,
 same fate). The fold stays in `VerifyInboxHeads`, off the boot path.
+
+### Fix and proof steps (lane/fp4-crash-boot-closure)
+
+Fix: 44793b5f0 (red). Test: 85a046294 (yellow). Before the fix, the test
+failed on `ListObjectsByMetadataPage choir.commitment_record
+$.record_plane json ran 2 times`. Not fixed: C4, the per-run close
+(residual R-C1), and Open 3, the host reboot script's `allow_busy` (a host
+change, not this lane).
+
+Proof steps (FP0, at a crash boot of a test computer: stop it through
+vmctl with no planned-restart marker):
+
+1. Before the stop, make sure the test computer has at least one open
+   round: a Texture request whose research desk has not reported yet.
+   Note its conversation id, from the guest's obligations surface or the
+   console's "Cast" line.
+2. After the boot, from the console:
+   `grep -E 'restart kind=|boot phase (begin|end)|closed round|closed run|crash boot'`.
+   Pass:
+   - `restart kind=crash_or_stop`;
+   - `close_open_rounds_after_crash dur=` is a few seconds at most;
+   - one "closed round N of conv:… after a crash restart" line per open
+     round, and none for closed ones;
+   - `source_schedules_after_restart` begins right after the closure;
+   - no "crash boot round closure: open rounds:" error.
+3. Crash rule: every pre-boot run reads cancelled with error
+   `interrupted_by_restart` ("closed run … after a crash restart"). The
+   round's caster inbox holds a final system Report with stop reason
+   `interrupted_by_restart`. No "activation wait" line for a closed run.
+4. Second boot writes nothing: crash-stop the same computer again. Pass:
+   `close_open_rounds_after_crash` logs no "closed round" line, and
+   `close_pre_boot_runs_after_crash` closes only runs started between the
+   two boots.
+5. On the paper at its next crash boot, if one happens: the same grep. The
+   `close_pre_boot_runs_after_crash` candidate count (the "owner-scoped …
+   candidates=N" line) settles the C4 hypothesis (about 730 parked runs).
+   Record it here.
+
+Residuals:
+- R-C1: about 150 ms per closed run on the paper: two write transactions
+  plus the event-sequence seed. Bounded by the open and parked runs at the
+  crash, not by history. Batching would change the event append path.
+- R-C2: `VerifyInboxHeads` has no production caller. An off-boot periodic
+  or owner-triggered audit would catch head drift if it ever appeared.
+- R-C3: the header list over all conversation heads of the owner grows
+  with conversations, not records. If it ever matters, an `open` field in
+  the head's metadata lets closed heads skip the point read.
