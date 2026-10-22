@@ -487,16 +487,25 @@ def classify_unasked(r):
     return out
 
 
+# The statuses HandleInternalPlannedRestart answers before it writes: 400
+# (bad body, no target), 403 (not the host), 404 and 405 (no such route or
+# method), 409 (busy). Its two pre-write 503s are read from the body below.
+GUEST_REFUSALS = frozenset({400, 403, 404, 405, 409})
+
+
 def answer_may_have_written(status, body):
     """Whether a POST answer leaves the host's marker possibly on disk: a
-    200 wrote it; a lost answer (0) or a 5xx (a write that failed after the
-    rename) may have. Every other answer is a refusal before the write
+    200 wrote it; a lost answer (0), a 5xx (a write that failed after the
+    rename) or any status the guest does not answer before writing (F6)
+    may have. A 400, 403, 404, 405 or 409 is a refusal before the write
     (D1), and so are the guest's own two 503s, both sent before
     writeHostPlannedRestartMarker (HandleInternalPlannedRestart):
     {"error":"planned restart surface unavailable"} and
     {"error":"planned restart: <err>"} when plannedRestartBusy cannot
     read its state (R1). A 503 with any other body (a proxy, an older
     guest) may have written."""
+    if status in GUEST_REFUSALS:
+        return False
     if status == 200 or status == 0:
         return True
     if status == 503:
@@ -507,7 +516,9 @@ def answer_may_have_written(status, body):
         if isinstance(err, str) and (err == "planned restart surface unavailable" or err.startswith("planned restart: ")):
             return False
         return True
-    return status >= 500
+    # Any other status (a 408 or 429 from something in front of the guest, a
+    # 5xx) is not one of the guest's own pre-write answers (F6).
+    return True
 
 
 # ssh's stderr when it never connected or authenticated, so the remote
@@ -717,7 +728,6 @@ def mark_rounds(args, m, items, sent, target):
         sent_at = time.time()
         m["in_flight"] = sorted(it["vm_id"] for it in batch)
         res = remote(args.host, "mark", json.dumps({"items": batch, "target": target}), timeout=mark_timeout(len(batch)))
-        m["in_flight"] = []
         got = {r["vm_id"]: r for r in res if r.get("vm_id") in items}
         answers = {}
         for it in batch:
@@ -735,6 +745,9 @@ def mark_rounds(args, m, items, sent, target):
             worst[vm] = worse(worst.get(vm), a["outcome"])
             answers[vm] = a
             log("  %s %s (class=%s allow_busy=%s): %s" % (a["outcome"], vm, a["warmness_class"], a["allow_busy"], a["detail"]))
+        # Only now is every answer in may_hold_marker: until here a signal or
+        # an error clears the in-flight batch too (F1).
+        m["in_flight"] = []
         return answers, sent_at
 
     pending, written = dict(items), set()
@@ -897,7 +910,9 @@ def phase_reboot(args, receipt):
     before = receipt["pre"]["facts"]["boot_id"]
     log("REBOOT: systemctl reboot on %s (boot_id %s)" % (args.host, before))
     try:
-        p = subprocess.run(["ssh", *SSH_OPTS, args.host, "systemctl", "reboot"], capture_output=True, text=True, timeout=60)
+        # LC_ALL=C: OpenSSH localizes the stderr phrases ssh_never_connected reads (F4).
+        p = subprocess.run(["ssh", *SSH_OPTS, args.host, "systemctl", "reboot"], capture_output=True, text=True, timeout=60,
+                           env={**os.environ, "LC_ALL": "C"})
         rc, err = p.returncode, (p.stderr or "").strip()
     except subprocess.TimeoutExpired as e:
         # Usually the connection hanging as the host goes down.
@@ -1071,6 +1086,9 @@ def main():
     ap.add_argument("--skip-hardening", action="store_true")
     ap.add_argument("--state", help="receipt JSON path (default: $TMPDIR/node-b-host-reboot-<UTC>.json); --phase post reads its pre baseline")
     args = ap.parse_args()
+    if not 0 < args.down_wait < args.boot_timeout:
+        # Otherwise the down-wait branch cannot fire before the boot timeout.
+        ap.error("--down-wait %d must be above 0 and below --boot-timeout %d" % (args.down_wait, args.boot_timeout))
     if args.min_kernel is None:
         # Read after parsing so --help works without the file.
         args.min_kernel = kernel_security_floor()
@@ -1144,7 +1162,16 @@ def main():
         c = phase_post(args, receipt)
         save()
         return 1 if c.failed() else 0
-    except Exception as e:  # keep the receipt for the operator
+    except BaseException as e:  # keep the receipt for the operator
+        # An interrupt (SIGHUP, SIGTERM, Ctrl-C) in the window between the mark
+        # phase and reboot_after_mark's try leaves markers armed; a clear
+        # that already ran sets marks.cleared and is not repeated (F2). A
+        # --phase post run, or a host that came back, has nothing to clear.
+        marks = receipt.get("marks") or {}
+        if (args.phase != "post" and marks.get("sent_items") and not marks.get("cleared")
+                and not (receipt.get("reboot") or {}).get("back_at")):
+            log("FAILED (%r): clearing the markers" % e)
+            clear_receipt_markers(args, receipt)
         receipt["error"] = repr(e)
         save()
         raise
