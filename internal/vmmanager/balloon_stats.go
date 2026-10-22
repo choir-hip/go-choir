@@ -123,7 +123,12 @@ func (m *Manager) GuestMemoryStats(vmID string) (GuestMemoryStats, error) {
 	case errors.Is(err, errVMNotRunning):
 		return fail(GuestMemoryStatsReasonNotRunning, "")
 	case err != nil:
-		return fail(GuestMemoryStatsReasonNoAPISocket, "")
+		detail := err.Error()
+		var nse *noAPISocketError
+		if errors.As(err, &nse) {
+			detail = fmt.Sprintf("%s: %v", nse.Path, nse.Err)
+		}
+		return fail(GuestMemoryStatsReasonNoAPISocket, detail)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), guestMemoryStatsTimeout)
 	defer cancel()
