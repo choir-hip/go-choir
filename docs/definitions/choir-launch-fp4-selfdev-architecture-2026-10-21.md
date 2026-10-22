@@ -215,7 +215,11 @@ now:
     dispatch latency. P2: the R3 refusal advised "partial", which ends in a
     completion-guard cancel; it now advises failed with the refusal as the
     reason, and the guard's reason names the open candidate. Tests first
-    (yellow), then the fix (red), then this record. Earlier: round 2 (R1 to
+    (yellow), then the fix (red), then this record. Round 3b (review
+    bunch 51: three accepts, edits only): a re-run plan whose request B
+    reports failed, residuals for the emitter's commit boundary and the
+    cancel/admission race, real-handler and lane tests, a range for the
+    latency test, a state-neutral guard reason. Earlier: round 2 (R1 to
     R6), batch 1 (B1 to B3), writer-gate counts, the nudge.
   source_ref: cf7ed5072 on lane/fp4-r3-nudge (base main 7448bf899)
   deploy_identity: unknown to this lane
@@ -278,30 +282,35 @@ now:
     the bind commit, without a restart, still leaves a bound run without
     its deadline wake (R2 residual). The open-time spawn wake is still minted
     on management's mailbox by the store, so a request's first admission
-    attempt waits for the casting activation (P1 residual).
+    attempt waits for the casting activation (P1 residual). A nudge minted
+    from a management-initiated Cancel becomes durable only when
+    management's activation commits, so it still waits for that
+    activation; a management Cancel and an admission can now race, and the
+    lifecycle CAS makes the loser fail closed (P1 residuals b, c).
   next_action: >-
-    FP0: review the round 3 commits on lane/fp4-r3-nudge, land, then re-run
-    drill steps 4 and 6 (the others passed on deploys J and K): (1) Cast A, wait for its capsule bound;
-    (2) Cast B; read rows: A bound, B open/unbound, log "waits behind A";
-    (3) trigger a planned refresh of the test computer while A is live
-    (critical_protected or deferred refresh); read rows after boot: B still
-    open, log "planned boot: queued engineering request B kept and resumed";
-    (4) let A finish or Cancel it; B binds within seconds (nudge), not at the
-    next minute retry, while management is still reading A's report; in the
-    guest log read "actorruntime: engineering admission wake latency
+    FP0: review the round 3 and 3b commits on lane/fp4-r3-nudge, land, then
+    re-run drill steps 4 and 6 with the re-run plan in
+    docs/evidence/fp4-admission-queue-deployed-proof-2026-10-22.md ("Re-run
+    plan for steps 4 and 6 after FP4 round 3"). Its request B tells the desk
+    to report FAILED with the refusal as the reason, so the new refusal text
+    is the branch under test; the original request B said "partial" and
+    cannot test it. (4) Let A finish on its own (not the "or Cancel it"
+    variant, which this repair does not cover); B binds within seconds, not
+    at the next minute retry, while management is still reading A's report;
+    the guest log has "actorruntime: engineering admission wake latency
     mailbox=engineering-admission … waited=…" for B's nudge (content carries
-    "nudge":"<A>"): waited is a few seconds at most, and mailbox is not
-    management's; (5) GET /api/runtime/observability and read
-    objectgraph_writer_gate {mode: observe, counts}; (6) with A completed
-    and its candidate frozen, have B freeze: B's run shows the refusal
-    naming A's operation, "cannot freeze until" and "Complete with result
-    failed", and the guest log has "selfdev: assignment B cannot freeze"; B
-    ends failed with the refusal as its reason, or, if the model reports
-    partial, cancelled with a reason that names A's candidate ("the freeze
-    was refused: self-development candidate selfdev-… is awaiting_approval"),
-    never the bare guard name. Crash half: on a
-    throwaway computer, kill the guest with B queued; after boot B is
-    cancelled interrupted_by_restart.
+    "nudge":"<A>"), waited a few seconds at most. (6) B's freeze is refused
+    with text naming A's operation, "cannot freeze until" and "Complete with
+    result failed", never "partial"; the guest log has "selfdev: assignment
+    B cannot freeze"; B's terminal report is failed with the refusal as its
+    reason and there is no system cancel. If the guard still cancels B, its
+    reason names A's candidate ("the freeze was refused because
+    self-development candidate selfdev-… was open (state
+    awaiting_approval)"), never the bare guard name, and that is a finding,
+    not a pass. Steps 0 to 2 and 5 passed on deploys J and K; step 3 is
+    unreachable by design (evidence doc). Crash half: on a throwaway
+    computer, kill the guest with B queued; after boot B is cancelled
+    interrupted_by_restart.
 slices:
   ARCH-10:
     what: >-
@@ -366,6 +375,11 @@ receipts:
     identity: b557b2d64 (tests), cf7ed5072 (fix), on lane/fp4-r3-nudge
     proof_refs: [internal/agentcore/engineering_admission_dispatch_test.go, internal/agentcore/freeze_refusal_fate_test.go, internal/actorruntime/admission_wake_latency_test.go]
     rollback_ref: git revert cf7ed5072 (no schema, no new kind; a wake already on the admission mailbox is dropped and the request gets its fate at the next planned or crash boot)
+  - id: arch10-r3b
+    boundary: implement
+    identity: f55f1588a (dispatcher options extracted), f9732b3de (tests), 1b21dc6c8 (guard reason text)
+    proof_refs: [internal/actorruntime/admission_mailbox_test.go, internal/actorruntime/admission_wake_latency_test.go, internal/agentcore/freeze_refusal_fate_test.go]
+    rollback_ref: git revert 1b21dc6c8 (text only); the other two change no behaviour
   - id: arch04-observability
     boundary: implement
     identity: bbd19192c

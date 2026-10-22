@@ -126,3 +126,48 @@ Notes:
   - s0-*, s5-observability-095604.txt;
   - s4-events-A/B-101817.txt, s4-snap-A/B-101817.txt;
   - trace-A.json, trace-B.json, post-ops-*.txt, post-health-*.txt.
+
+## Re-run plan for steps 4 and 6 after FP4 round 3 (written 2026-10-22, before any cast)
+
+The run above is kept as recorded. Its request B told the desk to
+"Complete the assignment as partial", so it cannot exercise round 3's P2
+repair, whose primary branch is a failed report. This plan replaces only
+request B; request A, the computer, the rules and steps 0 to 2 and 5 are
+as above, on the build that carries round 3.
+
+Request B for the re-run (send verbatim):
+
+```
+Engineering request B (FP4 admission drill re-run, test computer only): through the engineering desk, in one assignment. This request is expected to wait in the engineering queue behind request A, which is already working; that is the drill.
+1. In internal/selfdev/operations.go add the comment line "// Store keeps self-development operations." directly above "type Store struct".
+2. Record three cheap receipts, each in its own cell: the toolchain (`go version`, `node --version`, `npm --version`); the check `gofmt -l internal/selfdev/operations.go` (no output expected); and, as the build stand-in, `sh -c 'test -s internal/selfdev/operations.go'`.
+3. Do not run go vet, go build, npm or vite.
+4. Call Freeze exactly once, citing those three receipts. It is expected to be refused while A's candidate awaits my decision.
+5. When Freeze is refused, do not retry and do not work around it: report the work as FAILED, with the refusal text as the reason.
+Management: cast this once and do not re-cast, cancel or replace request A; report B's outcome back to me.
+```
+
+What the re-run must show:
+
+- Step 4: B binds within seconds of A's terminal_at while management is
+  still reading A's report (`--step 5`, 30 s bound). The guest log has
+  "actorruntime: engineering admission wake latency
+  mailbox=engineering-admission … waited=…" for B's nudge (content
+  carries `"nudge":"<A's assignment id>"`), with waited of a few seconds
+  at most. Let A finish on its own; do not use the "or Cancel it"
+  variant, which this repair does not cover (see the P1 record's
+  residuals).
+- Step 6, the refusal: B's freeze tool error reads "cannot freeze until
+  the open candidate settles (… <A's operation id> is
+  awaiting_approval)" and advises "report the work as failed: Complete
+  with result failed and this refusal as the reason". It does not say
+  "partial". The guest log has "selfdev: assignment <B> cannot freeze".
+- Step 6, B's fate: B's terminal report is `failed`, and its reason
+  carries the refusal (A's operation id). There is no
+  `engineering-system-cancel` event for B. If the guard still cancels B,
+  the cancel reason names A's candidate ("the freeze was refused because
+  self-development candidate <A's operation id> was open (state
+  awaiting_approval)"), never the bare guard name; that outcome is
+  recorded as a finding against the advice, not a pass.
+- A's candidate is still `awaiting_approval` and untouched; no operation
+  exists for B.

@@ -108,10 +108,12 @@ Fix, both halves of what FP0 asked for:
 2. The guard's reason names the candidate when the run's freeze was
    refused by one, so a model that still reports partial ends with a fate
    that says why: `tool loop: completion guard
-   "engineering_overlay_terminal_fate_required; the freeze was refused:
-   self-development candidate selfdev-… is awaiting_approval and waits for
-   management's Verify and the owner's decision" was not satisfied after 2
-   retries`. Its reminder then tells the run to Complete failed with the
+   "engineering_overlay_terminal_fate_required; the freeze was refused
+   because self-development candidate selfdev-… was open (state
+   awaiting_approval)" was not satisfied after 2 retries` (wording as of
+   round 3b; round 3 added "and waits for management's Verify and the
+   owner's decision", which was wrong for states other than
+   awaiting_approval). Its reminder then tells the run to Complete failed with the
    refusal. The reason is read from the run's tool results
    (`engineeringTerminalFateGuardReason`), and a run with no refused freeze
    keeps the old reason (`TestCompletionGuardReasonNamesTheOpenCandidate`).
@@ -122,3 +124,20 @@ reason.
 
 Disposition: repaired. The fate is still a system cancel when the model
 ignores the advice, but its reason now names the open candidate.
+
+## Round 3b (review bunch 51)
+
+- DeepSeek 5: the guard's reason now names the candidate and the state
+  the refusal gave, and claims nothing about what that state waits for
+  (1b21dc6c8, test f9732b3de). Text only; fate unchanged.
+- Residual: the guard keeps the run's last refusal even if a later freeze
+  succeeded, so a stale refusal can name a candidate in the reason. A
+  successful freeze leaves no mark in the cell output the guard reads, so
+  scoping the scan is not a few lines. It changes only the cancel's text,
+  and only on a run that then fails to commit any terminal fate. A model
+  that echoes the refusal pattern in cell output can also shape this
+  text.
+- DeepSeek 1: the drill's request B said "partial", so it could not test
+  this repair. The evidence doc keeps that record and adds a re-run plan
+  whose request B reports FAILED with the refusal as the reason
+  (docs/evidence/fp4-admission-queue-deployed-proof-2026-10-22.md).
