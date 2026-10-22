@@ -19,7 +19,7 @@ review:
 start:
   captured_at: 2026-10-22T03:00:00Z
   source:
-    canonical_ref: main 51cb3a8cd (rebased onto 975f1c039 for the bunch 11 edits)
+    canonical_ref: main 51cb3a8cd (rebased onto e04c66d6a)
     deploy_identity: unknown to this lane; FP0 reads staging identity
   worktrees:
     - path: /home/agent/lanes/fp10-net10-app-policy
@@ -98,19 +98,19 @@ now:
   slice: >-
     Design and build plan committed; W0 (internal/appnet) built, tested
     locally and pushed, unwired and off. Bunch 11: flash accept, Devin
-    accept with edits; the edits are 339907d4c (tests) and ef277e818 (fix),
+    accept with edits; the edits are d84590b45 (tests) and aad05f37e (fix),
     and this file records the Parse size cap as W1's. Owner ruling Q3
     (owner notes §40): preset policies; §5.1 maps them onto egressgrant
     and names W2's changes (docs only). FP0 reviews the
     delta, lands W0 with an inert set under that set's no-effect proof
     (§8 step 0). W1 to W7 are not started.
-  source_ref: ef277e818
+  source_ref: aad05f37e
   deploy_identity: unknown to this lane
   candidate:
     id: fp10-net10-w0
     state: ready
     ref: lane/fp10-net10-app-policy
-    base: 975f1c039
+    base: e04c66d6a
     digest: none
     inert: true (a new unwired package; nothing imports it)
     scope:
@@ -148,39 +148,39 @@ now:
       Whether W1's install event shape (approved grant ids) fits S7-0's
       package event when it lands; whether host-side desk attribution
       (NET-03) is needed before the first real app agent.
-    next_observation: FP0's delta review of ef277e818
+    next_observation: FP0's delta review of aad05f37e
   blocker_or_risk: >-
     W5 depends on NET-01 landing (lane/fp10-net01-host-fetch); W1 depends on
     S7-0's install events reaching main.
   next_action: >-
-    FP0 reviews the bunch 11 delta (339907d4c, ef277e818) and lands W0
+    FP0 reviews the bunch 11 delta (d84590b45, aad05f37e) and lands W0
     inert. The owner's Q3 ruling (preset policies, §5.1) changes the W1
     and W2 plans only; W0 needs no change to land.
 
 receipts:
   - id: problem-record-and-design
     boundary: define
-    identity: 461fc60f1
+    identity: d1809206a
     proof_refs: [docs/problems/app-package-cannot-declare-network-2026-10-22.md]
-    rollback_ref: git revert 461fc60f1
+    rollback_ref: git revert d1809206a
     disposition: committed
   - id: tests-first
     boundary: implement
-    identity: 3a626f81e
+    identity: d708699ec
     proof_refs: [internal/appnet/appnet_test.go]
-    rollback_ref: git revert 3a626f81e
+    rollback_ref: git revert d708699ec
     disposition: committed (does not build alone; the next commit adds the code)
   - id: appnet-w0
     boundary: implement
-    identity: 1351a557c
+    identity: ef051b761
     proof_refs: [go test ./internal/appnet ok, -race ok, go vet clean; go test ./internal/egressgrant ./internal/appdesk ./internal/deskmanifest ok; no importer of internal/appnet]
-    rollback_ref: git revert 1351a557c
+    rollback_ref: git revert ef051b761
     disposition: committed
   - id: bunch-11-edits
     boundary: review
-    identity: ef277e818 (tests 339907d4c)
+    identity: aad05f37e (tests d84590b45)
     proof_refs: [go test -race ./internal/appnet ./internal/egressgrant ok (GOMAXPROCS=2 GOFLAGS=-p=1), go vet clean]
-    rollback_ref: git revert ef277e818 339907d4c
+    rollback_ref: git revert aad05f37e d84590b45
     disposition: committed
 ---
 
@@ -246,7 +246,7 @@ So one validator decides it:
 - the budget is per period (`day`), not per lifetime (§5.1);
 - at most 16 entries, no duplicate verbs.
 
-W0 as built (`internal/appnet` at ef277e818) still has `renewal_days`
+W0 as built (`internal/appnet` at aad05f37e) still has `renewal_days`
 (1 to 90) and a lifetime budget, from before the ruling. W1 replaces them
 as planned in §7; no code changes in this docs step.
 
