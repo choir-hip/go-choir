@@ -68,7 +68,13 @@ func newAdmissionDispatchHarness(t *testing.T, f *admissionFixture) *admissionDi
 		switch u.Kind {
 		case holdManagementKind:
 			h.inMgmt <- struct{}{}
-			<-h.release // management reading A's report
+			// Management reading A's report. Bounded far past the test's own
+			// 5 s waits, so a broken test fails instead of hanging; a lapse
+			// cannot pass the test, which has already judged by then.
+			select {
+			case <-h.release:
+			case <-time.After(time.Minute):
+			}
 		case delegatedAssignmentSpawnDeadlineUpdateKind:
 			err := f.rt.HandleDelegatedAssignmentSpawnDeadline(ctx, f.seed.OwnerID, f.computer, mailbox, u.Content)
 			var wake delegatedAssignmentSpawnDeadline
