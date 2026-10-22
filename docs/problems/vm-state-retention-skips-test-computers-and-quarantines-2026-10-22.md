@@ -330,3 +330,27 @@ DeepSeek accepts with edits; Gemini accepts.
   journal forever (R3-5 restated); an ownerless dir with only a plain
   `data.img` still goes after 6 h (the open owner question restated);
   `vmDirRecoveryKeepReasons` reads the dir under the registry lock.
+
+## Round 4 dispositions (289262db0, 2094f73d2)
+
+- R4-1: fixed. Step 4 fails when the state dir cannot be read, when it
+  holds no `vm-*`/`candidate-*` dir while the plan counts some, when the
+  plan read exits non-zero or is empty, and when the body does not parse
+  as a retention plan. No recovery dir, or a plan with no candidates, is
+  a MANUAL "nothing to check" line, never a PASS. Eighteen selftest cases
+  cover it; each failed on 2ffb6c3ad. The default selftest pass now
+  points step 4 at a stub state dir (it passed vacuously before).
+- R4-3: fixed in the station (149 passed, 1 pre-existing fp1 failure).
+- R4-4: fixed in the station: how to read each step 4 outcome, and what
+  a FAIL before the deploy means.
+- R4-6: fixed in the proof's output (kept lines sorted by `vm_id`); the
+  plan's own order is unchanged.
+- R4-2: declined for this round. The stale claim lasts one lock hand-off
+  and costs a retryable error, no data; moving the release into the
+  final lock hold changes the lifecycle protocol on a red path and wants
+  its own test.
+- R4-5: declined. The mode is set once at startup, so the re-read cannot
+  change; not worth a red-path edit for a comment.
+- R4-7: no change. The journal pin is R3-5 (reported, an owner act), the
+  plain `data.img` orphan is the open owner question, and the dir read
+  under the lock touches fewer than ten entries.

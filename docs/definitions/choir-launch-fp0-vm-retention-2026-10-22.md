@@ -140,7 +140,9 @@ Tests:
   - round 3: the orphan destroy-time recheck deleted, the ephemeral
     destroy-time dir recheck deleted, the ephemeral claim not taken, and
     its conflict check skipped.
-- `scripts/proofs/selftest.sh` reports 132 passed.
+- `scripts/proofs/selftest.sh` reports 149 passed and 1 failed; the
+  failure is the pre-existing `fp1 step 1 computes a busy share`, not
+  this lane's (round 3 said 132 passed; it was 131 and the same failure).
 
 ## Deployed proof (FP0)
 
@@ -149,6 +151,20 @@ Tests:
    lists every `vm-*` or `candidate-*` dir on Node B holding a quarantine,
    a staging image or a recovery journal (`ls`, `du`), and checks that
    none is a candidate in the active plan.
+   Reading step 4 (review round 4, R4-1, R4-4):
+   - a FAIL that says the state dir or the active plan was not read, or
+     the plan does not parse, compared nothing: fix the read and run the
+     step again before deploying;
+   - a MANUAL "nothing to check" line is not a pass: no dir holds
+     recovery state, or the plan has no candidates. Record it as such;
+     on Node B the candidate fleet's 10-07 quarantines should make the
+     first one impossible, so treat it as a wrong state dir first;
+   - a FAIL naming candidates before the deploy means today's binary will
+     destroy a dir holding recovery state at its next sweep (the old
+     ephemeral rule has no keep). Record the dirs in the problem record
+     and deploy this batch at once; if it cannot go at once, the owner
+     decides whether to copy the named dirs aside first (a Node B
+     mutation, not a step of this script).
 1. Deploy it as a live red batch (its own deploy, or with inert ones). Run
    `--step 4 --evidence after.txt`. Expect:
    - the same recovery-dir lines as before (none gone, the candidate-fleet
@@ -233,7 +249,7 @@ Tests:
 ```yaml
 now:
   status: waiting_on_fp0
-  slice: review round 3 fixed; the deploy and its proof (step 4 before and after, then steps 0 to 2) are FP0's
-  next_action: FP0 re-reviews the round-3 delta (98f1c074b..head), runs step 4 on Node B, lands it as a live red batch (orphan and ephemeral rules delete less), runs step 4 again and steps 0 to 2
+  slice: review round 4 fixed (R4-1, step 4 can no longer pass vacuously); the deploy and its proof (step 4 before and after, then steps 0 to 2) are FP0's
+  next_action: FP0 re-reviews the round-4 delta (2ffb6c3ad..head), runs step 4 on Node B, lands it as a live red batch (orphan and ephemeral rules delete less), runs step 4 again and steps 0 to 2
   blocker_or_risk: enforce waits on the shadow report and the owner questions above
 ```
