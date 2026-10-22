@@ -56,12 +56,22 @@ Phases (--phase all runs them in order):
           --no-markers) get a read-only check from their obligations
           surface: a self-development operation mid-transaction aborts
           the run; an unreadable count needs --allow-crash-unverified.
+          The computers are listed again immediately before the final
+          pass: unasked ones are checked again, and a computer that
+          started running during the wait is asked in the final pass.
+          A 404/405 guest is not asked again in later rounds. A
+          WARNING line before the reboot names every unasked computer
+          whose live capsules were not checked.
           Their live capsules cannot be read without asking and are not
           checked. Computers that are not running (hibernated, stopped)
           are not checked: the kernel change invalidates their
           snapshots, so each cold-boots as a crash boot at its next wake.
   reboot  (--execute) systemctl reboot. Waits for ssh with a new boot_id
-          (--boot-timeout).
+          (--boot-timeout). If ssh reports that systemctl refused (an exit
+          status other than 0 or ssh's own 255), or the old boot_id still
+          answers after --down-wait, the host did not go down: the markers
+          are cleared and the run exits 3. Any failure after the markers
+          are written (a failed receipt save, an interrupt) clears them.
   post    read-only. Booted kernel = staged kernel; nested=N; booted system
           = current system; units back; md clean; vmctl healthy; firewall
           chains re-created; no new verify-host-hardening failures; staging
@@ -74,8 +84,9 @@ release, so after a kernel change every snapshot cold-boots as a crash boot
 (internal/vmmanager/snapshot.go, host_kernel_mismatch).
 
 Exit status: 0 ok; 1 a pre-check or post-check failed; 2 usage error; 3
-aborted before the reboot (markers cleared); 4 the host did not come back
-within --boot-timeout (go to the console; see the runbook).
+aborted before the reboot, or the reboot was refused or the host did not
+go down (markers cleared); 4 the host did not come back within
+--boot-timeout (go to the console; see the runbook).
 """
 
 import argparse
@@ -475,6 +486,16 @@ def mark_timeout(n):
     return 60 + 30 * n
 
 
+def computers_timeout(n):
+    """ssh timeout for the computers call: an 8 s health and a 15 s
+    obligations request per running guest, in turn."""
+    return max(180, 60 + 25 * n)
+
+
+def list_computers(host, n):
+    return remote(host, "computers", timeout=computers_timeout(n))
+
+
 def forward_guest_jumps(rules):
     """FORWARD must begin with the two guest jumps in the order vmctl
     installs them at start (ensureBaseLocked, internal/vmmanager/
@@ -578,30 +599,24 @@ def phase_pre(args, receipt):
 
 
 def phase_mark(args, receipt):
-    comp = remote(args.host, "computers")
+    n_pre = len(running_computers((receipt.get("pre") or {}).get("computers") or {}))
+    comp = list_computers(args.host, n_pre)
     target = "host-reboot kernel %s" % receipt["pre"]["facts"]["current_kernel"]
-    m = receipt["marks"] = {"target": target, "skipped": bool(args.no_markers), "sent": [], "marked": [],
-                            "unmarked": [], "marked_at": None, "outcomes": {}, "worst": {}, "unasked": {}}
+    m = receipt["marks"] = {"target": target, "skipped": bool(args.no_markers), "sent": [], "sent_items": [],
+                            "marked": [], "unmarked": [], "marked_at": None, "outcomes": {}, "worst": {}, "unasked": {}}
     if "error" in comp:
         log("ABORT: vmctl computer list unreadable: %s" % comp["error"])
         m["error"] = comp["error"]
         return False
-    running = running_computers(comp)
-    asked = [] if args.no_markers else [r for r in running if not r.get("held")]
-    unasked = running if args.no_markers else [r for r in running if r.get("held")]
     if args.no_markers:
         log("MARK: --no-markers: no markers; every computer boots as a crash boot; parked work closes interrupted_by_restart")
-    for r in unasked:
-        a = classify_unasked(r)
-        m["unasked"][r["vm_id"]] = a
-        log("  %s %s (class=%s held=%s): %s" % (a["outcome"], r["vm_id"], a["warmness_class"], a["held"], a["detail"]))
+    items = {}
+    split_computers(args, m, comp, items)
     blocked = reboot_blockers({vm: a["outcome"] for vm, a in m["unasked"].items()},
                               args.allow_crash_close, args.allow_crash_unverified)
     if blocked:
         abort(args, m, blocked, {})
         return False
-    items = {r["vm_id"]: {"vm_id": r["vm_id"], "computer_url": r["computer_url"], "warmness_class": r.get("warmness_class"),
-                          "allow_busy": marker_allows_busy(r.get("warmness_class"), args.no_allow_busy)} for r in asked}
     sent = {}
     try:
         return mark_rounds(args, m, items, sent, target)
@@ -614,6 +629,26 @@ def phase_mark(args, receipt):
         raise
 
 
+def split_computers(args, m, comp, items):
+    """Sort a vmctl listing: running computers the script does not ask
+    (held, or all under --no-markers) get the read-only check, kept fresh
+    in m["unasked"]; every other running computer joins items (asked).
+    Returns the vm_ids newly added to items."""
+    m["unasked"] = {}
+    added = []
+    for r in running_computers(comp):
+        vm = r["vm_id"]
+        if args.no_markers or r.get("held"):
+            a = classify_unasked(r)
+            m["unasked"][vm] = a
+            log("  %s %s (class=%s held=%s): %s" % (a["outcome"], vm, a["warmness_class"], a["held"], a["detail"]))
+        elif vm not in items:
+            items[vm] = {"vm_id": vm, "computer_url": r["computer_url"], "warmness_class": r.get("warmness_class"),
+                         "allow_busy": marker_allows_busy(r.get("warmness_class"), args.no_allow_busy)}
+            added.append(vm)
+    return added
+
+
 def mark_rounds(args, m, items, sent, target):
     outcomes, worst = m["outcomes"], m["worst"]
 
@@ -621,6 +656,7 @@ def mark_rounds(args, m, items, sent, target):
         for it in batch:
             sent[it["vm_id"]] = it
         m["sent"] = sorted(sent)
+        m["sent_items"] = [{"vm_id": vm, "computer_url": sent[vm]["computer_url"]} for vm in sorted(sent)]
         sent_at = time.time()
         res = remote(args.host, "mark", json.dumps({"items": batch, "target": target}), timeout=mark_timeout(len(batch)))
         got = {r["vm_id"]: r for r in res if r.get("vm_id") in items}
@@ -650,6 +686,8 @@ def mark_rounds(args, m, items, sent, target):
             if a["outcome"] == "written":
                 written.add(vm)
                 pending.pop(vm)
+            elif a["outcome"] == "unsupported":
+                pending.pop(vm)  # the guest lacks the endpoint: asking again cannot change it
         if "unsafe" in worst.values():
             break  # never rebooted through; waiting cannot change the decision
         if not pending or time.time() >= deadline:
@@ -657,10 +695,27 @@ def mark_rounds(args, m, items, sent, target):
         time.sleep(15)
 
     def standing():
-        st = {vm: ("written" if vm in written and worst[vm] != "unsafe" else worst[vm]) for vm in items}
-        st.update({vm: a["outcome"] for vm, a in m["unasked"].items()})
+        st = {vm: ("written" if vm in written and worst[vm] != "unsafe" else worst[vm]) for vm in items if vm in worst}
+        for vm, a in m["unasked"].items():
+            st[vm] = worse(st.get(vm), a["outcome"])
         return st
 
+    blocked = reboot_blockers(standing(), args.allow_crash_close, args.allow_crash_unverified)
+    if blocked:
+        abort(args, m, blocked, sent)
+        return False
+    # List the computers again immediately before the final pass: a held
+    # (or, under --no-markers, any) computer may have started an apply
+    # during the wait, and a computer woken meanwhile must be asked too.
+    n = len(items) + len(m["unasked"])
+    comp = list_computers(args.host, n)
+    if "error" in comp:
+        log("vmctl computer list unreadable before the final pass: %s" % comp["error"])
+        abort(args, m, {"vmctl list": "unreadable"}, sent)
+        return False
+    added = split_computers(args, m, comp, items)
+    if added:
+        log("MARK: %d computer(s) started running during the wait; asking them in the final pass: %s" % (len(added), added))
     blocked = reboot_blockers(standing(), args.allow_crash_close, args.allow_crash_unverified)
     if blocked:
         abort(args, m, blocked, sent)
@@ -697,6 +752,9 @@ def mark_rounds(args, m, items, sent, target):
         log("%s: rebooting %s unasked (%s): %s" % (
             "--allow-crash-unverified" if a["outcome"] == "unavailable" else ("--no-markers" if args.no_markers else "held"),
             vm, a["outcome"], a["detail"]))
+    if m["unasked"]:
+        log("WARNING: %d unasked computer(s), live capsules not checked: the reboot destroys any they hold: %s" % (
+            len(m["unasked"]), sorted(m["unasked"])))
     return True
 
 
@@ -710,6 +768,15 @@ def abort(args, m, blocked, sent):
     log("ABORT: %d computer(s) stop the reboot. Clearing the marker on every computer asked." % len(blocked))
     m["blocked"] = blocked
     clear_markers(args, m, sent)
+
+
+def clear_receipt_markers(args, receipt):
+    """clear_markers for every computer the receipt says was POSTed to."""
+    m = receipt.get("marks") or {}
+    sent = {it["vm_id"]: it for it in m.get("sent_items") or []}
+    if sent:
+        log("Clearing the markers: the host did not reboot")
+    return clear_markers(args, m, sent)
 
 
 def clear_markers(args, m, sent):
@@ -735,14 +802,39 @@ def clear_markers(args, m, sent):
     return not failed
 
 
+def reboot_after_mark(args, receipt, save):
+    """Everything after the markers are written: save the receipt, then
+    reboot. Any failure clears every marker (a crash in the next 15
+    minutes must not boot as planned); clearing a computer that already
+    rebooted is harmless."""
+    try:
+        save()
+        return phase_reboot(args, receipt)
+    except BaseException as e:
+        log("FAILED after marking (%r): clearing the markers" % e)
+        clear_receipt_markers(args, receipt)
+        raise
+
+
 def phase_reboot(args, receipt):
+    """0 the host is back with a new boot_id; 3 it did not go down (the
+    reboot was refused, or the old boot_id still answers after
+    --down-wait), markers cleared; 4 it did not come back in time."""
     before = receipt["pre"]["facts"]["boot_id"]
     log("REBOOT: systemctl reboot on %s (boot_id %s)" % (args.host, before))
     try:
-        subprocess.run(["ssh", *SSH_OPTS, args.host, "systemctl", "reboot"], capture_output=True, text=True, timeout=60)
+        p = subprocess.run(["ssh", *SSH_OPTS, args.host, "systemctl", "reboot"], capture_output=True, text=True, timeout=60)
+        rc, err = p.returncode, (p.stderr or "").strip()
     except subprocess.TimeoutExpired:
-        pass  # the connection drops as the host goes down
-    receipt["reboot"] = {"requested_at": now(), "boot_id_before": before}
+        rc, err = None, "timeout"  # the connection drops as the host goes down
+    receipt["reboot"] = {"requested_at": now(), "boot_id_before": before, "ssh_exit": rc}
+    if rc not in (0, 255, None):
+        # 255 is ssh's own error (the connection dropping as the host goes
+        # down); any other status is systemctl's answer: it refused.
+        log("REBOOT REFUSED: ssh systemctl reboot exited %s: %s. The host did not go down." % (rc, err[-300:]))
+        receipt["reboot"]["refused"] = True
+        clear_receipt_markers(args, receipt)
+        return 3
     t0 = time.time()
     deadline = t0 + args.boot_timeout
     time.sleep(30)
@@ -753,11 +845,18 @@ def phase_reboot(args, receipt):
             log("host back after %ds (boot_id %s)" % (time.time() - t0, bid))
             if time.time() - t0 > 15 * 60:
                 log("WARNING: over 15 minutes; planned-restart markers are stale, so computers boot as crash boots")
-            return True
+            return 0
+        if bid == before and time.time() - t0 >= args.down_wait:
+            log("HOST DID NOT GO DOWN: boot_id %s still answers %ds after the reboot request. Clearing the markers; "
+                "if the host goes down later every computer boots as a crash (safe); run --phase post after it." % (
+                    before, time.time() - t0))
+            receipt["reboot"]["did_not_go_down"] = True
+            clear_receipt_markers(args, receipt)
+            return 3
         time.sleep(10)
     receipt["reboot"]["timed_out"] = True
     log("HOST DID NOT RETURN within %ds. Open the OVH IPMI/KVM console (runbook: Rollback)." % args.boot_timeout)
-    return False
+    return 4
 
 
 def wait_for(fn, seconds, interval=10):
@@ -830,13 +929,13 @@ def phase_post(args, receipt):
     pre_running = {r["vm_id"]: r for r in running_computers(pre.get("computers") or {})}
 
     def warmed():
-        comp = remote(args.host, "computers")
+        comp = list_computers(args.host, len(pre_running))
         want = [r for r in comp.get("computers", [])
                 if r.get("warmness_class") in AUTO_WARM_CLASSES and not r.get("held")
                 and (r["vm_id"] in pre_running or r.get("warmness_class") == "critical_protected")]
         return comp if all(r.get("state") == "active" and r.get("health") == 200 for r in want) else None
 
-    comp = wait_for(warmed, args.computer_wait, 20) or remote(args.host, "computers")
+    comp = wait_for(warmed, args.computer_wait, 20) or list_computers(args.host, len(pre_running))
     receipt["post"]["computers"] = comp
     if marked and marked_at:
         age = time.time() - marked_at
@@ -881,6 +980,9 @@ def main():
                     help="lowest acceptable staged and booted kernel (default: nix/kernel-security-floor, the flake's floor)")
     ap.add_argument("--busy-wait", type=int, default=600, help="seconds to wait for busy computers to go idle")
     ap.add_argument("--boot-timeout", type=int, default=1200, help="seconds to wait for ssh after the reboot")
+    ap.add_argument("--down-wait", type=int, default=300,
+                    help="seconds the old boot_id may keep answering after the reboot request before the run "
+                         "decides the host did not go down (markers cleared, exit 3)")
     ap.add_argument("--settle-wait", type=int, default=300, help="seconds for systemd and vmctl to settle")
     ap.add_argument("--computer-wait", type=int, default=600, help="seconds for always-on computers to come back")
     ap.add_argument("--hardening-args", default="", help="extra args for verify-host-hardening.py (e.g. '--expect-internal enforce')")
@@ -938,7 +1040,8 @@ def main():
                 held = [r["vm_id"] for r in running_computers(receipt["pre"]["computers"]) if r.get("held")]
                 if held:
                     log("     held, not asked (read-only selfdev check only; live capsules unchecked): %s" % held)
-            log("  2. ssh %s systemctl reboot; wait up to %ds for a new boot_id" % (args.host, args.boot_timeout))
+            log("  2. ssh %s systemctl reboot; wait up to %ds for a new boot_id (a refused reboot, or the old boot_id "
+                "still answering after %ds, clears the markers and exits 3)" % (args.host, args.boot_timeout, args.down_wait))
             log("  3. run the post-checks (or later: --phase post --state %s)" % state)
             save()
             return 0
@@ -949,11 +1052,10 @@ def main():
         if not phase_mark(args, receipt):
             save()
             return 3
+        code = reboot_after_mark(args, receipt, save)
         save()
-        if not phase_reboot(args, receipt):
-            save()
-            return 4
-        save()
+        if code:
+            return code
         c = phase_post(args, receipt)
         save()
         return 1 if c.failed() else 0
