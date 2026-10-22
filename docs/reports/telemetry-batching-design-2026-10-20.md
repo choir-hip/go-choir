@@ -951,3 +951,76 @@ effect at once and persists across restarts (read at boot); the same call with
 `CHOIR_TELEMETRY_BATCH=on` in the guest environment turns it on whatever the
 setting says. Verify with the observability counters above, then run the
 section 9 drills before phase 2.
+
+### Phase 1 staging gate (2026-10-22)
+
+Run by FP0's lane `lane/fp0-batching-e2e` on one fresh test computer,
+`computer-71afbf1461dffabcce8eeebe558d03bd` (class `test`), on staging builds
+`840e1a701` and `d991907e6` (the batching files are the same in both). The
+paper and every other computer were not touched. Evidence, machine-readable:
+[`telemetry-batching-phase1-staging-2026-10-22.json`](../evidence/telemetry-batching-phase1-staging-2026-10-22.json).
+
+The tape audit read the chain through corpusd's replay page and payload
+routes, read-only, from Node B (no guest access). Runs were driven through the
+product API: Texture create, revise and research on four documents.
+
+- **Flag.** `POST /api/computer-settings` took effect at once, without a
+  restart (`batching.enabled` true, `window_ms` 1000). Both crash boots came up
+  with it on, so the stored setting is read at boot. Setting it back to false
+  with two records queued drained them, lost none, and later batched kinds took
+  the acknowledged path.
+- **Steps 1 and 2: pass.** 211 telemetry batches held 1,089 ops, mean **k =
+  5.16** (5.04, 5.36 and 3.38 in the three processes). Every op in them is a
+  batched `choir.event`. No ordinary-authority batch in the flag-on window holds
+  only batched kinds. 27 batches (13%) hold one op; they are a lone record
+  sealed at the deadline or by a barrier, which is legitimate, so step 1's "each
+  with more than one op" is read as "batches form".
+- **Step 3: pass.** No acknowledged event sits on the tape before a telemetry
+  record of the same run with a lower `seq`, and none before one with a lower
+  `stream_seq`. Run-memory entries (763 ops in the window) are not ordered
+  against telemetry, as section 4.3 says.
+- **Step 4: pass.** The kill went through the owner's product route
+  `POST /api/computers/<id>/lifecycle/refresh`, the same vmctl refresh as T7
+  (a SIGKILL). It was sent when observability showed three records queued, and
+  the kill landed 6 s later, mid-turn. The live WebSocket was recorded
+  throughout: of 643 published events, 4 never reached the tape. All 4 are
+  batched kinds, the newest of their two runs, spanning 0.27 s: inside `W` plus
+  one batch. The boot closed 8 runs "interrupted by a restart" with the
+  sentence about the missing window. The whole chain (seq 1 to 3532) has no
+  duplicate `seq` or `stream_seq`; the only holes are the two 512 reseed gaps.
+  The replay completeness probe reported `equivalent` at head 2694, with 30
+  multi-op telemetry batches in its replayed tail, which settles the section 13
+  question about the witness and event partitioning. An unplanned pressure
+  hibernate earlier gave a second crash boot with the same result.
+- **Step 5: not run.** The only marker-backed restart of one computer is the
+  host's deploy refresh, outside this gate's authority, and a test computer
+  refuses the marker while a run is running. Reading that path found a defect:
+  the host-requested marker skips the drain and the refresh is a SIGKILL, so a
+  busy protected computer loses the window silently on a planned boot
+  ([problem record](../problems/host-planned-restart-skips-telemetry-drain-2026-10-22.md)).
+- **Step 6: partial.** The cite barrier works: four acceptance syntheses made
+  with records queued each left the queue empty, three with seal reason
+  `read`. The verdict comparison and the restart-interrupted trajectory were not
+  reached: synthesis of any Texture-with-research trajectory is refused by the
+  vocabulary fence, a defect unrelated to batching
+  ([problem record](../problems/run-acceptance-refused-by-vocab-fence-on-multi-desk-trajectory-2026-10-22.md)).
+  The verifier's inconclusive rule has no product route.
+- **Step 8: recorded.** Process 2 before the kill: 618 records enqueued, 118
+  batches, seal reasons deadline 75, barrier 40, read 3; 53 barrier waits; no
+  class violation, drop, seal failure or capacity flush; seal latency mean 141
+  ms, max 512 ms. Process 1's counters were lost to the pressure kill; its k
+  comes from the tape.
+- **Events.** The flag-on window has 0.60 of the tape events it would have had
+  without batching (1.67x fewer), inside the section 7 planning range. `t` over
+  the flag-off interval was 0.57.
+- **Journal.** Small. Per tape op, store bytes fell 3.7% to 5.6%; per runtime
+  event, 1.3%. A fit over 15 snapshot segments gives about 86 KB of store
+  growth per op and 12.5 KB per tape event, so a telemetry record costs about
+  10% less at k = 5, not the 25% to 35% measured locally. This was a fresh,
+  small store; the paper's may weigh the per-event share differently.
+
+Residuals: the planned-restart drain defect blocks enabling on
+`critical_protected` and `public_platform` computers, including the paper;
+step 6's comparison and the verifier rule are unproven on staging; the journal
+effect on the paper is unmeasured. The flag was left **off** on the test
+computer, because steps 5 and 6 did not fully pass.

@@ -1,0 +1,961 @@
+{
+ "schema": "telemetry-batching-phase1-staging/v1",
+ "design": "docs/reports/telemetry-batching-design-2026-10-20.md",
+ "lane": "lane/fp0-batching-e2e",
+ "mutation_class": "red activation on one fresh test computer (tape write path); no code change",
+ "environment": {
+  "base_url": "https://choir.news",
+  "builds": [
+   {
+    "commit": "840e1a701d27e21dcbd3d1ca6b1189954b638ce3",
+    "served": "04:36-05:00 UTC (process 1)"
+   },
+   {
+    "commit": "d991907e6c616e29c4d376cf33bb64df00252616",
+    "served": "from 05:15 UTC (processes 2 and 3; staging deploy at 05:13:52)"
+   }
+  ],
+  "between_builds": "the batching files (internal/store/telemetry_*.go, internal/agentcore/telemetry_batching.go, planned_restart.go, internal/computerevent/appender.go, internal/store/projection_tape.go) are identical in both; d991907e6 does change the store (og_objects derived columns: boot is discovery only, fdbb4b911) and other runtime code, so the flag-off interval (840e1a701) and the main flag-on interval (d991907e6) are not on the same build; process 1 is the same-build flag-on comparison"
+ },
+ "computer": {
+  "label": "batching-e2e-1022",
+  "computer_id": "computer-71afbf1461dffabcce8eeebe558d03bd",
+  "owner_user_id": "c7f51f0f-1b2a-4d0e-b932-d552bb361c30",
+  "vm_id": "vm-c5c801f814d244e9e7f91c18d310734f",
+  "warmness_class": "test",
+  "minted_at": "2026-10-22T04:36:30Z",
+  "minted_by": "scripts/qa_test_computer.mjs",
+  "untouched": [
+   "computer-1355b83bced1613eb048ee28d66688a8",
+   "computer-ad1b46d4c20129e84b9e239cf4720fb9",
+   "computer-9648031f92e131adc1fb65ec455c5903"
+  ]
+ },
+ "flag": {
+  "turned_on": {
+   "route": "POST /api/computer-settings {\"key\":\"telemetry.batch\",\"value\":true}",
+   "at": "2026-10-22T04:48:59.517Z",
+   "took_effect": "at once (batching.enabled=true, window_ms=1000 in the next observability read, no restart)",
+   "tape_seq_of_setting_write": 1461
+  },
+  "read_at_boot": "yes: both crash boots (05:15 and 05:26) came up with batching.enabled=true from the stored setting",
+  "turned_off": {
+   "route": "POST /api/computer-settings {\"key\":\"telemetry.batch\",\"value\":false}",
+   "at": "2026-10-22T05:39:12.099Z",
+   "queue_depth_before": 2,
+   "queue_depth_after": 0,
+   "records_enqueued_equals_ops_sealed": [
+    27,
+    27
+   ],
+   "records_dropped": 0,
+   "tape_seq_of_setting_write": 2777,
+   "last_telemetry_batch_tape_seq": 2776,
+   "after_off": "batched kinds written as ordinary single-op events from tape seq 2778; records_enqueued stayed 27 while events_appended_batchable rose"
+  },
+  "final_state": "off",
+  "final_state_reason": "step 5 not run and step 6 only partly reached, so by the gate's rule the flag goes back to false",
+  "final_counters": {
+   "at": "2026-10-22T05:41:02Z",
+   "batching": {
+    "enabled": false,
+    "synchronous": false,
+    "window_ms": 1000,
+    "queue_depth": 0,
+    "records_enqueued": 27,
+    "batches_sealed": 8,
+    "ops_sealed": 27,
+    "sealed_ops_per_batch": {
+     "2": 3,
+     "3-4": 4,
+     "5-8": 1
+    },
+    "mean_ops_per_batch": 3.375,
+    "seal_reasons": {
+     "barrier": 4,
+     "deadline": 4
+    },
+    "barrier_waits": 4,
+    "telemetry_class_violation": 0,
+    "records_dropped": 0,
+    "poison_dropped": 0,
+    "seal_failures": 0,
+    "unknown_outcome_records_lost": 0,
+    "split_to_singles": 0,
+    "capacity_flushes": 0,
+    "boot_watermark_writes": 1,
+    "seal_latency_mean_ms": 52.886585,
+    "seal_latency_max_ms": 73.507442
+   }
+  }
+ },
+ "timeline_utc": [
+  [
+   "04:36:30",
+   "test computer minted (13 s to answer)"
+  ],
+  [
+   "04:37:54-04:48:55",
+   "flag-off interval: Texture create, revise, research; research desk kept working"
+  ],
+  [
+   "04:48:59",
+   "telemetry.batch=true"
+  ],
+  [
+   "04:49:43-04:53:19",
+   "flag-on workload 1 (create, revise); the research revise was refused 'durable lifecycle state is unavailable or terminal' because trajectory a9fdfab4 had settled at 04:53:20 under rule durable-work/v1 (no open work items); the flag-off trajectory 5482fd87 settled under the same rule at 04:46:04, so this is lifecycle settlement, not batching"
+  ],
+  [
+   "05:00:07",
+   "vmctl pressure reclaim hibernated the test computer (host memory 2.3 GiB available, floor 4.8 GiB); unplanned"
+  ],
+  [
+   "05:13:52",
+   "staging deploy d991907e6"
+  ],
+  [
+   "05:15:13",
+   "owner lifecycle start (product path); boot kind crash_or_stop on d991907e6: first crash boot with batching configured"
+  ],
+  [
+   "05:20:37-05:23:06",
+   "flag-on workload 2 (create, revise, research)"
+  ],
+  [
+   "05:21:04-05:23:30",
+   "step 6: four acceptance syntheses with records queued"
+  ],
+  [
+   "05:25:39.975",
+   "step 4: refresh sent with queue_depth 3 (owner product path POST /api/computers/<id>/lifecycle/refresh, vmctl refresh = SIGKILL)"
+  ],
+  [
+   "05:25:46",
+   "vmctl SIGKILLed the guest (cause=refresh); booted 05:26:37"
+  ],
+  [
+   "05:26:46",
+   "computer answered after the kill"
+  ],
+  [
+   "05:30:39",
+   "replay completeness: equivalent at head 2694"
+  ],
+  [
+   "05:32:55-05:38:06",
+   "flag-on workload 3 after the crash boot"
+  ],
+  [
+   "05:39:12",
+   "telemetry.batch=false with 2 records queued"
+  ]
+ ],
+ "steps": {
+  "1_telemetry_batches_on_tape": {
+   "verdict": "pass",
+   "tape_window": "tape seq 1462-2777 (flag on), audited from corpusd's replay page and payload routes, read-only",
+   "telemetry_batches": 211,
+   "telemetry_ops": 1089,
+   "k_mean_ops_per_telemetry_batch": 5.161,
+   "batches_with_more_than_one_op": 184,
+   "single_op_batches": 27,
+   "single_op_note": "a lone record sealed at the deadline (quiet tail) or by a barrier is a one-op batch; the design's 'each with more than one op' is read as 'batches form', which they do (87% hold 2 to 28 ops)",
+   "ops_histogram": {
+    "1": 27,
+    "2": 31,
+    "3": 25,
+    "4": 25,
+    "5": 33,
+    "6": 16,
+    "7": 21,
+    "8": 4,
+    "9": 2,
+    "10": 4,
+    "11": 7,
+    "12": 2,
+    "13": 4,
+    "14": 4,
+    "15": 1,
+    "17": 1,
+    "18": 1,
+    "19": 1,
+    "21": 1,
+    "28": 1
+   },
+   "kinds": {
+    "texture.agent_revision.progress": 138,
+    "loop.progress": 336,
+    "tool.invoked": 150,
+    "desk.cell": 150,
+    "tool.result": 149,
+    "desk.egress": 166
+   },
+   "telemetry_batches_before_flag_on": 0,
+   "telemetry_batches_after_flag_off": 0
+  },
+  "2_class_audit": {
+   "verdict": "pass",
+   "telemetry_batch_ops_that_are_not_a_batched_choir_event": 0,
+   "ordinary_authority_batches_in_flag_on_window_holding_only_batched_events": 0,
+   "telemetry_class_violation_counter": 0
+  },
+  "3_ordering": {
+   "verdict": "pass",
+   "acknowledged_choir_events_in_window": 141,
+   "telemetry_records_in_window": 1089,
+   "per_run_violations": 0,
+   "stream_wide_violations": 0,
+   "rule": "no acknowledged choir.event at tape position P has a telemetry record with a lower per-run seq (or lower stream_seq) at a position after P",
+   "exemption_named": "run-memory entries are not ordered against telemetry (design 4.3); 763 run-memory ops in the window were not checked"
+  },
+  "4_kill_drill": {
+   "verdict": "pass",
+   "method": "owner product path POST /api/computers/computer-71afbf1461dffabcce8eeebe558d03bd/lifecycle/refresh (same vmctl /internal/vmctl/refresh as acceptance T7, selected by the API key's computer binding; no Node B mutation); fired when observability showed queue_depth 3 during a Texture turn; the live WebSocket was recorded throughout",
+   "boot_kind": {
+    "kind": "crash_or_stop"
+   },
+   "runs_after_120s": {},
+   "wakes": {
+    "unprojected": 0,
+    "retrying": 0,
+    "exhausted": 0
+   },
+   "document": {
+    "doc_id": "5fe84217-d47c-57d4-9059-3c2eb3f976dc",
+    "trajectory_id": "a3015be4-976a-55d5-b46b-1130f2ef5f13",
+    "agent_revision_interrupted": true,
+    "agent_revision_pending": false,
+    "note": "appagent revision 3db2b769 was committed at 05:25:39.063, before the refresh; nothing resumed"
+   },
+   "runs_closed_interrupted_by_restart": 8,
+   "crash_close_payload": {
+    "fate": "interrupted_by_restart",
+    "telemetry": "the last window of this run's trace may be missing"
+   },
+   "published_vs_tape": {
+    "ws_events_published": 643,
+    "on_tape": 639,
+    "lost": 4,
+    "lost_records": [
+     [
+      "tool.result",
+      "run 68ad3cf3 seq 27",
+      2496
+     ],
+     [
+      "texture.agent_revision.progress",
+      "run 68ad3cf3 seq 28",
+      2497
+     ],
+     [
+      "loop.progress",
+      "run 68ad3cf3 seq 29",
+      2498
+     ],
+     [
+      "loop.progress",
+      "run 8c872c09 seq 22",
+      2499
+     ]
+    ],
+    "all_lost_are_batched_kinds": true,
+    "lost_span_s": 0.274,
+    "lost_ts": [
+     "05:25:45.892",
+     "05:25:46.166"
+    ],
+    "bound": "4 records, 0.27 s: within W (1 s) plus one batch (64)",
+    "tail_only": "each run's lost records are its newest; the last stored stream_seq before the kill is 2495, nothing is missing below it",
+    "ws_window": "05:20:29-05:40:10, tape audited through seq 3532"
+   },
+   "duplicates_whole_chain": {
+    "duplicate_run_seq": 0,
+    "duplicate_stream_seq": 0,
+    "distinct_choir_events": 2165,
+    "excluded": {
+     "loop.started": 38,
+     "activation.passivated": 16,
+     "loop.completed": 18
+    },
+    "excluded_note": "lifecycle-folded events carry seq 0 and no stream_seq on both flag states; they are not allocated numbers"
+   },
+   "reseed_gaps": {
+    "stream_seq_holes": [
+     [
+      1282,
+      1795,
+      512
+     ],
+     [
+      2495,
+      3008,
+      512
+     ]
+    ],
+    "per_run_seq_holes": {
+     "fd64737f": [
+      [
+       27,
+       540,
+       512
+      ]
+     ],
+     "(none)": [
+      [
+       1,
+       514,
+       512
+      ],
+      [
+       514,
+       1027,
+       512
+      ]
+     ],
+     "2bef2fef": [
+      [
+       13,
+       526,
+       512
+      ]
+     ],
+     "1b75e8ce": [
+      [
+       49,
+       562,
+       512
+      ]
+     ],
+     "ec4eba27": [
+      [
+       20,
+       533,
+       512
+      ]
+     ],
+     "21fa4896": [
+      [
+       13,
+       526,
+       512
+      ]
+     ],
+     "14e04964": [
+      [
+       20,
+       533,
+       512
+      ]
+     ],
+     "73e97b68": [
+      [
+       279,
+       792,
+       512
+      ]
+     ],
+     "5356e3ba": [
+      [
+       13,
+       526,
+       512
+      ]
+     ],
+     "44698d53": [
+      [
+       61,
+       574,
+       512
+      ]
+     ],
+     "3ff4e9d1": [
+      [
+       13,
+       526,
+       512
+      ]
+     ],
+     "f8fbe78c": [
+      [
+       20,
+       533,
+       512
+      ]
+     ],
+     "68ad3cf3": [
+      [
+       26,
+       539,
+       512
+      ]
+     ],
+     "8c872c09": [
+      [
+       21,
+       534,
+       512
+      ]
+     ]
+    },
+    "note": "the only holes are the 512 gaps at the two crash boots; the boot after the kill resumed stream_seq at 3008 over the lost 2496-2499"
+   },
+   "boot_watermarks": [
+    [
+     1476,
+     855
+    ],
+    [
+     1980,
+     1802
+    ],
+    [
+     2709,
+     3018
+    ]
+   ],
+   "state_completeness_probe": {
+    "route": "GET /api/computers/<id>/self-development/replay-completeness",
+    "status": "equivalent",
+    "eligible": true,
+    "live_head": 2694,
+    "replay_head": 2694,
+    "base_sequence": 2505,
+    "tail_events_applied": 189,
+    "telemetry_batches_in_tail": 30,
+    "run_memory": {
+     "live_count": 1188,
+     "replay_count": 1188,
+     "live_only_count": 0,
+     "replay_only_count": 0,
+     "different_count": 0
+    }
+   },
+   "counters_after_boot": {
+    "enabled": true,
+    "synchronous": false,
+    "window_ms": 1000,
+    "queue_depth": 0,
+    "records_enqueued": 0,
+    "batches_sealed": 0,
+    "ops_sealed": 0,
+    "sealed_ops_per_batch": {},
+    "mean_ops_per_batch": 0,
+    "seal_reasons": {},
+    "barrier_waits": 0,
+    "telemetry_class_violation": 0,
+    "records_dropped": 0,
+    "poison_dropped": 0,
+    "seal_failures": 0,
+    "unknown_outcome_records_lost": 0,
+    "split_to_singles": 0,
+    "capacity_flushes": 0,
+    "boot_watermark_writes": 0,
+    "seal_latency_mean_ms": 0,
+    "seal_latency_max_ms": 0
+   },
+   "second_unplanned_crash": "the 05:00:07 pressure hibernate followed by the 05:15 crash_or_stop boot closed 5 more runs with the same payload; stream gap 1282->1795, per-run gaps 512, no holes, no duplicates; the WebSocket was not recorded then, so its loss is not measured",
+   "kill_at": "2026-10-22T05:25:46Z (vmctl journal: destructive kill cause=refresh, firecracker exited signal: killed; booted 05:26:37 epoch 13228)"
+  },
+  "5_planned_restart_drill": {
+   "verdict": "not run",
+   "why": [
+    "the only marker-backed restart of one computer is vmctl POST /internal/vmctl/deploy-refresh, a Node B mutation outside this lane's allowance (read-only except the one refresh)",
+    "on a warmness_class test computer the guest refuses the marker while any run is running (planned_restart.go:490), and an idle computer's queue is empty within W, so 'marker with records queued' is unreachable here",
+    "code reading found that the host-requested marker path does not drain the queue at all, then the refresh SIGKILLs the VM: see the problem record"
+   ],
+   "problem_record": "docs/problems/host-planned-restart-skips-telemetry-drain-2026-10-22.md"
+  },
+  "6_acceptance_and_verifier": {
+   "verdict": "partial",
+   "cite_barrier": {
+    "verdict": "pass",
+    "calls": [
+     {
+      "queue_before": 4,
+      "queue_after": 0,
+      "seal_reasons_before": {
+       "deadline": 2
+      },
+      "seal_reasons_after": {
+       "barrier": 1,
+       "deadline": 2
+      },
+      "reads_consistent_after": 1,
+      "at": "2026-10-22T05:21:04.297Z"
+     },
+     {
+      "queue_before": 5,
+      "queue_after": 0,
+      "seal_reasons_before": {
+       "barrier": 8,
+       "deadline": 8
+      },
+      "seal_reasons_after": {
+       "barrier": 8,
+       "deadline": 8,
+       "read": 1
+      },
+      "reads_consistent_after": 2,
+      "at": "2026-10-22T05:21:30.975Z"
+     },
+     {
+      "queue_before": 1,
+      "queue_after": 0,
+      "seal_reasons_before": {
+       "barrier": 8,
+       "deadline": 9,
+       "read": 1
+      },
+      "seal_reasons_after": {
+       "barrier": 8,
+       "deadline": 9,
+       "read": 2
+      },
+      "reads_consistent_after": 3,
+      "at": "2026-10-22T05:21:35.775Z"
+     },
+     {
+      "queue_before": 1,
+      "queue_after": 0,
+      "seal_reasons_before": {
+       "barrier": 10,
+       "deadline": 9,
+       "read": 2
+      },
+      "seal_reasons_after": {
+       "barrier": 11,
+       "deadline": 9,
+       "read": 3
+      },
+      "reads_consistent_after": 4,
+      "at": "2026-10-22T05:21:49.051Z"
+     }
+    ],
+    "note": "each POST /api/run-acceptances/synthesize made with records queued left the queue at 0; three of the four sealed it with reason 'read'; the first was sealed by a concurrent acknowledged write (reason 'barrier') just before its read"
+   },
+   "acceptance_record": {
+    "acceptance_id": "runacc-ab663015caa2cba0087b",
+    "state": "blocked",
+    "level": "docs-level",
+    "authority_profile": "texture",
+    "cites": "the source run only; no event ids, so the record cannot cite a lost telemetry event"
+   },
+   "same_verdict_as_flag_off": "not reached: no flag-off synthesis of a comparable trajectory, and every multi-desk trajectory is refused by the vocab fence",
+   "restart_interrupted_trajectory": "not reached: synthesis of a3015be4 (texture > research) refused by the vocab fence, a defect independent of batching",
+   "verifier_inconclusive_rule": "not reached: VerifyTextureWorkflow has no non-test caller, so no product route runs it",
+   "problem_record": "docs/problems/run-acceptance-refused-by-vocab-fence-on-multi-desk-trajectory-2026-10-22.md"
+  },
+  "8_counters": {
+   "verdict": "pass (recorded)",
+   "process_1": {
+    "note": "counters lost with the process at the 05:00:07 pressure kill, before they were read; tape-derived instead",
+    "tape": {
+     "telemetry_batches": 80,
+     "telemetry_ops": 403,
+     "k": 5.04
+    }
+   },
+   "process_2_before_kill": {
+    "at": "2026-10-22T05:25:39.975Z",
+    "batching": {
+     "enabled": true,
+     "synchronous": false,
+     "window_ms": 1000,
+     "queue_depth": 3,
+     "records_enqueued": 618,
+     "batches_sealed": 118,
+     "ops_sealed": 615,
+     "sealed_ops_per_batch": {
+      "1": 17,
+      "17-32": 2,
+      "2": 12,
+      "3-4": 26,
+      "5-8": 49,
+      "9-16": 12
+     },
+     "mean_ops_per_batch": 5.211864406779661,
+     "seal_reasons": {
+      "barrier": 40,
+      "deadline": 75,
+      "read": 3
+     },
+     "barrier_waits": 53,
+     "telemetry_class_violation": 0,
+     "records_dropped": 0,
+     "poison_dropped": 0,
+     "seal_failures": 0,
+     "unknown_outcome_records_lost": 0,
+     "split_to_singles": 0,
+     "capacity_flushes": 0,
+     "boot_watermark_writes": 1,
+     "seal_latency_mean_ms": 141.14120704237288,
+     "seal_latency_max_ms": 511.614803
+    },
+    "batchable_share": 0.9406392694063926,
+    "events_appended_batchable": 618,
+    "events_appended_acknowledged": 39,
+    "tape_events": 666,
+    "tape_events_by_authority": {
+     "authority:vm-local-projection": 548,
+     "authority:vm-local-projection-telemetry": 118
+    },
+    "reads_consistent": 4,
+    "reads_relaxed": 0,
+    "tape_after_the_kill": {
+     "telemetry_batches": 123,
+     "telemetry_ops": 659,
+     "k": 5.36,
+     "lost": 4
+    }
+   },
+   "process_3_final": {
+    "enabled": false,
+    "synchronous": false,
+    "window_ms": 1000,
+    "queue_depth": 0,
+    "records_enqueued": 27,
+    "batches_sealed": 8,
+    "ops_sealed": 27,
+    "sealed_ops_per_batch": {
+     "2": 3,
+     "3-4": 4,
+     "5-8": 1
+    },
+    "mean_ops_per_batch": 3.375,
+    "seal_reasons": {
+     "barrier": 4,
+     "deadline": 4
+    },
+    "barrier_waits": 4,
+    "telemetry_class_violation": 0,
+    "records_dropped": 0,
+    "poison_dropped": 0,
+    "seal_failures": 0,
+    "unknown_outcome_records_lost": 0,
+    "split_to_singles": 0,
+    "capacity_flushes": 0,
+    "boot_watermark_writes": 1,
+    "seal_latency_mean_ms": 52.886585,
+    "seal_latency_max_ms": 73.507442
+   }
+  }
+ },
+ "realised_event_reduction": {
+  "window": "tape seq 1462-2777",
+  "tape_events": 1316,
+  "telemetry_batches": 211,
+  "telemetry_ops": 1089,
+  "counterfactual_tape_events": 2194,
+  "ratio": 0.6,
+  "x_fewer": 1.67,
+  "t_flag_off": {
+   "events_appended_batchable": 821,
+   "tape_events": 1450,
+   "t": 0.566
+  },
+  "design_planning_range": "0.55 to 0.65 of today's events"
+ },
+ "journal_effect": {
+  "measure": "guest store bytes (observability ?memory=detail, label store, all files of the Dolt workspace) against the tape head (effective_release.event_head.sequence) and the tape's own op counts",
+  "flag_off": {
+   "interval": "04:37:54-04:48:55",
+   "store_bytes": [
+    395031,
+    166721216
+   ],
+   "tape_head": [
+    2,
+    1460
+   ],
+   "delta_bytes": 166326185,
+   "tape_events": 1458,
+   "tape_ops": 1746,
+   "runtime_events_appended": 852,
+   "bytes_per_tape_event": 114078,
+   "bytes_per_tape_op": 95261,
+   "bytes_per_runtime_event": 195219
+  },
+  "flag_on": {
+   "interval": "05:20:37-05:24:10 (process 2, quiet start, before the kill)",
+   "store_bytes": [
+    261751683,
+    347504786
+   ],
+   "tape_head": [
+    1965,
+    2406
+   ],
+   "delta_bytes": 85753103,
+   "tape_events": 441,
+   "tape_ops": 935,
+   "runtime_events_appended": 445,
+   "bytes_per_tape_event": 194451,
+   "bytes_per_tape_op": 91714,
+   "bytes_per_runtime_event": 192703
+  },
+  "change": {
+   "bytes_per_tape_event": "+70% (expected: each tape event carries more ops)",
+   "bytes_per_tape_op": "-3.7%",
+   "bytes_per_runtime_event": "-1.3%"
+  },
+  "fit": {
+   "model": "delta_bytes = a*tape_events + b*tape_ops, 15 snapshot segments, both flag states",
+   "a_bytes_per_tape_event": 12474,
+   "b_bytes_per_op": 85826,
+   "r2": 0.985,
+   "per_telemetry_record": {
+    "flag_off": 98300,
+    "flag_on_at_k_5_2": 88200,
+    "change": "-10%"
+   }
+  },
+  "reading": "on this fresh computer the journal grows by about 86 KB per op written (25 to 35 times the payload bytes) and only about 12.5 KB per tape event, so batching, which removes tape events but not ops, trims journal bytes per telemetry record by about 10%, not the 25 to 35% measured locally; the paper's much larger store may weigh the per-event share differently (not measured)",
+  "segments": [
+   {
+    "t0": "04:37:54",
+    "t1": "04:41:18",
+    "flag": false,
+    "dbytes": 51954140,
+    "events": 550,
+    "tele_batches": 0,
+    "ops": 657,
+    "payload": 1954086,
+    "rm": 401262,
+    "ev": 932298
+   },
+   {
+    "t0": "04:41:18",
+    "t1": "04:42:31",
+    "flag": false,
+    "dbytes": 10228333,
+    "events": 87,
+    "tele_batches": 0,
+    "ops": 87,
+    "payload": 269671,
+    "rm": 72924,
+    "ev": 171443
+   },
+   {
+    "t0": "04:42:31",
+    "t1": "04:48:55",
+    "flag": false,
+    "dbytes": 104143712,
+    "events": 821,
+    "tele_batches": 0,
+    "ops": 1002,
+    "payload": 4425328,
+    "rm": 669590,
+    "ev": 1539984
+   },
+   {
+    "t0": "04:48:55",
+    "t1": "04:48:59",
+    "flag": true,
+    "dbytes": 130395,
+    "events": 1,
+    "tele_batches": 0,
+    "ops": 1,
+    "payload": 1219,
+    "rm": 0,
+    "ev": 0
+   },
+   {
+    "t0": "04:49:39",
+    "t1": "05:15:32",
+    "flag": true,
+    "dbytes": 94900072,
+    "events": 504,
+    "tele_batches": 80,
+    "ops": 1055,
+    "payload": 2841329,
+    "rm": 505993,
+    "ev": 1155157
+   },
+   {
+    "t0": "05:20:37",
+    "t1": "05:21:00",
+    "flag": true,
+    "dbytes": 3582907,
+    "events": 21,
+    "tele_batches": 2,
+    "ops": 40,
+    "payload": 98270,
+    "rm": 19782,
+    "ev": 28802
+   },
+   {
+    "t0": "05:21:00",
+    "t1": "05:21:23",
+    "flag": true,
+    "dbytes": 15183174,
+    "events": 93,
+    "tele_batches": 10,
+    "ops": 180,
+    "payload": 464779,
+    "rm": 83541,
+    "ev": 158958
+   },
+   {
+    "t0": "05:21:23",
+    "t1": "05:21:47",
+    "flag": true,
+    "dbytes": 6974012,
+    "events": 47,
+    "tele_batches": 11,
+    "ops": 88,
+    "payload": 285295,
+    "rm": 61051,
+    "ev": 140545
+   },
+   {
+    "t0": "05:21:47",
+    "t1": "05:22:10",
+    "flag": true,
+    "dbytes": 13322119,
+    "events": 57,
+    "tele_batches": 12,
+    "ops": 144,
+    "payload": 469353,
+    "rm": 107784,
+    "ev": 254221
+   },
+   {
+    "t0": "05:22:10",
+    "t1": "05:22:35",
+    "flag": true,
+    "dbytes": 7932013,
+    "events": 33,
+    "tele_batches": 6,
+    "ops": 62,
+    "payload": 216439,
+    "rm": 57853,
+    "ev": 118490
+   },
+   {
+    "t0": "05:22:35",
+    "t1": "05:23:06",
+    "flag": true,
+    "dbytes": 9473215,
+    "events": 50,
+    "tele_batches": 9,
+    "ops": 106,
+    "payload": 355734,
+    "rm": 72953,
+    "ev": 166684
+   },
+   {
+    "t0": "05:23:06",
+    "t1": "05:23:07",
+    "flag": true,
+    "dbytes": 4975463,
+    "events": 22,
+    "tele_batches": 4,
+    "ops": 54,
+    "payload": 165433,
+    "rm": 41617,
+    "ev": 113156
+   },
+   {
+    "t0": "05:23:07",
+    "t1": "05:23:49",
+    "flag": true,
+    "dbytes": 19256645,
+    "events": 88,
+    "tele_batches": 16,
+    "ops": 198,
+    "payload": 887816,
+    "rm": 178207,
+    "ev": 270746
+   },
+   {
+    "t0": "05:23:49",
+    "t1": "05:24:10",
+    "flag": true,
+    "dbytes": 5053555,
+    "events": 30,
+    "tele_batches": 6,
+    "ops": 63,
+    "payload": 180451,
+    "rm": 48945,
+    "ev": 118811
+   },
+   {
+    "t0": "05:24:10",
+    "t1": "05:24:43",
+    "flag": true,
+    "dbytes": 29755424,
+    "events": 159,
+    "tele_batches": 29,
+    "ops": 308,
+    "payload": 831886,
+    "rm": 166059,
+    "ev": 416459
+   },
+   {
+    "t0": "05:24:43",
+    "t1": "05:26:50",
+    "flag": true,
+    "dbytes": 34616873,
+    "events": 129,
+    "tele_batches": 18,
+    "ops": 351,
+    "payload": 1498376,
+    "rm": 239710,
+    "ev": 351827
+   }
+  ],
+  "flag_on_same_build": {
+   "interval": "04:49:39-05:15:32 (process 1 on 840e1a701, plus the 05:15 crash boot of process 2)",
+   "store_bytes": [
+    166851611,
+    261751683
+   ],
+   "tape_head": [
+    1461,
+    1965
+   ],
+   "delta_bytes": 94900072,
+   "tape_events": 504,
+   "tape_ops": 1055,
+   "bytes_per_tape_event": 188293,
+   "bytes_per_tape_op": 89952,
+   "change_vs_flag_off": {
+    "bytes_per_tape_op": "-5.6%",
+    "bytes_per_tape_event": "+65%"
+   }
+  }
+ },
+ "residuals": [
+  "planned restart through vmctl deploy-refresh loses the queue silently on busy protected computers (problem record); do not enable on critical_protected or public_platform computers (the paper) before it is fixed",
+  "step 6 same-verdict comparison and the verifier's inconclusive rule are unreached on staging",
+  "process 1 counters were lost to an unplanned pressure kill; its k comes from the tape",
+  "journal effect is small on a fresh store; the paper's effect is unmeasured",
+  "single-op telemetry batches (13%) are legitimate deadline or barrier seals of a lone record",
+  "Texture first draft after the second crash boot ended with choir.Done and no revision (model choice, seen in the run's events); not batching"
+ ],
+ "whole_chain_audit": {
+  "tape_seq": [
+   1,
+   3532
+  ],
+  "tape_sequence_gaps": 0,
+  "duplicate_run_seq": 0,
+  "duplicate_stream_seq": 0,
+  "per_run_order_violations": 0,
+  "stream_order_violations": 0,
+  "telemetry_batches_after_flag_off": 0,
+  "stream_seq_holes": [
+   [
+    1282,
+    1795,
+    512
+   ],
+   [
+    2495,
+    3008,
+    512
+   ]
+  ]
+ }
+}
