@@ -310,8 +310,10 @@ item below:
     YouTube, iTunes, podcast feeds and Obscura.
   - Done when: capabilities 1-4 of "Networking must enable, not starve"
     pass through the host path, with arbitrary public URLs still readable
-    (no allowlist) and Telegram's MTProto connection given its own host
-    route.
+    (no allowlist). (FP0, 2026-10-22: the MTProto clause is struck. The
+    owner skipped Telegram, owner notes 2026-10-14 §"Telegram skipped",
+    "Skip Telegram then", and no MTProto code exists, inventory Fact 1.
+    If Telegram is reinstated, its host route is a new item.)
 - [ ] **NET-02 · P1 · red — Package mirrors beyond goproxy**
   - Target: npm, PyPI, crates and git mirrors on the host, extending the
     goproxy pattern (`internal/goproxy`, tap port 8088), so capsule egress

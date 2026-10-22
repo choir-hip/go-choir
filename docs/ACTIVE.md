@@ -147,8 +147,9 @@ Alongside, no deploy: self-development drill rerun, claims E0 + E6a,
 Autoradio prototype (branch), teaching series (docs/learn/).
 Owner decisions list: delivered as the 2026-10-20 digest and answered; the
 rulings are [owner notes §27](reports/owner-notes-2026-10-14.md). Open items
-are the account-recovery launch blocker (§27 item 13) and the Telegram
-MTProto account setup.
+are the account-recovery launch blocker (§27 item 13). (The Telegram
+MTProto setup was closed later: the owner skipped Telegram, owner notes
+"Telegram skipped".)
 
 ## Now (2026-10-14, 07:00 UTC): what landed overnight, what is next
 
