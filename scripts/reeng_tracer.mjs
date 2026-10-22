@@ -1029,8 +1029,14 @@ async function researchScenario(c, out, n, deadline, phase) {
   const bundle = JSON.parse(readFileSync(bundlePath, 'utf8'));
   const events = bundle.layers?.run_events?.items || [];
   const payload = (e) => e.payload || e.data || {};
-  const done = events.filter((e) => (e.kind || e.type) === 'desk.egress' && payload(e).verb === 'search_done').map(payload);
-  const started = events.filter((e) => (e.kind || e.type) === 'desk.egress' && /search_?start/i.test(String(payload(e).verb || ''))).length;
+  // A cell's egress calls ride its desk.cell event since journal cut R4; the
+  // standalone desk.egress events are older tapes, refusals and search_done.
+  const egressRows = [
+    ...events.filter((e) => (e.kind || e.type) === 'desk.egress').map(payload),
+    ...events.filter((e) => (e.kind || e.type) === 'desk.cell').flatMap((e) => (Array.isArray(payload(e).egress) ? payload(e).egress : [])),
+  ];
+  const done = egressRows.filter((row) => row.verb === 'search_done');
+  const started = egressRows.filter((row) => /search_?start/i.test(String(row.verb || ''))).length;
   const countLines = events.filter((e) => {
     if ((e.kind || e.type) !== 'tool.result') return false;
     let result = null;

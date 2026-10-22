@@ -209,7 +209,13 @@ async function submitFollowup(reason) {
 const ageMin = (ms, base) => Math.round(((ms - base) / 60000) * 100) / 100;
 function analyse() {
   const cells = cellEvents();
-  const egress = allEvents().filter((e) => e.kind === 'desk.egress').map((e) => ({ ...parsePayload(e), event_run_id: e.run_id }));
+  // A cell's egress calls ride its desk.cell event since journal cut R4; the
+  // standalone desk.egress events are older tapes, refusals and search_done.
+  const egress = allEvents().flatMap((e) => {
+    if (e.kind === 'desk.egress') return [{ ...parsePayload(e), event_run_id: e.run_id }];
+    const rows = e.kind === 'desk.cell' ? parsePayload(e).egress : null;
+    return Array.isArray(rows) ? rows.map((row) => ({ ...row, event_run_id: e.run_id })) : [];
+  });
   const sessions = new Map();
   const sess = (key) => {
     if (!sessions.has(key)) sessions.set(key, { desk_session: key, profile: sessionProfile(key), workers: new Map() });

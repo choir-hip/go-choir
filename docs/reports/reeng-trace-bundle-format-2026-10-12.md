@@ -49,7 +49,7 @@ Every layer has the same envelope:
 | `runs` | `RunRecord` for every run of the trajectory, including Management lifecycle-control runs whose `metadata.assignment_trajectory_id` names it and every run named by an event, packet or assignment | `GET /api/runs?trajectory_id=`, `GET /api/runs/{id}` |
 | `run_events` | `EventRecord` rows of every run in `runs`, each with `loop_id`, ordered by (`loop_id`, `seq`) | `GET /api/runs/{id}/events?after=&limit=1000` (new, owner-scoped) |
 | `cells` | one item per `desk.cell` run event (below) | derived from `run_events` |
-| `egress` | one item per `desk.egress` run event (below) | derived from `run_events` |
+| `egress` | one item per egress call: the rows in the `egress` array of each `desk.cell` run event, and each standalone `desk.egress` run event (below). A folded row also carries `cell_event_id`, and an `event_id` of the cell event plus `#egress.<n>` | derived from `run_events` |
 | `deliveries` | the snapshot's `updates` (delivery packets) and `work_items` | derived from `trajectory` |
 | `records` | every record of the Texture and research inboxes of the trajectory's documents (Cut 1 L3a: their conversation is on records), each with `inbox`, `inbox_seq`, `sender_inbox`, `conversation_id`, `round`, `final` | `GET /api/inboxes/{inbox}/records?after=&limit=1000` |
 | `inboxes` | one item per inbox read: `{inbox, head, cursor, open_rounds}` (cursor is the inbox's own desk's) | the same route |
@@ -106,6 +106,15 @@ no owner input since the boot makes it a violation.
 
 Both are persisted on the acting desk run (not published on the live bus).
 
+Since journal cut R4 (2026-10-22) a cell's per-call egress rows are written
+inside its `desk.cell` event, in an `egress` array (same fields as the
+`desk.egress` event below), so a cell is one record. A standalone `desk.egress`
+event is written only for a refused frame (`refused: true`), for the end of an
+async search (`verb: search_done`, which outlives the cell), and for a row that
+arrived after its cell event was built. Tapes written before the cut hold one
+`desk.egress` event per call. Readers take both: the bundle's `egress` layer
+is built from both shapes.
+
 `desk.cell`, one per `desk_go_eval` cell:
 
 ```json
@@ -121,8 +130,9 @@ Both are persisted on the acting desk run (not published on the live bus).
 }
 ```
 
-`desk.egress`, one per host-mediated `choir.*` network or product call made
-from a cell:
+`desk.egress` (an element of `desk.cell`'s `egress` array, or a standalone
+event in the cases above), one per host-mediated `choir.*` network or product
+call made from a cell:
 
 ```json
 {

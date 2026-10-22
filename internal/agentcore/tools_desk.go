@@ -532,7 +532,11 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 					if err != nil {
 						ev["error"] = err.Error()
 					}
-					rt.recordDeskEvent(egrCtx, cellExec, types.EventDeskEgress, ev)
+					// The row rides the cell's desk.cell event (journal cut
+					// R4); a row with no open cell is appended on its own.
+					if !cellEgressLogFrom(egrCtx).add(ev) {
+						rt.recordDeskEvent(egrCtx, cellExec, types.EventDeskEgress, ev)
+					}
 					return out, err
 				},
 			}
@@ -584,6 +588,8 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 				evalCtx, cancel = context.WithTimeout(ctx, bound)
 				defer cancel()
 			}
+			egressLog := &cellEgressLog{}
+			evalCtx = withCellEgressLog(evalCtx, egressLog)
 			evalStart := time.Now()
 			res, evalErr := w.EvalCell(evalCtx, input.Source, reduction.inbox, docSnapshot, pack, updates, emits, reduction.records.view)
 			elapsed := time.Since(evalStart)
@@ -599,6 +605,9 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			}
 			if hostDeadline > 0 {
 				cellEvent["host_deadline_ms"] = hostDeadline.Milliseconds()
+			}
+			if rows := egressLog.seal(); len(rows) > 0 {
+				cellEvent["egress"] = rows
 			}
 			result := yaegikernel.SessionResult{}
 			if evalErr != nil {
