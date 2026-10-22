@@ -665,6 +665,13 @@ The engineering assignment declares a request of 2 GiB (above the measured
 1.80 GiB peak, so `memory.high` does not throttle the link): admission is
 unchanged at 2 GiB and, under `doctrine`, the ceiling becomes 4 GiB.
 
+Sizing evidence (2026-10-22, FP4 lane/fp4-capsule-memory): a release build
+ran at the 2 GiB ceiling with 2 OOM kills on 71afbf14. With Go bounded to
+the capsule's quota (fd8337941), a capsule-shaped cold build's anonymous
+peak is 846 MiB. The 2 GiB request stands; `memory.peak` counts page cache,
+so `doctrine_would_throttle` reads true for every cold build
+(docs/evidence/res04-capsule-memory-sizing-2026-10-22.md).
+
 Failure modes, written before code: Q1 a `memory.high` below a build's
 anonymous peak throttles it with no swap (why the default is observe); Q2
 admission against the request lets the sum of ceilings exceed the budget (the

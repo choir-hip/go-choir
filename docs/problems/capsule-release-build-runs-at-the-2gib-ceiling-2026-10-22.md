@@ -90,6 +90,16 @@ capsule (`MemoryMax=2G`, `MemorySwapMax=0`, `CPUQuota=100%`), fresh
 | run | wall | cgroup peak | events max / oom / oom_kill | largest process RSS | GOCACHE |
 |---|---|---|---|---|---|
 | GOMAXPROCS=4 | 8 m 45 s | 2,147,487,744 (at max) | 7,955 / 0 / 0 | 1.55 GiB | 1.4 GB |
+| GOMAXPROCS=4, anon sampled every 0.5 s | 9 m 32 s | 2,147,487,744 (at max); **anon peak 1,359,892,480 (1.27 GiB)** at 362 s, in the compile phase | 1,957 / 0 / 0 | 1.44 GiB | 1.4 GB |
+| GOMAXPROCS=1 GOMEMLIMIT=1280MiB (added after this record, for the fix) | **7 m 53 s** | 2,147,487,744 (at max); **anon peak 887,144,448 (846 MiB)** at 469 s, in the link | 3,570 / 0 / 0 | 1.50 GiB | 1.4 GB |
+
+The cgroup totals sit at `memory.max` in every run because the build's
+written cache is page cache charged to the cgroup; the anonymous peak is the
+part that cannot be reclaimed without swap. The capsule's state volume is
+disk (`CHOIR_CAPSULE_STATE_DIR=/mnt/persistent/capsule-state`,
+`nix/autoputer-vm.nix:1025`), so `/tmp` and the cache are not tmpfs. The
+runs shared the VM with other workers' tests, so wall times are noisy;
+the anonymous peaks are not.
 
 The local build reaches `memory.max` too, with no OOM kill: the build alone,
 with nothing else in the cgroup, already lives at the ceiling. The guest
@@ -138,11 +148,24 @@ second `go build`, `go_eval`) started while the build runs (the
    deployed commit). A shared writable cache lets one capsule poison
    another's builds, so it needs its own design (red).
 
+## Fix (fd8337941, orange; tests 55e9ac1ae)
+
+Option 1, keeping the 2 GiB cap. The executor gives each capsule broker
+`CHOIR_CAPSULE_GOMAXPROCS` (the CPU quota in CPUs, rounded up: 1 for
+engineering, 2 for a Claude capsule) and `CHOIR_CAPSULE_GOMEMLIMIT` (5/8 of
+`memory.high` when doctrine set one, else of `memory.max`: 1280 MiB of
+2 GiB). The broker carries them to the session worker; cells, jobs and
+direct exec get them as `GOMAXPROCS` and `GOMEMLIMIT`, which a cell's
+payload or `env` in a job's argv overrides. Option 2 is not needed by this
+evidence; option 3 (a shared cache) stays a residual with its own design.
+
 ## Next probes
 
-1. Measure the bounded shape (`GOMAXPROCS=1`, `GOMEMLIMIT` below the cap)
-   in the same scope: peak, events, wall time.
+1. Done: the bounded shape measured (table above).
 2. FP0: read A's job argv and start times from `trace-A-1402.json`.
-3. The deployed proof is an FP4 drill re-run on 71afbf14 whose
+3. Hypothesis to watch on the guest: dirty-page writeback to the guest's
+   virtio-blk volume slows reclaim of the cache's pages, which a host
+   without that disk does not show.
+4. The deployed proof is an FP4 drill re-run on 71afbf14 whose
    `capsule_memory` receipt for the build capsule shows `oom_kill=0`, with
    the build job's wall time from its status.
