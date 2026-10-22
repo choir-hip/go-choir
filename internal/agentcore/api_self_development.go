@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -593,7 +594,7 @@ func (h *APIHandler) decideSelfDevelopment(ctx context.Context, ownerID, compute
 	if h.rt.selfdevDecisionBeforeTransition != nil {
 		h.rt.selfdevDecisionBeforeTransition(ctx, operation.OperationID)
 	}
-	operation, err = h.rt.selfdevOperations.Transition(ctx, computerID, operation.OperationID, selfdev.StateAwaitingApproval, nextState, func(next *selfdev.Operation) error {
+	decided, err := h.rt.selfdevOperations.Transition(ctx, computerID, operation.OperationID, selfdev.StateAwaitingApproval, nextState, func(next *selfdev.Operation) error {
 		next.DecisionActor = decision.Actor
 		next.DecisionEvent = eventDigest
 		next.DesiredHead, next.EffectiveHead = transition.Request.Next.DesiredEventHead, transition.Request.Next.EffectiveEventHead
@@ -604,27 +605,30 @@ func (h *APIHandler) decideSelfDevelopment(ctx context.Context, ownerID, compute
 	if err != nil {
 		// M7 derivable continuations: the post-commit observer may have
 		// raced this transition — the drain's recoverSelfDevelopmentDecision
-		// applies the same finalized decision. If the durable operation now
-		// carries this exact decision, the request already succeeded.
-		if errors.Is(err, selfdev.ErrConflict) {
-			if current, getErr := h.rt.selfdevOperations.Get(ctx, computerID, operation.OperationID); getErr == nil &&
-				current.DecisionEvent == eventDigest && current.DecisionReceipt == transition.Receipt.ReceiptID &&
-				selfDevelopmentDecisionStateDescends(current.State, nextState) {
-				if _, verifyErr := verifyFinalizedSelfDevelopmentDecision(current, transition); verifyErr == nil {
-					operation = current
-					if operation.State == selfdev.StateAccepted {
-						h.rt.triggerSelfDevelopmentReconcile()
-					}
-					return operation, http.StatusOK, nil
-				}
-			}
+		// applies the same finalized decision, and on an approve may already
+		// be materializing it. If the durable operation now carries this
+		// exact decision, the request already succeeded. Transition answers
+		// a zero operation on error, so the re-read uses the id read above.
+		if !errors.Is(err, selfdev.ErrConflict) {
+			return selfdev.Operation{}, http.StatusConflict, err
 		}
-		return selfdev.Operation{}, http.StatusConflict, err
+		current, getErr := h.rt.selfdevOperations.Get(ctx, computerID, operation.OperationID)
+		mismatch := "get (" + fmt.Sprint(getErr) + ")"
+		if getErr == nil {
+			mismatch = selfDevelopmentDecisionNotCarried(current, transition, nextState)
+		}
+		if mismatch != "" {
+			log.Printf("selfdev decision: operation %s: %s lost its transition and the operation does not carry this decision: %s mismatch (operation state=%q decision_event=%q decision_receipt=%q; this decision event=%q receipt=%q next_state=%q): %v",
+				operation.OperationID, request.Decision, mismatch, current.State, current.DecisionEvent, current.DecisionReceipt,
+				eventDigest, transition.Receipt.ReceiptID, nextState, err)
+			return selfdev.Operation{}, http.StatusConflict, err
+		}
+		decided = current
 	}
-	if operation.State == selfdev.StateAccepted {
+	if decided.State == selfdev.StateAccepted {
 		h.rt.triggerSelfDevelopmentReconcile()
 	}
-	return operation, http.StatusOK, nil
+	return decided, http.StatusOK, nil
 }
 
 func selfDevelopmentDecisionAuthority(ownerID, consensusAuthority string) string {

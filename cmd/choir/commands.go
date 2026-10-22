@@ -588,7 +588,7 @@ func buildRegistry() []*command {
 			legacy:  runSelfDevWait,
 		},
 		{
-			path: []string{"self-dev", "approve"}, summary: "Owner's single approval: arm accept_once for exactly the frozen candidate, then decide",
+			path: []string{"self-dev", "approve"}, summary: "Owner's single approval: arm accept_once for exactly the frozen candidate, then decide; the same key replays a landed approval",
 			params: []param{
 				computerParam().orSay(selfDevUsage),
 				pStr("operation", "Operation ID awaiting approval").req(),
@@ -602,7 +602,7 @@ func buildRegistry() []*command {
 			cliOnly: ownerActReason,
 		},
 		{
-			path: []string{"self-dev", "reject"}, summary: "Reject a candidate awaiting approval (--reason)",
+			path: []string{"self-dev", "reject"}, summary: "Reject a candidate awaiting approval (--reason); the same key and reason replay a landed reject",
 			params: []param{
 				computerParam().orSay(selfDevUsage),
 				pStr("operation", "Operation ID awaiting approval").req(),
@@ -951,13 +951,14 @@ func textureShow(x *call) (any, error) {
 
 func selfDevDecide(x *call, decision string) (any, error) {
 	computerID, id := x.trim("computer"), x.trim("operation")
-	operation, binding, err := selfDevDecisionBinding(x.c, computerID, id)
+	operation, binding, replay, err := selfDevDecisionBinding(x.c, computerID, id, decision)
 	if err != nil {
 		return nil, err
 	}
-	if decision == "approve" {
+	if decision == "approve" && !replay {
 		// The owner's single approval: arm accept_once bound to exactly this
-		// candidate and head; the decision consumes it.
+		// candidate and head; the decision consumes it. A replay of a landed
+		// approval arms nothing: its grant was consumed.
 		var mode struct {
 			Generation uint64 `json:"generation"`
 		}
