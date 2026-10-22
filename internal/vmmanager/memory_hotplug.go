@@ -58,6 +58,18 @@ var (
 	errNoAPISocket  = errors.New("VM has no API socket")
 )
 
+// noAPISocketError is errNoAPISocket with the path looked at and why.
+type noAPISocketError struct {
+	Path string
+	Err  error
+}
+
+func (e *noAPISocketError) Error() string {
+	return fmt.Sprintf("%v: %s: %v", errNoAPISocket, e.Path, e.Err)
+}
+
+func (e *noAPISocketError) Unwrap() error { return errNoAPISocket }
+
 // ErrMemoryHotplugBusy means another manager operation (boot, hibernate,
 // restore) holds the VM; the caller retries later.
 var ErrMemoryHotplugBusy = errors.New("memory hotplug: VM operation in progress")
@@ -150,7 +162,7 @@ func (m *Manager) runningAPISocket(vmID string) (string, int, error) {
 		sock = m.jailAPISocketHostPath(vmID)
 	}
 	if _, err := os.Stat(sock); err != nil {
-		return "", 0, fmt.Errorf("%w: %w: VM %s", ErrMemoryHotplugUnavailable, errNoAPISocket, vmID)
+		return "", 0, fmt.Errorf("%w: VM %s: %w", ErrMemoryHotplugUnavailable, vmID, &noAPISocketError{Path: sock, Err: err})
 	}
 	return sock, base, nil
 }
