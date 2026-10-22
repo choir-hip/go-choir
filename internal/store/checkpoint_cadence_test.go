@@ -1263,8 +1263,8 @@ func TestCloseFailsClosedUnderAStatementInFlight(t *testing.T) {
 		_, err := s.db.ExecContext(context.Background(), "SELECT SLEEP(2)")
 		return err
 	})
-	if err := s.Close(); !errors.Is(err, ErrCheckpointCommitLive) {
-		t.Fatalf("Close under a statement in flight = %v, want ErrCheckpointCommitLive", err)
+	if err := closeWithin(t, s, 5*time.Second); !errors.Is(err, ErrPoolStatementLive) {
+		t.Fatalf("Close under a statement in flight = %v, want ErrPoolStatementLive", err)
 	}
 	if err := waitDone(t, "the statement", sleeping); err != nil {
 		t.Fatalf("the statement in flight failed: %v", err)
@@ -1281,8 +1281,8 @@ func TestCloseFailsClosedUnderAReadInFlight(t *testing.T) {
 		_, err := s.readDB.ExecContext(context.Background(), "SELECT SLEEP(2)")
 		return err
 	})
-	if err := s.Close(); !errors.Is(err, ErrCheckpointCommitLive) {
-		t.Fatalf("Close under a read in flight = %v, want ErrCheckpointCommitLive", err)
+	if err := closeWithin(t, s, 5*time.Second); !errors.Is(err, ErrPoolStatementLive) {
+		t.Fatalf("Close under a read in flight = %v, want ErrPoolStatementLive", err)
 	}
 	if err := waitDone(t, "the read", reading); err != nil {
 		t.Fatalf("the read in flight failed: %v", err)
@@ -1309,9 +1309,9 @@ func TestCloseFailsClosedUnderAnOpenWriteTransaction(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := s.Close(); !errors.Is(err, ErrCheckpointCommitLive) {
+	if err := closeWithin(t, s, 5*time.Second); !errors.Is(err, ErrPoolStatementLive) {
 		_ = tx.Rollback()
-		t.Fatalf("Close under an open write transaction = %v, want ErrCheckpointCommitLive", err)
+		t.Fatalf("Close under an open write transaction = %v, want ErrPoolStatementLive", err)
 	}
 	if err := tx.Commit(); err != nil {
 		t.Fatalf("the open transaction could not commit after the failed Close: %v", err)
@@ -1381,8 +1381,8 @@ func TestCloseFailedAtThePinRestoresCadence(t *testing.T) {
 		_, err := s.db.ExecContext(context.Background(), "SELECT SLEEP(2)")
 		return err
 	})
-	if err := s.Close(); !errors.Is(err, ErrCheckpointCommitLive) {
-		t.Fatalf("Close under a statement in flight = %v, want ErrCheckpointCommitLive", err)
+	if err := closeWithin(t, s, 5*time.Second); !errors.Is(err, ErrPoolStatementLive) {
+		t.Fatalf("Close under a statement in flight = %v, want ErrPoolStatementLive", err)
 	}
 	if got := s.CheckpointStats().Mode; got != CheckpointModeDebounced {
 		t.Fatalf("mode after a Close failed at the pin = %q, want %q", got, CheckpointModeDebounced)
@@ -1457,7 +1457,7 @@ const openFailsChildEnv = "CHOIR_TEST_OPEN_FAILS_CHILD"
 // panics nor closes the engine over the missing files.
 func TestOpenFailingAfterTheEngineIsUpReturnsAnError(t *testing.T) {
 	if path := os.Getenv(openFailsChildEnv); path != "" {
-		testHookAfterWorkspaceOpen = func(workspacePath string) { _ = os.RemoveAll(workspacePath) }
+		testHookAfterWorkspaceOpen = func(s *Store) error { return os.RemoveAll(s.texturePath) }
 		s, err := Open(path)
 		if err == nil {
 			_ = s
@@ -1473,5 +1473,246 @@ func TestOpenFailingAfterTheEngineIsUpReturnsAnError(t *testing.T) {
 	code, out := runStoreChild(t, "TestOpenFailingAfterTheEngineIsUpReturnsAnError", openFailsChildEnv+"="+path)
 	if code != 3 || !strings.Contains(out, "OPEN-ERROR ") {
 		t.Fatalf("Open over a workspace removed after the engine came up must return an error, not crash (exit %d):\n%s", code, out)
+	}
+}
+
+// closeWithin runs Close and fails the test if it has not returned within
+// d: an unbounded wait in Close fails fast instead of at go test's timeout.
+func closeWithin(t *testing.T, s *Store, d time.Duration) error {
+	t.Helper()
+	done := make(chan error, 1)
+	go func() { done <- s.Close() }()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(d):
+		t.Fatalf("Close did not return within %s: an unbounded wait", d)
+		return nil
+	}
+}
+
+// closeOrderRecorder stands in for the Dolt connector and records, at the
+// first engine close, how many pool connections were still open.
+type closeOrderRecorder struct {
+	doltConnector
+	mu               sync.Mutex
+	pools            func() []*sql.DB
+	closes           int
+	openAtFirstClose int
+}
+
+func (r *closeOrderRecorder) Close() error {
+	r.mu.Lock()
+	r.closes++
+	if r.closes == 1 && r.pools != nil {
+		for _, pool := range r.pools() {
+			if pool != nil {
+				r.openAtFirstClose += pool.Stats().OpenConnections
+			}
+		}
+	}
+	r.mu.Unlock()
+	return r.doltConnector.Close()
+}
+
+func (r *closeOrderRecorder) snapshot() (closes, openAtFirstClose int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.closes, r.openAtFirstClose
+}
+
+// recordEngineCloses wraps every connector the next opens create.
+func recordEngineCloses(t *testing.T) *closeOrderRecorder {
+	t.Helper()
+	rec := &closeOrderRecorder{}
+	testHookWrapConnector = func(c doltConnector) doltConnector {
+		rec.doltConnector = c
+		return rec
+	}
+	t.Cleanup(func() { testHookWrapConnector = nil })
+	return rec
+}
+
+func assertEngineClosedOnceLast(t *testing.T, s *Store, rec *closeOrderRecorder) {
+	t.Helper()
+	rec.mu.Lock()
+	rec.pools = func() []*sql.DB { return []*sql.DB{s.textureDB, s.readDB, s.db} }
+	rec.mu.Unlock()
+	for _, pool := range []*sql.DB{s.textureDB, s.readDB, s.db} {
+		if pool != nil {
+			if err := pool.PingContext(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if err := closeWithin(t, s, 30*time.Second); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if err := closeWithin(t, s, 30*time.Second); err != nil {
+		t.Fatalf("a second Close: %v", err)
+	}
+	closes, open := rec.snapshot()
+	if closes != 1 {
+		t.Fatalf("the engine was closed %d times, want exactly once", closes)
+	}
+	if open != 0 {
+		t.Fatalf("%d pool connections were still open when the engine closed, want 0", open)
+	}
+}
+
+// Sonnet r7 F1: the engine closes exactly once, last, after every pool
+// connection (the pinned ones included) is closed. Kills the mutants that
+// drop the connector wrapper, close the engine before releasing the pins,
+// or never release the pins.
+func TestCloseClosesTheEngineOnceAfterEveryConnection(t *testing.T) {
+	rec := recordEngineCloses(t)
+	path := testStorePath(t)
+	cleanupTestStorePath(path)
+	t.Cleanup(func() { cleanupTestStorePath(path) })
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertEngineClosedOnceLast(t, s, rec)
+}
+
+// The same for a texture-only store (OpenTextureWorkspace).
+func TestTextureStoreClosesTheEngineOnceAfterEveryConnection(t *testing.T) {
+	rec := recordEngineCloses(t)
+	path := testStorePath(t)
+	cleanupTestStorePath(path)
+	t.Cleanup(func() { cleanupTestStorePath(path) })
+	s, err := OpenTextureWorkspace(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertEngineClosedOnceLast(t, s, rec)
+}
+
+// A texture-only store pins its pool too: a statement in flight on it
+// makes Close fail closed. Kills the mutant that drops the texture pin.
+func TestTextureStoreCloseFailsClosedUnderAStatementInFlight(t *testing.T) {
+	path := testStorePath(t)
+	cleanupTestStorePath(path)
+	t.Cleanup(func() { cleanupTestStorePath(path) })
+	s, err := OpenTextureWorkspace(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.checkpoint.closeTimeout = 300 * time.Millisecond
+	sleeping := runHeld(t, s.textureDB, func() error {
+		_, err := s.textureDB.ExecContext(context.Background(), "SELECT SLEEP(2)")
+		return err
+	})
+	if err := closeWithin(t, s, 5*time.Second); !errors.Is(err, ErrPoolStatementLive) {
+		t.Fatalf("texture-store Close under a statement in flight = %v, want ErrPoolStatementLive", err)
+	}
+	if err := waitDone(t, "the statement", sleeping); err != nil {
+		t.Fatalf("the statement in flight failed: %v", err)
+	}
+	if err := closeWithin(t, s, 30*time.Second); err != nil {
+		t.Fatalf("Close after the statement finished: %v", err)
+	}
+}
+
+// The pin shares the one hard deadline: when the closing commit has spent
+// the close deadline waiting for a busy connection, the pin gets only the
+// grace, so Close returns by the deadline plus the grace. Kills the mutant
+// that gives the pin a fresh deadline (about double the worst case).
+func TestClosePinSharesTheHardDeadline(t *testing.T) {
+	path := testStorePath(t)
+	cleanupTestStorePath(path)
+	t.Cleanup(func() { cleanupTestStorePath(path) })
+	s, _ := openWithPendingCheckpoint(t, path, "computer-cadence-pindeadline")
+	const limit = 300 * time.Millisecond
+	s.checkpoint.closeTimeout = limit
+	sleeping := runHeld(t, s.db, func() error {
+		_, err := s.db.ExecContext(context.Background(), "SELECT SLEEP(3)")
+		return err
+	})
+	started := time.Now()
+	err := closeWithin(t, s, 10*time.Second)
+	elapsed := time.Since(started)
+	if !errors.Is(err, ErrPoolStatementLive) {
+		t.Fatalf("Close under a statement in flight = %v, want ErrPoolStatementLive", err)
+	}
+	if bound := limit + checkpointCloseGrace + 150*time.Millisecond; elapsed > bound {
+		t.Fatalf("Close took %s, past one close deadline plus one grace (%s): the pin did not share the deadline", elapsed, bound)
+	}
+	if err := waitDone(t, "the statement", sleeping); err != nil {
+		t.Fatalf("the statement in flight failed: %v", err)
+	}
+	if err := closeWithin(t, s, 30*time.Second); err != nil {
+		t.Fatalf("Close after the statement finished: %v", err)
+	}
+}
+
+// Sonnet r7 F3: a pin failure names a statement, not a commit, and both
+// fail-closed errors are ErrCloseLeftOpen for callers.
+func TestClosePinFailureIsNotACommitError(t *testing.T) {
+	s, _ := openForPinTest(t)
+	sleeping := runHeld(t, s.db, func() error {
+		_, err := s.db.ExecContext(context.Background(), "SELECT SLEEP(2)")
+		return err
+	})
+	err := closeWithin(t, s, 5*time.Second)
+	if !errors.Is(err, ErrPoolStatementLive) || !errors.Is(err, ErrCloseLeftOpen) || errors.Is(err, ErrCheckpointCommitLive) {
+		t.Fatalf("pin failure = %v, want ErrPoolStatementLive (an ErrCloseLeftOpen), not ErrCheckpointCommitLive", err)
+	}
+	if !errors.Is(ErrCheckpointCommitLive, ErrCloseLeftOpen) {
+		t.Fatal("ErrCheckpointCommitLive is not an ErrCloseLeftOpen")
+	}
+	if err := waitDone(t, "the statement", sleeping); err != nil {
+		t.Fatal(err)
+	}
+	if err := closeWithin(t, s, 30*time.Second); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// DeepSeek r7 F4: a pin with the deadline already spent says so, rather
+// than blaming a statement.
+func TestPinPoolsWithASpentDeadlineNamesTheBudget(t *testing.T) {
+	s := openProjectStore(t)
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancel()
+	pinned, err := s.pinPools(ctx)
+	if !errors.Is(err, errCloseBudgetSpent) || len(pinned) != 0 {
+		t.Fatalf("pinPools with a spent deadline = %d pinned, %v; want errCloseBudgetSpent", len(pinned), err)
+	}
+}
+
+// Sonnet r7 F4: an Open that fails after the engine is up closes its store
+// and releases the workspace, even when a statement it started still holds
+// a connection at its first Close: the next Open of the same path works,
+// and Open's error is returned.
+func TestOpenFailureReleasesTheWorkspace(t *testing.T) {
+	path := testStorePath(t)
+	cleanupTestStorePath(path)
+	t.Cleanup(func() { cleanupTestStorePath(path) })
+	injected := errors.New("injected open failure")
+	var sleeping <-chan error
+	testHookAfterWorkspaceOpen = func(s *Store) error {
+		s.checkpoint.closeTimeout = 200 * time.Millisecond
+		sleeping = runHeld(t, s.db, func() error {
+			_, err := s.db.ExecContext(context.Background(), "SELECT SLEEP(1)")
+			return err
+		})
+		return injected
+	}
+	t.Cleanup(func() { testHookAfterWorkspaceOpen = nil })
+	if _, err := Open(path); !errors.Is(err, injected) {
+		t.Fatalf("Open with an injected failure = %v, want it", err)
+	}
+	testHookAfterWorkspaceOpen = nil
+	if sleeping != nil {
+		_ = waitDone(t, "the statement", sleeping)
+	}
+	next, err := Open(path)
+	if err != nil {
+		t.Fatalf("the next Open after a failed Open: %v (the workspace was not released)", err)
+	}
+	if err := closeWithin(t, next, 30*time.Second); err != nil {
+		t.Fatal(err)
 	}
 }
