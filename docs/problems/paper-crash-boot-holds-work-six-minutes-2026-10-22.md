@@ -155,9 +155,9 @@ Residuals:
   DROP and match opposite directions, so that order is not less safe, but
   the check would fail on it. Fail closed is the chosen side; a reboot
   re-creates the fresh order.
-- `--no-markers` still crash-boots every computer without asking, so it
-  also crashes through an apply or a live capsule. Unchanged: it is the
-  operator's explicit choice of pure crash semantics.
+- `--no-markers` still crash-boots every computer without asking.
+  Narrowed by round 2 (F5 below): it now aborts on a self-development
+  operation, but live capsules stay unchecked.
 - Not run against any host. The next reboot is the first live proof that
   the paper boots `planned` with its runs resumed once.
 
@@ -226,3 +226,81 @@ Undocumented.
 
 F9 (nit). The tier test reads only the first `case ...: return true` in
 `deployRefreshAllowsBusy`.
+
+### Fix, round 2 (lane `lane/fp0-reboot-script-r2`)
+
+- F1 fixed. `--allow-crash-close` now covers only `busy` (runs). An
+  `unavailable` (no answer, timeout, 503, other 5xx) or `unsupported`
+  (404/405) guest aborts the reboot unless the new
+  `--allow-crash-unverified` names that risk. Choice, stated: a separate
+  flag rather than calling these `unsafe`, so a guest that is truly dead
+  can still be rebooted through on purpose; fail closed stays the
+  default. `unsafe` has no flag.
+- F2 fixed. `marks.worst` keeps each computer's worst outcome across
+  rounds (written < busy < unsupported/unavailable < unsafe) and the
+  abort reads it. An unsafe refusal ends the rounds at once: waiting
+  cannot change the decision, so the operator reruns after the apply or
+  capsule settles. A computer that was busy and then wrote its marker
+  counts as written (the purpose of `--busy-wait`).
+- F3 fixed. After the rounds pass, a final pass re-sends every marker
+  immediately before `systemctl reboot`: the guest replaces its marker
+  (`writeHostPlannedRestartMarker`), so the 15-minute TTL starts then, and
+  it re-checks for an apply or capsule. A computer written in the rounds
+  that does not write again (any outcome) aborts whatever the flags; a
+  busy one that answers worse is judged by its new worst. `marked_at`
+  is the time the final pass was sent, and each written outcome carries
+  its own `written_at`; both are taken when the request goes out, so
+  post's age is never smaller than the marker's true age.
+- F4 fixed. Every computer is recorded in `marks.sent` before its POST.
+  An abort, or any exception in the mark phase (an ssh drop,
+  `subprocess.TimeoutExpired`, an interrupt), DELETEs the marker on every
+  computer sent, whatever it answered, then re-raises. Each DELETE answer
+  is read: a non-200, a missing answer or a failed call is logged as a
+  warning naming the computer and kept in `marks.unmark_failed`, and
+  `cleared` is true only when every clear answered 200. The ssh timeout
+  for a mark or unmark call is 60 s plus 30 s per guest, above the
+  guests' 25 s each.
+- F5 fixed by a check plus a narrower claim. The remote computer list
+  now reads `selfdev.busy` from each running guest's obligations surface
+  (the same states the marker refusal counts; `null` when the section is
+  missing or reports an error). Computers the script does not ask (held
+  ones; every one under `--no-markers`) abort the reboot on a nonzero
+  count, before any marker is sent, and need `--allow-crash-unverified`
+  when the count is unreadable. The pre-check prints the count for every
+  running computer, held ones included. Live capsules have no read-only
+  surface, so for unasked computers they are not checked, and computers
+  that are not running are not checked at all; the docstring and the
+  runbook now say exactly that instead of "no computer is rebooted
+  through an apply or a capsule".
+- F6 fixed. The proceed log names each unmarked computer, its worst
+  outcome and the flag that accepted it, with the apply/capsule risk
+  spelled out for unverified ones; the abort log names each blocking
+  computer and the flag that would accept it, or none.
+- F7 fixed. `scripts/test_node_b_host_reboot.py` adds 20 tests: cannot-
+  tell answers under `--allow-crash-close`, the unverified flag and its
+  limit, unsafe-then-timeout, timeout-then-busy, busy-then-written with
+  `busy_wait > 0` on a fake clock, the final pass (refresh after a long
+  wait, an apply that starts after marking, a marker lost in the final
+  pass), the scaled ssh timeout, ssh drop and ssh timeout, a lost answer
+  cleared on abort, a failed clear reported, and held and `--no-markers`
+  computers.
+- F8 documented (runbook marker policy): an older guest without
+  `live_capsules` in its 409 is read as unsafe and cannot be marked while
+  busy. Fail closed, kept.
+- F9 fixed. The tier test reads every `case ...: return true` in
+  `deployRefreshAllowsBusy`.
+
+Residuals after round 2:
+
+- Live capsules on unasked (held, `--no-markers`) computers are not
+  checked; reading them would need a read-only capsule count on the
+  obligations surface (`plannedRestartBusy` has one; the surface does
+  not expose it).
+- The final pass narrows, but cannot close, the window between the
+  guest's check and the reboot: an apply admitted in the seconds after
+  the final pass is cut. The same window exists for vmctl's deploy
+  refresh.
+- A computer that boots more than 15 minutes after the final pass still
+  boots as a crash (safe fallback); the final pass only moves the start
+  of the TTL to the last moment.
+- Still not run against any host.
