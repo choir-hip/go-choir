@@ -10,10 +10,6 @@
     {
       "computer_id": "computer-1355b83bced1613eb048ee28d66688a8",
       "note": "Autopaper paper computer (docs/reports/reeng-autopaper-paper-computer-2026-10-13.md)"
-    },
-    {
-      "computer_id": "computer-7dcdf5e247476cb22ee5a22ff7063aee",
-      "note": "FP3 group 1 deployed proof test computer (a staging test account's primary); temporary, remove after the proof (2026-10-21)"
     }
   ]
 }
