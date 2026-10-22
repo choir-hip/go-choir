@@ -178,8 +178,10 @@ func procSelfStatusField(key string) string {
 }
 
 // SeccompSelfTest runs one child per capsule filter from bin (the daemon's
-// own binary) and judges the receipt. The children are throwaway: their own
-// process group, killed with the daemon, bounded by a timeout.
+// own binary) and judges the receipt. Each child leads its own process group
+// (its control children join it). At the timeout the whole group is killed
+// (cmd.Cancel), not only the child. Pdeathsig kills the child, but not its
+// group, if the daemon thread that started it dies.
 func SeccompSelfTest(ctx context.Context, bin string) SeccompSelfTestReceipt {
 	rec := SeccompSelfTestReceipt{Kind: "capsule_seccomp_selftest", StartedAt: time.Now().UTC().Format(time.RFC3339)}
 	var uts unix.Utsname
@@ -198,6 +200,7 @@ func SeccompSelfTest(ctx context.Context, bin string) SeccompSelfTestReceipt {
 		cmd := exec.CommandContext(cctx, bin, SeccompSelfTestArg, name)
 		cmd.Env = []string{"PATH=/usr/bin:/bin", "TMPDIR=/tmp"}
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGKILL}
+		cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
 		var stdout, stderr bytes.Buffer
 		cmd.Stdout, cmd.Stderr = &stdout, &stderr
 		runErr := cmd.Run()
