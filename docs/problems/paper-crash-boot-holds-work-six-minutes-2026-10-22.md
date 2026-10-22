@@ -24,6 +24,15 @@ said ok. During the second phase the console was silent; from the host the
 Firecracker vCPUs used about 0.8 CPU, and the process had read 12 GB from
 its disks by 20:13.
 
+Then the schedules wait one interval. At 20:13:39 each schedule logged
+"crash boot: … stays active; next tick 2026-10-22T20:28:39Z", as designed
+(a crash boot arms the next tick one interval after boot). Meanwhile the
+dispatcher dead-lettered every source-poll wake recorded before the boot
+(`durably invalid occurrence: interrupted_by_restart: work occurrence
+recorded before this boot`; 42 between 20:16:07 and 20:22:20), also as
+designed. So the paper did no source work from 20:05 to at least 20:28,
+about 23 minutes, of which the closures were six and a half.
+
 ## Cause (read from the code)
 
 `closeOpenRoundsAfterCrash` (`internal/agentcore/inbox_records.go:1133`)
