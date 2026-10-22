@@ -108,3 +108,24 @@ the product API and `choir trace export`.
 3. A focused test: Freeze, then Complete with a repeated
    `capsule-exec:` ref. It should report `completed`, or refuse in a way
    that can be retried, and never lose the candidate.
+
+## Disposition (lane/fp4-r4, FP4 round 4)
+
+Tests b79cab192 (failed on main 6c60685cc), fix 4e6f96833.
+
+- Repaired by the first of the record's two options: `commitCompleteIntent`
+  collapses repeated execution refs (`completeExecutionRefs`: trim, drop
+  blanks and repeats, first-cited order) before it resolves receipts or
+  builds the report. A repeated ref is the same receipt, so the evidence
+  rule is unchanged: every command still needs its own granted receipt,
+  and the binder still refuses a repeated granted ref.
+- The count checks after the freeze, for late evidence and for partial
+  reports now name the resolver's error, or the counts when there is none,
+  instead of `%!w(<nil>)`.
+- Not taken: the second option (a report-only cell while the capsule is
+  frozen, or checking the Complete before the freeze commits). A
+  post-freeze failure of another kind still leaves no cell to retry in;
+  that remains a residual of the terminal saga.
+- Not proven locally: the Freeze-then-Complete path needs a real frozen
+  capsule. The staging re-run (A completes citing a repeated ref and keeps
+  its candidate) is the proof.

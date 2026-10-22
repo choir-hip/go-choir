@@ -80,3 +80,26 @@ Code read (internal/actor/dispatcher.go):
 
 Which branch dead-lettered 58a5b36c is not known (hypothesis: the
 final-attempt branch, the one that drops the error).
+
+## Dispositions (lane/fp4-r4)
+
+Tests b79cab192 (each failed on main 6c60685cc), fix 4e6f96833.
+
+- **P2: repaired at the store.** `RecordEngineeringAssignmentReport`, on a
+  committed command id with another digest, replays the committed result
+  when that command committed this same terminal proposition (the slot's
+  match has the same report id and command id). A partial, or a different
+  proposition, keeps the conflict. The two writers still race; both now
+  answer success, and the loser's cell hears its report landed. Not
+  proven locally through the runtime (the race needs a frozen capsule);
+  the store test reproduces the second writer's request exactly.
+- **P3: repaired.** The guard resets its refusal when a later tool result
+  carries `freeze_result.operation_id`; the key is top-level in the cell
+  result, so text the model prints cannot set it. Round 3b's residual in
+  docs/problems/fp4-r3-partial-advice-ends-in-system-cancel-2026-10-22.md
+  is closed.
+- **P4: repaired.** The dispatcher's poison lines carry the handler error
+  on the last attempt and at the deferral limit, and say "earlier
+  deliveries ended without returning (crash or kill)" when the budget was
+  spent before the handler ran. Which branch dead-lettered 58a5b36c stays
+  unknown; the next one will say.

@@ -130,7 +130,8 @@ ignores the advice, but its reason now names the open candidate.
 - DeepSeek 5: the guard's reason now names the candidate and the state
   the refusal gave, and claims nothing about what that state waits for
   (1b21dc6c8, test f9732b3de). Text only; fate unchanged.
-- Residual: the guard keeps the run's last refusal even if a later freeze
+- Closed in FP4 round 4 (4e6f96833: the guard reads only refusals after
+  the last successful freeze). Was: residual: the guard keeps the run's last refusal even if a later freeze
   succeeded, so a stale refusal can name a candidate in the reason. A
   successful freeze leaves no mark in the cell output the guard reads, so
   scoping the scan is not a few lines. It is not text only: whenever the
