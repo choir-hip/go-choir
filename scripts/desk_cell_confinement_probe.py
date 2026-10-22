@@ -32,13 +32,20 @@ its isolation self-test (POST /api/runtime/isolation-selftest, owner only):
    daemon leaves no answer: one attempt, never retried, and no answer is a
    failure.
 
+4. seccomp (--leg seccomp): the guest re-execs its own binary once per
+   capsule seccomp filter. Each child loads the filter the capsule's
+   constructor builds and tries clone3 (must be ENOSYS), a clone and an
+   unshare into a new user namespace (must be EPERM), then fork+exec and
+   os/exec (must work). SEC-13 on the deployed kernel; it does not show that
+   a live capsule loads the filter, nor the session worker's bounds (RES-03).
+
 This script judges the raw facts itself (it does not trust the server's
 "ok"), prints one JSON receipt on stdout and writes it to --out.
 
 Exit 0: proven. 1: a check failed. 2: the route is not deployed or the
 computer could not be reached (nothing proven).
 
-usage: desk_cell_confinement_probe.py --cred FILE --out FILE [--host URL] [--leg oom]
+usage: desk_cell_confinement_probe.py --cred FILE --out FILE [--host URL] [--leg oom|seccomp]
   --cred is the 0600 credential file scripts/qa_test_computer.mjs writes
   (api_key or key, computer_id). The key is never printed.
 """
@@ -66,6 +73,10 @@ LANDLOCK_DENIED = ["write_allowed_root"]
 # manifest edit that loosens the budget fails the probe.
 OOM_ROLE = "research"
 OOM_BUDGET_BYTES = 768 << 20
+# The seccomp leg: every capsule filter (internal/capsule/seccomp.go) and what
+# each probe must answer under it, written out here.
+SECCOMP_FILTERS = ["workload", "workload-inet", "broker", "broker-inet", "delegate", "broker-delegate"]
+SECCOMP_WANT = {"clone3": "ENOSYS", "clone_newuser": "EPERM", "unshare_newuser": "EPERM", "fork_exec": "", "os_exec": ""}
 EGRESS_WANT = {
     "host_gateway": "open", "host_corpusd": "open", "public_https": "open",
     "host_sshd": "blocked", "host_dolt": "blocked", "host_caddy_admin": "blocked",
@@ -270,6 +281,47 @@ def judge_oom(oom):
     return fails
 
 
+def judge_seccomp(sc):
+    """The capsule seccomp leg: each filter loaded, clone3 ENOSYS, no new user namespace, children start."""
+    if not sc:
+        return ["seccomp: no receipt (the guest predates the seccomp leg and ran the default self-test)"]
+    fails = []
+    if not str(sc.get("kernel") or "").strip():
+        fails.append("seccomp: kernel release unread")
+    got = {}
+    for f in sc.get("filters") or []:
+        if f.get("name") in got:
+            fails.append("seccomp: filter %s reported twice" % f.get("name"))
+        got[f.get("name")] = f
+    hashes = set()
+    for name in SECCOMP_FILTERS:
+        f = got.get(name)
+        p = "seccomp %s: " % name
+        if not f:
+            fails.append(p + "did not run")
+            continue
+        if f.get("error") or f.get("load_error") or not f.get("loaded"):
+            fails.append(p + "not loaded: %r" % (f.get("error") or f.get("load_error")))
+            continue
+        h = f.get("bpf_sha256") or ""
+        if not h or h != f.get("expected_sha256"):
+            fails.append(p + "loaded program %r is not the capsule's %r" % (h, f.get("expected_sha256")))
+        hashes.add(h)
+        if f.get("seccomp") != "2":
+            fails.append(p + "Seccomp=%r after the load, want 2" % f.get("seccomp"))
+        probes = f.get("probes") or {}
+        for probe, want in SECCOMP_WANT.items():
+            if probe not in probes:
+                fails.append(p + "%s did not run" % probe)
+            elif want == "" and probes[probe] != "":
+                fails.append(p + "%s = %r, want it to work under the filter" % (probe, probes[probe]))
+            elif want and not str(probes[probe]).startswith(want + ":"):
+                fails.append(p + "%s = %r, want %s" % (probe, probes[probe], want))
+    if len(hashes) != len([n for n in SECCOMP_FILTERS if n in got]):
+        fails.append("seccomp: two filters loaded the same program: %r" % sorted(hashes))
+    return fails
+
+
 def judge_egress(eg):
     fails = []
     got = {e.get("name"): e for e in eg or []}
@@ -290,9 +342,9 @@ def main():
     ap.add_argument("--cred", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--host", default="https://choir.news")
-    ap.add_argument("--leg", choices=["confinement", "oom"], default="confinement",
+    ap.add_argument("--leg", choices=["confinement", "oom", "seccomp"], default="confinement",
                     help="oom: run only the out-of-memory leg (a throwaway research worker is killed by its "
-                         "cgroup; one attempt, never retried)")
+                         "cgroup; one attempt, never retried). seccomp: run only the capsule seccomp leg")
     ap.add_argument("--skip-egress", action="store_true",
                     help="judge the desk cells only. The guest egress checks need the host egress policy "
                          "(SEC-03, internal/vmmanager/guest_egress.go) to be deployed; before it lands, "
@@ -331,6 +383,23 @@ def main():
         receipt["failures"] = fails
         if not body.get("oom"):
             finish(2, "OOM leg not deployed: the guest ran the default self-test")
+        finish(0 if not fails else 1, "proven" if not fails else "failed")
+    if args.leg == "seccomp":
+        receipt["leg"] = "seccomp"
+        code, body = c.call("POST", "/api/runtime/isolation-selftest?leg=seccomp", {})
+        log("isolation_selftest_seccomp", status=code)
+        if code in (400, 404, 405):
+            finish(2, "seccomp leg not deployed (HTTP %s)" % code)
+        if code != 200:
+            finish(2, "self-test unavailable (HTTP %s)" % code)
+        receipt["server"] = body
+        if not body.get("seccomp"):
+            receipt["failures"] = judge_seccomp(None)
+            finish(2, "seccomp leg not deployed: the guest ran the default self-test")
+        fails = judge_seccomp(body.get("seccomp"))
+        if not body.get("ok"):
+            fails.append("server judged not ok: %r" % (body.get("failures") or []))
+        receipt["failures"] = fails
         finish(0 if not fails else 1, "proven" if not fails else "failed")
     code, body = c.call("POST", "/api/runtime/isolation-selftest", {})
     log("isolation_selftest", status=code)

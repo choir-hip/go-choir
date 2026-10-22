@@ -68,6 +68,42 @@ class JudgeOOM(unittest.TestCase):
             self.assertTrue(probe.judge_oom(r), name)
 
 
+GOOD_SECCOMP = {
+    "kind": "capsule_seccomp_selftest", "kernel": "6.1.155", "ok": True,
+    "filters": [{
+        "name": n, "bpf_sha256": "h%d" % i, "expected_sha256": "h%d" % i, "loaded": True, "seccomp": "2",
+        "probes": {"clone3": "ENOSYS: function not implemented", "clone_newuser": "EPERM: operation not permitted",
+                   "unshare_newuser": "EPERM: operation not permitted", "fork_exec": "", "os_exec": ""},
+    } for i, n in enumerate(probe.SECCOMP_FILTERS)],
+}
+
+
+class JudgeSeccomp(unittest.TestCase):
+    def test_good(self):
+        self.assertEqual(probe.judge_seccomp(copy.deepcopy(GOOD_SECCOMP)), [])
+
+    def test_each_shortfall(self):
+        cases = {
+            "missing receipt": lambda r: r.clear(),
+            "no kernel": lambda r: r.update(kernel=""),
+            "filter missing": lambda r: r["filters"].pop(),
+            "not loaded": lambda r: r["filters"][0].update(loaded=False),
+            "other program": lambda r: r["filters"][0].update(bpf_sha256="x"),
+            "same program twice": lambda r: (r["filters"][1].update(bpf_sha256="h0", expected_sha256="h0")),
+            "seccomp off": lambda r: r["filters"][0].update(seccomp="0"),
+            "clone3 reached the kernel": lambda r: r["filters"][2]["probes"].update(clone3="EINVAL: invalid argument"),
+            "new user namespace": lambda r: r["filters"][3]["probes"].update(clone_newuser=""),
+            "unshare reached": lambda r: r["filters"][3]["probes"].update(unshare_newuser="EINVAL: invalid argument"),
+            "fork broken": lambda r: r["filters"][4]["probes"].update(fork_exec="EPERM: operation not permitted"),
+            "os/exec broken": lambda r: r["filters"][5]["probes"].update(os_exec="ENOSYS: function not implemented"),
+            "probe missing": lambda r: r["filters"][5]["probes"].pop("os_exec"),
+        }
+        for name, mutate in cases.items():
+            r = copy.deepcopy(GOOD_SECCOMP)
+            mutate(r)
+            self.assertTrue(probe.judge_seccomp(r), name)
+
+
 class FakeGuest(http.server.BaseHTTPRequestHandler):
     status = 200
     body = {}
@@ -106,10 +142,10 @@ class ProbeRun(unittest.TestCase):
     def tearDownClass(cls):
         cls.srv.shutdown()
 
-    def run_probe(self, status, body):
+    def run_probe(self, status, body, leg="oom"):
         FakeGuest.status, FakeGuest.body, FakeGuest.paths = status, body, []
         out = os.path.join(self.dir, "receipt.json")
-        p = subprocess.run([sys.executable, "-I", PROBE, "--cred", self.cred, "--out", out, "--leg", "oom",
+        p = subprocess.run([sys.executable, "-I", PROBE, "--cred", self.cred, "--out", out, "--leg", leg,
                             "--host", "http://127.0.0.1:%d" % self.srv.server_address[1]],
                            capture_output=True, text=True, timeout=60)
         self.assertNotIn("k-never-printed", p.stdout + p.stderr)
@@ -119,6 +155,15 @@ class ProbeRun(unittest.TestCase):
         code, rec, paths = self.run_probe(200, {"leg": "oom", "ok": True, "oom": GOOD_OOM})
         self.assertEqual(code, 0, rec.get("failures"))
         self.assertEqual(paths, ["/api/runtime/isolation-selftest?leg=oom"])
+
+    def test_seccomp_proven(self):
+        code, rec, paths = self.run_probe(200, {"leg": "seccomp", "ok": True, "seccomp": GOOD_SECCOMP}, leg="seccomp")
+        self.assertEqual(code, 0, rec.get("failures"))
+        self.assertEqual(paths, ["/api/runtime/isolation-selftest?leg=seccomp"])
+
+    def test_seccomp_old_guest(self):
+        code, rec, _ = self.run_probe(200, {"ok": True, "desk_cells": {}}, leg="seccomp")
+        self.assertEqual(code, 2)
 
     def test_daemon_changed_fails(self):
         bad = copy.deepcopy(GOOD_OOM)
