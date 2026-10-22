@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -241,3 +243,50 @@ func TestFoldedRunEventRetryTakesOneNumber(t *testing.T) {
 		t.Errorf("ev-retry stored %d times in ListEventsAfter(0), want 1: %+v", count, got)
 	}
 }
+
+// Review round 1 (DeepSeek 5): an event with a Seq but no StreamSeq is not
+// skipped; it gets a stream cursor.
+func TestAllocateEventSeqFillsAMissingStreamSeq(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	ev := &types.EventRecord{
+		EventID: "ev-half", RunID: "run-half", AgentID: "agent-half",
+		OwnerID: "owner-half", TrajectoryID: "traj-half",
+		Kind: types.EventRunCompleted, Timestamp: time.Now().UTC(), Seq: 7,
+	}
+	if err := s.AllocateEventSeq(ctx, ev); err != nil {
+		t.Fatalf("allocate: %v", err)
+	}
+	if ev.StreamSeq <= 0 {
+		t.Fatalf("stream_seq = %d, want > 0 for an event that had a seq but no stream_seq", ev.StreamSeq)
+	}
+}
+
+// Review round 1 (flash 1): concurrent calls on one record take one number.
+func TestAllocateEventSeqSharedRecordTakesOneNumber(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	for i := 0; i < 50; i++ {
+		ev := &types.EventRecord{
+			EventID: fmt.Sprintf("ev-shared-%d", i), RunID: "run-shared", AgentID: "agent-shared",
+			OwnerID: "owner-shared", TrajectoryID: "traj-shared",
+			Kind: types.EventRunCompleted, Timestamp: time.Now().UTC(),
+		}
+		var wg sync.WaitGroup
+		start := make(chan struct{})
+		for g := 0; g < 4; g++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				<-start
+				_ = s.AllocateEventSeq(ctx, ev)
+			}()
+		}
+		close(start)
+		wg.Wait()
+		if want := int64(i + 1); ev.Seq != want {
+			t.Fatalf("round %d: seq = %d, want %d (a shared record took more than one number)", i, ev.Seq, want)
+		}
+	}
+}
+
