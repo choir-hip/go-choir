@@ -194,3 +194,42 @@ Tests ce11b6dd0, fix a32e7652f. Both reviewers found the same High.
   context leaves the worker's store calls to fail after it acquires, so its
   cell can hear an error for a report the resume landed. Narrow (a resume
   holds the mutex only across one saga attempt).
+
+## Review bunch 92 (DeepSeek), M1: a fate re-drive that keeps failing is dead-lettered and the assignment never ends
+
+Medium, confirmed from the code path, not exercised. It predates this
+lane's delta. Problem documentation only; there is no fix in this commit.
+
+Code read at c6f597b0f:
+
+- A failed terminal report saga arms its re-drive through the redrive hook
+  (`recordAssignedEngineeringReport`'s deferred `armFateRedriveAfterFailure`,
+  internal/agentcore/engineering_assignment_fate.go). The hook mints a new
+  wake generation only when every wake of the family is processed
+  (internal/actorruntime/adapter.go `dispatchAtMode`: `familySize > 0 &&
+  !familyPending`). While a fate wake of the same content is pending, it
+  mints nothing, by design: the pending wake is the re-drive.
+- That pending wake's handler (`HandleAssignedEngineeringFateDeadline` ->
+  `resumeStrandedFateAssignmentIfPending` -> the staged proposal's resume)
+  returns the resume's error as a plain handler error. The resume's own
+  failure arms again, and mints nothing again, because the wake being
+  handled is still pending.
+- The dispatcher retries a plain handler error at once, with no backoff,
+  and dead-letters it on the eighth attempt (`MaxAttempts=8`,
+  internal/actorruntime/adapter.go). A dead-lettered wake re-drives
+  nothing.
+- No other path ends a fate-pending assignment on a live computer: the
+  bound deadline's wake, when the assignment is fate-pending, takes the
+  same resume and fails the same way. Only a restart reaches it (a crash
+  boot closes it; a planned boot resumes it once, and a failed resume there
+  is only logged).
+
+So a terminal saga whose failure repeats (the P1 incident's receipt
+binding is one such exit) leaves the assignment bound, its capsule frozen
+or freeze_requested, nonterminal until the next restart, and the owner
+sees no fate. The invariant broken: every assignment reaches a terminal
+fate visible to the owner.
+
+The reviewer's two options: give the re-drive a distinct generation so the
+pending wake does not swallow it, or defer on a resume failure and, when
+the retries run out, cancel the assignment terminally with a true reason.
