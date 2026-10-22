@@ -167,6 +167,12 @@ hibernate snapshot at once (`firecracker_version_mismatch`), with no canary.
 `--enable-pci` half is already done; every launch and restore passes it in
 both modes (`snapshot.go:319-329`, `confinement.go:300-311`, since
 f240251b6). nixpkgs at the lock still packages 1.16.1.
+Hotplug blocker found 2026-10-22: Firecracker 1.17 places the virtio-mem
+hotplug region at 512 GiB, and Node B's Xeon E-2236 has 39-bit physical
+addresses (2^39 = 512 GiB), so a 1.17 computer cannot hotplug on this host
+(firecracker issue #6255, open). The host moves to 1.16.2 instead
+([firecracker-1-16-1-virtio-mem-restore-bugs-2026-10-22.md](../problems/firecracker-1-16-1-virtio-mem-restore-bugs-2026-10-22.md));
+NET-08 stays off hotplug computers until #6255 is fixed.
 
 ### P4 (RES-06). Guest page cache is never reclaimed while the guest is busy
 
@@ -313,6 +319,12 @@ activation under the metamission's lease. Record outputs under
 
 ### NET-08 and RES-16 (Firecracker 1.17 and discard, one test computer)
 
+0. Precondition (2026-10-22): the NET-08 test computer must not be in
+   `VM_MEMORY_HOTPLUG_ONLY`. Firecracker 1.17 puts the hotplug region at
+   512 GiB, past the E-2236's 39-bit physical address limit
+   (`grep 'address sizes' /proc/cpuinfo`; firecracker #6255, open). Do not
+   move a hotplug computer to 1.17 until #6255 is fixed. Re-check the
+   latest 1.17.x release notes for it before filling the hashes.
 1. Host step: fill both hashes in `nix/firecracker-next.nix` (build it on
    Node B or the Mac; each fakeHash failure prints the real hash; check the
    latest 1.17.x tag first). Then in `nix/node-b.nix`:
