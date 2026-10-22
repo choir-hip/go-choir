@@ -185,12 +185,21 @@ The script runs these steps in order:
 3. **Reboot.** It runs `ssh node-b systemctl reboot` and waits up to
    `--boot-timeout` (1200 s) for ssh with a new `boot_id`. If ssh exits
    with a status other than 0 or its own 255 (systemctl refused: an
-   inhibitor, a bus error), or the old `boot_id` still answers after
-   `--down-wait` (300 s), the host did not go down: the script clears
-   every marker and exits 3. If the host goes down later anyway, every
-   computer boots as a crash (safe); run `--phase post` after it. Any
-   failure after the markers are written and before this step ends (a
-   failed receipt save, an interrupt) also clears them.
+   inhibitor, a bus error), or its stderr shows it never connected or
+   authenticated (`connect to host ...`, `Permission denied`, an
+   unresolved host, a host key failure, `kex_exchange_identification`),
+   or the old `boot_id` still answers after `--down-wait` (300 s), the
+   host did not go down: the script clears every marker and exits 3. If
+   the host goes down later anyway (a slow shutdown past `--down-wait`),
+   every computer boots as a crash (safe); run `--phase post` after it,
+   and raise `--down-wait` if shutdowns run long. Any failure after the
+   markers are written and before this step ends (a failed receipt
+   save, an interrupt, a closed terminal's SIGHUP, a SIGTERM) also clears
+   them. **Exit 4 keeps the markers armed**, because the host may still
+   be rebooting: if the console shows it never went down, clear them by
+   hand (`DELETE <computer_url>/internal/runtime/planned-restart` for
+   each computer in `marks.may_hold_marker`) before 15 minutes pass, or a
+   crash in that window boots as planned. A SIGKILL skips every clear.
 4. **Post-checks** (below). The receipt JSON goes to
    `$TMPDIR/node-b-host-reboot-<UTC>.json`.
 

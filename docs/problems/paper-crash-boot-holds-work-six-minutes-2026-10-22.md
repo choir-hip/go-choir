@@ -511,3 +511,51 @@ closed, noisy).
 
 R6 (nit). A POST that timed out (status 0) can still reach the guest
 after the DELETE that follows it.
+
+### Fix, round 4 (lane `lane/fp0-reboot-script-r2`)
+
+- R1 fixed. `answer_may_have_written` reads a 503's body: the guest's
+  own two pre-write 503s, `{"error":"planned restart surface
+  unavailable"}` and `{"error":"planned restart: <err>"}` (matched
+  exactly against `HandleInternalPlannedRestart`), count as refusals and
+  are not cleared. Any other 503 body (a proxy, an older guest), a 500
+  or another 5xx, and a lost answer still count as a possible write.
+- R2 fixed. On an ssh exit 255 or an ssh timeout, the script reads ssh's
+  stderr. A connect or authentication failure (`connect to host`,
+  `Permission denied`, `Could not resolve hostname`, `Host key
+  verification failed`, `kex_exchange_identification`, `Too many
+  authentication failures`) means the command was never sent: the
+  markers are cleared and the run exits 3 (`reboot.not_sent`). Bare
+  `Connection timed out` and `No route to host` are left out on purpose:
+  ssh also prints them after "Read from remote host" when the session
+  drops as the host goes down; a connect failure carries the "connect to
+  host" prefix. A drop after connecting still waits for the new boot. The
+  runbook now says exit 4 keeps the markers armed and how to clear them
+  by hand.
+- R3 fixed. From the mark phase on, SIGHUP and SIGTERM raise
+  `Interrupted` (a `KeyboardInterrupt`), so the mark-phase clear and
+  `reboot_after_mark`'s clear both run. SIGKILL cannot be caught; the
+  runbook says so.
+- R4 recorded, default kept. A shutdown slower than `--down-wait`
+  (300 s) clears the markers and exits 3 while the host goes down, so
+  every computer boots as a crash: the safe side, which costs the
+  planned resume. The flag stays at 300 s; the runbook says to raise it
+  if shutdowns run long and to run `--phase post` after a late reboot.
+  Reading `systemctl is-system-running` ("stopping") first would tell
+  the two apart; not done.
+- R5 recorded as a residual. The re-list comes before the final ask, so
+  the unasked check is as old as the ask (up to 25 s per guest) plus the
+  reboot; a computer woken, or a held one that starts an apply, in that
+  time is not seen. An asked computer stopped during the wait answers
+  `unavailable` in the final pass and blocks (fail closed); the operator
+  reruns.
+- R6 recorded as a residual. A POST that timed out (status 0) can still
+  reach the guest after the DELETE that follows it, leaving a marker for
+  up to 15 minutes. Inherent in a request whose answer is lost.
+- Tests: 7 more (66 in all), plus guard cases that a mid-session drop
+  keeps the markers.
+
+Gemini review of 69c2d2515 (bunch 120): ACCEPT, no required findings;
+its risks (serial guest requests, the second between the final pass and
+the reboot, unasked live capsules) are residuals already recorded. The
+DeepSeek review had not arrived when this round landed.
