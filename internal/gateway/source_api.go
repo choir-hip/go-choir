@@ -692,8 +692,8 @@ func (h *Handler) HandleSourceAPI(w http.ResponseWriter, r *http.Request) {
 	}
 	var req SourceAPIRequest
 	if err := h.decodeBody(w, r, bodyRouteSourceAPI, computerID, &req, true); err != nil {
-		if isBodyTooLarge(err) {
-			writeGatewayJSON(w, http.StatusRequestEntityTooLarge, ErrorResponse{Error: err.Error()})
+		if status, ok := bodyRefusal(w, err); ok {
+			writeGatewayJSON(w, status, ErrorResponse{Error: err.Error()})
 			return
 		}
 		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid request body"})

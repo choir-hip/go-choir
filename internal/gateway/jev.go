@@ -298,8 +298,8 @@ func (h *Handler) HandleJudgment(w http.ResponseWriter, r *http.Request) {
 	// its bucket.
 	var request JudgmentRequest
 	if err := h.decodeBody(w, r, bodyRouteJudgment, computerID, &request, false); err != nil {
-		if isBodyTooLarge(err) {
-			writeGatewayJSON(w, http.StatusRequestEntityTooLarge, ErrorResponse{Error: err.Error()})
+		if status, ok := bodyRefusal(w, err); ok {
+			writeGatewayJSON(w, status, ErrorResponse{Error: err.Error()})
 			return
 		}
 		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid judgment request"})

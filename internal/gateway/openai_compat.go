@@ -129,9 +129,11 @@ func (h *Handler) HandleOpenAIChatCompletions(w http.ResponseWriter, r *http.Req
 	defer release()
 
 	var req openAIChatCompletionRequest
-	if err := h.decodeBody(w, r, bodyRouteModel, computerID, &req, false); err != nil {
-		if isBodyTooLarge(err) {
-			writeGatewayJSON(w, http.StatusRequestEntityTooLarge, openAIErrorResponse(err.Error()))
+	releaseBody, err := h.decodeBodyHeld(w, r, bodyRouteModel, computerID, &req, false)
+	defer releaseBody() // the decoded request lives for the whole call (F1)
+	if err != nil {
+		if status, ok := bodyRefusal(w, err); ok {
+			writeGatewayJSON(w, status, openAIErrorResponse(err.Error()))
 			return
 		}
 		writeGatewayJSON(w, http.StatusBadRequest, openAIErrorResponse("invalid request body"))
