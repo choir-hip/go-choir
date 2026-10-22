@@ -331,3 +331,52 @@ Deploy 2 (6c9152c4c, a later deploy):
   All lane tests pass locally; nix not evaluated here (no nix on the VM).
 - Next: FP0 evals (above), reviews, lands ddd5a3c07, proves steps 1 to 4,
   then 6c9152c4c and steps 5 to 7. Then the enforce decision.
+
+## Review round 2 findings (bunch 74: Gemini flash, DeepSeek, Sonnet), recorded before the fixes
+
+Recorded as found; dispositions follow in the commits after this one.
+
+- **S-F1 / DS-3, observe is not the legacy `+4` after a rollback.**
+  `nix-env --delete-generations +N` keeps every generation newer than the
+  current one, the current one and N-1 older; the script kept the newest N
+  by number plus current. Equal whenever current is newest (every automated
+  deploy); after a manual rollback to generation 5 of 1..8, real nix deletes
+  only 1, the script's observe deletes 1 2 3 4 (Sonnet, real nix-env on a
+  throwaway store). Enforce has the same flaw: it deletes the generation
+  just below a rolled-back current, the next rollback target.
+- **S-F2 / DS-1, the floor-after-min-free order is enforced by people.**
+  The preflight reads only free space. Both commits in one deploy, a revert
+  of deploy 1 alone, or `nixos-rebuild switch --rollback` to a
+  pre-deploy-1 generation leaves the live `min-free` at 80 GiB under a
+  48 GiB floor: the 2026-09-17 loop.
+- **DS-2, the floor ignores the guest store compaction.** A compaction's
+  peak new allocation is about its compacted size, 13.5 GiB today
+  (ledger 16:34, disk-pressure round 2), and nothing stops it overlapping a
+  deploy ("no deploy-in-flight signal"). 48 − 8 − 13.5 = 26.5 GiB, 2.5 GiB
+  above `min-free`, minutes of the paper's regrowth (85 to 290 MiB/min).
+- **S-F3 / DS-7, the 8 GiB footprint is unmeasured** and nothing makes its
+  measurement a gate for deploy 2. A flake.lock bump can bring ~20 GiB.
+- **S-F4, provenance.** `builder/releases` was also written by ci.yml's
+  app-layer release push from e527c1698 (2026-10-04) to a47122de0
+  (2026-10-09), not only by the S2 probe. The conclusion (no live writer
+  or reader) holds; every root is at least 13 days old, so in production
+  the keep count, not the age, is the only guard.
+- **DS-6, retention hardening.** An empty, relative or `/` builder root
+  makes every auto root a builder release; a failed `stat` reads as mtime 0
+  (infinitely old).
+- **DS-4 / DS-5, alarm.** An unparsable metadata line yields an all-clear
+  `<6>`; the comment "a missing line means the timer did not run" is wrong
+  for `-p warning`, which hides `<6>`.
+- **S-F5, test gaps** (surviving mutants): the builder keep count is never
+  the deciding guard; the default protect list is never exercised; no
+  98/99/100 generation case; the alarm's exact thresholds and the exit code
+  of its error and df-failure paths are unchecked.
+- **S-F6**, none of the three test scripts run in CI.
+- **S-F7, classifier blast radius.** The two new scripts are "unknown
+  deployed paths", so deploy 1 is a full deploy: host OS, a guest image
+  rebuild and a refresh of every active computer (the paper included, on
+  the marker path). Deploy 2's node-b.nix comment edit restarts vmctl.
+- **S-F8 / S-F9 / S-F10**, the alarm is a journal line only; auto-optimise
+  makes every `nix store gc` walk a full `.links` (prebuild latency to
+  watch); the estimator reads size-colliding images through the page cache
+  and uses `os.path.stat`.
