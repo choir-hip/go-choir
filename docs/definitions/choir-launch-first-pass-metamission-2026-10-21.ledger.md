@@ -440,3 +440,129 @@ Append-only. One terse entry per orchestrator pass.
   - **ARCH-13 rounds 1 to 6.** Live red: the guest store's Close in every mode.
   - **Riding along:** the token scanner fix (scripts) and the FP4 docs.
   Proofs, on separate test computers: FP7 step 4's watch and the paper's polls; ARCH-13's planned restart of a test computer while idle.
+- 14:15. Deploy R pushed as 0bf8a097d (CI waiter running).
+- 14:16. CI guards lane (lane/fp0-ci-guards, 0fc758bc5):
+  - 08ae67657: dated sections in both problem records.
+  - e7d382ac2 (orange): vmctl writes one boot-state journal line at start and every 24 h, naming booted_system, current_system, the booted, activated and running kernels, and booted_at. The line starts "WARNING host reboot pending" with reasons and pending_since, and says OVERDUE past 7 days. It uses the same read-only reads as /internal/vmctl/host/boot-state, and never appears on public /health.
+  - 0fc758bc5 (yellow): selftest-guest-token runs as a step in CI's Vocabulary Gates job, pinned by ci-workflow-contract-test. The VM's token lacks GitHub's workflow scope, so FP0 applied this commit on the Mac and pushed it there. The YAML parses, and the contract test passes.
+  - It rides along with SEC-06 in stage S.
+- 14:16. Firecracker 1.16.2 lane (lane/fp0-firecracker-1162, d764f14a0):
+  - 6f5602d8e: the problem record, plus the 39-bit and #6255 note added to NET-08's plan in the FP8 definition.
+  - d764f14a0 (red): Firecracker was unpinned (pkgs.firecracker 1.16.1). The new choirFirecrackerRelease and mkChoirFirecracker override it on Node B only, and only while nixpkgs is older. The jailer comes from the same package. Two tests: the full 1.16.1 → 1.16.2 resume path refuses and cold boots without starting Firecracker, and the validateSnapshot mismatch case.
+  - The source hash is sha256-BJ1WD6D/tsoBNUpIGjE/w5RgxFKRYkB7HKAi/TGXqbU= (nix flake prefetch on the Mac). cargoHash still needs a Linux build: the Mac's aarch64-linux builder (192.168.65.2) was not running. FP0 computes it before the 19:00 kernel and Firecracker deploy.
+- 14:16. Mirror sec06m PASS (79dc4b39f: SEC-06's 10 commits rebased onto 6c60685cc; autoputer, capsule, vmmanager). Stage S = SEC-06 (its own live red: the boot path) plus the CI guards (orange and yellow), 13 commits on R's 0bf8a097d with every lane's hunks identical, pushed as lane/fp0-deploy-s-stage. Combined mirror deploys1 queued (q54).
+- 14:22. ARCH-13 round 7 (eb8185144: 1aaa5e7c9 tests, 6dbdf815d red, eb8185144 docs), the owner's option (a).
+  - Each pool's DB.Close used to close the shared Dolt connector, so the first pool close tore the engine down. Round 7 wraps the connector to hide Close from database/sql. Teardown closes each pool, releases the pinned connections with the engine up, then closes the engine last.
+  - Sonnet's round-5 probes are now tests: a SLEEP in flight on either pool, and an open write transaction. In each, Close fails closed and the statement completes. Four of the five new tests fail on 3b220fa02.
+  - Review: a DeepSeek delta review (bunch 59) and a Sonnet seat. Mirror arch13j is queued (q55).
+- 14:28. Deploy R FAILED at "Deploy to Staging (Node B)". The disk preflight refused it: root_available_kib_after_reclaim 93,855,960 against a floor of 94,371,840 (90 GiB). Staging stays on Q. Problem record first: 71ec8e704 (docs/problems/node-b-disk-fills-from-the-paper-data-image-2026-10-22.md).
+  - Node B's btrfs root (476G) is losing about 250 to 290 MiB a minute. The paper's data image grows about 130 to 170 MiB a minute: 82.7 GB allocated of a 128 GiB cap, because there is no discard on Firecracker 1.16.1.
+  - Other holders: VM state about 186 GiB (the paper 79, the fleet 41, five hibernated test computers about 60); the nix store about 80 to 87 GiB; dolt-backup-20261015-pre-2.4.2 48.5 GB (a week-old pre-upgrade backup); platform-dolt 37.5 GB (+72 MiB in 2 min); corpus-dolt 6.3 GB.
+- 14:45. FP0 slip: the docs-only problem-record push to main (71ec8e704) started a full CI run (39797341340). Deploy classification compares against the last deployed commit (Q), not the push's parent, so it saw R's undeployed code and began prebuilding R on Node B. The prebuild added about 6.7 GB to the nix store in two minutes. FP0 cancelled the run before its deploy step. Lesson: with undeployed code on main, any push to main redeploys it. Free space after the cancel: 78,851,856 KiB.
+- 14:45. Owner asked: lower the deploy floor to 30 GiB (FP0 recommends yes), and decide how to stop the paper's growth (a one-time compaction of the paper's data image is the owner's call). FP0 will not delete the dolt-backup unasked.
+- 14:55. Disk, more readings (read-only):
+  - Free 75.4 GiB at 14:55:41, falling about 207 MiB a minute (90 s: paper +212 MiB, platform-dolt +67 MiB). btrfs: 38 GiB unallocated, metadata 84% of 18.6 GiB.
+  - The paper's guest /health: persistent_disk used 39.5 GB of 135 GB (29%); dolt_gc online, live 28 GiB, journal 787 MiB. On the host its image holds about 80 GiB. So about 40 GiB of host allocation is blocks the guest already freed. This confirms the record's hypothesis.
+  - The 04:00 compaction sweep compacted the paper this morning: a planned restart with busy allowed; squashed 4786 commits to 2; the store went from 32.2 GB to 12.1 GB in 6m12s; file_bytes before was 88,975,036,416. The image regrew to about 80 GiB in 11 hours and reaches its 125.7 GiB cap around 20:30 UTC.
+  - platform-dolt is 36 GiB, almost all noms/oldgen archives. Auto GC runs about every 30 minutes and adds an oldgen archive each time, so oldgen grows about 1.5 to 2.5 GiB an hour and nothing collects it.
+  - vmctl's retention plan matches no state (the test computers are registered accounts, not ephemeral ones).
+  - Swap removal can't help yet: it waits on tonight's backup proof.
+  - Projection with no action: the host is within a few GiB of full by about 04:00 UTC, just when the sweep needs room for the compacted store.
+- 14:58. Owner asked (replaces the 14:45 ask): run today's compaction now instead of at 04:00 (the same job, a ~6-minute planned restart of the paper, frees about 65 GiB; FP0's recommendation), or delete dolt-backup-20261015-pre-2.4.2 (48.5 GB). Either one clears the 90 GiB floor, so the floor need not change. Decide by about 01:00 UTC. FP0 holds pushes to main until then: any push retries R's deploy and its prebuild costs about 7 GB.
+- 14:58. Reviews of ARCH-13 round 7 (eb8185144, pre-fix): DeepSeek (bunch 59) and Sonnet both accept with edits, finding no correctness defect.
+  - DeepSeek's edits: two stale comments, one doc line, and a log line that blames a statement when the deadline ran out.
+  - Sonnet's edits: no behavioural test of "engine closed once and last" (five mutants survive); a failed Close stalls readers for up to about 10 s (record it); the pin failure returns ErrCheckpointCommitLive, naming a commit that isn't running; Open ignores Close's error on bootstrap failure.
+  - The mirror panic (arch13j) still stands, and arch13i is fixing it. These findings go to arch13i's next round.
+- 15:00. Finished workers read:
+  - FP4 round 4 (lane/fp4-r4 8727d5f41): P1 collapses repeated execution refs; P2 replays a same-proposition report under its committed command id; P3 limits the guard to refusals after the last successful freeze; P4 makes dead letters name their cause.
+  - F-c deploy 1 (lane/fp1-event-table c4508ef82, inert, store schema epoch 1→2).
+  - Reviews: bunch 60 (DeepSeek + Sonnet) on FP4 round 4; bunch 61 (flash, DeepSeek, Sonnet) on F-c deploy 1. Mirrors fp4r4m (q56) and evtablem (q57).
+  - F-c deploy 1 touches the store schema, so under the 13:35 rule it gets a deploy to itself.
+- 15:03. Three more VM workers (owner: up the intensity):
+  - fcd2: F-c deploy 2, stamping behind store.event_table, with the F17 journal ratio. This is the structural fix for the paper's journal growth.
+  - diskp: problem records for the new disk evidence and platform-dolt's oldgen, and a pressure trigger for the existing compaction (off/observe by default).
+  - capmem: RES-04, release builds at the 2 GiB capsule ceiling.
+- 15:10. Firecracker 1.16.2's vendor hash is computed on the Mac: sha256-xr/DxDNpwfOhI7w+Ms7RXbIEV6cNEE2iedtxxuearEI=, taken from fetchCargoVendor's fixed-output staging step, which is the same on every system. The vendor dir builds with it.
+  - 3b402571e on lane/fp0-firecracker-1162.
+  - Stage KF (kernel 6.18.57 + Firecracker 1.16.2, 0c7798c62 on 71ec8e704, pushed as lane/fp0-deploy-kf-stage): nix eval gives kernel 6.18.57, firecracker 1.16.2, 0 failing assertions, and the system drvPath evaluates.
+  - Review bunch 62 (flash, DeepSeek, Sonnet) and mirror deploykfm (q58) are running. It deploys after 19:00 UTC, and the reboot waits for the owner's go.
+- 15:25. Stages ahead of the disk decision. Each cherry-picks cleanly, each lane's hunks are identical, and each system drvPath evaluates on the Mac:
+  - T: FP3 cut 2 on S, 32840eae4, lane/fp0-deploy-t-stage, mirror q59.
+  - U: SEC-14 deploy 1 on T, a5e68ad3a, lane/fp0-deploy-u-stage, mirror q60. The only workflow change on main since SEC-14's base (358ce87c0) is the CI guards' 6-line Vocabulary Gates step, so nothing from main's deploy section needs porting.
+  - FP3 cuts 2 to 4 as replayed: flash and Devin accepted the originals, and DeepSeek accepted them with edits in bunch 41 (f15203d5a). DeepSeek's delta review of the replay is bunch 63: the range-diff, the 891d52ae5 conflict resolution, and the disposition of its bunch 41 edits.
+- 15:40. FP4 round 4 reviews: DeepSeek (bunch 60) and Sonnet both accept with edits; neither found a blocking defect.
+  - Shared findings:
+    - No test exercises P1's wiring: reverting rlm_reduce.go:1723 leaves every test green, and the P1 tests only fail on main because they don't compile.
+    - The guard's reset after a successful freeze misses a freeze that shares its cell with a failing Complete, and an echoed refusal text.
+    - The poison line's "crash or kill" wording.
+  - Sonnet only:
+    - The replay path skips the fresh path's validation, so a bogus PropositionDigest is acknowledged.
+    - Two P4 lines have no test.
+    - The replay drops a second writer's evidence silently.
+  - DeepSeek only:
+    - P2's "both writers get success" holds only at the store; a loser that finds the capsule gone fails earlier.
+    - A pre-fix stranded proposal keeps its duplicate refs (residual).
+  - Sent back as round 4b (worker fp4r4b, the same session).
+- 15:40. F-c deploy 1 reviews (bunch 61): flash and DeepSeek accept, and both confirm it is inert.
+  - DeepSeek HIGH, for deploy 2: the updater's automatic recovery (restorePrior, updater.go:958-988) skips checkStateCompatibility. So a failed health probe after a deploy restarts the prior release, and that release rewrites the store-schema receipt down to 1. This is harmless for deploy 1: no stamped rows, and the old binary only loses checkpoint publishing. For deploy 2 it would breach the floor.
+  - Also for deploy 2: JSON decoding under the engine mutex, and ListEventsByOwner's merge order. All of these go to the deploy 2 worker.
+  - Sonnet's seat is still running.
+- 15:55. F-c deploy 1: Sonnet accepts with edits, so all three seats accept. Deploy 1 is inert and the boot path adds only the DDL. 21 of 23 mutants are killed.
+  - Sonnet's rollback trace: a plain git revert shipped by deploy-refresh is refused by nothing. The epoch check covers only host-built layered releases. The epoch-1 binary rewrites the receipt to 1 and then refuses checkpoint publication until a forward deploy. That is fail-closed, with no corruption. So rollback is runtime-safe, not rollback-safe.
+  - Deploy 1's edits (docs, the rollback recipe and a proof rehearsal step, the F14 lock pin, the guard against unkeyed literals, and the F6 fidelity fix) went back to its worker as round 1b (evtable1b).
+  - Deploy 2's findings (decode outside the engine lock; whether the union read needs one snapshot; the floor on every path, restorePrior included) are queued for fcd2.
+  - The fp4r4m mirror is stopped, because round 4b supersedes it.
+- 15:33. Owner: "Compaction and delete backup".
+  - FP0 checked the backup before deleting it. /var/lib/go-choir/dolt-backup-20261015-pre-2.4.2 is a plain directory, not a subvolume, holding Oct 15 copies of corpus-dolt and platform-dolt. Nothing in nix/, scripts/, internal/ or cmd/ references it, and no process held an open fd or cwd in it.
+  - Deleted. Free space went from 69,250,884 to 76,778,860 KiB (+7.2 GiB) after a sync. So most of its 48.5 GB was extents shared with the live databases, presumably reflink copies.
+- 15:34. Compaction sweep dry run (caller fp0-owner-approved-early-compaction-dry-run) selected only the paper (file_bytes 92,729,827,328). It skipped vm-48bc0981 and the candidate fleet ("not a platform class").
+  - The first real run, a transient unit, failed before calling anything: curl was not on the unit's PATH.
+  - The second run (fp0-early-compaction-20261022b, caller fp0-owner-approved-early-compaction) started 15:35:16. vmctl killed the paper for the planned refresh: "destructive kill … cause=refresh epoch=13238".
+- 15:42. Early compaction done (fp0-early-compaction-20261022b, 6m46s wall):
+  - Outcome refreshed, planned_restart true.
+  - Squashed 3981 commits to 2. Store 33,020,774,378 → 14,451,421,725 bytes in 6m11s, with root_before = root_after (83jajjcq…), so the content is unchanged.
+  - The paper is active at 10.201.157.2:8085, epoch 13239. Its /health reads ready on d206fdd40, guest used 21.9 GB. The host state dir went from about 92.9 GB to 45.5 GiB.
+  - Node B free: 130,696,368 KiB (124.6 GiB).
+- 15:45. Deploy R re-run: `gh run rerun 39794075862 --failed` (only "Deploy to Staging (Node B)"). Waiter in _runs/ci-0bf8a097d-rerun.txt.
+- 15:45. Disk-pressure lane (lane/fp0-disk-pressure 4515538eb):
+  - 95166c3aa: the new evidence, and a record for platform-dolt's oldgen. Normal auto GC only adds to oldgen. Only a history squash plus a full GC frees it: the never-run Store A squash tool, best run with the server stopped.
+  - 0eef6382c: 16 tests.
+  - ca135c22b (red): a 5-minute pressure trigger for platform computers. A computer is due at ≥ 60% of its image cap or when host free is under 64 GiB. At most one attempt per computer per 6 h, persisted. Every compaction, the 04:00 timer's included, is refused when host free is under 32 GiB. Off by default; observe on Node B.
+  - Deploy floor proposal: nix min-free is 80 GiB, so lowering only the deploy floor to 30 GiB would bring back nix's GC firing mid-build (the 2026-09-17 incident). The proposal moves both: min-free 24 / max-free 40 GiB and a 48 GiB floor. FP0 holds that for the owner's call.
+  - Review bunch 64 (flash, DeepSeek, Sonnet) and mirror diskpm (q61).
+- 15:48. ARCH-13 round 7's mirror panic, root cause (arch13i, 776bfe5ac):
+  - Store tests use os.TempDir()/go-choir-m3-store-test/<TestName>, the same path in every process. Another run of the same test deleted the open workspace, and NomsBlockStore.Close then panicked on a goroutine nothing can recover. That predates round 7, and the 01:16 record's hypothesis 3 is now confirmed.
+  - Fix: 949fb1467 (child-process tests, per-process paths), 7078b0561 (red: Close checks the workspace still exists before closing the engine and returns an error instead of crashing), 776bfe5ac (docs).
+  - Round 7's review edits (Sonnet F1 to F4, DeepSeek F1 to F4) went to the same worker as round 7c (arch13j).
+  - FP0 gave every VM mirror run its own TMPDIR (ci-mirror.sh) and added the rule to ~/worker-rules.md until per-process paths land.
+- 15:45:36. Deploy R live: the "Deploy to Staging (Node B)" re-run took 2.5 minutes because the closure was already built. Staging serves 0bf8a097d.
+  - vmctl's deploy refresh moved vm-48bc0981 (15:43:55), the paper (15:44:35, planned restart, busy allowed) and the candidate fleet (15:45:28).
+  - The paper is ready on 0bf8a097d with 4 running runs, and the gateway's host judgments kept being served.
+  - The Close that ran at those shutdowns was Q's. R's own Close was proved on a test computer (below).
+- 15:47 to 15:53. Deploy R proof on test computer 71afbf14 only (_runs/deployR/proof.sh):
+  - FP7 step 4 (SEC-05 enforce) PASS. Mode is enforce, refused 0, would_refuse 0, pinned 51, and no computer was refused after its pin moved (journal since 15:45). The test computer's model call (submission 327b27da…) completed.
+  - FP7 step 5 (a copied token is refused) still has no route without a guest shell; it stays manual.
+  - ARCH-13, count mode: /api/runtime/observability guest_checkpoint reads mode "count", closes_left_open 0 and failures 0. No inline commit yet, because 57 events is below the cadence.
+  - ARCH-13, planned restart while idle, through vmctl compact-store (caller fp0-deploy-r-arch13-planned-restart-proof):
+    - Outcome refreshed, planned_restart true; the compaction squashed 83 commits to 2 (261 MB → 50 MB).
+    - "host requested a planned restart … interrupting 0 running runs" at 15:48:24, and the store opened with every phase complete at 15:48:34. The whole restart took 12 s.
+    - The console has zero "close left the store open" lines.
+  - ARCH-13 setting: store.debounced_checkpoint set to true reads mode debounced (debounce 60 s, max_ops 10000). After one research activation (9f928dce…), background_commits went 0→1 (max 4.2 ms), inline_commits stayed 0, failures 0, and events_since_commit went back to 0. Set back to false, it reads mode count.
+  - Not run: the "planned restart during an online DOLT_GC" branch (FP0 can't trigger a GC on cue), and the kill -9 durability step, which belongs before the setting is turned on for the paper.
+- 15:55. Kernel + Firecracker stage reviews (bunch 62): flash accepts; DeepSeek and Sonnet accept with edits. The edits went to a VM worker as KF round 2 (kf2):
+  - The runbook still names 6.18.55, and the reboot script's --min-kernel default is 6.18.45.
+  - Firecracker needs a < 1.17 ceiling (Sonnet).
+  - Sonnet: the "1.17 moves virtio-mem past the 39-bit limit" premise is wrong. The placement is the same in 1.15.1 to 1.17.0, so hotplug may already be broken on Node B.
+  - The kernel config also changes: module signing, lockdown LSM built in but inactive, NR_CPUS=512. So a test computer boots the new guest image as a canary before the paper takes it.
+  - Stale "pinned 1.16.1" text, and a wrong "one cold boot instead of two" claim.
+- 15:56. Capsule memory (lane/fp4-capsule-memory f0d3a3574, RES-04):
+  - Cause, confirmed in code: Go can't see the capsule's CPU quota (/sys is hidden), so it built with -p 4 under one CPU of quota and no memory limit.
+  - The executor now passes GOMAXPROCS (the quota, rounded up) and GOMEMLIMIT (5/8 of memory.high or memory.max, 1280 MiB) to every capsule command.
+  - Local cold build: 9m32s and 1.27 GiB peak anonymous memory before; 7m53s and 846 MiB after.
+  - Orange. DeepSeek review is bunch 65; mirror capmemm is q62.
+- 15:57. The self-development monitor closed. Its digest, docs/evidence/fp4-admission-queue-deployed-proof-2026-10-22.md, is on main.
+- 15:58. Deploy S lands. It is 13 commits on main 71ec8e704, with every lane's hunks identical to the mirrored stage (deploys1 PASS on 0bf8a097d):
+  - SEC-06 (capsule tunnel identity) is the one live red: observe everywhere, with enforce on test computer computer-9648031f only (VM_CAPSULE_TUNNEL_ENFORCE_ONLY).
+  - The CI guards ride along: vmctl's daily boot-state journal line (orange), and the guest-token scanner in Vocabulary Gates (yellow).
+  - Accepted by flash, DeepSeek and Sonnet across two rounds.
+  - Proofs: `scripts/capsule-tunnel-identity-probe.sh observe` on 71afbf14, `… enforce` on 9648031f, the ledger counts, and vmctl's boot-state line at start.

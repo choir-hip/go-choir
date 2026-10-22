@@ -283,21 +283,22 @@ boundaries:
 now:
   status: working
   slice: >-
-    Land the live-red queue one per deploy, each with its deployed proof on
-    a test computer: Q (FP4 round 3, with RES-13 L3a inert, the FP2
-    self-test fix and FP0 ops visibility riding along) in CI; then the FP7
-    enforce flip, SEC-06 in observe, ARCH-13 (now live), SEC-14 deploys 1
-    to 3, FP3 cuts 2 to 4. Reviews use flash, DeepSeek and Devin or a
-    Sonnet subagent in the third seat (owner, 2026-10-22).
-  source_ref: d206fdd40
-  deploy_identity: 966d3f519 serving (deploy P, FP2 batch 2); d206fdd40 (deploy Q) in CI
+    Land the live-red queue one deploy at a time (two disjoint live reds
+    allowed, owner 13:35), each with its deployed proof on a test computer:
+    R (FP7 enforce + ARCH-13) is live and proved; S (SEC-06 observe with
+    enforce on the FP2 test computer, plus the CI guards) is in CI; then T
+    (FP3 cut 2), U (SEC-14 deploy 1), and after 19:00 UTC KF (kernel
+    6.18.57 + Firecracker 1.16.2, then the Node B reboot with the owner's
+    go). Reviews use flash, DeepSeek and Devin or a Sonnet subagent.
+  source_ref: 71ec8e704
+  deploy_identity: 0bf8a097d serving (deploy R, proved 15:53); deploy S in CI
   candidate:
-    id: deploy-Q
-    state: on main, CI running; mirror PASS on 64ce90ba2 (34 commits on 966d3f519, every lane's hunks identical); FP4 round 3 has three accepts and its 3b delta three accepts with docs edits
-    ref: d206fdd40 (main)
-    base: 966d3f519
-    digest: the mirrored tree 64ce90ba2 plus the ledger and this card
-    scope: [internal/agentcore, internal/actorruntime, internal/vmmanager, internal/vmctl, scripts, docs]
+    id: deploy-S
+    state: on main, CI running; mirror deploys1 PASS on 0bf8a097d (13 commits, every lane's hunks identical on 71ec8e704)
+    ref: deploy S's landing commit on main
+    base: 71ec8e704
+    digest: the mirrored tree plus the ledger and this card
+    scope: [internal/vmmanager, internal/capsule, cmd/autoputer, internal/vmctl, nix, .github/workflows, scripts, docs]
   bridge_conjecture: >-
     If the security and density batches land with deployed proofs and
     independent review, then the owner's second pass starts from a computer
@@ -328,28 +329,30 @@ now:
     owner_ratification_ref: not_applicable
   belief:
     believed_state: >-
-      Deploys L to P are live and proved on staging. P's proof found that
-      the document-tool and seccomp self-tests ran the dedicated desk-worker
-      binary (an FP2 and RES-17 interaction); production extraction is
-      unaffected (observe: 2 runs, 2 equal, 0 failed); the fix rides in Q.
-      Queued and reviewed: the FP7 flip (three accepts with edits, done),
-      SEC-06 observe (in review), ARCH-13 rounds 5 and 6 (three accepts on
-      5, a delta review on 6; now a live red; a design choice is with the
-      owner). FP3 cuts 2 to 4 and SEC-14 are built and mirrored.
+      Deploys L to R are live and proved on staging. R put the FP7 bearer
+      binding in enforce (refused 0, 51 pinned, no computer refused after
+      its pin moved) and ARCH-13's store Close (a planned restart on a
+      test computer: no close left the store open, 12 s; the debounced
+      setting moves commits off the write path). Node B's disk was the
+      blocker at 14:28: the paper's image only grows on the host (no
+      discard on Firecracker 1.16.1). The owner approved an early
+      compaction (store 33.0 to 14.5 GB, same content root) and deleting
+      the week-old Dolt backup; free space is about 125 GiB.
     main_uncertainty: >-
-      whether the landing queue (about nine live reds at 40 to 60 minutes
-      each) fits the pass; whether guest page-cache reclaim returns host
-      memory (busy phase: both guests rose about 1 GiB on the host and
-      kept it).
-    next_observation: Q's identity on staging, the FP4 drill steps 4 and 6 re-run on 71afbf14, and P's step 1 and seccomp leg re-run on the FP2 test computer.
+      whether the disk holds until the pressure trigger lands (the paper
+      regrows about 140 MiB a minute; platform-dolt's oldgen grows about 2
+      GiB an hour with nothing collecting it); whether the new kernel's
+      config (module signing, lockdown built in) boots the guest image.
+    next_observation: S's identity on staging and the SEC-06 observe and enforce probes.
   blocker_or_risk: >-
-    Landing is the bottleneck (conjecture C-FP-landing holds). Cross-lane
-    interactions appear only when lanes meet on staging (P's self-test);
-    the combined-stage mirror and the deployed proof are the catch. FP7
-    step 5 (a copied token refused) has no route without a guest shell.
+    Landing is the bottleneck. Disk: the 90 GiB deploy floor, nix's 80 GiB
+    min-free, and the paper's regrowth interact; the disk-pressure lane's
+    trigger (observe first) and the coupled floor proposal are next. FP7
+    step 5 has no route without a guest shell.
   next_action: >-
-    Prove Q; then the FP7 flip as R; SEC-06 observe and ARCH-13 as their
-    reviews close; then SEC-14.
+    Prove S; land T (FP3 cut 2) and U (SEC-14 deploy 1); KF after 19:00
+    UTC with a test-computer canary before the paper; then FP4 round 4b,
+    ARCH-13 round 7c, F-c deploy 1 (alone), capsule memory, disk pressure.
 receipts:
   - id: capture-label-key-read
     boundary: implement
