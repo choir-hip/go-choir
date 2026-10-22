@@ -566,3 +566,104 @@ Append-only. One terse entry per orchestrator pass.
   - The CI guards ride along: vmctl's daily boot-state journal line (orange), and the guest-token scanner in Vocabulary Gates (yellow).
   - Accepted by flash, DeepSeek and Sonnet across two rounds.
   - Proofs: `scripts/capsule-tunnel-identity-probe.sh observe` on 71afbf14, `… enforce` on 9648031f, the ledger counts, and vmctl's boot-state line at start.
+- 15:56. Deploy S pushed as ddd20de0e (CI waiter running). T (FP3 cut 2) and U (SEC-14 deploy 1) are rebuilt on it as stage/deployT-land and stage/deployU-land, with every lane's hunks identical.
+- 15:58. FP3 cuts replay, DeepSeek delta review (bunch 63):
+  - Cut 2: accept with edits. The code is a faithful replay. The only edit is that the frozen cut2.patch doesn't apply to the live tree; moot, because FP0 cherry-picks the commits, which apply cleanly.
+  - Cut 3: accept.
+  - Cut 4: accept with edits. Its observe-window gate before ownerActMode = "enforce" (nix/node-b.nix:124) is still unmet, the same as in bunch 41. Cut 4 waits for the observe window.
+  - So cut 2 now has all three accepts (flash and Devin on the originals, DeepSeek on the replay).
+- 15:58. Disk-pressure trigger reviews (bunch 64): flash accepts; Sonnet accepts with edits but would not deploy it as it stands. DeepSeek is still running.
+  - Sonnet's required edits:
+    - F1: an attempts file holding JSON null loads as a nil map, and the next record() panics after the guest wrote its marker and the VM was killed. Nothing recovers, so vmctl exits with the paper down, and it can loop.
+    - F2: the attempt is recorded after the guest accepts and the VM is killed, so an unwritable file costs a planned restart with no compaction, in every mode, the 04:00 timer included.
+    - F3: the 32 GiB floor is on by default and applies to the 04:00 timer even in observe. A refusal is silent (200, unit exits 0), and the number is unmeasured.
+  - Sonnet's advised edits: F4, the host-free trigger has no minimum image size, so under 64 GiB free every platform computer restarts every 6 h; F5, five surviving mutants.
+- 16:00. Mirror throughput: one lock serialized six queued mirrors behind evtablem's -race run (30+ minutes on agentcore and store).
+  - ci-mirror.sh now takes MIRROR_LOCK. T's and U's landing stages (lane/fp0-deploy-t-land, lane/fp0-deploy-u-land, rebuilt on ddd20de0e) mirror on a second lane (heavy-mirror-b.lock, q63 then q64).
+  - FP0 stopped the stale T and U mirrors (q59, q60), which ran on the pre-landing stages.
+- 16:02. KF round 2 (lane/fp0-kf-r2 115bf75e6, nine commits):
+  - The runbook reads the kernel from the system.
+  - One floor file, nix/kernel-security-floor (6.18.57), is read by the flake assertion and by the reboot script's --min-kernel.
+  - A flake assertion keeps pkgs.firecracker below 1.17 on go-choir-b.
+  - Stale text is fixed, and the cold-boot count is corrected.
+  - The kernel config changes are recorded, with a canary plan:
+    - Hold the paper before the push.
+    - Deploy, then mint a test computer. It passes on the console showing Linux 6.18.57, lockdown [none], the store opening, and a model call answering.
+    - Unhold the paper, then send one explicit deploy-refresh for it. A held computer is skipped by the deploy and not retried by the sweep.
+    - The host reboot comes after the canary.
+  - New problem record b430934fa: memory hotplug cannot work on Node B.
+    - The 512 GiB hotplug region is the same in Firecracker 1.15.1 to 1.17.0. With no CPU template the guest sees the host's 39 physical address bits.
+    - Hotplug is on for test computers (nix/node-b.nix:1461-1462). No plug has ever succeeded there, and a failed plug is refused cleanly. This is reasoned from source and #6255, not drilled.
+    - The ledger's 14:16 and 15:55 lines that state the 1.17 premise are superseded by this.
+  - FP0's nix eval on 115bf75e6: firecracker 1.16.2, kernel 6.18.57, assertions [], the system drvPath evaluates, and check-guest-data-fstrim passes on the Mac. DeepSeek delta review is bunch 66.
+- 16:06. FP0 slip, recorded. The second mirror lane (16:00) overloaded the agents VM: MemAvailable fell to 188 MiB. Four test binaries were running at once: deploytl's -race run (platform.test, 2.6 GB), evtablem's store -race run (2.3 GB), arch13j's store -race run under the worker lock (2.0 GB) and a worker's non-race store run (1.1 GB). FP0 stopped the second lane before the OOM killer acted, and memory came back to about 4.1 GiB. Lesson: the single mirror lock was a memory budget, not only a queue. T's and U's mirrors are re-queued on the single lock (q63), and the stale disk-pressure mirror (q61) is dropped, because that lane goes to round 2.
+- 16:05. Report for the owner: "Launch First Pass Day One 2026-10-22" (iCloud Choir Reports; repo copy docs/reports/launch-first-pass-day-one-2026-10-22.md, committed on T's landing stage as 48fd93035).
+- 16:09. The mirrors run as one ordered queue (q65): deploytl, deployul, kfr2m (the kernel round 2 head), capmemm. Dropped from it:
+  - evtablem: F-c deploy 1's round 1b changes its tests.
+  - deploykfm: superseded by kfr2m.
+  - Earlier single queues.
+  - FP0 slip, the second time: a `pkill -f` pattern matched FP0's own remote shell and cut the ssh session. The cleanup had already finished, so nothing was lost. The rule stands: PID loops excluding $$ and $PPID, or tmux kill-session, never pkill -f.
+- 16:10:53. Deploy S live: CI 39809473959 succeeded, and staging serves ddd20de0e.
+  - vmctl's deploy refresh moved vm-48bc0981 (16:07:36), the paper (16:08:26), the fleet (16:09:31) and 71afbf14 (16:09:40). The paper is ready on ddd20de0e with 3 running runs.
+  - CI guards proof: vmctl's start line reads "WARNING host reboot pending: booted system older than the activated one". The booted system is from 10-15, and every kernel field (booted, activated, running) reads 6.18.55.
+  - vmctl's environment has VM_CAPSULE_TUNNEL_ENFORCE_ONLY=computer-9648031f…
+- 16:12. SEC-06 probes started as engineering assignments: observe on 71afbf14 (d0e46ecf…), enforce on 9648031f after its wake (914bcb53…).
+- 16:13. Reviews:
+  - Disk-pressure trigger: DeepSeek accepts with edits (bunch 64), so it has three accepts with edits.
+    - DeepSeek's must-fix is the same null-file panic Sonnet found.
+    - DeepSeek also found: a guest without the marker endpoint is crash-booted with maintenance (deploy_refresh.go:432-447); the 6 h gap binds only the pressure loop, so the timer and by-hand calls bypass it; no coordination with a deploy in flight; a sticky load error; nits.
+    - Round 2 is with the worker (diskp2).
+  - Capsule memory: DeepSeek accepts with edits (bunch 65). The blocker: two new internal/capsule files carry no build tags, so the non-Linux build breaks. Round 2 is with the worker (capmem2).
+- 16:15 to 16:23. Mirrors on the single ordered queue: deploytl PASS (44c50bb7b, T), deployul PASS (40d11e70f, U), kfr2m PASS (1b4287b8e, KF round 2).
+- 16:20. Capsule memory round 2 (570ad4eac):
+  - F1: go_bounds.go gets a linux build tag. FP0 ran `go build ./...` and the vet on darwin at 570ad4eac, and both pass.
+  - A 64 MiB GOMEMLIMIT floor.
+  - F4 was real: an ambient CHOIR_CAPSULE_GO* on the guest service reached every broker. The bounds now have their own broker-to-session carry. A new test fails at f0d3a3574.
+  - Tests for the job-env override and for no CHOIR_ names in the job env. The docs now say the measurement is local.
+  - DeepSeek delta review is bunch 67.
+- 16:24. SEC-06 step 1 PASS. 71afbf14 booted on S at 16:09:39 with "capsule executor: egress tunnel identity observe" and no package-mirror grant, which meets the probe's precondition. 9648031f booted at 16:11:51 with "… enforce". Engineering assignments were bound on 71afbf14 at about 16:13.
+- 16:28. SEC-06 probe, first attempt: on 71afbf14 the assignment ended failed in 34 s. The capsule's platform source is 840e1a701 (the 04:36 vendorHash fix), not the deployed ddd20de0e, so `scripts/capsule-tunnel-identity-probe.sh` did not exist there ("No such file or directory", exit 127).
+  - A computer's capsules get that computer's own pinned source, which can lag the platform deploy. The SEC-06 runbook (step 2) assumed the deployed tree and is corrected at landing.
+  - The second attempt embedded the script, and the prompt bar answered HTTP 500 "failed to submit prompt". In the guest log: "prepare initial revision: invalid texture revision: … contains legacy unresolved numbered citation syntax". The script's bracketed indices read as old citations.
+  - Problem, recorded: a Texture validation refusal of the owner's prompt surfaces as a 500, not a 400 with the reason (internal/textureowner/prompt_bar.go:99-101).
+  - The third attempt sent the script base64-encoded (sha256 845df208…). The rerun started at 16:31: observe da1836a4… on 71afbf14, enforce eeaf82c5… on 9648031f.
+- 16:29. ARCH-13 round 7c (92450f670) is back:
+  - All of Sonnet's F1 to F4 and DeepSeek's F1 to F4 are answered. All six of Sonnet's mutants are killed.
+  - ErrCloseLeftOpen and ErrPoolStatementLive. Open's failure paths retry a fail-closed Close up to twice, so a failed Open can wait about 30 s.
+  - The launch checklist line for Sonnet F2 (readers stall up to about 10.25 s during a failing Close) is FP0's to add, because workers may not edit it.
+  - Reviews: bunch 68 (flash and DeepSeek on the whole of round 7) and a Sonnet seat on 7b and 7c. Mirror arch13r7c (q66).
+- 16:33. FP4 round 4b (lane/fp4-r4 f848bb74e: fec168943 tests, 3efb1312d red, f848bb74e docs):
+  - The P1 wiring test runs through commitCompleteIntent and fails with line 1723 reverted.
+  - The replay runs the fresh path's two checks.
+  - The guard reset wins within the cell, and covers a rejected bundle and a freeze followed by a failed intent.
+  - The report race is fixed at the source with a per-assignment saga mutex. The fate-wake resume tries it and defers to the live saga.
+  - The poison-line wording is fixed, with tests, and the replay logs differing evidence.
+  - Residual: a pre-fix staged proposal with repeated refs still fails closed.
+  - Reviews: DeepSeek (bunch 69) and a Sonnet seat. Mirror fp4r4bm (q67).
+- 16:34. Disk-pressure round 2 (440f8ee48):
+  - The floor is 24 GiB: a compaction's peak new allocation is about its compacted size, 13.5 GiB today, plus about 10 GiB of margin. A refused timer run answers 507, so the unit fails.
+  - Null and non-object files are load errors, the tick recovers from a panic, and writability is checked before the guest is asked.
+  - The trigger needs a 32 GiB image, and backs off to 24 h after a reclaim under 8 GiB.
+  - The 6 h gap binds every caller ({"force":true} overrides it), a guest without the marker endpoint defers, a corrupt record is kept and healed, and every surviving mutant has a killing test.
+  - Residual: no deploy-in-flight signal.
+  - Reviews: DeepSeek (bunch 70) and a Sonnet seat. Mirror diskp2m (q68).
+- 16:34. F-c deploy 1 round 1b (fbb6d74a8):
+  - Rollback is now called runtime-safe, naming three unchecked paths: a CI revert, platform-follow and restorePrior.
+  - A rollback recipe (drop an empty choir_events at boot in the revert) is documented and rehearsed by a test, not shipped. Proof step 6 rehearses the previous build.
+  - F14 pins WithEngine's lock, the guard catches unkeyed literals, and F6 reads the real dry-run position through a nil-checked test hook (red).
+  - The ListEventsByOwner change is recorded for deploy 2.
+  - DeepSeek delta is bunch 71; mirror evtable1bm (q68).
+- 16:36. SEC-06 probe, third attempt: engineering refused the base64 copy because the long string gained whitespace, so it couldn't verify the bytes. Fourth attempt: the capsule fetches the script itself, with git fetch --depth 1 --filter=blob:none from the public repo at ddd20de0e, and checks sha256 845df208…. Started 16:36 on both computers (95b23397…, 7eb88003…).
+- 16:38. SEC-06 deployed proof PASS on S (ddd20de0e). The probe script was fetched inside each capsule from the public repository at ddd20de0e (sha256 845df208…) and run as a capsule job. Evidence: _runs/deployS/egress-observe.jsonl and egress-enforce.jsonl, from the guests' capsule-egress lines.
+  - Observe on 71afbf14 (capsule-096014c3…), 11 CONNECT entries. Every toolchain tunnel passed: pypi.org 2/2, files.pythonhosted.org 2/2, registry.npmjs.org 2/2, huggingface.co 1/1, and github.com 3 of 4 (git's tunnels and the script fetch). Exactly one would_refuse on github.com: outcome ok, reason `ClientHello SNI "pypi.org" is not the CONNECT host "github.com"`. The guest log carries one "tunnel identity (observe) would refuse capsule … host github.com" line.
+  - Enforce on 9648031f (capsule-f323ef57…), 9 entries. Every toolchain tunnel passed: pypi.org 2/2, files.pythonhosted.org 2/2, registry.npmjs.org 2/2, huggingface.co 1/1, github.com 1 pass. The mismatch was refused: outcome refused, tunnel_identity refused, the same SNI reason, bytes_up 0 and bytes_down 0.
+  - So SEC-06's observe window has started with zero would_refuse from real toolchains. The global enforce gate in the problem record still needs the observe ledgers over time, plus a Claude-mode capsule's api.anthropic.com pass.
+  - Runbook correction, landed with T: a capsule's platform source is the computer's own pinned source (840e1a701 on 71afbf14), which can lag the deployed commit. Step 2 now says to fetch the probe at the deployed commit inside the capsule. Embedding it in the prompt fails: the prompt bar's Texture validator rejects bracketed indices with a 500, and models do not copy a long base64 string exactly.
+- 16:40. Deploy T lands: FP3 cut 2 (a37b3b404, c72446a55, fc50421fb, 891d52ae5, cf8a6de45; every lane's hunks identical), on ddd20de0e, with the day-one report (docs) and this ledger. Mirror deploytl PASS (44c50bb7b).
+  - Accepts: flash and Devin on the originals (bunch 41 era), DeepSeek on the originals (bunch 41) and on the replay (bunch 63).
+  - Contents:
+    - Quick containment 1 (host units: PID 1 sockets and EnvironmentFile-only env files hidden; vmctl cannot write deployed binaries or guest images).
+    - The hostauth issuer credential (observe first).
+    - The SEC-11 proxy object-graph route, which stops trusting loopback alone (observe first).
+    - Dolt auth stage 2: corpusd, checkpointd and vmctl connect as the app user.
+  - The auth and store-auth surfaces keep this deploy to itself under the 13:35 rule.

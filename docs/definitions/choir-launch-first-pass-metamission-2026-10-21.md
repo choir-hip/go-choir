@@ -291,14 +291,14 @@ now:
     6.18.57 + Firecracker 1.16.2, then the Node B reboot with the owner's
     go). Reviews use flash, DeepSeek and Devin or a Sonnet subagent.
   source_ref: 71ec8e704
-  deploy_identity: 0bf8a097d serving (deploy R, proved 15:53); deploy S in CI
+  deploy_identity: ddd20de0e serving (deploy S, proved 16:38); deploy T in CI
   candidate:
-    id: deploy-S
-    state: on main, CI running; mirror deploys1 PASS on 0bf8a097d (13 commits, every lane's hunks identical on 71ec8e704)
-    ref: deploy S's landing commit on main
-    base: 71ec8e704
+    id: deploy-T
+    state: on main, CI running; mirror deploytl PASS (FP3 cut 2, 5 commits on ddd20de0e, every lane's hunks identical)
+    ref: deploy T's landing commit on main
+    base: ddd20de0e
     digest: the mirrored tree plus the ledger and this card
-    scope: [internal/vmmanager, internal/capsule, cmd/autoputer, internal/vmctl, nix, .github/workflows, scripts, docs]
+    scope: [internal/hostauth, internal/platform, internal/proxy, internal/vmctl, nix/node-b.nix, scripts, docs]
   bridge_conjecture: >-
     If the security and density batches land with deployed proofs and
     independent review, then the owner's second pass starts from a computer
@@ -329,30 +329,29 @@ now:
     owner_ratification_ref: not_applicable
   belief:
     believed_state: >-
-      Deploys L to R are live and proved on staging. R put the FP7 bearer
-      binding in enforce (refused 0, 51 pinned, no computer refused after
-      its pin moved) and ARCH-13's store Close (a planned restart on a
-      test computer: no close left the store open, 12 s; the debounced
-      setting moves commits off the write path). Node B's disk was the
-      blocker at 14:28: the paper's image only grows on the host (no
-      discard on Firecracker 1.16.1). The owner approved an early
-      compaction (store 33.0 to 14.5 GB, same content root) and deleting
-      the week-old Dolt backup; free space is about 125 GiB.
+      Deploys L to S are live and proved on staging. S put SEC-06 in
+      observe everywhere and enforce on the FP2 test computer: real
+      toolchains pass, the SNI mismatch is would_refuse in observe and
+      refused with no bytes in enforce. R proved the FP7 bearer binding in
+      enforce and ARCH-13's store Close. Node B's disk was the blocker at
+      14:28; the owner approved an early compaction and deleting the old
+      backup, and free space is about 125 GiB.
     main_uncertainty: >-
       whether the disk holds until the pressure trigger lands (the paper
       regrows about 140 MiB a minute; platform-dolt's oldgen grows about 2
       GiB an hour with nothing collecting it); whether the new kernel's
       config (module signing, lockdown built in) boots the guest image.
-    next_observation: S's identity on staging and the SEC-06 observe and enforce probes.
+    next_observation: T's identity on staging and FP3 cut 2's host-hardening verifier (hostauth issuer and proxy route in observe; Dolt app-user connections).
   blocker_or_risk: >-
-    Landing is the bottleneck. Disk: the 90 GiB deploy floor, nix's 80 GiB
-    min-free, and the paper's regrowth interact; the disk-pressure lane's
-    trigger (observe first) and the coupled floor proposal are next. FP7
-    step 5 has no route without a guest shell.
+    Landing is the bottleneck. The agents VM's memory bounds mirrors to one
+    at a time. FP7 step 5 has no route without a guest shell. A capsule's
+    platform source can lag the deployed commit (the SEC-06 runbook now
+    fetches the probe at the deployed commit).
   next_action: >-
-    Prove S; land T (FP3 cut 2) and U (SEC-14 deploy 1); KF after 19:00
-    UTC with a test-computer canary before the paper; then FP4 round 4b,
-    ARCH-13 round 7c, F-c deploy 1 (alone), capsule memory, disk pressure.
+    Prove T; land U (SEC-14 deploy 1, the deploy gate); KF after 19:00 UTC
+    with a test-computer canary before the paper; then F-c deploy 1
+    (alone), FP4 round 4b, ARCH-13 round 7c, capsule memory, the
+    disk-pressure trigger in observe.
 receipts:
   - id: capture-label-key-read
     boundary: implement

@@ -173,7 +173,7 @@ plain variant of this problem (a ClientHello naming another host). The
 durable fix is the fetch service per ecosystem (NET-02). Exact host matching
 is still the named residual.
 
-**Runbook for FP0's deployed proof (pending; nothing below has been run).**
+**Runbook for FP0's deployed proof (run on deploy S, ddd20de0e, 2026-10-22 16:36 UTC: steps 1 to 4 pass; see "Deployed proof" below).**
 Precondition: each computer used has no package-mirror grant, or its grant
 is not `mirrors_only`. Under `mirrors_only` the proxy refuses CONNECT to
 pypi.org, registry.npmjs.org and github.com with 403, and no tunnel is judged.
@@ -245,3 +245,36 @@ reverting `e20c92b6c` as well removes the check. SEC-06's plain CONNECT
 variant counts as repaired only where enforce runs: on the selected computer
 at landing, everywhere at the global flip. Until then, observe closes
 nothing.
+
+## Deployed proof (2026-10-22, deploy S, ddd20de0e)
+
+Run by FP0 on test computers only: observe on computer-71afbf14 and enforce
+on computer-9648031f, the computer `VM_CAPSULE_TUNNEL_ENFORCE_ONLY` names.
+
+- Step 1 passes. 71afbf14 booted on S with `capsule executor: egress tunnel
+  identity observe` and 9648031f with `... enforce`. Neither computer has a
+  package-mirror grant.
+- Steps 2 and 3 pass on 71afbf14. Every toolchain tunnel was `pass`
+  (pypi.org, files.pythonhosted.org, registry.npmjs.org, huggingface.co, and
+  git's tunnels to github.com). Exactly one `would_refuse` on github.com,
+  outcome `ok`, reason `ClientHello SNI "pypi.org" is not the CONNECT host
+  "github.com"`, and one `tunnel identity (observe) would refuse` line.
+- Step 4 passes on 9648031f. The toolchain tunnels were `pass`; the mismatch
+  was `refused` with the same reason, `bytes_up` 0 and `bytes_down` 0.
+
+**Runbook correction.** A capsule's platform source is the computer's own
+pinned source, which can lag the deployed commit: on 71afbf14 it was
+840e1a701, without this script, so the first run failed with "No such file
+or directory". Run the probe from a copy fetched inside the capsule at the
+deployed commit (`git init`, then `git fetch --depth 1 --filter=blob:none
+https://github.com/choir-hip/go-choir <deployed sha>` and `git show
+FETCH_HEAD:scripts/capsule-tunnel-identity-probe.sh`), and check its sha256.
+Two other routes failed: the script pasted into the prompt (the prompt bar's
+Texture validator rejects its bracketed indices as legacy citations and
+answers HTTP 500), and the script as base64 (the model did not copy the long
+string exactly).
+
+The global enforce gate above still needs the observe ledgers to show zero
+`would_refuse` for real toolchains over time, and a Claude-mode capsule's
+`api.anthropic.com` tunnel to read `pass`.
+
