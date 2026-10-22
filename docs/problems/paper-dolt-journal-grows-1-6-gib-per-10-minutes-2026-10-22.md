@@ -365,3 +365,256 @@ and gives the kind mix, which decides between F-a and F-c.
   5%, so it is not one.)
 - introduced: none.
 - repaired: none.
+
+## Root cause, second investigation (2026-10-22)
+
+Date: 2026-10-22. Station: FP1 (lane `lane/fp1-journal-root-cause`). Mutation
+class of this section: green. No runtime code changed. Nothing was run on any
+computer, no SQL against any production store. One local probe test was run
+and deleted (section 2).
+
+Evidence labels as above. Checkout: `85a8115b1`. Paper readings **[M]** are FP0's
+two observability snapshots of computer-1355b83b, 21:30:27 and 21:38:45 UTC
+(498 s apart, build `674460d15`): `telemetry_batching`, `engine_mutex`,
+`recent_log`, `guest_checkpoint`. All rates below are differences of those two.
+
+### Answer in brief
+
+1. The journal is written at about **1.8 MiB/s** (model; FP0 saw 1.3 to
+   2.0) because the tape projects **14.0 ops/s in 10.8 tape events/s**
+   **[M]**, and every op costs a full root-to-leaf path in every tree of its
+   table: **about 160 KiB per `choir.event` tape event and about 90 KiB per
+   run-memory tape event** on a 100,000-row store (probe, section 2). The
+   cost is **per op, not per byte**: a 300-byte `desk.cell` row costs 159 KiB,
+   an 8 KB progress row 169 KiB.
+2. There is no unexplained writer. The writers are the run machinery itself.
+   Of the 14.0 ops/s, **6.0/s are `choir.event` trace lines**, 3.7/s are
+   run-memory entries, and 4.0/s are other objects, mostly in about 250 multi-op
+   commits per 498 s. The product's real output (Texture revisions) is
+   about 0.06/s.
+3. A large part of the trace lines and of the run-memory entries is
+   **redundant or has no durable reader**: a second `loop.progress` per model
+   call that nothing reads (0.9/s), a Texture copy of every progress line that
+   only the live bus reads (0.6/s), `tool.invoked` (0.84/s, live ticker only),
+   `desk.cell` and `desk.egress` (1.6/s, diagnostic tooling only), an
+   `inbox_cursor` run-memory entry written after every cell even when the
+   cursor did not move, and a duplicate index on `run_memory_entries`.
+4. Source cuts (R1 to R5) remove about **33%** of the journal rate (about
+   600 KiB/s). Moving the trace kinds out of the tape and out of Dolt (R7)
+   removes about **53%** on its own. Everything together (R1 to R7) removes
+   about **68%** and leaves about 0.57 MiB/s: one 1 GiB GC pass per 30
+   minutes instead of per 10 to 15.
+5. Yes, this is a re-architecture question: ephemeral, loss-tolerant trace
+   lines (owner ruling: "a crash may lose the open window", section 27 item 18
+   of the owner notes) should not be rows in a versioned store behind a signed
+   tape with four host files per event. Section 4, step R7.
+
+### 1. The 14 ops/s, writer by writer
+
+Window arithmetic **[M]**: 5,388 tape events (10.82/s), 6,979 ops (14.01/s).
+Standalone `Store.AppendEvent` calls: 2,998 (6.02/s), each one tape event with
+one op (batching off, `batching.enabled=false`). Run-memory ops: 1,823
+(3.66/s). The remaining 567 tape events (1.14/s) carry 2,158 ops (4.33/s),
+of which 1,996 are `object_recorded` (4.01/s), 88 edges, 74 Texture mutations.
+Ops-per-event histogram of the window: 315 events with 1 op, 252 with 2 or
+more (36 with 9 to 16, 17 with 17 to 32, 6 with 33 to 64, 1 with 65 or more).
+So the non-event objects are about 250 batches per 498 s averaging 7 ops,
+with a tail of 24 batches of 17 or more ops. `putBatch` engine-mutex calls:
+440 (0.88/s) **[M]**.
+
+| Stream | Rate | Writer (code) | Necessary at this rate? |
+|---|---|---|---|
+| `loop.progress`, phase `provider_call_started` | about 0.9/s | `toolloop.go:493-516`: emitted before every model call, with `system_preview` (2,000 chars), `last_user_text` (4,000 chars), two SHA-256s | **No.** No reader of the phase in Go, frontend, scripts or cmd **[V]** (grep of `provider_call_started`, `provider_call`). The cost reader takes only phase `tool_loop` (`llmcost/aggregator.go:72-83`) |
+| `loop.progress`, phase `tool_loop` | about 0.9/s | `toolloop.go:660-678`, one per model call, token counts and 2,000 chars of response text | Yes for cost (`llmcost`). One per model call is the minimum |
+| `texture.agent_revision.progress` | 0.59/s | `runtime.go:3549-3562`: for a Texture run, every `loop.progress` is copied as `{doc_id, loop_id, phase}` | **No durable reader.** Its only consumer is the live stream (`textureowner/texture.go:1705-1790` reads a bus channel) **[V]** |
+| `tool.invoked` | 0.84/s | `batch_executor.go:73` | **No durable reader** in Go. The frontend ticker reads it live (`PromptSurface.svelte:139,159`). `cmd/choir/trace.go` lists every kind, so it is in trace bundles |
+| `tool.result` | 0.83/s | `batch_executor.go:119` | Yes. It is evidence for run acceptance and the Texture workflow verifier (`run_acceptance.go:284`, `texture_workflow_verifier.go:345,378,397`) |
+| `desk.cell` | 0.84/s | `tools_desk.go:644`, one timing row per cell (no source) | Diagnostic only: `cmd/choir/trace.go:363`, `scripts/management_latency_probe.py:295` |
+| `desk.egress` | 0.80/s | `tools_desk.go:521,535,1215`, one row per host `choir.*` call | Diagnostic only: `cmd/choir/trace.go:364`. About 1 per cell |
+| other `choir.event` (started, submitted, completed, revision started/completed/created) | 0.33/s | `emitEvent`, `runtime.go:4703` | Yes: run state and Texture canonical events |
+| run-memory `message` entries | about 1.7/s | `run_memory.go:286-296` via `afterAppendMessage`: assistant turn and tool-result turn of each model call | Yes: the run's context is rebuilt from these each call (`run_memory.go:298-304`) |
+| run-memory `inbox_cursor` | up to 0.84/s | `rlm_reduce.go:536-546`, called by `commitTray` at `:1040` after every successful cell | **Mostly redundant [H].** It is written even when `highWater == scope.Cursor`, and the reader takes the maximum (`rlm_reduce.go:516-531`), so an equal value changes nothing **[V]**. How often the cursor moves is not measured |
+| run-memory `cell_fate` | up to 0.84/s | `rlm_reduce.go:574-607`, `recordFate` at `:858` | Needed so a late timeout cannot override a success (first fate wins). It does not need a row in the versioned store **[H]** |
+| other objects, 4.0/s | in about 250 commits | Cell commits (`CommitInboxRecords`, `inbox.go:441-760`: records, inbox head, conversation head, wake outbox row, cursor, and the `inbox_command` replay row), Texture revisions with their citation checks, lifecycle transitions with folded events (`lifecycle.go:3331`), wake outbox state changes | **Unknown by kind [H].** The tape records the kind only in each op's `canonical_id`, and no counter reads it. Section 5, reading 1 settles it |
+
+The mix in the log agrees: in the last 6 minutes the paper authored 31 Texture
+turns, 23 of them revisions and 7 `no_semantic_change`, and published 3 stories;
+20 revisions were held for citing fewer than 2 outlets. That is one revision per 16 s
+and one published story per 2 minutes on top of 14 ops/s.
+
+No heartbeat-like or periodic writer was found **[V]**: grep for heartbeat,
+lease renewal and touch-run writers in `internal/agentcore` and `internal/store`
+returns nothing. The tool-loop log rate (258 lines per 6 minutes, 0.8/s)
+matches `tool.invoked` (0.84/s) and half of `loop.progress` (1.8/s), so the
+progress rate is two lines per model call, not a loop.
+
+Redundancy inside one cell (a `desk_go_eval` call), counted from the code:
+the cell source is stored in `tool.invoked.arguments`, in the assistant
+run-memory message, and up to 2,000 chars in `loop.progress.response_text`.
+The cell output is stored in `tool.result.output` and in the tool-result
+run-memory message. One cell costs about 8 to 10 tape ops: 2 `loop.progress`,
+`tool.invoked`, `tool.result`, `desk.cell`, about 1 `desk.egress`, 2 messages,
+`inbox_cursor`, `cell_fate`, and sometimes a records commit.
+
+### 2. What it costs on the paper's store
+
+Local probe, run and deleted (the lane's machine, not the paper): the real
+tape harness (`telemetry_harness_test.go`), a store seeded to **100,000 rows
+in `og_objects` (random ids, all 13 trees) and 100,000 in
+`run_memory_entries`**, then 150 appends per kind through `Store.AppendEvent`
+and `Store.AppendRunMemoryEntry`, journal bytes read with `doltJournalBytes`
+around a `DOLT_COMMIT`. Index counts from `information_schema.statistics` on
+the same schema: `og_objects` 13 trees (primary plus 12), `run_memory_entries`
+**6 trees, two of them identical (`UNIQUE(loop_id, seq)` is `loop_id`, and
+`idx_run_memory_entries_loop_seq` repeats it)**, `computer_event_index` 4.
+
+| Tape event (one op each) | Journal per event |
+|---|---|
+| `choir.event`, 0.3 KB payload (a `desk.cell` row) | **159 KiB** |
+| `choir.event`, 8 KB payload (the `provider_call_started` line) | **169 KiB** |
+| run-memory entry, details only (an `inbox_cursor` row) | **90 KiB** |
+| run-memory entry, 3 KB message | **96 KiB** |
+
+Payload size is a 6% term (8 KB costs 10 KiB more). The path is the cost.
+The record's 141 KiB for `loop.delta` was on 3,000 rows; 100,000 rows add a
+level and about 18 KiB. The paper has 1.0M `og_objects` rows and a
+deeper tree still, so these are floors **[H]**.
+
+Model of the paper, per second, with those constants (`og` op about 113 KiB,
+run-memory op about 45, tape-event overhead about 47) **[H]**:
+
+| Group | Rate | Cost | KiB/s |
+|---|---|---|---|
+| trace lines (standalone `choir.event`) | 6.02 events/s | 160 | 963 |
+| other objects, edges, Texture (567 events, 2,158 ops per 498 s) | 4.33 ops/s in 1.14 events/s | 113 per op + 47 per event | 507 |
+| run-memory entries | 3.66 events/s | 93 | 340 |
+| **Total** | | | **about 1,810 KiB/s = 1.77 MiB/s = 6.2 GiB/h** |
+
+FP0's 1.3 to 2.0 MiB/s is bracketed. One GiB arrives in 9 to 13 minutes at
+the model rate, which is the GC cadence seen (a pass every 10 to 15 minutes).
+There is no residual that needs another writer. The split by group is
+trace 53%, other objects 28%, run memory 19%. The per-op constants on the
+paper's own store are not measured (reading 2).
+
+### 3. Why it is a design problem and not one bad writer
+
+- Every durable write, however small and however disposable, takes the same
+  path: one tape event (four host files, three guest transactions) and one
+  full prolly path per tree. The cost model has no term for payload size or
+  for importance. A timing row and a Texture revision cost the same journal.
+- 6.0 of the 14.0 ops/s are trace lines the owner has already ruled
+  loss-tolerant. They sit in `og_objects` with 13 trees (most of them index
+  nothing a trace reader asks for [H]), in the content witness, in every
+  100-event checkpoint, and on the host as four files each (24 files/s).
+- Permanent growth follows tape events, not journal bytes. The live store is
+  28 to 29 GiB for 2.68M events: about **10 KB of retained history per tape
+  event** **[H]**, derived from the live figure in the first section and today's head
+  (2,677,384). At 10.8 events/s that is about 110 KiB/s, **about 9.5 GiB a
+  day** if today's rate held. GC does not touch it. Cutting tape events is
+  the only lever on it, so the step that removes 6 of 10.8 events/s matters
+  more for the disk than for the journal.
+- Telemetry batching (F-a) was the wrong lever for this: it removes the
+  per-event 47 KiB, not the per-op path, which is what trace lines pay. That
+  is why staging measured 4 to 10%.
+
+### 4. Resolution, ranked by saving per unit of risk
+
+Base rate used (KiB/s, section 2): trace lines 963, other objects 507,
+run-memory 340, total about 1,810. "Saved" is derived from the paper's
+rates above and the section 2 per-op constants **[H]**; the real constants
+come from reading 2.
+
+| # | Step | Saved | Class | Protected surface | Rollback | Build |
+|---|---|---|---|---|---|---|
+| R1 | Stop emitting the `provider_call_started` progress line (`toolloop.go:493-516`) and stop copying progress to `texture.agent_revision.progress` durably (publish on the bus only, `runtime.go:3549-3562`) | about 240 KiB/s (13%) | orange | none read it durably **[V]**; touches the trace layer | revert | hours; test: a stub provider run emits one `loop.progress` per model call; `cost` totals unchanged |
+| R2 | Skip the `inbox_cursor` run-memory entry when `highWater <= scope.Cursor` (`rlm_reduce.go:1040`) | up to 75 KiB/s (4%) | orange | run memory (red-adjacent); the reader takes a max, so no read changes **[V]** | revert | hours; fraction unmeasured, reading 1 |
+| R3 | Merge `tool.invoked` into `tool.result` (arguments ride the result; `batch_executor.go:73,119`), or make it live-only | about 135 KiB/s (7%) | orange, trace content changes | Trace/evidence: `tool.result` stays, `tool.invoked` disappears from bundles | revert | a day; frontend ticker reads the live bus, keep publishing there |
+| R4 | Fold a cell's `desk.egress` rows into its `desk.cell` row (one event per cell with an `egress[]` array; `tools_desk.go:521,535,644`) | about 130 KiB/s (7%) | orange | Trace bundles and `management_latency_probe.py` must read the new shape | revert | a day |
+| R5 | Drop `idx_run_memory_entries_loop_seq`, an exact duplicate of `UNIQUE(loop_id, seq)` (`store.go:407,485`) | about 30 KiB/s (2%) | orange, schema | duplicate confirmed locally. An index is not state in the witness extraction (`projectionbase/witness.go:19-38` compares table content) **[H]** | recreate the index | run as an explicit migration, never at boot (`boot-alters-og-objects-when-older-columns-missing-2026-10-21`) |
+| R6 | Multi-row upserts in `projectBatch` for the 7-op average batch (F-e) | about 155 KiB/s (9%) | red | tape projection, replay, witness | flag per computer | days; local probe: 100 to 63 KiB per row |
+| R7 | **Trace lines leave the tape and the store.** The sealer already classifies the ten kinds (`event_durability.go:35-46`) and queues them; its sink becomes an append-only segment log in the workspace (outside the Dolt directory, rotated hourly, group fsync, retention by age). List APIs read the log first and `og_objects` second for history written before the cutover | the whole trace share, 963 KiB/s (53%), of which R1, R3, R4 are 500, so R7 adds about 460 after them. Also 24 host files/s, and the retained-history growth of 6 of 10.8 events/s | red | the tape, Trace/evidence (`tool.result` is run-acceptance evidence), replay, content witness, every `ListEvents*` reader | a per-computer setting; off writes to the tape as today, and reads see both | 1 to 2 weeks plus a panel; design first |
+
+Totals, derived **[H]**: R1 to R5 about 605 KiB/s (33%). R1 to R6 about
+760 KiB/s (42%). R1 to R7 about 1,220 KiB/s (68%), leaving about
+590 KiB/s (0.57 MiB/s, 2.0 GiB/h): one 1 GiB GC pass per 30 minutes
+instead of per 10 to 15, and the stall 3x rarer. R1 to R5 are small,
+independent, orange, and each can be proven on a staging test computer by the
+existing counters (`events_appended_by_kind`, `tape_ops_by_kind`, section 5):
+do them first, in one slice. R7 is the answer to "re-architect": do the
+design in parallel, not after.
+
+If the owner will not leave the Dolt store for trace lines, the next best is
+F-c plus telemetry batching: a `(run_id, seq)` table with a sequential key and
+one index costs about 20 KiB per op, plus 47 KiB per tape event divided by k.
+At k = 5 that is about 30 KiB per event instead of 160, saving about
+780 KiB/s (43%) **[H]**. It keeps the tape, the host files and the witness
+cost, needs a new op kind and a replay change, and is red as well.
+It is worse than R7 on every axis except staying inside one store.
+
+Not first: dropping `og_objects` indexes (about 2% per tree; which exist on
+the paper is unread, reading 3) and moving the transient coordination rows
+(`inbox_command`, wake outbox) until reading 1 sizes them.
+
+A GC that does not hold the write connection saves no bytes. It removes the
+503s and is worth doing, but the stall shrinks by itself as the rate falls:
+pass time is about 16.6 s per GiB, and after R1 to R7 passes are 3x rarer.
+
+### 5. Readings FP0 can take
+
+Each is read-only. FP0 does the host and paper reads.
+
+1. **Tape sample (settles the 4.0 objects/s, the cursor and the fate rows).**
+   On the host, take the newest 3,000 events of computer-1355b83b from the
+   platform's append receipts and read each event's payload artifact
+   (`sha256/computer-event-payload/<digest>`). Decode `ops[]`. Tally by
+   `op.kind`; for objects, by the kind in `canonical_id`
+   (`obj:<kind>:<owner>:<suffix>`); count ops and sum `len(body)` per group.
+   For run-memory ops tally the body's `kind` (message, inbox_cursor,
+   cell_fate, compaction). For `inbox_cursor` ops, count how many carry the
+   same `cursor` as the previous one for the same agent and channel.
+   Also list the batches of 17 or more ops: their kinds.
+2. **Real bytes per op.** Two samples 600 s apart inside one GC interval (after
+   a pass ends, before the next tick): `GET /api/runtime/observability?memory=detail`
+   (`store` tree `bytes`, `truncated` empty, plus `telemetry_batching`) and
+   `/health` `dolt_gc`. Then bytes per op is the journal delta over the
+   `tape_ops_by_kind` delta, and with reading 1's mix it solves the og-row,
+   run-memory and per-event constants.
+3. **Tree count of `og_objects`.** The boot console line
+   `objectgraph dolt: derived access paths ... (live: [...])` or
+   `... missing on a table with rows ... (live: [...])`
+   (`dolt_store.go:343,346`). It says which generated columns and indexes
+   exist on the paper. The engine-mutex labels show `index` for
+   `choir.event $.run_id`, `$.channel_id`, and `json` for
+   `choir.channel_message $.to_agent_id`, so at least some exist and some do not.
+4. **After R1 to R5 on a test computer:** the same `events_appended_by_kind`
+   and `tape_ops_by_kind` over a 498 s window of a comparable load. The
+   acceptance is the rate of each cut kind going to 0 (or halving for R3,
+   R4) with `tool.result` and `loop.progress` phase `tool_loop` unchanged.
+
+### 6. Not settled
+
+- The kinds in the 4.0 objects/s. Candidates from the code are cell commits
+  (inbox records, wake outbox, `inbox_command`), Texture revisions with
+  citation checks, and lifecycle commits. No counter reads the kind. A
+  one-line counter in `recordTapeEvent` (`telemetry_stats.go:114`) that
+  tallies `canonical_id` kinds and body bytes would make reading 1 permanent;
+  it is orange, small, and not built here.
+- The paper's real per-op constants (reading 2). The model reproduces the
+  measured rate (1.6 MiB/s against 1.3 to 2.0 MiB/s) but cannot tell the
+  og-row constant apart from the per-event constant.
+- How often a cell's cursor does not move (R2) and what share of
+  `cell_fate` rows could leave the store.
+- Whether anything reads `tool.invoked` or `desk.*` outside this repo's
+  tools (owner dashboards, panels). The grep covers the repo only.
+- The 10 KB per retained event is a division of two totals, not a
+  measurement of what a checkpoint pins.
+
+### Heresy delta (second investigation)
+
+- discovered: trace lines are the largest single journal writer (6.0 of
+  14.0 ops/s) and are paid at full tape price; a second per-call progress
+  line, a durable copy of progress that only the bus reads, and a cursor
+  entry per cell are written with no durable reader or no change; a duplicate
+  index on `run_memory_entries`.
+- introduced: none.
+- repaired: none.
