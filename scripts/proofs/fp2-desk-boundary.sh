@@ -8,9 +8,14 @@
 # lands); this script runs it and judges its exit status (0 proven, 1 a check
 # failed, 2 not deployed or unreachable).
 #
-# Uses the PRODUCT API only (no ssh): CHOIR_API_KEY must be the key minted for
-# the test computer by scripts/qa_test_computer.mjs. The key is never printed;
-# for the probe it is written to a 0600 temp credential file removed on exit.
+# Steps 1, 2 and 5 use the PRODUCT API: CHOIR_API_KEY must be the key minted
+# for the test computer by scripts/qa_test_computer.mjs. The key is never
+# printed, and never passed in argv; for the probe it is written to a 0600
+# temp credential file, removed on exit. Steps 4 and 6 (the OOM and seccomp
+# legs) are host-internal. They resolve the test computer through vmctl's
+# list and POST the guest's /internal/runtime/isolation-selftest from Node B
+# over ssh. The internal service token header file is passed to curl by path
+# on Node B and never read here. No API key is used for them.
 #
 #   CHOIR_API_KEY=... scripts/proofs/fp2-desk-boundary.sh --computer computer-<test> [--commit SHA]
 #       [--probe scripts/desk_cell_confinement_probe.py] [--egress yes] [--out docs/evidence/fp2-desk-boundary-<date>.json]
@@ -22,10 +27,10 @@ PROOF_NAME=fp2-desk
 step_def 1 ro "deployed commit: platform /health and the test computer's observability"
 step_def 2 mut "the isolation self-test on the test computer, judged by the confinement probe"
 step_def 3 ro-after "trace refusals (read by hand)"
-step_def 4 mut "out-of-memory: the isolation self-test's OOM leg (a research worker killed by its cgroup; daemon and sibling live)"
+step_def 4 mut "out-of-memory: the self-test's host-internal OOM leg, from Node B (a research worker killed by its cgroup; daemon and sibling live)"
 step_def 5 mut "real turns: the Texture acceptance spec on the test computer"
-step_def 6 ro-after "rollback"
-step_def 7 mut "capsule seccomp on the deployed kernel: the isolation self-test's seccomp leg (SEC-13)"
+step_def 6 mut "capsule seccomp on the deployed kernel: the self-test's host-internal seccomp leg, from Node B (SEC-13)"
+step_def 7 ro-after "rollback"
 
 : "${OPT_probe:=scripts/desk_cell_confinement_probe.py}" "${OPT_egress:=no}" "${OPT_commit:=}" "${OPT_out:=}" "${OPT_oom_out:=}" "${OPT_seccomp_out:=}"
 
@@ -62,7 +67,8 @@ step_2() {
 	[ -n "${CHOIR_API_KEY:-}" ] || die 2 "CHOIR_API_KEY is not set in the environment"
 	cred=$(umask 077 && mktemp "${TMPDIR:-/tmp}/fp2-cred.XXXXXX") || die 2 "mktemp failed"
 	trap 'rm -f "${cred:-}"' EXIT
-	jq -nc --arg k "$CHOIR_API_KEY" --arg c "$OPT_computer" '{api_key:$k, computer_id:$c}' >"$cred"
+	# The key is read from the environment by jq, never passed in argv.
+	jq -nc --arg c "$OPT_computer" '{api_key: env.CHOIR_API_KEY, computer_id: $c}' >"$cred"
 	if [ "$OPT_egress" = yes ]; then
 		python3 -I "$OPT_probe" --cred "$cred" --out "$out" >/dev/null
 	else
@@ -85,37 +91,46 @@ step_3() {
 	manual "a run of the test computer after step 2 expects nothing; a real refusal appears as a desk.egress run event with refused: true (read the run's events in the product)"
 }
 
-# Step 4 runs the self-test's OOM leg (POST /api/runtime/isolation-selftest?leg=oom):
-# no model is in the loop, since the deployed desks refuse a runaway prompt
-# (docs/problems/fp2-step4-deployed-oom-not-drivable-desk-refuses-runaway-2026-10-22.md).
-# The daemon's identity comes from the daemon process (pid, /proc/self/stat
-# start time, boot id), not from observability's steps.recent. A desk worker's
-# cgroup reports memory.max and memory.events; memory.peak is logged only for
-# capsules.
-step_4() {
-	local cred rc out
-	fp2_need_computer
-	out=${OPT_oom_out:-docs/evidence/fp2-desk-oom-$(date -u +%Y%m%d).json}
-	will "POST /api/runtime/isolation-selftest?leg=oom on $OPT_computer through $OPT_probe (a throwaway research worker allocates until its 768 MiB cgroup kills it; one attempt, never retried), writing $out"
+# fp2_internal_leg LEG OUT: run the self-test's host-internal LEG on the test
+# computer through the probe, from Node B over ssh. The guest address comes
+# from vmctl's list. The internal service token header file is passed to
+# curl by path on Node B. Neither it nor any API key is read here.
+fp2_internal_leg() {
+	local leg=$1 out=$2 rc
+	resolve_target "$OPT_computer" 1
 	if [ "$PROOF_DRY" = 1 ]; then
-		info "\$ python3 $OPT_probe --cred <0600 temp file from CHOIR_API_KEY and --computer> --out $out --leg oom"
+		info "\$ python3 -I $OPT_probe --leg $leg --ssh $PROOF_SSH_HOST --guest-url $T_URL --computer $T_COMPUTER --out $out"
 		return 0
 	fi
 	[ -f "$OPT_probe" ] || die 2 "$OPT_probe is not in this tree; pass --probe PATH"
-	[ -n "${CHOIR_API_KEY:-}" ] || die 2 "CHOIR_API_KEY is not set in the environment"
-	cred=$(umask 077 && mktemp "${TMPDIR:-/tmp}/fp2-cred.XXXXXX") || die 2 "mktemp failed"
-	trap 'rm -f "${cred:-}"' EXIT
-	jq -nc --arg k "$CHOIR_API_KEY" --arg c "$OPT_computer" '{api_key:$k, computer_id:$c}' >"$cred"
-	python3 -I "$OPT_probe" --cred "$cred" --out "$out" --leg oom >/dev/null
+	python3 -I "$OPT_probe" --leg "$leg" --ssh "$PROOF_SSH_HOST" --guest-url "$T_URL" --computer "$T_COMPUTER" --out "$out" >/dev/null
 	rc=$?
-	rm -f "$cred"
+	return $rc
+}
+
+# Step 4 runs the self-test's OOM leg (POST
+# /internal/runtime/isolation-selftest?leg=oom on the guest, from Node B). No
+# model is in the loop: the deployed desks refuse a runaway prompt
+# (docs/problems/fp2-step4-deployed-oom-not-drivable-desk-refuses-runaway-2026-10-22.md).
+# The daemon's identity comes from the daemon process (pid, /proc/self/stat
+# start time, boot id), not from observability's steps.recent. A desk
+# worker's cgroup reports memory.max and memory.events; memory.peak is logged
+# for capsules only.
+step_4() {
+	local rc out
+	fp2_need_computer
+	out=${OPT_oom_out:-docs/evidence/fp2-desk-oom-$(date -u +%Y%m%d).json}
+	will "POST /internal/runtime/isolation-selftest?leg=oom on $OPT_computer from $PROOF_SSH_HOST through $OPT_probe. If MemAvailable covers 768 MiB + 1 GiB and a sibling answers, a throwaway research worker allocates until its cgroup kills it. One attempt, never retried. Writes $out"
+	fp2_internal_leg oom "$out"
+	rc=$?
+	[ "$PROOF_DRY" = 1 ] && return 0
 	case "$rc" in
 	0) pass "OOM leg proven (exit 0): the worker was killed by its cgroup, the daemon and the sibling lived; receipt $out" ;;
 	1) fail "OOM leg: a check failed or the guest gave no answer (exit 1); receipt $out" ;;
-	*) fail "OOM leg: not deployed or computer unreachable (exit $rc); nothing proven" ;;
+	*) fail "OOM leg: not deployed, not authorized or unreachable (exit $rc); nothing proven" ;;
 	esac
 	if [ -s "$out" ]; then
-		jq -c '.server.oom // {} | {oom_kill: .worker.oom_kill, worker_memory_max: .worker.cgroup.memory_max, worker_memory_high: .worker.cgroup.memory_high, slice_memory_max: .slice.memory_max, slice_memory_high: .slice.memory_high, exit_cause: .worker.exit_cause, sibling_after: .sibling.after_answered, daemon_before: .daemon_before, daemon_after: .daemon_after}' "$out" 2>/dev/null | while IFS= read -r l; do info "oom $l"; done
+		jq -c '.server.oom // {} | {mode, mem_available_bytes, required_available_bytes, cell_started: .worker.cell_started, oom_kill: .worker.oom_kill, worker_memory_max: .worker.cgroup.memory_max, worker_memory_high: .worker.cgroup.memory_high, slice_memory_max: .slice.memory_max, slice_memory_high: .slice.memory_high, exit_cause: .worker.exit_cause, sibling_after: .sibling.after_answered, daemon_before: .daemon_before, daemon_after: .daemon_after}' "$out" 2>/dev/null | while IFS= read -r l; do info "oom $l"; done
 		jq -c '.failures // []' "$out" 2>/dev/null | while IFS= read -r l; do info "failures $l"; done
 	fi
 	manual "the next real research turn on this computer works (step 5)"
@@ -129,36 +144,28 @@ step_5() {
 	manual "management, research and Texture each complete a turn on this computer, and one engineering assignment completes (proves the capsule seccomp, the session worker's new limits, and that nothing inside needed clone3)"
 }
 
-step_6() {
+step_7() {
 	manual "rollback is git revert of the lane's commits and the Landing Loop; the guest image carries the unit environment, so a revert is a deploy"
 }
 
-# Step 7 runs the self-test's seccomp leg (POST /api/runtime/isolation-selftest?leg=seccomp):
-# one child per capsule filter loads the capsule's own filter and tries clone3
-# and a new user namespace. It proves the filters on the deployed kernel, not
-# that a live capsule loads them, and nothing about the session worker's
-# bounds (RES-03).
-step_7() {
-	local cred rc out
+# Step 6 runs the self-test's seccomp leg (POST
+# /internal/runtime/isolation-selftest?leg=seccomp on the guest, from Node
+# B). One child per capsule filter loads the capsule's own filter and tries
+# clone3 and a new user namespace. It proves the filters on the deployed
+# kernel, not that a live capsule loads them, and nothing about the session
+# worker's bounds (RES-03).
+step_6() {
+	local rc out
 	fp2_need_computer
 	out=${OPT_seccomp_out:-docs/evidence/fp2-capsule-seccomp-$(date -u +%Y%m%d).json}
-	will "POST /api/runtime/isolation-selftest?leg=seccomp on $OPT_computer through $OPT_probe (six throwaway children, one per capsule filter; nothing persists), writing $out"
-	if [ "$PROOF_DRY" = 1 ]; then
-		info "\$ python3 $OPT_probe --cred <0600 temp file from CHOIR_API_KEY and --computer> --out $out --leg seccomp"
-		return 0
-	fi
-	[ -f "$OPT_probe" ] || die 2 "$OPT_probe is not in this tree; pass --probe PATH"
-	[ -n "${CHOIR_API_KEY:-}" ] || die 2 "CHOIR_API_KEY is not set in the environment"
-	cred=$(umask 077 && mktemp "${TMPDIR:-/tmp}/fp2-cred.XXXXXX") || die 2 "mktemp failed"
-	trap 'rm -f "${cred:-}"' EXIT
-	jq -nc --arg k "$CHOIR_API_KEY" --arg c "$OPT_computer" '{api_key:$k, computer_id:$c}' >"$cred"
-	python3 -I "$OPT_probe" --cred "$cred" --out "$out" --leg seccomp >/dev/null
+	will "POST /internal/runtime/isolation-selftest?leg=seccomp on $OPT_computer from $PROOF_SSH_HOST through $OPT_probe (six throwaway children, one per capsule filter; nothing persists), writing $out"
+	fp2_internal_leg seccomp "$out"
 	rc=$?
-	rm -f "$cred"
+	[ "$PROOF_DRY" = 1 ] && return 0
 	case "$rc" in
 	0) pass "seccomp leg proven (exit 0): every capsule filter answers clone3 ENOSYS and refuses a new user namespace on the deployed kernel; receipt $out" ;;
 	1) fail "seccomp leg: a check failed (exit 1); receipt $out" ;;
-	*) fail "seccomp leg: not deployed or computer unreachable (exit $rc); nothing proven" ;;
+	*) fail "seccomp leg: not deployed, not authorized or unreachable (exit $rc); nothing proven" ;;
 	esac
 	if [ -s "$out" ]; then
 		jq -c '.server.seccomp // {} | {kernel, filters: [.filters[]? | {name, bpf_sha256, seccomp, probes}]}' "$out" 2>/dev/null | while IFS= read -r l; do info "seccomp $l"; done
