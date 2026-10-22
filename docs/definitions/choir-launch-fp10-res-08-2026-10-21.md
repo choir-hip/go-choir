@@ -99,7 +99,7 @@ boundaries:
   protected_surfaces: [none touched; the design names vmmanager drives, the guest image and the jailer as the surfaces a later slice touches]
 
 now:
-  status: checkpoint (bunch 13 and 16 review fixes done; FP0 lands them, then the reads)
+  status: checkpoint (round 3 done; FP0 lands it on top of round 2, then the reads)
   slice: >-
     The read landed in deploy D (fd58229aa, 840e1a701 on main). Review bunch
     13 (DeepSeek v4.1 Flash) accepted with edits. Its findings 1, 2, 3, 4
@@ -114,14 +114,21 @@ now:
     partitioned false, and pins the exclusion by path in the test;
     fb2b6587c makes the probe refuse a store with skips, print null store
     numbers while unquotable, and records the DT_UNKNOWN residual. The bunch
-    13 fixes were rebased to 5b33a456e and d661cd756.
-  source_ref: a55660c0d
+    13 fixes were rebased to 5b33a456e and d661cd756. Bunch 18 accepted round
+    2 (it rides deploy F). Round 3 answers DeepSeek's late bunch-16 review of
+    001edc8e8: a94d459ab (stacked overlays and an overlay without a parsed
+    upper report partitioned false with a reason; caps documented per root;
+    an escape test) and 126f5136d (the probe refuses a store that measured
+    nothing, nulls persistent while unpartitioned, and quotes the reason; the
+    count claim is corrected). Already fixed by round 2: F1 (store fields),
+    F3 and F7. F6 was not fixed by round 2 and is fixed in round 3.
+  source_ref: d23dfaa2d
   deploy_identity: deploy D serves the first read (no store_layering); the probe refuses its store numbers
   candidate:
-    id: FP10-RES-08-measure-r3
-    state: built, not frozen; review fixes for bunches 13 and 16 (DeepSeek bunch 16 pending)
+    id: FP10-RES-08-measure-r4
+    state: built, not frozen; round 3 on top of round 2 (bunch 18 accepted round 2)
     ref: lane/fp10-res08-pmem-dax
-    base: a55660c0d
+    base: d23dfaa2d
     digest: none
     scope: [internal/server/debug_pagecache*.go, scripts/res08_pagecache_probe.py, scripts/test_res08_pagecache_probe.py, docs]
   conjecture:
@@ -131,7 +138,7 @@ now:
       pages, so a shared DAX image saves 0.3 GiB or more per idle guest net
       of its memmap cost.
     test: the report §5 reads (idle-30m, cold-boot, busy-run) and its threshold table, quoted only when store_quotable
-    edge: missing_oracle until 5b33a456e and a8f27991d deploy (deploy D's read can double count the overlay upper)
+    edge: missing_oracle until round 2 (deploy F) and round 3 deploy (deploy D's read can double count the overlay upper)
     delta_o: FP0's res08_pagecache_probe.py receipts
     scope_if_supported: Node B guests on one release
     status: active
@@ -151,13 +158,13 @@ now:
       daemon runs as guest root, so the store is measurable. A layered
       release adds an overlay upper, which the fixed read counts apart.
     main_uncertainty: whether the store or the Dolt data dominates idle guest page cache, and how much of the store is mapped code (what L5 cannot reclaim)
-    next_observation: FP0's idle-30m read after a8f27991d deploys, with store_quotable true
+    next_observation: FP0's idle-30m read after round 3 deploys, with store_quotable true
   blocker_or_risk: >-
     The panel (DEC-05), and FP8's ownership of vmmanager and the image for any
     build slice. The Firecracker 1.16.1 pmem facts marked "verify" in the
     report are unproven. Finding 5 (guard in hostauth off mode) stays with
     the hostauth owner.
-  next_action: FP0 lands 5b33a456e, d661cd756, a8f27991d and fb2b6587c, deploys, and runs report §5 step 1.
+  next_action: FP0 lands round 3 (a94d459ab, 126f5136d) on top of round 2, deploys, and runs report §5 step 1.
 
 receipts: []
 ---
