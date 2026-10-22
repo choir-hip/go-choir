@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -3739,10 +3740,15 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 			if waited, ok := rt.engineeringJobWait(ctx, rec); ok {
 				return waited, nil
 			}
+			instruction := "The turn ended without a committed terminal fate. Finish the assignment inside a capsule_go_eval cell: call choir.Freeze when a self-development bundle is bound, then choir.Complete once with execution_refs — or commit the corresponding terminal failure fate — before ending the turn. Narrative text alone does not end the run."
+			reason := engineeringTerminalFateGuardReason(state.Messages)
+			if reason != engineeringTerminalFateRequired {
+				instruction = "The freeze was refused because another self-development candidate is open. A partial report does not end the assignment: Complete with result failed and the refusal as the reason, in a capsule_go_eval cell, before ending the turn."
+			}
 			return toolregistry.ToolLoopCompletionGuardResult{
 				Continue:    true,
-				Reason:      "engineering_overlay_terminal_fate_required",
-				Instruction: "The turn ended without a committed terminal fate. Finish the assignment inside a capsule_go_eval cell: call choir.Freeze when a self-development bundle is bound, then choir.Complete once with execution_refs — or commit the corresponding terminal failure fate — before ending the turn. Narrative text alone does not end the run.",
+				Reason:      reason,
+				Instruction: instruction,
 			}, nil
 		}))
 	}
@@ -4277,6 +4283,52 @@ func ptrBool(v bool) *bool {
 // per batch, extended across the whole cell history for the completion guard.
 // Tool results persist as user messages whose content is a list of
 // {type:"tool_result", content:<eval output JSON string>} blocks.
+const engineeringTerminalFateRequired = "engineering_overlay_terminal_fate_required"
+
+// freezeRefusedByOpenCandidate matches the refusal openFreezeCandidate
+// returns when another self-development operation is open, and captures that
+// operation's id and state.
+var freezeRefusedByOpenCandidate = regexp.MustCompile(`cannot freeze until the open candidate settles \(` +
+	regexp.QuoteMeta(selfdev.ErrOperationOpen.Error()) + `: (\S+) is (\w+)\)`)
+
+// engineeringTerminalFateGuardReason is the completion guard's reason, which
+// becomes the system cancel's reason when the guard gives up. When the run's
+// freeze was refused by an open candidate it names that candidate, so the
+// assignment's fate says why it could not finish (FP4 round 3, P2).
+func engineeringTerminalFateGuardReason(messages []json.RawMessage) string {
+	var msg struct {
+		Content json.RawMessage `json:"content"`
+	}
+	var blocks []struct {
+		Type    string `json:"type"`
+		Content string `json:"content"`
+	}
+	var refused []string
+	for _, raw := range messages {
+		msg.Content = nil
+		if err := json.Unmarshal(raw, &msg); err != nil || len(msg.Content) == 0 {
+			continue
+		}
+		blocks = blocks[:0]
+		if err := json.Unmarshal(msg.Content, &blocks); err != nil {
+			continue
+		}
+		for _, block := range blocks {
+			if block.Type != "tool_result" {
+				continue
+			}
+			if m := freezeRefusedByOpenCandidate.FindStringSubmatch(block.Content); m != nil {
+				refused = m
+			}
+		}
+	}
+	if refused == nil {
+		return engineeringTerminalFateRequired
+	}
+	return fmt.Sprintf("%s; the freeze was refused: self-development candidate %s is %s and waits for management's Verify and the owner's decision",
+		engineeringTerminalFateRequired, refused[1], refused[2])
+}
+
 func engineeringOverlayTerminalFateCommitted(messages []json.RawMessage) bool {
 	var msg struct {
 		Content json.RawMessage `json:"content"`

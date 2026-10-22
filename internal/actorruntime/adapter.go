@@ -144,7 +144,9 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 		// Source polls are network I/O up to the poll timeout; their own
 		// lane keeps them out of the slots desks wait for
 		// (docs/problems/research-more-slow-and-hidden-2026-10-21.md, E6).
-		Lanes: []actor.Lane{{Prefix: "source:", MaxConcurrent: sourcePollLane}},
+		// Engineering admission has its own lane too, so a nudge never
+		// waits for a desk's slot (docs/problems/fp4-nudge-waits-behind-management-activation-2026-10-22.md).
+		Lanes: []actor.Lane{{Prefix: "source:", MaxConcurrent: sourcePollLane}, {Prefix: agentcore.EngineeringAdmissionMailbox, MaxConcurrent: 1}},
 	})
 	rt.SetKernelMode()
 

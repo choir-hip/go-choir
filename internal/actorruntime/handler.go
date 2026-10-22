@@ -307,6 +307,16 @@ func (h *actorHandler) handleDelegatedAssignmentSpawnDeadline(ctx context.Contex
 	if err != nil {
 		return nil, fmt.Errorf("actorruntime: resolve delegated assignment spawn deadline scope: %w", err)
 	}
+	// How long the wake waited from due to handled: a nudge or a retry that
+	// waits behind its mailbox shows here (FP4 drill step 4).
+	due := u.NotBefore
+	if due.IsZero() {
+		due = u.CreatedAt
+	}
+	if !due.IsZero() {
+		log.Printf("actorruntime: engineering admission wake latency mailbox=%s update=%s waited=%s content=%s",
+			agentID, u.UpdateID, time.Since(due).Round(time.Millisecond), u.Content)
+	}
 	if err := h.rt.HandleDelegatedAssignmentSpawnDeadline(ctx, ownerID, computerID, agentID, u.Content); err != nil {
 		return nil, fmt.Errorf("actorruntime: delegated assignment spawn deadline: %w", err)
 	}
