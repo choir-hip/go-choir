@@ -50,8 +50,11 @@ import (
 //
 // The lifecycle fold (F8) is covered like every other writer. Deploy 2 adds
 // its writer's file to projectionTableStampers, with the setting that gates
-// it.
-var projectionTableStampers = map[string]bool{}
+// it; TestEventTableOnlyEventObjectOpStamps narrows that file to one
+// function, eventObjectOp.
+var projectionTableStampers = map[string]bool{
+	"internal/store/event_table.go": true,
+}
 
 const computereventPath = "github.com/yusefmosiah/go-choir/internal/computerevent"
 
