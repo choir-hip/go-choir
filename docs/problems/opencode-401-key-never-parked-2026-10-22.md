@@ -62,10 +62,20 @@ Repair:
    its value. Tests first: a pool with one key that answers 401 serves
    every session from the other key, and with every key dead no upstream
    call loops.
-2. Owner. Renew or remove `OPENCODE_API_KEY` in
-   `/var/lib/go-choir/gateway-provider.env` on Node B. Until then the code
-   repair routes around it. This is the same expired opencode-go key the
-   review panel lost at 00:20.
+2. Owner ruling (2026-10-22 01:45 UTC): "The pool should use ChatGPT
+   and Opencode api key alt 0 only currently", and "we shouldn't need to
+   edit the gateway's credentials. We should just be able to change the
+   policy." So the gateway's credential file is not edited. Instead,
+   which OpenCode keys are in service becomes policy:
+   `GATEWAY_OPENCODE_KEYS` in `nix/node-b.nix` lists key variable
+   names, and it is set to `OPENCODE_API_KEY_ALT_0`.
+   - Unset, every configured key serves, as today.
+   - Set, only the listed keys serve. A list that names no configured key
+     leaves OpenCode with no key, and calls fall to the pool's next model
+     (ChatGPT). An unlisted key is never used.
+   - Changing which keys serve is a reviewed commit and a deploy.
+   - The 401 parking stays as defense for whichever keys the policy
+     admits.
 
 Rollback: revert the repair commit. 401s then fail sessions again, as
 before.
