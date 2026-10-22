@@ -50,6 +50,7 @@ const (
 	snapshotReasonSnapshotType = "snapshot_type_unknown"
 	snapshotReasonDiffNotCold  = "diff_not_cold_origin"
 	snapshotReasonDiffLength   = "diff_memory_length_mismatch"
+	snapshotReasonDiffLeverOff = "diff_lever_off"
 )
 
 // Why a hibernate took Full instead of Diff (SnapshotTimeline.DiffRefused).
@@ -62,6 +63,13 @@ const (
 	diffRefusedMaySwap       = "guest_memory_may_swap"
 	diffRefusedTHP           = "guest_memory_thp_or_unknown"
 	diffRefusedCreateFailed  = "diff_create_failed"
+	// diffRefusedHotplugShape: the launch's virtio-mem device and vmctl's
+	// hotplug selection disagree, so the memory file's length would not be
+	// the one the meta expects (round 2, F1).
+	diffRefusedHotplugShape = "hotplug_shape_mismatch"
+	// diffRefusedLengthAtCreate: the Diff file was not (mem + hotplug) MiB
+	// long after the create; the hibernate took Full instead.
+	diffRefusedLengthAtCreate = "diff_length_mismatch_at_create"
 )
 
 // normalizeSnapshotTypeConfig reads VM_SNAPSHOT_TYPE: diff, or full.
@@ -73,8 +81,10 @@ func normalizeSnapshotTypeConfig(raw string) string {
 }
 
 // diffSnapshotRefusal returns "" when a hibernate of this process may take
-// a Diff snapshot, else why not. It only reads.
-func (m *Manager) diffSnapshotRefusal(cfg VMConfig, coldOrigin bool, pid int, firecrackerBanner string) string {
+// a Diff snapshot, else why not. It only reads, and runs before the pause.
+// firecrackerBanner is called only once the cheap checks pass, so a
+// hibernate in full mode never runs `firecracker --version` for it.
+func (m *Manager) diffSnapshotRefusal(cfg VMConfig, coldOrigin bool, pid int, launchHasHotplug bool, firecrackerBanner func() string) string {
 	if normalizeSnapshotTypeConfig(m.cfg.SnapshotType) != SnapshotTypeConfigDiff {
 		return diffRefusedOff
 	}
@@ -87,7 +97,10 @@ func (m *Manager) diffSnapshotRefusal(cfg VMConfig, coldOrigin bool, pid int, fi
 	if pid <= 0 {
 		return diffRefusedNoPID
 	}
-	if !firecrackerAtLeast(firecrackerBanner, diffMinFirecrackerMajor, diffMinFirecrackerMinor) {
+	if launchHasHotplug != (cfg.MemoryHotplugMiB > 0) {
+		return diffRefusedHotplugShape
+	}
+	if !firecrackerAtLeast(firecrackerBanner(), diffMinFirecrackerMajor, diffMinFirecrackerMinor) {
 		return diffRefusedFirecracker
 	}
 	if !guestMemoryCannotSwap(m.procRootDir(), m.cgroupRootDir(), pid) {
@@ -275,6 +288,11 @@ func (m *Manager) diffSnapshotRefusalReason(dir string, meta *SnapshotMeta) stri
 	if !meta.ColdOrigin {
 		return snapshotReasonDiffNotCold
 	}
+	// The lever must still select the computer: turning it off (the
+	// rollback) cold boots a pending Diff instead of loading it (F4).
+	if normalizeSnapshotTypeConfig(m.cfg.SnapshotType) != SnapshotTypeConfigDiff || !selectsComputer(m.cfg.SnapshotDiffOnly, meta.Config) {
+		return snapshotReasonDiffLeverOff
+	}
 	info, err := os.Stat(filepath.Join(dir, snapshotMemName))
 	if err != nil {
 		return snapshotReasonFilesMissing
@@ -284,4 +302,10 @@ func (m *Manager) diffSnapshotRefusalReason(dir string, meta *SnapshotMeta) stri
 		return snapshotReasonDiffLength
 	}
 	return ""
+}
+
+// diffMemoryLength is the length a complete memory file of cfg's guest has:
+// base memory plus the virtio-mem region (reading R3: 8 + 4 GiB).
+func diffMemoryLength(cfg VMConfig) int64 {
+	return int64(cfg.MachineMemSizeMib+cfg.MemoryHotplugMiB) << 20
 }

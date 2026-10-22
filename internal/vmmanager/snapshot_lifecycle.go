@@ -207,6 +207,19 @@ func (m *Manager) captureSnapshotInto(vmID string, cfg VMConfig, hostURL string,
 		}
 	}
 
+	// L3a (snapshot_diff.go): decide Full or Diff before the pause, so no
+	// read or exec of the decision adds frozen time.
+	m.mu.Lock()
+	coldOrigin, pid := false, 0
+	if inst := m.vms[vmID]; inst != nil {
+		coldOrigin, pid = inst.coldOrigin, inst.PID
+	}
+	m.mu.Unlock()
+	snap.ColdOrigin = coldOrigin
+	snap.DiffRefused = m.diffSnapshotRefusal(cfg, coldOrigin, pid, launchConfigHasMemoryHotplug(launchConfig), func() string {
+		return firecrackerBuildVersion(m.launchedVMM(vmID).Firecracker)
+	})
+
 	pauseStart := time.Now()
 	pauseCtx, cancel := context.WithTimeout(context.Background(), snapshotPauseTimeout)
 	err = api.Pause(pauseCtx)
@@ -248,29 +261,30 @@ func (m *Manager) captureSnapshotInto(vmID string, cfg VMConfig, hostURL string,
 		statePath = "/" + snapshotPartialDirName + "/" + snapshotStateName
 		memPath = "/" + snapshotPartialDirName + "/" + snapshotMemName
 	}
-	// L3a (snapshot_diff.go): a Diff when every condition holds; a Diff
-	// error falls back to Full inside this same pause.
-	m.mu.Lock()
-	coldOrigin, pid := false, 0
-	if inst := m.vms[vmID]; inst != nil {
-		coldOrigin, pid = inst.coldOrigin, inst.PID
-	}
-	m.mu.Unlock()
-	snap.ColdOrigin = coldOrigin
-	snap.DiffRefused = m.diffSnapshotRefusal(cfg, coldOrigin, pid, firecrackerBuildVersion(m.launchedVMM(vmID).Firecracker))
+	// A Diff when the decision allowed it; a Diff error or a memory file
+	// of the wrong length falls back to Full inside this same pause.
 	createStart := time.Now()
 	createCtx, cancel := context.WithTimeout(context.Background(), snapshotCreateTimeout)
 	snap.SnapshotType = snapshotTypeFull
 	if snap.DiffRefused == "" {
-		if err = api.CreateDiffSnapshot(createCtx, statePath, memPath); err == nil {
-			snap.SnapshotType = snapshotTypeDiff
+		hostPartial := partial
+		if jailed {
+			hostPartial = jailPartial
+		}
+		err = api.CreateDiffSnapshot(createCtx, statePath, memPath)
+		if err == nil {
+			info, statErr := os.Stat(filepath.Join(hostPartial, snapshotMemName))
+			if statErr == nil && info.Size() == diffMemoryLength(cfg) {
+				snap.SnapshotType = snapshotTypeDiff
+			} else {
+				log.Printf("vmmanager: Diff snapshot of VM %s has the wrong memory length (%v, want %d); taking Full in the same pause", vmID, statErr, diffMemoryLength(cfg))
+				snap.DiffRefused = diffRefusedLengthAtCreate
+			}
 		} else {
 			log.Printf("vmmanager: Diff snapshot of VM %s failed (%v); taking Full in the same pause", vmID, err)
 			snap.DiffRefused = diffRefusedCreateFailed
-			hostPartial := partial
-			if jailed {
-				hostPartial = jailPartial
-			}
+		}
+		if snap.SnapshotType != snapshotTypeDiff {
 			for _, name := range []string{snapshotStateName, snapshotMemName} {
 				_ = os.Remove(filepath.Join(hostPartial, name))
 			}
@@ -503,6 +517,8 @@ func (m *Manager) ResumeVMFromSnapshot(vmID string, expect VMConfig, issue Resum
 		DiskBytes:       meta.DiskBytes,
 		DiskBytesMethod: meta.DiskBytesMethod,
 		CreatedAt:       meta.CreatedAt.UTC().Format(time.RFC3339Nano),
+		SnapshotType:    meta.SnapshotType,
+		ColdOrigin:      meta.ColdOrigin,
 	}
 	if !meta.ResumeDeadline.IsZero() {
 		snap.ResumeDeadline = meta.ResumeDeadline.UTC().Format(time.RFC3339Nano)
