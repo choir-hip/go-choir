@@ -180,6 +180,34 @@ itself.
   lifecycle branch already does, `runtime.go:1553`) or a derived key.
 - R-A3: the 3 s before the first boot phase (A6).
 
+### Window A fix and proof steps (lane/fp4-boot-passivation)
+
+Fix: c85b7f394 (red), test d8bea520e (yellow, fails before the fix with
+`ListObjectsByMetadata choir.work_item $.objective_fingerprint json ran 1
+times`). Local: the test and the planned/crash boot, management-task,
+source-schedule, selfdev crash-close and planned-restart suites pass;
+actorruntime passes.
+
+Proof (FP0, at the paper's next planned refresh after the fix deploys):
+
+1. Run `ops.sh watch` on the paper across the refresh. Pass: no vmmanager
+   health failure between "runtime: boot phase begin
+   passivate_interrupted_activations" and "boot phase end". Window B (a
+   connect timeout about 3 minutes later) is a separate open item; record
+   it, do not count it against A.
+2. From the guest console or journal, read the boot timeline:
+   `grep -E 'boot phase (begin|end)|passivated run|closed management task run|owner-scoped'`.
+   Pass: `passivate_interrupted_activations dur=` well under 10 s (the
+   expected order is the 2.7 s header list plus about 0.2 s per run). Every
+   "passivated run … dur=" line is under 2 s. No line reads "spawned work
+   item skipped" or "create spawned work item" (both are deleted).
+3. The restart rule: the console still reads "boot follows a planned
+   restart … pre-boot work resumes", and the parked runs resume. The
+   dispatcher's "activation wait" lines for them follow "runtime: started".
+   A crash boot (none planned for this proof) is unchanged.
+4. If a run's dur= is still slow, its profile in the same line names the
+   path. Record it here before any further fix.
+
 ## Steady-state 503s, not only after a refresh (FP0, 21:15)
 
 FP0's 2 s probe of the paper's `/health` from Node B, 20:08 to 21:08
