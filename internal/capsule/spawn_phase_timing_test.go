@@ -81,7 +81,7 @@ func TestSpawnPhaseTimerLogsEachSourcePhaseUnderTheCapsule(t *testing.T) {
 	timer := newSpawnPhaseTimer("capsule-timing-test")
 	target := filepath.Join(t.TempDir(), "timed")
 	unlockTree(t, target)
-	timed, err := copyImmutableCommitTreeTimed(context.Background(), source, commit, target, timer)
+	timed, err := copyImmutableCommitTreeTimed(context.Background(), source, commit, target, "", timer)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,10 +101,12 @@ func TestSpawnPhaseTimerLogsEachSourcePhaseUnderTheCapsule(t *testing.T) {
 			t.Errorf("no %s phase line in:\n%s", phase, out)
 		}
 	}
-	if !regexp.MustCompile(`phase=source_blobs took=\S+ files=3 git_procs=3`).MatchString(out) {
+	// One `git cat-file --batch` per pass, not one git process per file.
+	if !regexp.MustCompile(`phase=source_blobs took=\S+ files=3 git_procs=1`).MatchString(out) {
 		t.Errorf("blob phase does not count files and git processes:\n%s", out)
 	}
-	if !regexp.MustCompile(`phase=source_digest_commit took=\S+ files=3 git_procs=3`).MatchString(out) {
+	// With no expected digest the copy re-derives the commit's (one batch).
+	if !regexp.MustCompile(`phase=source_digest_commit took=\S+ files=3 git_procs=1`).MatchString(out) {
 		t.Errorf("commit digest phase does not count files and git processes:\n%s", out)
 	}
 	if !regexp.MustCompile(`(?m)^capsule capsule-timing-test spawn total=\S+ ok=true$`).MatchString(out) {
@@ -137,8 +139,25 @@ func TestTimedCopyKeepsTheUntimedRefusal(t *testing.T) {
 	_ = captureLog(t)
 	bogus := strings.Repeat("0", 40)
 	_, untimedErr := copyImmutableCommitTree(context.Background(), source, bogus, filepath.Join(t.TempDir(), "u"))
-	_, timedErr := copyImmutableCommitTreeTimed(context.Background(), source, bogus, filepath.Join(t.TempDir(), "t"), newSpawnPhaseTimer("capsule-x"))
+	_, timedErr := copyImmutableCommitTreeTimed(context.Background(), source, bogus, filepath.Join(t.TempDir(), "t"), "", newSpawnPhaseTimer("capsule-x"))
 	if untimedErr == nil || timedErr == nil || untimedErr.Error() != timedErr.Error() {
 		t.Fatalf("untimed=%v timed=%v", untimedErr, timedErr)
+	}
+}
+
+func TestSpawnPhaseTimerShowsTheExpectedDigestSkipsTheCommitPass(t *testing.T) {
+	source, commit := timedSourceRepo(t)
+	expected, err := canonicalImmutableCommitDigest(context.Background(), source, commit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	buf := captureLog(t)
+	target := filepath.Join(t.TempDir(), "expected")
+	unlockTree(t, target)
+	if _, err := copyImmutableCommitTreeTimed(context.Background(), source, commit, target, expected, newSpawnPhaseTimer("capsule-expected")); err != nil {
+		t.Fatal(err)
+	}
+	if !regexp.MustCompile(`phase=source_digest_commit took=\S+ files=3 git_procs=0 against=expected`).MatchString(buf.String()) {
+		t.Errorf("commit digest phase does not say it compared against the expected digest:\n%s", buf.String())
 	}
 }
