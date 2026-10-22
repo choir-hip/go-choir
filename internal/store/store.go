@@ -114,6 +114,11 @@ type Store struct {
 	trajectoryMu  sync.Mutex
 	textureRevMu  sync.Mutex
 	doltCommitMu  sync.Mutex
+	// closeMu serializes Close and Reopen: a second Close waits for the
+	// first. closedOK (under closeMu) is set once a Close has closed the
+	// pools, and cleared by Reopen.
+	closeMu  sync.Mutex
+	closedOK bool
 	// dirtyGen counts marks; cleanGen (under doltCommitMu) is the mark
 	// count the last successful commit read before it ran. The store is
 	// dirty while they differ. A mark is one atomic add and never waits on
@@ -1045,8 +1050,14 @@ func (s *Store) Reopen(path string) error {
 	if s == nil {
 		return fmt.Errorf("runtime store: reopen requires a store")
 	}
+	s.closeMu.Lock()
+	defer s.closeMu.Unlock()
 	if err := s.checkpoint.leftOpen(); err != nil {
 		return fmt.Errorf("runtime store: reopen: %w", err)
+	}
+	if !s.closedOK {
+		// Adopting new handles over open ones would orphan them.
+		return fmt.Errorf("runtime store: reopen requires a closed store")
 	}
 	s.CancelDerivedColumnMigration()
 	live, err := Open(path)
@@ -1077,12 +1088,18 @@ func (s *Store) Reopen(path string) error {
 	s.ogStore = live.ogStore
 	s.ogReadStore = live.ogReadStore
 	*live = Store{}
+	s.closedOK = false
 	s.reopenCheckpoint()
 	return nil
 }
 
 // Close closes the underlying database connection.
 func (s *Store) Close() error {
+	s.closeMu.Lock()
+	defer s.closeMu.Unlock()
+	if s.closedOK {
+		return nil
+	}
 	// Graceful close seals the telemetry window first. A crash does not, which
 	// is the loss the ruling allows.
 	s.closeTelemetry()
@@ -1092,14 +1109,28 @@ func (s *Store) Close() error {
 	// fail on the closed pool. Cancel it before the closing checkpoint so
 	// no new step starts after that final commit, and commit the
 	// checkpoint before the pools below close, since it writes through
-	// s.db. If a Dolt commit is still running at the close deadline, Close
-	// fails closed: closing the pools would tear the embedded engine down
-	// under it, so they stay open (process exit reclaims them) and Close
-	// returns ErrCheckpointCommitLive. Close again once it finishes.
+	// s.db. One deadline (the close deadline plus one grace) bounds the
+	// whole Close. If a Dolt commit is still running at it, Close fails
+	// closed: closing the pools would tear the embedded engine down under
+	// it, so they stay open (process exit reclaims them) and Close returns
+	// ErrCheckpointCommitLive. Close again once it finishes.
 	s.CancelDerivedColumnMigration()
-	if err := s.closeCheckpoint(); err != nil {
+	deadline := time.Now().Add(s.checkpoint.closeLimit())
+	hard := deadline.Add(checkpointCloseGrace)
+	if err := s.closeCheckpoint(deadline, hard); err != nil {
 		return err
 	}
+	// The fence, in every mode: every Dolt commit (background, inline,
+	// history, closing, maintenance) runs under doltCommitMu, so holding it
+	// means no commit holds a pinned connection while the pools close.
+	fence, cancelFence := context.WithDeadline(context.Background(), hard)
+	defer cancelFence()
+	if err := s.lockDoltCommitBy(fence); err != nil {
+		return s.checkpoint.leaveOpen("a Dolt commit holds the commit lock")
+	}
+	defer s.doltCommitMu.Unlock()
+	s.checkpoint.clearLeftOpen()
+	s.closedOK = true
 	var err error
 	if closeErr := s.closeDepositUpcastLedger(); closeErr != nil {
 		err = closeErr
