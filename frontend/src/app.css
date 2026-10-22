@@ -78,7 +78,6 @@ body {
   .texture-editor,
   .settings-app,
   .compute-monitor,
-  .terminal-preview,
   .file-browser,
   .browser-app,
   .podcast-app,
@@ -93,8 +92,7 @@ body {
   [data-browser-app],
   [data-compute-monitor-app],
   [data-features-app],
-  [data-texture-editor],
-  [data-super-console-preview]
+  [data-texture-editor]
 ) {
   background: var(--choir-surface-app) !important;
   color: var(--choir-text-primary) !important;
@@ -111,7 +109,6 @@ body {
   .episode-row,
   .show-row,
   .toolbar,
-  .terminal-preview,
   .audio-player,
   .audio-info,
   .video-control-panel,
@@ -126,19 +123,6 @@ body {
   background: var(--choir-surface-card) !important;
   color: var(--choir-text-primary) !important;
   border-color: transparent !important;
-}
-
-.app-content :is(
-  .terminal-preview
-) {
-  background:
-    linear-gradient(
-      var(--choir-surface-app),
-      var(--choir-surface-app)
-    ),
-    var(--choir-state-selected) !important;
-  background-color: var(--choir-surface-app) !important;
-  background-clip: padding-box;
 }
 
 .app-content :is(

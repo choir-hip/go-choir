@@ -576,8 +576,7 @@
   .window[data-window-app-id='video'] .window-content,
   .window[data-window-app-id='pdf'] .window-content,
   .window[data-window-app-id='epub'] .window-content,
-  .window[data-window-app-id='features'] .window-content,
-  .window[data-window-app-id='super-console'] .window-content {
+  .window[data-window-app-id='features'] .window-content {
     overflow: hidden;
   }
 

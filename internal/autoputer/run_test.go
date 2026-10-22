@@ -1,11 +1,9 @@
 package autoputer
 
 import (
-	"bytes"
 	"os"
 	"path/filepath"
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
@@ -48,26 +46,6 @@ func TestConsumeComputerCredentialEnvelopeRejectsLooseMode(t *testing.T) {
 	}
 	if _, err := readComputerCredentialEnvelopeOwned(path, uint32(os.Getuid())); err == nil {
 		t.Fatal("mode-0600 bootstrap credential was accepted")
-	}
-}
-
-func TestRunZotSessionUsesProcessConfiguration(t *testing.T) {
-	root := t.TempDir()
-	t.Setenv("ZOT_SESSION_ID", "entry-test")
-	t.Setenv("ZOT_ROOT_DIR", root)
-	t.Setenv("ZOT_USER_ID", "entry@example.com")
-
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	if code := RunZotSession(strings.NewReader("quit\n"), &stdout, &stderr); code != 0 {
-		t.Fatalf("RunZotSession code = %d, stderr = %q", code, stderr.String())
-	}
-	if !strings.Contains(stdout.String(), "zot repair session entry-test") {
-		t.Fatalf("stdout = %q, want configured session ID", stdout.String())
-	}
-	logPath := filepath.Join(root, ".choir", "zot", "sessions", "entry-test", "session.jsonl")
-	if _, err := os.Stat(logPath); err != nil {
-		t.Fatalf("session log: %v", err)
 	}
 }
 

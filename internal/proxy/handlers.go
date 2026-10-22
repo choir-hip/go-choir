@@ -928,7 +928,10 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 		h.HandleWS(w, r)
 		return
 	case path == "/api/super-console/ws":
-		h.HandleManagementConsoleWS(w, r)
+		// The Management Console's zot session is removed
+		// (docs/problems/remove-zot-2026-10-22.md). Answer here so the
+		// generic forward never carries it to a guest still on an old image.
+		writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})
 		return
 	case path == "/api/platform/texture/publications":
 		h.HandleTexturePublication(w, r)
@@ -1134,116 +1137,6 @@ func (h *Handler) HandleWS(w http.ResponseWriter, r *http.Request) {
 
 	// Wait briefly for the second goroutine to finish.
 	<-relayDone
-}
-
-// HandleManagementConsoleWS handles GET /api/super-console/ws. It validates the access JWT
-// cookie, denies requests with missing or invalid auth without upgrading, and
-// relays WebSocket frames bidirectionally between the client and the autoputer
-// singleton zot PTY endpoint. This allows the browser to connect to zot through
-// the auth-gated proxy without exposing a raw terminal app.
-func (h *Handler) HandleManagementConsoleWS(w http.ResponseWriter, r *http.Request) {
-	stripClientSuppliedHeaders(r)
-	// Step 1: Validate auth BEFORE upgrading.
-	authResult, err := h.authenticate(r)
-	if err != nil {
-		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
-		return
-	}
-	if !h.authorizeAPIKeyScope(w, r, authResult) {
-		return
-	}
-
-	// Step 2: Resolve only the exact API-key-bound computer.
-	desktopID := requestDesktopID(r)
-	computerTarget, ok := h.requireAPIKeyComputerTarget(w, r, authResult, "", desktopID)
-	if !ok {
-		return
-	}
-	autoputerURL, err := h.resolveComputerURLForComputerTarget(r.Context(), authResult, computerTarget, desktopID)
-	if err != nil {
-		log.Printf("proxy super console WS: failed to resolve autoputer for user %s desktop %s: %v", authResult.UserID, desktopID, err)
-		writeResolveError(w, err)
-		return
-	}
-
-	// Step 3: Upgrade the client connection to WebSocket.
-	clientConn, err := h.upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		return
-	}
-	defer func() { _ = clientConn.Close() }()
-
-	// Wrap the client connection in a wsWriter so every write to it is
-	// serialized. See HandleWS for the race explanation: the relay goroutine
-	// and the teardown close-frame write both write to clientConn, and
-	// gorilla/websocket connections are not safe for concurrent writes.
-	clientW := &wsWriter{conn: clientConn}
-
-	// Step 4: Dial the autoputer terminal WebSocket endpoint.
-	terminalWSURL := h.managementConsoleWSURLForTarget(autoputerURL, r.URL.RawQuery)
-	autoputerHeader := http.Header{}
-	autoputerHeader.Set("X-Authenticated-User", authResult.UserID)
-	if authResult.Email != "" {
-		autoputerHeader.Set("X-Authenticated-Email", authResult.Email)
-	}
-	if len(authResult.Scopes) > 0 {
-		autoputerHeader.Set("X-Authenticated-Scopes", strings.Join(authResult.Scopes, ","))
-	}
-
-	autoputerConn, _, err := h.dialer.Dial(terminalWSURL, autoputerHeader)
-	if err != nil {
-		log.Printf("proxy super console WS: dial autoputer %s: %v", terminalWSURL, err)
-		_ = clientW.writeMessage(websocket.CloseMessage,
-			websocket.FormatCloseMessage(websocket.CloseTryAgainLater, "upstream unavailable"))
-		return
-	}
-	defer func() { _ = autoputerConn.Close() }()
-
-	// Wrap the autoputer connection in its own wsWriter; the client->autoputer
-	// relay and the teardown close-frame write both write to autoputerConn.
-	autoputerW := &wsWriter{conn: autoputerConn}
-
-	// Step 5: Relay frames bidirectionally until either side closes or errors.
-	relayDone := make(chan struct{}, 2)
-
-	go func() {
-		defer func() { relayDone <- struct{}{} }()
-		h.relayFrames(clientConn, autoputerW, "client->super-console")
-	}()
-
-	go func() {
-		defer func() { relayDone <- struct{}{} }()
-		h.relayFrames(autoputerConn, clientW, "super-console->client")
-	}()
-
-	<-relayDone
-
-	// Serialized against the still-running relay goroutine via the
-	// per-connection wsWriter mutex.
-	_ = clientW.writeMessage(websocket.CloseMessage,
-		websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
-	_ = autoputerW.writeMessage(websocket.CloseMessage,
-		websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
-
-	<-relayDone
-}
-
-// superConsoleWSURLForTarget derives the Management Console WebSocket URL for a specific
-// autoputer target URL.
-func (h *Handler) managementConsoleWSURLForTarget(targetURL, rawQuery string) string {
-	u, err := url.Parse(targetURL)
-	if err != nil {
-		return "ws://127.0.0.1:8085/api/super-console/ws"
-	}
-	switch u.Scheme {
-	case "https":
-		u.Scheme = "wss"
-	case "http":
-		u.Scheme = "ws"
-	}
-	u.Path = "/api/super-console/ws"
-	u.RawQuery = rawQuery
-	return u.String()
 }
 
 // autoputerWSURLForTarget derives the WebSocket URL for a specific autoputer URL.
