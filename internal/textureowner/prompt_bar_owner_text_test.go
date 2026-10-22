@@ -93,3 +93,82 @@ func TestHandlePromptBarReplaysBracketedPrompt(t *testing.T) {
 		t.Fatalf("replayed result changed: first=%+v replay=%+v", first, replay)
 	}
 }
+
+// The owner-text rule is for the owner. The management desk reaches
+// /api/prompt-bar through choir.ProductAPI, which serves the call in-process
+// as the owner with an empty RemoteAddr (server.GuestHostCaller's in-process
+// marker). Text a desk composes stays under the Texture citation rules: it
+// is refused with a 400 and the validator's reason, so the desk can correct
+// it, and never stored as an owner-labelled revision (round 2 review F1,
+// bunch 81; the problem record's Round 2 section).
+func TestHandlePromptBarInProcessCallerStaysUnderCitationRules(t *testing.T) {
+	texts := map[string]string{
+		"numbered citation": "Findings so far.[1] The rest follows.",
+		"source line":       "Summary of captures.\nSource: https://example.com/fake",
+		"source token":      "See {{source: capture-7}} for the claim.",
+		"bracket source":    "A claim [source: wiki] without a source_ref.",
+		"all four together": "Findings so far.[1] See {{source: capture-7}}.\nSource: https://example.com/fake\n[source: wiki]",
+	}
+	for name, text := range texts {
+		t.Run(name, func(t *testing.T) {
+			_, handler := testAPISetup(t)
+			body, _ := json.Marshal(map[string]string{"text": text})
+			req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", string(body), "user-desk-owner")
+			req.RemoteAddr = "" // choir.ProductAPI's in-process call
+			w := httptest.NewRecorder()
+			handler.HandlePromptBar(w, req)
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("desk-shaped call status = %d, want %d; body=%s", w.Code, http.StatusBadRequest, w.Body.String())
+			}
+			var resp apiError
+			if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+				t.Fatalf("decode body: %v", err)
+			}
+			if !strings.HasPrefix(resp.Error, "prompt refused: ") || !strings.Contains(resp.Error, "legacy") ||
+				strings.Contains(resp.Error, "failed to submit prompt") || strings.Contains(resp.Error, "prepare initial revision") {
+				t.Fatalf("error = %q, want the validator's reason after \"prompt refused: \"", resp.Error)
+			}
+		})
+	}
+}
+
+// A desk still starts a Texture from ordinary text: the marker only keeps the
+// authoring rules on its text.
+func TestHandlePromptBarInProcessCallerStillStartsATexture(t *testing.T) {
+	_, handler := testAPISetup(t)
+	body, _ := json.Marshal(map[string]string{"text": "Draft a short note on retry-safe command handling."})
+	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", string(body), "user-desk-owner")
+	req.RemoteAddr = ""
+	w := httptest.NewRecorder()
+	handler.HandlePromptBar(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("desk-shaped call with ordinary text status = %d, want %d; body=%s", w.Code, http.StatusAccepted, w.Body.String())
+	}
+}
+
+// The owner-create route takes the same rule as the prompt bar: literal for
+// the owner, strict for an in-process caller (a desk cannot reach this route
+// today, validateProductAPIRoute refuses a non-GET under /api/texture/; the
+// marker keeps the two owner-start handlers alike).
+func TestTextureLifecycleCreateOwnerTextLiteralInProcessStrict(t *testing.T) {
+	_, handler := testAPISetup(t)
+	post := func(clientRequestID, content string, inProcess bool) *httptest.ResponseRecorder {
+		t.Helper()
+		body, _ := json.Marshal(map[string]string{"client_request_id": clientRequestID, "title": "Pasted script", "initial_content": content})
+		req := httptest.NewRequest(http.MethodPost, "/api/texture/lifecycle-documents", strings.NewReader(string(body)))
+		req.Header.Set("X-Authenticated-User", "user-create-text")
+		if inProcess {
+			req.RemoteAddr = ""
+		}
+		w := httptest.NewRecorder()
+		handler.HandleTextureRouter(w, req)
+		return w
+	}
+	const text = "print(sys.argv[1])\nSource: my notes"
+	if got := post("create-owner-1", text, false); got.Code != http.StatusCreated {
+		t.Fatalf("owner create with bracketed text = %d, want %d; body=%s", got.Code, http.StatusCreated, got.Body.String())
+	}
+	if got := post("create-desk-1", text, true); got.Code != http.StatusBadRequest {
+		t.Fatalf("in-process create with bracketed text = %d, want %d; body=%s", got.Code, http.StatusBadRequest, got.Body.String())
+	}
+}
