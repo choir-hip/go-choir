@@ -87,13 +87,32 @@ now:
     Built, tested locally and pushed on the lane branch; off by default.
     FP0 reviews the red commit, lands, deploys, then grants one test
     computer and runs the proof steps below.
-  source_ref: 117c72af0
+  source_ref: >-
+    lane/fp10-net01-on-main, rebased onto main 5efe46672 on 2026-10-22
+    (old -> new): a108bc42e -> 9d45e381d, 54da5ffa4 -> d4c6be9c0,
+    2a73810d4 -> 07f34670b, 117c72af0 -> 8129eb408, c8428350f -> 56110b01c,
+    a8cc621e5 -> 33f05f575, d6dbfb38e -> 4500e750b, 759544b18 -> 9fba08b0b,
+    7a0e3d079 -> 47501c8dd. Receipt identities below are the pre-rebase
+    SHAs; map them with this list.
+  rebase: >-
+    Conflicts only where this lane and NET-02 (capsule mirrors, on main)
+    both add a switch after VisualCapture: vmmanager config.go
+    (LoadConfigFromEnv), manager.go (ManagerConfig field; bootVM
+    credential-disk material) and nix/node-b.nix (go-choir-vmctl env).
+    Both sides kept, NET-02 first then host fetch; the grant files differ
+    (capsule-mirrors.json, host-fetch.json). 759544b18 replaces its own
+    env block with CHOIR_HOST_FETCH_VMS=${hostFetchVMs}; the mirror lines
+    were kept around it. hostFetchVMs stays "" (off by default). Re-run
+    after rebase, all GOMAXPROCS=2 GOFLAGS=-p=2 -race -count=1, all ok:
+    hostfetch, sourcefetch, gateway, vmmanager, autoputer (full
+    packages), agentcore -run Podcast; go vet on hostfetch, gateway,
+    vmmanager, sourcefetch, autoputer, agentcore clean.
   deploy_identity: unknown to this lane
   candidate:
     id: fp10-host-fetch
     state: ready
-    ref: lane/fp10-net01-host-fetch
-    base: 53a691be6
+    ref: lane/fp10-net01-on-main
+    base: 5efe46672
     digest: none
     scope:
       - internal/hostfetch/
@@ -146,7 +165,7 @@ now:
     The gateway runs as root on Node B with no network hardening; the verb
     makes that process dial guest-chosen public addresses (no parsing on
     the host, but the residual is real). Not in this branch.
-  next_action: FP0 reviews 2a73810d4 (red) with the batch panel, lands, runs the proof steps
+  next_action: FP0 reviews 07f34670b and 9fba08b0b (red; were 2a73810d4 and 759544b18) with the batch panel, lands, runs the proof steps
 
 receipts:
   - id: problem-record-and-station
