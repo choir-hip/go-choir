@@ -1180,13 +1180,20 @@ def main():
         # that already ran sets marks.cleared and is not repeated (F2). A
         # --phase post run, or a host that came back, has nothing to clear.
         # The error is saved first: a second interrupt during the clear must
-        # not lose the receipt (F2-c).
+        # not lose the receipt (F2-c). Both saves are best effort: a save
+        # that fails must not skip the clear (round 8).
         receipt["error"] = repr(e)
-        save()
+
+        def try_save():
+            try:
+                save()
+            except Exception as se:
+                log("WARNING: receipt save failed (%r); the receipt is not on disk" % se)
+        try_save()
         if args.phase != "post" and markers_armed(receipt):
             log("FAILED (%r): clearing the markers" % e)
             clear_receipt_markers(args, receipt)
-            save()
+            try_save()
         raise
 
 
