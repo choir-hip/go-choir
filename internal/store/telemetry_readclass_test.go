@@ -29,7 +29,10 @@ var listEventsCallSiteClass = map[string]ReadConsistency{
 	"internal/agentcore/live_ws.go ListEventsByOwnerAfter":                      ReadConsistent, // one-time catch-up after reconnect
 	"internal/agentcore/api.go ListEvents":                                      ReadConsistent, // desk tooling reads run events
 	"internal/agentcore/run_memory.go ListEvents":                               ReadConsistent, // compaction serializes the run ledger
-	"internal/agentcore/system1_verb.go ListEventsByChannel":                    ReadConsistent, // replay lookup and the System 1 call caps
+	// F10 (event-table design section 1.2): the channel read covers
+	// acknowledged kinds only; a second caller fails here until it adds a
+	// channel index or a union.
+	"internal/agentcore/system1_verb.go ListAcknowledgedEventsByChannel": ReadConsistent, // replay lookup and the System 1 call caps
 }
 
 func repoRoot(t *testing.T) string {
@@ -97,7 +100,7 @@ func TestListEventsCallSitesAreClassified(t *testing.T) {
 			switch {
 			case sel.Sel.Name == "WithReadConsistency":
 				relaxed = true
-			case strings.HasPrefix(sel.Sel.Name, "ListEvents"):
+			case strings.HasPrefix(sel.Sel.Name, "ListEvents"), sel.Sel.Name == "ListAcknowledgedEventsByChannel":
 				found[rel+" "+sel.Sel.Name] = true
 			}
 			return true

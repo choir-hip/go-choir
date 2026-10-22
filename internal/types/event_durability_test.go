@@ -124,3 +124,53 @@ func TestDurabilityTableIsTheDesignedTen(t *testing.T) {
 		t.Fatalf("eventDurability has %d entries, want 43 (the 42 designed kinds and system1.judgment)", n)
 	}
 }
+
+// F9 (docs/design/choir-event-table-f-c-2026-10-22.md section 2.1): every
+// EventKind has a storage entry, and the table cannot keep an entry for a
+// kind that no longer exists.
+func TestEveryEventKindHasAStorageClass(t *testing.T) {
+	consts := eventKindConstants(t)
+	var missing, stale []string
+	for value, name := range consts {
+		if _, ok := eventStorage[EventKind(value)]; !ok {
+			missing = append(missing, name+" ("+value+")")
+		}
+	}
+	for kind := range eventStorage {
+		if _, ok := consts[string(kind)]; !ok {
+			stale = append(stale, string(kind))
+		}
+	}
+	sort.Strings(missing)
+	sort.Strings(stale)
+	if len(missing) > 0 {
+		t.Fatalf("EventKind constants with no entry in eventStorage (name each object_graph or event_table in event_durability.go): %v", missing)
+	}
+	if len(stale) > 0 {
+		t.Fatalf("eventStorage has entries with no EventKind constant: %v", stale)
+	}
+}
+
+// F9: batching and storage are two decisions, pinned equal today. A change
+// to either map fails here until someone decides whether rows move tables.
+func TestStorageClassEqualsTheBatchedSetToday(t *testing.T) {
+	for _, kind := range EventKinds() {
+		if (kind.Storage() == StorageEventTable) != kind.Batchable() {
+			t.Fatalf("%s: storage %q but batchable %t; the two classes are pinned equal until the owner decides otherwise", kind, kind.Storage(), kind.Batchable())
+		}
+	}
+	for kind, class := range eventStorage {
+		if (class == StorageEventTable) != kind.Batchable() {
+			t.Fatalf("%s: storage %q but batchable %t", kind, class, kind.Batchable())
+		}
+	}
+}
+
+// F9: a kind the table does not name stays in og_objects.
+func TestStorageUnknownKindIsObjectGraph(t *testing.T) {
+	for _, kind := range []EventKind{"", "loop.unknown", "LOOP.DELTA", "loop.delta ", "tool.result.v2"} {
+		if got := kind.Storage(); got != StorageObjectGraph {
+			t.Errorf("Storage(%q) = %q, want object_graph", kind, got)
+		}
+	}
+}

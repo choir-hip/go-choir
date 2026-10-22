@@ -168,7 +168,7 @@ func decodeSystem1(t *testing.T, raw json.RawMessage) system1Decoded {
 
 func (f *system1Fixture) tape(t *testing.T) []types.EventRecord {
 	t.Helper()
-	evs, err := f.s.ListEventsByChannel(context.Background(), f.owner, system1Channel(f.computer), 1000)
+	evs, err := f.s.ListAcknowledgedEventsByChannel(context.Background(), f.owner, system1Channel(f.computer), 1000)
 	if err != nil {
 		t.Fatal(err)
 	}
