@@ -275,6 +275,9 @@ type Store struct {
 	// on in this process (telemetry_sealer.go).
 	telemetryStats telemetryCounters
 	telemetry      atomic.Pointer[telemetrySealer]
+	// eventTableWrites is store.event_table as the runtime applied it: the
+	// writer stamps the storage class's ops for choir_events (event_table.go).
+	eventTableWrites atomic.Bool
 	// searchIdx caches tokenized head text for SearchDocuments
 	// (search_index.go).
 	searchIdx searchIndex
@@ -2536,8 +2539,12 @@ func (s *Store) AppendEvent(ctx context.Context, rec *types.EventRecord) error {
 		return err
 	}
 
+	// The event-table stamp (store.event_table) is decided once, here, with
+	// the numbers: the tape then says which table the event lands in.
+	stamp := s.stampsEventTable(rec.Kind)
+
 	if batched {
-		queued, err := newTelemetryRecord(rec)
+		queued, err := newTelemetryRecord(rec, stamp)
 		if err == nil {
 			// The refusals the acknowledged write would have made at this
 			// moment, so a refused write still reaches its caller.
@@ -2559,7 +2566,11 @@ func (s *Store) AppendEvent(ctx context.Context, rec *types.EventRecord) error {
 		s.eventMu.Unlock()
 		unlocked = true
 	}
-	if err := s.AppendEventOG(ctx, rec); err != nil {
+	appendOne := s.AppendEventOG
+	if stamp {
+		appendOne = s.appendStampedEvent
+	}
+	if err := appendOne(ctx, rec); err != nil {
 		// The sequence was not written: forget the mark so the run's next
 		// append re-reads the store and takes this number again, as the
 		// per-append read did. If a concurrent append to the run (possible
