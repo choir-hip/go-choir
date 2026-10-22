@@ -50,7 +50,7 @@ J
 	;;
 *:8083/health) echo '{"status":"ok","build":{"commit":"t1sha"}}' ;;
 *:8084/health) echo '{"status":"ok","bearer_binding":{"mode":"observe","pinned":3,"unpinned":0,"would_refuse":0,"refused":0},"anthropic_relay":"off","model_scheduler":{"mode":"on","queued":0,"in_flight":0,"granted":5},"credentials":{"active":3}}' ;;
-*/api/runtime/observability)
+*/api/runtime/observability|*/api/runtime/observability\?*)
 	c=$(cat "$ST/obs.n" 2>/dev/null || echo 0); c=$((c + 1)); echo $c >"$ST/obs.n"
 	hold=$((c * 60000000000))
 	cat <<J
@@ -58,7 +58,7 @@ J
 "recent_log":["store: open phase=runtime-store-open status=start","store: open phase=runtime-store-open status=complete duration=1m5.2s","derived keys run.agent_id: validated 100 rows in 1s","derived keys a: validated 5 rows in 1s","derived keys b: validated 7 rows in 1s","engineering request B waits behind A","desk cgroup /sys/fs/cgroup/choir-desks memory.max 768M"]}
 J
 	;;
-*/api/runtime/obligations) echo '{"restart":{"kind":"crash"},"runs":{},"open_work_items":0}' ;;
+*/api/runtime/obligations|*/api/runtime/obligations\?*) echo '{"restart":{"kind":"crash"},"runs":{},"open_work_items":0}' ;;
 */health) echo '{"status":"ok","build":{"commit":"t1sha"}}' ;;
 *) echo '{}' ;;
 esac
