@@ -213,3 +213,78 @@ workload filter (`capsule.LoadWorkloadFilter`) and tries `clone3` and
 `unshare(CLONE_NEWUSER)`. That proves the deployed filter on the deployed
 kernel, though not inside a capsule, and it cannot read the session worker's
 bounds.
+
+## The partial capsule leg: `?leg=seccomp` (FP0 chose it, 2026-10-22)
+
+FP0 chose the partial option above. `POST
+/api/runtime/isolation-selftest?leg=seccomp` re-execs the daemon's own
+binary once per capsule seccomp filter: workload, workload-inet, broker,
+broker-inet, delegate and broker-delegate. Each child loads the filter that
+`internal/capsule/seccomp.go` builds for that name. The child gets the
+filter by calling the same function the capsule calls (for example
+`WorkloadSeccompFilter()`), not a copy. Then, under the filter, the child:
+
+- tries `clone3` and expects ENOSYS;
+- tries `clone(CLONE_NEWUSER|CLONE_THREAD)` and expects EPERM from the
+  filter (the kernel would answer EINVAL, so this never creates a process);
+- tries `unshare(CLONE_NEWUSER)` and expects EPERM from the filter's
+  default deny;
+- runs two controls that must work: a plain `fork`+`exec`+`wait`
+  (`syscall.ForkExec`), and Go's `os/exec`. The `os/exec` control matters
+  because it is how a capsule's tools start their children.
+
+The receipt carries:
+
+- the deployed kernel's release;
+- for each filter, the sha256 of the assembled BPF program the child
+  loaded, and the hash the daemon computes from the same function (they
+  must match);
+- the child's `Seccomp` field from `/proc/self/status` after the load;
+- each probe's raw result.
+
+### What it proves and what it does not
+
+It proves that the capsule filters built by the deployed binary, loaded on
+the deployed guest kernel, answer `clone3` with ENOSYS and refuse a new user
+namespace, and that a process under them can still fork and exec. That is
+the SEC-13 mechanism on the deployed kernel.
+
+It does not prove:
+
+- that a live capsule loads these filters. The child is not a capsule: it
+  has no namespaces, no Landlock and no broker. That a capsule installs the
+  filter is code (`cmd/capsule-broker/main.go:171-180`) plus the Linux
+  container tests, and step 5's engineering assignment shows that nothing
+  in a capsule needs `clone3`.
+- anything about RES-03, the exec-go-session worker's bounds (rlimit,
+  GOMEMLIMIT, oom_score_adj). Those apply only in the broker's session
+  worker, and the leg cannot read them.
+
+### Ways it could fail or mislead (written before code)
+
+- **S1. The child probes a copy of the filter, not the capsule's.** The
+  filter comes from a table in `internal/capsule` that maps each name to the
+  exported constructor the capsule uses. The daemon computes the expected
+  hash from the same constructor and the child reports the hash of what it
+  loaded, so a mismatch fails. A test fails if the table omits a filter that
+  the existing clone test covers.
+- **S2. The filter never loaded and the kernel answered instead.** Then
+  `clone3(NULL)` is EINVAL or EFAULT, not ENOSYS, and `clone(NEWUSER|THREAD)`
+  is EINVAL, not EPERM. The child also reports `Seccomp: 2` from
+  `/proc/self/status`, and the judge requires it.
+- **S3. A probe succeeds and does harm.** The clone probe uses a flag
+  combination the kernel rejects. `unshare` in a multithreaded Go process
+  can only answer EPERM (the filter) or EINVAL (the kernel). The child is a
+  throwaway process in its own process group, killed with the daemon
+  (Pdeathsig) and bounded by a timeout.
+- **S4. The refusal breaks legitimate children.** Both controls must start a
+  child that exits 0. The child execs the same binary in a no-op mode, so
+  the control needs nothing else on the guest.
+- **S5. The leg takes caller input.** It doesn't. The filter names are
+  compiled in, the route takes only `leg=seccomp`, and the caller rule is
+  the OOM leg's: host peer only, one self-test at a time, not on the
+  ProductAPI allowlist.
+- **S6. The judge trusts the server.** The staging script holds its own list
+  of the six filters and the expected errno for each probe. It requires
+  each child's hash to equal the daemon's expected hash and to be the same
+  across the two calls a proof makes.
