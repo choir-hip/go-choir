@@ -4277,12 +4277,6 @@ func ptrBool(v bool) *bool {
 	return &v
 }
 
-// engineeringOverlayTerminalFateCommitted reports whether any persisted
-// tool_result block in the run's message log carries a capsule_go_eval output
-// with fate_terminal=true — the same predicate the terminal-tool check applies
-// per batch, extended across the whole cell history for the completion guard.
-// Tool results persist as user messages whose content is a list of
-// {type:"tool_result", content:<eval output JSON string>} blocks.
 const engineeringTerminalFateRequired = "engineering_overlay_terminal_fate_required"
 
 // freezeRefusedByOpenCandidate matches the refusal openFreezeCandidate
@@ -4294,7 +4288,11 @@ var freezeRefusedByOpenCandidate = regexp.MustCompile(`cannot freeze until the o
 // engineeringTerminalFateGuardReason is the completion guard's reason, which
 // becomes the system cancel's reason when the guard gives up. When the run's
 // freeze was refused by an open candidate it names that candidate, so the
-// assignment's fate says why it could not finish (FP4 round 3, P2).
+// assignment's fate says why it could not finish (FP4 round 3, P2). It
+// reports the candidate and the state the refusal gave, and nothing about
+// what that state waits for. It keeps the run's last refusal, even if a
+// later freeze succeeded (residual: a successful freeze leaves no mark in
+// the cell output this reads).
 func engineeringTerminalFateGuardReason(messages []json.RawMessage) string {
 	var msg struct {
 		Content json.RawMessage `json:"content"`
@@ -4325,10 +4323,16 @@ func engineeringTerminalFateGuardReason(messages []json.RawMessage) string {
 	if refused == nil {
 		return engineeringTerminalFateRequired
 	}
-	return fmt.Sprintf("%s; the freeze was refused: self-development candidate %s is %s and waits for management's Verify and the owner's decision",
+	return fmt.Sprintf("%s; the freeze was refused because self-development candidate %s was open (state %s)",
 		engineeringTerminalFateRequired, refused[1], refused[2])
 }
 
+// engineeringOverlayTerminalFateCommitted reports whether any persisted
+// tool_result block in the run's message log carries a capsule_go_eval output
+// with fate_terminal=true — the same predicate the terminal-tool check applies
+// per batch, extended across the whole cell history for the completion guard.
+// Tool results persist as user messages whose content is a list of
+// {type:"tool_result", content:<eval output JSON string>} blocks.
 func engineeringOverlayTerminalFateCommitted(messages []json.RawMessage) bool {
 	var msg struct {
 		Content json.RawMessage `json:"content"`
