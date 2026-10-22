@@ -88,18 +88,26 @@ func TestBuildFirecrackerConfig_BalloonFreePageReportingWhenEnabled(t *testing.T
 	}
 }
 
+// The interval applies only to computers VM_BALLOON_STATS_ONLY names
+// (RES-10; balloon_stats_test.go): set alone it turns nothing on.
 func TestBuildFirecrackerConfig_BalloonStatsInterval(t *testing.T) {
-	mgr := balloonTestManager(t, func(c *ManagerConfig) {
-		c.BalloonFreePageReporting = true
-		c.BalloonStatsPollingIntervalS = 5
-	})
-	fcConfig := mgr.buildFirecrackerConfig(balloonTestVMConfig(), 9001)
-	balloon, ok := fcConfig["balloon"].(map[string]any)
-	if !ok {
-		t.Fatalf("balloon missing: %#v", fcConfig["balloon"])
-	}
-	if got := balloon["stats_polling_interval_s"]; got != 5 {
-		t.Fatalf("stats_polling_interval_s = %#v, want 5", got)
+	for _, tc := range []struct {
+		only []string
+		want int
+	}{{nil, 0}, {[]string{"vm-balloon-1"}, 5}} {
+		mgr := balloonTestManager(t, func(c *ManagerConfig) {
+			c.BalloonFreePageReporting = true
+			c.BalloonStatsPollingIntervalS = 5
+			c.BalloonStatsOnly = tc.only
+		})
+		fcConfig := mgr.buildFirecrackerConfig(balloonTestVMConfig(), 9001)
+		balloon, ok := fcConfig["balloon"].(map[string]any)
+		if !ok {
+			t.Fatalf("balloon missing: %#v", fcConfig["balloon"])
+		}
+		if got := balloon["stats_polling_interval_s"]; got != tc.want {
+			t.Fatalf("only=%v: stats_polling_interval_s = %#v, want %d", tc.only, got, tc.want)
+		}
 	}
 }
 
