@@ -21,7 +21,12 @@ import (
 //	G5. the bound is tied to the build path, so a capsule without the C
 //	    toolchain runs unbounded;
 //	G6. the carry variables reach the workload under their CHOIR_ names, or
-//	    a payload sets the carry.
+//	    a payload sets the carry;
+//	G7. a tiny GOMEMLIMIT (a few bytes or KiB) reaches the workload and its
+//	    GC runs without pause;
+//	G8. the carry is read from the autoputer's own environment at the
+//	    broker launch, so an ambient CHOIR_CAPSULE_GO* on the guest service
+//	    bounds every capsule, or a capsule the executor set no bound for.
 func boundsEnv() map[string]string {
 	env := guestEnv()
 	env[CapsuleGoMaxProcsEnv] = "1"
@@ -75,18 +80,34 @@ func TestWorkloadEnvDropsMalformedGoBounds(t *testing.T) {
 	}
 }
 
-// G1, hop broker to session worker: the carry passes the bounds, with or
-// without a build path.
-func TestBuildToolchainCarryPassesGoBounds(t *testing.T) {
-	joined := "\n" + strings.Join(BuildToolchainCarry(lookupFrom(boundsEnv())), "\n") + "\n"
+// G1, hop broker to session worker: the bounds carry passes the bounds,
+// with or without a build path. G8: the toolchain carry, which the executor
+// also reads from the autoputer's own environment, never does.
+func TestCapsuleGoBoundsCarryPassesGoBounds(t *testing.T) {
+	joined := "\n" + strings.Join(CapsuleGoBoundsCarry(lookupFrom(boundsEnv())), "\n") + "\n"
 	for _, want := range []string{"\n" + CapsuleGoMaxProcsEnv + "=1\n", "\n" + CapsuleGoMemLimitEnv + "=1342177280\n"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("carry missing %q in %q", strings.TrimSpace(want), joined)
 		}
 	}
-	only := BuildToolchainCarry(lookupFrom(map[string]string{CapsuleGoMaxProcsEnv: "1", CapsuleGoMemLimitEnv: "junk"}))
+	only := CapsuleGoBoundsCarry(lookupFrom(map[string]string{CapsuleGoMaxProcsEnv: "1", CapsuleGoMemLimitEnv: "junk"}))
 	if strings.Join(only, ",") != CapsuleGoMaxProcsEnv+"=1" {
-		t.Fatalf("carry without a build path: %q", only)
+		t.Fatalf("carry with a junk limit: %q", only)
+	}
+	if toolchain := strings.Join(BuildToolchainCarry(lookupFrom(boundsEnv())), "\n"); strings.Contains(toolchain, "CHOIR_CAPSULE_GO") {
+		t.Fatalf("the toolchain carry passed the bounds: %q", toolchain)
+	}
+}
+
+// G7: a carried GOMEMLIMIT under the 64 MiB floor is dropped.
+func TestWorkloadEnvDropsGoMemLimitUnderTheFloor(t *testing.T) {
+	for _, v := range []string{"1", "4096", "67108863"} {
+		if _, extra := WorkloadToolchainEnv("/bin", lookupFrom(map[string]string{CapsuleGoMemLimitEnv: v})); len(extra) != 0 {
+			t.Errorf("GOMEMLIMIT %s passed: %q", v, extra)
+		}
+	}
+	if _, extra := WorkloadToolchainEnv("/bin", lookupFrom(map[string]string{CapsuleGoMemLimitEnv: "67108864"})); strings.Join(extra, ",") != "GOMEMLIMIT=67108864" {
+		t.Fatalf("GOMEMLIMIT at the floor: %q", extra)
 	}
 }
 
