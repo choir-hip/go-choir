@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
@@ -99,5 +100,18 @@ func TestIsolationSelfTestEgressClassification(t *testing.T) {
 	}
 	if h, _ := guestEgressTargets("http://gateway.internal:8084"); h != "" {
 		t.Errorf("a name must not become a probe host: %q", h)
+	}
+}
+
+// The seccomp leg through the real `autoputer` binary: the daemon's
+// entrypoint dispatches the child mode, and the child loads each capsule
+// filter and probes under it (no root needed: no_new_privs suffices).
+func TestIsolationSelfTestSeccompLegThroughTheRealBinary(t *testing.T) {
+	deskTestWorkerBin(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	rec := capsule.SeccompSelfTest(ctx, deskWorkerBinary())
+	if !rec.OK {
+		t.Fatalf("seccomp leg through the real binary failed: %v\n%+v", rec.Failures, rec)
 	}
 }
