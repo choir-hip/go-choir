@@ -42,7 +42,7 @@ finish:
     decision thresholds that turn the numbers into go, per-tenant go, or
     close in favour of L5.
   acceptance:
-    - action: go test ./internal/server -run 'PageCache|ProcMem|DebugPprof' (passes at b12f48e7b)
+    - action: go test ./internal/server -run 'PageCache|ProcMem|DebugPprof' (passes at fa547e9c7)
       proves: the residency read sums only resident pages, refuses non-host callers, never reads file contents, and stops at its bounds
       evidence_class: unit
     - action: FP0 runs the measurement steps in the design report §5 on staging after the read deploys
@@ -102,9 +102,11 @@ now:
   status: checkpoint (lane work done; FP0 steps and the panel remain)
   slice: >-
     Done: problem record and station (d3f87c771); the host-only guest
-    page-cache residency read, tests first (b12f48e7b); the design, threat
+    page-cache residency read, tests first (888c462bd, rebased from
+    b12f48e7b), joined into procmem?pagecache=1 with a byte cap per owner
+    notes §40 (fa547e9c7); the design, threat
     analysis and FP0's probe script (6255c0b32). Next is FP0's: land
-    b12f48e7b, run the §5 reads, then convene the DEC-05 panel on the report
+    888c462bd and fa547e9c7, run the §5 reads, then convene the DEC-05 panel on the report
     if the thresholds say so.
   source_ref: d1c60ad87
   deploy_identity: unchanged (nothing of this lane is deployed)
@@ -122,7 +124,7 @@ now:
       pages, so a shared DAX image saves 0.3 GiB or more per idle guest net
       of its memmap cost.
     test: the report §5 reads (idle-30m, cold-boot, busy-run) and its threshold table
-    edge: missing_oracle until b12f48e7b deploys
+    edge: missing_oracle until fa547e9c7 deploys
     delta_o: FP0's res08_pagecache_probe.py receipts
     scope_if_supported: Node B guests on one release
     status: active
@@ -142,12 +144,12 @@ now:
       measurable by mincore. Linux 5.2+ would otherwise report every page
       resident, and the read fails closed to "unmeasured".
     main_uncertainty: whether the store or the Dolt data dominates idle guest page cache, and how much of the store is mapped code (what L5 cannot reclaim)
-    next_observation: FP0's idle-30m read after b12f48e7b deploys
+    next_observation: FP0's idle-30m read after fa547e9c7 deploys
   blocker_or_risk: >-
     The panel (DEC-05), and FP8's ownership of vmmanager and the image for any
     build slice. The Firecracker 1.16.1 pmem facts marked "verify" in the
     report are unproven.
-  next_action: FP0 lands b12f48e7b, deploys, and runs report §5 step 1.
+  next_action: FP0 lands 888c462bd and fa547e9c7, deploys, and runs report §5 step 1.
 
 receipts: []
 ---
