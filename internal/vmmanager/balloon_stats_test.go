@@ -341,6 +341,13 @@ func TestGuestMemoryStatsReasons(t *testing.T) {
 		if got := statsReason(t, err); got != GuestMemoryStatsReasonNoAPISocket {
 			t.Fatalf("reason = %q (%v)", got, err)
 		}
+		// The detail names the socket path and the stat error, so an
+		// operator can tell a missing socket from a wrong path.
+		var se *GuestMemoryStatsError
+		_ = errors.As(err, &se)
+		if !strings.Contains(se.Detail, mgr.apiSocketPath("vm-b")) || !strings.Contains(se.Detail, "no such file or directory") {
+			t.Fatalf("detail = %q, want the socket path and the stat error", se.Detail)
+		}
 	})
 	t.Run("no balloon device", func(t *testing.T) {
 		mgr := runningBalloonVM(t, &fakeBalloonAPI{noDevice: true}, nil)
