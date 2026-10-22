@@ -15,6 +15,10 @@
 #   access JWTs remain valid after auth restarts (VAL-CROSS-118)
 { config, lib, pkgs, goChoirPackages, choirGo, guestImage ? null, sourceRepoRemote ? "https://github.com/choir-hip/go-choir.git", buildCommit ? "local", ... }:
 let
+  # Firecracker 1.17 as a second VMM build for the computers
+  # VM_FIRECRACKER_NEXT_ONLY names (nix/firecracker-next.nix; RES-16 data
+  # drive discard). The pinned build stays pkgs.firecracker for everyone else.
+  firecrackerNext = import ./firecracker-next.nix { inherit pkgs; };
   # Host fetch route (SDC NET-01; internal/hostfetch,
   # docs/definitions/choir-launch-fp10-net01-host-fetch-2026-10-21.md). One
   # list, read by vmctl (writes the grant on the credential disk at cold
@@ -1532,24 +1536,23 @@ in
         # computer: empty the list and redeploy (it cold boots into
         # observe); the image line set to off does not override it.
         "VM_CAPSULE_TUNNEL_ENFORCE_ONLY=computer-9648031f92e131adc1fb65ec455c5903"
-        # Data drive discard (VM_DATA_DISCARD=1) is deliberately NOT set: the
-        # pinned Firecracker is 1.16.2, which has no virtio-blk discard
-        # (vmmanager ignores the flag on an older binary). Guest side:
-        # choir-data-fstrim timer in nix/autoputer-vm.nix
-        # (docs/problems/guest-data-image-never-trims-2026-10-20.md).
-        # Staged per computer (FP8 station, NET-08 and RES-16): build
-        # nix/firecracker-next.nix (hashes unfilled), then add
-        #   "VM_FIRECRACKER_NEXT_BIN=${firecrackerNext}/bin/firecracker"
-        #   "VM_FIRECRACKER_NEXT_ONLY=<test computer id>"
-        #   "VM_DATA_DISCARD=1"
-        #   "VM_DATA_DISCARD_ONLY=<test computer id>"
-        # with firecrackerNext = import ./firecracker-next.nix { inherit pkgs; }.
-        # Only the named computers launch 1.17 and get discard. Name a
-        # computer outside VM_MEMORY_HOTPLUG_ONLY (one variable per test).
-        # Hotplug cannot plug on this host under any Firecracker since 1.15.1:
-        # the region sits at 512 GiB, past this CPU's 39-bit limit
-        # (firecracker #6255; docs/problems/memory-hotplug-cannot-work-on-
-        # node-b-39-bit-cpu-2026-10-22.md).
+        # Data drive discard (RES-16; docs/problems/guest-data-image-never-
+        # trims-2026-10-20.md, docs/problems/node-b-disk-fills-from-the-paper-
+        # data-image-2026-10-22.md). Only the computers named here launch
+        # Firecracker 1.17 (nix/firecracker-next.nix) and get virtio-blk
+        # discard on the data drive; the guest's hourly choir-data-fstrim
+        # timer (nix/autoputer-vm.nix) then hole-punches the freed blocks on
+        # the host. Owner rule 2026-10-22: one selected test computer first;
+        # the paper only after that computer's proof. A named computer cold
+        # boots once (its snapshot is from the other VMM build). The 1.17
+        # hotplug objection is gone: the hotplug region is the same in 1.16.x
+        # (docs/problems/memory-hotplug-cannot-work-on-node-b-39-bit-cpu-
+        # 2026-10-22.md). Rollback: empty both lists and redeploy (the named
+        # computer cold boots on the pinned build with no discard).
+        "VM_FIRECRACKER_NEXT_BIN=${firecrackerNext}/bin/firecracker"
+        "VM_FIRECRACKER_NEXT_ONLY=computer-9648031f92e131adc1fb65ec455c5903"
+        "VM_DATA_DISCARD=1"
+        "VM_DATA_DISCARD_ONLY=computer-9648031f92e131adc1fb65ec455c5903"
         # Memory hotplug (virtio-mem) for test computers only (it cannot plug
         # on Node B's 39-bit CPU; see the problem record above): a selected
         # computer boots with a 4 GiB unplugged region and grows under
