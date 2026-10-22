@@ -108,7 +108,14 @@ var testHookWrapConnector func(doltConnector) doltConnector
 
 // errWorkspaceGone is Close's answer when the workspace's Dolt files are
 // gone from disk under the open engine.
-var errWorkspaceGone = errors.New("runtime store: the Dolt workspace is gone under the open engine; the engine is left open")
+// It is a fail-closed Close (an ErrCloseLeftOpen) that never clears: the
+// engine is abandoned for process exit, so every later Close returns it
+// again and Reopen refuses.
+var errWorkspaceGone = fmt.Errorf("%w: the Dolt workspace is gone under the open engine; the engine is left for process exit", ErrCloseLeftOpen)
+
+// closeStoreForFailedOpen is the Close closeFailedOpen runs (a seam for
+// tests).
+var closeStoreForFailedOpen = func(s *Store) error { return s.Close() }
 
 // doltWorkspaceIntact reports whether the workspace root and every Dolt
 // database's .dolt/noms in it are still on disk. Closing an engine whose
@@ -167,6 +174,9 @@ type Store struct {
 	// pools, and cleared by Reopen.
 	closeMu  sync.Mutex
 	closedOK bool
+	// engineAbandoned (under closeMu) is the errWorkspaceGone of a Close
+	// that left the engine for process exit; it never clears.
+	engineAbandoned error
 	// dirtyGen counts marks; cleanGen (under doltCommitMu) is the mark
 	// count the last successful commit read before it ran. The store is
 	// dirty while they differ. A mark is one atomic add and never waits on
@@ -397,9 +407,9 @@ func (s *Store) pinPools(ctx context.Context) ([]*sql.Conn, error) {
 // of times to release the engine and the workspace lock; a Close error
 // that remains is logged and joined to Open's.
 func (s *Store) closeFailedOpen(openErr error) error {
-	err := s.Close()
+	err := closeStoreForFailedOpen(s)
 	for attempt := 0; attempt < 2 && errors.Is(err, ErrCloseLeftOpen); attempt++ {
-		err = s.Close()
+		err = closeStoreForFailedOpen(s)
 	}
 	if err != nil {
 		log.Printf("runtime store: close after a failed open: %v", err)
@@ -1188,7 +1198,9 @@ func (s *Store) Reopen(path string) error {
 	// not survive the reopen: the handle points at the quarantined
 	// realization once the flip renames the workspace.
 	if err := s.closeDepositUpcastLedger(); err != nil {
-		return fmt.Errorf("runtime store: reopen deposit upcast ledger: %w", err)
+		// The opened store is not adopted: close it rather than leak its
+		// engine and workspace lock.
+		return errors.Join(fmt.Errorf("runtime store: reopen deposit upcast ledger: %w", err), live.Close())
 	}
 	s.depositUpcastMu.Lock()
 	s.depositUpcast = nil
@@ -1216,6 +1228,11 @@ func (s *Store) Close() error {
 	s.closeMu.Lock()
 	defer s.closeMu.Unlock()
 	if s.closedOK {
+		if s.engineAbandoned != nil {
+			// An earlier Close abandoned the engine over a removed
+			// workspace: the store stays failed closed.
+			return s.checkpoint.leaveOpen(s.engineAbandoned)
+		}
 		return nil
 	}
 	// Graceful close seals the telemetry window first. A crash does not, which
@@ -1310,8 +1327,9 @@ func (s *Store) Close() error {
 	// it is left open for process exit to reclaim and Close says so.
 	if s.doltConnector != nil && s.texturePath != "" {
 		if goneErr := doltWorkspaceIntact(s.texturePath); goneErr != nil {
-			log.Printf("%v", goneErr)
-			return errors.Join(err, goneErr)
+			s.engineAbandoned = goneErr
+			s.checkpoint.enginesLeftOpen.Add(1)
+			return errors.Join(err, s.checkpoint.leaveOpen(goneErr))
 		}
 	}
 	if connector := s.doltConnector; connector != nil {
