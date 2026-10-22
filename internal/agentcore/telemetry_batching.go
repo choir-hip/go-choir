@@ -3,9 +3,11 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -77,14 +79,16 @@ func (rt *Runtime) applyTelemetryBatchingSetting(value bool) {
 	}
 }
 
-// drainTelemetryForRestart is the planned-restart step: new telemetry takes
-// the acknowledged path, then the queue is sealed under the shutdown-sized
-// deadline. It reports whether the drain failed or timed out (or lost
-// records); the caller writes the marker either way, because the planned-
-// restart contract is about work, not telemetry. restore undoes synchronous
-// mode for an apply that returns without restarting.
+// drainTelemetryForRestart is the planned-restart step: it takes one hold on
+// synchronous mode, so new telemetry takes the acknowledged path, and the
+// queue is sealed under the shutdown-sized deadline. It reports whether the
+// drain failed or timed out (or lost records); the caller writes the marker
+// either way, because the planned-restart contract is about work, not
+// telemetry. restore releases this hold (once) for a restart that did not
+// happen; another holder keeps synchronous mode on. With batching off it does
+// nothing.
 func (rt *Runtime) drainTelemetryForRestart() (failed bool, restore func()) {
-	if rt == nil || rt.store == nil || !rt.store.TelemetryBatchingConfigured() {
+	if rt == nil || rt.store == nil || !rt.store.TelemetryBatchingOn() {
 		return false, func() {}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), rt.drainDeadline())
@@ -93,39 +97,80 @@ func (rt *Runtime) drainTelemetryForRestart() (failed bool, restore func()) {
 		log.Printf("runtime: planned restart: telemetry drain failed (marker still written; the resume record will say the trace may have a gap): %v", err)
 		failed = true
 	}
+	var once sync.Once
 	return failed, func() {
-		if err := rt.store.SetTelemetrySynchronous(context.Background(), false); err != nil {
-			log.Printf("runtime: telemetry synchronous mode off: %v", err)
+		once.Do(func() {
+			if err := rt.store.SetTelemetrySynchronous(context.Background(), false); err != nil {
+				log.Printf("runtime: telemetry synchronous mode off: %v", err)
+			}
+		})
+	}
+}
+
+// writeHostPlannedRestartMarker is the host's planned-restart request: the
+// vmctl kill that follows skips the shutdown drain, so the queue is sealed
+// here and synchronous mode is held until the host clears the marker, the
+// computer restarts, or a later request finds no marker on disk. The host has
+// one marker, so it has one hold: a repeated request replaces it and keeps an
+// earlier drain failure, whose records are lost whatever the second drain
+// does. Holding and writing are serialized with the releases below.
+func (rt *Runtime) writeHostPlannedRestartMarker(storePath string, marker PlannedRestart) (PlannedRestart, error) {
+	rt.hostRestartTelemetryMu.Lock()
+	defer rt.hostRestartTelemetryMu.Unlock()
+	if rt.store != nil && rt.store.TelemetryBatchingOn() {
+		failed, restore := rt.drainTelemetryForRestart()
+		previous := rt.hostRestartTelemetryRestore
+		failed = failed || (previous != nil && rt.hostRestartDrainFailed)
+		rt.hostRestartTelemetryRestore, rt.hostRestartDrainFailed = restore, failed
+		if previous != nil {
+			previous()
 		}
 	}
-}
-
-// holdHostRestartTelemetry is drainTelemetryForRestart for the host's
-// planned-restart request, which answers before the restart happens: the undo
-// is kept on the runtime until the host clears the marker or a later request
-// is refused. With batching off it does nothing and reports no failure.
-func (rt *Runtime) holdHostRestartTelemetry() (drainFailed bool) {
-	if rt == nil || rt.store == nil || !rt.store.TelemetryBatchingConfigured() {
-		return false
+	marker.TelemetryDrainFailed = rt.hostRestartTelemetryRestore != nil && rt.hostRestartDrainFailed
+	if err := WritePlannedRestartMarker(storePath, marker); err != nil {
+		// The write can fail after the rename: only an empty marker path
+		// proves nothing will boot as planned on it.
+		rt.releaseHostRestartTelemetryIfNoMarkerLocked(storePath)
+		return marker, err
 	}
-	failed, restore := rt.drainTelemetryForRestart()
-	rt.hostRestartTelemetryMu.Lock()
-	rt.hostRestartTelemetryRestore = restore
-	rt.hostRestartTelemetryMu.Unlock()
-	return failed
+	return marker, nil
 }
 
-// releaseHostRestartTelemetry undoes the synchronous mode a host request
-// entered, if one holds it.
-func (rt *Runtime) releaseHostRestartTelemetry() {
+// clearHostPlannedRestartMarker is the host's marker clear after a refresh
+// that did not happen. The hold is released only once the clear succeeded; a
+// failed clear may leave the marker durable, so the queue stays closed.
+func (rt *Runtime) clearHostPlannedRestartMarker(storePath string) error {
+	rt.hostRestartTelemetryMu.Lock()
+	defer rt.hostRestartTelemetryMu.Unlock()
+	if err := ClearPlannedRestartMarker(storePath); err != nil {
+		return err
+	}
+	rt.releaseHostRestartTelemetryLocked()
+	return nil
+}
+
+// releaseHostRestartTelemetryIfNoMarker is the busy refusal's undo: a refused
+// request restarts nothing, but an earlier request's durable marker may still
+// be followed by the host's kill, so the hold is kept while any marker is on
+// disk (or its presence cannot be read).
+func (rt *Runtime) releaseHostRestartTelemetryIfNoMarker(storePath string) {
 	if rt == nil {
 		return
 	}
 	rt.hostRestartTelemetryMu.Lock()
-	restore := rt.hostRestartTelemetryRestore
-	rt.hostRestartTelemetryRestore = nil
-	rt.hostRestartTelemetryMu.Unlock()
-	if restore != nil {
+	defer rt.hostRestartTelemetryMu.Unlock()
+	rt.releaseHostRestartTelemetryIfNoMarkerLocked(storePath)
+}
+
+func (rt *Runtime) releaseHostRestartTelemetryIfNoMarkerLocked(storePath string) {
+	if _, err := os.Lstat(PlannedRestartMarkerPath(storePath)); errors.Is(err, os.ErrNotExist) {
+		rt.releaseHostRestartTelemetryLocked()
+	}
+}
+
+func (rt *Runtime) releaseHostRestartTelemetryLocked() {
+	if restore := rt.hostRestartTelemetryRestore; restore != nil {
+		rt.hostRestartTelemetryRestore, rt.hostRestartDrainFailed = nil, false
 		restore()
 	}
 }

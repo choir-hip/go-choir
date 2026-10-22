@@ -462,9 +462,9 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 	}
 	storePath := h.rt.cfg.StorePath
 	if r.Method == http.MethodDelete {
-		// The host did not restart after all: telemetry queues again.
-		h.rt.releaseHostRestartTelemetry()
-		if err := ClearPlannedRestartMarker(storePath); err != nil {
+		// The host did not restart after all: telemetry queues again once
+		// the marker is gone.
+		if err := h.rt.clearHostPlannedRestartMarker(storePath); err != nil {
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
 			return
 		}
@@ -490,9 +490,9 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 		return
 	}
 	if work.unsafe() || (work.Running > 0 && !allowBusy) {
-		// A refused request restarts nothing, so an earlier request's
-		// synchronous mode is undone; the host's retry enters it again.
-		h.rt.releaseHostRestartTelemetry()
+		// A refused request restarts nothing: an earlier request's
+		// synchronous mode is undone unless its marker is still durable.
+		h.rt.releaseHostRestartTelemetryIfNoMarker(storePath)
 		why := "guest is busy; restart deferred to its next idle moment"
 		if work.unsafe() {
 			why = "a self-development operation or a live capsule would not survive a restart; restart deferred until it settles"
@@ -510,10 +510,8 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 	// and new telemetry takes the acknowledged path until the kill. A failed
 	// drain is recorded on the marker, not fatal (the same seam as
 	// markPlannedRestart; design 4.5).
-	drainFailed := h.rt.holdHostRestartTelemetry()
-	marker := PlannedRestart{Reason: PlannedRestartPlatformRefresh, Target: target, RequestedAt: time.Now().UTC(), TelemetryDrainFailed: drainFailed}
-	if err := WritePlannedRestartMarker(storePath, marker); err != nil {
-		h.rt.releaseHostRestartTelemetry()
+	marker, err := h.rt.writeHostPlannedRestartMarker(storePath, PlannedRestart{Reason: PlannedRestartPlatformRefresh, Target: target, RequestedAt: time.Now().UTC()})
+	if err != nil {
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
 		return
 	}
