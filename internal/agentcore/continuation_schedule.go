@@ -321,7 +321,7 @@ func (rt *Runtime) HandleAssignedEngineeringFateDeadline(ctx context.Context, ow
 		return nil
 	}
 	if err != nil {
-		return err
+		return fateWakeReadRetry("the fate wake's read", deadline.AssignmentID, err)
 	}
 	if assignment.Binding.ParentAgentID != agentID {
 		return nil
