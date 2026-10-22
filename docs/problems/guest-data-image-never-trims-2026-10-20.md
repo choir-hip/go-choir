@@ -159,6 +159,48 @@ live Dolt store (about 12 GB for 8 GB live) instead of climbing ~5 GB/hour;
 the journal line `choir-data-fstrim` reports bytes trimmed each hour; store
 read/write latency and Dolt commit time show no hourly regression.
 
+### Proof on one test computer (lane/fp0-discard-test, 2026-10-22)
+
+The lane enables Firecracker 1.17 and discard only for
+computer-9648031f (vm-80b173b9, FP2's test computer; coordinate with FP2
+first). Every other computer keeps the pinned binary. FP0's steps, from the
+bunch 72 reviews:
+
+0. Before the deploy, on Node B: record `sha256sum` of
+   `fc-config.json` for the paper and for an unnamed test computer
+   (vm-c5c801f8), and `btrfs filesystem usage -b /` plus `df -k /`. Build
+   `nix/firecracker-next.nix` once on Node B ahead of the deploy (done
+   2026-10-22 17:47, `/nix/store/jbzvr6c965zyby7ldj73yi0zvibgd65b-firecracker-1.17.0`).
+1. Negative control: after the deploy, the two recorded `fc-config.json`
+   hashes are unchanged and the unnamed computer's snapshot still resumes
+   (boot kind `snapshot_resume`).
+2. The named computer cold boots (its 1.16 snapshot is refused with
+   `firecracker_version_mismatch`). Its boot timeline names
+   `Firecracker v1.17.0`; its `fc-config.json` data drive has
+   `"io_engine": "Sync"` and `"discard": true`, and no other drive does.
+3. In the guest: `/sys/block/vdb/queue/discard_max_bytes` is non-zero and
+   `choir-data-fstrim.timer` is active. The store opens (`/health` ok) and
+   one prompt gets a model answer.
+4. The first fstrim, 10 minutes after the cold boot over a never-trimmed
+   image: the Sync engine does the hole punch on Firecracker's VMM thread,
+   which also serves the guest's net, vsock and balloon. Sample the guest
+   `/health` latency every 10 s from 2 minutes before to 5 minutes after it.
+   Record the unit's exit status and bytes trimmed. A failure (EIO from an
+   ENOSPC hole punch on a near-full host) must show as a failed unit, not a
+   silent one; check the host's btrfs metadata headroom at the same time.
+5. Host effect, measured as host free space and btrfs exclusive bytes, not
+   `du` or `st_blocks` alone: reflink copies (the off-host backup, the
+   compaction copy) keep shared extents, and root is `compress=zstd`, so a
+   partial punch of a compressed extent frees nothing. Read
+   `btrfs filesystem usage -b /` and `df -k /` before the first fstrim,
+   after it, and hourly for 6 hours, against the live store size.
+6. Reverse switch: remove the id from both `_ONLY` lines, deploy, and wake
+   the computer. Expect `firecracker_version_mismatch` (its 1.17 snapshot
+   is refused under 1.16) and a cold boot, not a resume.
+Pass: steps 1 to 3 and 6 as stated; step 4 with no health failure and a
+visible unit result; step 5 shows host free space recovered by the trim,
+or the record says why not.
+
 ## As built (same day)
 
 - `internal/vmmanager/data_discard.go`: `ManagerConfig.DataDiscard`
