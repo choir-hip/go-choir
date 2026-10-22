@@ -248,3 +248,65 @@ replaced B and C on the owner's ruling, so this lane has only the pin.
 - Heresy delta. Discovered: after D4, the pinned 1.16.2 build is a silent
   fallback that no computer should take. Introduced: none. Repaired: the
   host runs one Firecracker build again, and it is the pinned one.
+
+## As built (lane/fp0-firecracker-117-fleet, on D4 2de635109)
+
+- b42a29c10: this record (green).
+- a92c7c380 (yellow), two tests:
+  - `scripts/check-host-firecracker-pin.sh`, an evaluation of the host that
+    builds nothing. It fails on 2de635109: "host Firecracker is 1.16.2,
+    expected 1.17.0".
+  - `TestPinned117KeepsTheLaunchConfigOfTheNextBuild` and
+    `TestPinnedDiscardBuildNamesOnlyTheSelectedComputer`, in
+    `internal/vmmanager/vmm_next_test.go`. Both pass on 2de635109, because
+    the Go seam already handles both shapes. They pin the selection
+    semantics this change relies on. Two mutations were checked by hand:
+    turning off the pinned build's discard gate makes the first fail, and
+    an empty discard selector makes the second fail.
+- 70c82a1eb (red), the change itself:
+  - `flake.nix`: `choirFirecrackerRelease` is 1.17.0 and
+    `choirFirecrackerBelow` is 1.18.
+  - `nix/firecracker-next.nix` is deleted, along with its import in
+    `nix/node-b.nix` and the `VM_FIRECRACKER_NEXT_BIN` and `_ONLY` lines.
+  - `VM_DATA_DISCARD=1` and `VM_DATA_DISCARD_ONLY=*` stay.
+  - Comments in `flake.nix`, `nix/node-b.nix`, `data_discard.go` and
+    `vmm_next.go` are updated. No Go code changed.
+
+Local verification at 70c82a1eb:
+
+- `nix-instantiate --parse` succeeds for `flake.nix` and `nix/node-b.nix`.
+- `EXPECT_OUT=/nix/store/jbzvr6c965zyby7ldj73yi0zvibgd65b-firecracker-1.17.0
+  scripts/check-host-firecracker-pin.sh` prints "ok: host Firecracker
+  1.17.0 at /nix/store/jbzvr6c9…-firecracker-1.17.0 (VMM and jailer),
+  next=<unset>, discard_only=*".
+- `nix eval` of `config.system.build.toplevel.drvPath` evaluates, so every
+  host assertion holds.
+- The focused `go test ./internal/vmmanager -run 'TestPinned|…FirecrackerNext|TestDataDiscard|TestVMMFor|TestLaunchedVMM|…DataDiscard…|TestResumeRefusesSnapshotFromOtherFirecrackerPatch'`
+  passes.
+
+## Deploy note
+
+- Land after D4 has deployed, or together with it. It changes `flake.nix`,
+  so it is a host switch, a vmctl restart, and a planned deploy refresh of
+  every running computer. It builds no Firecracker: Node B already has the
+  1.17.0 path.
+- Cold boot cost for computers that launched under D4: none beyond the
+  usual deploy refresh. Their binary, banner and launch config are
+  unchanged, so a hibernated D4 snapshot resumes. A computer still holding
+  a 1.16.x snapshot from before D4 cold boots once, which is D4's cost.
+- If the change lands without D4, every computer moves from 1.16.2 with no
+  discard to 1.17.0 with discard at once. That costs the same single cold
+  boot per computer that D4 costs.
+- Before deploying, decide whether a full rollback to 1.16.2 must stay
+  quick. If it must, add a GC root for
+  `/nix/store/5nh9p1bhzhljbshbp8dibb5qd4qz1nxb-firecracker-1.16.2`. No host
+  generation needs that path after this change, so the deploy preflight's
+  reclaim may collect it.
+- `scripts/proofs/fp8-image-jailer.sh` step 7 looks for the "next
+  Firecracker build" log line, which no longer appears. Read step 7 as done
+  by D3 and D4 together with the proof above. Do not run it as a fail.
+- Residual: after this change, the next minor version has to be staged with
+  a new `nix/firecracker-next.nix`. Patch releases on 1.17.x from a weekly
+  nixpkgs bump still reach the host with no review, because the bound
+  stops only 1.18. Each one changes the banner and costs every computer one
+  cold boot, as patch releases did on 1.16.x.
