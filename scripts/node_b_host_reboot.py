@@ -870,8 +870,11 @@ def clear_markers(args, m, sent):
         log("Not clearing %s: each refused before writing, and a DELETE could clear the guest's own apply marker" % skipped)
     sent = {vm: it for vm, it in sent.items() if vm in possible}
     items = list(sent.values())
-    m["cleared"], m["unmark_failed"] = True, {}
+    # Not done until the unmark succeeded: a signal during the ssh must leave
+    # the recovery clear in main armed (F2-a).
+    m["cleared"], m["unmark_failed"] = False, {}
     if not items:
+        m["cleared"] = True
         return True
     log("Clearing markers on %d computer(s): %s" % (len(items), sorted(sent)))
     try:
@@ -889,6 +892,14 @@ def clear_markers(args, m, sent):
     return not failed
 
 
+def markers_armed(receipt):
+    """Whether the receipt has sent markers that no clear has finished and the
+    host has not outlived: the condition for a recovery clear (F2)."""
+    marks = receipt.get("marks") or {}
+    return bool(marks.get("sent_items") and not marks.get("cleared")
+                and not (receipt.get("reboot") or {}).get("back_at"))
+
+
 def reboot_after_mark(args, receipt, save):
     """Everything after the markers are written: save the receipt, then
     reboot. Any failure clears every host marker (a crash in the next 15
@@ -898,8 +909,9 @@ def reboot_after_mark(args, receipt, save):
         save()
         return phase_reboot(args, receipt)
     except BaseException as e:
-        log("FAILED after marking (%r): clearing the markers" % e)
-        clear_receipt_markers(args, receipt)
+        if markers_armed(receipt):
+            log("FAILED after marking (%r): clearing the markers" % e)
+            clear_receipt_markers(args, receipt)
         raise
 
 
@@ -1167,13 +1179,14 @@ def main():
         # phase and reboot_after_mark's try leaves markers armed; a clear
         # that already ran sets marks.cleared and is not repeated (F2). A
         # --phase post run, or a host that came back, has nothing to clear.
-        marks = receipt.get("marks") or {}
-        if (args.phase != "post" and marks.get("sent_items") and not marks.get("cleared")
-                and not (receipt.get("reboot") or {}).get("back_at")):
-            log("FAILED (%r): clearing the markers" % e)
-            clear_receipt_markers(args, receipt)
+        # The error is saved first: a second interrupt during the clear must
+        # not lose the receipt (F2-c).
         receipt["error"] = repr(e)
         save()
+        if args.phase != "post" and markers_armed(receipt):
+            log("FAILED (%r): clearing the markers" % e)
+            clear_receipt_markers(args, receipt)
+            save()
         raise
 
 
