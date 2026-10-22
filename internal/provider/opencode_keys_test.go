@@ -207,3 +207,35 @@ func TestOpenCodeKeyPoolNeverParksTheLastKeyOn401(t *testing.T) {
 		t.Fatal("402 must still park the last key")
 	}
 }
+
+// Which OpenCode keys serve is gateway policy, GATEWAY_OPENCODE_KEYS (a list
+// of key variable names), not a credential edit (owner, 2026-10-22). Failure
+// modes: an unlisted key still serves; an unset policy drops keys; a policy
+// naming no configured key falls back to every key instead of to none.
+func TestOpenCodeKeysFromEnvHonorsThePolicy(t *testing.T) {
+	t.Setenv("OPENCODE_API_KEY", "key-primary")
+	t.Setenv("OPENCODE_API_KEY_ALT_0", "key-alt-0")
+	t.Setenv("OPENCODE_API_KEY_ALT_1", "key-alt-1")
+	names := func() string {
+		var n []string
+		for _, k := range openCodeKeysFromEnv() {
+			n = append(n, k.name)
+		}
+		return strings.Join(n, ",")
+	}
+	if got := names(); got != "OPENCODE_API_KEY,OPENCODE_API_KEY_ALT_0,OPENCODE_API_KEY_ALT_1" {
+		t.Fatalf("no policy: %s, want every key", got)
+	}
+	t.Setenv(openCodeKeysPolicyEnv, "OPENCODE_API_KEY_ALT_0")
+	if got := names(); got != "OPENCODE_API_KEY_ALT_0" {
+		t.Fatalf("policy ALT_0: %s", got)
+	}
+	t.Setenv(openCodeKeysPolicyEnv, " OPENCODE_API_KEY_ALT_1, OPENCODE_API_KEY_ALT_0 ")
+	if got := names(); got != "OPENCODE_API_KEY_ALT_0,OPENCODE_API_KEY_ALT_1" {
+		t.Fatalf("policy ALT_1,ALT_0: %s, want configured order", got)
+	}
+	t.Setenv(openCodeKeysPolicyEnv, "OPENCODE_API_KEY_ALT_7")
+	if got := names(); got != "" {
+		t.Fatalf("policy naming no configured key: %s, want none", got)
+	}
+}
