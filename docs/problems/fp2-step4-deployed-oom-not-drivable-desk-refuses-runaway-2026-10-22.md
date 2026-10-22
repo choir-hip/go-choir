@@ -113,3 +113,103 @@ Also fix the step-4 script's daemon-identity check (yellow): compare an
 authoritative daemon identity, not `steps.recent[].started_at`
 (e.g. expose a daemon `started_at`/`boot_id` in observability, or read it
 host-side), and drop the `memory.peak` expectation for desk workers.
+
+## The sanctioned mechanism: an OOM leg in the isolation self-test (FP0, 2026-10-22)
+
+FP0 chose the second option above: the isolation self-test
+(`POST /api/runtime/isolation-selftest`, `internal/agentcore/isolation_selftest.go`)
+gains an out-of-memory leg, selected with `?leg=oom`, so no model is in the
+loop. The leg spawns a throwaway research-class (untrusted input) desk worker
+through the production spawner, with its real per-worker cgroup under the
+real desks slice. It runs a fixed cell compiled into the binary that
+allocates and touches memory until the kernel kills the worker. Then it
+reports, read from outside the worker:
+
+- the worker cgroup's `memory.max`, `memory.high` and `memory.events`
+  (`oom_kill`);
+- the desks slice's `memory.max` and `memory.high`;
+- the daemon's own pid, `/proc/self/stat` start time and the kernel boot id,
+  before and after;
+- whether a sibling worker of the same class, spawned before the runaway,
+  still answers a fixed check cell.
+
+Items: RES-01 (in-guest cgroup tree), RES-02 (hard per-worker budget).
+
+### Ways the leg could fail or mislead (written before code)
+
+- **O1. The runaway runs without a hard budget and takes the guest.** This
+  happens with no desks cgroup, a worker with no budget cgroup, or
+  `memory.max` reading `max`. The leg refuses to send the allocating cell
+  unless the worker's own cgroup reads a numeric `memory.max` no larger than
+  its manifest budget. Otherwise it reports a failure and allocates nothing.
+- **O2. The worker dies for another reason and reads as an OOM proof.** The
+  other reasons are the Go runtime's own out of memory at `RLIMIT_AS`, the
+  cell timeout's host kill, or a crash. The death cause is `oom_kill` >= 1 in
+  the worker cgroup's `memory.events`, together with an exit cause that names
+  the budget. A host kill on timeout is reported as a host kill.
+- **O3. The pages are never touched.** A fresh large `make` returns zeroed
+  pages that the kernel has not backed, so the cell would run to its timeout
+  with a flat RSS. The fixed cell writes one byte per 4 KiB page.
+- **O4. The kernel picks the daemon (the 2026-10-16 failure).** The daemon
+  reads its own pid, `/proc/self/stat` start time and the boot id before the
+  runaway and after it, from the process and never from observability's
+  `steps.recent` (the step-4 defect above). If the daemon died, the HTTP
+  answer never arrives, and the script reports exit 2, not a pass.
+- **O5. The kill reaches a sibling.** This could come from `oom.group` on the
+  wrong cgroup or a slice-level OOM. A sibling worker of the same class is
+  spawned before the runaway and must answer the check cell after it.
+- **O6. The leg becomes a way to run code.** The cell is a constant in the
+  binary and the route takes no source. The only input is the leg selector,
+  an enum, and any other value is refused with 400. The route stays
+  host-peer owner only (`server.AuthenticatedOwner`: the request must come
+  from the guest's default gateway, which is where the proxy and vmctl dial
+  from, with `X-Authenticated-User`). It is not on the ProductAPI allowlist
+  (`internal/agentcore/tools_product_api.go`), so no desk can call it. One
+  self-test runs at a time (`isolationSelfTestMu`).
+- **O7. The leg runs by accident.** It runs only with `?leg=oom`. The default
+  self-test (`POST` with no leg) answers exactly as before, so step 2 on any
+  computer never allocates.
+- **O8. A worker or cgroup leaks.** Both workers are closed before the
+  handler answers. Close reaps the worker and removes its cgroup, and a crash
+  mid-leg is covered by the boot sweep of `w-*` under the desks slice.
+- **O9. `memory.events` is read after the cgroup is gone.** A removed cgroup
+  reads as zero, which would give a false negative. It is read before the
+  worker is closed.
+- **O10. The judge trusts the server.** The staging script judges the raw
+  numbers itself and compares `memory.max` to its own written-out 768 MiB.
+
+### The capsule leg (SEC-13, RES-03) is not reachable safely from the self-test
+
+The brief asked for a second leg inside a throwaway capsule's session
+worker: probe `clone3` and `unshare(CLONE_NEWUSER)`, and report the worker's
+bounds. Reading `internal/capsule` and `cmd/capsule-broker` on `d23dfaa2d`
+shows the self-test cannot safely reach one:
+
+- A capsule is spawned in one place only, after a durable engineering
+  assignment opens: `internal/agentcore/engineering_assignment_runtime.go:494`
+  (`rt.capsuleExecutor.Spawn`). Its use needs a capability minted for an
+  engineering or research run identity
+  (`internal/capsule/executor.go:857-866`, `MintCapabilityHandle`). If the
+  self-test minted one with no assignment, the desk ontology's rule would
+  break: management admits engineering only through a delegated cast.
+- `Spawn` admits against the capsule memory budget
+  (`internal/capsule/executor.go:311`, `admitCapsuleMemoryLocked`). A
+  throwaway capsule would compete with real engineering work for admission.
+  A live capsule also blocks an always-busy computer's planned refresh
+  (CLAUDE.md, Restarts).
+- The session worker's argv is fixed by the broker
+  (`cmd/capsule-broker/session_worker.go:106-117`), so there is no way to
+  select a probe mode. A cell cannot call `clone3` itself, because the cell
+  allowlist forbids `syscall` (`internal/yaegikernel/allowlist.go:36`). A
+  probe would need a new broker stage, which is a new entrypoint into the
+  capsule binary, and it would add red surface to prove red surface.
+
+So SEC-13 and RES-03 stay unticked by this lane. Their evidence remains the
+Linux container tests (`internal/capsule/seccomp_clone_linux_test.go`,
+`cmd/capsule-broker/session_limits_test.go`) plus step 5's engineering
+assignment. A safe partial option for FP0, not built here: a self-test leg
+that re-execs the daemon binary into a child that loads the deployed capsule
+workload filter (`capsule.LoadWorkloadFilter`) and tries `clone3` and
+`unshare(CLONE_NEWUSER)`. That proves the deployed filter on the deployed
+kernel, though not inside a capsule, and it cannot read the session worker's
+bounds.
