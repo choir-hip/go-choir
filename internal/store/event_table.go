@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
@@ -196,4 +197,176 @@ func dryRunTapePosition(ctx context.Context, q rowQuerier, computerID string) (u
 		return 0, fmt.Errorf("computer event projection: dry-run position: %w", err)
 	}
 	return sequence + 1, nil
+}
+
+// The choir_events half of each union read (section 4.4), one query per
+// reader shape, each served by one index (F16 pins the plans).
+
+func eventTableRunAfterSQL(runID string, afterSeq int64, limit int) (string, []any) {
+	return `SELECT canonical_id, updated_at, body FROM choir_events WHERE run_id = ? AND seq > ? ORDER BY seq ASC LIMIT ?`,
+		[]any{runID, afterSeq, limit}
+}
+
+func eventTableOwnerAfterSQL(ownerID string, afterStreamSeq int64, limit int) (string, []any) {
+	return `SELECT canonical_id, updated_at, body FROM choir_events WHERE owner_id = ? AND stream_seq > ? ORDER BY stream_seq ASC LIMIT ?`,
+		[]any{ownerID, afterStreamSeq, limit}
+}
+
+func eventTableOwnerNewestSQL(ownerID string, limit int) (string, []any) {
+	return `SELECT canonical_id, updated_at, body FROM choir_events WHERE owner_id = ? ORDER BY stream_seq DESC LIMIT ?`,
+		[]any{ownerID, limit}
+}
+
+func eventTableTrajectoryNewestSQL(trajectoryID string, limit int) (string, []any) {
+	return `SELECT canonical_id, updated_at, body FROM choir_events WHERE trajectory_id = ? ORDER BY stream_seq DESC LIMIT ?`,
+		[]any{trajectoryID, limit}
+}
+
+// eventTableRunMaxSeqSQL is the per-run seed's half: one reverse seek on
+// (run_id, seq). It reads no row for a run with none, which the seed takes
+// as 0 (round 2, Gemini: MAX over no rows is NULL).
+func eventTableRunMaxSeqSQL(runID string) (string, []any) {
+	return `SELECT seq FROM choir_events WHERE run_id = ? ORDER BY seq DESC LIMIT 1`, []any{runID}
+}
+
+// eventTableNewestStreamSQL is the stream seed's half: the newest 500 rows
+// by tape position, today's newest-500 heuristic over allocation order.
+func eventTableNewestStreamSQL() (string, []any) {
+	return `SELECT stream_seq FROM choir_events ORDER BY tape_seq DESC, op_index DESC LIMIT 500`, nil
+}
+
+// eventTableEntry is one event of a union read, from either table.
+type eventTableEntry struct {
+	canonicalID string
+	updatedAt   time.Time
+	rec         types.EventRecord
+}
+
+// eventTableDB runs fn on the read pool under the shared engine mutex
+// (section 4.4, Q8).
+func (s *Store) eventTableDB(op string, fn func(db *sql.DB) error) error {
+	store := s.ogReadStore
+	if store == nil {
+		store = s.ogStore
+	}
+	if store == nil {
+		return fmt.Errorf("store: object graph not initialized")
+	}
+	return store.WithEngine(op, fn)
+}
+
+// readEventTable runs one choir_events half and decodes its rows.
+func (s *Store) readEventTable(ctx context.Context, op, query string, args []any) ([]eventTableEntry, error) {
+	var out []eventTableEntry
+	err := s.eventTableDB(op, func(db *sql.DB) error {
+		rows, err := db.QueryContext(ctx, query, args...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var e eventTableEntry
+			var body []byte
+			if err := rows.Scan(&e.canonicalID, &e.updatedAt, &body); err != nil {
+				return err
+			}
+			if err := json.Unmarshal(body, &e.rec); err != nil {
+				return fmt.Errorf("store: unmarshal %s body: %w", choirEventsTable, err)
+			}
+			e.updatedAt = e.updatedAt.UTC()
+			out = append(out, e)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, fmt.Errorf("query %s (%s): %w", choirEventsTable, op, err)
+	}
+	return out, nil
+}
+
+// objectEventEntries decodes the og_objects half.
+func objectEventEntries(objs []objectgraph.Object) ([]eventTableEntry, error) {
+	out := make([]eventTableEntry, 0, len(objs))
+	for _, obj := range objs {
+		var rec types.EventRecord
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, err
+		}
+		out = append(out, eventTableEntry{canonicalID: obj.CanonicalID, updatedAt: obj.UpdatedAt.UTC(), rec: rec})
+	}
+	return out, nil
+}
+
+// unionEvents merges the two halves, deduplicated by canonical id before any
+// cut. One op lands in one table, so a duplicate is a bug or a store an old
+// binary touched (section 4.5); the og_objects copy is kept.
+func unionEvents(og, table []eventTableEntry) []eventTableEntry {
+	seen := make(map[string]struct{}, len(og)+len(table))
+	out := make([]eventTableEntry, 0, len(og)+len(table))
+	for _, half := range [][]eventTableEntry{og, table} {
+		for _, e := range half {
+			if _, dup := seen[e.canonicalID]; dup {
+				continue
+			}
+			seen[e.canonicalID] = struct{}{}
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+func eventRecords(entries []eventTableEntry, limit int) []types.EventRecord {
+	if limit >= 0 && len(entries) > limit {
+		entries = entries[:limit]
+	}
+	out := make([]types.EventRecord, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, e.rec)
+	}
+	return out
+}
+
+// eventTableRunMaxSeq is the per-run seed's choir_events half. The owner
+// filter of the og_objects half is dropped: runless events share the empty
+// run_id across owners, so this can only over-estimate, which is a gap.
+func (s *Store) eventTableRunMaxSeq(ctx context.Context, runID string) (int64, error) {
+	query, args := eventTableRunMaxSeqSQL(runID)
+	var seq int64
+	err := s.eventTableDB("store.event_table.seed_run_seq", func(db *sql.DB) error {
+		err := db.QueryRowContext(ctx, query, args...).Scan(&seq)
+		if errors.Is(err, sql.ErrNoRows) {
+			seq = 0
+			return nil
+		}
+		return err
+	})
+	if err != nil {
+		return 0, fmt.Errorf("append event: seed seq from %s: %w", choirEventsTable, err)
+	}
+	return seq, nil
+}
+
+// eventTableNewestStreamSeq is the stream seed's choir_events half.
+func (s *Store) eventTableNewestStreamSeq(ctx context.Context) (int64, error) {
+	query, args := eventTableNewestStreamSQL()
+	var newest int64
+	err := s.eventTableDB("store.event_table.seed_stream_seq", func(db *sql.DB) error {
+		rows, err := db.QueryContext(ctx, query, args...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var v int64
+			if err := rows.Scan(&v); err != nil {
+				return err
+			}
+			newest = max(newest, v)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return 0, fmt.Errorf("append event: seed stream_seq from %s: %w", choirEventsTable, err)
+	}
+	return newest, nil
 }
