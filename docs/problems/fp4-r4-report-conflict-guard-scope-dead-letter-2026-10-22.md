@@ -89,10 +89,14 @@ Tests b79cab192 (each failed on main 6c60685cc), fix 4e6f96833.
   committed command id with another digest, replays the committed result
   when that command committed this same terminal proposition (the slot's
   match has the same report id and command id). A partial, or a different
-  proposition, keeps the conflict. The two writers still race; both now
-  answer success, and the loser's cell hears its report landed. Not
-  proven locally through the runtime (the race needs a frozen capsule);
-  the store test reproduces the second writer's request exactly.
+  proposition, keeps the conflict. Corrected in round 4b: this made the
+  store answer success to both writers, not the cells. A loser that found
+  the winner had already destroyed the capsule failed earlier, resolving
+  the frozen capsule's capability or binding receipts, before it reached
+  the store, so its cell still heard an error for a report that landed
+  (review round 4b, DeepSeek 3). Round 4b fixes the race at its source;
+  see below. Not proven locally through the runtime (the race needs a
+  frozen capsule); the store test reproduces the second writer's request.
 - **P3: repaired.** The guard resets its refusal when a later tool result
   carries `freeze_result.operation_id`; the key is top-level in the cell
   result, so text the model prints cannot set it. Round 3b's residual in
@@ -100,6 +104,42 @@ Tests b79cab192 (each failed on main 6c60685cc), fix 4e6f96833.
   is closed.
 - **P4: repaired.** The dispatcher's poison lines carry the handler error
   on the last attempt and at the deferral limit, and say "earlier
-  deliveries ended without returning (crash or kill)" when the budget was
-  spent before the handler ran. Which branch dead-lettered 58a5b36c stays
+  deliveries did not complete (crash, kill or a failed commit)" when the
+  budget was spent before the handler ran (wording corrected in round 4b:
+  a handler that returned but whose commit failed, an epoch conflict
+  included, or a restart that lowered MaxAttempts, reaches it too). Which branch dead-lettered 58a5b36c stays
   unknown; the next one will say.
+
+## Round 4b (review of 8727d5f41: DeepSeek v4.1 flash, Sonnet; both accept with edits)
+
+Tests fec168943, fix 3efb1312d.
+
+- **P2 at its source (DeepSeek 3, Sonnet F6): repaired.** A per-assignment
+  saga mutex in the host process (`assignmentSagaMutex`). The worker's
+  Complete takes it; the fate wake's resume of the staged proposal only
+  tries it, and defers when the live saga holds it: the live saga commits
+  the report or, failing, arms the fate watchdog, which re-drives when the
+  mutex is free. A worker that waits behind a resume finds the report
+  stored and replays it before any capsule step. Both drivers run in the
+  host process (capsule cells reduce there; the fate wake is handled
+  there); a driver in another process would not be covered, and none
+  exists today. Not minting the immediate fate wake was the other option;
+  it would leave a crash between the freeze intent and the commit without
+  its re-drive, so it was not taken.
+- **Replay checks (Sonnet F2): repaired.** The same-command replay first
+  runs the fresh path's checks: a stated proposition digest must be the
+  one the report computes, and the report id the one that digest derives.
+- **Replay evidence (Sonnet F7): repaired.** When the replayed writer's
+  evidence (executor receipts, candidate, mutations, attestation count)
+  differs from the committed report's, one line says so; the committed
+  report stands.
+- **Guard reset (DeepSeek, Sonnet): repaired.** Any top-level
+  `freeze_result` (a committed freeze, or a rejected bundle, which also
+  passed the open-candidate check) resets the refusal, and wins over the
+  refusal pattern in the same cell. A cell whose freeze committed before a
+  later intent failed returns an error that carries the committed
+  `freeze_result`, which resets too. The marker is text in that error, so
+  model-authored text inside a reduce error could set it; the effect is
+  only the default guard reason.
+- **Poison lines (Sonnet F5): tests added** for the pre-handler and
+  deferral-limit lines.

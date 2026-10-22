@@ -236,8 +236,14 @@ now:
     successful freeze. P4: dead letters log their cause. Records:
     docs/problems/frozen-candidate-lost-when-complete-cites-a-duplicate-execution-ref-2026-10-22.md,
     docs/problems/fp4-r4-report-conflict-guard-scope-dead-letter-2026-10-22.md.
-    Next: FP0 re-runs drill step 6 (A completes, its candidate stays open,
-    B's freeze is refused and B reports failed). Before that:
+    Round 4b (review of 8727d5f41, accept with edits): P1 wired through
+    commitCompleteIntent in a test; the report race fixed at its source
+    (a per-assignment saga mutex: the fate-wake resume defers to the live
+    saga); the replay runs the fresh path's checks and logs differing
+    evidence; the guard resets on any freeze past the gate; residual: a
+    pre-fix staged proposal with repeated refs. Next: FP0 re-runs drill
+    step 6 (A completes, its candidate stays open, B's freeze is refused
+    and B reports failed). Before that:
     Capsule memory (lane/fp4-capsule-memory, base main 71ec8e704): A's
     release build in the round 3 re-run ran at its capsule's 2 GiB ceiling
     with 2 OOM kills. Cause confirmed in code: the capsule's /sys mask hides
@@ -265,7 +271,7 @@ now:
     cancel/admission race, real-handler and lane tests, a range for the
     latency test, a state-neutral guard reason. Earlier: round 2 (R1 to
     R6), batch 1 (B1 to B3), writer-gate counts, the nudge.
-  source_ref: 4e6f96833 on lane/fp4-r4 (base main 6c60685cc)
+  source_ref: 3efb1312d on lane/fp4-r4 (base main 6c60685cc)
   deploy_identity: unknown to this lane
   candidate: {id: arch10-admission-r3, state: ready_for_review, ref: lane/fp4-r3-nudge, base: 7448bf899, digest: none, scope: [internal/agentcore/engineering_admission.go, internal/agentcore/engineering_assignment_runtime.go, internal/agentcore/engineering_assignment_fate.go, internal/agentcore/continuation_schedule.go, internal/agentcore/api.go, internal/agentcore/freeze_candidate.go, internal/agentcore/runtime.go, internal/actorruntime/adapter.go, internal/actorruntime/handler.go, internal/objectgraph/writer.go]}
   conjecture:
