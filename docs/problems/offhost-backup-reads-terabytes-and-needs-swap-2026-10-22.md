@@ -481,7 +481,8 @@ Gemini flash and DeepSeek accept with edits; Devin pending at writing.
 ## Review round 4 (panel bunch 35), dispositions
 
 Flash accept; DeepSeek accept with edits. Test first in 7904d3b13 (it
-failed 2 of 7 on f67d64c85), fix in 645a07439.
+failed 2 of 6 checks on f67d64c85's script, the wait and the reap),
+fix in 645a07439.
 
 1. **Medium: the 60 s fail-open.** Fixed: `flock 9` with no timeout. The
    holder runs one jq on a small file, and the unit's `TimeoutStartSec`
@@ -495,12 +496,39 @@ failed 2 of 7 on f67d64c85), fix in 645a07439.
    can lose each other's marks, then writes (a developer host case).
 3. **Low: the lock test on hosts without flock.** Fixed: it prints
    `SKIP: no flock on this host` and exits 0 (checked with an empty
-   PATH). The Linux run, 7 of 7 in 66 s, is the evidence.
+   PATH). The Linux run, 6 of 6 in 66 s, is the evidence.
 4. **Low: temp cleanup.** Fixed: explicit removal after a failed jq or a
    failed `mv`, and the hour-old reap under the lock (tested: a 2-hour-old
    temp goes, a fresh one stays). Round 3's sentence above now says this.
 5. **Low: the pass table's overlap guarantee.** The row now names the
    util-linux `flock` dependency.
+
+## Review round 5 (Devin's lows on round 4), dispositions
+
+All three reviewers accepted round 4 (76d36c6b9). No behaviour change in
+this round.
+
+1. **Low: the lock test's counts.** Corrected above: the test has six
+   checks (three from round 3, three from round 4), not seven. Rerun on
+   2026-10-22: f67d64c85's script fails 2 of 6 (the 65 s wait, the
+   hour-old reap); this head passes 6 of 6.
+2. **Low: a lock error's return is discarded (named residual, not
+   changed).** `status_merge` returns non-zero when `flock` itself
+   errors, and no call site checks it (the attempt marks in
+   `attempt_start` and `attempt_end`, and the backup's and verify's final
+   status writes; the script has no `set -e`). So a persistently failing
+   `flock` does not fail the run: the backup or verify continues
+   unmarked, and status.json stays frozen at its last write. That is
+   deliberate: refusing the backup over a status-file lock would trade
+   real durability for bookkeeping. It is bounded by the journal (each
+   failure logs "could not take the status.json lock; status not
+   written") and by the freshness check's 36 h `last_success_epoch`
+   alarm, which a frozen file trips. Round 4's "nothing is written" means
+   exactly that: the status write is skipped, not the run.
+3. **Low: `touch -d` is GNU only.** The lock test back-dates its stale
+   temp with `touch -d` (Node B, unchanged), else `touch -t` with a stamp
+   from BSD `date -v` (darwin), else it prints a SKIP line for that one
+   check.
 
 ## Heresy delta
 
