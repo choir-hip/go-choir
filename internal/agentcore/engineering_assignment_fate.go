@@ -766,6 +766,27 @@ func (rt *Runtime) reconcileEngineeringAssignmentCapsulesAfterRestart(ctx contex
 	}
 	if _, planned := rt.BootWasPlannedRestart(); planned {
 		rt.resumeQueuedEngineeringRequestsAtPlannedBoot(ctx, computerID)
+		rt.rearmBoundEngineeringDeadlinesAtPlannedBoot(ctx, computerID)
+	}
+}
+
+// rearmBoundEngineeringDeadlinesAtPlannedBoot re-arms the bound deadline of
+// every assignment a planned boot kept bound and active. The bind arms it
+// after the bind commit, so a restart in between left the assignment with
+// none (review round 2, R2). The wake's content is the bind-time one, so a
+// surviving wake dedups. It arms a deadline, which can only end work; it
+// resumes nothing.
+func (rt *Runtime) rearmBoundEngineeringDeadlinesAtPlannedBoot(ctx context.Context, computerID string) {
+	assignments, err := rt.store.ListEngineeringAssignmentsForComputer(ctx, computerID)
+	if err != nil {
+		log.Printf("runtime: planned boot: list bound engineering assignments: %v", err)
+		return
+	}
+	for _, a := range assignments {
+		if a.Disposition != types.EngineeringAssignmentBound || a.CapsuleDisposition != types.EngineeringCapsuleActive {
+			continue
+		}
+		rt.armAssignedEngineeringDeadline(a)
 	}
 }
 

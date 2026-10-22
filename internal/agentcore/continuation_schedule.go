@@ -342,12 +342,12 @@ func (rt *Runtime) HandleAssignedEngineeringFateDeadline(ctx context.Context, ow
 		ComputerID: assignment.Binding.ComputerID, AgentID: assignment.Binding.ParentAgentID,
 	}
 	result, err := rt.cancelAssignedEngineering(ctx, parent, assignment.AssignmentID, assignment.Binding.Attempt,
-		fmt.Sprintf("assignment deadline expired after %s; request remains pending and retryable", assignedEngineeringDeadline()))
+		fmt.Sprintf("assignment deadline expired after %s from bind; the assignment is cancelled", assignedEngineeringDeadline()))
 	if err != nil {
 		return fmt.Errorf("cancel expired assignment %s: %w", assignment.AssignmentID, err)
 	}
 	if !result.Replay {
-		log.Printf("runtime: assignment %s failed closed at deadline (attempt %d); request stays pending",
+		log.Printf("runtime: assignment %s failed closed at deadline (attempt %d)",
 			assignment.AssignmentID, assignment.Binding.Attempt)
 	}
 	return nil

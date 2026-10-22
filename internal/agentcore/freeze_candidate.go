@@ -2,7 +2,9 @@ package agentcore
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
@@ -45,6 +47,17 @@ func openFreezeCandidate(ctx context.Context, operations *selfdev.Store, authori
 		ComputerID: computerID, IdempotencyKey: idempotencyKey, PromptArtifactRef: promptRef.String(),
 		OperationID: store.EngineeringFreezeOperationID(computerID, assignmentID), TrajectoryID: trajectoryID,
 	})
+	if errors.Is(err, selfdev.ErrOperationOpen) {
+		// One open operation per computer. A completed assignment's frozen
+		// candidate stays open for management's Verify and the owner's
+		// decision, so the next assignment cannot freeze until then. Say so
+		// on this assignment's run, so it reports instead of retrying until
+		// its deadline (review round 2, R3).
+		log.Printf("selfdev: assignment %s cannot freeze: %v", assignmentID, err)
+		return selfdev.Operation{}, fmt.Errorf("self-development candidate: assignment %s cannot freeze until the open candidate settles (%w); "+
+			"a frozen, verified or awaiting_approval candidate waits for management's Verify and the owner's decision, which this assignment cannot make; "+
+			"report the work as partial or failed instead of retrying the freeze", assignmentID, err)
+	}
 	if err != nil {
 		return selfdev.Operation{}, fmt.Errorf("self-development candidate: open: %w", err)
 	}
