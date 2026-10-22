@@ -81,6 +81,52 @@ most 0.5", deploy 2 sits at the bar, not under it. Q2's price is about
 4 KiB per op batched and about 7 KiB per event unbatched. The numbers are
 directional only.
 
+**Review findings on deploy 1 that bear on deploy 2 (2026-10-22, before
+any fix).** These were recorded first; the dispositions follow in the
+commits after this one.
+
+- **A (DeepSeek, high).** The updater's automatic recovery bypasses the
+  epoch fence. `restorePrior` (`updater.go:958-988`) swaps back to the
+  prior release and restarts it without `checkStateCompatibility`, which
+  only Apply calls (`:291`). The epoch-1 binary's Open then rewrites the
+  receipt to 1 (`store.go:718-728`). That is harmless for deploy 1. Once an
+  op is stamped, it breaches the floor (section 4.5). Planned: a durable
+  floor marker that only stamping binaries write and none lower; Apply and
+  `restorePrior` refuse a release below it, or one that declares no epoch
+  on a floored store; and Open neither lowers a newer receipt nor runs
+  under a floor above its own epoch.
+- **B and F (DeepSeek, flash; Sonnet measured).** `readEventTable` decodes
+  JSON under the engine mutex. A 4,000-row owner read held it 281 ms, of
+  which 228 ms was decode. Planned: scan under the lock, decode after it.
+- **C (DeepSeek).** `ListEventsByOwner` cuts og_objects' newest by
+  `updated_at` against `choir_events`' newest by `stream_seq`. Under
+  timestamp/allocation inversion it can return a row that is not the newest
+  by timestamp (pinned by `TestEventTableOwnerNewestCutWithSwappedTimestamps`).
+  Planned: name it as a semantic change that becomes live with deploy 2.
+  The table has no `(owner_id, updated_at)` index (a fifth tree, declined
+  in round 2).
+- **D (DeepSeek).** Every dry run reads the projection head, and every
+  event read takes the engine lock a second time. Planned: the hold-time
+  readings join deploy 2's proof.
+- **E (DeepSeek).** F6 read the dry-run position outside the dry run's
+  transaction. Deploy 1's round 1b repaired this (`0e8f72cad`, a test hook
+  inside `DryRunProjectionBatch`). Planned for deploy 2: the same check
+  through the writer.
+- **G (Sonnet, a hypothesis not reproduced).** The union reads run two
+  statements. A cursor reader (`?after=`, the WS catch-up) could skip an
+  og_objects event committed between the two halves when a later
+  `choir_events` event was committed before the second. Planned: a
+  deterministic test with a hook between the halves, then a fix.
+- **H (Sonnet).** A plain git revert shipped by CI's deploy-refresh, and a
+  platform-follow offer (which declares no epoch), are refused by nothing.
+  The floor must hold on every path: deploy-refresh, platform-follow,
+  Apply and `restorePrior`. Planned: the guest-side fences of A cover
+  platform-follow, Apply and `restorePrior`. Deploy-refresh boots whatever
+  image CI built, and a revert also reverts any fence inside the reverted
+  code. So the fence for that path is a CI check, landed on its own: a push
+  that lowers `storeschema.Version` fails unless the commit names the
+  pre-rollback check in an explicit trailer.
+
 **Tests run (local).** Under `-race`: the store tests matching
 `EventTable|Telemetry|ComputerSetting|FlagOff|Lifecycle` (828 s, pass), and
 the agentcore settings, event-table, telemetry, planned-restart, ProductAPI
