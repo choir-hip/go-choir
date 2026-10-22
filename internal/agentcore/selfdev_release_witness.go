@@ -278,8 +278,14 @@ type WitnessDecision struct {
 	ModeReceipt                string `json:"mode_receipt,omitempty"`
 	ExpectedDesiredEventHead   string `json:"expected_desired_event_head,omitempty"`
 	ExpectedEffectiveEventHead string `json:"expected_effective_event_head,omitempty"`
-	NextDesiredEventHead       string `json:"next_desired_event_head,omitempty"`
-	NextEffectiveEventHead     string `json:"next_effective_event_head,omitempty"`
+	// The rest of the decision-time binding: with the expected heads and the
+	// caller's own key, reason and bundle it is what a same-key replay of
+	// the decision has to carry (the decision moved the current head).
+	ExpectedPendingTransitionRef     string `json:"expected_pending_transition_ref,omitempty"`
+	ExpectedDesiredStateCommitment   string `json:"expected_desired_state_commitment,omitempty"`
+	ExpectedEffectiveStateCommitment string `json:"expected_effective_state_commitment,omitempty"`
+	NextDesiredEventHead             string `json:"next_desired_event_head,omitempty"`
+	NextEffectiveEventHead           string `json:"next_effective_event_head,omitempty"`
 	// GateVerified is the result of the gate's own verifier
 	// (verifyFinalizedSelfDevelopmentDecision) run on the stored decision.
 	GateVerified *bool  `json:"gate_verified"`
@@ -585,7 +591,10 @@ func (rt *Runtime) witnessDecision(ctx context.Context, operation selfdev.Operat
 	out.Decision = WitnessDecision{
 		Present: true, EventKind: string(event.EventKind), EventDigest: transition.Request.EventDigest, ReceiptID: transition.Receipt.ReceiptID,
 		ExpectedDesiredEventHead: event.ExpectedDesiredEventHead, ExpectedEffectiveEventHead: event.ExpectedEffectiveEventHead,
-		NextDesiredEventHead: transition.Request.Next.DesiredEventHead, NextEffectiveEventHead: transition.Request.Next.EffectiveEventHead,
+		ExpectedPendingTransitionRef:     event.ExpectedPendingTransitionRef,
+		ExpectedDesiredStateCommitment:   event.ExpectedDesiredStateCommitment,
+		ExpectedEffectiveStateCommitment: event.ExpectedEffectiveStateCommitment,
+		NextDesiredEventHead:             transition.Request.Next.DesiredEventHead, NextEffectiveEventHead: transition.Request.Next.EffectiveEventHead,
 	}
 	if _, isConsensus := decisionpolicy.ReceiptDigestFromAuthority(event.AuthorityRef); isConsensus {
 		consensus = true

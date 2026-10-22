@@ -291,12 +291,17 @@ func (rt *Runtime) recoverSelfDevelopmentDecision(ctx context.Context, operation
 	})
 	if err != nil {
 		current, getErr := rt.selfdevOperations.Get(ctx, operation.ComputerID, operation.OperationID)
-		if getErr == nil && current.DecisionEvent == transition.Request.EventDigest &&
-			current.DecisionReceipt == transition.Receipt.ReceiptID &&
-			selfDevelopmentDecisionStateDescends(current.State, decision.NextState) {
-			if _, verifyErr := verifyFinalizedSelfDevelopmentDecision(current, transition); verifyErr == nil {
-				return current, true, nil
-			}
+		mismatch := "get (" + fmt.Sprint(getErr) + ")"
+		if getErr == nil {
+			mismatch = selfDevelopmentDecisionNotCarried(current, transition, decision.NextState)
+		}
+		if mismatch == "" {
+			return current, true, nil
+		}
+		if errors.Is(err, selfdev.ErrConflict) {
+			log.Printf("selfdev decision recovery: operation %s lost its transition and the operation does not carry the finalized decision: %s mismatch (operation state=%q decision_event=%q decision_receipt=%q; decision event=%q receipt=%q next_state=%q): %v",
+				operation.OperationID, mismatch, current.State, current.DecisionEvent, current.DecisionReceipt,
+				transition.Request.EventDigest, transition.Receipt.ReceiptID, decision.NextState, err)
 		}
 		return operation, false, err
 	}

@@ -122,7 +122,12 @@ func verifyFinalizedSelfDevelopmentDecision(operation selfdev.Operation, transit
 	if operation.DecisionActor != "" && operation.DecisionActor != actor {
 		return verifiedSelfDevelopmentDecision{}, fmt.Errorf("decision binding: operation actor projection mismatch")
 	}
-	if operation.State != selfdev.StateAwaitingApproval &&
+	// The heads are the decision's projection only while the operation sits
+	// in the decision's own state. From materializing on, the materializer
+	// owns them (it rewrites them to the head after effect_started, then
+	// after the apply); the event, receipt and actor joins above still bind
+	// the decision exactly.
+	if operation.State == nextState &&
 		(operation.DesiredHead != transition.Request.Next.DesiredEventHead || operation.EffectiveHead != transition.Request.Next.EffectiveEventHead) {
 		return verifiedSelfDevelopmentDecision{}, fmt.Errorf("decision binding: operation head projection mismatch")
 	}
@@ -131,6 +136,25 @@ func verifyFinalizedSelfDevelopmentDecision(operation selfdev.Operation, transit
 		out.ConsensusReceiptDigest = consensusDigest
 	}
 	return out, nil
+}
+
+// selfDevelopmentDecisionNotCarried names the first comparison by which the
+// durable operation does not carry this finalized decision, or "" when it
+// does. A decision writer that lost its Transition to another writer uses
+// it to tell "the decision already landed" from a real conflict.
+func selfDevelopmentDecisionNotCarried(current selfdev.Operation, transition computerevent.DurableEvent, decisionState string) string {
+	switch {
+	case current.DecisionEvent != transition.Request.EventDigest:
+		return "decision_event"
+	case current.DecisionReceipt != transition.Receipt.ReceiptID:
+		return "decision_receipt"
+	case !selfDevelopmentDecisionStateDescends(current.State, decisionState):
+		return "state"
+	}
+	if _, err := verifyFinalizedSelfDevelopmentDecision(current, transition); err != nil {
+		return "verify (" + err.Error() + ")"
+	}
+	return ""
 }
 
 func selfDevelopmentDecisionStateDescends(state, decisionState string) bool {

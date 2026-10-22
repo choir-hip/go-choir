@@ -184,22 +184,70 @@ func runSelfDevWait(args []string, stdout, stderr io.Writer) int {
 	}
 }
 
-// selfDevDecisionBinding reads the frozen candidate and the computer's event
-// head, and returns the binding a decision on exactly that candidate carries.
-func selfDevDecisionBinding(c *client, computerID, operationID string) (selfDevOperation, map[string]any, error) {
+// selfDevDecidedStates are the states a landed decision leaves an operation
+// in, by decision, and selfDevDecisionEventKinds the tape event it landed as.
+// An operation in one of them may be replayed with the caller's same key: the
+// guest answers 200 only for the exact decision that landed, so the caller
+// learns its first call succeeded
+// (docs/problems/selfdev-reject-lands-but-answers-409-2026-10-22.md).
+var (
+	selfDevDecidedStates = map[string][]string{
+		"reject":  {"rejected"},
+		"approve": {"accepted", "materializing", "applied"},
+	}
+	selfDevDecisionEventKinds = map[string]string{"reject": "effect_rejected", "approve": "effect_accepted"}
+)
+
+// selfDevDecisionBinding reads the frozen candidate and returns the binding
+// a decision on exactly that candidate carries. Awaiting approval, that is
+// the computer's current event head. Already in the state this decision
+// leaves it in, it is the landed decision's own decision-time binding, read
+// from the release witness, and replay is true: the decision moved the
+// current head, and the guest matches a replay exactly.
+func selfDevDecisionBinding(c *client, computerID, operationID, decision string) (selfDevOperation, map[string]any, bool, error) {
 	var operation selfDevOperation
 	if err := c.do(http.MethodGet, selfDevPath(computerID, "operations/"+url.PathEscape(operationID)), nil, &operation); err != nil {
-		return operation, nil, err
+		return operation, nil, false, err
 	}
-	if operation.State != "awaiting_approval" {
-		return operation, nil, fmt.Errorf("operation %s is %s, not awaiting_approval", operationID, operation.State)
+	replay := slices.Contains(selfDevDecidedStates[decision], operation.State)
+	if operation.State != "awaiting_approval" && !replay {
+		return operation, nil, false, fmt.Errorf("operation %s is %s, not awaiting_approval", operationID, operation.State)
 	}
 	if operation.BundleDigest == "" || len(operation.VerifierRefs) == 0 {
-		return operation, nil, errors.New("operation has no frozen bundle or verifier")
+		return operation, nil, false, errors.New("operation has no frozen bundle or verifier")
+	}
+	if replay {
+		var witness struct {
+			Decision struct {
+				Present                          bool   `json:"present"`
+				EventKind                        string `json:"event_kind"`
+				ExpectedDesiredEventHead         string `json:"expected_desired_event_head"`
+				ExpectedEffectiveEventHead       string `json:"expected_effective_event_head"`
+				ExpectedPendingTransitionRef     string `json:"expected_pending_transition_ref"`
+				ExpectedDesiredStateCommitment   string `json:"expected_desired_state_commitment"`
+				ExpectedEffectiveStateCommitment string `json:"expected_effective_state_commitment"`
+			} `json:"decision"`
+		}
+		if err := c.do(http.MethodGet, selfDevPath(computerID, "operations/"+url.PathEscape(operationID)+"/release-witness"), nil, &witness); err != nil {
+			return operation, nil, false, fmt.Errorf("read the landed decision: %w", err)
+		}
+		landed := witness.Decision
+		if !landed.Present || landed.EventKind != selfDevDecisionEventKinds[decision] || landed.ExpectedDesiredEventHead == "" ||
+			landed.ExpectedEffectiveEventHead == "" || landed.ExpectedDesiredStateCommitment == "" || landed.ExpectedEffectiveStateCommitment == "" {
+			return operation, nil, false, fmt.Errorf("operation %s is %s, and the tape holds no %s decision for it to replay", operationID, operation.State, decision)
+		}
+		return operation, map[string]any{
+			"bundle_digest":                       operation.BundleDigest,
+			"expected_desired_event_head":         landed.ExpectedDesiredEventHead,
+			"expected_effective_event_head":       landed.ExpectedEffectiveEventHead,
+			"expected_pending_transition_ref":     landed.ExpectedPendingTransitionRef,
+			"expected_desired_state_commitment":   landed.ExpectedDesiredStateCommitment,
+			"expected_effective_state_commitment": landed.ExpectedEffectiveStateCommitment,
+		}, true, nil
 	}
 	var head selfDevHead
 	if err := c.do(http.MethodGet, selfDevPath(computerID, "head"), nil, &head); err != nil {
-		return operation, nil, err
+		return operation, nil, false, err
 	}
 	binding := map[string]any{
 		"bundle_digest":                       operation.BundleDigest,
@@ -209,5 +257,5 @@ func selfDevDecisionBinding(c *client, computerID, operationID string) (selfDevO
 		"expected_desired_state_commitment":   head.DesiredStateCommitment,
 		"expected_effective_state_commitment": head.EffectiveStateCommitment,
 	}
-	return operation, binding, nil
+	return operation, binding, false, nil
 }
