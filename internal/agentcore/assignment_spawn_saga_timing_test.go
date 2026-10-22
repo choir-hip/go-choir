@@ -12,7 +12,7 @@ import (
 // It fails its purpose if it lacks the capsule id the executor's spawn lines
 // use, the phase, a duration or the assignment, or if it does not hand back
 // the time the next phase starts from.
-func TestAssignmentSagaPhaseLogsUnderTheCapsule(t *testing.T) {
+func TestSpawnSagaPhaseLogsUnderTheCapsule(t *testing.T) {
 	var buf bytes.Buffer
 	previous, flags := log.Writer(), log.Flags()
 	log.SetOutput(&buf)

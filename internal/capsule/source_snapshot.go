@@ -361,7 +361,7 @@ func copyImmutableCommitTreeTimed(ctx context.Context, source, commit, target st
 	if err != nil {
 		return "", err
 	}
-	timer.phase("source_inventory", fmt.Sprintf("files=%d", len(tracked)))
+	timer.phaseGit("source_inventory", len(tracked), 1) // one git ls-tree
 	if err := os.MkdirAll(target, 0o755); err != nil {
 		return "", err
 	}
@@ -401,7 +401,7 @@ func copyImmutableCommitTreeTimed(ctx context.Context, source, commit, target st
 			return "", errors.Join(copyErr, closeErr)
 		}
 	}
-	timer.phase("source_blobs", gitProcsDetail(len(tracked))...)
+	timer.phaseGit("source_blobs", len(tracked), len(tracked)) // one git cat-file per file
 	digest, err := digestCanonicalSubjectTree(ctx, target)
 	if err != nil {
 		return "", err
@@ -411,7 +411,7 @@ func copyImmutableCommitTreeTimed(ctx context.Context, source, commit, target st
 	if err != nil || expected != digest {
 		return "", fmt.Errorf("source snapshot canonical digest mismatch")
 	}
-	timer.phase("source_digest_commit", gitProcsDetail(len(tracked))...)
+	timer.phaseGit("source_digest_commit", len(tracked), len(tracked)+1) // its own ls-tree, then one cat-file per file
 	if err := makeSubjectTreeReadOnly(target); err != nil {
 		return "", err
 	}
