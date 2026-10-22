@@ -692,15 +692,11 @@ func TestEventTableIsTheExtractorsOptionalTable(t *testing.T) {
 func TestEventTableDryRunPositionIsTheTapePosition(t *testing.T) {
 	ctx := context.Background()
 	h := newTapeHarness(t)
+	// The position DryRunProjectionBatch itself passes to projectBatch, read
+	// inside its transaction (round 1b, DeepSeek: a helper call outside the
+	// dry run would not catch a divergence).
 	var provisional []uint64
-	h.dryRunHook = func(*computerevent.ProjectionBatch) error {
-		pos, err := dryRunTapePosition(ctx, h.store.db, h.computerID)
-		if err != nil {
-			return err
-		}
-		provisional = append(provisional, pos)
-		return nil
-	}
+	h.store.dryRunPositionHook = func(pos uint64) { provisional = append(provisional, pos) }
 	for i := int64(1); i <= 3; i++ {
 		h.appendStamped(eventTableRecord(fmt.Sprintf("d-%d", i), "run-d", "owner-1", "traj-d", types.EventToolResult, i, i, eventTableBase.Add(time.Duration(i)*time.Second)))
 	}
@@ -971,6 +967,25 @@ func TestEventTableReadsRaceTheProjector(t *testing.T) {
 	}
 	if got := len(mustEvents(t)(h.store.ListEventsAfter(ctx, "run-race", 0, 100))); got != 20 {
 		t.Fatalf("read %d events, want 20", got)
+	}
+	// The race detector cannot see the embedded engine's internal races
+	// (round 1b, Sonnet: a mutant without the lock passed under -race), so
+	// pin the lock itself: every choir_events read and seed is accounted on
+	// the engine mutex the og_objects reads share. A read that bypassed
+	// WithEngine, or a WithEngine without its lock, records nothing here.
+	// TestWithEngineExcludesOtherEngineUse pins the exclusion.
+	if err := h.store.AppendEvent(ctx, h.event("race-seed", "run-race-2", "owner-1", types.EventRunStarted, eventTableBase)); err != nil {
+		t.Fatal(err)
+	}
+	stats := h.store.ogStore.EngineMutexStats()
+	for _, op := range []string{
+		"store.event_table.list_run_after", "store.event_table.list_owner_after",
+		"store.event_table.list_owner_newest", "store.event_table.list_trajectory",
+		"store.event_table.seed_run_seq", "store.event_table.seed_stream_seq",
+	} {
+		if stats[op].Calls == 0 {
+			t.Errorf("%s never took the shared engine mutex", op)
+		}
 	}
 }
 
