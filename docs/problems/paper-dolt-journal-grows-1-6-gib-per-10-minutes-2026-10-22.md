@@ -212,6 +212,32 @@ Recommendation, revised: F-a on a test computer first (built; measured
 -25% to -35% for telemetry events locally), then F-e (small, red, inside
 `projectBatch`), then F-c as the substrate design.
 
+## Staging measurement of F-a (FP0, 2026-10-22 05:50)
+
+Telemetry batching's phase 1 staging gate ran on test computer
+computer-71afbf14 (evidence
+docs/evidence/telemetry-batching-phase1-staging-2026-10-22.json):
+
+- Batches form: k = 5.16 (211 batches, 1,089 ops). Tape events fall to
+  0.60x.
+- Journal bytes fall much less than the local -25 to -35%: 3.7 to 5.6% per
+  tape op (5.6% is the same-build comparison), 1.3% per runtime event, about
+  10% per telemetry record.
+- A fit over the run gives about 86 KB of store growth per op and about
+  12.5 KB per tape event. That agrees with the local 90 KiB per og_objects
+  row (13 trees): on staging the journal is paid per op, by the row and its
+  trees. Prepare and finalize per tape event cost little.
+
+So F-a is not the journal lever. It also cannot go on the paper until the
+host's planned restart drains the queue
+(docs/problems/host-planned-restart-skips-telemetry-drain-2026-10-22.md).
+F-e (multi-row upserts in `projectBatch`) is only useful with batching on.
+The ranking becomes F-c first: move `choir.event` out of `og_objects` into a
+table with a sequential key and the one or two indexes its readers use. It
+needs its own design and a panel. Caveat: the gate's store was fresh and
+small; the paper's per-op cost is not measured, and deeper trees cost more
+per op, not less.
+
 ## Causes, ranked (first pass; see the correction above)
 
 1. **Per-event transaction amplification (top).** Three transactions per

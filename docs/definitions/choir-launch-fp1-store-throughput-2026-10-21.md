@@ -180,9 +180,12 @@ now:
     FP0 can check the paper with the query in that record before the deploy.
     Residual: the validator's COUNT and stray-id lists are not keyset-paged.
   next_action: >-
-    FP0 rebases lane/fp1-boot-window onto 53c8bb181, lands 40cdc19fc and its
-    tests (orange), and reads the next boot window. Then F1 if the owner or
-    FP0 wants it.
+    (FP0, 2026-10-22 05:55) The boot-window repair is deployed (deploy E,
+    d991907e6): the paper is healthy about 30 s after boot (34 s on deploy
+    F). F1 (bounded /health) is accepted by all three reviewers and rides
+    deploy G after its mirror. Journal growth: F-a measured on staging at
+    about 10% per telemetry record, so F-c (choir.event out of og_objects)
+    is the next lever and needs a design and a panel.
   followup: >-
     Journal growth (lane/fp1-journal-growth, 2026-10-22): problem record
     docs/problems/paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md.
@@ -203,7 +206,7 @@ receipts:
     identity: b6523c170, 37cab03d4 (tests), 40cdc19fc (fix), 0084139d6 (record)
     proof_refs: [internal/store/computer_event_prefix_test.go]
     rollback_ref: git revert 40cdc19fc
-    disposition: built and tested locally (-race); not landed
+    disposition: landed and deployed in deploy E (d991907e6); boot to healthy about 30 s
   - id: fp1-boot-window-reading
     boundary: define
     identity: 29c175738 (problem record append), 601e90c2a (probe)
