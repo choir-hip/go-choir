@@ -667,3 +667,34 @@ Append-only. One terse entry per orchestrator pass.
     - The SEC-11 proxy object-graph route, which stops trusting loopback alone (observe first).
     - Dolt auth stage 2: corpusd, checkpointd and vmctl connect as the app user.
   - The auth and store-auth surfaces keep this deploy to itself under the 13:35 rule.
+- 16:38:48. Deploy T pushed as f0b1ee313 (CI waiter running).
+  - "Before" reading on S (ddd20de0e), with T's verify-host-hardening.py (`--expect-internal enforce --expect-dolt users --expect-guest-floor --allow-reboot-pending`; _runs/fp3cut2/before-S.txt): 105 PASS lines and 61 FAIL lines.
+  - The fails are exactly cut 2's targets: 59 [containment] (host units can still reach /run/systemd/private, the D-Bus socket and other units' EnvironmentFiles) and 2 [credential] (corpusd and vmctl hold no issuer credential yet).
+  - The Dolt, internal-auth and guest-floor sections pass.
+- 16:42. Stage U (SEC-14 deploy 1, the choir-deploy user and the host gate; CI still deploys as root) is rebuilt on f0b1ee313 as stage/deployU-land2: 19 commits, every lane's hunks identical.
+  - Its proof, per the FP10 station's rollout: the deploy log shows root running .github/scripts/node-b-ci-deploy to "Staging deploy complete". Then `scripts/node-b-ci-gate-probe <off-main-sha> <deploy-1-main-sha>` as root from /opt/go-choir: every line PASS, including a real prebuild through the gate, and "bootstrap marker present".
+- 16:45. Owner questions answered:
+  - Why 17 s: the nudge took 2 ms, and the rest is B's capsule cold start. The SEC-06 run measured the same, 18 s from admission to broker ready.
+  - What the mirror is.
+  - Hotplug and Cloud Hypervisor: the seam design already plans CH as a second backend; recommendation: hotplug off now.
+  - Disk, accelerated.
+  - The hotplug finding removes the only objection to Firecracker 1.17, so discard is unblocked. FP0 built it:
+    - lane/fp0-discard-test 2913ad487 fills nix/firecracker-next.nix's hashes (v1.17.0, the latest tag; source sha256-1HL13XL8…, vendor sha256-TR5hi7iZ…, computed on the Mac).
+    - vmctl gets VM_FIRECRACKER_NEXT_BIN, and VM_FIRECRACKER_NEXT_ONLY and VM_DATA_DISCARD_ONLY name only computer-9648031f.
+    - nix eval: the system evaluates, and pkgs.firecracker stays the pinned build.
+    - Mirror discardm PASS. Reviews: bunch 72 (flash, DeepSeek) and a Sonnet seat.
+  - New VM workers:
+    - nixpol: auto-optimise, retention, min-free coupled with the deploy floor, a compression evaluation, a disk alarm.
+    - retention: test-class computers and quarantined images, observe first.
+    - pdolt: the root cause of oldgen growth and the squash runbook.
+  - fcd2 (F-c deploy 2, head 2670d1d34) rebases on deploy 1's round 1b and folds in deploy 1's review findings for deploy 2 (fcd2b).
+- 16:45. The owner was asked for one yes on one-time deletions. (a) The candidate fleet folder's two quarantined data images from 10-07: 32.4 GiB (39ddc7f2 holds 32 GiB, e3dacdac 406 MiB). (b) Three idle test-class computers: computer-2bd23366 (vm-f2588c7b, 8.6 GiB), computer-1f86c719 (vm-fdcb6a45, 8.7 GiB, the FP2 proof's Playwright account), computer-7dcdf5e2 (vm-7bb38d0c, 1.4 GiB, FP3's wedge test), plus candidate-control-20260717-j (0.3 GiB). (c) Nix's store dedupe tonight at low priority, which deletes nothing, unless the owner objects.
+- 17:00. Deploy T live: CI 39816936195 succeeded, and staging serves f0b1ee313. The paper refreshed 16:58:38 and is ready on f0b1ee313 with 8 running runs; vm-48bc0981 and the fleet refreshed too. Free: 128.6 GiB.
+- 17:05. Deploy T proof (FP3 cut 2 steps 1 to 3; _runs/fp3cut2):
+  - Step 1, partial. verify-host-hardening (`--expect-dolt clients`): 138 PASS and 28 FAIL, against 105 and 61 before T. The two issuer-credential checks and 31 containment checks now pass.
+  - Dolt: no "Access denied" or dbcred line since 16:55; corpusd and vmctl active; checkpointd is a one-minute timer whose last result is success.
+  - The remaining 28 are two problems, recorded first (docs/problems/host-containment-gaps-after-fp3-cut-2-2026-10-22.md):
+    - The deploy rewrites deploy.env by rename (ci.yml:2057-2060) at 16:59:59, after the units restarted (16:56 to 16:57). Every running unit sees the new file until its next restart.
+    - caddy, go-choir-goproxy, qdrant and searx have no InaccessiblePaths at all, so they can reach PID 1's private socket, the system bus and three env files.
+  - Step 2 (SEC-11 observe) PASS. The marker alone answers 200 and logs "hostauth: observe: would refuse … missing credential". The marker plus the credential answers 200 and logs nothing. The runbook omits the marker: the credential alone answers 403 "internal caller required".
+  - Step 3 PASS: no "issuer: would refuse" after the boots of the paper, vm-48bc0981 and the fleet on T.

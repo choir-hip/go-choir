@@ -291,14 +291,14 @@ now:
     6.18.57 + Firecracker 1.16.2, then the Node B reboot with the owner's
     go). Reviews use flash, DeepSeek and Devin or a Sonnet subagent.
   source_ref: 71ec8e704
-  deploy_identity: ddd20de0e serving (deploy S, proved 16:38); deploy T in CI
+  deploy_identity: f0b1ee313 serving (deploy T, proved 17:05 with two containment gaps recorded); deploy U in CI
   candidate:
-    id: deploy-T
-    state: on main, CI running; mirror deploytl PASS (FP3 cut 2, 5 commits on ddd20de0e, every lane's hunks identical)
-    ref: deploy T's landing commit on main
-    base: ddd20de0e
+    id: deploy-U
+    state: on main, CI running; mirror deployul PASS (SEC-14 deploy 1, 19 commits; rebuilt on f0b1ee313 with every lane's hunks identical)
+    ref: deploy U's landing commit on main
+    base: f0b1ee313
     digest: the mirrored tree plus the ledger and this card
-    scope: [internal/hostauth, internal/platform, internal/proxy, internal/vmctl, nix/node-b.nix, scripts, docs]
+    scope: [.github/scripts, .github/workflows, nix/node-b.nix, scripts, docs]
   bridge_conjecture: >-
     If the security and density batches land with deployed proofs and
     independent review, then the owner's second pass starts from a computer
@@ -341,7 +341,7 @@ now:
       regrows about 140 MiB a minute; platform-dolt's oldgen grows about 2
       GiB an hour with nothing collecting it); whether the new kernel's
       config (module signing, lockdown built in) boots the guest image.
-    next_observation: T's identity on staging and FP3 cut 2's host-hardening verifier (hostauth issuer and proxy route in observe; Dolt app-user connections).
+    next_observation: U's deploy log (root runs .github/scripts/node-b-ci-deploy) and scripts/node-b-ci-gate-probe on Node B: every line PASS, a real prebuild through the gate, "bootstrap marker present".
   blocker_or_risk: >-
     Landing is the bottleneck. The agents VM's memory bounds mirrors to one
     at a time. FP7 step 5 has no route without a guest shell. A capsule's
