@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"fmt"
 	"hash/fnv"
 	"log"
 	"net/http"
@@ -67,18 +68,29 @@ var (
 func sharedOpenCodeKeyPool() *openCodeKeyPool {
 	envOpenCodeKeysOnce.Do(func() {
 		keys := openCodeKeysFromEnv()
+		logOpenCodeKeysInService(keys)
+		envOpenCodeKeys = newOpenCodeKeyPool(keys)
+	})
+	return envOpenCodeKeys
+}
+
+var openCodeKeysLogOnce sync.Once
+
+// logOpenCodeKeysInService logs, once per process, which keys serve, by name
+// (never value). The presence check calls it too, so a policy that admits no
+// key, and so builds no provider, still says so.
+func logOpenCodeKeysInService(keys []openCodeKey) {
+	openCodeKeysLogOnce.Do(func() {
 		names := make([]string, len(keys))
 		for i, k := range keys {
 			names[i] = k.name
 		}
 		policy := "unset, every configured key"
 		if openCodeKeysPolicy() != nil {
-			policy = os.Getenv(openCodeKeysPolicyEnv)
+			policy = fmt.Sprintf("%q", os.Getenv(openCodeKeysPolicyEnv))
 		}
 		log.Printf("provider: OpenCode keys in service: [%s] (%s: %s)", strings.Join(names, " "), openCodeKeysPolicyEnv, policy)
-		envOpenCodeKeys = newOpenCodeKeyPool(keys)
 	})
-	return envOpenCodeKeys
 }
 
 // openCodeKeysFromEnv returns the configured keys in order: the primary,
@@ -122,12 +134,13 @@ func openCodeKeysFromEnv() []openCodeKey {
 }
 
 // openCodeKeysPolicy returns the key variable names the policy admits, or
-// nil when no policy is set (every configured key serves).
+// nil when the variable is unset (every configured key serves).
 func openCodeKeysPolicy() map[string]bool {
 	raw, ok := os.LookupEnv(openCodeKeysPolicyEnv)
-	if !ok || strings.TrimSpace(raw) == "" {
+	if !ok {
 		return nil
 	}
+	// Set but blank names no key, so none serve: a blank must not fail open.
 	allowed := map[string]bool{}
 	for _, name := range strings.FieldsFunc(raw, func(r rune) bool { return r == ',' || unicode.IsSpace(r) }) {
 		allowed[name] = true
