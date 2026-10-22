@@ -31,8 +31,17 @@ import (
 //     guest-side firewall could not bind) to host ports that must be dropped
 //     and to ones that must stay open.
 //
-// Owner-only; not on the ProductAPI allowlist, so no desk can call it. It
-// changes no state: the workers and their tmp dirs are gone when it answers.
+// With ?leg=oom it runs only the out-of-memory leg instead
+// (yaegikernel.DeskOOMSelfTest): a throwaway research worker under its real
+// budget cgroup runs a fixed allocating cell until the kernel kills it
+// (docs/problems/fp2-step4-deployed-oom-not-drivable-desk-refuses-runaway-2026-10-22.md).
+// The leg is an enum; the route takes no cell.
+//
+// Owner-only: server.AuthenticatedOwner admits only the host peer (the
+// guest's default gateway, where the proxy and vmctl dial from) carrying
+// X-Authenticated-User, never an in-guest caller. Not on the ProductAPI
+// allowlist, so no desk can call it. It changes no state: the workers, their
+// cgroups and tmp dirs are gone when it answers.
 
 var isolationSelfTestMu sync.Mutex
 
@@ -48,8 +57,11 @@ type isolationEgressProbe struct {
 }
 
 type isolationSelfTestResponse struct {
-	ComputerID string                              `json:"computer_id"`
-	DeskCells  yaegikernel.DeskCellSelfTestReceipt `json:"desk_cells"`
+	ComputerID string `json:"computer_id"`
+	// Leg is "" for the confinement legs, "oom" for the out-of-memory leg.
+	Leg       string                              `json:"leg,omitempty"`
+	OOM       *yaegikernel.DeskOOMSelfTestReceipt `json:"oom,omitempty"`
+	DeskCells yaegikernel.DeskCellSelfTestReceipt `json:"desk_cells"`
 	// FrameBoundary is the forged-frame probe: raw observations of the
 	// daemon's frame admission per desk, judged by the staging script against
 	// a table it holds itself.
@@ -70,6 +82,11 @@ func (h *APIHandler) HandleIsolationSelfTest(w http.ResponseWriter, r *http.Requ
 		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
 		return
 	}
+	leg, err := isolationSelfTestLeg(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+		return
+	}
 	if !isolationSelfTestMu.TryLock() {
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: "an isolation self-test is already running"})
 		return
@@ -78,7 +95,17 @@ func (h *APIHandler) HandleIsolationSelfTest(w http.ResponseWriter, r *http.Requ
 	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
 	defer cancel()
 
-	resp := isolationSelfTestResponse{ComputerID: h.rt.cfg.ComputerID}
+	resp := isolationSelfTestResponse{ComputerID: h.rt.cfg.ComputerID, Leg: leg}
+	if leg == isolationLegOOM {
+		rec := yaegikernel.DeskOOMSelfTest(ctx, deskOOMSelfTestConfig(h.rt.cfg.ComputerID))
+		resp.OOM = &rec
+		for _, f := range rec.Failures {
+			resp.Failures = append(resp.Failures, "oom: "+f)
+		}
+		resp.OK = len(resp.Failures) == 0
+		writeAPIJSON(w, http.StatusOK, resp)
+		return
+	}
 	resp.DeskCells = yaegikernel.DeskCellSelfTest(ctx, deskCellSelfTestConfig(h.rt.cfg.ComputerID))
 	for _, f := range resp.DeskCells.Failures {
 		resp.Failures = append(resp.Failures, "desk_cells: "+f)
@@ -102,6 +129,31 @@ func (h *APIHandler) HandleIsolationSelfTest(w http.ResponseWriter, r *http.Requ
 	}
 	resp.OK = len(resp.Failures) == 0
 	writeAPIJSON(w, http.StatusOK, resp)
+}
+
+const isolationLegOOM = "oom"
+
+// isolationSelfTestLeg reads the one input the route takes: no query (the
+// confinement legs) or exactly leg=oom. Anything else is refused before a
+// worker starts.
+func isolationSelfTestLeg(r *http.Request) (string, error) {
+	q := r.URL.Query()
+	if len(q) == 0 {
+		return "", nil
+	}
+	if len(q) == 1 && len(q["leg"]) == 1 && q.Get("leg") == isolationLegOOM {
+		return isolationLegOOM, nil
+	}
+	return "", errors.New("unknown self-test leg: the only selector is leg=oom")
+}
+
+// deskOOMSelfTestConfig is the OOM leg's: the research desk (untrusted input)
+// on desk_go_eval's production worker config.
+func deskOOMSelfTestConfig(computerID string) yaegikernel.DeskOOMSelfTestConfig {
+	return yaegikernel.DeskOOMSelfTestConfig{
+		Base: deskCellSelfTestConfig(computerID).Base,
+		Role: "research",
+	}
 }
 
 // deskCellSelfTestConfig is desk_go_eval's worker config (tools_desk.go)
