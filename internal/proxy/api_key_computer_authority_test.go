@@ -175,7 +175,6 @@ func TestOwnerWideAdminAPIKeyRequiresNamedTargetBeforeDesktopRouteFamilies(t *te
 		{name: "bootstrap", method: http.MethodGet, path: "/api/shell/bootstrap"},
 		{name: "protected HTTP", method: http.MethodGet, path: "/api/base/delta"},
 		{name: "websocket", method: http.MethodGet, path: "/api/ws"},
-		{name: "super console websocket", method: http.MethodGet, path: "/api/super-console/ws"},
 		{name: "compute recovery", method: http.MethodPost, path: "/api/compute/recovery", body: `{"action":"wake_current_computer","desktop_id":"primary"}`},
 		{name: "execution identity", method: http.MethodGet, path: "/api/acceptance/execution-identity"},
 	}
@@ -371,7 +370,6 @@ func TestExactBoundAdminAPIKeyPassesGuardForAllComputerRouteFamilies(t *testing.
 		{name: "bootstrap", method: http.MethodGet, path: "/api/shell/bootstrap"},
 		{name: "protected HTTP", method: http.MethodGet, path: "/api/base/delta"},
 		{name: "websocket", method: http.MethodGet, path: "/api/ws"},
-		{name: "super console websocket", method: http.MethodGet, path: "/api/super-console/ws"},
 		{name: "compute status", method: http.MethodGet, path: "/api/compute/status"},
 		{name: "compute recovery", method: http.MethodPost, path: "/api/compute/recovery", body: `{"action":"wake_current_computer","desktop_id":"primary"}`},
 		{name: "execution identity", method: http.MethodGet, path: "/api/acceptance/execution-identity"},
@@ -677,7 +675,6 @@ func TestBoundAPIKeyDesktopMismatchDeniedAcrossComputerRouteFamilies(t *testing.
 		{name: "bootstrap", method: http.MethodGet, path: "/api/shell/bootstrap?desktop_id=branch"},
 		{name: "protected HTTP", method: http.MethodGet, path: "/api/base/delta?desktop_id=branch"},
 		{name: "websocket", method: http.MethodGet, path: "/api/ws?desktop_id=branch"},
-		{name: "super console websocket", method: http.MethodGet, path: "/api/super-console/ws?desktop_id=branch"},
 		{name: "compute status", method: http.MethodGet, path: "/api/compute/status?desktop_id=branch"},
 		{name: "execution identity", method: http.MethodGet, path: "/api/acceptance/execution-identity?desktop_id=branch"},
 		{name: "texture publication", method: http.MethodPost, path: "/api/platform/texture/publications?desktop_id=branch", body: `{"doc_id":"doc-a"}`},

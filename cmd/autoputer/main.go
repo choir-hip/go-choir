@@ -7,9 +7,6 @@ import (
 )
 
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "zot-session" {
-		os.Exit(autoputer.RunZotSession(os.Stdin, os.Stdout, os.Stderr))
-	}
 	if len(os.Args) > 1 && os.Args[1] == "desk-session" {
 		// Host desk-cell session worker (R3b): serve framed yaegi eval cells on
 		// the inherited session socket for a non-capsule desk activation. The

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -41,7 +40,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/updater"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
-	"github.com/yusefmosiah/go-choir/internal/zot"
 )
 
 // replayHealthGate serves the guest /health surface while the computer event
@@ -158,15 +156,6 @@ func (g *replayHealthGate) tick() {
 	g.mu.Unlock()
 }
 
-// RunZotSession runs the autoputer binary's zot-session process mode.
-func RunZotSession(stdin io.Reader, stdout, stderr io.Writer) int {
-	return zot.RunSession(zot.SessionConfig{
-		SessionID: os.Getenv("ZOT_SESSION_ID"),
-		RootDir:   os.Getenv("ZOT_ROOT_DIR"),
-		UserID:    os.Getenv("ZOT_USER_ID"),
-	}, stdin, stdout, stderr)
-}
-
 // Run starts the autoputer service.
 func Run() {
 	bootMark("process_main_entry")
@@ -184,11 +173,6 @@ func Run() {
 	RegisterRoutes(s, h)
 
 	filesRoot := provideriface.ResolveFilesRoot(os.Getenv("AUTOPUTER_FILES_ROOT"))
-
-	// Initialize the singleton Management Console PTY handler. The PTY process is
-	// zot, not an interactive shell.
-	managementConsoleHandler := NewManagementConsoleHandler(filesRoot)
-	RegisterManagementConsoleRoutes(s, managementConsoleHandler)
 
 	// Initialize the runtime engine with persisted state.
 	rtRuntimeCfg := provideriface.LoadConfig()

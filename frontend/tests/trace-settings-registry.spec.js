@@ -86,7 +86,6 @@ test('Trace and Settings stay product-safe while app and theme metadata come fro
   const expectedApps = [
     ['files', 'Files', '📁'],
     ['browser', 'Web Lens', '🌐'],
-    ['super-console', 'Engineering Console', '⌘'],
     ['settings', 'Settings', '⚙️'],
     ['texture', 'Texture', '📝'],
   ];
@@ -118,9 +117,7 @@ test('Trace and Settings stay product-safe while app and theme metadata come fro
   await expect(settings).not.toContainText('/api/prompts');
 
   await expect(page.locator('[data-desktop-icon-id="trace"]')).toHaveCount(0);
-  await openApp(page, 'super-console');
-  const superConsole = page.locator('[data-super-console-app]').last();
-  await expect(superConsole.locator('[data-super-console]')).toBeVisible({ timeout: 10000 });
+  await expect(page.locator('[data-desktop-icon-id="super-console"]')).toHaveCount(0);
 
   await page.waitForTimeout(500);
   expect(forbiddenRequests).toHaveLength(0);

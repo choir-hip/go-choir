@@ -106,14 +106,14 @@ test('floating desktop icons render with emoji and labels', async ({ page, authe
   const surface = page.locator('[data-desktop-surface]');
   await expect(surface).toBeVisible();
 
-  // Trace is unshipped and Terminal is replaced by singleton Engineering Console.
+  // Trace is unshipped; Terminal and the Engineering Console (zot) are removed.
   const icons = surface.locator('[data-desktop-icon]');
-  await expect(icons).toHaveCount(8);
+  await expect(icons).toHaveCount(7);
 
   // Verify each app icon is present
   await expect(surface.locator('[data-desktop-icon-id="files"]')).toBeVisible();
   await expect(surface.locator('[data-desktop-icon-id="browser"]')).toBeVisible();
-  await expect(surface.locator('[data-desktop-icon-id="super-console"]')).toBeVisible();
+  await expect(surface.locator('[data-desktop-icon-id="super-console"]')).toHaveCount(0);
   await expect(surface.locator('[data-desktop-icon-id="settings"]')).toBeVisible();
   await expect(surface.locator('[data-desktop-icon-id="texture"]')).toBeVisible();
   await expect(surface.locator('[data-desktop-icon-id="trace"]')).toHaveCount(0);
@@ -208,11 +208,7 @@ test('logged-out desktop opens Browser and Trace as read shells before auth', as
 
   await page.locator('[data-desk-menu-button]').click();
   await expect(page.locator('[data-desk-sheet-app][data-desk-app-id="trace"]')).toHaveCount(0);
-  await page.locator('[data-desk-sheet-app][data-desk-app-id="super-console"]').click();
-
-  const superConsole = page.locator('[data-super-console-app]').last();
-  await expect(superConsole).toBeVisible({ timeout: 5000 });
-  await expect(superConsole.locator('[data-super-console-preview]')).toBeVisible();
+  await expect(page.locator('[data-desk-sheet-app][data-desk-app-id="super-console"]')).toHaveCount(0);
   expect(protectedAppRequests).toEqual([]);
   await expect(page.locator('[data-auth-entry]')).toHaveCount(0);
 });
@@ -285,23 +281,14 @@ test('Texture opens near full mobile workspace and clears the prompt bar', async
 // ---------------------------------------------------------------
 // Test: Trace appears as a debugging desktop app
 // ---------------------------------------------------------------
-test('Trace is unshipped and Engineering Console replaces Terminal', async ({ page, authenticator }) => {
+test('Trace is unshipped; Terminal and Engineering Console are removed', async ({ page, authenticator }) => {
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);
 
   await expect(page.locator('[data-desktop-icon-id="trace"]')).toHaveCount(0);
   await expect(page.locator('[data-desktop-icon-id="terminal"]')).toHaveCount(0);
-  await expect(page.locator('[data-desktop-icon-id="super-console"]')).toBeVisible();
-});
-
-test('Engineering Console opens as the singleton repair app', async ({ page, authenticator }) => {
-  const email = uniqueEmail();
-  await registerAndLoadDesktop(page, authenticator, email);
-
-  await openAppViaIcon(page, 'super-console');
-  await openAppViaIcon(page, 'super-console');
-  await expect(page.locator('[data-super-console-app]')).toHaveCount(1);
-  await expect(page.locator('[data-super-console]')).toBeVisible();
+  // zot is removed (docs/problems/remove-zot-2026-10-22.md).
+  await expect(page.locator('[data-desktop-icon-id="super-console"]')).toHaveCount(0);
 });
 
 // ---------------------------------------------------------------

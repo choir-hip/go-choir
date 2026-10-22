@@ -276,7 +276,7 @@ test('mobile restore recovery pauses too many heavyweight saved windows', async 
   await page.setViewportSize({ width: 390, height: 844 });
   await registerAndLoadDesktop(page, authenticator, email);
 
-  const appIds = ['image', 'pdf', 'epub', 'video', 'audio', 'podcast', 'texture', 'browser', 'super-console'];
+  const appIds = ['image', 'pdf', 'epub', 'video', 'audio', 'podcast', 'texture', 'browser', 'slides'];
   const windows = appIds.map((appId, index) => ({
     window_id: `recovery-window-${index + 1}`,
     app_id: appId,

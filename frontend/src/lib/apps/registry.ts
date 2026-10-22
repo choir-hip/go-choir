@@ -1,7 +1,7 @@
 import type { ComponentType } from 'svelte';
 
 export type AppPreviewPolicy = 'public-preview' | 'public-readonly' | 'private';
-export type AppSurfaceKind = 'standard' | 'document' | 'media' | 'terminal';
+export type AppSurfaceKind = 'standard' | 'document' | 'media';
 
 export type WindowGeometry = {
   width?: number;
@@ -241,17 +241,6 @@ export const APP_REGISTRY = [
     window: { singleton: false, heavy: false, desktop: { width: 820, height: 620, minWidth: 560, minHeight: 420 }, compact: compactDefault },
     auth: { preview: 'public-readonly' },
     theme: { surface: 'standard', shellDataAttr: 'data-content-window', contentClass: 'content-viewer-content' },
-  },
-  {
-    id: 'super-console',
-    name: 'Engineering Console',
-    icon: '⌘',
-    description: 'engineering repair console',
-    component: () => import('../SuperConsoleApp.svelte'),
-    launcher: { desk: true, desktopIcon: true, order: 140 },
-    window: { singleton: true, heavy: true },
-    auth: { preview: 'public-preview' },
-    theme: { surface: 'terminal', shellDataAttr: 'data-super-console-app', contentClass: 'terminal-content' },
   },
   {
     id: 'settings',

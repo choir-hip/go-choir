@@ -337,7 +337,7 @@ test.describe('Cross-breakpoint checks', () => {
     const email = uniqueEmail();
     await registerAndLoadDesktop(page, authenticator, email, { width: 1280, height: 800 });
 
-    await openAppViaIcon(page, 'super-console');
+    await openAppViaIcon(page, 'settings');
     const windowEl = page.locator('[data-window]').first();
     await expect(windowEl).toBeVisible({ timeout: 5000 });
 

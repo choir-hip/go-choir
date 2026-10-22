@@ -40,7 +40,6 @@
 
   .app-content[data-app-surface='document'],
   .app-content[data-app-surface='media'],
-  .app-content[data-app-surface='terminal'],
   .app-content[data-app-id='settings'],
   .app-content[data-app-id='compute-monitor'],
   .app-content[data-app-id='features'] {

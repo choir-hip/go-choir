@@ -218,7 +218,7 @@ test('logged-out Desk opens every app and keeps Settings themes available', asyn
   const deskOverflow = await page.locator('[data-desk-sheet]').evaluate((el) => el.scrollHeight - el.clientHeight);
   expect(deskOverflow).toBeLessThanOrEqual(1);
   const appIds = await deskAppIds(page);
-  expect(appIds.length).toBeGreaterThanOrEqual(15);
+  expect(appIds.length).toBeGreaterThanOrEqual(14);
   expect(new Set(appIds).size).toBe(appIds.length);
   for (const appId of appIds) {
     await expect(page.locator(`[data-desk-sheet-app][data-desk-app-id="${appId}"]`), appId).toBeVisible();
@@ -235,7 +235,6 @@ test('logged-out Desk opens every app and keeps Settings themes available', asyn
   for (const appId of appIds) {
     expect(appHostIds, `${appId} app host`).toContain(appId);
   }
-  await expect(page.locator('[data-super-console-preview]')).toBeVisible();
   await expect(page.locator('[data-settings-window]')).toHaveCount(1);
 
   await expect(page.locator('[data-settings-window] [data-theme-preset]')).toHaveCount(3);
@@ -369,11 +368,14 @@ test('logged-out Desk opens every app and keeps Settings themes available', asyn
   await page.locator('[data-desk-sheet-close]').click();
 });
 
-test('Engineering Console appears in desktop and mobile app switchers while Trace is absent', async ({ page, browser }) => {
+test('desktop and mobile app switchers carry neither Trace nor the removed Engineering Console', async ({ page, browser }) => {
   await page.goto(BASE_URL);
+  await page.locator('[data-desk-menu-button]').click();
+  await expect(page.locator('[data-desk-sheet]')).toBeVisible();
   await expect(page.locator('[data-desk-sheet-app][data-desk-app-id="trace"]')).toHaveCount(0);
-  await openDeskApp(page, 'super-console');
-  await expect(page.locator('[data-super-console-app]')).toBeVisible();
+  // zot is removed (docs/problems/remove-zot-2026-10-22.md).
+  await expect(page.locator('[data-desk-sheet-app][data-desk-app-id="super-console"]')).toHaveCount(0);
+  await page.locator('[data-desk-sheet-close]').click();
 
   const mobile = await browser.newPage({ viewport: { width: 390, height: 844 } });
   await mobile.goto(BASE_URL);
