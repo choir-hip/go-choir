@@ -421,7 +421,7 @@ func (d *Dispatcher) activate(ctx context.Context, agentID string) {
 				CreatedAt:   time.Now().UTC(),
 			})
 			incorporated = append(incorporated, u.UpdateID)
-			log.Printf("dispatcher: poison %s/%s after %d attempts -> %s cause=earlier deliveries ended without returning (crash or kill)", agentID, u.UpdateID, attempts, d.opts.ErrorSink)
+			log.Printf("dispatcher: poison %s/%s after %d attempts -> %s cause=earlier deliveries did not complete (crash, kill or a failed commit)", agentID, u.UpdateID, attempts, d.opts.ErrorSink)
 			continue
 		}
 		newMemory, herr := d.safeHandleUpdate(actx, agentID, u, memory)

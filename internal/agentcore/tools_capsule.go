@@ -662,7 +662,7 @@ func newCapsuleGoEvalTool(rt *Runtime) toolregistry.Tool {
 			if reduction.active && result.Error == "" {
 				reduction.records = reduction.records.capToShown(rt.noteRecordsShown(reduction.scope.RunID, result.RecordsShown))
 				if rerr := traceErr(rt, toolCtx.AgentRunID, "cell.reduce", func() error { return reduction.commit(ctx, result.Intents) }); rerr != nil {
-					return "", rerr
+					return "", withCommittedFreeze(rerr, reduction.freezeResult)
 				}
 				for _, in := range reduction.receipt.Intents {
 					result.StagedIntentIDs = append(result.StagedIntentIDs, fmt.Sprintf("rlm:%s:%d", in.Kind, in.Seq))
@@ -675,6 +675,25 @@ func newCapsuleGoEvalTool(rt *Runtime) toolregistry.Tool {
 			return toolregistry.ResultJSON(result)
 		},
 	}
+}
+
+// committedFreezeMarker prefixes the note a cell error carries when its
+// freeze committed before a later intent failed.
+const committedFreezeMarker = "the freeze in this cell committed: freeze_result="
+
+// withCommittedFreeze adds the committed freeze to a cell's reduce error.
+// The error path returns no result, so without it a durable freeze left no
+// freeze_result in the cell's output and the completion guard kept a stale
+// refusal (review round 4b, DeepSeek).
+func withCommittedFreeze(err error, freezeResult map[string]any) error {
+	if err == nil || len(freezeResult) == 0 {
+		return err
+	}
+	encoded, encodeErr := json.Marshal(freezeResult)
+	if encodeErr != nil {
+		return err
+	}
+	return fmt.Errorf("%w; %s%s", err, committedFreezeMarker, encoded)
 }
 
 func sortedUniqueStrings(values []string) []string {

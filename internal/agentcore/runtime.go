@@ -129,6 +129,9 @@ type Runtime struct {
 	// in-flight durable open (each delivery's cleanup would otherwise write
 	// divergent fate intents on the same deterministic command identity).
 	engineeringAssignmentOpenMu sync.Mutex
+	// assignmentSagas holds one mutex per assignment attempt for its terminal
+	// report's drivers (assignmentSagaMutex).
+	assignmentSagas sync.Map
 	// productAPISrv is the canonical product API route table the management
 	// desk's choir.ProductAPI verb serves through (SMG). Bound at autoputer
 	// boot via SetProductAPIHandler; nil in tests that never call the verb.
@@ -4314,20 +4317,18 @@ func engineeringTerminalFateGuardReason(messages []json.RawMessage) string {
 			if block.Type != "tool_result" {
 				continue
 			}
-			if m := freezeRefusedByOpenCandidate.FindStringSubmatch(block.Content); m != nil {
-				refused = m
+			// A cell whose freeze got past the open-candidate check returns a
+			// top-level freeze_result (committed, or a rejected bundle), or,
+			// when a later intent of the cell failed, an error naming the
+			// committed freeze. Refusals before it no longer describe the run,
+			// and this check wins over the refusal pattern in the same cell,
+			// whose output may echo an old refusal (review round 4b).
+			if cellPassedTheFreezeGate(block.Content) {
+				refused = nil
 				continue
 			}
-			// A cell whose freeze committed returns a top-level
-			// freeze_result with the operation id: refusals before it no
-			// longer describe the run.
-			var cell struct {
-				FreezeResult map[string]any `json:"freeze_result"`
-			}
-			if json.Unmarshal([]byte(block.Content), &cell) == nil {
-				if id, _ := cell.FreezeResult["operation_id"].(string); strings.TrimSpace(id) != "" {
-					refused = nil
-				}
+			if m := freezeRefusedByOpenCandidate.FindStringSubmatch(block.Content); m != nil {
+				refused = m
 			}
 		}
 	}
@@ -4344,6 +4345,21 @@ func engineeringTerminalFateGuardReason(messages []json.RawMessage) string {
 // per batch, extended across the whole cell history for the completion guard.
 // Tool results persist as user messages whose content is a list of
 // {type:"tool_result", content:<eval output JSON string>} blocks.
+// cellPassedTheFreezeGate reports whether a cell's tool result shows a
+// freeze that got past the open-candidate check: a top-level freeze_result
+// object (committed, or a rejected bundle), or a cell error that names a
+// committed freeze (withCommittedFreeze). Output text cannot set the
+// top-level key.
+func cellPassedTheFreezeGate(content string) bool {
+	var cell struct {
+		FreezeResult map[string]any `json:"freeze_result"`
+	}
+	if json.Unmarshal([]byte(content), &cell) == nil && len(cell.FreezeResult) > 0 {
+		return true
+	}
+	return strings.Contains(content, committedFreezeMarker)
+}
+
 func engineeringOverlayTerminalFateCommitted(messages []json.RawMessage) bool {
 	var msg struct {
 		Content json.RawMessage `json:"content"`
