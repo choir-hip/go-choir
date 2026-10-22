@@ -62,7 +62,8 @@ type PageCacheRoot struct {
 // private store on /mnt/persistent (nix/autoputer-vm.nix layering): its
 // files are the release delta, not the base image, so they are counted as
 // store_upper and left out of persistent. Partitioned is false when the
-// mount table could not be read; then the store and persistent totals may
+// mount table could not be read, or the store is an overlay whose upper
+// does not resolve in this namespace; then the store and persistent totals may
 // both include the upper and must not be quoted as the base image.
 type PageCacheLayering struct {
 	FSType      string `json:"fstype"`
@@ -334,6 +335,16 @@ func readGuestPageCache() (PageCache, error) {
 	out, err := readPageCache(roots, guestPageCacheLimits)
 	if err != nil {
 		return out, err
+	}
+	// An overlay upper that does not resolve here (misparsed, removed after
+	// mount, mounted from another namespace) partitions nothing: its files
+	// stay in store and persistent, so the split must not be claimed.
+	if layering.Partitioned && layering.FSType == "overlay" && layering.Upper != "" {
+		for _, r := range out.Roots {
+			if r.Name == "store_upper" && !r.Present {
+				layering.Partitioned = false
+			}
+		}
 	}
 	out.StoreLayering = &layering
 	if info, err := readKiBFields("/proc/meminfo"); err == nil {

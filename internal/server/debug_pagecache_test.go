@@ -447,8 +447,36 @@ func TestPageCacheSplitsTheOverlayUpperFromTheBaseStore(t *testing.T) {
 	if r := rootByName(t, got, "store_upper"); r.Files != 1 || r.Bytes != 8192 || len(r.Top) > 1 {
 		t.Fatalf("store_upper = %+v, want the release file only", r)
 	}
-	if r := rootByName(t, got, "persistent"); r.Files != 1 || r.Bytes != 100 {
+	r := rootByName(t, got, "persistent")
+	if r.Files != 1 || r.Bytes != 100 {
 		t.Fatalf("persistent = %+v, want the Dolt file only (upper and work excluded)", r)
+	}
+	// Pin the mechanism: the shared inode dedup alone would also pass the
+	// totals above, so the upper must be excluded by path (review bunch 16).
+	excluded := strings.Join(r.Excluded, "\n")
+	if !strings.Contains(excluded, upper) || !strings.Contains(excluded, work) {
+		t.Fatalf("persistent.excluded = %v, want the upper %s and work %s", r.Excluded, upper, work)
+	}
+}
+
+//  17. An overlay whose upper does not resolve in the reader's namespace
+//     (misparsed, removed after mount, mounted from another namespace)
+//     leaves every merged file in store and the upper inside persistent:
+//     the read must say partitioned false, not true (review bunch 16).
+func TestPageCacheOverlayWithUnresolvedUpperIsNotPartitioned(t *testing.T) {
+	store, persistent := t.TempDir(), t.TempDir()
+	writeFile(t, filepath.Join(store, "aaa-base", "bin", "x"), 4096)
+	missing := filepath.Join(persistent, "choir-updater", "store") // never created
+	useGuestPaths(t, store, persistent, fmt.Sprintf("41 24 0:44 / %s rw - overlay overlay rw,lowerdir=%s,upperdir=%s,workdir=%s\n", store, store, missing, missing+"-work"))
+	got, err := readGuestPageCache()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l := got.StoreLayering; l == nil || l.FSType != "overlay" || l.Partitioned {
+		t.Fatalf("store_layering = %+v, want overlay and partitioned false", got.StoreLayering)
+	}
+	if r := rootByName(t, got, "store_upper"); r.Present {
+		t.Fatalf("store_upper = %+v, want absent", r)
 	}
 }
 
