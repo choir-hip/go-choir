@@ -83,6 +83,11 @@ NO_CAP_UNITS = {
     "go-choir-maild", "go-choir-platform-dolt", "go-choir-corpus-dolt",
     "go-choir-checkpointd", "go-choir-front-importance", "go-choir-goproxy",
 }
+# The host services a guest reaches on its own tap host address: the floor's
+# one list, internal/vmmanager tapReachableHostServicePorts (8089 is
+# go-choir-pkgmirror, NET-02). TestHostFloorScriptsExpectEveryTapServicePort
+# keeps the two in step.
+TAP_SERVICE_PORTS = ("8082", "8083", "8084", "8086", "8087", "8088", "8089")
 FORBIDDEN_SYSCALLS = ["bpf", "chroot", "acct", "setuid", "capset"]
 
 results = []
@@ -469,6 +474,10 @@ def check_guest_floor(dns_port=8053):
     rules = [l for l in chain.splitlines() if l.startswith("-A ")]
     record("guest-floor", "egress chain", len(rules) > 0 and all("80,443" not in l for l in rules)
            and any("--limit-iface-in" in l for l in rules), f"{len(rules)} rules")
+    want_ports = ",".join(TAP_SERVICE_PORTS)
+    services = [l for l in rules if "--limit-iface-in" in l and "-p tcp" in l and "--dports" in l and l.endswith("-j RETURN")]
+    record("guest-floor", "egress service ports", any(f"--dports {want_ports} " in l for l in services),
+           f"want {want_ports}; have {[l.split('--dports ')[1].split()[0] for l in services]}")
     pre = _run("iptables", "-t", "mangle", "-S", "PREROUTING").stdout.splitlines()
     record("guest-floor", "egress jump first", len(pre) > 1 and "CHOIR-GUEST-EGRESS" in pre[1],
            pre[1] if len(pre) > 1 else "no rules")

@@ -63,6 +63,9 @@ def main():
         ("own maild", f"{host}:8087", True, "capability 6: Mail"),
         ("own proxy", f"{host}:8082", True, "publish path"),
         ("own goproxy", f"{host}:8088", True, "capability 5: Go modules"),
+        # go-choir-pkgmirror listens with every ecosystem off; the TCP dial
+        # still connects (a prefix answers 404).
+        ("own pkgmirror", f"{host}:8089", True, "NET-02 capsule package mirror"),
         ("own resolver over TCP", f"{host}:53", True, "SEC-10 host resolver"),
         ("internet https", "1.1.1.1:443", True, "capability 1: research reads"),
         ("internet dns over tcp", "8.8.8.8:53", True, "public TCP stays open"),

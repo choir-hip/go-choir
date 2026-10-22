@@ -2,6 +2,9 @@ package vmmanager
 
 import (
 	"fmt"
+	"os"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -26,7 +29,11 @@ import (
 //	H7 the INPUT service ACCEPTs admit a guest to a host address other than
 //	   its own DNAT'd loopback service (another tap's host address);
 //	H8 the guest DNS resolver is reached when none is configured, or not
-//	   reached (DNAT and INPUT) when one is.
+//	   reached (DNAT and INPUT) when one is;
+//	H9 a host service a guest needs (the package mirror on 8089, NET-02)
+//	   is on the floor's port list but the probe and the hardening check do
+//	   not expect it, so the deployed proof flags a capability as a leak, or
+//	   the list outgrows the one multiport match that admits it.
 
 type floorStep struct {
 	name  string
@@ -248,4 +255,61 @@ func TestGuestDNSReachesHostResolverOnlyWhenConfigured(t *testing.T) {
 			}
 		}
 	})
+}
+
+// H9: every port on the floor's service list (tapReachableHostServicePorts,
+// the one list the egress chain, the INPUT ACCEPTs and the DNAT read) is
+// one the deployed probes expect open, with the package mirror (8089,
+// NET-02, go-choir-pkgmirror) named; and the list fits one multiport match.
+func TestHostFloorScriptsExpectEveryTapServicePort(t *testing.T) {
+	ports := tapReachableHostServicePorts()
+	if !slices.Contains(ports, "8089") {
+		t.Fatalf("the package mirror 8089 is not on the floor's service list %v", ports)
+	}
+	if len(ports) > 15 {
+		t.Fatalf("%d service ports: iptables multiport takes at most 15", len(ports))
+	}
+	tp := tapsAtOrdinals(t, 9)[0]
+	ipt := newFakeIPTables(t)
+	h := newFakeHostNet(t, ipt, newFakeIP(nil))
+	if err := h.ensureTap(tp.name, tp.guest); err != nil {
+		t.Fatal(err)
+	}
+	if v := ipt.verdict("INPUT", fakePacket{in: tp.name, src: tp.guest, dst: "127.0.0.1", proto: "tcp", dport: "8089"}); v != "ACCEPT" {
+		t.Fatalf("guest to its own package mirror: verdict %q, want ACCEPT", v)
+	}
+	dnat := false
+	for _, r := range tapNATSpecs(tp.name, tp.host, tp.guest, 9309, 8085, 0) {
+		if r.chain == "PREROUTING" && strings.Contains(strings.Join(r.spec, " "), "--dport 8089 ") && slices.Contains(r.spec, "127.0.0.1:8089") {
+			dnat = true
+		}
+	}
+	if !dnat {
+		t.Fatalf("no DNAT of the tap host address :8089 to the loopback mirror")
+	}
+
+	probe, err := os.ReadFile("../../scripts/host_floor_probe.py")
+	if err != nil {
+		t.Fatal(err)
+	}
+	hardening, err := os.ReadFile("../../scripts/verify-host-hardening.py")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := regexp.MustCompile(`(?m)^TAP_SERVICE_PORTS = \(([^)]*)\)`).FindSubmatch(hardening)
+	if m == nil {
+		t.Fatal("verify-host-hardening.py has no TAP_SERVICE_PORTS tuple")
+	}
+	for _, port := range ports {
+		open := regexp.MustCompile(`f"\{host\}:` + port + `", True,`)
+		if !open.Match(probe) {
+			t.Errorf("host_floor_probe.py does not expect own-tap :%s open", port)
+		}
+		if !strings.Contains(string(m[1]), `"`+port+`"`) {
+			t.Errorf("verify-host-hardening.py TAP_SERVICE_PORTS lacks %s", port)
+		}
+	}
+	if !regexp.MustCompile(`"own pkgmirror", f"\{host\}:8089", True, "[^"]*NET-02`).Match(probe) {
+		t.Errorf("host_floor_probe.py does not name 8089's owner (pkgmirror, NET-02)")
+	}
 }
