@@ -430,6 +430,11 @@ func (h *Handler) deployRefreshWith(ctx context.Context, req deployRefreshReques
 	case guestMarkBusy:
 		return reply(deployRefreshDeferred, "busy: "+detail, http.StatusConflict)
 	case guestMarkUnsupported:
+		// Offline maintenance (the store compaction) is never worth a crash
+		// boot: without a marker the boot would close the guest's open work.
+		if maintenance != nil {
+			return reply(deployRefreshDeferred, "guest predates planned-restart; a compaction never crash-boots a computer", http.StatusConflict)
+		}
 		// A guest built before the endpoint cannot write a marker, and the
 		// deploy that ships the endpoint must still reach it. Refresh it only
 		// when its /health reports no work (the idle sweep's test); the boot
