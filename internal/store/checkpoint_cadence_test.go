@@ -25,7 +25,12 @@ import (
 //   - turning the mode off leaves a timer running, or does not return to
 //     counted inline commits;
 //   - count mode drifts from today's cadence;
-//   - the counters cannot tell write-path time from background time.
+//   - the counters cannot tell write-path time from background time;
+//   - a finalize that waits on a background commit for the store's one
+//     connection is invisible to the counters;
+//   - a wedged closing commit holds Close for the full commit timeout;
+//   - a "nothing to commit" answer is counted as a commit;
+//   - the mode report says debounced after Close.
 
 // finalizeTestEvents appends n events after the head of computerID.
 func finalizeTestEvents(t *testing.T, s *Store, computerID string, n int) {
@@ -163,7 +168,7 @@ func TestCheckpointMarkDuringCommitStaysDirty(t *testing.T) {
 	_, _ = prepareGenesis(t, s, computerID, "genesis-cadence-gen")
 	s.markDoltHistoryDirty()
 	marked := false
-	s.checkpointExecHook = func() error {
+	s.checkpointExecHook = func(context.Context) error {
 		if !marked {
 			marked = true
 			s.markDoltHistoryDirty()
@@ -190,7 +195,7 @@ func TestCheckpointBackgroundFailureRetries(t *testing.T) {
 	s := openProjectStore(t)
 	var mu sync.Mutex
 	fail := 1
-	s.checkpointExecHook = func() error {
+	s.checkpointExecHook = func(context.Context) error {
 		mu.Lock()
 		defer mu.Unlock()
 		if fail > 0 {
@@ -342,4 +347,171 @@ func TestCheckpointReopenAfterCloseStaysDebounced(t *testing.T) {
 		st := s.CheckpointStats()
 		return st.BackgroundCommits > before && st.EventsSinceCommit == 0
 	})
+}
+
+// A background commit holds the store's one connection (MaxOpenConns 1), so
+// a finalize that starts during it waits at BeginTx while holding eventMu.
+// Debounced mode bounds how often that happens; the counters must show it.
+func TestCheckpointFinalizeWaitOnCommitIsCounted(t *testing.T) {
+	ctx := context.Background()
+	s := openProjectStore(t)
+	const computerID = "computer-cadence-connwait"
+	_, _ = prepareGenesis(t, s, computerID, "genesis-cadence-connwait")
+	finalizeTestEvents(t, s, computerID, 1)
+	if got := s.CheckpointStats(); got.FinalizeCommitWaits != 0 {
+		t.Fatalf("a finalize with no commit in flight counted a wait: %+v", got)
+	}
+
+	head, err := s.Head(ctx, computerID)
+	if err != nil || head == nil {
+		t.Fatalf("head: %v", err)
+	}
+	eventID, err := computerevent.NewEventID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	event, digest := prepareProjectionEvent(t, s, *head, eventID, "connwait-"+eventID)
+	batch := testBatchCheckpointBatch(t, computerID, event.EventID, digest)
+	receipt := signedReceipt(t, computerID, digest, event.Sequence)
+
+	const hold = 150 * time.Millisecond
+	held := make(chan struct{})
+	release := make(chan struct{})
+	s.checkpointExecHook = func(ctx context.Context) error {
+		// Stand in for DOLT_COMMIT holding the connection.
+		conn, err := s.db.Conn(ctx)
+		if err != nil {
+			return err
+		}
+		close(held)
+		<-release
+		return conn.Close()
+	}
+	s.markDoltHistoryDirty()
+	commitDone := make(chan error, 1)
+	go func() {
+		commitDone <- s.commitDoltCheckpointAt(ctx, "held", checkpointSiteBackground)
+	}()
+	select {
+	case <-held:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the commit never took the connection")
+	}
+	finalizeDone := make(chan error, 1)
+	go func() {
+		finalizeDone <- s.FinalizeBatch(ctx, computerID, digest, receipt, &batch)
+	}()
+	time.Sleep(hold)
+	close(release)
+	for name, ch := range map[string]chan error{"commit": commitDone, "finalize": finalizeDone} {
+		select {
+		case err := <-ch:
+			if err != nil {
+				t.Fatalf("%s: %v", name, err)
+			}
+		case <-time.After(10 * time.Second):
+			t.Fatalf("%s did not finish", name)
+		}
+	}
+	s.checkpointExecHook = nil
+	stats := s.CheckpointStats()
+	if stats.FinalizeCommitWaits != 1 {
+		t.Fatalf("finalize_commit_waits = %d, want 1: %+v", stats.FinalizeCommitWaits, stats)
+	}
+	if min := uint64(hold / 2); stats.FinalizeCommitWaitMaxNs < min || stats.FinalizeCommitWaitNanos < min {
+		t.Fatalf("the wait on the commit was not measured (want >= %d ns): %+v", min, stats)
+	}
+}
+
+// A wedged closing commit holds Close for the close cap, not the
+// background commit's timeout.
+func TestCheckpointCloseCommitIsBoundedByCloseTimeout(t *testing.T) {
+	if checkpointCloseTimeout >= checkpointCommitTimeout {
+		t.Fatalf("close cap %s is not shorter than the commit timeout %s", checkpointCloseTimeout, checkpointCommitTimeout)
+	}
+	path := testStorePath(t)
+	cleanupTestStorePath(path)
+	t.Cleanup(func() { cleanupTestStorePath(path) })
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.ConfigureCheckpoint(CheckpointConfig{Debounced: true, Debounce: time.Hour, MaxOps: 1 << 30})
+	s.checkpoint.closeTimeout = 100 * time.Millisecond
+	const computerID = "computer-cadence-closecap"
+	_, _ = prepareGenesis(t, s, computerID, "genesis-cadence-closecap")
+	finalizeTestEvents(t, s, computerID, 1)
+	sawDeadline := make(chan bool, 1)
+	s.checkpointExecHook = func(ctx context.Context) error {
+		_, ok := ctx.Deadline()
+		sawDeadline <- ok
+		<-ctx.Done()
+		return ctx.Err()
+	}
+	started := time.Now()
+	closed := make(chan error, 1)
+	go func() { closed <- s.Close() }()
+	select {
+	case <-closed:
+	case <-time.After(10 * time.Second):
+		t.Fatal("Close waited on the wedged closing commit past the close cap")
+	}
+	if elapsed := time.Since(started); elapsed > 5*time.Second {
+		t.Fatalf("Close took %s with a 100ms close cap", elapsed)
+	}
+	if ok := <-sawDeadline; !ok {
+		t.Fatal("the closing commit ran without a deadline")
+	}
+	if s.CheckpointStats().Failures < 1 {
+		t.Fatal("the timed-out closing commit was not counted as a failure")
+	}
+}
+
+// "nothing to commit" is not a commit: it is counted apart and moves no
+// site's commit count.
+func TestCheckpointNoopCommitIsCountedApart(t *testing.T) {
+	ctx := context.Background()
+	s := openProjectStore(t)
+	const computerID = "computer-cadence-noop"
+	_, _ = prepareGenesis(t, s, computerID, "genesis-cadence-noop")
+	s.markDoltHistoryDirty()
+	if err := s.commitDoltCheckpoint(ctx, "real"); err != nil {
+		t.Fatal(err)
+	}
+	before := s.CheckpointStats()
+	s.markDoltHistoryDirty()
+	if err := s.commitDoltCheckpoint(ctx, "nothing changed"); err != nil {
+		t.Fatal(err)
+	}
+	after := s.CheckpointStats()
+	if after.NoopCommits != before.NoopCommits+1 {
+		t.Fatalf("noop_commits %d -> %d, want +1", before.NoopCommits, after.NoopCommits)
+	}
+	if after.OtherCommits != before.OtherCommits || after.InlineCommits != before.InlineCommits || after.BackgroundCommits != before.BackgroundCommits {
+		t.Fatalf("a no-op commit moved a commit count: before %+v after %+v", before, after)
+	}
+	if s.doltHistoryIsDirty() {
+		t.Fatal("a no-op commit left the store dirty")
+	}
+}
+
+// After Close the mode report says closed, not the configured mode.
+func TestCheckpointModeReportsClosedAfterClose(t *testing.T) {
+	path := testStorePath(t)
+	cleanupTestStorePath(path)
+	t.Cleanup(func() { cleanupTestStorePath(path) })
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.ConfigureCheckpoint(CheckpointConfig{Debounced: true, Debounce: time.Hour, MaxOps: 1 << 30})
+	if got := s.CheckpointStats().Mode; got != CheckpointModeDebounced {
+		t.Fatalf("mode before Close = %q", got)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.CheckpointStats().Mode; got != CheckpointModeClosed {
+		t.Fatalf("mode after Close = %q, want %q", got, CheckpointModeClosed)
+	}
 }
