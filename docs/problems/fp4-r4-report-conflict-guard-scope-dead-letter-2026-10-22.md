@@ -270,3 +270,30 @@ frozen; the actorruntime test did not compile there), fix 6a1ee89ec.
 - **Not exercised on a computer.** The test drives the handler in process
   with an absent capsule; the dispatcher's deferral is pinned by the
   actorruntime test.
+
+## Review bunch 107 (DeepSeek, accepts M1's fix): two gaps on the same path
+
+Problem documentation only; there is no fix in this commit. Code read at
+ab433bf9c.
+
+- **107-2, Medium: a transient read on the fate wake path is a plain
+  error.** `HandleAssignedEngineeringFateDeadline`'s first
+  `GetEngineeringAssignment` (internal/agentcore/continuation_schedule.go),
+  the resume's re-read and the cancel's re-read
+  (`resumeStrandedFateAssignmentIfPending` and
+  `cancelUnfinishableFateAssignment`,
+  internal/agentcore/engineering_assignment_fate.go) return a non-NotFound
+  read error as is. actorruntime maps only the held saga and
+  `ErrFateRedriveRetry` to a deferral, so the dispatcher retries this one at
+  once, with no backoff, and dead-letters the wake on the eighth attempt
+  (internal/actor/dispatcher.go). A store stall of a few milliseconds
+  therefore leaves the assignment bound and fate-pending with no wake: the
+  M1 outcome, by another door. Confirmed from the code path, not exercised
+  on a computer.
+- **107-3, Low: the terminal cancel keeps the saga entry.** The cancel
+  deletes the re-drive count but holds the saga mutex until it returns and
+  never calls `releaseAssignmentSaga`, so one mutex and key stay in
+  `assignmentSagas` for every assignment cancelled this way, for the
+  process lifetime: the invariant
+  `TestSagaEntryIsReleasedOnceTheAssignmentIsSettled` pins for the other
+  settle paths.
