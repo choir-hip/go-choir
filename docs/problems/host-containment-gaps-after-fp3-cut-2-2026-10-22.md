@@ -554,3 +554,62 @@ snippet heals and relinks; DS2's safety comes from the assert. Fix
 - FP0's proof gains two checks: that the directory entry carries no "-",
   and the asserts. It also says what the two intended loud states mean and
   how to clear them.
+
+## Round 2c findings (DeepSeek, bunch 98, on 8b14bc9cc), before any fix
+
+DeepSeek v4.1 flash: ACCEPT (conditional), `_runs/bunch98/out/omp-deepseek-v41-flash.out`.
+DS1 is closed. DS2 is not, as written:
+
+- **DS8 (medium, confirmed): the marker is written by a failing
+  activation, and it certifies no file.** The snippet writes
+  `unit-env/.imported` whenever the run started without it, before the
+  `fail != 0` exit. The "neither a file nor a link" branch sets `fail=1`
+  and leaves `unit-env/<name>` missing. Reproduced on a temp tree with the
+  evaluated snippet:
+  - first run with a directory at the old path of corpus-dsn.env: exit 1,
+    the FAIL line, the marker present, `unit-env/corpus-dsn.env` absent;
+  - the recovery the station file gives (remove the obstruction, run
+    `/run/current-system/activate`): exit 0, nothing to import, the marker
+    still there. corpusd and checkpointd pass `AssertPathExists`, and their
+    corpus-dsn.env EnvironmentFile is optional ("-"), so they start on
+    Store A for corpus tables: F2's harm, which DS2 claimed to close.
+  - A required file removed from unit-env after a good import gives the
+    same state with exit 0.
+  switch-to-configuration records an activation failure and still restarts
+  units, so the assert is the only thing that keeps the readers down.
+- **DS9 (low): `chmod` on a stray can follow a link.** A stray is a link
+  when `mv "$new" "$stray"` moved a link planted in unit-env; `chmod 0600`
+  then changes its target.
+- **DS10 (low): the marker can be a link.** `[ -e ]` is false for a
+  dangling link, and `: >` then writes through it. The marker is never
+  chmod'ed and has no tmpfiles `z` line.
+- **DS11 (low): the nix test does not run in CI.** It is the only pin for
+  the directory entry without "-" and the asserts. This is F10; not
+  introduced here.
+- **DS12 (info): overclaims.** node-b.nix's comment on `unitEnvImported`
+  ("once the first import has moved every file in") and this record's
+  "refuse to start ... until the import is complete" are false in DS8's
+  states.
+
+What else the node needs to know: the authority-split runbook's rollback
+removes `unit-env/corpus-dsn.env` on purpose to send corpusd back to Store
+A, and corpusd treats an empty `CORPUSD_CORPUS_DOLT_DSN` as Store A
+(internal/platform/config.go). An assert on the file's existence must keep
+that rollback possible.
+
+Planned dispositions, tests first:
+
+- DS8: the marker is written only after the `fail != 0` exit, so a failing
+  activation never writes it. corpusd and checkpointd also assert
+  `unit-env/corpus-dsn.env`, so a missing DSN file keeps them down, loudly,
+  whatever the marker says. The runbook's rollback writes a file without a
+  DSN (an explicit Store A) instead of removing it. The marker is not gated
+  on the files' presence as well: the proxy asserts the marker and reads no
+  required file, so that gate would take the site down for a corpus DSN gap
+  that the per-file assert already covers, and sandbox-gateway-token.env
+  has no unit reader.
+- DS9: a link stray is not chmod'ed.
+- DS10: the marker is written as a fresh regular file (any link there
+  removed first), 0600, and tmpfiles carries its `z` line.
+- DS11: recorded, with F10.
+- DS12: the comments and this record are corrected with the fix.
