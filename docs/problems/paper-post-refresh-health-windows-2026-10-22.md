@@ -303,3 +303,39 @@ runtime; the store and /health's answers do not change):
 Not built: a per-call hold-time log on every store call (it would touch
 every raw `s.db` caller); moving /health's reads off the store. Both stay
 open above.
+
+Built (`7a7fdee1e`, tests in `df538f65a`; not yet deployed, so no staging
+receipt yet):
+
+- `internal/agentcore/api_health_stall_holder.go`: the 503 branch starts
+  the capture in a goroutine after `writeAPIJSON`, so the 503 still answers
+  at the 1 s budget (the test checks under 2 s). One log write per capture:
+  a header `store_stalled holders: computer=... unanswered=...
+  engine_goroutines=N shown=M parked_in_conn=K stack_truncated=...
+  write_pool{max_open open in_use idle wait_count wait_ms} read_pool{...}`,
+  then one `store_stalled holder g=<id> [<state>] choir=<first choir frame>
+  engine=<frame> < <frame>` line per holder. Rate limit: one capture per
+  runtime per minute.
+- Only engine goroutines with a choir frame or a choir creator are listed.
+  The engine's own background goroutines (events sender, binlog streamer,
+  branch activity tracker, async replication: about eight per open store,
+  parked for its lifetime) are counted in `engine_goroutines` but not
+  listed; in the first test run they filled the 16-line cap. Only a choir
+  caller takes a connection from the pool, so this drops no possible holder.
+- `store.(*Store).PoolStats` and `store_pools` on
+  `/api/runtime/observability`: `wait_count` and `wait_duration_ms` since
+  boot for both pools.
+
+How to read it: `in_use=1` on the write pool with `shown=0` means the
+connection is held by a caller that is not inside the engine at that moment
+(a `*sql.Conn` or `*sql.Tx` held between statements, or rows not yet
+closed); the existing stall test, whose holder is an idle `Conn`, logs
+exactly that. A listed holder with its choir frame names the call.
+Holders that hold the connection between statements are the instrument's
+known blind spot; if the deployed log shows `shown=0` during the
+unattributed bursts, the next instrument is a hold-time log on the store's
+`Conn`/`BeginTx` callers.
+
+Declined in this lane: the pool stats on /health's 200 body. That body's
+test pins it to today's keys, and the lane's contract is that /health's
+answers do not change; observability carries them instead.
