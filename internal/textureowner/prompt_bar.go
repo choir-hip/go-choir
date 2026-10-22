@@ -89,16 +89,11 @@ func (h *Handler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 	defer commitCancel()
 	rec, handoff, err := h.submitPromptBar(commitCtx, ownerID, authenticatedUserEmail(r), text, commandID, true)
 	if err != nil {
-		if errors.Is(err, agentcore.ErrPromptCommandConflict) || errors.Is(err, store.ErrLifecycleCommandConflict) || errors.Is(err, store.ErrConcurrentStateChange) {
-			writeAPIJSON(w, http.StatusConflict, apiError{Error: "command identity conflicts with the stored request"})
-			return
+		status, message := promptBarSubmitFailure(err)
+		if status != http.StatusConflict && status != http.StatusServiceUnavailable {
+			log.Printf("texture prompt bar: submit: %v", err)
 		}
-		if errors.Is(err, agentcore.ErrPreGenesis) {
-			writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "computer initializing"})
-			return
-		}
-		log.Printf("texture prompt bar: submit: %v", err)
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to submit prompt"})
+		writeAPIJSON(w, status, apiError{Error: message})
 		return
 	}
 	writeAPIJSON(w, http.StatusAccepted, promptBarSubmitResponse{
@@ -113,6 +108,31 @@ func (h *Handler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 		SubjectID: handoff.Conductor.SubjectID, ObligationIDs: handoff.Conductor.ObligationIDs,
 		ReducerSeq: handoff.Conductor.ReducerSeq, SnapshotCursor: handoff.Conductor.SnapshotCursor,
 	})
+}
+
+// promptBarSubmitFailure answers a failed prompt-bar submit with the status
+// and message the owner's client sees. A command conflict is a 409 and a
+// computer without genesis is a 503. A validation refusal of the owner's
+// input (store.ErrInvalidTextureRevision) is the owner's to correct, so it is
+// a 400 that carries the validator's reason, not a server error (receipt:
+// docs/problems/prompt-bar-refuses-bracketed-index-as-server-error-2026-10-22.md,
+// HTTP 500 "failed to submit prompt" with the reason only in the guest log).
+// Everything else is a 500 that does not describe the internals.
+func promptBarSubmitFailure(err error) (int, string) {
+	switch {
+	case errors.Is(err, agentcore.ErrPromptCommandConflict), errors.Is(err, store.ErrLifecycleCommandConflict), errors.Is(err, store.ErrConcurrentStateChange):
+		return http.StatusConflict, "command identity conflicts with the stored request"
+	case errors.Is(err, agentcore.ErrPreGenesis):
+		return http.StatusServiceUnavailable, "computer initializing"
+	case errors.Is(err, store.ErrInvalidTextureRevision):
+		reason := err.Error()
+		if marker := store.ErrInvalidTextureRevision.Error() + ": "; strings.Contains(reason, marker) {
+			reason = reason[strings.Index(reason, marker)+len(marker):]
+		}
+		return http.StatusBadRequest, "prompt refused: " + reason
+	default:
+		return http.StatusInternalServerError, "failed to submit prompt"
+	}
 }
 
 // submitPromptBar records the conductor decision and, for Texture, the
