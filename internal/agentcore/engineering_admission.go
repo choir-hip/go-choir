@@ -126,7 +126,8 @@ func sameEngineeringAssignment(a, b types.EngineeringAssignment) bool {
 // admitEngineeringAssignment is the one admission function of the spawn saga.
 // nil admits the request; a *engineeringAdmissionBusy refuses it, retryably.
 // The caller holds engineeringAssignmentOpenMu, so no other saga binds a
-// capsule while the rows are read. It reads and writes nothing else.
+// capsule while the rows are read. It writes only the cancel of this
+// request when it has expired.
 func (rt *Runtime) admitEngineeringAssignment(ctx context.Context, assignment types.EngineeringAssignment) error {
 	assignments, err := rt.store.ListEngineeringAssignmentsForComputer(ctx, assignment.Binding.ComputerID)
 	if err != nil {
@@ -134,8 +135,14 @@ func (rt *Runtime) admitEngineeringAssignment(ctx context.Context, assignment ty
 	}
 	now := rt.engineeringAdmissionNow()
 	if assignment.Disposition == types.EngineeringAssignmentOpen && engineeringRequestExpired(assignment, now) {
-		// Defense in depth: the saga expires an overdue request before it
-		// asks for admission.
+		// The saga expires an overdue request before it asks for admission,
+		// but the deadline can pass between the two clock readings. The
+		// caller reads errEngineeringRequestExpired as "cancelled" and
+		// consumes the wake, so the request is cancelled here too (review
+		// round 2, R1).
+		if err := rt.expireQueuedEngineeringRequest(ctx, assignment); err != nil {
+			return fmt.Errorf("expire queued assignment %s: %w", assignment.AssignmentID, err)
+		}
 		return errEngineeringRequestExpired
 	}
 	// The slot first: a live assignment outranks any queue position.
@@ -254,12 +261,7 @@ func (rt *Runtime) expireOverdueEngineeringRequests(ctx context.Context, assignm
 			continue
 		}
 		self := sameEngineeringAssignment(a, assignment)
-		parent := types.RunRecord{
-			RunID: a.Binding.ParentRunID, OwnerID: a.Binding.OwnerID, ComputerID: a.Binding.ComputerID, AgentID: a.Binding.ParentAgentID,
-		}
-		reason := fmt.Sprintf("queued request expired: waited past the assignment deadline (%s) without admission; request remains pending and retryable",
-			assignedEngineeringDeadline())
-		if _, err := rt.cancelAssignedEngineering(ctx, parent, a.AssignmentID, a.Binding.Attempt, reason); err != nil {
+		if err := rt.expireQueuedEngineeringRequest(ctx, a); err != nil {
 			if self {
 				return fmt.Errorf("expire queued assignment %s: %w", a.AssignmentID, err)
 			}
@@ -273,6 +275,18 @@ func (rt *Runtime) expireOverdueEngineeringRequests(ctx context.Context, assignm
 		return errEngineeringRequestExpired
 	}
 	return nil
+}
+
+// expireQueuedEngineeringRequest cancels a queued request that waited past
+// the assignment deadline, through the same cancel as management's Cancel.
+func (rt *Runtime) expireQueuedEngineeringRequest(ctx context.Context, a types.EngineeringAssignment) error {
+	parent := types.RunRecord{
+		RunID: a.Binding.ParentRunID, OwnerID: a.Binding.OwnerID, ComputerID: a.Binding.ComputerID, AgentID: a.Binding.ParentAgentID,
+	}
+	reason := fmt.Sprintf("queued request expired: waited past the assignment deadline (%s) without admission; the request is cancelled",
+		assignedEngineeringDeadline())
+	_, err := rt.cancelAssignedEngineering(ctx, parent, a.AssignmentID, a.Binding.Attempt, reason)
+	return err
 }
 
 // wakeNextQueuedEngineeringRequest asks the first queued request of the
@@ -302,11 +316,16 @@ func (rt *Runtime) wakeNextQueuedEngineeringRequest(ctx context.Context, freed t
 		if !rt.bootRestartPlanned && a.CreatedAt.Before(rt.bootedAt) {
 			continue
 		}
+		if engineeringRequestExpired(a, now) {
+			// An expired head is out of the queue; the first live request
+			// behind it is the one to wake (review round 2, R4).
+			continue
+		}
 		if next == nil || engineeringRequestQueuedAhead(a, *next, now) {
 			next = &assignments[i]
 		}
 	}
-	if next == nil || engineeringRequestExpired(*next, now) {
+	if next == nil {
 		return
 	}
 	content, err := json.Marshal(delegatedAssignmentSpawnDeadline{AssignmentID: next.AssignmentID, Attempt: next.Binding.Attempt, Nudge: freed.AssignmentID})
