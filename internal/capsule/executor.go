@@ -719,6 +719,9 @@ func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule, claudeT
 	// Package mirrors: the granted ecosystems, for the broker's workload
 	// client settings (mirror.go); nothing on an ungranted computer.
 	cmd.Env = append(cmd.Env, mirrorBrokerEnv(caps.mirrors)...)
+	// Go bounds: the capsule's CPU quota and a memory bound, for its Go
+	// workloads (go_bounds.go).
+	cmd.Env = append(cmd.Env, capsuleBrokerGoBoundsEnv(caps)...)
 	if claudeToken != "" {
 		// Claude delegate (claude mode only): the broker reads the token
 		// once, removes it from its environment and hands it to the claude
