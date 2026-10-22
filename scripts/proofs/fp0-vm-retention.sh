@@ -39,10 +39,11 @@ commit_matches() {
 	return 1
 }
 
-# vmctl_runs COMMIT SERVICE WANT: the build headers name vmctl and a commit
-# matching WANT.
+# vmctl_runs COMMIT SERVICE STATUS WANT: /health answered 2xx and the build
+# headers name vmctl and a commit matching WANT.
 vmctl_runs() {
-	[ "$2" = vmctl ] && [ "$1" != - ] && commit_matches "$1" "$3"
+	case "$3" in 2[0-9][0-9]) ;; *) return 1 ;; esac
+	[ "$2" = vmctl ] && [ "$1" != - ] && commit_matches "$1" "$4"
 }
 
 SHADOW_JSON=""
@@ -52,13 +53,15 @@ shadow_plan() {
 }
 
 step_0() {
-	local commit service cfg
+	local commit service status cfg
 	# vmctl's identity is its X-Choir-Build-Commit response header (the
-	# commit compiled into the process), not a /health body field (R5-1).
-	read -r commit service < <(vmctl_build_identity)
-	info "vmctl X-Choir-Build-Commit=${commit:--} X-Choir-Build-Service=${service:--}"
+	# commit compiled into the process), not a /health body field (R5-1),
+	# on a 2xx answer (R6-4). The check text names what was observed (R6-3).
+	read -r commit service status < <(vmctl_build_identity)
+	commit=${commit:--} service=${service:--} status=${status:--}
+	info "vmctl X-Choir-Build-Commit=$commit X-Choir-Build-Service=$service status=$status"
 	if [ -n "$OPT_commit" ]; then
-		check "vmctl runs $OPT_commit (X-Choir-Build-Commit of :8083/health, X-Choir-Build-Service vmctl)" vmctl_runs "${commit:--}" "${service:--}" "$OPT_commit"
+		check "vmctl runs $OPT_commit (2xx :8083/health, X-Choir-Build-Commit, X-Choir-Build-Service vmctl): observed commit=$commit service=$service status=$status" vmctl_runs "$commit" "$service" "$status" "$OPT_commit"
 	else
 		manual "no --commit given: vmctl's build identity was read, not compared"
 	fi
