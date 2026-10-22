@@ -42,8 +42,8 @@ would launch (`internal/vmmanager/snapshot.go` `validateSnapshot`, exact
 string compare, reason `firecracker_version_mismatch`), discards it and
 cold boots, so Firecracker is never asked to load a 1.16.1 snapshot. The
 host kernel bump to 6.18.57 refuses every snapshot the same way
-(`host_kernel_mismatch`), so the two ship in one deploy and share one cold
-boot per computer.
+(`host_kernel_mismatch`), but only at the host reboot, which is a separate
+event (corrected 2026-10-22; see the deploy note).
 
 ## Why 1.16.2 and not 1.17 (NET-08)
 
@@ -82,8 +82,19 @@ computer cold boots with `firecracker_version_mismatch` on its timeline).
 ## Deploy note
 
 - Lands in the same deploy as the host kernel 6.18.57 bump, after 19:00
-  UTC. Both void every snapshot; one deploy means one cold boot per
-  computer instead of two.
+  UTC. **This does not mean one cold boot per computer** (corrected
+  2026-10-22; an earlier line said so). The deploy voids the 1.16.1
+  snapshots (`firecracker_version_mismatch`) and refreshes running
+  computers onto the new guest image. The host kernel takes effect only
+  at the later host reboot, and that reboot voids every snapshot again
+  (`host_kernel_mismatch`: the snapshot records the 6.18.55 host). So:
+  - a computer that is refreshed or woken after the deploy, and that
+    hibernates or is still running at the reboot, cold boots twice;
+  - a computer hibernated before the deploy and not woken until after
+    the reboot cold boots once.
+  Only a reboot soon after the deploy keeps the second boot rare.
+  Shipping both in one deploy saves one review and one deploy, not cold
+  boots.
 - Every computer cold boots at its next refresh or wake: its snapshot is
   refused (`firecracker_version_mismatch`, and `host_kernel_mismatch` after
   the reboot) and discarded, never loaded. The binary is chosen at launch,
