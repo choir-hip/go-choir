@@ -217,3 +217,38 @@ zero rows. A reader that wants them has the unfiltered `ListEventsOG`.
 - Heresy delta: discovered 0 further (the run-end retry duplicate is a residual that already
   existed); introduced 0; repaired 1 (new run-state events). Rows written 2026-09-24 to the
   deploy stay unrepaired.
+
+## Review round 1 (bunch 130: flash, DeepSeek, Devin all accept)
+
+Findings FP0 acts on, before the fix:
+
+- **Doc, the digest (DeepSeek 1, flash 2).** Plan item 3 above says the
+  command digest covers the event. It does not:
+  `ReplaceLifecycleActivationRequest.Event` is `json:"-"`
+  (`internal/types/lifecycle.go:476`) and `lifecycleDigest` is a plain
+  `json.Marshal` (`internal/store/lifecycle.go:149-155`) **[V]**. So
+  allocation order is no digest hazard.
+- **Doc, the run-end residual (DeepSeek 2).** "A committed-but-timed-out
+  attempt could still store two events" cannot happen.
+  `persistActivationStateWithEvent` re-reads the run and returns
+  `(false, nil)` when it is terminal (`internal/agentcore/runtime.go:1917-1920`).
+  A non-terminal retry with a fresh event hits the content-hash replay
+  (`lifecycle.go:3311-3313`) **[V]**. It costs a gap only. The residual is
+  withdrawn.
+- **The guard is checked outside the lock (flash 1).** Two goroutines
+  holding the same `*EventRecord` could both pass `rec.Seq == 0` and take
+  two numbers. No caller shares a record today. Fix: re-check under
+  `eventMu`.
+- **The skip is Seq-only (DeepSeek 5).** An event with a Seq but no
+  StreamSeq would fold with a zero stream cursor. Fix: skip only when both
+  are set.
+
+Noted, not fixed:
+
+- The `eventSeqs` eviction window at 100,000 keys, which `AppendEvent`
+  already has (DeepSeek 3).
+- Replay publishing an event it did not store; this is pre-existing
+  (DeepSeek 4).
+- `AllocateEventSeq` being exported (DeepSeek 6).
+- A seed-read failure now fails the projection closed, which Devin judged
+  acceptable.
