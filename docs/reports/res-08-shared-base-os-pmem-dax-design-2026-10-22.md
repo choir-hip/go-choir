@@ -146,16 +146,22 @@ and work directories from `persistent`, and reports `store_layering`. The
 probe refuses to quote a store number (`store_quotable: false`, with the
 reasons in `refusals`) when `store_layering` is missing (a read older than
 53c91bc1f), when `partitioned` is false, when store files are unmeasured,
-or when the store walk is partial. The DAX memmap cost uses the base
+when the store walk is partial, or when it skipped entries or mounts. The
+DAX memmap cost uses the base
 store's bytes only.
 
 **Floors.** `skipped` (unreadable directories and files) and
 `skipped_mounts` (mounts below a root, such as the systemd
 `InaccessiblePaths` the daemon unit sets on the signer and credential
 directories) make a root's total a lower bound even when `partial` is
-false. The probe lists such roots in `floors`. A store floor still counts
-as a measurement, because it can only understate the saving; a persistent
-floor is expected (the signer directories are hidden from the daemon).
+false. The probe lists such roots in `floors`. A store with skips is
+refused, not quoted as a floor (review bunch 16). A skipped file adds
+nothing to `bytes`, so the memmap cost is understated, and if the skipped
+data is cold the saving is overstated. A persistent floor is expected
+(the signer directories are hidden from the daemon) and does not refuse
+the store. While `store_quotable` is false, the probe prints the store
+numbers as null. `partitioned` is also false for an overlay whose upper
+does not resolve in the daemon's namespace.
 
 Run from FP0's machine (the script uses `ssh node-b`; it boots, stops,
 evicts and writes nothing):
@@ -265,5 +271,12 @@ decision.
   the whole pprof prefix, and it belongs to the hostauth owner.
 - The mount-crossing count (`skipped_mounts`) has no unit test, because a
   test cannot mount without privileges. The guest read shows it.
+- **Directory entries of unknown type** (DT_UNKNOWN; review bunch 16,
+  issue 5). `WalkDir` reports such an entry with type 0, which reads as a
+  regular file. A directory reported that way fails the lstat identity
+  check and counts as one `skipped`, while its whole subtree goes
+  uncounted. That errs toward a floor, and a store with skips is refused,
+  so it cannot flatter a quoted number. erofs, overlay and ext4 return real
+  types today.
 - mountinfo option values are split on commas. An upper or work path that
   contains an escaped comma would be misparsed. Today's paths have none.

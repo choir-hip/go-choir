@@ -11,6 +11,11 @@ Ways the summary could mislead FP0 (written before the code; review bunch 13):
   3. It hides skipped subtrees, so a floor reads as a total.
   4. It counts the release delta (store_upper) in the DAX memmap cost or
      the saving; only the base store is on the image.
+  5. It quotes a store with skipped files or mounts as a floor. Skipped files
+     add nothing to bytes, so the memmap cost is understated and the saving
+     can be overstated when the skipped data is cold (review bunch 16).
+  6. It prints raw store numbers beside store_quotable false, where they can
+     be copied as if measured: they are null until quotable.
 Run: python3 -I scripts/test_res08_pagecache_probe.py
 """
 import importlib.util
@@ -58,11 +63,19 @@ class Summary(unittest.TestCase):
         self.assertFalse(s["store_quotable"])
         self.assertNotIn("net_saving_mib", s)
 
-    def test_refuses_unmeasured_or_partial_store(self):
-        for store in ({"unmeasured_files": 3, "unmeasured_bytes": 4096}, {"partial": True}):
+    def test_refuses_unmeasured_partial_or_skipped_store(self):
+        for store in ({"unmeasured_files": 3, "unmeasured_bytes": 4096}, {"partial": True}, {"skipped": 2}, {"skipped_mounts": 1}):
             s = probe.summarize(read(store=store))
             self.assertFalse(s["store_quotable"], store)
             self.assertNotIn("net_saving_mib", s)
+
+    def test_store_numbers_are_null_while_unquotable(self):
+        s = probe.summarize(read(layering=False, upper={}))
+        self.assertFalse(s["store_quotable"])
+        for k in ("store_resident_mib", "store_upper_resident_mib", "store_apparent_mib"):
+            self.assertIsNone(s[k], k)
+        # the diagnostics that explain the refusal stay
+        self.assertEqual(s["store_examined_files"], 950)
 
     def test_surfaces_skips_and_marks_floors(self):
         s = probe.summarize(read(store={"skipped": 2}, pers={"skipped_mounts": 1, "unmeasured_files": 4}))
@@ -71,7 +84,11 @@ class Summary(unittest.TestCase):
         self.assertEqual(s["persistent_unmeasured_files"], 4)
         self.assertIn("store", s["floors"])
         self.assertIn("persistent", s["floors"])
-        # a skipped store subtree only lowers the saving: still quotable, as a floor
+        self.assertFalse(s["store_quotable"], s)
+
+    def test_a_persistent_floor_alone_does_not_refuse_the_store(self):
+        s = probe.summarize(read(pers={"skipped_mounts": 2}))
+        self.assertIn("persistent", s["floors"])
         self.assertTrue(s["store_quotable"], s)
 
 
