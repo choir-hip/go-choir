@@ -56,6 +56,11 @@ func runAsNamespaceRoot(t *testing.T, mode string) map[string]any {
 	}
 	cmd := exec.Command(bin)
 	cmd.Env = []string{"CAPFLOOR_TEST_DAEMON=1", ModeEnv + "=" + mode}
+	// A cgo build (-race) links shared libraries from the dev shell, so the
+	// stand-in needs the loader path and nothing else from this environment.
+	if v, ok := os.LookupEnv("LD_LIBRARY_PATH"); ok {
+		cmd.Env = append(cmd.Env, "LD_LIBRARY_PATH="+v)
+	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Cloneflags:  syscall.CLONE_NEWUSER,
 		UidMappings: []syscall.SysProcIDMap{{ContainerID: 0, HostID: os.Getuid(), Size: 1}},
