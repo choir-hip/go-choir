@@ -11,14 +11,14 @@ import (
 // The OOM leg is selected only by an enum; anything else is refused before
 // any worker starts (docs/problems/fp2-step4-deployed-oom-not-drivable-desk-refuses-runaway-2026-10-22.md, O6, O7).
 func TestIsolationSelfTestLegSelector(t *testing.T) {
-	for raw, want := range map[string]string{"": "", "leg=oom": "oom"} {
+	for raw, want := range map[string]string{"": "", "leg=oom": "oom", "leg=seccomp": "seccomp"} {
 		r := httptest.NewRequest(http.MethodPost, "/api/runtime/isolation-selftest?"+raw, nil)
 		got, err := isolationSelfTestLeg(r)
 		if err != nil || got != want {
 			t.Errorf("%q: leg=%q err=%v, want %q", raw, got, err, want)
 		}
 	}
-	for _, raw := range []string{"leg=OOM", "leg=capsule", "leg=oom&leg=oom", "leg=", "source=for{}"} {
+	for _, raw := range []string{"leg=OOM", "leg=capsule", "leg=seccomp&filter=workload", "leg=oom&leg=oom", "leg=", "source=for{}"} {
 		r := httptest.NewRequest(http.MethodPost, "/api/runtime/isolation-selftest?"+raw, nil)
 		if leg, err := isolationSelfTestLeg(r); err == nil {
 			t.Errorf("%q: accepted as %q", raw, leg)
