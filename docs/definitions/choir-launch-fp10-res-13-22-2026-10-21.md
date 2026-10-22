@@ -90,15 +90,15 @@ boundaries:
   protected_surfaces: [vmctl, deployment routing]
 
 now:
-  status: blocked
+  status: working
   slice: >-
-    FP0's section 4 readings are in (2026-10-22 04:45 to 06:45Z, Node B,
-    read only), recorded in the two problem records: R1 to R7, the R6 PSI
-    sample across three hibernates, R5 on FP0's own test computer
-    (computer-2bd23366, vm-f2588c7b) cold and restored, S1, S3, S4 (two
-    reads), S5. S2 runs until about 2026-10-23 06:45Z (FP0's Mac, PID
-    63419, /Users/wiz/Dev/lanes/_runs/res22/slab-2026-10-22.log). Nothing
-    built; the build still waits on FP8 releasing vmmanager.
+    L3a build on lane/fp10-res13-l3a (base 7448bf899; FP8's vmmanager work
+    is on main). Owner notes §40: RES-13 defaults hold; L4 is 10 minutes
+    only after L3 is on everywhere; L20 ships off. The design carries the
+    readings' corrections (R2 swap walk, R4 THP on the guest mapping, R3
+    length with the hotplug region, R5 resume unlinks, wake by
+    lifecycle/start). Next: the six failure modes as failing tests, then
+    the inert red fix (default full, no computer selected).
   gates:
     L3a: >-
       Readings pass, with two design corrections. R2: guest memory cannot
