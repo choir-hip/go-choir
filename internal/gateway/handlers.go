@@ -14,6 +14,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/gateway/searchplane"
 	"github.com/yusefmosiah/go-choir/internal/health"
 	"github.com/yusefmosiah/go-choir/internal/hostauth"
+	"github.com/yusefmosiah/go-choir/internal/hostfetch"
 	"github.com/yusefmosiah/go-choir/internal/modelcatalog"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/server"
@@ -147,6 +148,9 @@ type Handler struct {
 	// sourceAPI serves /provider/v1/source-api; nil means the client built
 	// from the environment (source_api.go).
 	sourceAPI *SourceAPIClient
+	// hostFetch serves /provider/v1/fetch; nil means the default service
+	// built from the environment (host_fetch.go).
+	hostFetch *hostFetchService
 	// serviceCheckers maps a dependency service name to its health probe.
 	// Used by GET /health/{service} so operators can observe backend
 	// dependency health (runtime, qdrant, dolt, ollama) from
@@ -1202,6 +1206,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/provider/v1/search/health", h.HandleSearchHealth)
 	s.HandleFunc("/provider/v1/search/health/reset", h.HandleSearchHealthReset)
 	s.HandleFunc("/provider/v1/source-api", h.HandleSourceAPI)
+	s.HandleFunc(hostfetch.Path, h.HandleHostFetch)
 	s.HandleFunc("/provider/v1/credentials/issue", h.HandleIssueCredential)
 	s.HandleFunc("/provider/v1/credentials/ensure", h.HandleEnsureCredential)
 	s.HandleFunc("/provider/v1/breakers", h.HandleProviderBreakers)

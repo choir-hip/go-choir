@@ -407,6 +407,10 @@ type ManagerConfig struct {
 	// CapsuleMirrors is the capsule package mirror grant switch
 	// (CHOIR_CAPSULE_MIRROR_*; empty by default). See capsule_mirrors.go.
 	CapsuleMirrors CapsuleMirrorConfig
+
+	// HostFetch is the host fetch route grant switch
+	// (CHOIR_HOST_FETCH_COMPUTERS; empty by default). See host_fetch.go.
+	HostFetch HostFetchConfig
 }
 
 // DefaultManagerConfig returns a sensible default configuration.
@@ -1011,6 +1015,18 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 			log.Printf("vmmanager: capsule mirrors for computer %s (VM %s): %s", cfg.ComputerID, cfg.VMID, mirrorStatus)
 		}
 		for name, content := range mirrorFiles {
+			if delegateFiles == nil {
+				delegateFiles = map[string][]byte{}
+			}
+			delegateFiles[name] = content
+		}
+		// Host fetch route (SDC NET-01): a granted computer's disk carries
+		// the grant; its guest then fetches through the gateway.
+		fetchFiles, fetchStatus := m.cfg.HostFetch.hostFetchMaterial(cfg.ComputerID, cfg.WarmnessClass, time.Now())
+		if fetchStatus != "" {
+			log.Printf("vmmanager: host fetch route for computer %s (VM %s): %s", cfg.ComputerID, cfg.VMID, fetchStatus)
+		}
+		for name, content := range fetchFiles {
 			if delegateFiles == nil {
 				delegateFiles = map[string][]byte{}
 			}

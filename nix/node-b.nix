@@ -1482,6 +1482,16 @@ in
         "CHOIR_CAPSULE_MIRROR_COMPUTERS="
         "CHOIR_CAPSULE_MIRROR_ECOSYSTEMS="
         "CHOIR_CAPSULE_MIRRORS_ONLY="
+        # Host fetch route (SDC NET-01; internal/hostfetch,
+        # docs/definitions/choir-launch-fp10-net01-host-fetch-2026-10-21.md).
+        # OFF while empty. A listed computer (ComputerIDs and/or class:test)
+        # gets a grant on its credential disk at its next cold boot, and its
+        # research Read, content import, podcast and YouTube fetches and
+        # source polls then make their network hop through the gateway's
+        # POST /provider/v1/fetch (address guard, per-computer budget, one log
+        # line per hop). It never falls back to direct egress. Rollback: empty
+        # the list, deploy, cold-boot the computer.
+        "CHOIR_HOST_FETCH_COMPUTERS="
         # claude delegate (docs/design/claude-delegate-slice1-2026-10-14.md;
         # Option T, owner-ratified 2026-10-14). OFF while the list is empty.
         # To turn it on for one test computer: put its ComputerID in
