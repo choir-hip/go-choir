@@ -239,3 +239,21 @@ How the "after" estimates are built:
   first 30-90 s. A store test that is sensitive to load would show up as a
   new flake. The `go-test-scale` quarantine is the existing path for such
   tests.
+
+## Review bunch 101 (DeepSeek; Gemini approved), before any fix
+
+1. **Medium: the ci.yml go-test matrix is not pinned.**
+   `.github/scripts/ci-workflow-contract-test` pins `TOTAL_SHARDS: 8` for
+   go-test but not its matrix `shard: [0, 1, 2, 3, 4, 5, 6, 7]`
+   (race.yml's matrix is pinned). Deleting a shard from the matrix would
+   drop that shard's share of the tests, and every remaining shard and the
+   contract test would still pass.
+2. **Low: a sharded run that selects nothing passes.** In
+   `scripts/go-test-non-runtime-shards`, a whole shard (and, by the same
+   code shape, a split shard) whose selection is empty prints "No packages
+   selected" and exits 0. With `SHARD_INDEX` set that only happens when
+   `TOTAL_SHARDS` exceeds the packages or test names, a misconfiguration
+   that should fail rather than report a green shard that tested nothing.
+3. **Low: the empty-discovery branch has no regression test.** The planner
+   fails when split-package discovery succeeds but lists no test names, but
+   `.github/scripts/go-shard-discovery-test` never drives that branch.
