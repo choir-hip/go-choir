@@ -195,6 +195,18 @@ class ProbeRun(unittest.TestCase):
         self.assertEqual(len(calls), 1, "the OOM leg was retried")
         self.assertIn("HTTP 502", rec["failures"][0])
 
+    def test_a_conflict_is_named_not_called_a_dead_daemon(self):
+        # Review bunch 27 E2: HTTP 409 means another self-test holds the lock
+        # and this call ran nothing. It still fails (exit 1) and is never
+        # retried, but it must not claim the daemon may have died.
+        code, rec, calls = self.run_probe(409, {"error": "an isolation self-test is already running"})
+        self.assertEqual(code, 1)
+        self.assertEqual(len(calls), 1, "the OOM leg was retried")
+        msg = rec["failures"][0]
+        self.assertIn("HTTP 409", msg)
+        self.assertIn("already running", msg)
+        self.assertNotIn("may have died", msg)
+
     def test_ssh_failure_during_the_oom_leg_is_a_failure(self):
         code, rec, calls = self.run_probe(200, {}, rc="255")
         self.assertEqual(code, 1)

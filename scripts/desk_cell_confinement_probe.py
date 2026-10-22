@@ -409,8 +409,14 @@ def run_internal_leg(args, finish, receipt):
     if code != 200:
         if args.leg == "oom":
             # Never retried: a retry could run the runaway again on a restarted daemon.
-            receipt["failures"] = ["oom: no answer (HTTP %s): the daemon may have died with the runaway; "
-                                   "read its identity before retrying" % code]
+            if code == 409:
+                # The guest's self-test lock was held: this call ran nothing.
+                receipt["failures"] = ["oom: HTTP 409: an isolation self-test is already running on this computer, "
+                                       "so this call ran nothing; wait for the other run to end and read the "
+                                       "daemon's identity before retrying"]
+            else:
+                receipt["failures"] = ["oom: no answer (HTTP %s): the daemon may have died with the runaway; "
+                                       "read its identity before retrying" % code]
             finish(1, "failed")
         finish(2, "self-test unavailable (HTTP %s)" % code)
     receipt["server"] = body
