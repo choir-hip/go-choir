@@ -10,7 +10,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -44,6 +43,7 @@ const (
 	defaultRetentionTestIdleMinAge   = 7 * 24 * time.Hour
 	defaultRetentionQuarantineMinAge = 7 * 24 * time.Hour
 	lifecycleRetention               = lifecycleHolder("retention removal")
+	retentionMinAgeFloor             = 24 * time.Hour
 )
 
 // RetentionTestClassEntry is one test-class computer in the plan: what it
@@ -100,11 +100,19 @@ type retentionManifestLine struct {
 	Error         string `json:"error,omitempty"`
 }
 
-var selectorEnvKeyRE = regexp.MustCompile(`^VM_[A-Z0-9_]+_ONLY$`)
+// selectorEnvKeyRE matches every per-computer selector in vmctl's
+// environment (review round 2, R2-4): the staged-feature lists
+// VM_*_ONLY (VM_GUEST_RECLAIM_ONLY, VM_CAPSULE_TUNNEL_ENFORCE_ONLY,
+// VM_MEMORY_HOTPLUG_ONLY, VM_BALLOON_STATS_ONLY, VM_DATA_DISCARD_ONLY,
+// VM_FIRECRACKER_NEXT_ONLY, VM_SNAPSHOT_DIFF_ONLY, VM_SNAPSHOT_VAULT_ONLY),
+// VMCTL_JAILER_ONLY, and the CHOIR_*_COMPUTERS and CHOIR_*_ONLY allowlists
+// (CHOIR_CLAUDE_DELEGATE_COMPUTERS, CHOIR_VISUAL_CAPTURE_COMPUTERS,
+// CHOIR_CAPSULE_MIRROR_COMPUTERS, CHOIR_CAPSULE_MIRRORS_ONLY).
+var selectorEnvKeyRE = regexp.MustCompile(`^((VM|VMCTL)_[A-Z0-9_]+_ONLY|CHOIR_[A-Z0-9_]+_(COMPUTERS|ONLY))$`)
 
 // RetentionSelectorNamedFromEnviron returns the VM ids and computer ids that
-// any VM_*_ONLY staged-feature selector names. class: and * tokens select by
-// class or everything; they name no computer, so they protect none.
+// any per-computer selector names (selectorEnvKeyRE). class: and * tokens
+// select by class or everything; they name no computer, so they protect none.
 func RetentionSelectorNamedFromEnviron(environ []string) []string {
 	seen := map[string]bool{}
 	for _, kv := range environ {
@@ -179,17 +187,82 @@ func testIdleKeepReasons(own *VMOwnership, cfg RetentionPruneConfig, warmness Wa
 	if retentionSelectorNamed(cfg, own) {
 		reasons = append(reasons, "selector_named")
 	}
+	// The ephemeral rule's shape (R2-5): only a test account's primary
+	// interactive computer.
+	if own.Kind != VMKindInteractive {
+		reasons = append(reasons, "not_interactive")
+	}
+	if normalizeDesktopID(own.DesktopID) != PrimaryDesktopID {
+		reasons = append(reasons, "not_primary_desktop")
+	}
 	switch own.State {
 	case VMStateStopped, VMStateHibernated, VMStateFailed:
 	default:
 		reasons = append(reasons, "state_"+string(own.State))
+	}
+	if own.StoppedBy == "recover_current" {
+		reasons = append(reasons, "stopped_to_recover")
 	}
 	if own.LastActiveAt.IsZero() {
 		reasons = append(reasons, "never_active")
 	} else if now.Sub(own.LastActiveAt) < cfg.TestIdleMinAge {
 		reasons = append(reasons, "idle_below_min_age")
 	}
+	// DestroyVMState removes the whole dir: never one that holds a
+	// quarantine the age-out rule would keep, or a recovery in flight.
+	if vmDirHoldsUnfinishedRecovery(cfg.StateDir, own.VMID) {
+		reasons = append(reasons, "holds_unfinished_recovery")
+	}
 	return reasons
+}
+
+// vmDirHoldsUnfinishedRecovery reports whether a VM dir holds anything of a
+// cold recovery that may be the only copy of the computer's data: a
+// quarantine whose recovery did not finish (or that cannot be read), a
+// staging image, or a journal whose recovery is neither done nor failed.
+// An unreadable dir counts as holding one.
+func vmDirHoldsUnfinishedRecovery(stateDir, vmID string) bool {
+	root := filepath.Clean(stateDir)
+	if root == "." || root == string(os.PathSeparator) || vmID == "" || filepath.Base(vmID) != vmID {
+		return true
+	}
+	vmDir := filepath.Join(root, vmID)
+	files, err := os.ReadDir(vmDir)
+	if err != nil {
+		return !os.IsNotExist(err)
+	}
+	for _, file := range files {
+		name := file.Name()
+		switch {
+		case strings.HasPrefix(name, "data.img.staging-"):
+			return true
+		case strings.HasPrefix(name, "data.img.quarantine-"):
+			generation, operation, ok := parseQuarantineName(name)
+			if !ok || !file.Type().IsRegular() {
+				return true
+			}
+			journal, ok := readQuarantineJournal(vmDir, generation, operation)
+			if !ok || !recoveryFinished(journal) {
+				return true
+			}
+		case strings.HasPrefix(name, "rec-") && strings.HasSuffix(name, ".journal"):
+			var j quarantineJournal
+			body, err := os.ReadFile(filepath.Join(vmDir, name))
+			if err != nil || json.Unmarshal(body, &j) != nil {
+				return true
+			}
+			if !recoveryFinished(j) && j.Status != "failed" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// recoveryFinished: the journal's phase is done or its status active, and
+// the status is not failed. swapped and booted are not finished.
+func recoveryFinished(j quarantineJournal) bool {
+	return j.Status != "failed" && (j.Phase == "done" || j.Status == "active")
 }
 
 // retentionTestClassReport lists every test-class computer with its verdict.
@@ -265,47 +338,87 @@ func readQuarantineJournal(vmDir string, generation uint64, operation string) (q
 	return j, true
 }
 
-// quarantineInspection is one quarantine on disk, with the owner (if any)
-// resolved by VM id.
+// quarantineInspection is one quarantine on disk.
 type quarantineInspection struct {
 	entry RetentionQuarantineEntry
 	at    time.Time
 }
 
-// inspectQuarantine reads one quarantine file and decides the age-out rule
-// for it; the plan and the removal both use it.
-func inspectQuarantine(cfg RetentionPruneConfig, warmness WarmnessPolicyConfig, owner *VMOwnership, vmDir, vmID, name string, now time.Time) (quarantineInspection, bool) {
-	generation, operation, ok := parseQuarantineName(name)
-	if !ok {
-		return quarantineInspection{}, false
+// quarantineOwners resolves a quarantine's dir to its ownership and a
+// journal's computer id to the ownership that names it.
+type quarantineOwners struct {
+	byVM       map[string]*VMOwnership
+	byComputer map[string]*VMOwnership
+}
+
+func newQuarantineOwners(ownerships []*VMOwnership) quarantineOwners {
+	owners := quarantineOwners{byVM: map[string]*VMOwnership{}, byComputer: map[string]*VMOwnership{}}
+	for _, own := range ownerships {
+		if own == nil {
+			continue
+		}
+		owners.byVM[own.VMID] = own
+		owners.byComputer[stableComputerID(own.UserID, own.DesktopID, own.ComputerID)] = own
 	}
-	path := filepath.Join(vmDir, name)
-	info, err := os.Lstat(path)
-	if err != nil || !info.Mode().IsRegular() {
-		return quarantineInspection{}, false
+	return owners
+}
+
+// retentionStateDirName reports whether a dir under vm-state is vmctl's VM
+// state (vm-* or candidate-*), as the orphan scan reads it. Anything else is
+// host bookkeeping or an operator's saved copy and is never scanned.
+func retentionStateDirName(name string) bool {
+	return strings.HasPrefix(name, "vm-") || strings.HasPrefix(name, "candidate-")
+}
+
+// journalComputerProtected reports whether a journal's computer id is the
+// paper or another platform computer, a paid account's computer (the
+// owner's), or the computer of any ownership whose class is protected.
+func journalComputerProtected(computerID string, warmness WarmnessPolicyConfig, owners quarantineOwners) bool {
+	if warmness.PlatformComputerIDs[computerID] {
+		return true
 	}
-	// The rename into quarantine sets the inode's change time; the
-	// modification time is the image's last write before it.
-	at := info.ModTime()
-	size := info.Size()
-	if stat, ok := info.Sys().(*syscall.Stat_t); ok {
-		at = time.Unix(int64(stat.Ctim.Sec), int64(stat.Ctim.Nsec))
-		if stat.Blocks > 0 {
-			size = stat.Blocks * 512
+	for userID := range warmness.PaidUserIDs {
+		if stableComputerID(userID, PrimaryDesktopID, "") == computerID {
+			return true
 		}
 	}
-	entry := RetentionQuarantineEntry{
-		VMID:          vmID,
-		Name:          name,
-		Path:          path,
-		QuarantinedAt: at.UTC().Format(time.RFC3339Nano),
-		AgeSeconds:    int64(now.Sub(at).Seconds()),
-		SizeBytes:     size,
-		Verdict:       retentionVerdictKeep,
+	if own := owners.byComputer[computerID]; own != nil && warmnessClassProtected(warmnessClassForOwnership(own, warmness)) {
+		return true
 	}
+	return false
+}
+
+// inspectQuarantine reads one quarantine file and decides the age-out rule
+// for it; the plan and the removal both use it. Only a quarantine of a
+// test-class computer (R2-3), in a dir with an ownership record (R2-2),
+// whose journal names that same computer and is finished, ages out.
+func inspectQuarantine(cfg RetentionPruneConfig, warmness WarmnessPolicyConfig, owners quarantineOwners, vmDir, vmID, name string, now time.Time) quarantineInspection {
+	path := filepath.Join(vmDir, name)
+	entry := RetentionQuarantineEntry{VMID: vmID, Name: name, Path: path, Verdict: retentionVerdictKeep}
+	owner := owners.byVM[vmID]
 	if owner != nil {
-		entry.ComputerID = owner.ComputerID
+		entry.ComputerID = stableComputerID(owner.UserID, owner.DesktopID, owner.ComputerID)
 	}
+	generation, operation, parsed := parseQuarantineName(name)
+	info, err := os.Lstat(path)
+	switch {
+	case !parsed:
+		entry.Reasons = []string{"unparsed_name"}
+		return quarantineInspection{entry: entry}
+	case err != nil:
+		entry.Reasons = []string{"unreadable"}
+		return quarantineInspection{entry: entry}
+	case !info.Mode().IsRegular():
+		entry.Reasons = []string{"not_regular"}
+		return quarantineInspection{entry: entry}
+	}
+	// Off Linux there is no ctime: the age is zero and nothing ages out.
+	at := inodeChangeTime(info, now)
+	entry.QuarantinedAt = at.UTC().Format(time.RFC3339Nano)
+	entry.AgeSeconds = int64(now.Sub(at).Seconds())
+	entry.SizeBytes = allocatedBytes(info)
+
+	var reasons []string
 	journal, hasJournal := readQuarantineJournal(vmDir, generation, operation)
 	if hasJournal {
 		entry.RecoveryID = journal.RecoveryID
@@ -316,46 +429,61 @@ func inspectQuarantine(cfg RetentionPruneConfig, warmness WarmnessPolicyConfig, 
 			entry.ComputerID = journal.ComputerID
 		}
 	}
-	var reasons []string
 	switch {
 	case !hasJournal:
 		reasons = append(reasons, "journal_missing")
 	case journal.Status == "failed":
 		reasons = append(reasons, "recovery_failed")
-	case journal.Phase != "done" && journal.Status != "active":
+	case !recoveryFinished(journal):
 		reasons = append(reasons, "journal_phase_"+journal.Phase)
+	}
+	if hasJournal {
+		jc := strings.TrimSpace(journal.ComputerID)
+		switch {
+		case jc == "":
+			reasons = append(reasons, "journal_computer_missing")
+		case journalComputerProtected(jc, warmness, owners):
+			reasons = append(reasons, "journal_computer_protected")
+		case owner != nil && jc != entry.ComputerID:
+			reasons = append(reasons, "journal_computer_mismatch")
+		}
 	}
 	if now.Sub(at) < cfg.QuarantineMinAge {
 		reasons = append(reasons, "age_below_min_age")
 	}
-	if owner != nil {
-		if warmnessClassProtected(warmnessClassForOwnership(owner, warmness)) {
+	if owner == nil {
+		reasons = append(reasons, "no_ownership")
+	} else {
+		switch class := warmnessClassForOwnership(owner, warmness); {
+		case warmnessClassProtected(class):
 			reasons = append(reasons, "owner_protected_class")
+		case class != WarmnessClassTest:
+			reasons = append(reasons, "owner_not_test_class")
 		}
 		if owner.IsHeld() {
 			reasons = append(reasons, "owner_held")
 		}
-		if retentionSelectorNamed(cfg, owner) {
-			reasons = append(reasons, "selector_named")
+		if owner.StoppedBy == "recover_current" {
+			reasons = append(reasons, "owner_recovering")
 		}
-	} else {
-		for _, tok := range cfg.SelectorNamed {
-			if tok == vmID || (entry.ComputerID != "" && tok == entry.ComputerID) {
-				reasons = append(reasons, "selector_named")
-				break
-			}
+	}
+	for _, tok := range cfg.SelectorNamed {
+		if tok == vmID || (entry.ComputerID != "" && tok == entry.ComputerID) ||
+			(hasJournal && journal.ComputerID != "" && tok == journal.ComputerID) {
+			reasons = append(reasons, "selector_named")
+			break
 		}
 	}
 	entry.Reasons = reasons
 	if len(reasons) == 0 {
 		entry.Verdict = retentionRuleVerdict(cfg, cfg.QuarantineMode)
 	}
-	return quarantineInspection{entry: entry, at: at}, true
+	return quarantineInspection{entry: entry, at: at}
 }
 
-// retentionQuarantineReport lists every quarantined data image under the
-// state dir. It reads directory entries and one journal per quarantine; it
-// never opens an image.
+// retentionQuarantineReport lists every quarantined data image in vmctl's
+// VM state dirs (vm-* and candidate-*). It reads directory entries and one
+// journal per quarantine; it never opens an image.
 func retentionQuarantineReport(cfg RetentionPruneConfig, warmness WarmnessPolicyConfig, ownerships []*VMOwnership, now time.Time) ([]RetentionQuarantineEntry, []string) {
 	root := filepath.Clean(cfg.StateDir)
 	if root == "." || root == string(os.PathSeparator) {
@@ -368,16 +496,11 @@ func retentionQuarantineReport(cfg RetentionPruneConfig, warmness WarmnessPolicy
 		}
 		return nil, []string{fmt.Sprintf("read state dir: %v", err)}
 	}
-	byVM := make(map[string]*VMOwnership, len(ownerships))
-	for _, own := range ownerships {
-		if own != nil {
-			byVM[own.VMID] = own
-		}
-	}
+	owners := newQuarantineOwners(ownerships)
 	var entries []RetentionQuarantineEntry
 	var warnings []string
 	for _, dir := range dirs {
-		if dir == nil || !dir.IsDir() {
+		if dir == nil || !dir.IsDir() || !retentionStateDirName(dir.Name()) {
 			continue
 		}
 		vmID := dir.Name()
@@ -391,10 +514,7 @@ func retentionQuarantineReport(cfg RetentionPruneConfig, warmness WarmnessPolicy
 			if !strings.HasPrefix(file.Name(), "data.img.quarantine-") {
 				continue
 			}
-			inspected, ok := inspectQuarantine(cfg, warmness, byVM[vmID], vmDir, vmID, file.Name(), now)
-			if ok {
-				entries = append(entries, inspected.entry)
-			}
+			entries = append(entries, inspectQuarantine(cfg, warmness, owners, vmDir, vmID, file.Name(), now).entry)
 		}
 	}
 	sort.SliceStable(entries, func(i, j int) bool {
@@ -529,7 +649,10 @@ func (r *OwnershipRegistry) removeRetentionQuarantine(planned RetentionQuarantin
 	r.mu.RLock()
 	cfg := normalizeRetentionPruneConfig(r.retentionPrune)
 	warmness := normalizeWarmnessPolicyConfig(r.warmnessPolicy)
-	owner := cloneOwnership(r.vmByID[planned.VMID])
+	ownerships := make([]*VMOwnership, 0, len(r.ownerships))
+	for _, own := range r.ownerships {
+		ownerships = append(ownerships, cloneOwnership(own))
+	}
 	r.mu.RUnlock()
 	if cfg.Mode != RetentionPruneModeActive || cfg.QuarantineMode != RetentionPruneModeActive {
 		return 0, false
@@ -537,11 +660,12 @@ func (r *OwnershipRegistry) removeRetentionQuarantine(planned RetentionQuarantin
 	root := filepath.Clean(cfg.StateDir)
 	vmDir := filepath.Join(root, planned.VMID)
 	if root == "." || root == string(os.PathSeparator) || filepath.Base(planned.VMID) != planned.VMID ||
+		!retentionStateDirName(planned.VMID) ||
 		filepath.Base(planned.Name) != planned.Name || filepath.Join(vmDir, planned.Name) != planned.Path {
 		return 0, false
 	}
-	inspected, ok := inspectQuarantine(cfg, warmness, owner, vmDir, planned.VMID, planned.Name, now)
-	if !ok || inspected.entry.Verdict != retentionVerdictWillRemove {
+	inspected := inspectQuarantine(cfg, warmness, newQuarantineOwners(ownerships), vmDir, planned.VMID, planned.Name, now)
+	if inspected.entry.Verdict != retentionVerdictWillRemove {
 		log.Printf("vmctl: retention quarantine_age_out kept %s at removal time: %s", planned.Path, strings.Join(inspected.entry.Reasons, ","))
 		return 0, false
 	}
