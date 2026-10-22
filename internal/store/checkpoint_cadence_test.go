@@ -1394,3 +1394,84 @@ func TestCloseFailedAtThePinRestoresCadence(t *testing.T) {
 		t.Fatalf("Close after the statement finished: %v", err)
 	}
 }
+
+// runStoreChild runs testName in a child process of this test binary with
+// env set, and returns its exit code and output. Dolt's crash on a fatal
+// I/O error panics in a new goroutine, which no recover can catch, so a
+// test that must show "no panic" runs the risky part in a child.
+func runStoreChild(t *testing.T, testName string, env ...string) (int, string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^"+testName+"$", "-test.count=1")
+	cmd.Env = append(os.Environ(), env...)
+	out, err := cmd.CombinedOutput()
+	var exitErr *exec.ExitError
+	switch {
+	case err == nil:
+		return 0, string(out)
+	case errors.As(err, &exitErr):
+		return exitErr.ExitCode(), string(out)
+	default:
+		t.Fatalf("child %s: %v\n%s", testName, err, out)
+		return -1, ""
+	}
+}
+
+const removedWorkspaceChildEnv = "CHOIR_TEST_REMOVED_WORKSPACE_CHILD"
+
+// The mirror's arch13j panic (2026-10-22): the workspace was removed under
+// an open engine, and closing the engine made Dolt crash the process on its
+// journal flush. Close must return an error instead and leave the engine
+// unclosed.
+func TestCloseAfterTheWorkspaceIsRemovedReturnsAnError(t *testing.T) {
+	if path := os.Getenv(removedWorkspaceChildEnv); path != "" {
+		s, err := Open(path)
+		if err != nil {
+			fmt.Printf("CHILD-ERROR open = %v\n", err)
+			os.Exit(4)
+		}
+		if err := os.RemoveAll(deriveTextureWorkspacePath(path)); err != nil {
+			fmt.Printf("CHILD-ERROR remove = %v\n", err)
+			os.Exit(4)
+		}
+		fmt.Printf("CLOSE-RESULT %v\n", s.Close())
+		os.Exit(3)
+	}
+	path := testStorePath(t)
+	cleanupTestStorePath(path)
+	t.Cleanup(func() { cleanupTestStorePath(path) })
+	code, out := runStoreChild(t, "TestCloseAfterTheWorkspaceIsRemovedReturnsAnError", removedWorkspaceChildEnv+"="+path)
+	if code != 3 {
+		t.Fatalf("the child did not return from Close (exit %d):\n%s", code, out)
+	}
+	if !strings.Contains(out, "CLOSE-RESULT ") || strings.Contains(out, "CLOSE-RESULT <nil>") {
+		t.Fatalf("Close after the workspace was removed must return an error:\n%s", out)
+	}
+}
+
+const openFailsChildEnv = "CHOIR_TEST_OPEN_FAILS_CHILD"
+
+// Open that fails after the engine is up (the workspace removed right
+// after it opens, as in the mirror) returns its error; its Close neither
+// panics nor closes the engine over the missing files.
+func TestOpenFailingAfterTheEngineIsUpReturnsAnError(t *testing.T) {
+	if path := os.Getenv(openFailsChildEnv); path != "" {
+		testHookAfterWorkspaceOpen = func(workspacePath string) { _ = os.RemoveAll(workspacePath) }
+		s, err := Open(path)
+		if err == nil {
+			_ = s
+			fmt.Printf("CHILD-ERROR open succeeded over a removed workspace\n")
+			os.Exit(4)
+		}
+		fmt.Printf("OPEN-ERROR %v\n", err)
+		os.Exit(3)
+	}
+	path := testStorePath(t)
+	cleanupTestStorePath(path)
+	t.Cleanup(func() { cleanupTestStorePath(path) })
+	code, out := runStoreChild(t, "TestOpenFailingAfterTheEngineIsUpReturnsAnError", openFailsChildEnv+"="+path)
+	if code != 3 || !strings.Contains(out, "OPEN-ERROR ") {
+		t.Fatalf("Open over a workspace removed after the engine came up must return an error, not crash (exit %d):\n%s", code, out)
+	}
+}

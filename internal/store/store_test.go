@@ -32,9 +32,14 @@ func testStoreCoagentPacket(kind, summary string) types.SourcePacket {
 }
 
 // testStorePath returns a unique temporary database path for each test.
+// The directory is per process: two test processes of this package on one
+// host (two worktrees, a mirror and a worker) would otherwise share a
+// test's path, and one's cleanup would remove the other's workspace under
+// its open engine (the arch13j mirror panic, 2026-10-22). Child-process
+// tests get their parent's path through the environment.
 func testStorePath(t *testing.T) string {
 	t.Helper()
-	dir := filepath.Join(os.TempDir(), "go-choir-m3-store-test")
+	dir := filepath.Join(os.TempDir(), fmt.Sprintf("go-choir-m3-store-test-%d", os.Getpid()))
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("create temp dir: %v", err)
 	}
