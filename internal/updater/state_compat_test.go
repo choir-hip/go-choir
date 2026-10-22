@@ -244,3 +244,36 @@ func TestApplyVerifiesEntrypointBuildCommit(t *testing.T) {
 		t.Fatalf("provenance-mismatched apply err=%v, want build.json refusal", err)
 	}
 }
+
+// F23 (event-table design section 4.1): a release built before deploy 1
+// declares epoch 1. On a store whose receipt is this build's epoch it is
+// refused before mutation, so the updater never rolls a computer below the
+// rollback floor.
+func TestApplyRefusesPreEventTableReleaseOnEventTableStore(t *testing.T) {
+	blob, err := os.ReadFile(filepath.Join("testdata", "closure-single.nar"))
+	if err != nil {
+		t.Skipf("closure fixture absent: %v", err)
+	}
+	if storeschema.Version < 2 {
+		t.Fatalf("storeschema.Version = %d; deploy 1 is epoch 2", storeschema.Version)
+	}
+	root := filepath.Join(t.TempDir(), "updater")
+	t.Cleanup(func() { makeTreeWritable(root) })
+	basePath, baseDigest := compatTestBase(t, "commit-abc123")
+	schemaPath := writeSchemaReceipt(t, t.TempDir(), storeschema.Version)
+	engine, _ := compatEngine(t, root, basePath, schemaPath)
+
+	request := layeredRequestFixture(t, root, "computer-test", "realization-test", "op-pre-event-table", baseDigest, blob, "0pvb33w34jr4243s1182511gxwrchf0c-payload.txt")
+	request.Manifest.StoreSchemaVersion = 1
+	request.Manifest.MinStoreSchemaVersion = 1
+	request.Manifest.BaseCommit = "commit-abc123"
+	if err := refinalizeRequest(&request); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := engine.Apply(context.Background(), request); err == nil || !strings.Contains(err.Error(), "newer than release") {
+		t.Fatalf("pre-deploy-1 release apply err=%v, want pre-mutation refusal", err)
+	}
+	if _, statErr := os.Lstat(filepath.Join(root, "releases", request.Manifest.ContentDigest)); !os.IsNotExist(statErr) {
+		t.Fatalf("release dir staged despite refusal")
+	}
+}
