@@ -245,6 +245,18 @@ func (s *Store) closeCheckpoint() {
 	}
 }
 
+// reopenCheckpoint undoes closeCheckpoint for a Store that Reopen brings
+// back (Close then Reopen on the same *Store, the projection-base rebase
+// path): the configured mode holds again and the adopted workspace, which
+// Reopen marks dirty, gets a debounced commit.
+func (s *Store) reopenCheckpoint() {
+	c := &s.checkpoint
+	c.mu.Lock()
+	c.closed = false
+	c.mu.Unlock()
+	s.armCheckpoint()
+}
+
 func (c *checkpointCadence) recordCommit(site checkpointSite, elapsed time.Duration, events, ops uint64) {
 	ns := uint64(elapsed.Nanoseconds())
 	if ns == 0 {

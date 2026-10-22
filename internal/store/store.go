@@ -1008,6 +1008,7 @@ func (s *Store) Reopen(path string) error {
 	s.ogStore = live.ogStore
 	s.ogReadStore = live.ogReadStore
 	*live = Store{}
+	s.reopenCheckpoint()
 	return nil
 }
 
