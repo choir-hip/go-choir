@@ -1448,7 +1448,13 @@ func (s *Store) StartLifecycle(ctx context.Context, req types.StartLifecycleRequ
 	if revision.AuthorKind == "" {
 		revision.AuthorKind = types.AuthorAppAgent
 	}
-	revision, _, _, err = prepareOwnerInputTextureRevisionV2(revision)
+	if strictInitialText(ctx) {
+		// The caller is not the owner's browser (a desk's in-process
+		// choir.ProductAPI call): its text keeps the authoring rules.
+		revision, _, _, err = prepareTextureRevisionV2(revision)
+	} else {
+		revision, _, _, err = prepareOwnerInputTextureRevisionV2(revision)
+	}
 	if err != nil {
 		return types.LifecycleResult{}, fmt.Errorf("lifecycle start: prepare initial revision: %w", err)
 	}

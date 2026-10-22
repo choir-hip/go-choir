@@ -87,6 +87,7 @@ func (h *Handler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 
 	commitCtx, commitCancel := context.WithTimeout(context.WithoutCancel(r.Context()), promptBarCommitTimeout)
 	defer commitCancel()
+	commitCtx = ownerTextContext(commitCtx, r)
 	rec, handoff, err := h.submitPromptBar(commitCtx, ownerID, authenticatedUserEmail(r), text, commandID, true)
 	if err != nil {
 		status, message := promptBarSubmitFailure(err)
@@ -108,6 +109,21 @@ func (h *Handler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 		SubjectID: handoff.Conductor.SubjectID, ObligationIDs: handoff.Conductor.ObligationIDs,
 		ReducerSeq: handoff.Conductor.ReducerSeq, SnapshotCursor: handoff.Conductor.SnapshotCursor,
 	})
+}
+
+// ownerTextContext decides which rule the text of a new Texture is prepared
+// under. The owner's literal input (a request the proxy carried from the
+// owner's browser) is kept as typed. A caller with an empty RemoteAddr is
+// in-process: server.GuestHostCaller documents that marker and
+// choir.ProductAPI, the management desk's route to /api/prompt-bar, is its
+// only producer. A desk composes text from captures and Stories, so its text
+// keeps the Texture authoring rules and a refusal is a 400 it can correct
+// (round 2 review F1, docs/problems/prompt-bar-refuses-bracketed-index-as-server-error-2026-10-22.md).
+func ownerTextContext(ctx context.Context, r *http.Request) context.Context {
+	if strings.TrimSpace(r.RemoteAddr) == "" {
+		return store.WithStrictInitialText(ctx)
+	}
+	return ctx
 }
 
 // promptBarSubmitFailure answers a failed prompt-bar submit with the status
