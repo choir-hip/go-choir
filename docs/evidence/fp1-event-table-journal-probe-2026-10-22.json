@@ -1,0 +1,205 @@
+{
+  "schema": "fp1-event-table-journal-probe/1",
+  "design": "docs/design/choir-event-table-f-c-2026-10-22.md (F17, sections 4.1 and 5)",
+  "lane": "lane/fp1-event-table-d2",
+  "code": "deploy 2 writer (c7d7e6e48 and later on the lane)",
+  "machine": "node-a agents VM, embedded Dolt, the store's tape harness",
+  "command": "CHOIR_EVENT_TABLE_JOURNAL_PROBE=1 CHOIR_EVENT_TABLE_JOURNAL_PROBE_OUT=<file> go test ./internal/store -run TestEventTableJournalProbe -count=1 -v",
+  "interpretation": {
+    "gate_quantity": "b_ce/b_og, journal per op with the per-tape-event overhead amortized (sealed batches of up to 32 ops): 0.21, go bar 0.5: pass (prediction was about 0.35)",
+    "per_event_unbatched": "one tape event per op, batching off (the paper today): 0.52 (rounds 0.49, 0.55, 0.52). It saves about 68 KiB of about 143 KiB per batched event; the rest is the prepare and finalize overhead per tape event, which F-c does not touch (design 2.6 assumption 5)",
+    "three_tree_price": "dropping the trajectory index would save about 4 KiB per op batched and about 7 KiB per event unbatched; Q2 kept the index",
+    "drift": "unbatched_off rose 136 to 150 KiB per event across rounds as og_objects grew; the arms alternate so both see it",
+    "admissibility": "directional only: it can stop deploy 2, only staging and the paper can pass it"
+  },
+  "probe": "F17",
+  "note": "local tape harness; directional only (design 4.1): a miss stops deploy 2, only staging and the paper pass it",
+  "seed_events_per_table": 3000,
+  "payload_bytes": 2025,
+  "batch_k": 32,
+  "samples": [
+    {
+      "arm": "unbatched_off",
+      "events": 150,
+      "tape_events": 150,
+      "journal_bytes": 20933239,
+      "bytes_per_event": 139554.92666666667
+    },
+    {
+      "arm": "unbatched_on",
+      "events": 150,
+      "tape_events": 150,
+      "journal_bytes": 10341287,
+      "bytes_per_event": 68941.91333333333
+    },
+    {
+      "arm": "batched_off",
+      "events": 150,
+      "tape_events": 6,
+      "journal_bytes": 13686485,
+      "bytes_per_event": 91243.23333333334
+    },
+    {
+      "arm": "batched_on",
+      "events": 150,
+      "tape_events": 5,
+      "journal_bytes": 2568721,
+      "bytes_per_event": 17124.806666666667
+    },
+    {
+      "arm": "unbatched_off",
+      "events": 150,
+      "tape_events": 150,
+      "journal_bytes": 21757037,
+      "bytes_per_event": 145046.91333333333
+    },
+    {
+      "arm": "unbatched_on",
+      "events": 150,
+      "tape_events": 150,
+      "journal_bytes": 11876756,
+      "bytes_per_event": 79178.37333333334
+    },
+    {
+      "arm": "batched_off",
+      "events": 150,
+      "tape_events": 5,
+      "journal_bytes": 13505386,
+      "bytes_per_event": 90035.90666666666
+    },
+    {
+      "arm": "batched_on",
+      "events": 150,
+      "tape_events": 5,
+      "journal_bytes": 2891140,
+      "bytes_per_event": 19274.266666666666
+    },
+    {
+      "arm": "unbatched_off",
+      "events": 150,
+      "tape_events": 150,
+      "journal_bytes": 22978413,
+      "bytes_per_event": 153189.42
+    },
+    {
+      "arm": "unbatched_on",
+      "events": 150,
+      "tape_events": 150,
+      "journal_bytes": 12058377,
+      "bytes_per_event": 80389.18
+    },
+    {
+      "arm": "batched_off",
+      "events": 150,
+      "tape_events": 5,
+      "journal_bytes": 13169549,
+      "bytes_per_event": 87796.99333333333
+    },
+    {
+      "arm": "batched_on",
+      "events": 150,
+      "tape_events": 5,
+      "journal_bytes": 3085157,
+      "bytes_per_event": 20567.713333333333
+    },
+    {
+      "arm": "unbatched_off_3tree",
+      "events": 150,
+      "tape_events": 150,
+      "journal_bytes": 21861363,
+      "bytes_per_event": 145742.42
+    },
+    {
+      "arm": "unbatched_on_3tree",
+      "events": 150,
+      "tape_events": 150,
+      "journal_bytes": 10345083,
+      "bytes_per_event": 68967.22
+    },
+    {
+      "arm": "batched_off_3tree",
+      "events": 150,
+      "tape_events": 5,
+      "journal_bytes": 13394839,
+      "bytes_per_event": 89298.92666666667
+    },
+    {
+      "arm": "batched_on_3tree",
+      "events": 150,
+      "tape_events": 5,
+      "journal_bytes": 2191857,
+      "bytes_per_event": 14612.38
+    },
+    {
+      "arm": "unbatched_off_3tree",
+      "events": 150,
+      "tape_events": 150,
+      "journal_bytes": 21392759,
+      "bytes_per_event": 142618.39333333334
+    },
+    {
+      "arm": "unbatched_on_3tree",
+      "events": 150,
+      "tape_events": 150,
+      "journal_bytes": 10385826,
+      "bytes_per_event": 69238.84
+    },
+    {
+      "arm": "batched_off_3tree",
+      "events": 150,
+      "tape_events": 5,
+      "journal_bytes": 13512086,
+      "bytes_per_event": 90080.57333333333
+    },
+    {
+      "arm": "batched_on_3tree",
+      "events": 150,
+      "tape_events": 5,
+      "journal_bytes": 2396264,
+      "bytes_per_event": 15975.093333333334
+    },
+    {
+      "arm": "unbatched_off_3tree",
+      "events": 150,
+      "tape_events": 150,
+      "journal_bytes": 21903191,
+      "bytes_per_event": 146021.27333333335
+    },
+    {
+      "arm": "unbatched_on_3tree",
+      "events": 150,
+      "tape_events": 150,
+      "journal_bytes": 10294750,
+      "bytes_per_event": 68631.66666666667
+    },
+    {
+      "arm": "batched_off_3tree",
+      "events": 150,
+      "tape_events": 5,
+      "journal_bytes": 13754840,
+      "bytes_per_event": 91698.93333333333
+    },
+    {
+      "arm": "batched_on_3tree",
+      "events": 150,
+      "tape_events": 5,
+      "journal_bytes": 2095796,
+      "bytes_per_event": 13971.973333333333
+    }
+  ],
+  "mean_kib_per_event": {
+    "batched_off": 87.58988715277779,
+    "batched_off_3tree": 88.24167751736111,
+    "batched_on": 18.543875868055554,
+    "batched_on_3tree": 14.505028211805557,
+    "unbatched_off": 142.51017578125,
+    "unbatched_off_3tree": 141.40041883680556,
+    "unbatched_on": 74.38459201388889,
+    "unbatched_on_3tree": 67.32998914930556
+  },
+  "ratio_per_event_unbatched": 0.5219598643121991,
+  "ratio_per_op_batched": 0.21171252151187936,
+  "ratio_per_op_batched_3_tree": 0.1643784277440982,
+  "ratio_per_event_unbatched_3_tree": 0.476165415231288,
+  "go_bar": 0.5
+}
