@@ -456,7 +456,18 @@ item below:
 - [ ] **RES-13 · P2 · red — Snapshot levers**: sparse or diff snapshots
   (L3; `fcapi.go:126` is Full), shorter idle hibernate (L4; 30 min today),
   snapshots surviving deploys (L20).
-- [ ] **RES-14 · P1 · red — Verify the snapshot budget counts real bytes**
+- [x] **RES-14 · P1 · red — Verify the snapshot budget counts real bytes**
+  - Done 2026-10-22: the read-only probe (b2fa05c3a tests, 3ea3642f7
+    `scripts/snapshot_budget_bytes_probe.py`; on main in deploy J,
+    a84b39bac) read Node B at 09:00 UTC on deploy I (58e705802); reading
+    358741b5d in
+    [snapshot-budget-falls-back-to-logical-bytes-2026-10-14.md](problems/snapshot-budget-falls-back-to-logical-bytes-2026-10-14.md).
+    The budget counts the true compressed bytes (`btrfs_extents` equals
+    the tree search for all three committed snapshots, 790 to 1,503 MiB);
+    G2 answered (the 4 GiB hotplug region is all holes, so `need` reserves
+    the real worst case); no fix. The 48 GiB and 36 h settings stay: free
+    space and the 36 h age bind first; a second reading with more
+    hibernated computers is what would move either.
   - Now: FIEMAP bound landed (9001e9842); vmctl gained `CAP_SYS_ADMIN`
     (10e9f18e1), which may let the exact method succeed; no staging
     reading of which method hibernates log. Then revisit the 48 GiB and
