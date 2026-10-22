@@ -559,3 +559,51 @@ Gemini review of 69c2d2515 (bunch 120): ACCEPT, no required findings;
 its risks (serial guest requests, the second between the final pass and
 the reboot, unasked live capsules) are residuals already recorded. The
 DeepSeek review had not arrived when this round landed.
+
+## Findings: DeepSeek review of round 4 (bunch 124), 2026-10-22
+
+Verdict ACCEPT, conditional on F1. Read against `d1e5d5819`; 66 tests
+pass there. Its three round-4 checks held (the two 503 literals match the
+guest and come before the write; the ssh phrases cannot match a drop after
+the session exists; the handlers are installed after `--execute` and
+`--console-verified`, before the mark phase).
+
+F1 (medium-low, fail-open, required). `mark_rounds.ask` sets
+`m["in_flight"] = []` right after `remote()` returns, before the loop that
+fills `may_hold_marker`. A SIGHUP or SIGTERM (now an `Interrupted`), or
+any exception, inside that loop reaches `phase_mark`'s `except
+BaseException`, which clears `may_hold_marker` united with `in_flight`:
+both empty. `clear_markers` then skips every sent computer while it logs
+that it clears every marker that may exist. The host marker stays armed
+for 15 minutes with no reboot, so a crash in that window boots as
+planned, the state the red rule forbids. Reproduced by the reviewer on
+the FakeHost harness (guest answers 200, a signal at the first
+`answer_may_have_written`, `unmarked == []`).
+
+F2 (low). `main` catches `Exception` around the phases, which misses
+`Interrupted` and `KeyboardInterrupt`. Two gaps: (a) between `phase_mark`
+returning True and the `try` in `reboot_after_mark`, an interrupt leaves
+the markers armed with no clear; (b) an interrupt that `phase_mark` or
+`reboot_after_mark` clears and re-raises escapes `main` without `save()`,
+so the receipt that records what was sent is lost.
+
+F3 (low, doc). The runbook says an exit 4 keeps the markers armed and a
+crash in the next 15 minutes boots as planned. Exit 4 comes about 1230 s
+after the final pass (30 s sleep plus `--boot-timeout` 1200), past
+`plannedRestartMaxAge` (15 minutes, `internal/agentcore/planned_restart.go`),
+so at the defaults every marker is already stale and boots as a crash. The
+claim only holds when `--boot-timeout` is under 900 s.
+
+F4 (low). OpenSSH localizes its error messages. Under a non-C
+`LC_MESSAGES` none of the `SSH_NOT_SENT` phrases match, and R2 quietly
+degrades to waiting and exit 4 (fail-safe, but the exit-3 path is dead).
+
+F5 (nit, carried over). `--down-wait >= --boot-timeout` is not
+validated; the down-wait branch is then unreachable and a host that is
+still up exits 4.
+
+F6 (nit). `answer_may_have_written` treats every other status below 500
+as a refusal before the write. An unknown 4xx (408 or 429 from something
+in front of the guest) is then never cleared. Unreachable with today's
+guest, whose pre-write answers are 400, 403, 404, 405, 409 and the two
+503s.
