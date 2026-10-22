@@ -126,3 +126,60 @@ Notes:
   - s0-*, s5-observability-095604.txt;
   - s4-events-A/B-101817.txt, s4-snap-A/B-101817.txt;
   - trace-A.json, trace-B.json, post-ops-*.txt, post-health-*.txt.
+
+## Round 3 re-drill of steps 4 and 6 (plan, written before any cast)
+
+FP0 asked for this re-drill once FP4 round 3 (lane/fp4-r3-nudge: tests b557b2d64, fix cf7ed5072, record 4a4bf27bb) deploys. The computer is still 71afbf14.
+
+Starting state, read at 11:40 UTC on deploy N (4bc3aa3ec):
+
+- A's earlier candidate selfdev-0593136f is `rejected`. FP0 rejected it with key `fp0-reject-0593136f-20261022`; its `updated_at` is 11:32:02.873. The computer's one operation slot is free.
+- No operation is open; `running_runs` is 0.
+
+Judged as round 3's `next_action` states it:
+
+- **Step 4.** B binds within seconds of A's terminal_at, while management is still reading A's report. Script `--step 5` checks the 30 s bound.
+  - The guest log has "actorruntime: engineering admission wake latency mailbox=engineering-admission … waited=…" for B's nudge; the content carries `"nudge":"<A>"`.
+  - waited is a few seconds at most, and the mailbox is not management's.
+- **Step 6.** A completes with its candidate frozen, then B makes one Freeze.
+  - B's run shows the refusal naming A's operation, "cannot freeze until" and "Complete with result failed".
+  - The guest log has "selfdev: assignment B cannot freeze".
+  - B ends `failed` with the refusal as its reason. If the model reports partial, B ends `cancelled` with a reason that names A's candidate, never the bare guard name.
+- Steps 0-2 are re-read on the way (wake, A bound, B "waits behind"), and step 5 reads the writer gate once.
+- Step 3 is not forced. A natural planned refresh is recorded if one comes.
+- The crash half stays skipped.
+
+Prompts:
+
+- Request A is the round 2 text with the drill tag changed to FP4R3-20261022.
+- Request B is the round 2 text with that tag change, and step 5 now reads: "When Freeze is refused, do not retry and do not work around it: follow the refusal's advice: Complete the assignment with result failed, with the refusal text as the reason."
+  - This follows round 3's refusal advice; round 2's prompt said partial, after round 2's advice.
+
+Risk: since deploy M, guest egress is limited to host service ports, 80/443 and the 8089 package mirror.
+
+- If A's release build cannot fetch what it needs, A fails before it freezes.
+- Step 4 can still be judged, because A ending is all it needs. Step 6 then has no frozen candidate to refuse against, and is recorded as not reached, with A's failure.
+
+Request A (sent verbatim):
+
+```
+Engineering request A (FP4 admission drill FP4R3-20261022, test computer only): through the engineering desk, make one small, real, reversible source change. Keep this assignment live for at least five minutes: a second engineering request will be cast while it works and must queue behind it.
+1. In internal/selfdev/operations.go add the comment line "// Operation is one self-development change, from freeze to its decision." directly above "type Operation struct".
+2. Start the job `sh -c 'sleep 300'` and wait for it to end (the drill needs A live for five minutes).
+3. Check the change with `go vet ./internal/selfdev`.
+4. Build the release as usual (bin/autoputer and the frontend), then Freeze the candidate for my review.
+5. Await my decision; do not apply it.
+Management: cast this once; a second request B will arrive and should wait in the engineering queue, not replace this one.
+```
+
+Request B (sent verbatim):
+
+```
+Engineering request B (FP4 admission drill FP4R3-20261022, test computer only): through the engineering desk, in one assignment. This request is expected to wait in the engineering queue behind request A, which is already working; that is the drill.
+1. In internal/selfdev/operations.go add the comment line "// Store keeps self-development operations." directly above "type Store struct".
+2. Record three cheap receipts, each in its own cell: the toolchain (`go version`, `node --version`, `npm --version`); the check `gofmt -l internal/selfdev/operations.go` (no output expected); and, as the build stand-in, `sh -c 'test -s internal/selfdev/operations.go'`.
+3. Do not run go vet, go build, npm or vite.
+4. Call Freeze exactly once, citing those three receipts. It is expected to be refused while A's candidate awaits my decision.
+5. When Freeze is refused, do not retry and do not work around it: follow the refusal's advice: Complete the assignment with result failed, with the refusal text as the reason.
+Management: cast this once and do not re-cast, cancel or replace request A; report B's outcome back to me.
+```
