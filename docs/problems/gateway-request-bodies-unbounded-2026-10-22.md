@@ -133,3 +133,48 @@ images; every other route enforces at once.
   guest; they are out of this record.
 - The gateway still runs as root on `0.0.0.0` with every key in one process
   (host containment, FP3).
+
+## Review findings, bunch 88 (2026-10-22, candidate 02010a2e0)
+
+DeepSeek v4.1 flash rejected the candidate as deployable (core mechanism
+accepted, mandatory fixes); Gemini 3.8 approved. FP0 checked the findings
+below against the code; they are recorded here before any fix.
+
+- **F1, high: the cap is per body only.** `body_caps.go:207-241` bounds one
+  body; nothing bounds how many are buffered at once. The first deploy runs
+  with the scheduler off (`nix/node-b.nix:546`) and the model routes in
+  observe (`:559`, up to the 576 MiB ceiling), so the only bound on bodies
+  in flight is the 60-per-minute window and the 120 s read timeout: about
+  120 bodies per computer, each up to 576 MiB, about twice that once
+  decoded. The gateway unit (`node-b.nix` around `:2131`) has no
+  `MemoryMax`, so the bound is the host's RAM. One guest with its own bearer
+  can still take every tenant's calls down, the threat this record names.
+  Residual (a) of the station's section 6 deferred the aggregate bound to
+  the scheduler, which is off for the whole observe and enforce window.
+- **F2, high: a queued call has already spent its read timeout.** The model
+  routes now take the scheduler slot before reading the body
+  (`handlers.go:423`, `openai_compat.go:125`). The scheduler waits up to
+  120 s; the server's `ReadTimeout` is also 120 s (`server.go:106`) and is
+  an absolute deadline from the request's start. A call granted late reads
+  its body past that deadline, the read fails with `i/o timeout`,
+  `decodeBody` returns the decoder's error and the handler answers 400
+  `invalid request body`. A 400 is not transient to the guest
+  (`gatewayHTTPStatusError.Transient`: 429 and 5xx only), so backpressure
+  that used to be a 429 with `Retry-After` becomes a failed turn.
+- **F3, medium (partly true): the 64 MiB enforce limit is below the media
+  contract.** The gateway accepts 20 images (`provider/media.go:27`) and
+  downscales each to at most 5 MiB (`MaxImageBytes`). 20 images already at
+  that bound are 100 MiB raw, about 133 MiB as base64, plus a context: a
+  body the gateway's own contract treats as normal output of its own
+  downscale is refused by the enforce limit, with a non-transient 413. The
+  limit is not wrong by itself (the observe deploy measures before
+  enforce), but it was not recorded as a decision against this arithmetic.
+- **F4, medium (same root as F2): a trickled body holds a slot.** With the
+  slot taken first, a guest that sends its body slowly holds a scheduler
+  slot until the server's read timeout, 120 s; six such calls hold one
+  computer's whole share, four guests hold all 24 slots.
+
+The other review findings (F5 rollback wording, F6 proof step 11 never
+reads a large model body under the ceiling, F7 the observe 413 names the
+ceiling, /health counters across tenants, "every body through one helper"
+wording) are low and are dispositioned with the fix.
