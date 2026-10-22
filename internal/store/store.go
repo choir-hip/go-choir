@@ -647,7 +647,7 @@ CREATE INDEX IF NOT EXISTS idx_desktop_workspaces_owner_id ON desktop_workspaces
 CREATE INDEX IF NOT EXISTS idx_desktop_sessions_driver ON desktop_sessions(owner_id, desktop_id, driver_until);
 CREATE INDEX IF NOT EXISTS idx_desktop_app_instances_stack ON desktop_app_instances(owner_id, desktop_id, shared_stack_rank);
 CREATE INDEX IF NOT EXISTS idx_desktop_window_placements_instance ON desktop_window_placements(owner_id, desktop_id, app_instance_id, updated_at);
-`
+` + choirEventsDDL
 
 // OpenFresh creates a unified Dolt workspace only when its marker and derived
 // workspace path can both be exclusively reserved among OpenFresh callers.
