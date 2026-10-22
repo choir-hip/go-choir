@@ -1,6 +1,6 @@
 {
- "as_of": "2026-10-22T21:01Z",
- "main": "674460d15",
+ "as_of": "2026-10-22T21:26Z",
+ "main": "fd564dbbc",
  "items": [
   {
    "id": "REC-01",
@@ -1869,7 +1869,7 @@
     {
      "name": "guest DAMON reclaim on test computers",
      "stage": 5,
-     "evidence": "activation for 9648031f in E (05:25), 71afbf14 in K (10:10); 13:06 reading: no host memory returned in the idle window",
+     "evidence": "activation for 9648031f in E (05:25), 71afbf14 in K (10:10); D2 report live 20:57; probe 21:26 on 254b5cfe (DAMON off): reporting returned 1,615 MiB host RSS after a capsule burst; DAMON-on reading on 71afbf14 owed",
      "history": [
       {
        "stage": 1,
