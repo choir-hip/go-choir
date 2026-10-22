@@ -147,3 +147,20 @@ reproduced by the reviewer and then by the failing tests in 1a0fb4c13:
    nothing is pending.
 
 Fixed in b0ea5d1c0; dispositions in the station's now card.
+
+## Review round 4: Close tore the engine down under a live commit (2026-10-22)
+
+FP0's bunch 50 (DeepSeek v4.1 flash, accept with edits) on 40f1422a7.
+Past the close cap, `Store.Close` went on to close `readDB`, whose
+connector Close shuts the embedded engine, DoltDB and NomsBlockStore,
+while a `DOLT_COMMIT` that ignored its cancel could still run on its
+pinned connection (`database/sql` does not wait for a connection in use).
+The on-disk state stayed safe in the reviewer's emulation, but the
+ordering is no driver contract, a panic there would turn a planned
+restart into a crash, and `NomsBlockStore.Close` can block on `nbs.mu`,
+so the deadline was not a real bound. Also: a clean planned close counted
+two failures (the cancelled background commit and the skipped closing
+commit), the counters' "exact" claim was stronger than the code, the
+rollback rationale was wrong for round 3, and one test synced on a sleep.
+Fixed in cf2dc9d90 after failing tests in ed56fdc0e; dispositions in the
+station's now card.

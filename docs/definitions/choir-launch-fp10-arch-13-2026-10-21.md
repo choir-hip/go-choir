@@ -61,7 +61,7 @@ finish:
         {"key":"store.debounced_checkpoint","value":true}, run one research
         activation, read guest_checkpoint again over a few minutes, then
         POST the value false and read it once more
-      proves: inline_commits and inline_ns stop growing, background_commits grows, last_commit_age_ms stays under debounce_ms plus a commit whenever events_since_commit is above 0 (with nothing pending the age may grow without bound, since a no-op commit, counted in noop_commits, does not reset it), failures stays 0; finalize_commit_waits grows by at most about one per background commit and finalize_commit_wait_max_ns stays near background_max_ns (the bounded stall, reported, not hidden); after false, mode is count and inline commits resume
+      proves: inline_commits and inline_ns stop growing, background_commits grows, last_commit_age_ms stays under debounce_ms plus a commit whenever events_since_commit is above 0 (with nothing pending the age may grow without bound, since a no-op commit, counted in noop_commits, does not reset it), failures stays 0 (a planned restart does not move it, since cancelled_at_close, closing_commits_skipped and closes_left_open count the close apart); finalize_commit_waits grows by at most about one per background commit and finalize_commit_wait_max_ns stays near background_max_ns (the bounded stall, reported, not hidden); after false, mode is count and inline commits resume
       evidence_class: deployed proof
     - action: the paper's schedules and polls read before and after the deploy (setting left off on the paper)
       proves: the deploy did not take the paper down
@@ -81,11 +81,13 @@ finish:
       evidence_class: deployed proof (FP0; a soak alone does not count)
   rollback: >-
     The setting off (the next mark goes back to counted inline commits);
-    then git revert of the red commits, each together with its yellow test
-    commit (the round-2 and round-3 tests do not compile without their
-    fix): 1a0fb4c13 with b0ea5d1c0, ba875fab5 with a95e8ff16, newest first,
-    then f298f7484 and d1ec806e2. Nothing persistent changes shape: no
-    schema, no witness, no tape format.
+    then git revert, newest first, of each round's record, fix and tests
+    together: the round-2 and round-4 tests do not compile without their
+    fix, and the round-3 tests compile but fail on behavior, so a fix
+    reverted alone leaves red tests. Round 4 - its green record, cf2dc9d90,
+    ed56fdc0e; round 3 - 40f1422a7, b0ea5d1c0, 1a0fb4c13; round 2 -
+    2b964182e, a95e8ff16, ba875fab5; then f298f7484 and d1ec806e2. Nothing
+    persistent changes shape: no schema, no witness, no tape format.
   landing:
     required: true
     environment: staging
@@ -186,7 +188,29 @@ now:
     failure modes with the data-safety argument. (4) Close comment fixed;
     a background commit after Close is not attempted (tested). (5) the age
     check applies only while events are pending. (6) rollback reverts
-    yellow and red together. Re-run (GOMAXPROCS=2, ulimit -n 65536):
+    yellow and red together.
+  review_round_4_bunch_50: >-
+    2026-10-22, DeepSeek v4.1 flash accept with edits on 40f1422a7. Tests
+    ed56fdc0e, fix cf2dc9d90 (red), this record. (1) fixed: Close waits for
+    the cancelled committer and the closing commit within the deadline and
+    otherwise fails closed with ErrCheckpointCommitLive, leaving the engine
+    open; Reopen refuses; the next-open check is split (same process -
+    Dolt's lock refuses, the engine is intact; next process - the pre-close
+    head, no lock error), because with the engine left open an in-process
+    open cannot be lock-free. (2) wording - exact for the connection hold,
+    and the lost ErrBadConn retry. (3) cancels, skips and left-open closes
+    count apart from failures. (4) rollback reason and list fixed. (5) the
+    finalize-wait test syncs on the pool's WaitCount, not a sleep.
+    Re-run - go test ./internal/store -run 'Checkpoint|Finalize|Close|Reopen'
+    ok; under ~/heavy-test.lock with GOMAXPROCS=2 GOFLAGS=-p=1, -race
+    store Checkpoint|Finalize|Close|Reopen ok (96 s) and agentcore
+    Checkpoint|ComputerSetting|Observability|TelemetryBatching|
+    BootConfigures|Rematerialize ok (155 s); gates check-test-hang-guards,
+    check-decode-roots, check-heresies, check-v1-writer-purity ok;
+    check-guest-data-fstrim not runnable here (no nix binary on the VM;
+    the lane touches no nix file).
+  previous_rerun: >-
+    Re-run (GOMAXPROCS=2, ulimit -n 65536):
     store TestCheckpoint* -race ok (17 tests); the four timing tests -race
     -count=5 ok; store Checkpoint|Finalize|Close -race ok; store package
     without -race ok as four -run groups covering all 457 top-level tests
@@ -226,6 +250,13 @@ now:
       once per window or ops bound and now counted
       (finalize_commit_waits); removing it needs a second connection or
       the store split, SA slice 5 (excluded).
+    - >-
+      After a Close that failed closed (a commit still running at the
+      deadline) the store stays open with its cadence closed: finalize
+      commits inline and mode reads "closed" until a Close and Reopen
+      succeed. Every caller (planned restart, rematerialize, projection-base
+      rebase) stops on Close's error, so this lasts until the process exits
+      or retries the Close.
     - >-
       Close is not a write fence (review item 3, kept as a residual, not
       fixed): CancelDerivedColumnMigration only signals, closeCheckpoint
@@ -309,10 +340,12 @@ Problem: [guest-checkpoint-on-the-write-path-2026-10-21](../problems/guest-check
    once. The commit runs outside `eventMu` and the appender mutex, but on
    the store's one connection, so a finalize that starts during it waits
    (counted, above; the commit pins the connection, so the count is
-   exact). Close stops the timer, cancels a background commit in flight,
-   and commits once; the closing commit waits for the commit lock and
-   runs only until a 10 s close deadline, and past it is skipped and
-   counted as a failure. Turning the setting off stops the
+   exact for the connection hold). Close stops the timer, cancels a
+   background commit in flight and waits for it, then commits once, all
+   within a 10 s close deadline plus a 250 ms grace. If a commit is still
+   running then, Close fails closed: it returns ErrCheckpointCommitLive
+   and leaves the pools, connector and engine open (process exit reclaims
+   them), and Reopen refuses until a later Close succeeds. Turning the setting off stops the
    timer and returns to counted inline commits.
 
 ## Failure modes, written before the code
@@ -329,21 +362,35 @@ Problem: [guest-checkpoint-on-the-write-path-2026-10-21](../problems/guest-check
   Close stops it; a background commit that reaches the commit lock after
   Close is not attempted (TestCheckpointCommitAfterCloseIsNotAttempted).
 - Close waits out a background commit already in flight. Test: with a
-  live background commit holding the lock and ignoring its context,
-  Close returns within the close deadline and counts the skipped closing
-  commit (TestCheckpointCloseIsBoundedBehindABackgroundCommit).
+  live background commit ignoring its cancellation, Close returns within
+  the close deadline plus the grace with ErrCheckpointCommitLive, the
+  connector still answers, Reopen refuses, and a Close after the commit
+  finishes closes the store
+  (TestCheckpointCloseIsBoundedBehindABackgroundCommit).
+- Close tears the embedded engine down under a running commit. database/sql
+  Close does not wait for a connection in use, and the connector's Close
+  shuts the engine, DoltDB and NomsBlockStore; that ordering is no driver
+  contract, could panic, and NomsBlockStore.Close can block on nbs.mu.
+  So Close never closes the pools while a commit runs: it fails closed
+  instead. Tests: in this process an open while the commit is held is
+  refused by Dolt's lock (the engine is intact), and after release the
+  late commit is not applied (TestCheckpointNextOpenWhileCommitterHeld);
+  a child process that fails closed and exits with the commit held
+  leaves a store the next process opens with no lock error at the
+  pre-close head (TestCheckpointNextProcessOpenAfterFailedClose).
 - The close deadline is a context deadline, not a wall-clock bound on the
   commit itself: DOLT_COMMIT does not check its context mid-write, so a
-  commit already running inside Dolt runs to its end. Close no longer
-  waits for it (it bounds the lock wait and skips its own commit), so
-  that commit can still be running on its pinned connection while Close
-  closes the pools. Data-safety: Dolt writes content-addressed chunks
-  and moves the working set and HEAD atomically, so an interrupted or
-  cut-off commit leaves at worst an unadvanced HEAD and unreferenced
-  chunks, never a partly visible commit; the rows it would have covered
-  stay in the SQL working set and the next commit after boot takes them.
-  The connection is not reused after Close. Not exercised against a real
+  commit already running inside Dolt runs to its end. Close does not wait
+  past the deadline and the grace; it fails closed and leaves that commit
+  its engine. If the process then exits mid-commit, data-safety rests on
+  Dolt writing content-addressed chunks and moving the working set and
+  HEAD atomically: at worst an unadvanced HEAD and unreferenced chunks,
+  never a partly visible commit; the rows stay in the SQL working set and
+  the next commit after boot takes them. Not exercised against a real
   wedged DOLT_COMMIT (read from dolt/go, per the reviewer).
+- A planned restart reads as failures. A background commit cancelled by
+  Close, a closing commit skipped or cut, and a Close that failed closed
+  count apart (TestCheckpointPlannedCloseCountsNoFailure).
 - Count mode drifts from today's cadence. Test: the existing
   `doltCheckpointEvery` test still passes, and the inline counter counts
   exactly one commit per `every` events.
