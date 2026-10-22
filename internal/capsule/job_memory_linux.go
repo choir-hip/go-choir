@@ -60,6 +60,10 @@ func boostedBytesLocked(caps *Capsule) int64 {
 	return sum
 }
 
+// stuckBoostPrefix keys a refused boost whose memory.max could not be put
+// back (review E6).
+const stuckBoostPrefix = "stuck:"
+
 // boostJobMemory admits a job's declared need against the live budget and
 // raises its capsule's memory.max by it. release (the job's lease share)
 // runs once, when the boost is returned. On error nothing was raised or
@@ -102,7 +106,19 @@ func (e *Executor) boostJobMemory(capsuleID, jobID string, bytes int64, release 
 			err = hc.SetHigh(caps.MemoryHigh + boostedBytesLocked(caps) + bytes)
 		}
 		if err != nil {
-			_ = cg.SetMax(caps.MemoryMax + boostedBytesLocked(caps))
+			if restoreErr := cg.SetMax(caps.MemoryMax + boostedBytesLocked(caps)); restoreErr != nil {
+				// Review E6: memory.max stays raised. The raise is counted
+				// until the capsule ends, as a boost that cannot come down
+				// is (endJobMemory), under a key the job's end never reaches;
+				// the job's lease share is not held by it.
+				if caps.memoryBoosts == nil {
+					caps.memoryBoosts = map[string]*jobMemoryBoost{}
+				}
+				caps.memoryBoosts[stuckBoostPrefix+jobID] = &jobMemoryBoost{bytes: bytes}
+				e.vmMemoryUsed += bytes
+				log.Printf("capsule: job %s memory boost refused in capsule %s, but memory.max stays raised by %d MiB and is counted until the capsule ends: %v", jobID, capsuleID, bytes>>20, restoreErr)
+				return fmt.Errorf("raise capsule %s memory.high: %w; memory.max could not be put back and stays raised by %d MiB, counted until the capsule ends: %v", capsuleID, err, bytes>>20, restoreErr)
+			}
 			return fmt.Errorf("raise capsule %s memory.high: %w", capsuleID, err)
 		}
 	}
