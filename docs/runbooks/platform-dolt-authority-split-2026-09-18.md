@@ -17,8 +17,11 @@ a file delete + restart. Never dual-write.
 
 - `go-choir-corpus-dolt.service` deployed and `active` (nix unit on 13307).
 - `corpusd` and `sourcecycled` running the build that accepts
-  `CORPUSD_CORPUS_DOLT_DSN` / `SOURCECYCLED_DOLT_DSN` and tolerates the
-  absent `corpus-dsn.env` (they share the Store A pool until the flip).
+  `CORPUSD_CORPUS_DOLT_DSN` / `SOURCECYCLED_DOLT_DSN`. They share the Store
+  A pool until the flip. Since 2026-10-22 corpusd and checkpointd refuse to
+  start without `/var/lib/go-choir/unit-env/corpus-dsn.env`
+  (AssertPathExists); before the flip it is a file without a DSN (see the
+  rollback below).
 - `scripts/dolt-dump-split/main.go` copied to Node B (`/root/dolt-dump-split.go`); stdlib-only, runs as `go run /root/dolt-dump-split.go` with no module.
 - Low-traffic window: world-wire + event APIs go dark for the dump/import
   duration (~1–1.5 h at current sizes).
@@ -94,10 +97,14 @@ curl -s https://choir.news/health
 ## Rollback
 
 ```bash
-# Fast path (B tables still present in Store A). Remove the file in
-# unit-env: `rm /var/lib/go-choir/corpus-dsn.env` removes only the link and
-# leaves corpusd on Store B.
-rm /var/lib/go-choir/unit-env/corpus-dsn.env
+# Fast path (B tables still present in Store A). Replace the file in
+# unit-env with one that sets no DSN: an empty CORPUSD_CORPUS_DOLT_DSN is
+# Store A. Do not remove it: corpusd and checkpointd assert it and would not
+# start (docs/problems/host-containment-gaps-after-fp3-cut-2-2026-10-22.md,
+# round 2c). `rm /var/lib/go-choir/corpus-dsn.env` removes only the link.
+install -m 0600 -o root -g root /dev/stdin /var/lib/go-choir/unit-env/corpus-dsn.env <<'EOF'
+# Store A for corpus tables: authority-split rollback, <date>
+EOF
 systemctl restart go-choir-corpusd go-choir-sourcecycled
 systemctl stop go-choir-corpus-dolt   # optional
 
