@@ -127,8 +127,14 @@ type blockingSnapshotVMManager struct {
 
 func (m *blockingSnapshotVMManager) ResumeVMFromSnapshot(vmID string, _ VMManagerConfig, _ func() (string, error)) (*VMInstanceInfo, error) {
 	m.spawned <- vmID
-	<-m.release
-	return nil, errVMCTLStoppedMidBoot
+	// Bounded far past any test's own run: the fixture only has to outlive
+	// the restart the test simulates.
+	select {
+	case <-m.release:
+		return nil, errVMCTLStoppedMidBoot
+	case <-time.After(2 * time.Minute):
+		return nil, errors.New("blockingSnapshotVMManager: never released by the test")
+	}
 }
 
 // restartedVMCTL is the vmctl systemd starts after the restart: it loads the
@@ -828,5 +834,90 @@ func TestStartIsRefusedWhenItsClaimCannotBeWritten(t *testing.T) {
 	}
 	if own := reg.GetOwnershipByVMID(seed.VMID); own.BootClaim != nil || own.State != VMStateStopped {
 		t.Fatalf("refused start left %+v, want the stopped row without a claim", own)
+	}
+}
+
+// Review round 3 (E1, E3). The escape from the repeated-interruption bound
+// is a deploy of a new target: it re-arms the charged retry and the deploy
+// rescue boots the computer once. A critical_protected computer always had
+// that route; the public_platform computer had none (it is not an
+// always-on boot class, so a stopped one was never a rescue candidate) and
+// stayed down for the whole window.
+func TestDeployReArmsAndBootsAComputerWhoseStartsKeptCrashingVMCTL(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		protected bool
+		class     WarmnessClass
+	}{
+		{"critical_protected", true, ""},
+		{"public_platform", false, WarmnessClassPublicPlatform},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newRescueFixture(t, tc.protected)
+			f.failStopUntracked(stoppedByStartInterruptedRepeatedly)
+			f.reg.mu.Lock()
+			own := f.reg.ownerships[ownershipKey(rescueUser, PrimaryDesktopID)]
+			if tc.class != "" {
+				own.WarmnessClass = tc.class
+			}
+			own.StartInterruptions = 2
+			own.FailureWarmedAt = f.now.UTC().Format(time.RFC3339Nano)
+			vmID := own.VMID
+			f.reg.mu.Unlock()
+
+			// Inside the window no automatic start boots it.
+			f.reg.WarmAlwaysOnDesktops(t.Context(), allowAllRoutes)
+			if f.spawns() != 0 {
+				t.Fatalf("the sweep booted a computer inside its charged window: spawns=%d", f.spawns())
+			}
+			listed, err := f.h.listOwnershipResponses(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			rescue := false
+			for _, c := range selectDeployRefresh(listed).Candidates {
+				if c.VMID == vmID && c.Rescue {
+					rescue = true
+				}
+			}
+			if !rescue {
+				t.Fatalf("%s computer whose starts kept crashing vmctl is not a deploy rescue candidate", tc.name)
+			}
+			if _, resp := f.deploy(t, "build-r3"); resp.Outcome != deployRefreshRefreshed {
+				t.Fatalf("deploy of a new target = %+v, want the rescue to boot it", resp)
+			}
+			got := f.own()
+			if f.spawns() != 1 || got.State != VMStateActive || got.StoppedBy != "" || got.StartInterruptions != 0 {
+				t.Fatalf("after the deploy rescue: spawns=%d own=%+v, want one boot, active, the run reset", f.spawns(), got)
+			}
+		})
+	}
+}
+
+// The platform class reaches the deploy rescue only for the repeated
+// fate: its other stops have their own escape (the platform warm and
+// ensure), and a deploy does not take them over.
+func TestDeployRescueReachesAPlatformComputerOnlyForRepeatedInterruptions(t *testing.T) {
+	platform := string(WarmnessClassPublicPlatform)
+	ownerships := []ownershipResponse{
+		{VMID: "vm-repeated", UserID: "a", DesktopID: "primary", State: "stopped", Kind: VMKindInteractive, WarmnessClass: platform, StoppedBy: stoppedByStartInterruptedRepeatedly},
+		{VMID: "vm-restart", UserID: "b", DesktopID: "primary", State: "stopped", Kind: VMKindInteractive, WarmnessClass: platform, StoppedBy: stoppedByVMCTLRestart},
+		{VMID: "vm-interrupted", UserID: "c", DesktopID: "primary", State: "stopped", Kind: VMKindInteractive, WarmnessClass: platform, StoppedBy: stoppedByStartInterrupted},
+		{VMID: "vm-wedged", UserID: "d", DesktopID: "primary", State: "stopped", Kind: VMKindInteractive, WarmnessClass: platform, StoppedBy: stoppedByWedged},
+		{VMID: "vm-failed", UserID: "e", DesktopID: "primary", State: "failed", Kind: VMKindInteractive, WarmnessClass: platform},
+	}
+	rescue := map[string]bool{}
+	for _, c := range selectDeployRefresh(ownerships).Candidates {
+		if c.Rescue {
+			rescue[c.VMID] = true
+		}
+	}
+	if !rescue["vm-repeated"] {
+		t.Errorf("a platform computer whose starts kept crashing vmctl is not a rescue candidate: %v", rescue)
+	}
+	for _, vmID := range []string{"vm-restart", "vm-interrupted", "vm-wedged", "vm-failed"} {
+		if rescue[vmID] {
+			t.Errorf("%s: a deploy rescue took over a platform stop the platform warm or ensure owns", vmID)
+		}
 	}
 }
