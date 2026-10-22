@@ -1173,3 +1173,46 @@ func TestCheckpointOverrunClosingCommitCountsOnce(t *testing.T) {
 		t.Fatalf("one overrunning closing commit must count once: %+v", st)
 	}
 }
+
+// A Close that fails closed leaves the store as it was before the Close:
+// the debounced cadence (not "closed", no inline commits) and the
+// telemetry sealer accepting again.
+func TestCheckpointFailedCloseRestoresCadenceAndTelemetry(t *testing.T) {
+	path := testStorePath(t)
+	cleanupTestStorePath(path)
+	t.Cleanup(func() { cleanupTestStorePath(path) })
+	const computerID = "computer-cadence-failedrestore"
+	s, _ := openWithPendingCheckpoint(t, path, computerID)
+	s.doltCheckpointEvery = 1
+	s.telemetry.Store(&telemetrySealer{s: s, window: time.Second, enabled: true})
+	if !s.TelemetryBatchingEnabled() {
+		t.Fatal("the test sealer is not accepting")
+	}
+	_, releaseCommit, background := holdBackgroundCommit(t, s)
+	if err := s.Close(); !errors.Is(err, ErrCheckpointCommitLive) {
+		t.Fatalf("Close with a live commit = %v, want ErrCheckpointCommitLive", err)
+	}
+	if got := s.CheckpointStats().Mode; got != CheckpointModeDebounced {
+		t.Fatalf("mode after a failed Close = %q, want %q", got, CheckpointModeDebounced)
+	}
+	if !s.TelemetryBatchingEnabled() {
+		t.Fatal("a failed Close left the telemetry sealer stopped")
+	}
+	releaseCommit()
+	select {
+	case <-background:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the background commit did not finish after release")
+	}
+	before := s.CheckpointStats().InlineCommits
+	finalizeTestEvents(t, s, computerID, 2)
+	if got := s.CheckpointStats().InlineCommits; got != before {
+		t.Fatalf("finalize committed inline %d times after a failed Close in debounced mode", got-before)
+	}
+	if !s.checkpointTimerArmed() {
+		t.Fatal("the debounce timer is not armed after a failed Close and new writes")
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close after the commit finished: %v", err)
+	}
+}
