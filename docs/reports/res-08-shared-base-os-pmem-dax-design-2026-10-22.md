@@ -165,9 +165,11 @@ the read is unpartitioned, because the upper may be inside it. A store
 walk that measured no files is refused, not quoted as 0 MiB. The read
 reports `partitioned: false` with a `reason`, and the probe's refusal
 quotes it. The reasons are: mountinfo unreadable, no store mount, a
-stacked overlay (more than one overlay at the store, or several lower
-layers), an overlay without a parsed upperdir, or an upper that does not
-resolve in the daemon's namespace. These reason strings are pinned by
+stacked overlay, an overlay without a parsed upperdir, or an upper that
+does not resolve in the daemon's namespace. "Stacked overlay" covers more
+than one overlay at the store, an overlay hidden under a later plain
+mount (reported with fstype erofs), a lowerdir with several layers, and
+`lowerdir+=` or `datadir+=` options. These reason strings are pinned by
 `TestPageCacheLayeringReasons`, and a partitioned read states none.
 
 Run from FP0's machine (the script uses `ssh node-b`; it boots, stops,
@@ -288,13 +290,18 @@ decision.
 - **Commas and colons in overlay option values** (review bunch 20). The
   options are split on literal commas. The kernel prints a comma inside a
   value as the octal escape `\054`, which is decoded after the split, so
-  such an upper or work path parses (tested). A literal comma, if one ever
-  appeared, would truncate the value. The truncated path then either does
-  not exist (the read reports partitioned false, "overlay upper does not
-  resolve") or is absent (partitioned false, "overlay without a parsed
-  upperdir"); it is never extended. A colon inside a lowerdir path is read
-  as a second layer, so it fails closed as stacked. Today's paths have
-  neither.
+  such an upper or work path parses (tested). A literal comma would
+  truncate the value, and the read detects that only when the truncated
+  path does not exist ("overlay upper does not resolve"). If the truncated
+  path exists, the read takes it for the upper and reports partitioned
+  true (reproduced with a throwaway test: a real upper `up,q` and a
+  directory `up`). That case is not reachable from `/proc/self/mountinfo`:
+  the kernel's `seq_show_option` escapes a comma in a value as `\054`
+  (DeepSeek checked v4.19, v5.4, v5.15 and v6.12 and a sampled container
+  mountinfo). A future kernel change to that escaping would reopen it, and
+  the guarantee is the kernel's, not the code's. A colon inside a lowerdir
+  path is read as a second layer, so it fails closed as stacked. Today's
+  paths have neither.
 - **The caps are per root** (review bunch 16, F4). The file cap (500k)
   and the byte cap (64 GiB) apply to each root (a root and its overlay
   upper share one budget). The guest's two roots may therefore examine up

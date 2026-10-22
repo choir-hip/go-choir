@@ -99,7 +99,7 @@ boundaries:
   protected_surfaces: [none touched; the design names vmmanager drives, the guest image and the jailer as the surfaces a later slice touches]
 
 now:
-  status: checkpoint (round 4 done; round 3 is in deploy F; FP0 lands round 4, then the reads)
+  status: checkpoint (round 5 done: comments and docs only; FP0 lands it on round 4, then the reads)
   slice: >-
     The read landed in deploy D (fd58229aa, 840e1a701 on main). Review bunch
     13 (DeepSeek v4.1 Flash) accepted with edits. Its findings 1, 2, 3, 4
@@ -124,14 +124,18 @@ now:
     findings): the tests (yellow), 273b1ceb2 (lowerdir+= and datadir+= are
     stacked; stacking no longer depends on mount order, so a hidden overlay
     is stacked too), and the report's comma wording, corrected to what the
-    code does (an octal-escaped comma parses; a literal comma truncates and
-    fails closed). Every layering reason is now asserted. Already fixed by round 2: F1 (store fields),
+    code does. Round 5 (bunch 23, comments and docs only) corrects what round 4
+    overclaimed: a literal comma that truncates an upper to a path that
+    exists is NOT caught (DeepSeek's counterexample, reproduced); it is
+    unreachable because the kernel emits \054. It also fixes the stale test
+    header (item 19), the PageCacheLayering and Stacked godoc, and the report's
+    reason list. Every layering reason is now asserted. Already fixed by round 2: F1 (store fields),
     F3 and F7. F6 was not fixed by round 2 and is fixed in round 3.
   source_ref: 8fabec36a
   deploy_identity: deploy D serves the first read (no store_layering); the probe refuses its store numbers
   candidate:
-    id: FP10-RES-08-measure-r5
-    state: built, not frozen; round 4 on top of round 3 (in deploy F)
+    id: FP10-RES-08-measure-r6
+    state: built, not frozen; round 5 (comments and docs) on top of round 4
     ref: lane/fp10-res08-pmem-dax
     base: 8fabec36a
     digest: none
@@ -169,7 +173,7 @@ now:
     build slice. The Firecracker 1.16.1 pmem facts marked "verify" in the
     report are unproven. Finding 5 (guard in hostauth off mode) stays with
     the hostauth owner.
-  next_action: FP0 lands round 4 on top of round 3, deploys, and runs report §5 step 1.
+  next_action: FP0 lands round 5 on top of round 4, deploys, and runs report §5 step 1.
 
 receipts: []
 ---

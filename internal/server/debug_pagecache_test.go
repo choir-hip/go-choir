@@ -515,8 +515,9 @@ func TestPageCacheServedAloneToHostCallers(t *testing.T) {
 //      with several lower layers, hides layers whose files the read counts
 //      as base and again under persistent. The read cannot partition them
 //      and must say partitioned false (F5).
-//  19. An overlay whose upperdir did not parse (an escaped comma,
-//      truncated options) puts the release delta in the base store; it must
+//  19. An overlay whose upperdir did not parse (truncated options, a comma
+//      the kernel failed to escape) puts the release delta in the base
+//      store; it must
 //      say partitioned false, not true (F6).
 //  20. Escaped mountinfo paths (\040 space, \134 backslash) parse to the
 //      real paths (F8).
@@ -582,8 +583,10 @@ func TestParseStoreOverlayUnescapesPaths(t *testing.T) {
 //  23. Every partitioned=false path states its reason, and a partitioned
 //      read states none; the probe and the report quote these strings.
 //  24. Commas in overlay option values: the kernel escapes them as \054 in
-//      mountinfo, so they parse; a literal comma truncates the value, which
-//      fails closed through the upper-does-not-resolve check.
+//      mountinfo, so they parse. A literal comma would truncate the value;
+//      that is caught only when the truncated path is absent (it is not
+//      reachable from kernel mountinfo, and a truncated path that happens to
+//      exist would be walked as the upper).
 
 func TestParseStoreOverlayAppendedLayerOptionsAreStacked(t *testing.T) {
 	for _, opt := range []string{"lowerdir+=/a", "datadir+=/a"} {
@@ -655,9 +658,10 @@ func TestParseStoreOverlayCommasInOptionValues(t *testing.T) {
 	if !ok || got.Stacked || got.Upper != "/mnt/p,q/store" || got.Work != "/mnt/p,q/work" {
 		t.Fatalf("escaped comma: got %+v ok=%v", got, ok)
 	}
-	// A literal comma ends the value early: the path is truncated, never
-	// extended, so it cannot name a different existing directory by accident
-	// of a longer match; the stray fragment is ignored.
+	// A literal comma ends the value early and the stray fragment is ignored.
+	// This pins the parse only. It is not a guarantee of fail-closed: if the
+	// truncated path exists, the read would take it for the upper. The kernel
+	// emits \054, so the case does not arise from mountinfo.
 	got, ok = parseStoreOverlay(overlayLine(41, "/nix/store", "lowerdir=/nix/store,upperdir=/mnt/p,q/store,workdir=/mnt/w"), "/nix/store")
 	if !ok || got.Upper != "/mnt/p" || got.Work != "/mnt/w" {
 		t.Fatalf("literal comma: got %+v ok=%v", got, ok)

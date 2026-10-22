@@ -63,16 +63,22 @@ type PageCacheRoot struct {
 // files are the release delta, not the base image, so they are counted as
 // store_upper and left out of persistent. Partitioned is false, with a
 // Reason, when the mount table could not be read or names no store mount,
-// or the store is an overlay that is stacked, has no parsed upper, or whose
-// upper does not resolve in this namespace; then the store and persistent totals may
-// both include the upper and must not be quoted as the base image.
+// or the store's mounts are stacked (more than one overlay, an overlay
+// hidden under a later plain mount, an overlay with several lower layers or
+// lowerdir+= / datadir+= options), or an overlay has no parsed upper or one
+// that does not resolve in this namespace; then the store and persistent
+// totals may both include the upper and must not be quoted as the base
+// image. FSType is the reported (last) mount's, so a hidden overlay shows
+// as stacked with fstype erofs.
 type PageCacheLayering struct {
 	FSType string `json:"fstype"`
 	Upper  string `json:"upper,omitempty"`
 	Work   string `json:"work,omitempty"`
-	// Stacked is true when more than one overlay is mounted at the store, or
-	// the top one has several lower layers: layers the read cannot see
-	// would be counted as base and again under persistent.
+	// Stacked is true when the read cannot attribute every layer's files:
+	// more than one overlay at the store, an overlay hidden under a later
+	// plain mount, a lowerdir with several layers, or lowerdir+= / datadir+=
+	// options. Such layers would be counted as base and again under
+	// persistent.
 	Stacked     bool   `json:"stacked,omitempty"`
 	Partitioned bool   `json:"partitioned"`
 	Reason      string `json:"reason,omitempty"` // why partitioned is false
