@@ -2133,7 +2133,7 @@ func (s *Store) AppendEvent(ctx context.Context, rec *types.EventRecord) error {
 	if len(rec.Payload) == 0 {
 		rec.Payload = json.RawMessage(`{}`)
 	}
-	s.telemetryStats.recordAppend(rec.Kind)
+	s.telemetryStats.recordAppend(rec.Kind, len(rec.Payload))
 
 	// Telemetry batching (docs/reports/telemetry-batching-design-2026-10-20.md).
 	// sl is nil unless batching was ever configured on in this process, and
@@ -2255,6 +2255,7 @@ func (s *Store) AppendEvent(ctx context.Context, rec *types.EventRecord) error {
 		}
 		reason, triggered := sl.enqueue(queued) // consumes the reservation
 		reservationHeld = false
+		s.telemetryStats.recordSink(rec.Kind, sinkTape) // queued for the tape: the sealer is a tape writer
 		s.eventMu.Unlock()
 		unlocked = true
 		sl.afterEnqueue(reason, triggered)
@@ -2281,6 +2282,7 @@ func (s *Store) AppendEvent(ctx context.Context, rec *types.EventRecord) error {
 		}
 		return err
 	}
+	s.telemetryStats.recordSink(rec.Kind, sinkTape)
 	return nil
 }
 

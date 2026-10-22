@@ -64,6 +64,8 @@ var sealReasonNames = [sealReasons]string{"deadline", "count", "bytes", "barrier
 type telemetryCounters struct {
 	mu                    sync.Mutex
 	appendedByKind        map[string]int64
+	payloadBytesByKind    map[string]int64
+	sinkByKind            [eventSinks]map[string]int64
 	tapeEventsByAuthority map[string]int64
 	tapeOpsByKind         map[string]int64
 
@@ -93,7 +95,42 @@ type telemetryCounters struct {
 	sealLatencyNanosMax   atomic.Int64
 }
 
-func (c *telemetryCounters) recordAppend(kind types.EventKind) {
+// eventSink is where an event the store accepted was written (R7 S0,
+// docs/design/trace-segment-log-2026-10-22.md section 9). Today every event
+// goes to the tape, whether as its own acknowledged tape event or as a record
+// the sealer queues for one. The trace log is S4's; the dropped sink is the
+// log's drop at disk-critical, also S4's. Both read zero until then.
+type eventSink int
+
+const (
+	sinkTape eventSink = iota
+	sinkTraceLog
+	sinkDropped
+	eventSinks
+)
+
+var eventSinkNames = [eventSinks]string{"tape", "trace_log", "dropped"}
+
+// recordSink counts one event of kind that reached sink. It is called only
+// after the write (or the sealer's enqueue) succeeded, so appended minus the
+// sinks is the number of appends that failed.
+func (c *telemetryCounters) recordSink(kind types.EventKind, sink eventSink) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	if c.sinkByKind[sink] == nil {
+		c.sinkByKind[sink] = map[string]int64{}
+	}
+	c.sinkByKind[sink][string(kind)]++
+	c.mu.Unlock()
+}
+
+// recordAppend counts one AppendEvent call by kind and adds the size of its
+// payload. The stored line is the payload plus a fixed envelope of about
+// 0.3 KB (ids, kind, timestamps), so the payload mean is the line mean to
+// within that.
+func (c *telemetryCounters) recordAppend(kind types.EventKind, payloadBytes int) {
 	if c == nil {
 		return
 	}
@@ -107,6 +144,10 @@ func (c *telemetryCounters) recordAppend(kind types.EventKind) {
 		c.appendedByKind = map[string]int64{}
 	}
 	c.appendedByKind[string(kind)]++
+	if c.payloadBytesByKind == nil {
+		c.payloadBytesByKind = map[string]int64{}
+	}
+	c.payloadBytesByKind[string(kind)] += int64(payloadBytes)
 	c.mu.Unlock()
 }
 
@@ -180,9 +221,18 @@ type BatchingStats struct {
 // baseline batch size. With the flag on the sealer counters give the realised
 // k. It is read-only; nothing branches on it.
 type TelemetryStats struct {
-	EventsAppendedByKind       map[string]int64 `json:"events_appended_by_kind"`
-	EventsAppendedBatchable    int64            `json:"events_appended_batchable"`
-	EventsAppendedAcknowledged int64            `json:"events_appended_acknowledged"`
+	EventsAppendedByKind map[string]int64 `json:"events_appended_by_kind"`
+	// EventPayloadBytesByKind is the summed payload size of those appends;
+	// MeanEventPayloadBytesByKind is that sum over the count, the mean line
+	// size the trace log's sizing needs (R7 S0). Counted at the same place as
+	// EventsAppendedByKind, so the two always divide.
+	EventPayloadBytesByKind     map[string]int64   `json:"event_payload_bytes_by_kind"`
+	MeanEventPayloadBytesByKind map[string]float64 `json:"mean_event_payload_bytes_by_kind"`
+	// EventsBySink is sink name ("tape", "trace_log", "dropped") to kind to the
+	// number of events that reached it. All three sinks are always present.
+	EventsBySink               map[string]map[string]int64 `json:"events_by_sink"`
+	EventsAppendedBatchable    int64                       `json:"events_appended_batchable"`
+	EventsAppendedAcknowledged int64                       `json:"events_appended_acknowledged"`
 	// BatchableShare is batchable / all standalone AppendEvent calls.
 	BatchableShare float64 `json:"batchable_share"`
 
@@ -213,9 +263,20 @@ func (s *Store) TelemetryStats() TelemetryStats {
 	c := &s.telemetryStats
 	c.mu.Lock()
 	out := TelemetryStats{
-		EventsAppendedByKind:  copyCounts(c.appendedByKind),
-		TapeEventsByAuthority: copyCounts(c.tapeEventsByAuthority),
-		TapeOpsByKind:         copyCounts(c.tapeOpsByKind),
+		EventsAppendedByKind:    copyCounts(c.appendedByKind),
+		EventPayloadBytesByKind: copyCounts(c.payloadBytesByKind),
+		TapeEventsByAuthority:   copyCounts(c.tapeEventsByAuthority),
+		TapeOpsByKind:           copyCounts(c.tapeOpsByKind),
+		EventsBySink:            map[string]map[string]int64{},
+	}
+	out.MeanEventPayloadBytesByKind = make(map[string]float64, len(c.payloadBytesByKind))
+	for kind, bytes := range c.payloadBytesByKind {
+		if n := c.appendedByKind[kind]; n > 0 {
+			out.MeanEventPayloadBytesByKind[kind] = float64(bytes) / float64(n)
+		}
+	}
+	for sink := range c.sinkByKind {
+		out.EventsBySink[eventSinkNames[sink]] = copyCounts(c.sinkByKind[sink])
 	}
 	c.mu.Unlock()
 	out.EventsAppendedBatchable = c.appendedBatchable.Load()
