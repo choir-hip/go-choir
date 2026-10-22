@@ -53,7 +53,7 @@ operation `executing` with a stamp for the close to carry. Read in code
   before it opens the operation:
   - an empty build, test or toolchain slot;
   - a job still running.
-- It then opens the assignment's operation (`OpenFreezeCandidate`,   line 188).
+- It then opens the assignment's operation (`OpenFreezeCandidate`, tools_capsule.go:189).
 - Every later refusal leaves the operation `executing`, and the reducer
   stamps `last_intent_error` as "freeze: <error>"
   (internal/agentcore/rlm_reduce.go:1465). Those refusals are: receipt
