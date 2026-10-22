@@ -35,7 +35,8 @@ type SelfTestReceipt struct {
 
 // JudgeProbe lists what is wrong with a probe report: the identity, the
 // confinement status, the namespace, an allowed probe that failed, or a
-// denied probe that succeeded or failed only with ENOENT.
+// denied probe that succeeded or failed only with ENOENT (a read: probe
+// must fail with EACCES or EPERM).
 func JudgeProbe(r ProbeReport, reads []string) []string {
 	var failures []string
 	if r.UID == 0 || r.GID == 0 {
@@ -63,6 +64,10 @@ func JudgeProbe(r ProbeReport, reads []string) []string {
 			failures = append(failures, "probe "+name+" succeeded inside the sandbox")
 		case strings.HasPrefix(got, "ENOENT"):
 			failures = append(failures, "probe "+name+" failed with ENOENT, which proves nothing")
+		case strings.HasPrefix(name, "read:") && !strings.HasPrefix(got, "EACCES") && !strings.HasPrefix(got, "EPERM"):
+			// Review E4: only an access denial is a denied read; EISDIR or
+			// ELOOP would fail outside the sandbox too.
+			failures = append(failures, "probe "+name+" failed with "+got+", not an access denial")
 		}
 	}
 	return failures

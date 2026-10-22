@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -44,8 +45,8 @@ var defaultExecRoots = []string{"/nix/store", "/usr", "/lib", "/lib64", "/bin"}
 var passedEnv = []string{"LANG", "LC_ALL", "LOCALE_ARCHIVE", "TZ", "TZDIR"}
 
 // runSandboxed runs the tool through the helper. budget puts it in a cgroup
-// of its own under the document tools' root (required); without it the tool
-// stays in the daemon's cgroup, as a direct run does (observe's shadow).
+// of its own under the document tools' root (required, and observe's shadow
+// since review E2); only the isolation tests run without one.
 // maxRSS is the tool's peak RSS. setupErr is non-nil when the sandbox could
 // not be set up and the tool did not run.
 func runSandboxed(ctx context.Context, opts runOptions, budget bool, tool, toolPath string, prefixArgs []string, ext string, raw []byte, suffixArgs []string) (out string, warnings []string, maxRSS int64, setupErr error) {
@@ -160,7 +161,7 @@ func runSandboxed(ctx context.Context, opts runOptions, budget bool, tool, toolP
 		w := toolFailure(tool, stderr.buf.String(), err)
 		if cg != nil {
 			if n := cg.oomKills(); n > 0 {
-				w += fmt.Sprintf(" (killed by its memory budget, memory.max %d MiB)", toolMemoryMax>>20)
+				w += fmt.Sprintf(" (%s, memory.max %d MiB)", killedByBudget, toolMemoryMax>>20)
 			}
 		}
 		return "", []string{w}, maxRSS, nil
@@ -225,9 +226,11 @@ func EnsureToolCgroupRoot(root string) error {
 	}
 	for _, e := range entries {
 		if e.IsDir() && strings.HasPrefix(e.Name(), toolCgroupPrefix) {
-			p := filepath.Join(root, e.Name())
-			_ = os.WriteFile(filepath.Join(p, "cgroup.kill"), []byte("1"), 0o644)
-			_ = os.RemoveAll(p) // a real cgroup is removed by rmdir; RemoveAll does that for an empty one
+			// Review E5: kill, then rmdir as the per-run removal does; never
+			// a recursive unlink.
+			if p := filepath.Join(root, e.Name()); !killAndRemoveCgroup(p) {
+				log.Printf("doctool: leftover tool cgroup %s not removed", p)
+			}
 		}
 	}
 	if err := enable(root); err != nil {
@@ -291,13 +294,25 @@ func (c *toolCgroup) oomKills() int64 {
 // swept at the next boot (D7).
 func (c *toolCgroup) remove() {
 	_ = c.dir.Close()
-	_ = os.WriteFile(filepath.Join(c.path, "cgroup.kill"), []byte("1"), 0o644)
+	_ = killAndRemoveCgroup(c.path)
+}
+
+// killAndRemoveCgroup kills every process in a cgroup and removes its
+// directory with rmdir, retrying briefly while the killed processes drain.
+// It reports whether the directory is gone.
+func killAndRemoveCgroup(path string) bool {
+	// cgroup.kill exists in every cgroup; it is written, never created.
+	if f, err := os.OpenFile(filepath.Join(path, "cgroup.kill"), os.O_WRONLY, 0); err == nil {
+		_, _ = f.WriteString("1")
+		_ = f.Close()
+	}
 	for i := 0; i < 50; i++ {
-		if err := os.Remove(c.path); err == nil || errors.Is(err, os.ErrNotExist) {
-			return
+		if err := unix.Rmdir(path); err == nil || errors.Is(err, unix.ENOENT) {
+			return true
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+	return false
 }
 
 // RunHelper is `autoputer doc-tool-sandbox <tool> <args...>`: started by the
@@ -342,6 +357,12 @@ func RunHelper(args []string) int {
 		if !strings.HasPrefix(kv, "CHOIR_DOCTOOL_") {
 			env = append(env, kv)
 		}
+	}
+	// Review E8: the tool inherits no fd above stderr, whatever the helper
+	// was started with; close-on-exec leaves the helper's runtime alone
+	// until the exec.
+	if err := unix.CloseRange(3, ^uint(0), unix.CLOSE_RANGE_CLOEXEC); err != nil {
+		return fail("close_range: %v", err)
 	}
 	err := syscall.Exec(args[0], append([]string{argv0}, args[1:]...), env)
 	return fail("exec %s: %v", args[0], err)

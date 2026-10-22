@@ -5,8 +5,8 @@
 // and no limits (internal/content/extract.go). Now, when the mode allows, the
 // daemon re-executes itself as a helper (`autoputer doc-tool-sandbox`) that
 // it starts as the sandbox user (SandboxUID, no capabilities) in an empty
-// network and IPC namespace (under required, also in a cgroup of its own
-// under the document tools' cgroup root, never the desks').
+// network and IPC namespace, in a cgroup of its own under the document tools'
+// cgroup root (never the desks').
 // The helper sets rlimits, no_new_privs, Landlock V5 (read and execute the
 // tool's roots; read its one input directory and its own /proc entry; write
 // nothing; no TCP) and a seccomp deny list, then execs the tool. The tool's
@@ -41,8 +41,10 @@ const (
 	ModeOff Mode = "off"
 	// ModeObserve runs the tool directly, as before: that run is the result,
 	// unchanged. A sandboxed shadow run of the same input follows (one at a
-	// time, no cgroup, so today's kill domain is unchanged) and only counts:
-	// equal, diverged, failed in the sandbox, or not set up (ShadowSnapshot).
+	// time, in its own cgroup under the document tools' root, so a hostile
+	// input cannot grow it into the daemon's memory; review E2) and only
+	// counts: equal, diverged, failed in the sandbox, or not set up
+	// (ShadowSnapshot). A shadow that cannot get its cgroup does not run.
 	ModeObserve Mode = "observe"
 	// ModeRequired sandboxes the tool or does not run it (warning
 	// document_tool_sandbox_refused); the extraction falls back to its
@@ -91,6 +93,8 @@ const (
 	// probe reads memory.peak of real runs); toolPidsMax its process cap.
 	toolMemoryMax = 1 << 30
 	toolPidsMax   = 64
+	// killedByBudget marks the warning of a tool its cgroup's OOM killed.
+	killedByBudget = "killed by its memory budget"
 
 	// toolTimeout bounds one run, as before SEC-15.
 	toolTimeout = 30 * time.Second
@@ -154,12 +158,12 @@ func run(ctx context.Context, opts runOptions, tool string, prefixArgs []string,
 type ShadowStats struct {
 	Runs          int64 `json:"runs"`
 	Equal         int64 `json:"equal"`          // same output, or both failed
-	Diverged      int64 `json:"diverged"`       // both succeeded, outputs differ
+	Diverged      int64 `json:"diverged"`       // outputs differ, or only the sandbox succeeded (review E3)
 	SandboxFailed int64 `json:"sandbox_failed"` // succeeded directly, failed in the sandbox
 	SetupFailed   int64 `json:"setup_failed"`   // the sandbox could not be set up
 	Skipped       int64 `json:"skipped"`        // a shadow was already running
 	// MaxRSSBytes is the largest shadow's peak RSS; OverBudget counts shadows
-	// whose peak passed toolMemoryMax (required mode would have killed them).
+	// that toolMemoryMax killed or whose peak passed it.
 	MaxRSSBytes int64 `json:"max_rss_bytes"`
 	OverBudget  int64 `json:"over_budget"`
 }
@@ -200,7 +204,9 @@ func observeShadow(opts runOptions, tool, toolPath string, prefixArgs []string, 
 	}
 	shadow := func() {
 		defer func() { <-shadowSlot }()
-		sOut, sWarnings, maxRSS, setupErr := runSandboxed(context.Background(), opts, false, tool, toolPath, prefixArgs, ext, raw, suffixArgs)
+		// The shadow is bounded like a required run (review E2): its own
+		// cgroup under the document tools' root, or it does not run.
+		sOut, sWarnings, maxRSS, setupErr := runSandboxed(context.Background(), opts, true, tool, toolPath, prefixArgs, ext, raw, suffixArgs)
 		outcome := "equal"
 		switch {
 		case setupErr != nil:
@@ -209,6 +215,10 @@ func observeShadow(opts runOptions, tool, toolPath string, prefixArgs []string, 
 			outcome = "sandbox_failed: " + strings.Join(sWarnings, "; ")
 		case ok && sOut != out:
 			outcome = "diverged"
+		case !ok && len(sWarnings) == 0:
+			// The direct run failed and the sandbox succeeded: required
+			// would store a different extraction (review E3).
+			outcome = "diverged: only the sandboxed run succeeded"
 		}
 		shadowMu.Lock()
 		shadowStats.Runs++
@@ -217,7 +227,7 @@ func observeShadow(opts runOptions, tool, toolPath string, prefixArgs []string, 
 			shadowStats.SetupFailed++
 		case strings.HasPrefix(outcome, "sandbox_failed"):
 			shadowStats.SandboxFailed++
-		case outcome == "diverged":
+		case strings.HasPrefix(outcome, "diverged"):
 			shadowStats.Diverged++
 		default:
 			shadowStats.Equal++
@@ -225,7 +235,7 @@ func observeShadow(opts runOptions, tool, toolPath string, prefixArgs []string, 
 		if maxRSS > shadowStats.MaxRSSBytes {
 			shadowStats.MaxRSSBytes = maxRSS
 		}
-		if maxRSS > toolMemoryMax {
+		if maxRSS > toolMemoryMax || strings.Contains(strings.Join(sWarnings, " "), killedByBudget) {
 			shadowStats.OverBudget++
 		}
 		shadowMu.Unlock()
