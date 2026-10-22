@@ -43,6 +43,25 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
+// newNamedTapeHarness is newTapeHarness for a test that needs more than one:
+// each gets its own files.
+func newNamedTapeHarness(t *testing.T, name string) *tapeHarness {
+	t.Helper()
+	path := strings.TrimSuffix(testStorePath(t), ".db") + "-" + name + ".db"
+	cleanupTestStorePath(path)
+	t.Cleanup(func() { cleanupTestStorePath(path) })
+	h := &tapeHarness{t: t, path: path, computerID: "computer-telemetry", tape: newRecordingTape(t)}
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.store = s
+	prepareGenesis(t, s, h.computerID, "genesis-telemetry")
+	h.bind()
+	t.Cleanup(func() { _ = h.store.Close() })
+	return h
+}
+
 // tapeOps returns every op of every tape event of the harness, in order.
 func (h *tapeHarness) tapeOps() []computerevent.ProjectionOp {
 	h.t.Helper()
@@ -80,10 +99,10 @@ func opEventKind(t *testing.T, op computerevent.ProjectionOp) (types.EventKind, 
 // W-off: the setting off (never set, or set and cleared) writes the tape
 // deploy 1 writes, op for op and byte for byte, with no Table anywhere.
 func TestEventTableWriterOffIsDeploy1(t *testing.T) {
-	never := newTapeHarness(t)
+	never := newNamedTapeHarness(t, "never")
 	scriptedWorkload(t, never)
 
-	cleared := newTapeHarness(t)
+	cleared := newNamedTapeHarness(t, "cleared")
 	cleared.store.SetEventTableWrites(true)
 	cleared.store.SetEventTableWrites(false)
 	scriptedWorkload(t, cleared)
@@ -118,9 +137,9 @@ func TestEventTableWriterOffIsDeploy1(t *testing.T) {
 // W-body and F9: with the setting on the tape differs from the setting off
 // only by Table, and only on ops of the storage class.
 func TestEventTableWriterOnDiffersOnlyByTheStamp(t *testing.T) {
-	off := newTapeHarness(t)
+	off := newNamedTapeHarness(t, "off")
 	scriptedWorkload(t, off)
-	on := newTapeHarness(t)
+	on := newNamedTapeHarness(t, "on")
 	on.store.SetEventTableWrites(true)
 	scriptedWorkload(t, on)
 
@@ -359,10 +378,25 @@ func TestEventTableWriterHandsOutNoDuplicateNumbers(t *testing.T) {
 // F2 through the writer: one script appended into a store with the setting
 // off, one with it on, and one where it toggles mid-run. Every union read is
 // identical, numbers included (the writer allocates them).
+//
+// Each run has one owner here. With two owners in one run the numbering is
+// not identical, by design: the choir_events half of the per-run seed reads
+// the run's maximum over every owner (design 3.5), so the second owner's
+// first number after a reopen or a fresh mark skips ahead, a gap and never a
+// duplicate. TestEventTableWriterHandsOutNoDuplicateNumbers covers that case.
 func TestEventTableWriterUnionReadsMatch(t *testing.T) {
 	script := eventTableScript(60)
-	run := func(toggle func(i int) bool) *Store {
-		h := newTapeHarness(t)
+	seqs := map[string]int64{}
+	for _, rec := range script {
+		rec.OwnerID = "owner-1"
+		if rec.RunID == "run-3" {
+			rec.OwnerID = "owner-2"
+		}
+		seqs[rec.RunID]++
+		rec.Seq = seqs[rec.RunID]
+	}
+	run := func(name string, toggle func(i int) bool) *Store {
+		h := newNamedTapeHarness(t, name)
 		for i, rec := range script {
 			h.store.SetEventTableWrites(toggle(i))
 			cp := *rec
@@ -376,9 +410,9 @@ func TestEventTableWriterUnionReadsMatch(t *testing.T) {
 		}
 		return h.store
 	}
-	off := run(func(int) bool { return false })
-	on := run(func(int) bool { return true })
-	toggled := run(func(i int) bool { return i >= 20 && i < 40 })
+	off := run("off", func(int) bool { return false })
+	on := run("on", func(int) bool { return true })
+	toggled := run("toggled", func(i int) bool { return i >= 20 && i < 40 })
 	if tableCount(t, on, "choir_events", "") == 0 || tableCount(t, toggled, "choir_events", "") == 0 || tableCount(t, off, "choir_events", "") != 0 {
 		t.Fatal("fixture: the writer did not follow the setting")
 	}
