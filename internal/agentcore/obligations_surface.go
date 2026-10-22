@@ -169,6 +169,7 @@ type obligationsSelfdev struct {
 	Busy       int                           `json:"busy"`
 	Stalled    int                           `json:"stalled"`
 	Operations []obligationsSelfdevOperation `json:"operations,omitempty"`
+	Truncated  bool                          `json:"truncated,omitempty"`
 }
 
 type obligationsSelfdevOperation struct {
@@ -209,6 +210,8 @@ func (rt *Runtime) selfdevObligationsSection(ctx context.Context, now time.Time)
 		}
 		if len(out.Operations) < 20 {
 			out.Operations = append(out.Operations, sample)
+		} else {
+			out.Truncated = true
 		}
 	}
 	return out, nil
