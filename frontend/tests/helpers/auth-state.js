@@ -113,6 +113,12 @@ export async function createAuthenticatedState(browser, baseURL = DEFAULT_BASE_U
 
   const existing = await validateStoredState(browser, baseURL);
   if (existing) return existing;
+  // A caller that names a session (CHOIR_AUTH_STATE) names an account and
+  // its computer: never replace it with a new one
+  // (docs/problems/proof-session-silently-replaced-by-new-account-2026-10-22.md).
+  if (process.env.CHOIR_AUTH_STATE) {
+    throw new Error(`the named session ${storageStatePath} no longer authenticates; re-mint it (scripts/qa_test_computer.mjs) instead of registering a new account`);
+  }
 
   let lockFd = null;
   try {
