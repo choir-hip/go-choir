@@ -115,20 +115,30 @@ fi
 
 require "$ci" 'needs: [plan, check]'
 
-# The job plus the program it runs on Node B (.github/scripts/node-b-ci-prebuild,
-# read from the prebuilt commit; SEC-14).
-prebuild_segment="$(sed -n '/^  prebuild-staging:/,/^  deploy-staging:/p' "$ci"; cat "$root/.github/scripts/node-b-ci-prebuild")"
+# The job, and the program it runs on Node B (.github/scripts/node-b-ci-prebuild,
+# read from the prebuilt commit; SEC-14). Each required pattern is checked in
+# the part that must hold it (bunch 33 item 4); the forbidden ones in both.
+prebuild_job="$(sed -n '/^  prebuild-staging:/,/^  deploy-staging:/p' "$ci")"
+prebuild_program="$(cat "$root/.github/scripts/node-b-ci-prebuild")"
+prebuild_segment="${prebuild_job}
+${prebuild_program}"
 for pattern in \
   'continue-on-error: true' \
   'group: staging-prebuild-node-b' \
   'needs: [plan, deploy-impact]' \
-  "needs.deploy-impact.outputs.deploy_needed == 'true'" \
+  "needs.deploy-impact.outputs.deploy_needed == 'true'"; do
+  grep -Fq -- "$pattern" <<<"$prebuild_job" || {
+    echo "prebuild job contract missing: $pattern" >&2
+    exit 1
+  }
+done
+for pattern in \
   'prebuild_repo=/opt/go-choir-prebuild' \
   'results_dir=/var/lib/go-choir/prebuild-results' \
   'git reset --hard "$DEPLOY_COMMIT"' \
   'nix build "$attr" -o "$out"'; do
-  grep -Fq -- "$pattern" <<<"$prebuild_segment" || {
-    echo "prebuild contract missing: $pattern" >&2
+  grep -Fq -- "$pattern" <<<"$prebuild_program" || {
+    echo "prebuild program contract missing: $pattern" >&2
     exit 1
   }
 done
