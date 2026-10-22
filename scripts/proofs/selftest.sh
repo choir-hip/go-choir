@@ -48,7 +48,24 @@ J
 		echo '{"candidates":[{"vm_id":"vm-test1","rescue":true,"warmness_class":"critical_protected","computer_url":"http://10.9.7.2:8080"}],"skipped":[]}'
 	fi
 	;;
-*:8083/health) echo '{"status":"ok","build":{"commit":"t1sha"}}' ;;
+*:8083/health)
+	# Real vmctl's /health body has no build field; its identity is the
+	# X-Choir-Build-Commit header (server.WithBuildIdentity). With -D the
+	# headers go to stdout; $ST/vmctlhdr: none (no build headers), other
+	# (another service's headers).
+	dump=; quiet=; prev=
+	for a in "$@"; do [ "$prev" = -D ] && [ "$a" = - ] && dump=1; [ "$prev" = -o ] && [ "$a" = /dev/null ] && quiet=1; prev=$a; done
+	if [ -n "$dump" ]; then
+		printf 'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n'
+		case "$(cat "$ST/vmctlhdr" 2>/dev/null)" in
+		none) ;;
+		other) printf 'X-Choir-Build-Commit: t1sha\r\nX-Choir-Build-Service: proxy\r\n' ;;
+		*) printf 'X-Choir-Build-Commit: t1sha\r\nX-Choir-Build-Service: vmctl\r\n' ;;
+		esac
+		printf '\r\n'
+	fi
+	[ -n "$quiet" ] || echo '{"status":"ok","service":"vmctl","active_vms":2}'
+	;;
 */internal/vmctl/retention-shadow-plan)
 	cat <<J
 {"mode":"dry-run","decision":"would_prune","config":{"mode":"dry-run","test_idle_mode":"dry-run","test_idle_min_age_seconds":604800,"quarantine_mode":"dry-run","quarantine_min_age_seconds":604800},
@@ -139,7 +156,7 @@ rc_is() { # want name command...
 	got=$?
 	[ "$got" = "$want" ] || { printf '   (wanted rc %s, got %s)\n' "$want" "$got"; sed 's/^/   | /' "$WORK/out" | head -5; return 1; }
 }
-reset_state() { rm -f "$ST/rule" "$ST/list.n" "$ST/obs.n" "$ST/wedged" "$ST/curl.log" "$ST/ssh.log"; : >"$ST/seq.log"; }
+reset_state() { rm -f "$ST/rule" "$ST/list.n" "$ST/obs.n" "$ST/wedged" "$ST/curl.log" "$ST/ssh.log" "$ST/vmctlhdr"; : >"$ST/seq.log"; }
 
 SCRIPTS="fp0-vm-retention fp1-store fp2-desk-boundary fp3-group1-wedge fp4-selfdev-admission fp7-gateway fp8-image-jailer net01-host-fetch net02-mirrors"
 
@@ -255,11 +272,26 @@ t "fp0-vm-retention reads both shadow rules in dry-run" grep -q 'PASS.*shadow qu
 t "fp0-vm-retention lists a kept test computer with its reasons" grep -q 'test-class computer-1111111111111111111111111111111f.*verdict=keep reasons=state_active,idle_below_min_age' "$WORK/out"
 t "fp0-vm-retention lists the quarantine and why it is kept" grep -q 'quarantine .*data.img.quarantine-1-ab.*verdict=keep reasons=journal_missing' "$WORK/out"
 t "fp0-vm-retention checks the active plan is unchanged" grep -q 'PASS.*no test_class_idle candidate in the active plan' "$WORK/out"
+# R5-1: vmctl's identity is its X-Choir-Build-Commit header, not a body field.
+t "fp0-vm-retention step 0 proves vmctl runs the commit from its build header" grep -q 'PASS.*vmctl runs t1sha' "$WORK/out"
+reset_state
+"$HERE/fp0-vm-retention.sh" --step 0 --commit othersha >"$WORK/out" 2>&1
+t "fp0-vm-retention step 0 fails when vmctl's header names another commit" grep -q 'FAIL.*vmctl runs othersha' "$WORK/out"
+reset_state
+echo none >"$ST/vmctlhdr"
+"$HERE/fp0-vm-retention.sh" --step 0 --commit t1sha >"$WORK/out" 2>&1
+t "fp0-vm-retention step 0 fails when vmctl sends no build header" grep -q 'FAIL.*vmctl runs t1sha' "$WORK/out"
+reset_state
+echo other >"$ST/vmctlhdr"
+"$HERE/fp0-vm-retention.sh" --step 0 --commit t1sha >"$WORK/out" 2>&1
+t "fp0-vm-retention step 0 fails when port 8083 answers as another service" grep -q 'FAIL.*vmctl runs t1sha' "$WORK/out"
 reset_state
 "$HERE/fp0-vm-retention.sh" --step 4 --state-dir "$WORK/vmstate" >"$WORK/out" 2>&1
 t "fp0-vm-retention step 4 lists the recovery dir" grep -q 'recovery-dir candidate-fleet-x artifacts=1' "$WORK/out"
 t "fp0-vm-retention step 4 shows the kept-dir report" grep -q 'kept candidate-fleet-x rule=orphan_state_dir.*reasons=holds_quarantine' "$WORK/out"
 t "fp0-vm-retention step 4 passes when no recovery dir is a candidate" grep -q 'PASS.*no dir holding recovery state is a deletion candidate' "$WORK/out"
+# R5-2: the before-deploy run is a precondition, said plainly.
+t "fp0-vm-retention step 4 says a run before the deploy is required" grep -q 'MANUAL.*a run of this step BEFORE the deploy is required' "$WORK/out"
 reset_state
 touch "$ST/badplan"
 "$HERE/fp0-vm-retention.sh" --step 4 --state-dir "$WORK/vmstate" >"$WORK/out" 2>&1
