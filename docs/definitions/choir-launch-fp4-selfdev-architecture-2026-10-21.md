@@ -222,9 +222,12 @@ now:
     cpu.max from Go, so go build runs -p 4 in one CPU of quota, with no
     GOMEMLIMIT and a cold cache. Fix (orange, the 2 GiB cap kept): capsule
     Go workloads get GOMAXPROCS from the quota and GOMEMLIMIT at 5/8 of the
-    throttling limit; locally a capsule-shaped cold build went from an anon
-    peak of 1.27 GiB to 846 MiB and from 9 m 32 s to 7 m 53 s. Problem
-    record 3680eacc3, tests 55e9ac1ae, fix fd8337941; sizing in
+    throttling limit (no bound under 64 MiB); in a local measurement only,
+    a capsule-shaped cold build went from an anon peak of 1.27 GiB to
+    846 MiB and from 9 m 32 s to 7 m 53 s. The deployed proof (the FP4
+    drill re-run on 71afbf14) is pending. Problem record 3680eacc3, tests
+    55e9ac1ae and 6d937d4fe, fix fd8337941 and c68c49a99 (review round 2:
+    linux build tags, the floor, no ambient carry); sizing in
     docs/evidence/res04-capsule-memory-sizing-2026-10-22.md.
     Before that: round 3 repair from the deployed drill on 71afbf14 (lane/fp4-r3-nudge,
     base main 7448bf899). P1: the nudge waited behind management's own
@@ -309,7 +312,7 @@ now:
     60 s); a management Cancel and an admission can now race, and the
     lifecycle CAS makes the loser fail closed (P1 residuals b, c).
   next_action: >-
-    Capsule memory: FP0 lands fd8337941 with its problem record and tests,
+    Capsule memory: FP0 lands fd8337941 and c68c49a99 with the problem record and tests,
     then runs the deployed proof in
     docs/evidence/res04-capsule-memory-sizing-2026-10-22.md ("Deployed
     proof"). That is an FP4 request A re-run on 71afbf14. Its cell and job
@@ -413,9 +416,9 @@ receipts:
     rollback_ref: git revert 1b21dc6c8 (text only); the other two change no behaviour
   - id: capsule-go-bounds
     boundary: implement
-    identity: 3680eacc3 (problem record), 55e9ac1ae (tests), fd8337941 (fix), on lane/fp4-capsule-memory
+    identity: 3680eacc3 (problem record), 55e9ac1ae and 6d937d4fe (tests), fd8337941 and c68c49a99 (fix), on lane/fp4-capsule-memory; deployed proof pending
     proof_refs: [internal/yaegikernel/go_bounds_test.go, internal/capsule/go_bounds_test.go, cmd/capsule-broker/exec_direct_test.go, docs/evidence/res04-capsule-memory-sizing-2026-10-22.md]
-    rollback_ref: git revert fd8337941 (no schema, no stored state; workloads go back to Go's defaults)
+    rollback_ref: git revert c68c49a99 fd8337941 (no schema, no stored state; workloads go back to Go's defaults)
   - id: arch04-observability
     boundary: implement
     identity: bbd19192c

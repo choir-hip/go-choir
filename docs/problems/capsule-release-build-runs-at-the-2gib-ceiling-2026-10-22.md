@@ -81,7 +81,7 @@ marked confirmed in code, confirmed by measurement, or hypothesis.
   The broker, the session worker and the `go` command itself share the
   same 2 GiB.
 
-## Local measurement (this lane, node-a agents VM, 71ec8e704)
+## Local measurement (this lane, node-a agents VM, 71ec8e704; local only, not a deployed proof)
 
 A cold `go build -o … ./cmd/autoputer` in a systemd scope shaped like the
 capsule (`MemoryMax=2G`, `MemorySwapMax=0`, `CPUQuota=100%`), fresh
@@ -148,7 +148,11 @@ second `go build`, `go_eval`) started while the build runs (the
    deployed commit). A shared writable cache lets one capsule poison
    another's builds, so it needs its own design (red).
 
-## Fix (fd8337941, orange; tests 55e9ac1ae)
+## Fix (fd8337941 and c68c49a99, orange; tests 55e9ac1ae and 6d937d4fe)
+
+Status: local tests and the local measurement above only. **The deployed
+proof is pending**: the FP4 drill re-run on 71afbf14 (next probe 4). Until
+then, "the OOM kills are gone" is a conjecture.
 
 Option 1, keeping the 2 GiB cap. The executor gives each capsule broker
 `CHOIR_CAPSULE_GOMAXPROCS` (the CPU quota in CPUs, rounded up: 1 for
@@ -156,7 +160,28 @@ engineering, 2 for a Claude capsule) and `CHOIR_CAPSULE_GOMEMLIMIT` (5/8 of
 `memory.high` when doctrine set one, else of `memory.max`: 1280 MiB of
 2 GiB). The broker carries them to the session worker; cells, jobs and
 direct exec get them as `GOMAXPROCS` and `GOMEMLIMIT`, which a cell's
-payload or `env` in a job's argv overrides. Option 2 is not needed by this
+payload or `env` in a job's argv overrides.
+
+- **GOMEMLIMIT floor (review F3).** 5/8 of a capsule limit under 64 MiB
+  sets no `GOMEMLIMIT`, and a carried value under 64 MiB is dropped at the
+  workload (`yaegikernel.MinCarriedGoMemLimit`). A tiny limit would make
+  the GC run without pause; with no limit the workload gets Go's defaults.
+  In practice the floor is not reached: the spawn refuses a non-positive
+  `MemoryMax`, and engineering (2 GiB) and Claude (3 GiB) capsules get 1280
+  and 1920 MiB.
+- **Ambient path (review F4).** At f0d3a3574 the toolchain carry also
+  carried the bounds, and the executor builds the broker's environment
+  from the autoputer's own environment through that carry
+  (`BrokerProcessEnv`). So a `CHOIR_CAPSULE_GO*` set on the guest service
+  reached every broker. The executor's values, appended later, won when it
+  set them; for a capsule with no quota, the ambient value applied. The
+  image sets neither variable, so this did not happen on staging. Fixed in
+  c68c49a99: the bounds have their own carry (`CapsuleGoBoundsCarry`, used
+  only broker to session worker), and only the executor sets them, from
+  the capsule. A desk session outside a capsule gets a bound only if its
+  own spawn environment names the carry, which no spawn does.
+
+Option 2 is not needed by this
 evidence; option 3 (a shared cache) stays a residual with its own design.
 
 ## Next probes

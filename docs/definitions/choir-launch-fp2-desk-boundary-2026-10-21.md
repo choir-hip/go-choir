@@ -667,8 +667,9 @@ unchanged at 2 GiB and, under `doctrine`, the ceiling becomes 4 GiB.
 
 Sizing evidence (2026-10-22, FP4 lane/fp4-capsule-memory): a release build
 ran at the 2 GiB ceiling with 2 OOM kills on 71afbf14. With Go bounded to
-the capsule's quota (fd8337941), a capsule-shaped cold build's anonymous
-peak is 846 MiB. The 2 GiB request stands; `memory.peak` counts page cache,
+the capsule's quota (fd8337941, c68c49a99), a capsule-shaped cold build's
+anonymous peak is 846 MiB in a local measurement; the deployed proof (the
+FP4 drill re-run on 71afbf14) is pending. The 2 GiB request stands; `memory.peak` counts page cache,
 so `doctrine_would_throttle` reads true for every cold build
 (docs/evidence/res04-capsule-memory-sizing-2026-10-22.md).
 
