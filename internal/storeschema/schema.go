@@ -57,8 +57,14 @@ type Receipt struct {
 }
 
 // Write records the running build's store schema epoch inside
-// workspacePath, atomically.
+// workspacePath, atomically. It never lowers a newer receipt: a store a
+// later binary opened keeps that binary's epoch, so the updater's check
+// still sees it (review finding A on F-c deploy 1). A binary that predates
+// this rule still lowers it; the floor (floor.go) is the fence for that.
 func Write(workspacePath string) error {
+	if existing, found, err := Read(filepath.Join(workspacePath, File)); err == nil && found && existing.Version > Version {
+		return nil
+	}
 	raw, err := json.Marshal(Receipt{Schema: Name, Version: Version})
 	if err != nil {
 		return err
