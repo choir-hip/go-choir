@@ -501,3 +501,25 @@ Texture run, and that run makes the model call:
 The pair for FP7's hibernate-and-wake leg is the last two: run
 cc565855 before the hibernate and run f970f55e 32 s after the resume, on
 the same boot (epoch 13229, guest build 8fabec36a deployed 06:02:12).
+
+## Fix, L3a (built 2026-10-22, lane/fp10-res13-l3a; not deployed)
+
+Tests first (b0072c20e, ff96a7bf2), then the fix (c657c0220):
+`internal/vmmanager/snapshot_diff.go` plus small hunks in `config.go`,
+`fcapi.go`, `manager.go`, `snapshot.go` and `snapshot_lifecycle.go`.
+A hibernate takes `snapshot_type: Diff` only when `VM_SNAPSHOT_TYPE=diff`,
+`VM_SNAPSHOT_DIFF_ONLY` selects the computer, the process was cold booted
+by this vmctl, Firecracker is 1.15.0 or later, no cgroup from the
+process's own to the root lacks a 0 `memory.swap.max` (the walk takes the
+nearest ancestor reading 0), `VmSwap` is 0, and every guest mapping reads
+`THPeligible 0`. Otherwise Full, with the reason in the hibernate
+timeline's `diff_refused` and the log line. A Diff create error takes Full
+in the same pause. A Diff loads only with `cold_origin` and a memory file
+exactly `(mem_size_mib + memory_hotplug_mib)` MiB long. `nix/node-b.nix`
+sets `VM_SNAPSHOT_TYPE=full` and an empty list: no computer changes.
+
+Known limit: a vmctl restart reattaches running guests with
+`cold_origin` false (vmctl did not see their launch), so after any deploy
+that restarts vmctl a running guest's next hibernate is Full until its
+next cold boot. At the 2026-10-22 deploy cadence that covers most
+hibernates; persisting the origin beside the pid file is the follow-up.

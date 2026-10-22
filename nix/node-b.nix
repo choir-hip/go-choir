@@ -1468,6 +1468,13 @@ in
         # delivers a fresh credential); the budget's oldest-first eviction
         # and the 16 GiB free-space floor still bound disk.
         "VM_SNAPSHOT_MAX_AGE=36h"
+        # L3a Diff snapshots (RES-13; internal/vmmanager/snapshot_diff.go):
+        # a hibernate of a cold-booted, selected guest writes only its
+        # resident pages. Full and no computer selected: inert. FP0 names
+        # one test computer for the proof, never the paper or the owner's
+        # computer. Rollback: set the list empty again and deploy.
+        "VM_SNAPSHOT_TYPE=full"
+        "VM_SNAPSHOT_DIFF_ONLY="
         "VMCTL_STOP_MANAGED_ON_EXIT=false"
         # visual capture (docs/design/visual-evidence-slice-2026-10-15.md):
         # the right to launch the guest image's Chromium in a capsule capture
