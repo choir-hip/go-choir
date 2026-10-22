@@ -39,7 +39,7 @@ Every request body the gateway reads, by route:
 | `POST /provider/v1/search/health/reset` | `handlers.go:1110` | host only, as above | none | buffered |
 | `POST /provider/v1/breakers/reset` | `handlers.go:1171` | host only, as above | none | buffered |
 | `POST /provider/v1/judgments` (Jev) | `jev.go:300` `http.MaxBytesReader(..., 1 MiB)` | a guest with its bearer and a Jev pin | 1 MiB | **400**, not 413 |
-| `POST /provider/v1/host/judgments` | `host_judgment.go:49` `MaxBytesReader(1 MiB)` | host only | 1 MiB | 400 |
+| `POST /provider/v1/host/judgments` | `host_judgment.go:49` `MaxBytesReader(1 MiB)` | host only | 1 MiB | 413 (corrected after the record's first commit, which said 400) |
 | `POST /provider/v1/source-api` | `source_api.go:694` `io.LimitReader(64 KiB)` | any guest with its bearer | 64 KiB (silently truncated) | 400 (the truncated JSON fails to parse) |
 | `POST /provider/v1/fetch` (host fetch) | `internal/hostfetch/host.go:115` `LimitReader(2 MiB + 64 KiB)` | granted computers | 2 MiB + 64 KiB | 413 |
 | `/provider/anthropic/*` (relay, dark) | `anthropic_relay.go:320` `MaxBytesReader(32 MiB)` | allowlisted computers only | 32 MiB | 413 |
@@ -95,7 +95,7 @@ Measured from the code, not guessed:
   name: under 1 KiB. 64 KiB cannot refuse a real call.
 - **Jev, host judgments, source-api, host fetch, relay.** Already bounded at
   sizes their callers were built against; only the status for "too large"
-  is inconsistent (400 on three of them).
+  is inconsistent (400 on Jev and source-api).
 
 No staging measurement of real body sizes exists: the gateway logs message
 and image counts per call (`handlers.go:449-450`), never the body's bytes.
@@ -115,6 +115,14 @@ and image counts per call (`handlers.go:449-450`), never the body's bytes.
    change.
 7. Turning the scheduler on later re-opens the hole (the scheduler path reads
    the body in a different place).
+
+## Repair (lane/fp7-gateway-body-caps)
+
+Tests 9d748f316 (yellow), code ee0183488 (red), nix 56a6df469 (red); the
+station's section 6 has the limits, the rollout and the proof steps.
+Observe first for the model routes only: a 64 MiB limit is below the media
+contract's ceiling, so it could refuse a real conversation with many
+images; every other route enforces at once.
 
 ## Residuals this record does not cover
 

@@ -19,6 +19,9 @@
 # Order: 1 after the deploy with observe; 2 and 3 after the model call and the
 # hibernate/refresh acts; flip to enforce; 4 and 5; 6; 7 after one timer tick
 # (10 minutes); 8; flip the scheduler on; 9 --label before, the burst, 9 --label after.
+# B7 body caps: 10 after the deploy with GATEWAY_BODY_CAPS=observe; 11 after
+# the guest curls; 12 after a day of observe, and again after the enforce
+# flip. The scheduler goes on only after 12 passes in enforce.
 set -uo pipefail
 PROOF_NAME=fp7-gateway
 . "$(dirname "$0")/lib.sh"
@@ -32,6 +35,9 @@ step_def 6 ro "SEC-08 gateway half: the relay is dark (anthropic_relay off)"
 step_def 7 ro-after "SEC-16: the front-importance tick reaches Jev through the gateway; the unit holds no OPENROUTER key"
 step_def 8 ro-after "SEC-16: the host judgment route refuses a caller without the internal credential"
 step_def 9 ro-after "RES-11 (scheduler on): counters before and after 40+1 concurrent calls"
+step_def 10 ro "B7 body caps (observe): body_caps on /health and the gateway's memory, baseline saved"
+step_def 11 ro-after "B7: oversized bodies from a test computer are refused 413, logged, and the gateway's memory stays flat"
+step_def 12 ro-after "B7: ready to enforce (no real model call over the limit); after the flip, mode is enforce"
 
 : "${OPT_label:=before}" "${OPT_since:=2 hours ago}"
 
@@ -193,6 +199,71 @@ step_9() {
 		b=$(fp7_num "$h" '.model_scheduler.queue_full')
 		[ "$b" = 0 ] && pass "queue_full is 0" || info "queue_full=$b"
 		manual "the second computer's single call stayed near one call's latency (judge from your timing)"
+	fi
+}
+
+# B7 body caps (docs/problems/gateway-request-bodies-unbounded-2026-10-22.md).
+fp7_mem() { node_b_q "systemctl show go-choir-gateway -p MemoryCurrent -p MemoryPeak --value | tr '\\n' ' '"; }
+
+step_10() {
+	local h m
+	h=$(fp7_health)
+	m=$(fp7_mem)
+	[ "$PROOF_DRY" = 1 ] && return 0
+	printf '%s' "$h" | jq -c '.body_caps' | while IFS= read -r l; do info "body_caps $l"; done
+	case "$(printf '%s' "$h" | jq -r '.body_caps.mode // ""')" in
+	observe) pass "body_caps.mode is observe" ;;
+	enforce) info "body_caps.mode is enforce (already past observe)" ;;
+	*) fail "/health has no body_caps.mode: the deploy does not carry the body caps" ;;
+	esac
+	[ "$(fp7_num "$h" '.body_caps.limits.model')" = 67108864 ] && [ "$(fp7_num "$h" '.body_caps.limits.search')" = 1048576 ] && pass "limits: model 64 MiB, search 1 MiB" || info "limits differ from the defaults (GATEWAY_BODY_LIMITS set?)"
+	info "gateway memory (current, peak bytes): $m"
+	printf '%s\n' "$h" >"$(fp7_state bodycaps)"
+	printf '%s\n' "$m" >"$(fp7_state bodycaps-mem)"
+	node_journal "$PROOF_UNIT_GATEWAY" "$OPT_since" "gateway: body caps:" 2
+}
+
+step_11() {
+	local h m base b0 b1 s0 s1 cur0 peak0 cur1 peak1
+	fp7_check_targets
+	manual "in ${OPT_t1:-a disposable test computer}'s guest shell, as root: GW=\$(sed -n 's/^RUNTIME_GATEWAY_URL=//p' /run/go-choir-autoputer.env); TOK=\$(cat /run/choir-bootstrap/gateway-token)"
+	manual "search, streamed 100 MiB (cap 1 MiB, cut unread past it): { printf '{\"query\":\"'; head -c 104857600 /dev/zero | tr '\\0' a; printf '\"}'; } | curl -sS -o - -w ' %{http_code}\\n' -X POST -H \"Authorization: Bearer \$TOK\" -H 'Content-Type: application/json' -T - \"\$GW/provider/v1/search\"  -> expect 413 (or curl reports the connection closed mid-upload)"
+	manual "inference, declared 700 MiB (over the 576 MiB observe ceiling; refused before a byte is read): head -c 734003200 /dev/zero | curl -sS -o - -w ' %{http_code}\\n' -X POST -H \"Authorization: Bearer \$TOK\" -H 'Content-Type: application/json' -H 'Content-Length: 734003200' -T - \"\$GW/provider/v1/inference\"  -> expect 413 'request body too large: the model limit is 576 MiB'"
+	manual "then one ordinary Texture prompt on the same computer: it still answers"
+	h=$(fp7_health)
+	m=$(fp7_mem)
+	[ "$PROOF_DRY" = 1 ] && return 0
+	[ -s "$(fp7_state bodycaps)" ] || die 2 "no baseline: run --step 10 first"
+	base=$(cat "$(fp7_state bodycaps)")
+	s0=$(fp7_num "$base" '.body_caps.refused.search'); s1=$(fp7_num "$h" '.body_caps.refused.search')
+	b0=$(fp7_num "$base" '.body_caps.refused.model'); b1=$(fp7_num "$h" '.body_caps.refused.model')
+	[ "$s1" -gt "$s0" ] && pass "refused.search rose ($s0 -> $s1)" || fail "refused.search did not rise ($s0 -> $s1)"
+	[ "$b1" -gt "$b0" ] && pass "refused.model rose ($b0 -> $b1)" || fail "refused.model did not rise ($b0 -> $b1)"
+	info "gateway journal, body cap lines since '$OPT_since':"
+	node_journal "$PROOF_UNIT_GATEWAY" "$OPT_since" "body cap " 10
+	read -r cur0 peak0 <"$(fp7_state bodycaps-mem)"
+	read -r cur1 peak1 <<<"$m"
+	info "gateway memory (current, peak bytes): baseline $cur0 $peak0, now $cur1 $peak1"
+	case "$cur0$peak0$cur1$peak1" in
+	*[!0-9]*) info "MemoryCurrent/MemoryPeak not numeric here (old systemd?); read them by hand" ;;
+	*) [ $((peak1 - peak0)) -lt $((256 << 20)) ] && [ $((cur1 - cur0)) -lt $((256 << 20)) ] && pass "memory flat: peak +$(((peak1 - peak0) >> 20)) MiB, current +$(((cur1 - cur0) >> 20)) MiB (bound 256 MiB)" || fail "memory rose: peak +$(((peak1 - peak0) >> 20)) MiB, current +$(((cur1 - cur0) >> 20)) MiB: a body was buffered" ;;
+	esac
+}
+
+step_12() {
+	local h mode wr seen
+	h=$(fp7_health)
+	[ "$PROOF_DRY" = 1 ] && return 0
+	mode=$(printf '%s' "$h" | jq -r '.body_caps.mode // ""')
+	wr=$(fp7_num "$h" '.body_caps.would_refuse.model')
+	seen=$(fp7_num "$h" '.body_caps.max_seen.model')
+	info "mode=$mode would_refuse.model=$wr max_seen.model=$seen bytes limit=$(fp7_num "$h" '.body_caps.limits.model') (the counters reset with the gateway)"
+	if [ "$mode" = observe ]; then
+		[ "$wr" = 0 ] && pass "no model call over the limit in this gateway process: flip gatewayBodyCaps to enforce" || fail "$wr model calls were over the limit: raise GATEWAY_BODY_LIMITS model= past max_seen before enforcing"
+		node_journal "$PROOF_UNIT_GATEWAY" "$OPT_since" "body cap would_refuse" 10
+	else
+		[ "$mode" = enforce ] && pass "body_caps.mode is enforce" || fail "body_caps.mode is '$mode'"
+		manual "rerun step 11's inference curl with 200 MiB streamed instead of declared ({ printf '{\"system\":\"'; head -c 209715200 /dev/zero | tr '\\0' a; printf '\"}'; } | curl ... -T - ...): expect 413 'the model limit is 64 MiB'; memory peak rises at most about twice the limit"
 	fi
 }
 
