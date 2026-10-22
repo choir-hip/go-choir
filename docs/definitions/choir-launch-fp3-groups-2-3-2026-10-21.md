@@ -186,6 +186,26 @@ now:
     a link stray keeps its target's mode. The DSN runbook's rollback
     writes a file without a DSN instead of removing it. Local: nix test
     31/31, verifier tests 14/14, toplevel drvPath evaluates.
+  sec10_guest_dns:
+    lane: lane/fp3-sec10-guest-dns (base main a35b3586f)
+    status: built, local tests green; waiting on FP0 (land, name one test computer, the "SEC-10 proof" below)
+    commits: >-
+      f76b02f21 problem record (green);
+      287758e43 tests, failing on main (yellow);
+      1353f92a7 choir.dns= per computer behind VMCTL_GUEST_DNS_ONLY, node-b list empty (red);
+      plus the card commit
+    uncommitted: sec10-step2-close-public-dns.patch in the lane worktree root (public 53 out of the floor; gated, see its header)
+    local_evidence: >-
+      go test -race -count=1 ./internal/vmmanager ok; hostauth, hostbuild,
+      owneract, maild -run DigestHost ok (node-b readers); go vet
+      ./internal/vmmanager and go build ./... clean. With the step 2 patch
+      applied: go test -run 'Egress|Floor' ok and
+      scripts/vmmanager-netfilter-test.sh (real kernel) both PASS; patch
+      then reverted.
+    belief: >-
+      Unverified on a live guest: that systemd-resolved is the guest's
+      resolver (resolv.conf 127.0.0.53). If it is not, DNS= reaches nothing
+      and the proof's step 3 fails visibly; nothing else breaks.
 ---
 
 # FP3 groups 2 and 3
@@ -465,15 +485,71 @@ so the next landing imports them as on its first run (corrected after
 round 2, F2). Roll back at once if any unit fails to start with a
 namespace error, if corpusd is not connected to 13307, or if step 3 shows
 a missing key.
+## SEC-10 proof (guest side, lane/fp3-sec10-guest-dns)
+
+Problem record: [guest-dns-host-resolver-unused-2026-10-22.md](../problems/guest-dns-host-resolver-unused-2026-10-22.md).
+The lane lands with `VMCTL_GUEST_DNS_ONLY=` empty, so its own deploy changes
+no computer. Then, on Node B as root:
+
+0. Before naming anyone, record a control: pick an unnamed computer U that
+   is hibernated (snapshot) and one that is running, and save
+   `jq -r '."boot-source".boot_args' /var/lib/go-choir/vm-state/<vm>/fc-config.json`
+   for each, plus `jq -r .launch_config_sha256 /var/lib/go-choir/vm-state/<U vm>/snapshot/meta.json`
+   for U.
+1. Name one test computer T (a `class:test` computer id, never the paper
+   or the delegate computer; `computer-9648031f92e131adc1fb65ec455c5903`
+   is the one the other selectors use): `"VMCTL_GUEST_DNS_ONLY=<T>"` in
+   `nix/node-b.nix`, commit, deploy. Pre-check:
+   `verify-host-hardening.py --expect-guest-floor` still all PASS (unbound
+   active on 127.0.0.1:8053).
+2. Cold boot T (stop, then start; or let it resume: its snapshot is refused
+   with `snapshot resume of VM <vm> not used (launch_config_mismatch)` and
+   it cold boots). Then
+   `jq -r '."boot-source".boot_args' /var/lib/go-choir/vm-state/<T vm>/fc-config.json | grep -o 'choir.dns=[0-9.]*'`
+   prints `choir.dns=<T's tap host address>` (the `.1` of T's /30), and
+   `iptables -t nat -S PREROUTING | grep -- "-d <T host ip>/32 .*--dport 53"`
+   shows the UDP and TCP DNAT to 127.0.0.1:8053.
+3. In T's guest (its Management Console shell on choir.news, as T's owner):
+   `cat /etc/resolv.conf` shows `nameserver 127.0.0.53`;
+   `resolvectl status` shows the link's DNS Servers as exactly the tap host
+   address (no fallback servers in use); `cat /run/systemd/network/10-vm-runtime.network`
+   ends with `DNS=<tap host ip>`. If resolv.conf is anything else, stop:
+   resolved is not the guest's resolver and the guest line does nothing
+   (record it in the problem doc; do not go to step 2 of the patch).
+4. Resolve a name in T: `resolvectl query example.com` and
+   `getent hosts github.com` answer. On the host, the DNAT counters for T
+   move: `iptables -t nat -L PREROUTING -v -n | grep '<T host ip>.*dpt:53'`
+   before and after. Unbound's journal (`journalctl -u unbound --since -10min`)
+   shows no errors; it logs no queries at its default verbosity, so the
+   counters (or `tcpdump -ni lo port 8053`, if present) are the per-query
+   evidence.
+5. Capabilities on T: a capsule git fetch (an engineering capsule job:
+   `git ls-remote https://github.com/golang/go HEAD`; the runtime's egress
+   proxy resolves github.com through the guest resolver), a model call
+   (any desk turn; the gateway is an IP literal, a control), a research
+   Read of a public URL and a source poll.
+6. Unnamed computers unchanged: the running control's boot args are
+   identical to step 0 and carry no `choir.dns=`; U resumes from its
+   snapshot (no `launch_config_mismatch` line for U's VM in
+   `journalctl -u go-choir-vmctl`) and its boot args equal step 0's.
+7. Keep 2-6's output as the artifact. Rollback: empty the list and deploy
+   (T cold boots once without `DNS=`); never drop the port or Unbound while
+   a computer is named.
+
+Step 2 of SEC-10 (public 53 out of `guestEgressRuleSpecs`) is the
+uncommitted `sec10-step2-close-public-dns.patch` in the lane worktree; its
+header carries the gate (every running guest cold booted with `choir.dns=`,
+a day of Unbound traffic), the proof and the rollback.
 
 ## Residuals and owner questions
 
 - NET-07: SMT and core scheduling stay on (owner ruling); owed before
   strangers share the host (DEC-06).
-- SEC-10 guest side: FP2 adds `DNS=$gateway_ip` to the
-  `go-choir-configure-network` unit (the gateway is the tap host address,
-  already parsed there); then public UDP 53 leaves the floor (one line in
-  `guestEgressRuleSpecs`).
+- SEC-10 guest side: the image line landed (236e816c3, `choir.dns=`);
+  vmctl passes it per computer (lane/fp3-sec10-guest-dns, see "SEC-10
+  proof"). Public 53 leaves the floor only after every running guest has
+  cold booted with it: the floor is host-wide, and closing UDP alone
+  leaves TCP 53 open, so the step 2 patch drops TCP 53 explicitly.
 - Guests reattached across the group 2 deploy get the DNS DNAT at their
   next start (reattach reconciles filter rules, not nat).
 - Public TCP egress stays open until NET-01.
