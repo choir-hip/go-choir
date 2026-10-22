@@ -235,6 +235,12 @@ type VMInstance struct {
 	// confinement is how the running Firecracker was confined (jailer or
 	// direct); read from confinement.json on reattach.
 	confinement *ConfinementReceipt
+
+	// coldOrigin is true when this vmctl launched the running Firecracker
+	// from a config (a cold boot), false for a snapshot restore and for a
+	// reattached process, whose origin it did not see. Only a cold-origin
+	// guest may take a Diff snapshot (snapshot_diff.go).
+	coldOrigin bool
 }
 
 // ManagerConfig holds the global configuration for the VM manager.
@@ -365,6 +371,11 @@ type ManagerConfig struct {
 	// SnapshotMaxAge bounds how long a snapshot stays resumable
 	// (VM_SNAPSHOT_MAX_AGE, default DefaultSnapshotMaxAge).
 	SnapshotMaxAge time.Duration
+	// SnapshotType (VM_SNAPSHOT_TYPE) is full (default) or diff; diff
+	// applies only to the computers SnapshotDiffOnly (VM_SNAPSHOT_DIFF_ONLY)
+	// selects, and only when every L3a condition holds (snapshot_diff.go).
+	SnapshotType     string
+	SnapshotDiffOnly []string
 	// SnapshotVaultDir (VM_SNAPSHOT_VAULT_DIR) is the mount of an
 	// ephemeral-key dm-crypt volume. When set, snapshots of the selected
 	// computers are written there and only there, and refused when the path
@@ -480,6 +491,8 @@ type Manager struct {
 	launchedMu   sync.Mutex
 	launchedVMMs map[string]vmmBuild
 	cgroupRoot   string
+	// procRoot is /proc unless a test replaces it (snapshot_diff.go).
+	procRoot string
 	// chownFn and fileOwnerFn are chown(2) and the owner lookup; tests that
 	// cannot change owners replace them.
 	chownFn     func(path string, uid, gid int) error
@@ -1055,6 +1068,7 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 		StartedAt: time.Now(),
 		done:      make(chan struct{}),
 	}
+	inst.coldOrigin = true // launched from a config, not a snapshot load
 
 	inst.BootTimeline = tl
 	tl.ComputerID = cfg.ComputerID
@@ -1304,6 +1318,8 @@ func (m *Manager) ResumeVM(vmID string) (*VMInstance, error) {
 		inst.State = StateFailed
 		return nil, fmt.Errorf("resume firecracker for VM %s: %w", vmID, err)
 	}
+	// A launch from config, not a snapshot load: cold origin.
+	inst.coldOrigin = true
 	tl.mark("firecracker_spawned")
 
 	m.mu.Unlock()
