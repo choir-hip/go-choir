@@ -40,6 +40,10 @@ type EventTableStatus struct {
 	Setting     bool   `json:"setting"`
 	Writing     bool   `json:"writing"`
 	Reason      string `json:"reason"`
+	// StoreFloor is the lowest store schema epoch that may run on this
+	// store (0: none). Once the writer has been on it is 2: no binary below
+	// deploy 1 may boot here (design 4.5). Read before any rollback.
+	StoreFloor uint64 `json:"store_floor,omitempty"`
 }
 
 func (rt *Runtime) eventTableCredentialDir() string {
@@ -96,16 +100,29 @@ func (rt *Runtime) setEventTableLocked(setting bool) {
 		st.Writing = true
 		st.Reason = "batched telemetry is written to choir_events"
 	}
-	rt.store.SetEventTableWrites(st.Writing)
+	if err := rt.store.SetEventTableWrites(st.Writing); err != nil {
+		// The floor could not be written: the writer stays off (fail closed).
+		st.Writing = false
+		st.Reason = "store.event_table is set, but " + err.Error()
+	}
 	if st.Setting || st.HostGranted {
 		log.Printf("runtime: event table: %s (host grant: %s)", st.Reason, grant.Reason)
 	}
 	rt.eventTableState = st
 }
 
-// eventTableStatus returns the switch as last applied.
+// eventTableStatus returns the switch as last applied, with the store floor
+// read now.
 func (rt *Runtime) eventTableStatus() EventTableStatus {
 	rt.eventTableMu.Lock()
-	defer rt.eventTableMu.Unlock()
-	return rt.eventTableState
+	st := rt.eventTableState
+	rt.eventTableMu.Unlock()
+	if rt.store != nil {
+		floor, err := rt.store.StoreFloor()
+		if err != nil {
+			st.Reason += "; the store floor is unreadable: " + err.Error()
+		}
+		st.StoreFloor = floor
+	}
+	return st
 }

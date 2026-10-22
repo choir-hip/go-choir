@@ -218,7 +218,7 @@ func TestEventTableObservabilityIsUnchangedWhenOff(t *testing.T) {
 		t.Fatal("observability does not show the switch on a granted computer")
 	}
 	var st EventTableStatus
-	if err := json.Unmarshal(raw, &st); err != nil || !st.HostGranted || !st.Setting || !st.Writing {
+	if err := json.Unmarshal(raw, &st); err != nil || !st.HostGranted || !st.Setting || !st.Writing || st.StoreFloor != 2 {
 		t.Fatalf("event_table = %s (%v)", raw, err)
 	}
 }

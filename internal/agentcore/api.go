@@ -1016,7 +1016,7 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 		resp.StreamSeqLease = &lease
 		checkpoint := h.rt.store.CheckpointStats()
 		resp.GuestCheckpoint = &checkpoint
-		if st := h.rt.eventTableStatus(); st.HostGranted || st.Setting {
+		if st := h.rt.eventTableStatus(); st.HostGranted || st.Setting || st.StoreFloor > 0 {
 			resp.EventTable = &st
 		}
 		if tasks, ok := boundedObservabilityRead(observabilityReadBudget, func() *managementTaskObservability {
