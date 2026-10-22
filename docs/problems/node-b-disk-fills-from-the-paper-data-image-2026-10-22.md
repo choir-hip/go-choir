@@ -101,7 +101,7 @@ public_platform: the sweep's own selection, `selectStoreCompaction` with no
 size threshold), its data image `FileBytes` and `CapBytes`. A computer is
 **due** when either:
 
-- host free < `VMCTL_STORE_COMPACT_PRESSURE_HOST_FREE_BYTES` (default 64 GiB), or
+- host free < `VMCTL_STORE_COMPACT_PRESSURE_HOST_FREE_GIB` (default 64 GiB), or
 - `FileBytes` >= `VMCTL_STORE_COMPACT_PRESSURE_FILL_FRACTION` x `CapBytes`
   (default 0.6; the paper at 15:00 is about 0.64).
 
@@ -135,7 +135,7 @@ Work"). The 04:00 timer stays as it is.
 ### The host free-space floor (all callers)
 
 `compactStore` refuses before it asks the guest for a planned restart when
-host free space is below `VMCTL_STORE_COMPACT_MIN_HOST_FREE_BYTES` (default
+host free space is below `VMCTL_STORE_COMPACT_MIN_HOST_FREE_GIB` (default
 32 GiB; `0` turns the floor off). The reflink copy shares the original's
 extents, but every block the compaction writes in the copy (the squashed
 store and its GC output, up to the live store size: 12 to 28 GiB for the
@@ -184,7 +184,7 @@ fail closed.
   observe mode first: the log line naming the paper and its reason, with no
   marker request, no restart, and no compaction.
 - Rollback: `VMCTL_STORE_COMPACT_PRESSURE=off` (or unset) stops the loop;
-  `VMCTL_STORE_COMPACT_MIN_HOST_FREE_BYTES=0` removes the floor; revert the
+  `VMCTL_STORE_COMPACT_MIN_HOST_FREE_GIB=0` removes the floor; revert the
   commits for the code.
 - Heresy delta: discovered: none; introduced: none intended (no boot-time
   resumer; the restart is the existing marker-backed planned restart);
@@ -240,3 +240,38 @@ brings back mid-build GC deletions**: every build on a host with less than
 - Until the paper's image is bounded (pressure trigger on, or discard),
   free space falls about 200 MiB a minute, so 48 GiB is about 2 hours of
   the fall below today's 72 GiB: the lower floor buys landings, not runway.
+
+## Pressure trigger: staging proof (FP0's steps, observe mode first)
+
+Built on lane `lane/fp0-disk-pressure` (`internal/vmctl/store_compaction_pressure.go`;
+nix sets `VMCTL_STORE_COMPACT_PRESSURE=observe`). After the deploy:
+
+1. vmctl's start line: `journalctl -u go-choir-vmctl | grep 'store compaction pressure mode='`
+   shows `mode=observe interval=5m0s host_free_below=68719476736 fill_fraction=0.60 min_gap=6h0m0s attempts="/var/lib/go-choir/vm-state/store-compact-attempts.json"`.
+2. Within 5 minutes, with the paper's image at or above 60% of its cap:
+   `vmctl: store compaction pressure (observe): would compact vm-1669020a… (computer …): reason="data image NN% of cap (X GiB of 125.x GiB) >= 60%[; host free Y GiB below 64.0 GiB]" host_free=Y GiB`.
+   If host free is under 32 GiB the line is `refused … the compaction needs room for the compacted copy` instead.
+3. No action: no `store-compaction` planned-restart marker request in the
+   paper's journal, no `vmctl: store compaction vm-…` outcome line, the
+   paper's boot epoch unchanged, and no `store-compact-attempts.json` written.
+4. Only then, by an owner/FP0 decision: `VMCTL_STORE_COMPACT_PRESSURE=on`
+   (a nix change and deploy). The first `on` tick compacts the paper as a
+   planned restart (`outcome=refreshed`, `planned_restart: true`), writes the
+   attempts record, and later ticks log `rate-limited … next after …` for 6 h.
+
+The floor applies now to the 04:00 timer as well: a timer run under 32 GiB
+free reports the paper `skipped` with the floor reason in
+the sweep's response (the by-hand `compact-store` answers HTTP 507) and does not restart the paper.
+
+## Now (lane fp0-disk-pressure, 2026-10-22)
+
+- Done: evidence and projection; platform-dolt oldgen record; trigger
+  design; tests; trigger built (observe on staging via nix); deploy-floor
+  proposal (docs only).
+- FP0: land, deploy, run the observe proof above; decide `on`.
+- Owner/FP0 decisions open: turning the trigger `on`; the coupled
+  `min-free`/deploy-floor change; the first supervised Store A squash.
+- Residuals: the gap is per VM ID (a re-created paper VM starts fresh);
+  observe logs every tick while due (12 lines an hour); free space is
+  `statfs` `Bavail` on btrfs, which over-reports when metadata is short
+  (watch `btrfs filesystem usage` unallocated alongside).
