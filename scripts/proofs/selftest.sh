@@ -52,11 +52,13 @@ J
 	# Real vmctl's /health body has no build field; its identity is the
 	# X-Choir-Build-Commit header (server.WithBuildIdentity). With -D the
 	# headers go to stdout; $ST/vmctlhdr: none (no build headers), other
-	# (another service's headers).
-	dump=; quiet=; prev=
-	for a in "$@"; do [ "$prev" = -D ] && [ "$a" = - ] && dump=1; [ "$prev" = -o ] && [ "$a" = /dev/null ] && quiet=1; prev=$a; done
+	# (another service's headers), 401 (vmctl's headers on a 401; the build
+	# headers are set on every response). -w's %{http_code} is honored.
+	dump=; quiet=; wout=; prev=
+	for a in "$@"; do [ "$prev" = -D ] && [ "$a" = - ] && dump=1; [ "$prev" = -o ] && [ "$a" = /dev/null ] && quiet=1; [ "$prev" = -w ] && wout=$a; prev=$a; done
+	code=200; [ "$(cat "$ST/vmctlhdr" 2>/dev/null)" = 401 ] && code=401
 	if [ -n "$dump" ]; then
-		printf 'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n'
+		printf 'HTTP/1.1 %s X\r\nContent-Type: application/json\r\n' "$code"
 		case "$(cat "$ST/vmctlhdr" 2>/dev/null)" in
 		none) ;;
 		other) printf 'X-Choir-Build-Commit: t1sha\r\nX-Choir-Build-Service: proxy\r\n' ;;
@@ -65,6 +67,7 @@ J
 		printf '\r\n'
 	fi
 	[ -n "$quiet" ] || echo '{"status":"ok","service":"vmctl","active_vms":2}'
+	[ -z "$wout" ] || printf '%b' "$(printf '%s' "$wout" | sed "s/%{http_code}/$code/")"
 	;;
 */internal/vmctl/retention-shadow-plan)
 	cat <<J
@@ -209,6 +212,16 @@ t "fp3 step 3 reads the sweep's retry" grep -q 'PASS.*spent the automatic retry'
 reset_state
 "$HERE/fp3-group1-wedge.sh" --step 1 --computer $TEST --t1 t1sha >"$WORK/out" 2>&1
 t "fp3 step 1 baseline passes" bash -c "grep -q 'PASS.*deploy-refresh candidate' '$WORK/out' && ! grep -q ' FAIL ' '$WORK/out'"
+# R6-5: fp3 step 1 fails when port 8083 answers as another service, and
+# (R6-4) when vmctl's /health answers non-2xx.
+reset_state
+echo other >"$ST/vmctlhdr"
+"$HERE/fp3-group1-wedge.sh" --step 1 --computer $TEST --t1 t1sha >"$WORK/out" 2>&1
+t "fp3 step 1 fails when port 8083 answers as another service" grep -q 'FAIL.*does not name T1 t1sha.*service=proxy' "$WORK/out"
+reset_state
+echo 401 >"$ST/vmctlhdr"
+"$HERE/fp3-group1-wedge.sh" --step 1 --computer $TEST --t1 t1sha >"$WORK/out" 2>&1
+t "fp3 step 1 fails when vmctl's /health answers non-2xx" grep -q 'FAIL.*does not name T1 t1sha.*status=401' "$WORK/out"
 
 # ---- FP6 deploy-refresh POST is a mutating step with a printed body ---------
 reset_state
@@ -273,18 +286,24 @@ t "fp0-vm-retention lists a kept test computer with its reasons" grep -q 'test-c
 t "fp0-vm-retention lists the quarantine and why it is kept" grep -q 'quarantine .*data.img.quarantine-1-ab.*verdict=keep reasons=journal_missing' "$WORK/out"
 t "fp0-vm-retention checks the active plan is unchanged" grep -q 'PASS.*no test_class_idle candidate in the active plan' "$WORK/out"
 # R5-1: vmctl's identity is its X-Choir-Build-Commit header, not a body field.
-t "fp0-vm-retention step 0 proves vmctl runs the commit from its build header" grep -q 'PASS.*vmctl runs t1sha' "$WORK/out"
+t "fp0-vm-retention step 0 proves vmctl runs the commit from its build header" grep -q 'PASS.*vmctl runs t1sha.*observed commit=t1sha service=vmctl status=200' "$WORK/out"
+# R6-3: each negative case asserts what was observed, so it fails on a
+# script that always fails. R6-4: a non-2xx answer fails.
 reset_state
 "$HERE/fp0-vm-retention.sh" --step 0 --commit othersha >"$WORK/out" 2>&1
-t "fp0-vm-retention step 0 fails when vmctl's header names another commit" grep -q 'FAIL.*vmctl runs othersha' "$WORK/out"
+t "fp0-vm-retention step 0 fails when vmctl's header names another commit" grep -q 'FAIL.*vmctl runs othersha.*observed commit=t1sha service=vmctl status=200' "$WORK/out"
 reset_state
 echo none >"$ST/vmctlhdr"
 "$HERE/fp0-vm-retention.sh" --step 0 --commit t1sha >"$WORK/out" 2>&1
-t "fp0-vm-retention step 0 fails when vmctl sends no build header" grep -q 'FAIL.*vmctl runs t1sha' "$WORK/out"
+t "fp0-vm-retention step 0 fails when vmctl sends no build header" grep -q 'FAIL.*vmctl runs t1sha.*observed commit=- service=- status=200' "$WORK/out"
 reset_state
 echo other >"$ST/vmctlhdr"
 "$HERE/fp0-vm-retention.sh" --step 0 --commit t1sha >"$WORK/out" 2>&1
-t "fp0-vm-retention step 0 fails when port 8083 answers as another service" grep -q 'FAIL.*vmctl runs t1sha' "$WORK/out"
+t "fp0-vm-retention step 0 fails when port 8083 answers as another service" grep -q 'FAIL.*vmctl runs t1sha.*observed commit=t1sha service=proxy status=200' "$WORK/out"
+reset_state
+echo 401 >"$ST/vmctlhdr"
+"$HERE/fp0-vm-retention.sh" --step 0 --commit t1sha >"$WORK/out" 2>&1
+t "fp0-vm-retention step 0 fails when vmctl's /health answers non-2xx" grep -q 'FAIL.*vmctl runs t1sha.*observed commit=t1sha service=vmctl status=401' "$WORK/out"
 reset_state
 "$HERE/fp0-vm-retention.sh" --step 4 --state-dir "$WORK/vmstate" >"$WORK/out" 2>&1
 t "fp0-vm-retention step 4 lists the recovery dir" grep -q 'recovery-dir candidate-fleet-x artifacts=1' "$WORK/out"
