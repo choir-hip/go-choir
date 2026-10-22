@@ -2,6 +2,7 @@ package agentcore
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -660,18 +661,42 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		httpStatus = http.StatusServiceUnavailable
 	}
 
+	// The store reads come before WriteHeader and are bounded: a held write
+	// connection answers 503 store_stalled at once, never a silent hang and
+	// never a 200 (F1, docs/problems/paper-unreachable-minutes-after-every-boot-2026-10-22.md).
+	reads := h.rt.readHealthStore(r.Context(), healthStoreBudget)
+	if len(reads.unanswered) > 0 {
+		stalled := runtimeHealthStalledResponse{
+			Status:        "store_stalled",
+			Service:       "autoputer",
+			ComputerID:    h.rt.cfg.ComputerID,
+			RuntimeHealth: health,
+			RunningRuns:   h.rt.RunningCount(),
+			Build:         buildinfo.Snapshot("autoputer"),
+			StoreStalled: healthStoreStalled{
+				Unanswered:      reads.unanswered,
+				BudgetMS:        healthStoreBudget.Milliseconds(),
+				EngineMutexLive: h.rt.store.EngineMutexLive(),
+			},
+		}
+		if guard != "" {
+			stalled.Status = "layering_bootguard"
+			stalled.LayeringBootguard = guard
+		}
+		writeAPIJSON(w, http.StatusServiceUnavailable, stalled)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(httpStatus)
-	deskPending := h.rt.pendingDeskMutations(r.Context())
-	selfdevActive := h.rt.activeSelfdevOperations(r.Context())
 	resp := runtimeHealthResponse{
 		Status:               string(health),
 		Service:              "autoputer",
 		ComputerID:           h.rt.cfg.ComputerID,
 		RuntimeHealth:        health,
 		RunningRuns:          h.rt.RunningCount(),
-		DeskPendingMutations: deskPending,
-		SelfdevActiveOps:     selfdevActive,
+		DeskPendingMutations: reads.deskPending,
+		SelfdevActiveOps:     reads.selfdevActive,
 		ActiveProvider:       h.rt.provider.ProviderName(),
 		Build:                buildinfo.Snapshot("autoputer"),
 	}
@@ -691,9 +716,97 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 	resp.DoltGC = store.ReadDoltGCDisposition(filepath.Dir(h.rt.cfg.StorePath))
 	resp.EngineMutex = h.rt.store.EngineMutexStats()
-	identity := h.rt.EffectiveRelease(r.Context())
-	resp.EffectiveRelease = &identity
+	resp.EffectiveRelease = &reads.identity
 	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// healthStoreBudget bounds /health's store reads, which run concurrently
+// under it: the proxy's runtime probe gives up at 2 s and vmmanager's at 3 s.
+const healthStoreBudget = time.Second
+
+// runtimeHealthStalledResponse is /health's 503 when a store read missed its
+// budget. The counts that were not read are left out: a 0 would read as idle.
+type runtimeHealthStalledResponse struct {
+	Status            string                   `json:"status"`
+	Service           string                   `json:"service"`
+	ComputerID        string                   `json:"computer_id"`
+	RuntimeHealth     types.RuntimeHealthState `json:"runtime_health"`
+	RunningRuns       int                      `json:"running_runs"`
+	Build             buildinfo.Info           `json:"build"`
+	LayeringBootguard string                   `json:"layering_bootguard,omitempty"`
+	StoreStalled      healthStoreStalled       `json:"store_stalled"`
+}
+
+// healthStoreStalled names the reads that missed and the engine lock's live
+// holder. The write connection can also be held outside the engine lock (the
+// online GC, a raw query); then the holder is empty or a waiter on it.
+type healthStoreStalled struct {
+	Unanswered      []string                     `json:"unanswered"`
+	BudgetMS        int64                        `json:"budget_ms"`
+	EngineMutexLive *objectgraph.EngineMutexLive `json:"engine_mutex_live,omitempty"`
+}
+
+type healthStoreReads struct {
+	deskPending   int
+	selfdevActive int
+	identity      EffectiveRelease
+	unanswered    []string
+}
+
+// readHealthStore runs /health's three store reads concurrently and gives up
+// on any that has not answered within budget. A read's value counts only if
+// it finished before its context ended: the read helpers turn a cancelled
+// query into 0, which must never pass as an answer. Cancelling the context on
+// return frees a read still waiting for the connection; one already inside a
+// statement ends with it and writes only to its own buffered channel.
+func (rt *Runtime) readHealthStore(parent context.Context, budget time.Duration) healthStoreReads {
+	ctx, cancel := context.WithTimeout(parent, budget)
+	defer cancel()
+	type answer[T any] struct {
+		value T
+		ok    bool
+	}
+	start := func(read func(context.Context) int) chan answer[int] {
+		done := make(chan answer[int], 1)
+		go func() {
+			value := read(ctx)
+			done <- answer[int]{value, ctx.Err() == nil}
+		}()
+		return done
+	}
+	desk := start(rt.pendingDeskMutations)
+	selfdevOps := start(rt.activeSelfdevOperations)
+	release := make(chan answer[EffectiveRelease], 1)
+	go func() {
+		value := rt.EffectiveRelease(ctx)
+		release <- answer[EffectiveRelease]{value, ctx.Err() == nil}
+	}()
+
+	var out healthStoreReads
+	awaitInt := func(name string, done chan answer[int]) int {
+		select {
+		case got := <-done:
+			if got.ok {
+				return got.value
+			}
+		case <-ctx.Done():
+		}
+		out.unanswered = append(out.unanswered, name)
+		return 0
+	}
+	out.deskPending = awaitInt("desk_pending_mutations", desk)
+	out.selfdevActive = awaitInt("selfdev_active_operations", selfdevOps)
+	select {
+	case got := <-release:
+		if got.ok {
+			out.identity = got.value
+			break
+		}
+		out.unanswered = append(out.unanswered, "effective_release")
+	case <-ctx.Done():
+		out.unanswered = append(out.unanswered, "effective_release")
+	}
+	return out
 }
 
 // guestObservabilityResponse is the product-API surface for the running
