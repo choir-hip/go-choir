@@ -122,8 +122,16 @@ func TestPoisonAtTheDeferralLimitLogsTheCause(t *testing.T) {
 		return nil, fmt.Errorf("%w: waiting on the apply checkpoint", ErrDeferUnprocessed)
 	})
 	runDispatcherUntil(t, klog, handler, DispatcherOptions{PollInterval: 10 * time.Millisecond, MaxDeferrals: 1, ErrorSink: "sink"}, sink)
-	if line := out(); !strings.Contains(line, "poison management/wake-3") || !strings.Contains(line, "waiting on the apply checkpoint") {
-		t.Fatalf("the deferral-limit poison line has no cause:\n%s", line)
+	// Judge the poison line itself: the earlier "deferred … cause=" line
+	// carries the cause too (review round 4c, Sonnet E3 M7a).
+	poison := ""
+	for _, line := range strings.Split(out(), "\n") {
+		if strings.Contains(line, "poison management/wake-3") {
+			poison = line
+		}
+	}
+	if !strings.Contains(poison, "waiting on the apply checkpoint") {
+		t.Fatalf("the deferral-limit poison line has no cause: %q\n%s", poison, out())
 	}
 }
 

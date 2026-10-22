@@ -2,6 +2,7 @@ package agentcore
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -16,7 +17,7 @@ import (
 // the assignment, the resume defers to it instead of racing it (the loser
 // used to fail early, at the capsule capability or the binding, and its
 // cell heard an error for a report that landed). Ways it can fail: the
-// resume still runs; it errors (and is retried or dead-lettered); it
+// resume still runs; it returns nil, consuming the wake (round 4c); it
 // touches the assignment; once the saga is free it no longer re-drives.
 func TestFateWakeResumeDefersToTheLiveTerminalSaga(t *testing.T) {
 	f := newAdmissionFixture(t, 1)
@@ -46,8 +47,10 @@ func TestFateWakeResumeDefersToTheLiveTerminalSaga(t *testing.T) {
 	err = f.rt.resumeStrandedFateAssignmentIfPending(ctx, bound.Binding.OwnerID, bound.Binding.ComputerID, bound.AssignmentID, bound.Binding.Attempt)
 	after := f.get(0)
 	saga.Unlock()
-	if err != nil {
-		t.Fatalf("the resume errored while the live saga held the assignment: %v", err)
+	// The held saga is reported, not swallowed: a nil here consumed the
+	// fate wake (review round 4c); actorruntime defers on this error.
+	if !errors.Is(err, errAssignmentSagaHeld) {
+		t.Fatalf("the resume under a held saga returned %v, want errAssignmentSagaHeld", err)
 	}
 	if after.LifecycleVersion != staged.Assignment.LifecycleVersion || after.CapsuleDisposition != staged.Assignment.CapsuleDisposition {
 		t.Fatalf("the resume touched the assignment while the live saga held it: v%d %s -> v%d %s",
