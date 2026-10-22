@@ -261,3 +261,48 @@ B, so it waits.
 
 **N3 (Argon's landing constraint): the three groups land in separate
 sequential deploys. Already the rollout.**
+
+## Delta re-review (Gemini 3.8 flash, ffde1b3d8): findings and dispositions
+
+**F1 (blocking): concurrent gate runs can lower the floor. Accepted.**
+- Evidence: `scripts/node-b-ci-gate` at ffde1b3d8 has no lock. `check_floor`
+  and `advance_floor` are separate steps, and `advance_floor` writes the
+  requested commit without re-reading the file.
+- CI's `staging-deploy-node-b` concurrency group does not help: a stolen key
+  calls the gate directly.
+- Two deploys that both descend from the floor can interleave. Step 3 is
+  written, then deploy 2 overwrites it, and deploy 2's activation puts the CI
+  key back on root.
+- Fix:
+  - one exclusive `flock` on `/var/lib/go-choir/ci-gate-floor.lock`, held
+    from before `check_floor` through the advance and the deploy run;
+  - the advance is a compare-and-swap: under the lock, the file must still
+    hold the floor that was checked, and the new commit must descend from it.
+
+**F2 (blocking): losing the floor file falls back to the seed and reopens
+the escape. Accepted.** It was this file's own residual.
+- Evidence: `check_floor` at ffde1b3d8 falls back to `seed_floor=961588290`,
+  which is an ancestor of 0fca75329 and 7637ad240, and both of those put the
+  CI key back on root.
+- Fix: the gate drops the seed. With no floor file it refuses every
+  prebuild and deploy. The one exception is a bootstrap marker,
+  `/var/lib/go-choir/ci-gate-floor-bootstrap`:
+  - Only a NixOS activation script in nix/node-b.nix writes it, and only
+    while the floor file is missing.
+  - The gate never writes it. The gate deletes it on its first deploy.
+  - Step 3 removes that activation script. Every commit that installs the
+    marker therefore sits below the floor once step 3 is deployed. After
+    that, losing the floor file means every request is refused until root
+    restores the file by hand.
+
+**Non-blocking, stdin: fixed** (requested). The program runs as
+`bash <file> </dev/null`. Neither program uses `$0` or `BASH_SOURCE`
+(grep: no hits).
+
+**Non-blocking, the floor rises before the run: residual (by design).** A
+failed deploy leaves the floor raised, so rollback is forward, with git
+revert.
+
+Prebuild checks the floor but takes no lock: it neither activates nor
+advances the floor. Locking it would also serialize it behind a running
+deploy, which defeats its purpose.
