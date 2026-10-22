@@ -220,6 +220,7 @@ step_10() {
 	[ "$(fp7_num "$h" '.body_caps.limits.in_flight')" -gt 0 ] && pass "in_flight bound present: $(fp7_num "$h" '.body_caps.limits.in_flight') bytes, read timeout $(fp7_num "$h" '.body_caps.read_timeout_seconds') s" || fail "/health body_caps has no limits.in_flight: the deploy predates the bunch 88 round"
 	[ "$(fp7_num "$h" '.body_caps.limits.per_caller')" -gt 0 ] && pass "per-caller share present: $(fp7_num "$h" '.body_caps.limits.per_caller') bytes of in_flight" || fail "/health body_caps has no limits.per_caller: the deploy predates the bunch 109 round"
 	info "refused: in_flight=$(printf '%s' "$h" | jq -r '.body_caps.refused.in_flight // 0') per_caller=$(printf '%s' "$h" | jq -r '.body_caps.refused.per_caller // 0') (per_caller: a caller over its own share, bunch 116)"
+	[ "$(fp7_num "$h" '.image_media.output_limit')" -gt 0 ] && pass "image_media present: decode_slots=$(fp7_num "$h" '.image_media.decode_slots'), output_limit=$(fp7_num "$h" '.image_media.output_limit'), output waited/refused=$(fp7_num "$h" '.image_media.output_waited')/$(fp7_num "$h" '.image_media.output_refused')" || fail "/health has no image_media.output_limit: the deploy predates FP0 round 5"
 	info "gateway MemoryMax: $(node_b_q "systemctl show go-choir-gateway -p MemoryMax --value")"
 	info "gateway memory (current, peak bytes): $m"
 	printf '%s\n' "$h" >"$(fp7_state bodycaps)"
