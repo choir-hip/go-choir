@@ -921,3 +921,23 @@ func TestDeployRescueReachesAPlatformComputerOnlyForRepeatedInterruptions(t *tes
 		}
 	}
 }
+
+// Review round 3 (low): a restart while a close is still open reloads the
+// same claim. One interrupted start must stay one: the row keeps the
+// first-close fate, uncharged, and is not bounded like a repeat.
+func TestRestartDuringAnOpenCloseCountsTheInterruptedStartOnce(t *testing.T) {
+	seed := alwaysOnTestComputer()
+	path := filepath.Join(t.TempDir(), "ownerships.json")
+	interruptStartOnDisk(t, seedOwnershipFile(t, path, seed), seed.VMID)
+	first, firstMgr, _ := restartedVMCTL(t, path, seed.VMID)
+	firstMgr.reapFails = true
+	first.ReattachManagedVMs(context.Background(), allowAllRoutes)
+
+	next, nextMgr, _ := restartedVMCTL(t, path, seed.VMID)
+	next.ReattachManagedVMs(context.Background(), allowAllRoutes)
+	requireStartSettled(t, next, nextMgr, seed.VMID, seed.StoppedBy, "after the restart that finished the close")
+	own := next.GetOwnershipByVMID(seed.VMID)
+	if own.StoppedBy != stoppedByStartInterrupted || own.FailureWarmedAt != "" || !isAlwaysOnTarget(next, seed.VMID) {
+		t.Fatalf("one interrupted start across two restarts = stopped_by %q failure_warmed_at %q target %t, want a free first close", own.StoppedBy, own.FailureWarmedAt, isAlwaysOnTarget(next, seed.VMID))
+	}
+}
