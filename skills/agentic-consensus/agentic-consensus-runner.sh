@@ -402,7 +402,7 @@ build_cmd() {
       [[ -n "$CODEX_MODEL" ]] && CMD+=(-m "$CODEX_MODEL")
       CMD+=("$AGENT_PROMPT") ;;
     devin)
-      CMD=(devin --permission-mode auto --respect-workspace-trust false)
+      CMD=(devin --permission-mode smart --respect-workspace-trust false)
       [[ -n "$DEVIN_MODEL" ]] && CMD+=(--model "$DEVIN_MODEL")
       CMD+=(-p "$AGENT_PROMPT") ;;
     claude)
