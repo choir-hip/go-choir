@@ -123,6 +123,47 @@
         nixpkgs.overlays = [ (final: prev: { dolt = mkChoirDolt prev; }) ];
       };
 
+      # Firecracker lane (docs/problems/firecracker-1-16-1-virtio-mem-restore-
+      # bugs-2026-10-22.md). The host's VMM and its jailer are both
+      # pkgs.firecracker (nix/node-b.nix VM_FIRECRACKER_BIN, VM_JAILER_BIN);
+      # the locked nixpkgs ships 1.16.1. 1.16.2 fixes two virtio-mem
+      # snapshot-restore bugs and changes the snapshot format, so it voids
+      # every hibernate snapshot (vmctl refuses them as
+      # firecracker_version_mismatch and cold boots). Not 1.17: its hotplug
+      # region at 512 GiB is past the E-2236's 39-bit physical limit
+      # (firecracker #6255; NET-08 stays on nix/firecracker-next.nix). Same
+      # pattern as choirDolt: the base's recipe with a newer version, source
+      # hash and vendor hash, applied only while the given nixpkgs is older.
+      #
+      # !!! UNEVALUATED: both hashes are lib.fakeHash (written in a lane with
+      # no Nix). The first build fails twice and prints each real hash: fill
+      # `hash` (source), rebuild, fill `cargoHash` (vendored crates). FP0
+      # computes them on the Mac before landing. Do not land fakeHash.
+      choirFirecrackerRelease = {
+        version = "1.16.2";
+        hash = nixpkgs.lib.fakeHash;
+        cargoHash = nixpkgs.lib.fakeHash;
+      };
+      mkChoirFirecracker = p:
+        if p.lib.versionAtLeast p.firecracker.version choirFirecrackerRelease.version then p.firecracker
+        else p.firecracker.overrideAttrs (finalAttrs: _: {
+          inherit (choirFirecrackerRelease) version;
+          src = p.fetchFromGitHub {
+            owner = "firecracker-microvm";
+            repo = "firecracker";
+            tag = "v${choirFirecrackerRelease.version}";
+            inherit (choirFirecrackerRelease) hash;
+          };
+          cargoDeps = p.rustPlatform.fetchCargoVendor {
+            inherit (finalAttrs) src;
+            name = "firecracker-${choirFirecrackerRelease.version}-vendor";
+            hash = choirFirecrackerRelease.cargoHash;
+          };
+        });
+      choirFirecrackerModule = { ... }: {
+        nixpkgs.overlays = [ (final: prev: { firecracker = mkChoirFirecracker prev; }) ];
+      };
+
       # Qdrant lane (docs/problems/weekly-nixpkgs-bump-qdrant-build-failure-
       # 2026-10-19.md). nixos-unstable's rustc 1.98 is linked against LLVM 21
       # but its stdarch declares the LLVM 22 shape of
@@ -638,6 +679,7 @@ EOF
           ./nix/node-b.nix
           choirKernelModule
           choirDoltModule
+          choirFirecrackerModule
           choirQdrantModule
         ];
       };
