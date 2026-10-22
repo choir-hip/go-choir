@@ -2390,15 +2390,19 @@ func (s *Store) allocateEventSeqLocked(ctx context.Context, rec *types.EventReco
 // projection batch (UpdateRunWithEvent) use it, so they are numbered like
 // every other run event and the seq-filtered readers see them
 // (docs/problems/run-events-without-seq-2026-10-22.md). An event that already
-// has a Seq keeps its numbers, so a retry with the same event takes no second
+// has both numbers keeps them, so a retry with the same event takes no second
+// number; the check is under eventMu, so callers sharing one record take one
 // number. A batch that then fails leaves a gap, never a duplicate.
 func (s *Store) AllocateEventSeq(ctx context.Context, rec *types.EventRecord) error {
-	if rec == nil || rec.Seq != 0 {
+	if rec == nil {
 		return nil
 	}
 	sl := s.telemetry.Load()
 	s.eventMu.Lock()
 	defer s.eventMu.Unlock()
+	if rec.Seq != 0 && rec.StreamSeq != 0 {
+		return nil
+	}
 	_, err := s.allocateEventSeqLocked(ctx, rec, sl)
 	return err
 }
