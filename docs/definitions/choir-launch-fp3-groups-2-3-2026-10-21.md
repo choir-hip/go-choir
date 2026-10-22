@@ -318,7 +318,8 @@ caddy, goproxy, qdrant and searx hiding nothing. The fix (844e0026b, red;
 tests 545d573fd) does three things:
 
 - moves the four EnvironmentFile-only env files into
-  `/var/lib/go-choir/unit-env`, which every unit hides as a directory;
+  `/var/lib/go-choir/unit-env`, which every long-running host unit (and
+  every oneshot that declares hidden paths) hides as a directory;
 - deletes the deploy's scrub of deploy.env;
 - gives caddy, qdrant, unbound, searx, searx-init, go-choir-goproxy and
   go-choir-pkgmirror the host set.
@@ -381,11 +382,13 @@ verifier's flags for the stage then current; at T they were
 7. Problem 3 probe (in the problem record): read only. Its result decides
    the gateway-state fix.
 
-Rollback: revert 844e0026b and redeploy. The links keep the old paths
-working for the reverted units. Return the files with
-`mv -f /var/lib/go-choir/unit-env/<name> /var/lib/go-choir/<name>` for
-each name present, then restart go-choir-proxy, go-choir-corpusd and
-go-choir-checkpointd. Roll back at once if any unit fails to start with a
+Rollback: revert the fix and redeploy, and move no files. The links keep
+the old paths working for the reverted units, and a later landing relinks
+without importing anything. If the files must go back to their old paths
+for good, run `mv -f /var/lib/go-choir/unit-env/<name> /var/lib/go-choir/<name>`
+for each name present. Then also `rm /var/lib/go-choir/unit-env/.imported`,
+so the next landing imports them as on its first run (corrected after
+round 2, F2). Roll back at once if any unit fails to start with a
 namespace error, if corpusd is not connected to 13307, or if step 3 shows
 a missing key.
 
