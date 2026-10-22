@@ -49,7 +49,7 @@ The steps, in order. "Seconds?" says whether a step can take seconds and why.
 
 | # | Step (code) | What it does | Seconds? |
 |---|---|---|---|
-| 0 | `planDelegatedCast` (internal/agentcore/engineering_assignment_runtime.go:227), **at cast time, inside management's activation** | `PreflightSourceSnapshot("")`. See 0a-0c. | **Yes, ~7 s (0c).** |
+| 0 | `planEngineeringCast` (internal/agentcore/engineering_assignment_runtime.go:174, the preflight at :227), **at cast time, inside management's activation, before the open commits** | `PreflightSourceSnapshot("")`. See 0a-0c. | **Yes, ~7 s (0c).** |
 | 0a | `immutableGitCommitIdentity` (internal/capsule/source_snapshot.go) | `git diff --quiet`, `git diff --cached --quiet`, `git rev-parse` | ~10 ms (measured) |
 | 0b | `immutableCommitInventory` | `git ls-tree -r` of the commit | ~6 ms |
 | 0c | `canonicalImmutableCommitDigest` | One `git cat-file blob <oid>` process **per tracked file**, hashing each blob | **Yes: N fork/execs of git.** |
@@ -133,13 +133,25 @@ been up 2.8 min.
   open" at 16:12:43.
 - 16:12:43 minus 13.479 s is 16:12:29.5, the open commit.
 
-**Hypothesis:** the cast cell's own preflight (step 0, about 7 s) is part of
-those 13.5 s.
+**The cast preflight is not in those 13.5 s** (corrected in round 2, after
+review bunch 77, DeepSeek F1; round 1 claimed it was, as a hypothesis).
 
-- It runs inside that same activation, before the open commits.
-- The tool-loop iterations at 16:12:30 and 16:12:38 are 8 s apart, which
-  fits one cast cell paying a model call plus about 7 s of git.
-- The excerpt does not name the cell. `cast_preflight` (next commit) will.
+- `waited` is `time.Since(due)` (internal/actorruntime/handler.go), and
+  `due` is the actor update's `CreatedAt`, because the `:spawn` wake has no
+  `NotBefore`. That `CreatedAt` is set when the wake is appended to the actor
+  log (internal/actorruntime/adapter.go), after the open commits.
+- The cast preflight (step 0) runs in `planEngineeringCast`, before
+  `openDelegatedCastAssignment`. It therefore delays the open, and so the
+  whole start, but it lies outside the logged wait.
+- Likewise, the tool-loop iterations at 16:12:30 and 16:12:38 come after
+  the open at about 16:12:29.5, so their 8 s gap is not the cast preflight.
+- The 13.5 s is the tail of the casting activation after the open. The
+  preflight is a separate pre-open cost of about 7 s, which the
+  `cast_preflight` line (next commit) will show.
+- Repair in flight elsewhere, not duplicated here: lane/fp4-actor-retry-backoff
+  (docs/problems/fp4-actor-retry-no-backoff-wake-latency-spawn-mailbox-2026-10-22.md,
+  disposition at 4f003dccb) moves the open-time `:spawn` wake to the
+  `engineering-admission` mailbox (its F3).
 
 ### initial_dispatch "waited 31.224 s"
 
@@ -152,8 +164,10 @@ queue.**
   `source.CreatedAt`: the **assignment object's** CreatedAt.
 - Every later version keeps the open time (`assignmentObj.CreatedAt` in each
   `lifecycleObject` rewrite, internal/store/engineering_assignments.go).
-- 16:13:01 minus 31.224 s is 16:12:29.8, the open again. 31.2 s is 13.5 s
-  (the admission wait) plus 18 s (the cold start) plus milliseconds.
+- 16:13:01 minus 31.224 s is 16:12:29.8, the open again.
+- 31.2 s matches 13.5 s (the admission wait) plus 18 s (the cold start)
+  within about 0.3 s. That is the error the second-granular log
+  timestamps allow: it is about 0.25 s below the sum, not above it.
 - `dispatch=1ms`: the dispatch itself went out within a millisecond of the
   bind.
 
@@ -169,6 +183,8 @@ queue.**
 
 The `actor wake latency` line therefore cannot tell a slow queue from an old
 assignment, for any wake whose source object outlives its first version.
+lane/fp4-actor-retry-backoff (its F2) now measures that line from the
+outbox row's mint time (`MintedAt`).
 
 ### The poison at 16:13:35
 
@@ -210,7 +226,8 @@ assignment, for any wake whose source object outlives its first version.
 - **`Executor.Spawn` holds `e.mu` (write) for all ~14 s of materialization.**
   Every executor call waits behind it: `GoEval`/`Exec`/`ReadFile` through
   `resolveOne`, `HasCapsule`, `MemoryBudget`, `ClaudeDelegateStatus` (which
-  `planDelegatedCast` calls), and the job verbs.
+  `planEngineeringCast` calls for the network mode,
+  engineering_assignment_runtime.go:264), and the job verbs.
   - With one live assignment capsule at a time the harm is small today.
   - With N capsules per assignment (ARCH-10's second half) every live
     capsule stalls while a sibling spawns.
@@ -291,12 +308,17 @@ Ordered by value over risk. Costs and risks are the lane's estimates.
 
 Not cold-start, but found here:
 
-- (a) Give a handler error a backoff in the dispatcher, as deferrals have,
+- (a) A backoff for a handler error in the dispatcher, as deferrals have,
   so a one-second CAS race does not dead-letter.
-- (b) Have `actor wake latency` measure from the wake's own mint time (the
-  outbox object's version time), not from the source object's CreatedAt.
-- (c) Move the open-time `:spawn` wake to the `engineering-admission`
-  mailbox: the residual of the nudge record.
+- (b) `actor wake latency` measured from the wake's own mint time, not
+  from the source object's CreatedAt.
+- (c) The open-time `:spawn` wake moved to the `engineering-admission`
+  mailbox, the residual of the nudge record.
+
+All three are F1 to F3 of lane/fp4-actor-retry-backoff
+(docs/problems/fp4-actor-retry-no-backoff-wake-latency-spawn-mailbox-2026-10-22.md;
+tests 94f829bfc, fix b7c5d7c97, disposition 4f003dccb). This lane does not
+duplicate them.
 
 ## Timing logs (next commit, orange: log lines only)
 
@@ -322,6 +344,27 @@ capsule <id> spawn phase=broker_ready took=… probes=K
 capsule <id> spawn total=… ok=true|false [err=…]
 capsule <id> saga phase=spawn|bind|activate took=… assignment=…
 ```
+
+**Locks (corrected in round 2, review bunch 77 F5).** The phase lines are
+written while locks are held:
+
+- the spawn lines under the executor's `e.mu` (write);
+- the saga lines under `engineeringAssignmentOpenMu`.
+
+Each line is one `log.Printf`, about 20 per spawn. That is a few
+microseconds against the git inside the same critical section (seconds
+before coldfix, about 1 s after it), and
+the same practice as the existing teardown memory line, which logs under
+`e.mu`. Still, the critical sections are longer by those writes, so "no
+behaviour change" means no change to what the spawn does and decides, not
+zero added time under the lock. The `total` line is written after the
+unlock: its deferred call is registered before the unlock's.
+
+The lines were not moved after the unlock. That would mean buffering them
+until the spawn ends, so a spawn that hangs inside a phase would no longer
+show the last phase it finished, and the hang is what the lines are for. No
+other work was added under either lock. A nil timer (the carried-patch
+path) formats nothing.
 
 Prediction for the next deploy, against which the conjecture is judged:
 
@@ -575,3 +618,60 @@ tests first, and records the rest here.
 - Fix:
   - the inventory error carries git's stderr;
   - the test repositories turn auto-maintenance off.
+
+## Coldstart round 2 (review bunch 77), ported onto coldfix (2026-10-22)
+
+lane/fp4-capsule-coldstart has a round 2 that this lane never carried:
+9b892ae10 (docs) and 4bf62ecbf (code). This lane was built on coldstart
+round 1 (94ad33125) and rewrote the source passes, so 4bf62ecbf does not
+apply here: it conflicts in source_snapshot.go, spawn_phase_timing.go and
+spawn_phase_timing_test.go. The port is on lane/fp4-coldstart-r2-port.
+
+**Ported as written (docs, this commit).** 9b892ae10's analysis
+corrections are code reads that the batch rewrite does not change:
+
+- step 0 is `planEngineeringCast`, and its preflight runs before the open;
+- the cast preflight is outside the 13.5 s admission wait (DeepSeek F1);
+- the 31.2 s arithmetic is within the log timestamps' error;
+- `ClaudeDelegateStatus` is called by `planEngineeringCast`;
+- the phase lines are written under `e.mu` and
+  `engineeringAssignmentOpenMu` (F5);
+- the wake-latency, backoff and spawn-mailbox items point at
+  lane/fp4-actor-retry-backoff.
+
+**Findings this lane still has, to be fixed by the port (code):**
+
+- **A panicked spawn logs ok=true.** `done(retErr)` runs in a deferred
+  call. A panic leaves `retErr` nil, so the total line says `ok=true` for
+  a spawn that never returned. Round 2's answer, ported: `markOK` at
+  Spawn's one successful return, and `done` logs
+  `ok=false err=spawn did not return (panic)` without it. No recover is
+  added: the panic still propagates.
+- **git_procs leaves out the inventory `ls-tree`.** This is coldfix's own
+  recorded point (Deepseek F4, sonnet F9, under "Smaller points"), and
+  round 2's intent. On this lane:
+  - `source_inventory` runs one `git ls-tree` and logs no `git_procs`;
+  - `source_blobs` runs one `git cat-file --batch`: `git_procs=1` is
+    right;
+  - `source_digest_commit` with no expected digest calls
+    `canonicalImmutableCommitDigest`, which runs its own `ls-tree` and its
+    own batch, so two processes, but logs `git_procs=1`;
+  - with the binding's digest it runs none: `git_procs=0 against=expected`
+    is right.
+- **A nil timer still formats its details.** `phase` returns early on a
+  nil timer, but its callers have already run `fmt.Sprintf` and built the
+  detail slices. The nil timer is the carried-patch base copy. Round 2's
+  `phaseGit` formats nothing on a nil timer.
+- **`go test ./internal/agentcore -run Spawn` skips the saga line test.**
+  It is named `TestAssignmentSagaPhaseLogsUnderTheCapsule`. Round 2
+  renamed it (and its file) to `TestSpawnSagaPhaseLogsUnderTheCapsule`.
+
+**Superseded by coldfix, not ported:**
+
+- Round 2's counts `source_blobs git_procs=N` and
+  `source_digest_commit git_procs=N+1`. They count one `git cat-file` per
+  file, which coldfix removed. Coldfix's batch counts are the truth for
+  the batch reads: 1 for the blob pass, and 2 (its `ls-tree` plus its
+  batch) or 0 for the commit pass. Round 2's other count,
+  `source_inventory git_procs=1`, still holds and is ported.
+- Round 2's removal of `gitProcsDetail`: coldfix already removed it.
