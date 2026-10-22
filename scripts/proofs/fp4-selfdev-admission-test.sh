@@ -26,8 +26,13 @@ cat >"$FAKES/curl" <<'J'
 url=; for a in "$@"; do case "$a" in http*) url=$a ;; esac; done
 echo "$url" >>"$FX/urls"
 p=${url#*://*/}; p=/${p%%\?*}
+after=0; case "$url" in *after=*) after=${url#*after=}; after=${after%%&*} ;; esac
 case "$p" in
-/api/trajectories/*/events) f=$FX/${p#/api/trajectories/}; f=${f%/events}.events.json ;;
+/api/trajectories/*/events)
+	t=${p#/api/trajectories/}; t=${t%/events}
+	if [ "$after" != 0 ] && [ -f "$FX/$t.events.after-$after.json" ]; then f=$FX/$t.events.after-$after.json
+	elif [ "$after" != 0 ] && [ -f "$FX/$t.infinite" ]; then echo "{\"events\":[{\"kind\":\"x\",\"command_id\":\"c\"}],\"next_cursor\":$((after + 1)),\"watermark\":999999}"; exit 0
+	else f=$FX/$t.events.json; fi ;;
 /api/trajectories/*) f=$FX/${p#/api/trajectories/}.snap.json ;;
 esac
 [ -f "$f" ] && cat "$f" || { echo "fake curl: no fixture for $url" >&2; exit 22; }
@@ -157,6 +162,33 @@ put_snap tb "$(row asg-b x cancelled revoked operator_cancel 2026-10-22T06:00:00
 run "step7 FAIL: B cancelled for another reason" 7 fail "${ARGS[@]}"
 put_snap tb "$BCAN"; put_events tb "$BOUND:asg-b:2026-10-22T04:02:00Z"
 run "step7 FAIL: B cancelled interrupted_by_restart but had been bound" 7 fail "${ARGS[@]}"
+
+# ---------------- pagination: B's bind on page 2 (the script follows next_cursor)
+put_snap ta "$AROW"; put_snap tb "$BROW_OPEN"
+jq -nc '{events:[{kind:"co_super_assignment_bound",command_id:"engineering-bind:asg-a",created_at:"2026-10-22T04:00:05Z",reducer_seq:5}],next_cursor:5,watermark:9}' >"$FX/ta.events.json"
+jq -nc '{events:[{kind:"co_super_assignment_opened",command_id:"engineering-open:asg-b",created_at:"2026-10-22T04:01:00Z",reducer_seq:5}],next_cursor:5,watermark:9}' >"$FX/tb.events.json"
+jq -nc '{events:[{kind:"co_super_assignment_bound",command_id:"engineering-bind:asg-b",created_at:"2026-10-22T05:00:05Z",reducer_seq:9}],next_cursor:9,watermark:9}' >"$FX/tb.events.after-5.json"
+obs "$NOLOG"
+run "step2 FAIL: B's bound event is on page 2" 2 fail "${ARGS[@]}"
+run "step4 FAIL: B's bound event is on page 2" 4 fail "${ARGS[@]}"
+put_snap tb "$BCAN"
+run "step7 FAIL: B's bound event is on page 2" 7 fail "${ARGS[@]}"
+put_snap ta "$ATERM"
+run "step5 PASS: B's bind on page 2 follows A's terminal_at" 5 pass "${ARGS[@]}"
+touch "$FX/tb.infinite"; rm -f "$FX/tb.events.after-5.json"
+put_snap tb "$BROW_OPEN"; put_snap ta "$AROW"
+run "step2 FAIL: an event stream over the page cap is a loud failure" 2 fail "${ARGS[@]}"
+rm -f "$FX/tb.infinite" "$FX"/*.events.after-*.json
+
+# ---------------- nine-digit fractional timestamps (the real tape's shape)
+put_snap ta "$(row asg-a x completed revoked "" 2026-10-21T10:23:37.123456789Z)"; put_events ta "$BOUND:asg-a:2026-10-21T10:20:00.000000001Z"
+put_snap tb "$(row asg-b x bound active "" "")"
+put_events tb "$BOUND:asg-b:2026-10-21T10:23:41.987654321Z"
+run "step5 PASS: nine-digit fractions, B bound 4.86s after A's terminal_at" 5 pass "${ARGS[@]}"
+put_events tb "$BOUND:asg-b:2026-10-21T10:24:08.700000000Z"
+run "step5 FAIL: nine-digit fractions, B bound 31.58s after" 5 fail "${ARGS[@]}"
+put_events tb "$BOUND:asg-b:2026-10-21T10:23:37.123455789Z"
+run "step5 FAIL: nine-digit fractions, B bound 1µs BEFORE A's terminal_at" 5 fail "${ARGS[@]}"
 
 # ---------------- the join must not pass by matching nothing
 put_snap tb "$BROW_OPEN"; put_events tb "$A_OPEN:asg-b:2026-10-22T04:01:00Z"
