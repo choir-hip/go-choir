@@ -58,6 +58,19 @@ observed; one finished run's events identical before and after; the
 and polling; a test-computer restart, and the owner restore of a
 pre-deploy-1 checkpoint on it). Section 6.3 is the proof of deploy 2.
 
+Round 1e (DeepSeek, review bunch 99, confirmed; Medium; open): proof step
+6 `--phase recovered` cannot run. Its `manual` message
+(`scripts/proofs/fp1-event-table-deploy1.sh:148`) is double-quoted, so the
+shell runs `$(mktemp -d)` while building the message and then expands
+`$T`, which is unbound; under `set -u` the step exits 1 before it prints
+the recovery sequence or reads the replay report. Observed on `a6fa313bb`
+in a dry run with fake ssh and curl: `line 148: T: unbound variable`,
+rc 1. No other double-quoted string in the script carries a `$(` or a `$`
+meant as literal text; the other expansions (`$T_COMPUTER`, `$body`,
+`$report`) are meant. The rollback recipe itself (the sequence below and
+`fc-deploy1-rollback.sh`) is unaffected: only the proof's printed copy of
+it is broken.
+
 **What a rollback below deploy 1 means now** (corrected in review round
 1b; all three reviewers). A rollback below deploy 1 is **runtime-safe, not
 rollback-safe**. Round 1's claim that "an updater-applied rollback below
