@@ -415,3 +415,99 @@ Still open: F1 (bounded `/health` reads, lane/fp1-health-bounded, in review
 edits for its callers' attempt budgets). F2 is the online GC's 11 to 30 s
 store stall every 10 to 17 minutes; telemetry batching's staging gate is
 the first lever against it.
+
+## F1: `/health` never waits unbounded on the store (lane/fp1-health-bounded)
+
+Orange: the guest health contract. Read from the code at a55660c0d.
+`HandleHealth` (`internal/agentcore/api.go:636`) makes three store reads
+with no deadline: `CountPendingAgentMutations`, `selfdev ListByStates` and
+`Store.Head` inside `EffectiveRelease`. All three use the store's write pool
+`s.db`, which has one connection (`configureEmbeddedDoltDB`). They wait for
+it behind any holder: an `ogStore` call holding the engine mutex, a
+projector batch, a Dolt commit, or the online GC. It also calls
+`WriteHeader` before the reads. So a held `s.db` leaves the caller with no
+status line until the holder lets go: a blind 000.
+
+### Shape
+
+The three reads run concurrently under one 1 s deadline, before
+`WriteHeader`. If all three answer in time, the response is the same 200
+body as today, byte for byte. If one misses, `/health` answers at once with
+503 and `status` "store_stalled". The body names the reads that missed, the
+budget, and the engine mutex's live holder, its age and its waiters
+(`Store.EngineMutexLive`, the same block the observability route reads).
+`desk_pending_mutations` and `selfdev_active_operations` are left out of
+the 503 body: they are unknown, and a 0 would read as "idle". The layering
+boot guard's status still wins (it is 503 already). The budget is shared,
+not 1 s per read in sequence, because the proxy's runtime probe gives up at
+2 s (`internal/proxy/compute_status.go:666`).
+
+### Ways it could fail (written before the code)
+
+1. **A late result races the response.** The read helpers swallow errors
+   and return 0. A read cut off by the deadline returns 0 quickly, and a
+   `select` that takes that value would answer 200 with
+   `desk_pending_mutations: 0` while the store is stalled. A value is kept
+   only if the read finished before its context ended; anything else counts
+   as a miss. A read that finishes right at the deadline is a miss too, so
+   the error is toward 503.
+2. **The bounded read leaks a goroutine or a connection.** The abandoned
+   read's context is cancelled when the handler returns, so a read still
+   waiting for the `s.db` connection gives up at once (database/sql honours
+   the context while it waits). A read already inside a Dolt statement runs
+   until the statement ends, then writes to its own buffered channel and
+   exits. It never touches the response. Each poll spawns at most three
+   such goroutines, and they end at the deadline, so a minutes-long stall
+   polled every few seconds does not pile them up. No connection is held
+   past the statement: `QueryRowContext(...).Scan` and `rows.Close` release
+   it.
+3. **WriteHeader already sent.** Today 200 goes out before the reads, so a
+   503 is impossible without moving the reads first. The fix moves them.
+4. **A slow but healthy store flaps to 503.** A read that legitimately takes
+   over 1 s (CI notes a migration step that holds the store about 3 s,
+   `.github/workflows/ci.yml:1157`) now gives a 503 where today it gave a
+   late 200. Every caller below retries, and a 503 is treated as busy or
+   not-yet-healthy, so this delays a deploy wait by one poll; it does not
+   change a lifecycle decision. Flapping between 200 and 503 under load is
+   visible, by design: the paper's readers wait on the same connection.
+5. **A body a caller parses as a different 503.** `vmmanager` reads 503
+   `status` "refused" (boot refusal) and "replaying" (replay progress). The
+   new status is "store_stalled", which is neither, so it never fails a boot
+   or extends a replay window.
+6. **A faster failure uses up an attempt-counted retry budget sooner.**
+   Callers that count attempts, not wall time, burn through them faster on a
+   fast 503 than on a 5 s timeout (see the table). This matters for the
+   updater's post-apply probe and the CI deploy waits.
+7. **The engine holder is not the stall.** `s.db` can be held by something
+   outside the engine mutex (the online GC, a raw query), and then
+   `engine_mutex_live` names no holder, or a victim. The body says which
+   reads missed. It does not claim to know the holder.
+
+### Callers: a fast 503 compared with a timeout
+
+| Caller | Fast 503 "store_stalled" | Timeout (today) |
+|---|---|---|
+| vmctl busy probe `httpGuestBusy` (`internal/vmctl/ownership.go:3452`, 4 s) | non-200 → busy | error → busy. Same decision, answered in about 1 s instead of 4 s. |
+| vmctl deploy-refresh sweep `httpGuestServedCommit` (`internal/vmctl/deploy_refresh_retry.go:319`, 10 s) | non-200 → "" (never matches a target) | error → "". Same. |
+| vmmanager `waitForGuestReady` (`internal/vmmanager/manager.go:2706`, 3 s per probe) | not healthy, not refused, not replaying → keeps polling until `BootReadyTimeout`. Marks `first_http_response` earlier (timeline detail only). | error → keeps polling until `BootReadyTimeout`. Same deadline. |
+| vmmanager `CheckHealth` and adopt (`manager.go:1335`, `:1505`) | unhealthy (the adopt path adopts it unready) | unhealthy. Same. |
+| vmctl wedge detector (`internal/vmctl/wedge.go`) | TCP connect only, never `/health` → not wedged | not wedged. Same. |
+| proxy `/api/compute` runtime status `probeRuntimeHealthForTarget` (`internal/proxy/compute_status.go:654`, 2 s) | `reachable: false`, `status: "store_stalled"` | `reachable: false`, "runtime health unavailable". Same reachability, now with a cause. |
+| proxy `/health` upstream `probeUpstreamHealth` (`internal/proxy/handlers.go:1647`, 2 s; static routing only) | unhealthy → "degraded", and the upstream build is shown | unhealthy → "degraded", no build. |
+| choir-updater post-apply probe `HTTPHealthProber` (`internal/updater/runtime.go:124`, 5 s client, 30 attempts 1 s apart, 15 min cap) | non-200 → uses one attempt, about 2 s each | error → uses one attempt, about 6 s each. **Same verdict, budget about 60 s instead of about 180 s of stall.** |
+| CI deploy identity wait (`.github/workflows/ci.yml:1156`, `curl -f --max-time 5`, 120 tries 1 s apart) | `curl -f` fails → empty commit → retry, about 2 s per try | timeout → retry, about 6 s per try. **Same verdict, budget about 4 min instead of about 12 min.** |
+| CI refresh shortcut (`ci.yml:1625`) and rescue loop (`ci.yml:1711`) | empty → posts to vmctl, or retries | the same. The rescue loop is attempt-counted as above. |
+| CI host-service probe (`ci.yml:1825`) | host services only, not the guest | — |
+| Frontend Settings (`frontend/src/lib/SettingsApp.svelte:231`) | reads the proxy's own `/health`, not the guest's | — |
+| `scripts/paper_boot_window_probe.py` (FP0) | records the status and the holder | records a timeout |
+
+No caller turns a fast 503 into a different lifecycle decision than a
+timeout. Two attempt-counted waits (the updater's post-apply probe and CI's
+deploy waits) have about a third of today's wall-time budget during a
+stall. During a real stall today, the paper's 4 to 6 minute window would
+already exceed the updater's 180 s, so this is no regression for that
+window. But a stall of 1 to 3 minutes would now fail an apply's health
+probe where it passed before. This is a residual, recorded here and not
+fixed in this lane: changing the updater's or CI's retry budget to wall
+time is a separate change to a protected surface (the updater's apply
+verdict; deployment routing).
