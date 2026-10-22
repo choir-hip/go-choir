@@ -79,3 +79,4 @@ specs/states/
 # Operator-local tools (OVH API, token install); kept off the public repo.
 /ops-local/
 __pycache__/
+*.pyc
