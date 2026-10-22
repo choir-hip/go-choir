@@ -38,7 +38,7 @@ import urllib.error
 import urllib.request
 
 try:
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
     from choir_internal import internal_headers
 except (ImportError, NameError):  # piped alone to the host: the marker only
     def internal_headers(url):

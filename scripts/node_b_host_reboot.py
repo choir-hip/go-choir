@@ -79,8 +79,9 @@ AUTO_WARM_CLASSES = {"premium_always_on", "critical_protected", "public_platform
 # modes "facts" and "computers" only read. The modes "mark" and "unmark" write
 # or clear guest markers, and the caller sends them only under --execute.
 # scripts/choir_internal.py goes first: internal_headers(url) attaches the
-# host-internal token only for a loopback internal port, never a guest.
-with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "choir_internal.py")) as _f:
+# host-internal token only for a loopback internal port, never a guest, and
+# internal_urlopen sends it with no proxy and follows no redirect.
+with open(Path(__file__).resolve().parent / "choir_internal.py") as _f:
     CHOIR_INTERNAL = _f.read()
 REMOTE = CHOIR_INTERNAL + r'''
 import json, os, re, subprocess, sys, urllib.request, urllib.error
@@ -109,7 +110,7 @@ def http(method, url, headers=None, body=None, timeout=20):
     if data is not None:
         req.add_header("Content-Type", "application/json")
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
+        with internal_urlopen(req, timeout=timeout) as r:
             return r.status, r.read(1 << 20).decode("utf-8", "replace")
     except urllib.error.HTTPError as e:
         return e.code, e.read(1 << 16).decode("utf-8", "replace")
