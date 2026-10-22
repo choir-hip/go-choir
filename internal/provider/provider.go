@@ -431,7 +431,7 @@ func (p *BedrockProvider) Stream(ctx context.Context, req LLMRequest, onChunk fu
 // because streaming uses binary EventStream, not SSE.
 func (p *BedrockProvider) Call(ctx context.Context, req LLMRequest) (*LLMResponse, error) {
 	modelID := effectiveModel(req.Model, p.modelID)
-	req, mediaErr := prepareMediaRequest("bedrock", modelID, req)
+	req, mediaErr := prepareMediaRequest(ctx, "bedrock", modelID, req)
 	if mediaErr != nil {
 		return nil, fmt.Errorf("bedrock: %w", mediaErr)
 	}
@@ -551,7 +551,7 @@ func (p *ZAIProvider) IsReal() bool { return true }
 func (p *ZAIProvider) Call(ctx context.Context, req LLMRequest) (*LLMResponse, error) {
 	endpoint := p.baseURL + "/v1/messages"
 	modelID := effectiveModel(req.Model, p.modelID)
-	req, mediaErr := prepareMediaRequest("zai", modelID, req)
+	req, mediaErr := prepareMediaRequest(ctx, "zai", modelID, req)
 	if mediaErr != nil {
 		return nil, fmt.Errorf("zai: %w", mediaErr)
 	}
@@ -586,7 +586,7 @@ func (p *ZAIProvider) Call(ctx context.Context, req LLMRequest) (*LLMResponse, e
 func (p *ZAIProvider) Stream(ctx context.Context, req LLMRequest, onChunk func(StreamChunk)) (*LLMResponse, error) {
 	endpoint := p.baseURL + "/v1/messages"
 	modelID := effectiveModel(req.Model, p.modelID)
-	req, mediaErr := prepareMediaRequest("zai", modelID, req)
+	req, mediaErr := prepareMediaRequest(ctx, "zai", modelID, req)
 	if mediaErr != nil {
 		return nil, fmt.Errorf("zai: %w", mediaErr)
 	}
@@ -710,7 +710,7 @@ func (p *FireworksProvider) IsReal() bool { return true }
 func (p *FireworksProvider) Call(ctx context.Context, req LLMRequest) (*LLMResponse, error) {
 	endpoint := p.fireworksChatCompletionsEndpoint()
 	modelID := effectiveModel(req.Model, p.modelID)
-	req, mediaErr := prepareMediaRequest("fireworks", modelID, req)
+	req, mediaErr := prepareMediaRequest(ctx, "fireworks", modelID, req)
 	if mediaErr != nil {
 		return nil, fmt.Errorf("fireworks: %w", mediaErr)
 	}
@@ -740,7 +740,7 @@ func (p *FireworksProvider) Call(ctx context.Context, req LLMRequest) (*LLMRespo
 func (p *FireworksProvider) Stream(ctx context.Context, req LLMRequest, onChunk func(StreamChunk)) (*LLMResponse, error) {
 	endpoint := p.fireworksChatCompletionsEndpoint()
 	modelID := effectiveModel(req.Model, p.modelID)
-	req, mediaErr := prepareMediaRequest("fireworks", modelID, req)
+	req, mediaErr := prepareMediaRequest(ctx, "fireworks", modelID, req)
 	if mediaErr != nil {
 		return nil, fmt.Errorf("fireworks: %w", mediaErr)
 	}
@@ -879,7 +879,7 @@ func (p *ChatGPTProvider) IsReal() bool { return true }
 func (p *ChatGPTProvider) Call(ctx context.Context, req LLMRequest) (*LLMResponse, error) {
 	req.Stream = true
 	modelID := effectiveModel(req.Model, p.modelID)
-	req, mediaErr := prepareMediaRequest("chatgpt", modelID, req)
+	req, mediaErr := prepareMediaRequest(ctx, "chatgpt", modelID, req)
 	if mediaErr != nil {
 		return nil, fmt.Errorf("chatgpt: %w", mediaErr)
 	}
@@ -898,7 +898,7 @@ func (p *ChatGPTProvider) Call(ctx context.Context, req LLMRequest) (*LLMRespons
 func (p *ChatGPTProvider) Stream(ctx context.Context, req LLMRequest, onChunk func(StreamChunk)) (*LLMResponse, error) {
 	req.Stream = true
 	modelID := effectiveModel(req.Model, p.modelID)
-	req, mediaErr := prepareMediaRequest("chatgpt", modelID, req)
+	req, mediaErr := prepareMediaRequest(ctx, "chatgpt", modelID, req)
 	if mediaErr != nil {
 		return nil, fmt.Errorf("chatgpt: %w", mediaErr)
 	}
@@ -1137,7 +1137,7 @@ func (p *OpenCodeProvider) call(ctx context.Context, req LLMRequest, onChunk fun
 	if err != nil {
 		return nil, err
 	}
-	req, mediaErr := prepareMediaRequest(p.providerName, modelID, req)
+	req, mediaErr := prepareMediaRequest(ctx, p.providerName, modelID, req)
 	if mediaErr != nil {
 		return nil, fmt.Errorf("%s: %w", p.providerName, mediaErr)
 	}
