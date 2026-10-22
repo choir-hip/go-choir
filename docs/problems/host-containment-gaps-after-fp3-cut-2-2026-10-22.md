@@ -157,3 +157,109 @@ off on Node B, and `/var/lib/go-choir` is 0750 root, so these units could
 not use what the verifier saw (it stats as root inside the namespace). The
 system bus is still reachable to them. Hiding stays the floor for every
 host unit, but problem 2 is a defense-in-depth gap, not an open path.
+
+## Fix (lane fp3-containment-gaps, 2026-10-22)
+
+Commits on lane/fp3-containment-gaps (base 273d139c9): 49b2f1790 (the
+addendum above), 545d573fd (tests, yellow), 844e0026b (fix, red), and the
+docs commit that adds this section.
+
+**Problem 1: the directory, not an in-place rewrite.** deploy.env,
+corpus-dsn.env, corpusd-retrieval.env and sandbox-gateway-token.env move
+into `/var/lib/go-choir/unit-env` (0700 root). Every unit hides the
+directory (`hostSecretPaths.unitEnv`), not each file. Why the directory:
+
+- Writing deploy.env in place would fix only the one CI writer. Any other
+  rename (sed -i, an editor, a future script) still reappears in running
+  units, and every future writer would have to remember to keep the inode.
+- A file absent when a unit starts is never hidden: "-" skips it. A later
+  create is visible to the unit, and a unit that can write
+  `/var/lib/go-choir` can plant it (problem 4). Inside a directory that
+  always exists and is always hidden, neither can happen. The unit's view
+  of the directory is systemd's read-only empty node, and the mountpoint
+  cannot be renamed from inside.
+- An in-place rewrite can be read half-written by a unit that starts during
+  it (systemd reads an EnvironmentFile at start).
+- `secrets/` already works this way.
+
+The deploy's scrub is deleted, not moved. It stripped
+CHOIR_DEPLOYED_AT/COMMIT, which nothing has written since the receipt
+(f2d1d330c, 2026-07-10), and buildinfo ignores them. Its only effect was
+a new inode after every deploy's restarts. The deploy contract test now
+rejects any `deploy.env` in the workflow and the Node B programs.
+
+The move is an activation snippet (`go-choir-unit-env`). Activation runs at
+boot before units start and in a switch before units restart, so every
+unit's new namespace is made with the directory present. The first run
+renames the files in, which keeps inode and contents on one filesystem,
+and writes a marker. Later runs never adopt a file found at an old path:
+a unit that can write `/var/lib/go-choir` could have planted it. Each old
+path keeps a link to `unit-env/<name>`. A rollback past the fix reads
+through it, because systemd follows the link for EnvironmentFile= and for
+InaccessiblePaths=. An old runbook's `>` writes through it, but `rm` of an
+old path removes only the link. A regular file at an old path is left in
+place (no unit reads it) and fails the verifier. A link or file planted at
+the directory's own path is moved aside, never followed.
+
+**Problems 2 and 5.** caddy, qdrant, unbound, go-choir-goproxy and
+go-choir-pkgmirror hide the whole set. searx and searx-init hide all of it
+except their own searxng.env, per FP0's ruling; hiding it would gain
+nothing, because the process already holds SEARXNG_SECRET in its
+environment and in /run/searx/settings.yml. None of these units uses D-Bus
+or PID 1's socket:
+
+- caddy reloads through its own admin API;
+- name lookups go through nscd;
+- searx reads its settings from /run/searx.
+
+pkgmirror and unbound join the verifier's units. Nothing in the verifier
+was narrowed.
+
+**Problem 4** is closed by the directory, because corpusd-retrieval.env
+moved into it.
+
+**Problem 3 stays open.** A proposed fix: a gateway-only directory hidden
+from every other unit, with GATEWAY_IDENTITY_STORE_PATH pointing into it,
+and codex-auth.json moved there too. Moving codex-auth.json needs either
+CHATGPT_AUTH_PATH changed in the owner's gateway-provider.env, written in
+place, or a gateway writer that resolves a link before it renames. Then
+the verifier checks both paths in every other unit. FP0's probe above
+comes first.
+
+### Operator paths
+
+- corpus-dsn.env (Store B DSN) is now
+  `/var/lib/go-choir/unit-env/corpus-dsn.env`; the runbook
+  docs/runbooks/platform-dolt-authority-split-2026-09-18.md is updated.
+- The retrieval and opinion kill switch is now
+  `/var/lib/go-choir/unit-env/corpusd-retrieval.env`.
+- The proxy's environment is now `/var/lib/go-choir/unit-env/deploy.env`.
+
+Older notes that say `echo ... > /var/lib/go-choir/corpusd-retrieval.env`
+still work through the link. Turning a switch off must remove the file in
+unit-env.
+
+### Residuals
+
+- Problem 3, above.
+- The other file entries (gateway-provider.env, maild.env, searxng.env,
+  codex-auth.json, gateway-identities.json, the JWT and platform keys) are
+  still hidden one by one. An operator's rename of one exposes it to
+  running units until they restart.
+- The oneshot units without hidden paths: disk-gc, nix-gc,
+  btrfs-headroom, store-compaction, digest, platform-dolt-squash,
+  platform-dolt-history-audit, the two dolt-users units and the three
+  offhost-backup units. Several need what they see (the backup reads every
+  secret; dolt-users reads the Dolt root password; store-compaction runs
+  systemctl).
+- The deploy classifier puts `scripts/off-host-backup.sh` under "unknown
+  deployed path" (host OS, plus guest image and active-computer refresh),
+  although nix/node-b.nix is its only reader. This landing therefore
+  refreshes active computers unless a classifier case is added.
+- CI does not run scripts/test_host_containment_nix.py; nor does it run
+  snapshot-vault-nix-eval-test.sh. It needs nix and evaluates the host
+  closure.
+- The first deploy restarts every unit whose unit file changes, as cut 2's
+  did. At the switch, that is both Dolt servers, caddy, qdrant, searx,
+  unbound, goproxy and pkgmirror; the deploy program restarts the rest.
+  caddy's restart drops open edge connections, and clients reopen them.
