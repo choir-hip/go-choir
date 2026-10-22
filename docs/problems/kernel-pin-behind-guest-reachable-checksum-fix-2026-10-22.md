@@ -78,25 +78,46 @@ against `http://127.0.0.1:8083`):
    `POST /internal/vmctl/hold {"computer_id":"<paper computer id>","reason":"KF canary: guest kernel 6.18.57","held_by":"fp0"}`.
    `GET /internal/vmctl/deploy-refresh` lists it under `skipped`, reason
    `held`.
-2. Push; CI deploys. Idle computers refresh. **Timebox the hold to 30
-   minutes from step 1.** A hold has no TTL. It persists across deploys and
-   vmctl restarts, and while it is set vmctl never recovers or warms the
-   paper (`ownership.go` `MaintenanceHold`, `SetHold`). Watch the paper's
-   `/health` and its paper-healthy signals the whole time. **If the paper's
-   `/health` fails, or the 30 minutes run out, unhold it at once**
-   (`POST /internal/vmctl/unhold`) and do not wait for step 5. vmctl then
-   recovers it, onto the new image: an untested image is better than a
-   paper that is down. Run the unhold from a `trap ... EXIT` (or a
-   `finally`) in the operator shell, so that an aborted session cannot
-   leave the paper held.
+2. Push; CI deploys. Idle computers refresh. A hold has no TTL. It
+   persists across deploys and vmctl restarts, and while it is set vmctl
+   never recovers, warms or refreshes the paper (`ownership.go`
+   `MaintenanceHold`, `SetHold`). Unhold only clears the hold: a running
+   paper stays on the image it booted, and only a stopped or hibernated
+   paper is then booted, onto the current image, by the warmer. So an
+   unhold is safe for a running paper only after the deploy's refresh
+   selection has run (the deploy log lists the paper as skipped, reason
+   `held`); before that, the selection would refresh the unheld paper
+   onto the untested image. Every unhold below sends the body
+   `{"computer_id":"<paper computer id>"}`; an empty body is refused
+   with 400 `invalid request body` and leaves the paper held.
+   Watch the paper's `/health` and its paper-healthy signals the whole
+   time:
+   - If the paper's `/health` fails while the canary has no verdict or
+     has passed, unhold it at once and do not wait for step 5. vmctl
+     recovers it onto the new image: an untested image is better than a
+     paper that is down.
+   - If the paper's `/health` fails after the canary failed, leave it
+     held (step 4): recovery would boot it onto the failed image. Record
+     the outage; the revert's deploy is the fix.
+   - If the canary has no verdict 30 minutes after the deploy finished,
+     record that it did not run in time and unhold (the selection has run
+     by then, so the running paper stays on the old image).
+   In the operator shell, keep two variables, `canary` (`pending`,
+   `passed`, `failed`) and `selection_done` (`yes` once the deploy log
+   shows the paper skipped as `held`), and set
+   `trap '[ "$canary" != failed ] && [ "$selection_done" = yes ] && curl ... /internal/vmctl/unhold -d "{\"computer_id\":\"<paper computer id>\"}"' EXIT`,
+   so that an aborted session leaves the paper unheld only when that is
+   safe. Once the canary fails, run `trap - EXIT` before starting the
+   revert.
 3. Canary: mint a test computer (`node scripts/qa_test_computer.mjs --label kf-canary`).
    It cold boots on the new image. If the mint is refused (host memory
-   admission, disk), use an existing `class:test` computer that the
-   deploy refreshed instead (the deploy log's `Refreshed <vm>` line; for
-   example vm-4a9afa23 or vm-c5c801f8). One that was `Deferred` is still
-   on the old image and does not count. If neither exists, unhold the
-   paper (step 2's rule) and record that the canary did not run. Pass
-   when all of these hold:
+   admission, disk), use an existing test computer that the deploy
+   refreshed instead (the deploy log's `Refreshed <vm>` line): the FP0
+   test computers vm-c5c801f8 (computer-71afbf14) or vm-80b173b9
+   (computer-9648031f). Never the owner's computer (vm-4a9afa23) or the
+   paper. One that was `Deferred` is still on the old image and does not
+   count. If neither exists, record that the canary did not run and
+   unhold the paper under step 2's rule. Pass when all of these hold:
    - its console log (`/var/lib/go-choir/vm-state/<vm>/console.log`)
      shows `Linux version 6.18.57`, and its kernel capability receipt
      shows `kernel_release` 6.18.57 with every capability present;
@@ -113,10 +134,10 @@ against `http://127.0.0.1:8083`):
      the `scripts/s3_snapshot_probe.py` pattern). A failure here is
      fail-closed (the refused snapshot cold boots), but it is a reason
      not to give the paper the image.
-4. If the canary fails, leave the paper held and running on the old
-   image, revert the KF commits, and redeploy. Unhold once the revert is
-   deployed, or earlier under step 2's rule (health fails or 30 minutes
-   pass), whichever comes first.
+4. If the canary fails, set `canary=failed` and run `trap - EXIT`. Leave
+   the paper held and running on the old image, revert the KF commits,
+   and redeploy. Unhold once the revert is deployed (the paper then stays
+   on, or recovers onto, the reverted image).
 5. If the canary passes: `POST /internal/vmctl/unhold {"computer_id":"<paper computer id>"}`,
    then `POST /internal/vmctl/deploy-refresh {"user_id":"<paper user>","desktop_id":"<paper desktop>","target":"<deployed autoputer runtime commit>"}`.
    The target is the commit the deploy's refresh log expected; a

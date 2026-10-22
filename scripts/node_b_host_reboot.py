@@ -390,7 +390,7 @@ def phase_pre(args, receipt):
             if booted and installed and booted < installed:
                 c.add("computer %s on the current guest image" % r["vm_id"], False,
                       "booted %s, before the guest image was installed: deploy refresh deferred it; vmctl's sweep "
-                      "retries it at an idle moment (a held computer only at the next deploy); this reboot moves it "
+                      "retries it at an idle moment (a held computer only after unhold, at the next deploy or an explicit deploy-refresh); this reboot moves it "
                       "to the new guest kernel" % r.get("booted_at"), False)
         crit = [r for r in comp["computers"] if r.get("warmness_class") == "critical_protected"]
         for r in crit:
