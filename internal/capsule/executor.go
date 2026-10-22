@@ -567,8 +567,8 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 		// against a second read of the commit.
 		sourceDigest, err = copyImmutableCommitTreeTimed(ctx, e.sourceDir, commit, sourceTarget, source.SubjectDigest, timer)
 	}
-	if err != nil || sourceDigest != source.SubjectDigest {
-		return nil, fmt.Errorf("capsule source changed after durable preflight")
+	if err := spawnSourceRefusal(err, source.SubjectDigest, sourceDigest); err != nil {
+		return nil, err
 	}
 	if err := requireFrozenComputerSurfaceSource(sourceTarget); err != nil {
 		return nil, err
