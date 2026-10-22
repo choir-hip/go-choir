@@ -138,14 +138,14 @@
       # pattern as choirDolt: the base's recipe with a newer version, source
       # hash and vendor hash, applied only while the given nixpkgs is older.
       #
-      # !!! UNEVALUATED: both hashes are lib.fakeHash (written in a lane with
-      # no Nix). The first build fails twice and prints each real hash: fill
-      # `hash` (source), rebuild, fill `cargoHash` (vendored crates). FP0
-      # computes them on the Mac before landing. Do not land fakeHash.
+      # Both hashes were computed on the Mac (2026-10-22): the source by
+      # `nix flake prefetch`, the vendored crates from the hash mismatch of
+      # fetchCargoVendor's fixed-output staging step, which is the same on
+      # every system.
       choirFirecrackerRelease = {
         version = "1.16.2";
-        hash = nixpkgs.lib.fakeHash;
-        cargoHash = nixpkgs.lib.fakeHash;
+        hash = "sha256-BJ1WD6D/tsoBNUpIGjE/w5RgxFKRYkB7HKAi/TGXqbU=";
+        cargoHash = "sha256-xr/DxDNpwfOhI7w+Ms7RXbIEV6cNEE2iedtxxuearEI=";
       };
       mkChoirFirecracker = p:
         if p.lib.versionAtLeast p.firecracker.version choirFirecrackerRelease.version then p.firecracker
