@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 )
 
 // SEC-06 (docs/problems/egress-proxy-tunnel-identity-2026-10-21.md): the
@@ -95,5 +96,53 @@ func TestNodeBNamesTheTunnelEnforceSelector(t *testing.T) {
 		if tok == "*" {
 			t.Fatal(`node-b selects every computer for enforce ("*"); the global flip is the guest image's line`)
 		}
+	}
+}
+
+// The load-bearing link: the boot argument reaches a named computer only
+// because naming it changes the launch-config hash, so a snapshot taken
+// under observe is refused and the computer cold boots into enforce. An
+// empty list (nil or zero-length) and a list naming another computer leave
+// the hash identical. This fails if expectedLaunchConfig stops rebuilding
+// boot args from m.cfg: the observe snapshot would then resume in observe
+// while vmctl's environment says enforce.
+func TestCapsuleTunnelEnforceSelectionRefusesAnObserveSnapshot(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		only []string
+		want string
+	}{
+		{"no selector", nil, ""},
+		{"empty list", []string{}, ""},
+		{"another computer", []string{"computer-other"}, ""},
+		{"this computer id", []string{"computer-s3"}, snapshotReasonLaunchConfig},
+		{"this vm id", []string{"vm-s3"}, snapshotReasonLaunchConfig},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newSnapshotFixture(t)
+			f.serveLaunchAPI(t)
+			if err := f.mgr.HibernateVM(f.vmID); err != nil {
+				t.Fatal(err)
+			}
+			dir := f.mgr.snapshotDir(f.vmID)
+			meta, err := readSnapshotMeta(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			f.mgr.cfg.CapsuleTunnelEnforceOnly = tc.only
+			_, expected := f.mgr.expectedLaunchConfig(meta, f.expect)
+			hash, err := launchConfigHash(expected)
+			if err != nil {
+				t.Fatal(err)
+			}
+			named := strings.Contains(bootArgsOf(t, expected), tunnelEnforceArg)
+			if same := hash == meta.LaunchConfigSHA256; same == (tc.want != "") || named != (tc.want != "") {
+				t.Fatalf("hash unchanged = %t, enforce boot arg = %t; want the hash to move and the arg present only for a named computer", same, named)
+			}
+			v := snapshotValidation{Now: time.Now(), FirecrackerVersion: meta.FirecrackerVersion, HostKernelRelease: meta.HostKernelRelease, Expect: f.expect}
+			if got := f.mgr.validateSnapshot(dir, meta, v); got != tc.want {
+				t.Fatalf("validateSnapshot = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
