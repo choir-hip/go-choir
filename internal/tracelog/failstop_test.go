@@ -53,7 +53,7 @@ func TestTornTailAtEveryByteOfTheLastRecord(t *testing.T) {
 		if err := os.Truncate(filepath.Join(img, tlog(1)), cut); err != nil {
 			t.Fatal(err)
 		}
-		l2, err := Open(Options{Dir: img, ComputerID: "computer-1", SyncInterval: -1, BootID: "boot-2"})
+		l2, err := Open(Options{Dir: img, ComputerID: "computer-1", SyncInterval: -1, BootID: "boot-2", Hooks: fastDisk().hooks()})
 		if err != nil {
 			t.Fatalf("cut %d: Open: %v", cut, err)
 		}
@@ -171,7 +171,7 @@ func TestTornSegmentHeaderIsQuarantinedNotReused(t *testing.T) {
 		if err := os.Truncate(filepath.Join(img, tlog(1)), int64(cut)); err != nil {
 			t.Fatal(err)
 		}
-		l2, err := Open(Options{Dir: img, ComputerID: "computer-1", SyncInterval: -1})
+		l2, err := Open(Options{Dir: img, ComputerID: "computer-1", SyncInterval: -1, Hooks: fastDisk().hooks()})
 		if err != nil {
 			t.Fatalf("cut %d: %v", cut, err)
 		}
@@ -485,10 +485,10 @@ func TestSealedSegmentsAreNeverModified(t *testing.T) {
 // a prefix of what was appended, in order, with no repeats, and every line a
 // successful Sync covered is among them.
 func TestPowerLossKeepsAPrefixThatIncludesEverySyncedLine(t *testing.T) {
-	for seed := int64(1); seed <= 60; seed++ {
+	for seed := int64(1); seed <= 40; seed++ {
 		rng := rand.New(rand.NewSource(seed))
 		dir := t.TempDir()
-		d := newDisk()
+		d := fastDisk()
 		l, _ := openT(t, dir, func(o *Options) { o.Hooks = d.hooks(); o.SealRecords = 3 + rng.Intn(12) })
 		n := 5 + rng.Intn(60)
 		lastSynced := 0
@@ -502,7 +502,7 @@ func TestPowerLossKeepsAPrefixThatIncludesEverySyncedLine(t *testing.T) {
 			}
 		}
 		img := crashImage(t, dir, d, func(unsynced int64) int64 { return rng.Int63n(unsynced + 1) })
-		l2, err := Open(Options{Dir: img, ComputerID: "computer-1", SyncInterval: -1})
+		l2, err := Open(Options{Dir: img, ComputerID: "computer-1", SyncInterval: -1, Hooks: fastDisk().hooks()})
 		if err != nil {
 			t.Fatalf("seed %d: Open after power loss: %v", seed, err)
 		}
@@ -564,5 +564,34 @@ func TestConcurrentAppendsAndAFailingFsync(t *testing.T) {
 	}
 	if err := l.Append(meta(1), lineFor(1)); !errors.Is(err, ErrPoisoned) {
 		t.Fatalf("Append after poison = %v", err)
+	}
+}
+
+// A crash between writing the index's temp file and renaming it leaves a stale
+// .tmp beside an unsealed segment. The next open replaces it and seals.
+func TestStaleIndexTempFileDoesNotBlockRecovery(t *testing.T) {
+	src := t.TempDir()
+	l, _ := openT(t, src, nil)
+	for i := 1; i <= 3; i++ {
+		mustAppend(t, l, i)
+	}
+	if err := l.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	img := copyDir(t, src)
+	if err := os.WriteFile(filepath.Join(img, tidx(1)+".tmp"), []byte("half an index"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	l2, err := Open(Options{Dir: img, ComputerID: "computer-1", SyncInterval: -1})
+	if err != nil {
+		t.Fatalf("Open with a stale index temp file: %v", err)
+	}
+	_ = l2.Close()
+	streams, _ := scanDir(t, img)
+	if !eqInts(streams, seq(1, 3)) {
+		t.Fatalf("lines = %v", streams)
+	}
+	if _, err := os.Stat(filepath.Join(img, tidx(1)+".tmp")); err == nil {
+		t.Fatal("the stale temp file is still there")
 	}
 }

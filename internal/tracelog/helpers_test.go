@@ -46,6 +46,7 @@ type disk struct {
 	failWrite bool
 	shortWr   bool
 	failDir   bool
+	fast      bool // skip the real fsync (the size is still recorded): for loops of many cases
 	synced    map[string]int64
 	syncs     int
 	block     chan struct{} // when non-nil, SyncFile waits for it to close
@@ -83,7 +84,7 @@ func (d *disk) writeAt(f *os.File, b []byte, off int64) (int, error) {
 
 func (d *disk) syncFile(f *os.File) error {
 	d.mu.Lock()
-	failing, lose, block, entered := d.failSync, d.lose, d.block, d.entered
+	failing, lose, block, entered, fast := d.failSync, d.lose, d.block, d.entered, d.fast
 	synced := d.synced[f.Name()]
 	d.mu.Unlock()
 	if entered != nil {
@@ -101,7 +102,10 @@ func (d *disk) syncFile(f *os.File) error {
 		}
 		return syscall.EIO
 	}
-	err := f.Sync()
+	var err error
+	if !fast {
+		err = f.Sync()
+	}
 	if info, serr := f.Stat(); err == nil && serr == nil {
 		d.mu.Lock()
 		d.synced[f.Name()] = info.Size()
@@ -117,6 +121,12 @@ func (d *disk) syncDir(path string) error {
 	d.mu.Unlock()
 	if fail {
 		return syscall.EIO
+	}
+	d.mu.Lock()
+	fast := d.fast
+	d.mu.Unlock()
+	if fast {
+		return nil
 	}
 	dir, err := os.Open(path)
 	if err != nil {
@@ -329,3 +339,11 @@ func mustRead(t *testing.T, p string) []byte {
 
 func tlog(n uint64) string { return fmt.Sprintf("seg-%08d.tlog", n) }
 func tidx(n uint64) string { return fmt.Sprintf("seg-%08d.tidx", n) }
+
+// fastDisk is a disk whose fsyncs are no-ops, for tests that open and reopen
+// a log hundreds of times. It still records synced sizes.
+func fastDisk() *disk {
+	d := newDisk()
+	d.fast = true
+	return d
+}
