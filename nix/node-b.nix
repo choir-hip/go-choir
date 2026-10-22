@@ -2285,11 +2285,13 @@ in
       #   + 200 MB RGBA copy + its 20 MiB input, decoded from base64 inside
       #   the slot, about 620 MB, so 3 x 620 MB = 1.73 GiB;
       #   downscaled output, at most 192 MiB of base64 held by all calls
-      #   (provider.MaxImageOutputBytes, 96 MiB per computer), three copies
+      #   (provider.MaxImageOutputBytes; one computer holds at most
+      #   max(96 MiB, its one call's 133.3 MiB)), three copies
       #   a byte: the string, the upstream body, the encoder's growth by
       #   doubling: 0.56 GiB;
       #   the runtime and everything else, about 0.5 GiB;
-      # about 5.80 GiB, under GOMEMLIMIT 6GiB and 1.65 GiB under MemoryMax.
+      # about 5.80 GiB: 0.2 GiB under GOMEMLIMIT 6GiB and 2.20 GiB under
+      # MemoryMax (systemd reads 8G as 8 GiB).
       # Four decode slots left no room for the output (6.38 GiB). Without
       # the decode bound, 24 calls (scheduler on) or 60 (off) decoding at once were
       # 7 to 18 GB. MemoryMax without MemoryHigh, as the squash unit: throttling
