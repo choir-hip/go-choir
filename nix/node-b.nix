@@ -513,6 +513,10 @@ let
   unitEnvDir = "/var/lib/go-choir/unit-env";
   unitEnvNames = [ "deploy.env" "corpus-dsn.env" "corpusd-retrieval.env" "sandbox-gateway-token.env" ];
   unitEnvFile = name: "-${unitEnvDir}/${name}";
+  # Written by the activation snippet once the first import has moved every
+  # file in. The units that read an env file from unitEnvDir assert it, so a
+  # partial import (an IO failure after some moves) never starts them.
+  unitEnvImported = "${unitEnvDir}/.imported";
   # Host secrets a unit does not read stay out of its mount view
   # (InaccessiblePaths; "-" tolerates an absent file). Each unit removes
   # what it needs. EnvironmentFile= and LoadCredential= are read by systemd
@@ -534,8 +538,11 @@ let
     # Env files read only through EnvironmentFile= (systemd reads them before
     # the namespace exists), hidden as one directory (unitEnvDir),
     # so a unit that can write /var/lib/go-choir can neither read them nor
-    # write another unit's environment for its next start.
-    unitEnv = "-${unitEnvDir}";
+    # write another unit's environment for its next start. No "-": a unit
+    # whose directory is missing refuses to start (226/NAMESPACE) instead of
+    # running with it unmasked once it appears. The activation makes it
+    # before any unit starts (boot) or restarts (switch), and tmpfiles too.
+    unitEnv = unitEnvDir;
     # PID 1's private socket and the system bus: a root unit that can reach
     # either can ask systemd to run a command outside its own sandbox. Only
     # units that run systemctl keep them (vmctl's store compaction, the Dolt
@@ -2373,8 +2380,13 @@ in
   # (docs/problems/host-containment-gaps-after-fp3-cut-2-2026-10-22.md, round 2).
   # Between activations, a regular file put at an old path is readable by
   # every root unit until the next activation quarantines it; the verifier
-  # flags it on any run. Remove this block and the links once no rollback
-  # can reach a commit from before the move.
+  # flags it on any run. The marker unit-env/.imported is written only after
+  # every file of the first import has moved; until then (an IO failure part
+  # way) the env readers' AssertPathExists keeps them down, loudly, and the
+  # next activation (a boot, or the deploy's switch retry) finishes the
+  # import. Never remove the marker except as the rollback text says. Remove
+  # this block and the links once no rollback can reach a commit from before
+  # the move.
   system.activationScripts.go-choir-unit-env = ''
     (
       set -eu
@@ -2469,6 +2481,13 @@ in
       if [ "$fail" != 0 ]; then exit 1; fi
     )
   '';
+
+  # The units that read an env file from unitEnvDir start only after the
+  # first import has completed (round 2b, DS2): an assertion failure is
+  # loud (the start job fails), and the deploy's restart of them fails too.
+  systemd.services.go-choir-proxy.unitConfig.AssertPathExists = unitEnvImported;
+  systemd.services.go-choir-corpusd.unitConfig.AssertPathExists = unitEnvImported;
+  systemd.services.go-choir-checkpointd.unitConfig.AssertPathExists = unitEnvImported;
 
   # Go module proxy for engineering capsules
   # (docs/reports/capsule-go-module-proxy-design-2026-10-14.md). Capsules
