@@ -429,24 +429,31 @@ async function trajectoryRuns(c, traj, sinceISO) {
 
 // Run events are served by GET /api/runs/{id}/events once Cut 0's read route
 // lands; until then the tracer falls back to run state alone.
+//
+// A cell in flight is a tool.invoked without its tool.result. tool.invoked is
+// a bus-only line since journal cut R3, so a new build's tape has no signal
+// for it: the answer is "not served" (the caller then uses its run-age
+// fallback) unless the run's tape holds an invoked row, which only an older
+// build wrote.
 async function cellInFlight(c, rid) {
   let after = 0;
   let open = 0;
+  let sawInvoked = false;
   for (let page = 0; page < 20; page++) {
     const res = await c.api(`/api/runs/${encodeURIComponent(rid)}/events?after=${after}&limit=1000`);
-    if (res.status !== 200 || !Array.isArray(res.body?.events)) return page === 0 ? { served: false, inFlight: null } : { served: true, inFlight: open > 0 };
+    if (res.status !== 200 || !Array.isArray(res.body?.events)) return page === 0 ? { served: false, inFlight: null } : { served: sawInvoked, inFlight: sawInvoked ? open > 0 : null };
     for (const e of res.body.events) {
       let payload = e.payload;
       if (typeof payload === 'string') { try { payload = JSON.parse(payload); } catch { payload = {}; } }
       if (payload?.tool !== 'desk_go_eval') continue;
-      if (e.kind === 'tool.invoked') open++;
+      if (e.kind === 'tool.invoked') { open++; sawInvoked = true; }
       if (e.kind === 'tool.result') open = Math.max(0, open - 1);
     }
     const next = Number(res.body.next_after || 0);
     if (res.body.events.length === 0 || !(next > after)) break;
     after = next;
   }
-  return { served: true, inFlight: open > 0 };
+  return { served: sawInvoked, inFlight: sawInvoked ? open > 0 : null };
 }
 
 // All events of one run, paged; null when the route does not answer.

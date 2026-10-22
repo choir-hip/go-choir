@@ -61,7 +61,8 @@ export const isGoBuildOfAutoputer = (job) => /\bgo\s+build\b/.test(argvText(job)
 export const isGoTest = (job) => /\bgo\s+test\b/.test(argvText(job));
 
 // goTestCells returns the passing go test check cells of one engineering
-// inbox, from its run events: a capsule_go_eval cell whose source runs go
+// inbox, from its run events (a result carries the cell source since journal
+// cut R3; older tapes pair it with the tool.invoked row): a capsule_go_eval cell whose source runs go
 // test through choir.Exec and panics when it fails, and whose result exited
 // 0 with a capsule-go-eval receipt. The engineering prompt and Freeze admit
 // such a cell as test evidence beside a test job.
@@ -86,7 +87,12 @@ export function goTestCells(events, inbox) {
       sources.set(p.call_id, String(p.arguments?.source || ''));
       continue;
     }
-    if (e.kind !== 'tool.result' || !isGoTestCellSource(sources.get(p.call_id) || '')) continue;
+    if (e.kind !== 'tool.result') continue;
+    // tool.invoked is a bus-only line since journal cut R3: a new tape's
+    // result carries the arguments itself. An old tape's result is matched
+    // to its invoked row by call_id.
+    const source = p.arguments ? String(p.arguments.source || '') : sources.get(p.call_id) || '';
+    if (!isGoTestCellSource(source)) continue;
     const result = parsePayload(p.output);
     const receipt = String(result.receipt_ref || '');
     if (p.is_error || result.error || result.exit_code !== 0 || !receipt.startsWith('capsule-go-eval:sha256:')) continue;

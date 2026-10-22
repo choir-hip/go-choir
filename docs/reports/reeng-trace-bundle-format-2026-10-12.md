@@ -135,8 +135,12 @@ from a cell:
 }
 ```
 
-Cell source and output stay in the existing `tool.invoked` / `tool.result`
-rows (`tool = desk_go_eval`).
+Cell source and output stay in the existing `tool.result` row (`tool =
+desk_go_eval`). Since journal cut R3 (2026-10-22) `tool.invoked` is a live-bus
+line and is not on the tape: the `tool.result` payload carries the call's
+`arguments` (the cell `source` is `arguments.source`), `started_at` and
+`duration_ms`. Tapes written before the cut hold a `tool.invoked` row with the
+arguments and a result without them; readers accept both.
 
 ## Drill block (written by the tracer)
 
