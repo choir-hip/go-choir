@@ -32,6 +32,10 @@
 #      find cannot enter, or a device node it did not read makes the scan
 #      fail (exit 1, "read errors: N"), never "hit: 0" with exit 0. A socket,
 #      fifo or symlink holds no bytes of its own: it is counted as skipped.
+#  H16 (bunch 31, low) down logs success although the backing file could not
+#      be removed: never; it exits 1 and names the file.
+#  H17 (bunch 31, low) the script runs under set -euo pipefail, so an
+#      unguarded failing step stops it instead of being ignored.
 #
 # Run: bash scripts/snapshot-vault-test.sh
 set -u
@@ -228,6 +232,20 @@ check "H10 down with a busy vault closes nothing and exits 1" "$([ "$RC" = 1 ] &
 rm -f "$BOX/state/busy"
 run downbusy down
 check "H11 down on a free vault removes mapping, loop device and file" "$([ "$RC" = 0 ] && nothing_created; echo $?)"
+
+# H16: a backing file that cannot be removed fails down. The box directory
+# is made read-only for the run (an ordinary user only: root ignores it).
+if [ "$(id -u)" != 0 ]; then
+  make_box downrm
+  run downrm up
+  chmod 555 "$BOX"
+  run downrm down
+  chmod 755 "$BOX"
+  check "H16 down that cannot remove the backing file exits 1" "$([ "$RC" = 1 ] && [ -e "$BOX/vault.img" ] && printf '%s' "$OUT" | grep -q 'vault.img' && ! printf '%s' "$OUT" | grep -q 'down: the vault key is gone'; echo $?)"
+fi
+
+# H17: strict mode.
+check "H17 the script sets -euo pipefail" "$(grep -qx 'set -euo pipefail' "$SCRIPT"; echo $?)"
 
 # H14: scan
 make_box scan

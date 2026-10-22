@@ -10,6 +10,59 @@ import (
 	"testing"
 )
 
+// Repair round 2 (bunch 31 review), the low findings on the vault:
+//
+// L1: the probe's claim "a mount point with a root-only mount root" was not
+// checked: mountinfo field 4 (the root of the mount within its file system)
+// was ignored, so a bind mount of a subdirectory passed. A mount whose root
+// is not "/" is refused.
+//
+// L5: capture selection read the running config's computer id; with that id
+// empty and VM_SNAPSHOT_VAULT_ONLY naming computers, the capture was not
+// selected and landed in the state directory in plaintext. A computer
+// without an id is refused when the list does not name its VM id.
+
+func TestVaultProbeRefusesAMountWhoseRootIsNotTheFileSystemRoot(t *testing.T) {
+	f := newVaultProbeFixture(t, "vault", "CRYPT-PLAIN-choir-snapshot-vault")
+	f.appendMountinfo(t, fmt.Sprintf("77 22 254:3 /sub %s rw,relatime shared:12 - ext4 /dev/mapper/choir-snapshot-vault rw", escapeMountinfo(f.dir)))
+	if err := probeVaultAt(f.dir, false, f.env); err == nil {
+		t.Fatal("a bind mount of a subdirectory of the vault device was accepted")
+	}
+}
+
+func TestVaultCaptureRefusesAComputerWithoutAnIDWhenTheListNamesComputers(t *testing.T) {
+	f := newVaultFixture(t)
+	f.mgr.cfg.SnapshotVaultOnly = []string{"computer-s3"}
+	f.inst.Config.ComputerID = ""
+	if err := f.mgr.HibernateVM(f.vmID); err != nil {
+		t.Fatal(err)
+	}
+	if exists(f.vaultSnap()) {
+		t.Fatal("a computer without an id was captured into the vault")
+	}
+	assertNoPlaintextSnapshot(t, f.snapshotFixture)
+	if f.guest.prepares != 0 {
+		t.Fatal("the guest was fenced although the capture could not be placed")
+	}
+	tl := readHibernateTimeline(t, f.mgr, f.vmID)
+	if tl.Snapshot == nil || tl.Snapshot.Outcome != "kill" || tl.Snapshot.Reason != snapshotReasonVaultUnknownComputer {
+		t.Fatalf("timeline = %+v", tl.Snapshot)
+	}
+}
+
+func TestVaultCaptureOfAComputerWithoutAnIDNamedByVMIDStillUsesTheVault(t *testing.T) {
+	f := newVaultFixture(t)
+	f.mgr.cfg.SnapshotVaultOnly = []string{f.vmID}
+	f.inst.Config.ComputerID = ""
+	if err := f.mgr.HibernateVM(f.vmID); err != nil {
+		t.Fatal(err)
+	}
+	if !exists(f.vaultSnap()) {
+		t.Fatal("a VM named by its VM id was not captured into the vault")
+	}
+	assertNoPlaintextSnapshot(t, f.snapshotFixture)
+}
+
 // Repair round 1 of station FP9 (bunch 4b review, docs/definitions/
 // choir-launch-fp9-keys-recovery-2026-10-21.md, "Review round 1").
 //

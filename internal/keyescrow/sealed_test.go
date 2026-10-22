@@ -8,7 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
 
 // Failure modes E1-E10 of docs/definitions/choir-launch-fp9-keys-recovery-2026-10-21.md
@@ -536,4 +538,40 @@ func TestKEKNameMatchesTheBackupExclusion(t *testing.T) {
 	if !strings.Contains(string(raw), `"`+KEKNamePrefix+`*"`) {
 		t.Fatalf("scripts/off-host-backup.sh does not exclude %q", KEKNamePrefix+"*")
 	}
+}
+
+// Repair round 2 (bunch 31 review, low): a FIFO or device at the KEK or key
+// path must be refused at once, not hang the service at start: the file is
+// opened non-blocking and without following a link, then checked to be a
+// regular file before any read.
+func TestKeyFilesThatAreNotRegularAreRefusedWithoutBlocking(t *testing.T) {
+	dir := t.TempDir()
+	kekFifo := filepath.Join(dir, "key-escrow-kek")
+	keyFifo := filepath.Join(dir, "key-escrow-key")
+	for _, p := range []string{kekFifo, keyFifo} {
+		if err := syscall.Mkfifo(p, 0o600); err != nil {
+			t.Skipf("mkfifo: %v", err)
+		}
+	}
+	type result struct{ err error }
+	run := func(name string, fn func() error) {
+		t.Helper()
+		done := make(chan result, 1)
+		go func() { done <- result{fn()} }()
+		select {
+		case r := <-done:
+			if r.err == nil {
+				t.Fatalf("%s: a FIFO was accepted", name)
+			}
+		case <-time.After(3 * time.Second):
+			t.Fatalf("%s: blocked opening a FIFO", name)
+		}
+	}
+	run("LoadKEK", func() error { _, err := LoadKEK(kekFifo); return err })
+	run("InspectKeyFile", func() error { _, err := InspectKeyFile(keyFifo, nil); return err })
+	kek := writeKEKFile(t, t.TempDir(), testKEK(t, 0x41), 0o400, false)
+	run("LoadPrivateKey require", func() error {
+		_, _, err := LoadPrivateKey(keyFifo, SealConfig{Mode: SealRequire, KEKPath: kek})
+		return err
+	})
 }

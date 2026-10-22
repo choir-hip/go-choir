@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -477,5 +478,50 @@ func TestManifestFieldNames(t *testing.T) {
 		if _, ok := m[k]; !ok {
 			t.Fatalf("manifest line lacks %s: %s", k, buf.String())
 		}
+	}
+}
+
+// Repair round 2 (bunch 31 review, low): copy refuses a store a writer is
+// using. It tries the per-computer segment lock the production appender
+// takes (internal/tapestore, lockDir) without blocking before each batch,
+// and refuses, writing nothing, if a writer holds it. Plan and census only
+// read and take no lock.
+func TestCopyRefusesWhileAWriterHoldsTheSegmentLock(t *testing.T) {
+	f := newFixture(t)
+	f.batchEvent(compA, "1")
+	entries := planA(t, f)
+	dir := filepath.Join(f.root, tapestore.SegDirName, compA)
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	d, err := os.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	if err := syscall.Flock(int(d.Fd()), syscall.LOCK_EX); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, err := Copy(CopyOptions{Root: f.root, Entries: entries, Computers: []string{compA}})
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), "live") {
+			t.Fatalf("copy under a held writer lock: err = %v, want a live-store refusal", err)
+		}
+	case <-time.After(3 * time.Second):
+		_ = syscall.Flock(int(d.Fd()), syscall.LOCK_UN)
+		<-done
+		t.Fatal("copy waited for the writer instead of refusing")
+	}
+	if names, _ := os.ReadDir(dir); len(names) != 0 {
+		t.Fatalf("copy wrote under a held lock: %v", names)
+	}
+	_ = syscall.Flock(int(d.Fd()), syscall.LOCK_UN)
+	if _, err := Copy(CopyOptions{Root: f.root, Entries: entries, Computers: []string{compA}}); err != nil {
+		t.Fatalf("copy after the writer released: %v", err)
 	}
 }
