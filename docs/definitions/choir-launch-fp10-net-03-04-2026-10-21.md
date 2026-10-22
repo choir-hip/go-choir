@@ -94,15 +94,36 @@ boundaries:
   protected_surfaces: [vmctl, VM lifecycle, gateway auth, guest authority predicates, snapshot validity]
 
 now:
-  status: working
-  slice: problem record and station file; the design next
-  source_ref: d1c60ad87
+  status: checkpoint_incomplete
+  slice: >-
+    Design written (docs/design/vsock-control-plane-and-nic-removal-2026-10-22.md);
+    nothing built, by brief. Hybrid Firecracker vsock per VM; identity is
+    the VM's endpoint, carried by a separate host relay (choir-vsockd) as a
+    PROXY v2 record from a vmctl-written binding outside the jail; host
+    authority predicates refuse any vsock caller; the gateway binds the
+    bearer's computer to the endpoint's (SEC-05). Order V0-V6 (vsock) then
+    N1-N7 (NIC), each per computer, off by default, cold boot only.
+  source_ref: d1c60ad87 (+ FP8 ee2dcf0a3, NET-01, NET-02, NET-10 lanes, read only)
   deploy_identity: unknown to this lane
-  decision: design only, by brief
-  blocker_or_risk: none yet
-  next_action: write the design
+  decision: >-
+    Conservative choices taken without the owner (No Blocking Asks): a
+    relay unit of its own (not in vmctl: fate-sharing) over services
+    listening on per-VM sockets; PROXY v2 over an HMAC header; no TCP
+    upstream from the relay ever (loopback is a credential); the device is
+    added at cold boot only, never on wake; host to guest moves before
+    guest to host because the guest's host predicates need the NIC's
+    default route.
+  blocker_or_risk: >-
+    V1 onward waits for FP8 to land (vmmanager, jailer layout, image).
+    N4 (the console's zot and shell, inventory A9) needs an owner ruling.
+    Unverified at the Firecracker 1.16.1 pin: vsock reset and uds_path
+    re-bind on restore, the busy-spin fixes, ptp_kvm for time.
+  next_action: >-
+    FP0 reads the design. After FP8 lands, a lane takes V0 (yellow/red,
+    tests first, no caller) and V1 (red, off by default) from section 9.
 
-receipts: []
+receipts:
+  - 40b246a85 station and problem record (green)
 ---
 
 # FP10 NET-03 and NET-04: vsock control plane, then no guest NIC
