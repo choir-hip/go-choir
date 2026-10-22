@@ -34,14 +34,25 @@ calls, and so does any computer whose sessions hash to the dead key. A
 new computer can lose all of them. Whether the turns fail or retry
 depends on the caller.
 
-The other two step 5 failures are hypotheses until their traces are read:
+The other step 5 results predate FP2. The earlier acceptance receipts in
+docs/evidence show:
 - T5b, revise after cancel, refused with 409 "durable lifecycle state is
-  unavailable or terminal". Is this a consequence of the failed turns, or
-  a separate defect in the lifecycle path?
-- T8 counted one open work item after the T7 crash restart, created at
-  01:14:55, before the crash. A crash restart closes every open
-  obligation, but the spec does not assert this check. Is the item real,
-  or a new item?
+  unavailable or terminal". Every receipt that records T5b since
+  2026-10-09 has the same 409. Cancel ends the document's trajectory, so
+  the 409 is the documented behavior. It is a named residual of the
+  supervised self-development gate
+  (docs/definitions/choir-appdev-gate2-supervised-self-development-2026-10-09.md:445),
+  not FP2.
+- T8 counted open work items after the crash restart: 3 and 5 on
+  2026-10-09, 1 today. That also predates FP2. Whether a crash restart
+  leaves a work item open against the "restarts end work" rule is still
+  unread in the trace. Residual.
+- T6, the research revision, landed in only one earlier receipt. Today
+  it failed for the cause above: no model answered.
+
+So step 5 does not judge FP2. Texture's own turns (T2a, T2b) passed.
+Research has to be re-run once OpenCode serves the test computer's
+sessions.
 
 Repair:
 1. Code (red: gateway and provider calls). A 401 or 403 parks the key as
