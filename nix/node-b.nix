@@ -1354,6 +1354,15 @@ in
         # computer's next cold boot. Rollback: delete this line
         # (docs/reports/lr-guest-memory-return-2026-10-14.md).
         "VM_BALLOON_FREE_PAGE_REPORTING=1"
+        # RES-06 guest memory return (internal/vmmanager/guest_reclaim.go,
+        # FP8 station): DAMON_RECLAIM boot arguments for the computers this
+        # selector names, so cold guest page cache is freed and free page
+        # reporting returns it to the host. Staged: one disposable test
+        # computer first (FP8 proof step 8 compares its host RSS with a
+        # control), then class:test, then the paper. A named computer cold
+        # boots once (boot arguments are in the launch-config hash).
+        # Rollback: delete this line and redeploy.
+        "VM_GUEST_RECLAIM_ONLY=computer-9648031f92e131adc1fb65ec455c5903"
         # Data drive discard (VM_DATA_DISCARD=1) is deliberately NOT set: the
         # pinned Firecracker is 1.16.1, which has no virtio-blk discard
         # (vmmanager ignores the flag on an older binary). Guest side:
