@@ -1,0 +1,3218 @@
+{
+ "as_of": "2026-10-22T21:01Z",
+ "main": "674460d15",
+ "items": [
+  {
+   "id": "REC-01",
+   "title": "Recover  fix/desk-cell-confinement",
+   "priority": "P0",
+   "class": "red",
+   "lane": "\u2014",
+   "section": "Recover existing work",
+   "slices": [
+    {
+     "name": "all",
+     "stage": 6,
+     "evidence": "recovered and pushed origin/fix/desk-cell-confinement fedb7656c and land/ 9cee80a2d (10-21, before the pass); landed as SEC-01/SEC-03",
+     "history": [
+      {
+       "stage": 6,
+       "at": "2026-10-21T15:05Z",
+       "approx": true
+      }
+     ]
+    }
+   ],
+   "next": "None; done (landing carried by SEC-01 and SEC-03)."
+  },
+  {
+   "id": "REC-02",
+   "title": "Land  origin/security/quick-containment",
+   "priority": "P0",
+   "class": "red",
+   "lane": "FP3",
+   "section": "Recover existing work",
+   "slices": [
+    {
+     "name": "quick containment 1 (host units hide PID 1/D-Bus sockets, env files; vmctl read-only)",
+     "stage": 5,
+     "evidence": "FP3 cut 2 landed f0b1ee313, deploy T live 17:00; verify-host-hardening 138 PASS / 28 FAIL at 17:05 (containment gaps remain)",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-20T17:06Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T09:20Z",
+       "approx": true
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T15:58Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T16:37Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T17:00Z"
+      }
+     ]
+    },
+    {
+     "name": "issuer credential (observe)",
+     "stage": 6,
+     "evidence": "deploy T; step 3 PASS 17:05: no 'issuer: would refuse' after boots",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-20T13:11Z",
+       "approx": true
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T15:58Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T16:37Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T17:00Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T17:05Z"
+      }
+     ]
+    },
+    {
+     "name": "containment gaps fix (deploy.env rename, caddy/goproxy/qdrant/searx)",
+     "stage": 3,
+     "evidence": "lane/fp3-containment-gaps 2b145c0bb; bunch 106 accept (20:29) after rounds 2-2c; not on main",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T17:45Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T18:10Z",
+       "approx": true
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T20:29Z"
+      }
+     ]
+    },
+    {
+     "name": "issuer credential enforce",
+     "stage": 0,
+     "evidence": "no lane work found (observe only)",
+     "history": []
+    }
+   ],
+   "next": "Land lane/fp3-containment-gaps in its own deploy and re-run verify-host-hardening for the 28 FAILs."
+  },
+  {
+   "id": "SEC-01",
+   "title": "Confine desk workers",
+   "priority": "P0",
+   "class": "red",
+   "lane": "FP2",
+   "section": "Security",
+   "slices": [
+    {
+     "name": "all",
+     "stage": 6,
+     "evidence": "FP2 batch 1 564840fcf + 7c61ce078, deploy 01:12; self-test proven 01:13 (fp2-desk-boundary-20261022.json); real turns confined 05:12",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T18:00Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-21T23:20Z",
+       "approx": true
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-21T23:35Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T00:46Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T01:12Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T01:13Z"
+      }
+     ]
+    }
+   ],
+   "next": "None; residuals are RES-02 (OOM proof) and SEC-15 (non-root daemon)."
+  },
+  {
+   "id": "SEC-02",
+   "title": "The daemon checks the role on every frame action",
+   "priority": "P0",
+   "class": "red",
+   "lane": "FP2",
+   "section": "Security",
+   "slices": [
+    {
+     "name": "all",
+     "stage": 6,
+     "evidence": "FP2 batch 1 564840fcf, deploy 01:12; frame_boundary probe proven 01:13",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T18:39Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-21T23:20Z",
+       "approx": true
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-21T23:35Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T00:46Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T01:12Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T01:13Z"
+      }
+     ]
+    }
+   ],
+   "next": "None; done."
+  },
+  {
+   "id": "SEC-03",
+   "title": "Host egress floor for guest taps",
+   "priority": "P0",
+   "class": "red",
+   "lane": "FP3",
+   "section": "Security",
+   "slices": [
+    {
+     "name": "all",
+     "stage": 6,
+     "evidence": "FP3 cut 1 8cb7e1acb, deploy M 10:59; guest-floor checks all PASS, host_floor_probe 23/23, capabilities PASS 11:05; ticked in checklist",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T17:50Z",
+       "approx": true
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T09:20Z",
+       "approx": true
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T09:55Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T10:44Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T10:59Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T11:05Z"
+      }
+     ]
+    }
+   ],
+   "next": "None; --expect-guest-floor stays mandatory after every deploy."
+  },
+  {
+   "id": "SEC-04",
+   "title": "Turn the Firecracker jailer on",
+   "priority": "P0",
+   "class": "red",
+   "lane": "FP8",
+   "section": "Security",
+   "slices": [
+    {
+     "name": "per-computer jailer selector (FP8)",
+     "stage": 5,
+     "evidence": "FP8 in deploy B 3c46d5196, live 02:59, inert (no computer selected); FP8 step 1 control PASS",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T23:45Z",
+       "approx": true
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T00:20Z",
+       "approx": true
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T02:09Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T02:40Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T02:59Z"
+      }
+     ]
+    },
+    {
+     "name": "jailer on one test computer (rollout step 2)",
+     "stage": 0,
+     "evidence": "not run; FP8 step 2 blocked by host admission 03:16; audit 17:43 lists it 'after KF'",
+     "history": []
+    },
+    {
+     "name": "jailer for every computer (rollout steps 3-4)",
+     "stage": 0,
+     "evidence": "no lane work found",
+     "history": []
+    }
+   ],
+   "next": "Name one test computer in VMCTL_JAILER_ONLY (with RES-05's shared inodes) and run the vmm_confinement_verify proof."
+  },
+  {
+   "id": "SEC-05",
+   "title": "Bind the gateway bearer to its computer",
+   "priority": "P0",
+   "class": "red",
+   "lane": "FP7",
+   "section": "Security",
+   "slices": [
+    {
+     "name": "bearer binding observe",
+     "stage": 6,
+     "evidence": "FP7 in deploy C 3c16f7c33, live 03:46; steps 1-3 PASS (would_refuse 0 across planned refreshes, 07:25)",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T18:19Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-21T23:35Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T02:17Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T03:29Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T03:46Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T07:25Z"
+      }
+     ]
+    },
+    {
+     "name": "enforce flip",
+     "stage": 6,
+     "evidence": "8144ebaf4 in deploy R 0bf8a097d, live 15:45; step 4 PASS 15:53 (refused 0, test computer call ok)",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T12:31Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T12:41Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T12:52Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T14:15Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T15:45Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T15:53Z"
+      }
+     ]
+    },
+    {
+     "name": "copied token refused (step 5)",
+     "stage": 5,
+     "evidence": "deployed with R but unproven: no route without a guest shell (ledger 15:53); keeps SEC-05 unticked",
+     "history": [
+      {
+       "stage": 5,
+       "at": "2026-10-22T15:45Z"
+      }
+     ]
+    },
+    {
+     "name": "credential renewal (rotation, small part)",
+     "stage": 5,
+     "evidence": "10154fb26 in deploy C; no rotation proof recorded",
+     "history": [
+      {
+       "stage": 4,
+       "at": "2026-10-22T03:29Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T03:46Z"
+      }
+     ]
+    }
+   ],
+   "next": "Run FP7 step 5 (a token copied between two test computers is refused) through a host-side guest shell."
+  },
+  {
+   "id": "SEC-06",
+   "title": "Egress proxy tunnel identity (a P1 finding, promoted to P0)",
+   "priority": "P0",
+   "class": "red",
+   "lane": "FP6",
+   "section": "Security",
+   "slices": [
+    {
+     "name": "tunnel identity observe everywhere",
+     "stage": 6,
+     "evidence": "deploy S ddd20de0e live 16:10; probe 16:38 PASS on 71afbf14 (toolchain tunnels pass, one would_refuse recorded)",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T18:59Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T13:05Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T14:10Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T15:55Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T16:10Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T16:38Z"
+      }
+     ]
+    },
+    {
+     "name": "enforce on one test computer",
+     "stage": 6,
+     "evidence": "VM_CAPSULE_TUNNEL_ENFORCE_ONLY=computer-9648031f in S; 16:38 mismatch refused with 0 bytes up",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T14:00Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T14:00Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T14:10Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T15:55Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T16:10Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T16:38Z"
+      }
+     ]
+    },
+    {
+     "name": "global enforce",
+     "stage": 0,
+     "evidence": "waits on observe ledgers over time plus a Claude-mode capsule's api.anthropic.com pass",
+     "history": []
+    }
+   ],
+   "next": "Accumulate observe ledgers and run a Claude-mode capsule to clear the global enforce gate."
+  },
+  {
+   "id": "SEC-07",
+   "title": "Address guard on browser and Obscura fetches",
+   "priority": "P0",
+   "class": "red",
+   "lane": "FP6",
+   "section": "Security",
+   "slices": [
+    {
+     "name": "all",
+     "stage": 6,
+     "evidence": "FP6 batch 1 53a691be6, CI 39692787991, live 10-21 23:36; browser routes 404, import-url serves",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T18:05Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-21T23:05Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-21T23:19Z",
+       "approx": true
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-21T23:19Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-21T23:36Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-21T23:36Z"
+      }
+     ]
+    }
+   ],
+   "next": "None; Obscura's image removal is tracked under SEC-15 (D2)."
+  },
+  {
+   "id": "SEC-08",
+   "title": "Claude delegate launch posture",
+   "priority": "P0",
+   "class": "red",
+   "lane": "FP7",
+   "section": "Security",
+   "slices": [
+    {
+     "name": "Option K gateway relay (dark)",
+     "stage": 5,
+     "evidence": "cfc234954/8b449df30 in deploy C, live 03:46; anthropic_relay off (07:25)",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T18:19Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-21T23:35Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T02:17Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T03:11Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T03:46Z"
+      }
+     ]
+    },
+    {
+     "name": "delegate key moved off the guest disk to the relay",
+     "stage": 0,
+     "evidence": "no lane work found; delegate stays on one test computer (owner, 10-21)",
+     "history": []
+    }
+   ],
+   "next": "Give the relay a key, identities and a window and move the delegate onto it on the test computer."
+  },
+  {
+   "id": "SEC-09",
+   "title": "KSM off, stale comments fixed",
+   "priority": "P0",
+   "class": "green/red",
+   "lane": "FP3",
+   "section": "Security",
+   "slices": [
+    {
+     "name": "all",
+     "stage": 6,
+     "evidence": "bd4b47201 in deploy M 8cb7e1acb (10:59); guest-floor check reads KSM run 2 (11:01); ticked",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T17:50Z",
+       "approx": true
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T09:55Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T10:44Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T10:59Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T11:01Z"
+      }
+     ]
+    }
+   ],
+   "next": "None; done."
+  },
+  {
+   "id": "SEC-10",
+   "title": "Guest DNS",
+   "priority": "P1",
+   "class": "red",
+   "lane": "FP3",
+   "section": "Security",
+   "slices": [
+    {
+     "name": "host resolver (unbound, DNAT at VM start)",
+     "stage": 6,
+     "evidence": "deploy M; probe reaches the host resolver over TCP, unbound active (11:01)",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T17:50Z",
+       "approx": true
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T09:55Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T10:44Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T10:59Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T11:01Z"
+      }
+     ]
+    },
+    {
+     "name": "guest network unit DNS= line",
+     "stage": 1,
+     "evidence": "lane/fp3-sec10-guest-dns 62c7439db (18:27), red, empty selector; no review found",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T18:21Z"
+      }
+     ]
+    },
+    {
+     "name": "no public resolver",
+     "stage": 0,
+     "evidence": "no lane work found (follows NET-01)",
+     "history": []
+    }
+   ],
+   "next": "Review and land lane/fp3-sec10-guest-dns, then select one test computer."
+  },
+  {
+   "id": "SEC-11",
+   "title": "Proxy object-graph route trusts loopback",
+   "priority": "P0",
+   "class": "red",
+   "lane": "FP3",
+   "section": "Security",
+   "slices": [
+    {
+     "name": "observe (no loopback-only trust, no TEST-NET-1 in prod)",
+     "stage": 6,
+     "evidence": "aa441f388 in deploy T f0b1ee313 (17:00); step 2 PASS 17:05",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T17:50Z",
+       "approx": true
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T09:20Z",
+       "approx": true
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T15:58Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T16:37Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T17:00Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T17:05Z"
+      }
+     ]
+    },
+    {
+     "name": "enforce",
+     "stage": 0,
+     "evidence": "no lane work found (observe first)",
+     "history": []
+    }
+   ],
+   "next": "Read the observe window and flip the object-graph route to enforce."
+  },
+  {
+   "id": "SEC-12",
+   "title": "Dolt auth stages 2-3 and owner-act enforce",
+   "priority": "P1",
+   "class": "red",
+   "lane": "FP3",
+   "section": "Security",
+   "slices": [
+    {
+     "name": "Dolt auth stage 2 (app user)",
+     "stage": 6,
+     "evidence": "44c50bb7b in deploy T (17:00); no Access denied since 16:55, services active (17:05)",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T17:50Z",
+       "approx": true
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T09:20Z",
+       "approx": true
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T15:58Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T16:37Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T17:00Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T17:05Z"
+      }
+     ]
+    },
+    {
+     "name": "Dolt stage 3 (locked, cut 3)",
+     "stage": 3,
+     "evidence": "lane/fp3-cuts-on-main 9b47d4a31; DeepSeek accept on the replay (bunch 63, 15:58); not on main",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T01:15Z",
+       "approx": true
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T09:20Z",
+       "approx": true
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T15:58Z"
+      }
+     ]
+    },
+    {
+     "name": "owner-act enforce (cut 4)",
+     "stage": 3,
+     "evidence": "7a7a34228 accepted with edits (bunch 63); its observe-window gate unmet",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T01:15Z",
+       "approx": true
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T09:20Z",
+       "approx": true
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T15:58Z"
+      }
+     ]
+    }
+   ],
+   "next": "Land FP3 cut 3 (Dolt locked) in its own deploy; read the owner-act observe window before cut 4."
+  },
+  {
+   "id": "SEC-13",
+   "title": "Capsule seccomp:  clone3  and user namespaces",
+   "priority": "P1",
+   "class": "red",
+   "lane": "FP2",
+   "section": "Security",
+   "slices": [
+    {
+     "name": "all",
+     "stage": 6,
+     "evidence": "capsule filters in FP2 batch 1 (01:12); seccomp leg PASS on deploy Q 13:33 (clone3 ENOSYS, CLONE_NEWUSER EPERM); checklist not ticked",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T18:39Z",
+       "approx": true
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-21T23:35Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T00:46Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T01:12Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T13:33Z"
+      }
+     ]
+    }
+   ],
+   "next": "Tick SEC-13 in the checklist with the Q seccomp-leg receipt."
+  },
+  {
+   "id": "SEC-14",
+   "title": "CI deploys as root with host-key checking off",
+   "priority": "P1",
+   "class": "red",
+   "lane": "FP0",
+   "section": "Security",
+   "slices": [
+    {
+     "name": "first half: pinned host keys",
+     "stage": 6,
+     "evidence": "6bfe06fcf 10-21 18:45; receipt read over strict checking (18:50)",
+     "history": [
+      {
+       "stage": 4,
+       "at": "2026-10-21T18:45Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-21T18:50Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-21T18:50Z"
+      }
+     ]
+    },
+    {
+     "name": "step 1: choir-deploy user and gate",
+     "stage": 6,
+     "evidence": "deploy U 273d139c9 live 17:37; gate probe 13 PASS 17:40",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T23:02Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-21T23:35Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T10:17Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T17:04Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T17:37Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T17:40Z"
+      }
+     ]
+    },
+    {
+     "name": "step 2: CI deploys through the gate",
+     "stage": 6,
+     "evidence": "deploy V 7ab8d653f via dispatch, live 18:32; choir-deploy through the gate",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T23:02Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T10:17Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T17:48Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T18:32Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T18:32Z"
+      }
+     ]
+    },
+    {
+     "name": "step 3: root drops the CI key",
+     "stage": 6,
+     "evidence": "f77799459/d9d81158c live 20:39 (107292acd); gate probe 15 PASS about 20:40; rollout complete",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T23:02Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T10:17Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T20:15Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T20:39Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T20:42Z"
+      }
+     ]
+    }
+   ],
+   "next": "Tick SEC-14 in the checklist with the 20:42 probe receipt."
+  },
+  {
+   "id": "SEC-15",
+   "title": "Non-root guest runtime and guest sysctls",
+   "priority": "P1",
+   "class": "red",
+   "lane": "FP2",
+   "section": "Security",
+   "slices": [
+    {
+     "name": "document-tool sandbox (observe)",
+     "stage": 6,
+     "evidence": "FP2 batch 2 in deploy P 966d3f519 (12:35); step 2 PASS 12:52 (equal 2, diverged 0); self-test PASS on Q 13:33",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T23:02Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T09:20Z",
+       "approx": true
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T10:47Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T12:19Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T12:35Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T12:52Z"
+      }
+     ]
+    },
+    {
+     "name": "daemon capability floor (observe)",
+     "stage": 6,
+     "evidence": "deploy P; step 1 reads cap_bnd, 25 extra, none missing; re-run PASS on Q 13:33",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T23:02Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T10:47Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T12:19Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T12:35Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T13:33Z"
+      }
+     ]
+    },
+    {
+     "name": "Obscura removed from the guest image",
+     "stage": 6,
+     "evidence": "D2 live 20:56:59 (674460d15); 20:57 the new guest image's closure has no obscura (the KF image held obscura-0.1.0-choir-348a651)",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T18:58Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T19:37Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T20:29Z",
+       "approx": true
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T20:30Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T20:57Z"
+      }
+     ]
+    },
+    {
+     "name": "required/enforce switches",
+     "stage": 0,
+     "evidence": "observe only; owner or FP0 decides when",
+     "history": []
+    },
+    {
+     "name": "non-root guest daemon, guest sysctls, route_localnet",
+     "stage": 1,
+     "evidence": "design residual in the FP2 station file only",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T09:59Z",
+       "approx": true
+      }
+     ]
+    }
+   ],
+   "next": "Prove D2 (no obscura in the guest closure), then plan the non-root daemon split."
+  },
+  {
+   "id": "SEC-16",
+   "title": "Host-side callers that bypass the gateway",
+   "priority": "P2",
+   "class": "orange",
+   "lane": "FP7",
+   "section": "Security",
+   "slices": [
+    {
+     "name": "first half: scorer reaches Jev through the gateway",
+     "stage": 6,
+     "evidence": "9875ec096 (FP7), live by deploy K; 10:02 every tick 'Jev reached by gateway'",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T19:40Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T03:11Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T03:46Z",
+       "approx": true
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T10:02Z"
+      }
+     ]
+    },
+    {
+     "name": "second half: scorer loads no provider env",
+     "stage": 6,
+     "evidence": "8c8bd7e54 in deploy N 4bc3aa3ec (11:29); PASS 11:31; ticked",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T03:11Z",
+       "approx": true
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T11:16Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T11:29Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T11:31Z"
+      }
+     ]
+    }
+   ],
+   "next": "None; done."
+  },
+  {
+   "id": "NET-01",
+   "title": "Host fetch service; no general guest internet",
+   "priority": "P1",
+   "class": "red",
+   "lane": "FP6",
+   "section": "Network",
+   "slices": [
+    {
+     "name": "guest network inventory",
+     "stage": 6,
+     "evidence": "2b320373d on main (FP6, 10-21); docs item complete",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T18:52Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-21T23:19Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-21T23:19Z"
+      }
+     ]
+    },
+    {
+     "name": "host fetch verb (off, no computer listed)",
+     "stage": 5,
+     "evidence": "deploy N 4bc3aa3ec (11:29); no fetch or grant logged",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T23:39Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T00:40Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T10:10Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T11:16Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T11:29Z"
+      }
+     ]
+    },
+    {
+     "name": "one test computer granted, net01-host-fetch.sh proof",
+     "stage": 0,
+     "evidence": "not run",
+     "history": []
+    },
+    {
+     "name": "no general guest internet",
+     "stage": 0,
+     "evidence": "no lane work found",
+     "history": []
+    }
+   ],
+   "next": "List one test computer for the host fetch verb and run scripts/proofs/net01-host-fetch.sh."
+  },
+  {
+   "id": "NET-02",
+   "title": "Package mirrors beyond goproxy",
+   "priority": "P1",
+   "class": "red",
+   "lane": "FP10",
+   "section": "Network",
+   "slices": [
+    {
+     "name": "host package mirror (npm, PyPI, crates, git; every ecosystem off)",
+     "stage": 5,
+     "evidence": "deploy G 4fca1e01b (07:15); inert proof: unit active, ecosystems 404, selectors empty",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T23:35Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T00:40Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T02:09Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T06:32Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T07:15Z"
+      }
+     ]
+    },
+    {
+     "name": "mirror granted to a test computer / mirrors-only capsule egress",
+     "stage": 0,
+     "evidence": "no grant yet",
+     "history": []
+    }
+   ],
+   "next": "Grant one test computer an ecosystem and run the mirror proof steps."
+  },
+  {
+   "id": "NET-03",
+   "title": "vsock control plane and identity",
+   "priority": "P2",
+   "class": "red",
+   "lane": "FP10",
+   "section": "Network",
+   "slices": [
+    {
+     "name": "all",
+     "stage": 1,
+     "evidence": "design only (docs/design/vsock-control-plane-and-nic-removal-2026-10-22.md, 6096e3e72 on main); nothing built",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T00:05Z"
+      }
+     ]
+    }
+   ],
+   "next": "Owner review of the vsock design, then a first inert slice."
+  },
+  {
+   "id": "NET-04",
+   "title": "Remove the guest NIC",
+   "priority": "P2",
+   "class": "red",
+   "lane": "FP10",
+   "section": "Network",
+   "slices": [
+    {
+     "name": "all",
+     "stage": 1,
+     "evidence": "covered by the NET-03/04 design (6096e3e72); nothing built; waits on NET-01 to NET-03",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T00:08Z"
+      }
+     ]
+    }
+   ],
+   "next": "Waits on NET-01 to NET-03."
+  },
+  {
+   "id": "NET-05",
+   "title": "Grant object for open egress",
+   "priority": "P2",
+   "class": "red",
+   "lane": "FP10",
+   "section": "Network",
+   "slices": [
+    {
+     "name": "internal/egressgrant package (unwired)",
+     "stage": 5,
+     "evidence": "deploy A 4dbdee107 (02:20), inert",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T23:57Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T00:40Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T01:18Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T02:07Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T02:20Z"
+      }
+     ]
+    },
+    {
+     "name": "wiring (request/decide grant, host proxy enforcement)",
+     "stage": 0,
+     "evidence": "later red missions per design \u00a75",
+     "history": []
+    }
+   ],
+   "next": "Wire grants behind CHOIR_EGRESS_GRANTS, default off."
+  },
+  {
+   "id": "NET-06",
+   "title": "Data at rest (F12)",
+   "priority": "P1",
+   "class": "red",
+   "lane": "FP9",
+   "section": "Network",
+   "slices": [
+    {
+     "name": "data images owner-only (0600)",
+     "stage": 6,
+     "evidence": "0a6ebb2e8 in deploy K 5289387c9 (10:10); paper's data.img 0600 after refresh",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T19:24Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-21T23:35Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T09:19Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T09:36Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T10:10Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T10:10Z"
+      }
+     ]
+    },
+    {
+     "name": "snapshot vault (dm-crypt plain, dark)",
+     "stage": 5,
+     "evidence": "deploy K, off; vault drill not run",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T19:33Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T09:19Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T09:36Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T10:10Z"
+      }
+     ]
+    },
+    {
+     "name": "sealed escrow key (dark)",
+     "stage": 5,
+     "evidence": "deploy K; escrowkey installed beside corpusd (10:10); not sealed yet",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T19:24Z",
+       "approx": true
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T09:19Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T09:36Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T10:10Z"
+      }
+     ]
+    },
+    {
+     "name": "volume encryption",
+     "stage": 0,
+     "evidence": "owner decision (key from outside the host)",
+     "history": []
+    }
+   ],
+   "next": "Bring the vault up on one test computer and run the FP9 drill."
+  },
+  {
+   "id": "NET-07",
+   "title": "CPU isolation before strangers (F11)",
+   "priority": "P1",
+   "class": "red",
+   "lane": "FP3",
+   "section": "Network",
+   "slices": [
+    {
+     "name": "/dev/kvm 0660",
+     "stage": 6,
+     "evidence": "bd4b47201 in deploy M; verify reads /dev/kvm 660 root:kvm (11:01)",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T17:50Z",
+       "approx": true
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T09:55Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T10:44Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T10:59Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T11:01Z"
+      }
+     ]
+    },
+    {
+     "name": "SMT and core scheduling",
+     "stage": "deferred_owner",
+     "evidence": "owner ruling: SMT stays on until outside users share the host",
+     "history": []
+    }
+   ],
+   "next": "None this pass (SMT waits on outside users)."
+  },
+  {
+   "id": "NET-08",
+   "title": "Firecracker 1.17 and  --enable-pci",
+   "priority": "P1",
+   "class": "red",
+   "lane": "FP8",
+   "section": "Network",
+   "slices": [
+    {
+     "name": "--enable-pci",
+     "stage": 6,
+     "evidence": "already on every launch and restore since f240251b6 (before the pass; FP8 P3)",
+     "history": []
+    },
+    {
+     "name": "per-computer second Firecracker build (FP8)",
+     "stage": 5,
+     "evidence": "deploy B (02:59), no computer selected",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T23:45Z",
+       "approx": true
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T02:09Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T02:40Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T02:59Z"
+      }
+     ]
+    },
+    {
+     "name": "Firecracker 1.17 on one test computer (discard trial)",
+     "stage": 3,
+     "evidence": "lane/fp0-discard-test 7b08a0b08; bunch 72 flash/DeepSeek accept, Sonnet accept with edits; not on main",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T16:40Z",
+       "approx": true
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T16:45Z",
+       "approx": true
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T18:08Z",
+       "approx": true
+      }
+     ]
+    },
+    {
+     "name": "Firecracker 1.17 for every computer",
+     "stage": 0,
+     "evidence": "plan only (ledger 19:40: after a clean 2-3 h trial)",
+     "history": []
+    }
+   ],
+   "next": "Land the discard trial on computer-9648031f now that KF and the reboot are done."
+  },
+  {
+   "id": "NET-09",
+   "title": "Keys behind policy signers; passkey-bound owner acts",
+   "priority": "P2",
+   "class": "red",
+   "lane": "FP9",
+   "section": "Network",
+   "slices": [
+    {
+     "name": "all",
+     "stage": 1,
+     "evidence": "design only (FP9 station \u00a7NET-09, on main via K); nothing built",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T19:24Z",
+       "approx": true
+      }
+     ]
+    }
+   ],
+   "next": "Owner review of the signer and passkey design."
+  },
+  {
+   "id": "NET-10",
+   "title": "Network policy for app agents",
+   "priority": "P1",
+   "class": "green then red",
+   "lane": "FP10",
+   "section": "Network",
+   "slices": [
+    {
+     "name": "design and S4/S7 pointers (green)",
+     "stage": 6,
+     "evidence": "e4b792b7f on main 10-21 23:35; owner Q3 ruling recorded",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T23:35Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-21T23:35Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-21T23:35Z"
+      }
+     ]
+    },
+    {
+     "name": "W0 internal/appnet (unwired, off)",
+     "stage": 5,
+     "evidence": "deploy D fd58229aa (04:20), inert",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T02:23Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T02:38Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T03:16Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T04:06Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T04:20Z"
+      }
+     ]
+    },
+    {
+     "name": "W1 enforcement (preset policies at install)",
+     "stage": 0,
+     "evidence": "no lane work found",
+     "history": []
+    }
+   ],
+   "next": "Build W1: bound the manifest before Parse and enforce preset policies."
+  },
+  {
+   "id": "RES-01",
+   "title": "In-guest cgroup tree",
+   "priority": "P0",
+   "class": "red",
+   "lane": "FP2",
+   "section": "Resources and density",
+   "slices": [
+    {
+     "name": "desks slice and daemon memory (batch 1)",
+     "stage": 5,
+     "evidence": "FP2 batch 1 deployed 01:12; OOM leg never run (05:12: stays open)",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T18:39Z",
+       "approx": true
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-21T23:35Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T00:46Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T01:12Z"
+      }
+     ]
+    },
+    {
+     "name": "capsules slice aggregate (batch 2, observe)",
+     "stage": 5,
+     "evidence": "FP2 batch 2 in deploy P (12:35), observe",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T23:07Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T10:47Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T12:19Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T12:35Z"
+      }
+     ]
+    }
+   ],
+   "next": "Run the self-test OOM leg (on main since J) on a test computer from outside the cell."
+  },
+  {
+   "id": "RES-02",
+   "title": "A hard memory budget per desk worker",
+   "priority": "P0",
+   "class": "red",
+   "lane": "FP2",
+   "section": "Resources and density",
+   "slices": [
+    {
+     "name": "all",
+     "stage": 5,
+     "evidence": "per-worker budget in FP2 batch 1 (01:12); OOM self-test leg landed J (09:50) but never run on staging (ledger 13:45)",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T18:39Z",
+       "approx": true
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-21T23:35Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T00:46Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T01:12Z"
+      }
+     ]
+    }
+   ],
+   "next": "Run desk_cell_confinement_probe --leg oom (no token) and read oom_kill with the daemon alive."
+  },
+  {
+   "id": "RES-03",
+   "title": "Bound the capsule  exec-go-session  worker",
+   "priority": "P1",
+   "class": "orange",
+   "lane": "FP2",
+   "section": "Resources and density",
+   "slices": [
+    {
+     "name": "all",
+     "stage": 5,
+     "evidence": "session worker bound deployed with FP2 batch 1 (01:12); local Linux tests only, no deployed probe (05:12)",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T18:39Z",
+       "approx": true
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-21T23:35Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T00:46Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T01:12Z"
+      }
+     ]
+    }
+   ],
+   "next": "Add a capsule-side probe of the exec-go-session bound to the deployed self-test."
+  },
+  {
+   "id": "RES-04",
+   "title": "Capsule memory per doctrine",
+   "priority": "P1",
+   "class": "red",
+   "lane": "FP2",
+   "section": "Resources and density",
+   "slices": [
+    {
+     "name": "capsule memory policy (observe) with memory.events receipts",
+     "stage": 6,
+     "evidence": "FP2 batch 2 deploy P (12:35); step 3 PASS 12:49 (peaks under request, events 0)",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T23:07Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T09:20Z",
+       "approx": true
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T10:47Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T12:19Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T12:35Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T12:49Z"
+      }
+     ]
+    },
+    {
+     "name": "capsule Go bounds (GOMAXPROCS, GOMEMLIMIT)",
+     "stage": 3,
+     "evidence": "lane/fp4-capsule-memory ec221ca1f; DeepSeek accept with low edits (bunch 67), mirror capmem3m PASS; uncertain whether round 3 was re-reviewed",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T15:27Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T15:56Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T17:12Z"
+      }
+     ]
+    },
+    {
+     "name": "doctrine mode (memory.high = request, max = 2x)",
+     "stage": 0,
+     "evidence": "observe only; 14:05 drill shows a release build exceeds the 2 GiB request",
+     "history": []
+    }
+   ],
+   "next": "Land the capsule Go bounds, then re-measure release builds before trying doctrine mode."
+  },
+  {
+   "id": "RES-05",
+   "title": "Keep store page-cache sharing under the jailer",
+   "priority": "P0",
+   "class": "red",
+   "lane": "FP8",
+   "section": "Resources and density",
+   "slices": [
+    {
+     "name": "shared jail inodes (FP8)",
+     "stage": 5,
+     "evidence": "deploy B (02:59), inert until the jailer selects a computer",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T23:45Z",
+       "approx": true
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T02:09Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T02:40Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T02:59Z"
+      }
+     ]
+    },
+    {
+     "name": "page-cache sharing proved under the jailer",
+     "stage": 0,
+     "evidence": "not run (needs SEC-04 step 2)",
+     "history": []
+    }
+   ],
+   "next": "Prove host page-cache sharing on a jailed test computer together with SEC-04 step 2."
+  },
+  {
+   "id": "RES-06",
+   "title": "Make the guest give memory back",
+   "priority": "P1",
+   "class": "red",
+   "lane": "FP8",
+   "section": "Resources and density",
+   "slices": [
+    {
+     "name": "guest DAMON reclaim on test computers",
+     "stage": 5,
+     "evidence": "activation for 9648031f in E (05:25), 71afbf14 in K (10:10); 13:06 reading: no host memory returned in the idle window",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T23:36Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T04:36Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T05:00Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T05:25Z"
+      }
+     ]
+    },
+    {
+     "name": "memory-return reporting (procmem, probe)",
+     "stage": 5,
+     "evidence": "D2 live 20:56:59 (674460d15); the probe on test computer 254b5cfe is running from 21:01",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T18:20Z",
+       "approx": true
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T18:20Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T20:29Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T20:30Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T20:57Z"
+      }
+     ]
+    },
+    {
+     "name": "reclaim on the paper",
+     "stage": 0,
+     "evidence": "held off until the longer idle reading (13:06)",
+     "history": []
+    }
+   ],
+   "next": "Run the burst-then-idle memory-return probe on an always-on test computer after D2."
+  },
+  {
+   "id": "RES-07",
+   "title": "Measure what fills idle guest page cache",
+   "priority": "P1",
+   "class": "green",
+   "lane": "FP0",
+   "section": "Resources and density",
+   "slices": [
+    {
+     "name": "busy paper page-cache split",
+     "stage": 6,
+     "evidence": "res08 probe on the paper 06:25: cache 4,747 MiB, /mnt/persistent 4,210, /nix/store 296",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T00:06Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T06:25Z"
+      }
+     ]
+    },
+    {
+     "name": "idle split by root",
+     "stage": 0,
+     "evidence": "only a coarse idle reading (owner's computer, 07:25); split waits on a test computer",
+     "history": []
+    }
+   ],
+   "next": "Take the idle by-root reading on a test computer about 25 min idle."
+  },
+  {
+   "id": "RES-08",
+   "title": "Share the base OS in guest RAM (pmem + DAX)",
+   "priority": "P2",
+   "class": "red",
+   "lane": "FP10",
+   "section": "Resources and density",
+   "slices": [
+    {
+     "name": "page-cache measurement probe",
+     "stage": 6,
+     "evidence": "rounds 1-5 deployed D-G; paper read 06:25 and 07:15 (store_quotable)",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T00:05Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T02:45Z",
+       "approx": true
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T03:16Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T04:06Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T04:20Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T06:25Z"
+      }
+     ]
+    },
+    {
+     "name": "pmem + DAX",
+     "stage": 1,
+     "evidence": "design and threat analysis 134113c61; decision table says L5 first (net saving 197 MiB)",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T00:12Z"
+      }
+     ]
+    }
+   ],
+   "next": "Take the idle median reading; DAX waits on L5 and DEC-05."
+  },
+  {
+   "id": "RES-09",
+   "title": "Prove virtio-mem hotplug, then a small base",
+   "priority": "P1",
+   "class": "red",
+   "lane": "FP8",
+   "section": "Resources and density",
+   "slices": [
+    {
+     "name": "hotplug boot-order fix (FP8)",
+     "stage": 5,
+     "evidence": "deploy B (02:59)",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T23:45Z",
+       "approx": true
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T02:09Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T02:40Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T02:59Z"
+      }
+     ]
+    },
+    {
+     "name": "staging hotplug proof, then small base",
+     "stage": 0,
+     "evidence": "blocked: problem record b430934fa says hotplug cannot work on Node B (512 GiB region, 39-bit CPU); FP0 recommends hotplug off",
+     "history": []
+    }
+   ],
+   "next": "Owner decision: turn hotplug off, or route it through RES-20's Cloud Hypervisor backend."
+  },
+  {
+   "id": "RES-10",
+   "title": "Balloon stats reader; emergency inflation",
+   "priority": "P2",
+   "class": "red",
+   "lane": "FP10",
+   "section": "Resources and density",
+   "slices": [
+    {
+     "name": "steps 1-2: stats selector and read-only reader",
+     "stage": 6,
+     "evidence": "deploy L 7448bf899 (10:42); inert proof PASS 10:43 (stats_disabled reason, not zeros); probe fix 12:54",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T23:36Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T08:33Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T09:45Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T10:28Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T10:42Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T10:43Z"
+      }
+     ]
+    },
+    {
+     "name": "stats on for a test computer",
+     "stage": 0,
+     "evidence": "VM_BALLOON_STATS_ONLY names no computer",
+     "history": []
+    },
+    {
+     "name": "step 3: emergency inflation",
+     "stage": 0,
+     "evidence": "design only",
+     "history": []
+    }
+   ],
+   "next": "Name one test computer in VM_BALLOON_STATS_ONLY and read real balloon stats."
+  },
+  {
+   "id": "RES-11",
+   "title": "Model-call scheduling at the gateway",
+   "priority": "P1",
+   "class": "red",
+   "lane": "FP7",
+   "section": "Resources and density",
+   "slices": [
+    {
+     "name": "gateway fair-share scheduler (off)",
+     "stage": 5,
+     "evidence": "FP7 in deploy C (03:46), model scheduler off; 07:25 still hits the fixed 60/min limit",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T18:19Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-21T23:35Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T02:17Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T03:29Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T03:46Z"
+      }
+     ]
+    },
+    {
+     "name": "scheduler on, fixed limit and in-guest spacer removed",
+     "stage": 0,
+     "evidence": "no lane work found",
+     "history": []
+    }
+   ],
+   "next": "Turn the scheduler on for one test computer and prove fair share."
+  },
+  {
+   "id": "RES-12",
+   "title": "Batch endpoints for calls that can wait",
+   "priority": "P2",
+   "class": "orange",
+   "lane": "FP7",
+   "section": "Resources and density",
+   "slices": [
+    {
+     "name": "all",
+     "stage": 1,
+     "evidence": "design only in the FP7 station card (9e31a05cf)",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T03:11Z",
+       "approx": true
+      }
+     ]
+    }
+   ],
+   "next": "Build the batch endpoint behind a switch."
+  },
+  {
+   "id": "RES-13",
+   "title": "Snapshot levers",
+   "priority": "P2",
+   "class": "red",
+   "lane": "FP10",
+   "section": "Resources and density",
+   "slices": [
+    {
+     "name": "readings (L3, L4, L20)",
+     "stage": 6,
+     "evidence": "40cd51ee0 (07:00): every deploy voids every snapshot, snapshot sizes, restore residency",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T00:02Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T06:46Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T07:00Z"
+      }
+     ]
+    },
+    {
+     "name": "L3a Diff snapshots (inert)",
+     "stage": 5,
+     "evidence": "deploy Q d206fdd40 (13:33), VM_SNAPSHOT_TYPE=full, no computer selected",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T10:34Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T11:17Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T12:41Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T13:18Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T13:33Z"
+      }
+     ]
+    },
+    {
+     "name": "L4 shorter idle hibernate",
+     "stage": 0,
+     "evidence": "no lane work found",
+     "history": []
+    },
+    {
+     "name": "L20 snapshots survive deploys",
+     "stage": 0,
+     "evidence": "no lane work found",
+     "history": []
+    }
+   ],
+   "next": "Select one test computer for Diff snapshots and prove a hibernate and wake."
+  },
+  {
+   "id": "RES-14",
+   "title": "Verify the snapshot budget counts real bytes",
+   "priority": "P1",
+   "class": "red",
+   "lane": "FP8",
+   "section": "Resources and density",
+   "slices": [
+    {
+     "name": "all",
+     "stage": 6,
+     "evidence": "probe 3ea3642f7 on main in J (09:50); Node B reading 09:00 (358741b5d); ticked a0ede4268",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T02:23Z",
+       "approx": true
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T09:33Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T09:50Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T10:06Z"
+      }
+     ]
+    }
+   ],
+   "next": "None; re-read with more hibernated computers to revisit 48 GiB / 36 h."
+  },
+  {
+   "id": "RES-15",
+   "title": "Record that admission does not reserve a running VM's growth",
+   "priority": "P2",
+   "class": "green",
+   "lane": "FP10",
+   "section": "Resources and density",
+   "slices": [
+    {
+     "name": "all",
+     "stage": 6,
+     "evidence": "comment in host_admission.go via p2-small, deploy E d991907e6 (05:25); green item complete, not ticked",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T23:27Z",
+       "approx": true
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T03:16Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T05:00Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T05:25Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T05:25Z"
+      }
+     ]
+    }
+   ],
+   "next": "Tick RES-15 in the checklist."
+  },
+  {
+   "id": "RES-16",
+   "title": "Data images that shrink",
+   "priority": "P1",
+   "class": "red",
+   "lane": "FP8",
+   "section": "Resources and density",
+   "slices": [
+    {
+     "name": "per-computer discard selector and next-Firecracker binary (FP8)",
+     "stage": 5,
+     "evidence": "deploy B (02:59), inert",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T23:45Z",
+       "approx": true
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T02:09Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T02:40Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T02:59Z"
+      }
+     ]
+    },
+    {
+     "name": "discard trial on computer-9648031f (Firecracker 1.17)",
+     "stage": 3,
+     "evidence": "lane/fp0-discard-test 7b08a0b08; bunch 72 accept; pre-build vendor hash fixed 7d75cba68; not on main",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T16:40Z",
+       "approx": true
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T16:45Z",
+       "approx": true
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T18:08Z",
+       "approx": true
+      }
+     ]
+    },
+    {
+     "name": "discard for every computer",
+     "stage": 0,
+     "evidence": "after the trial (ledger 19:40)",
+     "history": []
+    }
+   ],
+   "next": "Land the discard trial and watch the test computer's data image shrink after fstrim."
+  },
+  {
+   "id": "RES-17",
+   "title": "Desk-worker idle reaper and a smaller worker binary",
+   "priority": "P2",
+   "class": "orange",
+   "lane": "FP10",
+   "section": "Resources and density",
+   "slices": [
+    {
+     "name": "dedicated desk-worker binary",
+     "stage": 6,
+     "evidence": "deploy F 8fabec36a (05:50); per-worker RSS ~87 to ~24 MiB on the paper (05:50)",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T23:00Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-21T23:35Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-21T23:35Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T05:29Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T05:50Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T05:50Z"
+      }
+     ]
+    },
+    {
+     "name": "idle reaper",
+     "stage": 5,
+     "evidence": "deploy F; reaper effect not isolated (07:00, 08:36: hibernation at 30 min arrives with the 30 min retention)",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T23:05Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-21T23:35Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T05:29Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T05:50Z"
+      }
+     ]
+    }
+   ],
+   "next": "Shorten pool retention below the idle timeout or read the trace that settles worker 767."
+  },
+  {
+   "id": "RES-18",
+   "title": "Daemon memory",
+   "priority": "P1",
+   "class": "orange",
+   "lane": "FP1",
+   "section": "Resources and density",
+   "slices": [
+    {
+     "name": "measure daemon memory",
+     "stage": 6,
+     "evidence": "record 600e1c1d6 (11:44), rides O (12:06): Dolt table-file indexes ~0.5 GiB; appender leak fixed b36519198",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T00:20Z",
+       "approx": true
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T11:44Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T11:44Z"
+      }
+     ]
+    },
+    {
+     "name": "daemon levers (Dolt cache knob, J14)",
+     "stage": 0,
+     "evidence": "FP0 closed with no lever (11:44): the lever for the paper is RES-06",
+     "history": []
+    }
+   ],
+   "next": "None for the daemon; follow RES-06."
+  },
+  {
+   "id": "RES-19",
+   "title": "Density benchmark and LR measurements",
+   "priority": "P1",
+   "class": "green",
+   "lane": "FP0",
+   "section": "Resources and density",
+   "slices": [
+    {
+     "name": "all",
+     "stage": 1,
+     "evidence": "scripts/density written (station fp0-density-bench, on main with the ride batch 00:46); benchmark, LR sweep and oversubscription probe never run on Node B",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T00:06Z"
+      }
+     ]
+    }
+   ],
+   "next": "Run the density benchmark on Node B now that the reboot is done."
+  },
+  {
+   "id": "RES-20",
+   "title": "Cloud Hypervisor behind a backend seam",
+   "priority": "P2",
+   "class": "red",
+   "lane": "FP10",
+   "section": "Resources and density",
+   "slices": [
+    {
+     "name": "all",
+     "stage": 1,
+     "evidence": "design only (vm-hypervisor-seam-design-2026-10-21.md, a7a6d8812 on main); nothing built",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T00:00Z"
+      }
+     ]
+    }
+   ],
+   "next": "Owner review of the seam design; first inert seam slice."
+  },
+  {
+   "id": "RES-21",
+   "title": "Reconcile guest sizes in docs",
+   "priority": "P2",
+   "class": "green",
+   "lane": "FP0",
+   "section": "Resources and density",
+   "slices": [
+    {
+     "name": "all",
+     "stage": 6,
+     "evidence": "57a994549 (docs), ticked 139d1b23d",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T00:06Z",
+       "approx": true
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T00:46Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T02:05Z"
+      }
+     ]
+    }
+   ],
+   "next": "None; done."
+  },
+  {
+   "id": "RES-22",
+   "title": "Host slab and btrfs metadata",
+   "priority": "P2",
+   "class": "red",
+   "lane": "FP10",
+   "section": "Resources and density",
+   "slices": [
+    {
+     "name": "host slab reading",
+     "stage": 6,
+     "evidence": "40cd51ee0 (07:00): slab 1.21 GiB, no longer the problem",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T00:02Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T06:46Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T07:00Z"
+      }
+     ]
+    },
+    {
+     "name": "btrfs metadata",
+     "stage": 1,
+     "evidence": "metadata 82-84% used (07:00, 14:55); disk lanes (nix policy, disk pressure, platform-dolt) address space, not metadata",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T07:00Z"
+      }
+     ]
+    }
+   ],
+   "next": "Decide a metadata balance or reallocation step for Node B's btrfs root."
+  },
+  {
+   "id": "ARCH-01",
+   "title": "Doctrine names the app-desk tier",
+   "priority": "P0",
+   "class": "green",
+   "lane": "\u2014",
+   "section": "Architecture",
+   "slices": [
+    {
+     "name": "all",
+     "stage": 6,
+     "evidence": "e5ea2404d (doctrine I26), owner approved 10-21",
+     "history": [
+      {
+       "stage": 4,
+       "at": "2026-10-21T15:14Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-21T15:14Z"
+      }
+     ]
+    }
+   ],
+   "next": "None; done."
+  },
+  {
+   "id": "ARCH-02",
+   "title": "A desk manifest instead of hardcoded desks",
+   "priority": "P1",
+   "class": "red",
+   "lane": "FP2",
+   "section": "Architecture",
+   "slices": [
+    {
+     "name": "all",
+     "stage": 6,
+     "evidence": "FP2 batch 1 564840fcf, deploy 01:12; self-test spawns one worker per manifest desk role",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T18:39Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-21T23:20Z",
+       "approx": true
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-21T23:35Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T00:46Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T01:12Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T01:13Z"
+      }
+     ]
+    }
+   ],
+   "next": "None; done."
+  },
+  {
+   "id": "ARCH-03",
+   "title": "An app package carries its app desk",
+   "priority": "P1",
+   "class": "green then red",
+   "lane": "FP4",
+   "section": "Architecture",
+   "slices": [
+    {
+     "name": "app-desk design and problem record (green)",
+     "stage": 4,
+     "evidence": "50e440bc0 on main; S7 still owes ruling D1 and the LP S6 edits",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T23:27Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T02:06Z"
+      }
+     ]
+    },
+    {
+     "name": "internal/appdesk and worker carry (red, off)",
+     "stage": 5,
+     "evidence": "deploy A (02:20) inert; deskworker registration fix 50e3bc862 in deploy F",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T23:32Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T00:20Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T01:18Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T02:07Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T02:20Z"
+      }
+     ]
+    },
+    {
+     "name": "install registers the desk from the package",
+     "stage": 0,
+     "evidence": "not built; R6 (install seam to the gate registry) is a precondition",
+     "history": []
+    }
+   ],
+   "next": "Apply ruling D1 in S7 and wire install to the desk registry."
+  },
+  {
+   "id": "ARCH-04",
+   "title": "One writer per object kind",
+   "priority": "P1",
+   "class": "orange",
+   "lane": "FP4",
+   "section": "Architecture",
+   "slices": [
+    {
+     "name": "writer column and gate in observe (Texture, corpusd declare)",
+     "stage": 6,
+     "evidence": "6f0a35a40 in deploy J (09:50); drill step 1 PASS (13ef2f843) and step 5 reads observe counts (10:00)",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T18:03Z",
+       "approx": true
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-21T23:35Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T02:17Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T09:33Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T09:50Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T10:00Z"
+      }
+     ]
+    },
+    {
+     "name": "enforce for every app desk",
+     "stage": 0,
+     "evidence": "no lane work found",
+     "history": []
+    }
+   ],
+   "next": "Read the writer-gate counts and flip to enforce for Texture first."
+  },
+  {
+   "id": "ARCH-05",
+   "title": "Taint classes",
+   "priority": "P1",
+   "class": "green then red",
+   "lane": "FP2",
+   "section": "Architecture",
+   "slices": [
+    {
+     "name": "all",
+     "stage": 6,
+     "evidence": "FP2 batch 1 (01:12); real confined turns 05:12 (fp2-desk-boundary-steps4-5-20261022.json)",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T18:39Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-21T23:35Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T00:46Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T01:12Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T05:12Z"
+      }
+     ]
+    }
+   ],
+   "next": "None; done."
+  },
+  {
+   "id": "ARCH-06",
+   "title": "Agents are records; worker slots are pooled",
+   "priority": "P2",
+   "class": "red",
+   "lane": "FP10",
+   "section": "Architecture",
+   "slices": [
+    {
+     "name": "all",
+     "stage": 1,
+     "evidence": "design and problem record 1600e21ea on main; S1 blocked on FP2 and RES-17 (both now landed)",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T23:59Z"
+      }
+     ]
+    }
+   ],
+   "next": "Start S1 now that FP2 and RES-17 are on main."
+  },
+  {
+   "id": "ARCH-07",
+   "title": "Versioned, authenticated frame protocol",
+   "priority": "P1",
+   "class": "red",
+   "lane": "FP2",
+   "section": "Architecture",
+   "slices": [
+    {
+     "name": "all",
+     "stage": 6,
+     "evidence": "FP2 batch 1 (01:12); version-2 hello and header refused, per-slot tokens enforced (01:13)",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T18:39Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-21T23:35Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T00:46Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T01:12Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T01:13Z"
+      }
+     ]
+    }
+   ],
+   "next": "None; done."
+  },
+  {
+   "id": "ARCH-08",
+   "title": "Budgets passed down agent trees",
+   "priority": "P2",
+   "class": "red",
+   "lane": "FP10",
+   "section": "Architecture",
+   "slices": [
+    {
+     "name": "slice 1: research-tree token totals (observe)",
+     "stage": 5,
+     "evidence": "deploy B 3c46d5196 (02:59), orange observe-only; no deployed reading recorded",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T23:38Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T00:40Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T02:17Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T02:40Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T02:59Z"
+      }
+     ]
+    },
+    {
+     "name": "budget caps passed down trees",
+     "stage": "deferred_owner",
+     "evidence": "owner DEC-07 (02:45): track spending, no cap",
+     "history": []
+    }
+   ],
+   "next": "Read the token totals on a deployed research tree."
+  },
+  {
+   "id": "ARCH-09",
+   "title": "A compute capsule kind for app desks",
+   "priority": "P2",
+   "class": "red",
+   "lane": "FP10",
+   "section": "Architecture",
+   "slices": [
+    {
+     "name": "S0 internal/computecapsule (inert)",
+     "stage": 5,
+     "evidence": "deploy A (02:20)",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T00:00Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T00:40Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T01:18Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T02:07Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T02:20Z"
+      }
+     ]
+    },
+    {
+     "name": "S1-S4 (runner, wiring)",
+     "stage": 0,
+     "evidence": "residuals in the station file",
+     "history": []
+    }
+   ],
+   "next": "Build S1 of the compute capsule kind."
+  },
+  {
+   "id": "ARCH-10",
+   "title": "N capsules per assignment, apply serialized",
+   "priority": "P2",
+   "class": "red",
+   "lane": "FP4",
+   "section": "Architecture",
+   "slices": [
+    {
+     "name": "admission queues instead of cancelling (launch half)",
+     "stage": 6,
+     "evidence": "a233b7506 in J (09:50); round 3 in Q (13:33); drill step 4 PASS 14:05 (B bound 17 s after A); step 6 passed on K (10:30)",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T18:03Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-21T23:35Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T09:20Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T09:33Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T09:50Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T14:05Z"
+      }
+     ]
+    },
+    {
+     "name": "round 4: lost frozen candidate, report replay, wake-path",
+     "stage": 2,
+     "evidence": "lane/fp4-r4 49aba43d4; bunch 107 accept, delta bunch 113 in review (20:42)",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T14:12Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T15:00Z"
+      }
+     ]
+    },
+    {
+     "name": "N capsules per assignment, apply serialized (P2)",
+     "stage": 0,
+     "evidence": "no lane work found",
+     "history": []
+    }
+   ],
+   "next": "Finish bunch 113 and land FP4 round 4."
+  },
+  {
+   "id": "ARCH-11",
+   "title": "Executor VMs",
+   "priority": "P2",
+   "class": "red",
+   "lane": "FP10",
+   "section": "Architecture",
+   "slices": [
+    {
+     "name": "all",
+     "stage": 1,
+     "evidence": "design only (FP10 ARCH-11/12 station, lane/fp10-arch11-executors merged as docs); owner named it 'outboard capsule' (02:45)",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T00:40Z",
+       "approx": true
+      }
+     ]
+    }
+   ],
+   "next": "Owner answers the open design questions."
+  },
+  {
+   "id": "ARCH-12",
+   "title": "Executors on other hosts",
+   "priority": "P2",
+   "class": "red",
+   "lane": "FP10",
+   "section": "Architecture",
+   "slices": [
+    {
+     "name": "all",
+     "stage": 1,
+     "evidence": "covered by the ARCH-11/12 design only; after S9",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T00:40Z",
+       "approx": true
+      }
+     ]
+    }
+   ],
+   "next": "Waits on ARCH-11 and S9."
+  },
+  {
+   "id": "ARCH-13",
+   "title": "Store fan-in for wide trees",
+   "priority": "P2",
+   "class": "red",
+   "lane": "FP10",
+   "section": "Architecture",
+   "slices": [
+    {
+     "name": "debounced checkpoint and Close fence (rounds 1-6)",
+     "stage": 6,
+     "evidence": "deploy R 0bf8a097d (15:45); proof 15:53: count mode, idle planned restart 12 s, debounced setting works (GC branch and kill -9 not run)",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T23:38Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T00:40Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T13:01Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T14:15Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T15:45Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T15:53Z"
+      }
+     ]
+    },
+    {
+     "name": "round 7: pin the pools (owner option a)",
+     "stage": 3,
+     "evidence": "lane/fp10-arch13-on-main e5240dd92; 7d accepted (bunch 83, 18:31); 20:03 race check ok, landable",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T14:22Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T14:58Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T18:31Z"
+      }
+     ]
+    },
+    {
+     "name": "debounced on for the paper",
+     "stage": 0,
+     "evidence": "needs the kill -9 drill first",
+     "history": []
+    }
+   ],
+   "next": "Land ARCH-13 round 7d with FP4 4c, then the kill -9 drill."
+  },
+  {
+   "id": "ARCH-14",
+   "title": "App verb registry with per-caller allow lists",
+   "priority": "P2",
+   "class": "orange",
+   "lane": "FP10",
+   "section": "Architecture",
+   "slices": [
+    {
+     "name": "all",
+     "stage": 5,
+     "evidence": "internal/appverbs via p2-small, deploy E (05:25), unwired and off; wiring is a later station",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T23:27Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T02:38Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T03:16Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T05:00Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T05:25Z"
+      }
+     ]
+    }
+   ],
+   "next": "Wire the registry to a first app desk."
+  },
+  {
+   "id": "ARCH-15",
+   "title": "Rename the launcher's \"desk\"",
+   "priority": "P2",
+   "class": "green",
+   "lane": "FP10",
+   "section": "Architecture",
+   "slices": [
+    {
+     "name": "all",
+     "stage": 5,
+     "evidence": "launcher.desk renamed launcher.menu via p2-small (menutopIcon fix 977c2537c), deploy E (05:25); desktop icons not eyeballed on staging",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-21T23:27Z",
+       "approx": true
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T02:38Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T03:16Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T05:00Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T05:25Z"
+      }
+     ]
+    }
+   ],
+   "next": "Eyeball desktop icons on staging and tick ARCH-15."
+  }
+ ]
+}
