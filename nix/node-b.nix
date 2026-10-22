@@ -1681,6 +1681,17 @@ in
         "VMCTL_RETENTION_SHADOW_EPHEMERAL_MIN_AGE=24h"
         "VMCTL_RETENTION_SHADOW_MAX_DELETES=100"
         "VMCTL_RETENTION_SHADOW_MAX_BYTES_MIB=122880"
+        # The test-class idle rule and the quarantine age-out
+        # (docs/problems/vm-state-retention-skips-test-computers-and-
+        # quarantines-2026-10-22.md), observed first: the shadow plan lists
+        # every test-class computer and quarantined data image with bytes,
+        # age and verdict; it never deletes. The active plan's switches
+        # (VMCTL_RETENTION_TEST_IDLE_MODE, VMCTL_RETENTION_QUARANTINE_MODE)
+        # stay unset (off) until FP0 has read the shadow report.
+        "VMCTL_RETENTION_SHADOW_TEST_IDLE_MODE=dry-run"
+        "VMCTL_RETENTION_SHADOW_TEST_IDLE_MIN_AGE=168h"
+        "VMCTL_RETENTION_SHADOW_QUARANTINE_MODE=dry-run"
+        "VMCTL_RETENTION_SHADOW_QUARANTINE_MIN_AGE=168h"
         # Gateway URL for issuing autoputer credentials to VM guests.
         # vmctl calls this endpoint to get a token before booting each VM.
         "VMCTL_GATEWAY_URL=http://127.0.0.1:8084"

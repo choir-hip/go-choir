@@ -117,7 +117,7 @@ func main() {
 	if cfg, ok := retentionPruneConfigFromEnv(); ok {
 		registry.SetRetentionPruneConfig(cfg)
 		idleSweeperEnabled = true
-		log.Printf("vmctl: retention prune mode=%s ephemeral_domains=%s max_deletes=%d max_bytes=%d", cfg.Mode, strings.Join(cfg.EphemeralEmailDomains, ","), cfg.MaxDeletes, cfg.MaxBytes)
+		log.Printf("vmctl: retention prune mode=%s ephemeral_domains=%s max_deletes=%d max_bytes=%d test_idle_mode=%s test_idle_min_age=%s quarantine_mode=%s quarantine_min_age=%s selector_named=%d", cfg.Mode, strings.Join(cfg.EphemeralEmailDomains, ","), cfg.MaxDeletes, cfg.MaxBytes, cfg.TestIdleMode, cfg.TestIdleMinAge, cfg.QuarantineMode, cfg.QuarantineMinAge, len(cfg.SelectorNamed))
 	}
 	if cfg, ok := retentionShadowPruneConfigFromEnv(); ok {
 		registry.SetRetentionShadowPruneConfig(cfg)
@@ -132,7 +132,7 @@ func main() {
 		log.Fatalf("vmctl: computer tiers: %v", err)
 	}
 	registry.SetWarmnessPolicyConfig(warmnessPolicy)
-	log.Printf("vmctl: warmness policy primary_keepalive_mode=%s paid_user_count=%d platform_computer_count=%d", warmnessPolicy.PrimaryKeepaliveMode, len(warmnessPolicy.PaidUserIDs), len(warmnessPolicy.PlatformComputerIDs))
+	log.Printf("vmctl: warmness policy primary_keepalive_mode=%s paid_user_count=%d platform_computer_count=%d test_computer_count=%d", warmnessPolicy.PrimaryKeepaliveMode, len(warmnessPolicy.PaidUserIDs), len(warmnessPolicy.PlatformComputerIDs), len(warmnessPolicy.TestComputerIDs))
 
 	// Check if Firecracker is available on this host.
 	// If so, create a VM manager for real Firecracker lifecycle management
@@ -715,7 +715,27 @@ func retentionPruneConfigFromEnv() (vmctl.RetentionPruneConfig, bool) {
 			cfg.MaxBytes = mib * 1024 * 1024
 		}
 	}
+	retentionRulesFromEnv(&cfg, "VMCTL_RETENTION_")
 	return cfg, true
+}
+
+// retentionRulesFromEnv reads the test_class_idle and quarantine_age_out
+// switches (default off) and their minimum ages under prefix, and the ids
+// every VM_*_ONLY selector names, which neither rule touches.
+func retentionRulesFromEnv(cfg *vmctl.RetentionPruneConfig, prefix string) {
+	cfg.TestIdleMode = os.Getenv(prefix + "TEST_IDLE_MODE")
+	cfg.QuarantineMode = os.Getenv(prefix + "QUARANTINE_MODE")
+	if v := os.Getenv(prefix + "TEST_IDLE_MIN_AGE"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			cfg.TestIdleMinAge = d
+		}
+	}
+	if v := os.Getenv(prefix + "QUARANTINE_MIN_AGE"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			cfg.QuarantineMinAge = d
+		}
+	}
+	cfg.SelectorNamed = vmctl.RetentionSelectorNamedFromEnviron(os.Environ())
 }
 
 func retentionShadowPruneConfigFromEnv() (vmctl.RetentionPruneConfig, bool) {
@@ -754,6 +774,7 @@ func retentionShadowPruneConfigFromEnv() (vmctl.RetentionPruneConfig, bool) {
 			cfg.MaxBytes = mib * 1024 * 1024
 		}
 	}
+	retentionRulesFromEnv(&cfg, "VMCTL_RETENTION_SHADOW_")
 	return cfg, true
 }
 
@@ -785,6 +806,10 @@ func warmnessPolicyConfigFromEnv() (vmctl.WarmnessPolicyConfig, error) {
 	}
 	for _, id := range tiers.PlatformComputerIDs() {
 		cfg.PlatformComputerIDs[id] = true
+	}
+	cfg.TestComputerIDs = map[string]bool{}
+	for _, id := range tiers.TestComputerIDs() {
+		cfg.TestComputerIDs[id] = true
 	}
 	return cfg, nil
 }

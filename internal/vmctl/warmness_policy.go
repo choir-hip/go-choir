@@ -34,6 +34,10 @@ type WarmnessPolicyConfig struct {
 	// TestUserIDs is refreshed from the auth DB by the idle sweep
 	// (refreshTestAccounts), not configured.
 	TestUserIDs map[string]bool
+	// TestComputerIDs names test computers of registered accounts
+	// (internal/computertiers test_computers). A platform computer or a
+	// paid account's computer listed here keeps its own class.
+	TestComputerIDs map[string]bool
 }
 
 type WarmnessPolicyConfigSummary struct {
@@ -77,6 +81,7 @@ func normalizeWarmnessPolicyConfig(cfg WarmnessPolicyConfig) WarmnessPolicyConfi
 	cfg.PaidUserIDs = normalizedIDSet(cfg.PaidUserIDs)
 	cfg.PlatformComputerIDs = normalizedIDSet(cfg.PlatformComputerIDs)
 	cfg.TestUserIDs = normalizedIDSet(cfg.TestUserIDs)
+	cfg.TestComputerIDs = normalizedIDSet(cfg.TestComputerIDs)
 	return cfg
 }
 
@@ -105,7 +110,8 @@ func warmnessPolicySummary(cfg WarmnessPolicyConfig) WarmnessPolicyConfigSummary
 // ownership) is critical_protected or public_platform. A paid account's
 // computer is premium_always_on, read live from the tiers so a downgrade
 // takes effect; an account-derived class persisted on an older ownership is
-// ignored. Everything else is primary.
+// ignored. A test account's computer, or a computer computer-tiers.json
+// names as a test computer, is test. Everything else is primary.
 func warmnessClassForOwnership(own *VMOwnership, cfg WarmnessPolicyConfig) WarmnessClass {
 	if own == nil {
 		return ""
@@ -120,7 +126,7 @@ func warmnessClassForOwnership(own *VMOwnership, cfg WarmnessPolicyConfig) Warmn
 	if cfg.PaidUserIDs[strings.TrimSpace(own.UserID)] {
 		return WarmnessClassPremiumAlwaysOn
 	}
-	if cfg.TestUserIDs[strings.TrimSpace(own.UserID)] {
+	if cfg.TestUserIDs[strings.TrimSpace(own.UserID)] || cfg.TestComputerIDs[strings.TrimSpace(own.ComputerID)] {
 		return WarmnessClassTest
 	}
 	return WarmnessClassPrimary

@@ -41,16 +41,27 @@ type platformComputer struct {
 	Note       string `json:"note"`
 }
 
+// testComputer is a registered account's computer the operator names as a
+// test computer: below the free tier, and disposable once idle for the
+// retention rule's minimum (docs/problems/vm-state-retention-skips-test-
+// computers-and-quarantines-2026-10-22.md). Optional in the file.
+type testComputer struct {
+	ComputerID string `json:"computer_id"`
+	Note       string `json:"note"`
+}
+
 type file struct {
 	Schema            string             `json:"schema"`
 	PaidAccounts      []paidAccount      `json:"paid_accounts"`
 	PlatformComputers []platformComputer `json:"platform_computers"`
+	TestComputers     []testComputer     `json:"test_computers,omitempty"`
 }
 
 // Tiers is a parsed, validated tier file.
 type Tiers struct {
 	paid     map[string]bool
 	platform map[string]bool
+	test     map[string]bool
 }
 
 // Load parses the embedded tier file.
@@ -68,7 +79,7 @@ func Parse(body []byte) (Tiers, error) {
 	if f.Schema != Schema {
 		return Tiers{}, fmt.Errorf("computer tiers: schema %q, want %q", f.Schema, Schema)
 	}
-	t := Tiers{paid: map[string]bool{}, platform: map[string]bool{}}
+	t := Tiers{paid: map[string]bool{}, platform: map[string]bool{}, test: map[string]bool{}}
 	for _, a := range f.PaidAccounts {
 		id := strings.TrimSpace(a.UserID)
 		if !userIDRE.MatchString(id) {
@@ -95,6 +106,22 @@ func Parse(body []byte) (Tiers, error) {
 		}
 		t.platform[id] = true
 	}
+	for _, c := range f.TestComputers {
+		id := strings.TrimSpace(c.ComputerID)
+		if !computerIDRE.MatchString(id) {
+			return Tiers{}, fmt.Errorf("computer tiers: test computer %q is not a computer id", c.ComputerID)
+		}
+		if strings.TrimSpace(c.Note) == "" {
+			return Tiers{}, fmt.Errorf("computer tiers: test computer %s has no note", id)
+		}
+		if t.test[id] {
+			return Tiers{}, fmt.Errorf("computer tiers: test computer %s listed twice", id)
+		}
+		if t.platform[id] {
+			return Tiers{}, fmt.Errorf("computer tiers: %s is listed as both platform and test", id)
+		}
+		t.test[id] = true
+	}
 	return t, nil
 }
 
@@ -105,6 +132,9 @@ func (t Tiers) Paid(userID string) bool { return t.paid[strings.TrimSpace(userID
 func (t Tiers) PlatformComputer(computerID string) bool {
 	return t.platform[strings.TrimSpace(computerID)]
 }
+
+// TestComputerIDs lists the named test computers, sorted.
+func (t Tiers) TestComputerIDs() []string { return sortedKeys(t.test) }
 
 // PaidUserIDs lists the paid accounts, sorted.
 func (t Tiers) PaidUserIDs() []string { return sortedKeys(t.paid) }

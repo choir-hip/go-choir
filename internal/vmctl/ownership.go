@@ -549,6 +549,9 @@ type OwnershipRegistry struct {
 	retentionShadowPrune        RetentionPruneConfig
 	retentionShadowPruneEnabled bool
 	retentionUserEmails         map[string]string
+	// retentionClock is time.Now outside tests (the test-class idle rule
+	// and the quarantine age-out compare ages against it).
+	retentionClock func() time.Time
 
 	// warmnessPolicy controls under-capacity primary keepalive and future
 	// always-on tier modeling.
@@ -1034,6 +1037,12 @@ func (r *OwnershipRegistry) SetRetentionShadowPruneConfig(cfg RetentionPruneConf
 	cfg = normalizeRetentionPruneConfig(cfg)
 	if cfg.Mode != RetentionPruneModeOff {
 		cfg.Mode = RetentionPruneModeDryRun
+	}
+	if cfg.TestIdleMode != RetentionPruneModeOff {
+		cfg.TestIdleMode = RetentionPruneModeDryRun
+	}
+	if cfg.QuarantineMode != RetentionPruneModeOff {
+		cfg.QuarantineMode = RetentionPruneModeDryRun
 	}
 	r.retentionShadowPrune = cfg
 	r.retentionShadowPruneEnabled = true
