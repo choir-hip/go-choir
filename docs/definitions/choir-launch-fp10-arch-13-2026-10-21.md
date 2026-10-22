@@ -30,10 +30,15 @@ start:
 
 finish:
   deliver: >-
-    A guest write never waits on a Dolt history commit when the owner turns
-    the debounced checkpoint on, and every computer reports how often it
-    commits, how long a commit holds the write path, and how many events
-    and ops each commit carries.
+    When the owner turns the debounced checkpoint on, the Dolt history
+    commit leaves finalize, so a writer stalls on a commit at most once per
+    debounce window or ops bound instead of every 100 events. The stall is
+    bounded, not zero: the background commit still holds the store's one
+    connection, and a finalize that starts during it waits at BeginTx
+    (removing that is SA slice 5). Every computer reports how often it
+    commits, how long a commit holds the write path, how often and how long
+    a finalize waited on a commit, and how many events and ops each commit
+    carries.
   artifact: >-
     Commits on lane/fp10-arch13-fanin: the problem record and this file
     (green); the failing tests (yellow); the observe counters, the
@@ -56,11 +61,24 @@ finish:
         {"key":"store.debounced_checkpoint","value":true}, run one research
         activation, read guest_checkpoint again over a few minutes, then
         POST the value false and read it once more
-      proves: inline_commits and inline_ns stop growing, background_commits grows, last_commit_age_ms stays under debounce_ms plus a commit, failures stays 0; after false, mode is count and inline commits resume
+      proves: inline_commits and inline_ns stop growing, background_commits grows, last_commit_age_ms stays under debounce_ms plus a commit, failures stays 0; finalize_commit_waits grows by at most about one per background commit and finalize_commit_wait_max_ns stays near background_max_ns (the bounded stall, reported, not hidden); after false, mode is count and inline commits resume
       evidence_class: deployed proof
     - action: the paper's schedules and polls read before and after the deploy (setting left off on the paper)
       proves: the deploy did not take the paper down
       evidence_class: deployed proof
+    - action: >-
+        Before the setting is turned on for the paper (not part of this
+        landing): on a test computer with the setting on, finalize events
+        (one research activation), read guest_checkpoint so that
+        events_since_commit > 0, kill -9 the guest runtime process, let the
+        computer restart, then read the tape head and the projected rows
+        for every event acknowledged before the kill
+      proves: >-
+        the durability assumption - with the checkpoint off the write path,
+        an acknowledged write rests on SQL COMMIT being durable in the
+        embedded Dolt working set; every acknowledged event is still
+        projected after the kill, with no Dolt commit covering it
+      evidence_class: deployed proof (FP0; a soak alone does not count)
   rollback: >-
     The setting off (the next mark goes back to counted inline commits);
     then git revert of the red commit. Nothing persistent changes shape:
@@ -100,7 +118,13 @@ boundaries:
     - vmctl, vmmanager and the VM image are not touched (FP8's lane).
   excluded:
     - SA slice 4 (read cost) and slice 5 (store split, group commit of acts), and slice 6 (VM shapes, which are vmctl and FP8's).
-    - Turning the setting on for the paper; that is FP0's or the owner's call after a soak.
+    - Turning the setting on for the paper; that is FP0's or the owner's call after a soak and the kill -9 drill in acceptance.
+  assumptions:
+    - >-
+      Durability without the checkpoint rests on SQL COMMIT being durable in
+      the embedded Dolt working set (the Dolt commit only adds history
+      addressability). Not yet tested by a crash; the kill -9 drill in
+      acceptance tests it before the paper.
   protected_surfaces: [guest store write path]
 
 now:
@@ -119,6 +143,8 @@ now:
     9b8cc35f8 -> d1ec806e2, 6d059b885 -> f8966523d, 3bab3b8d1 -> 62dd84558,
     ced58e401 -> 31c6b2e5b, 410c6d35d -> f298f7484, 9196f87d9 -> 08bb5e4d6.
     The red commit FP0 reviews is now d1ec806e2, the review fix f298f7484.
+    Review round bunch 45 on f60daaa09: 4495cd076 (problem record),
+    ba875fab5 (tests), a95e8ff16 (fix, red), then this card.
   deploy_identity: unknown to this lane
   candidate:
     id: fp10-arch13-debounced-checkpoint
@@ -137,6 +163,15 @@ now:
       - internal/agentcore/computer_settings.go
       - internal/agentcore/runtime.go
       - internal/agentcore/telemetry_batching_test.go
+  review_round_bunch_45: >-
+    2026-10-22, DeepSeek (accept with edits; Gemini flash and Devin had
+    accepted). Problem record 4495cd076, tests ba875fab5, fix a95e8ff16.
+    (1) the claim is narrowed: the stall is bounded, not zero; the
+    finalize commit-wait counters make it visible; the acceptance reads
+    them. (2) the closing commit is capped at 10 s. (3) residual, below.
+    (4) no-op commits counted apart; mode reports closed. (5) the
+    durability assumption is stated and a kill -9 drill is required before
+    the paper.
   rebase:
     - >-
       2026-10-22 onto main 5efe46672. One conflict, Store.Close in
@@ -165,10 +200,28 @@ now:
       reopens the cadence and arms it (TestCheckpointReopenAfterCloseStaysDebounced).
   residuals:
     - >-
+      The background commit still holds the store's one connection
+      (MaxOpenConns 1): a finalize that starts during it waits at BeginTx
+      holding eventMu, and other writers queue behind it. Bounded to about
+      once per window or ops bound and now counted
+      (finalize_commit_waits); removing it needs a second connection or
+      the store split, SA slice 5 (excluded).
+    - >-
+      Close is not a write fence (review item 3, kept as a residual, not
+      fixed): CancelDerivedColumnMigration only signals, and closeCheckpoint
+      does not wait for work in flight, so a migration step already queued
+      on the connection, or any other writer racing shutdown, can land
+      after the closing commit. Effect: history addressability at a planned
+      shutdown only, not durability (the write is in the SQL working set,
+      and the next DOLT_COMMIT -Am after boot takes it). Not fenced because
+      waiting on the migration alone would not make the closing commit a
+      fence for the other writers, and a real fence (stop all writers
+      first) belongs to the shutdown ordering, not the cadence.
+    - >-
       Behavior change in count mode too, by design: the dirty mark no longer
-      waits on a commit in flight, a "nothing to commit" result counts as a
-      commit in the stats, and Reopen marks the adopted workspace dirty (at
-      most one extra no-op commit). Reviewers should check these three.
+      waits on a commit in flight, and Reopen marks the adopted workspace
+      dirty (at most one extra commit, counted in noop_commits if Dolt has
+      nothing to commit). No-op commits no longer count as commits.
     - >-
       Concurrent DOLT_COMMIT('-Am') with in-flight finalize transactions is
       exercised by a -race test on embedded Dolt and has precedent
@@ -184,17 +237,21 @@ now:
     claim: >-
       The guest's inline Dolt checkpoint is a write-path stall that every
       concurrent writer shares; moving it to a debounced background commit
-      with a lock-free dirty mark removes that stall without losing
-      durability or history addressability beyond the debounce window.
+      with a lock-free dirty mark bounds that stall to about once per
+      window (it does not remove it while the commit shares the store's one
+      connection) without losing durability or history addressability
+      beyond the debounce window.
     test: >-
       Count mode on staging shows non-zero write-path checkpoint time; with
-      the setting on, write-path checkpoint time is zero, background
-      commits occur within the window, and the computer behaves as before.
+      the setting on, inline write-path checkpoint time is zero, the
+      finalize waits on a commit are bounded to about one per background
+      commit, background commits occur within the window, and the computer
+      behaves as before.
     edge: missing_oracle
-    delta_o: the observe counters (this slice) are the oracle
+    delta_o: the observe counters (this slice) are the oracle, including finalize_commit_waits for the bounded stall
     scope_if_supported: guest store at the deployed SHA
     status: testing
-    evidence_refs: [docs/problems/guest-checkpoint-on-the-write-path-2026-10-21.md, 9b8cc35f8]
+    evidence_refs: [docs/problems/guest-checkpoint-on-the-write-path-2026-10-21.md, d1ec806e2, a95e8ff16]
   decision:
     what: take option (c) plus a lock-free mark, behind a computer setting, default off
     kind: safety
@@ -212,20 +269,25 @@ Problem: [guest-checkpoint-on-the-write-path-2026-10-21](../problems/guest-check
 1. **Observe, always on.** `Store.CheckpointStats()` and
    `/api/runtime/observability` `guest_checkpoint`: mode; inline and background commit counts;
    write-path checkpoint nanoseconds (inline commits only) and the max;
-   background commit nanoseconds; failures and the last error; events and
-   ops since the last commit; age of the last commit.
+   background commit nanoseconds; no-op commits ("nothing to commit",
+   counted apart); finalizes whose BeginTx waited on a commit holding the
+   store's one connection, with their wait time and max; failures and the
+   last error; events and ops since the last commit; age of the last
+   commit. Mode is count, debounced, or closed (between Close and Reopen).
 2. **Lock-free mark.** The dirty flag becomes a generation counter. A mark
    is an atomic increment; a commit records the generation it read before
-   the SQL call and is "clean" only if no mark came after. A write never
-   waits on a commit in flight. Same commit set as today in count mode.
+   the SQL call and is "clean" only if no mark came after. A mark never
+   waits on a commit in flight (the transaction can; see 3). Same commit set as today in count mode.
 3. **Debounced mode** (setting `store.debounced_checkpoint`, or env
    `CHOIR_GUEST_CHECKPOINT=debounced`; default off). `finalizeBatch` never
    commits; it arms a timer (default 60 s, env
    `CHOIR_GUEST_CHECKPOINT_DEBOUNCE`) or, past an ops bound (default
    10,000 ops since the last commit, env
    `CHOIR_GUEST_CHECKPOINT_MAX_OPS`), kicks the background committer at
-   once. The commit runs outside `eventMu` and the appender mutex. Close
-   stops the timer and commits once. Turning the setting off stops the
+   once. The commit runs outside `eventMu` and the appender mutex, but on
+   the store's one connection, so a finalize that starts during it waits
+   (counted, above). Close stops the timer and commits once, capped at
+   10 s. Turning the setting off stops the
    timer and returns to counted inline commits.
 
 ## Failure modes, written before the code
