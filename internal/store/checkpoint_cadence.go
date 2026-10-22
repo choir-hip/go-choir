@@ -61,6 +61,8 @@ var ErrCheckpointCommitLive = errors.New("runtime store: close left the store op
 
 var errCommitLockTimeout = errors.New("commit lock not taken by the close deadline")
 
+var errCancelledAtClose = errors.New("background commit cancelled by Close")
+
 // CheckpointConfig is the checkpoint cadence's runtime configuration. Zero
 // Debounce and MaxOps take the defaults.
 type CheckpointConfig struct {
@@ -258,11 +260,16 @@ func (s *Store) fireCheckpoint() {
 		c.mu.Unlock()
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), checkpointCommitTimeout)
+	parent, cancelCause := context.WithCancelCause(context.Background())
+	ctx, cancel := context.WithTimeout(parent, checkpointCommitTimeout)
 	defer cancel()
+	defer cancelCause(nil)
 	done := make(chan struct{})
 	c.inFlight = true
-	c.cancelInFlight = cancel
+	// Close cancels with a cause, so the commit's error counts as
+	// cancelled at close, not as a failure, even after a failed Close
+	// reopens the cadence.
+	c.cancelInFlight = func() { cancelCause(errCancelledAtClose) }
 	c.inFlightDone = done
 	c.mu.Unlock()
 	err := s.commitDoltCheckpointAt(ctx, "guest snapshot (debounced)", checkpointSiteBackground)
@@ -318,8 +325,10 @@ func (s *Store) closeCheckpoint(deadline, hard time.Time) error {
 	committer := c.inFlightDone
 	c.mu.Unlock()
 	if committer != nil && !waitUntil(committer, hard) {
-		// The closing commit is not attempted.
-		c.closingSkipped.Add(1)
+		// The closing commit, in debounced mode, is not attempted.
+		if debounced {
+			c.closingSkipped.Add(1)
+		}
 		return c.leaveOpen("the cancelled background commit has not returned")
 	}
 	if !debounced {

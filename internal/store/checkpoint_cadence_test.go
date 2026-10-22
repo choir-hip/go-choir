@@ -950,9 +950,8 @@ func TestCheckpointConcurrentCloseFailsClosed(t *testing.T) {
 	}
 }
 
-// After a Close that failed closed the store stays usable and finalize
-// commits inline; a retried Close while that inline commit runs fails
-// closed too.
+// After a Close that failed closed the store stays usable; a retried
+// Close while an inline finalize commit runs fails closed too.
 func TestCheckpointRetriedCloseUnderInlineCommitFailsClosed(t *testing.T) {
 	path := testStorePath(t)
 	cleanupTestStorePath(path)
@@ -971,6 +970,9 @@ func TestCheckpointRetriedCloseUnderInlineCommitFailsClosed(t *testing.T) {
 		t.Fatal("the background commit did not finish after release")
 	}
 
+	// A failed Close restores the debounced cadence, so take the store to
+	// count mode for an inline commit to retry Close under.
+	s.ConfigureCheckpoint(CheckpointConfig{})
 	finalize := prepareOneFinalize(t, s, computerID)
 	held, releaseInline := holdNextCommit(t, s)
 	finalized := make(chan error, 1)
