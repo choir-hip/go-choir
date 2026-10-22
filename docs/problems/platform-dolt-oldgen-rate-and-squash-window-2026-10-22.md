@@ -346,3 +346,72 @@ mechanism and is out of this lane's scope (named residual).
 - What a guest does when its event append to corpusd fails during the
   window (`internal/computerevent/http_client.go` does not retry; the
   callers' behaviour is not read here).
+
+## Review round 1 (bunch 75: Sonnet, DeepSeek, Gemini flash; all accept with edits; land inert, do not flip until fixed), 2026-10-22
+
+Recorded before the fixes. Reviews: `~/runs/reviews/bunch75-{sonnet,deepseek,flash}.out`
+(FP0's runs; patch digest `6901fc8e…f1f74`, head `752856812`).
+
+- **R1 (Sonnet F1, DeepSeek 1, flash 1; medium): a second squash fails
+  with snapshots off.** `internal/projectionbase/squash.go:214` makes the
+  squash commit only when `dolt_log` holds more than 2 commits. After the
+  first squash it holds 2, and with snapshots off HEAD never moves, so
+  WORKING differs from HEAD; the next run skips the commit and fails at
+  `:239` ("root changed by the squash commit", not a refusal before
+  mutation). On Node B: `platform-dolt-squash` exits 1, the script restores
+  the backup after a full Store A outage and leaves a
+  `*.squash-failed-<ts>` directory that blocks every later run. Reproduced
+  by Sonnet and DeepSeek. §4's "the squash tool commits the working set"
+  and "monthly" were true only while the log holds more than 2 commits.
+  The first squash (about 92k commits) is unaffected.
+- **R2 (Sonnet F2, DeepSeek 2; low-medium): the restore drill's head
+  check becomes vacuous.** `scripts/off-host-backup.sh` records the newest
+  `dolt_log` hash in `manifest.json` `dolt_heads`;
+  `scripts/off-host-restore-drill.sh` (`snap`) requires it in the restored
+  log. With snapshots off the hash is frozen, so any restore of any age
+  passes, while the working set is then the only copy of every write
+  since the flip.
+- **R3 (Sonnet F3; low-medium): the env wiring in `openStore` is
+  untested.** Mutants P1 (the apply call dropped), P2 (a wrong env name)
+  and P3 (an unknown value turns snapshots off at the seam) survive every
+  test; P3 fails open against the record's own rule.
+- **R4 (Sonnet F4, DeepSeek 3 and 5; low to medium): nothing alarms on
+  newgen or the journal, and D is not bounded "whatever the event rate".**
+  With snapshots off growth moves to newgen and the journal; the audit
+  only checks oldgen (50 GiB) and an upper bound on the commit delta, so it
+  can never fail. D is the post-flip live delta (mostly the append-only
+  receipts and their four indexes) and grows with the event rate: the
+  switch removes history overhead, not live growth, and "oldgen flat" can
+  pass while total `noms` still grows. Auto GC under 2.4.2 was read in the
+  2.2.0 module only.
+- **R5 (Sonnet F5; info): the durability wording.**
+  `TestModeOffWriteSurvivesReopen` closes the store gracefully; it proves
+  persistence across a reopen, not crash durability. Crash durability is
+  the 2026-09-19 kill -9 drill on 2.1.9 and Sonnet's probes on real Dolt
+  2.4.2: a `sql-server` killed with -9 while a client inserted with no
+  `DOLT_COMMIT` came back with all 93 acknowledged rows, `dolt_log`
+  unchanged and the working set intact; the same with two `DOLT_GC` calls
+  during the writes (108 rows). Sonnet also restored a `DOLT_BACKUP
+  ('sync-url')` of an uncommitted working set on 2.4.2 (93 rows) and
+  measured oldgen in a never-commit arm staying at 8 KiB while a
+  commit-every-tick arm grew 1.4 to 8.0 MiB.
+- **R6 (Sonnet §1): four operational readers of Store A's commit history
+  the record missed** ("nothing reads it" holds for the product and every
+  authority path, not for operations):
+  1. the squash tool (`squash.go:211, 214, 239`): R1;
+  2. the off-host backup manifest (`off-host-backup.sh`, `dolt_sync` and
+     `snapshot_store` record `dolt_log`'s newest hash);
+  3. the restore drill (`off-host-restore-drill.sh` `snap`): R2;
+  4. the subvolume migration's check (`scripts/dolt-data-to-subvolume.sh`
+     `head_of`, head equality before and after a one-shot move): stays
+     equal with a frozen head; harmless, but it no longer proves anything.
+  The history audit's `COUNT(*) FROM dolt_log` is a fifth, already named
+  (R4).
+- **R7 (DeepSeek 4): "Store B's committer is untouched" is conditional.**
+  True with a separate corpus DSN; in the shared-pool fallback (empty
+  `corpus-dsn.env`) the one committer serves both and the switch stops
+  corpus-table snapshots too, by design.
+- **R8 (flash 2): §4's sentence about the squash tool did not match the
+  code** (the same defect as R1, in the record).
+- Observed by Sonnet, harmless: with the file present checkpointd logs the
+  "snapshot commits off" line at every run (1,440 a day).
