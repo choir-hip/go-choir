@@ -60,7 +60,7 @@ step_2() {
 	[ -f "$OPT_probe" ] || die 2 "$OPT_probe is not in this tree (it lands with the FP2 batch); pass --probe PATH"
 	[ -n "${CHOIR_API_KEY:-}" ] || die 2 "CHOIR_API_KEY is not set in the environment"
 	cred=$(umask 077 && mktemp "${TMPDIR:-/tmp}/fp2-cred.XXXXXX") || die 2 "mktemp failed"
-	trap 'rm -f "$cred"' EXIT
+	trap 'rm -f "${cred:-}"' EXIT
 	jq -nc --arg k "$CHOIR_API_KEY" --arg c "$OPT_computer" '{api_key:$k, computer_id:$c}' >"$cred"
 	if [ "$OPT_egress" = yes ]; then
 		python3 -I "$OPT_probe" --cred "$cred" --out "$out" >/dev/null
@@ -75,7 +75,7 @@ step_2() {
 	*) fail "confinement probe: route not deployed or computer unreachable (exit $rc); nothing proven" ;;
 	esac
 	if [ -s "$out" ]; then
-		jq -c '{ok, mode: (.desk_cells.mode // null), frame_boundary: (.frame_boundary.ok // null)}' "$out" 2>/dev/null | while IFS= read -r l; do info "receipt $l"; done
+		jq -c '{verdict, desk_cells: (.server.desk_cells.ok // null), mode: (.server.desk_cells.mode // null), frame_boundary: (.server.frame_boundary.ok // null), failures}' "$out" 2>/dev/null | while IFS= read -r l; do info "receipt $l"; done
 	fi
 	[ "$OPT_egress" = yes ] || info "egress legs skipped (--egress yes after FP3's host egress policy is deployed)"
 }
