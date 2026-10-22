@@ -103,10 +103,16 @@ sweep for every later dir (secondary finding).
    (`DestroyVMState`, then the ownership), with the same re-check at destroy
    time.
 2. A quarantine age-out rule, its own switch, default off; minimum age
-   default 7 days. It takes only a post-swap quarantine (journal phase
-   swapped or later), never one whose journal is pre-swap or missing (it may
-   be the only copy), and never one of a protected-class or selector-named
-   computer. Each removal writes a manifest line (what, when quarantined, why:
+   default 7 days. It takes only a quarantine whose recovery finished: the
+   journal's phase is `done` or its status is `active`, and the status is
+   not `failed`. It keeps `swapped` and `booted` (a recovery that swapped
+   but never verified), every pre-swap phase, and a missing or unreadable
+   journal: any of these may be the only copy. This is stricter than
+   vmmanager's count prune (`recoveryJournalPrunable` accepts `swapped`
+   and later). It never takes a quarantine of a protected-class or
+   selector-named computer. (Round 2 corrected this paragraph, which said
+   "swapped or later" while the code said `done`/`active`: DeepSeek's
+   phase-drift finding.) Each removal writes a manifest line (what, when quarantined, why:
    the recovery id, journal phase and canonical head, size) before and after
    the unlink.
 3. The retention plan (and the shadow plan) reports every test-class computer
@@ -131,4 +137,70 @@ Failure modes the tests must cover (written before the code):
   when, why or size.
 - T9. The report omits a kept test computer or quarantine, or its reasons.
 - T10. With both new switches off the plan's candidates and deletions are
-  byte-identical to today's (inert deploy).
+  today's (inert deploy). The plan's config block does gain the new keys
+  (`test_idle_mode`, `quarantine_mode`, both min ages, `selector_named`), so
+  the JSON is functionally, not byte-, identical.
+
+## Review round 2 (bunch76, at 7430e1f31): findings, recorded before the fixes
+
+Reviews: DeepSeek (send back), Gemini flash (accept with edits), Sonnet
+(accept with edits; blockers before either rule may be switched active).
+Reproduced or confirmed by reading the code at 7430e1f31:
+
+- R2-1 (all three; build). `inspectQuarantine` reads `syscall.Stat_t.Ctim`,
+  which exists only on Linux. `go build ./internal/vmctl ./cmd/vmctl` fails
+  on darwin, while the base f0b1ee313 builds there. Also, where `Sys()` is
+  not a `*syscall.Stat_t`, the code falls back to the modification time,
+  which is older than the rename, so it fails open (ages out early). Not
+  reproducible on this Linux host (vmctl's Dolt cgo deps do not
+  cross-compile); the reviewers reproduced it on darwin/arm64.
+- R2-2 (all three; fail-open). Quarantines in a dir with no ownership record
+  are checked only against selectors. A journal naming the paper's or the
+  owner's computer in an ownerless dir is `will_remove` (DeepSeek's and
+  Sonnet's probes). The scan also reads every dir under vm-state, not only
+  `vm-*` and `candidate-*`, so operator-saved dirs are in scope. The
+  10-07 pair in the candidate-fleet dir is the owner's pre-restore image and
+  possibly unique (docs/problems/node-b-disk-free-space-2026-10-09.md;
+  docs/problems/fresh-realization-skips-file-hydration-2026-10-09.md:
+  484 paths absent from the restored disk, check never closed). Today they
+  are kept only if their dir still resolves to the owner's ownership: by
+  luck, not by code. The lane's own test expected an ownerless
+  `candidate-fleet` quarantine to be `would_remove`.
+- R2-3 (Sonnet F2; policy). A `done` journal does not prove a quarantine is
+  not the only copy: the 10-09 record shows a done recovery whose quarantine
+  held 484 user paths the restored disk lacked. The rule allowed every
+  non-protected class, real (primary) accounts included.
+- R2-4 (DeepSeek 1, Sonnet F3). The selector protection reads only
+  `^VM_[A-Z0-9_]+_ONLY$`. vmctl's environment also carries per-computer
+  lists the regex misses: `CHOIR_CLAUDE_DELEGATE_COMPUTERS` (the delegate
+  computer-ad1b46d4…, on an example.com account, so test class),
+  `CHOIR_VISUAL_CAPTURE_COMPUTERS`, `VMCTL_JAILER_ONLY`,
+  `CHOIR_CAPSULE_MIRROR_COMPUTERS`, `CHOIR_CAPSULE_MIRRORS_ONLY`. The proof
+  checked the delegate at proof time only; a computer that becomes eligible
+  later would be removed unreviewed.
+- R2-5 (Sonnet F4, DeepSeek 11). `test_class_idle` dropped the ephemeral
+  rule's `interactive` + `primary` desktop condition, so every desktop of a
+  test account (a branch desktop of the paper's example.com account
+  included) was eligible. And `DestroyVMState` removes the whole dir,
+  including a pre-swap, failed or journal-less quarantine the age-out rule
+  would keep (Sonnet probe P4). Related (DeepSeek 7): a computer stopped by
+  `recover_current` was not excluded.
+- R2-6 (DeepSeek 4). The record said "swapped or later"; the code says
+  `done`/`active`. Corrected above to match the code.
+- R2-7 (Sonnet F6, mutants). Mutants that survive the lane's tests:
+  - M07, M08: the lifecycle claim is dropped or its conflict check skipped;
+  - M09, M10, M31: a manifest write failure is ignored;
+  - M12, M16: the quarantine removal-time rechecks are dropped;
+  - M33: age is read from mtime instead of ctime;
+  - M34: the regular-file check is dropped;
+  - M29: a zero `LastActiveAt` counts as idle.
+- Low findings, taken in this round: unparsed or non-regular quarantine
+  names vanish from the report (Sonnet F8); no floor on the minimum ages
+  (F9); concurrent passes write a false `failed` line for an already-removed
+  quarantine (F7, part 1).
+- Low findings kept as residuals: the ephemeral rule ignores selectors and
+  runs first (pre-existing); the report's verdicts are not bounded by
+  `MAX_DELETES`/`MAX_BYTES`; the manifest lives on the filesystem it frees
+  and its new directory entry is not fsynced; a quarantine unlink racing a
+  cold recovery's own count prune on the same VM (F7, part 2); the newest
+  rollback quarantine of a test computer can age out (DeepSeek 5).
