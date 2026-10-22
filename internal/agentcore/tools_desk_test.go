@@ -82,6 +82,8 @@ func deskTestWorkerBin(t *testing.T) {
 			return
 		}
 		deskWorkerBinOverride = bin
+		// The compiled daemon also dispatches the self-test legs' arguments.
+		daemonSelfTestBinOverride = bin
 	})
 	if deskTestWorkerBinErr != nil {
 		t.Fatalf("%v", deskTestWorkerBinErr)

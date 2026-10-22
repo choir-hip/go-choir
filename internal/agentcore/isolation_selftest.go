@@ -145,7 +145,7 @@ func (h *APIHandler) HandleIsolationSelfTest(w http.ResponseWriter, r *http.Requ
 		}
 	}
 	cellCfg := deskCellSelfTestConfig(h.rt.cfg.ComputerID)
-	resp.DocumentTool = doctool.SelfTest(ctx, deskWorkerBinary(), append([]string{"/etc/passwd"}, cellCfg.ExtraReads...))
+	resp.DocumentTool = doctool.SelfTest(ctx, daemonSelfTestBinary(), append([]string{"/etc/passwd"}, cellCfg.ExtraReads...))
 	for _, f := range resp.DocumentTool.Failures {
 		resp.Failures = append(resp.Failures, "document_tool: "+f)
 	}
@@ -210,7 +210,7 @@ func (h *APIHandler) HandleInternalIsolationSelfTest(w http.ResponseWriter, r *h
 		rec := yaegikernel.DeskOOMSelfTest(ctx, deskOOMSelfTestConfig(h.rt.cfg.ComputerID))
 		resp.OOM, failures = &rec, rec.Failures
 	case isolationLegSeccomp:
-		rec := capsule.SeccompSelfTest(ctx, deskWorkerBinary())
+		rec := capsule.SeccompSelfTest(ctx, daemonSelfTestBinary())
 		resp.Seccomp, failures = &rec, rec.Failures
 	}
 	for _, f := range failures {
