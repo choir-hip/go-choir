@@ -44,6 +44,10 @@ type ProcMem struct {
 	TotalRSSKiB int64                   `json:"total_rss_kib"`
 	ByName      map[string]ProcMemGroup `json:"by_name"`
 	Processes   []ProcMemProcess        `json:"processes"`
+	// PageCache is joined only on procmem?pagecache=1: the walk costs a
+	// second or two of one core (debug_pagecache.go).
+	PageCache      *PageCache `json:"page_cache,omitempty"`
+	PageCacheError string     `json:"page_cache_error,omitempty"`
 }
 
 var procMeminfoKeys = []string{"MemTotal", "MemFree", "MemAvailable", "Buffers", "Cached", "Shmem", "Slab", "AnonPages"}
@@ -124,11 +128,18 @@ func readKiBFields(path string) (map[string]int64, error) {
 	return fields, sc.Err()
 }
 
-func serveProcMem(w http.ResponseWriter) {
+func serveProcMem(w http.ResponseWriter, r *http.Request) {
 	mem, err := readProcMem("/proc")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotImplemented)
 		return
+	}
+	if r.URL.Query().Get("pagecache") == "1" {
+		if pc, err := readGuestPageCache(); err != nil {
+			mem.PageCacheError = err.Error()
+		} else {
+			mem.PageCache = &pc
+		}
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(mem)

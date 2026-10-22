@@ -29,6 +29,11 @@ import (
 //     reporting that root as absent.
 //  7. It is served to a guest caller: it rides the pprof prefix and its
 //     host-sourced guard.
+// 10. A few huge files run the walk long under the file cap: a byte cap
+//     (apparent bytes examined) also stops it and says partial.
+// 11. Joining procmem makes every procmem read pay for a full store walk:
+//     the residency field is opt-in (procmem?pagecache=1), absent by
+//     default, and behind the same host-sourced guard.
 //  9. The kernel lies to an unprivileged caller: since Linux 5.2 mincore
 //     reports every page resident for a file the caller neither owns nor
 //     could write (without CAP_FOWNER), which on a read-only store would
@@ -67,7 +72,7 @@ func TestPageCacheCountsResidentBytesOncePerInode(t *testing.T) {
 	if err := os.Symlink("/etc", filepath.Join(store, "ccc-escape")); err != nil {
 		t.Fatal(err)
 	}
-	got, err := readPageCache([]pageCacheRootSpec{{Name: "store", Path: store, ListTop: true}}, pageCacheLimits{MaxFiles: 1000, Deadline: 10 * time.Second, Top: 1})
+	got, err := readPageCache([]pageCacheRootSpec{{Name: "store", Path: store, ListTop: true}}, pageCacheLimits{MaxBytes: 1 << 30, MaxFiles: 1000, Deadline: 10 * time.Second, Top: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +113,7 @@ func TestPageCacheNeverFaultsPagesIn(t *testing.T) {
 	f.Close()
 	spec := []pageCacheRootSpec{{Name: "store", Path: store, ListTop: true}}
 	for i := 0; i < 2; i++ {
-		got, err := readPageCache(spec, pageCacheLimits{MaxFiles: 10, Deadline: 10 * time.Second, Top: 5})
+		got, err := readPageCache(spec, pageCacheLimits{MaxBytes: 1 << 30, MaxFiles: 10, Deadline: 10 * time.Second, Top: 5})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -125,7 +130,7 @@ func TestPageCacheNeverFaultsPagesIn(t *testing.T) {
 func TestPageCacheHidesNamesOutsideStoreRoots(t *testing.T) {
 	persistent := t.TempDir()
 	writeFile(t, filepath.Join(persistent, "owner-private-title.md"), 4096)
-	got, err := readPageCache([]pageCacheRootSpec{{Name: "persistent", Path: persistent}}, pageCacheLimits{MaxFiles: 10, Deadline: 10 * time.Second, Top: 5})
+	got, err := readPageCache([]pageCacheRootSpec{{Name: "persistent", Path: persistent}}, pageCacheLimits{MaxBytes: 1 << 30, MaxFiles: 10, Deadline: 10 * time.Second, Top: 5})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,14 +149,14 @@ func TestPageCacheStopsAtFileCapAndSaysPartial(t *testing.T) {
 	for _, n := range []string{"a", "b", "c", "d"} {
 		writeFile(t, filepath.Join(store, n), 10)
 	}
-	got, err := readPageCache([]pageCacheRootSpec{{Name: "store", Path: store}}, pageCacheLimits{MaxFiles: 2, Deadline: 10 * time.Second})
+	got, err := readPageCache([]pageCacheRootSpec{{Name: "store", Path: store}}, pageCacheLimits{MaxBytes: 1 << 30, MaxFiles: 2, Deadline: 10 * time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if r := rootByName(t, got, "store"); r.Files != 2 || !r.Partial {
 		t.Fatalf("root = %+v, want 2 files and partial", r)
 	}
-	got, err = readPageCache([]pageCacheRootSpec{{Name: "store", Path: store}}, pageCacheLimits{MaxFiles: 100, Deadline: -time.Second})
+	got, err = readPageCache([]pageCacheRootSpec{{Name: "store", Path: store}}, pageCacheLimits{MaxBytes: 1 << 30, MaxFiles: 100, Deadline: -time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +166,7 @@ func TestPageCacheStopsAtFileCapAndSaysPartial(t *testing.T) {
 }
 
 func TestPageCacheMissingRootIsAbsentNotAnError(t *testing.T) {
-	got, err := readPageCache([]pageCacheRootSpec{{Name: "persistent", Path: filepath.Join(t.TempDir(), "absent")}}, pageCacheLimits{MaxFiles: 10, Deadline: time.Second})
+	got, err := readPageCache([]pageCacheRootSpec{{Name: "persistent", Path: filepath.Join(t.TempDir(), "absent")}}, pageCacheLimits{MaxBytes: 1 << 30, MaxFiles: 10, Deadline: time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,7 +191,7 @@ func TestPageCacheCountsUnownedFilesAsUnmeasured(t *testing.T) {
 	prev := pageCacheMayMeasure
 	pageCacheMayMeasure = func(uint32) bool { return false }
 	defer func() { pageCacheMayMeasure = prev }()
-	got, err := readPageCache([]pageCacheRootSpec{{Name: "store", Path: store, ListTop: true}}, pageCacheLimits{MaxFiles: 10, Deadline: 10 * time.Second, Top: 5})
+	got, err := readPageCache([]pageCacheRootSpec{{Name: "store", Path: store, ListTop: true}}, pageCacheLimits{MaxBytes: 1 << 30, MaxFiles: 10, Deadline: 10 * time.Second, Top: 5})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,5 +201,63 @@ func TestPageCacheCountsUnownedFilesAsUnmeasured(t *testing.T) {
 	}
 	if r.UnmeasuredFiles != 1 || r.UnmeasuredBytes != 8192 {
 		t.Fatalf("root = %+v, want one unmeasured file of 8192 bytes", r)
+	}
+}
+
+func TestPageCacheStopsAtByteCapAndSaysPartial(t *testing.T) {
+	store := t.TempDir()
+	for _, n := range []string{"a", "b", "c"} {
+		writeFile(t, filepath.Join(store, n), 4096)
+	}
+	got, err := readPageCache([]pageCacheRootSpec{{Name: "store", Path: store}}, pageCacheLimits{MaxFiles: 100, MaxBytes: 8192, Deadline: 10 * time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := rootByName(t, got, "store"); r.Files != 2 || r.Bytes != 8192 || !r.Partial {
+		t.Fatalf("root = %+v, want 2 files, 8192 bytes and partial", r)
+	}
+}
+
+func TestProcMemJoinsPageCacheOnlyWhenAsked(t *testing.T) {
+	if _, err := os.Stat("/proc/meminfo"); err != nil {
+		t.Skip("no /proc")
+	}
+	store := t.TempDir()
+	writeFile(t, filepath.Join(store, "pkg", "bin", "tool"), 4096)
+	prev := guestPageCacheRoots
+	guestPageCacheRoots = []pageCacheRootSpec{{Name: "store", Path: store, ListTop: true}}
+	defer func() { guestPageCacheRoots = prev }()
+	get := func(remote, query string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, DebugPprofPrefix+"procmem"+query, nil)
+		req.RemoteAddr = remote
+		rec := httptest.NewRecorder()
+		serveDebugPprof(rec, req)
+		return rec
+	}
+	if rec := get("203.0.113.9:4000", "?pagecache=1"); rec.Code != http.StatusForbidden {
+		t.Fatalf("guest caller got %d", rec.Code)
+	}
+	var plain map[string]json.RawMessage
+	rec := get("127.0.0.1:4000", "")
+	if err := json.Unmarshal(rec.Body.Bytes(), &plain); err != nil || rec.Code != http.StatusOK {
+		t.Fatalf("plain procmem %d %q", rec.Code, rec.Body.String())
+	}
+	if _, ok := plain["page_cache"]; ok {
+		t.Fatal("plain procmem walked the page cache")
+	}
+	var joined struct {
+		Meminfo   map[string]int64 `json:"meminfo"`
+		PageCache *PageCache       `json:"page_cache"`
+	}
+	rec = get("127.0.0.1:4000", "?pagecache=1")
+	if err := json.Unmarshal(rec.Body.Bytes(), &joined); err != nil || rec.Code != http.StatusOK {
+		t.Fatalf("joined procmem %d %q", rec.Code, rec.Body.String())
+	}
+	if joined.Meminfo["MemTotal_kib"] == 0 || joined.PageCache == nil {
+		t.Fatalf("joined = %+v, want meminfo and page_cache", joined)
+	}
+	r := rootByName(t, *joined.PageCache, "store")
+	if r.Files != 1 || r.ResidentBytes != 4096 || len(r.Top) != 1 || r.Top[0].Path != "pkg/bin/tool" {
+		t.Fatalf("store root = %+v", r)
 	}
 }

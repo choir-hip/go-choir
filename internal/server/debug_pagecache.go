@@ -61,6 +61,7 @@ type pageCacheRootSpec struct {
 
 type pageCacheLimits struct {
 	MaxFiles int           // per root
+	MaxBytes int64         // apparent bytes examined per root; zero stops at once
 	Deadline time.Duration // whole read
 	Top      int           // largest resident files listed per ListTop root
 }
@@ -72,7 +73,7 @@ var guestPageCacheRoots = []pageCacheRootSpec{
 	{Name: "persistent", Path: "/mnt/persistent"},
 }
 
-var guestPageCacheLimits = pageCacheLimits{MaxFiles: 500_000, Deadline: 30 * time.Second, Top: 40}
+var guestPageCacheLimits = pageCacheLimits{MaxFiles: 500_000, MaxBytes: 64 << 30, Deadline: 30 * time.Second, Top: 40}
 
 type inodeKey struct{ dev, ino uint64 }
 
@@ -102,6 +103,7 @@ func walkPageCacheRoot(spec pageCacheRootSpec, lim pageCacheLimits, deadline tim
 	}
 	r.Present = true
 	seen := map[inodeKey]bool{}
+	var examined int64
 	var top []PageCacheFile
 	_ = filepath.WalkDir(spec.Path, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -135,6 +137,11 @@ func walkPageCacheRoot(spec pageCacheRootSpec, lim pageCacheLimits, deadline tim
 		if seen[key] {
 			return nil
 		}
+		if examined+res.size > lim.MaxBytes {
+			r.Partial = true
+			return fs.SkipAll
+		}
+		examined += res.size
 		seen[key] = true
 		if !pageCacheMayMeasure(res.uid) {
 			r.UnmeasuredFiles++
@@ -159,10 +166,21 @@ func walkPageCacheRoot(spec pageCacheRootSpec, lim pageCacheLimits, deadline tim
 }
 
 func servePageCache(w http.ResponseWriter) {
-	out, err := readPageCache(guestPageCacheRoots, guestPageCacheLimits)
+	out, err := readGuestPageCache()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotImplemented)
 		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(out)
+}
+
+// readGuestPageCache is the guest read served by pagecache and joined into
+// procmem?pagecache=1 (owner notes §40).
+func readGuestPageCache() (PageCache, error) {
+	out, err := readPageCache(guestPageCacheRoots, guestPageCacheLimits)
+	if err != nil {
+		return out, err
 	}
 	if info, err := readKiBFields("/proc/meminfo"); err == nil {
 		out.Meminfo = map[string]int64{}
@@ -172,6 +190,5 @@ func servePageCache(w http.ResponseWriter) {
 			}
 		}
 	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(out)
+	return out, nil
 }
