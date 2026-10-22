@@ -15,6 +15,9 @@ Round 2 after review bunch 91 (all accept): findings 862050ce3, tests
 3280723f1 (yellow), fix fca6c46b8 (red: the spawn refusal wraps its cause
 and names both digests). The rest are recorded in "Review bunch 91 and
 round 2".
+Coldstart round 2 (review bunch 77) ported onto this lane, on
+lane/fp4-coldstart-r2-port: findings 47f62dadd, tests 0fdffb8b0 (yellow),
+fix 7c71afb26 (orange, log lines only). See the last section.
 
 ## Evidence
 
@@ -333,15 +336,16 @@ capsule <id> saga phase=adoption_input|carried_patch|reclaim took=… assignment
 capsule <id> spawn phase=executor_lock took=…
 capsule <id> spawn phase=admit_checks took=…
 capsule <id> spawn phase=state_dir took=… preflight=false
-capsule <id> spawn phase=source_inventory took=… files=N
-capsule <id> spawn phase=source_blobs took=… files=N git_procs=N
-capsule <id> spawn phase=source_digest_copy took=…
-capsule <id> spawn phase=source_digest_commit took=… files=N git_procs=N
+capsule <id> spawn phase=source_inventory took=… files=N git_procs=1     (git ls-tree)
+capsule <id> spawn phase=source_blobs took=… files=N git_procs=1         (one git cat-file --batch; coldfix)
+capsule <id> spawn phase=source_digest_copy took=…                       (in-process)
+capsule <id> spawn phase=source_digest_commit took=… files=N git_procs=0 against=expected   (the binding's digest; coldfix)
+capsule <id> spawn phase=source_digest_commit took=… files=N git_procs=2 (no expected digest: its own ls-tree, then one batch)
 capsule <id> spawn phase=source_read_only took=…
 capsule <id> spawn phase=source_lower_ready|selfdev_inputs|overlay_mount|root_prepare|selfdev_binds|cgroup|egress took=…
 capsule <id> spawn phase=broker_start took=…
 capsule <id> spawn phase=broker_ready took=… probes=K
-capsule <id> spawn total=… ok=true|false [err=…]
+capsule <id> spawn total=… ok=true|false [err=…]   (ok=false err=spawn did not return (panic) on a panic)
 capsule <id> saga phase=spawn|bind|activate took=… assignment=…
 ```
 
@@ -455,7 +459,7 @@ Expected:
 - `cast_preflight`, `resume_preflight`, `source_blobs` and
   `source_digest_copy` are each under 1 s.
 - `source_digest_commit` is about 0 s, with `git_procs=0 against=expected`.
-- `source_blobs` reports `git_procs=1`.
+- `source_inventory` and `source_blobs` each report `git_procs=1`.
 - The `spawn total=` line is a few seconds at most.
 
 If any of those phases still takes seconds, the residual is there.
@@ -591,6 +595,8 @@ tests first, and records the rest here.
 - **Smaller points, recorded:**
   - Deepseek F4, sonnet F9: `git_procs=1` is a literal. Each pass is two
     processes, `ls-tree` (logged under `source_inventory`) plus `cat-file`.
+    Fixed by the round 2 port (7c71afb26): the inventory logs its
+    `git_procs=1`, and the derived commit pass logs 2.
   - Sonnet F9: the version inside the cache key is a constant, a
     convention with no runtime check.
   - Sonnet F9: the same commit written in upper case gets a second cache
@@ -675,3 +681,21 @@ corrections are code reads that the batch rewrite does not change:
   batch) or 0 for the commit pass. Round 2's other count,
   `source_inventory git_procs=1`, still holds and is ported.
 - Round 2's removal of `gitProcsDetail`: coldfix already removed it.
+
+**Fixed (7c71afb26, tests 0fdffb8b0).**
+
+- A panicked spawn logs `ok=false err=spawn did not return (panic)`
+  (`TestSpawnPhaseTimerWithoutSuccessIsNotOK`).
+- `source_inventory` logs `git_procs=1`; the derived `source_digest_commit`
+  logs `git_procs=2`; `source_blobs` (1) and the pinned commit pass
+  (`0 against=expected`) are unchanged.
+- `phaseGit` on a nil timer allocates nothing (checked with
+  `testing.AllocsPerRun`).
+- `go test ./internal/agentcore -run Spawn` now runs
+  `TestSpawnSagaPhaseLogsUnderTheCapsule`.
+
+Verified locally (macOS, so the linux-only capsule tests do not run):
+`go test ./internal/capsule -run 'Spawn|SourceSnapshot|Timing'` and
+`go test ./internal/agentcore -run Spawn` pass. Nothing declined. The
+staging proof is the one under "Staging proof (FP0)", with the inventory
+line's `git_procs=1` added.
