@@ -335,3 +335,20 @@ Protected surfaces: the actor dispatcher's retry path and its loop timer
 the sweep's latency log. Not touched: the crash rule, the planned-restart
 resume, the attempt and deferral limits, Texture canonical writes, vmctl,
 the gateway.
+
+### Round 2 dispositions (record e62dcf2b4, tests f9aa36794, fix da66f915f)
+
+- **R2-1 repaired.** `nextHeld` drops holds that have ended and returns
+  only a future one; `dispatchPending` tests the hold before the room.
+  `TestDispatcherExpiredHoldWithNoSlotDoesNotSpin` read 26,325
+  `PendingAgents` and 26,325 `NextDue` calls in 2 s on 4f003dccb, and reads
+  at the 250 ms poll after the fix; agent-a runs once the slot frees.
+- **R2-2 repaired** (test only): the latency bound is the time since the
+  bind plus 1.5 s.
+- **R2-3 repaired:** the const sits above `actorWakeOutboxFromObject`'s
+  doc comment.
+- **R2-4 accepted** (reasons above); the malformed-wake hardening is a
+  residual.
+- **R2-5 residual:** `held_until` is not on the owed surface.
+- The `ClaudeDelegateStatus` claim, the residual's candidate fixes and the
+  heresy delta are corrected above.
