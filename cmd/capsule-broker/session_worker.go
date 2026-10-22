@@ -78,15 +78,16 @@ const sessionReadyTimeout = 10 * time.Second
 // with a sanitized environment, mirroring the one-shot worker hardening. The
 // role rides a trusted flag from the verified outer capability and bounds the
 // sessionWorkerEnv is the session worker's environment: a fixed PATH, the
-// egress proxy settings for an L2 capsule, and the build toolchain carry the
-// broker was given, which the worker's exec action hands to each
-// choir.Exec (yaegikernel.cellExecEnv).
+// egress proxy settings for an L2 capsule, and the Go bounds and build
+// toolchain carry the broker was given, which the worker's exec action hands
+// to each choir.Exec (yaegikernel.cellExecEnv).
 func sessionWorkerEnv(inet bool, lookup func(string) (string, bool)) []string {
 	env := []string{"PATH=/run/current-system/sw/bin:/bin:/usr/bin", "TMPDIR=/tmp"}
 	if inet {
 		env = append(env, capsule.EgressProxyEnv()...)
 		env = append(env, capsule.MirrorClientEnv(lookup)...)
 	}
+	env = append(env, yaegikernel.CapsuleGoBoundsCarry(lookup)...)
 	return append(env, yaegikernel.BuildToolchainCarry(lookup)...)
 }
 

@@ -51,10 +51,15 @@ const (
 // (runtime._MaxGomaxprocs); a larger carried value is not a quota.
 const maxCarriedGoMaxProcs = 1024
 
+// MinCarriedGoMemLimit is the smallest GOMEMLIMIT a capsule workload gets:
+// under it the GC would run without pause, so no bound is set at all.
+const MinCarriedGoMemLimit = int64(64 << 20)
+
 // capsuleGoBounds returns the carried bounds that are positive decimal
-// integers (GOMAXPROCS at most maxCarriedGoMaxProcs), as name=value under
-// the given names. Anything else is dropped: Go refuses to start on a
-// malformed GOMEMLIMIT, and a workload without a bound runs as before.
+// integers (GOMAXPROCS at most maxCarriedGoMaxProcs, GOMEMLIMIT at least
+// MinCarriedGoMemLimit), as name=value under the given names. Anything else
+// is dropped: Go refuses to start on a malformed GOMEMLIMIT, and a workload
+// without a bound runs as before.
 func capsuleGoBounds(lookup func(string) (string, bool), procsName, memName string) []string {
 	var out []string
 	if v, ok := lookup(CapsuleGoMaxProcsEnv); ok {
@@ -63,7 +68,7 @@ func capsuleGoBounds(lookup func(string) (string, bool), procsName, memName stri
 		}
 	}
 	if v, ok := lookup(CapsuleGoMemLimitEnv); ok {
-		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 && strconv.FormatInt(n, 10) == v {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n >= MinCarriedGoMemLimit && strconv.FormatInt(n, 10) == v {
 			out = append(out, memName+"="+v)
 		}
 	}
@@ -75,17 +80,25 @@ func capsuleGoBounds(lookup func(string) (string, bool), procsName, memName stri
 // dolthub/go-icu-regex). Values are store paths, never credentials.
 var BuildToolchainKeys = []string{"CGO_CFLAGS", "CGO_CXXFLAGS", "CGO_LDFLAGS", "PKG_CONFIG_PATH"}
 
+// CapsuleGoBoundsCarry returns the capsule's Go bounds, when well formed,
+// for the broker to hand its session worker. The executor sets them on the
+// broker from the capsule itself; the broker launch never reads them from
+// the autoputer's own environment (BuildToolchainCarry does not carry them),
+// so an ambient value on the guest service bounds nothing.
+func CapsuleGoBoundsCarry(lookup func(string) (string, bool)) []string {
+	return capsuleGoBounds(lookup, CapsuleGoMaxProcsEnv, CapsuleGoMemLimitEnv)
+}
+
 // BuildToolchainCarry returns the toolchain variables one capsule hop hands
-// the next (executor to broker, broker to session worker): the capsule's Go
-// bounds when they are well formed, then the build path and the cgo keys,
-// exactly as lookup finds them. No toolchain when the build path is unset.
+// the next (executor to broker, broker to session worker): the build path
+// and the cgo keys, exactly as lookup finds them. Nothing when the build
+// path is unset.
 func BuildToolchainCarry(lookup func(string) (string, bool)) []string {
-	bounds := capsuleGoBounds(lookup, CapsuleGoMaxProcsEnv, CapsuleGoMemLimitEnv)
 	buildPath, ok := lookup(BuildToolchainPathEnv)
 	if !ok || strings.TrimSpace(buildPath) == "" {
-		return bounds
+		return nil
 	}
-	out := append(bounds, BuildToolchainPathEnv+"="+buildPath)
+	out := []string{BuildToolchainPathEnv + "=" + buildPath}
 	for _, key := range BuildToolchainKeys {
 		if value, ok := lookup(key); ok {
 			out = append(out, key+"="+value)
