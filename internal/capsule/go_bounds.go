@@ -1,3 +1,5 @@
+//go:build linux
+
 package capsule
 
 import (
@@ -16,13 +18,17 @@ import (
 // (yaegikernel.CapsuleGoMaxProcsEnv), where a cell may override them.
 
 // goMemLimitFor is the GOMEMLIMIT for a capsule whose throttling limit is
-// limit: 5/8 of it. The rest (768 MiB of 2 GiB) is for what the Go heap
+// limit: 5/8 of it, or 0 (no bound) when that is under
+// yaegikernel.MinCarriedGoMemLimit, 64 MiB. The rest (768 MiB of 2 GiB) is for what the Go heap
 // limit does not cover: the broker and session worker (about 150 MiB), the
 // go command beside the one tool -p 1 runs, cgo's C compilers and the
 // external linker, and page cache. GOMEMLIMIT is soft and per process: a
 // live heap above it is slower, never killed for it.
 func goMemLimitFor(limit int64) int64 {
-	return limit / 8 * 5
+	if bound := limit / 8 * 5; bound >= yaegikernel.MinCarriedGoMemLimit {
+		return bound
+	}
+	return 0
 }
 
 // capsuleGoMemoryBase is the limit the bound sits under: memory.high when the
