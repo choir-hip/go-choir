@@ -853,7 +853,11 @@ func ogRoleFieldsFromJSON(kind string, raw []byte, prefix string, out *[]vocabmi
 		if i := strings.Index(key, "["); i >= 0 {
 			key = key[:i]
 		}
-		if ogRoleLeafKeys[key] && !skip[key] {
+		if kind == "choir.run_acceptance" && key == "authority_profile" {
+			// A run acceptance's authority_profile is the trajectory's desk
+			// path, checked part by part; elsewhere it is one role.
+			*out = append(*out, vocabmigrate.AuthorityPathFields("og:"+kind+":"+prefix+path, v)...)
+		} else if ogRoleLeafKeys[key] && !skip[key] {
 			*out = append(*out, vocabmigrate.Field{
 				Key:   "og:" + kind + ":" + prefix + path,
 				Value: v,
