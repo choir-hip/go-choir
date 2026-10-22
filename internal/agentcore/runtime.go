@@ -4349,7 +4349,7 @@ func engineeringTerminalFateGuardReason(messages []json.RawMessage) string {
 // freeze that got past the open-candidate check: a top-level freeze_result
 // object (committed, or a rejected bundle), or a cell error that names a
 // committed freeze (withCommittedFreeze). Output text cannot set the
-// top-level key.
+// top-level key; text inside a reduce error still can set the marker.
 func cellPassedTheFreezeGate(content string) bool {
 	var cell struct {
 		FreezeResult map[string]any `json:"freeze_result"`
@@ -4357,7 +4357,10 @@ func cellPassedTheFreezeGate(content string) bool {
 	if json.Unmarshal([]byte(content), &cell) == nil && len(cell.FreezeResult) > 0 {
 		return true
 	}
-	return strings.Contains(content, committedFreezeMarker)
+	// The marker counts only in a tool error (a failed cell's reduce
+	// error); a successful cell's result is JSON, and its printed output
+	// must not set it (review round 4c).
+	return strings.HasPrefix(strings.TrimSpace(content), "tool_error:") && strings.Contains(content, committedFreezeMarker)
 }
 
 func engineeringOverlayTerminalFateCommitted(messages []json.RawMessage) bool {

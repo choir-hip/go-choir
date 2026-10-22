@@ -662,7 +662,7 @@ func newCapsuleGoEvalTool(rt *Runtime) toolregistry.Tool {
 			if reduction.active && result.Error == "" {
 				reduction.records = reduction.records.capToShown(rt.noteRecordsShown(reduction.scope.RunID, result.RecordsShown))
 				if rerr := traceErr(rt, toolCtx.AgentRunID, "cell.reduce", func() error { return reduction.commit(ctx, result.Intents) }); rerr != nil {
-					return "", withCommittedFreeze(rerr, reduction.freezeResult)
+					return "", rerr // commit's error names a freeze it committed
 				}
 				for _, in := range reduction.receipt.Intents {
 					result.StagedIntentIDs = append(result.StagedIntentIDs, fmt.Sprintf("rlm:%s:%d", in.Kind, in.Seq))
