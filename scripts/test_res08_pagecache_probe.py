@@ -16,6 +16,10 @@ Ways the summary could mislead FP0 (written before the code; review bunch 13):
      can be overstated when the skipped data is cold (review bunch 16).
   6. It prints raw store numbers beside store_quotable false, where they can
      be copied as if measured: they are null until quotable.
+  7. It quotes a store walk that measured nothing as a store of 0 MiB
+     (every file skipped or failed): refused (review bunch 16, F2).
+  8. It prints the persistent number from an unpartitioned read, where the
+     overlay upper may be inside it: null too (F1).
 Run: python3 -I scripts/test_res08_pagecache_probe.py
 """
 import importlib.util
@@ -76,6 +80,26 @@ class Summary(unittest.TestCase):
             self.assertIsNone(s[k], k)
         # the diagnostics that explain the refusal stay
         self.assertEqual(s["store_examined_files"], 950)
+
+    def test_refuses_a_store_that_measured_nothing(self):
+        s = probe.summarize(read(store={"files": 0, "bytes": 0, "resident_bytes": 0, "examined_files": 500}))
+        self.assertFalse(s["store_quotable"], s)
+        self.assertIsNone(s["store_resident_mib"])
+        self.assertNotIn("net_saving_mib", s)
+
+    def test_persistent_is_null_while_unpartitioned(self):
+        for r in (read(layering=False), read(partitioned=False, upper={})):
+            s = probe.summarize(r)
+            self.assertIsNone(s["persistent_resident_mib"], s)
+        # a refusal that is about the store alone keeps persistent
+        s = probe.summarize(read(store={"partial": True}))
+        self.assertEqual(s["persistent_resident_mib"], 150.0)
+
+    def test_refusal_carries_the_read_reason(self):
+        r = read(partitioned=False, upper={})
+        r["procmem"]["page_cache"]["store_layering"]["reason"] = "stacked overlay"
+        s = probe.summarize(r)
+        self.assertTrue(any("stacked overlay" in x for x in s["refusals"]), s["refusals"])
 
     def test_surfaces_skips_and_marks_floors(self):
         s = probe.summarize(read(store={"skipped": 2}, pers={"skipped_mounts": 1, "unmeasured_files": 4}))

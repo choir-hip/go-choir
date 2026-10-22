@@ -160,8 +160,14 @@ nothing to `bytes`, so the memmap cost is understated, and if the skipped
 data is cold the saving is overstated. A persistent floor is expected
 (the signer directories are hidden from the daemon) and does not refuse
 the store. While `store_quotable` is false, the probe prints the store
-numbers as null. `partitioned` is also false for an overlay whose upper
-does not resolve in the daemon's namespace.
+numbers as null, and also prints the persistent number as null while
+the read is unpartitioned, because the upper may be inside it. A store
+walk that measured no files is refused, not quoted as 0 MiB. The read
+reports `partitioned: false` with a `reason`, and the probe's refusal
+quotes it. The reasons are: mountinfo unreadable, no store mount, a
+stacked overlay (more than one overlay at the store, or several lower
+layers), an overlay without a parsed upperdir, or an upper that does not
+resolve in the daemon's namespace.
 
 Run from FP0's machine (the script uses `ssh node-b`; it boots, stops,
 evicts and writes nothing):
@@ -279,4 +285,13 @@ decision.
   so it cannot flatter a quoted number. erofs, overlay and ext4 return real
   types today.
 - mountinfo option values are split on commas. An upper or work path that
-  contains an escaped comma would be misparsed. Today's paths have none.
+  contains an escaped comma would be misparsed. It now fails closed: the
+  read reports partitioned false, either for a missing upper or for one
+  that does not resolve. Today's paths have no commas.
+- **The caps are per root** (review bunch 16, F4). The file cap (500k)
+  and the byte cap (64 GiB) apply to each root (a root and its overlay
+  upper share one budget). The guest's two roots may therefore examine up
+  to twice each cap in all. The 30 s deadline is for the whole read.
+- The topmost store mount is taken to be the last matching mountinfo line.
+  That is the kernel's mount order, but it is not a documented guarantee.
+  A stacked store (more than one overlay) fails closed whatever the order.

@@ -137,7 +137,7 @@ now:
     status: active
     evidence_refs:
       - docs/reports/vm-density-limits-2026-10-14.md finding 3 and residuals
-      - internal/server/debug_pagecache_test.go (failure modes 1-16; nine new tests failed on deploy D's logic)
+      - internal/server/debug_pagecache_test.go (failure modes 1-20; against deploy D's logic the three bound tests failed, the skipped-subtree test passed, and the rest are tests of new API that could not compile there)
       - scripts/test_res08_pagecache_probe.py (refusal rules)
   decision:
     what: Whether guests in different trust domains may share one physical copy of base-OS pages (DEC-05)

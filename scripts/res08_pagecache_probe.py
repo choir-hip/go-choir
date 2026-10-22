@@ -143,10 +143,12 @@ def summarize(guest):
             floors.append(name)
     out["floors"] = floors  # totals that are lower bounds, not measurements
     refusals = []
+    unpartitioned = layering is None or not layering.get("partitioned")
     if layering is None:
         refusals.append("no store_layering: the read predates the overlay split, so the release delta may be inside the store and persistent totals")
     elif not layering.get("partitioned"):
-        refusals.append("store_layering.partitioned is false: the overlay upper may be counted in store and persistent")
+        reason = layering.get("reason") or "no reason given"
+        refusals.append(f"store_layering.partitioned is false ({reason}): the overlay upper may be counted in store and persistent")
     if store.get("unmeasured_files"):
         refusals.append(f"{store['unmeasured_files']} store files unmeasured: the daemon lacks ownership or CAP_FOWNER (Linux 5.2+ mincore)")
     if store.get("partial"):
@@ -157,12 +159,17 @@ def summarize(guest):
         refusals.append(f"store skipped {store.get('skipped', 0)} entries and {store.get('skipped_mounts', 0)} mounts: its total is a floor in both directions")
     if not store.get("present"):
         refusals.append("no store root")
+    elif not store.get("files"):
+        refusals.append(f"the store walk measured no files ({store.get('examined_files', 0)} examined): a broken walk, not a store of 0 MiB")
     out["refusals"] = refusals
     out["store_quotable"] = not refusals
     if refusals:
         # Never print a store number that may not be quoted.
         for k in ("store_resident_mib", "store_upper_resident_mib", "store_apparent_mib"):
             out[k] = None
+    if unpartitioned:
+        # The overlay upper may be inside persistent too.
+        out["persistent_resident_mib"] = None
     # The guest struct-page array for a DAX pmem region: 64 bytes per 4 KiB
     # page of the uncompressed base image (the base store's apparent bytes;
     # the release delta in store_upper is not on the image).
