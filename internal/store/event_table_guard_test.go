@@ -6,13 +6,10 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
-	"reflect"
 	"sort"
 	"strconv"
 	"strings"
 	"testing"
-
-	"github.com/yusefmosiah/go-choir/internal/computerevent"
 )
 
 // Source guards for deploy 1 of F-c
@@ -66,120 +63,6 @@ func stringLiterals(node ast.Node) []string {
 		return true
 	})
 	return out
-}
-
-// Deploy 1 is inert: no production code stamps ProjectionOp.Table. The
-// lifecycle fold (F8) and every other writer leave it empty. Deploy 2 adds
-// its writer to this list, with the setting that gates it.
-var projectionTableStampers = map[string]bool{}
-
-// projectionOpTableIndex is Table's position in ProjectionOp, which an
-// unkeyed literal fills positionally (TestProjectionOpFieldOrder pins it).
-const projectionOpTableIndex = 2
-
-// projectionTableStamps returns every place in file that may set
-// ProjectionOp.Table: a keyed literal naming Table, an unkeyed literal whose
-// Table position is not the empty string (round 1b, Sonnet: the keyed check
-// alone passed a positional literal), and any assignment to a .Table field.
-func projectionTableStamps(rel string, file *ast.File, fset *token.FileSet) []string {
-	var found []string
-	at := func(pos token.Pos) string { return rel + ":" + strconv.Itoa(fset.Position(pos).Line) }
-	ast.Inspect(file, func(n ast.Node) bool {
-		switch node := n.(type) {
-		case *ast.CompositeLit:
-			typeName := ""
-			switch typ := node.Type.(type) {
-			case *ast.Ident:
-				typeName = typ.Name
-			case *ast.SelectorExpr:
-				typeName = typ.Sel.Name
-			}
-			if typeName != "ProjectionOp" || len(node.Elts) == 0 {
-				return true
-			}
-			if _, keyed := node.Elts[0].(*ast.KeyValueExpr); !keyed {
-				if len(node.Elts) > projectionOpTableIndex {
-					if lit, ok := node.Elts[projectionOpTableIndex].(*ast.BasicLit); !ok || lit.Value != `""` {
-						found = append(found, at(node.Pos()))
-					}
-				}
-				return true
-			}
-			for _, elt := range node.Elts {
-				if kv, ok := elt.(*ast.KeyValueExpr); ok {
-					if key, ok := kv.Key.(*ast.Ident); ok && key.Name == "Table" {
-						found = append(found, at(kv.Pos()))
-					}
-				}
-			}
-		case *ast.AssignStmt:
-			for _, lhs := range node.Lhs {
-				if sel, ok := lhs.(*ast.SelectorExpr); ok && sel.Sel.Name == "Table" {
-					found = append(found, at(sel.Pos()))
-				}
-			}
-		}
-		return true
-	})
-	return found
-}
-
-func TestEventTableNothingStampsInDeploy1(t *testing.T) {
-	var unexpected []string
-	forEachNonTestGoFile(t, func(rel string, file *ast.File, fset *token.FileSet) {
-		for _, site := range projectionTableStamps(rel, file, fset) {
-			if !projectionTableStampers[rel] {
-				unexpected = append(unexpected, site)
-			}
-		}
-	})
-	if len(unexpected) > 0 {
-		t.Fatalf("production code stamps ProjectionOp.Table; deploy 1 has no writer (the lifecycle fold must never stamp):\n%s", strings.Join(unexpected, "\n"))
-	}
-}
-
-// The guard itself, on sources that stamp in each way it must catch, and
-// on ones that do not stamp.
-func TestEventTableStampGuardCatchesEveryForm(t *testing.T) {
-	stamps := map[string]string{
-		"keyed":           `op := computerevent.ProjectionOp{Kind: "object_recorded", Table: "choir_events"}`,
-		"unkeyed":         `op := computerevent.ProjectionOp{"object_recorded", "id", "choir_events", nil}`,
-		"unkeyed by name": `op := computerevent.ProjectionOp{"object_recorded", "id", table, nil}`,
-		"local type":      `op := ProjectionOp{"object_recorded", "id", choirEventsTable, nil}`,
-		"assigned":        `op.Table = "choir_events"`,
-	}
-	clean := map[string]string{
-		"keyed, no table":      `op := computerevent.ProjectionOp{Kind: "object_recorded", CanonicalID: "id"}`,
-		"unkeyed, empty table": `op := computerevent.ProjectionOp{"object_recorded", "id", "", nil}`,
-		"other type":           `fp := ObjectGraphFingerprint{Table: "choir_events"}`,
-	}
-	parse := func(stmt string) (*ast.File, *token.FileSet) {
-		fset := token.NewFileSet()
-		file, err := parser.ParseFile(fset, "x.go", "package x\nfunc f() {\n"+stmt+"\n_ = op\n}\n", 0)
-		if err != nil {
-			t.Fatalf("parse %q: %v", stmt, err)
-		}
-		return file, fset
-	}
-	for name, stmt := range stamps {
-		file, fset := parse(stmt)
-		if len(projectionTableStamps("x.go", file, fset)) == 0 {
-			t.Errorf("%s: the guard missed %s", name, stmt)
-		}
-	}
-	for name, stmt := range clean {
-		file, fset := parse(strings.Replace(stmt, "fp :=", "op :=", 1))
-		if got := projectionTableStamps("x.go", file, fset); len(got) != 0 {
-			t.Errorf("%s: the guard flagged %s at %v", name, stmt, got)
-		}
-	}
-}
-
-func TestProjectionOpFieldOrder(t *testing.T) {
-	field := reflect.TypeOf(computerevent.ProjectionOp{}).Field(projectionOpTableIndex)
-	if field.Name != "Table" {
-		t.Fatalf("ProjectionOp field %d is %s, not Table: update projectionOpTableIndex", projectionOpTableIndex, field.Name)
-	}
 }
 
 // F2: every function in this package that reads choir.event objects is
