@@ -179,3 +179,148 @@ func TestLaunchedVMMBuildIsDurable(t *testing.T) {
 		t.Fatalf("a new VM's build was not durable: %+v", got)
 	}
 }
+
+// Selection on a pinned 1.17 build with no next build
+// (docs/problems/firecracker-1-17-for-every-computer-2026-10-22.md): a
+// VM_DATA_DISCARD_ONLY that names one computer gives discard to that
+// computer only, and every other computer's launch config is byte-identical
+// to a discard-off host, so a version change alone moves no launch-config
+// hash.
+func TestPinnedDiscardBuildNamesOnlyTheSelectedComputer(t *testing.T) {
+	pinned := fakeFirecrackerAt(t, filepath.Join(t.TempDir(), "fc-1.17.0", "bin"), "Firecracker v1.17.0")
+	t.Setenv("VM_FIRECRACKER_BIN", pinned)
+	t.Setenv("VM_FIRECRACKER_NEXT_BIN", "")
+	t.Setenv("VM_FIRECRACKER_NEXT_ONLY", "")
+	t.Setenv("VM_DATA_DISCARD", "1")
+	t.Setenv("VM_DATA_DISCARD_ONLY", "computer-trial")
+	loaded := LoadConfigFromEnv()
+	if loaded.FirecrackerNext.BinPath != "" {
+		t.Fatalf("no next build is configured: %+v", loaded.FirecrackerNext)
+	}
+	if !loaded.DataDiscard {
+		t.Fatal("a pinned 1.17 build with VM_DATA_DISCARD on must allow discard")
+	}
+	if !reflect.DeepEqual(loaded.DataDiscardOnly, []string{"computer-trial"}) {
+		t.Fatalf("DataDiscardOnly = %q", loaded.DataDiscardOnly)
+	}
+
+	mgr := balloonTestManager(t, func(c *ManagerConfig) {
+		c.FirecrackerBinPath = pinned
+		c.DataDiscard = loaded.DataDiscard
+		c.DataDiscardOnly = loaded.DataDiscardOnly
+	})
+	// Same state dir: drive paths are in the config.
+	off := balloonTestManager(t, func(c *ManagerConfig) {
+		c.FirecrackerBinPath = pinned
+		c.StateDir = mgr.cfg.StateDir
+	})
+
+	trial := balloonTestVMConfig()
+	trial.ComputerID = "computer-trial"
+	trial.WarmnessClass = "test"
+	if b := mgr.vmmFor(trial); b.Next || b.Firecracker != pinned {
+		t.Fatalf("the trial computer must launch the pinned build: %+v", b)
+	}
+	if d := driveOf(t, mgr.buildFirecrackerConfig(trial, 9001), "data"); d["discard"] != true || d["io_engine"] != "Sync" {
+		t.Fatalf("the named computer must keep discard on the pinned build: %#v", d)
+	}
+
+	for _, other := range []VMConfig{
+		func() VMConfig {
+			c := balloonTestVMConfig()
+			c.VMID = "vm-paper"
+			c.ComputerID = "computer-paper"
+			c.WarmnessClass = "critical_protected"
+			return c
+		}(),
+		func() VMConfig {
+			c := balloonTestVMConfig()
+			c.VMID = "vm-test"
+			c.ComputerID = "computer-test"
+			c.WarmnessClass = "test"
+			return c
+		}(),
+	} {
+		got, err := launchConfigHash(mgr.buildFirecrackerConfig(other, 9002))
+		if err != nil {
+			t.Fatal(err)
+		}
+		want, err := launchConfigHash(off.buildFirecrackerConfig(other, 9002))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != want {
+			t.Fatalf("%s: launch config differs from a discard-off host (%s vs %s)", other.ComputerID, got, want)
+		}
+	}
+}
+
+// The pin change after deploy D4: D4 launches every computer on the next
+// build (1.17, VM_FIRECRACKER_NEXT_ONLY=*) with VM_DATA_DISCARD_ONLY=*, over
+// a pinned 1.16.2. Making 1.17 the pinned build and dropping the next build
+// must not change any computer's launch config or Firecracker banner, or
+// every snapshot taken under D4 would be refused a second time.
+func TestPinned117KeepsTheLaunchConfigOfTheNextBuild(t *testing.T) {
+	root := t.TempDir()
+	old := fakeFirecrackerAt(t, filepath.Join(root, "fc-1.16.2", "bin"), "Firecracker v1.16.2")
+	next := fakeFirecrackerAt(t, filepath.Join(root, "fc-1.17.0", "bin"), "Firecracker v1.17.0")
+
+	load := func(pinned, nextBin, nextOnly string) ManagerConfig {
+		t.Setenv("VM_FIRECRACKER_BIN", pinned)
+		t.Setenv("VM_FIRECRACKER_NEXT_BIN", nextBin)
+		t.Setenv("VM_FIRECRACKER_NEXT_ONLY", nextOnly)
+		t.Setenv("VM_DATA_DISCARD", "1")
+		t.Setenv("VM_DATA_DISCARD_ONLY", "*")
+		return LoadConfigFromEnv()
+	}
+	d4Env := load(old, next, "*")
+	pinEnv := load(next, "", "")
+	if d4Env.FirecrackerNext.BinPath != next || !d4Env.FirecrackerNext.DataDiscard || d4Env.DataDiscard {
+		t.Fatalf("D4 shape: next=%+v pinned discard=%v", d4Env.FirecrackerNext, d4Env.DataDiscard)
+	}
+	if pinEnv.FirecrackerNext.BinPath != "" || !pinEnv.DataDiscard {
+		t.Fatalf("pinned shape: next=%+v pinned discard=%v", pinEnv.FirecrackerNext, pinEnv.DataDiscard)
+	}
+
+	d4 := balloonTestManager(t, func(c *ManagerConfig) {
+		c.FirecrackerBinPath = old
+		c.FirecrackerNext = d4Env.FirecrackerNext
+		c.DataDiscard = d4Env.DataDiscard
+		c.DataDiscardOnly = d4Env.DataDiscardOnly
+	})
+	pin := balloonTestManager(t, func(c *ManagerConfig) {
+		c.StateDir = d4.cfg.StateDir // drive paths are in the config
+		c.FirecrackerBinPath = next
+		c.DataDiscard = pinEnv.DataDiscard
+		c.DataDiscardOnly = pinEnv.DataDiscardOnly
+	})
+
+	for _, class := range []string{"critical_protected", "public_platform", "test", ""} {
+		cfg := balloonTestVMConfig()
+		cfg.VMID = "vm-" + class
+		cfg.ComputerID = "computer-" + class
+		cfg.WarmnessClass = class
+		before, after := d4.vmmFor(cfg), pin.vmmFor(cfg)
+		if !before.Next || before.Firecracker != next || after.Next || after.Firecracker != next {
+			t.Fatalf("class %q: D4 build %+v, pinned build %+v; want the same 1.17 binary", class, before, after)
+		}
+		if b, a := firecrackerBuildVersion(before.Firecracker), firecrackerBuildVersion(after.Firecracker); b != a || a != "Firecracker v1.17.0" {
+			t.Fatalf("class %q: banner %q before, %q after", class, b, a)
+		}
+		beforeCfg := d4.buildFirecrackerConfig(cfg, 9001)
+		if d := driveOf(t, beforeCfg, "data"); d["discard"] != true || d["io_engine"] != "Sync" {
+			t.Fatalf("class %q: D4 data drive %#v, want discard", class, d)
+		}
+		hb, err := launchConfigHash(beforeCfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ha, err := launchConfigHash(pin.buildFirecrackerConfig(cfg, 9001))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if hb != ha {
+			t.Fatalf("class %q: launch config hash %s under D4, %s pinned: every D4 snapshot would be refused", class, hb, ha)
+		}
+	}
+}
