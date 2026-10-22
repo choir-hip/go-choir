@@ -727,7 +727,7 @@ func TestEventTableDryRunPositionIsTheTapePosition(t *testing.T) {
 	}
 
 	// A store that was never projected has no head row: position 1.
-	empty := openProjectStore(t)
+	empty, _ := vocabUpcastOpenStore(t, "never-projected")
 	if pos, err := dryRunTapePosition(ctx, empty.db, "computer-never-projected"); err != nil || pos != 1 {
 		t.Fatalf("no head row: position %d, %v; want 1", pos, err)
 	}
