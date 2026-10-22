@@ -538,3 +538,137 @@ func TestBodyCapsBoundTheBytesInFlightWithTheSchedulerOff(t *testing.T) {
 		t.Fatalf("a call after the first ended = %d, want 200", code)
 	}
 }
+
+// --- review round (bunch 109): F-A per-caller share, F-B panic, F-C window ---
+
+// budgetHeldAndQueued is the bytes the budget holds plus the bytes its
+// waiters ask for.
+func budgetHeldAndQueued(h *Handler) (held, queued int64) {
+	b := h.caps().budget
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for _, w := range b.waiters {
+		queued += w.n
+	}
+	return b.used, queued
+}
+
+// F-A: one caller that declares large bodies and sends nothing holds at
+// most its share of in_flight; another caller's body is taken in at once,
+// and the first caller's body over its share waits, then is answered 429
+// with Retry-After. Fails on 2e9ebc5eb: the stalled caller's two bodies
+// hold 400 of 512 KiB and the other caller's body waits its whole deadline
+// and is answered 429.
+func TestBodyCapsOneCallerCannotHoldTheWholeInFlight(t *testing.T) {
+	t.Setenv("GATEWAY_BODY_CAPS", "observe")
+	t.Setenv("GATEWAY_BODY_LIMITS", "model=64KiB,model_ceiling=256KiB,in_flight=512KiB")
+	t.Setenv("GATEWAY_BODY_READ_TIMEOUT", "1s")
+	h, reg, _ := setupHandler(t)
+	cred, err := reg.IssueCredential("computer-hog")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stalled := func() (*io.PipeWriter, chan *httptest.ResponseRecorder) {
+		pr, pw := io.Pipe()
+		req := httptest.NewRequest(http.MethodPost, "/provider/v1/inference", pr)
+		req.ContentLength = 200 << 10 // declared, never sent
+		req.Header.Set("Authorization", "Bearer "+cred.RawToken)
+		done := make(chan *httptest.ResponseRecorder, 1)
+		go func() { rec := httptest.NewRecorder(); h.HandleInference(rec, req); done <- rec }()
+		return pw, done
+	}
+	pw1, done1 := stalled()
+	waitUntil(t, "the first stalled body to be counted", func() bool { held, _ := budgetHeldAndQueued(h); return held == 200<<10 })
+	pw2, done2 := stalled()
+	defer pw1.Close()
+	defer pw2.Close()
+	waitUntil(t, "the second stalled body to be counted", func() bool { held, queued := budgetHeldAndQueued(h); return held+queued == 400<<10 })
+
+	started := time.Now()
+	rec := inferWithBody(t, h, reg, "computer-other", largeInferenceBody(t, 200<<10))
+	if rec.Code != http.StatusOK || time.Since(started) > 500*time.Millisecond {
+		t.Fatalf("another caller's 200 KiB body while one caller stalls two = %d after %s %s, want 200 at once",
+			rec.Code, time.Since(started).Round(time.Millisecond), rec.Body.String())
+	}
+	if got := healthNumber(t, bodyCapsHealth(t, h), "limits", "per_caller"); got != 128<<10 {
+		t.Fatalf("body_caps.limits.per_caller = %d, want in_flight/4 = %d", got, 128<<10)
+	}
+
+	select {
+	case r := <-done2:
+		if r.Code != http.StatusTooManyRequests || r.Header().Get("Retry-After") == "" {
+			t.Fatalf("the stalled caller's body over its share = %d (Retry-After %q), want 429 with Retry-After", r.Code, r.Header().Get("Retry-After"))
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("the stalled caller's body over its share was never answered")
+	}
+	_ = pw1.CloseWithError(errors.New("test done"))
+	<-done1
+	if held, queued := budgetHeldAndQueued(h); held != 0 || queued != 0 {
+		t.Fatalf("after every call ended the budget holds %d and queues %d bytes, want 0", held, queued)
+	}
+}
+
+type panicOnDecode struct{}
+
+func (*panicOnDecode) UnmarshalJSON([]byte) error { panic("decoder exploded") }
+
+// F-B: a panic inside the decode gives the body's bytes back. Fails on
+// 2e9ebc5eb: the release was never returned, so the bytes stay counted.
+func TestBodyCapsAPanicInTheDecodeGivesItsBytesBack(t *testing.T) {
+	for _, held := range []bool{true, false} {
+		h := &Handler{bodyCaps: newBodyCaps(BodyCapsEnforce, defaultBodyLimits())}
+		req := httptest.NewRequest(http.MethodPost, "/provider/v1/inference", strings.NewReader(`{"messages":[]}`))
+		func() {
+			defer func() { _ = recover() }()
+			var v panicOnDecode
+			if held {
+				_, _ = h.decodeBodyHeld(httptest.NewRecorder(), req, bodyRouteModel, "computer-panic", &v, false)
+			} else {
+				_ = h.decodeBody(httptest.NewRecorder(), req, bodyRouteModel, "computer-panic", &v, false)
+			}
+		}()
+		if got := h.caps().budget.inUse(); got != 0 {
+			t.Fatalf("held=%v: after a panic in the decode the budget still holds %d bytes", held, got)
+		}
+	}
+}
+
+// F-C: the read window starts when the body fits in in_flight, not when
+// it began to wait. Fails on 2e9ebc5eb: a body that waited half its
+// deadline for room is cut by the same deadline while it arrives (503).
+func TestBodyCapsReadWindowStartsWhenTheBodyFits(t *testing.T) {
+	t.Setenv("GATEWAY_BODY_CAPS", "enforce")
+	t.Setenv("GATEWAY_BODY_LIMITS", "model=128KiB,model_ceiling=128KiB,in_flight=128KiB")
+	t.Setenv("GATEWAY_BODY_READ_TIMEOUT", "1s")
+	gp := &gateProvider{name: "bedrock", gate: make(chan struct{})}
+	h, reg := schedulerHandler(t, gp, nil, nil)
+	first := make(chan int, 1)
+	go func() { first <- inferWithBody(t, h, reg, "computer-first", largeInferenceBody(t, 100<<10)).Code }()
+	waitUntil(t, "the first call to reach the provider", func() bool { return gp.calls.Load() == 1 })
+
+	cred, _ := reg.IssueCredential("computer-waits")
+	srv := bodyServer(t, h.HandleInference, 30*time.Second)
+	pr, pw := io.Pipe()
+	defer pw.Close()
+	res := postAsync(srv.URL+"/provider/v1/inference", cred.RawToken, pr) // chunked: reserves the cap
+	waitUntil(t, "the second body to wait for room", func() bool { _, queued := budgetHeldAndQueued(h); return queued > 0 })
+	time.Sleep(500 * time.Millisecond) // half the deadline spent waiting
+	releaseOne(t, gp)
+	if code := <-first; code != http.StatusOK {
+		t.Fatalf("the first call = %d, want 200", code)
+	}
+	time.Sleep(700 * time.Millisecond) // past the wait's deadline, inside the read's
+	go func() {
+		_, _ = pw.Write([]byte(`{"messages":[{"role":"user","content":[{"type":"text","text":"hi"}]}]}`))
+		_ = pw.Close()
+		select {
+		case gp.gate <- struct{}{}:
+		case <-time.After(3 * time.Second):
+		}
+	}()
+	r := <-res
+	if r.err != nil || r.code != http.StatusOK {
+		t.Fatalf("a body that arrived within the read window after its wait = %d %q (%v), want 200", r.code, r.body, r.err)
+	}
+}
