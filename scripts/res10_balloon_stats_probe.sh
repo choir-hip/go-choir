@@ -7,13 +7,21 @@
 #   host   GET localhost:8083/internal/vmctl/memory/balloon?computer_id=ID
 #          (host only; Firecracker GET /balloon + GET /balloon/statistics)
 #   host   VmRSS of that computer's firecracker process
-#   guest  GET <guest>:8085/internal/debug/pprof/procmem (meminfo, KiB)
+#   guest  GET <guest>:8085/internal/debug/pprof/procmem (meminfo, KiB),
+#          with NO credential or internal-caller header: the guest gate is
+#          the source address (HostSourcedCaller), and the host credential
+#          is never sent to a guest (internal/hostauth MarkInternal)
 #
 # Refuses any computer vmctl does not class as "test". Boots, stops,
 # selects and writes nothing; never PATCHes a balloon. The internal service
 # token header file is passed to curl by path on the host and never read or
-# printed here. Output: a table on stderr and one JSON receipt on stdout
-# (and in --out FILE).
+# printed here; it is sent only to vmctl on localhost. Output: a table on
+# stderr and one JSON receipt on stdout (and in --out FILE).
+#
+# Exit: 0 a reading or a reason (stats_disabled, ...); 2 usage, refusal, or
+# a vmctl answer that is not 2xx or has no entry for the computer (status
+# and body printed, no table); 3 the guest meminfo read failed (receipt
+# printed with the error).
 #
 # usage: scripts/res10_balloon_stats_probe.sh --computer-id ID [--ssh node-b]
 #        [--out FILE] [--label cold-boot-5m]
@@ -48,10 +56,31 @@ done
 [[ "$LABEL" =~ ^[A-Za-z0-9._:-]*$ ]] || die "bad label"
 command -v python3 >/dev/null || die "python3 is required locally"
 
+# Host credential: vmctl on localhost only.
 AUTH="-H 'X-Internal-Caller: true' \$(test -r $TOKEN_HEADER_FILE && echo -H @$TOKEN_HEADER_FILE)"
 remote() { ssh -o BatchMode=yes "$SSH_HOST" "$1"; }
 
-listing=$(remote "curl -s -m 20 $AUTH 'localhost:8083/internal/vmctl/list'")
+# fetch URL [curl args...]: sets BODY and STATUS (the HTTP status, or
+# "ssh-or-curl-failed"). curl prints the status on the last line.
+fetch() {
+	local url=$1 raw
+	shift
+	if ! raw=$(remote "curl -sS $* -w '\n%{http_code}' '$url'"); then
+		BODY=$raw STATUS=ssh-or-curl-failed
+		return
+	fi
+	STATUS=${raw##*$'\n'}
+	BODY=${raw%$'\n'*}
+	[ "$BODY" != "$raw" ] || BODY=""
+}
+ok2xx() { [[ "$STATUS" =~ ^2[0-9][0-9]$ ]]; }
+vmctl_get() { # path -> BODY, or die with status and body
+	fetch "localhost:8083$1" -m 20 "$AUTH"
+	ok2xx || die "vmctl GET $1: status $STATUS: $(printf '%s' "$BODY" | head -c 400)"
+}
+
+vmctl_get /internal/vmctl/list
+listing=$BODY
 own=$(printf '%s' "$listing" | python3 -c '
 import json, sys
 cid = sys.argv[1]
@@ -74,14 +103,37 @@ URL=$(field computer_url)
 [[ "$VM_ID" =~ ^[A-Za-z0-9._-]+$ ]] || die "bad vm id from vmctl"
 GUEST=$(printf '%s' "$URL" | sed -n 's#^http://\([0-9.]*\):8085.*#\1#p')
 
-balloon=$(remote "curl -s -m 10 $AUTH 'localhost:8083/internal/vmctl/memory/balloon?computer_id=$COMPUTER_ID'")
+vmctl_get "/internal/vmctl/memory/balloon?computer_id=$COMPUTER_ID"
+balloon=$BODY
+entry_check=$(printf '%s' "$balloon" | python3 -c '
+import json, sys
+try:
+    vms = json.load(sys.stdin).get("vms")
+except Exception:
+    print("not JSON"); sys.exit(0)
+if not isinstance(vms, list) or len(vms) != 1 or vms[0].get("vm_id") != sys.argv[1]:
+    print("no single entry for vm %s" % sys.argv[1]); sys.exit(0)
+e = vms[0]
+if not e.get("reason") and not e.get("reading"):
+    print("entry has neither a reading nor a reason")
+' "$VM_ID")
+[ -z "$entry_check" ] || die "vmctl balloon answer: $entry_check: $(printf '%s' "$balloon" | head -c 400)"
 rss_kib=$(remote "for p in \$(pgrep -f 'firecracker.*$VM_ID'); do [ \"\$(cat /proc/\$p/comm)\" = firecracker ] && awk '/^VmRSS/{print \$2}' /proc/\$p/status; done | head -1" || true)
 procmem=""
+procmem_error=""
 if [[ "$GUEST" =~ ^[0-9.]+$ ]]; then
-	procmem=$(remote "curl -s -f -m 30 $AUTH 'http://$GUEST:8085/internal/debug/pprof/procmem'" || true)
+	# No $AUTH: never send the host credential to a guest.
+	fetch "http://$GUEST:8085/internal/debug/pprof/procmem" -m 30
+	if ok2xx; then
+		procmem=$BODY
+	else
+		procmem_error="guest procmem: status $STATUS: $(printf '%s' "$BODY" | head -c 300)"
+	fi
+else
+	procmem_error="no guest address in vmctl computer_url"
 fi
 
-receipt=$(BALLOON="$balloon" PROCMEM="$procmem" RSS_KIB="$rss_kib" OWN="$own" LABEL="$LABEL" python3 -c '
+receipt=$(BALLOON="$balloon" PROCMEM="$procmem" PROCMEM_ERROR="$procmem_error" RSS_KIB="$rss_kib" OWN="$own" LABEL="$LABEL" python3 -c '
 import datetime, json, os, sys
 MIB = 1 << 20
 def load(name):
@@ -116,7 +168,7 @@ out = {
     "balloon_observed_at": reading.get("observed_at"),
     "balloon_stats_bytes": st or None,
     "guest_meminfo_kib": mi or None,
-    "guest_procmem_error": None if mi else "guest procmem read failed or empty",
+    "guest_procmem_error": os.environ.get("PROCMEM_ERROR") or (None if mi else "guest procmem answer has no meminfo"),
     "firecracker_rss_mib": k2m(int(rss)) if rss.isdigit() else None,
     "compare_mib": [{"what": r[0], "balloon": r[1], "guest_meminfo": r[2], "pair": r[3]} for r in rows],
 }
@@ -135,4 +187,8 @@ print(json.dumps(out, indent=2))
 printf '%s\n' "$receipt"
 if [ -n "$OUT" ]; then
 	printf '%s\n' "$receipt" >"$OUT"
+fi
+if ! printf '%s' "$receipt" | python3 -c 'import json,sys; sys.exit(1 if json.load(sys.stdin)["guest_procmem_error"] else 0)'; then
+	echo "res10_balloon_stats_probe: ${procmem_error:-guest procmem answer has no meminfo}" >&2
+	exit 3
 fi
