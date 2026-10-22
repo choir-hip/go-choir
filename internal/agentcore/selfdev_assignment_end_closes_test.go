@@ -49,6 +49,19 @@ func assignmentEndFixture(t *testing.T, owner string) (*Runtime, *store.Store, t
 	return rt, s, assignment
 }
 
+// pinnedAssignmentReport is a terminal report shaped as the entry point
+// derives it: the pinned subject, its proposition digest and slot report id.
+func pinnedAssignmentReport(assignment types.EngineeringAssignment, result types.EngineeringAssignmentResultKind) types.EngineeringAssignmentReport {
+	report := terminalAssignmentReport(assignment, result)
+	report.ObservedSubjectDigest = assignment.Binding.SubjectDigest
+	report.CandidateArtifactRef = ""
+	report.Mutations[0].AfterDigest = assignment.Binding.SubjectDigest
+	report.Mutations[0].SubjectBytesChanged = false
+	report.PropositionDigest, _ = store.ComputeTerminalPropositionDigest(assignment.Binding.SubjectDigest, report.Result, report.Verdict, report.Commands, report.Outputs, report.EvidenceRefs)
+	report.ReportID = store.TerminalReportID(assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignment.AssignmentID, assignment.Binding.Attempt, report.PropositionDigest)
+	return report
+}
+
 func seedAssignmentOperation(t *testing.T, rt *Runtime, assignment types.EngineeringAssignment, state, intentError string) string {
 	t.Helper()
 	operationID := store.EngineeringFreezeOperationID(assignment.Binding.ComputerID, assignment.AssignmentID)
@@ -191,18 +204,7 @@ func TestReplayedReportClosesTheOperationAfterACrashBeforeTheClose(t *testing.T)
 			assignment, run := c1eOpenBound(t, s, seed, 0)
 			operationID := seedAssignmentOperation(t, rt, assignment, selfdev.StateExecuting, "freeze: refused")
 
-			// The report as the outer path derives it: pinned subject,
-			// proposition digest, slot report id.
-			report := terminalAssignmentReport(assignment, result)
-			report.ObservedSubjectDigest = assignment.Binding.SubjectDigest
-			report.CandidateArtifactRef = ""
-			report.Mutations[0].AfterDigest = assignment.Binding.SubjectDigest
-			report.Mutations[0].SubjectBytesChanged = false
-			report.PropositionDigest, err = store.ComputeTerminalPropositionDigest(assignment.Binding.SubjectDigest, report.Result, report.Verdict, report.Commands, report.Outputs, report.EvidenceRefs)
-			if err != nil {
-				t.Fatal(err)
-			}
-			report.ReportID = store.TerminalReportID(assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignment.AssignmentID, assignment.Binding.Attempt, report.PropositionDigest)
+			report := pinnedAssignmentReport(assignment, result)
 
 			// The crash window: the store commits the terminal report; the
 			// close never runs.
