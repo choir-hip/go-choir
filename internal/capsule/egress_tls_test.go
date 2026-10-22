@@ -71,12 +71,17 @@ type helloOpts struct {
 	extraBytes    int // bytes the extension block claims beyond what follows
 	fragmentTail  int // bytes the handshake claims beyond this record
 	rawName       []byte
+	rawExtsBefore []byte // raw extensions placed before the server_name one
+	sniTrailing   int    // bytes inside the server_name extension after its list
+	bodyTrailing  int    // bytes in the hello after the extension block
+	padding       int    // a padding extension (0x0015) with this many bytes
 }
 
 func u16(n int) []byte { return []byte{byte(n >> 8), byte(n)} }
 
 func handBuiltHello(o helloOpts) []byte {
 	var ext bytes.Buffer
+	ext.Write(o.rawExtsBefore)
 	if !o.noSNI {
 		var list bytes.Buffer
 		names := o.names
@@ -93,9 +98,10 @@ func handBuiltHello(o helloOpts) []byte {
 			list.WriteString(name)
 		}
 		ext.Write(u16(0x0000))
-		ext.Write(u16(list.Len() + 2))
+		ext.Write(u16(list.Len() + 2 + o.sniTrailing))
 		ext.Write(u16(list.Len()))
 		ext.Write(list.Bytes())
+		ext.Write(make([]byte, o.sniTrailing))
 	}
 	// A supported_versions extension, so the block is not just the name.
 	ext.Write(u16(0x002b))
@@ -111,6 +117,11 @@ func handBuiltHello(o helloOpts) []byte {
 		ext.Write(u16(2))
 		ext.Write([]byte{0, 0})
 	}
+	if o.padding > 0 {
+		ext.Write(u16(0x0015))
+		ext.Write(u16(o.padding))
+		ext.Write(make([]byte, o.padding))
+	}
 
 	var body bytes.Buffer
 	body.Write([]byte{0x03, 0x03})
@@ -122,6 +133,7 @@ func handBuiltHello(o helloOpts) []byte {
 	body.WriteByte(0)
 	body.Write(u16(ext.Len() + o.extraBytes))
 	body.Write(ext.Bytes())
+	body.Write(make([]byte, o.bodyTrailing))
 
 	hsType := byte(1)
 	if o.handshakeType != 0 {
@@ -172,6 +184,24 @@ func TestVerifyTunnelClientHelloRefusesAnotherName(t *testing.T) {
 	}
 }
 
+// The name comparison is ASCII case-insensitive only: Unicode case folding
+// would match a CONNECT host the proxy resolved ("ſ.github.com", long s, or
+// a Kelvin sign) to a different ASCII name in the hello.
+func TestVerifyTunnelClientHelloComparesASCIIOnly(t *testing.T) {
+	for _, pair := range [][2]string{
+		{"s.github.com", "\u017f.github.com"},
+		{"k.github.com", "\u212a.github.com"},
+	} {
+		hello := handBuiltHello(helloOpts{names: []string{pair[0]}})
+		if err := verifyTunnelClientHello(hello, pair[1]); err == nil {
+			t.Errorf("hello for %q accepted for CONNECT host %q", pair[0], pair[1])
+		}
+	}
+	if err := verifyTunnelClientHello(handBuiltHello(helloOpts{names: []string{"Files.PyPI.org"}}), "files.pypi.ORG"); err != nil {
+		t.Errorf("ASCII case difference refused: %v", err)
+	}
+}
+
 func TestVerifyTunnelClientHelloTable(t *testing.T) {
 	good := handBuiltHello(helloOpts{names: []string{"pypi.org"}})
 	if err := verifyTunnelClientHello(good, "pypi.org"); err != nil {
@@ -205,6 +235,14 @@ func TestVerifyTunnelClientHelloTable(t *testing.T) {
 		{"empty", nil, "pypi.org"},
 		{"header only", []byte{0x16, 0x03, 0x01, 0x00, 0x10}, "pypi.org"},
 		{"truncated mid hello", good[:len(good)-5], "pypi.org"},
+		// Differential-parse guards: a server that reads a hello another way
+		// from this parser must never see a name the check did not.
+		{"duplicate server_name, first empty", handBuiltHello(helloOpts{names: []string{"pypi.org"},
+			rawExtsBefore: []byte{0x00, 0x00, 0x00, 0x02, 0x00, 0x00}}), "pypi.org"},
+		{"duplicate supported_versions", handBuiltHello(helloOpts{names: []string{"pypi.org"},
+			rawExtsBefore: []byte{0x00, 0x2b, 0x00, 0x03, 0x02, 0x03, 0x04}}), "pypi.org"},
+		{"bytes after the extension block", handBuiltHello(helloOpts{names: []string{"pypi.org"}, bodyTrailing: 4}), "pypi.org"},
+		{"bytes after the sni list", handBuiltHello(helloOpts{names: []string{"pypi.org"}, sniTrailing: 3}), "pypi.org"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -234,6 +272,15 @@ func connectNoRead(t *testing.T, h *egressHarness, target string) (net.Conn, *bu
 		t.Fatalf("CONNECT %s status = %d", target, resp.StatusCode)
 	}
 	return conn, br
+}
+
+// expectNothingReachedUpstream: the one upstream connection a refused
+// tunnel opened has ended and received no byte.
+func expectNothingReachedUpstream(t *testing.T, h *egressHarness) {
+	t.Helper()
+	if n := h.upstreamReceived(1); n != 0 {
+		t.Fatalf("a refused tunnel sent %d bytes to the upstream", n)
+	}
 }
 
 func expectTunnelClosedWithoutEcho(t *testing.T, conn net.Conn, br *bufio.Reader) {
@@ -278,6 +325,7 @@ func TestEgressRefusesATunnelWhoseServerNameIsNotTheConnectHost(t *testing.T) {
 		t.Fatal(err)
 	}
 	expectTunnelClosedWithoutEcho(t, conn, br)
+	expectNothingReachedUpstream(t, h)
 	records := h.waitRecords(1)
 	if len(records) != 1 || records[0].Outcome != EgressOutcomeRefused || !strings.Contains(records[0].Reason, "SNI") ||
 		records[0].Host != "github.com" || records[0].TunnelIdentity != TunnelVerdictRefused ||
@@ -300,6 +348,7 @@ func TestEgressRefusesATunnelThatIsNotTLS(t *testing.T) {
 				t.Fatal(err)
 			}
 			expectTunnelClosedWithoutEcho(t, conn, br)
+			expectNothingReachedUpstream(t, h)
 			records := h.waitRecords(1)
 			if len(records) != 1 || records[0].Outcome != EgressOutcomeRefused || records[0].Reason == "" {
 				t.Fatalf("records = %+v", records)
@@ -316,6 +365,7 @@ func TestEgressRefusesAHelloThatHidesItsName(t *testing.T) {
 		t.Fatal(err)
 	}
 	expectTunnelClosedWithoutEcho(t, conn, br)
+	expectNothingReachedUpstream(t, h)
 	records := h.waitRecords(1)
 	if len(records) != 1 || records[0].Outcome != EgressOutcomeRefused {
 		t.Fatalf("records = %+v", records)
@@ -328,6 +378,7 @@ func TestEgressRefusesASilentTunnel(t *testing.T) {
 	h.resolved["github.com"] = []netip.Addr{publicAddr}
 	conn, br := connectNoRead(t, h, "github.com:443")
 	expectTunnelClosedWithoutEcho(t, conn, br)
+	expectNothingReachedUpstream(t, h)
 	records := h.waitRecords(1)
 	if len(records) != 1 || records[0].Outcome != EgressOutcomeRefused || !strings.Contains(records[0].Reason, "ClientHello") {
 		t.Fatalf("records = %+v", records)
@@ -343,6 +394,7 @@ func TestEgressRefusesAnOversizedFirstRecord(t *testing.T) {
 		t.Fatal(err)
 	}
 	expectTunnelClosedWithoutEcho(t, conn, br)
+	expectNothingReachedUpstream(t, h)
 	records := h.waitRecords(1)
 	if len(records) != 1 || records[0].Outcome != EgressOutcomeRefused {
 		t.Fatalf("records = %+v", records)
@@ -358,4 +410,5 @@ func TestEgressClaudeTunnelIsBoundToItsName(t *testing.T) {
 		t.Fatal(err)
 	}
 	expectTunnelClosedWithoutEcho(t, conn, br)
+	expectNothingReachedUpstream(t, h)
 }
