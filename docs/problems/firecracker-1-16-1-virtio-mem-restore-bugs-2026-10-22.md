@@ -71,8 +71,10 @@ deploy note, below, added with the fix).
 As built: `flake.nix` `choirFirecrackerRelease` / `choirFirecrackerModule`
 (an overlay on the Node B host only, the Dolt pattern), so
 `pkgs.firecracker` is 1.16.2 for `VM_FIRECRACKER_BIN`, `VM_JAILER_BIN` and
-the host's `firecracker` package. Both hashes are `lib.fakeHash`: FP0
-fills them on the Mac before landing. `nix/firecracker-next.nix` (NET-08)
+the host's `firecracker` package. Both hashes were filled by FP0 on the
+Mac in 3b402571e (0c7798c62 on the KF stage branch). FP0's `nix eval` of
+go-choir-b gives `pkgs.firecracker.version` 1.16.2. The flake also asserts
+the host stays below 1.17 (`choirFirecrackerBelow`). `nix/firecracker-next.nix` (NET-08)
 overrides the same package and is unaffected. Test:
 `internal/vmmanager/snapshot_test.go`
 `TestResumeRefusesSnapshotFromOtherFirecrackerPatch` (a 1.16.1 snapshot on
