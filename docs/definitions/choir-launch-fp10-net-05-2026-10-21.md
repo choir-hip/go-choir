@@ -90,17 +90,25 @@ boundaries:
   protected_surfaces: [egress authority (new, unwired)]
 
 now:
-  status: working
-  slice: problem record and this station file
-  source_ref: d1c60ad87
+  status: checkpoint_incomplete
+  slice: >-
+    Done for this pass: problem record, station file, design, and the
+    unwired internal/egressgrant package with tests. Nothing pushed to main
+    or deployed. FP0 reviews and lands; wiring is later red missions
+    (design §5), each behind CHOIR_EGRESS_GRANTS default off.
+  source_ref: 953836789
   deploy_identity: unknown to this lane
   candidate:
     id: fp10-net05-grants
-    state: drafting
+    state: ready
     ref: lane/fp10-net05-grants
     base: d1c60ad87
     digest: none
-    scope: [docs/problems/no-grant-object-for-open-egress-2026-10-21.md, docs/definitions/choir-launch-fp10-net-05-2026-10-21.md]
+    scope:
+      - docs/problems/no-grant-object-for-open-egress-2026-10-21.md
+      - docs/definitions/choir-launch-fp10-net-05-2026-10-21.md
+      - docs/design/egress-grant-object-2026-10-21.md
+      - internal/egressgrant/
   conjecture:
     id: C-one-grant-model
     claim: >-
@@ -114,14 +122,42 @@ now:
     edge: missing_oracle
     delta_o: the proxy wiring (design §5) is the first real reader
     scope_if_supported: the grant model, not enforcement
-    status: open
-    evidence_refs: [docs/problems/no-grant-object-for-open-egress-2026-10-21.md]
+    status: testing
+    evidence_refs: [internal/egressgrant/egressgrant_test.go]
   belief:
-    believed_state: no grant object exists; owner-act receipts exist and can bind a decision
-    main_uncertainty: how NET-01's host fetch service and NET-02's mirrors name a destination
+    believed_state: >-
+      The record, its validation, expiry, owner-act-only decide and the
+      per-use check exist and pass their failure list; five hand mutations
+      of the checks each fail a test. No caller exists.
+    main_uncertainty: >-
+      How NET-01's host fetch service and NET-02's mirrors name a
+      destination, and whether the owner takes the host-side grant table
+      (design §5.5) as the enforcement authority.
     next_observation: their lane designs when FP0 lands them
-  blocker_or_risk: none
-  next_action: write the design, then the tests from the failure list, then the package
+  blocker_or_risk: >-
+    A stored record cannot re-verify its owner act after the 5-minute TTL;
+    host enforcement must not trust a guest-presented record (design §5.5).
+  next_action: FP0 freezes and reviews 953836789 in the next bunch; lands it (CI only, inert)
+
+receipts:
+  - id: problem-record-and-goal
+    boundary: define
+    identity: 465bc96e0
+    proof_refs: [docs/problems/no-grant-object-for-open-egress-2026-10-21.md]
+    rollback_ref: git revert 465bc96e0
+    disposition: committed
+  - id: design
+    boundary: define
+    identity: a644127df
+    proof_refs: [docs/design/egress-grant-object-2026-10-21.md]
+    rollback_ref: git revert a644127df
+    disposition: committed
+  - id: egressgrant-package
+    boundary: implement
+    identity: 953836789
+    proof_refs: [internal/egressgrant/egressgrant_test.go]
+    rollback_ref: git revert 953836789
+    disposition: committed; go test and go vet pass locally; unwired
 ---
 
 # FP10 NET-05: the grant object for open egress
