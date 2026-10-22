@@ -496,15 +496,18 @@ let
     ProtectHome = "tmpfs";
   };
   # Env files that units read only through EnvironmentFile=, kept in one
-  # root-only directory that every unit hides as a directory. Hiding them one
+  # root-only directory that every long-running host unit, and every oneshot
+  # that declares hidden paths, hides as a directory (the thirteen oneshots
+  # that hide nothing are listed in the problem record below). Hiding them one
   # by one failed (docs/problems/host-containment-gaps-after-fp3-cut-2-2026-10-22.md):
   # InaccessiblePaths mounts over a file when the unit's namespace is made,
   # so a file replaced by rename later (the deploy's rewrite of deploy.env),
   # or created after the unit started ("-" skips an absent path), is
   # visible to that unit until its next restart. A rename or a create
   # inside a hidden directory stays hidden. The activation snippet
-  # go-choir-unit-env moved the files here from /var/lib/go-choir and leaves
-  # a link at each old path. Operators write and remove unit-env/<name>: a
+  # go-choir-unit-env moved the files here from /var/lib/go-choir, leaves a
+  # link at each old path and quarantines anything else found there. Operators
+  # write (install -m 0600) and remove unit-env/<name>: a
   # `>` through an old path's link lands here too, but `rm` of an old path
   # removes only the link (the file, and a switch it holds, stays).
   unitEnvDir = "/var/lib/go-choir/unit-env";
@@ -529,7 +532,7 @@ let
     escrowKey = "-${platformArtifactsDir}/key-escrow-key";
     mail = "-${mailDir}";
     # Env files read only through EnvironmentFile= (systemd reads them before
-    # the namespace exists), hidden everywhere as one directory (unitEnvDir),
+    # the namespace exists), hidden as one directory (unitEnvDir),
     # so a unit that can write /var/lib/go-choir can neither read them nor
     # write another unit's environment for its next start.
     unitEnv = "-${unitEnvDir}";
@@ -2341,57 +2344,129 @@ in
   '';
 
   # The env directory (unitEnvDir). Activation runs at boot before units
-  # start and in a switch before units restart, so every unit's namespace
-  # is made with the directory present and hidden. Its first run moves the
-  # env files in from /var/lib/go-choir (a rename on one filesystem: the
-  # inode and contents are kept); later runs never adopt a file found at an
-  # old path, so a unit that can write /var/lib/go-choir (gateway, vmctl)
-  # cannot plant one for a later activation to take. Each old path keeps a
-  # link to unit-env/<name>: a rollback past this commit reads through it
-  # (systemd follows the link; inside a unit's namespace it leads into the
-  # hidden directory), and an old runbook's `>` writes through it. A
-  # regular file at an old path is left alone (no unit reads it) and fails
-  # verify-host-hardening.py. A link or file planted at the directory's own
-  # path is moved aside, never followed. Remove this block and the links
-  # once no rollback can reach a commit from before the move.
+  # start and in a switch before units restart, so each unit's new
+  # namespace is made with the directory present. Per name, by what sits at
+  # the old path /var/lib/go-choir/<name>:
+  #   - the link unit-env/<name>, or nothing: (re)made the link;
+  #   - before the first import (no .imported marker), a regular file or a
+  #     link to one elsewhere: imported (a regular file by rename, which keeps
+  #     the inode and the old view's mask on it during the landing; a link's
+  #     target by copy, the target left in place and named). The old path
+  #     wins over a file already in unit-env, which becomes a stray;
+  #   - after the import, a regular file or a link to one elsewhere with the
+  #     same content as unit-env/<name> (a reverted deploy's scrub): relinked;
+  #     with other content, or with no unit-env/<name>: never adopted (a unit
+  #     that can write /var/lib/go-choir could have put it there), moved or
+  #     copied into the hidden directory as <name>.stray.<epoch>.<pid> and
+  #     the old path relinked, so nothing secret stays where every root unit
+  #     can read it;
+  #   - a dangling link or a link to a non-file: repointed.
+  # A link is replaced through a temporary name and a rename, so the old name
+  # never goes missing when it is replaced. The activation fails (non-zero,
+  # a line on stderr and in the journal naming the path) while any stray
+  # waits in unit-env, so the deploy's one switch retry fails too, until the
+  # operator merges what is wanted into unit-env/<name> and removes the
+  # stray. A link or file planted at the directory's own path is moved aside,
+  # never followed. A rollback moves no files (the links serve the reverted
+  # units); one that moves them back must also remove unit-env/.imported, so
+  # the next landing imports them again
+  # (docs/problems/host-containment-gaps-after-fp3-cut-2-2026-10-22.md, round 2).
+  # Between activations, a regular file put at an old path is readable by
+  # every root unit until the next activation quarantines it; the verifier
+  # flags it on any run. Remove this block and the links once no rollback
+  # can reach a commit from before the move.
   system.activationScripts.go-choir-unit-env = ''
     (
       set -eu
+      umask 077
       state=/var/lib/go-choir
       d="$state/unit-env"
+      tag="$(date +%s).$$"
+      fail=0
+      say() {
+        echo "go-choir-unit-env: $*" >&2
+        ${pkgs.util-linux}/bin/logger -t go-choir-unit-env -p daemon.err -- "$*" 2>/dev/null || true
+      }
+      same() { [ -f "$2" ] && [ "$(cat -- "$1")" = "$(cat -- "$2")" ]; }
+      put_link() {
+        tmp="$state/.$1.link.$$"
+        rm -f "$tmp"
+        ln -s "unit-env/$1" "$tmp"
+        # mv onto a link to a directory would move into the directory.
+        if [ -L "$state/$1" ] && [ -d "$state/$1" ]; then rm -f "$state/$1"; fi
+        mv -f "$tmp" "$state/$1"
+      }
+      take() { # $1 from (a regular file, or a link to one), $2 to: rename a file, copy a link's target
+        if [ -L "$1" ]; then
+          cat -- "$1" > "$2.part"
+          mv "$2.part" "$2"
+        else
+          mv "$1" "$2"
+        fi
+      }
       if [ -L "$d" ] || { [ -e "$d" ] && [ ! -d "$d" ]; }; then
-        mv "$d" "$d.invalid.$(date +%s)"
-        echo "go-choir: $d was not a directory; moved it aside" >&2
+        mv "$d" "$d.invalid.$tag"
+        say "$d was not a directory; moved it aside to $d.invalid.$tag"
       fi
       mkdir -p "$d"
       if [ "$(id -u)" = 0 ]; then chown root:root "$d"; fi
       chmod 0700 "$d"
-      if [ ! -e "$d/.imported" ]; then
-        for name in ${lib.concatStringsSep " " unitEnvNames}; do
-          if [ -f "$state/$name" ] && [ ! -L "$state/$name" ] && [ ! -e "$d/$name" ] && [ ! -L "$d/$name" ]; then
-            mv "$state/$name" "$d/$name"
-            echo "go-choir: moved $state/$name into $d"
-          fi
-        done
-        : > "$d/.imported"
-      fi
+      imported=0
+      if [ -e "$d/.imported" ]; then imported=1; fi
       for name in ${lib.concatStringsSep " " unitEnvNames}; do
-        if [ -f "$d/$name" ] && [ ! -L "$d/$name" ]; then
-          if [ "$(id -u)" = 0 ]; then chown root:root "$d/$name"; fi
-          chmod 0600 "$d/$name"
-        fi
-        link="$state/$name"
-        if [ -L "$link" ]; then
-          if [ "$(readlink "$link")" != "unit-env/$name" ]; then
-            rm -f "$link"
-            ln -s "unit-env/$name" "$link"
+        old="$state/$name"
+        new="$d/$name"
+        stray="$d/$name.stray.$tag"
+        what="a regular file"
+        if [ -L "$old" ]; then what="a link to $(readlink "$old")"; fi
+        if [ -L "$old" ] && [ "$(readlink "$old")" = "unit-env/$name" ]; then
+          :
+        elif [ -L "$old" ] && [ ! -f "$old" ]; then
+          put_link "$name"
+          echo "go-choir-unit-env: repointed $old ($what)"
+        elif [ -f "$old" ]; then
+          if [ "$imported" = 0 ] && [ ! -e "$new" ] && [ ! -L "$new" ]; then
+            take "$old" "$new"
+            put_link "$name"
+            echo "go-choir-unit-env: imported $old ($what) into $new"
+            if [ "$what" != "a regular file" ]; then
+              say "the link's target is left in place; remove it if nothing else reads it: $what"
+            fi
+          elif same "$old" "$new"; then
+            put_link "$name"
+            echo "go-choir-unit-env: $old ($what) held what $new holds; relinked"
+          elif [ "$imported" = 0 ]; then
+            mv "$new" "$stray"
+            take "$old" "$new"
+            put_link "$name"
+            say "FAIL: $new existed before the import with other content than $old ($what); kept $old's as $new, quarantined the other as $stray"
+            fail=1
+          else
+            take "$old" "$stray"
+            put_link "$name"
+            say "FAIL: $old was $what after the import: never adopted (no unit reads it, every root unit could), quarantined as $stray"
+            fail=1
           fi
-        elif [ -e "$link" ]; then
-          echo "go-choir: $link is a file no unit reads (units read $d/$name)" >&2
+        elif [ -e "$old" ]; then
+          say "FAIL: $old is neither a file nor a link; left in place"
+          fail=1
         else
-          ln -s "unit-env/$name" "$link"
+          put_link "$name"
+        fi
+        if [ -f "$new" ] && [ ! -L "$new" ]; then
+          if [ "$(id -u)" = 0 ]; then chown root:root "$new"; fi
+          chmod 0600 "$new"
         fi
       done
+      if [ "$imported" = 0 ]; then : > "$d/.imported"; fi
+      for q in "$d"/*.stray.*; do
+        if [ ! -e "$q" ] && [ ! -L "$q" ]; then continue; fi
+        if [ "$(id -u)" = 0 ]; then chown -h root:root "$q"; fi
+        chmod 0600 "$q" 2>/dev/null || true
+        say "FAIL: $q waits for the operator: merge what is wanted into $d/<name>, then remove it"
+        fail=1
+      done
+      if [ "$fail" != 0 ]; then exit 1; fi
     )
   '';
 
