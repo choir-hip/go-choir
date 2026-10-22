@@ -81,8 +81,8 @@ func (s *Store) eventTableFingerprints(ctx context.Context) ([]ObjectGraphFinger
 	defer func() { _ = rows.Close() }()
 	var out []ObjectGraphFingerprint
 	for rows.Next() {
+		fp := ObjectGraphFingerprint{Table: choirEventsTable}
 		var (
-			fp               ObjectGraphFingerprint
 			tapeSeq, opIndex uint64
 			body             []byte
 			metadata         string
@@ -95,7 +95,6 @@ func (s *Store) eventTableFingerprints(ctx context.Context) ([]ObjectGraphFinger
 		bodySum := sha256.Sum256(body)
 		metaSum := sha256.Sum256([]byte(metadata))
 		fp.CanonicalID = fmt.Sprintf("%s/%d/%d", choirEventsTable, tapeSeq, opIndex)
-		fp.Table = choirEventsTable
 		fp.BodyDigest = hex.EncodeToString(bodySum[:])
 		fp.MetadataDigest = hex.EncodeToString(metaSum[:])
 		fp.UpdatedAt = fmt.Sprint(updatedAt)

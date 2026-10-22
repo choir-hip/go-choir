@@ -200,33 +200,36 @@ func dryRunTapePosition(ctx context.Context, q rowQuerier, computerID string) (u
 }
 
 // The choir_events half of each union read (section 4.4), one query per
-// reader shape, each served by one index (F16 pins the plans).
+// reader shape, each served by one index (F16 pins the plans). Each ORDER BY
+// names the whole index prefix, the equality column included: Dolt reads the
+// index in order, with no TopN, only then (measured on the plan test).
 
 func eventTableRunAfterSQL(runID string, afterSeq int64, limit int) (string, []any) {
-	return `SELECT canonical_id, updated_at, body FROM choir_events WHERE run_id = ? AND seq > ? ORDER BY seq ASC LIMIT ?`,
+	return `SELECT canonical_id, updated_at, body FROM choir_events WHERE run_id = ? AND seq > ? ORDER BY run_id ASC, seq ASC LIMIT ?`,
 		[]any{runID, afterSeq, limit}
 }
 
 func eventTableOwnerAfterSQL(ownerID string, afterStreamSeq int64, limit int) (string, []any) {
-	return `SELECT canonical_id, updated_at, body FROM choir_events WHERE owner_id = ? AND stream_seq > ? ORDER BY stream_seq ASC LIMIT ?`,
+	return `SELECT canonical_id, updated_at, body FROM choir_events WHERE owner_id = ? AND stream_seq > ? ORDER BY owner_id ASC, stream_seq ASC LIMIT ?`,
 		[]any{ownerID, afterStreamSeq, limit}
 }
 
 func eventTableOwnerNewestSQL(ownerID string, limit int) (string, []any) {
-	return `SELECT canonical_id, updated_at, body FROM choir_events WHERE owner_id = ? ORDER BY stream_seq DESC LIMIT ?`,
+	return `SELECT canonical_id, updated_at, body FROM choir_events WHERE owner_id = ? ORDER BY owner_id DESC, stream_seq DESC LIMIT ?`,
 		[]any{ownerID, limit}
 }
 
 func eventTableTrajectoryNewestSQL(trajectoryID string, limit int) (string, []any) {
-	return `SELECT canonical_id, updated_at, body FROM choir_events WHERE trajectory_id = ? ORDER BY stream_seq DESC LIMIT ?`,
+	return `SELECT canonical_id, updated_at, body FROM choir_events WHERE trajectory_id = ? ORDER BY trajectory_id DESC, stream_seq DESC LIMIT ?`,
 		[]any{trajectoryID, limit}
 }
 
 // eventTableRunMaxSeqSQL is the per-run seed's half: one reverse seek on
 // (run_id, seq). It reads no row for a run with none, which the seed takes
-// as 0 (round 2, Gemini: MAX over no rows is NULL).
+// as 0 (round 2, Gemini: MAX over no rows is NULL). Not MAX(seq): Dolt plans
+// that as a GroupBy over every row of the run.
 func eventTableRunMaxSeqSQL(runID string) (string, []any) {
-	return `SELECT seq FROM choir_events WHERE run_id = ? ORDER BY seq DESC LIMIT 1`, []any{runID}
+	return `SELECT seq FROM choir_events WHERE run_id = ? ORDER BY run_id DESC, seq DESC LIMIT 1`, []any{runID}
 }
 
 // eventTableNewestStreamSQL is the stream seed's half: the newest 500 rows
