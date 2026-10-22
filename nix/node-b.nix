@@ -1361,8 +1361,12 @@ in
         # computer first (FP8 proof step 8 compares its host RSS with a
         # control), then class:test, then the paper. A named computer cold
         # boots once (boot arguments are in the launch-config hash).
+        # The first test computer (9648031f) has not woken since: host
+        # admission refuses its start. The second (71afbf14) is the test
+        # computer FP0's monitor keeps awake, so its host RSS can be read
+        # against its own pre-DAMON readings at similar guest usage.
         # Rollback: delete this line and redeploy.
-        "VM_GUEST_RECLAIM_ONLY=computer-9648031f92e131adc1fb65ec455c5903"
+        "VM_GUEST_RECLAIM_ONLY=computer-9648031f92e131adc1fb65ec455c5903,computer-71afbf1461dffabcce8eeebe558d03bd"
         # Data drive discard (VM_DATA_DISCARD=1) is deliberately NOT set: the
         # pinned Firecracker is 1.16.1, which has no virtio-blk discard
         # (vmmanager ignores the flag on an older binary). Guest side:
