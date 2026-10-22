@@ -582,12 +582,12 @@ func copyImmutableCommitTreeTimed(ctx context.Context, source, commit, target, e
 	commitPass := []string{fmt.Sprintf("files=%d", len(tracked)), "git_procs=0", "against=expected"}
 	if expected == "" {
 		if expected, err = canonicalImmutableCommitDigest(ctx, source, commit); err != nil {
-			return "", fmt.Errorf("source snapshot canonical digest mismatch")
+			return "", fmt.Errorf("source snapshot canonical digest mismatch: commit %s: %w", commit, err)
 		}
 		commitPass = []string{fmt.Sprintf("files=%d", len(tracked)), "git_procs=1"}
 	}
 	if expected != digest {
-		return "", fmt.Errorf("source snapshot canonical digest mismatch")
+		return "", fmt.Errorf("source snapshot canonical digest mismatch: expected %s, copied %s", expected, digest)
 	}
 	timer.phase("source_digest_commit", commitPass...)
 	if err := makeSubjectTreeReadOnly(target); err != nil {
@@ -595,6 +595,21 @@ func copyImmutableCommitTreeTimed(ctx context.Context, source, commit, target, e
 	}
 	timer.phase("source_read_only")
 	return digest, nil
+}
+
+// spawnSourceRefusal is Spawn's verdict on its source copy: nil only when
+// the copy succeeded and its digest is the one the binding pins. A refusal
+// wraps the copy's cause and names the digests, so an object-id mismatch, a
+// missing object, a git exit, a deadline and a digest mismatch read
+// differently in the logs and in the cancelled assignment's reason.
+func spawnSourceRefusal(copyErr error, expected, copied string) error {
+	if copyErr != nil {
+		return fmt.Errorf("capsule source changed after durable preflight (expected %s): %w", expected, copyErr)
+	}
+	if copied != expected {
+		return fmt.Errorf("capsule source changed after durable preflight: expected %s, copied %s", expected, copied)
+	}
+	return nil
 }
 
 func requireFrozenComputerSurfaceSource(root string) error {
