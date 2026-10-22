@@ -100,12 +100,29 @@ need() { # tools...
 }
 
 # ---- status file ------------------------------------------------------
+# The daily backup and the weekly verify are separate units and can overlap,
+# so every write is a read-modify-write under a lock beside the file, held
+# only for the merge (never across restic), through a temp of its own.
 status_merge() { # JSON object on stdin merged into status.json atomically
   install -d -m 0700 "$STATE"
-  local new cur="{}"
+  local new
   new="$(cat)" # read before the pipeline: its stages do not share this stdin
+  if command -v flock >/dev/null 2>&1; then
+    ( flock -w 60 9 || err "status.json lock busy for 60 s; writing without it"
+      status_write "$new" ) 9>>"$STATUS.lock"
+  else
+    status_write "$new"
+  fi
+}
+status_write() { # $1 JSON object
+  local cur="{}" tmp
   [ -s "$STATUS" ] && cur="$(cat "$STATUS")"
-  printf '%s' "$cur" | jq -c --argjson new "$new" '. * $new' > "$STATUS.tmp" && mv "$STATUS.tmp" "$STATUS"
+  tmp="$(mktemp "$STATUS.XXXXXX")" || return 1
+  if printf '%s' "$cur" | jq -c --argjson new "$1" '. * $new' > "$tmp"; then
+    mv "$tmp" "$STATUS"
+  else
+    rm -f "$tmp"; return 1
+  fi
 }
 
 # ---- attempt marks -----------------------------------------------------
@@ -515,7 +532,7 @@ result_fresh() { # $1 attempt|verify, $2 label: 1 when the last result is not go
     ok|none) return 0 ;;
     running)
       pid="$(jq -r --arg k "last_${1}_pid" '.[$k] // 0' "$STATUS")"
-      if [ "$pid" -gt 0 ] 2>/dev/null && [ -r "/proc/$pid/cmdline" ] && tr '\0' ' ' < "/proc/$pid/cmdline" | grep -q 'off-\?host-backup'; then
+      if [ "$pid" -gt 0 ] 2>/dev/null && { tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null || ps -p "$pid" -o args= 2>/dev/null; } | grep -q 'off-\?host-backup'; then
         log "a $2 run is in progress (pid $pid)"; return 0
       fi
       err "last $2 was interrupted: marked running, and its process ($pid) is gone"; return 1 ;;
