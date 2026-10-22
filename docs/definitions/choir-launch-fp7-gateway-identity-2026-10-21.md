@@ -311,8 +311,14 @@ receipts:
     boundary: implement
     identity: cd6c1cd6e (+ nix comment 15e00ccad; decision and sizing e06f5364e, tests ae30081c0)
     proof_refs: [docs/problems/gateway-request-bodies-unbounded-2026-10-22.md "Repair of F7 (FP0 round 5)", "internal/provider/media_test.go TestImageOutputIsHeldUntilTheCallReleasesIt, TestImageOutputOneCallerHoldsAtMostItsShare, TestImageOutputIsGivenBackOnErrorAndPanic and internal/gateway/body_caps_test.go TestBodyCapsUnitMemoryArithmeticFitsUnderGOMEMLIMIT (5.80 GiB of 6), TestBodyCapsHealthReportsImageMedia: neither package builds on 142c17bd1 (new API); with only the API shimmed onto 142c17bd1 each fails behaviorally (the arithmetic at 6.38 GiB with four slots)", "go test -race ./internal/gateway -run 'TestBodyCaps|TestModelScheduler': green", "go test ./internal/gateway/... ./internal/provider/...: green"]
-    rollback_ref: git revert of cd6c1cd6e (the bunch 116 code stays; F7 returns as a residual)
+    rollback_ref: git revert of cd6c1cd6e and ae30081c0 together (the tests use the new API; the bunch 116 code stays; F7 returns as a residual)
     disposition: F7 fixed by FP0's decision (an output byte budget that calls wait on, no re-encode); decode slots 4 to 3 and 1 per computer to make room, with the full arithmetic in the nix comment, section 6 and the problem record
+  - id: b7-body-caps-review-bunch-121
+    boundary: implement
+    identity: test d6e94f34e (+ comments 4a94a39e8; findings 56f43277e)
+    proof_refs: [docs/problems/gateway-request-bodies-unbounded-2026-10-22.md "Repair of the review findings (bunch 121)", "internal/provider/media_test.go TestImageOutputFirstFullCallOverTheShareIsGrantedAtOnce: passes on f78ea9f96, fails with the held > 0 guard removed from grantLocked", "go test -race ./internal/gateway -run 'TestBodyCaps|TestModelScheduler': green", "go test ./internal/gateway/... ./internal/provider/...: green"]
+    rollback_ref: none needed (a test and comments only)
+    disposition: D1 pinned by a test; D2 and D3 (with Sonnet F1) corrected in the nix comment, the output budget's code comment, section 6 and the record; D7 rollback_ref corrected; D4 recorded, D5 and D6 declined for now, D8 recorded, with reasons in the problem record
   - id: res-12
     boundary: define
     identity: this file, section 5
@@ -576,8 +582,9 @@ Images are decoded at most 3 at once process-wide
 (`provider.MaxConcurrentImageDecodes`), at most 1 of them for one computer
 (`MaxImageDecodesPerCaller`), each from its base64 inside its slot. The
 downscaled images all calls hold, as base64, are bounded by
-`provider.MaxImageOutputBytes` (192 MiB, 96 MiB per computer, a
-computer's first call always fits): a call reserves its worst case
+`provider.MaxImageOutputBytes` (192 MiB; a computer's share is 96 MiB,
+but its first reservation is granted whatever its size, so one computer
+holds at most max(96 MiB, one call's 133.3 MiB)): a call reserves its worst case
 (6.67 MiB per base64 image) once before its first decode, keeps what it
 made, and gives it back when its upstream call returns (FP0 round 5, F7).
 A call whose context ends while it waits for a slot or for output bytes
@@ -588,10 +595,12 @@ use, waits and refusals. The gateway unit has `MemoryMax=8G` and
 bodies 3 x 1 GiB (the decoder's buffer, or the decoded request and its
 upstream body) = 3.00 GiB, decodes 3 x about 620 MB = 1.73 GiB, output
 3 x 192 MiB (the string, its upstream copy, the encoder's growth) =
-0.56 GiB, runtime about 0.5 GiB: about 5.80 GiB, under `GOMEMLIMIT` and
-1.65 GiB under `MemoryMax` (the nix comment and the problem record carry
-it; `TestBodyCapsUnitMemoryArithmeticFitsUnderGOMEMLIMIT` computes it from
-the constants).
+0.56 GiB, runtime about 0.5 GiB: about 5.80 GiB, 0.2 GiB under
+`GOMEMLIMIT` and 2.20 GiB under `MemoryMax` (systemd reads 8G as 8 GiB;
+the nix comment and the problem record carry it;
+`TestBodyCapsUnitMemoryArithmeticFitsUnderGOMEMLIMIT` computes the
+capacity terms from the constants, with the copy factors, the runtime
+term and the 6 GiB limit as literals).
 
 **Observe first, for the model routes only.** The model limit is below the
 media contract's ceiling, so it could refuse a real call: a long
@@ -624,7 +633,8 @@ ceiling is no bound.
 the aggregate bound with the scheduler off. (b) Bounded by the bunch 109
 and 116 rounds and FP0 round 5: images are decoded at most 3 at once, at
 most 1 for one computer, about 620 MB each at 50 Mpx; the downscaled
-output is at most 192 MiB, 96 MiB for one computer; the shares are per
+output is at most 192 MiB, max(96 MiB, one call's 133.3 MiB) for one
+computer; the shares are per
 computer, not per owner. The worst case is computed, not measured. (c) The refusal log has one
 line per refusal and no throttle. (d) No real body sizes have been measured
 yet. The observe deploy's `max_seen.model` is the first measurement.

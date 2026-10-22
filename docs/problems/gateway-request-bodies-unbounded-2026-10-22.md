@@ -590,7 +590,9 @@ comment 15e00ccad (green).
   and one caller's at `MaxImageOutputBytesPerCaller` = 96 MiB, keyed by
   the same decode caller (the computer) as the slots and the body share,
   with the body budget's grant rule: oldest first, a caller over its share
-  passed over, its first reservation always within its share. 192 MiB
+  passed over, its first reservation granted whatever its size (corrected
+  in bunch 121: one computer holds at most max(96 MiB, one call's
+  133.3 MiB)). 192 MiB
   takes one full call (20 x 6.67 MiB = 133.3 MiB) with 58 MiB to spare.
 - **Reserve once, before any slot.** `prepareMediaRequest` reserves
   `ImageOutputPerImage` (6.67 MiB) per base64 image in one acquire before
@@ -640,14 +642,16 @@ comment 15e00ccad (green).
   1.73 GiB; downscaled output 3 x 192 MiB (the string, its upstream copy,
   the encoder's growth by doubling) = 0.56 GiB; the runtime and everything
   else about 0.5 GiB. About 5.80 GiB: 0.2 GiB under `GOMEMLIMIT=6GiB` and
-  1.65 GiB under `MemoryMax=8G`. `TestBodyCapsUnitMemoryArithmeticFitsUnderGOMEMLIMIT`
-  computes it from the constants, so a later change to any of them fails a
-  test before it fails the unit.
+  2.20 GiB under `MemoryMax=8G` (corrected in bunch 121: systemd reads 8G
+  as 8 GiB). `TestBodyCapsUnitMemoryArithmeticFitsUnderGOMEMLIMIT`
+  computes the capacity terms from the constants, so a later change to any
+  of them fails a test before it fails the unit; the copy factors, the
+  runtime term and the 6 GiB limit are literals in it (bunch 121 D8).
 - **Residuals.** The worst case is computed, not measured; the observe
   deploy's `MemoryPeak` (proof 10) is the first measurement, and the
   0.5 GiB runtime term is an estimate. The margin under `GOMEMLIMIT` is
   thin by construction: at the bound the collector works hard, which is
-  what `GOMEMLIMIT` is for, and `MemoryMax` is 1.65 GiB further. The
+  what `GOMEMLIMIT` is for, and `MemoryMax` is 2.20 GiB further. The
   output budget is a second copy of the body budget's grant code (the
   provider cannot import the gateway); one shared byte-budget package is
   a clean-up for later. Shares are per computer, not per owner.
@@ -695,3 +699,48 @@ recorded here before any change.
   from the constants but the copy factors, the 0.5 GiB runtime and the
   6 GiB `GOMEMLIMIT` are literals, so a nix `GOMEMLIMIT` change does not
   fail it.
+
+## Repair of the review findings (bunch 121)
+
+Findings 56f43277e (green), test d6e94f34e (yellow), comments 4a94a39e8 (green).
+
+- **D1, pinned.** `TestImageOutputFirstFullCallOverTheShareIsGrantedAtOnce`
+  builds the budget with the production sizes (192 MiB, 96 MiB share),
+  checks a full call's reservation is over the share, and checks it is
+  granted at once on an empty budget, that the same caller's next call
+  then waits while another caller's goes ahead, and that the waiting call
+  leaves with `ErrImageDecodeWait` when its context ends. It passes on
+  f78ea9f96 (the rule was already the code's) and was checked to fail with
+  the `held > 0` guard removed from `grantLocked`; no code changed.
+- **D2, corrected.** The round 5 repair above, section 6, residual (b),
+  the nix comment and the `media_budget.go` comment now say a caller's
+  first reservation is granted whatever its size, so one computer holds at
+  most max(96 MiB, one call's 133.3 MiB) of the 192 MiB.
+- **D3 and Sonnet F1, corrected.** The worst case is 2.20 GiB under
+  `MemoryMax=8G` (8 GiB) and 0.2 GiB under `GOMEMLIMIT`, in the nix
+  comment, section 6 and the record.
+- **D4, recorded (a cost, not a deadlock).** A call waiting for output
+  holds its scheduler slot and its body bytes; while one 20-image call
+  holds 133.3 of the 192 MiB, every other full image call (any computer)
+  waits for it to end, holding its scheduler slot. With the scheduler on,
+  one computer's waiters take at most its own 6 slots (the scheduler's
+  per-computer cap); several computers' waiters together can fill the
+  global 24. Text calls and calls of a few images go
+  ahead (58 MiB is about 8 images). If `output_waited` in `/health`
+  shows this in practice, the remedy is to reserve before the scheduler
+  slot, a change of order on a red path not taken here.
+- **D5, declined for now.** The 502 is the answer every failed provider
+  call already gets and the guest already retries; the only waits that
+  end this way are a client gone (nobody reads the answer) or the call's
+  own inference deadline (a 503 would not let it retry sooner). Revisit
+  with the scheduler flip if `output_refused` or `decode_refused` move.
+- **D6, declined for now.** `NormalizeImage` has no caller outside the
+  tests; the gateway path takes the call's context and caller through
+  `prepareMediaRequest`. Taking a context in the exported function is a
+  signature change with no user; recorded.
+- **D7, corrected.** The round 5 receipt's rollback now names cd6c1cd6e
+  and ae30081c0 together.
+- **D8, recorded.** The literals are the arithmetic's assumptions, not
+  capacities; tying the test to the nix `GOMEMLIMIT` would make a Go test
+  read a nix file. A `GOMEMLIMIT` change in nix must be paired with the
+  test by hand; the nix comment names the test.
