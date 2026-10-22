@@ -7,8 +7,12 @@ package vmmanager
 // so enforce is proved on a test computer in the same deploy that ships
 // observe everywhere (owner rule 2026-10-22):
 //
-//	VM_CAPSULE_TUNNEL_ENFORCE_ONLY   VM ids, computer ids, class:test or *
-//	                                 (computer_select.go); empty: none
+//	VM_CAPSULE_TUNNEL_ENFORCE_ONLY   computer ids (computer_select.go); empty: none
+//
+// Name computer ids only. selectsComputer also takes VM ids, class:<class>
+// and *, but class: misses the platform computer's boot and the resume
+// config (vmManagerConfigForOwnership never sets WarmnessClass), and * is
+// the global flip, which belongs to the image line behind its gate.
 //
 // The selection is a kernel boot argument, so neither the guest nor a capsule
 // can set it; the guest boot script copies only the exact value "enforce"
