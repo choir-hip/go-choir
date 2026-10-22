@@ -247,6 +247,10 @@ type immutableGitFile struct{ mode, oid, path string }
 func immutableCommitInventory(ctx context.Context, source, commit string) ([]immutableGitFile, error) {
 	raw, err := exec.CommandContext(ctx, "git", "-C", source, "ls-tree", "-rz", "-r", "--full-tree", commit).Output()
 	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && len(exitErr.Stderr) > 0 {
+			return nil, fmt.Errorf("source snapshot tree inventory: %w: %s", err, strings.TrimSpace(string(exitErr.Stderr)))
+		}
 		return nil, fmt.Errorf("source snapshot tree inventory: %w", err)
 	}
 	var tracked []immutableGitFile
