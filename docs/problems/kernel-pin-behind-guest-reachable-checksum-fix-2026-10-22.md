@@ -79,48 +79,33 @@ against `http://127.0.0.1:8083`):
    `POST /internal/vmctl/hold {"computer_id":"<paper computer id>","reason":"KF canary: guest kernel 6.18.57","held_by":"fp0"}`.
    `GET /internal/vmctl/deploy-refresh` lists it under `skipped`, reason
    `held`.
-2. Push; CI deploys. Idle computers refresh. A hold has no TTL. It
-   persists across deploys and vmctl restarts, and while it is set vmctl
-   never recovers, warms or refreshes the paper (`ownership.go`
-   `MaintenanceHold`, `SetHold`). Unhold only clears the hold: a running
-   paper stays on the image it booted, and only a stopped or hibernated
-   paper is then booted, onto the current image, by the warmer. So an
-   unhold is safe for a running paper only after the deploy's refresh
-   selection has run (the deploy log lists the paper as skipped, reason
-   `held`); before that, the selection would refresh the unheld paper
-   onto the untested image. Every unhold below sends the body
-   `{"computer_id":"<paper computer id>"}`; an empty body is refused
-   with 400 `invalid request body` and leaves the paper held.
-   Watch the paper's `/health` and its paper-healthy signals the whole
-   time. Unhold is never automatic on a clock; each unhold is one of
-   these, and each is written to the ledger with the time, the canary
-   state and the paper's state:
-   - The canary passed: step 5. This is safe at any time, because the
-     image is proven.
-   - The paper's `/health` fails while the canary has no verdict: unhold
-     at once. Unhold does not itself restart a running paper. Held
-     computers are skipped by the wedge checks (`host_capacity.go`), so
-     only after the unhold does vmctl stop a wedged paper (state
-     `stopped`, by `wedged`); the warmer then boots it onto the new image.
-     A paper in state `failed` is never warmed: send step 5's
-     deploy-refresh request for it. An untested image is better than a
-     paper that is down.
-   - The canary cannot run (step 3's last case): unhold only once the
-     deploy log shows the paper skipped as `held` (that line proves the
-     selection ran and passed it over), so the running paper stays on the
-     old image. If CI finished without that line (the plan request can
-     fail and CI continues), do not unhold; read
-     `GET /internal/vmctl/deploy-refresh` and decide by hand.
-   - The canary failed: step 4. The paper stays held, even if its
-     `/health` fails, because recovery would boot it onto the failed
-     image; the revert's deploy is the fix.
-   In the operator shell, keep `canary` (`pending`, `passed`, `failed`)
-   and set
-   `trap '[ "$canary" = passed ] && curl ... /internal/vmctl/unhold -d "{\"computer_id\":\"<paper computer id>\"}"; logger -t fp0-kf "operator exit: canary=$canary"' EXIT`.
-   An aborted session therefore unholds only a proven paper. In every
-   other state it leaves the paper held, with the hold's reason ("KF
-   canary") in `GET /internal/vmctl/list` and the exit line in the
-   journal, for the next operator.
+2. Push; CI deploys. Idle computers refresh; the held paper is listed as
+   skipped, reason `held`, and stays on the old image. A hold has no TTL.
+   It persists across deploys and vmctl restarts. While it is set vmctl
+   takes no automatic action on the paper: no refresh, no wedge stop
+   (`host_capacity.go`), no warm (`ownership.go` `MaintenanceHold`).
+   `GET /internal/vmctl/list` shows `held: true` for it (the reason is not
+   in the list). The operator is present for the whole window; nothing in
+   this procedure unholds automatically. FP0 writes each act (hold,
+   unhold, refresh request and its answer) to the metamission ledger with
+   the time, the canary state and the paper's state.
+   Unhold only clears the hold. After it, a running paper stays on the
+   image it booted; a stopped or hibernated paper is booted by the warmer
+   onto the current image; a `failed` paper is never warmed. So every
+   unhold below is followed at once by the explicit refresh request of
+   step 5, which handles every state: a running paper takes a planned
+   refresh (`refreshed`, `planned_restart` true) or is `deferred` while
+   busy; a stopped or failed one takes the rescue path (`refreshed`,
+   `planned_restart` false, reason "crash boot (no planned-restart
+   marker)", `deploy_refresh.go`).
+   While the canary has no verdict, watch the paper:
+   - Down (its `/health` refuses connections, or its state is `stopped` or
+     `failed`): unhold and send step 5's refresh request at once. The
+     paper boots the untested image; an untested image is better than a
+     paper that is down. Record it.
+   - Unhealthy but serving: keep the hold, record it, and decide by hand.
+     A hold blocks every automatic recovery, so this is FP0's call.
+   - Any state this list does not name: keep the hold and decide by hand.
 3. Canary: mint a test computer (`node scripts/qa_test_computer.mjs --label kf-canary`).
    It cold boots on the new image. If the mint is refused (host memory
    admission, disk), use an existing test computer that the deploy
@@ -129,8 +114,9 @@ against `http://127.0.0.1:8083`):
    (computer-71afbf14); FP2's vm-80b173b9 (computer-9648031f) only if
    FP2 has no run on it. Never the owner's computer (vm-4a9afa23) or the
    paper. One that was `Deferred` is still on the old image and does not
-   count. If neither exists, record that the canary did not run and
-   follow step 2's case for it. Pass when all of these hold:
+   count. If no canary can run, keep the paper held on the old image,
+   record it, and do not reboot the host (step 6): the canary gate holds
+   until a canary passes. Pass when all of these hold:
    - its console log (`/var/lib/go-choir/vm-state/<vm>/console.log`)
      shows `Linux version 6.18.57`, and its kernel capability receipt
      shows `kernel_release` 6.18.57 with every capability present;
@@ -147,20 +133,22 @@ against `http://127.0.0.1:8083`):
      the `scripts/s3_snapshot_probe.py` pattern). A failure here is
      fail-closed (the refused snapshot cold boots), but it is a reason
      not to give the paper the image.
-4. If the canary fails, set `canary=failed`. Leave the paper held and
-   running on the old image, revert the KF commits, and redeploy. Unhold
-   once the revert is deployed (the paper then stays on, or recovers onto,
-   the reverted image).
-5. If the canary passes: `POST /internal/vmctl/unhold {"computer_id":"<paper computer id>"}`,
-   then `POST /internal/vmctl/deploy-refresh {"user_id":"<paper user>","desktop_id":"<paper desktop>","target":"<deployed autoputer runtime commit>"}`.
+4. If the canary fails: keep the paper held, even if it goes down
+   (recovery would boot it onto the failed image), revert the KF commits,
+   and redeploy. Once the revert is deployed, unhold and send step 5's
+   refresh request with the revert's target, which moves the paper onto
+   the reverted image in whatever state it is in.
+5. If the canary passes: `POST /internal/vmctl/unhold {"computer_id":"<paper computer id>"}`
+   (an empty body is refused with 400 and leaves the hold), then
+   `POST /internal/vmctl/deploy-refresh {"user_id":"<paper user>","desktop_id":"<paper desktop>","target":"<deployed autoputer runtime commit>"}`.
    The target is the commit the deploy's refresh log expected; a
    refreshed computer's `/health` reports it as `build.commit`. Expect
-   `outcome` `refreshed` with `planned_restart` true, or `deferred` (then
-   watch `GET /internal/vmctl/deploy-refresh` `pending` until it clears).
-   Then run the paper-healthy check (reboot runbook, section 3).
-6. The host reboot comes after this. It cold boots every computer, the
-   paper included, onto whatever guest image is current, so it must not
-   come before the canary.
+   one of step 2's outcomes; for `deferred`, watch
+   `GET /internal/vmctl/deploy-refresh` `pending` until it clears. Then
+   run the paper-healthy check (reboot runbook, section 3).
+6. The host reboot comes after a passed canary and step 5, never without
+   them. It cold boots every computer, the paper included, onto whatever
+   guest image is current.
 
 ## As landed
 
