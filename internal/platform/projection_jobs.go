@@ -128,6 +128,26 @@ func (s *Store) ProjectionJob(ctx context.Context, computerID string) (Projectio
 	return j, nil
 }
 
+// ListProjectionJobs returns every projection job row (one per computer). It is
+// a plain read: checkpointd's scratch sweep uses it to decide which scratch
+// directories a queued, running or retrying job still holds.
+func (s *Store) ListProjectionJobs(ctx context.Context) ([]ProjectionJob, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT `+projectionJobColumns+` FROM computer_projection_jobs`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ProjectionJob
+	for rows.Next() {
+		j, err := scanProjectionJob(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, j)
+	}
+	return out, rows.Err()
+}
+
 // failedJobRetryBackoff is how long a twice-failed (non-deterministic) job
 // waits before cadence or repair may re-admit it: 15m doubling per further
 // failure, capped at 16h. Blocked jobs are deterministic refusals and still
