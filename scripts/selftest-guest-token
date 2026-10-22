@@ -31,12 +31,15 @@ What it checks:
      127.0.0.1, ::1 or localhost on 8083, 8084, 8086, 8087; the marker always.
   B. The scanner on fixtures: each known sender shape (1-5) is flagged, and
      the legitimate loopback shapes in the repo are not.
+     The copy in density/host_collect.py (piped alone to the host) is the
+     helper's source, verbatim, and passes the same table.
   C. The scanner over every tracked file (except Go, which uses
      MarkInternal): every request that carries the token, directly or
      through a variable or function that holds it, names only allowed
      destinations. A request whose destination it cannot resolve is flagged.
      Calls to the helpers carry no token by this check's reckoning: A
-     proves the helpers.
+     proves the helpers. A function named like a helper anywhere else is
+     scanned like any other, and flagged if it carries the token.
 
 Run: scripts/selftest-guest-token            (exit 0 when every check passes)
      scripts/selftest-guest-token --rev REV  (scan C only, at a git revision)
@@ -57,6 +60,9 @@ ALLOWED_HOSTS = {"127.0.0.1", "::1", "localhost"}
 ALLOWED_PORTS = {"8083", "8084", "8086", "8087"}
 # The helpers and this file are proven by A, not scanned by C.
 SKIP_FILES = {"scripts/selftest-guest-token", "scripts/choir_internal.py", "scripts/lib/choir_internal.sh"}
+# A verbatim copy of the Python helper, for a file piped alone to the host;
+# check_copies proves it is the helper.
+PROVEN_COPIES = {"scripts/density/host_collect.py"}
 HELPER_CALL = re.compile(r"\b(?:internal_headers|internal_curl_flags|choir_internal_curl|choir_internal_token_allowed)\b")
 HELPER_DEF = re.compile(r"^\s*(?:def\s+(?:internal_headers|internal_curl_flags|token_allowed)\s*\(|(?:choir_internal_curl|choir_internal_token_allowed)\s*\(\)\s*\{)")
 VERB = re.compile(r"\bcurl\b|\bwget\b|\bRequest\(|\burlopen\(|\bhttp_json\(|(?<![\w.])http\(|(?<![\w.])get\(|\bfetch\(|\brequests\.\w+\(")
@@ -198,10 +204,13 @@ def scan(path, text, global_names=()):
     """Findings for one file: (path, line, why)."""
     lines = logical_lines(text)
     defs = blocks(lines)
-    skip = set()
+    skip, findings_def = set(), []
     for a, b in defs.values():
         if HELPER_DEF.match(lines[a][1]):
-            skip.update(range(a, b + 1))
+            if path in PROVEN_COPIES:
+                skip.update(range(a, b + 1))
+            elif any(TOKEN_PATH in lines[k][1] or TOKEN_NAME in lines[k][1] for k in range(a, b + 1)):
+                findings_def.append((path, lines[a][0], "defines a helper name that carries the token, outside the proven helpers"))
     names = holders(lines, skip, defs, global_names)
     def_lines = {a for a, _ in defs.values()}
     urls = url_assignments(lines, defs)
@@ -239,7 +248,7 @@ def scan(path, text, global_names=()):
                 if not allowed(host, port):
                     findings.append((path, n, f"carries the token to {host}:{port or '(no port)'}"))
         if not grew:
-            return findings
+            return findings_def + findings
 
 
 def global_names_of(texts):
@@ -336,6 +345,31 @@ def check_python_helper(header_file):
     check("internal_headers with no readable header file sends the marker only", h == {"X-Internal-Caller": "true"}, repr(sorted(h)))
 
 
+def check_copies(header_file):
+    sys.path.insert(0, HERE)
+    try:
+        import choir_internal  # noqa: PLC0415
+    except ImportError:
+        return
+    import importlib.util  # noqa: PLC0415
+    import inspect  # noqa: PLC0415
+    for rel in sorted(PROVEN_COPIES):
+        spec = importlib.util.spec_from_file_location("copy", os.path.join(REPO, rel))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        for name in ("token_allowed", "internal_headers"):
+            same = hasattr(mod, name) and inspect.getsource(getattr(mod, name)) == inspect.getsource(getattr(choir_internal, name))
+            check(f"{rel} {name} is scripts/choir_internal.py's, verbatim", same)
+        for const in ("TOKEN_HEADER_FILE", "MARKER", "LOOPBACK_HOSTS", "INTERNAL_PORTS"):
+            check(f"{rel} {const} is the helper's", getattr(mod, const, None) == getattr(choir_internal, const))
+        if not hasattr(mod, "internal_headers"):
+            continue
+        for url, want in URL_TABLE:
+            h = mod.internal_headers(url, header_file=header_file)
+            check(f"{rel} internal_headers({url}) {'attaches' if want else 'omits'} the token",
+                  (h.get(TOKEN_NAME) == "sekrit-value") == want and h.get("X-Internal-Caller") == "true")
+
+
 def check_shell_helper(header_file, work):
     lib = os.path.join(HERE, "lib", "choir_internal.sh")
     if not os.path.exists(lib):
@@ -397,6 +431,10 @@ H=/var/lib/go-choir/secrets/internal-service-token.header
 curl -fsS -H @$H -H 'X-Internal-Caller: true' \\
   "http://$guest:8085/api/runtime/observability"
 '''),
+    "a lookalike helper that carries the token (shape 6)": ("h.py", '''
+def internal_headers():
+    return {"X-Choir-Internal-Token": open("/x").read()}
+'''),
     "loopback guest DNAT port (shape 5)": ("p.sh", '''
 curl -H @/var/lib/go-choir/secrets/internal-service-token.header http://127.0.0.1:8085/x
 '''),
@@ -451,6 +489,7 @@ def main():
         with open(header_file, "w") as f:
             f.write(f"{TOKEN_NAME}: sekrit-value\n")
         check_python_helper(header_file)
+        check_copies(header_file)
         check_shell_helper(header_file, work)
     for name, (path, text) in SENDERS.items():
         f = scan(path, text)

@@ -17,13 +17,13 @@ Everything is a read: /proc/meminfo, /proc/pressure/memory, /proc/stat,
 /sys/kernel/mm/ksm/*, /proc/<pid>/{stat,status} of Firecracker processes (the
 cmdline only to find the --id), vmctl's list, the guest procmem route, and
 fincore (mincore: it reads page-cache residency, not file data). The internal
-token header is read from the host file and sent only to localhost vmctl and
-the guest procmem route; it is never printed. Output: one JSON object.
+token header is read from the host file and sent only to a loopback internal
+port (localhost vmctl), never to a guest: the guest procmem route gets the
+marker only. It is never printed. Output: one JSON object.
 """
-import glob, json, os, shutil, subprocess, sys, time, urllib.request
+import glob, json, os, shutil, subprocess, sys, time, urllib.parse, urllib.request
 
 HZ = os.sysconf("SC_CLK_TCK")
-TOKEN_HEADER_FILE = "/var/lib/go-choir/secrets/internal-service-token.header"
 STATE_DIR = "/var/lib/go-choir/vm-state"
 STORE_IMAGE = "/var/lib/go-choir/guest/storedisk.erofs"
 
@@ -74,19 +74,46 @@ def ksm():
     return out
 
 
-def auth_headers():
-    h = {"X-Internal-Caller": "true"}
+# A copy of scripts/choir_internal.py (token_allowed, internal_headers), so this
+# file still runs piped alone to the host; scripts/selftest-guest-token
+# fails if the copy differs.
+TOKEN_HEADER_FILE = "/var/lib/go-choir/secrets/internal-service-token.header"
+MARKER = {"X-Internal-Caller": "true"}
+LOOPBACK_HOSTS = ("127.0.0.1", "::1", "localhost")
+INTERNAL_PORTS = ("8083", "8084", "8086", "8087")
+
+
+def token_allowed(url):
+    """True only for 127.0.0.1, ::1 or localhost on 8083, 8084, 8086, 8087."""
+    if "://" not in url:
+        url = "http://" + url
     try:
-        name, _, value = open(TOKEN_HEADER_FILE).read().strip().partition(":")
-        if name and value:
-            h[name.strip()] = value.strip()
+        u = urllib.parse.urlsplit(url)
+        port = u.port
+    except ValueError:
+        return False
+    return u.hostname in LOOPBACK_HOSTS and str(port) in INTERNAL_PORTS
+
+
+def internal_headers(url, header_file=TOKEN_HEADER_FILE):
+    """Headers for a request this process sends to url: the marker, plus
+    the token read from header_file when token_allowed(url) and the file
+    is readable. The token is never printed."""
+    h = dict(MARKER)
+    if not token_allowed(url):
+        return h
+    try:
+        with open(header_file) as f:
+            name, _, value = f.read().strip().partition(":")
     except OSError:
-        pass
+        return h
+    if name.strip() and value.strip():
+        h[name.strip()] = value.strip()
     return h
 
 
 def http_json(url, timeout=8):
-    req = urllib.request.Request(url, headers=auth_headers())
+    req = urllib.request.Request(url, headers=internal_headers(url))
     try:
         return json.load(urllib.request.urlopen(req, timeout=timeout))
     except Exception as e:  # noqa: BLE001 - reported, never raised

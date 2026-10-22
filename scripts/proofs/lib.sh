@@ -208,17 +208,18 @@ node_b_q() {
 		} >&2
 		return 0
 	fi
-	printf '%s\n' "$1" | "$PROOF_SSH_BIN" -o BatchMode=yes -o ConnectTimeout=15 "$PROOF_SSH_HOST" sh -s
+	printf '%s\n%s\n' "$PROOF_INTERNAL_LIB" "$1" | "$PROOF_SSH_BIN" -o BatchMode=yes -o ConnectTimeout=15 "$PROOF_SSH_HOST" sh -s
 }
 
-# The header file is read on Node B, by curl, only when readable (as ci.yml
-# does); its contents never cross the wire to this shell.
-proof_vmctl_auth='AUTH=; test -r /var/lib/go-choir/secrets/internal-service-token.header && AUTH="-H @/var/lib/go-choir/secrets/internal-service-token.header"'
+# choir_internal_curl (scripts/lib/choir_internal.sh), sent ahead of every
+# node_b_q script: on Node B, curl reads the header file, when readable, and
+# only for a loopback internal port, never a guest. Its contents never cross
+# the wire to this shell.
+PROOF_INTERNAL_LIB=$(cat "$(dirname "${BASH_SOURCE[0]}")/../lib/choir_internal.sh") || exit 2
 
 # vmctl_get PATH: GET a vmctl internal route on Node B; JSON on stdout.
 vmctl_get() {
-	node_b_q "$proof_vmctl_auth
-curl -fsS --max-time 30 -H 'X-Internal-Caller: true' \$AUTH '$PROOF_VMCTL$1'"
+	node_b_q "choir_internal_curl '$PROOF_VMCTL$1' -fsS --max-time 30"
 }
 
 # vmctl_post PATH JSON LIFECYCLE_CALLER: a state-changing POST. Prints the
@@ -226,8 +227,7 @@ curl -fsS --max-time 30 -H 'X-Internal-Caller: true' \$AUTH '$PROOF_VMCTL$1'"
 vmctl_post() {
 	case "$2" in *"'"*) die 2 "refusing a request body with a single quote" ;; esac
 	info "POST $PROOF_VMCTL$1 body=$2 caller=$3 (internal-service header from Node B's file)"
-	node_b_q "$proof_vmctl_auth
-curl -sS --max-time 600 -X POST -H 'X-Internal-Caller: true' -H 'X-Choir-Lifecycle-Caller: $3' -H 'Content-Type: application/json' \$AUTH -d '$2' -w '\\nhttp_status=%{http_code}\\n' '$PROOF_VMCTL$1'"
+	node_b_q "choir_internal_curl '$PROOF_VMCTL$1' -sS --max-time 600 -X POST -H 'X-Choir-Lifecycle-Caller: $3' -H 'Content-Type: application/json' -d '$2' -w '\\nhttp_status=%{http_code}\\n'"
 }
 
 # node_journal UNIT SINCE REGEX [LIMIT]: matching journal lines on Node B.

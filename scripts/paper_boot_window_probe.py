@@ -12,7 +12,8 @@ for --settle seconds (or --max-minutes pass):
     X-Authenticated-Computer), 20 s timeout: the engine mutex's live holder,
     unanswered reads, memory, and key frames counted in the goroutine dump;
   - GET <guest>/internal/debug/pprof/procmem (RSS by process), when
-    --procmem is given.
+    --procmem is given. The guest gates it on the host source address; it
+    gets the marker header only, never the host-internal token.
 
 Each sample gets a verdict (classify): healthy; h4_online_dolt_gc (the dump
 shows the online Dolt GC while /health fails); store_held:<op> (another
@@ -21,19 +22,27 @@ answer either: H2 or H3, read procmem and memory); health_failing_unattributed.
 
 Output: one JSON line per sample to --out, each failing sample's goroutine
 dump beside it (<out>.goroutines-<n>.txt), and a summary on stdout. Read
-only. The host credential, when needed for procmem, is read from
---token-file and never printed.
+only. It sends no host credential (docs/problems/
+host-internal-token-sent-to-guests-by-fp0-probes-2026-10-22.md).
 
 usage: paper_boot_window_probe.py --guest http://10.x.y.2:8085 \
          --owner-id OWNER --computer-id COMPUTER --out FILE \
-         [--procmem --token-file FILE] [--interval 10] [--settle 60] [--max-minutes 15]
+         [--procmem] [--interval 10] [--settle 60] [--max-minutes 15]
 """
 import argparse
 import json
+import os
 import sys
 import time
 import urllib.error
 import urllib.request
+
+try:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from choir_internal import internal_headers
+except (ImportError, NameError):  # piped alone to the host: the marker only
+    def internal_headers(url):
+        return {"X-Internal-Caller": "true"}
 
 # Frames whose presence in a dump attributes a hang. Matched with "(" so a
 # longer name that starts the same is not counted.
@@ -91,7 +100,7 @@ def get(url, headers, timeout):
         return {"timeout": True, "error": type(err).__name__}
 
 
-def take_sample(args, token, n, t0):
+def take_sample(args, n, t0):
     s = {"t": round(time.time() - t0, 1), "at": time.strftime("%H:%M:%S", time.gmtime())}
     h = get(args.guest + "/health", {}, 5)
     s["health"] = {k: v for k, v in h.items() if k != "body"}
@@ -114,8 +123,8 @@ def take_sample(args, token, n, t0):
                 f.write(dump)
     s["obs"] = obs
     if args.procmem:
-        ph = {"X-Choir-Internal-Token": token} if token else {}
-        p = get(args.guest + "/internal/debug/pprof/procmem", ph, 10)
+        url = args.guest + "/internal/debug/pprof/procmem"
+        p = get(url, internal_headers(url), 10)
         s["procmem"] = json.loads(p["body"]) if p.get("status") == 200 else {k: v for k, v in p.items() if k != "body"}
     s["verdict"] = classify(s)
     return s
@@ -128,17 +137,15 @@ def main():
     ap.add_argument("--computer-id", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--procmem", action="store_true")
-    ap.add_argument("--token-file")
     ap.add_argument("--interval", type=float, default=10)
     ap.add_argument("--settle", type=float, default=60)
     ap.add_argument("--max-minutes", type=float, default=15)
     args = ap.parse_args()
     args.guest = args.guest.rstrip("/")
-    token = open(args.token_file).read().strip() if args.token_file else ""
     t0, samples, healthy_since, n = time.time(), [], None, 0
     with open(args.out, "a") as out:
         while time.time() - t0 < args.max_minutes * 60:
-            s = take_sample(args, token, n, t0)
+            s = take_sample(args, n, t0)
             n += 1
             samples.append(s)
             out.write(json.dumps(s) + "\n")

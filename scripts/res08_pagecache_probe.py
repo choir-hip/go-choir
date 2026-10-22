@@ -8,8 +8,10 @@ For each --vm-id it reads, from Node B over ssh:
          per-process RSS, joined with the page-cache residency of /nix/store
          and /mnt/persistent (mincore; never reads or faults a page; owner
          notes §40). The guest serves it on :8085 to host-sourced callers
-         holding the internal service token; the public edge refuses
-         /internal/*, so the read goes through Node B, with no guest shell;
+         (its source address gates it; the internal service token is never
+         sent to a guest: scripts/choir_internal.py); the public edge
+         refuses /internal/*, so the read goes through Node B, with no
+         guest shell;
 and once for the host:
   host   /proc/meminfo; each firecracker process's VmRSS/RssAnon/RssFile;
          every distinct store-image inode those processes hold open
@@ -18,8 +20,8 @@ and once for the host:
          CPU vulnerability strings and EDAC (ECC) presence for the panel.
 
 Safety: read-only. It boots, stops, writes and evicts nothing. Command lines
-are never printed (only the vm-state/<id> segment is extracted). The internal
-service token header file is passed to curl by path and never read here. The
+are never printed (only the vm-state/<id> segment is extracted). The guest
+read carries the marker header only, never the internal service token. The
 guest pagecache walk costs the guest about 1 to 2 s of one core; take the
 paper's read outside owner demo windows.
 
@@ -32,8 +34,10 @@ import json
 import os
 import re
 import subprocess
+import sys
 
-TOKEN_HEADER_FILE = "/var/lib/go-choir/secrets/internal-service-token.header"
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from choir_internal import internal_curl_flags  # noqa: E402
 
 HOST_READ = r'''
 import glob, json, os, re, subprocess
@@ -108,8 +112,8 @@ def guest_addr(host, vm_id):
 
 
 def guest_read(host, ip, name):
-    auth = f"$(test -r {TOKEN_HEADER_FILE} && echo -H @{TOKEN_HEADER_FILE})"
-    body = ssh(host, f"curl -s -f -m 60 -H 'X-Internal-Caller: true' {auth} 'http://{ip}:8085/internal/debug/pprof/{name}'", timeout=90)
+    url = f"http://{ip}:8085/internal/debug/pprof/{name}"
+    body = ssh(host, f"curl -s -f -m 60 {internal_curl_flags(url)} '{url}'", timeout=90)
     return json.loads(body)
 
 
