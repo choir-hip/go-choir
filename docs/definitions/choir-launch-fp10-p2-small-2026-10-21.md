@@ -13,6 +13,10 @@ Lane branch `lane/fp10-p2-small`.
 | ARCH-15 | green | done | `launcher.desk` is `launcher.menu`, `DESK_APPS` is `LAUNCHER_APPS`, DeskSheet prop `launcherApps`; DOM `data-desk-*` hooks left; frontend typecheck not run (no node_modules in this worktree) |
 | ARCH-14 | orange | done, unwired | `internal/appverbs`: registry, per-caller allow, deny by default, errors as results, off unless `CHOIR_APP_VERBS`; no callers |
 
+Rebased 2026-10-22 onto main 51cb3a8cd (clean, no conflicts); re-checked:
+`go test -race ./internal/appverbs` passes, `go vet ./internal/appverbs ./internal/vmctl`
+clean, no `DESK_APPS`/`launcher.desk` reference left in the repo.
+
 Rollback: revert the three commits; none touches state or a protected surface.
 Heresy delta: discovered none, introduced none, repaired none.
 
