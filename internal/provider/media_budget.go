@@ -15,7 +15,9 @@ import (
 // bytes process-wide and per caller, with the body budget's grant rule:
 // waiters are served oldest first, except that a waiter whose caller is
 // over its share is passed over (and so are that caller's later waiters),
-// and a caller's first reservation always fits within its share. A call
+// and a caller's first reservation is granted whatever its size (the share
+// binds a caller that already holds output), so one caller holds at most
+// max(share, one call's reservation). A call
 // reserves once (prepareMediaRequest), so no holder waits for more.
 
 var imageOutput = newImageOutputBudget(MaxImageOutputBytes, MaxImageOutputBytesPerCaller)
