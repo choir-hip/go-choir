@@ -1,24 +1,33 @@
-// Command taperepack copies legacy tape pins into the segment store and
-// proves the copies (station FP9, L2-04; internal/taperepack). Copy only:
-// it never deletes, moves or edits a legacy file.
+// Command taperepack copies legacy tape files into the per-computer segment
+// store and proves, file by file, which have a verified segment copy
+// (station FP10, internal/taperepack). It never deletes, moves or edits a
+// legacy file.
 //
-//	taperepack plan   --root <artifacts> --computer <id>[,<id>] --out <manifest> [--count-unreceipted]
-//	taperepack copy   --root <artifacts> --manifest <manifest> --computer <id>[,<id>] [--batch 64]
-//	taperepack census --root <segment root> [--legacy-root <artifacts>] --manifest <manifest> [--computer <id>]
+//	taperepack census --root <artifacts> --work-dir <dir> [--computer <id>[,<id>]] [--rate N]
+//	taperepack copy   --root <artifacts> --work-dir <dir> [--computer <id>[,<id>]] [--apply] [--fresh] [--rate N]
 //
-// Each prints its counts as one JSON line. census exits 3 unless every
-// manifest record reads from a segment with the legacy bytes. Never name the
-// paper's or the owner's computer without the owner.
+// census reads everything and writes nothing under the artifacts root. copy
+// is a dry run unless --apply is given, and --apply needs --computer: a
+// computer is never copied without being named, and never the owner's or the
+// paper's without the owner. --work-dir (outside the artifacts root) holds the
+// spill files, the state of an interrupted copy, and the report, stored as
+// census-<digest>.json or copy-<digest>.json. Each command prints the report
+// as one JSON line (its "receipt" is that digest) and progress on stderr.
+// census exits 3 unless every file it is responsible for is covered by a
+// verified segment copy; copy exits 3 if the store is not healthy.
+//
+// Memory is bounded by the bucket (1/256 of the files) and 64 MiB of pending
+// appends, not by the number of files. Run it at idle priority on the host:
+//
+//	ionice -c3 nice -n 19 taperepack census --root … --work-dir …
 package main
 
 import (
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/taperepack"
@@ -42,141 +51,51 @@ func (l *listFlag) Set(v string) error {
 
 func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: taperepack plan|copy|census [flags]")
+		fmt.Fprintln(stderr, "usage: taperepack census|copy [flags]")
 		return 2
 	}
 	sub := args[0]
 	fs := flag.NewFlagSet("taperepack "+sub, flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	root := fs.String("root", "", "artifacts root (census: the root holding tape-seg)")
+	root := fs.String("root", "", "artifacts root (holds sha256/ and tape-seg/)")
+	workDir := fs.String("work-dir", "", "work directory outside the artifacts root")
 	var computers listFlag
-	fs.Var(&computers, "computer", "computer id; repeat or comma-separate")
-	out := fs.String("out", "", "plan: manifest to write (outside the artifacts root)")
-	manifest := fs.String("manifest", "", "copy, census: manifest to read")
-	legacyRoot := fs.String("legacy-root", "", "census: root holding the legacy files (default --root)")
-	batch := fs.Int("batch", taperepack.DefaultBatch, "copy: pins per append")
-	countUnreceipted := fs.Bool("count-unreceipted", false, "plan: count legacy artifacts no receipt names")
+	fs.Var(&computers, "computer", "computer id; repeat or comma-separate (copy --apply requires it)")
+	rate := fs.Int("rate", 0, "legacy files read per second (0 = unlimited)")
+	apply := fs.Bool("apply", false, "copy: really write (default is a dry run)")
+	fresh := fs.Bool("fresh", false, "copy --apply: discard the saved state of an interrupted run")
+	quiet := fs.Bool("quiet", false, "no progress lines")
+	if sub != "census" && sub != "copy" {
+		fmt.Fprintf(stderr, "taperepack: unknown subcommand %q\n", sub)
+		return 2
+	}
 	if err := fs.Parse(args[1:]); err != nil {
 		return 2
 	}
-	if *root == "" {
-		fmt.Fprintln(stderr, "taperepack: --root is required")
+	if *root == "" || *workDir == "" {
+		fmt.Fprintln(stderr, "taperepack: --root and --work-dir are required")
 		return 2
 	}
-	emit := func(v any) {
-		b, _ := json.Marshal(v)
-		fmt.Fprintln(stdout, string(b))
+	if sub == "census" && (*apply || *fresh) {
+		fmt.Fprintln(stderr, "taperepack census: --apply and --fresh belong to copy")
+		return 2
 	}
-	switch sub {
-	case "plan":
-		if *out == "" {
-			fmt.Fprintln(stderr, "taperepack plan: --out is required")
-			return 2
-		}
-		if inside, err := under(*out, *root); err != nil || inside {
-			fmt.Fprintln(stderr, "taperepack plan: --out must be outside the artifacts root")
-			return 2
-		}
-		res, err := taperepack.Plan(taperepack.PlanOptions{Root: *root, Computers: computers, CountUnreceipted: *countUnreceipted})
-		if err != nil {
-			fmt.Fprintf(stderr, "taperepack plan: %v\n", err)
-			return 1
-		}
-		if err := writeAtomic(*out, res.Entries); err != nil {
-			fmt.Fprintf(stderr, "taperepack plan: %v\n", err)
-			return 1
-		}
-		emit(res)
-		return 0
-	case "copy", "census":
-		if *manifest == "" {
-			fmt.Fprintf(stderr, "taperepack %s: --manifest is required\n", sub)
-			return 2
-		}
-		f, err := os.Open(*manifest)
-		if err != nil {
-			fmt.Fprintf(stderr, "taperepack %s: %v\n", sub, err)
-			return 1
-		}
-		entries, err := taperepack.ReadManifest(f)
-		f.Close()
-		if err != nil {
-			fmt.Fprintf(stderr, "taperepack %s: %v\n", sub, err)
-			return 1
-		}
-		if sub == "copy" {
-			counts, err := taperepack.Copy(taperepack.CopyOptions{Root: *root, Entries: entries, Computers: computers, Batch: *batch})
-			emit(counts)
-			if err != nil {
-				fmt.Fprintf(stderr, "taperepack copy: %v\n", err)
-				return 1
-			}
-			return 0
-		}
-		counts, err := taperepack.Census(taperepack.CensusOptions{SegmentRoot: *root, LegacyRoot: *legacyRoot, Entries: entries, Computers: computers})
-		if err != nil {
-			fmt.Fprintf(stderr, "taperepack census: %v\n", err)
-			return 1
-		}
-		emit(counts)
-		if !counts.OK() {
-			return 3
-		}
-		return 0
+	opts := taperepack.Options{Root: *root, WorkDir: *workDir, Computers: computers, Copy: sub == "copy", Apply: *apply, Fresh: *fresh, Rate: *rate}
+	if !*quiet {
+		opts.Progress = func(s string) { fmt.Fprintln(stderr, s) }
 	}
-	fmt.Fprintf(stderr, "taperepack: unknown subcommand %q\n", sub)
-	return 2
-}
-
-// under reports whether path (which need not exist) lies inside root.
-func under(path, root string) (bool, error) {
-	r, err := filepath.EvalSymlinks(root)
+	rep, err := taperepack.Run(opts)
 	if err != nil {
-		return false, err
+		fmt.Fprintf(stderr, "taperepack %s: %v\n", sub, err)
+		return 1
 	}
-	r, err = filepath.Abs(r)
-	if err != nil {
-		return false, err
+	b, _ := json.Marshal(rep)
+	fmt.Fprintln(stdout, string(b))
+	switch {
+	case sub == "census" && !rep.OK():
+		return 3
+	case sub == "copy" && !rep.Healthy():
+		return 3
 	}
-	dir, err := filepath.Abs(filepath.Dir(path))
-	if err != nil {
-		return false, err
-	}
-	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
-		dir = resolved
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return false, err
-	}
-	rel, err := filepath.Rel(r, filepath.Join(dir, filepath.Base(path)))
-	if err != nil {
-		return false, err
-	}
-	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))), nil
-}
-
-func writeAtomic(path string, entries []taperepack.Entry) (err error) {
-	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tmp-*")
-	if err != nil {
-		return err
-	}
-	name := tmp.Name()
-	defer func() {
-		if err != nil {
-			_ = os.Remove(name)
-		}
-	}()
-	err = tmp.Chmod(0o600)
-	if err == nil {
-		err = taperepack.WriteManifest(tmp, entries)
-	}
-	if err == nil {
-		err = tmp.Sync()
-	}
-	if cerr := tmp.Close(); err == nil {
-		err = cerr
-	}
-	if err != nil {
-		return err
-	}
-	return os.Rename(name, path)
+	return 0
 }
