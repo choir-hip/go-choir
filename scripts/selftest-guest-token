@@ -23,6 +23,13 @@ Ways a script or doc could break the promise (written before the helpers):
      (127.0.0.1:8085), or a lookalike host (localhost.evil, 127.0.0.1@guest).
   6. The helpers themselves attach the token to a non-loopback or
      non-internal destination, or drop the marker.
+  7. A function sends the token to a destination it takes as a parameter,
+     and no call site in its file names an allowed one (or none calls it).
+  8. One request statement spans several physical lines (Python implicit
+     concatenation), so the verb, the token and the destination are on
+     different lines (desk_cell_confinement_probe.py internal_post, found
+     2026-10-22 13:33). A destination the check cannot resolve is not
+     loopback: it fails.
 
 What it checks:
   A. The Python helper scripts/choir_internal.py (internal_headers,
@@ -530,6 +537,42 @@ H=/var/lib/go-choir/secrets/internal-service-token.header
 curl -fsS -H @$H -H 'X-Internal-Caller: true' \\
   "http://$guest:8085/api/runtime/observability"
 '''),
+    "an uncalled function whose destination is a parameter (shape 7)": ("u.py", '''
+TOKEN_HEADER_FILE = "/var/lib/go-choir/secrets/internal-service-token.header"
+def post(host, guest_url):
+    script = "curl -sS -H @%s '%s/internal/x'" % (TOKEN_HEADER_FILE, guest_url)
+    return run(["ssh", host, script])
+'''),
+    "a request statement split over lines, %-formatted destination (shape 8)": ("m.py", '''
+TOKEN_HEADER_FILE = "/var/lib/go-choir/secrets/internal-service-token.header"
+script = ("AUTH=; test -r %s && AUTH='-H @%s'; "
+          "curl -sS -X POST $AUTH "
+          "'%s/internal/runtime/isolation-selftest'") % (TOKEN_HEADER_FILE, TOKEN_HEADER_FILE, target)
+'''),
+    "desk_cell_confinement_probe.py internal_post at 6c60685cc (regression)": ("desk_cell_confinement_probe.py", r'''
+TOKEN_HEADER_FILE = "/var/lib/go-choir/secrets/internal-service-token.header"
+GUEST_URL = re.compile(r"^http://[0-9]{1,3}(\.[0-9]{1,3}){3}:[0-9]{1,5}$")
+
+
+def internal_post(ssh_host, guest_url, leg):
+    """POST the guest's internal self-test route from Node B. The internal
+    service token header file is read by curl on Node B, by path; it is never
+    read here and never crosses to this machine. One attempt. Returns
+    (http status or 0 for no answer, parsed body)."""
+    script = ("AUTH=; test -r %s && AUTH='-H @%s'; "
+              "curl -sS -m 170 -X POST -H 'X-Internal-Caller: true' $AUTH -w '\\nhttp_status=%%{http_code}\\n' "
+              "'%s/internal/runtime/isolation-selftest?leg=%s'") % (TOKEN_HEADER_FILE, TOKEN_HEADER_FILE, guest_url, leg)
+    try:
+        p = subprocess.run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15", ssh_host, script],
+                           capture_output=True, text=True, timeout=200)
+    except subprocess.TimeoutExpired:
+        return 0, {}
+    if p.returncode != 0:
+        log("ssh_failed", rc=p.returncode)
+        return 0, {}
+    text, _, status = p.stdout.rstrip("\n").rpartition("\nhttp_status=")
+    try:
+'''),
     "a lookalike helper that carries the token (shape 6)": ("h.py", '''
 def internal_headers():
     return {"X-Choir-Internal-Token": open("/x").read()}
@@ -540,6 +583,12 @@ curl -H @/var/lib/go-choir/secrets/internal-service-token.header http://127.0.0.
 }
 
 LEGIT = {
+    "a parametric sender called with a loopback literal": ("q.py", '''
+TOKEN_HEADER_FILE = "/var/lib/go-choir/secrets/internal-service-token.header"
+def post(url):
+    return run("curl -H @%s '%s'" % (TOKEN_HEADER_FILE, url))
+listing = post("http://127.0.0.1:8083/internal/vmctl/list")
+'''),
     "proofs/lib.sh vmctl_get": ("l.sh", '''
 PROOF_VMCTL=http://127.0.0.1:8083
 proof_vmctl_auth='AUTH=; test -r /var/lib/go-choir/secrets/internal-service-token.header && AUTH="-H @/var/lib/go-choir/secrets/internal-service-token.header"'
