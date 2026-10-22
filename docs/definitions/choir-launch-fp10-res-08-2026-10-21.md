@@ -99,7 +99,7 @@ boundaries:
   protected_surfaces: [none touched; the design names vmmanager drives, the guest image and the jailer as the surfaces a later slice touches]
 
 now:
-  status: checkpoint (round 3 done; FP0 lands it on top of round 2, then the reads)
+  status: checkpoint (round 4 done; round 3 is in deploy F; FP0 lands round 4, then the reads)
   slice: >-
     The read landed in deploy D (fd58229aa, 840e1a701 on main). Review bunch
     13 (DeepSeek v4.1 Flash) accepted with edits. Its findings 1, 2, 3, 4
@@ -120,15 +120,20 @@ now:
     upper report partitioned false with a reason; caps documented per root;
     an escape test) and 126f5136d (the probe refuses a store that measured
     nothing, nulls persistent while unpartitioned, and quotes the reason; the
-    count claim is corrected). Already fixed by round 2: F1 (store fields),
+    count claim is corrected). Round 4 answers DeepSeek's bunch 20 (four low
+    findings): the tests (yellow), 273b1ceb2 (lowerdir+= and datadir+= are
+    stacked; stacking no longer depends on mount order, so a hidden overlay
+    is stacked too), and the report's comma wording, corrected to what the
+    code does (an octal-escaped comma parses; a literal comma truncates and
+    fails closed). Every layering reason is now asserted. Already fixed by round 2: F1 (store fields),
     F3 and F7. F6 was not fixed by round 2 and is fixed in round 3.
-  source_ref: d23dfaa2d
+  source_ref: 8fabec36a
   deploy_identity: deploy D serves the first read (no store_layering); the probe refuses its store numbers
   candidate:
-    id: FP10-RES-08-measure-r4
-    state: built, not frozen; round 3 on top of round 2 (bunch 18 accepted round 2)
+    id: FP10-RES-08-measure-r5
+    state: built, not frozen; round 4 on top of round 3 (in deploy F)
     ref: lane/fp10-res08-pmem-dax
-    base: d23dfaa2d
+    base: 8fabec36a
     digest: none
     scope: [internal/server/debug_pagecache*.go, scripts/res08_pagecache_probe.py, scripts/test_res08_pagecache_probe.py, docs]
   conjecture:
@@ -164,7 +169,7 @@ now:
     build slice. The Firecracker 1.16.1 pmem facts marked "verify" in the
     report are unproven. Finding 5 (guard in hostauth off mode) stays with
     the hostauth owner.
-  next_action: FP0 lands round 3 (a94d459ab, 126f5136d) on top of round 2, deploys, and runs report §5 step 1.
+  next_action: FP0 lands round 4 on top of round 3, deploys, and runs report §5 step 1.
 
 receipts: []
 ---
