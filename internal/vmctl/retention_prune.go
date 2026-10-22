@@ -185,6 +185,13 @@ func normalizeRetentionPruneConfig(cfg RetentionPruneConfig) RetentionPruneConfi
 	if cfg.QuarantineMinAge <= 0 {
 		cfg.QuarantineMinAge = defaultRetentionQuarantineMinAge
 	}
+	// Never faster than the ephemeral rule's day (review round 2, F9).
+	if cfg.TestIdleMinAge < retentionMinAgeFloor {
+		cfg.TestIdleMinAge = retentionMinAgeFloor
+	}
+	if cfg.QuarantineMinAge < retentionMinAgeFloor {
+		cfg.QuarantineMinAge = retentionMinAgeFloor
+	}
 	cfg.SelectorNamed = normalizeIDList(cfg.SelectorNamed)
 	return cfg
 }
@@ -466,6 +473,11 @@ func retentionOrphanCandidates(cfg RetentionPruneConfig, ownedVMs map[string]boo
 			continue
 		}
 		orphanCount++
+		// R2-8: a dir holding recovery state (a quarantine may be the only
+		// copy of a computer's data) is never an orphan to destroy.
+		if retentionDirHoldsRecoveryState(root, vmID) {
+			continue
+		}
 		info, err := entry.Info()
 		if err != nil {
 			continue
@@ -672,7 +684,7 @@ func (r *OwnershipRegistry) destroyRetentionCandidate(candidate RetentionPruneCa
 	if current == nil {
 		r.mu.RLock()
 		defer r.mu.RUnlock()
-		if r.vmByID[candidate.VMID] != nil {
+		if r.vmByID[candidate.VMID] != nil || retentionDirHoldsRecoveryState(cfg.StateDir, candidate.VMID) {
 			return false
 		}
 		if err := mgr.DestroyVMState(candidate.VMID); err != nil {
@@ -733,4 +745,26 @@ func emailDomain(email string) string {
 		return ""
 	}
 	return strings.TrimSpace(email[at+1:])
+}
+
+// retentionDirHoldsRecoveryState reports whether a VM dir holds anything a
+// cold recovery left: a quarantined or staging data image, or a recovery
+// journal. An unreadable dir counts as holding some.
+func retentionDirHoldsRecoveryState(stateDir, vmID string) bool {
+	root := filepath.Clean(stateDir)
+	if root == "." || root == string(os.PathSeparator) || vmID == "" || filepath.Base(vmID) != vmID {
+		return true
+	}
+	files, err := os.ReadDir(filepath.Join(root, vmID))
+	if err != nil {
+		return !os.IsNotExist(err)
+	}
+	for _, file := range files {
+		name := file.Name()
+		if strings.HasPrefix(name, "data.img.quarantine-") || strings.HasPrefix(name, "data.img.staging-") ||
+			(strings.HasPrefix(name, "rec-") && strings.HasSuffix(name, ".journal")) {
+			return true
+		}
+	}
+	return false
 }
