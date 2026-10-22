@@ -121,6 +121,9 @@ func (m *Manager) captureSnapshot(vmID string, cfg VMConfig, hostURL string, tl 
 	// fence, so a refusal never pauses the guest. The vault directory is
 	// opened and verified once and held until the commit is synced; every
 	// path of the capture resolves through it (finding B1).
+	if m.vaultPlacementUnknown(vmID, cfg.ComputerID) {
+		return nil, false, snapshotReasonVaultUnknownComputer, fmt.Errorf("VM_SNAPSHOT_VAULT_ONLY is set and VM %s has no computer id; refusing rather than risk a plaintext capture", vmID)
+	}
 	if !m.vaultSelected(vmID, cfg.ComputerID) {
 		return m.captureSnapshotInto(vmID, cfg, hostURL, tl, snap, conf, nil)
 	}

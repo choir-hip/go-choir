@@ -294,7 +294,8 @@ func (h *vaultHandle) close() {
 }
 
 // lastMountDevice returns the major:minor of the last mountinfo entry whose
-// mount point is dir. The last entry is the one that serves files: a later
+// mount point is dir, and refuses unless that entry mounts the root of its
+// file system. The last entry is the one that serves files: a later
 // mount stacked on the path hides the earlier one.
 func lastMountDevice(mountinfo, dir string) (string, error) {
 	file, err := os.Open(mountinfo)
@@ -302,7 +303,7 @@ func lastMountDevice(mountinfo, dir string) (string, error) {
 		return "", fmt.Errorf("snapshot vault: cannot read the mount table: %w", err)
 	}
 	defer file.Close()
-	majmin := ""
+	majmin, mountRoot := "", ""
 	scanner := bufio.NewScanner(file)
 	scanner.Buffer(make([]byte, 64<<10), 1<<20)
 	for scanner.Scan() {
@@ -311,7 +312,7 @@ func lastMountDevice(mountinfo, dir string) (string, error) {
 			continue
 		}
 		if unescapeMountinfo(fields[4]) == dir {
-			majmin = fields[2]
+			majmin, mountRoot = fields[2], unescapeMountinfo(fields[3])
 		}
 	}
 	if err := scanner.Err(); err != nil {
@@ -319,6 +320,11 @@ func lastMountDevice(mountinfo, dir string) (string, error) {
 	}
 	if majmin == "" {
 		return "", fmt.Errorf("snapshot vault: %s is not a mount point", dir)
+	}
+	// Field 4 is the root of the mount within its file system: the vault is
+	// the whole file system, never a bind mount of a part of one.
+	if mountRoot != "/" {
+		return "", fmt.Errorf("snapshot vault: %s mounts %q of its file system, not the whole file system", dir, mountRoot)
 	}
 	return majmin, nil
 }
@@ -364,6 +370,23 @@ func octal3(s string) (byte, bool) {
 
 func (m *Manager) vaultConfigured() bool {
 	return strings.TrimSpace(m.cfg.SnapshotVaultDir) != ""
+}
+
+// vaultPlacementUnknown reports a capture that cannot be placed: the vault
+// list is set, the computer's id is empty and the list does not name its VM
+// id, so whether the list means this computer cannot be told (repair round
+// 2, L5). Such a capture is refused rather than written to the state
+// directory.
+func (m *Manager) vaultPlacementUnknown(vmID, computerID string) bool {
+	if !m.vaultConfigured() || len(m.cfg.SnapshotVaultOnly) == 0 || computerID != "" {
+		return false
+	}
+	for _, id := range m.cfg.SnapshotVaultOnly {
+		if id == vmID {
+			return false
+		}
+	}
+	return true
 }
 
 // vaultSelected reports whether a computer's snapshots belong in the vault:

@@ -123,7 +123,10 @@ const (
 	// plaintext snapshot was found for a computer that now uses the vault.
 	snapshotReasonVaultUnavailable = "snapshot_vault_unavailable"
 	snapshotReasonVaultJailed      = "snapshot_vault_jailed_unsupported"
-	snapshotReasonNotInVault       = "snapshot_not_in_vault"
+	// snapshotReasonVaultUnknownComputer: the vault list is set and the
+	// computer has no id, so its placement cannot be told (kill path).
+	snapshotReasonVaultUnknownComputer = "snapshot_vault_unknown_computer"
+	snapshotReasonNotInVault           = "snapshot_not_in_vault"
 )
 
 // Credential paths of a snapshot resume, recorded on the wake timeline.
