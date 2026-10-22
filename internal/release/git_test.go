@@ -1,8 +1,11 @@
 package release
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -43,22 +46,75 @@ func newRepo(t *testing.T) (string, string) {
 	return dir, git(t, dir, "rev-parse", "HEAD")
 }
 
-// repoFingerprint is everything a write to the repository would move: the
+// fingerprint is everything a write to the repository would move: the
 // index bytes, the loose and packed object set, HEAD and the worktree status.
-func repoFingerprint(t *testing.T, dir string) string {
+type fingerprint struct {
+	index   []byte
+	objects []string
+	head    string
+	status  string
+}
+
+func repoFingerprint(t *testing.T, dir string) fingerprint {
 	t.Helper()
 	index, _ := os.ReadFile(filepath.Join(dir, ".git", "index"))
 	var objects []string
-	_ = filepath.WalkDir(filepath.Join(dir, ".git", "objects"), func(path string, d os.DirEntry, err error) error {
+	root := filepath.Join(dir, ".git", "objects")
+	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err == nil && !d.IsDir() {
-			objects = append(objects, path)
+			rel, _ := filepath.Rel(root, path)
+			objects = append(objects, rel)
 		}
 		return nil
 	})
 	// --no-optional-locks: a plain status refreshes a racy index (stat data
 	// of files written in the same second as the commit) and rewrites
 	// .git/index, so the fingerprint itself would change the repository.
-	return string(index) + "\x00" + strings.Join(objects, ",") + "\x00" + git(t, dir, "rev-parse", "HEAD") + "\x00" + git(t, dir, "--no-optional-locks", "status", "--porcelain")
+	return fingerprint{
+		index:   index,
+		objects: objects,
+		head:    git(t, dir, "rev-parse", "HEAD"),
+		status:  git(t, dir, "--no-optional-locks", "status", "--porcelain"),
+	}
+}
+
+// fingerprintDiff names each part of the fingerprint that moved, empty when
+// none did: a failure must say which writer to look for.
+func fingerprintDiff(before, after fingerprint) string {
+	var parts []string
+	if !bytes.Equal(before.index, after.index) {
+		parts = append(parts, fmt.Sprintf("index: %d bytes sha256 %x -> %d bytes sha256 %x",
+			len(before.index), sha256.Sum256(before.index), len(after.index), sha256.Sum256(after.index)))
+	}
+	was := map[string]bool{}
+	for _, p := range before.objects {
+		was[p] = true
+	}
+	is := map[string]bool{}
+	for _, p := range after.objects {
+		is[p] = true
+	}
+	var added, removed []string
+	for _, p := range after.objects {
+		if !was[p] {
+			added = append(added, p)
+		}
+	}
+	for _, p := range before.objects {
+		if !is[p] {
+			removed = append(removed, p)
+		}
+	}
+	if len(added) > 0 || len(removed) > 0 {
+		parts = append(parts, fmt.Sprintf("objects: added %v, removed %v", added, removed))
+	}
+	if before.head != after.head {
+		parts = append(parts, fmt.Sprintf("HEAD: %s -> %s", before.head, after.head))
+	}
+	if before.status != after.status {
+		parts = append(parts, fmt.Sprintf("status: %q -> %q", before.status, after.status))
+	}
+	return strings.Join(parts, "; ")
 }
 
 func TestPatchedTreeEqualsTheCommittedTreeAndLeavesTheRepositoryUntouched(t *testing.T) {
@@ -86,8 +142,8 @@ func TestPatchedTreeEqualsTheCommittedTreeAndLeavesTheRepositoryUntouched(t *tes
 	if got != want {
 		t.Fatalf("tree = %s, want %s (the tree a commit of the patched files gets)", got, want)
 	}
-	if after := repoFingerprint(t, dir); after != before {
-		t.Fatal("PatchedTree wrote to the repository (index, objects, HEAD or worktree changed)")
+	if diff := fingerprintDiff(before, repoFingerprint(t, dir)); diff != "" {
+		t.Fatalf("PatchedTree wrote to the repository: %s", diff)
 	}
 	tree, err := CommitTree(context.Background(), dir, base)
 	if err != nil || tree != git(t, dir, "rev-parse", base+"^{tree}") {
@@ -116,8 +172,8 @@ func TestPatchedTreeRefusesAPatchThatDoesNotApply(t *testing.T) {
 	if _, err := PatchedTree(context.Background(), dir, base, conflict); !errors.Is(err, ErrPatchDoesNotApply) {
 		t.Fatalf("err = %v, want ErrPatchDoesNotApply", err)
 	}
-	if after := repoFingerprint(t, dir); after != before {
-		t.Fatal("a refused apply check wrote to the repository")
+	if diff := fingerprintDiff(before, repoFingerprint(t, dir)); diff != "" {
+		t.Fatalf("a refused apply check wrote to the repository: %s", diff)
 	}
 	if _, err := PatchedTree(context.Background(), dir, strings.Repeat("0", 40), conflict); err == nil || errors.Is(err, ErrPatchDoesNotApply) {
 		t.Fatalf("a base commit the repository lacks must be its own error, got %v", err)
