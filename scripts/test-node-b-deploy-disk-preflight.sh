@@ -40,7 +40,7 @@ cat >"$root/bin/df" <<'EOF'
 case "$*" in
   *--output=avail*)
     # FAKE_AVAIL_SEQ: one value per call ("a b": a before the reclaim, b after)
-    if [ -n "${FAKE_AVAIL_SEQ:-}" ]; then
+    if [ -n "${FAKE_AVAIL_SEQ+x}" ]; then
       n=$(cat "$FAKE_DIR/df.calls" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" >"$FAKE_DIR/df.calls"
       printf 'Avail\n%s\n' "$(echo "$FAKE_AVAIL_SEQ" | cut -d' ' -f"$n")"
     else

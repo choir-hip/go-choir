@@ -23,6 +23,7 @@ fallback_floor_kib=94371840
 guard_margin_kib=10485760
 nix_conf="${PREFLIGHT_NIX_CONF:-/etc/nix/nix.conf}"
 if ! [[ "$min_free_kib" =~ ^[0-9]+$ ]]; then
+  echo "    DEPLOY_MIN_FREE_KIB=\"${min_free_kib}\" is not a number of KiB; the floor is at least 90 GiB"
   min_free_kib="$fallback_floor_kib"
 fi
 live_min_free="$(awk -F'[[:space:]]*=[[:space:]]*' '$1 ~ /^[[:space:]]*min-free$/ {v = $2} END {print v}' "$nix_conf" 2>/dev/null || true)"
@@ -43,7 +44,15 @@ echo "==> Deploy disk preflight"
 df -h / /var/lib/go-choir 2>/dev/null || df -h /
 echo "    root_available_kib=${avail_kib} live_min_free_kib=${live_min_free_kib} min_required_kib=${min_free_kib}"
 
-if [ -n "$avail_kib" ] && [ "$avail_kib" -ge "$min_free_kib" ]; then
+# Every numeric read fails closed: a df that exits 0 with a non-numeric line
+# would make the [ tests below error, and an if whose test errors is false,
+# which let the script exit 0 (review round 2b, DS2b-1).
+if ! [[ "$avail_kib" =~ ^[0-9]+$ ]]; then
+  echo "Deploy disk preflight failed: cannot read free space on / (df gave \"${avail_kib}\")" >&2
+  exit 1
+fi
+
+if [ "$avail_kib" -ge "$min_free_kib" ]; then
   echo "    Disk preflight ok"
   exit 0
 fi
@@ -72,7 +81,11 @@ avail_kib="$(df --output=avail -k / | tail -n 1 | tr -d ' ')"
 df -h / /var/lib/go-choir 2>/dev/null || df -h /
 echo "    root_available_kib_after_reclaim=${avail_kib}"
 
-if [ -z "$avail_kib" ] || [ "$avail_kib" -lt "$min_free_kib" ]; then
+if ! [[ "$avail_kib" =~ ^[0-9]+$ ]]; then
+  echo "Deploy disk preflight failed: cannot read free space after the reclaim (df gave \"${avail_kib}\")" >&2
+  exit 1
+fi
+if [ "$avail_kib" -lt "$min_free_kib" ]; then
   echo "Deploy disk preflight failed: root filesystem still below required headroom (${min_free_kib} KiB)" >&2
   journalctl -u go-choir-host-disk-alarm -n 1 --no-pager >&2 || true
   exit 1
