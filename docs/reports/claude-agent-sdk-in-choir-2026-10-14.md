@@ -369,11 +369,14 @@ RAM, 5 GiB disk, and 1 CPU per agent" for the agent alone. The
 engineering capsule is exactly 1 GiB, 1 CPU and 256 pids, with no swap
 (`internal/agentcore/engineering_assignment_runtime.go:27-29`), and Go
 builds and tests share that budget. An interactive guest has 2 GiB and
-2 CPUs, and capsules may use up to three quarters of guest memory
+2 CPUs in code (`interactiveVMMemSizeMib`) and 8 GiB and 4 CPUs on Node B
+(`VM_INTERACTIVE_MEM_MIB=8192`, `nix/node-b.nix`; corrected 2026-10-22,
+RES-21), and capsules may use up to three quarters of guest memory
 (`internal/autoputer/capsule_executor_linux.go:44-60`;
 `internal/vmctl/ownership.go:1685-1694`). A Claude-mode capsule needs
-about 2-3 GiB and 2 CPUs. So the owner's computer needs the 4 GiB size
-that platform computers get. How to resize one computer is UNVERIFIED.
+about 2-3 GiB and 2 CPUs. So a computer on the code default (2 GiB) would
+need the 4 GiB size that platform computers get; Node B's interactive
+computers already have 8 GiB. How to resize one computer is UNVERIFIED.
 
 ### 3.2 Network egress
 

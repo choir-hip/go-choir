@@ -124,10 +124,15 @@ The other two placements:
 
 Firecracker backs guest RAM with a private anonymous mapping of
 `mem_size_mib`. It is faulted in as the guest touches it.
-- Test computers boot at 4 GiB and 2 vCPUs (`VM_MEM_MIB=4096`,
-  `VM_CPU_COUNT=2`).
-- Interactive computers boot at 8 GiB and 4 vCPUs
-  (`VM_INTERACTIVE_MEM_MIB=8192`).
+- Test computers are interactive computers, so on Node B they boot at 8 GiB
+  and 4 vCPUs (`VM_INTERACTIVE_MEM_MIB=8192`, `VM_INTERACTIVE_CPU_COUNT=4`
+  in `nix/node-b.nix`; the code default is 2 GiB and 2 vCPUs,
+  `interactiveVMMemSizeMib` in `internal/vmctl/ownership.go`). Platform
+  computers boot at 4 GiB and 2 vCPUs (`platformVMMemSizeMib`).
+  `VM_MEM_MIB=4096` and `VM_CPU_COUNT=2` are vmmanager's base config; vmctl's
+  per-ownership shape (`machineShapeForOwnership`) overrides them.
+  (Corrected 2026-10-22, RES-21: this section said test computers boot at
+  4 GiB.)
 - Both are in `nix/node-b.nix`.
 
 **Growth is automatic:** host RSS rises as the browser touches memory. The
@@ -399,7 +404,7 @@ runs a linux/arm64 VM with kernel 6.10.14 and 7.65 GiB.
 The container:
 - image `mcr.microsoft.com/playwright:v1.59.1-noble`, Chromium 147.0.7727.15;
 - `playwright-core` 1.59.1, the same version as `frontend/` uses;
-- `--memory=4g --cpus=2`, standing in for a 4 GiB, 2-vCPU test computer.
+- `--memory=4g --cpus=2`, standing in for a 4 GiB, 2-vCPU computer (the size of a platform computer; Node B's test computers are 8 GiB, 4 vCPUs).
 
 The setup:
 - Each scenario ran in a **fresh cgroup v2 leaf shaped like an engineering
