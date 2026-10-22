@@ -186,28 +186,41 @@ now:
   selftest_oom_leg: >-
     2026-10-22, lane/fp2-selftest-oom (from d23dfaa2d), not landed. The
     isolation self-test has an OOM leg, POST
-    /api/runtime/isolation-selftest?leg=oom. A throwaway research worker
+    /internal/runtime/isolation-selftest?leg=oom (host-internal since review
+    bunch 22). A throwaway research worker
     under its real 768 MiB cgroup runs a fixed allocating cell. The leg
     reports oom_kill from memory.events, the worker's and the slice's
     limits, the daemon's pid, start ticks and boot id before and after, and
-    whether a sibling answers. Callers: host peer only (AuthenticatedOwner),
-    not on the ProductAPI allowlist. FP2 step 4 now runs it through
-    desk_cell_confinement_probe.py --leg oom. The capsule leg (SEC-13,
+    whether a sibling answers. Callers: the guest's host peer holding the
+    internal service credential only (see review_bunch_22). FP2 step 4 runs
+    it through desk_cell_confinement_probe.py --leg oom from Node B. The capsule leg (SEC-13,
     RES-03) is not built: a capsule is not reachable safely from the
     self-test (file:line in
     docs/problems/fp2-step4-deployed-oom-not-drivable-desk-refuses-runaway-2026-10-22.md).
     Not yet run: TestDeskOOMSelfTestKillsTheWorkerAtItsBudget needs root and
     cgroup v2 (FP0's Linux mirror run). Then the deployed leg on a test
     computer, which can tick RES-01 and RES-02.
+  review_bunch_22: >-
+    Sent back on bb50792d0, repaired on the same lane. The oom and seccomp
+    legs moved to the host-internal POST
+    /internal/runtime/isolation-selftest?leg=... The guest admits its host
+    peer with the internal credential only. The proxy refuses a leg on
+    /api; the probe and proof steps 4 and 6 run from Node B over ssh. The
+    OOM leg gained: a MemAvailable guard (budget + 1 GiB), a sibling gate, a
+    cgroup path saved before Eval (the timeout panic), a host-recorded start
+    marker, and mode required in both judges. Seccomp children: group kill
+    at the timeout. Proof steps renumbered: 6 is seccomp, 7 is rollback.
+    Still FP0's: the root kill test, and both legs deployed.
   selftest_seccomp_leg: >-
     2026-10-22, same lane, on FP0's call. POST
-    /api/runtime/isolation-selftest?leg=seccomp re-execs the daemon's
+    /internal/runtime/isolation-selftest?leg=seccomp re-execs the daemon's
     binary once per capsule filter. Each child loads the capsule's own
     filter (same constructor, BPF hash checked) and tries clone3 (ENOSYS)
     and a clone and an unshare into a new user namespace (EPERM); fork+exec
     and os/exec must still work. The receipt reports the kernel release.
-    Proof step 7 runs it. It proves SEC-13's filters on the deployed kernel.
-    It does not prove that a live capsule loads them, nor RES-03. Local:
+    Proof step 6 runs it (renumbered in review bunch 22). It proves SEC-13's
+    filters on the deployed kernel. It does not prove that a live capsule
+    loads them, nor RES-03. Local:
     passes unprivileged on Linux 6.18, through cmd/autoputer.
   batch1_fix: >-
     Reviewer edits applied on lane/b3-desk-boundary-b1fix: (1) prlimit64 is
@@ -480,10 +493,13 @@ first on the paper.
    `desk.egress` run event with `refused: true`.
 4. Out of memory: `scripts/proofs/fp2-desk-boundary.sh --computer <test>
    --step 4 --mutate`, which runs `desk_cell_confinement_probe.py --leg oom`
-   (POST `/api/runtime/isolation-selftest?leg=oom`, once, never retried).
+   from Node B over ssh (POST the guest's host-internal
+   `/internal/runtime/isolation-selftest?leg=oom`, once, never retried).
    No model is in the loop: the deployed desks refuse a runaway prompt
    (docs/problems/fp2-step4-deployed-oom-not-drivable-desk-refuses-runaway-2026-10-22.md).
    Pass is exit 0:
+   - mode `required`, and MemAvailable at least 768 MiB + 1 GiB;
+   - the cell's start marker reached the host;
    - the research worker's `memory.max` is 768 MiB and its `memory.events`
      `oom_kill` is at least 1;
    - its exit cause names the memory budget;
@@ -497,13 +513,14 @@ first on the paper.
    tests/texture-acceptance-deployed.spec.js` with the test computer's session),
    and one engineering assignment completes (this proves the capsule seccomp,
    the session worker's new limits, and that nothing inside needed `clone3`).
-7. Capsule seccomp: `scripts/proofs/fp2-desk-boundary.sh --computer <test>
-   --step 7 --mutate`, which runs `desk_cell_confinement_probe.py --leg
-   seccomp`. Pass is exit 0: for each of the six capsule filters, the loaded
-   BPF hash equals the daemon's, Seccomp is 2, clone3 is ENOSYS, clone and
-   unshare into a new user namespace are EPERM, and fork+exec and os/exec
-   work. This is SEC-13 on the deployed kernel, not inside a live capsule.
-6. Rollback: `git revert` the lane's commits and the Landing Loop; the guest
+6. Capsule seccomp: `scripts/proofs/fp2-desk-boundary.sh --computer <test>
+   --step 6 --mutate`, which runs `desk_cell_confinement_probe.py --leg
+   seccomp` from Node B over ssh on the host-internal route. Pass is exit 0:
+   for each of the six capsule filters, the loaded BPF hash equals the
+   daemon's, Seccomp is 2, clone3 is ENOSYS, clone and unshare into a new
+   user namespace are EPERM, and fork+exec and os/exec work. This is SEC-13
+   on the deployed kernel, not inside a live capsule.
+7. Rollback: `git revert` the lane's commits and the Landing Loop; the guest
    image carries the unit environment, so a revert is a deploy.
 
 ## Residuals named now
