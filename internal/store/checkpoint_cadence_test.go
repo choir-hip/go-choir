@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"os"
@@ -1216,5 +1217,180 @@ func TestCheckpointFailedCloseRestoresCadenceAndTelemetry(t *testing.T) {
 	}
 	if err := s.Close(); err != nil {
 		t.Fatalf("Close after the commit finished: %v", err)
+	}
+}
+
+// runHeld runs fn in a goroutine and waits until pool reports a connection
+// in use, so Close starts while fn holds it.
+func runHeld(t *testing.T, pool interface{ Stats() sql.DBStats }, fn func() error) <-chan error {
+	t.Helper()
+	done := make(chan error, 1)
+	go func() { done <- fn() }()
+	waitForCheckpoint(t, "the statement to hold the pool's connection", func() bool { return pool.Stats().InUse > 0 })
+	return done
+}
+
+func waitDone(t *testing.T, what string, ch <-chan error) error {
+	t.Helper()
+	select {
+	case err := <-ch:
+		return err
+	case <-time.After(30 * time.Second):
+		t.Fatalf("%s did not finish", what)
+		return nil
+	}
+}
+
+func openForPinTest(t *testing.T) (*Store, string) {
+	t.Helper()
+	path := testStorePath(t)
+	cleanupTestStorePath(path)
+	t.Cleanup(func() { cleanupTestStorePath(path) })
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.checkpoint.closeTimeout = 300 * time.Millisecond
+	return s, path
+}
+
+// Sonnet's round-5 probe: a statement in flight on s.db that is not a
+// commit holds the pool's one connection; Close fails closed instead of
+// closing the engine under it, and the statement completes.
+func TestCloseFailsClosedUnderAStatementInFlight(t *testing.T) {
+	s, _ := openForPinTest(t)
+	sleeping := runHeld(t, s.db, func() error {
+		_, err := s.db.ExecContext(context.Background(), "SELECT SLEEP(2)")
+		return err
+	})
+	if err := s.Close(); !errors.Is(err, ErrCheckpointCommitLive) {
+		t.Fatalf("Close under a statement in flight = %v, want ErrCheckpointCommitLive", err)
+	}
+	if err := waitDone(t, "the statement", sleeping); err != nil {
+		t.Fatalf("the statement in flight failed: %v", err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close after the statement finished: %v", err)
+	}
+}
+
+// The same on the read pool.
+func TestCloseFailsClosedUnderAReadInFlight(t *testing.T) {
+	s, _ := openForPinTest(t)
+	reading := runHeld(t, s.readDB, func() error {
+		_, err := s.readDB.ExecContext(context.Background(), "SELECT SLEEP(2)")
+		return err
+	})
+	if err := s.Close(); !errors.Is(err, ErrCheckpointCommitLive) {
+		t.Fatalf("Close under a read in flight = %v, want ErrCheckpointCommitLive", err)
+	}
+	if err := waitDone(t, "the read", reading); err != nil {
+		t.Fatalf("the read in flight failed: %v", err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close after the read finished: %v", err)
+	}
+}
+
+// Sonnet's round-5 probe: an open write transaction holds the connection;
+// Close fails closed, the transaction commits, and its rows are durable.
+func TestCloseFailsClosedUnderAnOpenWriteTransaction(t *testing.T) {
+	ctx := context.Background()
+	s, path := openForPinTest(t)
+	if _, err := s.db.ExecContext(ctx, "CREATE TABLE close_pin_probe (id INT PRIMARY KEY)"); err != nil {
+		t.Fatal(err)
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i <= 3; i++ {
+		if _, err := tx.ExecContext(ctx, "INSERT INTO close_pin_probe VALUES (?)", i); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.Close(); !errors.Is(err, ErrCheckpointCommitLive) {
+		_ = tx.Rollback()
+		t.Fatalf("Close under an open write transaction = %v, want ErrCheckpointCommitLive", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("the open transaction could not commit after the failed Close: %v", err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close after the transaction committed: %v", err)
+	}
+	after, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer after.Close()
+	var rows int
+	if err := after.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM close_pin_probe").Scan(&rows); err != nil {
+		t.Fatal(err)
+	}
+	if rows != 3 {
+		t.Fatalf("rows after reopen = %d, want 3", rows)
+	}
+}
+
+// Round-6 review F4: a Close that fails at the commit-lock fence (count
+// mode, an inline commit holding the lock) restores the cadence and the
+// telemetry sealer.
+func TestCloseFailedAtTheFenceRestoresCadence(t *testing.T) {
+	s, _ := openForPinTest(t)
+	s.doltCheckpointEvery = 1
+	s.telemetry.Store(&telemetrySealer{s: s, window: time.Second, enabled: true})
+	const computerID = "computer-cadence-fencerestore"
+	_, _ = prepareGenesis(t, s, computerID, "genesis-cadence-fencerestore")
+	finalize := prepareOneFinalize(t, s, computerID)
+	held, release := holdNextCommit(t, s)
+	finalized := make(chan error, 1)
+	go func() { finalized <- finalize() }()
+	select {
+	case <-held:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the inline commit never started")
+	}
+	if err := s.Close(); !errors.Is(err, ErrCheckpointCommitLive) {
+		release()
+		t.Fatalf("Close at the fence = %v, want ErrCheckpointCommitLive", err)
+	}
+	if s.checkpoint.isClosed() || s.CheckpointStats().Mode != CheckpointModeCount {
+		release()
+		t.Fatalf("a Close failed at the fence left the cadence closed: %+v", s.CheckpointStats())
+	}
+	if !s.TelemetryBatchingEnabled() {
+		release()
+		t.Fatal("a Close failed at the fence left the telemetry sealer stopped")
+	}
+	release()
+	if err := waitDone(t, "the finalize", finalized); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close after the inline commit finished: %v", err)
+	}
+}
+
+// A Close that fails while pinning the pools (a statement in flight) in
+// debounced mode restores the debounced cadence too.
+func TestCloseFailedAtThePinRestoresCadence(t *testing.T) {
+	s, _ := openForPinTest(t)
+	s.ConfigureCheckpoint(CheckpointConfig{Debounced: true, Debounce: time.Hour, MaxOps: 1 << 30})
+	sleeping := runHeld(t, s.db, func() error {
+		_, err := s.db.ExecContext(context.Background(), "SELECT SLEEP(2)")
+		return err
+	})
+	if err := s.Close(); !errors.Is(err, ErrCheckpointCommitLive) {
+		t.Fatalf("Close under a statement in flight = %v, want ErrCheckpointCommitLive", err)
+	}
+	if got := s.CheckpointStats().Mode; got != CheckpointModeDebounced {
+		t.Fatalf("mode after a Close failed at the pin = %q, want %q", got, CheckpointModeDebounced)
+	}
+	if err := waitDone(t, "the statement", sleeping); err != nil {
+		t.Fatalf("the statement in flight failed: %v", err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close after the statement finished: %v", err)
 	}
 }
