@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"os"
 	"path/filepath"
 	"time"
 
@@ -72,6 +71,37 @@ func runCheckpointWorker(ctx context.Context, svc *platform.Service, store *plat
 	if err := store.CheckpointHeartbeat(ctx, reconcileProblem); err != nil {
 		return nil, err
 	}
+	// Orphan scratch sweep at start: best effort, never fails the run
+	// (docs/problems/platform-artifact-retention-2026-10-22.md, F1).
+	sweepScratch := func() {
+		if ctx.Err() != nil {
+			return
+		}
+		res, err := sweepOrphanScratch(scratchSweepConfig{
+			Root:   scratchRoot,
+			LogDir: filepath.Join(svc.ArtifactsRoot(), "artifact-gc-log"),
+			MinAge: scratchSweepMinAge,
+			Now:    time.Now(),
+			Jobs: func() (map[string]scratchJobState, error) {
+				rows, err := store.ListProjectionJobs(ctx)
+				if err != nil {
+					return nil, err
+				}
+				out := make(map[string]scratchJobState, len(rows))
+				for _, r := range rows {
+					out[r.ComputerID] = scratchJobState{Generation: r.Generation, Status: r.Status, GenesisRepair: r.GenesisRepair}
+				}
+				return out, nil
+			},
+		})
+		if err != nil {
+			log.Printf("checkpoint scratch sweep: %v", err)
+		}
+		if len(res.Removed) > 0 || len(res.Kept) > 0 {
+			log.Printf("checkpoint scratch sweep removed=%d bytes=%d kept_genesis_repair=%d", len(res.Removed), res.BytesRemoved, len(res.Kept))
+		}
+	}
+	sweepScratch()
 	j, err := store.ClaimProjectionJob(ctx)
 	if err != nil || j == nil {
 		return j, err
@@ -84,6 +114,7 @@ func runCheckpointWorker(ctx context.Context, svc *platform.Service, store *plat
 		defer close(stopped)
 		tick := time.NewTicker(45 * time.Second)
 		defer tick.Stop()
+		lastSweep := time.Now()
 		for {
 			select {
 			case <-stop:
@@ -103,6 +134,10 @@ func runCheckpointWorker(ctx context.Context, svc *platform.Service, store *plat
 				if err := store.CheckpointHeartbeat(ctx, problem); err != nil {
 					cancel()
 					return
+				}
+				if time.Since(lastSweep) >= scratchSweepInterval {
+					lastSweep = time.Now()
+					sweepScratch()
 				}
 			}
 		}
@@ -162,7 +197,7 @@ func runCheckpointWorker(ctx context.Context, svc *platform.Service, store *plat
 	if removed := pruneSupersededScratch(scratchRoot, j.ComputerID, j.Generation); len(removed) > 0 {
 		log.Printf("checkpoint scratch pruned computer=%s superseded=%d", j.ComputerID, len(removed))
 	}
-	if err := os.MkdirAll(scratch, 0700); err != nil {
+	if err := prepareScratchDir(scratch, j.GenesisRepair); err != nil {
 		return fail("failed", err)
 	}
 	cfg := projectionbase.Config{
@@ -215,7 +250,7 @@ func runCheckpointWorker(ctx context.Context, svc *platform.Service, store *plat
 	j.WatermarkSequence = uint64(wm)
 	j.BaseRef = ref
 	log.Printf("checkpoint published computer=%s target=%d bytes=%d duration=%s", j.ComputerID, d.Sequence, d.BlobSizeBytes, time.Since(started))
-	if err := os.RemoveAll(scratch); err != nil {
+	if err := removeScratchDir(scratch); err != nil {
 		log.Printf("checkpoint scratch cleanup computer=%s: %v", j.ComputerID, err)
 	}
 	return j, nil
