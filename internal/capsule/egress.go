@@ -192,8 +192,8 @@ type EgressProxy struct {
 	record    func(EgressRecord)
 	resolve   func(ctx context.Context, host string) ([]netip.Addr, error)
 	dial      func(ctx context.Context, network, address string) (net.Conn, error)
-	// helloTimeout bounds how long a CONNECT tunnel may stay silent before
-	// its ClientHello arrives (egress_tls.go); zero means the default.
+	// helloTimeout bounds how long a CONNECT tunnel's first record may take
+	// to arrive complete (egress_tls.go); zero means the default.
 	helloTimeout time.Duration
 	// logf takes the once-per-host observe log line; log.Printf by default.
 	logf func(format string, args ...any)
@@ -330,7 +330,7 @@ func (p *EgressProxy) serveConn(client net.Conn) {
 	}
 
 	_ = client.SetReadDeadline(time.Now().Add(30 * time.Second))
-	br := bufio.NewReaderSize(client, tunnelBufferSize)
+	br := bufio.NewReader(client)
 	req, err := http.ReadRequest(br)
 	if err != nil {
 		rec.Method = "invalid"
@@ -440,6 +440,10 @@ func (p *EgressProxy) serveConn(client net.Conn) {
 		if _, err := io.WriteString(client, "HTTP/1.1 200 Connection Established\r\n\r\n"); err != nil {
 			finish(EgressOutcomeFailed, "client went away")
 			return
+		}
+		// Only a checked CONNECT holds a whole TLS record in its reader.
+		if p.policy.TunnelIdentity.normalized() != TunnelIdentityOff {
+			br = tunnelReader(br, client)
 		}
 		// The tunnel is bound to the name the CONNECT asked for: its first
 		// record must be a ClientHello for exactly that name. Under enforce

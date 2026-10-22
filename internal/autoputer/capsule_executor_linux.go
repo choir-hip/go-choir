@@ -71,7 +71,11 @@ func configuredCapsuleExecutor() (*capsule.Executor, bool, error) {
 	log.Printf("capsule executor: memory policy %s", memoryPolicy)
 	// Egress tunnel identity (SDC SEC-06, internal/capsule/egress_tls.go):
 	// observe records what binding a CONNECT tunnel to its name would refuse
-	// and relays it; enforce refuses.
+	// and relays it; enforce refuses. A computer the host selects
+	// (VM_CAPSULE_TUNNEL_ENFORCE_ONLY) has enforce in its environment file.
+	if warning := capsule.TunnelIdentityEnvWarning(nil); warning != "" {
+		log.Printf("capsule executor: WARNING: %s", warning)
+	}
 	tunnelIdentity := capsule.TunnelIdentityModeFromEnv(nil)
 	executor.SetEgressTunnelIdentity(tunnelIdentity)
 	log.Printf("capsule executor: egress tunnel identity %s", tunnelIdentity)

@@ -2,8 +2,10 @@ package capsule
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"strings"
@@ -20,7 +22,12 @@ import (
 // CONNECT host in its server_name extension, and refuses everything else:
 // no TLS, no name, two names, a name in another form, a hidden name
 // (Encrypted Client Hello), a hello split across records, or a malformed
-// one. A refusal closes the tunnel before a byte reaches the upstream.
+// one, or a first record not complete within the hello timeout (10 s). A
+// refusal closes the tunnel before a byte reaches the upstream (the upstream
+// TCP connection is already open, and the client has had its 200). It binds
+// name to name only: a Host header inside the TLS session is not seen, so
+// this closes the plain variant of SEC-06; a fetch service per ecosystem
+// (NET-02) is the durable fix.
 //
 // Fail-closed notes. A client that sends a GREASE Encrypted Client Hello is
 // refused along with a real one, because the proxy cannot tell them apart;
@@ -32,10 +39,17 @@ import (
 // traffic and a wrong refusal breaks builds, so it ships in observe (the
 // metamission rule for new red behaviour): observe judges the first record
 // exactly as enforce does, writes the verdict on the egress ledger entry,
-// logs a would-refuse once per capsule and host, and relays the record and
-// the tunnel unchanged. Enforce refuses. Off skips the check. The mode is the
-// executor's, read from the daemon's environment (TunnelIdentityEnv) and
-// written on every policy it builds; a capsule never supplies a policy.
+// logs a would-refuse once per capsule and host, and relays the record's
+// bytes and the tunnel unchanged. Observe is not free of effect in time:
+// nothing is relayed either way until the first record is judged, and a
+// client that has not sent a complete first record waits up to the hello
+// timeout (10 s) first, so a silent client, or one waiting for a server that
+// speaks first, hears the server only after that wait. Enforce refuses. Off
+// skips the check. The mode is the executor's, read from the daemon's
+// environment (TunnelIdentityEnv) and written on every policy it builds; a
+// capsule never supplies a policy. The host selects computers for enforce by
+// a kernel boot argument the guest copies into that environment
+// (internal/vmmanager/capsule_tunnel_identity.go).
 type TunnelIdentityMode string
 
 const (
@@ -64,6 +78,21 @@ func TunnelIdentityModeFromEnv(getenv func(string) string) TunnelIdentityMode {
 	return TunnelIdentityMode(strings.ToLower(strings.TrimSpace(getenv(TunnelIdentityEnv)))).normalized()
 }
 
+// TunnelIdentityEnvWarning is the boot warning for a set value that is not
+// off, observe or enforce (it runs as observe); empty when there is none. A
+// typo in the flip must not read like success.
+func TunnelIdentityEnvWarning(getenv func(string) string) string {
+	if getenv == nil {
+		getenv = os.Getenv
+	}
+	raw := strings.ToLower(strings.TrimSpace(getenv(TunnelIdentityEnv)))
+	switch TunnelIdentityMode(raw) {
+	case "", TunnelIdentityOff, TunnelIdentityObserve, TunnelIdentityEnforce:
+		return ""
+	}
+	return fmt.Sprintf("%s=%q is not off, observe or enforce; running observe", TunnelIdentityEnv, clip(raw))
+}
+
 // normalized maps the zero value and unknown values to observe.
 func (m TunnelIdentityMode) normalized() TunnelIdentityMode {
 	switch m {
@@ -80,7 +109,8 @@ const (
 	// tunnelBufferSize holds a record header plus a full record behind the
 	// CONNECT request without a second read.
 	tunnelBufferSize = maxTunnelRecord + 5 + 512
-	// defaultHelloTimeout bounds how long a tunnel may stay silent.
+	// defaultHelloTimeout bounds how long a tunnel's first record may take
+	// to arrive complete; it is one deadline, not renewed by partial reads.
 	defaultHelloTimeout = 10 * time.Second
 
 	tlsRecordHandshake  = 0x16
@@ -185,7 +215,9 @@ func verifyTunnelClientHello(record []byte, host string) error {
 	if !plainHostName(sni) {
 		return fmt.Errorf("ClientHello SNI %q is not a plain host name", clip(sni))
 	}
-	if !strings.EqualFold(strings.TrimSuffix(sni, "."), strings.TrimSuffix(host, ".")) {
+	// ASCII case only: Unicode folding would match "\u017f.github.com" (long
+	// s), which the proxy resolved, to the hello's "s.github.com".
+	if asciiLower(strings.TrimSuffix(sni, ".")) != asciiLower(strings.TrimSuffix(host, ".")) {
 		return fmt.Errorf("ClientHello SNI %q is not the CONNECT host %q", clip(sni), clip(host))
 	}
 	return nil
@@ -210,6 +242,17 @@ func plainHostName(name string) bool {
 		return false
 	}
 	return true
+}
+
+// asciiLower lowercases A-Z and leaves every other byte as it is.
+func asciiLower(s string) string {
+	b := []byte(s)
+	for i, c := range b {
+		if c >= 'A' && c <= 'Z' {
+			b[i] = c + ('a' - 'A')
+		}
+	}
+	return string(b)
 }
 
 // clip bounds attacker-chosen text that goes into a log reason.
@@ -254,6 +297,14 @@ func (h *hello) u16() int {
 		return 0
 	}
 	return int(binary.BigEndian.Uint16(t.b))
+}
+
+// tunnelReader re-wraps a CONNECT's request reader in one that holds a
+// record header and a full TLS record, keeping the bytes the client sent
+// behind the request header first. Other requests keep the 4 KiB reader.
+func tunnelReader(br *bufio.Reader, client net.Conn) *bufio.Reader {
+	buffered, _ := br.Peek(br.Buffered())
+	return bufio.NewReaderSize(io.MultiReader(bytes.NewReader(append([]byte(nil), buffered...)), client), tunnelBufferSize)
 }
 
 // checkTunnel applies the policy's mode to a CONNECT tunnel: it judges the
