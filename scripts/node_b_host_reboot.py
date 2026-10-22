@@ -31,19 +31,35 @@ Phases (--phase all runs them in order):
           rule (deployRefreshAllowsBusy): their running runs park for the
           planned boot's one resume (CLAUDE.md: always-busy computers take
           a planned refresh while busy). Other busy guests refuse (409).
-          Busy ones are retried until --busy-wait runs out. Then the run
-          aborts and clears the markers already written, unless
-          --allow-crash-close accepts that their work ends "interrupted by
-          a restart". A guest that refuses for a self-development
-          operation mid-transaction or a live capsule (any tier) always
-          aborts the run: no restart may cut those. Each computer's
-          outcome is logged and kept in the receipt. A marker counts only
-          if its computer boots within 15 minutes (plannedRestartMaxAge),
-          so this runs immediately before the reboot, and post reports the
-          marker age. A marker that expires turns that boot into a crash
-          boot, the safe fallback. --no-allow-busy sends no allow_busy
-          (markers only to idle guests, the old rule). --no-markers skips
-          this phase: every boot is a crash boot.
+          Busy ones are retried until --busy-wait runs out. Each
+          computer's worst answer across the rounds decides, not its last.
+          A busy one aborts the run, unless --allow-crash-close accepts
+          that its work ends "interrupted by a restart". A guest that
+          cannot say whether an apply or a capsule is live (a 503, a
+          timeout, no answer, another 5xx, a 404/405 from a guest without
+          the endpoint) aborts the run unless --allow-crash-unverified
+          names that risk. A guest that refuses for a self-development
+          operation mid-transaction or a live capsule (any tier) aborts
+          the run at once, whatever the flags. Then every marker is sent
+          again immediately before the reboot: it refreshes the marker's
+          15-minute TTL (plannedRestartMaxAge) and re-checks for a new
+          apply or capsule; a computer that does not write again aborts
+          the run. An abort or any failure clears the marker on every
+          computer asked, and a failed clear is logged and kept in the
+          receipt. Each computer's outcome is logged and kept in the
+          receipt; post reports the marker age. A marker that expires
+          turns that boot into a crash boot, the safe fallback.
+          --no-allow-busy sends no allow_busy (markers only to idle
+          guests, the old rule). --no-markers sends no markers: every
+          boot is a crash boot.
+          Computers not asked (held ones, and every one under
+          --no-markers) get a read-only check from their obligations
+          surface: a self-development operation mid-transaction aborts
+          the run; an unreadable count needs --allow-crash-unverified.
+          Their live capsules cannot be read without asking and are not
+          checked. Computers that are not running (hibernated, stopped)
+          are not checked: the kernel change invalidates their
+          snapshots, so each cold-boots as a crash boot at its next wake.
   reboot  (--execute) systemctl reboot. Waits for ssh with a new boot_id
           (--boot-timeout).
   post    read-only. Booted kernel = staged kernel; nested=N; booted system
@@ -225,6 +241,13 @@ def computers():
                 row["restart_kind"] = (ob.get("restart") or {}).get("kind")
                 row["runs"] = ob.get("runs") or {}
                 row["open_work_items"] = ob.get("open_work_items")
+                # Self-development operations mid-transaction: the same
+                # states the marker refusal counts. None when the guest
+                # could not read them or predates the section.
+                sd = (ob.get("selfdev") or {}).get("busy") if isinstance(ob.get("selfdev"), dict) else None
+                if any(str(e).startswith("selfdev:") for e in (ob.get("errors") or [])):
+                    sd = None
+                row["selfdev_busy"] = sd
             else:
                 row["obligations_status"] = st
         rows.append(row)
@@ -259,8 +282,9 @@ else:
 '''
 
 
-def now():
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+def now(ts=None):
+    t = datetime.fromtimestamp(ts, timezone.utc) if ts is not None else datetime.now(timezone.utc)
+    return t.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def log(msg):
@@ -396,6 +420,61 @@ def classify_marker_answer(status, body, sent_allow_busy):
     return out
 
 
+# How bad an outcome is for the abort decision; each computer keeps its worst
+# across rounds (F2). An outcome not listed counts as unsafe.
+SEVERITY = {"written": 0, "unasked": 0, "busy": 1, "unsupported": 2, "unavailable": 2, "unsafe": 3}
+# The flag that accepts crashing through an outcome; unsafe has none.
+CRASH_FLAG = {"busy": "--allow-crash-close", "unsupported": "--allow-crash-unverified",
+              "unavailable": "--allow-crash-unverified"}
+
+
+def worse(a, b):
+    if a is None:
+        return b
+    return a if SEVERITY.get(a, 3) >= SEVERITY.get(b, 3) else b
+
+
+def reboot_blockers(standing, allow_crash_close, allow_crash_unverified):
+    """The computers whose outcome stops the reboot: unsafe always; busy
+    without --allow-crash-close; unsupported or unavailable (the guest did
+    not say whether an apply or a capsule is live) without
+    --allow-crash-unverified; anything unknown."""
+    allowed = {"written", "unasked"}
+    if allow_crash_close:
+        allowed.add("busy")
+    if allow_crash_unverified:
+        allowed |= {"unsupported", "unavailable"}
+    return {vm: o for vm, o in standing.items() if o not in allowed}
+
+
+def classify_unasked(r):
+    """A running computer the script does not ask (held, or --no-markers):
+    the read-only self-development count from its obligations surface.
+    unsafe for an operation mid-transaction, unavailable when the count
+    cannot be read, else unasked (boots as a crash; live capsules are not
+    readable without asking, so they are not checked)."""
+    sd = r.get("selfdev_busy")
+    out = {"warmness_class": r.get("warmness_class"), "held": bool(r.get("held")), "selfdev_busy": sd,
+           "running_runs": (r.get("runs") or {}).get("running")}
+    if not isinstance(sd, int) or isinstance(sd, bool) or sd < 0:
+        out["outcome"] = "unavailable"
+        out["detail"] = "not asked; its obligations surface does not say whether a self-development operation is mid-transaction (%s)" % (
+            "HTTP %s" % r["obligations_status"] if r.get("obligations_status") else "selfdev count %r" % (sd,))
+    elif sd > 0:
+        out["outcome"] = "unsafe"
+        out["detail"] = "not asked; %d self-development operation(s) mid-transaction" % sd
+    else:
+        out["outcome"] = "unasked"
+        out["detail"] = ("not asked; no self-development operation mid-transaction; live capsules not checked "
+                         "(not readable without asking); boots as a crash, %s running run(s) end interrupted_by_restart" % out["running_runs"])
+    return out
+
+
+def mark_timeout(n):
+    """ssh timeout for one mark or unmark call: each guest may take 25 s."""
+    return 60 + 30 * n
+
+
 def forward_guest_jumps(rules):
     """FORWARD must begin with the two guest jumps in the order vmctl
     installs them at start (ensureBaseLocked, internal/vmmanager/
@@ -469,9 +548,9 @@ def phase_pre(args, receipt):
         for r in running_computers(comp):
             busy = (r.get("runs") or {}).get("running", 0)
             c.add("running computer %s" % r["vm_id"], True,
-                  "class=%s held=%s health=%s runs=%s auto-warm=%s" % (
+                  "class=%s held=%s health=%s runs=%s selfdev_busy=%s auto-warm=%s" % (
                       r.get("warmness_class"), bool(r.get("held")), r.get("health"), r.get("runs"),
-                      r.get("warmness_class") in AUTO_WARM_CLASSES), False)
+                      r.get("selfdev_busy"), r.get("warmness_class") in AUTO_WARM_CLASSES), False)
             if busy and marker_allows_busy(r.get("warmness_class"), args.no_allow_busy):
                 c.add("computer %s busy, asked with allow_busy" % r["vm_id"], True,
                       "%d running run(s) park for the planned boot's one resume; a self-development apply "
@@ -499,51 +578,161 @@ def phase_pre(args, receipt):
 
 
 def phase_mark(args, receipt):
-    if args.no_markers:
-        log("MARK: skipped (--no-markers): every computer boots as a crash boot; parked work closes interrupted_by_restart")
-        receipt["marks"] = {"skipped": True}
-        return True
     comp = remote(args.host, "computers")
-    targets = [r for r in running_computers(comp) if not r.get("held")]
     target = "host-reboot kernel %s" % receipt["pre"]["facts"]["current_kernel"]
+    m = receipt["marks"] = {"target": target, "skipped": bool(args.no_markers), "sent": [], "marked": [],
+                            "unmarked": [], "marked_at": None, "outcomes": {}, "worst": {}, "unasked": {}}
+    if "error" in comp:
+        log("ABORT: vmctl computer list unreadable: %s" % comp["error"])
+        m["error"] = comp["error"]
+        return False
+    running = running_computers(comp)
+    asked = [] if args.no_markers else [r for r in running if not r.get("held")]
+    unasked = running if args.no_markers else [r for r in running if r.get("held")]
+    if args.no_markers:
+        log("MARK: --no-markers: no markers; every computer boots as a crash boot; parked work closes interrupted_by_restart")
+    for r in unasked:
+        a = classify_unasked(r)
+        m["unasked"][r["vm_id"]] = a
+        log("  %s %s (class=%s held=%s): %s" % (a["outcome"], r["vm_id"], a["warmness_class"], a["held"], a["detail"]))
+    blocked = reboot_blockers({vm: a["outcome"] for vm, a in m["unasked"].items()},
+                              args.allow_crash_close, args.allow_crash_unverified)
+    if blocked:
+        abort(args, m, blocked, {})
+        return False
     items = {r["vm_id"]: {"vm_id": r["vm_id"], "computer_url": r["computer_url"], "warmness_class": r.get("warmness_class"),
-                          "allow_busy": marker_allows_busy(r.get("warmness_class"), args.no_allow_busy)} for r in targets}
-    marked, busy, outcomes = [], dict(items), {}
+                          "allow_busy": marker_allows_busy(r.get("warmness_class"), args.no_allow_busy)} for r in asked}
+    sent = {}
+    try:
+        return mark_rounds(args, m, items, sent, target)
+    except BaseException as e:
+        # An ssh drop or timeout may lose answers from guests that wrote:
+        # clear every computer asked, then fail.
+        m["error"] = repr(e)
+        log("MARK FAILED (%r): clearing the marker on every computer asked" % e)
+        clear_markers(args, m, sent)
+        raise
+
+
+def mark_rounds(args, m, items, sent, target):
+    outcomes, worst = m["outcomes"], m["worst"]
+
+    def ask(batch):
+        for it in batch:
+            sent[it["vm_id"]] = it
+        m["sent"] = sorted(sent)
+        sent_at = time.time()
+        res = remote(args.host, "mark", json.dumps({"items": batch, "target": target}), timeout=mark_timeout(len(batch)))
+        got = {r["vm_id"]: r for r in res if r.get("vm_id") in items}
+        answers = {}
+        for it in batch:
+            vm = it["vm_id"]
+            r = got.get(vm, {"status": 0, "body": "no answer in the remote result"})
+            a = classify_marker_answer(r["status"], r["body"], it["allow_busy"])
+            a["warmness_class"] = it["warmness_class"]
+            if a["outcome"] == "written":
+                # Stamped when the request went out: the guest's RequestedAt
+                # is no earlier, so the age post reports is no smaller.
+                a["written_at"] = now(sent_at)
+            outcomes[vm] = a
+            worst[vm] = worse(worst.get(vm), a["outcome"])
+            answers[vm] = a
+            log("  %s %s (class=%s allow_busy=%s): %s" % (a["outcome"], vm, a["warmness_class"], a["allow_busy"], a["detail"]))
+        return answers, sent_at
+
+    pending, written = dict(items), set()
     deadline = time.time() + args.busy_wait
     log("MARK: asking %d running computer(s) for planned-restart markers (target %r; allow_busy for %s)" % (
-        len(targets), target, "none (--no-allow-busy)" if args.no_allow_busy else sorted(BUSY_ALLOWED_CLASSES)))
-    while busy:
-        res = remote(args.host, "mark", json.dumps({"items": list(busy.values()), "target": target}))
-        for r in res:
-            a = classify_marker_answer(r["status"], r["body"], busy[r["vm_id"]]["allow_busy"])
-            a["warmness_class"] = busy[r["vm_id"]]["warmness_class"]
-            outcomes[r["vm_id"]] = a
-            log("  %s %s (class=%s allow_busy=%s): %s" % (a["outcome"], r["vm_id"], a["warmness_class"], a["allow_busy"], a["detail"]))
+        len(items), target, "none (--no-allow-busy)" if args.no_allow_busy else sorted(BUSY_ALLOWED_CLASSES)))
+    while pending:
+        answers, _ = ask(list(pending.values()))
+        for vm, a in answers.items():
             if a["outcome"] == "written":
-                marked.append(busy.pop(r["vm_id"]))
-        if not busy or time.time() >= deadline:
+                written.add(vm)
+                pending.pop(vm)
+        if "unsafe" in worst.values():
+            break  # never rebooted through; waiting cannot change the decision
+        if not pending or time.time() >= deadline:
             break
         time.sleep(15)
-    receipt["marks"] = {"target": target, "marked": [m["vm_id"] for m in marked],
-                        "unmarked": list(busy), "marked_at": now(), "outcomes": outcomes}
+
+    def standing():
+        st = {vm: ("written" if vm in written and worst[vm] != "unsafe" else worst[vm]) for vm in items}
+        st.update({vm: a["outcome"] for vm, a in m["unasked"].items()})
+        return st
+
+    blocked = reboot_blockers(standing(), args.allow_crash_close, args.allow_crash_unverified)
+    if blocked:
+        abort(args, m, blocked, sent)
+        return False
+    if items:
+        # Final pass, immediately before the reboot: every marker is
+        # written again (a fresh 15-minute TTL) and the guest re-checks for
+        # an apply or a capsule that started since. A computer marked
+        # earlier must write again.
+        log("MARK: final pass: sending every marker again immediately before the reboot")
+        before = set(written)
+        answers, sent_at = ask(list(items.values()))
+        written = {vm for vm, a in answers.items() if a["outcome"] == "written"}
+        m["marked_at"] = now(sent_at)
+        lost = {vm: answers[vm]["outcome"] for vm in before - written}
+        blocked = reboot_blockers(standing(), args.allow_crash_close, args.allow_crash_unverified)
+        if lost or blocked:
+            blocked.update({vm: "%s in the final pass (was written)" % o for vm, o in lost.items()})
+            abort(args, m, blocked, sent)
+            return False
+    m["marked"] = sorted(written)
+    m["unmarked"] = sorted(set(items) - written)
     log("MARK outcomes:")
     for vm, a in outcomes.items():
-        log("  %s: %s, class=%s, allow_busy=%s, %s" % (vm, a["outcome"], a["warmness_class"], a["allow_busy"], a["detail"]))
-    # A refusal for a self-development apply or a live capsule (or one the
-    # script cannot read) is never rebooted through, --allow-crash-close or
-    # not: the restart would destroy the capsule or cut the apply.
-    unsafe = [vm for vm in busy if outcomes.get(vm, {}).get("outcome") == "unsafe"]
-    if busy and (unsafe or not args.allow_crash_close):
-        why = ("%d computer(s) refused for a self-development apply or a live capsule: %s" % (len(unsafe), unsafe)
-               if unsafe else "%d computer(s) still busy or unmarkable: %s" % (len(busy), list(busy)))
-        log("ABORT: %s. Clearing markers written so far." % why)
-        if marked:
-            remote(args.host, "unmark", json.dumps({"items": marked}))
-        receipt["marks"]["cleared"] = True
-        return False
-    if busy:
-        log("--allow-crash-close: rebooting with %d unmarked computer(s); their work ends interrupted_by_restart" % len(busy))
+        log("  %s: %s (worst %s), class=%s, allow_busy=%s, %s" % (
+            vm, a["outcome"], worst[vm], a["warmness_class"], a["allow_busy"], a["detail"]))
+    for vm in m["unmarked"]:
+        o = worst[vm]
+        risk = (" Its guest did not say whether a self-development apply or a live capsule is running; the reboot may cut one."
+                if o in ("unsupported", "unavailable") else "")
+        log("%s: rebooting %s unmarked (worst outcome %s); its work ends interrupted_by_restart.%s" % (
+            CRASH_FLAG.get(o, "?"), vm, o, risk))
+    for vm, a in m["unasked"].items():
+        log("%s: rebooting %s unasked (%s): %s" % (
+            "--allow-crash-unverified" if a["outcome"] == "unavailable" else ("--no-markers" if args.no_markers else "held"),
+            vm, a["outcome"], a["detail"]))
     return True
+
+
+def abort(args, m, blocked, sent):
+    for vm, o in sorted(blocked.items()):
+        flag = CRASH_FLAG.get(o)
+        why = ("%s would accept it" % flag if flag else
+               "no flag reboots through a self-development apply or a live capsule" if o == "unsafe" else
+               "no flag accepts it")
+        log("ABORT: %s: %s (%s)" % (vm, o, why))
+    log("ABORT: %d computer(s) stop the reboot. Clearing the marker on every computer asked." % len(blocked))
+    m["blocked"] = blocked
+    clear_markers(args, m, sent)
+
+
+def clear_markers(args, m, sent):
+    """DELETE the marker on every computer POSTed to, whatever it answered
+    (a lost answer may hide a written marker), and report each failure."""
+    items = list(sent.values())
+    m["cleared"], m["unmark_failed"] = True, {}
+    if not items:
+        return True
+    log("Clearing markers on %d computer(s): %s" % (len(items), sorted(sent)))
+    try:
+        res = remote(args.host, "unmark", json.dumps({"items": items}), timeout=mark_timeout(len(items)))
+        answered = {r.get("vm_id"): r for r in res}
+        failed = {vm: ("HTTP %s %s" % (answered[vm].get("status"), (answered[vm].get("body") or "")[:160])
+                       if vm in answered else "no answer")
+                  for vm in sent if vm not in answered or answered[vm].get("status") != 200}
+    except Exception as e:
+        failed = {vm: "unmark failed: %r" % e for vm in sent}
+    m["unmark_failed"], m["cleared"] = failed, not failed
+    for vm, why in sorted(failed.items()):
+        log("WARNING: marker on %s may remain (%s). For up to 15 minutes a crash of this computer boots as planned "
+            "and resumes work: clear it by hand (DELETE <computer_url>/internal/runtime/planned-restart)." % (vm, why))
+    return not failed
 
 
 def phase_reboot(args, receipt):
@@ -678,7 +867,11 @@ def main():
     ap.add_argument("--console-verified", action="store_true",
                     help="operator statement: the OVH IPMI/KVM console for this server was opened in this window")
     ap.add_argument("--allow-crash-close", action="store_true",
-                    help="reboot even if some computers stay busy (their work ends interrupted_by_restart)")
+                    help="reboot even if some computers stay busy with runs (their work ends interrupted_by_restart)")
+    ap.add_argument("--allow-crash-unverified", action="store_true",
+                    help="also reboot through computers that could not say whether a self-development apply or a "
+                         "live capsule is running (no answer, 503, other 5xx, 404/405, unreadable obligations): "
+                         "the reboot may cut an apply or destroy a capsule")
     ap.add_argument("--no-allow-busy", action="store_true",
                     help="never send allow_busy: busy critical_protected and public_platform computers refuse "
                          "their marker like any other (the behaviour before 2026-10-22)")
@@ -730,15 +923,21 @@ def main():
             running = [r["vm_id"] for r in running_computers(receipt["pre"]["computers"]) if not r.get("held")]
             log("DRY RUN. With --execute --console-verified this would:")
             if args.no_markers:
-                log("  1. write no markers (--no-markers): every computer boots as a crash boot")
+                log("  1. write no markers (--no-markers): every computer boots as a crash boot; a computer with a "
+                    "self-development operation mid-transaction (obligations surface) aborts the run")
             else:
                 rows = [r for r in running_computers(receipt["pre"]["computers"]) if not r.get("held")]
                 log("  1. POST planned-restart markers to %d running computer(s):" % len(running))
                 for r in rows:
                     log("       %s class=%s allow_busy=%s" % (r["vm_id"], r.get("warmness_class"),
                                                             marker_allows_busy(r.get("warmness_class"), args.no_allow_busy)))
-                log("     (busy ones retried for %ds, then abort unless --allow-crash-close; a refusal for a "
-                    "self-development apply or a live capsule always aborts)" % args.busy_wait)
+                log("     (busy ones retried for %ds, then abort unless --allow-crash-close; no answer, a 503 or a "
+                    "guest without the endpoint aborts unless --allow-crash-unverified; a refusal for a "
+                    "self-development apply or a live capsule always aborts; then every marker is sent again "
+                    "immediately before the reboot)" % args.busy_wait)
+                held = [r["vm_id"] for r in running_computers(receipt["pre"]["computers"]) if r.get("held")]
+                if held:
+                    log("     held, not asked (read-only selfdev check only; live capsules unchecked): %s" % held)
             log("  2. ssh %s systemctl reboot; wait up to %ds for a new boot_id" % (args.host, args.boot_timeout))
             log("  3. run the post-checks (or later: --phase post --state %s)" % state)
             save()
