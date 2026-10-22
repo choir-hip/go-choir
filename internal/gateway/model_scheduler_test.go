@@ -285,7 +285,11 @@ func TestModelSchedulerCancelWhileQueuedFreesTheEntry(t *testing.T) {
 	p := acquireAsync(ctx, s, "b")
 	waitUntil(t, "b to queue", func() bool { return s.Stats().Queued == 1 })
 	cancel()
-	<-p.done
+	select {
+	case <-p.done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("a cancelled queued call did not return")
+	}
 	if !errors.Is(p.err, context.Canceled) {
 		t.Fatalf("cancelled call: %v", p.err)
 	}
