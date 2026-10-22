@@ -279,3 +279,36 @@ func TestRetentionMinimumAgesHaveADayFloor(t *testing.T) {
 		t.Fatalf("min ages = %s, %s; want at least 24h", cfg.TestIdleMinAge, cfg.QuarantineMinAge)
 	}
 }
+
+// R2-8: the live orphan rule destroys a whole ownerless dir. It must never
+// take one holding a quarantine or a recovery journal: an ownerless
+// candidate-fleet dir may hold the owner's only pre-restore image.
+func TestOrphanRuleNeverDestroysADirHoldingAQuarantine(t *testing.T) {
+	f := newRetentionFixture(t, RetentionPruneModeActive, RetentionPruneModeOff, RetentionPruneModeOff)
+	f.reg.mu.Lock()
+	f.reg.retentionPrune.OrphanMinAge = time.Nanosecond
+	f.reg.mu.Unlock()
+	f.quarantineNaming(t, "candidate-fleet-e15cb89f", 1, "orph1", "done", "active", f.own[rtOwnerUser].ComputerID)
+	journalOnly := filepath.Join(f.stateDir, "vm-journal-only")
+	if err := os.MkdirAll(journalOnly, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(journalOnly, "rec-1-x.journal"), []byte(`{"phase":"fenced"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	empty := filepath.Join(f.stateDir, "vm-plain-orphan")
+	if err := os.MkdirAll(empty, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(time.Millisecond)
+	plan := f.reg.RetentionPrunePlan()
+	f.reg.PruneRetention(context.Background(), allowLifecycleRoute)
+	for _, vmID := range []string{"candidate-fleet-e15cb89f", "vm-journal-only"} {
+		if containsString(f.mgr.destroys, vmID) {
+			t.Fatalf("the orphan rule destroyed %s, which holds recovery state: plan=%+v", vmID, plan.Candidates)
+		}
+	}
+	if !containsString(f.mgr.destroys, "vm-plain-orphan") {
+		t.Fatalf("a plain orphan dir is no longer pruned: %v", f.mgr.destroys)
+	}
+}
