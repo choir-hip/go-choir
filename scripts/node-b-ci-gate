@@ -27,13 +27,18 @@ umask 022
 
 repo_url=https://github.com/choir-hip/go-choir.git
 receipt=/var/lib/go-choir/deploy-receipt.json
-# The host floor (SEC-14, bunch 4b B1). Prebuild and deploy refuse a commit
-# that does not descend from the floor; a deploy raises the floor to its
-# commit before it runs. Commits below a floor may restore root's CI key (the
-# deploy-1 and deploy-2 commits do), and the gate never lowers the floor.
-# Without the file the seed applies: a main commit from before the gate.
+# The host floor (SEC-14; bunch 4b B1, re-review F1 and F2). Prebuild and
+# deploy refuse a commit that does not descend from the floor. Commits below
+# it may put the CI key back on root (the deploy-1 and deploy-2 commits do).
+# A deploy holds an exclusive flock from before the floor check through its
+# run, and raises the floor to its commit by compare-and-swap, so the floor
+# never goes down. With no floor file the floor is the bootstrap marker,
+# which only a NixOS activation writes (nix/node-b.nix; step 3 removes that
+# activation) and the first deploy consumes. With neither, everything is
+# refused.
 floor_file=/var/lib/go-choir/ci-gate-floor
-seed_floor=961588290c0cc8c889e7b1d2832ef6d85ea7dda5
+bootstrap_file=/var/lib/go-choir/ci-gate-floor-bootstrap
+lock_wait=3600
 max_request=2048
 
 refuse() {
@@ -133,32 +138,67 @@ commit_from_env() {
   done
 }
 
-# check_floor REPO COMMIT: refuse unless COMMIT descends from the seed and
-# from the floor file's commit, when there is one.
+# read_floor_file FILE: print the single commit FILE holds, or refuse.
+read_floor_file() {
+  local file="$1"
+  local floor
+  floor=$(<"$file") || refuse "floor ${file} is unreadable"
+  [[ "$floor" =~ ^[0-9a-f]{40}$ ]] || refuse "floor ${file} is malformed"
+  printf '%s\n' "$floor"
+}
+
+# current_floor: the floor file, else the bootstrap marker, else refuse.
+current_floor() {
+  if [ -e "$floor_file" ] || [ -L "$floor_file" ]; then
+    read_floor_file "$floor_file"
+  elif [ -e "$bootstrap_file" ] || [ -L "$bootstrap_file" ]; then
+    read_floor_file "$bootstrap_file"
+  else
+    refuse "no floor (${floor_file}) and no bootstrap marker; root must restore the floor"
+  fi
+}
+
+# lock_gate: take the gate's exclusive lock on fd 9 for the rest of this
+# process. The test modes do not wait.
+lock_gate() {
+  exec 9>>"${floor_file}.lock" || refuse "cannot open the gate lock"
+  if [ "$lock_wait" -eq 0 ]; then
+    flock -x -n 9 || refuse "gate busy"
+  else
+    flock -x -w "$lock_wait" 9 || refuse "gate busy for ${lock_wait}s"
+  fi
+}
+
+# check_floor REPO COMMIT: refuse unless COMMIT descends from the current
+# floor; on success set checked_floor.
 check_floor() {
   local repo="$1"
   local commit="$2"
   local floor
-  git -C "$repo" cat-file -e "${seed_floor}^{commit}" 2>/dev/null ||
-    refuse "seed floor ${seed_floor} is not in ${repo}"
-  git -C "$repo" merge-base --is-ancestor "$seed_floor" "$commit" 2>/dev/null ||
-    refuse "commit ${commit} is below the seed floor ${seed_floor}"
-  if [ -e "$floor_file" ] || [ -L "$floor_file" ]; then
-    floor=$(<"$floor_file") || refuse "floor ${floor_file} is unreadable"
-    [[ "$floor" =~ ^[0-9a-f]{40}$ ]] || refuse "floor ${floor_file} is malformed"
-    git -C "$repo" cat-file -e "${floor}^{commit}" 2>/dev/null ||
-      refuse "floor ${floor} is not in ${repo}"
-    git -C "$repo" merge-base --is-ancestor "$floor" "$commit" 2>/dev/null ||
-      refuse "commit ${commit} is below the floor ${floor}"
-  fi
+  floor=$(current_floor) || exit 2
+  git -C "$repo" cat-file -e "${floor}^{commit}" 2>/dev/null ||
+    refuse "floor ${floor} is not in ${repo}"
+  git -C "$repo" merge-base --is-ancestor "$floor" "$commit" 2>/dev/null ||
+    refuse "commit ${commit} is below the floor ${floor}"
+  checked_floor="$floor"
 }
 
-# advance_floor COMMIT: record COMMIT as the floor (check_floor has passed).
+# advance_floor REPO COMMIT EXPECTED: compare-and-swap, under the lock. The
+# floor on disk must still be EXPECTED and COMMIT must descend from it; then
+# COMMIT becomes the floor and the bootstrap marker is consumed.
 advance_floor() {
-  local commit="$1"
+  local repo="$1"
+  local commit="$2"
+  local expected="$3"
+  local now
+  now=$(current_floor) || exit 2
+  [ "$now" = "$expected" ] || refuse "floor moved from ${expected} to ${now}"
+  git -C "$repo" merge-base --is-ancestor "$now" "$commit" 2>/dev/null ||
+    refuse "commit ${commit} is below the floor ${now}"
   local tmp="${floor_file}.tmp.$$"
   { printf '%s\n' "$commit" >"$tmp" && mv -f "$tmp" "$floor_file"; } ||
     { rm -f "$tmp"; refuse "cannot record floor ${commit}"; }
+  rm -f "$bootstrap_file"
 }
 
 run() {
@@ -182,6 +222,10 @@ run() {
   if ! git -C "$repo" merge-base --is-ancestor "$commit" refs/remotes/origin/main; then
     refuse "commit ${commit} is not on main"
   fi
+  # A deploy holds the lock from the floor check through its run (F1).
+  # Prebuild only checks: it never activates and never moves the floor.
+  [ "$verb" = deploy ] && lock_gate
+  checked_floor=
   check_floor "$repo" "$commit"
 
   local program
@@ -189,34 +233,50 @@ run() {
   trap 'rm -f "$program"' EXIT
   git -C "$repo" show "${commit}:${script}" >"$program" ||
     refuse "commit ${commit} has no ${script}"
-  [ "$verb" = deploy ] && advance_floor "$commit"
+  [ "$verb" = deploy ] && advance_floor "$repo" "$commit" "$checked_floor"
 
   echo "node-b-ci-gate: ${verb} ${commit} as root from ${script}" >&2
   # A clean root environment, as a NixOS root login would have it, plus the
-  # typed values. The program reads itself from stdin, as it did over ssh.
+  # typed values. The program runs from its file with stdin closed, so no
+  # command in it can read its later lines; the child does not inherit the
+  # lock fd, so nothing it leaves running can hold the lock.
   local status=0
   env -i HOME=/root USER=root LOGNAME=root SHELL=/run/current-system/sw/bin/bash \
     PATH=/run/wrappers/bin:/run/current-system/sw/bin "${env[@]}" \
     /run/current-system/sw/bin/bash -c \
-    'if [ -r /etc/set-environment ]; then . /etc/set-environment; fi; exec /run/current-system/sw/bin/bash -s' \
-    <"$program" || status=$?
+    'if [ -r /etc/set-environment ]; then . /etc/set-environment; fi; exec /run/current-system/sw/bin/bash "$1"' \
+    node-b-ci-program "$program" <"/dev/null" 9>&- || status=$?
   exit "$status"
 }
 
 mode="${1:-}"
 case "$mode" in
-  --test-floor | --test-advance)
+  --test-floor | --test-advance | --test-cas)
     # Tests only (.github/scripts/node-b-ci-gate-test): the floor logic on a
-    # caller's repo and floor file. Never as root.
+    # caller's repo, floor file and bootstrap marker. Never as root.
     [ "$(id -u)" -ne 0 ] || refuse "test modes never run as root"
-    [ "$#" -eq 5 ] || refuse "usage: node-b-ci-gate $mode <repo> <floor-file> <seed> <commit>"
+    want=5
+    [ "$mode" = --test-cas ] && want=6
+    [ "$#" -eq "$want" ] || refuse "usage: node-b-ci-gate $mode <repo> <floor-file> <bootstrap-file> [<expected>] <commit>"
     floor_file="$3"
-    seed_floor="$4"
-    [[ "$5" =~ ^[0-9a-f]{40}$ ]] || refuse "invalid commit"
-    check_floor "$2" "$5"
-    if [ "$mode" = --test-advance ]; then
-      advance_floor "$5"
-    fi
+    bootstrap_file="$4"
+    lock_wait=0
+    for sha in "${@:5}"; do
+      [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || refuse "invalid commit"
+    done
+    checked_floor=
+    case "$mode" in
+      --test-floor) check_floor "$2" "$5" ;;
+      --test-advance)
+        lock_gate
+        check_floor "$2" "$5"
+        advance_floor "$2" "$5" "$checked_floor"
+        ;;
+      --test-cas)
+        lock_gate
+        advance_floor "$2" "$6" "$5"
+        ;;
+    esac
     exit 0
     ;;
   --print-plan | --) ;;
