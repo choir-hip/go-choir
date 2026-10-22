@@ -2,10 +2,16 @@ package agentcore
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"fmt"
+	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -137,11 +143,12 @@ func TestAssignmentEndClosesItsUnfrozenOperation(t *testing.T) {
 			// A replay of the same report writes nothing new to the closed
 			// operation. The outer replay path that must also close it is
 			// TestReplayedReportClosesTheOperationAfterACrashBeforeTheClose.
-			if _, err := rt.commitAssignedEngineeringReport(ctx, c1eGet(t, s, assignment), terminalAssignmentReport(assignment, result)); err == nil {
-				again, _ := rt.selfdevOperations.Get(ctx, assignment.Binding.ComputerID, operationID)
-				if again.State != selfdev.StateFailed || again.TerminalError != operation.TerminalError {
-					t.Fatalf("a replayed report changed the closed operation: %+v", again)
-				}
+			if _, err := rt.commitAssignedEngineeringReport(ctx, c1eGet(t, s, assignment), terminalAssignmentReport(assignment, result)); err != nil {
+				t.Fatalf("replayed report: %v", err)
+			}
+			again, err := rt.selfdevOperations.Get(ctx, assignment.Binding.ComputerID, operationID)
+			if err != nil || again.State != selfdev.StateFailed || again.TerminalError != operation.TerminalError {
+				t.Fatalf("a replayed report changed the closed operation: %+v, %v", again, err)
 			}
 		})
 	}
@@ -237,5 +244,211 @@ func TestReplayedReportClosesTheOperationAfterACrashBeforeTheClose(t *testing.T)
 				t.Fatalf("busy probe after the replay = %d, want 0", got)
 			}
 		})
+	}
+}
+
+// endedAssignment is the terminal assignment value the close reads: its
+// disposition, id and computer. The close never reads anything else.
+func endedAssignment(computerID, assignmentID string, disposition types.EngineeringAssignmentDisposition) types.EngineeringAssignment {
+	return types.EngineeringAssignment{
+		AssignmentID: assignmentID, Disposition: disposition,
+		Binding: types.EngineeringAssignmentBinding{ComputerID: computerID, TrajectoryID: "trajectory-" + assignmentID},
+	}
+}
+
+// tapeBoundStore is a product store whose projection tape is bound, as in
+// production: self-development transitions write only through the tape.
+func tapeBoundStore(t *testing.T, computerID string) *store.Store {
+	t.Helper()
+	ctx := context.Background()
+	productStore, err := store.Open(filepath.Join(t.TempDir(), "runtime.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = productStore.Close() })
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signingKey := computerevent.SigningKey{SignerRef: computerevent.SignerRef{SignerDomain: "platform-control", KeyID: "close-tape"}, PrivateKey: privateKey}
+	// The derivable fixture's pinner and CAS: they pin the non-private
+	// projection batches a bound tape appends.
+	appender, err := computerevent.NewComputerEventAppender(computerID, &derivableTestPinner{key: signingKey}, productStore, &derivableChainCAS{key: signingKey, projection: productStore}, rollbackTestReceiptVerifier{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := productStore.BindProjectionTape(computerID, appender); err != nil {
+		t.Fatal(err)
+	}
+	genesisID, _ := computerevent.NewEventID()
+	commitment := strings.Repeat("a", 64)
+	genesis := computerevent.Event{
+		SchemaVersion: computerevent.SchemaVersionV1, EventID: genesisID, ComputerID: computerID,
+		EventKind: computerevent.EventGenesisImported, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
+		IdempotencyKey: "genesis", ActorProfile: "management", AuthorityRef: "owner", PrivacyClass: "owner",
+		PayloadCommitment: commitment, ProposedEffectRef: strings.Repeat("b", 64),
+		ResultingEffectiveCommitment: commitment, ReducerVersion: computerevent.ReducerVersionV1,
+	}
+	if _, err := appender.AppendNew(ctx, genesis, computerevent.TransitionInput{TargetStateCommitment: commitment}, nil); err != nil {
+		t.Fatal(err)
+	}
+	return productStore
+}
+
+// DeepSeek review of bunch 15: the production store binds the projection
+// tape, where Transition writes only through the event projection. The
+// close must work there, not only on the direct-SQL test seam.
+func TestAssignmentEndCloseWritesThroughTheProjectionTape(t *testing.T) {
+	ctx := context.Background()
+	computerID := "computer-close-tape"
+	productStore := tapeBoundStore(t, computerID)
+	operations, err := selfdev.NewStore(productStore, productStore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	operations.BindProjectionSink(productStore)
+	opened, err := openFreezeCandidate(ctx, operations, func(context.Context) error { return nil }, computerID, "trajectory-close-tape", "assignment-close-tape", "objective")
+	if err != nil || opened.State != selfdev.StateExecuting {
+		t.Fatalf("open = %+v, %v", opened, err)
+	}
+	if err := operations.RecordIntentError(ctx, computerID, opened.OperationID, "freeze: refused on the tape path"); err != nil {
+		t.Fatal(err)
+	}
+	before, err := productStore.Head(ctx, computerID)
+	if err != nil || before == nil {
+		t.Fatalf("head = %+v, %v", before, err)
+	}
+
+	rt := &Runtime{selfdevOperations: operations}
+	rt.closeEndedAssignmentSelfdevOperation(ctx, endedAssignment(computerID, "assignment-close-tape", types.EngineeringAssignmentCompleted))
+
+	closed, err := operations.Get(ctx, computerID, opened.OperationID)
+	if err != nil || closed.State != selfdev.StateFailed || !strings.Contains(closed.TerminalError, "refused on the tape path") {
+		t.Fatalf("operation on the tape path = %+v, %v; want failed with the refusal", closed, err)
+	}
+	after, err := productStore.Head(ctx, computerID)
+	if err != nil || after == nil || after.CanonicalEventHead == before.CanonicalEventHead {
+		t.Fatalf("the close appended nothing to the tape: head before %+v after %+v (%v)", before, after, err)
+	}
+}
+
+// DeepSeek review of bunch 15: a late freeze racing the close. Either may
+// win, but the operation never stays executing; a failed assignment's
+// candidate closes even when the freeze lands first (the close retries on
+// the state conflict).
+func TestAssignmentEndCloseRacesALateFreeze(t *testing.T) {
+	for _, disposition := range []types.EngineeringAssignmentDisposition{types.EngineeringAssignmentCompleted, types.EngineeringAssignmentFailed} {
+		t.Run(string(disposition), func(t *testing.T) {
+			ctx := context.Background()
+			rt, _ := testRuntime(t)
+			computerID := rt.TextureComputerID()
+			for i := 0; i < 20; i++ {
+				assignment := endedAssignment(computerID, fmt.Sprintf("assignment-race-%s-%d", disposition, i), disposition)
+				operationID := seedAssignmentOperation(t, rt, assignment, selfdev.StateExecuting, "freeze: refused")
+				var wg sync.WaitGroup
+				wg.Add(2)
+				go func() {
+					defer wg.Done()
+					_, _ = rt.selfdevOperations.Transition(ctx, computerID, operationID, selfdev.StateExecuting, selfdev.StateFrozen, func(next *selfdev.Operation) error {
+						next.BundleDigest = strings.Repeat("f", 64)
+						return nil
+					})
+				}()
+				go func() {
+					defer wg.Done()
+					rt.closeEndedAssignmentSelfdevOperation(ctx, assignment)
+				}()
+				wg.Wait()
+				operation, err := rt.selfdevOperations.Get(ctx, computerID, operationID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				switch {
+				case operation.State == selfdev.StateExecuting:
+					t.Fatalf("race %d left the operation executing", i)
+				case disposition == types.EngineeringAssignmentFailed && operation.State != selfdev.StateFailed:
+					t.Fatalf("race %d: a failed assignment's operation = %s, want failed", i, operation.State)
+				case disposition == types.EngineeringAssignmentCompleted && operation.State != selfdev.StateFailed && operation.State != selfdev.StateFrozen:
+					t.Fatalf("race %d: a completed assignment's operation = %s, want failed or frozen", i, operation.State)
+				}
+			}
+			if got := rt.activeSelfdevOperations(ctx); got != 0 {
+				t.Fatalf("busy probe after the races = %d, want 0", got)
+			}
+		})
+	}
+}
+
+// DeepSeek review of bunch 15: an owner decision's states are never closed
+// by an assignment's end, whatever its disposition.
+func TestAssignmentEndNeverClosesADecidedOperation(t *testing.T) {
+	ctx := context.Background()
+	rt, _ := testRuntime(t)
+	computerID := rt.TextureComputerID()
+	decided := []string{selfdev.StateAwaitingApproval, selfdev.StateAccepted, selfdev.StateMaterializing, selfdev.StateApplied, selfdev.StateRollbackPending, selfdev.StateDegraded}
+	for _, disposition := range []types.EngineeringAssignmentDisposition{types.EngineeringAssignmentCompleted, types.EngineeringAssignmentFailed, types.EngineeringAssignmentCancelled} {
+		for _, state := range decided {
+			assignment := endedAssignment(computerID, "assignment-decided-"+string(disposition)+"-"+state, disposition)
+			operationID := seedAssignmentOperation(t, rt, assignment, state, "")
+			rt.closeEndedAssignmentSelfdevOperation(ctx, assignment)
+			operation, err := rt.selfdevOperations.Get(ctx, computerID, operationID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if operation.State != state || operation.TerminalError != "" {
+				t.Errorf("%s assignment moved a %s operation to %s %q", disposition, state, operation.State, operation.TerminalError)
+			}
+		}
+	}
+}
+
+// DeepSeek review of bunch 15: on the tape, a competing writer that does
+// not share this store's write mutex (another process, or another Store
+// over the same tape) loses its CAS as ErrProjectionMismatch, not
+// selfdev.ErrConflict. The close must retry that too, or a failed
+// assignment's candidate frozen by the competing writer stays open.
+func TestAssignmentEndCloseRetriesATapeConflict(t *testing.T) {
+	ctx := context.Background()
+	computerID := "computer-close-tape-race"
+	productStore := tapeBoundStore(t, computerID)
+	closer, err := selfdev.NewStore(productStore, productStore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	closer.BindProjectionSink(productStore)
+	freezer, err := selfdev.NewStore(productStore, productStore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	freezer.BindProjectionSink(productStore)
+	rt := &Runtime{selfdevOperations: closer}
+	authorized := func(context.Context) error { return nil }
+	for i := 0; i < 30; i++ {
+		assignmentID := fmt.Sprintf("assignment-tape-race-%d", i)
+		opened, err := openFreezeCandidate(ctx, closer, authorized, computerID, "trajectory-"+assignmentID, assignmentID, "objective")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			_, _ = freezer.Transition(ctx, computerID, opened.OperationID, selfdev.StateExecuting, selfdev.StateFrozen, func(next *selfdev.Operation) error {
+				next.BundleDigest = strings.Repeat("f", 64)
+				return nil
+			})
+		}()
+		go func() {
+			defer wg.Done()
+			rt.closeEndedAssignmentSelfdevOperation(ctx, endedAssignment(computerID, assignmentID, types.EngineeringAssignmentFailed))
+		}()
+		wg.Wait()
+		operation, err := closer.Get(ctx, computerID, opened.OperationID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if operation.State != selfdev.StateFailed {
+			t.Fatalf("race %d on the tape: a failed assignment's operation = %s, want failed", i, operation.State)
+		}
 	}
 }
