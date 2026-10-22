@@ -166,8 +166,11 @@ docs commit that adds this section.
 
 **Problem 1: the directory, not an in-place rewrite.** deploy.env,
 corpus-dsn.env, corpusd-retrieval.env and sandbox-gateway-token.env move
-into `/var/lib/go-choir/unit-env` (0700 root). Every unit hides the
-directory (`hostSecretPaths.unitEnv`), not each file. Why the directory:
+into `/var/lib/go-choir/unit-env` (0700 root). Every long-running host
+unit, and every oneshot that declares hidden paths, hides the directory
+(`hostSecretPaths.unitEnv`), not each file. The thirteen oneshots listed
+under residuals hide nothing (corrected after round 2, F7). Why the
+directory:
 
 - Writing deploy.env in place would fix only the one CI writer. Any other
   rename (sed -i, an editor, a future script) still reappears in running
@@ -198,7 +201,8 @@ path keeps a link to `unit-env/<name>`. A rollback past the fix reads
 through it, because systemd follows the link for EnvironmentFile= and for
 InaccessiblePaths=. An old runbook's `>` writes through it, but `rm` of an
 old path removes only the link. A regular file at an old path is left in
-place (no unit reads it) and fails the verifier. A link or file planted at
+place (no unit reads it) and fails the verifier. (Superseded by round 2,
+below: such a file is quarantined and the activation fails.) A link or file planted at
 the directory's own path is moved aside, never followed.
 
 **Problems 2 and 5.** caddy, qdrant, unbound, go-choir-goproxy and
@@ -263,3 +267,130 @@ unit-env.
   did. At the switch, that is both Dolt servers, caddy, qdrant, searx,
   unbound, goproxy and pkgmirror; the deploy program restarts the rest.
   caddy's restart drops open edge connections, and clients reopen them.
+
+## Round 2 review findings (bunch 85, on 368ffec70), before any fix
+
+Reviews: Sonnet 5.5 accept with edits
+(`_runs/bunch85/sonnet.out`); flash (omp-gemini38) accept; DeepSeek still
+running. Sonnet reproduced F2 and F3 on temp trees with the evaluated
+snippet. The others come from reading the code, not from observation.
+
+- **F1 (medium): no unit hides the old paths now.** Several things can
+  put a regular file at an old path:
+  - an operator's `sed -i`, `install` or editor, which replaces the link by
+    rename;
+  - a restored backup from before the change;
+  - a reverted deploy program's scrub.
+
+  Every root unit can read that file (a 0600 root file is readable by its
+  owner), and no unit reads it as its environment. The snippet logs it and
+  returns 0, and only the verifier flags it, after units have started. For
+  that path this is a confidentiality regression against the base, which
+  hid the file when it existed at a unit's start.
+- **F2 (medium): the snippet returns 0 while a unit loses its env file.**
+  The state is a regular file at an old path, no file of that name in
+  unit-env, and the marker present. This lane's own rollback text produced
+  it: it moved the files back and left `.imported`, so a later landing
+  imports nothing. For corpus-dsn.env, corpusd and checkpointd then start
+  without CORPUSD_CORPUS_DOLT_DSN and put corpus tables on Store A
+  (internal/platform/config.go:68; nix/node-b.nix's comment on that
+  EnvironmentFile). The snippet also returns 0 when both paths hold the
+  name, leaving it unclear which copy wins.
+- **F3 (low-medium): a link at an old path to a file elsewhere is repointed
+  without importing its target.** The operator's file stays where it is,
+  unread, and unit-env lacks the name.
+- **F4 (low): the old name is briefly absent.** Between a file's move and
+  its link, the old name does not exist. A unit still on its old definition
+  that restarts in that window starts without the file. An abort in the
+  middle of the loop leaves the old names absent until the next successful
+  run.
+- **F5 (low): units keep their old view until they restart in the landing
+  deploy.** In that view unit-env is not masked. This covers:
+  - auth, maild, corpusd and the proxy, which the deploy program restarts
+    after the switch;
+  - the gateway, which restarts last, after a drain of up to 11 minutes;
+  - vmctl;
+  - every Firecracker VMM started before vmctl's restart, until its guest
+    next boots.
+
+  The three moved files stay masked in those views, because a rename moves
+  the dentry that carries the mask. Anything new in unit-env during that
+  window, a kill switch for example, is visible to them. The verifier sees
+  these units but does not check VMMs.
+- **F6 (low): the classifier.** Because `scripts/off-host-backup.sh` changed,
+  this landing also rebuilds the guest image, deploys the frontend and
+  refreshes every active computer. That refresh also relaunches VMMs under
+  vmctl's new namespace. This is an owner decision; FP0 takes it to the
+  owner, and the classifier is not changed here.
+- **F7 (low): "every unit hides the directory" overclaims.** Thirteen root
+  oneshots hide nothing: btrfs-headroom, both dolt-users units, digest,
+  disk-gc, nix-gc, the three offhost-backup units,
+  platform-dolt-history-audit, platform-dolt-squash and store-compaction.
+  They can see and write unit-env.
+- **F8 (low): the verifier now requires unit-env/deploy.env.** The base never
+  mode-checked deploy.env. A host without the file (a fresh rebuild, a
+  restore without it) fails the modes section. Node B has the file.
+- **F9 (info): the kill switch through the link has two traps.**
+  - `echo X=off > /var/lib/go-choir/corpusd-retrieval.env` through the
+    dangling link creates the file with the shell's umask (0644). The
+    verifier's modes check fails until the next activation sets 0600; use
+    `install -m 0600` into unit-env instead.
+  - Two older records still name the old path for the opinion and retrieval
+    switch: corpus-retrieval-windowed-unindexed-untimed-2026-10-14.md:342
+    and oped-not-connected-2026-10-20.md:157. There, `rm` leaves the switch
+    on.
+- **F10 (info): what the design assumes.**
+  - The first run trusts whatever is at the old paths, and an existing
+    unit-env with a marker. A unit that can write `/var/lib/go-choir`
+    before the landing could pre-plant either. This is no worse than the
+    base, but it should be checked before the deploy.
+  - systemd follows a link named in InaccessiblePaths= and EnvironmentFile=.
+    That comes from the source, not from observation, and matters only on
+    the revert path.
+  - CI does not run the nix test.
+
+Dispositions planned on this lane, tests first:
+
+- F1: quarantine. A regular file found at an old path after the import is
+  moved into unit-env as `<name>.stray.<epoch>` (0600). The old path
+  becomes the link, and the activation fails non-zero with a journal line
+  naming the path.
+- F2: the same failure applies to a file at an old path with no file of
+  that name in unit-env. The failure is sticky: every activation fails
+  while a stray exists, so the deploy's switch retry does not pass it
+  silently.
+  - A file identical to the one in unit-env is only relinked, with no
+    failure; that is what a reverted deploy's scrub leaves.
+  - Before the first import, the old path wins and an unexpected file
+    already in unit-env becomes the stray.
+  - The rollback text is corrected (below).
+- F3: before the first import, a link at an old path to a regular file
+  elsewhere is imported by copy. After it, the target's content becomes a
+  stray and the activation fails; a dangling link is only repointed.
+- F4: each file is moved and linked in adjacent steps rather than after
+  all four moves, and a link is replaced through a temporary name and a
+  rename. A hard link would keep the old name present throughout, but it
+  would detach the old-view masks during the landing (F5). Moving the
+  dentry keeps them, so the window stays two system calls wide.
+- F7: the comments are corrected (this commit corrects the record).
+- F5, F8, F9 and F10 are recorded. FP0's proof gains a check before the
+  deploy (F10) and runs the verifier after the gateway's restart (F5).
+- F6 stays with FP0 and the owner.
+
+Between activations, F1 stays open in one respect: a regular file that
+appears at an old path between two activations is readable by every root
+unit until the next activation (boot or switch) quarantines it. The
+verifier's legacy-path check flags it on any run. A systemd path unit
+watching `/var/lib/go-choir` could close that window; it is a residual,
+not built here.
+
+### Rollback (corrected)
+
+Revert the fix and redeploy. Move no files: the links keep the old paths
+working for the reverted units, and a later landing then relinks without
+importing anything. If the files must go back to their old paths for good,
+run `mv -f /var/lib/go-choir/unit-env/<name> /var/lib/go-choir/<name>` for
+each name present. Also run `rm /var/lib/go-choir/unit-env/.imported`, so
+that the next landing imports them again as on its first run. The red
+commit's message (844e0026b) gives the older text, which left the marker
+behind; this text supersedes it.
