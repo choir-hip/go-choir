@@ -214,7 +214,7 @@ func (s *Store) finalizeBatch(ctx context.Context, computerID, eventDigest strin
 		// Replay bypasses the OG write guard: record what it writes, and
 		// durably mark a fenced store before the first deposit commits
 		// (vocab_replay_fence.go).
-		if err := s.noteVocabReplayDeposit(batch); err != nil {
+		if err := s.noteVocabReplayDeposit(batch, sequence); err != nil {
 			return fmt.Errorf("computer event projection: %w", err)
 		}
 	}

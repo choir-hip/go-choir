@@ -16,7 +16,7 @@ import (
 // observable but cannot make a reversibility claim.
 var ErrReplayIneligible = errors.New("replay is ineligible")
 
-const replayEligibilityManifestVersion = 3
+const replayEligibilityManifestVersion = 4
 
 const emptyDoltTableHash = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
@@ -28,6 +28,13 @@ const (
 	ReplayEventProjection     ReplayObservationClass = "event_projection"
 	ReplayEmptyUntilSupported ReplayObservationClass = "empty_until_supported"
 	ReplayRetiredAbsent       ReplayObservationClass = "retired_absent"
+	// ReplayEventProjectionOptional is an event projection that the content
+	// extractor leaves out while it is empty (computerversion.OptionalTables),
+	// so it may be absent from both observation sets. Present in both, it is
+	// admitted with content like ReplayEventProjection; present on one side
+	// only is schema drift (docs/design/choir-event-table-f-c-2026-10-22.md
+	// section 3.3).
+	ReplayEventProjectionOptional ReplayObservationClass = "event_projection_optional"
 )
 
 // ReplayAirworthinessManifest is versioned evidence of the schema-object
@@ -84,6 +91,7 @@ var replayAirworthinessEntries = map[string]ReplayObservationClass{
 	"podcast_subscriptions":           ReplayRetiredAbsent,
 	"og_edges":                        ReplayEventProjection,
 	"og_objects":                      ReplayEventProjection,
+	"choir_events":                    ReplayEventProjectionOptional,
 	"solitaire_games":                 ReplayRetiredAbsent,
 	"solitaire_moves":                 ReplayRetiredAbsent,
 	"app_adoptions":                   ReplayRetiredAbsent,
@@ -117,7 +125,7 @@ func (m ReplayAirworthinessManifest) Validate() error {
 			return errors.New("replay manifest contains an empty table name")
 		}
 		switch class {
-		case ReplayEventProjection, ReplayEmptyUntilSupported, ReplayRetiredAbsent:
+		case ReplayEventProjection, ReplayEventProjectionOptional, ReplayEmptyUntilSupported, ReplayRetiredAbsent:
 		default:
 			return fmt.Errorf("replay manifest table %q has unknown class %q", table, class)
 		}
@@ -187,7 +195,7 @@ func replayEligibility(liveHead, replayHead *computerevent.Head, live, replay co
 			if content != "" && content != emptyDoltTableHash {
 				record(&eligibility.UnsupportedTables, seenUnsupported, table)
 			}
-		case ReplayEventProjection:
+		case ReplayEventProjection, ReplayEventProjectionOptional:
 			// Event projection rows are the only non-empty rows admitted by
 			// this first-slice manifest.
 		default:
@@ -209,6 +217,13 @@ func replayEligibility(liveHead, replayHead *computerevent.Head, live, replay co
 	for table, class := range manifest.Entries {
 		if class == ReplayRetiredAbsent {
 			continue
+		}
+		if class == ReplayEventProjectionOptional {
+			_, inLive := liveSchemas[table]
+			_, inReplay := replaySchemas[table]
+			if !inLive && !inReplay {
+				continue // empty on both sides, so observed on neither
+			}
 		}
 		if _, ok := liveSchemas[table]; !ok {
 			recordMissing(table)

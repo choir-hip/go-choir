@@ -867,17 +867,38 @@ func ogRoleFieldsFromJSON(kind string, raw []byte, prefix string, out *[]vocabmi
 	})
 }
 
-// servingOGRoleFields collects every role-bearing leaf in og_objects for the
-// serving fence: declared role keys in metadata and body (recursive, so
-// nested attestation roles are covered), excluding non-desk same-named
+// objectRowTables are the tables that hold object-graph rows: og_objects and
+// choir_events, where stamped choir.event ops land
+// (docs/design/choir-event-table-f-c-2026-10-22.md section 3.6). Both fences
+// read every table here. A later vocabulary migration must cover every table
+// here too: its plan, its row rewrite and both fences. The V1->V2 plan reads
+// og_objects alone, the one named exception, because no choir_events row can
+// be V1 (stamped ops exist only on V2 binaries with the write guard, and
+// replayed deposits are upcast before they are projected); the full fence
+// fails closed if that is ever false.
+var objectRowTables = []string{"og_objects", choirEventsTable}
+
+// servingOGRoleFields collects every role-bearing leaf in the object-row
+// tables for the serving fence: declared role keys in metadata and body
+// (recursive, so nested attestation roles are covered), excluding non-desk
+// same-named fields.
 func (s *Store) servingOGRoleFields(ctx context.Context, progress func()) ([]vocabmigrate.Field, error) {
+	var fields []vocabmigrate.Field
+	for _, table := range objectRowTables {
+		if err := s.servingRoleFieldsOf(ctx, table, progress, &fields); err != nil {
+			return nil, err
+		}
+	}
+	return fields, nil
+}
+
+func (s *Store) servingRoleFieldsOf(ctx context.Context, table string, progress func(), fields *[]vocabmigrate.Field) error {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT canonical_id, object_kind, body, metadata FROM og_objects`)
+		`SELECT canonical_id, object_kind, body, metadata FROM `+table)
 	if err != nil {
-		return nil, fmt.Errorf("vocab fence og scan: %w", err)
+		return fmt.Errorf("vocab fence %s scan: %w", table, err)
 	}
 	defer rows.Close()
-	var fields []vocabmigrate.Field
 	for rows.Next() {
 		if progress != nil {
 			progress()
@@ -885,12 +906,12 @@ func (s *Store) servingOGRoleFields(ctx context.Context, progress func()) ([]voc
 		var id, kind string
 		var body, meta []byte
 		if err := rows.Scan(&id, &kind, &body, &meta); err != nil {
-			return nil, fmt.Errorf("vocab fence og scan: %w", err)
+			return fmt.Errorf("vocab fence %s scan: %w", table, err)
 		}
-		ogRoleFieldsFromJSON(kind, meta, "metadata.", &fields)
-		ogRoleFieldsFromJSON(kind, body, "body.", &fields)
+		ogRoleFieldsFromJSON(kind, meta, "metadata.", fields)
+		ogRoleFieldsFromJSON(kind, body, "body.", fields)
 	}
-	return fields, rows.Err()
+	return rows.Err()
 }
 
 // vocabWriteGuard refuses durable OG writes carrying declared role fields
