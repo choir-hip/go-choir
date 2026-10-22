@@ -44,6 +44,8 @@ step_def 5 mut "crash drill: operator refresh (cold boot) of the TEST computer; 
 step_def 6 mut "live rollback: the owner sets store.event_table off; the writer is off at once; stamped events stay readable"
 step_def 7 ro "the fit and the decision (manual): b_ce/b_og <= 0.5 from step 3's snapshots"
 step_def 8 ro "the paper (manual, never run by this script): the owner's conditions and readings 1 to 6 before and after"
+step_def 9 ro "engine-mutex holds: every store.event_table.* op under a second, calls counted (review finding D; take it after each workload segment)"
+step_def 10 ro "pre-rollback check: the computer's store_floor; any binary below it is refused by the guest and the updater, and by CI unless Store-Floor-Override"
 
 : "${OPT_computer:=$PROOF_PAPER}" "${OPT_label:=}" "${OPT_out:=}" "${OPT_run:=}"
 
@@ -98,6 +100,7 @@ step_2() {
 	[ "$PROOF_DRY" = 1 ] && return 0
 	info "event_table $st"
 	printf '%s' "$st" | jq -e '.host_granted and .setting and .writing' >/dev/null && pass "the writer is on at once (no restart)" || fail "the writer is not on after the owner's act: $st"
+	printf '%s' "$st" | jq -e '.store_floor == 2' >/dev/null && pass "the store floor is 2 before any stamp: no binary below deploy 1 boots here now" || fail "store_floor is not 2 after the writer switched on: $st"
 	manual "record the tape head after the write ($(guest_get /health | jq -r '.effective_release.event_head.sequence // "?"')): stamped ops start after it"
 }
 
@@ -178,6 +181,31 @@ step_8() {
 	manual "baseline: the journal record's readings 1 to 6 BEFORE anything changes: two samples 600 s apart inside one GC interval; reading 4 confirms telemetry.batch is off"
 	manual "then a nix commit adds the paper ($PROOF_PAPER) to CHOIR_EVENT_TABLE_COMPUTERS; the paper takes the grant at its next cold boot (a planned, marker-backed refresh); then the owner sets store.event_table on the paper with the paper owner's key"
 	manual "after: the same readings 1 to 6. Keep it if journal bytes per tape event (reading 3) fall at least 20% allowing for the kind mix (reading 4); otherwise the owner's setting off (the live rollback), never a binary rollback below deploy 1, and the next design is 'no telemetry in Dolt' (design 6.2)"
+}
+
+step_9() {
+	local ops
+	ft_target
+	ops=$(ft_observability | jq -c '[.engine_mutex // {} | to_entries[] | select(.key | test("store.event_table|projection|dry_run")) | {op: .key, calls: .value.calls, max_hold_ms: (.value.max_hold_ns / 1e6 | floor), total_hold_ms: (.value.hold_ns / 1e6 | floor)}]')
+	[ "$PROOF_DRY" = 1 ] && return 0
+	printf '%s' "$ops" | jq -r '.[] | "  op=\(.op) calls=\(.calls) max_hold_ms=\(.max_hold_ms) total_hold_ms=\(.total_hold_ms)"' | while IFS= read -r l; do info "$l"; done
+	printf '%s' "$ops" | jq -e '[.[] | select(.op | test("store.event_table"))] | length > 0' >/dev/null && pass "store.event_table.* ops are live" || fail "no store.event_table.* op since boot"
+	printf '%s' "$ops" | jq -e '[.[] | select(.op | test("store.event_table"))] | all(.max_hold_ms < 1000)' >/dev/null && pass "every choir_events read held the engine under a second (decode runs after the lock)" || fail "a choir_events read held the engine a second or more"
+	manual "compare with deploy 1's step 3 reading: a cursor read now takes the lock three times (table, og_objects, table); total_hold_ms per call should stay near deploy 1's"
+}
+
+step_10() {
+	local st
+	ft_target
+	st=$(ft_event_table)
+	[ "$PROOF_DRY" = 1 ] && return 0
+	info "event_table $st"
+	if printf '%s' "$st" | jq -e '(.store_floor // 0) >= 2' >/dev/null; then
+		pass "$T_COMPUTER has store_floor $(printf '%s' "$st" | jq -r .store_floor): roll back no lower than deploy 1 (epoch 2)"
+		manual "the guest refuses to open under a lower binary, the updater refuses Apply and recovery to one, and CI refuses a push that lowers storeschema.Version unless the head commit carries Store-Floor-Override; never write that trailer while any computer reports a floor above the new epoch"
+	else
+		pass "$T_COMPUTER has no store floor: deploy 1's rollback recipe applies (no op was ever stamped here)"
+	fi
 }
 
 ft_is_active() { [ "$(proof_row_json "$T_COMPUTER" | jq -r '.state // ""')" = active ]; }
