@@ -1715,7 +1715,12 @@ func (r *rlmCallReduction) commitCompleteIntent(ctx context.Context, in yaegiker
 	result := types.EngineeringAssignmentResultKind(strings.TrimSpace(in.Result))
 	verdict := types.EngineeringAssignmentVerdict(strings.TrimSpace(in.Verdict))
 	evidenceRefs := sortedUniqueStrings(in.EvidenceRefs)
-	executionRefs := trimNonEmptyStrings(in.ExecutionRefs)
+	// A repeated ref is the same evidence: one command per distinct ref, in
+	// first-cited order. The post-freeze binder collapses repeats, so a
+	// repeat here failed its count check after the freeze was durable, when
+	// a frozen capsule leaves no cell to retry in
+	// (docs/problems/frozen-candidate-lost-when-complete-cites-a-duplicate-execution-ref-2026-10-22.md).
+	executionRefs := completeExecutionRefs(in.ExecutionRefs)
 	// An implementation assignment cannot issue a verification verdict; the
 	// store requires "none". Coerce rather than reject: the verdict is
 	// meaningless for implementation, and a reduce error here poisons the

@@ -4290,9 +4290,8 @@ var freezeRefusedByOpenCandidate = regexp.MustCompile(`cannot freeze until the o
 // freeze was refused by an open candidate it names that candidate, so the
 // assignment's fate says why it could not finish (FP4 round 3, P2). It
 // reports the candidate and the state the refusal gave, and nothing about
-// what that state waits for. It keeps the run's last refusal, even if a
-// later freeze succeeded (residual: a successful freeze leaves no mark in
-// the cell output this reads).
+// what that state waits for. Only refusals after the run's last successful
+// freeze count (FP4 round 4, P3).
 func engineeringTerminalFateGuardReason(messages []json.RawMessage) string {
 	var msg struct {
 		Content json.RawMessage `json:"content"`
@@ -4317,6 +4316,18 @@ func engineeringTerminalFateGuardReason(messages []json.RawMessage) string {
 			}
 			if m := freezeRefusedByOpenCandidate.FindStringSubmatch(block.Content); m != nil {
 				refused = m
+				continue
+			}
+			// A cell whose freeze committed returns a top-level
+			// freeze_result with the operation id: refusals before it no
+			// longer describe the run.
+			var cell struct {
+				FreezeResult map[string]any `json:"freeze_result"`
+			}
+			if json.Unmarshal([]byte(block.Content), &cell) == nil {
+				if id, _ := cell.FreezeResult["operation_id"].(string); strings.TrimSpace(id) != "" {
+					refused = nil
+				}
 			}
 		}
 	}

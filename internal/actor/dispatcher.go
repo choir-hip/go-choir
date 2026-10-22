@@ -421,7 +421,7 @@ func (d *Dispatcher) activate(ctx context.Context, agentID string) {
 				CreatedAt:   time.Now().UTC(),
 			})
 			incorporated = append(incorporated, u.UpdateID)
-			log.Printf("dispatcher: poison %s/%s after %d attempts -> %s", agentID, u.UpdateID, attempts, d.opts.ErrorSink)
+			log.Printf("dispatcher: poison %s/%s after %d attempts -> %s cause=earlier deliveries ended without returning (crash or kill)", agentID, u.UpdateID, attempts, d.opts.ErrorSink)
 			continue
 		}
 		newMemory, herr := d.safeHandleUpdate(actx, agentID, u, memory)
@@ -475,7 +475,7 @@ func (d *Dispatcher) activate(ctx context.Context, agentID string) {
 					CreatedAt:   time.Now().UTC(),
 				})
 				incorporated = append(incorporated, u.UpdateID)
-				log.Printf("dispatcher: poison %s/%s after %d deferrals -> %s", agentID, u.UpdateID, n, d.opts.ErrorSink)
+				log.Printf("dispatcher: poison %s/%s after %d deferrals -> %s cause=%v", agentID, u.UpdateID, n, d.opts.ErrorSink, herr)
 				continue
 			}
 			if len(evEmitted) > 0 {
@@ -510,7 +510,7 @@ func (d *Dispatcher) activate(ctx context.Context, agentID string) {
 					CreatedAt:   time.Now().UTC(),
 				})
 				incorporated = append(incorporated, u.UpdateID)
-				log.Printf("dispatcher: poison %s/%s after %d attempts -> %s", agentID, u.UpdateID, attempts, d.opts.ErrorSink)
+				log.Printf("dispatcher: poison %s/%s after %d attempts -> %s cause=%v", agentID, u.UpdateID, attempts, d.opts.ErrorSink, herr)
 				continue
 			}
 			log.Printf("dispatcher: handle %s/%s: %v", agentID, u.UpdateID, herr)

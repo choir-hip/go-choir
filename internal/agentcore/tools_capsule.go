@@ -728,6 +728,20 @@ func trimNonEmptyStrings(values []string) []string {
 	return out
 }
 
+// completeExecutionRefs trims a Complete's execution refs and drops blanks
+// and repeats, keeping first-cited order.
+func completeExecutionRefs(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := make(map[string]bool, len(values))
+	for _, value := range trimNonEmptyStrings(values) {
+		if !seen[value] {
+			seen[value] = true
+			out = append(out, value)
+		}
+	}
+	return out
+}
+
 const freezeDistinctReceiptsRequired = "distinct build, test, and dependency/toolchain execution receipts are required"
 
 // freezeReceiptSlotsError diagnoses a Freeze whose three receipt slots name
