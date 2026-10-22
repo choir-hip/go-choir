@@ -2,9 +2,9 @@
 
 Date: 2026-10-22. Status: **documented and audited; FP0's sending stopped at about
 09:15 UTC (the monitor's at 09:18); no guest-usable route found; rotation at a
-deploy recommended, the owner's call; the repo-script fix is on lane
-`fp0-guest-token-probes` (98dd1aeac, df682772c; review round 2 85d10406b,
-5c7b30687), reviewed in bunch 44**. Found by Devin's review of the RES-10
+deploy recommended, the owner's call; the repo-script fix landed on main
+(380d4f026, 3746c522d, 8a87e92c9); a fifth sender, which the selftest
+missed, was found at 13:33 and is fixed on lane `fp0-token-scan-2`**. Found by Devin's review of the RES-10
 probe (bunch 40), which pointed at the same pattern in FP0's own scripts.
 Mutation class of this record: green. Evidence class: host commands FP0 ran on
 Node B and their scripts; no guest-side reading.
@@ -117,6 +117,82 @@ would then pass the loopback checks, and so get vmctl lifecycle acts, gateway
 credential minting, maild sending and corpusd internal writes. Rotating is
 cheap: delete both secret files and redeploy (node-b.nix:2030-2032). Rotating
 before the probes are fixed would only leak the new value.
+
+## 2026-10-22 13:33: a fifth sender, which the selftest missed
+
+**What.** `scripts/desk_cell_confinement_probe.py` on main (6c60685cc) sends
+the header file to a guest in its two host-internal legs, `--leg oom` and
+`--leg seccomp` (FP2 proof steps 4 and 6). `internal_post()` (:429-436)
+runs, on Node B over ssh: `AUTH=; test -r <header file> && AUTH='-H
+@<header file>'; curl -sS -m 170 -X POST -H 'X-Internal-Caller: true' $AUTH
+… '<guest_url>/internal/runtime/isolation-selftest?leg=<leg>'`. Here
+`guest_url` is the guest's own `http://10.201.x.2:8085` address, which
+`--guest-url` must match. The route does not need the token:
+`HandleInternalIsolationSelfTest` (internal/agentcore/isolation_selftest.go:185)
+admits `server.GuestHostCaller` and then `hostauth.Authorize`, which is
+true on a guest because guests run hostauth off. The probe's own docstring
+says so (review bunch 27 E1). The marker is not needed either.
+
+FP0 found it by reading the code at 13:33 UTC, before running either leg.
+It did not run the probe's leg; it ran the seccomp leg by hand with no
+token (200, ok true).
+
+**Why the selftest passed it.** `python3 -I scripts/selftest-guest-token`
+on main reports 191 passed, 0 failed. Three gaps let it through:
+- **One statement, three lines.** The request is a single Python statement
+  split across physical lines :434-436 by implicit string concatenation in
+  parentheses. The scanner joins only backslash continuations, so it read
+  three separate lines:
+  - :434 assigns `AUTH`, but names the header file only through `%s`, so
+    `AUTH` was never recognized as holding the token;
+  - :435 has the `curl` verb and `$AUTH`, but not the token;
+  - :436 has the token (`TOKEN_HEADER_FILE`) but no verb and no literal URL.
+- **The unresolved-destination rule needed a verb on the same line.**
+  The rule fired only on a line that carried both the token and a request
+  verb. Line :436 had no verb, so the scanner skipped it instead of failing
+  it.
+- **An uncalled function's destination was never judged.** A function
+  whose destination comes from a parameter is judged at its call sites. A
+  function with no call site in its file would never have been judged.
+
+This file was not in the round-1 scan's base (6daa8bba0). `internal_post`
+arrived in 024a8a77c (lane fp2-selftest-oom, 06:22 UTC) and reached main
+in deploy J (a84b39bac, 09:35 UTC). Before 024a8a77c, the legs went through
+the product API (`/api/runtime/isolation-selftest?leg=…` with the computer's
+credential), which carries no host token.
+
+**Exposure.** No record shows the probe's oom or seccomp leg ever ran,
+with the token or without it:
+- **The ledger** (choir-launch-first-pass-metamission-2026-10-21.ledger.md,
+  through 13:17): FP2 step 4 at 05:12 went through the Texture desk, a
+  model turn, and failed. That was before `internal_post` existed and sent
+  no host token. Neither leg appears after deploy J. The 12:35 deploy P
+  entry ran step 1 only (the confinement leg, product API), and the 13:17
+  entry plans "re-run … `?leg=seccomp` on computer-9648031f" after deploy Q.
+- **The FP2 definition**: steps 4 and 6 have no receipt (no `oom_out` or
+  `seccomp_out` evidence file), and the second batch's deploy P note says
+  to re-run the seccomp leg after the fix.
+- **docs/evidence**: holds no receipt of either leg.
+
+The repo records cannot rule out a manual run from FP0's own shell. FP0's
+statement (no run with the token; the 13:33 seccomp run by hand, without
+it) is the authority. If it holds, this sender never sent the token to a
+guest: the exposure is zero, and the miss is in the check, not on the wire.
+Nothing here changes the rotation decision (Next 1).
+
+**Fix (lane `fp0-token-scan-2`).**
+- **Test first** (yellow): the selftest fails on three fixtures:
+  - a destination it cannot resolve on a line with no verb;
+  - a request statement split across lines;
+  - the probe's own `internal_post`, copied as a regression.
+- **The scanner** (yellow):
+  - it reads a Python statement as one logical line (`tokenize`);
+  - a statement that carries the token toward a destination it cannot
+    resolve fails, treated as not loopback;
+  - a function whose destination comes from a parameter, and that no call
+    site in its file resolves, fails at that function.
+- **The probe** (yellow, scripts only): its guest legs send neither the
+  token nor the marker, and its docstring says so.
 
 ## Next
 
