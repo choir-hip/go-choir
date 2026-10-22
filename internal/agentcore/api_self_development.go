@@ -590,6 +590,9 @@ func (h *APIHandler) decideSelfDevelopment(ctx context.Context, ownerID, compute
 	if bindingErr != nil || decision.NextState != nextState {
 		return selfdev.Operation{}, http.StatusConflict, errors.New("durable decision transition binding mismatch")
 	}
+	if h.rt.selfdevDecisionBeforeTransition != nil {
+		h.rt.selfdevDecisionBeforeTransition(ctx, operation.OperationID)
+	}
 	operation, err = h.rt.selfdevOperations.Transition(ctx, computerID, operation.OperationID, selfdev.StateAwaitingApproval, nextState, func(next *selfdev.Operation) error {
 		next.DecisionActor = decision.Actor
 		next.DecisionEvent = eventDigest
