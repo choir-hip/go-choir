@@ -1,9 +1,18 @@
 package store
 
 import (
+	"bytes"
 	"database/sql"
+	"encoding/json"
 	"errors"
+	"go/ast"
+	"go/parser"
+	"go/printer"
+	"go/token"
 	"log"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
@@ -17,8 +26,11 @@ import (
 // checkpoint publication is refused until a forward deploy or a drop.
 //
 // rollbackRecipeDropEmptyChoirEvents is the boot step the revert commit adds
-// to bootstrap, after the retiredRuntimeTables loop, verbatim (the design
-// quotes it). It drops choir_events only while the table is empty. A row
+// to bootstrap, after the retiredRuntimeTables loop. The shipped copy is
+// testdata/fc-deploy1-rollback/fc_deploy1_rollback.go, which
+// scripts/rollback/fc-deploy1-rollback.sh installs;
+// TestEventTableRollbackArtifactIsTheRehearsedFunction keeps the two
+// identical (round 1c, DeepSeek finding 2). It drops choir_events only while the table is empty. A row
 // means an op was stamped: the computer is below the rollback floor, and the
 // table stays (the repair is forward, design 4.5). It compiles against the
 // pre-deploy-1 store package, which imports database/sql, errors and log.
@@ -99,5 +111,103 @@ func TestEventTableRollbackRecipe(t *testing.T) {
 	}
 	if tableCount(t, stamped, "choir_events", "") != 1 {
 		t.Fatal("the recipe dropped a table holding a stamped row")
+	}
+}
+
+const rollbackArtifact = "testdata/fc-deploy1-rollback/fc_deploy1_rollback.go"
+
+func printedFunc(t *testing.T, path, name string) string {
+	t.Helper()
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, path, nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, decl := range file.Decls {
+		if fn, ok := decl.(*ast.FuncDecl); ok && fn.Name.Name == name {
+			fn.Doc = nil
+			var b bytes.Buffer
+			if err := printer.Fprint(&b, fset, fn); err != nil {
+				t.Fatal(err)
+			}
+			return b.String()
+		}
+	}
+	t.Fatalf("%s has no func %s", path, name)
+	return ""
+}
+
+// The shipped step is the function the rehearsal runs, token for token.
+func TestEventTableRollbackArtifactIsTheRehearsedFunction(t *testing.T) {
+	shipped := printedFunc(t, rollbackArtifact, "rollbackRecipeDropEmptyChoirEvents")
+	rehearsed := printedFunc(t, "event_table_rollback_test.go", "rollbackRecipeDropEmptyChoirEvents")
+	if shipped != rehearsed {
+		t.Fatalf("the shipped rollback step differs from the rehearsed one:\nshipped:\n%s\nrehearsed:\n%s", shipped, rehearsed)
+	}
+}
+
+// The rollback script patches bootstrap on its anchor (the
+// retiredRuntimeTables loop, unchanged since 6c60685cc), the call lands
+// inside bootstrap, and the store package builds with the step in place
+// (go build -overlay, nothing written into the tree). A drift of the anchor
+// or of the step's signature fails here, not at rollback time.
+func TestEventTableRollbackArtifactBuildsInTheStorePackage(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds internal/store")
+	}
+	root := repoRoot(t)
+	dir := t.TempDir()
+	patched := filepath.Join(dir, "store.go")
+	script := exec.Command(filepath.Join(root, "scripts/rollback/fc-deploy1-rollback.sh"), "patch-bootstrap", "store.go", patched)
+	if out, err := script.CombinedOutput(); err != nil {
+		t.Fatalf("patch-bootstrap: %v\n%s", err, out)
+	}
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, patched, nil, 0)
+	if err != nil {
+		t.Fatalf("patched store.go does not parse: %v", err)
+	}
+	calls := 0
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok {
+			continue
+		}
+		ast.Inspect(fn, func(n ast.Node) bool {
+			if id, ok := n.(*ast.Ident); ok && id.Name == "rollbackRecipeDropEmptyChoirEvents" {
+				if fn.Name.Name != "bootstrap" {
+					t.Errorf("the step landed in %s, not bootstrap", fn.Name.Name)
+				}
+				calls++
+			}
+			return true
+		})
+	}
+	if calls != 1 {
+		t.Fatalf("the patch placed %d calls of the step", calls)
+	}
+	artifact, err := filepath.Abs(rollbackArtifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	here, err := filepath.Abs(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	overlay, err := json.Marshal(map[string]map[string]string{"Replace": {
+		filepath.Join(here, "store.go"):               patched,
+		filepath.Join(here, "fc_deploy1_rollback.go"): artifact,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	overlayPath := filepath.Join(dir, "overlay.json")
+	if err := os.WriteFile(overlayPath, overlay, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	build := exec.Command("go", "build", "-overlay="+overlayPath, "./internal/store")
+	build.Dir = root
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("internal/store does not build with the rollback step: %v\n%s", err, out)
 	}
 }
