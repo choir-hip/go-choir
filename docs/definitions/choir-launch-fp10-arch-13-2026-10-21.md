@@ -106,20 +106,25 @@ boundaries:
 now:
   status: checkpoint_incomplete
   slice: >-
-    Built and tested on the lane; nothing deployed. The red commit 9b8cc35f8
+    Built and tested on the lane; nothing deployed. The red commit d1ec806e2 (was 9b8cc35f8)
     goes to FP0's bunch panel on its frozen diff, then lands alone (or with
     green) and FP0 runs the deployed acceptance above on a test computer,
     never the paper. Local evidence: internal/store full package green
     (374 s); the new store tests 3x under -race; the agentcore seam tests and
     every agentcore test file that touches settings or observability green
     under -race.
-  source_ref: see git log (review fix after 9b8cc35f8)
+  source_ref: >-
+    lane/fp10-arch13-on-main, rebased onto main 5efe46672 on 2026-10-22
+    (old -> new): 3939454fe -> 64fded347, 4372cbbdc -> c8a1d5c00,
+    9b8cc35f8 -> d1ec806e2, 6d059b885 -> f8966523d, 3bab3b8d1 -> 62dd84558,
+    ced58e401 -> 31c6b2e5b, 410c6d35d -> f298f7484, 9196f87d9 -> 08bb5e4d6.
+    The red commit FP0 reviews is now d1ec806e2, the review fix f298f7484.
   deploy_identity: unknown to this lane
   candidate:
     id: fp10-arch13-debounced-checkpoint
     state: ready
-    ref: lane/fp10-arch13-fanin
-    base: e4b792b7f
+    ref: lane/fp10-arch13-on-main
+    base: 5efe46672
     digest: none
     scope:
       - internal/store/checkpoint_cadence.go
@@ -132,6 +137,27 @@ now:
       - internal/agentcore/computer_settings.go
       - internal/agentcore/runtime.go
       - internal/agentcore/telemetry_batching_test.go
+  rebase:
+    - >-
+      2026-10-22 onto main 5efe46672. One conflict, Store.Close in
+      internal/store/store.go: main added CancelDerivedColumnMigration, this
+      lane closeCheckpoint. Both kept, cancel first: the cancel only stops
+      the migration before its next step, so no migration step starts after
+      the closing checkpoint commit (which would leave its writes
+      uncommitted and race that commit); the checkpoint commit writes
+      through s.db, so it runs before the pools close. Reopen needed no
+      change (main's cancel stays first, the lane's cadence reopen stays
+      last). Re-run after rebase (GOMAXPROCS=2 GOFLAGS=-p=2, -race -count=1,
+      a shared loaded VM): go vet internal/store and internal/agentcore
+      clean; agentcore -run 'Checkpoint|ComputerSetting|Observability|
+      TelemetryBatching|BootConfigures|Rematerialize' ok (141 s). The whole
+      internal/store package in one run hit the 10-minute cap under load
+      with no failure or race before it, so it was run as four -run groups
+      covering all 451 top-level tests: three ok first time; group two
+      (109 tests, alphabetical second quarter) panicked once, details lost
+      to an output filter, then passed twice in full (294 s). Residual: an
+      unidentified intermittent panic in that group; not shown to come from
+      this lane's code.
   review_fixes:
     - >-
       2026-10-22, FP0 first-pass reviewer (blocking): Reopen after Close left
