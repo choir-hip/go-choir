@@ -101,30 +101,69 @@ step_3() {
 }
 
 step_4() {
-	local dirs plan cands bad d
+	local out rc dirs plan planrc cands bad d n kib seen planned
 	case "$OPT_state_dir" in *"'"*) die 2 "refusing a state dir with a single quote" ;; esac
 	# Every vm-* or candidate-* dir holding a quarantine, a staging image or
-	# a recovery journal, with its size. Read-only (ls and du).
-	dirs=$(node_b_q "cd '$OPT_state_dir' 2>/dev/null || exit 0
+	# a recovery journal, with its size. Read-only (ls and du). The first
+	# line counts every vm-* and candidate-* dir; an unreadable state dir
+	# exits 3, so a wrong --state-dir fails instead of reading as "none".
+	out=$(node_b_q "cd '$OPT_state_dir' 2>/dev/null || exit 3
+seen=0
+for d in vm-* candidate-*; do [ -d \"\$d\" ] && seen=\$((seen + 1)); done
+echo \"state-dir dirs=\$seen\"
 for d in vm-* candidate-*; do
 	[ -d \"\$d\" ] || continue
 	n=\$(ls -1 \"\$d\" 2>/dev/null | grep -cE '^(data\\.img\\.quarantine-|data\\.img\\.staging-|rec-.*\\.journal\$)')
 	[ \"\$n\" -gt 0 ] || continue
 	printf '%s %s %s\\n' \"\$d\" \"\$n\" \"\$(du -sk \"\$d\" 2>/dev/null | cut -f1)\"
 done")
+	rc=$?
+	plan=$(vmctl_get /internal/vmctl/retention-plan)
+	planrc=$?
+	if [ "$PROOF_DRY" = 1 ]; then
+		info "(dry-run) would check: the state dir and the active plan were read, the plan's shape, and that no dir holding recovery state is a candidate"
+		return 0
+	fi
+	seen=$(printf '%s\n' "$out" | sed -n '1s/^state-dir dirs=\([0-9][0-9]*\)$/\1/p')
+	if [ "$rc" != 0 ] || [ -z "$seen" ]; then
+		fail "the state dir $OPT_state_dir was not read on Node B (exit $rc); nothing compared"
+		return 0
+	fi
+	dirs=$(printf '%s\n' "$out" | sed 1d)
 	printf '%s\n' "$dirs" | while read -r d n kib; do
 		[ -n "$d" ] && info "recovery-dir $d artifacts=$n kib=$kib"
 	done
-	plan=$(vmctl_get /internal/vmctl/retention-plan)
-	info "active plan decision=$(printf '%s' "$plan" | jq -r '.decision // ""' 2>/dev/null) candidates=$(printf '%s' "$plan" | jq -r '[.candidates[]?] | length' 2>/dev/null) kept_state_dirs=$(printf '%s' "$plan" | jq -r '.inventory.kept_state_dirs // 0' 2>/dev/null)"
-	printf '%s' "$plan" | jq -r '.kept_state_dirs[]? | "kept \(.vm_id) rule=\(.rule) gib=\((.size_bytes // 0) / 1073741824 * 10 | floor / 10) reasons=\((.reasons // []) | join(",")) release=\(.release)"' 2>/dev/null |
+	if [ "$planrc" != 0 ] || [ -z "$plan" ]; then
+		fail "the active plan was not read (exit $planrc, ${#plan} bytes); nothing compared"
+		return 0
+	fi
+	if ! printf '%s' "$plan" | jq -e 'type == "object" and (.decision | type) == "string" and .decision != "" and (.inventory | type) == "object" and (.config | type) == "object" and ((.candidates // []) | type) == "array" and ((.kept_state_dirs // []) | type) == "array"' >/dev/null 2>&1; then
+		fail "the active plan does not parse as a retention plan (${#plan} bytes: $(printf '%s' "$plan" | head -c 120 | tr -d '\n')); nothing compared"
+		return 0
+	fi
+	info "active plan decision=$(printf '%s' "$plan" | jq -r '.decision') candidates=$(printf '%s' "$plan" | jq -r '[.candidates[]?] | length') state_dirs=$(printf '%s' "$plan" | jq -r '.inventory.state_dirs // 0') kept_state_dirs=$(printf '%s' "$plan" | jq -r '.inventory.kept_state_dirs // 0') state_dir_seen=$seen"
+	# Sorted by vm_id so the before and after lines diff line for line.
+	printf '%s' "$plan" | jq -r '.kept_state_dirs // [] | sort_by(.vm_id)[] | "kept \(.vm_id) rule=\(.rule) gib=\((.size_bytes // 0) / 1073741824 * 10 | floor / 10) reasons=\((.reasons // []) | join(",")) release=\(.release)"' |
 		while IFS= read -r l; do info "$l"; done
-	cands=$(printf '%s' "$plan" | jq -r '.candidates[]?.vm_id' 2>/dev/null)
-	bad=""
-	for d in $(printf '%s\n' "$dirs" | awk '{print $1}'); do
-		if printf '%s\n' "$cands" | grep -qx "$d"; then bad="$bad $d"; fi
-	done
-	[ "$PROOF_DRY" = 1 ] || check "no dir holding recovery state is a deletion candidate${bad:+ (candidates:$bad)}" test -z "$bad"
+	planned=$(printf '%s' "$plan" | jq -r '.inventory.state_dirs // 0')
+	if [ "$seen" = 0 ] && [ "${planned:-0}" != 0 ]; then
+		fail "the state dir $OPT_state_dir holds no vm-* or candidate-* dir, but the plan counts $planned; wrong --state-dir? nothing compared"
+		return 0
+	fi
+	cands=$(printf '%s' "$plan" | jq -r '.candidates // [] | .[].vm_id // empty')
+	if [ -z "$dirs" ]; then
+		manual "nothing to check: no dir holds recovery state in $OPT_state_dir ($seen dirs read); this is not a pass of the no-candidate check"
+		return 0
+	fi
+	if [ -z "$cands" ]; then
+		manual "nothing to check: the active plan has no candidates; this is not a pass of the no-candidate check"
+	else
+		bad=""
+		for d in $(printf '%s\n' "$dirs" | awk '{print $1}'); do
+			if printf '%s\n' "$cands" | grep -qx "$d"; then bad="$bad $d"; fi
+		done
+		check "no dir holding recovery state is a deletion candidate${bad:+ (candidates:$bad)}" test -z "$bad"
+	fi
 	manual "run this step before the deploy and after it, with --evidence; every recovery-dir line before must still be there after (the 10-07 candidate-fleet quarantines included), and after the deploy each ownerless one must appear as a kept line with rule orphan_state_dir"
 }
 
