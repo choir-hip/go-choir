@@ -398,3 +398,37 @@ recorded as residuals:
 Residuals after round 3: as after round 2 (unasked live capsules; the
 seconds between the final pass and the reboot; no live proof), plus
 the two above.
+
+## Findings: DeepSeek review of round 2 (bunch 118), 2026-10-22
+
+DeepSeek review of 6b4e1b76e, received after the round-3 fix landed
+(`_runs/bunch118/out/omp-deepseek-v41-flash.out`). Recorded before any
+fix. Class: red.
+
+D1 (medium, a regression of the F4 fix). **Clearing deletes the guest's
+own apply marker.** `clear_markers` DELETEs every computer POSTed to,
+including ones whose answer proves the host wrote nothing (a readable
+409, 400, 403, 404, 405: the handler refuses before
+`writeHostPlannedRestartMarker`). The marker path is shared:
+`markPlannedRestart` (`internal/agentcore/planned_restart.go`) writes the
+same `<store>.planned-restart` file for the guest's own self-development
+apply (`self_development_materializer.go`), and the DELETE handler clears
+it unconditionally. So when the script aborts on `unsafe`, the very case
+in which an apply is running, the clear can remove the apply's marker:
+its restart becomes a crash boot and spends one of the apply's durable
+attempts (`guestApplyAttemptLimit`).
+
+D2 = N1 (the unasked check is a single snapshot), already fixed in
+round 3 (e7540b0a6).
+
+D3 (low). A computer whose marker the final pass did not renew is logged
+as "<outcome> in the final pass (was written) (no flag accepts it)"; the
+reason it stops the reboot (a marker written earlier was not renewed;
+rerun) is not said.
+
+D4 (low). The `--allow-crash-unverified` help does not say that a
+computer that wrote earlier and then cannot answer in the final pass
+aborts anyway.
+
+D5 (nit). `marks.marked_at` is set even when the final pass aborts and
+the markers are cleared.
