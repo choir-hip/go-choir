@@ -43,7 +43,7 @@ func serveDebugPprof(w http.ResponseWriter, r *http.Request) {
 	switch name {
 	case "":
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		fmt.Fprintln(w, "profiles: profile?seconds=N (cpu), trace?seconds=N, cmdline, symbol, procmem (per-process memory; ?pagecache=1 joins page-cache residency), pagecache (page-cache residency by filesystem)")
+		fmt.Fprintln(w, "profiles: profile?seconds=N (cpu), trace?seconds=N, cmdline, symbol, procmem (per-process memory and memory_return: DAMON reclaim, page reporting, balloon; ?pagecache=1 joins page-cache residency), pagecache (page-cache residency by filesystem)")
 		for _, p := range rpprof.Profiles() {
 			fmt.Fprintf(w, "%s (%d)\n", p.Name(), p.Count())
 		}
