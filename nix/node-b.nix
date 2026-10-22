@@ -2154,24 +2154,28 @@ in
       Restart = "on-failure";
       RestartSec = 3;
       TimeoutStopSec = "11min";
-      # B7 review (bunch 88, F1; bunch 109; bunch 116): a backstop under the
-      # in_flight body bound and the image decode bound, never a bound
-      # itself. No measurement of the gateway's normal RSS is in the repo.
-      # The arithmetic: bodies in flight are at most 1 GiB, about 3 GiB with
-      # the JSON decoder's buffer and the decoded copy; images are decoded
-      # at most 4 at once process-wide (provider.MaxConcurrentImageDecodes,
-      # at most 2 of them for one computer), each up to 50 Mpx: 400 MB
-      # decoded (16-bit PNG) + 200 MB RGBA copy + its 20 MiB input, which is
-      # decoded from base64 inside the slot (bunch 116), about 620 MB, so
-      # 4 x 620 MB = about 2.3 GiB; with about 0.5 GiB for the runtime and
-      # everything else, about 5.8 GiB, under GOMEMLIMIT 6GiB and 2 GiB
-      # under MemoryMax. Not counted (bunch 116 F7, a named residual in
-      # docs/problems/gateway-request-bodies-unbounded-2026-10-22.md): each
-      # call's downscaled images (up to 20 x 6.7 MiB of base64) and their
-      # copy in the upstream request live for the whole call, up to about
-      # 0.27 GiB a call, bounded by the scheduler's 24 calls when it is on
-      # and only by in_flight when it is off. Without the decode
-      # bound, 24 calls (scheduler on) or 60 (off) decoding at once were
+      # B7 review (bunch 88, F1; bunch 109; bunch 116; FP0 round 5): a
+      # backstop under the in_flight body bound, the image decode slots and
+      # the downscaled output budget, never a bound itself. No measurement
+      # of the gateway's normal RSS is in the repo. The unit's worst case,
+      # every term at its bound at once (internal/gateway TestBodyCapsUnit-
+      # MemoryArithmeticFitsUnderGOMEMLIMIT computes it from the constants):
+      #   bodies in flight, at most 1 GiB, three copies each: the JSON
+      #   decoder's buffer (up to twice the body, during the decode only),
+      #   or the decoded request and its upstream body (during the call);
+      #   a body is never in both phases, so 3 x 1 GiB = 3.00 GiB;
+      #   image decodes, at most 3 at once (provider.MaxConcurrentImageDecodes,
+      #   1 per computer), each up to 50 Mpx: 400 MB decoded (16-bit PNG)
+      #   + 200 MB RGBA copy + its 20 MiB input, decoded from base64 inside
+      #   the slot, about 620 MB, so 3 x 620 MB = 1.73 GiB;
+      #   downscaled output, at most 192 MiB of base64 held by all calls
+      #   (provider.MaxImageOutputBytes, 96 MiB per computer), three copies
+      #   a byte: the string, the upstream body, the encoder's growth by
+      #   doubling: 0.56 GiB;
+      #   the runtime and everything else, about 0.5 GiB;
+      # about 5.80 GiB, under GOMEMLIMIT 6GiB and 1.65 GiB under MemoryMax.
+      # Four decode slots left no room for the output (6.38 GiB). Without
+      # the decode bound, 24 calls (scheduler on) or 60 (off) decoding at once were
       # 7 to 18 GB. MemoryMax without MemoryHigh, as the squash unit: throttling
       # would stall every tenant's calls; GOMEMLIMIT (below) makes the Go
       # collector work harder before the kill. Tighten after /health and
