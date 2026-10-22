@@ -45,6 +45,14 @@ echo "$rules" | grep -Eq '\(root\) NOPASSWD: /nix/store/[^ ]+-go-choir-ci-deploy
   pass "sudo: one NOPASSWD rule, as root, to the gate" || failc "sudo rule: $rules"
 [ "$(echo "$rules" | grep -c 'NOPASSWD')" -eq 1 ] || failc "sudo: more than one NOPASSWD rule"
 
+if [ -e /var/lib/go-choir/ci-gate-floor ]; then
+  pass "floor file present: $(cat /var/lib/go-choir/ci-gate-floor)"
+elif grep -Eqx '[0-9a-f]{40}' /var/lib/go-choir/ci-gate-floor-bootstrap 2>/dev/null; then
+  pass "no floor file yet; bootstrap marker present (before the first gate deploy)"
+else
+  failc "neither a floor file nor a bootstrap marker: the gate refuses everything"
+fi
+
 as_deploy() {
   runuser -u choir-deploy -- env -i SSH_ORIGINAL_COMMAND="$1" "$forced"
 }
