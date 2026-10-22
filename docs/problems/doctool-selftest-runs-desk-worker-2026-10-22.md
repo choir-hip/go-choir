@@ -1,6 +1,8 @@
 # The isolation self-test runs the document-tool probe (and the seccomp leg) with the desk-worker binary, which serves only desk-session (2026-10-22)
 
-Status: open. Found by FP2 second batch staging step 1 on deploy P.
+Status: fixed on lane/fp2-selftest-binary (test c6f76c31c, fix 7dad68b50),
+not yet deployed; staging step 1 and the seccomp leg re-run after it lands.
+Found by FP2 second batch staging step 1 on deploy P.
 Mutation class of the eventual fix: orange (a diagnostic self-test path; no
 product behavior).
 

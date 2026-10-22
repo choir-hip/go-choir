@@ -252,6 +252,12 @@ now:
     review round 2: outcome". Rebased onto a84b39bac (861e765a3). Round 3
     (DeepSeek, bunch 43) F1-F5 fixed or recorded ("Second batch, review round
     3: outcome"); Devin's review is still running.
+  batch2_deploy_p: >-
+    2026-10-22: batch 2 live in deploy P (966d3f519). Staging step 1 failed: the
+    self-test's document-tool probe ran the desk-worker binary
+    (docs/problems/doctool-selftest-runs-desk-worker-2026-10-22.md); fixed on
+    lane/fp2-selftest-binary with the seccomp leg, not deployed. FP0: land it,
+    then re-run step 1 and the seccomp leg before reading step 2.
   slice: >-
     hand-off to FP0: two candidates. The first batch is lane/b3-desk-boundary
     (under review, unchanged). The second batch is lane/b3-desk-boundary-2 on top
@@ -804,6 +810,18 @@ unevaluated.
 On a disposable test computer after the deploy that carries this batch,
 never first on the paper. These steps come after the first batch's steps 1
 to 5.
+
+**2026-10-22, deploy P (966d3f519): step 1 failed on computer-9648031f.**
+The self-test's document-tool probe ran the dedicated desk-worker binary
+(RES-17), which serves only desk-session, as the sandbox helper and probe
+tool, so `document_tool` had no report; the rest of the self-test
+answered. The capsule seccomp leg has the same shape by code reading.
+Neither affects production extraction. Record:
+`docs/problems/doctool-selftest-runs-desk-worker-2026-10-22.md`; fix on
+lane/fp2-selftest-binary (both legs run the daemon's own executable).
+Until that fix is deployed, step 1's `document_tool` judgement cannot
+pass and "required is ready" (step 2) cannot be read. Re-run step 1, and
+the seccomp leg, after the fix lands.
 
 1. `python3 scripts/desk_cell_confinement_probe.py --cred <the test
    computer's 0600 credential file> --out
