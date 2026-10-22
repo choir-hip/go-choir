@@ -245,3 +245,55 @@ nix 95240b65c (red).
   scheduler's; kept. (c) The wording "every decoded body goes through one
   helper" excludes host fetch and the relay, which the station text
   already lists as keeping their own caps.
+
+## Review findings, bunch 109 (2026-10-22, candidate 2e9ebc5eb)
+
+Sonnet 5.5, DeepSeek v4.1 flash and Gemini 3.8 accepted the bunch 88
+repair. FP0 checked the follow-ups below against the code; they are
+recorded here before any fix.
+
+- **F-A (Sonnet), medium-high: one guest can fill `in_flight` for
+  nothing.** `decodeBodyHeld` reserves a body's declared `Content-Length`
+  (or the route's cap when chunked) before a byte arrives, and the budget
+  is shared by every caller. With the scheduler off and the model routes in
+  observe, as at the first deploy, two POSTs declaring 576 MiB and sending
+  nothing fill the 1 GiB budget; every other tenant's body, the paper's
+  included, waits behind them oldest first and is answered 429 at its 60 s
+  deadline. The guest repeats every minute; the rate limiter counts
+  requests, not bytes held. Before the budget the guest had to send the
+  bytes; now holding the gateway costs it no bandwidth. This is the threat
+  this record names, and no test covers it.
+- **F1 (DeepSeek), high for the claim that one guest cannot take the
+  gateway down: decoded pixels are not in `in_flight`.**
+  `provider.NormalizeImage` (`internal/provider/media.go`) decodes an image
+  of up to `MaxImagePixels` (50 Mpx) and `downscale` then copies it whole
+  into a full-size RGBA image before averaging. One 50 Mpx JPEG is about
+  75-150 MB decoded plus 200 MB copied; a 16-bit PNG is 400 MB decoded plus
+  the copy. Nothing bounds how many run at once: with the scheduler off the
+  60-per-minute window admits 60 single-image calls (about 400 MiB of
+  bodies, well inside `in_flight`), about 18 GB of live pixels, over the
+  unit's `MemoryMax=8G`; with the scheduler on, 24 calls at 300-400 MB are
+  7-10 GB. An OOM kill takes every tenant's calls down, and the nix
+  comment's arithmetic ("plus one decoded image per call, about 200 MB")
+  leaves out both the concurrency and the second full-size buffer.
+- **F-B (Sonnet) and Gemini F1, low: a panic in the decode leaks the
+  reservation.** If `dec.Decode` (or a reader) panics, `decodeBodyHeld`
+  has not returned its release, so the handler's `defer releaseBody()` is
+  never registered; net/http recovers the panic and the bytes stay counted
+  for the life of the process. `in_flight_bytes` drifts up until every
+  body is 429.
+- **F-C (Sonnet), low: the budget wait and the read share one window.** A
+  legitimate 150 MiB body that waited 55 s for room has 5 s left to
+  arrive and is cut with a 503 (transient, retried).
+- **F-D (Sonnet), info:** the budget counts wire bytes, not heap; image
+  decode is outside it (the same root as DeepSeek F1).
+- **F2 (DeepSeek), medium:** the 160 MiB enforce limit covers 20 images
+  already at the 5 MiB downscale bound, not 20 guest originals of up to
+  20 MiB (`MaxImageInputBytes`), which are a non-transient 413 in enforce.
+- **F3 (DeepSeek), low:** the `SetReadDeadline` error is ignored; a future
+  `ResponseWriter` wrapper without `Unwrap` would silently bring back the
+  bunch 88 F2 failure (a queued call's read hits the server's deadline).
+- **F4 (DeepSeek), low:** strict FIFO makes a small body that would fit
+  wait behind a large waiter.
+- **F5 (DeepSeek), low:** `in_flight` binds in body caps observe mode, so
+  observe is not a pure pass-through; the station text should say so.
