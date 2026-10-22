@@ -473,3 +473,36 @@ func TestEnsureToolCgroupRoot(t *testing.T) {
 		t.Fatalf("aggregate memory.max %q", raw)
 	}
 }
+
+// Review F1: a kernel without the swap controller has no memory.swap.max and
+// no swap to bound; the tool's cgroup is still made with its memory.max. Any
+// other write failure (here memory.max) still fails closed.
+func TestToolCgroupToleratesNoSwapController(t *testing.T) {
+	prev := writeToolCgroupFile
+	t.Cleanup(func() { writeToolCgroupFile = prev })
+	fail := map[string]error{"memory.swap.max": &os.PathError{Op: "open", Err: syscall.ENOENT}}
+	writeToolCgroupFile = func(dir, name, value string) error {
+		if err := fail[name]; err != nil {
+			return err
+		}
+		return prev(dir, name, value)
+	}
+	root := t.TempDir()
+	cg, err := newToolCgroup(root)
+	if err != nil {
+		t.Fatalf("no swap controller must not fail the tool cgroup: %v", err)
+	}
+	if raw, _ := os.ReadFile(filepath.Join(cg.path, "memory.max")); strings.TrimSpace(string(raw)) != strconv.Itoa(toolMemoryMax) {
+		t.Fatalf("memory.max %q", raw)
+	}
+	_ = cg.dir.Close()
+
+	fail = map[string]error{"memory.max": &os.PathError{Op: "open", Err: syscall.ENOENT}}
+	if _, err := newToolCgroup(t.TempDir()); err == nil {
+		t.Fatal("a missing memory.max made a tool cgroup")
+	}
+	fail = map[string]error{"memory.swap.max": &os.PathError{Op: "open", Err: syscall.EACCES}}
+	if _, err := newToolCgroup(t.TempDir()); err == nil {
+		t.Fatal("a memory.swap.max write refused for another reason made a tool cgroup")
+	}
+}

@@ -223,3 +223,29 @@ func TestRefusedBoostWithAStuckCeilingIsCounted(t *testing.T) {
 		t.Fatalf("ending the refused job returned the stuck raise: used %d MiB", e.vmMemoryUsed>>20)
 	}
 }
+
+// Review F3: two stuck attempts for one job id are both counted, and the
+// capsule's destroy returns both.
+func TestTwoStuckBoostsForOneJobAreBothReturned(t *testing.T) {
+	cg := &failingRestoreCgroup{fakeCgroupMemoryHigh: fakeCgroupMemoryHigh{fakeCgroupMemory: fakeCgroupMemory{current: 512 * mib, max: 4096 * mib}, high: 2048 * mib}}
+	caps := &Capsule{ID: "capsule-stuck-twice", State: StateActive, MemoryMax: 4096 * mib, MemoryHigh: 2048 * mib, memoryAdmitted: 2048 * mib}
+	e := &Executor{
+		capsules:        map[string]*Capsule{caps.ID: caps},
+		vmMemoryTotal:   8192 * mib,
+		vmMemoryUsed:    2048 * mib,
+		cgroupMemoryFor: func(*Capsule) cgroupMemory { return cg },
+	}
+	for i := 0; i < 2; i++ {
+		cg.maxCalls = 0 // each attempt's raise works and its restore fails
+		if err := e.boostJobMemory(caps.ID, "job-a", 1024*mib, nil); err == nil {
+			t.Fatalf("attempt %d: the boost passed", i+1)
+		}
+	}
+	if e.vmMemoryUsed != 4096*mib || boostedBytesLocked(caps) != 2048*mib {
+		t.Fatalf("two stuck raises: used %d MiB, boosted %d MiB", e.vmMemoryUsed>>20, boostedBytesLocked(caps)>>20)
+	}
+	e.returnMemoryBoostsLocked(caps)
+	if e.vmMemoryUsed != 2048*mib {
+		t.Fatalf("after destroy's return: used %d MiB, want the capsule's own 2048", e.vmMemoryUsed>>20)
+	}
+}
