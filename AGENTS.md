@@ -235,6 +235,17 @@ to bigger discoveries"). An unexplained number (a wait, a size, a rate) gets
 a read-only investigation and a record when it is seen, not when it hurts.
 Whether and when to act on the finding is a separate decision.
 
+**Resource use ahead of short-term uptime** (owner, 2026-10-22: "Anything
+which improves resource utilization on a forward and ongoing basis should be
+prioritized over stability, availability, or uptime in the short term"). A
+change that durably cuts disk, memory, CPU or write volume may take a
+planned restart, a cold boot or a slow window on any computer, the paper
+included, as long as it has its proof and its rollback.
+
+**Agent models** (owner, 2026-10-22): Sonnet subagents for following a plan,
+optimizing a metric, and investigations; Opus for design and open-ended
+work.
+
 **Escalate on dead ends.** If you've been working on the same problem for 3+
 iterations or 2+ days without convergence, stop patching. Write a structural
 assessment — dependency graph, whether a substrate-level fix would eliminate the
