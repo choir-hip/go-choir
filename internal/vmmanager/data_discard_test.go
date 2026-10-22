@@ -113,7 +113,7 @@ func TestLoadConfigFromEnv_DataDiscardRespectsVersionGate(t *testing.T) {
 	}{
 		{"flag unset, new binary", "", "Firecracker v1.17.0", false},
 		{"flag off, new binary", "0", "Firecracker v1.17.0", false},
-		{"flag on, pinned 1.16.1 refuses", "1", "Firecracker v1.16.1", false},
+		{"flag on, pinned 1.16.2 refuses", "1", "Firecracker v1.16.2", false},
 		{"flag on, new binary", "on", "Firecracker v1.17.0", true},
 		{"flag on, newer binary", "true", "Firecracker v1.18.1", true},
 	}
