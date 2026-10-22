@@ -54,13 +54,17 @@ type Executor struct {
 	artifactDir       string
 	lowerDir          string
 	sourceDir         string
-	brokerPath        string
-	brokerDigest      [sha256.Size]byte
-	publicKey         ed25519.PublicKey
-	privateKey        ed25519.PrivateKey
-	initErr           error
-	vmMemoryTotal     int64
-	vmMemoryUsed      int64
+	// commitDigests caches the canonical digest of sourceDir's commits this
+	// process has read in full (commitDigest); see commitDigestKey.
+	commitDigestMu sync.Mutex
+	commitDigests  map[commitDigestKey]string
+	brokerPath     string
+	brokerDigest   [sha256.Size]byte
+	publicKey      ed25519.PublicKey
+	privateKey     ed25519.PrivateKey
+	initErr        error
+	vmMemoryTotal  int64
+	vmMemoryUsed   int64
 	// memoryTotalFn reads the capsule budget live (SetLiveMemoryBudget);
 	// nil keeps vmMemoryTotal. cgroupMemoryFor replaces a capsule's cgroup
 	// memory controls in tests (job_memory_linux.go).
@@ -324,7 +328,7 @@ func (e *Executor) PreflightSourceSnapshot(ctx context.Context, candidateRef str
 		if decodeErr != nil || (len(decodedCommit) != 20 && len(decodedCommit) != 32) {
 			return SourcePreflight{}, fmt.Errorf("capsule source artifact commit is invalid")
 		}
-		actual, digestErr := canonicalImmutableCommitDigest(ctx, e.sourceDir, commit)
+		actual, digestErr := e.commitDigest(ctx, commit)
 		if digestErr != nil || actual != digest {
 			return SourcePreflight{}, fmt.Errorf("capsule source artifact is unavailable or corrupt")
 		}
@@ -345,11 +349,59 @@ func (e *Executor) PreflightSourceSnapshot(ctx context.Context, candidateRef str
 	if err != nil {
 		return SourcePreflight{}, err
 	}
-	digest, err := canonicalImmutableCommitDigest(ctx, e.sourceDir, commit)
+	digest, err := e.commitDigest(ctx, commit)
 	if err != nil {
 		return SourcePreflight{}, err
 	}
 	return SourcePreflight{SubjectDigest: digest, ArtifactRef: "capsule-source-git:" + commit + ":sha256:" + digest}, nil
+}
+
+// canonicalTreeDigestVersion names the algorithm of
+// canonicalImmutableCommitDigest and digestCanonicalSubjectTree. Change it
+// with any change to what they hash, so no cached digest outlives its
+// algorithm.
+const canonicalTreeDigestVersion = 1
+
+// commitDigestCacheLimit bounds commitDigests: a process sees one source
+// commit per deploy plus the few its assignments pin.
+const commitDigestCacheLimit = 64
+
+// commitDigestKey keys a commit's cached canonical digest. A commit id names
+// one immutable tree, and an Executor reads one sourceDir, so the commit and
+// the algorithm version are the whole key.
+type commitDigestKey struct {
+	Version int
+	Commit  string
+}
+
+// commitDigest is canonicalImmutableCommitDigest of e.sourceDir at commit,
+// computed once per process (option 2 of
+// docs/problems/capsule-coldstart-18s-2026-10-22.md): the cast's preflight
+// proves it, and the admission preflight of the same commit reuses it.
+// Failures are never cached. What this gives up: a resume preflight no
+// longer notices the object store changing after the first proof. The copy
+// at spawn still reads every blob from the store, checks each against its
+// object id, and refuses a tree whose digest is not the binding's, so a
+// changed store still stops the spawn, one step later.
+func (e *Executor) commitDigest(ctx context.Context, commit string) (string, error) {
+	key := commitDigestKey{Version: canonicalTreeDigestVersion, Commit: commit}
+	e.commitDigestMu.Lock()
+	digest, ok := e.commitDigests[key]
+	e.commitDigestMu.Unlock()
+	if ok {
+		return digest, nil
+	}
+	digest, err := canonicalImmutableCommitDigest(ctx, e.sourceDir, commit)
+	if err != nil {
+		return "", err
+	}
+	e.commitDigestMu.Lock()
+	defer e.commitDigestMu.Unlock()
+	if e.commitDigests == nil || len(e.commitDigests) >= commitDigestCacheLimit {
+		e.commitDigests = make(map[commitDigestKey]string)
+	}
+	e.commitDigests[key] = digest
+	return digest, nil
 }
 
 // Spawn creates an isolated capsule with a private user/PID/mount/network/UTS/
@@ -511,7 +563,9 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 		if decodeErr != nil || (len(decodedCommit) != 20 && len(decodedCommit) != 32) {
 			return nil, fmt.Errorf("capsule spawn preflight git commit is invalid")
 		}
-		sourceDigest, err = copyImmutableCommitTreeTimed(ctx, e.sourceDir, commit, sourceTarget, timer)
+		// The copy is checked against the digest the binding pins, not
+		// against a second read of the commit.
+		sourceDigest, err = copyImmutableCommitTreeTimed(ctx, e.sourceDir, commit, sourceTarget, source.SubjectDigest, timer)
 	}
 	if err != nil || sourceDigest != source.SubjectDigest {
 		return nil, fmt.Errorf("capsule source changed after durable preflight")

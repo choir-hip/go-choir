@@ -335,10 +335,13 @@ func TestInventoryRefusesNonBlobEntry(t *testing.T) {
 	source, _ := edgeCaseRepo(t)
 	runSourceGit(t, source, "update-index", "--add", "--cacheinfo", "160000,"+strings.Repeat("ab", 20)+",submodule")
 	runSourceGit(t, source, "commit", "-m", "gitlink")
-	commit, err := immutableGitCommitIdentity(context.Background(), source)
+	// The gitlink has no checkout, so the worktree reads as dirty: name the
+	// commit directly, as a pinned binding does.
+	raw, err := exec.Command("git", "-C", source, "rev-parse", "HEAD").Output()
 	if err != nil {
 		t.Fatal(err)
 	}
+	commit := strings.TrimSpace(string(raw))
 	if digest, err := canonicalImmutableCommitDigest(context.Background(), source, commit); err == nil {
 		t.Fatalf("digest %s over a tree with a gitlink", digest)
 	}
@@ -582,8 +585,8 @@ func TestSourcePassTimingsBeforeAfter(t *testing.T) {
 	e := &Executor{sourceDir: source}
 	var digest string
 	measure("after: commit digest, one batch (cast preflight, uncached)", func() error {
-		got, err := e.PreflightSourceSnapshot(ctx, "")
-		digest = got.SubjectDigest
+		var err error
+		digest, err = e.commitDigest(ctx, commit)
 		return err
 	})
 	ref := "capsule-source-git:" + commit + ":sha256:" + digest
