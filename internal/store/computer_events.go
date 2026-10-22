@@ -115,6 +115,9 @@ func (s *Store) DryRunProjectionBatch(ctx context.Context, computerID string, ba
 	if err != nil {
 		return err
 	}
+	if s.dryRunPositionHook != nil {
+		s.dryRunPositionHook(pos)
+	}
 	if err := projectBatch(ctx, tx, *batch, pos, nil); err != nil {
 		return err
 	}
