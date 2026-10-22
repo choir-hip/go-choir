@@ -66,7 +66,7 @@ func TestHostFetchRequiresGatewayToken(t *testing.T) {
 		t.Error("an unauthenticated fetch reached upstream")
 	}), 100, 4)
 	for _, token := range []string{"", "not-a-token"} {
-		if w := callHostFetch(h, token, "https://example.com/"); w.Code != http.StatusUnauthorized {
+		if w := callHostFetch(h, token, "http://example.com/"); w.Code != http.StatusUnauthorized {
 			t.Fatalf("token %q: status %d", token, w.Code)
 		}
 	}
@@ -84,7 +84,7 @@ func TestHostFetchServesAndLogsHostNotURL(t *testing.T) {
 		_, _ = io.WriteString(w, "page")
 	}), 100, 4)
 	tok := issue(t, reg, "computer-fetch-a")
-	w := callHostFetch(h, tok, "https://news.example/story?token=s3cret")
+	w := callHostFetch(h, tok, "http://news.example/story?token=s3cret")
 	if w.Code != http.StatusOK || w.Header().Get(hostfetch.StatusHeader) != "200" || w.Body.String() != "page" {
 		t.Fatalf("status %d upstream %q body %q", w.Code, w.Header().Get(hostfetch.StatusHeader), w.Body.String())
 	}
@@ -106,15 +106,15 @@ func TestHostFetchBudgetIsPerComputerAndItsOwn(t *testing.T) {
 	h, reg := hostFetchTestHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}), 2, 4)
 	a, b := issue(t, reg, "computer-fetch-a"), issue(t, reg, "computer-fetch-b")
 	for i := 0; i < 2; i++ {
-		if w := callHostFetch(h, a, "https://example.com/"); w.Code != http.StatusOK {
+		if w := callHostFetch(h, a, "http://example.com/"); w.Code != http.StatusOK {
 			t.Fatalf("a #%d: %d", i, w.Code)
 		}
 	}
-	w := callHostFetch(h, a, "https://example.com/")
+	w := callHostFetch(h, a, "http://example.com/")
 	if w.Code != http.StatusTooManyRequests || w.Header().Get("Retry-After") == "" {
 		t.Fatalf("a over budget: %d retry %q", w.Code, w.Header().Get("Retry-After"))
 	}
-	if w := callHostFetch(h, b, "https://example.com/"); w.Code != http.StatusOK {
+	if w := callHostFetch(h, b, "http://example.com/"); w.Code != http.StatusOK {
 		t.Fatalf("b starved by a: %d", w.Code)
 	}
 
@@ -138,14 +138,14 @@ func TestHostFetchBoundsConcurrencyPerComputer(t *testing.T) {
 	}), 100, 1)
 	a, b := issue(t, reg, "computer-fetch-a"), issue(t, reg, "computer-fetch-b")
 	done := make(chan int, 1)
-	go func() { done <- callHostFetch(h, a, "https://example.com/slow").Code }()
+	go func() { done <- callHostFetch(h, a, "http://example.com/slow").Code }()
 	<-entered
-	if w := callHostFetch(h, a, "https://example.com/"); w.Code != http.StatusTooManyRequests {
+	if w := callHostFetch(h, a, "http://example.com/"); w.Code != http.StatusTooManyRequests {
 		t.Fatalf("second in flight for a: %d", w.Code)
 	}
 	go func() { <-entered }()
 	bDone := make(chan int, 1)
-	go func() { bDone <- callHostFetch(h, b, "https://example.com/").Code }()
+	go func() { bDone <- callHostFetch(h, b, "http://example.com/").Code }()
 	close(release)
 	if code := <-done; code != http.StatusOK {
 		t.Fatalf("first a: %d", code)
@@ -153,7 +153,7 @@ func TestHostFetchBoundsConcurrencyPerComputer(t *testing.T) {
 	if code := <-bDone; code != http.StatusOK {
 		t.Fatalf("b blocked by a's slot: %d", code)
 	}
-	if w := callHostFetch(h, a, "https://example.com/"); w.Code != http.StatusOK {
+	if w := callHostFetch(h, a, "http://example.com/"); w.Code != http.StatusOK {
 		t.Fatalf("a's slot not released: %d", w.Code)
 	}
 }

@@ -165,6 +165,7 @@ func Run() {
 	log.Printf("autoputer: gomemlimit %s", gomemlimit.ApplyDaemon(doltmemlimit.Init, doltmemlimit.NodeCacheSize))
 	ensureDeskCgroups()
 	cfg := LoadConfig()
+	installHostFetchRoute(cfg.ComputerID)
 
 	s := server.NewServer("autoputer", cfg.Port)
 	boot := newStartupFailer(s, cfg.ComputerID)
