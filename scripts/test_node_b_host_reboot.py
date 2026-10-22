@@ -5,7 +5,7 @@ No host, no ssh: the marker phase runs against a fake `remote`. Run:
 python3 scripts/test_node_b_host_reboot.py
 
 Problem: docs/problems/paper-crash-boot-holds-work-six-minutes-2026-10-22.md
-(findings R1 to R3, review round 2 F1 to F9).
+(findings R1 to R3, review round 2 F1 to F9, round 3 N1 to N6).
 """
 import argparse
 import importlib.util
@@ -143,14 +143,23 @@ class FakeHost:
     which mark call this is (1-based). fail_on_call raises from that mark
     call after the guests answered (an ssh drop that lost the answers)."""
 
-    def __init__(self, rows, answer, clock=None, fail_on_call=None, unmark_status=200):
+    def __init__(self, rows, answer, clock=None, fail_on_call=None, unmark_status=200, later_rows=None):
         self.rows, self.answer, self.clock = rows, answer, clock
         self.fail_on_call, self.unmark_status = fail_on_call, unmark_status
+        # later_rows: what vmctl lists from the second computers call on
+        # (a dict with "error" for an unreadable list).
+        self.later_rows = later_rows
         self.sent, self.unmarked, self.calls, self.timeouts = [], [], [], []
+        self.listings, self.list_timeouts = 0, []
 
     def remote(self, host, mode, *args, timeout=180):
         if mode == "computers":
-            return {"counts": {}, "computers": self.rows}
+            self.listings += 1
+            self.list_timeouts.append(timeout)
+            rows = self.rows if self.listings == 1 or self.later_rows is None else self.later_rows
+            if isinstance(rows, dict):
+                return rows
+            return {"counts": {}, "computers": rows}
         req = json.loads(args[0])
         if mode == "unmark":
             self.unmarked += [it["vm_id"] for it in req["items"]]
@@ -422,6 +431,146 @@ class UnaskedComputers(unittest.TestCase):
         ok, receipt = run_mark(fake)
         self.assertTrue(ok)
         self.assertEqual(receipt["marks"]["unasked"][PRIMARY]["outcome"], "unasked")
+
+
+class Relisted(unittest.TestCase):
+    """N1: the computers are listed again immediately before the final pass;
+    held and --no-markers computers are checked again, and a computer that
+    started running during the wait is asked."""
+
+    def test_held_computer_that_starts_an_apply_during_the_wait_aborts(self):
+        fake = FakeHost([row(PAPER, "critical_protected"), row(PRIMARY, "primary", held=True)],
+                        scripted({}), clock=Clock(),
+                        later_rows=[row(PAPER, "critical_protected"), row(PRIMARY, "primary", held=True, selfdev_busy=1)])
+        ok, receipt = run_mark(fake, clock=fake.clock)
+        self.assertFalse(ok)
+        self.assertEqual(receipt["marks"]["unasked"][PRIMARY]["outcome"], "unsafe")
+        self.assertIn(PAPER, fake.unmarked)
+
+    def test_no_markers_rechecks_before_the_reboot(self):
+        fake = FakeHost([row(PAPER, "critical_protected")], scripted({}),
+                        later_rows=[row(PAPER, "critical_protected", selfdev_busy=1)])
+        ok, _ = run_mark(fake, no_markers=True)
+        self.assertFalse(ok)
+        self.assertEqual(fake.sent, [])
+
+    def test_newly_running_computer_is_asked_in_the_final_pass(self):
+        fake = FakeHost([row(PAPER, "critical_protected")], scripted({}),
+                        later_rows=[row(PAPER, "critical_protected"), row(PRIMARY, "primary")])
+        ok, receipt = run_mark(fake)
+        self.assertTrue(ok)
+        self.assertIn(PRIMARY, fake.calls[-1]["vms"])
+        self.assertEqual(sorted(receipt["marks"]["marked"]), sorted([PAPER, PRIMARY]))
+
+    def test_newly_running_computer_mid_apply_aborts(self):
+        fake = FakeHost([row(PAPER, "critical_protected")], scripted({PRIMARY: [UNSAFE]}),
+                        later_rows=[row(PAPER, "critical_protected"), row(PRIMARY, "primary")])
+        ok, _ = run_mark(fake, allow_crash_close=True, allow_crash_unverified=True)
+        self.assertFalse(ok)
+        self.assertEqual(sorted(fake.unmarked), sorted([PAPER, PRIMARY]))
+
+    def test_newly_running_unreadable_under_no_markers_needs_the_flag(self):
+        fake = FakeHost([], scripted({}), later_rows=[row(PRIMARY, "primary", selfdev_busy=None)])
+        self.assertFalse(run_mark(fake, no_markers=True)[0])
+
+    def test_unreadable_second_listing_aborts(self):
+        fake = FakeHost([row(PAPER, "critical_protected")], scripted({}), later_rows={"error": "vmctl list: 0 timed out"})
+        ok, _ = run_mark(fake)
+        self.assertFalse(ok)
+        self.assertEqual(fake.unmarked, [PAPER])
+
+    def test_computers_timeout_scales_with_the_guests(self):
+        rows = [row("vm-%02d" % i, "primary") for i in range(12)]
+        fake = FakeHost(rows, scripted({}))
+        run_mark(fake)
+        self.assertGreater(fake.list_timeouts[-1], 12 * 23)
+
+
+class CapsuleSummary(unittest.TestCase):
+    """N5: one loud line before the reboot names the unasked computers."""
+
+    def test_summary_names_unchecked_capsules(self):
+        lines = []
+        fake = FakeHost([row(PAPER, "critical_protected"), row(PRIMARY, "primary", held=True)], scripted({}))
+        with mock.patch.object(reboot, "log", lines.append):
+            ok, _ = run_mark(fake)
+        self.assertTrue(ok)
+        summary = [l for l in lines if "live capsules not checked" in l and l.startswith("WARNING")]
+        self.assertEqual(len(summary), 1, lines)
+        self.assertIn(PRIMARY, summary[0])
+
+
+class UnsupportedNotRetried(unittest.TestCase):
+    """N6: a 404/405 answer cannot change, so it is not asked every round."""
+
+    def test_unsupported_left_out_of_later_rounds(self):
+        fake = FakeHost([row(PAPER, "critical_protected"), row(PRIMARY, "primary")],
+                        scripted({PAPER: [(404, "")], PRIMARY: [BUSY, BUSY, WRITTEN]}), clock=Clock())
+        ok, _ = run_mark(fake, clock=fake.clock, busy_wait=600, allow_crash_unverified=True)
+        self.assertTrue(ok)
+        self.assertIn(PAPER, fake.calls[0]["vms"])
+        self.assertNotIn(PAPER, fake.calls[1]["vms"])
+
+
+def reboot_args(**kw):
+    a = argparse.Namespace(host="node-b", boot_timeout=1200, down_wait=300)
+    for k, v in kw.items():
+        setattr(a, k, v)
+    return a
+
+
+def marked_receipt():
+    url = "http://10.200.1.2:8085"
+    return {"pre": {"facts": {"boot_id": "old"}},
+            "marks": {"marked": [PAPER], "sent": [PAPER], "sent_items": [{"vm_id": PAPER, "computer_url": url}]}}
+
+
+class RebootNotDone(unittest.TestCase):
+    """N2: a reboot that did not happen clears the markers and exits 3."""
+
+    def run_reboot(self, rc, boot_ids):
+        fake, clock = FakeHost([], scripted({})), Clock()
+        ids = iter(boot_ids)
+        receipt = marked_receipt()
+        done = subprocess.CompletedProcess(["ssh"], rc, "", "Failed to reboot: inhibited")
+        with mock.patch.object(reboot, "remote", fake.remote), mock.patch.object(reboot.time, "sleep", clock.sleep), \
+                mock.patch.object(reboot.time, "time", clock.time), \
+                mock.patch.object(reboot.subprocess, "run", lambda *a, **k: done), \
+                mock.patch.object(reboot, "ssh_ok", lambda host, timeout=15: next(ids, boot_ids[-1])):
+            code = reboot.phase_reboot(reboot_args(), receipt)
+        return code, fake, receipt
+
+    def test_refused_reboot_clears_and_exits_3(self):
+        code, fake, receipt = self.run_reboot(1, ["old"])
+        self.assertEqual(code, 3)
+        self.assertEqual(fake.unmarked, [PAPER])
+        self.assertTrue(receipt["marks"]["cleared"])
+
+    def test_host_still_up_after_down_wait_clears_and_exits_3(self):
+        code, fake, _ = self.run_reboot(255, ["old"])
+        self.assertEqual(code, 3)
+        self.assertEqual(fake.unmarked, [PAPER])
+
+    def test_real_reboot_keeps_the_markers(self):
+        code, fake, _ = self.run_reboot(255, [None, None, "new"])
+        self.assertEqual(code, 0)
+        self.assertEqual(fake.unmarked, [])
+
+    def test_host_never_back_exits_4_and_keeps_the_markers(self):
+        code, fake, _ = self.run_reboot(255, [None])
+        self.assertEqual(code, 4)
+        self.assertEqual(fake.unmarked, [])
+
+    def test_failure_between_mark_and_reboot_clears(self):
+        fake = FakeHost([], scripted({}))
+        receipt = marked_receipt()
+
+        def save():
+            raise OSError("disk full")
+        with mock.patch.object(reboot, "remote", fake.remote):
+            with self.assertRaises(OSError):
+                reboot.reboot_after_mark(reboot_args(), receipt, save)
+        self.assertEqual(fake.unmarked, [PAPER])
 
 
 if __name__ == "__main__":
