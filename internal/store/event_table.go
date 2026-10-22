@@ -22,12 +22,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/storeschema"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -277,9 +279,18 @@ func (s *Store) eventTableDB(op string, fn func(db *sql.DB) error) error {
 	return store.WithEngine(op, fn)
 }
 
-// readEventTable runs one choir_events half and decodes its rows.
+// readEventTable runs one choir_events half. It scans the rows' bytes
+// under the engine mutex and decodes them after releasing it: a 10,000-row
+// read must not hold every object-graph query for its JSON decode (review
+// findings B and F on deploy 1; Sonnet measured 228 of 281 ms of a 4,000-row
+// hold as decode).
 func (s *Store) readEventTable(ctx context.Context, op, query string, args []any) ([]eventTableEntry, error) {
-	var out []eventTableEntry
+	type rawRow struct {
+		canonicalID string
+		updatedAt   time.Time
+		body        []byte
+	}
+	var raw []rawRow
 	err := s.eventTableDB(op, func(db *sql.DB) error {
 		rows, err := db.QueryContext(ctx, query, args...)
 		if err != nil {
@@ -287,23 +298,59 @@ func (s *Store) readEventTable(ctx context.Context, op, query string, args []any
 		}
 		defer rows.Close()
 		for rows.Next() {
-			var e eventTableEntry
-			var body []byte
-			if err := rows.Scan(&e.canonicalID, &e.updatedAt, &body); err != nil {
+			var r rawRow
+			if err := rows.Scan(&r.canonicalID, &r.updatedAt, &r.body); err != nil {
 				return err
 			}
-			if err := json.Unmarshal(body, &e.rec); err != nil {
-				return fmt.Errorf("store: unmarshal %s body: %w", choirEventsTable, err)
-			}
-			e.updatedAt = e.updatedAt.UTC()
-			out = append(out, e)
+			raw = append(raw, r)
 		}
 		return rows.Err()
 	})
 	if err != nil {
 		return nil, fmt.Errorf("query %s (%s): %w", choirEventsTable, op, err)
 	}
+	if s.eventTableDecodeHook != nil {
+		s.eventTableDecodeHook(op)
+	}
+	out := make([]eventTableEntry, 0, len(raw))
+	for _, r := range raw {
+		e := eventTableEntry{canonicalID: r.canonicalID, updatedAt: r.updatedAt.UTC()}
+		if err := json.Unmarshal(r.body, &e.rec); err != nil {
+			return nil, fmt.Errorf("store: unmarshal %s body: %w", choirEventsTable, err)
+		}
+		out = append(out, e)
+	}
 	return out, nil
+}
+
+// cursorTableHalf closes the window between a cursor read's two statements
+// (review finding G on deploy 1). The read runs the choir_events half
+// (first), then the og_objects half, then the choir_events half again
+// (again). An og_objects event committed after the og_objects read is not
+// returned; a choir_events event committed after it, in the same window, is
+// cut too: from the second read only rows whose cursor key is at most the
+// highest key the first two reads saw are kept. So the caller's cursor never
+// moves past an event committed before one it returns; the next read
+// returns both. Rows are immutable and keyed by tape position, so the
+// second read contains the first. What remains is the store's existing
+// window: numbers are allocated under eventMu and committed after it, so an
+// event can commit after one allocated later (a gap a single table has
+// always had).
+func cursorTableHalf(first, og, again []eventTableEntry, key func(types.EventRecord) int64, after int64) []eventTableEntry {
+	bound := after
+	for _, half := range [][]eventTableEntry{first, og} {
+		for _, e := range half {
+			bound = max(bound, key(e.rec))
+		}
+	}
+	kept := make([]eventTableEntry, 0, len(first)+len(again))
+	kept = append(kept, first...)
+	for _, e := range again {
+		if key(e.rec) <= bound {
+			kept = append(kept, e)
+		}
+	}
+	return unionEvents(nil, kept)
 }
 
 // objectEventEntries decodes the og_objects half.
@@ -405,13 +452,64 @@ func (s *Store) eventTableNewestStreamSeq(ctx context.Context) (int64, error) {
 // choir_events stay there and stay readable), then a binary down to deploy 1.
 // Below deploy 1 is not supported (section 4.5).
 
-// SetEventTableWrites applies store.event_table to the writer. A store with
-// no tape never stamps, whatever this says: it has no tape position.
-func (s *Store) SetEventTableWrites(on bool) {
-	if s != nil {
-		s.eventTableWrites.Store(on)
+// eventTableFloorEpoch is the store floor once an op may be stamped:
+// deploy 1's epoch, the first that projects and reads choir_events
+// (design 4.5).
+const eventTableFloorEpoch uint64 = 2
+
+const eventTableFloorReason = "events stamped for choir_events: deploy 1 (epoch 2) is the floor"
+
+// SetEventTableWrites applies store.event_table to the writer. Switching it
+// on writes the store floor first, durably, so no op is ever stamped on an
+// unfloored store; if the floor cannot be written the writer stays off and
+// the error is returned. Off keeps the floor (rows may exist). A store with
+// no tape never stamps, whatever this says, and writes no floor.
+func (s *Store) SetEventTableWrites(on bool) error {
+	if s == nil {
+		return nil
 	}
+	if on && s.projectionTape != nil {
+		if err := s.writeEventTableFloor(); err != nil {
+			s.eventTableWrites.Store(false)
+			return fmt.Errorf("store: event-table writer stays off: %w", err)
+		}
+	}
+	s.eventTableWrites.Store(on)
+	return nil
 }
+
+func (s *Store) writeEventTableFloor() error {
+	return storeschema.WriteFloor(s.texturePath, eventTableFloorEpoch, eventTableFloorReason)
+}
+
+// ensureEventTableFloor floors a workspace whose choir_events holds a row.
+// It reads one row by primary key, never the table.
+func (s *Store) ensureEventTableFloor() error {
+	var one int
+	err := s.db.QueryRow(eventTableAnyRowSQL).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("runtime store: probe %s for the floor: %w", choirEventsTable, err)
+	}
+	return s.writeEventTableFloor()
+}
+
+// StoreFloor reports the store floor (0 for none), for observability.
+func (s *Store) StoreFloor() (uint64, error) {
+	if s == nil || s.texturePath == "" {
+		return 0, nil
+	}
+	floor, found, err := storeschema.ReadFloor(filepath.Join(s.texturePath, storeschema.FloorFile))
+	if err != nil || !found {
+		return 0, err
+	}
+	return floor.Version, nil
+}
+
+// eventTableAnyRowSQL is Open's one-row probe for the floor.
+const eventTableAnyRowSQL = `SELECT 1 FROM choir_events LIMIT 1`
 
 // EventTableWritesOn reports the switch as the writer applies it.
 func (s *Store) EventTableWritesOn() bool {
