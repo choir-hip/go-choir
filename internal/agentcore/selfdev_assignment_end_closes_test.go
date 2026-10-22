@@ -121,7 +121,9 @@ func TestAssignmentEndClosesItsUnfrozenOperation(t *testing.T) {
 				t.Fatalf("a re-freeze revived the failed operation: %+v", reopened)
 			}
 
-			// A replay of the same report converges and writes nothing new.
+			// A replay of the same report writes nothing new to the closed
+			// operation. The outer replay path that must also close it is
+			// TestReplayedReportClosesTheOperationAfterACrashBeforeTheClose.
 			if _, err := rt.commitAssignedEngineeringReport(ctx, c1eGet(t, s, assignment), terminalAssignmentReport(assignment, result)); err == nil {
 				again, _ := rt.selfdevOperations.Get(ctx, assignment.Binding.ComputerID, operationID)
 				if again.State != selfdev.StateFailed || again.TerminalError != operation.TerminalError {
@@ -163,5 +165,75 @@ func TestFailedAssignmentClosesItsFrozenCandidate(t *testing.T) {
 	// failed assignment's frozen candidate can never advance.
 	if operation.State != selfdev.StateFailed || !strings.Contains(operation.TerminalError, "assignment failed") {
 		t.Fatalf("a failed assignment's frozen candidate = %s %q, want failed", operation.State, operation.TerminalError)
+	}
+}
+
+// Review bunch 15, F1/F4: a crash between the report's commit and the
+// close leaves a terminal assignment with a stored report and an executing
+// operation. The re-delivered report takes the outer replay path
+// (recordAssignedEngineeringReportOnce returns the stored receipt early),
+// which must still close the operation: nothing else re-drives a terminal
+// assignment on a planned boot.
+func TestReplayedReportClosesTheOperationAfterACrashBeforeTheClose(t *testing.T) {
+	for _, result := range []types.EngineeringAssignmentResultKind{types.EngineeringResultCompleted, types.EngineeringResultFailed} {
+		t.Run(string(result), func(t *testing.T) {
+			ctx := context.Background()
+			rt, s, _ := c1eRuntime(t)
+			operations, err := selfdev.NewStore(s, s)
+			if err != nil {
+				t.Fatal(err)
+			}
+			rt.selfdevOperations = operations
+			seed, err := store.SeedEngineeringAssignmentAuthority(s, "owner-replay-"+string(result), rt.TextureComputerID(), 1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assignment, run := c1eOpenBound(t, s, seed, 0)
+			operationID := seedAssignmentOperation(t, rt, assignment, selfdev.StateExecuting, "freeze: refused")
+
+			// The report as the outer path derives it: pinned subject,
+			// proposition digest, slot report id.
+			report := terminalAssignmentReport(assignment, result)
+			report.ObservedSubjectDigest = assignment.Binding.SubjectDigest
+			report.CandidateArtifactRef = ""
+			report.Mutations[0].AfterDigest = assignment.Binding.SubjectDigest
+			report.Mutations[0].SubjectBytesChanged = false
+			report.PropositionDigest, err = store.ComputeTerminalPropositionDigest(assignment.Binding.SubjectDigest, report.Result, report.Verdict, report.Commands, report.Outputs, report.EvidenceRefs)
+			if err != nil {
+				t.Fatal(err)
+			}
+			report.ReportID = store.TerminalReportID(assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignment.AssignmentID, assignment.Binding.Attempt, report.PropositionDigest)
+
+			// The crash window: the store commits the terminal report; the
+			// close never runs.
+			req := types.RecordEngineeringAssignmentReportRequest{
+				CommandID: "engineering-report:" + assignment.AssignmentID + ":" + report.ReportID,
+				OwnerID:   assignment.Binding.OwnerID, ComputerID: assignment.Binding.ComputerID,
+				AssignmentID: assignment.AssignmentID, Attempt: assignment.Binding.Attempt,
+				ExpectedLifecycleVersion: assignment.LifecycleVersion, Report: report,
+			}
+			req.CommandDigest, _ = store.ComputeRecordEngineeringAssignmentReportDigest(req)
+			committed, err := s.RecordEngineeringAssignmentReport(ctx, req)
+			if err != nil || !committed.Assignment.Disposition.Terminal() {
+				t.Fatalf("store report = %+v, %v", committed.Assignment.Disposition, err)
+			}
+			if before, _ := operations.Get(ctx, assignment.Binding.ComputerID, operationID); before.State != selfdev.StateExecuting {
+				t.Fatalf("setup: operation = %s before the replay", before.State)
+			}
+
+			if _, err := rt.recordAssignedEngineeringReport(ctx, &run, "tool-call:replay", report); err != nil {
+				t.Fatalf("replayed report: %v", err)
+			}
+			operation, err := operations.Get(ctx, assignment.Binding.ComputerID, operationID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if operation.State != selfdev.StateFailed || !strings.Contains(operation.TerminalError, "before its candidate froze") {
+				t.Fatalf("operation after the replayed report = %s %q, want failed", operation.State, operation.TerminalError)
+			}
+			if got := rt.activeSelfdevOperations(ctx); got != 0 {
+				t.Fatalf("busy probe after the replay = %d, want 0", got)
+			}
+		})
 	}
 }
