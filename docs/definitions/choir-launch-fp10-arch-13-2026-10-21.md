@@ -63,6 +63,18 @@ finish:
         POST the value false and read it once more
       proves: inline_commits and inline_ns stop growing, background_commits grows, last_commit_age_ms stays under debounce_ms plus a commit whenever events_since_commit is above 0 (with nothing pending the age may grow without bound, since a no-op commit, counted in noop_commits, does not reset it), failures stays 0 (a planned restart does not move it, since cancelled_at_close, closing_commits_skipped and closes_left_open count the close apart); finalize_commit_waits grows by at most about one per background commit and finalize_commit_wait_max_ns stays near background_max_ns (the bounded stall, reported, not hidden); after false, mode is count and inline commits resume
       evidence_class: deployed proof
+    - action: >-
+        Round 5 is not inert (see the landing note): with the setting off,
+        on a staging test computer, a planned restart while idle - the
+        guest journal has no "close left the store open" line and the
+        restart takes no longer than before; and, if FP0 can trigger it, a
+        planned restart during an online DOLT_GC - the journal shows "close
+        left the store open: a Dolt commit holds the commit lock", Close
+        returned after at most about 10.25 s past the telemetry drain, the
+        process exited, and the next boot opened the store with no lock
+        error and served
+      proves: the default-mode Close fence on a real computer, idle and behind a GC
+      evidence_class: deployed proof
     - action: the paper's schedules and polls read before and after the deploy (setting left off on the paper)
       proves: the deploy did not take the paper down
       evidence_class: deployed proof
@@ -85,10 +97,25 @@ finish:
     together: the round-2 and round-4 tests do not compile without their
     fix, and the round-3 tests compile but fail on behavior, so a fix
     reverted alone leaves red tests (the round-5 tests compile on round 4
-    and fail there on behavior). Round 5 - its green record, 4d42ba082,
-    d529f6a94; round 4 - 75f3a9a46, cf2dc9d90, ed56fdc0e; round 3 - 40f1422a7, b0ea5d1c0, 1a0fb4c13; round 2 -
+    and five of six fail there on behavior; TestCheckpointCloseBoundIsOneDeadline
+    passes there, it pins a bound round 4 already had; the round-6 test
+    fails on round 5 on behavior). Round 6 - its green record, d36230506,
+    9d2523727; round 5 - 83f7bc1f1, 4d42ba082, d529f6a94; round 4 - 75f3a9a46, cf2dc9d90, ed56fdc0e; round 3 - 40f1422a7, b0ea5d1c0, 1a0fb4c13; round 2 -
     2b964182e, a95e8ff16, ba875fab5; then f298f7484 and d1ec806e2. Nothing
     persistent changes shape: no schema, no witness, no tape format.
+  landing_note: >-
+    ARCH-13 is a live red with its own deploy, not an inert ride-along.
+    The debounced checkpoint stays behind its setting (default off), but
+    round 5's Close changes are unconditional: closeMu, the commit-lock
+    fence and the Reopen refusal apply in the default count mode on every
+    computer, the paper included. Online DOLT_GC holds the commit lock
+    for minutes, so a default-mode Close during a GC now waits up to
+    about 10.25 s (after the telemetry drain's own up-to-10 s) and returns
+    ErrCheckpointCommitLive instead of tearing the engine down under the
+    GC. The planned restart ignores that error and exits, so its restart
+    is up to about 10.25 s slower; rematerialize returns the error where
+    it used to proceed. Gating the fence on the setting would reopen the
+    round-4 fail-open door in default mode, so it stays unconditional.
   landing:
     required: true
     environment: staging
@@ -207,6 +234,26 @@ now:
     ok (108 s) and the agentcore seam tests ok (134 s); gates hang-guards,
     decode-roots, heresies, v1-writer-purity ok; guest-data-fstrim not
     runnable here (no nix binary; the lane touches no nix file).
+  review_round_6: >-
+    2026-10-22, after round 5's three accepts (Gemini flash; DeepSeek v4.1
+    flash and Sonnet 5.5 accept with edits). No patch round on the commit
+    class (the structural assessment stands). Test 9d2523727, fix
+    d36230506 (red), this record. (1) docs - round 5 is not inert; the
+    landing note and a deployed acceptance for a planned restart idle and
+    behind an online GC. (2) fixed - a Close that fails closed restores
+    the cadence and the telemetry sealer; close cuts are judged by what
+    cut the commit. (3) DeepSeek - the bound sentence now covers only the
+    checkpoint waits and the fence (fixed); the rollback note says five
+    of six round-5 tests fail on round 4 (fixed); the committer-path skip
+    counts only in debounced mode (fixed in code). (4) non-commit
+    statements recorded as an owner decision (pin the pools, or never
+    close the engine in-process), with Sonnet's F3 and F5 as residuals.
+    Re-run - go test ./internal/store -run 'Checkpoint|Finalize|Close|Reopen'
+    ok; under ~/heavy-test.lock with GOMAXPROCS=2 GOFLAGS=-p=1, -race store
+    Checkpoint|Finalize|Close|Reopen|Telemetry ok (130 s) and the agentcore
+    seam tests ok (136 s); gates hang-guards, decode-roots, heresies,
+    v1-writer-purity ok; guest-data-fstrim not runnable here (no nix
+    binary; the lane touches no nix file).
   structural_assessment: >-
     Round 5 on Close (CLAUDE.md escalation rule - 3+ rounds without
     convergence). The rounds found doors one at a time because Close had
@@ -272,6 +319,37 @@ now:
       the cadence closed. Problem recorded, failing test, fixed: Reopen
       reopens the cadence and arms it (TestCheckpointReopenAfterCloseStaysDebounced).
   residuals:
+    - >-
+      OWNER DECISION - non-commit statements are not fenced (Sonnet r5 F2,
+      the same class as the commit fence, one rung wider). The fence is
+      the commit lock; a statement that is not a commit (a SELECT SLEEP
+      in flight, an open write transaction, a finalize transaction, a
+      migration step) holds the pool's one connection without it, and
+      Close closes the engine under it. Probes on 83f7bc1f1 - a SLEEP in
+      flight failed "context canceled" and Close returned nil in 29 ms;
+      an open write transaction's Commit failed "database is read only"
+      and its rows were not durable. Loud failures, not silent ones.
+      Two designs end it. (a) Pin the pools - before teardown, check out
+      each pool's single connection (s.db.Conn and s.readDB.Conn, both
+      MaxOpenConns 1) under the hard deadline; a strict superset of the
+      commit fence, small. (b) Never close the engine in-process -
+      rematerialize and the projection-base rebase go through a planned
+      restart with the durable marker; larger, deletes the fence,
+      closeMu, ErrCheckpointCommitLive and the left-open state (DeepSeek
+      notes rematerialize renames the workspace in-process today, so (b)
+      moves that flip to boot). FP0 puts this to the owner; no patch
+      round here.
+    - >-
+      A commit queued behind the Close fence (an inline finalize commit,
+      the online GC, a texture history read) takes the commit lock once
+      Close returns and reads the store's handles while a Reopen swaps
+      them (Sonnet r5 F5, pre-existing): a data race whose commit lands
+      on the adopted engine or fails on the closed pool. Closed by design
+      (b) above, or by taking the commit lock around Reopen's adoption.
+    - >-
+      Once the fence is held, a wedged pool teardown keeps the commit
+      lock and closeMu, so every later commit and every Close or Reopen
+      waits behind it (Sonnet r5 F3); only process exit recovers it.
     - >-
       The background commit still holds the store's one connection
       (MaxOpenConns 1): a finalize that starts during it waits at BeginTx
@@ -382,7 +460,13 @@ Problem: [guest-checkpoint-on-the-write-path-2026-10-21](../problems/guest-check
    mode commits once (again on a retried Close), and then, in every
    mode, takes the commit lock under which every Dolt commit runs and
    holds it while the pools and the connector close. One hard deadline,
-   a 10 s close deadline plus one 250 ms grace, bounds all of it. If a
+   a 10 s close deadline plus one 250 ms grace, bounds the checkpoint
+   waits and the fence. It does not bound the telemetry drain before them
+   (its own 10 s), the wait for a concurrent Close or Reopen on closeMu,
+   or the pool teardown after the fence (only process exit recovers a
+   wedged teardown), so a caller's worst case is about 10 s + 10.25 s
+   plus a concurrent Close's own. A Close that fails closed restores the
+   cadence and the telemetry sealer it changed. If a
    commit is still running or holds the lock then, Close fails closed:
    it returns ErrCheckpointCommitLive and leaves the pools, connector and
    engine open (process exit reclaims them), and Reopen refuses until a
@@ -459,5 +543,9 @@ Problem: [guest-checkpoint-on-the-write-path-2026-10-21](../problems/guest-check
 
 ## FP0 steps
 
-Land after the bunch review; deploy alone or with green; run the
-acceptance above on a test computer, not the paper.
+Land after the bunch review as a live red with its own deploy (round 5's
+Close fence is unconditional; see `landing_note`), not as an inert
+ride-along. Run the acceptance above on a test computer, not the paper,
+including the planned restart idle and, if it can be triggered, during
+an online DOLT_GC. Put the non-commit fence decision (pin the pools, or
+never close the engine in-process) to the owner.

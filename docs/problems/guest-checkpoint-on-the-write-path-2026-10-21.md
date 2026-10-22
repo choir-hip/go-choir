@@ -183,3 +183,19 @@ two test claims were broader than the tests. The failing tests are
 d529f6a94; the fix is 4d42ba082 (Close and Reopen serialized, the
 commit-lock fence on every Close). This is the fifth round on Close; the
 station's now card carries the structural assessment.
+
+## Round 6: round 5 is not inert; a failed Close left the store changed (2026-10-22)
+
+Round 5 (83f7bc1f1) had three accepts. Two edits came with them. First,
+round 5's Close (closeMu, the commit-lock fence, the Reopen refusal) is
+unconditional, so it changes the default count mode on every computer:
+online DOLT_GC holds the commit lock for minutes, and a planned restart
+or rematerialize during a GC now waits up to about 10.25 s and gets
+ErrCheckpointCommitLive (the restart ignores it and exits;
+rematerialize returns it). Second, a Close that failed closed left the
+cadence closed and the telemetry sealer stopped, so a store that kept
+serving fell back to inline commits until exit. The second is fixed in
+d36230506 (test 9d2523727); the first is a landing-class change recorded
+in the station. Non-commit statements (a statement in flight, an open
+write transaction) are still not fenced; that is an owner decision
+between pinning the pools and never closing the engine in-process.
