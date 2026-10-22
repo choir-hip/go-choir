@@ -41,6 +41,11 @@ Failure modes pinned here:
      AssertPathExists on the import marker, so a partial first import (an
      IO failure after some moves) starts it on a partial view (DS2); a keep
      the unit hides anyway goes unnoticed (DS7).
+  N8 (round 2c) A failing activation writes the import marker, so a rerun
+     passes with a required file missing (DS8); corpusd or checkpointd
+     starts without unit-env/corpus-dsn.env (Store A for corpus tables);
+     a link stray is chmod'ed through (DS9); the marker is written through
+     a link or left without its mode (DS10).
 """
 
 import importlib.util
@@ -174,6 +179,15 @@ class HostUnits(unittest.TestCase):
         for name in readers:
             self.assertIn(UNIT_ENV_DIR + "/.imported", self.units[name]["asserts"], name)
 
+    def test_DS8_corpus_readers_assert_the_dsn_file(self):
+        # The marker says the import ran, not that a file is there: a
+        # missing corpus-dsn.env would start them on Store A (F2's harm).
+        dsn = UNIT_ENV_DIR + "/corpus-dsn.env"
+        for name in ("go-choir-corpusd", "go-choir-checkpointd"):
+            self.assertIn(dsn, self.units[name]["asserts"], name)
+        # The proxy reads no required file; it must not go down for one.
+        self.assertNotIn(dsn, self.units["go-choir-proxy"]["asserts"])
+
     def test_N1_every_unit_hides_the_reference_set_but_its_keeps(self):
         problems = []
         for name in covered_units(self.units):
@@ -223,6 +237,7 @@ class HostUnits(unittest.TestCase):
     def test_N4_tmpfiles_create_the_directory(self):
         rules = config()["tmpfiles"]
         self.assertIn(f"d {UNIT_ENV_DIR} 0700 root root -", rules)
+        self.assertIn(f"z {UNIT_ENV_DIR}/.imported 0600 root root -", rules)  # DS10
         for name in UNIT_ENV_NAMES:
             self.assertFalse(any(f" {STATE}/{name} " in r for r in rules), name)
 
@@ -401,6 +416,57 @@ class Activation(unittest.TestCase):
         self.run_snippet()
         self.assertEqual(self.read(self.new("corpus-dsn.env")), "B=2\n")
         self.assertEqual(self.strays(), [])
+
+    def marker(self):
+        return os.path.join(self.d, ".imported")
+
+    def test_DS8_a_failing_first_run_writes_no_marker(self):
+        # An obstruction at an old path fails the run and leaves the name
+        # missing from unit-env; the marker must stay absent, so a rerun
+        # after the obstruction is gone still runs as a first import.
+        self.write(self.old("deploy.env"), "A=1\n")
+        os.makedirs(self.old("corpus-dsn.env"))
+        err = self.run_snippet(rc=1)
+        self.assertIn("neither a file nor a link", err)
+        self.assertFalse(os.path.lexists(self.marker()))
+        self.assertFalse(os.path.lexists(self.new("corpus-dsn.env")))
+        # The operator restores the file at its old path and removes the
+        # obstruction: the rerun adopts it, as a first import does.
+        os.rmdir(self.old("corpus-dsn.env"))
+        self.write(self.old("corpus-dsn.env"), "B=2\n")
+        self.run_snippet()
+        self.assertEqual(self.read(self.new("corpus-dsn.env")), "B=2\n")
+        self.assert_linked("corpus-dsn.env")
+        self.assertTrue(os.path.isfile(self.marker()))
+
+    def test_DS8_a_stray_before_the_import_writes_no_marker(self):
+        os.makedirs(self.d)
+        self.write(self.new("deploy.env"), "OTHER=1\n")
+        self.write(self.old("deploy.env"), "A=1\n")
+        self.run_snippet(rc=1)
+        self.assertFalse(os.path.lexists(self.marker()))
+
+    def test_DS9_a_link_stray_is_not_chmod_through(self):
+        target = os.path.join(self.tmp, "planted-target.env")
+        self.write(target, "OTHER=1\n")
+        os.makedirs(self.d)
+        os.symlink(target, self.new("deploy.env"))
+        self.write(self.old("deploy.env"), "A=1\n")
+        self.run_snippet(rc=1)
+        (stray,) = self.strays("deploy.env")
+        self.assertTrue(os.path.islink(self.new(stray)))
+        self.assertEqual(stat.S_IMODE(os.stat(target).st_mode), 0o644)
+
+    def test_DS10_the_marker_is_never_written_through_a_link(self):
+        target = os.path.join(self.tmp, "marker-target")
+        os.makedirs(self.d)
+        os.symlink(target, self.marker())  # dangling: [ -e ] is false
+        self.write(self.old("deploy.env"), "A=1\n")
+        self.run_snippet()
+        self.assertFalse(os.path.lexists(target))
+        self.assertFalse(os.path.islink(self.marker()))
+        self.assertTrue(os.path.isfile(self.marker()))
+        self.assertEqual(stat.S_IMODE(os.lstat(self.marker()).st_mode), 0o600)
 
     # -- after the import: F1, F2 ------------------------------------------
 
