@@ -42,6 +42,59 @@ type egressHarness struct {
 	mu      sync.Mutex
 	dialed  []string
 	records []EgressRecord
+	// up counts what the upstream received and how many of its
+	// connections have ended, so a test can prove nothing reached it.
+	up upstreamCounter
+}
+
+// upstreamCounter is the upstream side's view: bytes received and
+// connections ended.
+type upstreamCounter struct {
+	mu     sync.Mutex
+	bytes  int64
+	closed int
+}
+
+func (u *upstreamCounter) add(n int) {
+	u.mu.Lock()
+	u.bytes += int64(n)
+	u.mu.Unlock()
+}
+
+func (u *upstreamCounter) end() {
+	u.mu.Lock()
+	u.closed++
+	u.mu.Unlock()
+}
+
+type countingConn struct {
+	net.Conn
+	u *upstreamCounter
+}
+
+func (c countingConn) Read(b []byte) (int, error) {
+	n, err := c.Conn.Read(b)
+	c.u.add(n)
+	return n, err
+}
+
+// upstreamReceived waits until n upstream connections have ended and returns
+// the bytes they received in total.
+func (h *egressHarness) upstreamReceived(n int) int64 {
+	h.t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		h.up.mu.Lock()
+		closed, got := h.up.closed, h.up.bytes
+		h.up.mu.Unlock()
+		if closed >= n {
+			return got
+		}
+		if time.Now().After(deadline) {
+			h.t.Fatalf("upstream connections ended = %d, want %d", closed, n)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 }
 
 func newEgressHarness(t *testing.T, policy EgressPolicy) *egressHarness {
@@ -52,7 +105,7 @@ func newEgressHarness(t *testing.T, policy EgressPolicy) *egressHarness {
 		t.Fatal(err)
 	}
 	h.upstream = upstream
-	go serveEchoUpstream(upstream)
+	go serveEchoUpstream(upstream, &h.up)
 	h.proxy = NewEgressProxy("capsule-test", policy, func(r EgressRecord) {
 		h.mu.Lock()
 		h.records = append(h.records, r)
@@ -86,15 +139,16 @@ func newEgressHarness(t *testing.T, policy EgressPolicy) *egressHarness {
 
 // serveEchoUpstream answers a plain HTTP request with a fixed body, and
 // otherwise echoes bytes back (standing in for a TLS server).
-func serveEchoUpstream(l net.Listener) {
+func serveEchoUpstream(l net.Listener, up *upstreamCounter) {
 	for {
 		conn, err := l.Accept()
 		if err != nil {
 			return
 		}
 		go func(c net.Conn) {
+			defer up.end()
 			defer c.Close()
-			br := bufio.NewReader(c)
+			br := bufio.NewReader(countingConn{Conn: c, u: up})
 			peek, _ := br.Peek(4)
 			if string(peek) == "GET " || string(peek) == "HEAD" {
 				req, err := http.ReadRequest(br)

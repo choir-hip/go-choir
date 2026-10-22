@@ -1,9 +1,15 @@
 package capsule
 
 import (
+	"bufio"
+	"bytes"
+	"context"
 	"fmt"
 	"io"
+	"net"
+	"net/http"
 	"net/netip"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -15,20 +21,33 @@ import (
 // refusal breaks builds (a GREASE Encrypted Client Hello, a client with no
 // SNI), so observe judges the first record exactly as enforce does, writes
 // the would-refuse verdict on the egress ledger entry, logs it once per
-// capsule and host, and relays the record and the tunnel unchanged.
+// capsule and host, and relays the record's bytes and the tunnel unchanged.
+//
+// Observe does change one thing a client sees: timing. Nothing is relayed in
+// either direction until the first record is judged, and the check waits up
+// to the hello timeout (10 s) for a complete first record. A TLS client
+// speaks first and is judged as soon as its hello arrives; a client that
+// stays silent, or one waiting for a server that speaks first, is relayed
+// only after that wait. TestEgressObserveDelaysAServerFirstGreetingUntilTheTimeout
+// pins it.
 //
 // Ways it could fail, pinned here:
 //   - observe judges differently from enforce (a case enforce refuses that
 //     observe passes, so the ledger's zero would-refuse count proves nothing);
-//   - observe drops, alters or delays the first record, or closes the tunnel;
+//   - observe drops, alters or reorders the first record, or closes the
+//     tunnel; or holds it longer than the hello timeout;
 //   - observe records nothing, so the flip to enforce has no evidence;
-//   - observe logs every connection (a busy build floods the journal) or
-//     never logs;
+//   - observe repeats its once-per-host warning on every connection, or
+//     never logs it (every connection's record is logged separately);
 //   - an unset or unknown mode is enforce (a typo breaks every build) or off
-//     (a typo removes the evidence);
+//     (a typo removes the evidence), or an unknown mode passes silently;
 //   - the mode can be chosen from inside a capsule (it is the executor's,
 //     read from the daemon's environment, set on the policy by the executor);
-//   - off still reads or judges the first record.
+//   - off still reads or judges the first record;
+//   - a valid hello larger than the request reader's buffer (4 KiB) is judged
+//     incomplete, in either mode, whether it follows the CONNECT in its own
+//     write or in the same one;
+//   - an enforce refusal sends any byte to the upstream (counted upstream).
 
 func enforced(p EgressPolicy) EgressPolicy {
 	p.TunnelIdentity = TunnelIdentityEnforce
@@ -134,6 +153,7 @@ func TestEgressEnforceRefusesWhatObserveWouldRefuse(t *testing.T) {
 				t.Fatal(err)
 			}
 			expectTunnelClosedWithoutEcho(t, conn, br)
+			expectNothingReachedUpstream(t, h)
 			records := h.waitRecords(1)
 			if len(records) != 1 {
 				t.Fatalf("records = %+v", records)
@@ -268,5 +288,187 @@ func TestEgressObserveLogsOncePerCapsuleAndHost(t *testing.T) {
 		if !strings.Contains(lines[i], "capsule-test") || !strings.Contains(lines[i], host) || !strings.Contains(lines[i], "would refuse") {
 			t.Errorf("log line %d = %q, want capsule, host %s and the verdict", i, lines[i], host)
 		}
+	}
+}
+
+// A client that sends some of its first record and the rest after the hello
+// timeout has not sent a complete first record in time: observe records it
+// and relays everything; enforce would refuse it.
+func TestEgressObserveRecordsAnIncompleteFirstRecordAndRelaysIt(t *testing.T) {
+	h := newEgressHarness(t, withMode(EcosystemEgressPolicy(), TunnelIdentityObserve))
+	h.proxy.helloTimeout = 100 * time.Millisecond
+	h.resolved["github.com"] = []netip.Addr{publicAddr}
+	conn, br := connectNoRead(t, h, "github.com:443")
+	hello := realClientHello(t, "github.com")
+	if _, err := conn.Write(hello[:10]); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	if _, err := conn.Write(hello[10:]); err != nil {
+		t.Fatal(err)
+	}
+	echo := make([]byte, len(hello))
+	_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	if _, err := io.ReadFull(br, echo); err != nil || string(echo) != string(hello) {
+		t.Fatalf("observe did not relay a slow hello intact: %v", err)
+	}
+	conn.Close()
+	if r := h.waitRecords(1); len(r) != 1 || r[0].Outcome != EgressOutcomeOK || r[0].TunnelIdentity != TunnelVerdictWouldRefuse ||
+		!strings.Contains(r[0].TunnelIdentityReason, "incomplete") {
+		t.Fatalf("records = %+v", r)
+	}
+}
+
+// paddedHello is a valid hello for name whose record payload is exactly
+// payload bytes (at most a TLS record, 16384).
+func paddedHello(t *testing.T, name string, payload int) []byte {
+	t.Helper()
+	base := len(handBuiltHello(helloOpts{names: []string{name}})) - 5
+	pad := payload - base - 4 // the padding extension's own header
+	if pad < 0 {
+		t.Fatalf("payload %d is below the unpadded hello's %d", payload, base)
+	}
+	rec := handBuiltHello(helloOpts{names: []string{name}, padding: pad})
+	if len(rec)-5 != payload {
+		t.Fatalf("padded hello payload = %d, want %d", len(rec)-5, payload)
+	}
+	if err := verifyTunnelClientHello(rec, name); err != nil {
+		t.Fatalf("padded hello refused by the verifier: %v", err)
+	}
+	return rec
+}
+
+// A valid hello larger than 4 KiB, up to the largest record TLS allows,
+// passes through the proxy in both modes, sent after the 200 or pipelined
+// behind the CONNECT header.
+func TestEgressLargeHellosPassInBothModes(t *testing.T) {
+	for _, mode := range []TunnelIdentityMode{TunnelIdentityObserve, TunnelIdentityEnforce} {
+		for _, size := range []int{9 * 1024, maxTunnelRecord} {
+			for _, pipelined := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%s/%d/pipelined=%t", mode, size, pipelined), func(t *testing.T) {
+					h := newEgressHarness(t, withMode(EcosystemEgressPolicy(), mode))
+					h.resolved["pypi.org"] = []netip.Addr{publicAddr}
+					hello := paddedHello(t, "pypi.org", size)
+					var conn net.Conn
+					var br *bufio.Reader
+					if pipelined {
+						c, err := net.Dial("tcp", h.addr)
+						if err != nil {
+							t.Fatal(err)
+						}
+						t.Cleanup(func() { c.Close() })
+						if _, err := c.Write(append([]byte("CONNECT pypi.org:443 HTTP/1.1\r\nHost: pypi.org:443\r\n\r\n"), hello...)); err != nil {
+							t.Fatal(err)
+						}
+						conn, br = c, bufio.NewReader(c)
+						resp, err := http.ReadResponse(br, nil)
+						if err != nil || resp.StatusCode != http.StatusOK {
+							t.Fatalf("CONNECT: %v %v", resp, err)
+						}
+					} else {
+						conn, br = connectNoRead(t, h, "pypi.org:443")
+						if _, err := conn.Write(hello); err != nil {
+							t.Fatal(err)
+						}
+					}
+					echo := make([]byte, len(hello))
+					_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+					if _, err := io.ReadFull(br, echo); err != nil || !bytes.Equal(echo, hello) {
+						t.Fatalf("a %d-byte hello did not pass intact: %v", size, err)
+					}
+					conn.Close()
+					if r := h.waitRecords(1); len(r) != 1 || r[0].Outcome != EgressOutcomeOK || r[0].TunnelIdentity != TunnelVerdictPass {
+						t.Fatalf("records = %+v", r)
+					}
+				})
+			}
+		}
+	}
+}
+
+// Observe's one visible effect, pinned: a server that speaks first is not
+// heard by a silent client until the hello timeout has passed; then the
+// greeting arrives intact and the tunnel is recorded would_refuse.
+func TestEgressObserveDelaysAServerFirstGreetingUntilTheTimeout(t *testing.T) {
+	const timeout = 200 * time.Millisecond
+	h := newEgressHarness(t, withMode(EcosystemEgressPolicy(), TunnelIdentityObserve))
+	h.proxy.helloTimeout = timeout
+	greeter, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { greeter.Close() })
+	go func() {
+		for {
+			c, err := greeter.Accept()
+			if err != nil {
+				return
+			}
+			go func(c net.Conn) {
+				defer c.Close()
+				_, _ = io.WriteString(c, "SSH-2.0-greeting\r\n")
+				_, _ = io.Copy(io.Discard, c)
+			}(c)
+		}
+	}()
+	h.proxy.dial = func(ctx context.Context, network, _ string) (net.Conn, error) {
+		var d net.Dialer
+		return d.DialContext(ctx, network, greeter.Addr().String())
+	}
+	h.resolved["github.com"] = []netip.Addr{publicAddr}
+	conn, br := connectNoRead(t, h, "github.com:443")
+	start := time.Now()
+	greeting := make([]byte, len("SSH-2.0-greeting\r\n"))
+	_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	if _, err := io.ReadFull(br, greeting); err != nil || string(greeting) != "SSH-2.0-greeting\r\n" {
+		t.Fatalf("greeting = %q, %v", greeting, err)
+	}
+	if elapsed := time.Since(start); elapsed < timeout*9/10 || elapsed > timeout+2*time.Second {
+		t.Fatalf("greeting arrived after %v; observe holds it for the hello timeout (%v)", elapsed, timeout)
+	}
+	conn.Close()
+	if r := h.waitRecords(1); len(r) != 1 || r[0].TunnelIdentity != TunnelVerdictWouldRefuse || !strings.Contains(r[0].TunnelIdentityReason, "no TLS ClientHello") {
+		t.Fatalf("records = %+v", r)
+	}
+}
+
+// A set value that is not one of the three is observe, and says so: a typo in
+// the flip must not read like success at boot.
+func TestTunnelIdentityEnvWarning(t *testing.T) {
+	env := func(v string) func(string) string { return func(string) string { return v } }
+	for _, ok := range []string{"", "  ", "off", "observe", " Enforce "} {
+		if w := TunnelIdentityEnvWarning(env(ok)); w != "" {
+			t.Errorf("%q warned: %s", ok, w)
+		}
+	}
+	for _, bad := range []string{"enforse", "enable", "1", "true"} {
+		w := TunnelIdentityEnvWarning(env(bad))
+		if !strings.Contains(w, TunnelIdentityEnv) || !strings.Contains(w, bad) || !strings.Contains(w, "observe") {
+			t.Errorf("%q: warning %q, want the variable, the value and the mode used", bad, w)
+		}
+	}
+}
+
+// The guest image names the mode, observe, rather than relying on the
+// default; and a computer the host selects (vmctl's
+// VM_CAPSULE_TUNNEL_ENFORCE_ONLY, a kernel boot argument) gets enforce
+// through the daemon's environment file, which overrides the unit's
+// environment. Only the exact value enforce is copied, so the boot argument
+// can turn enforce on and nothing else.
+func TestGuestImageNamesTheTunnelIdentityModeAndTheHostSelection(t *testing.T) {
+	raw, err := os.ReadFile("../../nix/autoputer-vm.nix")
+	if err != nil {
+		t.Skipf("nix/autoputer-vm.nix not readable from the package: %v", err)
+	}
+	img := string(raw)
+	if !strings.Contains(img, `CHOIR_CAPSULE_EGRESS_TUNNEL_IDENTITY = "observe";`) {
+		t.Fatal(`the guest image does not set CHOIR_CAPSULE_EGRESS_TUNNEL_IDENTITY = "observe"`)
+	}
+	if !strings.Contains(img, `choir.capsule_egress_tunnel_identity=enforce)`) ||
+		!strings.Contains(img, `echo "CHOIR_CAPSULE_EGRESS_TUNNEL_IDENTITY=enforce" >> "$ENV_FILE"`) {
+		t.Fatal("the guest boot script does not copy the host's enforce selection into the daemon's environment file")
+	}
+	if strings.Contains(img, `choir.capsule_egress_tunnel_identity=*)`) {
+		t.Fatal("the guest boot script copies any value of the selection, not only enforce")
 	}
 }
