@@ -81,13 +81,18 @@ boundaries:
   protected_surfaces: []
 
 now:
-  status: working
-  slice: station file; then RES-21; then scripts/density/
+  status: ready_for_fp0
+  slice: >-
+    RES-21 done (1fae88623: four reports corrected; dated problem records
+    left as point-in-time). scripts/density/ written and unit-checked
+    (py_compile, --help, test_guard.py, the collector run locally); nothing
+    has run on Node B. Waiting on FP0's runs (scripts/density/README.md steps
+    1 to 3) and on one owner question: add a guest fincore field to procmem?
   source_ref: d1c60ad87
   deploy_identity: unchanged
   candidate:
     id: FP0-density-bench
-    state: in progress
+    state: built, not run on Node B
     ref: lane/fp0-density-bench
     scope: [docs, scripts/density]
   conjecture:
