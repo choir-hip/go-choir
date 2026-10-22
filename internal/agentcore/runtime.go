@@ -2499,13 +2499,15 @@ func (rt *Runtime) activeSelfdevOperations(ctx context.Context) int {
 	if computerID == "" {
 		return 0
 	}
-	ops, err := rt.selfdevOperations.ListByStates(ctx, computerID,
-		selfdev.StateExecuting, selfdev.StateAccepted, selfdev.StateMaterializing, selfdev.StateRollbackPending)
+	ops, err := rt.selfdevOperations.ListByStates(ctx, computerID, selfdevBusyStates...)
 	if err != nil {
 		return 0
 	}
 	return len(ops)
 }
+
+// selfdevBusyStates are the states activeSelfdevOperations counts.
+var selfdevBusyStates = []string{selfdev.StateExecuting, selfdev.StateAccepted, selfdev.StateMaterializing, selfdev.StateRollbackPending}
 
 func (rt *Runtime) processorRunOccupiesAdmission(ctx context.Context, rec types.RunRecord) bool {
 	if rt == nil || rt.store == nil {
