@@ -108,6 +108,48 @@ status_merge() { # JSON object on stdin merged into status.json atomically
   printf '%s' "$cur" | jq -c --argjson new "$new" '. * $new' > "$STATUS.tmp" && mv "$STATUS.tmp" "$STATUS"
 }
 
+# ---- attempt marks -----------------------------------------------------
+# A run is marked running before it does any work, and every way out of it
+# leaves a result: the normal paths write theirs, the EXIT trap turns a
+# running mark of this run into failed (a signal, or set -u), and a SIGKILL
+# of bash itself leaves running, which the freshness check reads against
+# the recorded pid. With no swap a cgroup OOM kill is a designed failure,
+# so it must read as one (problem record offhost-backup-reads-terabytes-
+# and-needs-swap-2026-10-22, review round 2).
+ATTEMPT_KIND="" # attempt (the daily backup) or verify
+SIGNALLED=""
+attempt_start() { # $1 attempt|verify; extra JSON fields may follow in $2
+  ATTEMPT_KIND="$1"
+  trap 'SIGNALLED=TERM; exit 143' TERM
+  trap 'SIGNALLED=INT; exit 130' INT
+  trap 'SIGNALLED=HUP; exit 129' HUP
+  status_merge <<EOF
+{"last_${1}_result":"running","last_${1}_run":"$RUN_ID","last_${1}_pid":$$,"last_${1}_cause":""${2:+,$2}}
+EOF
+}
+attempt_end() { # $1 result, $2 cause (may be empty)
+  [ -n "$ATTEMPT_KIND" ] || return 0
+  local cause; cause="$(printf '%s' "${2:-}" | jq -R .)"
+  status_merge <<EOF
+{"last_${ATTEMPT_KIND}_result":"$1","last_${ATTEMPT_KIND}_cause":$cause}
+EOF
+}
+attempt_interrupted() { # EXIT trap: a running mark of this run becomes failed
+  [ -n "$ATTEMPT_KIND" ] && [ -s "$STATUS" ] || return 0
+  local k="$ATTEMPT_KIND" cur run
+  cur="$(jq -r --arg k "last_${k}_result" '.[$k] // ""' "$STATUS" 2>/dev/null)"
+  run="$(jq -r --arg k "last_${k}_run" '.[$k] // ""' "$STATUS" 2>/dev/null)"
+  [ "$cur" = running ] && [ "$run" = "$RUN_ID" ] || return 0
+  attempt_end failed "interrupted${SIGNALLED:+ by SIG$SIGNALLED} before a result was written"
+}
+exit_cause() { # $1 exit status of a tool, $2 tool name
+  if [ "$1" -gt 128 ]; then
+    printf '%s killed by signal %s%s' "$2" "$(( $1 - 128 ))" "$([ "$1" = 137 ] && echo ' (KILL: a cgroup OOM kill sends this)')"
+  else
+    printf '%s exit %s' "$2" "$1"
+  fi
+}
+
 # ---- the set of paths -------------------------------------------------
 PATHS=()
 SKIPPED=()
@@ -389,23 +431,19 @@ cmd_backup() {
   local result=ok rc ex sid started added
   need ssh restic jq sqlite3 dolt systemctl || return
   started="$(now)"
-  trap 'restore_dolt_memory; cleanup_clones; tunnel_down' EXIT
-  status_merge <<EOF
-{"last_attempt_epoch":$started,"last_attempt_run":"$RUN_ID"}
-EOF
+  trap 'restore_dolt_memory; cleanup_clones; tunnel_down; attempt_interrupted' EXIT
+  attempt_start attempt "\"last_attempt_epoch\":$started"
   if ! disk_guard; then
-    status_merge <<EOF
-{"last_attempt_result":"disk-guard"}
-EOF
+    attempt_end disk-guard ""
     return 4
   fi
-  tunnel_up || { status_merge <<<'{"last_attempt_result":"no-tunnel"}'; return 1; }
+  tunnel_up || { attempt_end no-tunnel ""; return 1; }
   restic_env daily
   # A run killed mid-command loses its tunnel in the same instant, so restic
   # cannot delete its lock and the next run is refused (item 18, run 5).
   # unlock removes only locks whose process is gone.
   R unlock >/dev/null 2>&1 || true
-  R cat config >/dev/null 2>&1 || { err "repository is not initialised or unreachable (run: off-host-backup.sh init)"; status_merge <<<'{"last_attempt_result":"no-repo"}'; return 1; }
+  R cat config >/dev/null 2>&1 || { err "repository is not initialised or unreachable (run: off-host-backup.sh init)"; attempt_end no-repo ""; return 1; }
   stage || result=partial
   resolve_paths
   [ "$REQUIRED_MISSING" = 0 ] || { err "a required path is absent: ${SKIPPED[*]}"; result=partial; }
@@ -418,8 +456,8 @@ EOF
   rc=$?
   if [ "$rc" -eq 3 ]; then result=partial; err "restic: some files were unreadable"
   elif [ "$rc" -ne 0 ]; then
-    err "restic backup failed (exit $rc): $(tail -c 300 "$STATE/run/backup.err" | tr -d '\n')"
-    status_merge <<<'{"last_attempt_result":"failed"}'
+    err "restic backup failed ($(exit_cause "$rc" restic)): $(tail -c 300 "$STATE/run/backup.err" | tr -d '\n')"
+    attempt_end failed "$(exit_cause "$rc" restic)"
     return 1
   fi
   sid="$(jq -r 'select(.message_type=="summary") | .snapshot_id' "$STATE/run/backup.json" | tail -1)"
@@ -431,7 +469,7 @@ EOF
   local raw; raw="$(repo_pack_bytes daily)"
   local skipped_json; skipped_json="$(printf '%s\n' "${SKIPPED[@]:-}" | jq -R . | jq -sc 'map(select(length>0))')"
   status_merge <<EOF
-{"last_attempt_result":"$result","last_snapshot_id":"${sid:-}","last_bytes_added":${added:-0},"repo_raw_bytes":${raw:-0},"skipped":$skipped_json,"duration_seconds":$(( $(now) - started ))}
+{"last_attempt_result":"$result","last_attempt_cause":"","last_snapshot_id":"${sid:-}","last_bytes_added":${added:-0},"repo_raw_bytes":${raw:-0},"skipped":$skipped_json,"duration_seconds":$(( $(now) - started ))}
 EOF
   if [ "$result" = ok ]; then
     local first; first="$(jq -r '.first_success_epoch // empty' "$STATUS" 2>/dev/null)"
@@ -447,20 +485,42 @@ EOF
 cmd_verify() {
   local week n rc
   need ssh restic jq || return
-  trap 'tunnel_down' EXIT
-  tunnel_up || return 1
+  trap 'tunnel_down; attempt_interrupted' EXIT
+  install -d -m 0700 "$STATE/run"
+  attempt_start verify
+  tunnel_up || { attempt_end failed "no tunnel"; return 1; }
   restic_env daily
   week="$(date -u +%V)"; n=$(( (10#$week % 10) + 1 ))
-  R check --with-cache --read-data-subset="$n/10" >/dev/null 2>"$STATE/run/verify.err"; rc=$?
+  # Two connections: restic's tree loaders are connections + GOMAXPROCS
+  # + 1 (the unit sets GOMAXPROCS=2), each holding a decoded tree; trees
+  # over 50 MiB go to one loader of their own (restic 0.19.1
+  # internal/data/tree_stream.go, StreamTrees).
+  R -o rest.connections=2 check --with-cache --read-data-subset="$n/10" >/dev/null 2>"$STATE/run/verify.err"; rc=$?
   if [ "$rc" -ne 0 ]; then
-    err "verify $n/10 failed: $(tail -c 300 "$STATE/run/verify.err" | tr -d '\n')"
-    status_merge <<<'{"last_verify_result":"failed"}'
+    err "verify $n/10 failed ($(exit_cause "$rc" restic)): $(tail -c 300 "$STATE/run/verify.err" | tr -d '\n')"
+    attempt_end failed "$(exit_cause "$rc" restic)"
     return 1
   fi
   log "verify $n/10 ok"
   status_merge <<EOF
-{"last_verify_result":"ok","last_verify_epoch":$(now),"last_verify_subset":"$n/10"}
+{"last_verify_result":"ok","last_verify_cause":"","last_verify_epoch":$(now),"last_verify_subset":"$n/10"}
 EOF
+}
+
+result_fresh() { # $1 attempt|verify, $2 label: 1 when the last result is not good
+  local r cause pid
+  r="$(jq -r --arg k "last_${1}_result" '.[$k] // "none"' "$STATUS")"
+  cause="$(jq -r --arg k "last_${1}_cause" '.[$k] // ""' "$STATUS")"
+  case "$r" in
+    ok|none) return 0 ;;
+    running)
+      pid="$(jq -r --arg k "last_${1}_pid" '.[$k] // 0' "$STATUS")"
+      if [ "$pid" -gt 0 ] 2>/dev/null && [ -r "/proc/$pid/cmdline" ] && tr '\0' ' ' < "/proc/$pid/cmdline" | grep -q 'off-\?host-backup'; then
+        log "a $2 run is in progress (pid $pid)"; return 0
+      fi
+      err "last $2 was interrupted: marked running, and its process ($pid) is gone"; return 1 ;;
+    *) err "last $2 was '$r'${cause:+ ($cause)}"; return 1 ;;
+  esac
 }
 
 cmd_freshness() {
@@ -475,7 +535,8 @@ cmd_freshness() {
   if [ "$last" -eq 0 ] || [ $(( (t - last) / 3600 )) -gt "$MAX_AGE_HOURS" ]; then
     err "STALE: last successful backup $(( (t - last) / 3600 )) h ago (max $MAX_AGE_HOURS); last attempt: $(jq -r '.last_attempt_result // "none"' "$STATUS")"; bad=1
   fi
-  case "$(jq -r '.last_attempt_result // "none"' "$STATUS")" in ok|none) ;; *) err "last attempt was '$(jq -r '.last_attempt_result' "$STATUS")'"; bad=1 ;; esac
+  result_fresh attempt backup || bad=1
+  result_fresh verify verify || bad=1
   if [ "$first" -gt 0 ] && [ $(( (t - first) / 3600 )) -gt "$MAX_VERIFY_AGE_HOURS" ] && { [ "$v" -eq 0 ] || [ $(( (t - v) / 3600 )) -gt "$MAX_VERIFY_AGE_HOURS" ]; }; then
     err "no passing verify in $MAX_VERIFY_AGE_HOURS h"; bad=1
   fi
