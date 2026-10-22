@@ -50,6 +50,9 @@ type gatewayHealthResponse struct {
 	// BodyCaps is the request body caps: mode, limits, refusals and the
 	// largest body seen per route class (B7).
 	BodyCaps *gatewayBodyCapsHealth `json:"body_caps,omitempty"`
+	// ImageMedia is the image decode slots and the downscaled output
+	// budget, with their waits and refusals (FP0 round 5, F7).
+	ImageMedia *provider.ImageMediaStats `json:"image_media,omitempty"`
 }
 
 // gatewayCacheHealth is provider.CacheStats plus its hit rate.
@@ -274,6 +277,8 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	resp.AnthropicRelay = h.anthropicRelay.status()
 	resp.ModelScheduler = h.schedulerHealth()
 	resp.BodyCaps = h.bodyCapsHealth()
+	media := provider.ImageMediaStatus()
+	resp.ImageMedia = &media
 
 	if stats := provider.CacheStatsSnapshot(); len(stats) > 0 {
 		resp.PromptCache = make(map[string]gatewayCacheHealth, len(stats))
