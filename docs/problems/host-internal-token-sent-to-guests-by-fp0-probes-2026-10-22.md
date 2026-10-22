@@ -2,7 +2,8 @@
 
 Date: 2026-10-22. Status: **documented and audited; FP0's sending stopped at about
 09:15 UTC (the monitor's at 09:18); no guest-usable route found; rotation at a
-deploy recommended, the owner's call; the repo scripts are being fixed**. Found by Devin's review of the RES-10
+deploy recommended, the owner's call; the repo scripts are fixed on lane
+`fp0-guest-token-probes` (98dd1aeac, df682772c), not landed yet**. Found by Devin's review of the RES-10
 probe (bunch 40), which pointed at the same pattern in FP0's own scripts.
 Mutation class of this record: green. Evidence class: host commands FP0 ran on
 Node B and their scripts; no guest-side reading.
@@ -123,12 +124,34 @@ before the probes are fixed would only leak the new value.
    them. Not urgent, since the token alone gives a guest nothing. It changes a
    credential that every host unit loads, so it is the owner's call. FP0 will
    not do it unasked.
-2. Every repo script above sends only the marker (`X-Internal-Caller`) to a
-   guest. A helper, Python `internal_headers(url)` and shell
-   `choir_internal_curl`, attaches the token only for a loopback host on an
-   internal port (8083, 8084, 8086, 8087), mirroring `MarkInternal`. A
-   selftest grep fails when the token file and `:8085` or a non-loopback host
-   appear in one command.
+2. **Done on lane `fp0-guest-token-probes`** (to land): `98dd1aeac` adds
+   `scripts/selftest-guest-token`, failing first on the four senders;
+   `df682772c` fixes them. Every repo script now sends only the marker
+   (`X-Internal-Caller`) to a guest. The helpers mirror `MarkInternal`:
+   Python `scripts/choir_internal.py` (`internal_headers(url)`,
+   `internal_curl_flags(url)`) and shell `scripts/lib/choir_internal.sh`
+   (`choir_internal_curl`). They attach the token only for 127.0.0.1, ::1
+   or localhost on 8083, 8084, 8086 or 8087. The fixes:
+   - `res08_pagecache_probe.py` `guest_read`: marker only, via the helper.
+   - `density/host_collect.py` `http_json`: `internal_headers(url)`. The
+     file carries a verbatim copy of the helper, because it is piped alone
+     to the host, and the selftest proves the copy.
+   - `paper_boot_window_probe.py`: `--token-file` removed; procmem gets
+     the marker only.
+   - The res-08 design report's manual guest curl drops the header.
+   - Loopback users moved to the helpers: `node_b_host_reboot.py` and
+     `proofs/lib.sh` (`vmctl_get`, `vmctl_post`).
+   - Checked and left alone, loopback only: `density/lib.py`,
+     `memory_hotplug_probe.py`, `s3_snapshot_probe.py`,
+     `node-b-deploy-disk-preflight`, ci.yml's deploy, the frontend helper
+     `node-b-internal-auth.js` and its users, and the commands in
+     `docs/runbooks/node-b-host-reboot.md` and the 2026-10-14 corpus record.
+
+   The selftest also checks every tracked non-Go file. A request that
+   carries the token, directly or through a variable or function holding
+   it, may name only those destinations, and a destination it cannot
+   resolve fails. It is not wired into CI yet (no scripts selftest is): run
+   `scripts/selftest-guest-token`.
 3. Optional detector (red, hostauth): a guest's `hostauth.Middleware` logs one
    line when a token header reaches a process with no token loaded, so a
    future leak shows in the journal.
