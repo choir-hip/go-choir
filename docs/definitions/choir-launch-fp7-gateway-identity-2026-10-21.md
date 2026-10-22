@@ -295,6 +295,12 @@ receipts:
     proof_refs: [docs/problems/gateway-request-bodies-unbounded-2026-10-22.md "Repair of the review findings (bunch 88)", "internal/gateway/body_caps_test.go TestBodyCapsBoundTheBytesInFlightWithTheSchedulerOff, TestBodyCapsQueuedCallReadsItsBodyAfterTheServerReadTimeout, TestBodyCapsTrickledBodyIsCutAtTheBodyReadDeadline, TestBodyCapsEnvOverridesAndHealth: each failed on 02010a2e0", "go test -race ./internal/gateway -run 'TestBodyCaps|TestModelScheduler': green"]
     rollback_ref: git revert of a303a223e and 95240b65c; GATEWAY_BODY_LIMITS in_flight= or GATEWAY_BODY_READ_TIMEOUT to loosen without a code change
     disposition: F1, F2, F4 fixed, F3 decided (160 MiB), F5 wording fixed; F6 and part of F7 declined with reasons in the problem record
+  - id: b7-body-caps-review-round-2
+    boundary: implement
+    identity: 9f9e1e658 (+ nix comments e07fdf76d; findings 91509d7df, tests 007c9ee0d)
+    proof_refs: [docs/problems/gateway-request-bodies-unbounded-2026-10-22.md "Repair of the review findings (bunch 109)", "internal/gateway/body_caps_test.go TestBodyCapsOneCallerCannotHoldTheWholeInFlight, TestBodyCapsAPanicInTheDecodeGivesItsBytesBack, TestBodyCapsReadWindowStartsWhenTheBodyFits and internal/provider/media_test.go TestNormalizeImageDecodesAtMostABoundedNumberAtOnce: each failed on 2e9ebc5eb", "go test -race ./internal/gateway -run 'TestBodyCaps|TestModelScheduler': green", "go test ./internal/gateway/... ./internal/provider/...: green"]
+    rollback_ref: git revert of 9f9e1e658; GATEWAY_BODY_LIMITS per_caller= (up to in_flight) loosens the share without a code change
+    disposition: F-A fixed (per_caller = in_flight/4, first body always fits), DeepSeek F1 fixed (4 decodes at once; MaxImagePixels kept; nix arithmetic corrected), F-B, F-C and DeepSeek F3 fixed, F5 wording fixed; DeepSeek F2 and F4 declined with reasons in the problem record
   - id: res-12
     boundary: define
     identity: this file, section 5
@@ -539,15 +545,24 @@ keep their own caps. `GATEWAY_BODY_LIMITS` (e.g. `model=96MiB`) overrides a
 limit, read once when the handler is built; an unreadable value is logged
 and the default kept.
 
-**Two bounds in every mode (bunch 88 round).** `limits.in_flight` (1 GiB)
-bounds the bytes of all bodies held at once, whatever the scheduler's mode;
-a model body stays counted until its call ends. A body that does not fit
-waits, then is answered 429 with `Retry-After`, unread. Each body must
-arrive within `GATEWAY_BODY_READ_TIMEOUT` (60 s) of `decodeBody`, which on
-the model routes runs after the slot is granted, so a long queue wait no
-longer spends the server's 120 s read timeout; a body cut there is answered
-503 with `Retry-After`. Both are transient to the guest. The gateway unit
-has `MemoryMax=8G` and `GOMEMLIMIT=6GiB` as a backstop.
+**Bounds in every mode (bunch 88 and 109 rounds).** Observe applies to the
+model limit only; these bind in every body caps mode and whatever the
+scheduler's. `limits.in_flight` (1 GiB) bounds the bytes of all bodies held
+at once; a model body stays counted until its call ends. One caller (the
+computer behind the bearer, or the host caller) holds at most
+`limits.per_caller` of it (in_flight/4, 256 MiB), except that its first
+body always fits; a caller over its share waits behind its own bodies only.
+A body that does not fit waits, then is answered 429 with `Retry-After`,
+unread. The wait lasts at most `GATEWAY_BODY_READ_TIMEOUT` (60 s) from
+`decodeBody`, which on the model routes runs after the slot is granted, so
+a long queue wait no longer spends the server's 120 s read timeout; the
+read then has its own 60 s from the moment the body fits, and a body cut
+there is answered 503 with `Retry-After`. Both are transient to the guest.
+Images are decoded at most 4 at once process-wide
+(`provider.MaxConcurrentImageDecodes`). The gateway unit has
+`MemoryMax=8G` and `GOMEMLIMIT=6GiB` as a backstop; the worst case is
+about 5.8 GiB (the arithmetic is in the nix comment and the problem
+record).
 
 **Observe first, for the model routes only.** The model limit is below the
 media contract's ceiling, so it could refuse a real call: a long
@@ -577,8 +592,10 @@ caps should already be in enforce: in observe, 24 slots times the 576 MiB
 ceiling is no bound.
 
 **Residuals.** (a) Closed in code by the bunch 88 round: `in_flight` is
-the aggregate bound with the scheduler off. (b) `prepareMediaRequest` decodes each image to pixels, up
-to 50 Mpx, about 200 MB of RGBA, one at a time. (c) The refusal log has one
+the aggregate bound with the scheduler off. (b) Bounded by the bunch 109
+round: images are decoded at most 4 at once, about 620 MB each at 50 Mpx;
+the slots are not fair across callers, and the share is per computer, not
+per owner. (c) The refusal log has one
 line per refusal and no throttle. (d) No real body sizes have been measured
 yet. The observe deploy's `max_seen.model` is the first measurement.
 (e) Proof 11 reads no large under-ceiling model body (review F6). (f) The
@@ -701,8 +718,8 @@ RES-11, after flipping `GATEWAY_MODEL_SCHEDULER=on`:
 B7 body caps (`scripts/proofs/fp7-gateway.sh --step 10|11|12`; run before
 the scheduler flip):
 10. After the deploy with `gatewayBodyCaps = "observe"`: `/health`
-    `body_caps.mode=observe`, limits model 167772160, search 1048576 and
-    `in_flight` present; the
+    `body_caps.mode=observe`, limits model 167772160, search 1048576,
+    `in_flight` and `per_caller` present; the
     journal has `gateway: body caps: mode=observe ...`; the gateway's
     `MemoryCurrent` and `MemoryPeak` are saved as the baseline.
 11. From a disposable test computer's guest shell, as root:

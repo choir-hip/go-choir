@@ -218,6 +218,7 @@ step_10() {
 	esac
 	[ "$(fp7_num "$h" '.body_caps.limits.model')" = 167772160 ] && [ "$(fp7_num "$h" '.body_caps.limits.search')" = 1048576 ] && pass "limits: model 160 MiB, search 1 MiB" || info "limits differ from the defaults (GATEWAY_BODY_LIMITS set?)"
 	[ "$(fp7_num "$h" '.body_caps.limits.in_flight')" -gt 0 ] && pass "in_flight bound present: $(fp7_num "$h" '.body_caps.limits.in_flight') bytes, read timeout $(fp7_num "$h" '.body_caps.read_timeout_seconds') s" || fail "/health body_caps has no limits.in_flight: the deploy predates the bunch 88 round"
+	[ "$(fp7_num "$h" '.body_caps.limits.per_caller')" -gt 0 ] && pass "per-caller share present: $(fp7_num "$h" '.body_caps.limits.per_caller') bytes of in_flight" || fail "/health body_caps has no limits.per_caller: the deploy predates the bunch 109 round"
 	info "gateway MemoryMax: $(node_b_q "systemctl show go-choir-gateway -p MemoryMax --value")"
 	info "gateway memory (current, peak bytes): $m"
 	printf '%s\n' "$h" >"$(fp7_state bodycaps)"

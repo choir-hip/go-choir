@@ -297,3 +297,96 @@ recorded here before any fix.
   wait behind a large waiter.
 - **F5 (DeepSeek), low:** `in_flight` binds in body caps observe mode, so
   observe is not a pure pass-through; the station text should say so.
+
+## Repair of the review findings (bunch 109)
+
+Tests 007c9ee0d (yellow, each failing on 2e9ebc5eb), code 9f9e1e658 (red),
+nix comments e07fdf76d (green).
+
+- **F-A, fixed: a per-caller share of `in_flight`.** `bodyBudget` counts
+  each caller's held bytes, keyed by the `caller` every handler already
+  passes to `decodeBody`: the computer's gateway identity from its
+  authenticated bearer (`authenticateBearer`), or `host` / the host
+  caller's label on the operator and host-judgment routes. A body is taken
+  in when its caller holds nothing yet, or when its caller's held bytes
+  plus this body stay within `limits.per_caller`; otherwise it waits, and
+  the grant loop passes over it (and that caller's later waiters, which
+  keep their order) instead of stopping at it. Oldest-first still holds
+  among callers within their share, and the bound, the 429 with
+  `Retry-After: 5` at the body deadline, `refused.in_flight` and the clamp
+  of one body to `in_flight` are unchanged. **The share chosen:**
+  `per_caller` defaults to `in_flight / 4` (256 MiB at the default 1 GiB),
+  never above `in_flight`, settable as `GATEWAY_BODY_LIMITS per_caller=`
+  and shown in `/health` `body_caps.limits.per_caller`. Why a quarter: it
+  is above the 160 MiB enforced model limit, so one computer can still
+  hold one full enforce body plus its small search and source calls; and
+  one computer then holds at most max(per_caller, one first body):
+  256 MiB in enforce, leaving 768 MiB, or one 576 MiB ceiling body in
+  observe, leaving 448 MiB, which still takes two full enforce bodies and
+  every small route. The first-body exception is what keeps one body of
+  any admitted size from deadlocking when it is larger than the share.
+  The stalled guest of the finding now holds 576 MiB at most (one declared
+  ceiling body) instead of the whole budget, and its second body is a 429
+  of its own. The test stalls two 200 KiB declared bodies from one caller
+  with `in_flight=512KiB` (share 128 KiB) and checks that another caller's
+  200 KiB body is served at once and the second stalled body is 429.
+  Residual: the share is per computer, not per owner; an owner with
+  several computers has several shares (with two in observe, about the
+  whole budget). Per-owner accounting needs the owner in the gateway's
+  identity, which it does not have.
+- **DeepSeek F1, fixed: a process-wide decode bound of 4.**
+  `provider.decodeAndDownscale` runs `image.Decode` and `downscale` inside
+  one of `MaxConcurrentImageDecodes` = 4 slots, so the full-size buffers
+  exist for at most four images at once; a call over the bound waits for a
+  slot (no new refusal). `MaxImagePixels` stays 50 Mpx: the 1568 px target
+  bounds the output, not the input, and 48-50 Mpx phone photos are real
+  inputs the gateway exists to downscale; lowering it would turn them into
+  non-transient 400s. The arithmetic: one 50 Mpx image is at most 400 MB
+  decoded (16-bit RGBA PNG, 8 bytes a pixel; an 8-bit PNG or CMYK JPEG is
+  200 MB, a 4:2:0 JPEG 75 MB) plus the 200 MB RGBA copy `downscale` makes,
+  plus its 20 MiB input: about 620 MB. Four are about 2.5 GB (2.3 GiB).
+  The unit's worst case is then about 3 GiB of bodies (1 GiB `in_flight`
+  with the decoder's buffer and the decoded copy) + 2.3 GiB of pixels +
+  about 0.5 GiB of runtime and the rest = about 5.8 GiB: under
+  `GOMEMLIMIT=6GiB` and 2 GiB under `MemoryMax=8G`, which therefore stays.
+  Eight slots would be about 4.6 GiB of pixels and 8.1 GiB in all, over
+  the kill, so four. The nix comment now carries this arithmetic with the
+  concurrency multiplier and the second full-size buffer. Residuals: the
+  slots are not fair across callers (one guest's 20-image calls of tiny
+  50 Mpx pixel-bomb PNGs can keep every slot busy, delaying other
+  tenants' image calls, never their text calls, by the decode time of the
+  queue ahead); a slot wait does not watch the call's context
+  (`prepareMediaRequest` takes none); the full-size RGBA copy itself could
+  be removed by reading the decoded image's own pixel layout.
+- **F-B (and Gemini F1), fixed.** `decodeBodyHeld` gives the bytes back on
+  every exit but success from a defer registered right after the grant, so
+  a panic in the decoder or a reader releases them before net/http
+  recovers it. The test panics in an `UnmarshalJSON` on both
+  `decodeBodyHeld` and `decodeBody` and checks the budget holds 0.
+- **F-C, fixed (trivial).** The read deadline is set when the body fits,
+  to now + `GATEWAY_BODY_READ_TIMEOUT`; the wait for room keeps its own
+  deadline of the same length from `decodeBody`. A connection is then held
+  at most twice the timeout (120 s by default: the server's own read
+  timeout), and a trickle is still cut 60 s after its read starts. The
+  test waits half the deadline for room, then sends the body after the
+  wait's deadline and inside the read's, and gets 200.
+- **F-D**: the same root as DeepSeek F1, answered there.
+- **DeepSeek F2, declined (a recorded decision, as the bunch 88 F3
+  paragraph says).** 160 MiB is the enforce limit for bodies whose images
+  are already within the gateway's own output bound; guest originals
+  between 5 and 20 MiB are the observe window's question, answered by
+  `max_seen.model` and `would_refuse.model` before the flip. Raising the
+  limit to 320 MiB now would loosen enforce without a measurement.
+- **DeepSeek F3, fixed (trivial).** A `SetReadDeadline` error is logged
+  once per process (`body read deadline not set`), so a future wrapper
+  without `Unwrap` shows in the journal. No production-chain test: the
+  routes are registered on the mux unwrapped (`internal/server/server.go`),
+  and the bunch 88 F2 test runs through a real listener.
+- **DeepSeek F4, declined.** Strict FIFO among callers within their share
+  is the stated design (a stream of small bodies must not starve a large
+  one); a small body behind a large waiter waits at most the deadline and
+  gets a transient 429. The share now lets every caller pass a caller over
+  its share, which removes the hostile case of this finding.
+- **DeepSeek F5, fixed in wording.** The station's section 6 now says
+  observe applies to the model limit only; `in_flight`, the share and the
+  body deadlines bind in every mode.
