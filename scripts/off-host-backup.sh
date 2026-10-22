@@ -90,7 +90,7 @@ cred() { # path of credential file $1
 # nix/node-b.nix); a root shell on Node B does not. Each subcommand checks
 # the tools it uses before it touches anything, so a hand run refuses
 # instead of ending partial an hour later (problem record section 13 item 5).
-NIX_SHELL_LINE="nix-shell -p restic jq openssh sqlite dolt apacheHttpd --run '...'"
+NIX_SHELL_LINE="nix-shell -p restic jq openssh sqlite dolt apacheHttpd util-linux --run '...'"
 need() { # tools...
   local t missing=()
   for t in "$@"; do command -v "$t" >/dev/null 2>&1 || missing+=("$t"); done
@@ -102,15 +102,21 @@ need() { # tools...
 # ---- status file ------------------------------------------------------
 # The daily backup and the weekly verify are separate units and can overlap,
 # so every write is a read-modify-write under a lock beside the file, held
-# only for the merge (never across restic), through a temp of its own.
+# only for the merge (never across restic), through a temp of its own. The
+# wait has no timeout: the holder runs one jq on a small file, and the
+# unit's TimeoutStartSec bounds a stuck one. With flock present a write is
+# never unlocked.
 status_merge() { # JSON object on stdin merged into status.json atomically
   install -d -m 0700 "$STATE"
   local new
   new="$(cat)" # read before the pipeline: its stages do not share this stdin
   if command -v flock >/dev/null 2>&1; then
-    ( flock -w 60 9 || err "status.json lock busy for 60 s; writing without it"
+    ( flock 9 || { err "could not take the status.json lock; status not written"; exit 1; }
+      # Temps left by a writer killed mid-merge (SIGKILL runs no cleanup).
+      find "$STATE" -maxdepth 1 -name "$(basename "$STATUS").??????" -mmin +60 -delete 2>/dev/null
       status_write "$new" ) 9>>"$STATUS.lock"
   else
+    err "flock (util-linux) is not on PATH: status.json is written unlocked, and a backup and a verify that overlap can lose each other's marks"
     status_write "$new"
   fi
 }
@@ -118,11 +124,10 @@ status_write() { # $1 JSON object
   local cur="{}" tmp
   [ -s "$STATUS" ] && cur="$(cat "$STATUS")"
   tmp="$(mktemp "$STATUS.XXXXXX")" || return 1
-  if printf '%s' "$cur" | jq -c --argjson new "$1" '. * $new' > "$tmp"; then
-    mv "$tmp" "$STATUS"
-  else
-    rm -f "$tmp"; return 1
+  if printf '%s' "$cur" | jq -c --argjson new "$1" '. * $new' > "$tmp" && mv "$tmp" "$STATUS"; then
+    return 0
   fi
+  rm -f "$tmp"; return 1
 }
 
 # ---- attempt marks -----------------------------------------------------
