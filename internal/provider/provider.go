@@ -1214,7 +1214,7 @@ func (p *OpenCodeProvider) call(ctx context.Context, req LLMRequest, onChunk fun
 		if lastStatus != "" {
 			return nil, fmt.Errorf("%s: status %s on every OpenCode key (sanitized)", p.providerName, lastStatus)
 		}
-		return nil, fmt.Errorf("%s: every OpenCode key is parked (out of funds or rate limited)", p.providerName)
+		return nil, fmt.Errorf("%s: every OpenCode key is parked (out of funds, rate limited or a dead credential)", p.providerName)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
