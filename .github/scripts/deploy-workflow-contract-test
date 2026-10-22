@@ -5,17 +5,12 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 workflow="$root/.github/workflows/ci.yml"
 # The programs Node B runs for prebuild and deploy live beside the workflow
 # and are read from the deployed commit (SEC-14); the contract covers both.
+# Every required pattern names the file that must hold it (require_in), so
+# program text can never satisfy a workflow pattern or the other way round
+# (bunch 33 item 4). A forbidden pattern (reject) is forbidden in all three.
 prebuild_program="$root/.github/scripts/node-b-ci-prebuild"
 deploy_program="$root/.github/scripts/node-b-ci-deploy"
 sources=("$workflow" "$prebuild_program" "$deploy_program")
-
-require() {
-  local pattern="$1"
-  if ! grep -Fq -- "$pattern" "${sources[@]}"; then
-    echo "deploy workflow contract missing: $pattern" >&2
-    exit 1
-  fi
-}
 
 reject() {
   local pattern="$1"
@@ -55,56 +50,59 @@ reject_in "$workflow" "<<'REMOTE_PREBUILD'"
 require_in "$deploy_program" 'echo "==> Staging deploy complete"'
 require_in "$prebuild_program" 'exit "$prebuild_status"'
 
-require 'DEPLOY_COMMIT: ${{ github.sha }}'
-require 'git fetch --no-tags origin "$DEPLOY_COMMIT"'
-require 'git reset --hard "$DEPLOY_COMMIT"'
-require 'x-choir-build-commit:'
-require 'deploy-receipt.json'
+require_in "$workflow" 'DEPLOY_COMMIT: ${{ github.sha }}'
+require_in "$prebuild_program" 'git fetch --no-tags origin "$DEPLOY_COMMIT"'
+require_in "$deploy_program" 'git fetch --no-tags origin "$DEPLOY_COMMIT"'
+require_in "$prebuild_program" 'git reset --hard "$DEPLOY_COMMIT"'
+require_in "$deploy_program" 'git reset --hard "$DEPLOY_COMMIT"'
+require_in "$workflow" 'x-choir-build-commit:'
+require_in "$deploy_program" 'x-choir-build-commit:'
+require_in "$deploy_program" 'deploy-receipt.json'
 # A partial deploy merges into the previous receipt instead of replacing it,
 # and deploy decisions never diff from the push before-SHA (docs/problems/
 # partial-deploy-receipt-blanks-deployed-commit-2026-10-14.md).
-require '.github/scripts/deploy-receipt-merge /var/lib/go-choir/deploy-receipt.json < "${receipt_tmp}.new" > "$receipt_tmp"'
-require 'selection="$(.github/scripts/deploy-base-select --after "$after" --health "$health_json" --receipt "$RUNNER_TEMP/deployed-receipt.json")"'
-require "'cat /var/lib/go-choir/deploy-receipt.json' >\"\$receipt_json\""
+require_in "$deploy_program" '.github/scripts/deploy-receipt-merge /var/lib/go-choir/deploy-receipt.json < "${receipt_tmp}.new" > "$receipt_tmp"'
+require_in "$workflow" 'selection="$(.github/scripts/deploy-base-select --after "$after" --health "$health_json" --receipt "$RUNNER_TEMP/deployed-receipt.json")"'
+require_in "$workflow" "'cat /var/lib/go-choir/deploy-receipt.json' >\"\$receipt_json\""
 # The receipt records whether the activated kernel is booted, and the
 # detector can never fail a deploy (docs/reports/patch-lanes-plan-2026-10-15.md).
-require "boot_state=\$(python3 scripts/verify-host-hardening.py --boot-state-json 2>/dev/null) || boot_state=''"
-require 'boot_state: $boot_state'
-require 'Staging deploy forced: no trustworthy deployed base'
-require 'selection="$(.github/scripts/deploy-base-select --after "$AFTER" --health "$health_json")"'
+require_in "$deploy_program" "boot_state=\$(python3 scripts/verify-host-hardening.py --boot-state-json 2>/dev/null) || boot_state=''"
+require_in "$deploy_program" 'boot_state: $boot_state'
+require_in "$workflow" 'Staging deploy forced: no trustworthy deployed base'
+require_in "$workflow" 'selection="$(.github/scripts/deploy-base-select --after "$AFTER" --health "$health_json")"'
 reject 'before="${{ github.event.before }}"'
 reject 'git diff-tree --no-commit-id --name-only -r "$after"'
 reject "jq -r '.build.deployed_commit // empty'"
-require 'Refusing to publish an activation receipt with no verified artifacts'
-require 'deploy-failures'
-require 'verify_artifact_manifest'
-require 'autoputer_commit=$(verify_artifact_manifest /var/lib/go-choir/services/autoputer/share/go-choir/build.json autoputer)'
-require 'source scripts/node-b-sync-service-pointers'
-require 'active_path="/var/lib/go-choir/services/${service}"'
-require 'active_commit=$(artifact_manifest_commit "$active_path/share/go-choir/build.json" "$service")'
-require 'active_digest=$(nix hash path --type sha256 "$active_path")'
-require 'candidate_digest=$(nix hash path --type sha256 "$candidate_path" 2>/dev/null || true)'
-require 'if [ "$candidate_commit" = "$active_commit" ] && [ "$candidate_digest" = "$active_digest" ]; then'
-require 'fallback_path=$(resolve_service_package_from_unit "$service")'
-require 'if [ "$fallback_commit" = "$active_commit" ] && [ "$fallback_digest" = "$active_digest" ]; then'
-require 'package_commit="$active_commit"'
-require 'for identity_service in "${identity_services[@]}"; do'
-require 'if [ "$package_commit" != "$DEPLOY_COMMIT" ] || [ "$service_commit" != "$DEPLOY_COMMIT" ]; then'
-require 'jq --arg service "$service" --arg path "$package_path" --arg digest "$package_digest" --arg commit "$package_commit"'
+require_in "$deploy_program" 'Refusing to publish an activation receipt with no verified artifacts'
+require_in "$deploy_program" 'deploy-failures'
+require_in "$deploy_program" 'verify_artifact_manifest'
+require_in "$deploy_program" 'autoputer_commit=$(verify_artifact_manifest /var/lib/go-choir/services/autoputer/share/go-choir/build.json autoputer)'
+require_in "$deploy_program" 'source scripts/node-b-sync-service-pointers'
+require_in "$deploy_program" 'active_path="/var/lib/go-choir/services/${service}"'
+require_in "$deploy_program" 'active_commit=$(artifact_manifest_commit "$active_path/share/go-choir/build.json" "$service")'
+require_in "$deploy_program" 'active_digest=$(nix hash path --type sha256 "$active_path")'
+require_in "$deploy_program" 'candidate_digest=$(nix hash path --type sha256 "$candidate_path" 2>/dev/null || true)'
+require_in "$deploy_program" 'if [ "$candidate_commit" = "$active_commit" ] && [ "$candidate_digest" = "$active_digest" ]; then'
+require_in "$deploy_program" 'fallback_path=$(resolve_service_package_from_unit "$service")'
+require_in "$deploy_program" 'if [ "$fallback_commit" = "$active_commit" ] && [ "$fallback_digest" = "$active_digest" ]; then'
+require_in "$deploy_program" 'package_commit="$active_commit"'
+require_in "$deploy_program" 'for identity_service in "${identity_services[@]}"; do'
+require_in "$deploy_program" 'if [ "$package_commit" != "$DEPLOY_COMMIT" ] || [ "$service_commit" != "$DEPLOY_COMMIT" ]; then'
+require_in "$deploy_program" 'jq --arg service "$service" --arg path "$package_path" --arg digest "$package_digest" --arg commit "$package_commit"'
 reject 'if [ "$candidate_commit" = "$DEPLOY_COMMIT" ]; then'
 reject 'package_commit=$(verify_artifact_manifest "$package_path/share/go-choir/build.json" "$service")'
 reject 'jq --arg service "$service" --arg path "$package_path" --arg digest "$package_digest" --arg commit "$service_commit"'
 reject 'service_commit=$(curl -fsS --max-time 5 "http://127.0.0.1:${port}/health" | jq -er '\''.build.commit'\'')'
 reject 'package_path=$(readlink -f "/var/lib/go-choir/services/${service}")'
-require 'wait_for_autoputer_commit "$refresh_computer_url" "$refresh_vm_id" "$refresh_expected_commit"'
-require 'refresh_health_commit=$(curl -fsS --max-time 10 "${refresh_computer_url}/health"'
-require 'refresh_expected_commit="$refresh_health_commit"'
-require 'if [ -n "$refresh_health_commit" ] && [ "$refresh_health_commit" = "$autoputer_runtime_commit" ]; then'
-require 'expecting served commit ${refresh_expected_commit} or ${autoputer_runtime_commit} after refresh'
-require 'Autoputer runtime selected without canonical guest boot refresh; refusing an undeployable service-pointer-only artifact'
+require_in "$deploy_program" 'wait_for_autoputer_commit "$refresh_computer_url" "$refresh_vm_id" "$refresh_expected_commit"'
+require_in "$deploy_program" 'refresh_health_commit=$(curl -fsS --max-time 10 "${refresh_computer_url}/health"'
+require_in "$deploy_program" 'refresh_expected_commit="$refresh_health_commit"'
+require_in "$deploy_program" 'if [ -n "$refresh_health_commit" ] && [ "$refresh_health_commit" = "$autoputer_runtime_commit" ]; then'
+require_in "$deploy_program" 'expecting served commit ${refresh_expected_commit} or ${autoputer_runtime_commit} after refresh'
+require_in "$deploy_program" 'Autoputer runtime selected without canonical guest boot refresh; refusing an undeployable service-pointer-only artifact'
 reject 'DEPLOY_APP_LAYER'
 reject 'App-layer release push'
-require 'echo "host_services=autoputer"'
+require_in "$workflow" 'echo "host_services=autoputer"'
 reject '/internal/runtime/refresh'
 # Deploys keep active computers current through the guest's planned-restart
 # marker and never restart a busy one: vmctl selects (constructed and
@@ -112,17 +110,17 @@ reject '/internal/runtime/refresh'
 # busy, and the deferred computer waits for the next deploy
 # (docs/problems/deploy-restarts-busy-computers-2026-10-09.md,
 # docs/problems/owner-computer-pinned-as-canary-2026-10-13.md).
-require 'http://127.0.0.1:8083/internal/vmctl/deploy-refresh)'
-require 'http://127.0.0.1:8083/internal/vmctl/deploy-refresh || printf'
-require '{user_id:$user_id,desktop_id:$desktop_id,target:$target}'
-require 'elif [ "$refresh_outcome" = "deferred" ] && { [ "${REFRESH_ACTIVE_COMPUTERS}" != "true" ] || [ "$refresh_rescue" = "true" ]; }; then'
-require 'Deferred ${refresh_vm_id} (vmctl retries it every minute until it updates): ${refresh_reason}'
-require 'record_receipt_artifact active_computers "$DEPLOY_COMMIT" pending'
-require 'active_computers: {commit: $commit, status: $status, deferred: $deferred}'
-require 'No active interactive computers need refresh'
+require_in "$deploy_program" 'http://127.0.0.1:8083/internal/vmctl/deploy-refresh)'
+require_in "$deploy_program" 'http://127.0.0.1:8083/internal/vmctl/deploy-refresh || printf'
+require_in "$deploy_program" '{user_id:$user_id,desktop_id:$desktop_id,target:$target}'
+require_in "$deploy_program" 'elif [ "$refresh_outcome" = "deferred" ] && { [ "${REFRESH_ACTIVE_COMPUTERS}" != "true" ] || [ "$refresh_rescue" = "true" ]; }; then'
+require_in "$deploy_program" 'Deferred ${refresh_vm_id} (vmctl retries it every minute until it updates): ${refresh_reason}'
+require_in "$deploy_program" 'record_receipt_artifact active_computers "$DEPLOY_COMMIT" pending'
+require_in "$deploy_program" 'active_computers: {commit: $commit, status: $status, deferred: $deferred}'
+require_in "$deploy_program" 'No active interactive computers need refresh'
 # The operator refresh (crash boot) runs only for an explicit manual dispatch.
-require "REFRESH_ACTIVE_COMPUTERS: \${{ github.event_name == 'workflow_dispatch' && inputs.refresh_active_computers && 'true' || 'false' }}"
-require 'X-Choir-Lifecycle-Caller: ci.deploy-refresh-forced'
+require_in "$workflow" "REFRESH_ACTIVE_COMPUTERS: \${{ github.event_name == 'workflow_dispatch' && inputs.refresh_active_computers && 'true' || 'false' }}"
+require_in "$deploy_program" 'X-Choir-Lifecycle-Caller: ci.deploy-refresh-forced'
 reject 'Preserving immutable constructed computer'
 reject 'select((.snapshot_kind // "") != "constructed-computer-version")'
 reject 'git reset --hard origin/main'
