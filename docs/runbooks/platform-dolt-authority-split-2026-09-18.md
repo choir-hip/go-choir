@@ -67,8 +67,11 @@ mysql -h 127.0.0.1 -P 13307 -u root corpus \
       SELECT COUNT(*) FROM og_edges;"
 # counts must match the pre-dump live values.
 
-# 6. Flip the DSNs (host-local env file; no redeploy).
-cat > /var/lib/go-choir/corpus-dsn.env <<'EOF'
+# 6. Flip the DSNs (host-local env file; no redeploy). Since 2026-10-22 the
+#    file lives in /var/lib/go-choir/unit-env, which every unit hides as a
+#    directory (docs/problems/host-containment-gaps-after-fp3-cut-2-2026-10-22.md);
+#    /var/lib/go-choir/corpus-dsn.env is only a link to it.
+cat > /var/lib/go-choir/unit-env/corpus-dsn.env <<'EOF'
 CORPUSD_CORPUS_DOLT_DSN=root@tcp(127.0.0.1:13307)/corpus?parseTime=true&multiStatements=true&clientFoundRows=true
 SOURCECYCLED_DOLT_DSN=root@tcp(127.0.0.1:13307)/corpus?parseTime=true&multiStatements=true&clientFoundRows=true
 EOF
@@ -90,8 +93,10 @@ curl -s https://choir.news/health
 ## Rollback
 
 ```bash
-# Fast path (B tables still present in Store A):
-rm /var/lib/go-choir/corpus-dsn.env
+# Fast path (B tables still present in Store A). Remove the file in
+# unit-env: `rm /var/lib/go-choir/corpus-dsn.env` removes only the link and
+# leaves corpusd on Store B.
+rm /var/lib/go-choir/unit-env/corpus-dsn.env
 systemctl restart go-choir-corpusd go-choir-sourcecycled
 systemctl stop go-choir-corpus-dolt   # optional
 

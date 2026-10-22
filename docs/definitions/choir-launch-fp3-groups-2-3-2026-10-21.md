@@ -119,7 +119,7 @@ now:
     re-run then (it was re-run in round 2: see round_2). Round 2 at
     b7eef4039, same filters: vmmanager, hostauth, proxy, vmctl, platform
     (347 s) all ok with -race -count=1; vet, py_compile, bash -n clean.
-  round_2 (DeepSeek bunch 41: cuts 1-3 accept with edits, cut 4 accept on a gate): >-
+  round_2 (DeepSeek bunch 41; cuts 1-3 accept with edits, cut 4 accept on a gate): >-
     M1 kvm group: NixOS declares it for every system
     (nixos/modules/config/users-groups.nix at the flake's locked nixpkgs
     fe1324228: users.groups.kvm.gid = ids.gids.kvm, 302 in
@@ -150,6 +150,20 @@ now:
     Group 2 is right on packets (real netfilter) but its nix half is
     unevaluated here (no nix binary on the worker; CI evaluates it).
   next_action: FP0 lands cuts 1-3 in order with the mandatory --expect-guest-floor check after each; cut 4 only after its entry gate (step 6) holds.
+  containment_gaps (2026-10-22, lane fp3-containment-gaps from 273d139c9): >-
+    Cut 2 is live (deploy T). Its proof found 28 containment failures,
+    recorded in docs/problems/host-containment-gaps-after-fp3-cut-2-2026-10-22.md.
+    The candidate is 49b2f1790 (record addendum), 545d573fd (tests),
+    844e0026b (fix, red) and the docs commit. It moves the four
+    EnvironmentFile-only env files into /var/lib/go-choir/unit-env, hidden
+    as a directory; it deletes the deploy's deploy.env scrub; it gives
+    caddy, qdrant, unbound, searx, searx-init, goproxy and pkgmirror the
+    host set. Cut 2 runbook step 2 is corrected (the marker with the
+    credential). Local: nix test 12/12, verifier tests 12/12, contract and
+    CI script tests pass (the gate test needs Linux flock), drvPath
+    evaluates. Next: FP0 lands it as its own deploy and runs "Containment
+    gaps after cut 2" steps 1-7. Open: problem 3, the gateway's renames of
+    codex-auth.json and gateway-identities.json, waits on its probe.
 ---
 
 # FP3 groups 2 and 3
@@ -238,10 +252,14 @@ Cut 2 (group 3: 239a23c02 .. 93205a30d), after the deploy:
    socket (9f337a3ac's check).
 2. SEC-11: on Node B, `curl -s -o /dev/null -w '%{http_code}' -H 'X-Internal-Caller: true' 'http://127.0.0.1:8082/internal/platform/objects?owner=x&computer=y'`
    answers (observe allows) and the proxy journal shows
-   "hostauth: observe: would refuse ... /internal/platform/objects";
-   the same with `-H @/var/lib/go-choir/secrets/internal-service-token.header`
-   logs nothing. Guest paths unchanged: a computer's story publish and
-   capture writes still work (they arrive from tap addresses).
+   "hostauth: observe: would refuse ... /internal/platform/objects".
+   The same request with the marker and the credential,
+   `curl -s -o /dev/null -w '%{http_code}' -H 'X-Internal-Caller: true' -H @/var/lib/go-choir/secrets/internal-service-token.header 'http://127.0.0.1:8082/internal/platform/objects?owner=x&computer=y'`,
+   answers 200 and logs nothing. The credential is checked in addition to
+   the marker, not instead of it: the credential alone answers 403
+   "internal caller required" (corrected 2026-10-22 after deploy T's
+   proof). Guest paths unchanged: a computer's story publish and capture
+   writes still work (they arrive from tap addresses).
 3. A cold boot of a test computer logs no "issuer: would refuse" (the
    issuer stays observe; its enforce flip is a later one-line change).
 4. After a clean day: flip `PROXY_OBJECT_GRAPH_INTERNAL_AUTH` to enforce
@@ -289,6 +307,87 @@ Cut 2 (group 3: 239a23c02 .. 93205a30d), after the deploy:
    computer (all succeed, no `owner-act: enforce: refused` line); a direct
    corpusd owner-mode write with the internal credential but no act is
    refused. Rollback: `ownerActMode = "observe"` and redeploy.
+
+## Containment gaps after cut 2 (lane fp3-containment-gaps)
+
+Problem record:
+[host-containment-gaps-after-fp3-cut-2-2026-10-22.md](../problems/host-containment-gaps-after-fp3-cut-2-2026-10-22.md).
+Deploy T's proof left 28 containment failures. Twelve came from the
+deploy's rename of deploy.env after the units restarted. Sixteen came from
+caddy, goproxy, qdrant and searx hiding nothing. The fix (844e0026b, red;
+tests 545d573fd) does three things:
+
+- moves the four EnvironmentFile-only env files into
+  `/var/lib/go-choir/unit-env`, which every unit hides as a directory;
+- deletes the deploy's scrub of deploy.env;
+- gives caddy, qdrant, unbound, searx, searx-init, go-choir-goproxy and
+  go-choir-pkgmirror the host set.
+
+Local evidence: `python3 -I scripts/test_host_containment_nix.py` (the
+evaluated host configuration and the activation snippet on a temp tree,
+12/12), `python3 -I scripts/test_verify_host_hardening_containment.py`
+(12/12), `.github/scripts/deploy-workflow-contract-test`, and the toplevel
+drvPath evaluates.
+
+FP0 deployed proof (Node B, root). Deploy D1 lands 844e0026b. Use the
+verifier's flags for the stage then current; at T they were
+`--expect-internal enforce --expect-dolt clients --expect-guest-floor --allow-reboot-pending`.
+
+1. The layout, names and modes only:
+   `ls -la /var/lib/go-choir/unit-env; ls -l /var/lib/go-choir/{deploy,corpus-dsn,corpusd-retrieval,sandbox-gateway-token}.env`.
+   Expect:
+   - unit-env is 0700 root, holding deploy.env, corpus-dsn.env and
+     sandbox-gateway-token.env (each 0600) and `.imported`;
+   - each old path is a link `-> unit-env/<name>`;
+   - the switch output in the deploy log shows "go-choir: moved ... into
+     /var/lib/go-choir/unit-env" once per file.
+2. `python3 - <flags> < scripts/verify-host-hardening.py`. Expect no
+   `[containment]` FAIL (T had 28). That covers:
+   - "cannot reach /var/lib/go-choir/unit-env" and its four files for
+     every running unit, go-choir-pkgmirror and unbound included;
+   - both sockets for every unit except vmctl and the Dolt probe;
+   - the four "is a link into /var/lib/go-choir/unit-env or absent" lines.
+
+   `[modes]` passes for unit-env and its files.
+3. The environments still load (key names only, never values):
+   ```
+   pid=$(systemctl show -p MainPID --value go-choir-proxy)
+   comm -23 <(grep -v '^#' /var/lib/go-choir/unit-env/deploy.env | cut -d= -f1 | sort -u) \
+            <(tr '\0' '\n' < /proc/$pid/environ | cut -d= -f1 | sort -u)
+   pid=$(systemctl show -p MainPID --value go-choir-corpusd)
+   comm -23 <(grep -v '^#' /var/lib/go-choir/unit-env/corpus-dsn.env | cut -d= -f1 | sort -u) \
+            <(tr '\0' '\n' < /proc/$pid/environ | cut -d= -f1 | sort -u)
+   ss -tnp state established '( dport = :13307 )' | grep -c corpusd
+   ```
+   Expect both `comm` outputs empty (every key reached the unit) and
+   corpusd connected to Store B (count above 0).
+4. Units restarted at the switch still serve:
+   - `curl -s -o /dev/null -w '%{http_code}' https://choir.news/health` is 200 (caddy);
+   - `curl -s 'http://127.0.0.1:8888/search?q=choir&format=json' | jq '.results | length'` is above 0 (searx);
+   - `dig @127.0.0.1 -p 8053 example.com +short` answers (unbound);
+   - `curl -s http://127.0.0.1:6333/readyz` answers (qdrant);
+   - goproxy's and pkgmirror's journals since the deploy show no start
+     failure;
+   - every unit is active: `systemctl --failed` lists no go-choir unit,
+     caddy, qdrant, searx or unbound.
+5. The rename case, on D1, with the same content:
+   `cd /var/lib/go-choir/unit-env && stat -c %i deploy.env && cp -p deploy.env deploy.env.next && mv deploy.env.next deploy.env && stat -c %i deploy.env`.
+   The inode changes. Re-run step 2: still no `[containment]` FAIL. This
+   is the operation that exposed deploy.env on T.
+6. A second deploy D2 (any later deploy): record
+   `stat -c %i /var/lib/go-choir/unit-env/deploy.env` before and after; it
+   is unchanged (the deploy no longer touches the file). Run step 2 again:
+   no `[containment]` FAIL.
+7. Problem 3 probe (in the problem record): read only. Its result decides
+   the gateway-state fix.
+
+Rollback: revert 844e0026b and redeploy. The links keep the old paths
+working for the reverted units. Return the files with
+`mv -f /var/lib/go-choir/unit-env/<name> /var/lib/go-choir/<name>` for
+each name present, then restart go-choir-proxy, go-choir-corpusd and
+go-choir-checkpointd. Roll back at once if any unit fails to start with a
+namespace error, if corpusd is not connected to 13307, or if step 3 shows
+a missing key.
 
 ## Residuals and owner questions
 
