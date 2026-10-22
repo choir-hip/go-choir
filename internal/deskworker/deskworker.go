@@ -14,6 +14,7 @@ import (
 type steps struct {
 	config      func() yaegikernel.SessionWorkerConfig
 	sockFD      func() (int, net.Conn, error)
+	appDesk     func() error
 	volunteer   func() error
 	memoryLimit func(uint64) error
 	goMemLimit  func()
@@ -26,6 +27,7 @@ func realSteps() steps {
 	return steps{
 		config:      func() yaegikernel.SessionWorkerConfig { return yaegikernel.SessionWorkerConfigFromEnv(nil, "") },
 		sockFD:      func() (int, net.Conn, error) { return yaegikernel.SessionWorkerSockFD(nil, "") },
+		appDesk:     func() error { return yaegikernel.RegisterCarriedAppDesk(nil, "") },
 		volunteer:   yaegikernel.VolunteerForOOMKill,
 		memoryLimit: yaegikernel.ApplyWorkerMemoryLimit,
 		goMemLimit:  func() { gomemlimit.ApplyDeskWorker() },
@@ -42,7 +44,7 @@ func realSteps() steps {
 // framed eval cells via yaegikernel.ExecuteWorkerSessionConn. It is the
 // killable-subprocess boundary for non-capsule desk model-authored Go.
 //
-// Startup order: gomemlimit.ApplyDeskWorker, ConfineDeskSessionWorker (exit 3
+// Startup order: RegisterCarriedAppDesk (exit 2 on error), gomemlimit.ApplyDeskWorker, ConfineDeskSessionWorker (exit 3
 // on error), RunDeskCellSelfTestIfRequested, then serving.
 func Run() int { return run(realSteps()) }
 
@@ -51,6 +53,12 @@ func run(s steps) int {
 	fd, conn, err := s.sockFD()
 	if err != nil || fd < 0 || conn == nil {
 		fmt.Fprintf(os.Stderr, "desk-session: session socket unavailable (fd=%d err=%v)\n", fd, err)
+		return 2
+	}
+	// An app desk's row crosses execve from the daemon (ARCH-03); a worker
+	// whose carry is missing or refused does not serve cells.
+	if err := s.appDesk(); err != nil {
+		fmt.Fprintf(os.Stderr, "desk-session: %v\n", err)
 		return 2
 	}
 	if len(cfg.AllowedPackages) == 0 {

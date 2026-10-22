@@ -9,7 +9,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
-func recorded(order *[]string, confineErr error) steps {
+func recorded(order *[]string, confineErr, appDeskErr error) steps {
 	c1, c2 := net.Pipe()
 	_ = c2
 	rec := func(n string) { *order = append(*order, n) }
@@ -18,6 +18,7 @@ func recorded(order *[]string, confineErr error) steps {
 			return yaegikernel.SessionWorkerConfig{AllowedPackages: []string{"fmt"}}
 		},
 		sockFD:      func() (int, net.Conn, error) { return 3, c1, nil },
+		appDesk:     func() error { rec("appdesk"); return appDeskErr },
 		volunteer:   func() error { rec("volunteer"); return nil },
 		memoryLimit: func(uint64) error { rec("rlimit"); return nil },
 		goMemLimit:  func() { rec("gomemlimit") },
@@ -29,10 +30,10 @@ func recorded(order *[]string, confineErr error) steps {
 
 func TestRunConfinesBeforeServing(t *testing.T) {
 	var order []string
-	if code := run(recorded(&order, nil)); code != 0 {
+	if code := run(recorded(&order, nil, nil)); code != 0 {
 		t.Fatalf("exit %d", code)
 	}
-	want := []string{"volunteer", "rlimit", "gomemlimit", "confine", "selftest", "serve"}
+	want := []string{"appdesk", "volunteer", "rlimit", "gomemlimit", "confine", "selftest", "serve"}
 	if !reflect.DeepEqual(order, want) {
 		t.Fatalf("startup order %v, want %v", order, want)
 	}
@@ -40,7 +41,7 @@ func TestRunConfinesBeforeServing(t *testing.T) {
 
 func TestRunDoesNotServeWhenConfinementFails(t *testing.T) {
 	var order []string
-	if code := run(recorded(&order, errors.New("landlock"))); code != 3 {
+	if code := run(recorded(&order, errors.New("landlock"), nil)); code != 3 {
 		t.Fatalf("exit %d, want 3", code)
 	}
 	for _, n := range order {
@@ -55,5 +56,17 @@ func TestRealStepsWireConfinement(t *testing.T) {
 	s := realSteps()
 	if s.confine == nil || s.serve == nil || s.goMemLimit == nil || s.selfTest == nil {
 		t.Fatal("realSteps leaves a startup step unwired")
+	}
+}
+
+func TestRunRefusesToServeWithoutItsCarriedAppDesk(t *testing.T) {
+	var order []string
+	if code := run(recorded(&order, nil, errors.New("carry refused"))); code != 2 {
+		t.Fatalf("exit %d, want 2", code)
+	}
+	for _, n := range order {
+		if n == "confine" || n == "serve" {
+			t.Fatalf("worker reached %q with a refused app-desk carry: %v", n, order)
+		}
 	}
 }
