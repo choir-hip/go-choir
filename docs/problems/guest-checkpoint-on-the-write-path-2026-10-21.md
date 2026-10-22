@@ -206,7 +206,7 @@ The owner chose option (a) for the non-commit class: before teardown,
 Close checks out each pool's single connection under the hard deadline,
 so no statement, transaction, commit or GC is in flight when the engine
 closes. Option (b), never closing the engine in-process, is not pursued.
-It is built in the next round on this station, after round 6 lands.
+It was built in round 7 (tests 1aaa5e7c9, fix 6dbdf815d); see below.
 
 ## Round 7: pin the pools, built (2026-10-22)
 
@@ -241,3 +241,17 @@ Round 7's teardown order is not the cause.
 Fixed in 7078b0561 (tests 949fb1467): Close checks the workspace's
 .dolt/noms is on disk before closing the engine and otherwise leaves the
 engine for process exit and returns an error; test paths are per process.
+
+## Round 7 review findings, folded in as round 7c (2026-10-22)
+
+DeepSeek v4.1 flash and Sonnet accepted round 7 with edits. Sonnet found
+that the "engine closed once and last" claim had no behavioral test (six
+mutants survived the focused set), that a failing Close stalls readers
+for its whole wait (a read issued during the wait took 1.55 s; up to
+about 10.25 s by default; reads recover within about 250 us afterwards,
+because the pin holds the read pool's connection while it waits for the
+write pool's), that a pin failure was reported as a running commit, and
+that Open's failure paths dropped Close's error. DeepSeek found two
+stale comments, this record's "built in the next round", and a log line
+that blamed a statement when the deadline was already spent. Tests
+564dc81ec, fix 8e68ece69; every one of the six mutants is now killed.
