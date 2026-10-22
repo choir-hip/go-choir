@@ -4,10 +4,12 @@ via virtio-pmem + DAX), before its security panel. Design and thresholds:
 docs/reports/res-08-shared-base-os-pmem-dax-design-2026-10-22.md §5.
 
 For each --vm-id it reads, from Node B over ssh:
-  guest  GET /internal/debug/pprof/pagecache (page-cache residency of
-         /nix/store and /mnt/persistent, by mincore; never faults a page)
-         and /internal/debug/pprof/procmem (meminfo, per-process RSS),
-         through the host-sourced route the guest serves on :8085;
+  guest  GET /internal/debug/pprof/procmem?pagecache=1: meminfo and
+         per-process RSS, joined with the page-cache residency of /nix/store
+         and /mnt/persistent (mincore; never reads or faults a page; owner
+         notes §40). The guest serves it on :8085 to host-sourced callers
+         holding the internal service token; the public edge refuses
+         /internal/*, so the read goes through Node B, with no guest shell;
 and once for the host:
   host   /proc/meminfo; each firecracker process's VmRSS/RssAnon/RssFile;
          every distinct store-image inode those processes hold open
@@ -114,7 +116,8 @@ def guest_read(host, ip, name):
 def summarize(guest):
     """The numbers the design report's thresholds use, in MiB."""
     mib = lambda b: round(b / (1 << 20), 1) if b is not None else None
-    pc, pm = guest.get("pagecache", {}), guest.get("procmem", {})
+    pm = guest.get("procmem", {})
+    pc = pm.get("page_cache") or {}
     roots = {r["name"]: r for r in pc.get("roots", [])}
     store, pers = roots.get("store", {}), roots.get("persistent", {})
     meminfo = pc.get("meminfo") or {}
@@ -150,8 +153,9 @@ def main():
         g = {}
         try:
             ip = guest_addr(args.ssh, vm)
-            g["pagecache"] = guest_read(args.ssh, ip, "pagecache")
-            g["procmem"] = guest_read(args.ssh, ip, "procmem")
+            g["procmem"] = guest_read(args.ssh, ip, "procmem?pagecache=1")
+            if g["procmem"].get("page_cache_error"):
+                raise RuntimeError("page cache: " + g["procmem"]["page_cache_error"])
             g["summary"] = summarize(g)
         except Exception as e:  # noqa: BLE001
             g["error"] = str(e)[:400]

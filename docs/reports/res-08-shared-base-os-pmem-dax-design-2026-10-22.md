@@ -21,8 +21,8 @@ the build slice. Everything else is reasoning, and is labelled as such.
   per idle guest. The guest struct-page array for the pmem region costs
   about 1.6% of the uncompressed image per guest (about 96 MiB for a
   6 GiB image), and that comes off the saving. §5 gives the read that
-  settles the number; it now exists (`/internal/debug/pprof/pagecache`,
-  commit b12f48e7b).
+  settles the number; it now exists (`/internal/debug/pprof/procmem?pagecache=1`,
+  also served alone as `/internal/debug/pprof/pagecache`; owner notes §40).
 - **What it opens.** The new channel is cache-line Flush+Reload on shared
   code and data across guests (§3, C1). It is not a privilege break. What
   it leaks is a victim's execution and data-access pattern inside shared
@@ -120,7 +120,7 @@ new panel.
 
 ## 5. Measurements FP0 takes (read-only)
 
-Prerequisite: commit b12f48e7b (the guest `pagecache` read) is deployed,
+Prerequisite: the guest page-cache read (lane/fp10-res08-pmem-dax) is deployed,
 and the guest has rebooted onto it.
 
 **Privilege check first.** The read reports a file as *unmeasured* when
@@ -156,7 +156,7 @@ evicts and writes nothing):
 
 Equivalent manual reads, if the script cannot run:
 - guest, on Node B:
-  `curl -s -H 'X-Internal-Caller: true' -H @/var/lib/go-choir/secrets/internal-service-token.header http://<guest-ip>:8085/internal/debug/pprof/pagecache`
+  `curl -s -H 'X-Internal-Caller: true' -H @/var/lib/go-choir/secrets/internal-service-token.header 'http://<guest-ip>:8085/internal/debug/pprof/procmem?pagecache=1'`
   The guest IP is `ip=` in `/var/lib/go-choir/vm-state/<vm>/fc-config.json`
   `boot_args`.
 - host, on Node B:
