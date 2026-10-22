@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# 90 GiB (recalibrated 2026-09-15): the 2026-08-26 floor of 100 GiB was set
-# when ~116 GiB was free (see
-# docs/evidence/node-b-deploy-disk-preflight-floor-2026-08-26.md); the host
-# has since grown to ~99 GiB free and the preflight began permanently
-# blocking deploys whose actual footprint (NixOS closure + guest images) is
-# single-digit GiB — and whose artifacts are typically already built by the
-# prebuild job. 90 GiB keeps ~30x headroom over observed build footprint.
-# The durable fix is host capacity, not a higher floor.
-min_free_kib="${DEPLOY_MIN_FREE_KIB:-94371840}"
+# 60 GiB (2026-10-22, docs/problems/node-b-nix-store-and-host-disk-policy-2026-10-22.md).
+# A deploy that starts here must end above nix's min-free (24 GiB in
+# nix/node-b.nix), where nix's auto-GC would delete the build's own unrooted
+# inputs (the 2026-09-17 deploy loop), with everything that can overlap it:
+#   60 >= 24 min-free + 8 deploy + 14 guest store compaction peak + 10 paper regrowth + 4 margin
+# scripts/test_node_b_disk_policy.py checks this. The guard below keeps the
+# floor above the *live* min-free whatever this default says.
+# (Earlier: 100 GiB on 2026-08-26, 90 GiB on 2026-09-15 while min-free was 80.)
+min_free_kib="${DEPLOY_MIN_FREE_KIB:-62914560}"
 
 # Guard (docs/problems/node-b-nix-store-and-host-disk-policy-2026-10-22.md,
 # review round 2): the floor must sit above the min-free nix runs with *now*,
