@@ -130,11 +130,19 @@ measured; per-structure sizes inferred, not measured):
 - **Read and pack buffers.** Two file readers (`RESTIC_READ_CONCURRENCY=2`)
   with chunker buffers of a few MB each; packs (`RESTIC_PACK_SIZE=64` MiB)
   are assembled in temp files under the unit's `PrivateTmp`, not RAM. Small.
-- **The scanner.** Without `--no-scan`, a second goroutine walks the whole
-  source in parallel only to print totals (bytes and files to do, for the
-  progress line). For a 4.58 M-entry directory it reads and sorts every
-  name, and it `lstat`s all 9.7 M files a second time. The daily run uses
-  `--json`, whose summary does not need the scan.
+- **The scanner** (corrected in review round 2). Without `--no-scan`, a
+  second goroutine walks the whole source in parallel only to print totals
+  for the progress line. It keeps nothing but four counters (`ScanStats`:
+  files, dirs, others, bytes; restic 0.19.1 `internal/archiver/scanner.go`).
+  While it is inside a directory it holds that directory's names, read and
+  sorted (`scanner.go:126-130`), and frees them when it leaves: for the
+  4.58 M-entry `pin-receipts` about 0.4 GB for the minutes the walk is
+  there, not retained. Its main cost is a second `lstat` of all 9.7 M files
+  (IO and dentry/inode slab). `--no-scan` therefore buys IO and a transient
+  slice, not the heap peak; it does not strengthen the "under 10G"
+  expectation below. The run's `--json` summary and the snapshot do not
+  depend on the scan (`cmd_backup.go` runs `arch.Snapshot` and the summary
+  unconditionally).
 - **Go heap slack.** `GOGC=50` lets the heap grow to 1.5 times the live
   set before a collection, and there is no `GOMEMLIMIT`, so nothing tells
   the runtime about the cgroup's line. If the live set is about 9 GB, the
@@ -205,8 +213,10 @@ Each with its effect on memory, read volume, durability and restore.
    `MemoryHigh=10G` (throttle, reclaim its own page cache first) under
    `MemoryMax=12G` (a cgroup-local OOM kill: only the backup dies).
    - Memory: bounds the unit at 12G resident, 0 swap. A run whose live set
-     exceeds that is killed inside its own cgroup, loudly (unit failed,
-     `last_attempt_result: failed`, the freshness check fails after 36 h).
+     exceeds that is killed inside its own cgroup, loudly: unit failed,
+     `last_attempt_result: failed` with the cause, and the freshness check
+     fails at its next 6-hourly run (review round 2, finding 1; before the
+     fix a killed run left the previous `ok` standing for up to 36 h).
    - Read volume: no swap IO from this unit.
    - Durability: no change while the live set fits; a night that does not
      fit fails loudly and keeps every earlier snapshot. That is a real
@@ -271,12 +281,15 @@ Each with its effect on memory, read volume, durability and restore.
 not change what is backed up:
 
 - `nix/node-b.nix`, `offHostBackupUnit` (all three units: backup, verify,
-  freshness): `MemorySwapMax = "0"`, `OOMScoreAdjust = 1000`, `GOMEMLIMIT=8GiB`
-  in the units' environment; `MemoryHigh=10G` and `MemoryMax=12G` unchanged.
-- `scripts/off-host-backup.sh`: `restic backup --no-scan`.
+  freshness): `MemorySwapMax = "0"`, `OOMPolicy = "continue"`,
+  `GOMEMLIMIT=8GiB` in the units' environment; `MemoryHigh=10G` and
+  `MemoryMax=12G` unchanged. Backup and verify only: `OOMScoreAdjust = 1000`.
+  Verify only: `GOMAXPROCS=2` (finding 2 below).
+- `scripts/off-host-backup.sh`: `restic backup --no-scan`; attempt marks
+  in status.json (finding 1); the verify's check with two connections.
 - `scripts/off-host-restore-drill.sh`: the example unit line drops
   `MemorySwapMax=4G` for `MemorySwapMax=0`, `OOMScoreAdjust=1000` and
-  `GOMEMLIMIT` (comment only).
+  `GOMEMLIMIT=8GiB` under 10G/12G (comment only).
 
 Expected: `MemorySwapPeak` 0 (enforced), `MemoryPeak` at or under 10 GiB
 (the throttle line; the page cache fills the gap above the Go heap),
@@ -298,7 +311,12 @@ Before `lane/fp9-remove-swap` deploys. Host swap may still be on; the unit's
 0. Confirm the deploy reached the unit:
    `systemctl show go-choir-offhost-backup -p MemorySwapMax -p MemoryHigh -p MemoryMax -p OOMScoreAdjust -p Environment`
    shows `MemorySwapMax=0`, `MemoryHigh=10737418240`, `MemoryMax=12884901888`,
-   `OOMScoreAdjust=1000`, and `GOMEMLIMIT=8GiB` in `Environment`. Also
+   `OOMScoreAdjust=1000`, `OOMPolicy=continue`, and `GOMEMLIMIT=8GiB` in
+   `Environment`; the verify unit the same plus `GOMAXPROCS=2`, and the
+   freshness unit `OOMScoreAdjust=0`. Read `status.json`'s
+   `last_verify_result` first: if the last Sunday verify failed, the new
+   freshness check fails from its first run (it now flags a failed verify
+   at once). Also
    `cat /sys/block/nvme*/queue/scheduler` (for the IO note in option 2),
    and the baseline: `grep -E 'MemAvailable|Swap' /proc/meminfo`,
    `grep -E 'pswpin|pswpout' /proc/vmstat`.
@@ -322,7 +340,10 @@ Before `lane/fp9-remove-swap` deploys. Host swap may still be on; the unit's
    unit from the drill script's header:
    `off-host-restore-drill.sh <id> snap` and `off-host-restore-drill.sh <id> tape`.
 4. The weekly verify by hand once (`systemctl start go-choir-offhost-backup-verify`),
-   read with the same `systemctl show` line.
+   read with the same `systemctl show` line. This gates `lane/fp9-remove-swap`
+   as much as the backup does.
+5. A freshness run after each (`systemctl start go-choir-offhost-backup-freshness`;
+   exit 0, journal "fresh: ...").
 
 Pass:
 
@@ -337,7 +358,8 @@ Pass:
 | Wall time | under 2 h | 1 h 11 min |
 | Drill `snap` | both stores `found=1` | passed 2026-10-21 |
 | Drill `tape` | 200 of 200 identical, both sqlite `integrity=ok` | passed 2026-10-20 |
-| Verify | `last_verify_result: ok`, `MemorySwapPeak` 0 | not run under these limits |
+| Verify | `Result=success`, `last_verify_result: ok`, `MemorySwapPeak` 0, `MemoryPeak` under 12 GiB | 10.3 GB + 4 GB swap (item 18, as the daily check) |
+| status.json on a failure | `last_*_result: failed` with `last_*_cause`, never a stale `ok` or `running` | a kill left the previous `ok` |
 
 If the run is OOM-killed at 12G (the conjecture is wrong: the live set is
 above 10 GB): read the "Consumed" CPU line (the collector at its cap shows
@@ -357,16 +379,70 @@ MemorySwapMax=4G` (the environment and the script need the revert).
 ## Residual risks
 
 - **The weekly verify** (`restic check --with-cache`, Sunday 06:00) walked
-  every tree at 10.3 GB resident with 4 GB of swap (item 18). Under the same
-  units it now has no swap. If its live set is above 12G it is OOM-killed;
-  the freshness check then fails after 10 days without a passing verify.
-  FP0 runs the verify by hand after the backup proof, or watches Sunday
-  2026-10-25.
+  every tree at 10.3 GB resident with 4 GB of swap (item 18). It now has no
+  swap, fewer tree loaders and `GOMEMLIMIT` (finding 2); whether that fits
+  12G is unmeasured. If it is OOM-killed, status.json says so and the
+  freshness check fails within 6 h. FP0 runs it by hand after the backup
+  proof; swap removal waits for a pass.
 - The tape's file count still grows where segments are not written (legacy
   paths), and the tree memory with it. Option 3 is the fix.
 - The images' nightly re-read stays (option 4).
 - The thrash attribution (section "Why restic reads terabytes", 2) is a
   hypothesis until the proof run's read volume.
+
+## Review round 2 (panel bunch 26), dispositions
+
+Gemini flash accept; Devin accept with lows; DeepSeek v4.1 flash accept
+with edits (restic 0.19.1 pinned, nix evaluated, systemd 261.3, all four
+script tests passing). Fixed in e025d9121 unless stated.
+
+1. **Medium: a killed run left `last_attempt_result` at the previous
+   `ok`.** Fixed. Backup and verify write `last_<kind>_result: running`
+   (with `_run`, `_pid`, an empty `_cause`) before any work. A non-zero
+   restic exit writes `failed` with a cause ("restic killed by signal 9
+   (KILL: a cgroup OOM kill sends this)"). The EXIT trap, with TERM, INT
+   and HUP traps, turns this run's `running` into `failed`, "interrupted
+   by SIGTERM before a result was written". A SIGKILL of bash leaves
+   `running`; freshness reads `running` with a dead or foreign pid as
+   interrupted (not fresh) and with a live backup process as in progress.
+   The units take `OOMPolicy=continue`: an OOM kill of restic is handled
+   by the script, which records it, instead of systemd stopping the unit
+   around it (the default `stop` would make the cause "interrupted by
+   SIGTERM"). Test: `scripts/off-host-backup-attempt-status-test.sh`, six
+   failure modes written first; it failed 11 of 16 checks before the code
+   and passes all after.
+2. **Medium: the verify unit was under-provisioned.** Fixed by reducing
+   its peak, not raising its cap; a larger cap is option 6's problem
+   (the host has about 7.7 GiB beside the guests). From restic 0.19.1
+   (`internal/data/tree_stream.go`, `StreamTrees`): `check` runs
+   connections + GOMAXPROCS + 1 tree loaders, each holding one decoded
+   tree. Trees over 50 MiB (the three flat directories) go to one
+   dedicated loader, so the big trees are one at a time already; the rest
+   scale with the loader count (5 + cores + 1 by default). The verify
+   unit now sets `GOMAXPROCS=2` and its check `-o rest.connections=2` (5
+   loaders), under `GOMEMLIMIT=8GiB`, 10G and 12G, no swap. Kept
+   `--read-data-subset` (the data read streams packs and adds little
+   memory) and `--with-cache`. Not available: `check` without its
+   structural walk (it always walks every tree of the snapshots checked);
+   `check latest` (restic 0.19.1 accepts snapshot filters) walks fewer
+   trees but not a smaller peak, since the newest snapshot holds the
+   largest trees. The fit is a conjecture; a killed verify is now loud
+   (finding 1), and swap removal waits for a hand verify that passes.
+3. **Low: the drill's `GOMEMLIMIT=6GiB` contradicted its "about 8 GB"
+   note.** Fixed: the example line is now `MemoryHigh=10G`,
+   `MemoryMax=12G`, `GOMEMLIMIT=8GiB`, matching the note and item 21's
+   7 GB peak with no swap.
+4. **Low: `OOMScoreAdjust=1000` on freshness; the comment omitted
+   front-importance.** Fixed: the adjustment is on the backup and verify
+   units only, and the comment names nix-daemon builds, checkpointd and
+   front-importance as the +1000 ties (all smaller than the backup).
+5. **Low (doc): the scanner memory claim.** Corrected in "What holds
+   restic's memory". Part of the finding stands and part does not: the
+   scanner retains only four counters (DeepSeek is right that nothing is
+   kept), but it does read and sort each directory's names while inside
+   it (`scanner.go:126-130`), so its memory is a transient slice the size
+   of the largest directory (about 0.4 GB), not O(1). `--no-scan` saves
+   that and a second 9.7 M-file `lstat` walk, not the heap peak.
 
 ## Heresy delta
 
@@ -376,3 +452,8 @@ probably inert on NVMe's `none` scheduler; the unit's swap filled while
 its memory was under its own line (host-wide reclaim, the competition with
 guests). introduced: none. repaired: none in this commit (the next commit
 repairs the first).
+
+Round 2: discovered: a killed run left the previous `ok` in status.json
+(freshness silent up to 36 h); a failed verify was not flagged for 10
+days. introduced: none. repaired: both (e025d9121), and the drill's
+contradicting limits.
