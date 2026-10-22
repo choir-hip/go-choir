@@ -168,9 +168,24 @@ The script runs these steps in order:
    `--no-markers`, are not asked; the script reads their
    self-development count from the obligations surface (`selfdev.busy`):
    a nonzero count aborts, an unreadable one needs
-   `--allow-crash-unverified`.
+   `--allow-crash-unverified`. The computers are listed again
+   immediately before the final pass: unasked computers are checked
+   again, and a computer that started running during the wait is asked
+   in the final pass. A 404/405 guest is not asked again in later
+   rounds. A `WARNING` line before the reboot names every unasked
+   computer whose live capsules were not checked. A final-pass abort
+   (a computer that wrote earlier answers anything else, even `busy` or
+   a passing 503) clears every marker: resolve the contention and rerun
+   from the pre-checks.
 3. **Reboot.** It runs `ssh node-b systemctl reboot` and waits up to
-   `--boot-timeout` (1200 s) for ssh with a new `boot_id`.
+   `--boot-timeout` (1200 s) for ssh with a new `boot_id`. If ssh exits
+   with a status other than 0 or its own 255 (systemctl refused: an
+   inhibitor, a bus error), or the old `boot_id` still answers after
+   `--down-wait` (300 s), the host did not go down: the script clears
+   every marker and exits 3. If the host goes down later anyway, every
+   computer boots as a crash (safe); run `--phase post` after it. Any
+   failure after the markers are written and before this step ends (a
+   failed receipt save, an interrupt) also clears them.
 4. **Post-checks** (below). The receipt JSON goes to
    `$TMPDIR/node-b-host-reboot-<UTC>.json`.
 

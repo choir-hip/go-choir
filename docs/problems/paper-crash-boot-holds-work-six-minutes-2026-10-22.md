@@ -343,3 +343,58 @@ line; there is no summary before the reboot.
 
 N6 (nit). A 404/405 (`unsupported`) guest is asked again every 15 s for
 the whole `--busy-wait` though its answer cannot change.
+
+### Fix, round 3 (lane `lane/fp0-reboot-script-r2`)
+
+- N1 fixed. After the rounds pass, the script lists the computers again
+  immediately before the final pass (`split_computers`). The unasked set
+  (held computers; every one under `--no-markers`) is rebuilt and
+  re-checked from the fresh list, so an apply that started during the
+  wait aborts; a running, non-held computer not asked before (woken
+  during the wait) joins the final pass and is judged like the others;
+  an unreadable list aborts and clears. Under `--no-markers` the second
+  list is the whole re-check. A computer both asked and now held is
+  judged by the worse of its two outcomes.
+- N2 fixed. `phase_reboot` reads ssh's exit status: anything but 0, 255
+  (ssh's own error, the connection dropping) or an ssh timeout means
+  systemctl refused, so every marker in `marks.sent_items` is cleared
+  and the run exits 3. If the old boot_id still answers after the new
+  `--down-wait` (300 s), the host did not go down: the markers are
+  cleared and the run exits 3. A host that never answers keeps the
+  markers and exits 4, as before. `reboot_after_mark` wraps the receipt
+  save and the reboot: any exception clears the markers and re-raises
+  (clearing a computer that already rebooted is harmless: its marker is
+  consumed or gone).
+- N3 declined, documented. A computer that wrote in the rounds and then
+  answers `busy` (or a passing 503) in the final pass aborts even under
+  `--allow-crash-close`. Fail closed kept: the earlier marker would be
+  armed against a state the guest no longer confirms, and the operator
+  reruns. The runbook says so.
+- N4 fixed. The `computers` call's ssh timeout is `max(180, 60 + 25 n)`
+  for n running guests (from the pre-check list, then from the first
+  list), in the mark and post phases. The pre-check's own first call
+  keeps 180 s; a timeout there stops the run before anything is written.
+- N5 fixed. One `WARNING` line before the reboot names every unasked
+  computer whose live capsules were not checked.
+- N6 fixed. A 404/405 guest is not asked again in later rounds; the
+  final pass asks it once more.
+- Tests: 14 more in `scripts/test_node_b_host_reboot.py` (53 in all),
+  with a fake host whose list changes between calls and a fake reboot
+  command and boot_id.
+
+Gemini review (bunch 118): ACCEPT, no required findings. Its risks are
+recorded as residuals:
+
+- The guest requests in one mark call run one after another (25 s
+  each), so with many hung guests a final pass takes minutes and the
+  first markers age while it runs. `marked_at` is stamped before the
+  pass, so post's age is never understated; a marker that ages out
+  makes a crash boot, the safe side. Concurrent requests in the remote
+  program would shorten it; not done in this round.
+- A clear that fails because ssh to the host is gone leaves markers for
+  up to 15 minutes; the script logs each one and the runbook says to
+  clear them by hand.
+
+Residuals after round 3: as after round 2 (unasked live capsules; the
+seconds between the final pass and the reboot; no live proof), plus
+the two above.
