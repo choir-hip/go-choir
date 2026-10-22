@@ -60,3 +60,35 @@ func TestParseAcceptsAWellFormedFile(t *testing.T) {
 		t.Fatalf("platform ids = %q", got)
 	}
 }
+
+// Test computers (docs/problems/vm-state-retention-skips-test-computers-
+// and-quarantines-2026-10-22.md): a registered account's computer that the
+// operator names as a test computer. Ways it could fail: a platform
+// computer or a paid account's computer is also listed as test and so
+// becomes disposable; a mistyped id names nothing; the list is required
+// and an older file stops vmctl.
+func TestParseTestComputers(t *testing.T) {
+	ok := `{"schema":"choir.computer_tiers.v1","paid_accounts":[],"platform_computers":[],
+	  "test_computers":[{"computer_id":"computer-2bd23366dc4bc1f9fd3aed0b299491a5","note":"FP0 proof computer"}]}`
+	tiers, err := Parse([]byte(ok))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(tiers.TestComputerIDs(), ","); got != "computer-2bd23366dc4bc1f9fd3aed0b299491a5" {
+		t.Fatalf("test ids = %q", got)
+	}
+	if _, err := Parse([]byte(`{"schema":"choir.computer_tiers.v1","paid_accounts":[],"platform_computers":[]}`)); err != nil {
+		t.Fatalf("a file without test_computers must still parse: %v", err)
+	}
+	bad := map[string]string{
+		"bad id":        `{"schema":"choir.computer_tiers.v1","paid_accounts":[],"platform_computers":[],"test_computers":[{"computer_id":"vm-1","note":"x"}]}`,
+		"no note":       `{"schema":"choir.computer_tiers.v1","paid_accounts":[],"platform_computers":[],"test_computers":[{"computer_id":"computer-2bd23366dc4bc1f9fd3aed0b299491a5"}]}`,
+		"twice":         `{"schema":"choir.computer_tiers.v1","paid_accounts":[],"platform_computers":[],"test_computers":[{"computer_id":"computer-2bd23366dc4bc1f9fd3aed0b299491a5","note":"a"},{"computer_id":"computer-2bd23366dc4bc1f9fd3aed0b299491a5","note":"b"}]}`,
+		"also platform": `{"schema":"choir.computer_tiers.v1","paid_accounts":[],"platform_computers":[{"computer_id":"computer-1355b83bced1613eb048ee28d66688a8","note":"a"}],"test_computers":[{"computer_id":"computer-1355b83bced1613eb048ee28d66688a8","note":"b"}]}`,
+	}
+	for name, body := range bad {
+		if _, err := Parse([]byte(body)); err == nil {
+			t.Errorf("%s: parsed without error", name)
+		}
+	}
+}
