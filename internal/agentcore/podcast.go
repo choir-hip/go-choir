@@ -14,6 +14,7 @@ import (
 	"time"
 
 	contentowner "github.com/yusefmosiah/go-choir/internal/content"
+	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -88,7 +89,10 @@ func (h *APIHandler) HandlePodcastSearch(w http.ResponseWriter, r *http.Request)
 		limit = 25
 	}
 	resp := podcastSearchResponse{Query: query, Provider: podcastSearchProviderName(), ProviderStatus: "pending"}
-	client := &http.Client{Timeout: 12 * time.Second}
+	// The guarded client (address guard, re-checked redirects), and so the
+	// host fetch route on a granted computer (row B1 of the guest network
+	// inventory).
+	client := sourcefetch.Client(12 * time.Second)
 	results, err := searchPodcastProvider(r.Context(), client, query, limit)
 	if err != nil {
 		resp.ProviderStatus = "error"
