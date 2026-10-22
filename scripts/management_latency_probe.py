@@ -215,8 +215,13 @@ def load_cred(path):
 
 
 def model_calls(events):
-    """Per model call: (iteration, model, seconds), paired from the request
-    loop.progress (no input_tokens) and the response one (input_tokens)."""
+    """Per model call: (iteration, model, seconds, input tokens).
+
+    A response loop.progress (input_tokens or stop_reason) carries the call's
+    provider_call_ms since journal cut R1 (the request-side line is bus-only).
+    Older tapes have two lines per call: the request one (message_roles or
+    messages, no input_tokens) and the response one, and the seconds are the
+    difference of their stamps."""
     calls, pending = [], {}
     for e in events:
         if e.get("kind") != "loop.progress":
@@ -226,10 +231,15 @@ def model_calls(events):
         t = parse_ts(e.get("ts"))
         if "input_tokens" in p or "stop_reason" in p:
             start = pending.pop(it, None)
-            if start is not None and t is not None:
-                calls.append({"iteration": it, "model": p.get("model") or p.get("llm_model"),
-                              "s": round((t - start).total_seconds(), 1),
-                              "input_tokens": p.get("input_tokens")})
+            if isinstance(p.get("provider_call_ms"), (int, float)):
+                seconds = round(p["provider_call_ms"] / 1000.0, 1)
+            elif start is not None and t is not None:
+                seconds = round((t - start).total_seconds(), 1)
+            else:
+                continue
+            calls.append({"iteration": it, "model": p.get("model") or p.get("llm_model"),
+                          "s": seconds,
+                          "input_tokens": p.get("input_tokens")})
         elif "message_roles" in p or "messages" in p:
             pending[it] = t
     return calls

@@ -3547,6 +3547,9 @@ func (rt *Runtime) executeActivation(ctx context.Context, rec *types.RunRecord) 
 // progress event's phase ("tool_loop", "tool_loop_budget_usage", ...) is
 // written into its payload unless the payload names one already; cost
 // extraction and the trace export read it there.
+//
+// A line types.LiveOnly names is published on the bus and not appended: the
+// live readers subscribe to the bus and nothing reads it from the tape.
 func (rt *Runtime) runEventEmitter(ctx context.Context, rec *types.RunRecord) provideriface.EventEmitFunc {
 	return func(kind types.EventKind, phase string, payload json.RawMessage) {
 		cause := events.CauseProviderProgress
@@ -3563,12 +3566,22 @@ func (rt *Runtime) runEventEmitter(ctx context.Context, rec *types.RunRecord) pr
 					"loop_id": rec.RunID,
 					"phase":   phase,
 				})
-				rt.emitEvent(ctx, rec, types.EventTextureAgentRevisionProgress,
+				rt.emitRunEvent(ctx, rec, types.EventTextureAgentRevisionProgress, "",
 					events.CauseProviderProgress, progressPayload)
 			}
 		}
-		rt.emitEvent(ctx, rec, kind, cause, payload)
+		rt.emitRunEvent(ctx, rec, kind, phase, cause, payload)
 	}
+}
+
+// emitRunEvent emits one run event: appended and published, or only published
+// when types.LiveOnly names it.
+func (rt *Runtime) emitRunEvent(ctx context.Context, rec *types.RunRecord, kind types.EventKind, phase string, cause events.EventCause, payload json.RawMessage) {
+	if types.LiveOnly(kind, phase) {
+		rt.publishEvent(rec, kind, cause, payload)
+		return
+	}
+	rt.emitEvent(ctx, rec, kind, cause, payload)
 }
 
 // payloadWithPhase adds "phase" to a JSON object payload that lacks one.
@@ -4708,17 +4721,7 @@ func trajectoryIDForRun(rec *types.RunRecord) string {
 // emitEvent creates and persists an event record, then publishes it on the
 // event bus for live streaming.
 func (rt *Runtime) emitEvent(ctx context.Context, rec *types.RunRecord, kind types.EventKind, cause events.EventCause, payload json.RawMessage) {
-	evRec := &types.EventRecord{
-		EventID:      uuid.New().String(),
-		RunID:        rec.RunID,
-		AgentID:      rec.AgentID,
-		ChannelID:    rec.ChannelID,
-		OwnerID:      rec.OwnerID,
-		TrajectoryID: trajectoryIDForRun(rec),
-		Timestamp:    time.Now().UTC(),
-		Kind:         kind,
-		Payload:      payload,
-	}
+	evRec := newRunEventRecord(rec, kind, payload)
 
 	if err := rt.store.AppendEvent(ctx, evRec); err != nil {
 		log.Printf("runtime: persist event %s: %v", evRec.EventID, err)
@@ -4729,6 +4732,30 @@ func (rt *Runtime) emitEvent(ctx context.Context, rec *types.RunRecord, kind typ
 		Actor:  events.ActorRuntime,
 		Cause:  cause,
 	})
+}
+
+// publishEvent publishes a run event on the live bus without appending it. It
+// carries no Seq or StreamSeq, so a live client's catch-up cursor ignores it.
+func (rt *Runtime) publishEvent(rec *types.RunRecord, kind types.EventKind, cause events.EventCause, payload json.RawMessage) {
+	rt.bus.Publish(events.RuntimeEvent{
+		Record: *newRunEventRecord(rec, kind, payload),
+		Actor:  events.ActorRuntime,
+		Cause:  cause,
+	})
+}
+
+func newRunEventRecord(rec *types.RunRecord, kind types.EventKind, payload json.RawMessage) *types.EventRecord {
+	return &types.EventRecord{
+		EventID:      uuid.New().String(),
+		RunID:        rec.RunID,
+		AgentID:      rec.AgentID,
+		ChannelID:    rec.ChannelID,
+		OwnerID:      rec.OwnerID,
+		TrajectoryID: trajectoryIDForRun(rec),
+		Timestamp:    time.Now().UTC(),
+		Kind:         kind,
+		Payload:      payload,
+	}
 }
 
 // persistEvent persists an event record without publishing it on the bus.
