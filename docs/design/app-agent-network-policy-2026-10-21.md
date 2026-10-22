@@ -114,7 +114,9 @@ exist, or declaring a listener, forward or tunnel into the guest, is invalid.
    revokes its egress grants and removes its ingress routes at the host
    service in the same owner act. Revocation is real because credentials stay
    with the platform (S4 principle 5).
-6. **Renewal.** Durable grants expire on their `renewal` period; renewal is an
+6. **Renewal** (withdrawn for app desks by owner ruling Q3, owner notes
+   §40, 2026-10-22: preset policies approved at install, never renewed by
+   the owner; see FP10 NET-10 §5.1). Durable grants expire on their `renewal` period; renewal is an
    owner act or a pre-approved policy. A missed renewal expires the grant
    visibly; it does not extend silently.
 7. **Events.** Issued, used, widened-pending, approved, renewed, expired and
