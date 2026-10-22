@@ -2,7 +2,8 @@
 
 Date: 2026-10-22, 17:00 UTC. Lane: FP0 platform Dolt oldgen
 (`lane/fp0-platform-dolt-oldgen`). Status: open; problem record first (381b7ee5f), then the switch
-(`90ea1e378`, inert) and the runbook. Companion to FP0's record
+(`90ea1e378`, inert), the runbook, review round 1 (findings `1dfa3c38f`,
+fixes `c4fe5db2d`). Companion to FP0's record
 [platform-dolt-oldgen-grows-every-auto-gc-2026-10-22.md](platform-dolt-oldgen-grows-every-auto-gc-2026-10-22.md)
 (on `lane/fp0-disk-pressure`), which reads the GC mechanism in Dolt's code;
 this record takes the next questions: why the rate, what the supervised squash
@@ -58,7 +59,8 @@ the fixes it names: red (Store A writes, the platform Dolt unit).
   replay watermark record (`file_cas.go:47, 107`); tape tombstones and
   projection base pin releases. `-Am` commits every table, so one boundary
   commit also snapshots whatever vmctl and checkpointd wrote.
-- **Nothing reads Store A's commit graph.** No code outside the guest
+- **Nothing in the product reads Store A's commit graph** (four operational
+  tools do: review round 1 R6 and the table in §4). No code outside the guest
   stores (`internal/store`, `internal/projectionbase`, the
   `computerversion.DoltStateExtractor` used only on guest workspaces) reads
   `dolt_log`, `dolt_diff`, `dolt_history_*`, `AS OF` or `HASHOF('HEAD')`
@@ -281,61 +283,124 @@ lost, so only for a store that is wrong.
 
 ## 4. A lasting cadence: stop the snapshots at the source, squash rarely
 
-**The fix (built, red, inert: `90ea1e378`).** `PLATFORM_DOLT_SNAPSHOTS=off`
-stops Store A's `DOLT_COMMIT` snapshots: `doltbatch` gains a mode in which
-`Mark`, `CommitNow`, `Flush` and `Close` are no-ops returning nil, and
-`platform.openStore` applies it to the Store A committer only. corpusd and
-checkpointd load the optional
+(Revised after review round 1; the findings are R1 to R8 below.)
+
+**The fix (built, red, inert: `90ea1e378`, repaired in `c4fe5db2d`).**
+`PLATFORM_DOLT_SNAPSHOTS=off` stops Store A's `DOLT_COMMIT` snapshots:
+`doltbatch` gains a mode in which `Mark`, `CommitNow`, `Flush` and `Close`
+are no-ops returning nil, and `platform.openStore` applies it to the Store A
+committer through `applyStoreASnapshotEnv(os.Getenv)`. With a separate
+corpus DSN (Node B since 2026-09-19) Store B's committer is untouched; in
+the shared-pool fallback (an empty `corpus-dsn.env`) the one committer
+serves both and the switch stops the corpus tables' snapshots too, by
+design (R7). corpusd and checkpointd load the optional
 `/var/lib/go-choir/platform-dolt-snapshots.env`; absent (as deployed),
-nothing changes. With it, oldgen stops growing between squashes: a Default
-auto GC with no new commit adds nothing to oldgen and rewrites in newgen
-only what the working set has that HEAD lacks (the divergence D). Store A's
-size is then bounded by its live set plus D, whatever the event rate, so
-H1 or H2 stops mattering.
+nothing changes.
 
-Why it is safe, read in code: nothing reads Store A's commits (§1); SQL
-`COMMIT` is the durability (the doltbatch drill on 2.1.9; the new test
-`TestModeOffWriteSurvivesReopen` on the embedded 2.2.0); auto GC still runs
-(its hook fires on working-set updates); the off-host backup copies the
-working set; the squash tool commits the working set (`-A`) and checks
-HEAD root equals the WORKING root it recorded.
+With it, oldgen stops growing between squashes: a Default auto GC with no
+new commit adds nothing to oldgen and rewrites in newgen only what the
+working set has that HEAD lacks (the divergence D). That removes the
+**history** overhead (every superseded leaf, internal node and row version
+each commit kept), not **live** growth: D is the post-flip live delta,
+mostly the append-only `computer_event_append_receipts` rows and their four
+indexes, and it grows with the event rate (R4). "Oldgen flat" can pass
+while `noms` still grows; the measurement that matters is total `noms`
+growth per day after the flip. If that stays near 1.6 GB a day, the disk
+problem is live-data growth and needs a retention decision for Store A's
+receipts, not more squashes.
 
-What it costs: each auto GC copies D, which grows by Store A's net live
-change (mostly new event receipts) until the next squash folds it into
-oldgen. Auto GC then runs less often (it waits until the store has grown
-by more than newgen) and each run takes longer. Watch the Dolt journal's
-`Successfully completed auto GC of database platform in …` durations.
+Why it is safe:
+
+- **Durability.** SQL `COMMIT` persists the working set (Dolt's journal is
+  fsynced on every root update, the same path a `DOLT_COMMIT` takes). Crash
+  evidence: the 2026-09-19 kill -9 drill on 2.1.9, and Sonnet's probes on
+  real Dolt **2.4.2** (round 1, R5): a `sql-server` killed with -9 mid-write
+  with no `DOLT_COMMIT` lost none of 93 acknowledged rows, and none of 108
+  with two `DOLT_GC` calls during the writes. `TestModeOffWriteSurvivesReopen`
+  closes the store gracefully: it shows persistence across a reopen, not
+  crash durability.
+- **Auto GC still runs, read in the 2.4.2 source** (`v2.4.2`,
+  `go/libraries/doltcore/sqle/auto_gc.go`: `ExecuteForWorkingSets()` returns
+  true; auto GC always uses `GCMode_Default`; `shouldRequestGC` and the
+  128 MiB threshold as in 2.2.0. `go/libraries/doltcore/doltdb/hooksdatabase.go`:
+  `UpdateWorkingSet` calls `ExecuteCommitHooks(ctx, ds, true, false)` and a
+  hook runs when `!onlyWS || hook.ExecuteForWorkingSets()`.
+  `go/store/types/value_store.go`: `oldGenFinalizer.SwapChunksInStore` only
+  under `GCMode_Full`). Read on GitHub at the tag, 2026-10-22; the running
+  behaviour is checked after the flip (step 2's journal check).
+- **Backups.** `DOLT_BACKUP('sync-url')` commits the session working set
+  and copies the whole noms root (read in code; Sonnet restored an
+  uncommitted working set from a sync on 2.4.2); the btrfs snapshot copies
+  the directory. The manifest now also records Store A's receipt count and
+  the drill requires it (R2, `c4fe5db2d`).
+- **The squash** commits the working set whenever HEAD lags it, not only
+  when the log has more than 2 commits (R1 and R8, `c4fe5db2d`), so it can
+  run again after the flip.
+
+**Operational readers of Store A's commit history, and what each needs
+after the flip (R6).** Nothing in the product or any authority path reads
+it; these operational tools do:
+
+| Reader | What it reads | After the flip |
+|---|---|---|
+| The squash tool (`internal/projectionbase/squash.go`) | commit count, HEAD vs WORKING root | fixed in `c4fe5db2d`: commits the working set when HEAD lags; the root check is unchanged |
+| The off-host backup manifest (`scripts/off-host-backup.sh` `dolt_head`) | newest `dolt_log` hash | still recorded (it identifies the squash commit); `dolt_rows` added: Store A's receipt count, read before the capture |
+| The restore drill (`scripts/off-host-restore-drill.sh` `snap`) | that hash in the restored log | hash check kept; the restored receipt count must be at least the recorded one (a manifest from before the change says so and relies on the head) |
+| The subvolume migration (`scripts/dolt-data-to-subvolume.sh` `head_of`) | head before and after a one-shot move | equality holds with a frozen head and proves nothing; harmless (the move already ran or is a one-off); if it runs again after the flip, compare the receipt count by hand |
+| The history audit (`scripts/dolt-history-audit.sh`, was inline in nix) | `COUNT(*) FROM dolt_log` | flat after the flip, by design; newgen (8 GiB) and journal (4 GiB) lines and alarms added (R4) |
 
 **Order (each step the owner's or FP0's):**
 
-1. Land `90ea1e378` (inert; the deploy restarts corpusd and checkpointd
-   with the same behaviour). No-effect proof: the paper polls, corpusd
-   healthy, `dolt_log` keeps growing as before (audit line).
-2. Flip, observe first on the readings: `echo PLATFORM_DOLT_SNAPSHOTS=off
-   | sudo tee /var/lib/go-choir/platform-dolt-snapshots.env && sudo chmod
-   0600 … && sudo systemctl restart go-choir-corpusd`. corpusd logs
-   `Store A snapshot commits off`. Over the next day: the oldgen `du` is
-   flat across auto GCs (no new oldgen file), the audit's commit count is
-   flat, newgen (`du -sk …/.dolt/noms` minus oldgen) grows slowly, auto GC
-   durations stay under a minute, the liveness probe never aborts, the
-   02:30 off-host backup succeeds.
-   Stop rule: an auto GC over 2 minutes, a liveness abort, or corpusd
-   errors: `sudo rm` the env file and restart corpusd (the next snapshot
-   commits the whole working set; nothing is lost).
+1. Land the lane (the switch inert). The deploy restarts corpusd and
+   checkpointd with the same behaviour; the squash change in
+   `internal/projectionbase` maps to vmctl and the guests too (the
+   classifier's "projection recovery consumers"), so the landing is not a
+   host-only deploy. No-effect proof: the paper polls, corpusd healthy,
+   the audit's new line (run the unit or wait for the daily run) shows
+   commits still growing, and newgen and journal under their lines.
+   Before landing, FP0 reads `du -sk` of both stores' `.dolt/noms`,
+   `noms/oldgen` and the journal file
+   (`noms/vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv`) so the new 8 GiB newgen and
+   4 GiB journal lines do not fail on day one; if corpus-dolt's newgen
+   is above 8 GiB, set `GO_CHOIR_DOLT_MAX_NEWGEN_KIB` for the unit first.
+2. Flip: `echo PLATFORM_DOLT_SNAPSHOTS=off | sudo tee
+   /var/lib/go-choir/platform-dolt-snapshots.env && sudo chmod 0600 … &&
+   sudo systemctl restart go-choir-corpusd`. corpusd logs `Store A snapshot
+   commits off` (checkpointd logs it at every run: 1,440 lines a day,
+   harmless).
+   **Precondition and first-hour check (2.4.2 auto GC):** within two hours
+   the Dolt unit logs `Successfully completed auto GC of database
+   platform`, and after it the journal file is back under about 256 MiB.
+   No auto GC line in two hours while the journal is over 256 MiB means
+   auto GC does not run on working-set updates in the deployed server:
+   stop (rule below).
+   **Over 24 hours:** oldgen `du` flat (no new oldgen file); the audit's
+   commit count flat; total `noms` growth measured (FP0 records the
+   KiB/day: this is the live growth D, the figure for the retention
+   question above); auto GC durations under a minute; no liveness abort;
+   the 02:30 off-host backup succeeds and its manifest holds
+   `dolt_rows` with `platform=<n>`.
+   **Stop rule:** an auto GC over 2 minutes, no auto GC as above, a
+   liveness abort, or corpusd errors: `sudo rm` the env file and restart
+   corpusd (the next snapshot commits the whole working set; nothing is
+   lost; that commit may be large after a long off period, so its first
+   commit is watched).
 3. The supervised squash (§3), once, to drop the history already there.
-   It can run before or after step 2; after is better (the oldgen it
-   rewrites stops moving).
-4. Cadence afterwards: the squash only folds D into oldgen, so it is
-   needed rarely: monthly, or when newgen passes a few GiB, or when auto GC
-   durations grow. Keep `platformDoltSquashTimerEnabled = false` while
-   snapshots are off; each run is a 10 to 30 minute Store A outage.
+   After step 2 is better (the oldgen it rewrites stops moving). It needs
+   `c4fe5db2d` deployed.
+4. Cadence afterwards: each squash folds D into oldgen (one commit, a
+   full GC of the live set) and keeps Store A at two commits. Run it when
+   the audit's newgen passes about 4 GiB, when auto GC durations pass a
+   minute, or monthly, whichever is first; each run is a 10 to 30 minute
+   Store A outage, so it stays a supervised act and
+   `platformDoltSquashTimerEnabled` stays false while snapshots are off.
    If the owner keeps snapshots on instead, the weekly timer is the
-   bound: under H1 that retains about 11 to 18 GB a week; under H2 weekly
-   is too slow and the timer needs a daily calendar, at a daily outage.
+   bound: under H1 about 11 to 18 GB a week retained; under H2 weekly is
+   too slow.
 
-Not changed: the history audit's thresholds (the alarm stays at 50 GiB);
-Store B's committer (`platform-corpus`, corpus-dolt 6.3 GB) has the same
-mechanism and is out of this lane's scope (named residual).
+Not changed: the oldgen alarm (still 50 GiB). Store B's committer
+(`platform-corpus`, corpus-dolt 6.3 GB) has the same mechanism and is out
+of this lane's scope (named residual).
 
 ## Open questions
 
@@ -415,3 +480,17 @@ Recorded before the fixes. Reviews: `~/runs/reviews/bunch75-{sonnet,deepseek,fla
   code** (the same defect as R1, in the record).
 - Observed by Sonnet, harmless: with the file present checkpointd logs the
   "snapshot commits off" line at every run (1,440 a day).
+
+### Dispositions (2026-10-22)
+
+| Finding | Disposition | Where |
+|---|---|---|
+| R1 second squash fails | fixed: squash when HEAD's root differs from WORKING too; test reproduces the refusal on `752856812` | `squash.go`, `TestSquashAndGCSquashesAgainWithSnapshotsOff` (`0fd3f3ab0`, `c4fe5db2d`) |
+| R2 drill head vacuous | fixed: manifest `dolt_rows` (Store A receipt count, read before the capture); the drill requires restored >= recorded | `off-host-backup.sh`, `off-host-restore-drill.sh`, snapshot test item 11; the drill itself runs only on Node B |
+| R3 env seam untested | fixed: `applyStoreASnapshotEnv(os.Getenv)`; P1, P2, P3 each fail a test (checked by mutating `store.go`) | `snapshot_mode_test.go` (a source guard for CI, a dolt sql-server test where the CLI exists) |
+| R4 no newgen/journal alarm; D grows with the event rate; 2.4.2 | fixed: the audit is `scripts/dolt-history-audit.sh` with newgen and journal lines and alarms; §4 states D is live growth and adds the 24 h `noms` measurement; the 2.4.2 source read and a first-hour check as the flip precondition | `scripts/test-dolt-history-audit.sh`, §4 |
+| R5 durability wording | reworded in §4: graceful reopen vs kill -9; Sonnet's 2.4.2 kill -9 probes recorded | §4, R5 |
+| R6 four operational readers | listed with what each needs after the flip | §4 table |
+| R7 Store B conditional | stated | §4 |
+| R8 record vs code on the squash | corrected with R1 | §4 |
+| (found while fixing) the classifier sent the audit and backup scripts to the conservative guest-image path | fixed: host activation for the two scripts read into nix; drill and script tests deploy nothing | `deploy-impact-classify` (+ test `f45e4248e`) |

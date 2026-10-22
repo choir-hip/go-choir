@@ -74,37 +74,42 @@ boundaries:
 now:
   status: blocked
   slice: >-
-    Record, tests and the inert switch pushed; runbook and cadence written.
-    Waits on FP0's readings, landing, and the owner's flip and squash.
-  source_ref: 90ea1e378
+    Review round 1 (bunch 75: Sonnet, DeepSeek, flash; accept with edits)
+    repaired: findings recorded (1dfa3c38f), tests first (0fd3f3ab0,
+    f45e4248e), fixes (c4fe5db2d), record §4 revised. The switch stays
+    inert until the env file exists. Waits on FP0's landing (not a
+    host-only deploy: projectionbase maps to vmctl and the guests) and the
+    owner's flip, after the first-hour auto GC check in record §4.
+  source_ref: c4fe5db2d
   deploy_identity: unchanged
-  candidate: {id: pdolt-snapshots-off, state: pushed, ref: lane/fp0-platform-dolt-oldgen, base: f0b1ee313, digest: none, scope: [internal/doltbatch/committer.go, internal/doltbatch/committer_test.go, internal/platform/store.go, internal/platform/snapshot_mode_test.go, nix/node-b.nix, docs/problems/platform-dolt-oldgen-rate-and-squash-window-2026-10-22.md, docs/definitions/choir-launch-fp0-platform-dolt-oldgen-2026-10-22.md]}
+  candidate: {id: pdolt-snapshots-off, state: pushed, ref: lane/fp0-platform-dolt-oldgen, base: f0b1ee313, digest: none, scope: [internal/doltbatch/committer.go, internal/doltbatch/committer_test.go, internal/platform/store.go, internal/platform/snapshot_mode_test.go, internal/projectionbase/squash.go, internal/projectionbase/squash_test.go, nix/node-b.nix, scripts/dolt-history-audit.sh, scripts/test-dolt-history-audit.sh, scripts/off-host-backup.sh, scripts/off-host-backup-dolt-snapshot-test.sh, scripts/off-host-restore-drill.sh, .github/scripts/deploy-impact-classify, .github/scripts/deploy-impact-classify-test, docs/problems/platform-dolt-oldgen-rate-and-squash-window-2026-10-22.md, docs/definitions/choir-launch-fp0-platform-dolt-oldgen-2026-10-22.md]}
   conjecture:
     id: C-pdolt-snapshots-off
     claim: >-
       With PLATFORM_DOLT_SNAPSHOTS=off, Store A's oldgen stops growing
-      between squashes, with no lost write and no failed backup.
-    test: oldgen du and dolt_log count flat for 24 h after the flip; auto GC durations under 60 s; corpusd and the paper healthy; the 02:30 backup succeeds.
-    edge: missing_oracle (no Node B reading since the flip; server 2.4.2 against the 2.2.0 code read)
+      between squashes, with no lost write and no failed backup, and the
+      squash can fold the working set on every later run.
+    test: auto GC line and journal under 256 MiB within 2 h of the flip; oldgen du and dolt_log flat for 24 h; total noms growth per day recorded; auto GC under 60 s; the backup manifest holds dolt_rows; corpusd and the paper healthy.
+    edge: missing_oracle (no Node B reading since the flip; 2.4.2 read in source, not yet observed)
     delta_o: record §4 step 2
     scope_if_supported: Store A
     status: active
     evidence_refs: [docs/problems/platform-dolt-oldgen-rate-and-squash-window-2026-10-22.md]
   decision:
-    what: stop Store A's snapshots at the source (switch, off by file) rather than a frequent squash timer; one supervised squash for the history already there
+    what: stop Store A's snapshots at the source (switch, off by file); a supervised squash on newgen 4 GiB, slow auto GC or monthly
     kind: operational
     status: proposed
     evidence_ref: record §4
     owner_ratification_ref: pending (the flip and the squash are the owner's)
   belief:
     believed_state: >-
-      The rate is most likely 10-15's (36 GiB is what 1.6 GB a day from
-      24.4 G predicts; the 25.7 GB file reads as a conjoin). The cause is
-      the snapshot commits; no new writer since 10-15.
-    main_uncertainty: the 6.2 GB file at 14:54; Store A's live set size; vmctl and guests with Store A down.
-    next_observation: FP0's readings (record §1).
+      The rate is most likely 10-15's; the cause is the snapshot commits;
+      the switch removes history overhead but not live growth (D), whose
+      daily rate is unmeasured.
+    main_uncertainty: total noms growth after the flip (a retention question if near 1.6 GB a day); the 6.2 GB file; vmctl and guests with Store A down.
+    next_observation: FP0's pre-landing du readings and §1 readings.
   blocker_or_risk: Node B steps are FP0's and the owner's.
-  next_action: FP0 reads §1, lands 90ea1e378 in an inert batch; the owner decides the flip and the squash window.
+  next_action: FP0 reads du (record §4 step 1), lands the lane, proves no effect; the owner decides the flip.
 
 receipts: []
 ---
