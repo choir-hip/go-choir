@@ -55,11 +55,13 @@ What it checks:
 Run: scripts/selftest-guest-token            (exit 0 when every check passes)
      scripts/selftest-guest-token --rev REV  (scan C only, at a git revision)
 """
+import io
 import os
 import re
 import subprocess
 import sys
 import tempfile
+import tokenize
 import urllib.parse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -99,10 +101,49 @@ def allowed(host, port):
 
 # --------------------------------------------------------------- the scanner
 
-def logical_lines(text):
-    """(first line number, text) with backslash continuations joined."""
+def is_python(path, text):
+    return path.endswith(".py") or text.startswith("#!/usr/bin/env python")
+
+
+def python_spans(text):
+    """Python statements that span physical lines through brackets: first
+    line -> last line. A statement holding a multi-line string is left as
+    physical lines, so code embedded in a string (a remote script) is still
+    read line by line. Up to the first token error, if any."""
+    spans, first, last, multiline_token = {}, None, None, False
+    try:
+        for tok in tokenize.generate_tokens(io.StringIO(text).readline):
+            if tok.type in (tokenize.NL, tokenize.COMMENT, tokenize.INDENT, tokenize.DEDENT, tokenize.ENCODING):
+                continue
+            if tok.type in (tokenize.NEWLINE, tokenize.ENDMARKER):
+                if first is not None and last > first and not multiline_token:
+                    spans[first] = last
+                first, multiline_token = None, False
+                continue
+            if first is None:
+                first = tok.start[0]
+            last = tok.end[0]
+            multiline_token = multiline_token or tok.start[0] != tok.end[0]
+    except (tokenize.TokenError, SyntaxError):
+        pass
+    return spans
+
+
+def logical_lines(text, python=False):
+    """(first line number, text) with backslash continuations joined, and in
+    Python every bracketed statement joined into one line."""
+    phys = text.splitlines()
+    if python:
+        spans = python_spans(text)
+        if spans:
+            joined, n = [], 1
+            while n <= len(phys):
+                end = spans.get(n, n)
+                joined.append((n, " ".join(x.strip() if k else x for k, x in enumerate(phys[n - 1:end]))))
+                n = end + 1
+            return joined
     out, buf, start = [], "", None
-    for n, line in enumerate(text.splitlines(), 1):
+    for n, line in enumerate(phys, 1):
         if start is None:
             start = n
         if line.rstrip().endswith("\\"):
@@ -213,7 +254,7 @@ def destinations(line):
 
 def scan(path, text, global_names=()):
     """Findings for one file: (path, line, why)."""
-    lines = logical_lines(text)
+    lines = logical_lines(text, is_python(path, text))
     defs = blocks(lines)
     skip, findings_def = set(), []
     for a, b in defs.values():
@@ -222,7 +263,10 @@ def scan(path, text, global_names=()):
                 skip.update(range(a, b + 1))
             elif any(TOKEN_PATH in lines[k][1] or TOKEN_NAME in lines[k][1] for k in range(a, b + 1)):
                 findings_def.append((path, lines[a][0], "defines a helper name that carries the token, outside the proven helpers"))
-    names = holders(lines, skip, defs, global_names)
+    # A name this file assigns itself is its own, not another file's holder
+    # (claude_delegate_probe.py's TOKEN_FILE is the Claude token's path).
+    assigned = {m.group(1) for _, line in lines for m in ASSIGN.finditer(line)}
+    names = holders(lines, skip, defs, set(global_names) - assigned)
     def_lines = {a for a, _ in defs.values()}
     urls = url_assignments(lines, defs)
 
@@ -234,7 +278,8 @@ def scan(path, text, global_names=()):
         return inner
 
     # Senders whose destination is a parameter: their callers are checked.
-    senders = set()
+    # sender -> the lines where its destination went unresolved.
+    senders = {}
     while True:
         findings, grew = [], False
         for i, (n, line) in enumerate(lines):
@@ -249,24 +294,34 @@ def scan(path, text, global_names=()):
                     dests += urls.get(ident, [])
                 if not dests:
                     f = enclosing(i)
-                    if f and f not in senders:
-                        senders.add(f)
-                        grew = True
-                    elif not f:
+                    if f:
+                        grew = grew or f not in senders
+                        senders.setdefault(f, set()).add(n)
+                    else:
                         findings.append((path, n, "carries the token to a destination this check cannot resolve"))
                     continue
             for host, port in dests:
                 if not allowed(host, port):
                     findings.append((path, n, f"carries the token to {host}:{port or '(no port)'}"))
         if not grew:
-            return findings_def + findings
+            break
+    # Fail closed: a sender no call site in this file reaches is never
+    # judged by its callers, so its unresolved destination fails here.
+    for f, at in sorted(senders.items()):
+        a, b = defs[f]
+        called = any(refs(lines[i][1], {f}) for i in range(len(lines))
+                     if i not in def_lines and not a < i <= b)
+        if not called:
+            for n in sorted(at):
+                findings.append((path, n, f"carries the token from {f}() to a destination it takes from a caller this file does not have"))
+    return findings_def + findings
 
 
 def global_names_of(texts):
     """Long upper-case names that hold the token cross files (imports)."""
     out = set()
     for path, text in texts.items():
-        lines = logical_lines(text)
+        lines = logical_lines(text, is_python(path, text))
         out |= {x for x in holders(lines, set(), blocks(lines)) if re.fullmatch(r"[A-Z][A-Z0-9_]{7,}", x)}
     return out
 
@@ -583,6 +638,16 @@ curl -H @/var/lib/go-choir/secrets/internal-service-token.header http://127.0.0.
 }
 
 LEGIT = {
+    "a file's own name shadows another file's holder of that name": ("k.py", '''
+TOKEN_FILE = "/var/lib/go-choir/secrets/claude-oauth-token"
+def host_token_check(host):
+    return sh(f"stat {TOKEN_FILE}")
+def call(path):
+    return urlopen(Request(BASE + path))
+def main():
+    path = "/api/runs?x=" + str(host_token_check("node-b"))
+    call(path)
+'''),
     "a parametric sender called with a loopback literal": ("q.py", '''
 TOKEN_HEADER_FILE = "/var/lib/go-choir/secrets/internal-service-token.header"
 def post(url):
@@ -690,7 +755,7 @@ def main():
         f = scan(path, text)
         check(f"scanner flags the known sender: {name}", bool(f))
     for name, (path, text) in LEGIT.items():
-        f = scan(path, text)
+        f = scan(path, text, {"TOKEN_FILE"})  # a holder name from another file
         check(f"scanner passes the loopback use: {name}", not f, repr(f))
     try:
         findings = scan_repo()
