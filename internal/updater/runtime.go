@@ -149,6 +149,18 @@ func (p HTTPHealthProber) Probe(ctx context.Context, releaseDigest string, manif
 	// of consuming an attempt. MaxDuration is the absolute bound.
 	var lastCommitted, lastProgress uint64
 	stallsLeft := attempts
+	// A guest whose store is held answers 503 {"status":"store_stalled"} in
+	// about a second, where it used to time out (F1,
+	// docs/problems/paper-unreachable-minutes-after-every-boot-2026-10-22.md).
+	// A run of those is charged by wall time against the budget the same
+	// attempts had as timeouts, attempts x (client timeout + interval), not
+	// one attempt each, so a fast answer does not shorten the wait.
+	clientTimeout := client.Timeout
+	if clientTimeout <= 0 {
+		clientTimeout = 5 * time.Second
+	}
+	storeStallBudget := time.Duration(attempts) * (clientTimeout + interval)
+	var storeStalledSince time.Time
 	deadline := time.Now().Add(p.MaxDuration)
 	for stallsLeft > 0 {
 		if p.MaxDuration > 0 && !time.Now().Before(deadline) {
@@ -178,7 +190,20 @@ func (p HTTPHealthProber) Probe(ctx context.Context, releaseDigest string, manif
 			}
 			decodeErr := json.NewDecoder(response.Body).Decode(&health)
 			_ = response.Body.Close()
+			storeStalled := response.StatusCode == http.StatusServiceUnavailable && decodeErr == nil && health.Status == "store_stalled"
+			if !storeStalled {
+				storeStalledSince = time.Time{}
+			}
 			switch {
+			case storeStalled:
+				if storeStalledSince.IsZero() {
+					storeStalledSince = time.Now()
+				}
+				stalledFor := time.Since(storeStalledSince)
+				lastErr = fmt.Errorf("health status=%d store_stalled for %s (budget %s)", response.StatusCode, stalledFor.Round(time.Millisecond), storeStallBudget)
+				if stalledFor >= storeStallBudget {
+					stallsLeft = 0
+				}
 			case response.StatusCode == http.StatusServiceUnavailable && decodeErr == nil && health.Status == "replaying":
 				if health.CommittedSequence > lastCommitted || health.Progress > lastProgress {
 					lastCommitted, lastProgress = health.CommittedSequence, health.Progress
