@@ -16,11 +16,12 @@ import (
 // backing file is hole-punched). The guest's fstrim timer
 // (nix/autoputer-vm.nix, choir-data-fstrim) is what issues the trims.
 //
-// Firecracker 1.16.x, the host's pinned line (flake.nix
-// choirFirecrackerRelease, kept below 1.17), has no such field and denies
-// unknown fields, so the drive option
-// is gated twice: VM_DATA_DISCARD must be on, and the Firecracker binary must
-// report 1.17.0 or newer. Off, the data drive is byte-for-byte what it was.
+// Firecracker 1.16.x has no such field and denies unknown fields, so the
+// drive option is gated twice: VM_DATA_DISCARD must be on, and the
+// Firecracker binary must report 1.17.0 or newer. The host pins 1.17.0
+// (flake.nix choirFirecrackerRelease), and VM_DATA_DISCARD_ONLY stages which
+// computers take it. Off, the data drive is byte-for-byte what it was, and a
+// rollback to 1.16.x turns the field off by itself.
 
 // First Firecracker release with drive discard.
 const (

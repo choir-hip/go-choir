@@ -15,10 +15,6 @@
 #   access JWTs remain valid after auth restarts (VAL-CROSS-118)
 { config, lib, pkgs, goChoirPackages, choirGo, guestImage ? null, sourceRepoRemote ? "https://github.com/choir-hip/go-choir.git", buildCommit ? "local", ... }:
 let
-  # Firecracker 1.17 as a second VMM build for the computers
-  # VM_FIRECRACKER_NEXT_ONLY names (nix/firecracker-next.nix; RES-16 data
-  # drive discard). The pinned build stays pkgs.firecracker for everyone else.
-  firecrackerNext = import ./firecracker-next.nix { inherit pkgs; };
   # Host fetch route (SDC NET-01; internal/hostfetch,
   # docs/definitions/choir-launch-fp10-net01-host-fetch-2026-10-21.md). One
   # list, read by vmctl (writes the grant on the credential disk at cold
@@ -1535,8 +1531,12 @@ in
         #   - rootfs.ext4 (boot disk / guest root filesystem)
         #   - initrd (for systemd module loading)
         #   - storedisk.erofs (shared nix store)
-        # pkgs.firecracker is 1.16.2 via flake.nix choirFirecrackerModule
-        # (one package: this binary and VM_JAILER_BIN below move together).
+        # pkgs.firecracker is 1.17.0 via flake.nix choirFirecrackerModule
+        # (one package: this binary and VM_JAILER_BIN below move together;
+        # docs/problems/firecracker-1-17-for-every-computer-2026-10-22.md).
+        # A later version is staged the NET-08 way: a fresh
+        # nix/firecracker-next.nix and VM_FIRECRACKER_NEXT_BIN/_ONLY
+        # (internal/vmmanager/vmm_next.go), one test computer first.
         "VM_FIRECRACKER_BIN=${pkgs.firecracker}/bin/firecracker"
         # VMM jailer slice 1: off until staging proves it on one test
         # computer. Rollout (FP8 station, SEC-04): VMCTL_JAILER=on with
@@ -1625,25 +1625,22 @@ in
         "VM_CAPSULE_TUNNEL_ENFORCE_ONLY=computer-9648031f92e131adc1fb65ec455c5903"
         # Data drive discard (RES-16; docs/problems/guest-data-image-never-
         # trims-2026-10-20.md, docs/problems/node-b-disk-fills-from-the-paper-
-        # data-image-2026-10-22.md). Only the computers named here launch
-        # Firecracker 1.17 (nix/firecracker-next.nix) and get virtio-blk
-        # discard on the data drive; the guest's hourly choir-data-fstrim
-        # timer (nix/autoputer-vm.nix) then hole-punches the freed blocks on
-        # the host. Owner rule 2026-10-22: one selected test computer first
-        # (computer-9648031f, proved in D3); then, owner 22:40 (resource use
-        # ahead of short-term availability), every computer, the paper
-        # included ("*"). Each computer cold boots once (its snapshot is from
-        # the other VMM build). The 1.17
-        # hotplug objection is gone: the hotplug region is the same in 1.16.x
-        # (docs/problems/memory-hotplug-cannot-work-on-node-b-39-bit-cpu-
-        # 2026-10-22.md). Rollback: delete all four lines and redeploy (every
-        # computer cold boots again on the pinned build with no discard).
-        # Never leave VM_DATA_DISCARD=1 with an empty VM_DATA_DISCARD_ONLY:
-        # once the pinned build is 1.17 or newer, an empty selector means
-        # every computer, every data drive gains discard, every launch-config
-        # hash changes, and the whole fleet's snapshots are refused.
-        "VM_FIRECRACKER_NEXT_BIN=${firecrackerNext}/bin/firecracker"
-        "VM_FIRECRACKER_NEXT_ONLY=*"
+        # data-image-2026-10-22.md). Every computer gets virtio-blk discard on
+        # its data drive (the pinned build is 1.17; Sync io_engine); the
+        # guest's hourly choir-data-fstrim timer (nix/autoputer-vm.nix) then
+        # hole-punches the freed blocks on the host. Owner rule 2026-10-22:
+        # one selected test computer first (computer-9648031f, proved in D3);
+        # then, owner 22:40 (resource use ahead of short-term availability),
+        # every computer, the paper included ("*", deploy D4, on the next
+        # build; since the pin change the same binary and config come from
+        # the pinned build, so no D4 snapshot is refused:
+        # docs/problems/firecracker-1-17-for-every-computer-2026-10-22.md).
+        # Discard is in the launch-config hash: a computer whose selection
+        # changes cold boots once. Rollback: delete both lines and redeploy
+        # (every computer cold boots again, without discard). Never leave
+        # VM_DATA_DISCARD=1 with an empty VM_DATA_DISCARD_ONLY: empty also
+        # means every computer but looks like "off"; the fleet-wide value is
+        # "*" (scripts/check-host-firecracker-pin.sh checks it).
         "VM_DATA_DISCARD=1"
         "VM_DATA_DISCARD_ONLY=*"
         # Memory hotplug (virtio-mem) for test computers only (it cannot plug
