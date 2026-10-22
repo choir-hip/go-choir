@@ -51,18 +51,33 @@ same way as `VM_MEMORY_HOTPLUG_ONLY`.
 - the running Firecracker process was cold booted, not restored (a new
   in-memory fact set at launch; a restored process sets it false);
 - the Firecracker version is at least 1.15.0 (diff corruption #5705 fixed);
-- the process's memory cannot swap: `VmSwap` in `/proc/<pid>/status` is 0
-  and its cgroup's `memory.swap.max` reads `0`. This is the check that
-  keeps the S3 design's D3 objection answered under the jailer, whose
-  cgroup is FP8's;
-- THP for guest memory is off (Node B: `never`) and KSM has not merged the
-  guest (Firecracker never marks guest memory mergeable).
+- the process's memory cannot swap: `VmSwap` in `/proc/<pid>/status` is 0,
+  and walking up from the process's cgroup (`/proc/<pid>/cgroup`, the
+  `0::` line) towards the root, some cgroup's `memory.swap.max` reads `0`.
+  The cgroup v2 limit is hierarchical, so the nearest ancestor that sets 0
+  bounds the leaf. Today (reading R2, 2026-10-22) the leaf
+  `go-choir-vmctl.service/supervisor` has no memory controller (no file)
+  and `go-choir-vmctl.service` reads 0. Under FP8's jailer the process sits
+  under `VMCTL_JAILER_CGROUP_PARENT` (`go-choir-vmctl.service/vms`) and the
+  same walk applies. No ancestor reading 0, or an unreadable cgroup,
+  refuses Diff. This is the check that keeps the S3 design's D3 objection
+  answered under the jailer;
+- THP never reaches guest memory: every guest memory mapping in
+  `/proc/<pid>/smaps` (every mapping of 32 MiB or more) reads
+  `THPeligible: 0`, and at least one such mapping exists. The host's
+  global THP mode is not the test (reading R4: Node B is `madvise`, and
+  R5 found `THPeligible 0` on every guest mapping). KSM is off on Node B
+  and Firecracker never marks guest memory mergeable; a merged page is
+  resident anyway, so KSM is no hazard to `mincore` and has no check.
 
 **Meta.** `SnapshotMeta` gains `SnapshotType` (`Full` when empty, so old
 metas read as Full) and `ColdOrigin`. No version bump: a version bump would
 void every existing snapshot at the deploy. Validation adds one rule: a
 `Diff` meta loads only if `ColdOrigin` is true and the memory file's
-length equals the machine's memory size.
+length equals the guest's memory size: base memory plus the virtio-mem
+region (`MemSizeMiB + Config.MemoryHotplugMiB`, in bytes). Reading R3: a
+hotplugged test computer's Full memory file is 12 GiB long, 8 GiB base
+plus the 4 GiB region. An unknown `SnapshotType` is refused.
 
 **A Diff create error** falls back to a Full create inside the same pause,
 then to the kill path as today. It never leaves a partial Diff in `snapshot/`.
@@ -86,7 +101,9 @@ then to the kill path as today. It never leaves a partial Diff in `snapshot/`.
    becomes honest for Diff snapshots without `CAP_SYS_ADMIN` (RES-14 still
    matters for Full ones).
 
-**Proof (FP0, one test computer).** Cold boot it. In the guest (through the
+**Proof (FP0, one test computer).** Cold boot it. Wake it every time
+through `POST /api/computers/{id}/lifecycle/start`: an API-key read cannot
+wake a hibernated computer (reading R5, `api_key_computer_authority.go`). In the guest (through the
 product's own terminal or engineering capsule, not a block device), write
 1 GiB of random bytes to tmpfs and record its sha256; record
 `/proc/meminfo`. Hibernate. On the host, record the hibernate log line
@@ -101,11 +118,12 @@ log says Full (failure mode 1).
 
 After the first wake, every later hibernate of that computer is of a
 restored guest, so L3a alone covers only the first hibernate after each
-cold boot. Today a resume only marks the snapshot consumed
-(`consumeSnapshot`, `snapshot.go:404`), the restored process keeps mapping
-its `mem`, and the next hibernate removes the directory
-(`snapshot_lifecycle.go:315`). L3b instead moves the consumed memory file
-to `snapshot.base/mem` at that point, takes a Diff of the
+cold boot. Today a resume marks the snapshot consumed
+(`consumeSnapshot`), and once the guest is healthy it removes the
+snapshot's names; the restored process keeps the inode mapped, so its
+memory mapping reads `.../snapshot/mem (deleted)` (reading R5). L3b
+instead links the consumed memory file to `snapshot.base/mem` in place of
+that removal, takes a Diff of the
 restored guest, then builds the new image as a reflink copy of the base
 (`cp --reflink=always`, btrfs) with the Diff applied by Firecracker's
 `snapshot-editor edit-memory rebase`. The result is complete because every
