@@ -221,7 +221,10 @@ run_script
 check "R4 observe: no current generation found, nothing deleted" '[ -z "$(deleted_gens)" ]'
 
 # ---- R15 a bad builder root refuses the builder step --------------------------
-for bad in "" "/" "rel" "/./"; do
+new_case emptyroot
+run_script GO_CHOIR_NIX_RETENTION_MODE=enforce NIX_RETENTION_BUILDER_ROOT=
+check "R15 an empty builder root means the default, never /*" 'grep -q "builder_root=/var/lib/go-choir/builder/releases" "$case_dir/out" && [ -L "$case_dir/prebuild/nixos-result" ] && [ -L "$case_dir/tmp/go-choir-nixos-result" ] && [ -L "$case_dir/host-build/work/j1/result" ]'
+for bad in "/" "rel" "/./" "//x"; do
   new_case "badroot-$(printf '%s' "$bad" | tr -c 'a-z' x)"
   run_script GO_CHOIR_NIX_RETENTION_MODE=enforce NIX_RETENTION_BUILDER_ROOT="$bad"
   check "R15 builder root \"$bad\" refused, nothing unrooted" 'grep -q "builder roots refused" "$case_dir/out" && [ -L "$case_dir/prebuild/nixos-result" ] && [ -L "$case_dir/tmp/go-choir-nixos-result" ] && [ -L "$case_dir/rel/c1/out/builder-result" ]'
