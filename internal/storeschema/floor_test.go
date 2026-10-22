@@ -83,7 +83,7 @@ func TestCheckFloorRefusesAFloorAboveThisEpoch(t *testing.T) {
 // the floor, which no older binary touches, is the fence for that case.)
 func TestWriteNeverLowersANewerReceipt(t *testing.T) {
 	dir := t.TempDir()
-	newer := `{"schema":"` + Name + `","version":` + string(rune('0'+Version+1)) + `}`
+	newer := `{"schema":"` + Name + `","version":` + strconv.FormatUint(Version+1, 10) + `}`
 	if err := os.WriteFile(filepath.Join(dir, File), []byte(newer), 0o644); err != nil {
 		t.Fatal(err)
 	}
