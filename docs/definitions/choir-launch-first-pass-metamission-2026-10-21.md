@@ -262,7 +262,7 @@ boundaries:
     - 'Locally five to seven agents in all (owner, 2026-10-21: "the rule is 5 to 7 agents running locally"): six Sonnet workers and the orchestrator. Workers work only in their own lane worktree and branch; they never push, never use Node B or staging credentials, never read secrets, never touch another worktree, never run git commit -a, never bypass hooks.'
     - Workers in the node-a agents VM (owner notes §39) follow the same rules, with one exception: they push their own lane branch to GitHub so FP0 can land it, and never push main. Sonnet for plan-linear or metric work, Opus where the design is open. The VM's slots do not count against the Mac's five to seven.
     - "Only FP0 lands. A deploy carries at most one live red batch; green work and inert red batches may ride with it (owner, 2026-10-22). A red batch is inert when, with its switches as deployed, it changes no running path: a new unwired package, or a feature off unless a selector names a computer, and no schema, boot-path, gateway, auth or deploy-routing change. Inert batches deploy together under one no-effect proof (the paper healthy and polling, routes and observability flags unchanged, boot logs clean); a failure reverts the inert set as a unit. Turning inert features on is a later deploy that may enable several at once, each on its own test computer, with their proofs in parallel. FP1's store batch counts as red for landing (the store schema is a protected surface) and gets a deploy of its own."
-    - The landing order: rebase the candidate onto current main, run focused checks, freeze base, scoped paths and digest, independent review on that frozen identity, check it is unchanged, land, deployed proof. A rebase or repair that changes reviewed lines is reviewed again, the delta only. Review runs in bunches (owner, 2026-10-21 night, "i dont think we have enough tokens (or clock time) to run it after each station. should do it in bunches"), one panel reviews every red candidate frozen at that moment, each with its own verdict. The landing panel is Gemini flash and Devin, with DeepSeek v4.1 Flash (opencode-go/deepseek-v4.1-flash, owner 2026-10-22 about 03:55 UTC) as a third reviewer and MiniMax M3.1 Flash (opencode-go/minimax-m3.1-flash-free, owner about 03:10 UTC: "another code review model") advisory only ("don't be blocked by Minimax") (owner, 2026-10-22 02:10 UTC: "I don't think we should be bottlenecked by SOL ... it's more important that we get a lot of work done pretty well, and we're going to discover flaws just from running it, testing it, QA ... we can still use Gemini and Devin"); a red candidate lands on their accept (blocking findings repaired), a passing Linux -race mirror run on the agents VM, and FP0's own read. GPT-6.1-sol is not used for review for the rest of the overnight run (owner, 2026-10-22 02:09 UTC: "let's stop using sol for code review for the overnight run. I'm using the same tokens for chatgpt gpt-6-Luna… I want to pace my usage"); the same ChatGPT quota serves the gateway's gpt-6-luna; the per-station settle panel is replaced by one end-of-pass panel over the landed candidates and their deployed evidence.
+    - 'The landing order: rebase the candidate onto current main, run focused checks, freeze base, scoped paths and digest, independent review on that frozen identity, check it is unchanged, land, deployed proof. A rebase or repair that changes reviewed lines is reviewed again, the delta only. Review runs in bunches (owner, 2026-10-21 night, "i dont think we have enough tokens (or clock time) to run it after each station. should do it in bunches"), one panel reviews every red candidate frozen at that moment, each with its own verdict. The landing panel is Gemini flash and Devin, with DeepSeek v4.1 Flash (opencode-go/deepseek-v4.1-flash, owner 2026-10-22 about 03:55 UTC) as a third reviewer and MiniMax M3.1 Flash (opencode-go/minimax-m3.1-flash-free, owner about 03:10 UTC: "another code review model") advisory only ("don''t be blocked by Minimax") (owner, 2026-10-22 02:10 UTC: "I don''t think we should be bottlenecked by SOL ... it''s more important that we get a lot of work done pretty well, and we''re going to discover flaws just from running it, testing it, QA ... we can still use Gemini and Devin"); a red candidate lands on their accept (blocking findings repaired), a passing Linux -race mirror run on the agents VM, and FP0''s own read. GPT-6.1-sol is not used for review for the rest of the overnight run (owner, 2026-10-22 02:09 UTC: "let''s stop using sol for code review for the overnight run. I''m using the same tokens for chatgpt gpt-6-Luna… I want to pace my usage"); the same ChatGPT quota serves the gateway''s gpt-6-luna; the per-station settle panel is replaced by one end-of-pass panel over the landed candidates and their deployed evidence.'
     - An activation lease: from a deploy to the end of its proof (or its rollback), no other deploy and no drill.
     - Recovery first: FP3's group 1 (a rollback can always reach a protected computer, and a failure-stopped always-on computer retries after a deploy) lands before FP1's store changes, and before any other boot-path risk.
     - Workers never run git fetch, gc, prune, stash, tag, remote, update-ref or config, any worktree command, or any gh command; never read the rest of the scratchpad (it holds credential files); never edit ACTIVE, the mission graph, the doc authority manifest or the two checklists (FP0 ticks them at landing). Red code fails closed. Live adversarial probes are FP0's.
@@ -284,21 +284,24 @@ now:
   status: working
   slice: >-
     Land the live-red queue one deploy at a time (two disjoint live reds
-    allowed, owner 13:35), each with its deployed proof on a test computer:
-    R to V are live and proved (V: CI deploys through the gate as
-    choir-deploy); KF (kernel 6.18.57 + Firecracker 1.16.2) lands with the
-    paper held and a test-computer canary before the paper, then the Node B
-    reboot with the owner's go. Reviews use flash, DeepSeek and Devin or a
-    Sonnet subagent.
-  source_ref: 7ab8d653f
-  deploy_identity: 7ab8d653f serving (deploy V, SEC-14 deploy 2, proved 18:32 through the gate)
+    allowed, owner 13:35), each with its deployed proof. Owner rule
+    (2026-10-22 22:3x): "Anything which improves resource utilization on a
+    forward and ongoing basis should be prioritized over stability,
+    availability, or uptime in the short term." So D4 carries Firecracker
+    1.17 and data-drive discard to every computer, the paper included.
+    Agent policy (owner): Sonnet for plan-following, metric optimization
+    and investigations; Opus for design and open-ended work. The paper's
+    models are chatgpt gpt-6-luna only (owner 21:4x); reviews are
+    DeepSeek, Gemini flash and Devin.
+  source_ref: 85a8115b1
+  deploy_identity: 85a8115b1 serving (deploy D3, proved 21:49 to 22:30)
   candidate:
-    id: deploy-KF
-    state: staged on 7ab8d653f (19 KF commits, hunks identical to lane/fp0-kf-r2 94487da7e, plus round 3e and the deleted-image record); Mac eval kernel 6.18.57, firecracker 1.16.2, 0 failed assertions; mirror kfr3m PASS
-    ref: deploy KF's landing commit on main
-    base: 7ab8d653f
+    id: deploy-D4
+    state: staged as lane/fp0-deployD4 (boot passivation, actor retry backoff, retention proof r3, store-stall holder, cold-start r2 port, CI shard balance, discard for every computer); mirror deployD4bm queued
+    ref: deploy D4's landing commit on main
+    base: 85a8115b1
     digest: the staged tree plus the ledger and this card
-    scope: [flake.lock, flake.nix, nix, scripts, internal/vmmanager, docs]
+    scope: [nix, internal/agentcore, internal/store, internal/vmctl, scripts, .github, docs]
   bridge_conjecture: >-
     If the security and density batches land with deployed proofs and
     independent review, then the owner's second pass starts from a computer
@@ -329,29 +332,31 @@ now:
     owner_ratification_ref: not_applicable
   belief:
     believed_state: >-
-      Deploys L to V are live and proved on staging. V moved CI's deploy
-      onto the gate: CI reaches Node B only as choir-deploy, the gate runs
-      the deploy program as root from a main commit at or above its floor,
-      and the floor holds 7ab8d653f. Node B has about 170 GB free and
-      steady. FP0 deleted an owner quarantine image at 17:06 that the repo
-      recorded as possibly unique; the file-root manifests show the real
-      loss is two small overlay files and maybe 13 Texture shortcuts. The
-      paper took about 4 minutes to answer health after V's refresh.
+      Deploys L to D3 are live. D3 proved Firecracker 1.17 discard on one
+      test computer (1.67 GiB punched, /health 93 of 93) and the capsule
+      memory bounds (oom_kill=0, spawn 748 ms). The paper writes 10.9 tape
+      events and 14 ops per second, batching off; at about 90 to 150 KiB of
+      Dolt journal per op that is the 1 to 1.8 GiB every 10 to 20 minutes
+      the online GC reclaims while it holds the only write connection.
+      Node B free space swings 140 to 170 GB; platform-artifacts holds
+      about 122 GB and vm-state 125 GB.
     main_uncertainty: >-
-      whether the new kernel's config (module signing, lockdown built in)
-      boots the guest image; why the paper's post-refresh health window
-      regressed from about 30 s to about 4 minutes.
-    next_observation: KF's canary on a fresh or woken test computer (console Linux 6.18.57, lockdown none, store opens, a model answer, hibernate and wake on 1.16.2) before the paper is unheld.
+      which writers carry the paper's 14 ops per second and how much of it
+      is needed (Sonnet investigation, lane/fp1-journal-root-cause); how
+      long the paper's first trim on its 61 GB image slows /health.
+    next_observation: the paper on Firecracker v1.17.0 with discard after D4, its data.img allocated size and Node B free space before and after its first trim, /health every 10 s around it.
   blocker_or_risk: >-
-    Landing is the bottleneck: about fifteen reviewed or nearly reviewed
-    lanes wait for slots. node-a's memory is shared by the agents VM,
-    Mike's staging and Node B's remote builds. A canary that cannot run
-    keeps the paper held and the host unrebooted.
+    The mirror queue on the agents VM runs one heavy test at a time, so
+    mirrors gate landing. The paper's first trim may slow /health
+    (accepted by the owner's rule). A security force-reboot path does not
+    exist yet: the reboot script waits for live self-development applies
+    and capsules (owner: "We should definitely not be waiting minutes just
+    to maintain some user self-development run").
   next_action: >-
-    Hold the paper, push KF, canary, unhold and refresh the paper, then ask
-    the owner for the reboot go. After the reboot: SEC-14 step 3, the
-    discard trial, F-c deploy 1 (alone), ARCH-13 7d with FP4 4c, capsule
-    memory and coldstart logs, the disk-pressure trigger (observe).
+    Land D4 after its mirror; watch the paper's first trim. Then crash-boot
+    closure alone, the Firecracker 1.17 pin (lane/fp0-firecracker-117-fleet),
+    the reboot script after round 6, D5 rebuilt on D4, body caps, and the
+    journal fix the investigation ranks first.
 receipts:
   - id: capture-label-key-read
     boundary: implement
