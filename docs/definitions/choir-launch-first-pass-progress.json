@@ -1,5 +1,5 @@
 {
- "as_of": "2026-10-22T21:26Z",
+ "as_of": "2026-10-22T23:22Z",
  "main": "fd564dbbc",
  "items": [
   {
@@ -1506,8 +1506,8 @@
     },
     {
      "name": "Firecracker 1.17 on one test computer (discard trial)",
-     "stage": 3,
-     "evidence": "lane/fp0-discard-test 7b08a0b08; bunch 72 flash/DeepSeek accept, Sonnet accept with edits; not on main",
+     "stage": 6,
+     "evidence": "9648031f runs Firecracker v1.17.0 since 21:47:58 (cold boot on version mismatch), store open, Texture answered, discard working",
      "history": [
       {
        "stage": 1,
@@ -1523,14 +1523,27 @@
        "stage": 3,
        "at": "2026-10-22T18:08Z",
        "approx": true
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T21:32Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T22:06Z"
       }
      ]
     },
     {
      "name": "Firecracker 1.17 for every computer",
-     "stage": 0,
-     "evidence": "plan only (ledger 19:40: after a clean 2-3 h trial)",
-     "history": []
+     "stage": 2,
+     "evidence": "D4 sets VM_FIRECRACKER_NEXT_ONLY=*; pin lane fp0-firecracker-117-fleet 1016fc951 built",
+     "history": [
+      {
+       "stage": 2,
+       "at": "2026-10-22T23:16Z"
+      }
+     ]
     }
    ],
    "next": "Land the discard trial on computer-9648031f now that KF and the reboot are done."
@@ -1791,8 +1804,8 @@
     },
     {
      "name": "capsule Go bounds (GOMAXPROCS, GOMEMLIMIT)",
-     "stage": 3,
-     "evidence": "lane/fp4-capsule-memory ec221ca1f; DeepSeek accept with low edits (bunch 67), mirror capmem3m PASS; uncertain whether round 3 was re-reviewed",
+     "stage": 5,
+     "evidence": "D3 live 21:45; drill on 71afbf14 for oom_kill=0 running",
      "history": [
       {
        "stage": 1,
@@ -1805,6 +1818,14 @@
       {
        "stage": 3,
        "at": "2026-10-22T17:12Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T21:32Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T22:06Z"
       }
      ]
     },
@@ -2147,6 +2168,27 @@
      "stage": 0,
      "evidence": "no lane work found",
      "history": []
+    },
+    {
+     "name": "gateway body caps (in_flight budget, per-caller share, decode slots)",
+     "stage": 3,
+     "evidence": "rounds 4-5 accepted by flash, DeepSeek, Sonnet (bunch 121); round 6 docs/test b8448c480 in review; joins D4",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T14:00Z",
+       "approx": true
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T19:30Z",
+       "approx": true
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T22:14Z"
+      }
+     ]
     }
    ],
    "next": "Turn the scheduler on for one test computer and prove fair share."
@@ -2351,8 +2393,8 @@
     },
     {
      "name": "discard trial on computer-9648031f (Firecracker 1.17)",
-     "stage": 3,
-     "evidence": "lane/fp0-discard-test 7b08a0b08; bunch 72 accept; pre-build vendor hash fixed 7d75cba68; not on main",
+     "stage": 5,
+     "evidence": "D3 live 21:45; steps 1-4 PASS (1.17 + discard on 9648031f only; 93/93 health 200 across the first trim); first trim punched 1.67 GiB from its data image; 6 h readings and reverse switch owed",
      "history": [
       {
        "stage": 1,
@@ -2368,14 +2410,27 @@
        "stage": 3,
        "at": "2026-10-22T18:08Z",
        "approx": true
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T21:32Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T22:06Z"
       }
      ]
     },
     {
      "name": "discard for every computer",
-     "stage": 0,
-     "evidence": "after the trial (ledger 19:40)",
-     "history": []
+     "stage": 2,
+     "evidence": "D4 2de635109 sets VM_DATA_DISCARD_ONLY=* (owner 22:3x)",
+     "history": [
+      {
+       "stage": 2,
+       "at": "2026-10-22T23:16Z"
+      }
+     ]
     }
    ],
    "next": "Land the discard trial and watch the test computer's data image shrink after fstrim."
@@ -3020,6 +3075,58 @@
      "stage": 0,
      "evidence": "no lane work found",
      "history": []
+    },
+    {
+     "name": "capsule cold start 18 s to ~1 s (one git batch per pass)",
+     "stage": 5,
+     "evidence": "D3 live 21:45; spawn-phase lines on 71afbf14 drill pending",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T12:00Z",
+       "approx": true
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T16:00Z",
+       "approx": true
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T20:20Z",
+       "approx": true
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T21:32Z",
+       "approx": true
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T22:06Z"
+      }
+     ]
+    },
+    {
+     "name": "cold-start timing round 2 (ported onto coldfix)",
+     "stage": 3,
+     "evidence": "DeepSeek accept (bunch 117); in D4",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T21:20Z",
+       "approx": true
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T21:28Z",
+       "approx": true
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T22:14Z"
+      }
+     ]
     }
    ],
    "next": "Finish bunch 113 and land FP4 round 4."
@@ -3213,6 +3320,248 @@
     }
    ],
    "next": "Eyeball desktop icons on staging and tick ARCH-15."
+  },
+  {
+   "id": "OPS-01",
+   "title": "The paper keeps working across restarts and load",
+   "priority": "P0",
+   "class": "red",
+   "lane": "FP4",
+   "section": "Architecture",
+   "slices": [
+    {
+     "name": "boot passivation re-ensure deleted (window A)",
+     "stage": 3,
+     "evidence": "lane/fp4-boot-passivation 98a5649b5 accepted; staged in D4",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T19:40Z",
+       "approx": true
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T20:10Z",
+       "approx": true
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T20:29Z",
+       "approx": true
+      }
+     ]
+    },
+    {
+     "name": "actor retry backoff",
+     "stage": 3,
+     "evidence": "lane/fp4-actor-retry-backoff accepted; mirror backoff2m PASS 21:15; staged in D4",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T14:00Z",
+       "approx": true
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T17:00Z",
+       "approx": true
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T20:30Z",
+       "approx": true
+      }
+     ]
+    },
+    {
+     "name": "crash boot closes open rounds from cached heads, schedules armed first",
+     "stage": 3,
+     "evidence": "accepted (bunch 122); mirror crashbootm PASS 23:06; deploys alone after D4",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T20:28Z",
+       "approx": true
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T22:14Z"
+      }
+     ]
+    },
+    {
+     "name": "host reboot asks busy critical computers for a planned restart (allow_busy)",
+     "stage": 3,
+     "evidence": "reboot script rounds 2-8 accepted (bunch 128); staged in D4 c404469d7",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T21:05Z",
+       "approx": true
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T21:14Z",
+       "approx": true
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T22:14Z"
+      }
+     ]
+    },
+    {
+     "name": "/health 503s under online GC and store load",
+     "stage": 0,
+     "evidence": "problem recorded on main 85a8115b1; GC holds the one connection 10-25 s every 10-20 min; three bursts unattributed",
+     "history": []
+    }
+   ],
+   "next": "Land D4 (passivation, backoff); finish the reboot script round 4; land crash-boot closure; decide the /health and GC fix."
+  },
+  {
+   "id": "RES-23",
+   "title": "The paper writes less (Dolt journal growth)",
+   "priority": "P1",
+   "class": "red",
+   "lane": "FP1",
+   "section": "Resources and density",
+   "next": "Land R1 to R4 trace cuts on a test computer, then the trace log (R7) after the owner rules O1.",
+   "slices": [
+    {
+     "name": "root cause: 14 ops/s by writer",
+     "stage": 3,
+     "evidence": "Sonnet investigation lane/fp1-journal-root-cause 73718ec65",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T23:00Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T23:00Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T23:00Z"
+      }
+     ]
+    },
+    {
+     "name": "R1 to R4: cut redundant trace and cursor writes",
+     "stage": 2,
+     "evidence": "built 27c6de2d0; bunch 129 three-seat review; mirror queued",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T23:00Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T23:22Z"
+      }
+     ]
+    },
+    {
+     "name": "R7 trace lines to a segment log (design)",
+     "stage": 3,
+     "evidence": "owner ruled O1, O5, O6 (23:20); S0/S1 building",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T23:20Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T23:20Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T23:21Z"
+      }
+     ]
+    },
+    {
+     "name": "R5 duplicate run-memory index (schema, alone)",
+     "stage": 0,
+     "evidence": "queued",
+     "history": []
+    }
+   ]
+  },
+  {
+   "id": "RES-24",
+   "title": "Host artifact store: repack and retention",
+   "priority": "P1",
+   "class": "red",
+   "lane": "FP10",
+   "section": "Resources and density",
+   "next": "Run the copy-only repack census on Node B; the legacy delete waits for the owner's yes on the evidence.",
+   "slices": [
+    {
+     "name": "tape segment writer on (A2)",
+     "stage": 6,
+     "evidence": "about 40 loose files per 10 min on Node B, 23:15",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T23:15Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T23:15Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-22T23:15Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-22T23:15Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T23:15Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T23:15Z"
+      }
+     ]
+    },
+    {
+     "name": "repack tool: copy only, census",
+     "stage": 1,
+     "evidence": "Sonnet builder lane/fp10-tape-repack",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T23:20Z"
+      }
+     ]
+    },
+    {
+     "name": "retention of projection-base, scratch, captures, gc log",
+     "stage": 2,
+     "evidence": "record d381440ce; fixes 1,3,4 building",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-22T23:20Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-22T23:22Z"
+      }
+     ]
+    },
+    {
+     "name": "legacy tape delete (about 46 GB, owner yes)",
+     "stage": 0,
+     "evidence": "queued",
+     "history": []
+    }
+   ]
   }
  ]
 }
