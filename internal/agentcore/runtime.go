@@ -335,6 +335,11 @@ type Runtime struct {
 	// canonical post-commit observer sets it and a single drain loop
 	// collapses bursts into one reconcile per settlement boundary.
 	selfdevReconcilePending atomic.Bool
+	// selfdevDecisionBeforeTransition is a test seam, nil in production: the
+	// decision handler calls it after the decision event is final and before
+	// it moves the operation, so a test can let the post-commit observer win
+	// that race.
+	selfdevDecisionBeforeTransition func(ctx context.Context, operationID string)
 	// restoreBaseSource overrides verified-base resolution for recovery
 	// (rematerialize, restore, replay-completeness). Nil builds a platform
 	// source from CorpusdURL plus guest credentials per call; tests inject

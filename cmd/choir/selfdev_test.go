@@ -14,10 +14,13 @@ import (
 // selfDevStub answers the self-development routes for computer-x from a
 // mutable operation state and records every request.
 type selfDevStub struct {
-	t        *testing.T
-	state    string
-	requests []string
-	bodies   map[string]map[string]any
+	t     *testing.T
+	state string
+	// decisionKind is the event kind of the decision the release witness
+	// reports; empty reports no decision.
+	decisionKind string
+	requests     []string
+	bodies       map[string]map[string]any
 }
 
 func (s *selfDevStub) serve(w http.ResponseWriter, r *http.Request) {
@@ -39,6 +42,15 @@ func (s *selfDevStub) serve(w http.ResponseWriter, r *http.Request) {
 	case "GET /head":
 		_ = json.NewEncoder(w).Encode(map[string]any{"canonical_event_head": hex("c"), "sequence": 9, "desired_event_head": hex("d"), "effective_event_head": hex("e"),
 			"pending_transition_ref": "", "desired_state_commitment": hex("1"), "effective_state_commitment": hex("2")})
+	case "GET /operations/op-1/release-witness":
+		decision := map[string]any{"present": false}
+		if s.decisionKind != "" {
+			// The decision-time bindings, which differ from the current head.
+			decision = map[string]any{"present": true, "event_kind": s.decisionKind,
+				"expected_desired_event_head": hex("3"), "expected_effective_event_head": hex("4"),
+				"expected_desired_state_commitment": hex("5"), "expected_effective_state_commitment": hex("6")}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"operation_id": "op-1", "decision": decision})
 	case "GET /mode":
 		_, _ = io.WriteString(w, `{"computer_id":"computer-x","mode":"propose_only","generation":3}`)
 	case "PUT /mode":
@@ -168,5 +180,65 @@ func TestSelfDevWaitStopsAtWantedOrSettledState(t *testing.T) {
 	}
 	if time.Since(started) > 2*time.Second {
 		t.Fatal("wait sat out its deadline on a settled operation")
+	}
+}
+
+// A decision that already landed can be replayed with the same key, so the
+// caller learns that its first call succeeded. Failure modes pinned: the
+// replay re-arms accept_once (a second owner act for a consumed grant); the
+// replay binds today's head instead of the decision-time binding, which the
+// guest's exact replay match refuses; a replay is posted for an operation
+// another decision settled, or one never decided.
+func TestSelfDevDecisionReplaysALandedDecisionWithItsOriginalBinding(t *testing.T) {
+	hex := func(c string) string { return strings.Repeat(c, 64) }
+	for _, tc := range []struct{ decision, state, kind string }{
+		{"reject", "rejected", "effect_rejected"},
+		{"approve", "applied", "effect_accepted"},
+		{"approve", "accepted", "effect_accepted"},
+	} {
+		t.Run(tc.decision+"-"+tc.state, func(t *testing.T) {
+			stub, server := newSelfDevStub(t, tc.state)
+			stub.decisionKind = tc.kind
+			args := []string{"self-dev", tc.decision, "--computer=computer-x", "--operation=op-1", "--idempotency-key=first-key", "--host=" + server.URL}
+			if tc.decision == "reject" {
+				args = append(args, "--reason=tests fail")
+			}
+			var stdout, stderr bytes.Buffer
+			if code := run(args, &stdout, &stderr); code != 0 {
+				t.Fatalf("replay code=%d stderr=%s", code, stderr.String())
+			}
+			if got := strings.Join(stub.requests, ","); got != "GET /operations/op-1,GET /operations/op-1/release-witness,POST /operations/op-1/decision" {
+				t.Fatalf("requests = %v", stub.requests)
+			}
+			body := stub.bodies["POST /operations/op-1/decision"]
+			for field, value := range map[string]any{"decision": tc.decision, "idempotency_key": "first-key", "bundle_digest": hex("b"), "verifier_ref": "verifier:jev",
+				"expected_desired_event_head": hex("3"), "expected_effective_event_head": hex("4"), "expected_pending_transition_ref": "",
+				"expected_desired_state_commitment": hex("5"), "expected_effective_state_commitment": hex("6")} {
+				if body[field] != value {
+					t.Fatalf("replay %s = %#v, want %#v (body %#v)", field, body[field], value, body)
+				}
+			}
+		})
+	}
+	for _, tc := range []struct{ decision, state, kind string }{
+		{"reject", "applied", "effect_accepted"},
+		{"approve", "rejected", "effect_rejected"},
+		{"reject", "rejected", ""},
+		{"approve", "failed", ""},
+		{"reject", "executing", ""},
+	} {
+		t.Run("refuses-"+tc.decision+"-"+tc.state, func(t *testing.T) {
+			stub, server := newSelfDevStub(t, tc.state)
+			stub.decisionKind = tc.kind
+			var stdout, stderr bytes.Buffer
+			if code := run([]string{"self-dev", tc.decision, "--computer=computer-x", "--operation=op-1", "--reason=r", "--host=" + server.URL}, &stdout, &stderr); code == 0 {
+				t.Fatalf("%s of a %s operation succeeded: %s", tc.decision, tc.state, stdout.String())
+			}
+			for _, request := range stub.requests {
+				if !strings.HasPrefix(request, "GET ") {
+					t.Fatalf("%s wrote %s for a %s operation", tc.decision, request, tc.state)
+				}
+			}
+		})
 	}
 }
