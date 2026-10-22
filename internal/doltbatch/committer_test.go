@@ -178,8 +178,11 @@ func TestModeOffNeverCommits(t *testing.T) {
 // store with no Dolt commit ever made.
 func TestModeOffWriteSurvivesReopen(t *testing.T) {
 	root := t.TempDir()
-	open := func() (*sql.DB, func()) {
+	open := func(database string) (*sql.DB, func()) {
 		dsn := fmt.Sprintf("file://%s?commitname=Choir&commitemail=system@choir.local&multistatements=true", root)
+		if database != "" {
+			dsn += "&database=" + database
+		}
 		cfg, err := embedded.ParseDSN(dsn)
 		if err != nil {
 			t.Fatalf("parse dsn: %v", err)
@@ -192,57 +195,34 @@ func TestModeOffWriteSurvivesReopen(t *testing.T) {
 		return db, func() { _ = db.Close(); _ = connector.Close() }
 	}
 
-	db, closeDB := open()
-	for _, q := range []string{
-		"CREATE DATABASE IF NOT EXISTS reopen",
-		"USE reopen",
-		"CREATE TABLE t (id INT PRIMARY KEY, v VARCHAR(64))",
-	} {
-		if _, err := db.Exec(q); err != nil {
-			t.Fatalf("%s: %v", q, err)
-		}
+	rootDB, closeRoot := open("")
+	if _, err := rootDB.Exec("CREATE DATABASE IF NOT EXISTS reopen"); err != nil {
+		t.Fatalf("create database: %v", err)
 	}
-	conn, err := db.Conn(context.Background())
-	if err != nil {
-		t.Fatalf("conn: %v", err)
+	closeRoot()
+
+	db, closeDB := open("reopen")
+	if _, err := db.Exec("CREATE TABLE t (id INT PRIMARY KEY, v VARCHAR(64))"); err != nil {
+		t.Fatalf("create table: %v", err)
 	}
-	if _, err := conn.ExecContext(context.Background(), "USE reopen"); err != nil {
-		t.Fatalf("use: %v", err)
-	}
-	var base int
-	if err := conn.QueryRowContext(context.Background(), "SELECT COUNT(*) FROM dolt_log").Scan(&base); err != nil {
-		t.Fatalf("count dolt_log: %v", err)
-	}
+	base := doltLogCount(t, db)
 	c := NewWithMode(db, "test", time.Hour, ModeOff)
-	if _, err := conn.ExecContext(context.Background(), "INSERT INTO t VALUES (7, 'kept')"); err != nil {
+	if _, err := db.Exec("INSERT INTO t VALUES (7, 'kept')"); err != nil {
 		t.Fatalf("insert: %v", err)
 	}
 	if err := c.CommitNow(context.Background(), "boundary"); err != nil {
 		t.Fatalf("CommitNow: %v", err)
 	}
 	_ = c.Close(context.Background())
-	_ = conn.Close()
 	closeDB()
 
-	db, closeDB = open()
+	db, closeDB = open("reopen")
 	defer closeDB()
-	conn, err = db.Conn(context.Background())
-	if err != nil {
-		t.Fatalf("conn after reopen: %v", err)
-	}
-	defer conn.Close()
-	if _, err := conn.ExecContext(context.Background(), "USE reopen"); err != nil {
-		t.Fatalf("use after reopen: %v", err)
-	}
 	var v string
-	if err := conn.QueryRowContext(context.Background(), "SELECT v FROM t WHERE id = 7").Scan(&v); err != nil || v != "kept" {
+	if err := db.QueryRow("SELECT v FROM t WHERE id = 7").Scan(&v); err != nil || v != "kept" {
 		t.Fatalf("row after reopen = %q, %v; want kept: SQL COMMIT must be durable without a snapshot", v, err)
 	}
-	var after int
-	if err := conn.QueryRowContext(context.Background(), "SELECT COUNT(*) FROM dolt_log").Scan(&after); err != nil {
-		t.Fatalf("count dolt_log after reopen: %v", err)
-	}
-	if after != base {
-		t.Fatalf("dolt_log = %d after reopen, want %d", after, base)
+	if got := doltLogCount(t, db); got != base {
+		t.Fatalf("dolt_log = %d after reopen, want %d", got, base)
 	}
 }
