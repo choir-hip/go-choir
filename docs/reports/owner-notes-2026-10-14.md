@@ -1291,3 +1291,55 @@ Taken as:
 - The checkout was cleaned: main at origin/main, the 80 old agent
   worktrees and the pre-October branches and stashes removed, every
   local branch first bundled to node-a (`/root/choir-lane-backups`).
+
+## 40. Overnight rulings on the open first-pass questions (2026-10-22, about 02:45 UTC)
+
+FP0 listed every open owner question with a default and a recommendation.
+The owner answered each one:
+
+- **FP9 keys and recovery.**
+  - Q1, host unlock after a reboot: "nothing for now".
+  - Q2, escrow KEK as a file on Node B with an offline owner copy: "yes.
+    And this is true for paper as well rn. More ceremony will come when this
+    is the weak link".
+  - Q3, snapshot wake vs snapshot confidentiality: "idc, we should have both
+    soon enough". The default stands: the vault only on computers the owner
+    selects, with no hibernate until the jailed capture is settled.
+  - Q4, swap: "default. Prob remove swap. Swap seems to lead to compounding
+    problems". Record now; removal is the expected next step.
+- **ARCH-11.** The name is "outboard capsule". Model calls relay through
+  the host gateway, with no token in the machine. A fresh machine for each
+  lease. All yes.
+- **RES-13.** A 10-minute idle hibernate once sparse snapshots are on
+  everywhere: yes. Waking on the previous guest release ships off; a deploy
+  that changes the guest kernel or its confinement sets the floor: agreed.
+- **NET-10.**
+  - Q1, L1 egress only through the host: yes.
+  - Q2, ingress names limited to the package's own name: yes.
+  - Q3, renewal: "not renewed by me (human) but perhaps renewed by mgmt
+    desk? Or may be needless ceremony for network that is required for
+    appagent desk duties; other networking shouldn't be allowed anyway. I
+    lean towards preset policies for each appagent by default".
+
+  Taken as: each app agent ships a preset network policy. It is part of the
+  reviewed package, approved when the package is installed, and never
+  renewed by the owner. Any widening is still an owner act, as before.
+  Whether management re-checks preset grants is open, not a default.
+- **App-desk compute capsules.**
+  - Q2, the first recipe is a PDF render: "yes; save video stuff for later,
+    post-launch".
+  - Q1 and Q3: the owner asked what they mean (answered in session); still
+    open.
+- **DEC-07 agent-tree budgets.** "Track spending, no hard cap; I'll get
+  rate limited when I run out of credits. Ie im capping things externally.
+  ... Will build more budgeting infrastructure post launch." ARCH-08 slices
+  2 to 5 are therefore observe-only. Nothing refuses work on spend.
+- **RES-19 / RES-08.** "Add read only page cache reading": a read-only
+  guest page-cache (`fincore`-style) reading joins the procmem endpoint.
+- **ChatGPT quota.** "ChatGPT credits will come back in an hour. If we save
+  it for Luna in choir (not sol code review) it will last long enough; I can
+  replenish when we hit limit". No sol review for the rest of the pass.
+- **node-a.** "Keep node-a as is; we are still serving Mike as well". The
+  agents VM keeps 9 GiB; parallelism is paced to fit it.
+- **Old dashboard artifact.** "Remove dashboard artifact". The generated
+  status page replaces it.
