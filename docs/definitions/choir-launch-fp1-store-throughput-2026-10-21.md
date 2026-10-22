@@ -108,35 +108,41 @@ boundaries:
 now:
   status: checkpoint_incomplete
   slice: >-
-    Follow-up (2026-10-22, lane/fp1-boot-window): the paper is unreachable
-    minutes after every boot. FP0's trace found the holder:
-    LatestComputerEventByIdempotencyPrefix walking every finalized event
-    (H4, the online GC, refuted by M0a). Repair built, tests first: one range
-    on the unique (computer_id, idempotency_key) key (40cdc19fc). F1 (bounded
-    /health reads) recorded as the next candidate, not built. Earlier slice:
-    B2 landed (bed24b526).
-  source_ref: see receipts
-  deploy_identity: f2c4a3ec3 serving at start; this lane deploys nothing
+    Follow-up (2026-10-22, lane/fp1-event-table): F-c deploy 1, run
+    telemetry in its own table, inert. Built tests first from the design's
+    section 5 on origin/main 6c60685cc after the owner approved the
+    section 8 defaults ("Defaults are fine"): choir_events (4 trees), the
+    projector route on ProjectionOp.Table, the union readers and both seeds,
+    the witness rule (an empty choir_events is not observed) and manifest
+    class (version 4), both vocabulary fences, store schema epoch 2, the
+    three caller-less methods deleted. No writer stamps an op: deploy 2 (the
+    writer behind store.event_table) is not built. Earlier slices: the
+    boot-window repair (deploy E), B2 (bed24b526).
+  source_ref: lane/fp1-event-table
+  deploy_identity: this lane deploys nothing; FP0 lands and proves
   candidate:
-    id: fp1-b2-store
-    state: paused
-    ref: lane/b2-store-b1fix (on the frozen 8cadecc7e)
-    base: f399a2e8c
+    id: fp1-event-table-deploy1
+    state: built, not landed; awaiting FP0's review bunch and mirror
+    ref: lane/fp1-event-table
+    base: 6c60685cc
     digest: none
     scope:
-      - internal/objectgraph/derived_keys.go
-      - internal/objectgraph/dolt_store.go
-      - internal/objectgraph/boot_step.go
-      - internal/store/derived_keys.go
+      - internal/store/event_table.go
+      - internal/store/store.go
       - internal/store/project.go
       - internal/store/computer_events.go
+      - internal/store/graph_store.go
+      - internal/store/object_graph_fingerprints.go
+      - internal/store/telemetry_sealer.go
       - internal/store/vocab_migrate_og.go
-      - internal/store/store.go
-      - internal/store/texture.go
+      - internal/store/vocab_replay_fence.go
+      - internal/objectgraph/dolt_store.go
+      - internal/types/event_storage.go
+      - internal/storeschema/schema.go
       - internal/computerversion/dolt_state_extractor.go
-      - internal/agentcore/replay_completeness.go
-      - internal/projectionbase/witness.go
-      - internal/autoputer/run.go
+      - internal/agentcore/replay_eligibility.go
+      - internal/agentcore/system1_verb.go
+      - scripts/proofs/fp1-event-table-deploy1.sh
   conjecture:
     id: C-FP1-sidetable
     claim: >-
@@ -180,12 +186,18 @@ now:
     FP0 can check the paper with the query in that record before the deploy.
     Residual: the validator's COUNT and stray-id lists are not keyset-paged.
   next_action: >-
-    (FP0, 2026-10-22 05:55) The boot-window repair is deployed (deploy E,
-    d991907e6): the paper is healthy about 30 s after boot (34 s on deploy
-    F). F1 (bounded /health) is accepted by all three reviewers and rides
-    deploy G after its mirror. Journal growth: F-a measured on staging at
-    about 10% per telemetry record, so F-c (choir.event out of og_objects)
-    is the next lever and needs a design and a panel.
+    FP0: review the deploy-1 set in a bunch (red: store schema, epoch,
+    projector, replay, witness, manifest, fences, event readers), mirror it
+    under -race, land it as its own deploy (owner Q5; the metamission's
+    one-store-batch-per-deploy rule), then run
+    scripts/proofs/fp1-event-table-deploy1.sh (step 2 --label before ahead
+    of the deploy). Keep deploy 1 at least one staging day and one paper
+    boot before deploy 2. Next lane: deploy 2 (the writer and
+    store.event_table, tests F17 and F18 first; F17's local ratio at most
+    0.5 gates it). Rollback below deploy 1: git revert is safe while no op
+    is stamped, but the updater refuses the epoch-1 release on any store
+    this build opened; once deploy 2 stamps, deploy 1 is the floor (design
+    4.5 and its status section).
   followup: >-
     Journal growth (lane/fp1-journal-growth, 2026-10-22): problem record
     docs/problems/paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md.
@@ -201,6 +213,35 @@ now:
     FP0's six readings in the record.
 
 receipts:
+  - id: fp1-event-table-deploy1
+    boundary: implement
+    identity: >-
+      lane/fp1-event-table on 6c60685cc: 2b30186a9 (tests, yellow);
+      e31a14260 (DDL, storage class, epoch 2), 3a75441f7 (projector route),
+      23d1a4cae (union readers and seeds), 220698ce1 (witness, manifest,
+      fingerprints, fences), e287b6e7e (deletions), 21718f62f (plan-shape
+      fix), all red; 04d055014 and 17736c304 (test repairs, yellow);
+      3900eed5c (proof script, yellow); then this docs commit (green)
+    proof_refs:
+      - internal/store/event_table_test.go
+      - internal/store/event_table_guard_test.go
+      - internal/store/event_table_vocab_test.go
+      - internal/store/event_table_old_binary_test.go
+      - internal/computerversion/dolt_state_extractor_test.go (TestDoltExtractorOmitsAnEmptyOptionalTable)
+      - internal/agentcore/replay_eligibility_test.go (TestReplayEligibilityOptionalEventTable)
+      - internal/updater/state_compat_test.go (TestApplyRefusesPreEventTableReleaseOnEventTableStore)
+      - scripts/proofs/fp1-event-table-deploy1.sh
+    rollback_ref: git revert of the lane's red commits (safe while no op is stamped)
+    disposition: >-
+      built and tested locally, not landed. internal/store whole package
+      passes (one repair found by it, 17736c304); the F-c, fence, telemetry
+      and call-site tests pass under -race; projectionbase, selfdevprotocol,
+      apihandler, computerversion, updater, types, storeschema, objectgraph
+      and computerevent pass; agentcore and textureowner pass on the
+      replay, restore, checkpoint, acceptance, WS, run-events, System1 and
+      diagnosis filters. scripts/check-*.sh pass except
+      check-guest-data-fstrim.sh, which needs the nix binary this VM lacks
+      (environmental, unrelated).
   - id: fp1-boot-window-repair
     boundary: implement
     identity: b6523c170, 37cab03d4 (tests), 40cdc19fc (fix), 0084139d6 (record)

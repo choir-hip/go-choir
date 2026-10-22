@@ -16,6 +16,72 @@ code at the cited `file:line` on this checkout; **[M]** measured, in a cited
 record, not re-measured here; **[H]** hypothesis or derivation, with the
 observation that settles it.
 
+## Status (2026-10-22): deploy 1 built
+
+The owner approved the section 8 defaults on 2026-10-22 ("Defaults are
+fine"): Q1 K2, Q2 four trees, Q3 `choir_events`, Q4 the multi-row insert is
+deploy 3, Q5 deploy 1 ships alone first, Q6 existing rows never touched, Q7
+the paper after a test computer passes, Q8 `readDB` under the engine mutex,
+Q9 accept and rename, Q10 delete the three methods.
+
+**Deploy 1 (inert) is built** on `lane/fp1-event-table` from `origin/main`
+`6c60685cc`, tests first, not landed. Commits: the section 5 tests (yellow),
+then five red commits: the DDL, the storage class and epoch 2; the projector
+route; the union readers and seeds; the witness rule, manifest class,
+fingerprints and both fences; the deletion of the three methods. Deploy 2
+(the writer and `store.event_table`) and deploy 3 are not built. F17 (the
+journal probe that gates deploy 2) and F18 (the setting) are deploy 2's.
+
+Deploy 1's staging proof is a no-effect proof:
+`scripts/proofs/fp1-event-table-deploy1.sh` (boot log; replay report at
+manifest version 4 with `choir_events` neither unknown, missing nor
+observed; one finished run's events identical before and after; the
+`store.event_table.*` engine ops live with short holds; the paper active
+and polling; a test-computer restart, and the owner restore of a
+pre-deploy-1 checkpoint on it). Section 6.3 is the proof of deploy 2.
+
+**What a rollback below deploy 1 means now.** While no op has ever been
+stamped (true for all of deploy 1, which has no writer), a git revert of
+the deploy-1 commits is safe, but the updater refuses the older epoch-1
+release on any store this build opened (epoch 2), so an updater-applied
+rollback below deploy 1 is refused before mutation. A rollback that reaches
+a computer by another path finds an empty table its manifest calls unknown:
+checkpoint publish is refused, the computer keeps running, and its restore
+of a pre-deploy-1 checkpoint, staged without the table, still works and
+removes the table with the workspace swap. Once deploy 2 stamps any op,
+deploy 1 is the floor (section 4.5).
+
+**Where the code differs from this document** (each is in the code and its
+tests):
+
+1. *Plan shapes (section 9's open item, F16).* Dolt reads `(run_id, seq)`
+   in index order, with no TopN, only when the `ORDER BY` names the whole
+   index prefix (`ORDER BY run_id, seq`, not `ORDER BY seq`). Every
+   `choir_events` query does so. `SELECT COALESCE(MAX(seq), 0) ... WHERE
+   run_id = ?` (section 3.5) plans as a GroupBy over every row of the run,
+   not a seek, so the per-run seed is `ORDER BY run_id DESC, seq DESC LIMIT
+   1`, and no row means 0 (the NULL case of round 2 handled the same way).
+2. *Fingerprints (3.3 item 3).* `canonical_id` is not unique in
+   `choir_events`, so a fingerprint there is named by tape position,
+   `choir_events/<tape_seq>/<op_index>`, with a new `Table` field.
+3. *The V1→V2 exception of the fence guard (3.6, F11)* is four functions,
+   not one: `planOGMigration`, `ogResolveLiveCollision`,
+   `applyOGMigration`, `revertOGMigration`. Both fences read
+   `objectRowTables`.
+4. *Ties.* The union reads break ties by `stream_seq` (or `seq`), so their
+   order is deterministic; before, `sort.Slice` left equal keys in the
+   og_objects read order. Only rows with equal sort keys can move.
+5. *F5* was run on `6c60685cc` before any change (the full `projectBatch`
+   put a stamped op in og_objects); the test now pins the old route,
+   `projectObject`, which deploy 1 keeps.
+6. *F1 after a reconstruction* and *F3* replay through `FinalizeReplayBatch`
+   on a frozen tape; the store's recording CAS is not an `EventSource`, so
+   `ReconstructInto` itself is not driven from the store package. *F7*
+   re-finalizes and re-projects at the same position; it does not simulate
+   a crash between commit and return. *F8* with the setting on is deploy
+   2's; deploy 1 has a repository-wide guard that no production code sets
+   `ProjectionOp.Table`.
+
 ## Answer in brief
 
 1. **What moves.** Only the ten batched telemetry kinds, about 94% of
