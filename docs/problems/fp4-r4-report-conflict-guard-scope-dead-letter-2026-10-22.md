@@ -117,9 +117,11 @@ Tests fec168943, fix 3efb1312d.
 - **P2 at its source (DeepSeek 3, Sonnet F6): repaired.** A per-assignment
   saga mutex in the host process (`assignmentSagaMutex`). The worker's
   Complete takes it; the fate wake's resume of the staged proposal only
-  tries it, and defers when the live saga holds it: the live saga commits
-  the report or, failing, arms the fate watchdog, which re-drives when the
-  mutex is free. A worker that waits behind a resume finds the report
+  tries it, and defers when the live saga holds it. [Corrected in round
+  4c: as built in 3efb1312d the deferral returned nil and consumed the
+  wake, the watchdog arm deduped into the consumed G9 wake, and several
+  failure exits armed nothing, so the claimed "arms the fate watchdog,
+  which re-drives" did not hold; see Round 4c.] A worker that waits behind a resume finds the report
   stored and replays it before any capsule step. Both drivers run in the
   host process (capsule cells reduce there; the fate wake is handled
   there); a driver in another process would not be covered, and none
@@ -138,8 +140,57 @@ Tests fec168943, fix 3efb1312d.
   passed the open-candidate check) resets the refusal, and wins over the
   refusal pattern in the same cell. A cell whose freeze committed before a
   later intent failed returns an error that carries the committed
-  `freeze_result`, which resets too. The marker is text in that error, so
-  model-authored text inside a reduce error could set it; the effect is
-  only the default guard reason.
+  `freeze_result`, which resets too. [Corrected in round 4c: the marker
+  check covered every tool result, so a successful cell's printed stdout
+  could set it, not only a reduce error; it now counts only in a tool
+  error. The wrap and the worker's lock were not pinned by a test.]
 - **Poison lines (Sonnet F5): tests added** for the pre-handler and
-  deferral-limit lines.
+  deferral-limit lines. [Corrected in round 4c: the deferral-limit test
+  matched the earlier "deferred … cause=" line too, so it did not pin the
+  poison line; it now judges the poison line.]
+
+## Round 4c (review of f848bb74e: DeepSeek v4.1 flash sends back, Sonnet accepts with edits)
+
+Tests ce11b6dd0, fix a32e7652f. Both reviewers found the same High.
+
+- **A deferred fate wake was lost (DeepSeek 1, Sonnet E1): repaired.**
+  Three faults, each confirmed (Sonnet by probe, then in code):
+  - the resume's deferral returned nil, so the dispatcher consumed the
+    wake;
+  - `armAssignedEngineeringFateWatchdog` scheduled the same content as the
+    G9 wake through the plain hook, and the actor log's
+    `ON CONFLICT(update_id) DO NOTHING` dropped it once G9 was consumed;
+  - the live saga's exits at the frozen capability, its digest, the
+    receipt binding (the P1 incident's exit), the candidate export and the
+    revoke path armed nothing.
+
+  So a live saga that failed after a deferral was re-driven only by the
+  six-hour bound deadline, the guard's cancel, or a planned restart.
+  Now: the resume returns `ErrAssignmentSagaHeld`, which actorruntime maps
+  to `actor.ErrDeferUnprocessed`, so the dispatcher re-delivers the same
+  wake with backoff (0.5 s doubling to 30 s; after 64 deferrals, about 30
+  minutes, it is dead-lettered with its cause). Every failure of the
+  terminal report saga on an assignment that still owes its fate arms a
+  re-drive, and the arm goes through the redrive hook, which mints a new
+  generation when the family's wakes are all consumed and nothing while
+  one is pending.
+- **The worker's lock (DeepSeek 2, Sonnet E3 M2): pinned** by
+  `TestWorkerCompleteWaitsForTheAssignmentSaga`, and released by defer
+  (DeepSeek 5, Sonnet E5).
+- **The freeze wrap (DeepSeek 3, Sonnet E3 M6): moved into
+  `reduction.commit`** and pinned there; every caller carries it.
+- **The P1 test (DeepSeek 4, Sonnet E2): skips off Linux**; receipts open
+  only on the Linux guest kernel. It runs and pins on the Linux VM.
+- **The marker (DeepSeek 6, Sonnet E8): counts only in a tool error.**
+  Text inside a reduce error can still set it; the effect is only the
+  default guard reason and instruction, never a refusal.
+- **The saga map (DeepSeek 7, Sonnet E7): trimmed.** A free entry is
+  dropped once the assignment no longer owes its report.
+- **Store mutants (Sonnet E4): killed** by a case with a derived report id
+  and a wrong stated digest, and one row per evidence leg.
+- **Comment order (Sonnet E9): fixed.**
+- **Residual (Sonnet E6):** the worker waits on the saga mutex without its
+  context. A resume that holds it longer than the cell's three-minute fate
+  context leaves the worker's store calls to fail after it acquires, so its
+  cell can hear an error for a report the resume landed. Narrow (a resume
+  holds the mutex only across one saga attempt).
