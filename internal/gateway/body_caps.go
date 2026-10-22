@@ -86,8 +86,10 @@ const (
 	bodyRouteOperator  = "operator"
 	// bodyInFlight is the limit on all bodies held at once, and the
 	// refused key of bodies turned away by it; bodyPerCaller is one
-	// caller's share of it; bodyReadDeadline is the refused key of reads
-	// cut by the body deadline.
+	// caller's share of it, and the refused key of bodies turned away
+	// because their caller held its share (bunch 116, F3);
+	// bodyReadDeadline is the refused key of reads cut by the body
+	// deadline.
 	bodyInFlight     = "in_flight"
 	bodyPerCaller    = "per_caller"
 	bodyReadDeadline = "read_deadline"
@@ -328,6 +330,10 @@ func (h *Handler) decodeBodyHeld(w http.ResponseWriter, r *http.Request, route, 
 			c.refuse(bodyInFlight, caller, fmt.Sprintf("route=%s bytes=%d waited=%s", route, want, waited.Round(time.Millisecond)), c.limits[bodyInFlight])
 			return noop, &errBodyRetry{status: http.StatusTooManyRequests, msg: "the gateway is holding as many request bodies as it can; retry"}
 		}
+		if errors.Is(err, errBodyShareWait) {
+			c.refuse(bodyPerCaller, caller, fmt.Sprintf("route=%s bytes=%d waited=%s", route, want, waited.Round(time.Millisecond)), c.limits[bodyPerCaller])
+			return noop, &errBodyRetry{status: http.StatusTooManyRequests, msg: "this caller's request bodies already hold its share of the gateway; retry"}
+		}
 		return noop, err
 	}
 	if waited > 0 {
@@ -392,8 +398,12 @@ func (h *Handler) decodeBodyHeld(w http.ResponseWriter, r *http.Request, route, 
 var readDeadlineUnset sync.Once
 
 // errBodyBudgetWait: the body waited its whole deadline for room in
-// in_flight.
-var errBodyBudgetWait = errors.New("no room in the request body budget")
+// in_flight. errBodyShareWait: it waited its whole deadline passed over
+// because its caller held its share (bunch 116, F3).
+var (
+	errBodyBudgetWait = errors.New("no room in the request body budget")
+	errBodyShareWait  = errors.New("the caller holds its share of the request body budget")
+)
 
 // bodyBudget counts the bytes of request bodies held at once against size,
 // and each caller's against share. Waiters are served in arrival order, so
@@ -443,6 +453,9 @@ func (b *bodyBudget) acquire(ctx context.Context, caller string, n int64, deadli
 		err = errBodyBudgetWait
 	}
 	b.mu.Lock()
+	if held := b.byCaller[caller]; err == errBodyBudgetWait && !w.granted && held > 0 && held+n > b.share {
+		err = errBodyShareWait
+	}
 	if w.granted {
 		b.releaseLocked(caller, n)
 	} else {

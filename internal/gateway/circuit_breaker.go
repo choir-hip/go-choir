@@ -179,6 +179,11 @@ func providerFailureCounts(ctx context.Context, err error) bool {
 	if provider.IsMediaError(err) {
 		return false
 	}
+	// A call that ended waiting for an image decode slot never reached
+	// the upstream (bunch 116, F2).
+	if errors.Is(err, provider.ErrImageDecodeWait) {
+		return false
+	}
 	if m := providerStatusPattern.FindStringSubmatch(err.Error()); m != nil {
 		code, _ := strconv.Atoi(m[1])
 		if code >= 400 && code < 500 && code != 408 && code != 429 {

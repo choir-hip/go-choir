@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/provider"
 )
 
 // RES-11: a fair model-call scheduler
@@ -352,7 +354,11 @@ func (h *Handler) schedulerOn() bool { return h.modelScheduler != nil }
 // budget: wait plus call stay inside the gateway's 10m30s write timeout and
 // the guest's client timeout (RES-11 record, finding 11). The handlers'
 // own inferenceTimeout contexts derive from it, so the earlier deadline wins.
+// In both modes it also names the computer as the call's image decode
+// caller, so one computer holds at most its share of the decode slots
+// (bunch 116, F2).
 func (h *Handler) scheduleModelCall(w http.ResponseWriter, r *http.Request, computerID string, openAI bool) (func(), *http.Request, bool) {
+	r = r.WithContext(provider.WithImageDecodeCaller(r.Context(), computerID))
 	if h.modelScheduler == nil {
 		return func() {}, r, true
 	}
