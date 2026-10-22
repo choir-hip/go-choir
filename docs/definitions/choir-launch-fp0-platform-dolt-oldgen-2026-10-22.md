@@ -79,11 +79,14 @@ now:
     f45e4248e), fixes (c4fe5db2d), record §4 revised. Review round 2
     (bunch 90, DeepSeek): R9 an unread receipt count passed the drill,
     fixed (504ed930b, 4b7128bf6, e16099811); R10 newgen wording fixed,
-    the shared 8 GiB line a residual (§4 step 1 covers it). The switch stays
+    the shared 8 GiB line a residual (§4 step 1 covers it). Review round 3
+    (bunch 103, DeepSeek): F1 to F3 fixed (b234006f7, 07ef10ec3,
+    ea77517f7): the drill validates the recorded receipt count and its
+    scratch directory. The switch stays
     inert until the env file exists. Waits on FP0's landing (not a
     host-only deploy: projectionbase maps to vmctl and the guests) and the
     owner's flip, after the first-hour auto GC check in record §4.
-  source_ref: e16099811
+  source_ref: ea77517f7
   deploy_identity: unchanged
   candidate: {id: pdolt-snapshots-off, state: pushed, ref: lane/fp0-platform-dolt-oldgen, base: f0b1ee313, digest: none, scope: [internal/doltbatch/committer.go, internal/doltbatch/committer_test.go, internal/platform/store.go, internal/platform/snapshot_mode_test.go, internal/projectionbase/squash.go, internal/projectionbase/squash_test.go, nix/node-b.nix, scripts/dolt-history-audit.sh, scripts/test-dolt-history-audit.sh, scripts/off-host-backup.sh, scripts/off-host-backup-dolt-snapshot-test.sh, scripts/off-host-restore-drill.sh, .github/scripts/deploy-impact-classify, .github/scripts/deploy-impact-classify-test, docs/problems/platform-dolt-oldgen-rate-and-squash-window-2026-10-22.md, docs/definitions/choir-launch-fp0-platform-dolt-oldgen-2026-10-22.md]}
   conjecture:

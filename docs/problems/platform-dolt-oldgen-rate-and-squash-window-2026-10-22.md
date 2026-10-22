@@ -345,7 +345,7 @@ it; these operational tools do:
 |---|---|---|
 | The squash tool (`internal/projectionbase/squash.go`) | commit count, HEAD vs WORKING root | fixed in `c4fe5db2d`: commits the working set when HEAD lags; the root check is unchanged |
 | The off-host backup manifest (`scripts/off-host-backup.sh` `dolt_head`) | newest `dolt_log` hash | still recorded (it identifies the squash commit); `dolt_rows` added: Store A's receipt count, read before the capture |
-| The restore drill (`scripts/off-host-restore-drill.sh` `snap`) | that hash in the restored log | hash check kept; the restored receipt count must be at least the recorded one; a count the run could not read (`platform=unread`) or a `dolt_rows` field with no Store A entry fails (R9); only a manifest with no `dolt_rows` field (from before the change) says so and relies on the head |
+| The restore drill (`scripts/off-host-restore-drill.sh` `snap`) | that hash in the restored log | hash check kept; the restored receipt count must be at least the recorded one; a count the run could not read (`platform=unread`) or a `dolt_rows` field with no Store A entry fails (R9), as does a recorded count that is not one entry of 1 to 15 decimal digits (round 3 F1, F2); only a manifest with no `dolt_rows` field (from before the change) says so and relies on the head |
 | The subvolume migration (`scripts/dolt-data-to-subvolume.sh` `head_of`) | head before and after a one-shot move | equality holds with a frozen head and proves nothing; harmless (the move already ran or is a one-off); if it runs again after the flip, compare the receipt count by hand |
 | The history audit (`scripts/dolt-history-audit.sh`, was inline in nix) | `COUNT(*) FROM dolt_log` | flat after the flip, by design; newgen (8 GiB) and journal (4 GiB) lines and alarms added (R4) |
 
@@ -535,9 +535,9 @@ Recorded before any fix.
 - **F1 (low, red fail-closed gap): the recorded count is not validated.**
   `scripts/off-host-restore-drill.sh` (`snap`, line 139 at `ed1cdd341`)
   compares `[ "$got_rows" -ge "$want_rows" ]` after validating only
-  `got_rows`. A manifest with `platform=-1` (or `platform=0`-like values a
-  hand edit or a bug could write) passes the freshness check against any
-  restore, the same vacuous pass R2 and R9 closed.
+  `got_rows`. A manifest with `platform=-1` (which a hand edit or a bug
+  could write) passes the freshness check against any restore, the same
+  vacuous pass R2 and R9 closed.
 - **F2 (low): a malformed recorded count fails with the wrong message.**
   A duplicated `platform=` key (two lines out of the `sed`), a non-numeric
   value, or one too large for the shell's integers makes `[` itself error,
@@ -549,3 +549,11 @@ Recorded before any fix.
   script test) and later `rm -rf "$D/r" ...`. A value of `/` or a relative
   path would chmod `/` or land the scratch tree under the caller's working
   directory.
+
+### Dispositions, round 3 (2026-10-22)
+
+| Finding | Disposition | Where |
+|---|---|---|
+| F1 recorded count unvalidated (`platform=-1` passes) | fixed: after the unread branch the drill requires 1 to 15 decimal digits and fails naming the manifest ("is not 1 to 15 decimal digits"). A recorded `0` stays valid (an empty store) | `off-host-restore-drill.sh` (`ea77517f7`); test item 13 (`07ef10ec3`) |
+| F2 duplicated, non-numeric or oversized count fails with the wrong message | fixed: a key recorded more than once fails first ("more than once"); non-numeric and over 15 digits fail with the F1 message instead of "fewer receipts" | same |
+| F3 drill directory unchecked | fixed: `OFFHOST_DRILL_DIR` must be absolute, without `.` or `..` components, and not `/` (exit 2, before `install -d`); the default is unchanged. The test stubs `install` to record and fail, so the tip it ran against never touched `/` | same; test item 14 |
