@@ -1768,7 +1768,7 @@ in
   # scripts/test-node-b-host-disk-alarm.sh;
   # docs/problems/node-b-nix-store-and-host-disk-policy-2026-10-22.md). Every
   # 15 minutes, one journal line with root free space, btrfs unallocated
-  # space and metadata use: priority warning under the deploy floor (56 GiB)
+  # space and metadata use: priority warning under the deploy floor (60 GiB)
   # or 20 GiB unallocated (go-choir-btrfs-headroom balances under 30), error
   # under nix min-free (24 GiB) or 10 GiB unallocated, or when a reading
   # fails. Read-only; always exits 0. See alarms:
@@ -1783,7 +1783,7 @@ in
       TimeoutStartSec = "1min";
       Environment = [
         "PATH=${lib.makeBinPath [ pkgs.coreutils pkgs.gawk pkgs.btrfs-progs ]}"
-        "HOST_DISK_WARN_FREE_GIB=56"
+        "HOST_DISK_WARN_FREE_GIB=60"
         "HOST_DISK_WARN_UNALLOC_GIB=20"
         "HOST_DISK_ERR_FREE_GIB=24"
         "HOST_DISK_ERR_UNALLOC_GIB=10"

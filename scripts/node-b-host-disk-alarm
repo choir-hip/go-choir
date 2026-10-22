@@ -15,7 +15,7 @@
 #   journalctl -u go-choir-host-disk-alarm
 set -u
 
-warn_free="${HOST_DISK_WARN_FREE_GIB:-56}"
+warn_free="${HOST_DISK_WARN_FREE_GIB:-60}"
 warn_unalloc="${HOST_DISK_WARN_UNALLOC_GIB:-20}"
 err_free="${HOST_DISK_ERR_FREE_GIB:-24}"
 err_unalloc="${HOST_DISK_ERR_UNALLOC_GIB:-10}"
