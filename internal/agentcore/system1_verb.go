@@ -173,7 +173,7 @@ func (rt *Runtime) system1Egress(ctx context.Context, deskRole string, exec tool
 	}
 
 	channel := system1Channel(computer)
-	tape, err := rt.store.ListEventsByChannel(ctx, owner, channel, system1TapeLimit)
+	tape, err := rt.store.ListAcknowledgedEventsByChannel(ctx, owner, channel, system1TapeLimit)
 	if err != nil {
 		return nil, fmt.Errorf("choir.System1: read the tape: %w", err)
 	}

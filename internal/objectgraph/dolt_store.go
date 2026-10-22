@@ -126,6 +126,19 @@ func (s *DoltStore) ShareEngineMutex(other *DoltStore) {
 	}
 }
 
+// WithEngine runs fn against this store's database while holding the shared
+// engine mutex, accounted under op. It serves tables outside the object graph
+// that share its embedded engine, such as the store's choir_events, so their
+// reads serialize with every object-graph query as the engine requires.
+func (s *DoltStore) WithEngine(op string, fn func(db *sql.DB) error) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("objectgraph dolt: nil store")
+	}
+	s.engineMu.LockAs(op)
+	defer s.engineMu.UnlockAs(op)
+	return fn(s.db)
+}
+
 // EnsureSchema creates the og_objects and og_edges tables if they do
 // not already exist. Safe to call multiple times.
 func (s *DoltStore) EnsureSchema(ctx context.Context) error {
