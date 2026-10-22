@@ -295,6 +295,7 @@ func TestTestIdleRechecksAtDestroyTime(t *testing.T) {
 }
 
 func TestShadowPlanReportsButNeverEnforces(t *testing.T) {
+	requireQuarantineCtime(t)
 	f := newRetentionFixture(t, RetentionPruneModeOff, RetentionPruneModeOff, RetentionPruneModeOff)
 	f.reg.SetRetentionShadowPruneConfig(RetentionPruneConfig{
 		Mode:             RetentionPruneModeActive,
@@ -322,6 +323,7 @@ func TestShadowPlanReportsButNeverEnforces(t *testing.T) {
 }
 
 func TestQuarantineAgeOutKeepsEverythingThatMayBeTheOnlyCopy(t *testing.T) {
+	requireQuarantineCtime(t)
 	f := newRetentionFixture(t, RetentionPruneModeActive, RetentionPruneModeOff, RetentionPruneModeDryRun)
 	real := f.vm(rtTesterRecent) // a test computer's dir: the only class whose quarantines age out
 	done := f.quarantine(t, real, 1, "done1", "done", "active")
@@ -414,6 +416,7 @@ func TestQuarantineAgeOutKeepsEverythingThatMayBeTheOnlyCopy(t *testing.T) {
 }
 
 func TestQuarantineAgeOutEnforceRemovesAndWritesTheManifest(t *testing.T) {
+	requireQuarantineCtime(t)
 	f := newRetentionFixture(t, RetentionPruneModeActive, RetentionPruneModeOff, RetentionPruneModeActive)
 	real := f.vm(rtTesterRecent)
 	done := f.quarantine(t, real, 1, "done1", "done", "active")

@@ -174,6 +174,7 @@ func TestTestIdleRemovalYieldsToAnotherLifecycleHolder(t *testing.T) {
 }
 
 func TestNoRemovalWhenTheManifestCannotBeWritten(t *testing.T) {
+	requireQuarantineCtime(t)
 	f := newRetentionFixture(t, RetentionPruneModeActive, RetentionPruneModeActive, RetentionPruneModeActive)
 	q := f.quarantine(t, f.vm(rtTesterRecent), 1, "done1", "done", "active")
 	plan := f.reg.RetentionPrunePlan()
@@ -193,6 +194,7 @@ func TestNoRemovalWhenTheManifestCannotBeWritten(t *testing.T) {
 }
 
 func TestQuarantineRemovalRereadsEveryCheck(t *testing.T) {
+	requireQuarantineCtime(t)
 	type change struct {
 		name  string
 		apply func(f *retentionFixture, dir, q string)
