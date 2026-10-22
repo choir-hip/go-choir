@@ -236,12 +236,14 @@ these checks read-only at any time:
   (`GET <computer_url>/api/runtime/obligations` → `restart.kind`) is
   `planned` if it booted inside the 15-minute TTL. Past the TTL it is
   `crash_or_stop`, which is expected; the script reports the marker age.
-- Guest kernel coverage: **a computer the kernel deploy skipped because it
-  was busy stays on the old guest kernel (6.18.55 for the KF deploy) until
-  vmctl's retry sweep catches it at an idle moment (every minute;
+- Guest kernel coverage: **a computer the kernel deploy deferred because
+  it was busy stays on the old guest kernel (6.18.55 for the KF deploy)
+  until vmctl's retry sweep catches it at an idle moment (every minute;
   `GET /internal/vmctl/deploy-refresh` lists it as pending). A held
-  computer is never retried; it needs the next deploy or an explicit
-  deploy-refresh request after unhold.** The pre-checks flag every running
+  computer is skipped, never retried. After unhold, a running one needs
+  the next deploy or an explicit deploy-refresh request; a stopped or
+  hibernated one is booted by the warmer onto the current image; a failed
+  one needs the explicit request.** The pre-checks flag every running
   computer that booted before the current guest image was installed. The
   reboot cold-boots every computer onto the new image, so after it all
   running computers are on the new guest kernel (6.18.57). A computer still hibernated or stopped
