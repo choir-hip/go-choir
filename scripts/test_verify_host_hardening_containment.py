@@ -168,8 +168,12 @@ class Modes(unittest.TestCase):
     def test_modes_name_the_directory_and_not_the_old_paths(self):
         paths = {p: (want, required) for p, want, required in vhh.MODE_EXPECT}
         self.assertEqual(paths[UNIT_ENV_DIR], (0o700, True))
-        for name in ("deploy.env", "corpus-dsn.env", "sandbox-gateway-token.env"):
+        for name in ("corpus-dsn.env", "sandbox-gateway-token.env"):
             self.assertEqual(paths[f"{UNIT_ENV_DIR}/{name}"], (0o600, True), name)
+        # The proxy's EnvironmentFile is optional; so is the check (DS5).
+        self.assertEqual(paths[f"{UNIT_ENV_DIR}/deploy.env"], (0o600, False))
+        # The first import has completed (round 2b, DS2).
+        self.assertEqual(paths[f"{UNIT_ENV_DIR}/.imported"], (0o600, True))
         # The kill switch is absent unless an operator writes it.
         self.assertEqual(paths[f"{UNIT_ENV_DIR}/corpusd-retrieval.env"], (0o600, False))
         for name in UNIT_ENV_NAMES:
