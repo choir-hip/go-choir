@@ -1,0 +1,179 @@
+#!/usr/bin/env bash
+# Node B Nix store retention: the one place that decides which system
+# generations and which builder-release GC roots stay
+# (docs/problems/node-b-nix-store-and-host-disk-policy-2026-10-22.md).
+# Callers: the go-choir-nix-gc unit (every 4 hours), the go-choir-disk-gc
+# sweep (daily) and scripts/node-b-deploy-disk-preflight. It never runs
+# `nix store gc` itself; each caller does after it.
+#
+# What stays, and why:
+# - System generations: the newest NIX_RETENTION_KEEP_GENERATIONS (3: the
+#   current system, the previous one, which is the deploy rollback target in
+#   deploy-receipt-previous.json, and one spare for a two-step rollback), and
+#   the current generation wherever it is (after a rollback it is not the
+#   newest). The booted system is a GC root of its own (/run/booted-system).
+# - Builder releases under /var/lib/go-choir/builder/releases: the S2
+#   acceptance probe's out-links (scripts/s2_station_acceptance.sh, deleted
+#   2026-10-12). Nothing reads them now: corpusd's host-build service builds
+#   under host-build/work and drops its own root, and guests replay the
+#   exported closure into their own store. The newest NIX_RETENTION_BUILDER_KEEP
+#   stay, and any younger than NIX_RETENTION_BUILDER_MIN_AGE_DAYS, and any
+#   whose store path the current system, the booted system or the current
+#   guest image is. Only the out-link symlink is removed; the release
+#   directory, its receipt and closure blob stay.
+# - Never touched: prebuild-results, /tmp deploy result links, host-build
+#   work. They are one link per attribute, overwritten by each build, and the
+#   service links are the only roots of a service-pointer deploy's closure
+#   (the service pointer is a copy whose binaries name store paths).
+#
+# GO_CHOIR_NIX_RETENTION_MODE: observe (default; any other value is logged and
+# read as observe) keeps the legacy behaviour, generations past the newest 4,
+# and logs what enforce would do; enforce applies the policy above.
+# Fails closed: a step that cannot read its input deletes nothing.
+set -u
+
+mode="${GO_CHOIR_NIX_RETENTION_MODE:-observe}"
+case "$mode" in
+  observe|enforce) ;;
+  *) echo "nix retention: unknown mode \"$mode\"; using observe"; mode=observe ;;
+esac
+profile="${NIX_RETENTION_PROFILE:-/nix/var/nix/profiles/system}"
+keep="${NIX_RETENTION_KEEP_GENERATIONS:-3}"
+legacy_keep=4
+auto_dir="${NIX_RETENTION_GCROOTS_AUTO:-/nix/var/nix/gcroots/auto}"
+builder_root="${NIX_RETENTION_BUILDER_ROOT:-/var/lib/go-choir/builder/releases}"
+builder_keep="${NIX_RETENTION_BUILDER_KEEP:-2}"
+builder_min_age_days="${NIX_RETENTION_BUILDER_MIN_AGE_DAYS:-7}"
+store_prefix="${NIX_RETENTION_STORE_PREFIX:-/nix/store/}"
+protect="${NIX_RETENTION_PROTECT:-/run/current-system /run/booted-system /var/lib/go-choir/guest}"
+
+echo "nix retention: mode=$mode keep_generations=$keep builder_keep=$builder_keep builder_min_age_days=$builder_min_age_days"
+
+# ---- system generations --------------------------------------------------
+
+# gens_to_delete <keep> prints, space-separated, every generation except the
+# newest <keep> and the current one. Reads the listing from $listing.
+gens_to_delete() {
+  local k="$1"
+  printf '%s\n' "$listing" | awk -v k="$k" -v cur="$current" '
+    /^[[:space:]]*[0-9]+[[:space:]]/ { n[++c] = $1 }
+    END {
+      # newest first by number
+      for (i = 1; i <= c; i++) for (j = i + 1; j <= c; j++) if (n[j] + 0 > n[i] + 0) { t = n[i]; n[i] = n[j]; n[j] = t }
+      out = ""
+      for (i = k + 1; i <= c; i++) if (n[i] != cur) out = n[i] " " out
+      # oldest first
+      m = split(out, a, " "); s = ""
+      for (i = 1; i <= m; i++) if (a[i] != "") s = s (s == "" ? "" : " ") a[i]
+      print s
+    }'
+}
+
+prune_generations() {
+  if ! [[ "$keep" =~ ^[0-9]+$ ]] || [ "$keep" -lt 2 ]; then
+    echo "nix retention: keep_generations=\"$keep\" refused (needs a number of at least 2: the current system and the rollback target); no generation deleted"
+    return 0
+  fi
+  if ! listing="$(nix-env -p "$profile" --list-generations 2>&1)"; then
+    echo "nix retention: generations skipped: cannot list $profile"
+    return 0
+  fi
+  current="$(printf '%s\n' "$listing" | awk '/^[[:space:]]*[0-9]+[[:space:]].*\(current\)/ {print $1; exit}')"
+  if [ -z "$current" ]; then
+    echo "nix retention: generations skipped: no current generation in the listing"
+    return 0
+  fi
+  local policy legacy apply
+  policy="$(gens_to_delete "$keep")"
+  legacy="$(gens_to_delete "$legacy_keep")"
+  if [ "$mode" = enforce ]; then
+    apply="$policy"
+  else
+    apply="$legacy"
+    if [ "$policy" != "$legacy" ]; then
+      echo "nix retention: observe: would delete system generations: $(comm -23 <(tr ' ' '\n' <<<"$policy" | sort) <(tr ' ' '\n' <<<"$legacy" | sort) | sort -n | tr '\n' ' ' | sed 's/ $//') (keep $keep, current $current)"
+    fi
+  fi
+  if [ -z "$apply" ]; then
+    echo "nix retention: no system generation to delete (current $current)"
+    return 0
+  fi
+  echo "nix retention: deleting system generations: $apply (current $current)"
+  # shellcheck disable=SC2086 # generation numbers, split on purpose
+  nix-env -p "$profile" --delete-generations $apply || echo "nix retention: nix-env --delete-generations failed"
+}
+
+# ---- builder-release GC roots ---------------------------------------------
+
+prune_builder_roots() {
+  if [ ! -d "$auto_dir" ]; then
+    echo "nix retention: builder roots skipped: no $auto_dir"
+    return 0
+  fi
+  if ! [[ "$builder_keep" =~ ^[0-9]+$ ]] || ! [[ "$builder_min_age_days" =~ ^[0-9]+$ ]]; then
+    echo "nix retention: builder roots refused: builder_keep and builder_min_age_days must be numbers"
+    return 0
+  fi
+  local protected=() p entry link target class now candidates=""
+  for p in $protect; do
+    p="$(readlink -f -- "$p" 2>/dev/null)" && [ -n "$p" ] && protected+=("$p")
+  done
+  now="$(date +%s)"
+  for entry in "$auto_dir"/*; do
+    [ -L "$entry" ] || continue
+    link="$(readlink -- "$entry")"
+    if [ -L "$link" ]; then
+      target="$(readlink -- "$link")"
+    elif [ -e "$link" ]; then
+      target="(not a link)"
+    else
+      target="(gone)"
+    fi
+    class=other
+    case "$link" in
+      */../*|*/./*|*/..|*/.) ;;
+      "$builder_root"/*)
+        if [ -L "$link" ]; then
+          case "$target" in
+            "$store_prefix"*)
+              class=builder-release
+              for p in "${protected[@]}"; do
+                if [ "$(readlink -f -- "$link" 2>/dev/null)" = "$p" ]; then class=builder-release-protected; fi
+              done
+              ;;
+          esac
+        fi
+        ;;
+    esac
+    echo "nix retention: root $link -> $target ($class)"
+    if [ "$class" = builder-release ]; then
+      candidates+="$(stat -c %Y -- "$link")"$'\t'"$link"$'\n'
+    fi
+  done
+  [ -n "$candidates" ] || return 0
+  local i=0 mtime age
+  while IFS=$'\t' read -r mtime link; do
+    [ -n "$link" ] || continue
+    i=$((i + 1))
+    if [ "$i" -le "$builder_keep" ]; then
+      continue
+    fi
+    age=$(( (now - mtime) / 86400 ))
+    if [ "$age" -lt "$builder_min_age_days" ]; then
+      continue
+    fi
+    if [ "$mode" = enforce ]; then
+      if [ -L "$link" ] && rm -f -- "$link"; then
+        echo "nix retention: unrooted $link (${age}d old)"
+      else
+        echo "nix retention: could not unroot $link"
+      fi
+    else
+      echo "nix retention: observe: would unroot $link (${age}d old)"
+    fi
+  done < <(printf '%s' "$candidates" | sort -t $'\t' -k1,1nr)
+}
+
+prune_generations
+prune_builder_roots
+exit 0

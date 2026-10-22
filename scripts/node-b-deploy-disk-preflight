@@ -35,7 +35,10 @@ if ! curl -fsS -X POST -H 'X-Internal-Caller: true' "${choir_internal_auth[@]}" 
   curl -fsS -X POST -H 'X-Internal-Caller: true' "${choir_internal_auth[@]}" http://127.0.0.1:8083/internal/vmctl/idle-check || true
 fi
 journalctl --vacuum-size=256M || true
-nix-env -p /nix/var/nix/profiles/system --delete-generations +4 || true
+# Which generations and builder-release roots stay is node-b-nix-retention's
+# (docs/problems/node-b-nix-store-and-host-disk-policy-2026-10-22.md).
+GO_CHOIR_NIX_RETENTION_MODE="${GO_CHOIR_NIX_RETENTION_MODE:-observe}" \
+  "$(dirname "$0")/node-b-nix-retention" || true
 nix store gc || true
 
 avail_kib="$(df --output=avail -k / | tail -n 1 | tr -d ' ')"
