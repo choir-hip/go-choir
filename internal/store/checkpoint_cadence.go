@@ -156,9 +156,8 @@ type checkpointCadence struct {
 	cancelInFlight context.CancelFunc
 	// inFlightDone is closed when the background commit in flight returns.
 	inFlightDone chan struct{}
-	// closeLive, set when Close failed closed, is closed when the commit
-	// it left running returns.
-	closeLive chan struct{}
+	// isLeftOpen is set while the last Close failed closed.
+	isLeftOpen bool
 
 	// events and ops are finalized since boot; committedEvents and
 	// committedOps are their values when the last successful commit read
@@ -296,30 +295,18 @@ func (s *Store) checkpointTimerArmed() bool {
 	return c.timer != nil
 }
 
-// closeCheckpoint stops the timer and, in debounced mode, commits what is
-// pending once. Count mode keeps its old Close (no commit). It cancels a
-// background commit in flight and waits for it, then takes the commit lock
-// and runs the closing commit, all within the close deadline (plus a short
-// grace for a commit that honors it). If a commit is still running then,
-// it returns ErrCheckpointCommitLive and the caller must not close the
+// closeCheckpoint stops the timer, cancels a background commit in flight
+// and waits for it, then, in debounced mode, commits what is pending once
+// (on a retried Close too). The closing commit runs to deadline; every
+// wait gives up at hard (the deadline plus one grace, for a commit that
+// honors the deadline to return). If a commit is still running then, it
+// returns ErrCheckpointCommitLive and the caller must not close the
 // pools: the deadline is a context, and a DOLT_COMMIT that does not check
-// it mid-write runs on. A later call returns nil once that commit is done
-// (the closing commit is not retried).
-func (s *Store) closeCheckpoint() error {
+// it mid-write runs on. Store.Close holds closeMu across this call.
+func (s *Store) closeCheckpoint(deadline, hard time.Time) error {
 	c := &s.checkpoint
 	c.mu.Lock()
-	if live := c.closeLive; live != nil {
-		select {
-		case <-live:
-			c.closeLive = nil
-			c.mu.Unlock()
-			return nil
-		default:
-			c.mu.Unlock()
-			return ErrCheckpointCommitLive
-		}
-	}
-	debounced := c.debounced && !c.closed
+	debounced := c.debounced
 	c.closed = true
 	if c.timer != nil {
 		c.timer.Stop()
@@ -329,39 +316,30 @@ func (s *Store) closeCheckpoint() error {
 		c.cancelInFlight()
 	}
 	committer := c.inFlightDone
-	limit := checkpointCloseTimeout
-	if c.closeTimeout > 0 {
-		limit = c.closeTimeout
-	}
 	c.mu.Unlock()
+	if committer != nil && !waitUntil(committer, hard) {
+		// The closing commit is not attempted.
+		c.closingSkipped.Add(1)
+		return c.leaveOpen("the cancelled background commit has not returned")
+	}
 	if !debounced {
 		return nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), limit)
+	ctx, cancel := context.WithDeadline(context.Background(), deadline)
 	defer cancel()
-	if committer != nil && !waitClose(ctx, committer) {
-		c.closingSkipped.Add(1)
-		return c.leaveOpen(committer, "the cancelled background commit has not returned")
-	}
 	finished := make(chan struct{})
 	var err error
 	go func() {
 		defer close(finished)
 		err = s.commitDoltCheckpointLocking(ctx, "guest snapshot at close", checkpointSiteClose, true)
 	}()
-	if !waitClose(ctx, finished) {
-		c.closingSkipped.Add(1)
-		return c.leaveOpen(finished, "the closing commit has not returned")
+	if !waitUntil(finished, hard) {
+		// Counted (skipped, or committed) when it returns.
+		return c.leaveOpen("the closing commit has not returned")
 	}
 	if errors.Is(err, errCommitLockTimeout) {
 		// Another commit holds the lock, so it is running on the engine.
-		free := make(chan struct{})
-		go func() {
-			s.doltCommitMu.Lock()
-			s.doltCommitMu.Unlock()
-			close(free)
-		}()
-		return c.leaveOpen(free, "another commit holds the commit lock")
+		return c.leaveOpen("another commit holds the commit lock")
 	}
 	if err != nil {
 		log.Printf("runtime store: checkpoint at close: %v", err)
@@ -369,38 +347,54 @@ func (s *Store) closeCheckpoint() error {
 	return nil
 }
 
-// waitClose waits for done until ctx is done, then a short grace.
-func waitClose(ctx context.Context, done <-chan struct{}) bool {
+// waitUntil waits for done until the hard deadline.
+func waitUntil(done <-chan struct{}, hard time.Time) bool {
 	select {
 	case <-done:
 		return true
-	case <-ctx.Done():
+	default:
 	}
-	grace := time.NewTimer(checkpointCloseGrace)
-	defer grace.Stop()
+	timer := time.NewTimer(time.Until(hard))
+	defer timer.Stop()
 	select {
 	case <-done:
 		return true
-	case <-grace.C:
+	case <-timer.C:
 		return false
 	}
 }
 
-func (c *checkpointCadence) leaveOpen(live chan struct{}, why string) error {
+func (c *checkpointCadence) closeLimit() time.Duration {
 	c.mu.Lock()
-	c.closeLive = live
+	defer c.mu.Unlock()
+	if c.closeTimeout > 0 {
+		return c.closeTimeout
+	}
+	return checkpointCloseTimeout
+}
+
+// leaveOpen records a Close that failed closed (once per failing Close).
+func (c *checkpointCadence) leaveOpen(why string) error {
+	c.mu.Lock()
+	c.isLeftOpen = true
 	c.mu.Unlock()
 	c.closesLeftOpen.Add(1)
 	log.Printf("runtime store: close left the store open: %s", why)
 	return ErrCheckpointCommitLive
 }
 
-// leftOpen reports ErrCheckpointCommitLive while a Close that failed
-// closed has not been followed by one that succeeded.
+func (c *checkpointCadence) clearLeftOpen() {
+	c.mu.Lock()
+	c.isLeftOpen = false
+	c.mu.Unlock()
+}
+
+// leftOpen reports ErrCheckpointCommitLive while the last Close failed
+// closed.
 func (c *checkpointCadence) leftOpen() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.closeLive != nil {
+	if c.isLeftOpen {
 		return ErrCheckpointCommitLive
 	}
 	return nil
