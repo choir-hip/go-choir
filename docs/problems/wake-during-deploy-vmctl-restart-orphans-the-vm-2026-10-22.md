@@ -256,3 +256,188 @@ marker for its own in-flight starts, so the new vmctl has crash semantics.
 Residual: the deploy that ships the fix restarts an old vmctl that wrote no
 claims. A wake in flight at that one restart can still orphan once, as on
 07:10.
+
+## Fix (lane fp3-wake-restart-orphan, 2026-10-22)
+
+Mutation class of this section: green. The fix it records is red (vmctl
+lifecycle). Commits, on top of 4da173c13 (the Cause section):
+
+- 20163083e and fe9b2db5d (yellow): the failing tests.
+- 0469522b4 (red): option A.
+
+Nothing has shipped yet. FP0 lands, deploys and proves.
+
+### What changed
+
+All the code is in `internal/vmctl`. vmmanager, cmd/vmctl, routes, the
+gateway and auth are unchanged.
+
+- **The claim** (`boot_claim.go`, new). `VMOwnership.BootClaim`
+  (`boot_claim` in ownerships.json) holds the kind (`boot`, `resume`, or
+  `first boot`), the realization epoch and the time.
+  - `spawnClaimed` (boot_claim.go:91) writes the claim to the ownership file
+    before the manager is called. If the write fails, the start is refused
+    before anything spawns. A failed spawn drops the claim, compared by
+    pointer.
+  - It wraps every spawn of an existing computer: BootVM, RecoverVM and
+    RefreshVM in `startAdmittedVM`, `recoverOrRestartActiveVM`, recover,
+    refresh and `rescueLaunch`; `ResumeVMFromSnapshot` in
+    `resumeFromSnapshot`; and the platform computer's `ResumeVM`.
+  - Every publish clears the claim in its own write. There are 11 sites:
+    six in ownership.go and five in platform_computer.go.
+  - A new computer's persisted `booting` row is its claim, read the same way.
+- **Load** (`ownership.go:693`, `interruptStartAtLoadLocked`
+  boot_claim.go:71). A row with an open claim, or a `booting` row, becomes
+  `stopped` with `stopped_by: interrupted-by-vmctl-restart`. It joins the
+  in-memory set of open closes; a booting row is first given a `first boot`
+  claim.
+  - A claim that outlived its publish is dropped, so it can never end a
+    running computer. That is a claim on an active or degraded row at the
+    claimed epoch or later, or on any row past it (`publishedIn`,
+    boot_claim.go:56).
+  - Everything else loads as before: running rows become `vmctl-restart`
+    and are reattached.
+- **Close** (`closeInterruptedStarts`, boot_claim.go:134).
+  - `ReattachManagedVMs` runs it first (ownership.go:789), at startup and
+    before vmctl serves. Every `ReconcileVMProcesses` pass retries it
+    (host_capacity.go:97).
+  - It powers off the surviving process with `ReapUnmanagedVM`. The
+    manager's per-VM operation lock serializes that kill with any boot of
+    the same VM, and the manager refuses to kill a VM it runs.
+  - It then drops the claim, discards a memory snapshot the start may have
+    run from, and saves.
+  - A kill that fails keeps the close open and durable. The fate is saved,
+    and the claim stays in the file for the next restart.
+- **Until the close finishes**, the process is never reattached
+  (`reattachOwnershipInfo`, ownership.go:836). The `startExistingVM` path
+  therefore answers `guest_reattach_pending` with Retry-After. The process
+  is never probed for a wedge, and reconcile counts it as pending
+  (host_capacity.go:152). It still shows in health's `unmanaged`.
+- **The fate is not a failure.**
+  - The always-on sweep boots the computer without spending the failure
+    retry.
+  - A deploy rescue treats it like `vmctl-restart`: it is eligible, its
+    retry is charged per target, and a hard failure makes it
+    `recovery_failed` (`stoppedByRestart`).
+  - The next owner act boots a fresh realization (a new epoch, a cold boot).
+- **H3 is refuted, so admission is unchanged.**
+
+### Tests (`internal/vmctl/interrupted_start_test.go`)
+
+Each test runs two registries over one ownership file. The first blocks
+mid-spawn. The second loads the file over a fake host whose process
+answers only at the address its boot was given. It then runs reattach, one
+reconcile, and eight one-minute reconcile passes (the incident's seven
+minutes). A third registry reloads the file.
+
+The table covers six start paths:
+
+- a visit wake of a hibernated computer, as a cold boot (the incident);
+- the same wake from its memory snapshot;
+- a resume of a stopped computer;
+- a deploy refresh of an active computer;
+- a recovery of a failed computer;
+- a new computer's first boot.
+
+Each must be adopted at the address its boot was given, or closed with an
+honest fate. It must never be wedged, and the fate must survive the reload.
+The other tests are:
+
+- an owner act after the close boots fresh and never adopts the orphan;
+- a close whose kill fails stays honest for eight passes, and the next
+  restart closes it;
+- guards: a published start (visit, resume, refresh) is reattached by the
+  next restart and not reaped; a computer hibernated after a published wake
+  stays hibernated; a failed wake keeps its fate.
+
+Before the fix, every table case failed:
+
+- the hibernated, stopped, failed and snapshot rows were never touched;
+- the refresh was adopted at the stale URL;
+- the first boot was adopted at the placeholder `http://127.0.0.1:8085`.
+
+The owner-act test failed because the later wake adopted the orphan at the
+stale URL, and the failed-kill test failed at minute 0. The guards passed.
+After the fix, all of them pass.
+
+Runs on darwin, at 0469522b4:
+
+- `go test -race ./internal/vmctl -count=1`: ok, with no skips.
+- `go test -race ./internal/vmmanager -count=1`: ok. Four Linux-only tests
+  skipped because they need `/proc`: `TestReattachVMAdoptsByIdentity`,
+  `TestBootAndDestroyRefuseOverLiveUntrackedFirecracker`,
+  `TestReattachDrainsALegacyConsolePipe` and
+  `TestReattachLeavesAFileConsoleAlone`.
+- `go test -race ./cmd/vmctl ./internal/proxy ./internal/platform`: ok.
+- `go build ./...`: ok.
+
+### Rollback
+
+`git revert 0469522b4`. The old binary decodes `boot_claim` as an unknown
+field and ignores it. A row the fix already closed reads
+`stopped / interrupted-by-vmctl-restart`, and the old binary boots it fresh
+on its next start: an owner act, or the always-on sweep. The old binary's
+deploy rescue does not reach that fate; its sweep does.
+
+### Staging proof plan (FP0, on a test computer)
+
+1. Land and deploy. The deploy that ships the fix restarts an old vmctl,
+   which wrote no claims (see the residual), so do not race a wake against
+   that restart. Verify the build identity first.
+2. Pick a test-class computer that is not always-on, hibernated or stopped
+   by idle. Record its ownership row: state, stopped_by, epoch,
+   computer_url.
+3. Fire an owner wake (lifecycle start) and, while its boot is in flight,
+   restart vmctl. Use the next deploy's restart, a redeploy of the same SHA,
+   or whatever no-SSH restart FP0 has. The 07:10 window was the cold boot
+   after a snapshot fallback, about 35 s. A wake that publishes before the
+   restart exercises the guard instead; retry.
+4. The caller sees 502 or a connection reset. That is expected: the start
+   was interrupted.
+5. Acceptance evidence:
+   - the vmctl journal shows `vmctl: VM <vm> (user <owner>): its boot of
+     epoch N was in flight at the vmctl restart; closing it`, then
+     `vmctl: closed VM <vm> ... (powered off pids [...]);
+     stopped_by=interrupted-by-vmctl-restart`;
+   - for that VM, there is no `runs outside the registry ... reattach
+     pending` line, no `wedged VM` line, and no destruction receipt with
+     cause `wedged`; the receipt cause is `reap-unmanaged:orphan`;
+   - the ownership row reads `stopped`, `stopped_by:
+     interrupted-by-vmctl-restart`, with no `boot_claim`;
+   - health's process reconcile lists no unmanaged entry for the VM.
+6. A second owner wake returns 200 at a new epoch, above N, with a fresh
+   address. The computer serves.
+7. Negative control: a test computer that was active at the same restart is
+   reattached as before (`vmctl-restart`, then reattached), not closed.
+
+### Heresy delta
+
+- Discovered: none beyond the Cause section. That section already records
+  the false "reattach pending" log for hibernated rows, and the new-computer
+  reattach at its placeholder URL.
+- Introduced: none.
+- Repaired:
+  - the lifecycle claim held only in memory (standing questions Q5 and Q8);
+  - the `wedged` fate, and its charged retry, for an orphan vmctl itself
+    made;
+  - reattach at a stale or placeholder URL after a restart mid-start.
+
+### Residuals
+
+- The shipping deploy's own vmctl restart: a wake of an existing computer in
+  flight at that one restart still orphans once, because the old binary
+  wrote no claim. A new computer's first boot is already covered, since its
+  persisted `booting` row now reads as a claim.
+- H2 is unchanged: a boot without a fresh gateway token falls back to the
+  previous boot's token file.
+- The platform computer's first-ever boot has no row before `BootVM`. Its
+  orphan is reaped by the orphan reaper on its second sighting, and the
+  ensure boots it again. This is unchanged.
+- A refresh whose publish is refused because the row changed under it keeps
+  its claim. A later restart closes that realization. This is deliberate:
+  the start was never published.
+- Each spawn adds one ownership-file write.
+- The deploy rescue's deferral text for a live, still-closing process still
+  names the wedge detector. This is cosmetic.
+- The L1b boot ledger (`docs/restart-subsystem-design-2026-10-13.md`) is
+  still the substrate this claim anticipates: a grant without a boot result.
