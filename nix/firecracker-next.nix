@@ -2,10 +2,12 @@
 # VM_FIRECRACKER_NEXT_ONLY names (internal/vmmanager/vmm_next.go; NET-08 and
 # RES-16 in docs/definitions/choir-launch-fp8-image-jailer-2026-10-21.md).
 #
-# Hashes computed by FP0 on the Mac (2026-10-22): the source with `nix flake
-# prefetch github:firecracker-microvm/firecracker/v1.17.0`, the vendored
+# Hashes computed by FP0 (2026-10-22): the source with `nix flake prefetch
+# github:firecracker-microvm/firecracker/v1.17.0` on the Mac; the vendored
 # crates from the hash mismatch of fetchCargoVendor's fixed-output staging
-# step, which is the same on every system. v1.17.0 is the latest 1.17.x tag.
+# step, built on Node B with the flake's own package set (go-choir-b pkgs).
+# The Mac's first vendor value differed, so recompute it with the flake's
+# pkgs, not a local nixpkgs. v1.17.0 is the latest 1.17.x tag.
 # nix/node-b.nix imports this for the computers VM_FIRECRACKER_NEXT_ONLY
 # names.
 #
@@ -24,6 +26,6 @@ pkgs.firecracker.overrideAttrs (finalAttrs: old: {
   cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
     inherit (finalAttrs) src;
     name = "firecracker-${finalAttrs.version}-vendor";
-    hash = "sha256-TR5hi7iZbZe7BTvqgPT9N2i0WPYT7aVwcSzkCVlPzFk=";
+    hash = "sha256-rqKOD/4cqOLAOIRAdHvxurMB7JPQktWb6fr9KTs84RI=";
   };
 })
