@@ -69,7 +69,8 @@ finish:
         guest journal has no "close left the store open" line and the
         restart takes no longer than before; and, if FP0 can trigger it, a
         planned restart during an online DOLT_GC - the journal shows "close
-        left the store open: a Dolt commit holds the commit lock", Close
+        left the store open: a Dolt commit is still running (a Dolt commit
+        holds the commit lock)" (wording as of round 7c), Close
         returned after at most about 10.25 s past the telemetry drain, the
         process exited, and the next boot opened the store with no lock
         error and served
@@ -81,8 +82,10 @@ finish:
         as before (Close returns nil, the flip happens, the store reopens on
         the staged workspace and serves); and, if FP0 can arrange it, one
         while an online DOLT_GC or a long statement is running - the owner
-        act returns an error naming ErrCheckpointCommitLive within about
-        10.25 s past the telemetry drain, the journal shows "close left the
+        act returns an error starting "runtime store: close left the store
+        open" (an ErrCloseLeftOpen naming its cause - a running commit
+        behind a GC, or a statement holding a pool's connection) within
+        about 10.25 s past the telemetry drain, the journal shows "close left the
         store open", nothing is quarantined or renamed, the computer keeps
         serving on its original store in debounced or count cadence as
         before (mode is not "closed"), and a later rematerialize, once idle,
@@ -115,7 +118,8 @@ finish:
     passes there, it pins a bound round 4 already had; the round-6 test
     fails on round 5 on behavior; four of the five round-7 tests fail on
     round 6 on behavior, the fence-restore test pins round-6 behavior).
-    Round 8 - its green record, 7078b0561, 949fb1467 (949fb1467 does
+    Round 7c - its green record, 8e68ece69, 564dc81ec (564dc81ec does
+    not compile without 8e68ece69); round 8 - 776bfe5ac, 7078b0561, 949fb1467 (949fb1467 does
     not compile without 7078b0561); round 7 - eb8185144, 6dbdf815d, 1aaa5e7c9 (this alone reverts
     the pinning; the commit-lock fence stays); round 6 - 3b220fa02,
     7ed2ce76a, c10afb2d3, d36230506,
@@ -135,6 +139,13 @@ finish:
     is up to about 10.25 s slower; rematerialize returns the error where
     it used to proceed. Gating the fence on the setting would reopen the
     round-4 fail-open door in default mode, so it stays unconditional.
+    While a Close waits and then fails closed, readers on the store wait
+    too (Sonnet r7 F2): the pin holds the read pool's connection while it
+    waits for the write pool's, so a read issued during the wait took
+    1.55 s in Sonnet's probe and can take up to the whole wait, about
+    10.25 s by default; reads recover within about 250 us after the
+    failed Close returns. A planned restart exits anyway; a failed
+    rematerialize stalls the computer's reads for that long once.
     Round 7 (its own landing after deploy R) widens the fence to the
     pools: a Close behind any statement in flight or open transaction on
     the guest store, not only a commit, now waits up to the same hard
@@ -289,6 +300,33 @@ now:
       decided_at: 2026-10-22
       relayed_by: FP0
       status: built in round 7 (tests 1aaa5e7c9, fix 6dbdf815d), on top of 3b220fa02; FP0 lands it after deploy R
+  round_7c_review: >-
+    2026-10-22, round 7 review (DeepSeek v4.1 flash and Sonnet accept with
+    edits; no correctness defect), folded in on top of 776bfe5ac. Tests
+    564dc81ec, fix 8e68ece69 (red), this record. Sonnet F1 (test gap) -
+    tests for the engine closed once and last (both store kinds), the pin
+    sharing the hard deadline, the texture-only pin, and closeWithin so
+    an unbounded Close fails in seconds; each of Sonnet's six mutants
+    (no wrapper, engine closed before releasing the pins, pins never
+    released, a fresh pin deadline, no texture pin, an unbounded pin) is
+    killed, run with go test -overlay. Sonnet F2 - the reader stall
+    during a failing Close is in the landing note and the problem
+    record; FP0 carries it into the launch doc (this lane does not edit
+    docs/launch-checklist-2026-10-21.md). Sonnet F3 - a pin failure is
+    ErrPoolStatementLive; every fail-closed error wraps ErrCloseLeftOpen.
+    Sonnet F4 - Open's failure paths retry a fail-closed Close (up to
+    three in all), log and return its error; tested (the next Open of the
+    path works). DeepSeek F1, F2 - the Close and pinPools comments fixed;
+    F3 - the problem record no longer says round 7 is not built; F4 - a
+    spent budget is named (errCloseBudgetSpent). The F1 tests pass on
+    776bfe5ac by design (they pin its behavior); the F3/F4 tests and the
+    hook signature do not compile there. Re-run - under ~/heavy-test.lock with
+    GOMAXPROCS=2 GOFLAGS=-p=1, the whole internal/store package under
+    -race on this Linux VM ok (1257 s) and the agentcore seam tests ok
+    (129 s); go test ./internal/store -run
+    'Checkpoint|Finalize|Close|Reopen|Telemetry|Pin|Open' ok; gates
+    hang-guards, decode-roots, heresies, v1-writer-purity ok;
+    guest-data-fstrim not runnable here (no nix binary).
   round_8_mirror_panic: >-
     2026-10-22, the arch13j Linux -race mirror of eb8185144 (rebased on
     main 0bf8a097d) panicked in internal/store. Root cause - the test's
