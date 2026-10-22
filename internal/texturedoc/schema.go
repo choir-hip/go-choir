@@ -122,16 +122,42 @@ func Validate(doc StructuredTextureDoc, entities []SourceEntity, unusedSourceEnt
 // bar's text, a new document's initial text). It is Validate without the
 // Texture authoring rules on text: "[1]", "sys.argv[1]", a markdown footnote,
 // a "Source:" line and "{{source:" are the owner's literal words, not
-// citations an agent forgot to write as a source_ref. The document has no
-// source entities, so a source_ref node is still refused. Text an agent
-// authors is validated with Validate.
+// citations an agent forgot to write as a source_ref. It accepts only that
+// synthesized shape, one paragraph of unmarked text and hard_break nodes, so
+// a document with any other block, mark or node is refused here and has to
+// pass Validate. The document has no source entities, so a source_ref node is
+// refused too. Text an agent authors is validated with Validate.
 func ValidateOwnerText(doc StructuredTextureDoc) error {
+	if err := requireOwnerTextShape(doc); err != nil {
+		return err
+	}
 	validator, err := newValidator(nil)
 	if err != nil {
 		return err
 	}
 	validator.ownerText = true
 	return validator.validateDoc(doc)
+}
+
+// requireOwnerTextShape accepts exactly what the store builds from plain text
+// (userAuthoredTextStructuredTextureDoc): one paragraph whose children are
+// text nodes without marks and hard_break nodes.
+func requireOwnerTextShape(doc StructuredTextureDoc) error {
+	if len(doc.Doc.Content) != 1 || doc.Doc.Content[0].Type != "paragraph" {
+		return fmt.Errorf("owner text must be a single paragraph")
+	}
+	for i, child := range doc.Doc.Content[0].Content {
+		switch child.Type {
+		case "hard_break":
+		case "text":
+			if len(child.Marks) != 0 {
+				return fmt.Errorf("doc.content.paragraph.content[%d]: owner text carries no marks", i)
+			}
+		default:
+			return fmt.Errorf("doc.content.paragraph.content[%d]: owner text holds only text and hard_break, got %q", i, child.Type)
+		}
+	}
+	return nil
 }
 
 // validateDoc checks the document and then that every material source entity

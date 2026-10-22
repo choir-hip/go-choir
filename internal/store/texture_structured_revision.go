@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -11,6 +12,26 @@ import (
 
 func prepareTextureRevisionV2(rev types.Revision) (types.Revision, string, string, error) {
 	return prepareTextureRevision(rev, false)
+}
+
+type strictInitialTextKey struct{}
+
+// WithStrictInitialText marks a context so that StartLifecycle prepares a
+// user-authored plain-text initial revision with the Texture authoring rules
+// (prepareTextureRevisionV2), not the owner-text rule. The HTTP handlers that
+// start a Texture from text set it for a caller that is not the owner's
+// browser: an empty RemoteAddr is server.GuestHostCaller's in-process marker,
+// and choir.ProductAPI (the management desk) is its only producer. The
+// marker is on the context, not in the request, so the start-request digest
+// and command replay are unchanged. Receipt: round 2 review F1 in
+// docs/problems/prompt-bar-refuses-bracketed-index-as-server-error-2026-10-22.md.
+func WithStrictInitialText(ctx context.Context) context.Context {
+	return context.WithValue(ctx, strictInitialTextKey{}, true)
+}
+
+func strictInitialText(ctx context.Context) bool {
+	strict, _ := ctx.Value(strictInitialTextKey{}).(bool)
+	return strict
 }
 
 // prepareOwnerInputTextureRevisionV2 prepares the first revision of a new
