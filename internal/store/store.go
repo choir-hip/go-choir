@@ -231,6 +231,14 @@ func (s *Store) commitDoltCheckpoint(ctx context.Context, message string) error 
 }
 
 func (s *Store) commitDoltCheckpointAt(ctx context.Context, message string, site checkpointSite) error {
+	return s.commitDoltCheckpointLocking(ctx, message, site, false)
+}
+
+// commitDoltCheckpointLocking commits the working set. boundedLock takes
+// the commit lock only until ctx is done (the closing commit, which must
+// not wait out a background commit); otherwise the lock wait is
+// unbounded, as before.
+func (s *Store) commitDoltCheckpointLocking(ctx context.Context, message string, site checkpointSite, boundedLock bool) error {
 	if s == nil || s.textureHandle() == nil {
 		return fmt.Errorf("runtime store: nil database")
 	}
@@ -239,8 +247,21 @@ func (s *Store) commitDoltCheckpointAt(ctx context.Context, message string, site
 		message = "vm state checkpoint"
 	}
 
-	s.doltCommitMu.Lock()
+	if boundedLock {
+		if err := s.lockDoltCommitBy(ctx); err != nil {
+			err = fmt.Errorf("runtime store: dolt checkpoint: commit lock: %w", err)
+			s.checkpoint.recordFailure(err)
+			return err
+		}
+	} else {
+		s.doltCommitMu.Lock()
+	}
 	defer s.doltCommitMu.Unlock()
+	// A background commit that passed the closed check before Close took
+	// the lock after the closing commit: it does not run.
+	if site == checkpointSiteBackground && s.checkpoint.isClosed() {
+		return nil
+	}
 	// Read the generation before the commit: a mark after this read may
 	// not be in the snapshot, so it keeps the store dirty.
 	gen := s.dirtyGen.Load()
@@ -249,17 +270,25 @@ func (s *Store) commitDoltCheckpointAt(ctx context.Context, message string, site
 	}
 	events, ops := s.checkpoint.events.Load(), s.checkpoint.ops.Load()
 	started := time.Now()
-	// The commit holds the store's one connection; a finalize that
-	// starts meanwhile waits for it (noteFinalizeConnWait).
+	// Pin the store's one connection for the commit, and mark the commit
+	// in flight only while it holds it, so a finalize waiting at BeginTx
+	// is counted exactly when it waits on this commit
+	// (noteFinalizeConnWait).
+	conn, err := s.textureHandle().Conn(ctx)
+	if err != nil {
+		err = fmt.Errorf("runtime store: dolt checkpoint: %w", err)
+		s.checkpoint.recordFailure(err)
+		return err
+	}
 	s.checkpoint.commitsStarted.Add(1)
-	var err error
 	if hook := s.checkpointExecHook; hook != nil {
 		err = hook(ctx)
 	}
 	if err == nil {
-		_, err = s.textureHandle().ExecContext(ctx, "CALL DOLT_COMMIT('-Am', ?)", message)
+		_, err = conn.ExecContext(ctx, "CALL DOLT_COMMIT('-Am', ?)", message)
 	}
 	s.checkpoint.commitsEnded.Add(1)
+	_ = conn.Close()
 	noop := err != nil && strings.Contains(err.Error(), "nothing to commit")
 	if err != nil && !noop {
 		err = fmt.Errorf("runtime store: dolt checkpoint: %w", err)
@@ -269,6 +298,26 @@ func (s *Store) commitDoltCheckpointAt(ctx context.Context, message string, site
 	s.cleanGen = gen
 	s.checkpoint.recordCommit(site, time.Since(started), events, ops, noop)
 	return nil
+}
+
+// lockDoltCommitBy takes doltCommitMu, giving up when ctx is done. It
+// polls: only the closing commit uses it.
+func (s *Store) lockDoltCommitBy(ctx context.Context) error {
+	if s.doltCommitMu.TryLock() {
+		return nil
+	}
+	tick := time.NewTicker(5 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-tick.C:
+			if s.doltCommitMu.TryLock() {
+				return nil
+			}
+		}
+	}
 }
 
 // doltHistoryIsDirty reports whether a mark is not yet in a commit.
@@ -1022,11 +1071,13 @@ func (s *Store) Close() error {
 	// Graceful close seals the telemetry window first. A crash does not, which
 	// is the loss the ruling allows.
 	s.closeTelemetry()
-	// A running derived-column migration stops before its next step; closing
-	// the pools waits for a step in flight. Cancel it before the closing
-	// checkpoint so no migration step starts after that final commit, and
-	// commit the checkpoint before the pools below close, since it writes
-	// through s.db.
+	// A running derived-column migration stops before its next step; a
+	// step in flight is not waited for (database/sql Close does not wait
+	// for a connection in use), so it can land after the closing commit or
+	// fail on the closed pool. Cancel it before the closing checkpoint so
+	// no new step starts after that final commit, and commit the
+	// checkpoint before the pools below close, since it writes through
+	// s.db.
 	s.CancelDerivedColumnMigration()
 	s.closeCheckpoint()
 	var err error

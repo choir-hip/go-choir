@@ -93,9 +93,10 @@ type CheckpointStats struct {
 	// NoopCommits are commits Dolt answered "nothing to commit"; they are
 	// in no commit count above, but their time is in their site's ns.
 	NoopCommits uint64 `json:"noop_commits"`
-	// FinalizeCommitWaits counts finalizes whose BeginTx overlapped a
-	// commit holding the store's one connection: a writer waiting on a
-	// commit, inline or not. The ns are the BeginTx waits of those
+	// FinalizeCommitWaits counts finalizes whose BeginTx wait overlapped a
+	// commit holding the store's one connection (the commit pins it, and
+	// is counted in flight only while it does): a writer waiting on a
+	// commit, inline or not. The ns are the whole BeginTx waits of those
 	// finalizes; writers queued behind them on eventMu are not added.
 	FinalizeCommitWaits     uint64 `json:"finalize_commit_waits"`
 	FinalizeCommitWaitNanos uint64 `json:"finalize_commit_wait_ns"`
@@ -127,8 +128,10 @@ type checkpointCadence struct {
 	timer     *time.Timer
 	closed    bool
 	// inFlight is set while a background commit runs, so the ops bound
-	// does not queue more kicks behind it.
-	inFlight bool
+	// does not queue more kicks behind it; cancelInFlight cancels it
+	// (closeCheckpoint).
+	inFlight       bool
+	cancelInFlight context.CancelFunc
 
 	// events and ops are finalized since boot; committedEvents and
 	// committedOps are their values when the last successful commit read
@@ -139,8 +142,9 @@ type checkpointCadence struct {
 	inlineCommits, inlineNanos, inlineMax             atomic.Uint64
 	backgroundCommits, backgroundNanos, backgroundMax atomic.Uint64
 	otherCommits, noopCommits, failures               atomic.Uint64
-	// commitsStarted and commitsEnded bracket every DOLT_COMMIT, so a
-	// finalize can tell whether its BeginTx overlapped one.
+	// commitsStarted and commitsEnded bracket every DOLT_COMMIT while it
+	// holds the pinned connection, so a finalize can tell whether its
+	// BeginTx waited on one.
 	commitsStarted, commitsEnded                           atomic.Uint64
 	finalizeWaits, finalizeWaitNanos, finalizeWaitMaxNanos atomic.Uint64
 	// closeTimeout overrides checkpointCloseTimeout (tests only).
@@ -227,13 +231,15 @@ func (s *Store) fireCheckpoint() {
 		c.mu.Unlock()
 		return
 	}
-	c.inFlight = true
-	c.mu.Unlock()
 	ctx, cancel := context.WithTimeout(context.Background(), checkpointCommitTimeout)
 	defer cancel()
+	c.inFlight = true
+	c.cancelInFlight = cancel
+	c.mu.Unlock()
 	err := s.commitDoltCheckpointAt(ctx, "guest snapshot (debounced)", checkpointSiteBackground)
 	c.mu.Lock()
 	c.inFlight = false
+	c.cancelInFlight = nil
 	c.mu.Unlock()
 	if err != nil {
 		log.Printf("runtime store: background checkpoint: %v", err)
@@ -245,6 +251,12 @@ func (s *Store) fireCheckpoint() {
 	}
 }
 
+func (c *checkpointCadence) isClosed() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.closed
+}
+
 func (s *Store) checkpointTimerArmed() bool {
 	c := &s.checkpoint
 	c.mu.Lock()
@@ -253,7 +265,11 @@ func (s *Store) checkpointTimerArmed() bool {
 }
 
 // closeCheckpoint stops the timer and, in debounced mode, commits what is
-// pending once. Count mode keeps its old Close (no commit).
+// pending once. Count mode keeps its old Close (no commit). A background
+// commit in flight is cancelled, and the closing commit waits for the
+// commit lock and runs only until the close deadline; past it the closing
+// commit is skipped and counted as a failure. The deadline is a context:
+// a DOLT_COMMIT that does not check it mid-write runs to its end.
 func (s *Store) closeCheckpoint() {
 	c := &s.checkpoint
 	c.mu.Lock()
@@ -262,6 +278,9 @@ func (s *Store) closeCheckpoint() {
 	if c.timer != nil {
 		c.timer.Stop()
 		c.timer = nil
+	}
+	if c.cancelInFlight != nil {
+		c.cancelInFlight()
 	}
 	c.mu.Unlock()
 	if !debounced {
@@ -273,7 +292,7 @@ func (s *Store) closeCheckpoint() {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), limit)
 	defer cancel()
-	if err := s.commitDoltCheckpointAt(ctx, "guest snapshot at close", checkpointSiteOther); err != nil {
+	if err := s.commitDoltCheckpointLocking(ctx, "guest snapshot at close", checkpointSiteOther, true); err != nil {
 		log.Printf("runtime store: checkpoint at close: %v", err)
 	}
 }
