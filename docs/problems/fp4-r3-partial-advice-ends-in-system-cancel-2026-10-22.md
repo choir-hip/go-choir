@@ -133,10 +133,17 @@ ignores the advice, but its reason now names the open candidate.
 - Residual: the guard keeps the run's last refusal even if a later freeze
   succeeded, so a stale refusal can name a candidate in the reason. A
   successful freeze leaves no mark in the cell output the guard reads, so
-  scoping the scan is not a few lines. It changes only the cancel's text,
-  and only on a run that then fails to commit any terminal fate. A model
-  that echoes the refusal pattern in cell output can also shape this
-  text.
+  scoping the scan is not a few lines. It is not text only: whenever the
+  reason is not the default, the guard also switches the model-facing
+  instruction to "Complete with result failed" (internal/agentcore/runtime.go,
+  the completion guard, about lines 3744-3750). So in the rare run where
+  B's freeze is refused, A's candidate then settles, B's retried freeze
+  succeeds, and B ends its turn without Complete, the guard tells B to
+  report failed for work whose freeze succeeded: a wrong instruction
+  toward a failed fate (review bunch 54, Sonnet F2). It stays a residual;
+  the repair is to scope the scan to refusals after the run's last
+  successful freeze. A model that echoes the refusal pattern in cell
+  output can also shape this text and instruction.
 - DeepSeek 1: the drill's request B said "partial", so it could not test
   this repair. The evidence doc keeps that record and adds a re-run plan
   whose request B reports FAILED with the refusal as the reason

@@ -221,7 +221,7 @@ now:
     cancel/admission race, real-handler and lane tests, a range for the
     latency test, a state-neutral guard reason. Earlier: round 2 (R1 to
     R6), batch 1 (B1 to B3), writer-gate counts, the nudge.
-  source_ref: cf7ed5072 on lane/fp4-r3-nudge (base main 7448bf899)
+  source_ref: 5c2c8032c on lane/fp4-r3-nudge (base main 7448bf899)
   deploy_identity: unknown to this lane
   candidate: {id: arch10-admission-r3, state: ready_for_review, ref: lane/fp4-r3-nudge, base: 7448bf899, digest: none, scope: [internal/agentcore/engineering_admission.go, internal/agentcore/engineering_assignment_runtime.go, internal/agentcore/engineering_assignment_fate.go, internal/agentcore/continuation_schedule.go, internal/agentcore/api.go, internal/agentcore/freeze_candidate.go, internal/agentcore/runtime.go, internal/actorruntime/adapter.go, internal/actorruntime/handler.go, internal/objectgraph/writer.go]}
   conjecture:
@@ -282,16 +282,21 @@ now:
     the bind commit, without a restart, still leaves a bound run without
     its deadline wake (R2 residual). The open-time spawn wake is still minted
     on management's mailbox by the store, so a request's first admission
-    attempt waits for the casting activation (P1 residual). A nudge minted
-    from a management-initiated Cancel becomes durable only when
-    management's activation commits, so it still waits for that
-    activation; a management Cancel and an admission can now race, and the
+    attempt waits for the casting activation (P1 residual). Hypothesis,
+    from code, not drilled: a nudge minted from a management-initiated
+    Cancel becomes durable only when management's activation commits, so
+    it still waits for that activation; a nudge whose emitting activation
+    errors or defers is lost and B waits for its own retry (up to about
+    60 s); a management Cancel and an admission can now race, and the
     lifecycle CAS makes the loser fail closed (P1 residuals b, c).
   next_action: >-
     FP0: review the round 3 and 3b commits on lane/fp4-r3-nudge, land, then
     re-run drill steps 4 and 6 with the re-run plan in
     docs/evidence/fp4-admission-queue-deployed-proof-2026-10-22.md ("Re-run
-    plan for steps 4 and 6 after FP4 round 3"). Its request B tells the desk
+    plan for steps 4 and 6 after FP4 round 3"). Precondition: no
+    self-development operation is open on 71afbf14 before A is cast (check
+    with `choir self-dev show/head`; the first run's selfdev-0593136f was
+    rejected by FP0 at 11:32 UTC on 2026-10-22). Its request B tells the desk
     to report FAILED with the refusal as the reason, so the new refusal text
     is the branch under test; the original request B said "partial" and
     cannot test it. (4) Let A finish on its own (not the "or Cancel it"
