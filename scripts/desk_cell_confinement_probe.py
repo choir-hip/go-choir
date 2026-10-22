@@ -22,13 +22,23 @@ its isolation self-test (POST /api/runtime/isolation-selftest, owner only):
    169.254.169.254:80 and another guest's address (must be dropped), and the
    gateway :8084, corpusd :8086 and 1.1.1.1:443 (must stay open).
 
+3. oom (--leg oom, instead of 1 and 2): the guest spawns a sibling and a
+   throwaway research worker under its real 768 MiB budget cgroup in the
+   desks slice, and sends the runaway a fixed cell (compiled into the guest;
+   nothing is sent from here) that allocates until the kernel kills it. It
+   reports the worker cgroup's memory.max, memory.high and memory.events,
+   the slice's limits, the daemon's pid, start time and boot id before and
+   after, and whether the sibling still answers. A runaway that took the
+   daemon leaves no answer: one attempt, never retried, and no answer is a
+   failure.
+
 This script judges the raw facts itself (it does not trust the server's
 "ok"), prints one JSON receipt on stdout and writes it to --out.
 
 Exit 0: proven. 1: a check failed. 2: the route is not deployed or the
 computer could not be reached (nothing proven).
 
-usage: desk_cell_confinement_probe.py --cred FILE --out FILE [--host URL]
+usage: desk_cell_confinement_probe.py --cred FILE --out FILE [--host URL] [--leg oom]
   --cred is the 0600 credential file scripts/qa_test_computer.mjs writes
   (api_key or key, computer_id). The key is never printed.
 """
@@ -51,6 +61,11 @@ SECCOMP_DENIED = [
     "fork_exec", "execve", "kill_pid1", "kill_parent", "setuid_root", "unshare_user", "unshare_net",
 ]
 LANDLOCK_DENIED = ["write_allowed_root"]
+# The OOM leg: the class it runs and that class's hard budget per worker
+# (internal/deskmanifest, research WorkerMaxBytes), written out here so a
+# manifest edit that loosens the budget fails the probe.
+OOM_ROLE = "research"
+OOM_BUDGET_BYTES = 768 << 20
 EGRESS_WANT = {
     "host_gateway": "open", "host_corpusd": "open", "public_https": "open",
     "host_sshd": "blocked", "host_dolt": "blocked", "host_caddy_admin": "blocked",
@@ -77,19 +92,23 @@ class Computer:
         if body is not None:
             data = json.dumps(body).encode()
             headers["Content-Type"] = "application/json"
-        for _ in range(retries):
+        last = 0
+        for attempt in range(retries):
             try:
                 req = urllib.request.Request(self.host + path, data=data, headers=headers, method=method)
                 return 200, json.load(urllib.request.urlopen(req, timeout=timeout))
             except urllib.error.HTTPError as err:
                 if err.code in (502, 503, 504):
-                    time.sleep(10)
+                    last = err.code
+                    if attempt + 1 < retries:
+                        time.sleep(10)
                     continue
                 # Status only: a body can echo request context.
                 return err.code, {}
             except urllib.error.URLError:
-                time.sleep(10)
-        return 0, {}
+                if attempt + 1 < retries:
+                    time.sleep(10)
+        return last, {}
 
 
 def judge_desk_cells(dc):
@@ -214,6 +233,43 @@ def judge_frames(fb):
     return fails
 
 
+def judge_oom(oom):
+    """The out-of-memory leg: killed by its cgroup at its budget, nothing else harmed."""
+    fails = []
+    if not oom:
+        return ["oom: no receipt (the guest predates the OOM leg and ran the default self-test)"]
+    w = oom.get("worker") or {}
+    cg = w.get("cgroup") or {}
+    sib = oom.get("sibling") or {}
+    if oom.get("role") != OOM_ROLE:
+        fails.append("oom: role=%r, want %s" % (oom.get("role"), OOM_ROLE))
+    if w.get("error"):
+        fails.append("oom: worker: %s" % w["error"])
+    if cg.get("memory_max") != str(OOM_BUDGET_BYTES):
+        fails.append("oom: worker memory.max=%r, want %d (768 MiB)" % (cg.get("memory_max"), OOM_BUDGET_BYTES))
+    slice_max = str((oom.get("slice") or {}).get("memory_max") or "")
+    if not slice_max.isdigit() or int(slice_max) == 0:
+        fails.append("oom: desks slice memory.max=%r, want a hard limit" % slice_max)
+    if not w.get("cell_sent"):
+        fails.append("oom: the runaway cell was not sent")
+    else:
+        if w.get("result") == "returned" or not w.get("dead"):
+            fails.append("oom: the runaway worker survived (result %r)" % w.get("result"))
+        oom_kill = w.get("oom_kill") or 0
+        if oom_kill < 1 or ((cg.get("memory_events") or {}).get("oom_kill") or 0) < 1:
+            fails.append("oom: memory.events oom_kill=%r: the cgroup did not kill it (exit %r)" % (oom_kill, w.get("exit_cause")))
+        if "killed by its memory budget" not in str(w.get("exit_cause") or ""):
+            fails.append("oom: exit cause does not name the budget: %r" % w.get("exit_cause"))
+    if not sib.get("before_answered") or not sib.get("after_answered"):
+        fails.append("oom: sibling before=%r after=%r (%r)" % (sib.get("before_answered"), sib.get("after_answered"), sib.get("output") or sib.get("error")))
+    b, a = oom.get("daemon_before") or {}, oom.get("daemon_after") or {}
+    if b.get("error") or a.get("error") or not b.get("pid") or not b.get("start_ticks") or not b.get("boot_id"):
+        fails.append("oom: daemon identity unread: before %r after %r" % (b, a))
+    elif any(b.get(k) != a.get(k) for k in ("pid", "start_ticks", "boot_id")):
+        fails.append("oom: daemon identity changed: before %r after %r" % (b, a))
+    return fails
+
+
 def judge_egress(eg):
     fails = []
     got = {e.get("name"): e for e in eg or []}
@@ -234,6 +290,9 @@ def main():
     ap.add_argument("--cred", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--host", default="https://choir.news")
+    ap.add_argument("--leg", choices=["confinement", "oom"], default="confinement",
+                    help="oom: run only the out-of-memory leg (a throwaway research worker is killed by its "
+                         "cgroup; one attempt, never retried)")
     ap.add_argument("--skip-egress", action="store_true",
                     help="judge the desk cells only. The guest egress checks need the host egress policy "
                          "(SEC-03, internal/vmmanager/guest_egress.go) to be deployed; before it lands, "
@@ -255,6 +314,24 @@ def main():
     code, obs = c.call("GET", "/api/runtime/observability")
     receipt["guest_build"] = (obs or {}).get("build") if code == 200 else {"error": code}
     log("observability", status=code, commit=((obs or {}).get("build") or {}).get("commit"))
+    if args.leg == "oom":
+        receipt["leg"] = "oom"
+        code, body = c.call("POST", "/api/runtime/isolation-selftest?leg=oom", {}, retries=1)
+        log("isolation_selftest_oom", status=code)
+        if code in (400, 404, 405):
+            finish(2, "OOM leg not deployed (HTTP %s)" % code)
+        if code != 200:
+            receipt["failures"] = ["oom: no answer (HTTP %s): the daemon may have died with the runaway; "
+                                   "read its identity in observability before retrying" % code]
+            finish(1, "failed")
+        receipt["server"] = body
+        fails = judge_oom(body.get("oom"))
+        if body.get("oom") and not body.get("ok"):
+            fails.append("server judged not ok: %r" % (body.get("failures") or []))
+        receipt["failures"] = fails
+        if not body.get("oom"):
+            finish(2, "OOM leg not deployed: the guest ran the default self-test")
+        finish(0 if not fails else 1, "proven" if not fails else "failed")
     code, body = c.call("POST", "/api/runtime/isolation-selftest", {})
     log("isolation_selftest", status=code)
     if code == 404 or code == 405:
