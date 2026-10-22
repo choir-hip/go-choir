@@ -145,3 +145,25 @@ Change (orange, next commit): every Texture occurrence the handler
 consumes without a turn now logs why. The next reproduction names the
 path. The product question stays open: a create-wake turn that ends in
 text without applying consumes the head, so the owner gets no first draft.
+
+## Recurrence, 2026-10-22 02:23 UTC (FP2 batch 1 deployed, build 4dbdee107)
+
+Receipt `evidence/texture-acceptance-2026-10-22T02-23-25-049Z.json`,
+fresh test computer `computer-1f86c719…` (vm-fdcb6a45). The 01:14 run on
+another computer passed T2a, so the failure is intermittent.
+
+- 02:23:43: document created. The gateway journal shows Texture's two model
+  calls: deepseek-v4.1-flash through OpenCode, 02:23:44 to 02:23:53 and
+  02:23:54 to 02:23:56. Both succeeded and ended in tool calls (text_len 0).
+  ChatGPT answered "circuit open" first.
+- 02:23:57: the run passivated. There were no more calls for this computer
+  until the owner's revise at 02:28:45; that revision landed 16 s later.
+- The obligations surface now shows the deferral this record asked for:
+  3 deferred actor updates for `texture:18d8d80f…`. The kinds are
+  `activation_budget_deadline` and `cell_terminal_deadline` ×2, all with
+  `not_before` 03:23:43 (created + 1 h) and `defer_count` 0.
+
+So the stuck occurrence now waits for an hour-long deadline, not forever.
+That fits H3: the activation parked on a wake that never came. Not yet
+confirmed: the actor-log row of the create occurrence itself is not in
+the surface.
