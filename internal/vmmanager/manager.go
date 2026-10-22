@@ -345,8 +345,12 @@ type ManagerConfig struct {
 	// it selects (VM_FIRECRACKER_NEXT_*; vmm_next.go). Empty BinPath: off.
 	FirecrackerNext FirecrackerNextConfig
 
-	// BalloonStatsPollingIntervalS is the balloon statistics interval in
-	// seconds; 0 disables statistics. Only meaningful with the balloon on.
+	// BalloonStatsOnly turns balloon statistics on for the computers it
+	// names (VM_BALLOON_STATS_ONLY; computer_select.go); empty: off for
+	// every computer. BalloonStatsPollingIntervalS is their interval in
+	// seconds (VM_BALLOON_STATS_POLLING_INTERVAL_S; 0 means the default, 5).
+	// Only meaningful with the balloon on. See balloon_stats.go.
+	BalloonStatsOnly             []string
 	BalloonStatsPollingIntervalS int
 
 	// HibernateMode selects hibernate behavior (VM_HIBERNATE_MODE):
@@ -1955,7 +1959,7 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 			},
 		},
 	}
-	if balloon := firecrackerBalloonConfig(m.cfg); balloon != nil {
+	if balloon := m.firecrackerBalloonConfig(cfg); balloon != nil {
 		fcConfig["balloon"] = balloon
 	}
 	if hotplug != nil {

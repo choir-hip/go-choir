@@ -1267,6 +1267,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/vmctl/hibernate", attributedLifecycle(h.HandleHibernate))
 	s.HandleFunc("/internal/vmctl/memory", h.HandleMemory)
 	s.HandleFunc("/internal/vmctl/memory/guest", h.HandleGuestMemory)
+	s.HandleFunc("/internal/vmctl/memory/balloon", h.HandleBalloonStats)
 }
 
 // attributedLifecycle logs who asked for a lifecycle call that can stop,

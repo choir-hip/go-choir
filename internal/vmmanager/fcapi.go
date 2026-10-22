@@ -150,3 +150,29 @@ func (c *fcAPIClient) LoadSnapshot(ctx context.Context, statePath, memPath strin
 		"resume_vm": true,
 	})
 }
+
+// fcBalloonConfig is GET /balloon (swagger Balloon): the device as the VMM
+// holds it, which for a snapshot-restored guest is the saved device.
+type fcBalloonConfig struct {
+	AmountMiB             int  `json:"amount_mib"`
+	DeflateOnOOM          bool `json:"deflate_on_oom"`
+	StatsPollingIntervalS int  `json:"stats_polling_interval_s"`
+	FreePageReporting     bool `json:"free_page_reporting,omitempty"`
+}
+
+// Balloon reads the balloon device's configuration. A 4xx means the VM has
+// no balloon device.
+func (c *fcAPIClient) Balloon(ctx context.Context) (fcBalloonConfig, error) {
+	var out fcBalloonConfig
+	err := c.doJSON(ctx, http.MethodGet, "/balloon", nil, &out)
+	return out, err
+}
+
+// BalloonStatistics reads GET /balloon/statistics (swagger BalloonStats).
+// Read only: PATCH /balloon/statistics, which changes the interval, is never
+// sent. A 4xx means statistics were not enabled at boot.
+func (c *fcAPIClient) BalloonStatistics(ctx context.Context) (BalloonStatistics, error) {
+	var out BalloonStatistics
+	err := c.doJSON(ctx, http.MethodGet, "/balloon/statistics", nil, &out)
+	return out, err
+}

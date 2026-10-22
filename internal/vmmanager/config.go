@@ -114,6 +114,7 @@ func LoadConfigFromEnv() ManagerConfig {
 	}
 	cfg.DataDiscardOnly = parseComputerSelector(os.Getenv("VM_DATA_DISCARD_ONLY"))
 	loadGuestReclaimFromEnv(&cfg)
+	cfg.BalloonStatsOnly = parseComputerSelector(os.Getenv("VM_BALLOON_STATS_ONLY"))
 	if v := os.Getenv("VM_BALLOON_STATS_POLLING_INTERVAL_S"); v != "" {
 		// Firecracker's field is a u16: refuse out-of-range values rather
 		// than fail every boot.

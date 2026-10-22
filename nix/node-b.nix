@@ -1363,6 +1363,14 @@ in
         # computer's next cold boot. Rollback: delete this line
         # (docs/reports/lr-guest-memory-return-2026-10-14.md).
         "VM_BALLOON_FREE_PAGE_REPORTING=1"
+        # RES-10 balloon statistics (internal/vmmanager/balloon_stats.go):
+        # deliberately NOT set. Staged per computer like the FP8 features:
+        #   "VM_BALLOON_STATS_ONLY=<one test computer id>"   then class:test
+        #   "VM_BALLOON_STATS_POLLING_INTERVAL_S=5"          optional, default 5
+        # A named computer cold boots once (the balloon is in the snapshot
+        # launch-config hash); unnamed computers keep their exact config.
+        # Read: GET localhost:8083/internal/vmctl/memory/balloon (host only),
+        # or scripts/res10_balloon_stats_probe.sh. Rollback: delete the line.
         # RES-06 guest memory return (internal/vmmanager/guest_reclaim.go,
         # FP8 station): DAMON_RECLAIM boot arguments for the computers this
         # selector names, so cold guest page cache is freed and free page

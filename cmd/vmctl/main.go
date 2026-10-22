@@ -454,6 +454,29 @@ func (a *vmManagerAdapter) MemoryHotplugStatus(vmID string) (vmctl.MemoryHotplug
 	}, nil
 }
 
+// GuestMemoryStats serves vmctl's read-only balloon statistics route
+// (internal/vmctl/balloon_stats.go).
+func (a *vmManagerAdapter) GuestMemoryStats(vmID string) (vmctl.GuestMemoryStats, error) {
+	st, err := a.mgr.GuestMemoryStats(vmID)
+	if err != nil {
+		var se *vmmanager.GuestMemoryStatsError
+		if errors.As(err, &se) {
+			return vmctl.GuestMemoryStats{}, &vmctl.GuestMemoryStatsError{VMID: se.VMID, Reason: se.Reason, Detail: se.Detail}
+		}
+		return vmctl.GuestMemoryStats{}, err
+	}
+	s := st.Stats
+	return vmctl.GuestMemoryStats{
+		VMID: st.VMID, StatsPollingIntervalS: st.StatsPollingIntervalS, ObservedAt: st.ObservedAt,
+		Stats: vmctl.BalloonStatistics{
+			TargetPages: s.TargetPages, ActualPages: s.ActualPages, TargetMiB: s.TargetMiB, ActualMiB: s.ActualMiB,
+			SwapIn: s.SwapIn, SwapOut: s.SwapOut, MajorFaults: s.MajorFaults, MinorFaults: s.MinorFaults,
+			FreeMemory: s.FreeMemory, TotalMemory: s.TotalMemory, AvailableMemory: s.AvailableMemory,
+			DiskCaches: s.DiskCaches, HugetlbAllocations: s.HugetlbAllocations, HugetlbFailures: s.HugetlbFailures,
+		},
+	}, nil
+}
+
 func (a *vmManagerAdapter) SetMemoryHotplugRequestedMiB(vmID string, requestedMiB int) error {
 	return mapMemoryHotplugErr(a.mgr.SetMemoryHotplugRequestedMiB(vmID, requestedMiB))
 }
