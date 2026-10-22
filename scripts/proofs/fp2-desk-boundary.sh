@@ -14,8 +14,9 @@
 # temp credential file, removed on exit. Steps 4 and 6 (the OOM and seccomp
 # legs) are host-internal. They resolve the test computer through vmctl's
 # list and POST the guest's /internal/runtime/isolation-selftest from Node B
-# over ssh. The internal service token header file is passed to curl by path
-# on Node B and never read here. No API key is used for them.
+# over ssh, with no credential: the internal service token is never sent to a
+# guest; the guest's source-address check is the gate. No API key is used
+# for them.
 #
 #   CHOIR_API_KEY=... scripts/proofs/fp2-desk-boundary.sh --computer computer-<test> [--commit SHA]
 #       [--probe scripts/desk_cell_confinement_probe.py] [--egress yes] [--out docs/evidence/fp2-desk-boundary-<date>.json]
@@ -93,8 +94,9 @@ step_3() {
 
 # fp2_internal_leg LEG OUT: run the self-test's host-internal LEG on the test
 # computer through the probe, from Node B over ssh. The guest address comes
-# from vmctl's list. The internal service token header file is passed to
-# curl by path on Node B. Neither it nor any API key is read here.
+# from vmctl's list. The guest gets no credential (the internal service token
+# never goes to a guest; vmctl's list read is loopback). No API key is read
+# here.
 fp2_internal_leg() {
 	local leg=$1 out=$2 rc
 	resolve_target "$OPT_computer" 1
