@@ -114,7 +114,8 @@ step_5() {
 }
 # step_6: what a rollback below deploy 1 does, rehearsed (design status
 # section). The epoch fences only the updater's Apply of an epoch-declaring
-# release; a CI revert (deploy-refresh), a platform-follow offer and the
+# release; a CI revert (deploy-refresh), a platform-follow offer that
+# declares no epoch and the
 # updater's restorePrior reach the older binary unfenced. Over a deploy-1
 # store that binary runs (Open rewrites the receipt to 1) but its manifest
 # calls the empty choir_events unknown, so the computer is replay-ineligible

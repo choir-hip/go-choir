@@ -33,7 +33,12 @@ fingerprints and both fences; the deletion of the three methods. Deploy 2
 journal probe that gates deploy 2) and F18 (the setting) are deploy 2's. Review round 1b (flash, DeepSeek v4.1 flash, Sonnet: accept with edits)
 is folded in: the rollback text and recipe below, F14 pinned on the lock,
 the stamp guard on unkeyed literals, F6 on the real dry-run position, and
-the `ListEventsByOwner` semantic change named.
+the `ListEventsByOwner` semantic change named. Round 1c (DeepSeek: accept
+with edits) is folded in too: the stamp guard is type-based (go/types over
+every package that depends on `computerevent`, elided literals included),
+the rollback step ships as a tested artifact with an apply script, the
+test hook is guarded as test-only, two claims are narrowed, and the
+citations are swept.
 
 Deploy 1's staging proof is a no-effect proof:
 `scripts/proofs/fp1-event-table-deploy1.sh` (boot log; replay report at
@@ -53,8 +58,12 @@ epoch (`checkStateCompatibility`, called only from `Apply`,
 
 - a plain git revert shipped by CI's deploy-refresh, which boots the
   platform image and never reads the receipt;
-- a platform-follow offer, which declares no epoch (`updater.go:442`: no
-  window, no check);
+- a platform-follow offer that declares no epoch. The offer may carry
+  `store_schema_version` and `min_store_schema_version`
+  (`platform/platform_update.go:47-48`, `:235-236`); whether corpusd sets
+  them is outside this repository. An offer without them takes the
+  no-window branch of `checkStateCompatibility` (`updater.go:442`), and an
+  offer that declares epoch 1 is refused like any other;
 - the updater's own recovery: a failed health probe after an apply runs
   `restorePrior` (`updater.go:406`, `:958-988`), which swaps back to the
   prior release without `checkStateCompatibility`.
@@ -80,48 +89,51 @@ existing build, and no code shipped in deploy 1 can run inside it.
 deploy-1 commits **plus one boot step** added to `bootstrap` after the
 `retiredRuntimeTables` loop (the same pattern): drop `choir_events` only
 while it is empty. A row means an op was stamped: the computer is below the
-floor, the table stays, and the repair is forward (section 4.5). The step,
-verbatim (it compiles against the pre-deploy-1 store package, which already
-imports `database/sql`, `errors` and `log`):
+floor, the table stays, and the repair is forward (section 4.5).
 
-```go
-func rollbackRecipeDropEmptyChoirEvents(db *sql.DB) error {
-	var name string
-	switch err := db.QueryRow(`SHOW TABLES LIKE 'choir_events'`).Scan(&name); {
-	case errors.Is(err, sql.ErrNoRows):
-		return nil // never created, or already dropped
-	case err != nil:
-		return err
-	}
-	var one int
-	switch err := db.QueryRow(`SELECT 1 FROM choir_events LIMIT 1`).Scan(&one); {
-	case errors.Is(err, sql.ErrNoRows):
-		_, err := db.Exec(`DROP TABLE choir_events`)
-		return err
-	case err != nil:
-		return err
-	}
-	log.Printf("store: choir_events holds rows; below the F-c rollback floor, left in place")
-	return nil
-}
-```
+The step ships as a tested artifact (round 1c, DeepSeek finding 2), not as
+a snippet here:
+- `internal/store/testdata/fc-deploy1-rollback/fc_deploy1_rollback.go`,
+  the whole file the revert commit adds to `internal/store`. It needs only
+  `database/sql`, `errors` and `log`, which the pre-deploy-1 store package
+  already imports.
+- `scripts/rollback/fc-deploy1-rollback.sh apply`, run after the git revert
+  (it refuses while `choirEventsDDL` is still defined): it copies the file
+  in, inserts the boot substep `runtime-schema/drop-empty-choir-events`
+  after the `retiredRuntimeTables` loop (failing unless it finds exactly
+  that one anchor, unchanged since `6c60685cc`), and builds
+  `internal/store`.
+- Three tests keep it from rotting. `TestEventTableRollbackRecipe`
+  rehearses the function. On a deploy-1 store with no stamped op, the drop
+  gives back a witness equal to one the deploy-1 extractor takes of the
+  same store before the table existed (`WitnessContentMatches`); that is
+  content-equivalent to the old extractor's witness, because the
+  optional-table rule is the only difference and the table is absent. A
+  second run is a no-op, and a table holding a stamped row is left alone.
+  `TestEventTableRollbackArtifactIsTheRehearsedFunction` keeps the shipped
+  file identical to the rehearsed function.
+  `TestEventTableRollbackArtifactBuildsInTheStorePackage` runs the script's
+  patch on `store.go`, checks the call lands in `bootstrap`, and builds the
+  store package with it through `go build -overlay`.
 
-`TestEventTableRollbackRecipe` rehearses it: on a deploy-1 store with no
-stamped op the drop gives back the pre-deploy-1 witness exactly
-(`WitnessContentMatches`); a second run is a no-op; a table holding a
-stamped row is left alone. Its cost at boot is one `SHOW TABLES` and, for
-an empty table, one probe and one drop of an empty table; it never reads
-`og_objects`.
+Its cost at boot is one `SHOW TABLES` and, for an empty table, one probe and
+one drop of an empty table; it never reads `og_objects`.
 
-**Decision: documented and rehearsed, not shipped in deploy 1.** The drop
-must run in the binary below deploy 1, and deploy 1 cannot put code into an
-older binary. Shipped inside deploy 1 it would drop and recreate an empty
-table on every boot to no effect, and a revert would remove it anyway. So it
-ships only in a revert commit, if a revert is ever made, and it must be in
-that commit: a bare revert leaves publication refused until a forward
-deploy. Shipping it in deploy 1 does not help the `restorePrior` path
-either, as above. The proof script's step 6 rehearses the previous build
-over a deploy-1 store on a test computer, and what restores publishing.
+**Decision: shipped as a tested artifact, installed only by a revert; not
+in deploy 1's code.** The drop must run in the binary below deploy 1, and
+deploy 1 cannot put code into an older binary. Inside deploy 1 it would
+drop and recreate an empty table on every boot to no effect, and a revert
+would remove it anyway. A revert must run the script: a bare revert leaves
+publication refused until a forward deploy. The artifact does not help the
+`restorePrior` path, as above. The proof script's step 6 rehearses the
+previous build over a deploy-1 store on a test computer, and its
+`recovered` phase names the script.
+
+**Open for the panel** (round 1c, DeepSeek, dissent): fencing
+`restorePrior` with `checkStateCompatibility`, so that the updater's
+automatic recovery cannot reach a binary below the store's epoch, is not
+part of deploy 1. If the panel wants automatic recovery closed before any
+op is stamped, it is a gate for deploy 2's card.
 
 Once deploy 2 stamps any op, deploy 1 is the floor (section 4.5). The
 recipe does not apply there: the table is not empty, and the old binary
@@ -144,7 +156,11 @@ then sorts by timestamp and cuts. Where a caller's timestamps run against
 allocation order, which happens because emitters set `Timestamp` before
 `AppendEvent` takes `eventMu`, the `choir_events` half can leave out a row
 whose timestamp is newer than a row it returns. The result is then not the
-newest `limit` events by timestamp. Before F-c it always was. In deploy 1
+newest `limit` events by timestamp. Before F-c it was, for every row
+`AppendEventOG` wrote: its `updated_at` is the event's `Timestamp`
+(`graph_store.go:1168-1186`). Not for the lifecycle fold's rows, whose
+`updated_at` is `run.UpdatedAt` (`lifecycle.go:3331`), so those already cut
+on a key other than `Timestamp` (round 1c, DeepSeek). In deploy 1
 no row is stamped, so nothing changes. From deploy 2's first stamped op
 this affects `/api/costs` (limit 10,000) and the texture diagnosis view
 (limit 80) at the cut, by the rows whose timestamps were inverted.
@@ -328,6 +344,18 @@ only code that names `ogKindEvent` is in `internal/store` (`graph_store.go:22`).
 | `ListEventsByTrajectoryAfter` (`store.go:2283`) | **none** (only `telemetry_sealer_test.go:688`) | — | — | — |
 | `ListEventsOG` (`graph_store.go:1242`) | **none** (only `lifecycle_test.go:315`) | — | — | — |
 | `ListEventsByOwnerOG` (`graph_store.go:1263`) | **none** | — | — | — |
+
+At the deploy-1 head (round 1c citation sweep; DeepSeek finding 6) the
+`store.go` lines in this table and in sections 1.3 and 4.1 have moved: the
+event methods are now `ListEvents` `:2139`, `ListEventsAfter` `:2147`,
+`ListEventsByOwner` `:2188`, `ListEventsByOwnerAfter` `:2225`,
+`ListAcknowledgedEventsByChannel` `:2268` and `ListEventsByTrajectory`
+`:2306`; `AppendEvent` is at `:1971` with the per-run seed's
+`choir_events` half at `:2040` and the stream seed's at `:2084`;
+`storeschema.Write` is at `:730`; the engine-mutex sharing at `:700` and
+`s.og` at `:711`. `ListEventsByTrajectoryAfter`, `ListEventsOG` and
+`ListEventsByOwnerOG` are deleted. Elsewhere, sections 0 to 9 cite
+`4fca1e01b`, the round-2 checkout, as their header says.
 
 Every list method first calls `beforeEventRead` (`telemetry_reads.go:41-50`).
 This is the sealer's read barrier. F-c leaves it as it is.
@@ -935,8 +963,8 @@ hand out duplicate numbers (section 4.5).
   apply at `:291`). That fences the updater's Apply of an
   epoch-declaring release, and nothing else (corrected in round 1b): the
   updater's own `restorePrior` after a failed health probe (`:406`,
-  `:958-988`) does not call the check, a platform-follow offer declares no
-  epoch, and a CI revert never reads the receipt (status section).
+  `:958-988`) does not call the check, a platform-follow offer may declare
+  no epoch, and a CI revert never reads the receipt (status section).
 - *What it does not do.* `Open` writes the receipt and never reads it
   (`store.go:718-728`). No path other than the updater reads it (a grep for
   `storeschema.Read` finds only `internal/updater`). So an old binary that
@@ -1060,7 +1088,7 @@ frequent (WebSocket catch-up), so the read pool is the better default.
 | Setting on → off | new events unstamped | union: nothing hidden | equivalent | none |
 | Deploy 2 → deploy 1 | stamped ops stay; deploy 1 projects them | union | equivalent | none |
 | Deploy 3 → deploy 2 | same op shape; one statement becomes N | same | same rows, so equivalent | none |
-| Deploy 1 → the previous build, no op ever stamped | none. The updater's Apply refuses an epoch-1 release on this store (section 4.1); this row is reached by a CI revert, a platform-follow offer, or the updater's `restorePrior` after a failed health probe (round 1b) | today's | an empty table **unknown** to the old manifest: replay-ineligible, so **checkpoint publish** is refused; the computer keeps running (og_key_index precedent, finding 3). **Restore** of a pre-deploy-1 checkpoint still works when the old binary stages a store without the table: from genesis, or from a base published before deploy 1. From a base published by deploy 1 it is refused (section 3.3, round 2 DeepSeek F6) | forward; or the rollback recipe (the revert plus a boot-time drop of an empty `choir_events`, status section); or an old-binary restore of a pre-deploy-1 checkpoint, whose workspace swap also removes the empty table. Round 1's hand `DROP TABLE` is withdrawn: it is SQL against a deployed store |
+| Deploy 1 → the previous build, no op ever stamped | none. The updater's Apply refuses an epoch-1 release on this store (section 4.1); this row is reached by a CI revert, a platform-follow offer that declares no epoch, or the updater's `restorePrior` after a failed health probe (round 1b) | today's | an empty table **unknown** to the old manifest: replay-ineligible, so **checkpoint publish** is refused; the computer keeps running (og_key_index precedent, finding 3). **Restore** of a pre-deploy-1 checkpoint still works when the old binary stages a store without the table: from genesis, or from a base published before deploy 1. From a base published by deploy 1 it is refused (section 3.3, round 2 DeepSeek F6) | forward; or the rollback recipe (the revert plus a boot-time drop of an empty `choir_events`, status section); or an old-binary restore of a pre-deploy-1 checkpoint, whose workspace swap also removes the empty table. Round 1's hand `DROP TABLE` is withdrawn: it is SQL against a deployed store |
 | Deploy 2 → the previous build, after stamped ops | **Not a supported rollback: deploy 1 is the floor.** The old projector ignores `Table`, so any stamped op it projects lands in `og_objects`. It projects them on any boot with a tail to replay: replay mode discards a prepared row and replays the event from the tape (`appender.go:778-787`, `:856`; `autoputer/run.go:744-746`). It also projects them in any rebuild or restore it runs | events stamped while deploy 2 ran are **invisible** to trace, WS catch-up, acceptance and costs. They are on the tape and in the table, but a WebSocket client that catches up during the window moves its cursor past them. The old seeds read `og_objects` only (`store.go:2012-2045`, `:2054-2074`), so they can hand out `seq` and `stream_seq` numbers `choir_events` already holds. Those duplicates go onto the tape and stay (round 2, MiniMax) | replay-ineligible (unknown table). Worse, once the old binary projects any stamped op, a later deploy-1 replay puts that op in `choir_events` while the live store holds it in `og_objects`. Live and replay then never agree again, and checkpoints stay refused after the forward deploy (round 2, DeepSeek F1) | forward to deploy 1 or later. If the old binary projected any stamped op, also rebuild the store from the tape on that binary: a fresh replay into a new workspace, as the projection-base rebuilder does (`projectionbase/rebuilder.go:385-395`), installed in place of the live store. Duplicated numbers cannot be repaired |
 
 The old binary's behaviour on a stamped op is a characterization test on
