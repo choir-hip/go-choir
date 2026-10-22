@@ -216,7 +216,9 @@ step_10() {
 	enforce) info "body_caps.mode is enforce (already past observe)" ;;
 	*) fail "/health has no body_caps.mode: the deploy does not carry the body caps" ;;
 	esac
-	[ "$(fp7_num "$h" '.body_caps.limits.model')" = 67108864 ] && [ "$(fp7_num "$h" '.body_caps.limits.search')" = 1048576 ] && pass "limits: model 64 MiB, search 1 MiB" || info "limits differ from the defaults (GATEWAY_BODY_LIMITS set?)"
+	[ "$(fp7_num "$h" '.body_caps.limits.model')" = 167772160 ] && [ "$(fp7_num "$h" '.body_caps.limits.search')" = 1048576 ] && pass "limits: model 160 MiB, search 1 MiB" || info "limits differ from the defaults (GATEWAY_BODY_LIMITS set?)"
+	[ "$(fp7_num "$h" '.body_caps.limits.in_flight')" -gt 0 ] && pass "in_flight bound present: $(fp7_num "$h" '.body_caps.limits.in_flight') bytes, read timeout $(fp7_num "$h" '.body_caps.read_timeout_seconds') s" || fail "/health body_caps has no limits.in_flight: the deploy predates the bunch 88 round"
+	info "gateway MemoryMax: $(node_b_q "systemctl show go-choir-gateway -p MemoryMax --value")"
 	info "gateway memory (current, peak bytes): $m"
 	printf '%s\n' "$h" >"$(fp7_state bodycaps)"
 	printf '%s\n' "$m" >"$(fp7_state bodycaps-mem)"
@@ -263,7 +265,7 @@ step_12() {
 		node_journal "$PROOF_UNIT_GATEWAY" "$OPT_since" "body cap would_refuse" 10
 	else
 		[ "$mode" = enforce ] && pass "body_caps.mode is enforce" || fail "body_caps.mode is '$mode'"
-		manual "rerun step 11's inference curl with 200 MiB streamed instead of declared ({ printf '{\"system\":\"'; head -c 209715200 /dev/zero | tr '\\0' a; printf '\"}'; } | curl ... -T - ...): expect 413 'the model limit is 64 MiB'; memory peak rises at most about twice the limit"
+		manual "rerun step 11's inference curl with 200 MiB streamed instead of declared ({ printf '{\"system\":\"'; head -c 209715200 /dev/zero | tr '\\0' a; printf '\"}'; } | curl ... -T - ...): expect 413 'the model limit is 160 MiB'; memory peak rises at most about twice the limit"
 	fi
 }
 
