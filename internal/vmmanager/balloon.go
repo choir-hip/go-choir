@@ -12,16 +12,19 @@ package vmmanager
 // unknown fields; free_page_hinting (a developer preview with a documented
 // corruption race) is never sent.
 
-// firecrackerBalloonConfig returns the "balloon" object for the Firecracker
-// --config-file, or nil when free page reporting is off.
-func firecrackerBalloonConfig(cfg ManagerConfig) map[string]interface{} {
-	if !cfg.BalloonFreePageReporting {
+// firecrackerBalloonConfig returns the "balloon" object for cfg's
+// Firecracker --config-file, or nil when free page reporting is off.
+// Statistics are on only for a computer VM_BALLOON_STATS_ONLY names
+// (balloon_stats.go); every other computer gets exactly the pre-RES-10
+// object, so its snapshot launch-config hash does not move.
+func (m *Manager) firecrackerBalloonConfig(cfg VMConfig) map[string]interface{} {
+	if !m.cfg.BalloonFreePageReporting {
 		return nil
 	}
 	return map[string]interface{}{
 		"amount_mib":               0,
 		"deflate_on_oom":           true,
-		"stats_polling_interval_s": cfg.BalloonStatsPollingIntervalS,
+		"stats_polling_interval_s": m.balloonStatsIntervalS(cfg),
 		"free_page_reporting":      true,
 	}
 }

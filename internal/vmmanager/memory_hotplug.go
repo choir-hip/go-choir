@@ -53,6 +53,11 @@ const (
 // can reach: not running, launched without the device, or no API socket.
 var ErrMemoryHotplugUnavailable = errors.New("memory hotplug unavailable")
 
+var (
+	errVMNotRunning = errors.New("VM is not running")
+	errNoAPISocket  = errors.New("VM has no API socket")
+)
+
 // ErrMemoryHotplugBusy means another manager operation (boot, hibernate,
 // restore) holds the VM; the caller retries later.
 var ErrMemoryHotplugBusy = errors.New("memory hotplug: VM operation in progress")
@@ -128,13 +133,14 @@ func (m *Manager) wantsAPISocket(cfg VMConfig) bool {
 }
 
 // runningAPISocket returns the API socket of a running VM and its base
-// memory, or ErrMemoryHotplugUnavailable.
+// memory, or ErrMemoryHotplugUnavailable (wrapping errVMNotRunning or
+// errNoAPISocket, which the balloon reader reports apart).
 func (m *Manager) runningAPISocket(vmID string) (string, int, error) {
 	m.mu.Lock()
 	inst := m.vms[vmID]
 	if inst == nil || inst.State != StateRunning {
 		m.mu.Unlock()
-		return "", 0, fmt.Errorf("%w: VM %s is not running", ErrMemoryHotplugUnavailable, vmID)
+		return "", 0, fmt.Errorf("%w: %w: VM %s", ErrMemoryHotplugUnavailable, errVMNotRunning, vmID)
 	}
 	jailed := inst.confinement.jailed()
 	base := inst.Config.MachineMemSizeMib
@@ -144,7 +150,7 @@ func (m *Manager) runningAPISocket(vmID string) (string, int, error) {
 		sock = m.jailAPISocketHostPath(vmID)
 	}
 	if _, err := os.Stat(sock); err != nil {
-		return "", 0, fmt.Errorf("%w: VM %s has no API socket", ErrMemoryHotplugUnavailable, vmID)
+		return "", 0, fmt.Errorf("%w: %w: VM %s", ErrMemoryHotplugUnavailable, errNoAPISocket, vmID)
 	}
 	return sock, base, nil
 }
