@@ -624,7 +624,8 @@ guest, whose pre-write answers are 400, 403, 404, 405, 409 and the two
   that `reboot_after_mark` already cleared, both leave the receipt
   saved with the error and the computer cleared once.
 - F3 fixed (doc). The runbook states the 900 s marker life and that exit
-  4 lands about 1230 s after the final pass at the defaults, so the
+  4 lands at least 1200 s after the final pass at the defaults (the 30 s
+  pause is inside the `--boot-timeout` deadline, not added to it), so the
   manual clear matters only when `--boot-timeout` is under 900 s.
 - F4 fixed. The `systemctl reboot` ssh runs with `LC_ALL=C`, so its
   stderr phrases match whatever the operator's locale. The test reads
@@ -674,3 +675,23 @@ F3 (nit). The runbook and the round 5 record say exit 4 lands about
 1230 s after the final pass, "30 s sleep plus `--boot-timeout` 1200 s".
 The 30 s sleep is inside the deadline (`deadline = t0 + boot_timeout`),
 so exit 4 lands at 1200 s. Still over 900 s, so the advice holds.
+
+### Fix, round 6 (lane `lane/fp0-reboot-script-r2`)
+
+- F2-a fixed. `clear_markers` sets `cleared=False` before the unmark and
+  `True` only on success (or with nothing to clear), so a signal during
+  the unmark leaves `main`'s recovery clear armed and the receipt does not
+  claim a clear that did not finish. Tests: the unmark raises
+  `Interrupted` once, then succeeds; two attempts, `cleared` only after
+  the second (failed on `3bde7921e`).
+- F2-b fixed. `reboot_after_mark` and `main` share `markers_armed` (sent
+  computers, `marks.cleared` unset or false, no `reboot.back_at`). A host
+  that came back, or a clear that already finished, is not cleared again.
+- F2-c fixed. `main` sets `receipt["error"]` and saves before the
+  recovery clear, and saves again after it.
+- F3 fixed. The runbook and this record now say exit 4 lands 1200 s
+  after the reboot request, not 1230 s (the 30 s pause is inside the
+  deadline); the final pass is earlier still, so the marker is over 900 s
+  old either way.
+- Tests: 4 more (76 in all). The main-level tests also patch
+  `subprocess.run`, `ssh_ok` and `staging_health` to fail loudly.
