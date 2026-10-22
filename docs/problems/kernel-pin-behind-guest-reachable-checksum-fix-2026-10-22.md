@@ -4,7 +4,7 @@ Date: 2026-10-22. Found by: FP0's kernel research (a Sonnet research agent asked
 
 ## Problem
 
-Host and guests run Linux 6.18.55, the `nixpkgs-kernel` lock from 2026-10-03 (`flake.lock` rev 7fd4004d…). 6.18.56 (2026-10-11, 403 commits), 6.18.57 (2026-10-15, 622) and 6.18.58 (2026-10-21, 49) shipped since. 6.18.57 carries "ipv4: validate checksum_start before completing checksum" (commit 6785011f8b16): guest-supplied virtio-net checksum metadata (`csum_start`, `csum_offset`) was not checked against the IPv4 header, so a deferred checksum write could rewrite the header-length byte and leak or corrupt host kernel memory. The fix is in the official stable changelogs (ChangeLog-6.18.57, ChangeLog-7.2.11). Its public write-up ("PwnEscape") reports a repeatable host memory disclosure; the same researcher's "KVM 0day" was confirmed by a Firecracker-based sandbox vendor in early October. That they are the same bug is not confirmed.
+Host and guests run Linux 6.18.55, the `nixpkgs-kernel` lock at rev 7fd4004d… (its nixos-unstable commit is dated 2026-10-11, the lock's `lastModified`; an earlier line here said 2026-10-03). 6.18.56 (2026-10-11, 403 commits), 6.18.57 (2026-10-15, 622) and 6.18.58 (2026-10-21, 49) shipped since. 6.18.57 carries "ipv4: validate checksum_start before completing checksum" (commit 6785011f8b16): guest-supplied virtio-net checksum metadata (`csum_start`, `csum_offset`) was not checked against the IPv4 header, so a deferred checksum write could rewrite the header-length byte and leak or corrupt host kernel memory. The fix is in the official stable changelogs (ChangeLog-6.18.57, ChangeLog-7.2.11). Its public write-up ("PwnEscape") reports a repeatable host memory disclosure; the same researcher's "KVM 0day" was confirmed by a Firecracker-based sandbox vendor in early October. That they are the same bug is not confirmed.
 
 ## Why Choir is exposed (reasoned, not drilled)
 
@@ -105,6 +105,14 @@ against `http://127.0.0.1:8083`):
 6. The host reboot comes after this. It cold boots every computer, the
    paper included, onto whatever guest image is current, so it must not
    come before the canary.
+
+## As landed
+
+`flake.lock` `nixpkgs-kernel` is now rev 02c087f3… (nixos-unstable,
+`lastModified` 2026-10-20 13:28 UTC), with `linuxPackages_6_18` at
+6.18.57. Commit 218a33a3b (2026-10-22) moved the lock and the floor. The
+floor now lives in `nix/kernel-security-floor`, which the flake assertion
+and `scripts/node_b_host_reboot.py` both read.
 
 ## What stays
 
