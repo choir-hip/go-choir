@@ -56,7 +56,7 @@ diffs move `MMIO64_MEM_START` to `128 << 30` or shrink `MMIO64_MEM_SIZE`.
 They note that server CPUs have more than 39 bits, so mostly older or
 consumer hardware is affected. Nothing is merged.
 
-**Choir uses hotplug on Node B.** `nix/node-b.nix:1461-1462` sets
+**Choir uses hotplug on Node B.** `nix/node-b.nix:1465-1466` sets
 `VM_MEMORY_HOTPLUG=on` and `VM_MEMORY_HOTPLUG_ONLY=class:test`. Test
 computers boot with an unplugged 4 GiB region (vm-4a9afa23 and
 vm-c5c801f8 in

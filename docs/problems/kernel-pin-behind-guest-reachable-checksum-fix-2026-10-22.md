@@ -78,11 +78,25 @@ against `http://127.0.0.1:8083`):
    `POST /internal/vmctl/hold {"computer_id":"<paper computer id>","reason":"KF canary: guest kernel 6.18.57","held_by":"fp0"}`.
    `GET /internal/vmctl/deploy-refresh` lists it under `skipped`, reason
    `held`.
-2. Push; CI deploys. Idle computers refresh. Keep the hold window short:
-   while held, vmctl will not recover the paper if it fails, so watch its
-   `/health` until step 5.
+2. Push; CI deploys. Idle computers refresh. **Timebox the hold to 30
+   minutes from step 1.** A hold has no TTL. It persists across deploys and
+   vmctl restarts, and while it is set vmctl never recovers or warms the
+   paper (`ownership.go` `MaintenanceHold`, `SetHold`). Watch the paper's
+   `/health` and its paper-healthy signals the whole time. **If the paper's
+   `/health` fails, or the 30 minutes run out, unhold it at once**
+   (`POST /internal/vmctl/unhold`) and do not wait for step 5. vmctl then
+   recovers it, onto the new image: an untested image is better than a
+   paper that is down. Run the unhold from a `trap ... EXIT` (or a
+   `finally`) in the operator shell, so that an aborted session cannot
+   leave the paper held.
 3. Canary: mint a test computer (`node scripts/qa_test_computer.mjs --label kf-canary`).
-   It cold boots on the new image. Pass when all of these hold:
+   It cold boots on the new image. If the mint is refused (host memory
+   admission, disk), use an existing `class:test` computer that the
+   deploy refreshed instead (the deploy log's `Refreshed <vm>` line; for
+   example vm-4a9afa23 or vm-c5c801f8). One that was `Deferred` is still
+   on the old image and does not count. If neither exists, unhold the
+   paper (step 2's rule) and record that the canary did not run. Pass
+   when all of these hold:
    - its console log (`/var/lib/go-choir/vm-state/<vm>/console.log`)
      shows `Linux version 6.18.57`, and its kernel capability receipt
      shows `kernel_release` 6.18.57 with every capability present;
@@ -91,10 +105,18 @@ against `http://127.0.0.1:8083`):
    - the store opens: `/health` ok and a store read through the API
      succeeds;
    - a model call passes: one prompt on the test computer gets a model
-     answer (the qa script's run, or a Texture prompt).
+     answer (the qa script's run, or a Texture prompt);
+   - hibernate by snapshot, then wake, works on 1.16.2: the boot kind is
+     `snapshot_resume`, and the snapshot meta and timeline record
+     `Firecracker v1.16.2` (step 2 of "FP0 verifies after the deploy" in
+     [firecracker-1-16-1-virtio-mem-restore-bugs-2026-10-22.md](firecracker-1-16-1-virtio-mem-restore-bugs-2026-10-22.md);
+     the `scripts/s3_snapshot_probe.py` pattern). A failure here is
+     fail-closed (the refused snapshot cold boots), but it is a reason
+     not to give the paper the image.
 4. If the canary fails, leave the paper held and running on the old
-   image, revert the KF commits, and redeploy. Unhold only after the
-   revert is deployed.
+   image, revert the KF commits, and redeploy. Unhold once the revert is
+   deployed, or earlier under step 2's rule (health fails or 30 minutes
+   pass), whichever comes first.
 5. If the canary passes: `POST /internal/vmctl/unhold {"computer_id":"<paper computer id>"}`,
    then `POST /internal/vmctl/deploy-refresh {"user_id":"<paper user>","desktop_id":"<paper desktop>","target":"<deployed autoputer runtime commit>"}`.
    The target is the commit the deploy's refresh log expected; a
