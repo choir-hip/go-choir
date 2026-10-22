@@ -18,8 +18,8 @@ import (
 //
 // Every manager spawn of an existing computer now writes a BootClaim on the
 // row before the manager is called. The publish clears it in the same write,
-// and so does a failed spawn. A new computer's persisted booting row
-// is its claim. At load, a row whose claim is still open is a start that a
+// and so does a failed spawn. A new computer's persisted booting row, and
+// the platform computer's first boot, is its claim. At load, a row whose claim is still open is a start that a
 // vmctl restart interrupted. Under the restart rule (CLAUDE.md, "Restarts End
 // Work (Crash) Or Resume It (Planned Update)") a crash restart never resumes
 // work. The row is stopped with stoppedByStartInterrupted, which is not a
@@ -28,10 +28,22 @@ import (
 // always-on sweep or a deploy rescue boots a fresh realization. A vmctl
 // restart carries no planned-restart marker for the computers it hosts, so
 // the planned-update exception does not apply.
+//
+// Review round 2 (bunch 37). The first close is free: the next start is not
+// charged. The second consecutive close of the same computer, with no
+// publish between, is a start that keeps crashing vmctl: it is stopped with
+// stoppedByStartInterruptedRepeatedly, a failure, and the close charges the
+// automatic retry, so the sweep and the platform warm leave it alone for
+// failureWarmWindow (or until a deploy re-arms it) and only an owner act
+// boots it. While a close is open (its process survived the kill) no start
+// of the computer may spawn: spawnClaimed refuses, and so do the platform
+// warm, the platform ensure and a direct recover, before they touch the row.
 
 // BootClaim marks a start of the computer whose result is not yet published.
-// It is immutable once written: row copies share it, and a claim is dropped
-// only by pointer.
+// It is immutable once written: row copies share it. A failed spawn drops
+// its claim by pointer; a publish drops a claim only if the published row
+// records the claimed realization (publishedIn), so it never drops the
+// claim of a later start of the same computer.
 type BootClaim struct {
 	// Kind is the start: "boot" for a fresh realization (BootVM, RecoverVM,
 	// RefreshVM), "resume" for a memory-snapshot or manager resume of the
@@ -71,6 +83,7 @@ func (c *BootClaim) publishedIn(own *VMOwnership) bool {
 func interruptStartAtLoadLocked(own *VMOwnership, now time.Time) bool {
 	if own.BootClaim != nil && own.BootClaim.publishedIn(own) {
 		own.BootClaim = nil
+		own.StartInterruptions = 0
 	}
 	if own.BootClaim == nil {
 		if own.State != VMStateBooting {
@@ -79,17 +92,76 @@ func interruptStartAtLoadLocked(own *VMOwnership, now time.Time) bool {
 		own.BootClaim = &BootClaim{Kind: bootClaimFirstBoot, Epoch: own.Epoch, ClaimedAt: now.UTC().Format(time.RFC3339Nano)}
 	}
 	own.State = VMStateStopped
+	own.StartInterruptions++
 	own.StoppedBy = stoppedByStartInterrupted
+	if own.StartInterruptions >= 2 {
+		own.StoppedBy = stoppedByStartInterruptedRepeatedly
+	}
 	return true
+}
+
+// publishStartLocked records that a start published own (State, Epoch and
+// address already written): it drops the claim the publish records, keeps a
+// claim of a later realization, and ends the run of interrupted starts. The
+// caller saves in the same write.
+func publishStartLocked(own *VMOwnership) {
+	if own.BootClaim.publishedIn(own) {
+		own.BootClaim = nil
+	}
+	own.StartInterruptions = 0
+}
+
+// errStartInterruptedOpen refuses a start of a computer whose interrupted
+// start is not yet closed. It spawned nothing and clears with the close.
+func errStartInterruptedOpen(vmID string) error {
+	return &RecoveryRefusal{
+		Kind:              RecoveryRefusalGuestReattachPending,
+		Reason:            fmt.Sprintf("VM %s: the process of a start a vmctl restart interrupted is still being powered off; retry shortly", vmID),
+		RetryAfterSeconds: guestReattachRetryAfterSeconds,
+	}
+}
+
+// refuseWhileCloseOpen reports why no start of vmID may spawn now: its
+// interrupted start is not closed, or a Firecracker process the manager does
+// not track still runs for it. nil when a start may proceed.
+func (r *OwnershipRegistry) refuseWhileCloseOpen(vmID string, mgr VMManager) error {
+	if r.startInterrupted(vmID) {
+		return errStartInterruptedOpen(vmID)
+	}
+	if mgr != nil && mgr.GetVM(vmID) == nil && r.liveUnmanagedProcess(vmID, mgr) {
+		return &RecoveryRefusal{
+			Kind:              RecoveryRefusalGuestReattachPending,
+			Reason:            "computer is still running but vmctl does not track it; retry shortly",
+			RetryAfterSeconds: guestReattachRetryAfterSeconds,
+		}
+	}
+	return nil
+}
+
+// repeatedInterruptionBoundLocked reports a computer whose starts keep
+// crashing vmctl and whose charged retry has not come round again: no
+// automatic start may boot it.
+func (r *OwnershipRegistry) repeatedInterruptionBoundLocked(own *VMOwnership) bool {
+	return own != nil && own.StoppedBy == stoppedByStartInterruptedRepeatedly && !failureWarmAllowed(own.FailureWarmedAt, r.now())
 }
 
 // spawnClaimed runs one manager spawn of an existing computer under a
 // durable start claim. The claim is written before the manager is called.
 // If it cannot be written, the start is refused before anything spawns. A
 // failed spawn drops the claim, and a successful one leaves it for the
-// publish to clear.
+// publish to clear. A start of a computer whose interrupted start is still
+// open is refused: the shield stays until the close ends the process.
 func (r *OwnershipRegistry) spawnClaimed(vmID, kind string, epoch int64, spawn func() (*VMInstanceInfo, error)) (*VMInstanceInfo, error) {
 	r.mu.Lock()
+	if _, open := r.interruptedStarts[vmID]; open {
+		r.mu.Unlock()
+		return nil, errStartInterruptedOpen(vmID)
+	}
+	if r.persistencePath == "" {
+		// No durable registry (tests, host-process mode): the start runs
+		// unclaimed, and a vmctl restart mid-boot would orphan it.
+		log.Printf("vmctl: WARNING: %s of VM %s runs without a durable start claim: the ownership registry has no persistence path", kind, vmID)
+	}
 	var claim *BootClaim
 	if own := r.vmByID[vmID]; own != nil && r.persistencePath != "" {
 		claim = &BootClaim{Kind: kind, Epoch: epoch, ClaimedAt: r.now().UTC().Format(time.RFC3339Nano)}
@@ -100,9 +172,6 @@ func (r *OwnershipRegistry) spawnClaimed(vmID, kind string, epoch int64, spawn f
 			r.mu.Unlock()
 			return nil, fmt.Errorf("persist start claim for VM %s: %w", vmID, err)
 		}
-		// This start replaces whatever an interrupted one left: the manager
-		// refuses to boot over a live untracked process, so nothing of it runs.
-		delete(r.interruptedStarts, vmID)
 	}
 	r.mu.Unlock()
 	info, err := spawn()
@@ -159,8 +228,11 @@ func (r *OwnershipRegistry) closeInterruptedStarts() {
 			// This vmctl started the computer since; its claim replaced this one.
 			ended = "started again since"
 		} else if pids := live[vmID]; len(pids) > 0 {
-			// The manager's per-VM operation lock serializes the kill with any
-			// boot of the same VM, and it refuses a VM the manager runs.
+			// No start of this VM spawns while its close is open
+			// (spawnClaimed). The manager's per-VM operation lock serializes
+			// the kill with BootVM, RecoverVM, RefreshVM and
+			// ResumeVMFromSnapshot; ResumeVM does not take it, but acts only
+			// on a VM the manager tracks, and the kill refuses one.
 			if err := pc.ReapUnmanagedVM(vmID); err != nil {
 				log.Printf("vmctl: close of VM %s, whose %s of epoch %d a vmctl restart interrupted, failed; pids %v still run, retried by the next reconcile: %v", vmID, claim.Kind, claim.Epoch, pids, err)
 				r.mu.Lock()
@@ -182,10 +254,15 @@ func (r *OwnershipRegistry) closeInterruptedStarts() {
 		if own != nil && own.BootClaim == claim {
 			own.BootClaim = nil
 		}
-		if own != nil && own.State == VMStateStopped && own.StoppedBy == stoppedByStartInterrupted {
+		if own != nil && own.State == VMStateStopped && (own.StoppedBy == stoppedByStartInterrupted || own.StoppedBy == stoppedByStartInterruptedRepeatedly) {
 			// The interrupted start may have run the guest from its memory
 			// snapshot; the next start cold boots.
-			r.discardStoppedSnapshotLocked(own, stoppedByStartInterrupted)
+			r.discardStoppedSnapshotLocked(own, own.StoppedBy)
+			if own.StoppedBy == stoppedByStartInterruptedRepeatedly {
+				// A start that keeps crashing vmctl is charged like a failure.
+				own.FailureWarmedAt = r.now().UTC().Format(time.RFC3339Nano)
+				own.failureWarmGen++
+			}
 		}
 		r.saveLocked()
 		r.mu.Unlock()
@@ -193,7 +270,15 @@ func (r *OwnershipRegistry) closeInterruptedStarts() {
 		if own != nil {
 			userID = own.UserID
 		}
-		log.Printf("vmctl: closed VM %s (user %s): its %s of epoch %d was interrupted by a vmctl restart (%s); stopped_by=%s, the next start boots fresh", vmID, userID, claim.Kind, claim.Epoch, ended, stoppedByStartInterrupted)
+		stoppedBy, interruptions := stoppedByStartInterrupted, 0
+		if own != nil {
+			stoppedBy, interruptions = own.StoppedBy, own.StartInterruptions
+		}
+		if stoppedBy == stoppedByStartInterruptedRepeatedly {
+			log.Printf("vmctl: closed VM %s (user %s): its %s of epoch %d was interrupted by a vmctl restart (%s), %d starts in a row; stopped_by=%s, the automatic retry is spent: the sweep leaves it for %s or the next deploy, an owner act boots it", vmID, userID, claim.Kind, claim.Epoch, ended, interruptions, stoppedBy, failureWarmWindow)
+			continue
+		}
+		log.Printf("vmctl: closed VM %s (user %s): its %s of epoch %d was interrupted by a vmctl restart (%s); stopped_by=%s, the next start boots fresh", vmID, userID, claim.Kind, claim.Epoch, ended, stoppedBy)
 	}
 }
 

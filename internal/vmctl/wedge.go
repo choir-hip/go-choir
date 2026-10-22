@@ -31,8 +31,13 @@ const (
 	// without spending the failure retry, and a deploy rescue charges it like
 	// a stop by a vmctl restart.
 	stoppedByStartInterrupted = "interrupted-by-vmctl-restart"
-	wedgedAfterDefault        = 5 * time.Minute
-	wedgeProbeTimeout         = 3 * time.Second
+	// stoppedByStartInterruptedRepeatedly marks the second consecutive start
+	// of the computer that a vmctl restart interrupted with no publish
+	// between: a start that keeps crashing vmctl. It is a failure: the close
+	// charges the automatic retry (boot_claim.go).
+	stoppedByStartInterruptedRepeatedly = "start-interrupted-repeatedly-by-vmctl-restart"
+	wedgedAfterDefault                  = 5 * time.Minute
+	wedgeProbeTimeout                   = 3 * time.Second
 )
 
 // guestAcceptsConnection reports whether the guest's service port accepts a

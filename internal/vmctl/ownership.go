@@ -139,6 +139,10 @@ type VMOwnership struct {
 	// that loads a row with an open claim closes the start; it never adopts
 	// it.
 	BootClaim *BootClaim `json:"boot_claim,omitempty"`
+	// StartInterruptions counts the consecutive starts of the computer a
+	// vmctl restart interrupted; a publish resets it. The second is
+	// stoppedByStartInterruptedRepeatedly (boot_claim.go).
+	StartInterruptions int `json:"start_interruptions,omitempty"`
 	// FailureWarmedAt is when the always-on sweep last spent its automatic
 	// retry on this computer after a wedged or recovery_failed stop. Interim
 	// bound until the boot ledger (restart station L1b).
@@ -1208,6 +1212,9 @@ const (
 	lifecycleRefresh   lifecycleHolder = "refresh"
 	lifecycleHibernate lifecycleHolder = "hibernate"
 	lifecycleRescue    lifecycleHolder = "deploy rescue"
+	// lifecyclePlatformWarm: the sweep's warm of the platform computer
+	// (platform_computer.go).
+	lifecyclePlatformWarm lifecycleHolder = "platform warm"
 )
 
 // errLifecycleBusy marks a refusal made because another path holds the
@@ -2087,7 +2094,7 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 				current.State = VMStateActive
 				current.LastActiveAt = time.Now()
 				current.StoppedBy = ""
-				current.BootClaim = nil
+				publishStartLocked(current)
 				r.saveLocked()
 				vmID := current.VMID
 				result := cloneOwnership(current)
@@ -2185,7 +2192,7 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 			current.State = VMStateActive
 			current.LastActiveAt = time.Now()
 			current.StoppedBy = ""
-			current.BootClaim = nil
+			publishStartLocked(current)
 			r.saveLocked()
 			waiters := r.pendingWaiters[key]
 			delete(r.pendingWaiters, key)
@@ -3086,7 +3093,7 @@ func (r *OwnershipRegistry) resumeVMForDesktop(userID, desktopID string, alwaysO
 	own.State = VMStateActive
 	own.LastActiveAt = time.Now()
 	own.StoppedBy = ""
-	own.BootClaim = nil
+	publishStartLocked(own)
 	r.saveLocked()
 	log.Printf("vmctl: started VM %s for user %s desktop %s (epoch=%d)", own.VMID, userID, own.DesktopID, own.Epoch)
 	ensureVMID = own.VMID
@@ -3167,6 +3174,13 @@ func (r *OwnershipRegistry) recoverVMForDesktop(userID, desktopID string, mainte
 
 	var info *VMInstanceInfo
 	if mgr != nil {
+		// No recovery spawns over the process of an interrupted start whose
+		// close is open, or over any process the manager does not track:
+		// both are ended only by the close or an explicit stop
+		// (boot_claim.go, review round 2, F2). The maintenance path too.
+		if err := r.refuseWhileCloseOpen(vmid, mgr); err != nil {
+			return nil, fmt.Errorf("recover VM %s: %w", vmid, err)
+		}
 		// Authorized maintenance recovery (the B14 replay-only drive) is an
 		// explicit operator path and stays exempt: refusing it would remove the
 		// evidence-gathering repair boot. Automatic recovery is gated.
@@ -3210,7 +3224,7 @@ func (r *OwnershipRegistry) recoverVMForDesktop(userID, desktopID string, mainte
 	own.State = VMStateActive
 	own.LastActiveAt = time.Now()
 	own.StoppedBy = ""
-	own.BootClaim = nil
+	publishStartLocked(own)
 	r.saveLocked()
 	log.Printf("vmctl: recovered VM %s for user %s desktop %s (new_epoch=%d, fresh-boot)", own.VMID, userID, own.DesktopID, own.Epoch)
 	ensureVMID = own.VMID
@@ -3341,7 +3355,7 @@ func (r *OwnershipRegistry) refreshVMForDesktop(userID, desktopID string, mainte
 	own.State = VMStateActive
 	own.LastActiveAt = time.Now()
 	own.StoppedBy = ""
-	own.BootClaim = nil
+	publishStartLocked(own)
 	r.saveLocked()
 	log.Printf("vmctl: refreshed VM %s for user %s desktop %s (new_epoch=%d, deploy-image-refresh)", own.VMID, userID, own.DesktopID, own.Epoch)
 	ensureVMID = own.VMID
@@ -3568,7 +3582,7 @@ type alwaysOnWarmTarget struct {
 const failureWarmWindow = 24 * time.Hour
 
 func stoppedByFailure(stoppedBy string) bool {
-	return stoppedBy == stoppedByWedged || stoppedBy == stoppedByRecoveryFailed
+	return stoppedBy == stoppedByWedged || stoppedBy == stoppedByRecoveryFailed || stoppedBy == stoppedByStartInterruptedRepeatedly
 }
 
 func failureWarmAllowed(lastWarmedAt string, now time.Time) bool {
@@ -3785,7 +3799,7 @@ func (r *OwnershipRegistry) rescueBoot(own VMOwnership, mgr VMManager) (*VMOwner
 	cur.State = VMStateActive
 	cur.LastActiveAt = time.Now()
 	cur.StoppedBy = ""
-	cur.BootClaim = nil
+	publishStartLocked(cur)
 	r.saveLocked()
 	log.Printf("vmctl: rescued VM %s for user %s desktop %s onto the current deploy (epoch=%d, crash boot)", cur.VMID, cur.UserID, cur.DesktopID, cur.Epoch)
 	result := cloneOwnership(cur)
@@ -3829,6 +3843,12 @@ func (r *OwnershipRegistry) markRecoveryFailed(vmID string) {
 
 // transientStartRefusal reports whether err is an admission refusal that
 // spawned nothing and clears by itself.
+// IsTransientStartRefusal reports a start refused before anything spawned
+// for a reason that clears by itself (host memory pressure, a live guest
+// still reattaching, an interrupted start's close still open, another start
+// in progress): the caller may retry.
+func IsTransientStartRefusal(err error) bool { return transientStartRefusal(err) }
+
 func transientStartRefusal(err error) bool {
 	if errors.Is(err, errLifecycleBusy) {
 		return true
