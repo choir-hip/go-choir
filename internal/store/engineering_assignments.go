@@ -945,6 +945,41 @@ func (s *Store) buildEngineeringLifecycleEvent(now time.Time, assignment types.E
 	return event, obj, err
 }
 
+// replaySameTerminalReportCommand answers a terminal report whose command id
+// is already committed under another digest. Two writers of one report (the
+// worker's Complete and the fate wake's resume of the staged proposal) share
+// the command id, because the report id derives from the proposition, but
+// carry different evidence. When this command committed this very
+// proposition, the request is the same report: it replays the committed
+// result. Anything else (a partial, another proposition, another command's
+// slot) is not answered here, and the caller keeps the conflict.
+func (s *Store) replaySameTerminalReportCommand(ctx context.Context, req types.RecordEngineeringAssignmentReportRequest) (types.EngineeringAssignmentCommandResult, bool, error) {
+	if req.Report.Result == types.EngineeringResultPartial {
+		return types.EngineeringAssignmentCommandResult{}, false, nil
+	}
+	assignment, err := s.GetEngineeringAssignment(ctx, req.OwnerID, req.ComputerID, req.AssignmentID, req.Attempt)
+	if err != nil {
+		return types.EngineeringAssignmentCommandResult{}, false, err
+	}
+	digest, err := ComputeTerminalPropositionDigest(assignment.Binding.SubjectDigest, req.Report.Result, req.Report.Verdict,
+		req.Report.Commands, req.Report.Outputs, req.Report.EvidenceRefs)
+	if err != nil {
+		return types.EngineeringAssignmentCommandResult{}, false, err
+	}
+	matchID, matchCommandID, _, err := s.SlotTerminalReport(ctx, assignment, digest)
+	if err != nil {
+		return types.EngineeringAssignmentCommandResult{}, false, err
+	}
+	if matchID == "" || matchID != strings.TrimSpace(req.Report.ReportID) || matchCommandID != req.CommandID {
+		return types.EngineeringAssignmentCommandResult{}, false, nil
+	}
+	replay, err := s.ReplayRecordedEngineeringAssignmentReport(ctx, req.OwnerID, req.ComputerID, req.AssignmentID, req.Attempt, matchID, matchCommandID)
+	if err != nil {
+		return types.EngineeringAssignmentCommandResult{}, false, err
+	}
+	return replay, true, nil
+}
+
 func (s *Store) replayEngineeringAssignmentCommand(ctx context.Context, ownerID, computerID, commandID, digest, assignmentID string, attempt uint64, reportID string) (types.EngineeringAssignmentCommandResult, bool, error) {
 	lifecycleResult, found, err := s.replayLifecycleCommand(ctx, ownerID, computerID, commandID, digest)
 	if !found || err != nil {
@@ -1776,6 +1811,13 @@ func (s *Store) RecordEngineeringAssignmentReport(ctx context.Context, req types
 	s.trajectoryMu.Lock()
 	defer s.trajectoryMu.Unlock()
 	if replay, found, err := s.replayEngineeringAssignmentCommand(ctx, req.OwnerID, req.ComputerID, req.CommandID, req.CommandDigest, req.AssignmentID, req.Attempt, req.Report.ReportID); found || err != nil {
+		if errors.Is(err, ErrLifecycleCommandConflict) {
+			if same, ok, sameErr := s.replaySameTerminalReportCommand(ctx, req); sameErr != nil {
+				return types.EngineeringAssignmentCommandResult{}, sameErr
+			} else if ok {
+				return same, nil
+			}
+		}
 		return replay, err
 	}
 	assignmentObj, assignment, err := s.getEngineeringAssignmentObject(ctx, req.OwnerID, req.ComputerID, req.AssignmentID, req.Attempt)

@@ -1263,7 +1263,7 @@ func (rt *Runtime) bindLateAssignmentExecutionReceipts(assignment types.Engineer
 	}
 	receipts, err := resolver.ResolveExecutionReceipts(refs)
 	if err != nil || len(receipts) != len(refs) {
-		return report, fmt.Errorf("late assignment raw execution evidence unavailable: %w", err)
+		return report, executionEvidenceCountError("late assignment raw execution evidence unavailable", len(refs), len(receipts), err)
 	}
 	seen := map[string]bool{}
 	for i, receipt := range receipts {
@@ -1370,7 +1370,7 @@ func (rt *Runtime) bindFrozenAssignmentExecutionReceipts(ctx context.Context, as
 	binding := assignmentSubjectBinding(report.Result)
 	receipts, err := rt.capsuleExecutor.ResolveGrantedExecutionReceiptsFor(ctx, assignment.BoundRunID, handle, refs, binding)
 	if err != nil || len(receipts) != len(refs) {
-		return report, fmt.Errorf("assignment command evidence unavailable after durable freeze: %w", err)
+		return report, executionEvidenceCountError("assignment command evidence unavailable after durable freeze", len(refs), len(receipts), err)
 	}
 	seen := map[string]bool{}
 	for i, receipt := range receipts {
@@ -1393,6 +1393,16 @@ func (rt *Runtime) bindFrozenAssignmentExecutionReceipts(ctx context.Context, as
 	return report, nil
 }
 
+// executionEvidenceCountError names why cited execution evidence did not
+// resolve one receipt per ref: the resolver's error, or the counts when it
+// returned none (a nil %w printed "%!w(<nil>)" and named no cause).
+func executionEvidenceCountError(what string, refs, receipts int, err error) error {
+	if err != nil {
+		return fmt.Errorf("%s: %w", what, err)
+	}
+	return fmt.Errorf("%s: %d cited refs resolved to %d receipts", what, refs, receipts)
+}
+
 func (rt *Runtime) commitAssignedEngineeringReport(ctx context.Context, assignment types.EngineeringAssignment, report types.EngineeringAssignmentReport) (types.EngineeringAssignmentCommandResult, error) {
 	if report.Result == types.EngineeringResultPartial {
 		refs := make([]string, 0, len(report.Commands))
@@ -1402,7 +1412,7 @@ func (rt *Runtime) commitAssignedEngineeringReport(ctx context.Context, assignme
 		if len(refs) > 0 {
 			receipts, err := rt.capsuleExecutor.ResolveExecutionReceipts(refs)
 			if err != nil || len(receipts) != len(refs) {
-				return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("partial assignment command evidence unavailable: %w", err)
+				return types.EngineeringAssignmentCommandResult{}, executionEvidenceCountError("partial assignment command evidence unavailable", len(refs), len(receipts), err)
 			}
 			for i, receipt := range receipts {
 				if receipt.CapsuleID != assignment.Binding.CapsuleID || objectgraph.SHA256([]byte(receipt.Command)) != report.Commands[i].CommandDigest {
