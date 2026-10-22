@@ -197,6 +197,14 @@ func TestEventTableBootPathAddsOnlyTheDDL(t *testing.T) {
 			}
 		}
 	}
+	// Deploy 2: Open's one statement on choir_events is the floor probe, one
+	// row by primary key (review finding A), never a scan.
+	if eventTableAnyRowSQL != `SELECT 1 FROM choir_events LIMIT 1` {
+		t.Fatalf("Open's floor probe is %q; it must read one row", eventTableAnyRowSQL)
+	}
+	if !mentionsIdent(files["store.go"], "ensureEventTableFloor") {
+		t.Fatal("Open no longer floors a workspace whose choir_events has rows")
+	}
 	for _, m := range runtimeColumnMigrations {
 		if m.table == choirEventsTable {
 			t.Fatal("deploy 1 adds no column migration to choir_events: its DDL is frozen (section 2.3)")

@@ -218,6 +218,12 @@ type Store struct {
 	// It runs inside the dry run's transaction: a hook that did store I/O
 	// would block on the embedded connection.
 	dryRunPositionHook func(pos uint64)
+	// eventTableDecodeHook, set only by tests, runs after a choir_events
+	// half released the engine mutex and before it decodes (findings B, F).
+	eventTableDecodeHook func(op string)
+	// eventUnionHook, set only by tests, runs between the halves of a union
+	// read: stage "after_object_graph" (finding G).
+	eventUnionHook func(stage string)
 }
 
 type eventSeqKey struct{ runID, ownerID string }
@@ -787,6 +793,13 @@ func Open(dbPath string) (*Store, error) {
 		return nil, fmt.Errorf("runtime store: open unified Dolt workspace: %w", err)
 	}
 
+	// The store floor (storeschema/floor.go): a binary below it never opens
+	// the store, and refuses before any DDL or receipt write.
+	if err := storeschema.CheckFloor(workspacePath); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+
 	readDB := sql.OpenDB(connector)
 	configureEmbeddedDoltDB(readDB)
 
@@ -852,6 +865,13 @@ func Open(dbPath string) (*Store, error) {
 	// stale-binary failure class.
 	doneEpoch := objectgraph.BootPhase("store: open", "store-schema-epoch")
 	if err := storeschema.Write(workspacePath); err != nil {
+		doneEpoch(err)
+		_ = s.Close()
+		return nil, err
+	}
+	// A workspace holding stamped events (a replay or base install into a
+	// fresh workspace) is floored here; a one-row probe, not a scan.
+	if err := s.ensureEventTableFloor(); err != nil {
 		doneEpoch(err)
 		_ = s.Close()
 		return nil, err
@@ -1118,6 +1138,14 @@ func (s *Store) Reopen(path string) error {
 	*live = Store{}
 	s.closedOK = false
 	s.reopenCheckpoint()
+	// The writer's switch survives a reopen; the adopted workspace (a restore
+	// or base install) may carry no floor, so it gets one before any stamp.
+	if s.eventTableWrites.Load() {
+		if err := s.writeEventTableFloor(); err != nil {
+			s.eventTableWrites.Store(false)
+			log.Printf("runtime store: reopen: event-table writer off: %v", err)
+		}
+	}
 	return nil
 }
 
@@ -2331,6 +2359,11 @@ func (s *Store) ListEventsAfter(ctx context.Context, runID string, afterSeq int6
 	if limit <= 0 {
 		limit = 200
 	}
+	query, args := eventTableRunAfterSQL(runID, afterSeq, limit)
+	first, err := s.readEventTable(ctx, "store.event_table.list_run_after", query, args)
+	if err != nil {
+		return nil, err
+	}
 	// Fetch a large window since ogListByMetadata orders by updated_at
 	// DESC, not by seq. We need all events to filter by seq and sort.
 	objs, err := s.ogListByMetadata(ctx, ogKindEvent, "run_id", runID, 100000)
@@ -2347,11 +2380,14 @@ func (s *Store) ListEventsAfter(ctx context.Context, runID string, afterSeq int6
 			kept = append(kept, e)
 		}
 	}
-	query, args := eventTableRunAfterSQL(runID, afterSeq, limit)
-	table, err := s.readEventTable(ctx, "store.event_table.list_run_after", query, args)
+	if s.eventUnionHook != nil {
+		s.eventUnionHook("after_object_graph")
+	}
+	again, err := s.readEventTable(ctx, "store.event_table.list_run_after", query, args)
 	if err != nil {
 		return nil, err
 	}
+	table := cursorTableHalf(first, kept, again, func(r types.EventRecord) int64 { return r.Seq }, afterSeq)
 	events := unionEvents(kept, table)
 	sort.Slice(events, func(i, j int) bool {
 		if events[i].rec.Seq != events[j].rec.Seq {
@@ -2409,6 +2445,11 @@ func (s *Store) ListEventsByOwnerAfter(ctx context.Context, ownerID string, afte
 	if limit <= 0 {
 		limit = 200
 	}
+	query, args := eventTableOwnerAfterSQL(ownerID, afterSeq, limit)
+	first, err := s.readEventTable(ctx, "store.event_table.list_owner_after", query, args)
+	if err != nil {
+		return nil, err
+	}
 	// Fetch a large window since ListObjects orders by updated_at DESC,
 	// not by stream_seq. We need all events to filter by stream_seq and
 	// then apply the caller's limit.
@@ -2430,11 +2471,14 @@ func (s *Store) ListEventsByOwnerAfter(ctx context.Context, ownerID string, afte
 			kept = append(kept, e)
 		}
 	}
-	query, args := eventTableOwnerAfterSQL(ownerID, afterSeq, limit)
-	table, err := s.readEventTable(ctx, "store.event_table.list_owner_after", query, args)
+	if s.eventUnionHook != nil {
+		s.eventUnionHook("after_object_graph")
+	}
+	again, err := s.readEventTable(ctx, "store.event_table.list_owner_after", query, args)
 	if err != nil {
 		return nil, err
 	}
+	table := cursorTableHalf(first, kept, again, func(r types.EventRecord) int64 { return r.StreamSeq }, afterSeq)
 	events := unionEvents(kept, table)
 	sort.Slice(events, func(i, j int) bool { return events[i].rec.StreamSeq < events[j].rec.StreamSeq })
 	return eventRecords(events, limit), nil
