@@ -132,6 +132,27 @@ type ownershipResponse struct {
 	// release, tree, event head, CodeRef. Shown beside construction_version,
 	// never merged into it.
 	ReportedRelease *ReportedRelease `json:"reported_release,omitempty"`
+	// The wake-orphan fix's row fields (boot_claim.go), for the operator:
+	// an open start's claim, the consecutive interrupted starts, and when
+	// the automatic failure retry was last spent. Read-only.
+	BootClaim          *bootClaimResponse `json:"boot_claim,omitempty"`
+	StartInterruptions int                `json:"start_interruptions,omitempty"`
+	FailureWarmedAt    string             `json:"failure_warmed_at,omitempty"`
+}
+
+// bootClaimResponse is a copy of a row's open BootClaim, so the answer
+// never shares the registry's pointer.
+type bootClaimResponse struct {
+	Kind      string `json:"kind"`
+	Epoch     int64  `json:"epoch"`
+	ClaimedAt string `json:"claimed_at,omitempty"`
+}
+
+func bootClaimResponseFor(claim *BootClaim) *bootClaimResponse {
+	if claim == nil {
+		return nil
+	}
+	return &bootClaimResponse{Kind: claim.Kind, Epoch: claim.Epoch, ClaimedAt: claim.ClaimedAt}
 }
 
 type reclaimResponse struct {
@@ -491,6 +512,9 @@ func (h *Handler) HandleLookup(w http.ResponseWriter, r *http.Request) {
 		DataImage:          dataImage,
 		MemoryPeakRSSBytes: own.MemoryPeakRSSBytes,
 		MemoryMeasuredAt:   own.MemoryMeasuredAt,
+		BootClaim:          bootClaimResponseFor(own.BootClaim),
+		StartInterruptions: own.StartInterruptions,
+		FailureWarmedAt:    own.FailureWarmedAt,
 	})
 }
 
@@ -995,6 +1019,9 @@ func (h *Handler) listOwnershipResponses(ctx context.Context) ([]ownershipRespon
 			MemoryPeakRSSBytes:        own.MemoryPeakRSSBytes,
 			MemoryMeasuredAt:          own.MemoryMeasuredAt,
 			ReportedRelease:           own.ReportedRelease,
+			BootClaim:                 bootClaimResponseFor(own.BootClaim),
+			StartInterruptions:        own.StartInterruptions,
+			FailureWarmedAt:           own.FailureWarmedAt,
 		})
 		h.fillMemoryFields(&result[len(result)-1], own, rss)
 	}
