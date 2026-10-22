@@ -101,7 +101,7 @@ func TestHealthStoreStallLogsTheEngineHolderOncePerMinute(t *testing.T) {
 	if !strings.Contains(all, "choir=internal/agentcore.holdWriteConnInEngine") {
 		t.Fatalf("no holder line names the choir caller holdWriteConnInEngine:\n%s", all)
 	}
-	if !strings.Contains(all, "dolthub/") {
+	if !strings.Contains(all, "engine=go-mysql-server/") && !strings.Contains(all, "engine=dolt/") && !strings.Contains(all, "engine=driver/") {
 		t.Fatalf("holder lines carry no engine frame:\n%s", all)
 	}
 	for _, line := range holders {
@@ -166,9 +166,10 @@ func TestObservabilityReportsStorePoolStats(t *testing.T) {
 }
 
 // The filter and the bounds, on a synthetic dump: an engine goroutine with a
-// choir caller is listed first with its choir frame and its first two engine
+// choir caller is listed with its choir frame and its first two engine
 // frames; one parked in (*DB).conn is not; one with no engine frame is not;
-// at most storeStallHolderMax lines.
+// the engine's own background goroutine (no choir frame or creator) is
+// counted but not listed; at most storeStallHolderMax lines.
 func TestStoreStallHolderLinesFilterAndBound(t *testing.T) {
 	engine := `goroutine 7 [select]:
 github.com/dolthub/go-mysql-server/sql/expression/function.(*Sleep).Eval(0xc000, {0x1, 0x2})
@@ -199,15 +200,12 @@ created by github.com/dolthub/dolt/go/store/nbs.newJournal in goroutine 1
 github.com/yusefmosiah/go-choir/internal/agentcore.(*Runtime).loop(0xc000)
 	/r/internal/agentcore/runtime.go:10 +0x1`
 	lines, matched := storeStallHolderLines(strings.Join([]string{background, engine, parked, plain}, "\n\n"))
-	if matched != 2 || len(lines) != 2 {
-		t.Fatalf("matched=%d lines=%q, want the engine goroutine and the background one", matched, lines)
+	if matched != 2 || len(lines) != 1 {
+		t.Fatalf("matched=%d lines=%q, want two engine goroutines matched and the choir one shown", matched, lines)
 	}
 	want := "store_stalled holder g=7 [select] choir=internal/store.(*Store).finalizeBatch engine=go-mysql-server/sql/expression/function.(*Sleep).Eval < go-mysql-server/sql/rowexec.(*projectIter).Next"
 	if lines[0] != want {
 		t.Fatalf("first line\n got %q\nwant %q", lines[0], want)
-	}
-	if !strings.Contains(lines[1], "g=9") || !strings.Contains(lines[1], "choir=- ") {
-		t.Fatalf("background engine goroutine line = %q", lines[1])
 	}
 
 	var many []string

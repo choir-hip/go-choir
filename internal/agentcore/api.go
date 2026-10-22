@@ -684,6 +684,11 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 			stalled.LayeringBootguard = guard
 		}
 		writeAPIJSON(w, http.StatusServiceUnavailable, stalled)
+		// After the answer, never before it: name who holds the connection
+		// while it is still held, at most once a minute.
+		if h.rt.storeStall.allow(time.Now()) {
+			go h.rt.logStoreStallHolders(reads.unanswered)
+		}
 		return
 	}
 
@@ -827,6 +832,10 @@ type guestObservabilityResponse struct {
 	// with ages: a store call that never returns shows here, where the
 	// cumulative stats above record a wait only after it ends.
 	EngineMutexLive *objectgraph.EngineMutexLive `json:"engine_mutex_live,omitempty"`
+	// StorePools is the store's write and read pools' sql.DBStats (one
+	// connection each): how often and how long callers waited for the
+	// connection since boot, the load behind /health's store_stalled 503s.
+	StorePools *store.PoolStats `json:"store_pools,omitempty"`
 	// Steps is the named steps of long operations (a cell, a Complete's
 	// terminal saga, the executor's freeze and teardown) running now with
 	// their start times, and the last finished ones: where a hung Complete
@@ -988,6 +997,7 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 	if h.rt.store != nil {
 		resp.EngineMutex = h.rt.store.EngineMutexStats()
 		resp.EngineMutexLive = h.rt.store.EngineMutexLive()
+		resp.StorePools = h.rt.store.PoolStats()
 		telemetry := h.rt.store.TelemetryStats()
 		resp.TelemetryBatching = &telemetry
 		checkpoint := h.rt.store.CheckpointStats()

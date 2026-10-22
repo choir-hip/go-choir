@@ -241,8 +241,11 @@ type Runtime struct {
 	assignmentLookup interface {
 		GetEngineeringAssignment(context.Context, string, string, string, uint64) (types.EngineeringAssignment, error)
 	}
-	assignmentRuntime     assignmentCapsuleRuntime
-	bootLog               *bootLogRing
+	assignmentRuntime assignmentCapsuleRuntime
+	bootLog           *bootLogRing
+	// storeStall rate-limits /health's store_stalled holder log
+	// (api_health_stall_holder.go).
+	storeStall            storeStallCapture
 	capsuleBuilder        *transaction.TransactionBuilder
 	eventAppender         *computerevent.ComputerEventAppender
 	selfdevOperations     *selfdev.Store
