@@ -4,9 +4,13 @@ For RES-04 (capsule memory per doctrine,
 `internal/capsule/capsule_memory.go`): the numbers the request and the
 ceiling should be set from. The problem record is
 `docs/problems/capsule-release-build-runs-at-the-2gib-ceiling-2026-10-22.md`;
-the fix is fd8337941 (lane/fp4-capsule-memory).
+the fix is fd8337941 and c68c49a99 (lane/fp4-capsule-memory).
 
-## Deployed receipts (observe policy, deploy Q, test computer 71afbf14)
+Status: the receipts below are deployed, from before the fix. The
+measurement of the fix is local only. **The deployed proof of the fix is
+pending**: the FP4 drill re-run on 71afbf14, last section.
+
+## Deployed receipts, before the fix (observe policy, deploy Q, test computer 71afbf14)
 
 | capsule | work | request = admitted = max | peak | events high / max / oom / oom_kill | doctrine_would_throttle |
 |---|---|---|---|---|---|
@@ -17,7 +21,7 @@ the fix is fd8337941 (lane/fp4-capsule-memory).
 `peak` is `memory.peak`, which counts page cache. Receipts do not yet
 separate anonymous memory from page cache.
 
-## Local measurement (capsule-shaped scope, cold cache, ./cmd/autoputer at 71ec8e704)
+## Local measurement, not deployed (capsule-shaped scope, cold cache, ./cmd/autoputer at 71ec8e704)
 
 `systemd-run --user --scope -p MemoryMax=2G -p MemorySwapMax=0
 -p CPUQuota=100%`, fresh `GOCACHE`, warm module cache, 1,420 packages.
@@ -52,9 +56,9 @@ Script: a 0.5 s sampler of `memory.stat` `anon` beside `time -v go build`.
   writable cache lets one capsule poison another's builds, so it needs its
   own design (red). That is a residual.
 
-## Deployed proof (FP0's; on test computer 71afbf14 only)
+## Deployed proof: pending (FP0's; on test computer 71afbf14 only)
 
-After fd8337941 is deployed and `/health` on 71afbf14 reports it:
+Not yet run. After c68c49a99 is deployed and `/health` on 71afbf14 reports it:
 
 1. Precondition: no self-development operation is open (`choir self-dev
    head`).
