@@ -52,9 +52,14 @@ type DamonReclaim struct {
 
 // PageReporting is free page reporting's one parameter: free blocks of at
 // least this order (in pages, as a power of two) are reported to the host.
-// The kernel holds -1 until a reporting device (the balloon with
-// VIRTIO_BALLOON_F_REPORTING) registers and sets it, so Registered is false
-// and nothing is being reported while it reads -1.
+// The kernel holds -1 until a reporting device registers and sets it, but
+// the page_reporting.page_reporting_order boot argument sets it with no
+// device, so a non-negative order proves nothing. Registered is true only
+// when the order is set and the virtio balloon is bound with
+// VIRTIO_BALLOON_F_REPORTING negotiated: virtio_balloon's probe registers
+// page reporting when that feature is negotiated and fails (leaving no
+// bound device) when registration fails. The balloon is the only reporting
+// device a Firecracker guest has.
 type PageReporting struct {
 	Present    bool   `json:"present"`
 	Order      *int64 `json:"order,omitempty"`
@@ -100,13 +105,15 @@ func readMemoryReturn(sysRoot, procRoot string, pageKiB int64) MemoryReturn {
 
 	out.DamonReclaim = readDamonReclaim(sysRoot, procRoot, note)
 
+	out.Balloon = readBalloonDriver(sysRoot, note)
+
 	if v, ok, err := readSysInt(filepath.Join(sysRoot, "module/page_reporting/parameters/page_reporting_order")); err != nil {
 		note(err)
 	} else if ok {
-		out.PageReporting = PageReporting{Present: true, Order: &v, Registered: v >= 0 && v < 64}
+		b := out.Balloon
+		reporting := b.Bound && b.Reporting != nil && *b.Reporting
+		out.PageReporting = PageReporting{Present: true, Order: &v, Registered: reporting && v >= 0 && v < 64}
 	}
-
-	out.Balloon = readBalloonDriver(sysRoot, note)
 
 	if vm, err := readVmstat(filepath.Join(procRoot, "vmstat")); err != nil {
 		if !errors.Is(err, fs.ErrNotExist) {
