@@ -359,7 +359,7 @@ Pass:
 | Drill `snap` | both stores `found=1` | passed 2026-10-21 |
 | Drill `tape` | 200 of 200 identical, both sqlite `integrity=ok` | passed 2026-10-20 |
 | Verify | `Result=success`, `last_verify_result: ok`, `MemorySwapPeak` 0, `MemoryPeak` under 12 GiB | 10.3 GB + 4 GB swap (item 18, as the daily check) |
-| status.json on a failure | `last_*_result: failed` with `last_*_cause`, never a stale `ok` or `running` | a kill left the previous `ok` |
+| status.json on a failure | `last_*_result: failed` with `last_*_cause`; never a stale `ok`; `running` only while its process lives (otherwise freshness flags it); valid JSON with both units' keys when backup and verify overlap (round 3) | a kill left the previous `ok` |
 
 If the run is OOM-killed at 12G (the conjecture is wrong: the live set is
 above 10 GB): read the "Consumed" CPU line (the collector at its cap shows
@@ -398,7 +398,10 @@ script tests passing). Fixed in e025d9121 unless stated.
 
 1. **Medium: a killed run left `last_attempt_result` at the previous
    `ok`.** Fixed. Backup and verify write `last_<kind>_result: running`
-   (with `_run`, `_pid`, an empty `_cause`) before any work. A non-zero
+   (with `_run`, `_pid`, an empty `_cause`) after only the tool preflight
+   (`need`), the exit trap and, for verify, `install -d` of its run
+   directory; before the disk guard, the tunnel or any restic call
+   (corrected in round 3). A non-zero
    restic exit writes `failed` with a cause ("restic killed by signal 9
    (KILL: a cgroup OOM kill sends this)"). The EXIT trap, with TERM, INT
    and HUP traps, turns this run's `running` into `failed`, "interrupted
@@ -443,6 +446,34 @@ script tests passing). Fixed in e025d9121 unless stated.
    it (`scanner.go:126-130`), so its memory is a transient slice the size
    of the largest directory (about 0.4 GB), not O(1). `--no-scan` saves
    that and a second 9.7 M-file `lstat` walk, not the heap peak.
+
+## Review round 3 (panel bunch 32), dispositions
+
+Gemini flash and DeepSeek accept with edits; Devin pending at writing.
+
+1. **Medium-low: status writers were not serialized.** Fixed in
+   f7c963c81, test first in d36ff175d. The daily backup and the weekly
+   verify are separate units and can overlap, and both now write at
+   start, end and exit; `status_merge` was an unlocked read-modify-write
+   through one fixed `status.json.tmp`. It now holds `flock` on
+   `status.json.lock` beside the file only around the read-merge-write
+   (never across restic; after 60 s it writes without the lock and logs
+   it), and writes through its own `mktemp` in the same directory before
+   the rename; a failed merge removes its temp.
+   `scripts/off-host-backup-status-lock-test.sh` runs the script's own
+   status-file section with two concurrent writers of 60 keys each: 61 of
+   120 keys survived before the fix; 120 of 120, valid JSON, no temp left
+   after (5 of 5 repeats).
+2. **Low: the attempt-status test's mode 4 assumed `/proc`.** Fixed in
+   the script, not the test: freshness reads the recorded pid's command
+   line from `/proc/<pid>/cmdline` and falls back to `ps -p <pid> -o
+   args=` where there is none (darwin). On Linux the `/proc` path is the
+   one the tests exercise; the fallback runs only off Linux and was not
+   run here.
+3. **Low: "before anything else" overstated.** Corrected in finding 1 of
+   round 2 above and in the script's comment: the mark follows the tool
+   preflight, the exit trap and (verify) `install -d`, and precedes the
+   disk guard, the tunnel and every restic call.
 
 ## Heresy delta
 
