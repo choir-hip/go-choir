@@ -75,7 +75,7 @@ What each reader does with a row whose numbers are zero:
 
 | Reader | Behavior | Evidence |
 |---|---|---|
-| `GET /api/runs/{id}/events?after=N` (`handleRunEvents`, `internal/agentcore/api_run_events.go:73`), through `ListEventsAfter` (`store.go:2294`) | **Vanishes** for every cursor, including `after=0`: the filter is `rec.Seq <= afterSeq` (`:2314`), and `0 <= 0` | [V] [M] |
+| `GET /api/runs/{id}/events?after=N` (`handleRunEvents`, `internal/agentcore/api_run_events.go:73`), through `ListEventsAfter` (`store.go:2294`) | **Vanishes** for every cursor, including `after=0`: the filter is `rec.Seq <= afterSeq` (`:2311`), and `0 <= 0` | [V] [M] |
 | `choir trace` `run_events` layer (`cmd/choir/trace.go:326-361`), which pages that route from `after=0` | **Vanishes**. The bundle has no `run.started`/`run.completed` lines, and nothing marks the gap | [V] [M] |
 | Legacy `GET /api/internal/runs/{id}/events` (`internal/agentcore/api.go:437`) and run memory (`run_memory.go:437`), through `ListEvents` (`ListEventsAfter(0)`) | **Vanishes** | [V] |
 | WebSocket catch-up `GET /api/ws?after_seq=` (`live_ws.go:79`), through `ListEventsByOwnerAfter` (`store.go:2357-2384`, filter `StreamSeq <= afterSeq`) | **Vanishes**. A reconnecting client misses every run-state event written while it was away. Catch-up only runs when `after_seq > 0` (`:78`), and the cursor is the highest `stream_seq` seen (`Desktop.svelte:987`, `:1031`) | [V] [M] |
