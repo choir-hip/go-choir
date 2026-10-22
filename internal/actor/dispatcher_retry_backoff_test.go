@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -183,4 +184,86 @@ func TestDispatcherRetryBackoffHoldsOnlyTheFailingMailboxInOrder(t *testing.T) {
 	if len(aOrder) != 3 || aOrder[0] != "a1" || aOrder[1] != "a1" || aOrder[2] != "a2" {
 		t.Fatalf("agent-a deliveries = %v, want [a1 a1 a2]: a2 must not run past the failed a1", aOrder)
 	}
+}
+
+// countingLog counts the loop's two projection reads.
+type countingLog struct {
+	*SQLiteLog
+	pending atomic.Int64
+	nextDue atomic.Int64
+}
+
+func (c *countingLog) PendingAgents(ctx context.Context, now time.Time) ([]string, error) {
+	c.pending.Add(1)
+	return c.SQLiteLog.PendingAgents(ctx, now)
+}
+
+func (c *countingLog) NextDue(ctx context.Context, now time.Time) (time.Time, bool, error) {
+	c.nextDue.Add(1)
+	return c.SQLiteLog.NextDue(ctx, now)
+}
+
+// Review round 2, R2-1 (bunch 79): a hold that ends while its mailbox has
+// no slot must not spin Run. With the only slot busy past agent-a's hold,
+// the loop reads the projection at its poll (250 ms: about 8 in 2 s), not
+// thousands of times (8,055 measured on 4f003dccb).
+func TestDispatcherExpiredHoldWithNoSlotDoesNotSpin(t *testing.T) {
+	l := &countingLog{SQLiteLog: openKernelLog(t)}
+	ctx := context.Background()
+	var aDeliveries atomic.Int32
+	aFailed := make(chan struct{}, 1)
+	xStarted := make(chan struct{}, 1)
+	release := make(chan struct{})
+	h := HandlerFunc(func(ctx context.Context, agentID string, u Update, memory []byte) ([]byte, error) {
+		switch u.UpdateID {
+		case "a1":
+			if aDeliveries.Add(1) == 1 {
+				aFailed <- struct{}{}
+				return memory, fmt.Errorf("transient")
+			}
+		case "x1":
+			xStarted <- struct{}{}
+			<-release
+		}
+		return memory, nil
+	})
+	d := NewDispatcher(l, h, DispatcherOptions{PollInterval: 250 * time.Millisecond, MaxAttempts: 8, ErrorSink: "error-sink", MaxConcurrent: 1})
+	go d.Run(ctx)
+	defer d.Stop()
+	released := false
+	defer func() {
+		if !released {
+			close(release)
+		}
+	}()
+
+	if _, err := l.Append(ctx, mkUpdate("a1", "agent-a")); err != nil {
+		t.Fatal(err)
+	}
+	d.Notify()
+	select {
+	case <-aFailed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("a1 never delivered")
+	}
+	if _, err := l.Append(ctx, mkUpdate("x1", "agent-x")); err != nil {
+		t.Fatal(err)
+	}
+	d.Notify()
+	select {
+	case <-xStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("x1 never took the slot")
+	}
+	time.Sleep(300 * time.Millisecond) // agent-a's hold (125 to 250 ms) has ended; x1 holds the only slot
+	p0, n0 := l.pending.Load(), l.nextDue.Load()
+	time.Sleep(2 * time.Second)
+	p, n := l.pending.Load()-p0, l.nextDue.Load()-n0
+	if p > 100 || n > 100 {
+		t.Fatalf("with the only slot busy and agent-a's hold ended, the loop read PendingAgents %d and NextDue %d times in 2 s (want about 8: the 250 ms poll)", p, n)
+	}
+	// The expired hold is gone, so agent-a runs as soon as the slot frees.
+	close(release)
+	released = true
+	waitProcessed(t, l.SQLiteLog, "agent-a", "a1", 5*time.Second)
 }
