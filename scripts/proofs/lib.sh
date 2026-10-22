@@ -223,15 +223,17 @@ vmctl_get() {
 	node_b_q "choir_internal_curl '$PROOF_VMCTL$1' -fsS --max-time 30"
 }
 
-# vmctl_build_identity: "COMMIT SERVICE" of the running vmctl, from the
-# X-Choir-Build-Commit and X-Choir-Build-Service headers that
+# vmctl_build_identity: "COMMIT SERVICE STATUS" of the running vmctl, from
+# the X-Choir-Build-Commit and X-Choir-Build-Service headers that
 # server.WithBuildIdentity (internal/server/server.go) sets on every
-# response; the deploy reads the same header for vmctl's activation receipt
+# response, and the HTTP status of :8083/health; the deploy reads the same
+# header and status for vmctl's activation receipt
 # (.github/scripts/node-b-ci-deploy). The /health body has no build field.
-# A missing header prints "-" in its place.
+# The headers come on any status (a 401 too), so callers require a 2xx
+# STATUS (R6-4). A missing value prints "-" in its place.
 vmctl_build_identity() {
-	node_b_q "choir_internal_curl '$PROOF_VMCTL/health' -sS --max-time 15 -D - -o /dev/null" |
-		awk '{ gsub(/\r/, "") } tolower($1) == "x-choir-build-commit:" { c = $2 } tolower($1) == "x-choir-build-service:" { s = $2 } END { printf "%s %s\n", (c == "" ? "-" : c), (s == "" ? "-" : s) }'
+	node_b_q "choir_internal_curl '$PROOF_VMCTL/health' -sS --max-time 15 -D - -o /dev/null -w '\\nX-Choir-Probe-Status: %{http_code}\\n'" |
+		awk '{ gsub(/\r/, "") } tolower($1) == "x-choir-build-commit:" { c = $2 } tolower($1) == "x-choir-build-service:" { s = $2 } tolower($1) == "x-choir-probe-status:" { h = $2 } END { printf "%s %s %s\n", (c == "" ? "-" : c), (s == "" ? "-" : s), (h == "" ? "-" : h) }'
 }
 
 # vmctl_post PATH JSON LIFECYCLE_CALLER: a state-changing POST. Prints the

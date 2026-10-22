@@ -87,15 +87,16 @@ step_0() {
 step_1() {
 	local plan
 	fp3_target
-	local commit service
-	# vmctl's identity is its X-Choir-Build-Commit header, not a body field (R5-3).
-	read -r commit service < <(vmctl_build_identity)
-	commit=${commit:--} service=${service:--}
-	info "vmctl identity: X-Choir-Build-Commit=$commit X-Choir-Build-Service=$service"
+	local commit service status
+	# vmctl's identity is its X-Choir-Build-Commit header, not a body field
+	# (R5-3), on a 2xx answer (R6-4).
+	read -r commit service status < <(vmctl_build_identity)
+	commit=${commit:--} service=${service:--} status=${status:--}
+	info "vmctl identity: X-Choir-Build-Commit=$commit X-Choir-Build-Service=$service status=$status"
 	if [ -n "${OPT_t1:-}" ] && [ "$PROOF_DRY" != 1 ]; then
-		case "$service:$commit" in
-		vmctl:"$OPT_t1"*) pass "vmctl's build header names T1 ${OPT_t1}" ;;
-		*) fail "vmctl's build header does not name T1 ${OPT_t1} (commit=$commit service=$service)" ;;
+		case "$service:$status:$commit" in
+		vmctl:2[0-9][0-9]:"$OPT_t1"*) pass "vmctl's build header names T1 ${OPT_t1} (status=$status)" ;;
+		*) fail "vmctl's build header does not name T1 ${OPT_t1} (commit=$commit service=$service status=$status)" ;;
 		esac
 	fi
 	plan=$(vmctl_get /internal/vmctl/deploy-refresh)
