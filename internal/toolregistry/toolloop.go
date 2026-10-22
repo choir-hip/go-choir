@@ -490,19 +490,26 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 		}
 		forceInitialToolChoiceRetry = false
 
+		// The request-side line is published on the bus and not appended
+		// (journal cut R1, types.LiveOnly); what a reader of the pair used
+		// to take from it rides the response line below.
+		lastUserText := extractLastUserMessage(messages)
+		systemSHA256 := toolOutputSHA256Hex(systemPrompt)
+		lastUserSHA256 := toolOutputSHA256Hex(lastUserText)
+		callMessages, callTools := len(messages), len(req.ToolDefinitions)
+		callStarted := time.Now()
 		if emit != nil {
-			lastUserText := extractLastUserMessage(messages)
 			preCallPayload, _ := json.Marshal(map[string]any{
 				"iteration":            i + 1,
 				"phase":                "provider_call_started",
-				"messages":             len(messages),
-				"tools":                len(req.ToolDefinitions),
+				"messages":             callMessages,
+				"tools":                callTools,
 				"tool_names":           toolDefinitionNames(req.ToolDefinitions),
 				"system_chars":         len(systemPrompt),
-				"system_sha256":        toolOutputSHA256Hex(systemPrompt),
+				"system_sha256":        systemSHA256,
 				"system_preview":       truncatePromptSnippet(systemPrompt, 2000),
 				"last_user_chars":      len(lastUserText),
-				"last_user_sha256":     toolOutputSHA256Hex(lastUserText),
+				"last_user_sha256":     lastUserSHA256,
 				"last_user_text":       truncatePromptSnippet(lastUserText, 4000),
 				"message_roles":        toolLoopMessageRoles(messages),
 				"max_tokens":           req.MaxTokens,
@@ -513,7 +520,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 				"tool_choice":          req.ToolChoice,
 				"model_policy":         "run_metadata",
 			})
-			emit(types.EventRunProgress, "provider_call", preCallPayload)
+			emit(types.EventRunProgress, types.ProgressPhaseProviderCall, preCallPayload)
 		}
 
 		// Call the LLM with current conversation state. Required continuation
@@ -674,6 +681,14 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 			// it at all (llmcost prices and rates only reported calls).
 			"cached_input_tokens": resp.Usage.CachedInputTokens,
 			"cache_reported":      resp.Usage.CacheReported,
+			// What the request-side line gave a reader of the pair: how long
+			// the call took (retries included), the request's shape, and the
+			// hashes that show the prompt prefix changed between turns.
+			"provider_call_ms": time.Since(callStarted).Milliseconds(),
+			"messages":         callMessages,
+			"tools":            callTools,
+			"system_sha256":    systemSHA256,
+			"last_user_sha256": lastUserSHA256,
 		})
 		emit(types.EventRunProgress, "tool_loop", progressPayload)
 
