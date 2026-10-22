@@ -147,3 +147,52 @@ func TestObligationsSurfaceServesPlannedRestartTarget(t *testing.T) {
 		t.Fatalf("crash boot restart = %+v, want no reason or target", got)
 	}
 }
+
+// An open self-development operation with no transition for longer than
+// selfdevStalledAfter is visible as stalled, with its last refusal
+// (docs/problems/selfdev-freeze-failure-leaves-operation-executing-2026-10-22.md):
+// an operation sat executing for 17 hours while the surface said nothing.
+// Failure modes pinned: a stalled operation is invisible; a fresh one is
+// called stalled; a settled one is listed; the busy count disagrees with
+// /health's selfdev_active_operations.
+func TestObligationsSurfaceReportsStalledSelfdevOperations(t *testing.T) {
+	rt, s := testRuntime(t)
+	computerID := rt.TextureComputerID()
+	now := time.Now().UTC()
+	seed := func(id, state, lastIntentError string, updated time.Time) {
+		if _, err := s.DB().Exec(`INSERT INTO self_development_operations (operation_id, computer_id, idempotency_key, request_commitment, trajectory_id, base_head, prompt_artifact_ref, verifier_refs_json, desired_head, effective_head, state, last_intent_error, created_at, updated_at) VALUES (?, ?, ?, '', ?, '', '', '[]', '', '', ?, ?, ?, ?)`,
+			id, computerID, "key-"+id, "trajectory-"+id, state, lastIntentError, updated, updated); err != nil {
+			t.Fatal(err)
+		}
+	}
+	seed("op-stalled", "executing", "freeze: capsule release must contain executable bin/autoputer", now.Add(-17*time.Hour))
+	seed("op-fresh", "awaiting_approval", "", now.Add(-time.Minute))
+	seed("op-settled", "failed", "", now.Add(-48*time.Hour))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/runtime/obligations", nil)
+	req.RemoteAddr = ""
+	req.Header.Set("X-Authenticated-User", "user-selfdev-stalled")
+	rec := httptest.NewRecorder()
+	NewAPIHandler(rt).HandleObligations(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("obligations status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var body obligationsResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	got := body.Selfdev
+	if got.Open != 2 || got.Stalled != 1 || len(got.Operations) != 2 {
+		t.Fatalf("selfdev section = %+v; want two open, one stalled", got)
+	}
+	if got.Busy != rt.activeSelfdevOperations(context.Background()) || got.Busy != 1 {
+		t.Fatalf("busy = %d; /health counts %d", got.Busy, rt.activeSelfdevOperations(context.Background()))
+	}
+	first := got.Operations[0]
+	if first.OperationID != "op-stalled" || !first.Stalled || first.LastIntentError == "" || first.IdleSeconds < int((16 * time.Hour).Seconds()) {
+		t.Fatalf("stalled operation sample = %+v", first)
+	}
+	if second := got.Operations[1]; second.OperationID != "op-fresh" || second.Stalled {
+		t.Fatalf("fresh operation sample = %+v", second)
+	}
+}
