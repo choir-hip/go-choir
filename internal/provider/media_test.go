@@ -685,3 +685,56 @@ func TestImageOutputIsGivenBackOnErrorAndPanic(t *testing.T) {
 		t.Fatalf("after a panic in the decode: output held %d, decode slots held %d, want 0 and 0", b.inUse(), len(imageDecodeSlots))
 	}
 }
+
+// Bunch 121 D1: with the production sizes a full call's reservation
+// (20 x ImageOutputPerImage, 133.3 MiB) is over one caller's share
+// (96 MiB); it is granted at once when its caller holds nothing, and a
+// second call of the same caller waits while another caller's goes ahead.
+// Passes on f78ea9f96; fails when the first-reservation guard
+// (held > 0) is removed from grantLocked.
+func TestImageOutputFirstFullCallOverTheShareIsGrantedAtOnce(t *testing.T) {
+	full := int64(MaxImagesPerRequest) * ImageOutputPerImage
+	if full <= MaxImageOutputBytesPerCaller {
+		t.Fatalf("a full call (%d) is within the share (%d); this test no longer pins the first-call rule", full, MaxImageOutputBytesPerCaller)
+	}
+	b := newImageOutputBudget(MaxImageOutputBytes, MaxImageOutputBytesPerCaller)
+	acquire := func(ctx context.Context, caller string, n int64) chan error {
+		done := make(chan error, 1)
+		go func() { done <- b.acquire(ctx, caller, n) }()
+		return done
+	}
+	select {
+	case err := <-acquire(context.Background(), "computer-a", full):
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatalf("a first full call of %d bytes over the %d share waited on an empty budget", full, MaxImageOutputBytesPerCaller)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	second := acquire(ctx, "computer-a", ImageOutputPerImage)
+	other := acquire(context.Background(), "computer-b", ImageOutputPerImage)
+	select {
+	case err := <-other:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("another caller's call waited behind a caller over its share")
+	}
+	select {
+	case err := <-second:
+		t.Fatalf("the same caller's second call was granted (err %v) while it held %d over its share", err, full)
+	case <-time.After(200 * time.Millisecond):
+	}
+	cancel()
+	if err := <-second; !errors.Is(err, ErrImageDecodeWait) {
+		t.Fatalf("the cancelled second call = %v, want ErrImageDecodeWait", err)
+	}
+	b.release("computer-a", full)
+	b.release("computer-b", ImageOutputPerImage)
+	if b.inUse() != 0 {
+		t.Fatalf("output held %d after every release, want 0", b.inUse())
+	}
+}
