@@ -200,10 +200,13 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
+      # Shards 0-5 run the split packages (scripts/go-test-split-packages)
+      # by test name and compile the same binaries; 6 and 7 run the rest
+      # whole (docs/problems/ci-critical-path-race-shards-2026-10-22.md).
       - name: Set up Go
         uses: ./.github/actions/setup-go-build-cache
         with:
-          lane: non-runtime-${{ needs.plan.outputs.race_selected == 'true' && 'race' || 'standard' }}-${{ matrix.shard < 6 && 'store' || matrix.shard }}
+          lane: non-runtime-${{ needs.plan.outputs.race_selected == 'true' && 'race' || 'standard' }}-${{ matrix.shard < 6 && 'split' || matrix.shard }}
 
       - name: Go test non-runtime shard
         shell: bash
@@ -293,13 +296,17 @@ jobs:
   # Report-only (docs/reports/patch-lanes-plan-2026-10-15.md, slice 3):
   # reachable vulnerabilities for the toolchain go.mod names (its toolchain
   # directive, the production compiler) and the locked modules. Never gates
-  # check; the daily Patch Watch workflow files the issues.
+  # check; the daily Patch Watch workflow files the issues. It waits for check
+  # so it never holds one of the 20 runner slots the gate shards and the
+  # deploy prebuild queue for (docs/problems/
+  # ci-critical-path-race-shards-2026-10-22.md), and runs whatever check's
+  # result.
   govulncheck:
     name: govulncheck (report only)
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    needs: plan
-    if: needs.plan.outputs.go == 'true'
+    needs: [plan, check]
+    if: ${{ !cancelled() && needs.plan.outputs.go == 'true' }}
     continue-on-error: true
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -617,13 +624,14 @@ jobs:
   # Report-only (docs/reports/patch-lanes-plan-2026-10-15.md, slice 4):
   # advisories against package-lock.json, the lock the Nix build ships.
   # Runtime dependencies are what users' browsers run; dev dependencies are
-  # listed separately. Never gates check; Patch Watch files the issues.
+  # listed separately. Never gates check; Patch Watch files the issues. Waits
+  # for check, as govulncheck does, and runs whatever check's result.
   npm-audit:
     name: npm audit (report only)
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: plan
-    if: needs.plan.outputs.frontend == 'true'
+    needs: [plan, check]
+    if: ${{ !cancelled() && needs.plan.outputs.frontend == 'true' }}
     continue-on-error: true
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0

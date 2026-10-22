@@ -1,18 +1,35 @@
 #!/usr/bin/env bash
 # Sharded non-runtime Go test runner for CI.
 #
-# Splits all non-runtime packages across TOTAL_SHARDS runners. When TOTAL_SHARDS >= 4,
-# internal/store (the heaviest non-runtime package with 300+ Dolt tests) is automatically
-# sub-sharded by test name across STORE_SHARDS runners, and all other non-runtime packages
-# are distributed across the remaining runners.
+# Runs every non-runtime package (all but internal/agentcore and
+# internal/textureowner, which scripts/go-test-runtime-shards runs) on
+# TOTAL_SHARDS runners, each test exactly once. When TOTAL_SHARDS >= 4:
+#
+# - Split shards 0..TOTAL_SHARDS-3 run the split packages listed in
+#   scripts/go-test-split-packages (internal/store and the other packages
+#   whose serial test binary would otherwise set a shard's length), sharded
+#   by test name. A test name goes to one shard for every split package that
+#   has it, so one `go test -run` over all split packages runs each
+#   (package, test) pair on exactly one shard, and the package binaries run
+#   in parallel on the runner's CPUs.
+# - Whole shards TOTAL_SHARDS-2 and TOTAL_SHARDS-1 run every other package
+#   whole, dealt by list index.
+#
+# Below 4 shards every package runs whole, dealt by list index. Without
+# SHARD_INDEX one process runs every package whole.
+#
+# A failed `go list` or test discovery, or a split list entry that go list
+# does not report as a non-runtime package, fails the shard: a shard never
+# passes having tested less than its share
+# (docs/problems/ci-critical-path-race-shards-2026-10-22.md).
 #
 # Usage in CI:
 #   env:
-#     TOTAL_SHARDS: 6
+#     TOTAL_SHARDS: 8
 #     SHARD_INDEX: ${{ matrix.shard }}
 #   run: scripts/go-test-non-runtime-shards
 #
-# Any extra args (e.g. -race) are forwarded to go test.
+# Any extra args (e.g. -race) are forwarded to go test, discovery included.
 set -euo pipefail
 
 total_shards="${TOTAL_SHARDS:-6}"
@@ -21,126 +38,143 @@ if ! [[ "$total_shards" =~ ^[1-9][0-9]*$ ]]; then
   exit 2
 fi
 
-store_package="./internal/store"
-store_package_full="github.com/yusefmosiah/go-choir/internal/store"
+module="github.com/yusefmosiah/go-choir"
+split_list="$(dirname "$0")/go-test-split-packages"
+whole_shards=2
 
-# List all packages except agentcore, textureowner, and store (when store is sub-sharded).
-mapfile -t all_packages < <(go list ./... | grep -Ev '^github.com/yusefmosiah/go-choir/internal/(agentcore|textureowner)$')
+# Capture first: process substitution hides a failed go list, which would
+# leave every shard with nothing to test and a passing exit.
+if ! package_listing=$(go list ./...); then
+  echo "go list ./... failed; refusing to run a partial package set" >&2
+  exit 1
+fi
+mapfile -t all_packages < <(grep -Ev "^${module}/internal/(agentcore|textureowner)$" <<<"$package_listing" | grep -v '^$' || true)
 if (( ${#all_packages[@]} == 0 )); then
-  echo "No non-agentcore packages found"
-  exit 0
+  echo "go list ./... reported no non-runtime packages" >&2
+  exit 1
 fi
 
-# Determine if we use store sub-sharding. Store gets all but two shards; the
-# remaining two cover every other non-runtime package. Requires at least 4
-# total shards so both sides stay non-empty.
-store_sharded=0
-store_shards=$(( total_shards - 2 ))
-if (( total_shards >= 4 )); then
-  for package in "${all_packages[@]}"; do
-    if [[ "$package" == "$store_package_full" || "$package" == "$store_package" ]]; then
-      store_sharded=1
-      break
+declare -A is_package=()
+for package in "${all_packages[@]}"; do
+  is_package["$package"]=1
+done
+
+split_packages=()
+declare -A is_split=()
+if [[ -f "$split_list" ]]; then
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%%#*}"
+    line="${line//[[:space:]]/}"
+    [[ -z "$line" ]] && continue
+    package="${module}/${line#./}"
+    if [[ -z "${is_package[$package]:-}" ]]; then
+      echo "${split_list#./}: ${line#./} is not a non-runtime package go list reports; fix the list" >&2
+      exit 2
     fi
-  done
+    if [[ -z "${is_split[$package]:-}" ]]; then
+      is_split["$package"]=1
+      split_packages+=("$package")
+    fi
+  done <"$split_list"
 fi
 
-run_shard() {
+whole_packages=()
+for package in "${all_packages[@]}"; do
+  if [[ -z "${is_split[$package]:-}" ]]; then
+    whole_packages+=("$package")
+  fi
+done
+
+split_mode=0
+if (( total_shards >= 4 && ${#split_packages[@]} > 0 )); then
+  split_mode=1
+fi
+
+timeout_args=(-timeout=60m)
+
+run_split_shard() {
   local shard_index="$1"
   shift
+  local split_shards=$(( total_shards - whole_shards ))
 
-  local -a timeout_args=(-timeout=60m)
-
-  if (( store_sharded )); then
-    local non_store_shards=$(( total_shards - store_shards ))
-
-    if (( shard_index < store_shards )); then
-      # Shards 0..(store_shards-1): Run sub-shard of internal/store by test name.
-      local -a store_tests=()
-      # Match execution's build mode (especially -race) so discovery warms
-      # the right cache. Capture first: process substitution hides failures.
-      local listing
-      if ! listing=$(go test "$store_package" "$@" -list '^(Test|Example)'); then
-        echo "Test discovery failed for $store_package" >&2
-        return 1
-      fi
-      mapfile -t store_tests < <(grep -E '^(Test|Example)' <<<"$listing" || true)
-      if (( ${#store_tests[@]} == 0 )); then
-        echo "No store tests found"
-        return 0
-      fi
-
-      local -a selected_tests=()
-      for i in "${!store_tests[@]}"; do
-        if (( i % store_shards == shard_index )); then
-          selected_tests+=("${store_tests[$i]}")
-        fi
-      done
-
-      if (( ${#selected_tests[@]} == 0 )); then
-        echo "No store tests selected for shard ${shard_index}/${total_shards}"
-        return 0
-      fi
-
-      local regex
-      regex="$(IFS='|'; echo "^(${selected_tests[*]})$")"
-      echo "Running ${#selected_tests[@]} of ${#store_tests[@]} ${store_package} tests in store sub-shard ${shard_index}/${store_shards} (CI shard ${shard_index}/${total_shards})"
-      "$(dirname "$0")/go-test-with-timing" -count=1 "${timeout_args[@]}" "$store_package" -run "$regex" "$@"
-      return $?
-    else
-      # Shards store_shards..(total_shards-1): Run other non-runtime packages.
-      local -a non_store_pkgs=()
-      for package in "${all_packages[@]}"; do
-        if [[ "$package" != "$store_package_full" && "$package" != "$store_package" ]]; then
-          non_store_pkgs+=("$package")
-        fi
-      done
-
-      local rel_index=$(( shard_index - store_shards ))
-      local -a selected_pkgs=()
-      for i in "${!non_store_pkgs[@]}"; do
-        if (( i % non_store_shards == rel_index )); then
-          selected_pkgs+=("${non_store_pkgs[$i]}")
-        fi
-      done
-
-      if (( ${#selected_pkgs[@]} == 0 )); then
-        echo "No non-store packages selected for shard ${shard_index}/${total_shards}"
-        return 0
-      fi
-
-      echo "Running ${#selected_pkgs[@]} of ${#non_store_pkgs[@]} non-store packages in non-store sub-shard ${rel_index}/${non_store_shards} (CI shard ${shard_index}/${total_shards})"
-      "$(dirname "$0")/go-test-with-timing" -count=1 "${timeout_args[@]}" "${selected_pkgs[@]}" "$@"
-      return $?
-    fi
+  # Match execution's build mode (especially -race) so discovery warms the
+  # right cache. Fuzz targets are listed too: -run executes their seeds.
+  local listing
+  if ! listing=$(go test "${split_packages[@]}" "$@" -list '^(Test|Example|Fuzz)'); then
+    echo "Test discovery failed for split packages: ${split_packages[*]#"${module}/"}" >&2
+    return 1
+  fi
+  local -a names=()
+  mapfile -t names < <(grep -E '^(Test|Example|Fuzz)' <<<"$listing" || true)
+  if (( ${#names[@]} == 0 )); then
+    echo "Test discovery found no tests in split packages: ${split_packages[*]#"${module}/"}" >&2
+    return 1
   fi
 
-  # Fallback standard package-level sharding
+  # One shard per distinct name, in first-listed order, so a name two split
+  # packages share runs on the same shard in both.
+  local -A seen=()
   local -a selected=()
-  for i in "${!all_packages[@]}"; do
-    if (( i % total_shards == shard_index )); then
-      selected+=("${all_packages[$i]}")
+  local k=0
+  local name
+  for name in "${names[@]}"; do
+    [[ -n "${seen[$name]:-}" ]] && continue
+    seen["$name"]=1
+    if (( k % split_shards == shard_index )); then
+      selected+=("$name")
     fi
+    k=$(( k + 1 ))
   done
 
   if (( ${#selected[@]} == 0 )); then
-    echo "No non-runtime packages selected for shard ${shard_index}/${total_shards}"
+    echo "No split-package tests selected for split shard ${shard_index}/${split_shards}"
     return 0
   fi
 
-  echo "Running ${#selected[@]} of ${#all_packages[@]} non-runtime packages in shard ${shard_index}/${total_shards}"
-  "$(dirname "$0")/go-test-with-timing" -count=1 "${timeout_args[@]}" "${selected[@]}" "$@"
+  local regex
+  regex="$(IFS='|'; echo "^(${selected[*]})$")"
+  echo "Running ${#selected[@]} of ${k} test names of ${#split_packages[@]} split packages (${split_packages[*]#"${module}/"}) in split shard ${shard_index}/${split_shards} (CI shard ${shard_index}/${total_shards})"
+  "$(dirname "$0")/go-test-with-timing" -count=1 "${timeout_args[@]}" "${split_packages[@]}" -run "$regex" "$@"
 }
 
-if [[ -n "${SHARD_INDEX:-}" ]]; then
-  if ! [[ "$SHARD_INDEX" =~ ^[0-9]+$ ]] || (( SHARD_INDEX >= total_shards )); then
-    echo "SHARD_INDEX must be an integer in [0, $((total_shards - 1))], got: ${SHARD_INDEX:-}" >&2
-    exit 2
-  fi
-  run_shard "$SHARD_INDEX" "$@"
+if [[ -z "${SHARD_INDEX:-}" ]]; then
+  echo "SHARD_INDEX not set; running all ${#all_packages[@]} non-runtime packages in one process"
+  "$(dirname "$0")/go-test-with-timing" -count=1 "${all_packages[@]}" "$@"
   exit $?
 fi
 
-# Fallback: run all non-runtime packages in a single process.
-echo "SHARD_INDEX not set; running all ${#all_packages[@]} non-runtime packages in one process"
-"$(dirname "$0")/go-test-with-timing" -count=1 "${all_packages[@]}" "$@"
+if ! [[ "$SHARD_INDEX" =~ ^[0-9]+$ ]] || (( SHARD_INDEX >= total_shards )); then
+  echo "SHARD_INDEX must be an integer in [0, $((total_shards - 1))], got: ${SHARD_INDEX:-}" >&2
+  exit 2
+fi
+shard_index="$SHARD_INDEX"
+
+if (( split_mode )); then
+  split_shards=$(( total_shards - whole_shards ))
+  if (( shard_index < split_shards )); then
+    run_split_shard "$shard_index" "$@"
+    exit $?
+  fi
+  deal_packages=("${whole_packages[@]}")
+  deal_index=$(( shard_index - split_shards ))
+  deal_count="$whole_shards"
+  label="whole shard"
+else
+  deal_packages=("${all_packages[@]}")
+  deal_index="$shard_index"
+  deal_count="$total_shards"
+  label="shard"
+fi
+
+selected=()
+for i in "${!deal_packages[@]}"; do
+  if (( i % deal_count == deal_index )); then
+    selected+=("${deal_packages[$i]}")
+  fi
+done
+if (( ${#selected[@]} == 0 )); then
+  echo "No packages selected for ${label} ${deal_index}/${deal_count} (CI shard ${shard_index}/${total_shards})"
+  exit 0
+fi
+echo "Running ${#selected[@]} of ${#deal_packages[@]} packages whole in ${label} ${deal_index}/${deal_count} (CI shard ${shard_index}/${total_shards})"
+"$(dirname "$0")/go-test-with-timing" -count=1 "${timeout_args[@]}" "${selected[@]}" "$@"
