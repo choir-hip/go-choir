@@ -413,3 +413,31 @@ The proof stays read-only. selftest: 154 passed, 1 failed (the
 pre-existing `fp1 step 1 computes a busy share`). D2's step 0 result
 stands as a proof-script FAIL, not a vmctl identity mismatch; the next
 run of step 0 on staging is the deployed check of this fix.
+
+## Review of the deployed-proof fix (bunch 115): findings, recorded before the fix
+
+One review of 6476fea46 (verdict accept, yellow, with two text
+corrections). Its findings:
+
+- R6-1 (medium-low, record accuracy). The D2 section above says "Steps
+  1, 2 and 4 passed". Step 4 printed no PASS or FAIL: the plan had no
+  candidates, so it printed only the MANUAL "nothing to check" line,
+  which says it is not a pass. Step 4's no-candidate rule is unproven on
+  staging. A proof record that misreads a MANUAL line as a PASS repeats
+  the error class R4-1 fixed in the script.
+- R6-2 (low, stale assumption). The proof-scripts station
+  (`docs/definitions/choir-launch-fp0-proof-scripts-2026-10-21.md`,
+  "Assumptions FP0 should check on the first run") still says vmctl's
+  `/health` reports `.build.commit`, the fact R5-1 refuted.
+- R6-3 (low, test discrimination). The three negative step 0 cases
+  (another commit, no header, another service) assert only
+  `FAIL.*vmctl runs <wanted>`. The FAIL text does not name what was
+  observed, so the cases also pass on the pre-fix script, which always
+  failed. Only the positive case tells old from new.
+- R6-4 (low, strictness). The old step 0 read used `-fsS`, so a non-2xx
+  answer failed. The header read uses `-sS`, and vmctl sets the build
+  headers on every response, so a 401 from `:8083/health` still passes
+  "vmctl runs". `HandleHealth` has no non-2xx path today and the deploy
+  separately requires 2xx, but the check no longer proves the endpoint
+  answered.
+- R6-5 (nit). fp3 step 1's wrong-service branch has no selftest case.
