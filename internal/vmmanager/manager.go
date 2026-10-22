@@ -430,6 +430,11 @@ type ManagerConfig struct {
 	// HostFetch is the host fetch route grant switch
 	// (CHOIR_HOST_FETCH_VMS; empty by default). See host_fetch.go.
 	HostFetch HostFetchConfig
+
+	// EventTable is the store.event_table grant switch
+	// (CHOIR_EVENT_TABLE_COMPUTERS; empty by default). See
+	// event_table_grant.go.
+	EventTable EventTableConfig
 }
 
 // DefaultManagerConfig returns a sensible default configuration.
@@ -1048,6 +1053,19 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 			log.Printf("vmmanager: host fetch route for computer %s (VM %s): %s", cfg.ComputerID, cfg.VMID, fetchStatus)
 		}
 		for name, content := range fetchFiles {
+			if delegateFiles == nil {
+				delegateFiles = map[string][]byte{}
+			}
+			delegateFiles[name] = content
+		}
+		// Event table (F-c deploy 2): a named computer's disk carries the
+		// grant; its writer then stamps telemetry for choir_events when the
+		// owner's store.event_table is on.
+		eventTableFiles, eventTableStatus := m.cfg.EventTable.eventTableMaterial(cfg.ComputerID, cfg.WarmnessClass, time.Now())
+		if eventTableStatus != "" {
+			log.Printf("vmmanager: event table for computer %s (VM %s): %s", cfg.ComputerID, cfg.VMID, eventTableStatus)
+		}
+		for name, content := range eventTableFiles {
 			if delegateFiles == nil {
 				delegateFiles = map[string][]byte{}
 			}
