@@ -121,7 +121,11 @@ var (
 	// packageName is internal/appdesk's package grammar.
 	packageName = regexp.MustCompile(`^[a-z][a-z0-9-]{1,31}$`)
 	verbSuffix  = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
-	addrSuffix  = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,30}$`)
+	// addrSuffix follows a "." after the package name. Package names never
+	// contain ".", and neither does a suffix, so an address names exactly
+	// one package: the text before its first ".". maild keeps "+" for
+	// secret aliases, so "+" is not the separator.
+	addrSuffix = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,30}$`)
 )
 
 // credentials is the registry of platform-held credentials an entry may
@@ -207,10 +211,14 @@ func Validate(pkg string, p Policy) []Problem {
 			refuse(CodeEffect, key, "effect class %q", e.EffectClass)
 		}
 		if e.EffectClass == egressgrant.EffectRead {
+			// A read is GET and HEAD only. POST is dual-use (a POST to
+			// calendar/v3 creates events) and OPTIONS is refused
+			// conservatively; a read-over-POST API is a new effect class.
 			for _, m := range e.Methods {
 				switch strings.ToUpper(strings.TrimSpace(m)) {
-				case "PUT", "PATCH", "DELETE":
-					refuse(CodeEffect, key, "a read entry lists %s", m)
+				case "GET", "HEAD":
+				default:
+					refuse(CodeEffect, key, "a read entry lists %s; a read is GET and HEAD only", m)
 				}
 			}
 		}
@@ -235,7 +243,7 @@ func Validate(pkg string, p Policy) []Problem {
 			refuse(CodeIngressSource, key, "source %q has no host service", in.Source)
 		}
 		if !addressInNamespace(pkg, in.Address) {
-			refuse(CodeIngressAddress, key, "address %q is not %s or %s-<suffix>", in.Address, pkg, pkg)
+			refuse(CodeIngressAddress, key, "address %q is not %s or %s.<suffix>", in.Address, pkg, pkg)
 		}
 		if ingress[key] {
 			refuse(CodeDuplicate, key, "ingress %s is declared twice", key)
@@ -249,7 +257,7 @@ func addressInNamespace(pkg, addr string) bool {
 	if addr == pkg {
 		return packageName.MatchString(pkg)
 	}
-	suffix, ok := strings.CutPrefix(addr, pkg+"-")
+	suffix, ok := strings.CutPrefix(addr, pkg+".")
 	return ok && addrSuffix.MatchString(suffix)
 }
 
@@ -274,11 +282,12 @@ func declaration(pkg, computerID string, e EgressEntry, now time.Time) egressgra
 	}
 }
 
-// Requests turns a valid policy's egress entries into requested grants for
-// computerID, valid from now for each entry's renewal period. A requested
-// grant allows nothing until an owner act decides it.
-func Requests(pkg, computerID string, p Policy, now time.Time) ([]egressgrant.Grant, error) {
-	if ps := Validate(pkg, p); len(ps) > 0 {
+// Requests turns an admitted policy's egress entries into requested grants
+// for computerID, valid from now for each entry's renewal period. It admits
+// the policy under mode first, so with the mode off it mints nothing. A
+// requested grant allows nothing until an owner act decides it.
+func Requests(mode Mode, pkg, computerID string, p Policy, now time.Time) ([]egressgrant.Grant, error) {
+	if ps := Admit(mode, pkg, p); len(ps) > 0 {
 		return nil, fmt.Errorf("appnet: policy for %s is invalid: %s %s", pkg, ps[0].Code, ps[0].Detail)
 	}
 	out := make([]egressgrant.Grant, 0, len(p.Egress))
