@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -1682,11 +1683,12 @@ func TestPinPoolsWithASpentDeadlineNamesTheBudget(t *testing.T) {
 	}
 }
 
-// Sonnet r7 F4: an Open that fails after the engine is up closes its store
-// and releases the workspace, even when a statement it started still holds
-// a connection at its first Close: the next Open of the same path works,
-// and Open's error is returned.
-func TestOpenFailureReleasesTheWorkspace(t *testing.T) {
+// Sonnet r7 F4 / round 7d: an Open that fails after the engine is up, with
+// a statement it started still holding a connection, retries its Close
+// until the statement ends: the engine is closed once, after every
+// connection, and Open's error does not report the store left open.
+func TestOpenFailureClosesTheEngineAfterRetries(t *testing.T) {
+	rec := recordEngineCloses(t)
 	path := testStorePath(t)
 	cleanupTestStorePath(path)
 	t.Cleanup(func() { cleanupTestStorePath(path) })
@@ -1694,23 +1696,173 @@ func TestOpenFailureReleasesTheWorkspace(t *testing.T) {
 	var sleeping <-chan error
 	testHookAfterWorkspaceOpen = func(s *Store) error {
 		s.checkpoint.closeTimeout = 200 * time.Millisecond
+		rec.mu.Lock()
+		rec.pools = func() []*sql.DB { return []*sql.DB{s.textureDB, s.readDB, s.db} }
+		rec.mu.Unlock()
+		// Outlasts the first Close attempt (200ms + 250ms grace), not the
+		// second.
 		sleeping = runHeld(t, s.db, func() error {
-			_, err := s.db.ExecContext(context.Background(), "SELECT SLEEP(1)")
+			_, err := s.db.ExecContext(context.Background(), "SELECT SLEEP(0.7)")
 			return err
 		})
 		return injected
 	}
 	t.Cleanup(func() { testHookAfterWorkspaceOpen = nil })
-	if _, err := Open(path); !errors.Is(err, injected) {
-		t.Fatalf("Open with an injected failure = %v, want it", err)
-	}
+	_, err := Open(path)
 	testHookAfterWorkspaceOpen = nil
-	if sleeping != nil {
-		_ = waitDone(t, "the statement", sleeping)
+	if !errors.Is(err, injected) || errors.Is(err, ErrCloseLeftOpen) {
+		t.Fatalf("Open = %v, want the injected failure and no store left open", err)
+	}
+	if err := waitDone(t, "the statement", sleeping); err != nil {
+		t.Fatalf("the statement Open started failed: %v", err)
+	}
+	closes, open := rec.snapshot()
+	if closes != 1 || open != 0 {
+		t.Fatalf("after the failed Open the engine was closed %d times with %d connections open, want once with 0", closes, open)
+	}
+}
+
+// When the statement outlasts every Close attempt, the failed Open returns
+// Close's fail-closed error joined to its own and leaves the engine open;
+// once the statement ends, Close closes it.
+func TestOpenFailureLeavesTheEngineWhenTheStatementOutlastsTheRetries(t *testing.T) {
+	rec := recordEngineCloses(t)
+	path := testStorePath(t)
+	cleanupTestStorePath(path)
+	t.Cleanup(func() { cleanupTestStorePath(path) })
+	injected := errors.New("injected open failure")
+	var sleeping <-chan error
+	var failed *Store
+	testHookAfterWorkspaceOpen = func(s *Store) error {
+		failed = s
+		s.checkpoint.closeTimeout = 200 * time.Millisecond
+		rec.mu.Lock()
+		rec.pools = func() []*sql.DB { return []*sql.DB{s.textureDB, s.readDB, s.db} }
+		rec.mu.Unlock()
+		// Outlasts three Close attempts of 200ms + 250ms grace.
+		sleeping = runHeld(t, s.db, func() error {
+			_, err := s.db.ExecContext(context.Background(), "SELECT SLEEP(3)")
+			return err
+		})
+		return injected
+	}
+	t.Cleanup(func() { testHookAfterWorkspaceOpen = nil })
+	_, err := Open(path)
+	testHookAfterWorkspaceOpen = nil
+	if !errors.Is(err, injected) || !errors.Is(err, ErrPoolStatementLive) {
+		t.Fatalf("Open = %v, want the injected failure joined with ErrPoolStatementLive", err)
+	}
+	if closes, _ := rec.snapshot(); closes != 0 {
+		t.Fatalf("the engine was closed %d times under a live statement", closes)
+	}
+	if err := waitDone(t, "the statement", sleeping); err != nil {
+		t.Fatalf("the statement Open started failed: %v", err)
+	}
+	if err := closeWithin(t, failed, 30*time.Second); err != nil {
+		t.Fatalf("Close after the statement ended: %v", err)
+	}
+	if closes, open := rec.snapshot(); closes != 1 || open != 0 {
+		t.Fatalf("the engine was closed %d times with %d connections open, want once with 0", closes, open)
+	}
+}
+
+const removedPartChildEnv = "CHOIR_TEST_REMOVED_PART_CHILD"
+
+// runRemovedPartChild runs, in a child, Open, the removal of part of the
+// workspace (rel, relative to it; "" for all of it), Close twice and a
+// Reopen, and reports each result.
+func runRemovedPartChild(t *testing.T, testName, rel string) string {
+	t.Helper()
+	if spec := os.Getenv(removedPartChildEnv); spec != "" {
+		path, _, _ := strings.Cut(spec, "|")
+		s, err := Open(path)
+		if err != nil {
+			fmt.Printf("CHILD-ERROR open = %v\n", err)
+			os.Exit(4)
+		}
+		if err := os.RemoveAll(filepath.Join(s.texturePath, rel)); err != nil {
+			fmt.Printf("CHILD-ERROR remove = %v\n", err)
+			os.Exit(4)
+		}
+		first := s.Close()
+		second := s.Close()
+		reopen := s.Reopen(path)
+		fmt.Printf("FIRST-LEFT-OPEN %t\n", first != nil && errors.Is(first, ErrCloseLeftOpen))
+		fmt.Printf("SECOND-LEFT-OPEN %t\n", second != nil && errors.Is(second, ErrCloseLeftOpen))
+		fmt.Printf("REOPEN-REFUSED %t\n", reopen != nil && errors.Is(reopen, ErrCloseLeftOpen))
+		fmt.Printf("CLOSES-LEFT-OPEN %d\n", s.CheckpointStats().ClosesLeftOpen)
+		os.Exit(3)
+	}
+	path := testStorePath(t)
+	cleanupTestStorePath(path)
+	t.Cleanup(func() { cleanupTestStorePath(path) })
+	code, out := runStoreChild(t, testName, removedPartChildEnv+"="+path+"|"+rel)
+	if code != 3 {
+		t.Fatalf("the child crashed or failed (exit %d):\n%s", code, out)
+	}
+	return out
+}
+
+func assertRemovedPartFailsClosed(t *testing.T, out string) {
+	t.Helper()
+	for _, want := range []string{"FIRST-LEFT-OPEN true", "SECOND-LEFT-OPEN true", "REOPEN-REFUSED true", "CLOSES-LEFT-OPEN 2"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q: a Close over a removed workspace must fail closed, stay failed and refuse Reopen:\n%s", want, out)
+		}
+	}
+}
+
+// DeepSeek r7 F1 / Sonnet r7 F4: a Close over a removed workspace is a
+// fail-closed Close: ErrCloseLeftOpen, counted, a second Close fails the
+// same way, and Reopen refuses beside the abandoned engine.
+func TestCloseOverARemovedWorkspaceFailsClosed(t *testing.T) {
+	assertRemovedPartFailsClosed(t, runRemovedPartChild(t, "TestCloseOverARemovedWorkspaceFailsClosed", ""))
+}
+
+// Sonnet r7 F2: only the database's .dolt/noms removed (the mirror's exact
+// shape) - the per-database check catches it.
+func TestCloseOverARemovedNomsDirFailsClosed(t *testing.T) {
+	assertRemovedPartFailsClosed(t, runRemovedPartChild(t, "TestCloseOverARemovedNomsDirFailsClosed", filepath.Join(textureDatabaseName, ".dolt", "noms")))
+}
+
+// Sonnet r7 F2: the database directory removed under a live workspace root
+// - the "no Dolt database" check catches it.
+func TestCloseOverARemovedDatabaseDirFailsClosed(t *testing.T) {
+	assertRemovedPartFailsClosed(t, runRemovedPartChild(t, "TestCloseOverARemovedDatabaseDirFailsClosed", textureDatabaseName))
+}
+
+// DeepSeek r7 F4: when Reopen fails after opening the new store (here the
+// old deposit-upcast ledger's close fails), it closes the store it opened
+// instead of leaking its engine and workspace lock.
+func TestReopenClosesTheStoreItOpenedWhenAdoptionFails(t *testing.T) {
+	path := testStorePath(t)
+	cleanupTestStorePath(path)
+	t.Cleanup(func() { cleanupTestStorePath(path) })
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := closeWithin(t, s, 30*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.CreateTemp(t.TempDir(), "ledger")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = f.Close()
+	s.depositUpcastMu.Lock()
+	s.depositUpcast = &depositUpcaster{file: f}
+	s.depositUpcastMu.Unlock()
+	rec := recordEngineCloses(t)
+	if err := s.Reopen(path); err == nil {
+		t.Fatal("Reopen succeeded although the old ledger's close failed")
+	}
+	if closes, _ := rec.snapshot(); closes != 1 {
+		t.Fatalf("the store Reopen opened was closed %d times, want once", closes)
 	}
 	next, err := Open(path)
 	if err != nil {
-		t.Fatalf("the next Open after a failed Open: %v (the workspace was not released)", err)
+		t.Fatalf("Open after the failed Reopen: %v (the opened store was leaked)", err)
 	}
 	if err := closeWithin(t, next, 30*time.Second); err != nil {
 		t.Fatal(err)
