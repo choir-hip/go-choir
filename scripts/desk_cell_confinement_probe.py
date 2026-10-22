@@ -13,7 +13,9 @@ purpose and are host-internal: they POST
 address from Node B over ssh, with the internal service token header file
 passed to curl by path. That file is read only by curl on Node B. No API key
 is used. The public edge refuses /internal/*, the proxy never forwards it, and
-the guest admits only its host peer holding that credential.
+the guest admits only its host peer (its default gateway on the tap). The
+deployed guest runs hostauth in off mode and ignores the token header; only
+the transport check gates the route (review bunch 27 E1).
 
 1. desk_cells: the guest spawns one worker per desk (management, Texture,
    research) through the production spawner and entrypoint. Each worker

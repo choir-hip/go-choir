@@ -43,10 +43,21 @@ import (
 // POST /internal/runtime/isolation-selftest?leg=oom|seccomp: the two legs
 // that load the guest on purpose, for the host's internal caller only
 // (review bunch 22, docs/problems/fp2-step4-deployed-oom-not-drivable-desk-refuses-runaway-2026-10-22.md).
-// The public edge refuses /internal/* and the proxy never forwards it; the
-// guest admits only its host peer (server.GuestHostCaller: the default
-// gateway, never loopback or another in-guest address) holding the internal
-// service credential (hostauth.Authorize), as /internal/debug/pprof/ does.
+// The public edge refuses /internal/* and the proxy never forwards it. The
+// handler checks server.GuestHostCaller (the guest's default gateway on the
+// tap, never loopback or another in-guest address) and then
+// hostauth.Authorize, the pairing /internal/debug/pprof/ uses (with the
+// looser HostSourcedCaller, loopback included). On the deployed guest
+// hostauth runs in off mode (nix/autoputer-vm.nix sets neither
+// CHOIR_INTERNAL_AUTH_MODE nor a credential, and Authorize returns true in
+// off mode), so the effective gate is GuestHostCaller alone, as for the
+// planned-restart routes (requireInternalRuntimeCaller). The credential
+// counts only if a guest is later run in enforce mode. Residual: a
+// guest-root process with CAP_NET_ADMIN could assign the gateway address
+// and pass the check; a confined desk cell (non-root, private netns,
+// seccomp) cannot, and pprof and planned-restart share the residual. Named
+// follow-up: guest internal routes rely on the transport gate; enforce mode
+// on guests is a follow-up.
 //
 //   - oom (yaegikernel.DeskOOMSelfTest): a throwaway research worker under its
 //     real budget cgroup runs a fixed allocating cell until the kernel kills
