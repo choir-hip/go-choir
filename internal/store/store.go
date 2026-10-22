@@ -1483,6 +1483,14 @@ func (s *Store) persistLifecycleRunWithEvent(ctx context.Context, rec types.RunR
 		return true, err
 	}
 
+	// The event is written by the projection batch, not by AppendEvent, so it
+	// takes its numbers here, before the command digest covers it.
+	if event != nil {
+		if err := s.AllocateEventSeq(ctx, event); err != nil {
+			return true, fmt.Errorf("allocate folded event seq: %w", err)
+		}
+	}
+
 	body, err := json.Marshal(rec)
 	if err != nil {
 		return true, err
@@ -2278,6 +2286,123 @@ func (s *Store) GetLatestPassivatedLifecycleRunByAgent(ctx context.Context, owne
 	})
 }
 
+// allocateEventSeqLocked assigns rec.Seq (the next number for the run) and
+// rec.StreamSeq (the next store-wide number) from the in-memory high-water
+// marks, seeding them from the store on first use. The caller holds eventMu.
+// It is the only allocator of both numbers: AppendEvent calls it, and so does
+// AllocateEventSeq for the events folded into a lifecycle batch. sl is the
+// telemetry sealer or nil.
+func (s *Store) allocateEventSeqLocked(ctx context.Context, rec *types.EventRecord, sl *telemetrySealer) (eventSeqKey, error) {
+	// OG requires a non-empty owner_id. Synthesize a system owner for
+	// ownerless runtime events (e.g. health/degraded events from
+	// Runtime.SetHealth).
+	if rec.OwnerID == "" {
+		rec.OwnerID = "__system__"
+	}
+
+	// Next sequence number for this run: an in-memory high-water mark, seeded
+	// from the store on the run's first append in this process. Reading and
+	// decoding every earlier event of the run on each append made a run's
+	// appends O(n²) (4.5 ms at 1 event to 25.6 ms at 800, measured;
+	// guest-cpu-is-unindexed-store-scans-2026-10-14, lever C5).
+	key := eventSeqKey{runID: rec.RunID, ownerID: rec.OwnerID}
+	maxSeq, seeded := s.eventSeqs[key]
+	if !seeded {
+		existing, err := s.ogListByMetadata(ctx, ogKindEvent, "run_id", rec.RunID, 10000)
+		if err != nil {
+			return eventSeqKey{}, fmt.Errorf("append event: list existing: %w", err)
+		}
+		for _, obj := range existing {
+			var ev types.EventRecord
+			if err := ogDecode(obj, &ev); err != nil {
+				continue
+			}
+			if ev.OwnerID != rec.OwnerID {
+				continue
+			}
+			if ev.Seq > maxSeq {
+				maxSeq = ev.Seq
+			}
+		}
+		// Events stamped for choir_events are not in og_objects: seed from
+		// both, or a number is handed out twice (event-table design 3.5).
+		tableSeq, err := s.eventTableRunMaxSeq(ctx, rec.RunID)
+		if err != nil {
+			return eventSeqKey{}, err
+		}
+		maxSeq = max(maxSeq, tableSeq)
+		if sl != nil {
+			// With the sealer a number can be published and never stored, so a
+			// seed from the store alone can hand it out twice (design 6.1).
+			// Skip a gap over anything the previous process could have lost,
+			// and never go below a number the queue still holds.
+			if maxSeq > 0 {
+				maxSeq += telemetrySeqGap
+			}
+			if floor := sl.seqFloor(key); floor > maxSeq {
+				maxSeq = floor
+			}
+		}
+		if s.eventSeqs == nil || len(s.eventSeqs) >= eventSeqCacheLimit {
+			s.eventSeqs = map[eventSeqKey]int64{}
+		}
+	}
+	rec.Seq = maxSeq + 1
+	s.eventSeqs[key] = rec.Seq
+
+	// StreamSeq: in-memory high-water mark incremented under eventMu. The
+	// unbounded ListObjects(100000) scan it replaced walked the entire event
+	// kind per append — at owner scale (~5.8G vm, 31GiB store) that read
+	// exceeded the request deadline and drove the runtime to OOM. Seeding
+	// from the newest page (updated_at DESC, indexed) is O(1) because the
+	// most recent append always carries max(StreamSeq).
+	if !s.streamSeqSeeded {
+		newest, err := s.og.ListObjects(ctx, objectgraph.ListFilter{Kind: ogKindEvent, Limit: 500})
+		if err != nil {
+			return eventSeqKey{}, fmt.Errorf("append event: seed stream_seq: %w", err)
+		}
+		for _, obj := range newest {
+			var ev types.EventRecord
+			if err := ogDecode(obj, &ev); err != nil {
+				continue
+			}
+			if ev.StreamSeq > s.maxStreamSeq {
+				s.maxStreamSeq = ev.StreamSeq
+			}
+		}
+		tableStream, err := s.eventTableNewestStreamSeq(ctx)
+		if err != nil {
+			return eventSeqKey{}, err
+		}
+		s.maxStreamSeq = max(s.maxStreamSeq, tableStream)
+		s.streamSeqSeeded = true
+		if sl != nil && s.maxStreamSeq > 0 {
+			s.maxStreamSeq += telemetrySeqGap // see the per-run seed above
+		}
+	}
+	s.maxStreamSeq++
+	rec.StreamSeq = s.maxStreamSeq
+	return key, nil
+}
+
+// AllocateEventSeq gives an event that is written by some path other than
+// AppendEvent its seq and stream_seq. Run-state events folded into a lifecycle
+// projection batch (UpdateRunWithEvent) use it, so they are numbered like
+// every other run event and the seq-filtered readers see them
+// (docs/problems/run-events-without-seq-2026-10-22.md). An event that already
+// has a Seq keeps its numbers, so a retry with the same event takes no second
+// number. A batch that then fails leaves a gap, never a duplicate.
+func (s *Store) AllocateEventSeq(ctx context.Context, rec *types.EventRecord) error {
+	if rec == nil || rec.Seq != 0 {
+		return nil
+	}
+	sl := s.telemetry.Load()
+	s.eventMu.Lock()
+	defer s.eventMu.Unlock()
+	_, err := s.allocateEventSeqLocked(ctx, rec, sl)
+	return err
+}
+
 // AppendEvent appends an event record with an auto-assigned sequence number.
 // The Seq field on the input record is overwritten with the next sequence
 // number for the run.
@@ -2317,95 +2442,10 @@ func (s *Store) AppendEvent(ctx context.Context, rec *types.EventRecord) error {
 	}()
 	tapeBound := s.projectionTape != nil
 
-	// OG requires a non-empty owner_id. Synthesize a system owner for
-	// ownerless runtime events (e.g. health/degraded events from
-	// Runtime.SetHealth).
-	if rec.OwnerID == "" {
-		rec.OwnerID = "__system__"
+	key, err := s.allocateEventSeqLocked(ctx, rec, sl)
+	if err != nil {
+		return err
 	}
-
-	// Next sequence number for this run: an in-memory high-water mark, seeded
-	// from the store on the run's first append in this process. Reading and
-	// decoding every earlier event of the run on each append made a run's
-	// appends O(n²) (4.5 ms at 1 event to 25.6 ms at 800, measured;
-	// guest-cpu-is-unindexed-store-scans-2026-10-14, lever C5).
-	key := eventSeqKey{runID: rec.RunID, ownerID: rec.OwnerID}
-	maxSeq, seeded := s.eventSeqs[key]
-	if !seeded {
-		existing, err := s.ogListByMetadata(ctx, ogKindEvent, "run_id", rec.RunID, 10000)
-		if err != nil {
-			return fmt.Errorf("append event: list existing: %w", err)
-		}
-		for _, obj := range existing {
-			var ev types.EventRecord
-			if err := ogDecode(obj, &ev); err != nil {
-				continue
-			}
-			if ev.OwnerID != rec.OwnerID {
-				continue
-			}
-			if ev.Seq > maxSeq {
-				maxSeq = ev.Seq
-			}
-		}
-		// Events stamped for choir_events are not in og_objects: seed from
-		// both, or a number is handed out twice (event-table design 3.5).
-		tableSeq, err := s.eventTableRunMaxSeq(ctx, rec.RunID)
-		if err != nil {
-			return err
-		}
-		maxSeq = max(maxSeq, tableSeq)
-		if sl != nil {
-			// With the sealer a number can be published and never stored, so a
-			// seed from the store alone can hand it out twice (design 6.1).
-			// Skip a gap over anything the previous process could have lost,
-			// and never go below a number the queue still holds.
-			if maxSeq > 0 {
-				maxSeq += telemetrySeqGap
-			}
-			if floor := sl.seqFloor(key); floor > maxSeq {
-				maxSeq = floor
-			}
-		}
-		if s.eventSeqs == nil || len(s.eventSeqs) >= eventSeqCacheLimit {
-			s.eventSeqs = map[eventSeqKey]int64{}
-		}
-	}
-	rec.Seq = maxSeq + 1
-	s.eventSeqs[key] = rec.Seq
-
-	// StreamSeq: in-memory high-water mark incremented under eventMu. The
-	// unbounded ListObjects(100000) scan it replaced walked the entire event
-	// kind per append — at owner scale (~5.8G vm, 31GiB store) that read
-	// exceeded the request deadline and drove the runtime to OOM. Seeding
-	// from the newest page (updated_at DESC, indexed) is O(1) because the
-	// most recent append always carries max(StreamSeq).
-	if !s.streamSeqSeeded {
-		newest, err := s.og.ListObjects(ctx, objectgraph.ListFilter{Kind: ogKindEvent, Limit: 500})
-		if err != nil {
-			return fmt.Errorf("append event: seed stream_seq: %w", err)
-		}
-		for _, obj := range newest {
-			var ev types.EventRecord
-			if err := ogDecode(obj, &ev); err != nil {
-				continue
-			}
-			if ev.StreamSeq > s.maxStreamSeq {
-				s.maxStreamSeq = ev.StreamSeq
-			}
-		}
-		tableStream, err := s.eventTableNewestStreamSeq(ctx)
-		if err != nil {
-			return err
-		}
-		s.maxStreamSeq = max(s.maxStreamSeq, tableStream)
-		s.streamSeqSeeded = true
-		if sl != nil && s.maxStreamSeq > 0 {
-			s.maxStreamSeq += telemetrySeqGap // see the per-run seed above
-		}
-	}
-	s.maxStreamSeq++
-	rec.StreamSeq = s.maxStreamSeq
 
 	if batched {
 		queued, err := newTelemetryRecord(rec)
