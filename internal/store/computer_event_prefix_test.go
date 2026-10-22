@@ -175,3 +175,22 @@ func TestLatestEventByPrefixPlanRangesTheIdempotencyKey(t *testing.T) {
 		t.Fatalf("family read selects event_json for every member:\n%s", query)
 	}
 }
+
+func TestPrefixUpperBound(t *testing.T) {
+	for _, c := range []struct {
+		prefix, upper string
+		ok            bool
+	}{
+		{"platform-update-applied-", "platform-update-applied.", true},
+		{"a\U0010FFFF", "b", true},
+		{"a퟿", "a", true}, // skips the surrogates
+		{"\U0010FFFF", "", false},
+		{"", "", false},
+		{"a\xff", "", false}, // not UTF-8: unbounded above, the prefix check decides
+	} {
+		upper, ok := prefixUpperBound(c.prefix)
+		if upper != c.upper || ok != c.ok {
+			t.Errorf("prefixUpperBound(%q) = %q, %v; want %q, %v", c.prefix, upper, ok, c.upper, c.ok)
+		}
+	}
+}
