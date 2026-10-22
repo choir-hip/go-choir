@@ -343,6 +343,10 @@ func MarkInternal(req *http.Request) {
 // 8082 is the proxy: its object-graph route needs the credential from host
 // callers (SEC-11), and its Middleware strips the header at ingress like
 // every other service.
+// Every port here must stay below vmctl's guest host-port base
+// (VM_HOST_BASE_PORT, 9000): vmctl DNATs 127.0.0.1:<host port> to a guest,
+// so a credential port in that range would hand the secret to a guest.
+// TestCredentialPortsNeverInGuestHostPortRange holds it.
 var defaultPorts = []string{"8082", "8083", "8084", "8086", "8087"}
 
 func portsFromEnv() map[string]bool {
