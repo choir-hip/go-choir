@@ -1,0 +1,471 @@
+#!/usr/bin/env python3
+"""Selftest: the host-internal service token never goes to a guest.
+
+docs/problems/host-internal-token-sent-to-guests-by-fp0-probes-2026-10-22.md.
+hostauth.MarkInternal (internal/hostauth/hostauth.go) sends the token only to
+a loopback host on an internal service port. Host-side scripts and the
+commands in docs must keep the same promise. Guest routes gate on the host
+source address and guests run hostauth off, so a guest read needs only the
+marker header (X-Internal-Caller).
+
+Ways a script or doc could break the promise (written before the helpers):
+  1. A curl line attaches the header file (-H @.../internal-service-token.header)
+     and names a guest URL (http://<guest-ip>:8085, http://{ip}:8085).
+  2. A variable or function holds the header (VMCTL_AUTH, auth, AUTH,
+     choir_internal_auth, auth_headers()), and a request two lines away
+     uses it with a guest URL.
+  3. A function builds its headers from the token and takes the URL as a
+     parameter, so the destination is whatever the caller passes
+     (density/host_collect.py http_json).
+  4. The raw token is sent under its header name (X-Choir-Internal-Token)
+     to a URL from the command line (paper_boot_window_probe.py --guest).
+  5. The destination is loopback but on a guest DNAT or other port
+     (127.0.0.1:8085), or a lookalike host (localhost.evil, 127.0.0.1@guest).
+  6. The helpers themselves attach the token to a non-loopback or
+     non-internal destination, or drop the marker.
+
+What it checks:
+  A. The Python helper scripts/choir_internal.py (internal_headers,
+     internal_curl_flags) and the shell helper scripts/lib/choir_internal.sh
+     (choir_internal_curl) over a table of URLs: the token only for
+     127.0.0.1, ::1 or localhost on 8083, 8084, 8086, 8087; the marker always.
+  B. The scanner on fixtures: each known sender shape (1-5) is flagged, and
+     the legitimate loopback shapes in the repo are not.
+  C. The scanner over every tracked file (except Go, which uses
+     MarkInternal): every request that carries the token, directly or
+     through a variable or function that holds it, names only allowed
+     destinations. A request whose destination it cannot resolve is flagged.
+     Calls to the helpers carry no token by this check's reckoning: A
+     proves the helpers.
+
+Run: scripts/selftest-guest-token            (exit 0 when every check passes)
+     scripts/selftest-guest-token --rev REV  (scan C only, at a git revision)
+"""
+import os
+import re
+import subprocess
+import sys
+import tempfile
+import urllib.parse
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+REPO = os.path.dirname(HERE)
+
+TOKEN_PATH = "internal-service-token.header"
+TOKEN_NAME = "X-Choir-Internal-Token"
+ALLOWED_HOSTS = {"127.0.0.1", "::1", "localhost"}
+ALLOWED_PORTS = {"8083", "8084", "8086", "8087"}
+# The helpers and this file are proven by A, not scanned by C.
+SKIP_FILES = {"scripts/selftest-guest-token", "scripts/choir_internal.py", "scripts/lib/choir_internal.sh"}
+HELPER_CALL = re.compile(r"\b(?:internal_headers|internal_curl_flags|choir_internal_curl|choir_internal_token_allowed)\b")
+HELPER_DEF = re.compile(r"^\s*(?:def\s+(?:internal_headers|internal_curl_flags|token_allowed)\s*\(|(?:choir_internal_curl|choir_internal_token_allowed)\s*\(\)\s*\{)")
+VERB = re.compile(r"\bcurl\b|\bwget\b|\bRequest\(|\burlopen\(|\bhttp_json\(|(?<![\w.])http\(|(?<![\w.])get\(|\bfetch\(|\brequests\.\w+\(")
+URL = re.compile(r"https?://([^/\s'\"`?#]+)")
+BARE = re.compile(r"(?<![\w/.@:-])(localhost|127\.0\.0\.1|\[::1\]):(\d+)")
+ASSIGN = re.compile(r"(?:^|(?<=[\s;(]))(?:export\s+|const\s+|let\s+|var\s+|local\s+|readonly\s+)?([A-Za-z_]\w*)(?:\[[^\]]*\])?\s*\+?=(?![=~])")
+
+
+# ------------------------------------------------------------------ the rule
+
+def split_hostport(hostport):
+    hostport = hostport.rsplit("@", 1)[-1]
+    if hostport.startswith("["):
+        host, _, rest = hostport[1:].partition("]")
+        return host, rest[1:] if rest.startswith(":") else ""
+    host, _, port = hostport.partition(":")
+    return host, port
+
+
+def allowed(host, port):
+    return host in ALLOWED_HOSTS and port in ALLOWED_PORTS
+
+
+# --------------------------------------------------------------- the scanner
+
+def logical_lines(text):
+    """(first line number, text) with backslash continuations joined."""
+    out, buf, start = [], "", None
+    for n, line in enumerate(text.splitlines(), 1):
+        if start is None:
+            start = n
+        if line.rstrip().endswith("\\"):
+            buf += line.rstrip()[:-1] + " "
+            continue
+        out.append((start, buf + line))
+        buf, start = "", None
+    if buf:
+        out.append((start, buf))
+    return out
+
+
+PY_DEF = re.compile(r"^(\s*)(?:async\s+)?def\s+([A-Za-z_]\w*)\s*\(")
+SH_DEF = re.compile(r"^(\s*)(?:function\s+)?([A-Za-z_]\w*)\s*\(\)\s*\{")
+JS_DEF = re.compile(r"^(\s*)(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_]\w*)\s*\(")
+
+
+def blocks(lines):
+    """Function definitions: name -> (first index, last index) in lines."""
+    found = {}
+    for i, (_, line) in enumerate(lines):
+        m = PY_DEF.match(line)
+        if m:  # Python: the indented body
+            indent = len(m.group(1))
+            j = i + 1
+            while j < len(lines):
+                body = lines[j][1]
+                if body.strip() and len(body) - len(body.lstrip()) <= indent:
+                    break
+                j += 1
+            found[m.group(2)] = (i, j - 1)
+            continue
+        m = SH_DEF.match(line) or JS_DEF.match(line)
+        if m:  # shell, JS: to the closing brace at the definition's indent
+            j = i + 1
+            while j < len(lines) - 1 and not re.match(re.escape(m.group(1)) + r"\}", lines[j][1]):
+                j += 1
+            found[m.group(2)] = (i, j)
+    return found
+
+
+def ref_pattern(name):
+    alts = [r"\$\{?" + re.escape(name) + r"\b", r"\{" + re.escape(name) + r"\b"]
+    if len(name) >= 2:
+        alts.append(r"(?<![\w\-/.$])" + re.escape(name) + r"\b")
+    return re.compile("|".join(alts))
+
+
+def refs(line, names):
+    return any(ref_pattern(n).search(line) for n in names)
+
+
+def holders(lines, skip, defs, seed=()):
+    """Names whose value is the token or its header: assigned, on a line
+    that makes no request, from something that carries it; or functions
+    whose body carries it and makes no request. To a fixed point."""
+    names = set(seed)
+
+    def carries(text):
+        return TOKEN_PATH in text or TOKEN_NAME in text or refs(text, names)
+
+    while True:
+        before = len(names)
+        for i, (_, line) in enumerate(lines):
+            if i in skip or HELPER_CALL.search(line) or VERB.search(line) or not carries(line):
+                continue
+            for m in ASSIGN.finditer(line):
+                prev = line[:m.start(1)].rstrip()
+                if prev.endswith((",", "(")) and not prev.endswith("=("):
+                    continue  # a keyword argument, not an assignment
+                if carries(line[m.end():]):
+                    names.add(m.group(1))
+        for name, (a, b) in defs.items():
+            if name in names or a in skip:
+                continue
+            body = [lines[k][1] for k in range(a + 1, b + 1)]
+            if any(carries(x) for x in body) and not any(VERB.search(x) and carries(x) for x in body):
+                names.add(name)
+        if len(names) == before:
+            return names
+
+
+def url_assignments(lines, defs):
+    """name -> the literal destinations it names: a variable assigned a URL,
+    or a function whose body names one."""
+    found = {}
+    for _, line in lines:
+        m = ASSIGN.search(line)
+        if m:
+            d = destinations(line[m.end():])
+            if d:
+                found.setdefault(m.group(1), d)
+    for name, (a, b) in defs.items():
+        d = [x for k in range(a + 1, b + 1) for x in destinations(lines[k][1])]
+        if d:
+            found.setdefault(name, d)
+    return found
+
+
+def destinations(line):
+    out = []
+    for m in URL.finditer(line):
+        host, port = split_hostport(m.group(1))
+        out.append((host, re.match(r"\d*", port).group(0) if re.match(r"\d", port) else port))
+    out += [(m.group(1).strip("[]"), m.group(2)) for m in BARE.finditer(line)]
+    return out
+
+
+def scan(path, text, global_names=()):
+    """Findings for one file: (path, line, why)."""
+    lines = logical_lines(text)
+    defs = blocks(lines)
+    skip = set()
+    for a, b in defs.values():
+        if HELPER_DEF.match(lines[a][1]):
+            skip.update(range(a, b + 1))
+    names = holders(lines, skip, defs, global_names)
+    def_lines = {a for a, _ in defs.values()}
+    urls = url_assignments(lines, defs)
+
+    def enclosing(i):
+        inner = None
+        for name, (a, b) in defs.items():
+            if a < i <= b and (inner is None or a > defs[inner][0]):
+                inner = name
+        return inner
+
+    # Senders whose destination is a parameter: their callers are checked.
+    senders = set()
+    while True:
+        findings, grew = [], False
+        for i, (n, line) in enumerate(lines):
+            if i in skip or i in def_lines:
+                continue
+            calls = refs(line, senders)
+            if not (TOKEN_PATH in line or TOKEN_NAME in line or refs(line, names) or calls):
+                continue
+            dests = destinations(line)
+            if not dests and (VERB.search(line) or calls):
+                for ident in set(re.findall(r"[A-Za-z_]\w*", line)):
+                    dests += urls.get(ident, [])
+                if not dests:
+                    f = enclosing(i)
+                    if f and f not in senders:
+                        senders.add(f)
+                        grew = True
+                    elif not f:
+                        findings.append((path, n, "carries the token to a destination this check cannot resolve"))
+                    continue
+            for host, port in dests:
+                if not allowed(host, port):
+                    findings.append((path, n, f"carries the token to {host}:{port or '(no port)'}"))
+        if not grew:
+            return findings
+
+
+def global_names_of(texts):
+    """Long upper-case names that hold the token cross files (imports)."""
+    out = set()
+    for path, text in texts.items():
+        lines = logical_lines(text)
+        out |= {x for x in holders(lines, set(), blocks(lines)) if re.fullmatch(r"[A-Z][A-Z0-9_]{7,}", x)}
+    return out
+
+
+def git(*args):
+    return subprocess.run(["git", "-C", REPO, *args], capture_output=True, text=True, check=False).stdout
+
+
+def tracked(rev, patterns):
+    args = ["grep", "-l", "-I"]
+    for p in patterns:
+        args += ["-e", p]
+    if rev:
+        args.append(rev)
+    args += ["--", ".", ":!*.go"]
+    paths = [p.split(":", 1)[1] if rev else p for p in git(*args).splitlines()]
+    return [p for p in paths if p not in SKIP_FILES]
+
+
+def read(rev, path):
+    if rev:
+        return git("show", f"{rev}:{path}")
+    with open(os.path.join(REPO, path), errors="replace") as f:
+        return f.read()
+
+
+def scan_repo(rev=None):
+    seeds = tracked(rev, [TOKEN_PATH, TOKEN_NAME])
+    texts = {p: read(rev, p) for p in seeds}
+    globals_ = global_names_of(texts)
+    if globals_:
+        for p in tracked(rev, sorted(globals_)):
+            texts.setdefault(p, read(rev, p))
+    findings = []
+    for p in sorted(texts):
+        findings += scan(p, texts[p], globals_)
+    return findings
+
+
+# -------------------------------------------------------------------- checks
+
+PASS, FAIL = [], []
+
+
+def check(name, ok, detail=""):
+    (PASS if ok else FAIL).append(name)
+    print(("ok   " if ok else "FAIL ") + name + (f": {detail}" if detail and not ok else ""))
+
+
+URL_TABLE = [
+    ("http://127.0.0.1:8083/internal/vmctl/list", True),
+    ("http://localhost:8084/provider/x", True),
+    ("http://[::1]:8086/internal/platform/objects", True),
+    ("http://127.0.0.1:8087/health", True),
+    ("localhost:8083/internal/vmctl/list", True),
+    ("http://10.200.4.2:8085/internal/debug/pprof/procmem", False),
+    ("http://127.0.0.1:8085/internal/debug/pprof/procmem", False),
+    ("http://127.0.0.1/internal/vmctl/list", False),
+    ("http://127.0.0.1:80830/x", False),
+    ("http://10.201.4.2:8083/internal/vmctl/list", False),
+    ("http://127.0.0.2:8083/x", False),
+    ("http://localhost.evil.example:8083/x", False),
+    ("http://127.0.0.1:8083@10.200.4.2:8085/x", False),
+    ("http://127.0.0.1:8083#@10.200.4.2:8085/x", True),  # the fragment is never sent
+    ("https://choir.news/api/health", False),
+    ("http://[::ffff:127.0.0.1]:8083/x", False),
+]
+
+
+def check_python_helper(header_file):
+    try:
+        sys.path.insert(0, HERE)
+        import choir_internal  # noqa: PLC0415
+    except ImportError as e:
+        check("python helper scripts/choir_internal.py imports", False, str(e))
+        return
+    for url, want in URL_TABLE:
+        h = choir_internal.internal_headers(url, header_file=header_file)
+        got = h.get(TOKEN_NAME) == "sekrit-value"
+        check(f"internal_headers({url}) {'attaches' if want else 'omits'} the token", got == want, repr(sorted(h)))
+        check(f"internal_headers({url}) sends the marker", h.get("X-Internal-Caller") == "true")
+        flags = choir_internal.internal_curl_flags(url, header_file=header_file)
+        check(f"internal_curl_flags({url}) {'names' if want else 'omits'} the header file",
+              (header_file in flags) == want, flags)
+        check(f"internal_curl_flags({url}) sends the marker", "X-Internal-Caller: true" in flags)
+    h = choir_internal.internal_headers("http://127.0.0.1:8083/x", header_file=header_file + ".missing")
+    check("internal_headers with no readable header file sends the marker only", h == {"X-Internal-Caller": "true"}, repr(sorted(h)))
+
+
+def check_shell_helper(header_file, work):
+    lib = os.path.join(HERE, "lib", "choir_internal.sh")
+    if not os.path.exists(lib):
+        check("shell helper scripts/lib/choir_internal.sh exists", False)
+        return
+    fake = os.path.join(work, "curl")
+    with open(fake, "w") as f:
+        f.write('#!/bin/sh\nfor a in "$@"; do printf "%s\\n" "$a"; done\n')
+    os.chmod(fake, 0o755)
+    for url, want in URL_TABLE:
+        script = f'. "$1"; CHOIR_INTERNAL_TOKEN_HEADER="$2" choir_internal_curl "$3" -fsS'
+        for shell in ("sh", "bash"):
+            r = subprocess.run([shell, "-c", script, shell, lib, header_file, url], capture_output=True, text=True,
+                               env={**os.environ, "PATH": work + os.pathsep + os.environ["PATH"]})
+            argv = r.stdout.splitlines()
+            check(f"{shell} choir_internal_curl {url} {'attaches' if want else 'omits'} the token",
+                  r.returncode == 0 and (("@" + header_file) in argv) == want, r.stdout + r.stderr)
+            check(f"{shell} choir_internal_curl {url} sends the marker and the URL",
+                  "X-Internal-Caller: true" in argv and argv[-1:] == [url])
+    r = subprocess.run(["bash", "-c", f'. "$1"; choir_internal_curl http://127.0.0.1:8083/x -L', "bash", lib],
+                       capture_output=True, text=True, env={**os.environ, "PATH": work + os.pathsep + os.environ["PATH"]})
+    check("choir_internal_curl refuses -L (curl resends custom headers on a redirect)", r.returncode != 0)
+
+
+SENDERS = {
+    "res08 guest_read (shape 1/2)": ("x.py", '''
+TOKEN_HEADER_FILE = "/var/lib/go-choir/secrets/internal-service-token.header"
+def guest_read(host, ip, name):
+    auth = f"$(test -r {TOKEN_HEADER_FILE} && echo -H @{TOKEN_HEADER_FILE})"
+    body = ssh(host, f"curl -s -f -m 60 -H 'X-Internal-Caller: true' {auth} 'http://{ip}:8085/internal/debug/pprof/{name}'", timeout=90)
+'''),
+    "host_collect http_json (shape 3)": ("y.py", '''
+TOKEN_HEADER_FILE = "/var/lib/go-choir/secrets/internal-service-token.header"
+def auth_headers():
+    h = {"X-Internal-Caller": "true"}
+    name, _, value = open(TOKEN_HEADER_FILE).read().strip().partition(":")
+    h[name.strip()] = value.strip()
+    return h
+def http_json(url, timeout=8):
+    req = urllib.request.Request(url, headers=auth_headers())
+    return json.load(urllib.request.urlopen(req, timeout=timeout))
+def main():
+    pm[vm] = http_json(f"http://{ip}:8085/internal/debug/pprof/procmem") if ip else {}
+'''),
+    "paper_boot_window --token-file (shape 4)": ("z.py", '''
+def take_sample(args, token, n, t0):
+    if args.procmem:
+        ph = {"X-Choir-Internal-Token": token} if token else {}
+        p = get(args.guest + "/internal/debug/pprof/procmem", ph, 10)
+def main():
+    s = take_sample(args, token, n, t0)
+sys.exit(main())
+'''),
+    "res-08 doc curl (shape 1)": ("d.md", '''
+  `curl -s -H 'X-Internal-Caller: true' -H @/var/lib/go-choir/secrets/internal-service-token.header 'http://<guest-ip>:8085/internal/debug/pprof/procmem?pagecache=1'`
+'''),
+    "shell variable, continued line (shape 2)": ("s.sh", '''
+H=/var/lib/go-choir/secrets/internal-service-token.header
+curl -fsS -H @$H -H 'X-Internal-Caller: true' \\
+  "http://$guest:8085/api/runtime/observability"
+'''),
+    "loopback guest DNAT port (shape 5)": ("p.sh", '''
+curl -H @/var/lib/go-choir/secrets/internal-service-token.header http://127.0.0.1:8085/x
+'''),
+}
+
+LEGIT = {
+    "proofs/lib.sh vmctl_get": ("l.sh", '''
+PROOF_VMCTL=http://127.0.0.1:8083
+proof_vmctl_auth='AUTH=; test -r /var/lib/go-choir/secrets/internal-service-token.header && AUTH="-H @/var/lib/go-choir/secrets/internal-service-token.header"'
+vmctl_get() {
+	node_b_q "$proof_vmctl_auth
+curl -fsS --max-time 30 -H 'X-Internal-Caller: true' \\$AUTH '$PROOF_VMCTL$1'"
+}
+'''),
+    "preflight array": ("f.sh", '''
+choir_internal_auth=()
+if [ -r /var/lib/go-choir/secrets/internal-service-token.header ]; then
+  choir_internal_auth=(-H @/var/lib/go-choir/secrets/internal-service-token.header)
+fi
+curl -fsS -X POST -H 'X-Internal-Caller: true' "${choir_internal_auth[@]}" \\
+  http://127.0.0.1:8083/internal/vmctl/reclaim
+'''),
+    "density lib vmctl": ("g.py", '''
+TOKEN_HEADER_FILE = "/var/lib/go-choir/secrets/internal-service-token.header"
+    def vmctl(self, method, path, body=None):
+        auth = f"-H 'X-Internal-Caller: true' $(test -r {TOKEN_HEADER_FILE} && echo -H @{TOKEN_HEADER_FILE})"
+        out = self.sh(f"curl -s -X{method} {auth} {data} 'localhost:8083{path}'")
+'''),
+    "a variable URL resolved to loopback": ("v.py", '''
+def main():
+    vmctl = arg("--vmctl", "http://localhost:8083")
+    listing = http_json(vmctl + "/internal/vmctl/list")
+def http_json(url):
+    return urlopen(Request(url, headers=internal_headers(url)))
+'''),
+    "a guest read through the helper": ("w.py", '''
+def guest_read(host, ip, name):
+    url = f"http://{ip}:8085/internal/debug/pprof/{name}"
+    return ssh(host, f"curl -s {internal_curl_flags(url)} '{url}'")
+'''),
+}
+
+
+def main():
+    if sys.argv[1:2] == ["--rev"]:
+        findings = scan_repo(sys.argv[2])
+        for p, n, why in findings:
+            print(f"{p}:{n}: {why}")
+        return 1 if findings else 0
+    with tempfile.TemporaryDirectory() as work:
+        header_file = os.path.join(work, "internal-service-token.header")
+        with open(header_file, "w") as f:
+            f.write(f"{TOKEN_NAME}: sekrit-value\n")
+        check_python_helper(header_file)
+        check_shell_helper(header_file, work)
+    for name, (path, text) in SENDERS.items():
+        f = scan(path, text)
+        check(f"scanner flags the known sender: {name}", bool(f))
+    for name, (path, text) in LEGIT.items():
+        f = scan(path, text)
+        check(f"scanner passes the loopback use: {name}", not f, repr(f))
+    findings = scan_repo()
+    for p, n, why in findings:
+        print(f"     {p}:{n}: {why}")
+    check("no tracked script or doc sends the token outside loopback internal ports", not findings,
+          f"{len(findings)} finding(s)")
+    print(f"\n{len(PASS)} passed, {len(FAIL)} failed")
+    return 1 if FAIL else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
