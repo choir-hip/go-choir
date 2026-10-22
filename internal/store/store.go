@@ -1128,7 +1128,9 @@ func (s *Store) Close() error {
 	// no new step starts after that final commit, and commit the
 	// checkpoint before the pools below close, since it writes through
 	// s.db. One deadline (the close deadline plus one grace) bounds the
-	// whole Close. If a Dolt commit is still running at it, Close fails
+	// checkpoint waits and the commit-lock fence; the telemetry drain above
+	// (its own 10 s), the wait for closeMu and the pool teardown below are
+	// outside it. If a Dolt commit is still running at it, Close fails
 	// closed: closing the pools would tear the embedded engine down under
 	// it, so they stay open (process exit reclaims them) and Close returns
 	// ErrCheckpointCommitLive. Close again once it finishes.
