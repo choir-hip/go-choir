@@ -417,7 +417,9 @@ func TestDiffSnapshotMetaIsBackwardCompatible(t *testing.T) {
 		t.Fatal(err)
 	}
 	var generic map[string]any
-	if err := json.Unmarshal(raw, &generic); err != nil {
+	dec := json.NewDecoder(strings.NewReader(string(raw)))
+	dec.UseNumber() // inode and mtime_ns do not fit a float64
+	if err := dec.Decode(&generic); err != nil {
 		t.Fatal(err)
 	}
 	delete(generic, "snapshot_type")
