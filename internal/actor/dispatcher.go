@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math/rand/v2"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -25,6 +26,22 @@ func deferralBackoff(attempts int) time.Duration {
 		d = 30 * time.Second
 	}
 	return d
+}
+
+// handlerRetryBackoff is how long a mailbox waits before the dispatcher
+// redelivers an update whose handler failed on its attempts-th delivery:
+// 250ms doubling to a 10s cap, scaled by jitter in [0.5, 1) so actors that
+// failed together do not retry together. Under the kernel's 8 attempts the
+// seven waits before the last delivery total 12.9s to 25.75s, so a conflict
+// that clears in a moment is not a dead letter
+// (docs/problems/fp4-actor-retry-no-backoff-wake-latency-spawn-mailbox-2026-10-22.md F1).
+func handlerRetryBackoff(attempts int, jitter float64) time.Duration {
+	d := 250 * time.Millisecond
+	for i := 1; i < attempts && d < 10*time.Second; i++ {
+		d *= 2
+	}
+	d = min(d, 10*time.Second)
+	return time.Duration(float64(d) * (0.5 + 0.5*min(max(jitter, 0), 1)))
 }
 
 // Dispatcher is the sole consumer of the tape-derived pending projection
@@ -110,6 +127,12 @@ type Dispatcher struct {
 	// dueAgents is the pending projection's size at the last pass, for the
 	// activation wait log.
 	dueAgents int
+	// heldUntil is when each mailbox whose handler failed may run again
+	// (handlerRetryBackoff). Process memory only: a restart forgets it and
+	// the boot's restart rules decide what is delivered; the attempt count
+	// that bounds the retries is durable.
+	heldUntil map[string]time.Time
+	jitter    func() float64
 }
 
 // activationWaitLogAfter is how long an activation's oldest due update may
@@ -201,13 +224,15 @@ func NewDispatcher(log KernelLog, handler Handler, opts DispatcherOptions) *Disp
 		opts.MaxDeferrals = 64
 	}
 	return &Dispatcher{
-		log:     log,
-		handler: handler,
-		opts:    opts,
-		running: make(map[string]time.Time),
-		wake:    make(chan struct{}, 1),
-		stop:    make(chan struct{}),
-		done:    make(chan struct{}),
+		log:       log,
+		handler:   handler,
+		opts:      opts,
+		running:   make(map[string]time.Time),
+		heldUntil: make(map[string]time.Time),
+		jitter:    rand.Float64,
+		wake:      make(chan struct{}, 1),
+		stop:      make(chan struct{}),
+		done:      make(chan struct{}),
 	}
 }
 
@@ -251,8 +276,14 @@ func (d *Dispatcher) Run(ctx context.Context) {
 	}()
 
 	for {
-		// Re-arm the due-index self-wake at the earliest scheduled event.
-		if next, ok, err := d.log.NextDue(ctx, time.Now()); err == nil && ok {
+		// Re-arm the due-index self-wake at the earliest scheduled event, or
+		// the earliest end of a retry backoff.
+		next, ok, err := d.log.NextDue(ctx, time.Now())
+		ok = ok && err == nil
+		if held, isHeld := d.nextHeld(); isHeld && (!ok || held.Before(next)) {
+			next, ok = held, true
+		}
+		if ok {
 			delay := time.Until(next)
 			if delay < 0 {
 				delay = 0
@@ -295,7 +326,7 @@ func (d *Dispatcher) dispatchPending(ctx context.Context) {
 	d.mu.Unlock()
 	for _, agentID := range agents {
 		d.mu.Lock()
-		if _, busy := d.running[agentID]; busy || !d.hasRoomLocked(agentID) {
+		if _, busy := d.running[agentID]; busy || !d.hasRoomLocked(agentID) || d.heldLocked(agentID) {
 			d.mu.Unlock()
 			continue
 		}
@@ -323,6 +354,44 @@ func (d *Dispatcher) dispatchPending(ctx context.Context) {
 			d.activate(ctx, id)
 		}(agentID)
 	}
+}
+
+// holdAfterFailure keeps agentID's mailbox out of dispatch for the backoff
+// after its attempts-th failed delivery. No lock is held while it waits:
+// the activation returns, and Run wakes at the hold's end.
+func (d *Dispatcher) holdAfterFailure(agentID, updateID string, attempts int) {
+	delay := handlerRetryBackoff(attempts, d.jitter())
+	d.mu.Lock()
+	d.heldUntil[agentID] = time.Now().Add(delay)
+	d.mu.Unlock()
+	log.Printf("dispatcher: retry %s/%s after attempt %d in %s", agentID, updateID, attempts, delay.Round(time.Millisecond))
+}
+
+// heldLocked reports whether agentID is waiting out a retry backoff, and
+// forgets a hold that has ended. Callers hold d.mu.
+func (d *Dispatcher) heldLocked(agentID string) bool {
+	until, ok := d.heldUntil[agentID]
+	if !ok {
+		return false
+	}
+	if time.Now().Before(until) {
+		return true
+	}
+	delete(d.heldUntil, agentID)
+	return false
+}
+
+// nextHeld is the earliest end of a retry backoff.
+func (d *Dispatcher) nextHeld() (time.Time, bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	var next time.Time
+	for _, until := range d.heldUntil {
+		if next.IsZero() || until.Before(next) {
+			next = until
+		}
+	}
+	return next, !next.IsZero()
 }
 
 // laneOf is the index of the lane agentID belongs to, or -1 for the shared
@@ -517,6 +586,8 @@ func (d *Dispatcher) activate(ctx context.Context, agentID string) {
 			// Tape order among eligible events: stop at the first failure so
 			// a later event is not incorporated past an unprocessed earlier
 			// one. The failed event's emissions were already discarded.
+			// The whole mailbox waits out the backoff, so order holds.
+			d.holdAfterFailure(agentID, u.UpdateID, attempts)
 			break
 		}
 		emitted = append(emitted, evEmitted...)

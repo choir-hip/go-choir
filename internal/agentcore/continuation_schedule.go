@@ -194,8 +194,9 @@ func (rt *Runtime) HandleDelegatedAssignmentSpawnDeadline(ctx context.Context, o
 		return err
 	}
 	binding := assignment.Binding
-	// The wake comes on the casting agent's mailbox (the open commit's
-	// spawn wake) or on admission's own (retries, nudges, boot resumes).
+	// The wake comes on admission's own mailbox (the open commit's spawn
+	// wake, retries, nudges, boot resumes) or, for a wake minted before the
+	// open-time wake moved there, on the casting agent's.
 	fromAdmission := agentID == EngineeringAdmissionMailbox
 	if (binding.ParentAgentID != agentID && !fromAdmission) ||
 		assignment.Disposition == types.EngineeringAssignmentBound || assignment.Disposition.Terminal() ||

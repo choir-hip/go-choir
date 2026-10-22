@@ -2798,7 +2798,13 @@ func (rt *Runtime) sweepActorWakes(ctx context.Context, announced bool) actorWak
 			}
 			dispatchStarted := time.Now()
 			dispatchErr = dispatch(ctx, wake.OwnerID, wake.ComputerID, wake.TargetAgentID, wake.Kind, wake.Content, wake.TrajectoryID, wake.AgentID)
-			if waited := dispatchStarted.Sub(wake.CreatedAt); dispatchErr == nil && (waited >= wakeLatencyLogAfter || time.Since(dispatchStarted) >= wakeLatencyLogAfter) {
+			// From the wake's own mint, not its source's creation: a wake
+			// minted by a later version of an old assignment is not that old.
+			minted := wake.MintedAt
+			if minted.IsZero() {
+				minted = wake.CreatedAt
+			}
+			if waited := dispatchStarted.Sub(minted); dispatchErr == nil && (waited >= wakeLatencyLogAfter || time.Since(dispatchStarted) >= wakeLatencyLogAfter) {
 				log.Printf("runtime: actor wake latency kind=%s target=%s waited=%s dispatch=%s", wake.Kind, wake.TargetAgentID, waited.Round(time.Millisecond), time.Since(dispatchStarted).Round(time.Millisecond))
 			}
 		}
