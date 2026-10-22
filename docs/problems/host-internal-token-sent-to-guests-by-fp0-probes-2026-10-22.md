@@ -1,7 +1,8 @@
 # FP0's host-side probes sent the host-internal service token to guests, the paper included
 
-Date: 2026-10-22. Status: **documented; the sending stopped at 09:22 UTC; whether
-the token must be rotated is under audit**. Found by Devin's review of the RES-10
+Date: 2026-10-22. Status: **documented and audited; FP0's sending stopped at about
+09:15 UTC (the monitor's at 09:18); no guest-usable route found; rotation at a
+deploy recommended, the owner's call; the repo scripts are being fixed**. Found by Devin's review of the RES-10
 probe (bunch 40), which pointed at the same pattern in FP0's own scripts.
 Mutation class of this record: green. Evidence class: host commands FP0 ran on
 Node B and their scripts; no guest-side reading.
@@ -18,7 +19,7 @@ guest addresses on port 8085:
 - **The boot-window sampler** (`lanes/_runs/bootwin/poll.sh`, outside the
   repo): every 20 s, `GET http://<paper>:8085/api/runtime/observability` with
   the token, `X-Internal-Caller: vmctl` and the paper's identity headers.
-  Runs logged for deploys C to I, from about 03:17 to 09:20 UTC on
+  Runs logged for deploys C to I, from about 03:17 to about 09:15 UTC on
   2026-10-22, with gaps between deploys. The guest was the paper,
   `computer-1355b83b…` (vm-1669020a), at each of its addresses that day.
 - **The paper desk-worker watch** (scratchpad `paper-reaper-watch.sh`):
@@ -28,6 +29,15 @@ guest addresses on port 8085:
   the token. On the paper they were the RES-07 readings. The owner's
   computer (vm-4a9afa23, read-only diagnosis, owner-authorized) got them at
   10.201.4.2, and so did test computers.
+- **The self-development monitor** (FP0's agent): from about 04:05 to
+  09:12 UTC, `check-nodeb.sh` (about every 10 min) sent the header with guest
+  GETs to `:8085` on the owner's computer (`ad1b46d4`), the paper
+  (`1355b83b`), and computers `03335285` and `7cc96dc6`. It also reached
+  test computer `71afbf14` on most passes from 04:40, with more calls from
+  `fc.sh`, `get.sh` and `ops.sh` from about 06:37 to 09:00. Computer
+  `2bd23366` was reached from 05:14 to 06:35, and `9648031f` once at 04:51.
+  The monitor removed the header from every guest call at 09:18. Its guest
+  reads still return 200 without it.
 - **In the repo**, `scripts/res08_pagecache_probe.py` (`guest_read`) sends
   the same header to guests. The RES-10 probe did too until its round 2
   (lane `fp10-res10-reader`, `3e2c19443`). Other scripts read the same
@@ -55,12 +65,76 @@ token must be rotated.
 
 ## Immediate actions taken
 
-- 09:22 UTC: FP0 stopped the boot-window sampler, and killed its loop
-  (`bash -s 5400`) on Node B. No FP0 process on Node B now sends the header.
+- About 09:15 UTC: FP0 stopped the boot-window sampler, and killed its loop
+  (`bash -s 5400`) on Node B. The monitor dropped the header from its guest
+  calls at 09:18. No FP0 process on Node B now sends it to a guest.
 - From now on, FP0's guest reads send no token: only the source address
   gates them.
 
+## Audit (FP0's read-only agent, 2026-10-22 09:30 UTC)
+
+**No host route accepts the token from a guest.** Every host unit runs hostauth
+in enforce (`nix/node-b.nix:75`, `:80`). Every place that checks the token
+sits behind a loopback or unix-socket source check, and a guest's connection
+never passes it:
+
+| Service (port) | Token check | Source check first |
+|---|---|---|
+| vmctl 8083 | `isInternalCaller` (handlers.go:1207) | `internalTransport`, loopback or unix only (:1214-1232) |
+| gateway 8084 | handlers.go:806, host_judgment.go:35 | `isLocalhost` (:790) plus the marker |
+| corpusd/platform 8086 | authority.go:67, key_escrow_http.go:308 | `trustedInternalTransport` (authority.go:22-37) |
+| maild 8087 | api.go:135, :247; auth_mail.go:61; digest.go:271 | `isMaildLoopbackHost` (api.go:164); guests get the vmctl ownership binding instead |
+| pprof on every host server | debug_pprof.go:38 | `HostSourcedCaller` (host_caller.go:31-61) |
+
+- Guests reach host ports 8082 to 8089 by DNAT from their gateway address to
+  127.0.0.1 (manager.go:3590-3606, hostfirewall.go:162-165). DNAT rewrites
+  only the destination, and MASQUERADE runs in POSTROUTING, which locally
+  delivered packets never pass. So every host service sees the guest's own
+  address as RemoteAddr, and the anti-spoof rule drops any other source
+  (hostfirewall.go:114-116).
+- The one way a guest's request can reach a service as loopback is through
+  the public site, because Caddy forwards to 127.0.0.1. Every token-gated
+  route is under `/internal/*` or `/provider/*`, and Caddy refuses both
+  (node-b.nix:603-608). That Caddy block is now the only barrier for token
+  checks on requests that arrive through the public site.
+- **Guest side:** guests hold no token by design (nix/autoputer-vm.nix never
+  mentions it, so hostauth runs off). The guest's `hostauth.Middleware`
+  deletes the header before the mux, in every mode (hostauth.go:258-260), and
+  no access log wraps it. So the token never reached a guest's handlers,
+  traces, tape or pprof. It crossed the tap as plaintext HTTP, where guest
+  root or a packet capture could read it.
+- **More senders in the repo:** `scripts/res08_pagecache_probe.py:111-112`,
+  `scripts/density/host_collect.py:175` (through `auth_headers()`, :77-85),
+  `scripts/paper_boot_window_probe.py:117` (with `--token-file`), and the curl
+  line in `docs/reports/res-08-shared-base-os-pmem-dax-design-2026-10-22.md:195`.
+
+**Why rotate anyway.** The token exists to stop host-namespace processes,
+such as the Firecracker VMMs, from using internal routes (hostauth.go:6-9).
+Suppose a guest escaped into its VMM while holding the captured value. It
+would then pass the loopback checks, and so get vmctl lifecycle acts, gateway
+credential minting, maild sending and corpusd internal writes. Rotating is
+cheap: delete both secret files and redeploy (node-b.nix:2030-2032). Rotating
+before the probes are fixed would only leak the new value.
+
 ## Next
+
+1. Owner decision: rotate the internal service token in the deploy that lands
+   the probe fix, by deleting both files on Node B so the deploy regenerates
+   them. Not urgent, since the token alone gives a guest nothing. It changes a
+   credential that every host unit loads, so it is the owner's call. FP0 will
+   not do it unasked.
+2. Every repo script above sends only the marker (`X-Internal-Caller`) to a
+   guest. A helper, Python `internal_headers(url)` and shell
+   `choir_internal_curl`, attaches the token only for a loopback host on an
+   internal port (8083, 8084, 8086, 8087), mirroring `MarkInternal`. A
+   selftest grep fails when the token file and `:8085` or a non-loopback host
+   appear in one command.
+3. Optional detector (red, hostauth): a guest's `hostauth.Middleware` logs one
+   line when a token header reaches a process with no token loaded, so a
+   future leak shows in the journal.
+4. FP0's own scripts (`bootwin/poll.sh`, the reaper watches) drop the header.
+
+## Earlier plan (kept for the record)
 
 1. Audit, read-only and under way: every host service that accepts the token,
    its source check, and whether a guest can reach it with the token. The
