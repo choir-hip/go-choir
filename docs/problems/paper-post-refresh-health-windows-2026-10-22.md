@@ -64,3 +64,118 @@ probe /health every 2 s with `curl -w '%{http_code} %{time_connect}
 %{time_total}'`, and read the guest's `/proc/net/netstat` ListenOverflows
 and `/proc/pressure/memory` through an existing host-only route if one
 exposes them.
+
+## Window A findings (FP4 lane boot-passivation, 2026-10-22, from code and the 18:30 console)
+
+Read from the code at 420aeae30 and `~/runs/reviews/paper-console-1830.txt`.
+No guest trace beyond the console was read, so the step attribution in A3
+is an inference from the log order, confirmed in shape by a local probe,
+not by a paper trace.
+
+**A1. What the phase does per activation.** `Runtime.Start`
+(`internal/agentcore/runtime.go:885-886`) runs
+`passivateInterruptedActivations` (`runtime.go:2636-2687`) only on a
+marker boot. It lists every run header of the owner
+(`forEachPreBootRun`, `runtime.go:2561-2582` ->
+`ListRunsByOwnerStates`, `internal/store/graph_store.go:1020` ->
+`ListAllObjectRefsByKindOwner`, `internal/objectgraph/dolt_store.go:1636`,
+no LIMIT, under the engine lock) and keeps pending and running ones.
+Then per run: a management task run is cancelled and its task closed
+(`runtime.go:2640-2658`); any other run is set passivated with reason
+`runtime_restarted`, and before its `UpdateRun` the phase calls
+`ensureSpawnedCoagentWorkItem` (`runtime.go:2666`). For a research,
+management or engineering run with a requester, that reaches
+`CreateWorkItem` (`internal/store/trajectory.go:146`), which holds
+`trajectoryMu` and looks the work item up by fingerprint
+(`trajectory.go:169-170` -> `findWorkItemByFingerprint`, `:198` ->
+`ogListByMetadata(choir.work_item, objective_fingerprint)`). No generated
+column or derived key covers `objective_fingerprint`
+(`dolt_store.go:219-226`, `derived_keys.go:76-80`), so the query is
+`JSON_EXTRACT(CAST(metadata AS JSON), '$.objective_fingerprint')` over
+every `choir.work_item` row (`dolt_store.go:1250-1252`), run while
+holding the shared engine lock (`dolt_store.go:1283`; the read store
+shares it, `internal/store/store.go:809-813`). Then `UpdateRun`,
+`MarkAgentMutationStale` for Texture runs, and one event.
+
+**A2. The work item it ensures already exists, and nothing reads the
+boot copy.** The spawn path creates the same work item with the same
+fingerprint (`runtime.go:1445`, through the same function) and applies
+the requester's Texture metadata (`runtime.go:1350`). The boot call's
+metadata key `passivated_spawned_work_item_id` has no reader anywhere in
+the tree. The planned resume does not use the work item:
+`handleInitialDispatch` resumes on `State == passivated` and
+`passivated_reason == runtime_restarted` alone
+(`internal/actorruntime/handler.go:551-575`). So the boot call is a
+second, idempotent ensure whose only effect is the lookup (and, for a run
+whose spawn-time item was lost, a work item minted at boot, the shape
+Cut 0 invariant I3 rejected for crash boots,
+`crash_boot_close_test.go:14-19`).
+
+**A3. The 75 s step.** Console order: the two task closes end at
+18:30:46.311; the next line is run d7b839a3 passivated at 18:32:01.222;
+the 17 runs after it take 120 to 300 ms each. Every other research run in
+the log prints "spawned work item skipped … requested_by=" (empty
+requester, so `createSpawnedCoagentWorkItem` returns at
+`runtime.go:1512-1514` before any lookup). d7b839a3 prints neither that
+line nor an error, so it is the one run that went past the requester
+check, into the work-item lookup. Inference: the 75 s is one
+`objective_fingerprint` JSON scan over all of the paper's work items.
+A local probe (planned boot, 300 work items, one spawned run with a
+requester, one Texture run, one orphan research run; engine-lock stats
+before and after the phase) shows exactly one
+`ListObjectsByMetadata choir.work_item $.objective_fingerprint json`
+call, for the spawned run only. Every other call in the phase is a
+point read or an indexed read.
+If the run's trajectory is a lifecycle trajectory, the same boot call
+goes to `OpenLifecycleWork` instead (`runtime.go:1552-1566`). That
+returns early from the spawn-time replay receipt (`lifecycle.go:2911`).
+If the receipt is missing, it reads a whole snapshot of the computer:
+every object of nine kinds (`scanLifecycleSnapshotObjects`,
+`lifecycle.go:2319` -> `ReadObjectSnapshotFiltered`,
+`dolt_store.go:815`). That second scan is behind the same call, so one
+deletion removes both.
+
+**A4. Why it grows deploy by deploy.** Every spawned coagent run creates
+a work item and none is deleted, so the scanned set grows with the
+paper's lifetime of spawns (the paper's run count went from 25,657 at
+05:13 to 30,268 at 18:32 today). 48 s, 52 s, 81.8 s follow it. The
+phase's other cost that grows is the owner-wide run header list: 2.7 s
+at 18:30:42-45 for 30,268 run headers (A1). It is a scan of all runs
+of the owner, not of all og_objects, and it is not the window.
+
+**A5. Why /health fails during it.** /health's three store reads
+(`internal/agentcore/api.go:663`, `readHealthStore` `:762`) need the same
+engine and its single write connection. A 75 s statement holding the
+engine lock makes every probe miss the 1 s budget, so /health answers
+503 `store_stalled` (F1). The console's 18:30:46 to 18:32:01 silence and
+vmmanager's failures at 18:31:00 to 18:32:00 coincide with the one step,
+not with the phase: the phase's first 4 s and last 3 s do not hold the
+store long. vmmanager discards the status, so 503 against a timeout is
+inferred from the code, not observed.
+
+**A6. Smaller items seen.** 3 s pass between the last startup line
+(18:30:39) and "boot phase begin" (18:30:42): `configureTelemetryBatching`
+and `configureGuestCheckpoint` run first in `Start`
+(`runtime.go:869-870`); not measured further. The same JSON lookup runs
+on every live spawn (`runtime.go:1445`), so each spawn on the paper
+holds the engine lock for a scan of all work items; that is off the boot
+path and is a residual (R-A2 below).
+
+### Fix shape (red, guest boot path)
+
+Delete the boot call at `runtime.go:2666`. The run is still passivated
+with reason `runtime_restarted` on a marker boot and closed on a crash
+boot; the one resume is untouched. The phase then makes only point and
+indexed reads per run. Add a per-run log when one run's passivation
+takes 2 s or more, naming its profile, so the next slow step names
+itself.
+
+### Residuals
+
+- R-A1: the owner-wide run header list (2.7 s, grows with runs). Needs a
+  state access path; adding a generated column is a schema change over
+  all og_objects and is out of the boot path's rules.
+- R-A2: `findWorkItemByFingerprint` is a JSON scan of every work item on
+  every live spawn. Fix with a deterministic work-item id (as the
+  lifecycle branch already does, `runtime.go:1553`) or a derived key.
+- R-A3: the 3 s before the first boot phase (A6).
