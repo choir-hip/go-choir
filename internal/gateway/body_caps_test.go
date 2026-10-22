@@ -734,3 +734,62 @@ func TestBodyCapsModelCallNamesItsComputerAsTheImageDecodeCaller(t *testing.T) {
 		}
 	}
 }
+
+// --- FP0 round 5 (F7): the unit's memory arithmetic and /health ---
+
+// F7: the documented worst case of the gateway unit, built from the
+// constants it names, stays under GOMEMLIMIT=6GiB (nix/node-b.nix): three
+// copies of every body in flight, the decode slots at MaxImagePixels
+// (16-bit RGBA decoded, the RGBA copy, the input), three copies of the
+// downscaled output budget (the string, the upstream body, its growth by
+// doubling) and 0.5 GiB of runtime; and the output budget takes one full
+// call. Fails on 142c17bd1: there is no output budget (and with four
+// decode slots there is no room for one).
+func TestBodyCapsUnitMemoryArithmeticFitsUnderGOMEMLIMIT(t *testing.T) {
+	const gib = int64(1) << 30
+	perDecode := int64(provider.MaxImagePixels)*8 + int64(provider.MaxImagePixels)*4 + int64(provider.MaxImageInputBytes)
+	bodies := 3 * DefaultBodyInFlight
+	decodes := int64(provider.MaxConcurrentImageDecodes) * perDecode
+	output := 3 * int64(provider.MaxImageOutputBytes)
+	total := bodies + decodes + output + gib/2
+	if total > 6*gib {
+		t.Fatalf("worst case %.2f GiB (bodies %.2f, decodes %.2f, output %.2f, runtime 0.5) is over GOMEMLIMIT 6 GiB",
+			float64(total)/float64(gib), float64(bodies)/float64(gib), float64(decodes)/float64(gib), float64(output)/float64(gib))
+	}
+	if full := int64(provider.MaxImagesPerRequest) * provider.ImageOutputPerImage; int64(provider.MaxImageOutputBytes) < full {
+		t.Fatalf("the output budget %d is under one full call's %d", provider.MaxImageOutputBytes, full)
+	}
+	if provider.MaxImageOutputBytesPerCaller > provider.MaxImageOutputBytes || provider.MaxImageDecodesPerCaller > provider.MaxConcurrentImageDecodes {
+		t.Fatal("a per-caller share is over its whole")
+	}
+	t.Logf("worst case %.2f GiB of 6", float64(total)/float64(gib))
+}
+
+// F7: /health reports the image decode slots and the output budget, with
+// their waits and refusals. Fails on 142c17bd1: no image_media block.
+func TestBodyCapsHealthReportsImageMedia(t *testing.T) {
+	h, _, _ := setupHandler(t)
+	rec := httptest.NewRecorder()
+	h.HandleHealth(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
+	var out map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	media, ok := out["image_media"].(map[string]any)
+	if !ok {
+		t.Fatalf("/health has no image_media: %s", rec.Body.String())
+	}
+	for key, want := range map[string]float64{
+		"decode_slots": provider.MaxConcurrentImageDecodes, "decode_slots_per_caller": provider.MaxImageDecodesPerCaller,
+		"output_limit": provider.MaxImageOutputBytes, "output_per_caller": provider.MaxImageOutputBytesPerCaller,
+	} {
+		if got, _ := media[key].(float64); got != want {
+			t.Fatalf("image_media.%s = %v, want %v", key, media[key], want)
+		}
+	}
+	for _, key := range []string{"output_in_use", "output_peak", "output_waited", "output_refused", "decode_waited", "decode_refused"} {
+		if _, ok := media[key].(float64); !ok {
+			t.Fatalf("image_media.%s missing: %v", key, media)
+		}
+	}
+}

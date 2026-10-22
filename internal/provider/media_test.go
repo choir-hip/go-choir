@@ -83,7 +83,7 @@ func TestOptedOutModelRefusesImageBeforeUpstream(t *testing.T) {
 
 // FM3: an uncatalogued model is not assumed to see.
 func TestUncataloguedModelRefusesImage(t *testing.T) {
-	_, err := prepareMediaRequest(context.Background(), "fireworks", "accounts/fireworks/models/kimi-k2p6", imageRequest("x", testPNG(t, 2, 2, color.White)))
+	_, err := prepareReleased(t, context.Background(), "fireworks", "accounts/fireworks/models/kimi-k2p6", imageRequest("x", testPNG(t, 2, 2, color.White)))
 	if err == nil || !strings.Contains(err.Error(), "not in the Choir model catalog") {
 		t.Fatalf("err = %v", err)
 	}
@@ -107,7 +107,7 @@ func TestPrepareMediaRequestRejectsBadSources(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			req := LLMRequest{Messages: []Message{{Role: "user", Content: []Block{{Type: "image", Source: tc.source}}}}}
-			_, err := prepareMediaRequest(context.Background(), tc.provider, "gpt-6-luna", req)
+			_, err := prepareReleased(t, context.Background(), tc.provider, "gpt-6-luna", req)
 			if err == nil || !strings.Contains(err.Error(), tc.want) || !IsMediaError(err) {
 				t.Fatalf("err = %v, want media error containing %q", err, tc.want)
 			}
@@ -122,7 +122,7 @@ func TestPrepareMediaRequestCapsImageCount(t *testing.T) {
 	for i := 0; i <= MaxImagesPerRequest; i++ {
 		blocks = append(blocks, Block{Type: "image", Source: &MediaSource{Kind: "base64", Data: base64.StdEncoding.EncodeToString(raw)}})
 	}
-	_, err := prepareMediaRequest(context.Background(), "chatgpt", "gpt-6-luna", LLMRequest{Messages: []Message{{Role: "user", Content: blocks}}})
+	_, err := prepareReleased(t, context.Background(), "chatgpt", "gpt-6-luna", LLMRequest{Messages: []Message{{Role: "user", Content: blocks}}})
 	if err == nil || !strings.Contains(err.Error(), "the limit is 20") {
 		t.Fatalf("err = %v", err)
 	}
@@ -135,11 +135,11 @@ func TestPrepareMediaRequestDownscalesLargeImages(t *testing.T) {
 	raw := testPNG(t, 2000, 1000, color.RGBA{R: 200, G: 10, B: 10, A: 255})
 	req := imageRequest("gpt-6-luna", raw)
 	original := req.Messages[0].Content[1].Source.Data
-	first, err := prepareMediaRequest(context.Background(), "chatgpt", "gpt-6-luna", req)
+	first, err := prepareReleased(t, context.Background(), "chatgpt", "gpt-6-luna", req)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := prepareMediaRequest(context.Background(), "chatgpt", "gpt-6-luna", req)
+	second, err := prepareReleased(t, context.Background(), "chatgpt", "gpt-6-luna", req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +167,7 @@ func TestPrepareMediaRequestDownscalesLargeImages(t *testing.T) {
 	}
 	// A small image passes byte for byte.
 	small := testPNG(t, 8, 8, color.White)
-	out, err := prepareMediaRequest(context.Background(), "chatgpt", "gpt-6-luna", imageRequest("gpt-6-luna", small))
+	out, err := prepareReleased(t, context.Background(), "chatgpt", "gpt-6-luna", imageRequest("gpt-6-luna", small))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -242,7 +242,7 @@ func TestOpenCodeChatCompletionsSendsImageURLPart(t *testing.T) {
 func TestChatGPTResponsesSendsInputImage(t *testing.T) {
 	p := &ChatGPTProvider{modelID: "gpt-6-luna", reasoning: "low"}
 	raw := testPNG(t, 4, 4, color.RGBA{B: 255, A: 255})
-	req, err := prepareMediaRequest(context.Background(), "chatgpt", "gpt-6-luna", imageRequest("gpt-6-luna", raw))
+	req, err := prepareReleased(t, context.Background(), "chatgpt", "gpt-6-luna", imageRequest("gpt-6-luna", raw))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -414,7 +414,7 @@ func TestPrepareImageDecodesItsBase64InsideADecodeSlot(t *testing.T) {
 	req := imageRequest("gpt-6-luna", testPNG(t, 4, 4, color.White))
 	done := make(chan error, 1)
 	go func() {
-		_, err := prepareMediaRequest(context.Background(), "chatgpt", "gpt-6-luna", req)
+		_, err := prepareReleased(t, context.Background(), "chatgpt", "gpt-6-luna", req)
 		done <- err
 	}()
 	select {
@@ -444,7 +444,7 @@ func TestImageDecodeSlotWaitEndsWithTheCallsContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
-		_, err := prepareMediaRequest(ctx, "chatgpt", "gpt-6-luna", req)
+		_, err := prepareReleased(t, ctx, "chatgpt", "gpt-6-luna", req)
 		done <- err
 	}()
 	time.Sleep(50 * time.Millisecond)
@@ -470,7 +470,7 @@ func TestImageDecodesOneCallerHoldsAtMostItsShareOfTheSlots(t *testing.T) {
 		p.wg.Add(1)
 		go func() {
 			defer p.wg.Done()
-			_, err := prepareMediaRequest(WithImageDecodeCaller(context.Background(), caller), "chatgpt", "gpt-6-luna", imageRequest("gpt-6-luna", raw))
+			_, err := prepareReleased(t, WithImageDecodeCaller(context.Background(), caller), "chatgpt", "gpt-6-luna", imageRequest("gpt-6-luna", raw))
 			done <- err
 		}()
 	}
@@ -526,4 +526,162 @@ func TestSummarizeMediaHashesWithoutDecodingTheWholeImage(t *testing.T) {
 func sha256Prefix(raw []byte) string {
 	sum := sha256.Sum256(raw)
 	return hex.EncodeToString(sum[:])[:12]
+}
+
+// prepareReleased is prepareMediaRequest with its output bytes given back
+// when the test ends.
+func prepareReleased(t *testing.T, ctx context.Context, providerName, modelID string, req LLMRequest) (LLMRequest, error) {
+	out, release, err := prepareMediaRequest(ctx, providerName, modelID, req)
+	t.Cleanup(release)
+	return out, err
+}
+
+// --- FP0 round 5 (F7): the downscaled output budget ---
+
+// useImageOutputBudget swaps in a budget of size bytes with a per-caller
+// share for the test.
+func useImageOutputBudget(t *testing.T, size, share int64) *imageOutputBudget {
+	t.Helper()
+	b := newImageOutputBudget(size, share)
+	old := imageOutput
+	imageOutput = b
+	t.Cleanup(func() { imageOutput = old })
+	return b
+}
+
+type prepared struct {
+	release func()
+	err     error
+}
+
+func prepareAsync(ctx context.Context, caller string, req LLMRequest) chan prepared {
+	done := make(chan prepared, 1)
+	go func() {
+		_, release, err := prepareMediaRequest(WithImageDecodeCaller(ctx, caller), "chatgpt", "gpt-6-luna", req)
+		done <- prepared{release, err}
+	}()
+	return done
+}
+
+func waitPrepared(t *testing.T, what string, done chan prepared) prepared {
+	t.Helper()
+	select {
+	case p := <-done:
+		return p
+	case <-time.After(3 * time.Second):
+		t.Fatalf("%s was never prepared", what)
+	}
+	return prepared{}
+}
+
+func stillWaiting(t *testing.T, what string, done chan prepared) {
+	t.Helper()
+	select {
+	case p := <-done:
+		t.Fatalf("%s was prepared (err %v) while the output budget was full", what, p.err)
+	case <-time.After(200 * time.Millisecond):
+	}
+}
+
+// F7: a call's downscaled output stays counted until the call releases it;
+// a call whose worst case does not fit waits, and leaves the queue with
+// ErrImageDecodeWait (not a MediaError) when its context ends; an image
+// passed unchanged holds nothing after the call is prepared. Fails on
+// 142c17bd1: prepareMediaRequest returns no release and nothing bounds
+// the output.
+func TestImageOutputIsHeldUntilTheCallReleasesIt(t *testing.T) {
+	b := useImageOutputBudget(t, ImageOutputPerImage, ImageOutputPerImage)
+	big := imageRequest("gpt-6-luna", testPNG(t, MaxImageLongEdge*2, 8, color.White))
+
+	small := waitPrepared(t, "an unchanged image", prepareAsync(context.Background(), "computer-a", imageRequest("gpt-6-luna", testPNG(t, 4, 4, color.White))))
+	if small.err != nil || b.inUse() != 0 {
+		t.Fatalf("an unchanged image: err %v, output held %d, want nil and 0", small.err, b.inUse())
+	}
+	small.release()
+
+	a := waitPrepared(t, "the first call", prepareAsync(context.Background(), "computer-a", big))
+	if a.err != nil {
+		t.Fatal(a.err)
+	}
+	if held := b.inUse(); held <= 0 || held >= ImageOutputPerImage {
+		t.Fatalf("after its call is prepared the output held is %d, want its downscaled base64 only (0 < n < %d)", held, ImageOutputPerImage)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancelled := prepareAsync(ctx, "computer-b", big)
+	stillWaiting(t, "a call whose worst case does not fit", cancelled)
+	cancel()
+	c := waitPrepared(t, "a cancelled call", cancelled)
+	if !errors.Is(c.err, ErrImageDecodeWait) || !errors.Is(c.err, context.Canceled) || IsMediaError(c.err) {
+		t.Fatalf("a cancelled output wait = %v, want ErrImageDecodeWait wrapping context.Canceled, not a MediaError", c.err)
+	}
+
+	next := prepareAsync(context.Background(), "computer-b", big)
+	stillWaiting(t, "the next call", next)
+	a.release()
+	a.release() // twice is once
+	n := waitPrepared(t, "the next call after the first released", next)
+	if n.err != nil {
+		t.Fatal(n.err)
+	}
+	n.release()
+	st := ImageMediaStatus()
+	if b.inUse() != 0 || st.OutputInUse != 0 {
+		t.Fatalf("after every call released, output held %d (status %d), want 0", b.inUse(), st.OutputInUse)
+	}
+	if st.OutputWaited < 2 || st.OutputRefused != 1 || st.OutputLimit != ImageOutputPerImage {
+		t.Fatalf("status = %+v, want output_waited >= 2, output_refused 1, output_limit %d", st, ImageOutputPerImage)
+	}
+}
+
+// F7: one caller holds at most its share of the output budget (its first
+// call always fits); another caller's call goes ahead of its waiting one.
+// Fails on 142c17bd1: no output budget.
+func TestImageOutputOneCallerHoldsAtMostItsShare(t *testing.T) {
+	b := useImageOutputBudget(t, 4*ImageOutputPerImage, ImageOutputPerImage)
+	big := imageRequest("gpt-6-luna", testPNG(t, MaxImageLongEdge*2, 8, color.White))
+	first := waitPrepared(t, "the hog's first call", prepareAsync(context.Background(), "computer-hog", big))
+	if first.err != nil {
+		t.Fatal(first.err)
+	}
+	second := prepareAsync(context.Background(), "computer-hog", big)
+	stillWaiting(t, "the hog's second call over its share", second)
+	other := waitPrepared(t, "another caller's call", prepareAsync(context.Background(), "computer-other", big))
+	if other.err != nil {
+		t.Fatal(other.err)
+	}
+	other.release()
+	first.release()
+	s := waitPrepared(t, "the hog's second call after its first released", second)
+	if s.err != nil {
+		t.Fatal(s.err)
+	}
+	s.release()
+	if b.inUse() != 0 {
+		t.Fatalf("output held %d after every call released, want 0", b.inUse())
+	}
+}
+
+// F7: the reservation is given back on a refused image and on a panic in
+// the decode, and the decode slot too. Fails on 142c17bd1: no output
+// budget (and a panic in the hook leaked its decode slot).
+func TestImageOutputIsGivenBackOnErrorAndPanic(t *testing.T) {
+	b := useImageOutputBudget(t, 4*ImageOutputPerImage, 4*ImageOutputPerImage)
+	req := imageRequest("gpt-6-luna", testPNG(t, MaxImageLongEdge*2, 8, color.White))
+	req.Messages[0].Content = append(req.Messages[0].Content, Block{Type: "image", Source: &MediaSource{Kind: "base64", Data: "not base64!"}})
+	_, release, err := prepareMediaRequest(context.Background(), "chatgpt", "gpt-6-luna", req)
+	release()
+	if !IsMediaError(err) || b.inUse() != 0 {
+		t.Fatalf("a refused second image: err %v, output held %d, want a MediaError and 0", err, b.inUse())
+	}
+
+	imageDecodeHook = func(string) { panic("decoder exploded") }
+	defer func() { imageDecodeHook = nil }()
+	func() {
+		defer func() { _ = recover() }()
+		_, _, _ = prepareMediaRequest(context.Background(), "chatgpt", "gpt-6-luna", imageRequest("gpt-6-luna", testPNG(t, MaxImageLongEdge*2, 8, color.White)))
+	}()
+	if b.inUse() != 0 || len(imageDecodeSlots) != 0 {
+		t.Fatalf("after a panic in the decode: output held %d, decode slots held %d, want 0 and 0", b.inUse(), len(imageDecodeSlots))
+	}
 }
