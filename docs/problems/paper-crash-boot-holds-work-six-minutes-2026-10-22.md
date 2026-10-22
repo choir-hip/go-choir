@@ -643,3 +643,34 @@ guest, whose pre-write answers are 400, 403, 404, 405, 409 and the two
   check it ran the script's read-only pre-phase (a dry run; no marker was
   written, no reboot) against `node-b` over ssh. The test now patches
   `subprocess.run`, `remote` and `phase_pre` to fail if a host is reached.
+
+## Findings: DeepSeek review of round 5 (bunch 126), 2026-10-22
+
+Verdict ACCEPT with one required fix. Read against `3bde7921e`; 72 tests
+pass there. F1 and F4 to F6 were confirmed fixed. F2 is partial.
+
+F2-a (low, fail-open, required). `clear_markers` sets `m["cleared"] =
+True` before the unmark ssh and revises it only after a caught
+`Exception`. An `Interrupted` raised during the unmark escapes with
+`cleared=True` and `unmark_failed={}`. `main`'s guard (`not
+marks.get("cleared")`) then skips the recovery clear: one unmark attempt,
+the host marker still armed for up to 15 minutes, and a saved receipt that
+says cleared. Reachable with a non-signal failure of the mark phase
+followed by a SIGHUP or SIGTERM during its clear, or a signal during
+`abort()`'s clear.
+
+F2-b (nit). `reboot_after_mark`'s `except` clears unconditionally. With
+`reboot.back_at` set it still clears (a DELETE that can remove a fresh
+guest self-development marker), and it repeats a clear that
+`phase_reboot`'s not-sent or did-not-go-down branch already ran. It
+should use the same condition as `main`: not `marks.cleared` and no
+`back_at`.
+
+F2-c (nit). In `main`'s `BaseException` path the error is set and the
+receipt saved only after the recovery clear; a second interrupt during
+that clear escapes with no receipt saved.
+
+F3 (nit). The runbook and the round 5 record say exit 4 lands about
+1230 s after the final pass, "30 s sleep plus `--boot-timeout` 1200 s".
+The 30 s sleep is inside the deadline (`deadline = t0 + boot_timeout`),
+so exit 4 lands at 1200 s. Still over 900 s, so the advice holds.
