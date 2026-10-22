@@ -306,3 +306,40 @@ func TestCheckpointConfigFromEnv(t *testing.T) {
 		t.Fatalf("zero values did not take the defaults: %+v", stats)
 	}
 }
+
+// Close then Reopen on the same Store (the projection-base rebase path)
+// keeps debounced mode working: finalize does not commit inline, the
+// adopted workspace is committed in the background, and the mode report
+// matches what finalize does.
+func TestCheckpointReopenAfterCloseStaysDebounced(t *testing.T) {
+	path := testStorePath(t)
+	cleanupTestStorePath(path)
+	t.Cleanup(func() { cleanupTestStorePath(path) })
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	s.doltCheckpointEvery = 1
+	s.ConfigureCheckpoint(CheckpointConfig{Debounced: true, Debounce: 20 * time.Millisecond, MaxOps: 1 << 30})
+	const computerID = "computer-cadence-reopen"
+	_, _ = prepareGenesis(t, s, computerID, "genesis-cadence-reopen")
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Reopen(path); err != nil {
+		t.Fatal(err)
+	}
+	if !s.checkpointDebounced() {
+		t.Fatal("Reopen left the debounced cadence closed")
+	}
+	before := s.CheckpointStats().BackgroundCommits
+	finalizeTestEvents(t, s, computerID, 2)
+	if got := s.CheckpointStats().InlineCommits; got != 0 {
+		t.Fatalf("finalize committed inline %d times after Reopen in debounced mode", got)
+	}
+	waitForCheckpoint(t, "a background commit after Reopen", func() bool {
+		st := s.CheckpointStats()
+		return st.BackgroundCommits > before && st.EventsSinceCommit == 0
+	})
+}
