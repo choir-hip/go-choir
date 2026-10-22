@@ -117,12 +117,34 @@ func waitFor(t *testing.T, what string, cond func() bool) {
 	}
 }
 
-// waitGoroutinesAtMost polls, bounded, until the goroutine count falls to
-// limit, and reports the last count.
-func waitGoroutinesAtMost(limit int, within time.Duration) int {
+// healthReadGoroutines counts the goroutines /health's bounded store reads
+// started: those whose stack names readHealthStore. Unrelated goroutines
+// (Dolt's, the runtime's, other tests') do not count.
+func healthReadGoroutines() int {
+	buf := make([]byte, 1<<20)
+	for {
+		n := runtime.Stack(buf, true)
+		if n < len(buf) {
+			buf = buf[:n]
+			break
+		}
+		buf = make([]byte, 2*len(buf))
+	}
+	count := 0
+	for _, stack := range strings.Split(string(buf), "\n\n") {
+		if strings.Contains(stack, "readHealthStore") {
+			count++
+		}
+	}
+	return count
+}
+
+// waitHealthReadsAtMost polls, bounded, until at most limit health-read
+// goroutines remain, and reports the last count.
+func waitHealthReadsAtMost(limit int, within time.Duration) int {
 	deadline := time.Now().Add(within)
 	for {
-		n := runtime.NumGoroutine()
+		n := healthReadGoroutines()
 		if n <= limit || time.Now().After(deadline) {
 			return n
 		}
@@ -244,11 +266,9 @@ func TestHandleHealthUnheldStoreAnswers200WithUnchangedBody(t *testing.T) {
 // stall once the holder lets go.
 func TestHandleHealthStalledStoreLeaksNoGoroutines(t *testing.T) {
 	handler, productStore := newBoundedHealthFixture(t)
-	// Warm up: the first call starts the effective-tree resolver once.
 	if rec, _ := serveHealth(t, handler); rec.Code != http.StatusOK {
 		t.Fatalf("warm-up /health status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	baseline := waitGoroutinesAtMost(0, 500*time.Millisecond)
 
 	release := holdStore(t, productStore)
 	for i := 0; i < 5; i++ {
@@ -257,15 +277,16 @@ func TestHandleHealthStalledStoreLeaksNoGoroutines(t *testing.T) {
 			t.Fatalf("poll %d during the stall: status=%d want 503", i, rec.Code)
 		}
 	}
-	// The holder's own read is one goroutine; allow one more for the pool's
-	// connection opener. Five polls of three reads each must not show.
-	if n := waitGoroutinesAtMost(baseline+2, 3*time.Second); n > baseline+2 {
-		t.Fatalf("goroutines during the stall=%d, baseline=%d: abandoned /health reads are piling up", n, baseline)
+	// Five polls of three reads each: every read was waiting for the held
+	// connection, so cancelling its context at the deadline ends it while
+	// the store is still held.
+	if n := waitHealthReadsAtMost(0, 3*time.Second); n != 0 {
+		t.Fatalf("%d /health read goroutines remain during the stall: abandoned reads are piling up", n)
 	}
 
 	release()
-	if n := waitGoroutinesAtMost(baseline, 5*time.Second); n > baseline {
-		t.Fatalf("goroutines after the stall=%d, baseline=%d: a /health read outlived the stall", n, baseline)
+	if n := waitHealthReadsAtMost(0, 5*time.Second); n != 0 {
+		t.Fatalf("%d /health read goroutines outlived the stall", n)
 	}
 	if rec, _ := serveHealth(t, handler); rec.Code != http.StatusOK {
 		t.Fatalf("/health after release status=%d want 200 body=%s", rec.Code, rec.Body.String())
