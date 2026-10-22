@@ -660,6 +660,10 @@ func TestValidateSnapshotRefusesEveryMismatch(t *testing.T) {
 		{"firecracker upgraded", func(_ *testing.T, _ *snapshotFixture, _ *SnapshotMeta, v *snapshotValidation) {
 			v.FirecrackerVersion = "Firecracker v1.16.0"
 		}, snapshotReasonFirecracker},
+		{"firecracker patch bump 1.16.1 to 1.16.2", func(_ *testing.T, _ *snapshotFixture, meta *SnapshotMeta, v *snapshotValidation) {
+			meta.FirecrackerVersion = "Firecracker v1.16.1"
+			v.FirecrackerVersion = "Firecracker v1.16.2"
+		}, snapshotReasonFirecracker},
 		{"host kernel changed", func(_ *testing.T, _ *snapshotFixture, _ *SnapshotMeta, v *snapshotValidation) {
 			v.HostKernelRelease = "6.19.0"
 		}, snapshotReasonHostKernel},
@@ -777,6 +781,50 @@ func TestResumeAfterDiskChangeFallsBackCold(t *testing.T) {
 	tl := newBootTimeline(f.vmID, "cold")
 	f.mgr.recordSnapshotFallbackOnBoot(f.vmID, tl)
 	if tl.Snapshot == nil || tl.Snapshot.Outcome != "fallback_cold" || tl.Snapshot.Reason != snapshotReasonDisk {
+		t.Fatalf("cold boot timeline snapshot = %+v", tl.Snapshot)
+	}
+}
+
+// The 1.16.1 -> 1.16.2 host bump (docs/problems/firecracker-1-16-1-virtio-
+// mem-restore-bugs-2026-10-22.md): 1.16.2 changed the snapshot format, so a
+// snapshot taken under 1.16.1 must be refused before Firecracker starts,
+// discarded, and the wake must cold boot. A patch-level banner change alone
+// refuses; nothing parses or tolerates "compatible" versions.
+func TestResumeRefusesSnapshotFromOtherFirecrackerPatch(t *testing.T) {
+	f := newSnapshotFixture(t)
+	root := t.TempDir()
+	f.mgr.cfg.FirecrackerBinPath = fakeFirecrackerAt(t, filepath.Join(root, "fc-1.16.1", "bin"), "Firecracker v1.16.1")
+	f.serveLaunchAPI(t)
+	if err := f.mgr.HibernateVM(f.vmID); err != nil {
+		t.Fatal(err)
+	}
+	dir := f.mgr.snapshotDir(f.vmID)
+	meta, err := readSnapshotMeta(dir)
+	if err != nil || meta.FirecrackerVersion != "Firecracker v1.16.1" {
+		t.Fatalf("snapshot meta version = %+v, %v", meta, err)
+	}
+
+	// Deploy: the host's pinned binary is now 1.16.2.
+	f.mgr.cfg.FirecrackerBinPath = fakeFirecrackerAt(t, filepath.Join(root, "fc-1.16.2", "bin"), "Firecracker v1.16.2")
+	started := false
+	f.mgr.firecrackerStarter = func(string, []string) error { started = true; return nil }
+	_, err = f.mgr.ResumeVMFromSnapshot(f.vmID, f.expect, nil)
+	var fb *SnapshotFallbackError
+	if !errors.As(err, &fb) || fb.Reason != snapshotReasonFirecracker {
+		t.Fatalf("resume = %v, want %s fallback", err, snapshotReasonFirecracker)
+	}
+	if started {
+		t.Fatal("a 1.16.1 snapshot must never start a 1.16.2 Firecracker to load it")
+	}
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatal("the refused 1.16.1 snapshot must be discarded")
+	}
+	if got := f.mgr.GetVM(f.vmID); got == nil || got.State != StateHibernated {
+		t.Fatalf("the computer must stay hibernated for the cold boot, got %+v", got)
+	}
+	tl := newBootTimeline(f.vmID, "cold")
+	f.mgr.recordSnapshotFallbackOnBoot(f.vmID, tl)
+	if tl.Snapshot == nil || tl.Snapshot.Outcome != "fallback_cold" || tl.Snapshot.Reason != snapshotReasonFirecracker {
 		t.Fatalf("cold boot timeline snapshot = %+v", tl.Snapshot)
 	}
 }
