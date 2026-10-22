@@ -540,13 +540,14 @@ item below:
     to every app desk; object-graph `Owner` is per package today
     (`internal/objectgraph/registry.go:24-44`).
   - Plans: doctrine C2; standing question 5. No general rule.
-- [ ] **ARCH-05 · P1 · green then red — Taint classes**
+- [x] **ARCH-05 · P1 · green then red — Taint classes**
   - Desks that read untrusted content (research, Mail) never share a
     worker with privileged desks; record how their output flows to Texture
     and management. Only maild labels untrusted input today
     (`internal/maild/ingest.go:121, 176`).
   - Plans: email desk §5 (lethal trifecta, origin tagging deferred to E8);
     grants design `taint` field; RLM consensus. No per-desk definition.
+  - Done: FP2 batch 1, 564840fcf with CI fix 7c61ce078, deploy CI 39702960215 (2026-10-22 01:12 UTC). The manifest's `Taint` keys the worker pool and the cell user; the data flow between classes is recorded in docs/definitions/choir-launch-fp2-desk-boundary-2026-10-21.md "Data flow between taint classes". Evidence: docs/evidence/fp2-desk-boundary-20261022.json (the deployed self-test: three distinct cell uids, every desk in its own confinement) and docs/evidence/fp2-desk-boundary-steps4-5-20261022.json (real management, research, Texture and engineering turns completing confined on computer-9648031f, 05:00 UTC).
 - [ ] **ARCH-06 · P2 · red — Agents are records; worker slots are pooled**
   - Now: one REPL per agent id, 30 min retention, at most 12 idle
     (`internal/agentcore/tools_desk.go:84-305`). Target: pool workers per
