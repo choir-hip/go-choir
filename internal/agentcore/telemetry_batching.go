@@ -100,6 +100,36 @@ func (rt *Runtime) drainTelemetryForRestart() (failed bool, restore func()) {
 	}
 }
 
+// holdHostRestartTelemetry is drainTelemetryForRestart for the host's
+// planned-restart request, which answers before the restart happens: the undo
+// is kept on the runtime until the host clears the marker or a later request
+// is refused. With batching off it does nothing and reports no failure.
+func (rt *Runtime) holdHostRestartTelemetry() (drainFailed bool) {
+	if rt == nil || rt.store == nil || !rt.store.TelemetryBatchingConfigured() {
+		return false
+	}
+	failed, restore := rt.drainTelemetryForRestart()
+	rt.hostRestartTelemetryMu.Lock()
+	rt.hostRestartTelemetryRestore = restore
+	rt.hostRestartTelemetryMu.Unlock()
+	return failed
+}
+
+// releaseHostRestartTelemetry undoes the synchronous mode a host request
+// entered, if one holds it.
+func (rt *Runtime) releaseHostRestartTelemetry() {
+	if rt == nil {
+		return
+	}
+	rt.hostRestartTelemetryMu.Lock()
+	restore := rt.hostRestartTelemetryRestore
+	rt.hostRestartTelemetryRestore = nil
+	rt.hostRestartTelemetryMu.Unlock()
+	if restore != nil {
+		restore()
+	}
+}
+
 // crashClosePayload is the event payload of a run closed by a crash boot. With
 // batching configured it also names the possible gap; without it the payload
 // is exactly what it was before batching existed.
