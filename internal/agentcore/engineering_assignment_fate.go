@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
@@ -1255,6 +1256,22 @@ var ErrAssignmentSagaHeld = errors.New("the assignment's live terminal saga hold
 
 var errAssignmentSagaHeld = ErrAssignmentSagaHeld
 
+// ErrFateRedriveRetry reports that the fate wake's re-drive of a staged
+// terminal report failed and the wake must come back: actorruntime maps it to
+// a dispatcher deferral (backoff, outside the MaxAttempts budget). A plain
+// handler error was retried at once and dead-lettered on the eighth attempt,
+// and the failure's own re-drive minted nothing while that wake was pending,
+// so the assignment never ended (review bunch 92, M1).
+var ErrFateRedriveRetry = errors.New("the terminal report re-drive failed; the fate wake retries")
+
+// assignedEngineeringFateRedriveLimit is how many failed re-drives of one
+// assignment's staged report the fate wake takes before it cancels the
+// assignment. It is below the dispatcher's MaxAttempts (8), so the wake
+// ends in a fate even where its failure reaches the dispatcher as a plain
+// error. The count is in-process: a crash boot closes the assignment, and a
+// planned boot starts a fresh count.
+const assignedEngineeringFateRedriveLimit = 6
+
 // assignmentSagaMutex serializes the drivers of one assignment's terminal
 // report in this process: the worker's Complete and the fate wake's resume
 // of its staged proposal (FP4 round 4 P2; review round 4b). Both run in the
@@ -1276,6 +1293,7 @@ func assignmentSagaKey(assignmentID string, attempt uint64) string {
 // fresh one; both then meet a settled assignment, whose report path replays.
 func (rt *Runtime) releaseAssignmentSaga(assignmentID string, attempt uint64) {
 	key := assignmentSagaKey(assignmentID, attempt)
+	rt.fateRedriveFailures.Delete(key)
 	value, ok := rt.assignmentSagas.Load(key)
 	if !ok {
 		return
@@ -1328,11 +1346,58 @@ func (rt *Runtime) resumeStrandedFateAssignmentIfPending(ctx context.Context, ow
 			// Not consumed: the dispatcher re-delivers this wake, which then
 			// finds the report committed (a no-op) or the saga free to drive.
 			log.Printf("runtime: assignment %s fate re-drive waits for the live saga: %v", assignmentID, resumeErr)
+			return resumeErr
 		}
-		return resumeErr
+		counter, _ := rt.fateRedriveFailures.LoadOrStore(assignmentSagaKey(assignmentID, attempt), new(atomic.Int64))
+		failures := counter.(*atomic.Int64).Add(1)
+		if failures < assignedEngineeringFateRedriveLimit {
+			log.Printf("runtime: assignment %s fate re-drive failed (%d of %d): %v", assignmentID, failures, assignedEngineeringFateRedriveLimit, resumeErr)
+			return fmt.Errorf("%w (failure %d of %d): %v", ErrFateRedriveRetry, failures, assignedEngineeringFateRedriveLimit, resumeErr)
+		}
+		return rt.cancelUnfinishableFateAssignment(ctx, assignment, failures, resumeErr)
 	}
 	rt.releaseAssignmentSaga(assignmentID, attempt)
 	log.Printf("runtime: assignment %s fate watchdog re-drove stranded %s proposal", assignmentID, assignment.CapsuleDisposition)
+	return nil
+}
+
+// cancelUnfinishableFateAssignment ends an assignment whose staged terminal
+// report failed every re-drive: its capsule is revoked and the assignment
+// cancelled with the cause, and management is told (not silent). It takes the
+// saga like the resume, so it never races the worker's Complete. A failure
+// here is retried by the same wake; a crash boot closes the assignment.
+func (rt *Runtime) cancelUnfinishableFateAssignment(ctx context.Context, assignment types.EngineeringAssignment, failures int64, cause error) error {
+	saga := rt.assignmentSagaMutex(assignment.AssignmentID, assignment.Binding.Attempt)
+	if !saga.TryLock() {
+		return errAssignmentSagaHeld
+	}
+	defer saga.Unlock()
+	current, err := rt.store.GetEngineeringAssignment(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignment.AssignmentID, assignment.Binding.Attempt)
+	if err != nil {
+		return err
+	}
+	if !assignedEngineeringFatePending(current) {
+		rt.fateRedriveFailures.Delete(assignmentSagaKey(assignment.AssignmentID, assignment.Binding.Attempt))
+		return nil
+	}
+	causeText := cause.Error()
+	if len(causeText) > 400 {
+		causeText = causeText[:400] + "..."
+	}
+	reason := fmt.Sprintf("the terminal report could not be committed after %d re-drives; the capsule is revoked and the assignment cancelled: %s", failures, causeText)
+	if current.CapsuleDisposition != types.EngineeringCapsuleRevoked {
+		// A fixed revoke reason keeps the revoke intent stable across retries.
+		if current, err = rt.revokeAssignedCapsule(ctx, current, "terminal report re-drives exhausted"); err != nil {
+			return fmt.Errorf("%w: revoke after %d failed re-drives: %v", ErrFateRedriveRetry, failures, err)
+		}
+	}
+	cancelled, err := rt.persistSystemEngineeringCancellation(ctx, current, reason, false)
+	if err != nil {
+		return fmt.Errorf("%w: cancel after %d failed re-drives: %v", ErrFateRedriveRetry, failures, err)
+	}
+	rt.stopCancelledAssignmentRun(ctx, cancelled.Assignment, reason)
+	rt.fateRedriveFailures.Delete(assignmentSagaKey(assignment.AssignmentID, assignment.Binding.Attempt))
+	log.Printf("runtime: assignment %s cancelled: %s", assignment.AssignmentID, reason)
 	return nil
 }
 
