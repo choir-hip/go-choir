@@ -226,7 +226,7 @@ now:
     a capsule-shaped cold build went from an anon peak of 1.27 GiB to
     846 MiB and from 9 m 32 s to 7 m 53 s. The deployed proof (the FP4
     drill re-run on 71afbf14) is pending. Problem record 3680eacc3, tests
-    55e9ac1ae and 6d937d4fe, fix fd8337941 and c68c49a99 (review round 2:
+    55e9ac1ae, 6d937d4fe and 3ec42fd64, fix fd8337941 and c68c49a99 (review round 2:
     linux build tags, the floor, no ambient carry); sizing in
     docs/evidence/res04-capsule-memory-sizing-2026-10-22.md.
     Before that: round 3 repair from the deployed drill on 71afbf14 (lane/fp4-r3-nudge,
@@ -416,9 +416,17 @@ receipts:
     rollback_ref: git revert 1b21dc6c8 (text only); the other two change no behaviour
   - id: capsule-go-bounds
     boundary: implement
-    identity: 3680eacc3 (problem record), 55e9ac1ae and 6d937d4fe (tests), fd8337941 and c68c49a99 (fix), on lane/fp4-capsule-memory; deployed proof pending
+    identity: 3680eacc3 (problem record), 55e9ac1ae, 6d937d4fe and 3ec42fd64 (tests), fd8337941 and c68c49a99 (fix), on lane/fp4-capsule-memory; deployed proof pending
     proof_refs: [internal/yaegikernel/go_bounds_test.go, internal/capsule/go_bounds_test.go, cmd/capsule-broker/exec_direct_test.go, docs/evidence/res04-capsule-memory-sizing-2026-10-22.md]
-    rollback_ref: git revert c68c49a99 fd8337941 (no schema, no stored state; workloads go back to Go's defaults)
+    rollback_ref: >-
+      git revert --no-commit 3ec42fd64 6d937d4fe c68c49a99 55e9ac1ae fd8337941
+      && git commit (newest first, tests before the code they test; one
+      commit, because the tree between 6d937d4fe's and c68c49a99's reverts
+      fails one test by construction). Checked in a scratch clone: each step
+      compiles, and the end state of internal/ and cmd/ equals 71ec8e704.
+      Reverting the fix commits alone leaves the tests unbuildable. The docs
+      commits need no revert. No schema, no stored state; workloads go back
+      to Go's defaults.
   - id: arch04-observability
     boundary: implement
     identity: bbd19192c
