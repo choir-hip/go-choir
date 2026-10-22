@@ -1,10 +1,10 @@
 ---
-definition_version: 4
+definition_version: 5
 
 # Station FP10, item RES-10, of the launch first pass
 # (choir-launch-first-pass-metamission-2026-10-21.md). Item: balloon stats
 # reader and emergency inflation (security-density checklist, P2, red).
-readiness: drafted
+readiness: built_steps_1_2
 
 review:
   reviewer: none yet
@@ -18,6 +18,12 @@ start:
     canonical_ref: lane/fp10-res10-balloon from main e4b792b7f
     deploy_identity: unknown to this lane
   worktrees:
+    - path: /home/agent/lanes/fp10-res10-reader
+      status: clean
+      class: goal_candidate
+      owner: FP10 RES-10 steps 1 and 2
+      touch: goal_owned
+      recovery: branch lane/fp10-res10-reader (from main 58e705802)
     - path: /home/agent/lanes/fp10-res10-balloon
       status: clean
       class: goal_candidate
@@ -46,11 +52,14 @@ The item is also red (VM lifecycle) and has an owner-visible tradeoff (below).
 
 Three steps, each shippable alone, each off until FP0 proves it on staging.
 
-1. **Stats on (observe).** Set `VM_BALLOON_STATS_POLLING_INTERVAL_S=5` in the
-   host env. Boot-time only, so it takes effect as guests cold-boot or
-   restore; snapshot-restored guests keep their saved device config
-   (UNVERIFIED: whether a restored balloon honors a changed interval; the
-   probe below answers it). No code change. Rollback: unset.
+1. **Stats on (observe), per computer.** (Revised 2026-10-22: not host-wide.
+   A host-wide interval changes every guest's config and every snapshot
+   hash, cold booting the paper and the owner's computer.)
+   `VM_BALLOON_STATS_ONLY` (the FP8 selector) names the computers;
+   `VM_BALLOON_STATS_POLLING_INTERVAL_S` is their interval, default 5.
+   Unselected computers keep their exact config. A selected hibernated
+   computer's snapshot is refused by hash and it cold boots once; a
+   restored guest keeps its saved device. Rollback: unset the selector.
 2. **Reader.** Add `fcAPIClient.BalloonStatistics(ctx)` decoding
    `GET /balloon/statistics` (`target_pages`, `actual_pages`, `free_memory`,
    `available_memory`, `total_memory`, `swap_in/out`, `major_faults`,
@@ -90,8 +99,23 @@ Three steps, each shippable alone, each off until FP0 proves it on staging.
    guest `MemTotal`/`MemAvailable`; PATCH to 0 and confirm deflation.
 2. Record whether a snapshot-restored guest reports stats.
 
+# Built (lane fp10-res10-reader, 2026-10-22)
+
+Steps 1 and 2, inert until selected; step 3 not built. What a selected and
+an unselected boot send, the reader's reasons, the vmctl route
+(`GET /internal/vmctl/memory/balloon`, host only), the probe
+(`scripts/res10_balloon_stats_probe.sh`), rollback and FP0's staging steps
+are in the problem record's "Built" and "FP0 staging steps" sections.
+Tests: `go test -race ./internal/vmmanager` (whole package),
+`go test -race ./internal/vmctl -run 'Balloon|Memory'`,
+`go test ./internal/vmctl ./cmd/vmctl`.
+
 # now
 
-Design written; problem record committed. Blocked on FP8 landing for any
-code. Residuals: the three UNVERIFIED claims in the problem record. No owner
-question needs an answer before step 1 and 2.
+Steps 1 and 2 built and pushed on lane/fp10-res10-reader; FP0 lands and
+runs the staging steps (one test computer selected, cold boot, probe,
+restore question). Step 3 waits for that evidence and for RES-09 (one
+controller owning guest memory targets). Residuals: stats cost per guest
+(UNVERIFIED), `MemTotal` under inflation (step 3), whether a restored
+balloon keeps its interval (FP0 step 4 answers it; code is honest either
+way). No owner question blocks steps 1 and 2.
