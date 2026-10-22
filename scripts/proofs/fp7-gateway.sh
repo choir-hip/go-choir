@@ -26,7 +26,7 @@ PROOF_NAME=fp7-gateway
 step_def 1 ro "SEC-05 (observe): bearer_binding on the gateway /health, baseline saved"
 step_def 2 ro-after "SEC-05: would_refuse has not risen after a test computer's model call"
 step_def 3 ro-after "SEC-05: would_refuse still 0 after hibernate/wake and the paper's planned refresh"
-step_def 4 ro-after "SEC-05 (enforce): the test computer's call still passes; refused stays 0"
+step_def 4 ro-after "SEC-05 (enforce): the test computer's call still passes; no computer refused after its pin moved"
 step_def 5 ro-after "SEC-05 (enforce): cross-computer token copy is refused (guest acts by hand)"
 step_def 6 ro "SEC-08 gateway half: the relay is dark (anthropic_relay off)"
 step_def 7 ro-after "SEC-16: the front-importance tick reaches Jev through the gateway; the unit holds no OPENROUTER key"
@@ -90,13 +90,38 @@ step_3() {
 }
 
 step_4() {
-	local h
+	# A refusal while a computer's pin is stale (after a refresh, before vmctl's
+	# ensure moves it) is the design: 429 + Retry-After 2, healed by the ensure.
+	# The failure is a computer still refused after its pin moved (FP7
+	# definition, "SEC-05 enforce flip": the watch). The counters reset with the
+	# gateway, so the journal since --since is the record.
+	local h j
 	h=$(fp7_health)
 	[ "$PROOF_DRY" = 1 ] && return 0
 	[ "$(printf '%s' "$h" | jq -r '.bearer_binding.mode // ""')" = enforce ] && pass "mode is enforce" || fail "mode is not enforce: flip it first (nix gatewayBearerBindingMode)"
-	info "refused=$(fp7_num "$h" '.bearer_binding.refused') would_refuse=$(fp7_num "$h" '.bearer_binding.would_refuse')"
-	manual "the same test computer's model call still passes (make one now), then rerun: refused must stay 0"
-	[ "$(fp7_num "$h" '.bearer_binding.refused')" = 0 ] && pass "refused is 0" || fail "refused is $(fp7_num "$h" '.bearer_binding.refused')"
+	info "refused=$(fp7_num "$h" '.bearer_binding.refused') would_refuse=$(fp7_num "$h" '.bearer_binding.would_refuse') first_use_bound=$(fp7_num "$h" '.bearer_binding.first_use_bound') pinned=$(fp7_num "$h" '.bearer_binding.pinned')"
+	manual "make one model call from the test computer now (a Texture prompt), then rerun this step: each run reads fresh counters and the journal"
+	j=$(node_b_q "journalctl -u go-choir-gateway --since '${OPT_since}' --no-pager -o short-iso | grep -E 'bearer binding enforce: refused|moved to its current guest address' || true")
+	printf '%s\n' "$j" | python3 -I -c '
+import re, sys
+last_ref, last_move = {}, {}
+for line in sys.stdin:
+    ts = line.split(" ", 1)[0]
+    m = re.search(r"enforce: refused (\S+) from", line)
+    if m: last_ref[m.group(1)] = ts
+    m = re.search(r"autoputer (\S+) moved to its current guest address", line)
+    if m: last_move[m.group(1)] = ts
+bad = [vm for vm, t in last_ref.items() if t > last_move.get(vm, "")]
+for vm, t in sorted(last_ref.items()):
+    print("INFO refused %s last at %s; its pin last moved at %s" % (vm, t, last_move.get(vm, "never")))
+print("BAD " + " ".join(bad) if bad else "OK")
+' > "$(fp7_state step4)"
+	grep '^INFO' "$(fp7_state step4)" | while read -r _ rest; do info "$rest"; done
+	if grep -q '^OK' "$(fp7_state step4)"; then
+		pass "no computer is refused after its pin moved to its current address"
+	else
+		fail "still refused after the pin moved: $(grep '^BAD' "$(fp7_state step4)" | cut -c5-) (rollback trigger)"
+	fi
 }
 
 step_5() {
