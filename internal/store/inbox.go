@@ -1025,7 +1025,32 @@ func (s *Store) OpenRounds(ctx context.Context, ownerID, computerID, inbox strin
 // against the fold. This read costs one header row per conversation of the
 // computer and one primary-key read per conversation of the inbox.
 func (s *Store) OpenRoundsAddressedTo(ctx context.Context, ownerID, computerID, inbox string) ([]types.ConversationHead, error) {
-	ownerID, computerID, inbox = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(inbox)
+	inbox = strings.TrimSpace(inbox)
+	// A conversation id is "conv:<a>|<b>" with a < b (InboxConversationID),
+	// so a conversation of inbox starts "conv:<inbox>|" or ends "|<inbox>".
+	return s.openConversationHeads(ctx, ownerID, computerID, func(conversationID string) bool {
+		return strings.HasPrefix(conversationID, "conv:"+inbox+"|") || strings.HasSuffix(conversationID, "|"+inbox)
+	}, func(head types.ConversationHead) bool { return head.RecipientInbox == inbox })
+}
+
+// OpenConversationHeads returns every open round of the computer, sorted by
+// conversation id, read from the conversation heads. It is the crash boot's
+// read (closeOpenRoundsAfterCrash): RebuildInboxHeads folds every inbox
+// record of the computer, a cost that grows with its whole history (4m36s
+// on the paper; docs/problems/paper-crash-boot-holds-work-six-minutes-
+// 2026-10-22.md C1). The head is written in the same atomic batch as every
+// record that changes it, so a crash cannot leave a record without its
+// head (C2).
+func (s *Store) OpenConversationHeads(ctx context.Context, ownerID, computerID string) ([]types.ConversationHead, error) {
+	return s.openConversationHeads(ctx, ownerID, computerID, nil, nil)
+}
+
+// openConversationHeads reads the open conversation heads of one owner and
+// computer: one header row per conversation of the owner, and one
+// primary-key read per head that wanted(conversation id) keeps. Metadata
+// that does not name its conversation is read whole rather than skipped.
+func (s *Store) openConversationHeads(ctx context.Context, ownerID, computerID string, wanted func(string) bool, keep func(types.ConversationHead) bool) ([]types.ConversationHead, error) {
+	ownerID, computerID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
 	graph := s.ogReadStore
 	if graph == nil {
 		graph = s.ogStore
@@ -1042,14 +1067,10 @@ func (s *Store) OpenRoundsAddressedTo(ctx context.Context, ownerID, computerID, 
 		if ref.Tombstone || ref.ComputerID != computerID {
 			continue
 		}
-		// A conversation id is "conv:<a>|<b>" with a < b (InboxConversationID),
-		// so a conversation of inbox starts "conv:<inbox>|" or ends "|<inbox>".
-		// Metadata that does not name it is read whole rather than skipped.
 		var meta struct {
 			ConversationID string `json:"conversation_id"`
 		}
-		if json.Unmarshal(ref.Metadata, &meta) == nil && meta.ConversationID != "" &&
-			!strings.HasPrefix(meta.ConversationID, "conv:"+inbox+"|") && !strings.HasSuffix(meta.ConversationID, "|"+inbox) {
+		if wanted != nil && json.Unmarshal(ref.Metadata, &meta) == nil && meta.ConversationID != "" && !wanted(meta.ConversationID) {
 			continue
 		}
 		obj, err := graph.GetObject(ctx, ref.CanonicalID)
@@ -1066,7 +1087,7 @@ func (s *Store) OpenRoundsAddressedTo(ctx context.Context, ownerID, computerID, 
 		if err != nil {
 			return nil, fmt.Errorf("conversation head decode %s: %w", obj.CanonicalID, err)
 		}
-		if head.Open && head.RecipientInbox == inbox {
+		if head.Open && (keep == nil || keep(head)) {
 			open = append(open, head)
 		}
 	}
