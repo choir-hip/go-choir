@@ -128,6 +128,24 @@
     fi
     printf '%s\n' "$commit"
   }
+  # guest_health URL prints the guest's /health body when it answers
+  # 200, and nothing otherwise. A guest whose store is held answers
+  # 503 store_stalled in about 1 s, where it used to time out at 5 s
+  # (F1, docs/problems/paper-unreachable-minutes-after-every-boot-2026-10-22.md);
+  # it sleeps out the difference, so each try costs what a timeout
+  # did and the 120-try waits keep their ~12 min stall budget.
+  guest_health() {
+    local out code body
+    out=$(curl -sS --max-time 5 -w '\n%{http_code}' "$1/health" 2>/dev/null || true)
+    code="${out##*$'\n'}"
+    body="${out%$'\n'*}"
+    if [ "$code" = "200" ]; then
+      printf '%s' "$body"
+    elif [ "$code" = "503" ] && [ "$(printf '%s' "$body" | jq -r '.status // empty' 2>/dev/null || true)" = "store_stalled" ]; then
+      sleep 4
+    fi
+    return 0
+  }
   wait_for_autoputer_commit() {
     local computer_url="$1"
     local vm_id="$2"
@@ -146,7 +164,7 @@
       # A bounded migration step can hold the embedded store for roughly
       # three seconds. Give one health probe enough time to cross that
       # contention window while keeping exact identity fail-closed.
-      commit=$(curl -fsS --max-time 5 "${computer_url}/health" 2>/dev/null | jq -r '.build.commit // empty' || true)
+      commit=$(guest_health "${computer_url}" | jq -r '.build.commit // empty' || true)
       if [ "$commit" = "$expected_commit" ] || { [ -n "$alt_commit" ] && [ "$commit" = "$alt_commit" ]; }; then
         echo "    Verified ${vm_id} serves autoputer commit ${commit}"
         return 0
@@ -697,7 +715,7 @@
             rescued_commit=""
             rescued_layered=""
             for _ in $(seq 1 120); do
-              rescue_health=$(curl -fsS --max-time 5 "${refresh_computer_url}/health" 2>/dev/null || true)
+              rescue_health=$(guest_health "${refresh_computer_url}")
               rescued_commit=$(printf '%s' "$rescue_health" | jq -r '.build.commit // empty' 2>/dev/null || true)
               rescued_layered=$(printf '%s' "$rescue_health" | jq -r '.effective_release.layered // false' 2>/dev/null || true)
               if [ -n "$rescued_commit" ] && { [ "$rescued_commit" = "$autoputer_runtime_commit" ] || [ "$rescued_layered" = "true" ]; }; then
