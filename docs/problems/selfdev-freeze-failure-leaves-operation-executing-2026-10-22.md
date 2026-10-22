@@ -115,9 +115,16 @@ than 30 minutes, with its last refusal.
 ## Now (FP4 follow-up lane, lane/fp4-freeze-failure-closes)
 
 - state: code and tests on the lane branch; FP0 lands and proves.
+- review bunch 15 (Devin, 2026-10-22): F1 the close now also runs at
+  the report entry point on every success, so the early replay returns
+  converge after a crash before the close; F2 every give-up logs; F3
+  the close ignores a cancelled request; F4 a test drives the outer
+  replay path and failed before F1; F5 the obligations list says when
+  it is truncated.
 - deployed proof (FP0, TEST computer only): see the lane report.
 - residual: the stamp write (`RecordIntentError`) is direct SQL, off
   the tape; the terminal error now carries the stamp onto the tape at
   the close. A stall that is not an ended assignment (an open
   assignment whose run is alive but idle) is only detected, not
-  closed.
+  closed. `idle_seconds` reads 0 if `updated_at` fails to parse (it
+  round-trips in practice).
