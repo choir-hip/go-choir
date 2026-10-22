@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -38,12 +39,22 @@ func TestDirectExecEnvAllowlist(t *testing.T) {
 	}
 }
 
+// pathBin resolves a binary from PATH; NixOS has no /bin/echo or /bin/sleep.
+func pathBin(t *testing.T, name string) string {
+	t.Helper()
+	p, err := exec.LookPath(name)
+	if err != nil {
+		t.Skipf("%s not on PATH: %v", name, err)
+	}
+	return p
+}
+
 // TestHandleExecDirectNoShell proves argv metacharacters are data, not code:
 // a shell would expand $(...), ; and $VARS, the direct runner must not.
 func TestHandleExecDirectNoShell(t *testing.T) {
 	root := t.TempDir()
 	b := &Broker{mergedDir: root}
-	p := capsule.ExecRequest{Command: "/bin/echo", Args: []string{"hello; touch pwned", "$(whoami)", "$HOME"}}
+	p := capsule.ExecRequest{Command: pathBin(t, "echo"), Args: []string{"hello; touch pwned", "$(whoami)", "$HOME"}}
 	resp := b.handleExecDirect(context.Background(), root, p)
 	if resp.Error != "" {
 		t.Fatalf("direct exec: %v", resp.Error)
@@ -95,7 +106,7 @@ func TestHandleExecDirectTimeoutReapsGroup(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 	start := time.Now()
-	resp := b.handleExecDirect(ctx, root, capsule.ExecRequest{Command: "/bin/sleep", Args: []string{"30"}})
+	resp := b.handleExecDirect(ctx, root, capsule.ExecRequest{Command: pathBin(t, "sleep"), Args: []string{"30"}})
 	if elapsed := time.Since(start); elapsed > 200*time.Millisecond+execKillReapGrace+2*time.Second {
 		t.Fatalf("reap exceeded grace: %v", elapsed)
 	}

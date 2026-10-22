@@ -50,8 +50,21 @@ func deskWorkerConfig(t *testing.T) DeskSessionWorkerConfig {
 			Role:            "management",
 		},
 		ProcessGroup: true,
-		ExtraEnv:     []string{"CHOIR_DESK_WORKER_CHILD=1"},
+		ExtraEnv:     append([]string{"CHOIR_DESK_WORKER_CHILD=1"}, testLoaderEnv()...),
 	}
+}
+
+// testLoaderEnv passes through only the dynamic-loader path variables this test
+// process itself has. The spawn scrubs the worker's environment, which on NixOS
+// drops the library path the cgo (ICU/Dolt) test binary needs to start.
+func testLoaderEnv() []string {
+	var env []string
+	for _, k := range []string{"LD_LIBRARY_PATH", "LD_PRELOAD", "DYLD_LIBRARY_PATH"} {
+		if v, ok := os.LookupEnv(k); ok {
+			env = append(env, k+"="+v)
+		}
+	}
+	return env
 }
 
 func TestDeskSessionWorkerSpawnsEvalsAndRespawns(t *testing.T) {

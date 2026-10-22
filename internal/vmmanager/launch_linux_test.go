@@ -61,7 +61,7 @@ func statusField(status, key string) string {
 func childStatus(t *testing.T, start func(*exec.Cmd) error) string {
 	t.Helper()
 	var out bytes.Buffer
-	cmd := exec.Command("/bin/cat", "/proc/self/status")
+	cmd := exec.Command(catBin(t), "/proc/self/status")
 	cmd.Stdout = &out
 	if err := start(cmd); err != nil {
 		t.Fatalf("start: %v", err)
@@ -325,4 +325,14 @@ func TestRealJailerLaunch(t *testing.T) {
 	if _, err := mgr.prepareJail(vmID, uid, nil, nil); err != nil {
 		t.Fatalf("second prepareJail: %v", err)
 	}
+}
+
+// catBin resolves cat from PATH; NixOS has no /bin/cat.
+func catBin(t *testing.T) string {
+	t.Helper()
+	p, err := exec.LookPath("cat")
+	if err != nil {
+		t.Skipf("cat not on PATH: %v", err)
+	}
+	return p
 }
