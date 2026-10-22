@@ -112,9 +112,10 @@ comparison failed is not observable: nothing logs it.
 
 ## Cause (read in code, origin/main 54040b730)
 
-Two parts. The approve part is found in code. The reject part is not:
-for a reject, every comparison in the race branch agrees with what the
-observer writes, so the test below is built to tell the cases apart.
+Two parts. The approve part is found in code. The reject part was not
+found by reading. The race test found it: see "Cause confirmed by the
+test" below. That cause hits both decisions. Parts 1-3 are kept as read,
+because part 1 is a second, independent fault on approve.
 
 **1. Approve: the race check refuses every operation that has started to
 materialize (found in code).**
@@ -195,3 +196,33 @@ materialize (found in code).**
   read for them today. The release witness exposes only the two expected
   event heads, not the pending ref or the state commitments
   (selfdev_release_witness.go:272).
+
+## Cause confirmed by the test (2026-10-22, before any fix)
+
+- The race test (`TestSelfDevDecisionObserverWinsRaceAnswersDecidedOperation`)
+  lets the observer win between the append and the Transition.
+- It reproduces staging's exact body for both decisions:
+  - reject: `self-development operation conflict: state is rejected,
+    expected awaiting_approval`;
+  - approve: `… state is applied, expected awaiting_approval`.
+- A temporary diagnostic in the race branch, not committed, printed:
+  `getErr=sql: no rows in result set`, with an empty `DecisionEvent`,
+  `DecisionReceipt` and state.
+- **The cause.** The handler assigns the Transition's result to its own
+  `operation` variable
+  (`operation, err = h.rt.selfdevOperations.Transition(...)`,
+  api_self_development.go:593 on 54040b730). On a conflict, Transition
+  returns `Operation{}`, so `operation.OperationID` becomes `""`. The
+  race branch then re-reads `Get(ctx, computerID, operation.OperationID)`
+  (:607), which is a read of the operation with id `""`. That read always
+  fails, and the branch falls through to the 409.
+- So the race branch has never matched. The four comparisons were never
+  reached. This is the "re-read `getErr`" branch named in part 2: it is
+  silent and it always fails.
+- `recoverSelfDevelopmentDecision` does not have this bug. It binds the
+  Transition result to a new variable (`recovered, err :=`). That is why
+  only the handler fails.
+- On approve, even with the id fixed, part 1's head check would still
+  refuse a `materializing` or `applied` operation. Both have to be fixed.
+- H1 and H2 are not needed to explain the evidence. The hypotheses
+  section is kept as written at the time.
