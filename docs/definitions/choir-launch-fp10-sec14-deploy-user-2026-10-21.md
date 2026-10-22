@@ -84,8 +84,8 @@ now:
   candidate:
     id: FP10-sec14-deploy-user
     state: rehearsing
-    ref: lane/fp10-sec14-deploy-user
-    base: 961588290
+    ref: lane/fp10-sec14-on-g (rebased; lane/fp10-sec14-deploy-user is the pre-rebase tip 333d1797d)
+    base: 6fb1a6580
     digest: none
     scope: [nix/node-b.nix, scripts/node-b-ci-gate, scripts/node-b-ci-gate-probe, .github/workflows/ci.yml, .github/scripts]
   conjecture:
@@ -131,6 +131,33 @@ receipts: []
 # FP10: CI deploys as choir-deploy
 
 Problem record: `docs/problems/ci-deploys-to-node-b-as-root-2026-10-21.md`.
+
+## Rebase onto main 6fb1a6580
+
+Branch `lane/fp10-sec14-on-g`, rebased from 961588290.
+- **The conflict.** There was one conflict, in ci.yml. Main had edited the
+  REMOTE_DEPLOY heredoc, and the lane deletes it.
+  - The rebase took the lane's side. The resolved file equals the lane
+    commit's ci.yml.
+  - Main changed nothing in ci.yml outside the heredoc. The prebuild
+    heredoc is unchanged on main.
+- **Where the port commits sit.** Main's heredoc edits come in as two
+  commits right after the move, inside the deploy-1 group. They are not at
+  the branch end, because deploy 1 already runs the moved script as root.
+  At the end, deploy 1 and deploy 2 would ship the program from before the
+  rescue.
+- **The byte check.** Below the header, `.github/scripts/node-b-ci-deploy`
+  matches main's heredoc at 6fb1a6580 byte for byte, once the 10-space YAML
+  indent is removed (checked with cmp).
+
+| main sha | what | where now (node-b-ci-deploy, at the lane tip) |
+|---|---|---|
+| 05555afca | rescue: rescue-first row, `rescue=` log field, no "already serves" shortcut and no forced refresh for a rescue, rescue wait | port commit "deploy rescue"; lines 594, 603, 608, 631, 665, 704-731 |
+| 211c56018 | the shortcut needs /health to have answered (`refresh_health_commit`) | same commit; lines 630-638 |
+| a80e37fd9 | `-` placeholders in every row field; the rescue wait checks commit and `layered`, and fails closed | same commit; lines 588, 594, 604-606, 714-730 |
+| 9960caa10 | `guest_health` sleeps out a 503 store_stalled (4 s), so the 120-try waits keep their ~12 min budget | port commit "store_stalled sleep-out"; lines 131-148, used at 167 and 718 |
+| 94b656fdb | the contract names the rescue-aware lines | merged cleanly into `deploy-workflow-contract-test` lines 114-116 and 132. They are checked against the workflow and both programs. They fail at the move commit and pass from the rescue port on. |
+| f2f66f9c3 | zot removal | nothing in ci.yml or the programs. The `nix/node-b.nix` line and the SBOM scripts arrive with the base. |
 
 ## Rollout for FP0 (exact steps)
 
