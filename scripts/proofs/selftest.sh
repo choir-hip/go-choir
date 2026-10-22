@@ -59,10 +59,18 @@ J
 J
 	;;
 */internal/vmctl/retention-plan)
+	# $ST/planmode: fail (curl -f error, no body), garbage (not JSON),
+	# shape (JSON, not a plan), empty (a plan with no candidates)
+	case "$(cat "$ST/planmode" 2>/dev/null)" in
+	fail) exit 22 ;;
+	garbage) echo 'upstream connect error'; exit 0 ;;
+	shape) echo '{"error":"not found"}'; exit 0 ;;
+	empty) echo '{"mode":"active","decision":"observe","config":{"mode":"active","test_idle_mode":"off","quarantine_mode":"off"},"inventory":{"state_dirs":2,"kept_state_dirs":1},"kept_state_dirs":[{"vm_id":"candidate-fleet-x","rule":"orphan_state_dir","size_bytes":1,"reasons":["holds_quarantine"],"release":"an owner act"}]}'; exit 0 ;;
+	esac
 	if [ -f "$ST/badplan" ]; then
-		echo '{"mode":"active","decision":"will_prune","config":{"mode":"active","test_idle_mode":"off","quarantine_mode":"off"},"inventory":{},"candidates":[{"vm_id":"candidate-fleet-x","reason":"orphan_state_dir"}]}'
+		echo '{"mode":"active","decision":"will_prune","config":{"mode":"active","test_idle_mode":"off","quarantine_mode":"off"},"inventory":{"state_dirs":2},"candidates":[{"vm_id":"candidate-fleet-x","reason":"orphan_state_dir"}]}'
 	else
-		echo '{"mode":"active","decision":"observe","config":{"mode":"active","test_idle_mode":"off","quarantine_mode":"off"},"inventory":{"kept_state_dirs":1},"candidates":[{"vm_id":"vm-plain","reason":"orphan_state_dir"}],"kept_state_dirs":[{"vm_id":"candidate-fleet-x","rule":"orphan_state_dir","size_bytes":1,"reasons":["holds_quarantine"],"release":"an owner act"}]}'
+		echo '{"mode":"active","decision":"observe","config":{"mode":"active","test_idle_mode":"off","quarantine_mode":"off"},"inventory":{"state_dirs":2,"kept_state_dirs":1},"candidates":[{"vm_id":"vm-plain","reason":"orphan_state_dir"}],"kept_state_dirs":[{"vm_id":"candidate-fleet-x","rule":"orphan_state_dir","size_bytes":1,"reasons":["holds_quarantine"],"release":"an owner act"}]}'
 	fi
 	;;
 *:8084/health) echo '{"status":"ok","bearer_binding":{"mode":"observe","pinned":3,"unpinned":0,"would_refuse":0,"refused":0},"anthropic_relay":"off","model_scheduler":{"mode":"on","queued":0,"in_flight":0,"granted":5},"credentials":{"active":3}}' ;;
@@ -237,16 +245,16 @@ for mode in empty garbage nonzero; do
 done
 
 # ---- FP0 VM retention: the shadow report, read-only -----------------------
+mkdir -p "$WORK/vmstate/candidate-fleet-x" "$WORK/vmstate/vm-plain"
+touch "$WORK/vmstate/candidate-fleet-x/data.img.quarantine-1-a"
 reset_state
-"$HERE/fp0-vm-retention.sh" --commit t1sha >"$WORK/out" 2>&1
+"$HERE/fp0-vm-retention.sh" --commit t1sha --state-dir "$WORK/vmstate" >"$WORK/out" 2>&1
 rc=$?
 t "fp0-vm-retention read-only pass completes" test "$rc" = 0
 t "fp0-vm-retention reads both shadow rules in dry-run" grep -q 'PASS.*shadow quarantine_mode is dry-run' "$WORK/out"
 t "fp0-vm-retention lists a kept test computer with its reasons" grep -q 'test-class computer-1111111111111111111111111111111f.*verdict=keep reasons=state_active,idle_below_min_age' "$WORK/out"
 t "fp0-vm-retention lists the quarantine and why it is kept" grep -q 'quarantine .*data.img.quarantine-1-ab.*verdict=keep reasons=journal_missing' "$WORK/out"
 t "fp0-vm-retention checks the active plan is unchanged" grep -q 'PASS.*no test_class_idle candidate in the active plan' "$WORK/out"
-mkdir -p "$WORK/vmstate/candidate-fleet-x" "$WORK/vmstate/vm-plain"
-touch "$WORK/vmstate/candidate-fleet-x/data.img.quarantine-1-a"
 reset_state
 "$HERE/fp0-vm-retention.sh" --step 4 --state-dir "$WORK/vmstate" >"$WORK/out" 2>&1
 t "fp0-vm-retention step 4 lists the recovery dir" grep -q 'recovery-dir candidate-fleet-x artifacts=1' "$WORK/out"
@@ -257,6 +265,35 @@ touch "$ST/badplan"
 "$HERE/fp0-vm-retention.sh" --step 4 --state-dir "$WORK/vmstate" >"$WORK/out" 2>&1
 t "fp0-vm-retention step 4 fails when a recovery dir is a candidate" grep -q 'FAIL.*candidates: candidate-fleet-x' "$WORK/out"
 rm -f "$ST/badplan"
+# R4-1: step 4 never passes without having compared something.
+step4_run() { # planmode state-dir
+	reset_state
+	if [ -n "$1" ]; then echo "$1" >"$ST/planmode"; else rm -f "$ST/planmode"; fi
+	"$HERE/fp0-vm-retention.sh" --step 4 --state-dir "$2" >"$WORK/out" 2>&1
+	echo $? >"$WORK/rc"
+	rm -f "$ST/planmode"
+}
+no_step4_pass() { ! grep -q 'PASS.*no dir holding recovery state is a deletion candidate' "$WORK/out"; }
+mkdir -p "$WORK/vmstate-empty" "$WORK/vmstate-clean/vm-plain"
+for mode in fail garbage shape; do
+	step4_run "$mode" "$WORK/vmstate"
+	t "fp0-vm-retention step 4 fails on a $mode plan read" grep -q 'FAIL.*the active plan' "$WORK/out"
+	t "fp0-vm-retention step 4 exits 1 on a $mode plan read" test "$(cat "$WORK/rc")" = 1
+	t "fp0-vm-retention step 4 does not pass on a $mode plan read" no_step4_pass
+done
+step4_run "" "$WORK/no-such-dir"
+t "fp0-vm-retention step 4 fails on an unreadable state dir" grep -q 'FAIL.*the state dir' "$WORK/out"
+t "fp0-vm-retention step 4 exits 1 on an unreadable state dir" test "$(cat "$WORK/rc")" = 1
+t "fp0-vm-retention step 4 does not pass on an unreadable state dir" no_step4_pass
+step4_run "" "$WORK/vmstate-empty"
+t "fp0-vm-retention step 4 fails on a state dir with none of the plan's dirs" grep -q 'FAIL.*the state dir' "$WORK/out"
+t "fp0-vm-retention step 4 does not pass on a state dir with none of the plan's dirs" no_step4_pass
+step4_run empty "$WORK/vmstate"
+t "fp0-vm-retention step 4 says nothing to check when the plan has no candidates" grep -q 'nothing to check.*no candidates' "$WORK/out"
+t "fp0-vm-retention step 4 does not pass when the plan has no candidates" no_step4_pass
+step4_run "" "$WORK/vmstate-clean"
+t "fp0-vm-retention step 4 says nothing to check when no dir holds recovery state" grep -q 'nothing to check.*no dir holds recovery state' "$WORK/out"
+t "fp0-vm-retention step 4 does not pass when no dir holds recovery state" no_step4_pass
 t "fp0-vm-retention has no mutating step" bash -c "! '$HERE/fp0-vm-retention.sh' --list | awk -F'\t' '\$2 == \"mut\"' | grep -q ."
 
 printf '\n%d passed, %d failed\n' "$PASSN" "$FAILN"
