@@ -127,3 +127,36 @@ Open: which store calls hold the connection over a second while eight runs
 are live (a per-call hold-time log above a threshold would name them);
 whether /health's three reads should come from memory instead of the
 store, so the health signal stops turning on load.
+
+### Findings: an instrument that names the holder at the stall (lane `lane/fp4-store-stall-holder`, 2026-10-22)
+
+Why the existing probes miss it. The bursts at 21:30:27 and 21:38:45 UTC
+are not inside a `DOLT_GC` window, and an external
+`/api/runtime/observability?goroutines=1` taken 1 to 2 s after a 503 found
+no goroutine inside the Dolt engine: by then the holder had let go.
+`engine_mutex_live` sees only callers of the object graph's engine lock,
+and the holders here are raw `s.db` callers, which never take it. Nothing
+records how long callers wait for the write pool's one connection, so the
+growth of that wait between stalls is invisible too.
+
+What the lane builds (mutation class orange: observability on the guest
+runtime; the store and /health's answers do not change):
+
+1. In /health's `store_stalled` branch, after the 503 is written (so the
+   answer is not delayed), at most once a minute, the runtime takes one
+   goroutine snapshot and logs one line per goroutine that is inside the
+   Dolt or go-mysql-server engine and not parked in
+   `database/sql.(*DB).conn` (the health reads themselves and the other
+   waiters): its first choir frame and its first two engine frames, then a
+   header with the write and read pools' `sql.DBStats` (in use, wait count,
+   wait duration). Bounded: at most 16 goroutines, each line and the total
+   capped in bytes. The lines go to the standard log, so they reach the
+   console and `recent_log`. This is taken at the moment the reads gave up,
+   while the holder still holds the connection.
+2. The same pool stats on `/api/runtime/observability` (`store_pools`), so
+   wait-count and wait-duration growth shows without a stall. /health's 200
+   body is left byte-for-byte as it is (its test pins the keys).
+
+Not built: a per-call hold-time log on every store call (it would touch
+every raw `s.db` caller); moving /health's reads off the store. Both stay
+open above.
