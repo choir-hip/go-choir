@@ -116,10 +116,13 @@ until step 0 has been done in the same window.** The script refuses
 - Hold deploys: no push to `main` during the window. The script refuses
   while a NixOS switch is running.
 - Quiet computers. A computer that is busy when marked (a run in flight or
-  a self-development operation open) refuses its marker. The script
-  retries for `--busy-wait` (600 s) and then aborts, clearing the markers
-  it wrote. `--allow-crash-close` reboots anyway, and the busy
-  computers' work ends `interrupted_by_restart`.
+  a self-development operation open) refuses its marker, except that a
+  `critical_protected` or `public_platform` computer (the paper, the
+  platform computer) is asked with `allow_busy` and takes the marker with
+  runs running. The script retries for `--busy-wait` (600 s) and then
+  aborts, clearing the markers it wrote. `--allow-crash-close` reboots
+  anyway, and the busy computers' work ends `interrupted_by_restart`. A
+  refusal for a self-development apply or a live capsule always aborts.
 - The paper's source schedules are standing intents and survive any
   restart (`recoverSourceSchedulesAtBoot`). A crash closes only the poll
   in flight. The next tick is armed one interval after boot. A
@@ -142,8 +145,12 @@ The script runs these steps in order:
 2. **Markers.** For every running, non-held computer it sends
    `POST <computer_url>/internal/runtime/planned-restart`
    `{"target":"host-reboot kernel <v>"}`, the same request
-   deploy-refresh makes. The guest writes the marker durably, or answers
-   409 while busy.
+   deploy-refresh makes, with `?allow_busy=1` for `critical_protected`
+   and `public_platform` computers (vmctl's `deployRefreshAllowsBusy`).
+   The guest writes the marker durably, or answers 409 while busy. The
+   script logs each computer's outcome (written, busy, unsafe,
+   unsupported, unavailable) and keeps it in the receipt under
+   `marks.outcomes`.
 3. **Reboot.** It runs `ssh node-b systemctl reboot` and waits up to
    `--boot-timeout` (1200 s) for ssh with a new `boot_id`.
 4. **Post-checks** (below). The receipt JSON goes to
@@ -157,10 +164,13 @@ writing will cold-boot on their next wake whatever happens.
 
 ### Marker policy (the default, stated)
 
-**Default: idle computers get markers written immediately before the
-reboot, and the post-checks verify the boot happened inside the TTL. Busy
-work is never carried across: the run waits for busy computers to go idle,
-or it aborts.** Here is why, and what the alternatives cost:
+**Default: idle computers, and busy `critical_protected` and
+`public_platform` computers, get markers written immediately before the
+reboot, and the post-checks verify the boot happened inside the TTL.
+Other busy computers' work is never carried across: the run waits for
+them to go idle, or it aborts. No computer is rebooted through a
+self-development apply or a live capsule.** Here is why, and what the
+alternatives cost:
 
 - The marker lasts 15 minutes (`plannedRestartMaxAge`). That is short for a
   host reboot, and this one's duration is unknown (estimate: 2 to 5
@@ -170,10 +180,17 @@ or it aborts.** Here is why, and what the alternatives cost:
   (`restart.kind`). An expired marker makes that boot a crash boot, which
   closes work as `interrupted_by_restart`. That is the safe fallback, not
   a failure.
-- The guest writes a marker only while it is idle (409 otherwise). So a
-  marker can resume parked work (scheduled wakes, the source schedules'
-  generations and saved ticks), but it never re-dispatches a run that was
-  in flight.
+- The guest writes a marker only while it is idle (409 otherwise), unless
+  asked with `allow_busy`. So for most computers a marker can resume
+  parked work (scheduled wakes, the source schedules' generations and
+  saved ticks) but never re-dispatches a run that was in flight. The
+  always-busy tiers (`critical_protected`, `public_platform`; owner,
+  2026-10-15, CLAUDE.md) are asked with `allow_busy`, the same rule
+  vmctl's deploy refresh uses: their running runs park and resume once on
+  the planned boot. The guest still refuses while a self-development
+  operation is mid-transaction or a capsule is live, and the script then
+  aborts, even under `--allow-crash-close`. `--no-allow-busy` restores
+  the idle-only rule for every computer.
 - `--allow-crash-close` accepts crash semantics for computers still busy
   after `--busy-wait`. Their in-flight work closes as "interrupted by a
   restart" and is not resumed.
@@ -222,8 +239,9 @@ these checks read-only at any time:
 - `/proc/mdstat` shows both arrays `[UU]`.
 - vmctl `/health` returns 200.
 - The firewall chains are re-created by vmctl at start
-  (`reconcileAtStart`): the first FORWARD rule is
-  `-i vm-+ … -j CHOIR-GUEST-FWD`, `CHOIR-GUEST-FWD` ends in
+  (`reconcileAtStart`): FORWARD begins with `-o vm-+ … -j
+  CHOIR-GUEST-RET` (replies only), then `-i vm-+ … -j CHOIR-GUEST-FWD`
+  (the order `ensureBaseLocked` installs), `CHOIR-GUEST-FWD` ends in
   `-j CHOIR-GUEST-TAPS` then `-j DROP`, and `CHOIR-GUEST-TAPS` and
   `nixos-fw` exist.
 - `scripts/verify-host-hardening.py` shows no failures beyond the

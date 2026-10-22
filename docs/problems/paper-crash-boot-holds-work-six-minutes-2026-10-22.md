@@ -74,7 +74,9 @@ history, so every crash boot gets slower.
 3. The host reboot script never asks a busy critical computer for a
    planned restart with `allow_busy`, which the guest supports
    (`"allow_busy":false` in its refusals at 20:04:16-20:05:19). With it, the
-   paper would have booted planned and skipped both closures.
+   paper would have booted planned and skipped both closures. **Answered
+   in the script** (R1 below, `lane/fp0-reboot-script-r2`); questions 1
+   and 2 stay open, since any crash boot of the paper still pays them.
 
 ## Findings: the host reboot script (open question 3), 2026-10-22
 
@@ -117,3 +119,44 @@ at position 1 and then the CHOIR-GUEST-RET jump at position 1, so on a
 fresh boot RET is rule 1 and FWD rule 2. The check predates the return
 chain (SEC-03, 9256d6368). The firewall is right; the check is wrong, and
 a check that fails on the right state teaches operators to ignore it.
+
+### Fix (lane `lane/fp0-reboot-script-r2`)
+
+- R1 fixed. `phase_mark` sends `?allow_busy=1` (a query parameter, as
+  `httpGuestMarker.mark` does) exactly for `marker_allows_busy`:
+  `critical_protected` and `public_platform`, vmctl's
+  `deployRefreshAllowsBusy` set. The vmctl list's `warmness_class` is
+  the registry-resolved class (`WarmnessClassForOwnership`), the input
+  vmctl's rule reads. `scripts/test_node_b_host_reboot.py` reads the case
+  list from the Go source, so a change to vmctl's rule fails the test
+  instead of drifting. `--no-allow-busy` keeps the old rule. The
+  docstring and the runbook's marker policy say so.
+- R2 fixed. `classify_marker_answer` turns each answer into written,
+  busy (runs only), unsafe (an apply mid-transaction or a live capsule,
+  or a 409 the script cannot read: fail closed), unsupported or
+  unavailable. Each round and a final table log every computer's outcome,
+  class, `allow_busy` and the guest's counts; the receipt keeps them
+  under `marks.outcomes`. Choice, stated: an unsafe refusal aborts the
+  reboot and clears the markers even under `--allow-crash-close`, which
+  now covers only runs. A crash cuts an apply or a capsule just as a
+  planned restart would, and the contract says these computers are never
+  restarted through one; the operator waits (`--busy-wait`) or reruns.
+- R3 fixed. The facts carry FORWARD's raw rules, and
+  `forward_guest_jumps` passes only when rule 1 is `-o vm-+ … -j
+  CHOIR-GUEST-RET` and rule 2 `-i vm-+ … -j CHOIR-GUEST-FWD`; a missing
+  rule, the reverse order, a rule ahead of them or an unreadable chain
+  fails. Pre-check stays a warning; post-check stays blocking.
+
+Residuals:
+
+- The order vmctl produces depends on history: `ensureBaseLocked`
+  re-inserts a missing jump at position 1, so if only the CHOIR-GUEST-FWD
+  jump were lost and restored, FWD would come first. Both chains end in
+  DROP and match opposite directions, so that order is not less safe, but
+  the check would fail on it. Fail closed is the chosen side; a reboot
+  re-creates the fresh order.
+- `--no-markers` still crash-boots every computer without asking, so it
+  also crashes through an apply or a live capsule. Unchanged: it is the
+  operator's explicit choice of pure crash semantics.
+- Not run against any host. The next reboot is the first live proof that
+  the paper boots `planned` with its runs resumed once.
