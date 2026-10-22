@@ -36,12 +36,14 @@ import (
 // table stays (the repair is forward, design 4.5). It compiles against the
 // pre-deploy-1 store package, which imports database/sql, errors and log.
 func rollbackRecipeDropEmptyChoirEvents(db *sql.DB) error {
-	var name string
-	switch err := db.QueryRow(`SHOW TABLES LIKE 'choir_events'`).Scan(&name); {
-	case errors.Is(err, sql.ErrNoRows):
-		return nil // never created, or already dropped
-	case err != nil:
+	// An exact name: LIKE would read the underscore as a wildcard
+	// (round 1d, DeepSeek).
+	var tables int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'choir_events'`).Scan(&tables); err != nil {
 		return err
+	}
+	if tables == 0 {
+		return nil // never created, or already dropped
 	}
 	var one int
 	switch err := db.QueryRow(`SELECT 1 FROM choir_events LIMIT 1`).Scan(&one); {
@@ -210,5 +212,30 @@ func TestEventTableRollbackArtifactBuildsInTheStorePackage(t *testing.T) {
 	build.Dir = root
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("internal/store does not build with the rollback step: %v\n%s", err, out)
+	}
+}
+
+// The step names the table exactly: a lookalike that LIKE 'choir_events'
+// would match (the underscore is a wildcard) neither stops the drop nor is
+// dropped (round 1d, DeepSeek).
+func TestEventTableRollbackRecipeNamesTheTableExactly(t *testing.T) {
+	s, _ := vocabUpcastOpenStore(t, "rollback-lookalike")
+	if _, err := s.db.Exec(`CREATE TABLE choirXevents (id INT PRIMARY KEY)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := rollbackRecipeDropEmptyChoirEvents(s.db); err != nil {
+		t.Fatalf("recipe beside a lookalike table: %v", err)
+	}
+	var n int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'choir_events'`).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("choir_events survived (%d, %v)", n, err)
+	}
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM choirXevents`).Scan(&n); err != nil {
+		t.Fatalf("the lookalike table was dropped: %v", err)
+	}
+	// choir_events gone, the lookalike present: a LIKE check would find the
+	// lookalike and then fail on choir_events, aborting the boot.
+	if err := rollbackRecipeDropEmptyChoirEvents(s.db); err != nil {
+		t.Fatalf("second boot beside a lookalike table: %v", err)
 	}
 }
