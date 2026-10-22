@@ -2028,6 +2028,13 @@ func (s *Store) AppendEvent(ctx context.Context, rec *types.EventRecord) error {
 				maxSeq = ev.Seq
 			}
 		}
+		// Events stamped for choir_events are not in og_objects: seed from
+		// both, or a number is handed out twice (event-table design 3.5).
+		tableSeq, err := s.eventTableRunMaxSeq(ctx, rec.RunID)
+		if err != nil {
+			return err
+		}
+		maxSeq = max(maxSeq, tableSeq)
 		if sl != nil {
 			// With the sealer a number can be published and never stored, so a
 			// seed from the store alone can hand it out twice (design 6.1).
@@ -2067,6 +2074,11 @@ func (s *Store) AppendEvent(ctx context.Context, rec *types.EventRecord) error {
 				s.maxStreamSeq = ev.StreamSeq
 			}
 		}
+		tableStream, err := s.eventTableNewestStreamSeq(ctx)
+		if err != nil {
+			return err
+		}
+		s.maxStreamSeq = max(s.maxStreamSeq, tableStream)
 		s.streamSeqSeeded = true
 		if sl != nil && s.maxStreamSeq > 0 {
 			s.maxStreamSeq += telemetrySeqGap // see the per-run seed above
@@ -2122,7 +2134,9 @@ func (s *Store) ListEvents(ctx context.Context, runID string, limit int) ([]type
 }
 
 // ListEventsAfter returns events for the given run with sequence > afterSeq,
-// ordered by sequence ascending, limited to the given count.
+// ordered by sequence ascending, limited to the given count. It reads the
+// union of og_objects and choir_events (event-table design 4.4); the cursor
+// and evidence-link semantics are unchanged.
 func (s *Store) ListEventsAfter(ctx context.Context, runID string, afterSeq int64, limit int) ([]types.EventRecord, error) {
 	s.beforeEventRead(ctx)
 	if limit <= 0 {
@@ -2134,26 +2148,36 @@ func (s *Store) ListEventsAfter(ctx context.Context, runID string, afterSeq int6
 	if err != nil {
 		return nil, fmt.Errorf("query events: %w", err)
 	}
-	events := make([]types.EventRecord, 0, len(objs))
-	for _, obj := range objs {
-		var rec types.EventRecord
-		if err := ogDecode(obj, &rec); err != nil {
-			return nil, err
-		}
-		if rec.Seq <= afterSeq {
-			continue
-		}
-		events = append(events, rec)
+	og, err := objectEventEntries(objs)
+	if err != nil {
+		return nil, err
 	}
-	sort.Slice(events, func(i, j int) bool { return events[i].Seq < events[j].Seq })
-	if len(events) > limit {
-		events = events[:limit]
+	kept := og[:0]
+	for _, e := range og {
+		if e.rec.Seq > afterSeq {
+			kept = append(kept, e)
+		}
 	}
-	return events, nil
+	query, args := eventTableRunAfterSQL(runID, afterSeq, limit)
+	table, err := s.readEventTable(ctx, "store.event_table.list_run_after", query, args)
+	if err != nil {
+		return nil, err
+	}
+	events := unionEvents(kept, table)
+	sort.Slice(events, func(i, j int) bool {
+		if events[i].rec.Seq != events[j].rec.Seq {
+			return events[i].rec.Seq < events[j].rec.Seq
+		}
+		return events[i].rec.StreamSeq < events[j].rec.StreamSeq
+	})
+	return eventRecords(events, limit), nil
 }
 
 // ListEventsByOwner returns events for the given owner, ordered by timestamp
-// descending, limited to the given count.
+// descending, limited to the given count. It reads the union: the
+// og_objects half is the newest by timestamp, the choir_events half the
+// newest by stream_seq. They differ only at the cut, and only where callers'
+// timestamps disagree with allocation order (event-table design 4.4).
 func (s *Store) ListEventsByOwner(ctx context.Context, ownerID string, limit int) ([]types.EventRecord, error) {
 	s.beforeEventRead(ctx)
 	if limit <= 0 {
@@ -2167,25 +2191,30 @@ func (s *Store) ListEventsByOwner(ctx context.Context, ownerID string, limit int
 	if err != nil {
 		return nil, fmt.Errorf("query events by owner: %w", err)
 	}
-	events := make([]types.EventRecord, 0, len(objs))
-	for _, obj := range objs {
-		var rec types.EventRecord
-		if err := ogDecode(obj, &rec); err != nil {
-			return nil, err
+	og, err := objectEventEntries(objs)
+	if err != nil {
+		return nil, err
+	}
+	query, args := eventTableOwnerNewestSQL(ownerID, limit)
+	table, err := s.readEventTable(ctx, "store.event_table.list_owner_newest", query, args)
+	if err != nil {
+		return nil, err
+	}
+	events := unionEvents(og, table)
+	sort.Slice(events, func(i, j int) bool {
+		if !events[i].rec.Timestamp.Equal(events[j].rec.Timestamp) {
+			return events[i].rec.Timestamp.After(events[j].rec.Timestamp)
 		}
-		events = append(events, rec)
-	}
-	sort.Slice(events, func(i, j int) bool { return events[i].Timestamp.After(events[j].Timestamp) })
-	if len(events) > limit {
-		events = events[:limit]
-	}
-	return events, nil
+		return events[i].rec.StreamSeq > events[j].rec.StreamSeq
+	})
+	return eventRecords(events, limit), nil
 }
 
 // ListEventsByOwnerAfter returns events for the given owner with stream_seq >
 // afterSeq across all runs, ordered by stream_seq ascending, limited to the
 // given count. This supports SSE catch-up after reconnection where the client
-// needs events newer than a previously seen sequence number.
+// needs events newer than a previously seen sequence number. It reads the
+// union of og_objects and choir_events.
 func (s *Store) ListEventsByOwnerAfter(ctx context.Context, ownerID string, afterSeq int64, limit int) ([]types.EventRecord, error) {
 	s.beforeEventRead(ctx)
 	if limit <= 0 {
@@ -2202,26 +2231,34 @@ func (s *Store) ListEventsByOwnerAfter(ctx context.Context, ownerID string, afte
 	if err != nil {
 		return nil, fmt.Errorf("query events by owner after seq: %w", err)
 	}
-	events := make([]types.EventRecord, 0, len(objs))
-	for _, obj := range objs {
-		var rec types.EventRecord
-		if err := ogDecode(obj, &rec); err != nil {
-			return nil, err
-		}
-		if rec.StreamSeq <= afterSeq {
-			continue
-		}
-		events = append(events, rec)
+	og, err := objectEventEntries(objs)
+	if err != nil {
+		return nil, err
 	}
-	sort.Slice(events, func(i, j int) bool { return events[i].StreamSeq < events[j].StreamSeq })
-	if len(events) > limit {
-		events = events[:limit]
+	kept := og[:0]
+	for _, e := range og {
+		if e.rec.StreamSeq > afterSeq {
+			kept = append(kept, e)
+		}
 	}
-	return events, nil
+	query, args := eventTableOwnerAfterSQL(ownerID, afterSeq, limit)
+	table, err := s.readEventTable(ctx, "store.event_table.list_owner_after", query, args)
+	if err != nil {
+		return nil, err
+	}
+	events := unionEvents(kept, table)
+	sort.Slice(events, func(i, j int) bool { return events[i].rec.StreamSeq < events[j].rec.StreamSeq })
+	return eventRecords(events, limit), nil
 }
 
-// ListEventsByChannel returns recent events for the given coordination channel.
-func (s *Store) ListEventsByChannel(ctx context.Context, ownerID, channelID string, limit int) ([]types.EventRecord, error) {
+// ListAcknowledgedEventsByChannel returns recent events for the given
+// coordination channel. It reads og_objects only, so for events written
+// after the event-table cutover it covers acknowledged kinds only: batched
+// kinds carry the run's channel but are stamped into choir_events, which has
+// no channel index (event-table design 1.2, Q9). Its one caller, System1,
+// reads an acknowledged kind; a new caller must add a channel index or a
+// union (pinned by the call-site audit).
+func (s *Store) ListAcknowledgedEventsByChannel(ctx context.Context, ownerID, channelID string, limit int) ([]types.EventRecord, error) {
 	s.beforeEventRead(ctx)
 	if limit <= 0 {
 		limit = 200
@@ -2249,33 +2286,58 @@ func (s *Store) ListEventsByChannel(ctx context.Context, ownerID, channelID stri
 	return events, nil
 }
 
-// ListEventsByTrajectory returns recent events for a specific user trajectory.
+// eventTrajectoryWindow is the newest-events window ListEventsByTrajectory
+// reads before it filters and cuts.
+const eventTrajectoryWindow = 10000
+
+// ListEventsByTrajectory returns events for a specific user trajectory: of
+// the trajectory's newest 10,000 events by timestamp, the owner's, the
+// oldest limit by stream_seq (as before F-c; whether acceptance should read
+// the newest is a reader question of its own, event-table design heresy
+// delta). It rebuilds that window over the union first, so a trajectory
+// whose events span both tables reads exactly what one table would give.
 func (s *Store) ListEventsByTrajectory(ctx context.Context, ownerID, trajectoryID string, limit int) ([]types.EventRecord, error) {
 	s.beforeEventRead(ctx)
 	if limit <= 0 {
 		limit = 500
 	}
 	// Fetch a large window since ogListByMetadata orders by updated_at DESC.
-	objs, err := s.ogListByMetadata(ctx, ogKindEvent, "trajectory_id", trajectoryID, 10000)
+	objs, err := s.ogListByMetadata(ctx, ogKindEvent, "trajectory_id", trajectoryID, eventTrajectoryWindow)
 	if err != nil {
 		return nil, fmt.Errorf("query events by trajectory: %w", err)
 	}
-	var events []types.EventRecord
-	for _, obj := range objs {
-		var rec types.EventRecord
-		if err := ogDecode(obj, &rec); err != nil {
-			return nil, err
-		}
-		if rec.OwnerID != ownerID {
-			continue
-		}
-		events = append(events, rec)
+	og, err := objectEventEntries(objs)
+	if err != nil {
+		return nil, err
 	}
-	sort.Slice(events, func(i, j int) bool { return events[i].StreamSeq < events[j].StreamSeq })
-	if len(events) > limit {
-		events = events[:limit]
+	query, args := eventTableTrajectoryNewestSQL(trajectoryID, eventTrajectoryWindow)
+	table, err := s.readEventTable(ctx, "store.event_table.list_trajectory", query, args)
+	if err != nil {
+		return nil, err
 	}
-	return events, nil
+	window := unionEvents(og, table)
+	sort.Slice(window, func(i, j int) bool {
+		if !window[i].updatedAt.Equal(window[j].updatedAt) {
+			return window[i].updatedAt.After(window[j].updatedAt)
+		}
+		return window[i].rec.StreamSeq > window[j].rec.StreamSeq
+	})
+	if len(window) > eventTrajectoryWindow {
+		window = window[:eventTrajectoryWindow]
+	}
+	events := window[:0]
+	for _, e := range window {
+		if e.rec.OwnerID == ownerID {
+			events = append(events, e)
+		}
+	}
+	sort.Slice(events, func(i, j int) bool {
+		if events[i].rec.StreamSeq != events[j].rec.StreamSeq {
+			return events[i].rec.StreamSeq < events[j].rec.StreamSeq
+		}
+		return events[i].rec.Seq < events[j].rec.Seq
+	})
+	return eventRecords(events, limit), nil
 }
 
 // ListEventsByTrajectoryAfter returns trajectory-scoped events newer than the
