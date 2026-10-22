@@ -179,7 +179,8 @@ heresy_delta:
 now:
   status: open_handoff
   slice: >-
-    Repair round 1 done (bunch 4b findings B1 to B4 fixed, below). Before it: commits 1 to 7 built on lane/b9-keys (the vault, its host script and
+    Repair round 2 done (bunch 31 findings E1 to E3 and five lows, below) on
+    lane/fp9-on-g. Repair round 1 done (bunch 4b findings B1 to B4 fixed, below). Before it: commits 1 to 7 built on lane/b9-keys (the vault, its host script and
     nix module, the mode change, sealed escrow keys with the escrowkey
     tool, taperepack, the drill steps). Every remaining step is FP0's
     (landing, the flake entries, deployed proofs) or the owner's (open
@@ -250,10 +251,24 @@ now:
     None for local work. The nix module cannot be evaluated here (no Nix in
     the lane VM; its evaluation test skips); it is not imported by
     node-b.nix so it cannot break a deploy until FP0 wires it. escrowkey and
-    taperepack are not in the flake's goServiceSubPackages yet (FP0 step).
+    taperepack are in goServiceSubPackages and installed beside corpusd
+    (repair round 2, E1); the flake was not evaluated here (no nix).
   next_action: FP0 reviews the frozen lane, lands it with the switches off, then runs "Landing steps for FP0" below.
 
 receipts:
+  - kind: local_tests
+    at: 2026-10-22
+    ref: lane/fp9-on-g (repair round 2)
+    evidence: >-
+      go test -race ./internal/vmmanager -run 'Vault|DataImage|Snapshot';
+      go test -race ./internal/keyescrow ./internal/taperepack
+      ./cmd/escrowkey ./cmd/taperepack; snapshot-vault-test.sh (H1-H17) and
+      off-host-backup-kek-exclude-test.sh pass; bash -n on the changed
+      scripts; go vet on the changed packages (and GOOS=darwin GOARCH=arm64
+      for vmmanager, keyescrow, taperepack). Break-once: the mount-root
+      check, the placement check and the live-writer refusal each removed
+      made its test fail; the FIFO and script tests failed before their
+      fixes. The flake change is reasoned, not evaluated (no nix here).
   - kind: local_tests
     at: 2026-10-21
     ref: lane/b9-keys (repair round 1)
@@ -596,8 +611,21 @@ corpusd healthy. 3. `escrowkey seal`; fingerprint unchanged; restart
 corpusd and the checkpoint worker; escrow public key endpoint unchanged and a
 checkpoint job opens an escrowed key. 4. Flip to `require`. 5. Exclude the KEK
 from the backup and take a backup; a restore of `platform-artifacts` without
-the KEK fails `escrowkey check`. 6. Rollback drill: `escrowkey unseal`, set
+the KEK fails `escrowkey check`. 5b (repair round 2, E3: restic omitted
+the KEK, proven on the repository, not the plan text). With the restic
+environment the restore drill uses (scripts/off-host-restore-drill.sh),
+`restic ls latest | grep -c key-escrow-kek` must print 0, and for each
+KEK source the plan listed under "excluded:" (the units' credential
+source and any absolute `CHOIR_KEY_ESCROW_KEK_PATH`),
+`restic ls latest <that path>` must list nothing. Counts and paths only;
+never print a file. 6. Rollback drill: `escrowkey unseal`, set
 `off`, restart: same fingerprint.
+
+The tools on Node B (repair round 2, E1): the corpusd package carries them,
+so they are `/var/lib/go-choir/services/corpusd/bin/escrowkey` and
+`/var/lib/go-choir/services/corpusd/bin/taperepack` (the store copy is
+`<corpusd package>/bin/...`). Every `escrowkey` and `taperepack` in these
+steps means that path.
 
 ## Review round 1 (bunch 4b, frozen 3bd691a6b): findings and dispositions
 
@@ -673,14 +701,54 @@ documentation, not observed on Node B (the `plan` check in landing step 3);
 a KEK delivered some way other than a credential or that variable is not
 discovered (the loader accepts no other way).
 
+## Repair round 2 (bunch 31, DeepSeek v4.1 flash, accept with edits)
+
+Reviewed on lane/fp9-on-g at ab67a159f (the lane rebased onto main
+4fca1e01b). Tests first (1e5db9308, yellow), then the fixes; each finding:
+
+- E1 (high, deliverability), fixed 6969a1522 (orange): the two commands
+  were neither built nor installed. They join `goServiceSubPackages` and
+  the corpusd package's `extraBins`; the drill names
+  `/var/lib/go-choir/services/corpusd/bin/`. go.mod and go.sum are
+  untouched and both commands import only the standard library and
+  internal packages already in the source filter, so vendorHash does not
+  change (reasoned from the flake text; no nix in the lane VM). Landing
+  step 1 is corrected.
+- E2 (medium), fixed 1e5db9308 (yellow): `newVaultFixture` skips off Linux
+  (the vault resolves paths through /proc/<pid>/fd and is refused on any
+  other host), so the 14 vault tests skip instead of failing on darwin.
+- E3 (medium), fixed in this file: escrow sealing step 5b proves on the
+  repository that restic omitted the KEK (`restic ls latest`), not only the
+  plan text. `kek_sources` splitting `Environment=` on spaces (a KEK path
+  with a space is missed) stays a residual beside the unobserved
+  `systemctl show` format.
+- Low, mount root, fixed f64062b54 (red): mountinfo field 4 must be "/".
+- Low, taperepack live store, fixed 2c6aa397e (red): copy tries the
+  appender's per-computer flock non-blocking before each batch and
+  refuses if held; plan and census only read and take no lock.
+- Low, non-blocking open, fixed 6058cb54d (red): readBounded opens with
+  O_NOFOLLOW|O_NONBLOCK, fstats, refuses non-regular files.
+- Low, script strict mode, fixed 0652617d4 (red): `set -euo pipefail` with
+  every answer-bearing step guarded; `down` exits 1 if the backing file
+  stays.
+- Edge, capture selection, fixed f64062b54 (red): with the vault list set, a computer
+  with no computer id whose VM id the list does not name is refused before
+  the fence (`snapshot_vault_unknown_computer`, kill path), never captured
+  in plaintext.
+
 ## Landing steps for FP0
 
 All switches ship off; with them unset the lane is byte-identical in
 behavior to main (must_preserve 1).
 
-1. Done by FP0's flake commit in the frozen candidate 3bd691a6b
-   (`cmd/escrowkey` and `cmd/taperepack` in `goServiceSubPackages`); keep
-   it when rebasing onto the repaired lane.
+1. The flake is on the lane (commit 6969a1522, repair round 2, E1): the
+   earlier statement here, that FP0's commit 3bd691a6b would be kept on
+   rebase, was false (that commit was on a frozen candidate and the rebase
+   onto 4fca1e01b dropped it). `cmd/escrowkey` and `cmd/taperepack` are in
+   `goServiceSubPackages` and in the corpusd package's `extraBins`; check
+   after the deploy that `/var/lib/go-choir/services/corpusd/bin/` holds
+   both. Not evaluated in the lane VM (no nix): run `nix flake check` or
+   the deploy build first.
 2. Snapshot vault: the "Deployed proof" steps below.
 3. Escrow sealing: the corpusd and checkpointd units read
    `CHOIR_KEY_ESCROW_SEAL` and `CHOIR_KEY_ESCROW_KEK_PATH`; give the KEK as
