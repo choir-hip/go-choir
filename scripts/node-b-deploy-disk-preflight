@@ -11,31 +11,62 @@ set -euo pipefail
 # (Earlier: 100 GiB on 2026-08-26, 90 GiB on 2026-09-15 while min-free was 80.)
 min_free_kib="${DEPLOY_MIN_FREE_KIB:-62914560}"
 
+# Every number this script compares has at most 15 digits (999 TB even in
+# bytes), so bash's 64-bit arithmetic cannot wrap; it is read as decimal
+# (10#, a leading zero is not octal); and a [ that errors refuses the deploy
+# instead of making its if false (review round 3, R3-F1).
+is_count() { [[ "$1" =~ ^[0-9]{1,15}$ ]]; }
+refuse() {
+  echo "Deploy disk preflight failed: $*" >&2
+  journalctl -u go-choir-host-disk-alarm -n 1 --no-pager >&2 || true
+  exit 1
+}
+at_least() { # $1 >= $2; a comparison that errors refuses the deploy
+  local rc=0
+  [ "$1" -ge "$2" ] || rc=$?
+  [ "$rc" -le 1 ] || refuse "cannot compare \"$1\" with \"$2\""
+  return "$rc"
+}
+
 # Guard (docs/problems/node-b-nix-store-and-host-disk-policy-2026-10-22.md,
-# review round 2): the floor must sit above the min-free nix runs with *now*,
-# not the one this checkout will install at its switch. Below live min-free
-# plus 10 GiB (the margin the 90/80 GiB pair ran with), nix's auto-GC fires
-# inside the build and deletes its unrooted inputs (2026-09-17). So the floor
-# is the larger of the two; a nix.conf without a readable numeric min-free
-# fails closed to 90 GiB. This keeps a lowered floor safe if it lands with,
-# or outlives, the min-free change it depends on.
-fallback_floor_kib=94371840
-guard_margin_kib=10485760
+# review rounds 2 and 3): the floor must sit above the min-free nix runs
+# with *now*, not the one this checkout will install at its switch, by the
+# same terms as the default above (deploy 8 + compaction 14 + regrowth 10 +
+# margin 4 = 36 GiB, R3-F2), so the work that can overlap a deploy fits
+# whatever min-free is live. Below that, nix's auto-GC can fire inside the
+# build and delete its unrooted inputs (2026-09-17). So the floor is the
+# larger of the two. A min-free that cannot be read fails closed to the
+# band before deploy 1 (80 GiB, node-b.nix's rollback value): 116 GiB. This
+# keeps a lowered floor safe if it lands with, or outlives, the min-free
+# change it depends on.
+#
+# The file, not the running nix-daemon, is the source (R3-F3): NixOS
+# restarts nix-daemon whenever /etc/nix/nix.conf's store path changes at a
+# switch (restartTriggers in nixos/modules/services/system/nix-daemon.nix),
+# and a switch that cannot restart it fails the deploy. nix has no call that
+# returns the daemon's settings; `nix config show` prints the client's own
+# reading of this same file. The preflight runs before this deploy's switch,
+# so it reads the file the last completed switch installed.
+GiB_KIB=1048576
+overlap_kib=$(((8 + 14 + 10 + 4) * GiB_KIB))
+fallback_floor_kib=$((80 * GiB_KIB + overlap_kib))
 nix_conf="${PREFLIGHT_NIX_CONF:-/etc/nix/nix.conf}"
-if ! [[ "$min_free_kib" =~ ^[0-9]+$ ]]; then
-  echo "    DEPLOY_MIN_FREE_KIB=\"${min_free_kib}\" is not a number of KiB; the floor is at least 90 GiB"
+if is_count "$min_free_kib"; then
+  min_free_kib=$((10#$min_free_kib))
+else
+  echo "    DEPLOY_MIN_FREE_KIB=\"${min_free_kib}\" is not a number of KiB; the floor is at least 116 GiB"
   min_free_kib="$fallback_floor_kib"
 fi
 live_min_free="$(awk -F'[[:space:]]*=[[:space:]]*' '$1 ~ /^[[:space:]]*min-free$/ {v = $2} END {print v}' "$nix_conf" 2>/dev/null || true)"
-if [[ "$live_min_free" =~ ^[0-9]+$ ]]; then
-  live_min_free_kib=$((live_min_free / 1024))
-  guard_floor_kib=$((live_min_free_kib + guard_margin_kib))
+if is_count "$live_min_free"; then
+  live_min_free_kib=$((10#$live_min_free / 1024))
+  guard_floor_kib=$((live_min_free_kib + overlap_kib))
 else
-  echo "    cannot read min-free from ${nix_conf}; the floor is at least 90 GiB"
+  echo "    cannot read min-free from ${nix_conf} (\"${live_min_free}\"); the floor is at least 116 GiB"
   live_min_free_kib=unknown
   guard_floor_kib="$fallback_floor_kib"
 fi
-if [ "$min_free_kib" -lt "$guard_floor_kib" ]; then
+if ! at_least "$min_free_kib" "$guard_floor_kib"; then
   min_free_kib="$guard_floor_kib"
 fi
 avail_kib="$(df --output=avail -k / | tail -n 1 | tr -d ' ')"
@@ -46,13 +77,12 @@ echo "    root_available_kib=${avail_kib} live_min_free_kib=${live_min_free_kib}
 
 # Every numeric read fails closed: a df that exits 0 with a non-numeric line
 # would make the [ tests below error, and an if whose test errors is false,
-# which let the script exit 0 (review round 2b, DS2b-1).
-if ! [[ "$avail_kib" =~ ^[0-9]+$ ]]; then
-  echo "Deploy disk preflight failed: cannot read free space on / (df gave \"${avail_kib}\")" >&2
-  exit 1
+# which let the script exit 0 (review round 2b, DS2b-1; length, R3-F1).
+if ! is_count "$avail_kib"; then
+  refuse "cannot read free space on / (df gave \"${avail_kib}\")"
 fi
 
-if [ "$avail_kib" -ge "$min_free_kib" ]; then
+if at_least "$avail_kib" "$min_free_kib"; then
   echo "    Disk preflight ok"
   exit 0
 fi
@@ -81,12 +111,10 @@ avail_kib="$(df --output=avail -k / | tail -n 1 | tr -d ' ')"
 df -h / /var/lib/go-choir 2>/dev/null || df -h /
 echo "    root_available_kib_after_reclaim=${avail_kib}"
 
-if ! [[ "$avail_kib" =~ ^[0-9]+$ ]]; then
-  echo "Deploy disk preflight failed: cannot read free space after the reclaim (df gave \"${avail_kib}\")" >&2
-  exit 1
+if ! is_count "$avail_kib"; then
+  refuse "cannot read free space after the reclaim (df gave \"${avail_kib}\")"
 fi
-if [ "$avail_kib" -lt "$min_free_kib" ]; then
-  echo "Deploy disk preflight failed: root filesystem still below required headroom (${min_free_kib} KiB)" >&2
-  journalctl -u go-choir-host-disk-alarm -n 1 --no-pager >&2 || true
-  exit 1
+if ! at_least "$avail_kib" "$min_free_kib"; then
+  refuse "root filesystem still below required headroom (${min_free_kib} KiB)"
 fi
+echo "    Disk preflight ok after the reclaim"
