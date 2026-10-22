@@ -128,15 +128,16 @@ a busy refusal, and when the marker write fails. The failure modes resolve as:
    the kill, so later telemetry is acknowledged.
 2. Drain failure or timeout: marker still written with
    `telemetry_drain_failed`, so `passivatedOnRestartPayload` names the gap.
-3. A busy refusal never enters synchronous mode (the busy check comes first),
-   and it **undoes** one an earlier host request left on: a refused computer
-   is not restarting, so it goes back to batching. The retry enters it again.
-4. `marker.clear` undoes it.
+3. A busy refusal never enters synchronous mode (the busy check comes first).
+   It releases a hold an earlier host request left on **only when no marker
+   is on disk** (round 2): while that marker is durable the host's kill may
+   still follow.
+4. `marker.clear` releases it, but only after the clear succeeded (round 2).
 
 With batching off (every computer today) the hold returns before any call:
 no sealer, no drain, no latency, marker and response bytes unchanged.
 
-Proven locally (`go test -race ./internal/agentcore -run
+Proven locally in round 1 (`go test -race ./internal/agentcore -run
 'PlannedRestart|Telemetry|Marker'`, 23 pass), in
 `internal/agentcore/planned_restart_telemetry_test.go`: one test per failure
 mode 1-4 (each failed on `origin/main`) and the flag-off pin (passes either
@@ -148,10 +149,50 @@ planned boot's passivation records must carry no gap (or the gap sentence if
 the drain failed), and stream_seq must show no hole beyond the boot reseed.
 The staging test computer cannot show it (see above).
 
-Residuals: synchronous mode is one flag in the store, not a count. If a
-guest self-development apply (`markPlannedRestart`) and a host request both
-hold it, the first undo turns it off for both. The host refuses while an apply
-is mid-transaction, so the overlap needs an apply to start after the host's
-200 and before the kill. The cost is a window of queued, not lost-by-design,
-telemetry. The restore restart (`writeRestoreRestartMarker`) still does not
+## Round 2: panel bunch 25 (DeepSeek accept with edits) and dispositions
+
+Lane commits: tests `1122b1f5b` (yellow, each fails on `344818311`), fix
+`f34709673` (red).
+
+1. Medium, release before the marker clear: **fixed**. `DELETE` clears first
+   and releases only on success; a failed clear keeps synchronous mode on
+   (`TestHostPlannedRestartFailedClearKeepsHold`).
+2. Medium, busy refusal released while an earlier marker was durable:
+   **fixed**. Refusal releases only on `Lstat` ENOENT at the marker path; the
+   mode-3 test now pins the hold kept while the marker is durable, then
+   released once it is gone
+   (`TestHostPlannedRestartBusyRefusalKeepsHoldWhileMarkerDurable`).
+3. Medium/low, one shared bool: **fixed with a hold count**.
+   `Store.SetTelemetrySynchronous` takes or releases one hold (synchronous
+   while the count is above zero; a release at zero does nothing); each
+   restore runs once. Apply/host overlap is independent in both orders. Host/host
+   (deploy refresh and store compaction both call the endpoint) is one marker
+   file, so it is one host hold: a repeated request replaces the hold and keeps
+   an earlier drain failure on the new marker
+   (`TestSynchronousModeIsHeldUntilEveryHolderReleases`,
+   `TestHostAndApplyHoldsAreIndependent`,
+   `TestHostPlannedRestartRepeatKeepsDrainFailure`).
+4. Low, gate on a sealer existing: **fixed**. The gate is
+   `TelemetryBatchingOn` (switched on, not stopped) for both planned-restart
+   paths (`TestHostPlannedRestartBatchingTurnedOffIsUnchanged`).
+5. Low, marker write error after the rename: **fixed**. A failed write
+   releases only when nothing is at the marker path
+   (`TestHostPlannedRestartFailedWriteKeepsHoldWhenMarkerPathOccupied`; the
+   test occupies the path, since a `syncParentDir` failure cannot be injected).
+6. Low, 1 ns deadline: **fixed**. The drain fails deterministically through
+   a telemetry pinner that refuses the batch pin.
+
+Hold, write, clear and refusal release are serialized on one runtime mutex.
+
+Local proof (round 2): `go test -race ./internal/agentcore -run
+'PlannedRestart|Telemetry|Marker'` 27 pass; `go test -race ./internal/store
+-run 'Telemetry|SynchronousMode'` ok.
+
+Residuals: a hold kept by a failed clear, a failed write or a refusal over a
+durable marker is released by a later successful clear, a refusal after the
+marker is gone, or the next boot. Until then the computer stays
+acknowledged; it costs throughput, never telemetry. Two host requests share one
+marker and so one hold: the first host's clear also cancels the second's
+planned boot (as before this fix), and that kill then boots as a crash with
+the missing-window note. The restore restart (`writeRestoreRestartMarker`) still does not
 record a failed drain (unchanged; its SIGTERM reaches the shutdown drain).
