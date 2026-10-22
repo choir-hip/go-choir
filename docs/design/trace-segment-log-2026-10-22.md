@@ -147,7 +147,7 @@ log takes, and the design is the same whether or not each cut lands.
 | "we should have a better api to get full multidesk/multiagent traces"; "evaluate the traces, looking for failed tool calls" | `owner-notes-2026-10-14.md:970-976` (§35) | owner | Trace lines must be kept for days, not minutes, and be readable by trajectory. So the log is not a memory ring (section 3) |
 | F-c's ten defaults accepted | ledger, 13:20, 2026-10-22 | owner | F-c goes ahead. R7 composes with it (section 6.2) |
 | "Track spending, no hard cap" | `owner-notes-2026-10-14.md` §40, DEC-07 | owner | Cost lines (`loop.progress`) must stay readable. They do, in the log, for the retention window. A spend total that lasts longer is open decision O5 |
-| Trace lines leave the signed tape | **none** | — | **Not settled.** Ruling 18 allows losing a window; it does not move telemetry off the tape. This is O1. The design proposes it; until the owner rules, R7's writer (slice S4) does not go past a test computer |
+| Trace lines leave the signed tape | owner in session, 2026-10-22 23:20 UTC: "yes, o1 is ok" | owner | **Settled (O1).** The nine `StorageTraceLog` kinds leave the tape for the guest log; the S5 paper flip still needs its own S4 proof |
 
 Doctrine that applies **[V]**:
 
@@ -920,3 +920,22 @@ inside a fixed cap, and deletes it.
 - **Repaired** (once built): none by this document. On landing: trace
   lines' share of the journal, tape events, host records and permanent
   history on every computer with the setting on.
+
+## 16. Owner rulings (2026-10-22, 23:20 UTC, in session)
+
+- **O1:** "yes, o1 is ok". Trace lines leave the signed tape as this
+  design states. S4 (one test computer) and then S5 (the paper) may
+  proceed on their proofs.
+- **O6:** "ok; we will get to streaming logs to a storage box soon
+  enough". The retention bounds stand: 7 days and min(2 GiB, 10% of the
+  disk). A later slice streams sealed segments off-host to a storage box;
+  it is not part of R7.
+- **O5:** "sure, yes. keep metadata." A lasting spend total is in scope:
+  an hourly cost rollup on the tape, so spending outlives retention. Also
+  keep metadata: when a sealed segment is deleted, its per-run summary
+  (run id, kinds and counts, first and last time, cost) stays as a small
+  record. The exact shape is S7's to design, and is no longer deferred.
+- The owner also said yes to deleting the legacy tape files once the
+  repack census shows a verified segment copy of each (owner notes 34's
+  evidence gate). That is the tape-segments mission's step, not R7's.
+
