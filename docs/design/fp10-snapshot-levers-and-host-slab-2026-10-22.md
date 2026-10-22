@@ -79,6 +79,10 @@ region (`MemSizeMiB + Config.MemoryHotplugMiB`, in bytes). Reading R3: a
 hotplugged test computer's Full memory file is 12 GiB long, 8 GiB base
 plus the 4 GiB region. An unknown `SnapshotType` is refused.
 
+**The decision is taken before the pause** (round 2, F2): no file read
+or `firecracker --version` exec adds frozen time, and the version runs
+only once the cheap checks pass, so a full-mode hibernate never execs it.
+
 **A Diff create error** falls back to a Full create inside the same pause,
 then to the kill path as today. It never leaves a partial Diff in `snapshot/`.
 
@@ -91,12 +95,22 @@ then to the kill path as today. It never leaves a partial Diff in `snapshot/`.
    check; test with a fake `/proc` reading `VmSwap: 4 kB` and with
    `memory.swap.max` = `max`.
 3. Firecracker returns an error for Diff: test the in-pause Full fallback.
-4. The Diff file is short (Firecracker wrote only up to the last resident
-   page): the length rule refuses it and the computer cold boots. Reading
-   R5's proof step checks the length on staging.
-5. An old vmctl reads a new Diff meta after a rollback: it ignores the
-   unknown fields, sees a regular memory file and loads it, which is
-   correct for a cold-origin Diff. The rollback therefore needs no repair.
+4. The memory file has the wrong length. Firecracker 1.13+ `set_len()`s
+   a Diff file to the full memory size before writing, so a short write
+   does not happen (review bunch 49). The reachable mismatch is the
+   shape: vmctl selected a hotplug region that the launch omitted (the
+   device is dropped when its sizes fail validation), or the reverse.
+   Guards: before the pause, the launch config's device must agree with
+   `MemoryHotplugMiB`; after the create, the file must be
+   `(MachineMemSizeMib + MemoryHotplugMiB)` MiB long; either failure takes
+   Full in the same pause. At load the length rule refuses a mismatch and
+   the computer cold boots.
+5. A rollback. Turning the lever off (an empty `VM_SNAPSHOT_DIFF_ONLY` or
+   `VM_SNAPSHOT_TYPE=full`) refuses a pending Diff at load
+   (`diff_lever_off`), so it cold boots. A git revert of the code is
+   different: an old vmctl ignores the unknown fields, sees a regular
+   memory file and loads it, which is correct for a cold-origin Diff. Either
+   way the rollback needs no repair.
 6. The budget: a Diff file's `st_blocks` is its real size, so the budget
    becomes honest for Diff snapshots without `CAP_SYS_ADMIN` (RES-14 still
    matters for Full ones).

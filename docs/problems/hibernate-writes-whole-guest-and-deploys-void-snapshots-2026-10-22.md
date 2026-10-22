@@ -509,14 +509,36 @@ Tests first (b0072c20e, ff96a7bf2), then the fix (c657c0220):
 `fcapi.go`, `manager.go`, `snapshot.go` and `snapshot_lifecycle.go`.
 A hibernate takes `snapshot_type: Diff` only when `VM_SNAPSHOT_TYPE=diff`,
 `VM_SNAPSHOT_DIFF_ONLY` selects the computer, the process was cold booted
-by this vmctl, Firecracker is 1.15.0 or later, no cgroup from the
-process's own to the root lacks a 0 `memory.swap.max` (the walk takes the
-nearest ancestor reading 0), `VmSwap` is 0, and every guest mapping reads
-`THPeligible 0`. Otherwise Full, with the reason in the hibernate
+by this vmctl, Firecracker is 1.15.0 or later, some cgroup from the
+process's own up to the root reads `memory.swap.max` 0 (any ancestor
+reading 0 bounds the leaf; none reading 0 refuses), `VmSwap` is 0, and
+every guest mapping reads `THPeligible 0`. Otherwise Full, with the reason in the hibernate
 timeline's `diff_refused` and the log line. A Diff create error takes Full
 in the same pause. A Diff loads only with `cold_origin` and a memory file
 exactly `(mem_size_mib + memory_hotplug_mib)` MiB long. `nix/node-b.nix`
 sets `VM_SNAPSHOT_TYPE=full` and an empty list: no computer changes.
+
+Round 2 (review bunch 49, DeepSeek v4.1 flash and Gemini 3.8 flash):
+tests 4d97cc4be, fix in the red commit after it.
+- F2: the Full-or-Diff decision runs before the pause, and
+  `firecracker --version` runs for it only after the off, selection,
+  cold-origin, pid and shape checks pass. A full-mode hibernate (the
+  paper's) runs no exec for it, and no hibernate runs one inside the pause.
+- F1: Firecracker 1.13+ `set_len()`s a Diff file to the full length, so a
+  short write cannot happen. The reachable mismatch is the shape: vmctl
+  selected a hotplug region the launch omitted (the device is dropped
+  when its sizes fail validation), or the reverse. The shape is checked
+  before the pause (`hotplug_shape_mismatch`), and the file's length after
+  the create (`diff_length_mismatch_at_create`); either takes Full in the
+  same pause. The load-time length rule stays as defence.
+- F4: a Diff meta loads only while the lever still selects its computer
+  (`diff_lever_off` otherwise): emptying `VM_SNAPSHOT_DIFF_ONLY` or setting
+  `VM_SNAPSHOT_TYPE=full` cold boots a pending Diff. A git revert of the
+  code is different: old code has no Diff rules and loads it, which is
+  correct for a cold-origin Diff.
+- F5: tests pin that a reattached process is never cold origin and that a
+  jailed Diff error clears the jail's capture dir. F6: the wake's timeline
+  records `snapshot_type` and `cold_origin`.
 
 Known limit: a vmctl restart reattaches running guests with
 `cold_origin` false (vmctl did not see their launch), so after any deploy
