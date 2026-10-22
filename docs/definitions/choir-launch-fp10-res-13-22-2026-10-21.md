@@ -90,9 +90,11 @@ boundaries:
   protected_surfaces: [vmctl, deployment routing]
 
 now:
-  status: working
+  status: blocked
   slice: >-
-    Problem records written; the design and FP0's readings are next.
+    Design and FP0's read-only readings written (design section 4);
+    nothing built. The build waits on the readings and on FP8 releasing
+    vmmanager; two owner questions with defaults (design section 5).
   source_ref: d1c60ad87
   deploy_identity: unchanged
   candidate: {id: none, state: none, ref: none, base: d1c60ad87, digest: none, scope: []}
