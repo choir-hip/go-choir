@@ -504,3 +504,33 @@ func TestCancellationCloseRetriesATapeConflict(t *testing.T) {
 		}
 	}
 }
+
+// blockingProjectionSink never commits: it waits for its context to end.
+type blockingProjectionSink struct{}
+
+func (blockingProjectionSink) AppendProjectionOps(ctx context.Context, _ []computerevent.ProjectionOp) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+// Bunch 19 item 2: the close detaches from the request's cancellation but
+// must keep a deadline of its own, as settleRulePrecommits does; a wedged
+// tape append must not hold the report path forever.
+func TestAssignmentEndCloseIsBounded(t *testing.T) {
+	rt, _ := testRuntime(t)
+	computerID := rt.TextureComputerID()
+	assignment := endedAssignment(computerID, "assignment-close-bounded", types.EngineeringAssignmentCompleted)
+	seedAssignmentOperation(t, rt, assignment, selfdev.StateExecuting, "freeze: refused")
+	rt.selfdevOperations.BindProjectionSink(blockingProjectionSink{})
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		rt.closeEndedAssignmentSelfdevOperation(context.Background(), assignment)
+	}()
+	select {
+	case <-done:
+	case <-time.After(20 * time.Second):
+		t.Fatal("the close did not return within 20s of a wedged tape append; it has no deadline")
+	}
+}
