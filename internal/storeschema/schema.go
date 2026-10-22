@@ -23,7 +23,16 @@ import (
 // before mutation when the persisted epoch falls outside that window. That
 // is the pre-mutation fence for the failure the vm-3dc68688 crash-loop
 // exposed — an August binary exec'ing against an October store.
-const Version uint64 = 1
+//
+// Epochs:
+//   - 1: the unified Dolt workspace.
+//   - 2: choir_events, run telemetry in its own table
+//     (docs/design/choir-event-table-f-c-2026-10-22.md, deploy 1). An older
+//     binary ignores ProjectionOp.Table and calls the table unknown, so the
+//     updater refuses an epoch-1 release on an epoch-2 store. The minimum
+//     epoch a release migrates from stays 1: deploy 1 migrates an epoch-1
+//     store by creating the empty table.
+const Version uint64 = 2
 
 // File is the receipt filename inside the unified Dolt workspace
 // (deriveTextureWorkspacePath(StorePath)).
