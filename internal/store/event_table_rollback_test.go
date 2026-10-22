@@ -20,7 +20,8 @@ import (
 
 // Rollback below F-c deploy 1 (docs/design/choir-event-table-f-c-2026-10-22.md,
 // status section, round 1b). The epoch fence covers only Apply of a release
-// that declares an epoch; a CI revert, a platform-follow offer and the
+// that declares an epoch; a CI revert, a platform-follow offer that declares
+// no epoch and the
 // updater's restorePrior reach the older binary unfenced. That binary
 // runs, but its replay manifest calls the empty choir_events unknown, so
 // checkpoint publication is refused until a forward deploy or a drop.

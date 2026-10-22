@@ -210,6 +210,9 @@ type Store struct {
 
 	// dryRunPositionHook, set only by tests, sees the tape position the
 	// projection dry run passes to projectBatch (event_table.go, F6).
+	// TestEventTableDryRunHookIsTestOnly keeps non-test code from setting it.
+	// It runs inside the dry run's transaction: a hook that did store I/O
+	// would block on the embedded connection.
 	dryRunPositionHook func(pos uint64)
 }
 
