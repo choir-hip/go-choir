@@ -361,7 +361,7 @@ func (e *traceExporter) export(now time.Time) *traceBundle {
 	bundle.Layers["run_events"] = runEvents.finish()
 
 	bundle.Layers["cells"] = deriveRunEventKind(bundle.Layers["run_events"], "desk.cell")
-	bundle.Layers["egress"] = deriveRunEventKind(bundle.Layers["run_events"], "desk.egress")
+	bundle.Layers["egress"] = deriveEgress(bundle.Layers["run_events"])
 	bundle.Layers["deliveries"] = deriveDeliveries(bundle.Layers["trajectory"])
 	bundle.Layers["turn_commits"] = deriveTurnCommits(bundle.Layers["lifecycle_events"])
 
@@ -660,6 +660,68 @@ func deriveRunEventKind(parent *traceLayer, kind string) *traceLayer {
 		}
 		encoded, _ := json.Marshal(item)
 		b.add(encoded)
+	}
+	return b.finish()
+}
+
+// deriveEgress projects the egress calls of the run events into items, one
+// per call. Since journal cut R4 a cell's calls ride its desk.cell event, in
+// its egress array; the standalone desk.egress events are older tapes, refused
+// frames and the end of an async search. A folded row becomes an item with the
+// fields it carried, the identity of its cell event (cell_event_id, and an
+// event_id of the cell's event_id plus "#egress.<n>"), and the cell event's
+// loop_id, seq and ts where the row does not carry them.
+func deriveEgress(parent *traceLayer) *traceLayer {
+	source := "derived from run_events (kind desk.egress, and the egress array of kind desk.cell)"
+	if parent.Status == traceStatusUnserved {
+		return unservedLayer("run_events is unserved", source)
+	}
+	b := newLayer(source)
+	for _, raw := range parent.Items {
+		var ev struct {
+			EventID string          `json:"event_id"`
+			LoopID  string          `json:"loop_id"`
+			Seq     int64           `json:"seq"`
+			TS      string          `json:"ts"`
+			Kind    string          `json:"kind"`
+			Payload json.RawMessage `json:"payload"`
+		}
+		if json.Unmarshal(raw, &ev) != nil {
+			continue
+		}
+		switch ev.Kind {
+		case "desk.egress":
+			item := map[string]any{}
+			if json.Unmarshal(ev.Payload, &item) != nil || item == nil {
+				item = map[string]any{"payload": ev.Payload}
+			}
+			for k, v := range map[string]any{"event_id": ev.EventID, "loop_id": ev.LoopID, "seq": ev.Seq, "ts": ev.TS} {
+				if _, ok := item[k]; !ok {
+					item[k] = v
+				}
+			}
+			encoded, _ := json.Marshal(item)
+			b.add(encoded)
+		case "desk.cell":
+			var cell struct {
+				Egress []map[string]any `json:"egress"`
+			}
+			if json.Unmarshal(ev.Payload, &cell) != nil {
+				continue
+			}
+			for i, item := range cell.Egress {
+				if item == nil {
+					continue
+				}
+				for k, v := range map[string]any{"event_id": fmt.Sprintf("%s#egress.%d", ev.EventID, i), "cell_event_id": ev.EventID, "loop_id": ev.LoopID, "seq": ev.Seq, "ts": ev.TS} {
+					if _, ok := item[k]; !ok {
+						item[k] = v
+					}
+				}
+				encoded, _ := json.Marshal(item)
+				b.add(encoded)
+			}
+		}
 	}
 	return b.finish()
 }

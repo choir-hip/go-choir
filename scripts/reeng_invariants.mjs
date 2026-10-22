@@ -126,6 +126,18 @@ function deskItems(bundle, name, kind) {
     const re = layer(bundle, 'run_events');
     status = re.status === 'unserved' ? 'unserved' : 'derived';
     items = re.items.filter((e) => str(e.kind) === kind);
+    // Since journal cut R4 a cell's egress calls ride its desk.cell event, in
+    // its egress array; the desk.egress events are older tapes, refusals and
+    // the end of an async search. A folded row reads as the event it replaces.
+    if (kind === 'desk.egress') {
+      for (const cell of re.items.filter((e) => str(e.kind) === 'desk.cell')) {
+        const rows = eventPayload(cell).egress;
+        if (!Array.isArray(rows)) continue;
+        rows.forEach((row, i) => {
+          items.push({ kind, payload: row, event_id: `${str(cell.event_id)}#egress.${i}`, seq: cell.seq, loop_id: cell.loop_id, ts: cell.ts });
+        });
+      }
+    }
   }
   const flat = items.map((it) => {
     if (it && typeof it === 'object' && 'payload' in it && 'kind' in it) {
