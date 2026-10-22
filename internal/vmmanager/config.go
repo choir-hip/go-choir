@@ -182,6 +182,7 @@ func LoadConfigFromEnv() ManagerConfig {
 			log.Printf("vmmanager: ignoring VMCTL_GUEST_DNS_PORT=%q: not a port", v)
 		}
 	}
+	cfg.GuestDNSOnly = parseComputerSelector(os.Getenv("VMCTL_GUEST_DNS_ONLY"))
 
 	if v := os.Getenv("VM_SOURCE_SEED_REPO"); v != "" {
 		cfg.SourceSeedRepoPath = strings.TrimSpace(v)
