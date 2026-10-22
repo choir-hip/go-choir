@@ -359,6 +359,11 @@ let
     "OFFHOST_UPLOAD_LIMIT_KIB=${toString offHostBackup.uploadLimitKiB}"
     "OFFHOST_MIN_FREE_GIB=${toString offHostBackup.minFreeGiB}"
     "OFFHOST_IMAGE_COMPUTERS=${lib.concatStringsSep "," offHostBackup.imageComputers}"
+    # Go runtime soft limit for restic, 2 GiB under MemoryHigh: the
+    # collector runs harder near it instead of letting GOGC slack grow
+    # past the unit's line (docs/problems/offhost-backup-reads-terabytes-
+    # and-needs-swap-2026-10-22.md, option 1).
+    "GOMEMLIMIT=8GiB"
   ];
   offHostBackupCredentials = [
     "restic-password:${offHostBackup.secretsDir}/restic-password"
@@ -381,16 +386,18 @@ let
       Nice = 19;
       IOSchedulingClass = "idle";
       CPUWeight = 10;
-      # restic holds the tree of a 9.5M-file tape in memory. Measured on
-      # run 1 (docs/problems/no-off-host-backup-2026-10-20.md section 13
-      # item 8): about 13 GB, so a 4G line pushed 9 GB into swap and the
-      # unit wrote 1 TB. Owner, 2026-10-20: give restic more memory. Node B
-      # had about 14 GB available at idle, so: throttle at 10G, stop at
-      # 12G, and at most 4G of swap, so a run that outgrows this fails
-      # loudly instead of paging the host.
+      # restic holds the tree of a 9.5M-file tape in memory: about 13 GB
+      # with no GOMEMLIMIT (docs/problems/no-off-host-backup-2026-10-20.md
+      # section 13 item 8), and every run filled its 4G of swap, reading
+      # terabytes. No swap now (docs/problems/offhost-backup-reads-
+      # terabytes-and-needs-swap-2026-10-22.md): the Go heap is held under
+      # GOMEMLIMIT (offHostBackupEnv), the unit throttles at 10G and is
+      # killed inside its own cgroup at 12G, loudly, and in a host OOM it
+      # dies before any guest (at +1000, tied only with builds and checkpointd).
       MemoryHigh = "10G";
       MemoryMax = "12G";
-      MemorySwapMax = "4G";
+      MemorySwapMax = "0";
+      OOMScoreAdjust = 1000;
       TimeoutStartSec = "12h";
       # Creates ${offHostBackup.stateDir} (status.json, restic cache, staging)
       # and keeps it writable under ProtectSystem=strict.
