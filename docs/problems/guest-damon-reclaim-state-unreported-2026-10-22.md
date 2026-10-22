@@ -118,3 +118,26 @@ procmem route (orange), then a probe script FP0 runs on a test computer.
 No lever is built in this lane; the outcome table is in
 `docs/reports/guest-memory-return-outcomes-2026-10-22.md` (written with the
 probe).
+
+## Review findings (bunch 87, DeepSeek; confirmed by FP0), before any fix
+
+1. **The probe reports a missing host RSS as a measured zero** (medium,
+   `scripts/fp8_memory_return_probe.py` `first_reading`). When no
+   firecracker RSS was read at a window's start or end, `delta(...)` is
+   `None` and `or 0` turns it into "host RSS fell 0.0 MiB", which reads as
+   outcome B (freed but not returned) when nothing was measured. The
+   host-side pid matcher (a firecracker whose cmdline has an argument equal
+   to the VM id or ending in `/<vm id>`) records nothing when it matches no
+   process, so the CSV cannot say why `fc_rss_mib` is empty. The same
+   `or 0` hides a missing guest MemFree as "rose 0 MiB".
+2. **`registered` claims more than `page_reporting_order` proves**
+   (low/medium, `internal/server/debug_memreturn.go`). `Registered: v >= 0`
+   treats a non-negative order as proof a reporting device registered. The
+   kernel's `page_reporting_order` starts at -1 and the first
+   `page_reporting_register` sets it, but the
+   `page_reporting.page_reporting_order=N` boot argument (the fragmentation
+   lever the outcomes table names) sets it with no device at all. Then
+   `registered` reads true, a reportable total is claimed, and the probe
+   reads "reporting active" for a guest that reports nothing.
+
+Three further low findings in the same bunch are left as they are.
