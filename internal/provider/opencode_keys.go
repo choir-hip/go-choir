@@ -14,15 +14,23 @@ import (
 // OpenCode key pool (docs/problems/opencode-key-exhausted-no-failover-2026-10-15.md).
 // The gateway may hold several OpenCode accounts: OPENCODE_API_KEY (or the
 // older OPENCODE_GO_API_KEY) and OPENCODE_API_KEY_ALT_<n>. A key that answers
-// 402 (out of funds) is parked for hours; one that answers 429 is parked for
-// a minute. A session keeps one healthy key while it stays healthy, so
-// OpenCode's per-session upstream routing keeps its prompt cache. Keys are
+// 402 (out of funds) or 401 (a revoked or expired credential,
+// docs/problems/opencode-401-key-never-parked-2026-10-22.md) is parked for
+// hours; one that answers 429 is parked for a minute. A session keeps one
+// healthy key while it stays healthy, so OpenCode's per-session upstream
+// routing keeps its prompt cache. Keys are
 // named by their variable, never by value.
 
 const (
 	openCodeFundsPark     = 6 * time.Hour
 	openCodeRateLimitPark = 60 * time.Second
-	openCodeAltKeyPrefix  = "OPENCODE_API_KEY_ALT_"
+	// A revoked or expired credential (401) answers the same on every call
+	// until the owner replaces it, which takes a gateway restart (the keys
+	// are read once) and so clears every park. 403 does not park: OpenCode
+	// also answers 403 for a model the plan does not cover, and the pool is
+	// shared by every model.
+	openCodeCredentialPark = 6 * time.Hour
+	openCodeAltKeyPrefix   = "OPENCODE_API_KEY_ALT_"
 )
 
 type openCodeKey struct {
@@ -123,8 +131,8 @@ func (p *openCodeKeyPool) pick(session string, exclude map[string]bool) (openCod
 	return healthy[int(h.Sum32()%uint32(len(healthy)))], true
 }
 
-// park benches a key after a quota status. It reports whether the status is
-// one that parks (and so may be retried on another key).
+// park benches a key after a quota or dead-credential status. It reports
+// whether the status is one that parks (and so may be retried on another key).
 func (p *openCodeKeyPool) park(name string, status int) bool {
 	var d time.Duration
 	switch status {
@@ -132,6 +140,8 @@ func (p *openCodeKeyPool) park(name string, status int) bool {
 		d = openCodeFundsPark
 	case http.StatusTooManyRequests:
 		d = openCodeRateLimitPark
+	case http.StatusUnauthorized:
+		d = openCodeCredentialPark
 	default:
 		return false
 	}
