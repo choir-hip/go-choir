@@ -33,6 +33,18 @@ type RetentionPruneConfig struct {
 	EphemeralMinAge         time.Duration
 	MaxDeletes              int
 	MaxBytes                int64
+	// TestIdleMode and QuarantineMode switch the test_class_idle and
+	// quarantine_age_out rules (retention_test_class.go): off, dry-run
+	// (reported, never removed) or active (removed when Mode is active too).
+	TestIdleMode     string
+	TestIdleMinAge   time.Duration
+	QuarantineMode   string
+	QuarantineMinAge time.Duration
+	// SelectorNamed holds the VM and computer ids VM_*_ONLY selectors name;
+	// neither new rule touches them.
+	SelectorNamed []string
+	// ManifestPath is the removal manifest; default <StateDir>/retention-manifest.jsonl.
+	ManifestPath string
 }
 
 type RetentionPruneConfigSummary struct {
@@ -45,18 +57,31 @@ type RetentionPruneConfigSummary struct {
 	EphemeralMinAgeSeconds  int64    `json:"ephemeral_min_age_seconds"`
 	MaxDeletes              int      `json:"max_deletes"`
 	MaxBytes                int64    `json:"max_bytes,omitempty"`
+	TestIdleMode            string   `json:"test_idle_mode"`
+	TestIdleMinAgeSeconds   int64    `json:"test_idle_min_age_seconds,omitempty"`
+	QuarantineMode          string   `json:"quarantine_mode"`
+	QuarantineMinAgeSeconds int64    `json:"quarantine_min_age_seconds,omitempty"`
+	SelectorNamed           []string `json:"selector_named,omitempty"`
 }
 
 type RetentionPruneInventory struct {
-	Ownerships                int   `json:"ownerships"`
-	StateDirs                 int   `json:"state_dirs"`
-	OrphanStateDirs           int   `json:"orphan_state_dirs"`
-	DetachedRollbackStateDirs int   `json:"detached_rollback_state_dirs"`
-	EphemeralOwnerships       int   `json:"ephemeral_ownerships"`
-	Candidates                int   `json:"candidates"`
-	CandidateBytes            int64 `json:"candidate_bytes"`
-	ProjectedDeleteCount      int   `json:"projected_delete_count"`
-	ProjectedDeleteBytes      int64 `json:"projected_delete_bytes"`
+	Ownerships                 int   `json:"ownerships"`
+	StateDirs                  int   `json:"state_dirs"`
+	OrphanStateDirs            int   `json:"orphan_state_dirs"`
+	DetachedRollbackStateDirs  int   `json:"detached_rollback_state_dirs"`
+	EphemeralOwnerships        int   `json:"ephemeral_ownerships"`
+	Candidates                 int   `json:"candidates"`
+	CandidateBytes             int64 `json:"candidate_bytes"`
+	ProjectedDeleteCount       int   `json:"projected_delete_count"`
+	ProjectedDeleteBytes       int64 `json:"projected_delete_bytes"`
+	TestClassComputers         int   `json:"test_class_computers,omitempty"`
+	TestClassBytes             int64 `json:"test_class_bytes,omitempty"`
+	TestClassWouldRemove       int   `json:"test_class_would_remove,omitempty"`
+	TestClassWouldRemoveBytes  int64 `json:"test_class_would_remove_bytes,omitempty"`
+	Quarantines                int   `json:"quarantines,omitempty"`
+	QuarantineBytes            int64 `json:"quarantine_bytes,omitempty"`
+	QuarantineWouldRemove      int   `json:"quarantine_would_remove,omitempty"`
+	QuarantineWouldRemoveBytes int64 `json:"quarantine_would_remove_bytes,omitempty"`
 }
 
 type RetentionPruneCandidate struct {
@@ -80,14 +105,18 @@ type RetentionProtectedState struct {
 }
 
 type RetentionPrunePlan struct {
-	Mode                    string                      `json:"mode"`
-	Decision                string                      `json:"decision"`
-	Reason                  string                      `json:"reason"`
-	Inventory               RetentionPruneInventory     `json:"inventory"`
-	Candidates              []RetentionPruneCandidate   `json:"candidates,omitempty"`
-	ProtectedDetachedLegacy []RetentionProtectedState   `json:"protected_detached_legacy,omitempty"`
-	Config                  RetentionPruneConfigSummary `json:"config"`
-	Warnings                []string                    `json:"warnings,omitempty"`
+	Mode                    string                    `json:"mode"`
+	Decision                string                    `json:"decision"`
+	Reason                  string                    `json:"reason"`
+	Inventory               RetentionPruneInventory   `json:"inventory"`
+	Candidates              []RetentionPruneCandidate `json:"candidates,omitempty"`
+	ProtectedDetachedLegacy []RetentionProtectedState `json:"protected_detached_legacy,omitempty"`
+	// TestClass and Quarantines list every test-class computer and every
+	// quarantined data image while their rule is not off, removable or not.
+	TestClass   []RetentionTestClassEntry   `json:"test_class,omitempty"`
+	Quarantines []RetentionQuarantineEntry  `json:"quarantines,omitempty"`
+	Config      RetentionPruneConfigSummary `json:"config"`
+	Warnings    []string                    `json:"warnings,omitempty"`
 }
 
 type RetentionPruneResult struct {
@@ -98,16 +127,24 @@ type RetentionPruneResult struct {
 	PlanBefore   RetentionPrunePlan        `json:"plan_before"`
 	PlanAfter    RetentionPrunePlan        `json:"plan_after"`
 	Warnings     []string                  `json:"warnings,omitempty"`
+
+	QuarantinesRemoved     int                        `json:"quarantines_removed,omitempty"`
+	QuarantineBytesRemoved int64                      `json:"quarantine_bytes_removed,omitempty"`
+	RemovedQuarantines     []RetentionQuarantineEntry `json:"removed_quarantines,omitempty"`
 }
 
 func DefaultRetentionPruneConfig() RetentionPruneConfig {
 	return RetentionPruneConfig{
-		Mode:            RetentionPruneModeOff,
-		StateDir:        "/var/lib/go-choir/vm-state",
-		OrphanMinAge:    6 * time.Hour,
-		EphemeralMinAge: 24 * time.Hour,
-		MaxDeletes:      25,
-		MaxBytes:        20 * 1024 * 1024 * 1024,
+		Mode:             RetentionPruneModeOff,
+		StateDir:         "/var/lib/go-choir/vm-state",
+		OrphanMinAge:     6 * time.Hour,
+		EphemeralMinAge:  24 * time.Hour,
+		MaxDeletes:       25,
+		MaxBytes:         20 * 1024 * 1024 * 1024,
+		TestIdleMode:     RetentionPruneModeOff,
+		TestIdleMinAge:   defaultRetentionTestIdleMinAge,
+		QuarantineMode:   RetentionPruneModeOff,
+		QuarantineMinAge: defaultRetentionQuarantineMinAge,
 	}
 }
 
@@ -140,7 +177,32 @@ func normalizeRetentionPruneConfig(cfg RetentionPruneConfig) RetentionPruneConfi
 	}
 	cfg.EphemeralEmailDomains = normalizeLowerList(cfg.EphemeralEmailDomains)
 	cfg.EphemeralUserIDPrefixes = normalizeLowerList(cfg.EphemeralUserIDPrefixes)
+	cfg.TestIdleMode = normalizeRetentionRuleMode(cfg.TestIdleMode)
+	cfg.QuarantineMode = normalizeRetentionRuleMode(cfg.QuarantineMode)
+	if cfg.TestIdleMinAge <= 0 {
+		cfg.TestIdleMinAge = defaultRetentionTestIdleMinAge
+	}
+	if cfg.QuarantineMinAge <= 0 {
+		cfg.QuarantineMinAge = defaultRetentionQuarantineMinAge
+	}
+	cfg.SelectorNamed = normalizeIDList(cfg.SelectorNamed)
 	return cfg
+}
+
+// normalizeIDList trims, dedups and sorts ids; ids keep their case.
+func normalizeIDList(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := map[string]bool{}
+	for _, raw := range values {
+		v := strings.TrimSpace(raw)
+		if v == "" || seen[v] {
+			continue
+		}
+		seen[v] = true
+		out = append(out, v)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func normalizeLowerList(values []string) []string {
@@ -169,12 +231,17 @@ func retentionPruneConfigSummary(cfg RetentionPruneConfig) RetentionPruneConfigS
 		EphemeralMinAgeSeconds:  int64(cfg.EphemeralMinAge.Seconds()),
 		MaxDeletes:              cfg.MaxDeletes,
 		MaxBytes:                cfg.MaxBytes,
+		TestIdleMode:            cfg.TestIdleMode,
+		TestIdleMinAgeSeconds:   int64(cfg.TestIdleMinAge.Seconds()),
+		QuarantineMode:          cfg.QuarantineMode,
+		QuarantineMinAgeSeconds: int64(cfg.QuarantineMinAge.Seconds()),
+		SelectorNamed:           append([]string(nil), cfg.SelectorNamed...),
 	}
 }
 
 func (r *OwnershipRegistry) RetentionPrunePlan() RetentionPrunePlan {
 	cfg, ownerships, emails, detached := r.retentionSnapshot()
-	return retentionPrunePlanFromSnapshot(cfg, r.warmnessPolicySnapshot(), ownerships, emails, detached)
+	return retentionPrunePlanFromSnapshot(cfg, r.warmnessPolicySnapshot(), ownerships, emails, detached, r.retentionNow())
 }
 
 func (r *OwnershipRegistry) RetentionShadowPlan() RetentionPrunePlan {
@@ -188,10 +255,10 @@ func (r *OwnershipRegistry) RetentionShadowPlan() RetentionPrunePlan {
 			Config:   retentionPruneConfigSummary(cfg),
 		}
 	}
-	return retentionPrunePlanFromSnapshot(cfg, r.warmnessPolicySnapshot(), ownerships, emails, detached)
+	return retentionPrunePlanFromSnapshot(cfg, r.warmnessPolicySnapshot(), ownerships, emails, detached, r.retentionNow())
 }
 
-func retentionPrunePlanFromSnapshot(cfg RetentionPruneConfig, warmness WarmnessPolicyConfig, ownerships []*VMOwnership, emails map[string]string, detached map[string]RetentionProtectedState) RetentionPrunePlan {
+func retentionPrunePlanFromSnapshot(cfg RetentionPruneConfig, warmness WarmnessPolicyConfig, ownerships []*VMOwnership, emails map[string]string, detached map[string]RetentionProtectedState, now time.Time) RetentionPrunePlan {
 	plan := RetentionPrunePlan{
 		Mode:     cfg.Mode,
 		Decision: "disabled",
@@ -221,7 +288,6 @@ func retentionPrunePlanFromSnapshot(cfg RetentionPruneConfig, warmness WarmnessP
 	})
 	plan.Inventory.Ownerships = len(ownerships)
 	plan.Inventory.DetachedRollbackStateDirs = len(detached)
-	now := time.Now()
 	candidates := make([]RetentionPruneCandidate, 0)
 	orphans, stateDirCount, orphanCount, orphanWarnings := retentionOrphanCandidates(cfg, ownedVMs, now)
 	plan.Inventory.StateDirs = stateDirCount
@@ -251,6 +317,61 @@ func retentionPrunePlanFromSnapshot(cfg RetentionPruneConfig, warmness WarmnessP
 			ProposedAction: "destroy_vm_state_and_remove_ownership",
 		})
 	}
+	if cfg.TestIdleMode != RetentionPruneModeOff {
+		planned := make(map[string]bool, len(candidates))
+		for _, c := range candidates {
+			planned[c.VMID] = true
+		}
+		byVM := make(map[string]*VMOwnership, len(ownerships))
+		for _, own := range ownerships {
+			byVM[own.VMID] = own
+		}
+		plan.TestClass = retentionTestClassReport(cfg, warmness, ownerships, now)
+		for _, entry := range plan.TestClass {
+			plan.Inventory.TestClassComputers++
+			plan.Inventory.TestClassBytes += entry.SizeBytes
+			if entry.Verdict == retentionVerdictKeep {
+				continue
+			}
+			plan.Inventory.TestClassWouldRemove++
+			plan.Inventory.TestClassWouldRemoveBytes += entry.SizeBytes
+			if entry.Verdict != retentionVerdictWillRemove || planned[entry.VMID] {
+				continue
+			}
+			own := byVM[entry.VMID]
+			candidates = append(candidates, RetentionPruneCandidate{
+				VMID:           entry.VMID,
+				UserID:         entry.UserID,
+				EmailDomain:    emailDomain(strings.TrimSpace(emails[own.UserID])),
+				Kind:           own.Kind,
+				State:          entry.State,
+				DesktopID:      entry.DesktopID,
+				LastActiveAt:   entry.LastActiveAt,
+				AgeSeconds:     entry.IdleSeconds,
+				SizeBytes:      entry.SizeBytes,
+				Reason:         retentionReasonTestClassIdle,
+				ProposedAction: "destroy_vm_state_and_remove_ownership",
+			})
+		}
+	}
+	quarantineRemovals := 0
+	if cfg.QuarantineMode != RetentionPruneModeOff {
+		entries, warnings := retentionQuarantineReport(cfg, warmness, ownerships, now)
+		plan.Quarantines = entries
+		plan.Warnings = append(plan.Warnings, warnings...)
+		for _, entry := range entries {
+			plan.Inventory.Quarantines++
+			plan.Inventory.QuarantineBytes += entry.SizeBytes
+			if entry.Verdict == retentionVerdictKeep {
+				continue
+			}
+			plan.Inventory.QuarantineWouldRemove++
+			plan.Inventory.QuarantineWouldRemoveBytes += entry.SizeBytes
+			if entry.Verdict == retentionVerdictWillRemove {
+				quarantineRemovals++
+			}
+		}
+	}
 	sortRetentionCandidates(candidates)
 	plan.Inventory.Candidates = len(candidates)
 	for _, candidate := range candidates {
@@ -262,7 +383,7 @@ func retentionPrunePlanFromSnapshot(cfg RetentionPruneConfig, warmness WarmnessP
 	for _, candidate := range limited {
 		plan.Inventory.ProjectedDeleteBytes += candidate.SizeBytes
 	}
-	if len(limited) == 0 {
+	if len(limited) == 0 && quarantineRemovals == 0 {
 		plan.Decision = "observe"
 		plan.Reason = "no VM state matched the retention prune policy"
 		return plan
@@ -446,6 +567,8 @@ func retentionReasonRank(reason string) int {
 		return 0
 	case "ephemeral_test_primary":
 		return 1
+	case retentionReasonTestClassIdle:
+		return 2
 	default:
 		return 9
 	}
@@ -509,6 +632,7 @@ func (r *OwnershipRegistry) PruneRetention(ctx context.Context, guard ComputerVe
 			result.DeletedVMs = append(result.DeletedVMs, candidate)
 		}
 	}
+	r.ageOutRetentionQuarantines(before, &result)
 	result.PlanAfter = r.RetentionPrunePlan()
 	return result
 }
@@ -516,6 +640,9 @@ func (r *OwnershipRegistry) PruneRetention(ctx context.Context, guard ComputerVe
 func (r *OwnershipRegistry) destroyRetentionCandidate(candidate RetentionPruneCandidate) bool {
 	if strings.TrimSpace(candidate.VMID) == "" {
 		return false
+	}
+	if candidate.Reason == retentionReasonTestClassIdle {
+		return r.destroyTestIdleCandidate(candidate)
 	}
 	r.mu.RLock()
 	mgr := r.vmManager
