@@ -260,3 +260,36 @@ still mapped by running VMMs (G1), and `statfs` free space. It opens files
 read-only, issues only FIEMAP (without `FIEMAP_FLAG_SYNC`) and the tree
 search ioctl, reads `/proc`, and writes nothing. Steps are in the
 [station file](../definitions/choir-launch-fp10-res-14-2026-10-22.md).
+
+### Probe reading (FP0, Node B, 2026-10-22 09:00 UTC)
+
+`sudo python3 scripts/snapshot_budget_bytes_probe.py` (read-only, euid 0,
+tree search exact), on deploy I (`58e705802`):
+
+| VM | recorded (method) | apparent | allocated | FIEMAP bound | tree search | exclusive | created |
+|---|---|---|---|---|---|---|---|
+| vm-80b173b9 | 1503.2 MiB (btrfs_extents) | 12288.1 | 8192.1 | 3992.1 | 1503.2 | 1503.2 | 05:04 |
+| vm-f2588c7b | 857.3 MiB (btrfs_extents) | 12288.1 | 8192.1 | 3441.8 | 857.3 | 857.3 | 07:05 |
+| vm-fdcb6a45 | 790.3 MiB (btrfs_extents) | 12288.1 | 8192.1 | 2195.0 | 790.3 | 790.3 | 03:23 |
+
+- Totals: 3 committed snapshots; the budget counts 3,150.8 MiB of its
+  49,152 MiB, which equals the tree search's referenced compressed bytes
+  and the exclusive bytes. No shared extents, no delalloc, no partial
+  captures, and no deleted snapshot memory still mapped by a VMM (G1 reads
+  0 at this moment). statfs: 119.3 GiB available, 103.3 GiB over the 16 GiB
+  floor.
+- **G2 answered:** each memory file's apparent size is 12 GiB for an 8 GiB
+  guest (ratio 1.4884), so Firecracker's Full memory file does include the
+  4 GiB virtio-mem region. Its allocated size is exactly 8,192 MiB: the
+  region is all holes, because it is shrunk to base before the capture. The
+  logical worst case on disk is therefore the base size, which is what
+  `need` reserves. G2 does not under-reserve; no fix.
+- **The recorded figure is the true one** for every committed snapshot
+  (`btrfs_extents` equals the tree search), so measure (1) is running on
+  Node B. The FIEMAP bound over-counts by 2.8 to 4.4 times (compressed
+  extents' bounds), as the record expected.
+- **48 GiB and 36 h:** at 0.8 to 1.5 GiB a snapshot, the budget holds about
+  35 to 60 committed snapshots; free space (103 GiB over the floor) and the
+  36 h age are the binding limits, not 48 GiB. No change proposed from one
+  reading; a second reading under more hibernated computers would be
+  needed to move either figure.
