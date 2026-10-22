@@ -14,9 +14,9 @@
 #   0, 1, 2          the inert deploy: identity, the shadow report, the active plan unchanged
 #   --step 3         after an enforce deploy: manifest lines and journal lines
 #   4                the live orphan and ephemeral rules (R2-8, R3-3): no dir
-#                    holding recovery state is a candidate; run it BEFORE the
-#                    deploy and AFTER it (--evidence before.txt / after.txt),
-#                    and the recovery-dir lists must match
+#                    holding recovery state is a candidate; a run BEFORE the
+#                    deploy is required (--evidence before.txt), then one AFTER
+#                    it (--evidence after.txt); the recovery-dir lists must match
 #
 #   [--state-dir DIR]  vm-state on Node B (default /var/lib/go-choir/vm-state)
 set -uo pipefail
@@ -39,6 +39,12 @@ commit_matches() {
 	return 1
 }
 
+# vmctl_runs COMMIT SERVICE WANT: the build headers name vmctl and a commit
+# matching WANT.
+vmctl_runs() {
+	[ "$2" = vmctl ] && [ "$1" != - ] && commit_matches "$1" "$3"
+}
+
 SHADOW_JSON=""
 shadow_plan() {
 	[ -n "$SHADOW_JSON" ] || SHADOW_JSON=$(vmctl_get /internal/vmctl/retention-shadow-plan)
@@ -46,12 +52,15 @@ shadow_plan() {
 }
 
 step_0() {
-	local health commit cfg
-	health=$(vmctl_get /health)
-	commit=$(printf '%s' "$health" | jq -r '.build.commit // ""' 2>/dev/null)
-	info "vmctl build.commit=$commit"
+	local commit service cfg
+	# vmctl's identity is its X-Choir-Build-Commit response header (the
+	# commit compiled into the process), not a /health body field (R5-1).
+	read -r commit service < <(vmctl_build_identity)
+	info "vmctl X-Choir-Build-Commit=${commit:--} X-Choir-Build-Service=${service:--}"
 	if [ -n "$OPT_commit" ]; then
-		check "vmctl runs $OPT_commit" commit_matches "$commit" "$OPT_commit"
+		check "vmctl runs $OPT_commit (X-Choir-Build-Commit of :8083/health, X-Choir-Build-Service vmctl)" vmctl_runs "${commit:--}" "${service:--}" "$OPT_commit"
+	else
+		manual "no --commit given: vmctl's build identity was read, not compared"
 	fi
 	cfg=$(shadow_plan | jq -c '.config | {mode, test_idle_mode, test_idle_min_age_seconds, quarantine_mode, quarantine_min_age_seconds, selector_named}' 2>/dev/null)
 	info "shadow config $cfg"
@@ -164,7 +173,7 @@ done")
 		done
 		check "no dir holding recovery state is a deletion candidate${bad:+ (candidates:$bad)}" test -z "$bad"
 	fi
-	manual "run this step before the deploy and after it, with --evidence; every recovery-dir line before must still be there after (the 10-07 candidate-fleet quarantines included), and after the deploy each ownerless one must appear as a kept line with rule orphan_state_dir"
+	manual "a run of this step BEFORE the deploy is required, not optional: without its --evidence before.txt this run has nothing to be compared with (D2 missed it). Run it before the deploy and again after it (--evidence after.txt); every recovery-dir line before must still be there after (the 10-07 candidate-fleet quarantines included), and after the deploy each ownerless one must appear as a kept line with rule orphan_state_dir"
 }
 
 proof_main "$@"

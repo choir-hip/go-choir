@@ -87,10 +87,16 @@ step_0() {
 step_1() {
 	local plan
 	fp3_target
-	info "vmctl identity (health):"
-	vmctl_get /health | jq -c '{commit: (.build.commit // .commit // .deploy_commit // null), status}' 2>/dev/null | while IFS= read -r l; do info "vmctl $l"; done
+	local commit service
+	# vmctl's identity is its X-Choir-Build-Commit header, not a body field (R5-3).
+	read -r commit service < <(vmctl_build_identity)
+	commit=${commit:--} service=${service:--}
+	info "vmctl identity: X-Choir-Build-Commit=$commit X-Choir-Build-Service=$service"
 	if [ -n "${OPT_t1:-}" ] && [ "$PROOF_DRY" != 1 ]; then
-		vmctl_get /health | jq -e --arg t "$OPT_t1" '[.. | strings] | any(startswith($t) or . == $t)' >/dev/null && pass "vmctl health names T1 ${OPT_t1}" || fail "vmctl health does not name T1 ${OPT_t1}"
+		case "$service:$commit" in
+		vmctl:"$OPT_t1"*) pass "vmctl's build header names T1 ${OPT_t1}" ;;
+		*) fail "vmctl's build header does not name T1 ${OPT_t1} (commit=$commit service=$service)" ;;
+		esac
 	fi
 	plan=$(vmctl_get /internal/vmctl/deploy-refresh)
 	if [ "$PROOF_DRY" != 1 ]; then
