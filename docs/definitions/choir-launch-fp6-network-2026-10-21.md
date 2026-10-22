@@ -145,7 +145,11 @@ boundaries:
 now:
   status: checkpoint_incomplete
   slice: >-
-    2026-10-22: SEC-06 replayed onto main and made observe-first on
+    2026-10-22, later: the Obscura image removal (L2-06 step 5) is
+    cherry-picked onto main 420aeae30 as d1af92301 on
+    lane/fp6-obscura-removal (from c2da85986, which never landed); conflicts
+    resolved against the zot removal; SBOM tests pass; pushed, not landed
+    (see "Obscura image removal on main"). Earlier on 2026-10-22: SEC-06 replayed onto main and made observe-first on
     lane/fp6-sec06-on-main (e20c92b6c replay, d8d88ae5f tests, e0efea302 the
     off/observe/enforce mode, default observe; see "SEC-06 on main, observe
     first"); review round on 3b5c9e982 done (824a3f09e tests, e97b1b0db the
@@ -225,7 +229,9 @@ now:
     here. The stored browser-session accessors, types and six event kinds
     remain as frozen vocabulary.
   next_action: >-
-    FP0 reviews and lands the commits in the order in "Landing order"; for
+    FP0 reviews and lands the commits in the order in "Landing order"
+    (step 5 is d1af92301 on lane/fp6-obscura-removal, its own deploy, with
+    the proof in "Obscura image removal on main"); for
     SEC-06, land lane/fp6-sec06-on-main (three code commits and the docs
     commit) in place of a38eb7f67 with one test computer named in
     VM_CAPSULE_TUNNEL_ENFORCE_ONLY, run the runbook in the problem record
@@ -259,10 +265,14 @@ receipts:
     disposition: committed
   - id: obscura-image
     boundary: implement
-    identity: c2da85986
-    proof_refs: [.github/scripts/build-sboms-differential-test, .github/scripts/verify-sbom-candidate-test]
-    rollback_ref: git revert c2da85986
-    disposition: committed; SBOM scripts pass locally; image not built here
+    identity: d1af92301
+    proof_refs: [.github/scripts/build-sboms-differential-test, .github/scripts/verify-sbom-candidate-test, .github/scripts/sbom-semantic-fingerprint-test]
+    rollback_ref: git revert d1af92301
+    disposition: >-
+      pushed on lane/fp6-obscura-removal (cherry-pick of c2da85986 onto main
+      420aeae30, which supersedes c2da85986 for landing); the three SBOM test
+      scripts and the go tests that read the nix files pass locally; no nix
+      on the lane VM, so the flake was not evaluated and the image not built
   - id: egress-tunnel-identity
     boundary: implement
     identity: a38eb7f67
@@ -326,8 +336,10 @@ instead, in observe mode: see "SEC-06 on main, observe first"). 0314e100b and th
    owner's computer; `POST /api/content/import-url` with `{"url":"https://example.com"}`
    returns 200 with text; read `GET /api/autopaper/sources/schedules` before
    and after the deploy and see the same schedules polling.
-5. **Image.** The deploy's build output shows no obscura derivation; record the
-   guest image size before and after.
+5. **Image.** Land `d1af92301` (lane/fp6-obscura-removal) in place of
+   `c2da85986`. The deploy's build output shows no obscura derivation; record the
+   guest image size before and after. The exact steps are in "Obscura image
+   removal on main" below.
 6. **Egress (after a38eb7f67), on a test computer, from an implementation
    capsule.** Superseded on 2026-10-22: the check lands in observe, so the
    proof is the one in "SEC-06 on main, observe first" below; what follows is
@@ -433,3 +445,74 @@ red, ceremony in its message), then the docs commit with this section.
 Residuals: no `nix` binary on this VM, so neither nix file was evaluated.
 The guest boot-script case arm was run in bash against three command lines.
 The mode defaults to observe in code if the image line is absent.
+
+## Obscura image removal on main (2026-10-22)
+
+`c2da85986` (the image removal) was written on `26c4e1ed0` and never landed.
+It is cherry-picked onto `origin/main` `420aeae30` as `d1af92301` on
+`lane/fp6-obscura-removal`. The commit message carries the red ceremony.
+
+**Conflicts.** All six files conflicted, and all for one reason: the source
+predates the zot removal (`f2f66f9c3`), so each of its hunks kept zot. zot
+stays gone. The flake and nix hunks are deletions on both sides. The vendorHash
+changes since (`840e1a701`, `7c9e92bb5`) are on the shared Go module build.
+Obscura is a Rust package with its own cargoHash, so no hash changes here. With
+zot and obscura gone, the nine SBOM packages are all first-party, required and
+semantic:
+
+- the source's `SBOM_REQUIRED_PACKAGES` test seam stays; its default is the
+  production set, and the verifier requires `.required == true` for every
+  package;
+- the test's optional package is `vmctl`, where the source used zot;
+- the verifier requires a 64-hex semantic fingerprint for every package, and
+  a new verifier case refuses an `exact:` one;
+- `sbom-semantic-fingerprint-test` uses `not-a-listed-package` as its
+  unlisted example, where it used obscura.
+
+**References left.** No code path, Nix file, script, workflow or SBOM list
+names Obscura. What remains is comments that cite the problem record
+(`frontend/src/lib/BrowserApp.svelte`, `frontend/tests/browser-app.spec.js`,
+`internal/apihandler/routes_test.go`), dated docs and evidence, and one
+default label. `internal/store/browser.go` sets `Provider = "obscura"` in
+`CreateBrowserSession`, which has no caller. The four browser-session Store
+methods have no caller at all; they and their `*BrowserSessionOG` storage are
+a residual for a store-owning station (the stored kind stays registered,
+per must_preserve).
+
+**Local proof.**
+
+- The three SBOM test scripts print "all tests passed".
+- `deploy-impact-classify-test` is ok.
+- The go tests that read `flake.nix` or `nix/autoputer-vm.nix` pass: builder,
+  capfloor, capsule, deskmanifest, doctool, hostbuild and runtimeprompts.
+- `scripts/check-heresies.sh` exits 0.
+
+There is no `nix` binary on the lane VM, so the flake was not evaluated and
+the image was not built.
+
+**FP0 proof steps (no secrets).**
+
+1. **The guest image builds.** At `d1af92301` or its landed SHA, run
+   `nix flake check --no-build` (or `nix eval --raw
+   .#nixosConfigurations.go-choir-autoputer-vm.config.system.build.toplevel.drvPath`),
+   then `guest=$(nix build --no-link --print-out-paths .#guest-image)`. The
+   deploy's CI build is the same step. Record `du -sh` of
+   `$guest/storedisk.erofs` against the previous deploy's. The checklist's
+   research estimated about 508 MiB less; not measured here.
+2. **No obscura path in the guest closure.** Each of these prints 0:
+   - `nix-store -qR $(nix build --no-link --print-out-paths
+     .#nixosConfigurations.go-choir-autoputer-vm.config.system.build.toplevel)
+     | grep -ci -e obscura -e rusty_v8`
+   - `grep -ci obscura $guest/guest-image-manifest`
+
+   `nix eval .#packages.x86_64-linux.obscura` and
+   `nix eval .#sbom.x86_64-linux.obscura` both fail with a missing attribute.
+3. **A test computer boots it.** After the deploy, refresh one test computer
+   onto the new image. Its health reports the landed commit (`build.json`),
+   and an owner session can open the desktop and run one research Read. From an
+   implementation capsule on that computer, `command -v obscura` finds nothing
+   and `env | grep -ci obscura` prints 0. The SBOM job's `manifest.jsonl` for
+   that run lists exactly the nine packages, all `required: true`.
+
+Rollback: `git revert d1af92301` and a deploy; it is independent of the code
+deletion.
