@@ -191,7 +191,7 @@ func TestGuestRouteIsOffUnlessThisComputerIsGranted(t *testing.T) {
 	}
 
 	other := t.TempDir()
-	writeGrant(t, other, Grant{ComputerID: "computer-b", Status: GrantGranted, Basis: BasisComputer})
+	writeGrant(t, other, Grant{ComputerID: "computer-b", Status: GrantGranted, Basis: BasisVM})
 	if rt, _ := GuestRoute(other, "computer-a", "http://10.200.0.1:8084", tok); rt != nil {
 		t.Fatal("another computer's grant turned the route on")
 	}
@@ -205,7 +205,7 @@ func TestGuestRouteIsOffUnlessThisComputerIsGranted(t *testing.T) {
 	}
 
 	granted := t.TempDir()
-	writeGrant(t, granted, Grant{ComputerID: "computer-a", Status: GrantGranted, Basis: BasisComputer})
+	writeGrant(t, granted, Grant{ComputerID: "computer-a", Status: GrantGranted, Basis: BasisVM})
 	rt, status := GuestRoute(granted, "computer-a", "http://10.200.0.1:8084", tok)
 	tr, ok := rt.(*Transport)
 	if !ok || tr.BaseURL != "http://10.200.0.1:8084" || !strings.Contains(status, "on") {
