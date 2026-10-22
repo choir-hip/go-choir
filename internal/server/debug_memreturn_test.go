@@ -30,6 +30,9 @@ import (
 //     found it (read only; no writer, no unit changes parameters).
 //  8. A value is not a number: kept raw for inputs; for a counter, named in
 //     errors and omitted.
+//  9. page_reporting_order reads -1 until a reporting device registers (seen
+//     on 6.18.37 without a balloon): no order is reportable then, so no
+//     reportable total is claimed.
 
 func writeFakeMemoryReturn(t *testing.T) (sysRoot, procRoot string) {
 	t.Helper()
@@ -109,7 +112,7 @@ func TestReadMemoryReturnReportsDamonReportingAndBalloon(t *testing.T) {
 		}
 	}
 
-	if !got.PageReporting.Present || got.PageReporting.Order == nil || *got.PageReporting.Order != 9 {
+	if !got.PageReporting.Present || got.PageReporting.Order == nil || *got.PageReporting.Order != 9 || !got.PageReporting.Registered {
 		t.Fatalf("page_reporting = %+v", got.PageReporting)
 	}
 	b := got.Balloon
@@ -211,6 +214,20 @@ func TestReadMemoryReturnPartialAndStoppedKdamond(t *testing.T) {
 	}
 	if !got.Balloon.Bound || got.Balloon.StatsVQ == nil || !*got.Balloon.StatsVQ || got.Balloon.Reporting != nil {
 		t.Fatalf("short features: %+v (bits 0..2 known, reporting unknown)", got.Balloon)
+	}
+}
+
+func TestReadMemoryReturnUnregisteredReportingClaimsNothing(t *testing.T) {
+	sysRoot, procRoot := writeFakeMemoryReturn(t)
+	if err := os.WriteFile(filepath.Join(sysRoot, "module/page_reporting/parameters/page_reporting_order"), []byte("-1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := readMemoryReturn(sysRoot, procRoot, 4)
+	if !got.PageReporting.Present || got.PageReporting.Order == nil || *got.PageReporting.Order != -1 || got.PageReporting.Registered {
+		t.Fatalf("page_reporting = %+v, want present, order -1, not registered", got.PageReporting)
+	}
+	if got.FreeBlocks == nil || got.FreeBlocks.ReportableKiB != nil {
+		t.Fatalf("free_blocks = %+v, want blocks but no reportable total", got.FreeBlocks)
 	}
 }
 
