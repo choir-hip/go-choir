@@ -79,9 +79,13 @@ region (`MemSizeMiB + Config.MemoryHotplugMiB`, in bytes). Reading R3: a
 hotplugged test computer's Full memory file is 12 GiB long, 8 GiB base
 plus the 4 GiB region. An unknown `SnapshotType` is refused.
 
-**The decision is taken before the pause** (round 2, F2): no file read
-or `firecracker --version` exec adds frozen time, and the version runs
-only once the cheap checks pass, so a full-mode hibernate never execs it.
+**The decision is taken before the pause** (round 2, F2): none of the
+decision's reads (`/proc` status and smaps, the cgroup walk) and no
+`firecracker --version` exec adds frozen time, and the version runs only
+once the cheap checks pass, so a full-mode hibernate never execs it. Inside
+the pause a selected computer adds the Diff create and one `os.Stat` of
+its memory file (the create-time length check); a full-mode hibernate adds
+nothing.
 
 **A Diff create error** falls back to a Full create inside the same pause,
 then to the kill path as today. It never leaves a partial Diff in `snapshot/`.
