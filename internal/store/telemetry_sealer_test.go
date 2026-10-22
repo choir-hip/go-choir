@@ -1039,6 +1039,39 @@ func TestSynchronousModeDrainsThenAcknowledges(t *testing.T) {
 	}
 }
 
+// Synchronous mode is held, not toggled: two planned-restart holders (a guest
+// apply and the host's request) each keep it on until both release, and an
+// extra release cannot take the count below zero.
+func TestSynchronousModeIsHeldUntilEveryHolderReleases(t *testing.T) {
+	h := newTapeHarness(t)
+	h.enableBatching(farFuture)
+	ctx := context.Background()
+	for i := 0; i < 2; i++ {
+		if err := h.store.SetTelemetrySynchronous(ctx, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := h.store.SetTelemetrySynchronous(ctx, false); err != nil {
+		t.Fatal(err)
+	}
+	if h.store.TelemetryBatchingEnabled() {
+		t.Fatal("the first holder's release reopened the queue for the second holder")
+	}
+	if err := h.store.SetTelemetrySynchronous(ctx, false); err != nil {
+		t.Fatal(err)
+	}
+	if !h.store.TelemetryBatchingEnabled() {
+		t.Fatal("synchronous mode outlived both holders")
+	}
+	_ = h.store.SetTelemetrySynchronous(ctx, false) // unbalanced release
+	if err := h.store.SetTelemetrySynchronous(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+	if h.store.TelemetryBatchingEnabled() {
+		t.Fatal("an unbalanced release drove the hold count negative")
+	}
+}
+
 // ---- flag-off and shape -----------------------------------------------------
 
 // Configuring the flag off explicitly changes nothing: still the baseline tape.

@@ -2,14 +2,19 @@ package agentcore
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/store"
 )
 
@@ -37,6 +42,81 @@ func batchingPlannedRestartRuntime(t *testing.T, computerID string) (*Runtime, *
 		t.Fatal(err)
 	}
 	return rt, &APIHandler{rt: rt}
+}
+
+// failingTelemetryPinner refuses every telemetry batch pin once fail is set,
+// so a drain deterministically loses its records (no timing race).
+type failingTelemetryPinner struct {
+	telemetryTestPinner
+	fail *atomic.Bool
+}
+
+func (p failingTelemetryPinner) PinNonPrivatePayload(ctx context.Context, computerID string, payload []byte, mediaType, privacyClass, pinIntentCommitment string) (computerevent.PinResult, error) {
+	if p.fail.Load() {
+		return computerevent.PinResult{}, errors.New("test: telemetry pin refused")
+	}
+	return p.telemetryTestPinner.PinNonPrivatePayload(ctx, computerID, payload, mediaType, privacyClass, pinIntentCommitment)
+}
+
+// failingDrainRuntime is batchingPlannedRestartRuntime whose telemetry seals
+// fail while the returned flag is set.
+func failingDrainRuntime(t *testing.T, computerID string) (*Runtime, *APIHandler, *atomic.Bool) {
+	t.Helper()
+	rt := chainBootstrapRuntime(t, computerID)
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := computerevent.SigningKey{SignerRef: computerevent.SignerRef{SignerDomain: "platform-control", KeyID: "test"}, PrivateKey: privateKey}
+	fail := &atomic.Bool{}
+	pinner := failingTelemetryPinner{telemetryTestPinner{rollbackTestPinner{key}}, fail}
+	appender, err := computerevent.NewComputerEventAppender(computerID, pinner, rt.store, rollbackTestCAS{key: key, projection: rt.store}, rollbackTestReceiptVerifier{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt.eventAppender = appender
+	if err := rt.store.BindProjectionTape(computerID, appender); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := MintProvisionedGenesis(context.Background(), rt.store, appender, computerID, "owner-telemetry"); err != nil {
+		t.Fatal(err)
+	}
+	if err := rt.store.ConfigureTelemetryBatching(store.TelemetryBatchConfig{Enabled: true, Window: 2 * time.Second}); err != nil {
+		t.Fatal(err)
+	}
+	return rt, &APIHandler{rt: rt}, fail
+}
+
+func synchronous(rt *Runtime) bool { return rt.store.TelemetryStats().Batching.Synchronous }
+
+func setBusy(t *testing.T, rt *Runtime, loopID string) {
+	t.Helper()
+	rt.runningMu.Lock()
+	if rt.running == nil {
+		rt.running = map[string]context.CancelFunc{}
+	}
+	rt.running[loopID] = func() {}
+	rt.runningMu.Unlock()
+	t.Cleanup(func() {
+		rt.runningMu.Lock()
+		delete(rt.running, loopID)
+		rt.runningMu.Unlock()
+	})
+}
+
+// occupyMarkerPath puts a non-empty directory where the marker file goes, so
+// both writing and removing the marker fail while something stays there.
+func occupyMarkerPath(t *testing.T, rt *Runtime) {
+	t.Helper()
+	path := PlannedRestartMarkerPath(rt.cfg.StorePath)
+	_ = os.Remove(path)
+	if err := os.MkdirAll(path, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path+"/occupied", []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(path) })
 }
 
 func deletePlannedRestart(t *testing.T, handler *APIHandler) int {
@@ -78,9 +158,9 @@ func TestHostPlannedRestartDrainsTelemetryBeforeMarker(t *testing.T) {
 
 // Failure mode 2.
 func TestHostPlannedRestartDrainFailureStillWritesMarkerAndNamesGap(t *testing.T) {
-	rt, handler := batchingPlannedRestartRuntime(t, "computer-host-restart-drainfail")
+	rt, handler, fail := failingDrainRuntime(t, "computer-host-restart-drainfail")
 	queueTelemetry(t, rt, 2)
-	rt.telemetryDrainDeadline = time.Nanosecond
+	fail.Store(true)
 	code, body := postPlannedRestart(t, handler, "192.0.2.1:4000", `{"target":"761d94c5"}`)
 	if code != http.StatusOK {
 		t.Fatalf("a failed drain blocked the host's restart: status=%d body=%s", code, body)
@@ -97,33 +177,151 @@ func TestHostPlannedRestartDrainFailureStillWritesMarkerAndNamesGap(t *testing.T
 	}
 }
 
-// Failure mode 3: a refusal undoes the synchronous mode the host's earlier
-// request entered, so a computer that is not restarting goes back to batching.
-func TestHostPlannedRestartBusyRefusalUndoesSynchronousMode(t *testing.T) {
+// Failure mode 3 (round 2, finding 2): a busy refusal never undoes the
+// synchronous mode an earlier host request entered while that request's marker
+// is durable: the host's kill may still follow, and the planned boot would
+// read a clean marker over lost telemetry. Once no marker is on disk the
+// computer is not restarting, and a refusal returns it to batching.
+func TestHostPlannedRestartBusyRefusalKeepsHoldWhileMarkerDurable(t *testing.T) {
 	rt, handler := batchingPlannedRestartRuntime(t, "computer-host-restart-busy")
 	if code, body := postPlannedRestart(t, handler, "192.0.2.1:4000", `{"target":"761d94c5"}`); code != http.StatusOK {
 		t.Fatalf("idle request: status=%d body=%s", code, body)
 	}
-	if !rt.store.TelemetryStats().Batching.Synchronous {
+	if !synchronous(rt) {
 		t.Fatal("the host's marker request did not enter synchronous mode")
 	}
-	// The refresh did not happen; by the host's retry a run is running.
-	rt.runningMu.Lock()
-	if rt.running == nil {
-		rt.running = map[string]context.CancelFunc{}
+	setBusy(t, rt, "loop-busy")
+	if code, body := postPlannedRestart(t, handler, "192.0.2.1:4000", `{"target":"8a2b0c11"}`); code != http.StatusConflict {
+		t.Fatalf("busy retry: status=%d body=%s, want 409", code, body)
 	}
-	rt.running["loop-busy"] = func() {}
-	rt.runningMu.Unlock()
-	t.Cleanup(func() {
-		rt.runningMu.Lock()
-		delete(rt.running, "loop-busy")
-		rt.runningMu.Unlock()
-	})
+	if _, err := os.Stat(PlannedRestartMarkerPath(rt.cfg.StorePath)); err != nil {
+		t.Fatalf("the refusal touched the earlier durable marker: %v", err)
+	}
+	if !synchronous(rt) {
+		t.Fatal("a busy refusal reopened the queue while an earlier request's marker is durable")
+	}
+	// The marker is gone (here: an apply's cleanup removed it): nothing will
+	// restart on it, so the next refusal returns the computer to batching.
+	if err := ClearPlannedRestartMarker(rt.cfg.StorePath); err != nil {
+		t.Fatal(err)
+	}
 	if code, body := postPlannedRestart(t, handler, "192.0.2.1:4000", `{"target":"8a2b0c11"}`); code != http.StatusConflict {
 		t.Fatalf("busy retry: status=%d body=%s, want 409", code, body)
 	}
 	if !rt.store.TelemetryBatchingEnabled() {
-		t.Fatal("a busy refusal left synchronous mode on: the computer runs acknowledged until its next boot")
+		t.Fatal("a busy refusal with no durable marker left synchronous mode on")
+	}
+}
+
+// Round 2, finding 1: a failed marker clear keeps synchronous mode on (fail
+// closed): the marker may still be durable.
+func TestHostPlannedRestartFailedClearKeepsHold(t *testing.T) {
+	rt, handler := batchingPlannedRestartRuntime(t, "computer-host-restart-clearfail")
+	if code, body := postPlannedRestart(t, handler, "192.0.2.1:4000", `{"target":"761d94c5"}`); code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", code, body)
+	}
+	occupyMarkerPath(t, rt)
+	if code := deletePlannedRestart(t, handler); code != http.StatusInternalServerError {
+		t.Fatalf("clear of an occupied marker path: status=%d, want 500", code)
+	}
+	if !synchronous(rt) {
+		t.Fatal("a failed marker clear reopened the queue while the marker may be durable")
+	}
+}
+
+// Round 2, finding 5: a marker write that fails while something is at the
+// marker path keeps synchronous mode on; one that left nothing releases it.
+func TestHostPlannedRestartFailedWriteKeepsHoldWhenMarkerPathOccupied(t *testing.T) {
+	rt, handler := batchingPlannedRestartRuntime(t, "computer-host-restart-writefail")
+	occupyMarkerPath(t, rt)
+	if code, body := postPlannedRestart(t, handler, "192.0.2.1:4000", `{"target":"761d94c5"}`); code != http.StatusInternalServerError {
+		t.Fatalf("write onto an occupied marker path: status=%d body=%s, want 500", code, body)
+	}
+	if !synchronous(rt) {
+		t.Fatal("a failed marker write released synchronous mode although the marker path is occupied")
+	}
+}
+
+// Round 2, finding 3: synchronous mode is held, not toggled. A guest apply's
+// hold and the host's hold each keep it on until both are released.
+func TestHostAndApplyHoldsAreIndependent(t *testing.T) {
+	rt, handler := batchingPlannedRestartRuntime(t, "computer-host-restart-overlap")
+	done, err := rt.markPlannedRestart("self-development apply", "u-overlap")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code, body := postPlannedRestartURL(t, handler, "/internal/runtime/planned-restart?allow_busy=1", `{"target":"761d94c5"}`); code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", code, body)
+	}
+	// The apply returns (its own cleanup clears the shared marker file) while
+	// the host's kill is still coming: the host's hold keeps the queue closed.
+	done(nil)
+	if !synchronous(rt) {
+		t.Fatal("the apply's undo released the host's hold")
+	}
+	// Host/host: a second host request (deploy refresh after store compaction)
+	// is still one marker, so one clear releases it.
+	if code, body := postPlannedRestartURL(t, handler, "/internal/runtime/planned-restart?allow_busy=1", `{"target":"8a2b0c11"}`); code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", code, body)
+	}
+	if code := deletePlannedRestart(t, handler); code != http.StatusOK {
+		t.Fatalf("clear: status=%d", code)
+	}
+	if !rt.store.TelemetryBatchingEnabled() {
+		t.Fatal("after every holder released, synchronous mode is still on")
+	}
+	// The reverse order: the host clears first, the apply still holds.
+	done2, err := rt.markPlannedRestart("self-development apply", "u-overlap-2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code, body := postPlannedRestartURL(t, handler, "/internal/runtime/planned-restart?allow_busy=1", `{"target":"9c3d"}`); code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", code, body)
+	}
+	if code := deletePlannedRestart(t, handler); code != http.StatusOK {
+		t.Fatalf("clear: status=%d", code)
+	}
+	if !synchronous(rt) {
+		t.Fatal("the host's clear released the apply's hold")
+	}
+	done2(nil)
+	if !rt.store.TelemetryBatchingEnabled() {
+		t.Fatal("synchronous mode outlived both holders")
+	}
+}
+
+// Round 2, finding 6: an earlier failed drain is not forgotten when the host
+// asks again before the restart; the second marker still names the gap.
+func TestHostPlannedRestartRepeatKeepsDrainFailure(t *testing.T) {
+	rt, handler, fail := failingDrainRuntime(t, "computer-host-restart-repeat")
+	queueTelemetry(t, rt, 2)
+	fail.Store(true)
+	if code, body := postPlannedRestart(t, handler, "192.0.2.1:4000", `{"target":"761d94c5"}`); code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", code, body)
+	}
+	fail.Store(false)
+	if code, body := postPlannedRestart(t, handler, "192.0.2.1:4000", `{"target":"8a2b0c11"}`); code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", code, body)
+	}
+	marker, planned := ConsumePlannedRestartMarker(rt.cfg.StorePath, time.Now())
+	if !planned || !marker.TelemetryDrainFailed {
+		t.Fatalf("second marker planned=%v %+v forgot the first drain's lost records", planned, marker)
+	}
+}
+
+// Round 2, finding 4: a sealer left in place after the owner turned batching
+// off does not make the host's request drain or enter synchronous mode.
+func TestHostPlannedRestartBatchingTurnedOffIsUnchanged(t *testing.T) {
+	rt, handler := batchingPlannedRestartRuntime(t, "computer-host-restart-turnedoff")
+	if err := rt.store.ConfigureTelemetryBatching(store.TelemetryBatchConfig{Enabled: false}); err != nil {
+		t.Fatal(err)
+	}
+	code, body := postPlannedRestart(t, handler, "192.0.2.1:4000", `{"target":"761d94c5"}`)
+	if code != http.StatusOK || strings.Contains(body, "telemetry") {
+		t.Fatalf("status=%d body=%s, want 200 and an unchanged response", code, body)
+	}
+	if synchronous(rt) {
+		t.Fatal("the host's request entered synchronous mode with batching turned off")
 	}
 }
 
