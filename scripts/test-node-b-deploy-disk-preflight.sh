@@ -21,6 +21,17 @@
 #       reclaim, lets the deploy through (both [ tests error, the if is
 #       false, exit 0; review round 2b DS2b-1)
 #   P7  a non-numeric DEPLOY_MIN_FREE_KIB is not refused or guarded
+#   P8  a numeric read too long for bash's 64-bit arithmetic (a 20-digit
+#       floor or df reading makes every [ error, so the guard and the
+#       refusal are skipped and the script exits 0; a min-free of 2^63
+#       wraps negative) or with a leading zero (read as octal) admits the
+#       deploy instead of failing closed (review round 3, R3-F1)
+#   P9  the guard keeps a fixed 10 GiB over the live min-free instead of the
+#       floor's terms (deploy 8 + compaction 14 + regrowth 10 + margin 4 =
+#       36 GiB), so for a live min-free from 24 GiB up the overlapping work
+#       no longer fits (review round 3, R3-F2)
+# The fail-closed floor (an unreadable min-free or floor setting) is the
+# old band's: 80 GiB min-free + 36 = 116 GiB.
 set -u
 here="$(cd "$(dirname "$0")" && pwd)"
 fail=0
@@ -78,27 +89,30 @@ min-free = 25769803776
 max-free = 42949672960'
 f56="DEPLOY_MIN_FREE_KIB=$((56 * GiB_KIB))"
 f60="DEPLOY_MIN_FREE_KIB=$((60 * GiB_KIB))"
+closed=$((116 * GiB_KIB))
 
 run_preflight 70 "$old" "$f56"
 check "P1 live min-free 80, floor 56: 70 GiB free is refused" '[ "$(cat "$root/rc")" = 1 ]'
-check "P5 the guarded floor (90 GiB) is logged" 'grep -q "live_min_free_kib=83886080 min_required_kib=94371840" "$root/out"'
-run_preflight 95 "$old" "$f56"
-check "P1 live min-free 80: 95 GiB free passes" '[ "$(cat "$root/rc")" = 0 ]'
+check "P5 the guarded floor (80 + 36 = 116 GiB) is logged" 'grep -q "live_min_free_kib=83886080 min_required_kib=$closed" "$root/out"'
+run_preflight 100 "$old" "$f56"
+check "P1 live min-free 80: 100 GiB free is refused (P9)" '[ "$(cat "$root/rc")" = 1 ]'
+run_preflight 120 "$old" "$f56"
+check "P1 live min-free 80: 120 GiB free passes" '[ "$(cat "$root/rc")" = 0 ]'
 
 run_preflight 60 "$new" "$f56"
-check "P4 live min-free 24, floor 56: 60 GiB free passes" '[ "$(cat "$root/rc")" = 0 ] && grep -q "min_required_kib=$((56 * GiB_KIB))" "$root/out"'
+check "P4 live min-free 24, hand-set floor 56: raised to 24 + 36 = 60 (P9), 60 GiB free passes" '[ "$(cat "$root/rc")" = 0 ] && grep -q "min_required_kib=$((60 * GiB_KIB))" "$root/out"'
 run_preflight 50 "$new" "$f56"
 check "P4 live min-free 24, floor 56: 50 GiB free is refused" '[ "$(cat "$root/rc")" = 1 ]'
 
 run_preflight 70 - "$f56"
-check "P2 no nix.conf: fails closed to 90 GiB" '[ "$(cat "$root/rc")" = 1 ] && grep -q "cannot read min-free" "$root/out" && grep -q "min_required_kib=94371840" "$root/out"'
+check "P2 no nix.conf: fails closed to 116 GiB" '[ "$(cat "$root/rc")" = 1 ] && grep -q "cannot read min-free" "$root/out" && grep -q "min_required_kib=$closed" "$root/out"'
 run_preflight 70 "max-free = 42949672960" "$f56"
-check "P2 nix.conf without min-free: fails closed to 90 GiB" '[ "$(cat "$root/rc")" = 1 ] && grep -q "min_required_kib=94371840" "$root/out"'
+check "P2 nix.conf without min-free: fails closed to 116 GiB" '[ "$(cat "$root/rc")" = 1 ] && grep -q "min_required_kib=$closed" "$root/out"'
 run_preflight 70 "min-free = lots" "$f56"
-check "P2 non-numeric min-free: fails closed to 90 GiB" '[ "$(cat "$root/rc")" = 1 ] && grep -q "min_required_kib=94371840" "$root/out"'
+check "P2 non-numeric min-free: fails closed to 116 GiB" '[ "$(cat "$root/rc")" = 1 ] && grep -q "min_required_kib=$closed" "$root/out"'
 
 run_preflight 40 "$old" DEPLOY_MIN_FREE_KIB=$((10 * GiB_KIB))
-check "P3 a hand-set 10 GiB floor stays guarded at 90 GiB" '[ "$(cat "$root/rc")" = 1 ] && grep -q "min_required_kib=94371840" "$root/out"'
+check "P3 a hand-set 10 GiB floor stays guarded at 116 GiB" '[ "$(cat "$root/rc")" = 1 ] && grep -q "min_required_kib=$closed" "$root/out"'
 
 # ---- P6 every free-space read fails closed ------------------------------------
 run_preflight 0 "$new" "$f60" FAKE_AVAIL_SEQ="garbage"
@@ -112,9 +126,36 @@ check "P6 a numeric reclaim to 70 GiB passes" '[ "$(cat "$root/rc")" = 0 ]'
 
 # ---- P7 the floor setting itself ------------------------------------------------
 run_preflight 70 "$new" DEPLOY_MIN_FREE_KIB=lots
-check "P7 non-numeric DEPLOY_MIN_FREE_KIB: 90 GiB and logged" '[ "$(cat "$root/rc")" = 1 ] && grep -q "DEPLOY_MIN_FREE_KIB" "$root/out" && grep -q "min_required_kib=94371840" "$root/out"'
-run_preflight 95 "$new" DEPLOY_MIN_FREE_KIB=lots
-check "P7 non-numeric DEPLOY_MIN_FREE_KIB: 95 GiB passes" '[ "$(cat "$root/rc")" = 0 ]'
+check "P7 non-numeric DEPLOY_MIN_FREE_KIB: 116 GiB and logged" '[ "$(cat "$root/rc")" = 1 ] && grep -q "DEPLOY_MIN_FREE_KIB" "$root/out" && grep -q "min_required_kib=$closed" "$root/out"'
+run_preflight 120 "$new" DEPLOY_MIN_FREE_KIB=lots
+check "P7 non-numeric DEPLOY_MIN_FREE_KIB: 120 GiB passes" '[ "$(cat "$root/rc")" = 0 ]'
+
+# ---- P8 numbers too long for the arithmetic, or octal-looking -----------------
+big=99999999999999999999
+run_preflight 70 "$new" DEPLOY_MIN_FREE_KIB=$big
+check "P8 a 20-digit DEPLOY_MIN_FREE_KIB: 116 GiB, 70 GiB free is refused" '[ "$(cat "$root/rc")" = 1 ] && grep -q "min_required_kib=$closed" "$root/out"'
+run_preflight 0 "$new" "$f60" FAKE_AVAIL_SEQ="$big"
+check "P8 a 20-digit free-space reading before the reclaim: refused" '[ "$(cat "$root/rc")" = 1 ] && grep -q "cannot read free space" "$root/out"'
+run_preflight 0 "$new" "$f60" FAKE_AVAIL_SEQ="$((10 * GiB_KIB)) $big"
+check "P8 a 20-digit free-space reading after the reclaim: refused" '[ "$(cat "$root/rc")" = 1 ] && grep -q "cannot read free space after the reclaim" "$root/out"'
+run_preflight 70 "min-free = 9223372036854775808" "$f60"
+check "P8 min-free 2^63 (wraps negative): fails closed to 116 GiB" '[ "$(cat "$root/rc")" = 1 ] && grep -q "cannot read min-free" "$root/out" && grep -q "min_required_kib=$closed" "$root/out"'
+run_preflight 70 "min-free = 99999999999999999999" "$f60"
+check "P8 a 20-digit min-free: fails closed to 116 GiB" '[ "$(cat "$root/rc")" = 1 ] && grep -q "min_required_kib=$closed" "$root/out"'
+run_preflight 70 "min-free = 042949672960" "$f60"
+check "P8 min-free with a leading zero is decimal (40 GiB): floor 76 GiB" '[ "$(cat "$root/rc")" = 1 ] && grep -q "live_min_free_kib=41943040 min_required_kib=$((76 * GiB_KIB))" "$root/out"'
+run_preflight 70 "$new" DEPLOY_MIN_FREE_KIB=062914560
+check "P8 a floor with a leading zero is decimal (60 GiB): 70 GiB free passes" '[ "$(cat "$root/rc")" = 0 ] && grep -q "min_required_kib=62914560" "$root/out"'
+
+# ---- P9 the guard is the floor's terms over the live min-free ------------------
+run_preflight 65 "min-free = 42949672960" "$f60"
+check "P9 live min-free 40, floor 60: 65 GiB free is refused (floor 76)" '[ "$(cat "$root/rc")" = 1 ] && grep -q "live_min_free_kib=41943040 min_required_kib=$((76 * GiB_KIB))" "$root/out"'
+run_preflight 77 "min-free = 42949672960" "$f60"
+check "P9 live min-free 40: 77 GiB free passes" '[ "$(cat "$root/rc")" = 0 ]'
+run_preflight 61 "$new" "$f60"
+check "P9 live min-free 24: the floor stays 60 (24 + 36)" '[ "$(cat "$root/rc")" = 0 ] && grep -q "live_min_free_kib=25165824 min_required_kib=62914560" "$root/out"'
+run_preflight 59 "$new" "$f60"
+check "P9 live min-free 24: 59 GiB free is refused" '[ "$(cat "$root/rc")" = 1 ]'
 
 echo "node-b-deploy-disk-preflight: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
