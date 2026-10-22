@@ -194,7 +194,7 @@ units (`GO_CHOIR_NIX_RETENTION_MODE=enforce`) and the preflight's default.
 | nix `min-free` | 80 GiB | **24 GiB** | 24 GiB |
 | nix `max-free` | 100 GiB | **40 GiB** | 40 GiB |
 | deploy floor default (`DEPLOY_MIN_FREE_KIB`) | 90 GiB | 90 GiB | **60 GiB** |
-| preflight guard | none | floor ≥ live `min-free` + 10 GiB; unreadable → 90 GiB | same |
+| preflight guard | none | floor ≥ live `min-free` + 10 GiB; unreadable → 90 GiB | floor ≥ live `min-free` + 36 GiB (the floor's terms); unreadable → 116 GiB (round 3) |
 | alarm: warning | none | free < 60 GiB, unallocated < 20 GiB, metadata unreadable | same |
 | alarm: error | none | free < 24 GiB, unallocated < 10 GiB, a failed reading | same |
 
@@ -240,13 +240,18 @@ deploy ~70 GiB free by hand.
 **Order is enforced by code now** (S-F2, DS-1). The preflight runs from the
 new checkout before the switch, so it reads the `min-free` nix runs with
 *now* from `/etc/nix/nix.conf` and never takes a floor under it plus
-10 GiB (the margin the 90/80 pair ran with); without a readable numeric
-`min-free` it fails closed to 90 GiB. Under today's 80 GiB that is 90 GiB,
-as now. So deploy 2 is safe whether it lands after deploy 1, with it, or
+36 GiB, the same terms as the floor (round 3, R3-F2; deploy 1's preflight
+used 10 GiB, the margin the 90/80 pair ran with); without a readable
+numeric `min-free` it fails closed to the old band's 80 + 36 = 116 GiB.
+Under the old 80 GiB band, deploy 2's preflight asks 116 GiB; deploy 1's
+asks 90. So deploy 2 is safe whether it lands after deploy 1, with it, or
 outlives a revert of it; landing them in order still matters for the
 footprint gate below. Rollback needs no order either: reverting deploy 1
-puts `min-free` back to 80 and the guard lifts the floor to 90 at the next
-deploy. At the paper's rate, 60 GiB buys landings, not runway; the pressure
+puts `min-free` back to 80 and deploy 2's guard lifts the floor to
+116 GiB at the next deploy (revert deploy 2 too to return to 90).
+`nix/node-b.nix`'s comment still says "plus 10 GiB" and "back to 90 GiB";
+it is left for the next host change so deploy 2 stays preflight-only (the
+guard it describes is now stricter, not looser). At the paper's rate, 60 GiB buys landings, not runway; the pressure
 trigger and discard are the runway.
 
 ### 4. btrfs `compress=zstd` for `/nix/store`: evaluated, not implemented
@@ -379,7 +384,8 @@ paper regrows 5 to 16 GiB an hour):
    that is the footprint of a full deploy. **Deploy 2 proceeds only if that
    sum is ≤ 8 GiB.** If it is larger, deploy 2's floor becomes
    24 + footprint + 14 + 10 + 4 (rounded up), and the test's footprint
-   constant with it, before it lands.
+   constant and the preflight's `overlap_kib` term with it, before it
+   lands.
 1. The CI deploy log's preflight line:
    `live_min_free_kib=83886080 min_required_kib=94371840` (the guard reads
    the old band and keeps 90 GiB).
@@ -435,18 +441,28 @@ Deploy 2 (the next deploy after it lands, with step 0 passed):
 - No deploy-in-flight signal between the preflight and the compaction;
   the floor reserves for the compaction instead of coordinating with it.
 - `DEPLOY_MIN_FREE_KIB` has no break-glass path in ci.yml; a floor change
-  is a commit (the guard keeps it from going under live min-free + 10).
-- The guard trusts `/etc/nix/nix.conf`, not the running daemon (DS2b-7);
-  step 2 is the hold. nix offers no cheap read of the daemon's effective
-  `min-free`, and on NixOS the file is a store symlink whose mtime cannot be
-  compared with the daemon's start.
+  is a commit (the guard keeps it from going under live min-free + 36).
+- The guard trusts `/etc/nix/nix.conf`, not the running daemon (DS2b-7,
+  R3-F3); step 2 is the hold for the first deploy after the min-free
+  change. Why the file is the source: the locked nixpkgs (fe1324228)
+  restarts nix-daemon when the file's store path changes at a switch
+  (`restartTriggers = [ config.environment.etc."nix/nix.conf".source ]`
+  with `stopIfChanged = false`, nixos/modules/services/system/nix-daemon.nix
+  lines 303 and 336), and ci.yml exits the deploy when the switch fails
+  twice. nix has no call that returns the daemon's settings: `nix config
+  show` (Nix 2.34, src/nix/config.cc) prints the client's own
+  `globalConfig`, read from this same file. What is left: connection
+  workers forked before a restart keep the old value until they exit
+  (nix-daemon.nix's own comment, lines 328 to 332), and a deploy whose
+  switch failed leaves file and daemon apart until the next switch, which
+  runs after the next preflight.
 - The retention log's deletion list is a model of nix's `+N` at the moment
   of the listing (DS2b-6); a concurrent `nix-env --set` can make the log
   differ from what nix deletes, which is always nix's own rule. An old
   booted *generation link* can be deleted; the booted store closure stays
   rooted by `/run/booted-system`.
 
-## Now card (2026-10-22, round 2b)
+## Now card (2026-10-22, round 3)
 
 - Station: FP0's Nix store and host disk policy lane. Mutation class: red
   (host Nix config, deploy routing via the preflight and the classifier).
@@ -455,11 +471,12 @@ Deploy 2 (the next deploy after it lands, with step 0 passed):
   d3e8b5cd3 (round 2 findings), 473f8a451 (tests), 0284b76db (fixes),
   cc25aed8c (docs), 326a2860b (round 2b findings), a9937a8a5 (tests),
   997bc4e89 (preflight fail-closed, alarm 60), 1a729b00e (classifier), and this docs
-  commit (the deploy 1 head). Deploy 2: the one commit after it (floor
-  60 GiB, preflight only). The ci.yml step:
+  commit (17ef1dccf, the deploy 1 head). Deploy 2: every commit after it,
+  preflight and its test only (0aa462439 floor 60 GiB; round 3: findings,
+  test, 27566d828 fix, this record). The ci.yml step:
   `docs/evidence/node-b-disk-policy-ci-wiring-2026-10-22.patch`, for FP0.
 - Tests at the deploy 2 head: retention 48/48, alarm 17/17, preflight
-  15/15, policy 8/8, `.github/scripts/deploy-impact-classify-test` ok. At
+  27/27, policy 8/8, `.github/scripts/deploy-impact-classify-test` ok. At
   the deploy 1 head the same but policy 6/8 (the two floor checks).
 - Next: FP0 evals, re-review of the delta, lands deploy 1 (host-only),
   proves steps 0 to 5 with step 2 as a hold; deploy 2 only if step 0's
@@ -606,3 +623,11 @@ head (0aa462439).
   daemon's effective value with the file as a fallback that fails closed on
   disagreement, or record why the file is authoritative here, with the
   evidence.
+
+## Review round 3 dispositions
+
+| Finding | Disposition |
+|---|---|
+| R3-F1 numeric reads unbounded | Fixed (27566d828): every compared number is 1 to 15 digits and read as decimal (`10#`), and a `[` that errors refuses the deploy (`at_least`/`refuse`) at the guard and at both free-space checks. Test P8 (20-digit floor and `df` readings, min-free 2^63, leading zeros) failed first (9e0bee653). |
+| R3-F2 guard margin fixed at 10 GiB | Fixed (27566d828): the guard is live `min-free` + 36 GiB, the floor's own terms, so the overlap fits for every `min-free`; the fail-closed floor is the old band's 80 + 36 = 116 GiB. Test P9 (min-free 40 GiB admitted 65 GiB free) and P4 (a hand-set 56 under min-free 24 kept) failed first (9e0bee653). |
+| R3-F3 file, not daemon | Kept the file as the source, with the evidence in the script's comment and in Residuals: NixOS restarts nix-daemon when the file changes at a switch, a failed switch fails the deploy, and `nix config show` reads the same file in the client, so it adds no daemon reading and no disagreement to fail closed on. Step 2 stays the hold. |
