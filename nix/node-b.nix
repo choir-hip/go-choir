@@ -544,6 +544,19 @@ let
   # deploy after the staging proof; /health model_scheduler shows the queue.
   # Rollback: "off" and redeploy.
   gatewayModelScheduler = "off";
+  # B7 gateway request body caps (internal/gateway/body_caps.go;
+  # docs/problems/gateway-request-bodies-unbounded-2026-10-22.md). Every
+  # route's body is capped and refused 413 unread past its cap. This mode
+  # governs only the model routes (inference, OpenAI chat; limit 64 MiB):
+  #   "observe"  serve a model body over 64 MiB, up to the 576 MiB ceiling,
+  #              and log `body cap would_refuse` with its size and route;
+  #   "enforce"  refuse it.
+  # Search (1 MiB), source-api (64 KiB), Jev (1 MiB) and the operator
+  # routes (64 KiB) enforce in every mode. Observe for one deploy, then
+  # enforce if /health body_caps.would_refuse.model stays 0 and max_seen
+  # stays under the limit. An unset or unknown value enforces in code.
+  # Limits: GATEWAY_BODY_LIMITS, e.g. "model=96MiB". Rollback: "observe".
+  gatewayBodyCaps = "observe";
   # claude delegate (docs/design/claude-delegate-slice1-2026-10-14.md): the
   # owner's setup-token token, root 0400, written by the owner only. Every
   # unit, vmctl included, keeps the secrets dir hidden; vmctl's start copies
@@ -2198,6 +2211,7 @@ in
         "GATEWAY_AUTOPUTER_TOKEN_TTL=720h"
         "GATEWAY_BEARER_BINDING=${gatewayBearerBindingMode}"
         "GATEWAY_MODEL_SCHEDULER=${gatewayModelScheduler}"
+        "GATEWAY_BODY_CAPS=${gatewayBodyCaps}"
         # SearXNG self-hosted meta-search (free, no credits). SearXNGProvider
         # is first in the provider list, so this absorbs the majority of
         # search load. Paid providers (Tavily, Brave, etc.) act as fallback.
