@@ -3,9 +3,11 @@ package agentcore
 import (
 	"context"
 	"net/http"
+	"slices"
 	"sort"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -24,6 +26,7 @@ type obligationsResponse struct {
 	OldestRun   map[string]string   `json:"oldest_run_at,omitempty"`
 	WorkItems   obligationsCountAge `json:"open_work_items"`
 	Actors      *obligationsActors  `json:"actors,omitempty"`
+	Selfdev     obligationsSelfdev  `json:"selfdev"`
 	Errors      []string            `json:"errors,omitempty"`
 }
 
@@ -151,6 +154,66 @@ type obligationsExhaustedWake struct {
 	ExhaustedAt string `json:"exhausted_at,omitempty"`
 }
 
+// selfdevStalledAfter is how long an open self-development operation may go
+// without a transition before the surface calls it stalled. A freeze, verify
+// or owner decision normally lands within minutes; the operation that pinned
+// a computer busy sat 17 hours
+// (docs/problems/selfdev-freeze-failure-leaves-operation-executing-2026-10-22.md).
+const selfdevStalledAfter = 30 * time.Minute
+
+// obligationsSelfdev lists the computer's open self-development operations.
+// Busy is the count /health reports as selfdev_active_operations, the one
+// vmctl's deploy refresh defers on. Read-only: it never closes anything.
+type obligationsSelfdev struct {
+	Open       int                           `json:"open"`
+	Busy       int                           `json:"busy"`
+	Stalled    int                           `json:"stalled"`
+	Operations []obligationsSelfdevOperation `json:"operations,omitempty"`
+}
+
+type obligationsSelfdevOperation struct {
+	OperationID     string `json:"operation_id"`
+	State           string `json:"state"`
+	UpdatedAt       string `json:"updated_at"`
+	IdleSeconds     int    `json:"idle_seconds"`
+	Busy            bool   `json:"busy"`
+	Stalled         bool   `json:"stalled"`
+	LastIntentError string `json:"last_intent_error,omitempty"`
+}
+
+func (rt *Runtime) selfdevObligationsSection(ctx context.Context, now time.Time) (obligationsSelfdev, error) {
+	out := obligationsSelfdev{}
+	if rt == nil || rt.selfdevOperations == nil || rt.TextureComputerID() == "" {
+		return out, nil
+	}
+	operations, err := rt.selfdevOperations.ListByStates(ctx, rt.TextureComputerID(), selfdev.OpenStates...)
+	if err != nil {
+		return out, err
+	}
+	for _, operation := range operations {
+		sample := obligationsSelfdevOperation{
+			OperationID: operation.OperationID, State: operation.State, UpdatedAt: operation.UpdatedAt,
+			Busy: slices.Contains(selfdevBusyStates, operation.State), LastIntentError: operation.LastIntentError,
+		}
+		if updated, parseErr := time.Parse(time.RFC3339Nano, operation.UpdatedAt); parseErr == nil {
+			idle := now.Sub(updated)
+			sample.IdleSeconds = int(idle.Seconds())
+			sample.Stalled = idle > selfdevStalledAfter
+		}
+		out.Open++
+		if sample.Busy {
+			out.Busy++
+		}
+		if sample.Stalled {
+			out.Stalled++
+		}
+		if len(out.Operations) < 20 {
+			out.Operations = append(out.Operations, sample)
+		}
+	}
+	return out, nil
+}
+
 type obligationsCountAge struct {
 	Count  int    `json:"count"`
 	Oldest string `json:"oldest_at,omitempty"`
@@ -243,6 +306,11 @@ func (h *APIHandler) HandleObligations(w http.ResponseWriter, r *http.Request) {
 		if !oldest.IsZero() {
 			resp.WorkItems.Oldest = oldest.UTC().Format(time.RFC3339)
 		}
+	}
+	if section, err := rt.selfdevObligationsSection(ctx, resp.GeneratedAt); err != nil {
+		resp.Errors = append(resp.Errors, "selfdev: "+err.Error())
+	} else {
+		resp.Selfdev = section
 	}
 	if actors, err := rt.actorObligationsSection(ctx, resp.GeneratedAt); err != nil {
 		resp.Errors = append(resp.Errors, "actors: "+err.Error())
