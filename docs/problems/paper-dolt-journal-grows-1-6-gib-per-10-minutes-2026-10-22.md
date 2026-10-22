@@ -63,8 +63,9 @@ Two defects, one cause.
   `nbs.memtable`) **[V]**. Chunks flushed by a statement are in it whether
   or not the transaction later commits; the next commit by any session
   persists the memtable. So a **rolled-back transaction still writes its
-  chunks to the journal**. **[V]** for the shared memtable; **[H]** that no
-  path discards a rolled-back session's chunks (none found).
+  chunks to the journal**. Measured locally (section "Local measurement"):
+  a rolled-back insert costs the same journal bytes as a committed one,
+  once the next commit lands.
 - The journal deduplicates by content: `ChunkJournal.Persist` skips chunks
   the store already has (`store/nbs/journal.go:293-321`) **[V]**. Rewriting
   an identical row costs nothing; any changed byte (an `updated_at`)
@@ -98,18 +99,35 @@ the generated columns are NULL for other kinds, but the rows are still
 indexed. `run_memory_entries` has a random UUID key and 5 secondary indexes
 (`store.go:362-365` plus the UNIQUE) **[V]**.
 
-Estimate per `choir.event` tape event **[H]** (depth about 4 for a table of
-about 10^6 rows, about 3 KiB per compressed chunk, so about 12 KiB per
-touched tree):
+### Local measurement (2026-10-22, this lane)
+
+An embedded Dolt store from this module, on the lane's machine (a probe
+test, run and deleted; not a proof about the paper). One table shaped like
+`og_objects`: a random `CHAR(64)` key, 12 secondary indexes, 100,000 seed
+rows, then 200 operations of each kind, journal size read with
+`doltJournalBytes` before and after:
+
+| Operation (one transaction each) | Journal per operation |
+|---|---|
+| Autocommit insert, random key | **87 KiB** |
+| Insert, then ROLLBACK (bytes appear at the next commit) | **90 KiB** |
+| Autocommit UPDATE of the timestamp column only | 63 KiB |
+
+The same probe with 6 secondary indexes and 60,000 rows: 53, 56 and
+60 KiB. So about 6.7 to 7.6 KiB per touched tree at this size; a table of
+about 10^6 rows is one level deeper, about 8 to 9 KiB per tree **[H]**.
+
+Estimate per `choir.event` tape event on the paper **[H]**, from those
+constants:
 
 | Part | Trees | Journal |
 |---|---|---|
-| Dry run (`og_objects` insert) | 13 | about 156 KiB |
-| Prepare (`computer_event_index` insert) | 4 | about 48 KiB |
-| Finalize (heads, index update, `og_objects` insert) | about 16 | about 190 KiB |
-| Table, root-value and working-set chunks, about 8 statements | | about 30 to 60 KiB |
-| Content (event JSON, receipt, body) | | about 5 KiB |
-| **Total** | | **about 250 to 450 KiB** |
+| Dry run (`og_objects` insert, rolled back) | 13 | about 90 to 120 KiB |
+| Prepare (`computer_event_index` insert) | 4 | about 30 to 40 KiB |
+| Finalize (heads, index row and status index, `og_objects` insert) | about 16 | about 115 to 150 KiB |
+| **Total** | | **about 240 to 310 KiB** |
+
+The dry run is about 35 to 40% of it.
 
 Cross-check from an earlier measurement **[M]**: on 10-15 the GC stopped at
 10-14 13:00 and the journal reached 27.2 GB at 10-15 00:20
@@ -118,9 +136,9 @@ at about 3 tape events per second. That is 0.67 MB/s, or about **220 KB per
 event**, and the volume design states "240 KB per event". The estimate
 above is the same order and slightly larger, as it should be on today's
 store: `og_objects` gained `rec_inbox_seq`, `rec_claim` and the derived-key
-side table since 10-15, and the trees are deeper.
+side table since 10-15, and the trees are deeper. The two agree.
 
-At 220 to 450 KiB per event, 2.0 to 2.7 MiB/s means **about 5 to 12 tape
+At 220 to 310 KiB per event, 2.0 to 2.7 MiB/s means **about 7 to 12 tape
 events per second** on the paper now, against about 3 on 10-15 and 1.0 to
 1.5 per day-average since 10-17. The paper is busier than either:
 after deploy C it ran research 8/8 and sources 4/4 slots with 67 due agents
@@ -134,8 +152,8 @@ below splits it.
    durable write, each rewriting a root-to-leaf path in every touched
    tree, 13 of them for any `og_objects` row, and the dry run's chunks
    reach the journal although it rolls back. The journal rate is
-   (tape events per second) x (about 250 to 450 KiB). **[V]** mechanism,
-   **[H]** the constants.
+   (tape events per second) x (about 240 to 310 KiB). **[V]** mechanism
+   and the local constants, **[H]** the paper's constants.
 2. **Event rate.** `choir.event` telemetry was 58% and run-memory entries
    31% of the paper's tape events on 10-15 **[M]**. Telemetry batching is
    built and off: the `telemetry.batch` computer setting
@@ -173,13 +191,13 @@ below splits it.
 ## Proposed fixes for the top cause (none implemented here)
 
 Smallest first. Each needs FP0's measurement first: if bytes per event are
-far above 450 KiB, this model is wrong and none of these is the fix.
+far above about 400 KiB, this model is wrong and none of these is the fix.
 
 | # | Fix | Effect (derived) | Class | Rollback |
 |---|---|---|---|---|
 | F-a | Turn on telemetry batching for the paper (`telemetry.batch`, already built) | One dry run, prepare and finalize per sealed batch of up to 64 ops. `og_objects` inserts stay one per op but share the batch's upper-level chunks; the three-transaction overhead falls by k. Expect the `choir.event` share of the journal to fall 2x to 4x (volume design §4a) | red (tape write path; the design's own class) | setting off |
-| F-b | Stop the dry run writing chunks: validate with a read-only check where the op cannot fail at the engine (unguarded `choir.event` and run-memory inserts), keep the full dry run for guarded ops | Removes about a third of the journal for those ops | red (tape append validation; a projection that fails after the CAS wedges the computer) | revert |
-| F-c | Move `choir.event` (append-only telemetry) out of `og_objects` into its own table with a sequential key and the 1 or 2 indexes its readers use | About 13 trees to about 2 per telemetry event in both dry run and finalize: the largest single lever, roughly half the journal | red (store schema, content witness, replay, every `choir.event` reader) | dual-read; a design of its own |
+| F-b | Stop the dry run writing chunks: validate with a read-only check where the op cannot fail at the engine (unguarded `choir.event` and run-memory inserts), keep the full dry run for guarded ops | Removes about 35 to 40% of the journal for those ops (local measurement) | red (tape append validation; a projection that fails after the CAS wedges the computer) | revert |
+| F-c | Move `choir.event` (append-only telemetry) out of `og_objects` into its own table with a sequential key and the 1 or 2 indexes its readers use | About 33 trees to about 10 per telemetry event (13 to about 2 in both dry run and finalize): the largest single lever, about two thirds of a telemetry event's journal | red (store schema, content witness, replay, every `choir.event` reader) | dual-read; a design of its own |
 | F-d | Sequential key for `computer_event_index` (volume design b2) | History, not journal | red (schema, witness) | migration |
 
 Recommendation: F-a first, measured on its own test computer (it is built,
@@ -220,8 +238,8 @@ All are existing routes or logs **[V]**; none changes the computer.
    generation does not change, so Δbytes is the journal growth. Read both
    samples inside one GC interval (after a pass ends, before the next tick
    that runs).
-3. **Bytes per event** = (2) / (1). Prediction: 220 to 450 KiB. Above about
-   1 MiB means a writer or a blob rewrite this record missed.
+3. **Bytes per event** = (2) / (1). Prediction: 220 to 310 KiB. Above about
+   400 KiB means a writer or a blob rewrite this record missed.
 4. **Kind mix and batching state.** The same observability response,
    `telemetry_batching`: `enabled`, `events_appended_by_kind`,
    `tape_events`, `tape_ops`, `ops_per_tape_event`,
@@ -246,7 +264,8 @@ and gives the kind mix, which decides between F-a and F-c.
 ## Heresy delta
 
 - discovered: a rolled-back dry-run transaction per tape event writes its
-  chunks to the journal (the shared memtable); the online GC holds the only
+  chunks to the journal (the shared memtable; measured locally, 90 KiB per
+  rolled-back insert on a 13-tree table); the online GC holds the only
   write connection for its whole pass.
 - introduced: none.
 - repaired: none.
