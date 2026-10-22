@@ -1,9 +1,14 @@
 package capfloor
 
 import (
+	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -123,16 +128,44 @@ func TestStagingProbeHoldsTheFloor(t *testing.T) {
 	}
 }
 
-// privilegedCalls are the syscalls that need a capability, as the daemon's
-// Go source spells them, with the capability each needs (capabilities(7)).
+// privilegedCalls are the wrappers of syscall and golang.org/x/sys/unix that
+// need a capability, with the capability each needs (capabilities(7)). Where
+// it depends on the arguments, the strongest is named: IoctlIfreq sets
+// interface flags (SIOCSIF*, CAP_NET_ADMIN); a setxattr outside user.* needs
+// CAP_SYS_ADMIN.
 var privilegedCalls = map[string]int{
-	"Settimeofday(": capSysTime, "ClockSettime(": capSysTime, "Adjtimex(": capSysTime,
-	"Mount(": capSysAdmin, "Unmount(": capSysAdmin, "Setns(": capSysAdmin, "PivotRoot(": capSysAdmin,
-	"Sethostname(": capSysAdmin, "Chroot(": capSysChroot, "Mknod(": capMknod, "Mknodat(": capMknod,
-	"Reboot(": capSysBoot, "Iopl(": capSysRawio, "Ioperm(": capSysRawio,
-	"InitModule(": capSysModule, "FinitModule(": capSysModule, "DeleteModule(": capSysModule,
-	"Klogctl(": capSyslog, "Acct(": capSysPacct,
+	"Settimeofday": capSysTime, "ClockSettime": capSysTime, "Adjtimex": capSysTime, "ClockAdjtime": capSysTime,
+	"Mount": capSysAdmin, "Unmount": capSysAdmin, "Setns": capSysAdmin, "PivotRoot": capSysAdmin,
+	"Sethostname": capSysAdmin, "Setdomainname": capSysAdmin, "Fsopen": capSysAdmin, "Fsmount": capSysAdmin,
+	"MoveMount": capSysAdmin, "OpenTree": capSysAdmin,
+	"Setxattr": capSysAdmin, "Lsetxattr": capSysAdmin, "Fsetxattr": capSysAdmin,
+	"Chroot": capSysChroot, "Mknod": capMknod, "Mknodat": capMknod,
+	"Reboot": capSysBoot, "Iopl": capSysRawio, "Ioperm": capSysRawio,
+	"InitModule": capSysModule, "FinitModule": capSysModule, "DeleteModule": capSysModule,
+	"Klogctl": capSyslog, "Acct": capSysPacct,
+	"IoctlIfreq": capNetAdmin,
+	"Setuid":     capSetuid, "Setreuid": capSetuid, "Setresuid": capSetuid, "Setfsuid": capSetuid,
+	"Setgid": capSetgid, "Setregid": capSetgid, "Setresgid": capSetgid, "Setfsgid": capSetgid, "Setgroups": capSetgid,
 }
+
+// privilegedSyscallNumbers are the same needs as raw syscall numbers, when
+// one is the first argument of Syscall, Syscall6, RawSyscall or RawSyscall6.
+var privilegedSyscallNumbers = map[string]int{
+	"SYS_SETTIMEOFDAY": capSysTime, "SYS_CLOCK_SETTIME": capSysTime, "SYS_CLOCK_ADJTIME": capSysTime, "SYS_ADJTIMEX": capSysTime,
+	"SYS_MOUNT": capSysAdmin, "SYS_UMOUNT2": capSysAdmin, "SYS_PIVOT_ROOT": capSysAdmin, "SYS_SETNS": capSysAdmin,
+	"SYS_SETHOSTNAME": capSysAdmin, "SYS_SETDOMAINNAME": capSysAdmin, "SYS_FSOPEN": capSysAdmin, "SYS_FSMOUNT": capSysAdmin,
+	"SYS_MOVE_MOUNT": capSysAdmin, "SYS_OPEN_TREE": capSysAdmin,
+	"SYS_SETXATTR": capSysAdmin, "SYS_LSETXATTR": capSysAdmin, "SYS_FSETXATTR": capSysAdmin,
+	"SYS_CHROOT": capSysChroot, "SYS_MKNOD": capMknod, "SYS_MKNODAT": capMknod,
+	"SYS_REBOOT": capSysBoot, "SYS_KEXEC_LOAD": capSysBoot, "SYS_KEXEC_FILE_LOAD": capSysBoot,
+	"SYS_IOPL": capSysRawio, "SYS_IOPERM": capSysRawio,
+	"SYS_INIT_MODULE": capSysModule, "SYS_FINIT_MODULE": capSysModule, "SYS_DELETE_MODULE": capSysModule,
+	"SYS_SYSLOG": capSyslog, "SYS_ACCT": capSysPacct, "SYS_BPF": capBPF, "SYS_PERF_EVENT_OPEN": capPerfmon,
+	"SYS_SETUID": capSetuid, "SYS_SETREUID": capSetuid, "SYS_SETRESUID": capSetuid, "SYS_SETFSUID": capSetuid,
+	"SYS_SETGID": capSetgid, "SYS_SETREGID": capSetgid, "SYS_SETRESGID": capSetgid, "SYS_SETFSGID": capSetgid, "SYS_SETGROUPS": capSetgid,
+}
+
+var rawSyscallFuncs = map[string]bool{"Syscall": true, "Syscall6": true, "RawSyscall": true, "RawSyscall6": true}
 
 // probeFiles call privileged syscalls to prove they are denied; the floor
 // must not grant them.
@@ -141,11 +174,117 @@ var probeFiles = map[string]string{
 	"internal/yaegikernel/desk_cell_selftest_linux.go": "the desk cell self-test expects every call denied",
 }
 
-// K1, review E1: every capability-needing syscall the guest daemon makes on
-// its own paths (and the capsule broker it starts, which can hold no more)
-// is under a kept capability. The hibernate resume steps the clock with
+// privilegedSite is one call in the daemon's source that needs a capability.
+type privilegedSite struct {
+	file, call string
+	line, cap  int
+}
+
+// scanPrivilegedCalls parses Go source (so comments are not code and import
+// aliases resolve) and returns every named privileged call into syscall or
+// golang.org/x/sys/unix. A dot import of either is an error: its calls
+// could not be seen.
+func scanPrivilegedCalls(name string, src []byte) ([]privilegedSite, error) {
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, name, src, parser.SkipObjectResolution)
+	if err != nil {
+		return nil, err
+	}
+	pkgs := map[string]bool{}
+	for _, imp := range f.Imports {
+		path, _ := strconv.Unquote(imp.Path.Value)
+		if path != "syscall" && path != "golang.org/x/sys/unix" {
+			continue
+		}
+		local := filepath.Base(path)
+		if imp.Name != nil {
+			local = imp.Name.Name
+		}
+		if local == "." {
+			return nil, fmt.Errorf("%s dot-imports %s", name, path)
+		}
+		if local != "_" {
+			pkgs[local] = true
+		}
+	}
+	selector := func(e ast.Expr) (string, bool) {
+		sel, ok := e.(*ast.SelectorExpr)
+		if !ok {
+			return "", false
+		}
+		x, ok := sel.X.(*ast.Ident)
+		if !ok || !pkgs[x.Name] {
+			return "", false
+		}
+		return sel.Sel.Name, true
+	}
+	var sites []privilegedSite
+	ast.Inspect(f, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		fn, ok := selector(call.Fun)
+		if !ok {
+			return true
+		}
+		if c, ok := privilegedCalls[fn]; ok {
+			sites = append(sites, privilegedSite{name, fn, fset.Position(call.Pos()).Line, c})
+		}
+		if rawSyscallFuncs[fn] && len(call.Args) > 0 {
+			if num, ok := selector(call.Args[0]); ok {
+				if c, ok := privilegedSyscallNumbers[num]; ok {
+					sites = append(sites, privilegedSite{name, fn + "(" + num + ")", fset.Position(call.Pos()).Line, c})
+				}
+			}
+		}
+		return true
+	})
+	return sites, nil
+}
+
+// F4: the scan sees calls, not text: a comment neither trips nor satisfies
+// it, an aliased import and a raw syscall number are seen, a dot import is
+// refused.
+func TestScanPrivilegedCallsReadsCode(t *testing.T) {
+	src := `package p
+
+import (
+	sys "golang.org/x/sys/unix"
+	"syscall"
+)
+
+// unix.Settimeofday(nil) and syscall.Mount("", "", "", 0, "") in a comment.
+func f() {
+	_ = sys.IoctlIfreq(0, 0, nil)
+	_, _, _ = syscall.Syscall(syscall.SYS_SETTIMEOFDAY, 0, 0, 0)
+	_ = sys.Fsetxattr(0, "user.x", nil, 0)
+	s := "unix.Mount("
+	_ = s
+}
+`
+	sites, err := scanPrivilegedCalls("p.go", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, s := range sites {
+		got = append(got, s.call)
+	}
+	if strings.Join(got, ",") != "IoctlIfreq,Syscall(SYS_SETTIMEOFDAY),Fsetxattr" {
+		t.Fatalf("sites %v", got)
+	}
+	if _, err := scanPrivilegedCalls("d.go", []byte("package p\nimport . \"golang.org/x/sys/unix\"\nfunc f() { _ = Getpid() }\n")); err == nil {
+		t.Fatal("a dot import of x/sys/unix was accepted")
+	}
+}
+
+// K1, review E1 and F4: every named capability-needing call the guest daemon
+// makes on its own paths (and the capsule broker it starts, which can hold no
+// more) is under a kept capability. The hibernate resume steps the clock with
 // settimeofday; without CAP_SYS_TIME enforce answers it 500 and the host
-// cold-boots the guest.
+// cold-boots the guest. Calls this list does not name, and binaries the
+// daemon execs, are the enforce trial's to find.
 func TestKeptCoversTheDaemonsPrivilegedSyscalls(t *testing.T) {
 	root := "../.."
 	if _, err := os.Stat(filepath.Join(root, "go.mod")); err != nil {
@@ -166,15 +305,14 @@ func TestKeptCoversTheDaemonsPrivilegedSyscalls(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			for _, line := range strings.Split(string(raw), "\n") {
-				for call, c := range privilegedCalls {
-					if !strings.Contains(line, "unix."+call) && !strings.Contains(line, "syscall."+call) {
-						continue
-					}
-					seen[call] = true
-					if _, kept := Kept[c]; !kept {
-						t.Errorf("%s calls %s, which needs %s; the floor drops it", rel, strings.TrimSuffix(call, "("), Name(c))
-					}
+			sites, err := scanPrivilegedCalls(rel, raw)
+			if err != nil {
+				return err
+			}
+			for _, s := range sites {
+				seen[s.call] = true
+				if _, kept := Kept[s.cap]; !kept {
+					t.Errorf("%s:%d calls %s, which needs %s; the floor drops it", s.file, s.line, s.call, Name(s.cap))
 				}
 			}
 			return nil
@@ -183,10 +321,10 @@ func TestKeptCoversTheDaemonsPrivilegedSyscalls(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// The scan sees the calls it is meant to see.
-	for _, call := range []string{"Settimeofday(", "Mount("} {
+	// The scan sees the calls it is meant to see (calls, never comments).
+	for _, call := range []string{"Settimeofday", "Mount", "IoctlIfreq", "Fsetxattr"} {
 		if !seen[call] {
-			t.Errorf("the scan found no %s; it no longer reads the daemon's source", call)
+			t.Errorf("the scan found no %s call; it no longer reads the daemon's source", call)
 		}
 	}
 }
