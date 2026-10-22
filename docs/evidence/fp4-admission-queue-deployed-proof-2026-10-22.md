@@ -183,3 +183,74 @@ What the re-run must show:
   recorded as a finding against the advice, not a pass.
 - A's candidate is still `awaiting_approval` and untouched; no operation
   exists for B.
+
+## Re-run of steps 4 and 6 on deploy Q (2026-10-22 13:36-14:05 UTC)
+
+Run by the self-development monitor on FP0's go. Round 3 (cf7ed5072) is
+live in deploy Q, d206fdd40 (CI 39785702260). The computer was 71afbf14,
+reached through the product path with its own key, `env -u
+CHOIR_API_KEY`, and flags before positionals. Request A was sent as the
+original text; request B was the plan's re-run text, verbatim. The
+operator applied, approved and rejected nothing; at the end no candidate
+is open, so nothing needed settling.
+
+Every step ran on d206fdd40: `/health` reported `deployed_at`
+13:36:34, and there was no refresh during the run.
+
+| Step | Time (UTC) | Call | Code | Rows read | Log line | Result |
+|---|---|---|---|---|---|---|
+| 0 wake + precondition | 13:36:38; reads 13:36:45 | `choir computer start --computer … --idempotency-key fp4r3-wake-20261022T1342`; then `self-dev head`, `self-dev show --operation selfdev-0593136f…`, operations, obligations | exit 0, receipt `01a163d3-f9de-7adb-a069-e43dbebcd877` (hibernated to active, epoch 13243) | /health ready, running_runs 0. Head seq 7231, `pending_transition_ref` "". selfdev-0593136f `rejected` (11:32:02.873); 5e28993f `failed`; bb0cebfa `rejected`. Obligations selfdev {0,0,0}. | n/a | PASS: no operation open |
+| 1 cast A | cast 13:37:34; opened 13:38:06.02; bound 13:38:25.59 | `choir run start --idempotency-key fp4r3-cast-A-20261022T1340` (trajectory `a85bd572-42c1-5512-89ee-6e000c49c88d`, submission `ec546abf-3971-50b2-a4f6-812b1abeef62`) | exit 0 | A `assignment-6daa96ea503df3de8adbba70` bound, capsule active | 13:38:07 "engineering admission wake latency mailbox=management:… update=36736c3d-… waited=1.611s content={assignment A, attempt 1}" | PASS |
+| 2 cast B | cast 13:38:36.9; opened 13:39:23.89; script 13:39:42-44 | `choir run start --idempotency-key fp4r3-cast-B-20261022T1340` (trajectory `f1539984-38b5-58e1-a49c-fb76ddabd1b1`); `--step 2` | exit 0; script "no failed checks" | A bound with a live capsule, one bound event. B `assignment-4f6ef21be59f0ed797963a43` open, unbound, no bound event. | 13:39:26 "… waits behind assignment-6daa96ea… (live); retry 1 in 10s". Retries ran through 24 at 14:00:36. From 13:39:36 each retry's latency line reads `mailbox=engineering-admission … waited=1ms`-`2ms`. | PASS |
+| A ends (not as planned) | Freeze 14:00:59; Complete refused 14:01:08; cancel 14:01:29.73 | A's own run | n/a | A's Freeze succeeded: `selfdev-f8778d8a37e0d85be0dc7ff42f45efb4` `frozen` 14:01:03, capsule frozen 14:01:07.80. A's `Complete("completed", …)` cited one `capsule-exec:` ref twice and was refused with "assignment command evidence unavailable after durable freeze: %!w(<nil>)". Every later cell got "assignment fate is not active and bound". `engineering-system-cancel:assignment-6daa96ea…:1:1`, guard reason. Operation `failed` 14:01:29.91. | 14:01:10-29: management fate-deadline update 58a5b36c… dead-lettered three times | **finding**: problem record 702bd1259. A's candidate was lost, so step 6 as planned is not reachable. |
+| 4 nudge | A terminal_at 14:01:29.732; B bound 14:01:46.890; script 14:02:25 | `--step 5` | script "no failed checks" | **B bound 17.16 s after A's terminal_at** (bound 30 s). The first drill took 305 s. | **14:01:29 "actorruntime: engineering admission wake latency mailbox=engineering-admission update=0f8ec10a-4fca-5e84-a8ea-2b9e5276291d waited=2ms content={"assignment_id":"assignment-4f6ef21be59f0ed797963a43","attempt":1,"objective":"","nudge":"assignment-6daa96ea503df3de8adbba70"}"**. B's capsule broker was ready at 14:01:46. Management was then handling A's fate wakes (14:01:07-29), and the nudge did not wait for them. | **PASS**. A ended by the guard's system cancel, not by finishing; the plan expected it to finish. |
+| 6 refusal | B Freeze 14:03:46.6 | B's `choir.Freeze` | tool_error | No open candidate existed when B froze. The refusal was "reduce: persist tray-1: capsule release contains no frozen runtime artifacts", not the open-candidate refusal. B's operation `selfdev-70598873adff86126d385785032e0178` opened (executing 14:03:51) and closed `failed` at 14:04:00.58: "assignment failed before its candidate froze; last refusal: freeze: capsule release contains no frozen runtime artifacts". | no "selfdev: assignment B cannot freeze" (none expected without an open candidate) | **not reached**. The open-candidate refusal and its "failed" advice were not exercised. |
+| 6 B's fate | Complete 14:03:57.97; reported 14:04:00.14 | B's `choir.Complete` with result failed and the refusal as the reason | the tool returned "reduce: persist tray-1: lifecycle command digest conflict", but the report landed | B `failed`, `disposition_reason` "reducer-derived from report report:sha256:95333a0e4755e0dd2d74da57c6637588e3369436526f4edc212dd22c4a1f4b9d". Events: opened, bound, capsule dispositions, `co_super_assignment_reported`. **No `engineering-system-cancel` event for B.** | 14:04:00 "rule precommit … settled no at terminal failed" | **PASS** for "a failed report is terminal, no system cancel", with a different refusal than planned |
+| 5 writer gate + capsule memory | 14:05:24 | GET /api/runtime/observability | 200 | `objectgraph_writer_gate` {"mode":"observe","counts":{"choir.texture_document\|undeclared\|undeclared_writer":2,"choir.texture_revision\|undeclared\|undeclared_writer":2}}. `capsule_memory`: see the next table. | 14:01:27 and 14:03:59 "capsule … memory: policy=observe …" | recorded |
+
+`capsule_memory` receipts (policy `observe`):
+
+| Capsule | Assignment | request = admitted = max | peak | events high / max / oom / oom_kill | doctrine_would_throttle |
+|---|---|---|---|---|---|
+| capsule-3b63529a-9bc6-55e8-a589-e8decdcfe8cb | A (release build) | 2147483648 | **2147594240** (at max) | 0 / **385311** / **73** / **2** | **true** |
+| capsule-9ae08362-e606-51c3-8caf-0be3ef789c33 | B (cheap receipts) | 2147483648 | 158109696 | 0 / 0 / 0 / 0 | false |
+
+Findings:
+
+- **New problem: A's frozen candidate is lost because its Complete
+  repeats an execution ref.** The record is
+  `docs/problems/frozen-candidate-lost-when-complete-cites-a-duplicate-execution-ref-2026-10-22.md`
+  (702bd1259).
+  - `bindGrantedReceipts` collapses duplicate refs.
+  - The post-freeze count check then fails, and wraps a nil error.
+  - A frozen capsule refuses every later cell, so the model cannot
+    report again.
+- **The release build runs at the capsule's 2 GiB ceiling.** It hit
+  memory.max 385,311 times and was OOM-killed twice.
+  - Three `capsule_go_eval` calls hit the 30 s broker read timeout, at
+    13:44:16, 13:44:57 and 13:58:54. Hypothesis: these are related to the
+    memory pressure.
+- **B's `Complete("failed")` returned "lifecycle command digest
+  conflict" to the model although the report landed.**
+  - A's terminal report in the first drill (10:11:20) showed the same.
+  - After it, B spent two guard retries on cells that could not run. Its
+    assignment was already terminal, so no cancel followed.
+- **B's report says the literal comment text was missing from the cast it
+  received.** B wrote its own one-line comment and disclosed that. Its
+  admission content carries only an objective ("obey all specifics in the
+  parent request").
+- **Step 6, the open-candidate branch, is still unproved on staging.** A
+  later run needs A's Complete to land; a ref list without repeats would
+  allow that until the duplicate-ref problem is fixed.
+
+Evidence is in the monitor's scratchpad, `mon/fr3proof/`:
+
+- acts.log, poll.log;
+- s0-start.json, s0-head.json, s0-show-0593136f.json, s0-ops.txt,
+  s0-obl.txt, s0-health-*.txt, s0-observability-*.txt;
+- s1-run-start-A.json, s2-run-start-B.json;
+- step2-out.txt, step5-out.txt;
+- s4-events-A/B-*.txt, s4-opA-*.json;
+- s6-events-B-*.txt, s6-snap-B-*.txt, s6-ops-*.json;
+- s5-observability-140524.txt;
+- trace-A-1402.json, trace-B-1405.json.
