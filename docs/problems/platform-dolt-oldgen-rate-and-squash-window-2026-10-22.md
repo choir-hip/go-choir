@@ -345,7 +345,7 @@ it; these operational tools do:
 |---|---|---|
 | The squash tool (`internal/projectionbase/squash.go`) | commit count, HEAD vs WORKING root | fixed in `c4fe5db2d`: commits the working set when HEAD lags; the root check is unchanged |
 | The off-host backup manifest (`scripts/off-host-backup.sh` `dolt_head`) | newest `dolt_log` hash | still recorded (it identifies the squash commit); `dolt_rows` added: Store A's receipt count, read before the capture |
-| The restore drill (`scripts/off-host-restore-drill.sh` `snap`) | that hash in the restored log | hash check kept; the restored receipt count must be at least the recorded one (a manifest from before the change says so and relies on the head) |
+| The restore drill (`scripts/off-host-restore-drill.sh` `snap`) | that hash in the restored log | hash check kept; the restored receipt count must be at least the recorded one; a count the run could not read (`platform=unread`) or a `dolt_rows` field with no Store A entry fails (R9); only a manifest with no `dolt_rows` field (from before the change) says so and relies on the head |
 | The subvolume migration (`scripts/dolt-data-to-subvolume.sh` `head_of`) | head before and after a one-shot move | equality holds with a frozen head and proves nothing; harmless (the move already ran or is a one-off); if it runs again after the flip, compare the receipt count by hand |
 | The history audit (`scripts/dolt-history-audit.sh`, was inline in nix) | `COUNT(*) FROM dolt_log` | flat after the flip, by design; newgen (8 GiB) and journal (4 GiB) lines and alarms added (R4) |
 
@@ -519,3 +519,11 @@ Recorded before any fix.
   its own line) and chunks no GC has collected yet, so it is an upper
   bound on D, not D. The 8 GiB line is one value for every store the unit
   audits (Store A and corpus-dolt).
+
+### Dispositions, round 2 (2026-10-22)
+
+| Finding | Disposition | Where |
+|---|---|---|
+| R9 unread count passes the drill | fixed: the backup records `platform=unread`; the drill fails on it and on a `dolt_rows` field with no Store A entry; no field at all (pre-marker) keeps the head-only pass. The snapshot test now runs the drill's `snap` piece against stub restic, dolt and ssh (the drill takes `OFFHOST_SECRETS_DIR` and `OFFHOST_DRILL_DIR`, defaults unchanged); three checks failed on `3c6c42c92` | `off-host-backup.sh`, `off-host-restore-drill.sh`, `off-host-backup-dolt-snapshot-test.sh` item 12 (`4b7128bf6`, `e16099811`) |
+| R10 newgen wording | fixed in the audit's header: newgen (noms minus oldgen) is an upper bound on D, since it also counts the journal and uncollected chunks | `dolt-history-audit.sh` (`e16099811`) |
+| R10 one 8 GiB line for every store | residual, not changed: a per-store line needs the script to take a line per spec and the nix unit to pass it, more than a one-line change. Covered meanwhile by §4 step 1 (FP0 reads both stores' `noms` and `oldgen` before landing and sets `GO_CHOIR_DOLT_MAX_NEWGEN_KIB` if corpus-dolt is near the line). Because newgen also counts the journal, a stuck journal can trip the newgen line before or with the journal line; both messages then appear in the unit's log in turn as each is fixed | §4 step 1 |
