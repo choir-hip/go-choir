@@ -249,7 +249,7 @@ func expectTunnelClosedWithoutEcho(t *testing.T, conn net.Conn, br *bufio.Reader
 }
 
 func TestEgressForwardsARealClientHelloUnchanged(t *testing.T) {
-	h := newEgressHarness(t, EcosystemEgressPolicy())
+	h := newEgressHarness(t, enforced(EcosystemEgressPolicy()))
 	h.resolved["pypi.org"] = []netip.Addr{publicAddr}
 	conn, br := connectNoRead(t, h, "pypi.org:443")
 	hello := realClientHello(t, "pypi.org")
@@ -263,13 +263,13 @@ func TestEgressForwardsARealClientHelloUnchanged(t *testing.T) {
 	}
 	conn.Close()
 	records := h.waitRecords(1)
-	if len(records) != 1 || records[0].Outcome != EgressOutcomeOK {
+	if len(records) != 1 || records[0].Outcome != EgressOutcomeOK || records[0].TunnelIdentity != TunnelVerdictPass {
 		t.Fatalf("records = %+v", records)
 	}
 }
 
 func TestEgressRefusesATunnelWhoseServerNameIsNotTheConnectHost(t *testing.T) {
-	h := newEgressHarness(t, EcosystemEgressPolicy())
+	h := newEgressHarness(t, enforced(EcosystemEgressPolicy()))
 	// Both names are on the allowlist: the point is that naming one in the
 	// CONNECT does not buy the other.
 	h.resolved["github.com"] = []netip.Addr{publicAddr}
@@ -280,7 +280,8 @@ func TestEgressRefusesATunnelWhoseServerNameIsNotTheConnectHost(t *testing.T) {
 	expectTunnelClosedWithoutEcho(t, conn, br)
 	records := h.waitRecords(1)
 	if len(records) != 1 || records[0].Outcome != EgressOutcomeRefused || !strings.Contains(records[0].Reason, "SNI") ||
-		records[0].Host != "github.com" {
+		records[0].Host != "github.com" || records[0].TunnelIdentity != TunnelVerdictRefused ||
+		records[0].TunnelIdentityReason != records[0].Reason {
 		t.Fatalf("records = %+v", records)
 	}
 }
@@ -292,7 +293,7 @@ func TestEgressRefusesATunnelThatIsNotTLS(t *testing.T) {
 		"random bytes":                 "\x00\x01\x02\x03\x04\x05\x06\x07",
 	} {
 		t.Run(name, func(t *testing.T) {
-			h := newEgressHarness(t, EcosystemEgressPolicy())
+			h := newEgressHarness(t, enforced(EcosystemEgressPolicy()))
 			h.resolved["github.com"] = []netip.Addr{publicAddr}
 			conn, br := connectNoRead(t, h, "github.com:443")
 			if _, err := io.WriteString(conn, payload); err != nil {
@@ -308,7 +309,7 @@ func TestEgressRefusesATunnelThatIsNotTLS(t *testing.T) {
 }
 
 func TestEgressRefusesAHelloThatHidesItsName(t *testing.T) {
-	h := newEgressHarness(t, EcosystemEgressPolicy())
+	h := newEgressHarness(t, enforced(EcosystemEgressPolicy()))
 	h.resolved["github.com"] = []netip.Addr{publicAddr}
 	conn, br := connectNoRead(t, h, "github.com:443")
 	if _, err := conn.Write(handBuiltHello(helloOpts{names: []string{"github.com"}, ech: true})); err != nil {
@@ -322,7 +323,7 @@ func TestEgressRefusesAHelloThatHidesItsName(t *testing.T) {
 }
 
 func TestEgressRefusesASilentTunnel(t *testing.T) {
-	h := newEgressHarness(t, EcosystemEgressPolicy())
+	h := newEgressHarness(t, enforced(EcosystemEgressPolicy()))
 	h.proxy.helloTimeout = 150 * time.Millisecond
 	h.resolved["github.com"] = []netip.Addr{publicAddr}
 	conn, br := connectNoRead(t, h, "github.com:443")
@@ -334,7 +335,7 @@ func TestEgressRefusesASilentTunnel(t *testing.T) {
 }
 
 func TestEgressRefusesAnOversizedFirstRecord(t *testing.T) {
-	h := newEgressHarness(t, EcosystemEgressPolicy())
+	h := newEgressHarness(t, enforced(EcosystemEgressPolicy()))
 	h.resolved["github.com"] = []netip.Addr{publicAddr}
 	conn, br := connectNoRead(t, h, "github.com:443")
 	// A record header that claims more than a TLS record may carry.
@@ -350,7 +351,7 @@ func TestEgressRefusesAnOversizedFirstRecord(t *testing.T) {
 
 // The name check applies to the Claude delegate's policy as well.
 func TestEgressClaudeTunnelIsBoundToItsName(t *testing.T) {
-	h := newEgressHarness(t, ClaudeEgressPolicy())
+	h := newEgressHarness(t, enforced(ClaudeEgressPolicy()))
 	h.resolved["api.anthropic.com"] = []netip.Addr{publicAddr}
 	conn, br := connectNoRead(t, h, "api.anthropic.com:443")
 	if _, err := conn.Write(realClientHello(t, "example.com")); err != nil {
