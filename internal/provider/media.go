@@ -44,14 +44,28 @@ const (
 	// image at MaxImagePixels is up to 400 MB decoded (16-bit RGBA PNG) plus
 	// the 200 MB RGBA copy downscale makes, about 620 MB with its 20 MiB
 	// input, which is decoded from base64 inside the slot too (bunch 116,
-	// F1); four are about 2.5 GB, which fits beside the body budget's heap
-	// under the gateway unit's GOMEMLIMIT and MemoryMax.
-	MaxConcurrentImageDecodes = 4
+	// F1). Three are about 1.73 GiB: four left no room under the gateway
+	// unit's GOMEMLIMIT for the downscaled output (FP0 round 5, F7; the
+	// unit's arithmetic is in nix/node-b.nix and the problem record).
+	MaxConcurrentImageDecodes = 3
 	// MaxImageDecodesPerCaller bounds the decode slots one caller (the
 	// computer, as the gateway's body share is keyed) holds or waits on
 	// at once, so one computer's queue of large images leaves the other
-	// slots to every other computer (bunch 116, F2).
-	MaxImageDecodesPerCaller = 2
+	// slots to every other computer (bunch 116, F2; one of three since
+	// round 5, so two are always left to the others).
+	MaxImageDecodesPerCaller = 1
+	// ImageOutputPerImage is the most one downscaled image can add to a
+	// call: MaxImageBytes as base64.
+	ImageOutputPerImage = int64((MaxImageBytes + 2) / 3 * 4)
+	// MaxImageOutputBytes bounds the downscaled images, as base64, that
+	// all calls hold at once, process-wide (FP0 round 5, F7): each lives
+	// for its call and again in the upstream request body. It takes one
+	// full call (MaxImagesPerRequest x ImageOutputPerImage, 133.3 MiB)
+	// and, at three copies a byte, 0.56 GiB of the unit's worst case.
+	MaxImageOutputBytes = 192 << 20
+	// MaxImageOutputBytesPerCaller is one caller's share of it; a
+	// caller's first call always fits.
+	MaxImageOutputBytesPerCaller = MaxImageOutputBytes / 2
 )
 
 // imageDecodeSlots holds one token per base64 image being decoded,
@@ -75,9 +89,10 @@ type callerDecodeSlots struct {
 var imageDecodeHook func(caller string)
 
 // ErrImageDecodeWait wraps the context's error when a call ends while it
-// waits for a decode slot. It is not a MediaError: the image was not
-// refused, and the breaker does not count it.
-var ErrImageDecodeWait = errors.New("call ended while waiting for an image decode slot")
+// waits for a decode slot or for room in the output budget. It is not a
+// MediaError: the image was not refused, and the breaker does not count
+// it.
+var ErrImageDecodeWait = errors.New("call ended while waiting for image decode capacity")
 
 type imageDecodeCallerKey struct{}
 
@@ -95,11 +110,19 @@ func ImageDecodeCaller(ctx context.Context) string {
 
 // acquireImageDecodeSlot takes one of the MaxConcurrentImageDecodes slots,
 // first one of the caller's MaxImageDecodesPerCaller (a caller-less ctx
-// takes the process slot only), and gives up when ctx ends.
+// takes the process slot only), and gives up when ctx ends. The caller
+// defers the release before it runs the hook or decodes.
 func acquireImageDecodeSlot(ctx context.Context) (func(), error) {
 	if err := ctx.Err(); err != nil {
+		imageDecodeRefused.Add(1)
 		return nil, fmt.Errorf("%w: %w", ErrImageDecodeWait, err)
 	}
+	waited := false
+	defer func() {
+		if waited {
+			imageDecodeWaited.Add(1)
+		}
+	}()
 	caller := ImageDecodeCaller(ctx)
 	var mine *callerDecodeSlots
 	drop := func() {
@@ -123,19 +146,31 @@ func acquireImageDecodeSlot(ctx context.Context) (func(), error) {
 		imageDecodeCallers.mu.Unlock()
 		select {
 		case mine.ch <- struct{}{}:
-		case <-ctx.Done():
-			drop()
-			return nil, fmt.Errorf("%w: %w", ErrImageDecodeWait, ctx.Err())
+		default:
+			waited = true
+			select {
+			case mine.ch <- struct{}{}:
+			case <-ctx.Done():
+				drop()
+				imageDecodeRefused.Add(1)
+				return nil, fmt.Errorf("%w: %w", ErrImageDecodeWait, ctx.Err())
+			}
 		}
 	}
 	select {
 	case imageDecodeSlots <- struct{}{}:
-	case <-ctx.Done():
-		if mine != nil {
-			<-mine.ch
-			drop()
+	default:
+		waited = true
+		select {
+		case imageDecodeSlots <- struct{}{}:
+		case <-ctx.Done():
+			if mine != nil {
+				<-mine.ch
+				drop()
+			}
+			imageDecodeRefused.Add(1)
+			return nil, fmt.Errorf("%w: %w", ErrImageDecodeWait, ctx.Err())
 		}
-		return nil, fmt.Errorf("%w: %w", ErrImageDecodeWait, ctx.Err())
 	}
 	release := func() {
 		<-imageDecodeSlots
@@ -144,10 +179,14 @@ func acquireImageDecodeSlot(ctx context.Context) (func(), error) {
 			drop()
 		}
 	}
-	if imageDecodeHook != nil {
-		imageDecodeHook(caller)
-	}
 	return release, nil
+}
+
+// runImageDecodeHook runs the test hook inside a held slot.
+func runImageDecodeHook(ctx context.Context) {
+	if imageDecodeHook != nil {
+		imageDecodeHook(ImageDecodeCaller(ctx))
+	}
 }
 
 // MediaError is an image the gateway refused before calling the upstream.
@@ -183,26 +222,61 @@ func urlImageSourcesAllowed(providerName string) bool {
 // prepareMediaRequest checks every image block against the model's
 // capability and the image limits, and returns the request with oversized
 // images downscaled. A request without images is returned unchanged.
-// Errors never quote image data. Each base64 image waits for a decode slot
-// (acquireImageDecodeSlot) until ctx ends.
-func prepareMediaRequest(ctx context.Context, providerName, modelID string, req LLMRequest) (LLMRequest, error) {
-	count := 0
+// Errors never quote image data.
+//
+// Before its first decode the call reserves its worst case in the output
+// budget (ImageOutputPerImage per base64 image), once, so it never holds
+// output while it waits for more (FP0 round 5, F7); each base64 image then
+// waits for a decode slot. Both waits end with ctx. After the last image
+// the reservation is cut to the downscaled base64 the request carries,
+// which stays counted until the returned release runs: the caller defers
+// it for the whole upstream call. release is never nil and runs once; on
+// an error or a panic the reservation is already given back.
+func prepareMediaRequest(ctx context.Context, providerName, modelID string, req LLMRequest) (LLMRequest, func(), error) {
+	noop := func() {}
+	count, base64Images := 0, 0
 	for _, msg := range req.Messages {
 		for _, block := range msg.Content {
 			if block.Type == "image" {
 				count++
+				if block.Source != nil && strings.TrimSpace(block.Source.Kind) == "base64" {
+					base64Images++
+				}
 			}
 		}
 	}
 	if count == 0 {
-		return req, nil
+		return req, noop, nil
 	}
 	if refusal := modelcatalog.ImageRefusal(modelID); refusal != "" {
-		return req, &MediaError{msg: refusal}
+		return req, noop, &MediaError{msg: refusal}
 	}
 	if count > MaxImagesPerRequest {
-		return req, mediaErrorf("request carries %d images; the limit is %d", count, MaxImagesPerRequest)
+		return req, noop, mediaErrorf("request carries %d images; the limit is %d", count, MaxImagesPerRequest)
 	}
+	caller := ImageDecodeCaller(ctx)
+	budget := imageOutput
+	held := int64(base64Images) * ImageOutputPerImage
+	if held > 0 {
+		if err := budget.acquire(ctx, caller, held); err != nil {
+			return req, noop, err
+		}
+	}
+	var once sync.Once
+	release := func() {
+		once.Do(func() {
+			if held > 0 {
+				budget.release(caller, held)
+			}
+		})
+	}
+	kept := false
+	defer func() {
+		if !kept {
+			release()
+		}
+	}()
+	var added int64
 	messages := make([]Message, len(req.Messages))
 	for i, msg := range req.Messages {
 		messages[i] = msg
@@ -215,17 +289,23 @@ func prepareMediaRequest(ctx context.Context, providerName, modelID string, req 
 			if block.Type != "image" {
 				continue
 			}
-			source, err := prepareImageSource(ctx, providerName, block.Source)
+			source, n, err := prepareImageSource(ctx, providerName, block.Source)
 			if err != nil {
-				return req, err
+				return req, noop, err
 			}
+			added += n
 			block.Source = source
 			content[j] = block
 		}
 		messages[i].Content = content
 	}
 	req.Messages = messages
-	return req, nil
+	if added < held {
+		budget.release(caller, held-added)
+		held = added
+	}
+	kept = true
+	return req, release, nil
 }
 
 func messageHasImage(msg Message) bool {
@@ -237,58 +317,61 @@ func messageHasImage(msg Message) bool {
 	return false
 }
 
-func prepareImageSource(ctx context.Context, providerName string, source *MediaSource) (*MediaSource, error) {
+// prepareImageSource returns the source to send and the bytes of new
+// base64 it made (0 when the image passes unchanged).
+func prepareImageSource(ctx context.Context, providerName string, source *MediaSource) (*MediaSource, int64, error) {
 	if source == nil {
-		return nil, mediaErrorf("image block missing source")
+		return nil, 0, mediaErrorf("image block missing source")
 	}
 	switch strings.TrimSpace(source.Kind) {
 	case "base64":
 		data := strings.TrimSpace(source.Data)
 		if data == "" {
-			return nil, mediaErrorf("image block base64 source missing data")
+			return nil, 0, mediaErrorf("image block base64 source missing data")
 		}
 		if base64.StdEncoding.DecodedLen(len(data)) > MaxImageInputBytes+3 {
-			return nil, mediaErrorf("image is over %d bytes before resizing", MaxImageInputBytes)
+			return nil, 0, mediaErrorf("image is over %d bytes before resizing", MaxImageInputBytes)
 		}
 		// The raw copy, up to MaxImageInputBytes, exists only inside a
 		// decode slot (bunch 116, F1).
 		release, err := acquireImageDecodeSlot(ctx)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		defer release()
+		runImageDecodeHook(ctx)
 		raw, err := base64.StdEncoding.DecodeString(data)
 		if err != nil {
-			return nil, mediaErrorf("image block base64 source is not valid standard base64: %v", err)
+			return nil, 0, mediaErrorf("image block base64 source is not valid standard base64: %v", err)
 		}
 		normalized, mimeType, err := normalizeImage(raw)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		out := *source
 		out.MIMEType = mimeType
-		if !bytes.Equal(normalized, raw) {
-			out.Data = base64.StdEncoding.EncodeToString(normalized)
-		} else {
+		if bytes.Equal(normalized, raw) {
 			out.Data = data
+			return &out, 0, nil
 		}
-		return &out, nil
+		out.Data = base64.StdEncoding.EncodeToString(normalized)
+		return &out, int64(len(out.Data)), nil
 	case "url":
 		url := strings.TrimSpace(source.URL)
 		if url == "" {
-			return nil, mediaErrorf("image block url source missing url")
+			return nil, 0, mediaErrorf("image block url source missing url")
 		}
 		if !strings.HasPrefix(url, "https://") && !strings.HasPrefix(url, "http://") {
-			return nil, mediaErrorf("image block url source must be an absolute http(s) URL")
+			return nil, 0, mediaErrorf("image block url source must be an absolute http(s) URL")
 		}
 		if !urlImageSourcesAllowed(providerName) {
-			return nil, mediaErrorf("provider %s does not take image URLs; inline the image as base64 or pass an artifact_ref", providerName)
+			return nil, 0, mediaErrorf("provider %s does not take image URLs; inline the image as base64 or pass an artifact_ref", providerName)
 		}
-		return source, nil
+		return source, 0, nil
 	case "artifact_ref":
-		return nil, mediaErrorf("image artifact_ref %q must be resolved by the computer before the gateway call", source.Ref)
+		return nil, 0, mediaErrorf("image artifact_ref %q must be resolved by the computer before the gateway call", source.Ref)
 	default:
-		return nil, mediaErrorf("unsupported image source kind %q", source.Kind)
+		return nil, 0, mediaErrorf("unsupported image source kind %q", source.Kind)
 	}
 }
 
@@ -305,6 +388,7 @@ func NormalizeImage(raw []byte) ([]byte, string, error) {
 		return nil, "", err
 	}
 	defer release()
+	runImageDecodeHook(context.Background())
 	return normalizeImage(raw)
 }
 
