@@ -509,10 +509,18 @@ let
   unitEnvDir = "/var/lib/go-choir/unit-env";
   unitEnvNames = [ "deploy.env" "corpus-dsn.env" "corpusd-retrieval.env" "sandbox-gateway-token.env" ];
   unitEnvFile = name: "-${unitEnvDir}/${name}";
-  # Written by the activation snippet once the first import has moved every
-  # file in. The units that read an env file from unitEnvDir assert it, so a
-  # partial import (an IO failure after some moves) never starts them.
+  # Written by the activation snippet at the end of the first run that
+  # passes: every name was imported, linked or absent, and no stray waits. A
+  # failing run never writes it. The units that read an env file from
+  # unitEnvDir assert it, so a partial or failed import (an IO failure after
+  # some moves, an obstruction at an old path) never starts them. It says
+  # the import ran, not that any file is there: a file a unit requires has
+  # its own assert (unitEnvDsn, round 2c).
   unitEnvImported = "${unitEnvDir}/.imported";
+  # corpusd and checkpointd refuse to start without it: absent, they would
+  # put corpus tables on Store A. Store A on purpose (the authority-split
+  # runbook's rollback) is a file without CORPUSD_CORPUS_DOLT_DSN.
+  unitEnvDsn = "${unitEnvDir}/corpus-dsn.env";
   # Host secrets a unit does not read stay out of its mount view
   # (InaccessiblePaths; "-" tolerates an absent file). Each unit removes
   # what it needs. EnvironmentFile= and LoadCredential= are read by systemd
@@ -1202,9 +1210,11 @@ in
       EnvironmentFile = [
         "-/var/lib/go-choir/secrets/corpusd-escrow-operators.env"
         # Store B DSN flip: written by the authority-split cutover runbook
-        # (docs/runbooks/platform-dolt-authority-split-2026-09-18.md). Absent
-        # until the corpus store is populated; corpusd then shares the
-        # Store A pool for corpus tables.
+        # (docs/runbooks/platform-dolt-authority-split-2026-09-18.md). The
+        # unit asserts the file (unitEnvDsn): a file without
+        # CORPUSD_CORPUS_DOLT_DSN (the runbook's rollback) shares the Store A
+        # pool for corpus tables; no file, no start. The "-" stays so the
+        # assert, not the env loader, is what refuses.
         (unitEnvFile "corpus-dsn.env")
         # Retrieval rollback switch, flippable without a deploy
         # (docs/problems/corpus-retrieval-windowed-unindexed-untimed-2026-10-14.md):
@@ -2372,11 +2382,12 @@ in
   # (docs/problems/host-containment-gaps-after-fp3-cut-2-2026-10-22.md, round 2).
   # Between activations, a regular file put at an old path is readable by
   # every root unit until the next activation quarantines it; the verifier
-  # flags it on any run. The marker unit-env/.imported is written only after
-  # every file of the first import has moved; until then (an IO failure part
-  # way) the env readers' AssertPathExists keeps them down, loudly, and the
-  # next activation (a boot, or the deploy's switch retry) finishes the
-  # import. Never remove the marker except as the rollback text says. Remove
+  # flags it on any run. The marker unit-env/.imported is written only by a
+  # first run that passed (every file moved, no obstruction, no stray); until
+  # then (an IO failure part way, a FAIL) the env readers' AssertPathExists
+  # keeps them down, loudly, and the next activation that passes (a boot,
+  # or the deploy's switch retry) finishes the import. A required file
+  # missing after it (corpus-dsn.env) has its own assert. Never remove the marker except as the rollback text says. Remove
   # this block and the links once no rollback can reach a commit from before
   # the move.
   system.activationScripts.go-choir-unit-env = ''
@@ -2462,24 +2473,35 @@ in
           chmod 0600 "$new"
         fi
       done
-      if [ "$imported" = 0 ]; then : > "$d/.imported"; fi
       for q in "$d"/*.stray.*; do
         if [ ! -e "$q" ] && [ ! -L "$q" ]; then continue; fi
         if [ "$(id -u)" = 0 ]; then chown -h root:root "$q"; fi
-        chmod 0600 "$q" 2>/dev/null || true
+        # chmod follows a link: a stray that is a link keeps its target's mode.
+        if [ ! -L "$q" ]; then chmod 0600 "$q" 2>/dev/null || true; fi
         say "FAIL: $q waits for the operator: merge what is wanted into $d/<name>, then remove it"
         fail=1
       done
       if [ "$fail" != 0 ]; then exit 1; fi
+      # Only a run that passed writes the marker (round 2c, DS8). [ -e ] is
+      # false for a dangling link, so remove whatever is there and never
+      # write through it (DS10).
+      if [ "$imported" = 0 ]; then
+        rm -f "$d/.imported"
+        : > "$d/.imported"
+        chmod 0600 "$d/.imported"
+      fi
     )
   '';
 
-  # The units that read an env file from unitEnvDir start only after the
-  # first import has completed (round 2b, DS2): an assertion failure is
-  # loud (the start job fails), and the deploy's restart of them fails too.
+  # The units that read an env file from unitEnvDir start only after a
+  # first import has passed (round 2b, DS2; round 2c, DS8): an assertion
+  # failure is loud (the start job fails), and the deploy's restart of them
+  # fails too. corpusd and checkpointd also need corpus-dsn.env itself
+  # (unitEnvDsn). The proxy reads only the optional deploy.env, so it does
+  # not wait on a corpus DSN.
   systemd.services.go-choir-proxy.unitConfig.AssertPathExists = unitEnvImported;
-  systemd.services.go-choir-corpusd.unitConfig.AssertPathExists = unitEnvImported;
-  systemd.services.go-choir-checkpointd.unitConfig.AssertPathExists = unitEnvImported;
+  systemd.services.go-choir-corpusd.unitConfig.AssertPathExists = [ unitEnvImported unitEnvDsn ];
+  systemd.services.go-choir-checkpointd.unitConfig.AssertPathExists = [ unitEnvImported unitEnvDsn ];
 
   # Go module proxy for engineering capsules
   # (docs/reports/capsule-go-module-proxy-design-2026-10-14.md). Capsules
@@ -2774,6 +2796,7 @@ in
     # restarts units.
     "d ${unitEnvDir} 0700 root root -"
   ] ++ map (name: "z ${unitEnvDir}/${name} 0600 root root -") unitEnvNames ++ [
+    "z ${unitEnvImported} 0600 root root -"
     "d /var/lib/go-choir/vm-state 0750 root root -"
     "d ${platformDoltDir} 0750 root root -"
     "d ${platformDoltDBDir} 0750 root root -"
