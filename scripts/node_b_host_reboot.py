@@ -309,7 +309,11 @@ def iso_ts(v):
 def kernel_security_floor():
     # The flake's kernel floor assertion reads the same file. No fallback:
     # a missing or malformed floor must stop the run, not lower the bar.
-    floor = (REPO / "nix" / "kernel-security-floor").read_text().strip()
+    path = REPO / "nix" / "kernel-security-floor"
+    try:
+        floor = path.read_text().strip()
+    except OSError as e:
+        raise SystemExit("%s: %s; pass --min-kernel or restore the file" % (path, e))
     if not re.fullmatch(r"\d+\.\d+\.\d+", floor):
         raise SystemExit("nix/kernel-security-floor: %r is not a kernel version" % floor)
     return floor
@@ -385,8 +389,9 @@ def phase_pre(args, receipt):
             booted, installed = iso_ts(r.get("booted_at")), f.get("guest_image_installed_at")
             if booted and installed and booted < installed:
                 c.add("computer %s on the current guest image" % r["vm_id"], False,
-                      "booted %s, before the guest image was installed: deploy refresh deferred it and retries "
-                      "only at the next deploy; this reboot moves it to the new guest kernel" % r.get("booted_at"), False)
+                      "booted %s, before the guest image was installed: deploy refresh deferred it; vmctl's sweep "
+                      "retries it at an idle moment (a held computer only at the next deploy); this reboot moves it "
+                      "to the new guest kernel" % r.get("booted_at"), False)
         crit = [r for r in comp["computers"] if r.get("warmness_class") == "critical_protected"]
         for r in crit:
             c.add("critical computer %s (the paper)" % r["vm_id"], True,
@@ -573,7 +578,7 @@ def main():
                     help="reboot even if some computers stay busy (their work ends interrupted_by_restart)")
     ap.add_argument("--no-markers", action="store_true",
                     help="write no planned-restart markers: every boot is a crash boot (the conservative choice)")
-    ap.add_argument("--min-kernel", default=kernel_security_floor(),
+    ap.add_argument("--min-kernel", default=None,
                     help="lowest acceptable staged and booted kernel (default: nix/kernel-security-floor, the flake's floor)")
     ap.add_argument("--busy-wait", type=int, default=600, help="seconds to wait for busy computers to go idle")
     ap.add_argument("--boot-timeout", type=int, default=1200, help="seconds to wait for ssh after the reboot")
@@ -583,6 +588,12 @@ def main():
     ap.add_argument("--skip-hardening", action="store_true")
     ap.add_argument("--state", help="receipt JSON path (default: $TMPDIR/node-b-host-reboot-<UTC>.json); --phase post reads its pre baseline")
     args = ap.parse_args()
+    if args.min_kernel is None:
+        # Read after parsing so --help works without the file.
+        args.min_kernel = kernel_security_floor()
+    elif not re.fullmatch(r"\d+\.\d+\.\d+", args.min_kernel):
+        # vtuple reads junk as (0,), which every kernel passes.
+        ap.error("--min-kernel %r is not MAJOR.MINOR.PATCH" % args.min_kernel)
 
     tmp = os.environ.get("TMPDIR", "/tmp")
     state = Path(args.state or os.path.join(tmp, "node-b-host-reboot-%s.json" % datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")))

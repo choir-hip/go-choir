@@ -62,8 +62,13 @@
       # Copy Fail (6.18.22). The assertion keeps a lock regression from
       # silently shipping an older kernel. The floor lives in one file,
       # nix/kernel-security-floor, which scripts/node_b_host_reboot.py also
-      # reads as its --min-kernel default.
-      choirKernelSecurityFloor = nixpkgs.lib.fileContents ./nix/kernel-security-floor;
+      # reads as its --min-kernel default. Evaluation fails unless the file is
+      # exactly MAJOR.MINOR.PATCH: versionAtLeast against "", " 6.18.57",
+      # "v6.18.57" or "6.18" is true, which would silently drop the floor.
+      choirKernelSecurityFloor =
+        let floor = nixpkgs.lib.fileContents ./nix/kernel-security-floor;
+        in if builtins.match "[0-9]+\\.[0-9]+\\.[0-9]+" floor != null then floor
+        else throw "nix/kernel-security-floor must be exactly MAJOR.MINOR.PATCH (one line), got \"${floor}\"";
       choirKernelPackages = (import nixpkgs-kernel { inherit system; }).linuxPackages_6_18;
       choirKernelModule = { lib, ... }: {
         boot.kernelPackages = choirKernelPackages;
