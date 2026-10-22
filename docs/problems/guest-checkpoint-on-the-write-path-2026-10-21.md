@@ -122,3 +122,28 @@ f60daaa09 and checked against the code before any fix.
    durability rests on SQL `COMMIT` being durable in the embedded Dolt
    working set. A soak does not test that; a kill -9 of the guest store
    on a test computer does.
+
+## Review round 3: the close cap and the wait counters at the edges (2026-10-22)
+
+FP0's bunch 48 (DeepSeek v4.1 flash, accept with edits) on 2b964182e,
+reproduced by the reviewer and then by the failing tests in 1a0fb4c13:
+
+1. The 10 s close cap did not bound Close behind a background commit
+   already in flight: the closing commit's context was spent waiting on
+   the uninterruptible `doltCommitMu.Lock()` the background committer
+   held for up to its 2-minute context (Close waited 3 s against a
+   100 ms cap in the test).
+2. The finalize wait counters could misattribute at the connection
+   boundary: the commit was marked in flight before it took the
+   connection and after it had returned it (a hook that did not hold
+   the connection still counted a 0.3 ms wait).
+3. The cap is a context deadline; DOLT_COMMIT does not check it
+   mid-write.
+4. The `Store.Close` comment said closing the pools waits for a step in
+   flight; `database/sql` does not. A background commit that passed the
+   closed check before Close could commit after the closing commit (the
+   test reached the closed pool).
+5. After a no-op, `last_commit_age_ms` can exceed the debounce while
+   nothing is pending.
+
+Fixed in b0ea5d1c0; dispositions in the station's now card.
