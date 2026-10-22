@@ -709,6 +709,7 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 	e.capsules[caps.ID] = caps
 	e.controlHandles[capKey{AgentRunID: spec.OwnerRunID, Handle: controlHandle}] = caps.ID
 	e.vmMemoryUsed += caps.admittedMemory()
+	timer.markOK()
 	return caps, nil
 }
 

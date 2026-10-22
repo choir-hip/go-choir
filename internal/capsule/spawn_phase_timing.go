@@ -1,6 +1,8 @@
 package capsule
 
 import (
+	"errors"
+	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -14,6 +16,7 @@ import (
 type spawnPhaseTimer struct {
 	capsuleID   string
 	start, last time.Time
+	ok          bool // set only at the spawn's successful return
 }
 
 func newSpawnPhaseTimer(capsuleID string) *spawnPhaseTimer {
@@ -35,12 +38,32 @@ func (t *spawnPhaseTimer) phase(name string, detail ...string) {
 	t.last = now
 }
 
-// done logs the whole spawn's duration and whether it succeeded.
+// phaseGit is phase with the tracked file count and the git processes the
+// phase ran, then any further detail; it formats nothing on a nil timer.
+func (t *spawnPhaseTimer) phaseGit(name string, files, gitProcs int, detail ...string) {
+	if t == nil {
+		return
+	}
+	t.phase(name, append([]string{fmt.Sprintf("files=%d", files), fmt.Sprintf("git_procs=%d", gitProcs)}, detail...)...)
+}
+
+// markOK records that the spawn reached its successful return.
+func (t *spawnPhaseTimer) markOK() {
+	if t != nil {
+		t.ok = true
+	}
+}
+
+// done logs the whole spawn's duration and whether it succeeded. A spawn
+// that returns no error without reaching markOK panicked.
 func (t *spawnPhaseTimer) done(err error) {
 	if t == nil {
 		return
 	}
 	total := time.Since(t.start).Round(time.Millisecond)
+	if err == nil && !t.ok {
+		err = errors.New("spawn did not return (panic)")
+	}
 	if err != nil {
 		log.Printf("capsule %s spawn total=%s ok=false err=%v", t.capsuleID, total, err)
 		return

@@ -534,7 +534,7 @@ func copyImmutableCommitTreeTimed(ctx context.Context, source, commit, target, e
 	if err != nil {
 		return "", err
 	}
-	timer.phase("source_inventory", fmt.Sprintf("files=%d", len(tracked)))
+	timer.phaseGit("source_inventory", len(tracked), 1) // one git ls-tree
 	if _, err := os.Lstat(target); errors.Is(err, os.ErrNotExist) {
 		defer func() {
 			if retErr != nil {
@@ -577,23 +577,26 @@ func copyImmutableCommitTreeTimed(ctx context.Context, source, commit, target, e
 	if err != nil {
 		return "", err
 	}
-	timer.phase("source_blobs", fmt.Sprintf("files=%d", len(tracked)), "git_procs=1")
+	timer.phaseGit("source_blobs", len(tracked), 1) // one git cat-file --batch
 	digest, err := digestCanonicalSubjectTree(ctx, target)
 	if err != nil {
 		return "", err
 	}
 	timer.phase("source_digest_copy")
-	commitPass := []string{fmt.Sprintf("files=%d", len(tracked)), "git_procs=0", "against=expected"}
-	if expected == "" {
+	derived := expected == ""
+	if derived {
 		if expected, err = canonicalImmutableCommitDigest(ctx, source, commit); err != nil {
 			return "", fmt.Errorf("source snapshot canonical digest mismatch: commit %s: %w", commit, err)
 		}
-		commitPass = []string{fmt.Sprintf("files=%d", len(tracked)), "git_procs=1"}
 	}
 	if expected != digest {
 		return "", fmt.Errorf("source snapshot canonical digest mismatch: expected %s, copied %s", expected, digest)
 	}
-	timer.phase("source_digest_commit", commitPass...)
+	if derived {
+		timer.phaseGit("source_digest_commit", len(tracked), 2) // its own git ls-tree, then one batch
+	} else {
+		timer.phaseGit("source_digest_commit", len(tracked), 0, "against=expected")
+	}
 	if err := makeSubjectTreeReadOnly(target); err != nil {
 		return "", err
 	}
