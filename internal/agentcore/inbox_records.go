@@ -1140,16 +1140,17 @@ func (rt *Runtime) closeOpenRoundsAfterCrash(ctx context.Context) {
 		log.Printf("runtime: crash boot round closure skipped: owner or computer unknown")
 		return
 	}
-	fold, err := rt.store.RebuildInboxHeads(ctx, ownerID, computerID)
+	// The open rounds come from the conversation heads, which commit
+	// atomically with their records; folding every record of the computer
+	// here took 4m36s on the paper
+	// (docs/problems/paper-crash-boot-holds-work-six-minutes-2026-10-22.md).
+	open, err := rt.store.OpenConversationHeads(ctx, ownerID, computerID)
 	if err != nil {
-		log.Printf("runtime: crash boot round closure: fold: %v", err)
+		log.Printf("runtime: crash boot round closure: open rounds: %v", err)
 		return
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	for _, conversation := range fold.Conversations {
-		if !conversation.Open {
-			continue
-		}
+	for _, conversation := range open {
 		closure := types.NewRoundClosureRecord(conversation.CasterInbox, conversation.RecipientInbox, conversation.Round, types.ClosureReasonInterruptedByRestart, now)
 		closure.ComputerID = computerID
 		req := types.CommitInboxRecordsRequest{OwnerID: ownerID, ComputerID: computerID, CommandID: "boot-closure:" + closure.RecordID, Records: []types.CommitmentRecord{closure}}
