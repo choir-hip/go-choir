@@ -182,6 +182,9 @@ type Handler struct {
 	// on first use unless a test sets it.
 	storeCompactOnce sync.Once
 	storeCompact     *storeCompactState
+	// storeCompactPressure configures the disk-pressure compaction loop
+	// (store_compaction_pressure.go); set before StartStoreCompactPressure.
+	storeCompactPressure StoreCompactPressureConfig
 	// dataImageStatsFor reads a VM's host data image stats (nil: the
 	// registry's); tests substitute it.
 	dataImageStatsFor    func(vmID string) (DataImageStats, bool)

@@ -1664,6 +1664,18 @@ in
         # Rollback: SIGNAL=instant and ADMISSION_MODE=guest-size restore the
         # single-sample reclaim and the floor + 8 GiB admission.
         "VMCTL_PRESSURE_RECLAIM_SIGNAL=sustained"
+        # Store compaction on host disk pressure (docs/problems/node-b-disk-
+        # fills-from-the-paper-data-image-2026-10-22.md): observe only logs
+        # "would compact <vm> ... reason=..." for a platform computer whose
+        # image holds 60% of its cap or when host free is under 64 GiB, at
+        # most once per computer per 6 h. Rollback: PRESSURE=off. Every
+        # compaction (timer, by hand, pressure) refuses under the floor:
+        # the compacted copy needs room. FLOOR=0 turns the floor off.
+        "VMCTL_STORE_COMPACT_PRESSURE=observe"
+        "VMCTL_STORE_COMPACT_PRESSURE_HOST_FREE_GIB=64"
+        "VMCTL_STORE_COMPACT_PRESSURE_FILL_FRACTION=0.6"
+        "VMCTL_STORE_COMPACT_PRESSURE_MIN_GAP=6h"
+        "VMCTL_STORE_COMPACT_MIN_HOST_FREE_GIB=32"
         "VMCTL_ADMISSION_MODE=measured"
         # A proof-account computer busy longer than this (e.g. stuck
         # mid-apply) loses busy protection under host pressure.

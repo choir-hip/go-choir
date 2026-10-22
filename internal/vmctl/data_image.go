@@ -58,6 +58,11 @@ func LookupDataImageStats(stateDir, vmID string) (DataImageStats, bool) {
 }
 
 // DataImageStatsForVM returns stats using the registry pressure-reclaim state dir.
+// DataImageStateDir is the directory holding each VM's data image.
+func (r *OwnershipRegistry) DataImageStateDir() string {
+	return normalizePressureReclaimConfig(r.pressureReclaim).StateDir
+}
+
 func (r *OwnershipRegistry) DataImageStatsForVM(vmID string) (DataImageStats, bool) {
 	cfg := normalizePressureReclaimConfig(r.pressureReclaim)
 	return LookupDataImageStats(cfg.StateDir, vmID)

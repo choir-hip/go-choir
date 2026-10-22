@@ -225,15 +225,40 @@ type storeCompactSweepResponse struct {
 type storeCompactState struct {
 	mu        sync.Mutex
 	compactor storeCompactorIface
+	// minHostFree is the host free-space floor below which every
+	// compaction refuses (0: no floor); freeBytes reads host free space.
+	minHostFree uint64
+	freeBytes   func() (uint64, error)
+	// attempts is the last compaction attempt per computer (the pressure
+	// trigger's gap; store_compaction_pressure.go).
+	attemptsMu sync.Mutex
+	attempts   *storeCompactAttempts
 }
 
 func (h *Handler) storeCompaction() *storeCompactState {
 	h.storeCompactOnce.Do(func() {
 		if h.storeCompact == nil {
-			h.storeCompact = &storeCompactState{compactor: newHostStoreCompactor()}
+			h.storeCompact = &storeCompactState{
+				compactor:   newHostStoreCompactor(),
+				minHostFree: storeCompactMinHostFreeFromEnv(os.Getenv),
+				// Free space on the filesystem holding the data images.
+				freeBytes: func() (uint64, error) {
+					free, _, err := statfsAvailable(h.registry.DataImageStateDir())
+					return free, err
+				},
+			}
 		}
 	})
 	return h.storeCompact
+}
+
+func (s *storeCompactState) attemptsRecord() *storeCompactAttempts {
+	s.attemptsMu.Lock()
+	defer s.attemptsMu.Unlock()
+	if s.attempts == nil {
+		s.attempts = loadStoreCompactAttempts("")
+	}
+	return s.attempts
 }
 
 // compactStore compacts one computer's store as a planned restart.
@@ -243,6 +268,11 @@ func (h *Handler) compactStore(ctx context.Context, own ownershipResponse) (stor
 		return storeCompactResponse{deployRefreshResponse: deployRefreshResponse{Outcome: deployRefreshDeferred, Reason: "another store compaction is running", VMID: own.VMID}}, http.StatusConflict
 	}
 	defer state.mu.Unlock()
+	if refusal := state.hostFloorRefusal(); refusal != "" {
+		log.Printf("vmctl: store compaction %s (computer %s): refused: %s", own.VMID, own.ComputerID, refusal)
+		return storeCompactResponse{deployRefreshResponse: deployRefreshResponse{Outcome: deployRefreshSkipped, Reason: refusal, VMID: own.VMID, ComputerID: own.ComputerID}}, http.StatusInsufficientStorage
+	}
+	attempts := state.attemptsRecord()
 	head := ""
 	if own.ReportedRelease != nil {
 		head = own.ReportedRelease.CanonicalEventHead
@@ -250,6 +280,13 @@ func (h *Handler) compactStore(ctx context.Context, own ownershipResponse) (stor
 	var report *storeCompactionReport
 	var compactErr error
 	maintenance := func(dataImagePath string) error {
+		// The guest took the planned restart and the VM is down: this is an
+		// attempt, recorded before the compaction so a vmctl crash during it
+		// still holds the pressure trigger's gap.
+		if err := attempts.record(own.VMID, time.Now()); err != nil {
+			report, compactErr = nil, err
+			return err
+		}
 		r, err := state.compactor.Compact(context.Background(), own.VMID, dataImagePath, own.ComputerID, head)
 		report, compactErr = &r, err
 		return err
