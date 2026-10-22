@@ -78,7 +78,43 @@ HOST = "https://choir.news"
 # attaches the token only for a loopback internal port, never a guest.
 with open(Path(__file__).resolve().parent / "choir_internal.py") as _f:
     CHOIR_INTERNAL = _f.read()
-REMOTE = CHOIR_INTERNAL + r'''
+
+# Host side: the firecracker process of one VM, matched by a cmdline
+# argument equal to the VM id or ending in /<VM id>. A miss returns an error
+# naming the VM, the pattern and how many firecracker processes were seen,
+# so an empty fc_rss_mib column has a cause. Command lines are never
+# returned.
+FC_RSS = r'''
+import os
+
+def firecracker_rss(vm, proc="/proc"):
+    def rd(p):
+        try:
+            with open(p) as f:
+                return f.read()
+        except OSError:
+            return ""
+    seen = 0
+    for pid in filter(str.isdigit, os.listdir(proc)):
+        if rd("%s/%s/comm" % (proc, pid)).strip() != "firecracker":
+            continue
+        seen += 1
+        args = rd("%s/%s/cmdline" % (proc, pid)).split("\0")
+        if not any(a == vm or a.endswith("/" + vm) for a in args):
+            continue
+        out = {}
+        for l in rd("%s/%s/status" % (proc, pid)).splitlines():
+            k = l.split(":", 1)[0]
+            if k in ("VmRSS", "RssAnon", "RssFile"):
+                out[k + "_kib"] = int(l.split()[1])
+        if "VmRSS_kib" not in out:
+            return out, "firecracker pid %s for vm %s has no VmRSS in its status (exited?)" % (pid, vm)
+        return out, None
+    return {}, ("no firecracker pid for vm %s: none of %d firecracker processes has a cmdline "
+                "argument equal to %r or ending in %r" % (vm, seen, vm, "/" + vm))
+'''
+
+REMOTE = CHOIR_INTERNAL + FC_RSS + r'''
 import json, os, re, sys, urllib.request, urllib.error
 
 VM, CID = sys.argv[1], sys.argv[2]
@@ -113,17 +149,11 @@ if st == 200:
 else:
     out["errors"].append("vmctl list %s" % st)
 out["ownership"] = own
-for pid in filter(str.isdigit, os.listdir("/proc")):
-    if rd("/proc/%s/comm" % pid).strip() != "firecracker":
-        continue
-    args = rd("/proc/%s/cmdline" % pid).split("\0")
-    if not any(a == VM for a in args) and not any(a.endswith("/" + VM) for a in args):
-        continue
-    for l in rd("/proc/%s/status" % pid).splitlines():
-        k = l.split(":", 1)[0]
-        if k in ("VmRSS", "RssAnon", "RssFile"):
-            out[k + "_kib"] = int(l.split()[1])
-    break
+if VM != "no-vm-yet":  # the first call only reads the ownership
+    rss, miss = firecracker_rss(VM)
+    out.update(rss)
+    if miss:
+        out["errors"].append(miss)
 st, body = get("http://127.0.0.1:8083/internal/vmctl/memory/balloon?computer_id=" + CID)
 out["balloon_status"] = st
 try:
@@ -325,8 +355,16 @@ def first_reading(rows):
     windows.append(("idle", idle))
     out["reporting_windows"] = {}
     for name, rs in windows:
-        free_up = delta(rs, "guest_memfree_mib") or 0
-        rss_down = -(delta(rs, "fc_rss_mib") or 0)
+        # Both ends must be measured: a missing reading is not a zero.
+        ends = (("start", rs[0]), ("end", rs[-1])) if rs else ()
+        missing = ["%s at the window's %s" % (k, side) for side, e in ends
+                   for k in ("fc_rss_mib", "guest_memfree_mib") if num(e, k) is None]
+        if not rs or missing:
+            v = "undeterminable (%s)" % ("no samples" if not rs else "no " + ", no ".join(missing))
+            out["reporting_windows"][name] = v
+            continue
+        free_up = round(num(rs[-1], "guest_memfree_mib") - num(rs[0], "guest_memfree_mib"), 1)
+        rss_down = round(num(rs[0], "fc_rss_mib") - num(rs[-1], "fc_rss_mib"), 1)
         if free_up < 128:
             v = "untested (guest MemFree rose %s MiB)" % free_up
         elif rss_down >= 0.5 * free_up:
