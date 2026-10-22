@@ -536,3 +536,44 @@ below (D1 to D3).
 - **Gemini 3.8** approved with no required finding; its two residuals (the
   share per computer, the decode slots unfair across callers) are the
   per-owner residual above and F2.
+
+## F7 decided (FP0, round 5, 2026-10-22, candidate 142c17bd1)
+
+FP0's decision: fix F7 now with the conservative option, a process-wide
+byte budget for downscaled image output that calls wait on, with a
+per-caller share keyed as the others, the call's context honoured while
+waiting (a transient answer, not a 400), release on every path including a
+panic, its waits and refusals in `/health`, and the full arithmetic in the
+nix comment, the station text and this record. No lossy re-encode: image
+fidelity is not the gateway's to change silently. The documented unit
+worst case (bodies + decode slots + downscaled output + its upstream copy
++ runtime) must stay under `GOMEMLIMIT=6GiB` and `MemoryMax=8G`.
+
+What the sizing has to face, recorded before the fix:
+
+- **There is no room for the output beside four decode slots.** The
+  terms already stated are 3 GiB of bodies + 4 x about 620 MB = 2.31 GiB
+  of decodes + 0.5 GiB of runtime = about 5.81 GiB, 0.19 GiB under
+  `GOMEMLIMIT`. A downscaled image is held as a base64 string (at most
+  `MaxImageBytes` 5 MiB, 6.67 MiB as base64) for the whole call and again
+  in the upstream request body; with the JSON encoder's growth by doubling,
+  the upstream copy can briefly be twice its size, so one output byte costs
+  up to three. One full call (20 images, 133 MiB of output) is then up to
+  about 0.4 GiB, over the 0.19 GiB left. The output budget has to take its
+  room from another term.
+- **What the 3 GiB of bodies covers.** net/http reads a body through a
+  4 KiB buffer, so the body's copies are the JSON decoder's buffer (up to
+  about twice the body, by doubling, during the decode only), the decoded
+  request (held for the call) and the upstream request body (during the
+  upstream call only). A body is in its decode or in its upstream call,
+  never both, so each held body has at most about three copies live:
+  3 x `in_flight`. The upstream copy of a body's own bytes is therefore
+  inside the 3 GiB (DeepSeek D2), and only the downscaled output's copies
+  are outside it.
+- **No hold-and-wait.** The output a call will make is known only after
+  each image is decoded, and a call that held output for its first images
+  while it waited for more could deadlock with other calls doing the same,
+  or with calls that hold a decode slot while they wait for output. A
+  call must reserve once, before its first decode slot, for its worst case
+  (its base64 images x 6.67 MiB), and give back what it did not use after
+  the last image.
