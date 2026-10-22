@@ -711,6 +711,12 @@ func (rt *Runtime) recordAssignedEngineeringReport(ctx context.Context, rec *typ
 	for attempt := 0; attempt < 4; attempt++ {
 		result, err := rt.recordAssignedEngineeringReportOnce(ctx, rec, toolCallID, report)
 		if err == nil {
+			// Every success, the early replay returns included: a crash or a
+			// failed close after the report committed leaves a terminal
+			// assignment that nothing else re-drives, and its re-delivered
+			// report takes a replay return. One indexed read when there is
+			// nothing to close.
+			rt.closeEndedAssignmentSelfdevOperation(ctx, result.Assignment)
 			return result, nil
 		}
 		lastErr = err
@@ -1077,7 +1083,6 @@ func (rt *Runtime) recordAssignedEngineeringReportOnce(ctx context.Context, rec 
 		rt.armAssignedEngineeringFateWatchdog(assignment)
 		return types.EngineeringAssignmentCommandResult{}, err
 	}
-	rt.closeEndedAssignmentSelfdevOperation(ctx, result.Assignment)
 	return result, nil
 }
 
@@ -1338,8 +1343,8 @@ func (rt *Runtime) commitAssignedEngineeringReport(ctx context.Context, assignme
 		rt.settleEngineeringPrecommitsAtTerminal(ctx, result.Assignment, string(report.Result)+": "+report.Summary)
 	}
 	if err == nil {
-		// Replays included: a crash between the report and this close
-		// leaves the operation for the replay to converge.
+		// At the commit; recordAssignedEngineeringReport closes again on
+		// every success, which covers its early replay returns.
 		rt.closeEndedAssignmentSelfdevOperation(ctx, result.Assignment)
 	}
 	return result, err
@@ -1355,11 +1360,14 @@ func (rt *Runtime) commitAssignedEngineeringReport(ctx context.Context, assignme
 // A completed assignment keeps a frozen candidate for management's Verify;
 // a failed one cannot be verified, so its candidate closes too. Cancellation
 // closes through failBoundSelfdevOperation. The close is a normal Transition,
-// on the tape like every other, and a terminal operation is left alone.
+// on the tape like every other, and a terminal operation is left alone. It
+// runs after the report committed, so a cancelled request must not stop it,
+// and every give-up is logged.
 func (rt *Runtime) closeEndedAssignmentSelfdevOperation(ctx context.Context, assignment types.EngineeringAssignment) {
 	if rt == nil || rt.selfdevOperations == nil || !assignment.Disposition.Terminal() {
 		return
 	}
+	ctx = context.WithoutCancel(ctx)
 	closable := []string{selfdev.StateRequested, selfdev.StateExecuting}
 	if assignment.Disposition != types.EngineeringAssignmentCompleted {
 		closable = append(closable, selfdev.StateFrozen, selfdev.StateVerified)
@@ -1367,7 +1375,11 @@ func (rt *Runtime) closeEndedAssignmentSelfdevOperation(ctx context.Context, ass
 	computerID := assignment.Binding.ComputerID
 	for attempt := 0; attempt < 3; attempt++ {
 		operation, found, err := rt.selfdevOperations.GetByIdempotency(ctx, computerID, store.EngineeringFreezeIdempotencyKey(assignment.AssignmentID))
-		if err != nil || !found || !slices.Contains(closable, operation.State) {
+		if err != nil {
+			log.Printf("selfdev: close the operation of ended assignment %s: read: %v", assignment.AssignmentID, err)
+			return
+		}
+		if !found || !slices.Contains(closable, operation.State) {
 			return
 		}
 		reason := fmt.Sprintf("assignment %s before its candidate froze", assignment.Disposition)
@@ -1390,6 +1402,7 @@ func (rt *Runtime) closeEndedAssignmentSelfdevOperation(ctx context.Context, ass
 			return
 		}
 	}
+	log.Printf("selfdev: close the operation of ended assignment %s: gave up after repeated state conflicts", assignment.AssignmentID)
 }
 
 // assignmentOutcomeRefs names, on a terminal report, the candidate the
