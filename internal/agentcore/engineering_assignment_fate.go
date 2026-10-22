@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"log"
 	"slices"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
@@ -1225,6 +1227,20 @@ func (rt *Runtime) armAssignedEngineeringFateWatchdog(assignment types.Engineeri
 
 // resumeStrandedFateAssignmentIfPending re-reads the assignment and finishes
 // the stranded terminal saga when the strand predicate still holds.
+// errAssignmentSagaHeld reports that the assignment's live terminal saga
+// holds it; the fate-wake re-drive defers to that saga.
+var errAssignmentSagaHeld = errors.New("the assignment's live terminal saga holds it")
+
+// assignmentSagaMutex serializes the drivers of one assignment's terminal
+// report in this process: the worker's Complete and the fate wake's resume
+// of its staged proposal (FP4 round 4 P2; review round 4b). Both run in the
+// host process (capsule cells reduce there, and the fate wake is handled
+// there). The worker waits for it; the resume only tries it.
+func (rt *Runtime) assignmentSagaMutex(assignmentID string, attempt uint64) *sync.Mutex {
+	mu, _ := rt.assignmentSagas.LoadOrStore(assignmentID+"\x00"+strconv.FormatUint(attempt, 10), new(sync.Mutex))
+	return mu.(*sync.Mutex)
+}
+
 func (rt *Runtime) resumeStrandedFateAssignmentIfPending(ctx context.Context, ownerID, computerID, assignmentID string, attempt uint64) error {
 	assignment, err := rt.store.GetEngineeringAssignment(ctx, ownerID, computerID, assignmentID, attempt)
 	if err != nil {
@@ -1237,6 +1253,12 @@ func (rt *Runtime) resumeStrandedFateAssignmentIfPending(ctx context.Context, ow
 		return nil
 	}
 	if resumeErr := rt.resumeStrandedFrozenAssignmentCommit(ctx, assignment); resumeErr != nil {
+		if errors.Is(resumeErr, errAssignmentSagaHeld) {
+			// The live saga either commits the report or, on failure, arms
+			// the fate watchdog, which re-drives once it is free.
+			log.Printf("runtime: assignment %s fate re-drive deferred: %v", assignmentID, resumeErr)
+			return nil
+		}
 		return resumeErr
 	}
 	log.Printf("runtime: assignment %s fate watchdog re-drove stranded %s proposal", assignmentID, assignment.CapsuleDisposition)
@@ -1297,6 +1319,11 @@ func (rt *Runtime) resumeStrandedFrozenAssignmentCommit(ctx context.Context, ass
 	if proposal == nil || strings.TrimSpace(assignment.BoundRunID) == "" {
 		return fmt.Errorf("stranded assignment %s has no resumable proposal", assignment.AssignmentID)
 	}
+	saga := rt.assignmentSagaMutex(assignment.AssignmentID, assignment.Binding.Attempt)
+	if !saga.TryLock() {
+		return errAssignmentSagaHeld
+	}
+	defer saga.Unlock()
 	rec := &types.RunRecord{
 		RunID: assignment.BoundRunID, OwnerID: assignment.Binding.OwnerID, ComputerID: assignment.Binding.ComputerID,
 		AgentID: assignment.Binding.AssignedAgentID, ChannelID: assignment.Binding.AssignedAgentID,

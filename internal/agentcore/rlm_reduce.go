@@ -1760,7 +1760,13 @@ func (r *rlmCallReduction) commitCompleteIntent(ctx context.Context, in yaegiker
 	// The report's outcome (row, final Report to management) commits in one
 	// transaction (C1e D3); management's Verify, not a host chain, judges a
 	// frozen candidate (C1e step 4).
-	if _, err := rt.recordAssignedEngineeringReport(ctx, r.rec, intentIdentity, report); err != nil {
+	// The live saga holds the assignment, so the fate wake's resume of the
+	// same staged proposal defers instead of racing it.
+	saga := rt.assignmentSagaMutex(metadataStringValue(r.rec.Metadata, "assignment_id"), uint64(metadataIntValue(r.rec.Metadata, "assignment_attempt")))
+	saga.Lock()
+	_, err = rt.recordAssignedEngineeringReport(ctx, r.rec, intentIdentity, report)
+	saga.Unlock()
+	if err != nil {
 		return false, err
 	}
 	return result != types.EngineeringResultPartial, nil

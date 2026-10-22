@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -966,6 +968,18 @@ func (s *Store) replaySameTerminalReportCommand(ctx context.Context, req types.R
 	if err != nil {
 		return types.EngineeringAssignmentCommandResult{}, false, err
 	}
+	// The fresh path's checks first: a stated proposition digest must be
+	// the one the report computes, and its report id the one that digest
+	// derives. A request the fresh path refuses is never acknowledged as
+	// landed (review round 4b, Sonnet F2).
+	if stated := strings.TrimSpace(req.Report.PropositionDigest); stated != "" {
+		if stated != digest {
+			return types.EngineeringAssignmentCommandResult{}, false, fmt.Errorf("co-super assignment report proposition digest mismatch: %s vs %s: %w", stated, digest, ErrEngineeringAssignmentInvalid)
+		}
+		if expected := TerminalReportID(req.OwnerID, req.ComputerID, req.AssignmentID, req.Attempt, digest); req.Report.ReportID != expected {
+			return types.EngineeringAssignmentCommandResult{}, false, fmt.Errorf("co-super assignment report report_id mismatch: %s vs %s: %w", req.Report.ReportID, expected, ErrEngineeringAssignmentInvalid)
+		}
+	}
 	matchID, matchCommandID, _, err := s.SlotTerminalReport(ctx, assignment, digest)
 	if err != nil {
 		return types.EngineeringAssignmentCommandResult{}, false, err
@@ -977,7 +991,35 @@ func (s *Store) replaySameTerminalReportCommand(ctx context.Context, req types.R
 	if err != nil {
 		return types.EngineeringAssignmentCommandResult{}, false, err
 	}
+	// The replay acknowledges the proposition, not this writer's evidence:
+	// say so when that evidence differs from the committed report's
+	// (review round 4b, Sonnet F7).
+	if replay.Report != nil {
+		if differs := reportEvidenceDifferences(*replay.Report, req); len(differs) > 0 {
+			log.Printf("store: report %s replayed under command %s; this writer's evidence differs from the committed report (%s), which stands",
+				matchID, matchCommandID, strings.Join(differs, ", "))
+		}
+	}
 	return replay, true, nil
+}
+
+// reportEvidenceDifferences names the evidence fields in which a second
+// writer's request differs from the committed report.
+func reportEvidenceDifferences(committed types.EngineeringAssignmentReport, req types.RecordEngineeringAssignmentReportRequest) []string {
+	var differs []string
+	if !slices.Equal(committed.ExecutorReceiptRefs, req.Report.ExecutorReceiptRefs) {
+		differs = append(differs, "executor receipts")
+	}
+	if committed.CandidateArtifactRef != req.Report.CandidateArtifactRef {
+		differs = append(differs, "candidate")
+	}
+	if !reflect.DeepEqual(committed.Mutations, req.Report.Mutations) {
+		differs = append(differs, "mutations")
+	}
+	if len(committed.ExecutionAttestations) != len(req.ExecutionAttestations) {
+		differs = append(differs, "attestations")
+	}
+	return differs
 }
 
 func (s *Store) replayEngineeringAssignmentCommand(ctx context.Context, ownerID, computerID, commandID, digest, assignmentID string, attempt uint64, reportID string) (types.EngineeringAssignmentCommandResult, bool, error) {
