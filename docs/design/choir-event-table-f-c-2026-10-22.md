@@ -3,10 +3,13 @@
 Date: 2026-10-22. Station: FP1 follow-up, lever F-c of
 [`paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22`](../problems/paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md).
 Lane `lane/fp1-event-table-design`, from `origin/main` `6b3bdcc1b`.
+Round 2 (after review bunch 28): lane `lane/fp1-event-table-design-r2`,
+from `origin/main` `4fca1e01b`. Every citation was re-checked on that
+checkout.
 Mutation class of this document: green (docs only; no code, nothing run on
 any computer, no SQL against any store). Mutation class of the change it
-designs: **red** (store schema, projection, replay, content witness, event
-readers, sequence allocation). Section 6 has the ceremony.
+designs: **red** (store schema, schema epoch, projection, replay, content
+witness, event readers, sequence allocation). Section 6 has the ceremony.
 
 Evidence labels, as in the problem record: **[V]** verified by reading the
 code at the cited `file:line` on this checkout; **[M]** measured, in a cited
@@ -15,10 +18,12 @@ observation that settles it.
 
 ## Answer in brief
 
-1. **What moves.** Only the ten batched telemetry kinds
-   (`types.EventKind.Batchable()`, `internal/types/event_durability.go:31-45`),
-   about 94% of `choir.event` appends on staging **[M]**. Run-state,
-   acknowledged and evidence events stay in `og_objects` exactly as today.
+1. **What moves.** Only the ten batched telemetry kinds, about 94% of
+   `choir.event` appends on staging **[M]**. They are named by a new closed
+   storage class beside the batching class
+   (`internal/types/event_durability.go:31-45`), which today names the same
+   ten kinds. Run-state, acknowledged and evidence events stay in
+   `og_objects` exactly as today.
 2. **How a row gets there.** The writer stamps the existing, unused
    `ProjectionOp.Table` field (`internal/computerevent/projection_batch.go:68`)
    with `choir_events`. The op kind is still `object_recorded` and the body
@@ -34,14 +39,19 @@ observation that settles it.
 4. **Estimate.** About 30 to 38 KiB of journal per batched op instead of
    86 to 115 KiB, about 65% less **[H]**. For one telemetry record, including
    the per-event overhead, that is about 98 KB to about 43 KB with batching
-   off, and about 88 KB to about 33 KB with batching on. On the paper's
-   10-15 kind mix the whole journal falls **about 30 to 40%**: 1.6 GiB per
-   10 minutes becomes about 1.0 to 1.1 GiB. F-c alone does not end the F2
-   stall. With F-a and a multi-row insert into the new table (F-e on
-   `choir_events`, deploy 3) the fall is about 50%.
+   off, and about 88 KB to about 33 KB with batching on (staging
+   constants). On the paper the whole journal falls **about 20 to 35%**
+   **[H]**: 1.6 GiB per 10 minutes becomes about 1.05 to 1.3 GiB. The low
+   end depends on how much of a paper event's cost is the `og_objects` row,
+   which is not measured. The paper's own readings decide, not this
+   estimate (section 2.6). F-c alone does not end the F2 stall. With F-a
+   (after the drain fix) and a multi-row insert into the new table (F-e on
+   `choir_events`, deploy 3) the fall is about 40 to 50% **[H]**.
 5. **Rollout.** Three deploys:
    - Deploy 1 is inert. It adds the table, the projector route, the union
-     readers, the witness and the manifest.
+     readers, the witness and the manifest, and bumps the store schema
+     epoch from 1 to 2. Deploy 1 is the rollback floor once any op is
+     stamped.
    - Deploy 2 adds the writer behind a per-computer setting,
      `store.event_table`, which is off by default and is an owner act on the
      tape. It runs on one test computer first.
@@ -49,6 +59,46 @@ observation that settles it.
 
    Existing `choir.event` rows in `og_objects` are never touched. Readers
    read the union of the two tables.
+
+## Round 2 changes
+
+A three-reviewer panel (bunch 28: DeepSeek v4.1 flash, Gemini 3.8 flash,
+Devin; MiniMax advisory) approved with changes. Each finding was checked
+against the code on `4fca1e01b`. "Declined" rows give the reason and the
+code. The reviewers read `96a82ae33`; where their line numbers drifted,
+this document cites the current ones.
+
+| Finding | Reviewer | Disposition | Where |
+|---|---|---|---|
+| F1: a rollback below deploy 1 can split the store for ever, because an old binary projects stamped ops into `og_objects` | DeepSeek | **Adopted.** Caveat, a pre-rollback check, rebuild-from-tape as the repair. One correction: at boot the old binary discards a prepared row and replays the event from the tape (`appender.go:778-787`, `:856`; `autoputer/run.go:744-746`); it does not re-finalize it. The outcome is the same | 4.5 |
+| F1: decide on a `storeschema.Version` bump | DeepSeek, Devin, MiniMax | **Adopted.** 1 → 2 in deploy 1. It fences updater-applied releases only (`updater.go:456-457`); `Open` writes the receipt and never reads it (`store.go:718-728`) | 4.1, 4.5 |
+| F2: `projectChoirEvent` must not refuse on `Batchable()`; add a named storage-class predicate | DeepSeek | **Adopted.** The projector accepts any structurally valid `choir.event`. New closed class `EventKind.Storage()` | 2.1, 2.2, F6, F9, F22 |
+| F3: the trajectory union returns the oldest N, not the newest | DeepSeek | **Adopted in part.** The defect is real for a trajectory over 10,000 events. The proposed fix is declined: today keeps the oldest N of its newest 10,000 (`store.go:2259`, `:2274`, `:2276`), so `DESC LIMIT N` then an ascending merge would return the newest N, a different result. The union now rebuilds today's 10,000 window first. DeepSeek's extra tests are adopted | 4.4, F2, heresy delta |
+| F4: the whole-journal estimate is optimistic | DeepSeek; Gemini (dissent); MiniMax | **Adopted.** 20 to 35%, and the paper's readings 1 to 6 decide | Answer 4, 2.6, 6.2, 6.3 |
+| F5: `OmitWhenEmpty` as extractor config is a footgun | DeepSeek | **Adopted.** A package-level set inside `computerversion`, not a field. Both construction sites already copy their config by hand (`replay_completeness.go:489-505`, `projectionbase/witness.go:21-35`) | 3.3, heresy delta |
+| F6: section 3.3 is wrong in the old-binary direction | DeepSeek | **Adopted.** `WitnessContentMatches` needs equal table counts (`selfdevprotocol/rematerialize.go:76-78`). An old binary's restore of a pre-deploy-1 checkpoint does work when its staged store has no table | 3.3, 4.5 |
+| F7: `event_kind` needs a default; `CREATE TABLE IF NOT EXISTS` adds no later columns | DeepSeek | **Adopted.** `DEFAULT ''`. Later columns need `ensureColumns`, later indexes `CREATE INDEX IF NOT EXISTS`, and each one changes the witness | 2.3 |
+| F8: future vocabulary migrations and the fence must cover the new table | DeepSeek | **Adopted.** A constraint plus a source guard over one list of object-row tables | 3.6, F11 |
+| F9: `desk.cell` and `desk.egress` carry `ChannelID`, so the channel read narrows | DeepSeek, Devin | **Adopted.** Every run-emitted event carries the run's channel (`runtime.go:4631-4641`, `tools_desk.go:1228-1237`). The method is renamed `ListAcknowledgedEventsByChannel`. No runtime refusal: a reader cannot know a channel's kinds without reading it | 1.2, 1.6, 4.4, F10, Q9 |
+| F10: one reader-inventory error: an interface declares `AppendEvent` | DeepSeek | **Adopted.** `runSubmissionStore` (`agentcore/runtime_persistence.go:20-25`); only `*store.Store` implements it | 1 |
+| Q1 to Q10 positions | DeepSeek | **Adopted:** Q2 measures the empty-`trajectory_id` share; Q4 keeps the dry run on the same statement; Q5 keeps deploy 1 for a week; Q6 notes retention and the witness; Q7 gates on the rollback check and the paper's baseline. Its "F-e on `og_objects` first if the drain fix is close" is noted in section 7, not made the plan | 7, 8 |
+| `SELECT MAX(seq)` returns NULL for a run with no rows | Gemini | **Adopted.** `COALESCE(MAX(seq), 0)` | 3.5, F1 |
+| The dry run must handle a store with no projection head | Gemini | **Adopted.** `sql.ErrNoRows` means position 1, as finalize (`computer_events.go:171-179`) and the appender (`appender.go:663-664`) already rule | 2.4, F6 |
+| The omission probe must check that the table exists | Gemini | **Adopted.** The probe runs only for a table `SHOW TABLES` returned | 3.3, F4 |
+| The optional class needs a two-sided rule | Gemini | **Adopted as a clarification.** Today's schema-drift check already makes "present on one side only" ineligible (`replay_eligibility.go:220-229`) | 3.3, F12 |
+| Drop `idx_choir_events_trajectory_stream` in deploy 3 | Gemini; Devin (option); MiniMax (measure both) | **Declined.** A fan-out over runs is not provably equal, and a later index change alters the table's `SHOW COLUMNS` and so the witness (`dolt_state_extractor.go:290-333`). The index set is settled before deploy 1. F17 measures a 3-tree variant locally, so the price is known | 2.3, Q2, F17 |
+| Q7: F-a stays off on the paper until the drain fix | Gemini | **Adopted** | 4.2, Q7 |
+| F17's journal probe should gate deploy 2, not only deploy 3 | Devin | **Adopted.** Local ratio at most 0.5 before deploy 2 goes to staging | 4.1, F17, 6.3 |
+| The narrowed replay fence reads `og_objects` only and skips a missing ID | Devin; MiniMax | **Adopted.** It would fail open for a stamped op (`vocab_replay_fence.go:179-183`). The tracker records stamped ops by tape position, and the fence re-reads them from `choir_events` | 1.4, 3.6, F11 |
+| Spell out the optional manifest class | Devin; MiniMax | **Adopted.** Three code sites: `Validate`, `classify`, the missing-table loop | 3.3 |
+| Pin the union merge rules; deduplicate | Devin; MiniMax | **Adopted.** Each half fetches the limit; merge key per method; deduplicate by `canonical_id`. Declined: a fifth tree `(owner_id, updated_at)` and switching `ListEventsByOwner` to `stream_seq` order. The halves differ only at the cut, and only when callers' timestamps disagree with allocation order | 4.4, F2 |
+| A stamp needs a bound tape | Devin | **Adopted.** One sentence | 2.2 |
+| Doc errors: the legacy `events` table has 7 secondary indexes, not 2; owner reads use the write connection | Devin | **Adopted** (`store.go:360-364`, `:796-803`; `store.go:704-706`) | 4.4, Q3 |
+| Q7: `store.event_table` is orthogonal to the drain bug | Devin | **Adopted** | 4.2, Q7 |
+| Rollback below deploy 1 can hand out duplicate `seq` and `stream_seq`; a WebSocket client skips hidden events | MiniMax (advisory) | **Adopted.** Part of why deploy 1 is the floor | 4.5 |
+| The `choir_events` DDL is frozen after deploy 1 | MiniMax (advisory) | **Adopted** | 2.3 |
+| Path error: `restore_base.go` is in `agentcore` | MiniMax (advisory) | **Adopted** | 3.3 |
+| Measure a 3-tree variant on staging | MiniMax (advisory) | **Declined.** It needs a second build on staging. The local probe measures it (F17) | F17 |
 
 ## 0. The problem in one paragraph
 
@@ -74,15 +124,20 @@ run-memory entries **[M]**.
 ## 1. Readers and writers (standing question 4)
 
 All production callers go through the concrete `*store.Store`. No interface
-declares the event methods. The store fields are concrete:
-`internal/agentcore/runtime.go:95`, `internal/apihandler/handler.go:14` and
+declares the event read methods. One interface declares the writer:
+`runSubmissionStore` has `AppendEvent`
+(`internal/agentcore/runtime_persistence.go:20-25`), and its only
+production argument is `rt.store` (`runtime.go:1107`) **[V]**. So the
+source guard in F2 scans implementations, not interfaces. The store fields
+are concrete: `internal/agentcore/runtime.go:95`,
+`internal/apihandler/handler.go:14` and
 `internal/textureowner/handler.go:48` **[V]**.
 
 ### 1.1 Writers of `choir.event` objects
 
 | # | Writer | Path to the tape | Kinds | After F-c |
 |---|---|---|---|---|
-| W1 | `Store.AppendEvent`, acknowledged branch (`internal/store/store.go:1964`, `:2100`) | `AppendEventOG` (`graph_store.go:1168-1199`) → `ogPut` → `objectgraph.Service.CreateObject` → `DoltStore.PutObject` → write validator → `interceptOG` (`projection_tape.go:61-89`) → one `object_recorded` op | every kind | Batched kinds with the setting on: the op is built directly, as the sealer builds it, then run through `PreflightWrite` and stamped `Table: choir_events`. All other kinds: unchanged |
+| W1 | `Store.AppendEvent`, acknowledged branch (`internal/store/store.go:1964`, `:2100`) | `AppendEventOG` (`graph_store.go:1168-1199`) → `ogPut` → `objectgraph.Service.CreateObject` → `DoltStore.PutObject` → write validator → `interceptOG` (`projection_tape.go:61-89`) → one `object_recorded` op | every kind | Event-table kinds (today the ten batched kinds) on a tape-bound store with the setting on: the op is built directly, as the sealer builds it, then run through `PreflightWrite` and stamped `Table: choir_events`. All other kinds: unchanged |
 | W2 | Telemetry sealer (`telemetry_sealer.go:109-134` `newTelemetryRecord`, which calls `buildEventObject`, `graph_store.go:1205-1239`) | the sealed batch under `authority:vm-local-projection-telemetry` (`projection_tape.go:106-109`) | batched kinds only (`recheckTelemetryOp`, `telemetry_sealer.go:486-506`) | stamped when the setting is on |
 | W3 | Lifecycle fold: `projectLifecycleRun` (`lifecycle.go:3116`, through `projectLifecycleRunWithRetry`, `:3002`) puts a `buildEventObject` into its `PutBatchConditional` with an absent-condition on the event's canonical id (`:3330-3337`). The other absent-conditions in `lifecycle.go` (`:4394`, `:5037`, `:5113`, `:6209`) are `choir.lifecycle_event` objects, a different kind | `putBatch` → `evaluateConditions` against `og_objects` (`dolt_store.go:1133-1140`, `:1798-1838`) → intercept | run-state kinds: `loop.started`, `activation.passivated`, `loop.completed` and the rest. These are never batched (`event_durability.go`) | **unchanged**: stays in `og_objects`, and the condition keeps its meaning |
 | W4 | Projector (`project.go:215-256` `projectObject`, one upsert into `og_objects`; `derived.Maintain` is a no-op for this kind because no `og_key_index` family covers it, `derived_keys.go:76-80`, `:297-305`) | live finalize (`computer_events.go:227`), replay finalize (`:222`), dry run (`:114`) | all | routes stamped ops to `choir_events` (section 2.2) |
@@ -98,11 +153,11 @@ only code that names `ogKindEvent` is in `internal/store` (`graph_store.go:22`).
 | Store method (file:line) | Production callers | Surface | Filter | Order / cursor / limit |
 |---|---|---|---|---|
 | `ListEventsAfter` (`store.go:2126`) | `api_run_events.go:73` (relaxed read) | `GET /api/runs/{id}/events` (`apihandler/routes.go:22`), used by `choir trace` (`cmd/choir/trace.go:327-358`), the Playwright helper (`frontend/tests/helpers/run-trace.js:11-30`), `scripts/reeng_tracer.mjs:436`, `:457`, `scripts/reeng_ttl_session.mjs:101`, `scripts/claude_delegate_probe.py:79`, `scripts/management_latency_probe.py:127`. Acceptance evidence links have the form `/api/runs/{id}/events?after=<seq-1>&limit=1` (`run_acceptance.go:343-353`) | run_id | seq ascending; `after` is a seq cursor; limit up to 1000 (+1) |
-| `ListEvents` (`store.go:2120`, delegates to the method above) | `api.go:436` (consistent); `run_memory.go:437`, which is unreachable in production: it is gated on reason `continuation_selection` (`run_memory.go:432-434`) and no caller passes it | `GET /internal/runtime/runs/{id}/events` (`routes.go:56`), desk tooling | run_id | seq ascending; up to 1000 |
+| `ListEvents` (`store.go:2120`, delegates to the method above) | `api.go:437` (consistent); `run_memory.go:437`, which is unreachable in production: it is gated on reason `continuation_selection` (`run_memory.go:432-434`) and no caller passes it | `GET /internal/runtime/runs/{id}/events` (`routes.go:56`), desk tooling | run_id | seq ascending; up to 1000 |
 | `ListEventsByOwnerAfter` (`store.go:2189`) | `live_ws.go:79` (consistent), then a desktop filter (`live_ws.go:85`, `:174`) | WebSocket `/api/ws?after_seq=` (`routes.go:38`); the frontend cursor is the highest `stream_seq` seen (`frontend/src/lib/Desktop.svelte:981-1043`) | owner | stream_seq ascending, after a cursor; 500 |
 | `ListEventsByOwner` (`store.go:2157`) | `apihandler/costs.go:74` (relaxed); `textureowner/texture.go:1969` (relaxed) | `GET /api/costs` (`routes.go:27`), used by `scripts/cpu_efficiency_probe.py:74`; `GET /api/texture/documents/{id}/diagnosis` (`routes.go:82`), which `TextureEditor.svelte:1396` calls with limit 80 | owner | newest first by timestamp; up to 10000 (costs) or 500 (diagnosis) |
 | `ListEventsByTrajectory` (`store.go:2253`) | `run_acceptance.go:91` (consistent; it sorts again at `:94`); `texture_workflow_verifier.go:126` has **no caller** | `POST /api/run-acceptances/synthesize` (`routes.go:53`) | owner + trajectory_id | stream_seq ascending; 3000 |
-| `ListEventsByChannel` (`store.go:2224`) | `system1_verb.go:176` only | the `choir.System1` desk egress; the channel is `system1:<computer>` (`:81`), written by `:323` with kind `EventSystem1Judgment`, which is **acknowledged** (`event_durability.go:66`) | owner + channel_id | timestamp ascending; 10000 |
+| `ListEventsByChannel` (`store.go:2224`), renamed `ListAcknowledgedEventsByChannel` in deploy 1 | `system1_verb.go:176` only, pinned by the call-site audit (`telemetry_readclass_test.go:23-33`) | the `choir.System1` desk egress; the channel is `system1:<computer>` (`:81`), written by `:323` with kind `EventSystem1Judgment`, which is **acknowledged** (`event_durability.go:66`). The caller keeps only that kind (`:182-184`). Batched kinds do carry channels: every run-emitted event carries the run's `ChannelID` (`runtime.go:4631-4641`, `tools_desk.go:1228-1237`) | owner + channel_id | timestamp ascending; 10000 |
 | `ListEventsByTrajectoryAfter` (`store.go:2283`) | **none** (only `telemetry_sealer_test.go:688`) | — | — | — |
 | `ListEventsOG` (`graph_store.go:1242`) | **none** (only `lifecycle_test.go:315`) | — | — | — |
 | `ListEventsByOwnerOG` (`graph_store.go:1263`) | **none** | — | — | — |
@@ -128,6 +183,7 @@ tables, or numbers are handed out twice** (failure F1, section 5).
 | Reader | What it does with `choir.event` rows | After F-c |
 |---|---|---|
 | Vocabulary plan and serving fence (`vocab_migrate_og.go:347`, `:871`; event fields `kind` and `phase` are skipped, `:835-838`), reached from `MigrateAndFenceServingVocabulary` (`autoputer/run.go:693`, `:765`; `projectionbase/rebuilder.go:390`; `agentcore/rematerialize.go:204`). Boot takes a fast path when nothing was replayed (`vocab_migrate.go:219-225`) | scans role leaves | the full fence pass also reads `choir_events` (section 3.6) |
+| Narrowed replay fence (`vocab_replay_fence.go`): `noteVocabReplayDeposit` records the canonical id of every replayed object op (`:104-109`), and `vocabReplayStaysFenced` re-reads each id from `og_objects` only, skipping one it cannot find (`:179-183`). Missed in round 1 | re-checks the role leaves of replayed rows | **fails open** for a stamped op unless changed: its row is not in `og_objects`, so it is skipped. Section 3.6 records stamped ops by tape position and re-reads them from `choir_events` |
 | `ListObjectGraphFingerprints` (`object_graph_fingerprints.go:27-60`), used **only as a diagnostic** when live and replay differ (`replay_completeness.go:352-361`, `checkpoint_restore_bindings.go:181-182`) | fingerprints every row | gains a `choir_events` fingerprint list |
 | `ReadObjectSnapshot` (`dolt_store.go:767`), `snapshotResidueObjects` (`residue_import.go:240-247`) | filter on `owner_id AND computer_id`. Events carry `computer_id = ''`, because `ogPut` sets none (`graph_store.go:91-111`, `service.go:125-136`) | not affected |
 | Content extractor and replay eligibility | hash and classify every table (section 3.3) | explicit wiring |
@@ -151,7 +207,7 @@ Live WebSocket delivery comes from the runtime bus, not the store
 | An owner's events in `stream_seq` order after a cursor; an owner's newest N | WS catch-up, costs, diagnosis | `idx_choir_events_owner_stream (owner_id, stream_seq)` |
 | A trajectory's events in `stream_seq` order | acceptance synthesis | `idx_choir_events_trajectory_stream (trajectory_id, stream_seq)` |
 | The store-wide newest `stream_seq` | stream seed | the primary key read backwards (newest 500 by tape position) |
-| A channel's events | System1 egress only, whose kind is acknowledged | **none**: post-cutover channel reads stay on `og_objects` (section 2.1) |
+| A channel's events | System1 egress only, whose kind is acknowledged | **none**: post-cutover channel reads stay on `og_objects`, and the method's new name says it covers acknowledged kinds only (section 2.1) |
 
 ### 1.7 Deletion citers (deleted in deploy 1, not extended)
 
@@ -166,12 +222,21 @@ unreachable.
 
 ### 2.1 Which events move: the ten batched kinds only
 
-The routing rule is `rec.Kind.Batchable()`. The ten kinds are `loop.delta`,
-`loop.progress`, `loop.retry`, `loop.compaction.started`,
+The routing rule is `rec.Kind.Storage() == StorageEventTable`. `Storage()`
+is a new closed classification in `internal/types/event_durability.go`,
+beside `eventDurability`. Its default, for any kind it does not name, is
+`StorageObjectGraph`. Today it names the same ten kinds as `Batchable()`:
+`loop.delta`, `loop.progress`, `loop.retry`, `loop.compaction.started`,
 `loop.compaction.completed`, `tool.invoked`, `tool.result`, `desk.cell`,
 `desk.egress` and `texture.agent_revision.progress`
 (`event_durability.go:36-45`). The rule does not depend on whether batching
-is on. Reasons:
+is on.
+
+Why a second class and not `Batchable()` itself: batching and storage are
+two decisions. A later change to the batching table must not move rows
+between tables without anyone deciding it. A test pins the two maps as
+equal today, so a change to either one fails until someone decides
+(round 2, DeepSeek F2). Reasons for the ten kinds:
 
 - **Volume.** On staging, batchable appends were 94% of runtime events
   (`events_appended_batchable` 618 against `acknowledged` 39, evidence
@@ -183,10 +248,13 @@ is on. Reasons:
   canonical id being absent from `og_objects` (`lifecycle.go:3336`) and
   carries only acknowledged kinds.
 - **The channel reader needs no index.** Its one caller reads an
-  acknowledged kind (`event_durability.go:66`).
+  acknowledged kind (`event_durability.go:66`). Batched events do carry
+  channels (section 1.2), so the method is renamed
+  `ListAcknowledgedEventsByChannel` to say what it covers.
 - **The class discipline already exists.** The sealer has five layers,
   including a forcing test over every `EventKind`
-  (telemetry-batching design §3.4). F-c reuses the same predicate.
+  (telemetry-batching design §3.4). The storage class copies that
+  discipline: a parser test fails if a kind has no storage entry.
 
 ### 2.2 Routing: the op carries its table
 
@@ -195,25 +263,40 @@ is on. Reasons:
 it only to refuse the two presence tables (`:194-197`). An op without it
 serializes byte for byte as today **[V]**.
 
-- **Writer (deploy 2).** With `store.event_table` on, the writer builds the
-  op for a batched-kind event with `Table: "choir_events"` (W1, W2).
+- **Writer (deploy 2).** The writer stamps `Table: "choir_events"` only
+  when all three hold: the store is bound to a tape
+  (`s.projectionTape != nil`, `store.go:1998`), `store.event_table` is on,
+  and the kind's storage class is `StorageEventTable` (W1, W2). An unbound
+  store has no tape position, so it never stamps (W6).
 - **Projector (deploy 1).** In `projectOp` (`project.go:69-92`), case
   `ProjectionOpObject`: if `strings.TrimSpace(op.Table) == "choir_events"`,
   it calls `projectChoirEvent(ctx, tx, op.Body, pos, i)`. Otherwise it calls
   `projectObject` as today. Any other `Table` value keeps today's behaviour.
   The projector does **not** start refusing unknown `Table` values: a
   stricter `Validate` could refuse historical tapes on replay.
-- **`projectChoirEvent` refuses** (it returns `ErrProjectionBatchInvalid`,
-  which the dry run turns into `batchRefused` before the event is
-  canonical, `appender.go:427-437`) any op that:
+- **`projectChoirEvent` refuses only shapes the table cannot hold.** It
+  never refuses on vocabulary that a later binary may extend, such as the
+  event kind. The reason: a later binary may add a kind to the storage
+  class, and a
+  deploy-1 or deploy-2 binary that replays that tape must not refuse it.
+  Refusing it would be replay poison, the failure the stamp was chosen to
+  avoid (round 2, DeepSeek F2; an unknown kind is `Acknowledged` and not
+  batchable, `event_durability.go:100-112`). It returns
+  `ErrProjectionBatchInvalid`, which the dry run turns into `batchRefused`
+  before the event is canonical (`appender.go:427-437`), for any op that:
   - is not of object kind `choir.event`;
-  - has a body that is not a `types.EventRecord` of a batched kind;
-  - has a non-empty `computer_id`, `version_id` or `superseded_by`, or
-    `tombstone` set;
+  - has a body that does not decode as a `types.EventRecord`;
+  - has `tombstone` or `superseded_by` set. A row here is an immutable fact
+    keyed by tape position, and a later op cannot reach it by canonical id;
   - has a zero `created_at` or `updated_at`;
   - has a `run_id`, `trajectory_id` or `owner_id` longer than 255
-    characters. Today's `og_meta_*` VARCHAR(255) generated columns refuse
-    the same rows (`dolt_store.go:186-190`, `:274`).
+    characters, or a metadata `kind` longer than 128. Today's `og_meta_*`
+    VARCHAR(255) generated columns refuse the same rows
+    (`dolt_store.go:186-190`, `:274`).
+
+  `computer_id` and `version_id` are stored as given (both are columns).
+  A metadata `kind` that is absent is stored as `''`. Neither is a refusal,
+  for the same forward-compatibility reason.
 
 Why a stamp and not the alternatives (section 7 has the full comparison):
 
@@ -256,7 +339,7 @@ CREATE TABLE IF NOT EXISTS choir_events (
   seq           BIGINT          NOT NULL DEFAULT 0,   -- from metadata.seq
   stream_seq    BIGINT          NOT NULL DEFAULT 0,   -- from metadata.stream_seq
   trajectory_id VARCHAR(255)    NOT NULL DEFAULT '',  -- from metadata.trajectory_id
-  event_kind    VARCHAR(128)    NOT NULL,             -- from metadata.kind
+  event_kind    VARCHAR(128)    NOT NULL DEFAULT '',  -- from metadata.kind; '' when absent
   PRIMARY KEY (tape_seq, op_index),
   INDEX idx_choir_events_run_seq (run_id, seq),
   INDEX idx_choir_events_owner_stream (owner_id, stream_seq),
@@ -277,6 +360,27 @@ The write is `INSERT ... ON DUPLICATE KEY UPDATE`, keyed on the tape
 position. A re-projection of the same event (finalize after
 `RecoverPrepared`, `appender.go:772`) is idempotent and never wedges the
 computer.
+
+`event_kind` has `DEFAULT ''` (round 2, DeepSeek F7). A metadata `kind`
+that is absent is not a refusal (section 2.2). The projector writes `''`
+for it, and the default keeps that meaning even for an insert that omits
+the column. DeepSeek's concern was poison after the CAS. That cannot
+happen while the dry run and finalize share one DDL: the dry run runs the
+same insert in a rolled-back transaction (`computer_events.go:108-117`),
+so a row the table cannot hold is refused before the CAS. The frozen DDL
+below keeps them the same.
+
+**The DDL is frozen at deploy 1.** `CREATE TABLE IF NOT EXISTS` does
+nothing on a store that already has the table, so it can never add a
+later column or index. A later column must go through
+`runtimeColumnMigrations` and `ensureColumns` (`store.go:793`,
+`:814-834`), and a later index through `CREATE INDEX IF NOT EXISTS`, the
+pattern at `store.go:796-803`. Each such change also alters the table's
+`SHOW COLUMNS` output, which enters the witness schema hash
+(`dolt_state_extractor.go:290-333`; the `Key` field marks a column that
+leads an index). So it makes every earlier checkpoint unverifiable under
+the new binary, and it needs its own design. The index set (Q2) is
+therefore decided before deploy 1, not after it.
 
 ### 2.4 The key: tape position, not `stream_seq`
 
@@ -304,6 +408,21 @@ prepare, CAS and finalize, that is the event's real position **[V]**. The
 dry run's rows are then the same rows in the same tree, and the journal
 deduplicates them, as it does today (record, "Correction") **[M]**. Failure
 F6 tests that the provisional and final positions are equal.
+
+A store with no projection head row (never projected) returns
+`sql.ErrNoRows`. Then the provisional position is 1. That is the rule
+finalize already applies to a missing head (`computer_events.go:171-179`:
+the first event must be sequence 1) and the appender applies to a nil head
+(`appender.go:663-664`) (round 2, Gemini). Any other read error refuses
+the dry run.
+
+If the store's head ever lagged the appender's head, the provisional
+position would be low. That costs only the dry run's deduplication, never
+correctness: the dry run rolls back, and the upsert never fails on a key.
+An exact alternative is to pass `event.Sequence`, which the appender binds
+before the dry run (`appender.go:409`, `:428-436`), through a widened
+`BatchDryRunner`. It is not proposed, because it widens a `computerevent`
+interface for a journal saving only.
 
 ### 2.5 Trees per insert
 
@@ -348,22 +467,41 @@ measured -37% for six rows as one statement on 13 random-key trees (record)
 **Whole journal on the paper (derived)** **[H]**:
 
 - Batched kinds are about 0.58 × 0.94 ≈ 0.55 of tape events (10-15 mix).
-- They save about 65% of a row that is about 87% of their per-record cost
-  (86 of 98.5 KB).
-- So the journal falls by about 0.55 × 0.65 × 0.87 ≈ 31%.
+- They save about 65% of the `og_objects` row.
+- The row's share of a telemetry record's whole cost is the open factor.
+  On staging it is about 0.87 (86 of 98.5 KB, the fit). On the local
+  harness it is about 0.64 (90 of 141 KiB, record "Correction"). The paper
+  has batching off, so every event pays the prepare and finalize overhead
+  of about 45 KiB, and its deeper trees and larger rows put a record at
+  about 150 to 250 KiB (record, reading 3). With a row of about 114 KiB at
+  10^6 rows, the paper's share is about 0.46 to 0.76 **[H]**.
+- So the journal falls by about 0.55 × 0.65 × share: about 31% at 0.87,
+  23% at 0.64, 20% at 0.55, and 16% at 0.46.
 - If run-memory ops (7 trees, record) cost less than `og_objects` rows, the
-  share is larger, up to about 36 to 40%.
-- So 1.6 GiB per 10 minutes becomes **about 1.0 to 1.1 GiB per 10
-  minutes**, and the 1 GiB GC pass comes about every 15 minutes instead of
-  about every 10.
+  batched share of the journal is larger, by up to a few points.
+- **Published estimate: about 20 to 35%.** 1.6 GiB per 10 minutes becomes
+  about 1.05 to 1.3 GiB per 10 minutes, and the 1 GiB GC pass comes about
+  every 12 to 15 minutes instead of about every 10. It is below 20% if the
+  paper's row share is under about 0.55, or if its batched share of ops is
+  under 0.55 (reading 4).
+
+This band is wider and lower than round 1's 30 to 40%. Round 1 used the
+staging row share (0.87) for the paper. DeepSeek (F4, 18 to 30%), Gemini
+(22 to 25%, from the same per-event overhead with batching off) and
+MiniMax (a band of 20 to 40%) all found that optimistic. **The decision
+on the paper rests on the paper's own readings 1 to 6 before and after the
+setting write (section 6.3, step 9), not on this estimate.** The staging
+ratio b_ce/b_og stays the gate for the test computer.
 
 Each pass still takes about 19 s (16.6 s per GiB plus 2 s, record), so F2
 needs the record's stopgaps as well: smaller passes, a non-blocking GC, and
-F1's fast 503. With F-a and deploy 3 the fall is about 50%. The next lever
-by volume is `run_memory_entries`, 31% of events, with a random UUID key
-and 6 more trees; the same pattern applies, in a design of its own.
+F1's fast 503. With F-a (after the drain fix) and deploy 3 the fall is
+about 40 to 50% **[H]**. The next lever by volume is
+`run_memory_entries`, 31% of events, with a random UUID key and 6 more
+trees; the same pattern applies, in a design of its own.
 
-**Assumptions, each settled by the staging proof (section 6.3).**
+**Assumptions, each settled by the staging proof (section 6.3), except
+items 4 and 6, which only the paper's readings settle.**
 
 1. A secondary index of `choir_events` costs no more per insert than one of
    `og_objects`. Its keys are narrower, so it is probably cheaper.
@@ -376,6 +514,9 @@ and 6 more trees; the same pattern applies, in a design of its own.
    is not known, and the record's reading 4 gives it.
 5. The per-tape-event overhead is unchanged: 12.5 KB on staging, about
    45 KiB locally.
+6. The `og_objects` row is at least about 55% of a paper telemetry
+   record's cost. It is not read directly. Reading 3 (bytes per event)
+   bounds it.
 
 **History.** The 28 to 29 GiB live store is history: each 100-event
 checkpoint pins about 100 distinct paths per random-key table (record,
@@ -393,7 +534,9 @@ The tape is the only authority for an event, as it is for every other
 projection. `choir_events` is a projection of `projection_batch_recorded`
 ops, as `og_objects` and `run_memory_entries` are. The two tables never
 disagree about one event, because one op lands in exactly one of them: the
-stamp decides, on the tape. A reader that finds an event in neither table
+stamp decides, on the tape. That holds for every deploy-1-or-later binary;
+an older binary ignores the stamp, which is why deploy 1 is the rollback
+floor (section 4.5). A reader that finds an event in neither table
 is reading a lost-on-crash batched record, which batching already defines
 (telemetry-batching design §5.2), or a bug.
 
@@ -424,31 +567,72 @@ binary, so they agree.
 
 Three pieces need explicit wiring:
 
-1. **Replay manifest** (`replay_eligibility.go:44-94`). It is default-deny:
-   an unlisted table is "unknown" and the computer is replay-ineligible
-   (`:177-181`, `:245-246`). Ineligibility blocks checkpoint and restore
-   (`checkpoint_restore_bindings.go:60`, `:187`). Add `choir_events` as
-   `event_projection`. Declared tables must also be present in both
-   observation sets (`:209-219`), so item 2 needs a matching rule here.
+1. **Replay manifest** (`internal/agentcore/replay_eligibility.go:44-94`).
+   It is default-deny: an unlisted table is "unknown" and the computer is
+   replay-ineligible (`:177-181`, `:245-246`). Ineligibility blocks
+   checkpoint publish (`checkpoint_restore_bindings.go:60`, `:187`).
+   Restore has its own gate: the staged store's witness must match the
+   checkpoint's (`agentcore/rematerialize.go:196`). Declared tables must
+   also be present in both observation sets (`replay_eligibility.go:209-219`),
+   so item 2 needs a matching rule here.
 2. **Old checkpoints.** `WitnessContentMatches`
-   (`selfdevprotocol/rematerialize.go:66-92`) and `WitnessFromObservationSets`
-   (`selfdevprotocol/restore.go:142-179`) require equal table sets and equal
-   content roots. A checkpoint witnessed before deploy 1 has no
-   `choir_events`. A deploy-1 binary that replays to that head would create
-   the empty table, and every empty table adds one line to `content_root`.
-   The restore would be refused.
+   (`selfdevprotocol/rematerialize.go:66-92`; equal counts at `:76-78`) and
+   `WitnessFromObservationSets` (`selfdevprotocol/restore.go:142-179`)
+   require equal table sets and equal content roots. A checkpoint witnessed
+   before deploy 1 has no `choir_events`. A deploy-1 binary that replays to
+   that head would create the empty table, and every empty table adds one
+   schema observation and one line to `content_root`. The restore would be
+   refused.
 
-   **Rule: an empty `choir_events` is not observed.** The extractor
-   (`dolt_state_extractor.go:153-161`, beside `IgnoredTables`) gains
-   `OmitWhenEmpty: {choir_events}`, checked with one
-   `SELECT 1 FROM choir_events LIMIT 1`. The manifest gets one more class,
-   `event_projection_optional`, which is not reported missing when it is
-   absent from both sets (`replayEligibilityManifestVersion` 3 → 4).
+   **Rule: an empty `choir_events` is not observed.**
+   - *Where the rule lives.* A package-level set in `computerversion`,
+     `optionalTables = {choir_events}`, read inside `Extract` beside the
+     `IgnoredTables` filter (`dolt_state_extractor.go:153-161`). It is not
+     a field, so no construction site can forget it. Round 1 proposed a
+     field, `OmitWhenEmpty`. DeepSeek (F5) showed why that is a footgun: a
+     site that forgot it would still pass live against replay, because
+     both sides would include the empty table, while every pre-deploy-1
+     checkpoint became unrestorable. Both sites today already copy their
+     config by hand (`agentcore/replay_completeness.go:489-505`,
+     `projectionbase/witness.go:21-35`). A test in `internal/store`
+     asserts the set names the table `bootstrap` creates.
+   - *How it is checked.* Only for a table that `SHOW TABLES` returned
+     (`queryDoltTables`, `:263-286`), so a workspace without the table
+     needs no probe and cannot fail one (round 2, Gemini). Then one
+     `SELECT 1 FROM choir_events LIMIT 1`. No row: the table is left out of
+     both the schema and the content observations, and so out of
+     `content_root`, exactly as `IgnoredTables` leaves a table out.
+   - *The manifest class.* One new class, `event_projection_optional`, and
+     one new entry, `choir_events: event_projection_optional`
+     (`replayEligibilityManifestVersion` 3 → 4). It touches three code
+     sites. `Validate` must accept it (`replay_eligibility.go:119-123`).
+     `classify` admits it with content, like `event_projection` (`:177-196`;
+     an unknown class falls to `default` and is ineligible). The missing-
+     table loop skips it when it is absent from both sets, like
+     `retired_absent` (`:209-219`). Present on one side only is still
+     ineligible: today's schema-drift loops already catch it (`:220-229`).
+     With a deploy-1-or-later binary on both sides that case cannot arise,
+     because the stamp that decides the table is on the tape (round 2,
+     Gemini, Devin). The manifest version is reported in the eligibility
+     JSON (`:147`) but never persisted or compared, so the bump is local.
 
-   Then every head before the first stamped op has the same witness under
-   old and new binaries. The same rule covers the base witness check
+   **What the rule buys, and what it does not** (corrected in round 2,
+   DeepSeek F6). A new binary reading a store with no stamped op produces
+   the same witness that an old binary produced for the same head. So a
+   new binary can restore every pre-deploy-1 checkpoint. The reverse is not
+   true. An old binary has no such rule. Extracting a store that holds the
+   empty table, it sees one more table, so its witness no longer matches
+   its own earlier checkpoints, and its manifest calls the table unknown.
+   An old binary can still restore a pre-deploy-1 checkpoint when its
+   staged store has no `choir_events`: a replay from genesis into a fresh
+   store (`agentcore/rematerialize.go:127`), or a base published before
+   deploy 1. A base published by a deploy-1 binary carries the empty table
+   in its workspace, so an old binary's restore from it is refused
+   (`:196`). Section 4.5 uses this.
+
+   The same rule covers the base witness check
    (`projectionbase/verify.go:68-105`) and an old base installed under the
-   new DDL (`restore_base.go:194`).
+   new DDL (`agentcore/restore_base.go:194`).
 3. **Diagnostics.** Today `compareReplayObjectGraph` names the
    `og_objects` rows that differ. Deploy 1 adds the same per-row
    fingerprints for `choir_events`, so an inequivalence names its rows.
@@ -456,7 +640,7 @@ Three pieces need explicit wiring:
 **Pre-existing, not introduced.** Checkpoint witnesses are already a
 function of the binary's schema. `SHOW COLUMNS` enters the schema hash
 (`dolt_state_extractor.go:290-333`), so any added column
-(`store.go:814-830`) or table makes earlier checkpoints unverifiable under
+(`store.go:814-834`) or table makes earlier checkpoints unverifiable under
 the new binary. The closing heresy delta records this as discovered. The
 rule above avoids it for this change only.
 
@@ -476,11 +660,14 @@ both tables (section 3.5).
 
 ### 3.5 Sequence seeds (the write path's reads)
 
-- **Per-run.** `max(today's og_objects seed, SELECT MAX(seq) FROM
-  choir_events WHERE run_id = ?)`. This is one index seek. The owner filter
-  of today's seed (`store.go:2024-2026`) is dropped for the table half.
-  Runless events share run_id '' across owners, so the maximum can only
-  over-estimate, which is a gap and safe.
+- **Per-run.** `max(today's og_objects seed, SELECT COALESCE(MAX(seq), 0)
+  FROM choir_events WHERE run_id = ?)`. This is one index seek. `MAX` over
+  no rows is SQL `NULL`, and scanning `NULL` into an `int64` fails, which
+  would fail the append on a run's first event (round 2, Gemini); the
+  `COALESCE` makes it 0. The owner filter of today's seed
+  (`store.go:2024-2026`) is dropped for the table half. Runless events
+  share run_id '' across owners, so the maximum can only over-estimate,
+  which is a gap and safe.
 - **Store-wide `stream_seq`.** `max(today's newest-500 og_objects seed,
   the maximum stream_seq among the newest 500 choir_events rows by
   primary key)`. This has the same quality as today's newest-by-time
@@ -497,6 +684,38 @@ both tables (section 3.5).
   deposits are upcast before they are projected. The V1→V2 row migration
   (`planOGMigration`) therefore does not rewrite the table. The fence makes
   the "never V1" claim fail closed instead of trusting it (F11).
+- **Narrowed replay fence** (missed in round 1; Devin, MiniMax). Replay is
+  the one writer the write guard does not see (`computer_events.go:207-213`).
+  After a replay onto a fenced store, boot re-checks only the replayed rows:
+  `noteVocabReplayDeposit` records each object op's canonical id
+  (`vocab_replay_fence.go:104-109`), and `vocabReplayStaysFenced` re-reads
+  each id from `og_objects` and skips one it cannot find (`:179-183`). A
+  stamped op's row is in `choir_events`, so today's code would skip it and
+  report the store still fenced. That fails open. The change:
+  - `finalizeBatch` passes its `sequence` (`computer_events.go:144`) to
+    `noteVocabReplayDeposit` (called at `:211`). The tracker records a
+    stamped op as `(tape_seq, op_index)`, in a set of its own under the same
+    `vocabReplayTrackLimit`.
+  - `vocabReplayStaysFenced` re-reads those rows from `choir_events` by
+    primary key, with the same fixpoint and role-field checks. A stamped
+    position it cannot find returns `false`, so the full pass decides. It
+    is never skipped.
+  - Looking a stamped id up by `canonical_id` instead would scan the
+    table, because `canonical_id` is not indexed (section 2.3).
+- **Future vocabulary migrations** (round 2, DeepSeek F8). The plan
+  (`planOGMigration`, `vocab_migrate_og.go:342-352`) and both fences scan
+  `og_objects` by name. A later V2→V3 migration written the same way would
+  leave `choir_events` rows behind, and the full fence would then fail
+  closed at boot (`autoputer/run.go:693-697`, `boot.fatalf`). So this is a
+  constraint on every later migration: the plan, the row rewrite and both
+  fences cover `choir_events` as well as `og_objects`, and the replay
+  deposit upcast covers stamped ops (it does today: it rewrites `op.Body`
+  and keeps `op.Table`, section 3.2). Deploy 1 puts the two names in one
+  list, `objectRowTables`, and both fences read it. The V1→V2 plan keeps
+  reading `og_objects` only, because no `choir_events` row can be V1; it is
+  the one named exception, and the full fence covers it. A source guard
+  fails on any other `FROM og_objects` in `internal/store/vocab_*.go` that
+  does not come from the list, so a later plan must read the list (F11).
 - **Fingerprints.** See section 3.3, item 3.
 - **Residue import** snapshots legacy direct-written rows into the tape
   (`residue_import.go:51-122`). It must never read `choir_events`, whose
@@ -507,18 +726,56 @@ both tables (section 3.5).
 The doctrine rule for this pass is: no boot step scans or rewrites all of
 `og_objects`, and schema changes are online and rollback-safe
 (`docs/definitions/choir-launch-first-pass-metamission-2026-10-21.md:270`).
+Round 2 makes "rollback-safe" precise for this change. Each deploy can be
+rolled back to the one before it. Deploy 1 can be rolled back to the
+previous build only until the first op is stamped; after that, deploy 1 is
+the floor (section 4.5). That is the expand-then-write shape: the expand
+step is stable before anything writes.
 
 ### 4.1 Three deploys
 
 | Deploy | Contents | Effect on a computer |
 |---|---|---|
-| 1, "expand" (red, inert) | DDL (empty table at boot); `projectChoirEvent` and the route; `pos` through `projectBatch`; union readers (section 4.4) and both seeds; manifest class and entry; extractor `OmitWhenEmpty`; fence and fingerprints; the three caller-less methods deleted; plan-shape tests | **None observable**: no writer stamps, the table stays empty and is not observed, and the readers' second query returns nothing. Rollback to the previous build: an empty unknown table. See the rollback matrix |
-| 2, "writer" (red) | the `store.event_table` setting in `KnownComputerSettings` (`computer_setting.go:55-61`), applied at once (the pattern of `computer_settings.go:105`) and at boot (the pattern of `telemetry_batching.go:39-56`); W1 and W2 stamp when it is on; a new counter `tape_ops_by_table` in `TelemetryStats` (`telemetry_stats.go:114-131`, `:182-205`) | off: byte-identical tape and store to deploy 1. On, per computer: batched kinds go to `choir_events` |
-| 3, "F-e on the new table" (red) | in `projectBatch`, consecutive stamped ops of one batch become one multi-row upsert into `choir_events` | only useful with batching on; measured on its own |
+| 1, "expand" (red, inert) | DDL (empty table at boot); `projectChoirEvent` and the route; `pos` through `projectBatch`; union readers (section 4.4) and both seeds; the storage class `EventKind.Storage()`; manifest class and entry; the extractor's `optionalTables` set; both fences and the `objectRowTables` list; fingerprints; `ListEventsByChannel` renamed `ListAcknowledgedEventsByChannel`; the three caller-less methods deleted; plan-shape tests; **`storeschema.Version` 1 → 2** | **None observable**: no writer stamps, the table stays empty and is not observed, and the readers' second query returns nothing. Rollback to the previous build: an empty unknown table, and the updater refuses an epoch-1 release. See the rollback matrix |
+| 2, "writer" (red) | the `store.event_table` setting in `KnownComputerSettings` (`computer_setting.go:55-61`), applied at once (the pattern of `computer_settings.go:105`) and at boot (the pattern of `telemetry_batching.go:39-56`); W1 and W2 stamp when it is on; a new counter `tape_ops_by_table` in `TelemetryStats` (`telemetry_stats.go:114-131`, `:182-205`). No epoch bump: deploy 2 is backward compatible with deploy 1 | off: byte-identical tape and store to deploy 1. On, per computer: batched kinds go to `choir_events` |
+| 3, "F-e on the new table" (red) | in `projectBatch`, consecutive stamped ops of one batch become one multi-row upsert into `choir_events`. The dry run runs the same multi-row statement, so finalize writes the same chunks and the journal still deduplicates them (round 2, DeepSeek Q4) | only useful with batching on; measured on its own |
 
 Deploy 1 must be the stable release, with at least one staging day and one
 paper boot, before deploy 2 is anywhere. A rollback of deploy 2 then lands
-on a binary that projects and reads the table.
+on a binary that projects and reads the table. **Deploy 1 is the rollback
+floor** once any op has been stamped (section 4.5). Keep it as a release
+you are willing to roll back to for at least a week after deploy 2
+(round 2, DeepSeek Q5).
+
+**Gate for deploy 2** (round 2, Devin). The local journal probe (F17)
+runs on the deploy-2 code before it ships. Go bar: b_ce/b_og at most 0.5
+on the harness, the same bar staging uses. A local miss stops deploy 2
+until the gap is explained. The local number is directional only; it can
+stop a deploy, but only staging and the paper can pass one.
+
+**The schema epoch: 1 → 2 in deploy 1** (round 2; DeepSeek F1, Devin,
+MiniMax). The epoch's contract asks for a bump whenever a change is not
+freely backward compatible for older binaries
+(`storeschema/schema.go:17-26`). Round 1 said `choir_events` was freely
+backward compatible. That was wrong. An old binary does run on a deploy-1
+store, but its manifest calls the table unknown, so it can no longer
+publish a checkpoint. After any stamped op it also hides events and can
+hand out duplicate numbers (section 4.5).
+- *What the bump does.* The updater refuses, before mutation, a release
+  that declares epoch 1 (the builder stamps the build's epoch,
+  `builder/request.go:240`) on a store whose receipt says 2
+  (`updater/updater.go:441-463`, the check at `:456-457`; called from
+  apply at `:291`). That fences every updater-applied rollback below
+  deploy 1.
+- *What it does not do.* `Open` writes the receipt and never reads it
+  (`store.go:718-728`). No path other than the updater reads it (a grep for
+  `storeschema.Read` finds only `internal/updater`). So an old binary that
+  reaches the computer another way is not refused by code, and its first
+  `Open` rewrites the receipt to 1. The pre-rollback check in section 4.5
+  fences that path by procedure.
+- `min_store_schema_version` does not change: deploy 1 migrates an epoch-1
+  store by creating the table. Deploys 2 and 3 do not bump: each is
+  backward compatible with deploy 1.
 
 ### 4.2 The selector
 
@@ -535,6 +792,13 @@ environment override is proposed; telemetry.batch has
 `CHOIR_TELEMETRY_BATCH`. F-c does not depend on the sealer, so it can go on
 the paper with batching still off
 (docs/problems/host-planned-restart-skips-telemetry-drain-2026-10-22.md).
+
+The setting is orthogonal to the drain bug (round 2, Devin). It decides
+which table a projected op lands in. It does not change which events are
+queued, sealed or lost: an open telemetry window is lost on a skipped drain
+whether or not its ops would have been stamped. So `telemetry.batch` (F-a)
+stays off on the paper until the planned-restart drain fix lands, whatever
+this setting says (round 2, Gemini).
 
 ### 4.3 Existing `choir.event` rows: never touched
 
@@ -558,17 +822,61 @@ kept.
 ### 4.4 Union reads
 
 Each method runs its `og_objects` query as today, plus one indexed query on
-`choir_events`, then merges and cuts to the limit:
+`choir_events`, then merges and cuts. The rules, pinned in round 2 (Devin,
+MiniMax, DeepSeek F3):
 
-| Method | `choir_events` query | Merge |
-|---|---|---|
-| `ListEventsAfter` | `WHERE run_id=? AND seq>? ORDER BY seq LIMIT ?` | by seq; the cursor and evidence-link semantics are unchanged |
-| `ListEventsByOwnerAfter` | `WHERE owner_id=? AND stream_seq>? ORDER BY stream_seq LIMIT ?` | by stream_seq |
-| `ListEventsByOwner` | `WHERE owner_id=? ORDER BY stream_seq DESC LIMIT ?` | by timestamp, descending, as today |
-| `ListEventsByTrajectory` | `WHERE trajectory_id=? AND owner_id=? ORDER BY stream_seq LIMIT ?` (the index serves the first term and the order) | by stream_seq |
-| `ListEventsByChannel` | none: the post-cutover channel read stays on `og_objects` | — |
+- Each half fetches at least what the caller's result can need, never
+  fewer than the limit.
+- The merged rows are deduplicated by `canonical_id` before any cut. One op
+  lands in one table, so a duplicate means a bug or a store an old binary
+  touched (section 4.5). The copy kept is the `og_objects` one.
+- The cut uses the method's merge key, with `stream_seq` as the tie-break.
 
-Reads go to `readDB` under the engine mutex, with labelled op names. This
+| Method | Today's `og_objects` half | `choir_events` half | Merge and cut |
+|---|---|---|---|
+| `ListEventsAfter` | the run's newest 100,000 by `updated_at`, then `seq > after` (`store.go:2133-2147`) | `WHERE run_id=? AND seq>? ORDER BY seq LIMIT ?` | ascending by seq, first `limit`; the cursor and evidence-link semantics are unchanged |
+| `ListEventsByOwnerAfter` | the owner's newest 100,000 by `updated_at`, then `stream_seq > after` (`:2197-2214`) | `WHERE owner_id=? AND stream_seq>? ORDER BY stream_seq LIMIT ?` | ascending by stream_seq, first `limit` |
+| `ListEventsByOwner` | the owner's newest `limit` by `updated_at` (`:2162-2166`; `dolt_store.go:743`). `updated_at` is the event's `Timestamp` (`graph_store.go:1169-1172`, `:1186`) | `WHERE owner_id=? ORDER BY stream_seq DESC LIMIT ?` | descending by timestamp, first `limit`, as today |
+| `ListEventsByTrajectory` | the trajectory's newest 10,000 by `updated_at` (`:2259`), filtered to the owner, sorted ascending by `stream_seq` (`:2274`), and the **first** `limit` kept (`:2276`): the oldest `limit` of a 10,000 window | `WHERE trajectory_id=? ORDER BY stream_seq DESC LIMIT 10000` (the index serves the term and the order); then the owner filter in Go, as today | first rebuild today's window: the newest 10,000 of the union by timestamp. Then filter the owner, sort ascending by `stream_seq`, keep the first `limit` |
+| `ListAcknowledgedEventsByChannel` | as today | none: the post-cutover channel read stays on `og_objects` | — |
+
+**The trajectory method** (round 2, DeepSeek F3, adopted in a corrected
+form). DeepSeek is right that round 1's half, `ORDER BY stream_seq LIMIT
+?`, changes the result: for a trajectory over 10,000 events it returns the
+oldest rows of the whole trajectory, while today returns the oldest of the
+newest 10,000. Its fix, `DESC LIMIT limit` and then an ascending merge, is
+not today either. Today keeps the oldest `limit` of its window, not the
+newest `limit` (`store.go:2274-2277`). For a trajectory of 5,000 events all
+in `choir_events`, that fix would return events 2,001 to 5,000, and today
+returns 1 to 3,000. Rebuilding the window first gives today's result
+exactly, whenever timestamps follow allocation order. Whether acceptance
+synthesis should read the newest events instead is a separate reader
+question, recorded in the heresy delta.
+
+**The owner method and the cut** (Devin, MiniMax). The `og_objects` half
+picks the newest by timestamp, and the `choir_events` half by allocation
+order. They differ only when callers' timestamps disagree with allocation
+order. That happens because emitters set `Timestamp` before `AppendEvent`
+takes `eventMu` (`runtime.go:4639`, `tools_desk.go:1235`), so two
+concurrent emitters can swap. The difference is a few rows at the cut of a
+cost total (`/api/costs`, limit 10,000) or a diagnosis view (limit 80).
+Two other options were declined. A fifth tree, `(owner_id, updated_at)`,
+costs about 7 to 9 KiB per op on every row to fix that boundary. Switching
+the method to `stream_seq` order changes what `/api/costs` and the
+diagnosis return today; that is a reader change, not part of F-c.
+
+**Cursor methods.** For `ListEventsAfter` and `ListEventsByOwnerAfter`
+today's half is capped at its newest 100,000 rows, and a cursor older than
+that window skips rows today. The `choir_events` half is an exact indexed
+cursor read, so the union never skips more than today does.
+
+**Connections.** Today the owner methods and the stream seed read through
+`s.og`, a `Service` over the write `DoltStore` (`store.go:704-706`). The
+metadata methods and the per-run seed read the read pool
+(`ogListByMetadata`, `graph_store.go:296-304`). Both hold the shared engine
+mutex (`ShareEngineMutex`, `store.go:693`). Round 1 implied all event reads
+were on the read pool; that was imprecise (Devin). The `choir_events` half
+goes to `readDB` under the engine mutex, with labelled op names. This
 needs a small exported `DoltStore` helper, because the mutex is unexported
 (`dolt_store.go:65-69`). The upstream race the mutex was kept for is
 recorded in the engine-concurrency design. `run_memory_entries` is read on
@@ -582,17 +890,35 @@ frequent (WebSocket catch-up), so the read pool is the better default.
 | Setting on → off | new events unstamped | union: nothing hidden | equivalent | none |
 | Deploy 2 → deploy 1 | stamped ops stay; deploy 1 projects them | union | equivalent | none |
 | Deploy 3 → deploy 2 | same op shape; one statement becomes N | same | same rows, so equivalent | none |
-| Deploy 1 → the previous build, no op ever stamped | none | today's | an empty table **unknown** to the old manifest: replay-ineligible, so checkpoint and restore are refused; the computer keeps running (og_key_index precedent, finding 3) | forward, or `DROP TABLE choir_events` by hand (it is empty; deploy 1 recreates it) |
-| Deploy 2 → the previous build, after stamped ops | **the old projector ignores `Table` and upserts stamped ops into `og_objects`**: new events after the rollback project normally | events stamped while deploy 2 ran are **invisible** to trace, WS catch-up, acceptance and costs. They are not lost: they are on the tape and in the table | replay-ineligible (unknown table). An old-binary replay would put the stamped events into `og_objects`, so it would not be equivalent to the live store anyway | forward to deploy 1 or later: everything is visible and equivalent again |
+| Deploy 1 → the previous build, no op ever stamped | none. The updater refuses an epoch-1 release on this store (section 4.1); this row is reachable only by a path outside the updater | today's | an empty table **unknown** to the old manifest: replay-ineligible, so **checkpoint publish** is refused; the computer keeps running (og_key_index precedent, finding 3). **Restore** of a pre-deploy-1 checkpoint still works when the old binary stages a store without the table: from genesis, or from a base published before deploy 1. From a base published by deploy 1 it is refused (section 3.3, round 2 DeepSeek F6) | forward; or an old-binary restore of a pre-deploy-1 checkpoint, whose workspace swap also removes the empty table. Round 1's hand `DROP TABLE` is withdrawn: it is SQL against a deployed store |
+| Deploy 2 → the previous build, after stamped ops | **Not a supported rollback: deploy 1 is the floor.** The old projector ignores `Table`, so any stamped op it projects lands in `og_objects`. It projects them on any boot with a tail to replay: replay mode discards a prepared row and replays the event from the tape (`appender.go:778-787`, `:856`; `autoputer/run.go:744-746`). It also projects them in any rebuild or restore it runs | events stamped while deploy 2 ran are **invisible** to trace, WS catch-up, acceptance and costs. They are on the tape and in the table, but a WebSocket client that catches up during the window moves its cursor past them. The old seeds read `og_objects` only (`store.go:2012-2045`, `:2054-2074`), so they can hand out `seq` and `stream_seq` numbers `choir_events` already holds. Those duplicates go onto the tape and stay (round 2, MiniMax) | replay-ineligible (unknown table). Worse, once the old binary projects any stamped op, a later deploy-1 replay puts that op in `choir_events` while the live store holds it in `og_objects`. Live and replay then never agree again, and checkpoints stay refused after the forward deploy (round 2, DeepSeek F1) | forward to deploy 1 or later. If the old binary projected any stamped op, also rebuild the store from the tape on that binary: a fresh replay into a new workspace, as the projection-base rebuilder does (`projectionbase/rebuilder.go:385-395`), installed in place of the live store. Duplicated numbers cannot be repaired |
 
 The old binary's behaviour on a stamped op is a characterization test on
 today's code, written before any change (F5). Today's `projectObject`
 reads only `op.Body` (`project.go:73-74`, `:215-256`), and `Validate` does
 not refuse `Table` values other than the presence tables
-(`projection_batch.go:194-197`) **[V]**. The schema epoch
-(`storeschema/schema.go:17-26`) does not change: an additive table that
-older binaries tolerate is "freely backward compatible". The remaining cost
-of a rollback, an ineligible replay, is named above.
+(`projection_batch.go:194-197`) **[V]**.
+
+**Pre-rollback check, below deploy 1 only, once any op has been stamped**
+(round 2, DeepSeek F1). The default answer is "roll back to deploy 1
+instead". If an older build is truly needed, all four must hold on the
+computer first, read through product routes:
+1. `store.event_table` is off, and at least one event has been appended
+   since the off write. Then the newest `og_objects` event carries the
+   store-wide `stream_seq` maximum, which is what the old seed reads.
+2. No run is open, so no run continues from a `seq` that only
+   `choir_events` holds. This is the idle state an ordinary refresh already
+   waits for.
+3. The appender is drained: no prepared row, and the store's head equals
+   the platform head (`/health` `effective_release.event_head.sequence`
+   stable across two readings while idle). Then boot has no tail to
+   replay.
+4. No rebuild, base publish or restore runs on the old binary while it is
+   deployed.
+
+If 3 or 4 was skipped, the repair is the rebuild in the last column. The
+paper is never idle (an always-busy computer), so for the paper the floor
+is absolute.
 
 ## 5. Failure modes, written before any code, each with its test
 
@@ -602,35 +928,38 @@ noted otherwise.
 
 | # | Failure | Test that catches it |
 |---|---|---|
-| F1 | A seed reads `og_objects` only, so `seq` or `stream_seq` is handed out twice after the cutover or after a reopen | Harness: with the setting on, append batched and acknowledged events across several runs; `reopen` (a new `Store`, so the marks start empty, harness `:201-210`); append more; assert no duplicate `(run_id, owner, seq)` and no duplicate `stream_seq` across both tables. Repeat with batching on, with parallel appenders, and after `ReconstructThroughTarget` |
-| F2 | A reader forgets the union, or merges or limits wrongly | Differential test over all four union methods: one event script into two stores, setting off against setting on, plus a store where the setting toggles in mid-run; identical results for every cursor and limit, including `limit+1` paging in `handleRunEvents`. Source guard: any function in `internal/store` that reads `ogKindEvent` must be on the union-aware list |
+| F1 | A seed reads `og_objects` only, so `seq` or `stream_seq` is handed out twice after the cutover or after a reopen | Harness: with the setting on, append batched and acknowledged events across several runs; `reopen` (a new `Store`, so the marks start empty, harness `:201-210`); append more; assert no duplicate `(run_id, owner, seq)` and no duplicate `stream_seq` across both tables. Repeat with batching on, with parallel appenders, and after `ReconstructThroughTarget`. Include a run's first append with no `choir_events` rows (`MAX` is `NULL`; the append succeeds with seq 1) |
+| F2 | A reader forgets the union, or merges or limits wrongly | Differential test over all four union methods: one event script into two stores, setting off against setting on, plus a store where the setting toggles in mid-run; identical results for every cursor and limit, including `limit+1` paging in `handleRunEvents`. The script includes a trajectory over 10,000 events and over the 3,000 limit, one that spans the toggle, and an owner whose timestamps follow allocation order (the `ListEventsByOwner` boundary of section 4.4 is pinned by a separate test with swapped timestamps, which documents the difference). One event planted in both tables comes back once. Source guard: any function in `internal/store` that reads `ogKindEvent`, or calls `ListObjects` with no kind, must be on the union-aware list. It scans implementations, not interfaces (section 1) |
 | F3 | Live and replay disagree: a wrong position, a wrong table, a `time.Now()` default | Harness: a mixed tape (toggled on, off, on; singles and sealed batches); `ReconstructInto` a fresh store; `replayDoltStateExtractor` of both is equivalent and `replayEligibility` is eligible |
-| F4 | An old checkpoint becomes unverifiable because the empty table enters the witness | Build a witness on a workspace without `choir_events`; open it with the new DDL (empty table); the witness matches (`WitnessContentMatches`). After one stamped op, the table is observed and the old witness no longer matches, which is correct |
+| F4 | An old checkpoint becomes unverifiable because the empty table enters the witness | Build a witness on a workspace without `choir_events`; open it with the new DDL (empty table); the witness matches (`WitnessContentMatches`). After one stamped op, the table is observed and the old witness no longer matches, which is correct. A workspace with no `choir_events` at all extracts without error and without a probe. Every `DoltStateExtractor` built in production omits the empty table (no construction site can opt out) |
 | F5 | An old binary refuses or wedges on a stamped op | **Characterization test on today's `main`, before the change**: `projectBatch` with `Table: "choir_events"` on an object op writes `og_objects` and `Validate` passes |
-| F6 | The dry run's provisional position differs from the final one (extra chunks), or the dry run passes an op that finalize refuses (poison after the CAS) | Hook `DryRunProjectionBatch` (`hookedProjection`, harness `:154`) to record the position; assert it equals the finalized `tape_seq` for every stamped op. Table-driven refusals at the dry run, never on the tape: run_id of 300 characters, zero timestamps, a non-batched kind, a non-`choir.event` object, a non-empty `computer_id` |
+| F6 | The dry run's provisional position differs from the final one (extra chunks), or the dry run passes an op that finalize refuses (poison after the CAS) | Hook `DryRunProjectionBatch` (`hookedProjection`, harness `:154`) to record the position; assert it equals the finalized `tape_seq` for every stamped op. A store with no projection head gives position 1. Table-driven refusals at the dry run, never on the tape: run_id of 300 characters, a metadata `kind` of 200, zero timestamps, `tombstone` set, a non-`choir.event` object. Table-driven acceptances: a non-empty `computer_id` or `version_id` is stored; an absent metadata `kind` is stored as `''`; a kind the binary does not know is stored (F22) |
 | F7 | Re-finalizing (`RecoverPrepared` after a crash) fails on the primary key | Finalize the same prepared event twice, then crash between commit and return and run `RecoverPrepared`: no error, one row |
 | F8 | The lifecycle fold starts writing to the table, so its absent-condition stops meaning anything | `projectLifecycleRun` (a `ReplaceLifecycleActivationRequest`) with a `loop.started` event, setting on: the event is in `og_objects`, a second identical fold returns `ErrConcurrentStateChange`, and a source guard checks that `lifecycle.go` never sets `Table` |
-| F9 | The class leaks: a non-batched kind is stamped | A forcing test over `types.EventKinds()`: only `Batchable()` kinds are ever stamped; `recheckTelemetryOp` also asserts `Table ∈ {"", choir_events}`; the projector refusal from F6 |
-| F10 | The channel read misses events | Pin `EventSystem1Judgment` as acknowledged, and pin `ListEventsByChannel`'s production callers to `system1_verb.go` (a source-scan test). A new caller fails the test and must add a channel index or a union |
-| F11 | The fence is blind to the table | A raw-SQL V1 role leaf in a `choir_events` row makes the full fence pass fail closed |
-| F12 | The manifest reports an empty or absent optional table as missing, or a non-empty one as fine when replay lacks it | `replay_eligibility_test.go`: absent from both sets is eligible; present in both with equal hashes is eligible; present in live only is ineligible |
+| F9 | The class leaks: a kind outside the storage class is stamped, or a batching change moves rows silently | A parser test: every `EventKind` has a storage entry. A forcing test over `types.EventKinds()`: only `StorageEventTable` kinds are ever stamped, and only by a tape-bound store. A test pins the storage map equal to the batched set today, so a change to either fails until someone decides. `recheckTelemetryOp` also asserts `Table ∈ {"", choir_events}` |
+| F10 | The channel read misses events | Pin `EventSystem1Judgment` as acknowledged, and pin `ListAcknowledgedEventsByChannel`'s production callers to `system1_verb.go` in the existing call-site audit (`telemetry_readclass_test.go:23-33`). A new caller fails the test and must add a channel index or a union. The rename makes the contract visible at every call site |
+| F11 | The fences are blind to the table | A raw-SQL V1 role leaf in a `choir_events` row makes the full fence pass fail closed. A replayed stamped op with a V1 role leaf makes `vocabReplayStaysFenced` return false, so the full pass runs; a tracked stamped position that is missing also returns false. A source guard: every `FROM og_objects` in `internal/store/vocab_*.go` comes from `objectRowTables`, except the named V1→V2 plan |
+| F12 | The manifest reports an empty or absent optional table as missing, or a non-empty one as fine when replay lacks it | `replay_eligibility_test.go`: absent from both sets is eligible; present in both with equal hashes is eligible; present in live only, or in replay only, is ineligible (schema drift); `Validate` accepts the new class |
 | F13 | Restore keeps rows after the target head | Stamped events at heads h1 < h2; `ReconstructThroughTarget(h1)`: the maximum `tape_seq` is at most h1, and the witness equals one taken at h1 |
 | F14 | Event-table reads race the projector on the shared engine | A `-race` test with finalize running concurrently with union reads (the pattern of `engine_mutex_live_test.go`) |
 | F15 | Boot scans `og_objects`, or the DDL is slow on a large store | `Open` over many `og_objects` rows: `DOLT_HASHOF_TABLE('og_objects')` is unchanged and the open time is bounded (the pattern of `TestReopenWithManyRowsDoesNotTouchOgObjects`) |
 | F16 | A reader query does not use its index | Plan-shape tests that `EXPLAIN` each `choir_events` query text, as the generated-column plan tests do (`dolt_store.go:1243`) |
-| F17 | The saving is smaller than predicted | Local probe on the harness (journal per batched op, setting off against on, same seed, `doltJournalBytes`, `dolt_maintenance.go:192`). It is directional only; the staging proof decides |
+| F17 | The saving is smaller than predicted | Local probe on the harness (journal per batched op, setting off against on, same seed, `doltJournalBytes`, `dolt_maintenance.go:192`). **It gates deploy 2** (section 4.1): b_ce/b_og at most 0.5 locally before staging. It also measures a 3-tree variant (no trajectory index), so Q2's price is known in KiB. It is directional only: a local miss stops deploy 2, but only staging and the paper can pass it |
 | F18 | The setting is not applied at once, or is lost across a reboot | API test: `POST /api/computer-settings` takes effect without a restart; a crash boot reads it from the store (the gate's "read_at_boot") |
 | F19 | A planned or crash restart adds a resumer | None is added. A source guard keeps the boot path's new statements to the DDL and the setting read (CLAUDE.md, "Restarts End Work") |
 | F20 | The deleted methods have hidden callers | Compilation; the grep in section 1.2 |
 | F21 | Residue import re-emits table rows as ops | The residue snapshot ignores `choir_events` (a test with rows present) |
+| F22 | A binary refuses a stamped op whose kind a later binary added to the storage class: replay poison | Replay a tape with a stamped op of a kind absent from the binary's maps: it projects into `choir_events`, the dry run passes it, and replay equals live (round 2, DeepSeek F2) |
+| F23 | The epoch is not bumped, so an updater-applied release from before deploy 1 lands on a deploy-1 store | `storeschema.Version` is 2. In the pattern of `updater/state_compat_test.go`: a store receipt of 2 and a release built at 1 is refused before mutation |
 
 ## 6. Mutation class, ceremony, staging proof
 
 ### 6.1 Class: red
 
-The change touches the guest store schema, the projector (tape to state),
-replay and restore, the content witness and the replay manifest, the event
-readers (trace, WS catch-up, acceptance evidence) and sequence allocation.
+The change touches the guest store schema and its epoch, the projector
+(tape to state), replay and restore, the content witness and the replay
+manifest, both vocabulary fences, the event readers (trace, WS catch-up,
+acceptance evidence) and sequence allocation.
 
 ### 6.2 Ceremony
 
@@ -638,18 +967,25 @@ readers (trace, WS catch-up, acceptance evidence) and sequence allocation.
   - New: *a durable op's journal cost is paid per touched prolly tree, so
     moving batched telemetry from a 13-tree table to a 4-tree table with a
     sequential key cuts its per-op journal by about 60% and the paper's
-    total by about a third*.
-  - It is falsified if the staging fit gives b_ce/b_og > 0.5, or the
-    paper's total falls by less than 20%.
+    total by about 20 to 35%* (round 1 said about a third; section 2.6).
+  - It is falsified on staging if the fit gives b_ce/b_og > 0.5. On the
+    paper it is falsified if the journal bytes per tape event (reading 3)
+    fall by less than 20%, after allowing for any change in the kind mix
+    (reading 4).
+  - If the paper falls by less than 20%, the next step is the "no
+    telemetry in Dolt" design (section 7), not tuning F-c (round 2,
+    DeepSeek).
   - It refines the record's ranking (F-c first) and makes F-e's value
     larger on the new table.
-- **Protected surfaces.** Store schema (`schemaDDL`); `projectOp` and
-  `projectBatch`; `DryRunProjectionBatch` and `finalizeBatch`; replay
-  (`FinalizeReplayBatch`); the restore witness compare (`selfdevprotocol`);
-  the replay airworthiness manifest; `DoltStateExtractor`; `AppendEvent`
-  and its seeds; the four event read methods. Not touched: the tape event
-  format and reducer, the payload format, the head CAS, auth, vmctl,
-  gateway, deploy routing.
+- **Protected surfaces.** Store schema (`schemaDDL`) and the store schema
+  epoch (`storeschema.Version`); `projectOp` and `projectBatch`;
+  `DryRunProjectionBatch` and `finalizeBatch`; replay
+  (`FinalizeReplayBatch`); both vocabulary fences, full and narrowed; the
+  restore witness compare (`selfdevprotocol`); the replay airworthiness
+  manifest; `DoltStateExtractor`; `AppendEvent` and its seeds; the event
+  kind classification (`types`); the four event read methods and the
+  renamed channel read. Not touched: the tape event format and reducer,
+  the payload format, the head CAS, auth, vmctl, gateway, deploy routing.
 - **Admissible evidence class.**
   - Staging test-computer readings through product routes only:
     `/health` `effective_release.event_head.sequence`;
@@ -661,13 +997,16 @@ readers (trace, WS catch-up, acceptance evidence) and sequence allocation.
   - Not admissible: local claims about the paper's journal; anything read
     over SSH; SQL against a deployed store.
 - **Rollback path.** The setting off (live); then git revert of deploy 2
-  (safe to deploy 1); then git revert of deploy 1, at the costs in 4.5.
+  (safe to deploy 1). Deploy 1 is the floor once any op is stamped. A git
+  revert of deploy 1 is safe only while no op has ever been stamped, or
+  after the pre-rollback check in 4.5.
 - **Heresy delta.** See the closing section.
 
 ### 6.3 Staging proof plan
 
 The proof runs on one fresh test computer, as in the batching gate. These
-are the same readings the record and the gate used.
+are the same readings the record and the gate used. Before any of it, the
+local probe (F17) has passed its go bar (section 4.1).
 
 1. **Same build for both arms.** The gate's flag-off and flag-on intervals
    were on different builds (evidence `environment.between_builds`). Here
@@ -685,6 +1024,8 @@ are the same readings the record and the gate used.
    - Prediction: b_og ≈ 86 KB, b_ce ≈ 30 KB, so b_ce/b_og ≈ 0.35.
    - Pass: b_ce/b_og ≤ 0.5. Report the bytes per telemetry record for both
      arms.
+   - Also report the share of stamped rows with an empty `trajectory_id`
+     (round 2, DeepSeek Q2). It shows how much the trajectory index serves.
 5. **Correctness on the same computer.**
    - Replay completeness is `equivalent` and `eligible` at a head after the
      cutover, with stamped ops in the replayed tail.
@@ -694,6 +1035,8 @@ are the same readings the record and the gate used.
      returns every event the recorded WebSocket published.
    - `POST /api/run-acceptances/synthesize` on a trajectory with stamped
      `tool.result` events cites them.
+   - The replay-completeness report shows manifest version 4, and
+     `choir_events` is neither unknown nor missing.
    - `/api/costs` and the texture diagnosis return events from both tables.
 6. **Crash drill.** An owner lifecycle refresh (SIGKILL), as in gate
    step 4. After the boot: no duplicate numbers, runs closed "interrupted
@@ -702,9 +1045,16 @@ are the same readings the record and the gate used.
    `og_objects`, and readers still return the whole stream.
 8. **Composition.** Batching on, setting on: the fit gives the k = 5 cost
    per telemetry record. After deploy 3, the same with multi-row inserts.
-9. **Paper.** After steps 1 to 8 pass and the panel agrees: set the paper's
-   setting, then take the record's readings 1 to 6 before and after, two
-   samples 600 s apart inside one GC interval.
+9. **Paper.** After steps 1 to 8 pass and the panel agrees:
+   - Take the record's readings 1 to 6 as a baseline **before** the
+     setting write: two samples 600 s apart inside one GC interval. Reading
+     4 also confirms `telemetry.batch` is still off there.
+   - Set the paper's setting, then take the same readings after.
+   - **This is the decision for the paper.** Keep the setting if bytes per
+     tape event (reading 3) fall by at least 20%, after allowing for any
+     change in the kind mix (reading 4). Otherwise turn it off (the live
+     rollback, never a binary rollback below deploy 1) and take the next
+     step named in section 6.2 (round 2, DeepSeek F4 and Q7).
 
 The final artifact is a JSON evidence file in the shape of
 `docs/evidence/telemetry-batching-phase1-staging-2026-10-22.json`.
@@ -714,9 +1064,9 @@ The final artifact is a JSON evidence file in the shape of
 | Alternative | What it would buy | Why F-c wins |
 |---|---|---|
 | **Fewer indexes on `og_objects`, for all kinds** | Every op of every kind pays fewer trees | The 12 indexes exist because their absence was the CPU problem: JSON scans at about 1.4 s per call (`dolt_store.go:212-214`; guest-cpu-is-unindexed-store-scans-2026-10-14). Dolt has no partial indexes, so a record-scoped index costs every kind (`:271-274`, `:318-328`). Dropping one saves 1 of 13 trees per op (about 7%) and regresses its reader. It is also DDL on the largest table |
-| **F-e alone: multi-row upserts in `og_objects`** | -37% per row at k = 6 (raw probe, record) | Useful only with batching on, which cannot go on the paper before the planned-restart drain fix. It still pays 13 trees per statement. It composes with F-c and is stronger there (deploy 3) |
+| **F-e alone: multi-row upserts in `og_objects`** | -37% per row at k = 6 (raw probe, record) | Useful only with batching on, which cannot go on the paper before the planned-restart drain fix. It still pays 13 trees per statement. It composes with F-c and is stronger there (deploy 3). DeepSeek (round 2) suggests landing it on `og_objects` first if the drain fix lands before deploy 2: it has no schema, witness, reader or seed surface. That is compatible with this plan, as its own change sharing deploy 3's multi-row code. It is not made the plan, because the drain fix's date is not known |
 | **A separate Dolt database for telemetry** | GC of telemetry would no longer hold the main store's write connection | It writes the same bytes. Finalize (heads, index and projection) is one transaction on one connection today (`computer_events.go:133-235`); a second database splits it, so a crash between the two leaves a head that says "finalized" over a missing row. The witness, restore and base code assume one database, `texture` (`replay_completeness.go:492`, `rematerialize` workspace swap, `projectionbase`): a second workspace means a second extractor, swap and base. It can be revisited after F-c if GC isolation is still wanted |
-| **No telemetry in Dolt at all**: serve trace reads from the tape (the corpusd payload pages) or a local append-only log | Removes about 90 KiB per op altogether | The trace and acceptance would fate-share with corpusd (standing question 7). A local log is new state with no replay, witness or restore story, and acceptance cites events by id and `stream_seq` as evidence. It is the right long-term question (retention, telemetry-batching design §8), but it is not a first-pass change. F-c keeps every existing invariant (tape → Dolt projection → witness) and is reversible |
+| **No telemetry in Dolt at all**: serve trace reads from the tape (the corpusd payload pages) or a local append-only log | Removes about 90 KiB per op altogether | The trace and acceptance would fate-share with corpusd (standing question 7). A local log is new state with no replay, witness or restore story, and acceptance cites events by id and `stream_seq` as evidence. It is the right long-term question (retention, telemetry-batching design §8), but it is not a first-pass change. F-c keeps every existing invariant (tape → Dolt projection → witness) and is reversible. If the paper falls by less than 20% under F-c (section 6.3, step 9), this is the next design, not a tuned F-c |
 | **Move every `choir.event` (K1)** | About 6% more volume | It moves the lifecycle fold and its condition, the acknowledged evidence kinds and the System1 channel read. It needs a fifth tree, `(channel_id, …)`, or a condition on the new table. Open question Q1 |
 | **A new op kind (`event_recorded`) instead of the stamp** | Explicit in the op kind | Old binaries refuse unknown op kinds at `Validate` (`projection_batch.go:188-190`): a rollback could neither finalize nor replay |
 | **Route by kind in the projector, with no stamp** | No writer change | A new binary's replay of an old tape would put historical events into the new table while the live store holds them in `og_objects`. They are never equivalent, unless every row is moved |
@@ -727,15 +1077,15 @@ The final artifact is a JSON evidence file in the shape of
 
 | # | Question | Default |
 |---|---|---|
-| Q1 | Move only the ten batched kinds (K2), or every `choir.event` (K1)? | **K2.** About 94% of the volume, with no change to the lifecycle fold, the evidence kinds or the channel read |
-| Q2 | Keep the `(trajectory_id, stream_seq)` index (4 trees), or serve acceptance synthesis by fanning out over the trajectory's runs (3 trees, about 7 to 9 KiB less per op)? | **Keep it** in deploy 2. Trajectory derivation has fallbacks (`runtime.go:4611-4619`, `traceTrajectoryIDForRun`), so a fan-out is not provably equal. Revisit with the staging numbers |
-| Q3 | Name: a new `choir_events`, or reuse the legacy empty `events` table (created at boot with two indexes, `store.go:254-268`, `:796-803`, and declared `empty_until_supported`, `replay_eligibility.go:50`)? | **New name.** Reusing it changes an existing manifest class and inherits its columns and indexes. Retiring the legacy table is a separate small change |
-| Q4 | Fold the multi-row insert into deploy 2, or keep it as deploy 3? | **Deploy 3**, so each saving is measured on its own |
-| Q5 | Ship deploy 1 as its own release before deploy 2? | **Yes.** At least one staging day and one paper boot first |
-| Q6 | Existing rows in `og_objects`: never touched, or moved or expired later? | **Never touched by F-c.** Retention, meaning how long trace telemetry is kept, is a separate owner decision with its own design |
-| Q7 | Enable on the paper before the batching drain fix? | **Yes**, after the test computer passes. F-c works with batching off |
-| Q8 | Event-table reads on `readDB` under the engine mutex, or on the write connection as `run_memory_entries` does? | **`readDB` under the engine mutex**, with labelled ops |
-| Q9 | Accept the narrowing of `ListEventsByChannel` to acknowledged kinds for post-cutover rows (pinned by F10), or add a channel index (5 trees)? | **Accept, pinned.** Its only caller reads an acknowledged kind |
+| Q1 | Move only the ten batched kinds (K2), or every `choir.event` (K1)? | **K2.** About 94% of the volume, with no change to the lifecycle fold, the evidence kinds or the channel read. Named by the storage class, not by `Batchable()` (section 2.1; all reviewers agreed) |
+| Q2 | Keep the `(trajectory_id, stream_seq)` index (4 trees), or serve acceptance synthesis by fanning out over the trajectory's runs (3 trees, about 7 to 9 KiB less per op)? | **Keep it, and decide it once, before deploy 1.** Trajectory derivation has fallbacks (`runtime.go:4613-4627`, `traceTrajectoryIDForRun`), so a fan-out is not provably equal. Dropping it later is not free: it changes the table's `SHOW COLUMNS` and so the witness (section 2.3). Gemini's dissent (drop it in deploy 3) and Devin's option are declined for that reason. F17 prices the 3-tree variant locally, and the staging proof reports the empty-`trajectory_id` share (DeepSeek). If the owner wants 3 trees, it must be chosen before deploy 1 |
+| Q3 | Name: a new `choir_events`, or reuse the legacy empty `events` table (created at boot with a primary key and seven secondary indexes: five in `schemaDDL`, `store.go:360-364`, and two added at boot, `:796-803`; declared `empty_until_supported`, `replay_eligibility.go:50`)? | **New name.** Reusing it changes an existing manifest class and inherits its key, columns and indexes. Retiring the legacy table is a separate small change. (Round 1 said "two indexes"; Devin corrected it.) |
+| Q4 | Fold the multi-row insert into deploy 2, or keep it as deploy 3? | **Deploy 3**, so each saving is measured on its own. Its dry run must use the same multi-row statement, so the journal still deduplicates (DeepSeek) |
+| Q5 | Ship deploy 1 as its own release before deploy 2? | **Yes.** At least one staging day and one paper boot first. Deploy 1 is the rollback floor, so keep it as a release you are willing to roll back to for at least a week after deploy 2 (DeepSeek) |
+| Q6 | Existing rows in `og_objects`: never touched, or moved or expired later? | **Never touched by F-c.** Retention, meaning how long trace telemetry is kept, is a separate owner decision with its own design. That design must account for the witness: deleting rows changes it like any other write, so a deletion must itself be a tape act, and a table emptied by retention drops out of the witness by the omission rule (DeepSeek) |
+| Q7 | Enable on the paper before the batching drain fix? | **Yes**, after the test computer passes, with three conditions. `telemetry.batch` (F-a) stays off on the paper until the drain fix lands (Gemini). The paper's baseline readings 1 to 6 are taken before the setting write (DeepSeek). Any rollback goes no lower than deploy 1 (section 4.5). The setting is orthogonal to the drain bug: it does not change what an open window loses (Devin) |
+| Q8 | Event-table reads on `readDB` under the engine mutex, or on the write connection as `run_memory_entries` does? | **`readDB` under the engine mutex**, with labelled ops. Today's owner reads already hold the same mutex on the write connection (`dolt_store.go:723-724`; section 4.4) |
+| Q9 | Accept the narrowing of the channel read to acknowledged kinds for post-cutover rows (pinned by F10), or add a channel index (5 trees)? | **Accept, pinned, and renamed** `ListAcknowledgedEventsByChannel`. Its only caller reads an acknowledged kind. Batched kinds do carry channels (section 1.2), so the name states the contract (DeepSeek F9, Devin) |
 | Q10 | Delete the three caller-less methods in deploy 1? | **Yes** (standing question 4) |
 
 ## 9. Not determined from code
@@ -756,6 +1106,16 @@ The final artifact is a JSON evidence file in the shape of
   need is not known.
 - Whether anything outside this repo reads a guest store's `og_objects`
   for `choir.event`. Nothing was found in code.
+- The `og_objects` row's share of a paper telemetry record's cost, which
+  sets the low end of the 20 to 35% band (section 2.6). Reading 3 bounds
+  it.
+- Whether Dolt reports a column that leads a secondary index in
+  `SHOW COLUMNS`' `Key` field, as MySQL does (`MUL`). If it does, any later
+  index change on `choir_events` changes the witness (section 2.3). The
+  design assumes it does; a one-line check on the harness settles it.
+- Which host paths can put an older guest binary on a computer without
+  the updater, and so without the epoch gate. The code shows only that
+  nothing outside `internal/updater` reads the receipt (section 4.1).
 
 ## Heresy delta
 
@@ -770,14 +1130,38 @@ The final artifact is a JSON evidence file in the shape of
     `ListEventsByTrajectoryAfter`, `ListEventsOG` and `ListEventsByOwnerOG`.
   - `compactRunEventLedger`'s event read is unreachable, and
     `VerifyTextureWorkflow` has no caller.
-  - The legacy `events` table is still created at every boot, with two
-    indexes and no readers.
+  - The legacy `events` table is still created at every boot, with a
+    primary key, seven secondary indexes and no readers (round 1 said two).
   - `ListEventsByChannel` has a single caller, System1.
+  - Round 2: `ListEventsByTrajectory` returns the oldest 3,000 events of
+    its newest-10,000 window (`store.go:2259`, `:2274-2277`). For a
+    trajectory over 3,000 events, acceptance synthesis reads its oldest
+    events, not its newest. F-c keeps this; whether acceptance should read
+    the newest is a reader question of its own.
+  - Round 2: the narrowed vocabulary replay fence skips any replayed id it
+    cannot find in `og_objects` (`vocab_replay_fence.go:179-183`). It
+    would fail open for any object row a replay writes to another table.
+    `choir_events` is the first such table, and F-c handles it.
+  - Round 2: the store schema receipt is written by every `Open` and read
+    only by the updater (`store.go:718-728`; `updater.go:441-463`). An
+    older binary that reaches a computer by another path is not refused,
+    and it rewrites the receipt.
+  - Round 2: the two `DoltStateExtractor` construction sites copy the same
+    `IgnoredTables` and `IgnoredContentColumns` by hand
+    (`agentcore/replay_completeness.go:489-505`,
+    `projectionbase/witness.go:21-35`). A third site would be easy to get
+    wrong.
 - **Introduced (by the design, once built)**
   - A stamped op's projection depends on whether the binary honours
-    `ProjectionOp.Table`: an old binary puts it in `og_objects`.
+    `ProjectionOp.Table`: an old binary puts it in `og_objects`. Hence the
+    floor: once any op is stamped, a binary rollback goes no lower than
+    deploy 1 (a one-way door, fenced by the epoch for updater releases and
+    by the pre-rollback check otherwise).
   - Event reads are a union of two tables until retention.
-  - `ListEventsByChannel` covers acknowledged kinds only for post-cutover
-    rows (pinned).
+  - `ListAcknowledgedEventsByChannel` (renamed) covers acknowledged kinds
+    only for post-cutover rows (pinned).
+  - Two event classifications, durability and storage, pinned equal by a
+    test.
 - **Repaired:** none by this document. Once landed: the 13-tree write
-  amplification of batched telemetry.
+  amplification of batched telemetry, and the narrowed fence's blind spot
+  for rows outside `og_objects`.
