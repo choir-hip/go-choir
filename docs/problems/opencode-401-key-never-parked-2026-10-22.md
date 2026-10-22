@@ -77,5 +77,25 @@ Repair:
    - The 401 parking stays as defense for whichever keys the policy
      admits.
 
+Review (bunch 8b, 2026-10-22 02:10 UTC): flash accepted. Devin accepted
+with edits. Finding 1: a set but blank policy served every key; it is now
+fixed, so only an unset variable means every key. Finding 5: a policy
+that admits no key logged nothing; it is now fixed, and the presence
+check logs the keys in service. Named residuals:
+- systemd's `EnvironmentFile=` overrides `Environment=`. A
+  `GATEWAY_OPENCODE_KEYS` line in `gateway-provider.env` therefore wins
+  over the unit's policy. The file is root-only on the host, and it is
+  never written with that variable: neither
+  `nix/deploy-provider-creds.sh`'s generated list nor any FP0 action
+  writes it. Its upsert mode could, so do not upsert that name.
+- A full credential regeneration through `nix/deploy-provider-creds.sh`
+  writes `OPENCODE_API_KEY`, but no `OPENCODE_API_KEY_ALT_*`. It would
+  leave the policy naming an absent key, and OpenCode would go dark. That
+  fails closed, and the new log line shows it.
+- With opencode-go unregistered, a request for the catalogued
+  `glm-5.3-flash` falls to the gateway's `glm-` prefix heuristic and
+  lands on Z.AI (`internal/gateway/handlers.go:566-569`). The heuristic
+  predates this change; the change only makes "no provider" a real state.
+
 Rollback: revert the repair commit. 401s then fail sessions again, as
 before.
