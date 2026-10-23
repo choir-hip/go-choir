@@ -317,14 +317,21 @@ func (s *Store) RestoreRunMemoryIndexes(ctx context.Context, names []string) (Ru
 	}
 	m.restoring = true
 	m.mu.Unlock()
+	// Registered first so it runs last: restoring clears even if a refresh
+	// probe below panics, so a panic cannot refuse every later migration.
+	defer func() {
+		m.mu.Lock()
+		m.restoring = false
+		m.mu.Unlock()
+	}()
 	defer func() {
 		// The migration's status holds the index fields as of its last step. A
 		// restore changes them, so they are re-read from a fresh inventory, on
 		// success and on failure (a part-built restore is reported as built).
 		// The probes run outside m.mu (a status read never waits on the
 		// database) with restoring still set, so no migration starts between
-		// them and the publish; the publish and restoring=false are one
-		// critical section. A probe that fails keeps the last good field. A
+		// them and the publish; restoring clears after the publish, in the
+		// deferred func above. A probe that fails keeps the last good field. A
 		// store that has run no migration here (State "") is rediscovered by
 		// every status read, so it needs no refresh. The context is fresh: the
 		// caller's may be the reason the restore failed.
@@ -335,7 +342,6 @@ func (s *Store) RestoreRunMemoryIndexes(ctx context.Context, names []string) (Ru
 		probeCancel()
 		m.mu.Lock()
 		defer m.mu.Unlock()
-		m.restoring = false
 		if m.status.State == "" {
 			return
 		}
