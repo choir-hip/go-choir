@@ -1494,7 +1494,7 @@ in
         # cold-boot cycle and a probe). A named computer cold boots once (boot
         # arguments are in the launch-config hash). Rollback: empty the list
         # and redeploy before taking the port or Unbound away.
-        "VMCTL_GUEST_DNS_ONLY="
+        "VMCTL_GUEST_DNS_ONLY=computer-71afbf1461dffabcce8eeebe558d03bd"
         # D-ROUTE and immutable ComputerVersion inputs are tables on the same
         # corpusd world-wire SQL server. vmctl is the sole route CAS writer.
         "VMCTL_ROUTE_DSN=root@tcp(127.0.0.1:13306)/platform?parseTime=true&multiStatements=true&clientFoundRows=true"
