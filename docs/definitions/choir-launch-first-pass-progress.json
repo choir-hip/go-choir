@@ -1,5 +1,5 @@
 {
- "as_of": "2026-10-23T01:33Z",
+ "as_of": "2026-10-23T01:50Z",
  "main": "fd564dbbc",
  "items": [
   {
@@ -91,8 +91,8 @@
     },
     {
      "name": "containment gaps fix (deploy.env rename, caddy/goproxy/qdrant/searx)",
-     "stage": 3,
-     "evidence": "lane/fp3-containment-gaps 2b145c0bb; bunch 106 accept (20:29) after rounds 2-2c; not on main",
+     "stage": 4,
+     "evidence": "D6 lands alone with the nix store policy (stage eb3f82b1c rebased 8890b4fa3 on 6cc19c797)",
      "history": [
       {
        "stage": 1,
@@ -106,6 +106,10 @@
       {
        "stage": 3,
        "at": "2026-10-22T20:29Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-23T01:50Z"
       }
      ]
     },
@@ -2595,7 +2599,7 @@
      ]
     }
    ],
-   "next": "Owner review of the seam design; first inert seam slice."
+   "next": "Owner 2026-10-23: keep Firecracker 1.17; CH stays on the itinerary, not a priority. Goal beyond M7: a computer moves between backends transparently (planned restart into the other backend with its disks; memory snapshots do not cross, F15), and agentic red-teaming runs on both. Check whether CH's virtio-mem placement fits Node B's 39-bit physical addresses (Firecracker's does not, #6255)."
   },
   {
    "id": "RES-21",
@@ -3399,8 +3403,8 @@
     },
     {
      "name": "crash boot closes open rounds from cached heads, schedules armed first",
-     "stage": 4,
-     "evidence": "D5 lands alone (stage 157e3115a, mirror deployD5cm PASS)",
+     "stage": 6,
+     "evidence": "D5 6cc19c797 deployed 01:42:18; test computer 71afbf14 crash proof steps 1-4 PASS; step 5 waits for the paper's next crash boot",
      "history": [
       {
        "stage": 1,
@@ -3414,6 +3418,10 @@
       {
        "stage": 4,
        "at": "2026-10-23T01:33Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-23T01:49Z"
       }
      ]
     },
@@ -3569,7 +3577,7 @@
     {
      "name": "repack tool: copy only, census",
      "stage": 2,
-     "evidence": "fix round fd09566db (F1 shared-file scope, F2 sealed-only); bunch 139 in review",
+     "evidence": "round 2 0866a7663 (segment receipts and event digests in attribution, mtime guard, fail-closed dropped receipts); bunch 140 in review",
      "history": [
       {
        "stage": 1,
