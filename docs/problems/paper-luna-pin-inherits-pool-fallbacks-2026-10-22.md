@@ -1,6 +1,7 @@
 # The paper's gpt-6-luna pin inherits the default pool's fallbacks
 
-Status: open. This record documents the problem first; this commit has no
+Status: fixed in lane/fp0-pin-hardening (see the 2026-10-23 update at the end;
+not yet on main). This record documented the problem first; the first commit had no
 fix. Mutation class of a fix: orange, with full ceremony, because it
 touches model routing.
 
@@ -104,3 +105,51 @@ that tightens its validator to the documented set would 400 the thread
 otherwise.
 
 Evidence: code reading only. No trace shows any of the three firing.
+
+### Disposition (fix round fp0-pin-hardening, orange, rollback: `git revert` the fix commit)
+
+1. Pin fallbacks: fixed. `Assign` returns no fallbacks for a concrete
+   provider/model, in any pool; the default-pool-member rule is deleted. A
+   pool spec still fails over inside its pool (except `synthetic-luna`), and
+   a retired model remapped to the default pool keeps that pool's
+   fallbacks because it asked for the pool. Test:
+   `TestAssignExplicitPinGetsNoDefaultPoolFallbacks` (a two-member default
+   pool through the `catalogPools` seam; fails on the prior tip).
+2. Unknown pool: fixed by failing closed, not by keeping the remap. The
+   policy and overlay parsers reject a pool the catalog does not name, with
+   the pool in the error. A rejected file is handled like every invalid
+   file: `Load` returns the last valid policy, else the platform policy,
+   plus the error; every run's metadata carries `llm_policy_error` naming the
+   pool, and the resolve API reports `policy_error`. The Texture
+   prompt-eval and engineering-assignment paths already refuse a run whose
+   policy has an error, so they now fail for such a file. Other runs
+   (conductor, research, management, co-agent spawn) ignore the error and
+   run on the platform policy as they do for any invalid file; this is the
+   existing handling, not a new loop or crash. Defense in depth: `Assign`
+   no longer remaps (assignment `unknown_pool`, unresolved selection),
+   `EnrichMetadata` adds the error, and a research child refuses the
+   selection. Existing files: the platform default text names only
+   `pool:default`, and `pool:synthetic-luna` is the one other pool; no
+   test or default names another pool. A computer whose own file names a
+   pool the catalog lacks (I could not look at any live file, no SSH) would
+   now see the error where it previously ran on the default pool; for the
+   old pools `default` the platform policy gives the same model. Test:
+   `TestUnknownPoolFailsClosedNamingThePool`.
+3. Synthetic effort: fixed, and I chose the advertised enum as the
+   contract: `minimal` maps to `none`, `medium` maps to `high` (same
+   thinking mode as the probe in Q2 showed), so the provider only ever
+   sends none, low, high, xhigh or max, or omits the field. Test:
+   `TestSyntheticReasoningEffortNeverSendsAnInvalidValue`.
+
+Declined: an explicit fallback in the policy file. No such field exists.
+`fallback_provider` and `fallback_model` are aliases of `provider` and
+`model` in `applyValue`, kept because old platform-default files used them
+as the primary (a test still parses such a file), so a `fallback_model` line
+sets the primary, not a failover. Adding a real fallback field would touch
+`LLMSelection`, overlays, fill and the runtime; R2 says fail rather than fall
+back, so it is not built here.
+
+Residual (named, not fixed): the `fallback_*` key aliases are misleading and
+could be renamed or rejected in a later policy-version bump. Evidence
+collection for the original claim (paper run metadata after 21:42) is
+unchanged and still wanted before this record closes.
