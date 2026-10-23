@@ -74,7 +74,7 @@ sleep $OPT_window
 t2=\$(date +%s.%N); s2=\$(curl -fsS --max-time 60 -H \"\$H1\" -H 'X-Authenticated-User: $T_USER' -H 'X-Authenticated-Computer: $T_COMPUTER' '$T_URL/api/runtime/observability')
 printf '{\"t1\":%s,\"s1\":%s,\"t2\":%s,\"s2\":%s}\\n' \"\$t1\" \"\$s1\" \"\$t2\" \"\$s2\"")
 	[ "$PROOF_DRY" = 1 ] && return 0
-	out=$(printf '%s' "$raw" | jq -c --arg label "$OPT_label" '
+	out=$(printf '%s' "$raw" | jq -c --arg lbl "$OPT_label" '
 		(.s1.engine_mutex // {}) as $x | (.s2.engine_mutex // {}) as $y |
 		($y | to_entries | map({op: .key,
 			calls: (.value.calls - ($x[.key].calls // 0)),
@@ -82,7 +82,7 @@ printf '{\"t1\":%s,\"s1\":%s,\"t2\":%s,\"s2\":%s}\\n' \"\$t1\" \"\$s1\" \"\$t2\"
 			wait_ms: ((.value.wait_ns - ($x[.key].wait_ns // 0)) / 1e6),
 			max_hold_ms: (.value.max_hold_ns / 1e6)})
 			| map(select(.calls > 0))) as $ops |
-		{label: $label, window_s: ((.t2 | tonumber) - (.t1 | tonumber)), ops: ($ops | sort_by(-.hold_ms)),
+		{"label": $lbl, window_s: ((.t2 | tonumber) - (.t1 | tonumber)), ops: ($ops | sort_by(-.hold_ms)),
 		 total_hold_ms: ($ops | map(.hold_ms) | add // 0)}' 2>/dev/null)
 	if [ -z "$out" ]; then
 		fail "could not read two engine_mutex samples from $T_URL (is the guest answering /api/runtime/observability?)"
