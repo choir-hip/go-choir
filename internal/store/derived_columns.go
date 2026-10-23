@@ -44,6 +44,16 @@ type DerivedColumnMigrationStatus struct {
 	Steps     []objectgraph.AccessPathStep `json:"steps"`
 	Plan      objectgraph.AccessPathPlan   `json:"plan"`
 	Error     string                       `json:"error,omitempty"`
+	// RunMemoryKindIndex is nil until the store reports it.
+	RunMemoryKindIndex *RunMemoryKindIndexStatus `json:"run_memory_kind_index,omitempty"`
+}
+
+// RunMemoryKindIndexStatus is the state of the run_memory_entries kind index,
+// the one access path of this operation that is not on og_objects.
+type RunMemoryKindIndexStatus struct {
+	Name    string `json:"name"`
+	Present bool   `json:"present"`
+	HasRows bool   `json:"has_rows"`
 }
 
 type derivedColumnMigration struct {
