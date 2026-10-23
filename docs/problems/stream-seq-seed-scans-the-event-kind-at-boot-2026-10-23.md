@@ -237,3 +237,93 @@ among the newest K objects of any kind by `updated_at`, through the
 and only `metadata` read. It differs from the old seed in one case, an event
 history whose newest event is older than the newest K objects of every kind;
 see the fix section.
+
+## The fix (option 1, no schema change; red)
+
+Mutation class: red (the event sequence allocator, on the guest boot path).
+Protected surfaces: `allocateEventSeqLocked` / the stream_seq allocator, the
+boot path's first event append. Rollback: revert the commit; the seed returns
+to the newest-500 `ListObjects`. No stored data, schema or index changes.
+
+What changed:
+
+- `objectgraph.DoltStore.ListNewestObjectHeaders(limit)` reads
+  `SELECT object_kind, metadata FROM og_objects ORDER BY updated_at DESC
+  LIMIT ?`. The plan is a reverse walk of `idx_og_objects_updated`, no sort,
+  no kind index, no body (pinned by
+  `TestNewestObjectHeadersPlanWalksTheTimeIndex`). It is named on the engine
+  mutex. `HasObjectOfKind` is one seek of the kind index.
+- `Store.seedStreamSeq` reads the newest 2,000 objects of any kind, takes the
+  maximum `stream_seq` from the metadata of the events among them, and widens
+  to 50,000 only if the first window holds no event. If neither does, one
+  `HasObjectOfKind` seek tells a store with no events (seed 0) from events out
+  of reach. Then the event table's seed and the sealer's gap, unchanged.
+
+### Does a bounded read keep the no-reuse invariant?
+
+Yes under the assumption the old seed made, and no worse in any case that can
+occur in the product, with one named exception.
+
+- The old seed assumed the newest events by `updated_at` carry the maximum
+  `stream_seq`. The new one assumes the same of the newest objects of every
+  kind. They differ only when the last event is older than the newest 2,000
+  (then 50,000) objects of other kinds. Events are the most frequent write of
+  the store, run-state events are folded into the same batches as the
+  projection writes, and a boot's own run closures emit events, so such a
+  stretch is not expected (a hypothesis from the write paths, not a measured
+  rate); the tests exercise it (2,600 later
+  objects of another kind; the widening).
+- The exception: events exist and every one is older than the newest 50,000
+  objects of all kinds. The seed logs `stream_seq seed: choir.event objects
+  exist but none is among the newest 50000 objects, out of reach of the
+  bounded seed` and seeds from the event table alone. That could reuse a
+  number. It is detected, loud, and not silent. Option 2 (a persisted
+  high-water mark written with each batch commit or the guest checkpoint,
+  seeded from plus a bounded catch-up) is the exact fix for this case and is
+  proposed, not built: it adds a write to every batch and a state authority
+  beside the tape, which is a larger decision than this record.
+- Unchanged: the telemetry gap (`telemetrySeqGap`, applied once, after the
+  maximum of both tables), the event-table half, and the per-run seed.
+
+### Results
+
+Plan and timing, `TestStreamSeqSeedScale` (env-gated, repeatable:
+`CHOIR_STREAM_SEQ_SEED_SCALE=2000,20000,60000 go test ./internal/store -run
+TestStreamSeqSeedScale -v -count=1`), best of three, warm, same store shape as
+Phase 1:
+
+| events | old seed statement | new seed (`seedStreamSeq`, whole) |
+|---|---|---|
+| 2,000 | 5.7 ms | 6.6 ms |
+| 20,000 | 47 ms | 8.5 ms |
+| 60,000 | 148 ms | 9.3 ms |
+
+The old statement grows with the kind (TopN over the kind index); the new
+read's time is the window's. The slight growth of the new column is the index
+depth, not the kind: it reads 2,000 entries at every size. The cold case on the
+paper cannot be reproduced locally; the plan, not the warm time, is the claim:
+no read of any row of the event kind, no body.
+
+Tests: the new `TestStreamSeqSeed*` (store), `TestNewestObjectHeaders*`,
+`TestHasObjectOfKind` (objectgraph); `TestEventTableReadersAreUnionAware` lists
+`seedStreamSeq`. The test that failed before the fix is
+`TestStreamSeqSeedDoesNotListTheEventKind` (the engine-mutex counters showed
+one `ListObjects choir.event` on the first append).
+
+### Heresy delta
+
+- Discovered: a comment stating an O(1) bound the plan does not give (the
+  seed); the same shape in the per-run seed, `ListEventsByOwnerAfter`, the
+  boot run-header list, and the worker-update body readers (Phase 1 list).
+- Introduced: the out-of-reach exception above (detected and logged).
+- Repaired: the seed's read of the event kind, its comment (now states the
+  assumption and the exception).
+
+### Follow-ups named, not done here
+
+1. `ListEventsByOwnerAfter` (limit 100,000 with bodies, first live catch-up
+   after every boot) is the next stall; it needs a bounded `stream_seq` read.
+2. The per-run seed reads up to 10,000 bodies for a maximum.
+3. Boot `ListAllObjectRefsByKindOwner(choir.run)` is linear in run history.
+4. Option 2, the persisted high-water mark, if the out-of-reach log line is
+   ever seen on a computer.
