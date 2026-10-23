@@ -389,6 +389,98 @@ Heresy delta of this pass: discovered, none new; introduced, a write-pool
 the connection exactly as before; the log is the only new output); repaired,
 the unconditional cursor read in `recoverPartialActCommit`.
 
+## The first cold read: 16.7 s (D15 observation, 10:41 UTC)
+
+D15 (`ff5cb4cbb`, deployed 10:41:36) carries the slow-read log. Its first
+line, from the paper:
+
+```text
+run_memory_agent_list slow site=desk_cell_start agent=management:e5962310-8767-4624-87e5-a9b93a4e1db1 kinds=1 rows_returned=14965 conn_wait_ms=0 first_row_ms=16648 iterate_ms=49 elapsed_ms=16699 calls_since_open=1
+```
+
+**[V]** (the console line, copied by FP0). It answers three of the open
+questions of "What this does not settle":
+
+- the long call site is `desk_cell_start`, the first call after a boot
+  (`calls_since_open=1`);
+- the call does not wait for the connection (`conn_wait_ms=0`) and does not
+  spend its time scanning or decoding (`iterate_ms=49` for 14,965 rows, 3
+  microseconds a row); it holds the write connection for 16.6 s before the
+  first row, in the plan, fetch and in-memory sort of the whole desk range:
+  `first_row_ms` is the cold read of the desk's rows through
+  `idx_run_memory_entries_owner_agent_created` and the `kind` filter above it;
+- the management desk holds 14,965 cursor rows, about 15,000. Locally, warm,
+  that read is 34 ms with the kind index and 510 ms without at 20,000 cursor
+  rows (100,000 desk rows); 16.6 s is 30 to 500 times the warm number, which
+  is the cold-chunk gap the stacks suggested. The warm local figures cannot
+  be used to size it; only the shape (rows read versus rows wanted) is
+  portable. **[H]** that the kind index cuts the cold read by the same ratio
+  as the warm one (the rows fetched fall from the whole desk range to the
+  cursor rows, which are 20% of a row mix we guessed).
+
+Every `/health` read that arrives in those 16.6 s answers 503
+`store_stalled`, and every writer waits.
+
+## Shape 3: how the index gets onto a live store
+
+Questions asked before writing code, answered from the repo.
+
+**What mechanism does this repo have for an index on a populated table?**
+Two exist and one is a trap.
+
+- *The trap, `schemaDDL`.* `store.go:599-602` creates the existing
+  `run_memory_entries` indexes with `CREATE INDEX IF NOT EXISTS` in
+  `schemaDDL`, applied by `bootstrap` at every `Open` (`store.go:1001`). A
+  fourth index line there would build on the paper at its first boot after
+  the deploy, on the boot path, before the listener, holding the engine for as
+  long as the build takes. That is the shape the repo has already refused
+  twice: [boot-alters-og-objects-when-older-columns-missing-2026-10-21.md](boot-alters-og-objects-when-older-columns-missing-2026-10-21.md)
+  and [stored-column-add-blocks-paper-boot-2026-10-21.md](stored-column-add-blocks-paper-boot-2026-10-21.md),
+  and R5 of the journal record ("run as an explicit migration, never at
+  boot"). So the index does **not** go in `schemaDDL`.
+- *The mechanism, the explicit access-path operation.* Derived columns and
+  indexes are added at open only to an empty table; on a table with rows the
+  boot is discovery only and the operator adds them with `POST
+  /internal/store/derived-columns?action=migrate` (host peer only, one step at
+  a time, cancellable, progress on `GET`; `internal/store/derived_columns.go`,
+  `internal/autoputer/derived_columns.go`). Its DDL steps run under the shared
+  engine mutex through `DoltStore.WithEngine`, the hook the F-c event table
+  uses for a table outside the object graph (`event_table.go:258`). That is
+  the mechanism used here: the run-memory kind index becomes one more step of
+  that operation. It is a per-computer act at a time the operator chooses.
+
+**Does it need a store schema epoch bump? No.** `storeschema.Version`'s
+contract asks for a bump when a change "is not freely backward compatible
+for older binaries". An additive secondary index is. An older binary's
+`schemaDDL` is `CREATE INDEX IF NOT EXISTS` for its own three indexes and
+leaves a fourth alone; its queries are the same SQL and the planner may even
+use the new index. The content witness hashes rows, not indexes
+(`computerversion.queryTableContentHash` is `SELECT *`;
+`projectionbase.witnessForWorkspace`), and the replay manifest names tables
+and columns, not indexes. Nothing keys on the epoch for an index, so there
+is no floor to raise, and the same reasoning is why the F-c table needed a
+bump (an old binary cannot know the table) and this does not. The CI
+store-floor guard named in the ledger is not in `main` (`grep` finds it only in
+the ledger), so there is nothing here for it to fence. **[V]** (code and docs
+read); **[H]** that no off-repo tool reads the index set.
+
+**Index order, from a plan test on 100,000 rows.** Three orders were built on
+a scratch store and planned against the query's four real shapes (owner and
+one kind, owner and two kinds, no owner and one kind, owner and all kinds):
+`(owner_id, agent_id, kind, created_at)`, `(agent_id, kind, owner_id,
+created_at)` and `(agent_id, owner_id, kind, created_at)`. All three turn the
+owner-and-kind shapes from a range of the whole desk with `kind` filtered
+above it (80 ms) into an index range on `kind` (1.1 ms, no filter above). The
+`(owner_id, ...)` order leaves the no-owner shape on a full table scan (93 ms)
+because the planner cannot skip the leading column. Both agent-leading orders
+serve it (0.8 and 1.9 ms). `(agent_id, kind, owner_id, created_at)` is chosen:
+it serves every shape the function has, the owner-empty full scan the first
+pass of this record called a latent trap goes away, and `kind` equality before
+the `owner_id` equality gives the narrowest range. With all kinds the planner
+keeps the existing `(owner_id, agent_id, created_at)` index. The sort on
+`(created_at, seq)` remains above the access (it now sorts the cursor rows
+only).
+
 ## Next (not in this pass)
 
 Shape 1 (keyed cursor state, red), shape 3 (the `(owner_id, agent_id, kind,
