@@ -27,6 +27,11 @@ var (
 	ErrUnsupportedVersion = errors.New("tracelog: unsupported format version")
 )
 
+// unsupportedSegment is the error for a segment this binary cannot read.
+func unsupportedSegment(segno uint64, what string) error {
+	return fmt.Errorf("%w: %w: segment %d %s", ErrCorrupt, ErrUnsupportedVersion, segno, what)
+}
+
 func corruptf(format string, args ...any) error {
 	return fmt.Errorf("%w: "+format, append([]any{ErrCorrupt}, args...)...)
 }
@@ -133,7 +138,7 @@ const (
 	headerOK headerClass = iota
 	headerTorn
 	headerBad
-	headerNewer
+	headerUnsupported
 )
 
 // classifyHeader says what a segment file's first bytes are. head holds up to
@@ -154,11 +159,10 @@ func classifyHeader(head []byte, segno uint64) (class headerClass, hdrLen int, c
 		return headerBad, 0, time.Time{}, ""
 	}
 	if len(head) >= 12 {
+		// Our magic with any other version is not foreign: it is a format this
+		// binary does not know (older or newer), never to be set aside.
 		if v := binary.BigEndian.Uint32(head[8:12]); v != formatVersion {
-			if v > formatVersion {
-				return headerNewer, 0, time.Time{}, ""
-			}
-			return headerBad, 0, time.Time{}, ""
+			return headerUnsupported, 0, time.Time{}, ""
 		}
 	}
 	if string(head[:n]) != string(want[:n]) {
@@ -239,13 +243,19 @@ func encodeLine(buf []byte, m *Meta, line []byte) ([]byte, error) {
 	return finishRecord(buf), nil
 }
 
-func encodeBoundary(buf []byte, b Boundary) []byte {
+func encodeBoundary(buf []byte, b Boundary) ([]byte, error) {
+	if len(b.Reason) > MaxRecordBytes/2 {
+		return buf, ErrTooLarge
+	}
 	buf = append(buf[:0], 0, 0, 0, 0, 0, 0, 0, 0, typeBoundary)
 	buf = binary.AppendUvarint(buf, uint64(len(b.Reason)))
 	buf = append(buf, b.Reason...)
 	buf = binary.AppendVarint(buf, b.HeadSeq)
 	buf = binary.AppendVarint(buf, timeNanos(b.At))
-	return finishRecord(buf)
+	if len(buf)-recHeaderSize > MaxRecordBytes {
+		return buf, ErrTooLarge
+	}
+	return finishRecord(buf), nil
 }
 
 type recHeader struct {

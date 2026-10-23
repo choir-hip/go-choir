@@ -54,19 +54,24 @@ type pair [2]uint32 // (owner, run) or (owner, trajectory)
 // and lookups by run and trajectory. The open segment's is bounded by the
 // record cap (F18).
 type segIdx struct {
-	strs      strTab
-	ents      []ent
-	byRun     map[pair][]int32
-	byTraj    map[pair][]int32
-	nBound    int // boundary records
-	monotone  bool
-	minStream int64
-	maxStream int64
-	minTs     int64
-	maxTs     int64
-	kindN     map[uint32]int64
-	kindBytes map[uint32]int64
-	lastStr   int64 // last stream_seq added, for the monotone check
+	strs   strTab
+	ents   []ent
+	byRun  map[pair][]int32
+	byTraj map[pair][]int32
+	nBound int // boundary records
+	// Damaged spans the scan skipped (design 9.2 item 4): the count and bytes
+	// are exact; the list is capped at maxSpans.
+	damagedRecords int64
+	damagedBytes   int64
+	spans          [][2]int64
+	monotone       bool
+	minStream      int64
+	maxStream      int64
+	minTs          int64
+	maxTs          int64
+	kindN          map[uint32]int64
+	kindBytes      map[uint32]int64
+	lastStr        int64 // last stream_seq added, for the monotone check
 }
 
 func newIdx() *segIdx {
@@ -133,6 +138,13 @@ type Summary struct {
 	Owners    []string            `json:"owners"`
 	Runs      map[string][2]int64 `json:"runs"`         // owner NUL run to [min seq, max seq]
 	Trajs     map[string][2]int64 `json:"trajectories"` // owner NUL trajectory to [min stream_seq, max stream_seq]
+
+	// DamagedRecords counts the spans of the file that failed their checks and
+	// were skipped; DamagedBytes their total size; DamagedSpans the first
+	// maxSpans of them as [offset, length].
+	DamagedRecords int64      `json:"damaged_records"`
+	DamagedBytes   int64      `json:"damaged_bytes"`
+	DamagedSpans   [][2]int64 `json:"damaged_spans,omitempty"`
 }
 
 func runKey(owner, run string) string { return owner + "\x00" + run }
@@ -145,6 +157,7 @@ func (x *segIdx) summarize(validEnd int64, created, sealed time.Time) *Summary {
 		CreatedAt: created.UnixNano(), SealedAt: sealed.UnixNano(),
 		KindCount: map[string]int64{}, KindBytes: map[string]int64{},
 		Runs: map[string][2]int64{}, Trajs: map[string][2]int64{},
+		DamagedRecords: x.damagedRecords, DamagedBytes: x.damagedBytes, DamagedSpans: x.spans,
 	}
 	for id, n := range x.kindN {
 		s.KindCount[x.str(id)] = n
@@ -241,11 +254,13 @@ func parseIdxHeader(b []byte) (idxHeader, error) {
 	if string(b[:8]) != idxMagic {
 		return idxHeader{}, corruptf("index magic")
 	}
-	if crc32.Checksum(b[:idxHeaderSize-4], crcTable) != binary.BigEndian.Uint32(b[idxHeaderSize-4:idxHeaderSize]) {
-		return idxHeader{}, corruptf("index header checksum")
-	}
+	// The version is read before the checksum: a format this binary does not
+	// know may lay its header out differently, and must not read as damage.
 	if v := binary.BigEndian.Uint32(b[8:12]); v != formatVersion {
 		return idxHeader{}, corruptf("index version %d: %w", v, ErrUnsupportedVersion)
+	}
+	if crc32.Checksum(b[:idxHeaderSize-4], crcTable) != binary.BigEndian.Uint32(b[idxHeaderSize-4:idxHeaderSize]) {
+		return idxHeader{}, corruptf("index header checksum")
 	}
 	return idxHeader{
 		segno:      binary.BigEndian.Uint64(b[12:20]),
@@ -318,5 +333,18 @@ func decodeIndex(b []byte) (idxHeader, *Summary, *segIdx, error) {
 		p += entSize
 	}
 	x.nBound = s.Records - s.Lines
+	x.damagedRecords, x.damagedBytes, x.spans = s.DamagedRecords, s.DamagedBytes, s.DamagedSpans
 	return h, s, x, nil
+}
+
+// maxSpans caps the damaged spans listed in an index.
+const maxSpans = 64
+
+// addSpan records one skipped span.
+func (x *segIdx) addSpan(off, n int64) {
+	x.damagedRecords++
+	x.damagedBytes += n
+	if len(x.spans) < maxSpans {
+		x.spans = append(x.spans, [2]int64{off, n})
+	}
 }

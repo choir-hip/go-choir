@@ -2,7 +2,9 @@ package tracelog
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
+	"log"
 	"math"
 	"os"
 	"path/filepath"
@@ -27,6 +29,9 @@ type SegmentInfo struct {
 	MinStream  int64
 	MaxStream  int64
 	MinTime    time.Time
+	// DamagedRecords spans of the file were skipped, DamagedBytes in all.
+	DamagedRecords int64
+	DamagedBytes   int64
 }
 
 // Floor is the oldest line the log still holds, so a reader can tell "older
@@ -46,7 +51,10 @@ const maxLoadedIndexes = 4
 // the open segment through the Log's in-memory index; one made by OpenReader
 // reads the files alone, and scans an unsealed segment's whole records.
 // Segments deleted by retention while a read is under way are skipped, never
-// an error, and a file already open is read to its end.
+// an error, and a file already open is read to its end. A segment whose header,
+// index or record version this binary does not know is never read around: the
+// query returns the records of the other segments together with an error that
+// is ErrUnsupportedVersion (design 9.2 item 10).
 type Reader struct {
 	dir  string
 	live *Log
@@ -57,17 +65,18 @@ type Reader struct {
 
 	rebuilds atomic.Int64
 	skipped  atomic.Int64
+	logf     func(format string, args ...any)
 }
 
 // OpenReader returns a reader over dir. It touches nothing until used.
 func OpenReader(dir string) *Reader {
-	return &Reader{dir: filepath.Clean(dir), states: map[uint64]*segState{}}
+	return &Reader{dir: filepath.Clean(dir), states: map[uint64]*segState{}, logf: log.Printf}
 }
 
 // Reader returns the log's reader, which sees the open segment's index.
 func (l *Log) Reader() *Reader {
 	l.readerOnce.Do(func() {
-		l.reader = &Reader{dir: l.dir, live: l, states: map[uint64]*segState{}}
+		l.reader = &Reader{dir: l.dir, live: l, states: map[uint64]*segState{}, logf: l.logf}
 	})
 	return l.reader
 }
@@ -165,6 +174,7 @@ type segState struct {
 	idx     *segIdx     // sealed: loaded entries, or nil
 	scan    *scanResult // unsealed: the incremental scan
 	rebuilt bool        // sealed, but indexed by scanning because the .tidx was bad
+	logged  bool        // damage in this segment has been logged
 }
 
 func (r *Reader) state(f segFile) *segState {
@@ -178,9 +188,9 @@ func (r *Reader) state(f segFile) *segState {
 	return st
 }
 
-// touch records that a sealed segment's entries were just used, and drops the
-// entries of the least recently used ones beyond the bound. It is called with
-// no segment lock held.
+// touch records that a segment's entries were just used, and drops the
+// entries (a loaded index, or the scan of an unsealed segment) of the least
+// recently used ones beyond the bound. It is called with no segment lock held.
 func (r *Reader) touch(segno uint64) {
 	r.mu.Lock()
 	for i, n := range r.loaded {
@@ -200,15 +210,24 @@ func (r *Reader) touch(segno uint64) {
 	r.mu.Unlock()
 	for _, st := range evict {
 		st.mu.Lock()
-		st.idx = nil
+		st.idx, st.scan = nil, nil
 		st.mu.Unlock()
 	}
 }
 
 func (r *Reader) tlogPath(segno uint64) string { return filepath.Join(r.dir, segmentName(segno)) }
 
+func (r *Reader) noteDamage(segno uint64, st *segState, x *segIdx) {
+	if x.damagedRecords > 0 && !st.logged {
+		st.logged = true
+		r.logf("tracelog: segment %d: %d damaged span(s), %d bytes, skipped; the lines around them are served", segno, x.damagedRecords, x.damagedBytes)
+	}
+}
+
 // loadSealed fills st.sum (and st.idx when wantIdx) from the .tidx, or by
-// scanning the .tlog when the index is missing or bad. st.mu is held.
+// scanning the .tlog when the index is missing or bad. An index of a version
+// this binary does not know is an error, never a reason to scan. A scan made
+// only for the summary keeps no entries. st.mu is held.
 func (r *Reader) loadSealed(f segFile, st *segState, wantIdx bool) error {
 	if st.sum != nil && (!wantIdx || st.idx != nil) {
 		return nil
@@ -219,8 +238,12 @@ func (r *Reader) loadSealed(f segFile, st *segState, wantIdx bool) error {
 			b, err := os.ReadFile(path)
 			if err == nil {
 				h, sum, x, derr := decodeIndex(b)
+				if errors.Is(derr, ErrUnsupportedVersion) {
+					return fmt.Errorf("segment %d index: %w", f.segno, derr)
+				}
 				if derr == nil && h.segno == f.segno && h.tlogSize <= f.tlogSize {
 					st.sum, st.idx = sum, x
+					r.noteDamage(f.segno, st, x)
 					return nil
 				}
 			} else if errors.Is(err, fs.ErrNotExist) {
@@ -231,6 +254,9 @@ func (r *Reader) loadSealed(f segFile, st *segState, wantIdx bool) error {
 			if err == nil {
 				sum, h, derr := readSummary(fh)
 				fh.Close()
+				if errors.Is(derr, ErrUnsupportedVersion) {
+					return fmt.Errorf("segment %d index: %w", f.segno, derr)
+				}
 				if derr == nil && h.segno == f.segno && h.tlogSize <= f.tlogSize {
 					st.sum = sum
 					return nil
@@ -254,13 +280,17 @@ func (r *Reader) loadSealed(f segFile, st *segState, wantIdx bool) error {
 		st.rebuilt = true
 		r.rebuilds.Add(1)
 	}
-	st.idx = res.idx
+	if wantIdx {
+		st.idx = res.idx
+	}
 	st.sum = res.idx.summarize(res.validEnd, res.created, f.tlogMod)
+	r.noteDamage(f.segno, st, res.idx)
 	return nil
 }
 
 // readSummary reads the header and summary from the front of a .tidx without
-// reading its entries.
+// reading its entries. A summary length longer than the file is refused before
+// anything is allocated for it.
 func readSummary(fh *os.File) (*Summary, idxHeader, error) {
 	front := make([]byte, idxHeaderSize)
 	if _, err := fh.ReadAt(front, 0); err != nil {
@@ -270,8 +300,12 @@ func readSummary(fh *os.File) (*Summary, idxHeader, error) {
 	if err != nil {
 		return nil, h, err
 	}
-	if h.summaryLen > 1<<28 {
-		return nil, h, corruptf("index summary of %d bytes", h.summaryLen)
+	info, err := fh.Stat()
+	if err != nil {
+		return nil, h, err
+	}
+	if int64(h.summaryLen) > info.Size()-idxHeaderSize-4 {
+		return nil, h, corruptf("index summary of %d bytes in a file of %d", h.summaryLen, info.Size())
 	}
 	front = make([]byte, idxHeaderSize+int(h.summaryLen)+4)
 	if _, err := fh.ReadAt(front, 0); err != nil {
@@ -299,6 +333,7 @@ func (r *Reader) loadUnsealed(f segFile, st *segState) error {
 			return err
 		}
 		st.scan = &res
+		r.noteDamage(f.segno, st, res.idx)
 		return nil
 	}
 	if st.scan.class != headerOK || info.Size() == st.scan.size {
@@ -307,9 +342,13 @@ func (r *Reader) loadUnsealed(f segFile, st *segState) error {
 	st.scan.size = info.Size()
 	end, err := resume(fh, st.scan, st.scan.validEnd)
 	if err != nil {
+		if errors.Is(err, ErrUnsupportedVersion) {
+			err = unsupportedSegment(f.segno, "record")
+		}
 		return err
 	}
 	st.scan.validEnd = end
+	r.noteDamage(f.segno, st, st.scan.idx)
 	return nil
 }
 
@@ -321,42 +360,41 @@ func (r *Reader) withIdx(f segFile, fn func(x *segIdx)) error {
 		return nil
 	}
 	st := r.state(f)
-	if st.sealed {
-		err := func() error {
-			st.mu.Lock()
-			defer st.mu.Unlock()
+	err := func() error {
+		st.mu.Lock()
+		defer st.mu.Unlock()
+		if st.sealed {
 			if err := r.loadSealed(f, st, true); err != nil {
 				return err
 			}
 			fn(st.idx)
 			return nil
-		}()
-		if err == nil {
-			r.touch(f.segno)
 		}
-		return err
+		if err := r.loadUnsealed(f, st); err != nil {
+			return err
+		}
+		fn(st.scan.idx)
+		return nil
+	}()
+	if err == nil {
+		r.touch(f.segno)
 	}
-	st.mu.Lock()
-	defer st.mu.Unlock()
-	if err := r.loadUnsealed(f, st); err != nil {
-		return err
-	}
-	fn(st.scan.idx)
-	return nil
+	return err
 }
 
-// summary returns a sealed segment's summary, or nil when it has no usable one.
-func (r *Reader) summary(f segFile) *Summary {
+// summary returns a sealed segment's summary; nil, nil for a segment that is
+// not sealed.
+func (r *Reader) summary(f segFile) (*Summary, error) {
 	if !f.hasIdx {
-		return nil
+		return nil, nil
 	}
 	st := r.state(f)
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	if err := r.loadSealed(f, st, false); err != nil {
-		return nil
+		return nil, err
 	}
-	return st.sum
+	return st.sum, nil
 }
 
 // withOpen runs fn on the open segment if it is segno, under the Log's mutex.
@@ -370,6 +408,27 @@ func (l *Log) withOpen(segno uint64, fn func(s *openSeg)) bool {
 	return true
 }
 
+// soft collects the errors a query reports without stopping: a segment whose
+// version this binary does not know. The records of the other segments are
+// still returned with them.
+type soft struct{ errs []error }
+
+// add records err if it is an unsupported-version error and reports whether it
+// did.
+func (s *soft) add(err error) bool {
+	if err != nil && errors.Is(err, ErrUnsupportedVersion) {
+		s.errs = append(s.errs, err)
+		return true
+	}
+	return false
+}
+
+func (s *soft) err() error { return errors.Join(s.errs...) }
+
+// skippable reports whether a per-segment error leaves the query going: the
+// segment is gone (retention), or unsupported (collected in sf).
+func skippable(sf *soft, err error) bool { return sf.add(err) || goneErr(err) }
+
 // cand is a line chosen by an index lookup, before it is read.
 type cand struct {
 	segno  uint64
@@ -380,10 +439,12 @@ type cand struct {
 }
 
 // load reads the chosen records, in order. A segment gone or a record that
-// fails its checksum is skipped and counted.
-func (r *Reader) load(cands []cand) ([]Record, error) {
+// fails its checksum is skipped and counted; a record version this binary does
+// not know is reported once per segment.
+func (r *Reader) load(cands []cand, sf *soft) ([]Record, error) {
 	files := map[uint64]*os.File{}
 	gone := map[uint64]bool{}
+	reported := map[uint64]bool{}
 	defer func() {
 		for _, f := range files {
 			f.Close()
@@ -416,6 +477,13 @@ func (r *Reader) load(cands []cand) ([]Record, error) {
 		}
 		m, line, err := decodeLine(body)
 		if err != nil {
+			if errors.Is(err, ErrUnsupportedVersion) {
+				gone[c.segno] = true
+				if !reported[c.segno] {
+					reported[c.segno] = true
+					sf.add(unsupportedSegment(c.segno, "record"))
+				}
+			}
 			r.skipped.Add(1)
 			continue
 		}
@@ -440,6 +508,15 @@ func sortCands(c []cand, bySeq bool) {
 	})
 }
 
+// finish loads the chosen candidates and joins the soft errors.
+func (r *Reader) finish(cands []cand, sf *soft) ([]Record, error) {
+	recs, err := r.load(cands, sf)
+	if err != nil {
+		return recs, err
+	}
+	return recs, sf.err()
+}
+
 // ByRun returns the run's lines with seq > afterSeq, ascending in seq, at most
 // limit (200 when limit is not positive).
 func (r *Reader) ByRun(owner, run string, afterSeq int64, limit int) ([]Record, error) {
@@ -450,16 +527,21 @@ func (r *Reader) ByRun(owner, run string, afterSeq int64, limit int) ([]Record, 
 	if err != nil {
 		return nil, err
 	}
+	var sf soft
 	var cands []cand
 	full, thresh := false, int64(math.MaxInt64)
 	for _, f := range ls.segs {
-		if sum := r.summary(f); sum != nil {
+		sum, err := r.summary(f)
+		if skippable(&sf, err) {
+			continue
+		}
+		if sum != nil {
 			rng, ok := sum.Runs[runKey(owner, run)]
 			if !ok || rng[1] <= afterSeq || (full && rng[0] > thresh) {
 				continue
 			}
 		}
-		err := r.withIdx(f, func(x *segIdx) {
+		err = r.withIdx(f, func(x *segIdx) {
 			o, ok1 := x.strs.lookup(owner)
 			ru, ok2 := x.strs.lookup(run)
 			if !ok1 || !ok2 {
@@ -471,7 +553,7 @@ func (r *Reader) ByRun(owner, run string, afterSeq int64, limit int) ([]Record, 
 				}
 			}
 		})
-		if err != nil && !goneErr(err) {
+		if err != nil && !skippable(&sf, err) {
 			return nil, err
 		}
 		if len(cands) >= limit {
@@ -484,7 +566,7 @@ func (r *Reader) ByRun(owner, run string, afterSeq int64, limit int) ([]Record, 
 	if len(cands) > limit {
 		cands = cands[:limit]
 	}
-	return r.load(cands)
+	return r.finish(cands, &sf)
 }
 
 // ByTrajectory returns the trajectory's first limit lines, ascending in
@@ -497,16 +579,21 @@ func (r *Reader) ByTrajectory(owner, traj string, limit int) ([]Record, error) {
 	if err != nil {
 		return nil, err
 	}
+	var sf soft
 	var cands []cand
 	full, thresh := false, int64(math.MaxInt64)
 	for _, f := range ls.segs {
-		if sum := r.summary(f); sum != nil {
+		sum, err := r.summary(f)
+		if skippable(&sf, err) {
+			continue
+		}
+		if sum != nil {
 			rng, ok := sum.Trajs[runKey(owner, traj)]
 			if !ok || (full && rng[0] > thresh) {
 				continue
 			}
 		}
-		err := r.withIdx(f, func(x *segIdx) {
+		err = r.withIdx(f, func(x *segIdx) {
 			o, ok1 := x.strs.lookup(owner)
 			t, ok2 := x.strs.lookup(traj)
 			if !ok1 || !ok2 {
@@ -517,7 +604,7 @@ func (r *Reader) ByTrajectory(owner, traj string, limit int) ([]Record, error) {
 				cands = append(cands, cand{f.segno, e.off, e.n, e.seq, e.stream})
 			}
 		})
-		if err != nil && !goneErr(err) {
+		if err != nil && !skippable(&sf, err) {
 			return nil, err
 		}
 		if len(cands) >= limit {
@@ -530,7 +617,7 @@ func (r *Reader) ByTrajectory(owner, traj string, limit int) ([]Record, error) {
 	if len(cands) > limit {
 		cands = cands[:limit]
 	}
-	return r.load(cands)
+	return r.finish(cands, &sf)
 }
 
 // ByOwnerAfter returns the owner's lines with stream_seq > after, ascending,
@@ -543,15 +630,20 @@ func (r *Reader) ByOwnerAfter(owner string, after int64, limit int) ([]Record, e
 	if err != nil {
 		return nil, err
 	}
+	var sf soft
 	var cands []cand
 	full, thresh := false, int64(math.MaxInt64)
 	for _, f := range ls.segs {
-		if sum := r.summary(f); sum != nil {
+		sum, err := r.summary(f)
+		if skippable(&sf, err) {
+			continue
+		}
+		if sum != nil {
 			if !sum.hasOwner(owner) || sum.MaxStream <= after || (full && sum.MinStream > thresh) {
 				continue
 			}
 		}
-		err := r.withIdx(f, func(x *segIdx) {
+		err = r.withIdx(f, func(x *segIdx) {
 			o, ok := x.strs.lookup(owner)
 			if !ok {
 				return
@@ -572,7 +664,7 @@ func (r *Reader) ByOwnerAfter(owner string, after int64, limit int) ([]Record, e
 				}
 			}
 		})
-		if err != nil && !goneErr(err) {
+		if err != nil && !skippable(&sf, err) {
 			return nil, err
 		}
 		if len(cands) >= limit {
@@ -585,7 +677,7 @@ func (r *Reader) ByOwnerAfter(owner string, after int64, limit int) ([]Record, e
 	if len(cands) > limit {
 		cands = cands[:limit]
 	}
-	return r.load(cands)
+	return r.finish(cands, &sf)
 }
 
 // ByOwnerNewest returns the owner's newest limit lines, newest first.
@@ -597,6 +689,7 @@ func (r *Reader) ByOwnerNewest(owner string, limit int) ([]Record, error) {
 	if err != nil {
 		return nil, err
 	}
+	var sf soft
 	var cands []cand
 	full, thresh := false, int64(math.MinInt64)
 	newestFirst := func(c []cand) {
@@ -609,12 +702,16 @@ func (r *Reader) ByOwnerNewest(owner string, limit int) ([]Record, error) {
 	}
 	for i := len(ls.segs) - 1; i >= 0; i-- {
 		f := ls.segs[i]
-		if sum := r.summary(f); sum != nil {
+		sum, err := r.summary(f)
+		if skippable(&sf, err) {
+			continue
+		}
+		if sum != nil {
 			if !sum.hasOwner(owner) || (full && sum.MaxStream < thresh) {
 				continue
 			}
 		}
-		err := r.withIdx(f, func(x *segIdx) {
+		err = r.withIdx(f, func(x *segIdx) {
 			o, ok := x.strs.lookup(owner)
 			if !ok {
 				return
@@ -632,7 +729,7 @@ func (r *Reader) ByOwnerNewest(owner string, limit int) ([]Record, error) {
 				}
 			}
 		})
-		if err != nil && !goneErr(err) {
+		if err != nil && !skippable(&sf, err) {
 			return nil, err
 		}
 		if len(cands) >= limit {
@@ -645,18 +742,20 @@ func (r *Reader) ByOwnerNewest(owner string, limit int) ([]Record, error) {
 	if len(cands) > limit {
 		cands = cands[:limit]
 	}
-	return r.load(cands)
+	return r.finish(cands, &sf)
 }
 
 // Scan visits every record of every segment in order, boundaries included,
-// reading the files front to back. A segment deleted before the scan reaches
-// it is skipped; one deleted while it is being read is read to its end. fn
-// returns false to stop.
+// reading the files front to back and skipping damaged spans. A segment
+// deleted before the scan reaches it is skipped; one deleted while it is being
+// read is read to its end. A segment of an unknown version is reported in the
+// returned error after the others have been visited. fn returns false to stop.
 func (r *Reader) Scan(fn func(Item) bool) error {
 	ls, err := r.list()
 	if err != nil {
 		return err
 	}
+	var sf soft
 	for _, f := range ls.segs {
 		fh, err := openRegular(r.tlogPath(f.segno), os.O_RDONLY, 0)
 		if err != nil {
@@ -669,13 +768,16 @@ func (r *Reader) Scan(fn func(Item) bool) error {
 		stop, err := scanItems(fh, f.segno, fn)
 		fh.Close()
 		if err != nil {
+			if sf.add(err) {
+				continue
+			}
 			return err
 		}
 		if stop {
-			return nil
+			break
 		}
 	}
-	return nil
+	return sf.err()
 }
 
 func scanItems(fh *os.File, segno uint64, fn func(Item) bool) (stopped bool, err error) {
@@ -688,10 +790,13 @@ func scanItems(fh *os.File, segno uint64, fn func(Item) bool) (stopped bool, err
 		return false, err
 	}
 	class, hdrLen, _, _ := classifyHeader(head, segno)
+	if class == headerUnsupported {
+		return false, unsupportedSegment(segno, "header")
+	}
 	if class != headerOK {
 		return false, nil
 	}
-	_, _, err = walk(fh, int64(hdrLen), info.Size(), func(off int64, typ byte, body []byte, total int) error {
+	_, _, _, err = walk(fh, int64(hdrLen), info.Size(), func(off int64, typ byte, body []byte, total int) error {
 		if stopped {
 			return nil
 		}
@@ -699,7 +804,10 @@ func scanItems(fh *os.File, segno uint64, fn func(Item) bool) (stopped bool, err
 		case typeLine:
 			m, line, err := decodeLine(body)
 			if err != nil {
-				return err
+				if errors.Is(err, ErrUnsupportedVersion) {
+					return err
+				}
+				return fmt.Errorf("%w: %v", errBadRecord, err)
 			}
 			line = append([]byte(nil), line...)
 			if !fn(Item{Record: Record{Meta: m, Line: line, Segment: segno, Offset: off}}) {
@@ -708,7 +816,7 @@ func scanItems(fh *os.File, segno uint64, fn func(Item) bool) (stopped bool, err
 		case typeBoundary:
 			b, err := decodeBoundary(body)
 			if err != nil {
-				return err
+				return fmt.Errorf("%w: %v", errBadRecord, err)
 			}
 			if !fn(Item{Record: Record{Segment: segno, Offset: off}, Boundary: &b}) {
 				stopped = true
@@ -716,27 +824,32 @@ func scanItems(fh *os.File, segno uint64, fn func(Item) bool) (stopped bool, err
 		}
 		return nil
 	})
+	if err != nil && errors.Is(err, ErrUnsupportedVersion) {
+		err = unsupportedSegment(segno, "record")
+	}
 	return stopped, err
 }
 
-// Segments lists the segments, oldest first.
+// Segments lists the segments, oldest first. A segment of an unknown version
+// is left out and reported in the error; the list is then still returned.
 func (r *Reader) Segments() ([]SegmentInfo, error) {
 	ls, err := r.list()
 	if err != nil {
 		return nil, err
 	}
+	var sf soft
 	out := make([]SegmentInfo, 0, len(ls.segs))
 	for _, f := range ls.segs {
 		info, err := r.info(f)
 		if err != nil {
-			if goneErr(err) {
+			if skippable(&sf, err) {
 				continue
 			}
 			return nil, err
 		}
 		out = append(out, info)
 	}
-	return out, nil
+	return out, sf.err()
 }
 
 func (r *Reader) info(f segFile) (SegmentInfo, error) {
@@ -744,6 +857,7 @@ func (r *Reader) info(f segFile) (SegmentInfo, error) {
 	fromIdx := func(x *segIdx, validEnd int64) {
 		si.Records, si.Lines, si.ValidEnd = len(x.ents)+x.nBound, len(x.ents), validEnd
 		si.MinStream, si.MaxStream = x.minStream, x.maxStream
+		si.DamagedRecords, si.DamagedBytes = x.damagedRecords, x.damagedBytes
 		if len(x.ents) > 0 {
 			si.MinTime = nanosTime(x.minTs)
 		}
@@ -756,20 +870,13 @@ func (r *Reader) info(f segFile) (SegmentInfo, error) {
 		return si, nil
 	}
 	if f.hasIdx {
-		sum := r.summary(f)
-		if sum == nil {
-			// No usable index: fall back to scanning for this segment.
-			st := r.state(f)
-			st.mu.Lock()
-			err := r.loadSealed(f, st, true)
-			sum = st.sum
-			st.mu.Unlock()
-			if err != nil {
-				return si, err
-			}
+		sum, err := r.summary(f)
+		if err != nil {
+			return si, err
 		}
 		si.Records, si.Lines, si.ValidEnd = sum.Records, sum.Lines, sum.ValidEnd
 		si.MinStream, si.MaxStream = sum.MinStream, sum.MaxStream
+		si.DamagedRecords, si.DamagedBytes = sum.DamagedRecords, sum.DamagedBytes
 		si.CreatedAt, si.SealedAt = time.Unix(0, sum.CreatedAt).UTC(), time.Unix(0, sum.SealedAt).UTC()
 		if sum.Lines > 0 {
 			si.MinTime = nanosTime(sum.MinTs)
@@ -777,43 +884,50 @@ func (r *Reader) info(f segFile) (SegmentInfo, error) {
 		return si, nil
 	}
 	st := r.state(f)
-	st.mu.Lock()
-	defer st.mu.Unlock()
-	if err := r.loadUnsealed(f, st); err != nil {
-		return si, err
+	err := func() error {
+		st.mu.Lock()
+		defer st.mu.Unlock()
+		if err := r.loadUnsealed(f, st); err != nil {
+			return err
+		}
+		si.CreatedAt = st.scan.created
+		fromIdx(st.scan.idx, st.scan.validEnd)
+		return nil
+	}()
+	if err == nil {
+		r.touch(f.segno)
 	}
-	si.CreatedAt = st.scan.created
-	fromIdx(st.scan.idx, st.scan.validEnd)
-	return si, nil
+	return si, err
 }
 
-// Floor is the oldest line still held.
+// Floor is the oldest line still held. An unsupported segment's error is
+// returned with the floor of the rest.
 func (r *Reader) Floor() (Floor, error) {
 	segs, err := r.Segments()
-	if err != nil {
+	if segs == nil {
 		return Floor{}, err
 	}
 	for _, s := range segs {
 		if s.Lines > 0 {
-			return Floor{Segment: s.Segno, Time: s.MinTime, StreamSeq: s.MinStream}, nil
+			return Floor{Segment: s.Segno, Time: s.MinTime, StreamSeq: s.MinStream}, err
 		}
 	}
-	return Floor{Empty: true}, nil
+	return Floor{Empty: true}, err
 }
 
 // MaxStreamSeq is the highest stream_seq in the newest segment that has a
 // line, or zero. The store's seeds read it (design 4.4).
 func (r *Reader) MaxStreamSeq() (int64, error) {
 	segs, err := r.Segments()
-	if err != nil {
+	if segs == nil {
 		return 0, err
 	}
 	for i := len(segs) - 1; i >= 0; i-- {
 		if segs[i].Lines > 0 {
-			return segs[i].MaxStream, nil
+			return segs[i].MaxStream, err
 		}
 	}
-	return 0, nil
+	return 0, err
 }
 
 // MaxRunSeq is the highest seq the log holds for a run, or zero.
@@ -822,15 +936,20 @@ func (r *Reader) MaxRunSeq(owner, run string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
+	var sf soft
 	var best int64
 	for _, f := range ls.segs {
-		if sum := r.summary(f); sum != nil {
+		sum, err := r.summary(f)
+		if skippable(&sf, err) {
+			continue
+		}
+		if sum != nil {
 			if rng, ok := sum.Runs[runKey(owner, run)]; ok {
 				best = max(best, rng[1])
 			}
 			continue
 		}
-		err := r.withIdx(f, func(x *segIdx) {
+		err = r.withIdx(f, func(x *segIdx) {
 			o, ok1 := x.strs.lookup(owner)
 			ru, ok2 := x.strs.lookup(run)
 			if !ok1 || !ok2 {
@@ -840,9 +959,9 @@ func (r *Reader) MaxRunSeq(owner, run string) (int64, error) {
 				best = max(best, x.ents[i].seq)
 			}
 		})
-		if err != nil && !goneErr(err) {
+		if err != nil && !skippable(&sf, err) {
 			return 0, err
 		}
 	}
-	return best, nil
+	return best, sf.err()
 }

@@ -26,6 +26,10 @@ type RetainResult struct {
 // the end. A poisoned log refuses: it touches no file.
 func (l *Log) Retain() (RetainResult, error) {
 	var res RetainResult
+	// retainMu first, then the check: Close holds retainMu to its end, so a
+	// Retain that gets here is either before Close or sees the log closed.
+	l.retainMu.Lock()
+	defer l.retainMu.Unlock()
 	l.mu.Lock()
 	if err := l.usableLocked(); err != nil {
 		l.mu.Unlock()
@@ -37,8 +41,6 @@ func (l *Log) Retain() (RetainResult, error) {
 	}
 	l.mu.Unlock()
 
-	l.retainMu.Lock()
-	defer l.retainMu.Unlock()
 	maxAge, maxBytes := l.retainMA, l.retainMB
 	rd := l.Reader()
 	ls, err := rd.list()
@@ -99,7 +101,7 @@ func (l *Log) Retain() (RetainResult, error) {
 		old := false
 		if maxAge > 0 {
 			sealedAt := f.tlogMod
-			if sum := rd.summary(f); sum != nil {
+			if sum, err := rd.summary(f); err == nil && sum != nil {
 				sealedAt = time.Unix(0, sum.SealedAt)
 			}
 			old = now.Sub(sealedAt) > maxAge
