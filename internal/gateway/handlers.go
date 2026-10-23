@@ -47,6 +47,9 @@ type gatewayHealthResponse struct {
 	// ModelScheduler is the RES-11 model-call scheduler: its mode, the calls
 	// in flight and queued, and what it has granted, refused and cancelled.
 	ModelScheduler *gatewaySchedulerHealth `json:"model_scheduler,omitempty"`
+	// SyntheticGate is the Synthetic concurrency gate: its limit, calls in
+	// flight, and what has waited, timed out or been cancelled.
+	SyntheticGate *provider.SyntheticGateStats `json:"synthetic_gate,omitempty"`
 	// BodyCaps is the request body caps: mode, limits, refusals and the
 	// largest body seen per route class (B7).
 	BodyCaps *gatewayBodyCapsHealth `json:"body_caps,omitempty"`
@@ -277,6 +280,9 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	resp.AnthropicRelay = h.anthropicRelay.status()
 	resp.ModelScheduler = h.schedulerHealth()
 	resp.BodyCaps = h.bodyCapsHealth()
+	if st, ok := provider.SyntheticGateStatus(); ok {
+		resp.SyntheticGate = &st
+	}
 	media := provider.ImageMediaStatus()
 	resp.ImageMedia = &media
 
