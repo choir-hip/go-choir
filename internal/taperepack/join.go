@@ -206,11 +206,21 @@ func (e *engine) file(bc *bucketCtx, f listRec) error {
 	default:
 		v.size = int64(len(raw))
 		v.listStart = e.st.ListStart
-		e.decide(bc, &v, raw)
+		counts := e.decide(bc, &v, raw)
 		if v.class == classCovered && e.attrBroken() {
 			// Some computer's segments or some receipt could not be read:
 			// no file can be proven free of a need nobody could see.
 			v.class = classBlocked
+		}
+		// Per-computer tallies are reporting; they follow the final class
+		// where it refuses a file the computer's own comparison passed
+		// (review round 3, L4).
+		for _, cc := range counts {
+			cl := cc.class
+			if (cl == classCovered || cl == classUncovered) && (v.class == classBlocked || v.class == classDroppedReceipt) {
+				cl = v.class
+			}
+			bc.part.countComputer(cc.computer, v.ns, cl)
 		}
 	}
 	bc.part.countGlobal(f.ns, v.class)
@@ -224,7 +234,7 @@ func (e *engine) file(bc *bucketCtx, f listRec) error {
 
 // decide attributes a verified legacy file to the computers that need it and
 // compares it with their segment copies. raw hashes to the file's name.
-func (e *engine) decide(bc *bucketCtx, v *Verdict, raw []byte) {
+func (e *engine) decide(bc *bucketCtx, v *Verdict, raw []byte) (counts []computerClass) {
 	var computers []string
 	// dropped: a receipt names this file and was set aside (rejected by the
 	// shape guard, ineligible, another length, another computer than the
@@ -239,14 +249,14 @@ func (e *engine) decide(bc *bucketCtx, v *Verdict, raw []byte) {
 		ed, ok := parseReceipt(raw)
 		if !ok || !ed.eligible {
 			v.class = classIneligible
-			return
+			return nil
 		}
 		computers = []string{ed.computer}
 	default:
 		edges := bc.edges[locKey{v.ns, mustDigest(v.digest)}]
 		if len(edges) == 0 {
 			v.class = classUnreceipted
-			return
+			return nil
 		}
 		var event *computerevent.Event
 		eventTried := false
@@ -295,7 +305,7 @@ func (e *engine) decide(bc *bucketCtx, v *Verdict, raw []byte) {
 			} else {
 				v.class = classIneligible
 			}
-			return
+			return nil
 		}
 		guard = map[string]bool{}
 		for _, name := range refs {
@@ -321,7 +331,7 @@ func (e *engine) decide(bc *bucketCtx, v *Verdict, raw []byte) {
 		}
 		if !inScope {
 			v.class = classOutOfScope
-			return
+			return nil
 		}
 	}
 	v.computers = computers
@@ -335,7 +345,7 @@ func (e *engine) decide(bc *bucketCtx, v *Verdict, raw []byte) {
 			}
 			continue
 		}
-		bc.part.countComputer(c, v.ns, cl)
+		counts = append(counts, computerClass{c, cl})
 		if cl == classUncovered && !guard[c] {
 			if e.opts.Apply {
 				bc.pending[c] = append(bc.pending[c], pendItem{ns: v.ns, body: append([]byte(nil), raw...)})
@@ -354,6 +364,13 @@ func (e *engine) decide(bc *bucketCtx, v *Verdict, raw []byte) {
 		worst = classDroppedReceipt
 	}
 	v.class = worst
+	return counts
+}
+
+// computerClass is one computer's own comparison of a file with its segments.
+type computerClass struct {
+	computer string
+	class    class
 }
 
 func rank(c class) int {

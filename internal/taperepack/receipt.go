@@ -100,17 +100,21 @@ func parseReceipt(raw []byte) (e edge, ok bool) {
 
 // hexRefs returns the distinct 64-character lowercase hex tokens in b: the
 // digests an event body names (payload refs, parents). The sweep keeps every
-// file the chain names this way.
+// file the chain names this way, and its regexp matches inside a longer run
+// of hex, so every 64-character window of a run is a reference here (more
+// requirements, never fewer; review round 3, L5).
 func hexRefs(b []byte) [][32]byte {
 	var out [][32]byte
 	seen := map[[32]byte]bool{}
 	start := -1
 	flush := func(end int) {
-		if start >= 0 && end-start == 64 {
-			var d [32]byte
-			if _, err := hex.Decode(d[:], b[start:end]); err == nil && !seen[d] {
-				seen[d] = true
-				out = append(out, d)
+		if start >= 0 {
+			for i := start; i+64 <= end; i++ {
+				var d [32]byte
+				if _, err := hex.Decode(d[:], b[i:i+64]); err == nil && !seen[d] {
+					seen[d] = true
+					out = append(out, d)
+				}
 			}
 		}
 		start = -1
