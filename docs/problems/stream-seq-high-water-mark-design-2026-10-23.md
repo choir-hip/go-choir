@@ -1,390 +1,625 @@
 # stream_seq high-water mark: a lease on the tape (design, 2026-10-23)
 
-Date: 2026-10-23. Author: an FP0 design worker. Status: **design, not
-built.** It answers the gate in
+Date: 2026-10-23. Author: an FP0 design worker. Status: **design, round 2,
+not built.** It answers the gate in
 `docs/problems/stream-seq-seed-scans-the-event-kind-at-boot-2026-10-23.md`
-("Gate on F-c deploy 2"), option 1, the persisted high-water mark. Mutation
-class of the build: **red** (the event sequence allocator, the guest boot
-path, the store schema epoch, a new tape-written object kind). Review: as the
-change it designs, tier 2 (boot path, new concurrency, store epoch).
+("Gate on F-c deploy 2"), option 1, the persisted high-water mark.
+
+Mutation class of the build: **red**. It touches the event sequence
+allocator, the guest boot path, the store schema epoch, a new object kind
+written to the tape, and the workspace swap points. Review is tier 2: round 1
+was bunch 162 (Devin, DeepSeek v4.1 flash). Its dispositions are at the end.
 
 Tags: [V] verified in code at the cited line on `origin/main` `b1abdfb0b`;
 [H] hypothesis, not verified.
 
+Round 2 changes the trust rule, the untrusted seed, the migration gap, the
+allocator's concurrency, the writer fence, the witness rule, the block size,
+and drops the restore carry-forward. Section numbers keep round 1's questions.
+
 ## The decision
 
-1. The mark is a **lease**: the highest `stream_seq` this computer may hand
-   out. The allocator never gives out a number above the lease, so the lease
-   is at or above every number the computer has published (stored, queued
-   for the sealer, or put on the bus by a failed append).
-2. The lease lives **on the tape**, as one singleton `og_objects` object
-   (`choir.stream_seq_lease`), written through the projection interceptor
-   like any other object. No new table, column, file, index or tape format.
-   The tape stays the single authority. The local row is its projection, and
-   replay rebuilds it.
-3. It is written **ahead**, one block of N numbers (proposed N = 8,192) at a
-   time. A refill runs in the background when half the block is used. An
-   allocation waits only on a process's first number, or when a whole
-   half-block runs out before the refill lands.
-4. The seed at boot is **one primary-key read** of the lease, plus the two
-   bounded reads that exist today, used only as a cross-check (taken by
-   `max`, logged if they exceed the lease). The exact read of the event kind
-   never runs while the lease is trusted.
-5. A **binary rollback** below the lease is detected by the store schema
-   receipt, which every binary's `Open` rewrites: bump `storeschema.Version`
-   to 3 and read the prior receipt before `Open` rewrites it. A store last
-   opened by an epoch-below-3 binary has an untrusted lease. Its seed takes
-   today's path once (windows, then the exact read) and re-leases above it.
+1. **The mark is a lease**: the highest `stream_seq` this computer may hand
+   out. The allocator never gives out a number above a lease that has passed
+   the head CAS. On every path except migration (section 4), the lease is
+   therefore at or above every number published: stored, queued for the
+   sealer, or put on the bus by a failed append.
+2. **The lease lives on the tape**, as one `og_objects` object
+   (`choir.stream_seq_lease`, external-key identity) written through the
+   projection interceptor. There is no new table, column, file format, index
+   or tape format. The tape is the single authority, and the local row is its
+   projection, which replay rebuilds.
+3. **It is written ahead**, in blocks of **N = 65,536**, sized against refill
+   latency (section 2). A single-flight refill starts in the background when
+   half the block is used. Seeding is single-flight too. No allocator ever
+   holds a number above the durable lease.
+4. **A trusted lease** seeds by one primary-key read plus a bounded
+   cross-check: the newest 500 rows of `choir_events` by key, and the og
+   windows 2,000, then 50,000. A cross-check above the lease makes the lease
+   untrusted.
+5. **Trust is fail-closed.** A lease is trusted only when all four hold:
+   - its row is present and parses;
+   - the prior store schema receipt was at least 3, with the epoch bumped to
+     3;
+   - no untrust marker is in the workspace (every workspace swap point and
+     every low or absent prior receipt writes one, durably, before anything
+     else);
+   - it is within a bound of the cross-check.
+
+   Anything else takes the **exact seed** once. That is a full paged scan of
+   the event kind's `stream_seq` plus the exact maximum of `choir_events`, plus
+   an unconditional gap of 2^20. Then it re-leases and clears the marker.
 
 ## 1. Where the mark lives
 
-### What exists today
+**What exists.**
 
-- `choir_events` has no index led by `stream_seq`. Its indexes are the
-  primary key `(tape_seq, op_index)`, `(run_id, seq)`, `(owner_id,
-  stream_seq)` and `(trajectory_id, stream_seq)` [V `event_table.go:70-73`].
-  The store-wide seed reads the newest 500 rows by tape position
-  [V `event_table.go:235-239`]. That is the newest-carries-max heuristic over
-  tape order, not a maximum.
-- An exact store-wide maximum over `choir_events` is possible with no new
-  state: one seek per owner on `(owner_id, stream_seq)`, written as `ORDER BY
-  owner_id DESC, stream_seq DESC LIMIT 1` and not as `MAX()`, which Dolt plans
-  as a GroupBy [V the comment at `event_table.go:228-230`]. Owners can be
-  listed by skip-seeks on the same index [H: plan unmeasured]. This covers
-  only the table half.
-- `og_objects` events have no `stream_seq` column. `stream_seq` is in
-  `metadata` JSON [V `graph_store.go:1173-1186`]. An index needs a STORED
-  generated column (the `og_rec_inbox_seq` pattern, `dolt_store.go:263-266`)
-  built by the explicit derived-columns operation
-  [V `derived_columns.go:14-19`]. A new column changes `og_objects`' `SHOW
+- `choir_events` has no index led by `stream_seq`. Its indexes are `(tape_seq,
+  op_index)` PK, `(run_id, seq)`, `(owner_id, stream_seq)` and
+  `(trajectory_id, stream_seq)` [V `event_table.go:70-73`].
+- The store-wide seed reads the newest 500 rows by tape position
+  [V `event_table.go:235-239`]: newest-carries-max over tape order, not a
+  maximum.
+- An exact maximum over `choir_events` needs no new state: one reverse seek
+  per owner on `(owner_id, stream_seq)`, with owners listed by skip-seeks on
+  the same index [H: no plan test yet, the builder pins one]. For `MAX(seq)`
+  over a run, Dolt plans a GroupBy over every row of the run
+  [V `event_table.go:226-230`, the per-run comment]. The same is assumed, not
+  checked, for `MAX(stream_seq)`, so write `ORDER BY ... DESC LIMIT 1`.
+- `og_objects` events have no `stream_seq` column; it is in `metadata`
+  [V `graph_store.go:1173-1186`]. An index needs a STORED generated column (the
+  `og_rec_inbox_seq` pattern, `dolt_store.go:262-268`), built by the explicit
+  derived-columns operation [V `derived_columns.go:14-19`]. That changes `SHOW
   COLUMNS`, which the content witness hashes
-  [V `computerversion/dolt_state_extractor.go:338-375`]. Not cheap (section
-  7).
+  [V `computerversion/dolt_state_extractor.go:338-375`].
 - A new index on `choir_events` led by `stream_seq` would change that table's
-  `SHOW COLUMNS` too. Its DDL is frozen for this reason
+  `SHOW COLUMNS` too, which is why its DDL is frozen
   [V `event_table.go:38-43`].
 
-So no zero-state read is exact for both halves. The table half can be. The
-og half cannot without a schema change on the largest table.
+No zero-state read is exact for both halves.
 
-### Why on the tape, as an object
-
-Three candidate homes, judged against the standing questions (5, single
-authority; 8, restart):
+**Why on the tape, as an object.**
 
 | Home | Authority | Witness and schema | Survives |
 |---|---|---|---|
-| **og object through the interceptor (chosen)** | the tape: the lease is a projection op on the signed tape, and the local row is its projection | none: `og_objects` already exists, `projectObject` is kind-agnostic [V `project.go:223-264`], and live and replay both hold the row | restart, crash, replay, base install, rebuild from tape, disk loss |
-| sidecar file beside the store marker | a second authority beside the tape | none (outside Dolt) | restart, restore (rematerialize renames only the marker and the workspace, [V `rematerialize.go:224-252`]); **not** disk loss or a new VM, where it falls back to the slow seed |
-| new derived table, or a column on `computer_event_projection_heads` | the tape, if kept as a fold in `finalizeBatch` | a column changes a witnessed table's schema hash, so every older checkpoint stops matching [V `dolt_state_extractor.go:338-375`, `projectionbase/witness.go:21-34`]. A new table must be in `IgnoredTables` at every extractor site [V `witness.go:25`, `agentcore/replay_completeness.go:492`], and older binaries call it unknown, so checkpoint publication is refused after a rollback (the og_key_index precedent, F-c design rollback matrix) | restart, replay; restore re-derives it |
+| **og object through the interceptor (chosen)** | the tape | no schema change. `projectObject` is kind-agnostic [V `project.go:223-264`]. The row is witness content, made deterministic by section 7's timestamp rule | restart, crash, replay, base install, rebuild, disk loss |
+| sidecar file beside the store marker | a second authority beside the tape | none | restart and restore (rematerialize renames only the marker and the workspace [V `agentcore/rematerialize.go:227-259`]); not disk loss or a new VM |
+| a fold in `finalizeBatch`, into a new table or a heads column | the tape | a heads column changes a witnessed schema hash [V `dolt_state_extractor.go:338-375`]. A new table needs `IgnoredTables` at every extractor site [V `projectionbase/witness.go:25`, `agentcore/replay_completeness.go:494`], and older binaries call it unknown | restart, replay |
 
-The object needs no new structure and keeps one authority. The object is:
-kind `choir.stream_seq_lease`, owner `__system__`, one fixed identity key,
-body and metadata `{"reserved_through": R, "block": N, "writer_epoch": 3}`.
-It carries no role fields, so the vocabulary write guard passes it
-[V `vocab_migrate_og.go:921-938` checks role fields only, with no kind
-allowlist]. The read is `GetObject` on the canonical ID, one primary-key seek
-under the engine mutex [V `dolt_store.go:706-711`].
+**The object.**
 
-Why the plain upsert holds the maximum: only one refill is in flight at a
-time, and each writes a larger `R`. The appender serialises appends
-[V `appender.go:400-403`], so tape order is value order and the last upsert
-is the largest. No projector change is needed. This matters: a projector
-change would make replay depend on the binary.
+- Kind `choir.stream_seq_lease`, registered with `IdentityExternalKey`
+  [V the mode exists, `objectgraph/registry.go:21`] so the canonical ID is
+  stable. Owner `__system__`, one fixed identity key.
+- Body and metadata: `{"reserved_through": R, "block": N, "writer_epoch": 3,
+  "head_sequence": h}`, where `h` is the local projection head sequence when
+  it was written (diagnostic only).
+- The read is `GetObject` on the canonical ID, one PK seek under the engine
+  mutex [V `objectgraph/dolt_store.go:706-711`].
+- The plain upsert keeps the maximum because exactly one refill is in flight
+  (section 2), each with a larger `R`. The appender serialises appends under
+  `a.mu` [V `appender.go:402`, after `awaitBarrier` at `:401`], so tape order
+  is value order. No projector change is needed. Replay and older binaries
+  project the row as an ordinary object; the projector does not call the
+  write registry [V `objectgraph/registry.go:300-306`].
 
-## 2. Write cost and atomicity
+## 2. Write cost, atomicity, concurrency
 
-**Cost.** One tape append (a batch with one object op of about 200 bytes)
-per N/2 to N numbers. On every process start there is one more: the first
-allocation reserves a fresh block. The steady-state seed cost is one PK seek
-plus the two bounded cross-check reads that already exist (the 2,000-object
-window, measured 6.6 to 9.3 ms warm in the record, and `choir_events`'
-newest 500 by key). There is no per-event or per-batch write.
+**Lock order.** The real order is `flushMu` → appender `a.mu` → `eventMu`
+(→ the engine mutex inside the SQL).
 
-**Order of operations (the invariant).** A number above `R` is never handed
-out before a lease of at least that number has been accepted by the head CAS.
-In detail:
+- The sealer's flush holds `flushMu` and appends
+  [V `telemetry_sealer.go:486-488`, `:587`].
+- `AppendNewPayload` takes `a.mu` [V `appender.go:401-403`].
+- `Prepare` and `finalizeBatch` take `eventMu` under it
+  [V `computer_events.go:47`, `:140`].
+- The interceptor runs outside the engine mutex (DeepSeek F6, cited at
+  `dolt_store.go:646,1054,1141` [H: not re-read]).
 
-- The lease append cannot run under `eventMu`. `Prepare` and `finalizeBatch`
-  take `eventMu` under the appender mutex [V `computer_events.go:47`,
-  `:140`], and the sealer rule is the same: no flush under `eventMu`
-  [V `telemetry_sealer.go:29-37`]. So the refill computes its target under
-  `eventMu`, then releases it and appends. A waiting allocator waits with
-  `eventMu` released (a condition or channel wait that reacquires it) and has
-  a deadline, so an outage fails the append instead of hanging it.
-- The sealer's append barrier waits only for enqueued records, not reserved
-  slots [V `telemetry_sealer.go:460-472`]. A caller holding a reservation
-  while it waits for the lease does not block the lease's barrier [H: needs a
-  test with the sealer on].
-- `AllocateEventSeq` (D12's folded events) is called before the lifecycle
-  batch is built, outside the appender [V `store.go:1524-1528`]. The builder
-  must check every caller of `AppendEvent` and `AllocateEventSeq` for a lock
-  the lease append also takes [H].
+`eventMu` is never held across an append. `AppendEvent` already releases it
+before the tape write [V `store.go:2632-2635`]. Platform `writeMu`
+(`platform/service.go:40`) is the platform service's lock, unrelated to the
+guest store [V].
 
-**Crash between the event write and the mark write.** That window does not
-exist, because the mark comes first:
+**Allocator state** (all fields on `Store`, under `eventMu`):
 
-- A crash before the lease's CAS: no number above the old `R` was handed out.
-- A crash after the CAS but before the local finalize: the lease is on the
-  tape, and the next boot replays it before the runtime starts
-  [V `autoputer/run.go:747-749`; reconstruct fails unless the local head
-  reaches the platform head, `appender.go:1013-1022`].
-- If `AppendNewPayload` returns an error after the CAS (a finalize failure,
-  `appender.go:763-765`), the refill treats the lease as not written and does
-  not raise `R`. A later refill writes a higher `R`. The cost is waste, never
-  reuse.
+- `leaseState`: `unseeded`, `seeding` or `ready`;
+- `reserved`, the durable `R`;
+- `refillInFlight`;
+- `leaseChanged`, a channel closed and replaced at every state change;
+- `refillFailed`, a count, plus `lastLeaseErr`;
+- the trust outcome.
 
-**Gaps.** Allowed, and already present:
+`allocateEventSeqLocked` loops:
 
-- A failed batch leaves a gap [V `store.go:2548-2553`].
-- The sealer gap of 512 is applied at every seed with batching on
-  [V `store.go:2522-2524`, `telemetry_sealer.go:46-50`].
-- Consumers use only the maximum and `> after`: the browser cursor
-  [V `frontend/src/lib/Desktop.svelte:1031-1042`] and the table's after-read
-  [V `event_table.go:212-215`]. Grep finds no contiguity assumption in Go
-  [V: no `StreamSeq ± 1` outside the allocator].
-- Waste per process start: at most N. That is irrelevant in an int64, and
-  below 2^53 for the browser for any plausible lifetime.
-- Under a trusted lease the 512 gap for `stream_seq` is redundant: a queued
-  number is at most `R`. Keep it anyway (conservative, costs nothing). The
-  per-run gap is unchanged.
+1. **`unseeded`**: set `seeding`, start the seeder goroutine, then wait.
+2. **`seeding`**: wait.
+3. **`ready` and `maxStreamSeq + 1 > reserved`**: if no refill is in flight,
+   start one, then wait.
+4. **`ready` and the number is inside `reserved`**: hand it out. If fewer than
+   N/2 numbers remain and no refill is in flight, start one asynchronously.
 
-## 3. Restore, rollback, replay, rematerialize
+"Wait" means:
+- release `eventMu`;
+- select on `leaseChanged` or the allocation deadline (30 s, the sealer's
+  seal timeout);
+- reacquire `eventMu`, and loop.
 
-**Replay** projects op bodies verbatim and never calls the allocator
-[V `appender.go:879-890` Prepare and finalize; `project.go:223-264`]. The
-lease row is rebuilt exactly as written.
+A deadline returns an error. The append fails, and no number is taken.
 
-**Boot after anything** (crash, planned restart, RecoveryResume, Install,
-Rebase): the runtime starts only after the tape has been replayed to the
-platform head [V `run.go:747-767`, `appender.go:1013-1022`]. Rebase
-reinstalls an older base and then replays (W, H]
-[V `recoveryplan/recovery_plan.go:32-34`, `autoputer/projection_base.go:173-200`].
-So the first seed of a process reads a projection that holds every lease on
-the tape, and the tape is never rewound.
+Two allocators can never both hand out unleased numbers. Only the goroutine
+that flips `unseeded` to `seeding` seeds, and every path to a number checks
+`reserved` under `eventMu` (DeepSeek F5).
 
-**Checkpoint restore and rematerialize, in process.** `RematerializeFromTape`
-reconstructs a staged store only through the target head. Later events stay
-on the tape [V `appender.go:832-834`, `rematerialize.go:161-163`]. The
-staged store is then swapped in and `Reopen`ed [V `rematerialize.go:254`].
-The restored row holds an older lease. `Reopen` does not touch
-`maxStreamSeq` or `streamSeqSeeded` [V `store.go:1188-1268`], and the design
-puts the lease state (`reserved`, the refill flag) on `Store` beside them,
-also untouched by `Reopen`. The next refill writes `max(R, maxStreamSeq) + N`,
-never a lower value. Builder: add the new fields to the Open/Reopen field
-audit the selfdev-operations replay record started.
+- **The seeder** computes the seed (section 3) with `eventMu` released. It
+  appends the lease `seed + N`, and only after the CAS does it take `eventMu`
+  to set `maxStreamSeq = seed`, `reserved = seed + N` and `ready`, then
+  broadcast.
+- **On seeder failure** the state goes back to `unseeded`, the error is
+  recorded, waiters are woken, and they retry or meet their deadline. No
+  number is handed out.
+- **The refill** reads its target under `eventMu`, `max(reserved,
+  maxStreamSeq) + N`, then releases `eventMu` and appends.
+  - On success it raises `reserved = max(reserved, target)`.
+  - On any error it leaves `reserved` alone, including an error after the CAS,
+    such as a finalize failure [V `appender.go:763-765`].
+  - Either way it clears `refillInFlight`, counts `refill_failed` on error, and
+    broadcasts.
+  - The next allocation that needs it starts a new refill, at most one per
+    second after a failure.
 
-**Restore, after a restart.** Today the restored projection head is the
-target while the platform head is later
-[V test `rematerialize_test.go:504-510`]. `appendLocked` refuses appends
-while the two differ [V `appender.go:712-717`], and the next boot replays
-the events after the target [V `appender.go:1013-1022`]. Those include every
-later lease, so the seed is safe. Whether that replay is restore's intended
-meaning is not this design's question [H, recorded in the heresy delta]. If a
-future restore really rewinds the platform head, it must carry the lease
-forward in the new timeline before it serves (append `max(R, maxStreamSeq) +
-N` right after `Reopen`). The design asks the builder to add that append now,
-so the rule does not depend on restore's semantics.
+`reserved` never decreases.
 
-**Never below a published number.** Every number on the bus, in a cursor, or
-held by an `after_seq` client was handed out by an allocator. Every allocator
-was bounded by a lease that had passed the CAS. Every such lease is on the
-tape, and the projection a seed reads holds it. One case falls outside this:
-an older binary allocated (below).
+**Atomicity under a crash.**
 
-**Binary rollback across the introduction.**
+- A crash before the lease CAS: no number above the old `R` was handed out.
+- A crash after the CAS and before the local finalize: the next boot replays
+  the lease before the runtime starts [V `autoputer/run.go:747-749`;
+  reconstruct fails unless the local head reaches the platform head,
+  `appender.go:1013-1022`]. So no event can carry a number above a lease that
+  is not on the tape.
 
-- An older binary ignores the lease row: the projector is kind-agnostic, and
-  no older reader asks for the kind. It seeds by D13's path and can allocate
-  above `R`.
-- After a forward deploy, a stale lease would reissue those numbers. The
-  detector is the store schema receipt. Every binary's `Open` rewrites
-  `store-schema.json` with its own epoch [V `store.go:964-970`,
-  `storeschema/schema.go:27-41`].
-- Bump `Version` to 3, and have `Open` read the prior receipt before it
-  writes. A lease is trusted only if the prior receipt says 3 or more, or the
-  store is fresh.
-- An untrusted lease seeds as `max(R, today's seed with its exact
-  fallback)`. That is slow at most once after a rollback, and it is logged.
-  Then the seed re-leases.
-- A new field in the receipt would not work: `storeschema.Read` disallows
-  unknown fields, so older updaters would fail to read it
-  [V `schema.go:86-89`].
-- Side effect of the bump: the updater's `Apply` refuses an epoch-2 release
-  on the store. The CI revert, the platform-follow offer and `restorePrior`
-  are not fenced [V `schema.go:30-37`], and the receipt catches those.
-- D2's store floor (lane `fp1-event-table-d2`, `storeschema/floor.go`) is
-  separate: the lease does not raise the floor, because an older binary is
-  safe to *run* on a lease store.
+**Fail-closed cost.** Allocation needs a durable lease. When vmctl or the
+store cannot finish a refill before N/2 numbers are used, event appends fail
+at their deadline. That is an event-append outage, not reuse. Today a
+tape-bound append already fails when the tape append fails, so it fate-shares
+with the same components (standing question 7). It shows as `refill_failed`
+and `last_lease_error` in the observability block (Devin F2).
 
-## 4. Migration (a store with no lease)
+**Block size N = 65,536**, sized against refill latency (DeepSeek, open
+question 2):
+- A refill is one tape append. It includes `awaitBarrier`, a sealer flush of
+  up to the 30 s seal timeout [V `telemetry_sealer.go:55`, `appender.go:401`],
+  then pin, CAS and finalize.
+- The finalize waits on the engine mutex, which the paper has seen held for
+  104 s.
+- The runway after the trigger is N/2 = 32,768 numbers. At the paper's
+  measured 8 to 18 events/s
+  [V `docs/problems/paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md`],
+  that is about 30 minutes.
+- Against a 120 s refill, 32,768 covers a burst of about 270 events/s, 15x
+  the measured peak.
+- Refills happen about every 30 minutes, each forcing one sealer flush.
 
-- **Where:** at today's site, the first allocation of the first lease-aware
-  process on each computer, under `eventMu` [V `store.go:2395-2399`]. No
-  lease row means the seed runs today's `seedStreamSeq` unchanged: the
-  bounded windows, and the exact read only if they miss
-  [V `store.go:2451-2526`]. Then `R0 = seed + gap`, a synchronous lease
-  append of `R0 + N`, and the first number is `R0 + 1`.
+Waste is at most N per process start (int64; under 2^53 for the browser).
+DeepSeek's 1,024 to 2,048 gives 28 to 57 s of runway at 18 events/s. That is
+shorter than one observed engine stall, so appends would fail during stalls:
+rejected.
+
+**Gaps** are allowed and already present:
+- a failed batch leaves a gap [V `store.go:2547-2554`];
+- the sealer gap is 512 [V `store.go:2522-2524`];
+- consumers use only the maximum and `> after`
+  [V `frontend/src/lib/Desktop.svelte:1031-1042`, `event_table.go:212-215`].
+
+The per-run gap is unchanged.
+
+## 3. The seed: trust, the exact seed, restore, rollback
+
+### Trust (fail-closed; Devin F1, DeepSeek F1 and F2)
+
+A lease is **trusted** only if all four hold:
+
+- **(a) Row.** The lease row is present and parses, with `writer_epoch` of 3
+  or more.
+- **(b) Receipt.** The prior receipt read by `Open` was 3 or more.
+  - `Open` reads `store-schema.json` before it rewrites it (today it writes at
+    `store.go:964-970` and never reads it).
+  - If the prior receipt is absent on a workspace that has rows, or below 3,
+    `Open` first writes the untrust marker durably (write, fsync, rename,
+    directory fsync: the `WriteFloor` pattern of lane `fp1-event-table-d2`).
+    Only then does it write receipt 3.
+  - So receipt 2, then `Open` writes 3, then a restart before the first
+    append still finds the marker (DeepSeek F1).
+- **(c) No marker.** `stream-seq-lease-untrusted.json` is absent from the
+  workspace.
+- **(d) Bound.** `R` is at most `cross_check_max + N + G`, where `G = 2^20`
+  is the exact-seed gap. A legitimate lease satisfies this by construction:
+  it is written at most N + G above an exact or cross-checked maximum.
+  - A forged or corrupt huge `R` fails the bound. The exact seed then ignores
+    any `R` above `exact + N + G`, with a log line naming it, so a forged row
+    cannot burn the sequence space (Devin F2).
+  - A cross-check that finds no event at all fails (d) as well.
+
+There is no "the store is fresh" exception. With no lease row the seed is the
+exact seed, and on an empty store that is cheap (Devin F1).
+
+**The untrust marker is written by every workspace swap**, into the incoming
+workspace, before it is renamed into place or opened. The swap points
+[V by grep of workspace renames]:
+
+- `projectionbase.InstallVerifiedBase` (`install.go:53`, renames `:172-187`);
+- `projectionbase.RebaseRetainedStore` (`rebase.go:19`, renames `:58-76`);
+- `RematerializeFromTape`'s flip (`agentcore/rematerialize.go:227-262`).
+
+**And by the base publisher.** Bases tar every regular file in the workspace
+[V `projectionbase/publisher.go:67-104`]; the bookkeeping cleanup removes only
+seed metadata [V `install.go:330-337`]. So a base carries receipt 3 and a
+lease row (Devin F1, DeepSeek F2). The publisher adds the marker to every
+blob, so a base is untrusted by construction even if a swap site forgets.
+
+Order at boot matters. `store.Open` runs before install or rebase
+[V `autoputer/run.go:200` against `:366`], and the rebase `Reopen`s the
+swapped workspace [V `projectionbase/rebase.go:19-76`,
+`autoputer/projection_base.go:173-200`]. The receipt that `Reopen`'s `Open`
+reads is the base's, so the marker carries the decision.
+
+A guard test (the `event_table_guard_test.go` AST pattern) fails if any
+function that renames into the live store or workspace path does not call
+`markStreamSeqLeaseUntrusted`.
+
+The marker is cleared only by the exact seed's successful lease append.
+After a restore, rebase or install, the next process start pays the exact
+seed once. That is priced below and logged.
+
+### The exact seed (DeepSeek F3, Devin F3)
+
+When the lease is absent or untrusted, the seed is the **maximum, not a
+band**:
+
+- **og half:** a full scan of the event kind's `stream_seq`. It is keyset
+  paged over `idx_og_objects_kind_owner` and the PK suffix, `metadata` only,
+  5,000 rows a page, releasing the engine mutex between pages. A row whose
+  metadata has no `stream_seq` has its body decoded.
+- **table half:** the exact `choir_events` maximum, by per-owner reverse
+  seeks (section 1). If the plan test does not show seeks, a full scan of the
+  `stream_seq` column instead.
+- **The gap:** `seed = max(og, table, R if within bound) + G` with `G =
+  2^20`, unconditionally, batching on or off (section 4).
+
+Cost:
+- It is linear in the event history, like the read that held the paper for
+  104 s, and is priced at that class.
+- It reads `metadata`, not `body`. Dolt keeps large blobs out of the row
+  [H: so it may be cheaper; measure with `TestStreamSeqSeedScale` before the
+  build ships].
+- Because it pages, `/health` and other engine readers proceed between pages.
+  Event appends wait for it [H: the 503 effect is unmeasured].
+
+It runs once per computer at migration, and once after each swap or
+rollback-forward. `seedStreamSeqExact` (the 500 newest by `updated_at`) is
+then no longer used by the seed. The old windows remain only as the
+cross-check.
+
+### Trusted seed
+
+- `seed = R`.
+- The cross-check reads `choir_events` newest-500 by key and the og window of
+  2,000, widened to 50,000 when the first window finds no event (Devin F3).
+- If `cross_check_max > R`, the lease is stale: it is untrusted, the exact
+  seed runs, and a log line says "lease violated" with both numbers.
+- Then a fresh block is appended (`R + N`) before the first number `R + 1`.
+
+### Replay, restore, rollback
+
+- **Replay** projects op bodies verbatim and never calls the allocator
+  [V `appender.go:879-890`, `project.go:223-264`].
+- **Every boot** replays to the platform head before the runtime starts
+  [V `run.go:747-767`, `appender.go:1013-1022`]. Rebase replays (W, H] after
+  the swap [V `recoveryplan/recovery_plan.go:32-34`].
+- **In-process restore.**
+  - `RematerializeFromTape` reconstructs only to the target
+    [V `rematerialize.go:164`]; later events stay on the tape
+    [V `appender.go:832-834`].
+  - It `Reopen`s the swapped workspace [V `rematerialize.go:262`].
+  - `Reopen` does not touch `maxStreamSeq` or `streamSeqSeeded`
+    [V `store.go:1188-1268`], and the lease fields sit beside them. The next
+    refill writes `max(reserved, maxStreamSeq) + N`.
+  - Appends are refused while the projection head is behind the platform
+    head [V `appender.go:712-717`]. So the refill fails (`refill_failed`), and
+    appends fail as they already do after a restore.
+  - At the next boot the tail replays, and the marker the flip wrote forces
+    the exact seed.
+- **Binary rollback across the epoch bump.**
+  - The reverted binary (epoch 2) ignores the lease row and seeds by D13's
+    path. Its `Open` rewrites the receipt to 2.
+  - The next epoch-3 `Open` reads 2, writes the marker, and the exact seed
+    runs.
+  - The guest updater's `Apply` refuses an epoch-2 release on an epoch-3
+    store [V `updater/updater.go:456-458`]. The CI revert, the platform-follow
+    offer and `restorePrior` are not fenced [V `storeschema/schema.go:30-37`],
+    and the receipt-plus-marker rule catches them.
+  - **Release rule:** the epoch-3 release keeps `min_store_schema_version` at
+    2 or below, or the updater refuses every epoch-2 store and migration
+    stalls [V the refusal at `updater.go:459-460`; DeepSeek F2. That an offer
+    can set min = 3 is DeepSeek's cite of `platform_update.go`, H].
+  - D2's floor (lane `fp1-event-table-d2`, `storeschema/floor.go`, not on
+    main) is separate. The lease does not raise it: an older binary is safe
+    to run.
+
+### Restore carry-forward: dropped (DeepSeek F8)
+
+Round 1 asked for a lease append right after `Reopen`, against a future head
+rewind. It is dropped:
+
+- The value it would carry is process memory. After a real rewind the process
+  that knew it is gone.
+- Today there is no rewind. The local head advances only by
+  `WHERE sequence=? AND canonical_event_head=?`
+  [V `computer_events.go:195`]. Appends are refused while the heads differ
+  [V `appender.go:712-717`]. A boot whose local head is ahead of the platform
+  head fails: the plan resumes with no tail, and reconstruct's final
+  `sameHead` check returns `ErrNeedsProjectionRepair`
+  [V `recoveryplan/recovery_plan.go:66-71`, `:118-123`, `appender.go:1013-1022`], which
+  `runReplayPhase` turns into a fatal boot [V `run.go:781`].
+
+That existing refusal is the head-rewind fence. The build pins it with a test
+rather than adding code.
+
+## 4. Migration (no lease yet)
+
+- **Where:** the seeder, triggered by the first allocation of the first
+  lease-aware process (today's site, `store.go:2395-2399`).
+  - Optionally it can start eagerly in a goroutine right after the replay
+    phase, so it overlaps boot [H: a builder choice; it does not change
+    correctness].
+  - It is the exact seed of section 3, with the gap `G = 2^20` applied
+    unconditionally, batching on or off.
+  - That gap is DeepSeek F4. `emitEvent` publishes a `stream_seq` even when
+    `AppendEvent` failed [V `agentcore/runtime.go:4760-4768`], and with
+    batching off today's seed adds no gap [V `store.go:2522`].
+  - Migration is the one boot with no bound on numbers the previous,
+    lease-unaware process published and never stored. The gap bounds them at
+    2^20, and more than that is the stated residual.
 - **What it holds:**
-  - `eventMu`: every event append waits, as today.
-  - The engine mutex, for the 2,000-object window (about 9 ms warm).
-  - One tape append, with `eventMu` released.
-  - On the paper after D13 this site cost a 748 ms first passivation (ledger
-    `35e5c82f2`) [V commit message; the cold share of it is not split out].
-- **Why it is not boot-critical:** the lease must ship, and must have
-  migrated on a computer, **before** `store.event_table` is switched on there.
-  While every event is still in `og_objects`, the windows find one and the
-  exact read does not run. The record: "correct for a store whose events are
-  in `og_objects`, which is every store today".
-- **Builder rule:** the deploy-2 writer refuses to stamp, and the setting
-  refuses to turn on, until the lease row exists. Then the exact read can run
-  only on a computer whose newest 50,000 objects hold no event before deploy
-  2. That case is not expected and is logged.
-- **Fresh store:** no lease and no events. The seed is 0 and the lease is N.
+  - The engine mutex, one page at a time.
+  - Not `eventMu`, which is released while seeding.
+  - Event appends wait (single-flight), up to their deadline. On a large
+    history the first appends can fail at the 30 s deadline while the seed
+    runs [H: the paper's scan time is unmeasured]. The builder either raises
+    the deadline for the `seeding` state, or starts the seed eagerly after
+    replay.
+- **When:** before `store.event_table` is switched on for that computer. The
+  deploy-2 writer refuses to stamp, and the setting refuses to turn on, until
+  a trusted lease exists on that computer.
+- **Fresh store:** the exact seed is 0 (no rows), plus the gap.
 
 ## 5. D12's per-run seq, and the tape
 
-- **The tape.** `stream_seq` is on the signed tape, in the projection batch
-  payload:
-  - op bodies carry the object's metadata and the `EventRecord` with
-    `stream_seq` [V `graph_store.go:1173-1186`, `projection_tape.go:66-77`];
-  - the event commits to the payload by digest [V `appender.go:412-417`];
-  - head receipts are ed25519-signed [V `computerevent/receipt.go:5,26-40`].
-  - `choir_events` projects it into a column [V `event_table.go:67`].
-  - Replay does not re-derive it (above). The lease is on the tape the same
-    way, as an ordinary object op.
-- **D12.**
-  - `AllocateEventSeq` shares `allocateEventSeqLocked`
-    [V `store.go:2555-2569`], so lifecycle-folded events take their stream
-    numbers under the lease with no change.
-  - The per-run `seq` is a separate counter with its own seed: the run's
-    metadata index, `eventTableRunMaxSeq`, and with the sealer the gap and
-    `seqFloor` [V `store.go:2346-2386`]. That seed is bounded by the run, and
-    the lease does not cover it. It stays as is (the record's follow-up 2
-    still applies).
-  - Note for the per-run counter: on a failed unbatched append, the per-run
-    mark is dropped so the next append takes the same `seq` again
-    [V `store.go:2643-2649`]. That is deliberate and outside this design.
+**The tape.** `stream_seq` is on the signed tape:
+- the projection batch's op bodies carry it
+  [V `graph_store.go:1173-1186`, `projection_tape.go:66-77`];
+- the event commits to the payload by digest [V `appender.go:412-417`];
+- the receipts are signed with ed25519 [V `computerevent/receipt.go:5,26-40`].
 
-## 6. Class, surfaces, rollback, heresy, proof
+`choir_events` projects it into a column [V `event_table.go:67`]. Replay does
+not re-derive it. The lease rides the tape the same way.
 
-**Mutation class:** red.
+**D12.**
+- `AllocateEventSeq` uses `allocateEventSeqLocked` [V `store.go:2555-2569`],
+  so folded lifecycle events take stream numbers under the lease. Their
+  caller holds no store lock across the later batch append
+  [V `store.go:1524-1528`].
+- They wait like any allocation, with `eventMu` released. Test listed below.
+- Per-run `seq` keeps its own seed [V `store.go:2346-2386`] and is not covered
+  by the lease.
+- The per-run counter re-takes a failed unbatched append's number by design
+  [V `store.go:2643-2649`]. That is outside this design.
+
+## 6. Class, surfaces, rollback, heresy, tests, proof
+
+**Mutation class:** red, tier 2.
 
 **Protected surfaces:**
-- the stream allocator (`allocateEventSeqLocked`, `seedStreamSeq`);
-- the boot path's first event append;
-- `store.Open` (the receipt read) and `storeschema.Version`;
-- tape writes of a new object kind;
-- `Reopen`'s field set.
+- the stream allocator and its concurrency;
+- the boot path's first allocation;
+- `store.Open`'s receipt read and the marker;
+- `storeschema.Version`;
+- the three swap points and the base publisher;
+- the objectgraph registry and the writer fence;
+- tape writes of the new kind.
 
-**Not touched:** the projector, the witness extractor, the replay manifest,
-the tape format, and every table and index.
+**Not touched:** the projector, the extractor, the replay manifest and the
+tape format.
+
+**Writer fence (Devin F2).**
+- Register `choir.stream_seq_lease` with a new writer `system:store`, not
+  `WriterRuntime`. A runtime kind admits every writer
+  [V `objectgraph/writer.go:199-210`], and an unregistered kind is refused
+  [V `registry.go:307-314`].
+- The gate defaults to observe [V `writer.go:110-115`], so the registry alone
+  does not refuse a desk write in production. Add a hard fence independent of
+  the gate mode: `CheckWrite` refuses a non-tombstone write of the kind unless
+  the context carries the store-private lease capability.
+- A guard test fails if anything outside `internal/store`'s lease file sets
+  that capability.
+- Replay does not call `CheckWrite` [V `registry.go:300-306`], so the fence
+  cannot poison a replay.
+- A forged huge `R` that gets past the fence is bounded by trust rule (d).
 
 **Rollback path.** Revert the lease commits.
-- The reverted binary ignores the lease row (an inert og row) and seeds by
-  D13's path. That path is correct while events are in `og_objects`. If
-  deploy 2's switch is on, turn it off first; otherwise the exact read returns
-  at that binary's boots.
-- Guest-updater `Apply` will refuse an epoch-2 release. The CI revert path is
-  the rollback route.
-- A later forward deploy sees receipt 2, distrusts the lease, and re-seeds
-  once.
+- The reverted binary ignores the row and seeds by D13's path, which is
+  correct while events are in `og_objects`. If deploy 2's switch is on, turn
+  it off first.
+- `Apply` refuses epoch-2 releases; the CI revert is the route.
+- Forward again: receipt 2, then the marker, then the exact seed once.
 
 **Heresy delta.**
 - Discovered:
-  1. `emitEvent` publishes the allocated `stream_seq` on the bus even when
-     `AppendEvent` failed [V `agentcore/runtime.go:4760-4768`]. With batching
-     off the seed adds no gap [V `store.go:2522`], so a restart after a failed
-     append can reissue a number a client already holds. This is a reuse path
-     independent of the seed's read [H: no observed occurrence].
-  2. After a restore, the projection head stays behind the platform head:
-     appends are refused [V `appender.go:712-717`], and the next boot replays
-     past the target [V `appender.go:1013-1022`]. Whether a restore survives
-     a reboot is unverified [H].
-  3. The comment on `maxStreamSeq` [V `store.go:248-252`] still describes "a
-     lazy seed from the newest page".
+  1. `emitEvent` publishes a `stream_seq` for a failed append
+     [V `runtime.go:4760-4768`], and with batching off a restart adds no gap
+     [V `store.go:2522`]. A published number can be reissued [H: not
+     observed].
+  2. After a restore, appends are refused until a reboot replays past the
+     target [V `appender.go:712-717`, `:1013-1022`]. Whether a restore
+     survives a reboot is unverified [H].
+  3. The `maxStreamSeq` comment is stale [V `store.go:248-252`].
+  4. (Round 2) Bases carry `store-schema.json`, so the epoch receipt is per
+     workspace copy and not per computer [V `publisher.go:67-104`].
 - Introduced (by the design):
-  - an allocator-written object kind outside run semantics;
-  - gaps of up to N per process start;
-  - the epoch bump's `Apply` fence on epoch-2 releases.
+  - an allocator-written kind;
+  - gaps of up to N per process start, and 2^20 per exact seed;
+  - the epoch bump's `Apply` fence;
+  - an event-append outage when refills fail for longer than the runway
+    (fail-closed, observable);
+  - one exact seed per swap.
 - Repaired (once built):
-  - the exact read at boot after deploy 2;
-  - the `updated_at` reuse band (Round 2 F1), since the seed no longer
-    depends on `updated_at`;
-  - discovered item 1.
+  - the exact read at every boot after deploy 2;
+  - the `updated_at` band. The seed no longer uses `updated_at` on any path,
+    because the exact seed is a maximum. Round 1 overclaimed this while the
+    untrusted path was still the band;
+  - discovered item 1, after migration.
 
-**Conjecture delta.** "The newest events carry the maximum" stops being
-load-bearing. It survives only in the cross-check and in the
-migration/untrusted path.
+**Tests first (they fail today or on round 1's design).** Local E2E on the
+store unless marked.
 
-**Tests first (the builder writes them failing).** Local E2E on the store:
-- After a lease exists, a reopen's first append runs no `ListObjects
-  choir.event` and no exact read (engine-mutex counters, as
-  `TestStreamSeqSeedDoesNotListTheEventKind`).
-- A failed append's published number is not reissued after a reopen
-  (fails today with batching off).
-- DeepSeek's counterexample (bunch 156) still allocates 13.
-- A crash between the lease CAS and finalize, then a replay, seeds above the
-  lease.
-- Restore, then reopen, then append: above the pre-restore maximum.
-- The receipt says 2 with a lease present: untrusted, exact path, logged.
-- With the sealer on, the first allocation waits for the lease while a
-  reservation is held: no deadlock, with a deadline.
-- The 2,000/50,000 window tests still pass on the migration path.
+Trust:
+1. Receipt 2, `Open` (writes 3), restart before any append, reopen: still
+   untrusted, exact seed (DeepSeek F1).
+2. Lease row present and receipt absent: untrusted.
+3. A base built and installed (and a rebase) from a workspace with receipt 3
+   and a stale lease, after an epoch-2 interlude that allocated past `R`:
+   untrusted once, no reissue (Devin F1, DeepSeek F2).
+4. Rematerialize, then a restart: marker present, exact seed.
+5. The swap-point guard test, and the `Open` read-before-write ordering test:
+   the receipt read happens before the write.
 
-**Deployed proof (FP0, read-only on live state, no SQL, no SSH).** The build
-must expose a `stream_seq_lease` block (`reserved_through`, `trusted`,
-`seeded_from` lease|migration|untrusted, `seed_ms`, `cross_check_max`) in
-`/api/runtime/observability` (standing question 9).
-1. Staging, after CI and the deploy identity check, on a **test computer**
-   with history:
-   - **First boot:** `seeded_from=migration` once.
+Exact seed:
+6. An epoch-2 high number placed behind 500 newer events and 50,000 objects
+   is not reissued after forward. This fails with round 1's band (DeepSeek
+   F3).
+7. Untrusted runs the full exact seed even when the first window finds an
+   event.
+8. With batching off, a failed append in the previous process: its published
+   number is not reissued after migration (DeepSeek F4).
+9. DeepSeek's bunch-156 counterexample still allocates above 12.
+
+Concurrency:
+10. Two concurrent first allocations during migration: one seeder, no
+    unleased number (DeepSeek F5).
+11. A refill failure clears the in-flight flag and the next allocation
+    refills.
+12. Two allocators trigger one refill.
+13. A refill error after the CAS: `R` never decreases.
+14. A migration lease-append failure: the first allocation fails, and no
+    number is handed out.
+15. The folded path (`AllocateEventSeq`) waits on an exhausted lease.
+16. With batching on and a sealer reservation held, the first allocation
+    waits for the lease: no deadlock, and the deadline fires.
+
+Writer fence:
+17. An unregistered or wrong-writer lease write is refused under
+    `WriterGateEnforce`.
+18. A desk-declared writer is refused even under observe (the hard fence).
+19. A forged `R` above the bound is ignored with a log line.
+
+Witness:
+20. The lease op carries fixed `created_at` and `updated_at` (section 7). A
+    base witness equals a replay witness after lease appends (DeepSeek F7).
+21. The lease row survives `MigrateAndFenceServingVocabulary` after a replay
+    with applied rows, with its key unchanged.
+
+Rewind:
+22. A boot whose local head is ahead of the platform head refuses (pins
+    section 3's fence).
+
+Kept from round 1: no `ListObjects choir.event` on a trusted reopen
+(engine-mutex counters); crash between the lease CAS and finalize, then
+replay, seeds above; the 2,000/50,000 window tests as the cross-check.
+
+**Deployed proof.** FP0 runs it read-only on live state: no SQL, no SSH.
+
+The build exposes a `stream_seq_lease` block in `/api/runtime/observability`:
+`reserved_through`, `state`, `trusted`, `untrust_reason`, `seeded_from`
+(exact|lease), `seed_ms`, `cross_check_max`, `refill_failed`,
+`last_lease_error`, `marker_present`.
+
+1. **Staging test computer** with history:
+   - **First boot:** `seeded_from=exact`, `untrust_reason=no_lease`, and the
+     `seed_ms` cost.
    - **A planned restart:** `seeded_from=lease`, `trusted=true`, `seed_ms`
-     under 50, and the engine-mutex table shows no `ListObjects choir.event`.
-   - **A WebSocket cursor script:** record the highest `stream_seq` S1, then
-     restart, run a prompt, and assert every new `stream_seq` > S1 and that
-     `after_seq=S1` returns them. JSON artifact.
-2. Same test computer, **deploy 2 on**, then restart: the same three facts,
-   and no "out of reach" line.
-3. Optional rollback rehearsal on the test computer via the CI revert path,
-   then forward: `seeded_from=untrusted` once, then `lease`.
-4. **The paper**, at its next planned refresh:
-   - `seeded_from=migration`, its `seed_ms`, the first passivation time and
-     the `/health` 503 window.
-   - On the refresh after that: `seeded_from=lease`, with no event-kind read
-     on the engine mutex.
-   - Only then is deploy 2's switch eligible on the paper.
+     under 50, and no `ListObjects choir.event` in the engine-mutex table.
+   - **A WebSocket cursor script:** record S1, restart, run, and assert every
+     new `stream_seq` > S1 and that `after_seq=S1` returns them. JSON
+     artifact.
+2. **Same computer, a restore** (an owner checkpoint), then reboot:
+   `untrust_reason=swap`, exact seed once, then `lease`.
+3. **Same computer, deploy 2 on**, restart: `lease`, with no event-kind read.
+4. **Optional:** a CI-revert rollback rehearsal, then forward:
+   `untrust_reason=receipt`.
+5. **The paper**, at its next planned refresh: `exact` and its `seed_ms`; the
+   first-passivation time; the `/health` 503 window. On the refresh after
+   that, `lease`. Only then is deploy 2 eligible there.
 
-## 7. Alternatives considered
+## 7. Witness determinism and alternatives
 
-| Option | Closes the boot read | Closes the `updated_at` band | Covers published-not-stored | Cost | Verdict |
-|---|---|---|---|---|---|
-| **Lease on the tape (chosen)** | yes, one PK seek | yes | yes | one tape append per N/2 to N numbers; an async refill and a wait path; an epoch bump | chosen: no schema, witness or tape-format change, and one authority |
-| Lease in a sidecar file | yes | yes | yes | fsync per block, simple | lost with the disk or VM (slow seed then); a second authority beside the tape |
-| Projector fold (max in `finalizeBatch`'s transaction) into a new table or a heads column | yes | yes | **no** (only stored numbers) | one row write per batch; witness schema change, or an `IgnoredTables` entry at every site plus older manifests calling it unknown | rejected: misses failed-append numbers, and touches the witness boundary |
-| Option 2, the `(object_kind, updated_at)` index on `og_objects` | yes, one reverse seek | **no** | no | an online build on a 31 GiB table, write amplification on every og write [H: unmeasured]; witness-neutral, because `object_kind` already leads an index, the kind-index trick [H] | rejected as the close; acceptable later as a read optimisation |
-| Generated column `og_meta_stream_seq` and an index | yes | yes for og | no | the derived-columns operation on og, and a `SHOW COLUMNS` change | rejected: heaviest; witness churn |
-| Exact `choir_events` max by owner seeks, og by the windows | the table half only | no for og | no | none | rejected alone; a possible tighter cross-check |
-| Status quo (D13, with the exact fallback) | no: 104 s at every boot after deploy 2 | no | no | none | the reason for this design |
+**Witness content (DeepSeek F7).**
+- The witness hashes rows, not only schema
+  [V `dolt_state_extractor.go:388-403`].
+- `projectObject` substitutes the current time only for zero timestamps
+  [V `project.go:235-241`].
+- `ogPut` passes `now` into the object [V `store/graph_store.go:100-106`], so
+  live and replay already agree on the op's own timestamps. The finding's
+  premise that they would disagree is partly refuted.
+- The rule is adopted anyway: the lease op carries fixed `created_at` and
+  `updated_at` (the constant `2000-01-01T00:00:00Z`). Every lease row is then
+  a pure function of `R` and its fields.
+- The fixed old `updated_at` also keeps the row out of the newest-objects
+  windows.
 
-## Open questions (for review)
+**Alternatives.**
 
-1. **The epoch bump versus accepting the band.** Without the bump, the
-   rollback-forward residual is the old band, limited to "an older binary ran
-   and its newest event is behind 50,000 objects". The bump closes it, at the
-   cost of the `Apply` fence. This design takes the bump as the conservative
-   option.
-2. **Block size N.** 8,192 is proposed. It needs the paper's event rate (not
-   measured here) to confirm that a refill lands well within a half-block.
-3. **Lock audit.** Can any caller of `AppendEvent` or `AllocateEventSeq` hold
-   a lock the lease append also takes (the appender mutex, sealer `flushMu`,
-   lifecycle locks)? [H]
-4. **Base installs.** Does a ProjectionBase blob carry `store-schema.json`?
-   If a base published by an epoch-2 binary is installed, the first seed
-   distrusts the lease and is slow once [H].
-5. **Restore semantics** (heresy 2): does a restored computer replay past its
-   target at the next boot? The design is safe either way, with the
-   carry-forward append after `Reopen`.
-6. **Retiring the exact fallback.** Should `seedStreamSeqExact` be deleted
-   once every computer holds a trusted lease? It is then reachable only on
-   the migration and untrusted paths.
+| Option | Closes the boot read | Closes the `updated_at` band | Covers published-not-stored | Verdict |
+|---|---|---|---|---|
+| **Lease on the tape (chosen)** | yes | yes (the exact seed off the lease path) | yes, after migration | chosen |
+| Lease in a sidecar file | yes | yes | yes | lost with the disk; a second authority |
+| Fold in `finalizeBatch` (a table or column) | yes | yes | no | touches the witness boundary |
+| `(object_kind, updated_at)` index (option 2) | yes | no | no | an online build on 31 GiB [H]; a read optimisation at best |
+| `og_meta_stream_seq` column and index | yes | yes for og | no | the heaviest; a `SHOW COLUMNS` change |
+| Exact `choir_events` max by owner seeks alone | the table half | no | no | used inside the exact seed |
+| Status quo (D13) | no: 104 s per boot after deploy 2 | no | no | the reason for this record |
+
+## Open questions (round 2)
+
+1. **The exact seed's cost on the paper**, paged and metadata-only, is
+   unmeasured. If it is far above the 30 s deadline, the builder should start
+   it eagerly after replay and let `seeding` waiters wait longer.
+2. **Clearing the marker in-process.** A process whose own seed was trusted
+   or exact, and that later swaps in-process (restore), could clear the
+   marker after its next successful refill, since its memory dominates. This
+   design does not, to stay conservative: one exact seed per swap.
+3. **The per-owner skip-seek plan on `choir_events`** needs a plan test. The
+   fallback is a full column scan, still exact.
+
+## Round 2: dispositions of bunch 162
+
+Both seats said REVISE or reject-as-specified on round 1 (`ff714de1f`). Each
+finding was checked in code.
+
+| Finding | Disposition | Code |
+|---|---|---|
+| Devin F1, a trusted lease stale after a base install or rebase | **Accept.** Swap-point markers, the publisher marker, the receipt and marker rule, no "fresh" exception | `publisher.go:67-104`; `install.go:330-337`; `run.go:200` before `:366`; `rebase.go:19-76` |
+| Devin F2, unexamined write gates, a forged R, the refill wedge | **Accept.** A dedicated writer, a hard fence independent of gate mode, bound (d), `refill_failed` | `registry.go:307-314`; `writer.go:110-115`, `199-210` |
+| Devin F3, the cross-check narrower than migration | **Accept.** Widened to 2,000 then 50,000, and a violation makes the lease untrusted | `store.go:2451-2526` |
+| Devin F4, citation drift | **Accept.** Fixed: `rematerialize.go:164`, `:227-259`, `:262`; `replay_completeness.go:494`; `store.go:2547-2554` | |
+| DeepSeek F1, receipt written before repair | **Accept.** The durable marker is written before receipt 3 | `store.go:964-970` |
+| DeepSeek F2, bases and rebuilds launder the receipt; min epoch | **Accept.** As Devin F1, plus the release rule for min epoch ≤ 2 | `updater.go:459-460` |
+| DeepSeek F3, the untrusted path is the band | **Accept.** The exact seed is a full paged maximum | `store.go:2528-2545` is the band |
+| DeepSeek F4, the migration gap | **Accept.** `G = 2^20` unconditionally; the residual is stated | `runtime.go:4760-4768`; `store.go:2522` |
+| DeepSeek F5, migration concurrency | **Accept.** The single-flight state machine | `store.go:2328`, `2560`, `2596` |
+| DeepSeek F6, the lock order is wrong | **Accept the clarification. Reject the premise.** Round 1 never stated "eventMu then the appender mutex". It said "`Prepare` and `finalizeBatch` take `eventMu` under the appender mutex", which is the correct order. The full order is now stated | `computer_events.go:47`, `:140`; `appender.go:401-403` |
+| DeepSeek F7, the lease row is witness content | **Accept the rule. Partly reject the premise.** `ogPut` supplies non-zero timestamps, so live and replay already agree. Fixed constants adopted for determinism | `graph_store.go:100-106`; `project.go:235-241` |
+| DeepSeek F8, the carry-forward cannot work | **Accept. Dropped**, replaced by pinning the existing rewind refusal with a test | `computer_events.go:195`; `recovery_plan.go:66-71`, `:118-123`; `appender.go:1013-1022` |
+| DeepSeek F9, `MAX()` GroupBy and the appender cite | **Accept.** The GroupBy note is the per-run comment, now marked as an assumption for `stream_seq`; `a.mu` is at `:402` after `awaitBarrier` at `:401` | `event_table.go:226-230` |
+| DeepSeek, N of 1,024 to 2,048 | **Reject the number. Accept the method** (size against latency). The runway would be shorter than one observed engine stall | section 2 |
+| Devin and DeepSeek open-question answers (keep the exact read, take the bump, the lock audit) | **Accept** | |
