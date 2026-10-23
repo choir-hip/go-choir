@@ -321,6 +321,37 @@ Dispositions (fix round, bunch 144):
    usual deploy refresh", and that the refresh cold boots every running
    computer.
 
+## Review findings, round 2 (bunch 145), before any fix
+
+DeepSeek answered findings 1, 2 and 4 above and blocks on the fix to 3:
+
+7. MEDIUM: `scripts/proofs/fp8-image-jailer.sh` step 7 can report a false
+   PASS. The check was `node_journal … | grep -q . && fail || pass`.
+   `node_journal` returns the status of the last command in a pipeline
+   (`tail` on the host, then `ssh`), so a `journalctl` that fails prints
+   nothing and the step reports "no 'next Firecracker build' line". The
+   reviewer reproduced it with a fake ssh that exits 255 for `journalctl`:
+   both checks PASS. The same pattern is in step 1 (`--label after`). Two
+   further faults: `"discard": true` in `fc-config.json` does not tell the
+   pinned 1.17 build from D4's next 1.17 build, and the "next Firecracker
+   build" line is written once at config load (`vmm_next.go:83`), so a
+   `--since` window can miss it while `VM_FIRECRACKER_NEXT_BIN` is set.
+   The journal is the wrong evidence. The fix asserts positively from
+   vmctl's running environment (`systemctl show go-choir-vmctl -p
+   Environment`): `VM_FIRECRACKER_BIN` and `VM_JAILER_BIN` under one
+   `firecracker-1.17.x` store path and no `VM_FIRECRACKER_NEXT_BIN`, and
+   fails when the read itself fails.
+8. Nits: name the GC root
+   `/nix/var/nix/gcroots/go-choir-firecracker-1.16.2-rollback` (on Node B
+   since 02:54 UTC, pointing at the 1.16.2 path) with a verification
+   command, in the doc and in proof step 0; `check-host-firecracker-pin-test.sh`
+   exits 0 when jq is missing, so a green run can prove nothing; its header
+   says five nix eval calls and there are four; "every computer cold boots
+   once more" in the full rollback should say every computer holding a 1.17
+   snapshot (a pre-D4 1.16.x snapshot resumes on 1.16.2); the guard is a
+   strict superset of `envFlagOn` (it also strips inner whitespace), not an
+   exact match.
+
 The other DeepSeek notes need no change: 1.17.x patch releases through the
 weekly bump are the existing residual below, and "no host generation needs
 the 1.16.2 path" is true of the new generation, though an older generation
