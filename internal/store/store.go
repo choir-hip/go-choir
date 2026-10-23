@@ -2350,39 +2350,99 @@ func (s *Store) allocateEventSeqLocked(ctx context.Context, rec *types.EventReco
 	rec.Seq = maxSeq + 1
 	s.eventSeqs[key] = rec.Seq
 
-	// StreamSeq: in-memory high-water mark incremented under eventMu. The
-	// unbounded ListObjects(100000) scan it replaced walked the entire event
-	// kind per append — at owner scale (~5.8G vm, 31GiB store) that read
-	// exceeded the request deadline and drove the runtime to OOM. Seeding
-	// from the newest page (updated_at DESC, indexed) is O(1) because the
-	// most recent append always carries max(StreamSeq).
+	// StreamSeq: in-memory high-water mark incremented under eventMu, seeded
+	// once per process from the store (seedStreamSeq). The unbounded
+	// ListObjects(100000) scan it replaced walked the entire event kind per
+	// append, and the newest-500 ListObjects after it still read every event
+	// of the kind at boot (docs/problems/stream-seq-seed-scans-the-event-kind-at-boot-2026-10-23.md).
 	if !s.streamSeqSeeded {
-		newest, err := s.og.ListObjects(ctx, objectgraph.ListFilter{Kind: ogKindEvent, Limit: 500})
-		if err != nil {
-			return eventSeqKey{}, fmt.Errorf("append event: seed stream_seq: %w", err)
-		}
-		for _, obj := range newest {
-			var ev types.EventRecord
-			if err := ogDecode(obj, &ev); err != nil {
-				continue
-			}
-			if ev.StreamSeq > s.maxStreamSeq {
-				s.maxStreamSeq = ev.StreamSeq
-			}
-		}
-		tableStream, err := s.eventTableNewestStreamSeq(ctx)
-		if err != nil {
+		if err := s.seedStreamSeq(ctx, sl); err != nil {
 			return eventSeqKey{}, err
-		}
-		s.maxStreamSeq = max(s.maxStreamSeq, tableStream)
-		s.streamSeqSeeded = true
-		if sl != nil && s.maxStreamSeq > 0 {
-			s.maxStreamSeq += telemetrySeqGap // see the per-run seed above
 		}
 	}
 	s.maxStreamSeq++
 	rec.StreamSeq = s.maxStreamSeq
 	return key, nil
+}
+
+// streamSeedWindows are the sizes, in objects of any kind, of the windows
+// seedStreamSeq reads through the newest objects looking for an event. A
+// variable so a test can shrink them.
+var streamSeedWindows = []int{2000, 50000}
+
+// seedStreamSeq sets maxStreamSeq above every stream_seq the store holds, in
+// work bounded by streamSeedWindows and not by the size of the event history.
+// The caller holds eventMu.
+//
+// og_objects half: the newest event carries the maximum, as the seed has
+// always assumed, so the maximum over the events among the newest objects of
+// any kind is the answer. The newest objects are read through
+// idx_og_objects_updated backwards, kind and metadata only (the metadata
+// carries stream_seq; the body is never read). There is no (object_kind,
+// updated_at) index, and the engine plans "this kind ordered by updated_at"
+// as the kind index and a sort of every row of the kind, which held the
+// engine for 104 s on the paper; this read cannot take that plan. A window
+// holding no event is widened to the next. Events written before a stretch
+// of other kinds no longer than the widest window are found.
+//
+// One case is not covered: events exist, and every one is older than the
+// newest streamSeedWindows[last] objects of all kinds. The seed then says so
+// in the log and takes the event table's maximum alone, which can be lower
+// than a stored stream_seq. A persisted high-water mark would close it; it is
+// the recorded follow-up (option 2 of the problem record), not built here.
+// The event table half (eventTableNewestStreamSeq) is bounded by its key.
+func (s *Store) seedStreamSeq(ctx context.Context, sl *telemetrySealer) error {
+	graph := s.ogStore
+	if graph == nil {
+		return fmt.Errorf("append event: seed stream_seq: object graph not initialized")
+	}
+	var maxSeq int64
+	found, sawAll := false, false
+	for _, window := range streamSeedWindows {
+		headers, err := graph.ListNewestObjectHeaders(ctx, window)
+		if err != nil {
+			return fmt.Errorf("append event: seed stream_seq: %w", err)
+		}
+		for _, h := range headers {
+			if h.Kind != ogKindEvent {
+				continue
+			}
+			found = true
+			var meta struct {
+				StreamSeq int64 `json:"stream_seq"`
+			}
+			if err := json.Unmarshal(h.Metadata, &meta); err != nil {
+				continue
+			}
+			maxSeq = max(maxSeq, meta.StreamSeq)
+		}
+		sawAll = len(headers) < window
+		if found || sawAll {
+			break
+		}
+	}
+	if !found && !sawAll {
+		// Every window was full of other kinds. One seek of the kind index
+		// tells "no events at all" from "events out of reach".
+		exists, err := graph.HasObjectOfKind(ctx, ogKindEvent)
+		if err != nil {
+			return fmt.Errorf("append event: seed stream_seq: %w", err)
+		}
+		if exists {
+			log.Printf("store: stream_seq seed: choir.event objects exist but none is among the newest %d objects, out of reach of the bounded seed; seeding from %s alone", streamSeedWindows[len(streamSeedWindows)-1], choirEventsTable)
+		}
+	}
+	s.maxStreamSeq = max(s.maxStreamSeq, maxSeq)
+	tableStream, err := s.eventTableNewestStreamSeq(ctx)
+	if err != nil {
+		return err
+	}
+	s.maxStreamSeq = max(s.maxStreamSeq, tableStream)
+	s.streamSeqSeeded = true
+	if sl != nil && s.maxStreamSeq > 0 {
+		s.maxStreamSeq += telemetrySeqGap // see the per-run seed above
+	}
+	return nil
 }
 
 // AllocateEventSeq gives an event that is written by some path other than

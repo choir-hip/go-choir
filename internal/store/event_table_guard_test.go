@@ -70,6 +70,7 @@ func stringLiterals(node ast.Node) []string {
 // of ogKindEvent fails here until someone decides which.
 var ogKindEventFunctions = map[string]string{
 	"allocateEventSeqLocked":          "writer; the one allocator of seq and stream_seq: both seeds read both tables",
+	"seedStreamSeq":                   "writer; the stream seed: bounded newest-objects window of og_objects, then choir_events",
 	"AppendEventOG":                   "writer",
 	"buildEventObject":                "writer",
 	"recheckTelemetryOp":              "writer (the sealer's second look)",
