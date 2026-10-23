@@ -156,3 +156,56 @@ Rollback order matters: deselect first (the computer cold boots without
 `DNS=`), then drop the port or Unbound. Dropping Unbound or the DNAT under
 a guest that has `DNS=` leaves it with no resolver until its next cold
 boot.
+
+## Observed on T, 2026-10-23: the fallback stays current beside DNS=
+
+FP0 ran `scripts/guest_diag_probe.py --probe all --expect-udp53 open` from
+Node B against T (computer-71afbf1461dffabcce8eeebe558d03bd, the one
+computer in `VMCTL_GUEST_DNS_ONLY`) at 17:27 UTC, on a guest that cold
+booted at 17:27:30 on c53237618 (D17). Eight checks matched and one did
+not:
+
+- matched: `/etc/resolv.conf` is the resolved stub (127.0.0.53); the
+  runtime network unit ends with `DNS=10.200.55.1` (the tap host);
+  resolved's own server list and the link's DNS servers are exactly the
+  tap host; the system resolver answers (example.com, 22 ms); direct UDP 53
+  to 1.1.1.1 is open (expected until the SEC-10 close);
+- did not match: `resolvectl status` shows the **Global** scope with
+  `Current DNS Server: 1.1.1.1#one.one.one.one`, beside the link's
+  `Current DNS Server: 10.200.55.1`. The Global section lists resolved's
+  compiled-in `Fallback DNS Servers` (1.1.1.1, 8.8.8.8, 9.9.9.9, 1.0.0.1,
+  8.8.4.4, 149.112.112.112 and six IPv6 addresses); the guest image's
+  `/etc/systemd/resolved.conf` sets no `FallbackDNS=` line
+  (`nix eval` of `environment.etc."systemd/resolved.conf".text`).
+
+So the sentence above, "resolved uses FallbackDNS only when the link has
+no `DNS=`", is false as a statement about a booted guest: the link has
+`DNS=` and a fallback server is still the Global scope's current server.
+
+Hypothesis, not confirmed by a packet trace (Node B has no tcpdump, and
+the host floor has no per-port counter for public 53): resolved picks a
+fallback as the Global current server when a lookup runs before
+networkd has given the link its `DNS=` (early boot, timesyncd), and keeps
+it, since its server selection only falls back when no current server is
+set. A Global scope with a current server takes part in every lookup that
+no routing domain claims, beside the link scope, so plain DNS from a
+selected guest still reaches a public resolver today. The SEC-10 close
+(public 53 dropped at the floor) would turn those queries into timeouts on
+the Global scope, not into failures, because the link scope still answers.
+Either way the property SEC-10 step 3 asserts, that no fallback is in use,
+does not hold.
+
+Why not set `FallbackDNS=` empty in the image: every guest except T has no
+`choir.dns=` and no link `DNS=`, so the compiled-in fallback is its only
+resolver today (the paper included). Emptying it image-wide would leave
+those guests with no DNS. The fix follows the selector instead:
+`go-choir-configure-network` writes a resolved drop-in with an empty
+`FallbackDNS=` only when it accepted a `choir.dns=` address, so only a
+guest that has the host resolver loses the public fallback. Mutation class:
+red (the guest boot path), gated by the existing selector; rollback is
+removing T from `VMCTL_GUEST_DNS_ONLY` (it cold boots without `choir.dns=`
+and without the drop-in) or reverting the commit.
+
+Evidence: `_runs/d17-proof-guestdiag.json` and `_runs/d17-proof-dns-raw.json`
+in FP0's run folder (the probe report and the raw `/internal/diag/dns`
+answer, with the full `resolvectl status` text).
