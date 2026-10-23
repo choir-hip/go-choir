@@ -1525,7 +1525,9 @@ in
         # Jailed VMs share one inode per store image (RES-05). Rollback:
         # VMCTL_JAILER=off (new launches go direct; a jailed snapshot is
         # refused and the computer cold boots).
-        "VMCTL_JAILER=off"
+        # Step 1 (SEC-04, 2026-10-23): one fresh test computer, fp8-jailer-1023.
+        "VMCTL_JAILER=on"
+        "VMCTL_JAILER_ONLY=computer-476cd7944083ba08d6234bae0c341724"
         "VM_JAILER_BIN=${pkgs.firecracker}/bin/jailer"
         "VMCTL_JAILER_CGROUP_PARENT=system.slice/go-choir-vmctl.service/vms"
         "VM_MKFS_EXT4_BIN=${pkgs.e2fsprogs}/bin/mkfs.ext4"

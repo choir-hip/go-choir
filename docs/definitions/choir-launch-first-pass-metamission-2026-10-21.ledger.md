@@ -1375,3 +1375,14 @@ Append-only. One terse entry per orchestrator pass.
   - T (computer-71afbf…) on a01d2e1f0: exact / no_lease / seed_ms 739; reserved through 1122793; no lease errors.
   - Owed: the next planned restart of each computer reads seeded_from=lease with seed_ms under 50; the paper's first refill (allocated_through moves).
 - 22:5x. Post-diet journal, the paper, 21:51 to 22:36: 54 to 125 MiB/min between GC passes (median about 80), against about 164 MiB/min on 10-22, which was before D7. The rate follows the work, so this gap is not all the diet. Each GC pass ran at 1080 to 1339 MiB and took 24 to 37 s. Evidence: _runs/d21-journal-watch.txt.
+- 22:54. T's lease-read boot (design section 6 step 1, by a vmctl refresh, caller operator.fp0-d24-lease-read): seeded_from lease, trusted true, seed 1122793 (the prior reservation), reserved through 1188329, seed_ms 220, last_lease_error empty.
+  - cross_check_max 8681 is a lower bound by design (test 11): T's exact max was 8681, and its first seed was 8681 + 2^20 = 1057257.
+  - 220 ms is over the 50 ms target and unexplained. It is still under a second, and the exact path is not run. Observed; the read-only breakdown (heads, lease read, the 2,000/50,000 header windows) is owed.
+  - The paper's lease-read boot is still owed, at its next planned refresh.
+- 23:0x. D25 lands, alone: SEC-04 step 1, the jailer on one fresh test computer (nix/node-b.nix: VMCTL_JAILER=on, VMCTL_JAILER_ONLY=computer-476cd7944083ba08d6234bae0c341724).
+  - Class red (vmctl, VM lifecycle). Tier 0: an owner-authorized rollout (owner notes section 27 item 3; readiness plan "Steps 1 to 4: nothing"), config only, with a one-act rollback (VMCTL_JAILER=off). The jailer code was reviewed in bunches 5 and 144 to 146 and landed inert in deploy B and D8.
+  - The test computer J is fp8-jailer-1023, minted at 22:56 by qa_test_computer.mjs (user b57e613e…, guest a01d2e1f0). Node B had 13.8 GB available before the mint.
+  - Cheap checks: both systems evaluate. The evaluated vmctl environment has VMCTL_JAILER=on with the selector naming only J, and VM_JAILER_BIN is the 1.17.0 jailer. The four gates pass (guest token selftest 196/0). The proof script dry run is clean.
+  - Proof step 1 before (read-only, the paper as control): fc-config.json sha256 52feedba… (_runs/sec04-step1-before.json).
+  - Proof, after the deploy: vmctl logs "jailer ready". J is stopped and started, then script steps 4 and 6 run (confinement jailer; vmm_confinement_verify --expect jailer), and jail_files shows store.img shared. The control's fc-config is unchanged at its next natural launch. Steps 3 and 4 (a second test computer; hibernate and wake, a vmctl restart with reattach, the assumed-breach probe) follow.
+  - Rollback: VMCTL_JAILER=off plus a deploy. J cold boots at its next launch.
