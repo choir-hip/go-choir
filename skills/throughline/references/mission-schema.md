@@ -241,7 +241,7 @@ One entry — the latest review of this file (not of landed code).
 `frozen_ref` binds the verdict to a content digest; a `reviewed` file
 whose digest changed since its `accept` is `drafted` again. This is the
 authoring gate; the landed-candidate review gate at `complete` (sized by
-risk tier: none, one Devin seat, or a panel) is a separate, unchanged
+risk tier: none, one Devin seat, or Devin plus DeepSeek) is a separate, unchanged
 obligation for behavior change.
 
 ### `metamission` — ordered station set

@@ -198,7 +198,7 @@ intent       a direction, not yet shaped — exists so the idea isn't lost;
              do not execute
 drafted      authored to the schema; unreviewed; not executable
 reviewed     passed review of THIS file (one Devin seat by default; a
-             panel when the file authorizes tier 2 work), bound to a
+             DeepSeek too when the file authorizes tier 2 work), bound to a
              frozen digest in `review`; coherent and authority-checked
 executable   authorized to run: `readiness: executable` +
              `now.status: working` + named authority (owner statement, or
@@ -324,13 +324,21 @@ moving target to a panel and do not use a panel merely to narrate progress.
 **Allocate review by risk, not by habit** (owner, 2026-10-23: "allocating code
 review to hard stuff and trusting that we can handle the easy stuff cold";
 "make devin the go-to reviewer"). The tiers are in the repo operating
-contract (`CLAUDE.md`, Mutation Classes): tier 0, no model review (green and
-yellow, proof tooling, mechanical rebases, fixes answering an earlier
-finding); tier 1, one seat, Devin (orange, and red that is additive, behind a
-switch, with a one-act rollback); tier 2, three seats (red where a defect
-would be silent or irreversible). A goal file names the tier of each
-candidate it lands and does not hardcode a panel. Re-review only a behaviour
-change on a tier 2 surface, one seat on the delta, never for nits.
+contract (`CLAUDE.md`, Mutation Classes). Cheap checks come first, every
+time (repo gates, nix eval when nix changed, dry run of touched proof scripts,
+CI mirror, rebase onto the deploy tree). Tier 0, no model review: green and
+yellow by default, proof tooling, mechanical rebases, and fixes answering doc,
+nit or test-only findings; but an architectural design (a new mechanism, a
+doctrine change, a design a build will follow) is reviewed like the change it
+designs, and the proof, rollback and procedure text of a red deploy is not
+tier 0. Tier 1, one seat, Devin: orange, and red that is additive, behind a
+switch, with a one-act rollback. Tier 2, two seats, Devin and DeepSeek: red
+where a defect would be silent or irreversible. The tiers are a default and the
+orchestrator judges by context. A goal file names the tier of each candidate it
+lands and does not hardcode a panel. Re-review a red delta, one seat, whenever
+the previous round found a blocking-real defect; after three rounds on one
+mechanism, look at the substrate. Evidence:
+`docs/evidence/review-yield-2026-10-23.md`.
 
 Bind review to a frozen candidate identity: base ref, scoped paths, digest, and
 available evidence. The result is an evidence receipt with an adjudicated
@@ -341,7 +349,7 @@ pass.
 **Review is a completion gate, sized by tier.** Before a behavior-changing
 mission may settle `complete`, run the tier's review on the frozen landed
 candidate (diff identity + deployed evidence): none for tier 0, one Devin
-seat for tier 1, the agentic-consensus panel for tier 2. The gate is not
+seat for tier 1, Devin plus DeepSeek for tier 2. The gate is not
 advisory:
 
 - **Approve** → record the `consensus_review` receipt (or the tier 0 check
