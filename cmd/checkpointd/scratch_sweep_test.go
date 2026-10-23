@@ -59,9 +59,16 @@ func (f *sweepFixture) dir(name string, size int, age time.Duration) string {
 }
 
 // marker writes the worker's genesis-repair marker beside a scratch directory.
-func (f *sweepFixture) marker(name string) {
+func (f *sweepFixture) marker(name string) { f.markerAged(name, oldAge) }
+
+func (f *sweepFixture) markerAged(name string, age time.Duration) {
 	f.t.Helper()
-	if err := os.WriteFile(filepath.Join(f.root, name+genesisRepairSuffix), nil, 0o600); err != nil {
+	p := filepath.Join(f.root, name+genesisRepairSuffix)
+	if err := os.WriteFile(p, nil, 0o600); err != nil {
+		f.t.Fatal(err)
+	}
+	when := f.now.Add(-age)
+	if err := os.Chtimes(p, when, when); err != nil {
 		f.t.Fatal(err)
 	}
 }
@@ -331,5 +338,139 @@ func TestSweepRemovesOnlyDanglingMarkers(t *testing.T) {
 	}
 	if f.exists("computer-gone-9" + genesisRepairSuffix) {
 		t.Fatal("a dangling marker was kept")
+	}
+}
+
+// Round 2 (docs/problems/platform-artifact-retention-2026-10-22.md section 10).
+
+// N1: a job admitted after the job rows were read and before the rename must
+// not lose its directory. The job read is repeated after the rename, and a
+// held directory is renamed back.
+func TestSweepRestoresADirectoryAJobClaimsBetweenReadAndRename(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		job  scratchJobState
+	}{
+		{"running", scratchJobState{Generation: 1, Status: "running"}},
+		{"queued", scratchJobState{Generation: 1, Status: "queued"}},
+		{"genesis repair", scratchJobState{Generation: 1, Status: "blocked", GenesisRepair: true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newSweepFixture(t)
+			p := f.dir("computer-x-1", 300, oldAge)
+			reads := 0
+			cfg := f.cfg()
+			cfg.Jobs = func() (map[string]scratchJobState, error) {
+				reads++
+				if reads == 1 {
+					return map[string]scratchJobState{}, nil // no row yet
+				}
+				return map[string]scratchJobState{"computer-x": tc.job}, nil // the claim landed
+			}
+			res, err := sweepOrphanScratch(cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(res.Removed) != 0 {
+				t.Fatalf("removed a directory a job now holds: %+v", res.Removed)
+			}
+			if _, err := os.Stat(filepath.Join(p, "sub", "runtime.db")); err != nil {
+				t.Fatalf("the directory was not restored intact under its own name: %v", err)
+			}
+			if left, _ := filepath.Glob(filepath.Join(f.root, sweepingPrefix+"*")); len(left) != 0 {
+				t.Fatalf("a renamed directory was left behind: %v", left)
+			}
+			for _, rec := range f.logRecords() {
+				if rec["op"] == "scratch_removed" {
+					t.Fatalf("logged a removal that did not happen: %v", rec)
+				}
+			}
+		})
+	}
+}
+
+// N1: the claim lands after the rename, so the job (which creates its
+// directory after claiming) already made a fresh one under the live name. The
+// sweep must leave that fresh directory alone.
+func TestSweepNeverTouchesADirectoryCreatedAfterTheRename(t *testing.T) {
+	f := newSweepFixture(t)
+	f.dir("computer-x-1", 300, oldAge)
+	cfg := f.cfg()
+	cfg.afterRename = func(name string) {
+		f.jobs["computer-x"] = scratchJobState{Generation: 1, Status: "running"}
+		fresh := filepath.Join(f.root, name)
+		if err := os.MkdirAll(fresh, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(fresh, "runtime.db"), []byte("job state"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := sweepOrphanScratch(cfg); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(filepath.Join(f.root, "computer-x-1", "runtime.db"))
+	if err != nil || string(got) != "job state" {
+		t.Fatalf("the job's fresh directory was disturbed: %v %q", err, got)
+	}
+}
+
+// N4: the claim-time prune honors the genesis-repair marker too.
+func TestPruneSupersededScratchKeepsMarkedGenesisRepair(t *testing.T) {
+	root := t.TempDir()
+	for _, name := range []string{"computer-aa-3", "computer-aa-4"} {
+		if err := os.MkdirAll(filepath.Join(root, name), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(root, "computer-aa-3"+genesisRepairSuffix), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	removed := pruneSupersededScratch(root, "computer-aa", 5)
+	if len(removed) != 1 || removed[0] != "computer-aa-4" {
+		t.Fatalf("removed = %v, want only computer-aa-4", removed)
+	}
+	if _, err := os.Stat(filepath.Join(root, "computer-aa-3")); err != nil {
+		t.Fatalf("a marked genesis-repair scratch was pruned: %v", err)
+	}
+}
+
+// N6: a marker younger than the age gate is kept even when its directory is
+// not in this listing (the directory is created first, a chunked listing can
+// miss it).
+func TestSweepKeepsAFreshDanglingMarker(t *testing.T) {
+	f := newSweepFixture(t)
+	f.markerAged("computer-new-1", time.Minute)
+	f.markerAged("computer-old-1", oldAge)
+	if _, err := sweepOrphanScratch(f.cfg()); err != nil {
+		t.Fatal(err)
+	}
+	if !f.exists("computer-new-1" + genesisRepairSuffix) {
+		t.Fatal("a fresh marker was removed")
+	}
+	if f.exists("computer-old-1" + genesisRepairSuffix) {
+		t.Fatal("an old dangling marker was kept")
+	}
+}
+
+// N5: the intent to remove is in the log before the directory is touched.
+func TestSweepLogsIntentBeforeRemoving(t *testing.T) {
+	f := newSweepFixture(t)
+	f.dir("computer-y-2", 77, oldAge)
+	cfg := f.cfg()
+	var atRename []map[string]any
+	cfg.afterRename = func(string) { atRename = f.logRecords() }
+	if _, err := sweepOrphanScratch(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if len(atRename) != 1 || atRename[0]["op"] != "scratch_remove_intent" || atRename[0]["path"] != "checkpoint-scratch/computer-y-2" {
+		t.Fatalf("log at the moment of the rename = %v, want one scratch_remove_intent", atRename)
+	}
+	ops := []any{}
+	for _, rec := range f.logRecords() {
+		ops = append(ops, rec["op"])
+	}
+	if len(ops) != 2 || ops[1] != "scratch_removed" {
+		t.Fatalf("ops = %v, want [scratch_remove_intent scratch_removed]", ops)
 	}
 }
