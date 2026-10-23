@@ -154,4 +154,21 @@ func runMemoryIndexDietCensus(t *testing.T, seed int) {
 		return nil
 	})
 	cost("after the operation (4)")
+
+	// The rollback: restore_run_memory_indexes, which a revert runs before the
+	// old binary deploys. Its report carries each build's hold.
+	hold("restore_run_memory_indexes (three builds)", func() error {
+		rep, err := s.RestoreRunMemoryIndexes(ctx, nil)
+		for _, st := range rep.Steps {
+			t.Logf("rows=%d restore step %s %s: %d ms", seed, st.Name, st.Action, st.HoldMS)
+		}
+		t.Logf("rows=%d restore total hold %d ms", seed, rep.TotalHoldMS)
+		return err
+	})
+	cost("after the restore (the paper's schema today) (5)")
+	hold("restore again (idempotent)", func() error {
+		rep, err := s.RestoreRunMemoryIndexes(ctx, nil)
+		t.Logf("rows=%d second restore: %d steps, total hold %d ms", seed, len(rep.Steps), rep.TotalHoldMS)
+		return err
+	})
 }
