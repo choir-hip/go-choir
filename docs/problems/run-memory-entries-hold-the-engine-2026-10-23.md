@@ -795,8 +795,61 @@ and the repo's rule for a table with rows applies regardless of the witness
   unchanged, and the operation drops it again.
 - *Revert the commit, store not yet dropped:* nothing changes.
 
-**Measurements** (local, 425,000 rows, `TestRunMemoryHoldCensus`): to follow in
-the update after the code lands.
+**Built (code `ba04ae68c`) and measured. [V] local**, `TestRunMemoryHoldCensus`
+(the R5 section: with the index, dropped by the production operation, without,
+recreated, with, dropped, without; a `SELECT 1` probe on `s.db` every 10 ms
+through each DDL; 200 appends per phase, the store directory's growth per
+append). The kind index is present throughout.
+
+| rows | journal per append with / without loop_seq (two alternations) | saved | drop (operation step) hold of the write connection | CREATE (the rollback's rebuild) hold |
+|---|---|---|---|---|
+| 50,000 | 46.0, 47.0 / 44.4, 46.0 KiB | about 1.3 KiB (3%) | 58 and 71 ms whole, longest probe wait 2 ms | 80 and 88 ms |
+| 100,000 | 48.9, 50.4 / 47.9, 49.2 KiB | about 1.1 KiB (2%) | 60 and 60 ms, longest wait 3 ms | 163 and 137 ms |
+| 425,000 | 55.7, 56.1 / 53.1, 53.2 KiB | about 2.75 KiB (5%) | 111 and 73 ms, longest wait 29 ms and 10 ms | 1.12 s and 1.01 s (longest wait 1.10 s) |
+
+**The saving is much smaller than the pairing note above said.** The kind index
+cost 12.5 KiB per append; this one (two narrow columns, short keys) is worth
+**1.1 to 2.8 KiB per append**, the measure noisy by about 1 KiB between phases.
+At 3.7 appends a second that is about 4 to 10 KiB/s, **0.2 to 0.6%** of the
+paper's modelled 1.77 MiB/s journal growth, not "about as much" as the kind
+index (the journal record's R5 figure of about 30 KiB/s, 2%, is not
+reproduced locally). Time per append is unchanged within noise (6.7 to 10.5 ms,
+no ordering). It is the right cleanup (a tree nothing reads, a fresh store
+made without it) and a small one; the chosen cost is a few hundred lines
+of test and a two-statement schema change for 0.2 to 0.6% of the growth. If FP0
+weighs it against a restart-bearing deploy, the weight is small. **[H]** the
+paper's saving per append is the local one: the paper's tree depth at 425,000
+rows is the 425,000-row row above.
+
+**The drop's hold. [V]** 73 to 111 ms at 425,000 rows (a metadata operation on
+Dolt: the index tree is released, not rewritten), the longest `SELECT 1` wait
+10 to 29 ms, well under `/health`'s 1 s budget; nothing in the paper's
+`/health` 503 rate comes from it. The rollback's rebuild is the expensive
+direction: 1.0 to 1.1 s of the write connection at 425,000 rows, at the boot of
+a reverted binary (before its listener) on a store that had dropped the index.
+The paper's own kind-index build took 19.3 s against 1.0 to 1.2 s locally, so a
+paper rebuild could be on the order of tens of seconds **[H]**.
+
+**Checks. [V]** focused `-race` on `internal/store` (`-run
+'RunMemory|DerivedColumn|BootSteps|TestListRunMemory'`) and on
+`internal/autoputer` (`-run DerivedColumn`); the store's
+`Open|Schema|Boot|Witness|Index|Epoch|Residue|EventTable` tests; the three gate
+scripts and `scripts/selftest-guest-token` (196 passed).
+
+**Rollout. [H]** Deploy; then, with the kind index already built, run
+`POST /internal/store/derived-columns?action=migrate` on the paper again: it
+finds the kind index present and drops `idx_run_memory_entries_loop_seq` (one
+step, `drop_index`), and `GET` reports `run_memory_loop_seq_index.present=false`.
+A computer that is not migrated keeps the index (and the journal cost) and
+works. No order dependency with the kind index; the operation does kind first.
+
+**Heresy delta.** Discovered: the journal record's R5 estimate (2% of the
+growth) and this record's "about as much as the kind index" were not measured
+and are off by a factor of 4 to 20 locally (0.2 to 0.6%); a revert of any
+index drop is a boot-time build because `schemaDDL` is the old binary's
+authority. Introduced: one more `Open` hook (a discovery read and, on an empty
+table only, a drop). Repaired: one duplicate tree per append; the fresh-store
+and migrated-store structures agree after the operation.
 
 ## Next (not in this pass)
 
