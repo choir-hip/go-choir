@@ -132,8 +132,9 @@ Evidence: code reading only. No trace shows any of the three firing.
    `pool:default`, and `pool:synthetic-luna` is the one other pool; no
    test or default names another pool. A computer whose own file names a
    pool the catalog lacks (I could not look at any live file, no SSH) would
-   now see the error where it previously ran on the default pool; for the
-   old pools `default` the platform policy gives the same model. Test:
+   now see the error where it previously ran silently on the default pool;
+   the platform policy it falls back to is also the default pool, so the
+   model is the same and only the error is new. Test:
    `TestUnknownPoolFailsClosedNamingThePool`.
 3. Synthetic effort: fixed, and I chose the advertised enum as the
    contract: `minimal` maps to `none`, `medium` maps to `high` (same
