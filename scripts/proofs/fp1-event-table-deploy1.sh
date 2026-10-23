@@ -78,7 +78,7 @@ step_2() {
 	info "GET /api/runs/$OPT_run/events?limit=1000 on the guest (label=$OPT_label)"
 	events=$(guest_get "/api/runs/$OPT_run/events?limit=1000")
 	[ "$PROOF_DRY" = 1 ] && return 0
-	out=$(printf '%s' "$events" | jq -c --arg label "$OPT_label" --arg run "$OPT_run" '(.events // .) as $e | {label: $label, run: $run, count: ($e | length), first_seq: ($e[0].seq // null), last_seq: ($e[-1].seq // null), ids_sha: ($e | map(.event_id) | join(",") | @base64)}' 2>/dev/null)
+	out=$(printf '%s' "$events" | jq -c --arg lbl "$OPT_label" --arg run "$OPT_run" '(.events // .) as $e | {"label": $lbl, run: $run, count: ($e | length), first_seq: ($e[0].seq // null), last_seq: ($e[-1].seq // null), ids_sha: ($e | map(.event_id) | join(",") | @base64)}' 2>/dev/null)
 	if [ -z "$out" ]; then fail "could not read the run's events"; return 1; fi
 	info "events $out"
 	[ -z "$OPT_out" ] || printf '%s\n' "$out" >"$OPT_out"
