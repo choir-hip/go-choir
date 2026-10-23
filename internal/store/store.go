@@ -1112,6 +1112,16 @@ func (s *Store) Reopen(path string) error {
 	if err != nil {
 		return err
 	}
+	// The writer's switch survives a reopen; the adopted workspace (a restore
+	// or base install) may carry no floor, so it gets one BEFORE it is adopted
+	// and before any stamp can land in it (bunch 148, Devin 2a). If that fails
+	// the writer goes off first.
+	if s.eventTableWrites.Load() {
+		if err := writeEventTableFloorAt(live.texturePath); err != nil {
+			s.eventTableWrites.Store(false)
+			log.Printf("runtime store: reopen: event-table writer off: %v", err)
+		}
+	}
 	// The adopted workspace may carry a different deposit-upcast ledger (a
 	// rematerialize flip or base install replaces the files wholesale), so
 	// the cached decision, its alias map and its appended file handle must
@@ -1138,14 +1148,6 @@ func (s *Store) Reopen(path string) error {
 	*live = Store{}
 	s.closedOK = false
 	s.reopenCheckpoint()
-	// The writer's switch survives a reopen; the adopted workspace (a restore
-	// or base install) may carry no floor, so it gets one before any stamp.
-	if s.eventTableWrites.Load() {
-		if err := s.writeEventTableFloor(); err != nil {
-			s.eventTableWrites.Store(false)
-			log.Printf("runtime store: reopen: event-table writer off: %v", err)
-		}
-	}
 	return nil
 }
 

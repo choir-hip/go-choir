@@ -449,7 +449,14 @@ func (s *Store) SetEventTableWrites(on bool) error {
 	if s == nil {
 		return nil
 	}
-	if on && s.projectionTape != nil {
+	if on {
+		// A store with no tape cannot stamp, so it cannot be floored in any
+		// useful way: refuse rather than set a switch that later binds a tape
+		// with no floor under it (bunch 148, DeepSeek P3).
+		if s.projectionTape == nil {
+			s.eventTableWrites.Store(false)
+			return fmt.Errorf("store: event-table writer stays off: the projection tape is not bound")
+		}
 		if err := s.writeEventTableFloor(); err != nil {
 			s.eventTableWrites.Store(false)
 			return fmt.Errorf("store: event-table writer stays off: %w", err)
@@ -460,8 +467,23 @@ func (s *Store) SetEventTableWrites(on bool) error {
 }
 
 func (s *Store) writeEventTableFloor() error {
-	return storeschema.WriteFloor(s.texturePath, eventTableFloorEpoch, eventTableFloorReason)
+	return writeEventTableFloorAt(s.texturePath)
 }
+
+// writeEventTableFloorAt floors a workspace. A floor above the build's own
+// epoch would make the next boot refuse its own store, so it is refused here
+// too (bunch 148, DeepSeek P4); the constant assertion below catches the same
+// drift at compile time.
+func writeEventTableFloorAt(workspace string) error {
+	if storeschema.Version < eventTableFloorEpoch {
+		return fmt.Errorf("store: the build's schema epoch %d is below the event-table floor %d", storeschema.Version, eventTableFloorEpoch)
+	}
+	return storeschema.WriteFloor(workspace, eventTableFloorEpoch, eventTableFloorReason)
+}
+
+// Compile-time guard: storeschema.Version must be at least the floor epoch
+// (the constant expression underflows uint64 otherwise).
+const _ = storeschema.Version - eventTableFloorEpoch
 
 // ensureEventTableFloor floors a workspace whose choir_events holds a row.
 // It reads one row by primary key, never the table.
