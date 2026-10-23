@@ -63,6 +63,20 @@ func postEventTable(t *testing.T, rt *Runtime, value bool, mutate func(*http.Req
 	return rec
 }
 
+// readyLease seeds the stream_seq lease and waits until it is ready on the
+// tape: store.event_table refuses to turn on before that.
+func readyLease(t *testing.T, rt *Runtime) {
+	t.Helper()
+	deadline := time.Now().Add(60 * time.Second)
+	for rt.store.StreamSeqLeaseStats().State != "ready" {
+		if time.Now().After(deadline) {
+			t.Fatalf("the lease never became ready: %+v", rt.store.StreamSeqLeaseStats())
+		}
+		rt.store.StartStreamSeqSeed()
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 func appendToolResult(t *testing.T, rt *Runtime, id string) {
 	t.Helper()
 	rec := &types.EventRecord{EventID: id, RunID: "run-event-table", OwnerID: eventTableOwner, Timestamp: time.Now().UTC(), Kind: types.EventToolResult}
@@ -104,6 +118,7 @@ func TestEventTableSettingIsOffByDefaultAndAnOwnerAct(t *testing.T) {
 func TestEventTableSettingNeedsTheHostGrant(t *testing.T) {
 	rt := eventTableRuntime(t, "computer-event-table-ungranted", false)
 	rt.configureEventTable(context.Background())
+	readyLease(t, rt)
 	if rec := postEventTable(t, rt, true, nil); rec.Code != http.StatusOK {
 		t.Fatalf("set = %d %s", rec.Code, rec.Body)
 	}
@@ -126,6 +141,7 @@ func TestEventTableSettingNeedsTheHostGrant(t *testing.T) {
 		t.Fatal(err)
 	}
 	other.configureEventTable(context.Background())
+	readyLease(t, other)
 	if rec := postEventTable(t, other, true, nil); rec.Code != http.StatusOK {
 		t.Fatalf("set = %d %s", rec.Code, rec.Body)
 	}
@@ -210,6 +226,7 @@ func TestEventTableObservabilityIsUnchangedWhenOff(t *testing.T) {
 	}
 	on := eventTableRuntime(t, "computer-event-table-obs-on", true)
 	on.configureEventTable(context.Background())
+	readyLease(t, on)
 	if rec := postEventTable(t, on, true, nil); rec.Code != http.StatusOK {
 		t.Fatalf("set = %d %s", rec.Code, rec.Body)
 	}
@@ -236,6 +253,7 @@ func TestEventTableSameValuePostRetriesAFailedApply(t *testing.T) {
 	t.Setenv("CHOIR_OWNER_ID", eventTableOwner)
 	rt := eventTableRuntime(t, "computer-event-table-retry", true)
 	rt.configureEventTable(context.Background())
+	readyLease(t, rt)
 	workspace := rt.store.TexturePath()
 
 	// The floor cannot be written: the workspace directory refuses a new file.
@@ -274,6 +292,7 @@ func TestEventTableStatusReadsTheStoresLiveSwitch(t *testing.T) {
 	t.Setenv("CHOIR_OWNER_ID", eventTableOwner)
 	rt := eventTableRuntime(t, "computer-event-table-live-status", true)
 	rt.configureEventTable(context.Background())
+	readyLease(t, rt)
 	if rec := postEventTable(t, rt, true, nil); rec.Code != http.StatusOK {
 		t.Fatalf("set on = %d %s", rec.Code, rec.Body)
 	}
@@ -287,5 +306,76 @@ func TestEventTableStatusReadsTheStoresLiveSwitch(t *testing.T) {
 	}
 	if st := rt.eventTableStatus(); st.Writing {
 		t.Fatalf("status = %+v after the store's switch went off, want writing:false", st)
+	}
+}
+
+// The stream_seq lease gate (docs/problems/stream-seq-high-water-mark-design-
+// 2026-10-23.md, section 4 "When"): store.event_table refuses to turn on until
+// the lease is ready with a lease on the tape, and the API says so. Ways it
+// can fail, written before the code:
+//   - the POST stores true and answers 200 while the lease is unseeded, so the
+//     owner believes the writer is on;
+//   - the refusal is a 500 or names nothing the owner can act on (the lease
+//     state, the observability block to watch);
+//   - a value stored before a restart arms the writer at boot and the status
+//     reports writing while the lease is still seeding;
+//   - once the lease is ready the switch still refuses, or the status does not
+//     follow the lease without another POST.
+
+func TestEventTableSettingRefusesUntilTheLeaseIsReady(t *testing.T) {
+	ctx := context.Background()
+	t.Setenv("CHOIR_OWNER_ID", eventTableOwner)
+	rt := eventTableRuntime(t, "computer-event-table-lease", true)
+	rt.configureEventTable(ctx)
+	if got := rt.store.StreamSeqLeaseStats().State; got != "unseeded" {
+		t.Fatalf("fixture: lease state %q, want unseeded", got)
+	}
+
+	rec := postEventTable(t, rt, true, nil)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("set on with the lease unseeded = %d %s, want 409", rec.Code, rec.Body)
+	}
+	var body apiError
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("refusal body %s: %v", rec.Body, err)
+	}
+	for _, want := range []string{"stream_seq lease", "unseeded", "stream_seq_lease"} {
+		if !strings.Contains(body.Error, want) {
+			t.Fatalf("refusal %q does not name %q", body.Error, want)
+		}
+	}
+	if _, err := rt.store.GetComputerSetting(ctx, eventTableOwner, rt.cfg.ComputerID, store.SettingEventTable); err == nil {
+		t.Fatal("a refused POST stored the setting")
+	}
+	if rt.store.EventTableWritesOn() {
+		t.Fatal("a refused POST turned the writer on")
+	}
+
+	// A value stored before a restart: the boot arms the switch, and the
+	// status says the writer waits for the lease.
+	if err := rt.store.PutComputerSetting(ctx, store.ComputerSetting{OwnerID: eventTableOwner, ComputerID: rt.cfg.ComputerID, Key: store.SettingEventTable, Value: true, UpdatedAt: time.Now().UTC()}); err != nil {
+		t.Fatal(err)
+	}
+	rt.configureEventTable(ctx)
+	st := rt.eventTableStatus()
+	if !st.Setting || st.Writing || !strings.Contains(st.Reason, "stream_seq lease") {
+		t.Fatalf("status at boot with the lease unseeded = %+v, want set, not writing, the lease named", st)
+	}
+
+	// The lease seeds (the first append): the status follows it, and a POST is
+	// accepted.
+	appendToolResult(t, rt, "lease-1")
+	if got := rt.store.StreamSeqLeaseStats().State; got != "ready" {
+		t.Fatalf("lease state %q after an append, want ready", got)
+	}
+	if st := rt.eventTableStatus(); !st.Writing {
+		t.Fatalf("status with the lease ready = %+v, want writing", st)
+	}
+	if rec := postEventTable(t, rt, true, nil); rec.Code != http.StatusOK {
+		t.Fatalf("set on with the lease ready = %d %s", rec.Code, rec.Body)
+	}
+	appendToolResult(t, rt, "lease-2")
+	if got := rt.store.TelemetryStats().TapeOpsByTable["choir_events"]; got != 2 {
+		t.Fatalf("stamped ops = %d, want 2 (both appends after the lease was ready)", got)
 	}
 }
