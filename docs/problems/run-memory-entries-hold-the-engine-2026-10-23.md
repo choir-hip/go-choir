@@ -851,6 +851,294 @@ authority. Introduced: one more `Open` hook (a discovery read and, on an empty
 table only, a drop). Repaired: one duplicate tree per append; the fresh-store
 and migrated-store structures agree after the operation.
 
+## The index diet: owner_loop_seq and owner_agent_created (red, store schema; lane `fp0-run-memory-index-diet`)
+
+Mutation class: **red** (store schema, `schemaDDL`, `Open`, two more steps of
+`POST /internal/store/derived-columns?action=migrate`) plus one **orange** read edit
+(`residue_import.go`). Protected surfaces: the store schema (two dropped secondary
+indexes), the boot path (one more discovery-or-drop hook, on an empty table only),
+the content witness (unchanged for the two dropped, and the reason a third is left
+out). Not touched: the epoch, row data, the event tape. Review tier: FP0 judges; my
+reading is tier 1 (Devin): additive in effect, behind an operator act, a one-statement
+rollback per index. The two things a reviewer should look at are the kind-index
+coupling and the reverted-binary boot rebuild below, not the drops.
+
+**The question.** Option 4 of
+[store-journal-write-amplification-2026-10-23.md](store-journal-write-amplification-2026-10-23.md):
+every secondary index on `run_memory_entries` costs 9 to 13 KiB of journal per append
+(one prolly-tree path, rewritten on every statement). Which indexes does no production
+statement need?
+
+### 1. The reader audit **[V]**
+
+Every statement over the table, found by a source census
+(`TestRunMemoryProductionStatementCensus` counts `FROM|INTO|UPDATE|JOIN run_memory_entries`
+in every non-test `.go` file under `internal/` and `cmd/` and fails on a statement the
+audit does not know; no other file, script or non-Go source names the table), planned
+with `EXPLAIN PLAN` on a 20,000-row store (three owners, 40 agents and a hot desk,
+loops of 50 entries chained by `parent_entry_id`), with the full set, with each
+candidate dropped, with each pair and with all three
+(`TestRunMemoryIndexAuditPlansWithAndWithoutEachCandidate` logs every plan change;
+`CHOIR_RUN_MEMORY_AUDIT_PLANS=1` prints the plan texts; `CHOIR_RUN_MEMORY_AUDIT_ROWS`
+sets the size).
+
+| index (Dolt name) | columns | tree cost | production readers | decision |
+|---|---|---|---|---|
+| `PRIMARY` | `entry_id` | pk | `GetRunMemoryEntry` x2 (`run_memory.go:481, 491`), the projection read `FOR UPDATE` (`project.go:313`), the fingerprints `ORDER BY entry_id` (`:390`) | keep |
+| `loop_id` (the `UNIQUE`) | `loop_id, seq` | unique | `:55, 64, 108, 119` (seq allocation, parent), `:247, 257` (`ListRunMemoryEntries`), `:461` (`LatestRunMemoryEntry`), the uniqueness itself | keep |
+| `idx_..._loop_seq` | `loop_id, seq` | 0.5 to 1.2 KiB | none (its twin is the unique key) | dropped by R5 |
+| `idx_..._owner_loop_seq` | `owner_id, loop_id, seq` | 9 KiB | one: the residue import (`residue_import.go`), as written | **drop**, with the residue statement rewritten |
+| `idx_..._owner_agent_created` | `owner_id, agent_id, created_at` | 10 KiB | one: `ListRunMemoryEntriesForAgent` with no `kind` filter (`ORDER BY created_at, seq`), which has no production caller | **drop** |
+| `idx_..._owner_agent_kind_created` | `owner_id, agent_id, kind, created_at` | the kind index | `ListRunMemoryEntriesForAgent` (`:290`), the only production caller `LoadInboxCursorForDesk` (`rlm_reduce.go:520`) sends an owner and one kind | keep |
+| `idx_..._parent` | `parent_entry_id` | 13 KiB | none | **keep: it moves the witness** (section 3) |
+
+Plans, with each candidate. Every statement not named below has a **text-equal** plan
+with and without each candidate, for all five subsets (each alone, both owner indexes,
+all three), and I pinned the access each uses on the diet's set
+(`TestRunMemoryIndexDietEveryStatementKeepsItsAccess`): the loop-keyed statements
+(`:55, 64, 108, 119, 247, 257, 461`) read `[loop_id, seq]` (the unique key; R5 already
+showed `:257`, the owner form, does not pick `owner_loop_seq`), the by-id ones read
+`PRIMARY`, the agent read with one or two kinds reads the kind index with no `Filter`.
+
+- **Residue import, as written, needs `owner_loop_seq`.** `WHERE (e.owner_id=? AND
+  e.loop_id=?) OR (...) ORDER BY e.owner_id, e.loop_id, e.seq`:
+
+  ```text
+  with:    Sort <- IndexedTableAccess  index [owner_id,loop_id,seq]  filters: two ranges
+  without: Sort <- Filter((owner=.. AND loop=..) OR (..)) <- Table   (full scan)
+  ```
+
+  A full scan of the table (425,000 rows on the paper) in a rare owner-initiated import.
+  That is a worse plan, so by the brief's rule the index stays **unless the statement
+  changes**. It now filters `e.loop_id IN (...)` first, in batches of 100 scopes (3
+  placeholders a scope; the old statement had 2 a scope with no batch, which also
+  capped it at about 32,000 scopes):
+
+  ```text
+  with and without owner_loop_seq: Sort <- IndexedTableAccess  index [loop_id,seq]  (the unique key)
+  ```
+
+  The scopes are already sorted by (owner, run) and each batch orders by (owner, run,
+  seq), so batches in order keep the whole in order. Rows are identical to the old
+  statement's, including a loop id under the wrong owner and a loop that does not exist
+  (`TestRunMemoryResidueRewriteReturnsTheSameRows`); the production function returns
+  every entry once in table order over 230 runs (3 batches) with and without the index
+  (`TestSnapshotResidueRuntimeKeepsRunMemoryOrderAcrossManyRuns`); the as-written plan
+  is pinned so the premise of the rewrite is visible
+  (`TestRunMemoryResidueStatementAsWrittenNeedsOwnerLoopSeq`).
+
+- **The one `ORDER BY created_at` read** is `ListRunMemoryEntriesForAgent` (`:290`); the
+  other `ORDER BY`s are on `seq`, `entry_id` or `(owner_id, loop_id, seq)`. With one or
+  two kinds it uses the kind index and sorts on `(created_at, seq)` in memory above it,
+  with or without `owner_agent_created` (`seq` is in neither index, so the sort is
+  never index-ordered). With **no** kind filter (no production caller) it moves from
+  `owner_agent_created` to the kind index:
+
+  ```text
+  with:    Sort(created_at ASC, seq ASC) <- IndexedTableAccess index [owner_id,agent_id,created_at]
+           filters {[owner,owner],[agent,agent],[NULL,inf)}
+  without: Sort(created_at ASC, seq ASC) <- IndexedTableAccess index [owner_id,agent_id,kind,created_at]
+           filters {[owner,owner],[agent,agent],[NULL,inf),[NULL,inf)}
+  ```
+
+  The same (owner, agent) range, the same rows fetched, the same sort; no ordering is
+  lost (`TestRunMemoryIndexDietEveryStatementKeepsItsAccess` pins the `Sort`, and
+  `TestRunMemoryIndexDietKeepsEveryAnswer` the rows and their order for one kind, two
+  kinds and all kinds). The ownerless form (no production caller) is a full scan with
+  or without it. A future caller of the no-kinds form pays the kind index's wider key
+  (one more column per entry), nothing else.
+
+- **`parent`:** its only reader is a hypothetical `WHERE parent_entry_id = ?`; nothing
+  in the repo sends it (`parent_entry_id` is only written and read back in a row).
+
+### 2. Decision per index
+
+| index | decision | evidence |
+|---|---|---|
+| `owner_loop_seq` | drop, with the residue rewrite | section 1; 9 KiB an append (section 4) |
+| `owner_agent_created` | drop | section 1; 10 KiB an append |
+| `parent` | **left out** | section 3 |
+| `loop_seq` | already R5 | |
+
+### 3. The witness, and why `parent` is out **[V]**
+
+`SHOW COLUMNS` reads `MUL` for the first column of a non-unique index and of a
+composite unique one (`computerversion/dolt_state_extractor.go:338`). Observed with the
+production extractor on closed stores (`TestRunMemoryIndexDietKeepsTheWitnessSchemaObservation`,
+`...WithoutTheKindIndexMovesTheWitness`, `TestRunMemoryParentIndexDropMovesTheWitnessSchemaObservation`):
+
+| drop | Key moves? |
+|---|---|
+| `owner_loop_seq` and `owner_agent_created`, kind index present | **no**: `owner_id` stays `MUL` through the kind index (it leads with `owner_id`), `loop_id` through `UNIQUE(loop_id, seq)`; the observations of every table are equal to the full set's |
+| the same two, **no kind index** (the control) | **yes**: `owner_id` `MUL` -> empty. So the drop is **refused** unless the kind index exists with exactly `(owner_id, agent_id, kind, created_at)` (the first-pass `(agent_id, kind, owner_id, created_at)` order under the same name does not count; tested) and a unique key on exactly `(loop_id, seq)` exists |
+| `parent` | **yes**: `parent_entry_id` `MUL` -> empty; nothing else moves |
+
+The `parent` drop can be made to agree between a fresh store and a migrated store (out
+of `schemaDDL`, dropped by the operation, as R5 does). What it cannot do is agree by
+**vintage**, and the witness is compared across vintages in four places **[V]** (code):
+
+- `replayEligibility` (`agentcore/replay_eligibility.go:235`) compares the live store's
+  schema observation with the replay store's; the replay store is `OpenFresh` (current
+  schema) or a **staged base** (`replay_completeness.go:444-471`) with whatever index
+  set the base was made with. A live store that dropped `parent` against an older base
+  (or the reverse, an unmigrated live store against a fresh replay) is `SchemaDrift`,
+  and `rebindCheckpointWitness` (`checkpoint_restore_bindings.go:151`) refuses a
+  self-development checkpoint on it.
+- `projectionbase/seed.go:218` and `verify.go:95` recompute a base's witness and require
+  it to equal the descriptor's recorded one.
+- `agentcore/rematerialize.go:196` re-extracts and requires equality with the
+  checkpoint's recorded witness: a checkpoint recorded with `MUL` cannot be matched by
+  a store that has dropped `parent` if the rematerialization starts from a fresh store.
+- A store-schema epoch bump, the repo's tool for a witness-moving schema change, is
+  refused until LU2 (`hostbuild/types.go:210`).
+
+So `parent` is not an index drop: it is a witness change that needs a coordinated cutover
+(bases republished after the drop, pre-drop checkpoints retired or rematerialized from a
+base of the same vintage), or an extractor change that makes `Key` insensitive to
+non-unique secondary indexes (every recorded witness changes at once, so a witness
+epoch). Neither belongs in this lane. The operation never touches it
+(`TestRunMemoryIndexDietOperationDropsEachOnceAfterTheKindIndex` asserts it survives) and
+`schemaDDL` still creates it (`...FreshStoreLacksTheCandidatesAndKeepsParent`). Its value
+is the largest left: 13 KiB an append, a further 25% off a four-tree append (section 4,
+measured as a what-if only).
+
+### 4. Built (code) and measured **[V]** local
+
+**Mechanism: R5's, extended** (`internal/store/run_memory_index_diet.go`).
+
+- `schemaDDL` no longer creates the two (a fresh store is made without them; a test
+  pins that `schemaDDL` does not name them).
+- `Open` drops them from an **empty** table only, when the guard holds; on a table
+  with rows it only logs. No boot DDL on a populated table
+  (`...IsNotDroppedOrBuiltAtBoot`, including a reopen after the operation).
+- The operation: two more steps after the kind index and R5's drop, in order
+  `owner_loop_seq`, `owner_agent_created`, each `drop_index` under the engine mutex
+  through `WithEngine`. A step whose index is absent does nothing (a second run
+  touches none); a refused guard fails the migration naming the index and stops the
+  rest (`...IsRefusedWithoutTheKindIndexColumns`, `...WithoutTheUniqueKey`); a cancel
+  before a step is `cancelled`, not `done`. The status gains `run_memory_diet_indexes`
+  (`name`, `present`, `has_rows`, `guard_ok`, `guard_reason`), in the start probe, the
+  final status and the idle read.
+- The guard is one function (`dietGuard`): a unique key on `(loop_id, seq)` and the
+  kind index with its four columns. R5's discovery now reads the same inventory.
+- The migrated store's index set equals a fresh store's
+  (`...OperationDropsEachOnceAfterTheKindIndex` compares columns and uniqueness).
+
+**Journal per append** (`TestRunMemoryIndexDietCensus`, the journal census's meter: it
+walks the chunk records written in the window, so these are journal bytes; UUID ids and
+word-salad text, 200 appends per window, each schema measured twice, alternating; direct
+statements, one append each; the table is seeded at the row count):
+
+| rows | today (7 trees) | R5 (6) | + owner_loop_seq dropped | + owner_agent_created dropped = **the diet (4 trees: pk, unique, parent, kind)** | what-if: parent too (3) |
+|---|---|---|---|---|---|
+| 100,000 | 67.0, 65.6 KiB | 65.8 | 56.6 | **47.1, 47.6** (47.4) | 34.1 |
+| 425,000 | 72.3, 73.3 KiB | 72.4 | 63.5 | **53.7, 53.2** (53.5) | 40.3 |
+
+- **The diet saves 18.9 KiB an append at 100,000 rows (28%) and 19.3 KiB at 425,000
+  (26%)** against today's 7-tree table (66.3 and 72.8 KiB mean of two windows). Per drop
+  (first descent): `owner_loop_seq` 9.2 and 8.9 KiB, `owner_agent_created` 9.0 and 9.9
+  KiB, `loop_seq` 1.2 and about 0 (R5, content-addressed twin). The sum matches the
+  amplification record's per-tree table (9.6 + 10.1). Noise between two windows of one
+  schema is about 1 to 1.5 KiB here, 4 KiB in the amplification record's five repeats,
+  so each per-drop figure is good to about 1 KiB and the totals are not in doubt.
+- A **tape** append is the same plus a fixed 36 KiB per event, so through the tape at
+  100,000 rows the saving is 19 of 103 KiB (18%). On the paper's 3.4 to 3.7 run-memory
+  appends a second that is **about 65 to 70 KiB/s, 4 to 7% of the modelled 1.0 to 1.77
+  MiB/s journal growth [H]** (the model's rate is the paper's, the per-append number is a
+  warm local floor: the paper's trees are deeper). By the amplification record's
+  arithmetic (stall share = 18 s/GiB x journal rate) that moves the online GC's share of
+  the write connection from 1.76% to about 1.65% and the passes from 3.1 to 2.9 an hour;
+  it does not shorten a pass. It is the cheapest honest byte saving left that changes no
+  tape op, and it is a fifth of a run-memory append, not a cure for the 503s.
+- Time per append is unchanged within noise (5.9 to 9.9 ms, no ordering).
+
+**The holds** (a `SELECT 1` on the write connection every 10 ms through the DDL; "wait"
+is the longest one, which is what `/health`'s reads would see):
+
+| | 100,000 rows | 425,000 rows |
+|---|---|---|
+| `DROP INDEX` (direct, each of the three, 2 runs) | 11 to 13 ms, wait 0 to 1 ms | 12 to 13 ms, wait 0 to 1 ms |
+| the operation's three drops (steps `DurationMS`) | 4 to 5 ms each; whole 70 ms, longest wait 6 ms | 6 ms each; whole 132 ms, longest wait 36 ms |
+| `CREATE INDEX` (the rollback, see section 5): `owner_loop_seq` | 182 ms, 171 ms | 1.91 s, 1.71 s |
+| `CREATE INDEX`: `owner_agent_created` | 193 ms, 182 ms | 1.71 s, 1.60 s |
+| `CREATE INDEX`: `loop_seq` (R5's, for the revert of both) | 298, 153 ms | 3.16 s (cold), 1.59 s |
+| `CREATE INDEX`: `parent` (what-if) | 137 ms | 1.63 s |
+
+The drops are metadata operations (the tree is released), far under `/health`'s 1 s
+budget, and the whole operation is 132 ms of write-connection time at 425,000 rows. A
+`CREATE` holds the connection for the whole build (the longest probe wait equals the
+build).
+
+### 5. Rollback, and what a reverted binary does at boot **[V]**
+
+- *Recreate by hand, exactly what the old `schemaDDL` ran:*
+
+  ```sql
+  CREATE INDEX idx_run_memory_entries_owner_loop_seq ON run_memory_entries(owner_id, loop_id, seq);
+  CREATE INDEX idx_run_memory_entries_owner_agent_created ON run_memory_entries(owner_id, agent_id, created_at);
+  ```
+
+  Local timing above: 0.17 to 0.19 s each at 100,000 rows, 1.6 to 1.9 s each at 425,000.
+  The answers are unchanged across the recreate and the operation drops them again
+  (`TestRunMemoryIndexDietRollbackRecreatesThem`).
+- *A reverted binary, store already dropped:* the same as R5, for both. The old
+  `schemaDDL` has `CREATE INDEX IF NOT EXISTS` lines for them, applied by `bootstrap`
+  at every `Open` **on the populated table, before the listener**; the test runs those
+  exact statements on the dropped store and they rebuild the indexes. That is the shape
+  this record refuses for new work, and it holds here. **The honest cost of a revert:**
+  two builds at boot, 3.3 to 3.6 s locally at 425,000 rows (about 5 s if R5 is reverted
+  too, which adds `loop_seq`). The paper's kind-index build took 19.3 s against 1.0 to
+  1.2 s locally (17 times); scaled by that one ratio the paper's boot would wait
+  **about 60 s for the two, about 90 s with R5 [H]**, with the listener down (the ratio
+  is from one index; the true figure could be half or double). No data risk (`IF NOT EXISTS`, same columns), and the
+  indexes and their 19 KiB of journal an append come back.
+- *Proposed fix (not built):* the old binary's DDL cannot be changed, so move the build
+  off the boot path instead. Before deploying a revert, run the operation's reverse:
+  `POST /internal/store/derived-columns?action=restore_run_memory_indexes`, one
+  `CREATE INDEX` step per dropped index under the engine mutex, listener up. The total
+  hold is the same (about 2 x 1.7 s local, 2 x 30 s on the paper [H]) but it
+  arrives as a `/health` 503 window the operator chooses, not as a boot delay, and the
+  old binary's `IF NOT EXISTS` is then a no-op. Build it only if a revert is ever planned;
+  a roll-forward fix needs none of it. The cheapest correct revert procedure on a
+  computer that has run the operation is therefore: restore the indexes first, then
+  revert.
+- *Revert the commit, store not yet migrated:* nothing changes.
+- **The kind index is now load-bearing for the witness.** After the diet it is the only
+  index that leads with `owner_id`. The kind-index record's rollback ("DROP INDEX is the
+  whole rollback") was witness-neutral while the two owner indexes existed; it no longer
+  is: dropping the kind index on a dieted store moves `owner_id` `MUL` -> empty
+  (`...WithoutTheKindIndexMovesTheWitness` is exactly that store). So a rollback of the
+  kind index must recreate `owner_agent_created` first (or accept the drift). The guard
+  stops the operation from creating the situation; nothing stops a manual drop.
+
+### 6. Rollout **[H]**
+
+Deploy, then run `POST /internal/store/derived-columns?action=migrate` on the paper:
+the kind index is already built, so the steps are `loop_seq` (R5), `owner_loop_seq`,
+`owner_agent_created` (three `drop_index`, about 0.13 s in all at 425,000 rows locally),
+and `GET` reports `run_memory_diet_indexes[*].present=false`. A computer that is not
+migrated keeps all three indexes and works. A fresh computer is made without them. In a
+mixed fleet a fresh store and an unmigrated live store agree on `owner_id` (`MUL` through
+the kind index and through the legacy indexes), so no `SchemaDrift` appears during the
+rollout; that is exactly the property `parent` lacks.
+
+Checks: focused `-race` on `internal/store -run 'RunMemory|DerivedColumn|Witness|Index'`, `internal/autoputer -run DerivedColumn`; the
+four gates; gofmt. Two existing kind-index tests encoded the old index set and are
+updated, not weakened: the all-kinds plan now expects the kind index with its sort
+(`TestRunMemoryKindIndexPlanHasNoFullRangeWalk`), and the kind-index witness test adds
+the legacy owner indexes to both stores it compares so it still tests "the kind index
+adds no Key".
+
+**Heresy delta.** Discovered: the residue import's statement needed an index only it
+used (a full scan without it) and had a placeholder cap; the kind index becomes
+load-bearing for the witness once the owner-leading indexes go (its documented rollback
+is no longer witness-neutral); a revert of any index drop is a boot-time build on the
+populated table (`schemaDDL` is the old binary's authority); `parent` is the largest
+remaining unread tree and cannot be dropped without a witness cutover. Introduced: one
+more `Open` hook (a discovery read and, on an empty table only, two drops); two more
+operation steps; a batched residue read. Repaired: two unread trees per append (19 KiB of
+journal, 26 to 28%), and a latent full scan in the residue import.
+
 ## Next (not in this pass)
 
 Shape 1 (keyed cursor state, red), shape 3 (the `(owner_id, agent_id, kind,
@@ -858,6 +1146,10 @@ created_at)` index with the `details_json` projection, orange, built by the
 online access-path migration, never at boot), shape 4 (the in-memory cursor)
 and shape 6 (retention). Read the new log line after the next refresh before
 choosing between them.
+
+Index diet follow-ups: `idx_run_memory_entries_parent` (13 KiB an append, no reader)
+needs a witness cutover (section "The index diet", 3); the operation's reverse
+(`restore_run_memory_indexes`) if a revert is ever planned.
 
 ## Not asked, seen
 
