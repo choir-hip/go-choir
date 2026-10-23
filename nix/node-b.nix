@@ -1525,9 +1525,10 @@ in
         # Jailed VMs share one inode per store image (RES-05). Rollback:
         # VMCTL_JAILER=off (new launches go direct; a jailed snapshot is
         # refused and the computer cold boots).
-        # Step 1 (SEC-04, 2026-10-23): one fresh test computer, fp8-jailer-1023.
+        # SEC-04 steps 1 to 3 (2026-10-23): two fresh test computers,
+        # fp8-jailer-1023 and fp8-jailer-1023b (RES-05: one shared store image).
         "VMCTL_JAILER=on"
-        "VMCTL_JAILER_ONLY=computer-476cd7944083ba08d6234bae0c341724"
+        "VMCTL_JAILER_ONLY=computer-476cd7944083ba08d6234bae0c341724,computer-5144344168c7d75abbae7ac453176def"
         "VM_JAILER_BIN=${pkgs.firecracker}/bin/jailer"
         # The jailer copies its exec file into the jail, which holds no
         # loader: the glibc build above cannot exec there ("Failed to exec

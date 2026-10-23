@@ -1401,3 +1401,20 @@ Append-only. One terse entry per orchestrator pass.
   - Checks: the jsfc-1 mirror PASS; PR #93 full CI 25 pass, 8 skipped; both systems evaluate; the four gates pass.
   - Proof: vmctl logs "jailer ready". The test computer fp8-jailer-1023 launches jailed. Script steps 4 and 6 (confinement jailer; vmm_confinement_verify --expect jailer), and jail_files shows the shared images.
   - Rollback: VMCTL_JAILER=off (one setting), or a revert of D26.
+- 23:46. D26 live (372cd205b; CI 40040553724 passed). At 23:44:53 vmctl logged "jailer ready" with exec_file the pkgsStatic 1.17.0 Firecracker (k1ipcp7m…).
+- 23:47. SEC-04 step 2 proved on the test computer fp8-jailer-1023 (computer-476cd794…, vm-fa28a867…):
+  - It launched jailed: pid 782262, uid 900757, its own cgroup leaf under go-choir-vmctl.service/vms, booted in 10 s.
+  - confinement.json: mode jailer. jail_files: vmlinux shared, initrd and store.img shared by reflink, data.img and credential.img hard-linked.
+  - The guest is ready on 372cd205b.
+  - Script step 4 PASS (jailer ready). Step 6 PASS (vmm_confinement_verify --expect jailer). Evidence: _runs/sec04-step4.json and step6.json.
+- 23:48. SEC-04 step 4, on the test computer:
+  - Hibernate by snapshot under the jailer: 8.6 s, 628 MiB on disk. The wake resumed it jailed (a new pid, the same uid): load 4 ms, wake_to_healthy 458 ms, credential delivered.
+  - Assumed-breach probe (_runs/sec04-step4-breach.txt), as uid 900757 with the host filesystem view, which models a chroot escape. Refused: T's data.img; gateway-provider.env; auth-signing/ed25519-key; owner-act-signing-key; the internal-service token header; 127.0.0.1:8083, 8084 and 13306; and 1.1.1.1:443.
+  - Controls: root opens the same files and connects to 8083; the uid opens a world-readable file. The probe printed no file contents.
+  - Owed: a vmctl restart with reattach of a jailed VM, at the next deploy.
+- 23:5x. SEC-04 step 3 (two jails share one store image): a second test computer, fp8-jailer-1023b, is being minted for D27 (the selector names both).
+- 23:5x. D27 lands, alone: SEC-04 step 3. The jailer selector names both test computers: fp8-jailer-1023 and fp8-jailer-1023b (computer-51443441…, user 88c1cd53…, minted at 23:50 on 372cd205b).
+  - Tier 0: config only, under the same authorized rollout. Checks: both systems evaluate (the evaluated selector names exactly the two), and the four gates pass.
+  - Proof: the second test computer launches jailed. Script step 5: the two jails share one root-owned 0444 store image (same dev:inode, link count of at least 3).
+  - The vmctl restart reattaches the first test computer's jailed VM (step 4's last item). The paper is reattached, not rebooted.
+  - Rollback: one id out of the selector, or VMCTL_JAILER=off.
