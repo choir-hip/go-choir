@@ -1,5 +1,5 @@
 {
- "as_of": "2026-10-22T23:22Z",
+ "as_of": "2026-10-23T01:33Z",
  "main": "fd564dbbc",
  "items": [
   {
@@ -1536,12 +1536,20 @@
     },
     {
      "name": "Firecracker 1.17 for every computer",
-     "stage": 2,
-     "evidence": "D4 sets VM_FIRECRACKER_NEXT_ONLY=*; pin lane fp0-firecracker-117-fleet 1016fc951 built",
+     "stage": 6,
+     "evidence": "the paper on 1.17.0 since 23:55, cold boot, store and Texture answer, discard proved",
      "history": [
       {
        "stage": 2,
        "at": "2026-10-22T23:16Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T23:59Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-23T00:08Z"
       }
      ]
     }
@@ -2423,12 +2431,20 @@
     },
     {
      "name": "discard for every computer",
-     "stage": 2,
-     "evidence": "D4 2de635109 sets VM_DATA_DISCARD_ONLY=* (owner 22:3x)",
+     "stage": 6,
+     "evidence": "the paper's first trim 00:07: data.img minus 29.6 GiB, Node B free 140.5 to 167.7 GB, /health 200 throughout",
      "history": [
       {
        "stage": 2,
        "at": "2026-10-22T23:16Z"
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T23:59Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-23T00:08Z"
       }
      ]
     }
@@ -3331,8 +3347,8 @@
    "slices": [
     {
      "name": "boot passivation re-ensure deleted (window A)",
-     "stage": 3,
-     "evidence": "lane/fp4-boot-passivation 98a5649b5 accepted; staged in D4",
+     "stage": 6,
+     "evidence": "D4 ef450642b: passivation 2.7 s at the planned refresh 23:55",
      "history": [
       {
        "stage": 1,
@@ -3348,13 +3364,17 @@
        "stage": 3,
        "at": "2026-10-22T20:29Z",
        "approx": true
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-22T23:59Z"
       }
      ]
     },
     {
      "name": "actor retry backoff",
-     "stage": 3,
-     "evidence": "lane/fp4-actor-retry-backoff accepted; mirror backoff2m PASS 21:15; staged in D4",
+     "stage": 5,
+     "evidence": "deployed in D4 ef450642b",
      "history": [
       {
        "stage": 1,
@@ -3370,13 +3390,17 @@
        "stage": 3,
        "at": "2026-10-22T20:30Z",
        "approx": true
+      },
+      {
+       "stage": 5,
+       "at": "2026-10-22T23:59Z"
       }
      ]
     },
     {
      "name": "crash boot closes open rounds from cached heads, schedules armed first",
-     "stage": 3,
-     "evidence": "accepted (bunch 122); mirror crashbootm PASS 23:06; deploys alone after D4",
+     "stage": 4,
+     "evidence": "D5 lands alone (stage 157e3115a, mirror deployD5cm PASS)",
      "history": [
       {
        "stage": 1,
@@ -3386,6 +3410,10 @@
       {
        "stage": 3,
        "at": "2026-10-22T22:14Z"
+      },
+      {
+       "stage": 4,
+       "at": "2026-10-23T01:33Z"
       }
      ]
     },
@@ -3412,9 +3440,14 @@
     },
     {
      "name": "/health 503s under online GC and store load",
-     "stage": 0,
-     "evidence": "problem recorded on main 85a8115b1; GC holds the one connection 10-25 s every 10-20 min; three bursts unattributed",
-     "history": []
+     "stage": 1,
+     "evidence": "D4 holder log names the actor wake outbox list (full scan, 48 s cold, 2 to 7 s warm); fix to build",
+     "history": [
+      {
+       "stage": 1,
+       "at": "2026-10-23T00:08Z"
+      }
+     ]
     }
    ],
    "next": "Land D4 (passivation, backoff); finish the reboot script round 4; land crash-boot closure; decide the /health and GC fix."
@@ -3449,8 +3482,8 @@
     },
     {
      "name": "R1 to R4: cut redundant trace and cursor writes",
-     "stage": 2,
-     "evidence": "built 27c6de2d0; bunch 129 three-seat review; mirror queued",
+     "stage": 3,
+     "evidence": "bunch 129 + R3 fix round 65e471113; bunch 138 ACCEPT",
      "history": [
       {
        "stage": 1,
@@ -3459,6 +3492,10 @@
       {
        "stage": 2,
        "at": "2026-10-22T23:22Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-23T00:45Z"
       }
      ]
     },
@@ -3531,12 +3568,16 @@
     },
     {
      "name": "repack tool: copy only, census",
-     "stage": 1,
-     "evidence": "Sonnet builder lane/fp10-tape-repack",
+     "stage": 2,
+     "evidence": "fix round fd09566db (F1 shared-file scope, F2 sealed-only); bunch 139 in review",
      "history": [
       {
        "stage": 1,
        "at": "2026-10-22T23:20Z"
+      },
+      {
+       "stage": 2,
+       "at": "2026-10-23T00:45Z"
       }
      ]
     },
