@@ -72,7 +72,7 @@ func TestEventTableWriterStaysOffWhenTheFloorCannotBeWritten(t *testing.T) {
 	if err := h.store.SetEventTableWrites(true); err == nil {
 		t.Fatal("the writer switched on without a durable floor")
 	}
-	if h.store.EventTableWritesOn() {
+	if h.store.eventTableWrites.Load() {
 		t.Fatal("the writer is on after the floor write failed")
 	}
 }
@@ -138,7 +138,7 @@ func TestEventTableUnboundStoreRefusesTheWriter(t *testing.T) {
 	if err := s.SetEventTableWrites(true); err == nil {
 		t.Fatal("SetEventTableWrites(true) on a store with no tape returned nil")
 	}
-	if s.EventTableWritesOn() {
+	if s.eventTableWrites.Load() {
 		t.Fatal("the switch is on for a store with no tape")
 	}
 	if _, found := storeFloor(t, s.texturePath); found {
@@ -195,7 +195,9 @@ func TestEventTableReopenFloorsTheAdoptedWorkspaceBeforeAdopting(t *testing.T) {
 	if !observed {
 		t.Fatal("Reopen never reached the before-adopt hook")
 	}
-	if !s.EventTableWritesOn() {
+	// The switch, not the effective writer: the lease is unseeded here
+	// (EventTableWritesOn also needs it ready, event_table_lease_gate_test.go).
+	if !s.eventTableWrites.Load() {
 		t.Fatal("the switch went off across a clean reopen")
 	}
 	if floor, found := storeFloor(t, s.texturePath); !found || floor.Version != eventTableFloorEpoch {
