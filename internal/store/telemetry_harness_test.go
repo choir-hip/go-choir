@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -142,6 +143,13 @@ type tapeHarness struct {
 	// dryRunHook, when set, is consulted by the projection's dry run: a
 	// non-nil error refuses the batch before anything is pinned.
 	dryRunHook func(batch *computerevent.ProjectionBatch) error
+	// platformSkew, when set and true, makes the platform report a head one
+	// event ahead of the local projection (stream_seq lease tests).
+	platformSkew *atomic.Bool
+	// finalizeFail, when set and true, makes the local projection fail every
+	// finalize after the platform accepted the event: a crash between the CAS
+	// and the local commit.
+	finalizeFail *atomic.Bool
 }
 
 // hookedProjection is the store as the appender's projection, with a scriptable
@@ -180,11 +188,19 @@ func newTapeHarness(t *testing.T) *tapeHarness {
 // bind attaches a fresh appender over the current store to the shared tape.
 func (h *tapeHarness) bind() {
 	h.t.Helper()
+	var cas computerevent.HeadCAS = recordingCAS{liveTapeCAS: liveTapeCAS{signer: h.tape.signer, projection: h.store}, tape: h.tape}
+	if h.platformSkew != nil {
+		cas = skewedCAS{HeadCAS: cas, skew: h.platformSkew}
+	}
+	var projection computerevent.ProjectionStore = hookedProjection{Store: h.store, hook: func() func(*computerevent.ProjectionBatch) error { return h.dryRunHook }}
+	if h.finalizeFail != nil {
+		projection = finalizeFailingProjection{ProjectionStore: projection, store: h.store, fail: h.finalizeFail}
+	}
 	appender, err := computerevent.NewComputerEventAppender(
 		h.computerID,
 		recordingPinner{liveTapePinner: liveTapePinner{signer: h.tape.signer}, tape: h.tape},
-		hookedProjection{Store: h.store, hook: func() func(*computerevent.ProjectionBatch) error { return h.dryRunHook }},
-		recordingCAS{liveTapeCAS: liveTapeCAS{signer: h.tape.signer, projection: h.store}, tape: h.tape},
+		projection,
+		cas,
 		liveTapeVerifier{},
 	)
 	if err != nil {
