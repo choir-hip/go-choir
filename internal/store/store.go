@@ -1255,6 +1255,11 @@ WHERE table_schema = DATABASE()
 	return nil
 }
 
+// reopenBeforeAdoptHook is a test seam: it runs in Reopen after the adopted
+// workspace is floored and before the store's handles are swapped to it.
+// Always nil in production.
+var reopenBeforeAdoptHook func(adoptedWorkspace string)
+
 // Reopen opens path and adopts its handles into s. The caller must Close s
 // first so the workspace files can be replaced. Process-start copies of the
 // same *Store keep working because the pointer does not change.
@@ -1285,6 +1290,9 @@ func (s *Store) Reopen(path string) error {
 			s.eventTableWrites.Store(false)
 			log.Printf("runtime store: reopen: event-table writer off: %v", err)
 		}
+	}
+	if reopenBeforeAdoptHook != nil {
+		reopenBeforeAdoptHook(live.texturePath)
 	}
 	// The adopted workspace may carry a different deposit-upcast ledger (a
 	// rematerialize flip or base install replaces the files wholesale), so

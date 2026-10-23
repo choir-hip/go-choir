@@ -462,8 +462,9 @@ const eventTableFloorReason = "events stamped for choir_events: deploy 1 (epoch 
 // SetEventTableWrites applies store.event_table to the writer. Switching it
 // on writes the store floor first, durably, so no op is ever stamped on an
 // unfloored store; if the floor cannot be written the writer stays off and
-// the error is returned. Off keeps the floor (rows may exist). A store with
-// no tape never stamps, whatever this says, and writes no floor.
+// the error is returned. Off keeps the floor (rows may exist). On a store
+// with no tape bound it is refused (the switch stays off and no floor is
+// written): the store itself keeps "writer on implies floored".
 func (s *Store) SetEventTableWrites(on bool) error {
 	if s == nil {
 		return nil
