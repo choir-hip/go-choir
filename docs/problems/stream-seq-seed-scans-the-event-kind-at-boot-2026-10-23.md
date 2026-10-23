@@ -261,9 +261,12 @@ What changed:
 
 ### Does a bounded read keep the no-reuse invariant?
 
-Yes, under the assumption the old seed made (the newest events by `updated_at`
-carry the maximum). The one case the windows miss runs the old exact read, so
-the bound never trades away the invariant.
+Not outright. It keeps the old seed's assumption (the newest events by
+`updated_at` carry the maximum `stream_seq`) over a different read, and is
+weaker than the old seed in one band (Round 2 F1, restated in Round 3). When
+no window holds a usable event it runs the old exact read, which rests on the
+same assumption: `seedStreamSeqExact` is `LIMIT 500` by `updated_at`, not an
+exact `MAX`. "Exact" names the read, not a proof of the maximum.
 
 - The old seed assumed the newest events by `updated_at` carry the maximum
   `stream_seq`. The new one assumes the same of the newest objects of every
@@ -276,7 +279,7 @@ the bound never trades away the invariant.
   rate); the tests exercise it (2,600 later
   objects of another kind; the widening).
 - The exception, now fail-safe (coordinator change request after the first
-  push; narrowed to an empty event table by Round 2 below): events exist and every one is older than the newest 50,000 objects of
+  push; Round 2's narrowing to an empty event table was reverted in Round 3): events exist and every one is older than the newest 50,000 objects of
   all kinds. The first version logged and seeded from the event table alone,
   which could reuse a number; reuse is a correctness defect in red code. The
   seed now falls back to the exact read it used before
@@ -339,7 +342,10 @@ one `ListObjects choir.event` on the first append).
 
 ## Round 2 (Devin's review, accepted)
 
-### F2: the exact read must not be the common case after the event-table stamp
+### F2: the exact read must not be the common case after the event-table stamp (REVERTED in Round 3)
+
+Round 2's table shortcut below was rejected by review bunch 156 and removed in
+Round 3; see "Round 3". Kept for the record of what was tried.
 
 About 94% of event kinds go to `choir_events` once deploy 2's writer stamps.
 "No og event in the newest 50,000 objects" then stops being rare, and every
@@ -375,6 +381,9 @@ below a stored number when all of these hold:
   non-event objects on a store with under 500 newer events). This one misses
   it silently.
 
+(Round 3 correction: the second suppressor Round 2 added, a non-empty
+`choir_events`, is gone. Only a found event suppresses the exact read now.)
+
 It is inherited in kind and narrower in expectation than the 104 s boot stall
 it removes, but it is not zero, and the earlier sentence "the bound never
 trades away the invariant" is true only under the shared assumption. The exact
@@ -383,7 +392,7 @@ band, because a found event suppresses the fallback.
 
 The cheap part is fixed: a window event whose metadata has no parseable
 `stream_seq` used to count as found and contribute 0. It now counts as
-unusable and sends the seed to the exact read, which decodes the body. Test:
+unusable and sends the seed to the exact read, which decodes the body (Round 3 keeps this). Test:
 `TestStreamSeqSeedDoesNotTrustAnEventWithoutMetadataSeq` (an event whose
 metadata lacks `stream_seq` and whose body says 7 seeds 8; it seeded 1 before).
 
@@ -398,5 +407,69 @@ table access columns `[object_kind metadata updated_at]`, and no `body`.
 Once the stamp ships the og half of the seed reads mostly transition and
 incident events; the windows still bound the work. The cold hold of a
 50,000-row widening is unmeasured (warm, a 2,000-row window is 7 to 9 ms);
-the exact read is the only unbounded path, and after F2 it needs an empty
-table.
+the exact read is the only unbounded path (Round 3: it runs whenever the
+windows hold no event, whatever the table holds).
+
+## Round 3 (review bunch 156; FP0's conservative decision)
+
+DeepSeek REJECTed Round 2's table shortcut with an executed proof: table
+stream max 9, an og event with stream 12 that is newer, 400 newer non-event
+objects, windows 20 and 200, reopen, append. Round 1 allocated 13; Round 2
+allocated 10 with 12 stored and logged nothing. A window miss says nothing
+about the table's newest row: stamped table events and unstamped og events
+coexist by design (a stamp rollback, a mixed fleet, a non-event backfill).
+Devin accepted with notes.
+
+What changed, test first:
+
+- Round 1's fail-closed rule is back: when no window holds a usable event and
+  the whole store was not read, the seed probes the kind (one seek) and, if
+  events exist, runs `seedStreamSeqExact`, whatever `choir_events` holds. The
+  table's maximum joins through `max()`. The `unusable` branch (an event in a
+  window with no parseable `stream_seq`) stays; both seats found it sound.
+- `TestStreamSeqSeedTakesTheExactReadWhenTheWindowsHoldNoEventWhateverTheTableHolds`
+  is DeepSeek's counterexample and failed on the Round 2 code (seeded 10, want
+  13). It replaces Round 2's `TestStreamSeqSeedUsesTheTableWhenTheWindowsHoldNoEvent`,
+  which pinned the shortcut and so pinned the defect; the flip is deliberate.
+- Devin F2 (nit): `streamSeedWindows[len-1]` panicked on an empty slice. It is
+  guarded (an empty list names width 0 and takes the exact read), with
+  `TestStreamSeqSeedWithNoWindowsTakesTheExactRead`.
+- Invariant wording corrected above (same assumption, over a different read).
+- The reuse band is restated above for the restored code: the only suppressor
+  is a found event. The band is unchanged otherwise: an event with the maximum
+  `stream_seq` behind the newest 50,000 objects (a backdated timestamp, a
+  wall-clock regress, ties at a window edge) while another event sits inside a
+  window.
+- Devin F3 (nit): the cold cost of the 50,000 widening is unmeasured; it is
+  recorded, not measured here.
+
+### Gate on F-c deploy 2
+
+This seed is correct for a store whose events are in `og_objects`, which is
+every store today (no writer sets the table stamp yet). Once deploy 2 routes
+about 94% of event kinds to `choir_events`, the og windows will often hold no
+event, and the restored rule makes the exact read run at boot: the 104 s scan
+on a large history, at every boot, with a misleading "out of reach" line. So
+deploy 2 needs a real close first. Two options; neither is built here.
+
+1. **A persisted high-water mark** (option 2): a durable stream_seq floor
+   written with each batch commit or with the guest checkpoint, the seed reads
+   it and does a bounded catch-up over the table and the newest og window. Cost:
+   a write on the hot path of every batch (or a coupling to the checkpoint
+   cadence), a second state authority beside the tape that must itself survive
+   the restore, rollback and replay paths (a restored computer must not seed
+   from a floor ahead of or behind its tape), and a rollout order (an older
+   binary does not write it). It closes the reuse band as well, because the
+   floor does not depend on `updated_at`.
+2. **An `(object_kind, updated_at)` index** on `og_objects`: the engine can
+   then answer "newest events of the kind" by one reverse seek, so the old
+   seed's statement becomes bounded and the windows are unnecessary. Cost: a
+   schema change on the largest table. It must be built online, never as a
+   boot-path scan of `og_objects` (lane rule), and its build time and write
+   amplification on the paper's 31 GiB store are unmeasured. It does not close
+   the `updated_at`-versus-allocation-order band (a backdated event), only the
+   cost.
+
+Recommendation, not a decision: option 1 first, because it removes the
+dependency on `updated_at` that the whole family of bands comes from; option 2
+if the high-water mark's restore coupling proves worse than the build.
