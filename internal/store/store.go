@@ -1311,7 +1311,7 @@ func (s *Store) Close() error {
 	}
 	// The lease goroutines (seeder, refill) stop first: they append through the
 	// tape and read the pools Close is about to close.
-	s.stopLeaseWork()
+	s.cancelLeaseWork()
 	// Graceful close seals the telemetry window first. A crash does not, which
 	// is the loss the ruling allows.
 	telemetryStopped := s.closeTelemetry()
@@ -1350,6 +1350,9 @@ func (s *Store) Close() error {
 		return err
 	}
 	defer s.doltCommitMu.Unlock()
+	// The lease goroutines end before the pools are pinned (a statement of
+	// theirs in flight would fail the pin closed).
+	s.drainLeaseWork(hard)
 	// Pin the pools (owner decision of 2026-10-22): check out each pool's
 	// single connection by the same deadline, so no statement that is not
 	// a commit (a statement in flight, an open transaction) is using the
@@ -2369,19 +2372,27 @@ func (s *Store) GetLatestPassivatedLifecycleRunByAgent(ctx context.Context, owne
 // first use. The caller holds eventMu, which the stream_seq allocation
 // releases while it waits for a seed or a refill and holds again on return;
 // it takes the stream number first, so a wait never leaves a run's seq ahead
-// of its stream_seq. On a stream error nothing is taken.
+// of its stream_seq. On a stream error nothing is taken. folded is the
+// AllocateEventSeq caller: a record that gained both numbers while it waited
+// keeps them.
 // It is the only allocator of both numbers: AppendEvent calls it, and so does
 // AllocateEventSeq for the events folded into a lifecycle batch. sl is the
 // telemetry sealer or nil.
-func (s *Store) allocateEventSeqLocked(ctx context.Context, rec *types.EventRecord, sl *telemetrySealer) (eventSeqKey, error) {
+func (s *Store) allocateEventSeqLocked(ctx context.Context, rec *types.EventRecord, sl *telemetrySealer, folded bool) (eventSeqKey, error) {
 	// OG requires a non-empty owner_id. Synthesize a system owner for
 	// ownerless runtime events (e.g. health/degraded events from
 	// Runtime.SetHealth).
 	if rec.OwnerID == "" {
 		rec.OwnerID = "__system__"
 	}
-	if err := s.allocateStreamSeqLocked(ctx, rec); err != nil {
+	took, err := s.allocateStreamSeqLocked(ctx, rec, folded)
+	if err != nil {
 		return eventSeqKey{}, err
+	}
+	if !took {
+		// A folded record another caller numbered while this one waited for
+		// the lease keeps its numbers: callers sharing one record take one.
+		return eventSeqKey{}, nil
 	}
 
 	// Next sequence number for this run: an in-memory high-water mark, seeded
@@ -2459,7 +2470,7 @@ func (s *Store) AllocateEventSeq(ctx context.Context, rec *types.EventRecord) er
 	if rec.Seq != 0 && rec.StreamSeq != 0 {
 		return nil
 	}
-	_, err := s.allocateEventSeqLocked(ctx, rec, sl)
+	_, err := s.allocateEventSeqLocked(ctx, rec, sl, true)
 	return err
 }
 
@@ -2502,7 +2513,7 @@ func (s *Store) AppendEvent(ctx context.Context, rec *types.EventRecord) error {
 	}()
 	tapeBound := s.projectionTape != nil
 
-	key, err := s.allocateEventSeqLocked(ctx, rec, sl)
+	key, err := s.allocateEventSeqLocked(ctx, rec, sl, false)
 	if err != nil {
 		return err
 	}

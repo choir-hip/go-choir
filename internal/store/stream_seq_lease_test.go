@@ -1197,8 +1197,9 @@ func TestSeederRefusesWhenTheHeadsDiffer(t *testing.T) {
 	if rec.StreamSeq != 0 {
 		t.Fatalf("a number was taken without a lease: %d", rec.StreamSeq)
 	}
-	if st := leaseStats(h.store); st.State != "unseeded" || st.LastLeaseError == "" {
-		t.Fatalf("stats = %+v, want unseeded with the refusal named", st)
+	// Between attempts the state is unseeded; during a retry, seeding. Never ready.
+	if st := leaseStats(h.store); st.State == "ready" || st.LastLeaseError == "" {
+		t.Fatalf("stats = %+v, want not ready with the refusal named", st)
 	}
 	if _, found, _ := h.store.readLease(ctx); found {
 		t.Fatal("a lease was written although the precondition failed")
@@ -1350,7 +1351,7 @@ func TestLeaseOpOnTheTapeCarriesTheFixedTimestamps(t *testing.T) {
 		t.Fatal(err)
 	}
 	var found int
-	for _, record := range h.tape.snapshot() {
+	for _, record := range h.tape.leaseSnapshot() {
 		for _, op := range h.tape.batchOps(t, record) {
 			if !strings.Contains(op.CanonicalID, "choir.stream_seq_lease") {
 				continue

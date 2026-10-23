@@ -68,9 +68,12 @@ func scriptedWorkload(t *testing.T, h *tapeHarness) {
 func normalizedTape(t *testing.T, h *tapeHarness) []goldenTapeEvent {
 	t.Helper()
 	var out []goldenTapeEvent
-	for _, rec := range h.tape.snapshot() {
+	// The stream_seq lease batches are store bookkeeping and sit apart on the
+	// harness tape (leaseSnapshot), so the workload's sequence is its position
+	// beside the genesis event: the number the baseline tape had.
+	for i, rec := range h.tape.snapshot() {
 		ev := goldenTapeEvent{
-			Sequence: rec.Sequence, Kind: string(rec.Kind), Authority: rec.Authority,
+			Sequence: uint64(i + 2), Kind: string(rec.Kind), Authority: rec.Authority,
 			ActorProfile: rec.ActorProfile, PrivacyClass: rec.PrivacyClass,
 		}
 		for _, op := range h.tape.batchOps(t, rec) {
@@ -84,7 +87,9 @@ func normalizedTape(t *testing.T, h *tapeHarness) []goldenTapeEvent {
 // TestFlagOffTapeIsByteIdentical (design 6.2 item 9): with batching off, the
 // events a scripted workload puts on the tape are byte-identical to the
 // events the unmodified code put there. The golden file was generated from
-// the baseline commit before any production code changed; set
+// the baseline commit before any production code changed, and regenerated
+// once for the stream_seq lease (the event bodies carry stream_seq, which now
+// starts at 2^20 + 1 and steps by a block per restart); set
 // UPDATE_TELEMETRY_GOLDEN=1 only to regenerate it deliberately.
 func TestFlagOffTapeIsByteIdentical(t *testing.T) {
 	h := newTapeHarness(t)

@@ -71,15 +71,16 @@ func openSeedStore(t *testing.T) (*Store, string) {
 func TestStreamSeqSeedDoesNotListTheEventKind(t *testing.T) {
 	s, path := openSeedStore(t)
 	old := time.Now().UTC().Add(-time.Hour)
+	var lastStored int64
 	for i := 0; i < 40; i++ {
-		appendSeedEvent(t, s, fmt.Sprintf("e-%d", i), fmt.Sprintf("run-%d", i%4), old.Add(time.Duration(i)*time.Second))
+		lastStored = appendSeedEvent(t, s, fmt.Sprintf("e-%d", i), fmt.Sprintf("run-%d", i%4), old.Add(time.Duration(i)*time.Second)).StreamSeq
 	}
 	seedWakeOutbox(t, s, 20, 10)
 	s = reopenAt(t, s, path)
 
 	rec := appendSeedEvent(t, s, "after", "run-after", time.Now().UTC())
-	if rec.StreamSeq != 41 {
-		t.Fatalf("stream_seq after the restart = %d, want 41", rec.StreamSeq)
+	if rec.StreamSeq <= lastStored {
+		t.Fatalf("stream_seq after the restart = %d, want above the stored %d", rec.StreamSeq, lastStored)
 	}
 	if calls := s.EngineMutexStats()[eventListOp].Calls; calls != 0 {
 		t.Fatalf("the first append listed the event kind %d time(s) (%s): the seed reads every event of the kind", calls, eventListOp)
@@ -91,15 +92,16 @@ func TestStreamSeqSeedDoesNotListTheEventKind(t *testing.T) {
 func TestStreamSeqSeedFindsAnEventBehindOtherKinds(t *testing.T) {
 	s, path := openSeedStore(t)
 	old := time.Now().UTC().Add(-time.Hour)
+	var lastStored int64
 	for i := 0; i < 3; i++ {
-		appendSeedEvent(t, s, fmt.Sprintf("e-%d", i), "run-a", old.Add(time.Duration(i)*time.Second))
+		lastStored = appendSeedEvent(t, s, fmt.Sprintf("e-%d", i), "run-a", old.Add(time.Duration(i)*time.Second)).StreamSeq
 	}
 	seedWakeOutbox(t, s, 2600, 0)
 	s = reopenAt(t, s, path)
 
 	rec := appendSeedEvent(t, s, "after", "run-b", time.Now().UTC())
-	if rec.StreamSeq != 4 {
-		t.Fatalf("stream_seq after 2,600 later objects of another kind = %d, want 4", rec.StreamSeq)
+	if rec.StreamSeq <= lastStored {
+		t.Fatalf("stream_seq after 2,600 later objects of another kind = %d, want above %d", rec.StreamSeq, lastStored)
 	}
 }
 
@@ -123,7 +125,7 @@ func TestStreamSeqSeedAcrossBothTables(t *testing.T) {
 			put(false, "og-1", 1, 1, eventTableBase.Add(time.Second))
 			put(true, "tb-1", 2, tableStream, eventTableBase.Add(2*time.Second))
 			put(false, "og-2", 3, ogStream, eventTableBase.Add(3*time.Second))
-			want := max(ogStream, tableStream) + 1
+			want := max(ogStream, tableStream) + streamSeqExactGap + 1 // no lease: the exact seed plus the gap
 
 			h.reopen()
 			rec := h.event("after", "run-z", "owner-1", types.EventRunStarted, eventTableBase.Add(time.Hour))
@@ -137,9 +139,11 @@ func TestStreamSeqSeedAcrossBothTables(t *testing.T) {
 	}
 }
 
-// Failure 4. With the sealer the seed skips telemetrySeqGap once, over the
-// stored maximum.
-func TestStreamSeqSeedKeepsTheTelemetryGap(t *testing.T) {
+// Failure 4. With the sealer a number can be published and never stored; the
+// lease covers it (it replaced telemetrySeqGap for stream_seq). After a restart
+// the first number is above the previous process's lease, once: the boot
+// watermark takes the first, the append the next or later.
+func TestStreamSeqSeedWithTheSealerStaysAboveThePreviousLease(t *testing.T) {
 	h := newTapeHarness(t)
 	for i := 1; i <= 5; i++ {
 		rec := h.event(fmt.Sprintf("e-%d", i), "run-a", "owner-1", types.EventRunSubmitted, telemetryBase.Add(time.Duration(i)*time.Second))
@@ -147,28 +151,30 @@ func TestStreamSeqSeedKeepsTheTelemetryGap(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	row, found := readLeaseQuiet(h.store)
+	if !found {
+		t.Fatal("no lease after five appends")
+	}
 	h.reopen()
 	h.enableBatching(time.Hour)
 	rec := h.event("after", "run-a", "owner-1", types.EventRunCancelled, telemetryBase.Add(time.Minute))
 	if err := h.store.AppendEvent(context.Background(), rec); err != nil {
 		t.Fatal(err)
 	}
-	// The boot watermark takes the first number above the gap; the append is
-	// the next acknowledged number or later. Never inside the gap.
-	if rec.StreamSeq <= 5+telemetrySeqGap {
-		t.Fatalf("stream_seq with the sealer = %d, want above %d (stored max 5 + gap %d)", rec.StreamSeq, 5+telemetrySeqGap, telemetrySeqGap)
+	if rec.StreamSeq <= row.Reserved {
+		t.Fatalf("stream_seq with the sealer = %d, want above the previous lease %d", rec.StreamSeq, row.Reserved)
 	}
-	if rec.StreamSeq > 5+telemetrySeqGap+2 {
-		t.Fatalf("stream_seq with the sealer = %d: the gap was applied more than once (stored max 5, gap %d)", rec.StreamSeq, telemetrySeqGap)
+	if rec.StreamSeq > row.Reserved+2+streamSeqLeaseBlock {
+		t.Fatalf("stream_seq with the sealer = %d: more than one block above the previous lease %d", rec.StreamSeq, row.Reserved)
 	}
 }
 
-// Failure 5. Nothing stored.
+// Failure 5. Nothing stored: the exact seed of nothing is 0, plus the gap.
 func TestStreamSeqSeedStartsAtOne(t *testing.T) {
 	s, _ := openSeedStore(t)
 	t.Cleanup(func() { _ = s.Close() })
-	if rec := appendSeedEvent(t, s, "first", "run-a", time.Now().UTC()); rec.StreamSeq != 1 {
-		t.Fatalf("first stream_seq of an empty store = %d, want 1", rec.StreamSeq)
+	if rec := appendSeedEvent(t, s, "first", "run-a", time.Now().UTC()); rec.StreamSeq != streamSeqExactGap+1 {
+		t.Fatalf("first stream_seq of an empty store = %d, want %d", rec.StreamSeq, streamSeqExactGap+1)
 	}
 }
 
@@ -177,7 +183,7 @@ func TestStreamSeqSeedStartsAtOneBesideOtherKinds(t *testing.T) {
 	s, path := openSeedStore(t)
 	seedWakeOutbox(t, s, 30, 0)
 	s = reopenAt(t, s, path)
-	if rec := appendSeedEvent(t, s, "first", "run-a", time.Now().UTC()); rec.StreamSeq != 1 {
-		t.Fatalf("first stream_seq of a store with only other kinds = %d, want 1", rec.StreamSeq)
+	if rec := appendSeedEvent(t, s, "first", "run-a", time.Now().UTC()); rec.StreamSeq != streamSeqExactGap+1 {
+		t.Fatalf("first stream_seq of a store with only other kinds = %d, want %d", rec.StreamSeq, streamSeqExactGap+1)
 	}
 }

@@ -30,6 +30,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -176,10 +177,11 @@ type leaseAllocator struct {
 	// ctx is the lifetime of the lease goroutines; Close cancels it and waits
 	// for workers to drain. closing refuses new work until Reopen (or a failed
 	// Close) resumes.
+	ctxMu   sync.Mutex // guards ctx and cancel; never held with eventMu waiting
 	ctx     context.Context
 	cancel  context.CancelFunc
-	workers int
-	closing bool
+	workers atomic.Int32
+	closing atomic.Bool
 	obs     atomic.Pointer[StreamSeqLeaseStats]
 }
 
@@ -261,9 +263,11 @@ func (s *Store) leaseBroadcastLocked() {
 // Close, carrying the capability that admits a lease write and the store's
 // own writer.
 func (s *Store) leaseWorkContextLocked() context.Context {
+	s.lease.ctxMu.Lock()
 	if s.lease.ctx == nil || s.lease.ctx.Err() != nil {
 		s.lease.ctx, s.lease.cancel = context.WithCancel(context.Background())
 	}
+	s.lease.ctxMu.Unlock()
 	return objectgraph.WithWriter(objectgraph.WithStreamSeqLeaseCapability(s.lease.ctx), objectgraph.WriterStore)
 }
 
@@ -279,11 +283,11 @@ var (
 // or below a lease that has passed the head CAS. The caller holds eventMu; it
 // is held again on return, but released while the allocation waits for a seed
 // or a refill. On any error no number is taken.
-func (s *Store) allocateStreamSeqLocked(ctx context.Context, rec *types.EventRecord) error {
+func (s *Store) allocateStreamSeqLocked(ctx context.Context, rec *types.EventRecord, folded bool) (took bool, err error) {
 	var seedingDeadline, readyDeadline time.Time
 	for {
-		if s.lease.closing {
-			return errLeaseClosing
+		if s.lease.closing.Load() {
+			return false, errLeaseClosing
 		}
 		switch s.lease.state {
 		case leaseUnseeded:
@@ -292,16 +296,19 @@ func (s *Store) allocateStreamSeqLocked(ctx context.Context, rec *types.EventRec
 				seedingDeadline = time.Now().Add(leaseSeedingDeadline())
 			}
 			if err := s.leaseBlockedLocked(ctx, seedingDeadline, s.lease.seedNotBefore, "seed"); err != nil {
-				return err
+				return false, err
 			}
 		case leaseSeeding:
 			if seedingDeadline.IsZero() {
 				seedingDeadline = time.Now().Add(leaseSeedingDeadline())
 			}
 			if err := s.leaseBlockedLocked(ctx, seedingDeadline, time.Time{}, "seed"); err != nil {
-				return err
+				return false, err
 			}
 		default: // leaseReady
+			if folded && rec.Seq != 0 && rec.StreamSeq != 0 {
+				return false, nil // numbered by another caller while this one waited
+			}
 			next := s.maxStreamSeq + 1
 			if next > s.lease.reserved {
 				s.startRefillLocked()
@@ -309,7 +316,7 @@ func (s *Store) allocateStreamSeqLocked(ctx context.Context, rec *types.EventRec
 					readyDeadline = time.Now().Add(leaseReadyDeadline)
 				}
 				if err := s.leaseBlockedLocked(ctx, readyDeadline, s.lease.refillNotBefore, "refill"); err != nil {
-					return err
+					return false, err
 				}
 				continue
 			}
@@ -318,7 +325,7 @@ func (s *Store) allocateStreamSeqLocked(ctx context.Context, rec *types.EventRec
 			if s.lease.reserved-next < streamSeqLeaseBlock/2 {
 				s.startRefillLocked()
 			}
-			return nil
+			return true, nil
 		}
 	}
 }
@@ -376,12 +383,12 @@ func (s *Store) StartStreamSeqSeed() {
 // the state is unseeded, the store is not closing and the last failure's
 // backoff has passed.
 func (s *Store) startSeederLocked() {
-	if s.lease.closing || s.lease.state != leaseUnseeded || time.Now().Before(s.lease.seedNotBefore) {
+	if s.lease.closing.Load() || s.lease.state != leaseUnseeded || time.Now().Before(s.lease.seedNotBefore) {
 		return
 	}
 	ctx := s.leaseWorkContextLocked()
 	s.lease.state = leaseSeeding
-	s.lease.workers++
+	s.lease.workers.Add(1)
 	s.publishLeaseObsLocked()
 	s.leaseBroadcastLocked()
 	go s.runSeeder(ctx)
@@ -421,7 +428,7 @@ func (s *Store) runSeeder(ctx context.Context) {
 
 	s.eventMu.Lock()
 	defer s.eventMu.Unlock()
-	s.lease.workers--
+	s.lease.workers.Add(-1)
 	if err != nil {
 		s.lease.state = leaseUnseeded
 		s.lease.seedFailed++
@@ -818,14 +825,14 @@ func (s *Store) appendLease(ctx context.Context, phase string, row *leaseRow) er
 // refill is in flight, during the backoff after a failure, or while the store
 // is closing.
 func (s *Store) startRefillLocked() {
-	if s.lease.closing || s.lease.state != leaseReady || s.lease.refillInFlight || time.Now().Before(s.lease.refillNotBefore) {
+	if s.lease.closing.Load() || s.lease.state != leaseReady || s.lease.refillInFlight || time.Now().Before(s.lease.refillNotBefore) {
 		return
 	}
 	target := max(s.lease.reserved, s.maxStreamSeq) + streamSeqLeaseBlock
 	allocated := s.maxStreamSeq
 	ctx := s.leaseWorkContextLocked()
 	s.lease.refillInFlight = true
-	s.lease.workers++
+	s.lease.workers.Add(1)
 	go s.runRefill(ctx, target, allocated)
 }
 
@@ -842,7 +849,7 @@ func (s *Store) runRefill(ctx context.Context, target, allocated int64) {
 	s.eventMu.Lock()
 	defer s.eventMu.Unlock()
 	s.lease.refillInFlight = false
-	s.lease.workers--
+	s.lease.workers.Add(-1)
 	if err != nil {
 		s.lease.refillFailed++
 		s.lease.lastErr = err.Error()
@@ -856,33 +863,44 @@ func (s *Store) runRefill(ctx context.Context, target, allocated int64) {
 	s.leaseBroadcastLocked()
 }
 
-// stopLeaseWork cancels the seeder and the refill and waits for them. Close
-// calls it before the pools close, and the lease refuses new work until
-// resumeLeaseWork (Reopen, or a Close that failed and left the store open).
-func (s *Store) stopLeaseWork() {
-	s.eventMu.Lock()
-	s.lease.closing = true
+// cancelLeaseWork refuses new lease work and cancels the seeder and the
+// refill in flight. It takes no store lock: Close calls it first, while a
+// commit may hold eventMu (the inline-commit fence), and must not wait behind
+// it. The lease refuses new work until resumeLeaseWork (Reopen, or a Close that
+// failed and left the store open).
+func (s *Store) cancelLeaseWork() {
+	s.lease.closing.Store(true)
+	s.lease.ctxMu.Lock()
 	if s.lease.cancel != nil {
 		s.lease.cancel()
 	}
-	for s.lease.workers > 0 {
-		changed := s.leaseChangedLocked()
-		s.eventMu.Unlock()
-		<-changed
-		s.eventMu.Lock()
+	s.lease.ctxMu.Unlock()
+}
+
+// drainLeaseWork waits, until deadline, for the lease goroutines to end, and
+// wakes any allocation waiting on the lease so it sees the store is closing.
+// Close calls it after the commit-lock fence and before it pins the pools: a
+// goroutine still mid-statement then fails the pin closed, as any statement in
+// flight does.
+func (s *Store) drainLeaseWork(deadline time.Time) {
+	for {
+		if s.eventMu.TryLock() {
+			s.leaseBroadcastLocked()
+			s.eventMu.Unlock()
+		}
+		if s.lease.workers.Load() == 0 || !time.Now().Before(deadline) {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
-	// A cancelled seeder left the state unseeded; wake any waiter so it sees
-	// the store is closing.
-	s.leaseBroadcastLocked()
-	s.eventMu.Unlock()
 }
 
 // resumeLeaseWork lets the lease start work again.
 func (s *Store) resumeLeaseWork() {
-	s.eventMu.Lock()
-	s.lease.closing = false
+	s.lease.ctxMu.Lock()
 	s.lease.ctx, s.lease.cancel = nil, nil
-	s.eventMu.Unlock()
+	s.lease.ctxMu.Unlock()
+	s.lease.closing.Store(false)
 }
 
 // leaseSwapReason names why a marker was written, for the marker body.

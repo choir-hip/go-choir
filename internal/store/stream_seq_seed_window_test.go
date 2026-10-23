@@ -48,14 +48,15 @@ func TestStreamSeqSeedStopsAtTheFirstWindowWithAnEvent(t *testing.T) {
 	shrinkSeedWindows(t, 20, 200)
 	s, path := openSeedStore(t)
 	old := time.Now().UTC().Add(-time.Hour)
+	var last int64
 	for i := 0; i < 5; i++ {
-		appendSeedEvent(t, s, fmt.Sprintf("e-%d", i), "run-a", old.Add(time.Duration(i)*time.Second))
+		last = appendSeedEvent(t, s, fmt.Sprintf("e-%d", i), "run-a", old.Add(time.Duration(i)*time.Second)).StreamSeq
 	}
 	seedWakeOutbox(t, s, 8, 0)
-	s = reopenAt(t, s, path)
+	s = reopenAt(t, s, path) // a trusted lease: the windows are the cross-check
 	rec := appendSeedEvent(t, s, "after", "run-b", time.Now().UTC())
-	if rec.StreamSeq != 6 {
-		t.Fatalf("stream_seq = %d, want 6", rec.StreamSeq)
+	if rec.StreamSeq <= last {
+		t.Fatalf("stream_seq = %d, want above %d", rec.StreamSeq, last)
 	}
 	stats := s.EngineMutexStats()
 	if calls := stats["(*DoltStore).ListNewestObjectHeaders"].Calls; calls != 1 {
@@ -70,14 +71,15 @@ func TestStreamSeqSeedWidensPastOtherKinds(t *testing.T) {
 	shrinkSeedWindows(t, 20, 200)
 	s, path := openSeedStore(t)
 	old := time.Now().UTC().Add(-time.Hour)
+	var last int64
 	for i := 0; i < 5; i++ {
-		appendSeedEvent(t, s, fmt.Sprintf("e-%d", i), "run-a", old.Add(time.Duration(i)*time.Second))
+		last = appendSeedEvent(t, s, fmt.Sprintf("e-%d", i), "run-a", old.Add(time.Duration(i)*time.Second)).StreamSeq
 	}
 	seedWakeOutbox(t, s, 60, 0) // behind the first window, inside the second
 	s = reopenAt(t, s, path)
 	rec := appendSeedEvent(t, s, "after", "run-b", time.Now().UTC())
-	if rec.StreamSeq != 6 {
-		t.Fatalf("stream_seq = %d, want 6", rec.StreamSeq)
+	if rec.StreamSeq <= last {
+		t.Fatalf("stream_seq = %d, want above %d", rec.StreamSeq, last)
 	}
 	if calls := s.EngineMutexStats()["(*DoltStore).ListNewestObjectHeaders"].Calls; calls != 2 {
 		t.Fatalf("the seed read %d windows, want 2", calls)
@@ -91,8 +93,8 @@ func TestStreamSeqSeedWithNoEventsIsQuiet(t *testing.T) {
 	s = reopenAt(t, s, path)
 	buf := captureLog(t)
 	rec := appendSeedEvent(t, s, "first", "run-a", time.Now().UTC())
-	if rec.StreamSeq != 1 {
-		t.Fatalf("stream_seq = %d, want 1", rec.StreamSeq)
+	if rec.StreamSeq != streamSeqExactGap+1 {
+		t.Fatalf("stream_seq = %d, want %d", rec.StreamSeq, streamSeqExactGap+1)
 	}
 	if strings.Contains(buf.String(), "stream_seq seed") {
 		t.Fatalf("a store without events warned: %s", buf.String())
@@ -100,20 +102,22 @@ func TestStreamSeqSeedWithNoEventsIsQuiet(t *testing.T) {
 }
 
 func TestStreamSeqSeedSaysWhenEventsAreOutOfReach(t *testing.T) {
+	// No lease (events a lease-unaware binary stored), every event behind
+	// every window: the exact seed finds them, and says so with a duration.
 	shrinkSeedWindows(t, 20, 200)
 	s, path := openSeedStore(t)
 	old := time.Now().UTC().Add(-time.Hour)
 	for i := 0; i < 5; i++ {
-		appendSeedEvent(t, s, fmt.Sprintf("e-%d", i), "run-a", old.Add(time.Duration(i)*time.Second))
+		putStoredEvent(t, s, fmt.Sprintf("e-%d", i), "run-a", int64(i+1), old.Add(time.Duration(i)*time.Second))
 	}
 	seedWakeOutbox(t, s, 400, 0) // behind every window
 	s = reopenAt(t, s, path)
 	buf := captureLog(t)
 	rec := appendSeedEvent(t, s, "after", "run-b", time.Now().UTC())
-	if rec.StreamSeq != 6 {
-		t.Fatalf("stream_seq with every event beyond every window = %d, want 6 (above the stored 5): a number was handed out twice", rec.StreamSeq)
+	if want := 5 + streamSeqExactGap + 1; rec.StreamSeq != want {
+		t.Fatalf("stream_seq with every event beyond every window = %d, want %d (above the stored 5): a number was handed out twice", rec.StreamSeq, want)
 	}
-	if !strings.Contains(buf.String(), "stream_seq seed") || !strings.Contains(buf.String(), "out of reach") || !strings.Contains(buf.String(), "took ") {
+	if !strings.Contains(buf.String(), "stream_seq exact seed") || !strings.Contains(buf.String(), "took ") {
 		t.Fatalf("events exist beyond every window and the seed did not say so with a duration:\n%s", buf.String())
 	}
 }
@@ -152,14 +156,14 @@ func TestStreamSeqSeedTakesTheExactReadWhenTheWindowsHoldNoEventWhateverTheTable
 	if err := h.store.AppendEvent(ctx, rec); err != nil {
 		t.Fatal(err)
 	}
-	if rec.StreamSeq != 13 {
-		t.Fatalf("stream_seq = %d, want 13 (above the og event's 12 and the table's 9): a number was handed out twice", rec.StreamSeq)
+	if want := 12 + streamSeqExactGap + 1; rec.StreamSeq != want {
+		t.Fatalf("stream_seq = %d, want %d (above the og event's 12 and the table's 9): a number was handed out twice", rec.StreamSeq, want)
 	}
-	if calls := h.store.EngineMutexStats()[eventListOp].Calls; calls != 1 {
-		t.Fatalf("the exact read of the kind ran %d time(s), want 1", calls)
+	if calls := pageOpCalls(h.store); calls == 0 {
+		t.Fatal("the exact seed of the kind did not run")
 	}
-	if !strings.Contains(buf.String(), "out of reach") || !strings.Contains(buf.String(), "took ") {
-		t.Fatalf("the exact read did not log its case and duration:\n%s", buf.String())
+	if !strings.Contains(buf.String(), "stream_seq exact seed") || !strings.Contains(buf.String(), "took ") {
+		t.Fatalf("the exact seed did not log its case and duration:\n%s", buf.String())
 	}
 }
 
@@ -168,13 +172,14 @@ func TestStreamSeqSeedTakesTheExactReadWhenTheWindowsHoldNoEventWhateverTheTable
 func TestStreamSeqSeedWithNoWindowsTakesTheExactRead(t *testing.T) {
 	shrinkSeedWindows(t)
 	s, path := openSeedStore(t)
+	var last int64
 	for i := 0; i < 3; i++ {
-		appendSeedEvent(t, s, fmt.Sprintf("e-%d", i), "run-a", time.Now().UTC().Add(-time.Hour+time.Duration(i)*time.Second))
+		last = appendSeedEvent(t, s, fmt.Sprintf("e-%d", i), "run-a", time.Now().UTC().Add(-time.Hour+time.Duration(i)*time.Second)).StreamSeq
 	}
 	s = reopenAt(t, s, path)
 	rec := appendSeedEvent(t, s, "after", "run-b", time.Now().UTC())
-	if rec.StreamSeq != 4 {
-		t.Fatalf("stream_seq = %d, want 4", rec.StreamSeq)
+	if rec.StreamSeq <= last {
+		t.Fatalf("stream_seq = %d, want above %d (the lease serves; the cross-check has no windows)", rec.StreamSeq, last)
 	}
 }
 
@@ -197,7 +202,7 @@ func TestStreamSeqSeedDoesNotTrustAnEventWithoutMetadataSeq(t *testing.T) {
 	}
 	s = reopenAt(t, s, path)
 	next := appendSeedEvent(t, s, "after", "run-b", time.Now().UTC())
-	if next.StreamSeq != 8 {
-		t.Fatalf("stream_seq = %d, want 8 (the event without metadata stream_seq carries 7 in its body)", next.StreamSeq)
+	if want := 7 + streamSeqExactGap + 1; next.StreamSeq != want {
+		t.Fatalf("stream_seq = %d, want %d (the event without metadata stream_seq carries 7 in its body)", next.StreamSeq, want)
 	}
 }
