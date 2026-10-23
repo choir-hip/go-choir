@@ -379,7 +379,7 @@ Dispositions (round 2, bunch 145):
    (exit 1) when jq is missing; its header says four nix eval calls; the
    full rollback says "every computer holding a 1.17 snapshot" and that a
    pre-D4 1.16.x snapshot resumes; the guard's comment calls it a strict
-   superset of `envFlagOn`,.
+   superset of `envFlagOn`.
    The `config.go` citation now starts at the function (268).
 
 The other DeepSeek notes need no change: 1.17.x patch releases through the
