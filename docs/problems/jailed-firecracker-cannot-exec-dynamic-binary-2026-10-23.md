@@ -81,3 +81,54 @@ other unavailability. The test for the check is written first.
 - The real jailer integration test should run against the binary Node B
   deploys, not the upstream release.
 - SEC-04 steps 2 to 4 wait on this fix.
+
+## Fix (lane/fp0-jailer-static-fc)
+
+Direction 1, built from source. Mutation class red (vmctl, VM lifecycle).
+Tests first: 0b72fb7d1 (red; stubs only, six tests fail), then the fix.
+
+- **The jailed exec file.** `VM_JAILER_FIRECRACKER_BIN`
+  (`JailerConfig.FirecrackerBinPath`; default `VM_FIRECRACKER_BIN`, which
+  is the old behavior) is the jailer's `--exec-file`. `VM_FIRECRACKER_BIN`
+  is unchanged, so direct launches keep the glibc build. Nix sets it to
+  `pkgs.pkgsStatic.firecracker`. The `choirFirecrackerModule` overlay does
+  reach `pkgsStatic`, so this is `mkChoirFirecracker` of the musl package
+  set: the same 1.17.0 source and hashes. A new eval assertion requires the
+  two versions to match. `scripts/check-host-firecracker-pin.sh` now checks
+  the variable too, with three new cases in its fake-nix test.
+- **Startup check.** `prepareJailerHost` now refuses the exec file before
+  it touches the jail dirs, the cgroups or the no-IP rule. vmctl logs
+  `JAILER UNAVAILABLE` and every launch goes direct. It refuses an exec
+  file that is not ELF, or that has a `PT_INTERP` header or a `DT_NEEDED`
+  entry. It also refuses one with a different file name from the direct
+  binary, because the jail dir is named after it. Last, it refuses one
+  whose `--version` banner differs from the direct binary's.
+- **Snapshots.** `firecracker_version_mismatch` compares the
+  `--version` banner, not a path or a hash. Snapshot metadata records the
+  banner of the direct binary (`launchedVMM().Firecracker`). The startup
+  version-equality check is what keeps a jailed snapshot's record true.
+  Both builds print `Firecracker v1.17.0`, so no direct computer's snapshot
+  is voided, and no launch-config hash moves.
+- **NET-08 next build.** A computer on the next build jails with the next
+  binary itself, but only when that binary is static
+  (`FirecrackerNext.JailExec`, set at load). Otherwise it launches direct
+  with the reason `next_build_not_static`. With `VM_FIRECRACKER_NEXT_BIN`
+  unset, as it is today, nothing changes.
+- **Built and verified.** The build ran on the agents VM with
+  nix-portable, from the flake at 30acb645d. Its store path is
+  `/nix/store/k1ipcp7mhmdydknpp205i9n5nf4avg7x-firecracker-static-x86_64-unknown-linux-musl-1.17.0`,
+  the same path the Mac evaluates for this branch. Facts about the binary:
+  - `bin/firecracker` is 5,381,784 bytes, sha256 `cdb21237…a597b`.
+  - It is a static PIE. `readelf -h` gives Type DYN (PIE). `readelf -l`
+    shows no INTERP. `readelf -d` shows zero NEEDED entries.
+  - `--version` prints `Firecracker v1.17.0`.
+  - Copied alone into an empty dir, it runs under
+    `unshare -Ur chroot <dir> /firecracker --version` (exit 0). The glibc
+    build fails at exactly this step in the jail.
+  - The new `staticELFError` accepts it.
+- **Real jailer test.** `TestRealJailerLaunch` now takes
+  `CHOIR_JAILER_IT_JAILED_FIRECRACKER`, so the Node B run can use the
+  binary Node B deploys (first residual above).
+
+Not done here (FP0): the deploy, and the SEC-04 step 2 relaunch of
+fp8-jailer-1023. Rollback: revert the fix commit, or `VMCTL_JAILER=off`.
