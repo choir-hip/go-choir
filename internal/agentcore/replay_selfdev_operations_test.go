@@ -15,6 +15,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
+	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
 )
 
@@ -241,4 +242,81 @@ func openExecutingOperation(t *testing.T, ctx context.Context, operations *selfd
 		t.Fatal(err)
 	}
 	return executing
+}
+
+// RematerializeFromTape reopens the flipped realization on the live store
+// pointer (rematerialize.go:262). After it, the store must still route
+// object-graph writes through the tape (Store.Reopen carries the mutation
+// interceptor over), and the rebound operation store must still stamp through
+// the tape, so a replay of the reopened computer is equivalent.
+func TestRematerializeFromTapeKeepsObjectGraphAndOperationWritesOnTheTape(t *testing.T) {
+	ctx := context.Background()
+	computerID := "computer-rematerialize-tape-writes"
+	rt, _ := selfdevReplayRuntime(t, computerID)
+	live := rt.store
+	setting := func(owner string) {
+		t.Helper()
+		if err := live.PutComputerSetting(ctx, choirstore.ComputerSetting{
+			OwnerID: owner, ComputerID: computerID, Key: choirstore.SettingIntakeLabels, Value: true,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	setting("owner-before")
+
+	updaterRoot := filepath.Join(t.TempDir(), "updater")
+	priorDigest, _ := pinFrontendRelease(t, updaterRoot, computerID, "<html>live</html>")
+	targetDigest, targetIdentity := pinFrontendRelease(t, updaterRoot, computerID, "<html>checkpoint</html>")
+	pointCurrent(t, updaterRoot, priorDigest)
+	rt.selfdevUpdaterRoot = updaterRoot
+	report, err := rt.ReplayCompleteness(ctx, computerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !report.Result.Equivalent() {
+		t.Fatalf("control: before the rematerialize the replay is not equivalent: %#v", report.Result.Differences)
+	}
+	witness, err := selfdevprotocol.WitnessFromObservationSets(report.Live, report.Replay, report.Result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	head, err := live.Head(ctx, computerID)
+	if err != nil || head == nil {
+		t.Fatalf("head: %v %#v", err, head)
+	}
+	checkpoint := rematerializeTestCheckpoint(t, computerID, witness, targetDigest, targetIdentity, head.CanonicalEventHead)
+	if _, err := rt.RematerializeFromTape(ctx, computerID, checkpoint); err != nil {
+		t.Fatalf("rematerialize: %v", err)
+	}
+
+	sequence := func() uint64 {
+		t.Helper()
+		h, err := live.Head(ctx, computerID)
+		if err != nil || h == nil {
+			t.Fatalf("head: %v %#v", err, h)
+		}
+		return h.Sequence
+	}
+	if !live.ProjectionTapeBound() {
+		t.Fatal("the reopened store lost its projection tape")
+	}
+	before := sequence()
+	setting("owner-after")
+	if got := sequence(); got != before+1 {
+		t.Fatalf("an object-graph write after the rematerialize moved the tape %d -> %d, want one event", before, got)
+	}
+	if rt.selfdevOperations == nil {
+		t.Fatal("rematerialize left no operation store")
+	}
+	opened := openExecutingOperation(t, ctx, rt.selfdevOperations, computerID)
+	if err := rt.selfdevOperations.RecordIntentError(ctx, computerID, opened.OperationID, "freeze: refused after rematerialize"); err != nil {
+		t.Fatal(err)
+	}
+	after, err := rt.ReplayCompleteness(ctx, computerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !after.Result.Equivalent() {
+		t.Fatalf("after the rematerialize the reopened computer is not replay-equivalent: %#v", after.Result.Differences)
+	}
 }
