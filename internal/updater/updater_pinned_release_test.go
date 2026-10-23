@@ -62,7 +62,7 @@ func TestRestagePinnedReleaseSwapsWithoutRestart(t *testing.T) {
 	if err := os.Symlink(filepath.Join(root, "releases", first.ContentDigest), filepath.Join(root, "current")); err != nil {
 		t.Fatal(err)
 	}
-	if err := RestagePinnedRelease(root, second.ContentDigest); err != nil {
+	if err := RestagePinnedRelease(root, second.ContentDigest, ""); err != nil {
 		t.Fatal(err)
 	}
 	current, err := ReadCurrentManifest(root)
@@ -79,12 +79,19 @@ func TestRestagePinnedReleaseSwapsWithoutRestart(t *testing.T) {
 	if string(served) != "<html>two</html>" {
 		t.Fatalf("served SPA = %q", served)
 	}
-	if err := RestagePinnedRelease(root, strings.Repeat("0", 64)); err == nil {
+	if err := RestagePinnedRelease(root, strings.Repeat("0", 64), ""); err == nil {
 		t.Fatal("unpinned digest was restaged")
 	}
 }
 
 func writePinnedFrontendRelease(t *testing.T, root, computerID, spaHTML string) ReleaseManifest {
+	t.Helper()
+	return writePinnedFrontendReleaseEpoch(t, root, computerID, spaHTML, 0)
+}
+
+// writePinnedFrontendReleaseEpoch pins a release that declares a store schema
+// epoch (0 declares none, like a genesis baseline).
+func writePinnedFrontendReleaseEpoch(t *testing.T, root, computerID, spaHTML string, epoch uint64) ReleaseManifest {
 	t.Helper()
 	source := t.TempDir()
 	for path, body := range map[string]string{"bin/choir": "choir", "frontend/index.html": spaHTML} {
@@ -99,6 +106,13 @@ func writePinnedFrontendRelease(t *testing.T, root, computerID, spaHTML string) 
 	manifest, err := BuildBaselineManifest(source, computerID, "code:test", "artifact-program:test")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if epoch != 0 {
+		manifest.StoreSchemaVersion = epoch
+		manifest.MinStoreSchemaVersion = 1
+		if manifest, err = FinalizeManifest(manifest); err != nil {
+			t.Fatal(err)
+		}
 	}
 	releaseDir := filepath.Join(root, "releases", manifest.ContentDigest)
 	if err := os.MkdirAll(releaseDir, 0o700); err != nil {
