@@ -62,3 +62,24 @@ func TestReadGrantFailsClosed(t *testing.T) {
 		t.Fatal("this computer's grant turns another on")
 	}
 }
+
+// Bunch 148 (Devin, info): the grant's basis was never checked, so a
+// "granted" record with any basis was accepted while the reason claimed the
+// computer basis. Only the computer basis is defined.
+func TestReadGrantRefusesAnyBasisButComputer(t *testing.T) {
+	const self = "computer-self"
+	dir := t.TempDir()
+	for name, content := range map[string]string{
+		"no basis":    `{"computer_id":"computer-self","status":"granted"}`,
+		"other basis": `{"computer_id":"computer-self","status":"granted","basis":"fleet"}`,
+		"empty basis": `{"computer_id":"computer-self","status":"granted","basis":""}`,
+	} {
+		writeGrant(t, dir, content)
+		if st := ReadGrant(dir, self); st.Granted {
+			t.Fatalf("%s reads as granted: %+v", name, st)
+		}
+		if err := os.Remove(filepath.Join(dir, GrantFile)); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
