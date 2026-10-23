@@ -222,7 +222,11 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 		return report, fmt.Errorf("rematerialize: lease untrust marker: %w", err)
 	}
 
-	if err := updater.RestagePinnedRelease(rt.selfdevUpdaterRoot, checkpoint.Request.ReleaseDigest, filepath.Join(stagedWorkspace, storeschema.File)); err != nil {
+	// Both floors: the live workspace carries the floor; the staged one gets it
+	// only if Open found rows, and on the genesis-replay path the stamped ops
+	// arrive after Open (bunch 152, Devin 1).
+	if err := updater.RestagePinnedRelease(rt.selfdevUpdaterRoot, checkpoint.Request.ReleaseDigest,
+		filepath.Join(originalWorkspace, storeschema.File), filepath.Join(stagedWorkspace, storeschema.File)); err != nil {
 		_ = os.RemoveAll(stagingRoot)
 		return report, fmt.Errorf("rematerialize: restage served SPA: %w", err)
 	}
@@ -233,7 +237,7 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 		}
 		// The prior release was current on this computer before the restage;
 		// putting it back is not a step toward an older binary.
-		_ = updater.RestagePinnedRelease(rt.selfdevUpdaterRoot, priorReleaseDigest, "")
+		_ = updater.RestagePinnedRelease(rt.selfdevUpdaterRoot, priorReleaseDigest)
 	}()
 
 	quarantineDir := filepath.Join(filepath.Dir(originalMarker), "rematerialize-quarantine-"+time.Now().UTC().Format("20060102T150405.000000000Z"))
