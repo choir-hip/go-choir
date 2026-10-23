@@ -131,9 +131,14 @@ type SelfDevelopmentOperationProjection struct {
 	LifecycleReceipt       string  `json:"lifecycle_receipt"`
 	State                  string  `json:"state"`
 	TerminalError          string  `json:"terminal_error"`
-	CreatedAt              string  `json:"created_at"`
-	UpdatedAt              string  `json:"updated_at"`
-	ExpectedState          string  `json:"expected_state,omitempty"`
+	// LastIntentError is the most recent non-terminal intent refusal. It is
+	// omitted while empty, so an event written before the field existed and
+	// an event with no stamp are the same bytes and both project an empty
+	// column (docs/problems/selfdev-operations-replay-not-equivalent-2026-10-23.md).
+	LastIntentError string `json:"last_intent_error,omitempty"`
+	CreatedAt       string `json:"created_at"`
+	UpdatedAt       string `json:"updated_at"`
+	ExpectedState   string `json:"expected_state,omitempty"`
 }
 
 // TextureAgentMutationProjection is the canonical row snapshot for Texture's

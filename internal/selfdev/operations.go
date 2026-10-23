@@ -514,14 +514,38 @@ func (s *Store) Transition(ctx context.Context, computerID, operationID, expecte
 // transcript. Empty reason clears the stamp (a successful freeze clears a
 // prior refusal). The update tolerates any live state; a terminal
 // operation may still collect a late-arriving refusal from a parallel
-// attempt.
+// attempt. With the projection tape bound the stamp is a state-preserving
+// projection event (an unchanged reason appends nothing); unbound stores keep
+// the direct update.
 func (s *Store) RecordIntentError(ctx context.Context, computerID, operationID, reason string) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	reason = strings.TrimSpace(reason)
 	if len(reason) > 512 {
 		reason = reason[:512]
 	}
-	now := s.now().UTC().Truncate(time.Microsecond).Format(time.RFC3339Nano)
-	result, err := s.db.ExecContext(ctx, `UPDATE self_development_operations SET last_intent_error=?, updated_at=? WHERE computer_id=? AND operation_id=?`, reason, now, strings.TrimSpace(computerID), strings.TrimSpace(operationID))
+	computerID, operationID = strings.TrimSpace(computerID), strings.TrimSpace(operationID)
+	now := s.now().UTC().Truncate(time.Microsecond)
+	if s.projection != nil {
+		// The stamp is operation state, so it travels on the tape like every
+		// other column: a state-preserving update, guarded by the state the
+		// row is in. An unchanged reason is no event.
+		operation, err := s.Get(ctx, computerID, operationID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrOperationNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if operation.LastIntentError == reason {
+			return nil
+		}
+		expectedState := operation.State
+		operation.LastIntentError = reason
+		operation.UpdatedAt = now.Format(time.RFC3339Nano)
+		return s.appendOperationProjection(ctx, operation, expectedState)
+	}
+	result, err := s.db.ExecContext(ctx, `UPDATE self_development_operations SET last_intent_error=?, updated_at=? WHERE computer_id=? AND operation_id=?`, reason, now.Format(time.RFC3339Nano), computerID, operationID)
 	if err != nil {
 		return err
 	}
@@ -576,7 +600,7 @@ func (s *Store) appendOperationProjection(ctx context.Context, operation Operati
 		CheckpointRef: operation.CheckpointRef, RouteCertificate: operation.RouteCertificate,
 		RouteGeneration: operation.RouteGeneration, RouteReceipt: operation.RouteReceipt,
 		ModeReceipt: operation.ModeReceipt, LifecycleReceipt: operation.LifecycleReceipt,
-		State: operation.State, TerminalError: operation.TerminalError,
+		State: operation.State, TerminalError: operation.TerminalError, LastIntentError: operation.LastIntentError,
 		CreatedAt: operation.CreatedAt, UpdatedAt: operation.UpdatedAt, ExpectedState: expectedState,
 	})
 	if err != nil {

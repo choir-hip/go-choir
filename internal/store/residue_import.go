@@ -463,7 +463,7 @@ func (s *Store) snapshotResidueRuntime(ctx context.Context, ownerID, computerID 
 		base_head, prompt_artifact_ref, bundle_digest, release_digest, code_ref, artifact_program_ref,
 		verifier_refs_json, decision_actor, decision_event, decision_receipt, desired_head, effective_head,
 		materialization_receipt, checkpoint_ref, route_certificate, route_generation, route_receipt,
-		mode_receipt, lifecycle_receipt, state, terminal_error, created_at, updated_at
+		mode_receipt, lifecycle_receipt, state, terminal_error, last_intent_error, created_at, updated_at
 		FROM self_development_operations WHERE computer_id=? ORDER BY created_at, operation_id`
 	rows, err = s.db.QueryContext(ctx, operationQuery, strings.TrimSpace(computerID))
 	if err != nil {
@@ -478,7 +478,7 @@ func (s *Store) snapshotResidueRuntime(ctx context.Context, ownerID, computerID 
 			&operation.VerifierRefsJSON, &operation.DecisionActor, &operation.DecisionEvent, &operation.DecisionReceipt,
 			&operation.DesiredHead, &operation.EffectiveHead, &operation.MaterializationReceipt, &operation.CheckpointRef,
 			&operation.RouteCertificate, &routeGeneration, &operation.RouteReceipt, &operation.ModeReceipt,
-			&operation.LifecycleReceipt, &operation.State, &operation.TerminalError, &operation.CreatedAt, &operation.UpdatedAt); err != nil {
+			&operation.LifecycleReceipt, &operation.State, &operation.TerminalError, &operation.LastIntentError, &operation.CreatedAt, &operation.UpdatedAt); err != nil {
 			_ = rows.Close()
 			return nil, counts, fmt.Errorf("store: scan residue self-development operation: %w", err)
 		}
