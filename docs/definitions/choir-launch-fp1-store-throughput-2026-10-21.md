@@ -150,13 +150,28 @@ now:
     scripts. Residuals: undeclared-epoch baselines pass the restage and import
     paths; the CI override trailer is push-only; platform-follow offers
     still declare no epoch.
-  source_ref: lane/fp1-event-table-d2
+    Round 3 (2026-10-23, lane/fp1-event-table-d2-r3, on main 5669e22fc
+    with D24's stream_seq lease): the 32 deploy-2 commits ported by
+    cherry-pick (deploy 1's 25 are on main through D10 and were skipped);
+    conflicts in store.go only (the lease's allocateEventSeqLocked
+    replaces the inline seeds; Open's closeFailedOpen; Reopen keeps the
+    lease resume beside the floor). The lease gate the lease design owes
+    this lane (section 4 "When"): the writer stamps only once the lease
+    state is ready with its latest lease row written through a bound
+    tape (lease.onTape, recorded at the seed and refill writes), and POST
+    store.event_table=true answers 409 (stream_seq_lease_not_ready) and
+    stores nothing before that. A stored value arms the switch at boot;
+    the writer begins when the eager seed lands, and the status says it
+    waits. The proof's step 2 reads the lease ready before the switch;
+    step 5 asserts seeded_from=lease after the restart, with no
+    exact-seed read (design section 6 step 3).
+  source_ref: lane/fp1-event-table-d2-r3
   deploy_identity: this lane deploys nothing; FP0 lands and proves
   candidate:
     id: fp1-event-table-deploy2
     state: built, not landed; waits for deploy 1 to land and hold (owner Q5)
-    ref: lane/fp1-event-table-d2
-    base: stage/deployD10 (010cb1a29, deploy 1 round 1e on main plus D9); was fbb6d74a8
+    ref: lane/fp1-event-table-d2-r3
+    base: origin/main with D24 (the stream_seq lease); was stage/deployD10 (010cb1a29), fbb6d74a8
     digest: none
     scope:
       - internal/store/event_table.go

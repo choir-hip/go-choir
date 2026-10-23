@@ -1339,6 +1339,34 @@ whether or not its ops would have been stamped. So `telemetry.batch` (F-a)
 stays off on the paper until the planned-restart drain fix lands, whatever
 this setting says (round 2, Gemini).
 
+**The stream_seq lease gate** (deploy 2 round 3, 2026-10-23; D24's lease,
+docs/problems/stream-seq-high-water-mark-design-2026-10-23.md section 4
+"When"). Once events move to `choir_events`, a computer without a lease
+would seed `stream_seq` by the exact read over both tables at every boot
+(104 s on the paper before D24). So the writer stamps, and the setting turns
+on, only once the lease state is `ready` with its latest lease row written
+through a bound tape:
+
+- `Store.EventTableLeaseReady` returns nil, or `ErrEventTableLeaseNotReady`
+  naming the state. It reads the lease's published snapshot and one atomic
+  (`lease.onTape`, set where the seed and the refill write the row), so it
+  never waits on the allocator. It is the lease's state, not a copy.
+- `stampsEventTable` (under `eventMu`) also needs `ready` and `onTape`;
+  `EventTableWritesOn` reports the switch and the lease together.
+- `POST /api/computer-settings {"key":"store.event_table","value":true}`
+  answers 409, reason `stream_seq_lease_not_ready`, and stores nothing
+  before that.
+- A value stored before a restart arms the switch at boot, and the floor is
+  written then. The writer begins when the eager seed lands; until then the
+  status reason says the writer waits.
+- A lease seeded before any tape was bound is an og row with no tape event.
+  It does not admit the writer until a refill writes a row through the tape.
+
+Who owns `maxStreamSeq`: the lease does (`allocateStreamSeqLocked`,
+`completeSeedLocked`). Deploy 1's two-table seed is now the lease's exact
+seed (`exactTableStreamSeqMax`). The event table adds no allocator and no
+second seed, so the two do not disagree.
+
 ### 4.3 Existing `choir.event` rows: never touched
 
 The rows already in `og_objects` stay there. Readers read the union. There
