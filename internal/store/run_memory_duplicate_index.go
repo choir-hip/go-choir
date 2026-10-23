@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -44,41 +43,13 @@ const (
 // rows.
 func (s *Store) discoverRunMemoryLoopSeqIndex(ctx context.Context) (RunMemoryLoopSeqIndexStatus, error) {
 	status := RunMemoryLoopSeqIndexStatus{Name: RunMemoryLoopSeqIndexName}
-	rows, err := s.db.QueryContext(ctx, `SELECT INDEX_NAME, COLUMN_NAME, NON_UNIQUE FROM information_schema.STATISTICS
-		WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'run_memory_entries' ORDER BY INDEX_NAME, SEQ_IN_INDEX`)
+	inv, err := s.inventoryRunMemoryIndexes(ctx)
 	if err != nil {
-		return status, fmt.Errorf("runtime store: list run_memory_entries indexes: %w", err)
+		return status, err
 	}
-	cols := map[string][]string{}
-	unique := map[string]bool{}
-	for rows.Next() {
-		var name, col string
-		var nonUnique int
-		if err := rows.Scan(&name, &col, &nonUnique); err != nil {
-			_ = rows.Close()
-			return status, fmt.Errorf("runtime store: scan run_memory_entries indexes: %w", err)
-		}
-		cols[name] = append(cols[name], col)
-		unique[name] = nonUnique == 0
-	}
-	if err := rows.Err(); err != nil {
-		_ = rows.Close()
-		return status, fmt.Errorf("runtime store: list run_memory_entries indexes: %w", err)
-	}
-	_ = rows.Close()
-	_, status.Present = cols[RunMemoryLoopSeqIndexName]
-	for name, c := range cols {
-		if name != RunMemoryLoopSeqIndexName && unique[name] && len(c) == 2 && c[0] == "loop_id" && c[1] == "seq" {
-			status.CoveredByUniqueKey = true
-		}
-	}
-	var one int
-	switch err := s.db.QueryRowContext(ctx, `SELECT 1 FROM run_memory_entries LIMIT 1`).Scan(&one); {
-	case err == nil:
-		status.HasRows = true
-	case !errors.Is(err, sql.ErrNoRows):
-		return status, fmt.Errorf("runtime store: probe run_memory_entries rows: %w", err)
-	}
+	_, status.Present = inv.columns[RunMemoryLoopSeqIndexName]
+	status.CoveredByUniqueKey = inv.uniqueLoopSeq(RunMemoryLoopSeqIndexName)
+	status.HasRows = inv.hasRows
 	return status, nil
 }
 

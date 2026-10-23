@@ -387,6 +387,10 @@ func (s *Store) residueRunScopes(ctx context.Context, ownerID, computerID string
 	return out, nil
 }
 
+// residueRunMemoryBatch is the number of run scopes one run-memory read covers:
+// 3 placeholders a scope, well under the driver's limit at any computer size.
+const residueRunMemoryBatch = 100
+
 func (s *Store) snapshotResidueRuntime(ctx context.Context, ownerID, computerID string, objects []objectgraph.Object) ([]computerevent.ProjectionOp, residueRuntimeCounts, error) {
 	var counts residueRuntimeCounts
 	ops := make([]computerevent.ProjectionOp, 0)
@@ -396,19 +400,30 @@ func (s *Store) snapshotResidueRuntime(ctx context.Context, ownerID, computerID 
 		return nil, counts, err
 	}
 	var rows *sql.Rows
-	if len(runScopes) > 0 {
-		clauses := make([]string, len(runScopes))
-		runMemoryArgs := make([]any, 0, len(runScopes)*2)
-		for i, scope := range runScopes {
+	// The run memory of every scope, in (owner, run, seq) order. The scopes are
+	// sorted, so batches taken in order and each ordered inside keep the whole
+	// in that order. Each batch filters loop_id IN (...) first so that the
+	// unique key (loop_id, seq) serves it: the owner/run pairs alone (an OR of
+	// two-column equalities) needed idx_run_memory_entries_owner_loop_seq, or
+	// the planner scans the table (TestRunMemoryResidueStatementAsWrittenNeedsOwnerLoopSeq).
+	for start := 0; start < len(runScopes); start += residueRunMemoryBatch {
+		batch := runScopes[start:min(start+residueRunMemoryBatch, len(runScopes))]
+		marks := make([]string, len(batch))
+		clauses := make([]string, len(batch))
+		loopArgs := make([]any, 0, len(batch))
+		pairArgs := make([]any, 0, len(batch)*2)
+		for i, scope := range batch {
+			marks[i] = "?"
 			clauses[i] = `(e.owner_id=? AND e.loop_id=?)`
-			runMemoryArgs = append(runMemoryArgs, scope.ownerID, scope.runID)
+			loopArgs = append(loopArgs, scope.runID)
+			pairArgs = append(pairArgs, scope.ownerID, scope.runID)
 		}
 		runMemoryQuery := `SELECT e.entry_id, e.loop_id, e.owner_id, e.agent_id, e.parent_entry_id, e.seq,
 			e.kind, e.role, e.message_json, e.summary, e.first_kept_entry_id, e.tokens_before,
 			e.reason, e.model, e.details_json, e.created_at
-			FROM run_memory_entries e WHERE ` + strings.Join(clauses, ` OR `) + `
+			FROM run_memory_entries e WHERE e.loop_id IN (` + strings.Join(marks, `,`) + `) AND (` + strings.Join(clauses, ` OR `) + `)
 			ORDER BY e.owner_id, e.loop_id, e.seq`
-		rows, err = s.db.QueryContext(ctx, runMemoryQuery, runMemoryArgs...)
+		rows, err = s.db.QueryContext(ctx, runMemoryQuery, append(loopArgs, pairArgs...)...)
 		if err != nil {
 			return nil, counts, fmt.Errorf("store: list residue run memory: %w", err)
 		}

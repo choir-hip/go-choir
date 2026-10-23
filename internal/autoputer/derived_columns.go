@@ -23,7 +23,11 @@ import (
 // (internal/store/run_memory_kind_index.go) when it is missing, reported as
 // run_memory_kind_index in the status, and drops the duplicate
 // idx_run_memory_entries_loop_seq (internal/store/run_memory_duplicate_index.go)
-// when it is present, reported as run_memory_loop_seq_index. Each step holds the engine for one ALTER or CREATE INDEX, so the
+// when it is present, reported as run_memory_loop_seq_index, then drops the
+// unread owner-leading indexes idx_run_memory_entries_owner_loop_seq and
+// idx_run_memory_entries_owner_agent_created (internal/store/run_memory_index_diet.go),
+// reported as run_memory_diet_indexes, refusing unless the kind index and
+// UNIQUE(loop_id, seq) exist. Each step holds the engine for one ALTER or CREATE INDEX, so the
 // computer's store work waits during a step and runs between steps; the
 // listener and health stay up. Only the host peer may call it: the guest's
 // own children (loopback) are refused.
