@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# Selftest for scripts/check-store-schema-floor.sh: builds throwaway repos and
+# checks the guard's verdicts, including the fail-closed case (round 2 review
+# of F-c deploy 2, bunch 148: a non-zero base that cannot be read must fail,
+# not pass). Touches nothing in this tree.
+set -euo pipefail
+
+here=$(cd "$(dirname "$0")" && pwd)
+guard=$here/check-store-schema-floor.sh
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+fails=0
+
+commit_epoch() { # DIR EPOCH MESSAGE
+	mkdir -p "$1/internal/storeschema"
+	printf 'package storeschema\n\nconst Version uint64 = %s // test\n' "$2" >"$1/internal/storeschema/schema.go"
+	git -C "$1" add -A
+	git -C "$1" -c user.name=t -c user.email=t@t commit -q -m "$3"
+}
+
+expect() { # NAME WANT_EXIT DIR ARGS...
+	local name=$1 want=$2 dir=$3
+	shift 3
+	local got=0 out
+	out=$(cd "$dir" && "$guard" "$@" 2>&1) || got=$?
+	if [ "$got" != "$want" ]; then
+		echo "FAIL: $name: exit $got, want $want"
+		echo "$out" | sed 's/^/    /'
+		fails=$((fails + 1))
+	else
+		echo "ok:   $name"
+	fi
+}
+
+repo=$tmp/repo
+git init -q "$repo"
+commit_epoch "$repo" 1 "epoch 1"
+sha1=$(git -C "$repo" rev-parse HEAD)
+commit_epoch "$repo" 2 "epoch 2"
+sha2=$(git -C "$repo" rev-parse HEAD)
+commit_epoch "$repo" 1 "lower to 1"
+sha_low=$(git -C "$repo" rev-parse HEAD)
+git -C "$repo" commit -q --allow-empty -m "$(printf 'rollback\n\nStore-Floor-Override: every computer reported store_floor 0')"
+sha_override=$(git -C "$repo" rev-parse HEAD)
+zero=0000000000000000000000000000000000000000
+
+expect "raise passes" 0 "$repo" --base "$sha1" --head "$sha2"
+expect "lower fails" 1 "$repo" --base "$sha2" --head "$sha_low"
+expect "lower with trailer passes" 0 "$repo" --base "$sha2" --head "$sha_override"
+expect "all-zero base (new branch) passes" 0 "$repo" --base "$zero" --head "$sha2"
+# The fail-open case: a non-zero base that cannot be read, no remote to fetch it from.
+expect "unreadable non-zero base fails closed" 1 "$repo" --base deadbeefdeadbeefdeadbeefdeadbeefdeadbeef --head "$sha2"
+
+# A shallow clone that lacks the base: the guard fetches it once and then decides.
+clone=$tmp/shallow
+git clone -q --depth=1 "file://$repo" "$clone"
+git -C "$clone" fetch -q --depth=1 origin "$sha_low"
+git -C "$clone" checkout -q "$sha_low"
+expect "shallow clone: base fetched, decrease still caught" 1 "$clone" --base "$sha2" --head "$sha_low"
+expect "shallow clone: base unreachable still fails closed" 1 "$clone" --base deadbeefdeadbeefdeadbeefdeadbeefdeadbeef --head "$sha_low"
+
+if [ "$fails" -ne 0 ]; then
+	echo "selftest-store-schema-floor: $fails FAILED" >&2
+	exit 1
+fi
+echo "selftest-store-schema-floor: PASS"
