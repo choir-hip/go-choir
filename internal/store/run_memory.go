@@ -310,14 +310,34 @@ func (s *Store) ListRunMemoryEntriesForAgent(ctx context.Context, ownerID, agent
 		query += ` AND kind IN (` + strings.Join(marks, ",") + `)`
 	}
 	query += ` ORDER BY created_at ASC, seq ASC`
-	rows, err := s.db.QueryContext(ctx, query, args...)
+	obs := runMemoryAgentListRead{site: runMemoryReadSite(ctx), agentID: agentID, kinds: len(kinds)}
+	start := time.Now()
+	defer func() {
+		obs.elapsed = time.Since(start)
+		obs.callsSoFar = s.runMemoryAgentList.calls.Load()
+		s.runMemoryAgentList.observe(time.Now(), obs)
+	}()
+	// One pooled connection (configureEmbeddedDoltDB): taking it explicitly
+	// separates the wait for it from the hold, for the slow-read line.
+	conn, err := s.db.Conn(ctx)
+	obs.connWait = time.Since(start)
+	if err != nil {
+		return nil, fmt.Errorf("query run memory entries for agent: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+	rows, err := conn.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query run memory entries for agent: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
 	var entries []types.RunMemoryEntry
+	var firstRowAt time.Time
 	for rows.Next() {
+		if firstRowAt.IsZero() {
+			firstRowAt = time.Now()
+			obs.firstRow = firstRowAt.Sub(start) - obs.connWait
+		}
 		entry, err := scanRunMemoryEntry(rows)
 		if err != nil {
 			return nil, err
@@ -327,6 +347,12 @@ func (s *Store) ListRunMemoryEntriesForAgent(ctx context.Context, ownerID, agent
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	if firstRowAt.IsZero() {
+		obs.firstRow = time.Since(start) - obs.connWait
+	} else {
+		obs.iterate = time.Since(firstRowAt)
+	}
+	obs.rows = len(entries)
 	return entries, nil
 }
 

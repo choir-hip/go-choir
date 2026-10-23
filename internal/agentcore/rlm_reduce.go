@@ -662,7 +662,7 @@ func rlmReductionForCall(ctx context.Context, rt *Runtime, toolCtx *CapsuleToolC
 	if channel == "" || execCtx.RunID == "" {
 		return inert
 	}
-	cursor, err := LoadInboxCursorForDesk(ctx, rt.store, execCtx.OwnerID, deskAgentForCursor(execCtx), channel)
+	cursor, err := LoadInboxCursorForDesk(store.WithRunMemoryReadSite(ctx, "capsule_cell_start"), rt.store, execCtx.OwnerID, deskAgentForCursor(execCtx), channel)
 	if err != nil {
 		return inert
 	}
@@ -729,7 +729,7 @@ func rlmReductionForDeskCall(ctx context.Context, rt *Runtime) *rlmCallReduction
 	if channel == "" || execCtx.RunID == "" {
 		return inert
 	}
-	cursor, err := LoadInboxCursorForDesk(ctx, rt.store, execCtx.OwnerID, deskAgentForCursor(execCtx), channel)
+	cursor, err := LoadInboxCursorForDesk(store.WithRunMemoryReadSite(ctx, "desk_cell_start"), rt.store, execCtx.OwnerID, deskAgentForCursor(execCtx), channel)
 	if err != nil {
 		return inert
 	}
@@ -888,10 +888,16 @@ func (r *rlmCallReduction) recoverPartialActCommit(ctx context.Context, intents 
 	if r.ledger == nil {
 		return false, nil
 	}
-	cursor, err := LoadInboxCursorForDesk(ctx, r.st, r.scope.OwnerID, r.scope.DeskAgentID, r.scope.ChannelID)
-	if err != nil {
-		return false, fmt.Errorf("recover partial act commit: load inbox cursor: %w", err)
-	}
+	// The durable cursor is read only once a commitment record shows a
+	// possible crash after the ledger mint, and then once for the commit: in
+	// the common cell (every act fresh) it is never read here. It was read
+	// first, unconditionally, and ListRunMemoryEntriesForAgent is the paper's
+	// top store_stalled holder (docs/problems/run-memory-entries-hold-the-
+	// engine-2026-10-23.md, fix shape 2).
+	var (
+		cursor       uint64
+		cursorLoaded bool
+	)
 	for _, in := range intents {
 		if !isSemanticActKind(in.Kind) {
 			continue
@@ -902,6 +908,14 @@ func (r *rlmCallReduction) recoverPartialActCommit(ctx context.Context, intents 
 		}
 		if !exists {
 			continue
+		}
+		if !cursorLoaded {
+			var err error
+			cursor, err = LoadInboxCursorForDesk(store.WithRunMemoryReadSite(ctx, "commit_recovery"), r.st, r.scope.OwnerID, r.scope.DeskAgentID, r.scope.ChannelID)
+			if err != nil {
+				return false, fmt.Errorf("recover partial act commit: load inbox cursor: %w", err)
+			}
+			cursorLoaded = true
 		}
 		if cursor < highWater {
 			return true, r.commitTray(ctx, intents, highWater)
