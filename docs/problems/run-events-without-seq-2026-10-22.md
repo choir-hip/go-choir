@@ -259,3 +259,40 @@ sets `StreamSeq`, so a retry still takes no second number). Two tests
 fail on 31280c3ef and pass now. The two doc errors are corrected in the
 review section above; plan item 3's premise (the digest covers the event)
 is withdrawn, and so is the run-end two-events residual.
+
+## Rebase onto stage/deployD11 (2026-10-23)
+
+The lane was rebased onto the local branch `stage/deployD11` (main, D9, the
+F-c event-table deploy 1 at store epoch 2, ARCH-13 round 7). One conflict, in
+`internal/store/store.go`, on the fix commit (`AppendEvent` against
+`allocateEventSeqLocked`).
+
+What had moved on `AppendEvent` since the lane's base: telemetry batching
+(the sealer reservation `sl.reserve()` before `eventMu`, `reservationHeld`,
+the boot watermark, the deferred unlock and release) was already in the lane's
+base and moved unchanged. The new parts were in the allocation block: both
+seeds now also read `choir_events` (`eventTableRunMaxSeq`,
+`eventTableNewestStreamSeq`), the sealer gap and floor, and
+`recordAppend(rec.Kind, len(rec.Payload))`.
+
+Resolution: the allocation block, as it stands on stage/deployD11 (both seeds
+reading both tables, the sealer gap and floor), is what moved into
+`allocateEventSeqLocked`. The two new `return err` lines in it became
+`return eventSeqKey{}, err`. `AppendEvent` keeps everything else exactly: the
+reservation before `eventMu`, the deferred unlock and release, the batched
+branch, the tape-bound unlock, the failure path, and the new
+`recordAppend(kind, len)` call. It calls `allocateEventSeqLocked` once, under
+`eventMu`. `AllocateEventSeq` (the folded-event path) takes `eventMu`, never
+reserves and never flushes, so no flush runs under `eventMu`. The folded
+event is written to `og_objects` by the lifecycle batch (`buildEventObject`);
+it is not stamped to `choir_events` and needs no change for the table.
+
+Two test adaptations, in their own commit, no assertion weakened:
+
+- `ListEventsOG` was deleted by the event-table work (F20). The control read in
+  `TestRunEventFoldedIntoLifecycleBatchGetsSeq` now reads `og_objects` through
+  `ogListByMetadata`, `objectEventEntries` and `eventRecords`.
+- The F2 reader guard (`TestEventTableReadersAreUnionAware`) lists the
+  functions that read `ogKindEvent`. The seeds moved out of `AppendEvent`, so
+  the guard now lists `allocateEventSeqLocked` as "writer; the one allocator of
+  seq and stream_seq: both seeds read both tables" in place of `AppendEvent`.
