@@ -222,3 +222,70 @@ func TestEventTableObservabilityIsUnchangedWhenOff(t *testing.T) {
 		t.Fatalf("event_table = %s (%v)", raw, err)
 	}
 }
+
+// Round 2 of deploy 2, bunch 148 (Devin 4 and 2b), written before the fixes:
+//   - a same-value POST early-returns without applying, so a first apply that
+//     failed (the floor could not be written: the writer stays off, the
+//     setting is stored on) can be retried only by an off/on pair or a reboot;
+//   - the status the observability route reports is a copy taken at the last
+//     apply, so a later flip of the store's own switch (Reopen turning the
+//     writer off when it cannot floor the adopted workspace) leaves
+//     writing:true beside the truth.
+
+func TestEventTableSameValuePostRetriesAFailedApply(t *testing.T) {
+	t.Setenv("CHOIR_OWNER_ID", eventTableOwner)
+	rt := eventTableRuntime(t, "computer-event-table-retry", true)
+	rt.configureEventTable(context.Background())
+	workspace := rt.store.TexturePath()
+
+	// The floor cannot be written: the workspace directory refuses a new file.
+	if err := os.Chmod(workspace, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	restore := func() { _ = os.Chmod(workspace, 0o755) }
+	t.Cleanup(restore)
+	if probe := filepath.Join(workspace, ".probe"); os.WriteFile(probe, nil, 0o600) == nil {
+		_ = os.Remove(probe)
+		t.Skip("the workspace stays writable under chmod here (running as root?)")
+	}
+	if rec := postEventTable(t, rt, true, nil); rec.Code != http.StatusOK {
+		t.Fatalf("first POST = %d %s", rec.Code, rec.Body)
+	}
+	if rt.store.EventTableWritesOn() {
+		t.Fatal("the writer is on although the floor could not be written")
+	}
+	if st := rt.eventTableStatus(); st.Writing || !st.Setting {
+		t.Fatalf("status after the failed apply = %+v, want setting on, not writing", st)
+	}
+
+	restore()
+	if rec := postEventTable(t, rt, true, nil); rec.Code != http.StatusOK {
+		t.Fatalf("same-value POST = %d %s", rec.Code, rec.Body)
+	}
+	if !rt.store.EventTableWritesOn() {
+		t.Fatal("a same-value POST did not re-apply the setting: the writer stays off until an off/on pair or a reboot")
+	}
+	if st := rt.eventTableStatus(); !st.Writing || st.StoreFloor != 2 {
+		t.Fatalf("status after the retry = %+v, want writing with floor 2", st)
+	}
+}
+
+func TestEventTableStatusReadsTheStoresLiveSwitch(t *testing.T) {
+	t.Setenv("CHOIR_OWNER_ID", eventTableOwner)
+	rt := eventTableRuntime(t, "computer-event-table-live-status", true)
+	rt.configureEventTable(context.Background())
+	if rec := postEventTable(t, rt, true, nil); rec.Code != http.StatusOK {
+		t.Fatalf("set on = %d %s", rec.Code, rec.Body)
+	}
+	if st := rt.eventTableStatus(); !st.Writing {
+		t.Fatalf("status = %+v, want writing", st)
+	}
+	// The store turns its own switch off (Reopen does when the adopted
+	// workspace cannot be floored); the status must not keep saying writing.
+	if err := rt.store.SetEventTableWrites(false); err != nil {
+		t.Fatal(err)
+	}
+	if st := rt.eventTableStatus(); st.Writing {
+		t.Fatalf("status = %+v after the store's switch went off, want writing:false", st)
+	}
+}

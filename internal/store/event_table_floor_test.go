@@ -77,16 +77,6 @@ func TestEventTableWriterStaysOffWhenTheFloorCannotBeWritten(t *testing.T) {
 	}
 }
 
-func TestEventTableUnboundStoreWritesNoFloor(t *testing.T) {
-	s := openTestStore(t)
-	if err := s.SetEventTableWrites(true); err != nil {
-		t.Fatal(err)
-	}
-	if _, found := storeFloor(t, s.texturePath); found {
-		t.Fatal("an unbound store, which never stamps, wrote a floor")
-	}
-}
-
 // A workspace that holds stamped rows but no floor file (a replay into a
 // fresh workspace, an installed base) is floored at its next Open.
 func TestEventTableFloorAtOpenWhenTheTableHasRows(t *testing.T) {
@@ -133,5 +123,64 @@ func TestOpenRefusesAFloorAboveItsEpoch(t *testing.T) {
 		t.Fatal("Open ran under a floor above its own epoch")
 	} else if !strings.Contains(err.Error(), "floor") {
 		t.Fatalf("Open's refusal does not name the floor: %v", err)
+	}
+}
+
+// Round 2 of deploy 2, bunch 148 (DeepSeek P3 and P4, Devin 2a), written
+// before the fixes.
+
+// SetEventTableWrites(true) on a store with no tape used to set the switch
+// and write no floor. The switch is refused instead, so the store itself
+// keeps the invariant "writer on implies floored" rather than leaving it to
+// the runtime's ProjectionTapeBound check.
+func TestEventTableUnboundStoreRefusesTheWriter(t *testing.T) {
+	s := openTestStore(t)
+	if err := s.SetEventTableWrites(true); err == nil {
+		t.Fatal("SetEventTableWrites(true) on a store with no tape returned nil")
+	}
+	if s.EventTableWritesOn() {
+		t.Fatal("the switch is on for a store with no tape")
+	}
+	if _, found := storeFloor(t, s.texturePath); found {
+		t.Fatal("a refused switch wrote a floor")
+	}
+	// Off is always allowed.
+	if err := s.SetEventTableWrites(false); err != nil {
+		t.Fatalf("off on an unbound store: %v", err)
+	}
+}
+
+// The floor the writer writes must be one this build may run on: a
+// storeschema.Version below eventTableFloorEpoch would floor the store above
+// its own binary, and the next boot would refuse its own store.
+func TestEventTableFloorEpochIsAtMostTheBuildEpoch(t *testing.T) {
+	if storeschema.Version < eventTableFloorEpoch {
+		t.Fatalf("storeschema.Version %d is below eventTableFloorEpoch %d: the writer would floor the store above this build", storeschema.Version, eventTableFloorEpoch)
+	}
+}
+
+// Reopen adopts a workspace; the floor goes into that workspace before it is
+// adopted, so no stamped append can land in an adopted workspace that has no
+// floor yet.
+func TestEventTableReopenFloorsTheAdoptedWorkspaceBeforeAdopting(t *testing.T) {
+	other := testStorePath(t) + "-adopt"
+	cleanupTestStorePath(other)
+	t.Cleanup(func() { cleanupTestStorePath(other) }) // runs after the harness closes the store
+	h := newTapeHarness(t)
+	s := h.store
+	if err := s.SetEventTableWrites(true); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Reopen(other); err != nil {
+		t.Fatal(err)
+	}
+	if !s.EventTableWritesOn() {
+		t.Fatal("the switch went off across a clean reopen")
+	}
+	if floor, found := storeFloor(t, s.texturePath); !found || floor.Version != eventTableFloorEpoch {
+		t.Fatalf("adopted workspace floor = %+v found=%v, want %d", floor, found, eventTableFloorEpoch)
 	}
 }
