@@ -1306,3 +1306,22 @@ Append-only. One terse entry per orchestrator pass.
   - Fix 954b89768 (yellow): the poll waits up to 30 s, which is a bound, not a pace; it exits as soon as the run completes.
   - lane/fp0-deployD20 is pushed at 954b89768; PR #90 CI is rerunning.
 - 20:51. D20 lands: the self-development stamp heal (f1647a48e..97a4f55e4; bunches 163, 168 and round 3 accepted), the internal/server done buffering (c5b58815d..c39ce8c5f; bunch 176 ACCEPT) and the actorruntime pre-bind test bound (954b89768). PR #90 full CI PASS on 954b89768 (25 pass, 8 skipped); d20b-fast PASS. Rollback: revert. Next: GET (dry run) then POST the heal on T only, never the paper.
+- 21:1x. Lease round 2 pushed at e5c876828. DeepSeek 1 to 6 and Devin 2 to 4 are fixed:
+  - Close closes a dedicated channel at once, without eventMu, and every waiter selects on it. The test: a waiter is woken within 10 s against a 1-minute seeding deadline.
+  - The range walk has its own op label, and the tests assert which path ran.
+  - A plan pin on the outside-range probe.
+  - One marker read.
+  - Restart and window tests are pinned to R+1.
+  - seed_undecodable_rows is a fourteenth stats field.
+  - The workspace path is held under eventMu and passed to the seeder.
+  - marker_present is published with the snapshot.
+  - Devin 1 (desk-forged choir.event) is recorded as a residual.
+  - The full internal/store -race suite ran locally in 35 min and found a test-only race (a refill outliving TestTwoAllocatorsTriggerOneRefill; openSeedStore cleanup now stops lease work, 15x -race clean). It also had the pre-existing 400 ms timing test TestDeadlineIsFromFirstRecordNotSliding fail under load; that one passes in isolation and is left.
+  - No re-review is due (no blocking-real finding). PR #91 CI and mirror lease-r2-fast are running.
+- 21:08. D20 is live: staging serves e0bd976a3 (CI run 40022422453 passed). T was woken (operator.fp0-d20-proof) and booted on e0bd976a3 at 10.200.61.2. The heal proof on T only (the paper was not touched): PASS.
+  - GET (dry run): 6 rows examined, and 2 differ only in last_intent_error. They are selfdev-5e28993f... and selfdev-70598873..., both failed, live "freeze: capsule release contains no frozen runtime artifacts", empty in the replay; updated_at is equal. refused_diverged and missing_in_replay are empty. The probe at head 14667 is not equivalent (content_root, the self_development_operations table).
+  - POST at 21:09:28: appended 2 in one projection batch. The after-probe at head 14668 is equivalent and eligible ("canonical event replay is eligible for the declared manifest").
+  - A second GET selects 0 rows, so the heal is idempotent.
+  - Evidence: _runs/d20-heal-get1.json, d20-heal-post.json, d20-heal-get2.json.
+  - T can take self-development checkpoints again.
+- 21:29. D21 lands, alone: the run-memory index diet with R5. That is 15 commits: loop_seq (R5), owner_loop_seq and owner_agent_created out of schemaDDL, dropped by the operator migrate, and restore_run_memory_indexes as the online rollback. Reviews: bunch 171 tier 2 (Devin APPROVE, DeepSeek conditional, then fixed), bunch 172 Devin PASS on round 2, plus FP0's notes fix 33cd31246. The combined tree on e0bd976a3 is e6ae031cc. PR #92 full CI PASS (25 pass, 8 skipped); d21-fast PASS. Rollback: POST ?action=restore_run_memory_indexes on each dieted computer, then deploy the revert. Next: migrate on T and check the replay probe, then migrate on the paper.
