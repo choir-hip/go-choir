@@ -89,6 +89,7 @@ func defaultDNSDiagSources() dnsDiagSources {
 var handleDiagDNS = dnsDiagHandler(defaultDNSDiagSources())
 
 func dnsDiagHandler(src dnsDiagSources) http.HandlerFunc {
+	var running sync.Mutex
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -98,6 +99,13 @@ func dnsDiagHandler(src dnsDiagSources) http.HandlerFunc {
 			http.Error(w, "host peer required", http.StatusForbidden)
 			return
 		}
+		// One run at a time: each run sends a UDP query and a lookup.
+		if !running.TryLock() {
+			w.Header().Set("Retry-After", "5")
+			http.Error(w, "a dns probe is already running", http.StatusTooManyRequests)
+			return
+		}
+		defer running.Unlock()
 		// No query parameter is read: names, addresses and paths are fixed.
 		resp := map[string]any{"schema_version": 1, "kind": "guest_dns_probe"}
 		if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
@@ -470,7 +478,7 @@ func gatewayBodyCapHandler(cfg func() (baseURL, token string), opts gatewayBodyC
 func flattenHeaders(h http.Header, scrub func(string) string) map[string]string {
 	out := make(map[string]string, len(h))
 	for k, v := range h {
-		out[k] = scrub(strings.Join(v, ", "))
+		out[scrub(k)] = scrub(strings.Join(v, ", "))
 	}
 	return out
 }
@@ -490,7 +498,9 @@ func searchStreamedLeg(ctx context.Context, base *url.URL, token string, timeout
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	started := time.Now()
-	client := &http.Client{Timeout: timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	// Proxy nil: the bearer goes to the gateway address only, never to a
+	// proxy named by the environment.
+	client := &http.Client{Timeout: timeout, Transport: &http.Transport{Proxy: nil}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	resp, err := client.Do(req)
 	leg["latency_ms"] = time.Since(started).Milliseconds()
 	leg["body_bytes_sent"] = cr.n.Load()

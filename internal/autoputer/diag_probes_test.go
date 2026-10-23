@@ -658,3 +658,59 @@ func TestBodyCapProbeWithoutATokenSendsNothing(t *testing.T) {
 		t.Fatalf("a probe with no token still called the gateway: %v", g.paths)
 	}
 }
+
+func TestFlattenHeadersScrubsNamesAsWellAsValues(t *testing.T) {
+	h := http.Header{}
+	h["x-"+diagProbeToken] = []string{"v-" + diagProbeToken}
+	h["X-Plain"] = []string{"a", "b"}
+	scrub := func(s string) string { return strings.ReplaceAll(s, diagProbeToken, "[redacted]") }
+	got := flattenHeaders(h, scrub)
+	for k, v := range got {
+		if strings.Contains(k, diagProbeToken) || strings.Contains(v, diagProbeToken) {
+			t.Fatalf("token survived in header %q: %q", k, v)
+		}
+	}
+	if got["x-[redacted]"] != "v-[redacted]" || got["X-Plain"] != "a, b" {
+		t.Fatalf("flattened = %v", got)
+	}
+}
+
+func TestDNSProbeIsSerialized(t *testing.T) {
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	src := dnsDiagSources{
+		lookup: func(context.Context, string) ([]string, error) {
+			close(entered)
+			<-release // hang-guard: closed by the test below, bounded by its select
+			return nil, nil
+		},
+		lookupTimeout: 5 * time.Second,
+	}
+	h := dnsDiagHandler(src)
+	done := make(chan int, 1)
+	go func() {
+		rec := httptest.NewRecorder()
+		h(rec, hostPeerRequest(http.MethodGet, "/internal/diag/dns"))
+		done <- rec.Code
+	}()
+	select {
+	case <-entered:
+	case <-time.After(3 * time.Second):
+		close(release)
+		t.Fatal("the first dns probe never ran")
+	}
+	rec := httptest.NewRecorder()
+	h(rec, hostPeerRequest(http.MethodGet, "/internal/diag/dns"))
+	if rec.Code != http.StatusTooManyRequests || rec.Header().Get("Retry-After") == "" {
+		t.Fatalf("a dns probe while one runs = %d Retry-After=%q, want 429", rec.Code, rec.Header().Get("Retry-After"))
+	}
+	close(release)
+	select {
+	case code := <-done:
+		if code != http.StatusOK {
+			t.Fatalf("first dns probe = %d", code)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("first dns probe never finished")
+	}
+}
