@@ -9,13 +9,15 @@ import (
 	"log"
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 )
 
 // defaultTapeExtraRefsMax caps the unique digests the extra-refs route
-// answers (about 136 MB of JSON at 68 bytes each). The real set is expected
-// in the thousands to low hundreds of thousands; over the cap the route
-// refuses rather than truncate.
+// answers (about 136 MB of JSON at 68 bytes each; roughly 250 MB of heap for
+// the set, the sorted slice and the answer, an estimate, not measured). The
+// real set is expected in the thousands to low hundreds of thousands; over the
+// cap the route refuses rather than truncate.
 const defaultTapeExtraRefsMax = 2_000_000
 
 var errTapeExtraRefsTooLarge = errors.New("tape extra refs: the keep set is over the route's cap")
@@ -46,7 +48,11 @@ func (s *Service) TapeExtraRefDigests(ctx context.Context) (*TapeExtraRefs, erro
 			if over {
 				return
 			}
-			set[d] = struct{}{}
+			if _, ok := set[d]; !ok {
+				// d is a substring of the row text: clone it so the set
+				// holds 64 bytes per digest, not the whole row value.
+				set[strings.Clone(d)] = struct{}{}
+			}
 			if len(set) > limit {
 				over = true
 				set = nil // stop holding the set; the rest is only drained
