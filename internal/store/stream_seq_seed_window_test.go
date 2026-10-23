@@ -20,7 +20,9 @@ import (
 //  3. A store with no events at all pays for the widest window and then
 //     warns, or guesses a number other than 0.
 //  4. Events exist but sit behind more objects than every window: the seed
-//     is silent. It must say so, and still seed from the event table.
+//     seeds from the event table alone and hands a stream_seq out twice. It
+//     must fall back to the exact read of the kind (slow, rare), seed above
+//     every stored number, and say so with the duration.
 
 func shrinkSeedWindows(t *testing.T, windows ...int) {
 	t.Helper()
@@ -102,8 +104,11 @@ func TestStreamSeqSeedSaysWhenEventsAreOutOfReach(t *testing.T) {
 	seedWakeOutbox(t, s, 400, 0) // behind every window
 	s = reopenAt(t, s, path)
 	buf := captureLog(t)
-	appendSeedEvent(t, s, "after", "run-b", time.Now().UTC())
-	if !strings.Contains(buf.String(), "stream_seq seed") || !strings.Contains(buf.String(), "out of reach") {
-		t.Fatalf("events exist beyond every window and the seed did not say so:\n%s", buf.String())
+	rec := appendSeedEvent(t, s, "after", "run-b", time.Now().UTC())
+	if rec.StreamSeq != 6 {
+		t.Fatalf("stream_seq with every event beyond every window = %d, want 6 (above the stored 5): a number was handed out twice", rec.StreamSeq)
+	}
+	if !strings.Contains(buf.String(), "stream_seq seed") || !strings.Contains(buf.String(), "out of reach") || !strings.Contains(buf.String(), "took ") {
+		t.Fatalf("events exist beyond every window and the seed did not say so with a duration:\n%s", buf.String())
 	}
 }
