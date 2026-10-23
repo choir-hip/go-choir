@@ -1068,7 +1068,8 @@ func TestSeederAppendFailureHandsOutNoNumber(t *testing.T) {
 		t.Fatalf("maxStreamSeq = %d after a failed seed, want 0", got)
 	}
 	fail.Store(false)
-	time.Sleep(50 * time.Millisecond) // the retry backoff
+	leaseSeedingDeadlineFloor = time.Minute // the deadline above was the subject; recovery is not racing it
+	waitLeaseReady(t, s)
 	if n := appendNext(t, s, "recovered"); n <= streamSeqExactGap {
 		t.Fatalf("recovered stream_seq = %d", n)
 	}
@@ -1180,7 +1181,7 @@ func TestBatchingReservationDoesNotDeadlockTheLeaseWait(t *testing.T) {
 	// ready deadline fires, again without holding a reservation.
 	failSeed.Store(false)
 	failRefill.Store(true)
-	time.Sleep(30 * time.Millisecond)
+	waitLeaseReady(t, h.store) // the seeder's backoff step, not a racing deadline
 	var firstErr error
 	for i := 1; i < 40 && firstErr == nil; i++ {
 		r := h.event(fmt.Sprintf("t-%d", i), "run-t", "owner-1", types.EventToolResult, eventTableBase.Add(time.Duration(i)*time.Second))
@@ -1226,7 +1227,8 @@ func TestSeederRefusesWhenTheHeadsDiffer(t *testing.T) {
 		t.Fatal("a lease was written although the precondition failed")
 	}
 	skew.Store(false)
-	time.Sleep(50 * time.Millisecond)
+	leaseSeedingDeadlineFloor = time.Minute // the deadline above was the subject; recovery is not racing it
+	waitLeaseReady(t, h.store)
 	ok := h.event("a-2", "run-a", "owner-1", types.EventRunStarted, eventTableBase.Add(time.Second))
 	if err := h.store.AppendEvent(ctx, ok); err != nil {
 		t.Fatalf("after the heads agree: %v", err)
@@ -1504,7 +1506,7 @@ func TestCrossCheckSeesTheTableNewest(t *testing.T) {
 func TestSeederRetriesWithABackoffAndACounter(t *testing.T) {
 	shrinkLease(t, 8)
 	leaseRefillBackoff = 60 * time.Millisecond
-	leaseSeedingDeadlineFloor = 1500 * time.Millisecond
+	leaseSeedingDeadlineFloor = time.Minute // an upper bound only: the test counts attempts and gaps
 	s, _ := openSeedStore(t)
 	var mu sync.Mutex
 	var attempts []time.Time

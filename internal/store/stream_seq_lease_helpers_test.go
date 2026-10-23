@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
@@ -113,4 +114,25 @@ func (h *tapeHarness) setFinalizeFail(fail *atomic.Bool) {
 	h.t.Helper()
 	h.finalizeFail = fail
 	h.bind()
+}
+
+// waitLeaseReady nudges the seeder (a seeder in its retry backoff starts only
+// on an allocation or StartStreamSeqSeed) until the lease is ready, with a
+// generous bound. Tests that make a failure condition clear call it instead of
+// racing the seeder's doubling backoff against a shortened seeding deadline:
+// the deadline is the subject of the test that shortens it, and the backoff
+// step can outlast a deadline sized for the first attempt on a loaded runner.
+func waitLeaseReady(t testing.TB, s *Store) {
+	t.Helper()
+	deadline := time.Now().Add(60 * time.Second)
+	for {
+		s.StartStreamSeqSeed()
+		if s.StreamSeqLeaseStats().State == "ready" {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the lease never became ready: %+v", s.StreamSeqLeaseStats())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
