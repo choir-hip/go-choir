@@ -323,6 +323,79 @@ to the opencode-go route was run in this lane.
    matcher prices the model at DeepSeek's direct rate ($0.30/$1.20, cache
    $0.006), understating input by half and the cache read by 5x.
 
+## Staging: concurrency 429s and the circuit breaker (2026-10-23)
+
+Status: discovered on staging; fix in the commits after this section. Mutation
+class of the fix: red (gateway provider calls and the circuit breaker). This
+section is the problem record and is committed before any fix.
+
+Evidence (FP0, gateway journal on Node B, 03:55 to 04:11 UTC). The paper
+(`vm-1669020a...`) runs `pool:synthetic-luna` (Synthetic
+`hf:deepseek-ai/DeepSeek-V4.1-Flash-1017` and chatgpt `gpt-6-luna`, 1:1, no
+failover by owner ruling: "I'd rather them fail than fallback"). In the 15
+minutes to 04:11 UTC the gateway made 93 Synthetic calls and 20 of them failed
+with `synthetic: status 429 Too Many Requests`. Synthetic's reason for those is
+"Too many concurrent requests"; the probe measured about 10 concurrent and then
+429, with no `Retry-After` (finding in the probe section above). That is
+Residual R-b arriving as predicted: the gateway admits 24 calls in flight (6
+per computer) against an account ceiling near 10.
+
+Second effect, worse than the 20 rejections: the 429s open the gateway's
+per-model circuit breaker. After the threshold the journal shows `provider
+synthetic model ...: circuit open (model unhealthy)`, and the following
+Synthetic calls fail without being sent at all, for the breaker's open window,
+although the model is healthy. `providerFailureCounts`
+(`internal/gateway/circuit_breaker.go`) counts a 429 on purpose: the design
+(free-model-429-opens-provider-circuit-stub-stories-2026-10-14) makes an open
+model breaker the short per-model backoff that moves an opencode-go run to its
+next pool member. That reasoning needs a failover target. `synthetic-luna` has
+none, and a concurrency 429 says nothing about the model's health: it says
+"this account has too many calls in flight right now", which the gateway
+itself caused.
+
+Classification. Substrate: the gateway has no per-provider concurrency bound
+for a provider with an account-wide ceiling. The RES-11 model scheduler
+(`internal/gateway/model_scheduler.go`) is the existing seam but is off
+(`GATEWAY_MODEL_SCHEDULER`), is fair-share per computer rather than per
+provider, and bounds all providers together (24 global), so it cannot express
+"Synthetic: 8, everything else: unbounded" without a per-provider dimension;
+turning it on would also change every other route. The closer seam is the
+provider package's own bounded-wait gates (the image decode slots and output
+budget in `internal/provider/media_budget.go`, reported on `/health` as
+`image_media`), which sit inside the provider call, beneath the breaker, and
+count waited and refused. Symptom: the breaker counting a concurrency 429.
+
+Chosen change (smallest correct):
+
+1. A concurrency gate inside `SyntheticProvider` (semaphore, default 8, env
+   `SYNTHETIC_MAX_CONCURRENT`; wait bound default 120 s, env
+   `SYNTHETIC_MAX_WAIT`, and the request context). A call waits for a slot
+   instead of being sent and rejected, and holds the slot to the end of the
+   response or stream. Waiting is not failover, so the owner's ruling holds.
+   In flight, peak, waited, wait-timeouts and the limit are reported on
+   gateway `/health` as `synthetic_gate`, next to `image_media`.
+2. The breaker does not count (a) a Synthetic 429, typed
+   `provider.ErrUpstreamConcurrencyLimit` at the provider where the status is
+   known, nor (b) a gate wait that ended without a slot
+   (`provider.ErrConcurrencyGateWait`): neither says the model is unhealthy,
+   and (b) never reached the upstream. 5xx, timeouts and transport failures
+   still count. The error text of both keeps the sanitized form the run reads
+   (`synthetic: status 429 Too Many Requests (sanitized)`).
+
+Declined for now: not counting 429 for every provider. The opencode-go and
+cat-jam-free 429s are per-key or per-model rate limits where the open breaker
+is the designed failover trigger, and `circuit_breaker_client_error_test.go`
+pins that. Removing it needs a clustering assessment of the opencode pools, not
+a patch riding on this one. The 429 is scoped to the provider whose 429 is
+known to be a concurrency limit.
+
+Ways it could fail (written before the tests): the gate leaks a slot on a
+context cancel or an upstream error and starves later calls; a stream releases
+its slot at response headers instead of at the end; a wait timeout is counted
+as a model failure; the gate is bypassed on the non-stream path; a 429 still
+reaches the breaker through the stream path; `/health` reports no gate until
+the first call.
+
 ## Residuals and risks (named, not fixed here)
 
 - R-a: a pinned-name rotation returns 404 with a body our sanitized error
