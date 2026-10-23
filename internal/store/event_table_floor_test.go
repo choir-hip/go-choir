@@ -161,7 +161,10 @@ func TestEventTableFloorEpochIsAtMostTheBuildEpoch(t *testing.T) {
 
 // Reopen adopts a workspace; the floor goes into that workspace before it is
 // adopted, so no stamped append can land in an adopted workspace that has no
-// floor yet.
+// floor yet. The ordering is observed at the moment just before the handles
+// are swapped (reopenBeforeAdoptHook): the adopted workspace already holds
+// the floor and the store still points at its old workspace. A floor written
+// after the swap, as it was before round 2c, fails here.
 func TestEventTableReopenFloorsTheAdoptedWorkspaceBeforeAdopting(t *testing.T) {
 	other := testStorePath(t) + "-adopt"
 	cleanupTestStorePath(other)
@@ -171,11 +174,26 @@ func TestEventTableReopenFloorsTheAdoptedWorkspaceBeforeAdopting(t *testing.T) {
 	if err := s.SetEventTableWrites(true); err != nil {
 		t.Fatal(err)
 	}
+	oldWorkspace := s.texturePath
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
+	observed := false
+	reopenBeforeAdoptHook = func(adopted string) {
+		observed = true
+		if floor, found := storeFloor(t, adopted); !found || floor.Version != eventTableFloorEpoch {
+			t.Errorf("before the swap the adopted workspace has floor %+v found=%v, want %d", floor, found, eventTableFloorEpoch)
+		}
+		if s.texturePath != oldWorkspace {
+			t.Errorf("the hook ran after the swap: store points at %s, not %s", s.texturePath, oldWorkspace)
+		}
+	}
+	t.Cleanup(func() { reopenBeforeAdoptHook = nil })
 	if err := s.Reopen(other); err != nil {
 		t.Fatal(err)
+	}
+	if !observed {
+		t.Fatal("Reopen never reached the before-adopt hook")
 	}
 	if !s.EventTableWritesOn() {
 		t.Fatal("the switch went off across a clean reopen")

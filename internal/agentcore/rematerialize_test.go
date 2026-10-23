@@ -20,6 +20,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/storeschema"
 	"github.com/yusefmosiah/go-choir/internal/updater"
 )
 
@@ -362,6 +363,13 @@ func TestRestoreFromTapeRefusesPlatformOperand(t *testing.T) {
 
 func pinFrontendRelease(t *testing.T, updaterRoot, computerID, spaHTML string) (string, selfdevprotocol.FrontendIdentity) {
 	t.Helper()
+	return pinFrontendReleaseEpoch(t, updaterRoot, computerID, spaHTML, 0)
+}
+
+// pinFrontendReleaseEpoch pins a release that declares a store schema epoch
+// (0 declares none, like a genesis baseline).
+func pinFrontendReleaseEpoch(t *testing.T, updaterRoot, computerID, spaHTML string, epoch uint64) (string, selfdevprotocol.FrontendIdentity) {
+	t.Helper()
 	source := t.TempDir()
 	files := map[string]string{
 		"bin/choir":           "choir",
@@ -379,6 +387,13 @@ func pinFrontendRelease(t *testing.T, updaterRoot, computerID, spaHTML string) (
 	manifest, err := updater.BuildBaselineManifest(source, computerID, "code:sha256:"+strings.Repeat("d", 64), "artifact-program:sha256:"+strings.Repeat("e", 64))
 	if err != nil {
 		t.Fatal(err)
+	}
+	if epoch != 0 {
+		manifest.StoreSchemaVersion = epoch
+		manifest.MinStoreSchemaVersion = 1
+		if manifest, err = updater.FinalizeManifest(manifest); err != nil {
+			t.Fatal(err)
+		}
 	}
 	releaseDir := filepath.Join(updaterRoot, "releases", manifest.ContentDigest)
 	if err := os.MkdirAll(releaseDir, 0o700); err != nil {
@@ -705,4 +720,58 @@ func TestRematerializeFromTapeAcceptsOwnerRecoveryCheckpoint(t *testing.T) {
 		t.Fatal("owner-recovery rematerialize left the store closed")
 	}
 	t.Cleanup(func() { _ = rt.store.Close() })
+}
+
+// Round 2c of F-c deploy 2 (bunch 152, Devin 1), written before the fix. The
+// restage floor check read only the STAGED workspace's floor. On the genesis
+// replay path the staged store is opened empty (Open's floor probe finds no
+// row) and the stamped ops arrive afterwards, so the staged workspace has no
+// floor file at check time and a checkpoint pinning a release below the floor
+// still restaged. The live workspace carries the floor: it must be checked
+// too.
+func TestRematerializeFromTapeRefusesAReleaseBelowTheLiveFloor(t *testing.T) {
+	computerID := "computer-rematerialize-floor"
+	storePath := filepath.Join(t.TempDir(), "runtime.db")
+	live, err := choirstore.Open(storePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if live != nil {
+			_ = live.Close()
+		}
+	}()
+	rt, cas, acceptedHead := rematerializeTapeRuntime(t, computerID, storePath, live)
+	updaterRoot := filepath.Join(t.TempDir(), "updater")
+	priorDigest, _ := pinFrontendReleaseEpoch(t, updaterRoot, computerID, "<html>live</html>", storeschema.Version)
+	targetDigest, targetIdentity := pinFrontendReleaseEpoch(t, updaterRoot, computerID, "<html>below the floor</html>", 1)
+	pointCurrent(t, updaterRoot, priorDigest)
+	rt.selfdevUpdaterRoot = updaterRoot
+	ctx := context.Background()
+	seedRestoreBase(t, ctx, rt, cas, computerID, 1)
+	report, err := rt.ReplayCompleteness(ctx, computerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	witness, err := selfdevprotocol.WitnessFromObservationSets(report.Live, report.Replay, report.Result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkpoint := rematerializeTestCheckpoint(t, computerID, witness, targetDigest, targetIdentity, acceptedHead)
+
+	// The live store has been floored by a writer that stamped.
+	if err := storeschema.WriteFloor(live.TexturePath(), storeschema.Version, "the event-table writer is on"); err != nil {
+		t.Fatal(err)
+	}
+	_, err = rt.RematerializeFromTape(ctx, computerID, checkpoint)
+	if err == nil || !strings.Contains(err.Error(), "floor") {
+		t.Fatalf("rematerialize onto a release below the live floor: err=%v, want a refusal naming the floor", err)
+	}
+	if rt.store == nil {
+		t.Fatal("the refusal closed the original realization")
+	}
+	served, readErr := os.ReadFile(filepath.Join(updaterRoot, "current", "frontend", "index.html"))
+	if readErr != nil || string(served) != "<html>live</html>" {
+		t.Fatalf("a refused rematerialize moved the served SPA: %q %v", served, readErr)
+	}
 }
