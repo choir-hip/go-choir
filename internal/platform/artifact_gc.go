@@ -163,7 +163,7 @@ type gcCandidate struct {
 // reuse lock. Dry-run reports the full eligible set without deleting.
 func (s *Service) RunArtifactGC(ctx context.Context, cfg ArtifactGCConfig) (ArtifactGCReport, error) {
 	report, err := s.runArtifactGC(ctx, cfg)
-	if report.Mode == ArtifactGCModeActive && s != nil && s.artifactsRoot != "" && ctx.Err() == nil {
+	if err == nil && report.Mode == ArtifactGCModeActive && s != nil && s.artifactsRoot != "" && ctx.Err() == nil {
 		// F6: compress old daily logs, after artifactGCMu is released. Best
 		// effort: a failure is a warning and never fails the pass (the
 		// original is kept).

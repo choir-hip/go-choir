@@ -142,6 +142,11 @@ func (s *Service) rotateArtifactGCLogs(ctx context.Context, now time.Time) (Arti
 		if err != nil || !day.Before(cutoff) {
 			continue
 		}
+		// A file modified within the plain window is not old, whatever its
+		// name says (a clock step, or a log still being written).
+		if fi, err := e.Info(); err != nil || fi.ModTime().After(now.Add(-artifactGCLogPlainDays*24*time.Hour)) {
+			continue
+		}
 		before, after, err := rotateOneArtifactGCLog(filepath.Join(dir, e.Name()))
 		if err != nil {
 			if firstErr == nil {
@@ -174,12 +179,18 @@ func rotateOneArtifactGCLog(plain string) (before, after int64, err error) {
 	_ = os.Remove(tmp)
 
 	if zinfo, zerr := os.Lstat(zst); zerr == nil && zinfo.Mode().IsRegular() {
-		if verifyZstdMatches(plain, zst) == nil {
+		verr := verifyZstdMatches(plain, zst)
+		if verr == nil {
 			// Crash after the rename: both copies, the compressed one is good.
 			if err := os.Remove(plain); err != nil {
 				return 0, 0, err
 			}
 			return before, zinfo.Size(), nil
+		}
+		if _, divergent := verr.(*zstdDivergentError); divergent {
+			// A well-formed .zst that differs from the plain file may be the
+			// only archived copy of earlier records: keep both.
+			return 0, 0, fmt.Errorf("%s: both copies kept: %w", filepath.Base(zst), verr)
 		}
 		// A corrupt or partial .zst never passes for the log.
 		if err := os.Remove(zst); err != nil {
@@ -260,9 +271,17 @@ func verifyZstdMatches(plain, compressed string) error {
 		return err
 	}
 	if wantN != gotN || !bytes.Equal(want, got) {
-		return fmt.Errorf("decompressed %d bytes do not match the original %d bytes", gotN, wantN)
+		return &zstdDivergentError{got: gotN, want: wantN}
 	}
 	return nil
+}
+
+// zstdDivergentError means the compressed file decoded cleanly but its bytes
+// differ from the plain file's.
+type zstdDivergentError struct{ got, want int64 }
+
+func (e *zstdDivergentError) Error() string {
+	return fmt.Sprintf("the compressed file differs from the plain file (decompressed %d bytes, plain %d bytes)", e.got, e.want)
 }
 
 func sha256OfFile(path string, decompress bool) ([]byte, int64, error) {
