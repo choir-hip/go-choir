@@ -693,6 +693,111 @@ above are from the owner-leading index (the census was rerun): the order changes
 them by under 10%, build 1.02 to 1.13 s, hold of the write connection 1.04 to
 1.16 s, read after 67 ms and 184 ms.
 
+## R5: the duplicate `idx_run_memory_entries_loop_seq` (red, store schema; lane `fp0-run-memory-r5`)
+
+Mutation class: **red** (store schema, `schemaDDL`, `Open`, and one more step of
+`/internal/store/derived-columns`). Protected surfaces: the store schema (a
+dropped secondary index), the boot path (one discovery-or-drop call on an empty
+table), the content witness only if `SHOW COLUMNS` moves (it does not, below).
+Not touched: the epoch, row data, the event tape. Review tier: FP0 judges; the
+drop is additive in effect (an index is not state), behind an operator act with
+a one-statement rollback, but it edits the boot path, so it is recorded here as
+tier 1 or 2 by FP0's reading of "silent or irreversible".
+
+**The problem. [V] local.** The kind index (shape 3) cost 12.5 KiB more journal
+per append (+29%). The journal record
+([paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md](paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md),
+R5) named the pairing: `run_memory_entries` carries
+`idx_run_memory_entries_loop_seq ON (loop_id, seq)` as well as
+`UNIQUE(loop_id, seq)`. Both are in `schemaDDL` and the `CREATE TABLE`
+(`store.go:504-521`, `:599`), introduced in the same commit (`e759ce3f1`), so
+every store, the paper included, has both. Each append writes every secondary
+tree; the duplicate is one tree that nothing reads.
+
+**Duplicate proof. [V]** (`TestRunMemoryLoopSeqIndexIsADuplicateOfTheUniqueKey`).
+
+- *Prefix-superset.* `information_schema.STATISTICS` on a fresh store: the
+  unique key is named `loop_id` by Dolt and has columns `(loop_id, seq)`, the
+  same columns in the same order, and is `NON_UNIQUE=0`. The other indexes:
+  `PRIMARY(entry_id)`, `(owner_id, loop_id, seq)`, `(owner_id, agent_id,
+  created_at)`, `(owner_id, agent_id, kind, created_at)`, `(parent_entry_id)`.
+  `(loop_id, seq)` is not a prefix of any of the others, and the unique key is
+  the identical key.
+- *Plans.* `EXPLAIN PLAN` of every production statement over the table, on a
+  3,000-row store, with the index and after `DROP INDEX`: the texts are
+  **equal** for all of them. With the index present the planner already reads
+  `[run_memory_entries.loop_id,run_memory_entries.seq]`, which is the unique
+  key's column list; the plan does not name the duplicate. The statements
+  (all other statements over the table are `INSERT`s or by `entry_id`):
+
+  | statement | where | access |
+  |---|---|---|
+  | `SELECT COALESCE(MAX(seq),0)+1 ... WHERE loop_id=?` | `run_memory.go:55` (tape path), `:108` | `(loop_id, seq)` range, GroupBy MAX |
+  | `SELECT entry_id ... WHERE loop_id=? ORDER BY seq DESC LIMIT 1` | `run_memory.go:64`, `:119` | `(loop_id, seq)` range, TopN |
+  | `ListRunMemoryEntries`, no owner | `run_memory.go:247` | `(loop_id, seq)` range, Sort |
+  | `ListRunMemoryEntries`, owner | `run_memory.go:257` | `(loop_id, seq)` range, Filter owner (the `(owner_id, loop_id, seq)` index is not chosen for the `AND` form) |
+  | `ListRunMemoryEntriesForAgent` | `run_memory.go:290` (`runMemoryAgentListQuery`) | the kind index / `(owner_id, agent_id, created_at)`; `loop_id` not used |
+  | `ListRunMemoryEntryFingerprints` | `run_memory.go:390` | full scan |
+  | `LatestRunMemoryEntry` | `run_memory.go:461` | `(loop_id, seq)` range, TopN |
+  | `GetRunMemoryEntry` | `run_memory.go:481`, `:491` | `PRIMARY(entry_id)` |
+  | projection read `... WHERE entry_id=? FOR UPDATE` | `project.go:313` | `PRIMARY(entry_id)` |
+  | residue run memory | `residue_import.go:409` | `(owner_id, loop_id, seq)` ranges |
+
+  The `INSERT`s are `run_memory.go:134` and `project.go:330`. The test keeps
+  a copy of the statement list, with these file:line references, as the thing a
+  new statement must be added to.
+
+**Witness. [V]** (`TestRunMemoryLoopSeqIndexDropKeepsTheWitnessSchemaObservation`).
+A store with the index and a store without it (both closed, the production
+extractor, `computerversion.DoltStateExtractor`) have **equal schema
+observations for every table**. `loop_id` is `MUL` through the composite unique
+key `UNIQUE(loop_id, seq)` with or without the duplicate, so, unlike the first
+kind-index order, the drop moves no `Key`. The control (an index on the keyless
+`model` column) does move the observation, so the test can see a drift. The
+row hash `dolt_hashof_table` never saw indexes. **[H]** that no off-repo tool
+reads the index set.
+
+Because the observation is unchanged, a live store that dropped it and a fresh
+store agree in every hashed observation. They still must agree in structure,
+and the repo's rule for a table with rows applies regardless of the witness
+(no boot-time DDL against a populated table,
+[boot-alters-og-objects-when-older-columns-missing-2026-10-21.md](boot-alters-og-objects-when-older-columns-missing-2026-10-21.md)).
+
+**Design.** The kind index in reverse, in `internal/store/run_memory_duplicate_index.go`.
+
+- `schemaDDL` no longer creates it (a fresh store is made without it). A test
+  pins that `schemaDDL` does not name it, so no boot recreates it.
+- *Open, empty table:* a store that has it and no rows drops it at open (free;
+  it makes an old empty store agree with a fresh one). *Open, populated:*
+  discovery only, a log line, no DDL.
+- *The operation:* one more step of `POST /internal/store/derived-columns?action=migrate`
+  after the kind index, `DROP INDEX` under the engine mutex through
+  `WithEngine`, step kind `drop_index`, reported in the status as
+  `run_memory_loop_seq_index`. A second run finds it absent and does nothing. A
+  cancel before the step is `cancelled`, not `done`.
+- *Guard:* the drop is refused (the migration fails naming the index, the index
+  stays) unless a unique key on exactly `(loop_id, seq)` exists, so the
+  statements above can never end up on a table scan.
+- No epoch bump: an index is dropped, an older binary only has one fewer.
+
+**Rollback. [V]** (`TestRunMemoryLoopSeqIndexRollbackRecreatesIt`)
+
+- *Revert the commit, store already dropped.* The index stays dropped until the
+  reverted binary boots: its `schemaDDL` line is `CREATE INDEX IF NOT EXISTS
+  idx_run_memory_entries_loop_seq`, which **rebuilds it at that boot, on the
+  populated table, before the listener** (the shape this record refuses for new
+  work). The cost is one build of a two-column index; measured at 425,000 rows
+  below. The residue of a revert is therefore a one-time boot-time build, then
+  the index and its 12-ish KiB of journal per append are back. A revert should
+  be a planned update, not a crash restore.
+- *Recreate by hand:* `CREATE INDEX idx_run_memory_entries_loop_seq ON
+  run_memory_entries(loop_id, seq)`; the test recreates it, the answer is
+  unchanged, and the operation drops it again.
+- *Revert the commit, store not yet dropped:* nothing changes.
+
+**Measurements** (local, 425,000 rows, `TestRunMemoryHoldCensus`): to follow in
+the update after the code lands.
+
 ## Next (not in this pass)
 
 Shape 1 (keyed cursor state, red), shape 3 (the `(owner_id, agent_id, kind,
