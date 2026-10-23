@@ -560,6 +560,10 @@ func TestDeadlineIsFromFirstRecordNotSliding(t *testing.T) {
 	h := newTapeHarness(t)
 	h.enableBatching(400 * time.Millisecond)
 	ctx := context.Background()
+	// The first allocation of a process seeds the stream_seq lease (an exact
+	// seed and a tape append, slow under -race on a loaded runner). Seed it
+	// before the clock starts: the clock measures the seal deadline.
+	waitLeaseReady(t, h.store)
 	start := time.Now()
 	for i := 0; i < 4; i++ {
 		if err := h.store.AppendEvent(ctx, h.event(fmt.Sprintf("d%d", i), "run-dl", "owner-1", types.EventRunProgress, telemetryBase.Add(time.Duration(i)*time.Second))); err != nil {

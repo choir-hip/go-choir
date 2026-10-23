@@ -975,3 +975,29 @@ are counted and logged (`seed_undecodable_rows`, a fourteenth field); the
 stale comments and loose `> lastStored` assertions in the seed tests are
 replaced by the lease's exact `R + 1`; the base-install test asserts
 `no_lease`.
+
+### Round 3 (PR #91 CI: `TestSeederRefusesWhenTheHeadsDiffer`)
+
+The failure was test-only: the test shrank the seeding deadline to 200 ms,
+and after the heads agreed the seeder's next attempt (the doubling backoff
+had reached 160 to 320 ms, an attempt itself took 141 ms on the loaded
+runner) fell outside a second 200 ms deadline. Two of its neighbours
+(`TestSeederAppendFailureHandsOutNoNumber`, the ready phase of
+`TestBatchingReservationDoesNotDeadlockTheLeaseWait`) had the same shape.
+The tests now nudge the seeder (`StartStreamSeqSeed`) until the lease is
+ready, with a one-minute bound, instead of racing a shortened deadline.
+
+`TestDeadlineIsFromFirstRecordNotSliding` (a 400 ms window, run in the same
+package and shard) measured from before the process's first allocation,
+which since the lease includes the exact seed and a tape append; it now seeds
+the lease before the clock starts. Its 700 ms bound is otherwise unchanged
+and is still a wall-clock test, so it can still flake on a starved runner.
+
+Product question recorded, no code change: a seeder in its retry backoff
+does not notice that the cause cleared (heads agreeing is not an event the
+store is signalled about) until the backoff ends, so the first append after
+a transient failure can wait up to one backoff step (capped at 30 s, against
+the 10-minute seeding deadline). A wake would need a head-change signal from
+the appender; the bound is the same order as the 30 s ready deadline and an
+append never fails because of it. Left as is; revisit if a deployed proof
+shows `seed_failed` above 0 on a healthy boot.
