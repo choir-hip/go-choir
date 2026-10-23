@@ -80,7 +80,7 @@ still open (the report carries hashes only).
 
 `self_development_operations` columns, as written by the live path and as
 reproduced by the tape. The projection is
-`projectSelfDevelopmentOperation` (`internal/store/project.go:385-460`),
+`projectSelfDevelopmentOperation` (`internal/store/project.go:371-460`),
 fed by `computerevent.SelfDevelopmentOperationProjection`
 (`internal/computerevent/projection_batch.go:106-137`) which has 27 body
 fields and no `last_intent_error`. The projector's `INSERT ... ON DUPLICATE
@@ -90,11 +90,11 @@ survives any projected update on the live side.
 
 | Write site | What it writes | On the tape in production? | Reproduced by replay? |
 |---|---|---|---|
-| `selfdev/operations.go:263` (`Start` insert) | all request columns | Yes. Guarded: `if s.projection != nil` at `:258` returns through `appendOperationProjection` (`:545`). The insert is the unbound test seam only | Yes |
-| `operations.go:385` (`RecordAppliedBaseline` insert) | genesis baseline row | Yes. Same guard at `:380` | Yes |
-| `operations.go:432` (`StartRollback` insert) | rollback row | Yes. Same guard at `:428` | Yes |
-| `operations.go:495` (`Transition` UPDATE) | 22 columns incl. `last_intent_error`, `updated_at` | Yes. The projection branch at `:466-485` returns first; the UPDATE is the unbound seam only | Every column but `last_intent_error`. In projection mode `Transition` carries the old stamp in memory but `appendOperationProjection` drops it; harmless, because the projector never touches the column, so live keeps it |
-| `operations.go:196` (`BindStartIntent`) | `self_development_start_intents` | Yes, same pattern (`:187`) | Yes, all four columns (`project.go:363`) |
+| `selfdev/operations.go:263` (`Start` insert) | all request columns | Yes. Guarded: `if s.projection != nil` at `:257` returns through `appendOperationProjection` (`:557`). The insert is the unbound test seam only | Yes |
+| `operations.go:385` (`RecordAppliedBaseline` insert) | genesis baseline row | Yes. Same guard at `:379` | Yes |
+| `operations.go:432` (`StartRollback` insert) | rollback row | Yes. Same guard at `:426` | Yes |
+| `operations.go:495` (`Transition` UPDATE) | 22 columns incl. `last_intent_error`, `updated_at` | Yes. The projection branch at `:450` returns first; the UPDATE is the unbound seam only | Every column but `last_intent_error`. In projection mode `Transition` carries the old stamp in memory but `appendOperationProjection` drops it; harmless, because the projector never touches the column, so live keeps it |
+| `operations.go:196` (`BindStartIntent`) | `self_development_start_intents` | Yes, same pattern (`:190`) | Yes, all four columns (`project.go:363`) |
 | **`operations.go:524` (`RecordIntentError` UPDATE)** | `last_intent_error`, `updated_at` | **No. No `s.projection` branch exists; it runs as raw SQL in production** | **No. Neither column, as of this write** |
 
 Production binds the sink: `runtime.go:386-390` and `rematerialize.go:268-272`
@@ -202,7 +202,7 @@ the witness is used:
   recorded in every existing checkpoint, no longer match. Rematerialize
   extracts the reconstructed witness under the current recipe and compares
   it with the checkpoint's recorded one
-  (`rematerialize.go:~190, WitnessContentMatches`), so older checkpoints
+  (`rematerialize.go:196, WitnessContentMatches`), so older checkpoints
   would become unrestorable. The F-c design avoided exactly this for
   `choir_events` (`computerversion.OptionalTables`). A restore would also
   drop the stamp silently, since replay cannot produce it.
