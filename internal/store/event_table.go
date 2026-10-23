@@ -534,6 +534,16 @@ func (s *Store) StoreFloor() (uint64, error) {
 // eventTableAnyRowSQL is Open's one-row probe for the floor.
 const eventTableAnyRowSQL = `SELECT 1 FROM choir_events LIMIT 1`
 
+// ErrEventTableLeaseNotReady is the refusal of the event-table writer and of
+// store.event_table while the stream_seq lease is not ready on the tape.
+var ErrEventTableLeaseNotReady = errors.New("the stream_seq lease is not ready")
+
+// EventTableLeaseReady reports whether the stream_seq lease admits the
+// event-table writer. Not yet implemented (tests first).
+func (s *Store) EventTableLeaseReady() error {
+	return nil
+}
+
 // EventTableWritesOn reports the switch as the writer applies it.
 func (s *Store) EventTableWritesOn() bool {
 	return s != nil && s.eventTableWrites.Load()
