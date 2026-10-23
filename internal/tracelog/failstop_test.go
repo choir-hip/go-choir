@@ -57,7 +57,7 @@ func TestTornTailAtEveryByteOfTheLastRecord(t *testing.T) {
 		if err != nil {
 			t.Fatalf("cut %d: Open: %v", cut, err)
 		}
-		if st := l2.Stats(); st.TornTailsCut != 1 || st.DamagedTails != 0 {
+		if st := l2.Stats(); st.TornTailsCut != 1 || st.DamagedRecords != 0 {
 			t.Fatalf("cut %d: stats %+v", cut, st)
 		}
 		if err := l2.Append(meta(5), lineFor(5)); err != nil {

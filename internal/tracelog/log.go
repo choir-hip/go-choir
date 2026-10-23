@@ -34,9 +34,11 @@ package tracelog
 import (
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -79,6 +81,9 @@ type Options struct {
 
 	Now   func() time.Time
 	Hooks Hooks
+	// Logf receives the log's rare messages (a damaged span found at
+	// recovery, once per segment). Nil means the standard logger.
+	Logf func(format string, args ...any)
 }
 
 // Stats are the log's counters, for the observability block (design S2).
@@ -94,12 +99,15 @@ type Stats struct {
 	SegmentsCreated int64            `json:"segments_created"`
 	SegmentsSealed  int64            `json:"segments_sealed"`
 	// TornTailsCut counts unsealed segments found at Open whose last record
-	// was partial; DamagedTails those with damage before valid records.
-	// Quarantined counts files set aside as .bad.
-	TornTailsCut int64 `json:"torn_tails_cut"`
-	DamagedTails int64 `json:"damaged_tails"`
-	Quarantined  int64 `json:"quarantined"`
-	TooLarge     int64 `json:"too_large"`
+	// was partial. DamagedRecords counts spans of a segment that failed their
+	// checks and were skipped, with DamagedBytes their size; the whole records
+	// around them are kept (design 9.2 item 4). Quarantined counts files set
+	// aside as .bad.
+	TornTailsCut   int64 `json:"torn_tails_cut"`
+	DamagedRecords int64 `json:"damaged_records"`
+	DamagedBytes   int64 `json:"damaged_bytes"`
+	Quarantined    int64 `json:"quarantined"`
+	TooLarge       int64 `json:"too_large"`
 
 	Poisoned    bool   `json:"poisoned"`
 	PoisonError string `json:"poison_error,omitempty"`
@@ -150,6 +158,12 @@ type Log struct {
 	buf      []byte // the line being appended
 	bbuf     []byte // a boundary being written
 	stats    Stats
+
+	// failing is set by a failed fsync the moment it returns, before the
+	// failing call waits for mu, so a seal that holds mu can see it (and
+	// failErr says why).
+	failing atomic.Bool
+	failErr atomic.Pointer[error]
 
 	retainMu sync.Mutex
 	retainMA time.Duration
@@ -225,6 +239,14 @@ func Open(opts Options) (*Log, error) {
 func (l *Log) Dir() string { return l.dir }
 
 func (l *Log) now() time.Time { return l.opts.Now() }
+
+func (l *Log) logf(format string, args ...any) {
+	if l.opts.Logf != nil {
+		l.opts.Logf(format, args...)
+		return
+	}
+	log.Printf(format, args...)
+}
 
 // SetRetention changes the bounds Retain applies.
 func (l *Log) SetRetention(maxAge time.Duration, maxBytes int64) {
@@ -326,16 +348,25 @@ func (l *Log) AppendBoundary(reason string, headSeq int64) error {
 	if err := l.usableLocked(); err != nil {
 		return err
 	}
+	b := Boundary{Reason: reason, HeadSeq: headSeq, At: l.now()}
+	if len(reason) > MaxRecordBytes/2 {
+		l.stats.TooLarge++
+		return ErrTooLarge // refused before a segment is touched
+	}
 	if err := l.prepareLocked(); err != nil {
 		return err
 	}
-	return l.writeBoundaryLocked(l.cur, Boundary{Reason: reason, HeadSeq: headSeq, At: l.now()})
+	return l.writeBoundaryLocked(l.cur, b)
 }
 
 func (l *Log) writeBoundaryLocked(s *openSeg, b Boundary) error {
 	// Its own buffer: Append has a line encoded in l.buf when it creates a
 	// segment, and the segment's first boundary must not overwrite it.
-	l.bbuf = encodeBoundary(l.bbuf, b)
+	var err error
+	if l.bbuf, err = encodeBoundary(l.bbuf, b); err != nil {
+		l.stats.TooLarge++
+		return err
+	}
 	if err := l.writeLocked(s, l.bbuf); err != nil {
 		return err
 	}
@@ -478,6 +509,13 @@ func (l *Log) Sync() error {
 	start := time.Now()
 	err := l.syncFile(s.f)
 	took := time.Since(start).Nanoseconds()
+	if err != nil {
+		// Flag it before waiting for mu: a seal in progress holds mu and must
+		// not install an index after an fsync has failed.
+		e := fmt.Errorf("tracelog: fsync segment: %w", err)
+		l.failErr.CompareAndSwap(nil, &e)
+		l.failing.Store(true)
+	}
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -556,7 +594,19 @@ func (l *Log) sealCurrentLocked() error {
 		return l.failLocked(fmt.Errorf("tracelog: fsync segment %d to seal: %w", s.segno, err))
 	}
 	sum := s.idx.summarize(s.off, s.created, l.now())
-	if err := writeIndex(l.dir, s.segno, s.off, s.off, sum, s.idx, l.syncFile, l.syncDir); err != nil {
+	notFailed := func() error {
+		if l.failing.Load() {
+			if e := l.failErr.Load(); e != nil {
+				return fmt.Errorf("%w: not installing an index after: %v", ErrPoisoned, *e)
+			}
+			return ErrPoisoned
+		}
+		return nil
+	}
+	if err := writeIndex(l.dir, s.segno, s.off, s.off, sum, s.idx, l.syncFile, l.syncDir, notFailed); err != nil {
+		if e := l.failErr.Load(); e != nil {
+			err = *e // the failure that came first
+		}
 		return l.failLocked(err)
 	}
 	s.sealed = true
@@ -575,6 +625,10 @@ func (l *Log) sealCurrentLocked() error {
 // directory. A poisoned log only closes its descriptors: it touches no file.
 // Close is idempotent.
 func (l *Log) Close() error {
+	// Held to the end, the directory release included: a Retain in progress
+	// finishes first, and a later one finds the log closed.
+	l.retainMu.Lock()
+	defer l.retainMu.Unlock()
 	l.mu.Lock()
 	if l.closed {
 		l.mu.Unlock()

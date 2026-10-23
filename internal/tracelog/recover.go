@@ -87,8 +87,6 @@ func (l *Log) recoverSegment(segno uint64) error {
 		return fmt.Errorf("tracelog: read segment %d: %w", segno, err)
 	}
 	switch res.class {
-	case headerNewer:
-		return fmt.Errorf("%w: %w: segment %d", ErrCorrupt, ErrUnsupportedVersion, segno)
 	case headerTorn, headerBad:
 		// A torn header means the crash came before the segment was durable,
 		// so nothing in it was ever acknowledged; a bad header is not ours.
@@ -110,14 +108,16 @@ func (l *Log) recoverSegment(segno uint64) error {
 		return fmt.Errorf("tracelog: fsync segment %d to seal it: %w", segno, err)
 	}
 	sum := res.idx.summarize(res.validEnd, res.created, l.now())
-	if err := writeIndex(l.dir, segno, res.validEnd, res.size, sum, res.idx, l.syncFile, l.syncDir); err != nil {
+	if err := writeIndex(l.dir, segno, res.validEnd, res.size, sum, res.idx, l.syncFile, l.syncDir, nil); err != nil {
 		return err
 	}
-	switch res.state {
-	case endTorn:
+	if res.torn {
 		l.stats.TornTailsCut++
-	case endDamaged:
-		l.stats.DamagedTails++
+	}
+	if x := res.idx; x.damagedRecords > 0 {
+		l.stats.DamagedRecords += x.damagedRecords
+		l.stats.DamagedBytes += x.damagedBytes
+		l.logf("tracelog: segment %d: %d damaged span(s), %d bytes, skipped; the lines around them are kept", segno, x.damagedRecords, x.damagedBytes)
 	}
 	l.stats.SegmentsSealed++
 	return nil
@@ -127,7 +127,7 @@ func (l *Log) recoverSegment(segno uint64) error {
 // fsynced: temp file, fsync, rename, fsync of the directory. A crash before
 // the rename leaves the segment unsealed, which the next Open seals again.
 func writeIndex(dir string, segno uint64, validEnd, tlogSize int64, sum *Summary, x *segIdx,
-	syncFile func(*os.File) error, syncDir func(string) error) error {
+	syncFile func(*os.File) error, syncDir func(string) error, beforeInstall func() error) error {
 	b := encodeIndex(segno, validEnd, tlogSize, sum, x)
 	final := filepath.Join(dir, indexName(segno))
 	tmp := final + ".tmp"
@@ -155,6 +155,11 @@ func writeIndex(dir string, segno uint64, validEnd, tlogSize int64, sum *Summary
 	}
 	if err := t.Close(); err != nil {
 		return err
+	}
+	if beforeInstall != nil {
+		if err := beforeInstall(); err != nil {
+			return err
+		}
 	}
 	if err := os.Rename(tmp, final); err != nil {
 		return fmt.Errorf("tracelog: install index: %w", err)

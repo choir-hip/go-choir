@@ -433,7 +433,7 @@ func TestCloseSealsIsIdempotentAndRefusesAppends(t *testing.T) {
 	if !eqInts(streams, []int64{1, 2}) || strings.Join(reasons, ",") != "open,open" {
 		t.Fatalf("streams %v reasons %v", streams, reasons)
 	}
-	if st := l2.Stats(); st.TornTailsCut != 0 || st.DamagedTails != 0 {
+	if st := l2.Stats(); st.TornTailsCut != 0 || st.DamagedRecords != 0 {
 		t.Fatalf("recovery counters moved on a clean reopen: %+v", st)
 	}
 }
