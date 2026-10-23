@@ -789,10 +789,17 @@ func TestBackpressureAtCapacityDoesNotDeadlock(t *testing.T) {
 func TestPlatformOutageIsBounded(t *testing.T) {
 	h := newTapeHarness(t)
 	sl := h.enableBatching(farFuture)
+	ctx := context.Background()
+	// The stream_seq lease is seeded by the first allocation of the process;
+	// an outage before that makes the first allocations wait for it, up to the
+	// seeding deadline (the lease fails closed), which is not this test's
+	// subject. The outage here is a running computer's.
+	if err := h.store.AppendEvent(ctx, h.event("seed", "run-out", "owner-1", types.EventRunSubmitted, telemetryBase)); err != nil {
+		t.Fatal(err)
+	}
 	h.tape.mu.Lock()
 	h.tape.pinErr = func([]byte) error { return errors.New("platform outage") }
 	h.tape.mu.Unlock()
-	ctx := context.Background()
 	maxDepth := 0
 	for i := 0; i < 1000; i++ {
 		if err := h.store.AppendEvent(ctx, h.event(fmt.Sprintf("o%d", i), "run-out", "owner-1", types.EventRunDelta, telemetryBase.Add(time.Duration(i)*time.Millisecond))); err != nil {

@@ -8,13 +8,13 @@
     "ops": [
       {
         "kind": "object_recorded",
-        "canonical_id": "obj:choir.event:b3duZXItMQ:sha256-9d68fd98a95f4b8f4fb22fc447800506f0f041a1c5e711836bdb2274d6ca1d0a",
+        "canonical_id": "obj:choir.event:b3duZXItMQ:sha256-938e3bb634d2dca3c08010e00ed7621d44aa61d20ccd8df32b92091392a31686",
         "body": {
-          "canonical_id": "obj:choir.event:b3duZXItMQ:sha256-9d68fd98a95f4b8f4fb22fc447800506f0f041a1c5e711836bdb2274d6ca1d0a",
+          "canonical_id": "obj:choir.event:b3duZXItMQ:sha256-938e3bb634d2dca3c08010e00ed7621d44aa61d20ccd8df32b92091392a31686",
           "object_kind": "choir.event",
           "owner_id": "owner-1",
-          "content_hash": "sha256:9d68fd98a95f4b8f4fb22fc447800506f0f041a1c5e711836bdb2274d6ca1d0a",
-          "body": "eyJldmVudF9pZCI6ImctMSIsInNlcSI6MSwic3RyZWFtX3NlcSI6MSwidHMiOiIyMDI2LTEwLTIwVDEyOjAwOjAxWiIsImxvb3BfaWQiOiJydW4tYSIsIm93bmVyX2lkIjoib3duZXItMSIsInRyYWplY3RvcnlfaWQiOiJ0cmFqZWN0b3J5LXJ1bi1hIiwia2luZCI6Imxvb3Auc3VibWl0dGVkIiwicGF5bG9hZCI6eyJpZCI6ImctMSJ9fQ==",
+          "content_hash": "sha256:938e3bb634d2dca3c08010e00ed7621d44aa61d20ccd8df32b92091392a31686",
+          "body": "eyJldmVudF9pZCI6ImctMSIsInNlcSI6MSwic3RyZWFtX3NlcSI6MTA0ODU3NywidHMiOiIyMDI2LTEwLTIwVDEyOjAwOjAxWiIsImxvb3BfaWQiOiJydW4tYSIsIm93bmVyX2lkIjoib3duZXItMSIsInRyYWplY3RvcnlfaWQiOiJ0cmFqZWN0b3J5LXJ1bi1hIiwia2luZCI6Imxvb3Auc3VibWl0dGVkIiwicGF5bG9hZCI6eyJpZCI6ImctMSJ9fQ==",
           "metadata": {
             "agent_id": "",
             "channel_id": "",
@@ -23,7 +23,7 @@
             "phase": "",
             "run_id": "run-a",
             "seq": 1,
-            "stream_seq": 1,
+            "stream_seq": 1048577,
             "timestamp": "2026-10-20T12:00:01Z",
             "trajectory_id": "trajectory-run-a"
           },
@@ -42,13 +42,13 @@
     "ops": [
       {
         "kind": "object_recorded",
-        "canonical_id": "obj:choir.event:b3duZXItMQ:sha256-7740e7544d87014c9c218a18d6d0a99e2e3c110ea8b82553770a6f8fe106e9cf",
+        "canonical_id": "obj:choir.event:b3duZXItMQ:sha256-1b8d6f4b1c87d28fbb7547c32af3b02dbf8c79603d0f9fe5d826d8f264558e1b",
         "body": {
-          "canonical_id": "obj:choir.event:b3duZXItMQ:sha256-7740e7544d87014c9c218a18d6d0a99e2e3c110ea8b82553770a6f8fe106e9cf",
+          "canonical_id": "obj:choir.event:b3duZXItMQ:sha256-1b8d6f4b1c87d28fbb7547c32af3b02dbf8c79603d0f9fe5d826d8f264558e1b",
           "object_kind": "choir.event",
           "owner_id": "owner-1",
-          "content_hash": "sha256:7740e7544d87014c9c218a18d6d0a99e2e3c110ea8b82553770a6f8fe106e9cf",
-          "body": "eyJldmVudF9pZCI6ImctMiIsInNlcSI6Miwic3RyZWFtX3NlcSI6MiwidHMiOiIyMDI2LTEwLTIwVDEyOjAwOjAyWiIsImxvb3BfaWQiOiJydW4tYSIsIm93bmVyX2lkIjoib3duZXItMSIsInRyYWplY3RvcnlfaWQiOiJ0cmFqZWN0b3J5LXJ1bi1hIiwia2luZCI6Imxvb3AucHJvZ3Jlc3MiLCJwYXlsb2FkIjp7ImlkIjoiZy0yIn19",
+          "content_hash": "sha256:1b8d6f4b1c87d28fbb7547c32af3b02dbf8c79603d0f9fe5d826d8f264558e1b",
+          "body": "eyJldmVudF9pZCI6ImctMiIsInNlcSI6Miwic3RyZWFtX3NlcSI6MTA0ODU3OCwidHMiOiIyMDI2LTEwLTIwVDEyOjAwOjAyWiIsImxvb3BfaWQiOiJydW4tYSIsIm93bmVyX2lkIjoib3duZXItMSIsInRyYWplY3RvcnlfaWQiOiJ0cmFqZWN0b3J5LXJ1bi1hIiwia2luZCI6Imxvb3AucHJvZ3Jlc3MiLCJwYXlsb2FkIjp7ImlkIjoiZy0yIn19",
           "metadata": {
             "agent_id": "",
             "channel_id": "",
@@ -57,7 +57,7 @@
             "phase": "",
             "run_id": "run-a",
             "seq": 2,
-            "stream_seq": 2,
+            "stream_seq": 1048578,
             "timestamp": "2026-10-20T12:00:02Z",
             "trajectory_id": "trajectory-run-a"
           },
@@ -76,13 +76,13 @@
     "ops": [
       {
         "kind": "object_recorded",
-        "canonical_id": "obj:choir.event:b3duZXItMQ:sha256-679360edfa20e1ff990fa164c004401e3d30df0d19b547b0a548bdb0e8cc5469",
+        "canonical_id": "obj:choir.event:b3duZXItMQ:sha256-3274c121b06e3de62e0b4d08da97d2ee3550c9a992cd22547a65c45fb2b501f5",
         "body": {
-          "canonical_id": "obj:choir.event:b3duZXItMQ:sha256-679360edfa20e1ff990fa164c004401e3d30df0d19b547b0a548bdb0e8cc5469",
+          "canonical_id": "obj:choir.event:b3duZXItMQ:sha256-3274c121b06e3de62e0b4d08da97d2ee3550c9a992cd22547a65c45fb2b501f5",
           "object_kind": "choir.event",
           "owner_id": "owner-1",
-          "content_hash": "sha256:679360edfa20e1ff990fa164c004401e3d30df0d19b547b0a548bdb0e8cc5469",
-          "body": "eyJldmVudF9pZCI6ImctMyIsInNlcSI6Mywic3RyZWFtX3NlcSI6MywidHMiOiIyMDI2LTEwLTIwVDEyOjAwOjAzWiIsImxvb3BfaWQiOiJydW4tYSIsIm93bmVyX2lkIjoib3duZXItMSIsInRyYWplY3RvcnlfaWQiOiJ0cmFqZWN0b3J5LXJ1bi1hIiwia2luZCI6InRvb2wuaW52b2tlZCIsInBheWxvYWQiOnsiaWQiOiJnLTMifX0=",
+          "content_hash": "sha256:3274c121b06e3de62e0b4d08da97d2ee3550c9a992cd22547a65c45fb2b501f5",
+          "body": "eyJldmVudF9pZCI6ImctMyIsInNlcSI6Mywic3RyZWFtX3NlcSI6MTA0ODU3OSwidHMiOiIyMDI2LTEwLTIwVDEyOjAwOjAzWiIsImxvb3BfaWQiOiJydW4tYSIsIm93bmVyX2lkIjoib3duZXItMSIsInRyYWplY3RvcnlfaWQiOiJ0cmFqZWN0b3J5LXJ1bi1hIiwia2luZCI6InRvb2wuaW52b2tlZCIsInBheWxvYWQiOnsiaWQiOiJnLTMifX0=",
           "metadata": {
             "agent_id": "",
             "channel_id": "",
@@ -91,7 +91,7 @@
             "phase": "",
             "run_id": "run-a",
             "seq": 3,
-            "stream_seq": 3,
+            "stream_seq": 1048579,
             "timestamp": "2026-10-20T12:00:03Z",
             "trajectory_id": "trajectory-run-a"
           },
@@ -110,13 +110,13 @@
     "ops": [
       {
         "kind": "object_recorded",
-        "canonical_id": "obj:choir.event:b3duZXItMQ:sha256-247b451a5507f8fd44229cae5931bf79353cfa9f8fd1eb3ce27cb6c1203feb43",
+        "canonical_id": "obj:choir.event:b3duZXItMQ:sha256-8aff041bdf513aeaf033a7f953f5104fff4e54523d75d28d40ebe5553b4635f0",
         "body": {
-          "canonical_id": "obj:choir.event:b3duZXItMQ:sha256-247b451a5507f8fd44229cae5931bf79353cfa9f8fd1eb3ce27cb6c1203feb43",
+          "canonical_id": "obj:choir.event:b3duZXItMQ:sha256-8aff041bdf513aeaf033a7f953f5104fff4e54523d75d28d40ebe5553b4635f0",
           "object_kind": "choir.event",
           "owner_id": "owner-1",
-          "content_hash": "sha256:247b451a5507f8fd44229cae5931bf79353cfa9f8fd1eb3ce27cb6c1203feb43",
-          "body": "eyJldmVudF9pZCI6ImctNCIsInNlcSI6NCwic3RyZWFtX3NlcSI6NCwidHMiOiIyMDI2LTEwLTIwVDEyOjAwOjA0WiIsImxvb3BfaWQiOiJydW4tYSIsIm93bmVyX2lkIjoib3duZXItMSIsInRyYWplY3RvcnlfaWQiOiJ0cmFqZWN0b3J5LXJ1bi1hIiwia2luZCI6InRvb2wucmVzdWx0IiwicGF5bG9hZCI6eyJpZCI6ImctNCJ9fQ==",
+          "content_hash": "sha256:8aff041bdf513aeaf033a7f953f5104fff4e54523d75d28d40ebe5553b4635f0",
+          "body": "eyJldmVudF9pZCI6ImctNCIsInNlcSI6NCwic3RyZWFtX3NlcSI6MTA0ODU4MCwidHMiOiIyMDI2LTEwLTIwVDEyOjAwOjA0WiIsImxvb3BfaWQiOiJydW4tYSIsIm93bmVyX2lkIjoib3duZXItMSIsInRyYWplY3RvcnlfaWQiOiJ0cmFqZWN0b3J5LXJ1bi1hIiwia2luZCI6InRvb2wucmVzdWx0IiwicGF5bG9hZCI6eyJpZCI6ImctNCJ9fQ==",
           "metadata": {
             "agent_id": "",
             "channel_id": "",
@@ -125,7 +125,7 @@
             "phase": "",
             "run_id": "run-a",
             "seq": 4,
-            "stream_seq": 4,
+            "stream_seq": 1048580,
             "timestamp": "2026-10-20T12:00:04Z",
             "trajectory_id": "trajectory-run-a"
           },
@@ -144,13 +144,13 @@
     "ops": [
       {
         "kind": "object_recorded",
-        "canonical_id": "obj:choir.event:b3duZXItMQ:sha256-3de5446c5a8901a73c9d4c5c05652e3ecff8030e532d5a5fa73ec36d7b14cd74",
+        "canonical_id": "obj:choir.event:b3duZXItMQ:sha256-cf9d4ba76cb4f92183c11ba3b66bcd9d980a922becd81c09b481fe1e468f6772",
         "body": {
-          "canonical_id": "obj:choir.event:b3duZXItMQ:sha256-3de5446c5a8901a73c9d4c5c05652e3ecff8030e532d5a5fa73ec36d7b14cd74",
+          "canonical_id": "obj:choir.event:b3duZXItMQ:sha256-cf9d4ba76cb4f92183c11ba3b66bcd9d980a922becd81c09b481fe1e468f6772",
           "object_kind": "choir.event",
           "owner_id": "owner-1",
-          "content_hash": "sha256:3de5446c5a8901a73c9d4c5c05652e3ecff8030e532d5a5fa73ec36d7b14cd74",
-          "body": "eyJldmVudF9pZCI6ImctNSIsInNlcSI6NSwic3RyZWFtX3NlcSI6NSwidHMiOiIyMDI2LTEwLTIwVDEyOjAwOjA1WiIsImxvb3BfaWQiOiJydW4tYSIsIm93bmVyX2lkIjoib3duZXItMSIsInRyYWplY3RvcnlfaWQiOiJ0cmFqZWN0b3J5LXJ1bi1hIiwia2luZCI6Imxvb3AuZGVsdGEiLCJwYXlsb2FkIjp7ImlkIjoiZy01In19",
+          "content_hash": "sha256:cf9d4ba76cb4f92183c11ba3b66bcd9d980a922becd81c09b481fe1e468f6772",
+          "body": "eyJldmVudF9pZCI6ImctNSIsInNlcSI6NSwic3RyZWFtX3NlcSI6MTA0ODU4MSwidHMiOiIyMDI2LTEwLTIwVDEyOjAwOjA1WiIsImxvb3BfaWQiOiJydW4tYSIsIm93bmVyX2lkIjoib3duZXItMSIsInRyYWplY3RvcnlfaWQiOiJ0cmFqZWN0b3J5LXJ1bi1hIiwia2luZCI6Imxvb3AuZGVsdGEiLCJwYXlsb2FkIjp7ImlkIjoiZy01In19",
           "metadata": {
             "agent_id": "",
             "channel_id": "",
@@ -159,7 +159,7 @@
             "phase": "",
             "run_id": "run-a",
             "seq": 5,
-            "stream_seq": 5,
+            "stream_seq": 1048581,
             "timestamp": "2026-10-20T12:00:05Z",
             "trajectory_id": "trajectory-run-a"
           },
@@ -209,13 +209,13 @@
     "ops": [
       {
         "kind": "object_recorded",
-        "canonical_id": "obj:choir.event:b3duZXItMg:sha256-67027e63b9d184ad1a55c8156ae557c59c353c646bfce3498bb5d7559a2d94ef",
+        "canonical_id": "obj:choir.event:b3duZXItMg:sha256-602160e71777a585486c91d2fa41da2c6baf455c28ff1efe187f7ea23726b48c",
         "body": {
-          "canonical_id": "obj:choir.event:b3duZXItMg:sha256-67027e63b9d184ad1a55c8156ae557c59c353c646bfce3498bb5d7559a2d94ef",
+          "canonical_id": "obj:choir.event:b3duZXItMg:sha256-602160e71777a585486c91d2fa41da2c6baf455c28ff1efe187f7ea23726b48c",
           "object_kind": "choir.event",
           "owner_id": "owner-2",
-          "content_hash": "sha256:67027e63b9d184ad1a55c8156ae557c59c353c646bfce3498bb5d7559a2d94ef",
-          "body": "eyJldmVudF9pZCI6ImctNyIsInNlcSI6MSwic3RyZWFtX3NlcSI6NiwidHMiOiIyMDI2LTEwLTIwVDEyOjAwOjA3WiIsImxvb3BfaWQiOiJydW4tYiIsIm93bmVyX2lkIjoib3duZXItMiIsInRyYWplY3RvcnlfaWQiOiJ0cmFqZWN0b3J5LXJ1bi1iIiwia2luZCI6Imxvb3AucHJvZ3Jlc3MiLCJwYXlsb2FkIjp7ImlkIjoiZy03In19",
+          "content_hash": "sha256:602160e71777a585486c91d2fa41da2c6baf455c28ff1efe187f7ea23726b48c",
+          "body": "eyJldmVudF9pZCI6ImctNyIsInNlcSI6MSwic3RyZWFtX3NlcSI6MTA0ODU4MiwidHMiOiIyMDI2LTEwLTIwVDEyOjAwOjA3WiIsImxvb3BfaWQiOiJydW4tYiIsIm93bmVyX2lkIjoib3duZXItMiIsInRyYWplY3RvcnlfaWQiOiJ0cmFqZWN0b3J5LXJ1bi1iIiwia2luZCI6Imxvb3AucHJvZ3Jlc3MiLCJwYXlsb2FkIjp7ImlkIjoiZy03In19",
           "metadata": {
             "agent_id": "",
             "channel_id": "",
@@ -224,7 +224,7 @@
             "phase": "",
             "run_id": "run-b",
             "seq": 1,
-            "stream_seq": 6,
+            "stream_seq": 1048582,
             "timestamp": "2026-10-20T12:00:07Z",
             "trajectory_id": "trajectory-run-b"
           },
@@ -243,13 +243,13 @@
     "ops": [
       {
         "kind": "object_recorded",
-        "canonical_id": "obj:choir.event:b3duZXItMQ:sha256-d0de858b5a991b23d9fb81fa2c95fad52b4e76fac5036280b9fbcf672aefb3f7",
+        "canonical_id": "obj:choir.event:b3duZXItMQ:sha256-1df81ae747f88d5f0c87062168d4cc1da25bd89c064166303b79665069e4caa0",
         "body": {
-          "canonical_id": "obj:choir.event:b3duZXItMQ:sha256-d0de858b5a991b23d9fb81fa2c95fad52b4e76fac5036280b9fbcf672aefb3f7",
+          "canonical_id": "obj:choir.event:b3duZXItMQ:sha256-1df81ae747f88d5f0c87062168d4cc1da25bd89c064166303b79665069e4caa0",
           "object_kind": "choir.event",
           "owner_id": "owner-1",
-          "content_hash": "sha256:d0de858b5a991b23d9fb81fa2c95fad52b4e76fac5036280b9fbcf672aefb3f7",
-          "body": "eyJldmVudF9pZCI6ImctOCIsInNlcSI6Niwic3RyZWFtX3NlcSI6NywidHMiOiIyMDI2LTEwLTIwVDEyOjAwOjA4WiIsImxvb3BfaWQiOiJydW4tYSIsIm93bmVyX2lkIjoib3duZXItMSIsInRyYWplY3RvcnlfaWQiOiJ0cmFqZWN0b3J5LXJ1bi1hIiwia2luZCI6Imxvb3AuY29tcGxldGVkIiwicGF5bG9hZCI6eyJpZCI6ImctOCJ9fQ==",
+          "content_hash": "sha256:1df81ae747f88d5f0c87062168d4cc1da25bd89c064166303b79665069e4caa0",
+          "body": "eyJldmVudF9pZCI6ImctOCIsInNlcSI6Niwic3RyZWFtX3NlcSI6MTA0ODU4MywidHMiOiIyMDI2LTEwLTIwVDEyOjAwOjA4WiIsImxvb3BfaWQiOiJydW4tYSIsIm93bmVyX2lkIjoib3duZXItMSIsInRyYWplY3RvcnlfaWQiOiJ0cmFqZWN0b3J5LXJ1bi1hIiwia2luZCI6Imxvb3AuY29tcGxldGVkIiwicGF5bG9hZCI6eyJpZCI6ImctOCJ9fQ==",
           "metadata": {
             "agent_id": "",
             "channel_id": "",
@@ -258,7 +258,7 @@
             "phase": "",
             "run_id": "run-a",
             "seq": 6,
-            "stream_seq": 7,
+            "stream_seq": 1048583,
             "timestamp": "2026-10-20T12:00:08Z",
             "trajectory_id": "trajectory-run-a"
           },
@@ -277,13 +277,13 @@
     "ops": [
       {
         "kind": "object_recorded",
-        "canonical_id": "obj:choir.event:b3duZXItMQ:sha256-a6516e7040d120bb82cfe93ac2185fd9d9151e74c228cd336f74b631c463dc3a",
+        "canonical_id": "obj:choir.event:b3duZXItMQ:sha256-c67dd57e79f03b06609cbe24a065e55aa3f307ed75f2bb173bb16bfa2df7778b",
         "body": {
-          "canonical_id": "obj:choir.event:b3duZXItMQ:sha256-a6516e7040d120bb82cfe93ac2185fd9d9151e74c228cd336f74b631c463dc3a",
+          "canonical_id": "obj:choir.event:b3duZXItMQ:sha256-c67dd57e79f03b06609cbe24a065e55aa3f307ed75f2bb173bb16bfa2df7778b",
           "object_kind": "choir.event",
           "owner_id": "owner-1",
-          "content_hash": "sha256:a6516e7040d120bb82cfe93ac2185fd9d9151e74c228cd336f74b631c463dc3a",
-          "body": "eyJldmVudF9pZCI6ImctOSIsInNlcSI6Nywic3RyZWFtX3NlcSI6OCwidHMiOiIyMDI2LTEwLTIwVDEyOjAwOjA5WiIsImxvb3BfaWQiOiJydW4tYSIsIm93bmVyX2lkIjoib3duZXItMSIsInRyYWplY3RvcnlfaWQiOiJ0cmFqZWN0b3J5LXJ1bi1hIiwia2luZCI6ImNoYW5uZWwubWVzc2FnZSIsInBheWxvYWQiOnsiaWQiOiJnLTkifX0=",
+          "content_hash": "sha256:c67dd57e79f03b06609cbe24a065e55aa3f307ed75f2bb173bb16bfa2df7778b",
+          "body": "eyJldmVudF9pZCI6ImctOSIsInNlcSI6Nywic3RyZWFtX3NlcSI6MTA0ODU4NCwidHMiOiIyMDI2LTEwLTIwVDEyOjAwOjA5WiIsImxvb3BfaWQiOiJydW4tYSIsIm93bmVyX2lkIjoib3duZXItMSIsInRyYWplY3RvcnlfaWQiOiJ0cmFqZWN0b3J5LXJ1bi1hIiwia2luZCI6ImNoYW5uZWwubWVzc2FnZSIsInBheWxvYWQiOnsiaWQiOiJnLTkifX0=",
           "metadata": {
             "agent_id": "",
             "channel_id": "",
@@ -292,7 +292,7 @@
             "phase": "",
             "run_id": "run-a",
             "seq": 7,
-            "stream_seq": 8,
+            "stream_seq": 1048584,
             "timestamp": "2026-10-20T12:00:09Z",
             "trajectory_id": "trajectory-run-a"
           },
@@ -311,13 +311,13 @@
     "ops": [
       {
         "kind": "object_recorded",
-        "canonical_id": "obj:choir.event:b3duZXItMQ:sha256-0ec1430636539eefdfafb536098f623dcbae662682742c15ac0b9b7e033197b4",
+        "canonical_id": "obj:choir.event:b3duZXItMQ:sha256-8204f78b6f0c305a15908dab306349ec18e75e3956418098d99dc056bf514afd",
         "body": {
-          "canonical_id": "obj:choir.event:b3duZXItMQ:sha256-0ec1430636539eefdfafb536098f623dcbae662682742c15ac0b9b7e033197b4",
+          "canonical_id": "obj:choir.event:b3duZXItMQ:sha256-8204f78b6f0c305a15908dab306349ec18e75e3956418098d99dc056bf514afd",
           "object_kind": "choir.event",
           "owner_id": "owner-1",
-          "content_hash": "sha256:0ec1430636539eefdfafb536098f623dcbae662682742c15ac0b9b7e033197b4",
-          "body": "eyJldmVudF9pZCI6ImctMTAiLCJzZXEiOjgsInN0cmVhbV9zZXEiOjksInRzIjoiMjAyNi0xMC0yMFQxMjowMDoxMFoiLCJsb29wX2lkIjoicnVuLWEiLCJvd25lcl9pZCI6Im93bmVyLTEiLCJ0cmFqZWN0b3J5X2lkIjoidHJhamVjdG9yeS1ydW4tYSIsImtpbmQiOiJsb29wLnByb2dyZXNzIiwicGF5bG9hZCI6eyJpZCI6ImctMTAifX0=",
+          "content_hash": "sha256:8204f78b6f0c305a15908dab306349ec18e75e3956418098d99dc056bf514afd",
+          "body": "eyJldmVudF9pZCI6ImctMTAiLCJzZXEiOjgsInN0cmVhbV9zZXEiOjEwNDg1ODUsInRzIjoiMjAyNi0xMC0yMFQxMjowMDoxMFoiLCJsb29wX2lkIjoicnVuLWEiLCJvd25lcl9pZCI6Im93bmVyLTEiLCJ0cmFqZWN0b3J5X2lkIjoidHJhamVjdG9yeS1ydW4tYSIsImtpbmQiOiJsb29wLnByb2dyZXNzIiwicGF5bG9hZCI6eyJpZCI6ImctMTAifX0=",
           "metadata": {
             "agent_id": "",
             "channel_id": "",
@@ -326,7 +326,7 @@
             "phase": "",
             "run_id": "run-a",
             "seq": 8,
-            "stream_seq": 9,
+            "stream_seq": 1048585,
             "timestamp": "2026-10-20T12:00:10Z",
             "trajectory_id": "trajectory-run-a"
           },
@@ -345,13 +345,13 @@
     "ops": [
       {
         "kind": "object_recorded",
-        "canonical_id": "obj:choir.event:X19zeXN0ZW1fXw:sha256-7e2efce291f6091242efe2ba0cea80b00e143175b93f5948641b4e2113cf35b3",
+        "canonical_id": "obj:choir.event:X19zeXN0ZW1fXw:sha256-384fcba1fa238d4c1422d0783247d0a1dbf577a2e3a806a7195154da72ef9b3c",
         "body": {
-          "canonical_id": "obj:choir.event:X19zeXN0ZW1fXw:sha256-7e2efce291f6091242efe2ba0cea80b00e143175b93f5948641b4e2113cf35b3",
+          "canonical_id": "obj:choir.event:X19zeXN0ZW1fXw:sha256-384fcba1fa238d4c1422d0783247d0a1dbf577a2e3a806a7195154da72ef9b3c",
           "object_kind": "choir.event",
           "owner_id": "__system__",
-          "content_hash": "sha256:7e2efce291f6091242efe2ba0cea80b00e143175b93f5948641b4e2113cf35b3",
-          "body": "eyJldmVudF9pZCI6ImctMTEiLCJzZXEiOjEsInN0cmVhbV9zZXEiOjEwLCJ0cyI6IjIwMjYtMTAtMjBUMTI6MDA6MTFaIiwib3duZXJfaWQiOiJfX3N5c3RlbV9fIiwidHJhamVjdG9yeV9pZCI6InRyYWplY3RvcnktIiwia2luZCI6InJ1bnRpbWUuaGVhbHRoIiwicGF5bG9hZCI6eyJpZCI6ImctMTEifX0=",
+          "content_hash": "sha256:384fcba1fa238d4c1422d0783247d0a1dbf577a2e3a806a7195154da72ef9b3c",
+          "body": "eyJldmVudF9pZCI6ImctMTEiLCJzZXEiOjEsInN0cmVhbV9zZXEiOjEwNDg1ODYsInRzIjoiMjAyNi0xMC0yMFQxMjowMDoxMVoiLCJvd25lcl9pZCI6Il9fc3lzdGVtX18iLCJ0cmFqZWN0b3J5X2lkIjoidHJhamVjdG9yeS0iLCJraW5kIjoicnVudGltZS5oZWFsdGgiLCJwYXlsb2FkIjp7ImlkIjoiZy0xMSJ9fQ==",
           "metadata": {
             "agent_id": "",
             "channel_id": "",
@@ -360,7 +360,7 @@
             "phase": "",
             "run_id": "",
             "seq": 1,
-            "stream_seq": 10,
+            "stream_seq": 1048586,
             "timestamp": "2026-10-20T12:00:11Z",
             "trajectory_id": "trajectory-"
           },

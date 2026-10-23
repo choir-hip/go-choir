@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -31,6 +32,13 @@ type recordingTape struct {
 	// casErr, when set and non-nil for a request, fails the CAS after the pin.
 	casErr func(request computerevent.CASRequest) error
 	pins   int
+	// leaseDigests are the payload digests of projection batches that carry
+	// only the stream_seq lease object. The lease is store bookkeeping, not
+	// part of the workload a test scripts: its batches are recorded apart
+	// (leaseRecords, leaseSnapshot) so the shape of the workload's tape stays
+	// the one the telemetry tests were written against.
+	leaseDigests map[string]bool
+	leaseRecords []tapeRecord
 }
 
 // tapeRecord is one event the platform accepted.
@@ -75,6 +83,12 @@ func (p recordingPinner) PinNonPrivatePayload(ctx context.Context, computerID st
 		p.tape.mu.Lock()
 		p.tape.payloads[result.ArtifactDigest] = append([]byte(nil), payload...)
 		p.tape.pins++
+		if isLeaseOnlyBatch(payload) {
+			if p.tape.leaseDigests == nil {
+				p.tape.leaseDigests = map[string]bool{}
+			}
+			p.tape.leaseDigests[result.ArtifactDigest] = true
+		}
 		p.tape.mu.Unlock()
 	}
 	return result, err
@@ -98,11 +112,16 @@ func (c recordingCAS) CompareAndSwap(ctx context.Context, request computerevent.
 	if err == nil {
 		e := request.Event
 		c.tape.mu.Lock()
-		c.tape.records = append(c.tape.records, tapeRecord{
+		record := tapeRecord{
 			Sequence: e.Sequence, Kind: e.EventKind, Authority: e.AuthorityRef,
 			IdempotencyKey: e.IdempotencyKey, ActorProfile: e.ActorProfile, PrivacyClass: e.PrivacyClass,
 			PayloadDigest: e.PayloadCommitment,
-		})
+		}
+		if c.tape.leaseDigests[e.PayloadCommitment] {
+			c.tape.leaseRecords = append(c.tape.leaseRecords, record)
+		} else {
+			c.tape.records = append(c.tape.records, record)
+		}
 		c.tape.mu.Unlock()
 	}
 	return receipt, err
@@ -113,6 +132,28 @@ func (r *recordingTape) snapshot() []tapeRecord {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return append([]tapeRecord(nil), r.records...)
+}
+
+// leaseSnapshot returns the accepted lease-only batches in CAS order.
+func (r *recordingTape) leaseSnapshot() []tapeRecord {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]tapeRecord(nil), r.leaseRecords...)
+}
+
+// isLeaseOnlyBatch reports whether a pinned payload is a projection batch of
+// the stream_seq lease object alone.
+func isLeaseOnlyBatch(payload []byte) bool {
+	batch, err := computerevent.DecodeProjectionBatch(payload)
+	if err != nil || len(batch.Ops) == 0 {
+		return false
+	}
+	for _, op := range batch.Ops {
+		if !strings.Contains(op.CanonicalID, "choir.stream_seq_lease") {
+			return false
+		}
+	}
+	return true
 }
 
 // batchOps decodes the projection batch an event pinned.

@@ -36,17 +36,19 @@ func TestTelemetryStatsCountEventsAndBatchSizes(t *testing.T) {
 	if got := stats.BatchableShare; got < 0.599 || got > 0.601 {
 		t.Errorf("batchable_share = %v, want 0.6", got)
 	}
-	// 11 tape events: 10 standalone AppendEvents and one run-memory entry.
-	if stats.TapeEvents != 11 || stats.TapeOps != 11 {
-		t.Errorf("tape events/ops = %d/%d, want 11/11", stats.TapeEvents, stats.TapeOps)
+	// 12 tape events: 10 standalone AppendEvents, one run-memory entry and the
+	// stream_seq lease the first allocation wrote (store bookkeeping, one
+	// object op).
+	if stats.TapeEvents != 12 || stats.TapeOps != 12 {
+		t.Errorf("tape events/ops = %d/%d, want 12/12", stats.TapeEvents, stats.TapeOps)
 	}
-	if stats.OpsPerTapeEvent["1"] != 11 {
+	if stats.OpsPerTapeEvent["1"] != 12 {
 		t.Errorf("ops_per_tape_event = %v, want every event at 1 op", stats.OpsPerTapeEvent)
 	}
-	if stats.TapeEventsByAuthority["authority:vm-local-projection"] != 11 {
+	if stats.TapeEventsByAuthority["authority:vm-local-projection"] != 12 {
 		t.Errorf("tape_events_by_authority = %v", stats.TapeEventsByAuthority)
 	}
-	if stats.TapeOpsByKind["object_recorded"] != 10 || stats.TapeOpsByKind["run_memory_entry_recorded"] != 1 {
+	if stats.TapeOpsByKind["object_recorded"] != 11 || stats.TapeOpsByKind["run_memory_entry_recorded"] != 1 {
 		t.Errorf("tape_ops_by_kind = %v", stats.TapeOpsByKind)
 	}
 	// Flag off: nothing is batched, so the realised telemetry batch size is 1.
@@ -82,8 +84,10 @@ func TestTelemetryStatsAreRaceFree(t *testing.T) {
 	if total := stats.EventsAppendedBatchable + stats.EventsAppendedAcknowledged; total != workers*each {
 		t.Fatalf("counted %d appends, want %d", total, workers*each)
 	}
-	if stats.TapeEvents != workers*each {
-		t.Fatalf("counted %d tape events, want %d", stats.TapeEvents, workers*each)
+	// One tape event per append, plus the stream_seq lease the first
+	// allocation wrote.
+	if stats.TapeEvents != workers*each+1 {
+		t.Fatalf("counted %d tape events, want %d", stats.TapeEvents, workers*each+1)
 	}
 }
 

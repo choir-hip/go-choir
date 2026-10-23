@@ -189,8 +189,9 @@ func TestEventTableSeedsReadBothTables(t *testing.T) {
 	if err := h.store.AppendEvent(ctx, next); err != nil {
 		t.Fatal(err)
 	}
-	if next.Seq != 6 || next.StreamSeq != 9 {
-		t.Fatalf("after a reopen run-a got seq %d stream_seq %d, want 6 and 9", next.Seq, next.StreamSeq)
+	// No lease yet: the exact seed over both tables (stored maximum 8) plus the gap.
+	if want := 8 + streamSeqExactGap + 1; next.Seq != 6 || next.StreamSeq != want {
+		t.Fatalf("after a reopen run-a got seq %d stream_seq %d, want 6 and %d", next.Seq, next.StreamSeq, want)
 	}
 	// A run with no rows in either table: MAX over no rows is NULL, and the
 	// append still succeeds with seq 1.
@@ -198,8 +199,8 @@ func TestEventTableSeedsReadBothTables(t *testing.T) {
 	if err := h.store.AppendEvent(ctx, fresh); err != nil {
 		t.Fatalf("a run's first append: %v", err)
 	}
-	if fresh.Seq != 1 || fresh.StreamSeq != 10 {
-		t.Fatalf("run-c got seq %d stream_seq %d, want 1 and 10", fresh.Seq, fresh.StreamSeq)
+	if fresh.Seq != 1 || fresh.StreamSeq != next.StreamSeq+1 {
+		t.Fatalf("run-c got seq %d stream_seq %d, want 1 and %d", fresh.Seq, fresh.StreamSeq, next.StreamSeq+1)
 	}
 	assertNoDuplicateNumbers(t, h.store)
 
@@ -255,8 +256,8 @@ func TestEventTableSeedsAfterReplay(t *testing.T) {
 	if err := s.AppendEvent(ctx, rec); err != nil {
 		t.Fatal(err)
 	}
-	if rec.Seq != 5 || rec.StreamSeq != 105 {
-		t.Fatalf("after replay got seq %d stream_seq %d, want 5 and 105", rec.Seq, rec.StreamSeq)
+	if want := 104 + streamSeqExactGap + 1; rec.Seq != 5 || rec.StreamSeq != want {
+		t.Fatalf("after replay got seq %d stream_seq %d, want 5 and %d", rec.Seq, rec.StreamSeq, want)
 	}
 	assertNoDuplicateNumbers(t, s)
 }
@@ -981,7 +982,7 @@ func TestEventTableReadsRaceTheProjector(t *testing.T) {
 	for _, op := range []string{
 		"store.event_table.list_run_after", "store.event_table.list_owner_after",
 		"store.event_table.list_owner_newest", "store.event_table.list_trajectory",
-		"store.event_table.seed_run_seq", "store.event_table.seed_stream_seq",
+		"store.event_table.seed_run_seq", "store.event_table.seed_owner_max", "store.event_table.seed_next_owner",
 	} {
 		if stats[op].Calls == 0 {
 			t.Errorf("%s never took the shared engine mutex", op)

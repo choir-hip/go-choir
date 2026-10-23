@@ -1109,6 +1109,7 @@ func TestListEventsByOwnerAfter(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Microsecond)
 
 	// Create events for alice with increasing sequence numbers.
+	var streams []int64
 	for i := 0; i < 5; i++ {
 		rec := &types.EventRecord{
 			EventID:   fmtEventID(i),
@@ -1121,10 +1122,11 @@ func TestListEventsByOwnerAfter(t *testing.T) {
 		if err := s.AppendEvent(ctx, rec); err != nil {
 			t.Fatalf("append event %d: %v", i, err)
 		}
+		streams = append(streams, rec.StreamSeq)
 	}
 
 	// Get events after seq 2 (should return seq 3, 4, 5).
-	events, err := s.ListEventsByOwnerAfter(ctx, "user-alice", 2, 10)
+	events, err := s.ListEventsByOwnerAfter(ctx, "user-alice", streams[1], 10)
 	if err != nil {
 		t.Fatalf("list events by owner after seq: %v", err)
 	}
@@ -1185,28 +1187,31 @@ func TestAppendEventAssignsOwnerWideStreamSeqAcrossRuns(t *testing.T) {
 		}
 	}
 
-	if eventsToAppend[0].Seq != 1 || eventsToAppend[0].StreamSeq != 1 {
-		t.Fatalf("first event seqs = (%d,%d), want (1,1)", eventsToAppend[0].Seq, eventsToAppend[0].StreamSeq)
+	// The first stream_seq of a store is 2^20 + 1 (the exact seed of nothing
+	// plus the gap); the rest follow consecutively.
+	base := streamSeqExactGap + 1
+	if eventsToAppend[0].Seq != 1 || eventsToAppend[0].StreamSeq != base {
+		t.Fatalf("first event seqs = (%d,%d), want (1,%d)", eventsToAppend[0].Seq, eventsToAppend[0].StreamSeq, base)
 	}
-	if eventsToAppend[1].Seq != 1 || eventsToAppend[1].StreamSeq != 2 {
-		t.Fatalf("second event seqs = (%d,%d), want (1,2)", eventsToAppend[1].Seq, eventsToAppend[1].StreamSeq)
+	if eventsToAppend[1].Seq != 1 || eventsToAppend[1].StreamSeq != base+1 {
+		t.Fatalf("second event seqs = (%d,%d), want (1,%d)", eventsToAppend[1].Seq, eventsToAppend[1].StreamSeq, base+1)
 	}
-	if eventsToAppend[2].Seq != 2 || eventsToAppend[2].StreamSeq != 3 {
-		t.Fatalf("third event seqs = (%d,%d), want (2,3)", eventsToAppend[2].Seq, eventsToAppend[2].StreamSeq)
+	if eventsToAppend[2].Seq != 2 || eventsToAppend[2].StreamSeq != base+2 {
+		t.Fatalf("third event seqs = (%d,%d), want (2,%d)", eventsToAppend[2].Seq, eventsToAppend[2].StreamSeq, base+2)
 	}
 
-	got, err := s.ListEventsByOwnerAfter(ctx, "user-alice", 1, 10)
+	got, err := s.ListEventsByOwnerAfter(ctx, "user-alice", base, 10)
 	if err != nil {
 		t.Fatalf("list events by owner after stream seq: %v", err)
 	}
 	if len(got) != 2 {
 		t.Fatalf("events after stream seq 1: got %d, want 2", len(got))
 	}
-	if got[0].EventID != "evt-stream-2" || got[0].TrajectoryID != "traj-2" || got[0].StreamSeq != 2 {
-		t.Fatalf("first catch-up event = %+v, want evt-stream-2 traj-2 stream_seq=2", got[0])
+	if got[0].EventID != "evt-stream-2" || got[0].TrajectoryID != "traj-2" || got[0].StreamSeq != base+1 {
+		t.Fatalf("first catch-up event = %+v, want evt-stream-2 traj-2 stream_seq=%d", got[0], base+1)
 	}
-	if got[1].EventID != "evt-stream-3" || got[1].TrajectoryID != "traj-1" || got[1].StreamSeq != 3 {
-		t.Fatalf("second catch-up event = %+v, want evt-stream-3 traj-1 stream_seq=3", got[1])
+	if got[1].EventID != "evt-stream-3" || got[1].TrajectoryID != "traj-1" || got[1].StreamSeq != base+2 {
+		t.Fatalf("second catch-up event = %+v, want evt-stream-3 traj-1 stream_seq=%d", got[1], base+2)
 	}
 }
 
@@ -1225,14 +1230,17 @@ func TestAppendEventStreamSeqReseedsMonotonicAcrossReopen(t *testing.T) {
 		t.Fatalf("open store 1: %v", err)
 	}
 	now := time.Now().UTC().Truncate(time.Microsecond)
+	var lastStream int64
 	for i := range 3 {
-		if err := s1.AppendEvent(ctx, &types.EventRecord{
+		first := &types.EventRecord{
 			EventID: fmt.Sprintf("evt-reseed-%d", i), RunID: "run-reseed",
 			OwnerID: "user-alice", Timestamp: now.Add(time.Duration(i) * time.Second),
 			Kind: types.EventRunProgress, Payload: json.RawMessage(`{"i":` + fmt.Sprint(i) + `}`),
-		}); err != nil {
+		}
+		if err := s1.AppendEvent(ctx, first); err != nil {
 			t.Fatalf("append %d: %v", i, err)
 		}
+		lastStream = first.StreamSeq
 	}
 	if err := s1.Close(); err != nil {
 		t.Fatalf("close store 1: %v", err)
@@ -1255,10 +1263,10 @@ func TestAppendEventStreamSeqReseedsMonotonicAcrossReopen(t *testing.T) {
 	if err := s2.AppendEvent(ctx, rec); err != nil {
 		t.Fatalf("append after reopen: %v", err)
 	}
-	if rec.StreamSeq != 4 {
-		t.Fatalf("StreamSeq after reopen = %d, want 4 (seeded above prior max 3)", rec.StreamSeq)
+	if rec.StreamSeq <= lastStream {
+		t.Fatalf("StreamSeq after reopen = %d, want above the prior max %d (seeded from the lease)", rec.StreamSeq, lastStream)
 	}
-	got, err := s2.ListEventsByOwnerAfter(ctx, "user-alice", 3, 10)
+	got, err := s2.ListEventsByOwnerAfter(ctx, "user-alice", lastStream, 10)
 	if err != nil {
 		t.Fatalf("list after reopen: %v", err)
 	}
