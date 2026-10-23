@@ -1386,3 +1386,10 @@ Append-only. One terse entry per orchestrator pass.
   - Proof step 1 before (read-only, the paper as control): fc-config.json sha256 52feedba… (_runs/sec04-step1-before.json).
   - Proof, after the deploy: vmctl logs "jailer ready". J is stopped and started, then script steps 4 and 6 run (confinement jailer; vmm_confinement_verify --expect jailer), and jail_files shows store.img shared. The control's fc-config is unchanged at its next natural launch. Steps 3 and 4 (a second test computer; hibernate and wake, a vmctl restart with reattach, the assumed-breach probe) follow.
   - Rollback: VMCTL_JAILER=off plus a deploy. J cold boots at its next launch.
+- 23:07. D25 live (e30c8b51a; CI 40036935988 passed). vmctl restarted at 23:06:36 with jailer=true and logged "jailer ready". (D25 was pushed at 22:58, not 23:0x.)
+- 23:07. SEC-04 step 2 found a problem, documented before any fix: docs/problems/jailed-firecracker-cannot-exec-dynamic-binary-2026-10-23.md.
+  - The first jailed launch (the test computer fp8-jailer-1023, after an operator stop and resolve) failed with "Failed to exec into Firecracker: No such file or directory".
+  - The pinned nix Firecracker 1.17.0 is dynamically linked against the store glibc, which is not in the chroot. The 10-14 real-jailer test used upstream static release binaries.
+  - The shared reflink images (RES-05), the uid, the tap and admission all worked. Only the test computer is affected: the paper and everything else launch direct.
+  - The test computer stays down, as evidence. Rollback, if wanted: VMCTL_JAILER=off.
+  - Fix direction: a static (musl) build of the same 1.17.0 pin as the jailed exec file, plus a startup check that refuses a dynamic exec file.
