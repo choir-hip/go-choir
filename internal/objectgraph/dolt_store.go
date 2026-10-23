@@ -720,8 +720,12 @@ func (s *DoltStore) ListObjects(ctx context.Context, filter ListFilter) ([]Objec
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("objectgraph dolt: nil store")
 	}
-	s.engineMu.Lock()
-	defer s.engineMu.Unlock()
+	// Named by kind, so a stall's holder log and the engine-mutex counters say
+	// which kind's list held the engine (an unnamed op hid it on the paper,
+	// docs/problems/actor-wake-outbox-list-full-scan-2026-10-23.md).
+	op := "(*DoltStore).ListObjects " + kindOpLabel(string(filter.Kind))
+	s.engineMu.LockAs(op)
+	defer s.engineMu.UnlockAs(op)
 	query := `SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by FROM og_objects WHERE 1=1`
 	var args []any
 	if filter.Kind != "" {
