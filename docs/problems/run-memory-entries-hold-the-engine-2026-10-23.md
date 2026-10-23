@@ -610,7 +610,25 @@ natural pairing; it is not done here.
   ON run_memory_entries` (a metadata operation, fast). After it the table's row
   hash (`dolt_hashof_table('run_memory_entries')`) is exactly what it was before
   the index existed, and the cursor answer is unchanged. Both facts are logged
-  by the test.
+  by the test. **On a dieted store, run `restore_run_memory_indexes` first:
+  `owner_agent_created` must exist before the kind index is dropped**, because
+  after the index diet the kind index is the only index that leads with
+  `owner_id`, and dropping it alone moves `owner_id`'s `SHOW COLUMNS` Key from
+  `MUL` to empty and with it the content witness (see "The kind index is now
+  load-bearing for the witness" in the index diet section below). *Forward note
+  (2026-10-23): the rollback lines in
+  `docs/definitions/choir-launch-first-pass-metamission-2026-10-21.ledger.md`
+  that call `DROP INDEX` the whole kind-index rollback predate the diet; the
+  ledger is append-only history and is not edited, this paragraph supersedes
+  them.*
+- *Boot invariant: the kind index is `owner_id`'s only Key on a fresh store.*
+  On a fresh store `owner_id` has a Key (`MUL`) only because `Open`'s hook
+  (`ensureRunMemoryKindIndexAtOpen`) creates the kind index on the empty table;
+  `schemaDDL` no longer creates any other `owner_id`-leading index. That hook's
+  error is logged and recorded as a failed boot phase, not fatal, so a failure
+  there boots a store with `owner_id`'s Key empty, and every witness comparison
+  against a store that has the index fails closed (a visible drift, never a
+  silent match).
 - *The answer.* The cursor, the two-kind and the no-owner reads return the same
   entries in the same order with and without the index.
 - A reopen after the operation does nothing to a present index, and a revert
@@ -1152,8 +1170,10 @@ build).
    diet only, add `&indexes=idx_run_memory_entries_owner_agent_created,idx_run_memory_entries_owner_loop_seq`).
    Expect 200 and `created` for each missing index; read `total_hold_ms`. A failure (500)
    or a cut request leaves finished builds in place: call it again.
-2. `GET` again and confirm all three are present. (Equivalently the second `POST`
-   returns all `present`.)
+2. `GET` again and confirm all three are present (`run_memory_diet_indexes[*].present`
+   and `run_memory_loop_seq_index.present` are re-read from the inventory when a restore
+   ends, success or failure; `restoring` is true while one runs). (Equivalently the
+   second `POST` returns all `present`.)
 3. **Then** deploy the revert. Its boot DDL finds the indexes and builds nothing. A
    computer that never ran the operation needs no step 1.
 4. If the kind index is also being rolled back (`DROP INDEX`), do it only after step 1:
