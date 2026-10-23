@@ -1,15 +1,18 @@
 diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
-index 84331c211..293eed831 100644
+index 7428b6780..bc9eb4f19 100644
 --- a/.github/workflows/ci.yml
 +++ b/.github/workflows/ci.yml
-@@ -413,6 +413,21 @@ jobs:
+@@ -427,6 +427,25 @@ jobs:
          shell: bash
-         run: scripts/check-test-hang-guards.sh
+         run: python3 -I scripts/selftest-guest-token
  
 +      # The store floor on the deploy path (F-c review finding H): a push
 +      # that lowers storeschema.Version fails unless its head commit carries
 +      # Store-Floor-Override. Kept out of the event-table commits so that
-+      # reverting them never removes it.
++      # reverting them never removes it. It fails closed (bunch 148): a base
++      # it cannot read after a fetch retry is a failure, not a pass. The
++      # trailer is read from HEAD's message, so on a pull_request event (HEAD
++      # is the merge commit) it is not visible: the override works on push only.
 +      - name: Run store floor guard
 +        shell: bash
 +        env:
@@ -17,9 +20,10 @@ index 84331c211..293eed831 100644
 +        run: |
 +          set -euo pipefail
 +          if [ -n "${STORE_FLOOR_BASE//0/}" ]; then
-+            git fetch --no-tags --depth=1 origin "$STORE_FLOOR_BASE" || echo "store-floor: base $STORE_FLOOR_BASE not fetchable"
++            git fetch --no-tags --depth=1 origin "$STORE_FLOOR_BASE" || echo "store-floor: base $STORE_FLOOR_BASE not fetched at depth 1; the guard retries deeper and fails closed"
 +          fi
 +          scripts/check-store-schema-floor.sh
++          scripts/selftest-store-schema-floor
 +
    check:
      name: Go Vet + Test + Build
