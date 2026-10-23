@@ -363,6 +363,19 @@ func TestGuestImageHardeningIsDeclared(t *testing.T) {
 	if !strings.Contains(nix, "choir.dns=*)") || !strings.Contains(nix, `echo "DNS=$dns_ip"`) {
 		t.Error("the guest network unit does not take choir.dns from the kernel command line (SEC-10)")
 	}
+	// SEC-10 step 3: a guest with the host resolver drops resolved's
+	// compiled-in public fallback, and only that guest: every other guest
+	// has no link DNS= and resolves through the fallback today.
+	dnsBranch := nix[strings.Index(nix, `if [ -n "$dns_ip" ]; then`):]
+	if i := strings.Index(dnsBranch, "\n      fi\n"); i > 0 {
+		dnsBranch = dnsBranch[:i]
+	}
+	if !strings.Contains(dnsBranch, "/run/systemd/resolved.conf.d/") || !strings.Contains(dnsBranch, "FallbackDNS=\n") {
+		t.Error("a guest given choir.dns keeps resolved's public fallback servers (SEC-10 step 3)")
+	}
+	if strings.Contains(nix, "FallbackDNS") && !strings.Contains(dnsBranch, "FallbackDNS") {
+		t.Error("FallbackDNS is set outside the choir.dns branch, which would strip the only resolver of an unselected guest")
+	}
 }
 
 func TestRetireAppRemovesOnlyAppDesks(t *testing.T) {

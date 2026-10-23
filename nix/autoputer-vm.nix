@@ -418,6 +418,23 @@ LinkLocalAddressing=no
 EOF
       if [ -n "$dns_ip" ]; then
         echo "DNS=$dns_ip" >> /run/systemd/network/10-vm-runtime.network
+        # SEC-10 step 3: with the host resolver named, resolved's compiled-in
+        # public fallback goes. Left in place, a fallback becomes the Global
+        # scope's current server on an early lookup and stays there beside
+        # the link's DNS= (docs/problems/guest-dns-host-resolver-unused-
+        # 2026-10-22.md, "Observed on T"). Only this branch writes it: a guest
+        # without choir.dns has no link DNS= and resolves through the fallback.
+        mkdir -p /run/systemd/resolved.conf.d
+        cat > /run/systemd/resolved.conf.d/10-choir-no-fallback.conf <<EOF
+[Resolve]
+FallbackDNS=
+EOF
+        # resolved may already be up; a restart makes it read the drop-in
+        # and forget a fallback it picked. --no-block: never wait on a job
+        # from early boot.
+        if systemctl is-active --quiet systemd-resolved.service; then
+          systemctl try-restart --no-block systemd-resolved.service
+        fi
       fi
     '';
   };
