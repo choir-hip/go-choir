@@ -2498,7 +2498,11 @@ func TestAdapterSQLitePreBindResearchRecoveryBindsAndExecutesWithoutSnapshot(t *
 	adapter.Runtime.Start(ctx)
 	// Kernel mode: Sweep is a no-op; StartKernel launches the dispatcher loop.
 	adapter.actorRT.StartKernel(ctx)
-	deadline := time.Now().Add(5 * time.Second)
+	// A bound, not a pace: the loop exits as soon as the run completes.
+	// Under -race on a loaded CI shard the owner-bind deferrals alone
+	// took past 5 s (runs 40002926558 and 40016077702, about 6 s locally
+	// under load on main and on D20 alike).
+	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		stored, loadErr := s.GetLifecycleRun(ctx, ownerID, computerID, rec.RunID)
 		if loadErr == nil && stored.State == types.RunCompleted && counting.calls.Load() == 1 {
