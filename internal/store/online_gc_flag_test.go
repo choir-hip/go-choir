@@ -27,6 +27,11 @@ func TestOnlineGCFlagIsSetDuringThePassAndClearedAfter(t *testing.T) {
 		<-release
 		return nil
 	}
+	var releaseOnce sync.Once
+	releasePass := func() { releaseOnce.Do(func() { close(release) }) }
+	// A failing assert below must not leave the pass parked on release while
+	// holding doltCommitMu: Close would then spend its deadline.
+	t.Cleanup(releasePass)
 	done := make(chan error, 1)
 	go func() { done <- s.runOnlineDoltGC(context.Background()) }()
 	<-entered
@@ -55,7 +60,7 @@ func TestOnlineGCFlagIsSetDuringThePassAndClearedAfter(t *testing.T) {
 	if got := s.PoolStats().OnlineGC; got != st {
 		t.Fatalf("PoolStats().OnlineGC = %+v, want %+v", got, st)
 	}
-	close(release)
+	releasePass()
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
@@ -108,35 +113,24 @@ func TestOnlineGCFlagIsClearedAfterAPanic(t *testing.T) {
 	}
 }
 
-// A real pass, not the hook: the flag is set while CALL DOLT_GC() runs on the
-// write connection and clear when it returns.
+// A real pass: the hook wraps the real CALL DOLT_GC() on the write connection
+// and reads the flag before and after it, so the observation is not a race
+// with a poller.
 func TestOnlineGCFlagAroundARealPass(t *testing.T) {
 	s := openTestStore(t)
 	writeProbeRows(t, s, 0, 300)
-	var sawActive bool
-	stop := make(chan struct{})
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for {
-			select {
-			case <-stop:
-				return
-			default:
-			}
-			if s.OnlineGCStatus().Active {
-				sawActive = true
-			}
-		}
-	}()
+	var before, after OnlineGCStatus
+	s.onlineGCExecHook = func(ctx context.Context) error {
+		before = s.OnlineGCStatus()
+		_, err := s.textureHandle().ExecContext(ctx, "CALL DOLT_GC()")
+		after = s.OnlineGCStatus()
+		return err
+	}
 	if err := s.runOnlineDoltGC(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	close(stop)
-	wg.Wait()
-	if !sawActive {
-		t.Fatal("a poller never saw the flag during a real pass")
+	if !before.Active || !after.Active || before.Since != after.Since {
+		t.Fatalf("flag around the real exec: before %+v, after %+v; want the same active pass", before, after)
 	}
 	if s.OnlineGCStatus().Active {
 		t.Fatal("flag set after a real pass")

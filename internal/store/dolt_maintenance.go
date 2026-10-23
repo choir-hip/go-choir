@@ -312,9 +312,15 @@ func MaybeRunDoltGC(persistentDir, storePath string) error {
 
 // MaybeRunOnlineDoltGC is the periodic GC on a running computer. It runs
 // CALL DOLT_GC() on the open store's own write connection, never on a second
-// engine over a workspace this process already holds. Dolt's session-aware
-// safepoint controller (dprocedures/dolt_gc.go; the default, installed by
-// every SqlEngine) keeps the store's read session valid across a collection.
+// engine over a workspace this process already holds. The pass stays on the
+// write connection on purpose: the embedded driver never registers its
+// sessions with Dolt's GC safepoint controller (it never calls
+// SessionCommandBegin), so the controller neither waits for nor keeps the
+// roots of any session but the caller's. The read session survives a pass
+// because the chunk-store keeper retains chunks as reads touch them, and a
+// write transaction open on another connection would not survive one; this
+// connection is held by the pass, so none can be open (docs/problems/
+// paper-remaining-store-stall-holders-2026-10-23.md, section 1a).
 func (s *Store) MaybeRunOnlineDoltGC(ctx context.Context, persistentDir string) error {
 	if s == nil || s.textureHandle() == nil {
 		return fmt.Errorf("dolt gc: nil store")
