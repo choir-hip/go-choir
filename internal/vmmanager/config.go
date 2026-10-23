@@ -203,6 +203,9 @@ func LoadConfigFromEnv() ManagerConfig {
 //	VMCTL_JAILER=off|on             run each Firecracker under the jailer
 //	VMCTL_JAILER_ONLY=a,b           only these VM ids, computer ids, class:test or *
 //	VM_JAILER_BIN                   jailer binary (default: beside firecracker)
+//	VM_JAILER_FIRECRACKER_BIN       the jailer's --exec-file: a static build of
+//	                                VM_FIRECRACKER_BIN's version (default:
+//	                                VM_FIRECRACKER_BIN; Start refuses a dynamic one)
 //	VMCTL_JAILER_CHROOT_BASE        default <VM_STATE_DIR>/.jail
 //	VMCTL_JAILER_UID_BASE/_COUNT    per-VM uid range (900000 + 4096)
 //	VMCTL_JAILER_CGROUP_PARENT      VMs' parent cgroup (default: derived)
@@ -219,6 +222,10 @@ func loadJailerConfigFromEnv(firecrackerBin string) JailerConfig {
 	}
 	if v := strings.TrimSpace(os.Getenv("VM_JAILER_BIN")); v != "" {
 		j.BinPath = v
+	}
+	j.FirecrackerBinPath = firecrackerBin
+	if v := strings.TrimSpace(os.Getenv("VM_JAILER_FIRECRACKER_BIN")); v != "" {
+		j.FirecrackerBinPath = v
 	}
 	if v := strings.TrimSpace(os.Getenv("VMCTL_JAILER_CHROOT_BASE")); v != "" {
 		j.ChrootBase = filepath.Clean(v)

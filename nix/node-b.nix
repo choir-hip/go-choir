@@ -1529,6 +1529,15 @@ in
         "VMCTL_JAILER=on"
         "VMCTL_JAILER_ONLY=computer-476cd7944083ba08d6234bae0c341724"
         "VM_JAILER_BIN=${pkgs.firecracker}/bin/jailer"
+        # The jailer copies its exec file into the jail, which holds no
+        # loader: the glibc build above cannot exec there ("Failed to exec
+        # into Firecracker: No such file or directory", docs/problems/
+        # jailed-firecracker-cannot-exec-dynamic-binary-2026-10-23.md). The
+        # jailed VMM is the same pinned 1.17.0 source built static (musl,
+        # upstream's release target); direct launches keep the glibc build,
+        # so no direct computer's snapshot changes. vmctl refuses (JAILER
+        # UNAVAILABLE) an exec file that is dynamic or of another version.
+        "VM_JAILER_FIRECRACKER_BIN=${pkgs.pkgsStatic.firecracker}/bin/firecracker"
         "VMCTL_JAILER_CGROUP_PARENT=system.slice/go-choir-vmctl.service/vms"
         "VM_MKFS_EXT4_BIN=${pkgs.e2fsprogs}/bin/mkfs.ext4"
         "VM_KERNEL_IMAGE=/var/lib/go-choir/guest/vmlinux"

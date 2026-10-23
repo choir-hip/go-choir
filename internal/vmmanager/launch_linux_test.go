@@ -163,8 +163,10 @@ func TestLaunchThreadBoundingDrop(t *testing.T) {
 // TestRealJailerLaunch runs the real jailer and Firecracker (pre-boot: the
 // API answers, no guest is started). Gate: CHOIR_JAILER_IT=1, root, and
 // CHOIR_JAILER_IT_FIRECRACKER=<firecracker binary> with the jailer beside it
-// (or CHOIR_JAILER_IT_JAILER). CHOIR_JAILER_IT_CGROUP_PARENT names a cgroup
-// v2 parent to place the VM leaf under.
+// (or CHOIR_JAILER_IT_JAILER). CHOIR_JAILER_IT_JAILED_FIRECRACKER names the
+// jailer's exec file when it is not the firecracker above (Node B: the static
+// build in VM_JAILER_FIRECRACKER_BIN). CHOIR_JAILER_IT_CGROUP_PARENT names a
+// cgroup v2 parent to place the VM leaf under.
 func TestRealJailerLaunch(t *testing.T) {
 	if os.Getenv("CHOIR_JAILER_IT") != "1" {
 		t.Skip("set CHOIR_JAILER_IT=1 to run the real jailer")
@@ -187,6 +189,7 @@ func TestRealJailerLaunch(t *testing.T) {
 	cfg.Jailer = defaultJailerConfig()
 	cfg.Jailer.Enabled = true
 	cfg.Jailer.BinPath = jailer
+	cfg.Jailer.FirecrackerBinPath = os.Getenv("CHOIR_JAILER_IT_JAILED_FIRECRACKER")
 	cfg.Jailer.CgroupParent = os.Getenv("CHOIR_JAILER_IT_CGROUP_PARENT")
 	if cfg.Jailer.CgroupParent == "" {
 		cfg.Jailer.PidsMax, cfg.Jailer.CPUWeight = 0, 0

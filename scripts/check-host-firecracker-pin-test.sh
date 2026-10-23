@@ -22,6 +22,8 @@ cat >"$TMP/bin/nix" <<'FAKE'
 case "$*" in
   *pkgs.firecracker.version*) printf '%s' 1.17.0 ;;
   *pkgs.firecracker.outPath*) printf '%s' "$FAKE_OUT" ;;
+  *pkgs.pkgsStatic.firecracker.version*) printf '%s' "${FAKE_STATIC_VERSION:-1.17.0}" ;;
+  *pkgs.pkgsStatic.firecracker.outPath*) printf '%s' "$FAKE_STATIC_OUT" ;;
   *serviceConfig.Environment*) printf '%s\n' "$FAKE_ENV_JSON" ;;
   *config.assertions*) printf '%s\n' '[]' ;;
   *) echo "fake nix: unexpected call: $*" >&2; exit 99 ;;
@@ -30,14 +32,17 @@ FAKE
 chmod +x "$TMP/bin/nix"
 
 failures=0
-# run_case NAME EXPECT(pass|fail) DISCARD ONLY
+STATIC_OUT=/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-firecracker-static-x86_64-unknown-linux-musl-1.17.0
+# run_case NAME EXPECT(pass|fail) DISCARD ONLY [JAILED [STATIC_VERSION]]
 run_case() {
-  local name="$1" expect="$2" discard="$3" only="$4" env_json status
-  env_json="$(jq -nc --arg out "$OUT" --arg d "$discard" --arg o "$only" '
+  local name="$1" expect="$2" discard="$3" only="$4" jailed="${5:--}" static_version="${6:-1.17.0}" env_json status
+  env_json="$(jq -nc --arg out "$OUT" --arg d "$discard" --arg o "$only" --arg j "$jailed" '
     ["VM_FIRECRACKER_BIN=\($out)/bin/firecracker", "VM_JAILER_BIN=\($out)/bin/jailer"]
+    + (if $j == "-" then [] else ["VM_JAILER_FIRECRACKER_BIN=\($j)"] end)
     + (if $d == "-" then [] else ["VM_DATA_DISCARD=\($d)"] end)
     + (if $o == "-" then [] else ["VM_DATA_DISCARD_ONLY=\($o)"] end)')"
   PATH="$TMP/bin:$PATH" FAKE_OUT="$OUT" FAKE_ENV_JSON="$env_json" \
+    FAKE_STATIC_OUT="$STATIC_OUT" FAKE_STATIC_VERSION="$static_version" \
     bash "$SCRIPT" >"$TMP/stdout" 2>"$TMP/stderr"
   status=$?
   if { [ "$expect" = pass ] && [ "$status" -eq 0 ]; } || { [ "$expect" != pass ] && [ "$status" -ne 0 ]; }; then
@@ -61,6 +66,10 @@ run_case "discard= Yes  (padded), no selector"   fail ' Yes ' -
 run_case "discard=on, selector *"                pass on   '*'
 run_case "discard=0, empty selector"             pass 0    ''
 run_case "discard=off, empty selector"           pass off  ''
+# The jailed exec file (docs/problems/jailed-firecracker-cannot-exec-dynamic-binary-2026-10-23.md).
+run_case "jailed = the static build"              pass -    -  "$STATIC_OUT/bin/firecracker"
+run_case "jailed = the dynamic build"             fail -    -  "$OUT/bin/firecracker"
+run_case "jailed static of another version"       fail -    -  "$STATIC_OUT/bin/firecracker" 1.17.1
 
 [ "$failures" -eq 0 ] || { echo "$failures case(s) failed" >&2; exit 1; }
 echo "all cases passed"

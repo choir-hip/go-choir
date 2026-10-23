@@ -713,8 +713,8 @@ func (m *Manager) Start() {
 		if err != nil {
 			log.Printf("vmmanager: JAILER UNAVAILABLE: %v; every VM launches direct (unconfined) until this is fixed", err)
 		} else {
-			log.Printf("vmmanager: jailer ready: bin=%s chroot_base=%s uids=%d+%d cgroup_parent=%s only=%v",
-				m.cfg.Jailer.BinPath, m.jailChrootBase(), m.cfg.Jailer.UIDBase, m.cfg.Jailer.UIDCount, m.cfg.Jailer.CgroupParent, m.cfg.Jailer.Only)
+			log.Printf("vmmanager: jailer ready: bin=%s exec_file=%s chroot_base=%s uids=%d+%d cgroup_parent=%s only=%v",
+				m.cfg.Jailer.BinPath, m.jailedExec(), m.jailChrootBase(), m.cfg.Jailer.UIDBase, m.cfg.Jailer.UIDCount, m.cfg.Jailer.CgroupParent, m.cfg.Jailer.Only)
 		}
 	}
 	go m.healthCheckLoop()

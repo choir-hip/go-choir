@@ -7,6 +7,9 @@
 #     1.17.0, the pin for every computer);
 #   - vmctl's VM_FIRECRACKER_BIN and VM_JAILER_BIN come from that one
 #     package (the VMM and its jailer move together);
+#   - VM_JAILER_FIRECRACKER_BIN, when set, is the same pin built static
+#     (pkgs.pkgsStatic.firecracker, same version): the jail holds no loader
+#     (docs/problems/jailed-firecracker-cannot-exec-dynamic-binary-2026-10-23.md);
 #   - no second ("next") build is configured unless it is newer than the
 #     pinned one;
 #   - VM_DATA_DISCARD on (1, true, on or yes, any case: the set vmctl's
@@ -38,6 +41,14 @@ envval() { jq -r --arg k "$1=" '[.[] | select(startswith($k)) | ltrimstr($k)] | 
 [ "$(envval VM_FIRECRACKER_BIN)" = "$out/bin/firecracker" ] || fail "VM_FIRECRACKER_BIN is $(envval VM_FIRECRACKER_BIN), not $out/bin/firecracker"
 [ "$(envval VM_JAILER_BIN)" = "$out/bin/jailer" ] || fail "VM_JAILER_BIN is $(envval VM_JAILER_BIN), not $out/bin/jailer"
 
+jailed="$(envval VM_JAILER_FIRECRACKER_BIN)"
+if [ "$jailed" != "<unset>" ]; then
+  static_version="$(nix eval --raw "$host.pkgs.pkgsStatic.firecracker.version")"
+  static_out="$(nix eval --raw "$host.pkgs.pkgsStatic.firecracker.outPath")"
+  [ "$static_version" = "$version" ] || fail "static Firecracker is $static_version, the host's is $version"
+  [ "$jailed" = "$static_out/bin/firecracker" ] || fail "VM_JAILER_FIRECRACKER_BIN is $jailed, not $static_out/bin/firecracker"
+fi
+
 next="$(envval VM_FIRECRACKER_NEXT_BIN)"
 if [ "$next" != "<unset>" ]; then
   next_version="${next%/bin/firecracker}"
@@ -62,4 +73,4 @@ esac
 failed="$(nix eval --json "$host.config.assertions" --apply 'as: map (a: a.message) (builtins.filter (a: !a.assertion) as)')"
 [ "$failed" = "[]" ] || fail "host assertions fail: $failed"
 
-echo "ok: host Firecracker $version at $out (VMM and jailer), next=${next}, discard_only=$(envval VM_DATA_DISCARD_ONLY)"
+echo "ok: host Firecracker $version at $out (VMM and jailer), jailed=${jailed}, next=${next}, discard_only=$(envval VM_DATA_DISCARD_ONLY)"

@@ -1,6 +1,7 @@
 package vmmanager
 
 import (
+	"debug/elf"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -237,6 +238,9 @@ func (m *Manager) decideConfinement(cfg VMConfig) (mode, reason string) {
 	if !validJailerID(cfg.VMID) {
 		return ConfinementDirect, confinementReasonInvalidID
 	}
+	if b := m.vmmFor(cfg); b.Next && b.JailedFirecracker == "" {
+		return ConfinementDirect, confinementReasonNextNotStatic
+	}
 	return ConfinementJailer, ""
 }
 
@@ -309,7 +313,10 @@ func jailFirecrackerRestoreArgs() []string {
 // jailerArgs is the jailer's command line (without argv[0]).
 func (m *Manager) jailerArgs(vmID string, uid int, firecrackerArgs []string) []string {
 	j := m.cfg.Jailer
-	bin := m.launchedVMM(vmID).Firecracker
+	bin := m.launchedVMM(vmID).JailedFirecracker
+	if bin == "" {
+		bin = m.jailedExec()
+	}
 	if bin == "" {
 		bin = "firecracker"
 	}
@@ -817,6 +824,9 @@ func (m *Manager) prepareJailerHost() error {
 	if info.IsDir() || info.Mode()&0o111 == 0 {
 		return fmt.Errorf("jailer binary %s is not executable", j.BinPath)
 	}
+	if err := jailedExecError(m.cfg.FirecrackerBinPath, m.jailedExec(), firecrackerBuildVersion); err != nil {
+		return err
+	}
 	if j.UIDBase <= 0 || j.UIDCount <= 0 {
 		return fmt.Errorf("VMM uid range [%d,+%d) is invalid", j.UIDBase, j.UIDCount)
 	}
@@ -937,11 +947,63 @@ func (m *Manager) ensureVMMNoIPRules() error {
 	return nil
 }
 
-// staticELFError is nil when path is an ELF with no program interpreter.
-func staticELFError(path string) error { return nil }
+// staticELFError is nil when path is an ELF that can run in an empty chroot:
+// no program interpreter (PT_INTERP) and no needed shared libraries. The
+// jailer copies the exec file into the jail, which holds neither the loader
+// nor libc, so a dynamic build fails there with "Failed to exec into
+// Firecracker: No such file or directory" (docs/problems/jailed-firecracker-
+// cannot-exec-dynamic-binary-2026-10-23.md).
+func staticELFError(path string) error {
+	f, err := elf.Open(path)
+	if err != nil {
+		return fmt.Errorf("%s is not an ELF executable: %w", path, err)
+	}
+	defer f.Close()
+	for _, p := range f.Progs {
+		if p.Type != elf.PT_INTERP {
+			continue
+		}
+		interp := "?"
+		if data, err := io.ReadAll(io.LimitReader(p.Open(), 4096)); err == nil {
+			interp = strings.TrimRight(string(data), "\x00")
+		}
+		return fmt.Errorf("%s is dynamically linked (program interpreter %s); the jail holds no loader", path, interp)
+	}
+	if libs, err := f.ImportedLibraries(); err == nil && len(libs) > 0 {
+		return fmt.Errorf("%s is dynamically linked (needs %s); the jail holds no libraries", path, strings.Join(libs, ", "))
+	}
+	return nil
+}
 
-// jailedExecError checks the jailed exec file against the direct binary.
-func jailedExecError(direct, jailed string, version func(string) string) error { return nil }
+// jailedExecError checks the jailed exec file against the direct binary: it
+// must be static, carry the same file name (the jail dir is named after it,
+// jailExecName), and report the same version. Snapshot metadata records the
+// version of the direct binary (launchedVMM().Firecracker), so the version
+// check is what keeps a jailed snapshot's recorded version true.
+func jailedExecError(direct, jailed string, version func(string) string) error {
+	if err := checkExecutable(jailed); err != nil {
+		return fmt.Errorf("jailed firecracker %s: %w", jailed, err)
+	}
+	if err := staticELFError(jailed); err != nil {
+		return fmt.Errorf("jailed firecracker: %w; set VM_JAILER_FIRECRACKER_BIN to a static build", err)
+	}
+	if canonicalBase(jailed) != canonicalBase(direct) {
+		return fmt.Errorf("jailed firecracker %s is not named like %s (the jail dir is named after it)", jailed, direct)
+	}
+	want, got := version(direct), version(jailed)
+	if got == "" || got != want {
+		return fmt.Errorf("jailed firecracker %s reports version %q, the direct %s reports %q", jailed, got, direct, want)
+	}
+	return nil
+}
+
+// jailedExec is the pinned build's jailed exec file.
+func (m *Manager) jailedExec() string {
+	if bin := m.cfg.Jailer.FirecrackerBinPath; bin != "" {
+		return bin
+	}
+	return m.cfg.FirecrackerBinPath
+}
 
 // --- jailed process start ----------------------------------------------------
 

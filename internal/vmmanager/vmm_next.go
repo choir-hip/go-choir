@@ -49,7 +49,12 @@ type FirecrackerNextConfig struct {
 type vmmBuild struct {
 	Firecracker string `json:"firecracker"`
 	Jailer      string `json:"jailer,omitempty"`
-	Next        bool   `json:"next,omitempty"`
+	// JailedFirecracker is the jailer's --exec-file: a static build of the
+	// same version (VM_JAILER_FIRECRACKER_BIN for the pinned build; the
+	// next binary itself when it is static). Empty on a next build that is
+	// not static: that computer launches direct.
+	JailedFirecracker string `json:"jailed_firecracker,omitempty"`
+	Next              bool   `json:"next,omitempty"`
 }
 
 const launchedVMMFileName = "vmm-build.json"
@@ -81,6 +86,14 @@ func loadFirecrackerNextFromEnv(pinnedBin string, discardFlag bool) FirecrackerN
 		return FirecrackerNextConfig{}
 	}
 	n := FirecrackerNextConfig{BinPath: bin, JailerBinPath: jailer, Only: only}
+	// A jailed launch on the next build runs the next binary itself in the
+	// jail, so only a static one can be jailed; otherwise its computers
+	// launch direct (confinementReasonNextNotStatic).
+	if err := staticELFError(bin); err != nil {
+		log.Printf("vmmanager: next Firecracker build cannot be jailed (%v); its computers launch direct", err)
+	} else {
+		n.JailExec = bin
+	}
 	n.DataDiscard = dataDiscardEnabledFromEnv(discardFlag, bin)
 	log.Printf("vmmanager: next Firecracker build %s (%s) for %s; data discard allowed=%v",
 		bin, firecrackerBuildVersion(bin), strings.Join(only, ","), n.DataDiscard)
@@ -109,14 +122,14 @@ func canonicalBase(bin string) string {
 }
 
 func (m *Manager) pinnedVMM() vmmBuild {
-	return vmmBuild{Firecracker: m.cfg.FirecrackerBinPath, Jailer: m.cfg.Jailer.BinPath}
+	return vmmBuild{Firecracker: m.cfg.FirecrackerBinPath, Jailer: m.cfg.Jailer.BinPath, JailedFirecracker: m.jailedExec()}
 }
 
 // vmmFor is the build cfg's next launch uses.
 func (m *Manager) vmmFor(cfg VMConfig) vmmBuild {
 	n := m.cfg.FirecrackerNext
 	if n.BinPath != "" && selectsComputer(n.Only, cfg) {
-		return vmmBuild{Firecracker: n.BinPath, Jailer: n.JailerBinPath, Next: true}
+		return vmmBuild{Firecracker: n.BinPath, Jailer: n.JailerBinPath, JailedFirecracker: n.JailExec, Next: true}
 	}
 	return m.pinnedVMM()
 }
@@ -174,6 +187,11 @@ func (m *Manager) launchedVMM(vmID string) vmmBuild {
 		if json.Unmarshal(data, &rec) == nil && rec.Firecracker != "" {
 			if rec.Jailer == "" {
 				rec.Jailer = m.cfg.Jailer.BinPath
+			}
+			// A record from before the jailed exec file existed: the pinned
+			// build's (a next build with no record of it launches direct).
+			if rec.JailedFirecracker == "" && !rec.Next {
+				rec.JailedFirecracker = m.jailedExec()
 			}
 			return rec
 		}

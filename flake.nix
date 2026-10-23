@@ -135,7 +135,9 @@
       };
 
       # Firecracker lane. The host's VMM and its jailer are both
-      # pkgs.firecracker (nix/node-b.nix VM_FIRECRACKER_BIN, VM_JAILER_BIN);
+      # pkgs.firecracker (nix/node-b.nix VM_FIRECRACKER_BIN, VM_JAILER_BIN),
+      # and the jailed VMM is its static build, pkgs.pkgsStatic.firecracker
+      # (VM_JAILER_FIRECRACKER_BIN);
       # the locked nixpkgs ships 1.16.1. The host pins 1.17.0 for every
       # computer (docs/problems/firecracker-1-17-for-every-computer-
       # 2026-10-22.md): it carries every 1.16.2 fix (docs/problems/
@@ -192,7 +194,17 @@
       choirFirecrackerBelow = "1.18";
       choirFirecrackerModule = { lib, pkgs, ... }: {
         nixpkgs.overlays = [ (final: prev: { firecracker = mkChoirFirecracker prev; }) ];
+        # The jailer's exec file is the same pin built static
+        # (pkgs.pkgsStatic.firecracker: this overlay reaches pkgsStatic, so
+        # it is mkChoirFirecracker of the musl package set; nix/node-b.nix
+        # VM_JAILER_FIRECRACKER_BIN). The jail holds no loader, so the
+        # glibc build cannot exec there (docs/problems/jailed-firecracker-
+        # cannot-exec-dynamic-binary-2026-10-23.md). vmctl refuses a jailed
+        # exec file of another version at start; this catches it at eval.
         assertions = [{
+          assertion = pkgs.pkgsStatic.firecracker.version == pkgs.firecracker.version;
+          message = "the static Firecracker for jailed launches is ${pkgs.pkgsStatic.firecracker.version}, the host Firecracker is ${pkgs.firecracker.version}: both come from mkChoirFirecracker and must match (vmctl refuses the jailer otherwise).";
+        } {
           assertion = lib.versionOlder pkgs.firecracker.version choirFirecrackerBelow;
           message = "host Firecracker ${pkgs.firecracker.version} is not below ${choirFirecrackerBelow}: a Firecracker version change voids every hibernate snapshot (firecracker_version_mismatch, every computer cold boots), and a new minor version is staged per computer first (internal/vmmanager/vmm_next.go; docs/problems/firecracker-1-17-for-every-computer-2026-10-22.md). Keep the host on 1.17.x or raise choirFirecrackerBelow in flake.nix deliberately.";
         }];
