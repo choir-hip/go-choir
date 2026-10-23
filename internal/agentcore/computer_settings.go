@@ -94,6 +94,16 @@ func (h *APIHandler) HandleComputerSettings(w http.ResponseWriter, r *http.Reque
 		// when the value last changed: intake.event_wakes reads it as when
 		// production began waiting on events (event layer §15).
 		if current, err := rt.store.GetComputerSetting(r.Context(), ownerID, computerID, key); err == nil && current.Value == value {
+			// The apply is idempotent and re-run for the two settings whose
+			// apply can fail after the value is stored (the event-table floor
+			// write, a telemetry sealer that did not start), so a same-value
+			// POST is the retry (bunch 148, Devin 4).
+			switch key {
+			case store.SettingTelemetryBatch:
+				rt.applyTelemetryBatchingSetting(value)
+			case store.SettingEventTable:
+				rt.applyEventTableSetting(value)
+			}
 			writeAPIJSON(w, http.StatusOK, map[string]any{"setting": current})
 			return
 		}
