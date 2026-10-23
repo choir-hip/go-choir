@@ -38,17 +38,23 @@ type DeleteOptions struct {
 
 // DeleteReport is the result of a delete run.
 type DeleteReport struct {
-	Mode          string           `json:"mode"` // delete-dry-run or delete-apply
-	Root          string           `json:"root"`
-	CensusReceipt string           `json:"census_receipt"`
-	VerifyReceipt string           `json:"verify_receipt"` // the fresh pass this run's verdicts came from
-	Computers     []string         `json:"computers,omitempty"`
-	WouldDelete   int64            `json:"would_delete"`
-	Deleted       int64            `json:"deleted"`
-	BytesFreed    int64            `json:"bytes_freed"`
-	AlreadyGone   int64            `json:"already_gone"`
-	Refused       map[string]int64 `json:"refused"`
-	Log           string           `json:"log,omitempty"`
+	Mode          string `json:"mode"` // delete-dry-run or delete-apply
+	Root          string `json:"root"`
+	CensusReceipt string `json:"census_receipt"`
+	VerifyReceipt string `json:"verify_receipt"` // the fresh pass this run's verdicts came from
+	// VerifyHealthy is false when the fresh pass found a corrupt copy, a
+	// blocked computer, a segment error or a legacy file that fails its hash
+	// since the gate census; those files are refused, the rest are still
+	// judged one by one, and the command exits 3.
+	VerifyHealthy bool              `json:"verify_healthy"`
+	SegmentErrors map[string]string `json:"segment_errors,omitempty"`
+	Computers     []string          `json:"computers,omitempty"`
+	WouldDelete   int64             `json:"would_delete"`
+	Deleted       int64             `json:"deleted"`
+	BytesFreed    int64             `json:"bytes_freed"`
+	AlreadyGone   int64             `json:"already_gone"`
+	Refused       map[string]int64  `json:"refused"`
+	Log           string            `json:"log,omitempty"`
 }
 
 // Delete unlinks legacy tape files that have a verified segment copy, and
@@ -205,6 +211,8 @@ func Delete(opts DeleteOptions) (*DeleteReport, error) {
 		return rep, err
 	}
 	rep.VerifyReceipt = verify.Receipt
+	rep.VerifyHealthy = verify.Healthy()
+	rep.SegmentErrors = verify.SegmentErrors
 	return rep, nil
 }
 

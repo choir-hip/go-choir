@@ -147,6 +147,9 @@ func unlinkCovered(root string, v Verdict) (int64, error) {
 	if !fi.Mode().IsRegular() {
 		return 0, fmt.Errorf("taperepack: refusing to unlink %s: not a regular file", path)
 	}
+	if fi.Size() != v.size {
+		return 0, fmt.Errorf("taperepack: refusing to unlink %s: size %d, verified %d bytes", path, fi.Size(), v.size)
+	}
 	if err := os.Remove(path); err != nil {
 		return 0, err
 	}

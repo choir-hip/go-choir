@@ -260,15 +260,19 @@ func (e *engine) decide(bc *bucketCtx, v *Verdict, raw []byte) {
 		}
 		sort.Strings(computers)
 	}
+	// want decides scope only: a file no wanted computer needs is out of
+	// scope. The verdict is the worst across every computer that needs the
+	// file, wanted or not, because the unlink removes the one file for all of
+	// them (review round 1, F1); only the writes are gated on want.
 	if e.want != nil {
-		kept := computers[:0]
+		inScope := false
 		for _, c := range computers {
 			if e.want[c] {
-				kept = append(kept, c)
+				inScope = true
+				break
 			}
 		}
-		computers = kept
-		if len(computers) == 0 {
+		if !inScope {
 			v.class = classOutOfScope
 			return
 		}
@@ -278,6 +282,12 @@ func (e *engine) decide(bc *bucketCtx, v *Verdict, raw []byte) {
 	key := locKey{v.ns, mustDigest(v.digest)}
 	for _, c := range computers {
 		cl := e.cover(bc, c, key, raw)
+		if e.want != nil && !e.want[c] {
+			if rank(cl) > rank(worst) {
+				worst = cl
+			}
+			continue
+		}
 		bc.part.countComputer(c, v.ns, cl)
 		if cl == classUncovered {
 			if e.opts.Apply {
@@ -317,13 +327,21 @@ func mustDigest(s string) [32]byte {
 }
 
 // cover is the verdict of one computer for one record: covered only when it
-// has at least one segment copy and every copy verifies and equals raw.
+// has at least one copy in a sealed segment and every sealed copy verifies and
+// equals raw. A copy in an unsealed open tail may not be fsynced (the tail is
+// made durable by the next writer's fsync or by Seal), so it does not count
+// (review round 1, F2).
 func (e *engine) cover(bc *bucketCtx, computer string, key locKey, raw []byte) class {
 	ci := e.comp(bc, computer)
 	if ci.err != nil {
 		return classBlocked
 	}
-	locs := ci.locs[key]
+	var locs []tapestore.SegLoc
+	for _, l := range ci.locs[key] {
+		if l.Sealed {
+			locs = append(locs, l)
+		}
+	}
 	if len(locs) == 0 {
 		return classUncovered
 	}
