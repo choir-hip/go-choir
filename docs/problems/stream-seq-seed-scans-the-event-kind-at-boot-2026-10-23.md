@@ -261,27 +261,35 @@ What changed:
 
 ### Does a bounded read keep the no-reuse invariant?
 
-Yes under the assumption the old seed made, and no worse in any case that can
-occur in the product, with one named exception.
+Yes, under the assumption the old seed made (the newest events by `updated_at`
+carry the maximum). The one case the windows miss runs the old exact read, so
+the bound never trades away the invariant.
 
 - The old seed assumed the newest events by `updated_at` carry the maximum
   `stream_seq`. The new one assumes the same of the newest objects of every
   kind. They differ only when the last event is older than the newest 2,000
-  (then 50,000) objects of other kinds. Events are the most frequent write of
+  (then 50,000) objects of other kinds. In that case the seed falls back to the
+  exact old read (below). Events are the most frequent write of
   the store, run-state events are folded into the same batches as the
   projection writes, and a boot's own run closures emit events, so such a
   stretch is not expected (a hypothesis from the write paths, not a measured
   rate); the tests exercise it (2,600 later
   objects of another kind; the widening).
-- The exception: events exist and every one is older than the newest 50,000
-  objects of all kinds. The seed logs `stream_seq seed: choir.event objects
-  exist but none is among the newest 50000 objects, out of reach of the
-  bounded seed` and seeds from the event table alone. That could reuse a
-  number. It is detected, loud, and not silent. Option 2 (a persisted
-  high-water mark written with each batch commit or the guest checkpoint,
-  seeded from plus a bounded catch-up) is the exact fix for this case and is
-  proposed, not built: it adds a write to every batch and a state authority
-  beside the tape, which is a larger decision than this record.
+- The exception, now fail-safe (coordinator change request after the first
+  push): events exist and every one is older than the newest 50,000 objects of
+  all kinds. The first version logged and seeded from the event table alone,
+  which could reuse a number; reuse is a correctness defect in red code. The
+  seed now falls back to the exact read it used before
+  (`seedStreamSeqExact`: the kind index, the 500 newest events by
+  `updated_at`, with bodies) and takes its maximum. That read is the 104 s
+  scan on a large history, so the case is slow, and it logs `stream_seq seed:
+  choir.event objects exist but none is among the newest 50000 objects, out of
+  reach of the bounded seed; took the exact read of the kind, max stream_seq N,
+  took D`. It is rare by the argument above; slow is the accepted price of
+  never reusing a number. No cheaper exact form exists without a structure
+  (an `(object_kind, updated_at)` index or a persisted high-water mark, option
+  2), neither built here. Test: `TestStreamSeqSeedSaysWhenEventsAreOutOfReach`
+  failed before the change (seeded 1 above a stored 5) and now seeds 6.
 - Unchanged: the telemetry gap (`telemetrySeqGap`, applied once, after the
   maximum of both tables), the event-table half, and the per-run seed.
 
@@ -315,7 +323,8 @@ one `ListObjects choir.event` on the first append).
 - Discovered: a comment stating an O(1) bound the plan does not give (the
   seed); the same shape in the per-run seed, `ListEventsByOwnerAfter`, the
   boot run-header list, and the worker-update body readers (Phase 1 list).
-- Introduced: the out-of-reach exception above (detected and logged).
+- Introduced: the out-of-reach case runs the old slow exact read (logged with
+  its duration); no reuse.
 - Repaired: the seed's read of the event kind, its comment (now states the
   assumption and the exception).
 
@@ -325,5 +334,5 @@ one `ListObjects choir.event` on the first append).
    after every boot) is the next stall; it needs a bounded `stream_seq` read.
 2. The per-run seed reads up to 10,000 bodies for a maximum.
 3. Boot `ListAllObjectRefsByKindOwner(choir.run)` is linear in run history.
-4. Option 2, the persisted high-water mark, if the out-of-reach log line is
-   ever seen on a computer.
+4. Option 2, the persisted high-water mark, to make the out-of-reach case
+   fast too, if its log line is ever seen on a computer.
