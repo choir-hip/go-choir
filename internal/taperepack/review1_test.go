@@ -173,7 +173,7 @@ func TestF6AFileThatChangedSizeSinceTheReadIsNotUnlinked(t *testing.T) {
 	}
 	_, _ = f.WriteString("x")
 	f.Close()
-	if _, err := unlinkCovered(w.f.root, v); err == nil {
+	if _, err := unlinkCovered(w.f.root, v, nil); err == nil {
 		t.Fatal("F6: unlinked a file whose size changed")
 	}
 	if !w.legacyExists(tapestore.NSPayload, d) {

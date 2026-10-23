@@ -5,7 +5,7 @@
 //
 //	taperepack census --root <artifacts> --work-dir <dir> [--computer <id>[,<id>]] [--rate N]
 //	taperepack copy   --root <artifacts> --work-dir <dir> [--computer <id>[,<id>]] [--apply] [--fresh] [--rate N]
-//	taperepack delete --root <artifacts> --work-dir <dir> --census-receipt <digest> [--computer <id>[,<id>]] [--apply] [--max-age 24h] [--pause 250ms] [--rate N]
+//	taperepack delete --root <artifacts> --work-dir <dir> --census-receipt <digest> [--computer <id>[,<id>]] [--keep-digests <file> [--keep-digests-empty-ok]] [--apply] [--max-age 24h] [--pause 250ms] [--rate N]
 //
 // census reads everything and writes nothing under the artifacts root. copy
 // is a dry run unless --apply is given, and --apply needs --computer: a
@@ -20,6 +20,11 @@
 // fresh verdict is covered by a verified segment copy. It is a dry run unless
 // --apply is given; its exit status is 1 on any refusal or error and 3 when
 // its own fresh verification found a damaged store (verify_healthy false).
+// --apply needs --keep-digests: a file of 64-hex digests, one per line, that
+// the platform's database keeps (the tape sweep's tapeExtraRefQueries, which
+// this host binary cannot read). A listed digest is never unlinked and is
+// counted as kept_by_list; a malformed line, or a file with no digest unless
+// --keep-digests-empty-ok, is an error.
 // census exits 3 unless every file it is responsible for is covered by a
 // verified segment copy; copy exits 3 if the store is not healthy.
 //
@@ -75,6 +80,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 	quiet := fs.Bool("quiet", false, "no progress lines")
 	receipt := fs.String("census-receipt", "", "delete: digest of the census report in --work-dir")
 	maxAge := fs.Duration("max-age", 24*time.Hour, "delete: oldest census accepted")
+	keepFile := fs.String("keep-digests", "", "delete: file of digests (one 64-hex per line) the platform database keeps; never unlinked; required with --apply")
+	keepEmptyOK := fs.Bool("keep-digests-empty-ok", false, "delete: allow --keep-digests to name no digest")
 	pause := fs.Duration("pause", 250*time.Millisecond, "delete: pause between batches of 256 unlinks")
 	if sub != "census" && sub != "copy" && sub != "delete" {
 		fmt.Fprintf(stderr, "taperepack: unknown subcommand %q\n", sub)
@@ -95,12 +102,28 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "taperepack %s: --census-receipt belongs to delete\n", sub)
 		return 2
 	}
+	if sub != "delete" && (*keepFile != "" || *keepEmptyOK) {
+		fmt.Fprintf(stderr, "taperepack %s: --keep-digests belongs to delete\n", sub)
+		return 2
+	}
 	if sub == "delete" {
+		if *keepEmptyOK && *keepFile == "" {
+			fmt.Fprintln(stderr, "taperepack delete: --keep-digests-empty-ok needs --keep-digests <file>")
+			return 2
+		}
 		if *fresh {
 			fmt.Fprintln(stderr, "taperepack delete: --fresh belongs to copy")
 			return 2
 		}
 		dopts := taperepack.DeleteOptions{Root: *root, WorkDir: *workDir, CensusReceipt: *receipt, Computers: computers, Apply: *apply, MaxAge: *maxAge, Pause: *pause, Rate: *rate}
+		if *keepFile != "" {
+			keep, err := taperepack.LoadKeepDigests(*keepFile, *keepEmptyOK)
+			if err != nil {
+				fmt.Fprintf(stderr, "taperepack delete: %v\n", err)
+				return 1
+			}
+			dopts.Keep = keep
+		}
 		if !*quiet {
 			dopts.Progress = func(s string) { fmt.Fprintln(stderr, s) }
 		}

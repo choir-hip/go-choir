@@ -19,7 +19,11 @@ import (
 
 func keepOf(t *testing.T, digests ...string) *KeepSet {
 	t.Helper()
-	k, err := ParseKeepDigests(strings.NewReader(strings.Join(digests, "\n")+"\n"), false)
+	in := ""
+	if len(digests) > 0 {
+		in = strings.Join(digests, "\n") + "\n"
+	}
+	k, err := ParseKeepDigests(strings.NewReader(in), true)
 	if err != nil {
 		t.Fatal(err)
 	}

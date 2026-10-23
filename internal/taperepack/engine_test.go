@@ -301,7 +301,7 @@ func TestP3AnUnreceiptedFileIsNeverCovered(t *testing.T) {
 	}
 }
 
-var bannedUnlinks = []string{"os.Remove", "os.RemoveAll", "os.Rename", "syscall.Unlink", "syscall.Unlinkat", "syscall.Rename", "unix.Unlink", "unix.Unlinkat", "unix.Rename", "unix.Renameat", "unix.Renameat2", "syscall.Renameat", "os.Link", "syscall.Link", "unix.Link"}
+var bannedUnlinks = []string{"os.Remove", "os.RemoveAll", "os.Rename", "syscall.Unlink", "syscall.Unlinkat", "syscall.Rename", "unix.Unlink", "unix.Unlinkat", "unix.Rename", "unix.Renameat", "unix.Renameat2", "syscall.Renameat", "os.Link", "syscall.Link", "unix.Link", "unix.Linkat", "syscall.Linkat"}
 
 // P4: a Verdict cannot be made deletable by a caller, and the package has
 // no unlink or rename outside workdir.go.

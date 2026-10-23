@@ -24,6 +24,11 @@ type DeleteOptions struct {
 	Computers []string
 	// Apply unlinks. Without it Delete counts what it would unlink.
 	Apply bool
+	// Keep is the digests the platform's database names, which the tape sweep
+	// keeps and this tool cannot see (review round 4, M2). Apply refuses to
+	// start without it (an explicitly empty set is a non-nil one); a listed
+	// digest is never unlinked, whatever its verdict.
+	Keep *KeepSet
 	// MaxAge is how old the census may be; zero means 24 hours.
 	MaxAge time.Duration
 	// Batch is the number of unlinks between pauses; zero means 256.
@@ -51,10 +56,15 @@ type DeleteReport struct {
 	Computers     []string          `json:"computers,omitempty"`
 	WouldDelete   int64             `json:"would_delete"`
 	Deleted       int64             `json:"deleted"`
-	BytesFreed    int64             `json:"bytes_freed"`
-	AlreadyGone   int64             `json:"already_gone"`
-	Refused       map[string]int64  `json:"refused"`
-	Log           string            `json:"log,omitempty"`
+	// KeepDigests is how many digests the keep file named; KeptByList how
+	// many covered files were left alone because of it (counted by a dry run
+	// too, in place of would_delete).
+	KeepDigests int64            `json:"keep_digests"`
+	KeptByList  int64            `json:"kept_by_list"`
+	BytesFreed  int64            `json:"bytes_freed"`
+	AlreadyGone int64            `json:"already_gone"`
+	Refused     map[string]int64 `json:"refused"`
+	Log         string           `json:"log,omitempty"`
 }
 
 // Delete unlinks legacy tape files that have a verified segment copy, and
@@ -65,8 +75,10 @@ type DeleteReport struct {
 // verification again; each file is unlinked only when its Verdict from that
 // fresh pass is deletable, at the moment the engine has just compared the
 // segment copies with the legacy bytes. Dry run by default; --apply with the
-// digest unlinks, in batches with a pause, logs every unlink, and stops at
-// the first error. It never removes a directory.
+// digest and a keep list unlinks, in batches with a pause, logs every unlink,
+// and stops at the first error. It never removes a directory. The keep list
+// is checked at the unlink itself, on the apply pass's own verdict, not on a
+// dry run's.
 func Delete(opts DeleteOptions) (*DeleteReport, error) {
 	if opts.Root == "" {
 		return nil, errors.New("taperepack: --root is required")
@@ -74,6 +86,9 @@ func Delete(opts DeleteOptions) (*DeleteReport, error) {
 	root := filepath.Clean(opts.Root)
 	if err := checkWorkDir(opts.WorkDir, root); err != nil {
 		return nil, err
+	}
+	if opts.Apply && opts.Keep == nil {
+		return nil, errors.New("taperepack: delete --apply needs --keep-digests, the digests the platform database keeps (the tape sweep's tapeExtraRefQueries); nothing is deleted without it")
 	}
 	if len(opts.CensusReceipt) != 64 {
 		return nil, errors.New("taperepack: delete needs --census-receipt, the digest of a census report in the work directory")
@@ -144,7 +159,7 @@ func Delete(opts DeleteOptions) (*DeleteReport, error) {
 		}
 	}
 
-	rep := &DeleteReport{Mode: "delete-dry-run", Root: root, CensusReceipt: opts.CensusReceipt, Computers: computers, Refused: map[string]int64{}}
+	rep := &DeleteReport{Mode: "delete-dry-run", Root: root, CensusReceipt: opts.CensusReceipt, Computers: computers, KeepDigests: int64(opts.Keep.Len()), Refused: map[string]int64{}}
 	var logf *os.File
 	var logw *bufio.Writer
 	if opts.Apply {
@@ -172,11 +187,18 @@ func Delete(opts DeleteOptions) (*DeleteReport, error) {
 			return nil
 		}
 		if !opts.Apply {
-			rep.WouldDelete++
+			if opts.Keep.Has(v.Digest()) {
+				rep.KeptByList++
+			} else {
+				rep.WouldDelete++
+			}
 			return nil
 		}
-		size, err := unlinkCovered(root, v)
+		size, err := unlinkCovered(root, v, opts.Keep)
 		switch {
+		case errors.Is(err, errKeptByList):
+			rep.KeptByList++
+			return nil
 		case errors.Is(err, os.ErrNotExist):
 			rep.AlreadyGone++
 			return nil
