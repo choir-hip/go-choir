@@ -465,6 +465,8 @@ func stallGC(t *testing.T) {
 		// A writer on s.db during the pass: one small insert every 20 ms, each timed.
 		var wmu sync.Mutex
 		var worst time.Duration
+		var writes, writeErrs int
+		var firstWriteErr error
 		wstop := make(chan struct{})
 		var wwg sync.WaitGroup
 		wwg.Add(1)
@@ -477,14 +479,22 @@ func stallGC(t *testing.T) {
 				default:
 				}
 				t0 := time.Now()
-				_, _ = s.db.ExecContext(ctx, `INSERT INTO run_memory_entries (entry_id, loop_id, owner_id, agent_id, parent_entry_id, seq, kind, role, message_json, summary,
+				_, werr := s.db.ExecContext(ctx, `INSERT INTO run_memory_entries (entry_id, loop_id, owner_id, agent_id, parent_entry_id, seq, kind, role, message_json, summary,
 					first_kept_entry_id, tokens_before, reason, model, details_json, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-					fmt.Sprintf("w-%d-%d", mib, time.Now().UnixNano()), "run-w", "owner-gc", "agent-w", "", i, "message", "", "{}", "", "", 0, "", "", "{}", time.Now().UTC())
-				if w := time.Since(t0); w > worst {
-					wmu.Lock()
-					worst = w
-					wmu.Unlock()
+					fmt.Sprintf("w-%d-%d", mib, time.Now().UnixNano()), fmt.Sprintf("run-w-%d-%d", mib, g0.UnixNano()), "owner-gc", "agent-w", "", i, "message", "", "{}", "", "", 0, "", "", "{}", time.Now().UTC())
+				w := time.Since(t0)
+				wmu.Lock()
+				writes++
+				if werr != nil {
+					writeErrs++
+					if firstWriteErr == nil {
+						firstWriteErr = werr
+					}
 				}
+				if w > worst {
+					worst = w
+				}
+				wmu.Unlock()
 				time.Sleep(20 * time.Millisecond)
 			}
 		}()
@@ -499,8 +509,18 @@ func stallGC(t *testing.T) {
 			continue
 		}
 		wmu.Lock()
-		t.Logf("journal %5d MiB: CALL DOLT_GC() on s.readDB %.2f s; longest SELECT 1 on s.db %.2f s, on s.readDB %.2f s; slowest 1-row INSERT on s.db %.2f s; journal after %d MiB",
-			journal, d.Seconds(), waitW.Seconds(), waitR.Seconds(), worst.Seconds(), doltJournalBytes(s.texturePath)>>20)
+		t.Logf("journal %5d MiB: CALL DOLT_GC() on s.readDB %.2f s; longest SELECT 1 on s.db %.2f s, on s.readDB %.2f s; slowest 1-row INSERT on s.db %.2f s (%d inserts, %d failed, first error: %v); journal after %d MiB",
+			journal, d.Seconds(), waitW.Seconds(), waitR.Seconds(), worst.Seconds(), writes, writeErrs, firstWriteErr, doltJournalBytes(s.texturePath)>>20)
 		wmu.Unlock()
+		// The pass must not have lost the writer's rows: every insert that
+		// reported success is still there, and a reopened engine reads them.
+		var have int
+		if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM run_memory_entries WHERE agent_id = 'agent-w' AND entry_id LIKE ?`, fmt.Sprintf("w-%d-%%", mib)).Scan(&have); err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("journal %5d MiB: rows the concurrent writer reported inserted %d, rows present after the pass %d", journal, writes-writeErrs, have)
+		if have != writes-writeErrs {
+			t.Errorf("rows present %d, inserts that reported success %d", have, writes-writeErrs)
+		}
 	}
 }
