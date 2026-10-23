@@ -118,6 +118,10 @@ func (rt *Runtime) eventTableStatus() EventTableStatus {
 	st := rt.eventTableState
 	rt.eventTableMu.Unlock()
 	if rt.store != nil {
+		// The store's own switch is the truth: Reopen turns it off when it
+		// cannot floor an adopted workspace, which this copy never hears of
+		// (bunch 148, Devin 2b).
+		st.Writing = st.Writing && rt.store.EventTableWritesOn()
 		floor, err := rt.store.StoreFloor()
 		if err != nil {
 			st.Reason += "; the store floor is unreadable: " + err.Error()
