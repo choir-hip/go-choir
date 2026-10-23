@@ -37,6 +37,9 @@ type FirecrackerNextConfig struct {
 	BinPath       string
 	JailerBinPath string
 	Only          []string
+	// JailExec is the next binary when it is static (it can run in the
+	// jail); empty means a computer on the next build launches direct.
+	JailExec string
 	// DataDiscard is VM_DATA_DISCARD for the next build: on only if the
 	// flag is on and the next binary reports 1.17.0 or newer.
 	DataDiscard bool

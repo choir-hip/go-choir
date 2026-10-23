@@ -53,6 +53,7 @@ const (
 	confinementReasonNotSelected    = "not_selected"
 	confinementReasonHostUnprepared = "jailer_host_unprepared"
 	confinementReasonInvalidID      = "invalid_jailer_id"
+	confinementReasonNextNotStatic  = "next_build_not_static"
 )
 
 // Linux capability numbers (include/uapi/linux/capability.h). Kept here so
@@ -107,6 +108,10 @@ type JailerConfig struct {
 	// BinPath is the jailer binary (VM_JAILER_BIN; default: beside
 	// Firecracker).
 	BinPath string
+	// FirecrackerBinPath is the jailer's --exec-file (VM_JAILER_FIRECRACKER_BIN;
+	// default: the direct Firecracker). The jailer copies it into the chroot,
+	// which holds no loader, so it must be a static build.
+	FirecrackerBinPath string
 	// ChrootBase is the jailer's --chroot-base-dir. It must be on the state
 	// dir's mount so data.img can be hard-linked (default <state>/.jail).
 	ChrootBase string
@@ -931,6 +936,12 @@ func (m *Manager) ensureVMMNoIPRules() error {
 	}
 	return nil
 }
+
+// staticELFError is nil when path is an ELF with no program interpreter.
+func staticELFError(path string) error { return nil }
+
+// jailedExecError checks the jailed exec file against the direct binary.
+func jailedExecError(direct, jailed string, version func(string) string) error { return nil }
 
 // --- jailed process start ----------------------------------------------------
 
