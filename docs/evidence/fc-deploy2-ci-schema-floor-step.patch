@@ -1,3 +1,8 @@
+Ordering: this patch lands with or after deploy 2's scripts
+(scripts/check-store-schema-floor.sh and scripts/selftest-store-schema-floor).
+The step runs both, so applied to a tree that lacks them it fails every push.
+Apply from the repository root with git apply.
+
 diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
 index 7428b6780..bc9eb4f19 100644
 --- a/.github/workflows/ci.yml

@@ -821,11 +821,15 @@ func ReadPinnedManifest(root, releaseDigest string) (ReleaseManifest, string, er
 
 // RestagePinnedRelease swaps `current` onto an already-pinned release without
 // Apply, restorePrior, or a service restart. Tape restore uses this to restage
-// SPA bytes after the Dolt witness matches. storeSchemaPath is the guest
-// store's schema receipt (the floor sits beside it): a pinned release that
-// declares an epoch below the store floor is refused before the swap
-// (bunch 148, Devin 3). An empty path skips the check.
-func RestagePinnedRelease(root, releaseDigest, storeSchemaPath string) error {
+// SPA bytes after the Dolt witness matches. storeSchemaPaths are the guest
+// store schema receipts to check (the floor sits beside each): a pinned
+// release that declares an epoch below ANY of their floors is refused before
+// the swap (bunch 148 Devin 3; bunch 152 Devin 1). A caller holds two stores
+// during a restore, the live workspace, which carries the floor, and the
+// staged one, which on the genesis-replay path gets its floor only after the
+// stamped ops are replayed into it, so both are passed. An empty path is
+// skipped; none skips the check.
+func RestagePinnedRelease(root, releaseDigest string, storeSchemaPaths ...string) error {
 	root = filepath.Clean(root)
 	if root == "." || !filepath.IsAbs(root) {
 		return fmt.Errorf("updater: restage requires an absolute updater root")
@@ -834,8 +838,10 @@ func RestagePinnedRelease(root, releaseDigest, storeSchemaPath string) error {
 	if err != nil {
 		return err
 	}
-	if err := checkManifestAgainstFloor(storeSchemaPath, manifest, "restage", true); err != nil {
-		return err
+	for _, schemaPath := range storeSchemaPaths {
+		if err := checkManifestAgainstFloor(schemaPath, manifest, "restage", true); err != nil {
+			return err
+		}
 	}
 	ensureReleaseEntrypoint(root, releaseDir, manifest)
 	return swapCurrentPointer(root, releaseDir)
