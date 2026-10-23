@@ -314,3 +314,81 @@ func TestManagerRewritesUnversionedPlatformPolicy(t *testing.T) {
 		t.Fatalf("texture = %+v", got)
 	}
 }
+
+// withPools swaps the pool table for one test.
+func withPools(t *testing.T, pools map[string][]modelcatalog.PoolMember) {
+	t.Helper()
+	prev := catalogPools
+	catalogPools = func() map[string][]modelcatalog.PoolMember { return pools }
+	t.Cleanup(func() { catalogPools = prev })
+}
+
+// Owner 2026-10-23 (R2): "I'd rather them fail than fallback." Review bunch
+// 147, Medium: no-failover was a property of the pool spec only, so a
+// concrete provider/model pin that is a member of the default pool got the
+// rest of that pool as fallbacks. Ways it could fail: a pin inherits the
+// default pool's other members; a retired-model remap loses its pool
+// fallbacks (it asked for a pool, so it keeps them); a pool spec loses its
+// own. Fails on the unfixed tip: the explicit pin gets deepseek.
+func TestAssignExplicitPinGetsNoDefaultPoolFallbacks(t *testing.T) {
+	withPools(t, map[string][]modelcatalog.PoolMember{
+		modelcatalog.DefaultPool: {
+			{Provider: "chatgpt", Model: "gpt-6-luna", Weight: 1},
+			{Provider: "opencode-go", Model: "deepseek-v4.1-flash", Weight: 1},
+		},
+	})
+	chosen, fallbacks, assignment := Assign(provideriface.LLMSelection{Provider: "chatgpt", Model: "gpt-6-luna"}, "traj")
+	if assignment != "explicit" || chosen.Model != "gpt-6-luna" || len(fallbacks) != 0 {
+		t.Fatalf("explicit pin: %q %+v with fallbacks %+v, want none", assignment, chosen, fallbacks)
+	}
+	chosen, fallbacks, _ = Assign(provideriface.LLMSelection{Provider: "opencode-go", Model: "deepseek-v4.1-flash"}, "traj")
+	if chosen.Model != "deepseek-v4.1-flash" || len(fallbacks) != 0 {
+		t.Fatalf("explicit second member: %+v with fallbacks %+v, want none", chosen, fallbacks)
+	}
+	// A pool spec still fails over inside its pool.
+	_, fallbacks, assignment = Assign(provideriface.LLMSelection{Model: "pool:default"}, "traj")
+	if assignment != "hash" || len(fallbacks) != 1 {
+		t.Fatalf("pool spec: %q fallbacks %+v, want the other member", assignment, fallbacks)
+	}
+}
+
+// Review bunch 147, High deploy gate: an unknown pool name resolved silently
+// as pool:default. Ways it could fail: Assign remaps it; the parser accepts
+// it; the Manager loads it without an error; EnrichMetadata runs the role on
+// the default model with no policy error; an unknown pool in a role is
+// rejected only for that role while the rest of the file is silently kept.
+// Fails on the unfixed tip at every step.
+func TestUnknownPoolFailsClosedNamingThePool(t *testing.T) {
+	chosen, fallbacks, assignment := Assign(provideriface.LLMSelection{Model: "pool:no-such-pool"}, "traj")
+	if assignment != "unknown_pool" || chosen.Provider != "" || len(fallbacks) != 0 {
+		t.Fatalf("Assign remapped an unknown pool: %q %+v %+v", assignment, chosen, fallbacks)
+	}
+	if _, err := parsePolicy("[defaults]\nmodel = \"pool:default\"\n\n[roles.texture]\nmodel = \"pool:no-such-pool\"\n", "test"); err == nil || !strings.Contains(err.Error(), "no-such-pool") {
+		t.Fatalf("parse accepted an unknown pool or did not name it: %v", err)
+	}
+	if _, err := parsePolicy("[defaults]\nmodel = \"pool:typo\"\n", "test"); err == nil || !strings.Contains(err.Error(), "typo") {
+		t.Fatalf("parse accepted an unknown default pool: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "System", "model-policy.toml")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("# owner-edited\n[defaults]\nmodel = \"pool:default\"\n\n[roles.texture]\nmodel = \"pool:no-such-pool\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	manager := NewManager(ManagerConfig{PolicyPath: path})
+	if _, err := manager.Load(context.Background(), "owner"); err == nil || !strings.Contains(err.Error(), "no-such-pool") {
+		t.Fatalf("Load did not report the unknown pool: %v", err)
+	}
+	meta := manager.EnrichMetadata(context.Background(), "owner", agentprofile.Texture, map[string]any{"trajectory_id": "t1"})
+	if errText, _ := meta[MetadataPolicyError].(string); !strings.Contains(errText, "no-such-pool") {
+		t.Fatalf("EnrichMetadata hid the unknown pool: policy error = %q", errText)
+	}
+	// A policy that is valid still carries no error.
+	if err := os.WriteFile(path, []byte("# owner-edited\n[defaults]\nmodel = \"pool:synthetic-luna\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Load(context.Background(), "owner"); err != nil {
+		t.Fatalf("a known pool must load: %v", err)
+	}
+}
