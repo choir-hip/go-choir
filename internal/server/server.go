@@ -147,10 +147,14 @@ func NewServer(serviceName, port string) *Server {
 	bindHost := BindHostFromEnv()
 	addr := fmt.Sprintf("%s:%s", bindHost, port)
 	s := &Server{
-		serviceName:     serviceName,
-		mux:             mux,
-		addr:            addr,
-		done:            make(chan struct{}),
+		serviceName: serviceName,
+		mux:         mux,
+		addr:        addr,
+		// Capacity one: Shutdown's non-blocking send must land even when
+		// Start has not reached <-s.done yet, or the signal is lost and
+		// Start blocks forever (docs/problems/server-shutdown-lost-wakeup-
+		// 2026-10-23.md).
+		done:            make(chan struct{}, 1),
 		healthHandler:   nil, // set below after method receiver is available
 		shutdownTimeout: ShutdownTimeoutFromEnv(),
 	}
