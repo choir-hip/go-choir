@@ -977,3 +977,116 @@ artifacts pinned only by a deleted receipt are `unreceipted` in later passes
 `requirePlainDir` hardening of the segment path (root-only); fsynced but
 unsealed live-writer records stay uncovered (round-1 F2 cost); the P4 and F7
 guards use the substring `name(` so `os.Remove (p)` evades them.
+
+#### Review round 2: dispositions (tests 0c7dc7710, fix commit 8984bfd68)
+
+Mutation class red. Protected surface: the delete's unlink of legacy files on
+Node B. Rollback: `git revert` of the fix commit; the command is run by hand.
+Heresy delta: discovered 1 (a segmented repin leaves a computer dependent on a
+shared legacy file with no record of the dependence), introduced 0, repaired 0
+(the pin-side cause stays, see the residual).
+
+- **R1 fixed inside the repack.** The list phase reads every computer's
+  segments (sealed and unsealed) for two kinds of edge. A pin receipt in a
+  segment attributes the computer it names and the computer whose directory
+  holds it. An event body in a segment that carries a 64-hex digest attributes
+  that computer to a legacy file of that digest as a guard: the file needs the
+  computer's sealed copy, but the copy never writes it (the sweep keeps what
+  the committed receipts and the event bodies name, FP0 note from origin/main
+  ef450642b, so the rule is "the chain names it", not "has a segment artifact
+  record"). A segment record that cannot be read falls back to the legacy file
+  of the same digest when it still hashes to it; a computer whose segments
+  cannot be listed, or a record with no fallback, is an attribution error: it
+  appears in `segment_errors`, the run is unhealthy, and every file of the pass
+  is refused (`blocked`), because nothing can be proven free of a need nobody
+  could see. Fails on fd09566db: `TestR1AReceiptOnlyInASegment...`,
+  `TestR1AComputerWhoseSegmentsCannotBeRead...`,
+  `TestR1AnEventInASegmentThatNamesAPayload...`.
+- **R1 named residual (pin side, separate lane, red).** After the legacy-hit
+  refresh in `stageSegmented`'s reuse branch, read the computer's own segment;
+  if the artifact is absent, return the item so the artifact record is
+  appended (one duplicate copy per computer on the first repin). The segment
+  then holds the bytes and no computer depends on a shared legacy file. Until
+  that lands, the repack's job is to see the dependence, which it now does.
+- **R2 fixed.** The pass records its list start (in its state); each verdict
+  carries it; `unlinkCovered` refuses a file whose mtime is later (a repin
+  refreshes it) and a verdict with no list start. A repin that lands between
+  the list and the unlink is therefore kept. Residual: the kernel's coarse
+  timestamp for a file written (not touched with an explicit time) can lag a
+  few milliseconds; no pin path writes the artifact file in place, they all
+  `Chtimes` with the current time. Fails on fd09566db: `TestR2...`.
+- **R3 fixed.** `classifyReceipt` separates a foreign document (ignored), a
+  well formed receipt, a receipt that names an artifact but fails the shape
+  guard (issuer, signature set, version, namespace, length), and one that names
+  nothing. A rejected receipt is counted (`listing.rejected_receipts`), spills
+  an edge for both namespaces that the join treats as a dropped receipt; a
+  nameless one is counted (`listing.unnamable_receipts`) and, like an
+  unreadable segment, refuses every file of the pass. In the join, an edge it
+  sets aside (ineligible, another length, another computer than the event's)
+  beside a kept edge makes the file `dropped_receipt`: not deletable, and the
+  run is unhealthy. A file whose every edge is set aside stays `ineligible`
+  (not the copy's business, as before). The round-1 F3 test now expects
+  `ineligible` and an unhealthy run for the unsigned receipt. The round-1 note
+  "can only add a required copy" was wrong and is withdrawn. The report version
+  is 2, so a census taken before this fix is refused by the delete gate. Fails
+  on fd09566db: the two `TestR3...` receipts tests and the unparseable one.
+- **R4 declined, with a test.** There is no path by which a census or the
+  delete's verification pass reuses saved state: `prepare` loads state only for
+  an `Apply` run from the `apply/` directory, every other run wipes `scan/`
+  first, and `matches` already compares `Copy` and `Apply`. Adding the mode to
+  `matches` would change nothing. `TestR4AStoppedCensus...` stops a census
+  midway and shows the next census describes the tree as it is; it passes on
+  fd09566db and now guards the claim.
+- **Nits.** L3 fixed: the guards use `name\s*\(` (a helper) and list the
+  `Rename` family (`syscall.Rename`, `unix.Renameat`, `unix.Renameat2`); an
+  import alias (`rm "os"`) still evades a text guard and would need the AST
+  guard, recorded, not done (r4 rests on `Verdict` and `unlinkCovered`, not on
+  this test). Exit 3 of the delete is tested at report level
+  (`TestF5...`) and the command's `return 3` is one branch; a command-level
+  test needs a store that turns bad between the census and the delete, not
+  built, recorded. Recorded, not changed: deleting a covered receipt file
+  erases its legacy edge, so later passes lean on the segment copy of that
+  receipt (which the new segment pass reads) and an artifact pinned only by a
+  deleted legacy receipt whose segment copy is gone would be `unreceipted`
+  (fails closed); legacy directories lack the `requirePlainDir` hardening of
+  the segment path (a symlinked intermediate directory under the root, root
+  only); fsynced but unsealed live-writer records stay uncovered (round-1 F2).
+
+#### Before `delete --apply` on Node B: preconditions
+
+Nothing on Node B has run this tool. All of these hold first:
+
+1. The build contains 8984bfd68 or later (report version 2). Any census taken
+   before it is refused by the gate; take a fresh one after the last copy:
+   `census` unfiltered (not `--computer`), exit 0 or a clean exit 3 whose only
+   cause is uncovered files of computers the owner has not named, and `files`
+   with `corrupt`, `blocked`, `legacy_bad`, `dropped_receipt` all 0,
+   `segment_errors` empty, `listing.rejected_receipts` and
+   `listing.unnamable_receipts` absent or 0. `listing.segment_receipts` shows
+   the segment pass ran.
+2. The evidence gate of owner notes 34 holds on the health tape block after the
+   flag flip: `segment_pins` growing, files per pin falling toward 0,
+   `segment_fallbacks` flat, `corrupt` and `segment_error_fallbacks` 0, the
+   appender not poisoned; replay after the next deploy's planned restart and a
+   checkpoint publish read from segments. And the owner's yes for the delete
+   itself (ruling 2026-10-22, "4. yes", is for the census-gated command; the
+   run on Node B waits on the gate).
+3. Copies exist for every computer that is to lose files: a computer named in
+   no `copy --apply` keeps every file it shares with a copied computer (the
+   shared file is judged across all of them). Run the copy, then the census,
+   then the delete without `--computer`, so the file set is decided by the
+   attribution and not by a filter.
+4. Run the delete soon after the census (`--max-age` defaults to 24 h): the
+   attribution is frozen at each pass's list start, and the mtime check keeps
+   files repinned after it, but only a short window keeps the unsealed live
+   tails (which do not count) and new first-time pins out of the picture.
+5. Work directory room: 600 MB for spill files plus about 1.3 GB for the
+   delete log at 10 million files; `--pause 1ms` under `ionice -c3 nice -n 19`.
+   Root, same owner as the platform's segments.
+6. Exit 3 from the delete means the fresh pass was unhealthy: read
+   `segment_errors` and the `files` counts before running anything again.
+   Deletes are not undone by the tool; a legacy file removed with a verified
+   sealed copy is read from the segment.
+
+Tests: `go test ./internal/taperepack/... ./cmd/taperepack/...
+./internal/tapestore/...` passes (71 s, 50 s, 36 s).
