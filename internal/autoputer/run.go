@@ -637,6 +637,10 @@ func Run() {
 	// answer during the replay-gated window too.
 	s.HandleFunc("/internal/boot/timeline", handleBootTimeline)
 	s.HandleFunc("/internal/diag/tcp-dial", handleDiagTCPDial)
+	// Guest views for deployed-proof steps with no shell (record:
+	// docs/problems/guest-proof-steps-have-no-route-2026-10-23.md).
+	s.HandleFunc("/internal/diag/dns", handleDiagDNS)
+	s.HandleFunc("/internal/diag/gateway-body-cap", handleDiagGatewayBodyCap)
 	// The explicit og_objects derived-column migration (host peer only);
 	// boot itself is discovery only.
 	s.HandleFunc("/internal/store/derived-columns", derivedColumnsHandler(db))
