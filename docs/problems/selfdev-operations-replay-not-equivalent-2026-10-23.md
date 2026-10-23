@@ -267,3 +267,109 @@ would be silent. The test commit and this record are yellow and green.
   lose its interceptor after `Reopen` (unreproduced).
 - Introduced: none.
 - Repaired: none.
+
+## Fix (2026-10-23, lane fp0-selfdev-ops-replay; red)
+
+Decision from FP0 (conservative default): the stamp keeps setting
+`updated_at`, as today, so obligations_surface's idle time keeps its
+meaning. Both `last_intent_error` and `updated_at` travel on the tape.
+
+What changed:
+
+- `computerevent.SelfDevelopmentOperationProjection` gains
+  `LastIntentError` (`json:"last_intent_error,omitempty"`). While empty the
+  key is absent, so an event written before the field and an event with no
+  stamp are the same bytes and both project an empty column.
+- `store/project.go`: the projector's existing-row `SELECT`, its
+  `INSERT ... ON DUPLICATE KEY UPDATE` and the same-snapshot comparison
+  (`reflect.DeepEqual` over the struct) carry the column.
+  `store/residue_import.go` reads the column too, so a residue snapshot does
+  not drop a stamp.
+- `selfdev/operations.go`: `appendOperationProjection` sends
+  `operation.LastIntentError` (so a `Transition` snapshot never wipes the
+  stamp). `RecordIntentError` takes `writeMu` and, when a projection sink is
+  bound, reads the row, returns without an append if the trimmed and
+  truncated reason equals the stored one, and otherwise appends a
+  state-preserving update (`ExpectedState` = the row's current state) with
+  the new reason and `updated_at = now`. A missing row is still
+  `ErrOperationNotFound`. The unbound direct UPDATE stays as the test seam
+  and is unchanged.
+
+Tests (written first, failing before the change):
+
+- `agentcore/replay_selfdev_operations_test.go`:
+  `TestSelfDevelopmentIntentErrorStampIsNotOnTheTapeAndBreaksReplayEquivalence`
+  with three subtests (a stamp, a clear after success, a stamp replaced by
+  another reason): a control replay is equivalent, then the probe after the
+  writes is equivalent with identical live and replay rows.
+  `TestSelfDevelopmentIntentErrorUnchangedReasonAppendsNothing`: a clear of
+  an empty stamp and a repeat of the same reason append nothing and leave
+  `updated_at` alone; a new reason appends exactly one event and moves
+  `updated_at`; a missing operation is `ErrOperationNotFound`.
+- `store/project_selfdev_intent_error_test.go`: an event body without the
+  key projects an empty column (and an empty stamp is not spelled in the
+  body); a state-preserving event sets the stamp; a later one clears it.
+
+Rollback: revert the commit. A tape that already holds events with the new
+key replays on the old binary with the key ignored, the column empty, and
+the computer replay-ineligible again, as before this fix; nothing is
+corrupted. Mutation class red; Tier 2 review (Devin and DeepSeek).
+
+Heresy delta (fix): repaired: the `RecordIntentError` writer outside the
+tape. Introduced: none known; each distinct stamp is now a signed tape event
+(a freeze or verify loop that changes its reason every attempt grows the
+tape by one event per attempt; an unchanged reason does not).
+
+### Residual: operator heal for historic stamps (not built)
+
+A computer that stamped before this fix (t71; probably any computer where a
+freeze or verify was refused) is still inequivalent after the deploy: no
+past event carries its `last_intent_error` or its stamp-written
+`updated_at`. The heal is one explicit operator act per computer, after the
+fixed binary is serving (an old binary's projector drops the field):
+
+1. Read the live `self_development_operations` rows for the computer and
+   run the replay probe; select the rows whose `last_intent_error` or
+   `updated_at` differ from the replayed row. Only rows that differ.
+2. For each, build the snapshot the projector reads
+   (`SelfDevelopmentOperationProjection`) from the live row, with the live
+   `last_intent_error` and `updated_at` (formatted as `RecordIntentError`
+   does, RFC3339Nano) and `ExpectedState` = the row's state.
+3. Append them as one projection batch through the bound appender under the
+   selfdev store's `writeMu`, from an owner/operator-authorized route. Not a
+   boot step, not a resumer: no planned-restart marker applies.
+4. Run the replay probe again: equivalent, then the computer is eligible.
+   Re-running the heal selects no rows, so it is idempotent.
+
+### Store.Reopen and the OG interceptor (code reading and check)
+
+Reading (not fixed here): `BindProjectionTape` installs the OG mutation
+interceptor on the store's current `ogStore`
+(`store/projection_tape.go:38-40`). `Store.Reopen`
+(`store/store.go:1113-1115`) replaces `s.ogStore` and `s.ogReadStore` with
+those of a freshly opened store, which has no interceptor, and leaves
+`s.projectionTape` set. After a `Reopen`, `ProjectionTapeBound()` still
+answers true (so the desktop, alias, mutation and run-memory writers keep
+routing through the tape), but `og_objects` and `og_edges` writes take the
+`s.intercept == nil` branch in `objectgraph/dolt_store.go:655, 1055, 1150,
+1865` and become direct SQL with no event.
+`agentcore/rematerialize.go:262-265` calls `Reopen` on a bound store and then
+`RebindProjection`, which swaps only the appender's projection store; the
+caller does not rebind the interceptor.
+
+Check: `store/reopen_projection_tape_test.go`,
+`TestReopenKeepsTheObjectGraphOnTheProjectionTape`. It binds a tape, puts an
+object (control: one event), closes and reopens the store, and puts another.
+It fails today: the second write leaves the head sequence unchanged, i.e. no
+event. So the store-level defect is confirmed. What the test does not show
+is whether production reaches it: `rematerialize.go:262` runs on a bound
+live store, so a rematerialize in a running process looks affected (the
+interceptor is lost until the next boot, and a restart rebinds), while the
+boot-time rebase at `autoputer/projection_base.go:182-196` runs in recovery
+before the bind at `autoputer/run.go:428` (ordering read, not run). To refute
+or confirm in production, a staging test computer that has run a
+rematerialize without restarting should be probed with replay-completeness
+after an OG write; a diff in `og_objects` or `og_edges` confirms it. If
+confirmed, the fix shape is to re-install the interceptor in `Reopen` (or
+make `BindProjectionTape` idempotent and call it after `Reopen`), and its
+class is red.
