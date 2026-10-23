@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"fmt"
-	"os"
 	"sync"
 	"testing"
 
@@ -63,17 +62,16 @@ func TestReopenKeepsTheObjectGraphOnTheProjectionTape(t *testing.T) {
 	}
 }
 
-// Found while reading Reopen for the interceptor: Open builds the new
-// object-graph store with SetWriteValidator(live.vocabWriteGuard), a method
-// value bound to the temporary store, and Reopen then zeroes that store
-// (*live = Store{}). The validator the adopted ogStore keeps reads the zeroed
-// store's vocabCutover, so the vocabulary write fence is disarmed after a
-// Reopen even when s had cut over. Recorded, not fixed: re-arming a fence is
-// a behaviour change of its own (docs/problems/selfdev-operations-replay-not-equivalent-2026-10-23.md).
+// Open builds the new object-graph store with
+// SetWriteValidator(live.vocabWriteGuard), a method value bound to the
+// temporary store, and Reopen then zeroes that store (*live = Store{}). The
+// validator the adopted ogStore kept read the zeroed store's vocabCutover, so
+// the vocabulary write fence was disarmed after a Reopen even when s had cut
+// over (boot rebase at autoputer/projection_base.go:172-196, runtime
+// rematerialize at agentcore/rematerialize.go:262). Reopen binds the
+// validator to s and never lowers an armed fence
+// (docs/problems/selfdev-operations-replay-not-equivalent-2026-10-23.md).
 func TestReopenKeepsTheVocabularyWriteFenceArmed(t *testing.T) {
-	if os.Getenv("CHOIR_REPRO_REOPEN_FENCE") == "" {
-		t.Skip("known defect, recorded and not fixed: set CHOIR_REPRO_REOPEN_FENCE=1 to reproduce (docs/problems/selfdev-operations-replay-not-equivalent-2026-10-23.md)")
-	}
 	ctx := context.Background()
 	s := openTestStore(t)
 	s.vocabCutover.Store(true)
@@ -149,5 +147,37 @@ func TestReopenedStoreRoutesConcurrentObjectGraphWritesThroughTheTape(t *testing
 	}
 	if got := head.Sequence - before; got != 2*writers {
 		t.Fatalf("%d concurrent OG writes appended %d tape events; a write bypassed the tape", 2*writers, got)
+	}
+}
+
+// The same, with the cutover the way a computer has it: the fenced migration
+// persists the report in the workspace, the report survives the Reopen, and
+// the fence keeps refusing a stale role while still admitting a live one.
+func TestReopenAfterTheFencedCutoverKeepsTheFenceArmedAndAdmitsLiveRoles(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	if _, err := s.MigrateAndFenceServingVocabulary(ctx, false, nil); err != nil {
+		t.Fatal(err)
+	}
+	agent := func(role string) []objectgraph.Object {
+		return []objectgraph.Object{{ObjectKind: objectgraph.ObjectKind("choir.agent"), Metadata: []byte(fmt.Sprintf(`{"role":%q}`, role)), Body: []byte(`{}`)}}
+	}
+	path := s.path
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Reopen(path); err != nil {
+		t.Fatal(err)
+	}
+	if !s.vocabCutover.Load() {
+		t.Fatal("Reopen lost the cutover the adopted workspace's report records")
+	}
+	if err := s.ogStore.PreflightWrite(ctx, agent("boss"), nil); err == nil {
+		t.Fatal("after Reopen the fence accepts an unknown role")
+	}
+	for _, role := range []string{"management", "engineering", "research", "texture", "management_task"} {
+		if err := s.ogStore.PreflightWrite(ctx, agent(role), nil); err != nil {
+			t.Fatalf("after Reopen the fence refuses live role %q: %v", role, err)
+		}
 	}
 }

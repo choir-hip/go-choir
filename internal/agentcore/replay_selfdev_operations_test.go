@@ -11,12 +11,14 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // selfdevReplayRuntime is a runtime shaped like a production computer for the
@@ -305,6 +307,17 @@ func TestRematerializeFromTapeKeepsObjectGraphAndOperationWritesOnTheTape(t *tes
 	if got := sequence(); got != before+1 {
 		t.Fatalf("an object-graph write after the rematerialize moved the tape %d -> %d, want one event", before, got)
 	}
+	// The rematerialize cut the staged workspace over before the flip, so the
+	// reopened store is post-cutover and its vocabulary fence must be armed.
+	agent := func(role string) types.AgentRecord {
+		return types.AgentRecord{AgentID: "agent-fence-" + role, OwnerID: "owner-fence", ComputerID: computerID, Profile: role, Role: role, ChannelID: "channel-fence"}
+	}
+	if err := live.UpsertAgentOG(ctx, agent("boss")); err == nil {
+		t.Fatal("after the rematerialize the vocabulary write fence accepted an unknown role")
+	}
+	if err := live.UpsertAgentOG(ctx, agent("engineering")); err != nil {
+		t.Fatalf("after the rematerialize the fence refused a live role: %v", err)
+	}
 	if rt.selfdevOperations == nil {
 		t.Fatal("rematerialize left no operation store")
 	}
@@ -318,5 +331,53 @@ func TestRematerializeFromTapeKeepsObjectGraphAndOperationWritesOnTheTape(t *tes
 	}
 	if !after.Result.Equivalent() {
 		t.Fatalf("after the rematerialize the reopened computer is not replay-equivalent: %#v", after.Result.Differences)
+	}
+}
+
+// The reason is cut at 512 bytes and the cut can land inside a multi-byte
+// rune; a model-written reason can also carry invalid bytes. The stored value
+// is valid UTF-8 and equals what a repeat of the same text produces, so the
+// repeat appends nothing.
+func TestSelfDevelopmentIntentErrorReasonIsValidUTF8AfterTheCutAndRepeatsAppendNothing(t *testing.T) {
+	ctx := context.Background()
+	computerID := "computer-selfdev-intent-error-utf8"
+	rt, operations := selfdevReplayRuntime(t, computerID)
+	opened := openExecutingOperation(t, ctx, operations, computerID)
+	head := func() uint64 {
+		h, err := rt.store.Head(ctx, computerID)
+		if err != nil || h == nil {
+			t.Fatalf("head = %+v, %v", h, err)
+		}
+		return h.Sequence
+	}
+	// 511 ASCII bytes then a 2-byte rune: byte 512 is half of the rune.
+	cut := strings.Repeat("x", 511) + "\u00e9 tail"
+	invalid := "freeze: bad \xff\xfe bytes"
+	for name, reason := range map[string]string{"cut inside a rune": cut, "invalid bytes": invalid} {
+		before := head()
+		if err := operations.RecordIntentError(ctx, computerID, opened.OperationID, reason); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		stamped, err := operations.Get(ctx, computerID, opened.OperationID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !utf8.ValidString(stamped.LastIntentError) || len(stamped.LastIntentError) > 512 || stamped.LastIntentError == "" {
+			t.Fatalf("%s: stored reason is not valid UTF-8 within 512 bytes: %q", name, stamped.LastIntentError)
+		}
+		if head() != before+1 {
+			t.Fatalf("%s: a new reason appended %d events, want 1", name, head()-before)
+		}
+		mid := head()
+		if err := operations.RecordIntentError(ctx, computerID, opened.OperationID, reason); err != nil {
+			t.Fatal(err)
+		}
+		if head() != mid {
+			t.Fatalf("%s: a repeat of the same reason appended %d events", name, head()-mid)
+		}
+	}
+	report, err := rt.ReplayCompleteness(ctx, computerID)
+	if err != nil || !report.Result.Equivalent() {
+		t.Fatalf("replay after the cut stamps: %v %#v", err, report.Result.Differences)
 	}
 }
