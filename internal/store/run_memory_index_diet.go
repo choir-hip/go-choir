@@ -273,6 +273,10 @@ type RunMemoryIndexRestoreReport struct {
 // ErrUnknownRunMemoryIndex refuses a restore naming an index it does not know.
 var ErrUnknownRunMemoryIndex = errors.New("runtime store: unknown run-memory index")
 
+// runMemoryRestoreStepHook, when set by a test, runs before each restore step
+// (the step's position in the full order) after the restoring flag is set.
+var runMemoryRestoreStepHook func(step int)
+
 // runMemoryRestoreOrder is the restore's order.
 func runMemoryRestoreOrder() []runMemoryDietIndex {
 	byName := map[string]runMemoryDietIndex{}
@@ -314,14 +318,44 @@ func (s *Store) RestoreRunMemoryIndexes(ctx context.Context, names []string) (Ru
 	m.restoring = true
 	m.mu.Unlock()
 	defer func() {
+		// The migration's status holds the index fields as of its last step. A
+		// restore changes them, so they are re-read from a fresh inventory, on
+		// success and on failure (a part-built restore is reported as built).
+		// The probes run outside m.mu (a status read never waits on the
+		// database) with restoring still set, so no migration starts between
+		// them and the publish; the publish and restoring=false are one
+		// critical section. A probe that fails keeps the last good field. A
+		// store that has run no migration here (State "") is rediscovered by
+		// every status read, so it needs no refresh. The context is fresh: the
+		// caller's may be the reason the restore failed.
+		probeCtx, probeCancel := context.WithTimeout(context.Background(), runMemoryKindIndexOpenTimeout)
+		kind, kindErr := s.discoverRunMemoryKindIndex(probeCtx)
+		loopSeq, loopSeqErr := s.discoverRunMemoryLoopSeqIndex(probeCtx)
+		diet, dietErr := s.discoverRunMemoryDietIndexes(probeCtx)
+		probeCancel()
 		m.mu.Lock()
+		defer m.mu.Unlock()
 		m.restoring = false
-		m.mu.Unlock()
+		if m.status.State == "" {
+			return
+		}
+		if kindErr == nil {
+			m.status.RunMemoryKindIndex = &kind
+		}
+		if loopSeqErr == nil {
+			m.status.RunMemoryLoopSeqIndex = &loopSeq
+		}
+		if dietErr == nil {
+			m.status.RunMemoryDietIndexes = diet
+		}
 	}()
 
-	for _, d := range order {
+	for i, d := range order {
 		if len(selected) > 0 && !selected[d.name] {
 			continue
+		}
+		if hook := runMemoryRestoreStepHook; hook != nil {
+			hook(i)
 		}
 		step := RunMemoryIndexRestoreStep{Name: d.name, Action: RunMemoryIndexRestorePresent}
 		fail := func(err error) (RunMemoryIndexRestoreReport, error) {
