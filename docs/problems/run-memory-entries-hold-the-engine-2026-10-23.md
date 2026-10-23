@@ -454,32 +454,46 @@ contract asks for a bump when a change "is not freely backward compatible
 for older binaries". An additive secondary index is. An older binary's
 `schemaDDL` is `CREATE INDEX IF NOT EXISTS` for its own three indexes and
 leaves a fourth alone; its queries are the same SQL and the planner may even
-use the new index. The content witness hashes rows, not indexes
-(`computerversion.queryTableContentHash` is `SELECT *`;
-`projectionbase.witnessForWorkspace`), and the replay manifest names tables
-and columns, not indexes. Nothing keys on the epoch for an index, so there
-is no floor to raise, and the same reasoning is why the F-c table needed a
-bump (an old binary cannot know the table) and this does not. The CI
-store-floor guard named in the ledger is not in `main` (`grep` finds it only in
-the ledger), so there is nothing here for it to fence. **[V]** (code and docs
-read); **[H]** that no off-repo tool reads the index set.
+use the new index. **The content witness is not rows only, and the first
+pass of this record said it was (wrong, bunch 160 round 1, DeepSeek HIGH).**
+`computerversion/dolt_state_extractor.go:194-203` also hashes a per-table
+schema observation, `queryTableSchemaHash` (`SHOW COLUMNS`, `:338-382`), and
+its `Key` field reads `MUL` for the first column of a non-unique index.
+`replay_eligibility.go:235-243` records `SchemaDrift` when a live and a replay
+schema differ, the report goes ineligible, and
+`checkpoint_restore_bindings.go:53-60` refuses a self-development checkpoint.
+The first pass's order, `(agent_id, kind, owner_id, created_at)`, turned
+`agent_id` from no key to `MUL`; a live store that had built the index would
+then have differed from a fresh store (which makes it at open, on the empty
+table). **[V]** (`TestRunMemoryKindIndexKeepsTheWitnessSchemaObservation`: with
+an agent-leading index the observation changes; its control keeps that
+visible). The index is therefore **owner-leading**, `(owner_id, agent_id, kind,
+created_at)`: `owner_id` is already `MUL` through the existing
+`(owner_id, agent_id, created_at)` index, so `SHOW COLUMNS` is byte-identical
+with and without the index, and the test asserts every table's schema
+observation is equal on a store with the index and one without. The row
+content hash (`queryTableContentHash`, `SELECT *`) never saw indexes. Nothing
+else keys on the epoch for an index, so there is no floor to raise, and the
+same reasoning is why the F-c table needed a bump (an old binary cannot know
+the table) and this does not. The CI store-floor guard named in the ledger is
+not in `main`, so there is nothing here for it to fence. **[V]** (code and
+tests); **[H]** that no off-repo tool reads the index set or `SHOW COLUMNS`
+keys.
 
-**Index order, from a plan test on 100,000 rows.** Three orders were built on
-a scratch store and planned against the query's four real shapes (owner and
-one kind, owner and two kinds, no owner and one kind, owner and all kinds):
-`(owner_id, agent_id, kind, created_at)`, `(agent_id, kind, owner_id,
-created_at)` and `(agent_id, owner_id, kind, created_at)`. All three turn the
-owner-and-kind shapes from a range of the whole desk with `kind` filtered
+**Index order.** A plan test on 100,000 rows built three orders on a scratch
+store and planned them against the query's four shapes (owner and one kind,
+owner and two kinds, no owner and one kind, owner and all kinds). All three turn
+the owner-and-kind shapes from a range of the whole desk with `kind` filtered
 above it (80 ms) into an index range on `kind` (1.1 ms, no filter above). The
-`(owner_id, ...)` order leaves the no-owner shape on a full table scan (93 ms)
-because the planner cannot skip the leading column. Both agent-leading orders
-serve it (0.8 and 1.9 ms). `(agent_id, kind, owner_id, created_at)` is chosen:
-it serves every shape the function has, the owner-empty full scan the first
-pass of this record called a latent trap goes away, and `kind` equality before
-the `owner_id` equality gives the narrowest range. With all kinds the planner
-keeps the existing `(owner_id, agent_id, created_at)` index. The sort on
-`(created_at, seq)` remains above the access (it now sorts the cursor rows
-only).
+`(owner_id, ...)` order leaves the no-owner shape on a full table scan (93 ms);
+the two agent-leading orders serve it. The first pass chose an agent-leading
+order for that reason; that choice changes the witness (above), so it is
+reversed. Chosen: `(owner_id, agent_id, kind, created_at)`. The only production
+caller, `LoadInboxCursorForDesk`, always sends an owner and one kind; the
+no-owner shape is **not served** (no production caller; it stays on the table
+scan it had, and the earlier "latent trap" note stands as a note, not a fix).
+With all kinds the planner keeps the old index. The sort on `(created_at, seq)`
+remains above the access (it now sorts the cursor rows only).
 
 ## Shape 3 built (red, store schema, tier 2; lane `fp0-run-memory-kind-index`)
 
@@ -487,14 +501,16 @@ Mutation class: **red** (store schema, a boot-path function, and an
 operation on a live computer's store). Protected surfaces touched: the store
 schema (an additive index), `Store.Open` (one discovery-or-create call),
 `/internal/store/derived-columns` (one more step). Not touched: the store
-schema epoch, `schemaDDL`, the event tape, the content witness. Commits, in
+schema epoch, `schemaDDL`, the event tape. The content witness is affected
+only if the index changes `SHOW COLUMNS`; the first pass did, the second does
+not (below). Commits, in
 order: record `f616a3b14` (green), tests `4205d0a78` (yellow), code
 `80e81254b` (red), then this update (green) with the census variant that
 measures the build.
 
 **What it is. [V]** `internal/store/run_memory_kind_index.go`. The index is
-`idx_run_memory_entries_agent_kind_owner_created ON run_memory_entries(agent_id,
-kind, owner_id, created_at)`.
+`idx_run_memory_entries_owner_agent_kind_created ON run_memory_entries(owner_id,
+agent_id, kind, created_at)`.
 
 - *Open.* On an empty `run_memory_entries` (a fresh store) the index is
   created at open, where it costs nothing. On a table with rows Open only
@@ -529,14 +545,14 @@ from the production statement:
 ```text
 before:  Sort(created_at, seq)                      after:  Sort(created_at, seq)
           Filter (kind HASH IN (...))                        IndexedTableAccess(run_memory_entries)
-           IndexedTableAccess                                  index: [agent_id, kind, owner_id, created_at]
-            index: [owner_id, agent_id, created_at]            filters: {[agent], [kind], [owner], [NULL, inf)}
+           IndexedTableAccess                                  index: [owner_id, agent_id, kind, created_at]
+            index: [owner_id, agent_id, created_at]            filters: {[owner], [agent], [kind], [NULL, inf)}
             filters: {[owner], [agent], [NULL, inf)}
 ```
 
-Owner and one kind, owner and two kinds (two ranges), and no owner and one
-kind (before: a table scan) all read the new index with no `Filter` above it;
-with all kinds the planner keeps the old index (also asserted).
+Owner and one kind, and owner and two kinds (two ranges), read the new index
+with no `Filter` above it; with all kinds the planner keeps the old index
+(both asserted). No owner and one kind is not served and not pinned.
 
 **Hold at 100,000 and 300,000 desk rows of 425,000, warm local. [V]**
 `TestRunMemoryHoldCensus` (`CHOIR_RUN_MEMORY_HOLD=425000:100000,425000:300000`),
@@ -544,24 +560,24 @@ the production index built by the production step:
 
 | | desk rows 100,000 (20,000 cursor rows) | desk rows 300,000 (60,000 cursor rows) |
 |---|---|---|
-| `ListRunMemoryEntriesForAgent`, before | 461 / 456 ms, 644 MiB | 828 / 810 ms, 1,000 MiB |
-| after (the production query, new index) | 107 / 67 ms, 133 MiB | 249 / 187 ms, 320 MiB |
-| ratio of the best | 6.8 times | 4.3 times |
-| narrow projection on top (not built) | 32 ms, 8.6 MiB | 80 ms, 25.8 MiB |
+| `ListRunMemoryEntriesForAgent`, before | 465 / 454 ms, 644 MiB | 867 / 815 ms, 1,000 MiB |
+| after (the production query, new index) | 107 / 67 ms, 133 MiB | 252 / 184 ms, 320 MiB |
+| ratio of the best | 6.8 times | 4.4 times |
+| narrow projection on top (not built) | 31 ms, 8.6 MiB | 80 ms, 25.8 MiB |
 
 The build, with a `SELECT 1` probe on the write connection every 10 ms:
 
 | | 100,000 desk rows | 300,000 desk rows |
 |---|---|---|
-| build time | 1.06 s (1.12 s whole) | 1.04 s (1.09 s whole) |
-| longest `SELECT 1` wait on `s.db` during it | **1.05 s** | **1.03 s** |
+| build time | 1.13 s (1.19 s whole) | 1.02 s (1.07 s whole) |
+| longest `SELECT 1` wait on `s.db` during it | **1.16 s** | **1.04 s** |
 | probes over 100 ms | 1 (the build is one statement) | 1 |
 
 So the build holds the write connection, and the engine mutex, for its whole
 duration, and the duration is the table's size, not the desk's (the same 425,000
 rows both times). **/health during the build: [V] it blocks.** `/health`'s
 three store reads wait on `s.db` with a 1 s budget (`readHealthStore`); a
-1.05 s hold is just over the budget, so locally it costs one or two
+1.04 to 1.16 s hold is just over the budget, so locally it costs one or two
 `store_stalled` 503s. **[H] on the paper:** the build reads the whole table once,
 and the paper's reads of it are cold: the first-row read of its 14,965 cursor
 rows took 16.6 s, 30 to 500 times the warm local number for a read that
@@ -573,11 +589,11 @@ chosen time, with the paper's reads of the cursor held up for that window
 either way (they are already 16 s each).
 
 **Write cost of the index. [V] local, [H] paper.** Each `AppendRunMemoryEntry`
-now maintains one more tree: the store directory grew 42.4 and 43.5 KiB per
-append before, 54.8 and 55.3 KiB after (+12.5 KiB, +29%) in the two runs (time
-per append unchanged, 9.6 to 9.9 ms). At 3.7 entries a second
+now maintains one more tree: the store directory grew 41.0 and 45.1 KiB per
+append before, 53.9 and 58.4 KiB after (+12.9 and +13.3 KiB, +29%) in the two
+runs (time per append unchanged, 9.1 to 9.7 ms). At 3.7 entries a second
 ([paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md](paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md))
-that is about 46 KiB a second, 2.6% of the paper's modelled 1.77 MiB/s journal
+that is about 48 KiB a second, 2.7% of the paper's modelled 1.77 MiB/s journal
 growth. That journal record's R5 (drop `idx_run_memory_entries_loop_seq`, an
 exact duplicate of `UNIQUE(loop_id, seq)`) removes about as much and is the
 natural pairing; it is not done here.
@@ -590,7 +606,7 @@ natural pairing; it is not done here.
   close and reopen neither drops nor rebuilds it, and its queries are the same
   SQL, so the old binary probably also gets the faster plan **[H]**. The only residue is the
   extra 12.5 KiB per append.
-- *Full rollback.* `DROP INDEX idx_run_memory_entries_agent_kind_owner_created
+- *Full rollback.* `DROP INDEX idx_run_memory_entries_owner_agent_kind_created
   ON run_memory_entries` (a metadata operation, fast). After it the table's row
   hash (`dolt_hashof_table('run_memory_entries')`) is exactly what it was before
   the index existed, and the cursor answer is unchanged. Both facts are logged
@@ -610,8 +626,8 @@ package does not finish in 10 minutes locally (it never did; CI shards it).
 **Heresy delta.** Discovered: the brief's "build at first boot" and the repo's
 rule disagree (resolved by the rule); the build is a whole-table pass whose
 duration on the paper is unknown and blocks `/health` for it; each run-memory
-append already cost 42 KiB of journal locally. Introduced: one more index to
-maintain (+12.5 KiB per append). Repaired: the 16.6 s first read, once the
+append already cost 41 KiB of journal locally. Introduced: one more index to
+maintain (+13 KiB per append). Repaired: the 16.6 s first read, once the
 operation runs (not yet observed on the paper).
 
 **Next, after the operation runs on the paper:** read the
@@ -619,6 +635,63 @@ operation runs (not yet observed on the paper).
 `first_row_ms` of a small multiple of the cursor-row count), then decide on
 shape 1 (keyed cursor state), 4 (in-memory cursor) and 6 (retention), and on
 R5.
+
+## Shape 3, round 2: the witness finding (bunch 160)
+
+Bunch 160: Devin APPROVE (nits only); DeepSeek v4.1 flash REVISE with one HIGH
+and four lows. Answers, tests first (commit `04d733474`, then the code):
+
+- **HIGH, the witness hashes a schema observation, so the agent-leading index
+  would have been a replay drift and a checkpoint refusal. Accepted, and the
+  first pass's claim "the witness hashes rows, not indexes" is corrected above.**
+  The index is now `(owner_id, agent_id, kind, created_at)`. The schema
+  observation test result: **passes with the owner-leading index and fails
+  with the agent-leading one.** `TestRunMemoryKindIndexKeepsTheWitnessSchemaObservation`
+  opens a fresh store (index made at open) and one with the index dropped,
+  closes both, runs the production extractor
+  (`computerversion.DoltStateExtractor`, the configuration of `eventTableWitness`)
+  and asserts every table's `:schema:` observation is equal; a control store with
+  an extra agent-leading index must differ from the fresh one (agent_id becomes
+  `MUL`), so the test can see a drift. Before the reversal the same comparison
+  failed on the agent-leading production index. The comparison does not stand in
+  for a run of the replay probe on the paper, which was not done. **[V]** local.
+- **Low 2, the rollback row hash was logged, not asserted.** It is asserted now:
+  after `DROP INDEX` the `dolt_hashof_table('run_memory_entries')` equals its
+  value before the index existed.
+- **Low 3, a cancel between the og_objects steps and the index step reported
+  `done` with the index absent.** Fixed: a cancelled context at the end of the
+  run is state `cancelled`, and the index is reported absent. Test: the
+  step hook holds the run, the cancel lands, the og part (nothing missing)
+  returns without looking at the context.
+- **Low 4, a `GET` during a run omitted `run_memory_kind_index`.** Fixed: the
+  start probes it (bounded 2 s, best effort) and the status carries it while
+  the run holds the engine; the end of the run refreshes it.
+- **Nit 6, the boot hook's two queries had no deadline and swallowed errors.**
+  Fixed: the hook takes a context with a 5 s deadline and returns its error;
+  `Open` records it as a failed boot phase (`runtime-schema/run-memory-kind-index
+  status=failed`) and goes on, so the open never fails on it.
+- **The no-owner shape** is not served by an owner-leading index and no
+  production caller sends it. Recorded as unserved; the plan test does not pin
+  it.
+
+**Rollout order. [H]** Run `POST /internal/store/derived-columns?action=migrate`
+on the paper before any base rebuild or replay-gated work (a self-development
+checkpoint binding, a replay-completeness probe). With the owner-leading order
+the schema observation is identical with and without the index, so the order is
+not needed for the witness to agree; it is needed for two other reasons. A
+rebuilt or fresh store gets the index at open and a store that has not been
+migrated does not, so until the operation runs the two differ in structure
+(not in any hashed observation), and the faster read exists only on stores that
+ran it. And the build holds the write connection and the engine for its whole
+duration (1.0 to 1.2 s warm, unknown cold), during which a replay probe reading
+live state would wait on it; done first, nothing replay-gated overlaps it. No
+computer ever built the agent-leading index: the first-pass branch was not
+merged.
+
+**Numbers redone with the owner-leading order.** The build-cost and hold tables
+above are from the owner-leading index (the census was rerun): the order changes
+them by under 10%, build 1.02 to 1.13 s, hold of the write connection 1.04 to
+1.16 s, read after 67 ms and 184 ms.
 
 ## Next (not in this pass)
 
