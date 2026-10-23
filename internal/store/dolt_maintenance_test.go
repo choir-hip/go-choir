@@ -248,7 +248,17 @@ func TestStartPeriodicDoltGCTicks(t *testing.T) {
 	dir := t.TempDir()
 	defer stubDiskUsage(doltGCDiskUsage{TotalBytes: 32 * gibBytes, UsedBytes: 32*gibBytes - (100 << 20), AvailBytes: 100 << 20})()
 	ctx, cancel := context.WithCancel(context.Background())
-	StartPeriodicDoltGC(ctx, s, dir, 20*time.Millisecond)
+	done := StartPeriodicDoltGC(ctx, s, dir, 20*time.Millisecond)
+	// Wait the loop out before the deferred stub restore and the store close:
+	// a pass in flight at cancel still reads diskUsageForGC.
+	stop := func() {
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(30 * time.Second):
+			t.Fatal("periodic gc loop did not exit after cancel")
+		}
+	}
 	deadline := time.Now().Add(30 * time.Second)
 	for {
 		if raw := ReadDoltGCDisposition(dir); raw != nil {
@@ -258,12 +268,12 @@ func TestStartPeriodicDoltGCTicks(t *testing.T) {
 			}
 		}
 		if time.Now().After(deadline) {
-			cancel()
+			stop()
 			t.Fatal("periodic gc never ran an online collection")
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	cancel()
+	stop()
 	assertProbeCount(t, s, 50)
 }
 
