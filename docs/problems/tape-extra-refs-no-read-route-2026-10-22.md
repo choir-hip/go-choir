@@ -50,10 +50,39 @@ B, `CORPUSD_PORT=8086` in `nix/node-b.nix`).
   MB of JSON. This is an estimate, not measured on Node B (nothing was run
   there); `count` in the answer is the measurement.
 
+## Operator call (Node B, host shell)
+
+Port 8086 is in `choir_internal_token_allowed`'s set (8083, 8084, 8086, 8087),
+so `scripts/lib/choir_internal.sh` sends the credential to it and to no other
+port; no policy change. From the host shell (never a guest, never a proxy):
+
+```
+. scripts/lib/choir_internal.sh
+choir_internal_curl http://127.0.0.1:8086/internal/platform/artifact-gc/tape/extra-refs \
+  -fsS > $W/extra-refs.json
+jq -e '.queries == 5 and (.digests | length) == .count' $W/extra-refs.json \
+  && jq -r '.digests[]' $W/extra-refs.json > $W/keep-digests.txt
+```
+
+`-f` makes a 403/500/507 a failed call (no file content to mistake for a keep
+set); `jq -e` fails if the shape is wrong. An empty keep set is `"digests":[]`
+and a zero-line file, which `taperepack delete --apply` refuses unless
+`--keep-digests-empty-ok`. Take the file after the census and before the
+delete dry run, and use the same file for the dry run and the apply (checklist
+item 6 in the small-file-growth doc). If `jq -r` prints a line that is not 64
+lowercase hex, stop.
+
+Not run here: no call was made against Node B, staging or any database; the
+route is proved by `internal/platform/tape_extra_refs_test.go`
+(`go test ./internal/platform -run TapeExtraRefs`): the answer equals the
+digests `tapeExtraRefs` adds, a dropped table gives 500 and no digests, an
+over-cap set gives 507 and no digests, and a guest, a call without the marker or
+with a wrong credential, and POST are refused.
+
 ## Heresy delta
 
 - discovered: the sweep's database-side keep set is write-only (built, used,
   discarded), so a second deleter on the host cannot honor it.
 - introduced: none intended (a read-only route behind the existing internal
   authority).
-- repaired: none yet.
+- repaired: the keep set is readable (route landed); the repack blocker (item 6) is satisfiable once this deploys.
