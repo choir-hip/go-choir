@@ -12,6 +12,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/storeschema"
 )
 
 // BaseSource is the platform read surface a verified base install consumes:
@@ -177,6 +178,15 @@ func installDescriptor(ctx context.Context, src BaseSource, storeDir, markerName
 				}
 			}
 		}
+	}
+
+	// The stream_seq lease untrust marker goes into the staged workspace before
+	// anything is renamed into the live store path: a base is untrusted by
+	// construction (the publisher marks every blob; this covers an older blob
+	// and both entry points, InstallVerifiedBase and InstallPinnedBase). A
+	// failure refuses the install.
+	if err := storeschema.WriteLeaseUntrusted(choirstore.TextureWorkspacePath(targetMarkerInStaging), "install"); err != nil {
+		return Descriptor{}, fmt.Errorf("%w: lease untrust marker: %v", ErrBaseRefused, err)
 	}
 
 	entries, err := os.ReadDir(stagingDir)

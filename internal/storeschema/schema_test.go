@@ -48,7 +48,7 @@ func TestReadRejectsCorruptReceipt(t *testing.T) {
 // The epoch fences the updater's Apply of an epoch-declaring release only
 // (see Version and the design's status section for the unfenced paths).
 func TestVersionCoversTheEventTable(t *testing.T) {
-	if Version != 2 {
-		t.Fatalf("storeschema.Version = %d, want 2 (choir_events, deploy 1)", Version)
+	if Version < 2 {
+		t.Fatalf("storeschema.Version = %d, want at least 2 (choir_events, deploy 1; epoch 3 is the stream_seq lease)", Version)
 	}
 }

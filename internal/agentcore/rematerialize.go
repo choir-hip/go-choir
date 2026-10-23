@@ -18,6 +18,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/storeschema"
 	"github.com/yusefmosiah/go-choir/internal/updater"
 )
 
@@ -210,6 +211,15 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 	if err := staged.Close(); err != nil {
 		_ = os.RemoveAll(stagingRoot)
 		return report, fmt.Errorf("rematerialize: close staged realization: %w", err)
+	}
+	// The reconstructed workspace holds the lease as of the target; the live
+	// process may have published numbers after it that exist only on the tape.
+	// The marker goes into the staged workspace before the flip, so the next
+	// boot takes the exact seed (docs/problems/stream-seq-high-water-mark-design-2026-10-23.md,
+	// section 3).
+	if err := storeschema.WriteLeaseUntrusted(stagedWorkspace, "rematerialize"); err != nil {
+		_ = os.RemoveAll(stagingRoot)
+		return report, fmt.Errorf("rematerialize: lease untrust marker: %w", err)
 	}
 
 	if err := updater.RestagePinnedRelease(rt.selfdevUpdaterRoot, checkpoint.Request.ReleaseDigest); err != nil {

@@ -848,6 +848,12 @@ type guestObservabilityResponse struct {
 	// per-kind event counts and tape batch sizes that price batching, and the
 	// sealer's counters when it is on. Read-only.
 	TelemetryBatching *store.TelemetryStats `json:"telemetry_batching,omitempty"`
+	// StreamSeqLease is the stream_seq lease: state, the durable block,
+	// whether the lease was trusted and why not, how the process seeded and
+	// how long it took (docs/problems/stream-seq-high-water-mark-design-2026-10-23.md,
+	// section 6). Served from a snapshot: reading it never waits on the
+	// allocator.
+	StreamSeqLease *store.StreamSeqLeaseStats `json:"stream_seq_lease,omitempty"`
 	// GuestCheckpoint is the guest's Dolt history-commit cadence: the mode,
 	// inline commits (time writers waited) and background commits, and
 	// what is not yet committed (ARCH-13). Read-only.
@@ -1002,6 +1008,8 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 		resp.StorePools = h.rt.store.PoolStats()
 		telemetry := h.rt.store.TelemetryStats()
 		resp.TelemetryBatching = &telemetry
+		lease := h.rt.store.StreamSeqLeaseStats()
+		resp.StreamSeqLease = &lease
 		checkpoint := h.rt.store.CheckpointStats()
 		resp.GuestCheckpoint = &checkpoint
 		if tasks, ok := boundedObservabilityRead(observabilityReadBudget, func() *managementTaskObservability {

@@ -250,13 +250,20 @@ type Store struct {
 	// of silently writing a non-event-backed mutation. Set by
 	// Runtime.SetKernelMode via Store.SetKernelMode.
 	kernelMode atomic.Bool
-	// maxStreamSeq is the in-memory high-water mark for EventRecord.StreamSeq.
-	// AppendEvent is serialized under eventMu and the Dolt store is
-	// single-process, so a lazy seed from the newest page + increment under
-	// the same mutex replaces the per-append full-objectgraph scan that OOM'd
-	// owner-scale computers (docs/problems/sa2-appendevent-unbounded-scan-*).
-	maxStreamSeq    int64
-	streamSeqSeeded bool
+	// maxStreamSeq is the in-memory high-water mark for EventRecord.StreamSeq:
+	// the last number the allocator handed out. It is only ever raised by the
+	// allocator (allocateStreamSeqLocked) and by a completed seed
+	// (runSeeder), under eventMu, and it never exceeds lease.reserved, the
+	// durable lease (stream_seq_lease.go). A restart seeds it from the lease
+	// on the tape, or from the exact seed when the lease is not trusted
+	// (docs/problems/stream-seq-high-water-mark-design-2026-10-23.md).
+	maxStreamSeq int64
+	// lease is the stream_seq lease allocator state, under eventMu.
+	lease leaseAllocator
+	// leaseWriteHook and leaseScanHook are test seams for the lease writes and
+	// the exact seed's pages; production never sets them (a source guard).
+	leaseWriteHook func(phase string, reserved int64) error
+	leaseScanHook  func(page int)
 	// eventSeqs is the in-memory high-water mark of EventRecord.Seq per
 	// (run, owner), under eventMu. Each entry is seeded once per process
 	// from the store (the same bounded read the per-append scan did), so it
@@ -431,6 +438,7 @@ func (s *Store) closeFailedOpen(openErr error) error {
 // (open again, its timer re-armed) and the telemetry sealer. A cancelled
 // derived-column migration stays cancelled.
 func (s *Store) undoFailedClose(wasClosed, telemetryStopped bool) {
+	s.resumeLeaseWork()
 	if telemetryStopped {
 		s.resumeTelemetry()
 	}
@@ -860,6 +868,11 @@ func (s *Store) ReplaceWorkspace(quarantineDir string) (*Store, WorkspaceReplace
 	if err != nil {
 		return nil, receipt, fmt.Errorf("runtime store: replace workspace: open current schema: %w", err)
 	}
+	// Benign today (the fresh workspace has no lease row, and the runtime
+	// restarts afterwards), and it makes the swap-point guard uniform.
+	if err := storeschema.WriteLeaseUntrusted(fresh.TexturePath(), leaseMarkerReplace); err != nil {
+		return nil, receipt, errors.Join(fmt.Errorf("runtime store: replace workspace: lease untrust marker: %w", err), fresh.Close())
+	}
 	return fresh, receipt, nil
 }
 
@@ -884,6 +897,16 @@ func Open(dbPath string) (*Store, error) {
 	}
 	donePrepare(nil)
 	log.Printf("store: open fresh=%t", freshStore)
+
+	// The receipt this workspace carried before this Open rewrites it. It is
+	// read here, before anything can change it: receipt 3 written over a
+	// receipt 2 would hide that a binary that does not know the stream_seq
+	// lease ran in between (docs/problems/stream-seq-high-water-mark-design-2026-10-23.md,
+	// section 3). The decision to write the untrust marker is made below, just
+	// before the receipt is rewritten.
+	priorWorkspace := deriveTextureWorkspacePath(dbPath)
+	priorReceipt, priorFound, priorReadErr := storeschema.Read(filepath.Join(priorWorkspace, storeschema.File))
+	priorHadData := workspaceHoldsData(priorWorkspace)
 
 	doneWorkspace := objectgraph.BootPhase("store: open", "workspace-open")
 	db, workspacePath, connector, err := openTextureWorkspaceDB(dbPath)
@@ -980,6 +1003,17 @@ func Open(dbPath string) (*Store, error) {
 	// whose binary does not understand this store — the vm-3dc68688
 	// stale-binary failure class.
 	doneEpoch := objectgraph.BootPhase("store: open", "store-schema-epoch")
+	// A prior receipt below the epoch that writes leases (or unreadable, or
+	// absent on a workspace that holds data) writes the untrust marker,
+	// durably, BEFORE the receipt is rewritten. A marker-write failure aborts
+	// Open here: there is no state in which receipt 3 exists without the
+	// marker the old receipt called for.
+	if reason := priorReceiptUntrustReason(priorFound, priorReceipt.Version, priorReadErr, priorHadData); reason != "" {
+		if err := storeschema.WriteLeaseUntrusted(workspacePath, reason); err != nil {
+			doneEpoch(err)
+			return nil, s.closeFailedOpen(err)
+		}
+	}
 	if err := storeschema.Write(workspacePath); err != nil {
 		doneEpoch(err)
 		return nil, s.closeFailedOpen(err)
@@ -1273,6 +1307,9 @@ func (s *Store) Reopen(path string) error {
 	*live = Store{}
 	s.closedOK = false
 	s.reopenCheckpoint()
+	// The lease state (ready or unseeded, the reserved block, the counters)
+	// stays as it was; only the refusal Close set is lifted.
+	s.resumeLeaseWork()
 	return nil
 }
 
@@ -1288,6 +1325,9 @@ func (s *Store) Close() error {
 		}
 		return nil
 	}
+	// The lease goroutines (seeder, refill) stop first: they append through the
+	// tape and read the pools Close is about to close.
+	s.stopLeaseWork()
 	// Graceful close seals the telemetry window first. A crash does not, which
 	// is the loss the ruling allows.
 	telemetryStopped := s.closeTelemetry()
@@ -2339,9 +2379,13 @@ func (s *Store) GetLatestPassivatedLifecycleRunByAgent(ctx context.Context, owne
 	})
 }
 
-// allocateEventSeqLocked assigns rec.Seq (the next number for the run) and
-// rec.StreamSeq (the next store-wide number) from the in-memory high-water
-// marks, seeding them from the store on first use. The caller holds eventMu.
+// allocateEventSeqLocked assigns rec.StreamSeq (the next store-wide number,
+// always at or below the durable lease) and rec.Seq (the next number for the
+// run) from the in-memory high-water marks, seeding them from the store on
+// first use. The caller holds eventMu, which the stream_seq allocation
+// releases while it waits for a seed or a refill and holds again on return;
+// it takes the stream number first, so a wait never leaves a run's seq ahead
+// of its stream_seq. On a stream error nothing is taken.
 // It is the only allocator of both numbers: AppendEvent calls it, and so does
 // AllocateEventSeq for the events folded into a lifecycle batch. sl is the
 // telemetry sealer or nil.
@@ -2351,6 +2395,9 @@ func (s *Store) allocateEventSeqLocked(ctx context.Context, rec *types.EventReco
 	// Runtime.SetHealth).
 	if rec.OwnerID == "" {
 		rec.OwnerID = "__system__"
+	}
+	if err := s.allocateStreamSeqLocked(ctx, rec); err != nil {
+		return eventSeqKey{}, err
 	}
 
 	// Next sequence number for this run: an in-memory high-water mark, seeded
@@ -2402,163 +2449,13 @@ func (s *Store) allocateEventSeqLocked(ctx context.Context, rec *types.EventReco
 	}
 	rec.Seq = maxSeq + 1
 	s.eventSeqs[key] = rec.Seq
-
-	// StreamSeq: in-memory high-water mark incremented under eventMu, seeded
-	// once per process from the store (seedStreamSeq). The unbounded
-	// ListObjects(100000) scan it replaced walked the entire event kind per
-	// append, and the newest-500 ListObjects after it still read every event
-	// of the kind at boot (docs/problems/stream-seq-seed-scans-the-event-kind-at-boot-2026-10-23.md).
-	if !s.streamSeqSeeded {
-		if err := s.seedStreamSeq(ctx, sl); err != nil {
-			return eventSeqKey{}, err
-		}
-	}
-	s.maxStreamSeq++
-	rec.StreamSeq = s.maxStreamSeq
 	return key, nil
 }
 
 // streamSeedWindows are the sizes, in objects of any kind, of the windows
-// seedStreamSeq reads through the newest objects looking for an event. A
-// variable so a test can shrink them.
+// the lease's cross-check reads through the newest objects looking for an
+// event. A variable so a test can shrink it.
 var streamSeedWindows = []int{2000, 50000}
-
-// seedStreamSeq sets maxStreamSeq above every stream_seq the store holds, in
-// work bounded by streamSeedWindows and not by the size of the event history.
-// The caller holds eventMu.
-//
-// og_objects half: the newest event carries the maximum, as the seed has
-// always assumed, so the maximum over the events among the newest objects of
-// any kind is the answer. The newest objects are read through
-// idx_og_objects_updated backwards, kind and metadata only (the metadata
-// carries stream_seq; the body is never read). There is no (object_kind,
-// updated_at) index, and the engine plans "this kind ordered by updated_at"
-// as the kind index and a sort of every row of the kind, which held the
-// engine for 104 s on the paper; this read cannot take that plan. A window
-// holding no event is widened to the next.
-//
-// When no window holds a usable event, in order:
-//   - the whole store was read and held none: the og half is 0;
-//   - a window event has no parseable stream_seq in its metadata, or the
-//     kind index says events exist (every window was full of other kinds):
-//     the exact read it used before (seedStreamSeqExact: the kind index, the
-//     500 newest events by updated_at, with bodies). That is the 104 s scan
-//     on a large history, so it is slow, and it is never silent: it logs the
-//     case and its duration. It runs whatever choir_events holds, because a
-//     window miss says nothing about the table's newest row (stamped table
-//     events and unstamped og events coexist), and the table's maximum joins
-//     through max();
-//   - the kind holds no events at all: 0.
-//
-// The exact read rests on the same assumption as the windows, the newest
-// events by updated_at carry the maximum, over a different read (the 500
-// newest events of the kind instead of the events among the newest objects).
-//
-// The reuse band that remains is the assumption itself, not the bound: an
-// event whose stream_seq is the maximum but whose updated_at (the caller's
-// Timestamp, or CreatedAt, or a wall clock that stepped back) puts it behind
-// the newest streamSeedWindows[last] objects, while another event is inside a
-// window: a found event suppresses the exact read, so nothing sees the event
-// behind the windows. The old seed caught a case this one does not
-// (an event inside the newest 500 events but outside the newest 50,000
-// objects). A persisted high-water mark (option 2 of the problem record)
-// closes the band; it is not built here.
-// The event table half (eventTableNewestStreamSeq) is bounded by its key.
-func (s *Store) seedStreamSeq(ctx context.Context, sl *telemetrySealer) error {
-	graph := s.ogStore
-	if graph == nil {
-		return fmt.Errorf("append event: seed stream_seq: object graph not initialized")
-	}
-	var maxSeq int64
-	found, sawAll, unusable := false, false, false
-	for _, window := range streamSeedWindows {
-		headers, err := graph.ListNewestObjectHeaders(ctx, window)
-		if err != nil {
-			return fmt.Errorf("append event: seed stream_seq: %w", err)
-		}
-		for _, h := range headers {
-			if h.Kind != ogKindEvent {
-				continue
-			}
-			var meta struct {
-				StreamSeq *int64 `json:"stream_seq"`
-			}
-			if err := json.Unmarshal(h.Metadata, &meta); err != nil || meta.StreamSeq == nil {
-				unusable = true // an event whose number this read cannot see
-				continue
-			}
-			found = true
-			maxSeq = max(maxSeq, *meta.StreamSeq)
-		}
-		sawAll = len(headers) < window
-		if found || sawAll {
-			break
-		}
-	}
-	tableStream, err := s.eventTableNewestStreamSeq(ctx)
-	if err != nil {
-		return err
-	}
-	reason := ""
-	switch {
-	case unusable:
-		reason = "an event in the newest objects has no parseable stream_seq in its metadata"
-	case found, sawAll:
-		// the bounded answer, or the whole store read with no event
-	default:
-		// Every window was full of other kinds (or there is no window). The
-		// table's contents do not matter here: a window miss says nothing
-		// about the table's newest row, and stamped table events and unstamped
-		// og events coexist (a stamp rollback, a mixed fleet, a backfill). One
-		// seek of the kind index tells "no events at all" from "events out
-		// of reach".
-		exists, err := graph.HasObjectOfKind(ctx, ogKindEvent)
-		if err != nil {
-			return fmt.Errorf("append event: seed stream_seq: %w", err)
-		}
-		if exists {
-			widest := 0
-			if len(streamSeedWindows) > 0 {
-				widest = streamSeedWindows[len(streamSeedWindows)-1]
-			}
-			reason = fmt.Sprintf("choir.event objects exist but none is among the newest %d objects, out of reach of the bounded seed", widest)
-		}
-	}
-	if reason != "" {
-		started := time.Now()
-		exact, err := s.seedStreamSeqExact(ctx)
-		if err != nil {
-			return err
-		}
-		maxSeq = max(maxSeq, exact)
-		log.Printf("store: stream_seq seed: %s; took the exact read of the kind, max stream_seq %d, took %s", reason, exact, time.Since(started).Round(time.Millisecond))
-	}
-	s.maxStreamSeq = max(s.maxStreamSeq, maxSeq, tableStream) // the table's maximum joins whichever og answer stood
-	s.streamSeqSeeded = true
-	if sl != nil && s.maxStreamSeq > 0 {
-		s.maxStreamSeq += telemetrySeqGap // see the per-run seed above
-	}
-	return nil
-}
-
-// seedStreamSeqExact is the seed's old read, kept for the case the windows
-// miss: the newest 500 events of the kind by updated_at, with bodies. It is
-// linear in the event history (the kind index, a TopN over every event).
-func (s *Store) seedStreamSeqExact(ctx context.Context) (int64, error) {
-	newest, err := s.ogStore.ListObjects(ctx, objectgraph.ListFilter{Kind: ogKindEvent, Limit: 500})
-	if err != nil {
-		return 0, fmt.Errorf("append event: seed stream_seq (exact read): %w", err)
-	}
-	var maxSeq int64
-	for _, obj := range newest {
-		var ev types.EventRecord
-		if err := ogDecode(obj, &ev); err != nil {
-			continue
-		}
-		maxSeq = max(maxSeq, ev.StreamSeq)
-	}
-	return maxSeq, nil
-}
 
 // AllocateEventSeq gives an event that is written by some path other than
 // AppendEvent its seq and stream_seq. Run-state events folded into a lifecycle

@@ -129,6 +129,18 @@ func appendN(t *testing.T, s *Store, prefix string, n int) []int64 {
 	return out
 }
 
+// appendOld appends n events stamped an hour ago, so objects written after
+// them (seedWakeOutbox stamps now) sit in the newer windows.
+func appendOld(t *testing.T, s *Store, prefix string, n int) []int64 {
+	t.Helper()
+	base := time.Now().UTC().Add(-time.Hour)
+	out := make([]int64, 0, n)
+	for i := 0; i < n; i++ {
+		out = append(out, appendSeedEvent(t, s, fmt.Sprintf("%s-%d", prefix, i), "run-"+prefix, base.Add(time.Duration(i)*time.Second)).StreamSeq)
+	}
+	return out
+}
+
 func readLeaseRow(t *testing.T, s *Store) (leaseRow, bool) {
 	t.Helper()
 	row, found, err := s.readLease(leaseCtx())
@@ -151,7 +163,9 @@ func pageOpCalls(s *Store) int {
 func eventKindReads(s *Store) []string {
 	var out []string
 	for op, st := range s.EngineMutexStats() {
-		if st.Calls > 0 && strings.Contains(op, "choir.event") {
+		// The per-run seq seed (ListObjectsByMetadata by run_id) is the run
+		// counter's own, not the stream_seq seed.
+		if st.Calls > 0 && strings.Contains(op, "choir.event") && !strings.Contains(op, "ListObjectsByMetadata") {
 			out = append(out, fmt.Sprintf("%s x%d", op, st.Calls))
 		}
 	}
@@ -255,7 +269,7 @@ func TestLeaseObservabilityBlockShape(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{"state", "reserved_through", "allocated_through", "trusted", "untrust_reason", "seeded_from",
-		"seed_ms", "cross_check_max", "refill_failed", "last_lease_error", "marker_present"}
+		"seed_ms", "cross_check_max", "refill_failed", "last_lease_error", "marker_present", "seed_failed", "lease_tombstoned"}
 	for _, key := range want {
 		if _, ok := fields[key]; !ok {
 			t.Errorf("observability block lacks %q: %s", key, raw)
@@ -532,12 +546,12 @@ func TestInconsistentLeaseRowsAreUntrusted(t *testing.T) {
 func TestLegitimateLeaseWithABlindCrossCheckIsTrustedEveryBoot(t *testing.T) {
 	shrinkSeedWindows(t, 20, 200)
 	s, path := openSeedStore(t)
-	appendN(t, s, "a", 5)
+	appendOld(t, s, "a", 5)
 	row, _ := readLeaseRow(t, s)
 	seedWakeOutbox(t, s, 400, 0) // newer objects of another kind: both windows miss every event
 	for boot := 1; boot <= 2; boot++ {
 		s = reopenAt(t, s, path)
-		n := appendNext(t, s, fmt.Sprintf("boot-%d", boot))
+		n := appendSeedEvent(t, s, fmt.Sprintf("boot-%d", boot), "run-boot", time.Now().UTC().Add(-time.Hour)).StreamSeq
 		st := leaseStats(s)
 		if !st.Trusted || st.SeededFrom != "lease" || st.UntrustReason != "" {
 			t.Fatalf("boot %d: stats = %+v, want trusted from the lease", boot, st)
@@ -1419,7 +1433,7 @@ func TestCrossCheckKeepsTheWindows(t *testing.T) {
 	}{"first window holds an event": {8, 1}, "widens past other kinds": {60, 2}} {
 		t.Run(name, func(t *testing.T) {
 			s, path := openSeedStore(t)
-			appendN(t, s, "a", 5)
+			appendOld(t, s, "a", 5)
 			seedWakeOutbox(t, s, tc.others, 0)
 			s = reopenAt(t, s, path)
 			appendNext(t, s, "after")
@@ -1442,7 +1456,7 @@ func TestCrossCheckSeesTheTableNewest(t *testing.T) {
 	if err := h.store.AppendEvent(ctx, first); err != nil {
 		t.Fatal(err)
 	}
-	row, _ := h.store.readLease(ctx)
+	row, _, _ := h.store.readLease(ctx)
 	h.appendStamped(eventTableRecord("t-1", "run-t", "owner-1", "traj-t", types.EventToolResult, 1, row.Reserved+9, eventTableBase.Add(time.Second)))
 	h.reopen()
 	next := h.event("a-2", "run-a", "owner-1", types.EventRunStarted, eventTableBase.Add(time.Minute))
@@ -1454,5 +1468,103 @@ func TestCrossCheckSeesTheTableNewest(t *testing.T) {
 	}
 	if st := leaseStats(h.store); st.UntrustReason != "violated" {
 		t.Fatalf("stats = %+v, want violated", st)
+	}
+}
+
+// Bunch 169, medium-low: the seeder's retry has a backoff and a counter. A
+// failing seed rescans the event history; an allocation arriving every few
+// milliseconds must not start a rescan each time, and the operator must see
+// the failures without SQL. Choice: backoff (doubling per consecutive
+// failure, capped) plus a counter, surfaced in last_lease_error and
+// seed_failed. The head-delta retry (re-reading only rows since the scan's
+// head) was not built: it needs a classification of every op kind since the
+// scan's head, and an error in it silently reuses a stale scan.
+func TestSeederRetriesWithABackoffAndACounter(t *testing.T) {
+	shrinkLease(t, 8)
+	leaseRefillBackoff = 60 * time.Millisecond
+	leaseSeedingDeadlineFloor = 1500 * time.Millisecond
+	s, _ := openSeedStore(t)
+	var mu sync.Mutex
+	var attempts []time.Time
+	s.leaseWriteHook = func(phase string, reserved int64) error {
+		if phase != "seed" {
+			return nil
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		attempts = append(attempts, time.Now())
+		if len(attempts) <= 3 {
+			return errors.New("tape outage")
+		}
+		return nil
+	}
+	n := appendNext(t, s, "after-failures")
+	if n <= streamSeqExactGap {
+		t.Fatalf("stream_seq = %d", n)
+	}
+	st := leaseStats(s)
+	if st.SeedFailed != 3 {
+		t.Fatalf("seed_failed = %d, want 3: %+v", st.SeedFailed, st)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(attempts) != 4 {
+		t.Fatalf("the seed ran %d times, want 3 failures and 1 success", len(attempts))
+	}
+	for i := 1; i < len(attempts); i++ {
+		want := leaseRefillBackoff << (i - 1) // 60ms, 120ms, 240ms
+		if gap := attempts[i].Sub(attempts[i-1]); gap < want {
+			t.Fatalf("retry %d came %v after the failure, before its %v backoff", i, gap, want)
+		}
+	}
+	if st.State != "ready" {
+		t.Fatalf("state = %q", st.State)
+	}
+}
+
+func TestSeederFailureNamesTheAttemptInLastLeaseError(t *testing.T) {
+	shrinkLease(t, 8)
+	leaseSeedingDeadlineFloor = 150 * time.Millisecond
+	s, _ := openSeedStore(t)
+	s.leaseWriteHook = func(phase string, reserved int64) error { return errors.New("tape outage") }
+	rec := &types.EventRecord{EventID: "x", RunID: "run-x", OwnerID: "alice", Kind: types.EventRunProgress, Payload: json.RawMessage(`{}`)}
+	if err := s.AppendEvent(leaseCtx(), rec); err == nil {
+		t.Fatal("append succeeded with no lease")
+	}
+	st := leaseStats(s)
+	if !strings.Contains(st.LastLeaseError, "seed attempt ") || !strings.Contains(st.LastLeaseError, "tape outage") {
+		t.Fatalf("last_lease_error = %q", st.LastLeaseError)
+	}
+	if st.SeedFailed < 1 {
+		t.Fatalf("seed_failed = %d", st.SeedFailed)
+	}
+}
+
+// Bunch 169, low: a tombstoned lease row makes the next boot untrusted; the
+// seeder logs it and counts it.
+func TestTombstonedLeaseRowIsUntrustedLoggedAndCounted(t *testing.T) {
+	s, path := openSeedStore(t)
+	appendN(t, s, "a", 3)
+	row, _ := readLeaseRow(t, s)
+	obj, err := s.ogStore.GetObject(leaseCtx(), leaseCanonicalID(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	obj.Tombstone = true // a tombstone passes the fence, as in CheckWrite
+	if err := s.ogStore.PutObject(leaseCtx(), obj); err != nil {
+		t.Fatal(err)
+	}
+	s = reopenAt(t, s, path)
+	buf := captureLog(t)
+	n := appendNext(t, s, "after")
+	st := leaseStats(s)
+	if st.Trusted || st.SeededFrom != "exact" || st.LeaseTombstoned != 1 {
+		t.Fatalf("stats = %+v, want untrusted, exact, lease_tombstoned=1", st)
+	}
+	if !strings.Contains(buf.String(), "tombstoned") {
+		t.Fatalf("a tombstoned lease was not logged:\n%s", buf.String())
+	}
+	if n <= row.Reserved-streamSeqLeaseBlock {
+		t.Fatalf("stream_seq %d is not above the stored numbers", n)
 	}
 }

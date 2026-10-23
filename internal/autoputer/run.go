@@ -783,6 +783,16 @@ func runReplayPhase(boot *startupFailer, gate *replayHealthGate, appender *compu
 			boot.fatalf("autoputer: vocabulary migration refused: %v", migErr)
 		}
 		bootMark("vocab_fenced") // forward-migrate + serving fence complete
+		// The eager stream_seq seed: replay has finished, so the local head is
+		// the platform head and the exact scan (a computer with no trusted
+		// lease pays it once) cannot race an applied row. Event appends that
+		// arrive first wait for it rather than fail. The goroutine is the
+		// store's own and ends with its Close, not with this boot phase
+		// (docs/problems/stream-seq-high-water-mark-design-2026-10-23.md,
+		// section 4).
+		if !replayOnly {
+			db.StartStreamSeqSeed()
+		}
 	}
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {

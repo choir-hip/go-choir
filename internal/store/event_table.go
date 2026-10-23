@@ -238,6 +238,25 @@ func eventTableNewestStreamSQL() (string, []any) {
 	return `SELECT stream_seq FROM choir_events ORDER BY tape_seq DESC, op_index DESC LIMIT 500`, nil
 }
 
+// The exact stream_seq seed's table half: the maximum over every owner by
+// per-owner reverse seeks on (owner_id, stream_seq), owners listed by
+// skip-seeks on the same index. No index led by stream_seq exists (the DDL is
+// frozen, section 2.3), and a MAX() over the column plans as a GroupBy over
+// every row; the plan test pins that these two statements are served by
+// idx_choir_events_owner_stream with no sort.
+
+// eventTableNextOwnerSQL is the next owner after afterOwner, in owner order.
+func eventTableNextOwnerSQL(afterOwner string) (string, []any) {
+	return `SELECT owner_id FROM choir_events WHERE owner_id > ? ORDER BY owner_id ASC LIMIT 1`, []any{afterOwner}
+}
+
+// eventTableOwnerMaxStreamSQL is one owner's greatest stream_seq: one reverse
+// seek. The ORDER BY names the whole index prefix, the equality column
+// included, as the other readers do.
+func eventTableOwnerMaxStreamSQL(ownerID string) (string, []any) {
+	return `SELECT stream_seq FROM choir_events WHERE owner_id = ? ORDER BY owner_id DESC, stream_seq DESC LIMIT 1`, []any{ownerID}
+}
+
 // eventTableEntry is one event of a union read, from either table.
 type eventTableEntry struct {
 	canonicalID string

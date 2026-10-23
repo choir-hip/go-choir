@@ -54,6 +54,11 @@ const (
 	WriterRuntime Writer = "system:runtime"
 	// WriterCorpusd is the publication layer (Store B).
 	WriterCorpusd Writer = "system:corpusd"
+	// WriterStore is the VM store acting for itself, not for a desk: the
+	// stream_seq lease (choir.stream_seq_lease), written only by the store's
+	// allocator behind the capability fence in CheckWriteAs. It is not
+	// WriterRuntime: a runtime kind admits every declared writer.
+	WriterStore Writer = "system:store"
 	// WriterOwner is the owner's own edit path. It is declared by a write; it
 	// is never a kind's writer. A kind admits it only with OwnerEdits.
 	WriterOwner Writer = "owner"
@@ -62,7 +67,7 @@ const (
 // BuiltinWriters are the writers a built-in kind may name.
 var BuiltinWriters = map[Writer]bool{
 	WriterTexture: true, WriterManagement: true, WriterEngineering: true, WriterResearch: true,
-	WriterAutoradio: true, WriterRuntime: true, WriterCorpusd: true,
+	WriterAutoradio: true, WriterRuntime: true, WriterCorpusd: true, WriterStore: true,
 }
 
 var appDeskWriter = regexp.MustCompile(`^desk:[a-z][a-z0-9_-]{1,31}$`)
@@ -218,6 +223,12 @@ func CheckWriteAs(ctx context.Context, objects []Object, edges []Edge) error {
 	if err := CheckWrite(objects, edges); err != nil {
 		return err
 	}
+	// The hard fence, ahead of the mode check so it holds in off, observe and
+	// enforce alike: a lease written by anyone but the store's allocator can
+	// burn the number space (a forged high R) or reissue numbers (a low one).
+	if err := checkStreamSeqLeaseFence(ctx, objects); err != nil {
+		return err
+	}
 	mode := WriterGateMode(writerGateMode.Load())
 	if mode == WriterGateOff {
 		return nil
@@ -275,5 +286,47 @@ func (r *Registry) RegisterKindChecked(k KindRegistration) error {
 		return nil
 	}
 	r.kinds[k.Kind] = k
+	return nil
+}
+
+// ErrLeaseFence refuses a write of the stream_seq lease kind by anything but
+// the store's own allocator.
+var ErrLeaseFence = errors.New("objectgraph: stream_seq lease written outside the store's allocator")
+
+// KindStreamSeqLease is the kind of the stream_seq lease object
+// (docs/problems/stream-seq-high-water-mark-design-2026-10-23.md): the highest
+// stream_seq this computer may hand out, written ahead in blocks through the
+// projection interceptor.
+const KindStreamSeqLease ObjectKind = "choir.stream_seq_lease"
+
+type streamSeqLeaseCapabilityKey struct{}
+
+// WithStreamSeqLeaseCapability returns a context that admits a write of
+// KindStreamSeqLease. Its only non-test caller is
+// internal/store/stream_seq_lease.go (a source guard pins it). The key is
+// unexported, so nothing outside this package can forge the capability.
+func WithStreamSeqLeaseCapability(ctx context.Context) context.Context {
+	return context.WithValue(ctx, streamSeqLeaseCapabilityKey{}, true)
+}
+
+func hasStreamSeqLeaseCapability(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	ok, _ := ctx.Value(streamSeqLeaseCapabilityKey{}).(bool)
+	return ok
+}
+
+// checkStreamSeqLeaseFence refuses any non-tombstone lease object unless ctx
+// carries the lease capability. A tombstone passes, as in CheckWrite.
+func checkStreamSeqLeaseFence(ctx context.Context, objects []Object) error {
+	for _, obj := range objects {
+		if obj.ObjectKind != KindStreamSeqLease || obj.Tombstone {
+			continue
+		}
+		if !hasStreamSeqLeaseCapability(ctx) {
+			return fmt.Errorf("%w: object %s", ErrLeaseFence, obj.CanonicalID)
+		}
+	}
 	return nil
 }
