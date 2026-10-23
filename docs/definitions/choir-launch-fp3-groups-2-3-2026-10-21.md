@@ -275,9 +275,12 @@ Cut 2 (group 3: 239a23c02 .. 93205a30d), after the deploy:
 2. SEC-11: on Node B, `curl -s -o /dev/null -w '%{http_code}' -H 'X-Internal-Caller: true' 'http://127.0.0.1:8082/internal/platform/objects?owner=x&computer=y'`
    answers (observe allows) and the proxy journal shows
    "hostauth: observe: would refuse ... /internal/platform/objects".
-   The same request with the marker and the credential,
-   `curl -s -o /dev/null -w '%{http_code}' -H 'X-Internal-Caller: true' -H @/var/lib/go-choir/secrets/internal-service-token.header 'http://127.0.0.1:8082/internal/platform/objects?owner=x&computer=y'`,
-   answers 200 and logs nothing. The credential is checked in addition to
+   The same request with the marker and the host-internal credential
+   answered 200 and logged nothing at deploy T. Do not re-run that half by
+   hand: the guest-token policy (`scripts/selftest-guest-token`,
+   `scripts/lib/choir_internal.sh`) sends the credential only to the
+   internal ports 8083, 8084, 8086 and 8087, never to the proxy's 8082;
+   the proxy's own hostauth tests cover it. The credential is checked in addition to
    the marker, not instead of it: the credential alone answers 403
    "internal caller required" (corrected 2026-10-22 after deploy T's
    proof). Guest paths unchanged: a computer's story publish and capture
