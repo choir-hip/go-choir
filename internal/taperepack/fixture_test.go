@@ -61,6 +61,15 @@ func (f *fixture) pin(computer, namespace, mediaType string, body []byte) (strin
 
 func (f *fixture) receipt(computer, namespace, mediaType, digest string, length int) string {
 	f.t.Helper()
+	raw := f.receiptRaw(computer, namespace, mediaType, digest, length)
+	rd := hexSum(raw)
+	f.write("sha256/pin-receipts/"+rd+".json", raw)
+	return rd
+}
+
+// receiptRaw is the signed receipt's bytes, written nowhere.
+func (f *fixture) receiptRaw(computer, namespace, mediaType, digest string, length int) []byte {
+	f.t.Helper()
 	fields := map[string]any{
 		"computer_id": computer, "artifact_digest": digest, "media_type": mediaType,
 		"length": length, "privacy_class": "owner", "pin_namespace": namespace,
@@ -74,9 +83,7 @@ func (f *fixture) receipt(computer, namespace, mediaType, digest string, length 
 	if err != nil {
 		f.t.Fatal(err)
 	}
-	rd := hexSum(raw)
-	f.write("sha256/pin-receipts/"+rd+".json", raw)
-	return rd
+	return raw
 }
 
 func eventBody(computer, kind, nonce string) []byte {
