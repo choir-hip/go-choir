@@ -301,6 +301,8 @@ func TestP3AnUnreceiptedFileIsNeverCovered(t *testing.T) {
 	}
 }
 
+var bannedUnlinks = []string{"os.Remove", "os.RemoveAll", "os.Rename", "syscall.Unlink", "syscall.Unlinkat", "unix.Unlink", "unix.Unlinkat"}
+
 // P4: a Verdict cannot be made deletable by a caller, and the package has
 // no unlink or rename outside workdir.go.
 func TestP4VerdictIsUnforgeableAndThePackageNeverUnlinks(t *testing.T) {
@@ -315,7 +317,7 @@ func TestP4VerdictIsUnforgeableAndThePackageNeverUnlinks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	banned := []string{"os.Remove", "os.RemoveAll", "os.Rename", "syscall.Unlink", "syscall.Unlinkat", "unix.Unlink"}
+	banned := bannedUnlinks
 	for _, pkg := range pkgs {
 		for name, file := range pkg.Files {
 			raw, _ := os.ReadFile(name)
