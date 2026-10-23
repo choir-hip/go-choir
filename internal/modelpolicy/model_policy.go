@@ -726,6 +726,9 @@ func parseOverlay(id, raw, source string) (policyOverlay, error) {
 	if err := scanner.Err(); err != nil {
 		return policyOverlay{}, err
 	}
+	if pool := unknownPool(overlay.Defaults); pool != "" {
+		return policyOverlay{}, fmt.Errorf("overlay defaults name unknown pool %q", pool)
+	}
 	if strings.TrimSpace(overlay.Defaults.Provider) == "" && strings.TrimSpace(overlay.Defaults.Model) != "" {
 		return policyOverlay{}, fmt.Errorf("overlay defaults require provider when model is set")
 	}
