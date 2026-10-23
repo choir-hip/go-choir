@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -400,6 +401,28 @@ func (s *Store) persistVocabMigrationReport(rep *MigrationReport) error {
 		return fmt.Errorf("vocab migrate report persist: %w", err)
 	}
 	return nil
+}
+
+// armVocabFenceFromReport arms the vocabulary write fence at open when the
+// workspace has cut over. A readable sidecar arms it; a missing one means the
+// store never cut over and leaves it off. A sidecar that exists but cannot be
+// read or decoded fails closed: the fence is armed and the error is logged,
+// and the open is not refused, because a store that cannot open cannot reach
+// the health listener and the operator has no surface to repair it from. The
+// serving migration (MigrateAndFenceServingVocabulary) still returns the load
+// error to its callers, which is the visible stop
+// (docs/problems/selfdev-operations-replay-not-equivalent-2026-10-23.md,
+// section "B. A corrupt vocabulary sidecar must not leave the fence off").
+func (s *Store) armVocabFenceFromReport() {
+	rep, err := s.loadVocabMigrationReport()
+	if err != nil {
+		log.Printf("runtime store: vocabulary migration sidecar %s is unreadable, opening with the write fence armed (fail closed): %v", s.vocabReportPath(), err)
+		s.vocabCutover.Store(true)
+		return
+	}
+	if rep != nil {
+		s.vocabCutover.Store(true)
+	}
 }
 
 func (s *Store) loadVocabMigrationReport() (*MigrationReport, error) {

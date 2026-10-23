@@ -918,9 +918,7 @@ func Open(dbPath string) (*Store, error) {
 	ogDoltStore.SetWriteValidator(s.vocabWriteGuard)
 	// A persisted migration report means this store already cut over: the
 	// write guard activates immediately on reopen.
-	if rep, err := s.loadVocabMigrationReport(); err == nil && rep != nil {
-		s.vocabCutover.Store(true)
-	}
+	s.armVocabFenceFromReport()
 	// Create a read-only DoltStore using the read connection pool so OG
 	// reads don't block during write transactions on the main connection.
 	// Both stores share one embedded engine, which is not safe for concurrent

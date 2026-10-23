@@ -640,6 +640,9 @@ func Run() {
 	// The explicit og_objects derived-column migration (host peer only);
 	// boot itself is discovery only.
 	s.HandleFunc("/internal/store/derived-columns", derivedColumnsHandler(db))
+	// The explicit heal for historic last_intent_error stamps (host peer only;
+	// GET is a dry run, POST appends one batch). Never a boot step.
+	s.HandleFunc("/internal/self-development/operation-stamp-heal", operationStampHealHandler(rt.Runtime, strings.TrimSpace(os.Getenv("CHOIR_COMPUTER_ID"))))
 	s.SetOnListen(func() { bootMark("http_listen_ready") })
 
 	// Capture boot/reconcile log into a bounded ring before Start so guest

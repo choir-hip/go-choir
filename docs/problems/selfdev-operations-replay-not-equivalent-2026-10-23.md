@@ -646,4 +646,35 @@ error.
 ### Heresy delta (this section)
 
 - Discovered: none beyond the two items named by FP0 and the review.
-- Introduced: none yet. Repaired: none yet (set when the code lands).
+- Introduced: a host-peer route that appends tape events on an explicit
+  operator call (the heal), by design; each run that selects rows grows the
+  tape by one event.
+- Repaired: the silent fail-open of the vocabulary write fence on a corrupt
+  sidecar (`Open` and `OpenTextureWorkspace`); the means to make a computer
+  that stamped before the `RecordIntentError` fix replay-equivalent again
+  (not yet run on t71: that is an operator act after the deploy).
+
+### Built (code landed after the tests)
+
+- `store/vocab_migrate.go` `armVocabFenceFromReport`, used by `Open` and
+  `OpenTextureWorkspace`.
+- `selfdev/operations_heal.go`: `ListAll`, `PlanStampHeal`, `ApplyStampHeal`
+  (`ErrStampHealUnbound`); `operationProjectionOp` is the shared builder
+  `appendOperationProjection` now calls.
+- `agentcore/selfdev_stamp_heal.go`: `Runtime.HealSelfDevelopmentIntentStamps`
+  (plan = replay probe + row comparison; apply = one batch; verify = a second
+  probe; `ErrStampHealRunning` for a concurrent call).
+- `autoputer/operation_stamp_heal.go`, registered in `autoputer/run.go` beside
+  the derived-columns route. 409 for a refused or concurrent heal, 503 when
+  the store is unbound or the probe unavailable.
+- Tests: `agentcore/replay_selfdev_heal_test.go` (equivalence before and after,
+  dry run appends nothing, one batch, second run selects nothing, state moved
+  refused by `ExpectedState`/`ErrProjectionMismatch`, stamp moved refused,
+  unbound store, concurrent heal), `autoputer/operation_stamp_heal_test.go`
+  (host peer only, GET plans and POST applies, 409/500/405),
+  `store/vocab_sidecar_fence_test.go`.
+
+Operator use after the deploy (not run here; no live-computer mutation in this
+lane): `GET` the route on t71 (computer-71afbf14) from the host peer and read
+`rows` and `probe`; `POST` it; the answer's `after.equivalent` should be true
+and a following `GET` should list no rows.
