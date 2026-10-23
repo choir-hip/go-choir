@@ -18,7 +18,9 @@ const (
 )
 
 // edge is what a signed pin receipt says: computer pinned artifact. The
-// receipt is the only authority for which computer needs a payload or an
+// receipt is the only authority (as a shape check: the signature is not
+// verified here, the host has no platform key; the tape on the host disk is
+// the trust boundary, review round 1 F4) for which computer needs a payload or an
 // event in its segments; the artifact's own bytes can name any computer.
 type edge struct {
 	computer string
@@ -36,7 +38,7 @@ type edge struct {
 // is not a PinReceipt issued by corpusd naming a valid artifact digest.
 func parseReceipt(raw []byte) (e edge, ok bool) {
 	var receipt computerevent.Receipt
-	if err := json.Unmarshal(raw, &receipt); err != nil || receipt.ReceiptKind != "PinReceipt" || receipt.Issuer != "corpusd" {
+	if err := json.Unmarshal(raw, &receipt); err != nil || receipt.ReceiptKind != "PinReceipt" || receipt.Issuer != "corpusd" || len(receipt.SignatureSet) == 0 || receipt.ReceiptVersion != computerevent.ReceiptVersionV1 {
 		return e, false
 	}
 	computer, _ := receipt.KindFields["computer_id"].(string)

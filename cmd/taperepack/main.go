@@ -1,7 +1,7 @@
 // Command taperepack copies legacy tape files into the per-computer segment
 // store and proves, file by file, which have a verified segment copy
-// (station FP10, internal/taperepack). It never deletes, moves or edits a
-// legacy file.
+// (station FP10, internal/taperepack). Only delete removes a legacy file; it
+// never moves or edits one.
 //
 //	taperepack census --root <artifacts> --work-dir <dir> [--computer <id>[,<id>]] [--rate N]
 //	taperepack copy   --root <artifacts> --work-dir <dir> [--computer <id>[,<id>]] [--apply] [--fresh] [--rate N]
@@ -18,7 +18,9 @@
 // 2026-10-22): it needs the digest of a recent, healthy census of this root
 // from --work-dir, verifies everything again, and unlinks only files whose
 // fresh verdict is covered by a verified segment copy. It is a dry run unless
-// --apply is given; its exit status is 1 on any refusal or error. census exits 3 unless every file it is responsible for is covered by a
+// --apply is given; its exit status is 1 on any refusal or error and 3 when
+// its own fresh verification found a damaged store (verify_healthy false).
+// census exits 3 unless every file it is responsible for is covered by a
 // verified segment copy; copy exits 3 if the store is not healthy.
 //
 // Memory is bounded by the bucket (1/256 of the files) and 64 MiB of pending
@@ -110,6 +112,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 		if err != nil {
 			fmt.Fprintf(stderr, "taperepack delete: %v\n", err)
 			return 1
+		}
+		if !rep.VerifyHealthy {
+			return 3
 		}
 		return 0
 	}
