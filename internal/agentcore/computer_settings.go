@@ -90,6 +90,17 @@ func (h *APIHandler) HandleComputerSettings(w http.ResponseWriter, r *http.Reque
 			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "value must be true or false"})
 			return
 		}
+		// store.event_table turns on only once the stream_seq lease is ready
+		// on the tape (the lease design, section 4 "When"): refused here,
+		// before anything is stored, so the owner never sees a setting that
+		// says on beside a writer that cannot start
+		// (docs/problems/stream-seq-high-water-mark-design-2026-10-23.md).
+		if key == store.SettingEventTable && value {
+			if err := rt.store.EventTableLeaseReady(); err != nil {
+				writeAPIJSON(w, http.StatusConflict, apiError{Error: eventTableLeaseRefusal(err), Reason: "stream_seq_lease_not_ready"})
+				return
+			}
+		}
 		// Setting a value it already has writes nothing, so updated_at is
 		// when the value last changed: intake.event_wakes reads it as when
 		// production began waiting on events (event layer §15).
