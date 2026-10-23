@@ -51,7 +51,8 @@ B, `CORPUSD_PORT=8086` in `nix/node-b.nix`).
 - Bounds. The answer is built after all five queries succeed, then streamed
   from the sorted slice, so a failure never leaves a half-written list. The
   unique digest set is held in memory and capped at 2,000,000 digests (about
-  136 MB of JSON, 64 + 4 bytes each); over the cap the route answers 507 and
+  136 MB of JSON, 64 + 4 bytes each, and roughly 250 MB of heap for the
+  set, the sorted slice and the stream, an estimate); over the cap the route answers 507 and
   no list, rather than a truncated one. Expected size: the set is the artifact
   digests of every code closure and artifact program plus those named in
   checkpoints, receipts and route certificates, so it grows with versions and
@@ -130,3 +131,21 @@ Verdict: pass the route, hold the docs. Findings and dispositions:
   the file after the census and before the delete). `queries: 5` is asserted by
   the test and the operator's `jq`; a schema change updates both. No
   concurrency limit: the host operator makes one call at a time.
+
+### Round 1 fixes landed
+
+- F1: fixed in the record (first docs commit above).
+- F2: fixed. `TapeExtraRefDigests` inserts `strings.Clone(d)` for each new
+  digest; the cap comment and this record carry the corrected estimate;
+  `extraRefsMax` is commented test-only. No test pins the aliasing (it would
+  need a hook on row text; the clone is one line), declined as a test, not as a
+  fix.
+- F3: fixed.
+  `TestTapeExtraRefsRouteIsRegisteredAtItsExactPath` goes through
+  `server.NewServer` + `RegisterRoutes`; with the pattern mistyped it fails
+  (GET 404, checked by hand and restored). It passes on the lane tip as written,
+  because the registration was correct; the finding was missing coverage.
+- Checks: `go test ./internal/platform -run 'TapeExtraRefs|TapeSweep|HandleTapeSweep'`
+  ok; `go vet ./internal/platform ./cmd/corpusd` ok;
+  `python3 -I scripts/selftest-guest-token` 196 passed, 0 failed. Nothing was
+  run against Node B, staging or any VM.
