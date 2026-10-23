@@ -850,3 +850,53 @@ segment that `Seal` skips; `intern` truncates names over 256 characters but is
 unreachable (a computer id over 200 characters is invalid); the gate is
 `Complete && Healthy`, not `OK()`, so a census with uncovered files still
 gates a delete, matching the written design (each file is judged fresh).
+
+#### Review round 1: dispositions (fix commit 2506f7455, tests d62f31bdb)
+
+Mutation class red. Protected surface: the delete's unlink of legacy files on
+Node B. Rollback: `git revert` of the fix commit; the command is run by hand.
+
+- **F1 fixed.** `decide` uses `want` only to choose scope; `cover` runs over
+  every computer the receipts attribute to the file; per-computer tallies and
+  the copy writes (and `would_copy_*`) stay gated on `want`. A file shared with
+  an unnamed, uncopied computer is `uncovered` under `--computer A` and stays.
+  A consequence: a census scoped to A can now report a shared file as
+  corrupt or blocked because of B's copy; that is the conservative direction.
+  Tests `TestF1AFileSharedWithAnUnnamedComputerIsNotDeleted` (flag and census
+  filter) failed on beaca6d75; `TestF1ACopyForAWritesNothingForBEvenForASharedFile`
+  holds on both.
+- **F2 fixed (sealed only).** `cover` counts only `SegLoc.Sealed` locations;
+  `Seal` fsyncs the segment and writes its index. A record held only in an
+  unsealed tail is `uncovered`; the copy's append seals a foreign unsealed
+  tail (`begin`) and the engine seals what it wrote, so a census after a copy
+  sees the record sealed (the test checks this). Cost: a computer whose live
+  writer holds the tail open keeps those records uncovered until the writer
+  rotates; the legacy file stays. Not chosen: fsyncing the open segment in the
+  census path (a read-only tool would write).
+- **F3 fixed (shape).** Gemini's guard is real in the narrow sense: an empty
+  `signature_set` or another `receipt_version` unmarshals. It is added, with
+  the honest label that it is a shape check.
+- **F4 declined.** Signature verification needs the platform's receipt-key
+  resolver, which the host tool does not have and must not be given. The trust
+  boundary is the tape on the host disk, the same trust as the legacy files; a
+  forged receipt can add a required copy or misroute a copy but cannot
+  by itself make a file deletable without a verified byte-equal segment copy.
+  Recorded here; the code comment says "shape check".
+- **F5 fixed in part.** `DeleteReport.verify_healthy` and `segment_errors`
+  carry the fresh pass's health and the command exits 3 when it is false.
+  Declined: stopping at the first corrupt verdict, since D5 proves the other
+  covered files are still deleted file by file.
+- **F6 fixed.** `unlinkCovered` refuses when the file's size is not the size
+  the engine verified. Declined: re-hashing at unlink (root-only race).
+- **F7 fixed.** The guard list has `unix.Unlinkat`; `TestF7` scans
+  `cmd/taperepack` too.
+- **F8 fixed in part.** The command header is corrected. The FP9 definition's
+  stale `plan`/`--manifest` commands are left to FP9's lane. Operator notes for
+  Node B: at 10 million files the default `--pause 250ms` (per 256 unlinks)
+  is about 2.7 h of sleeping, so pass `--pause 1ms` on the host once the idle
+  priority is set; the delete log is about 1.3 GB, which the work directory
+  needs on top of 600 MB.
+- **Nits** recorded above, not changed.
+
+Tests: `go test ./internal/taperepack/... ./cmd/taperepack/...` passes (63 s
+and 41 s); the F tests fail on beaca6d75 (F1, F2, F3, F5, F6).
