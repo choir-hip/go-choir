@@ -1339,3 +1339,17 @@ Append-only. One terse entry per orchestrator pass.
   - Baseline at 22:0x: marker-only loopback GET /internal/platform/objects answers 200, which is observe.
   - D22 lands it alone (auth gets its own deploy). The lease moves to D23. Lease test fix 8b11c8a38 (test-only: waitLeaseReady nudges the seeder; the backoff-wake question is recorded in the design); PR #91 CI and mirror lease-r3-fast are running.
   - D21 journal watch running on the paper (_runs/d21-journal-watch.txt).
+- 22:04. D22 is live: staging serves 2b7d130c3 (CI run 40030283257 passed). go-choir-proxy has run with PROXY_OBJECT_GRAPH_INTERNAL_AUTH=enforce since 22:04:27; its startup line reads "hostauth: internal routes mode=enforce, credential loaded".
+  - Proof. A marker-only loopback GET /internal/platform/objects answers 403 (200 before the flip), logged as "hostauth: enforce: refused internal call ... missing credential". A call with no marker answers 403.
+  - From 22:04:27 to 22:09, the only refusal in the proxy journal is FP0's probe (22:04:58), and no real caller is refused.
+  - The paper keeps publishing through the platform path: "story verdicts: published 1/3/1 verdicts" at 22:09:02 to 22:09:06. SEC-11 is done.
+  - D21 journal watch: 743 MiB (21:51:28, just after the 21:47 boot) -> 1081 MiB (21:56:52), about 63 MiB/min. The online pass ran 24.2 s. Then 213 MiB at 22:01:28, about 46 MiB/min. The 10-22 baseline was about 164 MiB/min (1.6 GiB per 10 min, before D7). The watch continues.
+- 22:2x. SEC-12a (Dolt auth stage 3, root locked). The gate passes:
+  - verify-host-hardening --expect-internal enforce --expect-dolt clients: 207 passed, 0 failed.
+  - No "Access denied" in the platform or corpus Dolt journals since 10-22 17:00, and no dbcred or "Access denied" line in corpusd, checkpointd or vmctl.
+  - The last off-host backup (02:45 to 03:31 UTC) succeeded; it tries root with its password first.
+  - Dolt logs no connecting users, so the root-client audit is from the code. corpusd, checkpointd and vmctl all run with CHOIR_DOLT_USER=choir, and dbcred.ApplyDSN rewrites their root@ DSNs to the app user, failing closed with no password. The remaining root clients (off-host-backup.sh, dolt-data-to-subvolume.sh, the users unit) try the root password first.
+  - Rollback: doltAuthStage "clients" plus a deploy covers every known client. Restoring passwordless root needs ALTER USER with the root password, an owner-only act under FP0's no-production-SQL rule; nothing known needs it.
+  - D23 lands 6365f329b alone (store auth gets its own deploy); its reviews are bunches 41 and 63. Both systems evaluate and the four gates pass.
+  - First real consumer test: the 02:35 UTC off-host backup.
+  - The lease moves to D24.
