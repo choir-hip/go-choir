@@ -79,8 +79,8 @@ WHERE object_kind = ? AND JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), '$.p
 ```
 
 **[V]** `EXPLAIN` of exactly that text, run locally by
-`TestScratchWakeScan` against a store with 3000 closed and 4 open wakes
-(scratch test, not committed), prints:
+a scratch test against a store with 3000 closed and 4 open wakes (the shape
+of `TestOpenWakeListMeasure`), prints:
 
 ```
 Limit(256)
@@ -100,8 +100,8 @@ parsed per row, the filter keeps the open ones, and a `TopN` sorts the
 survivors by `canonical_id` because that index does not order by it. The
 cost is proportional to all outbox rows ever written, not to the open ones.
 Nothing in the outbox is deleted: a wake is marked `projected` (or given a
-fate), never removed (`MarkActorWakeProjected`, `lifecycle.go:~919`;
-`markActorWakeFate`, `actor_wake_signal.go:~190`).
+fate), never removed (`MarkActorWakeProjected`, `lifecycle.go:897`;
+`markActorWakeFate`, `actor_wake_signal.go:182`).
 
 **Why a full scan, in the task's terms:** a missing index for this predicate
 (the filter is a JSON predicate on `metadata`, not on a column), an unindexed
@@ -205,5 +205,84 @@ which do not read the new family).
   label; `ListExhaustedActorWakes` (`actor_wake_signal.go:222`, the
   obligations surface) is the same shape on `$.fate` and is left as is (it is
   read on an owner `GET`, not on a loop).
-- introduced: none yet.
-- repaired: none yet.
+- introduced: one `og_key_index` row per outbox row, rewritten once when a
+  wake is marked (journal cost: two small rows per wake, no `og_objects`
+  index). The first validation pass after deploy reads every outbox row's
+  header once, under the engine's duty cycle (25%), and writes one key row
+  each.
+- repaired: the open-wakes list no longer reads outbox rows that are closed;
+  `ListObjects` is attributable in the engine-mutex counters.
+
+## Fix (2026-10-23)
+
+Commits on `lane/fp4-outbox-scan`: tests first (`b7da10b14`, fails on
+`44da7f078`: the family does not exist and the list stays on the JSON path),
+then the fix.
+
+- `internal/objectgraph/derived_keys.go`: family `actor_wake_outbox.projected`
+  (`KeyActorWakeOutboxProjected`) over kind `choir.actor_wake_outbox`, with
+  the engine's own expression for `$.projected`; mapped for
+  `ListObjectsByMetadataPage(kind, "$.projected", ...)` in
+  `derivedFamilyForMetadataRead`; listed first in `derivedFamilies` so a pass
+  validates it before the larger kinds. Every writer already calls
+  `Maintain` by kind (`dolt_store.go:657`, `:1203`), including
+  `MarkActorWakeProjected` and `markActorWakeFate`, which go through
+  `PutBatchConditional`.
+- `internal/store/derived_keys.go`: the family joins `derivedKeyFamilies`
+  (the background loop's "all validated" and "repair pending" checks).
+- `internal/store/graph_store.go`: `ogKindActorWakeOutbox` is now the
+  objectgraph constant, one definition of the kind string.
+- `internal/objectgraph/dolt_store.go`: `ListObjects` takes the engine mutex
+  as `(*DoltStore).ListObjects <kind>`, not unnamed.
+
+Unchanged: the wake protocol, delivery, the outbox rows and metadata, the
+sweep and its cadence, `TakeAnnouncedActorWakes`, the JSON read (still the
+answer before the pass, after any withdrawal, and for a value of 255
+characters or more).
+
+Class **orange** (store query; object-graph read path). Not red: no
+projection of a wake, no change to when a wake is marked or dispatched.
+Rollback: revert the fix commit. The extra `og_key_index` rows stay and are
+ignored; an older binary does not maintain them, and a newer one re-derives
+them in its next pass (a family is never persisted as valid).
+
+### Measured locally
+
+`TestOpenWakeListMeasure`, a fresh store, closed wakes with a 600-byte
+content, 4 open wakes, best of 5, warm page cache (GOMAXPROCS=2):
+
+| closed wakes | JSON read (before): rows read in full / time | side-table read (after): key rows read / time |
+|---|---|---|
+| 3,000 | 3,004 / 15.1 ms | 4 / 1.2 ms |
+| 30,000 | 30,004 / 153.8 ms | 4 / 1.2 ms |
+
+The old read is linear in the age of the outbox; the new one is flat. On the
+paper the old read also decompresses cold archive chunks, which the warm local
+numbers do not include; the paper's 2 to 7 s per read is the same line at a
+larger N and a cold cache.
+
+### What FP0 should read on the paper after deploy
+
+1. Boot log: `objectgraph dolt: derived keys actor_wake_outbox.projected:
+   validation pass starts over N rows` is the outbox row count (the **[H]**
+   above), then `validated N rows in <t>`. The family is read only after that
+   line; until then the sweep is as slow as before.
+2. `/health` detail, `engine_mutex`: the op
+   `(*DoltStore).ListObjectsByMetadataPage choir.actor_wake_outbox $.projected`
+   ends in `keyindex` (calls grow) and the `json` variant stops growing after
+   the pass. Its `max_hold_ns` and `wait_ns` fall from seconds to milliseconds.
+3. Console: `runtime: actor wake outbox list wakes=... dur=...` stops appearing
+   for the audit and start sweeps (it logs at 2 s or more). If it still does,
+   `dur` is engine-mutex wait: read `engine_mutex_live` and the per-kind
+   `(*DoltStore).ListObjects <kind>` ops to name the holder.
+4. A repeat of the 00:03 to 00:05 stall: the holder's op now names the kind of
+   the `ListObjects` that held the engine.
+
+### Not fixed here
+
+- The 48 s line stays unexplained until a holder is named (**[H]** above).
+  This fix removes the outbox read as a contributor and makes the next
+  `ListObjects` holder attributable; it does not claim the stall.
+- `ListExhaustedActorWakes` (`$.fate`) is the same JSON shape; it runs on the
+  owner's obligations `GET`, not on a loop, and is left for a record of its
+  own if the counters show it.
