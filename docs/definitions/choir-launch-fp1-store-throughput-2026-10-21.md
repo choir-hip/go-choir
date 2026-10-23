@@ -142,7 +142,12 @@ now:
     status reads the store's live switch; the writer refuses an unbound
     store and a floor above the build epoch; Reopen floors the adopted
     workspace before adopting it; ReadGrant requires basis computer.
-    Residuals: undeclared-epoch baselines pass the restage and import
+    Round 2c (bunch 152, Devin ACCEPT with one fix): the restage floor
+    check now covers the live workspace as well as the staged one (on
+    the genesis-replay path the staged floor file does not exist at
+    check time); the Reopen ordering test observes the floor before the
+    handle swap; the CI patch notes it lands with or after deploy 2's
+    scripts. Residuals: undeclared-epoch baselines pass the restage and import
     paths; the CI override trailer is push-only; platform-follow offers
     still declare no epoch.
   source_ref: lane/fp1-event-table-d2
