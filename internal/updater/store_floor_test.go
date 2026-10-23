@@ -297,3 +297,35 @@ func TestImportBaselineRefusesAnEpochBelowTheFloor(t *testing.T) {
 		t.Fatalf("import at the floor: %v", err)
 	}
 }
+
+// Round 2c (bunch 152, Devin 1): the restage checks every receipt path it is
+// given, so a caller that holds the live workspace's and the staged one's can
+// pass both, and either floor above the declared epoch refuses.
+func TestRestagePinnedReleaseChecksEveryStoreSchemaPath(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "updater")
+	if err := os.MkdirAll(filepath.Join(root, "releases"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	current := writePinnedFrontendReleaseEpoch(t, root, "computer-test", "<html>current</html>", 2)
+	old := writePinnedFrontendReleaseEpoch(t, root, "computer-test", "<html>old</html>", 1)
+	if err := os.Symlink(filepath.Join(root, "releases", current.ContentDigest), filepath.Join(root, "current")); err != nil {
+		t.Fatal(err)
+	}
+	unfloored := writeSchemaReceipt(t, t.TempDir(), 2)
+	floored := floorOnStore(t, 2)
+	for name, paths := range map[string][]string{
+		"floored second": {unfloored, floored},
+		"floored first":  {floored, unfloored},
+		"floored, empty": {"", floored},
+	} {
+		if err := RestagePinnedRelease(root, old.ContentDigest, paths...); err == nil || !strings.Contains(err.Error(), "floor") {
+			t.Fatalf("%s: err=%v, want a refusal naming the floor", name, err)
+		}
+	}
+	if got, err := ReadCurrentManifest(root); err != nil || got.ContentDigest != current.ContentDigest {
+		t.Fatalf("a refused restage moved current: %+v err=%v", got, err)
+	}
+	if err := RestagePinnedRelease(root, old.ContentDigest, unfloored, ""); err != nil {
+		t.Fatalf("no floor on any path: %v", err)
+	}
+}
