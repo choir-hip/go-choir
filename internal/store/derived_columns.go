@@ -44,6 +44,9 @@ type DerivedColumnMigrationStatus struct {
 	Steps     []objectgraph.AccessPathStep `json:"steps"`
 	Plan      objectgraph.AccessPathPlan   `json:"plan"`
 	Error     string                       `json:"error,omitempty"`
+	// Restoring is true while RestoreRunMemoryIndexes runs. The index fields
+	// below are refreshed from a fresh inventory when it ends.
+	Restoring bool `json:"restoring"`
 	// RunMemoryKindIndex is nil until the store reports it.
 	RunMemoryKindIndex *RunMemoryKindIndexStatus `json:"run_memory_kind_index,omitempty"`
 	// RunMemoryLoopSeqIndex is the duplicate index the operation drops (R5).
@@ -299,6 +302,7 @@ func (s *Store) DerivedColumnMigrationStatus(ctx context.Context) DerivedColumnM
 	m.mu.Lock()
 	status := m.status
 	status.Steps = append([]objectgraph.AccessPathStep{}, m.status.Steps...)
+	status.Restoring = m.restoring
 	m.mu.Unlock()
 	if status.State == "" {
 		status.State = DerivedColumnMigrationIdle

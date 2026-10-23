@@ -300,3 +300,161 @@ func TestRunMemoryOpenWarnsWhenNoOwnerAgentIndexExists(t *testing.T) {
 		}
 	}
 }
+
+// The status after a restore. Ways it could fail, written before the code:
+//
+//  1. Stale after success: the migration's last status says the dieted indexes
+//     are absent (present=false), and the restore never refreshes it, so GET
+//     contradicts the rollback step that says to read it after the restore.
+//  2. Stale after a failure: a restore that built the first index and failed on
+//     the second leaves the first one reported absent.
+//  3. A refresh that fails (a probe error) clobbers the last good status.
+//  4. restoring stays true after the restore returns (a leaked flag refuses
+//     every later migration), or is never true while one runs.
+//  5. A concurrent status read during the build sees a torn status: the refresh
+//     is published under m.mu together with restoring=false, and the database
+//     probes run outside m.mu so a GET is never blocked on them.
+
+func dietIndexPresence(st DerivedColumnMigrationStatus) map[string]bool {
+	out := map[string]bool{}
+	for _, d := range st.RunMemoryDietIndexes {
+		out[d.Name] = d.Present
+	}
+	if st.RunMemoryLoopSeqIndex != nil {
+		out[RunMemoryLoopSeqIndexName] = st.RunMemoryLoopSeqIndex.Present
+	}
+	return out
+}
+
+// 1, 4. migrate -> restore -> status shows every restored index present.
+func TestRunMemoryIndexRestoreRefreshesTheMigrationStatus(t *testing.T) {
+	s, _ := dietPopulatedStore(t)
+	done := runDietMigration(t, s)
+	if done.State != DerivedColumnMigrationDone {
+		t.Fatalf("migration %s: %s", done.State, done.Error)
+	}
+	for name, present := range dietIndexPresence(done) {
+		if present {
+			t.Fatalf("after the migration %s is still reported present", name)
+		}
+	}
+	if done.Restoring {
+		t.Fatal("restoring is true with no restore running")
+	}
+	if _, err := s.RestoreRunMemoryIndexes(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	st := s.DerivedColumnMigrationStatus(context.Background())
+	if st.State != DerivedColumnMigrationDone {
+		t.Fatalf("a restore changed the migration state to %s", st.State)
+	}
+	if st.Restoring {
+		t.Fatal("restoring is still true after the restore returned")
+	}
+	got := dietIndexPresence(st)
+	want := map[string]bool{RunMemoryOwnerLoopSeqIndexName: true, RunMemoryOwnerAgentCreatedIndexName: true, RunMemoryLoopSeqIndexName: true}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("status after migrate then restore reports %v, want %v", got, want)
+	}
+	if st.RunMemoryKindIndex == nil || !st.RunMemoryKindIndex.Present {
+		t.Fatalf("kind index status after a restore = %+v", st.RunMemoryKindIndex)
+	}
+	// The migration can run again, and its status goes back to absent.
+	again := runDietMigration(t, s)
+	if again.State != DerivedColumnMigrationDone {
+		t.Fatalf("second migration %s: %s", again.State, again.Error)
+	}
+	for name, present := range dietIndexPresence(again) {
+		if present {
+			t.Fatalf("after the second migration %s is reported present", name)
+		}
+	}
+}
+
+// 1. A restore of a subset refreshes the whole set from the inventory.
+func TestRunMemoryIndexRestoreSubsetRefreshesOnlyWhatExists(t *testing.T) {
+	s, _ := dietPopulatedStore(t)
+	if st := runDietMigration(t, s); st.State != DerivedColumnMigrationDone {
+		t.Fatalf("migration %s: %s", st.State, st.Error)
+	}
+	if _, err := s.RestoreRunMemoryIndexes(context.Background(), []string{RunMemoryOwnerAgentCreatedIndexName}); err != nil {
+		t.Fatal(err)
+	}
+	got := dietIndexPresence(s.DerivedColumnMigrationStatus(context.Background()))
+	want := map[string]bool{RunMemoryOwnerLoopSeqIndexName: false, RunMemoryOwnerAgentCreatedIndexName: true, RunMemoryLoopSeqIndexName: false}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("status after a subset restore = %v, want %v", got, want)
+	}
+}
+
+// 2. A restore that fails part-way still reports what it built: the hook
+// cancels the context after the first index, so the second step fails.
+func TestRunMemoryIndexRestoreRefreshesTheStatusAfterAFailure(t *testing.T) {
+	s, _ := dietPopulatedStore(t)
+	if st := runDietMigration(t, s); st.State != DerivedColumnMigrationDone {
+		t.Fatalf("migration %s: %s", st.State, st.Error)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	runMemoryRestoreStepHook = func(step int) {
+		if step == 1 {
+			cancel()
+		}
+	}
+	t.Cleanup(func() { runMemoryRestoreStepHook = nil })
+	rep, err := s.RestoreRunMemoryIndexes(ctx, nil)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("restore error = %v, want context.Canceled", err)
+	}
+	if created, _ := restoreStepsOf(rep); !reflect.DeepEqual(created, restoreOrder[:1]) {
+		t.Fatalf("restore built %v before the cancel, want %v", created, restoreOrder[:1])
+	}
+	st := s.DerivedColumnMigrationStatus(context.Background())
+	if st.Restoring {
+		t.Fatal("restoring leaked after a failed restore")
+	}
+	got := dietIndexPresence(st)
+	want := map[string]bool{RunMemoryOwnerLoopSeqIndexName: false, RunMemoryOwnerAgentCreatedIndexName: true, RunMemoryLoopSeqIndexName: false}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("status after a failed restore = %v, want %v (what it built is reported)", got, want)
+	}
+}
+
+// 4, 5. restoring is true while a restore runs, a status read does not wait
+// for it, a migration is refused beside it, and the flag clears with the
+// refresh.
+func TestRunMemoryIndexRestoreReportsRestoringWhileItRuns(t *testing.T) {
+	s, _ := dietPopulatedStore(t)
+	if st := runDietMigration(t, s); st.State != DerivedColumnMigrationDone {
+		t.Fatalf("migration %s: %s", st.State, st.Error)
+	}
+	reached := make(chan struct{})
+	release := make(chan struct{})
+	runMemoryRestoreStepHook = func(step int) {
+		if step == 0 {
+			close(reached)
+			<-release
+		}
+	}
+	t.Cleanup(func() { runMemoryRestoreStepHook = nil })
+	errc := make(chan error, 1)
+	go func() {
+		_, err := s.RestoreRunMemoryIndexes(context.Background(), nil)
+		errc <- err
+	}()
+	<-reached
+	st := s.DerivedColumnMigrationStatus(context.Background())
+	if !st.Restoring || st.State != DerivedColumnMigrationDone {
+		t.Fatalf("status during a restore: restoring=%t state=%s, want restoring over the last migration state", st.Restoring, st.State)
+	}
+	if _, err := s.StartDerivedColumnMigration(); !errors.Is(err, ErrDerivedColumnMigrationRunning) {
+		t.Fatalf("migration beside a restore = %v, want ErrDerivedColumnMigrationRunning", err)
+	}
+	close(release)
+	if err := <-errc; err != nil {
+		t.Fatal(err)
+	}
+	if st := s.DerivedColumnMigrationStatus(context.Background()); st.Restoring {
+		t.Fatal("restoring leaked after the restore")
+	}
+}

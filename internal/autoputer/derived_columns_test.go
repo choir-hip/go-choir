@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -167,5 +168,80 @@ func TestDerivedColumnsRestoreEndpoint(t *testing.T) {
 		if st.Action != "present" {
 			t.Fatalf("second restore step %+v, want present", st)
 		}
+	}
+}
+
+// The restore action refreshes what GET reports. Ways it could fail, written
+// before the code: after migrate then restore in one process, GET still shows
+// the restored indexes as absent (the migration's last status), contradicting
+// the rollback step that tells the operator to read it back.
+func TestDerivedColumnsRestoreEndpointRefreshesGET(t *testing.T) {
+	db, err := choirstore.Open(filepath.Join(t.TempDir(), "runtime.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	handler := derivedColumnsHandler(db)
+	const host = "192.0.2.44:40000"
+	const base = "/internal/store/derived-columns"
+
+	get := func() choirstore.DerivedColumnMigrationStatus {
+		rec := httptest.NewRecorder()
+		handler(rec, derivedColumnsRequest(http.MethodGet, base, host))
+		var st choirstore.DerivedColumnMigrationStatus
+		if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &st) != nil {
+			t.Fatalf("GET = %d %s", rec.Code, rec.Body.String())
+		}
+		return st
+	}
+	presence := func(st choirstore.DerivedColumnMigrationStatus) map[string]bool {
+		out := map[string]bool{}
+		for _, d := range st.RunMemoryDietIndexes {
+			out[d.Name] = d.Present
+		}
+		if st.RunMemoryLoopSeqIndex != nil {
+			out[st.RunMemoryLoopSeqIndex.Name] = st.RunMemoryLoopSeqIndex.Present
+		}
+		return out
+	}
+
+	rec := httptest.NewRecorder()
+	handler(rec, derivedColumnsRequest(http.MethodPost, base+"?action=migrate", host))
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("migrate = %d %s, want 202", rec.Code, rec.Body.String())
+	}
+	deadline := time.Now().Add(30 * time.Second)
+	var st choirstore.DerivedColumnMigrationStatus
+	for st = get(); st.State == choirstore.DerivedColumnMigrationRunning; st = get() {
+		if time.Now().After(deadline) {
+			t.Fatal("migration did not finish")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if st.State != choirstore.DerivedColumnMigrationDone {
+		t.Fatalf("migration %s: %s", st.State, st.Error)
+	}
+	for name, present := range presence(st) {
+		if present {
+			t.Fatalf("after migrate GET reports %s present", name)
+		}
+	}
+
+	rec = httptest.NewRecorder()
+	handler(rec, derivedColumnsRequest(http.MethodPost, base+"?action=restore_run_memory_indexes", host))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("restore = %d %s, want 200", rec.Code, rec.Body.String())
+	}
+	st = get()
+	want := map[string]bool{
+		"idx_run_memory_entries_owner_agent_created": true,
+		"idx_run_memory_entries_owner_loop_seq":      true,
+		"idx_run_memory_entries_loop_seq":            true,
+	}
+	if got := presence(st); !reflect.DeepEqual(got, want) {
+		t.Fatalf("GET after migrate then restore reports %v, want %v", got, want)
+	}
+	if st.State != choirstore.DerivedColumnMigrationDone || st.Restoring {
+		t.Fatalf("GET after restore: state=%s restoring=%t", st.State, st.Restoring)
 	}
 }
