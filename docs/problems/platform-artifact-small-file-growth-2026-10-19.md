@@ -1056,8 +1056,9 @@ shared legacy file with no record of the dependence), introduced 0, repaired 0
 
 Nothing on Node B has run this tool. All of these hold first:
 
-1. The build contains 8984bfd68 or later (report version 2). Any census taken
-   before it is refused by the gate; take a fresh one after the last copy:
+1. The build contains the review round 3 fix (report version 3; the round-2
+   build, version 2, did not read legacy event bodies, see "Review round 3
+   dispositions" below). Any census taken before it is refused by the gate; take a fresh one after the last copy:
    `census` unfiltered (not `--computer`), exit 0 or a clean exit 3 whose only
    cause is uncovered files of computers the owner has not named, and `files`
    with `corrupt`, `blocked`, `legacy_bad`, `dropped_receipt` all 0,
@@ -1153,3 +1154,88 @@ undone, so it is a blocker for `delete --apply` on Node B.
   from an event ref to a receipt file), devin N2 (a repin between its
   `Chtimes` and its receipt landing across the whole legacy scan),
   deepseek's wall-clock step note.
+
+#### Review round 3 dispositions (FP10, 2026-10-22, after the fix)
+
+Fix commit: "fix(taperepack): review round 3 ..." (red); tests
+`review3_test.go`; the test commit before it fails L1, L4, L5, L6 on
+0866a7663 and L2 holds there.
+
+- **L1 fixed.** `listLegacyEvent` (list phase, same cap, pacing and file
+  count as `listReceipt`, so `--rate` bounds it) reads every file under
+  `sha256/computer-event/`, decodes `computer_id` (must be a valid computer id,
+  which also keeps a body from naming a path), and spills an `edgeRef` for
+  each digest in the body for that computer, in both namespaces, exactly as
+  for a segment event. A file that vanished makes no edge. One that cannot be
+  read, is larger than a record, or does not decode to a computer id is an
+  attribution error under the key `legacy-events` in `segment_errors`: the
+  pass is unhealthy and every covered file is `blocked`. `listing.
+  legacy_event_bodies` counts the bodies read (a census that shows 0 on a
+  tree with legacy events did not run the scan). The report version is 3, so
+  a census taken before the fix is refused by the delete gate. Tests:
+  `TestL1ALegacyEventBodyThatNamesAPayload...` (the deepseek reproduction:
+  X stays, A's own payload is deleted), `TestL1AnUndecodableLegacyEvent...`
+  (not JSON; JSON with no computer id).
+  *Node B cost.* The list phase now reads every event file once more (the
+  join already reads each file once for its verdict, and the list phase reads
+  every receipt): about 2.44 million files. The census namespace table has the
+  event files at about 1.5 KB each, so about 3.7 GB of content, which is the
+  2.44 million files at 4 KiB allocated each, about 9.8 GB by `du`; a
+  small-file read is open, fstat, read, close, so the cost is the file count,
+  not the bytes. The default `--rate` is 0 (unlimited). At the laptop rates of
+  the as-built table (1,170 to 1,410 files/s) that is 29 to 35 minutes added
+  to a census, on top of the roughly two hours for 10 million files, and the
+  delete's fresh verification pass is a census so it pays it again. Node B's
+  disk and cache decide the real number (cold small-file reads are usually
+  slower than a laptop's SSD): with `--rate 2000` the added time is a floor of
+  20 minutes. Run the census and the delete under `ionice -c3 nice -n 19` as
+  before and plan the window for about 2.5 to 3 hours each, not measured on
+  Node B.
+- **L2 test gap closed** (it was only a gap; the code holds). Segment record
+  unreadable with a verifying legacy file: used, nothing blocked, C still
+  required (`TestL2AnUnreadableSegmentRecordFallsBack...`). Segment-only
+  receipt with no legacy file, or with a legacy file that no longer hashes to
+  the digest: attribution error, unhealthy, nothing deletable
+  (`TestL2AnUnreadableSegmentOnlyRecord...`).
+- **L3 done.** `bannedUnlinks` now also lists `unix.Rename`,
+  `syscall.Renameat`, `os.Link`, `syscall.Link`, `unix.Link`. It stays a text
+  guard (an import alias evades it, recorded in round 2); the AST guard would
+  be about 40 lines and r4 does not rest on this test.
+- **L4 fixed** (reporting only). Per-computer tallies are counted after the
+  file's final class is known: a file the pass blocks or sets aside as
+  `dropped_receipt` is counted that way for each computer whose own comparison
+  said covered or uncovered. `TestL4...`.
+- **L5 fixed.** `hexRefs` takes every 64-character window of a hex run
+  (the sweep's regexp matches inside a longer run). `TestL5...`.
+- **L6 fixed.** A symlink at `tape-seg/<id>` is an attribution error.
+  `TestL6...`.
+- **M2 not built, made a precondition.** The sweep also keeps every 64-hex
+  substring of the database-side records in `tapeExtraRefQueries`
+  (`closure_json`, `program_json`, the checkpoint and its receipt, route
+  projection certificates). The tool is a host binary with no database
+  access and has no keep-list option. Before `delete --apply` on Node B, take
+  the dry run's digest list and check it against those five columns,
+  read-only on the platform's store: any digest that appears in a column is
+  a file the tool would unlink and the sweep would keep. If any appears, stop;
+  the follow-on is a `--keep-digests <file>` option, not built here because
+  it widens the command and its gate for a case not seen. Named residual,
+  open.
+- **M3 declined.** The receipt branch of `decide` ignores event-ref edges. A
+  receipt file is kept by the sweep when the chain row names it as an event
+  pin; the repack requires a sealed copy of the receipt for the computer the
+  receipt names (the computer whose chain row names it), and a reader of that
+  computer reads the receipt from its segment. An event of another computer
+  naming that receipt's digest is not a read path for it (readers resolve a
+  receipt by the computer's own chain row), so no file a reader needs is
+  lost. Hypothesis from the code, no trace; recorded.
+- **N2, deepseek's wall-clock note: recorded.** A repin whose `Chtimes` lands
+  before the list start and whose receipt lands after its bucket was scanned
+  needs the pin to span the whole legacy scan; precondition 4 (delete soon
+  after the census, and the fresh pass re-lists) bounds it. The mtime guard
+  is wall-clock: a backward step of the host clock larger than the pass would
+  defeat it; not realistic on a time-synced host, listed as a residual.
+- **deepseek's `dropped_receipt` on a payload pinned under two media types**
+  makes the census unhealthy: safe and already precondition 1; unchanged.
+
+Tests: `go test ./internal/taperepack/... ./cmd/taperepack/...
+./internal/tapestore -count=1` passes (87 s, 59 s, 35 s).
