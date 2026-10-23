@@ -79,3 +79,51 @@ func (s *DoltStore) HasObjectOfKind(ctx context.Context, kind ObjectKind) (bool,
 	}
 	return found, nil
 }
+
+// KindMetadataPageSQL is one keyset page of a kind's metadata: the canonical
+// id and the metadata, never the body, in canonical-id order from an
+// exclusive cursor. The exact stream_seq seed walks the event kind with it
+// (docs/problems/stream-seq-high-water-mark-design-2026-10-23.md, section 3).
+// The shape is ListObjectsPage's, so the engine plans the same range of the
+// kind; the plan test pins it.
+const KindMetadataPageSQL = `SELECT canonical_id, metadata FROM og_objects WHERE object_kind = ? AND canonical_id > ? ORDER BY canonical_id ASC LIMIT ?`
+
+// KindMetadataRow is one row of a metadata page.
+type KindMetadataRow struct {
+	CanonicalID string
+	Metadata    json.RawMessage
+}
+
+// ListKindMetadataPage returns up to limit rows of one kind with canonical id
+// strictly after afterCanonicalID, in canonical-id order. It holds the engine
+// mutex for this page only, so a caller scanning the whole kind releases it
+// between pages and other readers proceed. A shorter answer than limit means
+// the kind holds no more.
+func (s *DoltStore) ListKindMetadataPage(ctx context.Context, kind ObjectKind, afterCanonicalID string, limit int) ([]KindMetadataRow, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("objectgraph dolt: nil store")
+	}
+	if limit <= 0 {
+		return nil, fmt.Errorf("objectgraph dolt: kind metadata page: limit must be positive")
+	}
+	op := "(*DoltStore).ListKindMetadataPage " + kindOpLabel(string(kind))
+	s.engineMu.LockAs(op)
+	defer s.engineMu.UnlockAs(op)
+	rows, err := s.db.QueryContext(ctx, KindMetadataPageSQL, string(kind), afterCanonicalID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("objectgraph dolt: kind metadata page: %w", err)
+	}
+	defer rows.Close()
+	out := make([]KindMetadataRow, 0, min(limit, 4096))
+	for rows.Next() {
+		var id, metadata string
+		if err := rows.Scan(&id, &metadata); err != nil {
+			return nil, fmt.Errorf("objectgraph dolt: kind metadata page: %w", err)
+		}
+		out = append(out, KindMetadataRow{CanonicalID: id, Metadata: json.RawMessage(metadata)})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("objectgraph dolt: kind metadata page: %w", err)
+	}
+	return out, nil
+}

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/storeschema"
 )
 
 // RebaseRetainedStore installs a verified base into a sibling directory and
@@ -47,6 +48,12 @@ func RebaseRetainedStore(ctx context.Context, src BaseSource, storePath, compute
 	}
 	stagedMarker := filepath.Join(stagingRoot, markerName)
 	stagedWorkspace := choirstore.TextureWorkspacePath(stagedMarker)
+	// The install marked the staged workspace; mark it here too, before the
+	// flip, so this swap point stands on its own (a rebased workspace is
+	// untrusted until the exact seed has run).
+	if err := storeschema.WriteLeaseUntrusted(stagedWorkspace, "rebase"); err != nil {
+		return Descriptor{}, fmt.Errorf("%w: lease untrust marker: %v", ErrBaseRefused, err)
+	}
 
 	quarantineDir := filepath.Join(parent, "restore-quarantine-"+stamp)
 	if err := os.Mkdir(quarantineDir, 0o755); err != nil {

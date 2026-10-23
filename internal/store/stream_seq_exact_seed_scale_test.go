@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -114,6 +116,9 @@ func TestExactStreamSeqSeedScale(t *testing.T) {
 			sql, args := eventTableOwnerMaxStreamSQL("owner-07")
 			t.Logf("n=%d table per-owner plan:\n%s", n, explainEventTablePlan(t, s, sql, args...))
 
+			// The machine's context travels with the number (bunch 169 nit):
+			// the same seed on a different disk is a different number.
+			t.Logf("MACHINE %s/%s cpus=%d go=%s disk:\n%s", runtime.GOOS, runtime.GOARCH, runtime.NumCPU(), runtime.Version(), diskContext(s.TexturePath()))
 			var ogBest, tableBest, bothBest time.Duration
 			for r := 0; r < 3; r++ {
 				t0 := time.Now()
@@ -172,8 +177,9 @@ func TestExactSeedTablePlanSeeksPerOwner(t *testing.T) {
 		if strings.Contains(plan, "sort") {
 			t.Errorf("%s plan sorts:\n%s", name, plan)
 		}
-		if !strings.Contains(plan, "idx_choir_events_owner_stream") {
-			t.Errorf("%s plan does not use idx_choir_events_owner_stream:\n%s", name, plan)
+		// Dolt names the index by its columns in the plan.
+		if !strings.Contains(plan, "indexedtableaccess(choir_events)") || !strings.Contains(plan, "choir_events.owner_id,choir_events.stream_seq") {
+			t.Errorf("%s plan is not an index access on (owner_id, stream_seq):\n%s", name, plan)
 		}
 	}
 }
@@ -192,4 +198,26 @@ func TestExactSeedPagePlanIsAKeysetRangeOfTheKind(t *testing.T) {
 		t.Errorf("the page query reads the body:\n%s", pageSQL)
 	}
 	t.Logf("page plan:\n%s", plan)
+}
+
+// diskContext is the filesystem the workspace sits on: df for the mount, and
+// the device's type where the platform names it.
+func diskContext(path string) string {
+	out, err := exec.Command("df", "-h", path).CombinedOutput()
+	if err != nil {
+		return "df failed: " + err.Error()
+	}
+	text := strings.TrimSpace(string(out))
+	if mount, mErr := exec.Command("mount").CombinedOutput(); mErr == nil {
+		fields := strings.Fields(strings.SplitN(text, "\n", 2)[len(strings.SplitN(text, "\n", 2))-1])
+		if len(fields) > 0 {
+			for _, line := range strings.Split(string(mount), "\n") {
+				if strings.HasPrefix(line, fields[0]+" ") {
+					text += "\n" + line
+					break
+				}
+			}
+		}
+	}
+	return text
 }

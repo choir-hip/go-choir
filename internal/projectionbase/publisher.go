@@ -11,6 +11,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/yusefmosiah/go-choir/internal/storeschema"
 )
 
 // Publisher handles atomic, fsync'd publication of ProjectionBase tar artifacts.
@@ -99,6 +101,32 @@ func (p *Publisher) PublishDir(srcDir string) (string, int64, error) {
 				return fmt.Errorf("copy file %q to tar: %w", path, err)
 			}
 			totalBytes += n
+		}
+		// Every store workspace in the blob carries the stream_seq lease
+		// untrust marker: a base is untrusted by construction, whatever lease
+		// its rows hold (docs/problems/stream-seq-high-water-mark-design-2026-10-23.md,
+		// section 3). The marker is a tar entry beside the workspace's
+		// receipt, not a file written into the source directory. A workspace
+		// that already holds the marker has it walked as a file.
+		if fi.Mode().IsRegular() && fi.Name() == storeschema.File {
+			dir := filepath.Dir(path)
+			if _, statErr := os.Lstat(filepath.Join(dir, storeschema.LeaseUntrustedFile)); statErr != nil {
+				body := storeschema.LeaseUntrustedBody("base")
+				markerHeader := &tar.Header{
+					Name:     filepath.ToSlash(filepath.Join(filepath.Dir(relPath), storeschema.LeaseUntrustedFile)),
+					Mode:     0o644,
+					Size:     int64(len(body)),
+					Typeflag: tar.TypeReg,
+					ModTime:  fi.ModTime(),
+				}
+				if err := tarWriter.WriteHeader(markerHeader); err != nil {
+					return fmt.Errorf("write lease untrust marker header for %q: %w", dir, err)
+				}
+				if _, err := tarWriter.Write(body); err != nil {
+					return fmt.Errorf("write lease untrust marker for %q: %w", dir, err)
+				}
+				totalBytes += int64(len(body))
+			}
 		}
 		return nil
 	})

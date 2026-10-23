@@ -38,7 +38,20 @@ import (
 //     deploy or the design's rollback recipe. The minimum epoch a release
 //     migrates from stays 1: deploy 1 migrates an epoch-1 store by creating
 //     the empty table.
-const Version uint64 = 2
+//   - 3: the stream_seq lease
+//     (docs/problems/stream-seq-high-water-mark-design-2026-10-23.md). An
+//     object of kind choir.stream_seq_lease on the tape holds the highest
+//     stream_seq the computer may hand out. An older binary ignores the row
+//     and seeds by its own bounded read; it can allocate a number above the
+//     lease and rewrites the receipt to 2. The receipt is therefore read by
+//     Open before it is rewritten: a prior receipt below 3 (or absent on a
+//     workspace that holds rows) writes the lease untrust marker first
+//     (LeaseUntrustedFile), and a marked workspace seeds by the exact read of
+//     the event history once. The epoch fences only the updater's Apply of a
+//     release that declares one: Apply refuses an epoch-2 release on an
+//     epoch-3 store. The epoch-3 release keeps min_store_schema_version at 2
+//     or below.
+const Version uint64 = 3
 
 // File is the receipt filename inside the unified Dolt workspace
 // (deriveTextureWorkspacePath(StorePath)).

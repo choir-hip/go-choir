@@ -219,6 +219,32 @@ func (a *ComputerEventAppender) awaitBarrier(ctx context.Context) {
 	(*fn)(ctx)
 }
 
+// HeadsAligned reports whether the local projection head is the platform's
+// canonical head: nil when they are equal (two nil heads included), an error
+// wrapping ErrNeedsProjectionRepair when they differ in either direction. It
+// is the precondition of the stream_seq lease's exact seed
+// (docs/problems/stream-seq-high-water-mark-design-2026-10-23.md, section 2):
+// with equal heads replay cannot add events during the scan, and the lease
+// append, which appendLocked admits only on equal heads, lands on the state
+// that was scanned. It takes no appender lock; the caller serialises.
+func (a *ComputerEventAppender) HeadsAligned(ctx context.Context) error {
+	if a == nil {
+		return fmt.Errorf("computer event appender: heads check requires an appender")
+	}
+	platformHead, err := a.cas.Head(ctx, a.computerID)
+	if err != nil {
+		return fmt.Errorf("computer event appender: resolve canonical head: %w", err)
+	}
+	localHead, err := a.projection.Head(ctx, a.computerID)
+	if err != nil {
+		return fmt.Errorf("computer event appender: resolve embedded head: %w", err)
+	}
+	if !sameHead(platformHead, localHead) {
+		return fmt.Errorf("%w: local=%s platform=%s", ErrNeedsProjectionRepair, replayHeadSummary(localHead), replayHeadSummary(platformHead))
+	}
+	return nil
+}
+
 // HoldAppends runs fn while no event can be appended. Every append and its
 // live projection run under the same lock, so fn sees a head and a projection
 // that belong together. Keep fn short: every writer waits for it.

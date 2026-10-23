@@ -28,23 +28,20 @@ import (
 // leaseSwapPoints are the functions that move a workspace into a live store or
 // workspace path (or open a fresh one for it). Each must write the marker.
 var leaseSwapPoints = map[string]string{
-	"ReplaceWorkspace":      "internal/store: the fresh workspace OpenFresh created",
-	"installDescriptor":     "internal/projectionbase: the staged workspace; covers InstallVerifiedBase and InstallPinnedBase",
-	"RebaseRetainedStore":   "internal/projectionbase: the staged workspace, before the flip",
-	"RematerializeFromTape": "internal/agentcore: the staged workspace after Close, before the flip",
+	"store.go:ReplaceWorkspace":              "internal/store: the fresh workspace OpenFresh created",
+	"install.go:installDescriptor":           "internal/projectionbase: the staged workspace; covers InstallVerifiedBase and InstallPinnedBase",
+	"rebase.go:RebaseRetainedStore":          "internal/projectionbase: the staged workspace, before the flip",
+	"rematerialize.go:RematerializeFromTape": "internal/agentcore: the staged workspace after Close, before the flip",
 }
 
 // leaseSwapExempt are functions that match the swap-point shape and are not
 // one: they build or probe a disposable workspace that never becomes a
-// computer's live store. Each carries its reason.
+// computer's live store, or delegate to a swap point that marks. Each carries
+// its reason.
 var leaseSwapExempt = map[string]string{
-	"installSeedCandidate":  "projectionbase: unpacks a base into the rebuilder's scratch dir; the publisher marks every blob it packs",
-	"openProbeReplayStore":  "agentcore: a disposable replay-probe store in a temp dir",
-	"matchLiveDepositMode":  "agentcore: reads two stores, swaps nothing",
-	"installStagedBaseRef":  "agentcore: installs through projectionbase (installDescriptor writes the marker), then opens the staged store",
-	"openReplayProbe":       "agentcore: a disposable replay-probe store",
-	"ReplayCompleteness":    "agentcore: opens a disposable replay store",
-	"replayCompletenessRun": "agentcore: opens a disposable replay store",
+	"seed.go:installSeedCandidate":                "projectionbase: unpacks a base into the rebuilder's scratch dir; the publisher marks every blob it packs",
+	"replay_completeness.go:openProbeReplayStore": "agentcore: a disposable replay-probe store in a temp dir",
+	"workspace_replace.go:ReplaceWorkspace":       "agentcore: delegates to Store.ReplaceWorkspace, which marks the fresh workspace",
 }
 
 func sourceFilesIn(t *testing.T, dir string) map[string]*ast.File {
@@ -109,7 +106,7 @@ func TestEverySwapPointWritesTheLeaseUntrustMarker(t *testing.T) {
 				moves := calls["os.Rename"] || calls[".OpenFresh"] || calls["OpenFresh"]
 				touchesWorkspace := mentionsIdent(fn.Body, "TextureWorkspacePath") || mentionsIdent(fn.Body, "deriveTextureWorkspacePath") ||
 					mentionsIdent(fn.Body, "OpenFresh")
-				name := fn.Name.Name
+				name := filepath.Base(path) + ":" + fn.Name.Name
 				if _, swap := leaseSwapPoints[name]; swap {
 					seenSwap[name] = true
 					if !calls["storeschema.WriteLeaseUntrusted"] {
@@ -288,7 +285,7 @@ func TestLeaseTestSeamsAreTestOnly(t *testing.T) {
 // The allocator is the only code that takes a stream_seq: no other function
 // in the package increments maxStreamSeq.
 func TestOnlyTheAllocatorTakesAStreamSeq(t *testing.T) {
-	allowed := map[string]bool{"allocateStreamSeqLocked": true, "completeSeedLocked": true, "Reopen": false}
+	allowed := map[string]bool{"allocateStreamSeqLocked": true, "completeSeedLocked": true}
 	for name, file := range storeSourceFiles(t, func(string) bool { return true }) {
 		for _, decl := range file.Decls {
 			fn, ok := decl.(*ast.FuncDecl)

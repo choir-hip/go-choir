@@ -116,6 +116,14 @@ func DefaultRegistry() *Registry {
 		// docs/reports/p6-p8-release-adopt-2026-10-15.md).
 		{Kind: "choir.release_adoption", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "store.ReleaseAdoption"},
 
+		// The stream_seq lease: the highest stream_seq the computer may hand
+		// out, an external-key singleton written ahead in blocks by the
+		// store's allocator (docs/problems/stream-seq-high-water-mark-design-2026-10-23.md).
+		// system:store, not system:runtime (which admits every writer); the
+		// hard fence in CheckWriteAs refuses any other writer in every gate
+		// mode.
+		{Kind: KindStreamSeqLease, Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterStore},
+
 		// --- VM store: written through PutBatch before the write gate
 		// existed (H-OG1, docs/problems/object-graph-registration-and-anchor-gaps-2026-10-14.md).
 		// Identity is lifecycleCanonicalID: a key scoped by computer.

@@ -13,7 +13,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// TestStreamSeqSeedScale is the repeatable artifact of the seed record: it
+// TestStreamSeqSeedScale is the repeatable artifact of the seed record (now the lease's cross-check; the exact seed is TestExactStreamSeqSeedScale): it
 // builds a store with N events (1.5 KB payloads) and N/3 objects of another
 // kind interleaved in time, then prints the plan and the time of the old
 // seed's statement beside the new seed's, at each N. Off by default (it
@@ -86,15 +86,15 @@ func TestStreamSeqSeedScale(t *testing.T) {
 					oldBest = d
 				}
 				t0 = time.Now()
-				s.streamSeqSeeded, s.maxStreamSeq = false, 0
-				if err := s.seedStreamSeq(ctx, nil); err != nil {
+				cross, err := s.leaseCrossCheck(ctx)
+				if err != nil {
 					t.Fatal(err)
 				}
 				if d := time.Since(t0); r == 0 || d < newBest {
 					newBest = d
 				}
-				if s.maxStreamSeq != int64(n) {
-					t.Fatalf("seed = %d, want %d", s.maxStreamSeq, n)
+				if cross != int64(n) {
+					t.Fatalf("cross-check = %d, want %d", cross, n)
 				}
 			}
 			t.Logf("n=%d old seed statement best-of-3 %v; new seed best-of-3 %v", n, oldBest, newBest)
