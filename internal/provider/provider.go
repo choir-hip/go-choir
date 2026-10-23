@@ -22,6 +22,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -327,6 +328,11 @@ type ProviderConfig struct {
 	// OpenCodeZenModels lists OpenCode Zen model IDs. The first entry seeds the
 	// provider instance; request.Model controls per-call selection.
 	OpenCodeZenModels []string
+
+	// SyntheticModels lists Synthetic model IDs. The first entry seeds the
+	// provider instance; request.Model controls per-call selection. If empty,
+	// Synthetic is not initialized even if SYNTHETIC_API_KEY is set.
+	SyntheticModels []string
 
 	// SelectedProvider is the explicitly selected provider for direct autoputer
 	// runtime calls. Empty means no direct provider is selected.
@@ -807,6 +813,172 @@ func (p *FireworksProvider) buildChatCompletionsRequestBody(req LLMRequest, mode
 		body.Temperature = &temperature
 	}
 	return body
+}
+
+// SyntheticProvider implements the Provider interface for Synthetic
+// (synthetic.new) over its OpenAI-compatible Chat Completions API. It has one
+// key and no key pool: Synthetic's 429 is an account concurrency limit (about
+// 10 in flight, no Retry-After), so it surfaces at once for the gateway
+// breaker and the run's failover instead of parking the only key
+// (docs/problems/synthetic-provider-onboarding-2026-10-22.md).
+type SyntheticProvider struct {
+	apiKey     string // loaded at init time, never logged
+	modelID    string
+	baseURL    string
+	httpClient *http.Client
+}
+
+// SyntheticConfig holds configuration for creating a SyntheticProvider.
+type SyntheticConfig struct {
+	APIKey  string
+	ModelID string
+	BaseURL string // defaults to https://api.synthetic.new/openai/v1
+}
+
+const syntheticDefaultBaseURL = "https://api.synthetic.new/openai/v1"
+
+// NewSyntheticProvider creates a Synthetic provider from the given config.
+func NewSyntheticProvider(cfg SyntheticConfig) (*SyntheticProvider, error) {
+	apiKey := strings.TrimSpace(cfg.APIKey)
+	if apiKey == "" {
+		return nil, fmt.Errorf("synthetic provider requires api key")
+	}
+	modelID := strings.TrimSpace(cfg.ModelID)
+	if modelID == "" {
+		return nil, fmt.Errorf("synthetic provider requires model_id")
+	}
+	baseURL := strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/")
+	if baseURL == "" {
+		baseURL = syntheticDefaultBaseURL
+	}
+	return &SyntheticProvider{
+		apiKey:     apiKey,
+		modelID:    modelID,
+		baseURL:    baseURL,
+		httpClient: &http.Client{Timeout: defaultProviderHTTPTimeout},
+	}, nil
+}
+
+// NewSyntheticProviderFromEnv creates a Synthetic provider from
+// SYNTHETIC_API_KEY and the optional SYNTHETIC_BASE_URL.
+func NewSyntheticProviderFromEnv(modelID string) (*SyntheticProvider, error) {
+	p, err := NewSyntheticProvider(SyntheticConfig{
+		APIKey:  os.Getenv("SYNTHETIC_API_KEY"),
+		ModelID: modelID,
+		BaseURL: os.Getenv("SYNTHETIC_BASE_URL"),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("synthetic from env: %w", err)
+	}
+	return p, nil
+}
+
+func (p *SyntheticProvider) Name() string { return "synthetic" }
+func (p *SyntheticProvider) IsReal() bool { return true }
+
+func (p *SyntheticProvider) Call(ctx context.Context, req LLMRequest) (*LLMResponse, error) {
+	return p.call(ctx, req, func(StreamChunk) {})
+}
+
+func (p *SyntheticProvider) Stream(ctx context.Context, req LLMRequest, onChunk func(StreamChunk)) (*LLMResponse, error) {
+	req.Stream = true
+	return p.call(ctx, req, onChunk)
+}
+
+func (p *SyntheticProvider) call(ctx context.Context, req LLMRequest, onChunk func(StreamChunk)) (*LLMResponse, error) {
+	modelID := effectiveModel(req.Model, p.modelID)
+	req, mediaErr := prepareMediaRequest("synthetic", modelID, req)
+	if mediaErr != nil {
+		return nil, fmt.Errorf("synthetic: %w", mediaErr)
+	}
+	body := p.buildChatCompletionsRequestBody(req, modelID)
+	httpReq, err := newJSONRequest(ctx, http.MethodPost, openCodeEndpoint(p.baseURL, "chat/completions"), body)
+	if err != nil {
+		return nil, fmt.Errorf("synthetic: build request: %w", err)
+	}
+	httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("User-Agent", "choir-gateway/0.1")
+	if req.Stream {
+		httpReq.Header.Set("Accept", "text/event-stream")
+	} else {
+		httpReq.Header.Set("Accept", "application/json")
+	}
+
+	log.Printf("provider: synthetic call model=%s stream=%t reasoning=%s", modelID, req.Stream, body.ReasoningEffort)
+	resp, err := p.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("synthetic: http call: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if summary := syntheticQuotaSummary(resp.Header); summary != "" {
+		log.Printf("provider: synthetic quota %s", summary)
+	}
+	if !req.Stream {
+		return parseOpenAIChatCompletionsResponse(resp, modelID, "synthetic")
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		logRejectedRequest("synthetic", resp)
+		return nil, fmt.Errorf("synthetic: status %s (sanitized)", resp.Status)
+	}
+	return parseOpenAIChatCompletionsStream(resp.Body, modelID, "synthetic", onChunk)
+}
+
+func (p *SyntheticProvider) buildChatCompletionsRequestBody(req LLMRequest, modelID string) openAIChatCompletionRequest {
+	body := openAIChatCompletionRequest{
+		Model:           modelID,
+		Messages:        convertOpenAIChatMessages(req.System, req.Messages),
+		Tools:           convertOpenAIChatTools(req.Tools),
+		ToolChoice:      openAIChatToolChoice(req.ToolChoice),
+		Stream:          req.Stream,
+		ReasoningEffort: syntheticReasoningEffort(req.ReasoningEffort),
+	}
+	if req.MaxTokens > 0 {
+		maxTokens := req.MaxTokens
+		body.MaxTokens = &maxTokens
+	}
+	return body
+}
+
+// syntheticReasoningEffort maps Choir's effort to the values Synthetic
+// accepts. reasoning_effort is a mode switch plus a budget there: none,
+// minimal and low run the non-thinking template; medium, high, xhigh and max
+// think. Any other string is a 400, so an unknown value is omitted (model
+// default) and the disable spellings Choir uses elsewhere become none.
+func syntheticReasoningEffort(effort string) string {
+	switch e := strings.ToLower(strings.TrimSpace(effort)); e {
+	case "none", "minimal", "low", "medium", "high", "xhigh", "max":
+		return e
+	case "off", "disabled", "false":
+		return "none"
+	default:
+		return ""
+	}
+}
+
+// syntheticQuotaSummary renders the x-synthetic-quotas response header (the
+// same JSON as GET /v2/quotas) as a log fragment: the weekly plan percentage
+// is what an overnight run spends. Empty when the header is absent or bad.
+func syntheticQuotaSummary(h http.Header) string {
+	raw := strings.TrimSpace(h.Get("x-synthetic-quotas"))
+	if raw == "" {
+		return ""
+	}
+	var q struct {
+		Subscription struct {
+			Limit    int `json:"limit"`
+			Requests int `json:"requests"`
+		} `json:"subscription"`
+		Plan struct {
+			PercentRemaining *float64 `json:"percentRemaining"`
+			NextRegenAt      string   `json:"nextRegenAt"`
+		} `json:"planWeeklyLimit"`
+	}
+	if json.Unmarshal([]byte(raw), &q) != nil || q.Plan.PercentRemaining == nil {
+		return ""
+	}
+	return fmt.Sprintf("weekly_percent_remaining=%.4f weekly_next_regen=%s subscription_requests=%d/%d",
+		*q.Plan.PercentRemaining, q.Plan.NextRegenAt, q.Subscription.Requests, q.Subscription.Limit)
 }
 
 // ChatGPTProvider implements the Provider interface for ChatGPT subscription
@@ -2137,6 +2309,11 @@ func parseOpenAIChatCompletionsResponse(resp *http.Response, modelID string, pro
 			Arguments: canonicalJSON(json.RawMessage(call.Function.Arguments)),
 		})
 	}
+	// A forced tool_choice can answer finish_reason "stop" with the calls
+	// present (Synthetic does); the calls make it tool use.
+	if len(result.ToolCalls) > 0 && result.StopReason == "end_turn" {
+		result.StopReason = "tool_use"
+	}
 
 	RecordCacheUsage(providerName, result.Usage)
 	log.Printf("provider: %s chat completion model=%s stop=%s tokens_in=%d tokens_out=%d cached_in=%d cache_reported=%t text_len=%d tool_calls=%d",
@@ -2168,7 +2345,14 @@ func parseOpenAIChatCompletionsStream(body io.Reader, modelID string, providerNa
 		onChunk(StreamChunk{Type: "message_start", ID: result.ID, Model: result.Model})
 	}
 	flushTools := func() {
-		for idx, tool := range tools {
+		// The model's order: index ascending, not map order.
+		order := make([]int, 0, len(tools))
+		for idx := range tools {
+			order = append(order, idx)
+		}
+		sort.Ints(order)
+		for _, idx := range order {
+			tool := tools[idx]
 			if tool == nil {
 				continue
 			}
@@ -2188,7 +2372,12 @@ func parseOpenAIChatCompletionsStream(body io.Reader, modelID string, providerNa
 			return
 		}
 		completed = true
+		hadTools := len(tools) > 0
 		flushTools()
+		if hadTools && (reason == "" || reason == "stop") {
+			// A forced tool_choice answers "stop" with the calls present.
+			reason = "tool_calls"
+		}
 		switch reason {
 		case "tool_calls":
 			result.StopReason = "tool_use"
@@ -2221,7 +2410,10 @@ func parseOpenAIChatCompletionsStream(body io.Reader, modelID string, providerNa
 				Delta struct {
 					Content          any    `json:"content"`
 					ReasoningContent string `json:"reasoning_content"`
-					ToolCalls        []struct {
+					// Reasoning is the streamed spelling on Synthetic
+					// (non-streaming and echo use reasoning_content).
+					Reasoning string `json:"reasoning"`
+					ToolCalls []struct {
 						Index    int    `json:"index"`
 						ID       string `json:"id"`
 						Function struct {
@@ -2249,9 +2441,9 @@ func parseOpenAIChatCompletionsStream(body io.Reader, modelID string, providerNa
 				result.Text += text
 				onChunk(StreamChunk{Type: "content_block_delta", Delta: text})
 			}
-			if choice.Delta.ReasoningContent != "" {
-				result.ReasoningContent += choice.Delta.ReasoningContent
-				onChunk(StreamChunk{Type: "reasoning_delta", ReasoningDelta: choice.Delta.ReasoningContent})
+			if reasoning := choice.Delta.ReasoningContent + choice.Delta.Reasoning; reasoning != "" {
+				result.ReasoningContent += reasoning
+				onChunk(StreamChunk{Type: "reasoning_delta", ReasoningDelta: reasoning})
 			}
 			for _, call := range choice.Delta.ToolCalls {
 				tool := tools[call.Index]
@@ -3206,6 +3398,14 @@ func ResolveAll(cfg ProviderConfig) *MultiProvider {
 		if p, err := NewOpenCodeZenProviderFromEnv(cfg.OpenCodeZenModels[0]); err == nil {
 			mp.Register("opencode-zen", p)
 			log.Printf("provider: resolved opencode-zen (seed_model=%s)", p.modelID)
+		}
+	}
+
+	// Try Synthetic. Register one provider; req.Model selects the model.
+	if os.Getenv("SYNTHETIC_API_KEY") != "" && len(cfg.SyntheticModels) > 0 {
+		if p, err := NewSyntheticProviderFromEnv(cfg.SyntheticModels[0]); err == nil {
+			mp.Register("synthetic", p)
+			log.Printf("provider: resolved synthetic (seed_model=%s)", p.modelID)
 		}
 	}
 
