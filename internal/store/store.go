@@ -951,6 +951,14 @@ func Open(dbPath string) (*Store, error) {
 	}
 	doneTextureSchema(nil)
 
+	// The run-memory kind index: created on an empty table, only reported on a
+	// table with rows (run_memory_kind_index.go). Never a build on a populated
+	// table at boot.
+	bootSubstep("runtime-schema", "run-memory-kind-index", func() error {
+		s.ensureRunMemoryKindIndexAtOpen()
+		return nil
+	})
+
 	// Persist the running build's store schema epoch inside the workspace so
 	// the updater's pre-mutation state-compat gate (S2-d) can refuse a release
 	// whose binary does not understand this store — the vm-3dc68688

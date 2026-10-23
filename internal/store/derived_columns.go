@@ -122,6 +122,22 @@ func (s *Store) runDerivedColumnMigration(ctx context.Context, og *objectgraph.D
 		m.status.Steps = append(m.status.Steps, step)
 		m.mu.Unlock()
 	})
+	// The run-memory kind index is one more step of the operation, after the
+	// og_objects ones; a cancel before it skips it.
+	var indexErr error
+	if ctx.Err() == nil {
+		m.mu.Lock()
+		number := len(m.status.Steps) + 1
+		m.mu.Unlock()
+		step, stepErr := s.migrateRunMemoryKindIndex(ctx, number)
+		indexErr = stepErr
+		if step != nil {
+			m.mu.Lock()
+			m.status.Steps = append(m.status.Steps, *step)
+			m.mu.Unlock()
+		}
+	}
+	indexStatus, indexStatusErr := s.discoverRunMemoryKindIndex(context.Background())
 	// The final plan is read fresh: a cancel can land before the first
 	// discovery.
 	plan, planErr := og.DiscoverAccessPaths(context.Background())
@@ -131,6 +147,9 @@ func (s *Store) runDerivedColumnMigration(ctx context.Context, og *objectgraph.D
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.status.Plan = plan
+	if indexStatusErr == nil {
+		m.status.RunMemoryKindIndex = &indexStatus
+	}
 	m.status.EndedAt = time.Now().UTC().Format(time.RFC3339)
 	switch {
 	case errors.Is(err, context.Canceled):
@@ -138,6 +157,11 @@ func (s *Store) runDerivedColumnMigration(ctx context.Context, og *objectgraph.D
 	case err != nil:
 		m.status.State = DerivedColumnMigrationFailed
 		m.status.Error = err.Error()
+	case errors.Is(indexErr, context.Canceled):
+		m.status.State = DerivedColumnMigrationCancelled
+	case indexErr != nil:
+		m.status.State = DerivedColumnMigrationFailed
+		m.status.Error = indexErr.Error()
 	case planErr != nil:
 		m.status.State = DerivedColumnMigrationFailed
 		m.status.Error = planErr.Error()
@@ -186,6 +210,11 @@ func (s *Store) DerivedColumnMigrationStatus(ctx context.Context) DerivedColumnM
 			status.Error = err.Error()
 		}
 		status.Plan = plan
+		if idx, err := s.discoverRunMemoryKindIndex(ctx); err == nil {
+			status.RunMemoryKindIndex = &idx
+		} else if status.Error == "" {
+			status.Error = err.Error()
+		}
 	}
 	return status
 }

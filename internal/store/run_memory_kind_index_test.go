@@ -187,36 +187,31 @@ func TestRunMemoryKindIndexMigrationBuildsItOnce(t *testing.T) {
 	}
 }
 
-// runMemoryListShapes are the four shapes of ListRunMemoryEntriesForAgent's
-// WHERE: owner and one kind (what production sends), owner and two kinds,
+// runMemoryListShapes are the shapes of ListRunMemoryEntriesForAgent's
+// arguments: owner and one kind (what production sends), owner and two kinds,
 // no owner and one kind, owner and all kinds.
-func runMemoryListShapes() []struct {
-	name, where string
-	args        []any
-	kindIndex   bool
-} {
-	return []struct {
-		name, where string
-		args        []any
-		kindIndex   bool
-	}{
-		{"owner+1kind", "agent_id = ? AND owner_id = ? AND kind IN (?)", []any{"agent-hot", "owner-1", "rlm_inbox_cursor"}, true},
-		{"owner+2kinds", "agent_id = ? AND owner_id = ? AND kind IN (?,?)", []any{"agent-hot", "owner-1", "rlm_inbox_cursor", "cell_fate"}, true},
-		{"noowner+1kind", "agent_id = ? AND kind IN (?)", []any{"agent-hot", "rlm_inbox_cursor"}, true},
-		{"owner+allkinds", "agent_id = ? AND owner_id = ?", []any{"agent-hot", "owner-1"}, false},
-	}
+var runMemoryListShapes = []struct {
+	name      string
+	owner     string
+	kinds     []string
+	kindIndex bool
+}{
+	{"owner+1kind", "owner-1", []string{"rlm_inbox_cursor"}, true},
+	{"owner+2kinds", "owner-1", []string{"rlm_inbox_cursor", "cell_fate"}, true},
+	{"noowner+1kind", "", []string{"rlm_inbox_cursor"}, true},
+	{"owner+allkinds", "owner-1", nil, false},
 }
 
+// The plan is read from the production statement (runMemoryAgentListQuery),
+// not a copy of its text.
 func TestRunMemoryKindIndexPlanHasNoFullRangeWalk(t *testing.T) {
 	s, _ := populatedRunMemoryStore(t)
-	sel := func(where string) string {
-		return `SELECT entry_id, loop_id, owner_id, agent_id, parent_entry_id, seq, kind, role, message_json, summary,
-			first_kept_entry_id, tokens_before, reason, model, details_json, created_at
-			FROM run_memory_entries WHERE ` + where + ` ORDER BY created_at ASC, seq ASC`
+	plan := func(owner string, kinds []string) string {
+		q, args := runMemoryAgentListQuery(owner, "agent-hot", kinds)
+		return explainEventTablePlan(t, s, q, args...)
 	}
 	// Before: the kind filter sits above the desk's whole index range.
-	before := explainEventTablePlan(t, s, sel(runMemoryListShapes()[0].where), runMemoryListShapes()[0].args...)
-	if !strings.Contains(before, "Filter") {
+	if before := plan("owner-1", []string{"rlm_inbox_cursor"}); !strings.Contains(before, "Filter") {
 		t.Fatalf("plan before the index changed shape; the test's premise is gone:\n%s", before)
 	}
 	if _, err := s.StartDerivedColumnMigration(); err != nil {
@@ -226,19 +221,19 @@ func TestRunMemoryKindIndexPlanHasNoFullRangeWalk(t *testing.T) {
 		t.Fatalf("migration %s: %s", st.State, st.Error)
 	}
 	const kindIndexCols = "[run_memory_entries.agent_id,run_memory_entries.kind,run_memory_entries.owner_id,run_memory_entries.created_at]"
-	for _, shape := range runMemoryListShapes() {
-		plan := explainEventTablePlan(t, s, sel(shape.where), shape.args...)
+	for _, shape := range runMemoryListShapes {
+		p := plan(shape.owner, shape.kinds)
 		if shape.kindIndex {
-			if !strings.Contains(plan, kindIndexCols) {
-				t.Errorf("%s does not read the kind index:\n%s", shape.name, plan)
+			if !strings.Contains(p, kindIndexCols) {
+				t.Errorf("%s does not read the kind index:\n%s", shape.name, p)
 			}
-			if strings.Contains(plan, "Filter") {
-				t.Errorf("%s still filters above the index (a full-range walk):\n%s", shape.name, plan)
+			if strings.Contains(p, "Filter") {
+				t.Errorf("%s still filters above the index (a full-range walk):\n%s", shape.name, p)
 			}
-		} else if strings.Contains(plan, kindIndexCols) {
+		} else if strings.Contains(p, kindIndexCols) {
 			// With no kind the planner keeps the owner/agent/created_at index,
 			// which also gives the order.
-			t.Errorf("%s moved to the kind index:\n%s", shape.name, plan)
+			t.Errorf("%s moved to the kind index:\n%s", shape.name, p)
 		}
 	}
 }

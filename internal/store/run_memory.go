@@ -280,17 +280,10 @@ func (s *Store) ListRunMemoryEntries(ctx context.Context, ownerID, runID string)
 	return entries, nil
 }
 
-// ListRunMemoryEntriesForAgent returns run-memory entries for one desk agent
-// across all its runs, in agent's seq order per run then run order. The
-// durable inbox cursor is keyed (channel, desk): a respawned desk mints a new
-// run_id but must resume its channel cursor — the (runID,channel) key can't
-// do that. If ownerID is non-empty the query is scoped to that owner; kinds
-// restricts to the named entry kinds (empty = all kinds).
-func (s *Store) ListRunMemoryEntriesForAgent(ctx context.Context, ownerID, agentID string, kinds []string) ([]types.RunMemoryEntry, error) {
-	s.runMemoryAgentList.calls.Add(1)
-	if agentID == "" {
-		return nil, fmt.Errorf("list run memory for agent: agent_id is required")
-	}
+// runMemoryAgentListQuery is the statement of ListRunMemoryEntriesForAgent.
+// The kind index (run_memory_kind_index.go) serves its WHERE with no change to
+// the text: the planner reads it when it exists. A test pins the plan.
+func runMemoryAgentListQuery(ownerID, agentID string, kinds []string) (string, []any) {
 	query := `SELECT entry_id, loop_id, owner_id, agent_id, parent_entry_id, seq,
 	        kind, role, message_json, summary, first_kept_entry_id,
 	        tokens_before, reason, model, details_json, created_at
@@ -310,6 +303,21 @@ func (s *Store) ListRunMemoryEntriesForAgent(ctx context.Context, ownerID, agent
 		query += ` AND kind IN (` + strings.Join(marks, ",") + `)`
 	}
 	query += ` ORDER BY created_at ASC, seq ASC`
+	return query, args
+}
+
+// ListRunMemoryEntriesForAgent returns run-memory entries for one desk agent
+// across all its runs, in agent's seq order per run then run order. The
+// durable inbox cursor is keyed (channel, desk): a respawned desk mints a new
+// run_id but must resume its channel cursor — the (runID,channel) key can't
+// do that. If ownerID is non-empty the query is scoped to that owner; kinds
+// restricts to the named entry kinds (empty = all kinds).
+func (s *Store) ListRunMemoryEntriesForAgent(ctx context.Context, ownerID, agentID string, kinds []string) ([]types.RunMemoryEntry, error) {
+	s.runMemoryAgentList.calls.Add(1)
+	if agentID == "" {
+		return nil, fmt.Errorf("list run memory for agent: agent_id is required")
+	}
+	query, args := runMemoryAgentListQuery(ownerID, agentID, kinds)
 	obs := runMemoryAgentListRead{site: runMemoryReadSite(ctx), agentID: agentID, kinds: len(kinds)}
 	start := time.Now()
 	defer func() {
