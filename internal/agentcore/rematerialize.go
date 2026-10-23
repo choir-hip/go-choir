@@ -222,7 +222,7 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 		return report, fmt.Errorf("rematerialize: lease untrust marker: %w", err)
 	}
 
-	if err := updater.RestagePinnedRelease(rt.selfdevUpdaterRoot, checkpoint.Request.ReleaseDigest); err != nil {
+	if err := updater.RestagePinnedRelease(rt.selfdevUpdaterRoot, checkpoint.Request.ReleaseDigest, filepath.Join(stagedWorkspace, storeschema.File)); err != nil {
 		_ = os.RemoveAll(stagingRoot)
 		return report, fmt.Errorf("rematerialize: restage served SPA: %w", err)
 	}
@@ -231,7 +231,9 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 		if keepRestaged || priorReleaseDigest == "" || priorReleaseDigest == checkpoint.Request.ReleaseDigest {
 			return
 		}
-		_ = updater.RestagePinnedRelease(rt.selfdevUpdaterRoot, priorReleaseDigest)
+		// The prior release was current on this computer before the restage;
+		// putting it back is not a step toward an older binary.
+		_ = updater.RestagePinnedRelease(rt.selfdevUpdaterRoot, priorReleaseDigest, "")
 	}()
 
 	quarantineDir := filepath.Join(filepath.Dir(originalMarker), "rematerialize-quarantine-"+time.Now().UTC().Format("20060102T150405.000000000Z"))
