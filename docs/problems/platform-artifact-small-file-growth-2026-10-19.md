@@ -1239,3 +1239,67 @@ Fix commit: "fix(taperepack): review round 3 ..." (red); tests
 
 Tests: `go test ./internal/taperepack/... ./cmd/taperepack/...
 ./internal/tapestore -count=1` passes (87 s, 59 s, 35 s).
+
+### Review round 4 on 8722c4932: findings, before any fix (FP10, 2026-10-22, bunch 141)
+
+Class: red (the repack's delete gate). Reviews: deepseek-v41-flash `delete
+--apply` NO (F1 high, F2, F3 medium), devin ACCEPT WITH CONDITIONS, gemini38
+ACCEPT. All three verified L1 to L6 and the report-version-3 gate; the focused
+tests pass on 8722c4932. The open item is M2, and two reviewers found that the
+round-3 disposition of M2 is not something an operator can carry out.
+
+- **M2 (deepseek F1 high, devin 1 and 2): the database-side keep set has no
+  instrument and no enforcement.** The sweep also keeps every 64-hex substring
+  of the five `tapeExtraRefQueries` columns (`closure_json`, `program_json`,
+  `checkpoint_json`, `receipt_json`, `certificate_json`;
+  `internal/platform/tape_sweep.go` 777-782, `artifact_gc.go` 420-456). The
+  round-3 disposition said "take the dry run's digest list and check it against
+  those columns". There is no such list: a delete dry run only counts
+  (`WouldDelete++`), the per-digest log exists only with `--apply`, and the
+  apply pass re-runs the whole verification, so it can unlink a file that was
+  `uncovered` or `blocked` at dry-run time (a copy landed, a segment healed),
+  one that was never on any list checked. The check is also absent from the
+  numbered preconditions (it lived only in the dispositions). Fix: a
+  `--keep-digests <file>` option enforced at `unlinkCovered`, so the apply
+  pass checks every candidate at the moment of the unlink, whatever it was at
+  dry-run time; `delete --apply` refuses to start without it.
+- **M2 instrument (the lead's question, answered from the code).** Does the
+  platform already return that set? No. `POST /internal/platform/artifact-gc/
+  tape` (`HandleTapeSweep`, corpusd, loopback 8086) starts a job and
+  `GET ...?job=<id>` returns a `TapeSweepReport`. The report holds counts
+  (`orphans.<ns>.referenced`, `chain_events`, `warnings`), not digests; the
+  manifest file on disk lists the files the sweep would *delete*, not the
+  ones it keeps; the live set (`live.addAllHex` over the extra-ref columns,
+  line 1027) is an in-memory sorted prefix set that is never written out.
+  No other internal route lists those columns: closures and programs have no
+  read route at all, and checkpoints and route certificates are read one row
+  at a time by `computer_id` plus idempotency key
+  (`checkpoints.go` 303 and 379), which cannot enumerate. So no existing
+  read-only call produces the keep file. Per the lead's instruction this lane
+  adds no platform route; the missing route is recorded as the blocking
+  precondition and residual for a separate platform lane, with its smallest
+  design (below, in the dispositions).
+- **F2 (deepseek, medium): non-regular entries in the three legacy directories
+  are skipped silently.** `list.go` counts a digest-named symlink, FIFO or
+  directory under `sha256/computer-event`, `computer-event-payload` or
+  `pin-receipts` as `other_files` and reads no edge from it, while
+  `tapestore.readLegacy` follows a symlink and verifies the digest, so a
+  symlinked legacy event or receipt is a read source whose references the
+  repack never sees. Same class as L6 for the legacy tree. Fix: a name that
+  parses as a digest (with the receipt suffix) and is not a regular file is an
+  attribution error (fail closed).
+- **F3 (deepseek, medium): `hexRefs` every-window is unbounded work per body.**
+  A 64 MiB body of hex (`MaxRecordBytes`) has about 67 million windows, a
+  multi-gigabyte `seen` map and edge spill before the join can refuse the
+  file; and precondition 5 does not budget the event-ref edges (refs x 2 x 42
+  bytes x about 2.44 million events). The sweep's regexp is `FindAllString`,
+  which is non-overlapping: on a run of hex it matches at the run start plus
+  multiples of 64, not at every offset. Fix: enumerate those offsets (what the
+  sweep keeps, `>=` its references), update the work-directory estimate.
+- **Devin 3 (symlinked files under `sha256/*`)**: the same as F2.
+- **Devin 4 nits.** `unix.Linkat` is missing from `bannedUnlinks` (one line).
+  The `legacy-events` attribution key can collide with a computer whose id is
+  `legacy-events` (a valid id), cosmetic. An event body whose `computer_id`
+  differs from its chain owner would under-attribute; no production path
+  writes such a row (`appender.go` and `computer_events.go` enforce the
+  match); recorded beside M3.
