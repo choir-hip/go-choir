@@ -538,21 +538,49 @@ const eventTableAnyRowSQL = `SELECT 1 FROM choir_events LIMIT 1`
 // store.event_table while the stream_seq lease is not ready on the tape.
 var ErrEventTableLeaseNotReady = errors.New("the stream_seq lease is not ready")
 
-// EventTableLeaseReady reports whether the stream_seq lease admits the
-// event-table writer. Not yet implemented (tests first).
+// The stream_seq lease gate (docs/problems/stream-seq-high-water-mark-design-
+// 2026-10-23.md, section 4 "When"): the writer stamps, and store.event_table
+// may be turned on, only once the lease state is ready with its latest lease
+// row written through the projection tape. Before the lease, a restart after
+// deploy 2 would seed stream_seq by the exact read over both tables at every
+// boot (104 s on the paper); with it, by one lease row. The gate reads the
+// lease's own state (stream_seq_lease.go), never a copy of it.
+
+// EventTableLeaseReady returns nil when the stream_seq lease admits the
+// event-table writer, and otherwise an error wrapping
+// ErrEventTableLeaseNotReady that names the lease state. It reads the
+// lease's published snapshot and an atomic, so it never waits on the
+// allocator.
 func (s *Store) EventTableLeaseReady() error {
+	if s == nil {
+		return fmt.Errorf("%w: no store", ErrEventTableLeaseNotReady)
+	}
+	st := s.StreamSeqLeaseStats()
+	if st.State != leaseReady.String() {
+		return fmt.Errorf("%w: state %s (watch stream_seq_lease in /api/runtime/observability)", ErrEventTableLeaseNotReady, st.State)
+	}
+	if !s.lease.onTape.Load() {
+		return fmt.Errorf("%w: state ready, but its lease row is not on the projection tape (seeded before a tape was bound; the next refill writes one)", ErrEventTableLeaseNotReady)
+	}
 	return nil
 }
 
-// EventTableWritesOn reports the switch as the writer applies it.
+// EventTableWritesOn reports whether the writer stamps now: the switch on
+// and the stream_seq lease ready on the tape. The switch alone is armed
+// (SetEventTableWrites); a boot arms it before the lease has seeded, and the
+// writer begins once the lease is ready.
 func (s *Store) EventTableWritesOn() bool {
-	return s != nil && s.eventTableWrites.Load()
+	return s != nil && s.eventTableWrites.Load() && s.EventTableLeaseReady() == nil
 }
 
 // stampsEventTable reports whether an event of this kind is stamped now: a
-// bound tape, the switch on, and the kind in the storage class.
+// bound tape, the switch on, the stream_seq lease ready with its lease on the
+// tape, and the kind in the storage class. The caller holds eventMu (the
+// lease state is read under it).
 func (s *Store) stampsEventTable(kind types.EventKind) bool {
-	return s.projectionTape != nil && s.eventTableWrites.Load() && kind.Storage() == types.StorageEventTable
+	return s.projectionTape != nil && s.eventTableWrites.Load() &&
+		s.lease.state == leaseReady && s.lease.onTape.Load() &&
+		kind.Storage() == types.StorageEventTable
 }
 
 // eventObjectOp is the object_recorded op of one choir.event object, stamped

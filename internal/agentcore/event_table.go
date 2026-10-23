@@ -97,8 +97,15 @@ func (rt *Runtime) setEventTableLocked(setting bool) {
 	case !rt.store.ProjectionTapeBound():
 		st.Reason = "store.event_table is set, but the projection tape is not bound"
 	default:
+		// The switch is armed. The writer stamps only once the stream_seq
+		// lease is ready on the tape (store.EventTableLeaseReady); a boot arms
+		// it before the eager seed has finished, and the status follows the
+		// lease from then on (eventTableStatus).
 		st.Writing = true
 		st.Reason = "batched telemetry is written to choir_events"
+		if err := rt.store.EventTableLeaseReady(); err != nil {
+			st.Reason = eventTableWaitsReason(err)
+		}
 	}
 	if err := rt.store.SetEventTableWrites(st.Writing); err != nil {
 		// The floor could not be written: the writer stays off (fail closed).
@@ -111,6 +118,18 @@ func (rt *Runtime) setEventTableLocked(setting bool) {
 	rt.eventTableState = st
 }
 
+// eventTableWaitsReason is the status reason while the switch is armed and
+// the stream_seq lease does not yet admit the writer.
+func eventTableWaitsReason(err error) string {
+	return "store.event_table is set; the writer waits: " + err.Error()
+}
+
+// eventTableLeaseRefusal is the API's answer to turning store.event_table on
+// before the stream_seq lease is ready on the tape: nothing is stored.
+func eventTableLeaseRefusal(err error) string {
+	return "store.event_table refused: " + err.Error() + "; set it again once the lease state is ready"
+}
+
 // eventTableStatus returns the switch as last applied, with the store floor
 // read now.
 func (rt *Runtime) eventTableStatus() EventTableStatus {
@@ -121,7 +140,18 @@ func (rt *Runtime) eventTableStatus() EventTableStatus {
 		// The store's own switch is the truth: Reopen turns it off when it
 		// cannot floor an adopted workspace, which this copy never hears of
 		// (bunch 148, Devin 2b).
-		st.Writing = st.Writing && rt.store.EventTableWritesOn()
+		armed := st.Writing
+		st.Writing = armed && rt.store.EventTableWritesOn()
+		switch {
+		case armed && st.Writing:
+			st.Reason = "batched telemetry is written to choir_events"
+		case armed:
+			if err := rt.store.EventTableLeaseReady(); err != nil {
+				st.Reason = eventTableWaitsReason(err)
+			} else {
+				st.Reason = "store.event_table is set, but the store turned its writer off"
+			}
+		}
 		floor, err := rt.store.StoreFloor()
 		if err != nil {
 			st.Reason += "; the store floor is unreadable: " + err.Error()

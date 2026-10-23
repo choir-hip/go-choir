@@ -186,6 +186,12 @@ type leaseAllocator struct {
 	crossCheckMax int64
 	// allocatedThrough is the A of the row this process last wrote.
 	allocatedThrough int64
+	// onTape is whether the last lease row this process wrote went through a
+	// bound projection tape (a row written before any tape was bound is an
+	// og row only, which replay does not reproduce). Written under eventMu;
+	// atomic so a reader that must not wait on the allocator (the event-table
+	// gate's status) reads it lock-free.
+	onTape atomic.Bool
 	seedNotBefore    time.Time
 	refillNotBefore  time.Time
 	// ctx is the lifetime of the lease goroutines; Close cancels it and waits
@@ -428,6 +434,8 @@ type leaseSeedResult struct {
 	untrustReason string
 	crossMax      int64
 	undecodable   int64
+	// onTape: the seed's lease row was written with the projection tape bound.
+	onTape bool
 }
 
 // runSeeder computes the seed with eventMu released, lands a fresh lease block
@@ -440,6 +448,7 @@ func (s *Store) runSeeder(ctx context.Context, workspace string) {
 	if err == nil {
 		row = leaseRow{Reserved: res.seed + streamSeqLeaseBlock, Allocated: res.seed, Block: streamSeqLeaseBlock,
 			WriterEpoch: leaseWriterEpoch, Basis: res.basis}
+		res.onTape = s.projectionTape != nil
 		err = s.appendLease(ctx, "seed", &row)
 	}
 	if err == nil && res.basis == leaseBasisExact {
@@ -490,6 +499,7 @@ func (s *Store) completeSeedLocked(res leaseSeedResult, row leaseRow, took time.
 	s.lease.untrustReason = res.untrustReason
 	s.lease.crossCheckMax = res.crossMax
 	s.lease.undecodable = res.undecodable
+	s.lease.onTape.Store(res.onTape)
 	s.lease.seedMS = took.Milliseconds()
 	// lastErr is deliberately not cleared: it is the last error, evidence of a
 	// failure that has since healed.
@@ -899,6 +909,7 @@ func (s *Store) runRefill(ctx context.Context, target, allocated int64) {
 	row := leaseRow{Reserved: target, Allocated: allocated, Block: streamSeqLeaseBlock,
 		WriterEpoch: leaseWriterEpoch, Basis: leaseBasisLease}
 	started := time.Now()
+	onTape := s.projectionTape != nil
 	err := s.appendLease(ctx, "refill", &row)
 
 	s.eventMu.Lock()
@@ -913,6 +924,7 @@ func (s *Store) runRefill(ctx context.Context, target, allocated int64) {
 	} else {
 		s.lease.reserved = max(s.lease.reserved, target)
 		s.lease.allocatedThrough = allocated
+		s.lease.onTape.Store(onTape)
 	}
 	s.publishLeaseObsLocked()
 	s.leaseBroadcastLocked()
