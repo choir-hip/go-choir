@@ -23,7 +23,7 @@ readiness: intent | drafted | reviewed | executable
 # review — latest authoring-gate receipt for THIS file; required before
 # promotion to executable under continuous authority.
 review:
-  reviewer: <panel/agents that reviewed this file, or none>
+  reviewer: <agent(s)/panel that reviewed this file, or none>
   frozen_ref: <content digest reviewed>
   verdict: accept | send_back | escalate | none
   evidence_ref: <review output path or none>
@@ -240,8 +240,9 @@ documentation is what future planning reads. Promotions are recorded in
 One entry — the latest review of this file (not of landed code).
 `frozen_ref` binds the verdict to a content digest; a `reviewed` file
 whose digest changed since its `accept` is `drafted` again. This is the
-authoring gate; the landed-candidate consensus gate at `complete` is a
-separate, unchanged obligation for behavior change.
+authoring gate; the landed-candidate review gate at `complete` (sized by
+risk tier: none, one Devin seat, or a panel) is a separate, unchanged
+obligation for behavior change.
 
 ### `metamission` — ordered station set
 

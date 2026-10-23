@@ -197,7 +197,8 @@ each promotion is recorded:
 intent       a direction, not yet shaped — exists so the idea isn't lost;
              do not execute
 drafted      authored to the schema; unreviewed; not executable
-reviewed     passed agentic-consensus review of THIS file, bound to a
+reviewed     passed review of THIS file (one Devin seat by default; a
+             panel when the file authorizes tier 2 work), bound to a
              frozen digest in `review`; coherent and authority-checked
 executable   authorized to run: `readiness: executable` +
              `now.status: working` + named authority (owner statement, or
@@ -207,8 +208,8 @@ executable   authorized to run: `readiness: executable` +
 
 **Continuous-authority rule (owner 2026-09-29):** work proceeds
 continuously without per-station owner approval when the file passed
-agentic consensus and is coherent — the metamission's spine ratification
-plus per-file consensus review is the authorization, not a per-station
+review (risk-tiered, above) and is coherent — the metamission's spine
+ratification plus per-file review is the authorization, not a per-station
 ask. Owner approval is reserved for genuinely irreversible or
 authority-changing steps.
 
@@ -226,13 +227,13 @@ or explicitly `superseded`.
 
 ## Review — the per-file authoring receipt
 
-`review` records the latest file-review: `reviewer` (panel or agent),
+`review` records the latest file-review: `reviewer` (agent or panel),
 `frozen_ref` (digest reviewed), `verdict` (`accept`/`send_back`/
 `escalate`), `evidence_ref`. A `reviewed` file with `verdict: accept`
 bound to its current digest is continuous-authority-executable under the
 rule above. This is the file-authoring gate; the landed-candidate
-consensus gate at `complete` is unchanged and still mandatory for
-behavior change.
+review gate at `complete` (sized by tier) is unchanged and still mandatory
+for behavior change.
 
 
 ## The Circuit
@@ -320,17 +321,31 @@ only when it can change a real decision: candidate scope, product behavior,
 evidence floor, rollback, authority, or stopping condition. Do not send a
 moving target to a panel and do not use a panel merely to narrate progress.
 
+**Allocate review by risk, not by habit** (owner, 2026-10-23: "allocating code
+review to hard stuff and trusting that we can handle the easy stuff cold";
+"make devin the go-to reviewer"). The tiers are in the repo operating
+contract (`CLAUDE.md`, Mutation Classes): tier 0, no model review (green and
+yellow, proof tooling, mechanical rebases, fixes answering an earlier
+finding); tier 1, one seat, Devin (orange, and red that is additive, behind a
+switch, with a one-act rollback); tier 2, three seats (red where a defect
+would be silent or irreversible). A goal file names the tier of each
+candidate it lands and does not hardcode a panel. Re-review only a behaviour
+change on a tier 2 surface, one seat on the delta, never for nits.
+
 Bind review to a frozen candidate identity: base ref, scoped paths, digest, and
 available evidence. The result is an evidence receipt with an adjudicated
 outcome (`accept`, `repair`, `reject`, or `escalate`), not a vote and not its
 own commit. A reproducible minority blocker outweighs an unsupported majority
 pass.
 
-**Consensus is a completion gate.** Before a behavior-changing mission may
-settle `complete`, run the agentic-consensus panel on the frozen landed
-candidate (diff identity + deployed evidence). The gate is not advisory:
+**Review is a completion gate, sized by tier.** Before a behavior-changing
+mission may settle `complete`, run the tier's review on the frozen landed
+candidate (diff identity + deployed evidence): none for tier 0, one Devin
+seat for tier 1, the agentic-consensus panel for tier 2. The gate is not
+advisory:
 
-- **Approve** → record the `consensus_review` receipt and settle.
+- **Approve** → record the `consensus_review` receipt (or the tier 0 check
+  receipt) and settle.
 - **Send back / does not approve** → completion is blocked. Close the named
   gap (tighten the proof, repair the defect, or accept-and-name the edge),
   re-freeze the new candidate identity, and re-run the panel. Iterate until
@@ -406,6 +421,6 @@ A goal file conforms when it:
 - forces a shift after two zero-moves;
 - records closed boundaries in `receipts`, not as a running log;
 - never lets a weak measure advance `complete`.
-- never settles `complete` on a candidate the consensus panel sent back —
+- never settles `complete` on a candidate its tier's review sent back —
   the gate iterates (close the gap, re-freeze, re-run) until approval or an
   explicitly accepted edge.

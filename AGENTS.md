@@ -60,7 +60,8 @@ mission roadmap from here to World Wire live is
 [docs/world-wire-mission-stack-2026-09-22.md](docs/world-wire-mission-stack-2026-09-22.md);
 the product mechanism is precommitment records
 (`docs/precommitment-records.md`). For multi-agent review
-panels used at definition or phase gates, see
+panels used at definition or phase gates (code review is risk-tiered; see
+Mutation Classes below), see
 [skills/agentic-consensus/SKILL.md](skills/agentic-consensus/SKILL.md). Load those on demand.
 
 ## No Blocking Asks
@@ -182,6 +183,23 @@ Classify every mission/change by mutation class before editing:
 
 Do not count newly discovered heresies as regressions, and do not count
 discovery alone as repair.
+
+**Code review is risk-tiered, Devin by default** (owner, 2026-10-23: "we
+should be more judicious, allocating code review to hard stuff and trusting
+that we can handle the easy stuff cold"; "make devin the go-to reviewer").
+Tier 0, no model review: green and yellow changes, proof tooling, mechanical
+rebases, and fixes that answer an earlier finding; the repo gates, focused
+tests, the CI mirror and the staging proof are the check. Tier 1, one seat,
+Devin: orange changes, and red changes that are additive, behind a
+data/config switch, with a one-act rollback that shows on staging within
+minutes. Tier 2, three seats (Devin, DeepSeek v4.1 flash, Gemini 3.8 flash):
+red where a defect would be silent or irreversible — deletes, tape/evidence,
+Texture canonical writes, auth/session, store schema, boot path, new
+concurrency. Re-review only when a fix changes behaviour on a tier 2
+surface: one seat (Devin) on the delta; never for nits. Sol does not run code
+review. The tiers are tuned by measured review yield (review-yield study over
+bunches 1-147, pending). Panels for decisions
+(`skills/agentic-consensus`) are a separate use and unchanged.
 
 ## Convergence Before Patching
 

@@ -596,9 +596,10 @@ for a canonical Define or Implement boundary:
    and excluded path scope, content digest, and evidence refs. Use a
    content-addressed patch/bundle, read-only snapshot, or isolated candidate
    commit; a candidate commit is review substrate, not canonical mission state.
-3. Freeze scoped mutation, then run the risk-tiered panel. Map panel breadth to
-   the project's existing mutation classes and ceremony; never substitute the
-   panel for required evidence, rollback, protected-surface, or authority work.
+3. Freeze scoped mutation, then run the risk-tiered review (see Code Review
+   Allocation below). Map breadth to the project's existing mutation classes
+   and ceremony; never substitute the panel for required evidence, rollback,
+   protected-surface, or authority work.
 4. Read `manifest.tsv` and successful outputs, synthesize rather than
    concatenate, and locally verify high-impact claims.
 5. Adjudicate findings into the candidate. A confirmed new behavior problem
@@ -670,6 +671,31 @@ synthesis clusters, lateral synthesis collects reframes):
 - Mark unverified claims as unverified.
 - Never paste secrets, private tokens, `.env` content, or unrelated proprietary context into remote agents.
 
+## Code Review Allocation
+
+Code review is risk-tiered, with Devin the go-to reviewer (owner, 2026-10-23:
+"allocating code review to hard stuff and trusting that we can handle the
+easy stuff cold"; "make devin the go-to reviewer"). The repo contract
+(`CLAUDE.md`, Mutation Classes) is the authority; the runner shapes are:
+
+- Tier 0, no model review: green and yellow changes, proof tooling,
+  mechanical rebases, fixes that answer an earlier finding. The repo gates,
+  focused tests, the CI mirror and the staging proof are the check.
+- Tier 1, one seat: orange changes, and red changes that are additive, behind
+  a data/config switch, with a one-act rollback that shows on staging within
+  minutes. `--include devin`.
+- Tier 2, three seats: red where a defect would be silent or irreversible
+  (deletes, tape/evidence, Texture canonical writes, auth/session, store
+  schema, boot path, new concurrency).
+  `--include devin,omp-deepseek-v41-flash,omp-gemini38`.
+- Re-review only when a fix changes behavior on a tier 2 surface: one seat
+  (Devin) on the delta. Never for nits.
+- `gpt-6.1-sol` does not run code review.
+
+The tiers are tuned by measured review yield (a review-yield study over
+bunches 1-147 is pending). The full default panel below is for decisions and
+plans, not routine code review.
+
 ## When to Shrink the Panel
 
 Use a smaller panel when:
@@ -684,7 +710,7 @@ Use the full default panel when:
 
 - the decision is architectural or irreversible,
 - the code touches auth, payments, secrets, migrations, deployments, concurrency, or data loss,
-- the user asks for review before landing,
+- the user asks for review before landing a tier 2 candidate (otherwise use the tier above),
 - the team needs dissent or confidence calibration.
 
 Use `--mode divergent` (with lenses) when the direction or surface is stale,
