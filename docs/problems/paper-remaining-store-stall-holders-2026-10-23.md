@@ -426,6 +426,57 @@ ones inherit the quadratic shape.
    exact if `og_objects.created_at` equals the run's `CreatedAt` **[H]**
    (`CreateRunOG` passes it as `now`).
 
+### Fix shape 1 built (orange; lane `lane/fp0-runs-list-scan`)
+
+`ListRunsByOwnerOG` now pages `og_objects WHERE object_kind = ? AND owner_id = ?
+AND computer_id = '' AND canonical_id > ? ORDER BY canonical_id LIMIT ?`
+(`DoltStore.ListObjectsByKindOwnerComputerPage`, `ObjectsByKindOwnerComputerPageSQL`)
+instead of `ogListAllObjectsByKind` plus a Go filter. **Callers [V]:** the only
+production caller of `Store.ListRunsByOwner` / `ListRunsByOwnerOG` is
+`Runtime.ListRunsByOwner` (`runtime.go:2320`), reached by `HandleRunList`
+(`api.go:551`), `ListRunsByTrajectory` (`api_run_events.go:109`),
+`SynthesizeRunAcceptance` (`run_acceptance.go:78`), the Texture workflow
+verifier (`texture_workflow_verifier.go:107`) and the Texture diagnosis API
+(`texture.go:1949`, `:1961`); the rest are tests. `frontend/src` has no
+`/api/runs` caller (the callers are `choir runs`, `choir trace`, and scripts).
+`ogListAllObjectsByKind` itself is unchanged (ten other callers).
+
+- **Same answer [V].** `TestListRunsByOwnerEquivalentToTheFullKindScan`: 2,400
+  runs over two owners, three computer values and five states with created_at
+  ties; the old function (kept in the test as the oracle) and the new one
+  return the same ids in the same order at limits 0, 1, 7, 100, 500, 5,000 and
+  for an unknown owner; the keyset walk at page sizes 1, 3, 50, 256 and 4,096
+  equals the old filtered full-kind list. `GET /api/runs` has no cursor of its
+  own: the cursor is the internal canonical-ID walk, and the handler's
+  limit/sort/merge is untouched. One accepted divergence: a run whose
+  computer_id is whitespace-only (never written: lifecycle scope is trimmed
+  before write) was legacy to the old Go filter and is outside `computer_id = ''`.
+- **Index [V].** `idx_og_objects_kind_owner_computer` is a base index: a fresh
+  store builds it at open (empty table); a populated store builds it only in
+  `MigrateAccessPaths` (the operator route). The SQL is correct without it:
+  the plan then ranges `(object_kind, owner_id)` (the owner's runs of the
+  kind, one page when the legacy half is under 256), which every store has
+  (`SchemaDDL`). `TestScopePage*` pins the plan with and without the index and
+  after migration. With the index the engine still plans a TopN for the cursor
+  order, but over the scope's range only, so per page cost is the owner's
+  legacy rows, not the kind.
+- **Cost [V], local, `TestStallHoldersCensus/runs`, `limit=100`:**
+
+  | runs | legacy half before | after | lifecycle half (unchanged) |
+  |---|---|---|---|
+  | 8,500 | 1,312 ms, 390 MiB | 0.9 ms, 1.8 MiB | 0.93 s (untouched code; 0.91 s after) |
+  | 34,000 | 18,626 ms, 3,697 MiB | 1.1 to 2.1 ms, 1.8 to 2.1 MiB | 3.6 s before; 5.0 to 7.5 s in two later runs (run-to-run noise on this machine) |
+
+  The legacy half no longer grows with the lifecycle runs
+  (`TestListRunsByOwnerCostDoesNotGrowWithLifecycleRuns`: zero `ListObjectsPage`
+  calls and flat allocation at 500 and 2,000 lifecycle runs; the old read made
+  4 and 9 calls).
+- **Not done: the second scan's engine-mutex hold (2.9 s at 34,000).** Bounding
+  it needs fix shape 3 (newest-N by `created_at`), exact only if
+  `og_objects.created_at` equals the run record's `CreatedAt`, which is still
+  **[H]**, and `ListRunsByTrajectory` and others want the full set. Left as the
+  next step; it is a different mechanism from this deletion.
+
 ## What the holder log gets wrong
 
 - **It names the first mover after the release.** The 12:51:04 snapshot is
