@@ -117,6 +117,14 @@ class DriverTest(unittest.TestCase):
         code, out, _ = self.go({"/internal/diag/gateway-body-cap": (200, bad)}, "--probe", "body-cap")
         self.assertEqual(code, 1, out)
 
+    def test_mid_upload_close_passes_only_if_cut_short(self):
+        for sent, want in ((300000, 0), (1052672, 1)):
+            cap = json.loads(json.dumps(GOOD_CAP))
+            cap["probes"][0] = {"name": "search_streamed", "error": "connection reset", "body_bytes_planned": 1052672,
+                                "body_bytes_sent": sent}
+            code, out, _ = self.go({"/internal/diag/gateway-body-cap": (200, cap)}, "--probe", "body-cap")
+            self.assertEqual(code, want, out)
+
     def test_rate_limited_body_probe_fails(self):
         code, out, _ = self.go({"/internal/diag/gateway-body-cap": (429, {"error": "rate limited"})}, "--probe", "body-cap")
         self.assertEqual(code, 1, out)
