@@ -1,8 +1,8 @@
 # ListRunMemoryEntriesForAgent holds the paper's one write connection (2026-10-23)
 
 Date: 2026-10-23, 09:00 UTC. Found by: FP0 worker, lane `fp0-run-memory-hold`
-(investigation only; nothing is fixed here). Status: open, problem record
-before any fix. Mutation class of this record: green (docs) plus one yellow
+(investigation only; nothing is fixed here). Status: open; the first fix (shape 2) and an observation log are built
+(section "What was built"); the rest stay open. Mutation class of this record: green (docs) plus one yellow
 test (`TestRunMemoryHoldCensus`). Mutation class of the fixes named below:
 orange (a read shape, an online index) and red (anything that changes where
 the durable inbox cursor lives).
@@ -272,7 +272,7 @@ to 06:59:41 ones are the new guest's boot windows (`ListObjects` seed,
 So the answer is yes, they line up, with the limit that the log keeps one
 holder a minute: a minute with several 503s has one name. **[V]**
 
-## Fix shapes (named, not built)
+## Fix shapes (the record's first pass; shape 2 and the narrow projection are dealt with below)
 
 Ordered by how much of the problem class each removes. None is a patch of
 the 503 symptom.
@@ -309,6 +309,93 @@ the 503 symptom.
 6. **Bound the table. [H]** A retention cut for cursor rows other than the
    newest per `(desk, channel)`, or run-memory compaction. Red (it deletes
    run memory the replay diagnostics read).
+
+## What was built (orange, same lane)
+
+The coordinator asked for the cheap part: shape 2, the narrow projection if
+it earned 2x, and an observation. Shapes 1, 3, 4 and 6 (keyed cursor state,
+the `kind` index, the in-memory cursor, retention) are **next**, not built.
+Rollback of all of it: revert `d95af3714`; nothing else changed at runtime.
+
+**(a) Shape 2: `recoverPartialActCommit` reads the cursor lazily. [V]**
+`rlm_reduce.go` loaded the agent cursor on its first line for every commit.
+It now loads it once, on the first intent whose commitment record exists, and
+reuses it for the rest of the tray. Tests written first
+(`rlm_reduce_test.go`, commit `cf6c4027c`, run on the unfixed code):
+
+| test | before the fix | after |
+|---|---|---|
+| `TestDeskCellReadsTheAgentCursorOnceInTheCommonCase` (cell start + commit of a fresh act) | FAIL: 1 call at start, **2** per cell | 1 call at start, **1** per cell |
+| `TestCommitWithNoPriorCommitmentRecordDoesNotReadTheAgentCursor` (commit of two fresh acts) | FAIL: **1** call | **0** calls |
+| `TestPartialCommitRecoveryStillReadsTheAgentCursor` (two staged commitment records, then a replay) | pass: 1 call, 1 on replay, one envelope | pass: the same |
+
+The calls are counted by `Store.RunMemoryAgentListCalls()`, a counter added
+to the store for this and for the log below. The cursor answer is unchanged:
+the first test reads the durable cursor after the cell (1), the third checks
+the recovered receipt and the single envelope. Effect on the paper [H]: one
+`ListRunMemoryEntriesForAgent` per desk cell instead of two, so the
+function's share of the connection falls by about half in the common cell;
+a cell whose acts already have records (a crash-recovered tray) still reads
+it. The rest of the tests that touch `rlm_reduce` pass under `-race`
+(`-run 'Reduc|Cursor|Cell|Commit|Partial|Recover'`, 126 s).
+
+**(b) The narrow projection alone: not built. [V]** Variant E of
+`TestRunMemoryHoldCensus`, at 100,000 desk rows of 425,000, with no new index
+and no schema change: `SELECT details_json ... WHERE agent_id = ? AND
+owner_id = ? AND kind IN (?)` with no `ORDER BY` (the caller takes a maximum).
+Plan: the same `(owner_id, agent_id, created_at)` index access with `kind`
+filtered above it, columns `owner_id agent_id kind details_json`.
+
+| shape | hold, first / best | allocated |
+|---|---|---|
+| today | 565 / 510 ms | 644 MiB |
+| E: narrow, no `ORDER BY`, same index | 424 / 419 ms | 481 MiB |
+
+1.2 times on the hold and 1.3 times on allocation, under the 2 times bar, so
+it is left out (the sort was not the cost; the fetch of every row of the
+desk's range through a non-covering index is, 458 ms of `rows.Next` alone
+earlier). It only pays together with the `kind` index (variant C, 34 ms), which
+is shape 3 and is next.
+
+**(c) The observation log. [V] in test, [H] on the paper.** Every call of
+`ListRunMemoryEntriesForAgent` now measures itself (`run_memory_observe.go`).
+A call over 250 ms logs one line, at most once a minute (the stall snapshots'
+limit), with the number of slow calls it stood for:
+
+```text
+store: run_memory_agent_list slow site=desk_cell_start agent=<desk> kinds=1
+  rows_returned=4000 conn_wait_ms=0 first_row_ms=410 iterate_ms=30
+  elapsed_ms=440 calls_since_open=1234 slow_suppressed=3
+```
+
+`site` is `capsule_cell_start`, `desk_cell_start` or `commit_recovery`, put on
+the context by the three call sites in `rlm_reduce.go`; any other caller is
+`unlabelled`. `conn_wait_ms` is the wait for the write pool's one connection
+(the call now takes it with `db.Conn`, same pool, same semantics),
+`first_row_ms` the plan, fetch and in-memory sort, `iterate_ms` the scan and
+decode. `rows_returned` is the rows the call returned, not the rows the engine
+read (the filter runs inside the engine and the log cannot see them). On the
+next refresh this settles three things: which call site is the long one; how
+much of a slow call is waiting for the connection and how much is holding it;
+and, from `first_row_ms` against the 20 to 100 times gap, whether the paper's
+cost is the fetch (cold chunks) or the scan. `TestRunMemoryAgentListSlowLine`
+covers the fast call (silent), the line's fields, the rate limit with its
+suppressed count, and the unlabelled site. The log is read with the same
+read-only console grep as the stall lines:
+`sudo grep -a run_memory_agent_list .../console.log*`.
+
+Heresy delta of this pass: discovered, none new; introduced, a write-pool
+`db.Conn` in place of `db.QueryContext` for this one function (the call holds
+the connection exactly as before; the log is the only new output); repaired,
+the unconditional cursor read in `recoverPartialActCommit`.
+
+## Next (not in this pass)
+
+Shape 1 (keyed cursor state, red), shape 3 (the `(owner_id, agent_id, kind,
+created_at)` index with the `details_json` projection, orange, built by the
+online access-path migration, never at boot), shape 4 (the in-memory cursor)
+and shape 6 (retention). Read the new log line after the next refresh before
+choosing between them.
 
 ## Not asked, seen
 
