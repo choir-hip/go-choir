@@ -60,7 +60,10 @@ stall header. Locally, at the paper's journal size, the pass then blocks the
 write connection for 30 to 38% of its length instead of 100% (28 to 58% over
 all sizes), with no failed writer and no lost row (section 1). On the paper that would turn 19 s of stall into about 7 s [H].
 It is a red-class review (a Dolt maintenance procedure on another session,
-FM5 in the storage-growth record). If the aim is zero 503s from the GC rather
+FM5 in the storage-growth record). **Superseded by section 1a: not safe.
+A pass on `s.readDB` fails an open write transaction ("chunk ... required but not
+found"), because the embedded driver never registers sessions with Dolt's GC
+safepoint controller. Do not build it.** If the aim is zero 503s from the GC rather
 than a shorter stall, the cheapest is `/health`'s three store reads on
 `s.readDB`, which a GC on `s.db` does not block (0.04 to 0.07 s locally); that
 trades the GC for object-graph reads as the thing that can stall `/health`.
@@ -222,6 +225,125 @@ issues `SELECT 1` every 5 ms and keeps the longest wait.
    count of 503s rises. It needs a MiB-granular threshold and a one-minute tick
    (not available today) and a paper measurement of the intercept. Locally the
    intercept is 0.2 to 0.3 s.
+
+## 1a. Is a pass on the read pool's connection safe? No (2026-10-23, FP0 worker, lane `fp0-online-gc-session`)
+
+Mutation class of this section: green (docs) plus one yellow test
+(`TestOnlineGCSessionOpenTransaction`). Dolt module
+`github.com/dolthub/dolt/go v0.40.5-0.20260716231223-6bea93f2f665`, driver
+`github.com/dolthub/driver/v2 v2.2.0` (go.mod). Paths below are under the module
+cache (`go env GOMODCACHE`) in `dolt/go@v0.40.5-0.20260716231223-6bea93f2f665/`
+unless they name the driver or go-mysql-server. Shape 2 above is **not built**:
+the write connection is not killed, but a write transaction open on it when the
+pass starts is destroyed. **[V]**
+
+**Q1. Is `DOLT_GC` safe from a session other than the writer's? Not with this
+driver. [V]** The procedure is written for it. `doDoltGC`
+(`libraries/doltcore/sqle/dprocedures/dolt_gc.go:208-276`) takes whatever session
+calls it, and the default safepoint controller is session-aware (`:57`
+`UseSessionAwareSafepointController = true`; the other mode needs
+`DOLT_GC_SAFEPOINT_CONTROLLER_CHOICE=kill_connections`, `:47-52`; nothing in this
+repo sets it). The session-aware controller (`:169-206`) keeps other sessions'
+state in two steps: `BeginGC` visits the calling session's roots, then
+`gcctx.GCSafepointController.Waiter` (`libraries/doltcore/doltdb/gcctx/gc_safepoint_controller.go:141-185`)
+waits for every *other registered* session to end its current command and has
+`DoltSession.VisitGCRoots` (`libraries/doltcore/sqle/dsess/session.go:803-882`)
+keep that session's branch heads, working-set roots, open transaction's initial
+root, savepoints and its write session's pending-edit roots
+(`store/prolly/tuple_mutable_map.go:67-80`, which flushes pending edits and their
+out-of-line values so the visited root reaches them). A session is registered
+only by `SessionCommandBegin` (`gc_safepoint_controller.go:256-286`), which
+go-mysql-server's wire handler calls (`go-mysql-server@v0.20.1-0.20260715210958-36c4fed9afa6/server/handler.go:140,193,228,449`,
+`server/context.go:188`). **The embedded driver never calls it**:
+`grep -rn 'SessionCommandBegin\|CommandBegin\|SessionEnd\|gcctx\|Safepoint'` over
+`driver/v2@v2.2.0` (and over the cached `v2.4.1`) finds nothing; its
+`newLocalContext` (`connector.go:50-68`) and `beginQuery`/`endQuery` (`conn.go:106-140`)
+only touch the process list. So under this driver the controller's session map
+is empty: the pass waits for no session, and visits no session's roots except
+the caller's. Today (`s.db`) the caller is the writer, whose roots are visited,
+and the writer cannot be mid-transaction because the pass holds its one
+connection. On `s.readDB` the caller is the read session, and the writer is
+invisible.
+
+**Q2. What does it lock; does it kill sessions? It locks the whole chunk store
+for a short window, and kills nothing. [V]**
+
+- Default controller: `EstablishPostFinalizeSafepoint` is a no-op (`:198-200`);
+  the kill-and-poison behaviour (`:120-164`: `KillConnection` on every other
+  process, `SetValidateErr(ErrServerPerformedGC)` on the caller, `:71`) belongs to
+  `kill_connections` only. No connection is killed or invalidated.
+- Mark phase: `nbs.BeginGC` sets `gcInProgress` and `keeperFunc`, disables conjoin
+  and waits out a running conjoin (`store/nbs/store.go:2183-2230`). Chunk reads
+  and writes by any session then pass through the keeper and are retained.
+- Finalize: `ValueStore.transitionToFinalizingGC` (`store/types/value_store.go:478-490`)
+  sets `gcState_Finalizing` and waits for in-flight critical sections. While it
+  holds, `ValueStore.Put` and `Commit` (`:357`, `:541-545`, via
+  `waitForNotFinalizingGC` `:414-440`) and the NBS `addChunk` keeper
+  (`store/nbs/store.go:1054-1070`, `waitForGC` `:960-973`) park for **every**
+  session, not only the caller's. This is the 28 to 58% of the pass the writer
+  still waits on locally in the table above, whichever connection the pass is
+  issued on. `EndGC` waits for outstanding reads (`:2232-2250`).
+- The pass takes no engine mutex of the store's own (`objectgraph.DoltStore`
+  engineMu); it is a raw `ExecContext`. On `s.readDB` it holds that pool's only
+  connection (`configureEmbeddedDoltDB`, `texture.go:354`), so every object-graph
+  read (`ogReadStore`) queues behind the whole pass; a cost the table above did not
+  measure (it measured `SELECT 1` on `s.db` and table reads only on `s.readDB`
+  *while the pass ran on `s.db`*).
+
+**Q3. Can a read-pool session run it? Yes; it is not read-only. [V]**
+`readDB := sql.OpenDB(poolConnector{connector})` (`internal/store/store.go:893`)
+is a second pool over the same connector and engine as `s.db`, one session per
+connection, `root@%` (`connector.go:64`). Nothing opens it read-only.
+`branch_control.CheckAccess(ctx, Permissions_Write)` (`dolt_gc.go:214`) passes
+with no branch-control tables, and the census ran the pass on it
+(`TestStallHoldersCensus/gc`).
+
+**Q4. What happens to the write connection's open transaction? It fails at its
+next statement. [V] by test.** The connection survives (no kill, no
+`ErrServerPerformedGC`), and the committed state is intact. A transaction open
+across the pass loses the out-of-line chunks it wrote before the pass, because
+no root reaches them and the session is not visited. Test
+`TestOnlineGCSessionOpenTransaction` (`internal/store/online_gc_session_test.go`):
+the writer opens a transaction on `s.db`, inserts 40 rows of 300 KiB text, a
+`CALL DOLT_GC()` is issued on `s.readDB` (it returns nil in about 50 ms), and the
+writer's next statement fails:
+
+```text
+insert 40: Error 1105: malformed database: chunk 4de477q3706g4vhhj0j98iq6lnkbf4sa required but not found
+```
+
+7 of 7 runs, two with `-race`; the same hash each time. After `Rollback` the 200
+baseline rows are intact on both connections, a write succeeds and a second pass
+succeeds, so this is a failed write, not store corruption. The control arm (the
+pass on `s.db` between two committed halves, today's shape) commits every row.
+A single autocommit statement racing the pass (40 rows of 200 KiB in one
+`INSERT`, six delays from 0 to 200 ms) never failed; the exposed shape is an
+explicit multi-statement transaction. This repo has 47 `Begin`/`BeginTx` sites on
+Dolt handles (7 in `objectgraph/dolt_store.go`, `PutBatch` among them, 3 in the
+derived-key validator, `store/run_memory.go`, `computer_events.go`,
+`vocab_migrate_og.go`, platform and maild stores), none of which holds
+`doltCommitMu` or can know a pass has begun. Whether the paper's passes would hit
+one is a matter of write duty cycle; any hit is a failed write that the caller
+sees, with no retry.
+
+**Verdict.** Shape 2 (and any variant that puts the pass on another connection of
+this engine, including a dedicated third session) fails FM5. It is unsafe for an
+unregistered write session, which is the driver's property, not the pool's. The
+GC stays on `s.db`. A safe way to keep writers running during the mark phase
+needs the driver (or this store) to register sessions with the controller, or a
+write gate that waits out open transactions before `CALL DOLT_GC()` and holds new
+ones until `BeginGC` has returned, which is most of the 100% hold again.
+**[H]** whether that gate is worth building; the remaining shapes (1, 3, 4, 5)
+stand, and shape 1 (the `online_gc=active` flag) is independent of this.
+
+Two consequences for the code as it stands. **[V] source.** The comment on
+`MaybeRunOnlineDoltGC` (`dolt_maintenance.go`) says the safepoint controller
+"keeps the store's read session valid across a collection". Under this driver the
+read session is not registered, so that comes from the chunk store keeper
+(reads retained as they happen), not from the controller; an autocommit read
+cannot hold a root across the pass, so it holds. And nothing on `s.db` may start
+a transaction while the pass runs, which `MaxOpenConns(1)` guarantees only
+because the pass uses that connection.
 
 ## 2. `objectgraph.scanSideRows` (the validation page)
 
@@ -490,8 +612,10 @@ ones inherit the quadratic shape.
    discards every row) and what a cold `GET /api/runs` costs; a request-scoped
    timing on the handler, as the run-memory record did for its function,
    would answer both on the next refresh.
-5. Whether a GC issued on the read pool's connection is safe on the paper
-   (FM5), not only on a local store.
+5. ~~Whether a GC issued on the read pool's connection is safe on the paper
+   (FM5), not only on a local store.~~ Settled by section 1a: it is not safe on
+   any store, because it is the driver's session registration, not the paper's
+   state.
 
 ## Heresy delta
 
