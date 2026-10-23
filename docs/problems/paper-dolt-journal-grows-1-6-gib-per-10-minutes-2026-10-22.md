@@ -757,3 +757,56 @@ losses and the lost reconnect replay named under each cut, all inside the
 owner's loss-tolerant ruling (notes section 27 item 18). Repaired: three
 disposable lines, one redundant cursor entry and one row per cell no longer pay
 a tape event each.
+
+## Review round 1 of the journal cuts (2026-10-22, tip `27c6de2d0`)
+
+Three seats reviewed the delta (DeepSeek v4.1 flash, Gemini 3.8, Devin;
+Devin's transcript is incomplete). R1, R2 and R4 were accepted. Findings,
+before any fix:
+
+**F-1 (required, R3): malformed tool-call arguments erase the only durable
+tool record.** `executeOneTool` (`internal/toolregistry/batch_executor.go`)
+now puts the call's `arguments` into the `tool.result` payload as a
+`json.RawMessage`. `canonicalJSON` passes invalid JSON through unchanged
+(`internal/provider/provider.go`), so a provider that emits malformed
+arguments reaches `executeOneTool` with bytes that are not JSON. Then
+`json.Marshal` of the result map fails, the error is ignored
+(`resultPayload, _ :=`), the payload is nil, and `AppendEvent` stores `{}`
+for an empty payload. The `tool.result` row loses `tool`, `call_id`,
+`is_error` and `output`. Before R3 the result never embedded the arguments,
+so its row survived; and `tool.invoked` is now bus-only, so the attempt
+leaves no durable trace at all. Run acceptance reads `tool.result` as
+evidence. Verified empirically by two seats (Devin's last step, DeepSeek's
+run): marshaling a map holding an invalid RawMessage fails.
+
+Non-blocking notes, recorded:
+
+- F-2 (R4): the unit of crash loss for egress rows is now the open cell, not
+  the batching window. Rows wait in `cellEgressLog` until the `desk.cell`
+  event is written. The bound is 300 s for management and unbounded for
+  research and Texture (`deskCellHostDeadline` returns 0). Owner ruling
+  (notes section 27 item 18) is "a crash may lose up to the batch window of
+  telemetry"; a cell-length loss is wider than that wording. Mitigations:
+  the cell event is written under `context.WithoutCancel`, and every
+  non-crash exit (eval error, worker death, timeout) still writes it with
+  the rows; a crash now loses `search_start` and `search_done` together
+  instead of leaving a `search_done` without its start.
+- F-3 (R1/R3): bus-only lines carry no `Seq`, so the live-WS catch-up after a
+  reconnect cannot replay them. Already declined above.
+- F-4: `scripts/reeng_tracer.mjs` `cellInFlight` returns `served:false` on new
+  tapes (no `tool.invoked`) and falls back to `running >= 8s`, recording
+  `observed_by: run_state_running_8s`. No acceptance depends on it.
+- F-5: `serializeRunEventLedgerForCheckpoint` serializes every kind except
+  `run.delta`, so the model-visible continuation checkpoint loses the
+  truncated `system_preview`/`last_user_text` and the invoked row and gains
+  `arguments` on results. Durable and model-visible, not structural.
+- F-6: `scripts/reeng_invariants_plant.mjs` `plantI5` mutates
+  `desk.egress` events in `runEvents` only; on a bundle whose egress is
+  folded into `desk.cell` it mutates the egress layer but not the folded
+  rows. Test scaffold only.
+- F-7 (Devin): `scripts/l2a_window_pairs.py` and
+  `scripts/management_latency_probe.py` (line 307) filter on
+  `tool.result` and `tool.invoked` and scan payload text for receipts.
+- Nits: a stale "one item per ... run event" comment in
+  `scripts/reeng_invariants.mjs`; the trace bundle carries the egress bytes
+  twice (`cells` embeds `egress[]`, plus the `egress` layer).
