@@ -892,7 +892,8 @@ func (p *SyntheticProvider) Stream(ctx context.Context, req LLMRequest, onChunk 
 
 func (p *SyntheticProvider) call(ctx context.Context, req LLMRequest, onChunk func(StreamChunk)) (*LLMResponse, error) {
 	modelID := effectiveModel(req.Model, p.modelID)
-	req, mediaErr := prepareMediaRequest("synthetic", modelID, req)
+	req, releaseMedia, mediaErr := prepareMediaRequest(ctx, "synthetic", modelID, req)
+	defer releaseMedia() // the downscaled images live for the whole upstream call (F7)
 	if mediaErr != nil {
 		return nil, fmt.Errorf("synthetic: %w", mediaErr)
 	}
