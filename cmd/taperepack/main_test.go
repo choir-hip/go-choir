@@ -154,3 +154,78 @@ func TestTaperepackToolPath(t *testing.T) {
 		t.Fatalf("unknown subcommand: exit %d", code)
 	}
 }
+
+// M2 (review round 4): delete --apply needs --keep-digests, the digests it
+// names are never unlinked, a malformed list is an error, and an empty list
+// needs --keep-digests-empty-ok. All of these fail on 8722c4932, whose delete
+// takes no keep file and applies.
+func TestDeleteApplyNeedsTheKeepDigestsFile(t *testing.T) {
+	_, priv, _ := ed25519.GenerateKey(rand.Reader)
+	key := computerevent.SigningKey{SignerRef: computerevent.SignerRef{SignerDomain: "platform", KeyID: "t"}, PrivateKey: priv}
+	root, work := t.TempDir(), t.TempDir()
+	var digests []string
+	for _, n := range []string{"1", "2", "3"} {
+		legacyPin(t, root, "computer-a", key, n)
+		digests = append(digests, sum([]byte(`{"batch":"`+n+`"}`)))
+	}
+	base := []string{"--root", root, "--work-dir", work, "--quiet"}
+	if code, _, errs := tool(append([]string{"copy", "--apply", "--computer", "computer-a"}, base...)...); code != 0 {
+		t.Fatalf("copy: exit %d %q", code, errs)
+	}
+	code, out, _ := tool(append([]string{"census"}, base...)...)
+	var cen struct {
+		Receipt string `json:"receipt"`
+	}
+	if err := json.Unmarshal([]byte(out), &cen); err != nil || code != 0 {
+		t.Fatalf("census: %d %q", code, out)
+	}
+	exists := func(d string) bool {
+		_, err := os.Stat(filepath.Join(root, "sha256", "computer-event-payload", d))
+		return err == nil
+	}
+	del := func(extra ...string) (int, string) {
+		args := append([]string{"delete", "--census-receipt", cen.Receipt, "--pause", "1ms", "--apply"}, base...)
+		code, out, errs := tool(append(args, extra...)...)
+		return code, out + errs
+	}
+	all := func() bool { return exists(digests[0]) && exists(digests[1]) && exists(digests[2]) }
+	keepFile := func(name, content string) string {
+		p := filepath.Join(t.TempDir(), name)
+		if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+
+	if code, _ := del(); code == 0 || !all() {
+		t.Fatalf("delete --apply without --keep-digests: exit %d, files intact %v", code, all())
+	}
+	if code, _ := del("--keep-digests-empty-ok"); code == 0 || !all() {
+		t.Fatalf("--keep-digests-empty-ok without a file: exit %d, files intact %v", code, all())
+	}
+	if code, msg := del("--keep-digests", keepFile("bad", digests[0]+"\nnot-a-digest\n")); code == 0 || !all() {
+		t.Fatalf("a malformed keep file: exit %d, files intact %v: %s", code, all(), msg)
+	}
+	if code, _ := del("--keep-digests", keepFile("empty", "")); code == 0 || !all() {
+		t.Fatalf("an empty keep file without the flag: exit %d, files intact %v", code, all())
+	}
+	if code, _, _ := tool(append([]string{"copy", "--keep-digests", keepFile("k", digests[0]+"\n")}, base...)...); code == 0 {
+		t.Fatal("copy accepted --keep-digests")
+	}
+
+	// A listed digest survives; the others of the same computer go.
+	code, msg := del("--keep-digests", keepFile("keep", digests[1]+"\n"))
+	if code != 0 {
+		t.Fatalf("delete with a keep file: exit %d %s", code, msg)
+	}
+	if exists(digests[0]) || !exists(digests[1]) || exists(digests[2]) {
+		t.Fatalf("after the delete: %v %v %v, want only the listed digest left", exists(digests[0]), exists(digests[1]), exists(digests[2]))
+	}
+	var rep struct {
+		KeptByList  int64 `json:"kept_by_list"`
+		KeepDigests int64 `json:"keep_digests"`
+	}
+	if err := json.Unmarshal([]byte(strings.SplitN(msg, "\n", 2)[0]), &rep); err != nil || rep.KeptByList != 1 || rep.KeepDigests != 1 {
+		t.Fatalf("report %+v (%v): %s", rep, err, msg)
+	}
+}
