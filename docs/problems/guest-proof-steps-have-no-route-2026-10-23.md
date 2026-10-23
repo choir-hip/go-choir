@@ -141,6 +141,14 @@ If a later change to the gateway makes any of these false (a route that
 decodes before its cap, a tolerant partial-JSON decoder), the pinned test
 fails.
 
+## Driver
+
+`scripts/guest_diag_probe.py --guest-ip 10.200.X.2 [--probe dns|body-cap|all]
+[--expect-udp53 open|closed|any] [--json-out FILE] [--dry-run]`, run on Node B
+like `scripts/host_floor_probe.py`. It judges the dns reads against the tap
+host address (guest ip minus one) and the body-cap legs against 413. Its
+fake-guest test is `scripts/guest_diag_probe_test.py`.
+
 ## What the probes do not show
 
 The 100 MiB streamed body of the shell version is not reproduced (4 KiB over
