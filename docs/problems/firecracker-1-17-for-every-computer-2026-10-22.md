@@ -103,9 +103,10 @@ of this change is that such snapshots stay loadable.
 - **Other places that name a version.** `.github/workflows/patch-watch.yml`
   compares the declared version with upstream's latest. After this change they
   match (1.17.0 is the latest tag, checked with `git ls-remote`). The
-  `scripts/proofs/fp8-image-jailer.sh` step 7 checks for the "next
+  `scripts/proofs/fp8-image-jailer.sh` step 7 checked for the "next
   Firecracker build" log line, which no longer appears once this change removes
-  the next build. The proof below covers what step 7 was for. Comments
+  the next build. Step 7 is rewritten (see the review dispositions) and the
+  proof below covers what it was for. Comments
   in `data_discard.go` and `nix/node-b.nix` describe 1.16.x as the pinned
   line.
 
@@ -193,9 +194,11 @@ pinned hashes. It would override a package that is already 1.17.0, and its
 
 **Either rollback needs the 1.16.2 store path on Node B**
 (`/nix/store/5nh9p1bhzhljbshbp8dibb5qd4qz1nxb-firecracker-1.16.2`, in no
-public cache). Reverting the pin fix puts `VM_FIRECRACKER_BIN` back on that
-path, `IsFirecrackerAvailable` stats it
-(`internal/vmmanager/config.go:264-279`), and vmctl stops with "Firecracker
+public cache; rooted on Node B by
+`/nix/var/nix/gcroots/go-choir-firecracker-1.16.2-rollback`). Reverting the
+pin fix puts `VM_FIRECRACKER_BIN` back on that path,
+`IsFirecrackerAvailable` stats it
+(`internal/vmmanager/config.go:268-279`), and vmctl stops with "Firecracker
 is mandatory" (`cmd/vmctl/main.go:145`, `:167`) if it is gone. After this
 change no host generation needs the path, so the deploy preflight's reclaim
 may collect it, and a missing path means a cargo build on Node B before
@@ -213,14 +216,17 @@ either rollback can deploy. So the GC root is a **deploy precondition**
   (2de635109) is not a rollback: it only narrows both selectors back to
   `computer-9648031f…`, which leaves the four lines and so keeps 1.17 and
   discard on that computer (checked against `2de635109^:nix/node-b.nix`
-  lines 1556 to 1559). With the four lines gone every computer cold boots
-  once more on 1.16.2, because 1.16.2 refuses its 1.17 snapshot. The
+  lines 1556 to 1559). With the four lines gone every computer holding a
+  1.17 snapshot cold boots once more on 1.16.2, because 1.16.2 refuses it.
+  A computer still holding a pre-D4 1.16.x snapshot resumes it. The
   guest-data-image record has D4's own rollback.
 
 ### Proof (FP0, after the deploy)
 
 0. Before: the GC root for the 1.16.2 path exists on Node B (deploy
-   precondition above). `scripts/check-host-firecracker-pin.sh` passes on the lane head
+   precondition above): `nix-store --gc --print-roots | grep
+   go-choir-firecracker-1.16.2-rollback` prints
+   `/nix/var/nix/gcroots/go-choir-firecracker-1.16.2-rollback -> /nix/store/5nh9p1bhzhljbshbp8dibb5qd4qz1nxb-firecracker-1.16.2`. `scripts/check-host-firecracker-pin.sh` passes on the lane head
    with `EXPECT_OUT=/nix/store/jbzvr6c965zyby7ldj73yi0zvibgd65b-firecracker-1.17.0`.
    Record `sha256sum fc-config.json` for the paper and one test computer
    that run under D4, and the snapshot meta of one hibernated D4 computer.
@@ -303,15 +309,14 @@ Dispositions (fix round, bunch 144):
    `log.Fatal` is at `cmd/vmctl/main.go:167` (reached when
    `IsFirecrackerAvailable`, called at `:145`, is false); lines 145 to 146
    are the call and the config validation. The substance stands.
-3. Fixed. Step 7 of `scripts/proofs/fp8-image-jailer.sh` is rewritten for
-   the pinned build, rather than marked done: the rewrite was smaller than
-   explaining why an executable step must not be run. It checks discard on
-   the target's data drive and that no "next Firecracker build" line
-   exists; the manual lines no longer name `firecracker-next.nix` or a
-   selector. `--list` and `--step 7 --dry-run` ran with ssh and curl
-   replaced by `false`.
+3. Rewritten, then corrected in round 2 (finding 7). Step 7 of
+   `scripts/proofs/fp8-image-jailer.sh` is rewritten for the pinned build,
+   rather than marked done. The first rewrite kept a journal grep as its
+   check, which could pass falsely; round 2 replaced it with a read of
+   vmctl's environment.
 4. Fixed. The guard in `scripts/check-host-firecracker-pin.sh` trims,
-   lowercases and accepts `1`, `true`, `on`, `yes`. The new
+   lowercases and accepts `1`, `true`, `on`, `yes`; it also strips inner
+   whitespace, so it is a strict superset of `envFlagOn` and fails closed. The new
    `scripts/check-host-firecracker-pin-test.sh` runs the check against a
    fake `nix` over 13 cases; six of them failed on 1016fc951 and all pass
    now. The real check still passes on the lane with `EXPECT_OUT`.
@@ -351,6 +356,31 @@ DeepSeek answered findings 1, 2 and 4 above and blocks on the fix to 3:
    snapshot (a pre-D4 1.16.x snapshot resumes on 1.16.2); the guard is a
    strict superset of `envFlagOn` (it also strips inner whitespace), not an
    exact match.
+
+Dispositions (round 2, bunch 145):
+
+7. Fixed. Steps 1 (`--label after`) and 7 call `fp8_read_env`, which reads
+   `systemctl show go-choir-vmctl -p Environment` and FAILs when the read
+   fails or has no `Environment=` line. Step 7 then requires
+   `VM_FIRECRACKER_BIN` and `VM_JAILER_BIN` under one
+   `/nix/store/<hash>-firecracker-1.17.x/bin/` and no
+   `VM_FIRECRACKER_NEXT_BIN`; step 1 requires no `VM_FIRECRACKER_NEXT_BIN`.
+   Neither uses the journal for a verdict (step 1 still prints the journal
+   lines as information). I did not use `/proc/<pid>/exe`: under the jailer
+   the process runs a copy inside the jail, so the path does not name the
+   store package. `scripts/proofs/fp8-image-jailer-test.sh` runs both steps
+   under a fake ssh whose `journalctl` exits 255: eight cases (pinned 1.17
+   passes; D4's shape, a stray next build, a foreign jailer and an
+   unreadable environment fail), and six of them reported the false PASS on
+   c00254825. The earlier `discard: true` check stays, as a check on the
+   data drive, and no longer stands in for the pin.
+8. Fixed: the GC root is named, with its verification command, in the
+   Rollback section, the deploy note and proof step 0; the pin test fails
+   (exit 1) when jq is missing; its header says four nix eval calls; the
+   full rollback says "every computer holding a 1.17 snapshot" and that a
+   pre-D4 1.16.x snapshot resumes; the guard's comment calls it a strict
+   superset of `envFlagOn`,.
+   The `config.go` citation now starts at the function (268).
 
 The other DeepSeek notes need no change: 1.17.x patch releases through the
 weekly bump are the existing residual below, and "no host generation needs
@@ -404,6 +434,16 @@ Review fix round (bunch 144), on 1016fc951:
   preflight, the `sort -V` note, FP8 step 7.
 - This record's Rollback, deploy note and dispositions (green).
 
+Review fix round 2 (bunch 145), on c00254825:
+
+- 1786c49ed (green): findings 7 and 8, before any fix.
+- 37cbd3bde (yellow): `scripts/proofs/fp8-image-jailer-test.sh`; six of its
+  eight cases fail on c00254825.
+- e1f05ae99 (yellow, proof tooling only): FP8 steps 1 and 7 read vmctl's
+  environment; the pin test's jq failure, header and guard comment.
+- This record's round 2 dispositions, the GC root name and the wording
+  fixes (green).
+
 Local verification at 70c82a1eb:
 
 - `nix-instantiate --parse` succeeds for `flake.nix` and `nix/node-b.nix`.
@@ -430,18 +470,22 @@ Local verification at 70c82a1eb:
 - If the change lands without D4, every computer moves from 1.16.2 with no
   discard to 1.17.0 with discard at once. That costs the same single cold
   boot per computer that D4 costs.
-- **Deploy precondition (FP0, by hand, before the deploy): add a GC root on
+- **Deploy precondition (FP0, by hand, before the deploy): a GC root on
   Node B for
-  `/nix/store/5nh9p1bhzhljbshbp8dibb5qd4qz1nxb-firecracker-1.16.2`**, and
-  confirm the path exists. Both rollbacks restore a `VM_FIRECRACKER_BIN`
+  `/nix/store/5nh9p1bhzhljbshbp8dibb5qd4qz1nxb-firecracker-1.16.2`**, named
+  `/nix/var/nix/gcroots/go-choir-firecracker-1.16.2-rollback` (FP0 created
+  it on Node B at 02:54 UTC, 2026-10-23). Verify with
+  `nix-store --gc --print-roots | grep go-choir-firecracker-1.16.2-rollback`
+  and confirm the path exists. Both rollbacks restore a `VM_FIRECRACKER_BIN`
   under it (see Rollback). No host generation needs that path after this
   change, so the deploy preflight's reclaim may collect it, and vmctl
   would not start on a rollback deploy. Also confirm the 1.17.0 path
   (`…jbzvr6c9…-firecracker-1.17.0`) exists.
-- `scripts/proofs/fp8-image-jailer.sh` step 7 is rewritten for the pinned
-  build: it checks discard on the target's data drive and the absence of a
-  "next Firecracker build" line, and no longer names `firecracker-next.nix`
-  or a selector.
+- `scripts/proofs/fp8-image-jailer.sh` steps 1 and 7 are rewritten for the
+  pinned build. They read vmctl's running environment and assert the 1.17
+  VMM and jailer and no next build; step 7 also checks discard on the
+  target's data drive. They no longer name `firecracker-next.nix` or a
+  selector, and no longer use the journal.
 - Residual: after this change, the next minor version has to be staged with
   a new `nix/firecracker-next.nix`. Patch releases on 1.17.x from a weekly
   nixpkgs bump still reach the host with no review, because the bound
