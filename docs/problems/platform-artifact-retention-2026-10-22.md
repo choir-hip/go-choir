@@ -396,3 +396,25 @@ All read-only.
 - Open: the genesis-repair keep rule leaves a throwaway computer's genesis scratch in place until a human removes it. If the host read finds many, a narrower rule needs an ownership source inside checkpointd (the vmctl registry), which is its own change.
 
 Heresy delta of this build: discovered none new; introduced none; repaired: the scratch sweep missing terminal and dead computers (section 8's F1 class), `file-cas-roots` rows with no retention, and `artifact-gc-log` with no rotation. Mutation class: orange (checkpointd housekeeping, GC live set and a row delete on `computer_file_roots`, GC-log file rotation); protected surfaces touched: none of the red list (no Texture canonical write, no checkpoint publication or route change).
+
+## 10. Round 2 review findings (bunch 131, tip `c4c2c4191`), before any fix
+
+Three reviews: `omp-deepseek-v41-flash` ("do not ship as-is, two required fixes"), `omp-gemini38` ("revise before ship"), `devin` ("approve, two medium-low issues"). Findings are numbered N1 to N11 here; dispositions are in section 11 after the fixes.
+
+| # | Where | Finding | Rated by | Severity |
+|---|---|---|---|---|
+| N1 | F1 `scratch_sweep.go` list, job read, rename, remove | A job admitted between the job-row read and the rename (a row-less `<computer>-1` directory, generation 1 is the first value `EnqueueProjectionJob` assigns) can have its directory renamed and deleted under it. The held-set invariant is checked once, then acted on later. The coordinator asks for the hold check and the rename to be atomic with claiming, or a re-check after the rename with a rename back. | all three | high (deepseek), high (gemini, "overstated" in dissent), medium (devin) |
+| N2 | F4 `artifact_gc.go` order | Root rows are retired before the live set is loaded. A live-set failure aborts the pass with rows already deleted and an empty report. Required: compute and verify the live set before any DELETE; one transaction scoped to that set. | deepseek, gemini | medium / high |
+| N3 | F4 `file_cas_retire.go` | The old-row query materializes every row older than the window before the limit is applied, and `created_at` is not the leading index column. | deepseek, gemini | medium |
+| N4 | F1 `scratch.go` | `pruneSupersededScratch` (the claim-time prune) removes older generations without checking the genesis-repair marker, so the marker's guarantee does not hold on that path. | devin | low-medium |
+| N5 | F1 and F4 logs | `scratch_removed` and `root_retired` are written after the mutation, so a crash drops the audit line. The GC's own discipline is intent first. | all three | low |
+| N6 | F1 dangling-marker cleanup | It runs before the job snapshot with no age gate; a marker can be listed while its directory (created first) is not yet in a chunked `ReadDir`. | deepseek | low |
+| N7 | F6 | Rotation runs when the GC pass failed (`err != nil`, for example a live-set failure). | deepseek | low |
+| N8 | F6 | A backward clock step makes today's open file "old". | deepseek | low |
+| N9 | F6 | A well-formed `.zst` whose bytes differ from a still-present plain file is removed as corrupt; it could be the only archived copy of earlier records if the plain file was appended after rotation. | devin | low |
+| N10 | F4 | The retire budget is additive to `MaxDeletes` (up to 2 times the documented cap). | devin | nit |
+| N11 | F1 / F4 | F1 has no off or dry-run mode; retiring rows truncates the Files snapshot listing (`HandleFileCASRoots`) at 7 days; an index on `created_at` would remove the scan. | deepseek, gemini | info |
+
+Evidence for N1, from the code: `ClaimProjectionJob` never changes a generation; `EnqueueProjectionJob` writes `old.Generation+1`, and no row means 0, so a first job is generation 1. No code deletes `computer_projection_jobs` rows, so N1 needs a restored or hand-edited store; the fix is still required because the sweep's contract is absolute. Evidence for N2: `artifact_gc.go` calls `retireFileCASRoots` before `artifactGCLiveSets`, and the live-set failure returns with `Namespaces` empty.
+
+Heresy delta: discovered N1 to N9 (new code only); introduced them in round 1; repaired none yet.
