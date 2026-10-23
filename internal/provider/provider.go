@@ -823,14 +823,17 @@ func (p *FireworksProvider) buildChatCompletionsRequestBody(req LLMRequest, mode
 // SyntheticProvider implements the Provider interface for Synthetic
 // (synthetic.new) over its OpenAI-compatible Chat Completions API. It has one
 // key and no key pool: Synthetic's 429 is an account concurrency limit (about
-// 10 in flight, no Retry-After), so it surfaces at once for the gateway
-// breaker and the run's failover instead of parking the only key
+// 10 in flight, no Retry-After). A gate (SYNTHETIC_MAX_CONCURRENT, default 8)
+// holds the excess calls for a slot so they are not sent to be rejected; a 429
+// that still arrives surfaces at once, typed ErrUpstreamConcurrencyLimit so the
+// gateway breaker does not count it, instead of parking the only key
 // (docs/problems/synthetic-provider-onboarding-2026-10-22.md).
 type SyntheticProvider struct {
 	apiKey     string // loaded at init time, never logged
 	modelID    string
 	baseURL    string
 	httpClient *http.Client
+	gate       *concurrencyGate // bounds calls in flight; nil means unbounded
 }
 
 // SyntheticConfig holds configuration for creating a SyntheticProvider.
@@ -856,11 +859,14 @@ func NewSyntheticProvider(cfg SyntheticConfig) (*SyntheticProvider, error) {
 	if baseURL == "" {
 		baseURL = syntheticDefaultBaseURL
 	}
+	gate := newSyntheticGateFromEnv()
+	syntheticGate.Store(gate)
 	return &SyntheticProvider{
 		apiKey:     apiKey,
 		modelID:    modelID,
 		baseURL:    baseURL,
 		httpClient: &http.Client{Timeout: defaultProviderHTTPTimeout},
+		gate:       gate,
 	}, nil
 }
 
@@ -891,6 +897,15 @@ func (p *SyntheticProvider) Stream(ctx context.Context, req LLMRequest, onChunk 
 }
 
 func (p *SyntheticProvider) call(ctx context.Context, req LLMRequest, onChunk func(StreamChunk)) (*LLMResponse, error) {
+	if p.gate != nil {
+		// Wait for a slot before anything is decoded or sent; hold it to the
+		// end of the response or stream.
+		release, err := p.gate.acquire(ctx)
+		if err != nil {
+			return nil, err
+		}
+		defer release()
+	}
 	modelID := effectiveModel(req.Model, p.modelID)
 	req, releaseMedia, mediaErr := prepareMediaRequest(ctx, "synthetic", modelID, req)
 	defer releaseMedia() // the downscaled images live for the whole upstream call (F7)
@@ -919,6 +934,12 @@ func (p *SyntheticProvider) call(ctx context.Context, req LLMRequest, onChunk fu
 	defer func() { _ = resp.Body.Close() }()
 	if summary := syntheticQuotaSummary(resp.Header); summary != "" {
 		log.Printf("provider: synthetic quota %s", summary)
+	}
+	if resp.StatusCode == http.StatusTooManyRequests {
+		// Synthetic's 429 is its account concurrency limit, not model
+		// ill-health: typed so the gateway breaker does not count it.
+		logRejectedRequest("synthetic", resp)
+		return nil, &upstreamConcurrencyError{status: resp.Status}
 	}
 	if !req.Stream {
 		return parseOpenAIChatCompletionsResponse(resp, modelID, "synthetic")
