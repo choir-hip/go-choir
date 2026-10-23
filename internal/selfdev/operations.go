@@ -524,6 +524,11 @@ func (s *Store) RecordIntentError(ctx context.Context, computerID, operationID, 
 	if len(reason) > 512 {
 		reason = reason[:512]
 	}
+	// The cut can land inside a multi-byte rune, and a model-written reason
+	// can carry invalid bytes. Normalise after the cut and before the
+	// unchanged-reason comparison: the stored value must equal what a repeat
+	// of the same text produces, or a retry would append every time.
+	reason = strings.ToValidUTF8(reason, "")
 	computerID, operationID = strings.TrimSpace(computerID), strings.TrimSpace(operationID)
 	now := s.now().UTC().Truncate(time.Microsecond)
 	if s.projection != nil {

@@ -1226,6 +1226,20 @@ func (s *Store) Reopen(path string) error {
 	if s.projectionTape != nil {
 		live.ogStore.SetMutationInterceptor(s.projectionTape.interceptOG)
 	}
+	// Open bound the adopted store's write validator to live
+	// (SetWriteValidator(live.vocabWriteGuard)), and *live is zeroed below, so
+	// the vocabulary fence would read a zeroed vocabCutover and pass every
+	// write. Bind it to s, and keep the fence armed if either side is cut
+	// over: live read the adopted workspace's migration report in Open, s
+	// may have cut over in this process, and a Reopen never disarms a fence
+	// (fail closed). Open binds nothing else on live that Reopen drops: its
+	// other work is the handles copied here, the metadata, derived-key and
+	// engine-mutex sharing between the two object-graph stores (which refer
+	// to those stores, not to live), and the Store-level state Reopen resets.
+	live.ogStore.SetWriteValidator(s.vocabWriteGuard)
+	if live.vocabCutover.Load() {
+		s.vocabCutover.Store(true)
+	}
 	s.og = live.og
 	s.ogStore = live.ogStore
 	s.ogReadStore = live.ogReadStore
