@@ -2,12 +2,16 @@ package platform
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	embedded "github.com/dolthub/driver/v2"
 )
 
 // Failure modes, written before the code
@@ -203,5 +207,104 @@ func TestListProjectionJobsReturnsEveryRow(t *testing.T) {
 	}
 	if byID["computer-b"].Generation != 4 || !byID["computer-b"].GenesisRepair {
 		t.Fatalf("computer-b = %+v", byID["computer-b"])
+	}
+}
+
+// breakCorpusStore points the store's corpus at a Dolt without og_objects, so
+// the og live-set query fails (the same device as
+// TestRunArtifactGCFailsClosedOnLiveSetError).
+func breakCorpusStore(t *testing.T, store *Store, root string) {
+	t.Helper()
+	corpusRoot := filepath.Join(root, "corpus-dolt")
+	if err := os.MkdirAll(corpusRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := embedded.ParseDSN(fmt.Sprintf("file://%s?commitname=Choir&commitemail=system@choir.local&database=corpus&multistatements=true", corpusRoot))
+	if err != nil {
+		t.Fatal(err)
+	}
+	connector, err := embedded.NewConnector(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db := sql.OpenDB(connector)
+	store.corpusDB = db
+	t.Cleanup(func() { _ = db.Close(); _ = connector.Close() })
+}
+
+func readGCLogOps(t *testing.T, artifactsRoot string) []string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(artifactsRoot, artifactGCLogDir, time.Now().UTC().Format("2006-01-02")+".jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ops []string
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		var rec artifactGCLogRecord
+		if json.Unmarshal([]byte(line), &rec) == nil {
+			ops = append(ops, rec.Op)
+		}
+	}
+	return ops
+}
+
+// N2: the live sets are loaded and verified before any row is deleted. A pass
+// that cannot load them retires nothing.
+func TestRunArtifactGCRetiresNothingWhenTheLiveSetCannotBeLoaded(t *testing.T) {
+	store, root := openTestPlatformStore(t)
+	ensureGCRouteTables(t, store)
+	artifactsRoot := filepath.Join(root, "artifacts")
+	f := &rootsFixture{t: t, store: store, service: NewService(store, artifactsRoot, ""), artifactsRoot: artifactsRoot}
+	f.root("computer-a", "a1", 30*day)
+	f.root("computer-a", "a2", time.Minute)
+	breakCorpusStore(t, store, root)
+
+	if _, err := f.service.RunArtifactGC(context.Background(), ArtifactGCConfig{Mode: "active", Grace: time.Hour}); err == nil {
+		t.Fatal("expected the live-set failure")
+	}
+	if got := len(f.rows("computer-a")); got != 2 {
+		t.Fatalf("rows were retired before the live set was proven: %d left of 2", got)
+	}
+}
+
+// N5: the intent is durable in the log before the rows are deleted.
+func TestRunArtifactGCLogsRetirementIntentFirst(t *testing.T) {
+	f := newRootsFixture(t)
+	f.root("computer-a", "a1", 30*day)
+	f.root("computer-a", "a2", 20*day)
+	f.root("computer-a", "a3", time.Minute)
+	if _, err := f.service.RunArtifactGC(context.Background(), ArtifactGCConfig{Mode: "active", Grace: time.Hour}); err != nil {
+		t.Fatal(err)
+	}
+	var intents, retired int
+	for _, op := range readGCLogOps(t, f.artifactsRoot) {
+		switch op {
+		case "root_retire_intent":
+			if retired > 0 {
+				t.Fatal("an intent record came after an outcome record")
+			}
+			intents++
+		case "root_retired":
+			retired++
+		}
+	}
+	if intents != 2 || retired != 2 {
+		t.Fatalf("intents=%d retired=%d, want 2 and 2", intents, retired)
+	}
+}
+
+// N3: the retirement is bounded by MaxDeletes and takes the oldest first.
+func TestRunArtifactGCRetirementHonorsTheRowBudget(t *testing.T) {
+	f := newRootsFixture(t)
+	a1 := f.root("computer-a", "a1", 40*day)
+	a2 := f.root("computer-a", "a2", 30*day)
+	a3 := f.root("computer-a", "a3", 20*day)
+	a4 := f.root("computer-a", "a4", 10*day)
+	if _, err := f.service.RunArtifactGC(context.Background(), ArtifactGCConfig{Mode: "active", Grace: time.Hour, MaxDeletes: 2}); err != nil {
+		t.Fatal(err)
+	}
+	rows := f.rows("computer-a")
+	if rows[a1] || rows[a2] || !rows[a3] || !rows[a4] || len(rows) != 2 {
+		t.Fatalf("rows after a budget of 2 = %v (oldest two a1, a2 retired)", rows)
 	}
 }

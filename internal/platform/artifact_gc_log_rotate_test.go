@@ -172,3 +172,92 @@ func TestRunArtifactGCRotatesOldLogsToZstd(t *testing.T) {
 	}
 	rc.Close()
 }
+
+func newLogRotateService(t *testing.T) (*Service, *Store, string, string) {
+	t.Helper()
+	store, root := openTestPlatformStore(t)
+	ensureGCRouteTables(t, store)
+	artifactsRoot := filepath.Join(root, "artifacts")
+	logDir := filepath.Join(artifactsRoot, artifactGCLogDir)
+	if err := os.MkdirAll(logDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return NewService(store, artifactsRoot, ""), store, root, logDir
+}
+
+func writeAgedLog(t *testing.T, path string, data []byte, age time.Duration) {
+	t.Helper()
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	when := time.Now().Add(-age)
+	if err := os.Chtimes(path, when, when); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// N7: a pass that failed does not rotate.
+func TestRunArtifactGCDoesNotRotateAfterAFailedPass(t *testing.T) {
+	service, store, root, logDir := newLogRotateService(t)
+	day5 := time.Now().UTC().AddDate(0, 0, -5).Format("2006-01-02")
+	p := filepath.Join(logDir, day5+".jsonl")
+	writeAgedLog(t, p, gcLogLines(day5, 20), 5*day)
+	breakCorpusStore(t, store, root)
+	if _, err := service.RunArtifactGC(context.Background(), ArtifactGCConfig{Mode: "active", Grace: time.Hour}); err == nil {
+		t.Fatal("expected the live-set failure")
+	}
+	if _, err := os.Stat(p); err != nil {
+		t.Fatalf("a failed pass rotated a log: %v", err)
+	}
+	if _, err := os.Stat(p + ".zst"); !os.IsNotExist(err) {
+		t.Fatalf("a failed pass wrote a .zst: %v", err)
+	}
+}
+
+// N8: a file whose name says old but whose mtime is recent (a clock step, or a
+// log still being written) is not rotated.
+func TestRunArtifactGCDoesNotRotateAFileModifiedRecently(t *testing.T) {
+	service, _, _, logDir := newLogRotateService(t)
+	day5 := time.Now().UTC().AddDate(0, 0, -5).Format("2006-01-02")
+	p := filepath.Join(logDir, day5+".jsonl")
+	writeAgedLog(t, p, gcLogLines(day5, 20), time.Minute)
+	if _, err := service.RunArtifactGC(context.Background(), ArtifactGCConfig{Mode: "active", Grace: time.Hour}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(p); err != nil {
+		t.Fatalf("a recently modified log was rotated: %v", err)
+	}
+}
+
+// N9: a well-formed .zst that differs from the plain file may be the only
+// archived copy of earlier records. Both are kept and the pass warns.
+func TestRunArtifactGCKeepsBothWhenAValidZstDiffersFromThePlainFile(t *testing.T) {
+	service, _, _, logDir := newLogRotateService(t)
+	day5 := time.Now().UTC().AddDate(0, 0, -5).Format("2006-01-02")
+	p := filepath.Join(logDir, day5+".jsonl")
+	archived := gcLogLines(day5, 30)
+	enc, _ := zstd.NewWriter(nil)
+	writeAgedLog(t, p+".zst", enc.EncodeAll(archived, nil), 5*day)
+	appended := gcLogLines(day5, 5) // a later, different plain file
+	writeAgedLog(t, p, appended, 5*day)
+
+	report, err := service.RunArtifactGC(context.Background(), ArtifactGCConfig{Mode: "active", Grace: time.Hour})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := decompressFile(t, p+".zst"); !bytes.Equal(got, archived) {
+		t.Fatal("the archived .zst was replaced or removed")
+	}
+	if got, err := os.ReadFile(p); err != nil || !bytes.Equal(got, appended) {
+		t.Fatalf("the plain file was removed: %v", err)
+	}
+	warned := false
+	for _, w := range report.Warnings {
+		if strings.Contains(w, "differs") {
+			warned = true
+		}
+	}
+	if !warned {
+		t.Fatalf("no divergence warning in %v", report.Warnings)
+	}
+}
