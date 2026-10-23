@@ -554,3 +554,126 @@ func TestCommitSkipsInboxCursorEntryWhenCursorDidNotMove(t *testing.T) {
 		t.Fatalf("durable cursor = %d, %v; want 2", cursor, err)
 	}
 }
+
+// The paper's top store_stalled holder is ListRunMemoryEntriesForAgent
+// (docs/problems/run-memory-entries-hold-the-engine-2026-10-23.md). A desk
+// cell read it twice: at cell start (LoadInboxCursorForDesk in
+// rlmReductionForDeskCall) and again at commit (recoverPartialActCommit loaded
+// the cursor before it knew it needed it). The common cell, a fresh act with
+// no commitment record yet, needs only the first.
+//
+// Ways this could fail, written first: the commit still reads the cursor when
+// no commitment record exists (2 calls per cell); the fix drops the read from
+// the recovery path too, so a crash-recovered tray no longer sees the durable
+// cursor (it replays the whole tray instead of only the missing part, or
+// re-mails); the lazy load runs once per intent instead of once per commit.
+func deskCellRuntime(t *testing.T) (*Runtime, ReductionScope, context.Context) {
+	t.Helper()
+	rt, _ := testRuntime(t)
+	scope := testReductionScope()
+	scope.ComputerID = rt.TextureComputerID()
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{
+		RunID: scope.RunID, AgentID: scope.FromAgentID, OwnerID: scope.OwnerID,
+		ChannelID: scope.ChannelID, ComputerID: scope.ComputerID,
+	})
+	if _, err := rt.ChannelCast(ctx, scope.ChannelID, scope.FromAgentID, "", "management", "management", "snapshot-mail"); err != nil {
+		t.Fatal(err)
+	}
+	return rt, scope, ctx
+}
+
+func TestDeskCellReadsTheAgentCursorOnceInTheCommonCase(t *testing.T) {
+	rt, _, ctx := deskCellRuntime(t)
+	before := rt.store.RunMemoryAgentListCalls()
+	reduction := rlmReductionForDeskCall(ctx, rt)
+	if !reduction.active || reduction.highWater != 1 {
+		t.Fatalf("cell start reduction = active %t, highWater %d; want active, 1", reduction.active, reduction.highWater)
+	}
+	atStart := rt.store.RunMemoryAgentListCalls() - before
+	intent := yaegikernel.StagedIntent{LocalID: "ask-common", Kind: yaegikernel.IntentAsk, ToDesk: "management", Question: "is it ready?"}
+	if err := reduction.commit(ctx, []yaegikernel.StagedIntent{intent}); err != nil {
+		t.Fatal(err)
+	}
+	perCell := rt.store.RunMemoryAgentListCalls() - before
+	t.Logf("ListRunMemoryEntriesForAgent calls: cell start %d, whole cell %d", atStart, perCell)
+	if atStart != 1 {
+		t.Fatalf("calls at cell start = %d, want 1", atStart)
+	}
+	if perCell != 1 {
+		t.Fatalf("calls per desk cell = %d, want 1 (start only; the commit has no prior commitment record to recover)", perCell)
+	}
+	if cursor, err := LoadInboxCursorForDesk(ctx, rt.store, reduction.scope.OwnerID, reduction.scope.DeskAgentID, reduction.scope.ChannelID); err != nil || cursor != 1 {
+		t.Fatalf("durable cursor after the cell = %d, %v; want 1", cursor, err)
+	}
+}
+
+func TestCommitWithNoPriorCommitmentRecordDoesNotReadTheAgentCursor(t *testing.T) {
+	rt, scope, ctx := deskCellRuntime(t)
+	scope.CellID = "cell-no-prior-record"
+	reduction := &rlmCallReduction{active: true, mb: rt, st: rt.store, ledger: rt.store, scope: scope, highWater: 1}
+	intents := []yaegikernel.StagedIntent{
+		{LocalID: "ask-a", Kind: yaegikernel.IntentAsk, ToDesk: "management", Question: "first?"},
+		{LocalID: "ask-b", Kind: yaegikernel.IntentAsk, ToDesk: "management", Question: "second?"},
+	}
+	before := rt.store.RunMemoryAgentListCalls()
+	if err := reduction.commit(ctx, intents); err != nil {
+		t.Fatal(err)
+	}
+	if got := rt.store.RunMemoryAgentListCalls() - before; got != 0 {
+		t.Fatalf("commit of two fresh acts read the agent cursor %d times, want 0", got)
+	}
+}
+
+func TestPartialCommitRecoveryStillReadsTheAgentCursor(t *testing.T) {
+	rt, scope, ctx := deskCellRuntime(t)
+	scope.CellID = "cell-recovery-reads-cursor"
+	first := yaegikernel.StagedIntent{LocalID: "ask-1", Kind: yaegikernel.IntentAsk, ToDesk: "management", Question: "is the cast ready?"}
+	second := yaegikernel.StagedIntent{LocalID: "ask-2", Kind: yaegikernel.IntentAsk, ToDesk: "management", Question: "and the next?"}
+	// A process death after the append-only ledger mint of both acts and
+	// before the envelope and cursor writes.
+	for _, in := range []yaegikernel.StagedIntent{first, second} {
+		if _, err := rt.store.AppendCommitmentRecord(ctx, scope.OwnerID, scope.ComputerID, commitmentRecordForIntent(scope, in)); err != nil {
+			t.Fatalf("stage commitment record: %v", err)
+		}
+	}
+	reduction := &rlmCallReduction{active: true, mb: rt, st: rt.store, ledger: rt.store, scope: scope, highWater: 1}
+	before := rt.store.RunMemoryAgentListCalls()
+	if err := reduction.commit(ctx, []yaegikernel.StagedIntent{first, second}); err != nil {
+		t.Fatalf("recover partial act commit: %v", err)
+	}
+	got := rt.store.RunMemoryAgentListCalls() - before
+	// Once for the recovery decision, however many intents have records.
+	if got != 1 {
+		t.Fatalf("recovery read the agent cursor %d times, want exactly 1", got)
+	}
+	if !reduction.receipt.Committed || reduction.receipt.Cursor != 1 {
+		t.Fatalf("recovery receipt = %+v", reduction.receipt)
+	}
+	// Now the cursor is durable at 1: a replay finds nothing behind it and
+	// must read it again, and must still not duplicate mail.
+	before = rt.store.RunMemoryAgentListCalls()
+	if err := reduction.commit(ctx, []yaegikernel.StagedIntent{first, second}); err != nil {
+		t.Fatalf("replay recovered tray: %v", err)
+	}
+	if got := rt.store.RunMemoryAgentListCalls() - before; got != 1 {
+		t.Fatalf("replay read the agent cursor %d times, want 1", got)
+	}
+	to, content, mailed, err := stagedIntentEnvelope(scope, first)
+	if err != nil || !mailed {
+		t.Fatalf("envelope = (%q, %q, %t, %v)", to, content, mailed, err)
+	}
+	key := intentIdempotencyKey(scope, first.LocalID, to, content)
+	messages, _, err := rt.ChannelRead(scope.ChannelID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	matched := 0
+	for _, m := range messages {
+		if m.IdempotencyKey == key {
+			matched++
+		}
+	}
+	if matched != 1 {
+		t.Fatalf("recovered envelope count = %d, want 1", matched)
+	}
+}

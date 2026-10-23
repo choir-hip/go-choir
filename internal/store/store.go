@@ -208,15 +208,18 @@ type Store struct {
 	doltCheckpointEvery     uint64
 	workerUpdateMu          sync.Mutex
 	runMemoryMu             sync.Mutex
-	textureMutationMu       sync.Mutex
-	channelMsgMu            sync.Mutex
-	eventMu                 sync.Mutex
-	presenceMu              sync.Mutex
-	sessionPresence         map[string]types.DesktopSessionContext
-	projectionTape          *projectionTape
-	og                      *objectgraph.Service
-	ogStore                 *objectgraph.DoltStore
-	ogReadStore             *objectgraph.DoltStore
+	// runMemoryAgentList counts and observes ListRunMemoryEntriesForAgent
+	// (run_memory_observe.go).
+	runMemoryAgentList runMemoryAgentListObserver
+	textureMutationMu  sync.Mutex
+	channelMsgMu       sync.Mutex
+	eventMu            sync.Mutex
+	presenceMu         sync.Mutex
+	sessionPresence    map[string]types.DesktopSessionContext
+	projectionTape     *projectionTape
+	og                 *objectgraph.Service
+	ogStore            *objectgraph.DoltStore
+	ogReadStore        *objectgraph.DoltStore
 	// derivedColumns is the explicit og_objects derived-column migration
 	// (derived_columns.go); boot never runs it.
 	derivedColumns derivedColumnMigration
