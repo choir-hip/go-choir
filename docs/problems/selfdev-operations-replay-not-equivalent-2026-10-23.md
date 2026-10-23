@@ -530,3 +530,120 @@ instead of staying fresh while it retries. That is closer to the meaning of
 the field, and it is a behaviour change from before round 1 that FP0
 approved only in the sense of "a stamp that changes still sets `updated_at`";
 a looping same-reason refusal will now show up as stalled.
+
+## Operator heal and a corrupt vocabulary sidecar (2026-10-23, lane fp0-selfdev-heal; record first, green)
+
+Two items from FP0 that follow this record. This section is written before
+the tests (yellow) and the code (red); the commits are ordered the same way.
+
+### A. The operator heal for historic stamps (design as built)
+
+The "Residual: operator heal for historic stamps" steps above are the design;
+what is added here is the shape of the route and the three places where the
+steps needed a decision.
+
+- Route: `/internal/self-development/operation-stamp-heal`, registered beside
+  `/internal/store/derived-columns` (`autoputer/run.go`), host peer only
+  (`server.HostPeerCaller`: the guest's own loopback children get 403).
+  `GET` is the dry run: it replays, selects, and appends nothing. `POST`
+  applies. Any other method is 405. Never a boot step, never a resumer: no
+  code path calls it but the HTTP route, so no planned-restart marker is
+  involved.
+- Dry-run output shape (JSON): `computer_id`; `mode` (`dry_run` or
+  `applied`); `probe` (the replay probe at the time of the plan:
+  `live_head_sequence`, `replay_head_sequence`, `equivalent`, `eligible`,
+  `reason`, and the differing witness keys); `rows_examined`; `rows` (each:
+  `operation_id`, `state`, `live_last_intent_error`,
+  `replay_last_intent_error`, `live_updated_at`, `replay_updated_at`,
+  `differs`, a subset of `["last_intent_error","updated_at"]`);
+  `missing_in_replay` (live rows with no replayed row: reported, never healed,
+  because a state-preserving snapshot of a row the replay does not have is
+  refused); and, for `POST`, `appended` (rows in the one batch) and `after`
+  (a second probe, unless `?verify=0`).
+- Selection is by the two columns only (`last_intent_error`, `updated_at`),
+  compared as the strings `scanOperation` produces on each side. A row that
+  differs in some other column is not selected; the probe's remaining
+  differences in `after` name it.
+- Atomicity decision: the plan is separate from the apply. The plan reads
+  the live rows and keeps, per selected row, the full live `Operation` and
+  its state. The apply takes the selfdev store's `writeMu`, refuses with
+  `ErrConflict` when a selected row's stamp itself moved since the plan (a
+  newer stamp must not be overwritten by an older snapshot), and appends one
+  batch of state-preserving snapshots with `ExpectedState` = the state the
+  plan saw. A row whose state moved since the plan is therefore refused by the
+  projector's `ExpectedState` check (`store/project.go`,
+  `ErrProjectionMismatch`), the batch is not committed, and the route answers
+  409 with nothing appended. `Transition` carries the stamp unchanged, so a
+  state move reaches `ExpectedState` and a stamp move reaches the
+  `ErrConflict` check; between them the two ways a stale plan could damage a
+  row are refused.
+- Concurrency: one heal at a time per runtime (a second concurrent call
+  answers 409); the selfdev `writeMu` serialises it against `Transition`,
+  `Start` and `RecordIntentError`.
+- Idempotence: after a successful apply the replayed rows carry the live
+  values, so the next plan selects nothing and a `POST` appends nothing (no
+  batch is built for an empty plan). A stamp that a fixed binary wrote after
+  the probe's head can look divergent for one plan, because the probe is
+  taken first; healing it appends a snapshot equal to the live row, which is
+  harmless, and the following run selects nothing.
+- Cost: the plan runs the replay probe. On t71 that was about 20 s; on a
+  computer whose chain replays slowly (the paper) it is the full-chain replay,
+  which did not answer in 10 minutes. Do not run it on the paper without a
+  published base. `POST` runs a second probe for `after`; `?verify=0` skips it.
+- Mutation class: red (tape and evidence, self-development). The route
+  appends signed tape events. Rollback: stop calling it; the appended
+  snapshots are ordinary state-preserving events and an old binary replays
+  them with the `last_intent_error` key ignored (the computer returns to the
+  replay-ineligible state it was in). Review tier 2.
+
+### B. A corrupt vocabulary sidecar must not leave the fence off
+
+`Open` (`store/store.go`, after `SetWriteValidator`) and
+`OpenTextureWorkspace` (`store/texture.go`) arm the vocabulary write fence
+with `if rep, err := s.loadVocabMigrationReport(); err == nil && rep != nil`.
+A sidecar that exists but does not decode (truncated by a disk fault, damaged
+by a hand edit) gives `err != nil`, the condition is false, and the store
+opens with `vocabCutover` false: `vocabWriteGuard` then passes every write.
+That is a silent fail-open on a protected surface (bunch 157, Devin finding 1).
+A missing file is the only case that means "never cut over" (`nil, nil`).
+
+Decision: open with the fence armed and log the error. The open is not
+refused. Reasons:
+
+- Boot path. `Open` runs at `autoputer/run.go` (the store open before the tape
+  bind at `:428`), and `OpenTextureWorkspace`, `Reopen` (`projection_base.go`
+  at boot, `rematerialize.go` at runtime) and the projection-base rebuilder
+  open stores the same way. Refusing the open would turn a damaged sidecar into
+  a store that cannot be opened at all, so the computer cannot reach the
+  health listener, cannot be refreshed, and cannot be inspected by an operator
+  (no-SSH operability): a crash loop with no surface. Arming and logging keeps
+  the process up and the failure visible.
+- Fail-closed is the cheap direction. The sidecar is written only by the
+  cutover (`persistVocabMigrationReport`: temp file, fsync, rename), so a
+  sidecar that exists, damaged or not, means a cutover began on this
+  workspace. A store that cut over has V2 rows; the armed guard refuses
+  non-V2 role values, which is the correct posture for it. The cost of arming
+  wrongly is a refused write of a stale role (the same refusal every cut-over
+  computer already has); the cost of not arming is V1 spellings entering a V2
+  graph silently.
+- The corruption does not go unnoticed later. `MigrateAndFenceServingVocabulary`
+  (`run.go:695` and `:767`, `rematerialize.go:204`, `projectionbase/rebuilder.go:390`)
+  still returns the load error, as before, and the boot paths treat it as a
+  refusal (`boot.fatalf("vocabulary migration refused")`). That is an
+  existing, visible stop at the migration step, after the store is open and
+  the fence is armed, not a change made here. A repair of the sidecar is an
+  operator act and is not built here.
+- `Reopen` already carries an armed fence over (`live.vocabCutover` merges into
+  `s`), so arming in `Open` makes the corrupt-sidecar case hold after a
+  `Reopen` as well.
+
+Test (written first): a store whose sidecar is corrupt opens, and its fence
+is armed (an unknown role is refused); a missing sidecar leaves it disarmed
+(control); `OpenTextureWorkspace` behaves the same; the fence survives
+`Reopen`. Rollback: revert the helper; the open returns to ignoring the load
+error.
+
+### Heresy delta (this section)
+
+- Discovered: none beyond the two items named by FP0 and the review.
+- Introduced: none yet. Repaired: none yet (set when the code lands).
