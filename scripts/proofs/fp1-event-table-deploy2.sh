@@ -20,6 +20,13 @@
 # Before any of it, the local journal probe F17 must have passed its go bar
 # (docs/evidence/fp1-event-table-journal-probe-2026-10-22.json).
 #
+# The stream_seq lease (D24, docs/problems/stream-seq-high-water-mark-design-
+# 2026-10-23.md sections 4 and 6 step 3): the setting refuses to turn on (409,
+# reason stream_seq_lease_not_ready) and the writer refuses to stamp until the
+# lease is ready on the tape. Step 2 reads stream_seq_lease.state == ready
+# before the switch; step 5 asserts the restart after deploy 2 seeded from the
+# lease (seeded_from=lease) with no event-kind read.
+#
 #   BASH_ENV= CHOIR_API_KEY=<the test computer's key> \
 #   scripts/proofs/fp1-event-table-deploy2.sh [--computer computer-<id>] [--run RUN_ID]
 #       [--label LABEL] [--out FILE] [--dry-run | --list | --step N [--mutate]] [--evidence FILE]
@@ -37,10 +44,10 @@ PROOF_NAME=fp1-event-table-deploy2
 
 step_def 0 ro "no effect where off: no event_table block, no tape_ops_by_table, store.event_table false, no 'event table' boot line"
 step_def 1 ro "the named test computer is granted by the host after its cold boot; the setting is off; the writer is off"
-step_def 2 mut "the owner sets store.event_table on the TEST computer; the writer is on at once (no restart)"
+step_def 2 mut "the stream_seq lease is ready; the owner sets store.event_table on the TEST computer; the writer is on at once (no restart)"
 step_def 3 ro "snapshot for the fit: store bytes, tape head, tape events and ops, ops by table, events by kind (--label, --out appends)"
 step_def 4 ro "correctness: replay report eligible and equivalent at manifest version 4 with stamped ops; a run's events read whole"
-step_def 5 mut "crash drill: operator refresh (cold boot) of the TEST computer; the setting and the grant survive; the writer is on again"
+step_def 5 mut "crash drill: operator refresh (cold boot) of the TEST computer; the lease seeds from the lease row (seeded_from=lease, no event-kind read); the setting and the grant survive; the writer is on again"
 step_def 6 mut "live rollback: the owner sets store.event_table off; the writer is off at once; stamped events stay readable"
 step_def 7 ro "the fit and the decision (manual): b_ce/b_og <= 0.5 from step 3's snapshots"
 step_def 8 ro "the paper (manual, never run by this script): the owner's conditions and readings 1 to 6 before and after"
@@ -52,6 +59,7 @@ step_def 10 ro "pre-rollback check: the computer's store_floor; any binary below
 ft_target() { resolve_target "$OPT_computer" "${1:-0}"; }
 ft_observability() { guest_get "/api/runtime/observability${1:-}"; }
 ft_event_table() { ft_observability | jq -c '.event_table // null'; }
+ft_lease() { ft_observability | jq -c '.stream_seq_lease // null'; }
 ft_settings() { guest_get /api/computer-settings; }
 
 # ft_set_event_table VALUE: the owner act, through the product API with the
@@ -91,11 +99,16 @@ step_1() {
 }
 
 step_2() {
-	local st head
+	local st head lease
 	ft_target 1
+	lease=$(ft_lease)
+	if [ "$PROOF_DRY" != 1 ]; then
+		info "stream_seq_lease $lease"
+		printf '%s' "$lease" | jq -e '.state == "ready"' >/dev/null && pass "the stream_seq lease is ready before the switch (seeded_from $(printf '%s' "$lease" | jq -r '.seeded_from // "?"'))" || { fail "the stream_seq lease is not ready ($(printf '%s' "$lease" | jq -r '.state // "absent"')): the setting would be refused 409; wait for state ready (an exact seed takes minutes on a large store)"; return 1; }
+	fi
 	head=$(guest_get /health | jq -r '.effective_release.event_head.sequence // empty')
 	info "tape head before the setting write: ${head:-?}"
-	ft_set_event_table true || { fail "the setting write was refused"; return 1; }
+	ft_set_event_table true || { fail "the setting write was refused (a 409 is the lease gate: read stream_seq_lease)"; return 1; }
 	st=$(ft_event_table)
 	[ "$PROOF_DRY" = 1 ] && return 0
 	info "event_table $st"
@@ -111,8 +124,8 @@ step_3() {
 	obs=$(ft_observability '?memory=detail')
 	head=$(guest_get /health | jq -r '.effective_release.event_head.sequence // empty')
 	[ "$PROOF_DRY" = 1 ] && return 0
-	line=$(printf '%s' "$obs" | jq -c --arg label "$OPT_label" --arg at "$(proof_now)" --arg head "$head" '{
-		label: $label, at: $at, computer: .computer_id, build: .build,
+	line=$(printf '%s' "$obs" | jq -c --arg lbl "$OPT_label" --arg at "$(proof_now)" --arg head "$head" '{
+		"label": $lbl, at: $at, computer: .computer_id, build: .build,
 		event_head: ($head | tonumber? // null),
 		store_bytes: ([.memory_detail | .. | objects | select(.label? == "store") | .bytes][0] // null),
 		event_table: (.event_table // null),
@@ -146,13 +159,23 @@ step_4() {
 }
 
 step_5() {
-	local body
+	local body lease mutex
 	ft_target 1
 	body=$(jq -nc --arg u "$T_USER" --arg d "$T_DESKTOP" '{user_id:$u,desktop_id:$d}')
 	will "operator refresh (a crash boot, closes open work) of the TEST computer $T_COMPUTER ($T_VM) through POST /internal/vmctl/refresh $body"
 	vmctl_post /internal/vmctl/refresh "$body" proof.fp1-event-table-d2-restart
 	proof_poll 600 30 "$T_COMPUTER is active after the restart" ft_is_active
+	proof_poll 300 10 "the stream_seq lease is ready after the restart" ft_lease_ready
 	[ "$PROOF_DRY" = 1 ] && return 0
+	lease=$(ft_lease)
+	info "stream_seq_lease $lease"
+	printf '%s' "$lease" | jq -e '.state == "ready" and .seeded_from == "lease" and .trusted == true' >/dev/null && pass "the restart after deploy 2 seeded from the lease row (seeded_from=lease, trusted, seed_ms $(printf '%s' "$lease" | jq -r '.seed_ms // "?"'))" || fail "the restart did not seed from the lease: $lease (an exact seed here is the cost the lease removes)"
+	mutex=$(ft_observability | jq -c '.engine_mutex // null')
+	if [ "$mutex" = null ]; then
+		manual "engine_mutex is absent: confirm in the boot log that no exact stream_seq seed ran (no 'seeded from exact')"
+	else
+		printf '%s' "$mutex" | jq -e '[to_entries[] | select(.key | test("ListKindIDRangePage choir.event|store.event_table.seed_owner_max"))] | length == 0' >/dev/null && pass "no event-kind read since boot (no ListKindIDRangePage choir.event, no store.event_table.seed_owner_max)" || fail "an exact-seed read ran since boot: $(printf '%s' "$mutex" | jq -c '[to_entries[] | select(.key | test("ListKindIDRangePage choir.event|store.event_table.seed_owner_max")) | .key]')"
+	fi
 	ft_event_table | jq -e '.host_granted and .setting and .writing' >/dev/null && pass "after the crash boot the grant and the setting are read again; the writer is on" || fail "after the crash boot the writer is not on: $(ft_event_table)"
 	manual "runs open before the refresh are closed 'interrupted by a restart'; the whole-chain audit finds no duplicate seq or stream_seq across the boot"
 }
@@ -208,6 +231,7 @@ step_10() {
 	fi
 }
 
+ft_lease_ready() { ft_lease | jq -e '.state == "ready"' >/dev/null; }
 ft_is_active() { [ "$(proof_row_json "$T_COMPUTER" | jq -r '.state // ""')" = active ]; }
 
 proof_main "$@"
