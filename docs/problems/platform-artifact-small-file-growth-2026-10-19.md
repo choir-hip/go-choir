@@ -654,3 +654,109 @@ unlinked file is gone and its record still reads through `Reader.Read` from
 the segment; D8 files outside the three tape namespaces are untouched; D9 a
 rerun after a partial delete deletes the rest and no more; D10 the deletion
 log has one line per unlinked file.
+
+### Repack tool v2: as built and measured (FP10, 2026-10-22)
+
+Lane `lane/fp10-tape-repack`. Code: `internal/taperepack` (engine, report,
+delete), `internal/tapestore` (`Reader.OpenView`, `SegmentView`,
+`Appender.Seal`), `cmd/taperepack` (`census`, `copy`, `delete`). The FP9
+`plan`, the manifest and `refuseLiveWriter` are removed. Tests P1 to P19 and
+D1 to D10 (`internal/taperepack`), V1 to V4 and S1 to S3
+(`internal/tapestore`) pass under `-race`; one operator-path test in
+`cmd/taperepack`.
+
+Changes from the plan above, with the reason:
+
+- The report is stored as `census-<digest>.json` (`copy-<digest>.json` for a
+  copy run) in the work directory. The digest is the census receipt that
+  `delete` is gated on.
+- P9 as written ("a resumed run reports the same totals") does not hold: the
+  bucket that was interrupted after its append is redone, finds its records
+  present, and counts them `already_present`, not `copied`. Coverage, which is
+  what matters, is identical. Resume granularity is the bucket (1/256 of the
+  files).
+- A completed copy run removes its state, so a later run always lists afresh
+  (otherwise a second run would report the first run's counts). Only an
+  interrupted `--apply` leaves state; `--fresh` discards it.
+- `delete` is dry run by default and needs the digest for a dry run too.
+  `--apply` and the digest together unlink.
+
+Measured locally (macOS, APFS, GOMAXPROCS unset; a synthetic tree of 280,000
+files: 70,000 pins of an event, a payload and two receipts, about 1.2 KB
+each, three computers; the tool as a separate process under `/usr/bin/time
+-l`; seeded by `TestSynthTreeGenerate`):
+
+| run | wall | files/s | max resident set |
+|---|---|---|---|
+| `census`, nothing copied (280,000 uncovered) | 240 s | 1,170 | 24 MB |
+| `copy --apply` (3 computers, 280,000 records, 263.8 MB, 768 appends) | 284 s | 985 | 95 MB |
+| `census` after the copy (280,000 covered, exit 0) | 199 s | 1,410 | 24 MB |
+| `delete --apply` on that census (280,000 unlinked, 1 ms pause) | 305 s | 920 | 25 MB |
+
+The first census ran while `go test` ran beside it, so its rate is a floor.
+The resident set is the Go runtime plus one bucket (about 1/256 of the files)
+and, in `copy`, at most 64 MiB of pending record bodies; it does not grow
+with the number of files (the 280,000-file runs sit at 24 MB, a census of 10
+million files adds about 1/256 of 10 million list and edge records per bucket,
+about 10 MB). The per-file cost is system calls (open, fstat, read, close) and
+a SHA-256, so Node B's rate depends on its disk, not on this laptop's; at the
+laptop's census rate 10 million files take about two hours, and `--rate N`
+spaces the reads. Throughput was not tuned: one reader, no worker pool.
+
+Failure modes covered by a test: P1 to P15, P17 to P19 and D1 to D10. P16
+(memory) is measured above, not asserted in `go test`.
+
+Declined or left, with the reason:
+
+- No worker pool or read-ahead: a single reader is gentle on a host that is
+  serving users, and `--rate` bounds it. A pool is an easy addition if the
+  census proves too slow on Node B.
+- Event-namespace receipts are copied whatever the event's kind (residual 1);
+  checking the event would double the event reads.
+- The delete does not check the other evidence gates of owner notes 34 (a
+  restore drill covering tapes, an off-host snapshot holding the segments,
+  about three days with zero segment-error fallbacks). Those are FP0's gates
+  before it runs `delete --apply`; the command gates on the census only.
+- A run that resumes does not seal segments left unsealed by the killed
+  process; the next appender (the platform's, or the next copy) seals an
+  unsealed segment it did not write before starting its own.
+- Segments are written in digest order within a bucket pass, not in sequence
+  order; the reader is by digest, so replay is unaffected. A sequence-ordered
+  backfill (design 6.1 step 3) would need the platform's append receipts.
+
+#### Running it on Node B
+
+The binary is at `/var/lib/go-choir/services/corpusd/bin/taperepack`
+(`flake.nix` `extraBins`); corpusd runs as root with
+`CORPUSD_ARTIFACTS_ROOT=/var/lib/go-choir/platform-artifacts`, so run it as
+root (the segment files it creates must be owned like the platform's). The
+work directory must be outside the artifacts root and needs about 600 MB for
+10 million files (spill files; removed when a run completes). A census, which is also
+the dry run of the copy (every file uncovered, with the per-computer and
+per-namespace counts):
+
+```
+BIN=/var/lib/go-choir/services/corpusd/bin/taperepack
+ROOT=/var/lib/go-choir/platform-artifacts
+W=/var/lib/go-choir/taperepack-work
+mkdir -p $W
+ionice -c3 nice -n 19 $BIN census --root $ROOT --work-dir $W --rate 4000 \
+  > $W/census-run.json 2> $W/census-run.err
+echo exit $?
+```
+
+Exit 0 means every file the tool is responsible for is covered; 3 means not.
+The JSON line has `files` (global, by namespace: files, covered, uncovered,
+corrupt, blocked, ineligible, unreceipted, legacy_bad, too_large, vanished),
+`computers_by_namespace`, `segment_errors`, `listing` and `receipt` (the
+digest). A dry run of the copy: the same command with `copy --computer a,b`
+(its `copy.would_copy_records`). The copy: `copy --apply --computer a,b`
+(never the owner's or the paper's computer without the owner naming it). The
+delete, after a clean census and FP0's other gates:
+
+```
+ionice -c3 nice -n 19 $BIN delete --root $ROOT --work-dir $W \
+  --census-receipt <receipt digest from the census line>           # dry run
+ionice -c3 nice -n 19 $BIN delete --root $ROOT --work-dir $W \
+  --census-receipt <digest> --apply                                # unlinks
+```

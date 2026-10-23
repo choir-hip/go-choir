@@ -320,13 +320,27 @@ now:
     2026-10-22. The FP9 taperepack (plan, copy, census over an in-memory
     manifest) does not scale to 10 million flat files and cannot give a
     delete step a per-file verdict. A streaming, bounded-memory engine with an
-    unforgeable Verdict (r4) replaces it; plan and failure modes P1 to P18 in
+    unforgeable Verdict (r4) replaces it; plan and failure modes P1 to P19 in
     docs/problems/platform-artifact-small-file-growth-2026-10-19.md, "Repack
     tool v2". A census-gated `taperepack delete` follows in its own commit
     (D1 to D10 there).
+  repack_v2_built: >-
+    2026-10-22. Built and pushed on lane/fp10-tape-repack (not yet on main):
+    internal/taperepack (streaming bucketed engine, unforgeable Verdict,
+    census, copy dry run by default, resumable, census-gated delete),
+    internal/tapestore (SegmentView, Appender.Seal), cmd/taperepack. Tests
+    P1 to P19, D1 to D10, V1 to V4, S1 to S3 pass under -race. Synthetic tree
+    of 280,000 files: census 240 s and 24 MB, copy 284 s and 95 MB, census
+    after the copy 199 s and 24 MB with all 280,000 covered, delete 305 s and
+    25 MB. r4 closed in code: only a covered Verdict is deletable
+    (docs/problems/platform-artifact-small-file-growth-2026-10-19.md,
+    "Repack tool v2: as built and measured", with the Node B commands).
   blocker: >-
-    none. The repack tool v2 is in build (lane/fp10-tape-repack); the legacy
-    delete is owner-approved (owner_ruling_delete) and waits on the census.
+    none. The next step is FP0's: merge the lane, deploy, run the census on
+    Node B and read it, copy, a clean census, then the other evidence gates of
+    owner notes 34 (restore drill covering tapes, off-host snapshot of the
+    segments, about three days with zero segment-error fallbacks), then
+    `taperepack delete` (owner-approved: owner_ruling_delete).
   next_action: >-
     Read the health tape block after the flip (segment_pins growing,
     files per pin falling toward 0, segment_fallbacks, corrupt and
