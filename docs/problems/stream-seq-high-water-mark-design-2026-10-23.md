@@ -955,3 +955,23 @@ are additions (bunch 169).
 - The VM snapshot resume residual (open question 4) is unchanged.
 - The full `internal/agentcore` suite was not run; the focused run of the
   instruction (`Event|Seq|Lease|Rematerial|Restore|Replay`) passes.
+- A desk-forged `choir.event` row (a high `stream_seq` written by a desk
+  through the ordinary event path, which no fence guards) is inherited from
+  the pre-lease design and recorded here: the cross-check and the exact seed
+  read it like any event, so it can raise the next seed (a burn of the number
+  space, bounded by the ceiling for the lease and by nothing for the exact
+  seed's maximum), never lower it. Round 2 of bunch 175 (Devin) left it open
+  on purpose.
+
+### Round 2 (bunch 175: both seats accepted `642efb512`, no blocking finding)
+
+Fixed: a `Close` wakes every parked waiter at once (a closing channel closed
+without `eventMu`); the id-range walk has its own engine-mutex label
+(`ListKindIDRangePage`) and tests assert which path ran; the outside-range
+probe has a plan pin; the marker read is one call; `s.texturePath` is
+snapshotted under `eventMu` (Open, Reopen) instead of read in the seeder;
+`marker_present` is published inside the snapshot; undecodable event rows
+are counted and logged (`seed_undecodable_rows`, a fourteenth field); the
+stale comments and loose `> lastStored` assertions in the seed tests are
+replaced by the lease's exact `R + 1`; the base-install test asserts
+`no_lease`.

@@ -127,7 +127,7 @@ func (s *DoltStore) ListKindIDRangePage(ctx context.Context, kind ObjectKind, af
 	if afterCanonicalID > lo {
 		lo = afterCanonicalID
 	}
-	op := "(*DoltStore).ListKindMetadataPage range " + kindOpLabel(string(kind))
+	op := "(*DoltStore).ListKindIDRangePage " + kindOpLabel(string(kind))
 	s.engineMu.LockAs(op)
 	defer s.engineMu.UnlockAs(op)
 	result, err := s.db.QueryContext(ctx, KindIDRangePageSQL, lo, hi, limit)

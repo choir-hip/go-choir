@@ -155,7 +155,8 @@ func TestGuestObservabilityServesTheStreamSeqLease(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, key := range []string{"state", "reserved_through", "allocated_through", "trusted", "untrust_reason", "seeded_from",
-		"seed_ms", "cross_check_max", "refill_failed", "last_lease_error", "marker_present"} {
+		"seed_ms", "cross_check_max", "refill_failed", "last_lease_error", "marker_present",
+		"seed_failed", "lease_tombstoned", "seed_undecodable_rows"} {
 		if _, present := block[key]; !present {
 			t.Errorf("stream_seq_lease lacks %q: %s", key, raw)
 		}
