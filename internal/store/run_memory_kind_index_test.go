@@ -381,25 +381,22 @@ func TestRunMemoryKindIndexKeepsTheWitnessSchemaObservation(t *testing.T) {
 	// detectable by this extractor. owner_id is already MUL through the
 	// (owner_id, agent_id, created_at) index; agent_id is not.
 	control, controlPath := vocabUpcastOpenStore(t, "schema-agent-leading")
-	if _, err := control.db.Exec(`DROP INDEX ` + testRunMemoryKindIndex + ` ON run_memory_entries`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := control.db.Exec(`CREATE INDEX idx_control_agent_leading ON run_memory_entries(owner_id, agent_id, kind, created_at)`); err != nil {
+	if _, err := control.db.Exec(`CREATE INDEX idx_control_agent_leading ON run_memory_entries(agent_id, kind, owner_id, created_at)`); err != nil {
 		t.Fatal(err)
 	}
 	c := runMemorySchemaObservations(t, control, controlPath)
-	if c["dolt:texture:schema:run_memory_entries"] == b["dolt:texture:schema:run_memory_entries"] {
+	if c["dolt:texture:schema:run_memory_entries"] == a["dolt:texture:schema:run_memory_entries"] {
 		t.Error("an agent-leading index left the schema observation unchanged: the test cannot see a drift")
 	}
 }
 
 // Lows 3 and 4 of bunch 160 (DeepSeek) and its nit 6.
 //
-// 3. A cancel after the og_objects steps and before the index step reported
-//    done with the index absent.
-// 4. A status read during a run omitted run_memory_kind_index.
-// 6. The open hook had no deadline and returned nothing, so a failed query
-//    was invisible in the boot phase log.
+//  3. A cancel after the og_objects steps and before the index step reported
+//     done with the index absent.
+//  4. A status read during a run omitted run_memory_kind_index.
+//  6. The open hook had no deadline and returned nothing, so a failed query
+//     was invisible in the boot phase log.
 func TestRunMemoryKindIndexCancelBeforeItsStepIsCancelledNotDone(t *testing.T) {
 	s, _ := populatedRunMemoryStore(t)
 	// Nothing is missing on og_objects, so its part returns at once without

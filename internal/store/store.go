@@ -954,7 +954,8 @@ func Open(dbPath string) (*Store, error) {
 	// The run-memory kind index: created on an empty table, only reported on a
 	// table with rows (run_memory_kind_index.go). Never a build on a populated
 	// table at boot.
-	bootSubstep("runtime-schema", "run-memory-kind-index", func() error {
+	// Its error is in the boot phase log (status=failed) and never fails Open.
+	_ = bootSubstep("runtime-schema", "run-memory-kind-index", func() error {
 		return s.ensureRunMemoryKindIndexAtOpen(context.Background())
 	})
 

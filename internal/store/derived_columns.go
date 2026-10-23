@@ -103,6 +103,13 @@ func (s *Store) StartDerivedColumnMigration() (DerivedColumnMigrationStatus, err
 	ctx, cancel := context.WithCancel(context.Background())
 	m.cancel = cancel
 	m.status = DerivedColumnMigrationStatus{State: DerivedColumnMigrationRunning, StartedAt: time.Now().UTC().Format(time.RFC3339), Steps: []objectgraph.AccessPathStep{}}
+	// A status read during the run must not touch the engine, so the index's
+	// state at the start is taken here, bounded, and refreshed when the run ends.
+	probeCtx, probeCancel := context.WithTimeout(ctx, 2*time.Second)
+	if idx, err := s.discoverRunMemoryKindIndex(probeCtx); err == nil {
+		m.status.RunMemoryKindIndex = &idx
+	}
+	probeCancel()
 	og := s.ogStore
 	go s.runDerivedColumnMigration(ctx, og)
 	return m.status, nil
@@ -162,6 +169,10 @@ func (s *Store) runDerivedColumnMigration(ctx context.Context, og *objectgraph.D
 	case indexErr != nil:
 		m.status.State = DerivedColumnMigrationFailed
 		m.status.Error = indexErr.Error()
+	case ctx.Err() != nil:
+		// A cancel landed after the og_objects part and before the index step
+		// (or between): what was not run is not done.
+		m.status.State = DerivedColumnMigrationCancelled
 	case planErr != nil:
 		m.status.State = DerivedColumnMigrationFailed
 		m.status.Error = planErr.Error()
