@@ -1367,3 +1367,11 @@ Append-only. One terse entry per orchestrator pass.
     - T first boot: exact / no_lease / seed_ms, and no append errors.
     - The paper's first boot: exact plus its seed_ms (unmeasured; raise the 10-minute floor if it is over about 200 s), no event-append errors, the first-passivation time and the /health window.
     - Next restart: seeded_from=lease with seed_ms under 50.
+- 22:4x. D24 live (a01d2e1f0, CI then staging). Proof, per design section 6:
+  - The paper booted on a01d2e1f0 at 22:42:43. Its exact seed: "og max 1628467, table max 0, lease 0, seed 2677043, took 2m43.14s"; reserved through 2742579, untrust_reason no_lease, seed_failed 0, refill_failed 0, last_lease_error empty, marker_present false. 163 s is under the 200 s mark, so the 10-minute seeding floor stays.
+  - The paper's /health was 200 on 63 of 64 samples across the boot and seed. The 22:46 stall header reads write_pool wait_count=433 wait_ms=133758, read_pool 0 waits; the seed's id-range pages read through the paper's one write connection and interleave with writes. This is a one-boot cost; the next boot reads the lease. Observed, not acted on.
+  - After the seed the paper publishes stories, verdicts and texture turns. Its 247-line recent log at 22:51 has no error line and no lease or append failure.
+  - allocated_through stays at the seed (2677043). That is by design: the snapshot moves only at the seed (line 485) and a refill (line 915), and a refill starts when fewer than half a block (32768) is left.
+  - T (computer-71afbf…) on a01d2e1f0: exact / no_lease / seed_ms 739; reserved through 1122793; no lease errors.
+  - Owed: the next planned restart of each computer reads seeded_from=lease with seed_ms under 50; the paper's first refill (allocated_through moves).
+- 22:5x. Post-diet journal, the paper, 21:51 to 22:36: 54 to 125 MiB/min between GC passes (median about 80), against about 164 MiB/min on 10-22, which was before D7. The rate follows the work, so this gap is not all the diet. Each GC pass ran at 1080 to 1339 MiB and took 24 to 37 s. Evidence: _runs/d21-journal-watch.txt.
