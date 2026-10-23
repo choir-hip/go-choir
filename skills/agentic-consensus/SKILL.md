@@ -678,22 +678,34 @@ Code review is risk-tiered, with Devin the go-to reviewer (owner, 2026-10-23:
 easy stuff cold"; "make devin the go-to reviewer"). The repo contract
 (`CLAUDE.md`, Mutation Classes) is the authority; the runner shapes are:
 
-- Tier 0, no model review: green and yellow changes, proof tooling,
-  mechanical rebases, fixes that answer an earlier finding. The repo gates,
-  focused tests, the CI mirror and the staging proof are the check.
+- Cheap checks before any review, every time: the repo gates
+  (`check-v1-writer-purity`, `check-decode-roots`, `check-test-hang-guards`,
+  `selftest-guest-token`), a nix eval of both systems when nix or the flake
+  changed, a dry run of every touched proof script, the CI mirror, and a
+  rebase onto the current deploy tree.
+- The tiers are a default; FP0 judges by context.
+- Tier 0, no model review: green and yellow changes by default (an
+  architectural design, meaning a new mechanism, a doctrine change or a design
+  a build will follow, is reviewed like the change it designs), proof tooling,
+  mechanical rebases, fixes that answer doc, nit or test-only findings. The
+  checks are the review. Proof, rollback and procedure text for a red deploy
+  is not tier 0; it gets the deploy's own review.
 - Tier 1, one seat: orange changes, and red changes that are additive, behind
   a data/config switch, with a one-act rollback that shows on staging within
   minutes. `--include devin`.
-- Tier 2, three seats: red where a defect would be silent or irreversible
+- Tier 2, two seats: red where a defect would be silent or irreversible
   (deletes, tape/evidence, Texture canonical writes, auth/session, store
   schema, boot path, new concurrency).
-  `--include devin,omp-deepseek-v41-flash,omp-gemini38`.
-- Re-review only when a fix changes behavior on a tier 2 surface: one seat
-  (Devin) on the delta. Never for nits.
+  `--include devin,omp-deepseek-v41-flash`. Gemini (`omp-gemini38`) is
+  added only on an explicit ask; it found nothing unique after bunch 28.
+- Re-review a red delta, one seat (Devin), whenever the previous round found
+  a blocking-real defect; not when it found only doc, nit or test-only items.
+  After three rounds on one mechanism, stop adding rounds and look at the
+  substrate (CLAUDE.md "Escalate on dead ends").
 - `gpt-6.1-sol` does not run code review.
 
-The tiers are tuned by measured review yield (a review-yield study over
-bunches 1-147 is pending). The full default panel below is for decisions and
+The allocation follows the measured review yield
+(`docs/evidence/review-yield-2026-10-23.md`, confidence medium). The full default panel below is for decisions and
 plans, not routine code review.
 
 ## When to Shrink the Panel

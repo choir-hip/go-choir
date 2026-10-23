@@ -187,19 +187,29 @@ discovery alone as repair.
 **Code review is risk-tiered, Devin by default** (owner, 2026-10-23: "we
 should be more judicious, allocating code review to hard stuff and trusting
 that we can handle the easy stuff cold"; "make devin the go-to reviewer").
-Tier 0, no model review: green and yellow changes, proof tooling, mechanical
-rebases, and fixes that answer an earlier finding; the repo gates, focused
-tests, the CI mirror and the staging proof are the check. Tier 1, one seat,
-Devin: orange changes, and red changes that are additive, behind a
-data/config switch, with a one-act rollback that shows on staging within
-minutes. Tier 2, three seats (Devin, DeepSeek v4.1 flash, Gemini 3.8 flash):
-red where a defect would be silent or irreversible — deletes, tape/evidence,
-Texture canonical writes, auth/session, store schema, boot path, new
-concurrency. Re-review only when a fix changes behaviour on a tier 2
-surface: one seat (Devin) on the delta; never for nits. Sol does not run code
-review. The tiers are tuned by measured review yield (review-yield study over
-bunches 1-147, pending). Panels for decisions
-(`skills/agentic-consensus`) are a separate use and unchanged.
+Cheap checks run before any review, every time: the repo gates
+(`check-v1-writer-purity`, `check-decode-roots`, `check-test-hang-guards`,
+`selftest-guest-token`), a nix eval of both systems when `nix/` or the flake
+changed, a dry run of every touched proof script, the CI mirror, and a rebase
+onto the current deploy tree. The tiers are a default and FP0 judges by
+context. Tier 0, no model review: green and yellow changes by default (an
+architectural design, meaning a new mechanism, a doctrine change or a design
+a build will follow, is reviewed like the change it designs), proof tooling, mechanical rebases, and fixes that answer an earlier
+finding with only doc, nit or test-only items; the checks are the review.
+Proof, rollback and procedure text for a red deploy is not tier 0: it gets
+the deploy's own review. Tier 1, one seat, Devin: orange changes, and red
+changes that are additive, behind a data/config switch, with a one-act
+rollback that shows on staging within minutes. Tier 2, two seats (Devin and
+DeepSeek v4.1 flash): red where a defect would be silent or irreversible —
+deletes, tape/evidence, Texture canonical writes, auth/session, store schema,
+boot path, new concurrency. A red delta is re-reviewed, one seat (Devin),
+whenever the previous round found a blocking-real defect; not when it found
+only doc, nit or test-only items. After three rounds on one mechanism, stop
+adding rounds and look at the substrate ("Escalate on dead ends" below). Sol
+does not run code review. The allocation follows the measured review yield
+([docs/evidence/review-yield-2026-10-23.md](docs/evidence/review-yield-2026-10-23.md),
+confidence medium). Panels for decisions (`skills/agentic-consensus`) are a
+separate use and unchanged.
 
 ## Convergence Before Patching
 
