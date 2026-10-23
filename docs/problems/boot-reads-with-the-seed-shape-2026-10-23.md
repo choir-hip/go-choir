@@ -46,7 +46,7 @@ Two findings the question did not ask for:
   events). It is API-called, not boot. **[V]** (measured, below).
 - Over the five console logs on node-b (03:24 to 08:17 UTC), the most frequent
   stall holder is not any of the three: `internal/store.(*Store).ListRunMemoryEntriesForAgent`
-  is named in **49 of 99** `store_stalled holder` lines. The seed's `ListObjects`
+  is named in **49 of 97** `store_stalled holder` lines. The seed's `ListObjects`
   is 23. See "Not asked, seen".
 
 ## 1. The per-run seq seed
@@ -328,7 +328,7 @@ into a 21-row seek. Not urgent: it is the cheapest of the three.
 
 ## Not asked, seen
 
-- **`ListRunMemoryEntriesForAgent`** is the top stall holder: 49 of 99 holder lines
+- **`ListRunMemoryEntriesForAgent`** is the top stall holder: 49 of 97 holder lines
   across the five logs, 03:24 to 08:17 UTC, in steady state (cursor reads,
   `LoadInboxCursorForDesk`, `rlm_reduce.go:520`, `:665`, `:732`, `:891`), not
   at boot, and in the `run_memory_entries` table (outside the object graph, on
