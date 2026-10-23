@@ -185,3 +185,115 @@ func TestApplyRefusesBelowTheFloorEvenWhenTheReceiptWasLowered(t *testing.T) {
 		t.Fatalf("apply of a release at the floor: %v", err)
 	}
 }
+
+// Two more ways past the floor, written before the fix (bunch 148, Devin 3):
+//   - RestagePinnedRelease (tape restore restaging a pinned release) swaps
+//     `current` onto a release below the floor without any floor check;
+//   - ImportBaseline swaps `current` onto an imported baseline that declares
+//     an epoch below the floor.
+// A manifest that declares no epoch is a genesis baseline: it stages the
+// served SPA bytes of the booted image, and refusing it would stop checkpoint
+// derivation on every floored computer that never applied a release, so
+// these two paths refuse a declared epoch below the floor only (a named
+// residual; Apply and restorePrior keep refusing an undeclared epoch).
+
+func floorOnStore(t *testing.T, version uint64) (schemaPath string) {
+	t.Helper()
+	dir := t.TempDir()
+	schemaPath = writeSchemaReceipt(t, dir, version)
+	if err := storeschema.WriteFloor(dir, version, "the event-table writer is on"); err != nil {
+		t.Fatal(err)
+	}
+	return schemaPath
+}
+
+func TestRestagePinnedReleaseRefusesAReleaseBelowTheFloor(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "updater")
+	if err := os.MkdirAll(filepath.Join(root, "releases"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	current := writePinnedFrontendReleaseEpoch(t, root, "computer-test", "<html>current</html>", 2)
+	old := writePinnedFrontendReleaseEpoch(t, root, "computer-test", "<html>old</html>", 1)
+	if err := os.Symlink(filepath.Join(root, "releases", current.ContentDigest), filepath.Join(root, "current")); err != nil {
+		t.Fatal(err)
+	}
+	schema := floorOnStore(t, 2)
+	err := RestagePinnedRelease(root, old.ContentDigest, schema)
+	if err == nil || !strings.Contains(err.Error(), "floor") {
+		t.Fatalf("restage below the floor: err=%v, want a refusal naming the floor", err)
+	}
+	got, readErr := ReadCurrentManifest(root)
+	if readErr != nil || got.ContentDigest != current.ContentDigest {
+		t.Fatalf("a refused restage moved current: %+v err=%v", got, readErr)
+	}
+	// At or above the floor, and with no floor, the restage swaps.
+	if err := RestagePinnedRelease(root, current.ContentDigest, schema); err != nil {
+		t.Fatalf("restage at the floor: %v", err)
+	}
+	if err := RestagePinnedRelease(root, old.ContentDigest, ""); err != nil {
+		t.Fatalf("restage with no store schema path: %v", err)
+	}
+	// An unfloored store passes anything.
+	unfloored := writeSchemaReceipt(t, t.TempDir(), 2)
+	if err := RestagePinnedRelease(root, current.ContentDigest, unfloored); err != nil {
+		t.Fatalf("restage on an unfloored store: %v", err)
+	}
+}
+
+func TestRestagePinnedReleaseKeepsAGenesisBaselineOnAFlooredStore(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "updater")
+	if err := os.MkdirAll(filepath.Join(root, "releases"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	first := writePinnedFrontendRelease(t, root, "computer-test", "<html>one</html>")
+	second := writePinnedFrontendRelease(t, root, "computer-test", "<html>two</html>")
+	if err := os.Symlink(filepath.Join(root, "releases", first.ContentDigest), filepath.Join(root, "current")); err != nil {
+		t.Fatal(err)
+	}
+	if err := RestagePinnedRelease(root, second.ContentDigest, floorOnStore(t, 2)); err != nil {
+		t.Fatalf("a baseline that declares no epoch must still restage (SPA bytes only): %v", err)
+	}
+}
+
+func TestImportBaselineRefusesAnEpochBelowTheFloor(t *testing.T) {
+	r := newFloorRig(t, 2)
+	r.floor(t, 2)
+	source := filepath.Join(r.root, "incoming", "genesis")
+	if err := os.MkdirAll(filepath.Join(source, "bin"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "bin", "autoputer"), []byte("baseline"), 0o555); err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := BuildBaselineManifest(source, "computer-test", "code:baseline", "artifact-program:baseline")
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest.StoreSchemaVersion = 1
+	manifest.MinStoreSchemaVersion = 1
+	if manifest, err = FinalizeManifest(manifest); err != nil {
+		t.Fatal(err)
+	}
+	request := BaselineImportRequest{ComputerID: "computer-test", RealizationID: "realization-test", IdempotencyKey: "genesis-1", SourceDir: source, Manifest: manifest}
+	if request.RequestCommitment, err = ComputeBaselineImportCommitment(request); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.engine.ImportBaseline(request); err == nil || !strings.Contains(err.Error(), "floor") {
+		t.Fatalf("import below the floor: err=%v, want a refusal naming the floor", err)
+	}
+	if _, err := os.Lstat(filepath.Join(r.root, "current")); !os.IsNotExist(err) {
+		t.Fatalf("a refused import created current: %v", err)
+	}
+	// A baseline at the floor imports.
+	manifest.StoreSchemaVersion = 2
+	if manifest, err = FinalizeManifest(manifest); err != nil {
+		t.Fatal(err)
+	}
+	request.Manifest = manifest
+	if request.RequestCommitment, err = ComputeBaselineImportCommitment(request); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.engine.ImportBaseline(request); err != nil {
+		t.Fatalf("import at the floor: %v", err)
+	}
+}

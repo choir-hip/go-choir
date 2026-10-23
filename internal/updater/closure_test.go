@@ -462,7 +462,7 @@ func TestRestagePinnedBackfillsLegacyLayeredEntrypoint(t *testing.T) {
 	if err := os.Remove(entryPath); err != nil {
 		t.Fatal(err)
 	}
-	if err := RestagePinnedRelease(root, request.Manifest.ContentDigest); err != nil {
+	if err := RestagePinnedRelease(root, request.Manifest.ContentDigest, ""); err != nil {
 		t.Fatalf("restage: %v", err)
 	}
 	raw, err := os.ReadFile(entryPath)
