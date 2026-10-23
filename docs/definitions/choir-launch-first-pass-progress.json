@@ -1,5 +1,5 @@
 {
- "as_of": "2026-10-23T01:50Z",
+ "as_of": "2026-10-23T02:35Z",
  "main": "fd564dbbc",
  "items": [
   {
@@ -91,8 +91,8 @@
     },
     {
      "name": "containment gaps fix (deploy.env rename, caddy/goproxy/qdrant/searx)",
-     "stage": 4,
-     "evidence": "D6 lands alone with the nix store policy (stage eb3f82b1c rebased 8890b4fa3 on 6cc19c797)",
+     "stage": 6,
+     "evidence": "D6 308513aa3 deployed 02:10:50; containment steps 1-5 PASS (verifier 217/0, 103 containment checks; rename case 0 FAIL); step 6 at D7",
      "history": [
       {
        "stage": 1,
@@ -110,6 +110,10 @@
       {
        "stage": 4,
        "at": "2026-10-23T01:50Z"
+      },
+      {
+       "stage": 6,
+       "at": "2026-10-23T02:15Z"
       }
      ]
     },
@@ -3576,8 +3580,8 @@
     },
     {
      "name": "repack tool: copy only, census",
-     "stage": 2,
-     "evidence": "round 2 0866a7663 (segment receipts and event digests in attribution, mtime guard, fail-closed dropped receipts); bunch 140 in review",
+     "stage": 3,
+     "evidence": "round 4 49ba705eb: bunch 142 three ACCEPT for copy and census; delete --apply blocked on item 6 until the extra-refs route lands (lane fp10-tape-extra-refs)",
      "history": [
       {
        "stage": 1,
@@ -3586,6 +3590,10 @@
       {
        "stage": 2,
        "at": "2026-10-23T00:45Z"
+      },
+      {
+       "stage": 3,
+       "at": "2026-10-23T02:35Z"
       }
      ]
     },
