@@ -45,6 +45,7 @@ type modelPolicyResolveResponse struct {
 	ReasoningEffort string `json:"reasoning_effort,omitempty"`
 	MaxTokens       int    `json:"max_tokens,omitempty"`
 	Source          string `json:"source,omitempty"`
+	Fallbacks       string `json:"fallbacks,omitempty"` // provider/model, comma-separated; empty for a pin or a pool with no failover
 	PolicyError     string `json:"policy_error,omitempty"`
 }
 
@@ -247,6 +248,7 @@ func (h *APIHandler) HandleModelPolicyResolve(w http.ResponseWriter, r *http.Req
 		ReasoningEffort: metadataStringValue(metadata, modelpolicy.MetadataReasoningEffort),
 		MaxTokens:       metadataIntValue(metadata, modelpolicy.MetadataMaxTokens),
 		Source:          metadataStringValue(metadata, modelpolicy.MetadataPolicySource),
+		Fallbacks:       metadataStringValue(metadata, modelpolicy.MetadataFallbacks),
 		PolicyError:     metadataStringValue(metadata, modelpolicy.MetadataPolicyError),
 	})
 }

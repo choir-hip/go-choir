@@ -90,3 +90,41 @@ func TestSyntheticLunaPool(t *testing.T) {
 		t.Fatal("the 1017 model took an image in the probe; it must not be opted out")
 	}
 }
+
+// luna-synthetic is the owner's 2026-10-23 pool: "synthetic is using much
+// faster... we should go to chatgpt luna 100% with synthetic only as fallback
+// for now". Ways it could fail: Synthetic takes a share of threads; luna is
+// not first; the pool is NoFailover (so luna's failure fails the thread
+// instead of moving it); it changes the default or synthetic-luna pool.
+func TestLunaSyntheticPool(t *testing.T) {
+	const id = "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017"
+	pool := Pools()[LunaSyntheticPool]
+	want := []PoolMember{
+		{Provider: "chatgpt", Model: "gpt-6-luna", Weight: 1},
+		{Provider: "synthetic", Model: id, FallbackOnly: true},
+	}
+	if len(pool) != len(want) || pool[0] != want[0] || pool[1] != want[1] {
+		t.Fatalf("luna-synthetic = %v, want %v", pool, want)
+	}
+	if pool[0].SlotWeight() != 1 || pool[1].SlotWeight() != 0 {
+		t.Fatalf("slot weights = %d, %d, want 1, 0", pool[0].SlotWeight(), pool[1].SlotWeight())
+	}
+	for _, m := range pool {
+		if _, ok := Lookup(m.Provider, m.Model); !ok {
+			t.Fatalf("pool member %v is not in the catalog", m)
+		}
+	}
+	if NoFailover(LunaSyntheticPool) {
+		t.Fatal("luna-synthetic must fail over (Synthetic is its fallback)")
+	}
+	if !NoFailover(SyntheticLunaPool) || NoFailover(DefaultPool) {
+		t.Fatal("only synthetic-luna is a no-failover pool")
+	}
+	// The other pools are unchanged.
+	if d := Pools()[DefaultPool]; len(d) != 1 || d[0] != (PoolMember{Provider: "chatgpt", Model: "gpt-6-luna", Weight: 1}) {
+		t.Fatalf("default pool = %v", d)
+	}
+	if s := Pools()[SyntheticLunaPool]; len(s) != 2 || s[0].SlotWeight() != 1 || s[1].SlotWeight() != 1 || s[0].Provider != "synthetic" {
+		t.Fatalf("synthetic-luna pool = %v", s)
+	}
+}

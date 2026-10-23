@@ -399,3 +399,81 @@ func TestUnknownPoolFailsClosedNamingThePool(t *testing.T) {
 		t.Fatalf("a known pool must load: %v", err)
 	}
 }
+
+// Owner 2026-10-23 14:4x UTC: "synthetic is using much faster... we should go
+// to chatgpt luna 100% with synthetic only as fallback for now". Ways it
+// could fail: Synthetic is assigned a thread; luna is not the primary for
+// some thread hash; the fallback list is empty (NoFailover) or lists luna
+// itself; the reasoning effort is lost on the fallback; the default or
+// synthetic-luna pool changes.
+func TestAssignLunaSyntheticGivesLunaEveryThreadAndSyntheticAsFallback(t *testing.T) {
+	spec := provideriface.LLMSelection{Model: "pool:luna-synthetic", ReasoningEffort: "high", MaxTokens: 123}
+	for i := 0; i < 4000; i++ {
+		chosen, fallbacks, assignment := Assign(spec, fmt.Sprintf("thread-%d", i))
+		if chosen.Provider != "chatgpt" || chosen.Model != "gpt-6-luna" || assignment != "hash" ||
+			chosen.ReasoningEffort != "high" || chosen.MaxTokens != 123 {
+			t.Fatalf("thread-%d: %+v (%s), want chatgpt/gpt-6-luna", i, chosen, assignment)
+		}
+		if len(fallbacks) != 1 || fallbacks[0].Provider != "synthetic" ||
+			fallbacks[0].Model != "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017" || fallbacks[0].ReasoningEffort != "high" {
+			t.Fatalf("thread-%d fallbacks = %+v, want [synthetic DeepSeek 1017]", i, fallbacks)
+		}
+	}
+	// Texture's agent key hashes the same way.
+	if chosen, fallbacks, _ := Assign(spec, "texture:doc-1"); chosen.Model != "gpt-6-luna" || len(fallbacks) != 1 {
+		t.Fatalf("texture thread: %+v %+v", chosen, fallbacks)
+	}
+	// A concrete Synthetic pin still has no fallback; the other pools keep their shape.
+	if _, fb, _ := Assign(provideriface.LLMSelection{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017"}, "t"); len(fb) != 0 {
+		t.Fatalf("explicit synthetic pin has fallbacks %+v", fb)
+	}
+	if chosen, fb, _ := Assign(provideriface.LLMSelection{Model: "pool:default"}, "t"); chosen.Model != "gpt-6-luna" || len(fb) != 0 {
+		t.Fatalf("default pool changed: %+v %+v", chosen, fb)
+	}
+	seen := map[string]int{}
+	for i := 0; i < 2000; i++ {
+		chosen, fb, _ := Assign(provideriface.LLMSelection{Model: "pool:synthetic-luna"}, fmt.Sprintf("thread-%d", i))
+		seen[chosen.Provider]++
+		if len(fb) != 0 {
+			t.Fatalf("synthetic-luna grew fallbacks: %+v", fb)
+		}
+	}
+	if seen["synthetic"] < 900 || seen["synthetic"] > 1100 {
+		t.Fatalf("synthetic-luna split drifted: %v", seen)
+	}
+}
+
+// pool:luna-synthetic parses like pool:default, and the computer's policy
+// names both members, so the Synthetic fallback is a model the computer is
+// configured to call.
+func TestPolicyAcceptsLunaSyntheticPool(t *testing.T) {
+	policy, err := parsePolicy("# owner-edited\n[defaults]\nmodel = \"pool:luna-synthetic\"\nreasoning_effort = \"low\"\n\n[roles.texture]\nmodel = \"pool:luna-synthetic\"\nreasoning_effort = \"high\"\n", "test")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if got := policy.Resolve(agentprofile.Texture); got.Model != "pool:luna-synthetic" || got.ReasoningEffort != "high" {
+		t.Fatalf("texture = %+v", got)
+	}
+	models := map[string]bool{}
+	for _, s := range policy.Selections() {
+		models[s.Provider+"/"+s.Model] = true
+	}
+	if !models["synthetic/hf:deepseek-ai/DeepSeek-V4.1-Flash-1017"] || !models["chatgpt/gpt-6-luna"] || len(models) != 2 {
+		t.Fatalf("policy selections = %v", models)
+	}
+	// The management task never takes a pool or its fallback.
+	if got := policy.Resolve(agentprofile.ManagementTask); got.Provider != "chatgpt" || got.Model != "gpt-6-luna" {
+		t.Fatalf("management task = %+v", got)
+	}
+	path := filepath.Join(t.TempDir(), "System", "model-policy.toml")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("# owner-edited\n[defaults]\nmodel = \"pool:luna-synthetic\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	meta := NewManager(ManagerConfig{PolicyPath: path}).EnrichMetadata(context.Background(), "owner", agentprofile.ManagementTask, map[string]any{"trajectory_id": "t1"})
+	if _, ok := meta[MetadataFallbacks]; ok {
+		t.Fatalf("management task carries fallbacks %v", meta[MetadataFallbacks])
+	}
+}
