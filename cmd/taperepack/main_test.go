@@ -135,7 +135,12 @@ func TestTaperepackToolPath(t *testing.T) {
 	if code, out, errs = tool(append([]string{"delete", "--census-receipt", cen.Receipt, "--computer", "computer-a", "--pause", "1ms"}, base...)...); code != 0 || count() != before {
 		t.Fatalf("delete dry run: exit %d, %d -> %d files, %q", code, before, count(), errs)
 	}
-	if code, out, errs = tool(append([]string{"delete", "--census-receipt", cen.Receipt, "--computer", "computer-a", "--apply", "--pause", "1ms"}, base...)...); code != 0 {
+	// An apply needs the platform's keep list (here: known to be empty).
+	emptyKeep := filepath.Join(t.TempDir(), "keep")
+	if err := os.WriteFile(emptyKeep, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if code, out, errs = tool(append([]string{"delete", "--census-receipt", cen.Receipt, "--computer", "computer-a", "--apply", "--pause", "1ms", "--keep-digests", emptyKeep, "--keep-digests-empty-ok"}, base...)...); code != 0 {
 		t.Fatalf("delete: exit %d %q", code, errs)
 	}
 	// A's 3 payloads and their 3 receipts are gone; B's payload and receipt stay.

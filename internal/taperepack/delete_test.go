@@ -27,7 +27,7 @@ func (w *world) copied(t *testing.T, computers ...string) (workDir string, recei
 }
 
 func (w *world) delOpts(workDir, receipt string) DeleteOptions {
-	return DeleteOptions{Root: w.f.root, WorkDir: workDir, CensusReceipt: receipt, Pause: time.Nanosecond}
+	return DeleteOptions{Root: w.f.root, WorkDir: workDir, CensusReceipt: receipt, Pause: time.Nanosecond, Keep: &KeepSet{}}
 }
 
 func (w *world) legacyExists(ns tapestore.NS, digest string) bool {
@@ -335,7 +335,7 @@ func TestD3TheUnlinkHelperRefusesANonDeletableVerdict(t *testing.T) {
 	w := newWorld(t)
 	d := w.events[compA][0]
 	for _, v := range []Verdict{{}, {ns: tapestore.NSEvent, digest: d, class: classUncovered}, {ns: tapestore.NSEvent, digest: d, class: classCorrupt}} {
-		if _, err := unlinkCovered(w.f.root, v); err == nil {
+		if _, err := unlinkCovered(w.f.root, v, nil); err == nil {
 			t.Fatalf("unlinked a %s verdict", v.Class())
 		}
 	}

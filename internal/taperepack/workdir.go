@@ -128,12 +128,20 @@ func writeJSONAtomic(path string, v any) error {
 	return writeFileAtomic(path, b)
 }
 
+// errKeptByList is unlinkCovered's refusal of a digest the keep list names.
+var errKeptByList = errors.New("taperepack: digest is in the keep list")
+
 // unlinkCovered removes the legacy file of a covered verdict and nothing
-// else: it refuses any verdict that is not deletable (r4), builds the path
+// else: it refuses a digest the keep list names (review round 4, M2: the
+// platform's database keeps it, in any namespace), any verdict that is not
+// deletable (r4), builds the path
 // itself from the verdict's namespace and digest, and refuses anything that
 // is not a regular file. It returns the bytes freed. It is the package's only
 // removal of a legacy file.
-func unlinkCovered(root string, v Verdict) (int64, error) {
+func unlinkCovered(root string, v Verdict, keep *KeepSet) (int64, error) {
+	if keep.Has(v.digest) {
+		return 0, errKeptByList
+	}
 	if !v.Deletable() {
 		return 0, fmt.Errorf("taperepack: refusing to unlink %s %s: verdict is %s, not covered", v.ns, v.digest, v.Class())
 	}

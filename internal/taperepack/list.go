@@ -157,8 +157,17 @@ func (e *engine) list() error {
 			err := eachDirEntry(dir, func(de os.DirEntry) error {
 				name := de.Name()
 				digest, ok := strings.CutSuffix(name, l.suffix)
-				if !ok || !tapestore.ValidDigest(digest) || !de.Type().IsRegular() {
+				if !ok || !tapestore.ValidDigest(digest) {
 					e.st.Listing["other_files"]++
+					return nil
+				}
+				if !de.Type().IsRegular() {
+					// tapestore reads a symlinked legacy file and verifies
+					// its digest, so the references it holds are unseen here
+					// (review round 4, F2): fail closed.
+					e.st.Listing["other_files"]++
+					e.st.Listing["non_regular_legacy"]++
+					e.attrError(legacyNonRegularKey, fmt.Sprintf("%s/%s is not a regular file", l.dir, name))
 					return nil
 				}
 				e.st.Listing[nsName(l.ns)]++
@@ -195,7 +204,12 @@ func (e *engine) list() error {
 
 // legacyEventsKey names the attribution error of a legacy event body that
 // could not be read or decoded.
-const legacyEventsKey = "legacy-events"
+//
+// The keys are not valid computer ids, so they cannot collide with one.
+const (
+	legacyEventsKey     = "(legacy-events)"
+	legacyNonRegularKey = "(legacy-non-regular)"
+)
 
 // listLegacyEvent reads one legacy event file and spills an edgeRef for every
 // digest its body names, for the computer the body says it belongs to: the

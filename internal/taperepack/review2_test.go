@@ -110,7 +110,7 @@ func TestR2AFileTouchedAfterTheListIsNotUnlinked(t *testing.T) {
 	if err := os.Chtimes(path, now, now); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := unlinkCovered(w.f.root, v); err == nil {
+	if _, err := unlinkCovered(w.f.root, v, nil); err == nil {
 		t.Fatal("R2: unlinked a file whose mtime is newer than the list")
 	}
 	if !w.legacyExists(tapestore.NSPayload, d) {
