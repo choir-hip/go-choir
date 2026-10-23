@@ -13,6 +13,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/store"
 )
 
 // docs/problems/paper-post-refresh-health-windows-2026-10-22.md, "Findings:
@@ -220,5 +222,77 @@ github.com/yusefmosiah/go-choir/internal/agentcore.(*Runtime).loop(0xc000)
 	lines, _ = storeStallHolderLines(long)
 	if len(lines) != 1 || len(lines[0]) > storeStallHolderLineMax {
 		t.Fatalf("long line not bounded: %d bytes", len(lines[0]))
+	}
+}
+
+// The stall header names a running online Dolt GC pass, and says idle
+// otherwise, so a snapshot read after the fact is never ambiguous
+// (docs/problems/paper-remaining-store-stall-holders-2026-10-23.md section 1:
+// the 12:51:04 snapshot named a bystander 134 ms after a 19 s pass ended).
+func TestFormatOnlineGCNamesAPass(t *testing.T) {
+	if got := formatOnlineGC(store.OnlineGCStatus{}); got != "online_gc=idle" {
+		t.Fatalf("idle = %q", got)
+	}
+	got := formatOnlineGC(store.OnlineGCStatus{Active: true, Since: "2026-10-23T12:50:45Z"})
+	if got != "online_gc=active since=2026-10-23T12:50:45Z" {
+		t.Fatalf("active = %q", got)
+	}
+}
+
+// The header of a real stall carries the field, between stack_truncated and the
+// pools, and /health's answer is still 503 store_stalled with its usual body.
+func TestStoreStallHeaderCarriesOnlineGCField(t *testing.T) {
+	handler, productStore := newBoundedHealthFixture(t)
+	handler.rt.cfg.ComputerID = "computer-stall-gc-field"
+	sink := &lockedBuffer{}
+	previous := log.Writer()
+	log.SetOutput(sink)
+	t.Cleanup(func() { log.SetOutput(previous) })
+	ctx, cancel := context.WithCancel(context.Background())
+	held := make(chan struct{})
+	go func() {
+		defer close(held)
+		_ = holdWriteConnInEngine(ctx, productStore.DB())
+	}()
+	t.Cleanup(func() {
+		cancel()
+		<-held
+	})
+	waitFor(t, "the write connection in use", func() bool { return productStore.DB().Stats().InUse == 1 })
+	rec, _ := serveHealth(t, handler)
+	if rec.Code != http.StatusServiceUnavailable || !strings.Contains(rec.Body.String(), "store_stalled") {
+		t.Fatalf("/health = %d %s", rec.Code, rec.Body.String())
+	}
+	header := "store_stalled holders: computer=computer-stall-gc-field"
+	waitFor(t, "the stall header line", func() bool { return len(sink.lines(header)) == 1 })
+	head := sink.lines(header)[0]
+	if !strings.Contains(head, "stack_truncated=false online_gc=idle write_pool{") {
+		t.Fatalf("header lacks the online_gc field in place: %s", head)
+	}
+}
+
+// The observability store block reports the flag next to the pools.
+func TestObservabilityReportsOnlineGC(t *testing.T) {
+	rt := telemetryRuntime(t, "computer-online-gc")
+	req := httptest.NewRequest(http.MethodGet, "/api/runtime/observability", nil)
+	req.Header.Set("X-Authenticated-User", "owner-telemetry")
+	rec := httptest.NewRecorder()
+	(&APIHandler{rt: rt}).HandleGuestObservability(rec, req)
+	var obs struct {
+		StorePools struct {
+			OnlineGC struct {
+				Active *bool   `json:"active"`
+				Since  *string `json:"since"`
+			} `json:"online_gc"`
+		} `json:"store_pools"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &obs); err != nil || rec.Code != http.StatusOK {
+		t.Fatalf("observability = %d %s", rec.Code, rec.Body.String())
+	}
+	if obs.StorePools.OnlineGC.Active == nil || *obs.StorePools.OnlineGC.Active {
+		t.Fatalf("store_pools.online_gc.active missing or true on an idle store: %s", rec.Body.String())
+	}
+	if obs.StorePools.OnlineGC.Since != nil {
+		t.Fatalf("idle store reports since: %s", rec.Body.String())
 	}
 }
