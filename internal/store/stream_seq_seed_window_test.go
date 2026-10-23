@@ -118,12 +118,16 @@ func TestStreamSeqSeedSaysWhenEventsAreOutOfReach(t *testing.T) {
 	}
 }
 
-// Round 2, F2. After the event table takes most kinds, "no og event in the
-// newest objects" is the common case. With the table holding events, an og
-// event older than every window is older than the table's newest under the
-// same newest-carries-max assumption: seed from the table, and do not take
-// the exact read of the kind.
-func TestStreamSeqSeedUsesTheTableWhenTheWindowsHoldNoEvent(t *testing.T) {
+// Round 3. A window miss says nothing about the table's newest row: stamped
+// table events and unstamped og events coexist (a stamp rollback, a mixed
+// fleet, a non-event backfill). When the windows hold no event the seed takes
+// the exact read of the kind whatever the table holds, and the table's maximum
+// joins through max(). This pins the counterexample of review bunch 156
+// (DeepSeek): the table's newest is 9, an og event holds 12 and is newer, 400
+// newer objects of another kind push it out of both windows. Round 2 seeded 10.
+// Flipped from round 2's TestStreamSeqSeedUsesTheTableWhenTheWindowsHoldNoEvent,
+// which pinned the table shortcut (no exact read) and so pinned the defect.
+func TestStreamSeqSeedTakesTheExactReadWhenTheWindowsHoldNoEventWhateverTheTableHolds(t *testing.T) {
 	ctx := context.Background()
 	shrinkSeedWindows(t, 20, 200)
 	h := newTapeHarness(t)
@@ -140,21 +144,37 @@ func TestStreamSeqSeedUsesTheTableWhenTheWindowsHoldNoEvent(t *testing.T) {
 	for i := int64(4); i <= 9; i++ {
 		put(true, fmt.Sprintf("tb-%d", i), i, eventTableBase.Add(time.Duration(i)*time.Second))
 	}
-	seedWakeOutbox(t, h.store, 400, 0) // newer than the og events, behind no window of theirs
+	put(false, "og-12", 12, eventTableBase.Add(20*time.Second)) // newer than the table's events
+	seedWakeOutbox(t, h.store, 400, 0)                          // newer still, behind both windows
 	h.reopen()
 	buf := captureLog(t)
 	rec := h.event("after", "run-z", "owner-1", types.EventRunStarted, eventTableBase.Add(time.Hour))
 	if err := h.store.AppendEvent(ctx, rec); err != nil {
 		t.Fatal(err)
 	}
-	if rec.StreamSeq != 10 {
-		t.Fatalf("stream_seq = %d, want 10 (above the table's 9 and the og events' 3)", rec.StreamSeq)
+	if rec.StreamSeq != 13 {
+		t.Fatalf("stream_seq = %d, want 13 (above the og event's 12 and the table's 9): a number was handed out twice", rec.StreamSeq)
 	}
-	if calls := h.store.EngineMutexStats()[eventListOp].Calls; calls != 0 {
-		t.Fatalf("the exact read of the kind ran %d time(s) although the event table holds events", calls)
+	if calls := h.store.EngineMutexStats()[eventListOp].Calls; calls != 1 {
+		t.Fatalf("the exact read of the kind ran %d time(s), want 1", calls)
 	}
-	if strings.Contains(buf.String(), "out of reach") {
-		t.Fatalf("the out-of-reach path ran although the event table holds events:\n%s", buf.String())
+	if !strings.Contains(buf.String(), "out of reach") || !strings.Contains(buf.String(), "took ") {
+		t.Fatalf("the exact read did not log its case and duration:\n%s", buf.String())
+	}
+}
+
+// Round 3, Devin F2. An empty window list must not panic when it names the
+// widest window in its log line; with no window the seed takes the exact read.
+func TestStreamSeqSeedWithNoWindowsTakesTheExactRead(t *testing.T) {
+	shrinkSeedWindows(t)
+	s, path := openSeedStore(t)
+	for i := 0; i < 3; i++ {
+		appendSeedEvent(t, s, fmt.Sprintf("e-%d", i), "run-a", time.Now().UTC().Add(-time.Hour+time.Duration(i)*time.Second))
+	}
+	s = reopenAt(t, s, path)
+	rec := appendSeedEvent(t, s, "after", "run-b", time.Now().UTC())
+	if rec.StreamSeq != 4 {
+		t.Fatalf("stream_seq = %d, want 4", rec.StreamSeq)
 	}
 }
 
