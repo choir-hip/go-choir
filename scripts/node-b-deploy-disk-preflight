@@ -103,7 +103,7 @@ fi
 journalctl --vacuum-size=256M || true
 # Which generations and builder-release roots stay is node-b-nix-retention's
 # (docs/problems/node-b-nix-store-and-host-disk-policy-2026-10-22.md).
-GO_CHOIR_NIX_RETENTION_MODE="${GO_CHOIR_NIX_RETENTION_MODE:-observe}" \
+GO_CHOIR_NIX_RETENTION_MODE="${GO_CHOIR_NIX_RETENTION_MODE:-enforce}" \
   "$(dirname "$0")/node-b-nix-retention" || true
 nix store gc || true
 

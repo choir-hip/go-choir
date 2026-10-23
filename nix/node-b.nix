@@ -248,9 +248,10 @@ let
   # scripts/test-node-b-nix-retention.sh;
   # docs/problems/node-b-nix-store-and-host-disk-policy-2026-10-22.md).
   # Called by go-choir-nix-gc, the disk-gc sweep and the deploy preflight;
-  # each runs `nix store gc` after it. GO_CHOIR_NIX_RETENTION_MODE=observe
-  # keeps the newest 4 generations as before and logs what enforce (newest 3,
-  # stale builder-release roots unrooted) would do.
+  # each runs `nix store gc` after it. Enforce (owner, 2026-10-23) keeps the
+  # newest 3 system generations and unroots builder-release roots past the
+  # newest 2 and 7 days; the observe mode (the legacy +4, logging only) is
+  # the rollback.
   nixRetention = pkgs.writeShellScript "go-choir-nix-retention"
     (builtins.readFile ../scripts/node-b-nix-retention);
   diskRetentionSweep = pkgs.writeShellScript "go-choir-disk-retention-sweep" ''
@@ -1814,7 +1815,7 @@ in
         # routine Nix GC before storage pressure reaches recovery territory.
         "GO_CHOIR_DISK_GC_MIN_FREE_KIB=125829120"
         "GO_CHOIR_DISK_GC_TARGET_FREE_KIB=188743680"
-        "GO_CHOIR_NIX_RETENTION_MODE=observe"
+        "GO_CHOIR_NIX_RETENTION_MODE=enforce"
       ];
     };
   };
@@ -1844,7 +1845,7 @@ in
       Type = "oneshot";
       Nice = 19;
       IOSchedulingClass = "idle";
-      Environment = [ "GO_CHOIR_NIX_RETENTION_MODE=observe" ];
+      Environment = [ "GO_CHOIR_NIX_RETENTION_MODE=enforce" ];
       ExecStart = pkgs.writeShellScript "go-choir-nix-gc" ''
         set -euo pipefail
         export PATH="${lib.makeBinPath [ pkgs.coreutils pkgs.gawk pkgs.gnused pkgs.nix ]}:$PATH"
