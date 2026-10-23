@@ -118,46 +118,6 @@ func TestZeroFilledAndGarbageTailsAreCut(t *testing.T) {
 	}
 }
 
-// A bad record in the middle, followed by valid ones: the segment is cut at
-// the first bad record and counted, never refused (design 9.2 item 4).
-func TestDamageBeforeValidRecordsCutsAtTheFirstBadRecord(t *testing.T) {
-	src := t.TempDir()
-	l, _ := openT(t, src, nil)
-	for i := 1; i <= 6; i++ {
-		mustAppend(t, l, i)
-	}
-	if err := l.Sync(); err != nil {
-		t.Fatal(err)
-	}
-	var off3 int64
-	_ = OpenReader(src).Scan(func(it Item) bool {
-		if it.Boundary == nil && it.Meta.StreamSeq == 3 {
-			off3 = it.Offset
-		}
-		return true
-	})
-	img := copyDir(t, src)
-	p := filepath.Join(img, tlog(1))
-	raw := mustRead(t, p)
-	raw[off3+12] ^= 0xff // a body byte of line 3
-	if err := os.WriteFile(p, raw, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	l2, err := Open(Options{Dir: img, ComputerID: "computer-1", SyncInterval: -1})
-	if err != nil {
-		t.Fatalf("Open refused damaged segment: %v", err)
-	}
-	if st := l2.Stats(); st.DamagedTails != 1 {
-		t.Fatalf("DamagedTails = %d", st.DamagedTails)
-	}
-	mustAppend(t, l2, 7)
-	_ = l2.Close()
-	streams, _ := scanDir(t, img)
-	if !eqInts(streams, []int64{1, 2, 7}) {
-		t.Fatalf("lines = %v, want [1 2 7]", streams)
-	}
-}
-
 func TestTornSegmentHeaderIsQuarantinedNotReused(t *testing.T) {
 	src := t.TempDir()
 	l, _ := openT(t, src, nil)

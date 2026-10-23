@@ -40,17 +40,19 @@ func (c *fakeClock) Advance(d time.Duration) {
 // returns EIO; with lose set it first cuts the file back to that size, which
 // is what a dropped dirty page leaves behind.
 type disk struct {
-	mu        sync.Mutex
-	failSync  bool
-	lose      bool
-	failWrite bool
-	shortWr   bool
-	failDir   bool
-	fast      bool // skip the real fsync (the size is still recorded): for loops of many cases
-	synced    map[string]int64
-	syncs     int
-	block     chan struct{} // when non-nil, SyncFile waits for it to close
-	entered   chan struct{}
+	mu         sync.Mutex
+	failSync   bool
+	lose       bool
+	failWrite  bool
+	shortWr    bool
+	failDir    bool
+	dirOnce    chan struct{} // when non-nil, the first SyncDir waits for it to close, then clears it
+	dirEntered chan struct{}
+	fast       bool // skip the real fsync (the size is still recorded): for loops of many cases
+	synced     map[string]int64
+	syncs      int
+	block      chan struct{} // when non-nil, SyncFile waits for it to close
+	entered    chan struct{}
 }
 
 func newDisk() *disk { return &disk{synced: map[string]int64{}} }
@@ -118,7 +120,15 @@ func (d *disk) syncFile(f *os.File) error {
 func (d *disk) syncDir(path string) error {
 	d.mu.Lock()
 	fail := d.failDir
+	once, entered := d.dirOnce, d.dirEntered
+	d.dirOnce = nil
 	d.mu.Unlock()
+	if once != nil {
+		if entered != nil {
+			close(entered)
+		}
+		<-once
+	}
 	if fail {
 		return syscall.EIO
 	}
