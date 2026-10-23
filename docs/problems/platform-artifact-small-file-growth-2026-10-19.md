@@ -1090,3 +1090,66 @@ Nothing on Node B has run this tool. All of these hold first:
 
 Tests: `go test ./internal/taperepack/... ./cmd/taperepack/...
 ./internal/tapestore/...` passes (71 s, 50 s, 36 s).
+
+### Review round 3 on 0866a7663: findings, before any fix (FP10, 2026-10-22, bunch 140)
+
+Class: red (the repack's delete gate). Reviews: devin REJECT, deepseek-v41-flash
+ACCEPT WITH CONDITIONS, gemini38 ACCEPT. All three verified that R1 to R3 of
+round 2 are fixed and that the R4 decline holds; the focused tests pass on
+0866a7663. Two reviewers found the same remaining hole, and the delete is not
+undone, so it is a blocker for `delete --apply` on Node B.
+
+- **L1 (devin B1 / deepseek F1, blocking `delete --apply`). Legacy event
+  bodies are never scanned for the digests they name.** `list.go` runs
+  `hexRefs` only on `NSEvent` records found in `tape-seg/<id>` segments. The
+  legacy event files under `sha256/computer-event/` are listed and given a
+  verdict (the join reads them for the event's `computer_id`), but no edge is
+  spilled for the digests their bodies carry. The sweep's rule reads every
+  chain event body, segment first and legacy second
+  (`internal/platform/tape_sweep.go`, `walkTapeChain`, `hex64RE`). Case:
+  a legacy event of B names payload X, B has no receipt for X, A pins X and
+  has a sealed copy; the census is healthy, X is `covered` for A, `delete
+  --apply` unlinks X and B's chain reference dangles. deepseek reproduced it
+  on a throwaway copy of 0866a7663. Reach: `ValidateEventPins` forces a
+  receipt for every artifact ref of a current CAS-committed event, so the case
+  needs an event body ref with no receipt (pre-validator or foreign writers, a
+  lost receipt, a digest in a non-ref field such as an authority or parent
+  digest). That is exactly what the sweep's over-retention exists for, and
+  most of Node B's chain is in the legacy store, so the segment-only scan
+  repeats the round-1 blind spot for the part of the tape that matters.
+  Fix: in the list phase, read each legacy event file (capped, paced and
+  counted like `listReceipt`), decode its `computer_id`, and spill `edgeRef`
+  edges for its `hexRefs`, as for a segment event. A body that cannot be read
+  or decoded makes the pass unhealthy and refuses it (attribution error).
+  Test: a legacy event body for B naming X with no B receipt, A pinning X with
+  a sealed copy: `delete --apply` must not unlink X (fails on 0866a7663); and
+  an undecodable legacy event blocks every delete.
+- **L2 (deepseek F4, test gap).** The unreadable segment record path
+  (`view.Read` fails, fall back to the legacy file of the same digest, else an
+  attribution error) has no test; the round-2 test corrupts an index, which
+  fails at `OpenView`. Add tests for the fallback, for a segment-only receipt
+  with no fallback, and for a legacy-only fallback that still attributes.
+- **L3 (deepseek F2, test only).** `bannedUnlinks` lacks `unix.Rename`,
+  `syscall.Renameat`, `unix.Link`, `os.Link`, `syscall.Link`; a hard link
+  followed by an unlink elsewhere is as much a rewrite of the legacy tree as a
+  rename. Add them.
+- **L4 (deepseek F3, reporting only).** `countComputer` runs inside `decide`
+  before the verdict can be downgraded to `blocked` or `dropped_receipt`, so a
+  per-computer `covered` tally can be nonzero for a file the pass refuses. The
+  gate reads the global class only; deletion is unaffected. Count after the
+  final class is known.
+- **L5 (devin M1).** `hexRefs` takes only hex runs of exactly 64 characters;
+  the sweep's regexp matches inside longer runs, so two digests written
+  back to back (or a digest glued to a hex prefix) are kept by the sweep and
+  seen by the repack as nothing. Every 64-character window of a run is an
+  edge (more requirements, never fewer).
+- **L6 (devin N1).** A symlink at `tape-seg/<id>` is skipped by the listing
+  (not a directory entry by `DirEntry.IsDir`) while `OpenView` would follow
+  it for coverage. Root-only, one line: a symlink there is an attribution
+  error.
+- **Recorded, not changed by this round** (reasons in the disposition below):
+  devin M2 (the sweep's database-side extra refs: closures, programs,
+  checkpoints, checkpoint receipts, route certificates), devin M3 (no edge
+  from an event ref to a receipt file), devin N2 (a repin between its
+  `Chtimes` and its receipt landing across the whole legacy scan),
+  deepseek's wall-clock step note.
