@@ -57,3 +57,50 @@ still pre-launch."
 
 It is not a claim that a fallback already happened. It is a claim about
 what the code will do on the next failover-class error.
+
+## Update 2026-10-23 (fix round fp0-pin-hardening): findings from review bunch 147
+
+Status of the original claim: the default pool is gpt-6-luna alone since the
+D8 landing (`modelcatalog.Pools`), so the luna pin has no fallback to inherit
+today (`rotate(members, i)[1:]` is empty). The claim above described the
+pool as it was at 21:4x. The structural defect is still in the code: the
+rule "a concrete model that is a member of the default pool gets the rest of
+the pool" is still in `Assign`, so adding any second member to the default
+pool again gives every explicit pin a fallback it did not ask for. Review
+bunch 147 (omp-deepseek-v41-flash, devin) raised three findings against the
+D8 lane; this round answers them. Mutation class: orange (model routing).
+
+Finding 1 (Medium). No-failover is a property of the pool spec only
+(`NoFailover(pool)`). `Assign` still gives an explicit provider/model pin the
+default pool's other members as fallbacks (`model_policy.go`, the
+`pool == ""` branch). R2 ("I'd rather them fail than fallback") applies to a
+pin as much as to a pool. Fix: a concrete pin gets no fallbacks. The policy
+file has no real fallback field today: `fallback_provider` and
+`fallback_model` are only aliases of `provider` and `model` in `applyValue`
+(a `fallback_model` line replaces the primary model; this is its own trap
+and is recorded below as a residual). So there is no "explicit fallback" to
+honour, and none is added here.
+
+Finding 2 (High, deploy gate). An unknown pool name resolves silently as
+`pool:default`: `Assign` falls back when `Pools()[pool]` is missing, and
+`validSelection` accepts any `pool:<non-empty>`. A typo, or a pool removed
+from the catalog, runs on the default pool with no signal. Fix: the policy
+parser rejects a pool the catalog does not name (the file is then handled as
+every invalid file is: last valid policy, else the platform policy, with
+`llm_policy_error` naming the pool on every run and on the resolve API; the
+Texture prompt-eval path and engineering assignment already refuse a run
+whose policy has an error), and `Assign` stops remapping: an unknown pool
+yields no fallbacks and an `unknown_pool` assignment, and `EnrichMetadata`
+records a policy error naming the pool.
+
+Finding 3 (Low). `syntheticReasoningEffort` passes `minimal` and `medium`,
+which the live model accepts (probe, Q2 in
+`synthetic-provider-onboarding-2026-10-22.md`) but which are outside the
+advertised enum none/low/high/xhigh/max. Fix: map by thinking mode, to the
+nearest advertised value in the same mode: `minimal` to `none` (both select
+the non-thinking template; 0 reasoning tokens in the probe), `medium` to
+`high` (both think). The advertised enum is the safer contract: a server
+that tightens its validator to the documented set would 400 the thread
+otherwise.
+
+Evidence: code reading only. No trace shows any of the three firing.
