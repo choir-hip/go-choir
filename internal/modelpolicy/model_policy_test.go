@@ -369,6 +369,13 @@ func TestUnknownPoolFailsClosedNamingThePool(t *testing.T) {
 	if _, err := parsePolicy("[defaults]\nmodel = \"pool:typo\"\n", "test"); err == nil || !strings.Contains(err.Error(), "typo") {
 		t.Fatalf("parse accepted an unknown default pool: %v", err)
 	}
+	// Review bunch 150, Low: an overlay's [defaults] took an unknown pool.
+	if _, err := parseOverlay("o", "[overlay]\nexpires_at = \"2099-01-01T00:00:00Z\"\n\n[defaults]\nmodel = \"pool:typo\"\n", "test"); err == nil || !strings.Contains(err.Error(), "typo") {
+		t.Fatalf("overlay parse accepted an unknown default pool: %v", err)
+	}
+	if _, err := parseOverlay("o", "[overlay]\nexpires_at = \"2099-01-01T00:00:00Z\"\n\n[roles.texture]\nmodel = \"pool:no-such-pool\"\n", "test"); err == nil || !strings.Contains(err.Error(), "no-such-pool") {
+		t.Fatalf("overlay parse accepted an unknown role pool: %v", err)
+	}
 	path := filepath.Join(t.TempDir(), "System", "model-policy.toml")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
