@@ -53,10 +53,11 @@ func TestStreamSeqSeedStopsAtTheFirstWindowWithAnEvent(t *testing.T) {
 		last = appendSeedEvent(t, s, fmt.Sprintf("e-%d", i), "run-a", old.Add(time.Duration(i)*time.Second)).StreamSeq
 	}
 	seedWakeOutbox(t, s, 8, 0)
+	row, _ := readLeaseQuiet(s)
 	s = reopenAt(t, s, path) // a trusted lease: the windows are the cross-check
 	rec := appendSeedEvent(t, s, "after", "run-b", time.Now().UTC())
-	if rec.StreamSeq <= last {
-		t.Fatalf("stream_seq = %d, want above %d", rec.StreamSeq, last)
+	if rec.StreamSeq <= last || rec.StreamSeq != row.Reserved+1 {
+		t.Fatalf("stream_seq = %d, want the lease's R + 1 = %d (above %d)", rec.StreamSeq, row.Reserved+1, last)
 	}
 	stats := s.EngineMutexStats()
 	if calls := stats["(*DoltStore).ListNewestObjectHeaders"].Calls; calls != 1 {
@@ -76,10 +77,11 @@ func TestStreamSeqSeedWidensPastOtherKinds(t *testing.T) {
 		last = appendSeedEvent(t, s, fmt.Sprintf("e-%d", i), "run-a", old.Add(time.Duration(i)*time.Second)).StreamSeq
 	}
 	seedWakeOutbox(t, s, 60, 0) // behind the first window, inside the second
+	row, _ := readLeaseQuiet(s)
 	s = reopenAt(t, s, path)
 	rec := appendSeedEvent(t, s, "after", "run-b", time.Now().UTC())
-	if rec.StreamSeq <= last {
-		t.Fatalf("stream_seq = %d, want above %d", rec.StreamSeq, last)
+	if rec.StreamSeq <= last || rec.StreamSeq != row.Reserved+1 {
+		t.Fatalf("stream_seq = %d, want the lease's R + 1 = %d (above %d)", rec.StreamSeq, row.Reserved+1, last)
 	}
 	if calls := s.EngineMutexStats()["(*DoltStore).ListNewestObjectHeaders"].Calls; calls != 2 {
 		t.Fatalf("the seed read %d windows, want 2", calls)
@@ -176,10 +178,11 @@ func TestStreamSeqSeedWithNoWindowsTakesTheExactRead(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		last = appendSeedEvent(t, s, fmt.Sprintf("e-%d", i), "run-a", time.Now().UTC().Add(-time.Hour+time.Duration(i)*time.Second)).StreamSeq
 	}
+	row, _ := readLeaseQuiet(s)
 	s = reopenAt(t, s, path)
 	rec := appendSeedEvent(t, s, "after", "run-b", time.Now().UTC())
-	if rec.StreamSeq <= last {
-		t.Fatalf("stream_seq = %d, want above %d (the lease serves; the cross-check has no windows)", rec.StreamSeq, last)
+	if rec.StreamSeq <= last || rec.StreamSeq != row.Reserved+1 {
+		t.Fatalf("stream_seq = %d, want the lease's R + 1 = %d (the lease serves; the cross-check has no windows; above %d)", rec.StreamSeq, row.Reserved+1, last)
 	}
 }
 

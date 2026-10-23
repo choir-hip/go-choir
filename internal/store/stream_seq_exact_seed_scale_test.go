@@ -226,6 +226,9 @@ func TestExactSeedFindsAnEventOutsideTheKindIDRange(t *testing.T) {
 	if want := int64(4321) + streamSeqExactGap + 1; n != want {
 		t.Fatalf("stream_seq = %d, want %d: an event outside the id range was missed", n, want)
 	}
+	if keysetPageCalls(s) == 0 || rangePageCalls(s) != 0 {
+		t.Fatalf("an event outside the id range must take the kind-predicate fallback (keyset %d, range %d)", keysetPageCalls(s), rangePageCalls(s))
+	}
 }
 
 // diskContext is the filesystem the workspace sits on: df for the mount, and
@@ -247,4 +250,23 @@ func diskContext(path string) string {
 		}
 	}
 	return text
+}
+
+// The outside-range probe: one read of the kind index with LIMIT 1, not a scan
+// of og_objects.
+func TestKindOutsideRangeProbePlanIsAKindIndexRead(t *testing.T) {
+	s := openTestStore(t)
+	putStoredEvent(t, s, "e-1", "run", 1, time.Now().UTC())
+	lo, hi := objectgraph.KindIDRange(ogKindEvent)
+	plan := strings.ToLower(explainEventTablePlan(t, s, objectgraph.KindOutsideRangeSQL, "choir.event", lo, hi))
+	if !strings.Contains(plan, "limit(1)") {
+		t.Errorf("the probe has no LIMIT 1:\n%s", plan)
+	}
+	if !strings.Contains(plan, "indexedtableaccess") || !strings.Contains(plan, "object_kind") {
+		t.Errorf("the probe is not an access on the kind index:\n%s", plan)
+	}
+	if strings.Contains(plan, "sort") || strings.Contains(plan, "topn") {
+		t.Errorf("the probe sorts:\n%s", plan)
+	}
+	t.Logf("outside-range probe plan:\n%s", plan)
 }

@@ -11,23 +11,26 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// The stream_seq seed reads a bounded number of rows, whatever the size of
-// the event history (docs/problems/stream-seq-seed-scans-the-event-kind-at-boot-2026-10-23.md).
-//
-// Ways it can fail, written before the code:
-//  1. The seed lists the whole event kind: the engine takes the kind index,
+// What a restart's first stream_seq must be, after the stream_seq lease
+// (docs/problems/stream-seq-high-water-mark-design-2026-10-23.md; the seed
+// record is docs/problems/stream-seq-seed-scans-the-event-kind-at-boot-2026-10-23.md).
+// These tests began as the bounded seed's; the seed is now the lease's, and
+// the bounded windows are its cross-check. Ways it can fail:
+//  1. A trusted restart lists the event kind: the engine takes the kind index,
 //     sorts every event by updated_at and keeps 500. The engine-mutex counters
 //     show a ListObjects over choir.event on the first append
-//     (TestStreamSeqSeedDoesNotListTheEventKind). Its plan is pinned in the
-//     objectgraph package.
-//  2. The bounded read misses the newest event because other kinds were
-//     written after it: the seed starts low and hands a number out twice
-//     (TestStreamSeqSeedFindsAnEventBehindOtherKinds).
-//  3. The seed forgets one of its two tables: events in choir_events above the
-//     og_objects events, or the reverse (TestStreamSeqSeedAcrossBothTables).
-//  4. The sealer's reseed gap is dropped or applied twice
-//     (TestStreamSeqSeedKeepsTheTelemetryGap).
-//  5. A store with no events, or with only other kinds, starts anywhere but 1.
+//     (TestStreamSeqSeedDoesNotListTheEventKind).
+//  2. A restart starts below the previous lease because other kinds were
+//     written after the last event: a number is handed out twice
+//     (TestStreamSeqSeedFindsAnEventBehindOtherKinds). With a trusted lease the
+//     first number is exactly R + 1, whatever the windows hold.
+//  3. An exact seed forgets one of its two tables: events in choir_events
+//     above the og_objects events, or the reverse
+//     (TestStreamSeqSeedAcrossBothTables): maximum + 2^20 + 1.
+//  4. The sealer's old reseed gap is applied on top of the lease
+//     (TestStreamSeqSeedWithTheSealerStaysAboveThePreviousLease).
+//  5. A store with no events, or with only other kinds, starts anywhere but
+//     2^20 + 1: the exact seed of nothing is 0, plus the gap.
 
 const eventListOp = "(*DoltStore).ListObjects choir.event"
 
@@ -64,6 +67,14 @@ func openSeedStore(t *testing.T) (*Store, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// A seeder or refill still running when the test returns would read the
+	// lease constants (variables only tests write) while the next test's
+	// shrinkLease writes them: stop the lease work first. Cleanups run last
+	// in, first out, so this runs before shrinkLease restores the constants.
+	t.Cleanup(func() {
+		s.cancelLeaseWork()
+		s.drainLeaseWork(time.Now().Add(10 * time.Second))
+	})
 	return s, path
 }
 
@@ -75,12 +86,13 @@ func TestStreamSeqSeedDoesNotListTheEventKind(t *testing.T) {
 	for i := 0; i < 40; i++ {
 		lastStored = appendSeedEvent(t, s, fmt.Sprintf("e-%d", i), fmt.Sprintf("run-%d", i%4), old.Add(time.Duration(i)*time.Second)).StreamSeq
 	}
+	row, _ := readLeaseQuiet(s)
 	seedWakeOutbox(t, s, 20, 10)
 	s = reopenAt(t, s, path)
 
 	rec := appendSeedEvent(t, s, "after", "run-after", time.Now().UTC())
-	if rec.StreamSeq <= lastStored {
-		t.Fatalf("stream_seq after the restart = %d, want above the stored %d", rec.StreamSeq, lastStored)
+	if rec.StreamSeq <= lastStored || rec.StreamSeq != row.Reserved+1 {
+		t.Fatalf("stream_seq after the restart = %d, want the lease's R + 1 = %d (above the stored %d)", rec.StreamSeq, row.Reserved+1, lastStored)
 	}
 	if calls := s.EngineMutexStats()[eventListOp].Calls; calls != 0 {
 		t.Fatalf("the first append listed the event kind %d time(s) (%s): the seed reads every event of the kind", calls, eventListOp)
@@ -96,12 +108,13 @@ func TestStreamSeqSeedFindsAnEventBehindOtherKinds(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		lastStored = appendSeedEvent(t, s, fmt.Sprintf("e-%d", i), "run-a", old.Add(time.Duration(i)*time.Second)).StreamSeq
 	}
+	row, _ := readLeaseQuiet(s)
 	seedWakeOutbox(t, s, 2600, 0)
 	s = reopenAt(t, s, path)
 
 	rec := appendSeedEvent(t, s, "after", "run-b", time.Now().UTC())
-	if rec.StreamSeq <= lastStored {
-		t.Fatalf("stream_seq after 2,600 later objects of another kind = %d, want above %d", rec.StreamSeq, lastStored)
+	if rec.StreamSeq <= lastStored || rec.StreamSeq != row.Reserved+1 {
+		t.Fatalf("stream_seq after 2,600 later objects of another kind = %d, want the lease's R + 1 = %d (above %d)", rec.StreamSeq, row.Reserved+1, lastStored)
 	}
 }
 

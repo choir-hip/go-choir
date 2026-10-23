@@ -1025,6 +1025,7 @@ func Open(dbPath string) (*Store, error) {
 			return nil, s.closeFailedOpen(fmt.Errorf("runtime store: write marker: %w", err))
 		}
 	}
+	s.initLeaseObs()
 
 	return s, nil
 }
@@ -1310,6 +1311,7 @@ func (s *Store) Reopen(path string) error {
 	// The lease state (ready or unseeded, the reserved block, the counters)
 	// stays as it was; only the refusal Close set is lifted.
 	s.resumeLeaseWork()
+	s.refreshLeaseWorkspace()
 	return nil
 }
 

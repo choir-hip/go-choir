@@ -150,7 +150,20 @@ func readLeaseRow(t *testing.T, s *Store) (leaseRow, bool) {
 	return row, found
 }
 
-func pageOpCalls(s *Store) int {
+// rangePageCalls counts the exact seed's primary-key id range pages (the
+// linear walk); keysetPageCalls the kind-predicate pages (the fallback, a
+// TopN per page). pageOpCalls is both.
+func rangePageCalls(s *Store) int {
+	total := 0
+	for op, st := range s.EngineMutexStats() {
+		if strings.Contains(op, "ListKindIDRangePage") {
+			total += int(st.Calls)
+		}
+	}
+	return total
+}
+
+func keysetPageCalls(s *Store) int {
 	total := 0
 	for op, st := range s.EngineMutexStats() {
 		if strings.Contains(op, "ListKindMetadataPage") {
@@ -159,6 +172,8 @@ func pageOpCalls(s *Store) int {
 	}
 	return total
 }
+
+func pageOpCalls(s *Store) int { return rangePageCalls(s) + keysetPageCalls(s) }
 
 func eventKindReads(s *Store) []string {
 	var out []string
@@ -269,7 +284,7 @@ func TestLeaseObservabilityBlockShape(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{"state", "reserved_through", "allocated_through", "trusted", "untrust_reason", "seeded_from",
-		"seed_ms", "cross_check_max", "refill_failed", "last_lease_error", "marker_present", "seed_failed", "lease_tombstoned"}
+		"seed_ms", "cross_check_max", "refill_failed", "last_lease_error", "marker_present", "seed_failed", "lease_tombstoned", "seed_undecodable_rows"}
 	for _, key := range want {
 		if _, ok := fields[key]; !ok {
 			t.Errorf("observability block lacks %q: %s", key, raw)
@@ -633,8 +648,11 @@ func TestUntrustedRunsTheFullExactSeedEvenWhenTheFirstWindowHoldsAnEvent(t *test
 	}
 	t.Cleanup(func() { _ = s.Close() })
 	n := appendNext(t, s, "after")
-	if pageOpCalls(s) == 0 {
-		t.Fatal("an untrusted lease did not run the exact seed (no kind pages were read)")
+	if rangePageCalls(s) == 0 {
+		t.Fatal("an untrusted lease did not run the exact seed (no id range pages were read)")
+	}
+	if keysetPageCalls(s) != 0 {
+		t.Fatalf("a normal store took the quadratic kind-predicate fallback %d times", keysetPageCalls(s))
 	}
 	// seed = max(og, table, R') + G with R' = the self-consistent lease's R.
 	if want := row.Reserved + streamSeqExactGap + 1; n != want {
@@ -673,8 +691,11 @@ func TestExactSeedPagesTheKindAndDecodesABodyWithoutMetadataSeq(t *testing.T) {
 	if want := int64(7777) + streamSeqExactGap + 1; n != want {
 		t.Fatalf("stream_seq = %d, want %d", n, want)
 	}
-	if calls := pageOpCalls(s); calls < 4 {
-		t.Fatalf("11 events at 3 a page took %d page reads, want at least 4", calls)
+	if calls := rangePageCalls(s); calls < 4 {
+		t.Fatalf("11 events at 3 a page took %d range page reads, want at least 4", calls)
+	}
+	if keysetPageCalls(s) != 0 {
+		t.Fatalf("a normal store took the kind-predicate fallback %d times", keysetPageCalls(s))
 	}
 }
 
@@ -1567,5 +1588,111 @@ func TestTombstonedLeaseRowIsUntrustedLoggedAndCounted(t *testing.T) {
 	}
 	if n <= row.Reserved-streamSeqLeaseBlock {
 		t.Fatalf("stream_seq %d is not above the stored numbers", n)
+	}
+}
+
+// DeepSeek bunch 175, medium-low: a Close must wake every waiter promptly. A
+// waiter parked on the lease selected only on the state-change channel, the
+// timer and its own ctx; Close cancelled the work without closing anything the
+// waiter watches, so it slept to the seeding deadline (10 minutes) unless
+// Close could take eventMu. The waiter now also watches a closing channel
+// Close closes without a lock.
+func TestCloseWakesAParkedWaiterBeforeTheSeedingDeadline(t *testing.T) {
+	shrinkLease(t, 8)
+	leaseSeedingDeadlineFloor = time.Minute
+	s, path := openSeedStore(t)
+	putStoredEvent(t, s, "e-1", "run", 1, time.Now().UTC().Add(-time.Hour))
+	s = reopenAt(t, s, path)
+	reached, release := blockScan(s)
+	t.Cleanup(release)
+	s.StartStreamSeqSeed()
+	<-reached // the seeder is mid-scan; allocations park
+	waited := make(chan error, 1)
+	started := time.Now()
+	go func() {
+		rec := &types.EventRecord{EventID: "parked", RunID: "run-p", OwnerID: "alice", Timestamp: time.Now().UTC(),
+			Kind: types.EventRunProgress, Payload: json.RawMessage(`{}`)}
+		waited <- s.AppendEvent(leaseCtx(), rec)
+	}()
+	time.Sleep(100 * time.Millisecond) // let it park
+	closed := make(chan error, 1)
+	go func() { closed <- s.Close() }()
+	select {
+	case err := <-waited:
+		if err == nil || !errors.Is(err, errLeaseClosing) {
+			t.Fatalf("the parked waiter returned %v, want the closing error", err)
+		}
+		if took := time.Since(started); took > 10*time.Second {
+			t.Fatalf("the parked waiter woke after %v, not promptly", took)
+		}
+	case <-time.After(15 * time.Second):
+		t.Fatal("a parked waiter slept on after Close began")
+	}
+	release() // the seeder is still mid-scan; let Close drain it
+	select {
+	case err := <-closed:
+		if err != nil {
+			t.Fatalf("close: %v", err)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("Close did not return")
+	}
+}
+
+// Devin bunch 175, low: an event row the exact seed cannot decode is counted
+// and surfaced, not silently read as zero.
+func TestExactSeedCountsUndecodableEventRows(t *testing.T) {
+	s, path := openSeedStore(t)
+	at := time.Now().UTC().Add(-time.Hour)
+	putStoredEvent(t, s, "good", "run", 77, at)
+	rec := eventTableRecord("bad", "run-x", "alice", "traj-x", types.EventRunProgress, 1, 5, at)
+	obj, err := buildEventObject(rec, at)
+	if err != nil {
+		t.Fatal(err)
+	}
+	obj.Metadata = []byte(`{"event_id":"bad"}`) // no stream_seq in metadata
+	obj.Body = []byte(`"not an event record"`)  // and a body that is not an event
+	obj.ContentHash = objectgraph.ContentHash(obj.ObjectKind, obj.Body, obj.Metadata)
+	if err := s.ogStore.PutBatch(leaseCtx(), objectgraph.Batch{Objects: []objectgraph.Object{obj}}); err != nil {
+		t.Fatal(err)
+	}
+	s = reopenAt(t, s, path)
+	buf := captureLog(t)
+	n := appendNext(t, s, "after")
+	if want := int64(77) + streamSeqExactGap + 1; n != want {
+		t.Fatalf("stream_seq = %d, want %d", n, want)
+	}
+	st := leaseStats(s)
+	if st.SeedUndecodableRows != 1 {
+		t.Fatalf("seed_undecodable_rows = %d, want 1: %+v", st.SeedUndecodableRows, st)
+	}
+	if !strings.Contains(buf.String(), "undecodable") {
+		t.Fatalf("the skip was not logged:\n%s", buf.String())
+	}
+}
+
+// Devin bunch 175, nit: marker_present agrees with the snapshot: it is
+// published with the state, so it is true before the seed and false after an
+// exact seed cleared it.
+func TestMarkerPresentIsPublishedWithTheSnapshot(t *testing.T) {
+	s, path := openSeedStore(t)
+	appendN(t, s, "a", 2)
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := storeschema.WriteLeaseUntrusted(deriveTextureWorkspacePath(path), "install"); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	if st := leaseStats(s); !st.MarkerPresent || st.State != "unseeded" {
+		t.Fatalf("before the seed: %+v, want a marker and unseeded", st)
+	}
+	appendNext(t, s, "after")
+	if st := leaseStats(s); st.MarkerPresent || st.State != "ready" {
+		t.Fatalf("after the exact seed: %+v, want no marker and ready", st)
 	}
 }

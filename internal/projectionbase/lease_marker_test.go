@@ -199,8 +199,10 @@ func TestInstalledBaseOpensUntrustedAndSeedsExact(t *testing.T) {
 	if st.Trusted || st.SeededFrom != "exact" {
 		t.Fatalf("an installed base seeded from %s (trusted=%v, reason %q), want the exact seed", st.SeededFrom, st.Trusted, st.UntrustReason)
 	}
-	if st.UntrustReason != "marker" && st.UntrustReason != "no_lease" {
-		t.Fatalf("untrust reason = %q", st.UntrustReason)
+	// The base carries no lease row (the rebuilder replays a tape with no
+	// lease ops), and no_lease is reported before the marker.
+	if st.UntrustReason != "no_lease" {
+		t.Fatalf("untrust reason = %q, want no_lease", st.UntrustReason)
 	}
 }
 

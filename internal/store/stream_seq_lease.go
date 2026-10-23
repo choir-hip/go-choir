@@ -163,9 +163,21 @@ type leaseAllocator struct {
 	refillFailed   int64
 	// seedFailed counts failed seed attempts since the process started;
 	// seedStreak the consecutive ones, which set the retry backoff.
-	seedFailed    int64
-	seedStreak    int64
-	tombstoned    int64 // tombstoned lease rows met by a seeder
+	seedFailed int64
+	seedStreak int64
+	tombstoned int64 // tombstoned lease rows met by a seeder
+	// undecodable is the number of event rows the last exact seed could not
+	// read a stream_seq from (metadata without one and a body that is not an
+	// event record); lastUndecodable is the scan's running figure.
+	undecodable     int64
+	lastUndecodable atomic.Int64
+	// workspace is the Dolt workspace directory the lease reads its marker
+	// from, snapshotted under eventMu: Open sets it, Reopen (after Close
+	// drained the lease work) refreshes it.
+	workspace string
+	// closingCh is closed, without a lock, when Close begins: every parked
+	// waiter selects on it. Guarded by ctxMu.
+	closingCh     chan struct{}
 	lastErr       string
 	seedBasis     string
 	untrustReason string
@@ -208,11 +220,14 @@ type StreamSeqLeaseStats struct {
 	// lease rows the seeder met (a tombstone untrusts the lease).
 	SeedFailed      int64 `json:"seed_failed"`
 	LeaseTombstoned int64 `json:"lease_tombstoned"`
+	// SeedUndecodableRows counts event rows the exact seed could not read a
+	// stream_seq from, skipped and logged (a desk-forged or corrupt row).
+	SeedUndecodableRows int64 `json:"seed_undecodable_rows"`
 }
 
 // StreamSeqLeaseStats reports the lease without waiting on the allocator: the
-// snapshot is published on every state change, and the marker is read from the
-// workspace.
+// snapshot is published on every state change (and once at Open), marker
+// included.
 func (s *Store) StreamSeqLeaseStats() StreamSeqLeaseStats {
 	st := StreamSeqLeaseStats{State: leaseUnseeded.String()}
 	if s == nil {
@@ -221,14 +236,17 @@ func (s *Store) StreamSeqLeaseStats() StreamSeqLeaseStats {
 	if snap := s.lease.obs.Load(); snap != nil {
 		st = *snap
 	}
-	if s.texturePath != "" {
-		present, _ := storeschema.LeaseUntrusted(s.texturePath)
-		st.MarkerPresent = present
-	}
 	return st
 }
 
 func (s *Store) publishLeaseObsLocked() {
+	// marker_present is read here, with the state it describes, so the
+	// snapshot agrees with itself. Presence that cannot be decided reads as
+	// present, the answer that closes.
+	markerPresent := false
+	if s.lease.workspace != "" {
+		markerPresent, _ = storeschema.LeaseUntrusted(s.lease.workspace)
+	}
 	s.lease.obs.Store(&StreamSeqLeaseStats{
 		State:            s.lease.state.String(),
 		ReservedThrough:  s.lease.reserved,
@@ -242,6 +260,9 @@ func (s *Store) publishLeaseObsLocked() {
 		LastLeaseError:   s.lease.lastErr,
 		SeedFailed:       s.lease.seedFailed,
 		LeaseTombstoned:  s.lease.tombstoned,
+
+		SeedUndecodableRows: s.lease.undecodable,
+		MarkerPresent:       markerPresent,
 	})
 }
 
@@ -355,10 +376,12 @@ func (s *Store) leaseBlockedLocked(ctx context.Context, deadline, wakeAt time.Ti
 		until = wakeAt
 	}
 	changed := s.leaseChangedLocked()
+	closing := s.leaseClosingChan()
 	s.eventMu.Unlock()
 	timer := time.NewTimer(time.Until(until))
 	select {
 	case <-changed:
+	case <-closing: // Close began: the loop head returns the closing error
 	case <-timer.C:
 	case <-ctx.Done():
 	}
@@ -389,11 +412,12 @@ func (s *Store) startSeederLocked() {
 		return
 	}
 	ctx := s.leaseWorkContextLocked()
+	workspace := s.lease.workspace
 	s.lease.state = leaseSeeding
 	s.lease.workers.Add(1)
 	s.publishLeaseObsLocked()
 	s.leaseBroadcastLocked()
-	go s.runSeeder(ctx)
+	go s.runSeeder(ctx, workspace)
 }
 
 // leaseSeedResult is what the seeder computed before it wrote the lease.
@@ -403,15 +427,15 @@ type leaseSeedResult struct {
 	trusted       bool
 	untrustReason string
 	crossMax      int64
+	undecodable   int64
 }
 
 // runSeeder computes the seed with eventMu released, lands a fresh lease block
 // on the tape, and only then lets allocation begin. On failure the state goes
 // back to unseeded and the waiters retry or fail at their deadline.
-func (s *Store) runSeeder(ctx context.Context) {
+func (s *Store) runSeeder(ctx context.Context, workspace string) {
 	started := time.Now()
-	workspace := s.texturePath
-	res, err := s.computeLeaseSeed(ctx)
+	res, err := s.computeLeaseSeed(ctx, workspace)
 	var row leaseRow
 	if err == nil {
 		row = leaseRow{Reserved: res.seed + streamSeqLeaseBlock, Allocated: res.seed, Block: streamSeqLeaseBlock,
@@ -465,6 +489,7 @@ func (s *Store) completeSeedLocked(res leaseSeedResult, row leaseRow, took time.
 	s.lease.trusted = res.trusted
 	s.lease.untrustReason = res.untrustReason
 	s.lease.crossCheckMax = res.crossMax
+	s.lease.undecodable = res.undecodable
 	s.lease.seedMS = took.Milliseconds()
 	// lastErr is deliberately not cleared: it is the last error, evidence of a
 	// failure that has since healed.
@@ -475,7 +500,7 @@ func (s *Store) completeSeedLocked(res leaseSeedResult, row leaseRow, took time.
 // computeLeaseSeed decides whether the lease is trusted and returns the seed.
 // It runs with eventMu released; allocation waits meanwhile, so no
 // stream_seq is minted or appended during the scan.
-func (s *Store) computeLeaseSeed(ctx context.Context) (leaseSeedResult, error) {
+func (s *Store) computeLeaseSeed(ctx context.Context, workspace string) (leaseSeedResult, error) {
 	// The seeder's precondition: the local head is the platform head, so
 	// replay cannot add events during the scan and the lease append, which
 	// requires equal heads, lands on the state that was scanned.
@@ -497,13 +522,11 @@ func (s *Store) computeLeaseSeed(ctx context.Context) (leaseSeedResult, error) {
 	if err != nil {
 		return leaseSeedResult{}, fmt.Errorf("stream_seq seed: read lease: %w", err)
 	}
-	markerReason, markerPresent, markerErr := storeschema.LeaseUntrustedReason(s.texturePath)
-	if present, statErr := storeschema.LeaseUntrusted(s.texturePath); statErr != nil || present {
-		markerPresent = true
-		if markerReason == "" {
-			markerReason = "unreadable"
-		}
-		_ = markerErr
+	// One presence read: anything but a clean absence reads as present.
+	markerPresent, _ := storeschema.LeaseUntrusted(workspace)
+	markerReason := ""
+	if markerPresent {
+		markerReason, _, _ = storeschema.LeaseUntrustedReason(workspace)
 	}
 
 	untrust := ""
@@ -545,6 +568,7 @@ func (s *Store) computeLeaseSeed(ctx context.Context) (leaseSeedResult, error) {
 		return leaseSeedResult{}, err
 	}
 	exact := max(ogMax, tableMax)
+	res.undecodable = s.lease.lastUndecodable.Load()
 	// A legitimate lease covers the numbers its lineage published and never
 	// stored; the exact maximum covers anything an older binary stored. A row
 	// that fails its own checks, or sits above the ceiling, is ignored.
@@ -637,7 +661,8 @@ func (s *Store) exactOGStreamSeqMax(ctx context.Context) (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("append event: seed stream_seq (exact scan): %w", err)
 	}
-	var maxSeq int64
+	var maxSeq, undecodable int64
+	defer func() { s.lease.lastUndecodable.Store(undecodable) }()
 	take := func(row objectgraph.KindMetadataRow) error {
 		var meta struct {
 			StreamSeq *int64 `json:"stream_seq"`
@@ -654,7 +679,10 @@ func (s *Store) exactOGStreamSeqMax(ctx context.Context) (int64, error) {
 		if err := ogDecode(obj, &ev); err != nil {
 			// An event body this binary cannot decode carries no number it can
 			// see; the metadata path covers every event this binary or its
-			// predecessors wrote.
+			// predecessors wrote. Count it and say so: a skipped row is a
+			// number the seed did not see (a desk-forged or corrupt row).
+			undecodable++
+			log.Printf("store: stream_seq exact seed: undecodable event row %s skipped: %v", row.CanonicalID, err)
 			return nil
 		}
 		maxSeq = max(maxSeq, ev.StreamSeq)
@@ -898,10 +926,28 @@ func (s *Store) runRefill(ctx context.Context, target, allocated int64) {
 func (s *Store) cancelLeaseWork() {
 	s.lease.closing.Store(true)
 	s.lease.ctxMu.Lock()
+	if s.lease.closingCh == nil {
+		s.lease.closingCh = make(chan struct{})
+	}
+	select {
+	case <-s.lease.closingCh:
+	default:
+		close(s.lease.closingCh) // wakes every parked waiter, with no eventMu
+	}
 	if s.lease.cancel != nil {
 		s.lease.cancel()
 	}
 	s.lease.ctxMu.Unlock()
+}
+
+// leaseClosingChan is the channel cancelLeaseWork closes.
+func (s *Store) leaseClosingChan() <-chan struct{} {
+	s.lease.ctxMu.Lock()
+	defer s.lease.ctxMu.Unlock()
+	if s.lease.closingCh == nil {
+		s.lease.closingCh = make(chan struct{})
+	}
+	return s.lease.closingCh
 }
 
 // drainLeaseWork waits, until deadline, for the lease goroutines to end, and
@@ -926,8 +972,29 @@ func (s *Store) drainLeaseWork(deadline time.Time) {
 func (s *Store) resumeLeaseWork() {
 	s.lease.ctxMu.Lock()
 	s.lease.ctx, s.lease.cancel = nil, nil
+	s.lease.closingCh = nil
 	s.lease.ctxMu.Unlock()
 	s.lease.closing.Store(false)
+}
+
+// refreshLeaseWorkspace re-reads the workspace after Reopen adopted another
+// one, and republishes the snapshot (marker_present describes the new
+// workspace). It takes eventMu, which resumeLeaseWork must not: a failed Close
+// resumes while an inline commit may still hold eventMu across the fence.
+func (s *Store) refreshLeaseWorkspace() {
+	s.eventMu.Lock()
+	s.lease.workspace = s.texturePath
+	s.publishLeaseObsLocked()
+	s.eventMu.Unlock()
+}
+
+// initLeaseObs sets the workspace the lease reads its marker from and
+// publishes the first snapshot. Open calls it before the store is shared.
+func (s *Store) initLeaseObs() {
+	s.eventMu.Lock()
+	s.lease.workspace = s.texturePath
+	s.publishLeaseObsLocked()
+	s.eventMu.Unlock()
 }
 
 // leaseSwapReason names why a marker was written, for the marker body.
