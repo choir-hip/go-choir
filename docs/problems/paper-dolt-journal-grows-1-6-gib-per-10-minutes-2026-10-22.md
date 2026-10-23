@@ -810,3 +810,48 @@ Non-blocking notes, recorded:
 - Nits: a stale "one item per ... run event" comment in
   `scripts/reeng_invariants.mjs`; the trace bundle carries the egress bytes
   twice (`cells` embeds `egress[]`, plus the `egress` layer).
+
+### Review round 1: what each finding became
+
+- **F-1 fixed** (`internal/toolregistry/batch_executor.go`). Valid arguments
+  are embedded as `arguments` as before. Invalid bytes ride as the string
+  `arguments_raw` with `arguments_invalid: true`, on both the bus-only
+  `tool.invoked` and the durable `tool.result`. A marshal failure of the
+  result still falls back to a payload with `tool`, `call_id`, `is_error`,
+  `output`, `output_len`, timing and `marshal_error`, and the error is no
+  longer ignored. `TestToolResultSurvivesMalformedArguments` fails on
+  `27c6de2d0` (empty payload) and passes. The readers of `arguments`
+  (`retrieval_eval_extract.py`, `reeng_tracer_checks.mjs`) only look at a dict
+  `arguments`, so a malformed call yields no source there, as before.
+- **F-2 recorded, not changed.** The cell-length crash window for egress rows
+  is wider than the batching-window wording of notes section 27 item 18. It
+  sits inside the owner's loss tolerance for telemetry (crash restarts close
+  the cell's work anyway), and the fold removes the orphaned `search_done`.
+  If the owner wants the window bounded, the hardening is to seal and flush
+  the log at N rows or T seconds into a standalone `desk.egress` part; that is
+  an owner call, not a design branch, so it is left as a named residual.
+- **F-3 declined** (above): a replay ring on the bus is not built.
+- **F-4 recorded.** `cellInFlight` degrades to the 8 s running fallback on new
+  tapes; no acceptance depends on it.
+- **F-5 recorded.** The model-visible continuation checkpoint changes content
+  on new tapes (no invoked row, no prompt previews, `arguments` on results).
+- **F-6 fixed** (`scripts/reeng_invariants_plant.mjs`): `plantI5` also crosses
+  the response id in the rows folded into a `desk.cell` event. The stale
+  comment in `scripts/reeng_invariants.mjs` is corrected.
+- **F-7 checked, no change needed.** Both scripts accept `tool.invoked` and
+  `tool.result` and scan the payload text for receipt and story ids. The
+  ids they look for appear in the call's output, and the arguments that used to
+  ride `tool.invoked` now ride `tool.result`, so a new tape is scanned as
+  fully as an old one. No test was added: they are live-computer probes that
+  call the host API, which this lane does not run.
+- The double carriage of egress bytes (`cells` embeds `egress[]`, plus the
+  `egress` layer) is left; it is bundle size, not journal bytes.
+
+Heresy delta (round 1): discovered: R3 introduced a silent loss path (an
+ignored marshal error on a payload that embedded provider-controlled bytes).
+Introduced: none. Repaired: that path; the I5 planter now covers folded rows.
+
+Tests run: `go test ./internal/toolregistry`; `go test ./internal/agentcore -run
+'Cut|ToolResult|DeskCell|Egress|ToolLoop'`; `node --test
+scripts/reeng_invariants_test.mjs scripts/reeng_tracer_checks_test.mjs`;
+`python3 -I scripts/journal_cuts_readers_test.py`.
