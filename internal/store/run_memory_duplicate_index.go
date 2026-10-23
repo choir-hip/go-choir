@@ -36,6 +36,9 @@ import (
 const (
 	RunMemoryLoopSeqIndexName = "idx_run_memory_entries_loop_seq"
 	runMemoryLoopSeqDropDDL   = `DROP INDEX ` + RunMemoryLoopSeqIndexName + ` ON run_memory_entries`
+	// runMemoryLoopSeqCreateDDL is the rollback: what the old schemaDDL ran
+	// (restore_run_memory_indexes, run_memory_index_diet.go).
+	runMemoryLoopSeqCreateDDL = `CREATE INDEX ` + RunMemoryLoopSeqIndexName + ` ON run_memory_entries(loop_id, seq)`
 )
 
 // discoverRunMemoryLoopSeqIndex reads whether the duplicate exists, whether a

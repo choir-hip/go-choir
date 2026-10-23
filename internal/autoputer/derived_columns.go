@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/server"
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
@@ -18,6 +19,10 @@ import (
 //	GET  /internal/store/derived-columns                 status and plan
 //	POST /internal/store/derived-columns?action=migrate  start (202; 409 while one runs)
 //	POST /internal/store/derived-columns?action=cancel   stop before the next step
+//	POST /internal/store/derived-columns?action=restore_run_memory_indexes[&indexes=a,b]
+//	                                                     recreate the run_memory_entries indexes R5 and the
+//	                                                     diet dropped (200 with per-index holds; 409 while
+//	                                                     a migration runs); run it before a revert deploys
 //
 // After the og_objects steps it also builds the run_memory_entries kind index
 // (internal/store/run_memory_kind_index.go) when it is missing, reported as
@@ -52,6 +57,27 @@ func derivedColumnsHandler(db *choirstore.Store) http.HandlerFunc {
 				default:
 					writeDerivedColumnsJSON(w, http.StatusAccepted, status)
 				}
+			case "restore_run_memory_indexes":
+				// The rollback of R5 and the index diet: recreate the dropped
+				// run_memory_entries indexes online, so a reverted binary's boot
+				// DDL (CREATE INDEX IF NOT EXISTS) finds them and builds nothing.
+				// Synchronous: each build holds the engine for its length and the
+				// report carries the holds.
+				var names []string
+				if v := r.URL.Query().Get("indexes"); v != "" {
+					names = strings.Split(v, ",")
+				}
+				report, err := db.RestoreRunMemoryIndexes(r.Context(), names)
+				switch {
+				case errors.Is(err, choirstore.ErrUnknownRunMemoryIndex):
+					http.Error(w, err.Error(), http.StatusBadRequest)
+				case errors.Is(err, choirstore.ErrDerivedColumnMigrationRunning):
+					http.Error(w, err.Error(), http.StatusConflict)
+				case err != nil:
+					writeDerivedColumnsJSON(w, http.StatusInternalServerError, report)
+				default:
+					writeDerivedColumnsJSON(w, http.StatusOK, report)
+				}
 			case "cancel":
 				cancelled := db.CancelDerivedColumnMigration()
 				writeDerivedColumnsJSON(w, http.StatusOK, map[string]any{
@@ -59,7 +85,7 @@ func derivedColumnsHandler(db *choirstore.Store) http.HandlerFunc {
 					"status":    db.DerivedColumnMigrationStatus(r.Context()),
 				})
 			default:
-				http.Error(w, "action must be migrate or cancel", http.StatusBadRequest)
+				http.Error(w, "action must be migrate, cancel or restore_run_memory_indexes", http.StatusBadRequest)
 			}
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
