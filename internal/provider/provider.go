@@ -947,16 +947,23 @@ func (p *SyntheticProvider) buildChatCompletionsRequestBody(req LLMRequest, mode
 }
 
 // syntheticReasoningEffort maps Choir's effort to the values Synthetic
-// accepts. reasoning_effort is a mode switch plus a budget there: none,
-// minimal and low run the non-thinking template; medium, high, xhigh and max
-// think. Any other string is a 400, so an unknown value is omitted (model
-// default) and the disable spellings Choir uses elsewhere become none.
+// advertises (models endpoint reasoning_parameters.efforts: none, low, high,
+// xhigh, max). reasoning_effort is a mode switch plus a budget there: none
+// and low run the non-thinking template; high, xhigh and max think. The
+// server also accepts minimal and medium today (probe, docs/problems/
+// synthetic-provider-onboarding-2026-10-22.md Q2), but they are outside the
+// advertised set, so each maps to the advertised value in its own mode:
+// minimal to none (non-thinking), medium to high (thinking). Any other
+// string is a 400, so an unknown value is omitted (model default) and the
+// disable spellings Choir uses elsewhere become none.
 func syntheticReasoningEffort(effort string) string {
 	switch e := strings.ToLower(strings.TrimSpace(effort)); e {
-	case "none", "minimal", "low", "medium", "high", "xhigh", "max":
+	case "none", "low", "high", "xhigh", "max":
 		return e
-	case "off", "disabled", "false":
+	case "minimal", "off", "disabled", "false":
 		return "none"
+	case "medium":
+		return "high"
 	default:
 		return ""
 	}

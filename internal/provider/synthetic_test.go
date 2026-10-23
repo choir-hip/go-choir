@@ -75,8 +75,11 @@ func TestSyntheticProviderRequestShape(t *testing.T) {
 	}
 }
 
-// reasoning_effort outside none/minimal/low/medium/high/xhigh/max is a 400
-// upstream; the provider sends a valid value or none at all.
+// reasoning_effort outside the advertised none/low/high/xhigh/max is a
+// contract risk (the live validator also takes minimal and medium; an
+// unknown string is a 400); the provider sends an advertised value or none
+// at all. minimal maps to none and medium to high, each within its
+// thinking mode.
 func TestSyntheticReasoningEffortNeverSendsAnInvalidValue(t *testing.T) {
 	for in, want := range map[string]string{
 		"":         "",
