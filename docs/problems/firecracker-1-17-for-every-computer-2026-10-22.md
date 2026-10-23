@@ -235,6 +235,52 @@ The first draft of this record staged discard over three deploys: A pins
 1.17 with discard on one computer, B adds `class:test`, C sets `*`. D4
 replaced B and C on the owner's ruling, so this lane has only the pin.
 
+## Review findings (bunch 144), before any fix
+
+Three reviewers accepted the forward pin: Gemini ADOPT, Devin APPROVE,
+DeepSeek ACCEPT, the last conditional on the first three findings below.
+The runtime change itself drew no finding. The defects are in this record's
+rollback text and in the proof tooling.
+
+1. MEDIUM (DeepSeek): the "all the way back to 1.16.2" rollback is wrong.
+   It says to revert D4's selector commit (2de635109) in addition to the
+   pin fix. That commit only narrows the two selectors from `*` back to
+   `computer-9648031f…`; `git show 2de635109^:nix/node-b.nix` has all four
+   lines (`VM_FIRECRACKER_NEXT_BIN`, `_NEXT_ONLY`, `VM_DATA_DISCARD`,
+   `VM_DATA_DISCARD_ONLY`) at lines 1556 to 1559. After that revert the test
+   computer would still run 1.17 with discard, and its 1.17 snapshot would
+   resume. D4's own commit message gives the right rollback: delete the four
+   lines and redeploy.
+2. MEDIUM (DeepSeek): the rollback to D4's shape also needs the 1.16.2
+   path. Reverting the pin fix restores `VM_FIRECRACKER_BIN` to
+   `…5nh9p1bh…-firecracker-1.16.2/bin/firecracker`
+   (`2de635109^:nix/node-b.nix:1453` is `${pkgs.firecracker}` on the 1.16.2
+   pin). `IsFirecrackerAvailable` stats that path
+   (`internal/vmmanager/config.go:264-279`), and vmctl then stops with
+   "Firecracker is mandatory" (`cmd/vmctl/main.go:145` and `:167`). So the
+   record's "needs only the 1.17.0 path" is false: the 1.16.2 path is
+   needed for either rollback, and the record makes the GC root optional.
+3. LOW (DeepSeek, Devin): `scripts/proofs/fp8-image-jailer.sh` step 7
+   (lines 32, 130 and 142) still tells the operator to fill
+   `nix/firecracker-next.nix` (deleted here), to set
+   `VM_FIRECRACKER_NEXT_ONLY` (removed here), and requires a "next
+   Firecracker build" journal line that no longer appears. The deploy note
+   says to read it as done, but the script is executable and unannotated,
+   and run as written it fails.
+4. LOW (DeepSeek): `scripts/check-host-firecracker-pin.sh` line 45 treats
+   only the exact string `1` as discard on. The Go side (`envFlagOn`,
+   `internal/vmmanager/config.go:244-249`) accepts `1`, `true`, `on` and
+   `yes`, case-insensitively. A later `VM_DATA_DISCARD=on` with an empty
+   `VM_DATA_DISCARD_ONLY` would enable discard for every computer and pass
+   the guard.
+5. NIT (Devin): `sort -V` in that script is GNU only, and `jq` is used
+   without a preflight. Both fail closed, but the message would be unclear.
+6. Risk note (DeepSeek): "no new cold boot" in the Plan and the deploy note
+   can be read as "no cold boot at all". The deploy refresh still cold boots
+   every running computer. The claim means no cold boot beyond that refresh.
+
+Dispositions follow the fix.
+
 ## Ceremony
 
 - Mutation class: **red**. The protected surface is the VMM binary and
