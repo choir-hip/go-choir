@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
@@ -237,5 +238,35 @@ func TestEventTableRollbackRecipeNamesTheTableExactly(t *testing.T) {
 	// lookalike and then fail on choir_events, aborting the boot.
 	if err := rollbackRecipeDropEmptyChoirEvents(s.db); err != nil {
 		t.Fatalf("second boot beside a lookalike table: %v", err)
+	}
+}
+
+// The rollback below deploy 1 lowers storeschema.Version 2 -> 1, which the CI
+// store-floor guard fails unless the head commit carries Store-Floor-Override
+// (bunch 148, DeepSeek P1). The documented commit must therefore carry the
+// trailer, and the script header must say the pre-rollback reading it
+// stands for: valid only while every computer reports
+// event_table.store_floor == 0.
+func TestEventTableRollbackScriptDocumentsTheFloorOverride(t *testing.T) {
+	root := repoRoot(t)
+	raw, err := os.ReadFile(filepath.Join(root, "scripts/rollback/fc-deploy1-rollback.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	header := string(raw)
+	if i := strings.Index(header, "\nset -euo pipefail"); i > 0 {
+		header = header[:i]
+	}
+	for _, want := range []string{"Store-Floor-Override:", "event_table.store_floor", "== 0", "check-store-schema-floor.sh"} {
+		if !strings.Contains(header, want) {
+			t.Errorf("the rollback script header does not mention %q", want)
+		}
+	}
+	i := strings.Index(header, "git commit -m")
+	if i < 0 {
+		t.Fatal("the rollback script header has no git commit step")
+	}
+	if !strings.Contains(header[i:], "Store-Floor-Override:") {
+		t.Error("the documented rollback commit does not carry the Store-Floor-Override trailer")
 	}
 }
