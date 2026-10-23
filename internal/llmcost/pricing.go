@@ -87,6 +87,11 @@ var pricingTable = []ModelPricing{
 	// gateway calls the jev-latest alias, which resolves to it.
 	{Provider: "typesafe", Model: "jev-1.14", InputPerMillion: 0.042, OutputPerMillion: 0},
 	{Provider: "typesafe", Model: "jev-latest", InputPerMillion: 0.042, OutputPerMillion: 0},
+	// DeepSeek V4.1 Flash 1017 on Synthetic: its list rate, $0.60 in, $0.03
+	// cache read, $1.20 out per million (GET /openai/v1/models, 2026-10-22;
+	// docs/problems/synthetic-provider-onboarding-2026-10-22.md). Exact, or
+	// the prefix match below prices it at DeepSeek's own rate.
+	{Provider: "synthetic", Model: "deepseek-v4.1-flash-1017", InputPerMillion: 0.60, CachedInputPerMillion: 0.03, OutputPerMillion: 1.20},
 	// Free previews on opencode-go: found at $0, not unpriced. Free "for a
 	// limited time" with no end date; LongCat 2.5 Preview lists at about
 	// 0.30/1.20 elsewhere (unverified), Cat Jam has no known origin.

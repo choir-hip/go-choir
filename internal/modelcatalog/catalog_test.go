@@ -16,11 +16,14 @@ import "testing"
 // Owner 2026-10-21: "We have Opencode quota now"; the dual pool is back at
 // the owner's 1:3, so the same tasks run on both models and the errors they
 // share can be fixed in the tool surface, not tuned to one model.
+// Owner 2026-10-23 (UTC): "Just ChatGPT luna and synthetic DeepSeek 1017
+// tonight. I'd rather them fail than fallback." and "Don't use Opencode as
+// fallback tonight." The default pool is gpt-6-luna alone, so nothing falls
+// back to OpenCode; the deepseek-v4.1-flash catalog entry stays.
 func TestDefaultPoolMembers(t *testing.T) {
 	pool := Pools()[DefaultPool]
 	want := []PoolMember{
-		{Provider: "opencode-go", Model: "deepseek-v4.1-flash", Weight: 1},
-		{Provider: "chatgpt", Model: "gpt-6-luna", Weight: 3},
+		{Provider: "chatgpt", Model: "gpt-6-luna", Weight: 1},
 	}
 	if len(pool) != len(want) {
 		t.Fatalf("default pool = %v, want %v", pool, want)
@@ -28,6 +31,16 @@ func TestDefaultPoolMembers(t *testing.T) {
 	for i := range want {
 		if pool[i] != want[i] {
 			t.Fatalf("default pool[%d] = %v, want %v", i, pool[i], want[i])
+		}
+	}
+	if _, ok := Lookup("opencode-go", "deepseek-v4.1-flash"); !ok {
+		t.Fatal("deepseek-v4.1-flash should stay in the catalog, out of the pool only")
+	}
+	for name, members := range Pools() {
+		for _, m := range members {
+			if m.Provider == "opencode-go" || m.Provider == "opencode-zen" {
+				t.Fatalf("pool %s carries OpenCode member %v", name, m)
+			}
 		}
 	}
 	if _, ok := Lookup("opencode-go", "longcat-2.5-preview-free"); !ok {
@@ -45,5 +58,35 @@ func TestFallbackOnlyMemberHasNoSlotWeight(t *testing.T) {
 	}
 	if w := (PoolMember{}).SlotWeight(); w != 1 {
 		t.Fatalf("default slot weight = %d, want 1", w)
+	}
+}
+
+// synthetic-luna is Synthetic's DeepSeek V4.1 Flash 1017 and gpt-6-luna at
+// 1:1, the paper's overnight split (owner 2026-10-22), and it is the one pool
+// that never fails over. The catalog says the window Synthetic serves.
+func TestSyntheticLunaPool(t *testing.T) {
+	const id = "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017"
+	want := []PoolMember{
+		{Provider: "synthetic", Model: id, Weight: 1},
+		{Provider: "chatgpt", Model: "gpt-6-luna", Weight: 1},
+	}
+	pool := Pools()[SyntheticLunaPool]
+	if len(pool) != len(want) || pool[0] != want[0] || pool[1] != want[1] {
+		t.Fatalf("synthetic-luna = %v, want %v", pool, want)
+	}
+	for _, m := range pool {
+		if _, ok := Lookup(m.Provider, m.Model); !ok {
+			t.Fatalf("pool member %v is not in the catalog", m)
+		}
+	}
+	if !NoFailover(SyntheticLunaPool) || NoFailover(DefaultPool) {
+		t.Fatal("only synthetic-luna is a no-failover pool")
+	}
+	info, _ := Lookup("synthetic", id)
+	if info.ContextWindowTokens != 524288 || info.MaxOutputTokens != 65536 {
+		t.Fatalf("synthetic window = %d / %d, want 524288 / 65536 (probed 2026-10-22)", info.ContextWindowTokens, info.MaxOutputTokens)
+	}
+	if !SupportsImage(id) {
+		t.Fatal("the 1017 model took an image in the probe; it must not be opted out")
 	}
 }
