@@ -7,6 +7,7 @@ import (
 	"log"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -437,6 +438,10 @@ func TestRunMemoryIndexRestoreReportsRestoringWhileItRuns(t *testing.T) {
 		}
 	}
 	t.Cleanup(func() { runMemoryRestoreStepHook = nil })
+	var releaseOnce sync.Once
+	unblock := func() { releaseOnce.Do(func() { close(release) }) }
+	// A t.Fatal below still unblocks the restore goroutine.
+	t.Cleanup(unblock)
 	errc := make(chan error, 1)
 	go func() {
 		_, err := s.RestoreRunMemoryIndexes(context.Background(), nil)
@@ -450,7 +455,7 @@ func TestRunMemoryIndexRestoreReportsRestoringWhileItRuns(t *testing.T) {
 	if _, err := s.StartDerivedColumnMigration(); !errors.Is(err, ErrDerivedColumnMigrationRunning) {
 		t.Fatalf("migration beside a restore = %v, want ErrDerivedColumnMigrationRunning", err)
 	}
-	close(release)
+	unblock()
 	if err := <-errc; err != nil {
 		t.Fatal(err)
 	}
