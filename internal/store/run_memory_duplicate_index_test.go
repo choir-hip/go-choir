@@ -150,9 +150,9 @@ var runMemoryProductionStatements = []struct {
 		`SELECT entry_id, loop_id FROM run_memory_entries WHERE owner_id = ? AND entry_id = ?`, []any{"owner-1", "e-000001"}},
 	{"project.go:313 projectRunMemoryEntry read",
 		`SELECT entry_id, loop_id FROM run_memory_entries WHERE entry_id=? FOR UPDATE`, []any{"e-000001"}},
-	{"residue_import.go:409 residue run memory",
-		`SELECT e.entry_id FROM run_memory_entries e WHERE (e.owner_id=? AND e.loop_id=?) OR (e.owner_id=? AND e.loop_id=?)
-		 ORDER BY e.owner_id, e.loop_id, e.seq`, []any{"owner-1", "run-agent-03-1", "owner-1", "run-agent-04-1"}},
+	{"residue_import.go:424 residue run memory (loop_id IN first, batches of 100 scopes)",
+		`SELECT e.entry_id FROM run_memory_entries e WHERE e.loop_id IN (?,?) AND ((e.owner_id=? AND e.loop_id=?) OR (e.owner_id=? AND e.loop_id=?))
+		 ORDER BY e.owner_id, e.loop_id, e.seq`, []any{"run-agent-03-1", "run-agent-04-1", "owner-1", "run-agent-03-1", "owner-1", "run-agent-04-1"}},
 }
 
 // 1. Duplicate: the unique key is (loop_id, seq), and every statement plans the

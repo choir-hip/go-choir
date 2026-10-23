@@ -192,17 +192,19 @@ func TestRunMemoryKindIndexMigrationBuildsItOnce(t *testing.T) {
 // owner and one kind; owner and two kinds is the same index with two ranges.
 // No owner is not sent by any production caller and the owner-leading index
 // does not serve it (unserved: its plan is not pinned). With all kinds the
-// planner keeps the old index.
+// planner kept the (owner_id, agent_id, created_at) index until the index diet
+// dropped it (run_memory_index_diet.go): the kind index serves the same
+// (owner_id, agent_id) range with a sort on (created_at, seq) above it.
 var runMemoryListShapes = []struct {
 	name   string
 	owner  string
 	kinds  []string
-	expect string // "kind", "old" or "unserved"
+	expect string // "kind", "kind-sorted" or "unserved"
 }{
 	{"owner+1kind", "owner-1", []string{"rlm_inbox_cursor"}, "kind"},
 	{"owner+2kinds", "owner-1", []string{"rlm_inbox_cursor", "cell_fate"}, "kind"},
 	{"noowner+1kind", "", []string{"rlm_inbox_cursor"}, "unserved"},
-	{"owner+allkinds", "owner-1", nil, "old"},
+	{"owner+allkinds", "owner-1", nil, "kind-sorted"},
 }
 
 // The plan is read from the production statement (runMemoryAgentListQuery),
@@ -234,9 +236,9 @@ func TestRunMemoryKindIndexPlanHasNoFullRangeWalk(t *testing.T) {
 			if strings.Contains(p, "Filter") {
 				t.Errorf("%s still filters above the index (a full-range walk):\n%s", shape.name, p)
 			}
-		case "old":
-			if strings.Contains(p, kindIndexCols) {
-				t.Errorf("%s moved to the kind index:\n%s", shape.name, p)
+		case "kind-sorted":
+			if !strings.Contains(p, kindIndexCols) || !strings.Contains(p, "Sort(run_memory_entries.created_at ASC, run_memory_entries.seq ASC)") {
+				t.Errorf("%s is not the kind index range sorted on (created_at, seq):\n%s", shape.name, p)
 			}
 		}
 	}
@@ -364,6 +366,14 @@ func TestRunMemoryKindIndexKeepsTheWitnessSchemaObservation(t *testing.T) {
 	without, withoutPath := vocabUpcastOpenStore(t, "schema-without-index")
 	if _, err := without.db.Exec(`DROP INDEX ` + testRunMemoryKindIndex + ` ON run_memory_entries`); err != nil {
 		t.Fatal(err)
+	}
+	// owner_id is MUL through the legacy owner-leading indexes, which a store
+	// not yet through the index diet still has (a fresh store no longer does:
+	// after the diet the kind index is the only one, so dropping it moves
+	// owner_id's Key, TestRunMemoryIndexDietWithoutTheKindIndexMovesTheWitness).
+	// The kind index must add no Key to a store that has them.
+	for _, st := range []*Store{with, without} {
+		auditSetIndexes(t, st, map[string]bool{idxOwnerLoopSeq: true, idxOwnerAgentCreate: true, idxParent: true})
 	}
 	a := runMemorySchemaObservations(t, with, withPath)
 	b := runMemorySchemaObservations(t, without, withoutPath)
