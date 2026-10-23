@@ -38,6 +38,8 @@ So there are two kinds of work, and they get different treatment:
   catalog entry and a staged rollout. The owner approves it with one act.
 
 This is a plan. Section 6 names the smallest slice worth building first.
+The owner answered this document's open questions on 2026-10-23 (UTC).
+Section 9 records the rulings, and the sections they affect say so.
 
 ## Summary
 
@@ -66,9 +68,10 @@ This is a plan. Section 6 names the smallest slice worth building first.
 6. **Per-computer pins stay computer-owned.** The paper's pin to
    gpt-6-luna is an owner-edited `System/model-policy.toml` on the paper.
    The code today makes that pin soft: on failover it falls back to the
-   rest of the default pool. The design fixes that, and adds a
-   gateway-side backstop so a new route never reaches the paper or the
-   owner's computers first.
+   rest of the default pool. The design fixes that (owner ruling R2,
+   2026-10-23: before launch, a pinned model fails rather than falls
+   back), and adds a gateway-side backstop so a new route never reaches
+   the paper or the owner's computers first.
 7. **Onboarding is run by management on the owner's computer.** Research
    reads the provider's docs into citable captures. A host prober (trusted
    compiled code in the gateway, never a guest) runs the probe suite
@@ -280,9 +283,10 @@ prompt cache is kept, exactly as OpenCode does today.
 What this does not protect, stated plainly as FP9 did for the escrow key
 (`docs/definitions/choir-launch-fp9-keys-recovery-2026-10-21.md`, FP9-C2):
 a root read of Node B's filesystem gets the KEK and the records together.
-Moving the KEK into a TPM (`LoadCredentialEncrypted=`) or unlocking it
-over the network after boot is the open FP9 owner decision. This vault
-inherits that decision rather than opening a second one.
+Owner ruling R5 (2026-10-23): for now the KEK is only kept out of
+backups. A TPM (`LoadCredentialEncrypted=`) or a network unlock after boot
+is deferred, together with the same open FP9 decision, rather than opened
+as a second one.
 
 ### 2.3 Who can read a value
 
@@ -357,11 +361,12 @@ alone:
   therefore never waits on the owner, and re-enabling it is a step-up act.
 
 **Who is "the owner" here?** No platform-owner principal exists (section
-1). The smallest choice is a host allowlist of one user ID,
-`CHOIR_PLATFORM_OWNERS`, read by the proxy, auth and the gateway, and set
-in `nix/node-b.nix` by a reviewed commit, as `CORPUSD_AUTOPAPER_OWNERS` is
-today. The owner's account (`5bd6de97…`) would be its only member. This
-is an owner decision (section 9).
+1). Owner ruling R1 (2026-10-23): vault and host-policy acts are the
+owner's alone. They are admitted by a host allowlist holding one user ID,
+the owner's account (`5bd6de97…`): `CHOIR_PLATFORM_OWNERS`, set in
+`nix/node-b.nix` by a reviewed commit, as `CORPUSD_AUTOPAPER_OWNERS` is
+today, and read by the proxy, auth and the gateway. There is no second
+seat.
 
 ### 2.6 Swap, revoke and replace
 
@@ -403,6 +408,17 @@ These are pure owner acts. No agent and no script takes part.
   - In both cases the gateway writes back its own refreshed tokens. That
     is a vault write by the gateway alone. Each one adds an audit line
     with the reason `oauth_refresh` and needs no owner act.
+  - **Usage scope** (owner ruling R4, 2026-10-23: "Fine for my usage. Not
+    for production usage to customers"). Every `oauth_account` entry
+    carries `usage_scope: owner_only`. The gateway draws an `owner_only`
+    entry only for a call from one of the owner's own computers, which it
+    knows from the bearer (`handlers.go:384`). It never draws one for
+    customer computers, and never for the production traffic customers
+    see. When no other entry exists, a call from any other computer finds
+    the provider's pool empty for it, and the call fails. Several ChatGPT
+    accounts in one pool are therefore for the owner's usage only. Whether
+    the paper's pre-launch traffic counts as the owner's usage is not yet
+    ruled (section 9).
 
 ### 2.7 Hot reload
 
@@ -556,10 +572,11 @@ never writes a guest file. Two changes make pins mean what they say:
    Synthetic joins, "luna, then synthetic". The fix: a role that names a
    provider and model gets the fallbacks the file names
    (`fallback = "pool:default"` or a list), and none by default. That is
-   already the rule for the management-task pin (`:156-160`). The cost is
-   real: a luna outage then fails the paper's turns instead of moving them
-   to deepseek. If the paper should fail over to a known-good model, its
-   file names that model explicitly (section 9).
+   already the rule for the management-task pin (`:156-160`). The cost:
+   a luna outage fails the paper's turns instead of moving them. Owner
+   ruling R2 (2026-10-23) accepts that cost before launch: "I'd rather
+   them fail than fallback. We are still pre-launch." Problem record:
+   `docs/problems/paper-luna-pin-inherits-pool-fallbacks-2026-10-22.md`.
 2. **The host admits new routes to the paper and the owner's computers
    last.** `admission.platform` and `admission.owner` require the
    `target` stage, held for a soak period. Even if a guest file names
@@ -573,6 +590,20 @@ never writes a guest file. Two changes make pins mean what they say:
 The paper therefore stays pinned to gpt-6-luna in two independent ways:
 its own file, and the host's admission rule.
 
+**Tonight's run under R2 and R3.** The owner's words for the overnight
+paper run: "Just ChatGPT luna and synthetic DeepSeek 1017 tonight. I'd
+rather them fail than fallback" and "Don't use Opencode as fallback
+tonight." The code does not do that by default. A thread that names a
+pool gets the pool's other members as fallbacks (`Assign`,
+`model_policy.go:234-240`). So a paper file naming a two-member pool of
+luna and Synthetic would move a failed Synthetic thread to luna, and a
+failed luna thread to Synthetic. That is a fallback the owner ruled out.
+A file that names the concrete models gets no pool fallbacks only after
+the 1a change. Until 1a lands, a concrete pin in today's default pool
+falls back to opencode-go, which R3 forbids. FP0 should check
+`llm_fallbacks` in the paper's run metadata (`model_policy.go:164-166`):
+empty is the ruling, and a non-empty value is a breach to record.
+
 ### 3.5 The owner's 50/50, as data
 
 The owner's target is this version of the default pool:
@@ -581,9 +612,15 @@ The owner's target is this version of the default pool:
 default = [
   synthetic/<deepseek-v4.1-flash-1017 id from Synthetic's docs>  weight 1
   chatgpt/gpt-6-luna                                              weight 1
-  opencode-go/deepseek-v4.1-flash                                 fallback_only   (owner decision, section 9)
 ]
 ```
+
+OpenCode is not in it, not even as `fallback_only` (owner ruling R3,
+2026-10-23). Before launch, a pool member's failure ends the thread's
+turn with the error instead of moving to the other member. This reads R2
+as covering this pair, which is the pair it named. In
+the policy document that is a per-pool `failover: none` setting, which
+the 1a change also makes possible for pools.
 
 This is a stage target, reached through section 4's rollout. It is not
 written on day one.
@@ -833,8 +870,9 @@ Class: whatever the lane declares (red: provider calls).
 removes the script from key care and protects the pins.
 
 - 1a. **Pin hardening.** A concrete-model role gets no pool fallbacks
-  unless its file names them (3.4.1). It needs a failing test first, then
-  the change. Class: orange, with full ceremony, because it touches model
+  unless its file names them (3.4.1). A pool can say `failover: none`, so
+  under R2 its members fail instead of moving to each other (3.5). It
+  needs a failing test first, then the change. Class: orange, with full ceremony, because it touches model
   routing. Rollback: revert. Protected surface: provider and model routing.
 - 1b. **Vault at rest, with env fallback.** Sealed records, the KEK as a
   gateway-only credential excluded from backup, the hidden directory, a
@@ -885,8 +923,8 @@ pool, per-task routing finer than a pool, and cost-aware routing.
    The owner settled four inputs: the vault and panel idea, multi-key and
    multi-account, key care with no agent, and agentic onboarding (all
    2026-10-22). The paper's luna pin (21:4x) and tonight's overnight
-   override are also owner decisions. Everything else here waits for
-   ratification.
+   override are also owner decisions, and so are rulings R1 to R5 of
+   2026-10-23 (section 9). Everything else here waits for ratification.
 2. **Does it conform to settled decisions?**
    - Two Dolt stores: yes. It adds no Dolt store. Vault and policy are
      gateway files (3.1).
@@ -952,24 +990,40 @@ pool, per-task routing finer than a pool, and cost-aware routing.
     the owner's routes, and no CSP is set (`computer_surface.go:12-30`).
   - No owner act requires step-up (`owner_acts.go:25-39`).
   - No platform-owner principal exists.
-  - Each of these deserves its own problem record before any fix, per the
-    repo's problem-documentation-first rule.
+  - Each now has its own problem record, written before any fix:
+    - `docs/problems/paper-luna-pin-inherits-pool-fallbacks-2026-10-22.md`
+    - `docs/problems/deploy-provider-creds-puts-keys-in-ssh-argv-2026-10-22.md`
+    - `docs/problems/provider-keys-ride-in-off-host-backup-2026-10-22.md`
+    - `docs/problems/guest-served-desktop-on-owner-origin-without-csp-2026-10-22.md`
+    - `docs/problems/no-step-up-and-no-platform-owner-2026-10-22.md`
 - **Introduced:** none. This document changes nothing.
 - **Repaired:** none.
 
-## 9. Open questions for the owner
+## 9. Owner rulings (2026-10-23 UTC)
 
-1. **Platform owner.** Is a one-entry allowlist of your user ID
-   (`CHOIR_PLATFORM_OWNERS`, set by commit) the right authority for vault
-   and host-policy acts? Or should there be a second owner seat?
-2. **The paper's failover.** With pin hardening, a gpt-6-luna outage fails
-   the paper's turns instead of moving them to deepseek. Should the
-   paper's file name an explicit failover model? If so, which one?
-3. **OpenCode in the 50/50.** Should opencode-go/deepseek-v4.1-flash stay
-   in the default pool as `fallback_only` (it is at 89% of its quota), or
-   leave the pool?
-4. **Several ChatGPT accounts.** Is pooling several ChatGPT subscription
-   accounts behind one gateway acceptable to you, given the provider's
-   terms?
-5. **The KEK.** TPM, network unlock, or "sealed against backups only" for
-   now? This is the same FP9 decision. This vault would follow it.
+The owner answered this document's five open questions, relayed by FP0.
+Each answer is quoted verbatim.
+
+- **R1. Platform owner.** "Yes, just for me." Vault and host-policy acts
+  are owner-only. A committed allowlist holding the owner's user ID admits
+  them (2.5). There is no second seat.
+- **R2. Fail, do not fall back.** "Just ChatGPT luna and synthetic
+  DeepSeek 1017 tonight. I'd rather them fail than fallback. We are still
+  pre-launch." Before launch, a pinned model fails instead of falling
+  back, and so do the two members of tonight's pair (3.4, 3.5, slice 1a).
+  When launch comes, the owner revisits this.
+- **R3. No OpenCode fallback.** "Don't use Opencode as fallback tonight."
+  OpenCode is not a fallback, and it is not in the target pool even as
+  `fallback_only` (3.5).
+- **R4. Several ChatGPT accounts.** "Fine for my usage. Not for
+  production usage to customers." Pooling several ChatGPT accounts is
+  allowed only for the owner's own usage, never for customers'
+  production traffic. That is enforced by `usage_scope: owner_only` (2.6).
+- **R5. The KEK.** "For now just kept out of backups." The vault key is
+  excluded from the backup. A TPM or network unlock is deferred (2.2).
+
+Still open, and genuinely the owner's to settle:
+
+1. Does the paper's pre-launch traffic count as "my usage" under R4? The
+   paper is a platform computer whose stories the public reads. Until the
+   owner says yes, it does not draw `owner_only` ChatGPT accounts.
