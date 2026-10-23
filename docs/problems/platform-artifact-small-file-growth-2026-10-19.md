@@ -900,3 +900,80 @@ Node B. Rollback: `git revert` of the fix commit; the command is run by hand.
 
 Tests: `go test ./internal/taperepack/... ./cmd/taperepack/...` passes (63 s
 and 41 s); the F tests fail on beaca6d75 (F1, F2, F3, F5, F6).
+
+### Review round 2 on fd09566db: findings, before any fix (FP10, 2026-10-22, bunch 139)
+
+Three reviews of the round-1 fixes: devin REJECT, deepseek v4.1 flash REJECT,
+gemini 3.8 ACCEPT. Every round-1 fix (F1 to F8) was verified by all three. Two
+seats independently reproduced a new hole in the attribution that round 1 did
+not touch.
+
+**R1 (HIGH, devin Finding 1 and deepseek B1; r4 violation; blocking).**
+Attribution edges come only from legacy `sha256/pin-receipts/*.json`
+(`list.go`). With `PLATFORM_TAPE_SEGMENTS=write` (on in production since
+`d9649b191`), `pin` takes `pinSegmented` -> `stageSegmented`; when the legacy
+artifact file already exists, `stageSegmented` takes its reuse branch
+(`tape_segments_write.go`): it refreshes the mtime (`Chtimes`) and stages no
+segment artifact record, and `pin` appends only the receipt to the computer's
+segment and returns (`event_artifacts.go`). No legacy receipt file is written.
+So computer B, re-pinning an artifact that A already pinned through legacy,
+has a receipt only in B's segment and reads the bytes through the shared
+legacy file. The repack attributes the file to A alone, A has a sealed copy,
+the verdict is `covered`, and `delete --apply` unlinks the one file B still
+needs: no legacy file, no segment record, dangling receipt. Reproduced end to
+end by deepseek (full census, full delete, B's read fails `not found`). It is
+independent of `--computer`, and a healthy census does not see it. Reachability
+needs two computers pinning identical bytes (the premise of round-1 F1);
+the flag has been `write` since `d9649b191`.
+
+Fix inside the repack (the production pin path is not changed in this lane):
+the list phase also collects the pin receipts recorded in every computer's
+segments, sealed and unsealed (attribution must be complete even though only
+sealed copies count toward coverage), and spills their edges like the legacy
+ones. If a computer's segments cannot be listed or read, or a receipt record
+cannot be read, the run is unhealthy and deletes nothing: the files it could
+name cannot be known. Regression test: B's only receipt for X is in B's
+segment, A has a legacy receipt and a sealed copy; `delete --apply` must not
+unlink X (fails on fd09566db).
+
+Named residual for a separate lane (pin side): `stageSegmented`'s reuse branch
+should also stage the artifact record in the pinning computer's segment when
+the artifact exists only as a legacy file, so a segmented pin is
+self-sufficient and does not depend on a shared legacy file surviving. That
+changes the production pin path (red) and is not in this lane.
+
+**R2 (MEDIUM, devin TOCTOU).** The edge set is frozen at list time for a pass
+that takes hours. A legacy-mode repin lands its receipt file after the list;
+every repin path refreshes the artifact's mtime. `unlinkCovered` checks size
+only. Fix: record the run's list start; `unlinkCovered` refuses a file whose
+mtime is newer than it. (Under the segmented flag the refresh is the only
+signal of the repin that reaches the file, so this also covers a repin landing
+mid-run.)
+
+**R3 (LOW to MEDIUM, deepseek L1; fail-open in the attribution direction).**
+Two places drop a receipt and so remove a requirement: the round-1 shape guard
+(`receipt.go`: empty signature set, other version) makes the receipt attribute
+nothing, and `decide` skips an edge that is ineligible, has a length that is
+not the file's, or (events) names a computer other than the one in the event.
+The round-1 note "can only add a required copy" was wrong for both. A file
+needed by A (eligible) and by B (an odd receipt) was judged on A alone. Fix:
+count dropped receipts, mark the run unhealthy and refuse the files they
+name; a receipt that cannot name a file at all (unparseable) refuses all
+deletion in that run.
+
+**R4 (LOW, deepseek L2; gate freshness).** `state.matches` does not record
+census-versus-delete and `scan/` is shared; the claim is that a crash before
+the wipe lets a later census reuse stale bucket results with a fresh
+`Finished`. Checked against the code before any change: `prepare` loads a saved
+state only for an `Apply` run without `--fresh`, from the `apply/` directory;
+a census or `Delete`'s verification pass is never an `Apply` run, so it always
+wipes `scan/` before listing, and `matches` already compares `Copy` and
+`Apply`. The reuse path described does not exist. Disposition below.
+
+Nits (devin section 3, deepseek L3), disposition below: exit 3 only tested at
+report level; the delete erases the receipt files whose edges it used, so
+artifacts pinned only by a deleted receipt are `unreceipted` in later passes
+(fails closed, later passes are less complete); legacy directories lack the
+`requirePlainDir` hardening of the segment path (root-only); fsynced but
+unsealed live-writer records stay uncovered (round-1 F2 cost); the P4 and F7
+guards use the substring `name(` so `os.Remove (p)` evades them.
