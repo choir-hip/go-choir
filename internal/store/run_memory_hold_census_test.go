@@ -270,6 +270,29 @@ func runMemoryHoldCensus(t *testing.T, total, hot int) {
 	})
 	report("variant A: narrow projection (details_json only), same index", f, b, r, by)
 
+	// What LoadInboxCursorForDesk needs is the maximum cursor, so it needs
+	// neither the order nor any column but details_json (and kind, which the
+	// filter already fixes). No new index, no schema change.
+	narrowUnordered := `SELECT details_json FROM run_memory_entries WHERE agent_id = ? AND owner_id = ? AND kind IN (?)`
+	f, b, r, by = rmTimeRead(t, func() int {
+		rows, err := s.db.QueryContext(ctx, narrowUnordered, "agent-hot", rmOwner, "rlm_inbox_cursor")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		n := 0
+		for rows.Next() {
+			var d string
+			if err := rows.Scan(&d); err != nil {
+				t.Fatal(err)
+			}
+			n++
+		}
+		return n
+	})
+	report("variant E: narrow projection, no ORDER BY, same index (no new index)", f, b, r, by)
+	t.Logf("variant E plan:\n%s", explainEventTablePlan(t, s, narrowUnordered, "agent-hot", rmOwner, "rlm_inbox_cursor"))
+
 	idxStart := time.Now()
 	if _, err := s.db.ExecContext(ctx, `CREATE INDEX idx_rm_census_owner_agent_kind_created ON run_memory_entries(owner_id, agent_id, kind, created_at)`); err != nil {
 		t.Fatal(err)
