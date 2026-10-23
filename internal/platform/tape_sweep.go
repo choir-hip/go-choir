@@ -280,7 +280,9 @@ type tapeSweepState struct {
 	// before the append-receipt check, to simulate live appends during the walk.
 	afterReferences func()
 	// extraRefsMax caps the unique digests the extra-refs route holds and
-	// answers; 0 means defaultTapeExtraRefsMax.
+	// answers; 0 means defaultTapeExtraRefsMax. Test-only: set before the
+	// route is called and never written in production, so it is read without
+	// the sweep lock.
 	extraRefsMax int
 }
 
