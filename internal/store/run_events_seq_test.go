@@ -65,10 +65,16 @@ func TestRunEventFoldedIntoLifecycleBatchGetsSeq(t *testing.T) {
 		before.Seq, before.StreamSeq, after.Seq, after.StreamSeq)
 
 	// Control: the unfiltered object-graph read does see the event, with the numbers it was stored with.
-	og, err := s.ListEventsOG(ctx, run.RunID, 100)
+	// (ListEventsOG was deleted by the event-table work; read og_objects directly.)
+	objs, err := s.ogListByMetadata(ctx, ogKindEvent, "run_id", run.RunID, 100)
 	if err != nil {
 		t.Fatalf("list events OG: %v", err)
 	}
+	entries, err := objectEventEntries(objs)
+	if err != nil {
+		t.Fatalf("decode events OG: %v", err)
+	}
+	og := eventRecords(entries, 100)
 	var stored *types.EventRecord
 	for i := range og {
 		if og[i].EventID == "ev-folded" {
@@ -289,4 +295,3 @@ func TestAllocateEventSeqSharedRecordTakesOneNumber(t *testing.T) {
 		}
 	}
 }
-

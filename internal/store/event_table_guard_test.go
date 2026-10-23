@@ -69,7 +69,7 @@ func stringLiterals(node ast.Node) []string {
 // union-aware, a writer, or the acknowledged-only channel read. A new reader
 // of ogKindEvent fails here until someone decides which.
 var ogKindEventFunctions = map[string]string{
-	"AppendEvent":                     "writer; both seeds read both tables",
+	"allocateEventSeqLocked":          "writer; the one allocator of seq and stream_seq: both seeds read both tables",
 	"AppendEventOG":                   "writer",
 	"buildEventObject":                "writer",
 	"recheckTelemetryOp":              "writer (the sealer's second look)",
