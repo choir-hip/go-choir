@@ -1347,6 +1347,47 @@ func (s *DoltStore) ListObjectsPage(ctx context.Context, kind, afterCanonicalID 
 	return out, rows.Err()
 }
 
+// ObjectsByKindOwnerComputerPageSQL is one keyset page of the objects of one
+// kind, one owner and one computer_id (the empty string is a value: the
+// legacy, computer-less rows). The (object_kind, owner_id, computer_id) index
+// carries canonical_id as its suffix, so the engine seeks the scope and the
+// cursor and reads `limit` index entries in order, with no sort; ListObjectsPage's
+// plan for the same cursor reads every remaining row of the kind into a TopN.
+// A store without that index (a populated store never migrated) answers the
+// same rows through idx_og_objects_kind_owner, which every store has.
+const ObjectsByKindOwnerComputerPageSQL = `SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by
+	 FROM og_objects
+	 WHERE object_kind = ? AND owner_id = ? AND computer_id = ? AND canonical_id > ?
+	 ORDER BY canonical_id ASC LIMIT ?`
+
+// ListObjectsByKindOwnerComputerPage pages the objects of one kind, owner and
+// computer_id in canonical-ID order, strictly after afterCanonicalID. Use it
+// instead of ListObjectsPage plus a filter when the caller keeps one owner's
+// rows of one computer scope: work is bounded by the scope, not the kind.
+func (s *DoltStore) ListObjectsByKindOwnerComputerPage(ctx context.Context, kind, ownerID, computerID, afterCanonicalID string, limit int) ([]Object, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("objectgraph dolt: nil store")
+	}
+	op := "(*DoltStore).ListObjectsByKindOwnerComputerPage " + kindOpLabel(kind)
+	s.engineMu.LockAs(op)
+	defer s.engineMu.UnlockAs(op)
+	rows, err := s.db.QueryContext(ctx, ObjectsByKindOwnerComputerPageSQL,
+		kind, ownerID, computerID, afterCanonicalID, NormalizedLimit(limit))
+	if err != nil {
+		return nil, fmt.Errorf("objectgraph dolt: list objects by kind owner computer page: %w", err)
+	}
+	defer rows.Close()
+	var out []Object
+	for rows.Next() {
+		obj, scanErr := scanDoltObject(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		out = append(out, obj)
+	}
+	return out, rows.Err()
+}
+
 // ListObjectsByMetadataPage finds objects by kind + a metadata JSON path
 // equality check, continuing strictly after afterCanonicalID in canonical ID
 // order.

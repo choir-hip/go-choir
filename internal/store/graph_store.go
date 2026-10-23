@@ -759,12 +759,53 @@ func (s *Store) UpdateRunOG(ctx context.Context, rec types.RunRecord) error {
 	return s.ogStore.PutObject(ctx, updated)
 }
 
-// ListRunsByOwnerOG lists runs by owner from the object graph.
+// ogListAllObjectsByKindOwnerNoComputer pages the objects of one kind and one
+// owner whose computer_id is empty, in canonical-ID order. It reads the
+// (kind, owner, computer) index range instead of every row of the kind
+// (ogListAllObjectsByKind), which made GET /api/runs quadratic
+// (docs/problems/paper-remaining-store-stall-holders-2026-10-23.md section 4).
+func (s *Store) ogListAllObjectsByKindOwnerNoComputer(ctx context.Context, kind objectgraph.ObjectKind, ownerID string, pageSize int) ([]objectgraph.Object, error) {
+	store := s.ogReadStore
+	if store == nil {
+		store = s.ogStore
+	}
+	if store == nil {
+		return nil, fmt.Errorf("store: object graph not initialized")
+	}
+	if pageSize <= 0 {
+		pageSize = ogMetadataPageSize
+	}
+	var objects []objectgraph.Object
+	afterCanonicalID := ""
+	for {
+		page, err := store.ListObjectsByKindOwnerComputerPage(ctx, string(kind), ownerID, "", afterCanonicalID, pageSize)
+		if err != nil {
+			return nil, err
+		}
+		if len(page) == 0 {
+			return objects, nil
+		}
+		nextCursor := page[len(page)-1].CanonicalID
+		if nextCursor == "" || nextCursor <= afterCanonicalID {
+			return nil, fmt.Errorf("store: object page did not advance canonical ID cursor")
+		}
+		objects = append(objects, page...)
+		afterCanonicalID = nextCursor
+	}
+}
+
+// ListRunsByOwnerOG lists the legacy runs (no computer_id) of one owner from
+// the object graph, newest first. Lifecycle runs are
+// ListLifecycleRunsByOwner's.
 func (s *Store) ListRunsByOwnerOG(ctx context.Context, ownerID string, limit int) ([]types.RunRecord, error) {
+	return s.listRunsByOwnerOGPageSize(ctx, ownerID, limit, ogMetadataPageSize)
+}
+
+func (s *Store) listRunsByOwnerOGPageSize(ctx context.Context, ownerID string, limit, pageSize int) ([]types.RunRecord, error) {
 	if limit <= 0 {
 		limit = 100
 	}
-	objs, err := s.ogListAllObjectsByKind(ctx, ogKindRun)
+	objs, err := s.ogListAllObjectsByKindOwnerNoComputer(ctx, ogKindRun, ownerID, pageSize)
 	if err != nil {
 		return nil, err
 	}
