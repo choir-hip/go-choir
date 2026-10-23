@@ -1393,3 +1393,11 @@ Append-only. One terse entry per orchestrator pass.
   - The shared reflink images (RES-05), the uid, the tap and admission all worked. Only the test computer is affected: the paper and everything else launch direct.
   - The test computer stays down, as evidence. Rollback, if wanted: VMCTL_JAILER=off.
   - Fix direction: a static (musl) build of the same 1.17.0 pin as the jailed exec file, plus a startup check that refuses a dynamic exec file.
+- 23:3x. D26 lands, alone: the static Firecracker for jailed launches (lane/fp0-jailer-static-fc, 3 commits: 0b72fb7d1 red tests, ebfbf166e fix, 04e738943 record).
+  - VM_JAILER_FIRECRACKER_BIN is pkgsStatic of the same 1.17.0 pin: no INTERP, no NEEDED, and it runs in an empty chroot. VM_FIRECRACKER_BIN is unchanged.
+  - At start, vmctl refuses (JAILER UNAVAILABLE, so every launch goes direct) an exec file that is not ELF, is dynamic, has a different name, or prints a different --version.
+  - A NET-08 next build that is not static launches direct (next_build_not_static).
+  - Class red (vmctl launch path), behind VMCTL_JAILER_ONLY naming one test computer. Tier 1: bunch 177, Devin APPROVE (two nits: ImportedLibraries' error is ignored; a stale-record fallback).
+  - Checks: the jsfc-1 mirror PASS; PR #93 full CI 25 pass, 8 skipped; both systems evaluate; the four gates pass.
+  - Proof: vmctl logs "jailer ready". The test computer fp8-jailer-1023 launches jailed. Script steps 4 and 6 (confinement jailer; vmm_confinement_verify --expect jailer), and jail_files shows the shared images.
+  - Rollback: VMCTL_JAILER=off (one setting), or a revert of D26.
