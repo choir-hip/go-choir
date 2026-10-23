@@ -631,3 +631,18 @@ head (0aa462439).
 | R3-F1 numeric reads unbounded | Fixed (27566d828): every compared number is 1 to 15 digits and read as decimal (`10#`), and a `[` that errors refuses the deploy (`at_least`/`refuse`) at the guard and at both free-space checks. Test P8 (20-digit floor and `df` readings, min-free 2^63, leading zeros) failed first (9e0bee653). |
 | R3-F2 guard margin fixed at 10 GiB | Fixed (27566d828): the guard is live `min-free` + 36 GiB, the floor's own terms, so the overlap fits for every `min-free`; the fail-closed floor is the old band's 80 + 36 = 116 GiB. Test P9 (min-free 40 GiB admitted 65 GiB free) and P4 (a hand-set 56 under min-free 24 kept) failed first (9e0bee653). |
 | R3-F3 file, not daemon | Kept the file as the source, with the evidence in the script's comment and in Residuals: NixOS restarts nix-daemon when the file changes at a switch, a failed switch fails the deploy, and `nix config show` reads the same file in the client, so it adds no daemon reading and no disagreement to fail closed on. Step 2 stays the hold. |
+
+## Owner ruling: retention to enforce (2026-10-23)
+
+Owner, 02:3x UTC: "Yes, do nix retention change from observe to enforce."
+D6's observe run on Node B (02:12, by hand) would unroot 25 builder
+releases, 13 to 18 days old, all older than 2026-10-13, and keep 30 links
+otherwise unchanged; the newest 2 releases and anything younger than 7 days
+stay. Enforce also keeps 3 system generations instead of 4 (the current
+system and two rollback targets). The change sets
+`GO_CHOIR_NIX_RETENTION_MODE=enforce` in go-choir-nix-gc, go-choir-disk-gc
+and the deploy preflight's default. Rollback: revert that commit (observe
+again; unrooted paths that the GC already freed rebuild from the binary
+cache or the flake). Proof: the next go-choir-nix-gc run logs `mode=enforce`
+and its `unroot` lines; `find /var/lib/go-choir/builder/releases -type l | wc -l`
+falls to the kept set; free space before and after.
