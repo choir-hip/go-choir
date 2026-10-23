@@ -2382,17 +2382,30 @@ var streamSeedWindows = []int{2000, 50000}
 // updated_at) index, and the engine plans "this kind ordered by updated_at"
 // as the kind index and a sort of every row of the kind, which held the
 // engine for 104 s on the paper; this read cannot take that plan. A window
-// holding no event is widened to the next. Events written before a stretch
-// of other kinds no longer than the widest window are found.
+// holding no event is widened to the next.
 //
-// One case the windows do not cover: events exist, and every one is older
-// than the newest streamSeedWindows[last] objects of all kinds. The seed then
-// falls back to the exact read it used before (seedStreamSeqExact: the kind
-// index, the 500 newest events by updated_at, with bodies). That read is the
-// 104 s scan on a large history, so it is slow, and it is never silent: it logs
-// the case and its duration. It exists so a restart can never hand out a
-// stream_seq twice; the rare slow seed is the price. A persisted high-water
-// mark (option 2 of the problem record) would make that case fast too.
+// When no window holds a usable event, in order:
+//   - the whole store was read and held none: the og half is 0;
+//   - choir_events holds events: an og event older than the newest
+//     streamSeedWindows[last] objects is older than the table's newest under
+//     the same newest-carries-max assumption, so the table's maximum stands
+//     (after the event-table stamp most kinds live there, and this is the
+//     common case; the exact read would be a scan at every boot);
+//   - the table is empty and the kind still holds events, or a window event
+//     has no parseable stream_seq in its metadata: the exact read it used
+//     before (seedStreamSeqExact: the kind index, the 500 newest events by
+//     updated_at, with bodies). That is the 104 s scan on a large history, so
+//     it is slow, and it is never silent: it logs the case and its duration.
+//     It exists so a restart does not hand out a stream_seq twice.
+//
+// The reuse band that remains is the assumption itself, not the bound: an
+// event whose stream_seq is the maximum but whose updated_at (the caller's
+// Timestamp, or CreatedAt, or a wall clock that stepped back) puts it behind
+// the newest streamSeedWindows[last] objects, while another event is inside a
+// window. The old seed shared the assumption over the newest 500 events and
+// caught a case this one does not (an event inside the newest 500 events but
+// outside the newest 50,000 objects). A persisted high-water mark (option 2 of
+// the problem record) closes the band; it is not built here.
 // The event table half (eventTableNewestStreamSeq) is bounded by its key.
 func (s *Store) seedStreamSeq(ctx context.Context, sl *telemetrySealer) error {
 	graph := s.ogStore
@@ -2400,7 +2413,7 @@ func (s *Store) seedStreamSeq(ctx context.Context, sl *telemetrySealer) error {
 		return fmt.Errorf("append event: seed stream_seq: object graph not initialized")
 	}
 	var maxSeq int64
-	found, sawAll := false, false
+	found, sawAll, unusable := false, false, false
 	for _, window := range streamSeedWindows {
 		headers, err := graph.ListNewestObjectHeaders(ctx, window)
 		if err != nil {
@@ -2410,43 +2423,53 @@ func (s *Store) seedStreamSeq(ctx context.Context, sl *telemetrySealer) error {
 			if h.Kind != ogKindEvent {
 				continue
 			}
-			found = true
 			var meta struct {
-				StreamSeq int64 `json:"stream_seq"`
+				StreamSeq *int64 `json:"stream_seq"`
 			}
-			if err := json.Unmarshal(h.Metadata, &meta); err != nil {
+			if err := json.Unmarshal(h.Metadata, &meta); err != nil || meta.StreamSeq == nil {
+				unusable = true // an event whose number this read cannot see
 				continue
 			}
-			maxSeq = max(maxSeq, meta.StreamSeq)
+			found = true
+			maxSeq = max(maxSeq, *meta.StreamSeq)
 		}
 		sawAll = len(headers) < window
 		if found || sawAll {
 			break
 		}
 	}
-	if !found && !sawAll {
-		// Every window was full of other kinds. One seek of the kind index
-		// tells "no events at all" from "events out of reach".
+	tableStream, err := s.eventTableNewestStreamSeq(ctx)
+	if err != nil {
+		return err
+	}
+	reason := ""
+	switch {
+	case unusable:
+		reason = "an event in the newest objects has no parseable stream_seq in its metadata"
+	case found, sawAll, tableStream > 0:
+		// the bounded answer, an empty store, or the table's maximum
+	default:
+		// Every window was full of other kinds and the table is empty. One
+		// seek of the kind index tells "no events at all" from "events out
+		// of reach".
 		exists, err := graph.HasObjectOfKind(ctx, ogKindEvent)
 		if err != nil {
 			return fmt.Errorf("append event: seed stream_seq: %w", err)
 		}
 		if exists {
-			started := time.Now()
-			exact, err := s.seedStreamSeqExact(ctx)
-			if err != nil {
-				return err
-			}
-			maxSeq = max(maxSeq, exact)
-			log.Printf("store: stream_seq seed: choir.event objects exist but none is among the newest %d objects, out of reach of the bounded seed; took the exact read of the kind, max stream_seq %d, took %s", streamSeedWindows[len(streamSeedWindows)-1], exact, time.Since(started).Round(time.Millisecond))
+			reason = fmt.Sprintf("choir.event objects exist but none is among the newest %d objects, out of reach of the bounded seed", streamSeedWindows[len(streamSeedWindows)-1])
 		}
 	}
-	s.maxStreamSeq = max(s.maxStreamSeq, maxSeq)
-	tableStream, err := s.eventTableNewestStreamSeq(ctx)
-	if err != nil {
-		return err
+	if reason != "" {
+		started := time.Now()
+		exact, err := s.seedStreamSeqExact(ctx)
+		if err != nil {
+			return err
+		}
+		maxSeq = max(maxSeq, exact)
+		log.Printf("store: stream_seq seed: %s; took the exact read of the kind, max stream_seq %d, took %s", reason, exact, time.Since(started).Round(time.Millisecond))
 	}
-	s.maxStreamSeq = max(s.maxStreamSeq, tableStream)
+	s.maxStreamSeq = max(s.maxStreamSeq, maxSeq, tableStream)
 	s.streamSeqSeeded = true
 	if sl != nil && s.maxStreamSeq > 0 {
 		s.maxStreamSeq += telemetrySeqGap // see the per-run seed above

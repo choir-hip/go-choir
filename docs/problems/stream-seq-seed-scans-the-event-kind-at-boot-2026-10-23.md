@@ -276,7 +276,7 @@ the bound never trades away the invariant.
   rate); the tests exercise it (2,600 later
   objects of another kind; the widening).
 - The exception, now fail-safe (coordinator change request after the first
-  push): events exist and every one is older than the newest 50,000 objects of
+  push; narrowed to an empty event table by Round 2 below): events exist and every one is older than the newest 50,000 objects of
   all kinds. The first version logged and seeded from the event table alone,
   which could reuse a number; reuse is a correctness defect in red code. The
   seed now falls back to the exact read it used before
@@ -336,3 +336,67 @@ one `ListObjects choir.event` on the first append).
 3. Boot `ListAllObjectRefsByKindOwner(choir.run)` is linear in run history.
 4. Option 2, the persisted high-water mark, to make the out-of-reach case
    fast too, if its log line is ever seen on a computer.
+
+## Round 2 (Devin's review, accepted)
+
+### F2: the exact read must not be the common case after the event-table stamp
+
+About 94% of event kinds go to `choir_events` once deploy 2's writer stamps.
+"No og event in the newest 50,000 objects" then stops being rare, and every
+boot would have paid the exact scan with a misleading log line. Now, when the
+og windows hold no usable event: a whole-store read that held none seeds 0; a
+non-empty `choir_events` seeds its maximum (an og event older than every
+window is older than the table's newest under the same newest-carries-max
+assumption); only an empty table with events still in the kind, or an
+unreadable window event (below), takes the exact read. Tests:
+`TestStreamSeqSeedUsesTheTableWhenTheWindowsHoldNoEvent` (og events 1 to 3, a
+table holding 4 to 9, 400 newer objects of another kind: seeds above 9, the
+exact read's engine-mutex op never ran, no "out of reach" line) failed before
+the change; `TestStreamSeqSeedSaysWhenEventsAreOutOfReach` (empty table) still
+takes the exact read.
+
+### F1: the reuse band, stated plainly
+
+The seed keeps the old seed's assumption, "the newest events carry the
+maximum stream_seq", and is weaker than the old seed in one band. It can seed
+below a stored number when all of these hold:
+
+- An event holds the maximum `stream_seq` but sits behind the newest 50,000
+  objects of all kinds in `updated_at` order, and another event is inside a
+  window (so the seed counts as found and reads no further). `updated_at` of
+  an event object is the caller's `Timestamp` (`AppendEventOG`, the sealer),
+  `run.UpdatedAt` (`lifecycle.go` fold) or `CreatedAt`
+  (`runtime_persistence.go`), not the allocation time. Three ways to land an
+  event behind: a backdated timestamp; a wall-clock regress (an NTP step, a
+  snapshot resume) that sorts every later write behind earlier objects; or
+  `updated_at` ties bisected at a window edge.
+- The old seed caught the case "an event inside the newest 500 events but
+  outside the newest 50,000 objects" (a backdated event plus a large burst of
+  non-event objects on a store with under 500 newer events). This one misses
+  it silently.
+
+It is inherited in kind and narrower in expectation than the 104 s boot stall
+it removes, but it is not zero, and the earlier sentence "the bound never
+trades away the invariant" is true only under the shared assumption. The exact
+close is option 2, a persisted high-water mark; the log lines cannot see this
+band, because a found event suppresses the fallback.
+
+The cheap part is fixed: a window event whose metadata has no parseable
+`stream_seq` used to count as found and contribute 0. It now counts as
+unusable and sends the seed to the exact read, which decodes the body. Test:
+`TestStreamSeqSeedDoesNotTrustAnEventWithoutMetadataSeq` (an event whose
+metadata lacks `stream_seq` and whose body says 7 seeds 8; it seeded 1 before).
+
+### F3: no body, pinned
+
+`TestNewestObjectHeadersPlanWalksTheTimeIndex` now also requires the plan's
+projections to be `[og_objects.object_kind, og_objects.metadata]` and the
+table access columns `[object_kind metadata updated_at]`, and no `body`.
+
+### Forward note
+
+Once the stamp ships the og half of the seed reads mostly transition and
+incident events; the windows still bound the work. The cold hold of a
+50,000-row widening is unmeasured (warm, a 2,000-row window is 7 to 9 ms);
+the exact read is the only unbounded path, and after F2 it needs an empty
+table.
