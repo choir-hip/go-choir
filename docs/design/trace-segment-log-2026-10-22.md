@@ -724,6 +724,19 @@ yellow commit.
   5 to 8 ms on darwin (`F_FULLFSYNC`; Linux is not measured here); a run's
   page across 168 sealed segments is 2.5 ms against the 50 ms bar.
 
+**Round 2 (review bunch 132, DeepSeek, ADOPT-WITH-CHANGES on `db36de9ef`).**
+
+| Finding | Outcome |
+|---|---|
+| 1 (P1) a damaged record mid-file drops every later synced line | **Fixed** by FP0's ruling (9.2 item 4): `walk` resynchronizes with `resync`; damaged spans are counted (`damaged_records`, `damaged_bytes`), logged once per segment and stored in the `.tidx`; nothing is truncated. Tests: a flipped byte in record 3 keeps 1, 2 and 4 onward on every read path, a fake header and an embedded valid record inside a payload, two spans |
+| 2 (P1/P2) unknown versions are served around | **Fixed** (item 10): header, index and record envelope; older and newer; a reader returns the other segments' records with the error; `Open` fails and quarantines nothing. One test each |
+| 3 (P2) rebuilt `.tidx` entries bypass the cache bound | **Fixed** (item 11): summary-only rebuilds keep no entries; unsealed scans are in the cache |
+| 4 (P2/P3) `Close` does not serialize with `Retain` | **Fixed**: `Close` holds `retainMu`; `Retain` checks `closed` after taking it |
+| 5a oversized boundary | **Fixed** (`ErrTooLarge`, nothing written) |
+| 5b summary length allocated before the file length is checked | **Fixed** |
+| 5c a seal can install an index after a failing fsync | **Fixed** for the window after the fsync returns (atomic flag checked before the rename); the window before it remains, the host writer's accepted residual |
+| Dissent notes: the flock is on the inode, a same-uid rename of the directory defeats it; the fake disk over-credits concurrent fsyncs | **Declined**, no change: a per-computer VM is not a cross-tenant boundary; the concurrent test does not assert survivor completeness, and the single-threaded property test (F8) is unaffected |
+
 **What S2 needs from S1.**
 
 1. The store passes `Meta` and the serialized `EventRecord`; `AfterTapeSeq`
