@@ -314,6 +314,12 @@ func (m PoolMember) SlotWeight() int {
 // synthetic-luna fails over to nothing (NoFailover), and the default pool is
 // gpt-6-luna alone tonight: opencode-go deepseek-v4.1-flash left it (its
 // catalog entry stays), so no thread falls back to OpenCode.
+// Owner 2026-10-23 (14:4x UTC): "synthetic is using much faster... we should
+// go to chatgpt luna 100% with synthetic only as fallback for now": the
+// luna-synthetic pool. gpt-6-luna takes every thread; Synthetic's DeepSeek
+// 1017 is a fallback-only member, reached only when luna fails, and the pool
+// fails over in the normal way (it is not NoFailover). The default and
+// synthetic-luna pools are unchanged.
 func Pools() map[string][]PoolMember {
 	return map[string][]PoolMember{
 		DefaultPool: {
@@ -323,8 +329,16 @@ func Pools() map[string][]PoolMember {
 			{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", Weight: 1},
 			{Provider: "chatgpt", Model: "gpt-6-luna", Weight: 1},
 		},
+		LunaSyntheticPool: {
+			{Provider: "chatgpt", Model: "gpt-6-luna", Weight: 1},
+			{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", FallbackOnly: true},
+		},
 	}
 }
+
+// LunaSyntheticPool names the pool that runs every thread on gpt-6-luna and
+// falls back to Synthetic's DeepSeek V4.1 Flash 1017 only when luna fails.
+const LunaSyntheticPool = "luna-synthetic"
 
 // SyntheticLunaPool names the pool that splits threads between Synthetic's
 // DeepSeek V4.1 Flash 1017 and gpt-6-luna.
