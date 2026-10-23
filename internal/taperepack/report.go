@@ -186,7 +186,7 @@ type Report struct {
 	Receipt string `json:"receipt,omitempty"`
 }
 
-const reportVersion = 2
+const reportVersion = 3
 
 var namespaces = []string{"event", "payload", "receipt"}
 

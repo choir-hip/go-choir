@@ -2,6 +2,7 @@ package taperepack
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
@@ -138,7 +139,8 @@ var listing = []struct {
 }
 
 // list streams the three legacy directories into the bucket spill files and
-// reads each pin receipt once for its edge.
+// reads each pin receipt and each event body once for its edges (the join
+// reads every file again for its verdict).
 func (e *engine) list() error {
 	ls, err := newSpill(filepath.Join(e.dir, "list"), "l")
 	if err != nil {
@@ -168,10 +170,13 @@ func (e *engine) list() error {
 				if _, err := ls.w[rec[1]].Write(rec[:]); err != nil {
 					return err
 				}
-				if l.ns != tapestore.NSReceipt {
-					return nil
+				switch l.ns {
+				case tapestore.NSReceipt:
+					return e.listReceipt(es, filepath.Join(dir, name))
+				case tapestore.NSEvent:
+					return e.listLegacyEvent(es, digest, filepath.Join(dir, name))
 				}
-				return e.listReceipt(es, filepath.Join(dir, name))
+				return nil
 			})
 			if err != nil {
 				return fmt.Errorf("taperepack: list %s: %w", l.dir, err)
@@ -186,6 +191,50 @@ func (e *engine) list() error {
 		runErr = cerr
 	}
 	return runErr
+}
+
+// legacyEventsKey names the attribution error of a legacy event body that
+// could not be read or decoded.
+const legacyEventsKey = "legacy-events"
+
+// listLegacyEvent reads one legacy event file and spills an edgeRef for every
+// digest its body names, for the computer the body says it belongs to: the
+// sweep keeps what any chain event body names, segment or legacy (review
+// round 3, L1). A file that is gone makes no edge. One that cannot be read,
+// is too large to read, or does not say which computer it belongs to names
+// digests nobody can see: an attribution error, so the pass is unhealthy and
+// deletes nothing.
+func (e *engine) listLegacyEvent(es *spill, digest, path string) error {
+	e.pace.wait()
+	raw, st, err := e.readCapped(path, tapestore.MaxRecordBytes)
+	if err != nil {
+		return err
+	}
+	e.filesSeen++
+	switch st {
+	case readOK:
+	case readVanished:
+		return nil
+	default:
+		e.attrError(legacyEventsKey, fmt.Sprintf("event %s cannot be read for its references", digest))
+		return nil
+	}
+	e.st.Listing["legacy_event_bodies"]++
+	var head struct {
+		ComputerID string `json:"computer_id"`
+	}
+	if err := json.NewDecoder(bytes.NewReader(raw)).Decode(&head); err != nil || !tapestore.ValidComputerID(head.ComputerID) {
+		e.attrError(legacyEventsKey, fmt.Sprintf("event %s does not decode to a computer id", digest))
+		return nil
+	}
+	for _, d := range hexRefs(raw) {
+		for _, ns := range []tapestore.NS{tapestore.NSEvent, tapestore.NSPayload} {
+			if err := e.spillEdge(es, d, ns, head.ComputerID, 0, edgeRef); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // listReceipt reads one legacy pin receipt and spills its edge. A receipt that
@@ -291,10 +340,15 @@ func (e *engine) attrBroken() bool {
 // pin receipts and for the digests their event bodies name.
 func (e *engine) listSegments(es *spill) error {
 	return eachDirEntry(filepath.Join(e.root, tapestore.SegDirName), func(de os.DirEntry) error {
+		name := de.Name()
+		if de.Type()&os.ModeSymlink != 0 {
+			// OpenView would follow it for coverage; attribution does not.
+			e.attrError(name, "tape-seg entry is a symbolic link")
+			return nil
+		}
 		if !de.IsDir() {
 			return nil
 		}
-		name := de.Name()
 		if !tapestore.ValidComputerID(name) {
 			e.attrError(name, "tape-seg directory is not a valid computer id")
 			return nil
