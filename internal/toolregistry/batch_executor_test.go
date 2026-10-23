@@ -245,3 +245,46 @@ func TestToolResultCarriesArgumentsAndTiming(t *testing.T) {
 		t.Fatalf("duration_ms = %v, want at least the 15 ms the tool slept", result["duration_ms"])
 	}
 }
+
+// Malformed tool-call arguments (a provider can emit them; canonicalJSON passes
+// invalid JSON through) must not break the tool.result payload: that row is the
+// only durable record of the call now that tool.invoked is bus-only.
+func TestToolResultSurvivesMalformedArguments(t *testing.T) {
+	registry := NewToolRegistry()
+	if err := registry.Register(Tool{Name: "echo", Func: func(context.Context, json.RawMessage) (string, error) {
+		return "the-output", nil
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	const bad = `{"source": "fmt.Println(`
+	var invoked, result []byte
+	ExecuteToolBatch(context.Background(), registry, []types.ToolCall{
+		{ID: "c-bad", Name: "echo", Arguments: json.RawMessage(bad)},
+	}, func(kind types.EventKind, _ string, raw json.RawMessage) {
+		switch kind {
+		case types.EventToolInvoked:
+			invoked = raw
+		case types.EventToolResult:
+			result = raw
+		}
+	})
+	if len(result) == 0 {
+		t.Fatal("tool.result payload is empty: the marshal failure erased the call's record")
+	}
+	var got map[string]any
+	if err := json.Unmarshal(result, &got); err != nil {
+		t.Fatalf("tool.result payload is not JSON: %v", err)
+	}
+	if got["tool"] != "echo" || got["call_id"] != "c-bad" || got["output"] != "the-output" || got["is_error"] != false {
+		t.Fatalf("tool.result lost its identity or output: %#v", got)
+	}
+	if got["arguments_raw"] != bad || got["arguments_invalid"] != true {
+		t.Fatalf("tool.result arguments_raw/arguments_invalid = %#v / %#v, want the raw bytes and true", got["arguments_raw"], got["arguments_invalid"])
+	}
+	if _, has := got["arguments"]; has {
+		t.Fatalf("tool.result carries parsed arguments for invalid input: %#v", got["arguments"])
+	}
+	if len(invoked) == 0 {
+		t.Fatal("tool.invoked payload is empty for malformed arguments")
+	}
+}
