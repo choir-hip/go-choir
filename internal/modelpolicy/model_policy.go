@@ -162,6 +162,10 @@ func (m *Manager) EnrichMetadata(ctx context.Context, ownerID, role string, meta
 		// failover could land on a free model the pin exists to avoid.
 		fallbacks = nil
 	}
+	if assignment == AssignmentUnknownPool {
+		// Fail closed, visibly: never run the role on another pool's model.
+		metadata[MetadataPolicyError] = joinPolicyErrors(metadata, fmt.Sprintf("model policy names unknown pool %q", strings.TrimPrefix(strings.TrimSpace(selection.Model), modelcatalog.PoolSpecPrefix)))
+	}
 	metadata[MetadataSpec] = spec
 	metadata[MetadataAssignment] = assignment
 	metadata[MetadataThread] = thread
@@ -184,6 +188,13 @@ func (m *Manager) EnrichMetadata(ctx context.Context, ownerID, role string, meta
 		metadata[MetadataPolicySource] = selection.Source
 	}
 	return metadata
+}
+
+func joinPolicyErrors(metadata map[string]any, text string) string {
+	if existing := metadataString(metadata, MetadataPolicyError); existing != "" {
+		return existing + "; " + text
+	}
+	return text
 }
 
 // ThreadKey is the key a pool assignment hashes: the Texture agent for a
@@ -212,7 +223,9 @@ func SpecOf(selection provideriface.LLMSelection) string {
 // hashes the thread onto a member; the members after it are the fallbacks,
 // except in a pool that is NoFailover (no fallbacks at all).
 // A concrete model the catalog has retired is remapped to the default pool.
-// A concrete model in the default pool falls back to the rest of the pool.
+// A concrete model is a pin: it has no fallbacks, in any pool.
+// A pool the catalog does not name is not remapped: it returns the selection
+// unresolved with AssignmentUnknownPool.
 func Assign(selection provideriface.LLMSelection, thread string) (provideriface.LLMSelection, []provideriface.LLMSelection, string) {
 	model := strings.TrimSpace(selection.Model)
 	assignment := "explicit"
@@ -228,17 +241,16 @@ func Assign(selection provideriface.LLMSelection, thread string) (provideriface.
 		}
 	}
 	if pool == "" {
-		members := catalogPools()[modelcatalog.DefaultPool]
-		for i, member := range members {
-			if member.Provider == selection.Provider && member.Model == model {
-				return selection, poolSelections(rotate(members, i)[1:], selection), assignment
-			}
-		}
+		// A concrete pin fails rather than falls back (owner 2026-10-23,
+		// R2): it names one model, so it gets none of any pool's members.
 		return selection, nil, assignment
 	}
 	members, ok := catalogPools()[pool]
 	if !ok || len(members) == 0 {
-		members = catalogPools()[modelcatalog.DefaultPool]
+		// An unknown pool is not the default pool. The selection comes back
+		// unresolved (still "pool:<name>", no provider, no fallbacks) so a
+		// caller that skipped the parser's check fails visibly.
+		return selection, nil, AssignmentUnknownPool
 	}
 	index := weightedIndex(members, fnv32(thread))
 	ordered := poolSelections(rotate(members, index), selection)
@@ -249,6 +261,10 @@ func Assign(selection provideriface.LLMSelection, thread string) (provideriface.
 	}
 	return ordered[0], ordered[1:], assignment
 }
+
+// AssignmentUnknownPool is the assignment Assign reports for a pool spec the
+// catalog does not name.
+const AssignmentUnknownPool = "unknown_pool"
 
 // FormatFallbacks renders fallbacks as provider/model, comma-separated.
 func FormatFallbacks(fallbacks []provideriface.LLMSelection) string {
@@ -620,9 +636,15 @@ func parsePolicy(raw, source string) (Policy, error) {
 	if !validSelection(policy.Defaults) {
 		return Policy{}, fmt.Errorf("defaults require a pool spec or a provider and model")
 	}
+	if pool := unknownPool(policy.Defaults); pool != "" {
+		return Policy{}, fmt.Errorf("defaults name unknown pool %q", pool)
+	}
 	for role, selection := range policy.Roles {
 		if !validSelection(selection) {
 			return Policy{}, fmt.Errorf("role %q requires a pool spec or a provider and model", role)
+		}
+		if pool := unknownPool(selection); pool != "" {
+			return Policy{}, fmt.Errorf("role %q names unknown pool %q", role, pool)
 		}
 	}
 	return policy, nil
@@ -635,6 +657,20 @@ func validSelection(selection provideriface.LLMSelection) bool {
 		return len(model) > len(modelcatalog.PoolSpecPrefix)
 	}
 	return strings.TrimSpace(selection.Provider) != "" && model != ""
+}
+
+// unknownPool returns the pool a selection names when the catalog has no such
+// pool, else "". A file that names one is invalid, not remapped.
+func unknownPool(selection provideriface.LLMSelection) string {
+	model := strings.TrimSpace(selection.Model)
+	if !strings.HasPrefix(model, modelcatalog.PoolSpecPrefix) {
+		return ""
+	}
+	name := strings.TrimPrefix(model, modelcatalog.PoolSpecPrefix)
+	if len(catalogPools()[name]) == 0 {
+		return name
+	}
+	return ""
 }
 
 func parseOverlay(id, raw, source string) (policyOverlay, error) {
@@ -699,6 +735,9 @@ func parseOverlay(id, raw, source string) (policyOverlay, error) {
 	for role, selection := range overlay.Roles {
 		if !validSelection(selection) {
 			return policyOverlay{}, fmt.Errorf("overlay role %q requires a pool spec or a provider and model", role)
+		}
+		if pool := unknownPool(selection); pool != "" {
+			return policyOverlay{}, fmt.Errorf("overlay role %q names unknown pool %q", role, pool)
 		}
 	}
 	if isEmptySelection(overlay.Defaults) && len(overlay.Roles) == 0 {

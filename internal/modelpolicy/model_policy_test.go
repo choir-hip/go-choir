@@ -274,7 +274,7 @@ func TestPolicyAcceptsSyntheticLunaPool(t *testing.T) {
 }
 
 // A retired model is remapped to the default pool rather than sent to a
-// gateway that refuses it; a concrete pool member falls back to the other.
+// gateway that refuses it; a concrete pool member is a pin with no fallbacks.
 func TestAssignRemapsRetiredModelsAndPairsPoolMembers(t *testing.T) {
 	chosen, fallbacks, assignment := Assign(provideriface.LLMSelection{Provider: "chatgpt", Model: "gpt-5.6-luna"}, "traj")
 	poolSize := len(modelcatalog.Pools()[modelcatalog.DefaultPool])
@@ -282,7 +282,7 @@ func TestAssignRemapsRetiredModelsAndPairsPoolMembers(t *testing.T) {
 		t.Fatalf("retired: %q %+v %+v", assignment, chosen, fallbacks)
 	}
 	chosen, fallbacks, assignment = Assign(provideriface.LLMSelection{Provider: "chatgpt", Model: "gpt-6-luna"}, "traj")
-	if assignment != "explicit" || chosen.Model != "gpt-6-luna" || len(fallbacks) != poolSize-1 {
+	if assignment != "explicit" || chosen.Model != "gpt-6-luna" || len(fallbacks) != 0 {
 		t.Fatalf("explicit member: %q %+v %+v", assignment, chosen, fallbacks)
 	}
 	chosen, fallbacks, _ = Assign(provideriface.LLMSelection{Provider: "fireworks", Model: "some-model"}, "traj")
