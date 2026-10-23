@@ -1092,16 +1092,75 @@ build).
   **about 60 s for the two, about 90 s with R5 [H]**, with the listener down (the ratio
   is from one index; the true figure could be half or double). No data risk (`IF NOT EXISTS`, same columns), and the
   indexes and their 19 KiB of journal an append come back.
-- *Proposed fix (not built):* the old binary's DDL cannot be changed, so move the build
-  off the boot path instead. Before deploying a revert, run the operation's reverse:
-  `POST /internal/store/derived-columns?action=restore_run_memory_indexes`, one
-  `CREATE INDEX` step per dropped index under the engine mutex, listener up. The total
-  hold is the same (about 2 x 1.7 s local, 2 x 30 s on the paper [H]) but it
-  arrives as a `/health` 503 window the operator chooses, not as a boot delay, and the
-  old binary's `IF NOT EXISTS` is then a no-op. Build it only if a revert is ever planned;
-  a roll-forward fix needs none of it. The cheapest correct revert procedure on a
-  computer that has run the operation is therefore: restore the indexes first, then
-  revert.
+- *The fix, built (red, same lane): `restore_run_memory_indexes`.* The old binary's DDL
+  cannot be changed, so the build moves off the boot path. `POST
+  /internal/store/derived-columns?action=restore_run_memory_indexes` (host peer only like
+  `migrate`; loopback gets 403; a `GET` never runs it) recreates, online with the listener
+  up, every index R5 and the diet dropped, **in this order: `owner_agent_created`,
+  `owner_loop_seq`, `loop_seq`** (`owner_agent_created` first, for the witness coupling
+  below: it is the second owner-leading index, so a kind-index rollback that follows is
+  witness-neutral again). Optional `&indexes=a,b` restores a subset (a revert of the diet
+  that keeps R5 does not need `loop_seq`); an unknown name is a 400 before anything runs.
+  It is **idempotent**: an index that exists is reported `present` and costs one catalog
+  read, so a second call, or a call on a computer that never dieted, builds nothing
+  (200, all three `present`, `total_hold_ms: 0`). Each build takes the engine mutex for
+  its length like a drop does, so the write connection is released between builds. It
+  refuses (409) while a migration runs and a migration refuses while it runs. The 200
+  body is the report:
+
+  ```json
+  {"steps":[{"name":"idx_run_memory_entries_owner_agent_created","action":"created","hold_ms":541},
+            {"name":"idx_run_memory_entries_owner_loop_seq","action":"created","hold_ms":317},
+            {"name":"idx_run_memory_entries_loop_seq","action":"created","hold_ms":269}],
+   "total_hold_ms":1127}
+  ```
+
+  It is synchronous (the holds are the request's length); if the request is cut, the
+  builds that finished stay and a retry resumes (idempotent). Proven by tests: a restore
+  after the diet gives a store whose **index set, schema observation, every audited plan
+  and every answer equal the pre-diet store's** (`TestRunMemoryIndexRestoreAfterTheDietEqualsThePreDietStore`);
+  a second restore and a restore on a store that never dieted are no-ops (the table hash
+  does not move); **after a restore the old binary's `CREATE INDEX IF NOT EXISTS` lines
+  run and leave the table untouched**, i.e. build nothing
+  (`...LeavesAnOldBootDDLANoOp`); non-host callers get 403
+  (`TestDerivedColumnsRestoreEndpoint`).
+
+  **Measured holds of a restore** (the census, after the operation, three builds; the
+  longest `SELECT 1` wait equals the longest single build):
+
+  | rows | `owner_agent_created` | `owner_loop_seq` | `loop_seq` | total | second restore |
+  |---|---|---|---|---|---|
+  | 100,000 | 540 ms | 316 ms | 268 ms | 1.12 s (longest wait 542 ms) | 0 ms, 24 ms request |
+  | 425,000 | 5.28 s | 1.64 s | 1.82 s | 8.74 s (longest wait 5.27 s) | 0 ms, 54 ms request |
+
+  The first build after the drops is the slow one (5.3 s at 425,000 rows, against 1.6 to
+  1.9 s for a warm build in the earlier census; cold chunk reads). Scaled by the kind
+  index's paper/local ratio (17 times) a build on the paper is **about 30 s, the first
+  perhaps 90 s, about 2.5 minutes in all, in three separate `/health` 503 windows [H]**.
+  That is the honest cost of a revert, paid at a time the operator picks with the
+  listener up, instead of the same 2.5 minutes (60 s for the two, 90 s with R5) at the
+  reverted binary's boot with the listener down. Prefer an idle moment (the deploy's
+  deferred-refresh sweep); the always-busy computers take the same builds as a planned,
+  marker-backed refresh either way.
+
+**Rollback procedure for a revert of R5 and/or the diet (ordered).**
+
+1. On each computer that ran the operation (`GET /internal/store/derived-columns` shows
+   `run_memory_diet_indexes[*].present=false`, or `run_memory_loop_seq_index.present=false`):
+   check no migration is running (`state != "running"`), then `POST
+   /internal/store/derived-columns?action=restore_run_memory_indexes` (for a revert of the
+   diet only, add `&indexes=idx_run_memory_entries_owner_agent_created,idx_run_memory_entries_owner_loop_seq`).
+   Expect 200 and `created` for each missing index; read `total_hold_ms`. A failure (500)
+   or a cut request leaves finished builds in place: call it again.
+2. `GET` again and confirm all three are present. (Equivalently the second `POST`
+   returns all `present`.)
+3. **Then** deploy the revert. Its boot DDL finds the indexes and builds nothing. A
+   computer that never ran the operation needs no step 1.
+4. If the kind index is also being rolled back (`DROP INDEX`), do it only after step 1:
+   `owner_agent_created` must exist first or `owner_id`'s Key moves (below).
+5. Do not deploy the revert first and restore after: the reverted boot builds the
+   indexes itself, on the boot path.
+
 - *Revert the commit, store not yet migrated:* nothing changes.
 - **The kind index is now load-bearing for the witness.** After the diet it is the only
   index that leads with `owner_id`. The kind-index record's rollback ("DROP INDEX is the
@@ -1109,7 +1168,14 @@ build).
   is: dropping the kind index on a dieted store moves `owner_id` `MUL` -> empty
   (`...WithoutTheKindIndexMovesTheWitness` is exactly that store). So a rollback of the
   kind index must recreate `owner_agent_created` first (or accept the drift). The guard
-  stops the operation from creating the situation; nothing stops a manual drop.
+  stops the operation from creating the situation; nothing stops a manual drop. So
+  `Open` now says so: when neither the kind index (with its four columns) nor
+  `owner_agent_created` exists, the diet hook logs `run-memory: no (owner_id, agent_id)
+  index exists ... restore with ...action=restore_run_memory_indexes or build the kind
+  index with action=migrate` and returns the error, so the boot phase is logged as
+  failed (never a failed `Open`). It is quiet in every state that has one of them: a
+  fresh store, a pre-diet store, a dieted store
+  (`TestRunMemoryOpenWarnsWhenNoOwnerAgentIndexExists`).
 
 ### 6. Rollout **[H]**
 
@@ -1135,8 +1201,9 @@ load-bearing for the witness once the owner-leading indexes go (its documented r
 is no longer witness-neutral); a revert of any index drop is a boot-time build on the
 populated table (`schemaDDL` is the old binary's authority); `parent` is the largest
 remaining unread tree and cannot be dropped without a witness cutover. Introduced: one
-more `Open` hook (a discovery read and, on an empty table only, two drops); two more
-operation steps; a batched residue read. Repaired: two unread trees per append (19 KiB of
+more `Open` hook (a discovery read, a warning, and on an empty table only two drops);
+two more operation steps; a batched residue read; the `restore_run_memory_indexes`
+action. Repaired: two unread trees per append (19 KiB of
 journal, 26 to 28%), and a latent full scan in the residue import.
 
 ## Next (not in this pass)
@@ -1147,9 +1214,8 @@ online access-path migration, never at boot), shape 4 (the in-memory cursor)
 and shape 6 (retention). Read the new log line after the next refresh before
 choosing between them.
 
-Index diet follow-ups: `idx_run_memory_entries_parent` (13 KiB an append, no reader)
-needs a witness cutover (section "The index diet", 3); the operation's reverse
-(`restore_run_memory_indexes`) if a revert is ever planned.
+Index diet follow-up: `idx_run_memory_entries_parent` (13 KiB an append, no reader)
+needs a witness cutover (section "The index diet", 3).
 
 ## Not asked, seen
 
