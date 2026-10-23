@@ -478,9 +478,6 @@ func (u *Updater) checkStateCompatibility(manifest ReleaseManifest) error {
 	return nil
 }
 
-// readStoreSchema loads the guest store's persisted schema epoch.
-// found=false means no receipt — the store predates the contract or the
-// workspace is fresh.
 // checkStoreFloor refuses a release below the store floor
 // (storeschema/floor.go), or one that declares no epoch, on a floored store.
 // The floor sits beside the receipt and only binaries that know it write
@@ -490,10 +487,21 @@ func (u *Updater) checkStateCompatibility(manifest ReleaseManifest) error {
 // binary has floored keeps today's behaviour. A floor that cannot be read
 // refuses: the floor cannot be proven.
 func (u *Updater) checkStoreFloor(manifest ReleaseManifest, path string) error {
-	if strings.TrimSpace(u.storeSchemaPath) == "" {
+	return checkManifestAgainstFloor(u.storeSchemaPath, manifest, path, false)
+}
+
+// checkManifestAgainstFloor is the floor check shared by Apply, restorePrior,
+// RestagePinnedRelease and ImportBaseline. allowUndeclared lets a manifest
+// that declares no epoch pass: the two baseline paths stage the served SPA
+// bytes of the booted image (a genesis baseline declares no epoch), and
+// refusing it would stop checkpoint derivation on every floored computer
+// that never applied a release. A declared epoch below the floor is refused
+// on every path.
+func checkManifestAgainstFloor(storeSchemaPath string, manifest ReleaseManifest, path string, allowUndeclared bool) error {
+	if strings.TrimSpace(storeSchemaPath) == "" {
 		return nil
 	}
-	floor, found, err := storeschema.ReadFloor(storeschema.FloorPath(u.storeSchemaPath))
+	floor, found, err := storeschema.ReadFloor(storeschema.FloorPath(storeSchemaPath))
 	if err != nil {
 		return fmt.Errorf("updater: %s refused: %w", path, err)
 	}
@@ -501,6 +509,9 @@ func (u *Updater) checkStoreFloor(manifest ReleaseManifest, path string) error {
 		return nil
 	}
 	if manifest.StoreSchemaVersion == 0 {
+		if allowUndeclared {
+			return nil
+		}
 		return fmt.Errorf("updater: %s refused: the guest store floor is %d (%s) and the release declares no store schema epoch, so nothing proves it is at or above the floor", path, floor.Version, floor.Reason)
 	}
 	if manifest.StoreSchemaVersion < floor.Version {
@@ -509,6 +520,9 @@ func (u *Updater) checkStoreFloor(manifest ReleaseManifest, path string) error {
 	return nil
 }
 
+// readStoreSchema loads the guest store's persisted schema epoch.
+// found=false means no receipt — the store predates the contract or the
+// workspace is fresh.
 func (u *Updater) readStoreSchema() (storeschema.Receipt, bool, error) {
 	receipt, found, err := storeschema.Read(u.storeSchemaPath)
 	if err != nil {
@@ -764,6 +778,12 @@ func (u *Updater) ImportBaseline(request BaselineImportRequest) (ReleaseManifest
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return ReleaseManifest{}, err
 	}
+	// The same floor check as Apply, before anything is staged or swapped
+	// (bunch 148, Devin 3). A baseline that declares no epoch passes: see
+	// checkManifestAgainstFloor.
+	if err := checkManifestAgainstFloor(u.storeSchemaPath, request.Manifest, "baseline import", true); err != nil {
+		return ReleaseManifest{}, err
+	}
 	releaseDir := filepath.Join(u.root, "releases", request.Manifest.ContentDigest)
 	if err := u.stageRelease(filepath.Clean(request.SourceDir), releaseDir, request.Manifest); err != nil {
 		return ReleaseManifest{}, err
@@ -801,14 +821,20 @@ func ReadPinnedManifest(root, releaseDigest string) (ReleaseManifest, string, er
 
 // RestagePinnedRelease swaps `current` onto an already-pinned release without
 // Apply, restorePrior, or a service restart. Tape restore uses this to restage
-// SPA bytes after the Dolt witness matches.
-func RestagePinnedRelease(root, releaseDigest string) error {
+// SPA bytes after the Dolt witness matches. storeSchemaPath is the guest
+// store's schema receipt (the floor sits beside it): a pinned release that
+// declares an epoch below the store floor is refused before the swap
+// (bunch 148, Devin 3). An empty path skips the check.
+func RestagePinnedRelease(root, releaseDigest, storeSchemaPath string) error {
 	root = filepath.Clean(root)
 	if root == "." || !filepath.IsAbs(root) {
 		return fmt.Errorf("updater: restage requires an absolute updater root")
 	}
 	manifest, releaseDir, err := ReadPinnedManifest(root, releaseDigest)
 	if err != nil {
+		return err
+	}
+	if err := checkManifestAgainstFloor(storeSchemaPath, manifest, "restage", true); err != nil {
 		return err
 	}
 	ensureReleaseEntrypoint(root, releaseDir, manifest)
