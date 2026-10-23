@@ -1112,3 +1112,32 @@ Append-only. One terse entry per orchestrator pass.
   - on T, the replay report afterwards is no worse than D10's reading (not_equivalent only on the historic-stamp tables, until the operator heal);
   - the stamp itself rides the next refused freeze or verify on a test computer (no agent route tonight; recorded as open).
   Rollback: git revert of the three red commits (the stamp on the tape, Reopen's interceptor, Reopen's fence); an old binary ignores the new field.
+- 09:57 UTC: The paper's dispatcher-slots record (Sonnet worker, read only; lane/fp0-paper-slots 4c4f71963, docs/problems/paper-dispatcher-slots-saturated-2026-10-23.md).
+  - The 8 shared slots bind, and a run holds its slot for its whole life. From 05:16 to 09:36, of the 8 holders: 2.65 were in a Synthetic call, 2.9 were queued at the Synthetic gate, and 0.45 were in a luna call.
+  - Synthetic: 17.3 calls a minute at 19 s each (9.2 s service plus 10 s gate wait). Luna: 9.5 a minute at 2.8 s. A Texture cell costs 113 model-seconds on Synthetic and 10 on luna. 36-42 agents queue, with a median wait near 5 minutes.
+  - FP0's 05:1x gate change (8 to 3) removed the 429s but did not raise Synthetic throughput (12-22 a minute before, 17 after; the 05:18 reading of 30 did not hold). It turned fast failures into slot-holding queue waits: waits over 5 minutes went from 10% to 52%.
+  - The wait line logs only waits of 30 s or more.
+  - Also seen: GET /api/runs timed out at 90 s on the paper, another whole-owner listing.
+  - Options are named with their costs; none was chosen:
+    - more slots, which does not help Synthetic;
+    - a higher gate, where the 429 risk between 3 and 7 is unmeasured and the burn rises to about 9-13 points an hour;
+    - more luna share, which ends the owner's experiment;
+    - fewer cells, since 358 of 525 publish decisions ended unpublished;
+    - pool-aware scheduling, a code change.
+  - FP0 holds the gate at 3. This is red provider routing. The allowance falls about 8 points an hour from 63.5% at 09:57, which leaves about 8 hours; a higher gate would empty it in the owner's morning, and with no fallback the Synthetic half would then fail. Owner decision for the morning.
+- 10:07 UTC: D14 deployed: CI 39934469026 success; Node B deployed_commit 35e5c82f2. The paper took a planned refresh (kill at 10:05:55, refreshed at 10:06:40).
+- 10:09 UTC: D14 proofs: PASS for the reachable steps (_runs/deployD14/).
+  - The paper's boot: dolt-maintenance 20.3 s; runtime-store-open 2.88 s; vocabulary-migration 0 s; boot passivation 8.69 s; first passivation 505 ms; no ListObjects choir.event. /health (2 s probe): 35 answered 200 after the boot, the 7 000s came while the VM was down, and there was no 503.
+  - T (woken through vmctl resolve, build 35e5c82f2): the replay report has manifest version 4 and still lists not_equivalent on exactly D10's two keys, dolt:texture:content_root and the self_development_operations table. No new difference: no worse, as expected until the operator heal of the historic stamps.
+  - Open: the stamp on the tape needs a refused freeze or verify after D14; the fence's re-arm after Reopen has no observable on staging short of a RecoveryRebase boot.
+  - Rollback refs: git revert of the three red commits of lane/fp0-selfdev-ops-replay as landed.
+- 10:21 UTC: Mirror runmem-r1 PASS at 10:13:55 (435550bc1, -race). D15 staged on D14 (35e5c82f2) by cherry-pick:
+  - the run-memory hold (orange, the 6 lane commits);
+  - the boot-read census record and its env-gated test (green and yellow);
+  - the dispatcher-slots record (green).
+  Build, vet, the four gates and selftest-guest-token (196) pass. Focused -race on the combined tree passes: store (RunMemory, BootReadCensus, StreamSeq, Reopen) in 161 s; agentcore (Reduc, Cursor, Cell, Commit, Partial, Recover) in 117 s.
+  D15 proof:
+  - slow-read lines run_memory_agent_list appear on the paper's console with their site and timings, which settles which call site is long;
+  - the paper's steady /health 503 rate over 40 minutes after the boot, against 1.3% (D9 after) and the 09:20 and 09:25 bursts;
+  - the share of store_stalled snapshots naming ListRunMemoryEntriesForAgent.
+  Rollback: git revert dc555264f (the orange commit); the records and tests stay.
