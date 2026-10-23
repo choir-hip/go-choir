@@ -209,10 +209,17 @@ commits after this one.
         run: |
           set -euo pipefail
           if [ -n "${STORE_FLOOR_BASE//0/}" ]; then
-            git fetch --no-tags --depth=1 origin "$STORE_FLOOR_BASE" || echo "store-floor: base $STORE_FLOOR_BASE not fetchable"
+            git fetch --no-tags --depth=1 origin "$STORE_FLOOR_BASE" || echo "store-floor: base $STORE_FLOOR_BASE not fetched at depth 1; the guard retries deeper and fails closed"
           fi
           scripts/check-store-schema-floor.sh
+          scripts/selftest-store-schema-floor
 ```
+
+  The guard fails closed (round 2 of deploy 2, bunch 148, Devin 1 and
+  DeepSeek P2): a non-zero base that cannot be read after a fetch at depth
+  1 and a deeper retry is a failure, not a pass. Only an all-zero base (a
+  new branch) passes without a comparison. The trailer is read from the
+  head commit, so the override works on `push` only.
 
   Every computer's floor is visible as `/api/runtime/observability`
   `event_table.store_floor` (proof step 10).
@@ -398,8 +405,25 @@ git show "$TIP:scripts/rollback/fc-deploy1-rollback.sh" >"$T/fc-deploy1-rollback
 git revert --no-edit <deploy 1's commits>
 bash "$T/fc-deploy1-rollback.sh" apply --from "$TIP"
 git add internal/store/store.go internal/store/fc_deploy1_rollback.go
-git commit -m "rollback below F-c deploy 1: drop an empty choir_events at boot"
+git commit -m "rollback below F-c deploy 1: drop an empty choir_events at boot
+
+Store-Floor-Override: pre-rollback check done at <time>: every computer reports event_table.store_floor == 0 (<how many read>)"
 ```
+
+**The override trailer** (round 2 of deploy 2, bunch 148, DeepSeek P1). The
+revert lowers `storeschema.Version` 2 to 1, and CI's store floor guard
+(`scripts/check-store-schema-floor.sh`, section 4.5 and the deploy-2
+status) fails a push that lowers it unless the head commit carries
+`Store-Floor-Override`. Before the trailer, the documented commit was
+CI-red. The trailer is valid only after the pre-rollback reading: read
+`/api/runtime/observability` `event_table.store_floor` on every computer,
+the paper included, and write it only while every one reports
+`event_table.store_floor == 0`. A computer with a floor above 0 has
+stamped events; deploy 1 is its floor and the repair is forward. The
+script's `rehearse` mode now makes this commit and runs the guard over it:
+it must pass with the trailer and fail without it. The trailer is read
+from the head commit of a push, so it does not show on a `pull_request`
+event.
 
 `fc-deploy1-rollback.sh rehearse TIP BASE` runs that sequence in a
 throwaway `git clone --shared` (nothing in the working tree changes): it

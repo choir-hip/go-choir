@@ -18,7 +18,22 @@
 #   git revert --no-edit <deploy 1's commits>
 #   bash "$T/fc-deploy1-rollback.sh" apply --from "$TIP"
 #   git add internal/store/store.go internal/store/fc_deploy1_rollback.go
-#   git commit -m "rollback below F-c deploy 1: drop an empty choir_events at boot"
+#   git commit -m "rollback below F-c deploy 1: drop an empty choir_events at boot
+#
+#   Store-Floor-Override: pre-rollback check done at <time>: every computer reports event_table.store_floor == 0 (<how many read>)"
+#
+# The trailer is required. The revert lowers storeschema.Version 2 -> 1, and
+# CI's store floor guard (scripts/check-store-schema-floor.sh) fails a push
+# that lowers it unless the head commit carries Store-Floor-Override. Without
+# it the documented rollback is CI-red (bunch 148, DeepSeek P1). The override
+# may be written only after the pre-rollback reading (design 4.5): read
+# /api/runtime/observability event_table.store_floor on every computer (the
+# paper included), and the override is valid only while every one of them
+# reports event_table.store_floor == 0. A computer with a floor above 0 has
+# stamped events, deploy 1 is its rollback floor, and the repair there is
+# forward (design 4.5); do not write the trailer then. The guard reads the
+# trailer from the head commit of a push; it is not visible on a
+# pull_request event.
 #
 # Modes:
 #   apply [--from REV]
@@ -108,6 +123,7 @@ rehearse)
 	[ $# -eq 3 ] || { echo "usage: $0 rehearse TIP BASE" >&2; exit 2; }
 	tip=$(git rev-parse --verify "$2^{commit}")
 	base=$(git rev-parse --verify "$3^{commit}")
+	live=$(git rev-parse --show-toplevel)
 	work=$(mktemp -d)
 	trap 'rm -rf "$work"' EXIT
 	echo "rehearse: clone into $work/repo, tip $tip, base $base"
@@ -125,11 +141,29 @@ rehearse)
 	[ "$(grep -c 'rollbackRecipeDropEmptyChoirEvents(s.db)' internal/store/store.go)" = 1 ] || { echo "FAIL: the step is not in bootstrap once" >&2; exit 1; }
 	cmp -s internal/store/fc_deploy1_rollback.go <(git show "$tip:$ARTIFACT") || { echo "FAIL: the installed file differs from the artifact at $tip" >&2; exit 1; }
 	go vet ./internal/store
+	# The documented commit, then the CI store floor guard over it: with the
+	# Store-Floor-Override trailer it must pass; without it, it must fail when
+	# the revert lowered storeschema.Version (it does at deploy 1).
+	if [ -x "$live/scripts/check-store-schema-floor.sh" ]; then
+		git add -A internal/store
+		git -c user.name=rehearsal -c user.email=rehearsal@invalid commit --quiet --no-verify -a -m "rollback below F-c deploy 1: drop an empty choir_events at boot
+
+Store-Floor-Override: rehearsal: every computer reports event_table.store_floor == 0"
+		"$live/scripts/check-store-schema-floor.sh" --base "$tip" --head HEAD || { echo "FAIL: the store floor guard refuses the documented rollback commit" >&2; exit 1; }
+		git -c user.name=rehearsal -c user.email=rehearsal@invalid commit --quiet --no-verify --amend -m "rollback below F-c deploy 1: drop an empty choir_events at boot"
+		if "$live/scripts/check-store-schema-floor.sh" --base "$tip" --head HEAD >/dev/null 2>&1; then
+			echo "rehearse: note: the revert did not lower storeschema.Version, so the trailer was not needed here"
+		else
+			echo "rehearse: without the trailer the guard fails, with it the guard passes (as documented)"
+		fi
+	else
+		echo "rehearse: scripts/check-store-schema-floor.sh is not in the live tree; the guard step is skipped"
+	fi
 	echo "rehearse: PASS (revert, apply --from $tip, go build and go vet of internal/store)"
 	git diff --stat HEAD -- internal/store/store.go internal/store/fc_deploy1_rollback.go | tail -1
 	;;
 *)
-	sed -n '2,51p' "$0" >&2
+	sed -n '2,57p' "$0" >&2
 	exit 2
 	;;
 esac
