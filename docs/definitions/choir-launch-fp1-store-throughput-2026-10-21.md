@@ -126,13 +126,32 @@ now:
     skip between their halves, and a CI guard against lowering the epoch
     (script in the lane; the workflow step is FP0's). Deploy 1 lands
     first; earlier slices: deploy 1, the boot-window repair (deploy E), B2.
+    Round 2b (2026-10-23, bunch 148, Devin and DeepSeek both ACCEPT),
+    rebased on stage/deployD10 (main plus D9 plus deploy 1 round 1e;
+    keep-both conflicts in computer_setting.go, api.go, runtime.go,
+    store.go): the CI guard now fails closed on an unreadable non-zero
+    base (fetch retry, then exit 1; selftest-store-schema-floor; the
+    evidence patch is regenerated against the current ci.yml and runs the
+    selftest); the below-deploy-1 rollback commit carries
+    Store-Floor-Override and its pre-rollback reading (valid only while
+    every computer reports event_table.store_floor == 0), and rehearse
+    runs the guard over it; RestagePinnedRelease and ImportBaseline run
+    the floor check before swapping current (a baseline that declares no
+    epoch still passes there: genesis baselines stage SPA bytes); a
+    same-value POST re-applies store.event_table and telemetry.batch; the
+    status reads the store's live switch; the writer refuses an unbound
+    store and a floor above the build epoch; Reopen floors the adopted
+    workspace before adopting it; ReadGrant requires basis computer.
+    Residuals: undeclared-epoch baselines pass the restage and import
+    paths; the CI override trailer is push-only; platform-follow offers
+    still declare no epoch.
   source_ref: lane/fp1-event-table-d2
   deploy_identity: this lane deploys nothing; FP0 lands and proves
   candidate:
     id: fp1-event-table-deploy2
     state: built, not landed; waits for deploy 1 to land and hold (owner Q5)
     ref: lane/fp1-event-table-d2
-    base: fbb6d74a8 (lane/fp1-event-table, deploy 1 round 1b)
+    base: stage/deployD10 (010cb1a29, deploy 1 round 1e on main plus D9); was fbb6d74a8
     digest: none
     scope:
       - internal/store/event_table.go
@@ -153,6 +172,9 @@ now:
       - internal/storeschema/floor.go
       - internal/updater/updater.go
       - scripts/check-store-schema-floor.sh
+      - scripts/selftest-store-schema-floor
+      - scripts/rollback/fc-deploy1-rollback.sh
+      - docs/evidence/fc-deploy2-ci-schema-floor-step.patch
       - scripts/proofs/fp1-event-table-deploy2.sh
   conjecture:
     id: C-FP1-event-table
