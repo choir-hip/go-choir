@@ -48,8 +48,9 @@ if [ "$next" != "<unset>" ]; then
     || fail "next build $next_version is not newer than the pinned $version"
 fi
 
-# The same truthy set as envFlagOn (internal/vmmanager/config.go): trimmed,
-# case-insensitive 1, true, on, yes.
+# A strict superset of envFlagOn (internal/vmmanager/config.go), so it is
+# fail-closed: every value envFlagOn reads as on (trimmed, case-insensitive
+# 1, true, on, yes) is on here, and inner whitespace is also stripped.
 discard_flag="$(envval VM_DATA_DISCARD | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
 case "$discard_flag" in 1 | true | on | yes)
   only="$(envval VM_DATA_DISCARD_ONLY)"

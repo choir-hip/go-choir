@@ -23,7 +23,7 @@ set -uo pipefail
 PROOF_NAME=fp8-image
 . "$(dirname "$0")/lib.sh"
 
-step_def 1 ro "landing: a control computer's fc-config.json hash is unchanged; no 'next Firecracker build' line"
+step_def 1 ro "landing: a control computer's fc-config.json hash is unchanged; vmctl's environment names no VM_FIRECRACKER_NEXT_BIN"
 step_def 2 mut "RES-09: scripts/memory_hotplug_probe.py (mints its own test computer, grows and shrinks it)"
 step_def 3 ro-after "RES-09 diagnosis: the test computer's list entry and fc-config.json"
 step_def 4 ro-after "SEC-04: vmctl says 'jailer ready'; the test computer's confinement is jailer"
@@ -41,6 +41,49 @@ fp8_target() { resolve_target "${OPT_computer:-}" 1; }
 
 fp8_state() { printf '%s/fp8-%s.txt' "${TMPDIR:-/tmp}" "$1"; }
 
+# fp8_read_env: FP8_ENV = the running vmctl unit's Environment, read from
+# systemd (positive evidence of the host's pin; a journal grep cannot give it,
+# because "no line" is also what a failed or windowed journal read prints).
+# FAILs and returns 1 when the read itself fails or is not an Environment line;
+# returns 1 without a verdict in dry-run (after printing the command).
+fp8_read_env() {
+	if [ "$PROOF_DRY" = 1 ]; then
+		node_b_q "systemctl show '$PROOF_UNIT_VMCTL' -p Environment"
+		return 1
+	fi
+	FP8_ENV=$(node_b_q "systemctl show '$PROOF_UNIT_VMCTL' -p Environment") || {
+		fail "could not read vmctl's Environment (ssh or systemctl failed)"
+		return 1
+	}
+	case "$FP8_ENV" in
+	Environment=*) FP8_ENV=${FP8_ENV#Environment=} ;;
+	*)
+		fail "vmctl's Environment read returned no Environment= line"
+		return 1
+		;;
+	esac
+}
+
+# fp8_env_val NAME: the value of NAME in FP8_ENV, empty when unset.
+fp8_env_val() { printf '%s\n' "$FP8_ENV" | tr ' ' '\n' | sed -n "s/^$1=//p" | head -n 1; }
+
+# fp8_check_no_next_build: vmctl's environment names no VM_FIRECRACKER_NEXT_BIN.
+fp8_check_no_next_build() {
+	[ -z "$(fp8_env_val VM_FIRECRACKER_NEXT_BIN)" ] && pass "no VM_FIRECRACKER_NEXT_BIN in vmctl's environment" || fail "VM_FIRECRACKER_NEXT_BIN is set in vmctl's environment"
+}
+
+# fp8_check_pinned_117: VM_FIRECRACKER_BIN and VM_JAILER_BIN are both under one
+# firecracker-1.17.x store path, and no next build is set.
+fp8_check_pinned_117() {
+	local bin jail re='^/nix/store/[a-z0-9]{32}-firecracker-1\.17\.[0-9]+/bin/'
+	fp8_read_env || return 0
+	bin=$(fp8_env_val VM_FIRECRACKER_BIN)
+	jail=$(fp8_env_val VM_JAILER_BIN)
+	if [[ $bin =~ ${re}firecracker$ ]]; then pass "VM_FIRECRACKER_BIN is the pinned 1.17 build ($bin)"; else fail "VM_FIRECRACKER_BIN is '${bin:-<unset>}', not a firecracker-1.17.x store path"; fi
+	if [[ $jail =~ ${re}jailer$ ]] && [ "${jail%/bin/jailer}" = "${bin%/bin/firecracker}" ]; then pass "VM_JAILER_BIN is from the same package ($jail)"; else fail "VM_JAILER_BIN is '${jail:-<unset>}', not the jailer of VM_FIRECRACKER_BIN's package"; fi
+	fp8_check_no_next_build
+}
+
 step_1() {
 	local vm hash
 	[ -n "${OPT_control:-}" ] || die 2 "step 1 needs --control (a non-test computer; read-only, so the paper is fine)"
@@ -57,10 +100,10 @@ step_1() {
 			[ "$hash" = "$(cat "$(fp8_state control-fc)")" ] && pass "control fc-config.json unchanged across the deploy" || fail "control fc-config.json changed (before $(cat "$(fp8_state control-fc)") after $hash)"
 		fi
 	fi
-	info "vmctl journal 'next Firecracker build' lines since '$OPT_since' (expect none before the NET-08 nix change):"
+	info "vmctl journal 'next Firecracker build' lines since '$OPT_since' (informational only; the check below reads vmctl's environment):"
 	node_journal "$PROOF_UNIT_VMCTL" "$OPT_since" "next Firecracker build" 10
-	if [ "$PROOF_DRY" != 1 ] && [ "$OPT_label" = after ]; then
-		node_journal "$PROOF_UNIT_VMCTL" "$OPT_since" "next Firecracker build" 10 | grep -q . && fail "a 'next Firecracker build' line exists before any computer was named" || pass "no 'next Firecracker build' line"
+	if [ "$OPT_label" = after ]; then
+		fp8_read_env && fp8_check_no_next_build
 	fi
 }
 
@@ -128,14 +171,17 @@ step_6() {
 step_7() {
 	# Since the pin to 1.17.0 (docs/problems/firecracker-1-17-for-every-computer-2026-10-22.md)
 	# there is no "next" build and no per-computer selector: every computer runs the
-	# pinned 1.17 VMM and every data drive has discard. Host-side proof of the pin:
-	# scripts/check-host-firecracker-pin.sh and that record's proof list.
+	# pinned 1.17 VMM and every data drive has discard. The pin is asserted from
+	# vmctl's running environment (positive evidence); the journal's "next
+	# Firecracker build" line is written once at config load, so a --since
+	# window can miss it and an empty read cannot show it was absent. Host-side
+	# proof of the pin before the deploy: scripts/check-host-firecracker-pin.sh.
 	fp8_target
 	manual "host step (done by the 1.17 pin deploy, not here): VM_FIRECRACKER_BIN and VM_JAILER_BIN are under the pinned firecracker-1.17.0 path, VM_FIRECRACKER_NEXT_BIN is unset, VM_DATA_DISCARD=1 with VM_DATA_DISCARD_ONLY=*"
 	node_b_sh "grep -o '\"discard\": *[a-z]*\\|\"io_engine\": *\"[A-Za-z]*\"' $VMSTATE/$T_VM/fc-config.json"
+	fp8_check_pinned_117
 	if [ "$PROOF_DRY" != 1 ]; then
 		[ "$(node_b_q "grep -Ec '\"discard\": *true' $VMSTATE/$T_VM/fc-config.json || true")" -ge 1 ] && pass "data drive has discard true" || fail "data drive lacks discard true"
-		node_journal "$PROOF_UNIT_VMCTL" "$OPT_since" "next Firecracker build" 6 | grep -q . && fail "a 'next Firecracker build' line exists; the host should pin 1.17 with no next build" || pass "no 'next Firecracker build' line (1.17 is the pinned build)"
 	fi
 	manual "in the guest: /sys/block/vdb/queue/discard_max_bytes non-zero and choir-data-fstrim.timer active; hibernate and wake expects snapshot_resume under Firecracker v1.17.0"
 	manual "RES-16 measurement: hourly for 6 hours, du -k data.img against the live store: within about 1.5x and no hourly latency regression"

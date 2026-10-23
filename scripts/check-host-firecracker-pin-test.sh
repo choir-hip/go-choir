@@ -10,7 +10,7 @@
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SCRIPT="$HERE/check-host-firecracker-pin.sh"
-command -v jq >/dev/null 2>&1 || { echo "skip: jq is not installed"; exit 0; }
+command -v jq >/dev/null 2>&1 || { echo "FAIL: jq is required (a run without it proves nothing)" >&2; exit 1; }
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
