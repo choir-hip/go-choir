@@ -3,6 +3,7 @@ package selfdev
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -70,7 +71,9 @@ var stampColumns = map[string]bool{"last_intent_error": true, "updated_at": true
 
 // operationFields renders every field of an Operation as a string keyed by its
 // json name (or its Go name when it has none), so two rows compare
-// column by column without listing the columns here.
+// column by column without listing the columns here. The names are JSON names,
+// not column names: terminal_error is "error" and verifier_refs_json is
+// "verifier_refs" in a refusal's different_fields and replay_values.
 func operationFields(operation Operation) map[string]string {
 	value := reflect.ValueOf(operation)
 	kind := value.Type()
@@ -82,17 +85,18 @@ func operationFields(operation Operation) map[string]string {
 			name = tag
 		}
 		item := value.Field(index)
-		for item.Kind() == reflect.Pointer {
-			if item.IsNil() {
-				break
-			}
-			item = item.Elem()
-		}
-		if item.Kind() == reflect.Pointer {
-			fields[name] = "<nil>"
+		// A string renders as itself; every other field renders as its JSON,
+		// so ["a b","c"] and ["a","b c"] differ (%v would print both as
+		// [a b c]) and a nil pointer is "null".
+		if item.Kind() == reflect.String {
+			fields[name] = item.String()
 			continue
 		}
-		fields[name] = fmt.Sprintf("%v", item.Interface())
+		encoded, err := json.Marshal(item.Interface())
+		if err != nil {
+			encoded = []byte(fmt.Sprintf("<unencodable %T: %v>", item.Interface(), err))
+		}
+		fields[name] = string(encoded)
 	}
 	return fields
 }

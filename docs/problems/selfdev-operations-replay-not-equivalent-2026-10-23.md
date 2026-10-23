@@ -769,3 +769,16 @@ Heresy delta (round 2): discovered: the round-1 heal could append a
 replay-unappliable event on a computer whose rows diverged beyond the stamp;
 introduced: none; repaired: that, the doc claims above, the pre-serving
 window.
+
+### Round 3 (bunch 168: Devin accept; one low, one info; red)
+
+- Low: `operationFields` rendered non-string fields with `%v`, so
+  `verifier_refs` of `["a b","c"]` and `["a","b c"]` both printed `[a b c]` and
+  a real divergence could be masked from `refused_diverged`. Each non-string
+  field is now compared and rendered as its JSON (a string as itself, a nil
+  pointer as `null`). Test:
+  `TestOperationFieldsDistinguishVerifierRefsThatPrintTheSameWithPercentV`.
+- Info: the names in a refusal's `different_fields` and `replay_values` are
+  the `Operation` JSON names, not column names: `terminal_error` appears as
+  `error` and `verifier_refs_json` as `verifier_refs`. Stated in the
+  `operationFields` comment as well.
