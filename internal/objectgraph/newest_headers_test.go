@@ -49,6 +49,14 @@ func TestNewestObjectHeadersPlanWalksTheTimeIndex(t *testing.T) {
 		t.Fatalf("plan reads the kind index:\n%s", plan)
 	}
 
+	// F3: the window read projects the kind and the metadata and no body.
+	if !strings.Contains(plan, "columns: [og_objects.object_kind, og_objects.metadata]") || !strings.Contains(plan, "columns: [object_kind metadata updated_at]") {
+		t.Fatalf("the window read projects more than kind and metadata:\n%s", plan)
+	}
+	if strings.Contains(plan, "body") {
+		t.Fatalf("the window read touches body:\n%s", plan)
+	}
+
 	plan = explainPlan(t, store.db, ObjectKindExistsSQL, "choir.event")
 	if !strings.Contains(plan, "IndexedTableAccess(og_objects)") || !strings.Contains(plan, "Limit(1)") {
 		t.Fatalf("the existence probe is not one index seek:\n%s", plan)
