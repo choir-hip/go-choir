@@ -208,18 +208,6 @@ func (s *Service) runArtifactGC(ctx context.Context, cfg ArtifactGCConfig) (Arti
 		allowed[ns] = true
 	}
 
-	// F4: retire old file-cas root rows before the live sets are read, so the
-	// manifests of retired rows are unreachable in this same pass. Dry-run only
-	// counts.
-	rootsRetired := 0
-	if len(cfg.ActiveNamespaces) == 0 || allowed["file-cas-roots"] {
-		n, err := s.retireFileCASRoots(ctx, started, cfg.Grace, cfg.MaxDeletes, cfg.Mode == ArtifactGCModeActive)
-		rootsRetired = n
-		if err != nil {
-			report.Warnings = append(report.Warnings, "file-cas-roots retire: "+err.Error())
-		}
-	}
-
 	// A live set that fails to load aborts the whole sweep — sweeping with a
 	// missing set deletes live artifacts (s0-gc-og-wrong-store-deletion,
 	// 2026-10-05).
@@ -228,6 +216,30 @@ func (s *Service) runArtifactGC(ctx context.Context, cfg ArtifactGCConfig) (Arti
 	if live == nil {
 		report.DurationMs = time.Since(started).Milliseconds()
 		return report, fmt.Errorf("artifact gc: live set unavailable: %s", strings.Join(warnings, "; "))
+	}
+
+	// F4: retire old file-cas root rows only after the live sets have loaded
+	// (a pass that cannot prove them mutates nothing). The file-cas-roots live
+	// set is then re-read, so manifests of retired rows are unreachable in this
+	// same pass. Dry-run only counts.
+	rootsRetired := 0
+	if len(cfg.ActiveNamespaces) == 0 || allowed["file-cas-roots"] {
+		n, err := s.retireFileCASRoots(ctx, started, cfg.Grace, cfg.MaxDeletes, cfg.Mode == ArtifactGCModeActive)
+		rootsRetired = n
+		if err != nil {
+			report.Warnings = append(report.Warnings, "file-cas-roots retire: "+err.Error())
+		}
+		if n > 0 && cfg.Mode == ArtifactGCModeActive {
+			refreshed := map[string]struct{}{}
+			if err := scanStrings(ctx, s.store.db, `SELECT manifest_ref FROM computer_file_roots`, func(ref string) {
+				refreshed[filepath.Base(ref)] = struct{}{}
+			}); err != nil {
+				report.Namespaces["file-cas-roots"] = ArtifactGCNamespaceReport{Mode: ArtifactGCModeDryRun, Retired: n}
+				report.DurationMs = time.Since(started).Milliseconds()
+				return report, fmt.Errorf("artifact gc: file-cas-roots live set unavailable after retiring %d rows: %w", n, err)
+			}
+			live["file-cas-roots"] = refreshed
+		}
 	}
 
 	var selected []gcCandidate
