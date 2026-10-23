@@ -150,8 +150,9 @@ which build was chosen. So every launch-config hash is unchanged.
 
 ## Plan
 
-One change, one deploy, and no new cold boot for any computer that has
-already launched under D4:
+One change, one deploy, and no cold boot beyond the usual deploy refresh for
+any computer that has already launched under D4 (every running computer is
+refreshed by the planned restart below; none is refused a snapshot):
 
 - `choirFirecrackerRelease` becomes 1.17.0 with the
   `firecracker-next.nix` hashes, and `choirFirecrackerBelow` becomes 1.18.
@@ -190,25 +191,36 @@ pinned hashes. It would override a package that is already 1.17.0, and its
 
 ### Rollback
 
-- Back to D4's shape: revert the fix commit and redeploy. The host goes
-  back to pinning 1.16.2, and every computer is back on the next build
-  (`*`) with the same binary, banner and discard. No snapshot is refused.
-  Running computers take the usual deploy refresh.
-- All the way back to 1.16.2: also revert D4's selector commit (2de635109)
-  and redeploy. Every computer then cold boots once more on 1.16.2 with no
-  discard, because 1.16.2 refuses its 1.17 snapshot. The guest-data-image
-  record has D4's own rollback.
-- 1.16.2 (`/nix/store/5nh9p1bhzhljbshbp8dibb5qd4qz1nxb-firecracker-1.16.2`)
-  is in no public cache. After this change no host generation needs it, so
-  the deploy preflight's reclaim may collect it. Then a full rollback
-  rebuilds it on Node B, which takes minutes of cargo build. **Before this
-  deploy, add a GC root for that path** if a full rollback must stay quick.
-  The one-commit rollback to D4's shape needs only the 1.17.0 path, which
-  stays in use.
+**Either rollback needs the 1.16.2 store path on Node B**
+(`/nix/store/5nh9p1bhzhljbshbp8dibb5qd4qz1nxb-firecracker-1.16.2`, in no
+public cache). Reverting the pin fix puts `VM_FIRECRACKER_BIN` back on that
+path, `IsFirecrackerAvailable` stats it
+(`internal/vmmanager/config.go:264-279`), and vmctl stops with "Firecracker
+is mandatory" (`cmd/vmctl/main.go:145`, `:167`) if it is gone. After this
+change no host generation needs the path, so the deploy preflight's reclaim
+may collect it, and a missing path means a cargo build on Node B before
+either rollback can deploy. So the GC root is a **deploy precondition**
+(see the deploy note), not an option.
+
+- Back to D4's shape (1.16.2 pinned, 1.17 next for `*`, discard `*`):
+  revert the pin fix commit and redeploy. Every computer is back on the next
+  build with the same binary, banner and discard, so no snapshot is
+  refused. Running computers take the usual deploy refresh.
+- All the way back to 1.16.2 with no discard: revert the pin fix commit,
+  then delete all four lines in `nix/node-b.nix` (`VM_FIRECRACKER_NEXT_BIN`,
+  `VM_FIRECRACKER_NEXT_ONLY`, `VM_DATA_DISCARD`, `VM_DATA_DISCARD_ONLY`), as
+  D4's own rollback says, and redeploy. Reverting D4's selector commit
+  (2de635109) is not a rollback: it only narrows both selectors back to
+  `computer-9648031f…`, which leaves the four lines and so keeps 1.17 and
+  discard on that computer (checked against `2de635109^:nix/node-b.nix`
+  lines 1556 to 1559). With the four lines gone every computer cold boots
+  once more on 1.16.2, because 1.16.2 refuses its 1.17 snapshot. The
+  guest-data-image record has D4's own rollback.
 
 ### Proof (FP0, after the deploy)
 
-0. Before: `scripts/check-host-firecracker-pin.sh` passes on the lane head
+0. Before: the GC root for the 1.16.2 path exists on Node B (deploy
+   precondition above). `scripts/check-host-firecracker-pin.sh` passes on the lane head
    with `EXPECT_OUT=/nix/store/jbzvr6c965zyby7ldj73yi0zvibgd65b-firecracker-1.17.0`.
    Record `sha256sum fc-config.json` for the paper and one test computer
    that run under D4, and the snapshot meta of one hibernated D4 computer.
@@ -279,7 +291,41 @@ rollback text and in the proof tooling.
    can be read as "no cold boot at all". The deploy refresh still cold boots
    every running computer. The claim means no cold boot beyond that refresh.
 
-Dispositions follow the fix.
+Dispositions (fix round, bunch 144):
+
+1. Fixed (docs). The Rollback section now says: revert the pin fix, then
+   delete all four lines and redeploy. Reverting 2de635109 is named as not
+   a rollback, with the reason.
+2. Fixed (docs). The Rollback section and the deploy note state that the
+   1.16.2 path is needed for either rollback, and the GC root on Node B is a
+   deploy precondition that FP0 adds by hand before the deploy. One
+   correction to the finding's citation: the "Firecracker is mandatory"
+   `log.Fatal` is at `cmd/vmctl/main.go:167` (reached when
+   `IsFirecrackerAvailable`, called at `:145`, is false); lines 145 to 146
+   are the call and the config validation. The substance stands.
+3. Fixed. Step 7 of `scripts/proofs/fp8-image-jailer.sh` is rewritten for
+   the pinned build, rather than marked done: the rewrite was smaller than
+   explaining why an executable step must not be run. It checks discard on
+   the target's data drive and that no "next Firecracker build" line
+   exists; the manual lines no longer name `firecracker-next.nix` or a
+   selector. `--list` and `--step 7 --dry-run` ran with ssh and curl
+   replaced by `false`.
+4. Fixed. The guard in `scripts/check-host-firecracker-pin.sh` trims,
+   lowercases and accepts `1`, `true`, `on`, `yes`. The new
+   `scripts/check-host-firecracker-pin-test.sh` runs the check against a
+   fake `nix` over 13 cases; six of them failed on 1016fc951 and all pass
+   now. The real check still passes on the lane with `EXPECT_OUT`.
+5. Fixed. The script notes that `sort -V` is GNU coreutils and fails with
+   "jq is required" when jq is missing.
+6. Fixed (docs). The Plan and the deploy note say "no cold boot beyond the
+   usual deploy refresh", and that the refresh cold boots every running
+   computer.
+
+The other DeepSeek notes need no change: 1.17.x patch releases through the
+weekly bump are the existing residual below, and "no host generation needs
+the 1.16.2 path" is true of the new generation, though an older generation
+in the profile may keep the path alive until it is pruned (the GC root
+makes that irrelevant).
 
 ## Ceremony
 
@@ -318,6 +364,15 @@ Dispositions follow the fix.
   - Comments in `flake.nix`, `nix/node-b.nix`, `data_discard.go` and
     `vmm_next.go` are updated. No Go code changed.
 
+Review fix round (bunch 144), on 1016fc951:
+
+- c67700a02 (green): the findings, before any fix.
+- f67998525 (yellow): `scripts/check-host-firecracker-pin-test.sh`; six of
+  its 13 cases fail on 1016fc951.
+- a90c3d870 (yellow, proof tooling only): the guard's truthy set, the jq
+  preflight, the `sort -V` note, FP8 step 7.
+- This record's Rollback, deploy note and dispositions (green).
+
 Local verification at 70c82a1eb:
 
 - `nix-instantiate --parse` succeeds for `flake.nix` and `nix/node-b.nix`.
@@ -337,20 +392,25 @@ Local verification at 70c82a1eb:
   every running computer. It builds no Firecracker: Node B already has the
   1.17.0 path.
 - Cold boot cost for computers that launched under D4: none beyond the
-  usual deploy refresh. Their binary, banner and launch config are
+  usual deploy refresh (that refresh cold boots every running computer, as
+  above). Their binary, banner and launch config are
   unchanged, so a hibernated D4 snapshot resumes. A computer still holding
   a 1.16.x snapshot from before D4 cold boots once, which is D4's cost.
 - If the change lands without D4, every computer moves from 1.16.2 with no
   discard to 1.17.0 with discard at once. That costs the same single cold
   boot per computer that D4 costs.
-- Before deploying, decide whether a full rollback to 1.16.2 must stay
-  quick. If it must, add a GC root for
-  `/nix/store/5nh9p1bhzhljbshbp8dibb5qd4qz1nxb-firecracker-1.16.2`. No host
-  generation needs that path after this change, so the deploy preflight's
-  reclaim may collect it.
-- `scripts/proofs/fp8-image-jailer.sh` step 7 looks for the "next
-  Firecracker build" log line, which no longer appears. Read step 7 as done
-  by D3 and D4 together with the proof above. Do not run it as a fail.
+- **Deploy precondition (FP0, by hand, before the deploy): add a GC root on
+  Node B for
+  `/nix/store/5nh9p1bhzhljbshbp8dibb5qd4qz1nxb-firecracker-1.16.2`**, and
+  confirm the path exists. Both rollbacks restore a `VM_FIRECRACKER_BIN`
+  under it (see Rollback). No host generation needs that path after this
+  change, so the deploy preflight's reclaim may collect it, and vmctl
+  would not start on a rollback deploy. Also confirm the 1.17.0 path
+  (`…jbzvr6c9…-firecracker-1.17.0`) exists.
+- `scripts/proofs/fp8-image-jailer.sh` step 7 is rewritten for the pinned
+  build: it checks discard on the target's data drive and the absence of a
+  "next Firecracker build" line, and no longer names `firecracker-next.nix`
+  or a selector.
 - Residual: after this change, the next minor version has to be staged with
   a new `nix/firecracker-next.nix`. Patch releases on 1.17.x from a weekly
   nixpkgs bump still reach the host with no review, because the bound
