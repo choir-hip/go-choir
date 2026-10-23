@@ -668,6 +668,30 @@ yellow commit.
 | **S6** compression | the zstd reader first, then the zstd seal, in two releases | orange (the guest disk; the log's own format) | trace reads | retained days on the paper reach 7 under the cap; trace pages unchanged | revert the writer; the reader stays |
 | S7 follow-on, not R7 | the multi-desk trace API (owner §35) over the `.tidx` trajectory lists; a lasting spend total if O5 says so; retiring F-c deploy 3 for log kinds | — | — | — | — |
 
+10. **Unknown format versions are never served around** (round 2, finding
+   2). The tapestore round-5 rule: a segment header, index or record
+   envelope whose version this binary does not know is
+   `ErrUnsupportedVersion` and never falls back to a scan, a rebuild or
+   quarantine. A header whose magic is ours but whose version is not the
+   current one (older or newer) is unsupported, not foreign: a binary
+   after a format bump must not rename the previous binary's open segment
+   `.bad`. `Open` fails with it. A reader returns it for that segment and
+   keeps reading the others: query methods return the records they found
+   and the joined error.
+11. **Round 2 smaller changes.** `Close` holds the retention mutex, and
+   `Retain` checks that the log is open after taking it, so retention cannot
+   keep unlinking after another process owns the directory (finding 4).
+   The entries a reader rebuilds from a bad `.tidx` or scans from an
+   unsealed segment are kept in the same four-entry cache as loaded
+   indexes, and a summary-only call keeps no entries (finding 3).
+   `AppendBoundary` refuses a record over `MaxRecordBytes` (5a). A
+   `summary_len` larger than its file is refused before it is allocated
+   (5b). A fsync failure sets an atomic flag before it waits for the log's
+   mutex, and the seal checks the flag before it installs an index (5c);
+   the window between the failing fsync returning and the flag being set
+   remains, which is the host writer's accepted "already inside build"
+   residual.
+
 **Status (2026-10-22, lane `lane/fp1-trace-log-s0s1`).**
 
 - **S0 built** (`ceb063983`, orange). `TelemetryStats` serves
@@ -820,17 +844,41 @@ a ruling or the S2 to S7 plan.
    round 3's hole (a writer's memory outliving a lock release) cannot arise
    if the lock is never released. A second `Open` fails at once with
    `ErrLocked`, and the caller falls back to the tape.
-4. **Recovery never truncates** (4.2, F4). tapestore's round 4 still cuts a
-   torn tail. Here the next writer seals the segment it did not write, at
-   the end of the last whole, CRC-verified record, and records that offset
-   in the `.tidx` (`valid_end`). The bytes after it stay on disk and no
-   reader serves them. No offset is reused, there is no truncate to fail,
-   and a bad record followed by good ones is cut at the first bad record
-   and counted (`damaged_tails`) instead of refused. Refusing, as
-   tapestore does, would leave the log dead until someone repaired a disk
-   they cannot reach (standing question 8). A segment whose header is not
-   a prefix of a valid header is renamed `seg-N.tlog.bad`, counted, and
-   removed by retention with the other old files.
+4. **Recovery never truncates, and a damaged span is skipped, not a stop**
+   (4.2, F4; amended by FP0's round 2 ruling below). tapestore's round 4
+   still cuts a torn tail. Here the next writer seals the segment it did
+   not write and records its damage in the `.tidx`. The file is not
+   truncated or rewritten, no offset is reused, and there is no truncate to
+   fail. Refusing a damaged segment, as tapestore does, would leave the log
+   dead until someone repaired a disk they cannot reach (standing question
+   8). A segment whose header is not a prefix of a valid header is renamed
+   `seg-N.tlog.bad`, counted, and removed by retention with the other old
+   files. **Round 1 (superseded):** a bad record followed by good ones was
+   cut at the first bad record and the later records were dropped.
+   Review bunch 132 (finding 1, P1) showed that this drops synced lines
+   whose bytes are still on disk and verifiable, and that it contradicted
+   this item's own first sentence.
+   **Ruling (FP0, under No Blocking Asks: conservative, no loss of synced
+   lines we can still verify).** When a record fails its checksum or bounds
+   check, the scanner resynchronizes: it searches forward for the next
+   offset that starts a whole record (a plausible type and length, and the
+   record's own CRC verifies) and continues from there. Each skipped span
+   is a damaged span. A span is counted (`damaged_records`,
+   `damaged_bytes`), logged once per segment, and stored in the `.tidx`
+   summary. Recovery still never truncates or rewrites. Readers return
+   every verified record. `valid_end` is the end of the last whole record;
+   bytes after it with nothing valid behind them are the torn tail
+   (`torn_tails_cut`), as before.
+   **Why the record's CRC decides.** A header-shaped byte pattern can occur
+   inside a payload (tool output may contain anything). The search accepts
+   an offset only when the whole record there verifies, so a false header
+   fails with probability 1 - 2^-32 per candidate. A payload that embeds a
+   complete, valid record is the one case the CRC cannot tell apart; it is
+   reachable only inside a span that is already damaged, and the cost is
+   one extra trace line, never a lost one. A record whose CRC holds but
+   whose contents do not parse is a damaged span of exactly its length.
+   A segment, index or record version this binary does not know is never
+   skipped: it is `ErrUnsupportedVersion` (item 10).
 5. **Segments are created on the first write, not at `Open`** (3.1). An
    idle computer then makes no empty segment per boot. The boundary record
    (`open` or `crash_recovered`) is the first record of that segment.
