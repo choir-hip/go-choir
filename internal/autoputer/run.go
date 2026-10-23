@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -644,9 +645,12 @@ func Run() {
 	// The explicit og_objects derived-column migration (host peer only);
 	// boot itself is discovery only.
 	s.HandleFunc("/internal/store/derived-columns", derivedColumnsHandler(db))
+	// runtimeServing flips once rt.Start has returned; the heal route answers
+	// 503 until then.
+	var runtimeServing atomic.Bool
 	// The explicit heal for historic last_intent_error stamps (host peer only;
 	// GET is a dry run, POST appends one batch). Never a boot step.
-	s.HandleFunc("/internal/self-development/operation-stamp-heal", operationStampHealHandler(rt.Runtime, strings.TrimSpace(os.Getenv("CHOIR_COMPUTER_ID"))))
+	s.HandleFunc("/internal/self-development/operation-stamp-heal", operationStampHealHandler(rt.Runtime, strings.TrimSpace(os.Getenv("CHOIR_COMPUTER_ID")), runtimeServing.Load))
 	s.SetOnListen(func() { bootMark("http_listen_ready") })
 
 	// Capture boot/reconcile log into a bounded ring before Start so guest
@@ -681,6 +685,7 @@ func Run() {
 			if err := rt.Start(ctx); err != nil {
 				return err
 			}
+			runtimeServing.Store(true)
 			// The side table's online check starts after the runtime: never on
 			// the boot path (docs/problems/store-hot-reads-need-a-rollback-safe-side-table-2026-10-21.md).
 			db.StartDerivedKeyValidation(ctx)
@@ -717,6 +722,7 @@ func Run() {
 		if err := rt.Start(ctx); err != nil {
 			boot.fatalf("autoputer: runtime startup refused: %v", err)
 		}
+		runtimeServing.Store(true)
 		db.StartDerivedKeyValidation(ctx)
 		StartPeriodicFileSync(ctx, fileSyncService, fileSyncIntervalFromEnv())
 	}

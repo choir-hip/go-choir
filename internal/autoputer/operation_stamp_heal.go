@@ -34,11 +34,22 @@ type stampHealer interface {
 // replay on a computer with no published base). A refused heal (a row moved
 // since the plan, or another heal is running) is 409 with nothing appended.
 // Only the host peer may call it: the guest's own children (loopback) are
-// refused. It is never a boot step.
-func operationStampHealHandler(healer stampHealer, computerID string) http.HandlerFunc {
+// refused. It answers 503 until the runtime is serving. It is never a boot
+// step. Do not call it on the paper (or any computer with no published base):
+// the replay probe there is a full-chain replay that did not answer in 10
+// minutes, and its capture holds the appender mutex, so tape appends wait for
+// the length of the live extract.
+func operationStampHealHandler(healer stampHealer, computerID string, serving func() bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !server.HostPeerCaller(r) {
 			http.Error(w, "host peer required", http.StatusForbidden)
+			return
+		}
+		// Not before the runtime serves: during the boot replay the route is
+		// registered but the store is still being rebuilt, and the refusal
+		// must not depend on the appender's head check.
+		if serving == nil || !serving() {
+			http.Error(w, "runtime is not serving yet", http.StatusServiceUnavailable)
 			return
 		}
 		var apply bool
