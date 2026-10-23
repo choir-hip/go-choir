@@ -329,10 +329,46 @@ func (s *Store) runOnlineDoltGC(ctx context.Context) error {
 	// already serializes every other write.
 	s.doltCommitMu.Lock()
 	defer s.doltCommitMu.Unlock()
-	if _, err := s.textureHandle().ExecContext(ctx, "CALL DOLT_GC()"); err != nil {
+	// The pass is named while it runs (docs/problems/paper-remaining-store-
+	// stall-holders-2026-10-23.md, section 1, fix shape 1): the stall header
+	// and the observability store block read the flag, so a store_stalled
+	// snapshot taken during or just after a pass says so. The deferred clear
+	// runs on every exit, an error and a panic included.
+	s.onlineGCSince.Store(time.Now().UnixNano())
+	defer s.onlineGCSince.Store(0)
+	if _, err := s.execOnlineDoltGC(ctx); err != nil {
 		return fmt.Errorf("dolt gc: call dolt_gc (online): %w", err)
 	}
 	return nil
+}
+
+// execOnlineDoltGC issues the pass on the write connection. A test replaces it
+// through onlineGCExecHook to hold a pass open, fail it, or panic in it.
+func (s *Store) execOnlineDoltGC(ctx context.Context) (sql.Result, error) {
+	if hook := s.onlineGCExecHook; hook != nil {
+		return nil, hook(ctx)
+	}
+	return s.textureHandle().ExecContext(ctx, "CALL DOLT_GC()")
+}
+
+// OnlineGCStatus says whether an online Dolt GC pass is running in this
+// process and since when. It takes no lock and never waits, so it answers
+// during the pass it reports.
+type OnlineGCStatus struct {
+	Active bool   `json:"active"`
+	Since  string `json:"since,omitempty"` // RFC 3339, UTC, set while Active
+}
+
+// OnlineGCStatus reads the flag runOnlineDoltGC sets.
+func (s *Store) OnlineGCStatus() OnlineGCStatus {
+	if s == nil {
+		return OnlineGCStatus{}
+	}
+	ns := s.onlineGCSince.Load()
+	if ns == 0 {
+		return OnlineGCStatus{}
+	}
+	return OnlineGCStatus{Active: true, Since: time.Unix(0, ns).UTC().Format(time.RFC3339)}
 }
 
 // maybeRunDoltGC measures, plans and (when the plan says so) runs one GC.

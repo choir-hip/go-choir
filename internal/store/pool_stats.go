@@ -10,6 +10,9 @@ import "database/sql"
 type PoolStats struct {
 	Write PoolStat `json:"write"`
 	Read  PoolStat `json:"read"`
+	// OnlineGC is the online Dolt GC pass flag: a pass holds the write pool's
+	// one connection, so it is the first thing to read beside a stall.
+	OnlineGC OnlineGCStatus `json:"online_gc"`
 }
 
 // PoolStat is one pool's sql.DBStats, durations in milliseconds.
@@ -43,5 +46,5 @@ func (s *Store) PoolStats() *PoolStats {
 	if s == nil {
 		return nil
 	}
-	return &PoolStats{Write: poolStat(s.db), Read: poolStat(s.readDB)}
+	return &PoolStats{Write: poolStat(s.db), Read: poolStat(s.readDB), OnlineGC: s.OnlineGCStatus()}
 }

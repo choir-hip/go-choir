@@ -169,6 +169,11 @@ type Store struct {
 	trajectoryMu  sync.Mutex
 	textureRevMu  sync.Mutex
 	doltCommitMu  sync.Mutex
+	// onlineGCSince is the UnixNano start of the online Dolt GC pass that is
+	// running now, 0 when none is (runOnlineDoltGC, OnlineGCStatus).
+	onlineGCSince atomic.Int64
+	// onlineGCExecHook, when set by a test, stands in for the pass's SQL call.
+	onlineGCExecHook func(context.Context) error
 	// closeMu serializes Close and Reopen: a second Close waits for the
 	// first. closedOK (under closeMu) is set once a Close has closed the
 	// pools, and cleared by Reopen.
