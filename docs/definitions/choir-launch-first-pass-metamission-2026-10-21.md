@@ -351,15 +351,26 @@ now:
       owner takes for the Synthetic half.
     next_observation: the paper's remaining store_stalled holders (selfdev ListByStates, scanSideRows, the online GC) and the Synthetic allowance.
   blocker_or_risk: >-
-    Owner decisions: the Synthetic gate (held at 3; a higher gate empties
-    the allowance sooner and there is no fallback), the roadmap re-cut (lane/fp0-roadmap-recut). Guest-shell
-    proof steps (SEC-10 step 3, FP7 step 5, body caps step 11) are the
-    owner's manual items. F-c deploy 2 is gated on a real stream_seq close
-    (a persisted high-water mark or an index).
+    The owner restarted the Mac at about 15:05 UTC 2026-10-23: local
+    workers, Devin seats and omp seats stopped; the agents-VM mirrors and
+    everything on Node B kept running. The paper runs luna alone with no
+    fallback since 14:47:30 (owner: "chatgpt luna 100% with synthetic only
+    as fallback for now"); the luna-synthetic pool is built but not
+    deployed. Owner decisions open: the roadmap re-cut
+    (lane/fp0-roadmap-recut), whether the paper runs telemetry.batch.
   next_action: >-
-    The owner's agenda. Named next: the stream_seq
-    high-water mark before F-c deploy 2; ListEventsByOwnerAfter's header
-    window; the dispatcher's pool-aware scheduling if the owner picks it.
+    Resume from the ledger's 15:0x restart handoff, in order: (1) D17 from
+    lane/fp0-deployD17 once mirror d17 passes (guest diag probes, the
+    online_gc flag, the runs-list scan; orange), then prove SEC-10 step 3
+    and body caps step 11 on T with scripts/guest_diag_probe.py; (2) the
+    luna-synthetic pool (lane/fp0-luna-synthetic-pool fb9d1d61c) after
+    bunch 170 (rerun Devin if it did not finish) and mirror lunapool-r1,
+    then put _runs/paper-model-policy/luna-synthetic-1023.toml on the
+    paper; (3) D18, the selfdev heal alone (lane/fp0-selfdev-heal
+    97a4f55e4, accepted), then GET and POST the heal on T only; (4) the
+    stream_seq lease build (lane/fp0-stream-seq-lease) and the run-memory
+    index diet's restore action (lane/fp0-run-memory-index-diet) resume
+    from their pushed heads, then tier 2 review each.
 
 receipts:
   - id: capture-label-key-read
