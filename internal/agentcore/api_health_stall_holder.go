@@ -62,14 +62,25 @@ func (rt *Runtime) logStoreStallHolders(unanswered []string) {
 		pools = &store.PoolStats{}
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "store_stalled holders: computer=%s unanswered=%s engine_goroutines=%d shown=%d parked_in_conn=%d stack_truncated=%t write_pool{%s} read_pool{%s}",
+	fmt.Fprintf(&b, "store_stalled holders: computer=%s unanswered=%s engine_goroutines=%d shown=%d parked_in_conn=%d stack_truncated=%t %s write_pool{%s} read_pool{%s}",
 		rt.cfg.ComputerID, strings.Join(unanswered, ","), matched, len(lines),
-		strings.Count(dump, connWaitFrame), truncated, formatPoolStat(pools.Write), formatPoolStat(pools.Read))
+		strings.Count(dump, connWaitFrame), truncated, formatOnlineGC(pools.OnlineGC), formatPoolStat(pools.Write), formatPoolStat(pools.Read))
 	for _, line := range lines {
 		b.WriteString("\n")
 		b.WriteString(line)
 	}
 	log.Print(b.String())
+}
+
+// formatOnlineGC is the header field that names a running online Dolt GC pass
+// (docs/problems/paper-remaining-store-stall-holders-2026-10-23.md): the pass
+// holds the write pool's connection, and a snapshot taken just after it ends
+// names the first mover instead.
+func formatOnlineGC(g store.OnlineGCStatus) string {
+	if !g.Active {
+		return "online_gc=idle"
+	}
+	return "online_gc=active since=" + g.Since
 }
 
 func formatPoolStat(p store.PoolStat) string {

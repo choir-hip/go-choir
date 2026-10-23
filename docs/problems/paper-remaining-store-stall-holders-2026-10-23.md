@@ -186,7 +186,7 @@ issues `SELECT 1` every 5 ms and keeps the longest wait.
 
 **Fix shapes. [H] each, ordered by cost; none built.**
 
-1. **Name the pass (instrument, orange).** An in-process flag set by
+1. **Name the pass (instrument, orange). Built on `lane/fp0-online-gc-session`:** `Store.OnlineGCStatus` (set by `runOnlineDoltGC` under `doltCommitMu`, cleared by a defer on every exit), the stall header field `online_gc=active since=<RFC 3339>` or `online_gc=idle`, and `store_pools.online_gc` `{"active":bool,"since":...}` on `/api/runtime/observability`. `/health`'s answer is unchanged. An in-process flag set by
    `runOnlineDoltGC`; the stall header prints `online_gc=active
    since=<t>`. Then the 12:51:04 snapshot would have said GC. It removes no
    503. Smallest, and part of every other shape.
