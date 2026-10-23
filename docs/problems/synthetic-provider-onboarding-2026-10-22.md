@@ -396,6 +396,41 @@ as a model failure; the gate is bypassed on the non-stream path; a 429 still
 reaches the breaker through the stream path; `/health` reports no gate until
 the first call.
 
+Disposition (fix landed on `lane/fp0-synthetic-concurrency`, not yet deployed):
+
+- Gate: `internal/provider/synthetic_gate.go`, held in `SyntheticProvider.call`
+  before media preparation, released at the end of the response or stream.
+  Defaults 8 slots and a 120 s wait; `SYNTHETIC_MAX_CONCURRENT` and
+  `SYNTHETIC_MAX_WAIT` override. The unit needs no change for the defaults. A
+  caller that goes away while waiting leaves at once and holds nothing.
+- Breaker: `providerFailureCounts` skips `ErrUpstreamConcurrencyLimit` (a
+  Synthetic 429, typed at the provider where the status is known) and
+  `ErrConcurrencyGateWait`. The error text the run reads is unchanged
+  (`synthetic: status 429 Too Many Requests (sanitized)`); a gate wait reads
+  `synthetic: call ended while waiting for a synthetic concurrency slot ...`
+  and carries no status, so the run does not read it as a rate limit.
+- Health: `/health` carries `synthetic_gate` (limit, max_wait_ms, in_flight,
+  peak, granted, waited, wait_timeouts, cancelled). To verify on staging after
+  deploy: `waited` rises under load while `wait_timeouts` stays near zero, the
+  journal shows no `synthetic: status 429` and no `circuit open` for the
+  Synthetic model, and `peak` never exceeds `limit`.
+- Tests: provider `synthetic_gate_test.go` (a fake upstream that 429s above N
+  concurrent: 12 callers all succeed in both call shapes, a timed-out waiter is
+  never sent and leaks no slot, a waiter honours its context, the 429 is typed,
+  counters) and gateway `synthetic_gate_breaker_test.go` (a 20-caller burst
+  through the real breaker succeeds, six straight 429s leave the breaker
+  closed, 5xx still opens it, an opencode-go 429 still counts, `/health`).
+- Declined: not counting 429 for every provider (reason above). Also declined:
+  a gateway-wide scheduler dimension per provider; RES-11 stays off and
+  untouched.
+- Residual R-b below is superseded: a burst above the ceiling now waits (up to
+  120 s) instead of failing. The gate is per gateway process and the account
+  limit is per key, so a second consumer of the same key (the probe, a local
+  run) still uses the headroom; the default 8 of about 10 leaves two. Waiting
+  adds latency to the Synthetic half of the paper under load, visible as
+  `waited` and the run's step time, and a wait of 120 s then fails the call
+  (no failover, by ruling).
+
 ## Residuals and risks (named, not fixed here)
 
 - R-a: a pinned-name rotation returns 404 with a body our sanitized error
@@ -403,7 +438,7 @@ the first call.
   behaviour (owner: fail rather than fall back): the Synthetic share errors
   until someone looks, loudly, not silently. Candidate follow-up when failover
   returns to this pool: treat a 404 from a pool member as a failover trigger.
-- R-b: concurrency 10 account-wide against 24 in flight at the gateway and 6
+- R-b (superseded 2026-10-23 by the gate; kept for the record): concurrency 10 account-wide against 24 in flight at the gateway and 6
   per computer. With no failover, a burst above 10 in flight turns the excess
   Synthetic calls into 429 run errors (and opens the model breaker for its
   short window) instead of luna calls: expect error events on the Synthetic
