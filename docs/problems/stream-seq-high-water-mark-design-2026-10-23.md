@@ -788,3 +788,170 @@ The lease write therefore goes through a store method that builds the
 | F3, the 30 s deadline against a 104 s-class seed | **Accept.** An eager seed after replay, and a seeding deadline of at least 3x the measured time. No planned outage | `run.go:772`; section 4 |
 | F4, fence mechanics | **Accept.** The fence goes in `CheckWriteAs` before the mode check; `system:store` joins `BuiltinWriters` (it is at `writer.go:62-65` on main, not `:52-56`, which hold the writer constants); a marker-write failure aborts `Open` | `writer.go:62-65`, `:217-218`; `registry.go:307` |
 | F5, cite drift | **Accept 3. Reject 2.** Fixed: `dolt_store.go:706-715`; the rebase flip `:58-78`; the rewind fence cited at `appender.go:1019-1021`, with `recovery_plan.go:66-71` named only as the tail bound. Rejected: `queryTableContentHash` does start at `dolt_state_extractor.go:388` (`:382` is the schema hash's return), and `DisallowUnknownFields` is at `storeschema/schema.go:88`, not `:84`. Added the `2^20 + 1` first-number line | the cited lines |
+
+## Build record (2026-10-23, lane `lane/fp0-stream-seq-lease`)
+
+Status: **built, not deployed.** Tests first (`6c7a435a8`, yellow), then the
+code (red), then this section (green). The deployed proof of section 6 is
+FP0's; nothing here touched Node B.
+
+### Test status
+
+All 37 exist and pass on the lane. Test 3 is split: the store half (an
+epoch-2 interlude) and the base half (a published blob carries the marker, an
+installed base opens untrusted and seeds exact).
+
+| Tests | Where |
+|---|---|
+| 1, 2, 3 (store half), 6, 8, 9, 10, 11 | `internal/store/stream_seq_lease_test.go` |
+| 3 (base half), 5 | `internal/projectionbase/lease_marker_test.go` |
+| 4, 31 (replay equivalence), observability | `internal/agentcore/stream_seq_lease_test.go` |
+| 7, 29, 8 (AST order) | `internal/store/stream_seq_lease_guard_test.go` |
+| 12 to 17 | `internal/store/stream_seq_lease_test.go` |
+| 18 to 26 | `internal/store/stream_seq_lease_test.go` |
+| 27, 28, 30 | `internal/objectgraph/stream_seq_lease_fence_test.go` |
+| 31 (fixed timestamps), 32, 34, 36 | `internal/store/stream_seq_lease_test.go` |
+| 33 | `internal/computerevent/heads_aligned_test.go` |
+| 35 | `internal/store/stream_seq_lease_crash_test.go` |
+| 37 | `internal/store/stream_seq_exact_seed_scale_test.go` (env gated) |
+| epoch 3, release rule | `internal/storeschema`, `internal/updater/state_compat_lease_test.go` |
+| eager seed placement | `internal/autoputer/stream_seq_seed_boot_test.go` |
+
+### Test 37: the exact seed's cost, measured
+
+Machine: Apple M1, 8 CPUs, 16 GiB, `darwin/arm64`, Go 1.26.9, APFS on the
+internal SSD (`/dev/disk3s1s1`, local). Warm (best of 3, same process, page
+cache hot). Events carry 1.5 KB payloads over 50 runs; one other-kind object
+per three events is interleaved; the maximum `stream_seq` sits on the oldest
+event; `choir_events` holds n/10 rows over 20 owners.
+
+| events | og half, record's keyset page | og half, primary-key id range (built) | table half |
+|---|---|---|---|
+| 20,000 | 474 ms | 53 ms | 11 ms |
+| 60,000 | 6,554 ms | 148 ms | 11 ms |
+| 150,000 | 24,291 ms | 653 ms | 10 ms |
+
+**[V] refuted by the code.** Section 3 said the exact seed's og half is a
+keyset page over `idx_og_objects_kind_owner` and the PK suffix, with
+`ListObjectsPage` as the precedent. The plan (`EXPLAIN PLAN`, in the test log)
+is an `IndexedTableAccess` on a *different* composite index
+(`object_kind, og_rec_conversation_id, canonical_id`) under a
+`TopN(Limit 5000; canonical_id ASC)`: every page re-reads and sorts the kind,
+so the walk is quadratic in pages and was 25 s at 150,000 events. Fail-closed
+choice: the walk is the primary-key range of the kind's canonical ids
+(`obj:<kind>:` to `obj:<kind>;`, the `derivedKeyRange` precedent), a plan with
+no sort, 4.4 us an event, linear. A row of the kind outside that range makes
+the walk fall back to the kind-predicate pages (slow, exact), so the answer is
+exact whatever ids rows carry (`TestExactSeedFindsAnEventOutsideTheKindIDRange`).
+
+The seeding deadline: `max(10 min, 3 x 665 ms)` is the 10-minute floor.
+`leaseExactSeedMeasured` is 665 ms. The paper's own figure is unmeasured (its
+event count is not on this machine, and its first read is cold: the 104 s of
+the seed record was cold chunk reads). The first paper refresh reports
+`seed_ms`; if it exceeds about 200 s the floor must be raised before the
+refresh after. Open question 1 stays open for the paper, closed for the local
+shape.
+
+**Open question 3 closed.** The per-owner skip-seek on `choir_events` plans as
+a reverse `IndexedTableAccess` on `(owner_id, stream_seq)` with no sort
+(`TestExactSeedTablePlanSeeksPerOwner`); 10 ms at 15,000 rows.
+
+### Deviations and additions
+
+Deviations from the record:
+
+1. The og half of the exact seed walks by primary-key id range, not by the
+   kind-predicate keyset (above).
+2. Stream numbers are taken **before** the per-run seq in
+   `allocateEventSeqLocked`. A wait releases `eventMu`; taking the run's seq
+   first would let two appends to one run take seq in one order and stream_seq
+   in the other.
+3. `Close` cancels lease work without a lock and drains it after the
+   commit-lock fence, before the pools are pinned. The first build took
+   `eventMu` at the start of `Close`; an inline commit holds `eventMu` across
+   the fence, and three checkpoint tests (`TestCloseFailedAtTheFenceRestoresCadence`
+   and two others) caught it: `Close` waited 21 s and then succeeded where it
+   must fail closed. A closing store refuses new lease work and fails an
+   allocation fast until `Reopen` (or a failed `Close`) resumes.
+4. `AllocateEventSeq` callers sharing one record: the "already numbered"
+   check is repeated inside the wait loop (`TestAllocateEventSeqSharedRecordTakesOneNumber`
+   caught four callers taking four numbers after a shared wait).
+5. Untrust reason precedence is `no_lease`, then `receipt` or `marker`, then
+   `inconsistent`, `ceiling`, `violated`. A store with no lease row reports
+   `no_lease` even with a marker, so the proof's first boot on an epoch-2
+   store reads `no_lease`, and a rollback reads `receipt`.
+6. `Open` writes the marker for an absent receipt only on a workspace that
+   already holds data (a fresh workspace is not a swap). An unreadable
+   receipt writes it.
+7. An outage before a process's first allocation makes first allocations wait
+   for the seed, up to the seeding deadline (10 minutes), and then fail; they
+   do not fail at once as a store with a lease does. `TestPlatformOutageIsBounded`
+   now seeds first.
+8. The eager seed is skipped in the replay-only host drive (`RUNTIME_RECOVERY_REPLAY_ONLY`):
+   a lease append is an append, and that drive must not append.
+9. `last_lease_error` is sticky: the last error, not the current one.
+10. The telemetry test harness records lease-only batches apart
+    (`leaseSnapshot`) so the workload tape keeps its shape. The flag-off golden
+    (`telemetry_flag_off_tape.golden.json`) is regenerated: event bodies carry
+    `stream_seq`, which now starts at 2^20 + 1. Only hashes and the
+    `stream_seq` field changed. `TestTelemetryStats...` count the lease as one
+    tape event.
+11. Existing tests that pinned `stream_seq` values (a fresh store began at 1)
+    pin the lease's numbers instead: 2^20 + 1 fresh, `max + 2^20 + 1` for an
+    exact seed, above the previous lease on a trusted restart. The old window
+    tests became cross-check tests (test 36).
+12. Unbound stores (tests, no tape) write the lease by direct SQL and have no
+    head precondition.
+
+Additions from bunch 169 (Devin, round 3: nothing blocking):
+
+1. **Medium-Low, the seeder's retry.** Chosen: a retry backoff (1 s,
+   doubling per consecutive failure, capped at 30 s) and a counter, surfaced
+   in `last_lease_error` ("seed attempt N failed: ...") and the new
+   `seed_failed` field (`TestSeederRetriesWithABackoffAndACounter`,
+   `TestSeederFailureNamesTheAttemptInLastLeaseError`). Not built: the
+   head-delta retry. It needs a classification of every op kind between the
+   scan's head and the retry's, and a mistake in it silently reuses a stale
+   scan; backoff is the fail-closed choice that can be tested. Reading the
+   code: an intervening desk write does not fail the lease CAS in-process
+   (`appendLocked` binds the head under the appender mutex), and no event can
+   be minted while seeding, so a rescan is needed only when an append really
+   failed; the premise is recorded as unverified on a live always-busy
+   computer.
+2. **Low, a tombstoned lease row.** Logged and counted
+   (`lease_tombstoned`); the row is untrusted and the exact seed runs
+   (`TestTombstonedLeaseRowIsUntrustedLoggedAndCounted`).
+3. **Low, the capability.** `WithStreamSeqLeaseCapability` inherits the
+   `WithWriter` trust boundary: both are context values set by trusted
+   in-process code, never from a cell, a model or a request body, and the
+   source guard (test 29) is what keeps the capability's caller list to
+   `internal/store/stream_seq_lease.go`.
+4. **Nit, test 37** records the machine and disk context (above, and in the
+   test log).
+
+### The observability block
+
+`GET /api/runtime/observability` carries `stream_seq_lease`, served from a
+snapshot published on each state change (reading it never waits on the
+allocator; only `marker_present` is read live, one `stat`):
+
+```json
+{"state":"ready","reserved_through":0,"allocated_through":0,"trusted":false,
+ "untrust_reason":"no_lease","seeded_from":"exact","seed_ms":0,
+ "cross_check_max":0,"refill_failed":0,"last_lease_error":"",
+ "marker_present":false,"seed_failed":0,"lease_tombstoned":0}
+```
+
+`state` is `unseeded`, `seeding` or `ready`; `untrust_reason` is
+`no_lease`, `receipt`, `marker`, `inconsistent`, `ceiling`, `violated`, or
+empty when trusted; `seeded_from` is `exact` or `lease`. The last two fields
+are additions (bunch 169).
+
+### Not done, and residual
+
+- The deployed proof (section 6) and the paper's measured `seed_ms`.
+- Lane `fp1-event-table-d2`: its `store.event_table` setting must refuse to
+  turn on until `state` is `ready` with a lease on the tape (not on this lane).
+- The VM snapshot resume residual (open question 4) is unchanged.
+- The full `internal/agentcore` suite was not run; the focused run of the
+  instruction (`Event|Seq|Lease|Rematerial|Restore|Replay`) passes.
