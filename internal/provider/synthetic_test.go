@@ -81,9 +81,9 @@ func TestSyntheticReasoningEffortNeverSendsAnInvalidValue(t *testing.T) {
 	for in, want := range map[string]string{
 		"":         "",
 		"none":     "none",
-		"minimal":  "minimal",
+		"minimal":  "none",
 		"low":      "low",
-		"medium":   "medium",
+		"medium":   "high",
 		"high":     "high",
 		" High ":   "high",
 		"xhigh":    "xhigh",

@@ -49,6 +49,10 @@ const (
 	ownerEditedLine   = "# owner-edited"
 )
 
+// catalogPools is the pool table Assign and the parser read: modelcatalog.Pools
+// in production, a seam for tests that need a default pool of several members.
+var catalogPools = modelcatalog.Pools
+
 // defaultPoolSpec is the spec every role uses by default.
 var defaultPoolSpec = modelcatalog.PoolSpecPrefix + modelcatalog.DefaultPool
 
@@ -224,7 +228,7 @@ func Assign(selection provideriface.LLMSelection, thread string) (provideriface.
 		}
 	}
 	if pool == "" {
-		members := modelcatalog.Pools()[modelcatalog.DefaultPool]
+		members := catalogPools()[modelcatalog.DefaultPool]
 		for i, member := range members {
 			if member.Provider == selection.Provider && member.Model == model {
 				return selection, poolSelections(rotate(members, i)[1:], selection), assignment
@@ -232,9 +236,9 @@ func Assign(selection provideriface.LLMSelection, thread string) (provideriface.
 		}
 		return selection, nil, assignment
 	}
-	members, ok := modelcatalog.Pools()[pool]
+	members, ok := catalogPools()[pool]
 	if !ok || len(members) == 0 {
-		members = modelcatalog.Pools()[modelcatalog.DefaultPool]
+		members = catalogPools()[modelcatalog.DefaultPool]
 	}
 	index := weightedIndex(members, fnv32(thread))
 	ordered := poolSelections(rotate(members, index), selection)
@@ -356,7 +360,7 @@ func (p Policy) Selections() []provideriface.LLMSelection {
 	seen := make(map[string]bool, len(roles)+1)
 	add := func(selection provideriface.LLMSelection) {
 		if strings.HasPrefix(selection.Model, modelcatalog.PoolSpecPrefix) {
-			members := modelcatalog.Pools()[strings.TrimPrefix(selection.Model, modelcatalog.PoolSpecPrefix)]
+			members := catalogPools()[strings.TrimPrefix(selection.Model, modelcatalog.PoolSpecPrefix)]
 			for _, member := range poolSelections(members, selection) {
 				if !seen[member.Model] {
 					seen[member.Model] = true
