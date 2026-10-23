@@ -198,12 +198,14 @@ func decodeJSON(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
 func TestDNSProbeReportsFixtures(t *testing.T) {
 	dir := t.TempDir()
 	src := dnsDiagSources{
-		resolvConfPath:    writeFixture(t, dir, "resolv.conf", fixtureResolvConf),
-		networkUnitPath:   writeFixture(t, dir, "10-vm-runtime.network", fixtureNetworkUnit),
-		resolvedConfPath:  writeFixture(t, dir, "resolved-resolv.conf", fixtureResolvedConf),
-		resolvectl:        func(context.Context) (string, bool, error) { return fixtureResolvectl, true, nil },
-		lookup:            func(context.Context, string) ([]string, error) { return []string{"93.184.216.34"}, nil },
-		udpQuery:          func(context.Context, string, string, time.Duration) (bool, error) { return false, errors.New("i/o timeout") },
+		resolvConfPath:   writeFixture(t, dir, "resolv.conf", fixtureResolvConf),
+		networkUnitPath:  writeFixture(t, dir, "10-vm-runtime.network", fixtureNetworkUnit),
+		resolvedConfPath: writeFixture(t, dir, "resolved-resolv.conf", fixtureResolvedConf),
+		resolvectl:       func(context.Context) (string, bool, error) { return fixtureResolvectl, true, nil },
+		lookup:           func(context.Context, string) ([]string, error) { return []string{"93.184.216.34"}, nil },
+		udpQuery: func(context.Context, string, string, time.Duration) (bool, error) {
+			return false, errors.New("i/o timeout")
+		},
 		fixedLookupName:   "example.com",
 		fixedUDPTarget:    "1.1.1.1:53",
 		udpTimeout:        2 * time.Second,
@@ -524,8 +526,11 @@ func TestBodyCapProbeReportsStatusAndHeadersOfBothLegs(t *testing.T) {
 	if model["declared_content_length"] != float64(gatewaycapprobe.ModelDeclaredLength) || model["body_bytes_sent"] != float64(0) {
 		t.Fatalf("model leg declared/sent = %v", model)
 	}
-	if search["body_bytes_sent"] != float64(gatewaycapprobe.SearchBodySize) {
-		t.Fatalf("search leg sent = %v, want %d", search["body_bytes_sent"], gatewaycapprobe.SearchBodySize)
+	if search["body_bytes_planned"] != float64(gatewaycapprobe.SearchBodySize) {
+		t.Fatalf("search leg planned = %v, want %d", search["body_bytes_planned"], gatewaycapprobe.SearchBodySize)
+	}
+	if sent, _ := search["body_bytes_sent"].(float64); sent <= 0 || sent > float64(gatewaycapprobe.SearchBodySize) {
+		t.Fatalf("search leg sent = %v, want 1..%d", search["body_bytes_sent"], gatewaycapprobe.SearchBodySize)
 	}
 	if h, _ := search["headers"].(map[string]any); h["Content-Type"] == nil {
 		t.Fatalf("search headers = %v", search["headers"])
