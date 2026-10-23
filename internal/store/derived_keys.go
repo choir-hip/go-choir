@@ -116,7 +116,7 @@ func (s *Store) StartDerivedKeyValidation(ctx context.Context) {
 	}()
 }
 
-var derivedKeyFamilies = []string{objectgraph.KeyRunAgentID, objectgraph.KeyCommitmentAddressee, objectgraph.KeySourceRefDocID}
+var derivedKeyFamilies = []string{objectgraph.KeyActorWakeOutboxProjected, objectgraph.KeyRunAgentID, objectgraph.KeyCommitmentAddressee, objectgraph.KeySourceRefDocID}
 
 func allFamiliesValidated(d *objectgraph.DerivedKeys) bool {
 	for _, name := range derivedKeyFamilies {

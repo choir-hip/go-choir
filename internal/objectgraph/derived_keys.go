@@ -14,8 +14,9 @@ import (
 )
 
 // The og_key_index side table: a rollback-safe replacement for scanning JSON
-// in og_objects for three hot equality reads (a run by agent_id, a
-// commitment record by addressee, a source ref by doc_id). The design, its
+// in og_objects for four hot equality reads (a run by agent_id, a
+// commitment record by addressee, a source ref by doc_id, an actor wake
+// outbox row by projected). The design, its
 // failure modes and its rollback are in
 // docs/problems/store-hot-reads-need-a-rollback-safe-side-table-2026-10-21.md.
 //
@@ -40,7 +41,14 @@ const (
 	KeyRunAgentID          = "run.agent_id"
 	KeyCommitmentAddressee = "commitment_record.addressee"
 	KeySourceRefDocID      = "source_ref.doc_id"
+	// KeyActorWakeOutboxProjected answers the open-wakes list (projected =
+	// "false") without reading every outbox row ever written
+	// (docs/problems/actor-wake-outbox-list-full-scan-2026-10-23.md).
+	KeyActorWakeOutboxProjected = "actor_wake_outbox.projected"
 )
+
+// ActorWakeOutboxKind is the object kind of the durable actor wake outbox.
+const ActorWakeOutboxKind = ObjectKind("choir.actor_wake_outbox")
 
 const (
 	derivedKeysPageOpName    = "(*DoltStore).ValidateDerivedKeys page"
@@ -73,7 +81,11 @@ type derivedFamily struct {
 	expr string
 }
 
+// The outbox family is first: a pass validates the families in this order,
+// and the outbox is read by a loop every minute, while the others wait on a
+// larger kind.
 var derivedFamilies = []derivedFamily{
+	{Name: KeyActorWakeOutboxProjected, Kind: ActorWakeOutboxKind, expr: `JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), '$.projected'))`},
 	{Name: KeyRunAgentID, Kind: "choir.run", expr: `JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), '$.agent_id'))`},
 	{Name: KeyCommitmentAddressee, Kind: commitmentRecordKind, expr: `JSON_UNQUOTE(JSON_EXTRACT(CAST(CAST(body AS CHAR) AS JSON), '$.addressee'))`},
 	{Name: KeySourceRefDocID, Kind: "choir.source_ref", expr: `JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), '$.doc_id'))`},
@@ -109,6 +121,8 @@ func derivedFamilyForMetadataRead(kind, jsonPath string) *derivedFamily {
 		return derivedFamilyByName(KeyRunAgentID)
 	case kind == "choir.source_ref" && jsonPath == "$.doc_id":
 		return derivedFamilyByName(KeySourceRefDocID)
+	case kind == string(ActorWakeOutboxKind) && jsonPath == "$.projected":
+		return derivedFamilyByName(KeyActorWakeOutboxProjected)
 	}
 	return nil
 }
