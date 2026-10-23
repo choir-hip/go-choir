@@ -461,15 +461,20 @@ func maybeRunDoltGC(persistentDir, workspacePath, mode string, maxJournalBytes u
 // collected between boots. It returns immediately; the loop
 // runs until ctx is cancelled, so ctx must live as long as the store. (Until
 // 2026-10-15 the only caller cancelled ctx as soon as this returned, so the
-// loop exited before its first tick and GC ran only at boot.)
-func StartPeriodicDoltGC(ctx context.Context, s *Store, persistentDir string, interval time.Duration) {
+// loop exited before its first tick and GC ran only at boot.) The returned
+// channel closes when the loop has exited, so a caller can wait out a pass in
+// flight after cancelling ctx.
+func StartPeriodicDoltGC(ctx context.Context, s *Store, persistentDir string, interval time.Duration) <-chan struct{} {
+	done := make(chan struct{})
 	if doltGCDisabled() || s == nil {
-		return
+		close(done)
+		return done
 	}
 	if interval <= 0 {
 		interval = 5 * time.Minute
 	}
 	go func() {
+		defer close(done)
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		if err := s.MaybeRunOnlineDoltGC(ctx, persistentDir); err != nil {
@@ -486,4 +491,5 @@ func StartPeriodicDoltGC(ctx context.Context, s *Store, persistentDir string, in
 			}
 		}
 	}()
+	return done
 }
