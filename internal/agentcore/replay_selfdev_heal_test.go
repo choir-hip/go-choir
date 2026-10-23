@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 )
 
@@ -162,8 +163,9 @@ func TestSelfDevelopmentIntentStampHealRefusesARowWhoseStateMovedAfterThePlan(t 
 		}
 	}
 	before := headSequence(t, ctx, rt, computerID)
-	if _, err := rt.HealSelfDevelopmentIntentStamps(ctx, computerID, true, false); !errors.Is(err, selfdev.ErrConflict) {
-		t.Fatalf("a row whose state moved was not refused: %v", err)
+	_, err := rt.HealSelfDevelopmentIntentStamps(ctx, computerID, true, false)
+	if !errors.Is(err, selfdev.ErrConflict) || !errors.Is(err, computerevent.ErrProjectionMismatch) {
+		t.Fatalf("a row whose state moved was not refused by ExpectedState: %v", err)
 	}
 	// The Transition itself is one event; the heal added none.
 	if got := headSequence(t, ctx, rt, computerID); got != before+1 {

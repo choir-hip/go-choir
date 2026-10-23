@@ -180,9 +180,7 @@ func OpenTextureWorkspace(path string) (*Store, error) {
 	}
 	s.ogStore = ogDoltStore
 	ogDoltStore.SetWriteValidator(s.vocabWriteGuard)
-	if rep, err := s.loadVocabMigrationReport(); err == nil && rep != nil {
-		s.vocabCutover.Store(true)
-	}
+	s.armVocabFenceFromReport()
 	s.og = objectgraph.NewService(objectgraph.Config{
 		Durable: ogDoltStore,
 	})

@@ -584,13 +584,27 @@ func (s *Store) appendStartIntentProjection(ctx context.Context, intent computer
 }
 
 func (s *Store) appendOperationProjection(ctx context.Context, operation Operation, expectedState string) error {
+	op, err := operationProjectionOp(operation, expectedState)
+	if err != nil {
+		return err
+	}
+	if err := s.projection.AppendProjectionOps(ctx, []computerevent.ProjectionOp{op}); err != nil {
+		return fmt.Errorf("append operation projection: %w", err)
+	}
+	return nil
+}
+
+// operationProjectionOp builds the projection op the projector reads for one
+// operation row. expectedState is empty for a create and the row's current
+// state for a state-preserving or state-moving update.
+func operationProjectionOp(operation Operation, expectedState string) (computerevent.ProjectionOp, error) {
 	verifiers := operation.VerifierRefs
 	if verifiers == nil {
 		verifiers = []string{}
 	}
 	verifiersJSON, err := json.Marshal(verifiers)
 	if err != nil {
-		return fmt.Errorf("marshal operation verifier refs: %w", err)
+		return computerevent.ProjectionOp{}, fmt.Errorf("marshal operation verifier refs: %w", err)
 	}
 	body, err := json.Marshal(computerevent.SelfDevelopmentOperationProjection{
 		OperationID: operation.OperationID, IdempotencyKey: operation.IdempotencyKey,
@@ -609,16 +623,13 @@ func (s *Store) appendOperationProjection(ctx context.Context, operation Operati
 		CreatedAt: operation.CreatedAt, UpdatedAt: operation.UpdatedAt, ExpectedState: expectedState,
 	})
 	if err != nil {
-		return fmt.Errorf("marshal operation projection: %w", err)
+		return computerevent.ProjectionOp{}, fmt.Errorf("marshal operation projection: %w", err)
 	}
-	if err := s.projection.AppendProjectionOps(ctx, []computerevent.ProjectionOp{{
+	return computerevent.ProjectionOp{
 		Kind:        computerevent.ProjectionOpSelfDevelopmentOperation,
 		CanonicalID: operation.OperationID,
 		Body:        body,
-	}}); err != nil {
-		return fmt.Errorf("append operation projection: %w", err)
-	}
-	return nil
+	}, nil
 }
 
 const operationSelect = `SELECT operation_id, idempotency_key, request_commitment, computer_id, trajectory_id, capsule_id, base_head, prompt_artifact_ref, bundle_digest, release_digest, code_ref, artifact_program_ref, verifier_refs_json, decision_actor, decision_event, decision_receipt, desired_head, effective_head, materialization_receipt, checkpoint_ref, route_certificate, route_generation, route_receipt, mode_receipt, lifecycle_receipt, state, terminal_error, last_intent_error, created_at, updated_at FROM self_development_operations`

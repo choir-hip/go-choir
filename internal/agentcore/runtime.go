@@ -228,6 +228,11 @@ type Runtime struct {
 	// replayProbeAfterCapture is a test seam: it runs after the
 	// replay-completeness probe captures its head and live state.
 	replayProbeAfterCapture func()
+	// selfdevStampHealMu admits one operator stamp heal at a time;
+	// selfdevStampHealAfterPlan is a test seam that runs between the heal's
+	// plan and its apply (selfdev_stamp_heal.go).
+	selfdevStampHealMu        sync.Mutex
+	selfdevStampHealAfterPlan func()
 	// candidateJudge is the decision model (Jev): support judgement and
 	// intake labels.
 	candidateJudge CandidateJudge
