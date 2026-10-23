@@ -366,12 +366,20 @@ func TestGuestImageHardeningIsDeclared(t *testing.T) {
 	// SEC-10 step 3: a guest with the host resolver drops resolved's
 	// compiled-in public fallback, and only that guest: every other guest
 	// has no link DNS= and resolves through the fallback today.
-	dnsBranch := nix[strings.Index(nix, `if [ -n "$dns_ip" ]; then`):]
-	if i := strings.Index(dnsBranch, "\n      fi\n"); i > 0 {
-		dnsBranch = dnsBranch[:i]
+	dnsBranch := ""
+	if i := strings.Index(nix, `if [ -n "$dns_ip" ]; then`); i >= 0 {
+		dnsBranch = nix[i:]
+		if j := strings.Index(dnsBranch, "\n      fi\n"); j > 0 {
+			dnsBranch = dnsBranch[:j]
+		}
 	}
 	if !strings.Contains(dnsBranch, "/run/systemd/resolved.conf.d/") || !strings.Contains(dnsBranch, "FallbackDNS=\n") {
 		t.Error("a guest given choir.dns keeps resolved's public fallback servers (SEC-10 step 3)")
+	}
+	// resolved is already running when the drop-in lands; without a restart
+	// it keeps the fallback it may have picked for the whole boot.
+	if !strings.Contains(dnsBranch, "systemctl restart --no-block systemd-resolved.service") {
+		t.Error("the choir.dns branch writes the no-fallback drop-in but never restarts resolved to read it")
 	}
 	if strings.Contains(nix, "FallbackDNS") && !strings.Contains(dnsBranch, "FallbackDNS") {
 		t.Error("FallbackDNS is set outside the choir.dns branch, which would strip the only resolver of an unselected guest")
