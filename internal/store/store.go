@@ -601,7 +601,6 @@ CREATE INDEX IF NOT EXISTS idx_events_owner_id ON events(owner_id);
 CREATE INDEX IF NOT EXISTS idx_events_agent_id ON events(agent_id);
 CREATE INDEX IF NOT EXISTS idx_events_channel_id_ts ON events(channel_id, ts);
 CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts);
-CREATE INDEX IF NOT EXISTS idx_run_memory_entries_loop_seq ON run_memory_entries(loop_id, seq);
 CREATE INDEX IF NOT EXISTS idx_run_memory_entries_owner_loop_seq ON run_memory_entries(owner_id, loop_id, seq);
 CREATE INDEX IF NOT EXISTS idx_run_memory_entries_owner_agent_created ON run_memory_entries(owner_id, agent_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_run_memory_entries_parent ON run_memory_entries(parent_entry_id);
@@ -960,6 +959,14 @@ func Open(dbPath string) (*Store, error) {
 	// Its error is in the boot phase log (status=failed) and never fails Open.
 	_ = bootSubstep("runtime-schema", "run-memory-kind-index", func() error {
 		return s.ensureRunMemoryKindIndexAtOpen(context.Background())
+	})
+
+	// R5: the duplicate idx_run_memory_entries_loop_seq is dropped from an empty
+	// table and only reported on one with rows (run_memory_duplicate_index.go).
+	// schemaDDL no longer creates it. Same rule: never DDL at boot on a table
+	// with rows; the operation drops it.
+	_ = bootSubstep("runtime-schema", "run-memory-loop-seq-index", func() error {
+		return s.dropRunMemoryLoopSeqIndexAtOpen(context.Background())
 	})
 
 	// Persist the running build's store schema epoch inside the workspace so

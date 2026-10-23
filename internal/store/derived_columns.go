@@ -46,6 +46,8 @@ type DerivedColumnMigrationStatus struct {
 	Error     string                       `json:"error,omitempty"`
 	// RunMemoryKindIndex is nil until the store reports it.
 	RunMemoryKindIndex *RunMemoryKindIndexStatus `json:"run_memory_kind_index,omitempty"`
+	// RunMemoryLoopSeqIndex is the duplicate index the operation drops (R5).
+	RunMemoryLoopSeqIndex *RunMemoryLoopSeqIndexStatus `json:"run_memory_loop_seq_index,omitempty"`
 }
 
 // RunMemoryKindIndexStatus is the state of the run_memory_entries kind index,
@@ -54,6 +56,16 @@ type RunMemoryKindIndexStatus struct {
 	Name    string `json:"name"`
 	Present bool   `json:"present"`
 	HasRows bool   `json:"has_rows"`
+}
+
+// RunMemoryLoopSeqIndexStatus is the state of the duplicate
+// idx_run_memory_entries_loop_seq: present means it still costs a tree per
+// append; CoveredByUniqueKey says UNIQUE(loop_id, seq) can take its place.
+type RunMemoryLoopSeqIndexStatus struct {
+	Name               string `json:"name"`
+	Present            bool   `json:"present"`
+	HasRows            bool   `json:"has_rows"`
+	CoveredByUniqueKey bool   `json:"covered_by_unique_key"`
 }
 
 type derivedColumnMigration struct {
@@ -109,6 +121,9 @@ func (s *Store) StartDerivedColumnMigration() (DerivedColumnMigrationStatus, err
 	if idx, err := s.discoverRunMemoryKindIndex(probeCtx); err == nil {
 		m.status.RunMemoryKindIndex = &idx
 	}
+	if idx, err := s.discoverRunMemoryLoopSeqIndex(probeCtx); err == nil {
+		m.status.RunMemoryLoopSeqIndex = &idx
+	}
 	probeCancel()
 	og := s.ogStore
 	go s.runDerivedColumnMigration(ctx, og)
@@ -144,7 +159,23 @@ func (s *Store) runDerivedColumnMigration(ctx context.Context, og *objectgraph.D
 			m.mu.Unlock()
 		}
 	}
+	// R5: the duplicate loop_seq index is dropped after the kind index; a
+	// cancel or a failure before it skips it.
+	var dropErr error
+	if ctx.Err() == nil && indexErr == nil {
+		m.mu.Lock()
+		number := len(m.status.Steps) + 1
+		m.mu.Unlock()
+		step, stepErr := s.migrateRunMemoryLoopSeqIndex(ctx, number)
+		dropErr = stepErr
+		if step != nil {
+			m.mu.Lock()
+			m.status.Steps = append(m.status.Steps, *step)
+			m.mu.Unlock()
+		}
+	}
 	indexStatus, indexStatusErr := s.discoverRunMemoryKindIndex(context.Background())
+	loopSeqStatus, loopSeqStatusErr := s.discoverRunMemoryLoopSeqIndex(context.Background())
 	// The final plan is read fresh: a cancel can land before the first
 	// discovery.
 	plan, planErr := og.DiscoverAccessPaths(context.Background())
@@ -156,6 +187,9 @@ func (s *Store) runDerivedColumnMigration(ctx context.Context, og *objectgraph.D
 	m.status.Plan = plan
 	if indexStatusErr == nil {
 		m.status.RunMemoryKindIndex = &indexStatus
+	}
+	if loopSeqStatusErr == nil {
+		m.status.RunMemoryLoopSeqIndex = &loopSeqStatus
 	}
 	m.status.EndedAt = time.Now().UTC().Format(time.RFC3339)
 	switch {
@@ -169,6 +203,11 @@ func (s *Store) runDerivedColumnMigration(ctx context.Context, og *objectgraph.D
 	case indexErr != nil:
 		m.status.State = DerivedColumnMigrationFailed
 		m.status.Error = indexErr.Error()
+	case errors.Is(dropErr, context.Canceled):
+		m.status.State = DerivedColumnMigrationCancelled
+	case dropErr != nil:
+		m.status.State = DerivedColumnMigrationFailed
+		m.status.Error = dropErr.Error()
 	case ctx.Err() != nil:
 		// A cancel landed after the og_objects part and before the index step
 		// (or between): what was not run is not done.
@@ -223,6 +262,11 @@ func (s *Store) DerivedColumnMigrationStatus(ctx context.Context) DerivedColumnM
 		status.Plan = plan
 		if idx, err := s.discoverRunMemoryKindIndex(ctx); err == nil {
 			status.RunMemoryKindIndex = &idx
+		} else if status.Error == "" {
+			status.Error = err.Error()
+		}
+		if idx, err := s.discoverRunMemoryLoopSeqIndex(ctx); err == nil {
+			status.RunMemoryLoopSeqIndex = &idx
 		} else if status.Error == "" {
 			status.Error = err.Error()
 		}

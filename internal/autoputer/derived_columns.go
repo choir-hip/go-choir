@@ -21,7 +21,9 @@ import (
 //
 // After the og_objects steps it also builds the run_memory_entries kind index
 // (internal/store/run_memory_kind_index.go) when it is missing, reported as
-// run_memory_kind_index in the status. Each step holds the engine for one ALTER or CREATE INDEX, so the
+// run_memory_kind_index in the status, and drops the duplicate
+// idx_run_memory_entries_loop_seq (internal/store/run_memory_duplicate_index.go)
+// when it is present, reported as run_memory_loop_seq_index. Each step holds the engine for one ALTER or CREATE INDEX, so the
 // computer's store work waits during a step and runs between steps; the
 // listener and health stay up. Only the host peer may call it: the guest's
 // own children (loopback) are refused.
