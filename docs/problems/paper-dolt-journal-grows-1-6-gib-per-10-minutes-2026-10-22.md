@@ -855,3 +855,17 @@ Tests run: `go test ./internal/toolregistry`; `go test ./internal/agentcore -run
 'Cut|ToolResult|DeskCell|Egress|ToolLoop'`; `node --test
 scripts/reeng_invariants_test.mjs scripts/reeng_tracer_checks_test.mjs`;
 `python3 -I scripts/journal_cuts_readers_test.py`.
+
+### FP0 at landing (D7): a refused tool batch leaves no durable row
+
+Bunch 138 (DeepSeek, on 65e471113, ACCEPT) noted, out of this delta's scope:
+a refused batch (`internal/toolregistry/batch_executor.go:44-56`) returns
+without emitting any `tool.result`. Before R1, its `tool.invoked` rows were
+durable, so the refused attempt stayed on the tape; with `tool.invoked`
+bus-only it leaves nothing durable. The gap is older than this lane (the
+refusal never had a `tool.result`) but R1 widens it. Residual R-J1: emit a
+durable `tool.result` with `is_error` and the refusal reason for a refused
+batch, in a later lane; no acceptance or replay reader depends on refused
+attempts today (bunch 138 checked `run_acceptance.go`). Also from bunch 138:
+the F-6 planter change is inert (no test covers it; LOW), and
+`arguments_raw` is not byte-exact for non-UTF-8 provider bytes (INFO).
