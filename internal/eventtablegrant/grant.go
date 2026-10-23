@@ -69,5 +69,8 @@ func ReadGrant(dir, computerID string) Status {
 	if strings.TrimSpace(g.ComputerID) != computerID {
 		return Status{Reason: "the event table grant names another computer"}
 	}
+	if g.Basis != BasisComputer {
+		return Status{Reason: "the event table grant has an unknown basis"}
+	}
 	return Status{Granted: true, ComputerID: computerID, Reason: "granted (" + BasisComputer + ")"}
 }
