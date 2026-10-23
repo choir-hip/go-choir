@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/hostauth"
+	"github.com/yusefmosiah/go-choir/internal/server"
 )
 
 // Tests for GET /internal/platform/artifact-gc/tape/extra-refs, the read-only
@@ -203,5 +204,47 @@ func TestTapeExtraRefsRouteIsHostInternalOnly(t *testing.T) {
 		if tc.want != http.StatusOK && regexp.MustCompile(`[0-9a-f]{64}`).MatchString(rec.Body.String()) {
 			t.Errorf("%s: a refused call saw digests: %s", tc.name, rec.Body.String())
 		}
+	}
+}
+
+// The route is reachable at its exact path through the real registration
+// (server.NewServer + RegisterRoutes + the host-credential middleware), GET
+// only. The other tests call the handler directly, so a typo in the
+// registered pattern would 404 the operator and still pass them.
+func TestTapeExtraRefsRouteIsRegisteredAtItsExactPath(t *testing.T) {
+	f := newTapeFixture(t)
+	want := f.seedExtraRefs()
+	const token = "tape-extra-refs-token-0123456789abcdef0123456789"
+	restore := hostauth.SetForTesting(hostauth.ModeEnforce, token)
+	defer restore()
+	srv := server.NewServer("corpusd-test", "0")
+	RegisterRoutes(srv, NewHandler(f.svc))
+	call := func(method, path string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, nil)
+		req.RemoteAddr = "127.0.0.1:5555"
+		internalMarker(req)
+		req.Header.Set(hostauth.Header, token)
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		return rec
+	}
+	const path = "/internal/platform/artifact-gc/tape/extra-refs"
+	rec := call(http.MethodGet, path)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET %s = %d %s", path, rec.Code, rec.Body.String())
+	}
+	var got tapeExtraRefsAnswer
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("answer is not JSON: %v: %s", err, rec.Body.String())
+	}
+	if strings.Join(got.Digests, ",") != strings.Join(want, ",") {
+		t.Fatalf("digests = %v, want %v", got.Digests, want)
+	}
+	if rec := call(http.MethodPost, path); rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("POST %s = %d, want 405: %s", path, rec.Code, rec.Body.String())
+	}
+	// A neighbouring path must not reach the extra-refs handler.
+	if rec := call(http.MethodGet, path+"x"); rec.Code == http.StatusOK {
+		t.Fatalf("GET %sx reached a handler: %s", path, rec.Body.String())
 	}
 }
