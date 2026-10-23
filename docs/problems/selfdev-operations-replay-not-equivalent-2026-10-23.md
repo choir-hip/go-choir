@@ -401,20 +401,132 @@ Heresy delta (Reopen fix): repaired: an OG writer outside the tape after a
 live rematerialize, reachable in a running process (reproduced through
 `RematerializeFromTape`, not only at the store). Introduced: none.
 
-### Second Reopen defect found (not fixed): the vocabulary write fence
+### Second Reopen defect: the vocabulary write fence (found in round 1, fixed in round 2)
 
 `Open` builds the object-graph store with
 `SetWriteValidator(s.vocabWriteGuard)`, a method value bound to the store
 being opened (`store/store.go:809`, `store/texture.go:184`). `Reopen` opens a
-temporary store, adopts its handles, then zeroes it (`*live = Store{}`).
-The validator the adopted `ogStore` keeps is bound to that zeroed store, so
-`vocabCutover.Load()` is false and the fence is disarmed after any `Reopen`,
-whatever `s.vocabCutover` says; `s.vocabCutover` is not refreshed from the
-reopened workspace's migration report either. Reproduction:
-`store.TestReopenKeepsTheVocabularyWriteFenceArmed`, skipped by default so
-the lane stays green; `CHOIR_REPRO_REOPEN_FENCE=1 go test ./internal/store
--run TestReopenKeepsTheVocabularyWriteFenceArmed` fails today. Not fixed
-here because re-arming a fence is a behaviour change of its own: after a
-rematerialize, writes that now pass could be refused. The fix shape is to
-bind the validator to `s` in `Reopen` and reload the cutover flag from the
-adopted workspace; class red (OG writes). Discovered, not introduced.
+temporary store, adopts its handles, then zeroes it (`*live = Store{}`). The
+validator the adopted `ogStore` kept was bound to that zeroed store, so
+`vocabCutover.Load()` was false and the fence was disarmed after any
+`Reopen`, whatever `s.vocabCutover` said. Round 1 recorded it with a skipped
+repro (`TestReopenKeepsTheVocabularyWriteFenceArmed`) and did not fix it.
+Tier 2 review (bunch 155) blocked on it.
+
+## Round 2: the vocabulary fence fix (2026-10-23; red)
+
+### 1. Is the boot path reachable? Yes.
+
+`materializeProjectionBaseIfNeeded` (`autoputer/projection_base.go`, called
+at `autoputer/run.go:366`) is handed the retained store `db`, which `Open`
+armed from its migration report. When the retained store is behind the
+advertised watermark (`PlanRecovery` returns `RecoveryRebase`, local sequence
+< W), the code does `live.Close()`, `RebaseRetainedStore`, and then
+`live.Reopen(storePath)` (`projection_base.go:172-196`) on that same
+post-cutover store. After that `Reopen` the validator reads a zeroed store, so
+the fence is off for the rest of the process: the later
+`MigrateAndFenceServingVocabulary` sets `s.vocabCutover` true, but the
+validator never reads `s`. The binding at `run.go:428` is irrelevant to the
+fence. At runtime the same defect is reached through
+`rematerialize.go:262`. DeepSeek's claim holds. Whether a given computer takes
+the rebase branch at boot depends on its local sequence against the
+watermark; it is a crash-boot path for a computer that fell behind, not every
+boot. Reproduced at the store (`TestReopenKeepsTheVocabularyWriteFenceArmed`)
+and through `RematerializeFromTape`
+(`TestRematerializeFromTapeKeepsObjectGraphAndOperationWritesOnTheTape`); the
+boot rebase itself has no unit test (it needs a platform fake), and its
+`Reopen` is the same call the store test covers.
+
+### 2. What would the fence refuse that passes today? (static reading)
+
+Re-arming changes behaviour only after a `Reopen`: every process that never
+reopened already runs the armed guard on every post-cutover computer, so a
+writer the guard refuses is refused in the common case today, not newly.
+Static survey (a Sonnet subagent plus my reading of `vocabWriteGuard`
+(`vocab_migrate_og.go:921`), `ogRoleFieldsFromJSON` (`:842`), `v2LiveSet`
+(`vocabmigrate/fence.go:38`); no ledger, no SQL, no paper or owner computer):
+
+- The deterministic desk-role carriers write only values in the V2 live set:
+  `choir.agent` profile and role (`graph_store.go:422-423`, values from
+  `agentprofile.Canonical` through `resolveRunIdentity`,
+  `runtime.go:699-736`); `choir.run` agent_profile, agent_role and
+  requested_by_profile; `choir.work_item` authority_profile;
+  `choir.channel_message` and `choir.event` role (`channel_store.go:42-50`);
+  `choir.worker_update` role; the grant attestation role
+  (`engineering_assignment_runtime.go:644`). `choir.run_memory_entry.role` is
+  skipped (`ogRoleSkipKinds`). `TestVocabWriteGuardAcceptsEveryRegisteredRoleAfterCutover`
+  pins that every role `agentprofile` registers is admitted.
+- Edges are not a carrier: `DoltStore.PutEdge` does not call the validator,
+  and every edge written has empty metadata.
+- Candidates that can in principle be refused, none shown to occur: (a)
+  `choir.run_acceptance` authority_profile and evidence profile/role fall back
+  to the literal `"loop"` or a task type when a run has no AgentProfile
+  (`trace_helpers.go:218-229`; `resolveRunIdentity` sets both on every run
+  that starts normally); (b) model-authored free-form JSON whose key is
+  exactly one of the eight role keys: cell-saved evidence metadata
+  (`yaegikernel/choir.go:654`, `tools_evidence.go:115`), coagent packet action
+  inputs (`types/evidence.go:138`; `rejectReportAuthorityInputs` blocks ID
+  keys only), Texture revision metadata and body nodes, commitment answers.
+  No writer was found that sets such a key.
+
+Verdict: no writer was found that a post-cutover computer writes today and
+the fence would newly refuse. The candidates above are the same risk the
+armed guard already carries on every process that has not reopened. Static
+reading cannot rule out a rare model-authored key; FP0 should weigh that
+against a silent fail-open on a protected surface. Rollback is a revert of
+the two lines in `Reopen`.
+
+### 3. The fix and the Open/Reopen field audit
+
+`Store.Reopen` now calls `live.ogStore.SetWriteValidator(s.vocabWriteGuard)`
+before `*live = Store{}`, and sets `s.vocabCutover` when `live.vocabCutover`
+is set. This differs on purpose from `s.vocabCutover.Store(live...)`: it never
+lowers an armed fence, so a store cut over in this process stays armed even if
+the adopted workspace has no report (fail closed); the adopted workspace's
+report still arms it when `s` was not. Audit of what `Open` binds on the
+store it returns, against what `Reopen` carries over:
+
+- Copied by `Reopen`: `db`, `readDB`, `path`, `textureDB`, `texturePath`,
+  `doltConnector`, `og`, `ogStore`, `ogReadStore`.
+- Bound to `live` by `Open` and now rebound to `s`: the write validator.
+  `vocabCutover` is merged as above.
+- Bound to the tape by `BindProjectionTape` and carried since round 1: the
+  mutation interceptor.
+- Shared between the two object-graph stores (`ShareEngineMutex`,
+  `InheritMetadataColumns`, `ShareDerivedKeys`): they refer to the stores, not
+  to `live`, and are rebuilt together in `Open`.
+- Reset by `Reopen` already: the deposit-upcast ledger and handle, the vocab
+  replay tracker, `dirtyGen`, `closedOK`, the checkpoint cadence.
+- Not touched by `Open`, kept on `s`: `kernelMode`, `retainReplayDeposits`,
+  `derivedColumns`, the telemetry sealer, `projectionTape`.
+- `objectgraph.Service` carries only `Durable`; nothing else is configured on
+  it after `Open`.
+
+Tests: `TestReopenKeepsTheVocabularyWriteFenceArmed` (unskipped),
+`TestReopenAfterTheFencedCutoverKeepsTheFenceArmedAndAdmitsLiveRoles` (a real
+fenced cutover, then a refused unknown role and admitted live roles), and the
+rematerialize end-to-end test now checks that `UpsertAgentOG` refuses an
+unknown role and admits `engineering` after the flip. Each fails without the
+change.
+
+### 4. Intent-error reason and UTF-8 (low)
+
+`RecordIntentError` now runs `strings.ToValidUTF8` after the 512-byte cut and
+before the unchanged-reason comparison, so a cut inside a multi-byte rune, or
+invalid bytes in a model-written reason, leave a stored value equal to what a
+repeat produces (otherwise the repeat would append every time).
+`TestSelfDevelopmentIntentErrorReasonIsValidUTF8AfterTheCutAndRepeatsAppendNothing`.
+
+### 5. A same-reason retry no longer moves updated_at (low)
+
+Before round 1 every `RecordIntentError` set `updated_at`, even for the same
+reason. Now an unchanged reason appends nothing and leaves `updated_at`
+alone. `obligations_surface.go:199-202` computes `idle_seconds` from
+`updated_at` and marks an open operation `stalled` after 30 minutes
+(`selfdevStalledAfter`). Effect: a refusal loop that repeats the same text no
+longer keeps resetting the clock, so the operation becomes `stalled` 30
+minutes after the last change (a new reason, a clear, or a state transition)
+instead of staying fresh while it retries. That is closer to the meaning of
+the field, and it is a behaviour change from before round 1 that FP0
+approved only in the sense of "a stamp that changes still sets `updated_at`";
+a looping same-reason refusal will now show up as stalled.
