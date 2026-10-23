@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"database/sql"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -103,42 +104,30 @@ func (s *lazyChainBaseSource) TailPage(ctx context.Context, computerID string, a
 
 // TestSelfDevelopmentIntentErrorStampIsNotOnTheTapeAndBreaksReplayEquivalence
 // pins docs/problems/selfdev-operations-replay-not-equivalent-2026-10-23.md.
-// Store.RecordIntentError stamps last_intent_error (and updated_at) with raw
-// SQL even when the projection tape is bound, and the operation projection
-// (computerevent.SelfDevelopmentOperationProjection, applied by
-// store/project.go) has no such column. The live self_development_operations
-// table then differs from the table replayed from the tape, so the
-// replay-completeness witness reports not_equivalent
+// Store.RecordIntentError used to stamp last_intent_error (and updated_at)
+// with raw SQL even when the projection tape is bound, and the operation
+// projection (computerevent.SelfDevelopmentOperationProjection, applied by
+// store/project.go) had no such column. The live self_development_operations
+// table then differed from the table replayed from the tape, so the
+// replay-completeness witness reported not_equivalent
 // (dolt:texture:table:self_development_operations and
-// dolt:texture:content_root) and the computer is replay-ineligible.
-//
-// The test fails today. It passes when the stamp is on the tape (or the
-// column is classified live-only in the witness).
+// dolt:texture:content_root) and the computer was replay-ineligible.
 func TestSelfDevelopmentIntentErrorStampIsNotOnTheTapeAndBreaksReplayEquivalence(t *testing.T) {
 	for _, tc := range []struct {
-		name   string
-		reason string
+		name  string
+		steps []string
 	}{
-		{"a refused freeze stamps last_intent_error", "freeze: refused (no verifier refs)"},
-		// The success path clears a prior stamp (rlm_reduce.go); the clear is
-		// the same raw UPDATE and still moves updated_at off the tape's.
-		{"a clearing write moves updated_at off the tape", ""},
+		{"a refused freeze stamps last_intent_error", []string{"freeze: refused (no verifier refs)"}},
+		// The success path clears the stamp (rlm_reduce.go): a clear after
+		// success is a tape write too, so both columns agree again.
+		{"a clear after success", []string{"freeze: refused (no verifier refs)", ""}},
+		{"a stamp replaced by another reason", []string{"freeze: refused", "verify: bundle digest mismatch"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
 			computerID := "computer-selfdev-intent-error-replay"
 			rt, operations := selfdevReplayRuntime(t, computerID)
-
-			opened, err := operations.Start(ctx, selfdev.StartRequest{
-				ComputerID: computerID, IdempotencyKey: "idem-intent-error",
-				PromptArtifactRef: "artifact:sha256:" + strings.Repeat("c", 64),
-			})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if _, err := operations.Transition(ctx, computerID, opened.OperationID, selfdev.StateRequested, selfdev.StateExecuting, nil); err != nil {
-				t.Fatal(err)
-			}
+			opened := openExecutingOperation(t, ctx, operations, computerID)
 
 			// Control: operation rows written only through the tape replay
 			// equivalent.
@@ -150,9 +139,10 @@ func TestSelfDevelopmentIntentErrorStampIsNotOnTheTapeAndBreaksReplayEquivalence
 				t.Fatalf("control: tape-only operation writes are not replay-equivalent: %#v", control.Result.Differences)
 			}
 
-			// The defect: the raw-SQL intent stamp, as rlm_reduce.go writes it.
-			if err := operations.RecordIntentError(ctx, computerID, opened.OperationID, tc.reason); err != nil {
-				t.Fatal(err)
+			for _, reason := range tc.steps {
+				if err := operations.RecordIntentError(ctx, computerID, opened.OperationID, reason); err != nil {
+					t.Fatal(err)
+				}
 			}
 			probe, err := rt.openReplayProbe(ctx, computerID)
 			if err != nil {
@@ -178,4 +168,77 @@ func TestSelfDevelopmentIntentErrorStampIsNotOnTheTapeAndBreaksReplayEquivalence
 			t.Fatalf("a RecordIntentError write made the replay not equivalent: differences %v; eligibility %+v", keys, probe.report.Eligibility)
 		})
 	}
+}
+
+// An unchanged reason is no event: a refusal that retries with the same text
+// must not grow the tape, and must not move updated_at (idle time keeps its
+// meaning for a retry that changes nothing). A new reason is one event.
+func TestSelfDevelopmentIntentErrorUnchangedReasonAppendsNothing(t *testing.T) {
+	ctx := context.Background()
+	computerID := "computer-selfdev-intent-error-unchanged"
+	rt, operations := selfdevReplayRuntime(t, computerID)
+	opened := openExecutingOperation(t, ctx, operations, computerID)
+	head := func() uint64 {
+		h, err := rt.store.Head(ctx, computerID)
+		if err != nil || h == nil {
+			t.Fatalf("head = %+v, %v", h, err)
+		}
+		return h.Sequence
+	}
+
+	// A clear on a row with no stamp is no change either.
+	before := head()
+	if err := operations.RecordIntentError(ctx, computerID, opened.OperationID, ""); err != nil {
+		t.Fatal(err)
+	}
+	if got := head(); got != before {
+		t.Fatalf("clearing an empty stamp appended events: sequence %d -> %d", before, got)
+	}
+
+	if err := operations.RecordIntentError(ctx, computerID, opened.OperationID, "freeze: refused"); err != nil {
+		t.Fatal(err)
+	}
+	stamped := head()
+	if stamped != before+1 {
+		t.Fatalf("a new reason appended %d events, want 1", stamped-before)
+	}
+	first, err := operations.Get(ctx, computerID, opened.OperationID)
+	if err != nil || first.LastIntentError != "freeze: refused" || first.State != selfdev.StateExecuting {
+		t.Fatalf("stamped operation = %+v, %v", first, err)
+	}
+	if first.UpdatedAt == opened.UpdatedAt {
+		t.Fatalf("a new stamp left updated_at at %s; the stamp keeps setting it", first.UpdatedAt)
+	}
+
+	if err := operations.RecordIntentError(ctx, computerID, opened.OperationID, "  freeze: refused  "); err != nil {
+		t.Fatal(err)
+	}
+	if got := head(); got != stamped {
+		t.Fatalf("an unchanged reason appended events: sequence %d -> %d", stamped, got)
+	}
+	again, err := operations.Get(ctx, computerID, opened.OperationID)
+	if err != nil || again.UpdatedAt != first.UpdatedAt {
+		t.Fatalf("an unchanged reason moved updated_at %s -> %s (%v)", first.UpdatedAt, again.UpdatedAt, err)
+	}
+
+	// A missing operation is still not found.
+	if err := operations.RecordIntentError(ctx, computerID, "selfdev-missing", "x"); !errors.Is(err, selfdev.ErrOperationNotFound) {
+		t.Fatalf("missing operation error = %v, want ErrOperationNotFound", err)
+	}
+}
+
+func openExecutingOperation(t *testing.T, ctx context.Context, operations *selfdev.Store, computerID string) selfdev.Operation {
+	t.Helper()
+	opened, err := operations.Start(ctx, selfdev.StartRequest{
+		ComputerID: computerID, IdempotencyKey: "idem-intent-error",
+		PromptArtifactRef: "artifact:sha256:" + strings.Repeat("c", 64),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	executing, err := operations.Transition(ctx, computerID, opened.OperationID, selfdev.StateRequested, selfdev.StateExecuting, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return executing
 }
