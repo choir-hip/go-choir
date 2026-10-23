@@ -760,3 +760,93 @@ ionice -c3 nice -n 19 $BIN delete --root $ROOT --work-dir $W \
 ionice -c3 nice -n 19 $BIN delete --root $ROOT --work-dir $W \
   --census-receipt <digest> --apply                                # unlinks
 ```
+
+### Review round 1 on beaca6d75: findings, before any fix (FP10, 2026-10-22, bunch 134)
+
+Three independent reviews (deepseek v4.1 flash, gemini 3.8, devin) all
+rejected the delete as built. The findings, with the evidence each cites and
+the disposition planned; the fix commits come after this record.
+
+**F1 (HIGH, all three seats; r4 violation).** `join.go` `decide` narrows
+`computers` to `e.want` before the cover loop. A legacy payload pinned by
+computers A and B and judged under `--computer A` (or under a delete that
+inherits a census filter naming A) is `covered` on A's segment copy alone;
+`unlinkCovered` then removes the one shared file for everyone, and B, which
+was never read, compared or perhaps copied, loses it (a later read for B
+misses in the segments and the legacy tree). One seat reproduced it end to
+end (copy A, census A healthy, delete A, B's `ReadSegment` not found). The
+tests missed it because `world` gives A and B distinct payloads. The design
+says a file's verdict is the worst across the computers that need it; the code
+made it the worst across the named ones. Planned fix: `want` decides scope
+only (no wanted computer attributed: out_of_scope); `cover` runs over the full
+attributed set; only copy writes (and `would_copy_*`) are gated on `want`. A
+file with an unwanted, uncovered computer is then `uncovered` and stays.
+Regression test: payload pinned to A and B, B uncopied, `delete --computer A`
+must not unlink it (fails on beaca6d75).
+
+**F2 (MEDIUM, devin; durability).** `cover` accepts a location in the
+computer's unsealed open-tail segment. A record written but not yet fsynced
+by a live writer, or whole but unacknowledged after a crash or a poisoned
+writer, verifies and counts as a copy; the delete then removes the legacy
+file, which is the durability backstop for exactly those bytes. Planned fix
+(the conservative one): only locations in sealed segments (`SegLoc.Sealed`;
+`Seal` fsyncs the segment and writes its index) count toward `covered`. A
+record held only in an unsealed tail is `uncovered`; the copy seals the
+segments it wrote, so a census after a copy sees it sealed. Test: a record
+present only in an unsealed tail is not covered and not deletable.
+
+**F3 (LOW, gemini; receipt guard).** `parseReceipt` accepts any
+`PinReceipt` from `corpusd`; gemini asks for `len(SignatureSet) > 0 &&
+ReceiptVersion == ReceiptVersionV1`. Checked: `Receipt.UnmarshalJSON`
+already rejects a receipt with a missing `receipt_version` or `signature_set`
+key, so what is unguarded is an empty set or another version. The platform's
+`NewSignedReceipt` always writes version 1 with one signature, so the guard
+cannot refuse a production receipt. It is a shape check, not verification;
+adopted as one line (it only makes an odd receipt attribute nothing, which
+adds no deletion).
+
+**F4 (MEDIUM, deepseek, devin F3; receipts are not signature-verified).** The
+doc says the signed receipt is the only authority; the code does not call
+`Receipt.Verify` or check the payload digest. Verification needs the
+platform's receipt-key resolver, which the host tool does not have (and must
+not be given). A forged receipt can only add a required copy (more
+conservative for delete) or route a copy to a computer that never pinned it;
+it needs host-filesystem write, the same trust as the legacy files. Planned:
+decline, record the trust boundary named in the doc (the tape on the host
+disk is trusted), keep F3's shape check.
+
+**F5 (MEDIUM, deepseek; a fresh-pass failure does not surface).** `Delete`
+uses only the fresh pass's receipt: if the store turned corrupt or blocked
+after the gate census, the fresh pass refuses those files, still unlinks other
+computers' covered files, and exits 0, with no health in `DeleteReport`.
+Per-file r4 holds (D5 designs for it). Planned fix: `DeleteReport` carries the
+fresh pass's health and segment errors and the command exits 3 when it is not
+healthy. Declined: stopping at the first corrupt verdict (the deepseek
+suggestion), because D5 deliberately proves the other covered files still go
+and each is independently verified.
+
+**F6 (LOW, deepseek and gemini; no size check at unlink).** `unlinkCovered`
+checks regular-file but not that the file's size is the size the engine read.
+Planned: refuse if `Lstat` size differs from the verdict's size (one line;
+root-only TOCTOU, so low).
+
+**F7 (LOW, deepseek; guard test scope).** P4 scans only the package's non-test
+files, not `cmd/taperepack`, and lacks `unix.Unlinkat`. Planned: scan the
+command too and add the missing spelling.
+
+**F8 (LOW, deepseek; stale text).** `cmd/taperepack/main.go` line 3 still
+says "It never deletes". Planned one-line fix. Also noted, not changed: the
+FP9 keys-recovery definition still prescribes the removed `plan`/`--manifest`
+commands (that goal file belongs to FP9's lane), and the default `--pause
+250ms` per 256 unlinks is about 2.7 h of sleeping at 10 million files (the
+280,000-file measurement used `--pause 1ms`), and the delete log is about
+1.3 GB at 10 million; the ops note below gets both numbers.
+
+Nits (devin), not changed: `delete-*.jsonl` is created before the work-dir
+lock (a concurrent run leaves an empty log); `touched` is not persisted, so a
+resumed copy does not re-seal computers written before the crash (the
+platform's next append seals); an all-present build leaves an empty unsealed
+segment that `Seal` skips; `intern` truncates names over 256 characters but is
+unreachable (a computer id over 200 characters is invalid); the gate is
+`Complete && Healthy`, not `OK()`, so a census with uncovered files still
+gates a delete, matching the written design (each file is judged fresh).
