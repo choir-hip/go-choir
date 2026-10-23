@@ -411,6 +411,82 @@ func runMemoryHoldCensus(t *testing.T, total, hot int) {
 	})
 	report("variant D: newest 64 cursor rows, narrow, with the kind index", f, b, r, by)
 	t.Logf("variant D plan:\n%s", explainEventTablePlan(t, s, latest, "agent-hot", rmOwner, "rlm_inbox_cursor"))
+
+	// ---- R5: the duplicate idx_run_memory_entries_loop_seq ---------------------
+	// A fresh store (after the R5 code) has no loop_seq index, the paper has
+	// one. Each phase is measured twice, alternating, because a run's journal
+	// bytes per append vary by about 10% between runs: with the index (built
+	// here, which is also the rollback's cost: an old binary's boot rebuilds
+	// it), then dropped by the production operation (the only step left once
+	// the kind index is present), and so on. A SELECT 1 probe on s.db every
+	// 10 ms through each DDL gives the hold of the write connection.
+	holdOf := func(label string, ddl func() error) {
+		var (
+			waits    []time.Duration
+			ddlErr   error
+			ddlStart = time.Now()
+		)
+		ddlDone, probeDone := make(chan struct{}), make(chan struct{})
+		go func() { defer close(ddlDone); ddlErr = ddl() }()
+		go func() {
+			defer close(probeDone)
+			for {
+				select {
+				case <-ddlDone:
+					return
+				default:
+				}
+				t1 := time.Now()
+				var one int
+				if err := s.db.QueryRowContext(ctx, `SELECT 1`).Scan(&one); err != nil {
+					t.Error(err)
+					return
+				}
+				waits = append(waits, time.Since(t1))
+				time.Sleep(10 * time.Millisecond)
+			}
+		}()
+		<-ddlDone
+		<-probeDone
+		if ddlErr != nil {
+			t.Fatalf("%s: %v", label, ddlErr)
+		}
+		var longest time.Duration
+		for _, w := range waits {
+			if w > longest {
+				longest = w
+			}
+		}
+		t.Logf("total=%d hot=%d R5 %s: %v whole; %d SELECT 1 probes on s.db, longest wait %v",
+			total, hot, label, time.Since(ddlStart).Round(time.Millisecond), len(waits), longest.Round(time.Millisecond))
+	}
+	createLoopSeq := func() {
+		holdOf("CREATE idx_run_memory_entries_loop_seq (the rollback's rebuild)", func() error {
+			_, err := s.db.ExecContext(ctx, `CREATE INDEX idx_run_memory_entries_loop_seq ON run_memory_entries(loop_id, seq)`)
+			return err
+		})
+	}
+	dropLoopSeq := func() {
+		holdOf("DROP idx_run_memory_entries_loop_seq (the operation's step)", func() error {
+			if _, err := s.StartDerivedColumnMigration(); err != nil {
+				return err
+			}
+			if st := waitDerivedColumnMigration(t, s); st.State != DerivedColumnMigrationDone {
+				return fmt.Errorf("migration %s: %s", st.State, st.Error)
+			}
+			return nil
+		})
+	}
+	if !runMemoryIndexExists(t, s, "idx_run_memory_entries_loop_seq") {
+		createLoopSeq()
+	}
+	appendCost("with loop_seq (1)")
+	dropLoopSeq()
+	appendCost("without loop_seq (1)")
+	createLoopSeq()
+	appendCost("with loop_seq (2)")
+	dropLoopSeq()
+	appendCost("without loop_seq (2)")
 }
 
 // rmTimeRead runs fn three times and returns the first and the best duration
