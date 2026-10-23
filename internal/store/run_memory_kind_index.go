@@ -59,12 +59,13 @@ func (s *Store) discoverRunMemoryKindIndex(ctx context.Context) (RunMemoryKindIn
 // ensureRunMemoryKindIndexAtOpen creates the index on an empty table and only
 // reports it missing on a table with rows. A failure is logged and never
 // fails the open: the read just stays on the slower plan.
-func (s *Store) ensureRunMemoryKindIndexAtOpen() {
-	ctx := context.Background()
+func (s *Store) ensureRunMemoryKindIndexAtOpen(ctx context.Context) error {
+	_ = ctx
+	ctx = context.Background()
 	status, err := s.discoverRunMemoryKindIndex(ctx)
 	if err != nil {
 		log.Printf("runtime store: run-memory kind index unknown, the slower plan is kept: %v", err)
-		return
+		return nil
 	}
 	switch {
 	case status.Present:
@@ -76,6 +77,7 @@ func (s *Store) ensureRunMemoryKindIndexAtOpen() {
 		log.Printf("runtime store: run-memory kind index %s missing on a table with rows, not added at open; ListRunMemoryEntriesForAgent stays on the (owner_id, agent_id, created_at) plan until POST /internal/store/derived-columns?action=migrate",
 			RunMemoryKindIndexName)
 	}
+	return nil
 }
 
 // migrateRunMemoryKindIndex is the operation's step for the index: nothing

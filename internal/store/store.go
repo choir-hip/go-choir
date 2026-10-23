@@ -955,8 +955,7 @@ func Open(dbPath string) (*Store, error) {
 	// table with rows (run_memory_kind_index.go). Never a build on a populated
 	// table at boot.
 	bootSubstep("runtime-schema", "run-memory-kind-index", func() error {
-		s.ensureRunMemoryKindIndexAtOpen()
-		return nil
+		return s.ensureRunMemoryKindIndexAtOpen(context.Background())
 	})
 
 	// Persist the running build's store schema epoch inside the workspace so

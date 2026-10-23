@@ -28,7 +28,7 @@ import (
 //     cursor read returns.
 //  6. A rollback is unsafe: an older binary's boot DDL fails on the extra
 //     index, or a reopen drops or rebuilds it.
-const testRunMemoryKindIndex = "idx_run_memory_entries_agent_kind_owner_created"
+const testRunMemoryKindIndex = "idx_run_memory_entries_owner_agent_kind_created"
 
 func runMemoryIndexExists(t *testing.T, s *Store, name string) bool {
 	t.Helper()
@@ -188,18 +188,21 @@ func TestRunMemoryKindIndexMigrationBuildsItOnce(t *testing.T) {
 }
 
 // runMemoryListShapes are the shapes of ListRunMemoryEntriesForAgent's
-// arguments: owner and one kind (what production sends), owner and two kinds,
-// no owner and one kind, owner and all kinds.
+// arguments. The only production caller (LoadInboxCursorForDesk) sends an
+// owner and one kind; owner and two kinds is the same index with two ranges.
+// No owner is not sent by any production caller and the owner-leading index
+// does not serve it (unserved: its plan is not pinned). With all kinds the
+// planner keeps the old index.
 var runMemoryListShapes = []struct {
-	name      string
-	owner     string
-	kinds     []string
-	kindIndex bool
+	name   string
+	owner  string
+	kinds  []string
+	expect string // "kind", "old" or "unserved"
 }{
-	{"owner+1kind", "owner-1", []string{"rlm_inbox_cursor"}, true},
-	{"owner+2kinds", "owner-1", []string{"rlm_inbox_cursor", "cell_fate"}, true},
-	{"noowner+1kind", "", []string{"rlm_inbox_cursor"}, true},
-	{"owner+allkinds", "owner-1", nil, false},
+	{"owner+1kind", "owner-1", []string{"rlm_inbox_cursor"}, "kind"},
+	{"owner+2kinds", "owner-1", []string{"rlm_inbox_cursor", "cell_fate"}, "kind"},
+	{"noowner+1kind", "", []string{"rlm_inbox_cursor"}, "unserved"},
+	{"owner+allkinds", "owner-1", nil, "old"},
 }
 
 // The plan is read from the production statement (runMemoryAgentListQuery),
@@ -220,20 +223,21 @@ func TestRunMemoryKindIndexPlanHasNoFullRangeWalk(t *testing.T) {
 	if st := waitDerivedColumnMigration(t, s); st.State != DerivedColumnMigrationDone {
 		t.Fatalf("migration %s: %s", st.State, st.Error)
 	}
-	const kindIndexCols = "[run_memory_entries.agent_id,run_memory_entries.kind,run_memory_entries.owner_id,run_memory_entries.created_at]"
+	const kindIndexCols = "[run_memory_entries.owner_id,run_memory_entries.agent_id,run_memory_entries.kind,run_memory_entries.created_at]"
 	for _, shape := range runMemoryListShapes {
 		p := plan(shape.owner, shape.kinds)
-		if shape.kindIndex {
+		switch shape.expect {
+		case "kind":
 			if !strings.Contains(p, kindIndexCols) {
 				t.Errorf("%s does not read the kind index:\n%s", shape.name, p)
 			}
 			if strings.Contains(p, "Filter") {
 				t.Errorf("%s still filters above the index (a full-range walk):\n%s", shape.name, p)
 			}
-		} else if strings.Contains(p, kindIndexCols) {
-			// With no kind the planner keeps the owner/agent/created_at index,
-			// which also gives the order.
-			t.Errorf("%s moved to the kind index:\n%s", shape.name, p)
+		case "old":
+			if strings.Contains(p, kindIndexCols) {
+				t.Errorf("%s moved to the kind index:\n%s", shape.name, p)
+			}
 		}
 	}
 }
@@ -314,9 +318,136 @@ func TestRunMemoryKindIndexKeepsTheAnswerAndRollsBackSafely(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT dolt_hashof_table('run_memory_entries')`).Scan(&back); err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("run_memory_entries table hash: before the index %s, after drop %s", rowsHash, back)
+	if back != rowsHash {
+		t.Fatalf("run_memory_entries row hash after DROP INDEX = %s, before the index = %s", back, rowsHash)
+	}
 	c2, _, _ := read()
 	if !reflect.DeepEqual(c0, c2) {
 		t.Fatalf("after DROP INDEX the cursor answer differs:\n%v\n%v", c0, c2)
+	}
+}
+
+// The content witness hashes a per-table schema observation as well as the
+// rows: queryTableSchemaHash is SHOW COLUMNS, and its Key column reads MUL for
+// the first column of a non-unique index
+// (computerversion/dolt_state_extractor.go). A live store that gained the
+// kind index and a fresh store (which makes it at open, on the empty table)
+// must hash the same schema, or replay eligibility records SchemaDrift and
+// checkpoint_restore_bindings.go refuses a self-development checkpoint.
+// bunch 160 (DeepSeek, HIGH) found the agent-leading order did exactly that:
+// agent_id was not MUL before. Ways this could fail, written first: the index
+// changes any Key; the test reads rows only and misses the schema observation;
+// the test passes because it compares two stores that both have the index.
+func runMemorySchemaObservations(t *testing.T, s *Store, path string) map[string]string {
+	t.Helper()
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	set, _ := eventTableWitness(t, path)
+	out := map[string]string{}
+	for _, o := range set.Observations {
+		if strings.Contains(o.Key, ":schema:") {
+			out[o.Key] = o.Value
+		}
+	}
+	if out["dolt:texture:schema:run_memory_entries"] == "" {
+		t.Fatalf("no schema observation for run_memory_entries in %d keys", len(out))
+	}
+	return out
+}
+
+func TestRunMemoryKindIndexKeepsTheWitnessSchemaObservation(t *testing.T) {
+	with, withPath := vocabUpcastOpenStore(t, "schema-with-index")
+	if !runMemoryIndexExists(t, with, testRunMemoryKindIndex) {
+		t.Fatal("a fresh store lacks the kind index")
+	}
+	without, withoutPath := vocabUpcastOpenStore(t, "schema-without-index")
+	if _, err := without.db.Exec(`DROP INDEX ` + testRunMemoryKindIndex + ` ON run_memory_entries`); err != nil {
+		t.Fatal(err)
+	}
+	a := runMemorySchemaObservations(t, with, withPath)
+	b := runMemorySchemaObservations(t, without, withoutPath)
+	for key, want := range b {
+		if got := a[key]; got != want {
+			t.Errorf("schema observation %s differs with the kind index:\n with:    %s\n without: %s", key, got, want)
+		}
+	}
+	if len(a) != len(b) {
+		t.Errorf("schema observation count %d with the index, %d without", len(a), len(b))
+	}
+
+	// The control that gives the test its meaning: an agent-leading index (the
+	// order of the first pass of this change) does move a Key, so a drift is
+	// detectable by this extractor. owner_id is already MUL through the
+	// (owner_id, agent_id, created_at) index; agent_id is not.
+	control, controlPath := vocabUpcastOpenStore(t, "schema-agent-leading")
+	if _, err := control.db.Exec(`DROP INDEX ` + testRunMemoryKindIndex + ` ON run_memory_entries`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := control.db.Exec(`CREATE INDEX idx_control_agent_leading ON run_memory_entries(owner_id, agent_id, kind, created_at)`); err != nil {
+		t.Fatal(err)
+	}
+	c := runMemorySchemaObservations(t, control, controlPath)
+	if c["dolt:texture:schema:run_memory_entries"] == b["dolt:texture:schema:run_memory_entries"] {
+		t.Error("an agent-leading index left the schema observation unchanged: the test cannot see a drift")
+	}
+}
+
+// Lows 3 and 4 of bunch 160 (DeepSeek) and its nit 6.
+//
+// 3. A cancel after the og_objects steps and before the index step reported
+//    done with the index absent.
+// 4. A status read during a run omitted run_memory_kind_index.
+// 6. The open hook had no deadline and returned nothing, so a failed query
+//    was invisible in the boot phase log.
+func TestRunMemoryKindIndexCancelBeforeItsStepIsCancelledNotDone(t *testing.T) {
+	s, _ := populatedRunMemoryStore(t)
+	// Nothing is missing on og_objects, so its part returns at once without
+	// looking at the context; the cancel lands before the index step.
+	release := make(chan struct{})
+	derivedColumnStepHook = func() { <-release }
+	t.Cleanup(func() { derivedColumnStepHook = nil })
+	if _, err := s.StartDerivedColumnMigration(); err != nil {
+		t.Fatal(err)
+	}
+	running := s.DerivedColumnMigrationStatus(context.Background())
+	if running.State != DerivedColumnMigrationRunning {
+		t.Fatalf("state %q, want running", running.State)
+	}
+	if running.RunMemoryKindIndex == nil || running.RunMemoryKindIndex.Present || running.RunMemoryKindIndex.Name != testRunMemoryKindIndex {
+		t.Fatalf("a status read during a run does not report the index: %+v", running.RunMemoryKindIndex)
+	}
+	if !s.CancelDerivedColumnMigration() {
+		t.Fatal("cancel found nothing running")
+	}
+	close(release)
+	done := waitDerivedColumnMigration(t, s)
+	if done.State != DerivedColumnMigrationCancelled {
+		t.Fatalf("state %q after a cancel before the index step, want cancelled (index present=%t)", done.State, runMemoryIndexExists(t, s, testRunMemoryKindIndex))
+	}
+	if runMemoryIndexExists(t, s, testRunMemoryKindIndex) {
+		t.Fatal("a cancelled operation built the index")
+	}
+	if done.RunMemoryKindIndex == nil || done.RunMemoryKindIndex.Present {
+		t.Fatalf("final status = %+v, want the index reported absent", done.RunMemoryKindIndex)
+	}
+}
+
+func TestRunMemoryKindIndexOpenHookHasADeadlineAndReportsErrors(t *testing.T) {
+	s, _ := populatedRunMemoryStore(t)
+	expired, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := s.ensureRunMemoryKindIndexAtOpen(expired); err == nil {
+		t.Fatal("the open hook swallowed an error from a cancelled context")
+	}
+	if runMemoryIndexExists(t, s, testRunMemoryKindIndex) {
+		t.Fatal("the open hook built the index on a populated table")
+	}
+	// A populated table without the index is a report, not an error, and not a build.
+	if err := s.ensureRunMemoryKindIndexAtOpen(context.Background()); err != nil {
+		t.Fatalf("populated table: %v", err)
+	}
+	if runMemoryIndexExists(t, s, testRunMemoryKindIndex) {
+		t.Fatal("the open hook built the index on a populated table")
 	}
 }
