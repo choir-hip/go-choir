@@ -756,10 +756,14 @@ delete, after a clean census and FP0's other gates:
 
 ```
 ionice -c3 nice -n 19 $BIN delete --root $ROOT --work-dir $W \
-  --census-receipt <receipt digest from the census line>           # dry run
+  --census-receipt <receipt digest from the census line> \
+  --keep-digests $W/keep-digests.txt                               # dry run
 ionice -c3 nice -n 19 $BIN delete --root $ROOT --work-dir $W \
-  --census-receipt <digest> --apply                                # unlinks
+  --census-receipt <digest> --keep-digests $W/keep-digests.txt --apply   # unlinks
 ```
+
+`$W/keep-digests.txt` is precondition 6 of the checklist below; `--apply`
+refuses without it.
 
 ### Review round 1 on beaca6d75: findings, before any fix (FP10, 2026-10-22, bunch 134)
 
@@ -1054,17 +1058,25 @@ shared legacy file with no record of the dependence), introduced 0, repaired 0
 
 #### Before `delete --apply` on Node B: preconditions
 
-Nothing on Node B has run this tool. All of these hold first:
+This list is the single operative checklist (review round 4). The review
+sections and dispositions say why an item is here; they add no step that is
+not here. Nothing on Node B has run this tool. All of these hold first:
 
 1. The build contains the review round 3 fix (report version 3; the round-2
    build, version 2, did not read legacy event bodies, see "Review round 3
-   dispositions" below). Any census taken before it is refused by the gate; take a fresh one after the last copy:
+   dispositions" below) and the round 4 fix (`--keep-digests`, the legacy
+   non-regular entry check; the report is still version 3, so the gate
+   accepts a round-3 census, but the delete's fresh pass runs the new check
+   and refuses what it finds; take the census with this build anyway). Any census taken before the round 3 fix is refused by the gate;
+   take a fresh one after the last copy:
    `census` unfiltered (not `--computer`), exit 0 or a clean exit 3 whose only
    cause is uncovered files of computers the owner has not named, and `files`
    with `corrupt`, `blocked`, `legacy_bad`, `dropped_receipt` all 0,
-   `segment_errors` empty, `listing.rejected_receipts` and
-   `listing.unnamable_receipts` absent or 0. `listing.segment_receipts` shows
-   the segment pass ran.
+   `segment_errors` empty (a `(legacy-events)` or `(legacy-non-regular)` key
+   there is a legacy file the tool could not attribute), `listing.
+   rejected_receipts`, `listing.unnamable_receipts` and `listing.
+   non_regular_legacy` absent or 0. `listing.segment_receipts` shows the
+   segment pass ran and `listing.legacy_event_bodies` the legacy event scan.
 2. The evidence gate of owner notes 34 holds on the health tape block after the
    flag flip: `segment_pins` growing, files per pin falling toward 0,
    `segment_fallbacks` flat, `corrupt` and `segment_error_fallbacks` 0, the
@@ -1081,10 +1093,36 @@ Nothing on Node B has run this tool. All of these hold first:
    attribution is frozen at each pass's list start, and the mtime check keeps
    files repinned after it, but only a short window keeps the unsealed live
    tails (which do not count) and new first-time pins out of the picture.
-5. Work directory room: 600 MB for spill files plus about 1.3 GB for the
-   delete log at 10 million files; `--pause 1ms` under `ionice -c3 nice -n 19`.
-   Root, same owner as the platform's segments.
-6. Exit 3 from the delete means the fresh pass was unhealthy: read
+5. Work directory room: about 600 MB of spill files for the listing and the
+   receipt edges at 10 million files, plus the legacy event-reference edges
+   (each digest a legacy event body names is two edges of 42 bytes; at 5 to
+   10 digests per body and about 2.44 million event files that is 1 to 2
+   GB, estimated from the body size, not measured on Node B), plus about 1.3
+   GB for the delete log: have 5 GB free in the work directory.
+   `--pause 1ms` under `ionice -c3 nice -n 19`. Root, same owner as the
+   platform's segments.
+6. **The keep file (M2). BLOCKED: its instrument does not exist yet.**
+   `delete --apply` refuses to start without `--keep-digests <file>`: one
+   64-character lowercase hex digest per line, the digests the platform
+   database names in the five `tapeExtraRefQueries` columns (`closure_json`,
+   `program_json`, `checkpoint_json`, `receipt_json`, `certificate_json`), which
+   the tape sweep keeps and this host binary cannot read. A listed digest is
+   never unlinked, in any namespace, and counts as `kept_by_list`; a
+   malformed line is an error, and a file with no digest is an error unless
+   `--keep-digests-empty-ok` (use that only if the platform's keep set was
+   read and is empty: an empty file from a failed export must not pass).
+   Nobody runs SQL against the production Dolt by hand for this. The file
+   must come from a read-only platform route that lists the
+   `tapeExtraRefQueries` digests; no such route exists (see "Review round 4
+   dispositions" for the check and the smallest design). So item 6 is not
+   satisfiable today, and `delete --apply` on Node B waits for a separate
+   platform lane to land that route. When it exists, the keep file is taken
+   after the census and before the delete (the checks at the unlink are on the
+   apply pass's own verdicts, so the order does not matter for correctness,
+   but a stale file misses rows written since), the delete dry run is run
+   with the same file (its `kept_by_list` and `keep_digests` show the file was
+   read), and the apply uses the same file.
+7. Exit 3 from the delete means the fresh pass was unhealthy: read
    `segment_errors` and the `files` counts before running anything again.
    Deletes are not undone by the tool; a legacy file removed with a verified
    sealed copy is read from the segment.
@@ -1209,7 +1247,9 @@ Fix commit: "fix(taperepack): review round 3 ..." (red); tests
   (the sweep's regexp matches inside a longer run). `TestL5...`.
 - **L6 fixed.** A symlink at `tape-seg/<id>` is an attribution error.
   `TestL6...`.
-- **M2 not built, made a precondition.** The sweep also keeps every 64-hex
+- **M2 not built, made a precondition. (Superseded by review round 4: the
+  check was not executable and is now a `--keep-digests` option, precondition
+  6 of the checklist.)** The sweep also keeps every 64-hex
   substring of the database-side records in `tapeExtraRefQueries`
   (`closure_json`, `program_json`, the checkpoint and its receipt, route
   projection certificates). The tool is a host binary with no database
@@ -1303,3 +1343,98 @@ round-3 disposition of M2 is not something an operator can carry out.
   differs from its chain owner would under-attribute; no production path
   writes such a row (`appender.go` and `computer_events.go` enforce the
   match); recorded beside M3.
+
+#### Review round 4 dispositions (FP10, 2026-10-22, after the fix)
+
+Fix commit: "fix(taperepack): review round 4 ..." (red); tests
+`review4_test.go` and `TestDeleteApplyNeedsTheKeepDigestsFile` in
+`cmd/taperepack/main_test.go`. The test commit before it fails on 8722c4932:
+the M2 library tests do not build there (no `KeepSet`, `Keep`, `KeptByList`),
+the command test fails at run time (the apply ran without a keep list and
+deleted), and F2 and F3 fail at run time (checked by running those two on a
+copy of 8722c4932 with the new option lines removed: three F2 cases healthy
+with no segment error; F3 gives 65 refs for two glued digests).
+
+- **M2 fixed in the tool; its instrument is a blocking precondition.**
+  - `--keep-digests <file>` (`delete` only): one 64-character lowercase hex
+    digest per line; any other line (blank, uppercase, short, a space, `\r`, two
+    on a line) is an error that names the line, and so is a file with no
+    digest unless `--keep-digests-empty-ok` is also given (the flag alone,
+    without a file, is a usage error).
+  - It is enforced in `unlinkCovered`, the package's only unlink, as the first
+    check: a listed digest returns `errKeptByList`, is counted as
+    `kept_by_list`, and is never unlinked in any namespace. It is checked on
+    the apply pass's own verdict at the moment of the unlink, so a file that
+    was `uncovered` at dry-run time and became covered is still protected
+    (the quantifier gap deepseek named: the list is not "the dry run's
+    would-delete set", it is a deny list over every candidate). The dry run
+    counts a listed covered file as `kept_by_list` instead of `would_delete`,
+    and the report carries `keep_digests` (how many the file named).
+  - `Delete` with `Apply` and no keep set refuses before it reads the census;
+    the command does too. Tests: `TestM2...` (survives, dry run counts,
+    `unlinkCovered` refuses, apply without a list refuses, parsing) and the
+    command test (no flag, flag alone, malformed, empty without the flag,
+    `copy --keep-digests` refused, a listed digest left and the rest of the
+    computer's files gone, `kept_by_list` 1).
+  - **The instrument does not exist.** Checked, with the code: the tape
+    sweep dry run (`POST /internal/platform/artifact-gc/tape` on corpusd,
+    `PLATFORM_TAPE_SWEEP_MODE`, polled with `GET ...?job=<id>`) returns a
+    `TapeSweepReport` of counts, and writes a manifest of what it would
+    *delete*; the keep set (the chain digests and the `tapeExtraRefQueries`
+    digests, `live.addAllHex`) lives in memory and is never written or
+    returned. No other `/internal` route lists closures or programs (no read
+    route), and checkpoints and route certificates are read one row at a time
+    by `computer_id` and idempotency key. So there is no call and no jq to
+    document that yields the file, and this lane adds no platform route
+    (lead's instruction). The residual, blocking `delete --apply` on Node B
+    (checklist item 6): **a read-only platform route that lists the
+    `tapeExtraRefQueries` digests**, for a separate platform lane.
+  - *Smallest design for that lane.* `GET /internal/platform/artifact-gc/tape/
+    extra-refs` on corpusd, `trustedInternalCaller` only, no mode gating (it
+    reads, it deletes nothing, it takes no run lock and writes nothing).
+    It runs `tapeExtraRefs` with the sweep's own extraction
+    (`hex64RE.FindAllString`, the same call as `live.addAllHex`, so the set is
+    exactly what the sweep keeps from the database), de-duplicates and sorts,
+    and answers `{"queries":5,"count":N,"digests":[...]}`; if any of the five
+    queries fails it answers an error and no digests (a partial list must not
+    look like a keep set). One platform test: rows in all five tables, the
+    answer equals the digests `tapeExtraRefs` adds, and a failing query
+    returns an error. Then the operator call, from the host, with the
+    host-internal credential only through `scripts/lib/choir_internal.sh`
+    (it sends the token only to loopback on an internal service port, and
+    never to a guest):
+    ```
+    . scripts/lib/choir_internal.sh
+    choir_internal_curl http://127.0.0.1:8086/internal/platform/artifact-gc/tape/extra-refs \
+      -fsS > $W/extra-refs.json
+    jq -e '.queries == 5 and (.digests | length) == .count' $W/extra-refs.json \
+      && jq -r '.digests[]' $W/extra-refs.json > $W/keep-digests.txt
+    ```
+    This is the design, not a command that works today. (Port 8086 is
+    corpusd's, as in `nix/node-b.nix`.)
+- **F2 fixed.** A name in `sha256/computer-event`, `computer-event-payload`
+  or `pin-receipts` that parses as a digest (with `.json` for receipts) and is
+  not a regular file (a symlink, a directory, a FIFO) is an attribution error
+  under the key `(legacy-non-regular)`, counted in `listing.non_regular_legacy`:
+  the pass is unhealthy and every covered file is blocked. A name that does
+  not parse as a digest is still only `other_files`. Test: a symlinked event, a
+  symlinked receipt, a directory named like a payload; nothing is deleted.
+  (Devin 3 is the same finding.)
+- **F3 fixed.** `hexRefs` takes the sweep's own matches: a hex run's first 64
+  characters, the next 64 and so on (`FindAllString` is non-overlapping), so
+  the work is linear in the body and glued digests (`TestL5`) are still
+  found. Every-window was a superset of what the sweep keeps, and a digest at
+  another offset of a run is not one the sweep keeps. Checklist item 5 now
+  budgets the event-reference edges.
+- **Devin 4 nits.** `unix.Linkat` and `syscall.Linkat` are in
+  `bannedUnlinks`. The `legacy-events` key is now `(legacy-events)`, which is
+  not a valid computer id, so it cannot collide. Recorded: an event body
+  whose `computer_id` differs from its chain owner would under-attribute; no
+  production path writes such a row (`appender.go` and `computer_events.go`
+  enforce `Event.ComputerID == computerID`), the same class as M3.
+- **Reviewers' accepted residuals, unchanged:** N2 (a repin straddling the list
+  start), M3 (declined), `dropped_receipt` on a multi-media pin, the
+  wall-clock mtime guard.
+
+Tests: `go test ./internal/taperepack/... ./cmd/taperepack/...
+./internal/tapestore -count=1` passes (121 s, 84 s, 35 s).
