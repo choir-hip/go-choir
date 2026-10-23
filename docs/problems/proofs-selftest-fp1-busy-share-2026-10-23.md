@@ -37,8 +37,25 @@ The self-test is not run in CI. Nothing under `.github/` references
 `scripts/proofs/selftest.sh`; it is run by hand. Not wired in here (out of
 scope).
 
-## Plan
+## Fix (landed)
 
-Quote the key (`"label": $label`), which every jq version accepts and which
-changes nothing the step measures. A self-test case pins the rule so a future
-unquoted keyword key fails the self-test under any jq.
+Two spellings in the one filter, both jq 1.7+ only: the unquoted `label:`
+object key, and the `$label` variable bound by `--arg label` (jq 1.6 lexes
+`$label` as the keyword too; the first fix attempt, quoting the key alone,
+still failed on 1.6 for that reason). Now `{"label": $lbl, ...}` with
+`--arg lbl "$OPT_label"`. The output field name `label` is unchanged, and the
+filter reads and computes the same fields, so the step still measures the real
+engine-mutex hold share over the window on staging.
+
+The self-test gained one case (written first, and failing on a33a3dfec) that
+greps `scripts/proofs/{fp*,net*,lib}.sh` for a keyword used as an unquoted
+object key, for a jq-style `$label`, and for `--arg label`. The pattern is a
+lint, not a jq parse, so it only covers those spellings.
+
+Verified: `bash scripts/proofs/selftest.sh` gives `159 passed, 0 failed` under
+jq 1.6 (anaconda), jq 1.7.1-apple (/usr/bin) and jq 1.8.1 (homebrew). Nothing
+was run against staging.
+
+Residual: the step still discards the filter's stderr, so a future jq compile
+error again reads as "is the guest answering". Left as is (smallest fix); a
+follow-up could keep the first stderr line in the failure text.
