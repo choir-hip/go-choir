@@ -113,8 +113,9 @@ function eventPayload(ev) {
   return parseMaybeJSON(p) || {};
 }
 
-// cells / egress layer items are "one item per desk.cell|desk.egress run
-// event" (bundle format). Accept either the raw EventRecord (payload nested)
+// cells layer items are one per desk.cell run event; egress layer items are
+// one per egress row, whether a standalone desk.egress event or a row folded
+// into a desk.cell event's egress[] (bundle format, journal cut R4). Accept either the raw EventRecord (payload nested)
 // or the flattened payload; fall back to deriving from run_events when the
 // layer key itself is missing from the bundle.
 function deskItems(bundle, name, kind) {

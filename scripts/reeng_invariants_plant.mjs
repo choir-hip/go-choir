@@ -223,6 +223,15 @@ export function plantI5(bundle) {
         ev.payload.response_request_id = crossed;
         ev.payload.is_error = false;
       }
+      // Egress folded into a desk.cell event (journal cut R4) is mutated too.
+      if (ev.kind === 'desk.cell' && ev.payload && Array.isArray(ev.payload.egress)) {
+        for (const row of ev.payload.egress) {
+          if (row && str(row.request_id) === req) {
+            row.response_request_id = crossed;
+            row.is_error = false;
+          }
+        }
+      }
     }
     return b;
   }
