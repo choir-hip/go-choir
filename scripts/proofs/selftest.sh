@@ -239,6 +239,10 @@ t "the API key is not in curl's argv" bash -c "! grep -q SECRETKEY '$ST/curl.log
 t "the internal-service header file's contents are never read here" bash -c "! grep -q 'internal-service-token.header' '$WORK/out' || grep -q '@/var/lib/go-choir/secrets/internal-service-token.header' '$WORK/out'"
 
 # ---- FP1 reading --------------------------------------------------------------
+# jq 1.6 rejects a keyword (label, and, or, if, ...) as an unquoted object key
+# and `label` as a $variable name; jq 1.7+ accepts both. Quote such keys and
+# name variables otherwise so the proofs run under either.
+t "no proof script uses a jq keyword as an unquoted object key or a \$variable" bash -c "! grep -nE '([{,][[:space:]]*(label|and|or|not|if|then|else|end|as|def|reduce|foreach|try|catch|import|include)[[:space:]]*:)|([ :(]\\\$label\\b)|(--arg label )' '$HERE'/fp*.sh '$HERE'/net*.sh '$HERE'/lib.sh"
 reset_state
 "$HERE/fp1-store.sh" --step 1 --computer $TEST --window 0 >"$WORK/out" 2>&1
 t "fp1 step 1 computes a busy share" grep -q 'engine mutex held' "$WORK/out"
