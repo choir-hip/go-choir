@@ -17,6 +17,15 @@ much of my synthetic usage I end up using." This lane adds a named pool
 `synthetic-luna` (1:1) next to the untouched default pool. Pointing the paper
 at it is a separate step by the orchestrator after deploy.
 
+Second scope change, owner 2026-10-23 (UTC): "Just ChatGPT luna and synthetic
+DeepSeek 1017 tonight. I'd rather them fail than fallback. We are still
+pre-launch" and "Don't use Opencode as fallback tonight." So `synthetic-luna`
+has no failover (a thread on Synthetic that fails, fails; the same for luna),
+and the default pool is gpt-6-luna alone tonight. Everything in this record
+about failing over to luna describes the existing mechanism and why the
+provider must not hide a 429; tonight it is switched off for this pool, so a
+Synthetic 429 or 404 ends the call for that thread.
+
 Raw probe requests and responses (no key material; the key never leaves the
 wrapper) are outside the repo in `/Users/wiz/Dev/lanes/_runs/synthetic-probes/`
 (`*.req.json`, `*.out.json`, `*.out.json.hdr` response headers). Wrapper:
@@ -232,8 +241,11 @@ policy, so this does not occur in normal use.
   gateway as `synthetic: status 429 Too Many Requests (sanitized)`; the circuit
   breaker's `: status (\d{3})` pattern counts it against the model breaker (the
   short per-model backoff), and the tool loop's `IsModelFailoverError` treats
-  429 as a failover trigger, so the thread moves to the next pool member
-  (luna). A 429 must therefore NOT be absorbed by a retry or key parking in the
+  429 as a failover trigger, so a thread in a pool that fails over moves to
+  the next member (luna). In `synthetic-luna` (no failover tonight) the thread
+  has no next member: the run errors, and the model breaker's short backoff
+  makes the following Synthetic calls from every computer fail fast for its
+  open window. A 429 must therefore NOT be absorbed by a retry or key parking in the
   provider: the OpenCode key pool parks a key after any 429, which for a
   transient concurrency limit would park the only Synthetic key. The Synthetic
   provider has one key and no parking.
@@ -298,7 +310,12 @@ to the opencode-go route was run in this lane.
    comparison. The pin rotates out with a loud 404 instead (R-a).
 3. Catalog: context 524288, max output 65536, provider `synthetic`,
    `RecommendedFor` empty (no role recommendation before the overnight
-   evidence). `Pools()["default"]` is unchanged; a new pool `synthetic-luna`.
+   evidence). A new pool `synthetic-luna` (1:1, `NoFailover`). Per the second
+   scope change `Pools()["default"]` becomes gpt-6-luna alone (the opencode-go
+   deepseek entry stays in the catalog) so nothing falls back to OpenCode.
+   `Assign` honours `modelcatalog.NoFailover(pool)` by returning no
+   fallbacks; the guest builds fallbacks only there, so that is the one
+   switch.
 4. `MaxInteractiveOutputTokensForSelection` returns 0 for `synthetic` like the
    other OpenAI-compatible chat-completions routes (omit the output budget):
    probes ran without `max_tokens` and the window check is on the total.
@@ -309,13 +326,26 @@ to the opencode-go route was run in this lane.
 ## Residuals and risks (named, not fixed here)
 
 - R-a: a pinned-name rotation returns 404 with a body our sanitized error
-  drops; `IsModelFailoverError` does not fail over on a bare 404. Overnight the
-  failure mode is "the Synthetic share errors until someone looks", not silent
-  loss. Candidate follow-up: treat a 404 from a pool member as a failover
-  trigger.
-- R-b: concurrency 10 account-wide against 24 in flight at the gateway; a busy
-  period fails over to luna by design (the 429 path above), so the overnight
-  Synthetic share will read lower than 1:1 under load.
+  drops, and a bare 404 is not a failover trigger. Tonight that is the intended
+  behaviour (owner: fail rather than fall back): the Synthetic share errors
+  until someone looks, loudly, not silently. Candidate follow-up when failover
+  returns to this pool: treat a 404 from a pool member as a failover trigger.
+- R-b: concurrency 10 account-wide against 24 in flight at the gateway and 6
+  per computer. With no failover, a burst above 10 in flight turns the excess
+  Synthetic calls into 429 run errors (and opens the model breaker for its
+  short window) instead of luna calls: expect error events on the Synthetic
+  half under load, and read them as the concurrency ceiling, not as a model
+  fault. The paper alone is capped at 6 in flight.
+- R-g: a gateway without `SYNTHETIC_API_KEY` answers `unsupported provider:
+  synthetic`, which is not a failover marker; with no failover it is moot, but
+  the key must be provisioned before the paper is pointed at the pool
+  (`CHOIR_PROVIDER_ONLY_KEYS=SYNTHETIC_API_KEY ./nix/deploy-provider-creds.sh
+  node-b` upserts it with no other change, then restarts the gateway). No nix
+  change: the unit's `EnvironmentFile` loads `gateway-provider.env`, and the
+  base URL defaults in code. The pool and the catalog also live in the guest
+  binary (the guest builds assignments), so a computer's guest must carry this
+  commit before a `pool:synthetic-luna` policy resolves; an older guest treats
+  an unknown pool as `pool:default`.
 - R-c: the output cap of 65,536 is advertised, unverified at the cap.
 - R-d: `flushTools` in the shared stream parser ranges over a map, so the order
   of parallel tool calls in `LLMResponse.ToolCalls` is not the model's order.
@@ -328,5 +358,8 @@ to the opencode-go route was run in this lane.
 
 - discovered: shared stream parser drops `delta.reasoning` (Q3); bare-404 model
   rotation is not a failover trigger (R-a); stream tool-call order (R-d).
-- introduced: none yet.
-- repaired: none yet (Q3 lands in the code commits).
+- introduced: the default pool no longer carries deepseek-v4.1-flash (owner
+  ruling, tonight only); `synthetic-luna` has no failover (owner ruling).
+- repaired: the shared stream parser reads `delta.reasoning` (Q3), keeps
+  parallel tool calls in the model's order (R-d), and reads finish_reason
+  "stop" with tool calls as tool use.
