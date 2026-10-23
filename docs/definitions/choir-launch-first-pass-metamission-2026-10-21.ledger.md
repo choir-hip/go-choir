@@ -1353,3 +1353,17 @@ Append-only. One terse entry per orchestrator pass.
   - D23 lands 6365f329b alone (store auth gets its own deploy); its reviews are bunches 41 and 63. Both systems evaluate and the four gates pass.
   - First real consumer test: the 02:35 UTC off-host backup.
   - The lease moves to D24.
+- 22:20. D23 is live: staging serves 46e4e0a8e (CI run 40032095138 passed).
+  - go-choir-platform-dolt-users: "root passwordless" -> "root locked (passwordless login refused)" on :13306. go-choir-corpus-dolt-users: the same on :13307.
+  - verify-host-hardening --expect-internal enforce --expect-dolt locked: 207 passed, 0 failed. Root with an empty password is refused on :13306 and :13307, and the Dolt liveness probe passes.
+  - corpusd, vmctl and both Dolt servers are active. checkpointd, a timer oneshot, succeeded at 22:20:24 under the locked stage.
+  - Owed: the 02:35 UTC off-host backup, the first root-with-password consumer under the lock.
+  - Rollback: doltAuthStage "clients" plus a deploy.
+- 22:3x. D24 lands, alone: the stream_seq lease (the high-water mark), 10 commits.
+  - Contents: design rounds 1 to 3, tests first, the build, the id-range exact seed, round 2 (bunch 175 lows), and the CI timing fix 8b11c8a38.
+  - Reviews: bunches 162, 164 and 169 (design), bunch 175 tier 2 (Devin ready-to-build, DeepSeek ACCEPT). PR #91 full CI PASS on 8b11c8a38 (25 pass, 8 skipped); lease-r3-fast PASS. On e0bd976a3..46e4e0a8e main it builds clean and the four gates pass.
+  - Store schema epoch bump: Apply refuses epoch-2 releases, so the rollback is a CI revert. The reverted binary ignores the lease row and seeds by D13's path. Event table deploy 2 is still off.
+  - Proof, per design section 6:
+    - T first boot: exact / no_lease / seed_ms, and no append errors.
+    - The paper's first boot: exact plus its seed_ms (unmeasured; raise the 10-minute floor if it is over about 200 s), no event-append errors, the first-passivation time and the /health window.
+    - Next restart: seeded_from=lease with seed_ms under 50.
