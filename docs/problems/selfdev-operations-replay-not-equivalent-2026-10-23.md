@@ -341,35 +341,80 @@ fixed binary is serving (an old binary's projector drops the field):
 4. Run the replay probe again: equivalent, then the computer is eligible.
    Re-running the heal selects no rows, so it is idempotent.
 
-### Store.Reopen and the OG interceptor (code reading and check)
+### Store.Reopen and the OG interceptor (code reading and check; fixed below)
 
-Reading (not fixed here): `BindProjectionTape` installs the OG mutation
-interceptor on the store's current `ogStore`
-(`store/projection_tape.go:38-40`). `Store.Reopen`
-(`store/store.go:1113-1115`) replaces `s.ogStore` and `s.ogReadStore` with
-those of a freshly opened store, which has no interceptor, and leaves
-`s.projectionTape` set. After a `Reopen`, `ProjectionTapeBound()` still
-answers true (so the desktop, alias, mutation and run-memory writers keep
-routing through the tape), but `og_objects` and `og_edges` writes take the
-`s.intercept == nil` branch in `objectgraph/dolt_store.go:655, 1055, 1150,
-1865` and become direct SQL with no event.
-`agentcore/rematerialize.go:262-265` calls `Reopen` on a bound store and then
-`RebindProjection`, which swaps only the appender's projection store; the
-caller does not rebind the interceptor.
+Reading: `BindProjectionTape` installs the OG mutation interceptor on the
+store's current `ogStore` (`store/projection_tape.go:38-40`). `Store.Reopen`
+replaced `s.ogStore` and `s.ogReadStore` with those of a freshly opened
+store, which has no interceptor, and left `s.projectionTape` set. After a
+`Reopen`, `ProjectionTapeBound()` still answered true (so the desktop, alias,
+mutation and run-memory writers kept routing through the tape), but
+`og_objects` and `og_edges` writes took the `s.intercept == nil` branch in
+`objectgraph/dolt_store.go:655, 1055, 1150, 1865` and became direct SQL with
+no event. `agentcore/rematerialize.go:262-265` calls `Reopen` on a bound
+store and then `RebindProjection`, which swaps only the appender's
+projection store.
 
 Check: `store/reopen_projection_tape_test.go`,
-`TestReopenKeepsTheObjectGraphOnTheProjectionTape`. It binds a tape, puts an
-object (control: one event), closes and reopens the store, and puts another.
-It fails today: the second write leaves the head sequence unchanged, i.e. no
-event. So the store-level defect is confirmed. What the test does not show
-is whether production reaches it: `rematerialize.go:262` runs on a bound
-live store, so a rematerialize in a running process looks affected (the
-interceptor is lost until the next boot, and a restart rebinds), while the
-boot-time rebase at `autoputer/projection_base.go:182-196` runs in recovery
-before the bind at `autoputer/run.go:428` (ordering read, not run). To refute
-or confirm in production, a staging test computer that has run a
-rematerialize without restarting should be probed with replay-completeness
-after an OG write; a diff in `og_objects` or `og_edges` confirms it. If
-confirmed, the fix shape is to re-install the interceptor in `Reopen` (or
-make `BindProjectionTape` idempotent and call it after `Reopen`), and its
-class is red.
+`TestReopenKeepsTheObjectGraphOnTheProjectionTape` (commit 88f8d5e06). It
+failed before the fix: the second write left the head sequence unchanged.
+
+## Reopen fix (2026-10-23, lane fp0-selfdev-ops-replay; red)
+
+`Store.Reopen` now installs the bound tape's interceptor
+(`s.projectionTape.interceptOG`, the same tape) on the adopted
+`live.ogStore` before it assigns `s.og`, `s.ogStore` and `s.ogReadStore`
+(`store/store.go`, in `Reopen`). `ogReadStore` takes no interceptor; it never
+wrote through one.
+
+Why no window and no fail-closed path:
+
+- Ordering at boot is safe. The only boot-time `Reopen` is the retained-store
+  rebase (`autoputer/projection_base.go:182-196`, reached from
+  `materializeProjectionBaseIfNeeded` at `autoputer/run.go:366`), and the
+  bind is at `run.go:428`, after it. There the tape is unbound, the new
+  branch does nothing, and `BindProjectionTape` installs the interceptor on
+  the adopted store as it always did.
+- The runtime reopen (`rematerialize.go:262`) runs on a bound store. The
+  interceptor is set on the new store before `Reopen` publishes it, the
+  store is closed from `Close` until `Reopen` returns (its SQL handles are
+  closed, so any write in that interval fails and cannot reach SQL), and the
+  interceptor reads only the tape, not the swapped fields. There is no
+  interval in which the adopted store is reachable and uninterceptable, so
+  clearing the bound state would only break the desktop, alias, mutation and
+  run-memory writers that did survive. `ProjectionTapeBound()` now matches
+  what the object graph honours.
+- Tests: `TestReopenedStoreRoutesConcurrentObjectGraphWritesThroughTheTape`
+  starts writers on both doors (the service `s.og` through
+  `PutComputerSetting`, and `ogStore.PutObject`) the moment `Reopen`
+  returns, under `-race`, and requires one tape event per write (without the
+  fix: 0 of 12). `agentcore.TestRematerializeFromTapeKeepsObjectGraphAndOperationWritesOnTheTape`
+  runs `RematerializeFromTape` end to end on a tape-bound runtime
+  (`rematerialize.go:262`), then writes through the object graph (one event;
+  without the fix 0), starts an operation and stamps it on the rebound
+  operation store, and requires a replay-equivalent computer.
+
+Rollback: revert the `Reopen` hunk; the object graph then loses its
+interceptor on `Reopen` as before. Mutation class red; tier 2 review.
+
+Heresy delta (Reopen fix): repaired: an OG writer outside the tape after a
+live rematerialize, reachable in a running process (reproduced through
+`RematerializeFromTape`, not only at the store). Introduced: none.
+
+### Second Reopen defect found (not fixed): the vocabulary write fence
+
+`Open` builds the object-graph store with
+`SetWriteValidator(s.vocabWriteGuard)`, a method value bound to the store
+being opened (`store/store.go:809`, `store/texture.go:184`). `Reopen` opens a
+temporary store, adopts its handles, then zeroes it (`*live = Store{}`).
+The validator the adopted `ogStore` keeps is bound to that zeroed store, so
+`vocabCutover.Load()` is false and the fence is disarmed after any `Reopen`,
+whatever `s.vocabCutover` says; `s.vocabCutover` is not refreshed from the
+reopened workspace's migration report either. Reproduction:
+`store.TestReopenKeepsTheVocabularyWriteFenceArmed`, skipped by default so
+the lane stays green; `CHOIR_REPRO_REOPEN_FENCE=1 go test ./internal/store
+-run TestReopenKeepsTheVocabularyWriteFenceArmed` fails today. Not fixed
+here because re-arming a fence is a behaviour change of its own: after a
+rematerialize, writes that now pass could be refused. The fix shape is to
+bind the validator to `s` in `Reopen` and reload the cutover flag from the
+adopted workspace; class red (OG writes). Discovered, not introduced.
