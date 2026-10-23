@@ -1193,3 +1193,11 @@ Append-only. One terse entry per orchestrator pass.
   - on T, the operator migrate POST builds the index, with its time and write hold measured; afterwards T's slow-read lines and the replay report show no new SchemaDrift.
   - The paper's build is the owner's slow window.
   Rollback: revert c184c1056 and 80e81254b; DROP INDEX on any computer that built it.
+- 12:26 UTC: D16 deployed: CI 39951016230 success; Node B deployed_commit 140f3e5f5. The paper refreshed planned at 12:25:59. Its boot logged "run-memory kind index idx_run_memory_entries_owner_agent_kind_created missing on a table with rows, not added at open", store open 4.99 s: inert as designed. PASS.
+- 12:28 UTC: D16 proof on T (woken through vmctl resolve; the guest route was called from Node B with the marker only, never the token; _runs/deployD16/).
+  - GET /internal/store/derived-columns before: idle, index present false, has_rows true.
+  - POST ?action=migrate gave 202 at 12:27:11.249; done by 12:27:11.794 with the index present; the step took 162 ms. T's /health answered 200 at every 0.5 s probe.
+  - The replay report afterwards: not_equivalent on exactly the same two historic-stamp keys as D10 and D14, no schema drift, and run_memory_entries not listed. The owner-leading order keeps the witness, as the round 2 test said. PASS.
+  - T's table is small, so 162 ms says little about the paper. Building on the paper is the owner's slow window: an estimated [H] tens of seconds to minutes of /health 503 while the build holds the write connection. Afterwards the management cell-start read should fall from about 3 s warm and 16.7 s cold.
+  - Rollback on a built computer: DROP INDEX idx_run_memory_entries_owner_agent_kind_created ON run_memory_entries.
+- 12:28 UTC: Morning handoff (docs only). The now card names D16 serving, no live candidate, the owner's three decisions (the Synthetic gate, the paper's index-build window, the roadmap re-cut) and the guest-shell manual steps. Status page v37 (65.0% against the 64.5-66% forecast for 13:00 UTC). The overnight letter is in docs/reports and in Choir Reports.

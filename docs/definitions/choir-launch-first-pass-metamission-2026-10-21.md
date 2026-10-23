@@ -293,15 +293,15 @@ now:
     risk-tiered, Devin by default; tier 2 adds DeepSeek (CLAUDE.md, Mutation
     Classes). The owner takes the agenda in the morning; the roadmap re-cut
     (lane/fp0-roadmap-recut) waits for that review and does not land before.
-  source_ref: 7ca537e01
-  deploy_identity: 7ca537e01 serving (deploy D12, CI 39920746304, proved 08:08 to 08:13 UTC)
+  source_ref: 140f3e5f5
+  deploy_identity: 140f3e5f5 serving (deploy D16, CI 39951016230, proved 12:26 to 12:28 UTC)
   candidate:
-    id: deploy-D13
-    state: landing as D13 (lane/fp0-stream-seq-seed 256218633; bunch 156 DeepSeek reject answered by round 3; bunch 158 Devin accept; Mac mirror streamseq-r3)
-    ref: deploy D13's landing commit on main
-    base: 7ca537e01
+    id: owner-agenda-2026-10-23
+    state: no live candidate; D13 to D16 landed and proved overnight; the next acts wait for the owner's agenda (13:00 UTC)
+    ref: the owner's morning decisions
+    base: 140f3e5f5
     digest: the staged tree plus the ledger and this card
-    scope: [internal/store, internal/objectgraph, docs]
+    scope: [docs]
   bridge_conjecture: >-
     If the security and density batches land with deployed proofs and
     independent review, then the owner's second pass starts from a computer
@@ -335,30 +335,35 @@ now:
     owner_ratification_ref: not_applicable
   belief:
     believed_state: >-
-      D9 to D12 are live and proved: the outbox scan holds 0 ms, the event
-      table (store schema epoch 2) is inert and live, Close pins its pools,
-      the run-state events are numbered, the prompt bar accepts pasted
-      scripts, and one named test computer resolves through the host's
-      Unbound. The paper's steady /health 503 rate fell from 3.0% to 1.3%;
-      each refresh window still has about 30 503s (the stream_seq seed).
-      Synthetic serves at a gate of 3 in flight with no 429s; the weekly
-      allowance falls about 5 points an hour.
+      D9 to D16 are live and proved. The paper's boot seed stall is gone
+      (first passivation 0.5-0.75 s, was 1m44s). Its steady /health 503s
+      come from one read, the management desk's inbox cursor (14,965
+      rows; about 3 s warm, 16.7 s cold, on the single write connection);
+      D15 halved the calls (post-boot 3.2%, steady 2.6%), and D16's kind
+      index, deployed inert and built on T in 162 ms, removes the walk once
+      it is built on the paper. The dispatcher's 8 slots are saturated:
+      about 3 of them wait at the Synthetic gate of 3, and half of all
+      activations wait over 5 minutes. Synthetic's weekly allowance falls
+      about 8 points an hour (63% at 10:00).
     main_uncertainty: >-
-      whether the bounded stream_seq seed's reuse band (an event with the
-      maximum stream_seq behind the newest 50,000 objects) is reachable in
-      practice; whether re-arming the vocabulary fence on Reopen refuses a
-      write that passes today.
-    next_observation: the paper's boot after D13, its console's slow-op lines and /health in the first minutes.
+      how long the kind index build holds the paper's write connection
+      (estimated tens of seconds to minutes); which dispatcher option the
+      owner takes for the Synthetic half.
+    next_observation: the paper's run_memory_agent_list slow lines and /health after the index is built.
   blocker_or_risk: >-
-    Guest-shell proof steps (SEC-10 step 3, FP7 step 5, body caps step 11)
-    have no agent route; they are the owner's manual items. F-c deploy 2
-    waits a staging day after D10 (06:52 UTC 2026-10-23).
+    Owner decisions: the Synthetic gate (held at 3; a higher gate empties
+    the allowance sooner and there is no fallback), the paper's index-build
+    slow window, the roadmap re-cut (lane/fp0-roadmap-recut). Guest-shell
+    proof steps (SEC-10 step 3, FP7 step 5, body caps step 11) are the
+    owner's manual items. F-c deploy 2 is gated on a real stream_seq close
+    (a persisted high-water mark or an index).
   next_action: >-
-    D13 (stream_seq seed) after bunch 156 and the mirror; prove it on the
-    paper's planned refresh. Then D14, the self-development operations
-    replay fix with the vocabulary fence re-armed (round 2, tier 2). Then
-    the next boot read the census ranks first, and F-c deploy 2 after its
-    staging day.
+    The owner's agenda. Ready on request: build the kind index on the paper
+    (POST /internal/store/derived-columns?action=migrate from Node B, with a
+    /health probe), then read its slow lines. Named next: the stream_seq
+    high-water mark before F-c deploy 2; ListEventsByOwnerAfter's header
+    window; the dispatcher's pool-aware scheduling if the owner picks it.
+
 receipts:
   - id: capture-label-key-read
     boundary: implement
