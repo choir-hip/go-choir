@@ -87,6 +87,9 @@ type derivedColumnMigration struct {
 	mu     sync.Mutex
 	status DerivedColumnMigrationStatus
 	cancel context.CancelFunc
+	// restoring is set while RestoreRunMemoryIndexes runs: a migration and a
+	// restore never run together (a drop and a create of the same index).
+	restoring bool
 }
 
 // DiscoverObjectGraphAccessPaths rediscovers which derived columns and
@@ -124,7 +127,7 @@ func (s *Store) StartDerivedColumnMigration() (DerivedColumnMigrationStatus, err
 	m := &s.derivedColumns
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.status.State == DerivedColumnMigrationRunning {
+	if m.status.State == DerivedColumnMigrationRunning || m.restoring {
 		return m.status, ErrDerivedColumnMigrationRunning
 	}
 	ctx, cancel := context.WithCancel(context.Background())

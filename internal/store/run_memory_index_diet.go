@@ -165,6 +165,18 @@ func (s *Store) dropRunMemoryDietIndexesAtOpen(ctx context.Context) error {
 		return err
 	}
 	reason := inv.dietGuard()
+	// The coupling: with neither the kind index nor owner_agent_created there
+	// is no (owner_id, agent_id) index at all. The agent read full-scans the
+	// table and owner_id has no leading index, so the content witness differs
+	// from a fresh store's. A store gets here by a manual drop of the kind
+	// index after the diet, or a kind index that was never built after
+	// owner_agent_created was dropped.
+	_, hasAgentCreated := inv.columns[RunMemoryOwnerAgentCreatedIndexName]
+	if !hasAgentCreated && !reflect.DeepEqual(inv.columns[RunMemoryKindIndexName], runMemoryKindIndexColumns) {
+		log.Printf("runtime store: run-memory: no (owner_id, agent_id) index exists (neither %s nor %s): ListRunMemoryEntriesForAgent full-scans the table and owner_id has no leading index, so the content witness differs from a fresh store's; restore with POST /internal/store/derived-columns?action=restore_run_memory_indexes or build the kind index with action=migrate",
+			RunMemoryKindIndexName, RunMemoryOwnerAgentCreatedIndexName)
+		return fmt.Errorf("runtime store: no (owner_id, agent_id) run-memory index")
+	}
 	for _, d := range runMemoryDietIndexes {
 		if _, present := inv.columns[d.name]; !present {
 			continue
@@ -219,4 +231,135 @@ func (s *Store) migrateRunMemoryDietIndex(ctx context.Context, number int, d run
 	}
 	log.Printf("runtime store: run-memory index %s dropped in %s", d.name, time.Since(start).Round(time.Millisecond))
 	return step, nil
+}
+
+// Restore: the rollback of R5 and the diet.
+//
+// A revert of the binary would rebuild the dropped indexes at its next boot,
+// on the populated table, before its listener (its schemaDDL is CREATE INDEX IF
+// NOT EXISTS; about 1.7 s each at 425,000 rows locally, tens of seconds on the
+// paper). RestoreRunMemoryIndexes moves that build off the boot path: the
+// operator runs it first, online, with the listener up, and the old binary's
+// DDL is then a no-op. It is idempotent (an index that exists is "present"),
+// takes the engine mutex per index like the drops do, and reports each build's
+// hold. It never runs beside a migration.
+//
+// Order: owner_agent_created first. After the diet the kind index is the only
+// index that leads with owner_id; owner_agent_created is the second, so owner_id's
+// SHOW COLUMNS Key never depends on a half-restored set, and a kind-index
+// rollback (DROP INDEX) that follows is witness-neutral again.
+const (
+	RunMemoryIndexRestoreCreated = "created"
+	RunMemoryIndexRestorePresent = "present"
+)
+
+// RunMemoryIndexRestoreStep is one index of a restore.
+type RunMemoryIndexRestoreStep struct {
+	Name   string `json:"name"`
+	Action string `json:"action"`
+	// HoldMS is the time the write connection was held by the build; 0 for a
+	// present index.
+	HoldMS int64  `json:"hold_ms"`
+	Err    string `json:"error,omitempty"`
+}
+
+// RunMemoryIndexRestoreReport is the result of RestoreRunMemoryIndexes.
+type RunMemoryIndexRestoreReport struct {
+	Steps       []RunMemoryIndexRestoreStep `json:"steps"`
+	TotalHoldMS int64                       `json:"total_hold_ms"`
+	Error       string                      `json:"error,omitempty"`
+}
+
+// ErrUnknownRunMemoryIndex refuses a restore naming an index it does not know.
+var ErrUnknownRunMemoryIndex = errors.New("runtime store: unknown run-memory index")
+
+// runMemoryRestoreOrder is the restore's order.
+func runMemoryRestoreOrder() []runMemoryDietIndex {
+	byName := map[string]runMemoryDietIndex{}
+	for _, d := range runMemoryDietIndexes {
+		byName[d.name] = d
+	}
+	return []runMemoryDietIndex{
+		byName[RunMemoryOwnerAgentCreatedIndexName],
+		byName[RunMemoryOwnerLoopSeqIndexName],
+		{RunMemoryLoopSeqIndexName, []string{"loop_id", "seq"}, runMemoryLoopSeqCreateDDL},
+	}
+}
+
+// RestoreRunMemoryIndexes recreates the indexes R5 and the diet dropped. names
+// limits it to those indexes (nil is all three).
+func (s *Store) RestoreRunMemoryIndexes(ctx context.Context, names []string) (RunMemoryIndexRestoreReport, error) {
+	report := RunMemoryIndexRestoreReport{Steps: []RunMemoryIndexRestoreStep{}}
+	if s == nil || s.ogStore == nil {
+		return report, fmt.Errorf("runtime store: object graph not initialized")
+	}
+	order := runMemoryRestoreOrder()
+	selected := map[string]bool{}
+	for _, n := range names {
+		known := false
+		for _, d := range order {
+			known = known || d.name == n
+		}
+		if !known {
+			return report, fmt.Errorf("%w %q", ErrUnknownRunMemoryIndex, n)
+		}
+		selected[n] = true
+	}
+	m := &s.derivedColumns
+	m.mu.Lock()
+	if m.status.State == DerivedColumnMigrationRunning || m.restoring {
+		m.mu.Unlock()
+		return report, ErrDerivedColumnMigrationRunning
+	}
+	m.restoring = true
+	m.mu.Unlock()
+	defer func() {
+		m.mu.Lock()
+		m.restoring = false
+		m.mu.Unlock()
+	}()
+
+	for _, d := range order {
+		if len(selected) > 0 && !selected[d.name] {
+			continue
+		}
+		step := RunMemoryIndexRestoreStep{Name: d.name, Action: RunMemoryIndexRestorePresent}
+		fail := func(err error) (RunMemoryIndexRestoreReport, error) {
+			step.Err = err.Error()
+			report.Steps = append(report.Steps, step)
+			report.Error = err.Error()
+			return report, err
+		}
+		if err := ctx.Err(); err != nil {
+			report.Error = err.Error()
+			return report, err
+		}
+		inv, err := s.inventoryRunMemoryIndexes(ctx)
+		if err != nil {
+			return fail(err)
+		}
+		if _, present := inv.columns[d.name]; present {
+			report.Steps = append(report.Steps, step)
+			continue
+		}
+		log.Printf("runtime store: run-memory index %s: restoring on a table with rows=%t", d.name, inv.hasRows)
+		start := time.Now()
+		buildErr := s.ogStore.WithEngine("(*Store).RestoreRunMemoryIndexes", func(db *sql.DB) error {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			_, err := db.ExecContext(ctx, d.ddl)
+			return err
+		})
+		step.HoldMS = time.Since(start).Milliseconds()
+		if buildErr != nil {
+			log.Printf("runtime store: run-memory index %s restore failed after %s: %v", d.name, time.Since(start).Round(time.Millisecond), buildErr)
+			return fail(buildErr)
+		}
+		step.Action = RunMemoryIndexRestoreCreated
+		report.TotalHoldMS += step.HoldMS
+		report.Steps = append(report.Steps, step)
+		log.Printf("runtime store: run-memory index %s restored in %s", d.name, time.Since(start).Round(time.Millisecond))
+	}
+	return report, nil
 }
