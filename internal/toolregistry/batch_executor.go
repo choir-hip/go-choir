@@ -68,11 +68,18 @@ func executeOneTool(ctx context.Context, registry *ToolRegistry, call types.Tool
 	// tool.invoked is published on the bus for the live ticker and is not
 	// appended (types.LiveOnly, journal cut R3): the arguments and the start
 	// ride the tool.result below.
-	invokedPayload, _ := json.Marshal(map[string]any{
-		"tool":      call.Name,
-		"call_id":   call.ID,
-		"arguments": args,
-	})
+	argFields := toolArgumentFields(args)
+	invokedData := map[string]any{
+		"tool":    call.Name,
+		"call_id": call.ID,
+	}
+	for k, v := range argFields {
+		invokedData[k] = v
+	}
+	invokedPayload, err := json.Marshal(invokedData)
+	if err != nil {
+		invokedPayload = fallbackToolPayload(call.Name, call.ID, nil)
+	}
 	emit(types.EventToolInvoked, "tool_call", invokedPayload)
 
 	isError := false
@@ -111,7 +118,7 @@ func executeOneTool(ctx context.Context, registry *ToolRegistry, call types.Tool
 		"output_len": len(visibleOutput),
 		"output":     visibleOutput,
 		// What tool.invoked carried and pairing the two gave (journal cut R3).
-		"arguments":   args,
+		// The arguments ride as toolArgumentFields (invalid JSON as a string).
 		"started_at":  toolStart.UTC(),
 		"duration_ms": elapsed.Milliseconds(),
 	}
@@ -123,10 +130,50 @@ func executeOneTool(ctx context.Context, registry *ToolRegistry, call types.Tool
 		resultPayloadData["full_output"] = fullOutput
 		resultPayloadData["full_output_truncated"] = truncated
 	}
-	resultPayload, _ := json.Marshal(resultPayloadData)
+	for k, v := range argFields {
+		resultPayloadData[k] = v
+	}
+	resultPayload, marshalErr := json.Marshal(resultPayloadData)
+	if marshalErr != nil {
+		// Never let one field erase the only durable record of the call.
+		resultPayload = fallbackToolPayload(call.Name, call.ID, map[string]any{
+			"is_error":      isError,
+			"output_len":    len(visibleOutput),
+			"output":        visibleOutput,
+			"started_at":    toolStart.UTC(),
+			"duration_ms":   elapsed.Milliseconds(),
+			"marshal_error": marshalErr.Error(),
+		})
+	}
 	emit(types.EventToolResult, "tool_call", resultPayload)
 
 	return types.ToolResult{CallID: call.ID, Output: visibleOutput, IsError: isError}
+}
+
+// toolArgumentFields returns the payload fields that carry a call's
+// arguments. Valid JSON is embedded as is under "arguments". A provider can
+// emit malformed arguments (canonicalJSON passes invalid JSON through), and a
+// json.RawMessage of invalid bytes makes the whole payload fail to marshal, so
+// those bytes ride as a string under "arguments_raw" with "arguments_invalid".
+func toolArgumentFields(args json.RawMessage) map[string]any {
+	if json.Valid(args) {
+		return map[string]any{"arguments": args}
+	}
+	return map[string]any{"arguments_raw": string(args), "arguments_invalid": true}
+}
+
+// fallbackToolPayload is the payload when the full one cannot be marshaled: it
+// keeps the tool name and call id plus the plain fields in extra.
+func fallbackToolPayload(tool, callID string, extra map[string]any) json.RawMessage {
+	data := map[string]any{"tool": tool, "call_id": callID}
+	for k, v := range extra {
+		data[k] = v
+	}
+	payload, err := json.Marshal(data)
+	if err != nil {
+		payload, _ = json.Marshal(map[string]any{"tool": tool, "call_id": callID, "marshal_error": err.Error()})
+	}
+	return payload
 }
 
 func shouldExecuteToolsSequentially(calls []types.ToolCall) bool {
