@@ -952,6 +952,11 @@ are additions (bunch 169).
 - The deployed proof (section 6) and the paper's measured `seed_ms`.
 - Lane `fp1-event-table-d2`: its `store.event_table` setting must refuse to
   turn on until `state` is `ready` with a lease on the tape (not on this lane).
+  Built on `lane/fp1-event-table-d2-r3` (2026-10-23): `Store.EventTableLeaseReady`
+  reads this lease's snapshot and one atomic (`lease.onTape`, set where the
+  seed and the refill write the row: the tape was bound); the writer's stamp
+  and the setting's POST (409) both refuse before it; deploy 2's proof step 5
+  is this section's step 3.
 - The VM snapshot resume residual (open question 4) is unchanged.
 - The full `internal/agentcore` suite was not run; the focused run of the
   instruction (`Event|Seq|Lease|Rematerial|Restore|Replay`) passes.
