@@ -13,7 +13,10 @@
 //  1. List. The three directories are streamed in batches and the names are
 //     spilled to 256 files by the first byte of the digest; each pin receipt
 //     is read once and its edge (computer, artifact, namespace, length,
-//     eligibility) is spilled by the artifact's first byte.
+//     eligibility) is spilled by the artifact's first byte. The pin receipts
+//     and the event bodies in every computer's segments (sealed and unsealed)
+//     are read for edges too: a segmented repin of an artifact whose legacy
+//     file exists writes its receipt to the segment only (review round 2).
 //  2. For each of the 256 buckets, the bucket's names and edges are loaded, and
 //     for each computer a tapestore.SegmentView supplies the segment records
 //     of that byte. Every legacy file of the bucket is read, hashed against
@@ -87,6 +90,10 @@ type state struct {
 	Table     []string         `json:"computer_table"`
 	Listing   map[string]int64 `json:"listing"`
 	Done      []bool           `json:"done"`
+	// ListStart is when the list phase began; AttrErrors are computers whose
+	// segments could not be read for their receipts (review round 2).
+	ListStart  time.Time         `json:"list_start"`
+	AttrErrors map[string]string `json:"attr_errors,omitempty"`
 }
 
 func (s *state) matches(o Options, root string, filter []string) bool {
@@ -184,6 +191,7 @@ func Run(opts Options) (*Report, error) {
 		return nil, err
 	}
 	if !e.st.ListDone {
+		e.st.ListStart = time.Now()
 		if err := e.list(); err != nil {
 			return nil, err
 		}
@@ -235,6 +243,11 @@ func Run(opts Options) (*Report, error) {
 			return nil, err
 		}
 		rep.merge(part)
+	}
+	for c, msg := range e.st.AttrErrors {
+		if _, ok := rep.SegmentErrors[c]; !ok {
+			rep.SegmentErrors[c] = msg
+		}
 	}
 	rep.Complete = true
 	rep.Finished = time.Now().UTC().Format(time.RFC3339)

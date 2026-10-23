@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"sort"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/tapestore"
 )
@@ -25,9 +26,10 @@ const (
 	classTooLarge
 	classVanished
 	classOutOfScope
+	classDroppedReceipt
 )
 
-var classNames = [...]string{"unverified", "covered", "uncovered", "corrupt", "blocked", "ineligible", "unreceipted", "legacy_bad", "too_large", "vanished", "out_of_scope"}
+var classNames = [...]string{"unverified", "covered", "uncovered", "corrupt", "blocked", "ineligible", "unreceipted", "legacy_bad", "too_large", "vanished", "out_of_scope", "dropped_receipt"}
 
 func (c class) String() string {
 	if int(c) < len(classNames) {
@@ -53,6 +55,9 @@ type Verdict struct {
 	class     class
 	computers []string
 	size      int64
+	// listStart is when the pass listed the legacy tree: a file touched
+	// after it was repinned after the attribution was frozen.
+	listStart time.Time
 }
 
 // NS is the legacy namespace of the file.
@@ -89,6 +94,10 @@ type Tally struct {
 	TooLarge    int64 `json:"too_large"`
 	Vanished    int64 `json:"vanished"`
 	OutOfScope  int64 `json:"out_of_scope"`
+	// DroppedReceipt counts files a receipt names that the join set aside
+	// beside a kept one (rejected shape, ineligible, another length or
+	// computer): refused, and the run is unhealthy.
+	DroppedReceipt int64 `json:"dropped_receipt"`
 }
 
 func (t *Tally) count(c class) {
@@ -114,6 +123,8 @@ func (t *Tally) count(c class) {
 		t.Vanished++
 	case classOutOfScope:
 		t.OutOfScope++
+	case classDroppedReceipt:
+		t.DroppedReceipt++
 	}
 }
 
@@ -129,6 +140,7 @@ func (t *Tally) add(o Tally) {
 	t.TooLarge += o.TooLarge
 	t.Vanished += o.Vanished
 	t.OutOfScope += o.OutOfScope
+	t.DroppedReceipt += o.DroppedReceipt
 }
 
 // CopyStats count records (an artifact or a receipt), not files.
@@ -174,7 +186,7 @@ type Report struct {
 	Receipt string `json:"receipt,omitempty"`
 }
 
-const reportVersion = 1
+const reportVersion = 2
 
 var namespaces = []string{"event", "payload", "receipt"}
 
@@ -246,14 +258,17 @@ func (r *Report) total(f func(Tally) int64) int64 {
 }
 
 // Healthy is true when nothing the store holds is damaged: no corrupt copy,
-// no blocked computer, no segment error, no legacy file that fails its hash.
+// no blocked computer, no segment error, no legacy file that fails its hash,
+// no pin receipt the tool had to set aside or could not read.
 // It is the gate of the delete command; a file is still deleted only if its
 // own Verdict is deletable.
 func (r *Report) Healthy() bool {
 	return r.Complete && len(r.SegmentErrors) == 0 &&
 		r.total(func(t Tally) int64 { return t.Corrupt }) == 0 &&
 		r.total(func(t Tally) int64 { return t.Blocked }) == 0 &&
-		r.total(func(t Tally) int64 { return t.LegacyBad }) == 0
+		r.total(func(t Tally) int64 { return t.LegacyBad }) == 0 &&
+		r.total(func(t Tally) int64 { return t.DroppedReceipt }) == 0 &&
+		r.Listing["rejected_receipts"] == 0 && r.Listing["unnamable_receipts"] == 0
 }
 
 // OK is true when the run is healthy, found at least one file, and every

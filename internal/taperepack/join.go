@@ -31,6 +31,8 @@ type edgeVal struct {
 	computer uint32
 	length   uint32
 	eligible bool
+	rejected bool // a PinReceipt the shape guard rejected: names the file, attributes nothing
+	ref      bool // an event body in a segment names the digest
 }
 
 // compIdx is one computer's segment records of the current bucket.
@@ -105,7 +107,9 @@ func (e *engine) readEdges(b int) (map[locKey][]edgeVal, error) {
 		out[k] = append(out[k], edgeVal{
 			computer: binary.BigEndian.Uint32(rec[33:37]),
 			length:   binary.BigEndian.Uint32(rec[37:41]),
-			eligible: rec[41] == 1,
+			eligible: rec[41]&edgeEligible != 0,
+			rejected: rec[41]&edgeRejected != 0,
+			ref:      rec[41]&edgeRef != 0,
 		})
 	}
 	return out, nil
@@ -201,7 +205,13 @@ func (e *engine) file(bc *bucketCtx, f listRec) error {
 		v.class = classLegacyBad
 	default:
 		v.size = int64(len(raw))
+		v.listStart = e.st.ListStart
 		e.decide(bc, &v, raw)
+		if v.class == classCovered && e.attrBroken() {
+			// Some computer's segments or some receipt could not be read:
+			// no file can be proven free of a need nobody could see.
+			v.class = classBlocked
+		}
 	}
 	bc.part.countGlobal(f.ns, v.class)
 	if e.opts.OnVerdict != nil {
@@ -216,6 +226,14 @@ func (e *engine) file(bc *bucketCtx, f listRec) error {
 // compares it with their segment copies. raw hashes to the file's name.
 func (e *engine) decide(bc *bucketCtx, v *Verdict, raw []byte) {
 	var computers []string
+	// dropped: a receipt names this file and was set aside (rejected by the
+	// shape guard, ineligible, another length, another computer than the
+	// event's). Setting it aside would remove a requirement, so a file with a
+	// dropped receipt beside a kept one is refused (review round 2, R3).
+	dropped := false
+	// guard: computers the chain names the file for through event bodies in
+	// their segments; they must cover it but the copy does not write it.
+	var guard map[string]bool
 	switch v.ns {
 	case tapestore.NSReceipt:
 		ed, ok := parseReceipt(raw)
@@ -233,8 +251,24 @@ func (e *engine) decide(bc *bucketCtx, v *Verdict, raw []byte) {
 		var event *computerevent.Event
 		eventTried := false
 		seen := map[string]bool{}
+		var refs []string
+		real := 0
 		for _, ed := range edges {
+			if ed.ref {
+				// The chain names the file for this computer. It adds a
+				// requirement; it never drives a copy.
+				if int(ed.computer) < len(e.table.names) {
+					refs = append(refs, e.table.names[ed.computer])
+				}
+				continue
+			}
+			real++
+			if ed.rejected {
+				dropped = true
+				continue
+			}
 			if !ed.eligible || int64(ed.length) != int64(len(raw)) || int(ed.computer) >= len(e.table.names) {
+				dropped = true
 				continue
 			}
 			name := e.table.names[ed.computer]
@@ -246,6 +280,7 @@ func (e *engine) decide(bc *bucketCtx, v *Verdict, raw []byte) {
 					}
 				}
 				if event == nil || event.ComputerID != name {
+					dropped = true
 					continue
 				}
 			}
@@ -255,8 +290,20 @@ func (e *engine) decide(bc *bucketCtx, v *Verdict, raw []byte) {
 			}
 		}
 		if len(computers) == 0 {
-			v.class = classIneligible
+			if real == 0 {
+				v.class = classUnreceipted // only event references: not a file the copy is responsible for
+			} else {
+				v.class = classIneligible
+			}
 			return
+		}
+		guard = map[string]bool{}
+		for _, name := range refs {
+			if !seen[name] {
+				seen[name] = true
+				guard[name] = true
+				computers = append(computers, name)
+			}
 		}
 		sort.Strings(computers)
 	}
@@ -289,7 +336,7 @@ func (e *engine) decide(bc *bucketCtx, v *Verdict, raw []byte) {
 			continue
 		}
 		bc.part.countComputer(c, v.ns, cl)
-		if cl == classUncovered {
+		if cl == classUncovered && !guard[c] {
 			if e.opts.Apply {
 				bc.pending[c] = append(bc.pending[c], pendItem{ns: v.ns, body: append([]byte(nil), raw...)})
 				bc.pendLen += len(raw)
@@ -302,6 +349,9 @@ func (e *engine) decide(bc *bucketCtx, v *Verdict, raw []byte) {
 		if rank(cl) > rank(worst) {
 			worst = cl
 		}
+	}
+	if dropped && (worst == classCovered || worst == classUncovered) {
+		worst = classDroppedReceipt
 	}
 	v.class = worst
 }

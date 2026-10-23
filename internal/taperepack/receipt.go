@@ -34,12 +34,32 @@ type edge struct {
 	eligible bool
 }
 
-// parseReceipt decodes a legacy pin receipt. ok is false for anything that
-// is not a PinReceipt issued by corpusd naming a valid artifact digest.
-func parseReceipt(raw []byte) (e edge, ok bool) {
+type receiptStatus int
+
+const (
+	// receiptForeign: valid JSON that is not a PinReceipt; it names nothing
+	// and is ignored.
+	receiptForeign receiptStatus = iota
+	// receiptOK: a well formed pin receipt. Its edge may still be ineligible.
+	receiptOK
+	// receiptRejected: a PinReceipt that names an artifact but fails the
+	// shape guard (issuer, signature set, version, namespace, length). It
+	// cannot be trusted to attribute, but it must not remove a requirement:
+	// the files it names are refused (review round 2, R3).
+	receiptRejected
+	// receiptUnnamable: something that claims to be a receipt but names no
+	// artifact (not JSON, no valid digest). No file can be proven free of it.
+	receiptUnnamable
+)
+
+// classifyReceipt decodes a pin receipt.
+func classifyReceipt(raw []byte) (e edge, st receiptStatus) {
 	var receipt computerevent.Receipt
-	if err := json.Unmarshal(raw, &receipt); err != nil || receipt.ReceiptKind != "PinReceipt" || receipt.Issuer != "corpusd" || len(receipt.SignatureSet) == 0 || receipt.ReceiptVersion != computerevent.ReceiptVersionV1 {
-		return e, false
+	if err := json.Unmarshal(raw, &receipt); err != nil {
+		return e, receiptUnnamable
+	}
+	if receipt.ReceiptKind != "PinReceipt" {
+		return e, receiptForeign
 	}
 	computer, _ := receipt.KindFields["computer_id"].(string)
 	artifact, _ := receipt.KindFields["artifact_digest"].(string)
@@ -47,23 +67,63 @@ func parseReceipt(raw []byte) (e edge, ok bool) {
 	mediaType, _ := receipt.KindFields["media_type"].(string)
 	lengthNum, _ := receipt.KindFields["length"].(json.Number)
 	length, lengthErr := lengthNum.Int64()
-	if !tapestore.ValidDigest(artifact) || lengthErr != nil {
-		return e, false
+	if !tapestore.ValidDigest(artifact) {
+		return e, receiptUnnamable
 	}
 	if _, err := hex.Decode(e.artifact[:], []byte(artifact)); err != nil {
-		return e, false
+		return e, receiptUnnamable
 	}
 	e.computer, e.length = computer, length
+	if receipt.Issuer != "corpusd" || len(receipt.SignatureSet) == 0 || receipt.ReceiptVersion != computerevent.ReceiptVersionV1 || lengthErr != nil {
+		return e, receiptRejected
+	}
 	switch {
 	case namespace == eventNamespace:
 		e.ns, e.eligible = tapestore.NSEvent, true
 	case namespace == payloadNamespace:
 		e.ns, e.eligible = tapestore.NSPayload, mediaType == computerevent.ProjectionBatchMediaType
 	default:
-		return e, false
+		return e, receiptRejected
 	}
 	if !tapestore.ValidComputerID(computer) || length <= 0 || length > tapestore.MaxRecordBytes {
 		e.eligible = false
 	}
-	return e, true
+	return e, receiptOK
+}
+
+// parseReceipt decodes a legacy pin receipt. ok is false for anything that
+// is not a well formed PinReceipt issued by corpusd naming a valid artifact.
+func parseReceipt(raw []byte) (e edge, ok bool) {
+	e, st := classifyReceipt(raw)
+	return e, st == receiptOK
+}
+
+// hexRefs returns the distinct 64-character lowercase hex tokens in b: the
+// digests an event body names (payload refs, parents). The sweep keeps every
+// file the chain names this way.
+func hexRefs(b []byte) [][32]byte {
+	var out [][32]byte
+	seen := map[[32]byte]bool{}
+	start := -1
+	flush := func(end int) {
+		if start >= 0 && end-start == 64 {
+			var d [32]byte
+			if _, err := hex.Decode(d[:], b[start:end]); err == nil && !seen[d] {
+				seen[d] = true
+				out = append(out, d)
+			}
+		}
+		start = -1
+	}
+	for i, c := range b {
+		if (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') {
+			if start < 0 {
+				start = i
+			}
+			continue
+		}
+		flush(i)
+	}
+	flush(len(b))
+	return out
 }
