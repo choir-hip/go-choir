@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Test of scripts/check-host-firecracker-pin.sh against a fake `nix` (no
-# evaluation, no build, no host access). The fake answers the script's five
+# evaluation, no build, no host access). The fake answers the script's four
 # nix eval calls from canned values; the host environment list it returns is
 # the case under test (docs/problems/firecracker-1-17-for-every-computer-2026-10-22.md,
 # review finding 4: the discard guard must recognise the same truthy set as

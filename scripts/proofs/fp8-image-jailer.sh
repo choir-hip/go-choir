@@ -56,7 +56,11 @@ fp8_read_env() {
 		return 1
 	}
 	case "$FP8_ENV" in
-	Environment=*) FP8_ENV=${FP8_ENV#Environment=} ;;
+	Environment=?*) FP8_ENV=${FP8_ENV#Environment=} ;;
+	Environment=)
+		fail "vmctl's Environment is empty (is $PROOF_UNIT_VMCTL loaded?)"
+		return 1
+		;;
 	*)
 		fail "vmctl's Environment read returned no Environment= line"
 		return 1
