@@ -162,11 +162,22 @@ func sweepOrphanScratch(cfg scratchSweepConfig) (scratchSweepResult, error) {
 		cands = append(cands, candidate{name: name, computer: m[1], gen: gen})
 	}
 	// A marker whose directory is gone (published, or pruned as superseded)
-	// guards nothing.
+	// guards nothing. A marker is a sibling written after its directory, but a
+	// chunked listing can still miss the directory: remove only a marker older
+	// than the age gate whose directory is still absent when re-checked.
 	for _, m := range markers {
-		if !dirs[strings.TrimSuffix(m, genesisRepairSuffix)] {
-			_ = os.Remove(filepath.Join(cfg.Root, m))
+		dirName := strings.TrimSuffix(m, genesisRepairSuffix)
+		if dirs[dirName] {
+			continue
 		}
+		mi, err := os.Lstat(filepath.Join(cfg.Root, m))
+		if err != nil || cfg.Now.Sub(mi.ModTime()) < cfg.MinAge {
+			continue
+		}
+		if _, err := os.Lstat(filepath.Join(cfg.Root, dirName)); err == nil {
+			continue
+		}
+		_ = os.Remove(filepath.Join(cfg.Root, m))
 	}
 	if len(cands) == 0 && len(leftovers) == 0 {
 		return res, nil
@@ -181,66 +192,89 @@ func sweepOrphanScratch(cfg scratchSweepConfig) (scratchSweepResult, error) {
 	logger := newScratchLog(cfg.LogDir, cfg.Now)
 	defer logger.close()
 
-	remove := func(name, reason string) error {
-		// The removal log must be writable before anything is removed.
-		if !logger.open() {
-			return fmt.Errorf("deletion log unavailable, nothing removed: %v", logger.failed)
-		}
-		src := filepath.Join(cfg.Root, name)
-		size := dirBytes(src)
-		dst := src
-		if !strings.HasPrefix(name, sweepingPrefix) {
-			dst = filepath.Join(cfg.Root, sweepingPrefix+name)
-			// Rename is atomic: the live name never names a half-deleted tree.
-			if err := os.Rename(src, dst); err != nil {
-				return err
-			}
-			if cfg.afterRename != nil {
-				cfg.afterRename(name)
-			}
-		}
-		if err := os.RemoveAll(dst); err != nil {
+	// finish removes a directory the sweep already renamed out of the live
+	// namespace (or a leftover from a crash).
+	finish := func(sweeping, original, reason string, size int64) error {
+		if err := os.RemoveAll(filepath.Join(cfg.Root, sweeping)); err != nil {
 			return err
 		}
-		res.Removed = append(res.Removed, scratchSweepEntry{Name: name, Bytes: size, Reason: reason})
+		res.Removed = append(res.Removed, scratchSweepEntry{Name: original, Bytes: size, Reason: reason})
 		res.BytesRemoved += size
-		return logger.write(scratchLogRecord{Op: "scratch_removed", Namespace: scratchLogNamespace, Path: scratchLogNamespace + "/" + strings.TrimPrefix(name, sweepingPrefix), Bytes: size, Reason: reason})
+		return logger.write(scratchLogRecord{Op: "scratch_removed", Namespace: scratchLogNamespace, Path: scratchLogNamespace + "/" + original, Bytes: size, Reason: reason})
 	}
 
 	for _, name := range leftovers {
-		if err := remove(name, "finished a removal interrupted by a crash"); err != nil {
+		if !logger.open() {
+			log.Printf("checkpoint scratch sweep: leftover %s: deletion log unavailable, nothing removed: %v", name, logger.failed)
+			continue
+		}
+		if err := finish(name, strings.TrimPrefix(name, sweepingPrefix), "finished a removal interrupted by a crash", dirBytes(filepath.Join(cfg.Root, name))); err != nil {
 			log.Printf("checkpoint scratch sweep: leftover %s: %v", name, err)
 		}
 	}
 	for _, c := range cands {
-		job, hasJob := jobs[c.computer]
-		if hasJob && c.gen > job.Generation {
-			continue // out of order: fail closed
-		}
-		if hasJob && c.gen == job.Generation {
-			switch job.Status {
-			case "queued", "running", "retry":
-				continue // held
-			}
-		}
 		dir := filepath.Join(cfg.Root, c.name)
-		var keepReason string
-		if _, err := os.Stat(dir + genesisRepairSuffix); err == nil {
-			keepReason = "genesis-repair marker: removal needs the owner's yes"
-		} else if hasJob && c.gen == job.Generation && job.GenesisRepair {
-			keepReason = "genesis-repair job (" + job.Status + "): removal needs the owner's yes"
+		verdict := classifyScratch(c.gen, dir, jobs[c.computer], jobHeld(jobs, c.computer))
+		if verdict.held {
+			continue
 		}
-		if keepReason != "" {
-			res.Kept = append(res.Kept, scratchSweepEntry{Name: c.name, Reason: keepReason})
-			logger.keep(scratchLogRecord{Op: "scratch_kept", Namespace: scratchLogNamespace, Path: scratchLogNamespace + "/" + c.name, Reason: keepReason})
+		if verdict.keep != "" {
+			res.Kept = append(res.Kept, scratchSweepEntry{Name: c.name, Reason: verdict.keep})
+			logger.keep(scratchLogRecord{Op: "scratch_kept", Namespace: scratchLogNamespace, Path: scratchLogNamespace + "/" + c.name, Reason: verdict.keep})
 			continue
 		}
 		info, err := os.Lstat(dir)
 		if err != nil || cfg.Now.Sub(info.ModTime()) < cfg.MinAge {
 			continue
 		}
-		reason := "no live job holds it"
-		if err := remove(c.name, reason); err != nil {
+		// The removal log must be writable, and the intent durable, before
+		// anything is touched.
+		size := dirBytes(dir)
+		pathInLog := scratchLogNamespace + "/" + c.name
+		if !logger.open() {
+			log.Printf("checkpoint scratch sweep: %s: deletion log unavailable, nothing removed: %v", c.name, logger.failed)
+			continue
+		}
+		if err := logger.write(scratchLogRecord{Op: "scratch_remove_intent", Namespace: scratchLogNamespace, Path: pathInLog, Bytes: size, Reason: "no live job holds it"}); err != nil {
+			log.Printf("checkpoint scratch sweep: %s: intent not logged, nothing removed: %v", c.name, err)
+			continue
+		}
+		// Rename is atomic: the live name never names a half-deleted tree. It
+		// is also the linearization point against job admission: a claim
+		// writes its job row before it creates or reuses the directory, so
+		// the job read repeated after the rename sees every claim that could
+		// have used this directory. A held directory is renamed back.
+		sweeping := sweepingPrefix + c.name
+		if err := os.Rename(dir, filepath.Join(cfg.Root, sweeping)); err != nil {
+			log.Printf("checkpoint scratch sweep: %s: %v", c.name, err)
+			continue
+		}
+		if cfg.afterRename != nil {
+			cfg.afterRename(c.name)
+		}
+		restore := func(reason string) {
+			if _, err := os.Lstat(dir); err == nil {
+				// The job already made a fresh directory under the live name.
+				// Leave it alone; the stale tree is finished by the next sweep.
+				reason += "; a fresh directory exists, stale tree left for the next sweep"
+			} else if err := os.Rename(filepath.Join(cfg.Root, sweeping), dir); err != nil {
+				reason += "; rename back failed: " + err.Error()
+			}
+			_ = logger.write(scratchLogRecord{Op: "scratch_remove_aborted", Namespace: scratchLogNamespace, Path: pathInLog, Reason: reason})
+		}
+		again, jerr := cfg.Jobs()
+		if jerr != nil {
+			restore("job read after the rename failed: " + jerr.Error())
+			continue
+		}
+		// The directory now lives under the sweeping name: classify as the
+		// original (a marker beside the original name still counts).
+		v2 := classifyScratch(c.gen, dir, again[c.computer], jobHeld(again, c.computer))
+		if v2.held || v2.keep != "" {
+			restore("a job claimed it during the sweep")
+			continue
+		}
+		if err := finish(sweeping, c.name, "no live job holds it", size); err != nil {
 			log.Printf("checkpoint scratch sweep: %s: %v", c.name, err)
 		}
 	}
@@ -248,6 +282,39 @@ func sweepOrphanScratch(cfg scratchSweepConfig) (scratchSweepResult, error) {
 		return res, err
 	}
 	return res, nil
+}
+
+func jobHeld(jobs map[string]scratchJobState, computer string) bool {
+	_, ok := jobs[computer]
+	return ok
+}
+
+type scratchVerdict struct {
+	held bool   // a live job (or an out-of-order generation) holds it: leave it, say nothing
+	keep string // a genesis-repair scratch: leave it and log why
+}
+
+// classifyScratch decides whether the directory of generation gen is held by
+// job (when hasJob), or is a genesis-repair scratch to keep. A directory of
+// the row's generation with status queued, running or retry is held; a newer
+// generation than the row's is out of order and held (fail closed).
+func classifyScratch(gen uint64, dir string, job scratchJobState, hasJob bool) scratchVerdict {
+	if hasJob && gen > job.Generation {
+		return scratchVerdict{held: true}
+	}
+	if hasJob && gen == job.Generation {
+		switch job.Status {
+		case "queued", "running", "retry":
+			return scratchVerdict{held: true}
+		}
+	}
+	if _, err := os.Stat(dir + genesisRepairSuffix); err == nil {
+		return scratchVerdict{keep: "genesis-repair marker: removal needs the owner's yes"}
+	}
+	if hasJob && gen == job.Generation && job.GenesisRepair {
+		return scratchVerdict{keep: "genesis-repair job (" + job.Status + "): removal needs the owner's yes"}
+	}
+	return scratchVerdict{}
 }
 
 // dirBytes sums regular file sizes under dir; unreadable entries count zero.

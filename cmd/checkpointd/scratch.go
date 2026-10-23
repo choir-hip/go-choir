@@ -34,6 +34,11 @@ func pruneSupersededScratch(scratchRoot, computerID string, generation uint64) [
 		if err != nil || g >= generation {
 			continue
 		}
+		// A genesis-repair scratch is evidence for an owner decision: the
+		// sibling marker keeps it here as well as in the orphan sweep.
+		if _, err := os.Stat(filepath.Join(scratchRoot, e.Name()+genesisRepairSuffix)); err == nil {
+			continue
+		}
 		if err := os.RemoveAll(filepath.Join(scratchRoot, e.Name())); err != nil {
 			log.Printf("checkpoint scratch prune computer=%s generation=%d: %v", computerID, g, err)
 			continue

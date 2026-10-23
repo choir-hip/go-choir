@@ -64,6 +64,9 @@ func (f *sweepFixture) marker(name string) { f.markerAged(name, oldAge) }
 func (f *sweepFixture) markerAged(name string, age time.Duration) {
 	f.t.Helper()
 	p := filepath.Join(f.root, name+genesisRepairSuffix)
+	if err := os.MkdirAll(f.root, 0o700); err != nil {
+		f.t.Fatal(err)
+	}
 	if err := os.WriteFile(p, nil, 0o600); err != nil {
 		f.t.Fatal(err)
 	}
