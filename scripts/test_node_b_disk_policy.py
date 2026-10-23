@@ -123,9 +123,10 @@ class NixPolicy(unittest.TestCase):
 
     def test_n6_retention_observe(self):
         src = nix_src()
-        self.assertIn('"GO_CHOIR_NIX_RETENTION_MODE=observe"', block(src, "systemd.services.go-choir-nix-gc ="))
-        self.assertIn('"GO_CHOIR_NIX_RETENTION_MODE=observe"', block(src, "systemd.services.go-choir-disk-gc ="))
-        self.assertNotIn("GO_CHOIR_NIX_RETENTION_MODE=enforce", src)
+        # Owner, 2026-10-23: retention enforces (was observe through D6).
+        self.assertIn('"GO_CHOIR_NIX_RETENTION_MODE=enforce"', block(src, "systemd.services.go-choir-nix-gc ="))
+        self.assertIn('"GO_CHOIR_NIX_RETENTION_MODE=enforce"', block(src, "systemd.services.go-choir-disk-gc ="))
+        self.assertNotIn("GO_CHOIR_NIX_RETENTION_MODE=observe", src)
 
 
 class DedupEstimate(unittest.TestCase):
