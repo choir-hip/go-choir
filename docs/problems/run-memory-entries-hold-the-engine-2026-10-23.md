@@ -481,6 +481,145 @@ keeps the existing `(owner_id, agent_id, created_at)` index. The sort on
 `(created_at, seq)` remains above the access (it now sorts the cursor rows
 only).
 
+## Shape 3 built (red, store schema, tier 2; lane `fp0-run-memory-kind-index`)
+
+Mutation class: **red** (store schema, a boot-path function, and an
+operation on a live computer's store). Protected surfaces touched: the store
+schema (an additive index), `Store.Open` (one discovery-or-create call),
+`/internal/store/derived-columns` (one more step). Not touched: the store
+schema epoch, `schemaDDL`, the event tape, the content witness. Commits, in
+order: record `f616a3b14` (green), tests `4205d0a78` (yellow), code
+`80e81254b` (red), then this update (green) with the census variant that
+measures the build.
+
+**What it is. [V]** `internal/store/run_memory_kind_index.go`. The index is
+`idx_run_memory_entries_agent_kind_owner_created ON run_memory_entries(agent_id,
+kind, owner_id, created_at)`.
+
+- *Open.* On an empty `run_memory_entries` (a fresh store) the index is
+  created at open, where it costs nothing. On a table with rows Open only
+  reads `information_schema` and one row, and logs `run-memory kind index ...
+  missing on a table with rows, not added at open`. It is not in `schemaDDL`,
+  which every boot applies, and a test pins that (`schemaDDL` does not name
+  it, a populated store reopened twice does not gain it).
+- *The operation.* `POST /internal/store/derived-columns?action=migrate` (host
+  peer only, 202, 409 while one runs, cancellable) runs the og_objects steps,
+  then this one: a single `CREATE INDEX` through `DoltStore.WithEngine`, so
+  under the engine mutex and on the write connection, logged as
+  `run-memory kind index ... building` and `built in <d>`. `GET` reports
+  `run_memory_kind_index {name, present, has_rows}` and the step
+  (`kind: index`, `duration_ms`) in `steps`. It is idempotent (a second run
+  adds no step), skipped by a cancel, and a failure leaves state `failed` with
+  the error and the read on the slower plan.
+- *The query.* Unchanged SQL (now built by `runMemoryAgentListQuery`). The
+  planner reads the index when it exists; no code path depends on it.
+- *Mechanism chosen, and why not the other.* See "How the index gets onto a
+  live store" above: the repo refuses a build on a populated table at boot, so
+  the F-c-style boot DDL was not used; the explicit operation is the repo's
+  own. This means the paper does **not** build it at its first boot after the
+  deploy: FP0 (or the operator) runs the POST at a chosen time. That departs
+  from the brief's sentence "the build runs once at the first boot"; the
+  mechanism, not the brief, is the repo rule, and the cost below says why.
+- *Epoch.* No bump, no floor to raise (reasoning above). **[V]** code,
+  **[H]** nothing outside the repo reads the index set.
+
+**Plan before and after. [V]** Printed by `TestRunMemoryKindIndexPlanHasNoFullRangeWalk`
+from the production statement:
+
+```text
+before:  Sort(created_at, seq)                      after:  Sort(created_at, seq)
+          Filter (kind HASH IN (...))                        IndexedTableAccess(run_memory_entries)
+           IndexedTableAccess                                  index: [agent_id, kind, owner_id, created_at]
+            index: [owner_id, agent_id, created_at]            filters: {[agent], [kind], [owner], [NULL, inf)}
+            filters: {[owner], [agent], [NULL, inf)}
+```
+
+Owner and one kind, owner and two kinds (two ranges), and no owner and one
+kind (before: a table scan) all read the new index with no `Filter` above it;
+with all kinds the planner keeps the old index (also asserted).
+
+**Hold at 100,000 and 300,000 desk rows of 425,000, warm local. [V]**
+`TestRunMemoryHoldCensus` (`CHOIR_RUN_MEMORY_HOLD=425000:100000,425000:300000`),
+the production index built by the production step:
+
+| | desk rows 100,000 (20,000 cursor rows) | desk rows 300,000 (60,000 cursor rows) |
+|---|---|---|
+| `ListRunMemoryEntriesForAgent`, before | 461 / 456 ms, 644 MiB | 828 / 810 ms, 1,000 MiB |
+| after (the production query, new index) | 107 / 67 ms, 133 MiB | 249 / 187 ms, 320 MiB |
+| ratio of the best | 6.8 times | 4.3 times |
+| narrow projection on top (not built) | 32 ms, 8.6 MiB | 80 ms, 25.8 MiB |
+
+The build, with a `SELECT 1` probe on the write connection every 10 ms:
+
+| | 100,000 desk rows | 300,000 desk rows |
+|---|---|---|
+| build time | 1.06 s (1.12 s whole) | 1.04 s (1.09 s whole) |
+| longest `SELECT 1` wait on `s.db` during it | **1.05 s** | **1.03 s** |
+| probes over 100 ms | 1 (the build is one statement) | 1 |
+
+So the build holds the write connection, and the engine mutex, for its whole
+duration, and the duration is the table's size, not the desk's (the same 425,000
+rows both times). **/health during the build: [V] it blocks.** `/health`'s
+three store reads wait on `s.db` with a 1 s budget (`readHealthStore`); a
+1.05 s hold is just over the budget, so locally it costs one or two
+`store_stalled` 503s. **[H] on the paper:** the build reads the whole table once,
+and the paper's reads of it are cold: the first-row read of its 14,965 cursor
+rows took 16.6 s, 30 to 500 times the warm local number for a read that
+touches a fraction of the table. A full pass over the paper's table (the
+10-19 probe counted 424,992 rows, 0.76 GiB, and it has grown) may take tens of
+seconds to minutes with `/health` 503 for that long, and every writer waiting.
+It is bounded by the table, runs once, and needs no restart. Run it at a
+chosen time, with the paper's reads of the cursor held up for that window
+either way (they are already 16 s each).
+
+**Write cost of the index. [V] local, [H] paper.** Each `AppendRunMemoryEntry`
+now maintains one more tree: the store directory grew 42.4 and 43.5 KiB per
+append before, 54.8 and 55.3 KiB after (+12.5 KiB, +29%) in the two runs (time
+per append unchanged, 9.6 to 9.9 ms). At 3.7 entries a second
+([paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md](paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md))
+that is about 46 KiB a second, 2.6% of the paper's modelled 1.77 MiB/s journal
+growth. That journal record's R5 (drop `idx_run_memory_entries_loop_seq`, an
+exact duplicate of `UNIQUE(loop_id, seq)`) removes about as much and is the
+natural pairing; it is not done here.
+
+**Rollback. [V]** (`TestRunMemoryKindIndexKeepsTheAnswerAndRollsBackSafely`)
+
+- *Revert the commit, leave the index.* The index stays in the store. An older
+  binary's boot applies `schemaDDL` (its own three `CREATE INDEX IF NOT
+  EXISTS` lines) without error, appends and reads work on the indexed table, a
+  close and reopen neither drops nor rebuilds it, and its queries are the same
+  SQL, so the old binary probably also gets the faster plan **[H]**. The only residue is the
+  extra 12.5 KiB per append.
+- *Full rollback.* `DROP INDEX idx_run_memory_entries_agent_kind_owner_created
+  ON run_memory_entries` (a metadata operation, fast). After it the table's row
+  hash (`dolt_hashof_table('run_memory_entries')`) is exactly what it was before
+  the index existed, and the cursor answer is unchanged. Both facts are logged
+  by the test.
+- *The answer.* The cursor, the two-kind and the no-owner reads return the same
+  entries in the same order with and without the index.
+- A reopen after the operation does nothing to a present index, and a revert
+  to a binary without this code leaves a store whose Open never touches it.
+
+**Checks. [V]** focused `-race` on `internal/store`
+(`-run 'RunMemory|DerivedColumn|BootSteps|TestListRunMemory'`), the
+`internal/autoputer` derived-columns endpoint tests, `internal/computerversion`
+and `internal/projectionbase` whole; the three gate scripts and
+`scripts/selftest-guest-token` (196 passed). The whole `internal/store`
+package does not finish in 10 minutes locally (it never did; CI shards it).
+
+**Heresy delta.** Discovered: the brief's "build at first boot" and the repo's
+rule disagree (resolved by the rule); the build is a whole-table pass whose
+duration on the paper is unknown and blocks `/health` for it; each run-memory
+append already cost 42 KiB of journal locally. Introduced: one more index to
+maintain (+12.5 KiB per append). Repaired: the 16.6 s first read, once the
+operation runs (not yet observed on the paper).
+
+**Next, after the operation runs on the paper:** read the
+`run_memory_agent_list slow` line again (it should not appear, or show a
+`first_row_ms` of a small multiple of the cursor-row count), then decide on
+shape 1 (keyed cursor state), 4 (in-memory cursor) and 6 (retention), and on
+R5.
+
 ## Next (not in this pass)
 
 Shape 1 (keyed cursor state, red), shape 3 (the `(owner_id, agent_id, kind,

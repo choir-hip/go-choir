@@ -19,7 +19,9 @@ import (
 //	POST /internal/store/derived-columns?action=migrate  start (202; 409 while one runs)
 //	POST /internal/store/derived-columns?action=cancel   stop before the next step
 //
-// Each step holds the engine for one ALTER or CREATE INDEX, so the
+// After the og_objects steps it also builds the run_memory_entries kind index
+// (internal/store/run_memory_kind_index.go) when it is missing, reported as
+// run_memory_kind_index in the status. Each step holds the engine for one ALTER or CREATE INDEX, so the
 // computer's store work waits during a step and runs between steps; the
 // listener and health stay up. Only the host peer may call it: the guest's
 // own children (loopback) are refused.
