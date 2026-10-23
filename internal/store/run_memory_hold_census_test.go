@@ -3,13 +3,18 @@ package store
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // TestRunMemoryHoldCensus is the repeatable artifact of
@@ -57,6 +62,11 @@ func runMemoryHoldCensus(t *testing.T, total, hot int) {
 	s := openTestStore(t)
 	ctx := context.Background()
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	// A fresh store creates the kind index at open (empty table). Drop it: the
+	// paper has rows and no index, and the build is measured below.
+	if _, err := s.db.ExecContext(ctx, `DROP INDEX `+RunMemoryKindIndexName+` ON run_memory_entries`); err != nil {
+		t.Fatal(err)
+	}
 
 	// ---- seed ---------------------------------------------------------------
 	msg := `{"role":"assistant","content":"` + strings.Repeat("m", 1500) + `"}`
@@ -293,12 +303,76 @@ func runMemoryHoldCensus(t *testing.T, total, hot int) {
 	report("variant E: narrow projection, no ORDER BY, same index (no new index)", f, b, r, by)
 	t.Logf("variant E plan:\n%s", explainEventTablePlan(t, s, narrowUnordered, "agent-hot", rmOwner, "rlm_inbox_cursor"))
 
-	idxStart := time.Now()
-	if _, err := s.db.ExecContext(ctx, `CREATE INDEX idx_rm_census_owner_agent_kind_created ON run_memory_entries(owner_id, agent_id, kind, created_at)`); err != nil {
-		t.Fatal(err)
+	// The production index, built by the production step on the populated
+	// table (the explicit operation's step). A concurrent SELECT 1 on s.db
+	// shows how long the build holds the write connection, the situation of
+	// /health's three reads; the build also holds the engine mutex.
+	appendCost := func(label string) {
+		before := dirBytes(filepath.Dir(s.path))
+		t0 := time.Now()
+		const n = 200
+		for i := 0; i < n; i++ {
+			if _, err := s.AppendRunMemoryEntry(ctx, types.RunMemoryEntry{RunID: "run-append-" + label, OwnerID: rmOwner, AgentID: "agent-append", Kind: "message",
+				Details: map[string]any{"i": i}}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		t.Logf("total=%d hot=%d AppendRunMemoryEntry %s the kind index: %.2f ms each, store directory grew %.1f KiB each (%d appends)",
+			total, hot, label, ms(time.Since(t0))/n, float64(dirBytes(filepath.Dir(s.path))-before)/1024/n, n)
 	}
-	t.Logf("scratch index (owner_id, agent_id, kind, created_at) built in %v", time.Since(idxStart).Round(time.Millisecond))
-	t.Logf("variant B plan:\n%s", explainEventTablePlan(t, s, sel, "agent-hot", rmOwner, "rlm_inbox_cursor"))
+	appendCost("without")
+	// A probe goroutine issues SELECT 1 on s.db every 10 ms through the build
+	// and keeps each wait: the longest is how long the build held the write
+	// connection (and so every /health store read).
+	var (
+		built    *objectgraph.AccessPathStep
+		buildErr error
+		waits    []time.Duration
+	)
+	buildDone := make(chan struct{})
+	probeDone := make(chan struct{})
+	buildStart := time.Now()
+	go func() {
+		defer close(buildDone)
+		built, buildErr = s.migrateRunMemoryKindIndex(ctx, 1)
+	}()
+	go func() {
+		defer close(probeDone)
+		for {
+			select {
+			case <-buildDone:
+				return
+			default:
+			}
+			t1 := time.Now()
+			var one int
+			if err := s.db.QueryRowContext(ctx, `SELECT 1`).Scan(&one); err != nil {
+				t.Error(err)
+				return
+			}
+			waits = append(waits, time.Since(t1))
+			time.Sleep(10 * time.Millisecond)
+		}
+	}()
+	<-buildDone
+	<-probeDone
+	if buildErr != nil || built == nil {
+		t.Fatalf("build: %v %v", built, buildErr)
+	}
+	var longest time.Duration
+	over := 0
+	for _, w := range waits {
+		if w > longest {
+			longest = w
+		}
+		if w > 100*time.Millisecond {
+			over++
+		}
+	}
+	t.Logf("total=%d hot=%d KIND INDEX BUILD (%s): %v whole (step reports %d ms); %d SELECT 1 probes on s.db, longest wait %v, %d over 100 ms",
+		total, hot, RunMemoryKindIndexName, time.Since(buildStart).Round(time.Millisecond), built.DurationMS, len(waits), longest.Round(time.Millisecond), over)
+	appendCost("with")
+	t.Logf("variant B (production index) plan:\n%s", explainEventTablePlan(t, s, sel, "agent-hot", rmOwner, "rlm_inbox_cursor"))
 	f, b, r, by = rmTimeRead(t, list("agent-hot"))
 	report("variant B: ListRunMemoryEntriesForAgent with the kind index", f, b, r, by)
 	f, b, r, by = rmTimeRead(t, func() int {
@@ -360,4 +434,19 @@ func rmTimeRead(t *testing.T, fn func() int) (first, best time.Duration, rows in
 		}
 	}
 	return first, best, rows, bytes
+}
+
+// dirBytes is the size of every file under dir; given the store's workspace
+// it covers the Dolt journal.
+func dirBytes(dir string) int64 {
+	var total int64
+	_ = filepath.WalkDir(dir, func(_ string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() {
+			if info, err := d.Info(); err == nil {
+				total += info.Size()
+			}
+		}
+		return nil
+	})
+	return total
 }
