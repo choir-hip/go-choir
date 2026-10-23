@@ -429,12 +429,14 @@ EOF
 [Resolve]
 FallbackDNS=
 EOF
-        # resolved may already be up; a restart makes it read the drop-in
-        # and forget a fallback it picked. --no-block: never wait on a job
-        # from early boot.
-        if systemctl is-active --quiet systemd-resolved.service; then
-          systemctl try-restart --no-block systemd-resolved.service
-        fi
+        # resolved is up by now (upstream it is DefaultDependencies=no and
+        # Before=sysinit.target; this unit is After=sysinit.target by default,
+        # so ordering it Before=resolved would be a cycle). A restart makes it
+        # read the drop-in and forget a fallback it picked. Unconditional, so a
+        # resolved still activating (a restart of its own) gets a restart
+        # queued behind it rather than being skipped. --no-block: never wait
+        # on a job from boot.
+        systemctl restart --no-block systemd-resolved.service
       fi
     '';
   };
