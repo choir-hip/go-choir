@@ -29,7 +29,7 @@ step_def 3 ro-after "RES-09 diagnosis: the test computer's list entry and fc-con
 step_def 4 ro-after "SEC-04: vmctl says 'jailer ready'; the test computer's confinement is jailer"
 step_def 5 ro-after "RES-05: two test computers' jails share one root-owned 0444 store image"
 step_def 6 ro-after "SEC-04: vmm_confinement_verify on the test computer (read-only)"
-step_def 7 ro-after "NET-08/RES-16: next Firecracker build for the test computer; data drive discard"
+step_def 7 ro-after "NET-08/RES-16: pinned Firecracker 1.17 for every computer; data drive discard"
 step_def 8 ro-after "RES-06: damon_reclaim boot args; host RSS of the test computer vs the control"
 step_def 9 ro-after "RES-14: hibernate disk-bytes method"
 step_def 10 ro "L4-03: users holding a passkey, for the cap number the owner confirms"
@@ -126,20 +126,18 @@ step_6() {
 }
 
 step_7() {
+	# Since the pin to 1.17.0 (docs/problems/firecracker-1-17-for-every-computer-2026-10-22.md)
+	# there is no "next" build and no per-computer selector: every computer runs the
+	# pinned 1.17 VMM and every data drive has discard. Host-side proof of the pin:
+	# scripts/check-host-firecracker-pin.sh and that record's proof list.
 	fp8_target
-	manual "host step: fill both hashes in nix/firecracker-next.nix, import it in nix/node-b.nix, name ONE test computer id in both VM_FIRECRACKER_NEXT_ONLY and VM_DATA_DISCARD_ONLY"
-	node_journal "$PROOF_UNIT_VMCTL" "$OPT_since" "next Firecracker build" 6
+	manual "host step (done by the 1.17 pin deploy, not here): VM_FIRECRACKER_BIN and VM_JAILER_BIN are under the pinned firecracker-1.17.0 path, VM_FIRECRACKER_NEXT_BIN is unset, VM_DATA_DISCARD=1 with VM_DATA_DISCARD_ONLY=*"
 	node_b_sh "grep -o '\"discard\": *[a-z]*\\|\"io_engine\": *\"[A-Za-z]*\"' $VMSTATE/$T_VM/fc-config.json"
 	if [ "$PROOF_DRY" != 1 ]; then
-		node_journal "$PROOF_UNIT_VMCTL" "$OPT_since" "next Firecracker build.*$T_COMPUTER.*discard allowed=true|next Firecracker build.*v1\\.17" 3 | grep -q . && pass "vmctl names the next build for the test computer" || fail "no 'next Firecracker build ... data discard allowed=true' line"
 		[ "$(node_b_q "grep -Ec '\"discard\": *true' $VMSTATE/$T_VM/fc-config.json || true")" -ge 1 ] && pass "data drive has discard true" || fail "data drive lacks discard true"
+		node_journal "$PROOF_UNIT_VMCTL" "$OPT_since" "next Firecracker build" 6 | grep -q . && fail "a 'next Firecracker build' line exists; the host should pin 1.17 with no next build" || pass "no 'next Firecracker build' line (1.17 is the pinned build)"
 	fi
-	[ -z "${OPT_control:-}" ] || {
-		resolve_target "$OPT_control" 0
-		info "control $T_VM discard/io_engine (expect neither):"
-		node_b_sh "grep -c '\"discard\": *true' $VMSTATE/$T_VM/fc-config.json || true"
-	}
-	manual "in the guest: /sys/block/vdb/queue/discard_max_bytes non-zero and choir-data-fstrim.timer active; hibernate and wake expects snapshot_resume; then remove the test id from VM_FIRECRACKER_NEXT_ONLY and wake again: expect firecracker_version_mismatch and a cold boot"
+	manual "in the guest: /sys/block/vdb/queue/discard_max_bytes non-zero and choir-data-fstrim.timer active; hibernate and wake expects snapshot_resume under Firecracker v1.17.0"
 	manual "RES-16 measurement: hourly for 6 hours, du -k data.img against the live store: within about 1.5x and no hourly latency regression"
 }
 
