@@ -287,6 +287,7 @@ func (s *Store) ListRunMemoryEntries(ctx context.Context, ownerID, runID string)
 // do that. If ownerID is non-empty the query is scoped to that owner; kinds
 // restricts to the named entry kinds (empty = all kinds).
 func (s *Store) ListRunMemoryEntriesForAgent(ctx context.Context, ownerID, agentID string, kinds []string) ([]types.RunMemoryEntry, error) {
+	s.runMemoryAgentList.calls.Add(1)
 	if agentID == "" {
 		return nil, fmt.Errorf("list run memory for agent: agent_id is required")
 	}
