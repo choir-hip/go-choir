@@ -620,6 +620,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/platform/texture/documents/", h.HandleInternalListTextureRevisions)
 	s.HandleFunc("/internal/platform/artifact-gc", h.HandleArtifactGC)
 	s.HandleFunc("/internal/platform/artifact-gc/tape", h.HandleTapeSweep)
+	s.HandleFunc("/internal/platform/artifact-gc/tape/extra-refs", h.HandleTapeExtraRefs)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

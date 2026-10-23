@@ -353,7 +353,7 @@ func (s *Service) tapeSweepDelta(ctx context.Context, run *tapeSweepApplyRun) er
 		}
 	}
 	return s.tapeExtraRefs(ctx, func(text string) {
-		for _, d := range hex64RE.FindAllString(text, -1) {
+		for _, d := range tapeHexRefs(text) {
 			run.delta[d] = true
 		}
 	})

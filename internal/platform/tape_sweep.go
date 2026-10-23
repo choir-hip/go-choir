@@ -279,6 +279,9 @@ type tapeSweepState struct {
 	// afterReferences is a test hook run after the dry-run's chain walk and
 	// before the append-receipt check, to simulate live appends during the walk.
 	afterReferences func()
+	// extraRefsMax caps the unique digests the extra-refs route holds and
+	// answers; 0 means defaultTapeExtraRefsMax.
+	extraRefsMax int
 }
 
 // SetTapeSweepPolicy records the configured policy.
@@ -570,7 +573,7 @@ func (p *digestPrefixSet) add(digest string) {
 }
 
 func (p *digestPrefixSet) addAllHex(text string) {
-	for _, m := range hex64RE.FindAllString(text, -1) {
+	for _, m := range tapeHexRefs(text) {
 		p.add(m)
 	}
 }
@@ -780,6 +783,14 @@ var tapeExtraRefQueries = []string{
 	`SELECT checkpoint_json FROM computer_checkpoints`,
 	`SELECT receipt_json FROM computer_checkpoints`,
 	`SELECT certificate_json FROM computer_route_projection_certificates`,
+}
+
+// tapeHexRefs is the one extraction of digests from a database value: every
+// 64-hex substring counts as a reference. The sweep's live set, the apply
+// pass's delta and the extra-refs route all call it, so the route lists
+// exactly what the sweep keeps.
+func tapeHexRefs(text string) []string {
+	return hex64RE.FindAllString(text, -1)
 }
 
 func (s *Service) tapeExtraRefs(ctx context.Context, add func(string)) error {
