@@ -339,9 +339,9 @@ now:
       (first passivation 0.5-0.75 s, was 1m44s). Its steady /health 503s
       come from one read, the management desk's inbox cursor (14,965
       rows; about 3 s warm, 16.7 s cold, on the single write connection);
-      D15 halved the calls (post-boot 3.2%, steady 2.6%), and D16's kind
-      index, deployed inert and built on T in 162 ms, removes the walk once
-      it is built on the paper. The dispatcher's 8 slots are saturated:
+      D15 halved the calls (post-boot 3.2%, steady 2.6%); D16's kind index,
+      built on the paper at 12:30 (a 19.3 s window), cut that read to about
+      0.75 s, and the paper's steady /health 503 rate is now 0.17%. The dispatcher's 8 slots are saturated:
       about 3 of them wait at the Synthetic gate of 3, and half of all
       activations wait over 5 minutes. Synthetic's weekly allowance falls
       about 8 points an hour (63% at 10:00).
@@ -349,18 +349,15 @@ now:
       how long the kind index build holds the paper's write connection
       (estimated tens of seconds to minutes); which dispatcher option the
       owner takes for the Synthetic half.
-    next_observation: the paper's run_memory_agent_list slow lines and /health after the index is built.
+    next_observation: the paper's remaining store_stalled holders (selfdev ListByStates, scanSideRows, the online GC) and the Synthetic allowance.
   blocker_or_risk: >-
     Owner decisions: the Synthetic gate (held at 3; a higher gate empties
-    the allowance sooner and there is no fallback), the paper's index-build
-    slow window, the roadmap re-cut (lane/fp0-roadmap-recut). Guest-shell
+    the allowance sooner and there is no fallback), the roadmap re-cut (lane/fp0-roadmap-recut). Guest-shell
     proof steps (SEC-10 step 3, FP7 step 5, body caps step 11) are the
     owner's manual items. F-c deploy 2 is gated on a real stream_seq close
     (a persisted high-water mark or an index).
   next_action: >-
-    The owner's agenda. Ready on request: build the kind index on the paper
-    (POST /internal/store/derived-columns?action=migrate from Node B, with a
-    /health probe), then read its slow lines. Named next: the stream_seq
+    The owner's agenda. Named next: the stream_seq
     high-water mark before F-c deploy 2; ListEventsByOwnerAfter's header
     window; the dispatcher's pool-aware scheduling if the owner picks it.
 
