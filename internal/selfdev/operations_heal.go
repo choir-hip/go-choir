@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"reflect"
+	"sort"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
@@ -31,6 +33,24 @@ type StampDivergence struct {
 	live Operation
 }
 
+// StampRefusal is a live row the heal will not touch because it differs from
+// the replayed row in some column other than last_intent_error and
+// updated_at. A snapshot of such a row would pass the projector's
+// ExpectedState check against the live table and fail it against the replayed
+// table, and an event the replay cannot apply on the canonical tape is a boot
+// loop with no way back. The operator reads the replay's values and repairs
+// the divergence by another act.
+type StampRefusal struct {
+	OperationID string `json:"operation_id"`
+	// Reason is "state_diverged" when state is among the differing fields and
+	// "row_diverged" otherwise.
+	Reason          string            `json:"reason"`
+	LiveState       string            `json:"live_state"`
+	ReplayState     string            `json:"replay_state"`
+	DifferentFields []string          `json:"different_fields"`
+	ReplayValues    map[string]string `json:"replay_values"`
+}
+
 // StampHealPlan is the dry-run result: what an apply would append.
 type StampHealPlan struct {
 	ComputerID   string
@@ -40,6 +60,41 @@ type StampHealPlan struct {
 	// reported and never healed: a state-preserving snapshot of a row the
 	// replay lacks is refused by the projector.
 	MissingInReplay []string
+	// Refused lists rows that differ from the replay in a column other than
+	// the two stamp columns. They are reported with the replay's values and
+	// never healed.
+	Refused []StampRefusal
+}
+
+var stampColumns = map[string]bool{"last_intent_error": true, "updated_at": true}
+
+// operationFields renders every field of an Operation as a string keyed by its
+// json name (or its Go name when it has none), so two rows compare
+// column by column without listing the columns here.
+func operationFields(operation Operation) map[string]string {
+	value := reflect.ValueOf(operation)
+	kind := value.Type()
+	fields := make(map[string]string, kind.NumField())
+	for index := 0; index < kind.NumField(); index++ {
+		field := kind.Field(index)
+		name := strings.ToLower(field.Name)
+		if tag := strings.Split(field.Tag.Get("json"), ",")[0]; tag != "" && tag != "-" {
+			name = tag
+		}
+		item := value.Field(index)
+		for item.Kind() == reflect.Pointer {
+			if item.IsNil() {
+				break
+			}
+			item = item.Elem()
+		}
+		if item.Kind() == reflect.Pointer {
+			fields[name] = "<nil>"
+			continue
+		}
+		fields[name] = fmt.Sprintf("%v", item.Interface())
+	}
+	return fields
 }
 
 // ListAll returns every operation of a computer, oldest first.
@@ -71,11 +126,37 @@ func (s *Store) PlanStampHeal(ctx context.Context, computerID string, replayed [
 	for _, operation := range replayed {
 		byID[operation.OperationID] = operation
 	}
-	plan := StampHealPlan{ComputerID: strings.TrimSpace(computerID), RowsExamined: len(live), Rows: []StampDivergence{}, MissingInReplay: []string{}}
+	plan := StampHealPlan{ComputerID: strings.TrimSpace(computerID), RowsExamined: len(live), Rows: []StampDivergence{}, MissingInReplay: []string{}, Refused: []StampRefusal{}}
 	for _, operation := range live {
 		other, ok := byID[operation.OperationID]
 		if !ok {
 			plan.MissingInReplay = append(plan.MissingInReplay, operation.OperationID)
+			continue
+		}
+		// Every column but the two stamp columns must already agree: the heal
+		// event is validated at replay against the replayed row, not the live
+		// one.
+		liveFields, replayFields := operationFields(operation), operationFields(other)
+		var divergent []string
+		for name, value := range liveFields {
+			if !stampColumns[name] && value != replayFields[name] {
+				divergent = append(divergent, name)
+			}
+		}
+		if len(divergent) > 0 {
+			sort.Strings(divergent)
+			refusal := StampRefusal{
+				OperationID: operation.OperationID, Reason: "row_diverged",
+				LiveState: operation.State, ReplayState: other.State,
+				DifferentFields: divergent, ReplayValues: map[string]string{},
+			}
+			for _, name := range divergent {
+				refusal.ReplayValues[name] = replayFields[name]
+				if name == "state" {
+					refusal.Reason = "state_diverged"
+				}
+			}
+			plan.Refused = append(plan.Refused, refusal)
 			continue
 		}
 		var differs []string
@@ -122,7 +203,15 @@ func (s *Store) ApplyStampHeal(ctx context.Context, plan StampHealPlan) (int, er
 		if err != nil {
 			return 0, err
 		}
-		if current.LastIntentError != row.live.LastIntentError {
+		// Both stamp columns: a reason that went A, B, A since the plan has
+		// the plan's text and a later updated_at. The writeMu held here is
+		// what makes this check sufficient; the projector cannot do it (see
+		// the record, "Round 2", for why an expected_updated_at is not carried
+		// on the op).
+		// A state move also moves updated_at; it is left to the projector's
+		// ExpectedState check (the authoritative refusal, the same one replay
+		// applies), so only a same-state change is refused here.
+		if current.State == row.live.State && (current.LastIntentError != row.live.LastIntentError || current.UpdatedAt != row.live.UpdatedAt) {
 			return 0, fmt.Errorf("%w: the stamp of %s changed since the plan", ErrConflict, row.OperationID)
 		}
 		op, err := operationProjectionOp(row.live, row.live.State)

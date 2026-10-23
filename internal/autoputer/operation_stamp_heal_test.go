@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
@@ -53,7 +55,8 @@ func stampHealRequest(method, rawURL, remote string) *http.Request {
 func TestOperationStampHealEndpoint(t *testing.T) {
 	const host, path = "192.0.2.44:40000", "/internal/self-development/operation-stamp-heal"
 	healer := &fakeStampHealer{}
-	handler := operationStampHealHandler(healer, "computer-1")
+	var serving atomic.Bool
+	handler := operationStampHealHandler(healer, "computer-1", func() bool { return serving.Load() })
 
 	for _, method := range []string{http.MethodGet, http.MethodPost} {
 		rec := httptest.NewRecorder()
@@ -66,7 +69,26 @@ func TestOperationStampHealEndpoint(t *testing.T) {
 		t.Fatalf("a refused caller reached the healer: %+v", healer.calls)
 	}
 
+	// Until the runtime is serving the route answers 503 and never reaches the
+	// healer; the host-peer check still comes first.
+	for _, method := range []string{http.MethodGet, http.MethodPost} {
+		rec := httptest.NewRecorder()
+		handler(rec, stampHealRequest(method, path, host))
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Fatalf("%s before the runtime serves = %d, want 503", method, rec.Code)
+		}
+	}
 	rec := httptest.NewRecorder()
+	handler(rec, stampHealRequest(http.MethodGet, path, "127.0.0.1:40000"))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("loopback before the runtime serves = %d, want 403", rec.Code)
+	}
+	if len(healer.calls) != 0 {
+		t.Fatalf("the healer was reached before the runtime served: %+v", healer.calls)
+	}
+	serving.Store(true)
+
+	rec = httptest.NewRecorder()
 	handler(rec, stampHealRequest(http.MethodGet, path+"?apply=1", host))
 	var report agentcore.SelfDevelopmentStampHealReport
 	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &report) != nil || report.Mode != "dry_run" || len(report.Rows) != 1 {
@@ -101,6 +123,14 @@ func TestOperationStampHealEndpoint(t *testing.T) {
 	handler(rec, stampHealRequest(http.MethodPost, path, host))
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("a concurrent heal = %d, want 409", rec.Code)
+	}
+	for _, unavailable := range []error{selfdev.ErrStampHealUnbound, agentcore.ErrReplayCompletenessUnavailable, fmt.Errorf("probe: %w", agentcore.ErrReplayCompletenessUnavailable)} {
+		healer.err = unavailable
+		rec = httptest.NewRecorder()
+		handler(rec, stampHealRequest(http.MethodGet, path, host))
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Fatalf("%v = %d, want 503", unavailable, rec.Code)
+		}
 	}
 	healer.err = errors.New("boom")
 	rec = httptest.NewRecorder()

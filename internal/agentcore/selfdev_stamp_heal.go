@@ -33,6 +33,7 @@ type SelfDevelopmentStampHealReport struct {
 	RowsExamined    int                            `json:"rows_examined"`
 	Rows            []selfdev.StampDivergence      `json:"rows"`
 	MissingInReplay []string                       `json:"missing_in_replay"`
+	RefusedDiverged []selfdev.StampRefusal         `json:"refused_diverged"`
 	Appended        int                            `json:"appended"`
 	After           *SelfDevelopmentStampHealProbe `json:"after,omitempty"`
 }
@@ -93,7 +94,7 @@ func (rt *Runtime) HealSelfDevelopmentIntentStamps(ctx context.Context, computer
 	}
 	report := SelfDevelopmentStampHealReport{
 		ComputerID: computerID, Mode: "dry_run", Probe: stampHealProbe(probe.report),
-		RowsExamined: plan.RowsExamined, Rows: plan.Rows, MissingInReplay: plan.MissingInReplay,
+		RowsExamined: plan.RowsExamined, Rows: plan.Rows, MissingInReplay: plan.MissingInReplay, RefusedDiverged: plan.Refused,
 	}
 	if !apply {
 		return report, nil

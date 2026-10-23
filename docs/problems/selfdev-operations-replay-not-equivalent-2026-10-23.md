@@ -678,3 +678,94 @@ Operator use after the deploy (not run here; no live-computer mutation in this
 lane): `GET` the route on t71 (computer-71afbf14) from the host peer and read
 `rows` and `probe`; `POST` it; the answer's `after.equivalent` should be true
 and a following `GET` should list no rows.
+
+### Round 2 (bunch 163: Devin accept with lows; DeepSeek one blocking; red)
+
+**1. Blocking (DeepSeek 1): the heal could append an event the replay cannot
+apply.** Round 1's record said "a row that differs in some other column is
+not selected". That was false: `PlanStampHeal` compared only the two stamp
+columns, so a row whose state (or any other column) had diverged from the tape
+was selected with its stamp. The live append is validated against the live
+table, where `ExpectedState` = the live state passes; replay validates the
+same event against the replayed row (`store/project.go`, `ErrProjectionMismatch`
+in `Finalize`), where the state differs, and a canonical event that fails to
+apply is a boot fatal loop with no rollback. Reproduced first: the new test
+changed a row's state with raw SQL and the heal's verification probe failed
+with `replay finalize sequence 7: ... state is failed, expected executing`.
+Fix: `PlanStampHeal` compares every `Operation` field by name
+(`operationFields`) and selects a row only if it equals the replayed row in
+every field except `last_intent_error` and `updated_at`. Any other row that
+differs is reported under `refused_diverged` (`operation_id`, `reason`
+`state_diverged` or `row_diverged`, `live_state`, `replay_state`,
+`different_fields`, `replay_values`) and nothing is appended for it. A refused
+row is not an error: the healthy rows in the same plan are still healed, a
+second run still selects none, and the refused row is the operator's to
+repair by another act. Test:
+`TestSelfDevelopmentIntentStampHealRefusesARowWhoseStateDivergedFromTheReplay`.
+
+**2. Low (DeepSeek 2): the stamp-moved recheck.** The recheck under `writeMu`
+now compares `last_intent_error` and `updated_at` (an A, B, A reason has the
+planned text and a later `updated_at`). Test:
+`...ReturnedToItsPlannedTextWithALaterUpdatedAt`; it fails with the old
+text-only comparison. The recheck applies only while the row is in the planned
+state: a state move also moves `updated_at`, and is left to the projector's
+`ExpectedState` check, so that check stays the authoritative refusal for state. An `expected_updated_at` on the projection op, checked
+beside `ExpectedState`, is not carried, and not because it is costly: it
+cannot be right. The check would run again at replay, against the replayed
+row, whose `updated_at` is by construction not the live one (that difference
+is what the heal repairs), so the heal event itself would fail at replay. The
+recheck under `writeMu` is enough because every writer of the table
+(`Start`, `StartRollback`, `RecordAppliedBaseline`, `Transition`,
+`RecordIntentError`, `BindStartIntent`) takes the same `writeMu` as
+`ApplyStampHeal`, which holds it from the recheck through the append, and
+`residue_import` and the projector run only at boot or replay. A second
+`selfdev.Store` instance (after a rematerialize rebind) has its own `writeMu`;
+the heal reads `rt.selfdevOperations` at the time of the call, so it holds the
+rebound store's mutex, which is the one new writers use. A residual race
+between an old store instance still in flight and the new one is the existing
+rematerialize overlap, not new here.
+
+**3. Doc corrections (DeepSeek 3, 5; Devin 1).**
+
+- Section B said the open "keeps the process up". Corrected: *the open
+  survives; boot still stops at the migration refusal* (`boot.fatalf` at
+  `run.go:698` and `:770`, `rematerialize.go:204`, `rebuilder.go:390`). That
+  crash loop on a corrupt sidecar is pre-existing and unchanged by this lane.
+  Arming at open narrows the fail-open window (including the replay deposit
+  upcast, `vocab_upcast_deposit.go:755`); it does not make the boot survive.
+  A repair or removal route for the sidecar is separate scope.
+- The rollback line said an older binary "replays" the heal events. Precise
+  statement: an older binary *replays them safely and the computer is still
+  not equivalent*: the ops are the same kind, the `last_intent_error` key is
+  ignored, `ExpectedState` exists, and `updated_at` is applied; the computer
+  stays replay-ineligible, exactly as before the fix.
+- The replay probe's capture holds the appender mutex for the whole live
+  extract (`HoldAppends` around the per-table hashing, `replay_completeness.go`),
+  so tape appends wait for that window; `/health` after boot is the static
+  default handler and takes no such lock. The replay phase itself runs on a
+  disposable store and dry-run appender and holds neither the store write
+  connection nor the engine mutex. Never run the heal on the paper (or any
+  computer with no published base): the paper's replay did not answer in 10
+  minutes and its extract window is base-independent. This is now in the
+  handler's comment as well.
+
+**4. DeepSeek 6: 503 until serving.** The route is registered before
+`s.Start()`, so it was reachable during the boot replay and relied on the
+appender's head check to refuse. It now answers 503 until `rt.Start` has
+returned (`runtimeServing` in `autoputer/run.go`, set in both boot branches),
+after the host-peer check, so a non-host caller still gets 403. Tests cover GET
+and POST before serving.
+
+**5. Devin 3: the 503 branches.** The endpoint test now covers
+`ErrStampHealUnbound`, `ErrReplayCompletenessUnavailable` and a wrapped one,
+each 503.
+
+**Not changed (Devin 2).** The apply runs on the request context: a caller
+that disconnects after the batch commits but before the verify probe returns
+an error with the event already on the tape. A retry converges (the next plan
+selects nothing). Benign; left as is.
+
+Heresy delta (round 2): discovered: the round-1 heal could append a
+replay-unappliable event on a computer whose rows diverged beyond the stamp;
+introduced: none; repaired: that, the doc claims above, the pre-serving
+window.

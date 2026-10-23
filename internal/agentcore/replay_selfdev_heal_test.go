@@ -79,7 +79,7 @@ func TestSelfDevelopmentIntentStampHealMakesAPreFixStampReplayEquivalent(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !clean.Probe.Equivalent || len(clean.Rows) != 0 || clean.RowsExamined != 2 {
+	if !clean.Probe.Equivalent || len(clean.Rows) != 0 || len(clean.RefusedDiverged) != 0 || clean.RowsExamined != 2 {
 		t.Fatalf("control: an equivalent computer selected rows: %+v", clean)
 	}
 
@@ -238,5 +238,100 @@ func TestSelfDevelopmentIntentStampHealRefusesAnUnboundStoreAndAConcurrentHeal(t
 	close(release)
 	if err := <-done; err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A row whose state differs from the replayed row (changed outside the tape)
+// must never be healed: the heal event would pass ExpectedState against the
+// live table and fail it against the replayed one, and an event the replay
+// cannot apply on the canonical tape is a boot loop. The plan reports it with
+// the replay's values and appends nothing for it; a healthy row beside it is
+// still healed, and the tape still reconstructs.
+func TestSelfDevelopmentIntentStampHealRefusesARowWhoseStateDivergedFromTheReplay(t *testing.T) {
+	ctx := context.Background()
+	computerID := "computer-selfdev-stamp-heal-state-diverged"
+	rt, operations := selfdevReplayRuntime(t, computerID)
+	rt.selfdevOperations = operations
+	earlier := openExecutingOperation(t, ctx, operations, computerID)
+	if _, err := operations.Transition(ctx, computerID, earlier.OperationID, selfdev.StateExecuting, selfdev.StateFailed, nil); err != nil {
+		t.Fatal(err)
+	}
+	healthy, err := operations.Start(ctx, selfdev.StartRequest{
+		ComputerID: computerID, IdempotencyKey: "idem-healthy",
+		PromptArtifactRef: "artifact:sha256:" + strings.Repeat("e", 64),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := operations.Transition(ctx, computerID, healthy.OperationID, selfdev.StateRequested, selfdev.StateExecuting, nil); err != nil {
+		t.Fatal(err)
+	}
+	preFixStamp(t, rt, healthy.OperationID, "freeze: refused")
+	// The earlier row: state moved outside the tape, with a stamp on top.
+	if _, err := rt.store.DB().Exec(`UPDATE self_development_operations SET state=?, last_intent_error=?, updated_at=? WHERE operation_id=?`,
+		selfdev.StateExecuting, "stale stamp", "2026-10-23T06:00:00.000001Z", earlier.OperationID); err != nil {
+		t.Fatal(err)
+	}
+
+	before := headSequence(t, ctx, rt, computerID)
+	report, err := rt.HealSelfDevelopmentIntentStamps(ctx, computerID, true, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Rows) != 1 || report.Rows[0].OperationID != healthy.OperationID || report.Appended != 1 {
+		t.Fatalf("the heal selected %+v appended %d, want only the healthy row", report.Rows, report.Appended)
+	}
+	if len(report.RefusedDiverged) != 1 {
+		t.Fatalf("refused = %+v, want the diverged row", report.RefusedDiverged)
+	}
+	refused := report.RefusedDiverged[0]
+	if refused.OperationID != earlier.OperationID || refused.Reason != "state_diverged" ||
+		refused.LiveState != selfdev.StateExecuting || refused.ReplayState != selfdev.StateFailed ||
+		refused.ReplayValues["state"] != selfdev.StateFailed {
+		t.Fatalf("refusal = %+v", refused)
+	}
+	if got := headSequence(t, ctx, rt, computerID); got != before+1 {
+		t.Fatalf("sequence %d -> %d: exactly the healthy row's batch may append", before, got)
+	}
+	// The replay still reconstructs (it is not equivalent: the diverged row
+	// is the operator's to repair), and a second heal appends nothing.
+	if _, err := rt.ReplayCompleteness(ctx, computerID); err != nil {
+		t.Fatalf("the tape no longer reconstructs after the heal: %v", err)
+	}
+	again, err := rt.HealSelfDevelopmentIntentStamps(ctx, computerID, true, false)
+	if err != nil || again.Appended != 0 || len(again.Rows) != 0 || len(again.RefusedDiverged) != 1 {
+		t.Fatalf("second heal = %+v, %v", again, err)
+	}
+	// The refused row keeps the live values.
+	live, err := operations.Get(ctx, computerID, earlier.OperationID)
+	if err != nil || live.State != selfdev.StateExecuting || live.LastIntentError != "stale stamp" {
+		t.Fatalf("refused row changed: %+v, %v", live, err)
+	}
+}
+
+// A stamp that went A, B, A between the plan and the apply has the plan's text
+// and a later updated_at; comparing the text alone would let the older
+// snapshot roll updated_at back.
+func TestSelfDevelopmentIntentStampHealRefusesAStampThatReturnedToItsPlannedTextWithALaterUpdatedAt(t *testing.T) {
+	ctx := context.Background()
+	computerID := "computer-selfdev-stamp-heal-aba"
+	rt, operations := selfdevReplayRuntime(t, computerID)
+	rt.selfdevOperations = operations
+	opened := openExecutingOperation(t, ctx, operations, computerID)
+	preFixStamp(t, rt, opened.OperationID, "freeze: refused")
+
+	rt.selfdevStampHealAfterPlan = func() {
+		for _, reason := range []string{"verify: B", "freeze: refused"} {
+			if err := operations.RecordIntentError(ctx, computerID, opened.OperationID, reason); err != nil {
+				t.Errorf("stamp %q between plan and apply: %v", reason, err)
+			}
+		}
+	}
+	before := headSequence(t, ctx, rt, computerID)
+	if _, err := rt.HealSelfDevelopmentIntentStamps(ctx, computerID, true, false); !errors.Is(err, selfdev.ErrConflict) {
+		t.Fatalf("an A, B, A stamp was not refused: %v", err)
+	}
+	if got := headSequence(t, ctx, rt, computerID); got != before+2 {
+		t.Fatalf("sequence %d -> %d: only the two stamps may have appended", before, got)
 	}
 }
