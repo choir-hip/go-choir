@@ -404,8 +404,11 @@ func TestEventTableWriterUnionReadsMatch(t *testing.T) {
 			if err := h.store.AppendEvent(context.Background(), &cp); err != nil {
 				t.Fatal(err)
 			}
-			if cp.Seq != rec.Seq || cp.StreamSeq != rec.StreamSeq {
-				t.Fatalf("event %s numbered %d/%d, the script says %d/%d", rec.EventID, cp.Seq, cp.StreamSeq, rec.Seq, rec.StreamSeq)
+			// A fresh store's stream_seq lease starts above the gap G (the
+			// stream_seq lease, section 2: the seed is 0 + G), so the script's
+			// stream_seq i is G + i here; every store numbers alike.
+			if cp.Seq != rec.Seq || cp.StreamSeq != rec.StreamSeq+streamSeqExactGap {
+				t.Fatalf("event %s numbered %d/%d, the script says %d/%d", rec.EventID, cp.Seq, cp.StreamSeq, rec.Seq, rec.StreamSeq+streamSeqExactGap)
 			}
 		}
 		return h.store
