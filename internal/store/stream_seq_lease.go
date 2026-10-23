@@ -69,10 +69,12 @@ var (
 )
 
 const (
-	// leaseExactSeedMeasured is the measured time of the exact seed at the
-	// paper's event count (test 37, recorded in the design record). The
-	// seeding deadline is at least three times it.
-	leaseExactSeedMeasured = 0 * time.Second
+	// leaseExactSeedMeasured is the measured time of the exact seed (test 37,
+	// recorded in the design record, section "Build record"): 665 ms for
+	// 150,000 events warm on an M1, about 4.4 us an event. The paper's real
+	// figure is unmeasured until its first refresh reports seed_ms; the
+	// seeding deadline is the larger of 10 minutes and three times this.
+	leaseExactSeedMeasured = 665 * time.Millisecond
 	// leaseSeedingFactor multiplies the measured seed into the deadline.
 	leaseSeedingFactor = 3
 	// leaseOwnerID and leaseIdentityKey name the singleton lease object.
@@ -619,49 +621,74 @@ func (s *Store) exactStreamSeqMax(ctx context.Context) (ogMax, tableMax int64, e
 	return ogMax, tableMax, nil
 }
 
-// exactOGStreamSeqMax scans the whole event kind of og_objects by keyset,
-// metadata only, a page at a time with the engine mutex released between
-// pages. A row whose metadata has no stream_seq has its body decoded.
+// exactOGStreamSeqMax scans the whole event kind of og_objects, metadata only,
+// a page at a time with the engine mutex released between pages. A row whose
+// metadata has no stream_seq has its body decoded. The walk is the primary-key
+// range of the kind's ids (a plan with no sort: measured, the keyset page by
+// the kind predicate costs the kind once per page). A row of the kind outside
+// that range makes the walk fall back to the kind-predicate pages, so the
+// answer is exact whatever ids the rows carry.
 func (s *Store) exactOGStreamSeqMax(ctx context.Context) (int64, error) {
 	graph := s.ogStore
 	if graph == nil {
 		return 0, fmt.Errorf("append event: seed stream_seq: object graph not initialized")
 	}
+	outside, err := graph.KindHasRowsOutsideIDRange(ctx, ogKindEvent)
+	if err != nil {
+		return 0, fmt.Errorf("append event: seed stream_seq (exact scan): %w", err)
+	}
 	var maxSeq int64
+	take := func(row objectgraph.KindMetadataRow) error {
+		var meta struct {
+			StreamSeq *int64 `json:"stream_seq"`
+		}
+		if err := json.Unmarshal(row.Metadata, &meta); err == nil && meta.StreamSeq != nil {
+			maxSeq = max(maxSeq, *meta.StreamSeq)
+			return nil
+		}
+		obj, err := graph.GetObject(ctx, row.CanonicalID)
+		if err != nil {
+			return fmt.Errorf("append event: seed stream_seq (exact scan): read %s: %w", row.CanonicalID, err)
+		}
+		var ev types.EventRecord
+		if err := ogDecode(obj, &ev); err != nil {
+			// An event body this binary cannot decode carries no number it can
+			// see; the metadata path covers every event this binary or its
+			// predecessors wrote.
+			return nil
+		}
+		maxSeq = max(maxSeq, ev.StreamSeq)
+		return nil
+	}
 	after := ""
 	for page := 1; ; page++ {
-		rows, err := graph.ListKindMetadataPage(ctx, ogKindEvent, after, leaseScanPage)
+		var rows []objectgraph.KindMetadataRow
+		var next string
+		var scanned int
+		if outside {
+			rows, err = graph.ListKindMetadataPage(ctx, ogKindEvent, after, leaseScanPage)
+			scanned = len(rows)
+			if len(rows) > 0 {
+				next = rows[len(rows)-1].CanonicalID
+			}
+		} else {
+			rows, next, scanned, err = graph.ListKindIDRangePage(ctx, ogKindEvent, after, leaseScanPage)
+		}
 		if err != nil {
 			return 0, fmt.Errorf("append event: seed stream_seq (exact scan): %w", err)
 		}
 		for _, row := range rows {
-			var meta struct {
-				StreamSeq *int64 `json:"stream_seq"`
+			if err := take(row); err != nil {
+				return 0, err
 			}
-			if err := json.Unmarshal(row.Metadata, &meta); err == nil && meta.StreamSeq != nil {
-				maxSeq = max(maxSeq, *meta.StreamSeq)
-				continue
-			}
-			obj, err := graph.GetObject(ctx, row.CanonicalID)
-			if err != nil {
-				return 0, fmt.Errorf("append event: seed stream_seq (exact scan): read %s: %w", row.CanonicalID, err)
-			}
-			var ev types.EventRecord
-			if err := ogDecode(obj, &ev); err != nil {
-				// An event body this binary cannot decode carries no number it
-				// can see; the metadata path above covers every event this
-				// binary or its predecessors wrote.
-				continue
-			}
-			maxSeq = max(maxSeq, ev.StreamSeq)
 		}
 		if hook := s.leaseScanHook; hook != nil {
 			hook(page)
 		}
-		if len(rows) < leaseScanPage {
+		if scanned < leaseScanPage {
 			return maxSeq, nil
 		}
-		after = rows[len(rows)-1].CanonicalID
+		after = next
 		if err := ctx.Err(); err != nil {
 			return 0, err
 		}

@@ -112,7 +112,9 @@ func TestExactStreamSeqSeedScale(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			t.Logf("n=%d og page plan:\n%s", n, explainEventTablePlan(t, s, objectgraph.KindMetadataPageSQL, "choir.event", "", leaseScanPage))
+			lo, hi := objectgraph.KindIDRange(ogKindEvent)
+			t.Logf("n=%d og range page plan:\n%s", n, explainEventTablePlan(t, s, objectgraph.KindIDRangePageSQL, lo, hi, leaseScanPage))
+			t.Logf("n=%d og kind-predicate page plan (the fallback):\n%s", n, explainEventTablePlan(t, s, objectgraph.KindMetadataPageSQL, "choir.event", "", leaseScanPage))
 			sql, args := eventTableOwnerMaxStreamSQL("owner-07")
 			t.Logf("n=%d table per-owner plan:\n%s", n, explainEventTablePlan(t, s, sql, args...))
 
@@ -184,38 +186,63 @@ func TestExactSeedTablePlanSeeksPerOwner(t *testing.T) {
 	}
 }
 
-// The og page query: the kind index, no sort on a column the index does not
-// carry, no body.
-func TestExactSeedPagePlanIsAKeysetRangeOfTheKind(t *testing.T) {
+// The og range page: a primary-key range in canonical-id order with no sort,
+// and no body. The kind-predicate fallback is pinned for what it is: exact, and
+// planned with a TopN per page (so it is the fallback, not the walk).
+func TestExactSeedPagePlanIsAPrimaryKeyRangeWithNoSort(t *testing.T) {
 	s := openTestStore(t)
 	putStoredEvent(t, s, "e-1", "run", 1, time.Now().UTC())
-	pageSQL := objectgraph.KindMetadataPageSQL
-	plan := strings.ToLower(explainEventTablePlan(t, s, pageSQL, "choir.event", "", 100))
-	if strings.Contains(plan, "sort") && !strings.Contains(plan, "limit") {
-		t.Errorf("the page query sorts the kind without a limit:\n%s", plan)
+	lo, hi := objectgraph.KindIDRange(ogKindEvent)
+	plan := strings.ToLower(explainEventTablePlan(t, s, objectgraph.KindIDRangePageSQL, lo, hi, 100))
+	if strings.Contains(plan, "sort") || strings.Contains(plan, "topn") {
+		t.Errorf("the range page sorts:\n%s", plan)
 	}
-	if strings.Contains(strings.ToLower(pageSQL), "body") {
-		t.Errorf("the page query reads the body:\n%s", pageSQL)
+	if !strings.Contains(plan, "primary") && !strings.Contains(plan, "indexedtableaccess") {
+		t.Errorf("the range page is not an index or primary-key access:\n%s", plan)
 	}
-	t.Logf("page plan:\n%s", plan)
+	if strings.Contains(strings.ToLower(objectgraph.KindIDRangePageSQL), "body") || strings.Contains(strings.ToLower(objectgraph.KindMetadataPageSQL), "body") {
+		t.Error("a page query reads the body")
+	}
+	t.Logf("range page plan:\n%s", plan)
+}
+
+// A row of the kind outside the kind's id range (a test or an old import may
+// carry one) is still found: the walk falls back to the kind-predicate pages.
+func TestExactSeedFindsAnEventOutsideTheKindIDRange(t *testing.T) {
+	s, path := openSeedStore(t)
+	at := time.Now().UTC().Add(-time.Hour)
+	putStoredEvent(t, s, "in-range", "run", 5, at)
+	rec := eventTableRecord("odd", "run-x", "alice", "traj-x", types.EventRunProgress, 1, 4321, at)
+	obj, err := buildEventObject(rec, at)
+	if err != nil {
+		t.Fatal(err)
+	}
+	obj.CanonicalID = "legacy:event:odd" // an id the code does not build
+	if err := s.ogStore.PutBatch(context.Background(), objectgraph.Batch{Objects: []objectgraph.Object{obj}}); err != nil {
+		t.Fatal(err)
+	}
+	s = reopenAt(t, s, path)
+	n := appendNext(t, s, "after")
+	if want := int64(4321) + streamSeqExactGap + 1; n != want {
+		t.Fatalf("stream_seq = %d, want %d: an event outside the id range was missed", n, want)
+	}
 }
 
 // diskContext is the filesystem the workspace sits on: df for the mount, and
-// the device's type where the platform names it.
+// the mount line where the platform names it.
 func diskContext(path string) string {
 	out, err := exec.Command("df", "-h", path).CombinedOutput()
 	if err != nil {
 		return "df failed: " + err.Error()
 	}
 	text := strings.TrimSpace(string(out))
-	if mount, mErr := exec.Command("mount").CombinedOutput(); mErr == nil {
-		fields := strings.Fields(strings.SplitN(text, "\n", 2)[len(strings.SplitN(text, "\n", 2))-1])
-		if len(fields) > 0 {
-			for _, line := range strings.Split(string(mount), "\n") {
-				if strings.HasPrefix(line, fields[0]+" ") {
-					text += "\n" + line
-					break
-				}
+	lines := strings.Split(text, "\n")
+	fields := strings.Fields(lines[len(lines)-1])
+	if mount, mErr := exec.Command("mount").CombinedOutput(); mErr == nil && len(fields) > 0 {
+		for _, line := range strings.Split(string(mount), "\n") {
+			if strings.HasPrefix(line, fields[0]+" ") {
+				text += "\n" + line
+				break
 			}
 		}
 	}

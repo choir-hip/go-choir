@@ -80,13 +80,29 @@ func (s *DoltStore) HasObjectOfKind(ctx context.Context, kind ObjectKind) (bool,
 	return found, nil
 }
 
-// KindMetadataPageSQL is one keyset page of a kind's metadata: the canonical
-// id and the metadata, never the body, in canonical-id order from an
-// exclusive cursor. The exact stream_seq seed walks the event kind with it
+// The exact stream_seq seed walks the whole event kind
 // (docs/problems/stream-seq-high-water-mark-design-2026-10-23.md, section 3).
-// The shape is ListObjectsPage's, so the engine plans the same range of the
-// kind; the plan test pins it.
-const KindMetadataPageSQL = `SELECT canonical_id, metadata FROM og_objects WHERE object_kind = ? AND canonical_id > ? ORDER BY canonical_id ASC LIMIT ?`
+// Two page queries, both metadata only and never the body:
+//
+//   - KindIDRangePageSQL, the walk: the kind's rows are the primary-key range
+//     of ids "obj:<kind>:" to "obj:<kind>;" (BuildCanonicalID builds every id
+//     that way), so a page is a primary-key range read in canonical-id order
+//     that stops after limit rows. Measured: this is the plan with no sort.
+//   - KindMetadataPageSQL, the fallback: a keyset page by the kind predicate.
+//     The engine plans it as an index range of the kind and a TopN over it for
+//     every page, so a walk by it costs the kind once per page; it runs only
+//     when a row of the kind sits outside the id range (none is built by the
+//     code; a test or an old import may), which keeps the seed exact.
+const (
+	KindIDRangePageSQL  = `SELECT canonical_id, object_kind, metadata FROM og_objects WHERE canonical_id > ? AND canonical_id < ? ORDER BY canonical_id ASC LIMIT ?`
+	KindMetadataPageSQL = `SELECT canonical_id, metadata FROM og_objects WHERE object_kind = ? AND canonical_id > ? ORDER BY canonical_id ASC LIMIT ?`
+	KindOutsideRangeSQL = `SELECT canonical_id FROM og_objects WHERE object_kind = ? AND (canonical_id <= ? OR canonical_id >= ?) LIMIT 1`
+)
+
+// KindIDRange bounds the canonical ids of a kind: (lo, hi) exclusive.
+func KindIDRange(kind ObjectKind) (lo, hi string) {
+	return "obj:" + string(kind) + ":", "obj:" + string(kind) + ";"
+}
 
 // KindMetadataRow is one row of a metadata page.
 type KindMetadataRow struct {
@@ -94,11 +110,76 @@ type KindMetadataRow struct {
 	Metadata    json.RawMessage
 }
 
+// ListKindIDRangePage returns the rows of kind with canonical id strictly
+// after the cursor inside the kind's id range, up to limit scanned rows, and
+// the last canonical id scanned (the next cursor). scanned counts the rows the
+// page read, including any whose kind is not the one asked for (kept out of
+// rows); scanned < limit means the range holds no more. It holds the engine
+// mutex for this page only.
+func (s *DoltStore) ListKindIDRangePage(ctx context.Context, kind ObjectKind, afterCanonicalID string, limit int) (rows []KindMetadataRow, next string, scanned int, err error) {
+	if s == nil || s.db == nil {
+		return nil, "", 0, fmt.Errorf("objectgraph dolt: nil store")
+	}
+	if limit <= 0 {
+		return nil, "", 0, fmt.Errorf("objectgraph dolt: kind id range page: limit must be positive")
+	}
+	lo, hi := KindIDRange(kind)
+	if afterCanonicalID > lo {
+		lo = afterCanonicalID
+	}
+	op := "(*DoltStore).ListKindMetadataPage range " + kindOpLabel(string(kind))
+	s.engineMu.LockAs(op)
+	defer s.engineMu.UnlockAs(op)
+	result, err := s.db.QueryContext(ctx, KindIDRangePageSQL, lo, hi, limit)
+	if err != nil {
+		return nil, "", 0, fmt.Errorf("objectgraph dolt: kind id range page: %w", err)
+	}
+	defer result.Close()
+	rows = make([]KindMetadataRow, 0, min(limit, 4096))
+	for result.Next() {
+		var id, rowKind, metadata string
+		if err := result.Scan(&id, &rowKind, &metadata); err != nil {
+			return nil, "", 0, fmt.Errorf("objectgraph dolt: kind id range page: %w", err)
+		}
+		scanned++
+		next = id
+		if rowKind == string(kind) {
+			rows = append(rows, KindMetadataRow{CanonicalID: id, Metadata: json.RawMessage(metadata)})
+		}
+	}
+	if err := result.Err(); err != nil {
+		return nil, "", 0, fmt.Errorf("objectgraph dolt: kind id range page: %w", err)
+	}
+	return rows, next, scanned, nil
+}
+
+// KindHasRowsOutsideIDRange reports whether any row of kind has a canonical id
+// outside the kind's id range: one read of the kind index.
+func (s *DoltStore) KindHasRowsOutsideIDRange(ctx context.Context, kind ObjectKind) (bool, error) {
+	if s == nil || s.db == nil {
+		return false, fmt.Errorf("objectgraph dolt: nil store")
+	}
+	lo, hi := KindIDRange(kind)
+	op := "(*DoltStore).KindHasRowsOutsideIDRange " + kindOpLabel(string(kind))
+	s.engineMu.LockAs(op)
+	defer s.engineMu.UnlockAs(op)
+	result, err := s.db.QueryContext(ctx, KindOutsideRangeSQL, string(kind), lo, hi)
+	if err != nil {
+		return false, fmt.Errorf("objectgraph dolt: kind outside id range: %w", err)
+	}
+	defer result.Close()
+	found := result.Next()
+	if err := result.Err(); err != nil {
+		return false, fmt.Errorf("objectgraph dolt: kind outside id range: %w", err)
+	}
+	return found, nil
+}
+
 // ListKindMetadataPage returns up to limit rows of one kind with canonical id
-// strictly after afterCanonicalID, in canonical-id order. It holds the engine
-// mutex for this page only, so a caller scanning the whole kind releases it
-// between pages and other readers proceed. A shorter answer than limit means
-// the kind holds no more.
+// strictly after afterCanonicalID, in canonical-id order, by the kind
+// predicate. Exact for any id; costs the kind once per page (see
+// KindMetadataPageSQL). A shorter answer than limit means the kind holds no
+// more.
 func (s *DoltStore) ListKindMetadataPage(ctx context.Context, kind ObjectKind, afterCanonicalID string, limit int) ([]KindMetadataRow, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("objectgraph dolt: nil store")
