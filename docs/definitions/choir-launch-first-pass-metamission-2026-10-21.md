@@ -262,7 +262,7 @@ boundaries:
     - 'Locally five to seven agents in all (owner, 2026-10-21: "the rule is 5 to 7 agents running locally"): six Sonnet workers and the orchestrator. Workers work only in their own lane worktree and branch; they never push, never use Node B or staging credentials, never read secrets, never touch another worktree, never run git commit -a, never bypass hooks.'
     - Workers in the node-a agents VM (owner notes §39) follow the same rules, with one exception: they push their own lane branch to GitHub so FP0 can land it, and never push main. Sonnet for plan-linear or metric work, Opus where the design is open. The VM's slots do not count against the Mac's five to seven.
     - "Only FP0 lands. A deploy carries at most one live red batch; green work and inert red batches may ride with it (owner, 2026-10-22). A red batch is inert when, with its switches as deployed, it changes no running path: a new unwired package, or a feature off unless a selector names a computer, and no schema, boot-path, gateway, auth or deploy-routing change. Inert batches deploy together under one no-effect proof (the paper healthy and polling, routes and observability flags unchanged, boot logs clean); a failure reverts the inert set as a unit. Turning inert features on is a later deploy that may enable several at once, each on its own test computer, with their proofs in parallel. FP1's store batch counts as red for landing (the store schema is a protected surface) and gets a deploy of its own."
-    - 'The landing order: rebase the candidate onto current main, run focused checks, freeze base, scoped paths and digest, independent review on that frozen identity, check it is unchanged, land, deployed proof. Review is risk-tiered and Devin is the go-to reviewer (owner, 2026-10-23 UTC: "it feels silly to run 3 models for code review for this... once we tested it with sonnet we didnt need review. we should be more judicious, allocating code review to hard stuff and trusting that we can handle the easy stuff cold"; "make devin the go-to reviewer. i have high limits with devin."). Cheap checks run before any review, every time: the repo gates (check-v1-writer-purity, check-decode-roots, check-test-hang-guards, selftest-guest-token), a nix eval of both systems when nix or the flake changed, a dry run of every touched proof script, the CI mirror, and a rebase onto the current deploy tree. The tiers are a default and FP0 judges by context. Tier 0, no model review: green and yellow changes by default (an architectural design (a new mechanism, a doctrine change, a design a build will follow) is reviewed like the change it designs), proof tooling, mechanical rebases, and fixes that answer an earlier finding with only doc, nit or test-only items; the checks are the review. Proof, rollback and procedure text for a red deploy is not tier 0: it gets the deploy's own review. Tier 1, one seat, Devin: orange changes, and red changes that are additive, behind a data/config switch, with a one-act rollback that shows on staging within minutes. Tier 2, two seats (Devin and DeepSeek v4.1 flash; Gemini 3.8 flash added no unique blocking find after bunch 28): red where a defect would be silent or irreversible: deletes, tape/evidence, Texture canonical writes, auth/session, store schema, boot path, new concurrency. A red delta is re-reviewed, one seat (Devin), whenever the previous round found a blocking-real defect, and not when it found only doc, nit or test-only items; after three rounds on one mechanism, stop adding rounds and look at the substrate. Station files that say "the bunch panel" or "a panel" mean this tiered review. The allocation follows the measured review yield (docs/evidence/review-yield-2026-10-23.md, confidence medium). Review runs in bunches (owner, 2026-10-21 night, "i dont think we have enough tokens (or clock time) to run it after each station. should do it in bunches"), one run reviews every tier 1 and tier 2 candidate frozen at that moment, each with its own verdict. Before 2026-10-23 the landing panel was Gemini flash and Devin, with DeepSeek v4.1 Flash (opencode-go/deepseek-v4.1-flash, owner 2026-10-22 about 03:55 UTC) as a third reviewer and MiniMax M3.1 Flash (opencode-go/minimax-m3.1-flash-free, owner about 03:10 UTC: "another code review model") advisory only ("don''t be blocked by Minimax") (owner, 2026-10-22 02:10 UTC: "I don''t think we should be bottlenecked by SOL ... it''s more important that we get a lot of work done pretty well, and we''re going to discover flaws just from running it, testing it, QA ... we can still use Gemini and Devin"); a tier 1 or tier 2 candidate lands on its reviewers'' accept (blocking findings repaired), a tier 0 candidate on its checks, and both on a passing Linux -race mirror run on the agents VM and FP0''s own read. GPT-6.1-sol is not used for review for the rest of the overnight run (owner, 2026-10-22 02:09 UTC: "let''s stop using sol for code review for the overnight run. I''m using the same tokens for chatgpt gpt-6-Luna… I want to pace my usage"); the same ChatGPT quota serves the gateway''s gpt-6-luna; the per-station settle panel is replaced by one end-of-pass panel over the landed candidates and their deployed evidence.'
+    - 'The landing order: rebase the candidate onto current main, run focused checks, freeze base, scoped paths and digest, independent review on that frozen identity, check it is unchanged, land, deployed proof. Review is risk-tiered and Devin is the go-to reviewer (owner, 2026-10-23 UTC: "it feels silly to run 3 models for code review for this... once we tested it with sonnet we didnt need review. we should be more judicious, allocating code review to hard stuff and trusting that we can handle the easy stuff cold"; "make devin the go-to reviewer. i have high limits with devin."). Cheap checks run before any review, every time: the repo gates (check-v1-writer-purity, check-decode-roots, check-test-hang-guards, selftest-guest-token), a nix eval of both systems when nix or the flake changed, a dry run of every touched proof script, the CI mirror, and a rebase onto the current deploy tree. The tiers are a default and FP0 judges by context. Tier 0, no model review: green and yellow changes by default (an architectural design (a new mechanism, a doctrine change, a design a build will follow) is reviewed like the change it designs), proof tooling, mechanical rebases, and fixes that answer an earlier finding with only doc, nit or test-only items; the checks are the review. Proof, rollback and procedure text for a red deploy is not tier 0: it gets the deploy''s own review. Tier 1, one seat, Devin: orange changes, and red changes that are additive, behind a data/config switch, with a one-act rollback that shows on staging within minutes. Tier 2, two seats (Devin and DeepSeek v4.1 flash; Gemini 3.8 flash added no unique blocking find after bunch 28): red where a defect would be silent or irreversible: deletes, tape/evidence, Texture canonical writes, auth/session, store schema, boot path, new concurrency. A red delta is re-reviewed, one seat (Devin), whenever the previous round found a blocking-real defect, and not when it found only doc, nit or test-only items; after three rounds on one mechanism, stop adding rounds and look at the substrate. Station files that say "the bunch panel" or "a panel" mean this tiered review. The allocation follows the measured review yield (docs/evidence/review-yield-2026-10-23.md, confidence medium). Review runs in bunches (owner, 2026-10-21 night, "i dont think we have enough tokens (or clock time) to run it after each station. should do it in bunches"), one run reviews every tier 1 and tier 2 candidate frozen at that moment, each with its own verdict. Before 2026-10-23 the landing panel was Gemini flash and Devin, with DeepSeek v4.1 Flash (opencode-go/deepseek-v4.1-flash, owner 2026-10-22 about 03:55 UTC) as a third reviewer and MiniMax M3.1 Flash (opencode-go/minimax-m3.1-flash-free, owner about 03:10 UTC: "another code review model") advisory only ("don''t be blocked by Minimax") (owner, 2026-10-22 02:10 UTC: "I don''t think we should be bottlenecked by SOL ... it''s more important that we get a lot of work done pretty well, and we''re going to discover flaws just from running it, testing it, QA ... we can still use Gemini and Devin"); a tier 1 or tier 2 candidate lands on its reviewers'' accept (blocking findings repaired), a tier 0 candidate on its checks, and both on a passing Linux -race mirror run on the agents VM and FP0''s own read. GPT-6.1-sol is not used for review for the rest of the overnight run (owner, 2026-10-22 02:09 UTC: "let''s stop using sol for code review for the overnight run. I''m using the same tokens for chatgpt gpt-6-Luna… I want to pace my usage"); the same ChatGPT quota serves the gateway''s gpt-6-luna; the per-station settle panel is replaced by one end-of-pass panel over the landed candidates and their deployed evidence.'
     - An activation lease: from a deploy to the end of its proof (or its rollback), no other deploy and no drill.
     - Recovery first: FP3's group 1 (a rollback can always reach a protected computer, and a failure-stopped always-on computer retries after a deploy) lands before FP1's store changes, and before any other boot-path risk.
     - Workers never run git fetch, gc, prune, stash, tag, remote, update-ref or config, any worktree command, or any gh command; never read the rest of the scratchpad (it holds credential files); never edit ACTIVE, the mission graph, the doc authority manifest or the two checklists (FP0 ticks them at landing). Red code fails closed. Live adversarial probes are FP0's.
@@ -283,26 +283,25 @@ boundaries:
 now:
   status: working
   slice: >-
-    Land the live-red queue one deploy at a time (two disjoint live reds
-    allowed, owner 13:35), each with its deployed proof. Owner rule
-    (2026-10-22 22:3x): "Anything which improves resource utilization on a
-    forward and ongoing basis should be prioritized over stability,
-    availability, or uptime in the short term." So D4 carries Firecracker
-    1.17 and data-drive discard to every computer, the paper included.
-    Agent policy (owner): Sonnet for plan-following, metric optimization
-    and investigations; Opus for design and open-ended work. The paper's
-    models are chatgpt gpt-6-luna only (owner 21:4x); reviews are
-    risk-tiered, Devin by default (owner 2026-10-23; DeepSeek
-    joins Devin only on tier 2).
-  source_ref: 85a8115b1
-  deploy_identity: 85a8115b1 serving (deploy D3, proved 21:49 to 22:30)
+    Overnight platform groundwork (owner 2026-10-23 05:0x: "ok, restarted
+    and ready to go overnight!"): land the live-red queue one deploy at a
+    time, each with its deployed proof; store schema, boot path,
+    auth/session and deploy routing each keep a deploy to themselves.
+    Resource use ahead of short-term uptime (owner 2026-10-22). The paper
+    runs half Synthetic DeepSeek V4.1 Flash, half ChatGPT luna, no fallback
+    (owner 2026-10-23: "I'd rather them fail than fallback"). Reviews are
+    risk-tiered, Devin by default; tier 2 adds DeepSeek (CLAUDE.md, Mutation
+    Classes). The owner takes the agenda in the morning; the roadmap re-cut
+    (lane/fp0-roadmap-recut) waits for that review and does not land before.
+  source_ref: 7ca537e01
+  deploy_identity: 7ca537e01 serving (deploy D12, CI 39920746304, proved 08:08 to 08:13 UTC)
   candidate:
-    id: deploy-D4
-    state: staged as lane/fp0-deployD4 (boot passivation, actor retry backoff, retention proof r3, store-stall holder, cold-start r2 port, CI shard balance, discard for every computer); mirror deployD4bm queued
-    ref: deploy D4's landing commit on main
-    base: 85a8115b1
+    id: deploy-D13
+    state: landing as D13 (lane/fp0-stream-seq-seed 256218633; bunch 156 DeepSeek reject answered by round 3; bunch 158 Devin accept; Mac mirror streamseq-r3)
+    ref: deploy D13's landing commit on main
+    base: 7ca537e01
     digest: the staged tree plus the ledger and this card
-    scope: [nix, internal/agentcore, internal/store, internal/vmctl, scripts, .github, docs]
+    scope: [internal/store, internal/objectgraph, docs]
   bridge_conjecture: >-
     If the security and density batches land with deployed proofs and
     independent review, then the owner's second pass starts from a computer
@@ -312,52 +311,54 @@ now:
     It fails if the pass ends with most security items still open, or if a
     landed item needs reworking at the second pass.
   conjecture:
-    id: C-FP-landing
+    id: C-FP-boot-reads
     claim: >-
-      In the first pass the bottleneck is landing, not building: five lanes
-      produce candidates faster than serialized red deploys (about 25
-      minutes each plus about 30 for the proof) can land them.
+      The paper's planned-refresh /health stalls are boot and first-call
+      reads that walk a whole kind or owner under the engine mutex; the
+      stream_seq seed was the first (104 s at D9's boot), and the next ones
+      have the same shape.
     test: >-
-      B1's timing per landing, and the queue of frozen candidates waiting
-      for a deploy slot at each FP0 pass.
+      After D13, the paper's boot shows no ListObjects choir.event op and
+      the first minute of /health has no 503; the boot-read census
+      (lane/fp0-boot-read-census) ranks the per-run seq seed,
+      ListEventsByOwnerAfter and the boot run-header list by measured hold.
     edge: resource
-    delta_o: time each landing's queue, build, image, refresh and proof (B1), and script the staging proof
-    scope_if_supported: the first pass's landing order and batch sizes
+    delta_o: hold times per boot read on the paper's console at each planned refresh
+    scope_if_supported: the next store deploys after D13
     status: active
-    evidence_refs: []
+    evidence_refs: [docs/problems/stream-seq-seed-scans-the-event-kind-at-boot-2026-10-23.md]
   decision:
-    what: six lanes now (FP1 to FP4, FP6, FP7); FP8 to FP10 fill slots as they free
+    what: overnight lanes are platform groundwork only (storage, memory, security, boot stalls); no new high-level design before the owner's morning agenda
     kind: operational
     status: settled
-    evidence_ref: owner in session 2026-10-21
+    evidence_ref: owner in session 2026-10-23 ("do this groundwork before going back high level into ideas")
     owner_ratification_ref: not_applicable
   belief:
     believed_state: >-
-      Deploys L to D3 are live. D3 proved Firecracker 1.17 discard on one
-      test computer (1.67 GiB punched, /health 93 of 93) and the capsule
-      memory bounds (oom_kill=0, spawn 748 ms). The paper writes 10.9 tape
-      events and 14 ops per second, batching off; at about 90 to 150 KiB of
-      Dolt journal per op that is the 1 to 1.8 GiB every 10 to 20 minutes
-      the online GC reclaims while it holds the only write connection.
-      Node B free space swings 140 to 170 GB; platform-artifacts holds
-      about 122 GB and vm-state 125 GB.
+      D9 to D12 are live and proved: the outbox scan holds 0 ms, the event
+      table (store schema epoch 2) is inert and live, Close pins its pools,
+      the run-state events are numbered, the prompt bar accepts pasted
+      scripts, and one named test computer resolves through the host's
+      Unbound. The paper's steady /health 503 rate fell from 3.0% to 1.3%;
+      each refresh window still has about 30 503s (the stream_seq seed).
+      Synthetic serves at a gate of 3 in flight with no 429s; the weekly
+      allowance falls about 5 points an hour.
     main_uncertainty: >-
-      which writers carry the paper's 14 ops per second and how much of it
-      is needed (Sonnet investigation, lane/fp1-journal-root-cause); how
-      long the paper's first trim on its 61 GB image slows /health.
-    next_observation: the paper on Firecracker v1.17.0 with discard after D4, its data.img allocated size and Node B free space before and after its first trim, /health every 10 s around it.
+      whether the bounded stream_seq seed's reuse band (an event with the
+      maximum stream_seq behind the newest 50,000 objects) is reachable in
+      practice; whether re-arming the vocabulary fence on Reopen refuses a
+      write that passes today.
+    next_observation: the paper's boot after D13, its console's slow-op lines and /health in the first minutes.
   blocker_or_risk: >-
-    The mirror queue on the agents VM runs one heavy test at a time, so
-    mirrors gate landing. The paper's first trim may slow /health
-    (accepted by the owner's rule). A security force-reboot path does not
-    exist yet: the reboot script waits for live self-development applies
-    and capsules (owner: "We should definitely not be waiting minutes just
-    to maintain some user self-development run").
+    Guest-shell proof steps (SEC-10 step 3, FP7 step 5, body caps step 11)
+    have no agent route; they are the owner's manual items. F-c deploy 2
+    waits a staging day after D10 (06:52 UTC 2026-10-23).
   next_action: >-
-    Land D4 after its mirror; watch the paper's first trim. Then crash-boot
-    closure alone, the Firecracker 1.17 pin (lane/fp0-firecracker-117-fleet),
-    the reboot script after round 6, D5 rebuilt on D4, body caps, and the
-    journal fix the investigation ranks first.
+    D13 (stream_seq seed) after bunch 156 and the mirror; prove it on the
+    paper's planned refresh. Then D14, the self-development operations
+    replay fix with the vocabulary fence re-armed (round 2, tier 2). Then
+    the next boot read the census ranks first, and F-c deploy 2 after its
+    staging day.
 receipts:
   - id: capture-label-key-read
     boundary: implement
