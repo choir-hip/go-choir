@@ -106,8 +106,12 @@ def judge_body_cap(rep, body):
                   f"status={s['status']} {s.get('body_prefix', '')[:80]!r}")
     else:
         # Step 11(a): a 413, or the connection closed mid-upload.
-        rep.check("11(a) streamed search body: connection closed mid-upload", bool(s.get("error")),
-                  f"error={s.get('error')} sent={s.get('body_bytes_sent')}")
+        # A close counts only if the gateway cut the upload short; a full
+        # upload followed by an error is a failed probe, not a refusal.
+        sent, planned = s.get("body_bytes_sent"), s.get("body_bytes_planned")
+        cut = bool(s.get("error")) and isinstance(sent, int) and isinstance(planned, int) and sent < planned
+        rep.check("11(a) streamed search body: connection closed mid-upload", cut,
+                  f"error={s.get('error')} sent={sent} planned={planned}")
     m = legs.get("model_declared", {})
     rep.check("11(b) model body declaring 700 MiB answers 413 before a byte is read", m.get("status") == 413,
               f"status={m.get('status')} sent={m.get('body_bytes_sent')} {m.get('body_prefix', m.get('error', ''))[:80]!r}")
