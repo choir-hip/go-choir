@@ -230,6 +230,21 @@ func SupportedModels() []ModelInfo {
 			ContextWindowTokens: DefaultContextWindowTokens,
 		},
 
+		// Synthetic (synthetic.new), probed 2026-10-22 before any traffic:
+		// the window is 524288 tokens (512 Ki, prompt plus completion; a
+		// request past it is a 400), not the 1M DeepSeek's own API serves;
+		// max output is advertised at 65536 and unproven at the cap. Vision
+		// verified with an image (docs/problems/synthetic-provider-
+		// onboarding-2026-10-22.md). No RecommendedFor until the overnight
+		// evidence.
+		{
+			ID:                  "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017",
+			DisplayName:         "DeepSeek V4.1 Flash 1017 (Synthetic)",
+			Provider:            "synthetic",
+			MaxOutputTokens:     65536,
+			ContextWindowTokens: 524288,
+		},
+
 		{
 			ID:                  "gpt-6-luna",
 			DisplayName:         "GPT-6 Luna",
@@ -291,13 +306,35 @@ func (m PoolMember) SlotWeight() int {
 // 2026-10-21: "We have Opencode quota now"; the dual pool is back at 1:3, so
 // the same kinds of task run on both models and the tool-call failures they
 // share are fixed in the tool surface rather than tuned to one model.
+// Owner 2026-10-22: the paper runs half Synthetic DeepSeek 1017, half ChatGPT
+// overnight, "to see how much of my synthetic usage I end up using": the
+// synthetic-luna pool, 1:1. Owner 2026-10-23 (UTC): "Just ChatGPT luna and
+// synthetic DeepSeek 1017 tonight. I'd rather them fail than fallback. We
+// are still pre-launch" and "Don't use Opencode as fallback tonight." So
+// synthetic-luna fails over to nothing (NoFailover), and the default pool is
+// gpt-6-luna alone tonight: opencode-go deepseek-v4.1-flash left it (its
+// catalog entry stays), so no thread falls back to OpenCode.
 func Pools() map[string][]PoolMember {
 	return map[string][]PoolMember{
 		DefaultPool: {
-			{Provider: "opencode-go", Model: "deepseek-v4.1-flash", Weight: 1},
-			{Provider: "chatgpt", Model: "gpt-6-luna", Weight: 3},
+			{Provider: "chatgpt", Model: "gpt-6-luna", Weight: 1},
+		},
+		SyntheticLunaPool: {
+			{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", Weight: 1},
+			{Provider: "chatgpt", Model: "gpt-6-luna", Weight: 1},
 		},
 	}
+}
+
+// SyntheticLunaPool names the pool that splits threads between Synthetic's
+// DeepSeek V4.1 Flash 1017 and gpt-6-luna.
+const SyntheticLunaPool = "synthetic-luna"
+
+// NoFailover reports whether a pool's threads never move to another member
+// when their model fails: the member that fails, fails. The default rule is
+// the next member in order (docs/model-pools-design-2026-10-12.md §5).
+func NoFailover(pool string) bool {
+	return strings.TrimSpace(pool) == SyntheticLunaPool
 }
 
 // Lookup returns the catalog entry for (provider, model).

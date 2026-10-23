@@ -205,7 +205,8 @@ func SpecOf(selection provideriface.LLMSelection) string {
 }
 
 // Assign resolves a selection to one concrete model for thread. A pool spec
-// hashes the thread onto a member; the members after it are the fallbacks.
+// hashes the thread onto a member; the members after it are the fallbacks,
+// except in a pool that is NoFailover (no fallbacks at all).
 // A concrete model the catalog has retired is remapped to the default pool.
 // A concrete model in the default pool falls back to the rest of the pool.
 func Assign(selection provideriface.LLMSelection, thread string) (provideriface.LLMSelection, []provideriface.LLMSelection, string) {
@@ -237,6 +238,11 @@ func Assign(selection provideriface.LLMSelection, thread string) (provideriface.
 	}
 	index := weightedIndex(members, fnv32(thread))
 	ordered := poolSelections(rotate(members, index), selection)
+	if modelcatalog.NoFailover(pool) {
+		// The member that fails, fails: no fallbacks, not even the default
+		// pool's (owner 2026-10-23: "I'd rather them fail than fallback").
+		return ordered[0], nil, assignment
+	}
 	return ordered[0], ordered[1:], assignment
 }
 

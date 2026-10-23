@@ -94,3 +94,12 @@ func TestLookupPricingModelsInUse(t *testing.T) {
 		t.Fatalf("gpt-6-luna resolved to %q", e.Model)
 	}
 }
+
+// Synthetic's 1017 model is priced at Synthetic's rate, not by prefix at
+// DeepSeek's own (0.30 in, 0.006 cached), which understated input by half.
+func TestSyntheticDeepSeek1017PricedAtSyntheticRate(t *testing.T) {
+	entry, ok := LookupPricing("hf:deepseek-ai/DeepSeek-V4.1-Flash-1017")
+	if !ok || entry.Provider != "synthetic" || entry.InputPerMillion != 0.60 || entry.CachedInputPerMillion != 0.03 || entry.OutputPerMillion != 1.20 {
+		t.Fatalf("pricing = %+v (found=%v)", entry, ok)
+	}
+}

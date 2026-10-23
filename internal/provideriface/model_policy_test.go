@@ -15,6 +15,9 @@ func TestMaxInteractiveOutputTokensForSelectionUsesModelCatalog(t *testing.T) {
 	if got := MaxInteractiveOutputTokensForSelection(LLMSelection{Provider: "opencode-zen", Model: "muse-spark-1.3-contributor-free"}, "management"); got != 0 {
 		t.Fatalf("OpenCode Zen interactive tokens = %d, want 0 to omit chat-completions budget", got)
 	}
+	if got := MaxInteractiveOutputTokensForSelection(LLMSelection{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017"}, "texture"); got != 0 {
+		t.Fatalf("Synthetic interactive tokens = %d, want 0 to omit chat-completions budget", got)
+	}
 	if got := MaxInteractiveOutputTokensForSelection(LLMSelection{Provider: "chatgpt", Model: "gpt-5.5"}, "texture"); got != 0 {
 		t.Fatalf("ChatGPT interactive tokens = %d, want 0 to omit unsupported max_output_tokens", got)
 	}

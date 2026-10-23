@@ -183,6 +183,7 @@ func loadProviderConfig() provider.ProviderConfig {
 			"step-5-preview-free",
 		},
 		OpenCodeZenModels: []string{"muse-spark-1.3-contributor-free"},
+		SyntheticModels:   []string{"hf:deepseek-ai/DeepSeek-V4.1-Flash-1017"},
 	}
 
 	// Allow overrides for non-default setups.
@@ -203,6 +204,9 @@ func loadProviderConfig() provider.ProviderConfig {
 	}
 	if v := os.Getenv("GATEWAY_OPENCODE_ZEN_MODELS"); v != "" {
 		cfg.OpenCodeZenModels = strings.Split(v, ",")
+	}
+	if v := os.Getenv("GATEWAY_SYNTHETIC_MODELS"); v != "" {
+		cfg.SyntheticModels = strings.Split(v, ",")
 	}
 
 	return cfg

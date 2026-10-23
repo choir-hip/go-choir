@@ -49,7 +49,7 @@ func MaxInteractiveOutputTokensForSelection(sel LLMSelection, role string) int {
 	}
 	// OpenAI-compatible chat-completions providers behave best when ordinary
 	// agent loops omit the explicit generation budget.
-	if provider == "opencode-go" || provider == "opencode-zen" {
+	if provider == "opencode-go" || provider == "opencode-zen" || provider == "synthetic" {
 		return 0
 	}
 	return MaxOutputTokensForSelection(sel)
