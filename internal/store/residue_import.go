@@ -406,6 +406,11 @@ func (s *Store) snapshotResidueRuntime(ctx context.Context, ownerID, computerID 
 	// unique key (loop_id, seq) serves it: the owner/run pairs alone (an OR of
 	// two-column equalities) needed idx_run_memory_entries_owner_loop_seq, or
 	// the planner scans the table (TestRunMemoryResidueStatementAsWrittenNeedsOwnerLoopSeq).
+	// Cross-batch order relies on the scopes' Go sort (byte order) agreeing with
+	// the ORDER BY inside each batch: Dolt's default collation is the binary
+	// utf8mb4_0900_bin, which orders owner_id and loop_id by byte like Go's
+	// string comparison. A non-binary collation here would interleave batches
+	// differently from the single statement this replaced.
 	for start := 0; start < len(runScopes); start += residueRunMemoryBatch {
 		batch := runScopes[start:min(start+residueRunMemoryBatch, len(runScopes))]
 		marks := make([]string, len(batch))
