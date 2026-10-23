@@ -360,3 +360,21 @@ func TestGracefulShutdownWaitsForInFlightRequest(t *testing.T) {
 		t.Fatal("Start did not return after graceful shutdown completed")
 	}
 }
+
+// A Shutdown that signals before Start waits on done must not be lost:
+// Start would block forever and the process would outlive its own
+// shutdown (docs/problems/server-shutdown-lost-wakeup-2026-10-23.md).
+func TestStartReturnsAfterAShutdownThatSignalledFirst(t *testing.T) {
+	s := NewServer("test-early-shutdown", "0")
+	s.Shutdown()
+	returned := make(chan struct{})
+	go func() {
+		defer close(returned)
+		s.Start()
+	}()
+	select {
+	case <-returned:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Start did not return after an earlier Shutdown: the done signal was lost")
+	}
+}
