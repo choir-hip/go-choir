@@ -1214,6 +1214,18 @@ func (s *Store) Reopen(path string) error {
 	s.doltConnector = live.doltConnector
 	// The adopted workspace may differ from the last commit: keep it dirty.
 	s.dirtyGen.Add(1)
+	// The object-graph store is new, and BindProjectionTape installed its
+	// mutation interceptor on the one it replaces. A bound store must hand
+	// the new one the same interceptor before the store is published here
+	// (s.ogStore and s.og below), or an og_objects/og_edges write after the
+	// swap is direct SQL with no tape event while ProjectionTapeBound() still
+	// answers true. Installing it on live.ogStore first leaves no window: the
+	// store is closed until Reopen returns, and nothing can reach the new
+	// store before this function does
+	// (docs/problems/selfdev-operations-replay-not-equivalent-2026-10-23.md).
+	if s.projectionTape != nil {
+		live.ogStore.SetMutationInterceptor(s.projectionTape.interceptOG)
+	}
 	s.og = live.og
 	s.ogStore = live.ogStore
 	s.ogReadStore = live.ogReadStore
