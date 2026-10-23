@@ -2,6 +2,7 @@ package taperepack
 
 import (
 	"bufio"
+	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
@@ -22,6 +23,11 @@ import (
 const (
 	listRecSize = 33
 	edgeRecSize = 42
+
+	// Edge flag bits.
+	edgeEligible = 1 // the receipt is eligible for the copy
+	edgeRejected = 2 // a PinReceipt the shape guard rejected: it names the file but attributes nothing
+	edgeRef      = 4 // an event body in a segment names the digest: guards, never copies
 )
 
 // computerTable interns computer ids for the edge spill.
@@ -171,7 +177,7 @@ func (e *engine) list() error {
 				return fmt.Errorf("taperepack: list %s: %w", l.dir, err)
 			}
 		}
-		return nil
+		return e.listSegments(es)
 	}()
 	if cerr := ls.close(); runErr == nil {
 		runErr = cerr
@@ -182,8 +188,9 @@ func (e *engine) list() error {
 	return runErr
 }
 
-// listReceipt reads one pin receipt and spills its edge. A receipt that is
-// gone, too large or not a pin receipt makes no edge.
+// listReceipt reads one legacy pin receipt and spills its edge. A receipt that
+// is gone makes no edge; one that cannot be read, or that claims to be a
+// receipt and names nothing, makes the run unhealthy and deletes nothing.
 func (e *engine) listReceipt(es *spill, path string) error {
 	e.pace.wait()
 	raw, st, err := e.readCapped(path, maxReceiptBytes)
@@ -191,32 +198,165 @@ func (e *engine) listReceipt(es *spill, path string) error {
 		return err
 	}
 	e.filesSeen++
-	if st != readOK {
+	switch st {
+	case readOK:
+		return e.spillReceipt(es, raw, "")
+	case readVanished:
+		return nil
+	default:
+		e.st.Listing["unnamable_receipts"]++
 		return nil
 	}
-	ed, ok := parseReceipt(raw)
-	if !ok {
+}
+
+// spillReceipt classifies one pin receipt (a legacy file, or a record in a
+// computer's segment) and spills its edge. dir is the computer whose segment
+// held it, or empty for a legacy file; a receipt in a segment attributes that
+// computer as well as the one it names (more requirements, never fewer).
+func (e *engine) spillReceipt(es *spill, raw []byte, dir string) error {
+	ed, st := classifyReceipt(raw)
+	switch st {
+	case receiptForeign:
+		return nil
+	case receiptUnnamable:
+		e.st.Listing["unnamable_receipts"]++
+		return nil
+	case receiptRejected:
+		e.st.Listing["rejected_receipts"]++
+		for _, ns := range []tapestore.NS{tapestore.NSEvent, tapestore.NSPayload} {
+			if err := e.spillEdge(es, ed.artifact, ns, ed.computer, 0, edgeRejected); err != nil {
+				return err
+			}
+		}
 		return nil
 	}
-	idx, err := e.table.intern(ed.computer)
-	if err != nil {
-		return err
-	}
-	var rec [edgeRecSize]byte
-	copy(rec[0:32], ed.artifact[:])
-	rec[32] = byte(ed.ns)
-	binary.BigEndian.PutUint32(rec[33:37], idx)
 	length := ed.length
 	eligible := ed.eligible
 	if length < 0 || length > tapestore.MaxRecordBytes {
 		length, eligible = 0, false
 	}
-	binary.BigEndian.PutUint32(rec[37:41], uint32(length))
+	var flags byte
 	if eligible {
-		rec[41] = 1
+		flags = edgeEligible
 	}
+	if err := e.spillEdge(es, ed.artifact, ed.ns, ed.computer, uint32(length), flags); err != nil {
+		return err
+	}
+	if dir != "" && dir != ed.computer {
+		return e.spillEdge(es, ed.artifact, ed.ns, dir, uint32(length), flags)
+	}
+	return nil
+}
+
+func (e *engine) spillEdge(es *spill, artifact [32]byte, ns tapestore.NS, computer string, length uint32, flags byte) error {
+	idx, err := e.table.intern(computer)
+	if err != nil {
+		return err
+	}
+	var rec [edgeRecSize]byte
+	copy(rec[0:32], artifact[:])
+	rec[32] = byte(ns)
+	binary.BigEndian.PutUint32(rec[33:37], idx)
+	binary.BigEndian.PutUint32(rec[37:41], length)
+	rec[41] = flags
 	_, err = es.w[rec[0]].Write(rec[:])
 	return err
+}
+
+// attrError records that a computer's segments could not be read to the end,
+// so the receipts and event references in them are unknown. The run is
+// unhealthy and unlinks nothing (attrBroken).
+func (e *engine) attrError(computer, msg string) {
+	if e.st.AttrErrors == nil {
+		e.st.AttrErrors = map[string]string{}
+	}
+	if _, ok := e.st.AttrErrors[computer]; !ok {
+		e.st.AttrErrors[computer] = msg
+	}
+}
+
+// attrBroken is true when the attribution is known to be incomplete: a
+// computer's segments could not be listed or read, or something that claims
+// to be a pin receipt names no artifact.
+func (e *engine) attrBroken() bool {
+	return len(e.st.AttrErrors) > 0 || e.st.Listing["unnamable_receipts"] > 0
+}
+
+// listSegments adds the edges the legacy receipts cannot show (review round
+// 2, R1). With the segment flag on, a repin of an artifact whose legacy file
+// exists appends the receipt to the computer's segment only and writes no
+// legacy receipt, and the computer keeps reading the shared legacy file. So
+// every computer's segments, sealed and unsealed (attribution must be complete
+// even though only sealed copies count toward coverage), are read for their
+// pin receipts and for the digests their event bodies name.
+func (e *engine) listSegments(es *spill) error {
+	return eachDirEntry(filepath.Join(e.root, tapestore.SegDirName), func(de os.DirEntry) error {
+		if !de.IsDir() {
+			return nil
+		}
+		name := de.Name()
+		if !tapestore.ValidComputerID(name) {
+			e.attrError(name, "tape-seg directory is not a valid computer id")
+			return nil
+		}
+		return e.listComputerSegments(es, name)
+	})
+}
+
+func (e *engine) listComputerSegments(es *spill, computer string) error {
+	view, err := e.reader.OpenView(computer)
+	if err != nil {
+		e.attrError(computer, err.Error())
+		return nil
+	}
+	for b := 0; b < buckets; b++ {
+		locs, err := view.Bucket(byte(b))
+		if err != nil {
+			e.attrError(computer, err.Error())
+			return nil
+		}
+		for _, l := range locs {
+			if l.NS != tapestore.NSReceipt && l.NS != tapestore.NSEvent {
+				continue
+			}
+			e.pace.wait()
+			body, err := view.Read(l)
+			if err != nil {
+				// The legacy file of the same digest, when it still verifies,
+				// says the same; otherwise the record's content is unknown.
+				var ok bool
+				if body, ok = e.legacyBody(l.NS, l.Digest); !ok {
+					e.attrError(computer, fmt.Sprintf("%s %x: %v", l.NS, l.Digest, err))
+					return nil
+				}
+			}
+			if l.NS == tapestore.NSReceipt {
+				e.st.Listing["segment_receipts"]++
+				if err := e.spillReceipt(es, body, computer); err != nil {
+					return err
+				}
+				continue
+			}
+			for _, d := range hexRefs(body) {
+				for _, ns := range []tapestore.NS{tapestore.NSEvent, tapestore.NSPayload} {
+					if err := e.spillEdge(es, d, ns, computer, 0, edgeRef); err != nil {
+						return err
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// legacyBody reads the legacy file of a digest and returns it only if it
+// hashes to that digest. The slice is a copy.
+func (e *engine) legacyBody(ns tapestore.NS, digest [32]byte) ([]byte, bool) {
+	raw, st, err := e.readCapped(filepath.Join(e.root, filepath.FromSlash(ns.LegacyRel(hex.EncodeToString(digest[:])))), tapestore.MaxRecordBytes)
+	if err != nil || st != readOK || sha256.Sum256(raw) != digest {
+		return nil, false
+	}
+	return append([]byte(nil), raw...), true
 }
 
 type readStatus int

@@ -9,6 +9,7 @@ package taperepack
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -219,4 +220,10 @@ func TestR1AnEventInASegmentThatNamesAPayloadAttributesTheComputer(t *testing.T)
 	if v := vs["payload/"+x]; v.Deletable() {
 		t.Fatalf("R1: X is deletable (%q) although B's event names it", v.Class())
 	}
+}
+
+// callsBanned reports a call of name, with or without space before the
+// parenthesis (round 2, L3). An import alias still evades it: recorded.
+func callsBanned(src, name string) bool {
+	return regexp.MustCompile(regexp.QuoteMeta(name) + `\s*\(`).MatchString(src)
 }

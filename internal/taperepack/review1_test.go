@@ -119,9 +119,14 @@ func TestF3AReceiptWithoutASignatureAttributesNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	w.f.write("sha256/pin-receipts/"+hexSum(raw)+".json", raw)
-	_, vs := verdicts(t, w.opts(t))
-	if v := vs["payload/"+d]; v.Class() != "unreceipted" {
-		t.Fatalf("F3: payload of an unsigned receipt is %q, want unreceipted", v.Class())
+	rep, vs := verdicts(t, w.opts(t))
+	// Round 2 (R3): the rejected receipt still names the file, so the file is
+	// refused and the run is unhealthy; it never counts as a copy requirement.
+	if v := vs["payload/"+d]; v.Deletable() || v.Class() != "ineligible" {
+		t.Fatalf("F3: payload of an unsigned receipt is %q, want ineligible (refused)", v.Class())
+	}
+	if rep.Healthy() {
+		t.Fatal("F3: a rejected receipt left the run healthy")
 	}
 }
 
@@ -188,7 +193,7 @@ func TestF7TheCommandNeverUnlinksEither(t *testing.T) {
 		}
 		raw, _ := os.ReadFile(filepath.Join("../../cmd/taperepack", e.Name()))
 		for _, b := range bannedUnlinks {
-			if strings.Contains(string(raw), b+"(") {
+			if callsBanned(string(raw), b) {
 				t.Fatalf("F7: cmd/taperepack/%s calls %s", e.Name(), b)
 			}
 		}

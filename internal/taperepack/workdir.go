@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/tapestore"
 )
@@ -149,6 +150,12 @@ func unlinkCovered(root string, v Verdict) (int64, error) {
 	}
 	if fi.Size() != v.size {
 		return 0, fmt.Errorf("taperepack: refusing to unlink %s: size %d, verified %d bytes", path, fi.Size(), v.size)
+	}
+	// Every repin path refreshes the file's mtime. A file touched after the
+	// pass listed the tree was pinned again after the attribution was frozen
+	// (review round 2, R2).
+	if v.listStart.IsZero() || fi.ModTime().After(v.listStart) {
+		return 0, fmt.Errorf("taperepack: refusing to unlink %s: modified at %s, after the pass listed the tree at %s", path, fi.ModTime().Format(time.RFC3339Nano), v.listStart.Format(time.RFC3339Nano))
 	}
 	if err := os.Remove(path); err != nil {
 		return 0, err
