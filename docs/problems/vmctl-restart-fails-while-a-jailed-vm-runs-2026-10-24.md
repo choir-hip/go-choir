@@ -209,3 +209,203 @@ User unit with the node-b shape. A script as the main process (in
   handle old leaves.
 - Proof before `class:test` widening (SEC-04 step 5): a vmctl restart with a
   jailed VM alive, on a deploy, in both the restart and the stop/start order.
+
+## Design: the VM slice (2026-10-24, lane `lane/fp0-vm-slice`)
+
+Written before code. Mutation class red (vmctl, VM lifecycle, the host's
+cgroup tree, a unit vmctl's boot pulls in). Evidence classes: source-read
+(nixpkgs `fe1324228`, systemd 261.3 as cited above), reproduced (agents VM,
+systemd 260.2 user manager, kernel 6.18.37; run 2026-10-24, everything
+removed after).
+
+### Two findings that shape it
+
+1. **`Delegate=` is not supported on slices.** systemd 260.2 logs
+   `fp0vms.slice:5: Delegate= setting not supported for this unit type,
+   ignoring.` and `systemctl show -p Delegate` reads `no`. The
+   investigation's "separate `Delegate=yes` slice" row worked, but with
+   `Delegate=` ignored. So the slice is a plain systemd slice, and `vms/`
+   under it is a cgroup systemd did not create. That departs from
+   systemd's delegation contract (only delegated subtrees are the
+   payload's), and is a named residual below. What systemd does to such a
+   subtree, reproduced: realizing the slice (start, daemon-reload with a
+   changed property) leaves `vms/` and the leaf alone; it cannot take the
+   jailer's `cpu pids` off the slice while `vms/` has them in its own
+   `subtree_control` (the same kernel check as cause point 4); stopping the
+   slice stops its member units (it has none) and does **not** kill the
+   leaf's process; an empty slice cgroup is removed at stop, a populated
+   one stays. The delegation-correct alternative, one transient
+   `Delegate=yes` scope per VM (what machined and docker's systemd driver
+   do), needs a pid at scope creation and puts the jailer itself in the
+   scope root it then writes `subtree_control` for, so it does not fit the
+   jailer's own cgroup setup. A holder service with `Delegate=yes` and a
+   placeholder process carries the same wedge class on its own restart.
+   Neither is worth it for slice 1.
+2. **NixOS switch never restarts or stops a changed slice.**
+   switch-to-configuration-ng (`pkgs/by-name/sw/switch-to-configuration-ng/src/main.rs`,
+   nixpkgs pin above), `cannot_be_restarted_directly()`: `unit.ends_with(".slice")`
+   is in the "Do nothing. These cannot be restarted directly" set, with the
+   comment "Slices and Paths don't have to be restarted since properties
+   (resource limits and inotify watches) seem to get applied on
+   daemon-reload". `handle_modified_unit` returns before any stop, start or
+   restart for them. A slice whose unit file is **removed** is stopped
+   unless its `[Unit]` says `X-StopOnRemoval=false` (main.rs, the
+   `unit_file_state(&new_base_unit_file)?.is_gone()` branch reads the
+   *current* unit file's `X-StopOnRemoval`, default true). The slice sets
+   it false, so a rollback that removes the slice does not stop it either.
+   `restartIfChanged`/`stopIfChanged` are service options and do not apply.
+   Reproduced: a changed `MemoryLow=` plus daemon-reload applied to the
+   slice's `memory.low` with the leaf's pid unchanged; a removed slice file
+   plus daemon-reload left the slice active and the leaf alive.
+
+### The shape
+
+- **Name:** `system-choirvms.slice`, cgroup `system.slice/system-choirvms.slice`.
+  The dash is used on purpose: it makes the slice a child of
+  `system.slice`, a sibling of `go-choir-vmctl.service`, so the jailed VMs
+  keep the ancestors they had (minus the unit) and the same CPU and memory
+  competition position as today. A top-level `choirvms.slice` would compete
+  with all of `system.slice` at the root (weight 100 against 100), giving
+  test VMs more CPU under contention than the paper. No `choir.slice` or
+  `choir-*` prefix is created.
+- **Properties** (`systemd.slices.system-choirvms` in nix/node-b.nix):
+  `MemorySwapMax=0` (required: guests never swap, and `guestMemoryCannotSwap`
+  in snapshot_diff.go walks the VM's cgroup up to the first
+  `memory.swap.max` 0, so without it every jailed diff snapshot is refused
+  `diffRefusedMaySwap`); `MemoryLow=4G` (one 4 GiB guest; the two jailed
+  test computers are the only members until `class:test`). The vmctl unit
+  keeps `MemoryLow=14G` and `MemorySwapMax=0` for the direct VMs, which stay
+  in its `supervisor` subgroup. Total configured protection rises from 14G
+  to 18G of 31 GiB, but `memory.low` protects usage only, so with no jailed
+  VM it costs nothing. CPU: the slice default (`CPUWeight` 100), per-VM
+  `cpu.weight` and `pids.max` from `VMCTL_JAILER_CPU_WEIGHT`/`_PIDS_MAX` as
+  today. No `MemoryMax` (failure item 13 of the jailer record). No
+  `Delegate=` (finding 1). `unitConfig.X-StopOnRemoval = false` (finding 2).
+  No `wantedBy`: vmctl pulls it in.
+- **Ordering:** vmctl gets `wants` and `after` on `system-choirvms.slice`,
+  not `requires`/`bindsTo`: stopping the slice never stops vmctl, stopping
+  vmctl never touches the slice. systemd creates the slice's (empty)
+  cgroup when the slice starts and applies its memory properties
+  (reproduced with a member-less slice).
+- **Write access:** vmctl runs as root with `ProtectControlGroups=false`
+  (unchanged); its mount namespace has `/sys/fs/cgroup` read-write, which
+  is how the jailer already writes `system.slice`'s `subtree_control`
+  today. Nothing new is granted. vmctl's own unit keeps `Delegate=yes` and
+  `DelegateSubgroup=supervisor` (the direct VMs live in `supervisor`;
+  changing that would move live processes). Narrowing that is a follow-up.
+- **`VMCTL_JAILER_CGROUP_PARENT`:** `system.slice/go-choir-vmctl.service/vms`
+  becomes `system.slice/system-choirvms.slice/vms`. Leaves are
+  `<slice>/vms/<vm>`; the jailer writes `+cpu +pids` into `vms/`, the
+  slice, `system.slice` and the root, never into vmctl's unit.
+- **vmctl (internal/vmmanager/confinement.go):**
+  - `deriveJailerCgroupParent` is **deleted**. It derived `<unit>/vms`,
+    which is exactly the layout that wedges the unit. An unset
+    `VMCTL_JAILER_CGROUP_PARENT` leaves the jailer host unprepared (JAILER
+    UNAVAILABLE, every launch direct, receipts say why).
+  - `prepareJailerCgroups` refuses a parent inside vmctl's own unit cgroup
+    (the nearest `*.service`/`*.scope` ancestor of vmctl's cgroup) with a
+    reason naming this record, so a rollback of the env line alone fails
+    safe to direct launches instead of re-arming the wedge. For a parent
+    outside: it never moves any process and never writes any
+    `subtree_control`; it requires the parent's parent (the slice's
+    cgroup, systemd's) to exist (a missing one means the slice is not
+    active; vmctl must not create a systemd-owned cgroup behind systemd's
+    back); it refuses when the slice's cgroup or `vms/` holds processes
+    (the jailer's `subtree_control` write would fail EBUSY on every
+    launch); it creates only `vms/` (`Mkdir`, not `MkdirAll`). The
+    process-moving code for the old layout is deleted with it.
+  - **Leaf cleanup** (`removeCgroupLeaf`, on a jailed exit and on destroy)
+    removes the leaf the launch receipt recorded (`confinement.json`
+    `cgroup`, validated: clean, relative, last element the VM id) as well
+    as the leaf under the current parent. `rmdir` only removes an empty
+    cgroup, so a stale or wrong path costs one logged error.
+- **The leftover `go-choir-vmctl.service/vms/` and `vms/vm-fa28a867…` on
+  Node B:** harmless. Their `subtree_control` was cleared at 00:16, so
+  systemd's pre-spawn disable of the unit root succeeds (the D28 restart
+  at 00:2x was clean with them present, if they were still present). The
+  EBUSY `rmdir` at 00:16 most likely met a not-yet-released exiting task in
+  the leaf (hypothesis, not checked); `cg_trim` at the next vmctl stop
+  removes empty subcgroups of the unit. No code handles them. The staging
+  proof reads them.
+- **Switch-over rule:** deploy this only while no process lives under
+  `go-choir-vmctl.service/vms` (true since D28: jailer off). Checked as
+  proof step 0. The switching deploy's own vmctl restart then meets the
+  old layout empty, which restarts cleanly (the 23:44 and D28 cases).
+- **Rollback, in order:** (1) `VMCTL_JAILER=off` and deploy: new launches
+  go direct, a jailed snapshot is refused and cold boots (today's
+  rollback). The slice stays; it is harmless and holds no protection in
+  use once its VMs are gone. (2) Only after no process lives under the
+  slice, `git revert` of the lane. Reverting the Go and nix together while
+  a jailed VM runs in the slice is the one unsafe order: the old vmctl
+  would put new leaves back under its unit. Reverting the env line alone is
+  safe (vmctl refuses the in-unit parent).
+
+### Failure modes (before code)
+
+1. vmctl restart with a jailed VM alive wedges the unit: the unit's cgroup
+   never gets controller bits (no leaf under it). Reproduced twice plus a
+   stop/start.
+2. Deploy restarts or stops the slice, killing VMs: switch never restarts
+   or stops a changed slice (finding 2); removal is covered by
+   `X-StopOnRemoval=false`; a manual `systemctl stop` of the slice does not
+   kill the leaf (reproduced). A manual `systemctl kill` of the slice
+   would; never do that.
+3. Slice not active at vmctl start: `wants`/`after` start it first; if it
+   is still missing, vmctl refuses the jailer (direct launches), never
+   creates the slice's cgroup itself.
+4. The slice or `vms/` holds a process (someone ran something there): the
+   jailer's write would fail every launch; vmctl refuses up front. vmctl
+   never moves processes it does not own.
+5. The parent configured inside vmctl's unit (old env, a typo, a partial
+   rollback): refused with this record named.
+6. Parent unset: refused (no derivation).
+7. Old-layout leaves after the switch: none by the switch-over rule; if one
+   existed, the receipt path removes it at exit.
+8. systemd strips the jailer's controller bits from the slice: it cannot
+   while `vms/` has them (kernel check); if `vms/` is empty and pruned at a
+   slice stop, the jailer re-enables them at the next launch.
+9. Jailed diff snapshots refused for swap: the slice carries
+   `MemorySwapMax=0`.
+10. Protection: `MemoryLow` on a child of `system.slice` behaves as the
+    vmctl unit's does today. Open question, not acted on: the kernel bounds
+    a cgroup's effective `memory.low` by every ancestor's, and the agents
+    VM reads `system.slice/memory.low` 0 under `memory_recursiveprot`. If
+    Node B's `system.slice` also reads 0, the unit's 14G (and the slice's
+    4G) protect nothing today. Read-only check on Node B:
+    `cat /sys/fs/cgroup/system.slice/memory.low` and the `low` counter of
+    `go-choir-vmctl.service/memory.events`.
+11. systemd's own contract: `vms/` is not delegated (finding 1). A future
+    systemd that prunes or migrates foreign cgroups in a slice would break
+    this; re-run the reproduction on each systemd bump.
+
+### Staging proof plan (FP0 runs it; not run by the lane)
+
+Node B, after the lane lands and deploys with `VMCTL_JAILER=off` first:
+
+0. Pre-deploy, read only: `cat /sys/fs/cgroup/system.slice/go-choir-vmctl.service/vms/cgroup.procs`
+   (and every leaf's) is empty; the unit root's `cgroup.subtree_control`
+   is empty. If not, stop: the switch-over rule is not met.
+1. After the deploy: `systemctl show -p ActiveState system-choirvms.slice`
+   is active; `cat /sys/fs/cgroup/system.slice/system-choirvms.slice/memory.swap.max`
+   reads 0; the vmctl journal shows `jailer=` with no JAILER UNAVAILABLE
+   for the cgroup parent (it is off, so expect off); the old `vms/` dirs
+   are gone or empty.
+2. A deploy with `VMCTL_JAILER=on`, `VMCTL_JAILER_ONLY` = the two test
+   computers (fp8-jailer-1023 `computer-476cd794…`, fp8-jailer-1023b
+   `computer-51443441…`). Resolve both; each receipt reads `mode: jailer`
+   and `cgroup: system.slice/system-choirvms.slice/vms/<vm>`;
+   `scripts/vmm_confinement_verify.py` passes for both; the vmctl unit
+   root's `cgroup.subtree_control` stays empty.
+3. With both jailed VMs alive, a deploy that restarts vmctl (any vmctl
+   change, or a second deploy). Expect: the vmctl restart succeeds first
+   try (no `Failed to spawn`, no `start-limit-hit`), both jailed VMs are
+   reattached with the same pids, both answer `/health`, the paper is
+   reattached, and the leaves still hold their pids. Then a
+   `systemctl stop` / `start` of vmctl (the other order), same result.
+4. RES-05 script step 5 (one shared store image across the two jailed
+   computers) on the restarted vmctl.
+5. Hibernate and wake one jailed computer: its leaf is removed at exit and
+   recreated at wake; a diff snapshot is not refused for swap.
+
+Pass: steps 1 to 5. Then SEC-04 step 5 (`class:test`) is unblocked, with
+the slice's `MemoryLow` rebalanced against the unit's as members move.
