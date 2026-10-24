@@ -97,7 +97,7 @@ You can answer these in one message, by number.
 ## Names and receipts
 
 - Deploys: D31 cc6479939 (VM slice round 2); D32 0cbc52edc (jailer and host-only DNS for class test); D33 824b84106 (self-development promotion classification); D34 911be16b1 (engineering job park); D35 92771df65 (event table deploy 2, inert); D36 0894e48fe (platform Dolt GOMEMLIMIT 3GiB under MemoryHigh 4G); D37 22a01746f (boot credential re-minted after offline maintenance; decisive proof at tonight's 04:00 compaction); D38 dc3f5ee3b (stream_seq seed by phase; the paper's seed 550 ms, append 391 ms).
-- Ledger: docs/definitions/choir-launch-first-pass-metamission-2026-10-21.ledger.md, through 29d8a0f65.
+- Ledger: docs/definitions/choir-launch-first-pass-metamission-2026-10-21.ledger.md, through 7f5615e61.
 - Problem records: docs/problems/selfdev-apply-on-a-constructed-computer-breaks-vmctl-list-2026-10-24.md; offline-maintenance-outlives-the-boot-credential-2026-10-24.md; engineering-busy-polls-its-own-job-2026-10-24.md; platform-dolt-gc-throttled-at-memory-high-2026-10-24.md; idle-sweep-hibernates-a-computer-just-after-its-apply-restart-2026-10-24.md; successive-selfdev-applies-do-not-compound-2026-10-24.md; texture-supervision-doc-stops-at-the-decision-boundary-2026-10-24.md; on lane/fp0-apprewrite: staged-engineering-rounds-break-on-desk-reads-of-blocked-2026-10-24.md and long-engineering-run-dies-on-corpusd-cas-invalid-connection-2026-10-24.md.
 - Design: docs/design/computer-update-architecture-rnd-2026-10-24.md; docs/design/psa-precommitment-icrl-status-2026-10-24.md.
 - Evidence: docs/evidence/selfdev-drill-2026-10-24.md; drill traces under ~/.config/choir-qa/traces/fp0-selfdev-1024a and fp0-jobpark-1024b.
