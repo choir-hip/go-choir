@@ -171,7 +171,7 @@ User unit with the node-b shape. A script as the main process (in
 | `vms/x` populated, `vms/` and root have `cpu pids` | **fails**: `Failed to spawn executor: Device or resource busy`, `Failed to spawn 'start-pre' task: Device or resource busy`, `Failed with result 'resources'`; the log line "Found left-over process ... in control group" precedes it. Same text as Node B. |
 | same, then `echo "-cpu -pids" > vms/cgroup.subtree_control` (leaf **still populated**) | restart **works**; unit root bits become empty, `.control` created. Proves `vms/`'s bits, not the leaf, are the blocker. |
 | `vms/` has bits but no leaf | restart **works**; `vms/` is gone after stop (`cg_trim`). Matches the clean 23:44 restart. |
-| VM leaf and bits under a separate `Delegate=yes` **slice**, populated leaf, two restarts of the unit | both restarts **work**; the unit root never gets bits; the leaf is untouched. |
+| VM leaf and bits under a separate `Delegate=yes` **slice**, populated leaf, two restarts of the unit | both restarts **work**; the unit root never gets bits; the leaf is untouched. (systemd ignored `Delegate=` on the slice: "Design: the VM slice", finding 1.) |
 
 ### Fix directions
 
@@ -378,6 +378,48 @@ removed after).
     systemd that prunes or migrates foreign cgroups in a slice would break
     this; re-run the reproduction on each systemd bump.
 
+### Lane evidence (2026-10-24)
+
+Reproduction, agents VM (systemd 260.2 user manager, kernel 6.18.37), a
+user unit shaped like go-choir-vmctl (`Delegate=yes`,
+`DelegateSubgroup=supervisor`, `KillMode=process`, two `ExecStartPre`), a
+member-less `app-fp0vms.slice` beside it (the user analog of
+`system-choirvms.slice` under `system.slice`: `MemoryLow=64M`,
+`MemorySwapMax=0`, `X-StopOnRemoval=false`, no `Delegate=`), and a `sleep`
+as the "jailed VM" in `<slice>/vms/x` with `+cpu +pids` written into the
+slice and `vms/` and `pids.max` 64 on the leaf:
+
+| Step | Result |
+|---|---|
+| control: the same leaf under the unit (`<unit>/vms/x`), restart | **fails**: `Failed to spawn executor: Device or resource busy`, `Failed to spawn 'start-pre' task`, `Failed with result 'resources'` |
+| slice: start | active; unit root `subtree_control` empty, procs empty; slice and `vms/` `cpu pids`; slice `memory.low` 64M, `memory.swap.max` 0 |
+| restart 1, restart 2 | rc 0 each; "reattach: leaf holds <pid>"; unit root still empty; leaf pid unchanged |
+| stop, then start | rc 0; same |
+| slice `MemoryLow=128M` + daemon-reload | `memory.low` 128M applied; leaf pid unchanged; bits unchanged |
+| slice unit file removed + daemon-reload | slice stays active, leaf alive |
+| `systemctl stop` of the slice, leaf populated | rc 0, slice inactive, **leaf process alive** in its cgroup, vmctl-shaped unit still active |
+| a member-less slice started alone | systemd creates its cgroup and applies `MemorySwapMax`/`MemoryLow`; removed at stop when empty |
+
+Cleanup: every unit file, cgroup and process removed (checked empty).
+
+Evaluation: `nix eval` of `go-choir-b` and `go-choir-autoputer-vm`
+toplevel drvPaths succeed; the evaluated vmctl `Environment` reads
+`VMCTL_JAILER=off` and
+`VMCTL_JAILER_CGROUP_PARENT=system.slice/system-choirvms.slice/vms`; the
+vmctl unit text has `After=`/`Wants=` `system-choirvms.slice` (no
+`Requires=`), `Delegate=yes`, `DelegateSubgroup=supervisor`, `MemoryLow=14G`,
+`MemorySwapMax=0`, `KillMode=process`; `system-choirvms.slice` renders
+`X-StopOnRemoval=false`, `MemoryLow=4G`, `MemorySwapMax=0`.
+
+Tests: vm_slice_test.go, five tests red on the old code (in-unit parent
+accepted and pid 999 moved out of the unit root, unset parent accepted,
+missing slice accepted, populated slice accepted, receipt leaf left), all
+green after the fix; `go test ./internal/vmmanager` and `-race` on the
+focused set pass. `scripts/vmm_confinement_verify.py` gains two host
+checks while a jailed VMM runs: `jailed_cgroups_outside_vmctl_unit` and
+`vmctl_unit_root_no_controllers` (dry-run on synthetic receipts: the slice
+layout passes both, the old layout fails both).
+
 ### Staging proof plan (FP0 runs it; not run by the lane)
 
 Node B, after the lane lands and deploys with `VMCTL_JAILER=off` first:
@@ -394,8 +436,9 @@ Node B, after the lane lands and deploys with `VMCTL_JAILER=off` first:
    computers (fp8-jailer-1023 `computer-476cd794…`, fp8-jailer-1023b
    `computer-51443441…`). Resolve both; each receipt reads `mode: jailer`
    and `cgroup: system.slice/system-choirvms.slice/vms/<vm>`;
-   `scripts/vmm_confinement_verify.py` passes for both; the vmctl unit
-   root's `cgroup.subtree_control` stays empty.
+   `scripts/vmm_confinement_verify.py --expect jailer --vm <each>` passes,
+   including the two new host checks (leaves outside vmctl's unit, the
+   unit root's `cgroup.subtree_control` empty).
 3. With both jailed VMs alive, a deploy that restarts vmctl (any vmctl
    change, or a second deploy). Expect: the vmctl restart succeeds first
    try (no `Failed to spawn`, no `start-limit-hit`), both jailed VMs are
