@@ -97,7 +97,7 @@ func DefaultRegistry() *Registry {
 		{Kind: "choir.texture_document", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterTexture, OwnerEdits: true},
 		{Kind: "choir.texture_revision", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Versioned: true, Owner: OwnerVMStore, Writer: WriterTexture, OwnerEdits: true},
 		{Kind: "choir.texture_decision", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterTexture},
-		{Kind: "choir.agent_evidence", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerVMStore, Writer: WriterRuntime},
+		{Kind: "choir.agent_evidence", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterResearch, Schema: "types.EvidenceRecord"},
 		{Kind: "choir.content_item", Store: StoreTypeDolt, IdentityMode: IdentityContentHash, Owner: OwnerVMStore, Writer: WriterRuntime},
 		{Kind: "choir.podcast_subscription", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime},
 		{Kind: "choir.browser_session", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime},
@@ -151,6 +151,10 @@ func DefaultRegistry() *Registry {
 		{Kind: "choir.co_super_subject_candidate", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "types.EngineeringSubjectCandidate"},
 		{Kind: "choir.co_super_capability_claim", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "store.engineeringCapabilityClaim"},
 		{Kind: "choir.co_super_capsule_claim", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "store.engineeringCapsuleClaim"},
+		// The slot claim of a trajectory: one object per (trajectory, slot)
+		// holding the run that owns it. Written by the store's slot claim
+		// (docs/problems/data-has-more-than-one-home-2026-10-24.md, step 3).
+		{Kind: "choir.co_super_slot", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "store.EngineeringSlotRecord"},
 		{Kind: "choir.co_super_run_claim", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "store.engineeringRunClaim"},
 
 		// --- corpusd: publication layer ---

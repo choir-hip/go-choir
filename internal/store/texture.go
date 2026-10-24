@@ -2258,9 +2258,9 @@ func (s *Store) ListTextureDecisionsByTrajectory(ctx context.Context, ownerID, t
 	return s.ListTextureDecisionsByTrajectoryOG(ctx, ownerID, trajectoryID, limit)
 }
 
-// CreateEvidence inserts a durable evidence record into the embedded Dolt
-// workspace. Evidence is owner-scoped and associated with the capturing agent.
-func (s *Store) CreateEvidence(ctx context.Context, rec types.EvidenceRecord) error {
+// createEvidenceTable inserts an evidence record into the legacy agent_evidence
+// table: the home while evidence.graph is off (graph_home.go).
+func (s *Store) createEvidenceTable(ctx context.Context, rec types.EvidenceRecord) error {
 	metadata := string(rec.Metadata)
 	if strings.TrimSpace(metadata) == "" {
 		metadata = "{}"
@@ -2284,8 +2284,8 @@ func (s *Store) CreateEvidence(ctx context.Context, rec types.EvidenceRecord) er
 	return nil
 }
 
-// GetEvidence returns a single evidence record scoped to the given owner.
-func (s *Store) GetEvidence(ctx context.Context, evidenceID, ownerID string) (types.EvidenceRecord, error) {
+// getEvidenceTable reads one evidence record from the legacy table.
+func (s *Store) getEvidenceTable(ctx context.Context, evidenceID, ownerID string) (types.EvidenceRecord, error) {
 	row := s.textureHandle().QueryRowContext(ctx,
 		`SELECT evidence_id, owner_id, agent_id, kind, source_uri, title, content, metadata_json, created_at
 		   FROM agent_evidence
@@ -2295,10 +2295,9 @@ func (s *Store) GetEvidence(ctx context.Context, evidenceID, ownerID string) (ty
 	return scanEvidence(row)
 }
 
-// ListEvidenceByAgent returns recent evidence captured by an agent and scoped
-// to the given owner. If agentID is empty it returns recent evidence across all
-// of the owner's agents.
-func (s *Store) ListEvidenceByAgent(ctx context.Context, ownerID, agentID string, limit int) ([]types.EvidenceRecord, error) {
+// listEvidenceByAgentTable lists the legacy table's evidence for an agent (or
+// for every agent of the owner when agentID is empty), newest first.
+func (s *Store) listEvidenceByAgentTable(ctx context.Context, ownerID, agentID string, limit int) ([]types.EvidenceRecord, error) {
 	if limit <= 0 {
 		limit = 50
 	}

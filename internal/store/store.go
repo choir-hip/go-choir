@@ -167,8 +167,11 @@ type Store struct {
 	doltConnector doltConnector
 	jsonPatchMu   sync.Mutex
 	trajectoryMu  sync.Mutex
-	textureRevMu  sync.Mutex
-	doltCommitMu  sync.Mutex
+	// graphHomeMu serializes the graph-home slot claims and the table-to-graph
+	// imports (graph_home.go); the claim is a read-compare-write on one object.
+	graphHomeMu  sync.Mutex
+	textureRevMu sync.Mutex
+	doltCommitMu sync.Mutex
 	// onlineGCSince is the UnixNano start of the online Dolt GC pass that is
 	// running now, 0 when none is (runOnlineDoltGC, OnlineGCStatus).
 	onlineGCSince atomic.Int64
@@ -2012,12 +2015,27 @@ func (s *Store) ListActiveRunsByTrajectory(ctx context.Context, ownerID, traject
 // run. If a live run already owns the slot, that run is returned and claimed is
 // false. If the previous owner is terminal, the slot is advanced to runID.
 func (s *Store) ClaimEngineeringSlot(ctx context.Context, ownerID, trajectoryID, slot, runID, agentID, requesterRunID string) (types.RunRecord, bool, error) {
+	if s.graphHomeOn(ctx, ownerID, SettingEngineeringSlotsGraph) {
+		return s.claimEngineeringSlotGraph(ctx, ownerID, trajectoryID, slot, runID, agentID, requesterRunID)
+	}
+	return s.claimEngineeringSlotTable(ctx, ownerID, trajectoryID, slot, runID, agentID, requesterRunID)
+}
+
+// claimEngineeringSlotTable is the legacy home, used while
+// engineering.slots_graph is off. A slot the graph holds for a live run is
+// still held (a rollback must not hand out a held slot twice).
+func (s *Store) claimEngineeringSlotTable(ctx context.Context, ownerID, trajectoryID, slot, runID, agentID, requesterRunID string) (types.RunRecord, bool, error) {
 	ownerID = strings.TrimSpace(ownerID)
 	trajectoryID = strings.TrimSpace(trajectoryID)
 	slot = strings.TrimSpace(slot)
 	runID = strings.TrimSpace(runID)
 	if ownerID == "" || trajectoryID == "" || slot == "" || runID == "" {
 		return types.RunRecord{}, false, fmt.Errorf("claim co-super slot: owner_id, trajectory_id, slot, and run_id are required")
+	}
+	if held, ok, err := s.engineeringSlotGraphHolder(ctx, ownerID, trajectoryID, slot); err != nil {
+		return types.RunRecord{}, false, err
+	} else if ok {
+		return held, false, nil
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	res, err := s.db.ExecContext(ctx,
@@ -2033,7 +2051,7 @@ func (s *Store) ClaimEngineeringSlot(ctx context.Context, ownerID, trajectoryID,
 		return types.RunRecord{}, true, nil
 	}
 
-	existingRunID, err := s.engineeringSlotRunID(ctx, ownerID, trajectoryID, slot)
+	existingRunID, err := s.engineeringSlotRunIDTable(ctx, ownerID, trajectoryID, slot)
 	if err != nil {
 		return types.RunRecord{}, false, err
 	}
@@ -2064,7 +2082,7 @@ func (s *Store) ClaimEngineeringSlot(ctx context.Context, ownerID, trajectoryID,
 	if rows, err := res.RowsAffected(); err != nil {
 		return types.RunRecord{}, false, fmt.Errorf("check co-super slot claim rows: %w", err)
 	} else if rows == 0 {
-		existingRunID, err = s.engineeringSlotRunID(ctx, ownerID, trajectoryID, slot)
+		existingRunID, err = s.engineeringSlotRunIDTable(ctx, ownerID, trajectoryID, slot)
 		if err != nil {
 			return types.RunRecord{}, false, err
 		}
@@ -2084,6 +2102,9 @@ func (s *Store) ReleaseEngineeringSlotClaim(ctx context.Context, ownerID, trajec
 	runID = strings.TrimSpace(runID)
 	if ownerID == "" || trajectoryID == "" || slot == "" || runID == "" {
 		return fmt.Errorf("release co-super slot: owner_id, trajectory_id, slot, and run_id are required")
+	}
+	if err := s.releaseEngineeringSlotGraph(ctx, ownerID, trajectoryID, slot, runID); err != nil {
+		return err
 	}
 	if _, err := s.db.ExecContext(ctx,
 		`DELETE FROM co_super_slots
@@ -2105,17 +2126,17 @@ func (s *Store) ReleaseEngineeringSlotClaim(ctx context.Context, ownerID, trajec
 // Engineering activation. RequestedByRunID is retained as requester provenance,
 // not as the authority relation.
 type EngineeringSlotRecord struct {
-	OwnerID          string
-	TrajectoryID     string
-	Slot             string
-	RunID            string
-	AgentID          string
-	RequestedByRunID string
-	ClaimedAt        time.Time
-	UpdatedAt        time.Time
+	OwnerID          string    `json:"owner_id"`
+	TrajectoryID     string    `json:"trajectory_id"`
+	Slot             string    `json:"slot"`
+	RunID            string    `json:"run_id"`
+	AgentID          string    `json:"agent_id"`
+	RequestedByRunID string    `json:"requested_by_run_id"`
+	ClaimedAt        time.Time `json:"claimed_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
-func (s *Store) engineeringSlotRunID(ctx context.Context, ownerID, trajectoryID, slot string) (string, error) {
+func (s *Store) engineeringSlotRunIDTable(ctx context.Context, ownerID, trajectoryID, slot string) (string, error) {
 	var runID string
 	err := s.db.QueryRowContext(ctx,
 		`SELECT run_id
@@ -2138,7 +2159,7 @@ func (s *Store) engineeringSlotRunID(ctx context.Context, ownerID, trajectoryID,
 
 // EngineeringSlotByAgent returns the most recent trajectory slot record for a
 // Engineering agent. Authority callers use this instead of active-run parentage.
-func (s *Store) EngineeringSlotByAgent(ctx context.Context, ownerID, agentID string) (EngineeringSlotRecord, bool, error) {
+func (s *Store) engineeringSlotByAgentTable(ctx context.Context, ownerID, agentID string) (EngineeringSlotRecord, bool, error) {
 	ownerID = strings.TrimSpace(ownerID)
 	agentID = strings.TrimSpace(agentID)
 	if ownerID == "" || agentID == "" {
@@ -2175,7 +2196,7 @@ func (s *Store) EngineeringSlotByAgent(ctx context.Context, ownerID, agentID str
 
 // EngineeringSlotByAgentAndTrajectory returns the trajectory slot record for a
 // Engineering agent on a specific trajectory.
-func (s *Store) EngineeringSlotByAgentAndTrajectory(ctx context.Context, ownerID, trajectoryID, agentID string) (EngineeringSlotRecord, bool, error) {
+func (s *Store) engineeringSlotByAgentAndTrajectoryTable(ctx context.Context, ownerID, trajectoryID, agentID string) (EngineeringSlotRecord, bool, error) {
 	ownerID = strings.TrimSpace(ownerID)
 	trajectoryID = strings.TrimSpace(trajectoryID)
 	agentID = strings.TrimSpace(agentID)
@@ -2257,23 +2278,15 @@ func (s *Store) CountActiveEngineeringSlots(ctx context.Context, ownerID, trajec
 	if ownerID == "" || trajectoryID == "" {
 		return 0, nil
 	}
-	// Fetch slot run IDs from SQL (co_super_slots table not yet in OG)
-	// and check run state via OG.
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT run_id FROM co_super_slots WHERE owner_id = ? AND trajectory_id = ?`,
-		ownerID, trajectoryID,
-	)
+	// The slots of the trajectory from both homes (the table and the graph,
+	// the newer record per slot), then each run's state from the graph.
+	slots, err := s.engineeringSlotsOfTrajectory(ctx, ownerID, trajectoryID)
 	if err != nil {
 		return 0, fmt.Errorf("count active co-super slots: %w", err)
 	}
-	defer rows.Close()
 	count := 0
-	for rows.Next() {
-		var runID string
-		if err := rows.Scan(&runID); err != nil {
-			return 0, fmt.Errorf("count active co-super slots: scan: %w", err)
-		}
-		rec, err := s.GetRunOG(ctx, runID)
+	for _, slotRec := range slots {
+		rec, err := s.GetRunOG(ctx, slotRec.RunID)
 		if err != nil {
 			if errors.Is(err, ErrNotFound) {
 				continue
@@ -2284,7 +2297,7 @@ func (s *Store) CountActiveEngineeringSlots(ctx context.Context, ownerID, trajec
 			count++
 		}
 	}
-	return count, rows.Err()
+	return count, nil
 }
 
 // GetLatestActiveRunByAgent returns the most recent non-terminal run for an agent.

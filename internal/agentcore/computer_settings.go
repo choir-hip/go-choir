@@ -119,7 +119,11 @@ func (h *APIHandler) HandleComputerSettings(w http.ResponseWriter, r *http.Reque
 			case store.SettingRunMemoryElision, store.SettingSearchCaps:
 				rt.applyResearchSwitchSetting(key, value)
 			}
-			writeAPIJSON(w, http.StatusOK, map[string]any{"setting": current})
+			resp := map[string]any{"setting": current}
+			if value {
+				rt.importGraphHome(r.Context(), key, resp)
+			}
+			writeAPIJSON(w, http.StatusOK, resp)
 			return
 		}
 		setting := store.ComputerSetting{OwnerID: ownerID, ComputerID: computerID, Key: key, Value: value, UpdatedAt: time.Now().UTC()}
@@ -140,8 +144,45 @@ func (h *APIHandler) HandleComputerSettings(w http.ResponseWriter, r *http.Reque
 			rt.applySourceProjectionSetting(value)
 		}
 		rt.applyResearchSwitchSetting(key, value)
-		writeAPIJSON(w, http.StatusOK, map[string]any{"setting": setting})
+		resp := map[string]any{"setting": setting}
+		if value {
+			rt.importGraphHome(r.Context(), key, resp)
+		}
+		writeAPIJSON(w, http.StatusOK, resp)
 	default:
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 	}
+}
+
+const graphHomeImportTimeout = 25 * time.Second
+
+// importGraphHome runs the one-time import behind evidence.graph and
+// engineering.slots_graph when one is turned on (a same-value POST is the
+// retry): it moves the old table's rows into the graph so the computer is
+// replay-eligible without waiting for the next write. A failure leaves the
+// setting stored and the unmoved rows readable, and is reported in the
+// response under "import" (docs/problems/data-has-more-than-one-home-2026-10-24.md).
+func (rt *Runtime) importGraphHome(ctx context.Context, key string, resp map[string]any) {
+	// Bounded: an import cut short by the deadline keeps what it moved, and
+	// the next write or a repeat of the POST continues it.
+	ctx, cancel := context.WithTimeout(ctx, graphHomeImportTimeout)
+	defer cancel()
+	var (
+		moved int
+		err   error
+	)
+	switch key {
+	case store.SettingEvidenceGraph:
+		moved, err = rt.store.ImportEvidenceToGraph(ctx)
+	case store.SettingEngineeringSlotsGraph:
+		moved, err = rt.store.ImportEngineeringSlotsToGraph(ctx)
+	default:
+		return
+	}
+	report := map[string]any{"moved": moved}
+	if err != nil {
+		log.Printf("computer settings: import for %s moved %d then failed: %v", key, moved, err)
+		report["error"] = err.Error()
+	}
+	resp["import"] = report
 }
