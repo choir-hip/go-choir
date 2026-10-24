@@ -22,10 +22,10 @@ definition_version: 4
 readiness: executable
 
 review:
-  reviewer: pending (one Devin seat on this file's first commit)
-  frozen_ref: none
-  verdict: none
-  evidence_ref: none
+  reviewer: Devin, one seat (bunch 200)
+  frozen_ref: the first commit of this file, ca26f13d0
+  verdict: accept  # after repair: bunch 200 sent back on three findings (worktree recovery handles, SR6's carried list, the switch-authority invariant), each fixed with the reviewer's text; doc-only, so tier 0 after
+  evidence_ref: /Users/wiz/Dev/lanes/_runs/bunch200/devin.out
 
 metamission:
   stations:
@@ -125,7 +125,12 @@ metamission:
         02:30 backup and the compaction; the legacy tape delete (46 GB, its
         own window, preconditions first); the idle sweep after an apply
         restart; the status page and the overnight report brought up to
-        D44.
+        D44; the computer-event table rollout (its next step names one
+        test computer in CHOIR_EVENT_TABLE_COMPUTERS); SEC-10 step 2's fleet
+        close (UDP 53 still open off the test class); the held jobpark wired
+        test (lane/fp0-jobpark-wired 9d9fdc884); the telemetry.batch lead on
+        the paper (unverified); the roadmap recut (lane/fp0-roadmap-recut),
+        to close or land.
     - id: T1
       path: none yet (intent)
       readiness: intent
@@ -167,12 +172,21 @@ start:
       owner: unknown (M go.sum, ?? scratchpad/)
       touch: forbidden
       recovery: leave in place; never stage go.sum
-    - path: /Users/wiz/Dev/lanes/fp0-u1, fp0-u1b, fp0-pkg-p1, fp0-pkg-p2, fp0-loop-gaps, fp0-reports-texture, fp0-file-object, fp0-evidence-slots, fp0-r7-s2
-      status: dirty
+    - path: /Users/wiz/Dev/lanes/fp0-u1, fp0-r7-s2
+      status: clean
       class: goal_candidate
       owner: FP0's lane workers
       touch: goal_owned
-      recovery: each lane's pushed branch
+      recovery: pushed branches origin/lane/fp0-u1-source-projection (61d0f2863) and origin/lane/fp0-r7-s2 (f4bc762c6)
+    - path: /Users/wiz/Dev/lanes/fp0-u1b, fp0-pkg-p1, fp0-pkg-p2, fp0-loop-gaps, fp0-reports-texture, fp0-file-object, fp0-evidence-slots
+      status: dirty
+      class: goal_candidate
+      owner: FP0's lane workers (in progress at capture)
+      touch: goal_owned
+      recovery: >-
+        unpushed at capture (local commits and dirty files only); each
+        worker pushes its lane branch when it reports, and nothing is
+        relied on before it is pushed
     - path: /Users/wiz/Dev/lanes/fp0-* (the other first-pass lanes)
       status: unknown
       class: goal_candidate
@@ -276,6 +290,7 @@ boundaries:
     - one home and one registered writer per kind of data (I27)
     - the paper and the owner's computers are never used for adversarial or proof steps
     - security first, availability second, customizations third
+    - each wave slice's switch is off until enabled by an owner act or a host selector, never from a guest
   excluded:
     - the ICRL build and Autopaper forecasting (designed; built after SR5)
     - owner-act enforcement (deprioritized by the owner)
@@ -344,7 +359,7 @@ now:
       Whether U1b can deliver the base's git history through an existing
       channel without a new host service.
     next_observation: U1b's investigation report.
-  blocker_or_risk: none
+  blocker_or_risk: wave-1 lanes are unpushed until their workers report; nothing is relied on before it is pushed
   next_action: >-
     Land U1's fixes after a one-seat re-review; collect U1b, P1, P2 and the
     gap lanes as they finish; mirror and review each by tier; freeze wave 1.

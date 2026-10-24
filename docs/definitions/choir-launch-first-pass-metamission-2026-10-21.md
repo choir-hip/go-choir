@@ -389,7 +389,9 @@ receipts:
       security and boot-stall deploys before them. Carried to the
       successor's station SR6 by name: R7 S2 to S6, D37's decisive proof,
       jailer wave 2b, D43 readings, the legacy tape delete, the idle sweep
-      after an apply restart, the status page and report. Today's design
+      after an apply restart, the status page and report, the
+      computer-event table rollout, SEC-10 step 2's fleet close, the held
+      jobpark wired test, the telemetry.batch lead, the roadmap recut. Today's design
       landings (I27 and H038, the ICRL design, the update design, the app
       packages replan, the data-homes inventory) feed the successor.
     landing:
