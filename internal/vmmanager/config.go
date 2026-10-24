@@ -208,7 +208,7 @@ func LoadConfigFromEnv() ManagerConfig {
 //	                                VM_FIRECRACKER_BIN; Start refuses a dynamic one)
 //	VMCTL_JAILER_CHROOT_BASE        default <VM_STATE_DIR>/.jail
 //	VMCTL_JAILER_UID_BASE/_COUNT    per-VM uid range (900000 + 4096)
-//	VMCTL_JAILER_CGROUP_PARENT      VMs' parent cgroup (default: derived)
+//	VMCTL_JAILER_CGROUP_PARENT      VMs' parent cgroup, outside vmctl's unit (required)
 //	VMCTL_JAILER_PIDS_MAX           pids.max per VM (default 128; 0 omits)
 //	VMCTL_JAILER_CPU_WEIGHT         cpu.weight per VM (default 100; 0 omits)
 //	VMCTL_VMM_SPECULATION_BARRIERS  also force barriers on direct launches
