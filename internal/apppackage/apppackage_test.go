@@ -3,6 +3,7 @@ package apppackage
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -118,19 +119,25 @@ func TestParseManifestRefusesWhatP1AndTheSlicesDoNotAdmit(t *testing.T) {
 func TestParseManifestRefusesANameThatIsADeskOrTheShell(t *testing.T) {
 	for _, name := range []string{
 		"texture", "management", "engineering", "research", "autoradio", // built-in desk writers
-		"conductor", "super", // desks of the manifest table
+		"conductor", "email", "super", "researcher", "co-super", // desks of the manifest table and frozen V1 spellings
 		"shell", "owner", "choir", "system", // shell names
 		"A", "a", "has_underscore", "x.y", strings.Repeat("a", 33),
 	} {
 		t.Run(name, func(t *testing.T) {
 			raw := fixtureJSON(t, func(v map[string]any) {
 				v["name"] = name
-				for _, k := range v["kinds"].([]any) {
-					k.(map[string]any)["kind"] = "choir.app." + name + ".note"
+				// Distinct kinds, so no case can fail on "declared twice": the
+				// name rule is the only thing left to refuse it.
+				for i, k := range v["kinds"].([]any) {
+					k.(map[string]any)["kind"] = fmt.Sprintf("choir.app.%s.note%d", name, i)
 				}
 			})
-			if _, err := ParseManifest(raw); !errors.Is(err, ErrInvalidManifest) {
+			_, err := ParseManifest(raw)
+			if !errors.Is(err, ErrInvalidManifest) {
 				t.Fatalf("name %q: err = %v, want ErrInvalidManifest", name, err)
+			}
+			if strings.Contains(err.Error(), "declared twice") {
+				t.Fatalf("name %q was refused for the wrong reason: %v", name, err)
 			}
 		})
 	}
@@ -145,6 +152,7 @@ func TestParseManifestRefusesBadKinds(t *testing.T) {
 		"a prefix-lookalike package": func(v map[string]any) { kind(v, 0)["kind"] = "choir.app.p2btest-x.note" },
 		"a nested kind name":         func(v map[string]any) { kind(v, 0)["kind"] = "choir.app.p2btest.a.b" },
 		"a kind declared twice":      func(v map[string]any) { kind(v, 1)["kind"] = kind(v, 0)["kind"] },
+		"owner edits by content":     func(v map[string]any) { kind(v, 0)["identity"] = "content_hash"; kind(v, 0)["owner_edits"] = true },
 		"an unknown identity":        func(v map[string]any) { kind(v, 0)["identity"] = "random" },
 		"schema version zero":        func(v map[string]any) { kind(v, 0)["schema_version"] = 0 },
 		"reads without the version":  func(v map[string]any) { kind(v, 0)["reads_schema_versions"] = []any{2} },
@@ -213,6 +221,25 @@ func TestCompileSchemaRefusesWhatItCannotEnforce(t *testing.T) {
 }
 
 // S1
+// S1: an enum of numbers compares values, not spellings. 2.0, 2e0 and 20e-1 are
+// the integer 2 and match enum [2], as typeMatches already admits them.
+func TestSchemaEnumComparesNumbersAsNumbers(t *testing.T) {
+	schema, err := CompileSchema([]byte(`{"type":"object","properties":{"n":{"type":"number","enum":[2,1.5]}}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, body := range []string{`{"n":2}`, `{"n":2.0}`, `{"n":2e0}`, `{"n":20e-1}`, `{"n":1.5}`, `{"n":1.50}`, `{"n":15e-1}`} {
+		if err := schema.Validate([]byte(body)); err != nil {
+			t.Errorf("%s: %v, want it in the enum", body, err)
+		}
+	}
+	for _, body := range []string{`{"n":3}`, `{"n":2.5}`, `{"n":"2"}`} {
+		if err := schema.Validate([]byte(body)); !errors.Is(err, ErrBody) {
+			t.Errorf("%s: err = %v, want ErrBody", body, err)
+		}
+	}
+}
+
 func TestSchemaValidateChecksTheBody(t *testing.T) {
 	note := fixture(t).Kinds[0]
 	schema, err := CompileSchema(note.Schema)
@@ -431,4 +458,21 @@ func canonicalSchema(t *testing.T, raw json.RawMessage) string {
 		t.Fatal(err)
 	}
 	return strings.TrimSuffix(buf.String(), "\n")
+}
+
+// M2, the generated path: RegisterFirstParty reaches the seam without the
+// manifest's name check, so the seam alone must refuse a reserved name.
+func TestRegisterFirstPartyRefusesAReservedDeskName(t *testing.T) {
+	saved := firstPartyPackages
+	defer func() { firstPartyPackages = saved }()
+	firstPartyPackages = []firstPartyPackage{{Name: "super", Kinds: []firstPartyKind{{
+		Kind: "choir.app.super.note", Identity: "external_key", Versioned: true, OwnerEdits: true,
+		SchemaVersion: 1, Schema: `{"type":"object"}`,
+	}}}}
+	if err := RegisterFirstParty(); err == nil || !strings.Contains(err.Error(), "reserved") {
+		t.Fatalf("RegisterFirstParty = %v, want a refusal naming the reserved name", err)
+	}
+	if _, ok := objectgraph.LookupPackageKind("choir.app.super.note"); ok {
+		t.Fatal("a reserved-name kind is registered")
+	}
 }
