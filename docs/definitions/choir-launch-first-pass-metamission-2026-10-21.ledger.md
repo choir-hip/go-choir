@@ -1443,3 +1443,7 @@ Append-only. One terse entry per orchestrator pass.
   - Preflight by hand at 01:0x: no vms/ cgroup under go-choir-vmctl.service, the unit root's subtree_control is empty, the jailer is off.
   - Proof: vmctl restarts cleanly (NRestarts 0) and reattaches the paper; system-choirvms.slice is active and empty; the paper is unchanged.
   - Rollback: a revert, safe while the slice holds no process.
+- 01:2x. D29's CI failed in "Detect Staging Deploy Impact", so the deploy never ran: staging still serves D28, and vmctl has not restarted since 00:25:37.
+  - Cause: .github/scripts/node-b-sync-service-pointers-test pins vmctl's exact after/wants text, and D29 added system-choirvms.slice.
+  - Why the lane's checks missed it: that job runs only on main pushes. PR CI and the mirror don't run it, so a nix unit edit needs the .github/scripts tests run by hand.
+  - Fix (tier 0, test only): the pins name the slice. All .github/scripts tests pass locally; node-b-ci-gate-test fails on macOS (no flock) on main as well.
