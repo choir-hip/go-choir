@@ -1464,3 +1464,9 @@ Append-only. One terse entry per orchestrator pass.
   - Script step 6 (vmm_confinement_verify --expect jailer) PASS on both.
 - 01:46. The wedge check, the one D27 failed: systemctl restart go-choir-vmctl with both jailed VMs alive. rc 0, active at 01:46:05, NRestarts 0, Result success. vmctl reattached all four VMs: the paper, both jailed test computers (their pids unchanged) and candidate-fleet-e15cb89f. The VM slice fix is proved on staging.
   - Remaining for SEC-04: class:test widening, then every computer (step 5, the owner's deploy-shape choice). The round-2 lows on the slice (fail closed on an unreadable own cgroup, a populated-leaf test, a per-launch slice stat, a deploy preflight) are owed before widening.
+- 02:2x. D31 lands, alone: the VM slice round 2 (lane/fp0-vm-slice-r2, PR #96).
+  - vmctl: prepareJailerCgroups refuses an unknown own cgroup (launches go direct); cleanCgroupParent guards the leaf path; decideConfinement falls back to direct with vm_slice_missing when the slice is gone; a test that a populated leaf is admitted.
+  - Deploy: .github/scripts/node-b-vm-slice-preflight runs in node-b-ci-deploy before the build, the switch and every vmctl restart. It refuses while a process lives under go-choir-vmctl.service/vms.
+  - Review: bunch 182 Devin (tier 1). Findings 1 and 2 are fixed by FP0 in 42f4482e1: a cgroup removed after find is skipped, and the contract test orders the preflight before the host-service restarts. The rest are nits.
+  - Checks: the vmslice-r2 mirror PASS and PR CI 25 pass, 8 skipped (on 7a932d4c4); every .github/scripts test passes locally except node-b-ci-gate-test (no flock on macOS).
+  - Proof: the deploy's own preflight passes (the old vms/ is absent). vmctl restarts with the two jailed test computers alive and reattaches them. The paper is unchanged.
