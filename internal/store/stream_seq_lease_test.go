@@ -285,6 +285,8 @@ func TestLeaseObservabilityBlockShape(t *testing.T) {
 	}
 	want := []string{"state", "reserved_through", "allocated_through", "trusted", "untrust_reason", "seeded_from",
 		"seed_ms", "cross_check_max", "refill_failed", "last_lease_error", "marker_present", "seed_failed", "lease_tombstoned", "seed_undecodable_rows", "on_tape"}
+	// The seed's per-phase timings are additive (zero before the first seed).
+	want = append(want, "heads_ms", "read_ms", "cross_check_ms", "cross_check_table_ms", "cross_check_window", "cross_check_rows", "exact_ms", "append_ms", "total_ms")
 	for _, key := range want {
 		if _, ok := fields[key]; !ok {
 			t.Errorf("observability block lacks %q: %s", key, raw)
@@ -1697,4 +1699,79 @@ func TestMarkerPresentIsPublishedWithTheSnapshot(t *testing.T) {
 	if st := leaseStats(s); st.MarkerPresent || st.State != "ready" {
 		t.Fatalf("after the exact seed: %+v, want no marker and ready", st)
 	}
+}
+
+// The seed's phase timings (FP0 observation, no behavior change): the stats
+// and the seed log line say where the seed's milliseconds went. Ways it can
+// fail: a phase is missing or negative; the phases sum above the total (a
+// phase timed twice or over a region the total does not cover); the log line
+// drops the existing "seeded from" prefix that probes grep.
+func TestSeedReportsItsPhaseTimings(t *testing.T) {
+	shrinkSeedWindows(t, 20, 200)
+	check := func(t *testing.T, st StreamSeqLeaseStats) {
+		t.Helper()
+		phases := map[string]float64{"heads_ms": st.HeadsMS, "read_ms": st.ReadMS, "cross_check_ms": st.CrossCheckMS,
+			"cross_check_table_ms": st.CrossCheckTableMS, "exact_ms": st.ExactMS, "append_ms": st.AppendMS}
+		sum := 0.0
+		for name, v := range phases {
+			if v < 0 {
+				t.Errorf("%s = %v, want non-negative", name, v)
+			}
+			if name != "cross_check_table_ms" { // a part of cross_check_ms
+				sum += v
+			}
+		}
+		if st.CrossCheckTableMS > st.CrossCheckMS {
+			t.Errorf("cross_check_table_ms %v above cross_check_ms %v", st.CrossCheckTableMS, st.CrossCheckMS)
+		}
+		if st.TotalMS <= 0 || sum > st.TotalMS {
+			t.Errorf("phases sum %v, total_ms %v: want 0 < sum <= total (%+v)", sum, st.TotalMS, st)
+		}
+		if st.AppendMS <= 0 {
+			t.Errorf("append_ms = %v, the seed always appends its lease row", st.AppendMS)
+		}
+		if int64(st.TotalMS) > st.SeedMS {
+			t.Errorf("total_ms %v above seed_ms %d", st.TotalMS, st.SeedMS)
+		}
+	}
+	s, path := openSeedStore(t)
+	appendOld(t, s, "a", 5)
+	seedWakeOutbox(t, s, 60, 0) // the first window (20) holds no event: the cross-check widens
+	t.Run("exact first boot", func(t *testing.T) {
+		st := leaseStats(s)
+		if st.SeededFrom != "exact" {
+			t.Fatalf("stats = %+v", st)
+		}
+		check(t, st)
+		if st.ExactMS <= 0 || st.CrossCheckMS != 0 {
+			t.Errorf("exact boot: exact_ms %v cross_check_ms %v", st.ExactMS, st.CrossCheckMS)
+		}
+	})
+	buf := captureLog(t)
+	s = reopenAt(t, s, path)
+	appendNext(t, s, "after")
+	t.Run("trusted reopen", func(t *testing.T) {
+		st := leaseStats(s)
+		if st.SeededFrom != "lease" {
+			t.Fatalf("stats = %+v", st)
+		}
+		check(t, st)
+		if st.CrossCheckMS <= 0 || st.CrossCheckWindow != 200 || st.CrossCheckRows < 20 || st.ExactMS != 0 {
+			t.Errorf("trusted boot: cross_check_ms %v window %d rows %d exact_ms %v", st.CrossCheckMS, st.CrossCheckWindow, st.CrossCheckRows, st.ExactMS)
+		}
+		line := ""
+		for _, l := range strings.Split(buf.String(), "\n") {
+			if strings.Contains(l, "stream_seq lease: seeded from lease") {
+				line = l
+			}
+		}
+		for _, want := range []string{"seeded from lease (trusted=true", " in ", "heads=", "read=", "cross_check=", "window=200", "append=", "total="} {
+			if !strings.Contains(line, want) {
+				t.Errorf("seed log line lacks %q: %q", want, line)
+			}
+		}
+		t.Logf("seed log line: %s", line)
+	})
+	raw, _ := json.Marshal(leaseStats(s))
+	t.Logf("stats json: %s", raw)
 }

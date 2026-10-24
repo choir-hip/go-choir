@@ -183,6 +183,8 @@ type leaseAllocator struct {
 	untrustReason string
 	trusted       bool
 	seedMS        int64
+	// seedPhases is where the last seed's time went (observation only).
+	seedPhases    leaseSeedPhases
 	crossCheckMax int64
 	// allocatedThrough is the A of the row this process last wrote.
 	allocatedThrough int64
@@ -219,12 +221,28 @@ type StreamSeqLeaseStats struct {
 	// violated; empty when the lease was trusted.
 	UntrustReason string `json:"untrust_reason"`
 	// SeededFrom is exact or lease; empty before the first seed.
-	SeededFrom     string `json:"seeded_from"`
-	SeedMS         int64  `json:"seed_ms"`
-	CrossCheckMax  int64  `json:"cross_check_max"`
-	RefillFailed   int64  `json:"refill_failed"`
-	LastLeaseError string `json:"last_lease_error"`
-	MarkerPresent  bool   `json:"marker_present"`
+	SeededFrom string `json:"seeded_from"`
+	SeedMS     int64  `json:"seed_ms"`
+	// The last seed's time by phase, in milliseconds to the microsecond
+	// (observation only; zero before the first seed). HeadsMS is the heads
+	// alignment check, ReadMS the lease row read, CrossCheckMS the cross-check
+	// (CrossCheckTableMS of it is the choir_events half; CrossCheckWindow is
+	// the widest og window read and CrossCheckRows the og headers scanned),
+	// ExactMS the exact scan (only when the lease was untrusted), AppendMS the
+	// lease row's append, TotalMS the whole seed (SeedMS before truncation).
+	HeadsMS           float64 `json:"heads_ms"`
+	ReadMS            float64 `json:"read_ms"`
+	CrossCheckMS      float64 `json:"cross_check_ms"`
+	CrossCheckTableMS float64 `json:"cross_check_table_ms"`
+	CrossCheckWindow  int     `json:"cross_check_window"`
+	CrossCheckRows    int     `json:"cross_check_rows"`
+	ExactMS           float64 `json:"exact_ms"`
+	AppendMS          float64 `json:"append_ms"`
+	TotalMS           float64 `json:"total_ms"`
+	CrossCheckMax     int64   `json:"cross_check_max"`
+	RefillFailed      int64   `json:"refill_failed"`
+	LastLeaseError    string  `json:"last_lease_error"`
+	MarkerPresent     bool    `json:"marker_present"`
 	// SeedFailed counts failed seed attempts (each is a rescan of the event
 	// history when the seed is exact); LeaseTombstoned counts tombstoned
 	// lease rows the seeder met (a tombstone untrusts the lease).
@@ -261,18 +279,27 @@ func (s *Store) publishLeaseObsLocked() {
 		markerPresent, _ = storeschema.LeaseUntrusted(s.lease.workspace)
 	}
 	s.lease.obs.Store(&StreamSeqLeaseStats{
-		State:            s.lease.state.String(),
-		ReservedThrough:  s.lease.reserved,
-		AllocatedThrough: s.lease.allocatedThrough,
-		Trusted:          s.lease.trusted,
-		UntrustReason:    s.lease.untrustReason,
-		SeededFrom:       s.lease.seedBasis,
-		SeedMS:           s.lease.seedMS,
-		CrossCheckMax:    s.lease.crossCheckMax,
-		RefillFailed:     s.lease.refillFailed,
-		LastLeaseError:   s.lease.lastErr,
-		SeedFailed:       s.lease.seedFailed,
-		LeaseTombstoned:  s.lease.tombstoned,
+		State:             s.lease.state.String(),
+		ReservedThrough:   s.lease.reserved,
+		AllocatedThrough:  s.lease.allocatedThrough,
+		Trusted:           s.lease.trusted,
+		UntrustReason:     s.lease.untrustReason,
+		SeededFrom:        s.lease.seedBasis,
+		SeedMS:            s.lease.seedMS,
+		HeadsMS:           phaseMS(s.lease.seedPhases.heads),
+		ReadMS:            phaseMS(s.lease.seedPhases.read),
+		CrossCheckMS:      phaseMS(s.lease.seedPhases.crossCheck),
+		CrossCheckTableMS: phaseMS(s.lease.seedPhases.crossCheckTable),
+		CrossCheckWindow:  s.lease.seedPhases.crossWindow,
+		CrossCheckRows:    s.lease.seedPhases.crossRows,
+		ExactMS:           phaseMS(s.lease.seedPhases.exact),
+		AppendMS:          phaseMS(s.lease.seedPhases.appendLease),
+		TotalMS:           phaseMS(s.lease.seedPhases.total),
+		CrossCheckMax:     s.lease.crossCheckMax,
+		RefillFailed:      s.lease.refillFailed,
+		LastLeaseError:    s.lease.lastErr,
+		SeedFailed:        s.lease.seedFailed,
+		LeaseTombstoned:   s.lease.tombstoned,
 
 		SeedUndecodableRows: s.lease.undecodable,
 		MarkerPresent:       markerPresent,
@@ -444,6 +471,29 @@ type leaseSeedResult struct {
 	undecodable   int64
 	// onTape: the seed's lease row was written with the projection tape bound.
 	onTape bool
+	phases leaseSeedPhases
+}
+
+// leaseSeedPhases is the seed's time by phase. Pure observation: nothing
+// reads it but the stats and the seed log line.
+type leaseSeedPhases struct {
+	heads, read, crossCheck, crossCheckTable, exact, appendLease, total time.Duration
+	crossWindow, crossRows                                              int
+}
+
+// phaseMS is a duration in milliseconds, truncated to the microsecond, so the
+// phases of one seed never sum above its total.
+func phaseMS(d time.Duration) float64 { return float64(d.Microseconds()) / 1000 }
+
+// String is the phases' tail of the seed log line.
+func (p leaseSeedPhases) String() string {
+	r := func(d time.Duration) time.Duration { return d.Round(10 * time.Microsecond) }
+	out := fmt.Sprintf("heads=%s read=%s cross_check=%s (table=%s window=%d rows=%d)",
+		r(p.heads), r(p.read), r(p.crossCheck), r(p.crossCheckTable), p.crossWindow, p.crossRows)
+	if p.exact > 0 {
+		out += fmt.Sprintf(" exact=%s", r(p.exact))
+	}
+	return out + fmt.Sprintf(" append=%s total=%s", r(p.appendLease), r(p.total))
 }
 
 // runSeeder computes the seed with eventMu released, lands a fresh lease block
@@ -457,7 +507,9 @@ func (s *Store) runSeeder(ctx context.Context, workspace string) {
 		row = leaseRow{Reserved: res.seed + streamSeqLeaseBlock, Allocated: res.seed, Block: streamSeqLeaseBlock,
 			WriterEpoch: leaseWriterEpoch, Basis: res.basis}
 		res.onTape = s.projectionTape != nil
+		appendStarted := time.Now()
 		err = s.appendLease(ctx, "seed", &row)
+		res.phases.appendLease = time.Since(appendStarted)
 	}
 	if err == nil && res.basis == leaseBasisExact {
 		// The exact seed's lease has passed the head CAS: the marker's work is
@@ -468,6 +520,7 @@ func (s *Store) runSeeder(ctx context.Context, workspace string) {
 		}
 	}
 	took := time.Since(started)
+	res.phases.total = took
 
 	s.eventMu.Lock()
 	defer s.eventMu.Unlock()
@@ -509,10 +562,11 @@ func (s *Store) completeSeedLocked(res leaseSeedResult, row leaseRow, took time.
 	s.lease.undecodable = res.undecodable
 	s.lease.onTape.Store(res.onTape)
 	s.lease.seedMS = took.Milliseconds()
+	s.lease.seedPhases = res.phases
 	// lastErr is deliberately not cleared: it is the last error, evidence of a
 	// failure that has since healed.
-	log.Printf("store: stream_seq lease: seeded from %s (trusted=%t reason=%q) seed %d reserved through %d in %s",
-		res.basis, res.trusted, res.untrustReason, res.seed, row.Reserved, took.Round(time.Millisecond))
+	log.Printf("store: stream_seq lease: seeded from %s (trusted=%t reason=%q) seed %d reserved through %d in %s [%s]",
+		res.basis, res.trusted, res.untrustReason, res.seed, row.Reserved, took.Round(time.Millisecond), res.phases)
 }
 
 // computeLeaseSeed decides whether the lease is trusted and returns the seed.
@@ -522,12 +576,17 @@ func (s *Store) computeLeaseSeed(ctx context.Context, workspace string) (leaseSe
 	// The seeder's precondition: the local head is the platform head, so
 	// replay cannot add events during the scan and the lease append, which
 	// requires equal heads, lands on the state that was scanned.
+	var phases leaseSeedPhases
+	phaseStarted := time.Now()
 	if tape := s.projectionTape; tape != nil {
 		if err := tape.appender.HeadsAligned(ctx); err != nil {
 			return leaseSeedResult{}, fmt.Errorf("stream_seq seed: %w", err)
 		}
 	}
+	phases.heads = time.Since(phaseStarted)
+	phaseStarted = time.Now()
 	row, found, err := s.readLease(ctx)
+	phases.read = time.Since(phaseStarted)
 	if errors.Is(err, errLeaseTombstoned) {
 		// A retired lease is not a lease: the zero row fails consistent() and
 		// the exact seed runs. Say so, and count it.
@@ -562,7 +621,9 @@ func (s *Store) computeLeaseSeed(ctx context.Context, workspace string) (leaseSe
 
 	res := leaseSeedResult{}
 	if untrust == "" {
-		cross, err := s.leaseCrossCheck(ctx)
+		phaseStarted = time.Now()
+		cross, err := s.leaseCrossCheckTimed(ctx, &phases)
+		phases.crossCheck = time.Since(phaseStarted)
 		if err != nil {
 			return leaseSeedResult{}, fmt.Errorf("stream_seq seed: cross-check: %w", err)
 		}
@@ -577,14 +638,17 @@ func (s *Store) computeLeaseSeed(ctx context.Context, workspace string) (leaseSe
 	}
 	if untrust == "" {
 		res.seed, res.basis, res.trusted = row.Reserved, leaseBasisLease, true
+		res.phases = phases
 		return res, nil
 	}
 
 	started := time.Now()
 	ogMax, tableMax, err := s.exactStreamSeqMax(ctx)
+	phases.exact = time.Since(started)
 	if err != nil {
 		return leaseSeedResult{}, err
 	}
+	res.phases = phases
 	exact := max(ogMax, tableMax)
 	res.undecodable = s.lease.lastUndecodable.Load()
 	// A legitimate lease covers the numbers its lineage published and never
@@ -614,6 +678,13 @@ func (s *Store) computeLeaseSeed(ctx context.Context, workspace string) (leaseSe
 // result above the lease makes the lease untrusted, and a result below it (a
 // window that holds no event reads 0) says nothing.
 func (s *Store) leaseCrossCheck(ctx context.Context) (int64, error) {
+	return s.leaseCrossCheckTimed(ctx, nil)
+}
+
+// leaseCrossCheckTimed is leaseCrossCheck that also reports, into phases when
+// it is not nil, the widest window read, the og headers scanned and the time
+// of the choir_events half.
+func (s *Store) leaseCrossCheckTimed(ctx context.Context, phases *leaseSeedPhases) (int64, error) {
 	graph := s.ogStore
 	if graph == nil {
 		return 0, fmt.Errorf("object graph not initialized")
@@ -623,6 +694,10 @@ func (s *Store) leaseCrossCheck(ctx context.Context) (int64, error) {
 		headers, err := graph.ListNewestObjectHeaders(ctx, window)
 		if err != nil {
 			return 0, err
+		}
+		if phases != nil {
+			phases.crossWindow = window
+			phases.crossRows += len(headers)
 		}
 		found := false
 		for _, h := range headers {
@@ -642,7 +717,11 @@ func (s *Store) leaseCrossCheck(ctx context.Context) (int64, error) {
 			break
 		}
 	}
+	tableStarted := time.Now()
 	tableStream, err := s.eventTableNewestStreamSeq(ctx)
+	if phases != nil {
+		phases.crossCheckTable = time.Since(tableStarted)
+	}
 	if err != nil {
 		return 0, err
 	}
