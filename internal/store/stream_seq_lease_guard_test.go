@@ -278,6 +278,9 @@ func seamAssignments(file *ast.File, seams map[string]bool) []string {
 				if sel, ok := lhs.(*ast.SelectorExpr); ok && seams[sel.Sel.Name] {
 					found = append(found, sel.Sel.Name)
 				}
+				if id, ok := lhs.(*ast.Ident); ok && seams[id.Name] {
+					found = append(found, id.Name)
+				}
 			}
 		case *ast.KeyValueExpr:
 			if key, ok := node.Key.(*ast.Ident); ok && seams[key.Name] {
