@@ -77,3 +77,77 @@ discovered: the boot credential is minted before offline maintenance, so a
 long hook makes the computer unbootable; an expired envelope loops as
 transient; a failed protected computer waits for a deploy. introduced: none.
 repaired: none.
+
+## Design of the fix (2026-10-24, FP0 lane fp0-envelope-fix)
+
+Class: red (the boot path and the boot credential). No store schema, no
+credential format change, no boot-time resumer.
+
+Two facts from the code refine the record above. The issue handler asks
+corpusd for a 10-minute life (`HandleComputerCredentialIssue`,
+`event_handlers.go`), not 15: 15 is only the cap `VerifyBootstrap` accepts.
+So any hook longer than about 10 minutes fails this way. And a same-key
+request after expiry is not replayed: corpusd re-derives the expiry from the
+recorded issue time and refuses it (`mintComputerCredentialEnvelope`), so
+asking again under `guest-credential:<realization>:<epoch>` cannot heal it.
+
+**Shape.** vmctl still mints the boot envelope where it does today, before
+the kill, under the same key; that keeps "fail before the kill" when corpusd
+is down. When a refresh carries an `OfflineMaintenance` hook, vmctl also
+hands vmmanager a re-mint closure (`PostMaintenanceCredential`, `json:"-"`,
+never stored in an instance config, like the hook). vmmanager calls it after
+the hook returns and before `bootVM` writes the credential disk, and boots
+with what it returns. The closure asks corpusd under
+`guest-credential-maintained:<realization>:<epoch>`, so the lifecycle
+receipt names the re-mint, the stale envelope is not replayed, and a second
+call for the same realization replays the post-hook envelope instead of
+issuing another one. The realization ID and epoch stay the same: the epoch
+was reserved and persisted before the kill (`ReserveBootEpoch`), the guest
+binds the envelope to that realization, and vmctl publishes it after the
+boot; a new epoch inside vmmanager would mean reserving under the per-VM
+lock and gains nothing, since the realization has not booted yet.
+
+**Which outcomes mint.**
+
+- No hook (every plain refresh, boot, recover): the closure is not set and
+  never called. Issuance is exactly as today, one request.
+- Hook returns nil, or an ordinary error (the manager boots the image the
+  hook left): re-mint, then boot. A failed compaction that ran 11 minutes
+  needs a fresh credential as much as a good one.
+- Hook returns `ErrOfflineMaintenanceUnbootable`: no boot, so no re-mint.
+- Re-mint fails (corpusd down after the hook): log it and boot with the
+  pre-hook envelope. That is never worse than today: a short hook still
+  boots, a long one fails as it did.
+
+**Failure modes, each a test written before the fix.**
+
+1. A hook that outlasts the envelope's life boots with an unexpired
+   envelope (vmctl, a fake corpusd on a test clock that the hook advances
+   11.5 minutes, with corpusd's replay and expiry rules).
+2. A refresh without a hook makes one issuance under the boot key and
+   carries no re-mint closure.
+3. Calling the re-mint twice for one realization replays: same key, same
+   envelope, one issuance record.
+4. An unbootable hook does not call the re-mint; an ordinary hook failure
+   does (vmmanager, the maintenance step on its own).
+5. A failed re-mint keeps the pre-hook envelope (vmmanager).
+
+**Item 2, taken: an expired envelope is fatal for that boot.**
+`VerifyBootstrap` returns a sentinel (`ErrCredentialEnvelopeLifetime`, same
+text as today) and the guest's credential step calls `boot.fatalf` for it
+instead of `retryf`. An envelope's lifetime is fixed when it is signed and
+the guest has no clock sync that could move its clock back, so a restart
+cannot fix it; the guest now serves a typed `startup_failed` refusal at
+once and vmctl ends the boot in seconds instead of 30 minutes. vmctl keeps
+`startup_failed` prompt but not durable (`RecordGuestRefusal`), so the next
+start with a fresh envelope is not blocked. Test: the sentinel is what an
+expired envelope returns, and the guest's classifier treats it, and only
+it, as fatal.
+
+**Residuals (not in this lane).** Item 3: a failed critical_protected
+computer waits for a deploy to retry. Item 4: the compaction unit's 10 G
+MemoryMax on a larger store. Corpusd's server-side expiry check at exchange
+("credential envelope: expired", guest clock behind the host's) still reads
+as transient to the guest. The re-mint makes a maintenance refresh issue two
+envelopes for one realization; the first expires unconsumed, and consuming
+the second advances the revocation epoch past it.
