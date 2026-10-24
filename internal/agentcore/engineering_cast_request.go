@@ -71,16 +71,17 @@ func legacyEngineeringRequestDigest(objective, parentID, recordID string) string
 	}, "\x00")))
 }
 
-// truncationMarker says plainly that the rest is not readable from the desk
-// (no verb reads a record by ref) and names the route that works: management
-// holds the Texture Cast in its inbox and can send the omitted part.
-func truncationMarker(total int, kept int, parentRecordID string) string {
-	return fmt.Sprintf("\n[... truncated: showing %d of %d bytes of the Texture request (record %s). The rest is not readable from your desk; do not guess it. Ask for it with choir.Ask(\"management\", \"send bytes %d-%d of the request in %s\") before acting on what is cut]", kept, total, parentRecordID, kept, total, parentRecordID)
+// truncationMarker says plainly that the rest of field is cut and that no
+// desk can read it back: no verb reads a record by ref, and management's
+// run no longer holds the consumed Texture Cast (bunch 190). So it asks for
+// a report, not a guess.
+func truncationMarker(field string, total int, kept int, parentRecordID string) string {
+	return fmt.Sprintf("\n[... truncated: showing %d of %d bytes of the Texture request's %s (record %s). Bytes %d-%d are not readable from any desk; do not guess them. Before acting on what is cut, choir.Report that the request's %s was cut at %d bytes, so the sender can resend it shorter]", kept, total, field, parentRecordID, kept, total, field, kept)
 }
 
 // boundRequestText cuts text to at most max bytes on a rune boundary and
 // appends a visible marker naming the parent record when it cut.
-func boundRequestText(text string, max int, parentRecordID string) (string, bool) {
+func boundRequestText(field, text string, max int, parentRecordID string) (string, bool) {
 	if len(text) <= max {
 		return text, false
 	}
@@ -88,7 +89,7 @@ func boundRequestText(text string, max int, parentRecordID string) (string, bool
 	for cut > 0 && !utf8.RuneStart(text[cut]) {
 		cut--
 	}
-	return text[:cut] + truncationMarker(len(text), cut, parentRecordID), true
+	return text[:cut] + truncationMarker(field, len(text), cut, parentRecordID), true
 }
 
 // engineeringRequestView joins the Texture request into engineering's view of
@@ -132,8 +133,8 @@ func (rt *Runtime) engineeringRequestView(ctx context.Context, ownerID, computer
 	}
 	request := &yaegikernel.InboxRequest{RecordID: parent.RecordID, From: parent.SenderInbox, Digest: digest}
 	var cutObjective, cutBody bool
-	request.Objective, cutObjective = boundRequestText(parent.Directive.Objective, engineeringRequestObjectiveMax, parent.RecordID)
-	request.Body, cutBody = boundRequestText(parent.Directive.Body, engineeringRequestBodyMax, parent.RecordID)
+	request.Objective, cutObjective = boundRequestText("objective", parent.Directive.Objective, engineeringRequestObjectiveMax, parent.RecordID)
+	request.Body, cutBody = boundRequestText("body", parent.Directive.Body, engineeringRequestBodyMax, parent.RecordID)
 	request.Truncated = cutObjective || cutBody
 	view.Request = request
 }

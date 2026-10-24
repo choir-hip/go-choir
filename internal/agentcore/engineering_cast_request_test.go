@@ -121,11 +121,11 @@ func TestEngineeringRequestDigestBindsParentText(t *testing.T) {
 }
 
 func TestBoundRequestTextIsBoundedAndMarked(t *testing.T) {
-	if got, cut := boundRequestText("short", 64, "r1"); got != "short" || cut {
+	if got, cut := boundRequestText("objective", "short", 64, "r1"); got != "short" || cut {
 		t.Fatalf("a small text was changed: %q %v", got, cut)
 	}
 	big := strings.Repeat("é", 100) // 2 bytes per rune, 200 bytes
-	got, cut := boundRequestText(big, 51, "texture-cell:Cast:r1")
+	got, cut := boundRequestText("objective", big, 51, "texture-cell:Cast:r1")
 	if !cut || !utf8.ValidString(got) {
 		t.Fatalf("valid=%v truncated=%v", utf8.ValidString(got), cut)
 	}
@@ -283,7 +283,7 @@ func TestEngineeringRequestOf6338BytesReachesTheViewWhole(t *testing.T) {
 
 // Text past the bound is still cut, and the marker must not promise a read
 // engineering cannot make: no verb reads a record by ref, so it names the
-// route that works (choir.Ask to management, which holds the Cast).
+// field and asks for a report, not a guess (no desk can read the cut bytes).
 func TestEngineeringRequestCutMarkerNamesAWorkingRoute(t *testing.T) {
 	f := newRequestFixture(t)
 	parent := f.textureCast(t, f.seed.TextureInbox, "marker", strings.Repeat("o", 20000), "b")
@@ -296,7 +296,7 @@ func TestEngineeringRequestCutMarkerNamesAWorkingRoute(t *testing.T) {
 	if strings.Contains(o, "the full text is on the tape") {
 		t.Fatalf("the marker still points at a record engineering cannot read: %s", o[len(o)-300:])
 	}
-	if !strings.Contains(o, `choir.Ask("management"`) || !strings.Contains(o, "20000") || !strings.Contains(o, parent.RecordID) {
+	if !strings.Contains(o, "choir.Report") || !strings.Contains(o, "objective") || strings.Contains(o, "choir.Ask") || !strings.Contains(o, "20000") || !strings.Contains(o, parent.RecordID) {
 		t.Fatalf("the marker does not say the rest is unavailable and how to ask for it: %s", o[len(o)-300:])
 	}
 }
