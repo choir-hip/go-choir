@@ -1565,8 +1565,15 @@ in
         # On again (2026-10-24) for the two test computers only, now that
         # jailed VMs live in system-choirvms.slice, outside this unit
         # (docs/problems/vmctl-restart-fails-while-a-jailed-vm-runs-2026-10-24.md).
+        # SEC-04 step 4, wave 1 (owner, 2026-10-24: "yes, I want the jailer on
+        # every real computer"): every primary computer joins class:test. The
+        # owner's computers (premium_always_on) and the paper
+        # (critical_protected) follow in later waves, the paper alone at a
+        # planned restart. Each selected computer cold boots once, at its
+        # next launch; a running VM is not touched. Rollback:
+        # VMCTL_JAILER_ONLY=class:test.
         "VMCTL_JAILER=on"
-        "VMCTL_JAILER_ONLY=class:test"
+        "VMCTL_JAILER_ONLY=class:test,class:primary"
         "VM_JAILER_BIN=${pkgs.firecracker}/bin/jailer"
         # The jailer copies its exec file into the jail, which holds no
         # loader: the glibc build above cannot exec there ("Failed to exec
