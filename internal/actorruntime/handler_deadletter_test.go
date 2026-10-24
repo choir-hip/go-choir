@@ -4,8 +4,28 @@ import (
 	"bytes"
 	"log"
 	"strings"
+	"sync"
 	"testing"
 )
+
+// lockedLog is a log destination the test reads while the runtime's own
+// background goroutines (started by the adapter env) may still be logging.
+type lockedLog struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (l *lockedLog) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.buf.Write(p)
+}
+
+func (l *lockedLog) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.buf.String()
+}
 
 // A poisoned wake lands in the delivery-poison sink as delivery_failed. The
 // sink must dead-letter it once with a log line naming what died, never
@@ -16,7 +36,7 @@ func TestHandlerDeadLettersDeliveryFailedOnceAndNamesTheSourcePoll(t *testing.T)
 	env := newAdapterTestEnv(t)
 	handler := newActorHandler(env.adapter.Runtime, nil)
 
-	var buf bytes.Buffer
+	var buf lockedLog
 	prev := log.Writer()
 	log.SetOutput(&buf)
 	t.Cleanup(func() { log.SetOutput(prev) })
