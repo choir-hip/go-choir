@@ -16,6 +16,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/sourceproj"
+	"github.com/yusefmosiah/go-choir/internal/store"
 )
 
 // U1 (docs/design/computer-update-architecture-rnd-2026-10-24.md, section 4.6
@@ -24,6 +25,30 @@ import (
 // tape and the updater, runs sourceproj, and keeps the facts. Everything is
 // behind sourceproj.Enabled (CHOIR_SOURCE_PROJECTION); with the switch off none
 // of it runs.
+
+// configureSourceProjectionSetting reads the owner's per-computer setting at
+// boot (store.source.projection; anything but a stored true is off). The
+// environment switch needs no setting.
+func (rt *Runtime) configureSourceProjectionSetting(ctx context.Context) {
+	if rt == nil || rt.store == nil {
+		return
+	}
+	ownerID := strings.TrimSpace(os.Getenv("CHOIR_OWNER_ID"))
+	sourceproj.SetSetting(rt.computerSettingOn(ctx, ownerID, rt.cfg.ComputerID, store.SettingSourceProjection))
+}
+
+// applySourceProjectionSetting is the owner's setting change at runtime. On
+// reconciles at once, in the background; off stops every entry point, and
+// leaves the repository where it is (the rollback in the design).
+func (rt *Runtime) applySourceProjectionSetting(value bool) {
+	if rt == nil {
+		return
+	}
+	sourceproj.SetSetting(value)
+	if value {
+		go rt.reconcileSourceProjectionLogged(context.Background(), "setting")
+	}
+}
 
 // sourceProjectionFactsFile is the guest-local log of projection facts. They
 // are observation only: reconcile recomputes from the tape every time.

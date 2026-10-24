@@ -68,6 +68,14 @@ const SettingDebouncedCheckpoint = "store.debounced_checkpoint"
 // (the readers read both tables).
 const SettingEventTable = "store.event_table"
 
+// SettingSourceProjection turns on the guest source projection (U1, and the
+// booted base's objects U1b fetches): the guest source repository follows the
+// effective release and the cast gate checks it
+// (docs/design/computer-update-architecture-rnd-2026-10-24.md, section 4.6).
+// An owner act at runtime, per computer, no deploy. Off by default; off is the
+// rollback. The env switch CHOIR_SOURCE_PROJECTION=1 turns it on regardless.
+const SettingSourceProjection = "source.projection"
+
 // KnownComputerSettings are the settings a computer has, with their
 // defaults. A key outside this list is refused, so a typo never stores a
 // setting nobody reads.
@@ -79,6 +87,7 @@ var KnownComputerSettings = map[string]bool{
 	SettingResearchSystem1:       false,
 	SettingDebouncedCheckpoint:   false,
 	SettingEventTable:            false,
+	SettingSourceProjection:      false,
 }
 
 // ComputerSetting is one switch's value on one computer.

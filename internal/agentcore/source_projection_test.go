@@ -2,6 +2,9 @@ package agentcore
 
 import (
 	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +15,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/release"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/sourceproj"
+	"github.com/yusefmosiah/go-choir/internal/store"
 )
 
 // U1 wiring (docs/design/computer-update-architecture-rnd-2026-10-24.md,
@@ -389,5 +393,72 @@ func TestPendingRefusalNamesTheOperationAndTheOwnerAct(t *testing.T) {
 	err := rt.sourceProjectionCastGate(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "op-held") || !strings.Contains(err.Error(), "materializing") || !strings.Contains(err.Error(), "rollback") {
 		t.Fatalf("F4: %v", err)
+	}
+}
+
+// The per-computer switch (FP0 direction 2026-10-24): the owner's setting
+// source.projection turns U1 on for one computer at runtime, no deploy; it
+// defaults off; the environment switch is independent of it.
+func TestSourceProjectionSettingTurnsItOnPerComputerAtRuntime(t *testing.T) {
+	const computerID = "computer-setting"
+	rt, updaterRoot, repo, base := projectionRuntime(t, computerID)
+	t.Setenv(sourceproj.EnvSwitch, "")
+	sourceproj.SetSetting(false)
+	t.Cleanup(func() { sourceproj.SetSetting(false) })
+	owner := "owner-setting"
+	t.Setenv("CHOIR_OWNER_ID", owner)
+	ctx := context.Background()
+	patch, _ := releasePatch(t, repo, map[string]string{"frontend/public/a.txt": "A\n"})
+	applyOperation(t, rt, updaterRoot, computerID, "op-a", base, patch)
+
+	// Default off: nothing runs, and a boot with no stored setting stays off.
+	rt.configureSourceProjectionSetting(ctx)
+	if sourceproj.Enabled() {
+		t.Fatal("the switch reads on with no setting")
+	}
+	if result, _ := rt.ReconcileSourceProjection(ctx, "boot"); result.State != sourceproj.StateDisabled || gitHead(t, repo) != base {
+		t.Fatalf("off: %+v", result)
+	}
+
+	post := func(value bool) {
+		req := httptest.NewRequest(http.MethodPost, "/api/computer-settings", strings.NewReader(fmt.Sprintf(`{"key":"source.projection","value":%v}`, value)))
+		req.Header.Set("X-Authenticated-User", owner)
+		rec := httptest.NewRecorder()
+		(&APIHandler{rt: rt}).HandleComputerSettings(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("set %v = %d %s", value, rec.Code, rec.Body)
+		}
+	}
+	post(true)
+	if !sourceproj.Enabled() {
+		t.Fatal("the switch is off after the owner set it")
+	}
+	// The setting's own reconcile runs in the background; the gate reconciles
+	// too, so the outcome does not depend on which runs first.
+	if err := rt.sourceProjectionCastGate(ctx); err != nil {
+		t.Fatalf("gate: %v", err)
+	}
+	if gitHead(t, repo) == base {
+		t.Fatal("the projection did not follow once the setting was on")
+	}
+
+	// A restart reads the stored setting.
+	sourceproj.SetSetting(false)
+	rt.configureSourceProjectionSetting(ctx)
+	if !sourceproj.Enabled() {
+		t.Fatal("the stored setting was not read at boot")
+	}
+	if got, err := rt.store.GetComputerSetting(ctx, owner, rt.cfg.ComputerID, store.SettingSourceProjection); err != nil || !got.Value {
+		t.Fatalf("stored = %+v %v", got, err)
+	}
+
+	// Off is the rollback: every entry point stops; the repository stays.
+	post(false)
+	if sourceproj.Enabled() {
+		t.Fatal("the switch is on after the owner turned it off")
+	}
+	head := gitHead(t, repo)
+	if result, _ := rt.ReconcileSourceProjection(ctx, "boot"); result.State != sourceproj.StateDisabled || gitHead(t, repo) != head {
+		t.Fatalf("off again: %+v", result)
 	}
 }

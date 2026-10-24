@@ -114,6 +114,8 @@ func (h *APIHandler) HandleComputerSettings(w http.ResponseWriter, r *http.Reque
 				rt.applyTelemetryBatchingSetting(value)
 			case store.SettingEventTable:
 				rt.applyEventTableSetting(value)
+			case store.SettingSourceProjection:
+				rt.applySourceProjectionSetting(value)
 			}
 			writeAPIJSON(w, http.StatusOK, map[string]any{"setting": current})
 			return
@@ -131,6 +133,9 @@ func (h *APIHandler) HandleComputerSettings(w http.ResponseWriter, r *http.Reque
 		}
 		if key == store.SettingDebouncedCheckpoint {
 			rt.applyGuestCheckpointSetting(value)
+		}
+		if key == store.SettingSourceProjection {
+			rt.applySourceProjectionSetting(value)
 		}
 		writeAPIJSON(w, http.StatusOK, map[string]any{"setting": setting})
 	default:

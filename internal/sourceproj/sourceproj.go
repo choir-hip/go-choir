@@ -18,15 +18,30 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
-// EnvSwitch is the runtime switch. Absent or anything but a true value means
-// off, and then nothing in U1 runs.
+// EnvSwitch is the process-wide switch. Absent or anything but a true value
+// means off for the environment; the per-computer setting below can still turn
+// it on.
 const EnvSwitch = "CHOIR_SOURCE_PROJECTION"
 
-// Enabled reports whether U1 is switched on for this process.
+// settingOn is the owner's per-computer setting (store.SettingSourceProjection),
+// set by the runtime at boot and when the owner changes it. It is the switch
+// that needs no deploy: Enabled is true when either it or the environment says
+// on. It defaults off.
+var settingOn atomic.Bool
+
+// SetSetting records the owner's per-computer setting.
+func SetSetting(on bool) { settingOn.Store(on) }
+
+// Enabled reports whether U1 is switched on for this process: the environment
+// switch or the computer setting.
 func Enabled() bool {
+	if settingOn.Load() {
+		return true
+	}
 	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvSwitch))) {
 	case "1", "true", "on", "yes":
 		return true

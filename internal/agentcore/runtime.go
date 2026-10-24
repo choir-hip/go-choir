@@ -939,6 +939,7 @@ func (rt *Runtime) Start(ctx context.Context) {
 	// U1: the guest source repository follows the effective release. Spawned,
 	// because git on a large repository is seconds; the cast gate reconciles
 	// again before it uses the repository.
+	rt.configureSourceProjectionSetting(ctx)
 	go rt.reconcileSourceProjectionLogged(ctx, "boot")
 	// M7 derivable continuations: every committed canonical event may carry
 	// a self-development settlement boundary (verification -> approval,
