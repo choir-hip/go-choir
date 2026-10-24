@@ -56,7 +56,9 @@ const (
 //
 // A desk's record wakes its reader. A source inbox has no reader. A system
 // record does not wake (D5: a closure is minted at boot, and waking there
-// would resume work after a crash), except four minted only by live work:
+// would resume work after a crash), except five minted only by live work:
+// an engineering progress relay to a Texture (the platform telling the
+// owner's document what engineering reported),
 // a support failure, a capture arrival that is not held for its events
 // (event layer §15), and a management task's final Report that is not
 // clean and was not written by a crash boot. A clean
@@ -66,6 +68,12 @@ func RecordWakesReader(rec types.CommitmentRecord) bool {
 		return false
 	}
 	if rec.EmitterKind != types.CommitmentEmitterSystem {
+		return true
+	}
+	// An engineering progress relay tells a Texture what engineering
+	// reported. It is minted only by the live commit of an agent's Report
+	// (never at a crash boot), so waking its reader resumes nothing.
+	if types.IsEngineeringProgressRelay(rec) {
 		return true
 	}
 	if rec.Support != nil && len(rec.Support.Failures) > 0 {

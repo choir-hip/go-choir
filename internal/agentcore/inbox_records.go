@@ -361,6 +361,8 @@ func inboxRecordKind(rec types.CommitmentRecord) string {
 		return "task_report"
 	case rec.Job != nil:
 		return "job"
+	case types.IsEngineeringProgressRelay(rec):
+		return "progress"
 	case rec.EmitterKind == types.CommitmentEmitterSystem:
 		return "closure"
 	case rec.Directive != nil:
@@ -695,6 +697,11 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 		records = append(records, rec)
 		localIDs = append(localIDs, in)
 	}
+	// Engineering's progress Reports also reach the Texture they serve, as
+	// platform-authored progress records in the same transaction, when the
+	// computer's engineering.progress_to_texture setting is on. They follow
+	// the cell's own records so each localIDs index still names its record.
+	records = append(records, r.engineeringProgressRelays(ctx, records)...)
 	cursor := r.records.cursorAdvance()
 	if len(records) == 0 && deskProfile == agentprofile.Management {
 		// A management cell that only read marks nothing; its turn's end
