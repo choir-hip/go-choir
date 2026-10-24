@@ -571,7 +571,10 @@ let
   # "model=256MiB,in_flight=2GiB". Rollback: "observe" only while
   # gatewayModelScheduler is "off" or with in_flight unchanged; otherwise
   # raise GATEWAY_BODY_LIMITS model= in enforce.
-  gatewayBodyCaps = "observe";
+  # enforce from 2026-10-24 (owner: switch on what is proved, aggressively;
+  # observe since D12 showed would_refuse {} and max_seen.model 163 KB
+  # against a 160 MiB cap, read 20:4x).
+  gatewayBodyCaps = "enforce";
   # claude delegate (docs/design/claude-delegate-slice1-2026-10-14.md): the
   # owner's setup-token token, root 0400, written by the owner only. Every
   # unit, vmctl included, keeps the secrets dir hidden; vmctl's start copies
@@ -1554,7 +1557,10 @@ in
         # cold-boot cycle and a probe). A named computer cold boots once (boot
         # arguments are in the launch-config hash). Rollback: empty the list
         # and redeploy before taking the port or Unbound away.
-        "VMCTL_GUEST_DNS_ONLY=class:test"
+        # Widened to class:primary 2026-10-24 (proved on T, 7 of 7 steps; the
+        # owner delegated switching on to FP0). The paper and public_platform
+        # still last.
+        "VMCTL_GUEST_DNS_ONLY=class:test,class:primary"
         # D-ROUTE and immutable ComputerVersion inputs are tables on the same
         # corpusd world-wire SQL server. vmctl is the sole route CAS writer.
         "VMCTL_ROUTE_DSN=root@tcp(127.0.0.1:13306)/platform?parseTime=true&multiStatements=true&clientFoundRows=true"
@@ -1716,8 +1722,10 @@ in
         # Takes effect at each test computer's next cold boot. Rollback:
         # delete both lines (new boots get no device; leases end at their
         # TTL) (docs/reports/memory-hotplug-controller-design-2026-10-14.md).
-        "VM_MEMORY_HOTPLUG=on"
-        "VM_MEMORY_HOTPLUG_ONLY=class:test"
+        # Off 2026-10-24: disproved on Node B (no plug ever succeeded; the
+        # 39-bit CPU cannot address the region). The code goes in a later
+        # change (docs/evidence/switched-off-inventory-2026-10-24.md, dead list).
+        "VM_MEMORY_HOTPLUG=off"
         # S3 snapshot hibernate (docs/reports/s3-snapshot-hibernate-design-
         # 2026-10-14.md): an idle hibernate fences the guest and writes a
         # Firecracker memory snapshot; the next wake loads it once instead of
