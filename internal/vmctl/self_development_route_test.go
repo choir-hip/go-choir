@@ -186,6 +186,26 @@ func TestSelfDevelopmentRouteProjectionRequiresExactPlatformCertificate(t *testi
 	if _, _, _, err := authority.constructedOwnershipIdentity(t.Context(), "other-owner", "primary", "vm-other"); err == nil || !strings.Contains(err.Error(), "unrecognized route execution evidence") {
 		t.Fatalf("unscoped promotion classification err=%v, want unrecognized", err)
 	}
+
+	// A self-development scope with no actor is refused the same way.
+	anonSlotID, _ := routeledger.RouteSlotID("anon-owner", "primary")
+	anonBootstrapApproval, _ := routeledger.NewAuthorizationEvidence(routeledger.AuthorizationEvidenceApproval, anonSlotID, oldVersion, json.RawMessage(`{"bootstrap":"approval"}`), now)
+	anonBootstrapCertificate, _ := routeledger.NewAuthorizationEvidence(routeledger.AuthorizationEvidencePromotionCertificate, anonSlotID, oldVersion, json.RawMessage(`{"bootstrap":"certificate"}`), now)
+	anonSlot, _, err := ledger.TransitionWithEvidence(t.Context(), routeledger.TransitionCommand{RouteSlotID: anonSlotID, Kind: routeledger.TransitionBootstrap, New: oldVersion, ApprovalRef: routeledger.ApprovalRef(anonBootstrapApproval.Ref), PromotionCertificateRef: routeledger.PromotionCertificateRef(anonBootstrapCertificate.Ref), IdempotencyKey: "idempotency:anon-bootstrap"}, []routeledger.AuthorizationEvidence{anonBootstrapApproval, anonBootstrapCertificate})
+	if err != nil {
+		t.Fatal(err)
+	}
+	anonymous := accepted
+	anonymous.DecisionActor = " "
+	anonymousJSON, _ := computerevent.CanonicalJSON(anonymous)
+	anonApproval, _ := routeledger.NewAuthorizationEvidence(routeledger.AuthorizationEvidenceApproval, anonSlotID, newVersion, anonymousJSON, now)
+	anonPromotion, _ := routeledger.NewAuthorizationEvidence(routeledger.AuthorizationEvidencePromotionCertificate, anonSlotID, newVersion, joinJSON, now)
+	if _, _, err := ledger.TransitionWithEvidence(t.Context(), routeledger.TransitionCommand{RouteSlotID: anonSlotID, Kind: routeledger.TransitionPromote, Old: oldVersion, New: newVersion, ExpectedGeneration: anonSlot.Generation, ApprovalRef: routeledger.ApprovalRef(anonApproval.Ref), PromotionCertificateRef: routeledger.PromotionCertificateRef(anonPromotion.Ref), IdempotencyKey: "idempotency:anon-promote"}, []routeledger.AuthorizationEvidence{anonApproval, anonPromotion}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := authority.constructedOwnershipIdentity(t.Context(), "anon-owner", "primary", "vm-anon"); err == nil || !strings.Contains(err.Error(), "unrecognized route execution evidence") {
+		t.Fatalf("actorless promotion classification err=%v, want unrecognized", err)
+	}
 }
 
 func TestHandleListClassifiesConstructedOwnershipFromRouteEvidence(t *testing.T) {

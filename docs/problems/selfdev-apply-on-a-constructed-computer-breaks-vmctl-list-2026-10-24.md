@@ -40,8 +40,10 @@ constructed slot falls through to "unrecognized route execution evidence".
 
 `listOwnershipResponses` fails the whole list on one classification error. That
 is deliberate fail-closed behaviour, pinned by
-`TestHandleListClassifiesConstructedOwnershipFromRouteEvidence`. Its two readers
-are the operator list and the deploy refresh selection. The resolve and
+`TestHandleListClassifiesConstructedOwnershipFromRouteEvidence`. Its readers are
+the operator list, the deploy refresh selection (`deploy_refresh.go`), the store
+compaction sweep (`store_compaction.go`) and the compaction pressure sweep
+(`store_compaction_pressure.go`). The resolve and
 authorize paths for that ownership refuse the same way. So the next deploy's
 refresh selection fails, and the owner cannot open that computer.
 `TestSelfDevelopmentRouteProjectionRequiresExactPlatformCertificate` applies a
@@ -61,8 +63,9 @@ against the platform-control signatures when it was written.
 
 - One computer's unclassifiable evidence takes down the whole list and the
   deploy refresh selection for every computer. That fail-closed choice is
-  deliberate. Its blast radius is now a measured cost: about 20 minutes so far,
-  and it was ready to fail the 06:52 deploy. Whether a per-entry refusal is
+  deliberate. Its blast radius is now measured: every list reader failed from 04:28
+  until the fix deployed, and the next deploy's refresh selection would
+  have failed with it. Whether a per-entry refusal is
   safer is a separate design question for the owner.
 - Constructed computers are rare: b@c's, and possibly the owner's older
   computers. Any of them would break the same way on its first

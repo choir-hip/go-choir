@@ -192,7 +192,8 @@ func (a *RouteAuthority) constructedOwnershipIdentity(ctx context.Context, owner
 	// AcceptedEventAuthorizationEvidence (accepted applied event joins old ->
 	// new version under the platform-follow scope, or under an owner-decision
 	// computer:self_development: scope, the precondition
-	// ApplySelfDevelopmentProjection enforces), and the certificate payload is
+	// ApplySelfDevelopmentProjection enforces; the projection request's
+	// constructor refuses an empty actor), and the certificate payload is
 	// a PromotionJoinEvidence (checkpoint + materialization receipt join).
 	// There is no disk-receipt construction verification on this route —
 	// ownership is the apply-time registry binding, so the join returns the
@@ -211,7 +212,7 @@ func (a *RouteAuthority) constructedOwnershipIdentity(ctx context.Context, owner
 		promotion.Version != 1 || promotion.ComputerID != accepted.ComputerID ||
 		!computerevent.IsSHA256(promotion.CheckpointReceiptDigest) ||
 		!routeledger.SameVersion(promotion.NewComputerVersion, slot.Current) {
-		return nil, "", false, fmt.Errorf("ownership %s platform-follow certificate join failed", vmID)
+		return nil, "", false, fmt.Errorf("ownership %s signed projection certificate join failed", vmID)
 	}
 	version := slot.Current
 	return &version, "", true, nil
