@@ -1,4 +1,5 @@
 import type { ComponentType } from 'svelte';
+import { loadPackageApps } from './packages';
 
 export type AppPreviewPolicy = 'public-preview' | 'public-readonly' | 'private';
 export type AppSurfaceKind = 'standard' | 'document' | 'media';
@@ -46,11 +47,9 @@ const compactDefault = { minWidth: 280, minHeight: 420 };
 
 export const TEXTURE_APP_ID = 'texture';
 
-export function normalizeAppId(appId: string): string {
-  return String(appId || '').trim();
-}
-
-export const APP_REGISTRY = [
+// Static apps: shell surfaces and apps not yet converted to a package.
+// First-party packages (src/packages/<name>/) join them below.
+const STATIC_APPS = [
   {
     id: 'files',
     name: 'Files',
@@ -155,17 +154,6 @@ export const APP_REGISTRY = [
     theme: { surface: 'media', shellDataAttr: 'data-podcast-window', contentClass: 'podcast-content' },
   },
   {
-    id: 'image',
-    name: 'Image',
-    icon: '🖼️',
-    description: 'Image viewer',
-    component: () => import('../ImageApp.svelte'),
-    launcher: { menu: true, desktopIcon: false, order: 80 },
-    window: { singleton: false, heavy: true, desktop: { width: 900, height: 680 }, compact: compactDefault },
-    auth: { preview: 'public-preview' },
-    theme: { surface: 'media', shellDataAttr: 'data-image-window', contentClass: 'image-content' },
-  },
-  {
     id: 'audio',
     name: 'Audio',
     icon: '🎧',
@@ -254,6 +242,18 @@ export const APP_REGISTRY = [
     theme: { surface: 'standard', shellDataAttr: 'data-settings-window', contentClass: 'settings-content' },
   },
 ] satisfies ChoirAppDefinition[];
+
+const PACKAGES = loadPackageApps(new Set(STATIC_APPS.map((app) => app.id)));
+
+export const APP_REGISTRY: ChoirAppDefinition[] = [...STATIC_APPS, ...PACKAGES.apps];
+
+// File routes contributed by packages' `opens`; media-utils.js consults them first.
+export const PACKAGE_MEDIA_ROUTES = PACKAGES.mediaRoutes;
+
+export function normalizeAppId(appId: string): string {
+  const id = String(appId || '').trim();
+  return Object.prototype.hasOwnProperty.call(PACKAGES.aliases, id) ? PACKAGES.aliases[id] : id;
+}
 
 export const LAUNCHER_APPS = APP_REGISTRY
   .filter((app) => app.launcher.menu)
