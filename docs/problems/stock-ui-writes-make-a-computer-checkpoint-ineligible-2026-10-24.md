@@ -186,3 +186,27 @@ shaped like production (bound tape, the replay probe):
   (direct-SQL) store's for the same sequence, and the replay is eligible;
 - the manifest classes the three tables `event_projection`, and the
   ineligible error names the blocking tables.
+
+### Residual: b@c's candidate runs an older binary
+
+The held candidate's guest binary is built from 0cbc52edc, 81 commits behind
+the platform (ledger 11:2x). That binary predates the three op kinds. Once
+b@c's tape holds a batch with them (its first media or theme write after
+this deploys, or a residue import), that binary's projector refuses those
+batches as unknown kinds. So after the candidate is applied:
+
+- its manifest still classes the three tables `empty_until_supported`, so
+  its checkpoints are refused again, as today;
+- any replay it runs over the new batches (a replay-completeness probe, and
+  a restore if the restore path replays rather than loading a base at the
+  checkpoint head) fails on the unknown kind rather than reporting
+  ineligible. Not checked here: whether restore to the pre-apply
+  checkpoint, run by the candidate's binary, replays those batches. If it
+  does, the rollback route of that apply is broken.
+
+This is the applies-do-not-compound substrate
+(docs/problems/engineering-work-product-durability-cluster-2026-10-24.md),
+not a defect of this fix, but it decides how b@c's candidate can be
+approved. Before approving it after this lands, check the restore path of
+an old binary over a tape with the new op kinds, or rebuild the candidate on
+current source.
