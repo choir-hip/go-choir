@@ -156,8 +156,9 @@ func firecrackerAtLeast(banner string, major, minor int) bool {
 // and some cgroup from its own up to the root reads memory.swap.max 0. The
 // cgroup v2 limit is hierarchical, so the nearest ancestor that sets 0
 // bounds the leaf (reading R2: the leaf go-choir-vmctl.service/supervisor
-// has no memory controller; the service reads 0; under the jailer the leaf
-// sits under the same service). Anything unreadable is "may swap".
+// has no memory controller; the service reads 0; a jailed leaf sits under
+// system-choirvms.slice, whose MemorySwapMax=0 reads 0). Anything
+// unreadable is "may swap".
 func guestMemoryCannotSwap(procRoot, cgroupRoot string, pid int) bool {
 	pidDir := filepath.Join(procRoot, strconv.Itoa(pid))
 	if swap, ok := procStatusKB(filepath.Join(pidDir, "status"), "VmSwap:"); !ok || swap != 0 {

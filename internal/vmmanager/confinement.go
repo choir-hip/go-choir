@@ -10,6 +10,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -119,8 +120,9 @@ type JailerConfig struct {
 	// UIDBase and UIDCount bound the per-VM uids (gid = uid).
 	UIDBase  int
 	UIDCount int
-	// CgroupParent is the VMs' parent cgroup relative to the cgroup2 root;
-	// empty means derive it from vmctl's own cgroup at Start.
+	// CgroupParent is the VMs' parent cgroup relative to the cgroup2 root,
+	// <slice>/vms in a slice outside vmctl's unit; empty leaves the jailer
+	// unavailable (vmSliceRecord).
 	CgroupParent string
 	// PidsMax and CPUWeight are written into each VM's leaf; 0 omits them.
 	PidsMax   int
@@ -800,17 +802,9 @@ func parseCgroupV2Path(content string) string {
 	return ""
 }
 
-// deriveJailerCgroupParent places VM leaves beside vmctl's own subgroup: the
-// unit runs with Delegate=yes and DelegateSubgroup=supervisor, so vmctl is in
-// <unit>/supervisor and VMs go to <unit>/vms/<vm>, under the unit's memory
-// protection.
-func deriveJailerCgroupParent(own string) (string, error) {
-	own = strings.Trim(own, "/")
-	if own == "" || filepath.Base(own) != "supervisor" {
-		return "", fmt.Errorf("vmctl runs in cgroup %q, not a delegated 'supervisor' subgroup (DelegateSubgroup=supervisor); set VMCTL_JAILER_CGROUP_PARENT", own)
-	}
-	return filepath.Dir(own) + "/vms", nil
-}
+// vmSliceRecord is the problem record behind the VM slice: VM cgroups inside
+// vmctl's unit wedge every vmctl restart while a jailed VM runs.
+const vmSliceRecord = "docs/problems/vmctl-restart-fails-while-a-jailed-vm-runs-2026-10-24.md"
 
 // prepareJailerHost readies the host for jailed launches once, at Start. Any
 // failure leaves the host unprepared: every launch is direct and its receipt
@@ -842,59 +836,106 @@ func (m *Manager) prepareJailerHost() error {
 	if err != nil {
 		return fmt.Errorf("read own cgroup: %w", err)
 	}
-	own := parseCgroupV2Path(string(ownData))
-	if strings.TrimSpace(j.CgroupParent) == "" {
-		parent, err := deriveJailerCgroupParent(own)
-		if err != nil {
-			return err
-		}
-		j.CgroupParent = parent
-	}
-	if err := m.prepareJailerCgroups(own); err != nil {
+	if err := m.prepareJailerCgroups(parseCgroupV2Path(string(ownData))); err != nil {
 		return err
 	}
 	return m.ensureVMMNoIPRules()
 }
 
-// prepareJailerCgroups empties the VMs' common ancestor of processes (cgroup
-// v2 refuses to enable controllers in a cgroup that holds any) by moving them
-// into vmctl's own subgroup, then creates the VMs' parent.
-func (m *Manager) prepareJailerCgroups(own string) error {
-	root := m.cgroupRoot
-	parent := filepath.Join(root, strings.Trim(m.cfg.Jailer.CgroupParent, "/"))
-	common := filepath.Dir(parent)
-	ownDir := filepath.Join(root, own)
-	if own != "" && filepath.Dir(ownDir) == common {
-		data, err := os.ReadFile(filepath.Join(common, "cgroup.procs"))
-		if err != nil {
-			return fmt.Errorf("read %s/cgroup.procs: %w", common, err)
-		}
-		for _, field := range strings.Fields(string(data)) {
-			if _, err := strconv.Atoi(field); err != nil {
-				continue
-			}
-			err := os.WriteFile(filepath.Join(ownDir, "cgroup.procs"), []byte(field), 0o644)
-			if err != nil && !errors.Is(err, syscall.ESRCH) {
-				return fmt.Errorf("move pid %s from %s into %s: %w", field, common, ownDir, err)
-			}
-			if err == nil {
-				log.Printf("vmmanager: moved pid %s from %s into %s so VM cgroups can enable controllers", field, common, ownDir)
-			}
+// unitCgroupOf is the unit cgroup holding a process in cgroup own: its
+// nearest *.service or *.scope element (vmctl runs in <unit>/supervisor),
+// else own itself.
+func unitCgroupOf(own string) string {
+	parts := strings.Split(strings.Trim(own, "/"), "/")
+	for i := len(parts) - 1; i >= 0; i-- {
+		if strings.HasSuffix(parts[i], ".service") || strings.HasSuffix(parts[i], ".scope") {
+			return strings.Join(parts[:i+1], "/")
 		}
 	}
-	if err := os.MkdirAll(parent, 0o755); err != nil {
+	return strings.Trim(own, "/")
+}
+
+// cgroupWithin reports whether cgroup path p is base or below it.
+func cgroupWithin(p, base string) bool {
+	return base != "" && (p == base || strings.HasPrefix(p, base+"/"))
+}
+
+// prepareJailerCgroups checks the VMs' parent cgroup (VMCTL_JAILER_CGROUP_
+// PARENT, normally <slice>/vms in a slice beside vmctl's unit) and creates
+// it. The jailer writes +cpu +pids into every ancestor of a VM leaf, and
+// systemd cannot spawn into a unit whose cgroup has them, so the parent must
+// lie outside vmctl's own unit (failure items 1, 5). The parent's parent is
+// systemd's slice: it must exist (vmctl never creates a systemd-owned
+// cgroup) and, like the parent, hold no process (the jailer's write would
+// fail EBUSY). vmctl moves no process and writes no subtree_control here.
+func (m *Manager) prepareJailerCgroups(own string) error {
+	rel := path.Clean(strings.Trim(strings.TrimSpace(m.cfg.Jailer.CgroupParent), "/"))
+	if rel == "." || rel == "" {
+		return fmt.Errorf("VMCTL_JAILER_CGROUP_PARENT is unset: jailed VMs need a parent cgroup outside vmctl's unit, such as system.slice/system-choirvms.slice/vms (%s)", vmSliceRecord)
+	}
+	if strings.HasPrefix(rel, "../") || rel == ".." {
+		return fmt.Errorf("VM cgroup parent %q leaves the cgroup root", m.cfg.Jailer.CgroupParent)
+	}
+	if unit := unitCgroupOf(own); cgroupWithin(rel, unit) {
+		return fmt.Errorf("VM cgroup parent %s is inside vmctl's unit %s: a vmctl restart while a jailed VM runs would fail (%s)", rel, unit, vmSliceRecord)
+	}
+	root := m.cgroupRoot
+	parent := filepath.Join(root, filepath.FromSlash(rel))
+	slice := filepath.Dir(parent)
+	if info, err := os.Stat(slice); err != nil || !info.IsDir() {
+		return fmt.Errorf("VM cgroup slice %s is missing (is %s active?): %v", path.Dir(rel), path.Base(path.Dir(rel)), err)
+	}
+	for _, dir := range []string{slice, parent} {
+		data, err := os.ReadFile(filepath.Join(dir, "cgroup.procs"))
+		if err != nil {
+			if dir == parent && os.IsNotExist(err) {
+				continue
+			}
+			return fmt.Errorf("read %s/cgroup.procs: %w", dir, err)
+		}
+		if pids := strings.Fields(string(data)); len(pids) > 0 {
+			return fmt.Errorf("VM cgroup %s holds processes %s: the jailer cannot enable controllers below it", dir, strings.Join(pids, " "))
+		}
+	}
+	if err := os.Mkdir(parent, 0o755); err != nil && !os.IsExist(err) {
 		return fmt.Errorf("create VM cgroup parent %s: %w", parent, err)
 	}
 	return nil
 }
 
+// receiptCgroupLeaf is the leaf a jailed launch recorded in its receipt, if
+// it is a clean relative path whose last element is this VM.
+func (m *Manager) receiptCgroupLeaf(vmID string) string {
+	receipt := m.loadConfinement(vmID)
+	if !receipt.jailed() {
+		return ""
+	}
+	rel := receipt.Cgroup
+	if rel == "" || strings.HasPrefix(rel, "/") || path.Clean(rel) != rel || strings.HasPrefix(rel, "../") ||
+		path.Base(rel) != vmID || path.Dir(rel) == "." {
+		return ""
+	}
+	return rel
+}
+
+// removeCgroupLeaf removes the VM's leaf under the current parent and the
+// leaf its launch receipt names (a VM launched under an earlier parent).
+// rmdir only removes an empty cgroup.
 func (m *Manager) removeCgroupLeaf(vmID string) {
-	rel := m.cgroupLeafRel(vmID)
-	if rel == "" || !validJailerID(vmID) {
+	if !validJailerID(vmID) {
 		return
 	}
-	if err := os.Remove(filepath.Join(m.cgroupRoot, rel)); err != nil && !os.IsNotExist(err) {
-		log.Printf("vmmanager: remove cgroup leaf %s: %v", rel, err)
+	leaves := []string{m.cgroupLeafRel(vmID)}
+	if old := m.receiptCgroupLeaf(vmID); old != "" && old != leaves[0] {
+		leaves = append(leaves, old)
+	}
+	for _, rel := range leaves {
+		if rel == "" {
+			continue
+		}
+		if err := os.Remove(filepath.Join(m.cgroupRoot, filepath.FromSlash(rel))); err != nil && !os.IsNotExist(err) {
+			log.Printf("vmmanager: remove cgroup leaf %s: %v", rel, err)
+		}
 	}
 }
 
