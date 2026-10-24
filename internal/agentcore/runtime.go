@@ -40,6 +40,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/qdrant"
 	"github.com/yusefmosiah/go-choir/internal/researchtools"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
+	"github.com/yusefmosiah/go-choir/internal/sourceproj"
 	"github.com/yusefmosiah/go-choir/internal/steptrace"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/texturewrite"
@@ -344,8 +345,13 @@ type Runtime struct {
 	effectiveBuildCommit func() string
 	effectiveTreeMu      sync.Mutex
 	effectiveTrees       map[string]*effectiveTreeEntry
-	releaseSource        ReleaseSource
-	promptSubmitter      PromptSubmitter
+	// sourceProjectionLast is the last source-projection reconcile (U1,
+	// source_projection.go); nil until one has run.
+	sourceProjectionMu    sync.Mutex
+	sourceProjectionRunMu sync.Mutex
+	sourceProjectionLast  *sourceproj.Result
+	releaseSource         ReleaseSource
+	promptSubmitter       PromptSubmitter
 	// managementReconcileMu serializes persistent-Management creation
 	// across every reconcile entry path (inbox continuation, boot rewarm).
 	managementReconcileMu sync.Mutex
@@ -930,6 +936,10 @@ func (rt *Runtime) Start(ctx context.Context) {
 	// poisons wakes); its first pass is one interval after boot.
 	rt.startSourceScheduleSweep(ctx)
 	bootPhase("selfdev_materialization_reconcile", func() { rt.triggerSelfDevelopmentReconcile() })
+	// U1: the guest source repository follows the effective release. Spawned,
+	// because git on a large repository is seconds; the cast gate reconciles
+	// again before it uses the repository.
+	go rt.reconcileSourceProjectionLogged(ctx, "boot")
 	// M7 derivable continuations: every committed canonical event may carry
 	// a self-development settlement boundary (verification -> approval,
 	// decision -> materialization, rollback request -> rollback). The

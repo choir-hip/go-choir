@@ -860,6 +860,11 @@ func (rt *Runtime) recordMaterializationApplied(ctx context.Context, operation s
 		next.ReleaseDigest, next.CodeRef, next.ArtifactProgramRef = result.ReleaseDigest, string(version.CodeRef), string(version.ArtifactProgramRef)
 		return nil
 	})
+	if err == nil {
+		// U1: the source repository follows the release that just became
+		// effective. A trigger only; the cast gate and boot reconcile again.
+		rt.reconcileSourceProjectionLogged(ctx, string(eventKind))
+	}
 	return err
 }
 

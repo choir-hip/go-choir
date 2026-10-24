@@ -42,7 +42,11 @@ const capsuleNamespaceHostID = 65534
 type Executor struct {
 	// trace records the freeze, digest and teardown steps for
 	// /api/runtime/observability; unset means untraced (executor_trace.go).
-	trace             atomic.Pointer[steptrace.Tracker]
+	trace atomic.Pointer[steptrace.Tracker]
+	// reuseByInputDiff lets Freeze reuse the running binary when the source's
+	// commit differs from the binary's but no binary-input path does (U1,
+	// docs/design/computer-update-architecture-rnd-2026-10-24.md section 4.6).
+	reuseByInputDiff  atomic.Bool
 	mu                sync.RWMutex
 	capsules          map[string]*Capsule
 	capabilities      map[capKey]*Capability
@@ -271,6 +275,21 @@ func NewExecutorWithArtifacts(stateDir, artifactDir, lowerDir, sourceDir, broker
 	// Restart rule: jobs open before this boot ended with their capsules.
 	e.closeInterruptedJobs()
 	return e
+}
+
+// SetBinaryReuseByInputDiff switches Freeze's binary-reuse test from "the
+// running binary's commit is the source's" to "no binary-input path differs
+// between them". Off by default.
+func (e *Executor) SetBinaryReuseByInputDiff(on bool) { e.reuseByInputDiff.Store(on) }
+
+// SourceDir is the capsule source repository the executor seeds from.
+func (e *Executor) SourceDir() string { return e.sourceDir }
+
+func (e *Executor) reuseDiffer() BinaryInputDiffer {
+	if !e.reuseByInputDiff.Load() {
+		return nil
+	}
+	return GitPathDiffer(e.sourceDir)
 }
 
 // InitializationError reports fail-closed construction validation before the
@@ -1991,7 +2010,8 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 		if runningErr != nil {
 			running = RunningBinary{}
 		}
-		if err := PlanReleaseBinaryReuse(changes, caps.Spec.SourceArtifactRef, running); err != nil {
+		reuseProof, err := PlanReleaseBinaryReuseWith(ctx, changes, caps.Spec.SourceArtifactRef, running, e.reuseDiffer())
+		if err != nil {
 			return nil, fmt.Errorf("capsule release must contain executable bin/autoputer: %w", errors.Join(err, runningErr))
 		}
 		reused, size, err := StageRunningBinary(ctx, temporary, running)
@@ -2008,6 +2028,7 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 			Origin: ReleaseBinaryReusedRunning, SHA256: reused.SHA256,
 			RunningCommit:    strings.ToLower(strings.TrimSpace(running.Commit)),
 			SourceBaseCommit: SourceArtifactCommit(caps.Spec.SourceArtifactRef),
+			ReuseProof:       reuseProof,
 		}
 	}
 	// S2-f: source changes (workspace/platform, classified LedgerSource) are

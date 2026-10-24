@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/capsule"
+	"github.com/yusefmosiah/go-choir/internal/sourceproj"
 )
 
 func configuredCapsuleExecutor() (*capsule.Executor, bool, error) {
@@ -64,6 +65,13 @@ func configuredCapsuleExecutor() (*capsule.Executor, bool, error) {
 		return nil, false, err
 	}
 	configureJobMemory(executor, staticBudget)
+	// U1 (docs/design/computer-update-architecture-rnd-2026-10-24.md, section
+	// 4.6): with the source projection on, Freeze reuses the running binary
+	// when no binary-input path differs from the capsule source.
+	if sourceproj.Enabled() {
+		executor.SetBinaryReuseByInputDiff(true)
+		log.Printf("capsule executor: source projection on; binary reuse by binary-input diff")
+	}
 	// Capsule memory per doctrine (RES-04) is a policy: observe keeps the
 	// MemoryMax shape and records what doctrine would have done.
 	memoryPolicy := capsule.CapsuleMemoryPolicyFromEnv(nil)
