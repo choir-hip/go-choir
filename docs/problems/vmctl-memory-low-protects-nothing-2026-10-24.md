@@ -42,3 +42,29 @@ unaffected.
 Every option is a host memory policy change. Read the current
 memory.pressure and the reclaim counters first, under the "investigate
 eagerly; act deliberately" rule.
+
+## Readings and decision (2026-10-24, 17:4x to 18:1x UTC)
+
+Owner: "Go with memory protection." Node B, read only:
+
+- 31 GiB of RAM and a 16 GiB swapfile (207 MiB used); the vmctl unit and
+  the VM slice have MemorySwapMax=0, so guest anon memory cannot be
+  reclaimed at all. What protection keeps is the guests' file cache.
+- 45.7 h of uptime: memory PSI full 3,067 s (about 1.9% of wall time),
+  allocstall 187k, pgscan_direct 30.2M, oom_kill 0.
+- system.slice 25.6 GiB current (17.4 anon, 4.9 file), 29.4 GiB peak.
+  vmctl unit: 14.7 GiB anon, 2.1 GiB file; workingset_refault_file 216M
+  pages since boot (about 860 GB of the guests' disk cache read back in).
+  Platform Dolt: 1.8 anon, 0.8 file, at its 4G MemoryHigh. VM slice empty.
+
+Decision (fix direction 1):
+- `system.slice` MemoryLow=18G, as a NixOS drop-in (`asDropinIfExists`).
+- `system-choirvms.slice` MemoryLow 4G -> 14G, the same as the vmctl unit,
+  so protection follows guests as the jailer waves move them. The kernel
+  shares the parent's 18G between the two children by protected usage.
+- The vmctl unit's 14G stays until every computer is jailed; then it
+  shrinks to vmctl's own size.
+
+Proof: after the deploy, `/sys/fs/cgroup/system.slice/memory.low` reads
+19327352832, and the vmctl unit's refault rate falls against the baseline
+read before the deploy. Rollback: delete the override.
