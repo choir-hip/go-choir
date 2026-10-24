@@ -1418,3 +1418,9 @@ Append-only. One terse entry per orchestrator pass.
   - Proof: the second test computer launches jailed. Script step 5: the two jails share one root-owned 0444 store image (same dev:inode, link count of at least 3).
   - The vmctl restart reattaches the first test computer's jailed VM (step 4's last item). The paper is reattached, not rebooted.
   - Rollback: one id out of the selector, or VMCTL_JAILER=off.
+- 00:1x (10-24). The D27 deploy failed, and vmctl was down from 23:57:58 to 00:16:20 UTC. Recorded first: docs/problems/vmctl-restart-fails-while-a-jailed-vm-runs-2026-10-24.md.
+  - The restart could not spawn ExecStartPre (EBUSY) while the first test computer's jailed VM ran under the unit's delegated cgroup with cpu and pids enabled. 10 starts failed, then start-limit-hit.
+  - Running guests kept running; nothing could launch, wake or resolve.
+  - Recovery (FP0): stopped the jailed test VM, cleared the cgroup controllers bottom up, reset-failed and started. vmctl reattached the paper and two other direct VMs. The paper answers /health 200 in 22 to 44 ms.
+  - Staging still reports D26 (372cd205b).
+- 00:1x. The paper's lease-read boot happened at the D26 refresh (23:45): seeded_from lease, trusted, seed_ms 1319, cross_check_max 2683603, reserved through 2808115. 1.3 s is over the 50 ms target; it is in the lease design's residual list beside T's 220 ms. Event table deploy 2's lease condition on the paper is met.
