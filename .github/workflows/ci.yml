@@ -414,6 +414,11 @@ jobs:
         shell: bash
         run: scripts/check-v1-writer-purity.sh
 
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: '22'
+
       - name: Check the first-party package kind table
         shell: bash
         run: node frontend/scripts/gen-package-kinds.mjs --check

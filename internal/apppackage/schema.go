@@ -267,7 +267,7 @@ func (s *Schema) check(v any, path string) error {
 			var ev any
 			dec := json.NewDecoder(bytes.NewReader(e))
 			dec.UseNumber()
-			if dec.Decode(&ev) == nil && jsonEqual(ev, v) {
+			if dec.Decode(&ev) == nil && enumEqual(ev, v) {
 				ok = true
 				break
 			}
@@ -320,6 +320,21 @@ func sortedAnyKeys(m map[string]any) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// enumEqual compares two decoded values: numbers by value (2, 2.0 and 20e-1 are
+// one value), anything else by its JSON text.
+func enumEqual(a, b any) bool {
+	an, aok := a.(json.Number)
+	bn, bok := b.(json.Number)
+	if aok && bok {
+		af, aerr := an.Float64()
+		bf, berr := bn.Float64()
+		if aerr == nil && berr == nil {
+			return af == bf
+		}
+	}
+	return jsonEqual(a, b)
 }
 
 func jsonEqual(a, b any) bool {

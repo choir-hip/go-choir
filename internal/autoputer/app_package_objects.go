@@ -36,8 +36,10 @@ import (
 // allowlist (a positive list), so no desk can reach it.
 //
 // The whole route is behind the app_packages.objects computer setting, read
-// live on every request and off by default. Off, every path answers 404 as if
-// the route did not exist, and nothing is read or written. Turning it off is the
+// live on every request and off by default. The setting is keyed by owner, so
+// the route authenticates first (an unauthenticated caller gets 401 whatever
+// the setting says, as on every route). Off, every authenticated path answers
+// 404 as if the route did not exist, and nothing is read or written. Turning it off is the
 // rollback; objects already written stay on the tape as inert rows.
 
 const (

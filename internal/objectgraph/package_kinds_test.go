@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 )
 
 // P2a (docs/design/app-packages-replan-2026-10-24.md section 2.2): the one
@@ -147,6 +149,67 @@ func TestRegisterPackageKindRefusesAPackageNamedLikeABuiltinDesk(t *testing.T) {
 	}
 }
 
+// F4, the seam holds every reserved name itself: the desks of the deskmanifest,
+// the frozen V1 spellings of a desk, the retained historical roles, the other
+// built-in writers and the shell's names. Each case is a valid kind of a valid
+// grammar name, so the name rule is the only thing that can refuse it.
+func TestRegisterPackageKindRefusesEveryReservedDeskAgentOrShellName(t *testing.T) {
+	names := append([]string{
+		"conductor", "email", // system desks the built-in writer set omits
+		"super", "co-super", "cosuper", "coagent", "co-agent", "researcher", "web-research", // frozen V1 desk spellings
+		"processor", "reconciler", "verifier", "verifier-multimodal", // retained historical roles
+		"runtime", "corpusd", "store", // non-desk built-in writers
+		"desktop", "shell", "owner", "choir", "system", "trace", "terminal", // the shell
+	}, deskmanifest.Names()...)
+	for _, pkg := range names {
+		if packageNameGrammar.MatchString(pkg) == false {
+			continue // a name the grammar refuses is covered by the bad-name test
+		}
+		t.Run(pkg, func(t *testing.T) {
+			r, tbl, builtin := newTestSeam()
+			err := register(r, tbl, builtin, pkg, pkgKind(pkg, "thing"))
+			if !errors.Is(err, ErrPackageKindRefused) || !strings.Contains(err.Error(), "reserved") {
+				t.Fatalf("err = %v, want ErrPackageKindRefused naming the reserved name", err)
+			}
+			if _, ok := tbl.lookup(ObjectKind("choir.app." + pkg + ".thing")); ok {
+				t.Fatal("the refused kind is in the table")
+			}
+			if ValidPackageName(pkg) {
+				t.Fatalf("ValidPackageName(%q) = true", pkg)
+			}
+		})
+	}
+}
+
+// F13 an owner-editable kind addressed by content: the owner route addresses by
+// the id in the path, so the same content written by a desk (content-addressed)
+// and by the owner (id-addressed) would be two objects. The seam refuses the
+// combination, including when the identity mode is left to default.
+func TestRegisterPackageKindRefusesAnOwnerEditableContentAddressedKind(t *testing.T) {
+	for _, mode := range []IdentityMode{IdentityContentHash, ""} {
+		t.Run("identity="+string(mode), func(t *testing.T) {
+			r, tbl, builtin := newTestSeam()
+			k := pkgKind("slides", "deck")
+			k.IdentityMode = mode
+			k.OwnerEdits = true
+			err := register(r, tbl, builtin, "slides", k)
+			if !errors.Is(err, ErrPackageKindRefused) || !strings.Contains(err.Error(), "owner_edits") {
+				t.Fatalf("err = %v, want ErrPackageKindRefused naming owner_edits", err)
+			}
+			if _, ok := tbl.lookup(k.Kind); ok {
+				t.Fatal("the refused kind is in the table")
+			}
+		})
+	}
+	// Content addressing without owner edits, and owner edits by key, stay.
+	r, tbl, builtin := newTestSeam()
+	k := pkgKind("slides", "log")
+	k.IdentityMode, k.OwnerEdits = IdentityContentHash, false
+	if err := register(r, tbl, builtin, "slides", k); err != nil {
+		t.Fatalf("content_hash without owner edits: %v", err)
+	}
+}
+
 func TestRegisterPackageKindRefusesABadPackageName(t *testing.T) {
 	long := strings.Repeat("a", 33) // desk:<name> allows 32 characters
 	for _, pkg := range []string{"", "A", "1a", "a", "a_b", "a.b", "a:b", "a b", "-a", "has/slash", long} {
@@ -211,6 +274,7 @@ func TestRegisterPackageKindAcceptsTheDefaultsItFills(t *testing.T) {
 	r, tbl, builtin := newTestSeam()
 	k := pkgKind("slides", "deck")
 	k.IdentityMode = ""
+	k.OwnerEdits = false // owner edits need external_key, not the content-hash default
 	k.Store = ""
 	k.Owner = "package:slides" // the value it would set itself
 	if err := register(r, tbl, builtin, "slides", k); err != nil {
@@ -237,7 +301,7 @@ func TestRegisterPackageKindIsIdempotentOnlyForAnIdenticalShape(t *testing.T) {
 	changed := map[string]func(*KindRegistration){
 		"owner edits flipped":   func(k *KindRegistration) { k.OwnerEdits = false },
 		"schema version bumped": func(k *KindRegistration) { k.Schema = "pkg:slides@2" },
-		"identity mode changed": func(k *KindRegistration) { k.IdentityMode = IdentityContentHash },
+		"identity mode changed": func(k *KindRegistration) { k.IdentityMode, k.OwnerEdits = IdentityContentHash, false },
 		"versioned flipped":     func(k *KindRegistration) { k.Versioned = false },
 	}
 	for name, mutate := range changed {
