@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# Deploy preflight: refuse while a process lives in the old in-unit VM
+# cgroup, system.slice/go-choir-vmctl.service/vms.
+#
+# Before the VM slice (docs/problems/vmctl-restart-fails-while-a-jailed-vm-
+# runs-2026-10-24.md) the jailer put jailed VMs' cgroups inside vmctl's own
+# unit. Such a VM makes systemd unable to spawn into the unit, so the vmctl
+# restart this deploy performs (or the NixOS switch that restarts it) would
+# fail while the VM runs. The new layout (system.slice/system-choirvms.slice/
+# vms) never has the problem; this guard only matters on a host that still
+# holds a VM from the old layout, and it is the "step 0" of the switch-over.
+# Empty leftover leaves are harmless (vmctl removes them) and do not refuse.
+#
+# PREFLIGHT_CGROUP_ROOT overrides /sys/fs/cgroup for the test only.
+set -euo pipefail
+
+cgroup_root="${PREFLIGHT_CGROUP_ROOT:-/sys/fs/cgroup}"
+old_parent="${cgroup_root}/system.slice/go-choir-vmctl.service/vms"
+
+refuse() {
+  echo "Deploy VM-slice preflight failed: $*" >&2
+  exit 1
+}
+
+if [ ! -d "$old_parent" ]; then
+  echo "    VM-slice preflight: no ${old_parent#"$cgroup_root"/} cgroup; nothing to move"
+  exit 0
+fi
+
+holders=()
+while IFS= read -r procs_file; do
+  # A cgroup.procs that cannot be read refuses: it cannot be proved empty.
+  pids=$(tr '\n' ' ' <"$procs_file") || refuse "cannot read ${procs_file}; refusing because it cannot be shown empty"
+  pids="${pids% }"
+  if [ -n "$pids" ]; then
+    holders+=("${procs_file%/cgroup.procs}: ${pids}")
+  fi
+done < <(find "$old_parent" -name cgroup.procs -type f 2>/dev/null | sort)
+
+if [ "${#holders[@]}" -gt 0 ]; then
+  {
+    echo "Deploy VM-slice preflight failed: processes still run in the old in-unit VM cgroup ${old_parent#"$cgroup_root"/}:"
+    printf '  %s\n' "${holders[@]}"
+    echo "A vmctl restart with a VM cgroup inside go-choir-vmctl.service fails (systemd cannot spawn into the unit)."
+    echo "Stop or hibernate those computers (their VMs relaunch into system-choirvms.slice), then re-run the deploy."
+    echo "Record: docs/problems/vmctl-restart-fails-while-a-jailed-vm-runs-2026-10-24.md"
+  } >&2
+  exit 1
+fi
+echo "    VM-slice preflight: no process in ${old_parent#"$cgroup_root"/}"

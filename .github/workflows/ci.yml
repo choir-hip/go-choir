@@ -161,6 +161,7 @@ jobs:
           .github/scripts/deploy-workflow-contract-test
           .github/scripts/deploy-base-select-test
           .github/scripts/deploy-receipt-merge-test
+          .github/scripts/node-b-vm-slice-preflight-test
           .github/scripts/node-b-sync-service-pointers-test
           .github/scripts/node-b-ci-gate-test
           bash -n .github/scripts/*

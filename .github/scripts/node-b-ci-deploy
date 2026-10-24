@@ -250,6 +250,12 @@
   scripts/node-b-deploy-disk-preflight
   note_phase "disk preflight"
 
+  # A process in the old in-unit VM cgroup makes the vmctl restart below
+  # (or the switch that restarts it) fail (docs/problems/vmctl-restart-fails-
+  # while-a-jailed-vm-runs-2026-10-24.md): refuse before anything changes.
+  .github/scripts/node-b-vm-slice-preflight
+  note_phase "vm slice preflight"
+
   systemctl reset-failed nixos-rebuild-switch-to-configuration.service 2>/dev/null || true
 
   echo "==> Building selected NixOS closure and guest images"
