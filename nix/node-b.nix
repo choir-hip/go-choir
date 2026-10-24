@@ -1762,7 +1762,11 @@ in
         # deploy.
         # 2026-10-20: one test computer (visual-evidence-20261020) for the
         # --visual staging drill; owner scope "one test computer first".
-        "CHOIR_VISUAL_CAPTURE_COMPUTERS=computer-7011602c92710d9cf13ee52fd2675908"
+        # 2026-10-24 (W3, FP0 under the switch delegation): b@c, the
+        # self-development test computer, so the owner previews a candidate
+        # through `choir self-dev visual` (gap B). The grant lands at b@c's
+        # next cold boot.
+        "CHOIR_VISUAL_CAPTURE_COMPUTERS=computer-7011602c92710d9cf13ee52fd2675908,computer-6c50d6e566143ae32cdb660faa60e24d"
         # store.event_table, the host half (F-c deploy 2,
         # docs/design/choir-event-table-f-c-2026-10-22.md 4.2): a named
         # computer's guest writer may stamp its telemetry for choir_events;
