@@ -102,8 +102,10 @@ everything cited here (`unit_cgroup_disable_all_controllers` is in both).
 
 ### Cause (confirmed)
 
-1. **Who writes `subtree_control`.** Not vmctl: no Go file in the repo writes
-   `cgroup.subtree_control`. vmctl only moves its own pids into `supervisor`
+1. **Who writes `subtree_control`.** Not vmctl: no host-side Go file writes
+   `cgroup.subtree_control` (`internal/yaegikernel/desk_cgroup.go` and
+   `internal/doctool/doctool_linux.go` write `+memory +pids`, but in-guest,
+   under `autoputer` and `CHOIR_DESK_CGROUP_ROOT`, never on the host). vmctl only moves its own pids into `supervisor`
    and `MkdirAll`s `vms` (`prepareJailerCgroups`). The Firecracker **jailer**
    does the write: `jailer/src/cgroup.rs: CgroupV2::write_all_subtree_control`
    (called from `write_values`, from `Env::run` via `cgroup_conf.setup()`)
@@ -325,12 +327,16 @@ removed after).
   at 00:2x was clean with them present, if they were still present). The
   EBUSY `rmdir` at 00:16 most likely met a not-yet-released exiting task in
   the leaf (hypothesis, not checked); `cg_trim` at the next vmctl stop
-  removes empty subcgroups of the unit. No code handles them. The staging
-  proof reads them.
+  removes empty subcgroups of the unit. The receipt-leaf cleanup removes an
+  old leaf at the VM's exit or destroy if its receipt names one (empty
+  cgroups only; `rmdir`). The staging proof reads them.
 - **Switch-over rule:** deploy this only while no process lives under
   `go-choir-vmctl.service/vms` (true since D28: jailer off). Checked as
   proof step 0. The switching deploy's own vmctl restart then meets the
-  old layout empty, which restarts cleanly (the 23:44 and D28 cases).
+  old layout empty, which restarts cleanly (the 23:44 and D28 cases). Since
+  round 2 the deploy enforces it: `.github/scripts/node-b-vm-slice-preflight`
+  refuses while any process lives under
+  `system.slice/go-choir-vmctl.service/vms`.
 - **Rollback, in order:** (1) `VMCTL_JAILER=off` and deploy: new launches
   go direct, a jailed snapshot is refused and cold boots (today's
   rollback). The slice stays; it is harmless and holds no protection in
@@ -452,3 +458,19 @@ Node B, after the lane lands and deploys with `VMCTL_JAILER=off` first:
 
 Pass: steps 1 to 5. Then SEC-04 step 5 (`class:test`) is unblocked, with
 the slice's `MemoryLow` rebalanced against the unit's as members move.
+
+## Review round 2 (bunch 179 non-blocking findings, lane `lane/fp0-vm-slice-r2`)
+
+Two seats (Devin, DeepSeek v4.1 flash) approved the slice; their
+non-blocking findings, each with its disposition:
+
+| Finding | Disposition |
+|---|---|
+| vmctl's own cgroup unknown (`parseCgroupV2Path` returns "") skips the in-unit check (both seats) | Fixed: `prepareJailerCgroups` refuses, so the host is unprepared and launches go direct. |
+| The current leaf (`cgroupLeafRel`) had no clean-relative guard before `Join`/`Remove` (Devin) | Fixed: `cleanCgroupParent` guards `cgroupLeafRel` and `prepareJailerCgroups`; a `..`-bearing parent has no leaf. |
+| No test for `vms/` holding a live leaf with a process (DeepSeek) | Added `TestPrepareJailerCgroupsAdmitsAPopulatedLeaf`; it passed on first write, the check was already right (the proved 01:46 restart). |
+| After `systemctl stop system-choirvms.slice` the jailer's `create_dir_all` would recreate the systemd-owned slice cgroup (DeepSeek) | Fixed: `decideConfinement` stats the slice per launch and falls back direct with reason `vm_slice_missing`. A vmctl restart brings the slice back (`Wants=`). |
+| Switch-over step 0 was manual (DeepSeek) | Fixed: the deploy runs `.github/scripts/node-b-vm-slice-preflight` before the build, switch and vmctl restart; test `.github/scripts/node-b-vm-slice-preflight-test`. |
+| `MemoryLow=4G` budgets one guest, the allowlist names two (DeepSeek) | Unchanged. `system.slice` `memory.low` is 0 on Node B, so the slice's `MemoryLow` protects nothing today anyway ([vmctl-memory-low-protects-nothing-2026-10-24.md](vmctl-memory-low-protects-nothing-2026-10-24.md)). Revisit with that record. |
+| Doc nits: "no Go file writes `subtree_control`"; "No code handles" old leaves | Corrected above. |
+| `scripts/vmm_confinement_verify.py` reads "" for both empty and unreadable `subtree_control`; the missing-slice message prints `.` for a one-element parent | Not changed: a transient race / cosmetic. |
