@@ -83,19 +83,31 @@ const SettingSourceProjection = "source.projection"
 // rollback. No env override ships for production computers.
 const SettingTraceLog = "store.trace_log"
 
+// SettingEngineeringProgressToTexture makes each engineering progress Report
+// (a choir.Report from an assignment's engineering desk, which goes to
+// management) also mint one platform-authored progress record into the
+// inbox of the Texture whose request the assignment serves, in the same
+// transaction, so the owner's document hears of the work without waiting
+// for a management turn to relay it
+// (docs/problems/engineering-reports-never-reach-texture-2026-10-24.md).
+// Texture stays the only writer of the document and management stays the
+// addressee. Off by default; off mints nothing and is the rollback.
+const SettingEngineeringProgressToTexture = "engineering.progress_to_texture"
+
 // KnownComputerSettings are the settings a computer has, with their
 // defaults. A key outside this list is refused, so a typo never stores a
 // setting nobody reads.
 var KnownComputerSettings = map[string]bool{
-	SettingIntakeLabels:          false,
-	SettingManagementSerialTasks: false,
-	SettingCalibrationFeedback:   false,
-	SettingTelemetryBatch:        false,
-	SettingResearchSystem1:       false,
-	SettingDebouncedCheckpoint:   false,
-	SettingEventTable:            false,
-	SettingSourceProjection:      false,
-	SettingTraceLog:              false,
+	SettingIntakeLabels:                 false,
+	SettingManagementSerialTasks:        false,
+	SettingCalibrationFeedback:          false,
+	SettingTelemetryBatch:               false,
+	SettingResearchSystem1:              false,
+	SettingDebouncedCheckpoint:          false,
+	SettingEventTable:                   false,
+	SettingSourceProjection:             false,
+	SettingTraceLog:                     false,
+	SettingEngineeringProgressToTexture: false,
 }
 
 // ComputerSetting is one switch's value on one computer.
