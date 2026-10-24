@@ -18,6 +18,8 @@ Each VMM is judged against its contract:
           NoNewPrivs 1, Seccomp 2, root = .../firecracker/<vm>/root, mnt and
           pid namespaces differ from init and from every other VMM, cgroup
           leaf .../vms/<vm>, speculation force-mitigated, empty environment.
+          Host, while one runs: every jailed leaf is outside vmctl's unit
+          and the unit root's cgroup.subtree_control is empty.
   direct: uid 0, CapEff and CapBnd at most CAP_NET_ADMIN, NoNewPrivs 1,
           Seccomp 2, empty environment (the pre-jailer path, tightened).
 
@@ -111,6 +113,15 @@ def vm_id_from_cmdline(args):
     return ""
 
 
+def unit_cgroup(cgroup):
+    """The nearest *.service or *.scope element of a cgroup path."""
+    parts = cgroup.strip("/").split("/")
+    for i in range(len(parts) - 1, -1, -1):
+        if parts[i].endswith(".service") or parts[i].endswith(".scope"):
+            return "/" + "/".join(parts[:i + 1])
+    return ""
+
+
 def collect(state_dir):
     init_ns = {ns: readlink("/proc/1/ns/" + ns) for ns in ("mnt", "pid", "net")}
     vmms = []
@@ -169,7 +180,9 @@ def collect(state_dir):
         for line in read("/proc/%d/cgroup" % vmctl_pid).splitlines():
             if line.startswith("0::"):
                 cgroup = line[3:].strip()
-        vmctl = {"pid": vmctl_pid, "status": status_fields(vmctl_pid), "cgroup": cgroup}
+        unit = unit_cgroup(cgroup)
+        vmctl = {"pid": vmctl_pid, "status": status_fields(vmctl_pid), "cgroup": cgroup, "unit_cgroup": unit,
+                 "unit_subtree_control": read("/sys/fs/cgroup" + unit + "/cgroup.subtree_control").strip() if unit else ""}
     rules = {}
     for tool in ("iptables", "ip6tables"):
         try:
@@ -275,6 +288,18 @@ def judge(data, args):
     if vmctl:
         bnd = vmctl["status"].get("CapBnd", "0")
         host_checks.append({"check": "vmctl_without_sys_ptrace", "ok": int(bnd, 16) & CAP_SYS_PTRACE == 0, "got": cap_names(bnd)})
+        # The VM slice (docs/problems/vmctl-restart-fails-while-a-jailed-vm-
+        # runs-2026-10-24.md): jailed leaves outside vmctl's unit, and the
+        # unit root without controller bits, else a vmctl restart wedges.
+        # Required only while a jailed VMM runs.
+        unit = vmctl.get("unit_cgroup", "")
+        inside = [v["cgroup"] for v in vmms if v["mode"] == "jailer" and unit and
+                  (v["cgroup"] == unit or v["cgroup"].startswith(unit + "/"))]
+        host_checks.append({"check": "jailed_cgroups_outside_vmctl_unit", "ok": (not any_jailed) or (bool(unit) and not inside),
+                            "got": {"unit": unit, "inside": inside}})
+        host_checks.append({"check": "vmctl_unit_root_no_controllers",
+                            "ok": (not any_jailed) or vmctl.get("unit_subtree_control", "") == "",
+                            "got": vmctl.get("unit_subtree_control", "")})
     expect_ok = True
     if args.expect != "any":
         expect_ok = bool(selected) and all(v["mode"] == args.expect for v in selected) and not missing
