@@ -1434,3 +1434,12 @@ Append-only. One terse entry per orchestrator pass.
   - Eligible after 06:52 UTC, the end of its staging day. The lease conditions are met on T (22:54) and on the paper (23:45).
 - 00:5x. The VM slice design (lane/fp0-vm-slice, PR #95, c93873ae8) is in: a plain system-choirvms.slice (systemd ignores Delegate= on slices), and vmctl owns vms/ under it. Mirror running; tier 2 review next.
 - 00:5x. Found by the slice worker and confirmed read-only on Node B: system.slice memory.low is 0, so vmctl's 14 GiB MemoryLow protects nothing. Recorded: docs/problems/vmctl-memory-low-protects-nothing-2026-10-24.md. Not acted on.
+- 01:0x. D29 lands, alone: the VM slice (lane/fp0-vm-slice, PR #95).
+  - What it does: jailed VMs' cgroups move to system.slice/system-choirvms.slice/vms, outside go-choir-vmctl.service. vmctl Wants and After the slice, never Requires it; X-StopOnRemoval=false; deriveJailerCgroupParent is deleted. prepareJailerCgroups writes no subtree_control and moves no process, and any refusal makes launches direct.
+  - Inert while VMCTL_JAILER=off, which is the deployed value.
+  - Review: bunch 179 tier 2, Devin APPROVE and DeepSeek APPROVE (confidence 0.8). No blocking findings.
+  - Shared low for round 2: fail closed when vmctl's own cgroup cannot be read. Other lows: a populated-leaf regression test, MemoryLow budgets one guest, a per-launch slice stat, and a deploy preflight.
+  - Checks: the vmslice-1 mirror PASS; PR CI 25 pass, 8 skipped; both systems evaluate.
+  - Preflight by hand at 01:0x: no vms/ cgroup under go-choir-vmctl.service, the unit root's subtree_control is empty, the jailer is off.
+  - Proof: vmctl restarts cleanly (NRestarts 0) and reattaches the paper; system-choirvms.slice is active and empty; the paper is unchanged.
+  - Rollback: a revert, safe while the slice holds no process.
