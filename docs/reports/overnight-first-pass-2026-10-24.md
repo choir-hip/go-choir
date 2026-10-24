@@ -1,10 +1,10 @@
 # The overnight first pass, October 24
 
-I wrote this on the morning of Saturday, October twenty-fourth. It covers the night's launch work, from about two in the morning to a quarter to ten, Universal Time, and it picks up where last night's letter stopped.
+I wrote this on the morning of Saturday, October twenty-fourth. It covers the night's launch work, from about two in the morning to half past eleven, Universal Time, and it picks up where last night's letter stopped.
 
 The platform got sturdier overnight, but the app redesigns are not done yet.
 
-Eight deploys landed, one at a time, and each was proved on staging. One proof is still owed tonight. Self-development ran a full cycle on a locked-down test computer for the first time. Engineering stopped burning tokens polling its own build job. Three outages surfaced and each now has a fix: vmctl's list of every computer stopped answering after a self-development apply; the paper was down for an hour after its nightly compaction; and the platform's main database froze three times. The app rewrites on the b@c test account applied one new Slides app at half past four. You looked at it and said it was a restyle, not a redesign. Since then four bigger redesign attempts have been lost to host failures and to how the desks read a staged plan. A fifth is running now. Two research write-ups are ready for today's design session: one on how diverging computers take updates, one on where prospective self-alignment stands. Your questions are at the end.
+Eight deploys landed, one at a time, and each was proved on staging. One proof is still owed tonight. Self-development ran a full cycle on a locked-down test computer for the first time. Engineering stopped burning tokens polling its own build job. Three outages surfaced and each now has a fix: vmctl's list of every computer stopped answering after a self-development apply; the paper was down for an hour after its nightly compaction; and the platform's main database froze three times. The app rewrites on the b@c test account applied one new Slides app at half past four. You looked at it and said it was a restyle, not a redesign. Five bigger redesign attempts followed. The first four were lost to host failures, to the desks misreading a staged plan, and to a refused finishing word. The sixth froze one candidate covering all five apps, and it looks worth approving. I am holding it because a product bug blocks the checkpoint every apply needs. Two research write-ups are ready for today's design session: one on how diverging computers take updates, one on where prospective self-alignment stands. Your questions are at the end.
 
 ## The early night: confinement and a full self-development cycle
 
@@ -46,6 +46,14 @@ Third, staging work in rounds fights the platform's vocabulary. The conductor tr
 
 A fifth attempt started at twenty to ten. It is one round for all five apps, with the lost stages as the minimum to match. The b@c computer now carries the job park. No redesign has been approved yet. The night's model cost on b@c was small: about forty-three million input tokens, ninety-six percent of them cached, for about two and a half dollars.
 
+## Late morning: a candidate worth approving, and why I held it
+
+I added this section at half past eleven. The fifth attempt froze four apps and was then lost to one wrong word. Engineering finished with "partial", the completion check refused it, and the frozen work went with the run. It also never saw the Podcasts brief. Engineering's view of its assignment is cut off at four kilobytes.
+
+The sixth attempt worked. At thirteen past eleven it froze one candidate covering all five apps. Files is now the hub. It opens each file by type, so a PDF goes to the Reader. It has an open-with menu, a context menu on right-click and long-press, upload by picker and by drag, and a preview pane. One Reader handles both PDF and EPUB. Slides saves its decks into Files and can upload a deck inside the app. Calendar has day, week and month views, and imports and exports calendar files. Podcasts has a queue, playback speed and resume. The conductor rates it clearly better, with a few small regressions.
+
+I have not approved it, for two reasons. First, the required checkpoint before an apply was refused. The cause is a real product bug. Changing the theme, or opening a PDF or a podcast, writes to three small tables the checkpoint requires to be empty. So any computer that has been used normally cannot take a checkpoint, and cannot self-develop. Approving anyway would leave no rollback except a checkpoint from before Slides. A worker is now building the fix: those three tables go onto the tape like the desktop's window positions. Second, the candidate's runtime was built from the computer's original source, eighty-one commits behind today's platform. That is the same "applies do not build on each other" problem, and it belongs to the design day. Once the checkpoint fix lands, you can look at the candidate and decide.
+
 ## The research for today
 
 You asked for real research on updating computers that diverge, and on prospective self-alignment, precommitment records and in-context learning in the REPL. Both write-ups are on main.
@@ -73,7 +81,8 @@ You can answer these in one message, by number.
 7. Should engineering gain an outcome that means "good, continue", so staged work is not a failure claim? And should a run save its candidate before it finishes?
 8. Should a planned restart count as activity for the idle sweep? Right now a computer can hibernate thirty-five seconds after its apply restart.
 9. May I delete the legacy flat tape? It is about forty-six gigabytes, and it is why the backup blocks computer starts.
-10. For b@c, keep Synthetic DeepSeek as engineering's model or go back to luna?
+10. For b@c, keep Synthetic DeepSeek as engineering's model or go back to luna? The conductor has restored the original policy for now.
+11. The five-app candidate: once the checkpoint fix lands, should I approve it, given that its runtime is eighty-one commits old? Or hold it until applies build on each other?
 
 ## Names and receipts
 
@@ -83,5 +92,6 @@ You can answer these in one message, by number.
 - Design: docs/design/computer-update-architecture-rnd-2026-10-24.md; docs/design/psa-precommitment-icrl-status-2026-10-24.md.
 - Evidence: docs/evidence/selfdev-drill-2026-10-24.md; drill traces under ~/.config/choir-qa/traces/fp0-selfdev-1024a and fp0-jobpark-1024b.
 - Apps: b@c computer computer-6c50d6e566143ae32cdb660faa60e24d; Slides apply selfdev-41ea6ea6 (04:27); v5 trajectory 80db9c3f-f482-53c6-8604-be36bb0e6283, Texture doc 679b943b-e4ac-5abb-b03b-22f33ec0e1d8; lost v4 stages in /Users/wiz/Dev/lanes/_runs/apprewrite/v4/stage3.patch; conductor log /Users/wiz/Dev/lanes/_runs/apprewrite/log.md.
+- The five-app candidate: op selfdev-79dc4bf4 (awaiting_approval), v6 trajectory 9da63b10-127f-53da-818b-92716d14f03a, Texture doc d4fe7dda-97b2-532b-b943-c5dd7272201c, patch /Users/wiz/Dev/lanes/_runs/apprewrite/v6/patch.diff. The checkpoint bug: docs/problems/stock-ui-writes-make-a-computer-checkpoint-ineligible-2026-10-24.md; fix lane lane/fp0-media-replay. Clustering assessment: docs/problems/engineering-work-product-durability-cluster-2026-10-24.md.
 - Held, not landed: lane/fp0-jobpark-wired 9d9fdc884 (a source-shape test; the staging events are the wired proof).
 - Owed: D37's proof at the 04:00 compaction; a second clean platform Dolt GC; restoring b@c's System/model-policy.toml after the rewrites.
