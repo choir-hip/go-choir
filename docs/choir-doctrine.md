@@ -419,8 +419,11 @@ reports resolve commitments, and scores stay off the acting desk's context.
 
 `I27` One object graph per computer, and one home per kind of data. Every
 meaningful kind of data a computer holds is an object graph kind with exactly
-one writer, and lives in one place: on the tape, in replay and restore, and
-reachable by a desk through a verb. Each kind belongs to the package that
+one registered writer (owner edits aside, where a kind admits them, `I1`), and
+lives in one place: on the tape, in replay and restore, and reachable through a
+verb by the desks and apps authorized over it. Authorization stays a boundary:
+an owner-private kind (computer settings, the model policy) is reached by owner
+acts, and a substrate-internal kind (a lease) by its substrate writer only. Each kind belongs to the package that
 declares it (the platform, an app package, or the computer itself), and its
 schema travels with that package. The substrate stores, replays and restores
 every kind without knowing it; an update changes only the kinds it owns, and
