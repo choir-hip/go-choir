@@ -287,6 +287,40 @@ deploy. Off: writes go to the table as today. On: writes go to the graph.
 Tests are written first (`internal/agentcore/evidence_slots_graph_test.go`,
 `internal/store/graph_home_test.go`) and fail before the code.
 
+### As built
+
+- Settings: `evidence.graph` and `engineering.slots_graph`
+  (`store/computer_setting.go`), both in `KnownComputerSettings`, default off.
+  The store reads them per write through `graphHomeOn` (`store/graph_home.go`),
+  keyed by the tape's computer id; an unbound store is always off. Turn one on
+  for one computer with `POST /api/computer-settings {"key":..., "value":true}`;
+  the response carries `import: {moved, error}`. The import runs under a 25 s
+  deadline and continues on the next write or a repeat POST.
+- Evidence writes `choir.agent_evidence` through the existing
+  `CreateEvidenceOG` under the research writer; the kind's registered writer is
+  now `desk:research` (was `system:runtime`) and its identity mode
+  `external_key` (it always was written with a key).
+- Slots: the new kind `choir.co_super_slot` (`registry.go`), one object per
+  `(trajectory, slot)`. The claim is a conditional write (`PutBatchConditional`,
+  expected content hash, or absent) under a store mutex, mirroring the SQL
+  insert-or-advance. A release writes the object with no run (a slot with no
+  run reads as absent), because the tape has no delete.
+- Reads union both homes for every slot and evidence read; a slot's newer
+  record wins at the table's one-second DATETIME resolution, a tie going to
+  the table (the later write in a rollback). The table claim path refuses a
+  slot the graph holds for a live run, so a rolled-back setting never hands a
+  held slot out twice.
+- Not done: the tables and their manifest entries stay (empty with a setting
+  on); dropping the DDL is step 10. `CreateEvidenceOG`'s agent edge is
+  best-effort as before.
+
+**Rollback.** Turn the setting off: new writes return to the tables, graph
+records stay on the tape and stay readable through the new binary. No op kind
+was added, so a binary revert strands no restore. One caution for a binary
+revert while `engineering.slots_graph` is on: an older binary does not read the
+graph slot objects, so it would not see a live claim. Turn the setting off and
+let live engineering runs finish before reverting a binary.
+
 What only staging proves: the setting flip on a real computer, the import of
 real rows, a real checkpoint accepted after, and the research and engineering
 desks using the graph home in a live run.
