@@ -956,7 +956,21 @@ are additions (bunch 169).
   reads this lease's snapshot and one atomic (`lease.onTape`, set where the
   seed and the refill write the row: the tape was bound); the writer's stamp
   and the setting's POST (409) both refuse before it; deploy 2's proof step 5
-  is this section's step 3.
+  is this section's step 3. Round 2 of bunch 178 (both seats approved
+  `f66b6f217`): `Reopen` re-reads the adopted workspace before the lease
+  resumes, clears `onTape` and writes a fresh lease row onto the tape (the
+  gate reopens when it lands); `StreamSeqLeaseStats.on_tape` reports the atomic
+  and deploy 2's proof step 2 asserts it. Recorded as information, not fixed
+  (bunch 178, Devin 2, 4 and 5):
+  - a `store.event_table=true` retry POST during a not-ready window gets 409
+    instead of re-applying the same value; the setting stays stored and the
+    switch armed, and it converges once the lease lands (cosmetic);
+  - proof step 5's engine-mutex regex keys on `seed_owner_max`, which the exact
+    seed always runs; it goes blind if that op label is renamed, and
+    `seeded_from == "lease"` is the primary signal;
+  - `RestagePinnedRelease` passes `allowUndeclared=true` so genesis baselines
+    restage on a floored store; safe because an undeclared manifest means the
+    booted floor-aware image, and no pre-contract pinned release should exist.
 - The VM snapshot resume residual (open question 4) is unchanged.
 - The full `internal/agentcore` suite was not run; the focused run of the
   instruction (`Event|Seq|Lease|Rematerial|Restore|Replay`) passes.
