@@ -284,8 +284,10 @@ deploy. Off: writes go to the table as today. On: writes go to the graph.
     with the evidence id in the error and the row stays in the table (the
     computer stays ineligible, visibly) instead of being dropped.
 
-Tests are written first (`internal/agentcore/evidence_slots_graph_test.go`,
-`internal/store/graph_home_test.go`) and fail before the code.
+Tests are written first and fail before the code
+(`internal/agentcore/evidence_slots_graph_test.go`; the review round added
+`internal/store/graph_home_race_test.go`). Failure modes 2, 7, 9 and 10 have
+no dedicated test yet (residual, named in the review round below).
 
 ### As built
 
@@ -319,7 +321,45 @@ records stay on the tape and stay readable through the new binary. No op kind
 was added, so a binary revert strands no restore. One caution for a binary
 revert while `engineering.slots_graph` is on: an older binary does not read the
 graph slot objects, so it would not see a live claim. Turn the setting off and
-let live engineering runs finish before reverting a binary.
+let live engineering runs finish before reverting a binary. The same holds for
+`evidence.graph`: an older binary reads only the `agent_evidence` table, so
+imported evidence would read as empty (`read_evidence`, `list_evidence`) though
+it stays on the tape; turn the setting off and re-import is not needed, but do
+not revert the binary until the records are not wanted by a live run.
+
+### Review round (bunch 206, tier 2: Devin and DeepSeek v4.1 flash, sent back)
+
+Discovered, before the fix:
+
+- **Two claims across the two homes could both be told `claimed=true`.** The
+  table path's graph-holder check ran outside `graphHomeMu`, and the graph path
+  checked `co_super_slots` before taking it, so a claim that read the setting
+  on and a claim that read it off could each pass the other home's check while
+  the other's write was still in flight (failure mode 3, silent dual
+  authority). Fix: `ClaimEngineeringSlot` holds `graphHomeMu` across the whole
+  decision (setting read, other-home check, import, write) in both homes, and
+  release holds it too.
+- **The table home never excluded a second claim on this driver** (found while
+  testing the above, on the pre-existing path, not introduced by this lane).
+  `INSERT ... ON DUPLICATE KEY UPDATE run_id = run_id` reports `RowsAffected=1`
+  for a matched duplicate, so a second claim of a slot a live run held returned
+  `claimed=true` (the table kept the first run; the second claimer ran as a
+  co-holder). Evidence: a two-claim sequential test on the table home returned
+  claimed=true for both. Fix: read the row first and insert only when absent.
+  This changes default-off behavior toward the documented contract (a held
+  slot returns the live run, `spawn_reused`).
+- Import deleted by key only, so a row advanced between its read and the delete
+  would be lost; the delete now names the `run_id` it read. A release in the
+  graph home cleared the graph record even when a newer table claim held the
+  slot; it now clears only when the union record still names the run.
+  `GetEvidence` treated any graph read error as not-found; it now falls back to
+  the table only on not-found.
+
+Residual: the graph claim's conditional write is not atomic with its tape
+append inside the object store; `graphHomeMu` plus one live store per computer
+is what serializes it. A second process would lose with an error
+(`ErrNeedsProjectionRepair` or head CAS), not receive the holder; production
+runs one autoputer per computer.
 
 What only staging proves: the setting flip on a real computer, the import of
 real rows, a real checkpoint accepted after, and the research and engineering
