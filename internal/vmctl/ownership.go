@@ -434,6 +434,11 @@ type VMManagerConfig struct {
 	// with the data image path (store_compaction.go). Refresh only.
 	OfflineMaintenance func(dataImagePath string) error
 
+	// PostMaintenanceCredential re-mints the boot envelope after
+	// OfflineMaintenance returns, for the same realization; refresh only
+	// (maintenanceCredentialIssuer).
+	PostMaintenanceCredential func() (string, error)
+
 	// WarmnessClass is the computer's class at this boot ("test" for a
 	// test account's computer): the visual capture grant reads it
 	// (docs/design/visual-evidence-slice-2026-10-15.md).
@@ -1654,6 +1659,33 @@ func (r *OwnershipRegistry) resumeCredentialIssuer(own *VMOwnership) func() (str
 		envelope := issueComputerCredentialEnvelopeWithKey(corpusdURL, computerID, realizationID, key)
 		if envelope == "" {
 			return "", fmt.Errorf("resume credential for %s unavailable", realizationID)
+		}
+		return envelope, nil
+	}
+}
+
+// maintenanceCredentialIssuer returns the re-mint vmmanager calls after a
+// refresh's OfflineMaintenance hook, or nil when vmctl has no corpusd. The
+// boot envelope in cfg was minted before the kill; corpusd gives it 10
+// minutes, and a long hook outlives it (docs/problems/offline-maintenance-
+// outlives-the-boot-credential-2026-10-24.md). The re-mint binds the same
+// reserved realization under its own key, so the lifecycle receipt names it
+// and corpusd does not replay the stale envelope; the key is fixed per
+// realization, so a second call replays the post-hook envelope instead of
+// issuing another.
+func (r *OwnershipRegistry) maintenanceCredentialIssuer(cfg VMManagerConfig) func() (string, error) {
+	r.mu.RLock()
+	corpusdURL := r.corpusdURL
+	r.mu.RUnlock()
+	if strings.TrimSpace(corpusdURL) == "" || cfg.ComputerID == "" || cfg.RealizationID == "" {
+		return nil
+	}
+	computerID, realizationID := cfg.ComputerID, cfg.RealizationID
+	key := fmt.Sprintf("guest-credential-maintained:%s:%d", realizationID, cfg.Epoch)
+	return func() (string, error) {
+		envelope := issueComputerCredentialEnvelopeWithKey(corpusdURL, computerID, realizationID, key)
+		if envelope == "" {
+			return "", fmt.Errorf("post-maintenance credential for %s unavailable", realizationID)
 		}
 		return envelope, nil
 	}
@@ -3322,8 +3354,9 @@ func (r *OwnershipRegistry) refreshVMForDesktop(userID, desktopID string, mainte
 		if err != nil {
 			return nil, fmt.Errorf("reserve refresh realization for VM %s: %w", snapshot.VMID, err)
 		}
-		if !missingManagerInstance {
+		if !missingManagerInstance && maintenance != nil {
 			cfg.OfflineMaintenance = maintenance
+			cfg.PostMaintenanceCredential = r.maintenanceCredentialIssuer(cfg)
 		}
 		info, err = r.spawnClaimed(snapshot.VMID, bootClaimBoot, cfg.Epoch, func() (*VMInstanceInfo, error) {
 			if missingManagerInstance {

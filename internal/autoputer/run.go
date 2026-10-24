@@ -313,6 +313,9 @@ func Run() {
 		}
 		if err != nil {
 			cancel()
+			if credentialStepFatal(err) {
+				boot.fatalf("autoputer: acquire or recover computer event credential: %v (the boot envelope cannot become valid; ending this boot)", err)
+			}
 			boot.retryf("autoputer: acquire or recover computer event credential: %v", err)
 		}
 		eventClient, err := computerevent.NewGuestHTTPClient(platformURL, credentials.Capability)

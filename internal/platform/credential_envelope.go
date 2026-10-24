@@ -22,6 +22,13 @@ var credentialEnvelopeDomain = []byte("choir-computer-credential-envelope-v1\x00
 
 const maximumCredentialEnvelopeTTL = 15 * time.Minute
 
+// ErrCredentialEnvelopeLifetime: the envelope is expired or its lifetime is
+// malformed. Its lifetime is fixed when it is signed, so the realization that
+// holds it can never use it; the guest ends that boot instead of restarting
+// into the same refusal (docs/problems/offline-maintenance-outlives-the-boot-
+// credential-2026-10-24.md, item 2).
+var ErrCredentialEnvelopeLifetime = errors.New("credential envelope: invalid bootstrap lifetime")
+
 type ComputerCredentialEnvelope struct {
 	Version                int    `json:"version"`
 	ComputerID             string `json:"computer_id"`
@@ -77,7 +84,7 @@ func (e ComputerCredentialEnvelope) VerifyBootstrap(computerID, realizationID st
 	issuedAt, issuedErr := time.Parse(time.RFC3339Nano, e.IssuedAt)
 	expiresAt, expiresErr := time.Parse(time.RFC3339Nano, e.ExpiresAt)
 	if issuedErr != nil || expiresErr != nil || issuedAt.Location() != time.UTC || expiresAt.Location() != time.UTC || !now.UTC().Before(expiresAt) || expiresAt.Sub(issuedAt) > maximumCredentialEnvelopeTTL {
-		return nil, fmt.Errorf("credential envelope: invalid bootstrap lifetime")
+		return nil, ErrCredentialEnvelopeLifetime
 	}
 	signature, err := base64.RawStdEncoding.DecodeString(e.Signature)
 	if err != nil {

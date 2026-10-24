@@ -2011,9 +2011,9 @@ type mockVMManager struct {
 	// bootedEnvelopes records the envelope each RefreshVM "booted" with:
 	// the config's, or the PostMaintenanceCredential re-mint after a hook.
 	bootedEnvelopes []string
-	destroys         []string
-	tokens           map[string]string
-	reservedEpochs   map[string]int64
+	destroys        []string
+	tokens          map[string]string
+	reservedEpochs  map[string]int64
 	// Configurable responses
 	bootResponse       *VMInstanceInfo
 	bootError          error

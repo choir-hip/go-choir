@@ -183,6 +183,15 @@ type VMConfig struct {
 	// only and never stores it in an instance config.
 	OfflineMaintenance func(dataImagePath string) error `json:"-"`
 
+	// PostMaintenanceCredential, when set on a refresh with
+	// OfflineMaintenance, re-mints the boot envelope after the hook returns
+	// and before the boot writes the credential disk: a long hook outlives
+	// the envelope minted before the kill (docs/problems/offline-maintenance-
+	// outlives-the-boot-credential-2026-10-24.md). It is not called without a
+	// hook, nor after an unbootable one; when it fails, the boot keeps the
+	// envelope it was given. Like the hook, it is never stored.
+	PostMaintenanceCredential func() (string, error) `json:"-"`
+
 	// WarmnessClass is the class vmctl booted the computer under ("test"
 	// for a test account's computer). It is a boot input only: the visual
 	// capture grant reads it (visual_capture.go).
@@ -1732,16 +1741,39 @@ func (m *Manager) RefreshVMWithConfig(vmID string, overrides VMConfig) (*VMInsta
 	cfg.VMID = vmID
 	m.mu.Unlock()
 
-	if overrides.OfflineMaintenance != nil {
-		dataImage := filepath.Join(m.cfg.StateDir, vmID, "data.img")
-		if err := overrides.OfflineMaintenance(dataImage); err != nil {
-			if errors.Is(err, ErrOfflineMaintenanceUnbootable) {
-				return nil, fmt.Errorf("vm %s not booted after offline maintenance: %w", vmID, err)
-			}
-			log.Printf("vmmanager: offline maintenance for %s failed (booting the image it left): %v", vmID, err)
-		}
+	if err := m.runOfflineMaintenance(vmID, &cfg, overrides); err != nil {
+		return nil, err
 	}
 	return m.bootVM(cfg)
+}
+
+// runOfflineMaintenance runs a refresh's OfflineMaintenance hook, then
+// re-mints the boot envelope into cfg for any outcome that boots. It returns
+// an error only when the hook left no bootable image. A failed re-mint keeps
+// the envelope minted before the kill: a short hook still boots on it.
+func (m *Manager) runOfflineMaintenance(vmID string, cfg *VMConfig, overrides VMConfig) error {
+	if overrides.OfflineMaintenance == nil {
+		return nil
+	}
+	dataImage := filepath.Join(m.cfg.StateDir, vmID, "data.img")
+	started := time.Now()
+	if err := overrides.OfflineMaintenance(dataImage); err != nil {
+		if errors.Is(err, ErrOfflineMaintenanceUnbootable) {
+			return fmt.Errorf("vm %s not booted after offline maintenance: %w", vmID, err)
+		}
+		log.Printf("vmmanager: offline maintenance for %s failed (booting the image it left): %v", vmID, err)
+	}
+	if overrides.PostMaintenanceCredential == nil {
+		return nil
+	}
+	envelope, err := overrides.PostMaintenanceCredential()
+	if err != nil || envelope == "" {
+		log.Printf("vmmanager: boot credential re-mint for %s (%s) after offline maintenance failed; booting the envelope minted before the hook (hook took %s): %v", vmID, cfg.RealizationID, time.Since(started).Round(time.Second), err)
+		return nil
+	}
+	cfg.ComputerCredentialEnvelope = envelope
+	log.Printf("vmmanager: boot credential for %s (%s) re-minted after offline maintenance (hook took %s)", vmID, cfg.RealizationID, time.Since(started).Round(time.Second))
+	return nil
 }
 
 func mergeVMConfigOverrides(cfg VMConfig, overrides VMConfig) VMConfig {

@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/server"
 )
 
@@ -167,4 +168,13 @@ func privacyKeyBootRefusal(computerID string, headSequence uint64, err error) *P
 		}
 	}
 	return &ProjectionBaseRefusal{ComputerID: computerID, Kind: BootRefusalKindStartupFailed, Reason: reason}
+}
+
+// credentialStepFatal reports whether the boot credential step failed for a
+// reason a restart cannot clear. An envelope past its life is read again,
+// unchanged, after a restart; looping on it held the paper unready for 30
+// minutes (docs/problems/offline-maintenance-outlives-the-boot-credential-
+// 2026-10-24.md). Everything else in the step stays transient.
+func credentialStepFatal(err error) bool {
+	return errors.Is(err, platform.ErrCredentialEnvelopeLifetime)
 }
