@@ -26,6 +26,50 @@ program, not a demonstrated guarantee of alignment, honesty or safety.
 
 ## 1. Thesis, and why this is the core
 
+### 1.0 Why: reading, and the scientific method (owner, 2026-10-24)
+
+The owner's own account, kept here to be revised as the thinking develops.
+
+**Engineering becomes science.** "Pre-commitment records turn engineering
+into science. ... We're applying, quote-unquote, the scientific method to
+everything, that you have to register your hypothesis before you do the
+experiment, where an experiment is something related to coding, or it'll
+also be as simple as research of, you know, before you do a search, you
+should set your expectations clear. So that way you actually are basically
+forced to learn as the reality meets your hypothesis, either confirming or
+updating."
+
+**The origin: reading, not writing.** One origin was disappointment with
+the quality of language models' writing, until it became clear that "it
+wasn't writing quality that was the weakness, but reading quality." Reading
+is among the most general cognitive functions, and it has many levels:
+close reading, reading between the lines, context and co-text, allusion,
+critical reading, and the traditions of literary and legal study. The
+mainstream habit of taking people at face value, and not imputing motives,
+is not deep reading. Deep reading is what poker players do in hand
+reading, or what anyone does reading a face, body language or a room: "being
+able to impute from the little bits of leaked information that people are
+trying to conceal is the essence of reading at a deep level. And the only
+way that you can calibrate that finally is by having more of a scientific
+approach where you have limited information, you make a hypothesis, and
+then you have to run an experiment or you have to observe how that
+hypothesis meets reality and update from that and keep calibrating. That's
+how you can work with imperfect information."
+
+**Feedback, not examples.** The owner says in-context *reinforcement*
+learning on purpose: "in-context learning evokes in most people's minds
+few-shot learning from examples," while today's models, trained with so
+much reinforcement learning, are far more sample-efficient with feedback
+than with examples. "We want to provide as much rich feedback to models as
+we can. We're really gonna be bootstrapping and improving the calibration
+of models ... This is the core scientific innovation of Choir in my mind."
+The 2026-10-24 rulings that follow from it (mandatory precommits on
+background tasks, fixed and free-form claims, System1 scoring, engineering
+sees aggregates of its own calibration with a 10% held-out set, calibration
+feedback on) are in the launch first pass ledger, 18:2x; the context-design
+text in 1.2 and 4.7 is being revised to match
+(docs/design/tasks-precommit-icrl-2026-10-24.md, in progress).
+
 ### 1.1 The mechanism
 
 Intelligent systems should commit to what they expect, and why, before the
