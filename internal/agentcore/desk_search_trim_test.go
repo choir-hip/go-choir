@@ -70,10 +70,10 @@ func TestDeskSearchLimitsFromEnvironment(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("CHOIR_DESK_SEARCH_MAX_RESULTS", tc.results)
 			t.Setenv("CHOIR_DESK_SEARCH_SNIPPET_CHARS", tc.snippet)
-			if got := deskSearchMaxResults(); got != tc.wantResults {
+			if got := deskSearchMaxResults(false); got != tc.wantResults {
 				t.Fatalf("max results = %d, want %d", got, tc.wantResults)
 			}
-			if got := deskSearchSnippetChars(); got != tc.wantChars {
+			if got := deskSearchSnippetChars(false); got != tc.wantChars {
 				t.Fatalf("snippet chars = %d, want %d", got, tc.wantChars)
 			}
 		})
@@ -112,5 +112,49 @@ for _, h := range r.Results {
 	}
 	if !strings.HasPrefix(out.Stdout, "Full title kept | https://example.test/a?x=1#frag | ") || !strings.Contains(out.Stdout, "| true") {
 		t.Fatalf("hit = %q", out.Stdout)
+	}
+}
+
+// E3 end to end: the per-computer setting alone (no env) makes the desk ask
+// for 12 results and cut snippets to 300.
+func TestDeskSearchCapsSettingAsksForFewerResultsWithoutEnv(t *testing.T) {
+	clearSwitchEnv(t)
+	client := recordingSearchClient{maxResults: make(chan int, 1)}
+	tool, ctx, _, _ := researchSearchToolWith(t, client, func(rt *Runtime) { rt.searchCapsSetting.Store(true) })
+	out := evalDeskCell(t, tool, ctx, `s, _ := choir.SearchStart("q")
+choir.SearchWait(s.ID, 5000)
+r, _ := choir.Searches.Get(s.ID)
+for _, h := range r.Results {
+	fmt.Println(h.Title, "|", len(h.Snippet), "|", strings.HasSuffix(h.Snippet, "…"))
+}`)
+	if out.Error != "" {
+		t.Fatalf("cell error: %s", out.Error)
+	}
+	if got := <-client.maxResults; got != 12 {
+		t.Fatalf("max_results = %d, want 12", got)
+	}
+	if !strings.Contains(out.Stdout, "| true") {
+		t.Fatalf("snippet not cut: %q", out.Stdout)
+	}
+}
+
+func TestDeskSearchCapsSettingOffAsksForFortyWholeSnippets(t *testing.T) {
+	clearSwitchEnv(t)
+	client := recordingSearchClient{maxResults: make(chan int, 1)}
+	tool, ctx, _, _ := researchSearchToolWith(t, client, nil)
+	out := evalDeskCell(t, tool, ctx, `s, _ := choir.SearchStart("q")
+choir.SearchWait(s.ID, 5000)
+r, _ := choir.Searches.Get(s.ID)
+for _, h := range r.Results {
+	fmt.Println(h.Title, "|", len(h.Snippet), "|", strings.HasSuffix(h.Snippet, "…"))
+}`)
+	if out.Error != "" {
+		t.Fatalf("cell error: %s", out.Error)
+	}
+	if got := <-client.maxResults; got != 40 {
+		t.Fatalf("max_results = %d, want 40", got)
+	}
+	if !strings.Contains(out.Stdout, "| false") {
+		t.Fatalf("snippet was cut with the setting off: %q", out.Stdout)
 	}
 }
