@@ -45,6 +45,8 @@ const componentModules = import.meta.glob('../../packages/*/App.svelte') as Reco
   () => Promise<{ default: ComponentType }>
 >;
 
+const isObject = (v: unknown): v is Record<string, any> => v !== null && typeof v === 'object' && !Array.isArray(v);
+
 export function loadPackageApps(reservedIds: ReadonlySet<string>): LoadedPackages {
   const apps: ChoirAppDefinition[] = [];
   const aliases: Record<string, string> = {};
@@ -52,40 +54,56 @@ export function loadPackageApps(reservedIds: ReadonlySet<string>): LoadedPackage
   const taken = new Set(reservedIds);
 
   for (const [manifestPath, manifest] of Object.entries(manifestModules).sort(([a], [b]) => a.localeCompare(b))) {
-    const entryPath = manifestPath.replace(/choir-package\.json$/, 'App.svelte');
-    const component = componentModules[entryPath];
-    const name = manifest?.name;
-    if (!name || !manifest.app || !manifest.display) {
-      console.warn(`[packages] skipped ${manifestPath}: malformed manifest`);
-      continue;
-    }
-    if (!component) {
-      console.warn(`[packages] skipped ${name}: no App.svelte`);
-      continue;
-    }
-    const packageAliases = manifest.app.aliases || [];
-    const claimed = [name, ...packageAliases];
-    if (claimed.some((id) => taken.has(id))) {
-      console.warn(`[packages] skipped ${name}: name or alias already taken`);
-      continue;
-    }
-    claimed.forEach((id) => taken.add(id));
-    packageAliases.forEach((alias) => {
-      aliases[alias] = name;
-    });
-    apps.push({
-      id: name,
-      name: manifest.display.title,
-      icon: manifest.display.icon,
-      description: manifest.display.description,
-      component,
-      launcher: manifest.app.launcher,
-      window: manifest.app.window,
-      auth: manifest.app.auth,
-      theme: manifest.app.theme,
-    });
-    for (const opens of manifest.opens || []) {
-      mediaRoutes.push({ appId: name, mediaType: opens.media_type, extensions: opens.extensions });
+    try {
+      const entryPath = manifestPath.replace(/choir-package\.json$/, 'App.svelte');
+      const component = componentModules[entryPath];
+      const name = manifest?.name;
+      if (!name || !isObject(manifest.app) || !isObject(manifest.display)) {
+        console.warn(`[packages] skipped ${manifestPath}: malformed manifest`);
+        continue;
+      }
+      if (!component) {
+        console.warn(`[packages] skipped ${name}: no App.svelte`);
+        continue;
+      }
+      const { launcher, window: windowPref, auth, theme } = manifest.app;
+      if (![launcher, windowPref, auth, theme].every(isObject)) {
+        console.warn(`[packages] skipped ${name}: launcher, window, auth and theme must be objects`);
+        continue;
+      }
+      const packageAliases = manifest.app.aliases ?? [];
+      const opensList = manifest.opens ?? [];
+      if (!Array.isArray(packageAliases) || !Array.isArray(opensList)
+        || !opensList.every((o) => isObject(o) && Array.isArray(o.extensions))) {
+        console.warn(`[packages] skipped ${name}: aliases, opens and opens[].extensions must be arrays`);
+        continue;
+      }
+      const claimed = [name, ...packageAliases];
+      if (claimed.some((id) => taken.has(id))) {
+        console.warn(`[packages] skipped ${name}: name or alias already taken`);
+        continue;
+      }
+      // Build everything before mutating shared state, so a skip leaves no trace.
+      const app: ChoirAppDefinition = {
+        id: name,
+        name: manifest.display.title,
+        icon: manifest.display.icon,
+        description: manifest.display.description,
+        component,
+        launcher,
+        window: windowPref,
+        auth,
+        theme,
+      };
+      const routes = opensList.map((o) => ({ appId: name, mediaType: o.media_type, extensions: o.extensions }));
+      claimed.forEach((id) => taken.add(id));
+      packageAliases.forEach((alias) => {
+        aliases[alias] = name;
+      });
+      apps.push(app);
+      mediaRoutes.push(...routes);
+    } catch (error) {
+      console.warn(`[packages] skipped ${manifestPath}:`, error);
     }
   }
   return { apps, aliases, mediaRoutes };

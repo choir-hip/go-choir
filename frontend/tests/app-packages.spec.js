@@ -89,6 +89,32 @@ const badCases = [
   ['import-dynamic', (root) => fs.writeFileSync(path.join(root, 'src/packages/image/helper.js'), "export const f = () => import('../../lib/auth.js');\n"), /leaves the package/],
   ['import-reexport', (root) => fs.writeFileSync(path.join(root, 'src/packages/image/helper.ts'), "export * from '../../lib/auth.js';\n"), /leaves the package/],
   ['symlink-out', (root) => fs.symlinkSync(path.join(root, 'src/lib/app-sdk.ts'), path.join(root, 'src/packages/image/link.js')), /symlinks are not allowed/],
+  // Devin round 1 (bunch201): F1 dynamic reach.
+  ['import-meta-glob', (root) => fs.appendFileSync(path.join(root, 'src/packages/image/App.svelte'), "\n<script>const m = import.meta.glob('../../lib/auth.js', { eager: true });</script>\n"), /import\.meta\.glob\/resolve is not allowed/],
+  ['import-meta-resolve', (root) => fs.writeFileSync(path.join(root, 'src/packages/image/helper.js'), "export const u = import.meta.resolve('../../lib/auth.js');\n"), /import\.meta\.glob\/resolve is not allowed/],
+  ['import-nonliteral', (root) => fs.writeFileSync(path.join(root, 'src/packages/image/helper.js'), "const p = '../../lib/auth.js';\nexport const f = () => import(p);\n"), /import\(\) must take a quoted string literal/],
+  ['import-template-literal', (root) => fs.writeFileSync(path.join(root, 'src/packages/image/helper.js'), 'export const f = (n) => import(`../../lib/${n}.js`);\n'), /import\(\) must take a quoted string literal/],
+  // F2: every file is scanned, whatever its extension.
+  ...['tsx', 'jsx', 'mts', 'cts', 'cjs', 'vue'].map((ext) => [
+    `import-escape-in-${ext}`,
+    (root) => fs.writeFileSync(path.join(root, `src/packages/image/helper.${ext}`), "export { fetchWithRenewal } from '../../lib/auth.js';\n"),
+    /leaves the package/,
+  ]),
+  // F3: only real directories under src/packages.
+  ['symlinked-package-dir', (root) => {
+    fs.cpSync(path.join(root, 'src/packages/image'), path.join(root, 'elsewhere'), { recursive: true });
+    fs.symlinkSync(path.join(root, 'elsewhere'), path.join(root, 'src/packages/linked'));
+  }, /linked: must be a real directory/],
+  ['stray-file-in-packages', (root) => fs.writeFileSync(path.join(root, 'src/packages/README.md'), 'hi\n'), /README\.md: must be a real directory/],
+  // F5: the required-package floor.
+  ['required-package-missing', (root) => {
+    fs.cpSync(path.join(root, 'src/packages/image'), path.join(root, 'src/packages/viewer'), { recursive: true });
+    const m = imageManifest(root);
+    m.name = 'viewer';
+    m.opens = [];
+    fs.writeFileSync(path.join(root, 'src/packages/viewer/choir-package.json'), JSON.stringify(m));
+    fs.rmSync(path.join(root, 'src/packages/image'), { recursive: true });
+  }, /required package "image" is missing/],
   ['dir-without-manifest', (root) => {
     fs.mkdirSync(path.join(root, 'src/packages/ghost'), { recursive: true });
     fs.writeFileSync(path.join(root, 'src/packages/ghost/App.svelte'), '<div/>\n');
@@ -236,5 +262,40 @@ test.describe('image viewer package in the shell', () => {
     const win = page.locator('[data-window][data-window-app-id="image"]');
     await expect(win).toBeVisible();
     await expect(win.locator('[data-image-viewer]')).toHaveAttribute('src', 'https://example.com/holiday.png');
+  });
+
+  // F4: the loader must never crash the shell. Needs `vite dev`: the test writes
+  // a malformed package into src/packages for its duration and removes it after.
+  test('a malformed package is skipped with a warning and the shell still works', async ({ page, request }) => {
+    const dev = await request.get(`${BASE_URL}/src/lib/apps/packages.ts`);
+    test.skip(!dev.ok(), 'needs the vite dev server (the glob must see a new package directory)');
+    const badDir = path.join(frontendRoot, 'src/packages/zz-bad-fixture');
+    const bad = {
+      ...JSON.parse(fs.readFileSync(path.join(frontendRoot, 'src/packages/image/choir-package.json'), 'utf8')),
+      name: 'zz-bad-fixture',
+      app: { entry: 'App.svelte', aliases: 'not-an-array', launcher: 7 },
+      opens: [{ media_type: 'x/y', extensions: 'zzz' }],
+    };
+    fs.mkdirSync(badDir, { recursive: true });
+    try {
+      fs.writeFileSync(path.join(badDir, 'choir-package.json'), JSON.stringify(bad));
+      fs.writeFileSync(path.join(badDir, 'App.svelte'), '<div>bad</div>\n');
+      await page.waitForTimeout(1500); // let vite's watcher see the new directory
+      const warnings = [];
+      const crashes = [];
+      page.on('console', (m) => {
+        if (/\[packages\]/.test(m.text())) warnings.push(m.text());
+      });
+      page.on('pageerror', (e) => crashes.push(String(e)));
+      await stubLoggedOutBackend(page);
+      await page.goto(BASE_URL);
+      await page.locator('[data-desk-menu-button]').click();
+      await expect(page.locator('[data-desk-sheet-app][data-desk-app-id="image"]')).toBeVisible();
+      await expect(page.locator('[data-desk-sheet-app][data-desk-app-id="zz-bad-fixture"]')).toHaveCount(0);
+      expect(warnings.join('\n')).toContain('zz-bad-fixture');
+      expect(crashes).toEqual([]);
+    } finally {
+      fs.rmSync(badDir, { recursive: true, force: true });
+    }
   });
 });
