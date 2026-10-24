@@ -151,16 +151,18 @@ func TestEveryEventKindHasAStorageClass(t *testing.T) {
 	}
 }
 
-// F9: batching and storage are two decisions, pinned equal today. A change
-// to either map fails here until someone decides whether rows move tables.
+// F9, changed by R7 S2 (trace-segment-log design 2.2): batching and storage are
+// two decisions, pinned together. A batched kind is stored in the event table
+// or in the trace log, and nothing else is.
 func TestStorageClassEqualsTheBatchedSetToday(t *testing.T) {
 	for _, kind := range EventKinds() {
-		if (kind.Storage() == StorageEventTable) != kind.Batchable() {
-			t.Fatalf("%s: storage %q but batchable %t; the two classes are pinned equal until the owner decides otherwise", kind, kind.Storage(), kind.Batchable())
+		class := kind.Storage()
+		if (class == StorageEventTable || class == StorageTraceLog) != kind.Batchable() {
+			t.Fatalf("%s: storage %q but batchable %t; the two classes are pinned together until the owner decides otherwise", kind, class, kind.Batchable())
 		}
 	}
 	for kind, class := range eventStorage {
-		if (class == StorageEventTable) != kind.Batchable() {
+		if (class == StorageEventTable || class == StorageTraceLog) != kind.Batchable() {
 			t.Fatalf("%s: storage %q but batchable %t", kind, class, kind.Batchable())
 		}
 	}
