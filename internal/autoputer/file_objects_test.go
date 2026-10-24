@@ -720,3 +720,97 @@ func TestFileObjectByIDIsComputerScoped(t *testing.T) {
 		t.Fatalf("another computer's file by id = %d, want 404", code)
 	}
 }
+
+// Review round 2 (bunch 217): the symlink refusal reaches the last path
+// component. A leaf symlink that resolves outside the root carried GET (serve
+// or list the target) and PUT (truncate and write the target) out of the root.
+
+func TestFileObjectLeafSymlinksStayInsideTheRoot(t *testing.T) {
+	f := newFileObjectFixture(t)
+	f.setSwitch(t, true)
+	outside := t.TempDir()
+	outFile := filepath.Join(outside, "secret.txt")
+	if err := os.WriteFile(outFile, []byte("outside"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	outDir := filepath.Join(outside, "dir")
+	if err := os.Mkdir(outDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	f.write(t, "real.txt", "inside")
+	for name, target := range map[string]string{
+		"leaf-file": outFile,
+		"leaf-dir":  outDir,
+		"dangling":  filepath.Join(outside, "not-yet.txt"),
+		"in-root":   filepath.Join(f.root, "real.txt"),
+		"relative":  "real.txt",
+	} {
+		if err := os.Symlink(target, filepath.Join(f.root, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, name := range []string{"leaf-file", "leaf-dir", "dangling"} {
+		for _, method := range []string{http.MethodGet, http.MethodPut} {
+			if w := f.do(t, method, "/api/files/"+name, []byte("overwritten")); w.Code != http.StatusForbidden {
+				t.Errorf("%s %s (a leaf symlink out of the root) = %d %s, want 403", method, name, w.Code, w.Body.String())
+			}
+		}
+	}
+	if got, _ := os.ReadFile(outFile); string(got) != "outside" {
+		t.Errorf("outside file was written through a leaf symlink: %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(outside, "not-yet.txt")); err == nil {
+		t.Error("a dangling leaf symlink created a file outside the root")
+	}
+	// A link that stays in the root keeps working, like files/Source/platform/CLAUDE.md -> AGENTS.md.
+	for _, name := range []string{"in-root", "relative"} {
+		w := f.do(t, http.MethodGet, "/api/files/"+name, nil)
+		if w.Code != http.StatusOK || w.Body.String() != "inside" {
+			t.Errorf("GET %s (in-root link) = %d %q, want 200 inside", name, w.Code, w.Body.String())
+		}
+	}
+	// DELETE of a leaf link removes the link only, wherever it points.
+	for _, name := range []string{"leaf-file", "leaf-dir", "dangling", "in-root"} {
+		f.do(t, http.MethodDelete, "/api/files/"+name, nil)
+		if _, err := os.Lstat(filepath.Join(f.root, name)); err == nil {
+			t.Errorf("DELETE %s left the link", name)
+		}
+	}
+	if got, err := os.ReadFile(outFile); err != nil || string(got) != "outside" {
+		t.Errorf("DELETE of a link touched its target: %q, %v", got, err)
+	}
+	if got, err := os.ReadFile(filepath.Join(f.root, "real.txt")); err != nil || string(got) != "inside" {
+		t.Errorf("DELETE of an in-root link touched its target: %q, %v", got, err)
+	}
+}
+
+func TestFileObjectReconcileSkipsAnUnreadableDirectoryWithoutDeletingWhatIsInIt(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads a mode-000 directory")
+	}
+	f := newFileObjectFixture(t)
+	f.setSwitch(t, true)
+	f.write(t, "locked/inside.txt", "inside")
+	f.write(t, "open.txt", "open")
+	f.reconcile(t)
+	if err := os.Chmod(filepath.Join(f.root, "locked"), 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(filepath.Join(f.root, "locked"), 0o755) })
+	f.write(t, "new.txt", "new")
+	for i := 0; i < 3; i++ {
+		res, err := f.fo.Reconcile(context.Background())
+		if err != nil {
+			t.Fatalf("pass %d: %v", i, err)
+		}
+		if res.Deleted != 0 || res.Unreadable != 1 {
+			t.Fatalf("pass %d = %+v, want nothing deleted and the directory counted unreadable", i, res)
+		}
+	}
+	if _, err := f.byPath("new.txt"); err != nil {
+		t.Fatalf("new.txt next to an unreadable directory: %v", err)
+	}
+	if _, err := f.byPath("locked/inside.txt"); err != nil {
+		t.Fatalf("a file in an unreadable directory was deleted: %v", err)
+	}
+}
