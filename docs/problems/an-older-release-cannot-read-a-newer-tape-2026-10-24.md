@@ -99,6 +99,15 @@ proofs may have checked only before a restart. Probe: on a test computer other
 than b@c, restore across a few events, restart it, and read whether the head
 and the projection stay at the target.
 
+Supporting staging evidence (one observation): the 2026-10-24 03:5x drill on
+computer-2ff1f637 (first-pass ledger) restored to the pre-apply checkpoint at
+03:39:07; "the route was gone after the restart" (the release rewound), but
+"the operation read awaiting_approval just after the restore and applied after
+the restart (unexplained)". That is the predicted split: the restored release
+runs, and at its boot the later events re-apply, so the store's projection
+returns to head while the code stays at the target. The hypothesis is now
+supported by one observation; the probe above decides it.
+
 **Versions that exist.** Event SchemaVersion and ReducerVersion must equal 1;
 batches allow (v1, projector 1) or (v2, projector 2); nothing else. No
 reads_schema_versions on events. The store has an epoch (storeschema.Version 3)
