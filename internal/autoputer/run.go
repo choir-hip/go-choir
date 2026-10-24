@@ -575,6 +575,7 @@ func Run() {
 		}
 	})
 	RegisterFileRoutes(s, fileHandler)
+	RegisterAppPackageObjectRoutes(s, db, cfg.ComputerID)
 	RegisterFileSyncRoute(s, fileSyncService)
 	maildir, err := NewMaildir(filepath.Join(filesRoot, "mail"))
 	if err != nil {
