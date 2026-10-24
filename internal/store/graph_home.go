@@ -95,8 +95,14 @@ func (s *Store) createEvidenceGraph(ctx context.Context, rec types.EvidenceRecor
 // or, failing that, the legacy table.
 func (s *Store) GetEvidence(ctx context.Context, evidenceID, ownerID string) (types.EvidenceRecord, error) {
 	if s.og != nil {
-		if rec, err := s.GetEvidenceOG(ctx, ownerID, evidenceID); err == nil {
+		rec, err := s.GetEvidenceOG(ctx, ownerID, evidenceID)
+		if err == nil {
 			return rec, nil
+		}
+		// Only an absent record falls through to the table: a graph read
+		// failure is not "not found".
+		if !errors.Is(err, ErrNotFound) && !errors.Is(err, objectgraph.ErrNotFound) {
+			return types.EvidenceRecord{}, err
 		}
 	}
 	return s.getEvidenceTable(ctx, evidenceID, ownerID)
@@ -272,7 +278,10 @@ func (s *Store) engineeringSlotGraphObject(ctx context.Context, ownerID, traject
 }
 
 // putEngineeringSlotGraph writes the slot object only if the stored version is
-// still the one read (or still absent). The caller holds graphHomeMu.
+// still the one read (or still absent). The caller holds graphHomeMu. The
+// store's conditional check and its tape write are not one atomic step, so
+// graphHomeMu (one live store per computer) is what makes the claim safe, not
+// the condition alone.
 func (s *Store) putEngineeringSlotGraph(ctx context.Context, prior *objectgraph.Object, rec EngineeringSlotRecord) error {
 	createdAt := rec.ClaimedAt
 	cond := objectgraph.ObjectCondition{}
@@ -289,22 +298,29 @@ func (s *Store) putEngineeringSlotGraph(ctx context.Context, prior *objectgraph.
 }
 
 // claimEngineeringSlotGraph is ClaimEngineeringSlot with engineering.slots_graph
-// on: the same compare-and-set over one object per (trajectory, slot).
+// on: the same compare-and-set over one object per (trajectory, slot). The
+// caller holds graphHomeMu, which also covers the table check and the import
+// of the legacy rows, so no table claim can land between the check and the
+// write.
 func (s *Store) claimEngineeringSlotGraph(ctx context.Context, ownerID, trajectoryID, slot, runID, agentID, requesterRunID string) (types.RunRecord, bool, error) {
 	ownerID, trajectoryID = strings.TrimSpace(ownerID), strings.TrimSpace(trajectoryID)
 	slot, runID = strings.TrimSpace(slot), strings.TrimSpace(runID)
 	if ownerID == "" || trajectoryID == "" || slot == "" || runID == "" {
 		return types.RunRecord{}, false, fmt.Errorf("claim co-super slot: owner_id, trajectory_id, slot, and run_id are required")
 	}
+	if s.og == nil || s.ogStore == nil {
+		return types.RunRecord{}, false, fmt.Errorf("claim co-super slot (graph): object graph not initialized")
+	}
 	if has, err := s.tableHasRows(ctx, s.db, "co_super_slots"); err != nil {
 		return types.RunRecord{}, false, err
 	} else if has {
-		if _, err := s.ImportEngineeringSlotsToGraph(ctx); err != nil {
+		if _, err := s.importEngineeringSlotsLocked(ctx); err != nil {
 			return types.RunRecord{}, false, err
 		}
 	}
-	s.graphHomeMu.Lock()
-	defer s.graphHomeMu.Unlock()
+	if hook := s.slotClaimHook; hook != nil {
+		hook()
+	}
 	prior, current, found, err := s.engineeringSlotGraphObject(ctx, ownerID, trajectoryID, slot)
 	if err != nil {
 		return types.RunRecord{}, false, err
@@ -345,18 +361,24 @@ func (s *Store) claimEngineeringSlotGraph(ctx context.Context, ownerID, trajecto
 
 // releaseEngineeringSlotGraph releases the graph home's claim only if it is
 // still owned by runID. A release is recorded as a slot with no run, which
-// reads as absent and is claimable (no delete exists on the tape).
+// reads as absent and is claimable (no delete exists on the tape). The caller
+// holds graphHomeMu.
 func (s *Store) releaseEngineeringSlotGraph(ctx context.Context, ownerID, trajectoryID, slot, runID string) error {
 	if s.og == nil || s.ogStore == nil {
 		return nil
 	}
-	s.graphHomeMu.Lock()
-	defer s.graphHomeMu.Unlock()
 	prior, current, found, err := s.engineeringSlotGraphObject(ctx, ownerID, trajectoryID, slot)
 	if err != nil {
 		return fmt.Errorf("release co-super slot claim: %w", err)
 	}
 	if !found || current.RunID != runID {
+		return nil
+	}
+	// A newer claim in the table (a rolled-back setting) holds the slot now:
+	// an empty graph marker would win the newer-record rule and free it.
+	if union, ok, err := s.engineeringSlotRecord(ctx, ownerID, trajectoryID, slot); err != nil {
+		return fmt.Errorf("release co-super slot claim: %w", err)
+	} else if !ok || union.RunID != runID {
 		return nil
 	}
 	current.RunID, current.AgentID, current.RequestedByRunID = "", "", ""
@@ -393,6 +415,12 @@ func (s *Store) engineeringSlotGraphHolder(ctx context.Context, ownerID, traject
 func (s *Store) ImportEngineeringSlotsToGraph(ctx context.Context) (int, error) {
 	s.graphHomeMu.Lock()
 	defer s.graphHomeMu.Unlock()
+	return s.importEngineeringSlotsLocked(ctx)
+}
+
+// importEngineeringSlotsLocked is ImportEngineeringSlotsToGraph for a caller
+// that holds graphHomeMu.
+func (s *Store) importEngineeringSlotsLocked(ctx context.Context) (int, error) {
 	if s.og == nil || s.ogStore == nil {
 		return 0, fmt.Errorf("store: object graph not initialized")
 	}
@@ -436,13 +464,15 @@ func (s *Store) ImportEngineeringSlotsToGraph(ctx context.Context) (int, error) 
 				if err := s.putEngineeringSlotGraph(ctx, priorPtr, rec); err != nil {
 					return moved, fmt.Errorf("import co-super slot %s/%s: %w", rec.TrajectoryID, rec.Slot, err)
 				}
+				moved++
 			}
+			// Delete only the row that was read: a row advanced since (the lock
+			// makes that unreachable today) is read again by the next page.
 			if _, err := s.db.ExecContext(ctx,
-				`DELETE FROM co_super_slots WHERE owner_id = ? AND trajectory_id = ? AND slot = ?`,
-				rec.OwnerID, rec.TrajectoryID, rec.Slot); err != nil {
+				`DELETE FROM co_super_slots WHERE owner_id = ? AND trajectory_id = ? AND slot = ? AND run_id = ?`,
+				rec.OwnerID, rec.TrajectoryID, rec.Slot, rec.RunID); err != nil {
 				return moved, fmt.Errorf("import co-super slot %s/%s: delete the moved row: %w", rec.TrajectoryID, rec.Slot, err)
 			}
-			moved++
 		}
 	}
 }

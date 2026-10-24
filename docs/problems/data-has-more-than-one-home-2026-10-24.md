@@ -324,8 +324,8 @@ graph slot objects, so it would not see a live claim. Turn the setting off and
 let live engineering runs finish before reverting a binary. The same holds for
 `evidence.graph`: an older binary reads only the `agent_evidence` table, so
 imported evidence would read as empty (`read_evidence`, `list_evidence`) though
-it stays on the tape; turn the setting off and re-import is not needed, but do
-not revert the binary until the records are not wanted by a live run.
+it stays on the tape. Turning the setting off does not move the records back;
+do not revert the binary while a live run needs imported evidence.
 
 ### Review round (bunch 206, tier 2: Devin and DeepSeek v4.1 flash, sent back)
 
