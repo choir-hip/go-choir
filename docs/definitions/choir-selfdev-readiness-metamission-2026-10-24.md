@@ -131,12 +131,53 @@ metamission:
         test (lane/fp0-jobpark-wired 9d9fdc884); the telemetry.batch lead on
         the paper (unverified); the roadmap recut (lane/fp0-roadmap-recut),
         to close or land.
+    - id: SR7
+      path: docs/problems/an-older-release-cannot-read-a-newer-tape-2026-10-24.md
+      readiness: drafted
+      status: pending
+      depends_on: [SR5]
+      note: >-
+        Recoverable changes (owner-ratified 2026-10-24): any release boots on
+        any tape written inside its support window, in both directions; an
+        older binary keeps and skips the kinds and fields it does not know; a
+        new kind ships in two releases; store schema changes are additive or
+        two-phase. Enforced by a cross-version replay gate in CI (the previous
+        release's binary boots on the candidate's tape) that must not lengthen
+        CI wall clock. Then the doctrine entry.
+    - id: SR8
+      path: none yet (drafted in the ledger 23:4x)
+      readiness: intent
+      status: pending
+      depends_on: [SR5, SR7]
+      note: >-
+        Staged auto-approve (owner-ratified 2026-10-24): reversibility, not a
+        person, is the gate. (1) Now, the owner or a coding agent approves
+        while the loop is proved. (2) standing_consensus on b@c for changes
+        inside one package boundary under frontend/src/packages/, with build,
+        verify and non-blank screenshots; the owner sees each applied change
+        in Texture after the fact with a one-act revert. (3) Automatic revert
+        on a health regression after an apply. (4) Widen by change class as
+        SR7's gate proves each one reversible, and by computer class, test
+        then primary then the owner's, the paper last. Auto-apply on one
+        computer is not auto-promote to main: promotion stays reviewed.
     - id: T1
       path: none yet (intent)
       readiness: intent
       status: pending
       depends_on: [SR5]
       note: Tent pole 1, apps become app agents with their own RLM desks (I26), through P4 and P5.
+    - id: T1b
+      path: none yet (intent)
+      readiness: intent
+      status: pending
+      depends_on: [T1, SR8]
+      note: >-
+        Choir in Choir (owner, 2026-10-24): one computer's engineering desk
+        drives another computer through the same CLI or MCP surface a coding
+        agent uses today, so Choir is its own coding agent. Needs a delegated,
+        scoped credential for the target (never owner:acts outright), the
+        target's tape naming the driving computer, and no driven computer
+        approving its driver's changes.
     - id: T2
       path: none yet (intent)
       readiness: intent
