@@ -1,0 +1,87 @@
+# The overnight first pass, October 24
+
+I wrote this on the morning of Saturday, October twenty-fourth. It covers the night's launch work, from about two in the morning to a quarter to ten, Universal Time, and it picks up where last night's letter stopped.
+
+The platform got sturdier overnight, but the app redesigns are not done yet.
+
+Eight deploys landed, one at a time, and each was proved on staging. One proof is still owed tonight. Self-development ran a full cycle on a locked-down test computer for the first time. Engineering stopped burning tokens polling its own build job. Three outages surfaced and each now has a fix: vmctl's list of every computer stopped answering after a self-development apply; the paper was down for an hour after its nightly compaction; and the platform's main database froze three times. The app rewrites on the b@c test account applied one new Slides app at half past four. You looked at it and said it was a restyle, not a redesign. Since then four bigger redesign attempts have been lost to host failures and to how the desks read a staged plan. A fifth is running now. Two research write-ups are ready for today's design session: one on how diverging computers take updates, one on where prospective self-alignment stands. Your questions are at the end.
+
+## The early night: confinement and a full self-development cycle
+
+Between two and half past three I widened the jailer and host-only DNS to every test computer. The jailer runs each computer's virtual machine as its own unprivileged user. All three test computers cold-booted jailed in about thirteen seconds each, and each resolved names only through the host. One lesson came early. The off-host backup ran from half past two to twenty past three, and while it ran, vmctl refused to start any computer for lack of memory. I recorded that. The real fix is deleting the legacy flat tape, which is most of the nine million files the backup walks. That needs your yes.
+
+At ten to four, a self-development drill passed all nineteen of its checks on a freshly made, jailed test computer. Texture cast management, management cast engineering, engineering built and froze a change, and then the owner approved it. The host built the release, the computer restarted once and served the new route, and a restore put it back. That is the whole loop on a confined computer.
+
+The drill also showed, for the third time, that engineering polls its own running build in a tight loop. In one round it polled thirty times in seventy-three seconds, then stopped a healthy build. I designed and landed a fix I call the job park. When engineering checks on its own running job, the turn simply waits until the job ends. The proof drill this morning parked four times, once for almost seven minutes on a Go build. Engineering used seventy-three percent fewer input tokens than in the earlier round.
+
+## Four in the morning: two outages at once
+
+At four, the paper began its nightly store compaction. The compaction itself went well, shrinking the store from fifty-five gigabytes to nineteen. But the computer's boot credential lasts ten minutes, vmctl mints it before the compaction starts, and the compaction took eleven and a half. The paper then looped on an expired credential and stayed down until five. The fix landed this morning: vmctl mints a fresh credential after the maintenance step, and an expired one now ends that boot at once instead of looping. Tonight's compaction is its real test.
+
+At twenty-eight past four, the first self-development apply on the b@c computer made vmctl's whole list fail closed. The classifier did not recognize the new kind of ownership evidence the apply had written. Other computers kept routing, but b@c's could not be reached. Both review seats approved a narrow fix, and it went live at five past five.
+
+I made one mistake in that hour. I read an empty watcher output as the list failure, when it was really the paper being down. I corrected the ledger once I saw it.
+
+## Dawn: the database stalls
+
+From six on, the platform's main database froze three times: at nine past six, at a quarter to seven, and at ten to eight. Each time, the liveness probe aborted it and systemd restarted it. Two of those restarts killed long engineering runs on b@c, about half an hour of work each time. One also kept a computer from starting.
+
+A read-only investigation found the cause. The database is capped at three gigabytes of memory. That cap was sized in early October, when the database used about one gigabyte. It now sits pinned at the cap. Its own garbage collector pushes past it, the kernel throttles it, and the store's locks back up behind the collector. There was a second cost hiding there. With the heap filling the cap, the database had almost no page cache, so it read about twenty megabytes a second from disk.
+
+The fix tells Go about the cap. It sets a three-gigabyte soft limit and raises the hard ceiling to four. In the first forty minutes after the fix, the database was throttled about twenty times less often, its page cache grew from eighty-seven megabytes to over a gigabyte, and it read about eighteen times less from disk. One garbage collection has passed since with no stall and no probe strike. I count the stall as fixed but want a second clean collection before I say it is closed.
+
+## The app rewrites
+
+The rewrites run on the b@c account's computer, under an Opus conductor. Texture writes a supervision document and revises it as the work moves, so you can follow it from the desktop.
+
+Slides applied at twenty-seven past four, after two rejected candidates. You looked and said it was a restyle. You asked for real redesign: an upload inside Slides that lands in Files, a PDF that opens in a reader rather than Slides, press-and-hold menus, and the many other obvious features. The conductor took that as the bar. The desks now write a product spec into the Texture document first, and work across apps is in scope.
+
+Then the night taught three lessons about the platform.
+
+First, successive applies do not build on each other. Every self-development run starts from the computer's original source, not from what the last apply left. So a Files change would have quietly undone Slides. The conductor switched to one combined change for all five apps.
+
+Second, a long engineering run loses everything when the host stumbles. Work is saved only when a run finishes, so the two runs the database stall killed left nothing behind.
+
+Third, staging work in rounds fights the platform's vocabulary. The conductor tried five short rounds, with each round ending "blocked" so the next would carry its work. The rounds themselves were good: Files with a real context menu and open-with routing, one Reader for PDF and EPUB, and a new Slides. But "blocked" means failure in the code, and the desks read it correctly. They kept casting recovery rounds. One recovery round broke the carry chain, and the three finished stages were lost. They survive only as a local patch file.
+
+A fifth attempt started at twenty to ten. It is one round for all five apps, with the lost stages as the minimum to match. The b@c computer now carries the job park. No redesign has been approved yet. The night's model cost on b@c was small: about forty-three million input tokens, ninety-six percent of them cached, for about two and a half dollars.
+
+## The research for today
+
+You asked for real research on updating computers that diverge, and on prospective self-alignment, precommitment records and in-context learning in the REPL. Both write-ups are on main.
+
+The update design splits each computer in two. There is a floor that the host owns and always patches: the guest kernel, the updater and the boot path. It never moves backward, not even on restore. Then there is a lock that the computer owns: its base, its ordered stack of applied changes, and its app packages with their pinned versions. A security fix rebuilds or replays the computer's own stack onto the fixed base, under a new evidence class that admits only deterministic transforms of fixes the host signed. Stock software and packages become subscriptions you choose. The proposed first slice is the same substrate the app work hit: make applies build on each other. The design also turned up three things worth checking on staging. A deploy that moves the base may silently drop a computer's own Go change. A kernel-only patch drops every layer. And a computer marked divergent gets no updates at all, security included.
+
+The self-alignment write-up found more built than the October fourteenth status said, but no loop is closed. Engineering makes real precommitments that the runtime settles from receipts, but it never sees how they settled. The calibration digest for the other desks is built and switched off by your ruling. The smallest slice is giving engineering its own settled record, behind a switch that is off by default.
+
+## What I would carry forward
+
+The one thing worth remembering is this. The platform's weak spots last night were not the new features. They were old sizing and old vocabulary: a memory cap set when the database was a third its size, a credential life shorter than a maintenance window, and no word for "good, continue". Each failed loudly once it was looked at.
+
+If I were holding the phone, I would start the design day on making applies build on each other. It blocks the app work, it is the first slice of the update design, and its precommitments are the cleanest place to start in-context learning.
+
+## Questions for you
+
+You can answer these in one message, by number.
+
+1. Update design: when a critical fix conflicts with a computer's own changes and you are away, should the computer park its stack, contain itself, or stop? My lean is park when stock code can read its data, otherwise contain.
+2. Update design: how many past platform bases should get backported security fixes before a computer must move?
+3. Update design: once applies build on each other, should a published release carry the cumulative change against the platform base, or the whole stack?
+4. Should making applies build on each other be the first slice? It is red, with two reviewers.
+5. Self-alignment: may engineering see its own aggregate settled record, behind a switch that is off by default?
+6. Self-alignment: is your approval a settler for engineering's claims?
+7. Should engineering gain an outcome that means "good, continue", so staged work is not a failure claim? And should a run save its candidate before it finishes?
+8. Should a planned restart count as activity for the idle sweep? Right now a computer can hibernate thirty-five seconds after its apply restart.
+9. May I delete the legacy flat tape? It is about forty-six gigabytes, and it is why the backup blocks computer starts.
+10. For b@c, keep Synthetic DeepSeek as engineering's model or go back to luna?
+
+## Names and receipts
+
+- Deploys: D31 cc6479939 (VM slice round 2); D32 0cbc52edc (jailer and host-only DNS for class test); D33 824b84106 (self-development promotion classification); D34 911be16b1 (engineering job park); D35 92771df65 (event table deploy 2, inert); D36 0894e48fe (platform Dolt GOMEMLIMIT 3GiB under MemoryHigh 4G); D37 22a01746f (boot credential re-minted after offline maintenance; decisive proof at tonight's 04:00 compaction); D38 dc3f5ee3b (stream_seq seed by phase; the paper's seed 550 ms, append 391 ms).
+- Ledger: docs/definitions/choir-launch-first-pass-metamission-2026-10-21.ledger.md, through 29d8a0f65.
+- Problem records: docs/problems/selfdev-apply-on-a-constructed-computer-breaks-vmctl-list-2026-10-24.md; offline-maintenance-outlives-the-boot-credential-2026-10-24.md; engineering-busy-polls-its-own-job-2026-10-24.md; platform-dolt-gc-throttled-at-memory-high-2026-10-24.md; idle-sweep-hibernates-a-computer-just-after-its-apply-restart-2026-10-24.md; successive-selfdev-applies-do-not-compound-2026-10-24.md; texture-supervision-doc-stops-at-the-decision-boundary-2026-10-24.md; on lane/fp0-apprewrite: staged-engineering-rounds-break-on-desk-reads-of-blocked-2026-10-24.md and long-engineering-run-dies-on-corpusd-cas-invalid-connection-2026-10-24.md.
+- Design: docs/design/computer-update-architecture-rnd-2026-10-24.md; docs/design/psa-precommitment-icrl-status-2026-10-24.md.
+- Evidence: docs/evidence/selfdev-drill-2026-10-24.md; drill traces under ~/.config/choir-qa/traces/fp0-selfdev-1024a and fp0-jobpark-1024b.
+- Apps: b@c computer computer-6c50d6e566143ae32cdb660faa60e24d; Slides apply selfdev-41ea6ea6 (04:27); v5 trajectory 80db9c3f-f482-53c6-8604-be36bb0e6283, Texture doc 679b943b-e4ac-5abb-b03b-22f33ec0e1d8; lost v4 stages in /Users/wiz/Dev/lanes/_runs/apprewrite/v4/stage3.patch; conductor log /Users/wiz/Dev/lanes/_runs/apprewrite/log.md.
+- Held, not landed: lane/fp0-jobpark-wired 9d9fdc884 (a source-shape test; the staging events are the wired proof).
+- Owed: D37's proof at the 04:00 compaction; a second clean platform Dolt GC; restoring b@c's System/model-policy.toml after the rewrites.
