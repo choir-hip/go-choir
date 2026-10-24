@@ -283,6 +283,10 @@ type Store struct {
 	// eventTableWrites is store.event_table as the runtime applied it: the
 	// writer stamps the storage class's ops for choir_events (event_table.go).
 	eventTableWrites atomic.Bool
+	// traceLog is the trace segment log beside the workspace (trace_log.go,
+	// R7 slice S2): opened when its directory exists, closed by Close,
+	// reopened by Reopen.
+	traceLog traceLogState
 	// searchIdx caches tokenized head text for SearchDocuments
 	// (search_index.go).
 	searchIdx searchIndex
@@ -1053,6 +1057,7 @@ func Open(dbPath string) (*Store, error) {
 		}
 	}
 	s.initLeaseObs()
+	s.openTraceLogIfPresent()
 
 	return s, nil
 }
@@ -1356,6 +1361,9 @@ func (s *Store) Reopen(path string) error {
 	s.og = live.og
 	s.ogStore = live.ogStore
 	s.ogReadStore = live.ogReadStore
+	// The trace log lives outside the swapped workspace: the scratch store
+	// reopened it, and it moves to s before the scratch store is zeroed.
+	s.adoptTraceLog(live)
 	*live = Store{}
 	s.closedOK = false
 	s.reopenCheckpoint()
@@ -1370,6 +1378,10 @@ func (s *Store) Reopen(path string) error {
 	s.refreshLeaseWorkspace()
 	s.resumeLeaseWork()
 	s.kickLeaseRowOntoTape()
+	// The workspace was swapped under the trace log (a restore, a base
+	// install): record where, so a reader can tell lines of an abandoned
+	// branch from the restored one (trace-log design 7.3).
+	s.writeTraceLogRestoreBoundary()
 	return nil
 }
 
@@ -1447,6 +1459,9 @@ func (s *Store) Close() error {
 	}
 	s.checkpoint.clearLeftOpen()
 	s.closedOK = true
+	// The trace log fsyncs, seals and releases its directory with the store
+	// (design 4.1). It cannot fail Close.
+	s.closeTraceLog()
 	var err error
 	if closeErr := s.closeDepositUpcastLedger(); closeErr != nil {
 		err = closeErr
@@ -2502,14 +2517,22 @@ func (s *Store) allocateEventSeqLocked(ctx context.Context, rec *types.EventReco
 			return eventSeqKey{}, err
 		}
 		maxSeq = max(maxSeq, tableSeq)
-		if sl != nil {
+		// The trace log is a third source (trace-log design 4.4): a line it
+		// holds may be on no tape, and a number lost with a VM crash may
+		// already have been delivered live. A run the log has no line for is
+		// seeded exactly as before.
+		logSeq := s.traceLogRunMaxSeq(rec.OwnerID, rec.RunID)
+		maxSeq = max(maxSeq, logSeq)
+		if sl != nil || logSeq > 0 {
 			// With the sealer a number can be published and never stored, so a
 			// seed from the store alone can hand it out twice (design 6.1).
-			// Skip a gap over anything the previous process could have lost,
-			// and never go below a number the queue still holds.
+			// Skip a gap over anything the previous process could have lost.
 			if maxSeq > 0 {
 				maxSeq += telemetrySeqGap
 			}
+		}
+		if sl != nil {
+			// And never go below a number the queue still holds.
 			if floor := sl.seqFloor(key); floor > maxSeq {
 				maxSeq = floor
 			}
@@ -2659,6 +2682,10 @@ func (s *Store) ListEventsAfter(ctx context.Context, runID string, afterSeq int6
 	if limit <= 0 {
 		limit = 200
 	}
+	// The log half is read first: a line is in the log as soon as its number
+	// is allocated, and a cursor must not move past an event still on its way
+	// to the tape (design 6.2).
+	logHalf := s.traceLogHalfRun(runID, afterSeq, limit)
 	query, args := eventTableRunAfterSQL(runID, afterSeq, limit)
 	first, err := s.readEventTable(ctx, "store.event_table.list_run_after", query, args)
 	if err != nil {
@@ -2688,7 +2715,7 @@ func (s *Store) ListEventsAfter(ctx context.Context, runID string, afterSeq int6
 		return nil, err
 	}
 	table := cursorTableHalf(first, kept, again, func(r types.EventRecord) int64 { return r.Seq }, afterSeq)
-	events := unionEvents(kept, table)
+	events := mergeTraceLogHalf(unionEvents(kept, table), logHalf)
 	sort.Slice(events, func(i, j int) bool {
 		if events[i].rec.Seq != events[j].rec.Seq {
 			return events[i].rec.Seq < events[j].rec.Seq
@@ -2708,6 +2735,7 @@ func (s *Store) ListEventsByOwner(ctx context.Context, ownerID string, limit int
 	if limit <= 0 {
 		limit = 200
 	}
+	logHalf := s.traceLogHalfOwnerNewest(ownerID, limit)
 	objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
 		Kind:    ogKindEvent,
 		OwnerID: ownerID,
@@ -2725,7 +2753,7 @@ func (s *Store) ListEventsByOwner(ctx context.Context, ownerID string, limit int
 	if err != nil {
 		return nil, err
 	}
-	events := unionEvents(og, table)
+	events := mergeTraceLogHalf(unionEvents(og, table), logHalf)
 	sort.Slice(events, func(i, j int) bool {
 		if !events[i].rec.Timestamp.Equal(events[j].rec.Timestamp) {
 			return events[i].rec.Timestamp.After(events[j].rec.Timestamp)
@@ -2745,6 +2773,7 @@ func (s *Store) ListEventsByOwnerAfter(ctx context.Context, ownerID string, afte
 	if limit <= 0 {
 		limit = 200
 	}
+	logHalf := s.traceLogHalfOwnerAfter(ownerID, afterSeq, limit)
 	query, args := eventTableOwnerAfterSQL(ownerID, afterSeq, limit)
 	first, err := s.readEventTable(ctx, "store.event_table.list_owner_after", query, args)
 	if err != nil {
@@ -2779,7 +2808,7 @@ func (s *Store) ListEventsByOwnerAfter(ctx context.Context, ownerID string, afte
 		return nil, err
 	}
 	table := cursorTableHalf(first, kept, again, func(r types.EventRecord) int64 { return r.StreamSeq }, afterSeq)
-	events := unionEvents(kept, table)
+	events := mergeTraceLogHalf(unionEvents(kept, table), logHalf)
 	sort.Slice(events, func(i, j int) bool { return events[i].rec.StreamSeq < events[j].rec.StreamSeq })
 	return eventRecords(events, limit), nil
 }
@@ -2834,6 +2863,7 @@ func (s *Store) ListEventsByTrajectory(ctx context.Context, ownerID, trajectoryI
 	if limit <= 0 {
 		limit = 500
 	}
+	logHalf := s.traceLogHalfTrajectory(ownerID, trajectoryID, eventTrajectoryWindow)
 	// Fetch a large window since ogListByMetadata orders by updated_at DESC.
 	objs, err := s.ogListByMetadata(ctx, ogKindEvent, "trajectory_id", trajectoryID, eventTrajectoryWindow)
 	if err != nil {
@@ -2848,7 +2878,7 @@ func (s *Store) ListEventsByTrajectory(ctx context.Context, ownerID, trajectoryI
 	if err != nil {
 		return nil, err
 	}
-	window := unionEvents(og, table)
+	window := mergeTraceLogHalf(unionEvents(og, table), logHalf)
 	sort.Slice(window, func(i, j int) bool {
 		if !window[i].updatedAt.Equal(window[j].updatedAt) {
 			return window[i].updatedAt.After(window[j].updatedAt)

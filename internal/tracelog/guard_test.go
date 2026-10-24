@@ -8,12 +8,11 @@ import (
 	"testing"
 )
 
-// No production package imports internal/tracelog yet (S1 ships the library
-// with no caller; S2 is the first slice that wires it). The guard fails when
-// a non-test source outside this package names the import path, the same way
-// tapestore guarded its fixture writer. S2 changes the allow-list in the same
-// commit that adds its caller.
-func TestNoProductionPackageImportsTracelogYet(t *testing.T) {
+// Only internal/store imports internal/tracelog (S1 shipped the library with
+// no caller; S2 wired the store). The guard fails when a non-test source
+// outside this package and the store names the import path, the same way
+// tapestore guarded its fixture writer.
+func TestOnlyTheStoreImportsTracelog(t *testing.T) {
 	dir, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
@@ -29,7 +28,7 @@ func TestNoProductionPackageImportsTracelogYet(t *testing.T) {
 		dir = parent
 	}
 	self := filepath.Join(dir, "internal", "tracelog")
-	allowed := map[string]bool{} // S2 adds internal/store here
+	allowed := map[string]bool{"internal/store": true}
 	var offenders []string
 	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -61,7 +60,7 @@ func TestNoProductionPackageImportsTracelogYet(t *testing.T) {
 		return nil
 	})
 	if len(offenders) > 0 {
-		t.Fatalf("no production package may import internal/tracelog before S2; found %v", offenders)
+		t.Fatalf("only internal/store may import internal/tracelog; found %v", offenders)
 	}
 }
 
