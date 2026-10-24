@@ -103,7 +103,15 @@ func (s *Store) ImportResidueSnapshotForOwner(ctx context.Context, ownerID strin
 	if desktopResidue != ogResidue {
 		return result, ErrResidueImportSplit
 	}
+	// An unscoped import records every media-state row, so it is the seed
+	// for this tape; an owner-scoped one may leave other owners' rows out.
+	markSeeded := func() {
+		if ownerID == "" {
+			s.mediaStateSeededTape = s.projectionTape
+		}
+	}
 	if !desktopResidue && !ogResidue && len(runtimeOps) == 0 && len(aliasOps) == 0 && len(mediaOps) == 0 {
+		markSeeded()
 		return result, nil
 	}
 	ops := make([]computerevent.ProjectionOp, 0, result.Desktops+result.Objects+result.Edges+len(runtimeOps)+len(aliasOps)+len(mediaOps))
@@ -134,6 +142,7 @@ func (s *Store) ImportResidueSnapshotForOwner(ctx context.Context, ownerID strin
 	if err := s.projectionTape.appendOps(ctx, ops); err != nil {
 		return result, err
 	}
+	markSeeded()
 	result.Appended = true
 	return result, nil
 }

@@ -414,11 +414,12 @@
     }, 0);
   }
 
-  function savePlaybackProgress() {
+  // flush: a pause or the end sends the position now, not on the throttle.
+  function savePlaybackProgress(flush = false) {
     if (!activeAudioEl || !activeEpisode) return;
     playbackPosition = activeAudioEl.currentTime || 0;
     playbackDuration = Number.isFinite(activeAudioEl.duration) ? activeAudioEl.duration : 0;
-    saveMediaPosition('podcast', episodeProgressSource(), playbackPosition, playbackDuration);
+    saveMediaPosition('podcast', episodeProgressSource(), playbackPosition, playbackDuration, { immediate: flush === true });
   }
 
   async function togglePlayback() {
@@ -638,11 +639,11 @@
             preload="metadata"
             bind:this={activeAudioEl}
             on:loadedmetadata={syncAudioFromServer}
-            on:durationchange={savePlaybackProgress}
-            on:timeupdate={savePlaybackProgress}
+            on:durationchange={() => savePlaybackProgress()}
+            on:timeupdate={() => savePlaybackProgress()}
             on:play={() => isPlaying = true}
-            on:pause={() => { isPlaying = false; savePlaybackProgress(); }}
-            on:ended={() => { isPlaying = false; savePlaybackProgress(); }}
+            on:pause={() => { isPlaying = false; savePlaybackProgress(true); }}
+            on:ended={() => { isPlaying = false; savePlaybackProgress(true); }}
             on:error={() => playbackError = 'Episode audio could not be loaded by the browser.'}
             data-podcast-audio
           />

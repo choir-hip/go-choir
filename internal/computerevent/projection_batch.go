@@ -31,6 +31,7 @@ const (
 	ProjectionOpTextureDocumentAliasDelete = "texture_document_alias_delete_recorded"
 	ProjectionOpMediaProgress              = "media_progress_recorded"
 	ProjectionOpMediaRecent                = "media_recent_recorded"
+	ProjectionOpMediaRecentDelete          = "media_recent_delete_recorded"
 	ProjectionOpUserPreference             = "user_preference_recorded"
 	ProjectionBatchMediaType               = "application/vnd.choir.projection-batch+json"
 )
@@ -54,13 +55,14 @@ var projectionOpKinds = map[string]struct{}{
 	ProjectionOpTextureDocumentAliasDelete: {},
 	ProjectionOpMediaProgress:              {},
 	ProjectionOpMediaRecent:                {},
+	ProjectionOpMediaRecentDelete:          {},
 	ProjectionOpUserPreference:             {},
 }
 
 func isProjectionV2OnlyKind(kind string) bool {
 	switch kind {
 	case ProjectionOpRunMemoryEntry, ProjectionOpSelfDevelopmentStartIntent, ProjectionOpSelfDevelopmentOperation, ProjectionOpTextureAgentMutation, ProjectionOpTextureDocumentAlias, ProjectionOpTextureDocumentAliasDelete,
-		ProjectionOpMediaProgress, ProjectionOpMediaRecent, ProjectionOpUserPreference:
+		ProjectionOpMediaProgress, ProjectionOpMediaRecent, ProjectionOpMediaRecentDelete, ProjectionOpUserPreference:
 		return true
 	default:
 		return false
@@ -311,6 +313,15 @@ type MediaRecentProjection struct {
 	MediaType         string `json:"media_type"`
 	ContentID         string `json:"content_id"`
 	OpenedAt          string `json:"opened_at"`
+}
+
+// MediaRecentDeleteProjection names one media_recents row by its primary
+// key. The prune that keeps the newest recents per (owner, media_kind) is
+// this op, so a replay removes exactly the rows the live store removed.
+type MediaRecentDeleteProjection struct {
+	OwnerID           string `json:"owner_id"`
+	MediaKind         string `json:"media_kind"`
+	MediaIdentityHash string `json:"media_identity_hash"`
 }
 
 // UserPreferenceProjection is the canonical row snapshot for one

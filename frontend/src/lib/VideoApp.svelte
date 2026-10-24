@@ -62,12 +62,13 @@
     if (mediaEl) mediaEl.playbackRate = Number(playbackSpeed) || 1;
   }
 
-  function updateMediaState() {
+  // flush: a pause or the end sends the position now, not on the throttle.
+  function updateMediaState(flush = false) {
     if (!mediaEl) return;
     mediaCurrentTime = Number.isFinite(mediaEl.currentTime) ? mediaEl.currentTime : 0;
     mediaDuration = Number.isFinite(mediaEl.duration) ? mediaEl.duration : 0;
     mediaPlaying = !mediaEl.paused;
-    saveMediaPosition(kind, { ...source, playbackRate: playbackSpeed }, mediaCurrentTime, mediaDuration);
+    saveMediaPosition(kind, { ...source, playbackRate: playbackSpeed }, mediaCurrentTime, mediaDuration, { immediate: flush === true });
   }
 
   async function restoreMediaPosition() {
@@ -204,10 +205,10 @@
         playsinline
         bind:this={mediaEl}
         on:loadedmetadata={restoreMediaPosition}
-        on:timeupdate={updateMediaState}
-        on:play={updateMediaState}
-        on:pause={updateMediaState}
-        on:ended={updateMediaState}
+        on:timeupdate={() => updateMediaState()}
+        on:play={() => updateMediaState()}
+        on:pause={() => updateMediaState(true)}
+        on:ended={() => updateMediaState(true)}
         data-video-player
       >
         <track kind="captions" />

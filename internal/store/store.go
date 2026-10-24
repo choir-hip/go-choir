@@ -1313,6 +1313,12 @@ func (s *Store) Reopen(path string) error {
 	s.depositUpcast = nil
 	s.depositUpcastMu.Unlock()
 	s.vocabReplay.reset()
+	// The adopted workspace may hold media-state rows this tape has not
+	// recorded (a restore, a base install): derive the seed again for it
+	// (media_projection.go; bunch 188).
+	s.mediaStateMu.Lock()
+	s.mediaStateSeededTape = nil
+	s.mediaStateMu.Unlock()
 	s.db = live.db
 	s.readDB = live.readDB
 	s.path = live.path

@@ -147,19 +147,23 @@ export async function loadMediaPosition(kind, source = {}) {
 // Players report progress on every timeupdate (about four a second while
 // playing), and every progress PUT is a tape event on the computer. Send at
 // most one PUT per source every MEDIA_PROGRESS_INTERVAL_MS: the first at once,
-// then a trailing PUT of the latest position
+// then a trailing PUT of the latest position. A pause or the end
+// ({ immediate: true }), hiding the page and leaving it send at once, with
+// keepalive so the browser finishes the request after unload
 // (docs/problems/stock-ui-writes-make-a-computer-checkpoint-ineligible-2026-10-24.md).
 const MEDIA_PROGRESS_INTERVAL_MS = 5000;
 const pendingMediaProgress = new Map();
 
 function sendMediaProgress(body) {
+  const payload = JSON.stringify(body);
   fetchWithRenewal('/api/media/progress', {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
       'X-Choir-Device': currentDeviceId(),
     },
-    body: JSON.stringify(body),
+    keepalive: payload.length < 60_000,
+    body: payload,
   }).catch(() => {});
 }
 
@@ -175,13 +179,20 @@ function flushMediaProgress(key) {
   sendMediaProgress(body);
 }
 
+function flushAllMediaProgress() {
+  for (const key of pendingMediaProgress.keys()) flushMediaProgress(key);
+}
+
 if (typeof window !== 'undefined') {
-  window.addEventListener('pagehide', () => {
-    for (const key of pendingMediaProgress.keys()) flushMediaProgress(key);
+  window.addEventListener('pagehide', flushAllMediaProgress);
+}
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushAllMediaProgress();
   });
 }
 
-export function saveMediaPosition(kind, source = {}, currentTime = 0, duration = 0) {
+export function saveMediaPosition(kind, source = {}, currentTime = 0, duration = 0, options = {}) {
   if (!Number.isFinite(currentTime) || currentTime < 0) return;
   const identity = mediaSourceIdentity(source);
   if (!kind || !identity) return;
@@ -196,6 +207,10 @@ export function saveMediaPosition(kind, source = {}, currentTime = 0, duration =
     playback_rate: Number(source.playbackRate) || 1,
     updated_by_device: currentDeviceId(),
   };
+  if (options.immediate === true) {
+    flushMediaProgress(key);
+    return;
+  }
   if (entry.timer) return;
   const wait = entry.lastSentAt + MEDIA_PROGRESS_INTERVAL_MS - Date.now();
   if (wait <= 0) {

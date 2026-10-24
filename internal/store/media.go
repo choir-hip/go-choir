@@ -47,7 +47,7 @@ func (s *Store) UpsertMediaProgress(ctx context.Context, rec types.MediaProgress
 	}
 	err := s.writeMediaState(ctx, computerevent.ProjectionOpMediaProgress, row, func(ex sqlExecer) error {
 		return execMediaProgress(ctx, ex, row)
-	})
+	}, nil)
 	if err != nil {
 		return types.MediaProgress{}, fmt.Errorf("upsert media progress: %w", err)
 	}
@@ -99,6 +99,8 @@ func (s *Store) UpsertMediaRecent(ctx context.Context, rec types.MediaRecent) (t
 	}
 	err := s.writeMediaState(ctx, computerevent.ProjectionOpMediaRecent, row, func(ex sqlExecer) error {
 		return execMediaRecent(ctx, ex, row)
+	}, func() ([]computerevent.ProjectionOp, error) {
+		return s.pruneMediaRecentsOps(ctx, row)
 	})
 	if err != nil {
 		return types.MediaRecent{}, fmt.Errorf("upsert media recent: %w", err)
@@ -172,7 +174,7 @@ func (s *Store) SaveUserPreference(ctx context.Context, rec types.UserPreference
 	}
 	err = s.writeMediaState(ctx, computerevent.ProjectionOpUserPreference, row, func(ex sqlExecer) error {
 		return execUserPreference(ctx, ex, row)
-	})
+	}, nil)
 	if err != nil {
 		return types.UserPreference{}, fmt.Errorf("save user preference: %w", err)
 	}

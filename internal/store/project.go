@@ -98,6 +98,8 @@ func projectOp(ctx context.Context, tx *sql.Tx, op computerevent.ProjectionOp, p
 		return projectMediaProgress(ctx, tx, op.Body)
 	case computerevent.ProjectionOpMediaRecent:
 		return projectMediaRecent(ctx, tx, op.Body)
+	case computerevent.ProjectionOpMediaRecentDelete:
+		return projectMediaRecentDelete(ctx, tx, op.Body)
 	case computerevent.ProjectionOpUserPreference:
 		return projectUserPreference(ctx, tx, op.Body)
 	default:
