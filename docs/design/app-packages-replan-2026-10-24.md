@@ -277,6 +277,26 @@ words were "apply that to all the existing apps": this order still does that,
 in the same day, after the Reader. It reorders the owner's ruling, so it is
 listed under contradictions.
 
+### 3.3 P1 failure modes (written before the code, 2026-10-24)
+
+Each row names the failure, what stops it, and the check that proves it.
+`check-packages.mjs` takes `--root <frontend dir>` so the spec can run it
+against a fixture tree and watch it refuse each bad case.
+
+| # | Failure | Stop | Proof |
+|---|---|---|---|
+| P1-F1 | `choir-package.json` is not JSON, has an unknown or missing field, or the wrong `schema` | the check fails the build (strict allow-list of keys at every level) | spec: bad-json, unknown-field, wrong-schema fixtures |
+| P1-F2 | the name breaks `^[a-z][a-z0-9-]{1,39}$`, or differs from its directory name | check | spec: bad-name, dir-mismatch |
+| P1-F3 | a name or alias equals a static registry id, a reserved shell or system-desk name (`desk`, `desktop`, `shell`, `prompt`, `system`, `owner`, `management`, `engineering`, `research`), another package's name or alias, or its own name twice | check | spec: static-id, reserved, package-clash, alias fixtures |
+| P1-F4 | an `opens` extension is claimed by two packages, or by a route still in the static `MEDIA_FILE_ROUTES` | check | spec: extension-clash fixtures |
+| P1-F5 | the package imports a file outside its directory (relative path, absolute path, a symlink out), a bare module that is not `svelte`, `svelte/*` or a declared npm dependency, or reaches `app-sdk.ts` by a different path; includes `import()` and `export ... from` | check, scanning `.svelte`, `.js`, `.ts` in the package | spec: relative-escape, bare-module, dynamic-import fixtures; the image viewer passes |
+| P1-F6 | `entry` is missing, outside the directory, or `abi` is unknown | check | spec: missing-entry, bad-abi |
+| P1-F7 | `kinds` is non-empty, or `desk`, `backend` or `grants` is set (P2 and later own these) | check refuses until the slice that owns them lands | spec: kinds fixture |
+| P1-F8 | `npm run build` is bypassed (vite called directly) and a bad package ships | the loader is defensive: a package whose name is already a static id, or whose entry file is missing, is skipped with a console warning, never crashes the shell, and the static entry wins | spec: browser test loads the shell with no console error from the loader; static entries unchanged |
+| P1-F9 | a saved desktop window, a file route or a prompt route for `image` stops resolving after the move | the package id is the old id, with the same icon, name, launcher, window and theme fields | spec: golden object equality on `getAppDefinition('image')`, `mediaRouteForFileName('x.png')`, the launcher click |
+| P1-F10 | the check silently finds no static ids (registry layout changes) and so passes every clash | the check fails when it parses fewer static ids than a floor of 10, or no static routes | spec: empty-registry fixture |
+| P1-F11 | a source test that reads `src/lib/ImageApp.svelte` by path breaks on the move | the one path in `computer-live-sync.spec.js` follows the file | `computer-live-sync.spec.js` runs |
+
 ## 4. Slice sequence
 
 Sizes are agent working time, excluding review queue and CI wait (CI and the
