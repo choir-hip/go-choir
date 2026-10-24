@@ -232,7 +232,7 @@ func TestEngineeringRequestRefusedForNonTextureParent(t *testing.T) {
 
 func TestEngineeringRequestIsBoundedAndStillVerifies(t *testing.T) {
 	f := newRequestFixture(t)
-	parent := f.textureCast(t, f.seed.TextureInbox, "big", strings.Repeat("o", 9000), strings.Repeat("é", 20000)) // body 40000 bytes
+	parent := f.textureCast(t, f.seed.TextureInbox, "big", strings.Repeat("o", 20000), strings.Repeat("é", 20000)) // objective 20000 bytes, body 40000 bytes
 	inbox := f.open(t, &parent, "capability-big", boundDigest(parent))
 	v := f.view(t, f.rt, inbox)
 	if len(v) != 1 || v[0].Request == nil {
@@ -247,6 +247,57 @@ func TestEngineeringRequestIsBoundedAndStillVerifies(t *testing.T) {
 	}
 	if !utf8.ValidString(r.Body) || !utf8.ValidString(r.Objective) || !strings.Contains(r.Body, "truncated") || !strings.Contains(r.Body, parent.RecordID) {
 		t.Fatal("cut text is not valid UTF-8 or not marked with the parent record id")
+	}
+}
+
+// The 2026-10-24 case (docs/problems/engineering-cast-objective-cut-at-4kib-
+// 2026-10-24.md): Texture put a 6,338 B request in the Cast's objective and
+// engineering saw it cut at 4 KiB, with a marker naming a record it has no
+// verb to read. A request this size must reach the Records() view whole, and
+// the Body desks print must carry all of it.
+func TestEngineeringRequestOf6338BytesReachesTheViewWhole(t *testing.T) {
+	f := newRequestFixture(t)
+	objective := strings.Repeat("scope line for the app and the file rules\n", 6338/42+1)[:6338]
+	if len(objective) != 6338 {
+		t.Fatalf("fixture objective is %d bytes", len(objective))
+	}
+	parent := f.textureCast(t, f.seed.TextureInbox, "whole", objective, `{"app":"podcasts"}`)
+	inbox := f.open(t, &parent, "capability-whole", boundDigest(parent))
+	v := f.view(t, f.rt, inbox)
+	if len(v) != 1 || v[0].Request == nil {
+		t.Fatalf("view %+v", v)
+	}
+	r := v[0].Request
+	if r.Truncated || r.Objective != objective || strings.Contains(r.Objective, "truncated") {
+		t.Fatalf("the 6338-byte objective was cut: truncated=%v kept %d bytes", r.Truncated, len(r.Objective))
+	}
+	var body map[string]any
+	if err := json.Unmarshal([]byte(v[0].Body), &body); err != nil {
+		t.Fatalf("body is not JSON: %v", err)
+	}
+	req, _ := body["request"].(map[string]any)
+	if req == nil || req["objective"] != objective || req["truncated"] != false {
+		t.Fatalf("the Body desks print does not carry the whole objective: %.200s", v[0].Body)
+	}
+}
+
+// Text past the bound is still cut, and the marker must not promise a read
+// engineering cannot make: no verb reads a record by ref, so it names the
+// route that works (choir.Ask to management, which holds the Cast).
+func TestEngineeringRequestCutMarkerNamesAWorkingRoute(t *testing.T) {
+	f := newRequestFixture(t)
+	parent := f.textureCast(t, f.seed.TextureInbox, "marker", strings.Repeat("o", 20000), "b")
+	inbox := f.open(t, &parent, "capability-marker", boundDigest(parent))
+	v := f.view(t, f.rt, inbox)
+	if len(v) != 1 || v[0].Request == nil || !v[0].Request.Truncated {
+		t.Fatalf("view %+v", v)
+	}
+	o := v[0].Request.Objective
+	if strings.Contains(o, "the full text is on the tape") {
+		t.Fatalf("the marker still points at a record engineering cannot read: %s", o[len(o)-300:])
+	}
+	if !strings.Contains(o, `choir.Ask("management"`) || !strings.Contains(o, "20000") || !strings.Contains(o, parent.RecordID) {
+		t.Fatalf("the marker does not say the rest is unavailable and how to ask for it: %s", o[len(o)-300:])
 	}
 }
 
