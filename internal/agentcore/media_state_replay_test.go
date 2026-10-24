@@ -19,6 +19,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
 	"github.com/yusefmosiah/go-choir/internal/mediastate"
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // These tests pin docs/problems/stock-ui-writes-make-a-computer-checkpoint-ineligible-2026-10-24.md.
@@ -312,4 +313,88 @@ func TestMediaStateTablesAreEventProjections(t *testing.T) {
 	if err := eligibility.Error(); err == nil || !strings.Contains(err.Error(), "co_super_slots") {
 		t.Fatalf("ineligible error %v does not name the blocking table", err)
 	}
+}
+
+func mediaStateHeadSequence(t *testing.T, rt *Runtime, computerID string) uint64 {
+	t.Helper()
+	head, err := rt.store.Head(context.Background(), computerID)
+	if err != nil || head == nil {
+		t.Fatalf("head = %#v, %v", head, err)
+	}
+	return head.Sequence
+}
+
+// The seed is bounded (bunch 188): a table larger than one batch's budget is
+// recorded over several tape events, each an idempotent upsert set, and the
+// replay is still equivalent.
+func TestMediaStateLargeSeedSpansSeveralBatchesAndReplaysEquivalent(t *testing.T) {
+	computerID := "computer-media-state-large-seed"
+	rt, _ := selfdevReplayRuntime(t, computerID)
+	db := rt.store.DB()
+	stamp := time.Date(2026, 10, 20, 9, 30, 15, 0, time.UTC).Format(time.RFC3339Nano)
+	const rows = 600 // about 2.4 MiB of identities
+	for i := 0; i < rows; i++ {
+		identity := fmt.Sprintf("https://feeds.example/%04d/%s.mp3", i, strings.Repeat("e", 4096))
+		if _, err := db.Exec(`INSERT INTO media_progress (owner_id, media_kind, media_identity_hash, media_identity, position_seconds, duration_seconds, playback_rate, updated_by_device, updated_at)
+			VALUES (?, 'podcast', ?, ?, ?, 3600, 1, 'phone', ?)`, mediaStateOwner, preChangeIdentityHash(identity), identity, float64(i)+0.5, stamp); err != nil {
+			t.Fatal(err)
+		}
+	}
+	before := mediaStateHeadSequence(t, rt, computerID)
+	if _, err := rt.store.SaveUserPreference(context.Background(), types.UserPreference{
+		OwnerID: mediaStateOwner, PreferenceKey: "theme", Value: map[string]any{"mode": "dark"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := mediaStateHeadSequence(t, rt, computerID) - before; got < 3 {
+		t.Fatalf("a 2.4 MiB seed was appended as %d tape event(s), want it split into at least 3 bounded batches", got)
+	}
+	requireMediaStateReplayEligible(t, rt, computerID)
+	requireReplayedRowsMatchLive(t, rt, computerID, rows+1)
+}
+
+// media_recents is pruned to the newest 100 per (owner, media_kind), the most
+// ListMediaRecents ever returns, and the prune is a tape op (a delete), so the
+// replay is still exact.
+func TestMediaRecentsArePrunedToTheNewestPerKindOnTheTape(t *testing.T) {
+	computerID := "computer-media-recents-prune"
+	rt, _ := selfdevReplayRuntime(t, computerID)
+	db := rt.store.DB()
+	base := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	const old = 105
+	for i := 0; i < old; i++ {
+		identity := fmt.Sprintf("file:/docs/%03d.pdf", i)
+		if _, err := db.Exec(`INSERT INTO media_recents (owner_id, media_kind, media_identity_hash, media_identity, title, opened_at)
+			VALUES (?, 'pdf', ?, ?, ?, ?)`, mediaStateOwner, preChangeIdentityHash(identity), identity, identity,
+			base.Add(time.Duration(i)*time.Minute).Format(time.RFC3339Nano)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Another kind is not touched by a pdf write.
+	if _, err := db.Exec(`INSERT INTO media_recents (owner_id, media_kind, media_identity_hash, media_identity, opened_at)
+		VALUES (?, 'epub', ?, 'file:/b.epub', ?)`, mediaStateOwner, preChangeIdentityHash("file:/b.epub"), base.Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+	h := mediastate.NewHandler(rt.store, nil)
+	mediaStateCall(t, h.HandleMediaRecents, http.MethodPut, "/api/media/recents", `{"kind":"pdf","identity":"file:/docs/new.pdf","title":"New"}`)
+
+	var pdf int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM media_recents WHERE owner_id=? AND media_kind='pdf'`, mediaStateOwner).Scan(&pdf); err != nil {
+		t.Fatal(err)
+	}
+	if pdf != 100 {
+		t.Fatalf("pdf recents = %d, want the newest 100", pdf)
+	}
+	list := mediaStateCall(t, h.HandleMediaRecents, http.MethodGet, "/api/media/recents?kind=pdf&limit=100", "")
+	items, _ := list["items"].([]any)
+	if len(items) != 100 {
+		t.Fatalf("listed %d pdf recents, want 100", len(items))
+	}
+	first, _ := items[0].(map[string]any)
+	last, _ := items[99].(map[string]any)
+	if first["identity"] != "file:/docs/new.pdf" || last["identity"] != "file:/docs/006.pdf" {
+		t.Fatalf("kept the wrong recents: first %v last %v", first["identity"], last["identity"])
+	}
+	requireMediaStateReplayEligible(t, rt, computerID)
+	requireReplayedRowsMatchLive(t, rt, computerID, 101)
 }
