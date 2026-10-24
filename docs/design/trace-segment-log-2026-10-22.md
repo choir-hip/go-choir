@@ -780,6 +780,17 @@ yellow commit.
   entries (about 3 MB at 50,000 records), with four kept in memory. The
   summaries of all sealed segments are kept.
 
+**Status (2026-10-24, lane `lane/fp0-r7-s2`): S2 built** (red: the Trace read
+path and sequence allocation; tests first as a yellow commit, then the code).
+The store opens, closes and reopens the log; the four list methods merge a log
+half; the seeds read the log; `StorageTraceLog` is in `types`; `store.trace_log`
+is registered and nothing reads it; the `trace_log` block is in
+`/api/runtime/observability`; `Reopen` writes the restore boundary. Nothing
+writes a trace line. The differential is a golden made on the commit before
+any S2 code (`internal/store/testdata/trace_log_empty_matrix.golden`): with the
+log absent or open and empty, every list method over a grid of cursors and
+limits, and the seeds a restarted store hands out, hash the same.
+
 ### 9.1 The proof for S4 (test computer) and S5 (the paper)
 
 The test computer is minted as F-c and the batching gate did it
@@ -916,6 +927,95 @@ a ruling or the S2 to S7 plan.
    share from the `events_by_sink.tape` kind counts instead. The line size
    S0 reports is the payload size. The stored line adds the envelope of
    about 0.3 KB, which the S1 benchmark reports.
+
+### 9.3 S2 build notes: where the code forced a reading (2026-10-24)
+
+Written from the code as it stands. Each item names the design text it changes
+or settles. None changes a ruling or the S3 to S7 plan.
+
+1. **The log opens only where its directory exists** (3.1, S2 "opens"). `Open`
+   creates nothing. A scratch store that a projection base is packed from
+   (`publisher.go` tars the whole directory), and an install into a store
+   directory that must be empty (`reinstallComplete` counts every non-dot entry),
+   would otherwise carry an empty `trace-log`. The directory is created by the
+   first thing that needs it: the restore boundary now, S4's writer next. A
+   segment is still created on the first write (9.2 item 5), so a restore into
+   a computer that never wrote trace lines leaves one segment, `open` then
+   `restore`.
+2. **A directory another writer holds leaves the store without a log, and
+   without reading it** (4.3 F12; 6 "readers read the log whenever it exists").
+   The conservative reading: a capsule or a second store over one directory
+   must not serve its parent's lines as its own. `trace_log.locked` says so.
+   Any other open failure (a file where the directory should be, a segment of
+   an unknown version) is `open_error`; the store opens either way.
+3. **The stream seed is the lease, so the 512 gap does not apply to it** (4.4).
+   The stream_seq lease (landed after the design) already covers every number
+   published, including lines lost with a VM. The log's maximum feeds the
+   lease's cross-check (a line above the reserved block makes the lease
+   untrusted, so the exact seed runs) and the exact seed's maximum; the exact
+   seed has its own gap of 1,048,576.
+4. **The per-run seed adds the 512 gap only when the log holds a line for the
+   run** (4.4). "After any boot when the log is configured" would move the seed
+   of every run on every computer that has a log directory, which breaks the
+   empty-log differential (a run's second boot starts at 513, not at its
+   maximum plus one). A run whose every line was lost with a VM leaves nothing
+   for the seed to see; S4 decides the trigger it needs (for example, any
+   sealed segment from a `crash_recovered` boot) when it writes.
+5. **Two readers were added to `tracelog`**: `ByRunAnyOwner` (`ListEventsAfter`
+   and `ListEvents` take a run id and no owner, and the empty run id is shared
+   by all owners) and `ByTrajectoryNewest` (the trajectory window is the newest
+   10,000, where `ByTrajectory` returns the first lines). Tests in the package.
+6. **`StorageTraceLog` and the F-c writer.** The nine kinds change class;
+   `loop.compaction.completed` stays `StorageEventTable` (2.1). So that the F-c
+   writer keeps stamping all ten while the log does not write,
+   `EventKind.EventTableEligible()` is true for both classes, and the writer's
+   predicate and the F-c tests use it. `Batchable()` equals event table or
+   trace log is the test that replaces F-c's equality test.
+7. **A log read that fails degrades; it does not fail the page.** A segment of
+   an unknown version, or a line that will not decode, costs those lines and
+   counts in `trace_log.read_errors`; the rest of the log and the Dolt half are
+   served. Run acceptance reads through these methods, so S3 decides whether it
+   wants the stricter reading for evidence.
+8. **The log half is read before the Dolt halves** in the two cursor methods,
+   so a cursor read never returns a line from a later moment than the Dolt
+   events it pairs with. The residual that remains is the one a single table
+   has always had (numbers are allocated under `eventMu` and committed after
+   it); with S4 a log line is visible at allocation, so S4 must re-check the
+   window.
+9. **The restore boundary carries one head**, the restored store's, because
+   `Boundary` has one field; 7.3's `{from_head, to_head}` is not recorded.
+   `Reopen` also serves a base install, which is a workspace swap too, and
+   writes the same boundary. `Reopen` that cannot write it logs and continues.
+   `ReplaceWorkspace` (a fresh store at the same path) opens the surviving log
+   through `Open` and writes no boundary; its numbers are protected by the
+   seeds all the same.
+10. **The segment header's ComputerID is `unbound`**: the store does not know its
+    computer at `Open`. It is informational; S4's digest object carries the
+    real one, and S4 passes it at open if it wants the header right.
+11. **The block's write-side counters have no writer yet.** `barrier_fsyncs`,
+    `barrier_fsync_p99_ms`, `dropped` and `fallbacks` exist, are zero, and are
+    fed by S4. Log counters (`records`, `bytes_by_kind`, `fsyncs`) restart with
+    the process and with `Reopen`.
+
+**S2 failure modes and their tests** (`internal/store/trace_log_test.go`
+unless named):
+
+| Failure | Test |
+|---|---|
+| F1 number reuse across Dolt and the log | `TestTraceLogSeedsConsiderTheLog` (mutated: stream seed without the log fails), `TestReopenWritesOneRestoreBoundaryAndNeverReusesNumbers` |
+| F2 a half forgotten, merged or cut wrongly | `TestTraceLogSplitEqualsTheAllDoltOracle` (every method, cursors, limits, cursor walks; mutated: no merge fails), `TestTraceLogDedupesByEventIDKeepingTheDoltCopy`, `TestEveryEventListMethodIsOnTheUnion` |
+| F2 an empty log changes a page or a seed | `TestTraceLogEmptyLogIsByteIdenticalToOriginMain` (golden from the pre-S2 commit; log absent and open) |
+| F11 a line is written in S2 | `TestNothingWritesATraceLineInS2` (every kind, setting on, source guard); `internal/types/event_storage_trace_log_test.go` for the class |
+| F12 two writers | `TestTraceLogLockedByAnotherWriterRunsWithoutTheLog` |
+| F17 restore loses the log or reuses numbers | the Reopen test above, `TestReopenCreatesTheLogForTheBoundaryWhenThereWasNone` |
+| F19, F20 the log inside the workspace | `TestTraceLogIsBesideTheWorkspaceNotInsideIt` |
+| F22 a boot adds a file or a resumer | `TestTraceLogIsNotCreatedByOpen` |
+| open failure, unreadable segment | `TestTraceLogOpenFailureNeverFailsTheStore`, `TestTraceLogUnreadableSegmentDegrades` |
+| the setting does something | `TestSettingTraceLogIsRegisteredAndNotActedOn` |
+| the block lacks a field or hides poison | `TestTraceLogStatsBlock`, `TestTraceLogStatsReportPoison`, `agentcore.TestGuestObservabilityServesTheTraceLogBlock` |
+| Close leaves the directory locked | `TestTraceLogCloseReleasesTheDirectoryAndReopenTakesItBack` |
+| a racing reader sees a torn handle | `TestTraceLogReadsRaceAppendsAndEnsure` (-race) |
+| the two new readers | `internal/tracelog/reader_s2_test.go` |
 
 ## 10. Failure modes, written before any code, each with its test
 
