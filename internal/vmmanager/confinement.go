@@ -56,6 +56,7 @@ const (
 	confinementReasonHostUnprepared = "jailer_host_unprepared"
 	confinementReasonInvalidID      = "invalid_jailer_id"
 	confinementReasonNextNotStatic  = "next_build_not_static"
+	confinementReasonVMSliceMissing = "vm_slice_missing"
 )
 
 // Linux capability numbers (include/uapi/linux/capability.h). Kept here so
@@ -243,6 +244,18 @@ func (m *Manager) decideConfinement(cfg VMConfig) (mode, reason string) {
 	if b := m.vmmFor(cfg); b.Next && b.JailedFirecracker == "" {
 		return ConfinementDirect, confinementReasonNextNotStatic
 	}
+	// systemd owns the VM slice's cgroup, and the jailer's create_dir_all
+	// would recreate it after a `systemctl stop` of the slice: launch direct
+	// while it is gone (a vmctl restart brings the slice back through
+	// Wants=). Checked per launch, not only at Start.
+	leaf := m.cgroupLeafRel(cfg.VMID)
+	if leaf == "" {
+		return ConfinementDirect, confinementReasonVMSliceMissing + ": VMCTL_JAILER_CGROUP_PARENT is unset or leaves the cgroup root"
+	}
+	slice := path.Dir(path.Dir(leaf))
+	if info, err := os.Stat(filepath.Join(m.cgroupRootDir(), filepath.FromSlash(slice))); err != nil || !info.IsDir() {
+		return ConfinementDirect, confinementReasonVMSliceMissing + ": " + slice
+	}
 	return ConfinementJailer, ""
 }
 
@@ -287,8 +300,21 @@ func (m *Manager) jailAPISocketHostPath(vmID string) string {
 	return filepath.Join(m.jailRoot(vmID), strings.TrimPrefix(jailAPISocket, "/"))
 }
 
+// cleanCgroupParent is VMCTL_JAILER_CGROUP_PARENT as a clean path relative
+// to the cgroup root, or "" when it is unset or leaves the root. Every Join
+// and Remove under the root goes through it.
+func cleanCgroupParent(raw string) string {
+	rel := path.Clean(strings.Trim(strings.TrimSpace(raw), "/"))
+	if rel == "." || rel == ".." || strings.HasPrefix(rel, "../") {
+		return ""
+	}
+	return rel
+}
+
+// cgroupLeafRel is the VM's leaf under the current parent, "" when the
+// parent is unset or not a clean relative path inside the cgroup root.
 func (m *Manager) cgroupLeafRel(vmID string) string {
-	parent := strings.Trim(m.cfg.Jailer.CgroupParent, "/")
+	parent := cleanCgroupParent(m.cfg.Jailer.CgroupParent)
 	if parent == "" {
 		return ""
 	}
@@ -869,14 +895,22 @@ func cgroupWithin(p, base string) bool {
 // cgroup) and, like the parent, hold no process (the jailer's write would
 // fail EBUSY). vmctl moves no process and writes no subtree_control here.
 func (m *Manager) prepareJailerCgroups(own string) error {
-	rel := path.Clean(strings.Trim(strings.TrimSpace(m.cfg.Jailer.CgroupParent), "/"))
-	if rel == "." || rel == "" {
+	raw := strings.Trim(strings.TrimSpace(m.cfg.Jailer.CgroupParent), "/")
+	if raw == "" || path.Clean(raw) == "." {
 		return fmt.Errorf("VMCTL_JAILER_CGROUP_PARENT is unset: jailed VMs need a parent cgroup outside vmctl's unit, such as system.slice/system-choirvms.slice/vms (%s)", vmSliceRecord)
 	}
-	if strings.HasPrefix(rel, "../") || rel == ".." {
+	rel := cleanCgroupParent(raw)
+	if rel == "" {
 		return fmt.Errorf("VM cgroup parent %q leaves the cgroup root", m.cfg.Jailer.CgroupParent)
 	}
-	if unit := unitCgroupOf(own); cgroupWithin(rel, unit) {
+	// Fail closed: a unit that cannot be determined (no unified-hierarchy
+	// line, or vmctl in the cgroup root) cannot be proved not to hold the
+	// parent, and the in-unit check below would be skipped.
+	unit := unitCgroupOf(own)
+	if unit == "" {
+		return fmt.Errorf("vmctl's own cgroup is unknown (%q): cannot prove VM cgroup parent %s lies outside vmctl's unit, so the jailer is unavailable (%s)", own, rel, vmSliceRecord)
+	}
+	if cgroupWithin(rel, unit) {
 		return fmt.Errorf("VM cgroup parent %s is inside vmctl's unit %s: a vmctl restart while a jailed VM runs would fail (%s)", rel, unit, vmSliceRecord)
 	}
 	root := m.cgroupRoot

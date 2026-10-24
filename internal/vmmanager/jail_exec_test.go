@@ -182,6 +182,7 @@ func TestNextBuildJailsOnlyWhenStatic(t *testing.T) {
 			c.Jailer.FirecrackerBinPath = "/nix/store/s-firecracker-static-1.16.2/bin/firecracker"
 			c.FirecrackerNext.JailExec = jailExec
 		})
+		withVMSlice(t, mgr)
 		mgr.jailerHostErr = nil
 		return mgr
 	}
