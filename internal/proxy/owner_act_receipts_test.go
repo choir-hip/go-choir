@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -232,11 +233,18 @@ func TestStandingArmThroughTheProxyIsTestTierOnly(t *testing.T) {
 	env := newOwnerActEnv(t)
 	env.handler.cfg.CorpusdURL = corpusd.URL
 	env.handler.ownerActSigner = signer
+	// The class is read by the fake vmctl on the request path and by the
+	// API-key activity touch's own goroutine, so it is guarded.
+	var classMu sync.Mutex
 	class := "primary"
+	setClass := func(c string) { classMu.Lock(); class = c; classMu.Unlock() }
 	ownership := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		classMu.Lock()
+		current := class
+		classMu.Unlock()
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"computer_id": "computer-a", "desktop_id": "primary", "user_id": env.user.ID,
-			"state": "active", "computer_url": "http://127.0.0.1:1", "vm_id": "vm-a", "warmness_class": class,
+			"state": "active", "computer_url": "http://127.0.0.1:1", "vm_id": "vm-a", "warmness_class": current,
 		})
 	}))
 	defer ownership.Close()
@@ -247,12 +255,12 @@ func TestStandingArmThroughTheProxyIsTestTierOnly(t *testing.T) {
 	key := env.key(t, "computer:self_development:mode", OwnerActsScope)
 
 	for _, refusedClass := range []string{"primary", "premium_always_on", "critical_protected", ""} {
-		class = refusedClass
+		setClass(refusedClass)
 		if rec := env.send(t, http.MethodPut, "/api/computers/computer-a/self-development/mode", body, key); rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "test-tier") {
 			t.Fatalf("class %q: %d %s", refusedClass, rec.Code, rec.Body.String())
 		}
 	}
-	class = "test"
+	setClass("test")
 	rec := env.send(t, http.MethodPut, "/api/computers/computer-a/self-development/mode", body, key)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("test-tier arm: %d %s", rec.Code, rec.Body.String())
