@@ -29,6 +29,19 @@ review:
 
 metamission:
   stations:
+    - id: CI0
+      path: docs/definitions/ci-test-cooptimization-2026-10-24.md
+      readiness: executable
+      status: working
+      depends_on: []
+      note: >-
+        CI and test co-optimization (owner, 2026-10-24), first because it
+        accelerates every other station: runs now, in parallel with the
+        waves, a Sonnet worker on the agents VM. Push to deploy is 19.9 min;
+        the target is half, the stretch a quarter. Order by wall clock
+        removed: the outlier shard and the cache, a pull-request run as the
+        pre-land gate whose green tree main reuses, the Node B build, then
+        pruning and speeding tests with a manifest.
     - id: SR0
       path: this file (the orchestrator's own work)
       readiness: executable
