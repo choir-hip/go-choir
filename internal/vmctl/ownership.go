@@ -242,6 +242,52 @@ func (r *OwnershipRegistry) SetHold(computerID, reason, heldBy string) error {
 	return r.writePersistenceLocked()
 }
 
+// keyTouchMinInterval is the floor between two registry writes a touch makes
+// for one computer: a client polling every second costs one write a minute.
+const keyTouchMinInterval = 60 * time.Second
+
+// TouchResult is what TouchComputerActivity found and did.
+type TouchResult struct {
+	Found   bool
+	Touched bool
+	State   VMState
+}
+
+// TouchComputerActivity moves the idle clock (LastActiveAt) of the computer a
+// (user, computer) pair names, and nothing else. It is the write the
+// authenticated API-key path lacks: that path joins a key to an ownership
+// without resolving it, so the idle sweep never saw its traffic
+// (docs/problems/idle-sweep-hibernates-a-computer-just-after-its-apply-restart-2026-10-24.md).
+//
+// It never resolves, wakes, starts or boots. Only an Active ownership is
+// touched; any other state is reported and left as it was. A stored value
+// younger than keyTouchMinInterval is left alone.
+func (r *OwnershipRegistry) TouchComputerActivity(userID, computerID string, now time.Time) TouchResult {
+	userID, computerID = strings.TrimSpace(userID), strings.TrimSpace(computerID)
+	if userID == "" || computerID == "" {
+		return TouchResult{}
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, own := range r.ownerships {
+		if own == nil || own.UserID != userID || stableComputerID(own.UserID, own.DesktopID, own.ComputerID) != computerID {
+			continue
+		}
+		result := TouchResult{Found: true, State: own.State}
+		if own.State != VMStateActive {
+			return result
+		}
+		if !own.LastActiveAt.IsZero() && now.Sub(own.LastActiveAt) < keyTouchMinInterval {
+			return result
+		}
+		own.LastActiveAt = now
+		r.saveLocked()
+		result.Touched = true
+		return result
+	}
+	return TouchResult{}
+}
+
 // ClearHold removes a maintenance hold from a computer. This is an authorized
 // owner/recovery operation; it is NOT called by any automatic reconciler.
 func (r *OwnershipRegistry) ClearHold(computerID string) error {

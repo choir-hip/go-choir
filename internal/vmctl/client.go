@@ -389,6 +389,43 @@ func (c *Client) LookupComputerContext(ctx context.Context, userID, computerID s
 	return c.lookupComputerContext(ctx, strings.TrimSpace(userID), computerID)
 }
 
+// TouchComputerActivity asks vmctl to move the idle clock of the computer a
+// (user, computer) pair names. It reports whether the clock moved. It never
+// wakes or resolves a computer; a non-active computer is left as it was.
+func (c *Client) TouchComputerActivity(ctx context.Context, userID, computerID string) (bool, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	data, err := json.Marshal(touchRequest{UserID: strings.TrimSpace(userID), ComputerID: strings.TrimSpace(computerID)})
+	if err != nil {
+		return false, fmt.Errorf("vmctl client: marshal touch request: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, TouchEndpoint(c.baseURL), bytes.NewReader(data))
+	if err != nil {
+		return false, fmt.Errorf("vmctl client: create touch request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	hostauth.MarkInternal(req)
+	setLifecycleCaller(req)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return false, fmt.Errorf("vmctl client: touch call failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+	if err != nil {
+		return false, fmt.Errorf("vmctl client: read touch response: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("vmctl client: touch status %s", resp.Status)
+	}
+	var result touchResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		return false, fmt.Errorf("vmctl client: decode touch response: %w", err)
+	}
+	return result.Touched, nil
+}
+
 // LookupComputerByIDContext resolves an ownership by stable ComputerID without
 // imposing a user-ID join. It is an internal control-plane primitive; public
 // callers must authorize the exact ComputerID before using it.

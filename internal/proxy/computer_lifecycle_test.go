@@ -35,6 +35,9 @@ func TestComputerRefreshUsesVmctlRefreshNotResolve(t *testing.T) {
 			})
 		case "/internal/vmctl/stop", "/internal/vmctl/resolve", "/internal/vmctl/rematerialize":
 			t.Fatalf("refresh used unexpected vmctl path %s", r.URL.Path)
+		case "/internal/vmctl/touch":
+			// The best-effort idle-clock touch of an authenticated key request.
+			_, _ = w.Write([]byte(`{"touched":true}`))
 		default:
 			t.Fatalf("unexpected vmctl path %s", r.URL.Path)
 		}
@@ -109,6 +112,9 @@ func TestComputerRecoverUnholdsStoppedComputerAndStarts(t *testing.T) {
 				"computer_id": "computer-ordinary", "user_id": "ordinary-owner", "desktop_id": "primary",
 				"state": state, "epoch": epoch,
 			})
+		case "/internal/vmctl/touch":
+			// The best-effort idle-clock touch of an authenticated key request.
+			_, _ = w.Write([]byte(`{"touched":true}`))
 		default:
 			t.Fatalf("unexpected vmctl path %s", r.URL.Path)
 		}

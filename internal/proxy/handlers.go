@@ -197,6 +197,7 @@ type Handler struct {
 	residueImportAutoputerHTTP *http.Client  // dedicated long-budget client for residue import
 	autoputerURL               *url.URL      // parsed autoputer URL for WS dial derivation
 	vmctlClient                *vmctl.Client // optional vmctl client for VM-backed routing
+	apiKeyTouchSent            sync.Map      // userID\x00computerID -> time of the last idle-clock touch sent to vmctl
 	lifecycle                  *lifecycleRecorder
 	recoveries                 *computeRecoveryTracker
 	apiKeyValidator            APIKeyValidator // optional: enables Bearer token (API key) auth
