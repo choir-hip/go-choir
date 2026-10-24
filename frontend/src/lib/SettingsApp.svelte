@@ -71,7 +71,11 @@
     { value: 'owner:acts', label: 'Owner Acts (approve, arm, restore)' },
   ];
 
-  const simpleKeyScopes = ['admin'];
+  // The one-click key covers everything an agent or CLI needs (owner,
+  // 2026-10-24: "the default API key should cover everything that you
+  // need"). admin does not grant owner acts (approve, arm, restore), so the
+  // key also carries owner:acts, which only this signed-in session may grant.
+  const simpleKeyScopes = ['admin', 'owner:acts'];
 
   // Any scope other than manage:keys selects a computer at use time; those
   // keys are owner-wide when computer_id is empty or attenuated when bound.
@@ -121,8 +125,8 @@
     apiKeyError = '';
     apiKeyNotice = '';
     const label = newKeyLabel.trim() || 'CLI key';
-    // Simple mode: one click mints an owner-wide admin key covering every
-    // computer you own. Advanced mode: caller may narrow scopes, bind to one
+    // Simple mode: one click mints an owner-wide admin and owner-acts key
+    // covering every computer you own. Advanced mode: caller may narrow scopes, bind to one
     // computer, or set an expiry.
     let scopes;
     let computerID;
