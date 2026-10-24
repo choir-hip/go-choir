@@ -2008,6 +2008,9 @@ type mockVMManager struct {
 	// maintenanceImage, when set, makes RefreshVM run the config's
 	// OfflineMaintenance on it before "booting", as vmmanager does.
 	maintenanceImage string
+	// bootedEnvelopes records the envelope each RefreshVM "booted" with:
+	// the config's, or the PostMaintenanceCredential re-mint after a hook.
+	bootedEnvelopes []string
 	destroys         []string
 	tokens           map[string]string
 	reservedEpochs   map[string]int64
@@ -2164,11 +2167,20 @@ func (m *mockVMManager) RefreshVM(vmID string, cfg VMManagerConfig) (*VMInstance
 	if release != nil {
 		<-release
 	}
+	envelope := cfg.ComputerCredentialEnvelope
 	if cfg.OfflineMaintenance != nil && m.maintenanceImage != "" {
 		if err := cfg.OfflineMaintenance(m.maintenanceImage); errors.Is(err, ErrOfflineMaintenanceUnbootable) {
 			return nil, err
 		}
+		if cfg.PostMaintenanceCredential != nil {
+			if fresh, err := cfg.PostMaintenanceCredential(); err == nil && fresh != "" {
+				envelope = fresh
+			}
+		}
 	}
+	m.mu.Lock()
+	m.bootedEnvelopes = append(m.bootedEnvelopes, envelope)
+	m.mu.Unlock()
 	if refreshError != nil {
 		return nil, refreshError
 	}
