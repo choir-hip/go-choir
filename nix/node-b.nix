@@ -1412,8 +1412,10 @@ in
       MemorySwapMax = "0";
       # The same 14G the vmctl unit asks for its direct guests: as computers
       # move here (SEC-04 waves) the protection follows them. system.slice
-      # below caps the two together at 18G, and the kernel shares that cap
-      # between them by protected usage (cgroup v2 memory.low distribution).
+      # below caps the two together at 18G; the kernel shares it between
+      # them by protected usage, and under memory_recursiveprot (Node B's
+      # cgroup2 mount) any of the 18G they do not claim goes to the other
+      # services by usage, so the guests' effective share can be below 18G.
       # memory.low protects usage only.
       MemoryLow = "14G";
     };
@@ -1427,9 +1429,16 @@ in
   # cache, leaving 13 GiB of the host's 31 for everything else. memory.low is
   # best effort: under pressure the kernel takes unprotected memory first and
   # protected memory only when nothing else is left, so it never OOMs by
-  # itself. Owner, 2026-10-24: "Go with memory protection." Rollback: delete
-  # this override (system.slice back to 0).
-  systemd.slices.system.sliceConfig.MemoryLow = "18G";
+  # itself. Owner, 2026-10-24: "Go with memory protection."
+  # NixOS already writes system.slice as a full unit file (systemd ships no
+  # file for it), so a change that ever dropped every definition would take
+  # the removal path and stop system.slice with everything under it.
+  # X-StopOnRemoval=false forbids that (bunch 192). Rollback: MemoryLow = "0"
+  # here, or live: systemctl set-property --runtime system.slice MemoryLow=0.
+  systemd.slices.system = {
+    unitConfig."X-StopOnRemoval" = false;
+    sliceConfig.MemoryLow = "18G";
+  };
 
   systemd.services.go-choir-vmctl = {
     # No crash loops (docs/restart-subsystem-design-2026-10-13.md, L1a): after 10 starts in 10 minutes the unit stays failed until a deploy or an operator (systemctl reset-failed) starts it again.

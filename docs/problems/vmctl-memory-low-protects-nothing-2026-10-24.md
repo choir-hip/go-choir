@@ -65,6 +65,21 @@ Decision (fix direction 1):
 - The vmctl unit's 14G stays until every computer is jailed; then it
   shrinks to vmctl's own size.
 
+Checked before the deploy (bunch 192): Node B mounts cgroup2 with
+`memory_recursiveprot`, so protection reaches the leaf groups vmctl creates
+(`supervisor`, `vms/<vm>`), which set no memory.low of their own. NixOS
+already writes `system.slice` as a full unit file (FragmentPath
+/etc/systemd/system/system.slice, empty), so the change modifies that file
+(slices apply on daemon-reload and are never restarted) and carries
+`X-StopOnRemoval=false` against the removal path. Under recursiveprot the
+unclaimed part of the 18G goes to the other services by usage, so the
+guests' effective share can be below 18G.
+
+Baseline (18:00 to 18:10 UTC, 601 s): the vmctl unit refaults 14.1 MiB/s of
+file cache, system.slice 20.2 MiB/s.
+
 Proof: after the deploy, `/sys/fs/cgroup/system.slice/memory.low` reads
-19327352832, and the vmctl unit's refault rate falls against the baseline
-read before the deploy. Rollback: delete the override.
+19327352832, `system-choirvms.slice` reads 15032385536, and the vmctl unit's
+refault rate is read again against the baseline. Rollback: MemoryLow "0" in
+the config, or live `systemctl set-property --runtime system.slice
+MemoryLow=0`.
