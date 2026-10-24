@@ -3757,6 +3757,12 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 			}
 			return json.Unmarshal([]byte(output), &decoded) == nil && decoded.FateTerminal
 		}))
+		// A cell that looked at the run's running job parks the turn on the
+		// job's end, with no model turn in between (capsule_jobs.go,
+		// engineeringJobPark).
+		toolLoopOptions = append(toolLoopOptions, toolregistry.WithToolBatchWait(func(ctx context.Context, calls []types.ToolCall, results []types.ToolResult) (toolregistry.ToolLoopCompletionGuardResult, bool, error) {
+			return rt.engineeringJobPark(ctx, rec, emit, calls, results)
+		}))
 		// The desk's only tool is capsule_go_eval; its durable transition is a
 		// committed terminal fate (freeze/verify for selfdev casts). An
 		// end_turn without one used to close the run with prose and strand the

@@ -204,19 +204,25 @@ func (s *ChoirScope) Stop(id string) error {
 }
 
 // Poll returns job id as this cell's start snapshot showed it, or as
-// "starting" when this cell staged it. It never waits: a job's end wakes
-// you, so end your turn rather than polling in a loop.
+// "starting" when this cell staged it. It never waits in the cell; a job it
+// returns unfinished is recorded as awaited, and the host ends the turn
+// after the cell and resumes it when the job ends
+// (problems/engineering-busy-polls-its-own-job-2026-10-24.md).
 func (s *ChoirScope) Poll(id string) (JobView, error) {
 	id = strings.TrimSpace(id)
 	for _, j := range s.jobs {
 		if j.ID == id {
 			j.Argv = append([]string(nil), j.Argv...)
+			if !capsulejob.Terminal(j.State) {
+				s.noteAwaited(id)
+			}
 			return j, nil
 		}
 	}
 	if s.tray != nil {
 		for _, in := range s.tray.intents {
 			if in.Kind == IntentJob && in.JobOp == JobOpStart && in.JobID == id {
+				s.noteAwaited(id)
 				return JobView{ID: id, State: JobStateStarting, Argv: append([]string(nil), in.Argv...), Cwd: in.Cwd,
 					WallClockSec: in.WallClockMS / 1000, Reason: "staged in this cell; it starts after the cell returns"}, nil
 			}
@@ -230,4 +236,26 @@ func (s *ChoirScope) Poll(id string) (JobView, error) {
 		return JobView{}, fmt.Errorf("choir.Poll: no job %q; this capsule has no jobs", id)
 	}
 	return JobView{}, fmt.Errorf("choir.Poll: no job %q; jobs: %s", id, strings.Join(known, ", "))
+}
+
+// noteAwaited records a job a Poll in the bound cell returned unfinished,
+// once.
+func (s *ChoirScope) noteAwaited(id string) {
+	s.awaitMu.Lock()
+	defer s.awaitMu.Unlock()
+	for _, a := range s.awaited {
+		if a == id {
+			return
+		}
+	}
+	s.awaited = append(s.awaited, id)
+}
+
+// takeAwaited returns and clears the jobs the bound cell awaited.
+func (s *ChoirScope) takeAwaited() []string {
+	s.awaitMu.Lock()
+	defer s.awaitMu.Unlock()
+	out := s.awaited
+	s.awaited = nil
+	return out
 }

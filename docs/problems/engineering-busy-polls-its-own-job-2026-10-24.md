@@ -3,8 +3,8 @@
 Date: 2026-10-24, 03:5x UTC. Found by: FP0, from the self-development drill
 fp0-selfdev-1024a (evidence: [selfdev-drill-2026-10-24](../evidence/selfdev-drill-2026-10-24.md)).
 Class of this record: green. Class of the fix it leads to: orange (the
-engineering in-cell API; the reducer and the desk loop). Status: problem
-recorded; not fixed.
+engineering in-cell API; the reducer and the desk loop). Status: fix
+built on lane `lane/fp0-job-park` (design below), not deployed or drilled.
 
 ## What happened
 
@@ -213,3 +213,10 @@ never polls a running job sees no difference.
   run woken by the job record through the outbox) would be needed only if
   engineering runs come to outlive a process. Today they cannot (a live
   capsule refuses a planned restart).
+- The park reads `job_park` from the cell result the model sees, which the
+  tool loop cuts at 100 KiB. A cell that prints more than that loses the
+  field (and `fate_terminal`, which has the same exposure), so it does not
+  park. Tails are about 4 KiB, so this is unlikely, and the outcome is
+  today's behaviour, not a new failure.
+- The broker tests (`cmd/capsule-broker`, linux only) were vetted for linux
+  but not run on the lane's macOS host. CI runs them.

@@ -672,6 +672,11 @@ func newCapsuleGoEvalTool(rt *Runtime) toolregistry.Tool {
 				result.VerifyResult = reduction.verifyResult
 				result.JobResults = reduction.jobResults
 			}
+			if reduction.active {
+				// The job this turn waits on, if the cell looked at one
+				// still running (capsule_jobs.go, cellJobPark).
+				result.JobPark = cellJobPark(result)
+			}
 			return toolregistry.ResultJSON(result)
 		},
 	}

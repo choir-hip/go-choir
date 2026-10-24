@@ -436,6 +436,7 @@ func sessionGoEvalResult(res yaegikernel.SessionResult, d time.Duration) capsule
 		Duration:        d,
 		StagedIntentIDs: res.Receipts,
 		RecordsShown:    res.RecordsShown,
+		JobsAwaited:     res.JobsAwaited,
 		Reuse:           res.Reuse,
 		DiagKind:        res.DiagKind,
 	}
