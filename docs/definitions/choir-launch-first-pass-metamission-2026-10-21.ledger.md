@@ -1455,3 +1455,12 @@ Append-only. One terse entry per orchestrator pass.
   - Proof: launch both test computers jailed, with leaves under the slice; RES-05 script step 5 (one shared store image).
   - Then restart vmctl with both jailed VMs alive: a clean start and both reattached. This is the check that wedged at D27.
   - Recovery if it wedges: stop the two jailed test VMs, reset-failed, start; then the jailer off.
+- 01:45. D30 live (d9336696b; CI 40050471884 passed). vmctl started at 01:44:19 with "jailer ready" and the slice parent, NRestarts 0, and reattached the paper.
+  - The paper took a planned refresh at D29 (01:33:20, epoch 13270) and read its lease: trusted, seed_ms 1343. /health 200 in 23 ms.
+- 01:45. SEC-04 step 3 and RES-05 on staging:
+  - Both test computers launched jailed (uids 900757 and 902443), each with one process in system-choirvms.slice/vms/<vm>. vmctl's unit root subtree_control stays empty.
+  - The second test computer had been direct and hibernated: its snapshot was refused for the jailed launch (launch_config_mismatch), and it cold booted, as designed.
+  - RES-05 script step 5 PASS: the same dev:inode, owner root, mode 444, link count at least 3.
+  - Script step 6 (vmm_confinement_verify --expect jailer) PASS on both.
+- 01:46. The wedge check, the one D27 failed: systemctl restart go-choir-vmctl with both jailed VMs alive. rc 0, active at 01:46:05, NRestarts 0, Result success. vmctl reattached all four VMs: the paper, both jailed test computers (their pids unchanged) and candidate-fleet-e15cb89f. The VM slice fix is proved on staging.
+  - Remaining for SEC-04: class:test widening, then every computer (step 5, the owner's deploy-shape choice). The round-2 lows on the slice (fail closed on an unreadable own cgroup, a populated-leaf test, a per-launch slice stat, a deploy preflight) are owed before widening.
