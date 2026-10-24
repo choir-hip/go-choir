@@ -284,7 +284,7 @@ func TestLeaseObservabilityBlockShape(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{"state", "reserved_through", "allocated_through", "trusted", "untrust_reason", "seeded_from",
-		"seed_ms", "cross_check_max", "refill_failed", "last_lease_error", "marker_present", "seed_failed", "lease_tombstoned", "seed_undecodable_rows"}
+		"seed_ms", "cross_check_max", "refill_failed", "last_lease_error", "marker_present", "seed_failed", "lease_tombstoned", "seed_undecodable_rows", "on_tape"}
 	for _, key := range want {
 		if _, ok := fields[key]; !ok {
 			t.Errorf("observability block lacks %q: %s", key, raw)

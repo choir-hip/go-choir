@@ -939,13 +939,15 @@ allocator; only `marker_present` is read live, one `stat`):
 {"state":"ready","reserved_through":0,"allocated_through":0,"trusted":false,
  "untrust_reason":"no_lease","seeded_from":"exact","seed_ms":0,
  "cross_check_max":0,"refill_failed":0,"last_lease_error":"",
- "marker_present":false,"seed_failed":0,"lease_tombstoned":0}
+ "marker_present":false,"seed_failed":0,"lease_tombstoned":0,
+ "seed_undecodable_rows":0,"on_tape":false}
 ```
 
 `state` is `unseeded`, `seeding` or `ready`; `untrust_reason` is
 `no_lease`, `receipt`, `marker`, `inconsistent`, `ceiling`, `violated`, or
 empty when trusted; `seeded_from` is `exact` or `lease`. The last two fields
-are additions (bunch 169).
+are additions (bunch 169); `on_tape` is an addition (bunch 178): the last lease
+row this process wrote went through a bound tape.
 
 ### Not done, and residual
 
