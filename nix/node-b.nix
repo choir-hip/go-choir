@@ -1660,9 +1660,11 @@ in
         # (docs/reports/lr-guest-memory-return-2026-10-14.md).
         "VM_BALLOON_FREE_PAGE_REPORTING=1"
         # RES-10 balloon statistics (internal/vmmanager/balloon_stats.go):
-        # deliberately NOT set. Staged per computer like the FP8 features:
-        #   "VM_BALLOON_STATS_ONLY=<one test computer id>"   then class:test
+        # staged per computer like the FP8 features. Step 1 (W2, FP0 under the
+        # owner's switch delegation, 2026-10-24): one test computer, b@c.
+        # Next: class:test. Rollback: delete the line.
         #   "VM_BALLOON_STATS_POLLING_INTERVAL_S=5"          optional, default 5
+        "VM_BALLOON_STATS_ONLY=computer-6c50d6e566143ae32cdb660faa60e24d"
         # A named computer cold boots once (the balloon is in the snapshot
         # launch-config hash); unnamed computers keep their exact config.
         # Read: GET localhost:8083/internal/vmctl/memory/balloon (host only),
@@ -1867,6 +1869,15 @@ in
         "VMCTL_RETENTION_EPHEMERAL_MIN_AGE=24h"
         "VMCTL_RETENTION_MAX_DELETES=100"
         "VMCTL_RETENTION_MAX_BYTES_MIB=122880"
+        # The test-class idle rule and the quarantine age-out, active (W2).
+        # FP0 read the shadow plan at 21:3x on 2026-10-24: 5 test-class
+        # computers (49.8 GB), every one kept (idle below 168 h, one also
+        # selector-named), 0 projected deletes. A computer any per-computer
+        # selector names is never touched. Rollback: delete these four lines.
+        "VMCTL_RETENTION_TEST_IDLE_MODE=active"
+        "VMCTL_RETENTION_TEST_IDLE_MIN_AGE=168h"
+        "VMCTL_RETENTION_QUARANTINE_MODE=active"
+        "VMCTL_RETENTION_QUARANTINE_MIN_AGE=168h"
         # Shadow retention mirrors the active policy as an observation endpoint
         # so reports can compare deletion pressure before and after sweeps.
         "VMCTL_RETENTION_SHADOW_PRUNE_MODE=dry-run"
