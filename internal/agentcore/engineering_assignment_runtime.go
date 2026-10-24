@@ -225,6 +225,12 @@ func (rt *Runtime) planEngineeringCast(ctx context.Context, scope ReductionScope
 		vocabmigrate.IdentitySeedDelegatedCastRequestV1, ownerID, computerID, trajectoryID, recordID,
 	}, "\x00")))[:24]
 	preflightStarted := time.Now()
+	// U1: the capsule seeds from the repository's HEAD, so HEAD must be the
+	// effective release's source before it is read (and a stack on a moved
+	// base refuses here, visibly, rather than building on the old base).
+	if err := rt.sourceProjectionCastGate(ctx); err != nil {
+		return engineeringCastPlan{}, fmt.Errorf("engineering cast: %w", err)
+	}
 	preflight, err := rt.capsuleExecutor.PreflightSourceSnapshot(ctx, "")
 	if err != nil {
 		return engineeringCastPlan{}, fmt.Errorf("engineering cast: preflight capsule source: %w", err)

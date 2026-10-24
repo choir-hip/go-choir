@@ -271,6 +271,10 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 	if err := freezeSourceChangeError(staged); err != nil {
 		return nil, err
 	}
+	// U1: the bundle's patch is the cumulative one, from the stack base.
+	if err := composeFreezePatch(ctx, toolCtx.Executor.SourceDir(), staged); err != nil {
+		return nil, err
+	}
 	sourceTreeDigest, err := toolCtx.Executor.ResolveGrantedSourceSnapshotDigest(toolCtx.AgentRunID, handle)
 	if err != nil {
 		return nil, err

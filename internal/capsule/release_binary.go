@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"runtime"
@@ -40,7 +41,20 @@ type ReleaseBinaryProvenance struct {
 	SHA256           string `json:"sha256"`
 	RunningCommit    string `json:"running_commit,omitempty"`
 	SourceBaseCommit string `json:"source_base_commit,omitempty"`
+	// ReuseProof says how a reused binary was shown to match the source when
+	// its commit is not the source's: ReuseProofBinaryInputsEqual, "no
+	// binary-input path differs between the two commits" (U1, section 4.6).
+	// Empty means the commits are equal.
+	ReuseProof string `json:"reuse_proof,omitempty"`
 }
+
+// ReuseProofBinaryInputsEqual is the proof of a reused binary whose running
+// commit differs from the capsule source commit.
+const ReuseProofBinaryInputsEqual = "binary_inputs_equal"
+
+// BinaryInputDiffer lists the paths that differ between two commits of the
+// capsule's source repository. It fails when either commit is not there.
+type BinaryInputDiffer func(ctx context.Context, fromCommit, toCommit string) ([]string, error)
 
 // RunningBinary identifies this process's executable: where to read it, its
 // content hash, and the commit the linker stamped into it.
@@ -131,28 +145,87 @@ func isHexCommit(commit string) bool {
 // as the release's bin/autoputer. It returns nil when it may, else an error
 // that names why the desk must build the binary itself.
 func PlanReleaseBinaryReuse(changes []FileChange, sourceArtifactRef string, running RunningBinary) error {
+	_, err := PlanReleaseBinaryReuseWith(context.Background(), changes, sourceArtifactRef, running, nil)
+	return err
+}
+
+// PlanReleaseBinaryReuseWith is PlanReleaseBinaryReuse with U1's looser test.
+// With differ nil it is the old rule: the running binary's commit equals the
+// capsule source's. With a differ, a commit that differs is accepted when no
+// binary-input path differs between the two commits, and the returned proof
+// is ReuseProofBinaryInputsEqual. A differ that fails (a commit not in the
+// repository) means the desk builds: the running binary is never assumed to
+// match.
+func PlanReleaseBinaryReuseWith(ctx context.Context, changes []FileChange, sourceArtifactRef string, running RunningBinary, differ BinaryInputDiffer) (string, error) {
 	if touched := SourceChangesTouchingBinary(changes); len(touched) > 0 {
 		shown := touched
 		if len(shown) > 5 {
 			shown = shown[:5]
 		}
-		return fmt.Errorf("the change touches binary inputs (%s%s), so the release needs bin/autoputer built from the workspace source", strings.Join(shown, ", "), moreSuffix(len(touched)-len(shown)))
+		return "", fmt.Errorf("the change touches binary inputs (%s%s), so the release needs bin/autoputer built from the workspace source", strings.Join(shown, ", "), moreSuffix(len(touched)-len(shown)))
 	}
 	sourceCommit := SourceArtifactCommit(sourceArtifactRef)
 	if sourceCommit == "" {
-		return fmt.Errorf("the capsule source is not pinned to a git commit, so the running binary cannot be shown to match it; build bin/autoputer")
+		return "", fmt.Errorf("the capsule source is not pinned to a git commit, so the running binary cannot be shown to match it; build bin/autoputer")
 	}
 	if !computerSHA256(running.SHA256) {
-		return fmt.Errorf("the running binary identity is unavailable; build bin/autoputer")
+		return "", fmt.Errorf("the running binary identity is unavailable; build bin/autoputer")
 	}
 	runningCommit := strings.ToLower(strings.TrimSpace(running.Commit))
 	if !isHexCommit(runningCommit) {
-		return fmt.Errorf("the running binary has no release commit (%q); build bin/autoputer", running.Commit)
+		return "", fmt.Errorf("the running binary has no release commit (%q); build bin/autoputer", running.Commit)
 	}
-	if runningCommit != sourceCommit {
-		return fmt.Errorf("the running binary was built from %s but the capsule source is pinned to %s; build bin/autoputer", runningCommit, sourceCommit)
+	if runningCommit == sourceCommit {
+		return "", nil
 	}
-	return nil
+	if differ == nil {
+		return "", fmt.Errorf("the running binary was built from %s but the capsule source is pinned to %s; build bin/autoputer", runningCommit, sourceCommit)
+	}
+	paths, err := differ(ctx, runningCommit, sourceCommit)
+	if err != nil {
+		return "", fmt.Errorf("the running binary was built from %s and the capsule source is pinned to %s; they could not be compared (%v); build bin/autoputer", runningCommit, sourceCommit, err)
+	}
+	var inputs []string
+	for _, p := range paths {
+		if BinaryInputPath(p) {
+			inputs = append(inputs, p)
+		}
+	}
+	if len(inputs) > 0 {
+		sort.Strings(inputs)
+		shown := inputs
+		if len(shown) > 5 {
+			shown = shown[:5]
+		}
+		return "", fmt.Errorf("the running binary was built from %s but the capsule source %s differs in binary inputs (%s%s); build bin/autoputer", runningCommit, sourceCommit, strings.Join(shown, ", "), moreSuffix(len(inputs)-len(shown)))
+	}
+	return ReuseProofBinaryInputsEqual, nil
+}
+
+// GitPathDiffer lists the paths that differ between two commits of the git
+// repository at sourceDir. Both must be full commit ids; anything else is
+// refused before git sees it.
+func GitPathDiffer(sourceDir string) BinaryInputDiffer {
+	return func(ctx context.Context, from, to string) ([]string, error) {
+		if !isHexCommit(from) || !isHexCommit(to) {
+			return nil, fmt.Errorf("commit ids are required")
+		}
+		out, err := exec.CommandContext(ctx, "git", "-C", sourceDir, "diff-tree", "-r", "--no-renames", "--name-only", "-z", from, to, "--").Output()
+		if err != nil {
+			var exitErr *exec.ExitError
+			if errors.As(err, &exitErr) && len(exitErr.Stderr) > 0 {
+				return nil, fmt.Errorf("git diff-tree: %w: %s", err, strings.TrimSpace(string(exitErr.Stderr)))
+			}
+			return nil, fmt.Errorf("git diff-tree: %w", err)
+		}
+		var paths []string
+		for _, p := range strings.Split(string(out), "\x00") {
+			if p != "" {
+				paths = append(paths, p)
+			}
+		}
+		return paths, nil
+	}
 }
 
 func moreSuffix(n int) string {
@@ -228,8 +301,17 @@ func ValidateReleaseBinary(files []FrozenReleaseFile, provenance *ReleaseBinaryP
 	case ReleaseBinaryCapsuleBuilt:
 		return nil
 	case ReleaseBinaryReusedRunning:
-		if !isHexCommit(provenance.RunningCommit) || provenance.RunningCommit != provenance.SourceBaseCommit {
-			return fmt.Errorf("reused release binary must name the running commit, equal to the source base commit")
+		if !isHexCommit(provenance.RunningCommit) {
+			return fmt.Errorf("reused release binary must name the running commit")
+		}
+		if provenance.RunningCommit != provenance.SourceBaseCommit {
+			// U1: a differing commit is accepted only with the proof that no
+			// binary input differs. A bundle without it still needs equality.
+			if provenance.ReuseProof != ReuseProofBinaryInputsEqual || !isHexCommit(provenance.SourceBaseCommit) {
+				return fmt.Errorf("reused release binary must name the running commit, equal to the source base commit or proven equal in binary inputs")
+			}
+		} else if provenance.ReuseProof != "" {
+			return fmt.Errorf("reused release binary carries a reuse proof for equal commits")
 		}
 		return nil
 	default:

@@ -15,6 +15,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/release"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
+	"github.com/yusefmosiah/go-choir/internal/sourceproj"
 	"github.com/yusefmosiah/go-choir/internal/updater"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
@@ -58,6 +59,12 @@ type EffectiveRelease struct {
 	AdoptedReleaseID string              `json:"adopted_release_id,omitempty"`
 	EventHead        *EffectiveEventHead `json:"event_head,omitempty"`
 	ManifestError    string              `json:"manifest_error,omitempty"`
+	// Diverged and SourceProjection are U1's (section 4.6): divergence is a
+	// live stack, derived from the tape; a retired (upstreamed) stack is not
+	// divergence. Both are absent while the switch is off or before the first
+	// reconcile.
+	Diverged         *bool              `json:"diverged,omitempty"`
+	SourceProjection *sourceproj.Result `json:"source_projection,omitempty"`
 }
 
 // EffectiveEventHead is the computer's event chain head as the guest store
@@ -141,6 +148,10 @@ func (rt *Runtime) EffectiveRelease(ctx context.Context) EffectiveRelease {
 	out.TreePending = entry.pending
 	out.OperationID, out.SourceBaseCommit, out.SourcePatchSHA256 = entry.operationID, entry.sourceBaseCommit, entry.sourcePatchSHA256
 	out.TreeHash, out.TreeError, out.AdoptedReleaseID = entry.treeHash, entry.treeError, entry.adoptedReleaseID
+	if projection := rt.sourceProjectionStatus(); projection != nil {
+		diverged := projection.Diverged
+		out.Diverged, out.SourceProjection = &diverged, projection
+	}
 	return out
 }
 

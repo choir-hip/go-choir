@@ -1216,6 +1216,38 @@ B (SPA carries both, B's patch contains A's files); restore to the head after A
 repaired and recorded; a base move over a non-empty stack refuses visibly; a
 change promoted to main and refreshed retires as upstreamed (needs U1b).
 
+**As built (U1, lane `fp0-u1`).**
+
+- **Code.** `internal/sourceproj` (reconcile, containment, cumulative patch),
+  `internal/agentcore/source_projection.go` (gather from `current` and the
+  operations table, the cast gate, the fact log), a one-line call in each of
+  Freeze (`tools_capsule.go`), the cast plan
+  (`engineering_assignment_runtime.go`), boot (`runtime.go`) and
+  `recordMaterializationApplied`, and in `internal/capsule` the binary-reuse
+  diff (`PlanReleaseBinaryReuseWith`, `GitPathDiffer`, provenance
+  `reuse_proof`).
+- **Switch.** `CHOIR_SOURCE_PROJECTION=1` in the guest runtime's environment.
+  Absent means off, and off means every entry point above returns before it
+  touches git. U1 as built has a process-wide switch; a per-computer switch
+  needs the same host selector shape as `VM_CAPSULE_TUNNEL_ENFORCE_ONLY` and is
+  a follow-up.
+- **Turning it off after it ran.** Remove the variable, then on each computer
+  that projected: `git -C /mnt/persistent/files/Source/platform reset --hard
+  refs/choir/base`. Without the reset, HEAD stays on the projection commit, and
+  a new Go candidate would be based on a computer-local commit that the host
+  builder refuses.
+- **Fact kinds** in `<updater root>/source-projection/facts.jsonl`:
+  `source_projection_built`, `source_projection_repaired`,
+  `source_projection_upstreamed`.
+- **Cast refusal codes** (first word of the error): `stack_base_moved`,
+  `source_projection_pending`, `source_projection_unrebuildable`,
+  `source_projection_repo_unavailable`, `source_projection_failed`.
+- **What a pre-U1 stack looks like.** An older apply's patch is based on the
+  creation commit and is not cumulative. The effective release is that one
+  patch ("last apply wins"), so the projection is that patch on its base, which
+  is what the effective identity already computed.
+- **Not changed:** the materializer, the host builder, corpusd, vmctl, nix.
+
 **Then, in order:**
 
 - **U2. Name the loss (orange, with one red step).**
