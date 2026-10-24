@@ -140,6 +140,8 @@ host neither.
 - The keyed digest still reveals, to the host, which of this computer's files
   have equal bytes (equal digests), as the sealed chunk addresses already do.
 - A computer whose digest key cannot be derived records nothing and reports it.
+- A reconcile that finds a directory it cannot read skips it and holds every
+  deletion under it (counted `unreadable`); the pass is not wedged.
 
 File CAS is unchanged. Its chunks are 4 MiB pieces sealed with a synthetic
 nonce, addressed by the SHA-256 of the **ciphertext**, deterministic per
@@ -231,6 +233,12 @@ writes that keep it true, and the read path, with the switch off.
    out of the root; the recording walk never follows one.) The check and the
    use are separate syscalls; the files root is guest-owned, so this closes
    the path an API caller can reach, not a hostile guest process.
+9b. **Leaf symlinks.** A symlink as the *last* component is judged too, for
+   every verb but delete: it must resolve (`EvalSymlinks`) to a place under the
+   root, or the verb answers 403 (a dangling or looping link is refused too).
+   In-tree links (`Source/platform/CLAUDE.md -> AGENTS.md`) keep working.
+   DELETE `lstat`s and removes the link itself, never its target. The same
+   hole existed on main for GET and PUT (review bunch 217).
 9a. **Names the filesystem keeps literal.** The recorder keeps a path as the
    walk and the API see it: a backslash or a leading or trailing space is part
    of the name, never rewritten, so two files cannot share one object path.

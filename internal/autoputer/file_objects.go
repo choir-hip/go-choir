@@ -280,6 +280,15 @@ func (f *fileObjects) stillOn(ctx context.Context) bool {
 	return f.enabled(ctx, f.ownerID) && !freshVolumeMarked(f.root)
 }
 
+func underAny(rel string, dirs []string) bool {
+	for _, d := range dirs {
+		if strings.HasPrefix(rel, d) {
+			return true
+		}
+	}
+	return false
+}
+
 // Reconcile makes the objects state the files tree: it records files written
 // outside the Files API, moves found by a unique digest, and deletions.
 //
@@ -327,8 +336,18 @@ func (f *fileObjects) Reconcile(ctx context.Context) (fileReconcileResult, error
 	var changes []choirstore.FileChange
 	var fresh []choirstore.FileRecord
 	seen := make(map[string]bool)
+	// Directories the walk could not read: what is under them is unknown, not
+	// gone, so nothing under one is a deletion candidate.
+	var unreadableDirs []string
 	err = filepath.WalkDir(f.root, func(abs string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
+			if errors.Is(walkErr, fs.ErrPermission) && d != nil && d.IsDir() && abs != f.root {
+				if rel, err := filepath.Rel(f.root, abs); err == nil {
+					unreadableDirs = append(unreadableDirs, filepath.ToSlash(rel)+"/")
+					res.Unreadable++
+					return filepath.SkipDir
+				}
+			}
 			return walkErr
 		}
 		if abs == f.root {
@@ -437,14 +456,14 @@ func (f *fileObjects) Reconcile(ctx context.Context) (fileReconcileResult, error
 	// came back, exists and is not vanished.)
 	var vanished []choirstore.FileObject
 	for _, obj := range present {
-		if !seen[obj.Path] && !exemptFilePath(obj.Path) && f.absentFromDisk(obj.Path) {
+		if !seen[obj.Path] && !exemptFilePath(obj.Path) && !underAny(obj.Path, unreadableDirs) && f.absentFromDisk(obj.Path) {
 			vanished = append(vanished, obj)
 		}
 	}
 	// A tree that shows no file at all while objects exist, or one that lost
 	// more than half of more than a few, is an unmounted or emptied volume,
 	// not an owner's deletion spree.
-	emptied := len(present) > 0 && len(seen) == 0 && res.Unreadable == 0
+	emptied := len(present) > 0 && len(seen) == 0
 	mass := len(present) > fileObjectMassDeleteFloor && len(vanished)*2 > len(present)
 	if len(vanished) > 0 && (emptied || mass) {
 		res.DeletionsHeld = len(vanished)
