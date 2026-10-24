@@ -1424,3 +1424,11 @@ Append-only. One terse entry per orchestrator pass.
   - Recovery (FP0): stopped the jailed test VM, cleared the cgroup controllers bottom up, reset-failed and started. vmctl reattached the paper and two other direct VMs. The paper answers /health 200 in 22 to 44 ms.
   - Staging still reports D26 (372cd205b).
 - 00:1x. The paper's lease-read boot happened at the D26 refresh (23:45): seeded_from lease, trusted, seed_ms 1319, cross_check_max 2683603, reserved through 2808115. 1.3 s is over the 50 ms target; it is in the lease design's residual list beside T's 220 ms. Event table deploy 2's lease condition on the paper is met.
+- 00:26. D28 live (1fec78a1b; CI 40044274747 passed): the jailer off again. vmctl restarted at 00:25:37 with jailer=false, NRestarts 0, and reattached the paper (pid 780706, epoch 13269). The D27 change (the second test computer in the selector) is in the tree but inert.
+- 00:2x. The vmctl restart wedge is confirmed from systemd 261.3 and kernel source, and reproduced on the agents VM (problem record, Investigation section, 1ff74ffd1).
+  - The Firecracker jailer writes +cpu +pids into every ancestor of the VM leaf. systemd spawns ExecStartPre into the unit root, and the kernel refuses that while the unit root has subtree_control set.
+  - systemd's disable of the unit root's controllers fails while the live vms/ child keeps its own bits.
+  - Fix: a separate delegated slice for the VMs, changed only while no jailed VM is alive.
+- 00:2x. Event table deploy 2 r3 (PR #94, f66b6f217): bunch 178 tier 2. Devin APPROVE and DeepSeek APPROVE, no blocking findings. Mirror PASS; PR CI 25 pass, 8 skipped.
+  - Round 2 takes the convergent lows: Reopen's lease workspace order and onTape, on_tape in the lease stats, and the refill-opens-the-gate test.
+  - Eligible after 06:52 UTC, the end of its staging day. The lease conditions are met on T (22:54) and on the paper (23:45).
