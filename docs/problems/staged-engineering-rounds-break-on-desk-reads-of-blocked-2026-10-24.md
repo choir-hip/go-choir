@@ -81,15 +81,21 @@ the rounds:
 
 ## Related findings from the next attempt (v5, one round, 09:40 to 10:38)
 
-- **The request reaches engineering cut at 4096 bytes.** Engineering reported
-  that the owner request it received was "TRUNCATED at 4096 of 6338 bytes"
-  (its Reports at 09:44:26 and 10:24:26). Everything after Podcasts' second
-  bullet was missing, including the allowed-files, package.json and
-  completion paragraphs. Texture forwarded "the missing Podcasts scope", but
-  engineering said at 10:24 that it never arrived. Podcasts was not built,
-  and package.json was edited, a rule that was in the cut-off part. The v6
-  request kept the whole brief to 3,342 B, and its record reads
-  `truncated:false`.
+- **The request reaches engineering cut at 4096 bytes.** Code:
+  `engineeringRequestObjectiveMax = 4 << 10`
+  (`internal/agentcore/engineering_cast_request.go`). Engineering's
+  `Records()` view joins the parent Texture Cast in, but cuts its objective
+  at 4 KiB (the body at 16 KiB). The cut text ends with the marker "the
+  full text is on the tape in record cell:…". Texture put the whole
+  request and spec into the Cast's objective, 6,338 B. Engineering saw the
+  marker at 09:40:27, spent about ten cells trying to read past it, found
+  no way to read that record, and reported it (09:44:26, 10:24:26). The
+  missing part held everything after Podcasts' second bullet, including the
+  allowed-files, package.json and completion paragraphs. Podcasts was not
+  built, and package.json was edited, a rule that was in the cut-off part.
+  Fix candidates: give engineering a way to read the named record in full,
+  or have Texture put long text in the body. The v6 request kept the whole
+  brief to 3,342 B, and its view reads `truncated:false`.
 - **A "partial" Complete after Freeze is refused.** Engineering froze
   (selfdev-f99b7ccd) and then sent `Complete("partial")`. The completion
   guard `engineering_overlay_terminal_fate_required` refused it twice, and
