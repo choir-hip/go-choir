@@ -36,6 +36,10 @@ func TestSelfDevelopmentModeRequiresExactComputerScope(t *testing.T) {
 		t.Fatal(err)
 	}
 	ownership := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/internal/vmctl/touch" {
+			_, _ = w.Write([]byte(`{"touched":true}`))
+			return
+		}
 		if r.URL.Path != "/internal/vmctl/lookup" || r.URL.Query().Get("user_id") != user.ID || r.URL.Query().Get("computer_id") != "computer-a" {
 			t.Fatalf("ownership lookup = %s?%s", r.URL.Path, r.URL.RawQuery)
 		}

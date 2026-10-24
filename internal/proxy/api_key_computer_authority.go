@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
@@ -103,7 +105,7 @@ func (h *Handler) requireAPIKeyComputerTarget(
 				return nil, false
 			}
 		}
-		return &resolvedComputerTarget{
+		return h.touchedAPIKeyTarget(&resolvedComputerTarget{
 			ComputerID:  ownership.ComputerID,
 			UserID:      ownership.UserID,
 			DesktopID:   ownership.DesktopID,
@@ -111,7 +113,7 @@ func (h *Handler) requireAPIKeyComputerTarget(
 			ComputerURL: strings.TrimSpace(ownership.ComputerURL),
 			State:       strings.TrimSpace(ownership.State),
 			Epoch:       ownership.Epoch,
-		}, true
+		}), true
 	}
 	if named := strings.TrimSpace(pathComputerID); named != "" && named != boundComputerID {
 		writeJSON(w, http.StatusForbidden, errorResponse{Error: "api key is bound to another computer"})
@@ -150,7 +152,7 @@ func (h *Handler) requireAPIKeyComputerTarget(
 			return nil, false
 		}
 	}
-	return &resolvedComputerTarget{
+	return h.touchedAPIKeyTarget(&resolvedComputerTarget{
 		ComputerID:  ownership.ComputerID,
 		UserID:      ownership.UserID,
 		DesktopID:   ownership.DesktopID,
@@ -158,7 +160,46 @@ func (h *Handler) requireAPIKeyComputerTarget(
 		ComputerURL: strings.TrimSpace(ownership.ComputerURL),
 		State:       strings.TrimSpace(ownership.State),
 		Epoch:       ownership.Epoch,
-	}, true
+	}), true
+}
+
+const (
+	// apiKeyTouchThrottle bounds how often one computer's authenticated key
+	// traffic reaches vmctl; vmctl applies its own 60 s floor on the write.
+	apiKeyTouchThrottle = 30 * time.Second
+	apiKeyTouchTimeout  = 2 * time.Second
+)
+
+// touchedAPIKeyTarget returns target after scheduling a best-effort refresh of
+// the computer's idle clock. An authenticated API-key request is activity, but
+// the key path never resolves a computer (it must not wake one), so
+// LastActiveAt was never refreshed and the idle sweep hibernated a computer
+// that a CLI was driving
+// (docs/problems/idle-sweep-hibernates-a-computer-just-after-its-apply-restart-2026-10-24.md).
+//
+// The touch runs on its own goroutine with a short timeout, at most once per
+// apiKeyTouchThrottle per computer, and its failure is logged and dropped: it
+// never delays or fails the request. vmctl moves the clock of an active
+// computer only; it cannot wake one.
+func (h *Handler) touchedAPIKeyTarget(target *resolvedComputerTarget) *resolvedComputerTarget {
+	if h == nil || h.vmctlClient == nil || target == nil || target.UserID == "" || target.ComputerID == "" {
+		return target
+	}
+	now := time.Now()
+	key := target.UserID + "\x00" + target.ComputerID
+	if last, ok := h.apiKeyTouchSent.Load(key); ok && now.Sub(last.(time.Time)) < apiKeyTouchThrottle {
+		return target
+	}
+	h.apiKeyTouchSent.Store(key, now)
+	client, userID, computerID := h.vmctlClient, target.UserID, target.ComputerID
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), apiKeyTouchTimeout)
+		defer cancel()
+		if _, err := client.TouchComputerActivity(ctx, userID, computerID); err != nil {
+			log.Printf("proxy: api key activity touch for %s failed: %v", computerID, err)
+		}
+	}()
+	return target
 }
 
 // resolveComputerURLForComputerTarget preserves the exact stable-computer join

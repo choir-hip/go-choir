@@ -168,3 +168,19 @@ window and a vmctl failure does not change the response), and the existing
 warmness sweep test extended with the key-only scenario of failure mode 1.
 Tier 1 review (Devin). Rollback: revert; the route is additive and nothing
 depends on it.
+
+### Implemented (FP0 loop-gaps lane, 2026-10-24)
+
+The design above is built as written, plus a host switch:
+
+- vmctl `POST /internal/vmctl/touch` (`HandleTouch`, `OwnershipRegistry.TouchComputerActivity`),
+  internal callers only (`isInternalCaller`: loopback or the vmctl socket, plus
+  the host-internal token). It never resolves, wakes or starts a computer.
+- proxy `touchedAPIKeyTarget`, called at both success returns of
+  `requireAPIKeyComputerTarget`: best-effort, 2 s timeout, once per 30 s per
+  computer.
+- Switch: `VMCTL_KEY_TOUCH=off` (also `0`, `false`, `no`) on the vmctl service
+  turns the route into a no-op answering `{"touched":false,"reason":"disabled"}`.
+  Default on. No nix change is needed to ship it; to turn it off, set the
+  variable in the vmctl unit's environment and restart vmctl.
+- The planned-restart refresh stays out, as designed.

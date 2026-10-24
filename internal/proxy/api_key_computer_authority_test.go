@@ -70,6 +70,12 @@ func TestRequireAPIKeyComputerTargetFailsClosed(t *testing.T) {
 			h := &Handler{}
 			if !test.withoutVMCTL {
 				server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if r.URL.Path == "/internal/vmctl/touch" {
+						// The best-effort idle-clock touch (K) is not a lookup.
+						w.WriteHeader(http.StatusOK)
+						_, _ = w.Write([]byte(`{"touched":true}`))
+						return
+					}
 					lookups.Add(1)
 					expected := test.lookupComputerID
 					if expected == "" {
@@ -546,6 +552,10 @@ func TestBoundAPIKeyUsesExactJoinedAutoputerWithoutDesktopReresolve(t *testing.T
 				"computer_id": computerID, "user_id": user.ID, "desktop_id": "primary", "vm_id": "vm-exact",
 				"computer_url": exactAutoputer.URL, "state": "active", "epoch": 7,
 			})
+			return
+		}
+		if r.URL.Path == "/internal/vmctl/touch" {
+			_, _ = w.Write([]byte(`{"touched":true}`))
 			return
 		}
 		desktopResolveCalls.Add(1)

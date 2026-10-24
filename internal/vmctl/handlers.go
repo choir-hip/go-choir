@@ -9,9 +9,11 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
 	"github.com/yusefmosiah/go-choir/internal/hostauth"
@@ -597,6 +599,63 @@ func (h *Handler) HandleHold(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeVMCTLJSON(w, http.StatusOK, map[string]string{"status": "held", "computer_id": req.ComputerID})
+}
+
+type touchRequest struct {
+	UserID     string `json:"user_id"`
+	ComputerID string `json:"computer_id"`
+}
+
+type touchResponse struct {
+	Touched bool   `json:"touched"`
+	State   string `json:"state,omitempty"`
+	Reason  string `json:"reason,omitempty"`
+}
+
+// keyTouchEnabled reports the VMCTL_KEY_TOUCH switch. It defaults on; "off",
+// "0", "false" or "no" turns the route into a no-op that answers
+// {"touched":false,"reason":"disabled"}.
+func keyTouchEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("VMCTL_KEY_TOUCH"))) {
+	case "off", "0", "false", "no":
+		return false
+	}
+	return true
+}
+
+// HandleTouch moves a computer's idle clock for an authenticated API-key
+// request the proxy served. It is host-internal (loopback or the vmctl socket,
+// with the host-internal token), joins on the exact (user, computer) pair, and
+// never resolves, wakes or starts a computer: an API key still cannot wake a
+// hibernated computer.
+func (h *Handler) HandleTouch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
+		return
+	}
+	if !isInternalCaller(r) {
+		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "vmctl control endpoints are not publicly accessible"})
+		return
+	}
+	var req touchRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
+		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid request body"})
+		return
+	}
+	if strings.TrimSpace(req.UserID) == "" || strings.TrimSpace(req.ComputerID) == "" {
+		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "user_id and computer_id are required"})
+		return
+	}
+	if !keyTouchEnabled() {
+		writeVMCTLJSON(w, http.StatusOK, touchResponse{Reason: "disabled"})
+		return
+	}
+	result := h.registry.TouchComputerActivity(req.UserID, req.ComputerID, time.Now())
+	if !result.Found {
+		writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: "no VM found for target"})
+		return
+	}
+	writeVMCTLJSON(w, http.StatusOK, touchResponse{Touched: result.Touched, State: string(result.State)})
 }
 
 // HandleUnhold removes a maintenance hold from a computer. This is an
@@ -1286,6 +1345,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/vmctl/compact-sweep", attributedLifecycle(h.HandleCompactSweep))
 	s.HandleFunc("/internal/vmctl/idle-check", h.HandleIdleCheck)
 	s.HandleFunc("/internal/vmctl/reclaim", attributedLifecycle(h.HandleReclaim))
+	s.HandleFunc("/internal/vmctl/touch", h.HandleTouch)
 	s.HandleFunc("/internal/vmctl/hold", h.HandleHold)
 	s.HandleFunc("/internal/vmctl/unhold", h.HandleUnhold)
 	s.HandleFunc("/internal/vmctl/divergence", h.HandleSetDivergence)
@@ -1320,6 +1380,11 @@ func attributedLifecycle(next http.HandlerFunc) http.HandlerFunc {
 // service at the given base URL.
 func ResolveEndpoint(baseURL string) string {
 	return baseURL + "/internal/vmctl/resolve"
+}
+
+// TouchEndpoint returns the endpoint that refreshes a computer's idle clock.
+func TouchEndpoint(baseURL string) string {
+	return baseURL + "/internal/vmctl/touch"
 }
 
 // LookupEndpoint returns the full lookup endpoint URL for the vmctl
