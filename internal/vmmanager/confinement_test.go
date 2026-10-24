@@ -89,7 +89,7 @@ func jailedManager(t *testing.T, stateDir string) (*Manager, *chownRecorder) {
 		BinPath:      "/nix/store/abc-firecracker-1.15.1/bin/jailer",
 		UIDBase:      DefaultJailerUIDBase,
 		UIDCount:     DefaultJailerUIDCount,
-		CgroupParent: "system.slice/go-choir-vmctl.service/vms",
+		CgroupParent: "system.slice/system-choirvms.slice/vms",
 		PidsMax:      DefaultJailerPidsMax,
 		CPUWeight:    DefaultJailerCPUWeight,
 		NoFile:       DefaultJailerNoFile,
@@ -194,7 +194,7 @@ func TestJailerLaunchArgs(t *testing.T) {
 	got := mgr.jailerArgs("vm-a", 900123, jailFirecrackerLaunchArgs(true))
 	want := "--id vm-a --exec-file /nix/store/abc-firecracker-1.15.1/bin/firecracker --uid 900123 --gid 900123 " +
 		"--chroot-base-dir /var/lib/go-choir/vm-state/.jail --new-pid-ns --cgroup-version 2 " +
-		"--parent-cgroup system.slice/go-choir-vmctl.service/vms --cgroup pids.max=128 --cgroup cpu.weight=100 " +
+		"--parent-cgroup system.slice/system-choirvms.slice/vms --cgroup pids.max=128 --cgroup cpu.weight=100 " +
 		"--resource-limit no-file=2048 -- --api-sock /run/fc.sock --enable-pci --config-file /fc-config.json"
 	if strings.Join(got, " ") != want {
 		t.Fatalf("jailer args =\n%s\nwant\n%s", strings.Join(got, " "), want)
@@ -482,18 +482,13 @@ func TestJailerConfigFromEnv(t *testing.T) {
 	}
 }
 
-// Failure item 11: vmctl's own cgroup gives the VMs' parent.
-func TestJailerCgroupParentFromSelf(t *testing.T) {
+// Failure item 11: vmctl reads its own cgroup v2 path. The VMs' parent is
+// never derived from it (docs/problems/vmctl-restart-fails-while-a-jailed-
+// vm-runs-2026-10-24.md, "Design: the VM slice"); see vm_slice_test.go.
+func TestParseOwnCgroupV2Path(t *testing.T) {
 	own := parseCgroupV2Path("0::/system.slice/go-choir-vmctl.service/supervisor\n")
 	if own != "system.slice/go-choir-vmctl.service/supervisor" {
 		t.Fatalf("own = %q", own)
-	}
-	parent, err := deriveJailerCgroupParent(own)
-	if err != nil || parent != "system.slice/go-choir-vmctl.service/vms" {
-		t.Fatalf("parent = %q, %v", parent, err)
-	}
-	if _, err := deriveJailerCgroupParent("system.slice/go-choir-vmctl.service"); err == nil {
-		t.Fatal("vmctl outside a delegated subgroup cannot host VM leaves")
 	}
 	if got := parseCgroupV2Path("12:pids:/x\n1:name=systemd:/y\n"); got != "" {
 		t.Fatalf("v1-only cgroup file parsed as %q", got)
