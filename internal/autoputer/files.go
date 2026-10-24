@@ -135,8 +135,8 @@ func (fh *FilesHandler) resolvePath(relativePath string) (string, error) {
 	// The check above is lexical. A symlinked directory in the path would
 	// carry any verb out of the root (a read, a write, a move), and the
 	// walk that records files never follows one, so no parent component of
-	// the path may be a symlink. The last component is the verb's own to
-	// judge (a move refuses a symlink source; a delete removes the link).
+	// the path may be a symlink. The last component is judged by
+	// leafStaysInRoot for every verb but delete, which removes the link itself.
 	parts := strings.Split(cleaned, string(filepath.Separator))
 	cur := fh.rootDir
 	for _, part := range parts[:len(parts)-1] {
@@ -150,6 +150,29 @@ func (fh *FilesHandler) resolvePath(relativePath string) (string, error) {
 		}
 	}
 	return absPath, nil
+}
+
+// leafStaysInRoot reports whether the last component of absPath, if it is a
+// symlink, resolves to a place under the root. A leaf symlink out of the root
+// would otherwise carry a read (serve or list the target) or a write (truncate
+// and write the target, or create a dangling link's target) out of the tree.
+// A link that stays inside (files/Source/platform/CLAUDE.md -> AGENTS.md) works
+// as before. A dangling or looping link is refused: its target is not known to
+// be inside.
+func (fh *FilesHandler) leafStaysInRoot(absPath string) bool {
+	info, err := os.Lstat(absPath)
+	if err != nil || info.Mode()&os.ModeSymlink == 0 {
+		return true // absent, or not a link: the verb reports it
+	}
+	root, err := filepath.EvalSymlinks(fh.rootDir)
+	if err != nil {
+		return false
+	}
+	resolved, err := filepath.EvalSymlinks(absPath)
+	if err != nil {
+		return false
+	}
+	return resolved == root || strings.HasPrefix(resolved, root+string(filepath.Separator))
 }
 
 // HandleListRoot handles GET /api/files — lists the root directory contents.
@@ -187,6 +210,13 @@ func (fh *FilesHandler) HandleFileByPath(w http.ResponseWriter, r *http.Request)
 
 	absPath, err := fh.resolvePath(suffix)
 	if err != nil {
+		writeFileError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
+	// Delete removes a link itself, wherever it points; every other verb acts
+	// on what the last component names.
+	if r.Method != http.MethodDelete && !fh.leafStaysInRoot(absPath) {
 		writeFileError(w, http.StatusForbidden, "access denied")
 		return
 	}
@@ -432,7 +462,9 @@ func (fh *FilesHandler) handleUpdateFile(w http.ResponseWriter, r *http.Request,
 
 // handleDelete removes a file or directory at the given path.
 func (fh *FilesHandler) handleDelete(w http.ResponseWriter, r *http.Request, absPath string) {
-	info, err := os.Stat(absPath)
+	// Lstat: a symlink at the path is removed as a link, never followed, so a
+	// link out of the root (or a dangling one) is deleted and its target is not.
+	info, err := os.Lstat(absPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			writeFileError(w, http.StatusNotFound, "not found")
