@@ -32,6 +32,7 @@ which `admin` does not imply; reject stays an agent act.
 | Find candidates | `choir self-dev list [--state=awaiting_approval]` | operations, newest first |
 | Observe | `choir self-dev wait --operation=ID --state=awaiting_approval` | operation once it reaches the state; exits 1 if it settles elsewhere |
 | Export the source patch | `choir self-dev patch --operation=ID --out=FILE` (frozen or later; MCP `self_dev_patch` inlines it up to 256 KiB) | sha256-verified `source.patch`, its base commit and bundle digest |
+| Preview the screenshots | `choir self-dev visual --operation=ID [--out=DIR]` (frozen or later; 409 before Freeze, 404 with no captures; `--out` fetches each PNG, re-hashes it against its digest, writes `<route>-<digest12>.png` mode 0600 and exits 1 if any capture is unresolvable or fails; MCP `self_dev_visual` lists only) | sha256-verified PNGs, manifest with the capture receipt |
 | Read the binding | `choir self-dev head` | canonical/desired/effective heads and state commitments |
 | Approve | `choir self-dev approve --operation=ID` | consumed `accept_once` ModeReceipt + decision event |
 | Reject | `choir self-dev reject --operation=ID --reason=...` | decision event |

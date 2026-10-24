@@ -498,6 +498,7 @@ func TestEveryToolMatchesItsCLICommand(t *testing.T) {
 		"self_dev_show":                    {cli: []string{"self-dev", "show", "--computer", "c1", "--operation", "op-1"}, mcp: `{"computer":"c1","operation":"op-1"}`},
 		"self_dev_head":                    {cli: []string{"self-dev", "head", "--computer", "c1"}, mcp: `{"computer":"c1"}`},
 		"self_dev_patch":                   {cli: []string{"self-dev", "patch", "--computer", "c1", "--operation", "op-1"}, mcp: `{"computer":"c1","operation":"op-1"}`, reply: sourcePatchReply("op-1", "c1", []byte(testSourcePatch), "")},
+		"self_dev_visual":                  {cli: []string{"self-dev", "visual", "--computer", "c1", "--operation", "op-1"}, mcp: `{"computer":"c1","operation":"op-1"}`, reply: visualListing("op-1", goodRow("/", testPNG))},
 		"self_dev_reject":                  {cli: []string{"self-dev", "reject", "--computer", "c1", "--operation", "op-1", "--reason", "no"}, mcp: `{"computer":"c1","operation":"op-1","reason":"no"}`, reply: approval},
 		"self_dev_mode_get":                {cli: []string{"self-dev", "mode", "get", "--computer", "c1"}, mcp: `{"computer":"c1"}`},
 		"release_list":                     {cli: []string{"release", "list", "--limit", "5", "--publisher", "c9"}, mcp: `{"limit":5,"publisher":"c9"}`},
