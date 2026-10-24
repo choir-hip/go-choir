@@ -417,6 +417,39 @@ admission-ledger release gate after sequential correctness. The commitment
 ledger is the management supervision surface: its objects live on the tape,
 reports resolve commitments, and scores stay off the acting desk's context.
 
+`I27` One object graph per computer, and one home per kind of data. Every
+meaningful kind of data a computer holds is an object graph kind with exactly
+one writer, and lives in one place: on the tape, in replay and restore, and
+reachable by a desk through a verb. Each kind belongs to the package that
+declares it (the platform, an app package, or the computer itself), and its
+schema travels with that package. The substrate stores, replays and restores
+every kind without knowing it; an update changes only the kinds it owns, and
+leaves every other kind byte-identical under replay. A user customizes a kind
+by extension only: new fields, kinds and edges in their own namespace that
+point at the kind, never a restructuring of another package's kind. A
+different app is a new app in its own namespace, not a fork of an existing one;
+it may declare kinds for genuinely new data, but data that already has a kind
+stays on that kind, and the new app reads it, extends it, and writes it through
+the owning package's verbs. A copy of a kind's data into a second kind, table,
+file convention or browser store is a second home; a one-time import that
+empties the old home is a migration. A file is an object: a blob in the
+computer's content-addressed store, referenced by digest, plus a path view; the
+files tree is a view, never a home for app data or configuration, and a file
+format (`.ics`, `.pptx`) is an import or export of a kind, not its storage.
+Named exceptions, kept few: secrets and keys (their own vault); the tape and its
+index (the graph is the tape's projection); platform control and routing shared
+across owners; raw store files and recovery logs; rebuildable caches, derived
+indexes, unsent drafts and per-device UI choices; source, build and capsule
+state (`docs/computer-ontology.md`); blob bytes themselves (one CAS per computer
+for owner bytes). The Autopaper object graph and a computer's graph are one
+model with two scopes and different restore rules, and an organization sharing
+one graph under RBAC is a third scope, not a second model. Mail's transport
+stays a host service with its own security boundary; its messages are still a
+kind. (Owner-ratified 2026-10-24, ledger 19:0x to 19:2x; inventory and migration
+order in `docs/problems/data-has-more-than-one-home-2026-10-24.md`. Kinds are
+compiled into the platform registry today, so package-declared kinds are the
+first substrate this needs; current staging is non-conformance, `H038`.)
+
 ## Proof-Carrying Autonomy
 
 Autonomy increases at the mutation layer only when accountability increases at
@@ -561,6 +594,18 @@ operates. Successor: per-computer computer surface under `C15`/`I25`; thin
 platform shell only; serving join before route CAS. Current staging is the
 heresy; add no zero-count CI detector that fails the live hop before the
 successor lands.
+
+**Second homes for data** (`I27`). `H038` a kind of data with more than one
+home or none of the graph's: app data or configuration in the files tree by
+convention (the model policy, Calendar `.ics`), owner data outside the computer
+(Mail in maild's SQLite), direct-SQL tables off the tape (`agent_evidence`,
+`co_super_slots`), a file named by path strings that delete and rename do not
+update, registered kinds with no writer beside live tables holding the same
+data, per-package key-value silos, and browser storage as app state.
+Successor: package-declared kinds with one writer, the file object (blob by
+digest plus path view) first, then the migration order in the data-homes
+problem record. Current staging is the heresy; add no zero-count CI detector
+that fails the live hop before the successor lands.
 
 ## Banned Patterns
 
