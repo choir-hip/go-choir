@@ -290,7 +290,7 @@ boundaries:
     - one home and one registered writer per kind of data (I27)
     - the paper and the owner's computers are never used for adversarial or proof steps
     - security first, availability second, customizations third
-    - each wave slice's switch is off until enabled by an owner act or a host selector, never from a guest
+    - a switch is enabled by FP0 (owner-delegated, 2026-10-24) or the owner, through an owner act or a host selector, never from a guest; FP0 turns proved switches on promptly and aggressively, test computers first, the paper and public_platform last
   excluded:
     - the ICRL build and Autopaper forecasting (designed; built after SR5)
     - owner-act enforcement (deprioritized by the owner)
