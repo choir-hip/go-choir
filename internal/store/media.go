@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -33,28 +34,20 @@ func (s *Store) UpsertMediaProgress(ctx context.Context, rec types.MediaProgress
 	if rec.UpdatedAt.IsZero() {
 		rec.UpdatedAt = time.Now().UTC()
 	}
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO media_progress (
-			owner_id, media_kind, media_identity_hash, media_identity,
-			position_seconds, duration_seconds, playback_rate, updated_by_device, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON DUPLICATE KEY UPDATE
-			media_identity = VALUES(media_identity),
-			position_seconds = VALUES(position_seconds),
-			duration_seconds = VALUES(duration_seconds),
-			playback_rate = VALUES(playback_rate),
-			updated_by_device = VALUES(updated_by_device),
-			updated_at = VALUES(updated_at)`,
-		rec.OwnerID,
-		rec.Kind,
-		mediaIdentityHash(rec.Identity),
-		rec.Identity,
-		rec.CurrentTime,
-		rec.Duration,
-		rec.PlaybackRate,
-		strings.TrimSpace(rec.UpdatedByDevice),
-		rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
-	)
+	row := computerevent.MediaProgressProjection{
+		OwnerID:           rec.OwnerID,
+		MediaKind:         rec.Kind,
+		MediaIdentityHash: mediaIdentityHash(rec.Identity),
+		MediaIdentity:     rec.Identity,
+		PositionSeconds:   rec.CurrentTime,
+		DurationSeconds:   rec.Duration,
+		PlaybackRate:      rec.PlaybackRate,
+		UpdatedByDevice:   strings.TrimSpace(rec.UpdatedByDevice),
+		UpdatedAt:         rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	}
+	err := s.writeMediaState(ctx, computerevent.ProjectionOpMediaProgress, row, func(ex sqlExecer) error {
+		return execMediaProgress(ctx, ex, row)
+	})
 	if err != nil {
 		return types.MediaProgress{}, fmt.Errorf("upsert media progress: %w", err)
 	}
@@ -91,32 +84,22 @@ func (s *Store) UpsertMediaRecent(ctx context.Context, rec types.MediaRecent) (t
 	if rec.OpenedAt.IsZero() {
 		rec.OpenedAt = time.Now().UTC()
 	}
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO media_recents (
-			owner_id, media_kind, media_identity_hash, media_identity,
-			title, file_name, file_path, source_url, media_type, content_id, opened_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON DUPLICATE KEY UPDATE
-			media_identity = VALUES(media_identity),
-			title = VALUES(title),
-			file_name = VALUES(file_name),
-			file_path = VALUES(file_path),
-			source_url = VALUES(source_url),
-			media_type = VALUES(media_type),
-			content_id = VALUES(content_id),
-			opened_at = VALUES(opened_at)`,
-		rec.OwnerID,
-		rec.Kind,
-		mediaIdentityHash(rec.Identity),
-		rec.Identity,
-		rec.Title,
-		rec.FileName,
-		rec.FilePath,
-		rec.SourceURL,
-		rec.MediaType,
-		rec.ContentID,
-		rec.OpenedAt.UTC().Format(time.RFC3339Nano),
-	)
+	row := computerevent.MediaRecentProjection{
+		OwnerID:           rec.OwnerID,
+		MediaKind:         rec.Kind,
+		MediaIdentityHash: mediaIdentityHash(rec.Identity),
+		MediaIdentity:     rec.Identity,
+		Title:             rec.Title,
+		FileName:          rec.FileName,
+		FilePath:          rec.FilePath,
+		SourceURL:         rec.SourceURL,
+		MediaType:         rec.MediaType,
+		ContentID:         rec.ContentID,
+		OpenedAt:          rec.OpenedAt.UTC().Format(time.RFC3339Nano),
+	}
+	err := s.writeMediaState(ctx, computerevent.ProjectionOpMediaRecent, row, func(ex sqlExecer) error {
+		return execMediaRecent(ctx, ex, row)
+	})
 	if err != nil {
 		return types.MediaRecent{}, fmt.Errorf("upsert media recent: %w", err)
 	}
@@ -181,17 +164,15 @@ func (s *Store) SaveUserPreference(ctx context.Context, rec types.UserPreference
 	if err != nil {
 		return types.UserPreference{}, fmt.Errorf("marshal preference value: %w", err)
 	}
-	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO user_preferences (owner_id, preference_key, value_json, updated_at)
-		 VALUES (?, ?, ?, ?)
-		 ON DUPLICATE KEY UPDATE
-		   value_json = VALUES(value_json),
-		   updated_at = VALUES(updated_at)`,
-		rec.OwnerID,
-		rec.PreferenceKey,
-		string(raw),
-		rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
-	)
+	row := computerevent.UserPreferenceProjection{
+		OwnerID:       rec.OwnerID,
+		PreferenceKey: rec.PreferenceKey,
+		ValueJSON:     string(raw),
+		UpdatedAt:     rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	}
+	err = s.writeMediaState(ctx, computerevent.ProjectionOpUserPreference, row, func(ex sqlExecer) error {
+		return execUserPreference(ctx, ex, row)
+	})
 	if err != nil {
 		return types.UserPreference{}, fmt.Errorf("save user preference: %w", err)
 	}

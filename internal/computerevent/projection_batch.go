@@ -29,6 +29,9 @@ const (
 	ProjectionOpTextureAgentMutation       = "texture_agent_mutation_recorded"
 	ProjectionOpTextureDocumentAlias       = "texture_document_alias_recorded"
 	ProjectionOpTextureDocumentAliasDelete = "texture_document_alias_delete_recorded"
+	ProjectionOpMediaProgress              = "media_progress_recorded"
+	ProjectionOpMediaRecent                = "media_recent_recorded"
+	ProjectionOpUserPreference             = "user_preference_recorded"
 	ProjectionBatchMediaType               = "application/vnd.choir.projection-batch+json"
 )
 
@@ -49,11 +52,15 @@ var projectionOpKinds = map[string]struct{}{
 	ProjectionOpTextureAgentMutation:       {},
 	ProjectionOpTextureDocumentAlias:       {},
 	ProjectionOpTextureDocumentAliasDelete: {},
+	ProjectionOpMediaProgress:              {},
+	ProjectionOpMediaRecent:                {},
+	ProjectionOpUserPreference:             {},
 }
 
 func isProjectionV2OnlyKind(kind string) bool {
 	switch kind {
-	case ProjectionOpRunMemoryEntry, ProjectionOpSelfDevelopmentStartIntent, ProjectionOpSelfDevelopmentOperation, ProjectionOpTextureAgentMutation, ProjectionOpTextureDocumentAlias, ProjectionOpTextureDocumentAliasDelete:
+	case ProjectionOpRunMemoryEntry, ProjectionOpSelfDevelopmentStartIntent, ProjectionOpSelfDevelopmentOperation, ProjectionOpTextureAgentMutation, ProjectionOpTextureDocumentAlias, ProjectionOpTextureDocumentAliasDelete,
+		ProjectionOpMediaProgress, ProjectionOpMediaRecent, ProjectionOpUserPreference:
 		return true
 	default:
 		return false
@@ -271,4 +278,46 @@ type TextureDocumentAliasProjection struct {
 	DocID      string `json:"doc_id"`
 	CreatedAt  string `json:"created_at,omitempty"`
 	UpdatedAt  string `json:"updated_at,omitempty"`
+}
+
+// MediaProgressProjection is the canonical row snapshot for one media_progress
+// row. Every field mirrors its SQL column verbatim (UpdatedAt is the DATETIME
+// text, MediaIdentityHash the stored key), so the projector never derives a
+// value and a seeded legacy row replays byte-for-byte
+// (docs/problems/stock-ui-writes-make-a-computer-checkpoint-ineligible-2026-10-24.md).
+type MediaProgressProjection struct {
+	OwnerID           string  `json:"owner_id"`
+	MediaKind         string  `json:"media_kind"`
+	MediaIdentityHash string  `json:"media_identity_hash"`
+	MediaIdentity     string  `json:"media_identity"`
+	PositionSeconds   float64 `json:"position_seconds"`
+	DurationSeconds   float64 `json:"duration_seconds"`
+	PlaybackRate      float64 `json:"playback_rate"`
+	UpdatedByDevice   string  `json:"updated_by_device"`
+	UpdatedAt         string  `json:"updated_at"`
+}
+
+// MediaRecentProjection is the canonical row snapshot for one media_recents
+// row, columns verbatim.
+type MediaRecentProjection struct {
+	OwnerID           string `json:"owner_id"`
+	MediaKind         string `json:"media_kind"`
+	MediaIdentityHash string `json:"media_identity_hash"`
+	MediaIdentity     string `json:"media_identity"`
+	Title             string `json:"title"`
+	FileName          string `json:"file_name"`
+	FilePath          string `json:"file_path"`
+	SourceURL         string `json:"source_url"`
+	MediaType         string `json:"media_type"`
+	ContentID         string `json:"content_id"`
+	OpenedAt          string `json:"opened_at"`
+}
+
+// UserPreferenceProjection is the canonical row snapshot for one
+// user_preferences row. ValueJSON is the stored LONGTEXT, not a re-encoding.
+type UserPreferenceProjection struct {
+	OwnerID       string `json:"owner_id"`
+	PreferenceKey string `json:"preference_key"`
+	ValueJSON     string `json:"value_json"`
+	UpdatedAt     string `json:"updated_at"`
 }

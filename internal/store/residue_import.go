@@ -32,6 +32,9 @@ type ResidueImportResult struct {
 	Operations       int
 	TextureMutations int
 	TextureAliases   int
+	MediaProgress    int
+	MediaRecents     int
+	UserPreferences  int
 	Appended         bool
 }
 
@@ -74,6 +77,15 @@ func (s *Store) ImportResidueSnapshotForOwner(ctx context.Context, ownerID strin
 	if err != nil {
 		return ResidueImportResult{}, err
 	}
+	// Media state rows that predate the media-state projection. The family
+	// lock keeps a media write from landing between this read and the append
+	// (media_projection.go).
+	s.mediaStateMu.Lock()
+	defer s.mediaStateMu.Unlock()
+	mediaOps, mediaCounts, err := s.snapshotMediaStateOps(ctx, ownerID)
+	if err != nil {
+		return ResidueImportResult{}, err
+	}
 	sessionCount := 0
 	for _, desktop := range desktops {
 		sessionCount += len(desktop.Sessions)
@@ -83,16 +95,18 @@ func (s *Store) ImportResidueSnapshotForOwner(ctx context.Context, ownerID strin
 		RunMemoryEntries: counts.runMemory, StartIntents: counts.startIntents,
 		Operations: counts.operations, TextureMutations: counts.textureMutations,
 		TextureAliases: len(aliasOps),
+		MediaProgress:  mediaCounts.progress, MediaRecents: mediaCounts.recents,
+		UserPreferences: mediaCounts.preferences,
 	}
 	desktopResidue := result.Desktops > 0 || result.Sessions > 0
 	ogResidue := result.Objects > 0 || result.Edges > 0
 	if desktopResidue != ogResidue {
 		return result, ErrResidueImportSplit
 	}
-	if !desktopResidue && !ogResidue && len(runtimeOps) == 0 && len(aliasOps) == 0 {
+	if !desktopResidue && !ogResidue && len(runtimeOps) == 0 && len(aliasOps) == 0 && len(mediaOps) == 0 {
 		return result, nil
 	}
-	ops := make([]computerevent.ProjectionOp, 0, result.Desktops+result.Objects+result.Edges+len(runtimeOps)+len(aliasOps))
+	ops := make([]computerevent.ProjectionOp, 0, result.Desktops+result.Objects+result.Edges+len(runtimeOps)+len(aliasOps)+len(mediaOps))
 	for _, desktop := range desktops {
 		body, err := json.Marshal(desktop)
 		if err != nil {
@@ -116,6 +130,7 @@ func (s *Store) ImportResidueSnapshotForOwner(ctx context.Context, ownerID strin
 	}
 	ops = append(ops, runtimeOps...)
 	ops = append(ops, aliasOps...)
+	ops = append(ops, mediaOps...)
 	if err := s.projectionTape.appendOps(ctx, ops); err != nil {
 		return result, err
 	}

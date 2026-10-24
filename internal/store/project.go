@@ -94,6 +94,12 @@ func projectOp(ctx context.Context, tx *sql.Tx, op computerevent.ProjectionOp, p
 		return projectTextureDocumentAlias(ctx, tx, op.Body, computerID)
 	case computerevent.ProjectionOpTextureDocumentAliasDelete:
 		return projectTextureDocumentAliasDelete(ctx, tx, op.Body, computerID)
+	case computerevent.ProjectionOpMediaProgress:
+		return projectMediaProgress(ctx, tx, op.Body)
+	case computerevent.ProjectionOpMediaRecent:
+		return projectMediaRecent(ctx, tx, op.Body)
+	case computerevent.ProjectionOpUserPreference:
+		return projectUserPreference(ctx, tx, op.Body)
 	default:
 		return fmt.Errorf("%w: kind %q", computerevent.ErrProjectionBatchInvalid, op.Kind)
 	}

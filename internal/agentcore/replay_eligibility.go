@@ -68,9 +68,9 @@ var replayAirworthinessEntries = map[string]ReplayObservationClass{
 	"co_super_slots":                  ReplayEmptyUntilSupported,
 	"wire_publish_debounce_entries":   ReplayEmptyUntilSupported,
 	"wire_publish_debounce_state":     ReplayEmptyUntilSupported,
-	"media_progress":                  ReplayEmptyUntilSupported,
-	"media_recents":                   ReplayEmptyUntilSupported,
-	"user_preferences":                ReplayEmptyUntilSupported,
+	"media_progress":                  ReplayEventProjection,
+	"media_recents":                   ReplayEventProjection,
+	"user_preferences":                ReplayEventProjection,
 	"desktop_state":                   ReplayRetiredAbsent,
 	"desktop_workspaces":              ReplayEventProjection,
 	"desktop_sessions":                ReplayEventProjection,
@@ -294,8 +294,29 @@ func (e ReplayEligibility) Error() error {
 	if e.Eligible {
 		return nil
 	}
-	if strings.TrimSpace(e.Reason) == "" {
+	reason := strings.TrimSpace(e.Reason)
+	// Name the tables, so a refused checkpoint says what blocks it
+	// (docs/problems/stock-ui-writes-make-a-computer-checkpoint-ineligible-2026-10-24.md).
+	var named []string
+	for _, list := range []struct {
+		name   string
+		tables []string
+	}{
+		{"unsupported_tables", e.UnsupportedTables},
+		{"retired_tables", e.RetiredTables},
+		{"unknown_tables", e.UnknownTables},
+		{"missing_tables", e.MissingTables},
+		{"schema_drift", e.SchemaDrift},
+	} {
+		if len(list.tables) > 0 {
+			named = append(named, fmt.Sprintf("%s=[%s]", list.name, strings.Join(list.tables, " ")))
+		}
+	}
+	if len(named) > 0 {
+		reason = strings.TrimSpace(reason + " (" + strings.Join(named, "; ") + ")")
+	}
+	if reason == "" {
 		return ErrReplayIneligible
 	}
-	return fmt.Errorf("%w: %s", ErrReplayIneligible, e.Reason)
+	return fmt.Errorf("%w: %s", ErrReplayIneligible, reason)
 }

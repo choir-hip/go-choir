@@ -24,6 +24,10 @@ type ResidueImportReport struct {
 	StartIntents     int    `json:"start_intents"`
 	Operations       int    `json:"operations"`
 	TextureMutations int    `json:"texture_mutations"`
+	TextureAliases   int    `json:"texture_aliases"`
+	MediaProgress    int    `json:"media_progress"`
+	MediaRecents     int    `json:"media_recents"`
+	UserPreferences  int    `json:"user_preferences"`
 	Appended         bool   `json:"appended"`
 }
 
@@ -74,7 +78,9 @@ func (rt *Runtime) ImportResidueSnapshot(ctx context.Context, computerID, ownerI
 		ComputerID: computerID, Desktops: result.Desktops, Sessions: result.Sessions,
 		Objects: result.Objects, Edges: result.Edges, RunMemoryEntries: result.RunMemoryEntries,
 		StartIntents: result.StartIntents, Operations: result.Operations,
-		TextureMutations: result.TextureMutations, Appended: result.Appended,
+		TextureMutations: result.TextureMutations, TextureAliases: result.TextureAliases,
+		MediaProgress: result.MediaProgress, MediaRecents: result.MediaRecents,
+		UserPreferences: result.UserPreferences, Appended: result.Appended,
 	}
 	return report, err
 }

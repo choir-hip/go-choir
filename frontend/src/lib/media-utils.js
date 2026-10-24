@@ -144,25 +144,65 @@ export async function loadMediaPosition(kind, source = {}) {
   return Number.isFinite(progress.currentTime) && progress.currentTime > 0 ? progress.currentTime : 0;
 }
 
-export function saveMediaPosition(kind, source = {}, currentTime = 0, duration = 0) {
-  if (!Number.isFinite(currentTime) || currentTime < 0) return;
-  const identity = mediaSourceIdentity(source);
-  if (!kind || !identity) return;
+// Players report progress on every timeupdate (about four a second while
+// playing), and every progress PUT is a tape event on the computer. Send at
+// most one PUT per source every MEDIA_PROGRESS_INTERVAL_MS: the first at once,
+// then a trailing PUT of the latest position
+// (docs/problems/stock-ui-writes-make-a-computer-checkpoint-ineligible-2026-10-24.md).
+const MEDIA_PROGRESS_INTERVAL_MS = 5000;
+const pendingMediaProgress = new Map();
+
+function sendMediaProgress(body) {
   fetchWithRenewal('/api/media/progress', {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
       'X-Choir-Device': currentDeviceId(),
     },
-    body: JSON.stringify({
-      kind,
-      identity,
-      current_time: currentTime,
-      duration: Number.isFinite(duration) ? duration : 0,
-      playback_rate: Number(source.playbackRate) || 1,
-      updated_by_device: currentDeviceId(),
-    }),
+    body: JSON.stringify(body),
   }).catch(() => {});
+}
+
+function flushMediaProgress(key) {
+  const entry = pendingMediaProgress.get(key);
+  if (!entry) return;
+  if (entry.timer) clearTimeout(entry.timer);
+  entry.timer = null;
+  const body = entry.body;
+  entry.body = null;
+  if (!body) return;
+  entry.lastSentAt = Date.now();
+  sendMediaProgress(body);
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('pagehide', () => {
+    for (const key of pendingMediaProgress.keys()) flushMediaProgress(key);
+  });
+}
+
+export function saveMediaPosition(kind, source = {}, currentTime = 0, duration = 0) {
+  if (!Number.isFinite(currentTime) || currentTime < 0) return;
+  const identity = mediaSourceIdentity(source);
+  if (!kind || !identity) return;
+  const key = `${kind}\u0000${identity}`;
+  const entry = pendingMediaProgress.get(key) || { body: null, timer: null, lastSentAt: 0 };
+  pendingMediaProgress.set(key, entry);
+  entry.body = {
+    kind,
+    identity,
+    current_time: currentTime,
+    duration: Number.isFinite(duration) ? duration : 0,
+    playback_rate: Number(source.playbackRate) || 1,
+    updated_by_device: currentDeviceId(),
+  };
+  if (entry.timer) return;
+  const wait = entry.lastSentAt + MEDIA_PROGRESS_INTERVAL_MS - Date.now();
+  if (wait <= 0) {
+    flushMediaProgress(key);
+    return;
+  }
+  entry.timer = setTimeout(() => flushMediaProgress(key), wait);
 }
 
 const MEDIA_RECENT_LIMIT = 10;

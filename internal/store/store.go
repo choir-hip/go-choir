@@ -220,11 +220,16 @@ type Store struct {
 	channelMsgMu       sync.Mutex
 	eventMu            sync.Mutex
 	presenceMu         sync.Mutex
-	sessionPresence    map[string]types.DesktopSessionContext
-	projectionTape     *projectionTape
-	og                 *objectgraph.Service
-	ogStore            *objectgraph.DoltStore
-	ogReadStore        *objectgraph.DoltStore
+	// mediaStateMu serialises the tape-bound writes of media_progress,
+	// media_recents and user_preferences; mediaStateSeededTape is the tape
+	// whose seed of those tables has been appended (media_projection.go).
+	mediaStateMu         sync.Mutex
+	mediaStateSeededTape *projectionTape
+	sessionPresence      map[string]types.DesktopSessionContext
+	projectionTape       *projectionTape
+	og                   *objectgraph.Service
+	ogStore              *objectgraph.DoltStore
+	ogReadStore          *objectgraph.DoltStore
 	// derivedColumns is the explicit og_objects derived-column migration
 	// (derived_columns.go); boot never runs it.
 	derivedColumns derivedColumnMigration
