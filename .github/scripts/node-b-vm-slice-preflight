@@ -29,7 +29,9 @@ fi
 
 holders=()
 while IFS= read -r procs_file; do
-  # A cgroup.procs that cannot be read refuses: it cannot be proved empty.
+  # A cgroup removed after find (a VM that just exited) holds no VM: skip it.
+  [ -e "$procs_file" ] || continue
+  # A cgroup.procs that exists but cannot be read refuses: it cannot be proved empty.
   pids=$(tr '\n' ' ' <"$procs_file") || refuse "cannot read ${procs_file}; refusing because it cannot be shown empty"
   pids="${pids% }"
   if [ -n "$pids" ]; then
