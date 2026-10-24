@@ -1410,12 +1410,26 @@ in
       # Guests never swap; snapshot_diff.go's guestMemoryCannotSwap reads
       # this as the jailed leaf's bound (else diffs are refused).
       MemorySwapMax = "0";
-      # Rebalance against the vmctl unit's MemoryLow as computers move here
-      # (SEC-04 step 5; wave 1 jails class:test and class:primary).
+      # The same 14G the vmctl unit asks for its direct guests: as computers
+      # move here (SEC-04 waves) the protection follows them. system.slice
+      # below caps the two together at 18G, and the kernel shares that cap
+      # between them by protected usage (cgroup v2 memory.low distribution).
       # memory.low protects usage only.
-      MemoryLow = "4G";
+      MemoryLow = "14G";
     };
   };
+
+  # Memory protection only reaches a cgroup through its parents: a child's
+  # effective memory.low is bounded by its parent's (docs/problems/
+  # vmctl-memory-low-protects-nothing-2026-10-24.md). system.slice defaulted
+  # to 0, so the vmctl unit's 14G and the VM slice's protection were dead.
+  # 18G covers the guests' anon memory, which never swaps, plus their disk
+  # cache, leaving 13 GiB of the host's 31 for everything else. memory.low is
+  # best effort: under pressure the kernel takes unprotected memory first and
+  # protected memory only when nothing else is left, so it never OOMs by
+  # itself. Owner, 2026-10-24: "Go with memory protection." Rollback: delete
+  # this override (system.slice back to 0).
+  systemd.slices.system.sliceConfig.MemoryLow = "18G";
 
   systemd.services.go-choir-vmctl = {
     # No crash loops (docs/restart-subsystem-design-2026-10-13.md, L1a): after 10 starts in 10 minutes the unit stays failed until a deploy or an operator (systemctl reset-failed) starts it again.
