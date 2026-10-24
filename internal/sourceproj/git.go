@@ -37,7 +37,8 @@ func gitRaw(ctx context.Context, repo string, env []string, stdin []byte, args .
 	}
 	ctx, cancel := context.WithTimeout(ctx, gitTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", repo}, args...)...)
+	// No hook of the repository's own config may run under a ref-mutating call.
+	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", repo, "-c", "core.hooksPath=" + os.DevNull}, args...)...)
 	base := make([]string, 0, len(os.Environ())+4)
 	for _, kv := range os.Environ() {
 		if !strings.HasPrefix(kv, "GIT_") {

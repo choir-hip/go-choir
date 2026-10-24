@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 )
@@ -202,6 +203,19 @@ func PlanReleaseBinaryReuseWith(ctx context.Context, changes []FileChange, sourc
 	return ReuseProofBinaryInputsEqual, nil
 }
 
+// gitDiffTimeout bounds the reuse comparison: Freeze must not hang on git.
+const gitDiffTimeout = 120 * time.Second
+
+func scrubbedGitEnv() []string {
+	env := make([]string, 0, len(os.Environ())+3)
+	for _, kv := range os.Environ() {
+		if !strings.HasPrefix(kv, "GIT_") {
+			env = append(env, kv)
+		}
+	}
+	return append(env, "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_TERMINAL_PROMPT=0")
+}
+
 // GitPathDiffer lists the paths that differ between two commits of the git
 // repository at sourceDir. Both must be full commit ids; anything else is
 // refused before git sees it.
@@ -210,7 +224,14 @@ func GitPathDiffer(sourceDir string) BinaryInputDiffer {
 		if !isHexCommit(from) || !isHexCommit(to) {
 			return nil, fmt.Errorf("commit ids are required")
 		}
-		out, err := exec.CommandContext(ctx, "git", "-C", sourceDir, "diff-tree", "-r", "--no-renames", "--name-only", "-z", from, to, "--").Output()
+		// Same promise as sourceproj's git: a caller's GIT_* must not redirect
+		// the repository (a diff of the wrong repo would read as "no binary input
+		// differs"), config must not change the answer, and a hung git is bounded.
+		ctx, cancel := context.WithTimeout(ctx, gitDiffTimeout)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, "git", "-C", sourceDir, "-c", "core.hooksPath="+os.DevNull, "diff-tree", "-r", "--no-renames", "--name-only", "-z", from, to, "--")
+		cmd.Env = scrubbedGitEnv()
+		out, err := cmd.Output()
 		if err != nil {
 			var exitErr *exec.ExitError
 			if errors.As(err, &exitErr) && len(exitErr.Stderr) > 0 {

@@ -305,3 +305,89 @@ func TestConcurrentTriggersConvergeOnTheEffectiveRelease(t *testing.T) {
 		t.Fatalf("P7: HEAD does not carry the applied tree")
 	}
 }
+
+// An unreadable effective release is unknown, not an empty stack: reconcile
+// must refuse before it moves anything (F1, "never falls back to the base").
+func TestUnreadableEffectiveReleaseNeverReadsAsAnEmptyStack(t *testing.T) {
+	const computerID = "computer-unknown"
+	rt, updaterRoot, repo, base := projectionRuntime(t, computerID)
+	ctx := context.Background()
+	patch, wantTree := releasePatch(t, repo, map[string]string{"frontend/public/a.txt": "A\n"})
+	release := applyOperation(t, rt, updaterRoot, computerID, "op-a", base, patch)
+	if err := rt.sourceProjectionCastGate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	head := gitHead(t, repo)
+
+	refuse := func(name string) {
+		t.Helper()
+		err := rt.sourceProjectionCastGate(ctx)
+		if err == nil || !strings.HasPrefix(err.Error(), "source_projection_unrebuildable") {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if gitHead(t, repo) != head || releaseGit(t, repo, "rev-parse", "HEAD^{tree}") != wantTree {
+			t.Fatalf("%s: the repository moved off the applied source", name)
+		}
+	}
+
+	// A manifest the digest check rejects.
+	manifestPath := filepath.Join(updaterRoot, "releases", release, "release-manifest.json")
+	raw, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(manifestPath, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(manifestPath, append(raw[:len(raw)-1:len(raw)-1], []byte(" ")...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	refuse("digest mismatch")
+	if err := os.WriteFile(manifestPath, raw, 0o444); err != nil {
+		t.Fatal(err)
+	}
+
+	// A dangling link: current exists, its target does not.
+	if err := os.Remove(filepath.Join(updaterRoot, "current")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join("releases", strings.Repeat("0", 64)), filepath.Join(updaterRoot, "current")); err != nil {
+		t.Fatal(err)
+	}
+	refuse("dangling current")
+	if err := os.Remove(filepath.Join(updaterRoot, "current")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join("releases", release), filepath.Join(updaterRoot, "current")); err != nil {
+		t.Fatal(err)
+	}
+	if err := rt.sourceProjectionCastGate(ctx); err != nil {
+		t.Fatalf("restored: %v", err)
+	}
+
+	// No operation store: the effective release cannot be read at all.
+	operations := rt.selfdevOperations
+	rt.selfdevOperations = nil
+	refuse("nil operation store")
+	rt.selfdevOperations = operations
+
+	// Only a missing current link is "no release": a base computer.
+	if err := os.Remove(filepath.Join(updaterRoot, "current")); err != nil {
+		t.Fatal(err)
+	}
+	result, err := rt.ReconcileSourceProjection(ctx, "boot")
+	if err != nil || result.State != sourceproj.StateBase || gitHead(t, repo) != base {
+		t.Fatalf("no current link = %+v, %v", result, err)
+	}
+}
+
+func TestPendingRefusalNamesTheOperationAndTheOwnerAct(t *testing.T) {
+	const computerID = "computer-held"
+	rt, updaterRoot, _, _ := projectionRuntime(t, computerID)
+	writeCurrentRelease(t, updaterRoot, computerID, "selfdev-op-held", nil)
+	insertReleaseOperation(t, rt.store, releaseOpRow{operationID: "op-held", computerID: computerID, state: selfdev.StateMaterializing, bundleDigest: strings.Repeat("1", 64), releaseDigest: strings.Repeat("2", 64)})
+	err := rt.sourceProjectionCastGate(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "op-held") || !strings.Contains(err.Error(), "materializing") || !strings.Contains(err.Error(), "rollback") {
+		t.Fatalf("F4: %v", err)
+	}
+}
