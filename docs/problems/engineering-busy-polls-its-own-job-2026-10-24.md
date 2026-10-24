@@ -102,3 +102,114 @@ job's outcome. Failure modes any shape must answer:
 discovered: the overlay's no-poll rule and the 10-20 refusal do not prevent
 a desk from stopping a healthy build to end its round. introduced: none.
 repaired: none.
+
+## Design: a Poll of the run's own running job parks the turn (FP0 lane fp0-job-park)
+
+Class: orange (the engineering in-cell API, the capsule_go_eval tool, the
+tool loop's engineering options). Rollback: revert the lane's commits; no
+store schema, tape event, boot path or provider route changes.
+
+### What the code does today **[V]**
+
+- A job's end does wake the desk, but only inside the same activation and
+  only after the model ends its turn. `handleCapsuleJobDone`
+  (`internal/agentcore/capsule_jobs.go`) commits a `job:<id>` record into
+  `engineering:<assignment>` and signals an in-process channel
+  (`signalJobWake`). The only reader of that signal is
+  `engineeringJobWait`, run by the engineering completion guard
+  (`runtime.go`, `WithCompletionGuard`) when a model turn ends with no tool
+  call and no terminal fate. It waits for the job's end (bounded by the
+  job's wall clock plus one minute and the run's context) and resumes the
+  loop with `jobEndedInstruction(view)`: state, exit code, elapsed, the
+  receipt_ref and what to do with it. There is no separate activation, no
+  durable park and no outbox wake: the "park" is the tool loop blocked in
+  one goroutine.
+- The tool loop (`internal/toolregistry/toolloop.go`) calls the model again
+  after every tool batch unless the batch was terminal or passivating. So a
+  cell that polls a running job is followed by a model turn, and only a
+  model that chooses to end its turn reaches the wait. That is the grain the
+  record names.
+- A crash closes jobs as `interrupted` at the next guest boot
+  (`closeInterruptedJobs`), and runs are closed by the existing boot rule.
+  A planned restart refuses while an engineering capsule is live
+  (`plannedRestartWork.LiveCapsules`, `planned_restart.go`), so no wait on a
+  job ever spans a planned restart.
+
+### The shape
+
+1. The cell reports what it waited on. `choir.Poll` records each job it
+   returned in a non-terminal state (`running`, or `starting` for a job the
+   cell itself staged). The cell result carries them as `jobs_awaited`
+   (kernel `SessionResult`, the broker, `capsule.GoEvalResult`), the same
+   way `records_shown` already rides back.
+2. The host decides the park. After the cell's reduction, `capsule_go_eval`
+   sets `job_park` to the first awaited job unless the cell committed a
+   terminal fate or staged a `choir.Stop`. The model sees the field in the
+   cell result.
+3. The loop does not offer another model turn. A new tool-loop option,
+   installed for the engineering overlay only, runs after a non-terminal
+   batch: when the cell result names `job_park` (or the cell was the
+   Complete-while-the-job-runs refusal), it waits for the job's end with the
+   same wait the completion guard uses, then appends the job-ended
+   instruction as the next user turn and calls the model. A park counts
+   against the guard's wait bound (32 per run), not its retries.
+4. The park is in the run's event trace. `capsule_job_park` (job id, cause
+   `poll` or `complete_refused`, deadline) is emitted when the park starts,
+   and `capsule_job_park_ended` (job id, how it ended, the job's state,
+   waited ms) when it ends. Both are run progress events, appended like
+   `completion_guard`.
+5. Nothing durable is added: no new store row, tape event, outbox entry or
+   boot path. The park dies with the process exactly as the existing guard
+   wait does.
+
+Why this shape: it reuses the wait that already works (round 2 of the 10-24
+drill and the 10-15 drills show `engineeringJobWait` resuming turns) and
+moves its trigger from "the model ended its turn" to "the cell looked at a
+job that is still running". That is the one decision the model kept getting
+wrong. It needs no new authority and no new durable state, and a desk that
+never polls a running job sees no difference.
+
+### The six failure modes
+
+1. **The wake never arrives.** The wait is bounded by the job's wall clock
+   plus one minute (`jobWaitSlack`) and by the run's context. A stale signal
+   from an earlier job does not release it (it re-checks the job). At the
+   deadline the turn resumes with an instruction that the job outlived its
+   wall clock. A crash kills the process: the job closes `interrupted` at
+   boot and the run closes under the existing rule, so no resumer is added.
+   A planned restart cannot happen while the capsule is live.
+2. **A job that is already done.** The cell-start snapshot shows it done, so
+   Poll does not record it and the cell does not park. If the job ends
+   between the cell and the park, the park sees no running job and resumes
+   at once with the job's outcome, without waiting.
+3. **Stop as an escape.** A cell that stages a Stop does not park (the job is
+   ending). Stop is otherwise unchanged: it is the legitimate way out of a
+   hung or wrong job. The park removes the pressure that led to tonight's
+   Stop. After its first look at a running job, the desk next speaks when
+   the job has ended, so it never sees "still running" twice. The refused
+   Complete (failure 23) also parks, so the cell that tried to finish early
+   is followed by the job's outcome, not by a fresh chance to Stop.
+4. **Other work while a job runs.** Only a cell whose Poll saw a running
+   job parks. Cells that read, write, Exec, Note or Report and do not poll
+   run as before. A desk that polls once to read the tail parks there, and
+   that is the intent.
+5. **Desks without capsule jobs.** The option is installed only with the
+   engineering overlay. Other desks have no jobs in their cell snapshot, so
+   their Poll never records one. Management, Texture and research are
+   unchanged.
+6. **The trace shows the wait.** `capsule_job_park` and
+   `capsule_job_park_ended` sit in the run's events between the cell's
+   `tool.result` and the next model call, with the job id, the cause and how
+   the park ended. A trace can tell a desk that waited from one that was
+   dropped or starved.
+
+### Residuals
+
+- A desk can still Stop a healthy job the first time it sees it running, in
+  the polling cell itself. The park makes that unlikely, not impossible.
+  If a drill shows it, the next step is a Stop that records a reason the
+  reducer keeps, not another prompt rule.
+- The park is in-process, as the guard wait is. A durable park (a parked
+  run woken by the job record through the outbox) would be needed only if
+  engineering runs come to outlive a process. Today they cannot (a live
+  capsule refuses a planned restart).
