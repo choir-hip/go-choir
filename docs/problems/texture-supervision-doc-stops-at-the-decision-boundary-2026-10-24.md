@@ -48,9 +48,10 @@ a new document (`b4f90909-3bad-541a-aec7-ace1fc8e5558`).
 
 Attempt 3 followed the same shape: rev 1 04:22:44, rev 2 04:23:10, rev 3
 04:25:23, with work_settled at the same instant. Approved at 04:27:04,
-materializing at 04:27:13. No Texture revision followed the approval.
-(The apply was then stalled by the host ownership failure FP0 is looking at;
-this record does not depend on that.)
+materializing at 04:27:13, applied at 04:27:21 (the served SPA carries the new
+Slides chunk). Read at 05:04: the document still has exactly the three
+revisions of 04:22:44, 04:23:10 and 04:25:23, and still reads "awaiting the
+owner's decision". Nothing followed the approval or the apply.
 
 ## The three gaps
 
