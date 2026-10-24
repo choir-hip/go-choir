@@ -1277,6 +1277,201 @@ change promoted to main and refreshed retires as upstreamed (needs U1b).
     the old base until U1b.
 - **Not changed:** the materializer, the host builder, corpusd, vmctl, nix.
 
+#### U1b design (lane `fp0-u1b`, 2026-10-24; written before the code)
+
+Class: red (boot path of the guest runtime; the source a capsule is cast
+from). Review tier 1 (one seat, Devin): additive, behind U1's switch plus one
+guest-local setting, and a one-act rollback. Builds on U1; nothing here is
+reachable with `CHOIR_SOURCE_PROJECTION` off.
+
+**The gap.** U1 reports `base_objects_missing` when the guest repo lacks the
+booted base commit, and with an empty stack the cast then proceeds on the
+creation commit. That is every existing computer after its first deploy. The
+host builder refuses a patch based on any commit but the booted image's
+`build_commit` [V internal/hostbuild/service.go:388-399], so such a cast fails
+late, at the host, with `base_commit_mismatch`. U1b makes the booted base's
+objects present at each boot, so B1 (move HEAD to the booted base) and B5
+(retire an upstreamed stack) become reachable on computers that already exist.
+
+**Investigation (read-only).**
+
+- *How the seed gets in.* `createDataImage` [V internal/vmmanager/manager.go:3122]
+  runs only when a data image is created (the launch path at :989, and the
+  recovery successor at :3314). It calls `sourceSeedStagingRoot` [:3144], which
+  `git clone`s the host checkout `VM_SOURCE_SEED_REPO` (default `/opt/go-choir`)
+  [V internal/vmmanager/config.go:189-198] into a staging directory, checks out
+  vmctl's own `buildinfo.Commit`, and lets `mkfs.ext4 -d` copy it into the image
+  [:3181-3215]. The clone is complete: it holds every commit that `/opt/go-choir`
+  held that day, and nothing after. The clone's `origin` is the host path
+  `/opt/go-choir`, which does not exist in the guest.
+- *Where the booted commit is known.* `build_commit=${buildCommit}` is a line of
+  the guest image manifest [V nix/autoputer-vm.nix:52]; `buildCommit` is
+  `self.rev or self.dirtyRev or "local"` [V flake.nix:235]. The runtime reads
+  it as `bootedBaseCommit` [V internal/agentcore/source_projection.go:35-52],
+  the updater likewise [V internal/updater/updater.go:534-544], and the host
+  builder reads the host's own copy [V internal/hostbuild/service.go:661]. A
+  `local` or `dirty` build has no full commit id, so no base.
+- *What the host holds.* `/opt/go-choir` is a full clone that every deploy
+  fetches the deployed commit into and `reset --hard`s
+  [V .github/scripts/node-b-ci-deploy:219-246], and corpusd's host build reads
+  its objects [V nix/node-b.nix:1275-1278]. So the host holds the booted commit
+  of the current image, and of older ones while they stay reachable. No separate
+  hostbuild source cache exists: `internal/hostbuild` takes `SourceDir` and reads
+  it [V internal/hostbuild/service.go:47, 555].
+- *Channels from host to guest.* The drives are the shared erofs store, the
+  computer's data image, and the 8 MiB credential disk [V
+  internal/vmmanager/manager.go:1900-1943]. There is no virtiofs or 9p [V
+  nix/autoputer-vm.nix:340-348]. The credential disk is rebuilt at each cold boot
+  (a snapshot resume keeps the old one), carries `extraFiles` that vmctl chooses
+  [V manager.go:3033-3118], mounts at `/run/choir-bootstrap`
+  [V nix/autoputer-vm.nix:354-358], and the runtime itself reads grant files from
+  it [V internal/agentcore/event_table.go:33-34]. The platform's update offer
+  carries files, by CAS ref [V internal/selfdevprotocol/platform_update.go:40-77];
+  it is a per-computer signed offer, not a boot-time channel. The git package
+  mirror [V internal/pkgmirror/git.go:20-50] serves public repositories over git's
+  dumb HTTP, for capsules only.
+- *What the guest can reach itself.* The runtime unit starts after
+  `network-online.target` [V nix/autoputer-vm.nix:933], has `git` on its PATH
+  [:991], and may write `/mnt/persistent` [:1093]. Guest egress allows public TCP
+  [V internal/vmmanager/guest_egress.go:19-21]. The repository is public
+  (`gh api repos/choir-hip/go-choir`: `private=false`), and the guest module
+  already receives `sourceRepoRemote` [V nix/autoputer-vm.nix:24, flake.nix:237]
+  and does not use it.
+- *Sizes, measured on this repo (10 k commits since 2026-04-10, about 55 a day;
+  128 MiB pack).*
+
+  | delta | bundle |
+  |---|---|
+  | last 1 commit | 4 KB |
+  | last 20 | 36 KB |
+  | last 100 | 400 KB |
+  | last 300 | 1.0 MB |
+  | last 1000 (about 20 days) | 3.7 MB |
+  | full history | 81 MB |
+
+  The cost of catching a computer up grows by about 190 KB per day of age.
+
+**Choice: the guest fetches the booted commit by id from `sourceRepoRemote`.**
+`git fetch` negotiates against the guest's own objects, so what moves is exactly
+the delta in the table, with no host work and no host change. The result is
+checked by content: git computes the object ids itself, so a remote can only
+supply the commit the image names, and `transfer.fsckObjects` rejects malformed
+objects.
+
+| candidate | verdict |
+|---|---|
+| guest `git fetch <booted> ` from the public remote | **built.** No host change; exact delta; the remote is already in the guest module. |
+| host bundle on the credential disk | not built; designed below as the fallback. The host does not know what the guest holds (no seed-commit record exists for existing computers), the disk is 8 MiB with a 4 MiB journal at default mkfs (about 3.5 MiB usable, roughly 18 days of age), and the producer is a new git-running step on the cold-boot path. |
+| pkgmirror git | rejected. Dumb HTTP downloads whole packs, it mirrors the same public remote, and it is wired to capsules. |
+| a git endpoint on vmctl (http-backend) | rejected. A new host service. |
+| host writes into the guest's data image | rejected. The host writing a guest's mutable disk. |
+
+*The fallback, if guest egress closes (NET-01).* vmctl records the seed commit
+beside the data image when it creates one, and at each cold boot adds
+`source-base.bundle` (`git bundle create <booted> ^<seed>`) to the credential
+disk's `extraFiles`; the credential disk grows to fit. The guest side differs
+only in the source: `git fetch <bundle> <booted>` from the file. A computer with
+no recorded seed commit, or a delta over the disk's room, gets no bundle and
+reports it. This is a host change to the boot path (red, tier 2) and is not part
+of U1b. The guest code takes the source as a setting, so the fallback adds no
+guest change beyond a second source.
+
+**Where it runs.** In U1's boot goroutine [V internal/agentcore/runtime.go:942]:
+reconcile as U1 does, then, if the switch is on and the booted base's objects are
+absent, fetch, then reconcile again. The fetch never blocks boot or `/health`.
+Order and bounds:
+
+1. No network is used when the objects are already present (the normal case on
+   a new computer, and on every boot after the first).
+2. A random delay of up to 20 s before the first attempt, so the computers that
+   boot together after a deploy do not open together to one remote.
+3. One attempt: 10 minute ceiling, abort when slower than 1 KB/s for 60 s,
+   skipped below 1 GiB free on the data volume.
+4. A failed attempt that looks transient retries after 30 s, 2 min, 10 min, 30 min
+   and 1 h, then stops for this process. A failure that is permanent for this
+   remote (the commit or repository is not there, authentication is asked for)
+   stops at once.
+5. The cast gate waits up to 45 s for a fetch that is in flight, then proceeds as
+   U1 does. It starts none.
+6. On success, the fetched commit is held by `refs/choir/booted/<commit>` (older
+   `refs/choir/booted/*` refs are removed) and reconcile runs again with trigger
+   `base_fetch`.
+
+**Failure modes, written before code.**
+
+- **N1 no network, DNS, remote down, rate limited.** Fetch fails; nothing in the
+  repo changes; the state stays `base_objects_missing`, its reason now carries the
+  last fetch error; the cast proceeds as in B2. Retries per 4. Boot is never
+  delayed.
+- **N2 the booted commit is not on the remote** (a `local` or `dirty` build, a
+  fork or private image, a branch deleted or force-pushed away). Classified
+  permanent, no retry in this process, fact `source_base_fetch_failed`. `local` and
+  `dirty` never get here: they have no full commit id, so no fetch is attempted.
+- **N3 a hostile or wrong remote.** Only `https://` remotes (no userinfo) and
+  absolute local paths are accepted; ssh, git, http and option-looking values are
+  refused before git runs. After the fetch, `<booted>^{commit}` must resolve to
+  exactly the id asked for.
+- **N4 download too large or stalled.** Bounded by the time ceiling and the low
+  speed abort in 3. Free space is checked first; below the floor the attempt is
+  skipped and retried like a transient failure.
+- **N5 concurrent git use.** Fetch takes no index or work-tree lock: it writes
+  objects and one ref. It runs outside reconcile's mutex (a capsule seed and a
+  reconcile are never delayed by the network) and under its own mutex, so two
+  fetches never overlap. A killed fetch leaves a `tmp_pack_*` that git removes
+  later.
+- **N6 repository maintenance.** `gc.auto=0` and `maintenance.auto=false` for the
+  fetch, so a catch-up never starts a background repack of a 130 MB repository
+  on a small guest.
+- **N7 crash during fetch.** Nothing resumes. The next boot finds the objects
+  absent (or partly present, which makes it cheaper) and fetches again. No
+  marker, no resumer.
+- **N8 crash loop.** The runtime's own start limit (5 in 10 minutes) bounds
+  attempts; the presence check in 1 costs no network. No persisted back-off.
+- **N9 many computers at once.** Delay in 2; the delta is small (table).
+- **N10 egress closes.** Behaves as N1, visibly; the fallback above is the
+  answer.
+- **N11 the move itself.** Once present, HEAD moves to the booted commit through
+  U1's `ensureHead` (B1), which already refuses to touch a damaged repo
+  silently. The move is recorded with the commit it came from, so the rollback
+  below is a copy-paste.
+- **N12 a fetch that races an apply.** The projection input is read and used
+  under U1's run lock; a fetch only adds objects, so the worst case is that the
+  reconcile after it sees a different input than the one before. Both recompute
+  from the tape.
+- **N13 switch off.** No fetch, no wait, no ref, no fact.
+- **N14 TLS roots.** git needs a CA bundle in the guest. NixOS provides
+  `/etc/ssl/certs/ca-certificates.crt`, which the fetch names explicitly. Whether
+  git in the runtime's environment reaches GitHub is a staging fact (below).
+
+**The switch and its rollback.**
+
+- *Switch.* U1's `CHOIR_SOURCE_PROJECTION=1` (process-wide, as built) and
+  `CHOIR_SOURCE_BASE_REMOTE`, set by the guest image to `sourceRepoRemote`
+  [V nix/autoputer-vm.nix]. An empty value, or `CHOIR_SOURCE_BASE_FETCH=off`
+  (both overridable in the guest's `/run/go-choir-autoputer.env`), turns the fetch
+  off and leaves U1 as built.
+- *Rollback.* Revert U1b; the fetched objects and `refs/choir/booted/*` are inert.
+  To put a computer's source back where it was, the move's fact in
+  `<updater root>/source-projection/facts.jsonl` names `from`:
+  `git -C /mnt/persistent/files/Source/platform reset --hard <from>`, then delete
+  `refs/choir/*` (U1's rollback).
+
+**What U1b does not do.** It does not refuse a cast whose booted base cannot be
+fetched (B2 stays; FP0 may prefer to refuse once staging shows the fetch works,
+since the host builder refuses such a candidate anyway for Go changes). It adds
+no host mechanism and no event kind. It does not advance the source between
+boots: a platform deploy that does not restart the computer moves the booted
+base only at the next boot.
+
+**Proof that must run on staging (FP0's):** on a test computer created before the
+current deploy, with the switch on: boot shows `source_base_fetched` in the fact
+log with the delta's size; `HEAD` equals the booted commit and the tree is clean;
+a candidate cast is pinned to the booted commit and the host build accepts its
+patch base; with the remote made unreachable (a test setting) the state reads
+`base_objects_missing` with the fetch error and the cast proceeds as before;
+promote a change to main, refresh the computer, and the stack retires as
+`upstreamed` (U1's proof, now reachable).
+
 **Then, in order:**
 
 - **U2. Name the loss (orange, with one red step).**
