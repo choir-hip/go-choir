@@ -1561,3 +1561,4 @@ Append-only. One terse entry per orchestrator pass.
   - Checks: PR CI 25 pass, 8 skipped, on 1ced2d5f0; mirror castcut-2 PASS; four gates; focused agentcore Engineering suite.
   - Orange (prompt-visible request bound). Rollback: a git revert, which restores the 4 KiB cut; no state, no tape.
   - Proof: the unit test carries a 6,338-byte objective whole; on staging, health reports the commit, vmctl restarts cleanly and the paper refreshes.
+- 14:3x. D40 proved: CI run 40101276835 success; health reports b2cebe931; vmctl active since 14:32:16 with zero restarts; the paper refreshed at 14:32:41 (epoch 13279). The cast cut no longer blocks a long app-conductor objective, so a five-app rebuild on current source can be cast whole.
