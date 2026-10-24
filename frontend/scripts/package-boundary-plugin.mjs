@@ -120,8 +120,12 @@ export default function packageBoundary({ root }) {
       const name = source.startsWith('@') ? source.split('/').slice(0, 2).join('/') : source.split('/')[0];
       return bare && allowedModules.has(name);
     }
-    const m = file.match(/[\\/]node_modules[\\/]((?:@[^\\/]+[\\/])?[^\\/]+)[\\/]/);
-    if (m) return allowedModules.has(m[1].replace(/\\/g, '/'));
+    // The package a file belongs to is the one after its LAST node_modules:
+    // pnpm keeps node_modules/.pnpm/<name>@<version>/node_modules/<name>/...,
+    // where the first segment after node_modules is .pnpm, not the package.
+    const segments = [...file.matchAll(/[\\/]node_modules[\\/]((?:@[^\\/]+[\\/])?[^\\/]+)[\\/]/g)];
+    const last = segments[segments.length - 1];
+    if (last) return allowedModules.has(last[1].replace(/\\/g, '/'));
     return false;
   };
 
