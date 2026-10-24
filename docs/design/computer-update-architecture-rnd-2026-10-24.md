@@ -1229,12 +1229,11 @@ change promoted to main and refreshed retires as upstreamed (needs U1b).
   `recordMaterializationApplied`, and in `internal/capsule` the binary-reuse
   diff (`PlanReleaseBinaryReuseWith`, `GitPathDiffer`, provenance
   `reuse_proof`).
-- **Switch.** `CHOIR_SOURCE_PROJECTION=1` in the guest runtime's environment.
-  Absent means off, and off means every entry point above returns before it
-  touches git. U1 as built has a process-wide switch; a per-computer switch
-  needs the same host selector shape as `VM_CAPSULE_TUNNEL_ENFORCE_ONLY` and is
-  a follow-up.
-- **Turning it off after it ran.** Remove the variable, then on each computer
+- **Switch.** The owner's per-computer setting `source.projection` (runtime, no
+  deploy, default off; the follow-up commit on the U1b lane, see "U1b design"),
+  or `CHOIR_SOURCE_PROJECTION=1` in the guest runtime's environment for a
+  process. Off means every entry point above returns before it touches git.
+- **Turning it off after it ran.** Turn the setting off (and remove the variable), then on each computer
   that projected: `git -C /mnt/persistent/files/Source/platform reset --hard
   refs/choir/base`. Without the reset, HEAD stays on the projection commit, and
   a new Go candidate would be based on a computer-local commit that the host
@@ -1280,9 +1279,9 @@ change promoted to main and refreshed retires as upstreamed (needs U1b).
 #### U1b design (lane `fp0-u1b`, 2026-10-24; written before the code)
 
 Class: red (boot path of the guest runtime; the source a capsule is cast
-from). Review tier 1 (one seat, Devin): additive, behind U1's switch plus one
-guest-local setting, and a one-act rollback. Builds on U1; nothing here is
-reachable with `CHOIR_SOURCE_PROJECTION` off.
+from). Review tier 1 (one seat, Devin): additive, behind a per-computer setting
+that defaults off, and a one-act rollback. Builds on U1; nothing here is
+reachable with the switch off.
 
 **The gap.** U1 reports `base_objects_missing` when the guest repo lacks the
 booted base commit, and with an empty stack the cast then proceeds on the
@@ -1445,12 +1444,18 @@ Order and bounds:
 
 **The switch and its rollback.**
 
-- *Switch.* U1's `CHOIR_SOURCE_PROJECTION=1` (process-wide, as built) and
+- *Switch.* The owner's per-computer setting `source.projection`
+  (`POST /api/computer-settings {"key":"source.projection","value":true}`), an
+  existing runtime mechanism: stored on the computer, read at boot and on change,
+  no deploy, default off. It turns on U1 and U1b together, for one computer.
+  `CHOIR_SOURCE_PROJECTION=1` still turns them on for a process. Setting it on
+  reconciles at once and starts the fetch if the objects are missing.
   `CHOIR_SOURCE_BASE_REMOTE`, set by the guest image to `sourceRepoRemote`
-  [V nix/autoputer-vm.nix]. An empty value, or `CHOIR_SOURCE_BASE_FETCH=off`
-  (both overridable in the guest's `/run/go-choir-autoputer.env`), turns the fetch
-  off and leaves U1 as built.
-- *Rollback.* Revert U1b; the fetched objects and `refs/choir/booted/*` are inert.
+  [V nix/autoputer-vm.nix], names where to fetch from; empty, or
+  `CHOIR_SOURCE_BASE_FETCH=off` in `/run/go-choir-autoputer.env`, turns only the
+  fetch off.
+- *Rollback.* Set `source.projection` to false: every entry point stops at once
+  and the repository stays where it is. Or revert U1b; the fetched objects and `refs/choir/booted/*` are inert.
   To put a computer's source back where it was, the move's fact in
   `<updater root>/source-projection/facts.jsonl` names `from`:
   `git -C /mnt/persistent/files/Source/platform reset --hard <from>`, then delete

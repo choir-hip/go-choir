@@ -46,7 +46,7 @@ func (rt *Runtime) applySourceProjectionSetting(value bool) {
 	}
 	sourceproj.SetSetting(value)
 	if value {
-		go rt.reconcileSourceProjectionLogged(context.Background(), "setting")
+		go rt.startSourceProjection(context.Background(), "setting")
 	}
 }
 
@@ -198,6 +198,7 @@ func (rt *Runtime) ReconcileSourceProjection(ctx context.Context, reason string)
 	if err != nil {
 		return result, err
 	}
+	result.Reason = rt.withBaseFetchReason(result)
 	rt.sourceProjectionMu.Lock()
 	previous := rt.sourceProjectionLast
 	copied := result
@@ -232,6 +233,7 @@ func (rt *Runtime) sourceProjectionCastGate(ctx context.Context) error {
 	if !sourceproj.Enabled() {
 		return nil
 	}
+	rt.waitSourceBaseFetch(ctx)
 	result, err := rt.ReconcileSourceProjection(ctx, "cast")
 	if err != nil {
 		return fmt.Errorf("source_projection_failed: the capsule source could not be reconciled with the applied stack: %w", err)
@@ -250,6 +252,7 @@ type sourceProjectionFact struct {
 	Reason      string `json:"reason,omitempty"`
 	OperationID string `json:"operation_id,omitempty"`
 	Head        string `json:"head"`
+	From        string `json:"from,omitempty"`
 	Base        string `json:"base,omitempty"`
 	BootedBase  string `json:"booted_base,omitempty"`
 	// LocksCleared names the stale git locks reconcile removed.
@@ -270,10 +273,18 @@ func (rt *Runtime) appendSourceProjectionFact(trigger string, result sourceproj.
 	case !result.Changed && len(result.LocksCleared) > 0:
 		kind = sourceproj.FactLockCleared
 	}
-	raw, err := json.Marshal(sourceProjectionFact{
+	rt.appendSourceProjectionFactRecord(sourceProjectionFact{
 		At: time.Now().UTC().Format(time.RFC3339Nano), Kind: kind, Trigger: trigger, State: string(result.State), Reason: result.Reason,
-		OperationID: result.OperationID, Head: result.Head, Base: result.Base, BootedBase: result.BootedBase, LocksCleared: result.LocksCleared,
+		OperationID: result.OperationID, Head: result.Head, From: result.From, Base: result.Base, BootedBase: result.BootedBase, LocksCleared: result.LocksCleared,
 	})
+}
+
+func (rt *Runtime) appendSourceProjectionFactRecord(fact sourceProjectionFact) {
+	root := strings.TrimSpace(rt.selfdevUpdaterRoot)
+	if root == "" {
+		return
+	}
+	raw, err := json.Marshal(fact)
 	if err != nil {
 		return
 	}
