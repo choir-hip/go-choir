@@ -1593,10 +1593,14 @@ in
         # owner's computers (premium_always_on) and the paper
         # (critical_protected) follow in later waves, the paper alone at a
         # planned restart. Each selected computer cold boots once, at its
-        # next launch; a running VM is not touched. Rollback:
-        # VMCTL_JAILER_ONLY=class:test.
+        # next launch; a running VM is not touched. Wave 2a (owner,
+        # 2026-10-24: "Let's apply the jailer everywhere") adds the owner's
+        # computers (premium_always_on). Last, alone: "*" for the paper
+        # (critical_protected) and platform computers, at a watched planned
+        # refresh, not at the unattended 04:00 compaction. Rollback:
+        # VMCTL_JAILER_ONLY=class:test,class:primary.
         "VMCTL_JAILER=on"
-        "VMCTL_JAILER_ONLY=class:test,class:primary"
+        "VMCTL_JAILER_ONLY=class:test,class:primary,class:premium_always_on"
         "VM_JAILER_BIN=${pkgs.firecracker}/bin/jailer"
         # The jailer copies its exec file into the jail, which holds no
         # loader: the glibc build above cannot exec there ("Failed to exec
