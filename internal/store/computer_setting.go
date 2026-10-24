@@ -68,6 +68,20 @@ const SettingDebouncedCheckpoint = "store.debounced_checkpoint"
 // (the readers read both tables).
 const SettingEventTable = "store.event_table"
 
+// SettingEvidenceGraph moves research evidence (SaveEvidence) from the
+// agent_evidence table to the choir.agent_evidence graph kind, on the tape
+// (docs/problems/data-has-more-than-one-home-2026-10-24.md, step 3). Read live
+// at each write. Off by default; off is the rollback: new evidence returns to
+// the table, and evidence already in the graph stays readable. Turning it on
+// moves the table's rows into the graph.
+const SettingEvidenceGraph = "evidence.graph"
+
+// SettingEngineeringSlotsGraph moves engineering slot claims from the
+// co_super_slots table to the choir.co_super_slot graph kind, on the tape.
+// Read live at each claim. Off by default; off is the rollback, as for
+// evidence.graph.
+const SettingEngineeringSlotsGraph = "engineering.slots_graph"
+
 // KnownComputerSettings are the settings a computer has, with their
 // defaults. A key outside this list is refused, so a typo never stores a
 // setting nobody reads.
@@ -79,6 +93,8 @@ var KnownComputerSettings = map[string]bool{
 	SettingResearchSystem1:       false,
 	SettingDebouncedCheckpoint:   false,
 	SettingEventTable:            false,
+	SettingEvidenceGraph:         false,
+	SettingEngineeringSlotsGraph: false,
 }
 
 // ComputerSetting is one switch's value on one computer.
