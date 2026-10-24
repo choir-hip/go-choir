@@ -13,7 +13,9 @@ package agentcore
 //  5. a crash boot wakes Texture              -> ...FinalReportIsNotRelayed
 //  6. replay mints a second record            -> ...ReplayMintsOnce
 //  8. the body is lost or altered             -> ...MintsOneTextureRecordWhenOn
-//  9. Texture reads a "closure"               -> ...MintsOneTextureRecordWhenOn
+//  9. Texture reads a "closure"               -> ...MintsOneTextureRecordWhenOn,
+//     ...RendersInTextureFrame
+// 7. no parent Texture / nothing to relay      -> ...RendersInTextureFrame
 
 import (
 	"context"
@@ -22,6 +24,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/texturewrite"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
@@ -215,5 +218,39 @@ func TestEngineeringProgressRelayOnlyTheProgressRecordWakes(t *testing.T) {
 		Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNote, Body: "x"}}
 	if store.RecordWakesReader(other) {
 		t.Fatal("an arbitrary system Note wakes its reader")
+	}
+}
+
+// Texture's frame renders a progress record as the engineering claims it
+// carries, labelled as a progress record, so the document's writer reads
+// what engineering reported with no frame change.
+func TestEngineeringProgressRelayRendersInTextureFrame(t *testing.T) {
+	var source types.CommitmentRecord
+	source.RecordID, source.SenderInbox, source.ComputerID = "cell-x:Report:rep", "engineering:a1", "c1"
+	source.Prediction.Hypothesis = relayTestPacket
+	relay, ok := types.NewEngineeringProgressRelay(source, "texture:doc-1")
+	if !ok {
+		t.Fatal("no relay built for a Report with a packet")
+	}
+	relay.InboxSeq = 1
+	frame := texturewrite.RecordsFrom(textureRecordInputs([]yaegikernel.InboxRecord{inboxRecordView(relay)}))
+	if len(frame) != 1 || frame[0].Kind != "progress" || frame[0].Summary != "Files hub built" ||
+		len(frame[0].Claims) != 1 || frame[0].Claims[0].Text != "The Files hub compiles and routes by kind." {
+		t.Fatalf("frame record = %+v", frame)
+	}
+	// A Report with nothing to relay, a non-engineering sender and a
+	// non-Texture target build nothing.
+	empty := source
+	empty.Prediction.Hypothesis = ""
+	if _, ok := types.NewEngineeringProgressRelay(empty, "texture:doc-1"); ok {
+		t.Fatal("an empty Report was relayed")
+	}
+	if _, ok := types.NewEngineeringProgressRelay(source, "research:doc-1"); ok {
+		t.Fatal("a relay was addressed to a non-Texture inbox")
+	}
+	fromManagement := source
+	fromManagement.SenderInbox = "management:o"
+	if _, ok := types.NewEngineeringProgressRelay(fromManagement, "texture:doc-1"); ok {
+		t.Fatal("a management record was relayed")
 	}
 }

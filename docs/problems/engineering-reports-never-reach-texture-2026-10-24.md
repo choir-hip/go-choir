@@ -1,7 +1,7 @@
 # Engineering's Reports never reach the owner's Texture document unless a management model chooses to relay them (2026-10-24)
 
-Status: documented, fix follows in the next commit. Mutation class of the
-fix: `red`, additive and behind a per-computer switch that is off by
+Status: fix built on lane/fp0-reports-texture (switch off by default, not
+deployed or drilled). Mutation class of the fix: `red`, additive and behind a per-computer switch that is off by
 default (it adds records to Texture's inbox and so wakes Texture; Texture
 stays the only writer of the document).
 
@@ -130,10 +130,12 @@ the assignment serves. Ways it could fail, with the test that pins each:
    binding) breaks the commit. Test: no relay, no error, the Report
    commits as before.
 8. The relay carries engineering text the owner should not see, or loses
-   it. The body is the Report's own claims and packet, the same bytes
-   management reads; the frame renders it as it renders any Report
-   (`texturewrite.RecordsFrom`). Test: the record's Report claims and
-   Prediction body equal the source record's.
+   it. The body is the Report's own packet, the same bytes management reads;
+   the frame renders it as it renders any packet (`texturewrite.RecordsFrom`).
+   It is a Note directive, not a Report, so no open-claim projection
+   (`ResolveCommitments` skips directives) counts it as a second standing
+   claim that goes overdue. Test: the directive body equals the source
+   packet and the Texture frame shows its claims.
 9. Texture sees it as a "closure" (a system record with no other body
    reads as one in `inboxRecordKind`). Test: the view's kind is
    `progress`.
@@ -165,3 +167,30 @@ one is its judgement, and a prompt line for the new kind waits for a trace.
 
 Heresy delta: discovered 1 (the replan's trace names the wrong path), 0
 introduced, 0 repaired in this commit.
+
+## The fix (red, additive, switched off by default)
+
+`engineering.progress_to_texture`, a per-computer boolean in
+`KnownComputerSettings` (`internal/store/computer_setting.go`), set by the
+owner through `POST /api/computer-settings` and read at each commit, so it
+changes at runtime with no restart. Default off. Off is the rollback: it
+mints nothing, and the records already minted stay in the ledger as
+ordinary evidence Texture has read or can reject.
+
+With it on, `commitRecordsRoute` (`inbox_records.go`) appends, to the
+transaction that commits an engineering cell's progress Report to
+management, one system Note per Report into the inbox of the Texture whose
+request the assignment serves (`engineering_progress_relay.go`; the Texture
+is the counterpart of the assignment's `ParentConversationID`). The record
+is sent from `progress:<assignment>`, so it is nobody's speech and opens or
+closes no round; `RecordWakesReader` admits it as a fifth system record that
+wakes (it is minted only by a live commit, never at a crash boot); Texture's
+view labels it `progress`. Engineering still addresses management only,
+management still reads the Report, Texture still decides whether and how
+the document changes, and the final Report still goes through management's
+D6 gate.
+
+Class: red (it wakes Texture, a protected surface's writer, and adds to the
+ledger). Tier 1 review: additive, behind a data switch, one-act rollback
+that shows within a minute on the next Report. Rollback: set the switch
+false; revert the commit for removal.
