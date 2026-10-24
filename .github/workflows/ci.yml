@@ -414,6 +414,10 @@ jobs:
         shell: bash
         run: scripts/check-v1-writer-purity.sh
 
+      - name: Check the first-party package kind table
+        shell: bash
+        run: node frontend/scripts/gen-package-kinds.mjs --check
+
       - name: Run decode-roots guard
         shell: bash
         run: scripts/check-decode-roots.sh
