@@ -1602,3 +1602,9 @@ Append-only. One terse entry per orchestrator pass.
   - Q2 the floor: all host-level and security-relevant code, everything engineering has no access to.
   - Updates are shown to the user: on opening the desktop, every update since it was last opened; on opening an app updated since it was last seen, a notice. Updates live in their own read-only app, not in Texture ("this list of updates shouldn't be read-write").
   - Q4 (default policies) and Q5 (what a published release carries): the owner asked for explanation before answering.
+- 19:0x. Owner rulings, in session, continued:
+  - One object graph per computer, as the Autopaper object graph is one for the world: "if a user makes a new app, not mail, but schmail, it's still using the same data ... You can have your whole organization all share one object graph with RBAC ... whatever new data you put in can then be leveraged by existing apps and agents. We need to take this more seriously and more foregrounded so that it's always clear and we never violate this invariant." Files and Dolt must integrate so that "every type of data has only one right way to store and access it."
+  - The Updates app holds the full history (a changelog), read-only for the user, and its data is readable by the desks (research, engineering).
+  - Q4 default policies: security auto; platform and app updates auto; a computer that diverges moves to propose (the owner wants a customized computer to be offered new features, not forced or hidden).
+  - propose needs visual evidence (Playwright screenshots and video), embedded in the change's Texture document and in the Updates app. Open (owner unsure): letting the user try the new version beside the current one at a second URL.
+  - Q5: changes should be as modular as possible (a mail app should not carry an unrelated theme change); distribution is source, not binary (owner notes 2026-10-14 §15).
