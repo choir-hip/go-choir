@@ -46,6 +46,8 @@ type FileChangeEvent struct {
 	Name       string `json:"name"`
 	EntryType  string `json:"entry_type"`
 	Size       int64  `json:"size,omitempty"`
+	// FromPath is the source of a move ("moved").
+	FromPath string `json:"from_path,omitempty"`
 }
 
 // FileChangeObserver receives durable Files mutation notifications.
@@ -55,6 +57,14 @@ type FileChangeObserver func(r *http.Request, event FileChangeEvent)
 type FilesHandler struct {
 	rootDir  string
 	observer FileChangeObserver
+	// moveGate admits the move verb (PATCH). Nil or false answers 405, as
+	// before the verb existed (the file object's switch, files.object).
+	moveGate func(*http.Request) bool
+}
+
+// SetMoveGate sets the function that admits PATCH moves.
+func (fh *FilesHandler) SetMoveGate(gate func(*http.Request) bool) {
+	fh.moveGate = gate
 }
 
 // NewFilesHandler creates a new file browser handler rooted at rootDir.
@@ -95,6 +105,7 @@ func (fh *FilesHandler) emitChange(r *http.Request, event FileChangeEvent) {
 	event.Name = strings.TrimSpace(event.Name)
 	event.Operation = strings.TrimSpace(event.Operation)
 	event.EntryType = strings.TrimSpace(event.EntryType)
+	event.FromPath = strings.Trim(event.FromPath, "/")
 	fh.observer(r, event)
 }
 
@@ -169,6 +180,12 @@ func (fh *FilesHandler) HandleFileByPath(w http.ResponseWriter, r *http.Request)
 		fh.handleUpdateFile(w, r, absPath)
 	case http.MethodDelete:
 		fh.handleDelete(w, r, absPath)
+	case http.MethodPatch:
+		if fh.moveGate == nil || !fh.moveGate(r) {
+			writeFileError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		fh.handleMove(w, r, absPath)
 	default:
 		writeFileError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
@@ -448,12 +465,78 @@ func (fh *FilesHandler) handleDelete(w http.ResponseWriter, r *http.Request, abs
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// fileMoveRequest is the body of PATCH /api/files/{path}.
+type fileMoveRequest struct {
+	MoveTo string `json:"move_to"`
+}
+
+// handleMove renames or moves one regular file to move_to (a path under the
+// root whose parent exists and which does not exist). Directories are not
+// moved in this slice.
+func (fh *FilesHandler) handleMove(w http.ResponseWriter, r *http.Request, absPath string) {
+	var req fileMoveRequest
+	if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&req); err != nil || strings.TrimSpace(req.MoveTo) == "" {
+		writeFileError(w, http.StatusBadRequest, "move_to is required")
+		return
+	}
+	destPath, err := fh.resolvePath(req.MoveTo)
+	if err != nil || destPath == fh.rootDir || absPath == fh.rootDir {
+		writeFileError(w, http.StatusForbidden, "access denied")
+		return
+	}
+	info, err := os.Lstat(absPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			writeFileError(w, http.StatusNotFound, "not found")
+			return
+		}
+		writeFileError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if !info.Mode().IsRegular() {
+		writeFileError(w, http.StatusConflict, "only a regular file can be moved")
+		return
+	}
+	if _, err := os.Lstat(destPath); err == nil {
+		writeFileError(w, http.StatusConflict, "destination exists")
+		return
+	} else if !os.IsNotExist(err) {
+		writeFileError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if parent, err := os.Stat(filepath.Dir(destPath)); err != nil || !parent.IsDir() {
+		writeFileError(w, http.StatusNotFound, "parent directory not found")
+		return
+	}
+	if err := os.Rename(absPath, destPath); err != nil {
+		writeFileError(w, http.StatusInternalServerError, "failed to move file")
+		return
+	}
+	relPath := fh.relativePath(destPath)
+	fh.emitChange(r, FileChangeEvent{
+		Operation:  "moved",
+		Path:       relPath,
+		ParentPath: filepath.ToSlash(filepath.Dir(relPath)),
+		Name:       filepath.Base(destPath),
+		EntryType:  "file",
+		Size:       info.Size(),
+		FromPath:   fh.relativePath(absPath),
+	})
+	writeFilesJSON(w, http.StatusOK, map[string]string{"status": "moved", "path": relPath})
+}
+
 // RegisterFileRoutes registers all file browser routes on the given server.
 func RegisterFileRoutes(s interface {
 	HandleFunc(string, http.HandlerFunc)
 }, fh *FilesHandler) {
 	s.HandleFunc("/api/files", fh.HandleListRoot)
 	s.HandleFunc("/api/files/", fh.HandleFileByPath)
+}
+
+func writeFilesJSON(w http.ResponseWriter, statusCode int, body any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	_ = json.NewEncoder(w).Encode(body)
 }
 
 // writeFileError writes a JSON error response with the given status code.

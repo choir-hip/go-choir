@@ -115,6 +115,12 @@ func DefaultRegistry() *Registry {
 		// An owner-requested source adoption of a published release (P8,
 		// docs/reports/p6-p8-release-adopt-2026-10-15.md).
 		{Kind: "choir.release_adoption", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "store.ReleaseAdoption"},
+		// The file object (I27; docs/design/file-object-2026-10-24.md): a file
+		// with a stable id and its plaintext digest, and the path view from a
+		// live path to that id. Written by the runtime for the Files API and
+		// the reconcile pass, behind the files.object computer setting.
+		{Kind: "choir.file", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "store.FileObject"},
+		{Kind: "choir.file_path", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "store.filePathView"},
 
 		// The stream_seq lease: the highest stream_seq the computer may hand
 		// out, an external-key singleton written ahead in blocks by the
