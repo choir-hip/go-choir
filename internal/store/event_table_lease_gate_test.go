@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -256,6 +257,22 @@ func TestReopenClosesTheGateUntilAFreshLeaseRowLandsOnTheTape(t *testing.T) {
 	if !s.StreamSeqLeaseStats().OnTape {
 		t.Fatalf("the gate is open but on_tape is false: %+v", s.StreamSeqLeaseStats())
 	}
+	wantDurableLeaseConsistent(t, s)
+}
+
+// wantDurableLeaseConsistent reads the lease row back from the store: the row
+// the next boot trusts or distrusts. A row its own reader rejects sends the
+// next boot to the exact seed (bunch 180, Devin, blocking).
+func wantDurableLeaseConsistent(t *testing.T, s *Store) leaseRow {
+	t.Helper()
+	row, found, err := s.readLease(context.Background())
+	if err != nil || !found {
+		t.Fatalf("readLease: found=%v err=%v", found, err)
+	}
+	if !row.consistent() {
+		t.Fatalf("the durable lease row is not consistent(): %+v (R-A %d, 3N/2 %d)", row, row.Reserved-row.Allocated, 3*row.Block/2)
+	}
+	return row
 }
 
 func TestARefillOntoTheTapeOpensTheEventTableGate(t *testing.T) {
@@ -303,5 +320,86 @@ func TestARefillOntoTheTapeOpensTheEventTableGate(t *testing.T) {
 	}
 	if n := tableCount(t, s, "choir_events", ""); n < 1 {
 		t.Fatalf("choir_events rows = %d after the gate opened, want at least 1", n)
+	}
+	wantDurableLeaseConsistent(t, s)
+}
+
+// A Reopen right after a seed has more than half its block left: the fresh
+// lease row re-affirms the block (it does not extend it), so the durable row
+// stays consistent() and the next boot trusts it.
+func TestReopenWritesAConsistentLeaseRowWithAFreshBlock(t *testing.T) {
+	shrinkLease(t, 64)
+	h := newTapeHarness(t)
+	s := h.store
+	if err := s.SetEventTableWrites(true); err != nil {
+		t.Fatal(err)
+	}
+	waitLeaseReady(t, s)
+	before := wantDurableLeaseConsistent(t, s)
+	if before.Reserved-before.Allocated <= before.Block/2 {
+		t.Fatalf("fixture: the block is not fresh: %+v", before)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Reopen(h.path); err != nil {
+		t.Fatal(err)
+	}
+	waitGateOpen(t, s, 30*time.Second)
+	after := wantDurableLeaseConsistent(t, s)
+	if after.Reserved != before.Reserved {
+		t.Fatalf("the Reopen kick extended the block: reserved %d -> %d, it must re-affirm", before.Reserved, after.Reserved)
+	}
+	if after.Allocated < before.Allocated {
+		t.Fatalf("the Reopen kick lowered allocated: %d -> %d", before.Allocated, after.Allocated)
+	}
+	if !s.StreamSeqLeaseStats().OnTape {
+		t.Fatalf("the gate is open but on_tape is false: %+v", s.StreamSeqLeaseStats())
+	}
+}
+
+// A kick that fails (or is skipped) on a quiet store retries on a timer: the
+// gate does not wait for N/2 appends.
+func TestReopenKickRetriesOnATimerOnAQuietStore(t *testing.T) {
+	shrinkLease(t, 64)
+	h := newTapeHarness(t)
+	s := h.store
+	if err := s.SetEventTableWrites(true); err != nil {
+		t.Fatal(err)
+	}
+	waitLeaseReady(t, s)
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	var failures atomic.Int32
+	s.leaseWriteHook = func(phase string, _ int64) error {
+		if phase == "refill" && failures.Add(1) <= 2 {
+			return errors.New("injected: the kick's lease row failed")
+		}
+		return nil
+	}
+	t.Cleanup(func() { s.leaseWriteHook = nil })
+	if err := s.Reopen(h.path); err != nil {
+		t.Fatal(err)
+	}
+	// No append follows: only the timer can reopen the gate.
+	waitGateOpen(t, s, 15*time.Second)
+	if got := failures.Load(); got < 3 {
+		t.Fatalf("the gate opened after %d lease write attempts, want the two failures retried", got)
+	}
+	if st := s.StreamSeqLeaseStats(); st.RefillFailed < 2 {
+		t.Fatalf("the failed kicks are not observable: %+v", st)
+	}
+	wantDurableLeaseConsistent(t, s)
+}
+
+func waitGateOpen(t *testing.T, s *Store, within time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(within)
+	for s.EventTableLeaseReady() != nil {
+		if time.Now().After(deadline) {
+			t.Fatalf("the gate never reopened: %v (lease %+v)", s.EventTableLeaseReady(), s.StreamSeqLeaseStats())
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }

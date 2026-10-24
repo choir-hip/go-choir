@@ -260,25 +260,71 @@ func TestOpenReadsTheReceiptThenWritesTheMarkerThenTheReceipt(t *testing.T) {
 	}
 }
 
-// The lease test seams are assigned by tests only.
-func TestLeaseTestSeamsAreTestOnly(t *testing.T) {
-	seams := map[string]bool{"leaseWriteHook": true, "leaseScanHook": true}
-	for name, file := range storeSourceFiles(t, func(string) bool { return true }) {
-		ast.Inspect(file, func(n ast.Node) bool {
-			switch node := n.(type) {
-			case *ast.AssignStmt:
-				for _, lhs := range node.Lhs {
-					if sel, ok := lhs.(*ast.SelectorExpr); ok && seams[sel.Sel.Name] {
-						t.Errorf("%s assigns %s outside a test", name, sel.Sel.Name)
-					}
-				}
-			case *ast.KeyValueExpr:
-				if key, ok := node.Key.(*ast.Ident); ok && seams[key.Name] {
-					t.Errorf("%s sets %s in a literal outside a test", name, key.Name)
+// leaseTestSeams are the package-level and field seams only tests may assign.
+var leaseTestSeams = map[string]bool{
+	"leaseWriteHook": true, "leaseScanHook": true,
+	"leaseResumeHook": true, "reopenBeforeAdoptHook": true,
+}
+
+// seamAssignments names every assignment to a seam in file: a selector on the
+// left (s.leaseWriteHook = ...), a bare identifier (a package-level var such
+// as leaseResumeHook = ...), or a literal key.
+func seamAssignments(file *ast.File, seams map[string]bool) []string {
+	var found []string
+	ast.Inspect(file, func(n ast.Node) bool {
+		switch node := n.(type) {
+		case *ast.AssignStmt:
+			for _, lhs := range node.Lhs {
+				if sel, ok := lhs.(*ast.SelectorExpr); ok && seams[sel.Sel.Name] {
+					found = append(found, sel.Sel.Name)
 				}
 			}
-			return true
-		})
+		case *ast.KeyValueExpr:
+			if key, ok := node.Key.(*ast.Ident); ok && seams[key.Name] {
+				found = append(found, key.Name+" (literal)")
+			}
+		}
+		return true
+	})
+	return found
+}
+
+// The lease test seams are assigned by tests only.
+func TestLeaseTestSeamsAreTestOnly(t *testing.T) {
+	for name, file := range storeSourceFiles(t, func(string) bool { return true }) {
+		for _, seam := range seamAssignments(file, leaseTestSeams) {
+			t.Errorf("%s assigns %s outside a test", name, seam)
+		}
+	}
+}
+
+// The guard itself catches a bare-identifier package-var seam, a field seam
+// and a literal key (bunch 180, Devin, low: the first version saw only
+// selectors and literal keys, so leaseResumeHook and reopenBeforeAdoptHook
+// slipped past).
+func TestLeaseTestSeamGuardSeesBareIdentifiers(t *testing.T) {
+	src := `package store
+func f(s *Store) {
+	leaseResumeHook = nil
+	reopenBeforeAdoptHook = func(string) {}
+	s.leaseWriteHook = nil
+	_ = Store{leaseScanHook: nil}
+	hook := leaseResumeHook
+	_ = hook
+}`
+	file, err := parser.ParseFile(token.NewFileSet(), "seam.go", src, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := seamAssignments(file, leaseTestSeams)
+	want := map[string]bool{"leaseResumeHook": true, "reopenBeforeAdoptHook": true, "leaseWriteHook": true, "leaseScanHook (literal)": true}
+	if len(got) != len(want) {
+		t.Fatalf("seamAssignments = %v, want exactly %v", got, want)
+	}
+	for _, g := range got {
+		if !want[g] {
+			t.Fatalf("seamAssignments = %v, want exactly %v", got, want)
+		}
 	}
 }
 
