@@ -77,6 +77,18 @@ func (r *chownRecorder) chownedTo(path string, uid int) bool {
 	return ok && got == uid
 }
 
+// withVMSlice gives mgr a fake cgroup2 root holding the VM slice systemd
+// would have created and a parent inside it: every jailed launch checks the
+// slice (confinementReasonVMSliceMissing).
+func withVMSlice(t *testing.T, mgr *Manager) {
+	t.Helper()
+	mgr.cgroupRoot = t.TempDir()
+	mgr.cfg.Jailer.CgroupParent = "system.slice/system-choirvms.slice/vms"
+	if err := os.MkdirAll(filepath.Join(mgr.cgroupRoot, "system.slice", "system-choirvms.slice"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // jailedManager returns a manager with the jailer enabled and the host
 // marked prepared; chown and file-owner lookups go through the recorder.
 func jailedManager(t *testing.T, stateDir string) (*Manager, *chownRecorder) {
@@ -95,6 +107,7 @@ func jailedManager(t *testing.T, stateDir string) (*Manager, *chownRecorder) {
 		NoFile:       DefaultJailerNoFile,
 	}
 	mgr := NewManager(cfg)
+	withVMSlice(t, mgr)
 	// The host floor fails a start whose rules do not install (SEC-03):
 	// tap networking runs against the fakes, never the host.
 	mgr.hostNet = newFakeHostNet(t, newFakeIPTables(t), newFakeIP(nil))
@@ -737,6 +750,7 @@ func enableJailer(t *testing.T, mgr *Manager) *chownRecorder {
 		UIDBase:  DefaultJailerUIDBase,
 		UIDCount: DefaultJailerUIDCount,
 	}
+	withVMSlice(t, mgr)
 	mgr.jailerHostErr = nil
 	rec := &chownRecorder{}
 	mgr.chownFn = rec.chown

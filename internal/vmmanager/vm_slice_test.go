@@ -275,3 +275,113 @@ func TestJailedVMInTheSliceCannotSwap(t *testing.T) {
 		t.Fatal("the slice's memory.swap.max 0 bounds the jailed leaf")
 	}
 }
+
+// Review (bunch 179, Devin and DeepSeek): an own cgroup that cannot be
+// determined (no "0::" line, or the cgroup root) skips the in-unit check.
+// Fail closed: vmctl cannot prove the parent lies outside its unit, so the
+// jailer is unavailable and launches go direct.
+func TestPrepareJailerCgroupsRefusesAnUnknownOwnCgroup(t *testing.T) {
+	for name, own := range map[string]string{
+		"empty":       "",
+		"slash":       "/",
+		"no_unified":  parseCgroupV2Path("1:name=systemd:/x\n"),
+		"cgroup_root": parseCgroupV2Path("0::/\n"),
+		"blank":       parseCgroupV2Path("  \n"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			mgr, root := sliceHost(t)
+			// The old layout, so only the unknown-unit refusal can stop it.
+			mgr.cfg.Jailer.CgroupParent = sliceUnit + "/vms"
+			before := treeSnapshot(t, root)
+			err := mgr.prepareJailerCgroups(own)
+			if err == nil || !strings.Contains(err.Error(), "vmctl-restart-fails-while-a-jailed-vm-runs") {
+				t.Fatalf("prepareJailerCgroups(own=%q) = %v, want a refusal naming the record", own, err)
+			}
+			assertTreeUnchanged(t, "cgroup root", before, treeSnapshot(t, root))
+			// Even a parent in the slice is refused: the unit is unknown.
+			mgr.cfg.Jailer.CgroupParent = sliceParent
+			if err := mgr.prepareJailerCgroups(own); err == nil {
+				t.Fatalf("prepareJailerCgroups(own=%q) admitted a parent with the unit unknown", own)
+			}
+			assertTreeUnchanged(t, "cgroup root", before, treeSnapshot(t, root))
+		})
+	}
+}
+
+// Review (Devin 2): the current leaf path gets the same clean-relative guard
+// as the receipt path before any Join or Remove, even with the jailer off.
+func TestRemoveCgroupLeafIgnoresAParentThatLeavesTheRoot(t *testing.T) {
+	for _, parent := range []string{"../outside", "a/../../outside", "..", "../../outside/vms"} {
+		t.Run(parent, func(t *testing.T) {
+			mgr, root := sliceHost(t)
+			mgr.cfg.Jailer.CgroupParent = parent
+			outside := filepath.Join(filepath.Dir(root), "outside")
+			victims := []string{filepath.Join(outside, "vm-a"), filepath.Join(outside, "vms", "vm-a"), filepath.Join(filepath.Dir(root), "vm-a")}
+			for _, v := range victims {
+				if err := os.MkdirAll(v, 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if rel := mgr.cgroupLeafRel("vm-a"); rel != "" {
+				t.Fatalf("cgroupLeafRel with parent %q = %q, want no leaf", parent, rel)
+			}
+			mgr.removeCgroupLeaf("vm-a")
+			for _, v := range victims {
+				if _, err := os.Stat(v); err != nil {
+					t.Fatalf("parent %q removed %s: %v", parent, v, err)
+				}
+			}
+		})
+	}
+	// A clean parent, with slashes around it, still names its leaf.
+	mgr, _ := sliceHost(t)
+	mgr.cfg.Jailer.CgroupParent = "/" + sliceParent + "/"
+	if rel := mgr.cgroupLeafRel("vm-a"); rel != sliceParent+"/vm-a" {
+		t.Fatalf("cgroupLeafRel = %q", rel)
+	}
+}
+
+// Review (DeepSeek 4): the proved staging case. A vmctl restart with jailed
+// VMs alive finds vms/ holding live leaves with processes; Start must
+// succeed and touch nothing. Only a process directly in the slice's or vms/'s
+// own cgroup.procs refuses (a leaf's process does not block the jailer's
+// subtree_control write, which is on the ancestors only).
+func TestPrepareJailerCgroupsAdmitsAPopulatedLeaf(t *testing.T) {
+	mgr, root := sliceHost(t)
+	writeCgroupFile(t, root, sliceParent+"/cgroup.procs", "")
+	writeCgroupFile(t, root, sliceParent+"/cgroup.subtree_control", "cpu pids\n")
+	writeCgroupFile(t, root, sliceParent+"/vm-a/cgroup.procs", "4242\n")
+	writeCgroupFile(t, root, sliceParent+"/vm-b/cgroup.procs", "4343\n4344\n")
+	before := treeSnapshot(t, root)
+	if err := mgr.prepareJailerCgroups(sliceOwn); err != nil {
+		t.Fatalf("a vmctl restart with live jailed leaves must start clean: %v", err)
+	}
+	assertTreeUnchanged(t, "cgroup root", before, treeSnapshot(t, root))
+}
+
+// Review (DeepSeek 2): systemd owns the slice's cgroup. After a manual
+// `systemctl stop system-choirvms.slice` the jailer's create_dir_all would
+// recreate it, so each jailed launch checks the slice and falls back direct
+// when it is gone.
+func TestDecideConfinementFallsBackDirectWhenTheVMSliceIsGone(t *testing.T) {
+	mgr, root := sliceHost(t)
+	cfg := VMConfig{VMID: "vm-a"}
+	if mode, reason := mgr.decideConfinement(cfg); mode != ConfinementJailer || reason != "" {
+		t.Fatalf("with the slice present = %s %q, want the jailer", mode, reason)
+	}
+	if err := os.RemoveAll(filepath.Join(root, sliceCgroup)); err != nil {
+		t.Fatal(err)
+	}
+	mode, reason := mgr.decideConfinement(cfg)
+	if mode != ConfinementDirect || !strings.HasPrefix(reason, confinementReasonVMSliceMissing) {
+		t.Fatalf("with the slice gone = %s %q, want direct %s", mode, reason, confinementReasonVMSliceMissing)
+	}
+	if _, err := os.Stat(filepath.Join(root, sliceCgroup)); !os.IsNotExist(err) {
+		t.Fatalf("the decision created the systemd-owned slice cgroup: %v", err)
+	}
+	// An invalid parent has no leaf and no slice to check: direct as well.
+	mgr.cfg.Jailer.CgroupParent = "../x"
+	if mode, _ := mgr.decideConfinement(cfg); mode != ConfinementDirect {
+		t.Fatalf("an invalid parent must not launch jailed, got %s", mode)
+	}
+}
