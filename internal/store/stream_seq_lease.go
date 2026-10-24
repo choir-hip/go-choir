@@ -191,9 +191,9 @@ type leaseAllocator struct {
 	// og row only, which replay does not reproduce). Written under eventMu;
 	// atomic so a reader that must not wait on the allocator (the event-table
 	// gate's status) reads it lock-free.
-	onTape atomic.Bool
-	seedNotBefore    time.Time
-	refillNotBefore  time.Time
+	onTape          atomic.Bool
+	seedNotBefore   time.Time
+	refillNotBefore time.Time
 	// ctx is the lifetime of the lease goroutines; Close cancels it and waits
 	// for workers to drain. closing refuses new work until Reopen (or a failed
 	// Close) resumes.
@@ -229,6 +229,9 @@ type StreamSeqLeaseStats struct {
 	// SeedUndecodableRows counts event rows the exact seed could not read a
 	// stream_seq from, skipped and logged (a desk-forged or corrupt row).
 	SeedUndecodableRows int64 `json:"seed_undecodable_rows"`
+	// OnTape: the last lease row this process wrote went through a bound
+	// projection tape. The event-table gate needs it with state ready.
+	OnTape bool `json:"on_tape"`
 }
 
 // StreamSeqLeaseStats reports the lease without waiting on the allocator: the
@@ -980,6 +983,10 @@ func (s *Store) drainLeaseWork(deadline time.Time) {
 	}
 }
 
+// leaseResumeHook is a test seam: it runs in resumeLeaseWork once the lease
+// may start work again. Always nil in production.
+var leaseResumeHook func(s *Store)
+
 // resumeLeaseWork lets the lease start work again.
 func (s *Store) resumeLeaseWork() {
 	s.lease.ctxMu.Lock()
@@ -987,6 +994,9 @@ func (s *Store) resumeLeaseWork() {
 	s.lease.closingCh = nil
 	s.lease.ctxMu.Unlock()
 	s.lease.closing.Store(false)
+	if hook := leaseResumeHook; hook != nil {
+		hook(s)
+	}
 }
 
 // refreshLeaseWorkspace re-reads the workspace after Reopen adopted another
