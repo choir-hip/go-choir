@@ -1447,3 +1447,11 @@ Append-only. One terse entry per orchestrator pass.
   - Cause: .github/scripts/node-b-sync-service-pointers-test pins vmctl's exact after/wants text, and D29 added system-choirvms.slice.
   - Why the lane's checks missed it: that job runs only on main pushes. PR CI and the mirror don't run it, so a nix unit edit needs the .github/scripts tests run by hand.
   - Fix (tier 0, test only): the pins name the slice. All .github/scripts tests pass locally; node-b-ci-gate-test fails on macOS (no flock) on main as well.
+- 01:34. D29 live (0d943bee0; CI 40049569777 passed). vmctl restarted at 01:32:38 with NRestarts 0 and reattached the paper (pid 780706). system-choirvms.slice is active with 0 processes.
+- 01:3x. Event table deploy 2 r3, round 3 (f1b76e0fa) answers bunch 180's blocking finding. The Reopen kick re-affirms the lease ({R: max(reserved, max), A: max}), so the row stays consistent(); it retries on a timer; the seam guard catches bare identifiers. One-seat re-review (bunch 181) and the mirror are running.
+- 01:3x. D30 lands, alone: the jailer on again, for the two test computers only. Jailed VMs now live in system-choirvms.slice/vms (D29).
+  - Tier 0: config only. The selector is unchanged, and the evaluated environment is on, with the two ids and the slice parent.
+  - Preflight: no vms/ under go-choir-vmctl.service, the unit root's subtree_control empty, the slice empty.
+  - Proof: launch both test computers jailed, with leaves under the slice; RES-05 script step 5 (one shared store image).
+  - Then restart vmctl with both jailed VMs alive: a clean start and both reattached. This is the check that wedged at D27.
+  - Recovery if it wedges: stop the two jailed test VMs, reset-failed, start; then the jailer off.

@@ -1554,9 +1554,10 @@ in
         # refused and the computer cold boots).
         # SEC-04 steps 1 to 3 (2026-10-23): two fresh test computers,
         # fp8-jailer-1023 and fp8-jailer-1023b (RES-05: one shared store image).
-        # Off again (2026-10-24): a vmctl restart fails while a jailed VM runs
+        # On again (2026-10-24) for the two test computers only, now that
+        # jailed VMs live in system-choirvms.slice, outside this unit
         # (docs/problems/vmctl-restart-fails-while-a-jailed-vm-runs-2026-10-24.md).
-        "VMCTL_JAILER=off"
+        "VMCTL_JAILER=on"
         "VMCTL_JAILER_ONLY=computer-476cd7944083ba08d6234bae0c341724,computer-5144344168c7d75abbae7ac453176def"
         "VM_JAILER_BIN=${pkgs.firecracker}/bin/jailer"
         # The jailer copies its exec file into the jail, which holds no
