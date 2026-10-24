@@ -1358,10 +1358,10 @@ nodes:
     title: Launch first pass — every agent-doable launch batch, built concurrently, landed in order, reviewed with the owner
     path: docs/definitions/choir-launch-first-pass-metamission-2026-10-21.md
     ledger: ''
-    status: working  # drafted 2026-10-21; panel review on its first commit
+    status: superseded  # 2026-10-24, by choir-selfdev-readiness-metamission-2026-10-24
     kind: spine
-    entrypoint: true
-    execution_mode: mission_orchestrator
+    entrypoint: false
+    execution_mode: superseded_non_executable
     depends_on: []
     enables: []
     note: >-
@@ -1369,3 +1369,17 @@ nodes:
       much concurrency as possible", "work autonomously for the first
       pass". Runs docs/launch-checklist-2026-10-21.md's batch plan in five
       parallel lanes; S6 (choir-lp-s6-commit-gate-2026-10-20) is its FP4.
+  - id: choir-selfdev-readiness-metamission-2026-10-24
+    title: Self-development readiness — the platform upgrades the self-development loop needs, then the first real loop (the Reader app) end to end
+    path: docs/definitions/choir-selfdev-readiness-metamission-2026-10-24.md
+    ledger: ''
+    status: working
+    kind: spine
+    entrypoint: true
+    execution_mode: mission_orchestrator
+    depends_on: [choir-launch-first-pass-metamission-2026-10-21]
+    enables: []
+    note: >-
+      Owner 2026-10-24: "do all of the platform upgrades that relate to
+      self-development now"; "supersede our current one and start the new
+      one". Carries the first pass's open items as station SR6.

@@ -8,22 +8,28 @@ Sequencing lives here and in
 throughline (`skills/throughline/SKILL.md`). Direction:
 [`reports/choir-state-and-vision-2026-10-14.md`](reports/choir-state-and-vision-2026-10-14.md).
 
-## Active metamission (2026-10-21): the launch first pass
+## Active metamission (2026-10-24): self-development readiness
 
-**Goal:** [`definitions/choir-launch-first-pass-metamission-2026-10-21.md`](definitions/choir-launch-first-pass-metamission-2026-10-21.md)
-(`readiness: executable` on the owner's word; review round 1 adjudicated in
-the file, round 2 pending). Owner, 2026-10-21 ([owner notes §38](reports/owner-notes-2026-10-14.md)):
-"set a really aggressive meta mission ... security is paramount", "work
-autonomously for the first pass", and "Just let's stick with the security
-and density checklist", self-development items included; no iPhone or
-voice work. Six lanes run at once, each a worker in its own worktree: the
-store (FP1), the desk boundary (FP2), the host and vmctl (FP3),
-self-development architecture (FP4: ARCH-10, ARCH-04, ARCH-03), the
-network and the Obscura deletion (FP6), and gateway identity (FP7). The
-orchestrator alone lands, one red batch per deploy, the vmctl recovery
-fixes first. The file's coverage table assigns every checklist item. The
-second pass is planned with the owner after review. S6 below waits: it is
-not on the checklist.
+**Goal:** [`definitions/choir-selfdev-readiness-metamission-2026-10-24.md`](definitions/choir-selfdev-readiness-metamission-2026-10-24.md)
+(`readiness: executable` on the owner's word; file review pending). Owner,
+2026-10-24: "self-development is our priority"; "do all of the platform
+upgrades that relate to self-development now"; "supersede our current one
+and start the new one". Acceptance: the owner's loop run end to end on the
+Reader app (a coding agent asks a test computer through the choir CLI,
+engineering builds on current main, the owner approves, the change is
+promoted to main and reaches every computer as the base). Stations: SR1 the
+source follows the base (U1, U1b); SR2 app packages
+([replan](design/app-packages-replan-2026-10-24.md)); SR3 the loop's gaps;
+SR4 the one-home migration (doctrine I27); SR5 the Reader loop; SR6 the
+first pass's carried items. Then the tent poles: app agents, an agentic
+red-teaming loop, distribution. Cadence: switched-off slices share a deploy
+wave; each is turned on for one test computer at a time.
+
+## Superseded (2026-10-24): the launch first pass
+
+[`definitions/choir-launch-first-pass-metamission-2026-10-21.md`](definitions/choir-launch-first-pass-metamission-2026-10-21.md)
+landed and proved deploys through D44 and closed as superseded (terminal
+receipt in the file). Its open items continue as station SR6 above.
 
 ## Active station (2026-10-20): LP S6, the commit gate
 

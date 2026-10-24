@@ -281,7 +281,7 @@ boundaries:
   protected_surfaces: [vmctl, guest desk confinement, gateway and provider calls, auth and session, the object store schema, deployment routing]
 
 now:
-  status: working
+  status: superseded  # 2026-10-24 20:1x, by docs/definitions/choir-selfdev-readiness-metamission-2026-10-24.md (owner: "We should supersede our current one and start the new one"); terminal receipt fp-terminal-superseded below. The rest of this card is the last working state, kept as written.
   slice: >-
     Overnight platform groundwork (owner 2026-10-23 05:0x: "ok, restarted
     and ready to go overnight!"): land the live-red queue one deploy at a
@@ -373,6 +373,31 @@ now:
     from their pushed heads, then tier 2 review each.
 
 receipts:
+  - id: fp-terminal-superseded
+    boundary: terminal
+    identity: main@e2d8fca61 (the last first-pass landing); staging c72cc2e07 (D44)
+    proof_refs:
+      - docs/definitions/choir-launch-first-pass-metamission-2026-10-21.ledger.md (every deploy's proof, D1 to D44)
+      - docs/reports/overnight-first-pass-2026-10-24.md
+    rollback_ref: per deploy, in the ledger
+    disposition: >-
+      superseded, not complete. Landed and proved through D44, among them:
+      the jailer for test, primary and premium_always_on computers (D42,
+      D44), memory protection for the guests (D43), the cast bound and its
+      truncation marker (D40), the default key covering owner acts (D41),
+      the media tables as event projections (D39), plus the store,
+      security and boot-stall deploys before them. Carried to the
+      successor's station SR6 by name: R7 S2 to S6, D37's decisive proof,
+      jailer wave 2b, D43 readings, the legacy tape delete, the idle sweep
+      after an apply restart, the status page and report. Today's design
+      landings (I27 and H038, the ICRL design, the update design, the app
+      packages replan, the data-homes inventory) feed the successor.
+    landing:
+      source_commit: c72cc2e0741db92fbfbc7474bc7075ea7e814c78 (last behavior change)
+      ci_ref: GitHub Actions run 40121748442, success
+      deploy_ref: the same run's Deploy to Staging (Node B), success
+      environment_identity: staging /health deployed_commit c72cc2e07
+      deployed_acceptance: D44's (ledger 18:4x)
   - id: capture-label-key-read
     boundary: implement
     identity: c893a956a
