@@ -1,8 +1,8 @@
 import { fetchWithRenewal, AuthRequiredError } from './auth.js';
 import { currentDeviceId } from './live-events.js';
+import { PACKAGE_MEDIA_ROUTES } from './apps/registry';
 
 export const MEDIA_FILE_ROUTES = [
-  { appId: 'image', mediaType: 'image/png', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'bmp', 'svg'] },
   { appId: 'audio', mediaType: 'audio/mpeg', extensions: ['mp3', 'm4a', 'aac', 'ogg', 'oga', 'wav', 'flac', 'opus'] },
   { appId: 'video', mediaType: 'video/mp4', extensions: ['mp4', 'm4v', 'webm', 'mov', 'avi', 'mkv'] },
   { appId: 'pdf', mediaType: 'application/pdf', extensions: ['pdf'] },
@@ -26,7 +26,7 @@ export function apiFileURL(path, inline = true) {
 export function mediaRouteForFileName(name) {
   const ext = String(name || '').toLowerCase().split('.').pop();
   if (!ext || ext === String(name || '').toLowerCase()) return null;
-  const route = MEDIA_FILE_ROUTES.find((candidate) => candidate.extensions.includes(ext));
+  const route = [...PACKAGE_MEDIA_ROUTES, ...MEDIA_FILE_ROUTES].find((candidate) => candidate.extensions.includes(ext));
   if (!route) return null;
   return {
     appId: route.appId,

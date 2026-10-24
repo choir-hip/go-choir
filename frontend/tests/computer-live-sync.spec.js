@@ -13,7 +13,7 @@ const syncedStateFiles = [
   'src/lib/Desktop.svelte',
   'src/lib/EpubApp.svelte',
   'src/lib/FileBrowser.svelte',
-  'src/lib/ImageApp.svelte',
+  'src/packages/image/App.svelte',
   'src/lib/PdfApp.svelte',
   'src/lib/PodcastApp.svelte',
   'src/lib/SettingsApp.svelte',

@@ -9,8 +9,10 @@
     recentMediaAppContext,
     rememberRecentMedia,
     resolveMediaSource,
-  } from './media-utils.js';
-  import { addLiveEventListener, liveEventKind, liveEventPayload } from './live-events.js';
+    addLiveEventListener,
+    liveEventKind,
+    liveEventPayload,
+  } from '../../lib/app-sdk';
 
   export let appContext = {};
   export let windowId = '';

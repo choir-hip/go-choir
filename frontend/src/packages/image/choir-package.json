@@ -1,0 +1,40 @@
+{
+  "schema": "choir.app-package/v1",
+  "name": "image",
+  "version": "1.0.0",
+  "origin": "first_party",
+  "display": {
+    "title": "Image",
+    "icon": "🖼️",
+    "description": "Image viewer"
+  },
+  "app": {
+    "entry": "App.svelte",
+    "abi": "choir.app-frontend/svelte-inline/v1",
+    "aliases": [],
+    "launcher": { "menu": true, "desktopIcon": false, "order": 80 },
+    "window": {
+      "singleton": false,
+      "heavy": true,
+      "desktop": { "width": 900, "height": 680 },
+      "compact": { "minWidth": 280, "minHeight": 420 }
+    },
+    "auth": { "preview": "public-preview" },
+    "theme": {
+      "surface": "media",
+      "shellDataAttr": "data-image-window",
+      "contentClass": "image-content"
+    }
+  },
+  "opens": [
+    {
+      "media_type": "image/png",
+      "extensions": ["png", "jpg", "jpeg", "gif", "webp", "avif", "bmp", "svg"]
+    }
+  ],
+  "kinds": [],
+  "uses_kinds": [],
+  "desk": null,
+  "backend": null,
+  "grants": []
+}
