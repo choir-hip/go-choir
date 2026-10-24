@@ -141,8 +141,7 @@ func TestCommitNotOnTheRemoteIsPermanent(t *testing.T) {
 }
 
 func TestUnreachableRemoteIsTransientAndChangesNothing(t *testing.T) {
-	_, c := remoteWithHistory(t)
-	remote2, _ := remoteWithHistory(t)
+	remote2, c := remoteWithHistory(t)
 	guest := guestAt(t, remote2, c[0])
 	// N1: the remote is gone (a path that is not a repository).
 	got := EnsureBaseObjects(context.Background(), guest, c[3], opts(t.TempDir()))
