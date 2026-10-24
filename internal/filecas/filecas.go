@@ -23,6 +23,7 @@ const (
 	manifestVersion = 1
 	chunkKeyInfo    = "choir/filecas/v1/chunk"
 	chunkNonceInfo  = "choir/filecas/v1/chunk-nonce"
+	fileDigestInfo  = "choir/filecas/v1/file-digest"
 )
 
 // FileEntry describes one file in an encrypted file manifest. Chunks address
@@ -161,6 +162,23 @@ func SealChunk(dek []byte, computerID string, chunk []byte) ([]byte, string, err
 		return nil, "", err
 	}
 	return sealChunkWithNonce(dek, computerID, nonce, chunk)
+}
+
+// FileDigestKey derives the HMAC-SHA-256 key for the file object's digest from
+// the DEK and computer ID, separate from the chunk encryption key and the chunk
+// nonce key. The digest of a file's bytes under this key identifies the bytes
+// to the computer (equal bytes, equal digest) without letting a holder of the
+// tape confirm a guessed plaintext.
+func FileDigestKey(dek []byte, computerID string) ([]byte, error) {
+	if len(dek) != chacha20poly1305.KeySize || strings.TrimSpace(computerID) == "" {
+		return nil, fmt.Errorf("filecas: invalid key or computer ID")
+	}
+	key := make([]byte, sha256.Size)
+	reader := hkdf.New(sha256.New, dek, []byte(computerID), []byte(fileDigestInfo))
+	if _, err := io.ReadFull(reader, key); err != nil {
+		return nil, fmt.Errorf("filecas: derive file digest key: %w", err)
+	}
+	return key, nil
 }
 
 // chunkNonce derives the synthetic nonce for chunk.

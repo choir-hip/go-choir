@@ -2,6 +2,8 @@ package filecas
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
 	"testing"
 	"time"
 )
@@ -126,5 +128,39 @@ func TestOpenChunkAcceptsRandomNonceChunks(t *testing.T) {
 	plain, err := OpenChunk(key, "computer-1", digest, sealed)
 	if err != nil || string(plain) != "legacy chunk" {
 		t.Fatalf("legacy open = %q, %v", plain, err)
+	}
+}
+
+// The file object's keyed digest key (docs/design/file-object-2026-10-24.md
+// section 3): derived from the DEK and computer, separate from every chunk key
+// and nonce key, so the platform host that holds the tape cannot test a
+// plaintext against a recorded digest.
+func TestFileDigestKeyIsPerComputerAndSeparateFromChunkKeys(t *testing.T) {
+	dek := bytes.Repeat([]byte{7}, 32)
+	a, err := FileDigestKey(dek, "computer-a")
+	if err != nil || len(a) != 32 {
+		t.Fatalf("key = %x, %v", a, err)
+	}
+	again, _ := FileDigestKey(dek, "computer-a")
+	other, _ := FileDigestKey(dek, "computer-b")
+	otherDEK, _ := FileDigestKey(bytes.Repeat([]byte{8}, 32), "computer-a")
+	if !bytes.Equal(a, again) || bytes.Equal(a, other) || bytes.Equal(a, otherDEK) {
+		t.Fatal("the digest key must be deterministic per (DEK, computer) and differ across either")
+	}
+	// Not the chunk nonce key: HMAC(nonce key, chunk) is the sealed-chunk nonce.
+	nonce, err := chunkNonce(dek, "computer-a", []byte("x"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mac := hmac.New(sha256.New, a)
+	mac.Write([]byte("x"))
+	if bytes.Equal(mac.Sum(nil)[:len(nonce)], nonce) {
+		t.Fatal("the digest key equals the chunk nonce key")
+	}
+	if _, err := FileDigestKey(dek[:5], "computer-a"); err == nil {
+		t.Fatal("a short DEK was accepted")
+	}
+	if _, err := FileDigestKey(dek, " "); err == nil {
+		t.Fatal("an empty computer ID was accepted")
 	}
 }

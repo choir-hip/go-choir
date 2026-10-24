@@ -35,6 +35,10 @@ func init() {
 	KnownComputerSettings[SettingFilesObject] = false
 }
 
+// ErrFileObjectsOff is returned by ApplyFileChanges when the files.object
+// setting is not on for the computer.
+var ErrFileObjectsOff = errors.New("file object: the files.object setting is off")
+
 // File states. A deleted file keeps its object, so a reference to its id
 // resolves to a file that was deleted, never to nothing.
 const (
@@ -49,7 +53,7 @@ type FileObject struct {
 	ComputerID string    `json:"computer_id"`
 	Path       string    `json:"path"`
 	Name       string    `json:"name"`
-	SHA256     string    `json:"sha256"`
+	Digest     string    `json:"digest"`
 	Size       int64     `json:"size"`
 	Mode       uint32    `json:"mode"`
 	MediaType  string    `json:"media_type,omitempty"`
@@ -71,7 +75,7 @@ type filePathView struct {
 // FileRecord is what the recorder read from disk for one path.
 type FileRecord struct {
 	Path      string
-	SHA256    string
+	Digest    string
 	Size      int64
 	Mode      uint32
 	ModTime   time.Time
@@ -107,9 +111,11 @@ type FileApplyResult struct {
 }
 
 // NormalizeFilePath cleans a files-root-relative path. It refuses the root
-// itself and any path that would leave the root.
+// itself and any path that would leave the root. It changes nothing the
+// filesystem keeps literal: a backslash or a space is part of a file name
+// (rewriting either made two files share one object path, review bunch 208),
+// so the only edits are the slash-separated ones Files API paths already get.
 func NormalizeFilePath(raw string) (string, error) {
-	raw = strings.TrimSpace(strings.ReplaceAll(raw, "\\", "/"))
 	if raw == "" {
 		return "", fmt.Errorf("file object: path is required")
 	}
@@ -240,7 +246,7 @@ func (b *fileBatch) putFile(f FileObject) error {
 		"file_id":     f.FileID,
 		"computer_id": f.ComputerID,
 		"path":        f.Path,
-		"sha256":      f.SHA256,
+		"digest":      f.Digest,
 		"state":       f.State,
 		"updated_at":  f.UpdatedAt.UTC().Format(time.RFC3339Nano),
 	}, f.CreatedAt, f.UpdatedAt)
@@ -308,7 +314,7 @@ func (b *fileBatch) markDeleted(viewID, fileID, by string) error {
 func applyRecord(f *FileObject, rec FileRecord, p string) {
 	f.Path = p
 	f.Name = path.Base(p)
-	f.SHA256 = strings.TrimSpace(rec.SHA256)
+	f.Digest = strings.TrimSpace(rec.Digest)
 	f.Size = rec.Size
 	f.Mode = rec.Mode
 	f.MediaType = strings.TrimSpace(rec.MediaType)
@@ -360,6 +366,16 @@ func (s *Store) ApplyFileChanges(ctx context.Context, ownerID, computerID string
 	}
 	if s.ogStore == nil {
 		return FileApplyResult{}, fmt.Errorf("store: object graph not initialized")
+	}
+	// The switch is checked here, at the only writer, not only by the callers:
+	// a caller that forgets it, or a switch turned off during a long pass,
+	// still cannot write.
+	setting, err := s.GetComputerSetting(ctx, ownerID, computerID, SettingFilesObject)
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return FileApplyResult{}, fmt.Errorf("file object: read %s: %w", SettingFilesObject, err)
+	}
+	if err != nil || !setting.Value {
+		return FileApplyResult{}, ErrFileObjectsOff
 	}
 	if now.IsZero() {
 		now = time.Now()
@@ -444,8 +460,8 @@ func (s *Store) ApplyFileChanges(ctx context.Context, ownerID, computerID string
 				}
 			}
 			rec := change.Record
-			if strings.TrimSpace(rec.SHA256) == "" {
-				rec = FileRecord{SHA256: f.SHA256, Size: f.Size, Mode: f.Mode, ModTime: f.ModTime, MediaType: f.MediaType}
+			if strings.TrimSpace(rec.Digest) == "" {
+				rec = FileRecord{Digest: f.Digest, Size: f.Size, Mode: f.Mode, ModTime: f.ModTime, MediaType: f.MediaType}
 			}
 			applyRecord(&f, rec, p)
 			f.UpdatedAt = b.now
@@ -480,8 +496,10 @@ func (s *Store) ApplyFileChanges(ctx context.Context, ownerID, computerID string
 	return res, nil
 }
 
-// GetFileObject returns a file by id, deleted files included, or ErrNotFound.
-func (s *Store) GetFileObject(ctx context.Context, ownerID, fileID string) (FileObject, error) {
+// GetFileObject returns a file of this computer by id, deleted files
+// included, or ErrNotFound. Another computer's file id is not found: the id is
+// random, but the read path is scoped by computer as the path and list reads are.
+func (s *Store) GetFileObject(ctx context.Context, ownerID, computerID, fileID string) (FileObject, error) {
 	if s.ogStore == nil {
 		return FileObject{}, fmt.Errorf("store: object graph not initialized")
 	}
@@ -502,6 +520,9 @@ func (s *Store) GetFileObject(ctx context.Context, ownerID, fileID string) (File
 	var f FileObject
 	if err := ogDecode(obj, &f); err != nil {
 		return FileObject{}, err
+	}
+	if f.ComputerID != strings.TrimSpace(computerID) {
+		return FileObject{}, ErrNotFound
 	}
 	return f, nil
 }
@@ -524,7 +545,7 @@ func (s *Store) GetFileObjectByPath(ctx context.Context, ownerID, computerID, ra
 	if fileID == "" {
 		return FileObject{}, ErrNotFound
 	}
-	f, err := s.GetFileObject(ctx, ownerID, fileID)
+	f, err := s.GetFileObject(ctx, ownerID, computerID, fileID)
 	if err != nil {
 		return FileObject{}, err
 	}

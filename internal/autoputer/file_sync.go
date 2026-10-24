@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
@@ -73,6 +74,8 @@ type fileSync struct {
 	// It mirrors the durable marker beside the files root, so a restart
 	// before hydration keeps the protection.
 	freshVolume bool
+	// hydrationSettled: a HydrateIfNeeded call has returned without error.
+	hydrationSettled atomic.Bool
 }
 
 // freshVolumeMarkerPath is beside the files root, never inside it, so sync
@@ -168,6 +171,19 @@ func (s *fileSync) SyncOnce(ctx context.Context) (string, error) {
 // no regular files, or when the volume is fresh (the image seed is not the
 // owner's tree). Otherwise a local file always wins over a remote snapshot.
 func (s *fileSync) HydrateIfNeeded(ctx context.Context) (int, error) {
+	n, err := s.hydrateIfNeeded(ctx)
+	if s != nil && err == nil {
+		s.hydrationSettled.Store(true)
+	}
+	return n, err
+}
+
+// HydrationSettled says a HydrateIfNeeded call has completed without error:
+// the files tree is the owner's, or there was nothing to restore. A tree that
+// is merely empty because hydration failed or is pending is not settled.
+func (s *fileSync) HydrationSettled() bool { return s != nil && s.hydrationSettled.Load() }
+
+func (s *fileSync) hydrateIfNeeded(ctx context.Context) (int, error) {
 	if s == nil || s.cipher == nil || strings.TrimSpace(s.filesRoot) == "" || strings.TrimSpace(s.platformURL) == "" || strings.TrimSpace(s.computerID) == "" {
 		return 0, fmt.Errorf("file sync: incomplete configuration")
 	}
