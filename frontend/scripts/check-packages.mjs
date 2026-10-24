@@ -4,7 +4,7 @@
 //
 // Run by `npm run build`. `--root <frontend dir>` points it at a fixture tree
 // (tests/app-packages.spec.js does this to watch each bad case be refused).
-import { existsSync, lstatSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -24,7 +24,15 @@ const RESERVED_NAMES = new Set([
   'desk', 'desktop', 'shell', 'prompt', 'system', 'owner', 'management', 'engineering', 'research',
 ]);
 const MIN_STATIC_IDS = 10;
-const SOURCE_EXT = new Set(['.svelte', '.js', '.mjs', '.ts']);
+// First-party packages that must exist: deleting one (or filtering it out of a
+// build) fails the build instead of shipping a shell without the app.
+const REQUIRED_PACKAGES = ['image'];
+// Every file in a package is scanned for imports except known binary assets,
+// so a new extension (.tsx, .jsx, .mts, .cts, ...) cannot hide an import.
+const BINARY_EXT = new Set([
+  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif', '.bmp', '.ico',
+  '.woff', '.woff2', '.ttf', '.otf', '.mp3', '.mp4', '.webm', '.wav', '.ogg', '.pdf', '.json',
+]);
 
 const errors = [];
 const fail = (where, message) => errors.push(`${where}: ${message}`);
@@ -91,6 +99,18 @@ function importSpecifiers(source) {
   return specs;
 }
 
+// import.meta.glob/resolve reach files by pattern and bypass the specifier
+// scan; a dynamic import whose argument is not a quoted literal cannot be
+// resolved at check time. Both are refused outright.
+function checkDynamicReach(source, where) {
+  if (/\bimport\s*\.\s*meta\s*\.\s*(glob|globEager|resolve)\b/.test(source)) {
+    fail(where, 'import.meta.glob/resolve is not allowed in a package');
+  }
+  const calls = (source.match(/\bimport\s*\(/g) || []).length;
+  const literal = (source.match(/\bimport\s*\(\s*(?:'[^'\n]*'|"[^"\n]*")\s*\)/g) || []).length;
+  if (calls !== literal) fail(where, 'import() must take a quoted string literal');
+}
+
 function listFiles(dir, out = []) {
   for (const name of readdirSync(dir)) {
     const full = join(dir, name);
@@ -108,9 +128,11 @@ const stripExt = (p) => p.replace(/\.(ts|js|mjs)$/, '');
 function checkImports(pkgDir, declaredDeps) {
   for (const file of listFiles(pkgDir)) {
     const dot = file.lastIndexOf('.');
-    if (dot < 0 || !SOURCE_EXT.has(file.slice(dot))) continue;
+    if (dot >= 0 && BINARY_EXT.has(file.slice(dot).toLowerCase())) continue;
     const where = relative(frontendRoot, file);
-    for (const spec of importSpecifiers(readFileSync(file, 'utf8'))) {
+    const source = readFileSync(file, 'utf8');
+    checkDynamicReach(source, where);
+    for (const spec of importSpecifiers(source)) {
       if (spec.startsWith('.')) {
         const target = resolve(dirname(file), spec);
         if (inside(pkgDir, target)) continue;
@@ -205,9 +227,23 @@ function main() {
     fail('package.json', `unreadable: ${e.message}`);
   }
 
-  const dirs = existsSync(packagesDir)
-    ? readdirSync(packagesDir).filter((n) => lstatSync(join(packagesDir, n)).isDirectory()).sort()
-    : [];
+  // Every entry under src/packages must be a real directory that stays under it:
+  // a symlink or stray file would be skipped here while Vite's glob can still match it.
+  const dirs = [];
+  if (existsSync(packagesDir)) {
+    const realPackages = realpathSync(packagesDir);
+    for (const n of readdirSync(packagesDir).sort()) {
+      const full = join(packagesDir, n);
+      if (!lstatSync(full).isDirectory() || !inside(realPackages, realpathSync(full))) {
+        fail(`src/packages/${n}`, 'must be a real directory inside src/packages (no symlinks or stray files)');
+        continue;
+      }
+      dirs.push(n);
+    }
+  }
+  for (const required of REQUIRED_PACKAGES) {
+    if (!dirs.includes(required)) fail('src/packages', `required package "${required}" is missing`);
+  }
 
   // A source filter that drops choir-package.json (the Nix build once could) must fail loudly.
   if (existsSync(packagesDir) && dirs.length === 0) {
