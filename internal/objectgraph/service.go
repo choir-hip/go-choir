@@ -95,7 +95,7 @@ func (s *Service) CreateObjectIfAbsent(ctx context.Context, req CreateObjectRequ
 }
 
 func (s *Service) newObject(req CreateObjectRequest) (Object, Store, error) {
-	reg, err := s.registry.LookupKind(req.Kind)
+	reg, err := s.lookupKind(req.Kind)
 	if err != nil {
 		return Object{}, nil, err
 	}
@@ -142,7 +142,7 @@ func (s *Service) GetObject(ctx context.Context, id string) (Object, error) {
 	if err != nil {
 		return Object{}, err
 	}
-	reg, err := s.registry.LookupKind(kind)
+	reg, err := s.lookupKind(kind)
 	if err != nil {
 		return Object{}, err
 	}
@@ -151,7 +151,7 @@ func (s *Service) GetObject(ctx context.Context, id string) (Object, error) {
 
 func (s *Service) ListObjects(ctx context.Context, filter ListFilter) ([]Object, error) {
 	if filter.Kind != "" {
-		reg, err := s.registry.LookupKind(filter.Kind)
+		reg, err := s.lookupKind(filter.Kind)
 		if err != nil {
 			return nil, err
 		}
@@ -206,7 +206,7 @@ func (s *Service) PutEdge(ctx context.Context, fromID, toID string, kind EdgeKin
 		Metadata:  meta,
 		CreatedAt: time.Now().UTC(),
 	}
-	reg, err := s.registry.LookupKind(from.ObjectKind)
+	reg, err := s.lookupKind(from.ObjectKind)
 	if err != nil {
 		return Edge{}, err
 	}
