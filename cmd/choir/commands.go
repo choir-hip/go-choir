@@ -576,6 +576,17 @@ func buildRegistry() []*command {
 			handler: selfDevPatch,
 		},
 		{
+			path:    []string{"self-dev", "visual"},
+			summary: "List a frozen candidate's screenshots (--out DIR fetches and sha256-verifies each PNG)",
+			desc:    "List a frozen self-development candidate's visual-evidence captures (frozen or later): route, size, digest, blank and resolvable, with the capture receipt. The CLI's --out also fetches each PNG, re-hashes it against its digest, and writes <route>-<digest12>.png into the directory; MCP returns the listing only.",
+			params: []param{
+				computerParam().orSay(selfDevUsage), pStr("operation", "Operation ID (frozen or later)").req(),
+				pStr("out", "Fetch each capture's PNG, verify it against its digest, and write it into this directory (created mode 0700)").onlyCLI("writes the caller's local filesystem; MCP returns the listing only (a hosted server has no local files, and a model must not pick local paths)"),
+			},
+			usage: "--operation is required", scopes: selfDevRead, readOnly: true,
+			handler: selfDevVisual, render: renderSelfDevVisual,
+		},
+		{
 			path: []string{"self-dev", "wait"}, summary: "Poll an operation until it reaches --state",
 			params: []param{
 				computerParam(), pStr("operation", "Operation ID").req(),
