@@ -40,6 +40,8 @@ const (
 	// the base of the stack's patch otherwise. It is the one documented
 	// rollback handle: `git reset --hard refs/choir/base`.
 	RefBase = "refs/choir/base"
+	// RefProjected points at the last commit the projection set as HEAD.
+	RefProjected = "refs/choir/projected"
 	// RefAppliedPrefix + the applied event digest points at the projection
 	// commit of the operation that event applied.
 	RefAppliedPrefix = "refs/choir/applied/"
@@ -88,6 +90,8 @@ const (
 	FactBuilt      = "source_projection_built"
 	FactRepaired   = "source_projection_repaired"
 	FactUpstreamed = "source_projection_upstreamed"
+	// FactLockCleared: a stale git lock left by a dead process was removed.
+	FactLockCleared = "source_projection_lock_cleared"
 )
 
 // Op is the effective release's source operation: the head of the stack.
@@ -116,6 +120,9 @@ type Input struct {
 	// Pending: an apply is in flight (current names a release whose operation
 	// is not recorded applied yet).
 	Pending bool
+	// PendingDetail names the operation that holds the apply open and the owner
+	// act that clears it; the cast refusal carries it.
+	PendingDetail string
 	// Top is the effective release's operation with a source patch; nil is an
 	// empty stack (a base release, a genesis baseline, a platform release).
 	Top *Op
@@ -140,9 +147,12 @@ type Result struct {
 	Diverged bool `json:"diverged"`
 	// Changed: HEAD or the work tree was moved. Repaired: it was moved from
 	// something this projection did not leave.
-	Changed  bool      `json:"changed,omitempty"`
-	Repaired bool      `json:"repaired,omitempty"`
-	At       time.Time `json:"at"`
+	Changed  bool `json:"changed,omitempty"`
+	Repaired bool `json:"repaired,omitempty"`
+	// LocksCleared lists stale git locks (index.lock, ref locks) removed because
+	// a process that died left them and nothing live holds them.
+	LocksCleared []string  `json:"locks_cleared,omitempty"`
+	At           time.Time `json:"at"`
 }
 
 // Refusal names why a cast must be refused, or "" when it may go ahead.
@@ -150,7 +160,11 @@ type Result struct {
 func (r Result) Refusal() string {
 	switch r.State {
 	case StatePending:
-		return "source_projection_pending: an apply is in flight; the capsule source is settled once it records applied"
+		detail := r.Reason
+		if detail == "" {
+			detail = "an apply is in flight"
+		}
+		return "source_projection_pending: " + detail + "; the capsule source is settled once it records applied"
 	case StateBaseMoved:
 		return "stack_base_moved: " + r.Reason
 	case StateUnrebuildable:
@@ -187,9 +201,16 @@ func reconcileLocked(ctx context.Context, in Input, res Result) (Result, error) 
 		res.State, res.Reason = StateRepoUnavailable, "no git repository at "+repo
 		return res, nil
 	}
+	// A crash can leave git's own lock files; a stale one would wedge every
+	// later reconcile. Cleared once, only when its holder is provably dead.
+	cleared, lockErr := clearStaleLocks(repo)
+	if lockErr != nil {
+		return res, lockErr
+	}
+	res.LocksCleared = cleared
 	head, haveHead := resolveCommit(ctx, repo, "HEAD")
 	if in.Pending {
-		res.State, res.Head = StatePending, head
+		res.State, res.Head, res.Reason = StatePending, head, in.PendingDetail
 		return res, nil
 	}
 	if in.TopUnavailable != "" {
@@ -283,8 +304,6 @@ func reconcileStack(ctx context.Context, repo string, top *Op, res Result, head 
 	case res.BootedBase == "":
 		res.State = StateProjected
 		res.Reason = "the booted base is unknown"
-	case strings.EqualFold(base, res.BootedBase):
-		res.State = StateProjected
 	default:
 		res.State = StateBaseMoved
 		res.Reason = "the stack is based on " + base + " but this computer booted " + res.BootedBase + "; that commit is not in the guest source repository, so the stack cannot be shown to be upstreamed"
@@ -353,6 +372,13 @@ func ensureHead(ctx context.Context, repo, expected, head string, haveHead, hadB
 	}
 	if appliedDigest != "" && commitID.MatchString(appliedDigest) {
 		if _, err := git(ctx, repo, nil, nil, "update-ref", RefAppliedPrefix+appliedDigest, expected); err != nil {
+			return false, false, err
+		}
+	}
+	// The last commit the projection set, whether or not an applied event
+	// named it: a HEAD that is this was left by us, not damage.
+	if cur, ok := resolveCommit(ctx, repo, RefProjected); !ok || cur != expected {
+		if _, err := git(ctx, repo, nil, nil, "update-ref", RefProjected, expected); err != nil {
 			return false, false, err
 		}
 	}

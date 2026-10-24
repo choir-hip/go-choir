@@ -1082,7 +1082,7 @@ tier 2. Everything below is behind the runtime switch
   deploy. U1 detects that and reports `base_objects_missing`. It does not
   invent them. The supply (a host git bundle) is U1b.
 
-**Failure modes, written before code.**
+**Failure modes, written before code.** (P10 and L1 below were added after review.)
 
 *Projection and reconcile*
 
@@ -1115,6 +1115,15 @@ tier 2. Everything below is behind the runtime switch
   error, not a retry loop).
 - **P8 switch off.** Reconcile, the cast gate, Freeze composition and the
   binary-reuse diff all do nothing. The repo is left as it is.
+- **P10 an unreadable effective release is not an empty stack.** Only a missing
+  `current` link means "no release". A dangling link, a manifest that fails its
+  digest or decode, or a missing operation store is unknown: reconcile reports
+  `source_projection_unrebuildable` before anything moves, and the cast refuses.
+- **L1 stale git locks.** A crash can leave `index.lock` or a ref lock in the
+  projection's paths. Reconcile removes one once, and records
+  `source_projection_lock_cleared`, only if it predates this process and no live
+  git process names the repository (checked through `/proc`). A lock it cannot
+  prove old, or that a live git holds, fails the reconcile and the cast refuses.
 - **P9 no booted base.** The guest image manifest has no `build_commit`
   (a dev build) or it is not a commit: report `no_booted_base`, change
   nothing.
@@ -1122,7 +1131,8 @@ tier 2. Everything below is behind the runtime switch
 *Base moves and the upstreamed amendment*
 
 - **B1 empty stack, base objects present.** HEAD moves to the booted base.
-- **B2 empty stack, base objects missing.** Nothing moves, `base_objects_missing`
+- **B2 empty stack, base objects missing.** Nothing moves (except that a retired
+  stack's projection is dropped back to the recorded base), `base_objects_missing`
   is reported, the cast proceeds as today. This keeps pre-U1 computers
   working; the hazard is named, not hidden. FP0 may prefer to refuse.
 - **B3 non-empty stack, stack base is the booted base.** Normal.
@@ -1136,32 +1146,25 @@ tier 2. Everything below is behind the runtime switch
 
 *The containment test (an applied patch is already in the booted base)*
 
-A patch is **contained** in base tree T iff both hold:
+A patch is **contained** in base tree T iff T contains every path the patch
+touches in the state the patch leaves it: for each touched path, T's blob (and
+mode) equals the blob the patch produces from its own base, or the patch deletes
+the path and T lacks it. This is exact for a change promoted verbatim.
 
-1. T contains every path the patch touches in the state the patch leaves it:
-   for each touched path, T's blob (and mode) equals the blob the patch
-   produces from its own base, or the patch deletes the path and T lacks
-   it. This is exact for a change promoted verbatim.
-2. Failing that, the patch reverse-applies cleanly to T (`git apply
-   --reverse --check`, default 3 lines of context, no fuzz) **and** the
-   forward patch then reproduces T's touched files exactly (round trip). This
-   admits a promoted change when main has since edited other parts of the
-   same file.
+There is no second, looser test. An earlier draft added "the patch
+reverse-applies cleanly and the forward patch reproduces T's touched files".
+Review (bunch 199) showed that round trip is tautological: it reduces to
+"reverse-apply succeeds", which only shows the after-image with its context
+appears somewhere in the file, so a duplicated block can retire a stack that is
+not upstreamed. It was dropped.
 
 Failure modes of that test, and how each is answered:
 
-- **C1 false positive, a different change with the same shape.** Test 1
-  needs byte-identical end states, so it cannot be fooled. Test 2 can match
-  repeated structure at a wrong offset; the round trip narrows it but does
-  not remove it. The cost of a false positive is a retired stack that was
-  not upstreamed, so the computer reads as undiverged while carrying a
-  difference. Mitigation: test 1 runs first and decides alone whenever it
-  can; test 2 only widens it, with git's own context matching and no fuzz.
-  A hunk that git applies at a different offset is accepted, because an
-  upstreamed change legitimately moves. Residual risk, accepted and listed in
-  the report.
-- **C2 false negative, the reviewer edited the change on the way in.** Neither
-  test passes. The stack stays, `stack_base_moved` shows, and the owner or
+- **C1 false positive, a different change with the same shape.** The test
+  needs byte-identical end states at every touched path, so a look-alike cannot
+  fool it. The price is the false negative in C2.
+- **C2 false negative, the reviewer edited the change on the way in, or main
+  has since edited the same file elsewhere.** The test fails. The stack stays, `stack_base_moved` shows, and the owner or
   U4 rebases. Safe direction.
 - **C3 partial containment.** Some files upstreamed, others not. git apply is
   atomic, test 1 needs every path. Not contained. Splitting a stack is a
@@ -1246,6 +1249,32 @@ change promoted to main and refreshed retires as upstreamed (needs U1b).
   creation commit and is not cumulative. The effective release is that one
   patch ("last apply wins"), so the projection is that patch on its base, which
   is what the effective identity already computed.
+- **Review fixes (bunch 199).** The containment test is exact only (the reverse
+  apply was dropped). An unreadable effective release refuses before anything
+  moves (P10). Stale git locks are cleared once with a fact (L1). The pending
+  refusal names the held operation and the owner act (a self-development
+  rollback to the prior applied head). `GitPathDiffer` has the same environment
+  scrub, config nulling and 120 s bound as `sourceproj`'s git, and every git call
+  runs with `core.hooksPath` off. `refs/choir/projected` records the last commit
+  the projection set, so a commit with no applied-event ref is no longer read as
+  damage.
+- **`ValidateReleaseBinary` is not switch-gated, on purpose.** It accepts a
+  `reuse_proof` bundle with differing commits whether or not the switch is on. A
+  bundle frozen while U1 was on must stay readable after the switch is turned
+  off, after a restore, and wherever it is verified or adopted; gating
+  validation on the environment would orphan frozen bundles. The proof is
+  attestation by Freeze (trusted core, bound by the bundle digest), not
+  something the reader re-derives. It is the one off-path behavior change.
+- **Named residuals.**
+  - A resumed engineering assignment re-pins its committed binding without the
+    cast gate. A base move between cast and resume fails later and less legibly,
+    at the host (`base_commit_mismatch`), still closed.
+  - `stack_base_moved` leaves a log line, not a fact row, because facts record
+    changes.
+  - A computer held in `source_projection_pending` has no automatic escalation
+    beyond the named refusal.
+  - Pre-deploy computers whose repo lacks the booted base (R3) still build from
+    the old base until U1b.
 - **Not changed:** the materializer, the host builder, corpusd, vmctl, nix.
 
 **Then, in order:**

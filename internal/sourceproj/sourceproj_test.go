@@ -426,19 +426,105 @@ func TestUpstreamedStackIsRetiredNotDivergence(t *testing.T) {
 	}
 }
 
-func TestUpstreamedWhenMainEditedTheSameFileElsewhere(t *testing.T) {
+func TestMainEditedTheSameFileElsewhereIsNotRetired(t *testing.T) {
 	repo, base := baseRepo(t)
 	patch := patchFrom(t, repo, base, func(r string) { editLine(t, r, "frontend/src/a.txt", 5, "accepted change") })
 	op := opFor("op-a", base, patch)
-	// Main took the change and also edited a distant line of the same file:
-	// the blobs differ, so only the reverse-apply test can see it (test 2).
+	// Main took the change and also edited a distant line of the same file.
+	// Containment is exact (C1): the blobs differ, so the stack is not retired.
+	// The false negative lands safely as stack_base_moved; a looser reverse-apply
+	// test would retire stacks that were never upstreamed (a duplicated block
+	// satisfies it), so it is not used.
 	moved := platformMoved(t, repo, base, func(r string) {
 		editLine(t, r, "frontend/src/a.txt", 5, "accepted change")
 		editLine(t, r, "frontend/src/a.txt", 35, "later edit by someone else")
 	})
 	res := reconcile(t, Input{Repo: repo, BootedBase: moved, Top: op})
-	if res.State != StateUpstreamed {
-		t.Fatalf("C1/test 2: %+v", res)
+	if res.State != StateBaseMoved || !res.Diverged {
+		t.Fatalf("C1: %+v", res)
+	}
+}
+
+func TestADuplicatedBlockDoesNotRetireTheStack(t *testing.T) {
+	repo, base := baseRepo(t)
+	// The patch adds a block. The new base has the same block somewhere else
+	// in the file but not at the patch's location: a reverse-apply with context
+	// can be fooled by that; exact containment cannot.
+	patch := patchFrom(t, repo, base, func(r string) { editLine(t, r, "frontend/src/a.txt", 20, "a line 20\nINSERTED BLOCK") })
+	op := opFor("op-dup", base, patch)
+	moved := platformMoved(t, repo, base, func(r string) { editLine(t, r, "frontend/src/a.txt", 3, "a line 03\nINSERTED BLOCK") })
+	res := reconcile(t, Input{Repo: repo, BootedBase: moved, Top: op})
+	if res.State != StateBaseMoved || !res.Diverged {
+		t.Fatalf("C1: a duplicated block retired the stack: %+v", res)
+	}
+}
+
+func TestStaleLocksAreClearedOnceAndLiveOnesAreNot(t *testing.T) {
+	repo, base := baseRepo(t)
+	patch := patchFrom(t, repo, base, func(r string) { editLine(t, r, "frontend/src/a.txt", 5, "A") })
+	in := Input{Repo: repo, BootedBase: base, Top: opFor("op-a", base, patch)}
+
+	// A fresh lock was taken by something live: reconcile fails closed and
+	// leaves it.
+	index := filepath.Join(repo, ".git", "index.lock")
+	if err := os.WriteFile(index, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Reconcile(context.Background(), in); err == nil {
+		t.Fatal("a live index.lock must fail the reconcile, not be removed")
+	}
+	if _, err := os.Stat(index); err != nil {
+		t.Fatalf("a lock younger than this process was removed: %v", err)
+	}
+
+	// The same lock, left by a process that died before this one started.
+	old := processStart.Add(-time.Hour)
+	if err := os.Chtimes(index, old, old); err != nil {
+		t.Fatal(err)
+	}
+	refLock := filepath.Join(repo, ".git", "refs", "heads", "choir", "computer.lock")
+	if err := os.MkdirAll(filepath.Dir(refLock), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(refLock, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(refLock, old, old); err != nil {
+		t.Fatal(err)
+	}
+	res := reconcile(t, in)
+	if res.State != StateProjected || len(res.LocksCleared) != 2 {
+		t.Fatalf("P7: %+v", res)
+	}
+	for _, lock := range []string{index, refLock} {
+		if _, err := os.Stat(lock); !os.IsNotExist(err) {
+			t.Fatalf("%s still exists", lock)
+		}
+	}
+	// Once: the next reconcile has nothing to clear.
+	if res := reconcile(t, in); len(res.LocksCleared) != 0 || res.Changed {
+		t.Fatalf("second pass = %+v", res)
+	}
+}
+
+func TestAnUnnamedProjectionIsNotDamage(t *testing.T) {
+	repo, base := baseRepo(t)
+	patchA := patchFrom(t, repo, base, func(r string) { editLine(t, r, "frontend/src/a.txt", 5, "A") })
+	opA := opFor("op-a", base, patchA)
+	opA.AppliedEventDigest = "" // the applied event was not found: no applied ref
+	reconcile(t, Input{Repo: repo, BootedBase: base, Top: opA})
+	patchB := patchFrom(t, repo, base, func(r string) { editLine(t, r, "frontend/src/b.txt", 5, "B") })
+	res := reconcile(t, Input{Repo: repo, BootedBase: base, Top: opFor("op-b", base, patchB)})
+	if !res.Changed || res.Repaired {
+		t.Fatalf("a commit this projection set is not damage: %+v", res)
+	}
+}
+
+func TestPendingRefusalNamesTheHeldOperation(t *testing.T) {
+	repo, base := baseRepo(t)
+	res := reconcile(t, Input{Repo: repo, BootedBase: base, Pending: true, PendingDetail: "operation op-held is materializing; ask the owner"})
+	if !strings.Contains(res.Refusal(), "op-held") || !strings.HasPrefix(res.Refusal(), "source_projection_pending") {
+		t.Fatalf("%q", res.Refusal())
 	}
 }
 

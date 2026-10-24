@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
@@ -58,12 +59,32 @@ func (rt *Runtime) bootedBaseCommit() string {
 func (rt *Runtime) sourceProjectionInput(ctx context.Context) sourceproj.Input {
 	in := sourceproj.Input{Repo: rt.releaseRepo(), BootedBase: rt.bootedBaseCommit()}
 	root := strings.TrimSpace(rt.selfdevUpdaterRoot)
-	if root == "" || rt.selfdevOperations == nil {
+	if root == "" {
+		return in // no updater: nothing was ever applied here
+	}
+	// Only a missing `current` link means "no release". Every other failure to
+	// read what is effective (a nil operation store, a dangling link, a digest
+	// mismatch, a manifest this build cannot decode) is unknown, and unknown
+	// must not read as an empty stack: reconcile would reset the repository to
+	// the base and drop the applied source (fail closed, before anything moves).
+	if _, err := os.Lstat(filepath.Join(root, "current")); errors.Is(err, fs.ErrNotExist) {
+		return in // no current release: a base computer
+	} else if err != nil {
+		in.TopUnavailable = "the current release link is unreadable: " + err.Error()
+		return in
+	}
+	if rt.selfdevOperations == nil {
+		in.TopUnavailable = "the self-development operations store is unavailable, so the effective release cannot be read"
 		return in
 	}
 	manifest, err := readCurrentManifestIdentity(root)
 	if err != nil || manifest.ContentDigest == "" {
-		return in // no current release: a base computer
+		reason := "the current release manifest is unreadable"
+		if err != nil {
+			reason += ": " + err.Error()
+		}
+		in.TopUnavailable = reason
+		return in
 	}
 	operation, ok := rt.appliedOperationForRelease(ctx, manifest.ContentDigest)
 	if !ok {
@@ -71,6 +92,7 @@ func (rt *Runtime) sourceProjectionInput(ctx context.Context) sourceproj.Input {
 			// The apply is in flight: the updater probes /health before the
 			// operation records applied. Not "no operation" (P2).
 			in.Pending = true
+			in.PendingDetail = rt.pendingApplyDetail(ctx)
 		}
 		return in
 	}
@@ -92,6 +114,20 @@ func (rt *Runtime) sourceProjectionInput(ctx context.Context) sourceproj.Input {
 		CreatedAt: parseOperationTime(operation.CreatedAt), Base: base, Patch: patch,
 	}
 	return in
+}
+
+// pendingApplyDetail names the operation that holds the apply open and the
+// owner act that clears it, for the cast refusal.
+func (rt *Runtime) pendingApplyDetail(ctx context.Context) string {
+	const clear = "it settles when the operation records applied or failed; if it stays there (apply attempts spent, or degraded), the owner clears it with a self-development rollback to the prior applied head"
+	if rt.selfdevOperations == nil {
+		return "the effective release is mid-apply and its operation is not recorded; " + clear
+	}
+	operation, found, err := rt.selfdevOperations.OpenOperation(ctx, rt.cfg.ComputerID)
+	if err != nil || !found {
+		return "the effective release is mid-apply and no open operation is recorded for it; " + clear
+	}
+	return fmt.Sprintf("operation %s is %s; %s", operation.OperationID, operation.State, clear)
 }
 
 // appliedEventDigest is the digest of the event that applied the operation,
@@ -146,7 +182,7 @@ func (rt *Runtime) ReconcileSourceProjection(ctx context.Context, reason string)
 		log.Printf("source projection (%s): %s base=%s head=%s booted=%s op=%s changed=%t repaired=%t diverged=%t %s",
 			reason, result.State, shortDigest(result.Base), shortDigest(result.Head), shortDigest(result.BootedBase), result.OperationID, result.Changed, result.Repaired, result.Diverged, result.Reason)
 	}
-	if result.Changed {
+	if result.Changed || len(result.LocksCleared) > 0 {
 		rt.appendSourceProjectionFact(reason, result)
 	}
 	return result, nil
@@ -191,6 +227,8 @@ type sourceProjectionFact struct {
 	Head        string `json:"head"`
 	Base        string `json:"base,omitempty"`
 	BootedBase  string `json:"booted_base,omitempty"`
+	// LocksCleared names the stale git locks reconcile removed.
+	LocksCleared []string `json:"locks_cleared,omitempty"`
 }
 
 func (rt *Runtime) appendSourceProjectionFact(trigger string, result sourceproj.Result) {
@@ -202,12 +240,14 @@ func (rt *Runtime) appendSourceProjectionFact(trigger string, result sourceproj.
 	switch {
 	case result.Repaired:
 		kind = sourceproj.FactRepaired
-	case result.State == sourceproj.StateUpstreamed:
+	case result.State == sourceproj.StateUpstreamed && result.Changed:
 		kind = sourceproj.FactUpstreamed
+	case !result.Changed && len(result.LocksCleared) > 0:
+		kind = sourceproj.FactLockCleared
 	}
 	raw, err := json.Marshal(sourceProjectionFact{
 		At: time.Now().UTC().Format(time.RFC3339Nano), Kind: kind, Trigger: trigger, State: string(result.State), Reason: result.Reason,
-		OperationID: result.OperationID, Head: result.Head, Base: result.Base, BootedBase: result.BootedBase,
+		OperationID: result.OperationID, Head: result.Head, Base: result.Base, BootedBase: result.BootedBase, LocksCleared: result.LocksCleared,
 	})
 	if err != nil {
 		return
