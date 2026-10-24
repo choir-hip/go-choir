@@ -1027,6 +1027,194 @@ itself" true for a computer that stays on one base.
 The capsule seeds from HEAD either way, so after a revert the operator
 resets the branch to the base commit (one documented command), or leaves
 it.
+#### U1 build notes (lane `fp0-u1`, 2026-10-24; written before the code)
+
+Class: red (boot path, a tape projection, the capsule's subject). Review
+tier 2. Everything below is behind the runtime switch
+`CHOIR_SOURCE_PROJECTION` (default off, absent means off).
+
+**Where the design is wrong against the code, and what U1 does instead.**
+
+- **Step 4 cannot be done at materialization.** The design has the
+  materializer send a cumulative patch to the builder. But corpusd's
+  consensus poster derives the host build's job identity from the frozen
+  bundle's own `source_patch_sha256` and `source_patch_base_commit`
+  [V internal/platform/standing_consensus.go:470-495], and the host
+  builder refuses any patch base other than the booted image's
+  `build_commit` [V internal/hostbuild/service.go:388-399]. A guest that
+  builds a different patch than the bundle names would never match the job
+  corpusd voted on, and a per-candidate patch based on a computer-local
+  commit would be refused `base_commit_mismatch`. Fixing this at the host
+  is a host change, which U1 excludes.
+  - **U1's answer:** Freeze writes the bundle's patch as the cumulative
+    patch against the stack base (the booted base). The bundle then names a
+    patch the builder, corpusd and `git apply` already accept, with no
+    host change. The materializer is untouched.
+  - This also answers R4 and owner question 7 for the publish side: a
+    release carries the cumulative patch against the platform base, the
+    smallest change to `release.Record`. It is a decision FP0 should
+    ratify; nothing in U1 forecloses the stack form.
+- **The stack is the effective release's source, not a chain of
+  per-operation commits.** The runtime already names the operation whose
+  release is `current` [V internal/agentcore/effective_release.go:276]
+  and derives its tree as base + that operation's patch. With cumulative
+  patches (and, for older applies, "last apply wins"), that one patch
+  already is the whole stack's effect. U1 projects exactly that tree as one
+  commit on the stack base, trailers naming the operation. It does not fold
+  the apply and rollback events to rebuild intermediate commits: rollback
+  targets, platform-follow replacements and restores all move `current`,
+  and `current` is the single authority the identity already reads.
+  `refs/choir/applied/<applied-event-digest>` points at that commit.
+- **Facts go to a guest-local log, not the tape.** A new event kind
+  crosses the platform's event validation and the reducer. That is its own
+  red slice. U1 appends `source_projection_*` facts to
+  `<updater root>/source-projection/facts.jsonl` and logs them. They are
+  observation, never authority: reconcile recomputes from the tape every
+  time.
+- **No vmctl list column and no engineering work item.** `vmctl.ReportedRelease`
+  is a host type, and opening a work item needs a desk addressee. U1
+  derives `diverged` and the projection state into `EffectiveRelease`
+  (served on `/health`), and the cast refusal names the reason where the
+  management desk sees it. Both are follow-ups.
+- **Base objects (R3) bound what staging can show.** Moving the base, and
+  the upstreamed test below, need the booted base commit's objects in the
+  guest repo. They are not there for a computer created before the last
+  deploy. U1 detects that and reports `base_objects_missing`. It does not
+  invent them. The supply (a host git bundle) is U1b.
+
+**Failure modes, written before code.**
+
+*Projection and reconcile*
+
+- **P1 crash between apply and projection.** The apply-time hook is only a
+  trigger. Reconcile recomputes from `current` and the operations table at
+  boot, after each apply, and immediately before a capsule is cast. Any of
+  the three heals a missed one.
+- **P2 apply in flight.** `current` already names a `selfdev-` release but
+  its operation is not yet recorded applied. Reconcile reports `pending`
+  and touches nothing. It must not read "no operation" as "empty stack" and
+  reset the repo to the base. The cast refuses while pending.
+- **P3 restore.** A restore moves `current` and the operations table back.
+  The commit is deterministic (fixed identity, the operation's creation
+  time as the commit date, a fixed message), so restoring to the head after
+  A rebuilds the commit A first got, and `refs/choir/applied/<A>` equals
+  HEAD.
+- **P4 damage.** An agent or owner edit in the repo (a dirty tracked file, a
+  moved HEAD, a stray branch) is damage. Reconcile resets tracked files to
+  the expected commit and records `source_projection_repaired`. It never
+  stages the difference as a change. Untracked files are left alone
+  (the capsule copies from commit objects, not the work tree).
+- **P5 unrebuildable.** The bundle, its patch, or the patch base commit is
+  missing from the guest. Reconcile reports `source_projection_unrebuildable`
+  with the missing thing and the cast refuses. It never falls back to the
+  base silently.
+- **P6 the repo is not what we think.** No repo, a bare repo, no `.git`, a
+  `.git` file, or git absent: report `repo_unavailable`, change nothing.
+- **P7 concurrency.** Reconcile is serialized by one mutex, and each git
+  step is a plumbing command that fails closed (a stale `index.lock` is an
+  error, not a retry loop).
+- **P8 switch off.** Reconcile, the cast gate, Freeze composition and the
+  binary-reuse diff all do nothing. The repo is left as it is.
+- **P9 no booted base.** The guest image manifest has no `build_commit`
+  (a dev build) or it is not a commit: report `no_booted_base`, change
+  nothing.
+
+*Base moves and the upstreamed amendment*
+
+- **B1 empty stack, base objects present.** HEAD moves to the booted base.
+- **B2 empty stack, base objects missing.** Nothing moves, `base_objects_missing`
+  is reported, the cast proceeds as today. This keeps pre-U1 computers
+  working; the hazard is named, not hidden. FP0 may prefer to refuse.
+- **B3 non-empty stack, stack base is the booted base.** Normal.
+- **B4 non-empty stack, stack base is not the booted base, not upstreamed.**
+  `stack_base_moved` (stack base, booted base). The cast refuses. The
+  projection itself stays on the stack base, so the identity stays true.
+- **B5 non-empty stack and the stack's patch is already in the booted base**
+  (the owner's loop: a change accepted on a test computer lands on main
+  and the computer takes the new base). The stack retires as `upstreamed`,
+  is not divergence, and does not refuse. See the containment test.
+
+*The containment test (an applied patch is already in the booted base)*
+
+A patch is **contained** in base tree T iff both hold:
+
+1. T contains every path the patch touches in the state the patch leaves it:
+   for each touched path, T's blob (and mode) equals the blob the patch
+   produces from its own base, or the patch deletes the path and T lacks
+   it. This is exact for a change promoted verbatim.
+2. Failing that, the patch reverse-applies cleanly to T (`git apply
+   --reverse --check`, default 3 lines of context, no fuzz) **and** the
+   forward patch then reproduces T's touched files exactly (round trip). This
+   admits a promoted change when main has since edited other parts of the
+   same file.
+
+Failure modes of that test, and how each is answered:
+
+- **C1 false positive, a different change with the same shape.** Test 1
+  needs byte-identical end states, so it cannot be fooled. Test 2 can match
+  repeated structure at a wrong offset; the round trip narrows it but does
+  not remove it. The cost of a false positive is a retired stack that was
+  not upstreamed, so the computer reads as undiverged while carrying a
+  difference. Mitigation: test 1 runs first and decides alone whenever it
+  can; test 2 only widens it, with git's own context matching and no fuzz.
+  A hunk that git applies at a different offset is accepted, because an
+  upstreamed change legitimately moves. Residual risk, accepted and listed in
+  the report.
+- **C2 false negative, the reviewer edited the change on the way in.** Neither
+  test passes. The stack stays, `stack_base_moved` shows, and the owner or
+  U4 rebases. Safe direction.
+- **C3 partial containment.** Some files upstreamed, others not. git apply is
+  atomic, test 1 needs every path. Not contained. Splitting a stack is a
+  rebase (U4).
+- **C4 missing base objects.** Unknowable, so not contained, and
+  `base_objects_missing` is reported. Never "contained by default".
+- **C5 empty or deletion-only patches.** An empty patch changes nothing and
+  is not a stack entry. A deletion is contained only if the path is absent in
+  T (test 1) or the reverse (re-creation) applies, which requires absence.
+- **C6 mode-only or binary content.** The capsule's patch is text. Mode is
+  compared in test 1. A binary patch fails test 2 closed.
+- **C7 a revert upstream.** If main later reverts the change, tests fail on
+  the new base and the stack reappears as `stack_base_moved`. The test is a
+  pure function of (stack, booted base); nothing is remembered, so there is no
+  stale "retired" flag to go wrong.
+- **C8 not recorded as divergence, but not erased either.** An upstreamed
+  stack is logged as `source_projection_upstreamed` (operation, booted
+  base). The tape still says the operation applied.
+- **C9 what the retirement does not do.** It changes source accounting
+  (divergence, the cast gate, the capsule's subject). It does not change what
+  the computer *runs*; the boot wrapper's layer drop and the old frontend copy
+  (F3, H1) are U2 and U4.
+
+*Freeze composition (cumulative patch)*
+
+- **F1 round trip.** The composed patch applied to the stack base must give
+  exactly the tree "projection head + the capsule's patch" would. Freeze
+  refuses (named reason) if not, instead of writing a patch it cannot vouch for.
+- **F2 empty stack.** The projection head is the base, nothing is composed,
+  and the bundle is byte-identical to today's.
+- **F3 base ref missing.** No `refs/choir/base`: nothing to compose against;
+  the capsule's own patch is used and the base it names is the pinned commit
+  (today's behavior).
+- **F4 size.** A cumulative patch grows with the stack. The host's
+  `MaxPatchBytes` refusal is the existing bound and is visible.
+
+*Binary reuse*
+
+- **R1 never reuse across a Go difference.** Reuse by diff requires that no
+  binary-input path differs between the running binary's commit and the
+  capsule source commit. If the running commit's objects are absent, git
+  fails, or the diff is non-empty, the desk builds. A layered running binary
+  stamps a commit the repo does not have, so it never reuses across a stack
+  that touches Go.
+- **R2 provenance.** A reused binary whose running commit differs from the
+  source commit carries `reuse_proof`; validation accepts a mismatch only with
+  it. A bundle without it still requires equal commits.
+
+*Proof that must run on staging (FP0's), not here:* fresh computer, apply A then
+B (SPA carries both, B's patch contains A's files); restore to the head after A
+(HEAD equals A's ref) and cast C on A; reboot, reconcile no-op; forced mismatch
+repaired and recorded; a base move over a non-empty stack refuses visibly; a
+change promoted to main and refreshed retires as upstreamed (needs U1b).
 
 **Then, in order:**
 
