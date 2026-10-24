@@ -65,7 +65,7 @@ func TestBootFetchesTheBootedBaseAndAnEmptyStackMovesToIt(t *testing.T) {
 	rt.sourceBaseFetchTune = fastFetch(remote)
 	ctx := context.Background()
 
-	// Before: U1 as built (B2): the objects are missing and the cast would go on.
+	// Before: the objects are missing, so the cast would be refused.
 	if result, _ := rt.ReconcileSourceProjection(ctx, "boot"); result.State != sourceproj.StateBaseObjectsMissing || gitHead(t, repo) != creation {
 		t.Fatalf("before: %+v", result)
 	}
@@ -101,8 +101,8 @@ func TestBootFetchesTheBootedBaseAndAnEmptyStackMovesToIt(t *testing.T) {
 	}
 }
 
-func TestUnreachableRemoteRetriesThenStopsAndTheCastGoesOnAsBefore(t *testing.T) {
-	rt, updaterRoot, repo, creation, _, _ := movedPlatform(t, "computer-u1b-down")
+func TestUnreachableRemoteRetriesThenStopsAndTheCastRefuses(t *testing.T) {
+	rt, updaterRoot, repo, creation, booted, remote := movedPlatform(t, "computer-u1b-down")
 	var attempts atomic.Int32
 	rt.sourceBaseFetchTune = &sourceBaseFetchTuning{
 		Backoff: []time.Duration{5 * time.Millisecond, 5 * time.Millisecond},
@@ -124,8 +124,17 @@ func TestUnreachableRemoteRetriesThenStopsAndTheCastGoesOnAsBefore(t *testing.T)
 	if status == nil || status.State != sourceproj.StateBaseObjectsMissing || !strings.Contains(status.Reason, "the fetch of it") {
 		t.Fatalf("the reason does not say why: %+v", status)
 	}
-	if err := rt.sourceProjectionCastGate(ctx); err != nil {
-		t.Fatalf("B2: the gate must stay open: %v", err)
+	// The setting is on and the base is still missing: the cast refuses, naming
+	// the state and the last fetch error (FP0, 2026-10-24).
+	err := rt.sourceProjectionCastGate(ctx)
+	if err == nil || !strings.HasPrefix(err.Error(), "base_objects_missing: ") || !strings.Contains(err.Error(), "the fetch of it") {
+		t.Fatalf("the gate must refuse with base_objects_missing and the fetch error: %v", err)
+	}
+	// Once the objects arrive (here: the remote comes back) the next cast opens.
+	rt.sourceBaseFetchTune = fastFetch(remote)
+	rt.startSourceProjection(ctx, "retry")
+	if err := rt.sourceProjectionCastGate(ctx); err != nil || gitHead(t, repo) != booted {
+		t.Fatalf("after the fetch: gate %v head %s want %s", err, gitHead(t, repo), booted)
 	}
 	if n := strings.Count(strings.Join(factKinds(t, updaterRoot), ","), sourceproj.FactBaseFetchFailed); n != 1 {
 		t.Fatalf("%d failure facts for one distinct failure", n)

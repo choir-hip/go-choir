@@ -148,8 +148,8 @@ func TestUnreachableRemoteIsTransientAndChangesNothing(t *testing.T) {
 	if got.Outcome == FetchFetched || got.Outcome == FetchPresent {
 		t.Fatalf("N1: %+v", got)
 	}
-	if res := reconcile(t, Input{Repo: guest, BootedBase: c[3]}); res.State != StateBaseObjectsMissing || res.Refusal() != "" {
-		t.Fatalf("N1 must leave U1's B2: %+v", res)
+	if res := reconcile(t, Input{Repo: guest, BootedBase: c[3]}); res.State != StateBaseObjectsMissing || !strings.HasPrefix(res.Refusal(), "base_objects_missing: ") {
+		t.Fatalf("N1 must refuse the cast: %+v", res)
 	}
 	// A cancelled context is a transient failure too, and does not hang.
 	ctx, cancel := context.WithCancel(context.Background())

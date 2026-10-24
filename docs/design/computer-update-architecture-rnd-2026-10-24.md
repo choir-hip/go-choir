@@ -1133,7 +1133,7 @@ tier 2. Everything below is behind the runtime switch
 - **B1 empty stack, base objects present.** HEAD moves to the booted base.
 - **B2 empty stack, base objects missing.** Nothing moves (except that a retired
   stack's projection is dropped back to the recorded base), `base_objects_missing`
-  is reported, the cast proceeds as today. This keeps pre-U1 computers
+  is reported, the cast proceeds as today (U1b: it now refuses). This keeps pre-U1 computers
   working; the hazard is named, not hidden. FP0 may prefer to refuse.
 - **B3 non-empty stack, stack base is the booted base.** Normal.
 - **B4 non-empty stack, stack base is not the booted base, not upstreamed.**
@@ -1390,8 +1390,8 @@ Order and bounds:
    and 1 h, then stops for this process. A failure that is permanent for this
    remote (the commit or repository is not there, authentication is asked for)
    stops at once.
-5. The cast gate waits up to 45 s for a fetch that is in flight, then proceeds as
-   U1 does. It starts none.
+5. The cast gate waits up to 45 s for a fetch that is in flight, then refuses
+   with `base_objects_missing` if the objects are still absent. It starts none.
 6. On success, the fetched commit is held by `refs/choir/booted/<commit>` (older
    `refs/choir/booted/*` refs are removed) and reconcile runs again with trigger
    `base_fetch`.
@@ -1400,7 +1400,7 @@ Order and bounds:
 
 - **N1 no network, DNS, remote down, rate limited.** Fetch fails; nothing in the
   repo changes; the state stays `base_objects_missing`, its reason now carries the
-  last fetch error; the cast proceeds as in B2. Retries per 4. Boot is never
+  last fetch error; the cast refuses with it. Retries per 4. Boot is never
   delayed.
 - **N2 the booted commit is not on the remote** (a `local` or `dirty` build, a
   fork or private image, a branch deleted or force-pushed away). Classified
@@ -1461,10 +1461,13 @@ Order and bounds:
   `git -C /mnt/persistent/files/Source/platform reset --hard <from>`, then delete
   `refs/choir/*` (U1's rollback).
 
-**What U1b does not do.** It does not refuse a cast whose booted base cannot be
-fetched (B2 stays; FP0 may prefer to refuse once staging shows the fetch works,
-since the host builder refuses such a candidate anyway for Go changes). It adds
-no host mechanism and no event kind. It does not advance the source between
+**What U1b decides (FP0, 2026-10-24).** With `source.projection` on and the booted
+base's objects still missing after the bounded wait, the cast refuses visibly:
+`base_objects_missing: <reason>`, the reason carrying the last fetch error. Turning
+the setting on means "build on current main"; silently building on the creation
+commit is the failure U1 exists to end. With the setting off, nothing changes
+(B2 as before). The refusal clears at the next cast after a retry succeeds. U1b
+adds no host mechanism and no event kind. It does not advance the source between
 boots: a platform deploy that does not restart the computer moves the booted
 base only at the next boot.
 
@@ -1473,7 +1476,7 @@ current deploy, with the switch on: boot shows `source_base_fetched` in the fact
 log with the delta's size; `HEAD` equals the booted commit and the tree is clean;
 a candidate cast is pinned to the booted commit and the host build accepts its
 patch base; with the remote made unreachable (a test setting) the state reads
-`base_objects_missing` with the fetch error and the cast proceeds as before;
+`base_objects_missing` with the fetch error and the cast refuses;
 promote a change to main, refresh the computer, and the stack retires as
 `upstreamed` (U1's proof, now reachable).
 

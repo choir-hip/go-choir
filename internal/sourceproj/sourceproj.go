@@ -89,7 +89,7 @@ const (
 	StateBaseMoved State = "stack_base_moved"
 	// StateBaseObjectsMissing: the booted base's objects are not in the
 	// guest repository (residual R3), so it can neither be moved to nor shown
-	// to contain the stack. With an empty stack the cast proceeds as before.
+	// to contain the stack. The cast refuses (U1b); U1b's fetch supplies them.
 	StateBaseObjectsMissing State = "base_objects_missing"
 	// StateUnrebuildable: the expected commit cannot be built; casting refuses.
 	StateUnrebuildable State = "source_projection_unrebuildable"
@@ -183,6 +183,11 @@ func (r Result) Refusal() string {
 			detail = "an apply is in flight"
 		}
 		return "source_projection_pending: " + detail + "; the capsule source is settled once it records applied"
+	case StateBaseObjectsMissing:
+		// The setting means "build on current main" (FP0, 2026-10-24): with the
+		// booted base's objects still missing after the fetch, building on the
+		// creation commit is the failure U1 exists to end. Off, none of this runs.
+		return "base_objects_missing: " + r.Reason
 	case StateBaseMoved:
 		return "stack_base_moved: " + r.Reason
 	case StateUnrebuildable:
