@@ -197,12 +197,16 @@ type leaseAllocator struct {
 	// ctx is the lifetime of the lease goroutines; Close cancels it and waits
 	// for workers to drain. closing refuses new work until Reopen (or a failed
 	// Close) resumes.
-	ctxMu   sync.Mutex // guards ctx and cancel; never held with eventMu waiting
-	ctx     context.Context
-	cancel  context.CancelFunc
-	workers atomic.Int32
-	closing atomic.Bool
-	obs     atomic.Pointer[StreamSeqLeaseStats]
+	ctxMu sync.Mutex // guards ctx, cancel and kickTimer; never held with eventMu waiting
+	// kickTimer is the Reopen kick's retry; kickStreak counts its failures
+	// (eventMu).
+	kickTimer  *time.Timer
+	kickStreak int64
+	ctx        context.Context
+	cancel     context.CancelFunc
+	workers    atomic.Int32
+	closing    atomic.Bool
+	obs        atomic.Pointer[StreamSeqLeaseStats]
 }
 
 // StreamSeqLeaseStats is the lease block of GET /api/runtime/observability.
@@ -953,6 +957,10 @@ func (s *Store) cancelLeaseWork() {
 	if s.lease.cancel != nil {
 		s.lease.cancel()
 	}
+	if s.lease.kickTimer != nil {
+		s.lease.kickTimer.Stop()
+		s.lease.kickTimer = nil
+	}
 	s.lease.ctxMu.Unlock()
 }
 
@@ -1016,17 +1024,99 @@ func (s *Store) refreshLeaseWorkspace() {
 
 // kickLeaseRowOntoTape writes a fresh lease row through the bound tape after
 // Reopen, so the event-table gate (state ready and a lease row on the tape)
-// reopens without waiting for the block to run down. An unseeded lease needs
-// nothing: its seeder writes the row. A failed kick leaves the gate closed
-// until the next refill, which is the conservative side. A store with no tape
-// has nothing to put on one.
+// reopens without waiting for the block to run down. The row re-affirms the
+// block this process already holds, {R: reserved, A: maxStreamSeq}; it does
+// not extend it, so the durable row stays consistent() (R <= A + 3N/2)
+// wherever the block stands and the next boot trusts it (bunch 180, Devin,
+// blocking: a refill-shaped row at an arbitrary fill failed consistent()). An
+// unseeded lease needs nothing: its seeder writes the row. A failed or
+// skipped kick retries on a timer with a doubling backoff, capped at
+// leaseSeedBackoffCap, until the row lands or the store closes: the gate stays
+// closed meanwhile (on_tape false, refill_failed and last_lease_error say
+// why). A store with no tape has nothing to put on one.
 func (s *Store) kickLeaseRowOntoTape() {
 	s.eventMu.Lock()
 	defer s.eventMu.Unlock()
-	if s.projectionTape == nil {
+	s.lease.kickStreak = 0
+	s.kickLeaseLocked()
+}
+
+// kickLeaseLocked starts the re-affirming write, or arms the timer when it
+// cannot start yet. The caller holds eventMu.
+func (s *Store) kickLeaseLocked() {
+	if s.projectionTape == nil || s.lease.closing.Load() || s.lease.state != leaseReady || s.lease.onTape.Load() {
 		return
 	}
-	s.startRefillLocked()
+	if s.lease.refillInFlight {
+		// A refill in flight puts a row on the tape if it succeeds; look
+		// again once it has had its time.
+		s.armKickTimerLocked(leaseRefillBackoff)
+		return
+	}
+	if wait := time.Until(s.lease.refillNotBefore); wait > 0 {
+		s.armKickTimerLocked(wait)
+		return
+	}
+	reserved := max(s.lease.reserved, s.maxStreamSeq)
+	allocated := s.maxStreamSeq
+	ctx := s.leaseWorkContextLocked()
+	s.lease.refillInFlight = true
+	s.lease.workers.Add(1)
+	go s.runReaffirm(ctx, reserved, allocated)
+}
+
+// runReaffirm appends the re-affirming lease row. Unlike runRefill it never
+// raises R.
+func (s *Store) runReaffirm(ctx context.Context, reserved, allocated int64) {
+	row := leaseRow{Reserved: reserved, Allocated: allocated, Block: streamSeqLeaseBlock,
+		WriterEpoch: leaseWriterEpoch, Basis: leaseBasisLease}
+	started := time.Now()
+	onTape := s.projectionTape != nil
+	err := s.appendLease(ctx, "refill", &row)
+
+	s.eventMu.Lock()
+	defer s.eventMu.Unlock()
+	s.lease.refillInFlight = false
+	s.lease.workers.Add(-1)
+	if err != nil {
+		s.lease.refillFailed++
+		s.lease.lastErr = err.Error()
+		s.lease.refillNotBefore = time.Now().Add(leaseRefillBackoff)
+		s.lease.kickStreak++
+		backoff := leaseRefillBackoff
+		for i := int64(1); i < s.lease.kickStreak && backoff < leaseSeedBackoffCap; i++ {
+			backoff *= 2
+		}
+		log.Printf("store: stream_seq lease: re-affirm at %d failed after %s (retry in %s): %v", reserved, time.Since(started).Round(time.Millisecond), min(backoff, leaseSeedBackoffCap), err)
+		s.armKickTimerLocked(min(backoff, leaseSeedBackoffCap))
+	} else {
+		s.lease.reserved = max(s.lease.reserved, reserved)
+		s.lease.allocatedThrough = allocated
+		s.lease.onTape.Store(onTape)
+	}
+	s.publishLeaseObsLocked()
+	s.leaseBroadcastLocked()
+}
+
+// armKickTimerLocked schedules the kick's retry. cancelLeaseWork stops the
+// timer and the closing flag is read under ctxMu, so none arms after Close.
+func (s *Store) armKickTimerLocked(d time.Duration) {
+	d = max(d, time.Millisecond)
+	s.lease.ctxMu.Lock()
+	defer s.lease.ctxMu.Unlock()
+	if s.lease.closing.Load() {
+		return
+	}
+	if s.lease.kickTimer != nil {
+		s.lease.kickTimer.Stop()
+	}
+	s.lease.kickTimer = time.AfterFunc(d, s.retryKick)
+}
+
+func (s *Store) retryKick() {
+	s.eventMu.Lock()
+	defer s.eventMu.Unlock()
+	s.kickLeaseLocked()
 }
 
 // initLeaseObs sets the workspace the lease reads its marker from and

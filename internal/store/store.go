@@ -1354,8 +1354,8 @@ func (s *Store) Reopen(path string) error {
 	// the moment the lease resumes must read the adopted workspace's untrust
 	// marker, not the one this store just left. The adopted workspace may
 	// hold an older lease row or none, so refreshLeaseWorkspace also forgets
-	// that the latest lease row is on the tape, and the kick below writes a
-	// fresh one (bunch 178, Devin 1 and DeepSeek 1).
+	// that the latest lease row is on the tape, and the kick below re-affirms
+	// the block with a fresh row on the tape (bunch 178, Devin 1 and DeepSeek 1).
 	s.refreshLeaseWorkspace()
 	s.resumeLeaseWork()
 	s.kickLeaseRowOntoTape()
