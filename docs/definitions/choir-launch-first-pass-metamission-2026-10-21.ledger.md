@@ -1432,3 +1432,5 @@ Append-only. One terse entry per orchestrator pass.
 - 00:2x. Event table deploy 2 r3 (PR #94, f66b6f217): bunch 178 tier 2. Devin APPROVE and DeepSeek APPROVE, no blocking findings. Mirror PASS; PR CI 25 pass, 8 skipped.
   - Round 2 takes the convergent lows: Reopen's lease workspace order and onTape, on_tape in the lease stats, and the refill-opens-the-gate test.
   - Eligible after 06:52 UTC, the end of its staging day. The lease conditions are met on T (22:54) and on the paper (23:45).
+- 00:5x. The VM slice design (lane/fp0-vm-slice, PR #95, c93873ae8) is in: a plain system-choirvms.slice (systemd ignores Delegate= on slices), and vmctl owns vms/ under it. Mirror running; tier 2 review next.
+- 00:5x. Found by the slice worker and confirmed read-only on Node B: system.slice memory.low is 0, so vmctl's 14 GiB MemoryLow protects nothing. Recorded: docs/problems/vmctl-memory-low-protects-nothing-2026-10-24.md. Not acted on.
