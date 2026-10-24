@@ -24,6 +24,61 @@ type sourcePatchFile struct {
 	NewExists bool
 }
 
+// collectSourcePatchFiles reads, for every workspace/platform file change,
+// the base bytes from the pinned source snapshot (<mergedDir>/../source-lower)
+// and the candidate bytes from the merged tree. A directory cannot be
+// expressed in a unified diff (the files inside it carry it), so directory
+// changes are skipped.
+func collectSourcePatchFiles(mergedDir string, changes []FileChange) ([]sourcePatchFile, error) {
+	var sourceChanges []FileChange
+	for _, change := range changes {
+		p := change.Path
+		if !strings.HasPrefix(p, "/") {
+			p = "/" + p
+		}
+		if strings.HasPrefix(p, "/workspace/platform/") && !change.Mode.IsDir() {
+			sourceChanges = append(sourceChanges, change)
+		}
+	}
+	lowerBase := filepath.Join(mergedDir, "..", "source-lower", "workspace", "platform")
+	var files []sourcePatchFile
+	for _, change := range sourceChanges {
+		rel := strings.TrimPrefix(change.Path, "/")
+		rel = strings.TrimPrefix(rel, "workspace/platform/")
+		if rel == "" || strings.HasPrefix(rel, "..") || strings.Contains(rel, "/../") {
+			continue
+		}
+		file := sourcePatchFile{Rel: rel}
+		oldPath := filepath.Join(lowerBase, filepath.FromSlash(rel))
+		var oldErr error
+		if info, statErr := os.Lstat(oldPath); statErr == nil && info.IsDir() {
+			oldErr = os.ErrNotExist // a directory replaced by a file
+		} else if statErr == nil && change.Kind == ChangeDeleted && info.Mode()&os.ModeSymlink != 0 {
+			// The builder refuses any patch that changes a symbolic link,
+			// and a deletion read through the link would carry the
+			// target's bytes: name the cause here instead.
+			return nil, fmt.Errorf("capsule source patch cannot delete %q: it is a symbolic link in the pinned source, and source patches do not change symbolic links", change.Path)
+		} else {
+			file.Old, oldErr = os.ReadFile(oldPath)
+		}
+		if oldErr != nil && !errors.Is(oldErr, os.ErrNotExist) {
+			return nil, fmt.Errorf("capsule source patch reads base %q: %w", change.Path, oldErr)
+		}
+		file.OldExists = oldErr == nil
+		if change.Kind != ChangeDeleted {
+			newPath := filepath.Join(mergedDir, filepath.FromSlash(strings.TrimPrefix(change.Path, "/")))
+			var err error
+			file.New, err = os.ReadFile(newPath)
+			if err != nil {
+				return nil, fmt.Errorf("capsule source patch reads %q: %w", change.Path, err)
+			}
+			file.NewExists = true
+		}
+		files = append(files, file)
+	}
+	return files, nil
+}
+
 // noNewlineMarker is git's marker for a last line without a final newline.
 const noNewlineMarker = "\\ No newline at end of file\n"
 
