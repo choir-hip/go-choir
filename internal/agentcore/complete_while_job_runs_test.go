@@ -24,7 +24,7 @@ func TestCompleteIsRefusedWhileTheRunsJobRuns(t *testing.T) {
 	if err == nil {
 		t.Fatal("Complete was accepted while the run's job runs")
 	}
-	for _, want := range []string{"job-build", "still running", "end your turn", "choir.Stop"} {
+	for _, want := range []string{"job-build", "still running", "turn ends here", "choir.Stop"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("refusal %q does not say %q", err, want)
 		}

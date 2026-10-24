@@ -203,7 +203,7 @@ func TestRLMEngineeringOverlayTeachesCapsuleJobs(t *testing.T) {
 			t.Errorf("J1: the overlay does not say %q", want)
 		}
 	}
-	for _, want := range []string{"end your turn", "you are woken", "Do not poll a job in a loop"} {
+	for _, want := range []string{"end your turn", "you are woken", "choir.Poll shows the job still running ends your turn"} {
 		if !strings.Contains(overlay, want) {
 			t.Errorf("J2: the overlay does not say %q", want)
 		}

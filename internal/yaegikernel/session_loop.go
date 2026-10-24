@@ -160,6 +160,9 @@ func serveCell(sess *Session, frame SessionFrame, drain func() []string, hooks *
 	if hooks != nil && hooks.RecordsShown != nil {
 		out.RecordsShown = hooks.RecordsShown()
 	}
+	if hooks != nil && hooks.JobsAwaited != nil {
+		out.JobsAwaited = hooks.JobsAwaited()
+	}
 	var staged []StagedIntent
 	if hooks != nil && hooks.End != nil {
 		staged = hooks.End()

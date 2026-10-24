@@ -55,6 +55,10 @@ type ChoirScope struct {
 	// jobs is the cell-start snapshot of this run's capsule jobs, read by
 	// Poll (jobs.go).
 	jobs []JobView
+	// awaited are the jobs a Poll in the bound cell returned unfinished, in
+	// first-poll order: the host parks the turn on them (jobs.go).
+	awaitMu sync.Mutex
+	awaited []string
 	// doc is the cell-start texture document snapshot (R3d) a texture cell
 	// reads via ReadDoc(): the bound doc's current revision id + content.
 	doc *DocSnapshot
@@ -205,6 +209,7 @@ func (s *ChoirScope) BindCell() CellHooks {
 			s.records = append([]InboxRecord(nil), frame.Records...)
 			s.jobs = append([]JobView(nil), frame.Jobs...)
 			s.recordsShown.Store(0)
+			s.takeAwaited()
 			s.takeRefusals()
 		},
 		End: func() []StagedIntent {
@@ -225,6 +230,7 @@ func (s *ChoirScope) BindCell() CellHooks {
 		Refusals:     s.takeRefusals,
 		SearchCounts: s.searchCountLines,
 		RecordsShown: s.recordsShown.Load,
+		JobsAwaited:  s.takeAwaited,
 	}
 }
 

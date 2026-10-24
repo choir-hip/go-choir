@@ -871,6 +871,22 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 				}
 			}
 
+			if requiredNextTool == nil && options.batchWait != nil {
+				waited, ok, err := options.batchWait(ctx, resp.ToolCalls, toolResults)
+				if err != nil {
+					return "", totalUsage, fmt.Errorf("tool loop batch wait: %w", err)
+				}
+				if ok && waited.Continue {
+					completionGuardWaits++
+					if completionGuardWaits > maxCompletionGuardWaits {
+						return "", totalUsage, fmt.Errorf("tool loop: completion guard waited %d times", maxCompletionGuardWaits)
+					}
+					if err := appendCompletionGuardReminder(waited); err != nil {
+						return "", totalUsage, fmt.Errorf("tool loop persist batch wait instruction: %w", err)
+					}
+				}
+			}
+
 			log.Printf("tool loop: iteration %d, executed %d tools, continuing", i+1, len(resp.ToolCalls))
 
 		case "end_turn", "":

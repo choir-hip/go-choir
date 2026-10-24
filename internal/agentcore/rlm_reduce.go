@@ -828,6 +828,10 @@ func (r *rlmCallReduction) commit(ctx context.Context, intents []yaegikernel.Sta
 	return r.recordFate(ctx, cellFateSuccess, "tray committed")
 }
 
+// completeWaitsForJobMarker is in the refusal of a Complete while the job
+// runs; engineering's batch wait parks the turn on it (capsule_jobs.go).
+const completeWaitsForJobMarker = "Complete waits until it ends"
+
 // refuseCompleteWhileJobRuns refuses a cell that stages Complete while the
 // run's capsule job runs, as Freeze is refused (failure 23): a round that
 // polls its build and completes in the same cell would otherwise end in the
@@ -842,7 +846,7 @@ func refuseCompleteWhileJobRuns(jobs capsuleJobTable, runID string, intents []ya
 			continue
 		}
 		if job, _, running := jobs.RunningJob(runID); running {
-			return fmt.Errorf("reduce: complete %s: job %s is still running; Complete waits until it ends: end your turn and you are woken when it ends with its outcome, or choir.Stop it in a cell of its own first", in.LocalID, job.ID)
+			return fmt.Errorf("reduce: complete %s: job %s is still running; %s: this turn ends here and resumes when the job ends, with its outcome (or choir.Stop it in a cell of its own first)", in.LocalID, job.ID, completeWaitsForJobMarker)
 		}
 	}
 	return nil

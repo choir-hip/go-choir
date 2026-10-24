@@ -2,6 +2,7 @@ package agentcore
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -221,27 +222,157 @@ func (rt *Runtime) engineeringJobWait(ctx context.Context, rec *types.RunRecord)
 	if !running {
 		return toolregistry.ToolLoopCompletionGuardResult{}, false
 	}
+	ended, reason, err := rt.waitJobEnd(ctx, jobs, rec.RunID, view, deadline)
+	if err != nil || reason != jobParkEnded {
+		return toolregistry.ToolLoopCompletionGuardResult{}, false
+	}
+	return toolregistry.ToolLoopCompletionGuardResult{Continue: true, Waited: true, Reason: jobParkEnded, Instruction: jobEndedInstruction(ended)}, true
+}
+
+// How a wait on a job ended.
+const (
+	jobParkEnded        = "capsule_job_ended"
+	jobParkAlreadyEnded = "already_ended"
+	jobParkDeadline     = "deadline"
+	jobParkCancelled    = "cancelled"
+)
+
+// waitJobEnd waits for the run's running job to end: woken by its end
+// signal (a stale signal from an earlier job does not release it), bounded
+// by the job's wall clock plus jobWaitSlack and by ctx. It returns the
+// job's latest view and how the wait ended; err is ctx's.
+func (rt *Runtime) waitJobEnd(ctx context.Context, jobs capsuleJobTable, runID string, view yaegikernel.JobView, deadline time.Time) (yaegikernel.JobView, string, error) {
 	timer := time.NewTimer(time.Until(deadline.Add(jobWaitSlack)))
 	defer timer.Stop()
-	wake := rt.jobWake(rec.RunID)
+	wake := rt.jobWake(runID)
 	for {
 		select {
 		case <-ctx.Done():
-			return toolregistry.ToolLoopCompletionGuardResult{}, false
+			return view, jobParkCancelled, ctx.Err()
 		case <-timer.C:
-			return toolregistry.ToolLoopCompletionGuardResult{}, false
+			return latestJobView(jobs, runID, view), jobParkDeadline, nil
 		case <-wake:
 		}
-		if _, _, still := jobs.RunningJob(rec.RunID); still {
+		if _, _, still := jobs.RunningJob(runID); still {
 			continue // a stale signal from an earlier job
 		}
+		return latestJobView(jobs, runID, view), jobParkEnded, nil
+	}
+}
+
+// latestJobView is the run's current view of job view.ID.
+func latestJobView(jobs capsuleJobTable, runID string, view yaegikernel.JobView) yaegikernel.JobView {
+	for _, v := range jobs.JobViews(runID) {
+		if v.ID == view.ID {
+			return v
+		}
+	}
+	return view
+}
+
+// The busy-poll fix (docs/problems/engineering-busy-polls-its-own-job-2026-10-24.md):
+// a cell that looked at the run's own job while it ran parks the turn on
+// the job's end. The tool loop calls no model in between (its batch wait),
+// so "end your turn and be woken" is what happens, not what is asked.
+
+// cellJobPark is the job a cell's turn parks on: the first job its Poll
+// returned unfinished, unless the cell ended the assignment (a terminal
+// fate) or staged a Stop (the job is ending). A cell that polled and then
+// failed still waited on the job.
+func cellJobPark(result capsule.GoEvalResult) string {
+	if result.FateTerminal || len(result.JobsAwaited) == 0 {
+		return ""
+	}
+	for _, in := range result.Intents {
+		if in.Kind == yaegikernel.IntentJob && in.JobOp == yaegikernel.JobOpStop {
+			return ""
+		}
+	}
+	return strings.TrimSpace(result.JobsAwaited[0])
+}
+
+// engineeringJobPark is engineering's tool-loop batch wait. It parks when
+// the batch's capsule_go_eval named a job_park (cause "poll") or was the
+// Complete refused because the job runs (cause "complete_refused"), waits
+// for the job's end, and resumes the turn with its outcome. A job that
+// already ended resumes at once. The park's start (capsule_job_park) and
+// end (capsule_job_park_ended) are run progress events. It holds nothing
+// durable: a crash ends it with the process, and the boot closes the job as
+// interrupted and the run under the restart rule.
+func (rt *Runtime) engineeringJobPark(ctx context.Context, rec *types.RunRecord, emit provideriface.EventEmitFunc, calls []types.ToolCall, results []types.ToolResult) (toolregistry.ToolLoopCompletionGuardResult, bool, error) {
+	none := toolregistry.ToolLoopCompletionGuardResult{}
+	if rt == nil || rec == nil {
+		return none, false, nil
+	}
+	jobs := rt.capsuleJobs()
+	if jobs == nil {
+		return none, false, nil
+	}
+	jobID, cause := "", ""
+	for i := 0; i < len(calls) && i < len(results); i++ {
+		if strings.TrimSpace(calls[i].Name) != "capsule_go_eval" {
+			continue
+		}
+		if results[i].IsError {
+			if strings.Contains(results[i].Output, completeWaitsForJobMarker) {
+				if running, _, ok := jobs.RunningJob(rec.RunID); ok {
+					jobID, cause = running.ID, "complete_refused"
+				}
+			}
+			continue
+		}
+		var out struct {
+			JobPark string `json:"job_park"`
+		}
+		if json.Unmarshal([]byte(results[i].Output), &out) == nil && strings.TrimSpace(out.JobPark) != "" {
+			jobID, cause = strings.TrimSpace(out.JobPark), "poll"
+		}
+	}
+	if jobID == "" {
+		return none, false, nil
+	}
+	view, deadline, running := jobs.RunningJob(rec.RunID)
+	if !running || view.ID != jobID {
+		// The job ended between the cell and the park.
 		for _, v := range jobs.JobViews(rec.RunID) {
-			if v.ID == view.ID {
-				view = v
+			if v.ID == jobID && capsulejob.Terminal(v.State) {
+				emitJobPark(emit, "capsule_job_park", map[string]any{"job_id": jobID, "cause": cause})
+				emitJobPark(emit, "capsule_job_park_ended", map[string]any{"job_id": jobID, "reason": jobParkAlreadyEnded, "state": v.State, "waited_ms": 0})
+				return toolregistry.ToolLoopCompletionGuardResult{Continue: true, Waited: true, Reason: jobParkEnded, Instruction: jobEndedInstruction(v)}, true, nil
 			}
 		}
-		return toolregistry.ToolLoopCompletionGuardResult{Continue: true, Waited: true, Reason: "capsule_job_ended", Instruction: jobEndedInstruction(view)}, true
+		return none, false, nil
 	}
+	emitJobPark(emit, "capsule_job_park", map[string]any{"job_id": jobID, "cause": cause, "deadline": deadline.Add(jobWaitSlack).UTC().Format(time.RFC3339)})
+	started := time.Now()
+	ended, reason, err := rt.waitJobEnd(ctx, jobs, rec.RunID, view, deadline)
+	emitJobPark(emit, "capsule_job_park_ended", map[string]any{"job_id": jobID, "reason": reason, "state": ended.State, "waited_ms": time.Since(started).Milliseconds()})
+	if err != nil {
+		return none, false, err
+	}
+	instruction := jobEndedInstruction(ended)
+	if reason == jobParkDeadline {
+		instruction = jobOutlivedInstruction(ended)
+	}
+	return toolregistry.ToolLoopCompletionGuardResult{Continue: true, Waited: true, Reason: reason, Instruction: instruction}, true, nil
+}
+
+func emitJobPark(emit provideriface.EventEmitFunc, phase string, body map[string]any) {
+	if emit == nil {
+		return
+	}
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return
+	}
+	emit(types.EventRunProgress, phase, payload)
+}
+
+// jobOutlivedInstruction resumes a turn whose job was still running past
+// its wall clock and the slack.
+func jobOutlivedInstruction(v yaegikernel.JobView) string {
+	return fmt.Sprintf("Your capsule job %s (%s) was still running past its wall clock of %d s. choir.Poll(%q) shows it now; if it hangs, choir.Stop it in a cell of its own and decide what to run instead.",
+		v.ID, strings.Join(v.Argv, " "), v.WallClockSec, v.ID)
 }
 
 // jobEndedInstruction is the turn that resumes a desk when its job ends.
@@ -264,15 +395,4 @@ func jobEndedInstruction(v yaegikernel.JobView) string {
 	}
 	b.WriteString(" Its record is in choir.Records() and choir.Poll(\"" + v.ID + "\") shows its output tail. Continue the assignment in your next cell.")
 	return b.String()
-}
-
-// cellJobPark is the job a cell's turn parks on
-// (problems/engineering-busy-polls-its-own-job-2026-10-24.md).
-func cellJobPark(result capsule.GoEvalResult) string {
-	return ""
-}
-
-// engineeringJobPark is the tool loop's batch wait for engineering.
-func (rt *Runtime) engineeringJobPark(ctx context.Context, rec *types.RunRecord, emit provideriface.EventEmitFunc, calls []types.ToolCall, results []types.ToolResult) (toolregistry.ToolLoopCompletionGuardResult, bool, error) {
-	return toolregistry.ToolLoopCompletionGuardResult{}, false, nil
 }
