@@ -129,3 +129,54 @@ func TestJobsAreEngineeringOnly(t *testing.T) {
 		}
 	}
 }
+
+// A Poll that returns a job unfinished (running, or starting: staged in this
+// cell) is what the cell waited on, and the result says so: the host parks
+// the turn on it instead of offering another model turn
+// (problems/engineering-busy-polls-its-own-job-2026-10-24.md). Each job
+// once, in first-poll order. A Poll of an ended job, no Poll, or an unknown
+// id carries nothing. A cell that polled and then failed still waited. The
+// next cell starts with nothing awaited.
+func TestPollOfAnUnfinishedJobIsAwaited(t *testing.T) {
+	sess, scope := engineeringJobSession(t)
+	hooks := scope.BindCell()
+	code := 0
+	jobs := []JobView{{ID: "job-build", State: capsulejob.StateRunning}, {ID: "job-earlier", State: capsulejob.StateDone, ExitCode: &code}}
+	cell := func(source string) SessionResult {
+		t.Helper()
+		out, _ := serveCell(sess, SessionFrame{ID: "cell", Jobs: jobs, Source: source}, nil, &hooks)
+		return out
+	}
+	out := cell(`a, _ := choir.Poll("job-build")
+b, _ := choir.Poll("job-earlier")
+a2, _ := choir.Poll("job-build")
+fmt.Println(a.State, b.State, a2.State)`)
+	if out.Error != "" || !strings.Contains(out.Stdout, "running done running") {
+		t.Fatalf("cell: %s %q", out.Error, out.Stdout)
+	}
+	if strings.Join(out.JobsAwaited, ",") != "job-build" {
+		t.Fatalf("awaited = %v, want [job-build]", out.JobsAwaited)
+	}
+	for _, src := range []string{`b, _ := choir.Poll("job-earlier"); fmt.Println(b.State)`, `fmt.Println("no poll")`, `_, err := choir.Poll("job-nope"); fmt.Println(err)`} {
+		if out := cell(src); len(out.JobsAwaited) != 0 {
+			t.Fatalf("%s: awaited = %v, want none", src, out.JobsAwaited)
+		}
+	}
+	out = cell(`id, _ := choir.Start([]string{"go", "test", "./..."}, nil)
+st, _ := choir.Poll(id)
+fmt.Println(st.State, id)`)
+	if out.Error != "" || len(out.JobsAwaited) != 1 || !strings.Contains(out.Stdout, "starting "+out.JobsAwaited[0]) {
+		t.Fatalf("a staged job polled: %s %q awaited %v", out.Error, out.Stdout, out.JobsAwaited)
+	}
+	out = cell(`st, _ := choir.Poll("job-build")
+if st.State != "done" { panic("build not done") }`)
+	if out.Error == "" || strings.Join(out.JobsAwaited, ",") != "job-build" {
+		t.Fatalf("a cell that polled then panicked: error %q awaited %v", out.Error, out.JobsAwaited)
+	}
+	if out := cell(`fmt.Println("after")`); len(out.JobsAwaited) != 0 {
+		t.Fatalf("the next cell inherited %v", out.JobsAwaited)
+	}
+	if !strings.Contains(choirFunctionDocs["Poll"].Summary, "ends your turn") {
+		t.Fatalf("Poll's help does not say a running job ends the turn: %q", choirFunctionDocs["Poll"].Summary)
+	}
+}

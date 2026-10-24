@@ -49,6 +49,13 @@ type ToolLoopCompletionGuardResult struct {
 
 type ToolLoopCompletionGuardFunc func(ctx context.Context, state ToolLoopCompletionState) (ToolLoopCompletionGuardResult, error)
 
+// ToolLoopBatchWaitFunc runs after a tool batch that was neither terminal
+// nor passivating. ok=true with Continue says it waited for an outside event
+// (a capsule job the batch's cell looked at) and Instruction reports it: the
+// loop appends the instruction and calls the model, with no model turn
+// between the batch and the wait. ok=false continues the loop as usual.
+type ToolLoopBatchWaitFunc func(ctx context.Context, calls []types.ToolCall, results []types.ToolResult) (ToolLoopCompletionGuardResult, bool, error)
+
 type ToolLoopParkState struct {
 	Messages  []json.RawMessage
 	FinalText string
@@ -103,6 +110,7 @@ type toolLoopOptions struct {
 	passivatingToolResults map[string]func(string) bool
 	completionGuard        ToolLoopCompletionGuardFunc
 	parkWaiter             ToolLoopParkWaiterFunc
+	batchWait              ToolLoopBatchWaitFunc
 }
 
 type pendingRequiredTool struct {
@@ -300,6 +308,15 @@ func WithPassivatingToolResult(name string, predicate func(output string) bool) 
 func WithCompletionGuard(guard ToolLoopCompletionGuardFunc) ToolLoopOption {
 	return func(opts *toolLoopOptions) {
 		opts.completionGuard = guard
+	}
+}
+
+// WithToolBatchWait installs a wait run after each non-terminal tool batch
+// (ToolLoopBatchWaitFunc). Its waits count against the completion guard's
+// wait bound (maxCompletionGuardWaits), not its retries.
+func WithToolBatchWait(wait ToolLoopBatchWaitFunc) ToolLoopOption {
+	return func(opts *toolLoopOptions) {
+		opts.batchWait = wait
 	}
 }
 

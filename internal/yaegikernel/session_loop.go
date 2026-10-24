@@ -94,6 +94,10 @@ type SessionResult struct {
 	// cell returned (0: the cell never called it). The cell's commit marks
 	// read only through it (autopaper-arrivals-unanswered-2026-10-13).
 	RecordsShown int64 `json:"records_shown,omitempty"`
+	// JobsAwaited are the jobs a choir.Poll in the cell returned unfinished
+	// (running, or starting: staged in the cell). The host parks the turn
+	// on them (problems/engineering-busy-polls-its-own-job-2026-10-24.md).
+	JobsAwaited []string `json:"jobs_awaited,omitempty"`
 	// SlotToken is set on the worker's ready handshake only (ARCH-07): the
 	// per-spawn token the host generated, proving the process on the socket
 	// is the one it started.
