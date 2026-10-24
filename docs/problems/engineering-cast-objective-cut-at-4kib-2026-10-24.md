@@ -65,4 +65,4 @@ over 16 KiB prove common.
 - Not investigated here: whether Texture should cap its Cast objective.
 
 Heresy delta: discovered 1 (a marker that promises an unreadable record),
-introduced 0, repaired 0 (until the fix commit).
+introduced 0, repaired 1 (objective bound raised to 16 KiB; the marker now says the rest is not readable and names choir.Ask to management). Rollback: revert the fix commit (display-only change; the tape and digests are untouched).

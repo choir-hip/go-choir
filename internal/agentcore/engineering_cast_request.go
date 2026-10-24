@@ -27,8 +27,12 @@ const (
 	// engineeringRequestDigestSeed domain-separates the parent-text digest.
 	engineeringRequestDigestSeed = "choir:delegated-cast-parent-request:v1"
 	// The view cuts the parent's text at these bounds; the digest covers all
-	// of it. The parent record stays on the tape.
-	engineeringRequestObjectiveMax = 4 << 10
+	// of it. The parent record stays on the tape, but no in-cell verb reads
+	// a record by ref, so what is cut is not readable from the desk. The
+	// objective bound equals the body's: a 4 KiB objective cut a 6,338 B
+	// request on 2026-10-24
+	// (docs/problems/engineering-cast-objective-cut-at-4kib-2026-10-24.md).
+	engineeringRequestObjectiveMax = 16 << 10
 	engineeringRequestBodyMax      = 16 << 10
 )
 
@@ -67,8 +71,11 @@ func legacyEngineeringRequestDigest(objective, parentID, recordID string) string
 	}, "\x00")))
 }
 
+// truncationMarker says plainly that the rest is not readable from the desk
+// (no verb reads a record by ref) and names the route that works: management
+// holds the Texture Cast in its inbox and can send the omitted part.
 func truncationMarker(total int, kept int, parentRecordID string) string {
-	return fmt.Sprintf("\n[... truncated: showing %d of %d bytes; the full text is on the tape in record %s]", kept, total, parentRecordID)
+	return fmt.Sprintf("\n[... truncated: showing %d of %d bytes of the Texture request (record %s). The rest is not readable from your desk; do not guess it. Ask for it with choir.Ask(\"management\", \"send bytes %d-%d of the request in %s\") before acting on what is cut]", kept, total, parentRecordID, kept, total, parentRecordID)
 }
 
 // boundRequestText cuts text to at most max bytes on a rune boundary and
