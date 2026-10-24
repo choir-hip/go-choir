@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# Behavioural test for node-b-vm-slice-preflight against a fake cgroup2
+# root. Needs no root and no systemd.
+#
+#   .github/scripts/node-b-vm-slice-preflight-test
+#
+# Failure modes (bunch 179, DeepSeek finding 1), written before the script:
+#   V1  a process in the old in-unit VM cgroup lets the deploy's vmctl
+#       restart hit the pre-existing wedge
+#   V2  a process in a nested leaf is missed
+#   V3  empty leftover leaves refuse a deploy that would be fine
+#   V4  a cgroup.procs that cannot be read is read as empty
+#   V5  a process in the new VM slice refuses (it is the intended layout)
+set -u
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+script="$here/node-b-vm-slice-preflight"
+fail=0
+pass=0
+tmp="$(mktemp -d)"
+trap 'chmod -R u+rwx "$tmp" 2>/dev/null; rm -rf "$tmp"' EXIT
+
+old="system.slice/go-choir-vmctl.service/vms"
+new="system.slice/system-choirvms.slice/vms"
+
+fresh_root() {
+  root="$tmp/$1"
+  rm -rf "$root"
+  mkdir -p "$root/system.slice/go-choir-vmctl.service" "$root/$new"
+}
+leaf() { # root-relative cgroup, procs content
+  mkdir -p "$root/$1"
+  printf '%s' "$2" >"$root/$1/cgroup.procs"
+}
+run() {
+  PREFLIGHT_CGROUP_ROOT="$root" bash "$script" >"$tmp/out" 2>&1
+  rc=$?
+}
+check() { # name, want-rc, optional required output pattern
+  if [ "$rc" -ne "$2" ]; then
+    echo "FAIL $1: exit $rc, want $2"; sed 's/^/    /' "$tmp/out"; fail=$((fail + 1)); return
+  fi
+  if [ -n "${3:-}" ] && ! grep -Fq -- "$3" "$tmp/out"; then
+    echo "FAIL $1: output lacks: $3"; sed 's/^/    /' "$tmp/out"; fail=$((fail + 1)); return
+  fi
+  echo "ok   $1"; pass=$((pass + 1))
+}
+
+fresh_root none
+run; check "no old vms cgroup passes" 0
+
+fresh_root empty
+leaf "$old" ""
+leaf "$old/vm-a" ""
+leaf "$old/vm-b" ""
+run; check "V3 empty old leaves pass" 0
+
+fresh_root pid
+leaf "$old" ""
+leaf "$old/vm-a" $'4242\n'
+run; check "V1 a pid in an old leaf refuses" 1 "4242"
+grep -Fq "go-choir-vmctl.service/vms/vm-a" "$tmp/out" || { echo "FAIL V1: output does not name the leaf"; fail=$((fail + 1)); }
+grep -Fq "vmctl-restart-fails-while-a-jailed-vm-runs" "$tmp/out" || { echo "FAIL V1: output does not name the record"; fail=$((fail + 1)); }
+
+fresh_root nested
+leaf "$old" ""
+leaf "$old/vm-a/deeper" $'77\n88\n'
+run; check "V2 a pid in a nested leaf refuses" 1 "77 88"
+
+fresh_root parentproc
+leaf "$old" $'31\n'
+run; check "V1 a pid in the old vms/ itself refuses" 1 "31"
+
+fresh_root newslice
+leaf "$old" ""
+leaf "$new" ""
+leaf "$new/vm-a" $'4242\n'
+run; check "V5 a pid in the new VM slice passes" 0
+
+if [ "$(id -u)" -ne 0 ]; then
+  fresh_root unreadable
+  leaf "$old/vm-a" $'4242\n'
+  chmod 000 "$root/$old/vm-a/cgroup.procs"
+  run; check "V4 an unreadable cgroup.procs refuses" 1 "cannot read"
+  chmod 644 "$root/$old/vm-a/cgroup.procs"
+else
+  echo "skip V4 (root reads everything)"
+fi
+
+echo "node-b-vm-slice-preflight: $pass passed, $fail failed"
+[ "$fail" -eq 0 ]

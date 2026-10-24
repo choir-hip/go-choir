@@ -48,6 +48,18 @@ reject_in "$workflow" 'ssh-keyscan'
 reject_in "$workflow" "<<'REMOTE_DEPLOY'"
 reject_in "$workflow" "<<'REMOTE_PREBUILD'"
 require_in "$deploy_program" 'echo "==> Staging deploy complete"'
+# The VM-slice preflight refuses a deploy while a process lives in the old
+# in-unit VM cgroup, and runs before the build, the switch and the vmctl
+# restart it protects.
+require_in "$deploy_program" '.github/scripts/node-b-vm-slice-preflight'
+preflight_line=$(grep -nF '.github/scripts/node-b-vm-slice-preflight' "$deploy_program" | head -1 | cut -d: -f1)
+for later in 'echo "==> Building selected NixOS closure and guest images"' 'echo "==> Activating NixOS config"' 'echo "==> Restarting vmctl when selected classes require it"'; do
+  later_line=$(grep -nF -- "$later" "$deploy_program" | head -1 | cut -d: -f1)
+  [ -n "$later_line" ] && [ "$preflight_line" -lt "$later_line" ] || {
+    echo "deploy workflow contract: the VM-slice preflight must run before: $later" >&2
+    exit 1
+  }
+done
 require_in "$prebuild_program" 'exit "$prebuild_status"'
 # SEC-14 deploy 2: CI logs in as choir-deploy, whose forced command is the
 # gate (scripts/node-b-ci-gate); it sends a verb and typed values, never a
