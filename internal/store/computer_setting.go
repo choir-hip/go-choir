@@ -76,6 +76,13 @@ const SettingEventTable = "store.event_table"
 // rollback. The env switch CHOIR_SOURCE_PROJECTION=1 turns it on regardless.
 const SettingSourceProjection = "source.projection"
 
+// SettingTraceLog will move the nine trace kinds off the tape into the
+// guest-local trace segment log (docs/design/trace-segment-log-2026-10-22.md
+// section 8). Registered by slice S2 and not acted on: the writer is S4's, and
+// until then nothing reads the value. Off by default; off will be the live
+// rollback. No env override ships for production computers.
+const SettingTraceLog = "store.trace_log"
+
 // KnownComputerSettings are the settings a computer has, with their
 // defaults. A key outside this list is refused, so a typo never stores a
 // setting nobody reads.
@@ -88,6 +95,7 @@ var KnownComputerSettings = map[string]bool{
 	SettingDebouncedCheckpoint:   false,
 	SettingEventTable:            false,
 	SettingSourceProjection:      false,
+	SettingTraceLog:              false,
 }
 
 // ComputerSetting is one switch's value on one computer.

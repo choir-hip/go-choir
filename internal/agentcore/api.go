@@ -854,6 +854,11 @@ type guestObservabilityResponse struct {
 	// section 6). Served from a snapshot: reading it never waits on the
 	// allocator.
 	StreamSeqLease *store.StreamSeqLeaseStats `json:"stream_seq_lease,omitempty"`
+	// TraceLog is the trace segment log's counters: lines and bytes by kind,
+	// fsyncs, the ordering barrier's fsyncs and p99, segments and retained
+	// bytes, the retention floor, dropped, fallbacks and poisoned (trace-log
+	// design S2). Read-only.
+	TraceLog *store.TraceLogStats `json:"trace_log,omitempty"`
 	// GuestCheckpoint is the guest's Dolt history-commit cadence: the mode,
 	// inline commits (time writers waited) and background commits, and
 	// what is not yet committed (ARCH-13). Read-only.
@@ -1014,6 +1019,8 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 		resp.TelemetryBatching = &telemetry
 		lease := h.rt.store.StreamSeqLeaseStats()
 		resp.StreamSeqLease = &lease
+		traceLog := h.rt.store.TraceLogStats()
+		resp.TraceLog = &traceLog
 		checkpoint := h.rt.store.CheckpointStats()
 		resp.GuestCheckpoint = &checkpoint
 		if st := h.rt.eventTableStatus(); st.HostGranted || st.Setting || st.StoreFloor > 0 {

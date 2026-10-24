@@ -443,10 +443,10 @@ func (s *Store) eventTableNewestStreamSeq(ctx context.Context) (int64, error) {
 // Deploy 2: the writer (event-table design 2.2, 4.2). The runtime applies
 // store.event_table (the owner's setting and the host's grant, both required)
 // through SetEventTableWrites. With it on, AppendEvent stamps the op of every
-// event whose kind's storage class is StorageEventTable, on both paths: the
-// acknowledged write (W1, appendStampedEvent) and the sealer (W2,
-// newTelemetryRecord). The lifecycle fold (W3) never stamps. Off, the
-// tape is byte for byte deploy 1's.
+// event whose kind is EventTableEligible (the event-table class, and the
+// trace-log kinds until the log writes), on both paths: the acknowledged write
+// (W1, appendStampedEvent) and the sealer (W2, newTelemetryRecord). The
+// lifecycle fold (W3) never stamps. Off, the tape is byte for byte deploy 1's.
 //
 // Rollback once any op is stamped: the setting off (live; events already in
 // choir_events stay there and stay readable), then a binary down to deploy 1.
@@ -580,7 +580,7 @@ func (s *Store) EventTableWritesOn() bool {
 func (s *Store) stampsEventTable(kind types.EventKind) bool {
 	return s.projectionTape != nil && s.eventTableWrites.Load() &&
 		s.lease.state == leaseReady && s.lease.onTape.Load() &&
-		kind.Storage() == types.StorageEventTable
+		kind.EventTableEligible()
 }
 
 // eventObjectOp is the object_recorded op of one choir.event object, stamped

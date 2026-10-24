@@ -1,13 +1,17 @@
 package types
 
-// EventStorage says which table a choir.event projects into once the writer
-// stamps it (docs/design/choir-event-table-f-c-2026-10-22.md section 2.1).
+// EventStorage says where a choir.event is stored once the writer stamps it:
+// which table (docs/design/choir-event-table-f-c-2026-10-22.md section 2.1), or
+// the guest-local trace log (docs/design/trace-segment-log-2026-10-22.md
+// section 2.2).
 //
 // It is a decision of its own, beside durability: a change to the batching
 // table must never move rows between tables without someone deciding it. The
-// two are pinned equal today by a test, so a change to either fails until
-// both are decided. The default for anything not named below is the object
-// graph, so an unknown or mistyped kind stays where every reader expects it.
+// two are pinned together today by a test (a batched kind is in the event
+// table or the trace log, and nothing else is), so a change to either fails
+// until both are decided. The default for anything not named below is the
+// object graph, so an unknown or mistyped kind stays where every reader
+// expects it.
 //
 // The class decides only what the writer stamps. The projector routes on the
 // stamp on the tape, never on this class, so a later binary may add a kind
@@ -20,22 +24,30 @@ const (
 	// StorageEventTable moves the event to choir_events (4 prolly trees per
 	// insert instead of 13).
 	StorageEventTable EventStorage = "event_table"
+	// StorageTraceLog is the guest-local trace segment log, off the tape: the
+	// nine trace kinds, once the log writes (R7 slice S4). Until then nothing
+	// writes the class, and these kinds go where StorageEventTable kinds go
+	// (EventTableEligible). loop.compaction.completed stays StorageEventTable:
+	// run acceptance reads it as a checkpoint.
+	StorageTraceLog EventStorage = "trace_log"
 )
 
 // eventStorage is the closed storage classification of every EventKind. The
 // parser test in event_durability_test.go fails if a constant has no entry.
 var eventStorage = map[EventKind]EventStorage{
-	// Event table: the ten per-step trace lines, about 94% of appends.
-	EventRunDelta:                     StorageEventTable,
-	EventRunProgress:                  StorageEventTable,
-	EventRunRetry:                     StorageEventTable,
-	EventRunCompactionStarted:         StorageEventTable,
+	// Trace lines: the ten per-step lines, about 94% of appends. Nine are the
+	// trace log's (R7); loop.compaction.completed is the tape's, in the event
+	// table.
+	EventRunDelta:                     StorageTraceLog,
+	EventRunProgress:                  StorageTraceLog,
+	EventRunRetry:                     StorageTraceLog,
+	EventRunCompactionStarted:         StorageTraceLog,
 	EventRunCompactionCompleted:       StorageEventTable,
-	EventToolInvoked:                  StorageEventTable,
-	EventToolResult:                   StorageEventTable,
-	EventDeskCell:                     StorageEventTable,
-	EventDeskEgress:                   StorageEventTable,
-	EventTextureAgentRevisionProgress: StorageEventTable,
+	EventToolInvoked:                  StorageTraceLog,
+	EventToolResult:                   StorageTraceLog,
+	EventDeskCell:                     StorageTraceLog,
+	EventDeskEgress:                   StorageTraceLog,
+	EventTextureAgentRevisionProgress: StorageTraceLog,
 
 	// Object graph: run state transitions, which the lifecycle fold writes
 	// under an absent-condition on og_objects.
@@ -86,4 +98,16 @@ func (k EventKind) Storage() EventStorage {
 		return s
 	}
 	return StorageObjectGraph
+}
+
+// EventTableEligible reports whether the F-c writer may stamp the kind for
+// choir_events: the kinds of the event-table class, and the trace-log kinds,
+// whose fallback sink the event table is until the log writes (and whenever it
+// falls back, design 4.3). It is the old ten.
+func (k EventKind) EventTableEligible() bool {
+	switch k.Storage() {
+	case StorageEventTable, StorageTraceLog:
+		return true
+	}
+	return false
 }

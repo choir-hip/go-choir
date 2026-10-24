@@ -5,6 +5,13 @@ package store
 // was produced by running traceLogReadMatrix on origin/main, before any code
 // of slice S2 existed, so an empty log is compared with the code it must not
 // change. This file uses only the store API that existed on that checkout.
+//
+// To regenerate it (only if the script changes, and only on a checkout without
+// the S2 code: the parent of the first S2 commit on lane/fp0-r7-s2, or any origin/main before it): add
+// a test that opens a store, calls appendTraceLogScript, and writes one line
+// per traceLogReadMatrix entry as "name<TAB>sha256(page)" and one per
+// traceLogSeedProbe entry as "name<TAB>value", sorted, to
+// testdata/trace_log_empty_matrix.golden.
 
 import (
 	"context"
