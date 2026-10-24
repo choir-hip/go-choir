@@ -156,6 +156,36 @@ func TestSelfDevelopmentRouteProjectionRequiresExactPlatformCertificate(t *testi
 	if _, err := authority.ApplySelfDevelopmentProjection(t.Context(), registry, tampered, now); err == nil {
 		t.Fatal("tampered route certificate was accepted")
 	}
+
+	// The promoted slot stays classifiable: on 2026-10-24 the first
+	// self-development apply on a constructed computer made vmctl's list fail
+	// closed for every computer (docs/problems/selfdev-apply-on-a-constructed-
+	// computer-breaks-vmctl-list-2026-10-24.md).
+	classified, receiptID, constructed, err := authority.constructedOwnershipIdentity(t.Context(), "owner", "primary", ownership.VMID)
+	if err != nil || !constructed || classified == nil || *classified != newVersion || receiptID != "" {
+		t.Fatalf("self-development promotion classification version=%v receipt=%q constructed=%v err=%v", classified, receiptID, constructed, err)
+	}
+
+	// A promotion whose scope is neither platform-follow nor self-development
+	// is still unknown evidence, and still refused.
+	otherSlotID, _ := routeledger.RouteSlotID("other-owner", "primary")
+	otherBootstrapApproval, _ := routeledger.NewAuthorizationEvidence(routeledger.AuthorizationEvidenceApproval, otherSlotID, oldVersion, json.RawMessage(`{"bootstrap":"approval"}`), now)
+	otherBootstrapCertificate, _ := routeledger.NewAuthorizationEvidence(routeledger.AuthorizationEvidencePromotionCertificate, otherSlotID, oldVersion, json.RawMessage(`{"bootstrap":"certificate"}`), now)
+	otherSlot, _, err := ledger.TransitionWithEvidence(t.Context(), routeledger.TransitionCommand{RouteSlotID: otherSlotID, Kind: routeledger.TransitionBootstrap, New: oldVersion, ApprovalRef: routeledger.ApprovalRef(otherBootstrapApproval.Ref), PromotionCertificateRef: routeledger.PromotionCertificateRef(otherBootstrapCertificate.Ref), IdempotencyKey: "idempotency:other-bootstrap"}, []routeledger.AuthorizationEvidence{otherBootstrapApproval, otherBootstrapCertificate})
+	if err != nil {
+		t.Fatal(err)
+	}
+	unscoped := accepted
+	unscoped.DecisionScope = "computer:other:approve"
+	unscopedJSON, _ := computerevent.CanonicalJSON(unscoped)
+	otherApproval, _ := routeledger.NewAuthorizationEvidence(routeledger.AuthorizationEvidenceApproval, otherSlotID, newVersion, unscopedJSON, now)
+	otherPromotion, _ := routeledger.NewAuthorizationEvidence(routeledger.AuthorizationEvidencePromotionCertificate, otherSlotID, newVersion, joinJSON, now)
+	if _, _, err := ledger.TransitionWithEvidence(t.Context(), routeledger.TransitionCommand{RouteSlotID: otherSlotID, Kind: routeledger.TransitionPromote, Old: oldVersion, New: newVersion, ExpectedGeneration: otherSlot.Generation, ApprovalRef: routeledger.ApprovalRef(otherApproval.Ref), PromotionCertificateRef: routeledger.PromotionCertificateRef(otherPromotion.Ref), IdempotencyKey: "idempotency:other-promote"}, []routeledger.AuthorizationEvidence{otherApproval, otherPromotion}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := authority.constructedOwnershipIdentity(t.Context(), "other-owner", "primary", "vm-other"); err == nil || !strings.Contains(err.Error(), "unrecognized route execution evidence") {
+		t.Fatalf("unscoped promotion classification err=%v, want unrecognized", err)
+	}
 }
 
 func TestHandleListClassifiesConstructedOwnershipFromRouteEvidence(t *testing.T) {
