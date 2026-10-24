@@ -1608,3 +1608,8 @@ Append-only. One terse entry per orchestrator pass.
   - Q4 default policies: security auto; platform and app updates auto; a computer that diverges moves to propose (the owner wants a customized computer to be offered new features, not forced or hidden).
   - propose needs visual evidence (Playwright screenshots and video), embedded in the change's Texture document and in the Updates app. Open (owner unsure): letting the user try the new version beside the current one at a second URL.
   - Q5: changes should be as modular as possible (a mail app should not carry an unrelated theme change); distribution is source, not binary (owner notes 2026-10-14 §15).
+- 19:0x. Owner rulings on the ICRL design's five open decisions (docs/design/tasks-precommit-icrl-2026-10-24.md, lane/fp0-icrl-design):
+  - 1 (a 50/50 split of engineering assignments, digest shown or not, until 200 settled claims per arm) and 2 (a capsule with /computer/files gets package mirrors only): agreed.
+  - 3 replaced: research works in rounds and reports to Texture after each round of searches, not only at the end, so Texture revises iteratively and can answer research before the next round. Each round is a precommitted experiment, settled by its report. (Not one Texture entry per search, and not a count in a final Report.)
+  - 4 (System1 scoring as a host step for management): agreed.
+  - 5 (never show per-item System1 verdicts, even on finished work): agreed for now, marked to reconsider: "there is value to desk being able to actually see its actual results. That's kind of a self-accountability thing."
