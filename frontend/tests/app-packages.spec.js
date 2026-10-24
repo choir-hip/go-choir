@@ -10,6 +10,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { build } from 'vite';
+import { svelte } from '@sveltejs/vite-plugin-svelte';
+import packageBoundary from '../scripts/package-boundary-plugin.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const frontendRoot = path.resolve(__dirname, '..');
@@ -83,23 +86,6 @@ const badCases = [
     m.desk = { name: 'image' };
     fs.writeFileSync(path.join(root, 'src/packages/image/choir-package.json'), JSON.stringify(m));
   }, /desk must be null/],
-  ['import-escape', (root) => fs.appendFileSync(path.join(root, 'src/packages/image/App.svelte'), "\n<script>import x from '../../lib/auth.js';</script>\n"), /leaves the package/],
-  ['import-sdk-wrong-path', (root) => fs.appendFileSync(path.join(root, 'src/packages/image/App.svelte'), "\n<script>import x from '../../lib/media-utils.js';</script>\n"), /leaves the package/],
-  ['import-bare-module', (root) => fs.appendFileSync(path.join(root, 'src/packages/image/App.svelte'), "\n<script>import x from 'lodash';</script>\n"), /not svelte, a declared dependency/],
-  ['import-dynamic', (root) => fs.writeFileSync(path.join(root, 'src/packages/image/helper.js'), "export const f = () => import('../../lib/auth.js');\n"), /leaves the package/],
-  ['import-reexport', (root) => fs.writeFileSync(path.join(root, 'src/packages/image/helper.ts'), "export * from '../../lib/auth.js';\n"), /leaves the package/],
-  ['symlink-out', (root) => fs.symlinkSync(path.join(root, 'src/lib/app-sdk.ts'), path.join(root, 'src/packages/image/link.js')), /symlinks are not allowed/],
-  // Devin round 1 (bunch201): F1 dynamic reach.
-  ['import-meta-glob', (root) => fs.appendFileSync(path.join(root, 'src/packages/image/App.svelte'), "\n<script>const m = import.meta.glob('../../lib/auth.js', { eager: true });</script>\n"), /import\.meta\.glob\/resolve is not allowed/],
-  ['import-meta-resolve', (root) => fs.writeFileSync(path.join(root, 'src/packages/image/helper.js'), "export const u = import.meta.resolve('../../lib/auth.js');\n"), /import\.meta\.glob\/resolve is not allowed/],
-  ['import-nonliteral', (root) => fs.writeFileSync(path.join(root, 'src/packages/image/helper.js'), "const p = '../../lib/auth.js';\nexport const f = () => import(p);\n"), /import\(\) must take a quoted string literal/],
-  ['import-template-literal', (root) => fs.writeFileSync(path.join(root, 'src/packages/image/helper.js'), 'export const f = (n) => import(`../../lib/${n}.js`);\n'), /import\(\) must take a quoted string literal/],
-  // F2: every file is scanned, whatever its extension.
-  ...['tsx', 'jsx', 'mts', 'cts', 'cjs', 'vue'].map((ext) => [
-    `import-escape-in-${ext}`,
-    (root) => fs.writeFileSync(path.join(root, `src/packages/image/helper.${ext}`), "export { fetchWithRenewal } from '../../lib/auth.js';\n"),
-    /leaves the package/,
-  ]),
   // F3: only real directories under src/packages.
   ['symlinked-package-dir', (root) => {
     fs.cpSync(path.join(root, 'src/packages/image'), path.join(root, 'elsewhere'), { recursive: true });
@@ -154,6 +140,130 @@ test.describe('check-packages.mjs', () => {
       expect(r.out).toMatch(pattern);
     });
   }
+});
+
+
+// ---- the package boundary plugin, on the resolved module graph ----
+//
+// Each row builds a tiny project with the real plugin and must fail (or, for the
+// controls, pass). Rows are the bypasses found in review (bunch201, bunch203).
+
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+
+function makeProject(files) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'choir-boundary-'));
+  fs.symlinkSync(path.join(frontendRoot, 'node_modules'), path.join(root, 'node_modules'));
+  fs.copyFileSync(path.join(frontendRoot, 'package.json'), path.join(root, 'package.json'));
+  const all = {
+    'main.js': "import('./src/packages/p/App.svelte').then((m) => console.log(m));\n",
+    'src/lib/app-sdk.ts': 'export const sdk = 1;\n',
+    'src/lib/secret.js': 'export const secret = 42;\n',
+    'src/lib/secret.css': '.secret { color: red; }\n',
+    'src/packages/q/helper.js': 'export const other = 1;\n',
+    'src/packages/p/local.js': 'export const local = 1;\n',
+    'src/packages/p/App.svelte': '<div>ok</div>\n',
+    ...files,
+  };
+  for (const [rel, body] of Object.entries(all)) {
+    fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+    fs.writeFileSync(path.join(root, rel), body);
+  }
+  fs.writeFileSync(path.join(root, 'src/lib/secret.png'), PNG);
+  fs.writeFileSync(path.join(root, 'src/packages/p/pic.png'), PNG);
+  return root;
+}
+
+async function buildProject(root) {
+  await build({
+    root,
+    configFile: false,
+    logLevel: 'silent',
+    plugins: [packageBoundary({ root }), svelte({ configFile: false, compilerOptions: { css: 'injected' } })],
+    build: { write: false, minify: false, rollupOptions: { input: path.join(root, 'main.js') } },
+  });
+}
+
+const script = (body) => ({ 'src/packages/p/App.svelte': `<script>\n${body}\n</script>\n<div>ok</div>\n` });
+const style = (css) => ({ 'src/packages/p/App.svelte': `<div class="a">ok</div>\n<style>\n${css}\n</style>\n` });
+const outside = /may not import/;
+
+const boundaryControls = [
+  ['own files, sdk, svelte, svelte/store, a declared dependency, own asset',
+    script("import { local } from './local.js';\nimport { sdk } from '../../lib/app-sdk';\nimport { onMount } from 'svelte';\nimport { writable } from 'svelte/store';\nimport JSZip from 'jszip';\nimport pic from './pic.png';\nimport s from './local.js?raw';\nconsole.log(local, sdk, onMount, writable, JSZip, pic, s, import.meta.env);\nimport('./local.js').then(console.log);")],
+  ['own css, data: urls and fragments', style('.a { color: red; background: url(data:image/png;base64,AAAA); fill: url(#grad); }')],
+];
+
+const boundaryBad = [
+  // static, whitespace and comment forms (bunch203 N1)
+  ['static import', script("import { secret } from '../../lib/secret.js';\nconsole.log(secret);"), outside],
+  ['import with no spaces', script("import{secret}from'../../lib/secret.js';console.log(secret);"), outside],
+  ['bare side-effect import', script("import'../../lib/secret.js';"), outside],
+  ['comment-split import', { ...script("import/**/a/**/from/**/'../../lib/secret.js';console.log(a);") }, outside],
+  ['unicode binding', script("import π from'../../lib/secret.js';console.log(π);"), outside],
+  ['re-export star in a helper', { ...script("import './h.js';"), 'src/packages/p/h.js': "export*from'../../lib/secret.js';\n" }, outside],
+  ['re-export star in a .tsx helper', { ...script("import './h.tsx';"), 'src/packages/p/h.tsx': "export*from'../../lib/secret.js';\n" }, outside],
+  ['dynamic import, comment before paren', script("import/*c*/('../../lib/secret.js').then(console.log);"), outside],
+  ['dynamic import with a variable', script("const p = '../../lib/secret.js';\nimport(/* @vite-ignore */ p).then(console.log);"), /must take a string literal/],
+  ['dynamic import with a template', script("export let n = 'secret';\nimport(`../../lib/${n}.js`).then(console.log);"), outside],
+  ['import.meta.glob eager', script("const m = import.meta.glob('../../lib/*.js', { eager: true });\nconsole.log(m);"), outside],
+  ['import.meta.glob with ?raw', script("const m = import.meta.glob('../../lib/*.js', { query: '?raw', eager: true });\nconsole.log(m);"), outside],
+  ['import.meta.resolve', script("console.log(import.meta.resolve('../../lib/secret.js'));"), /import\.meta is only allowed/],
+  ['import.meta computed member', script("console.log(import.meta['resolve']('../../lib/secret.js'));"), /import\.meta is only allowed/],
+  ['import.meta destructured', script("const { glob } = import.meta;\nconsole.log(glob);"), /import\.meta is only allowed/],
+  ['import.meta aliased', script("const m = import.meta;\nconsole.log(m.resolve('x'));"), /import\.meta is only allowed/],
+  // the other query forms, absolute and bare traversal
+  ['?raw of an outside file', script("import s from '../../lib/secret.js?raw';console.log(s);"), outside],
+  ['?url of an outside file', script("import u from '../../lib/secret.png?url';console.log(u);"), outside],
+  ['root-absolute path', script("import { secret } from '/src/lib/secret.js';console.log(secret);"), outside],
+  ['bare path traversal', script("import { secret } from 'svelte/../../src/lib/secret.js';console.log(secret);"), /.+/],
+  ['another package', script("import { other } from '../q/helper.js';console.log(other);"), outside],
+  ['an undeclared dependency', script("import { build } from 'vite';console.log(build);"), outside],
+  // runtime reach
+  ['eval', script("eval('1 + 1');"), /"eval" is not allowed/],
+  ['eval of raw text', { ...script("import raw from './local.js?raw';\neval(raw);") }, /"eval" is not allowed/],
+  ['new Function', script("new Function('return 1')();"), /"Function" is not allowed/],
+  ['Function call', script("Function('return 1')();"), /"Function" is not allowed/],
+  ['setTimeout with a string', script("setTimeout('console.log(1)', 0);"), /setTimeout with a string/],
+  ['new URL with import.meta.url', script("console.log(new URL('../../lib/secret.js', import.meta.url).href);"), /import\.meta is only allowed|outside/],
+  ['new Worker with import.meta.url', script("new Worker(new URL('../../lib/secret.js', import.meta.url), { type: 'module' });"), /"Worker" is not allowed|import\.meta is only allowed/],
+  // CSS (bunch203 N4)
+  ['css @import quoted', style("@import '../../lib/secret.css';\n.a { color: red; }"), /@import is not allowed/],
+  ['css @import url unquoted', style("@import url(../../lib/secret.css);\n.a { color: red; }"), /@import is not allowed/],
+  ['css @IMPORT upper case', style("@IMPORT '../../lib/secret.css';\n.a { color: red; }"), /@import is not allowed/],
+  ['css @import no space', style("@import'../../lib/secret.css';\n.a { color: red; }"), /@import is not allowed/],
+  ['css escaped @import', style("@\\69mport '../../lib/secret.css';\n.a { color: red; }"), /@import is not allowed/],
+  ['css url() outside', style('.a { background: url(../../lib/secret.png); }'), /url\(\) in package CSS/],
+  ['css url() quoted, upper case', style(".a { background: URL('../../lib/secret.png'); }"), /url\(\) in package CSS/],
+  ['css .css file import outside', { ...script("import '../../lib/secret.css';") }, outside],
+  ['css file in the package with @import', { ...script("import './x.css';"), 'src/packages/p/x.css': "@import '../../lib/secret.css';\n" }, /@import is not allowed/],
+];
+
+test.describe('package boundary plugin', () => {
+  for (const [label, files] of boundaryControls) {
+    test(`allows: ${label}`, async () => {
+      const root = makeProject(files);
+      await buildProject(root);
+    });
+  }
+  for (const [label, files, pattern] of boundaryBad) {
+    test(`refuses: ${label}`, async () => {
+      const root = makeProject(files);
+      let message = '';
+      try {
+        await buildProject(root);
+      } catch (e) {
+        message = String(e?.message || e);
+      }
+      expect(message, 'the build should have failed').not.toBe('');
+      if (process.env.SHOW_BOUNDARY) console.log(`${label} => ${message.split('\n')[0].slice(0, 230)}`);
+      expect(message).toMatch(pattern);
+    });
+  }
+
+  test('a module outside any package may import anything', async () => {
+    const root = makeProject({ 'main.js': "import { secret } from './src/lib/secret.js';\nconsole.log(secret);\n" });
+    await buildProject(root);
+  });
 });
 
 // ---- the shell: the image viewer as a package ----

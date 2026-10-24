@@ -58,7 +58,7 @@ export function loadPackageApps(reservedIds: ReadonlySet<string>): LoadedPackage
       const entryPath = manifestPath.replace(/choir-package\.json$/, 'App.svelte');
       const component = componentModules[entryPath];
       const name = manifest?.name;
-      if (!name || !isObject(manifest.app) || !isObject(manifest.display)) {
+      if (typeof name !== 'string' || !name || !isObject(manifest.app) || !isObject(manifest.display)) {
         console.warn(`[packages] skipped ${manifestPath}: malformed manifest`);
         continue;
       }
@@ -73,9 +73,9 @@ export function loadPackageApps(reservedIds: ReadonlySet<string>): LoadedPackage
       }
       const packageAliases = manifest.app.aliases ?? [];
       const opensList = manifest.opens ?? [];
-      if (!Array.isArray(packageAliases) || !Array.isArray(opensList)
+      if (!Array.isArray(packageAliases) || !packageAliases.every((a) => typeof a === 'string') || !Array.isArray(opensList)
         || !opensList.every((o) => isObject(o) && Array.isArray(o.extensions))) {
-        console.warn(`[packages] skipped ${name}: aliases, opens and opens[].extensions must be arrays`);
+        console.warn(`[packages] skipped ${name}: aliases (strings), opens and opens[].extensions must be arrays`);
         continue;
       }
       const claimed = [name, ...packageAliases];

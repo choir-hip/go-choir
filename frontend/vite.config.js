@@ -1,5 +1,7 @@
 import { defineConfig } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
+import { fileURLToPath } from 'node:url';
+import packageBoundary from './scripts/package-boundary-plugin.mjs';
 
 const buildInfo = {
   version: process.env.VITE_CHOIR_BUILD_VERSION || process.env.CHOIR_BUILD_VERSION || 'dev',
@@ -8,7 +10,8 @@ const buildInfo = {
 };
 
 export default defineConfig({
-  plugins: [svelte()],
+  // The package boundary plugin goes first so its pre hooks run before svelte's.
+  plugins: [packageBoundary({ root: fileURLToPath(new URL('.', import.meta.url)) }), svelte()],
   define: {
     __CHOIR_BUILD_VERSION__: JSON.stringify(buildInfo.version),
     __CHOIR_BUILD_COMMIT__: JSON.stringify(buildInfo.commit),
