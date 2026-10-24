@@ -21,7 +21,6 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 )
 
@@ -42,13 +41,6 @@ var (
 	// objectgraph.ValidPackageName: 2 to 32 characters.
 	versionPattern = regexp.MustCompile(`^(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})$`)
 	aliasPattern   = regexp.MustCompile(`^[a-z][a-z0-9-]{0,39}$`)
-	// A shell name no package may take (the static app registry is checked by
-	// the frontend script, which reads it).
-	shellNames = map[string]bool{
-		"desktop": true, "shell": true, "package": true, "packages": true,
-		"app-packages": true, "system": true, "trace": true, "terminal": true,
-		"features": true, "choir": true, "owner": true,
-	}
 )
 
 // Manifest is choir.app-package/v1 as P1 fixes it (design section 3.1). The
@@ -160,7 +152,7 @@ func (m Manifest) Validate() error {
 	}
 	seenAlias := map[string]bool{m.Name: true}
 	for _, a := range m.App.Aliases {
-		if !aliasPattern.MatchString(a) || shellNames[a] {
+		if !aliasPattern.MatchString(a) || objectgraph.IsShellName(a) {
 			return invalid("app.aliases: %q is not a valid alias", a)
 		}
 		if seenAlias[a] {
@@ -200,15 +192,12 @@ func (m Manifest) Validate() error {
 	return m.validateKinds()
 }
 
+// checkName defers to the seam, which holds the whole reserved set (built-in
+// writers, the desk manifest, frozen V1 spellings, the shell's names) so the
+// manifest layer and the generated first-party table cannot disagree with it.
 func checkName(name string) error {
 	if !objectgraph.ValidPackageName(name) {
-		return invalid("name %q must match ^[a-z][a-z0-9-]{1,31}$ and not be a built-in desk", name)
-	}
-	if shellNames[name] {
-		return invalid("name %q is reserved by the shell", name)
-	}
-	if _, ok := deskmanifest.Lookup(name); ok {
-		return invalid("name %q is a desk; desk:%s would not be the package's own", name, name)
+		return invalid("name %q must match ^[a-z][a-z0-9-]{1,31}$ and not be reserved (a desk, an agent role, a built-in writer or a shell name)", name)
 	}
 	return nil
 }
@@ -242,6 +231,9 @@ func (m Manifest) validateKinds() error {
 		case string(objectgraph.IdentityExternalKey), string(objectgraph.IdentityContentHash):
 		default:
 			return invalid("kinds[%d] %q: identity %q is not external_key or content_hash", i, k.Kind, k.Identity)
+		}
+		if k.OwnerEdits && k.Identity != string(objectgraph.IdentityExternalKey) {
+			return invalid("kinds[%d] %q: owner_edits needs identity external_key (the owner writes by id)", i, k.Kind)
 		}
 		if k.SchemaVersion < 1 {
 			return invalid("kinds[%d] %q: schema_version must be at least 1", i, k.Kind)

@@ -7,6 +7,9 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
+	"github.com/yusefmosiah/go-choir/internal/vocabmigrate"
 )
 
 // The registry seam for app packages (doctrine I27; P2a of
@@ -58,18 +61,55 @@ var (
 	packageSchemaRef   = regexp.MustCompile(`^pkg:([a-z][a-z0-9-]{1,31})@([1-9][0-9]{0,8})$`)
 )
 
+// shellNames are names the shell owns; no package may take one (the static app
+// registry is checked by the frontend script, which reads it).
+var shellNames = map[string]bool{
+	"desktop": true, "shell": true, "package": true, "packages": true,
+	"app-packages": true, "system": true, "trace": true, "terminal": true,
+	"features": true, "choir": true, "owner": true,
+}
+
+// IsShellName reports whether name belongs to the shell (also barred as an app
+// alias).
+func IsShellName(name string) bool { return shellNames[name] }
+
 // ValidPackageName reports whether name may be a package's name for kinds and
-// its desk: the grammar, and not the name of a built-in desk.
+// its desk: the grammar, and not a reserved name.
 func ValidPackageName(name string) bool {
 	return validPackageName(name) == nil
+}
+
+// reservedPackageName says why name cannot be a package, or "" when it can.
+// desk:<name> is the package's own desk, so a name that is already a desk, an
+// agent role, a built-in writer or the shell's would make the package's writer
+// something else. The seam holds the whole set itself: the manifest layer and
+// the generated first-party table both reach it, and neither is trusted to have
+// checked.
+func reservedPackageName(name string) string {
+	switch {
+	case BuiltinWriters[Writer("desk:"+name)], BuiltinWriters[Writer("system:"+name)]:
+		return "a built-in writer"
+	case shellNames[name]:
+		return "a shell name"
+	}
+	if _, ok := deskmanifest.Lookup(name); ok {
+		return "a desk of the desk manifest"
+	}
+	// The frozen V1 desk spellings (super, co-super, researcher, ...) and the
+	// retained historical roles (processor, reconciler, verifier): the map is
+	// the single list of them, so no literal is repeated here.
+	if _, ok := vocabmigrate.ForwardV1ToV2(name); ok {
+		return "a desk or agent role (current or frozen V1 spelling)"
+	}
+	return ""
 }
 
 func validPackageName(name string) error {
 	if !packageNameGrammar.MatchString(name) {
 		return fmt.Errorf("%w: package name %q must match %s", ErrPackageKindRefused, name, packageNameGrammar)
 	}
-	if BuiltinWriters[Writer("desk:"+name)] {
-		return fmt.Errorf("%w: package name %q is a built-in desk; desk:%s would be that desk", ErrPackageKindRefused, name, name)
+	if why := reservedPackageName(name); why != "" {
+		return fmt.Errorf("%w: package name %q is reserved: it is %s, and desk:%s would not be the package's own", ErrPackageKindRefused, name, why, name)
 	}
 	return nil
 }
@@ -210,6 +250,9 @@ func registerPackageKindOn(r *Registry, tbl *packageKindTable, builtin *Registry
 	k.Owner = "package:" + pkg
 	if k.IdentityMode == "" {
 		k.IdentityMode = IdentityContentHash
+	}
+	if k.OwnerEdits && k.IdentityMode != IdentityExternalKey {
+		return refuse("kind %q admits owner_edits but is addressed by %s; the owner writes by id, so the same content would be two objects (use external_key)", k.Kind, k.IdentityMode)
 	}
 
 	tbl.mu.Lock()

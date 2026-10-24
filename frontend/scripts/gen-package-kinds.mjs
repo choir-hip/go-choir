@@ -32,8 +32,8 @@ const canonical = (value) => {
 const goString = (s) => JSON.stringify(s);
 
 if (check && !existsSync(resolve(root, 'internal/apppackage'))) {
-  console.warn('internal/apppackage is outside this source closure; relying on the committed firstparty_gen.go');
-  process.exit(0);
+  // A deleted package with its generated file must not pass the drift check.
+  fail('internal/apppackage is missing; --check cannot compare the generated table');
 }
 
 const packages = [];
