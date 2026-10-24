@@ -167,11 +167,15 @@ type Store struct {
 	doltConnector doltConnector
 	jsonPatchMu   sync.Mutex
 	trajectoryMu  sync.Mutex
-	// graphHomeMu serializes the graph-home slot claims and the table-to-graph
-	// imports (graph_home.go); the claim is a read-compare-write on one object.
-	graphHomeMu  sync.Mutex
-	textureRevMu sync.Mutex
-	doltCommitMu sync.Mutex
+	// graphHomeMu serializes every engineering-slot claim and release in both
+	// homes, and the table-to-graph imports (graph_home.go): a claim reads the
+	// setting, consults the other home and writes under it.
+	graphHomeMu sync.Mutex
+	// slotClaimHook, when set by a test, runs in a graph-home slot claim after
+	// the table check and before the slot is read (graph_home.go).
+	slotClaimHook func()
+	textureRevMu  sync.Mutex
+	doltCommitMu  sync.Mutex
 	// onlineGCSince is the UnixNano start of the online Dolt GC pass that is
 	// running now, 0 when none is (runOnlineDoltGC, OnlineGCStatus).
 	onlineGCSince atomic.Int64
@@ -2000,6 +2004,12 @@ func (s *Store) ListActiveRunsByTrajectory(ctx context.Context, ownerID, traject
 // run. If a live run already owns the slot, that run is returned and claimed is
 // false. If the previous owner is terminal, the slot is advanced to runID.
 func (s *Store) ClaimEngineeringSlot(ctx context.Context, ownerID, trajectoryID, slot, runID, agentID, requesterRunID string) (types.RunRecord, bool, error) {
+	// One lock covers the whole decision, in both homes: the setting is read,
+	// the other home is consulted and the claim is written without another
+	// claim (or import) interleaving. The setting is read inside the lock so a
+	// claim that waited acts on the setting as it stands when its turn comes.
+	s.graphHomeMu.Lock()
+	defer s.graphHomeMu.Unlock()
 	if s.graphHomeOn(ctx, ownerID, SettingEngineeringSlotsGraph) {
 		return s.claimEngineeringSlotGraph(ctx, ownerID, trajectoryID, slot, runID, agentID, requesterRunID)
 	}
@@ -2008,7 +2018,8 @@ func (s *Store) ClaimEngineeringSlot(ctx context.Context, ownerID, trajectoryID,
 
 // claimEngineeringSlotTable is the legacy home, used while
 // engineering.slots_graph is off. A slot the graph holds for a live run is
-// still held (a rollback must not hand out a held slot twice).
+// still held (a rollback must not hand out a held slot twice). The caller
+// holds graphHomeMu.
 func (s *Store) claimEngineeringSlotTable(ctx context.Context, ownerID, trajectoryID, slot, runID, agentID, requesterRunID string) (types.RunRecord, bool, error) {
 	ownerID = strings.TrimSpace(ownerID)
 	trajectoryID = strings.TrimSpace(trajectoryID)
@@ -2023,20 +2034,24 @@ func (s *Store) claimEngineeringSlotTable(ctx context.Context, ownerID, trajecto
 		return held, false, nil
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO co_super_slots (owner_id, trajectory_id, slot, run_id, agent_id, requested_by_run_id, claimed_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-		 ON DUPLICATE KEY UPDATE run_id = run_id`,
-		ownerID, trajectoryID, slot, runID, agentID, requesterRunID, now, now,
-	)
-	if err != nil {
-		return types.RunRecord{}, false, fmt.Errorf("insert co-super slot claim: %w", err)
-	}
-	if rows, err := res.RowsAffected(); err == nil && rows == 1 {
+	// Read the row first, then insert only when there is none. The old
+	// INSERT ... ON DUPLICATE KEY UPDATE run_id = run_id cannot be told from a
+	// fresh insert here: the driver counts the matched row, so RowsAffected was
+	// 1 for a duplicate and every second claim of a held slot returned
+	// claimed=true (docs/problems/data-has-more-than-one-home-2026-10-24.md,
+	// the table home's claim). graphHomeMu serializes claims in this process
+	// and the primary key refuses a second insert.
+	existingRunID, err := s.engineeringSlotRunIDTable(ctx, ownerID, trajectoryID, slot)
+	if errors.Is(err, ErrNotFound) {
+		if _, err := s.db.ExecContext(ctx,
+			`INSERT INTO co_super_slots (owner_id, trajectory_id, slot, run_id, agent_id, requested_by_run_id, claimed_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			ownerID, trajectoryID, slot, runID, agentID, requesterRunID, now, now,
+		); err != nil {
+			return types.RunRecord{}, false, fmt.Errorf("insert co-super slot claim: %w", err)
+		}
 		return types.RunRecord{}, true, nil
 	}
-
-	existingRunID, err := s.engineeringSlotRunIDTable(ctx, ownerID, trajectoryID, slot)
 	if err != nil {
 		return types.RunRecord{}, false, err
 	}
@@ -2048,7 +2063,7 @@ func (s *Store) claimEngineeringSlotTable(ctx context.Context, ownerID, trajecto
 		return types.RunRecord{}, false, err
 	}
 
-	res, err = s.db.ExecContext(ctx,
+	res, err := s.db.ExecContext(ctx,
 		`UPDATE co_super_slots
 		    SET run_id = ?,
 		        agent_id = ?,
@@ -2088,6 +2103,8 @@ func (s *Store) ReleaseEngineeringSlotClaim(ctx context.Context, ownerID, trajec
 	if ownerID == "" || trajectoryID == "" || slot == "" || runID == "" {
 		return fmt.Errorf("release co-super slot: owner_id, trajectory_id, slot, and run_id are required")
 	}
+	s.graphHomeMu.Lock()
+	defer s.graphHomeMu.Unlock()
 	if err := s.releaseEngineeringSlotGraph(ctx, ownerID, trajectoryID, slot, runID); err != nil {
 		return err
 	}
