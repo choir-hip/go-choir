@@ -1410,9 +1410,9 @@ in
       # Guests never swap; snapshot_diff.go's guestMemoryCannotSwap reads
       # this as the jailed leaf's bound (else diffs are refused).
       MemorySwapMax = "0";
-      # One 4 GiB guest while the jailer is limited to the two test
-      # computers. Rebalance against the vmctl unit's MemoryLow as computers
-      # move here (SEC-04 step 5). memory.low protects usage only.
+      # Rebalance against the vmctl unit's MemoryLow as computers move here
+      # (SEC-04 step 5; wave 1 jails class:test and class:primary).
+      # memory.low protects usage only.
       MemoryLow = "4G";
     };
   };
@@ -1562,7 +1562,7 @@ in
         # refused and the computer cold boots).
         # SEC-04 steps 1 to 3 (2026-10-23): two fresh test computers,
         # fp8-jailer-1023 and fp8-jailer-1023b (RES-05: one shared store image).
-        # On again (2026-10-24) for the two test computers only, now that
+        # On again (2026-10-24) for class:test, now that
         # jailed VMs live in system-choirvms.slice, outside this unit
         # (docs/problems/vmctl-restart-fails-while-a-jailed-vm-runs-2026-10-24.md).
         # SEC-04 step 4, wave 1 (owner, 2026-10-24: "yes, I want the jailer on
