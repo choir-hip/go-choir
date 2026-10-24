@@ -709,10 +709,29 @@ func (h *APIHandler) verifyDecisionModeReceipt(computerID, operationID, mode str
 	if request.Decision == "approve" {
 		return h.verifyConsumedModeReceipt(request.ModeReceipt, operationID, request)
 	}
-	if request.Decision != "reject" || field("old_mode") == "accept_once" || field("old_mode") == platform.SelfDevelopmentModeQualifiedConsensus || field("consumed_operation_id") != "" {
+	// A reject is the fail-safe decision and needs no grant, so it stays
+	// available for every candidate until it is applied. The one receipt that
+	// refuses it is this operation's own approval consumption: that receipt is
+	// the approval's proof and must not authorize the opposite decision on the
+	// same operation. A consumption of another operation, or an owner disarm
+	// of an arm, says nothing about this one
+	// (docs/problems/selfdev-reject-refused-after-accept-once-consumed-2026-10-24.md).
+	if request.Decision != "reject" || modeReceiptConsumesOperation(field("idempotency_key"), operationID) {
 		return fmt.Errorf("current mode does not authorize rejection")
 	}
 	return nil
+}
+
+// modeReceiptConsumesOperation reports whether a mode receipt's idempotency
+// key is the guest's consumption of an accept_once or qualified_consensus arm
+// by approving the named operation (the keys verifyConsumedModeReceipt binds).
+func modeReceiptConsumesOperation(idempotencyKey, operationID string) bool {
+	operationID = strings.TrimSpace(operationID)
+	if operationID == "" {
+		return false
+	}
+	return strings.HasPrefix(idempotencyKey, platform.AcceptOnceConsumptionKeyPrefix+operationID+":") ||
+		strings.HasPrefix(idempotencyKey, platform.QualifiedConsensusConsumptionKeyPrefix+operationID+":")
 }
 
 func (h *APIHandler) verifyConsumedModeReceipt(receipt *computerevent.Receipt, operationID string, request selfDevelopmentDecisionRequest) error {
