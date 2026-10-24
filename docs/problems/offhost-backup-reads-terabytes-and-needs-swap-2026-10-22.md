@@ -543,3 +543,41 @@ Round 2: discovered: a killed run left the previous `ok` in status.json
 (freshness silent up to 36 h); a failed verify was not flagged for 10
 days. introduced: none. repaired: both (e025d9121), and the drill's
 contradicting limits.
+
+## Staging evidence, 2026-10-24: the backup refuses computer starts
+
+FP0 read Node B during and after the 02:34 run (the first under Dolt root
+locked, D23). **[V]** systemd's accounting, journal and `free -m`.
+
+- The run succeeded: 02:34:14 to 03:21:09 (46 min 55 s), MemoryPeak 10.0
+  GiB (10738446336 B), 400.9 G read from disk, 66.6 G written, snapshot
+  660746260ede added 41608672131 bytes.
+- At 03:08, restic (`.restic-wrapped`) held 6.8 GB RSS and the unit's
+  MemoryCurrent was 8.2 GB, rising to 9.2 GB at 03:11, under
+  `GOMEMLIMIT=8GiB`. Host `available` was 5.2 to 6.6 GiB.
+- vmctl refused all three starts FP0 asked for at 03:08:42 to 03:08:50
+  (T, J1, J2: stop, then resolve) with `computer recovery blocked
+  (host_memory_pressure)`, for example "host memory available 6639 MiB;
+  519 MiB reserved for starts in flight; this computer needs 1491 MiB
+  (measured) above the 4779 MiB floor and 1024 MiB headroom".
+- After the run ended, `available` was 11.5 GiB at 03:21:22. The same three
+  starts, retried at 03:21, all succeeded in 12.6 to 13.8 s.
+
+This confirms the mechanism in "What else the run costs" above: while
+the backup runs, any computer that is not already running cannot start.
+That covers a wake from hibernate, a crash recovery and a first launch.
+It lasts the length of the run, about 47 minutes a night at 02:34. Pressure
+reclaim did not hibernate anyone (`eligible=0 protected=2`; only
+protected computers were active). Tonight's refusals were FP0's own probes.
+**[H]** Any user whose computer is asleep at 02:34 and is woken in the
+window would be refused the same way. Before launch that is a few test
+users. After launch it is a nightly outage for strangers.
+
+The largest term in restic's memory is the trees of the three flat
+directories (section above): about 9.2 M of the 9.7 M files are the
+legacy flat tape (`sha256/pin-receipts`, `computer-event`,
+`computer-event-payload`). The owner's recorded yes is to delete those
+legacy files once the repack census shows a verified segment copy of each
+(ledger 10-22 23:21, ruling 4). That delete is the substrate fix for this
+cost. A lower `GOMEMLIMIT` or a later start time would only move the
+cost around. Not acted on here.
