@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 // Refuses a bad first-party app package at build time
-// (docs/design/app-packages-replan-2026-10-24.md §3.1 and §3.3).
+// (docs/design/app-packages-replan-2026-10-24.md §3.1 and §3.3): manifest
+// shape, name/alias/extension clashes, directory rules and the required floor.
+// Import confinement is not here; see scripts/package-boundary-plugin.mjs.
 //
 // Run by `npm run build`. `--root <frontend dir>` points it at a fixture tree
 // (tests/app-packages.spec.js does this to watch each bad case be refused).
 import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
-import { dirname, join, relative, resolve, sep } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const argv = process.argv.slice(2);
@@ -14,7 +16,6 @@ const frontendRoot = resolve(
   rootFlag >= 0 ? argv[rootFlag + 1] : join(dirname(fileURLToPath(import.meta.url)), '..'),
 );
 const packagesDir = join(frontendRoot, 'src/packages');
-const sdkBase = join(frontendRoot, 'src/lib/app-sdk');
 
 const SCHEMA = 'choir.app-package/v1';
 const ABI = 'choir.app-frontend/svelte-inline/v1';
@@ -27,12 +28,6 @@ const MIN_STATIC_IDS = 10;
 // First-party packages that must exist: deleting one (or filtering it out of a
 // build) fails the build instead of shipping a shell without the app.
 const REQUIRED_PACKAGES = ['image'];
-// Every file in a package is scanned for imports except known binary assets,
-// so a new extension (.tsx, .jsx, .mts, .cts, ...) cannot hide an import.
-const BINARY_EXT = new Set([
-  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif', '.bmp', '.ico',
-  '.woff', '.woff2', '.ttf', '.otf', '.mp3', '.mp4', '.webm', '.wav', '.ogg', '.pdf', '.json',
-]);
 
 const errors = [];
 const fail = (where, message) => errors.push(`${where}: ${message}`);
@@ -87,67 +82,10 @@ function staticFacts() {
 }
 
 // ---- imports ----
-
-function importSpecifiers(source) {
-  const specs = [];
-  const patterns = [
-    /\b(?:import|export)\s+(?:[\w*${}\s,]+?\s+from\s+)?['"]([^'"]+)['"]/g,
-    /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
-    /@import\s+(?:url\()?\s*['"]([^'"]+)['"]/g,
-  ];
-  for (const re of patterns) for (const m of source.matchAll(re)) specs.push(m[1]);
-  return specs;
-}
-
-// import.meta.glob/resolve reach files by pattern and bypass the specifier
-// scan; a dynamic import whose argument is not a quoted literal cannot be
-// resolved at check time. Both are refused outright.
-function checkDynamicReach(source, where) {
-  if (/\bimport\s*\.\s*meta\s*\.\s*(glob|globEager|resolve)\b/.test(source)) {
-    fail(where, 'import.meta.glob/resolve is not allowed in a package');
-  }
-  const calls = (source.match(/\bimport\s*\(/g) || []).length;
-  const literal = (source.match(/\bimport\s*\(\s*(?:'[^'\n]*'|"[^"\n]*")\s*\)/g) || []).length;
-  if (calls !== literal) fail(where, 'import() must take a quoted string literal');
-}
-
-function listFiles(dir, out = []) {
-  for (const name of readdirSync(dir)) {
-    const full = join(dir, name);
-    const st = lstatSync(full);
-    if (st.isSymbolicLink()) fail(relative(frontendRoot, full), 'symlinks are not allowed inside a package');
-    else if (st.isDirectory()) listFiles(full, out);
-    else out.push(full);
-  }
-  return out;
-}
+// Not checked here. What a package may import is enforced on the resolved
+// module graph by scripts/package-boundary-plugin.mjs, run by vite build.
 
 const inside = (dir, target) => target === dir || target.startsWith(dir + sep);
-const stripExt = (p) => p.replace(/\.(ts|js|mjs)$/, '');
-
-function checkImports(pkgDir, declaredDeps) {
-  for (const file of listFiles(pkgDir)) {
-    const dot = file.lastIndexOf('.');
-    if (dot >= 0 && BINARY_EXT.has(file.slice(dot).toLowerCase())) continue;
-    const where = relative(frontendRoot, file);
-    const source = readFileSync(file, 'utf8');
-    checkDynamicReach(source, where);
-    for (const spec of importSpecifiers(source)) {
-      if (spec.startsWith('.')) {
-        const target = resolve(dirname(file), spec);
-        if (inside(pkgDir, target)) continue;
-        if (stripExt(target) === sdkBase) continue;
-        fail(where, `import "${spec}" leaves the package (only src/lib/app-sdk.ts is allowed)`);
-      } else if (spec.startsWith('/') || /^[a-z]+:/i.test(spec) && !spec.startsWith('@')) {
-        fail(where, `import "${spec}" is an absolute or URL import`);
-      } else {
-        const bare = spec.startsWith('@') ? spec.split('/').slice(0, 2).join('/') : spec.split('/')[0];
-        if (bare === 'svelte' || declaredDeps.has(bare)) continue;
-        fail(where, `import "${spec}" is not svelte, a declared dependency, or app-sdk.ts`);
-      }
-    }
-  }
-}
 
 // ---- manifest ----
 
@@ -220,13 +158,6 @@ function checkManifest(manifest, dirName, where) {
 
 function main() {
   const { ids: staticIds, exts: staticExts } = staticFacts();
-  let declaredDeps = new Set();
-  try {
-    declaredDeps = new Set(Object.keys(JSON.parse(readFileSync(join(frontendRoot, 'package.json'), 'utf8')).dependencies || {}));
-  } catch (e) {
-    fail('package.json', `unreadable: ${e.message}`);
-  }
-
   // Every entry under src/packages must be a real directory that stays under it:
   // a symlink or stray file would be skipped here while Vite's glob can still match it.
   const dirs = [];
@@ -277,7 +208,6 @@ function main() {
     const before = errors.length;
     checkManifest(manifest, dir, where);
     if (!existsSync(join(pkgDir, 'App.svelte'))) fail(`src/packages/${dir}`, 'missing App.svelte');
-    checkImports(pkgDir, declaredDeps);
     if (errors.length > before && !(typeof manifest?.name === 'string' && NAME_RE.test(manifest.name))) continue;
 
     // name, alias and extension clashes
