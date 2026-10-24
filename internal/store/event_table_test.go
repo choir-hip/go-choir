@@ -294,7 +294,7 @@ func eventTableStoreFromScript(t *testing.T, name string, script []*types.EventR
 	var ops []computerevent.ProjectionOp
 	pos := uint64(2)
 	for i, rec := range script {
-		ops = append(ops, eventTableOp(t, rec, rec.Kind.Storage() == types.StorageEventTable && stamp(i)))
+		ops = append(ops, eventTableOp(t, rec, rec.Kind.EventTableEligible() && stamp(i)))
 		if len(ops) == 3 || i == len(script)-1 {
 			projectAt(t, s, pos, ops...)
 			ops = nil
@@ -408,7 +408,7 @@ func TestEventTableUnionReadsMatchSingleTable(t *testing.T) {
 	planted := eventTableStoreFromScript(t, "union-planted", script, func(int) bool { return true })
 	var dup *types.EventRecord
 	for _, rec := range script {
-		if rec.Kind.Storage() == types.StorageEventTable && rec.RunID == "run-1" {
+		if rec.Kind.EventTableEligible() && rec.RunID == "run-1" {
 			dup = rec
 			break
 		}
@@ -443,7 +443,7 @@ func TestEventTableTrajectoryWindowOverTenThousand(t *testing.T) {
 			end := min(start+per, n)
 			ops := make([]computerevent.ProjectionOp, 0, end-start)
 			for i := start; i < end; i++ {
-				ops = append(ops, eventTableOp(t, script[i], script[i].Kind.Storage() == types.StorageEventTable && stamp(i)))
+				ops = append(ops, eventTableOp(t, script[i], script[i].Kind.EventTableEligible() && stamp(i)))
 			}
 			projectAt(t, s, uint64(2+start/per), ops...)
 		}

@@ -150,7 +150,7 @@ func TestEventTableWriterOnDiffersOnlyByTheStamp(t *testing.T) {
 	for _, op := range on.tapeOps() {
 		kind, isEvent := opEventKind(t, op)
 		want := ""
-		if isEvent && kind.Storage() == types.StorageEventTable {
+		if isEvent && kind.EventTableEligible() {
 			want = choirEventsTable
 		}
 		if op.Table != want {
@@ -193,7 +193,7 @@ func TestEventTableWriterStampsOnlyTheStorageClass(t *testing.T) {
 	}
 	want := 0
 	for _, kind := range kinds {
-		if kind.Storage() == types.StorageEventTable {
+		if kind.EventTableEligible() {
 			want++
 		}
 	}
@@ -202,7 +202,7 @@ func TestEventTableWriterStampsOnlyTheStorageClass(t *testing.T) {
 	}
 	for _, op := range h.tapeOps() {
 		kind, isEvent := opEventKind(t, op)
-		if stamped := op.Table == choirEventsTable; stamped != (isEvent && kind.Storage() == types.StorageEventTable) {
+		if stamped := op.Table == choirEventsTable; stamped != (isEvent && kind.EventTableEligible()) {
 			t.Fatalf("event kind %q stamped=%v", kind, stamped)
 		}
 	}
