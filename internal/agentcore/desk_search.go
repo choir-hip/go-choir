@@ -44,33 +44,42 @@ import (
 // append-only prompt pattern so the provider prompt cache stays above 90%.
 // The defaults are therefore the earlier behaviour (40 results, snippets
 // whole). Opt in to trimming with CHOIR_DESK_SEARCH_MAX_RESULTS=12 and
-// CHOIR_DESK_SEARCH_SNIPPET_CHARS=300.
+// CHOIR_DESK_SEARCH_SNIPPET_CHARS=300 (every computer), or with the owner's
+// research.search_caps setting (one computer, live), which uses the capped
+// profile below when the env names no value.
 const (
 	defaultDeskSearchMaxResults   = 40
 	defaultDeskSearchSnippetChars = 0
+	cappedDeskSearchMaxResults    = 12
+	cappedDeskSearchSnippetChars  = 300
 	searchSnippetCutMarker        = "…"
 )
 
 // deskSearchMaxResults is how many results each provider is asked for. The
 // gateway honours it before it marks hits as seen, so a hit dropped here
-// can appear in a later search. A value that is not a positive integer
-// falls back to the default.
-func deskSearchMaxResults() int {
+// can appear in a later search. An env value that is a positive integer
+// wins; otherwise capsOn (the computer's research.search_caps setting) gives
+// 12 and off gives 40.
+func deskSearchMaxResults(capsOn bool) int {
 	if n, err := strconv.Atoi(strings.TrimSpace(os.Getenv("CHOIR_DESK_SEARCH_MAX_RESULTS"))); err == nil && n > 0 {
 		return n
+	}
+	if capsOn {
+		return cappedDeskSearchMaxResults
 	}
 	return defaultDeskSearchMaxResults
 }
 
 // deskSearchSnippetChars is how many characters of a hit's snippet the desk
-// keeps: 0 keeps it whole; a negative or non-numeric value is the default.
-func deskSearchSnippetChars() int {
-	raw := strings.TrimSpace(os.Getenv("CHOIR_DESK_SEARCH_SNIPPET_CHARS"))
-	if raw == "" {
-		return defaultDeskSearchSnippetChars
-	}
-	if n, err := strconv.Atoi(raw); err == nil && n >= 0 {
+// keeps: 0 keeps it whole. An env value of zero or more wins; a negative or
+// non-numeric one is ignored; otherwise capsOn gives 300 and off gives
+// the whole snippet.
+func deskSearchSnippetChars(capsOn bool) int {
+	if n, err := strconv.Atoi(strings.TrimSpace(os.Getenv("CHOIR_DESK_SEARCH_SNIPPET_CHARS"))); err == nil && n >= 0 {
 		return n
+	}
+	if capsOn {
+		return cappedDeskSearchSnippetChars
 	}
 	return defaultDeskSearchSnippetChars
 }
@@ -155,7 +164,7 @@ type searchDone struct {
 // startSearch serves choir.SearchStart for the session key's worker. It
 // returns once the gateway has named the providers it started; record is
 // called when the stream ends, before the worker hears of it.
-func (m *deskSessionWorkers) startSearch(ctx context.Context, key string, worker *yaegikernel.DeskSessionWorker, client search.Client, payload json.RawMessage, record func(searchDone)) (json.RawMessage, error) {
+func (m *deskSessionWorkers) startSearch(ctx context.Context, key string, worker *yaegikernel.DeskSessionWorker, client search.Client, payload json.RawMessage, capsOn bool, record func(searchDone)) (json.RawMessage, error) {
 	var req yaegikernel.SearchStartPayload
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("search_start: decode: %w", err)
@@ -184,7 +193,7 @@ func (m *deskSessionWorkers) startSearch(ctx context.Context, key string, worker
 	// The stream lives with the session, but waiting for its start line is
 	// part of this cell's call: the cell's end abandons it.
 	stopWithCell := context.AfterFunc(ctx, cancel)
-	stream, err := client.Stream(streamCtx, query, deskSearchMaxResults())
+	stream, err := client.Stream(streamCtx, query, deskSearchMaxResults(capsOn))
 	cellEnded := !stopWithCell()
 	if err == nil && cellEnded {
 		_ = stream.Close()
@@ -206,7 +215,7 @@ func (m *deskSessionWorkers) startSearch(ctx context.Context, key string, worker
 		searches.end(id)
 		return nil, fmt.Errorf("search_start: %w", err)
 	}
-	go forwardSearch(streamCtx, worker, stream, id, query, func(done searchDone) {
+	go forwardSearch(streamCtx, worker, stream, id, query, deskSearchSnippetChars(capsOn), func(done searchDone) {
 		searches.end(id)
 		if record != nil {
 			record(done)
@@ -218,10 +227,9 @@ func (m *deskSessionWorkers) startSearch(ctx context.Context, key string, worker
 // forwardSearch pushes each provider's answer to the worker as it lands,
 // then the search's end. A stream cancelled with its session ends quietly:
 // the worker is gone.
-func forwardSearch(ctx context.Context, worker *yaegikernel.DeskSessionWorker, stream *search.Stream, id, query string, finish func(searchDone)) {
+func forwardSearch(ctx context.Context, worker *yaegikernel.DeskSessionWorker, stream *search.Stream, id, query string, snippetChars int, finish func(searchDone)) {
 	defer func() { _ = stream.Close() }()
 	done := searchDone{id: id, query: query, started: time.Now(), total: len(stream.Start.Providers)}
-	snippetChars := deskSearchSnippetChars()
 	for {
 		a, err := stream.Next()
 		if errors.Is(err, io.EOF) {

@@ -116,6 +116,8 @@ func (h *APIHandler) HandleComputerSettings(w http.ResponseWriter, r *http.Reque
 				rt.applyEventTableSetting(value)
 			case store.SettingSourceProjection:
 				rt.applySourceProjectionSetting(value)
+			case store.SettingRunMemoryElision, store.SettingSearchCaps:
+				rt.applyResearchSwitchSetting(key, value)
 			}
 			writeAPIJSON(w, http.StatusOK, map[string]any{"setting": current})
 			return
@@ -137,6 +139,7 @@ func (h *APIHandler) HandleComputerSettings(w http.ResponseWriter, r *http.Reque
 		if key == store.SettingSourceProjection {
 			rt.applySourceProjectionSetting(value)
 		}
+		rt.applyResearchSwitchSetting(key, value)
 		writeAPIJSON(w, http.StatusOK, map[string]any{"setting": setting})
 	default:
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})

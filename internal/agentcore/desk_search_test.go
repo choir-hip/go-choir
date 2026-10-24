@@ -126,8 +126,18 @@ func (c *pipeSearchClient) cancelled(query string) bool {
 
 func researchSearchTool(t *testing.T, client search.Client) (toolregistry.Tool, context.Context, *deskSessionWorkers, string) {
 	t.Helper()
+	return researchSearchToolWith(t, client, nil)
+}
+
+// researchSearchToolWith is researchSearchTool with a hook on the runtime
+// (a per-computer setting under test).
+func researchSearchToolWith(t *testing.T, client search.Client, configure func(*Runtime)) (toolregistry.Tool, context.Context, *deskSessionWorkers, string) {
+	t.Helper()
 	deskTestWorkerBin(t)
 	rt := &Runtime{}
+	if configure != nil {
+		configure(rt)
+	}
 	if client != nil {
 		rt.researchDeps = &researchtools.Dependencies{Search: client}
 	}

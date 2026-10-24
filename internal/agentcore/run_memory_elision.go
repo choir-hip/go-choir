@@ -35,7 +35,8 @@ import (
 // OFF BY DEFAULT (owner ruling 2026-10-15): elision rewrites already-cached
 // history bytes, which works against the >90% prompt-cache goal; the
 // append-only prompt pattern is kept. Opt in with CHOIR_RUN_MEMORY_ELISION=1
-// on the guest runtime.
+// on the guest runtime, or turn it on for one computer with the owner's
+// research.run_memory_elision setting (research_switches.go).
 const (
 	defaultElisionKeepRecent = 8
 	defaultElisionBatch      = 24
@@ -59,13 +60,18 @@ func elisionIntEnv(name string, def int, min int) int {
 	return def
 }
 
-// newRunMemoryElision is the run's policy: off unless CHOIR_RUN_MEMORY_ELISION
-// is 1, on, true or yes, and then only for desks that can read an entry back.
-func newRunMemoryElision(rec *types.RunRecord) runMemoryElision {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("CHOIR_RUN_MEMORY_ELISION"))) {
-	case "1", "on", "true", "yes":
-	default:
-		return runMemoryElision{}
+// newRunMemoryElision is the run's policy: off unless the computer's
+// research.run_memory_elision setting is on (settingOn) or
+// CHOIR_RUN_MEMORY_ELISION is 1, on, true or yes (the fleet switch), and then
+// only for desks that can read an entry back. The KEEP, BATCH and MIN_CHARS
+// env knobs tune either way.
+func newRunMemoryElision(rec *types.RunRecord, settingOn bool) runMemoryElision {
+	if !settingOn {
+		switch strings.ToLower(strings.TrimSpace(os.Getenv("CHOIR_RUN_MEMORY_ELISION"))) {
+		case "1", "on", "true", "yes":
+		default:
+			return runMemoryElision{}
+		}
 	}
 	retrieval := runMemoryRetrievalVerb(rec)
 	if retrieval == "" {

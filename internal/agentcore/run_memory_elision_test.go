@@ -172,7 +172,7 @@ func TestElisionOffForOtherDesksAndWhenDisabled(t *testing.T) {
 	for name, policy := range map[string]runMemoryElision{
 		"disabled":     {Enabled: false, KeepRecent: 4, Batch: 6, MinChars: 500, Retrieval: "choir.RunMemoryEntry"},
 		"zero batch":   {Enabled: true, KeepRecent: 4, Batch: 0, MinChars: 500},
-		"no verb desk": newRunMemoryElision(&types.RunRecord{AgentID: "texture:x", AgentProfile: agentprofile.Texture}),
+		"no verb desk": newRunMemoryElision(&types.RunRecord{AgentID: "texture:x", AgentProfile: agentprofile.Texture}, false),
 	} {
 		view := policy.apply(entries)
 		if len(view) != len(plain) {
@@ -228,22 +228,22 @@ func TestElisionDoesNotRewriteStoredEntriesAndPressureUsesTheSentView(t *testing
 func TestElisionPolicyFromEnvironmentDefaults(t *testing.T) {
 	research := &types.RunRecord{AgentID: "research:doc", AgentProfile: agentprofile.Research}
 	t.Setenv("CHOIR_RUN_MEMORY_ELISION", "")
-	if newRunMemoryElision(research).Enabled {
+	if newRunMemoryElision(research, false).Enabled {
 		t.Fatalf("elision must be off when the flag is unset (owner ruling 2026-10-15)")
 	}
 	t.Setenv("CHOIR_RUN_MEMORY_ELISION", "1")
-	p := newRunMemoryElision(research)
+	p := newRunMemoryElision(research, false)
 	if !p.Enabled || p.KeepRecent != defaultElisionKeepRecent || p.Batch != defaultElisionBatch || p.MinChars != defaultElisionMinChars || p.Retrieval != "choir.RunMemoryEntry" {
 		t.Fatalf("defaults = %+v", p)
 	}
 	t.Setenv("CHOIR_RUN_MEMORY_ELISION", "0")
-	if newRunMemoryElision(research).Enabled {
+	if newRunMemoryElision(research, false).Enabled {
 		t.Fatalf("flag 0 did not disable elision")
 	}
 	t.Setenv("CHOIR_RUN_MEMORY_ELISION", "1")
 	t.Setenv("CHOIR_RUN_MEMORY_ELISION_KEEP", "junk")
 	t.Setenv("CHOIR_RUN_MEMORY_ELISION_BATCH", "-2")
-	p = newRunMemoryElision(research)
+	p = newRunMemoryElision(research, false)
 	if p.KeepRecent != defaultElisionKeepRecent || p.Batch != defaultElisionBatch {
 		t.Fatalf("garbage did not fall back: %+v", p)
 	}

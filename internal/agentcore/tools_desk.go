@@ -506,7 +506,7 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 					if action == yaegikernel.ActionSearchStart {
 						// An async search belongs to this desk session: its
 						// stream outlives the cell and ends with the session.
-						out, err = workers.startSearch(egrCtx, sessionKey, yaegikernel.EgressWorkerFromContext(egrCtx), rt.searchClient(), payload, func(done searchDone) {
+						out, err = workers.startSearch(egrCtx, sessionKey, yaegikernel.EgressWorkerFromContext(egrCtx), rt.searchClient(), payload, rt.searchCapsSettingOn(), func(done searchDone) {
 							ev := map[string]any{
 								"verb": "search_done", "search_id": done.id, "desk_session": workers.sessionLabel(sessionKey), "worker_pid": pid,
 								"run_id": cellExec.RunID, "started_at": done.started.UTC(), "finished_at": time.Now().UTC(),
