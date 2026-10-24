@@ -1523,7 +1523,7 @@ in
         # cold-boot cycle and a probe). A named computer cold boots once (boot
         # arguments are in the launch-config hash). Rollback: empty the list
         # and redeploy before taking the port or Unbound away.
-        "VMCTL_GUEST_DNS_ONLY=computer-71afbf1461dffabcce8eeebe558d03bd"
+        "VMCTL_GUEST_DNS_ONLY=class:test"
         # D-ROUTE and immutable ComputerVersion inputs are tables on the same
         # corpusd world-wire SQL server. vmctl is the sole route CAS writer.
         "VMCTL_ROUTE_DSN=root@tcp(127.0.0.1:13306)/platform?parseTime=true&multiStatements=true&clientFoundRows=true"
@@ -1558,7 +1558,7 @@ in
         # jailed VMs live in system-choirvms.slice, outside this unit
         # (docs/problems/vmctl-restart-fails-while-a-jailed-vm-runs-2026-10-24.md).
         "VMCTL_JAILER=on"
-        "VMCTL_JAILER_ONLY=computer-476cd7944083ba08d6234bae0c341724,computer-5144344168c7d75abbae7ac453176def"
+        "VMCTL_JAILER_ONLY=class:test"
         "VM_JAILER_BIN=${pkgs.firecracker}/bin/jailer"
         # The jailer copies its exec file into the jail, which holds no
         # loader: the glibc build above cannot exec there ("Failed to exec

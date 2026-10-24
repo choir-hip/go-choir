@@ -1470,3 +1470,15 @@ Append-only. One terse entry per orchestrator pass.
   - Review: bunch 182 Devin (tier 1). Findings 1 and 2 are fixed by FP0 in 42f4482e1: a cgroup removed after find is skipped, and the contract test orders the preflight before the host-service restarts. The rest are nits.
   - Checks: the vmslice-r2 mirror PASS and PR CI 25 pass, 8 skipped (on 7a932d4c4); every .github/scripts test passes locally except node-b-ci-gate-test (no flock on macOS).
   - Proof: the deploy's own preflight passes (the old vms/ is absent). vmctl restarts with the two jailed test computers alive and reattaches them. The paper is unchanged.
+- 02:41. D31 live (cc6479939; CI 40053614603 passed).
+  - The deploy's own preflight passed: "no system.slice/go-choir-vmctl.service/vms cgroup; nothing to move".
+  - vmctl restarted at 02:40:01 with NRestarts 0 and reattached the paper and candidate-fleet-e15cb89f.
+  - The two jailed test computers had hibernated for idleness at 02:16 (by snapshot, 6 s each), so nothing jailed ran at this restart. D30's deliberate restart at 01:46 remains the jailed-alive proof.
+  - Their empty leaves stay under the slice after hibernation; harmless.
+- 02:34. The off-host backup started under Dolt root locked (D23's owed consumer test). Both Dolt servers were captured as read-only snapshots, through root with a password; the auth.db and mail.db SQLite backups are ok. The restic upload is still running (10-23's run took 46 minutes). Its final result is owed at about 03:30.
+- 02:5x. Event table deploy 2 r3 rebased onto main (4d0818fc5, 47 commits; build and vet clean). Mirror etd2r3-4 and PR #94 CI running.
+- 02:5x. D32 lands, alone: the jailer and host-only guest DNS widen to class:test.
+  - Today class:test is three computers: the two jailer test computers and T. The 146 primary-class computers, the paper (critical_protected) and the owner's computer (premium_always_on) are not selected.
+  - Effect: T is jailed at its next launch, and the two jailer test computers boot with host-only DNS. Each cold boots once, because the launch configuration changes.
+  - Tier 0: config only, under the authorized rollout. Both systems evaluate; the vmmanager selector tests pass; every .github/scripts test passes except node-b-ci-gate-test (no flock on macOS).
+  - Rollback: the previous id lists.
