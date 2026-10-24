@@ -187,3 +187,106 @@ Start with kinds that have two live homes, and stop the growth first.
 10. **Clean-up:** drop dead DDL (`texture_revisions`, `texture_source_*`, `wire_publish_debounce_*`), the edge-only vestiges, and the unused `...OG` functions; make registering a kind without a live writer fail, not pass.
 
 Heresy delta: discovered, the files tree as a second home for configuration and app data; Mail as owner data outside the computer; `agent_evidence` and `co_super_slots` as off-tape direct-write tables of the media-state defect class; registered kinds with no writer beside live tables. Introduced: none. Repaired: none.
+
+## Step 3 design: agent evidence and engineering slot claims (2026-10-24, lane `lane/fp0-evidence-slots`)
+
+Mutation class: red, tier 2 (store write path with a new concurrency edge, the
+slot claim, and tape-bearing writes). The SQL schema is untouched: no table is
+added, altered or dropped in this slice (the tables stay as the legacy home
+until a later clean-up step, and `agent_evidence` keeps its manifest entry).
+What is added is one registered object kind and two computer settings. Both
+settings default off, so a deploy changes nothing until the owner turns one on
+for one computer.
+
+### What the code supports (checked, not assumed)
+
+- `choir.agent_evidence` is registered (`registry.go`), and `CreateEvidenceOG`
+  / `GetEvidenceOG` / `ListEvidenceByAgentOG` exist with no non-test caller.
+  Every OG write on a bound store already rides the projection interceptor to
+  the tape and is replayed as `og_objects`, so graph evidence is replay-class
+  `ReplayEventProjection` with no new op kind, no reducer and no manifest
+  change. The desk manifest's `evidence` owned kind is a label and is not
+  tied to the registry; the registered writer is `system:runtime`.
+- There is no kind for slot claims. `choir.co_super_run_claim` is keyed by
+  `run_id` and written inside the lifecycle bind command; a slot is keyed by
+  `(trajectory, slot)` and claimed by the older runtime path
+  (`ClaimEngineeringSlot`). A slot row is not deleted on release: it is
+  advanced to the next run when the previous owner is terminal, and deleted
+  only when run creation fails after the claim. So the table keeps one row per
+  `(trajectory, slot)` ever claimed, and **every computer that has ever run an
+  engineering trajectory through this path is checkpoint-ineligible**, not only
+  one mid-claim. (This settles the doc's [H] about emptiness: it is not empty.)
+
+### The choice per table
+
+- `agent_evidence`: the graph kind (the doc's target). The kind and its
+  functions already exist, no reducer or op kind is needed, and the one
+  writer is the research desk. An event projection would add an op kind and a
+  rollback floor for data the graph already models.
+- `co_super_slots`: a new graph kind `choir.co_super_slot`, external key
+  `(trajectory, slot)`, body the slot record. Not an event projection: the
+  claim is a compare-and-set on `(trajectory, slot)` whose other half
+  (the run's state) is already graph data, and an op kind would be the third
+  bespoke projection for a record that the graph models directly. A new kind
+  is replay-safe for an older binary (replay projects objects without
+  consulting the registry), so unlike a new op kind it adds no rollback floor.
+
+### The switch and the transition
+
+Two computer settings (`/api/computer-settings`, read live per call, default
+off): `evidence.graph` and `engineering.slots_graph`. A setting is read by the
+store at each write, from the computer setting object, with no restart and no
+deploy. Off: writes go to the table as today. On: writes go to the graph.
+
+- **Reads always union both homes**, whatever the switch says, so turning it
+  on or off never hides a record. Evidence: by id from the graph, else the
+  table; lists merge by `evidence_id`, newest first. Slots: per
+  `(trajectory, slot)` the newer `updated_at` wins.
+- **Migration** (I27: a one-time import that empties the old home): before any
+  graph-on write, and when the setting is turned on, the store moves every
+  table row into the graph (the object is written first, then the row is
+  deleted; the object is keyed by the row's identity so a crash between the two
+  re-runs idempotently). A slot row that is newer than its graph object wins
+  the import, which covers off then on again. A check that the table is
+  non-empty runs per graph-on write, so a rollback that wrote rows to the
+  table is re-imported on the next write or the next turn-on.
+- **Rollback**: turn the setting off. New writes return to the table; the
+  graph objects already written stay on the tape and stay readable. The
+  checkpoint-eligibility gain is lost only for rows written after the
+  rollback. No binary revert is needed, and no op kind exists to strand a
+  restore.
+
+### Failure modes, written before the code
+
+1. A graph-on write that errors must not also write the table (two homes
+   again) and must not report success.
+2. A crash between writing the graph object and deleting the row must leave
+   the record readable exactly once and the next import must finish it.
+3. Two concurrent claims of one `(trajectory, slot)` must give exactly one
+   winner; a claim of a slot whose owner is terminal must advance it; a
+   claim of a slot whose owner is live must return the live run.
+4. A release must clear only the matching run's claim, in whichever home holds
+   it.
+5. Rows written to the table with the switch off, after the switch was on,
+   must not shadow or duplicate the graph record: the newer `updated_at` wins
+   and the next import folds it in.
+6. With the switch on and the table empty, a computer with evidence and a
+   claimed slot replays eligible and equivalent; with legacy rows and the
+   switch on, it becomes eligible after the import and not before.
+7. The setting read failing (store error) reads as off and logs; it never
+   blocks a write.
+8. An unbound store (the test seam) keeps the table whatever the setting says,
+   because the graph there is not on a tape.
+9. The import must not run unbounded inside a request: it moves in bounded
+   pages, and a failure leaves the setting stored, the unmoved rows readable,
+   and the error visible in the response.
+10. Evidence content can be large; a row too large for the tape is refused
+    with the evidence id in the error and the row stays in the table (the
+    computer stays ineligible, visibly) instead of being dropped.
+
+Tests are written first (`internal/agentcore/evidence_slots_graph_test.go`,
+`internal/store/graph_home_test.go`) and fail before the code.
+
+What only staging proves: the setting flip on a real computer, the import of
+real rows, a real checkpoint accepted after, and the research and engineering
+desks using the graph home in a live run.
