@@ -66,8 +66,15 @@ func newRunMemoryManager(store *runtimestore.Store, rec *types.RunRecord, cfg pr
 		rec:     rec,
 		cfg:     provideriface.NormalizeConfig(cfg),
 		emit:    emit,
-		elision: newRunMemoryElision(rec),
+		elision: newRunMemoryElision(rec, false),
 	}
+}
+
+// withElision sets the run's elision policy (the computer's setting or the
+// fleet env, resolved by the runtime).
+func (m *runMemoryManager) withElision(p runMemoryElision) *runMemoryManager {
+	m.elision = p
+	return m
 }
 
 func (m *runMemoryManager) withLLMCompactor(provider provideriface.ToolLoopProvider, llmConfig provideriface.LLMSelection, promptOverheadTokens int) *runMemoryManager {
