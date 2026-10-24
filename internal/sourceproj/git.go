@@ -29,13 +29,19 @@ func git(ctx context.Context, repo string, env []string, stdin []byte, args ...s
 }
 
 func gitRaw(ctx context.Context, repo string, env []string, stdin []byte, args ...string) ([]byte, error) {
+	return gitRawTimeout(ctx, gitTimeout, repo, env, stdin, args...)
+}
+
+// gitRawTimeout is gitRaw with its own ceiling; the fetch of the booted base
+// is the one git call that talks to a network.
+func gitRawTimeout(ctx context.Context, timeout time.Duration, repo string, env []string, stdin []byte, args ...string) ([]byte, error) {
 	if strings.TrimSpace(repo) == "" {
 		return nil, errors.New("source repository is not configured")
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	ctx, cancel := context.WithTimeout(ctx, gitTimeout)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	// No hook of the repository's own config may run under a ref-mutating call.
 	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", repo, "-c", "core.hooksPath=" + os.DevNull}, args...)...)

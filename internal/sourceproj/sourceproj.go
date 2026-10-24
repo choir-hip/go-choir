@@ -166,8 +166,11 @@ type Result struct {
 	Repaired bool `json:"repaired,omitempty"`
 	// LocksCleared lists stale git locks (index.lock, ref locks) removed because
 	// a process that died left them and nothing live holds them.
-	LocksCleared []string  `json:"locks_cleared,omitempty"`
-	At           time.Time `json:"at"`
+	LocksCleared []string `json:"locks_cleared,omitempty"`
+	// From is the HEAD a changed result moved away from: the rollback handle
+	// when the projection first leaves the creation commit.
+	From string    `json:"from,omitempty"`
+	At   time.Time `json:"at"`
 }
 
 // Refusal names why a cast must be refused, or "" when it may go ahead.
@@ -203,7 +206,15 @@ func Reconcile(ctx context.Context, in Input) (Result, error) {
 	}
 	reconcileMu.Lock()
 	defer reconcileMu.Unlock()
-	return reconcileLocked(ctx, in, res)
+	before := ""
+	if strings.TrimSpace(in.Repo) != "" {
+		before, _ = resolveCommit(ctx, in.Repo, "HEAD")
+	}
+	out, err := reconcileLocked(ctx, in, res)
+	if err == nil && out.Changed && before != out.Head {
+		out.From = before
+	}
+	return out, err
 }
 
 func reconcileLocked(ctx context.Context, in Input, res Result) (Result, error) {

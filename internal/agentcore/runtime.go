@@ -350,8 +350,14 @@ type Runtime struct {
 	sourceProjectionMu    sync.Mutex
 	sourceProjectionRunMu sync.Mutex
 	sourceProjectionLast  *sourceproj.Result
-	releaseSource         ReleaseSource
-	promptSubmitter       PromptSubmitter
+	// U1b: the booted base's objects are fetched into the guest repository.
+	sourceBaseFetchMu       sync.Mutex
+	sourceBaseFetchRunning  bool
+	sourceBaseFetchInflight chan struct{}
+	sourceBaseFetchLast     *sourceproj.FetchResult
+	sourceBaseFetchTune     *sourceBaseFetchTuning
+	releaseSource           ReleaseSource
+	promptSubmitter         PromptSubmitter
 	// managementReconcileMu serializes persistent-Management creation
 	// across every reconcile entry path (inbox continuation, boot rewarm).
 	managementReconcileMu sync.Mutex
@@ -940,7 +946,7 @@ func (rt *Runtime) Start(ctx context.Context) {
 	// because git on a large repository is seconds; the cast gate reconciles
 	// again before it uses the repository.
 	rt.configureSourceProjectionSetting(ctx)
-	go rt.reconcileSourceProjectionLogged(ctx, "boot")
+	go rt.startSourceProjection(ctx, "boot")
 	// M7 derivable continuations: every committed canonical event may carry
 	// a self-development settlement boundary (verification -> approval,
 	// decision -> materialization, rollback request -> rollback). The
