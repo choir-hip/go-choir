@@ -361,6 +361,7 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 	}
 	verbs := map[string]func() reflect.Value{
 		"WriteFile":        func() reflect.Value { return reflect.ValueOf(s.WriteFile) },
+		"WriteFileBT":      func() reflect.Value { return reflect.ValueOf(s.WriteFileBT) },
 		"Exec":             func() reflect.Value { return reflect.ValueOf(s.Exec) },
 		"Start":            func() reflect.Value { return reflect.ValueOf(s.Start) },
 		"Poll":             func() reflect.Value { return reflect.ValueOf(s.Poll) },
@@ -409,10 +410,16 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 	for name, mint := range verbs {
 		// A verb is exported only when the desk's module set admits it AND the
 		// scope permits it: mutation verbs additionally require !readOnly.
-		if !s.deskModule(name) {
+		// WriteFileBT is WriteFile with a placeholder step: it is admitted
+		// by the WriteFile module entry and denied wherever WriteFile is.
+		gate := name
+		if name == "WriteFileBT" {
+			gate = "WriteFile"
+		}
+		if !s.deskModule(gate) {
 			continue
 		}
-		if s.readOnly && (name == "WriteFile" || name == "Exec" || name == "Start" || name == "Stop") {
+		if s.readOnly && (gate == "WriteFile" || name == "Exec" || name == "Start" || name == "Stop") {
 			continue
 		}
 		exports[name] = mint()
@@ -463,6 +470,22 @@ func (s *ChoirScope) WriteFile(path, content string) (int, error) {
 		return 0, err
 	}
 	return result.BytesWritten, nil
+}
+
+// backtickPlaceholder stands for a backtick in WriteFileBT content. A Go raw
+// string, the only literal that holds a multi-line file without escaping,
+// cannot contain a backtick, and Svelte and JavaScript template literals are
+// made of them.
+const backtickPlaceholder = "@@BT@@"
+
+// WriteFileBT is WriteFile after replacing every @@BT@@ in content with a
+// backtick, so a cell can write a file that holds backticks (a Svelte
+// component, a template literal) from a Go raw string, with its own newlines
+// and indentation (docs/problems/svelte-cannot-be-written-through-a-go-string-2026-10-24.md).
+// It dispatches WriteFile, so the role table, the read-only denial and the
+// capsule jail apply unchanged.
+func (s *ChoirScope) WriteFileBT(path, content string) (int, error) {
+	return s.WriteFile(path, strings.ReplaceAll(content, backtickPlaceholder, "`"))
 }
 
 // ListDir returns entry names of a jailed directory.
