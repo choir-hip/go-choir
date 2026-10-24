@@ -1349,9 +1349,16 @@ func (s *Store) Reopen(path string) error {
 	s.closedOK = false
 	s.reopenCheckpoint()
 	// The lease state (ready or unseeded, the reserved block, the counters)
-	// stays as it was; only the refusal Close set is lifted.
-	s.resumeLeaseWork()
+	// stays as it was; only the refusal Close set is lifted. The workspace is
+	// re-read first, while Close's refusal still holds: a seeder that starts
+	// the moment the lease resumes must read the adopted workspace's untrust
+	// marker, not the one this store just left. The adopted workspace may
+	// hold an older lease row or none, so refreshLeaseWorkspace also forgets
+	// that the latest lease row is on the tape, and the kick below writes a
+	// fresh one (bunch 178, Devin 1 and DeepSeek 1).
 	s.refreshLeaseWorkspace()
+	s.resumeLeaseWork()
+	s.kickLeaseRowOntoTape()
 	return nil
 }
 
