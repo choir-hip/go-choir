@@ -731,6 +731,9 @@ type CellHooks struct {
 	// RecordsShown returns the highest record seq a choir.Records() call in
 	// the cell returned (0: none).
 	RecordsShown func() int64
+	// JobsAwaited returns the jobs a choir.Poll in the cell returned
+	// unfinished, in first-poll order (nil: none).
+	JobsAwaited func() []string
 	// KeepOutput takes a successful cell's printed output and returns what
 	// the result shows: a print over the bound is stored whole for
 	// choir.CellOut and shown cut (LR lever 6, cell_output.go). Nil means no

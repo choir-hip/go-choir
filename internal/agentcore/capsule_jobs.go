@@ -10,6 +10,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/capsulejob"
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -263,4 +264,15 @@ func jobEndedInstruction(v yaegikernel.JobView) string {
 	}
 	b.WriteString(" Its record is in choir.Records() and choir.Poll(\"" + v.ID + "\") shows its output tail. Continue the assignment in your next cell.")
 	return b.String()
+}
+
+// cellJobPark is the job a cell's turn parks on
+// (problems/engineering-busy-polls-its-own-job-2026-10-24.md).
+func cellJobPark(result capsule.GoEvalResult) string {
+	return ""
+}
+
+// engineeringJobPark is the tool loop's batch wait for engineering.
+func (rt *Runtime) engineeringJobPark(ctx context.Context, rec *types.RunRecord, emit provideriface.EventEmitFunc, calls []types.ToolCall, results []types.ToolResult) (toolregistry.ToolLoopCompletionGuardResult, bool, error) {
+	return toolregistry.ToolLoopCompletionGuardResult{}, false, nil
 }

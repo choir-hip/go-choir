@@ -191,6 +191,13 @@ type GoEvalResult struct {
 	// RecordsShown is the highest record seq a choir.Records() call in the
 	// cell showed (C1e B1): the cell marks read only what it was shown.
 	RecordsShown int64 `json:"records_shown,omitempty"`
+	// JobsAwaited are the jobs a choir.Poll in the cell returned unfinished
+	// (the kernel's SessionResult.JobsAwaited, carried by the broker).
+	JobsAwaited []string `json:"jobs_awaited,omitempty"`
+	// JobPark is the job this turn waits on, set by guest core after
+	// reduction (agentcore cellJobPark): the tool loop calls no model until
+	// the job ends, then resumes the turn with its outcome.
+	JobPark string `json:"job_park,omitempty"`
 	// FreezeResult/VerifyResult carry the committed freeze/verify receipts for
 	// this cell so the model sees the same result the retired JSON tools
 	// returned.

@@ -426,6 +426,21 @@ func (b *Broker) handleCloseSession(_ context.Context, cap *capsule.Capability, 
 	return BrokerRPCResponse{Result: raw}
 }
 
+// sessionGoEvalResult is the go_eval result of one served cell: what the
+// worker's session reported, before the broker's failure handling.
+func sessionGoEvalResult(res yaegikernel.SessionResult, d time.Duration) capsule.GoEvalResult {
+	return capsule.GoEvalResult{
+		Stdout:          res.Stdout,
+		Stderr:          res.Stderr,
+		Error:           res.Error,
+		Duration:        d,
+		StagedIntentIDs: res.Receipts,
+		RecordsShown:    res.RecordsShown,
+		Reuse:           res.Reuse,
+		DiagKind:        res.DiagKind,
+	}
+}
+
 // handleGoEvalSession evaluates one cell on the activation's persistent
 // worker. A dead or poisoned worker is dropped and reported (never silently
 // retried: the cell may have partially executed). When no session worker can
@@ -464,16 +479,7 @@ func (b *Broker) handleGoEvalSession(ctx context.Context, cap *capsule.Capabilit
 		resultBytes, _ := json.Marshal(result)
 		return BrokerRPCResponse{Result: resultBytes}
 	}
-	result := capsule.GoEvalResult{
-		Stdout:          res.Stdout,
-		Stderr:          res.Stderr,
-		Error:           res.Error,
-		Duration:        time.Since(start),
-		StagedIntentIDs: res.Receipts,
-		RecordsShown:    res.RecordsShown,
-		Reuse:           res.Reuse,
-		DiagKind:        res.DiagKind,
-	}
+	result := sessionGoEvalResult(res, time.Since(start))
 	if res.Error != "" {
 		// Failed cells drop their tray: no intents ship and the inbox cursor
 		// cannot advance. Only unsafe-to-reuse failures discard the worker:
