@@ -158,7 +158,8 @@ writes that keep it true, and the read path, with the switch off.
    runs only after hydration returned.
 2. **Mass disappearance** (an unmounted or emptied volume). Guard: reconcile
    refuses to mark more than half of the present objects deleted when there
-   are more than 8; it logs and writes nothing.
+   are more than 8; it logs, holds every deletion and move, and still
+   records new and changed files.
 3. **API write and reconcile race.** One mutex serializes them; each write
    re-reads the disk at record time, so the last write states the disk.
 4. **Recording fails after the bytes were written** (tape append error). The

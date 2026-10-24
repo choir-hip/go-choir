@@ -556,12 +556,16 @@ func Run() {
 	// Initialize the file browser handler with autoputer files root. File
 	// mutations publish owner-scoped product events after the filesystem write
 	// succeeds so other devices can refresh Files without manual reload UI.
+	// The file object (docs/design/file-object-2026-10-24.md) records each
+	// mutation as choir.file when the files.object setting is on.
+	fileObjectRecorder := newFileObjects(filesRoot, db, os.Getenv("CHOIR_OWNER_ID"), rt.Runtime.TextureComputerID())
 	fileHandler := NewFilesHandlerWithObserver(filesRoot, func(r *http.Request, event FileChangeEvent) {
 		ownerID, authErr := server.AuthenticatedOwner(r)
 		if authErr != nil {
 			return
 		}
-		_, err := rt.Runtime.EmitProductEvent(r.Context(), ownerID, desktopIDFromRequest(r), types.EventFileChanged, map[string]any{
+		fileObjectRecorder.Record(r.Context(), ownerID, event)
+		payload := map[string]any{
 			"operation":        event.Operation,
 			"path":             event.Path,
 			"parent_path":      event.ParentPath,
@@ -569,12 +573,18 @@ func Run() {
 			"entry_type":       event.EntryType,
 			"size":             event.Size,
 			"source_device_id": strings.TrimSpace(r.Header.Get("X-Choir-Device")),
-		})
+		}
+		if event.FromPath != "" {
+			payload["from_path"] = event.FromPath
+		}
+		_, err := rt.Runtime.EmitProductEvent(r.Context(), ownerID, desktopIDFromRequest(r), types.EventFileChanged, payload)
 		if err != nil {
 			log.Printf("autoputer: file change event failed: %v", err)
 		}
 	})
+	fileHandler.SetMoveGate(fileObjectRecorder.MoveAllowed)
 	RegisterFileRoutes(s, fileHandler)
+	RegisterFileObjectRoutes(s, fileObjectRecorder)
 	RegisterFileSyncRoute(s, fileSyncService)
 	maildir, err := NewMaildir(filepath.Join(filesRoot, "mail"))
 	if err != nil {
@@ -693,6 +703,7 @@ func Run() {
 			// the boot path (docs/problems/store-hot-reads-need-a-rollback-safe-side-table-2026-10-21.md).
 			db.StartDerivedKeyValidation(ctx)
 			StartPeriodicFileSync(ctx, fileSyncService, fileSyncIntervalFromEnv())
+			StartPeriodicFileObjectReconcile(ctx, fileObjectRecorder, fileObjectIntervalFromEnv())
 			return nil
 		})
 	} else {
@@ -728,6 +739,7 @@ func Run() {
 		runtimeServing.Store(true)
 		db.StartDerivedKeyValidation(ctx)
 		StartPeriodicFileSync(ctx, fileSyncService, fileSyncIntervalFromEnv())
+		StartPeriodicFileObjectReconcile(ctx, fileObjectRecorder, fileObjectIntervalFromEnv())
 	}
 
 	s.Start()
