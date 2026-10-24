@@ -2,6 +2,7 @@ package autoputer
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -57,6 +58,8 @@ type FileChangeObserver func(r *http.Request, event FileChangeEvent)
 type FilesHandler struct {
 	rootDir  string
 	observer FileChangeObserver
+	// beforeMoveRename is a test seam between the destination check and the rename.
+	beforeMoveRename func(destPath string)
 	// moveGate admits the move verb (PATCH). Nil or false answers 405, as
 	// before the verb existed (the file object's switch, files.object).
 	moveGate func(*http.Request) bool
@@ -128,6 +131,23 @@ func (fh *FilesHandler) resolvePath(relativePath string) (string, error) {
 	// Final safety check: the result must be under the root.
 	if !strings.HasPrefix(absPath, fh.rootDir+string(filepath.Separator)) && absPath != fh.rootDir {
 		return "", fmt.Errorf("path escapes autoputer root")
+	}
+	// The check above is lexical. A symlinked directory in the path would
+	// carry any verb out of the root (a read, a write, a move), and the
+	// walk that records files never follows one, so no parent component of
+	// the path may be a symlink. The last component is the verb's own to
+	// judge (a move refuses a symlink source; a delete removes the link).
+	parts := strings.Split(cleaned, string(filepath.Separator))
+	cur := fh.rootDir
+	for _, part := range parts[:len(parts)-1] {
+		cur = filepath.Join(cur, part)
+		info, err := os.Lstat(cur)
+		if err != nil {
+			break // absent, or not a directory: the verb reports it
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return "", fmt.Errorf("path crosses a symlink")
+		}
 	}
 	return absPath, nil
 }
@@ -508,7 +528,17 @@ func (fh *FilesHandler) handleMove(w http.ResponseWriter, r *http.Request, absPa
 		writeFileError(w, http.StatusNotFound, "parent directory not found")
 		return
 	}
-	if err := os.Rename(absPath, destPath); err != nil {
+	if fh.beforeMoveRename != nil {
+		fh.beforeMoveRename(destPath)
+	}
+	// The existence check above is only a fast refusal. The move itself never
+	// replaces a destination: one created in the gap (a concurrent PUT or move)
+	// is refused, not destroyed.
+	if err := renameNoReplace(absPath, destPath); err != nil {
+		if errors.Is(err, fs.ErrExist) {
+			writeFileError(w, http.StatusConflict, "destination exists")
+			return
+		}
 		writeFileError(w, http.StatusInternalServerError, "failed to move file")
 		return
 	}
