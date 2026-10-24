@@ -89,14 +89,14 @@ func TestReplayEligibilityRejectsRetiredAndUnknownTables(t *testing.T) {
 func TestReplayEligibilityRejectsNonEmptyUnsupportedDirectWrites(t *testing.T) {
 	head := &computerevent.Head{ComputerID: "computer", Sequence: 1, CanonicalEventHead: "head"}
 	live := computerversion.ObservationSet{Observations: []computerversion.Observation{{
-		Kind: computerversion.ObservationDoltHead, Key: "dolt:texture:table:user_preferences", Value: "non-empty",
+		Kind: computerversion.ObservationDoltHead, Key: "dolt:texture:table:co_super_slots", Value: "non-empty",
 	}}}
 	result := computerversion.EquivalenceResult{Status: computerversion.EquivalenceEquivalent}
 	eligibility := replayEligibility(head, head, live, live, result)
 	if eligibility.Eligible {
 		t.Fatal("non-empty direct-write table replay was eligible")
 	}
-	if len(eligibility.UnsupportedTables) != 1 || eligibility.UnsupportedTables[0] != "user_preferences" {
+	if len(eligibility.UnsupportedTables) != 1 || eligibility.UnsupportedTables[0] != "co_super_slots" {
 		t.Fatalf("unsupported tables=%v", eligibility.UnsupportedTables)
 	}
 }
