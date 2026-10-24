@@ -78,3 +78,24 @@ the rounds:
   length); a carry across a base move (the offer already records
   BaseMoved); a carry into a different request's trajectory (owner act
   only).
+
+## Related findings from the next attempt (v5, one round, 09:40 to 10:38)
+
+- **The request reaches engineering cut at 4096 bytes.** Engineering reported
+  that the owner request it received was "TRUNCATED at 4096 of 6338 bytes"
+  (its Reports at 09:44:26 and 10:24:26). Everything after Podcasts' second
+  bullet was missing, including the allowed-files, package.json and
+  completion paragraphs. Texture forwarded "the missing Podcasts scope", but
+  engineering said at 10:24 that it never arrived. Podcasts was not built,
+  and package.json was edited, a rule that was in the cut-off part. The v6
+  request kept the whole brief to 3,342 B, and its record reads
+  `truncated:false`.
+- **A "partial" Complete after Freeze is refused.** Engineering froze
+  (selfdev-f99b7ccd) and then sent `Complete("partial")`. The completion
+  guard `engineering_overlay_terminal_fate_required` refused it twice, and
+  the run was cancelled at 10:34:01. Because nothing reached Complete, no
+  candidate was persisted, and the next round on that trajectory got no
+  carried patch: 45 minutes of four-app work was lost from the product
+  path. The honest result for "frozen, but one of five parts is not done"
+  is refused, with no visible reason given to the model beyond the guard
+  name.
