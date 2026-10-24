@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -210,7 +211,19 @@ func (c *Capsule) Diff(ctx context.Context) ([]FileChange, error) {
 		return nil, fmt.Errorf("failed to walk upperdir: %w", err)
 	}
 
-	return diffManifests(c.LastManifest, current), nil
+	changes := diffManifests(c.LastManifest, current)
+	// Overlay deletions the upper holds only as markers (a whiteout over a
+	// directory, an opaque directory, a directory replaced by a file)
+	// become one deletion per pinned source file, so the source patch, the
+	// bundle's ordered file effects and its digest all name them.
+	if c.MergedDir != "" {
+		lowerPlatform := filepath.Join(c.MergedDir, "..", "source-lower", "workspace", "platform")
+		changes, err = expandOverlayDeletions(ctx, changes, c.UpperDir, lowerPlatform)
+		if err != nil {
+			return nil, fmt.Errorf("failed to expand overlay deletions: %w", err)
+		}
+	}
+	return changes, nil
 }
 
 // CommitManifest records the current upperdir state as the new committed

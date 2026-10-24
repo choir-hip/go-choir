@@ -38,12 +38,18 @@ func walkUpperdir(ctx context.Context, upperDir string) ([]FileManifest, error) 
 		}
 
 		mt := fileTypeString(info)
+		whiteout, opaque := overlayMarks(path, info)
+		if whiteout {
+			mt = "whiteout"
+		}
 		fm := FileManifest{
 			Path:  relPath,
 			Size:  info.Size(),
 			Mtime: info.ModTime(),
 			Mode:  uint32(info.Mode()),
 			Type:  mt,
+			// Only a directory can be opaque.
+			Opaque: opaque && mt == "dir",
 		}
 
 		// Compute hash for regular files only.
@@ -78,10 +84,10 @@ func walkUpperdir(ctx context.Context, upperDir string) ([]FileManifest, error) 
 // They are spawn scaffolding, not something the capsule did: left in, a
 // capsule that built nothing would diff as four added directories, so its
 // bundle's OrderedFileEffects (and digest) would change and would no longer
-// be empty. The walk never reads xattrs, so the leaf's opaque marker is not
-// a signal and Diff cannot turn it into deletions of lower files (Diff only
-// compares upper-layer manifests; overlay deletions would surface as
-// whiteout device entries, and an opaque dir has none).
+// be empty. A pristine leaf is dropped here, before its opaque marker can
+// matter; and the opaque expansion into deletions (expandOverlayDeletions)
+// is limited to workspace/platform, so the release leaf, opaque or not,
+// never turns into deletions of the guest's lower release tree.
 //
 // A directory is dropped only if everything beneath it in the manifest is
 // itself dropped, from the leaf up. Once the capsule writes anything under
@@ -139,25 +145,42 @@ func diffManifests(lastCommit, current []FileManifest) []FileChange {
 	// Check for added and modified files.
 	for _, fm := range current {
 		last, existed := lastMap[fm.Path]
+		if fm.Type == "whiteout" {
+			// An overlay whiteout is how a deleted lower-layer file shows in
+			// the upper: it is the path's deletion, never an addition or a
+			// modification. Already committed, it is not a new change.
+			if !existed || last.Type != "whiteout" {
+				changes = append(changes, FileChange{
+					Path: fm.Path,
+					Kind: ChangeDeleted,
+					Mode: os.FileMode(fm.Mode),
+				})
+			}
+			continue
+		}
 		switch {
 		case !existed:
 			changes = append(changes, FileChange{
-				Path: fm.Path,
-				Kind: ChangeAdded,
-				Mode: os.FileMode(fm.Mode),
+				Path:   fm.Path,
+				Kind:   ChangeAdded,
+				Mode:   os.FileMode(fm.Mode),
+				Opaque: fm.Opaque,
 			})
 		case !manifestsEqual(last, fm):
 			changes = append(changes, FileChange{
-				Path: fm.Path,
-				Kind: ChangeModified,
-				Mode: os.FileMode(fm.Mode),
+				Path:   fm.Path,
+				Kind:   ChangeModified,
+				Mode:   os.FileMode(fm.Mode),
+				Opaque: fm.Opaque,
 			})
 		}
 	}
 
-	// Check for deleted files.
+	// Check for deleted files. A committed whiteout that leaves the manifest
+	// is not a deletion: nothing was removed, the path is simply no longer
+	// marked.
 	for _, fm := range lastCommit {
-		if _, exists := currMap[fm.Path]; !exists {
+		if _, exists := currMap[fm.Path]; !exists && fm.Type != "whiteout" {
 			changes = append(changes, FileChange{
 				Path: fm.Path,
 				Kind: ChangeDeleted,
@@ -184,7 +207,7 @@ func manifestsEqual(a, b FileManifest) bool {
 	if a.Mode != b.Mode {
 		return false
 	}
-	if a.Type != b.Type {
+	if a.Type != b.Type || a.Opaque != b.Opaque {
 		return false
 	}
 	if a.Type == "file" {

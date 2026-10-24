@@ -1848,7 +1848,12 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 		}
 		relative := strings.TrimPrefix(change.Path, releasePrefix)
 		clean := filepath.Clean(filepath.FromSlash(relative))
-		if clean == "." || filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(os.PathSeparator)) || change.Kind == ChangeDeleted {
+		if change.Kind == ChangeDeleted {
+			// A release is a set of files to publish; it has no way to say a
+			// file is absent.
+			return nil, fmt.Errorf("capsule release deletes %q; a release can only add or replace files", change.Path)
+		}
+		if clean == "." || filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(os.PathSeparator)) {
 			return nil, fmt.Errorf("capsule release contains unsafe path %q", change.Path)
 		}
 		sourcePath := filepath.FromSlash(strings.TrimPrefix(change.Path, "/"))
@@ -2064,19 +2069,11 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 // (capsule-source-git:<commit>:sha256:<digest>) so the builder applies the
 // patch to the commit the capsule actually worked on.
 func (e *Executor) emitSourcePatch(caps *Capsule, changes []FileChange, temporary string) (patchPath, patchSHA, baseCommit string, err error) {
-	var sourceChanges []FileChange
-	for _, change := range changes {
-		p := change.Path
-		if !strings.HasPrefix(p, "/") {
-			p = "/" + p
-		}
-		// A unified diff cannot express a directory; the files inside it
-		// carry it.
-		if strings.HasPrefix(p, "/workspace/platform/") && !change.Mode.IsDir() {
-			sourceChanges = append(sourceChanges, change)
-		}
+	files, err := collectSourcePatchFiles(caps.MergedDir, changes)
+	if err != nil {
+		return "", "", "", err
 	}
-	if len(sourceChanges) == 0 {
+	if len(files) == 0 {
 		return "", "", "", nil
 	}
 	// Recover the pinned base commit from the source artifact ref.
@@ -2085,36 +2082,6 @@ func (e *Executor) emitSourcePatch(caps *Capsule, changes []FileChange, temporar
 		if idx := strings.Index(raw, ":sha256:"); idx > 0 {
 			baseCommit = raw[:idx]
 		}
-	}
-	lowerBase := filepath.Join(caps.MergedDir, "..", "source-lower", "workspace", "platform")
-	var files []sourcePatchFile
-	for _, change := range sourceChanges {
-		rel := strings.TrimPrefix(change.Path, "/")
-		rel = strings.TrimPrefix(rel, "workspace/platform/")
-		if rel == "" || strings.HasPrefix(rel, "..") || strings.Contains(rel, "/../") {
-			continue
-		}
-		file := sourcePatchFile{Rel: rel}
-		oldPath := filepath.Join(lowerBase, filepath.FromSlash(rel))
-		var oldErr error
-		if info, statErr := os.Lstat(oldPath); statErr == nil && info.IsDir() {
-			oldErr = os.ErrNotExist // a directory replaced by a file
-		} else {
-			file.Old, oldErr = os.ReadFile(oldPath)
-		}
-		if oldErr != nil && !errors.Is(oldErr, os.ErrNotExist) {
-			return "", "", "", fmt.Errorf("capsule source patch reads base %q: %w", change.Path, oldErr)
-		}
-		file.OldExists = oldErr == nil
-		if change.Kind != ChangeDeleted {
-			newPath := filepath.Join(caps.MergedDir, filepath.FromSlash(strings.TrimPrefix(change.Path, "/")))
-			file.New, err = os.ReadFile(newPath)
-			if err != nil {
-				return "", "", "", fmt.Errorf("capsule source patch reads %q: %w", change.Path, err)
-			}
-			file.NewExists = true
-		}
-		files = append(files, file)
 	}
 	patch, err := renderSourcePatch(files)
 	if err != nil {

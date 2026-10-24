@@ -316,6 +316,9 @@ type FileChange struct {
 	Path string
 	Kind ChangeKind
 	Mode os.FileMode
+	// Opaque marks a directory the capsule removed and recreated: the
+	// overlay hides every lower entry under it.
+	Opaque bool
 }
 
 type FrozenReleaseFile struct {
@@ -353,7 +356,9 @@ type FileManifest struct {
 	Mtime time.Time
 	Hash  string // content hash (SHA-256 hex)
 	Mode  uint32
-	Type  string // "file", "dir", "symlink", "device"
+	Type  string // "file", "dir", "symlink", "device", "whiteout"
+	// Opaque is set on a directory carrying the overlay opaque xattr.
+	Opaque bool
 }
 
 // CapsuleSummary is a lightweight view of a capsule for listing.
