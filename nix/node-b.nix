@@ -1384,6 +1384,31 @@ in
     };
   };
 
+  # Jailed Firecracker VMs' cgroups: system.slice/system-choirvms.slice/vms/<vm>
+  # (docs/problems/vmctl-restart-fails-while-a-jailed-vm-runs-2026-10-24.md,
+  # "Design: the VM slice"). The jailer writes +cpu +pids into every
+  # ancestor of a VM leaf; inside vmctl's unit that made systemd refuse to
+  # spawn ExecStartPre (EBUSY) and wedged every vmctl restart while a jailed
+  # VM ran. The dash makes this a child of system.slice, a sibling of the
+  # vmctl unit, so the VMs keep their CPU and memory position. No Delegate=:
+  # systemd ignores it on slices; vmctl owns vms/ below. A switch never
+  # stops or restarts a changed slice (switch-to-configuration-ng
+  # cannot_be_restarted_directly), and X-StopOnRemoval=false keeps a rollback
+  # that drops this unit from stopping it. Never `systemctl kill` it.
+  systemd.slices.system-choirvms = {
+    description = "go-choir jailed Firecracker VMs (vmctl owns vms/)";
+    unitConfig."X-StopOnRemoval" = false;
+    sliceConfig = {
+      # Guests never swap; snapshot_diff.go's guestMemoryCannotSwap reads
+      # this as the jailed leaf's bound (else diffs are refused).
+      MemorySwapMax = "0";
+      # One 4 GiB guest while the jailer is limited to the two test
+      # computers. Rebalance against the vmctl unit's MemoryLow as computers
+      # move here (SEC-04 step 5). memory.low protects usage only.
+      MemoryLow = "4G";
+    };
+  };
+
   systemd.services.go-choir-vmctl = {
     # No crash loops (docs/restart-subsystem-design-2026-10-13.md, L1a): after 10 starts in 10 minutes the unit stays failed until a deploy or an operator (systemctl reset-failed) starts it again.
     startLimitIntervalSec = 600;
@@ -1395,8 +1420,9 @@ in
     # deploy's restarts, each of which detaches every guest (vmctl 360 review
     # Phase 0 step 6).
     restartIfChanged = false;
-    after = [ "network-online.target" "go-choir-platform-dolt.service" "go-choir-corpusd.service" ] ++ doltClientAfter;
-    wants = [ "network-online.target" "go-choir-platform-dolt.service" "go-choir-corpusd.service" ] ++ doltClientAfter;
+    # The VM slice: wants, not requires, so neither stopping the other.
+    after = [ "network-online.target" "go-choir-platform-dolt.service" "go-choir-corpusd.service" "system-choirvms.slice" ] ++ doltClientAfter;
+    wants = [ "network-online.target" "go-choir-platform-dolt.service" "go-choir-corpusd.service" "system-choirvms.slice" ] ++ doltClientAfter;
     serviceConfig = commonServiceHardening // {
       ExecStart = "${vmctlExec}";
       Restart = "on-failure";
@@ -1423,14 +1449,15 @@ in
       ];
       # The jailer mounts and pivot_roots in its own mount namespace.
       SystemCallFilter = [ "@system-service" "@privileged" "@mount" ];
-      # Per-VM cgroup v2 leaves: vmctl runs in <unit>/supervisor and each
-      # jailed VMM in <unit>/vms/<vm>, all under this unit's MemoryLow and
-      # MemorySwapMax. cgroup v2 forbids processes in a cgroup whose
-      # controllers are delegated, hence the subgroup.
+      # vmctl runs in <unit>/supervisor with the direct VMMs. Jailed VMMs
+      # run in system-choirvms.slice/vms/<vm> (above), never in this unit:
+      # VMCTL_JAILER_CGROUP_PARENT below, and vmctl refuses a parent inside
+      # its own unit.
       Delegate = "yes";
       DelegateSubgroup = "supervisor";
       ProtectControlGroups = lib.mkForce false;
-      # Host memory budget: Firecracker guests live in this cgroup. Reserve
+      # Host memory budget: direct Firecracker guests live in this cgroup
+      # (jailed ones in system-choirvms.slice, with their own). Reserve
       # 14G for them against reclaim by everything else (3 always-on 4 GiB
       # guests plus slack), never swap them, and keep them last in OOM order.
       # Guest count admission against this reservation is vmctl's job.
@@ -1541,7 +1568,10 @@ in
         # so no direct computer's snapshot changes. vmctl refuses (JAILER
         # UNAVAILABLE) an exec file that is dynamic or of another version.
         "VM_JAILER_FIRECRACKER_BIN=${pkgs.pkgsStatic.firecracker}/bin/firecracker"
-        "VMCTL_JAILER_CGROUP_PARENT=system.slice/go-choir-vmctl.service/vms"
+        # Outside this unit (docs/problems/vmctl-restart-fails-while-a-
+        # jailed-vm-runs-2026-10-24.md). Switch it only while no process
+        # lives under the old <unit>/vms.
+        "VMCTL_JAILER_CGROUP_PARENT=system.slice/system-choirvms.slice/vms"
         "VM_MKFS_EXT4_BIN=${pkgs.e2fsprogs}/bin/mkfs.ext4"
         "VM_KERNEL_IMAGE=/var/lib/go-choir/guest/vmlinux"
         "VM_ROOTFS_IMAGE=/var/lib/go-choir/guest/rootfs.ext4"
