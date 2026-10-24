@@ -67,6 +67,21 @@ store even without throttling; the throttle may only amplify it. The next GC
 (about 07:25 to 07:30) can confirm with a 1 s sampler of `memory.events high`,
 `memory.pressure`, `/proc/<pid>/io` and per-thread wchan.
 
+## The 07:23 GC (sampler, 1 s, read-only)
+
+- The GC that ended at about 07:23:40 (journal 541 MB to 120 KB) caused no
+  probe strike, and the cgroup's `memory.pressure full avg10` stayed at 0.00
+  throughout, with `memory.current` at the cap the whole time. Only about
+  2,500 `high` events fell in the window. So a GC at the cap is not always a
+  stall: the 06:09 and 06:43 stalls had `full avg10` 77.5 and 37.5. The
+  throttle hypothesis stands for those two, but it is not the whole story.
+- The cgroup holds about 87 MB of page cache, because anon (2.9 to 3.2 GB)
+  fills the cap, so nearly every chunk read goes to disk: `read_bytes` grew
+  by about 8.5 GB from 07:17:22 to 07:23:58 (about 20 MB/s), 70 GB in the new
+  process's first 40 minutes, and 5.8 TB read over the old process's
+  28 hours. Room above the Go heap would be page cache, which is a durable
+  disk-read saving whether or not it ends the stalls.
+
 ## Who it reaches
 
 Every computer: Store A holds the canonical event and control log. Each abort
