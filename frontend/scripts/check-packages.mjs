@@ -209,6 +209,11 @@ function main() {
     ? readdirSync(packagesDir).filter((n) => lstatSync(join(packagesDir, n)).isDirectory()).sort()
     : [];
 
+  // A source filter that drops choir-package.json (the Nix build once could) must fail loudly.
+  if (existsSync(packagesDir) && dirs.length === 0) {
+    fail('src/packages', 'the directory exists but holds no package; refusing a build that would ship none');
+  }
+
   const claimedIds = new Map(); // id -> package that holds it
   const claimedExts = new Map(); // ext -> package that holds it
   const claim = (id, owner, where) => {

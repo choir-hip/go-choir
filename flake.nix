@@ -319,6 +319,7 @@
               (pkgs.lib.hasSuffix ".html" path) ||
               base == "package.json" ||
               base == "package-lock.json" ||
+              base == "choir-package.json" ||
               base == "svelte.config.js" ||
               base == "vite.config.js";
         };

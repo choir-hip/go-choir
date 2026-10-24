@@ -89,6 +89,12 @@ const badCases = [
   ['import-dynamic', (root) => fs.writeFileSync(path.join(root, 'src/packages/image/helper.js'), "export const f = () => import('../../lib/auth.js');\n"), /leaves the package/],
   ['import-reexport', (root) => fs.writeFileSync(path.join(root, 'src/packages/image/helper.ts'), "export * from '../../lib/auth.js';\n"), /leaves the package/],
   ['symlink-out', (root) => fs.symlinkSync(path.join(root, 'src/lib/app-sdk.ts'), path.join(root, 'src/packages/image/link.js')), /symlinks are not allowed/],
+  ['dir-without-manifest', (root) => {
+    fs.mkdirSync(path.join(root, 'src/packages/ghost'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'src/packages/ghost/App.svelte'), '<div/>\n');
+  }, /ghost: missing choir-package\.json/],
+  ['manifest-filtered-away', (root) => fs.rmSync(path.join(root, 'src/packages/image/choir-package.json')), /image: missing choir-package\.json/],
+  ['zero-packages', (root) => fs.rmSync(path.join(root, 'src/packages/image'), { recursive: true }), /holds no package/],
   ['empty-registry', (root) => fs.writeFileSync(path.join(root, 'src/lib/apps/registry.ts'), 'export const x = 1;\n'), /static app ids \(floor/],
 ];
 
