@@ -187,9 +187,12 @@ func (a *RouteAuthority) constructedOwnershipIdentity(ctx context.Context, owner
 		return &version, verification.DiskReceiptID, true, nil
 	}
 
-	// Platform-follow evidence class: the gate payload is an
+	// Platform-follow and self-development evidence classes: both are written
+	// by applySignedProjection, so the gate payload is an
 	// AcceptedEventAuthorizationEvidence (accepted applied event joins old ->
-	// new version under the platform-follow scope), the certificate payload is
+	// new version under the platform-follow scope, or under an owner-decision
+	// computer:self_development: scope, the precondition
+	// ApplySelfDevelopmentProjection enforces), and the certificate payload is
 	// a PromotionJoinEvidence (checkpoint + materialization receipt join).
 	// There is no disk-receipt construction verification on this route —
 	// ownership is the apply-time registry binding, so the join returns the
@@ -197,8 +200,7 @@ func (a *RouteAuthority) constructedOwnershipIdentity(ctx context.Context, owner
 	var accepted selfdevprotocol.AcceptedEventAuthorizationEvidence
 	if err := json.Unmarshal(gate.Payload, &accepted); err != nil ||
 		accepted.Version != 1 || accepted.ComputerID == "" ||
-		accepted.DecisionActor != selfdevprotocol.PlatformUpdateFollowActor ||
-		accepted.DecisionScope != selfdevprotocol.PlatformUpdateFollowScope ||
+		!signedProjectionClass(accepted) ||
 		!computerevent.IsSHA256(accepted.AcceptedOrRollbackEventDigest) ||
 		!routeledger.SameVersion(accepted.NewComputerVersion, slot.Current) ||
 		!routeledger.SameVersion(accepted.OldComputerVersion, receipt.Old) {
@@ -213,6 +215,18 @@ func (a *RouteAuthority) constructedOwnershipIdentity(ctx context.Context, owner
 	}
 	version := slot.Current
 	return &version, "", true, nil
+}
+
+// signedProjectionClass reports whether accepted evidence names one of the two
+// decision classes applySignedProjection writes: the platform-follow update,
+// or an owner's self-development decision.
+func signedProjectionClass(accepted selfdevprotocol.AcceptedEventAuthorizationEvidence) bool {
+	if accepted.DecisionActor == selfdevprotocol.PlatformUpdateFollowActor &&
+		accepted.DecisionScope == selfdevprotocol.PlatformUpdateFollowScope {
+		return true
+	}
+	return strings.TrimSpace(accepted.DecisionActor) != "" &&
+		strings.HasPrefix(accepted.DecisionScope, "computer:self_development:")
 }
 
 func (a *RouteAuthority) resolveVersionInputs(ctx context.Context, version computerversion.ComputerVersion) (computerversion.CodeClosure, computerversion.ArtifactProgram, error) {
