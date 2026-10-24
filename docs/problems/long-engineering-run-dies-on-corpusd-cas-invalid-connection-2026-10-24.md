@@ -5,8 +5,13 @@ test computer computer-6c50d6e5 (b@c.com), staging, guest build 911be16b1
 (booted 06:13:33 by a planned platform refresh). Run log:
 `/Users/wiz/Dev/lanes/_runs/apprewrite/log.md` (outside the repo). Class of
 this record: green. Class of a fix: red (the event tape append path, corpusd).
-Status: problem recorded, cause not known; it needs the host's corpusd logs,
-which the conductor cannot read (no ssh, no /internal).
+Status: cause found by FP0 (08:4x): the platform Dolt's liveness probe
+aborted it mid auto-GC (strikes 3/3 at 06:43:09 and 07:51:50), so corpusd's
+CAS commit died on its connection. That cause and its fix (D36,
+GOMEMLIMIT under MemoryHigh, live 08:00:49) are recorded in
+[platform-dolt-gc-throttled-at-memory-high](platform-dolt-gc-throttled-at-memory-high-2026-10-24.md).
+Hypothesis 1 below (oversized payload) is refuted. What stays open here is
+the second finding: a host blip loses the whole run.
 
 ## What happened, twice
 
@@ -38,7 +43,7 @@ After each failure:
   invalid connection`). The `403 capability refused` on the next append
   follows within the same second. The run's fate append then fails, so the
   runtime cannot settle the run.
-- Not known: why the commit fails. Hypotheses, none checked:
+- Not known at the time (answered since, see Status): why the commit fails. Hypotheses:
   1. An oversized append body. A run memory entry is one message; DeepSeek's
      cells and printed outputs were large. "invalid connection" is what the
      MySQL protocol driver returns when a packet exceeds the server's
@@ -53,7 +58,11 @@ After each failure:
 
 ## What a fix has to do (not decided)
 
-- Find the cause in corpusd's log at 06:43:13 and 07:52:07 UTC.
+- Cause: found and fixed elsewhere (see Status).
+- Open: a candidate is persisted only at Complete, so a run killed by a host
+  blip after 30 to 40 minutes leaves nothing to carry; the next round starts
+  from the base. A run's work should survive its run (a periodic or
+  per-write candidate the carried-patch path can offer).
 - Whatever the cause, a failed append must not leave a zombie run. The run
   should end with a visible fate ("interrupted: event store unavailable"),
   so management can re-cast it and the owner sees it in Texture.
