@@ -20,8 +20,10 @@ Two kinds, both `Store: dolt`, `IdentityMode: external_key`,
   128 random bits, hex), minted when a path first gets a file. The id never
   encodes the path, so a rename or move keeps it. Body (`store.FileObject`):
   `file_id`, `owner_id`, `computer_id`, `path` (files-root relative, slash
-  separated, cleaned), `name`, `sha256` (`sha256:<hex>` of the plaintext
-  bytes), `size`, `mode` (permission bits), `media_type` (by extension),
+  separated, cleaned; **literal**: a backslash or a space is part of a name,
+  as on the disk), `name`, `digest` (`hmac-sha256:<hex>`: HMAC-SHA-256 of the
+  plaintext bytes under a key derived from the computer's DEK, section 3),
+  `size`, `mode` (permission bits), `media_type` (by extension),
   `mod_time` (filesystem mtime, used only to skip re-hashing), `state`
   (`present` or `deleted`), `created_at`, `updated_at`, `deleted_at`,
   `recorded_by` (`files_api` or `reconcile`).
@@ -50,13 +52,16 @@ same path gets a new id. Garbage collection of deleted objects is later.
 
 ## 2. Keeping it true: the Files API and reconcile
 
-All writes go through one in-process recorder (`autoputer.fileObjects`) that
-holds one mutex, so API writes and reconcile never interleave. Every write
-first checks the switch (section 7). The recorder reads the file from disk
+All writes go through one in-process recorder (`autoputer.fileObjects`).
+Every write first checks the switch (section 7), and the store's
+`ApplyFileChanges` checks it again (`ErrFileObjectsOff`), so a pass in
+flight stops when the switch goes off. The recorder reads the file from disk
 after the handler's write, hashes it by streaming, and writes one batch.
+A file with no digest key (no DEK reachable) is not recorded at all: the
+plaintext digest is never written in its place.
 
 - **Write (`PUT /api/files/{path}`, created or updated).** Look up the path
-  view. If it names a present file: same id, new `sha256/size/mode/mod_time`.
+  view. If it names a present file: same id, new `digest/size/mode/mod_time`.
   If not: mint an id, write the file and the path view in one batch.
 - **Delete (`DELETE /api/files/{path}`).** For a file: the object goes to
   `deleted`, the path view is tombstoned, one batch. An empty directory has
@@ -64,7 +69,10 @@ after the handler's write, hashes it by streaming, and writes one batch.
 - **Mkdir (`POST`).** Nothing is written.
 - **Rename and move (`PATCH /api/files/{path}` with `{"move_to": "<dest>"}`,
   new in this slice, regular files only, refused when the destination
-  exists).** The bytes move with `os.Rename`; then one batch: the file object
+  exists).** The bytes move with `renameat2(RENAME_NOREPLACE)` on Linux (a
+  hard link and an unlink where that is missing), so a destination created
+  between the check and the move is refused with 409, never replaced; then one
+  batch: the file object
   with its new `path`/`name` (same id), the new path view, and the old path
   view tombstoned. A rename is a path-view change, never a new object. A
   directory move (rewrite every descendant's view) is a later slice; the
@@ -75,14 +83,24 @@ after the handler's write, hashes it by streaming, and writes one batch.
   hydration). Reconcile walks the tree, skips symlinks, non-regular files and
   the top-level `Source/` directory (source and build state are exempt under
   `I27`; `Source/platform` is large), compares each file's `(size, mod_time)`
-  with its object and hashes only when they differ. A file with no view gets
-  a new object; an object whose path is gone and a new file with the same
-  digest, when exactly one of each, is recorded as a move (same id); any
-  other vanished object goes to `deleted`. Writes go in batches of 64.
-  Steady state on an unchanged tree writes nothing. It runs in the
+  with its object and hashes only when they differ. (A regular file named
+  `Source` is exempt too.) A file it cannot read (permission) is counted
+  `unreadable`, never deleted, and does not stop the pass. A file with no view
+  gets a new object; an object whose path is gone and a new non-empty file
+  with the same digest, when exactly one of each, is recorded as a move (same
+  id; empty files never pair, since their digest is every empty file's).
+  **A vanished object is deleted only when a fresh `lstat` at apply time finds
+  nothing there in two consecutive passes** (a file only temporarily absent
+  keeps its id); a tree showing no file at all while objects exist holds every
+  deletion, however few. The walk and the hashing run **outside** the recorder
+  lock (the Files API is not held still); the apply phase re-checks each record
+  against the disk (`size`, `mod_time`, `mode`) and drops one that went stale
+  (`raced`), re-reads the switch before every batch, and writes in batches of
+  64. Steady state on an unchanged tree writes nothing. It runs in the
   background after the runtime starts and after hydration, then every 15
   minutes (`CHOIR_FILE_OBJECT_RECONCILE_INTERVAL`), and on
-  `POST /api/file-objects/reconcile`. With the switch off a tick reads one
+  `POST /api/file-objects/reconcile`; a pass refuses to run until boot
+  hydration has returned without error (`fileSync.HydrationSettled`). With the switch off a tick reads one
   setting and stops.
 
 **Read path.** `GET /api/file-objects?path=P` (the object at a path),
@@ -93,10 +111,35 @@ switch off and nothing written they return 404 or an empty list.
 
 ## 3. The digest and file CAS
 
-The object carries **`sha256` of the plaintext bytes** of the whole file.
-That is the blob identity `I27` asks for, any reader of the bytes can verify
-it, and it is the same scheme as the image blob store
-(`state.image-blobs/sha256/<hex>`), the other CAS the unification will join.
+The object carries a **keyed digest** of the whole file:
+`hmac-sha256:<hex of HMAC-SHA-256(key, plaintext bytes)>`, where `key` is
+`filecas.FileDigestKey(DEK, computerID)`, an HKDF-SHA-256 derivation from the
+computer's DEK with its own info string (`choir/filecas/v1/file-digest`),
+separate from the chunk encryption key and the chunk nonce key. The DEK is
+the one the file sync already reads in the guest
+(`PrivateArtifactCipher.ExportKeyForEscrow`); no new key plumbing was added,
+and the key is derived per use and zeroed. Equal bytes on one computer have
+equal digests (reconcile's change detection and move pairing use it); nothing
+else can compute it.
+
+This replaces the plaintext `sha256` of the first draft (tier 2 review, bunch
+208). Projection batches are pinned as owner payloads the platform host can
+read; the file CAS manifest already gives the host every path and size. A
+plaintext digest would add a confirmation oracle (does this computer hold a
+file I already know?) and cross-computer correlation. A keyed digest gives the
+host neither.
+
+**Costs and residuals, named.**
+- The digest is not the blob identity of the image blob store
+  (`state.image-blobs/sha256/<hex>`), so the object and an image blob do not
+  join on it. The unification that wants a join keys the blob address the same
+  way later, or carries a plaintext digest only in guest memory.
+- A DEK rotation changes every digest; the next reconcile re-hashes and
+  records them as `diverged` (the same path a restore uses). The rotation path
+  does not exist yet.
+- The keyed digest still reveals, to the host, which of this computer's files
+  have equal bytes (equal digests), as the sealed chunk addresses already do.
+- A computer whose digest key cannot be derived records nothing and reports it.
 
 File CAS is unchanged. Its chunks are 4 MiB pieces sealed with a synthetic
 nonce, addressed by the SHA-256 of the **ciphertext**, deterministic per
@@ -104,19 +147,10 @@ nonce, addressed by the SHA-256 of the **ciphertext**, deterministic per
 `path, mode, size, chunks[]` (`filecas.FileEntry`). In slice 1 the object and
 a manifest entry join on `path` at a root, and agree on `size` and `mode`.
 The manifest gets no new field: `ParseManifest` uses
-`DisallowUnknownFields`, so a manifest with a `sha256` field would fail to
+`DisallowUnknownFields`, so a manifest with a digest field would fail to
 parse on a rolled-back binary and break hydration. Carrying the chunk list
-on the object, or a v2 manifest with a per-entry plaintext digest, is the
-later slice that makes the bytes' home the CAS.
-
-**Privacy (review question).** Projection batches are pinned as owner
-payloads that the platform host can read, as the content item's extracted
-text already is; the file CAS manifest already gives the host every path and
-size. What is new is the plaintext digest, which lets the host confirm that
-a computer holds a file it already knows. If tier-2 review rules that out,
-the field becomes a keyed digest (HMAC under a key derived from the DEK, as
-the chunk nonce is), at the cost of the join with image blobs. Decide before
-the switch goes on beyond b@c.
+on the object, or a v2 manifest with a per-entry digest, is the later slice
+that makes the bytes' home the CAS.
 
 ## 4. What restore means after this slice
 
@@ -152,16 +186,28 @@ writes that keep it true, and the read path, with the switch off.
 
 ## 6. Failure modes (written before the code)
 
-1. **Fresh volume or pending hydration.** The tree is the image seed; a
-   reconcile would mark every object deleted, and hydration would then mint
-   new ids. Guard: reconcile refuses while the fresh-volume marker exists and
-   runs only after hydration returned.
-2. **Mass disappearance** (an unmounted or emptied volume). Guard: reconcile
-   refuses to mark more than half of the present objects deleted when there
-   are more than 8; it logs, holds every deletion and move, and still
-   records new and changed files.
-3. **API write and reconcile race.** One mutex serializes them; each write
-   re-reads the disk at record time, so the last write states the disk.
+1. **Fresh volume or pending hydration.** The tree is the image seed, or is
+   empty because the restore failed or is pending; a reconcile would mark
+   every object deleted, and hydration would then mint new ids. Guard:
+   reconcile refuses while the fresh-volume marker exists and until boot
+   hydration has returned without error (a failed hydration leaves it
+   refusing until a restart). The marker lives beside the root and can vanish
+   with an unmounted mount, so the next two guards do not rely on it.
+2. **Mass disappearance** (an unmounted or emptied volume). Guard: a tree
+   showing no file while objects exist holds every deletion, however few;
+   otherwise reconcile refuses to mark more than half of the present objects
+   deleted when there are more than 8. It logs, holds every deletion and move,
+   and still records new and changed files.
+2a. **Temporarily absent.** A file renamed into a directory the walk had
+   already read, or one that came back, looks deleted. Guard: a deletion is
+   recorded only for a file a fresh `lstat` finds absent at apply time in two
+   consecutive passes (the candidate set lives in memory; a restart only
+   delays a deletion). A move pairs on the next pass.
+3. **API write and reconcile race.** The recorder lock serializes the Files
+   API's record with a pass's apply phase, not its walk. Each API write
+   re-reads the disk at record time; each reconcile record is checked against
+   the disk again at apply time and dropped if it changed (`raced`), so the
+   object is never a stale hash.
 4. **Recording fails after the bytes were written** (tape append error). The
    file write stands, the response is still success, the failure is logged
    and counted; the next reconcile repairs it. The object is never ahead of
@@ -176,9 +222,18 @@ writes that keep it true, and the read path, with the switch off.
    minted before may be marked deleted and a new one minted if the file
    changed path while off without a unique digest match.
 8. **Move to an existing destination, or of a directory.** Refused (409);
-   nothing moves.
-9. **Path traversal.** The move destination goes through `resolvePath`
-   like every other path.
+   nothing moves. A destination created concurrently is refused by the
+   no-replace rename, not overwritten.
+9. **Path traversal and symlinked parents.** Every verb's path (and the move
+   destination) goes through `resolvePath`, which refuses (403) a path whose
+   parent components include a symlink: the check is no longer lexical only.
+   (A symlinked directory in the tree could carry a read, a write or a move
+   out of the root; the recording walk never follows one.) The check and the
+   use are separate syscalls; the files root is guest-owned, so this closes
+   the path an API caller can reach, not a hostile guest process.
+9a. **Names the filesystem keeps literal.** The recorder keeps a path as the
+   walk and the API see it: a backslash or a leading or trailing space is part
+   of the name, never rewritten, so two files cannot share one object path.
 10. **Replay on a rolled-back binary.** The projector writes `og_objects`
     rows without consulting the registry (`store/project.go projectObject`),
     so the old binary replays these rows as inert data, and nothing reads
@@ -186,7 +241,10 @@ writes that keep it true, and the read path, with the switch off.
 11. **Writer gate in enforce mode.** The writes declare `system:runtime`,
     the kinds' writer.
 12. **Missing owner.** Reconcile needs `CHOIR_OWNER_ID`; without it, it
-    refuses. API writes use the authenticated owner.
+    refuses. API writes use the authenticated owner. `GET ?id=` is scoped to
+    the computer, as `?path=` and the list are.
+12a. **Switch turned off mid pass.** The pass re-reads the switch before every
+    batch and the store checks it on every apply; the pass stops writing.
 13. **Restore divergence.** See section 4; reconcile reports the files whose
     digest it changed.
 
@@ -213,8 +271,10 @@ computer:
    `enabled:false` and nothing; a `PUT` writes no object.
 2. Set `files.object=true` on b@c. `POST /api/file-objects/reconcile`:
    counts of created objects equal the regular files outside `Source/`.
-3. `PUT` a file: `GET ?path=` returns an id whose `sha256` equals the SHA-256
-   of the bytes the test sent. `PUT` new bytes: same id, new digest.
+3. `PUT` a file: `GET ?path=` returns an id whose `digest` is an
+   `hmac-sha256:` value that is **not** the SHA-256 of the bytes the test sent;
+   a second `PUT` of the same bytes at another path has the same digest.
+   `PUT` new bytes at the first path: same id, new digest.
 4. `PATCH move_to`: `GET ?path=<new>` returns the same id; `?path=<old>` is
    404; `GET` of the bytes at the new path returns them.
 5. `DELETE`: `?id=` returns `state:deleted`; `?path=` is 404.

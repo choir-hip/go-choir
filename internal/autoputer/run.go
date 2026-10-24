@@ -24,6 +24,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/desktopstate"
 	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/filecas"
 	"github.com/yusefmosiah/go-choir/internal/gatewayruntime"
 	"github.com/yusefmosiah/go-choir/internal/gomemlimit"
 	"github.com/yusefmosiah/go-choir/internal/health"
@@ -264,6 +265,9 @@ func Run() {
 		replayBootstrapCtx    context.Context
 		replayBootstrapCancel context.CancelFunc
 		fileSyncService       *fileSync
+		// fileObjectDigestKey derives the file object's HMAC key from the
+		// computer's DEK in the guest; nil until the credential block sets it.
+		fileObjectDigestKey func(context.Context) ([]byte, error)
 	)
 	if credentialPath := strings.TrimSpace(os.Getenv("CHOIR_COMPUTER_CREDENTIAL_FILE")); credentialPath != "" {
 		computerID := strings.TrimSpace(os.Getenv("CHOIR_COMPUTER_ID"))
@@ -461,6 +465,14 @@ func Run() {
 			cancel()
 			boot.fatalf("autoputer: acquire computer event authority: %v", err)
 		}
+		fileObjectDigestKey = func(ctx context.Context) ([]byte, error) {
+			dek, err := privateCipher.ExportKeyForEscrow(ctx, computerID)
+			if err != nil {
+				return nil, err
+			}
+			defer clear(dek)
+			return filecas.FileDigestKey(dek, computerID)
+		}
 		if platformURL != "" {
 			fileSyncService = newFileSync(filesRoot, platformURL, credentials.Capability, computerID, privateCipher, func(ctx context.Context) (uint64, error) {
 				head, err := eventClient.Head(ctx, computerID)
@@ -558,7 +570,10 @@ func Run() {
 	// succeeds so other devices can refresh Files without manual reload UI.
 	// The file object (docs/design/file-object-2026-10-24.md) records each
 	// mutation as choir.file when the files.object setting is on.
-	fileObjectRecorder := newFileObjects(filesRoot, db, os.Getenv("CHOIR_OWNER_ID"), rt.Runtime.TextureComputerID())
+	fileObjectRecorder := newFileObjects(filesRoot, db, os.Getenv("CHOIR_OWNER_ID"), rt.Runtime.TextureComputerID(), fileObjectDigestKey)
+	// A reconcile waits for boot hydration to settle: a tree that is only empty
+	// because the restore failed or is pending is not a tree of deletions.
+	fileObjectRecorder.SetReadyCheck(func() bool { return fileSyncService == nil || fileSyncService.HydrationSettled() })
 	fileHandler := NewFilesHandlerWithObserver(filesRoot, func(r *http.Request, event FileChangeEvent) {
 		ownerID, authErr := server.AuthenticatedOwner(r)
 		if authErr != nil {
