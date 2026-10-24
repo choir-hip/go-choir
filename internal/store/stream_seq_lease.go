@@ -649,7 +649,7 @@ func (s *Store) computeLeaseSeed(ctx context.Context, workspace string) (leaseSe
 		return leaseSeedResult{}, err
 	}
 	res.phases = phases
-	exact := max(ogMax, tableMax)
+	exact := max(ogMax, tableMax, s.traceLogMaxStreamSeq())
 	res.undecodable = s.lease.lastUndecodable.Load()
 	// A legitimate lease covers the numbers its lineage published and never
 	// stored; the exact maximum covers anything an older binary stored. A row
@@ -725,7 +725,9 @@ func (s *Store) leaseCrossCheckTimed(ctx context.Context, phases *leaseSeedPhase
 	if err != nil {
 		return 0, err
 	}
-	return max(maxSeq, tableStream), nil
+	// A line the trace log holds above the lease says the lease is stale (a
+	// workspace swapped under the log): untrusted, so the exact seed runs.
+	return max(maxSeq, tableStream, s.traceLogMaxStreamSeq()), nil
 }
 
 // exactStreamSeqMax is the exact seed's two halves: the maximum stream_seq of

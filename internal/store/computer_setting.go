@@ -68,6 +68,13 @@ const SettingDebouncedCheckpoint = "store.debounced_checkpoint"
 // (the readers read both tables).
 const SettingEventTable = "store.event_table"
 
+// SettingTraceLog will move the nine trace kinds off the tape into the
+// guest-local trace segment log (docs/design/trace-segment-log-2026-10-22.md
+// section 8). Registered by slice S2 and not acted on: the writer is S4's, and
+// until then nothing reads the value. Off by default; off will be the live
+// rollback. No env override ships for production computers.
+const SettingTraceLog = "store.trace_log"
+
 // KnownComputerSettings are the settings a computer has, with their
 // defaults. A key outside this list is refused, so a typo never stores a
 // setting nobody reads.
@@ -79,6 +86,7 @@ var KnownComputerSettings = map[string]bool{
 	SettingResearchSystem1:       false,
 	SettingDebouncedCheckpoint:   false,
 	SettingEventTable:            false,
+	SettingTraceLog:              false,
 }
 
 // ComputerSetting is one switch's value on one computer.

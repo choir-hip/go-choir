@@ -473,7 +473,7 @@ func TestTraceLogSeedsConsiderTheLog(t *testing.T) {
 
 	s2 := openTraceLogStore(t, path)
 	a := appendOne(s2, "run-a", "owner-1", "a-next")
-	if want := 500 + telemetrySeqGap + 1; a.Seq != want {
+	if want := int64(500 + telemetrySeqGap + 1); a.Seq != want {
 		t.Fatalf("run-a seq after a log line at 500 = %d, want %d (log maximum plus the gap)", a.Seq, want)
 	}
 	if a.StreamSeq <= farStream {
