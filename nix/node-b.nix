@@ -1074,8 +1074,15 @@ in
       WorkingDirectory = platformDoltDBDir;
       # Host memory budget (docs/problems/node-b-memory-overcommitted-swap-
       # 2026-10-09.md): the canonical log is throttled, never swapped and
-      # never hard-killed. ~1.1 GB RSS measured 2026-10-09.
-      MemoryHigh = "3G";
+      # never hard-killed. ~1.1 GB RSS measured 2026-10-09. By 2026-10-24 it
+      # sat pinned at the old 3G (anon 3.12 GB, nothing reclaimable) and an
+      # auto-GC throttled there stalled the store until the liveness probe
+      # aborted it (docs/problems/platform-dolt-gc-throttled-at-memory-high-
+      # 2026-10-24.md). GOMEMLIMIT (Environment, below) makes the Go collector
+      # hold the heap near 3 GiB before the kernel throttles; the 1 GiB above
+      # it is for cgo (gozstd) and stacks. The off-host backup raises this to
+      # 8G for its run and restores the value it read.
+      MemoryHigh = "4G";
       MemorySwapMax = "0";
       OOMScoreAdjust = -500;
       Restart = "on-failure";
@@ -1093,6 +1100,7 @@ in
       Environment = [
         "HOME=${platformDoltDir}"
         "GOTRACEBACK=all"
+        "GOMEMLIMIT=3GiB"
       ];
     };
   };
