@@ -24,7 +24,7 @@
 # 2026-10-23.md sections 4 and 6 step 3): the setting refuses to turn on (409,
 # reason stream_seq_lease_not_ready) and the writer refuses to stamp until the
 # lease is ready on the tape. Step 2 reads stream_seq_lease.state == ready
-# before the switch; step 5 asserts the restart after deploy 2 seeded from the
+# and on_tape == true before the switch; step 5 asserts the restart after deploy 2 seeded from the
 # lease (seeded_from=lease) with no event-kind read.
 #
 #   BASH_ENV= CHOIR_API_KEY=<the test computer's key> \
@@ -104,7 +104,7 @@ step_2() {
 	lease=$(ft_lease)
 	if [ "$PROOF_DRY" != 1 ]; then
 		info "stream_seq_lease $lease"
-		printf '%s' "$lease" | jq -e '.state == "ready"' >/dev/null && pass "the stream_seq lease is ready before the switch (seeded_from $(printf '%s' "$lease" | jq -r '.seeded_from // "?"'))" || { fail "the stream_seq lease is not ready ($(printf '%s' "$lease" | jq -r '.state // "absent"')): the setting would be refused 409; wait for state ready (an exact seed takes minutes on a large store)"; return 1; }
+		printf '%s' "$lease" | jq -e '.state == "ready" and .on_tape == true' >/dev/null && pass "the stream_seq lease is ready and on the tape before the switch (seeded_from $(printf '%s' "$lease" | jq -r '.seeded_from // "?"'))" || { fail "the stream_seq lease is not ready on the tape (state $(printf '%s' "$lease" | jq -r '.state // "absent"'), on_tape $(printf '%s' "$lease" | jq -r '.on_tape // "absent"')): the setting would be refused 409; wait for state ready with on_tape true (an exact seed takes minutes on a large store; a lease seeded before the tape bound turns on_tape true at its next refill)"; return 1; }
 	fi
 	head=$(guest_get /health | jq -r '.effective_release.event_head.sequence // empty')
 	info "tape head before the setting write: ${head:-?}"
@@ -189,7 +189,7 @@ step_6() {
 	[ "$PROOF_DRY" = 1 ] && return 0
 	printf '%s' "$st" | jq -e '.setting == false and .writing == false' >/dev/null && pass "the writer is off at once" || fail "the writer is still on: $st"
 	info "tape_ops_by_table at the off write: $before"
-	manual "run a turn; tape_ops_by_table.choir_events stays at $before while tape_ops grows (new events go to og_objects); step 4 with --run on a run that spans the on and off writes still reads every event"
+	manual "no new stamp decisions after the off write: run a turn; tape_ops_by_table.choir_events stays at $before while tape_ops grows (new events go to og_objects). A record already queued stamped when telemetry.batch is on still seals stamped (stamp-at-enqueue is deliberate), so drain the sealer queue (a turn's worth of idle time, or the sealer's queue reads 0) before reading the counter; step 4 with --run on a run that spans the on and off writes still reads every event"
 }
 
 step_7() {
