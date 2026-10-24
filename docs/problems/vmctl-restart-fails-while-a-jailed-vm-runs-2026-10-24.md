@@ -198,8 +198,6 @@ User unit with the node-b shape. A script as the main process (in
   - Never stop or restart the slice in a deploy (stopping it kills the VMs).
     Whether NixOS `switch-to-configuration` leaves a changed `.slice` alone
     needs confirming before the deploy; this was not tested.
-  - The slice also needs a pre-existing, correctly-owned cgroup for the
-    jailer's uid-based leaves (jailer runs as root; no change there).
 - **Existing jailed VMs when the parent changes:** a live process keeps its
   cgroup, so a VM launched under `.../go-choir-vmctl.service/vms/<vm>` stays
   there. `cgroupLeafRel` derives the leaf from the current process-wide parent,
