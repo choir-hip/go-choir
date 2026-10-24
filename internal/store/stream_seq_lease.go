@@ -272,6 +272,7 @@ func (s *Store) publishLeaseObsLocked() {
 
 		SeedUndecodableRows: s.lease.undecodable,
 		MarkerPresent:       markerPresent,
+		OnTape:              s.lease.onTape.Load(),
 	})
 }
 
@@ -1006,8 +1007,26 @@ func (s *Store) resumeLeaseWork() {
 func (s *Store) refreshLeaseWorkspace() {
 	s.eventMu.Lock()
 	s.lease.workspace = s.texturePath
+	// The adopted workspace may hold an older lease row, or none: this
+	// process's latest lease row is no longer known to be on the tape.
+	s.lease.onTape.Store(false)
 	s.publishLeaseObsLocked()
 	s.eventMu.Unlock()
+}
+
+// kickLeaseRowOntoTape writes a fresh lease row through the bound tape after
+// Reopen, so the event-table gate (state ready and a lease row on the tape)
+// reopens without waiting for the block to run down. An unseeded lease needs
+// nothing: its seeder writes the row. A failed kick leaves the gate closed
+// until the next refill, which is the conservative side. A store with no tape
+// has nothing to put on one.
+func (s *Store) kickLeaseRowOntoTape() {
+	s.eventMu.Lock()
+	defer s.eventMu.Unlock()
+	if s.projectionTape == nil {
+		return
+	}
+	s.startRefillLocked()
 }
 
 // initLeaseObs sets the workspace the lease reads its marker from and
