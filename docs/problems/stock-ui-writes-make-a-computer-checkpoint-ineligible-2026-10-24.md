@@ -127,6 +127,43 @@ Why this and not the alternatives:
   after a rollback, the first write under the new binary records those rows
   again.
 
+**Bounds (bunch 188, DeepSeek's blocking finding).** The first version put
+the whole seed in one event, and two of the tables were never pruned, so the
+event had no bound against the tape's record ceiling
+(`tapestore.MaxRecordBytes`, 64 MiB), and a pin that failed for size would
+have failed every media and theme write on that computer for good (the flag
+never sets, so each write retries the same seed). Now:
+
+- the seed goes out in batches of at most 1 MiB of op bodies
+  (`mediaStateSeedBatchBytes`), each an idempotent upsert set; the write and
+  its follow ops ride in the last batch. A crash between batches leaves the
+  flag unset and the next process seeds again from the rows as they stand;
+- every op (seed or write) is preflighted against an 8 MiB cap
+  (`mediaStateMaxOpBytes`, `ErrMediaStateOpTooLarge`) before anything is
+  pinned, so no new row can outgrow a batch. A pre-change row over the cap
+  would refuse the seed with an error naming the table; none is reachable
+  from the stock frontend;
+- `media_recents` keeps the newest 100 rows per (owner, media_kind), the
+  most `ListMediaRecents` returns (its limit is capped at 100, and any row in
+  the newest 100 across kinds is in the newest 100 of its own kind, so no
+  response changes). The prune is a fourth V2-only op kind,
+  `media_recent_delete_recorded`, in the same batch as the write that
+  triggers it, so a replay deletes the same rows. Ties on `opened_at` break
+  by key, so the choice is deterministic. `media_progress` is not pruned: it
+  is one row per distinct source and the chunking bounds its seed.
+
+The flag is cleared by `Store.Reopen`, which adopts another workspace (a
+restore or a base install) that may hold rows the tape has not recorded
+(bunch 188, DeepSeek). An unscoped residue import, which records every row,
+marks the tape seeded; the owner-scoped product route does not, since it may
+leave other owners' rows out (both seats, low).
+
+**The standing cost** (both seats, low): the flag is in memory, so each
+process (each boot) pays one seed on its first media-state write: one
+snapshot of the three tables, at most 100 recents per kind plus one
+progress row per source, in 1 MiB batches. Accepted, because it is also
+what re-records rows an older binary wrote by direct SQL after a revert.
+
 Replay stays exact: the seed ops carry the rows' stored values verbatim and
 come before the write's op in the same batch, so the write wins for its own
 key, and the reducer that applies the batch live is the one replay uses.
@@ -135,12 +172,12 @@ and the append (which would let the seed reapply an older value). The cost
 is one snapshot of three small tables per process lifetime, only on a
 computer that writes media state.
 
-Crash safety: the seed and the write are one event, appended by CAS and
-projected inside Finalize's transaction. A crash before the CAS leaves no
-trace and the next process seeds again. A crash after the CAS and before
-Finalize is the ordinary projection-repair case for any batch. There is no
-half-written seed. Re-seeding is idempotent: the ops are upserts of the
-current values.
+Crash safety: each batch is one event, appended by CAS and projected inside
+Finalize's transaction. A crash before a CAS leaves no trace of that batch;
+a crash after a CAS and before Finalize is the ordinary projection-repair
+case. A crash between seed batches leaves some rows re-recorded and the flag
+unset; the next process seeds again. Re-seeding is idempotent: the ops are
+upserts of the rows' current values, so a partial seed changes no row.
 
 b@c: the candidate's checkpoint becomes possible after deploy and either one
 theme or media write by the owner, or one `choir computer
@@ -154,8 +191,10 @@ OG interceptor), and the players PUT on every `timeupdate` (about four a
 second while playing). The row op doubles that. Discovered, recorded here,
 and offset in the same change: `saveMediaPosition` in
 `frontend/src/lib/media-utils.js` sends at most one PUT per source every
-few seconds, with a trailing send of the latest position, so a playing
-source appends a small fraction of today's events.
+5 s, with a trailing send of the latest position, so a playing source
+appends a small fraction of today's events. A pause or the end sends at
+once, and hiding or leaving the page flushes; the PUT is `keepalive` (as
+`desktop.js` does) so the browser finishes it after unload (both seats).
 
 ### The CLI's 409
 
@@ -163,13 +202,29 @@ source appends a small fraction of today's events.
 unknown, missing, drifted) in its message, so the guest's 409 and the CLI
 both say which tables block a checkpoint, with no CLI change.
 
-### Rollback
+### Rollback: forward-fix only
 
-Revert the commits. Batches already on a tape with the new op kinds are
-refused by an older binary's projector as unknown kinds, so a computer that
-wrote media state under the new binary cannot be replayed by the old one;
-every op-kind addition carries this exposure (`texture_document_alias_recorded`
-did). Once such batches exist, forward-fix rather than roll the binary back.
+An older binary's projector refuses a batch with any of the four new op
+kinds (`ProjectionBatch.Validate`, unknown kind). Where that matters, from
+the bunch 188 review (both seats traced it):
+
+- **Safe:** a revert on a computer whose local projection is at its tape
+  tip. Boot replays only the events after the local head, so it never
+  decodes the new batches. The computer boots; its media tables then grow by
+  direct SQL again and its checkpoints are refused, as before this fix.
+- **Unsafe:** any computer that must replay a tail holding media ops: after
+  a restore or rematerialize to an earlier checkpoint, a projection-base
+  rebuild, or a crash-window `RecoverPrepared` (a media batch CASed but not
+  finalized at the moment of the revert). Rematerialize replays only to its
+  target, so it succeeds and flips the workspace; the next boot then
+  replays target+1 to the head, meets a media batch, and refuses with
+  `startup_failed`. The rollback looks successful and leaves the computer
+  unbootable, which is worse than a clean refusal.
+
+So once any computer's tape holds a media op, the rollback is a forward fix,
+never a binary revert. Every op-kind addition carries this exposure
+(`texture_document_alias_recorded` did); a store floor cannot help, because
+the reader is the old binary.
 
 ### Tests (written first, failing before the fix)
 
@@ -187,26 +242,26 @@ shaped like production (bound tape, the replay probe):
 - the manifest classes the three tables `event_projection`, and the
   ineligible error names the blocking tables.
 
-### Residual: b@c's candidate runs an older binary
+Added for bunch 188 (also failing before their fix): a 2.4 MiB seed spans at
+least three batches and replays equivalent; 105 pre-change pdf recents plus
+one write keep the newest 100 and replay equivalent; the first write after
+`Reopen` seeds the adopted workspace's rows; an unscoped residue import
+counts as the seed; an op over the 8 MiB cap is refused with no tape event.
+
+### Residual: b@c's candidate must not be approved after this lands
 
 The held candidate's guest binary is built from 0cbc52edc, 81 commits behind
-the platform (ledger 11:2x). That binary predates the three op kinds. Once
-b@c's tape holds a batch with them (its first media or theme write after
-this deploys, or a residue import), that binary's projector refuses those
-batches as unknown kinds. So after the candidate is applied:
+the platform (ledger 11:2x), and predates the new op kinds. Once b@c's tape
+holds a media op (its first media or theme write after this deploys, or a
+residue import), that binary is the "unsafe" case above: its checkpoints are
+refused again (its manifest still classes the tables
+`empty_until_supported`), and a rollback of its apply to an earlier
+checkpoint rematerializes and then fails to boot (`startup_failed`). The
+bunch 188 review checked the restore path this record had left open, and it
+breaks.
 
-- its manifest still classes the three tables `empty_until_supported`, so
-  its checkpoints are refused again, as today;
-- any replay it runs over the new batches (a replay-completeness probe, and
-  a restore if the restore path replays rather than loading a base at the
-  checkpoint head) fails on the unknown kind rather than reporting
-  ineligible. Not checked here: whether restore to the pre-apply
-  checkpoint, run by the candidate's binary, replays those batches. If it
-  does, the rollback route of that apply is broken.
-
-This is the applies-do-not-compound substrate
+**Gate:** do not approve op selfdev-79dc4bf4 (the 0cbc52edc candidate) after
+this fix lands. Approve only a candidate rebuilt on current source. This is
+the applies-do-not-compound substrate
 (docs/problems/engineering-work-product-durability-cluster-2026-10-24.md),
-not a defect of this fix, but it decides how b@c's candidate can be
-approved. Before approving it after this lands, check the restore path of
-an old binary over a tape with the new op kinds, or rebuild the candidate on
-current source.
+not a defect of this fix, but it decides b@c.
