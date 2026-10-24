@@ -362,10 +362,10 @@ func TestEmptyStackMovesToTheBootedBase(t *testing.T) {
 func TestBaseObjectsMissing(t *testing.T) {
 	repo, base := baseRepo(t)
 	gone := strings.Repeat("a", 40)
-	// Empty stack: nothing moves, the cast is not refused (status quo), the
-	// state is named.
+	// Empty stack: nothing moves, the cast is refused with the named state
+	// (U1b: the setting means build on current main).
 	res := reconcile(t, Input{Repo: repo, BootedBase: gone})
-	if res.State != StateBaseObjectsMissing || res.Refusal() != "" || headOf(t, repo) != base {
+	if res.State != StateBaseObjectsMissing || !strings.HasPrefix(res.Refusal(), "base_objects_missing: ") || headOf(t, repo) != base {
 		t.Fatalf("B2: %+v", res)
 	}
 	// A live stack on a base that is not the booted one, and the booted
