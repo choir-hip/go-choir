@@ -1032,11 +1032,17 @@ func textureEmbedRows(revisionID string, body json.RawMessage) []textureEmbedRow
 			Route: e.Route, Width: e.Width, Height: e.Height, Blank: e.Blank, Caption: e.Caption, RevisionID: revisionID,
 			AssetURL: "/api/assets/sha256/" + e.Digest}
 		if e.Kind == texturedoc.EmbedKindCapsuleEvidence && e.ComputerID != "" && e.OperationID != "" {
-			row.Fetch = "choir self-dev visual --computer " + e.ComputerID + " --operation " + e.OperationID + " --out <dir>"
+			row.Fetch = "choir self-dev visual --computer " + shellQuote(e.ComputerID) + " --operation " + shellQuote(e.OperationID) + " --out <dir>"
 		}
 		rows = append(rows, row)
 	}
 	return rows
+}
+
+// shellQuote single-quotes s for a POSIX shell, so a pasted fetch line runs
+// as shown whatever the ids hold.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 func selfDevDecide(x *call, decision string) (any, error) {
