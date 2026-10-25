@@ -19,27 +19,34 @@ test lanes plus the floor.
 
 A main push of commit `AFTER` may reuse a pull-request run `R` only if all of:
 
-1. `R` is a `pull_request` run of `.github/workflows/ci.yml` with
-   `head_sha == AFTER` and `status == completed`, `conclusion == success`.
-   FP0 lands the reviewed PR head commit as is (fast-forward), so the commit
-   that reaches main is the commit the run tested.
-2. The tree `R` tested equals `AFTER`'s tree. `R` checked out GitHub's merge
-   of the PR head into the base at run time (`pull_requests[0].base.sha` in
-   the run object). That merge has the head's tree when the base commit is an
-   ancestor of the head, so the rule is: `compare/<R base sha>...AFTER`
-   reports `ahead` (or `identical`). If main moved and the head was not
-   rebased onto it, the merge tree differs from `AFTER`'s tree, the compare
-   reports `diverged`, and the push runs everything.
-3. `R` tested what main would test: its jobs include `success` for every Go
-   test lane (non-runtime shards 0-7, agentcore/textureowner shards 0-7, the
-   scale lane, Go Vet + Build) and `check`, matched by job name prefix and
-   counted (8, 8, 1, 1, 1); `R`'s plan selected the Go lanes and the race
-   mode (rule 4).
-4. `R` ran under -race. On a pull request the plan selects the race matrices
-   always (today only high-risk paths do, and main samples), so the gate is
-   at least as strict as a main run. Reuse requires the run's plan job log
-   line `race_selected=true`; the script reads it from the run's jobs
-   (job names carry `race`).
+1. `R` is a completed, successful `pull_request` run of `ci.yml` whose
+   `head_sha` is `T`, where `T` is `AFTER` or one of its last 50 ancestors
+   (the newest such commit is taken). Exactly one green run of `T` exists;
+   two make it ambiguous and count for nothing. FP0 lands the reviewed PR
+   head as is (fast-forward), so `T` is that head, and the docs commits that
+   follow a landing (the ledger commits) are ancestors-to-descendants of it.
+2. The tree `R` tested is `T`'s tree. `R` checked out GitHub's merge of `T`
+   into the base at run time (`pull_requests[0].base.sha`, one pull request).
+   That merge has `T`'s tree when the base is an ancestor of `T`: the rule is
+   `compare/<base>...T` reports `ahead` or `identical`. If main moved and `T`
+   was not rebased onto it the compare reports `diverged` and nothing is
+   reused.
+3. What changed from `T` to `AFTER` touches no Go or CI path. The compare
+   API lists the changed files (`T` must be an ancestor, status `ahead`, under
+   300 files and 250 commits, renames counted by both names) and the existing
+   classifier (`.github/scripts/ci-impact-classify`) must report `go=false`,
+   `ci=false` and `high_risk_race=false` for them. This is the predicate that
+   already lets a docs-only push skip the Go lanes on main; reuse adds no
+   new notion of "irrelevant".
+4. `R` tested what main would test: its jobs list is complete (`total_count`
+   equals the jobs returned) and holds `success` for exactly 8 distinct
+   `Go Test (race, non-runtime shard *)`, 8 distinct
+   `Go Test (race, agentcore/textureowner shard *)`, the scale lane,
+   `Go Vet + Build` and `Go Vet + Test + Build` (check). A PR that edits
+   `ci.yml` to drop a lane, or a run that was not under -race, fails here.
+   On a pull request the plan selects the race matrices always when Go is
+   selected (today only high-risk paths do and main samples 5%), so the gate
+   is at least as strict as any main run.
 
 Everything else about main stays: doccheck, heresy, v1-inventory, the repo
 gates, build-frontend, deploy-impact, the prebuild and the deploy run on the
@@ -94,7 +101,9 @@ Go lanes again, no state to clean. Nothing is written to GitHub.
 - The PR run must finish before landing, or the push finds none and runs the
   tests (safe, slow). FP0's landing procedure should wait on `gh pr checks`.
 - A landing that is not a fast-forward of the reviewed head (a squash, a
-  rebase) changes `head_sha`; it finds no run and tests. Land the head.
+  rebase) changes the sha; it finds no run and tests. Land the head.
+- The run list is the latest 100 completed `ci.yml` pull-request runs; an
+  older green run is not found (safe: tests run).
 - The PR run costs runner minutes the mirror did not; the 20-slot account
   limit is shared with main runs. PR runs cancel superseded runs (their own
   concurrency), main runs queue.
