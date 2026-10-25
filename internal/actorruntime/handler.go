@@ -333,6 +333,7 @@ func (h *actorHandler) handleDelegatedAssignmentSpawnDeadline(ctx context.Contex
 		log.Printf("actorruntime: engineering admission wake latency mailbox=%s update=%s waited=%s content=%s",
 			agentID, u.UpdateID, time.Since(due).Round(time.Millisecond), u.Content)
 	}
+	h.noteTextureRootTrajectory(ctx, ownerID, computerID, u.TrajectoryID)
 	if err := h.rt.HandleDelegatedAssignmentSpawnDeadline(ctx, ownerID, computerID, agentID, u.Content); err != nil {
 		return nil, fmt.Errorf("actorruntime: delegated assignment spawn deadline: %w", err)
 	}
@@ -361,6 +362,15 @@ func (h *actorHandler) handleReactivatedManagementResumeDeadline(ctx context.Con
 	return memory, nil
 }
 
+// noteTextureRootTrajectory notes, for the Texture root (PD3 S1), the
+// document whose ledger changed. These wakes are minted after the change
+// commits; a re-delivered wake notes again, which coalesces.
+func (h *actorHandler) noteTextureRootTrajectory(ctx context.Context, ownerID, computerID, trajectoryID string) {
+	if h.textureOwner != nil {
+		h.textureOwner.NoteTextureRootTrajectoryChange(ctx, ownerID, computerID, trajectoryID)
+	}
+}
+
 func (h *actorHandler) handleLifecycleWorkAssigned(ctx context.Context, u actor.Update, memory []byte) ([]byte, error) {
 	ownerID, computerID, agentID, err := parseScopedActorMailboxID(u.ToAgentID)
 	if err != nil {
@@ -376,6 +386,7 @@ func (h *actorHandler) handleLifecycleWorkAssigned(ctx context.Context, u actor.
 	if strings.TrimSpace(content.TrajectoryID) != strings.TrimSpace(u.TrajectoryID) || strings.TrimSpace(content.WorkItemID) == "" {
 		return nil, nil
 	}
+	h.noteTextureRootTrajectory(ctx, ownerID, computerID, content.TrajectoryID)
 	if err := h.rt.ReconcileLifecycleWorkAssignment(ctx, ownerID, computerID, agentID, content.TrajectoryID, content.WorkItemID); err != nil {
 		return nil, fmt.Errorf("%w: actorruntime: reconcile lifecycle work assignment: %v", actor.ErrDeferUnprocessed, err)
 	}
@@ -390,6 +401,7 @@ func (h *actorHandler) handleLifecycleCancellation(ctx context.Context, u actor.
 	if strings.TrimSpace(u.Content) != strings.TrimSpace(u.TrajectoryID) || strings.TrimSpace(u.TrajectoryID) == "" {
 		return nil, nil
 	}
+	h.noteTextureRootTrajectory(ctx, ownerID, computerID, u.TrajectoryID)
 	if err := h.rt.HandleLifecycleCancellationWake(ctx, ownerID, computerID, agentID, u.TrajectoryID); err != nil {
 		return nil, fmt.Errorf("%w: actorruntime: reconcile lifecycle cancellation: %v", actor.ErrDeferUnprocessed, err)
 	}
@@ -433,10 +445,6 @@ func (h *actorHandler) handleOwnerRevision(ctx context.Context, u actor.Update, 
 	return h.handleCoagentResult(ctx, u, memory)
 }
 
-// handleInboxRecord starts a turn for a records desk whose inbox took a
-// record (Cut 1 L3a, the Texture-research conversation). The wake carries no
-// work: the desk reads its records in (cursor, head] when its turn runs, and
-// an active turn reads them in its next cell.
 // handleTextureRootDigest delivers the Texture root's digest (PD3 S1). The
 // Texture owner checks the marked master's liveness, runs the ensure step
 // when it is not live, and wakes the master's own desk; a pre-boot digest
@@ -455,6 +463,10 @@ func (h *actorHandler) handleTextureRootDigest(ctx context.Context, u actor.Upda
 	return memory, nil
 }
 
+// handleInboxRecord starts a turn for a records desk whose inbox took a
+// record (Cut 1 L3a, the Texture-research conversation). The wake carries no
+// work: the desk reads its records in (cursor, head] when its turn runs, and
+// an active turn reads them in its next cell.
 func (h *actorHandler) handleInboxRecord(ctx context.Context, u actor.Update, memory []byte) ([]byte, error) {
 	ownerID, computerID, agentID, err := parseScopedActorMailboxID(u.ToAgentID)
 	if err != nil {

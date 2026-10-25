@@ -50,6 +50,15 @@ const (
 	// the ledger.
 	textureRootObjectiveChars = 240
 	textureRootAskChars       = 400
+	// textureRootAskWalk bounds the revisions read per document to find what
+	// the owner last asked once the head is Texture's.
+	textureRootAskWalk = 16
+	// textureRootMaxRevisionBytes bounds the master itself: a root revision
+	// over 48 KiB is refused, so a root run's input stays bounded too.
+	textureRootMaxRevisionBytes = 48 << 10
+	// textureRootClientRequestPrefix is reserved for the master documents'
+	// create commands (the create handler refuses it).
+	textureRootClientRequestPrefix = "texture-root:"
 )
 
 // textureRootDigest is the digest occurrence's content. Nonce makes each
@@ -58,16 +67,28 @@ type textureRootDigest struct {
 	V     int      `json:"v"`
 	Nonce string   `json:"nonce"`
 	Docs  []string `json:"docs"`
+	Full  bool     `json:"full,omitempty"`
 }
 
 // textureRootScope is one computer's digest state, in memory only: a
 // restart forgets it, which is the crash rule (the next commit mints anew).
 type textureRootScope struct {
-	pending    []string
-	armedNonce string
-	armedDue   time.Time
-	runStarts  []time.Time
-	seq        int64
+	pending     []string
+	pendingFull bool
+	armedNonce  string
+	armedDue    time.Time
+	// attempts are the digests that reached the master's reconcile, whether
+	// or not it started a run: the rate bound counts them, so a reconcile
+	// that keeps starting nothing (a tripped breaker) cannot loop.
+	attempts []time.Time
+	seq      int64
+}
+
+// textureRootArm is one digest armed under the scope mutex, scheduled after
+// it is released.
+type textureRootArm struct {
+	nonce, content string
+	due            time.Time
 }
 
 // textureRootWake carries a digest into the master's reconcile.
@@ -174,8 +195,10 @@ func addTextureRootPending(pending []string, docs ...string) []string {
 // NoteTextureRootChange records, after its transaction, that a document
 // other than the master changed (a Texture commit, an owner revision, a desk
 // report), and arms one digest unless one is already armed. Off, or on the
-// master itself, it does nothing.
+// master itself, it does nothing. The change is committed, so a cancelled
+// caller context does not drop the note.
 func (h *Handler) NoteTextureRootChange(ctx context.Context, ownerID, computerID, docID string) {
+	ctx = context.WithoutCancel(ctx)
 	ownerID, computerID, docID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(docID)
 	if h == nil || h.Store == nil || h.Core == nil || ownerID == "" || computerID == "" || docID == "" {
 		return
@@ -183,47 +206,102 @@ func (h *Handler) NoteTextureRootChange(ctx context.Context, ownerID, computerID
 	if !h.textureSettingOn(ctx, ownerID, computerID, store.SettingTextureRootDesk) {
 		return
 	}
+	h.noteTextureRootChangeOn(ctx, ownerID, computerID, docID)
+}
+
+// NoteTextureRootTrajectoryChange notes the document a trajectory names
+// (its doc_id subject ref): for ledger changes the actor runtime reconciles
+// by trajectory, after their commit (work assigned, a cancellation, a
+// delegated engineering spawn).
+func (h *Handler) NoteTextureRootTrajectoryChange(ctx context.Context, ownerID, computerID, trajectoryID string) {
+	ctx = context.WithoutCancel(ctx)
+	ownerID, computerID, trajectoryID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(trajectoryID)
+	if h == nil || h.Store == nil || h.Core == nil || ownerID == "" || computerID == "" || trajectoryID == "" {
+		return
+	}
+	if !h.textureSettingOn(ctx, ownerID, computerID, store.SettingTextureRootDesk) {
+		return
+	}
+	trajectory, err := h.Store.GetLifecycleTrajectory(ctx, ownerID, computerID, trajectoryID)
+	if err != nil {
+		if !errors.Is(err, store.ErrNotFound) {
+			log.Printf("texture root: read trajectory %s on %s: %v", trajectoryID, computerID, err)
+		}
+		return
+	}
+	if docID := strings.TrimSpace(trajectory.SubjectRefs["doc_id"]); docID != "" {
+		h.noteTextureRootChangeOn(ctx, ownerID, computerID, docID)
+	}
+}
+
+// noteTextureRootChangeOn is the note with the switch already read on.
+func (h *Handler) noteTextureRootChangeOn(ctx context.Context, ownerID, computerID, docID string) {
 	if root, err := h.Store.GetTextureRoot(ctx, ownerID, computerID); err == nil && root.DocumentID == docID {
 		return // the root's own document never wakes the root
 	} else if err != nil && !errors.Is(err, store.ErrNotFound) {
 		log.Printf("texture root: read marker on %s: %v", computerID, err)
 	}
 	now := h.textureRootClock()
+	interval := h.Core.TextureRootDigestInterval()
 	h.textureRootMu.Lock()
-	defer h.textureRootMu.Unlock()
 	scope := h.textureRootScopeLocked(ownerID, computerID)
-	due := now.Add(h.Core.TextureRootDigestInterval())
-	if slot := textureRootNextSlot(now, scope.runStarts, h.Core.TextureRootDigestInterval(), h.Core.TextureRootDigestPerHour()); slot.After(due) {
+	due := now.Add(interval)
+	if slot := textureRootNextSlot(now, scope.attempts, interval, h.Core.TextureRootDigestPerHour()); slot.After(due) {
 		due = slot
 	}
-	h.armTextureRootDigestLocked(ctx, ownerID, computerID, scope, now, due, docID)
+	arm := h.armTextureRootDigestLocked(computerID, scope, now, due, false, docID)
+	h.textureRootMu.Unlock()
+	h.scheduleTextureRootDigest(ctx, ownerID, computerID, arm)
 }
 
-// armTextureRootDigestLocked adds docs to the pending set and schedules one
-// digest unless one is armed and not stale.
-func (h *Handler) armTextureRootDigestLocked(ctx context.Context, ownerID, computerID string, scope *textureRootScope, now, due time.Time, docs ...string) {
+// armTextureRootDigestLocked adds docs to the pending set and arms one
+// digest unless one is armed and not stale. The arm is marked under the
+// mutex, so arming is exactly-once; the caller schedules it after
+// releasing the mutex (scheduleTextureRootDigest), so the actor-log write
+// does not serialize every commit's note.
+func (h *Handler) armTextureRootDigestLocked(computerID string, scope *textureRootScope, now, due time.Time, full bool, docs ...string) *textureRootArm {
 	scope.pending = addTextureRootPending(scope.pending, docs...)
+	scope.pendingFull = scope.pendingFull || full
 	if scope.armedNonce != "" && now.Before(scope.armedDue.Add(textureRootStaleArm)) {
-		return // coalesced into the armed digest
+		return nil // coalesced into the armed digest
 	}
 	scope.seq++
-	digest := textureRootDigest{V: 1, Nonce: fmt.Sprintf("%d-%d", now.UnixNano(), scope.seq), Docs: append([]string(nil), scope.pending...)}
+	digest := textureRootDigest{V: 1, Nonce: fmt.Sprintf("%d-%d", now.UnixNano(), scope.seq), Docs: append([]string(nil), scope.pending...), Full: scope.pendingFull}
 	content, err := json.Marshal(digest)
 	if err != nil {
 		log.Printf("texture root: encode digest on %s: %v", computerID, err)
-		return
-	}
-	if err := h.Core.ScheduleActor(ctx, ownerID, computerID, agentcore.TextureRootDigestMailbox, agentcore.TextureRootDigestKind, string(content), "", "", due); err != nil {
-		log.Printf("texture root: schedule digest on %s: %v", computerID, err)
-		return
+		return nil
 	}
 	scope.armedNonce, scope.armedDue = digest.Nonce, due
+	return &textureRootArm{nonce: digest.Nonce, content: string(content), due: due}
+}
+
+// scheduleTextureRootDigest writes an armed digest to the actor log, outside
+// the scope mutex. A failed write rolls the arm back (when it is still the
+// armed one), so the next note arms again; the documents stay pending.
+func (h *Handler) scheduleTextureRootDigest(ctx context.Context, ownerID, computerID string, arm *textureRootArm) {
+	if arm == nil {
+		return
+	}
+	err := h.Core.ScheduleActor(ctx, ownerID, computerID, agentcore.TextureRootDigestMailbox, agentcore.TextureRootDigestKind, arm.content, "", "", arm.due)
+	if err == nil {
+		return
+	}
+	log.Printf("texture root: schedule digest on %s: %v", computerID, err)
+	h.textureRootMu.Lock()
+	defer h.textureRootMu.Unlock()
+	if scope := h.textureRootScopeLocked(ownerID, computerID); scope.armedNonce == arm.nonce {
+		scope.armedNonce, scope.armedDue = "", time.Time{}
+	}
 }
 
 // HandleTextureRootDigest is the digest's dispatch. It runs the ensure step
 // (the marked master's liveness, checked before any activation), then wakes
 // the master's own Texture desk with the documents the digest names, unless
 // a root run is live or the rate bound holds it: then it re-arms one digest.
+// A wake that starts no run (the master's reconcile found a live run in the
+// gap, or its activation breaker is tripped) re-arms one digest too, with the
+// documents kept; it counts against the rate bound, so it cannot loop.
 func (h *Handler) HandleTextureRootDigest(ctx context.Context, ownerID, computerID, content string) error {
 	ownerID, computerID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
 	if h == nil || h.Store == nil || h.Core == nil || ownerID == "" || computerID == "" {
@@ -238,15 +316,17 @@ func (h *Handler) HandleTextureRootDigest(ctx context.Context, ownerID, computer
 	h.textureRootMu.Lock()
 	scope := h.textureRootScopeLocked(ownerID, computerID)
 	docs := addTextureRootPending(append([]string(nil), digest.Docs...), scope.pending...)
-	scope.pending = nil
+	full := digest.Full || scope.pendingFull
+	scope.pending, scope.pendingFull = nil, false
 	if scope.armedNonce == digest.Nonce {
 		scope.armedNonce, scope.armedDue = "", time.Time{}
 	}
 	h.textureRootMu.Unlock()
 	requeue := func(due time.Time) {
 		h.textureRootMu.Lock()
-		defer h.textureRootMu.Unlock()
-		h.armTextureRootDigestLocked(ctx, ownerID, computerID, h.textureRootScopeLocked(ownerID, computerID), now, due, docs...)
+		arm := h.armTextureRootDigestLocked(computerID, h.textureRootScopeLocked(ownerID, computerID), now, due, full, docs...)
+		h.textureRootMu.Unlock()
+		h.scheduleTextureRootDigest(ctx, ownerID, computerID, arm)
 	}
 	if !h.textureSettingOn(ctx, ownerID, computerID, store.SettingTextureRootDesk) {
 		log.Printf("texture root: digest on %s consumed: texture.root_desk is off", computerID)
@@ -257,16 +337,19 @@ func (h *Handler) HandleTextureRootDigest(ctx context.Context, ownerID, computer
 		h.textureRootMu.Lock()
 		scope := h.textureRootScopeLocked(ownerID, computerID)
 		scope.pending = addTextureRootPending(scope.pending, docs...)
+		scope.pendingFull = scope.pendingFull || full
 		h.textureRootMu.Unlock()
 		return fmt.Errorf("texture root: ensure the master document: %w", err)
 	}
+	masters := textureRootMasterIDs(root)
 	named := make([]string, 0, len(docs))
 	for _, docID := range docs {
-		if docID != root.DocumentID {
+		if !masters[docID] {
 			named = append(named, docID)
 		}
 	}
 	docs = named
+	full = full || created || len(docs) == 0
 	agentID := currentTextureAgentID(root.DocumentID)
 	interval := h.Core.TextureRootDigestInterval()
 	if active, found, err := h.Core.TextureActiveRunByAgent(ctx, ownerID, computerID, agentID); err != nil {
@@ -280,8 +363,9 @@ func (h *Handler) HandleTextureRootDigest(ctx context.Context, ownerID, computer
 		log.Printf("texture root: digest on %s re-armed: root run %s is live", computerID, active.RunID)
 		return nil
 	}
+	perHour := h.Core.TextureRootDigestPerHour()
 	h.textureRootMu.Lock()
-	slot := textureRootNextSlot(now, h.textureRootScopeLocked(ownerID, computerID).runStarts, interval, h.Core.TextureRootDigestPerHour())
+	slot := textureRootNextSlot(now, h.textureRootScopeLocked(ownerID, computerID).attempts, interval, perHour)
 	h.textureRootMu.Unlock()
 	if slot.After(now) {
 		requeue(slot)
@@ -293,19 +377,27 @@ func (h *Handler) HandleTextureRootDigest(ctx context.Context, ownerID, computer
 		requeue(now.Add(interval))
 		return fmt.Errorf("texture root: load the master document: %w", err)
 	}
-	rec, err := h.reconcileTextureRootDigest(ctx, master, textureRootWake{Docs: docs, Full: created || len(docs) == 0})
+	rec, err := h.reconcileTextureRootDigest(ctx, master, textureRootWake{Docs: docs, Full: full})
 	if err != nil {
 		requeue(now.Add(interval))
 		return fmt.Errorf("texture root: wake the root: %w", err)
 	}
-	if rec != nil {
-		h.textureRootMu.Lock()
-		scope := h.textureRootScopeLocked(ownerID, computerID)
-		scope.runStarts = append(scope.runStarts, now)
-		if len(scope.runStarts) > 4*h.Core.TextureRootDigestPerHour() {
-			scope.runStarts = append([]time.Time(nil), scope.runStarts[len(scope.runStarts)-h.Core.TextureRootDigestPerHour():]...)
+	h.textureRootMu.Lock()
+	scope = h.textureRootScopeLocked(ownerID, computerID)
+	scope.attempts = append(scope.attempts, now)
+	if keep := max(perHour, 1); len(scope.attempts) > 4*keep {
+		scope.attempts = append([]time.Time(nil), scope.attempts[len(scope.attempts)-keep:]...)
+	}
+	next := textureRootNextSlot(now, scope.attempts, interval, perHour)
+	h.textureRootMu.Unlock()
+	if rec == nil {
+		// Same semantics as a live root run: the documents wait for one
+		// digest, at the interval and within the rate bound.
+		if at := now.Add(interval); at.After(next) {
+			next = at
 		}
-		h.textureRootMu.Unlock()
+		requeue(next)
+		log.Printf("texture root: digest on %s re-armed for %s: the master's reconcile started no run", computerID, next.Format(time.RFC3339))
 	}
 	return nil
 }
@@ -324,24 +416,21 @@ func (h *Handler) reconcileTextureRootDigest(ctx context.Context, master types.D
 	return h.reconcileAgentWakeLockedFor(ctx, doc, currentTextureAgentID(docID), &wake)
 }
 
-// EnsureTextureRoot returns the computer's live master document, creating
-// it, or replacing a master that is no longer live, first. Idempotent on
-// liveness.
-func (h *Handler) EnsureTextureRoot(ctx context.Context, ownerID, computerID string) (store.TextureRoot, error) {
-	root, _, err := h.ensureTextureRoot(ctx, ownerID, computerID)
-	return root, err
-}
-
 // ensureTextureRoot claims the marker by compare-and-set before it creates
 // the document, so the claim is the atomic step: a lost race creates
 // nothing, and the master's first run already sees the marker. The document
 // id follows from the generation, so a claim whose document is missing (a
 // crash between claim and create) is completed, not replaced. created
-// reports that this call made the document.
+// reports that this call made the document. It returns the live master,
+// creating it, or replacing a master that is no longer live, first; it is
+// idempotent on liveness, and refuses with texture.root_desk off.
 func (h *Handler) ensureTextureRoot(ctx context.Context, ownerID, computerID string) (store.TextureRoot, bool, error) {
 	ownerID, computerID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
 	if h == nil || h.Store == nil {
 		return store.TextureRoot{}, false, fmt.Errorf("texture root: store unavailable")
+	}
+	if !h.textureSettingOn(ctx, ownerID, computerID, store.SettingTextureRootDesk) {
+		return store.TextureRoot{}, false, fmt.Errorf("texture root: %s is off", store.SettingTextureRootDesk)
 	}
 	for attempt := 0; attempt < 4; attempt++ {
 		current, err := h.Store.GetTextureRoot(ctx, ownerID, computerID)
@@ -365,7 +454,7 @@ func (h *Handler) ensureTextureRoot(ctx context.Context, ownerID, computerID str
 		default:
 			return store.TextureRoot{}, false, err
 		}
-		_, _, docID, _, _, _ := textureCreateIdentity(ownerID, computerID, textureRootClientRequestID(generation))
+		docID := textureRootDocumentID(ownerID, computerID, generation)
 		claimed, err := h.Store.ClaimTextureRoot(ctx, expected, store.TextureRoot{
 			OwnerID: ownerID, ComputerID: computerID, DocumentID: docID,
 			Generation: generation, PredecessorDocumentID: predecessor,
@@ -384,7 +473,27 @@ func (h *Handler) ensureTextureRoot(ctx context.Context, ownerID, computerID str
 }
 
 func textureRootClientRequestID(generation int64) string {
-	return fmt.Sprintf("texture-root:%d", generation)
+	return fmt.Sprintf("%s%d", textureRootClientRequestPrefix, generation)
+}
+
+// textureRootDocumentID is generation's master document id: it follows from
+// the reserved client request id.
+func textureRootDocumentID(ownerID, computerID string, generation int64) string {
+	_, _, docID, _, _, _ := textureCreateIdentity(ownerID, computerID, textureRootClientRequestID(generation))
+	return docID
+}
+
+// textureRootMasterIDs is the current master and every master it replaced:
+// none of them is a document the ledger lists.
+func textureRootMasterIDs(root store.TextureRoot) map[string]bool {
+	ids := map[string]bool{strings.TrimSpace(root.DocumentID): true}
+	if p := strings.TrimSpace(root.PredecessorDocumentID); p != "" {
+		ids[p] = true
+	}
+	for generation := int64(1); generation <= root.Generation; generation++ {
+		ids[textureRootDocumentID(root.OwnerID, root.ComputerID, generation)] = true
+	}
+	return ids
 }
 
 // createTextureRootDocument creates the marked master through the ordinary
@@ -445,6 +554,8 @@ type textureRootLedgerEntry struct {
 	Doc         types.Document
 	Snapshot    types.LifecycleSnapshot
 	HasSnapshot bool
+	// Ask is what the owner last asked, from the revision chain.
+	Ask string
 }
 
 // textureRootRequestSection is what a root run's request turn adds: the root
@@ -454,14 +565,16 @@ type textureRootLedgerEntry struct {
 func (h *Handler) textureRootRequestSection(ctx context.Context, ownerID string, doc types.Document, root store.TextureRoot, req textureAgentRevisionRequest) string {
 	computerID := strings.TrimSpace(doc.ComputerID)
 	full := req.RootFullRefresh || len(req.RootDocuments) == 0
+	masters := textureRootMasterIDs(root)
+	masters[doc.DocID] = true
 	var docs []types.Document
 	if full {
-		listed, err := h.Store.ListDocumentsByScope(ctx, ownerID, computerID, textureRootMaxDocuments+1)
+		listed, err := h.Store.ListDocumentsByScope(ctx, ownerID, computerID, textureRootMaxDocuments+len(masters))
 		if err != nil {
 			log.Printf("texture root: list documents on %s: %v", computerID, err)
 		}
 		for _, candidate := range listed {
-			if candidate.DocID != doc.DocID && len(docs) < textureRootMaxDocuments {
+			if !masters[candidate.DocID] && len(docs) < textureRootMaxDocuments {
 				docs = append(docs, candidate)
 			}
 		}
@@ -469,6 +582,9 @@ func (h *Handler) textureRootRequestSection(ctx context.Context, ownerID string,
 		for _, docID := range req.RootDocuments {
 			if len(docs) >= textureRootMaxDocuments {
 				break
+			}
+			if masters[docID] {
+				continue
 			}
 			candidate, err := h.Store.GetLifecycleDocument(ctx, ownerID, computerID, docID)
 			if err != nil {
@@ -483,6 +599,7 @@ func (h *Handler) textureRootRequestSection(ctx context.Context, ownerID string,
 		if strings.TrimSpace(candidate.TrajectoryID) != "" {
 			if snapshot, err := h.Store.GetLifecycleSnapshot(ctx, ownerID, computerID, candidate.TrajectoryID); err == nil {
 				entry.Snapshot, entry.HasSnapshot = snapshot, true
+				entry.Ask = h.textureRootOwnerAsk(ctx, ownerID, computerID, snapshot.HeadRevision)
 			}
 		}
 		entries = append(entries, entry)
@@ -555,7 +672,7 @@ func textureRootLedgerSection(entry textureRootLedgerEntry, compact bool) string
 			}
 		}
 		b.WriteString("\n")
-		if ask := textureRootOwnerAsk(snapshot); ask != "" {
+		if ask := entry.Ask; ask != "" {
 			b.WriteString("the owner last asked: " + ask + "\n")
 		}
 		if len(open) > 0 {
@@ -602,10 +719,36 @@ func textureRootRefsLine(docID string, open []types.WorkItemRecord) string {
 }
 
 // textureRootOwnerAsk is the owner's last direction on a document: the head
-// revision's owner prompt, else its seed, else a first revision the owner
-// wrote.
-func textureRootOwnerAsk(snapshot types.LifecycleSnapshot) string {
-	head := snapshot.HeadRevision
+// revision's own ask, else the newest owner direction on its revision chain,
+// else the first revision the owner wrote. The walk reads at most
+// textureRootAskWalk revisions.
+func (h *Handler) textureRootOwnerAsk(ctx context.Context, ownerID, computerID string, head types.Revision) string {
+	if ask := textureRootHeadAsk(head); ask != "" {
+		return ask
+	}
+	reads := 0
+	load := func(revisionID string) (types.Revision, error) {
+		if reads >= textureRootAskWalk {
+			return types.Revision{}, errTextureRootAskWalk
+		}
+		reads++
+		return h.Store.GetLifecycleRevision(ctx, ownerID, computerID, revisionID)
+	}
+	directions, first := collectTextureOwnerStory(head, nil, load, true)
+	if n := len(directions); n > 0 {
+		return truncatePromptSnippet(strings.Join(strings.Fields(directions[n-1].Text), " "), textureRootAskChars)
+	}
+	if first != nil {
+		return truncatePromptSnippet(strings.Join(strings.Fields(first.Content), " "), textureRootAskChars)
+	}
+	return ""
+}
+
+var errTextureRootAskWalk = errors.New("texture root: owner ask walk bound")
+
+// textureRootHeadAsk is the head revision's own ask: its owner prompt, else
+// its seed, else the head itself when it is a first revision the owner wrote.
+func textureRootHeadAsk(head types.Revision) string {
 	metadata := decodeRevisionMetadata(head.Metadata)
 	for _, key := range []string{"owner_prompt", "seed_prompt"} {
 		if ask := metadataString(metadata, key); ask != "" {
