@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Contract test for scripts/ci-prune-go-cache: it deletes only objects the run
+# did not use, and a missing or bad marker prunes nothing.
+set -euo pipefail
+cd "$(dirname "$0")/../.."
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+cache="$tmp/go-build"
+mkdir -p "$cache/aa" "$cache/bb"
+now="$(date +%s)"
+restored=$(( now - 300 ))
+echo "$restored" >"$tmp/marker"
+
+old="$cache/aa/old-d"                     # unused for a day
+echo old >"$old";       touch -d "@$(( restored - 86400 ))" "$old"
+edge_old="$cache/aa/edge-old-d"           # just past the grace: unused
+echo x >"$edge_old";    touch -d "@$(( restored - 3901 ))" "$edge_old"
+edge_kept="$cache/bb/edge-kept-d"         # inside the grace: maybe used, untouched by Go
+echo x >"$edge_kept";   touch -d "@$(( restored - 3899 ))" "$edge_kept"
+touched="$cache/bb/touched-d"             # touched by this run
+echo x >"$touched";     touch -d "@$now" "$touched"
+
+out="$(scripts/ci-prune-go-cache "$tmp/marker" "$cache")"
+[[ ! -e "$old" && ! -e "$edge_old" ]] || { echo "unused objects were kept" >&2; exit 1; }
+[[ -e "$edge_kept" && -e "$touched" ]] || { echo "used or recent objects were deleted" >&2; exit 1; }
+grep -q -- '/ 2 files' <<<"$out" || { echo "summary line missing: $out" >&2; exit 1; }
+
+# Missing marker, bad marker, missing dir: exit 0, prune nothing.
+echo y >"$old"; touch -d "@$(( restored - 86400 ))" "$old"
+scripts/ci-prune-go-cache "$tmp/absent" "$cache" >/dev/null 2>&1
+echo notanumber >"$tmp/bad"
+scripts/ci-prune-go-cache "$tmp/bad" "$cache" >/dev/null 2>&1
+[[ -e "$old" ]] || { echo "pruned without a valid marker" >&2; exit 1; }
+scripts/ci-prune-go-cache "$tmp/marker" "$tmp/nodir" >/dev/null
+# A usage error fails.
+if scripts/ci-prune-go-cache >/dev/null 2>&1; then echo "no-arg call must fail" >&2; exit 1; fi
+echo "ci-prune-go-cache: all tests passed"
