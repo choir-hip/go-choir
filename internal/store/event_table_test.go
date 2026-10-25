@@ -436,8 +436,16 @@ func TestEventTableTrajectoryWindowOverTenThousand(t *testing.T) {
 		}
 		script = append(script, eventTableRecord(fmt.Sprintf("t-%05d", i), "run-big", "owner-1", "traj-big", kind, int64(i), int64(i), eventTableBase.Add(time.Duration(i)*time.Second)))
 	}
-	build := func(name string, stamp func(i int) bool) *Store {
+	// The three stores are independent workspaces, so they fill side by side
+	// (the fill is the whole cost of this test). They are opened here, so the
+	// parent's cleanup closes them after the reads; each fill is its own
+	// parallel subtest, and the "fill" group returns when all three are done.
+	open := func(name string) *Store {
 		s, _ := vocabUpcastOpenStore(t, name)
+		return s
+	}
+	fill := func(t *testing.T, s *Store, stamp func(i int) bool) {
+		t.Helper()
 		const per = 500
 		for start := 0; start < n; start += per {
 			end := min(start+per, n)
@@ -447,15 +455,31 @@ func TestEventTableTrajectoryWindowOverTenThousand(t *testing.T) {
 			}
 			projectAt(t, s, uint64(2+start/per), ops...)
 		}
-		return s
 	}
 	ctx := context.Background()
 	read := func(s *Store, limit int) string {
 		return eventIDs(mustEvents(t)(s.ListEventsByTrajectory(ctx, "owner-1", "traj-big", limit)))
 	}
-	off := build("traj-off", func(int) bool { return false })
-	on := build("traj-on", func(int) bool { return true })
-	toggled := build("traj-toggle", func(i int) bool { return i >= 4000 && i < 8000 })
+	off, on, toggled := open("traj-off"), open("traj-on"), open("traj-toggle")
+	t.Run("fill", func(t *testing.T) {
+		for _, f := range []struct {
+			name  string
+			store *Store
+			stamp func(i int) bool
+		}{
+			{"off", off, func(int) bool { return false }},
+			{"on", on, func(int) bool { return true }},
+			{"toggled", toggled, func(i int) bool { return i >= 4000 && i < 8000 }},
+		} {
+			t.Run(f.name, func(t *testing.T) {
+				t.Parallel()
+				fill(t, f.store, f.stamp)
+			})
+		}
+	})
+	if t.Failed() {
+		t.FailNow()
+	}
 	for _, limit := range []int{500, 3000} {
 		want := read(off, limit)
 		if !strings.HasPrefix(want, "t-00051#") {
