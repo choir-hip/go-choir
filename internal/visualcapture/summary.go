@@ -6,6 +6,16 @@ import (
 	"strings"
 )
 
+// SummaryMaxBytes bounds the summary line. The job's output tail is the last
+// 4 KiB (capsulejob.TailBytes) and Freeze finds the receipt by the manifest
+// digest near the line's start, so a longer line loses it (review bunch
+// 238 D: six 512-byte routes, their shared-screenshot warning and six failed
+// assets made about 7 KiB).
+const SummaryMaxBytes = 3 << 10
+
+// summaryRouteLen is how much of a route a shortened summary keeps.
+const summaryRouteLen = 64
+
 // Summary is the one-line JSON a capture job prints, which becomes the job's
 // output tail. It names the manifest's digest: Freeze accepts the job's
 // receipt as the evidence's receipt only when that digest is in the output,
@@ -13,7 +23,26 @@ import (
 // failures are the run's failed asset answers (Report.AssetFailures): the
 // summary lists them and warns, so Freeze can carry them to the verifier.
 // dropped counts failed answers the recorder did not keep (Report.AssetDropped).
+//
+// The line is at most SummaryMaxBytes. Past it the summary sheds, in order:
+// long routes (cut to 64 bytes with "..."), the warnings (Freeze and the
+// verifier recompute them from the manifest and the failures), the per-route
+// rows (the manifest has them), and last the failure list.
 func Summary(m Manifest, manifestRaw []byte, failures []AssetFailure, dropped int) []byte {
+	if len(failures) > MaxAssetFailures {
+		failures = failures[:MaxAssetFailures]
+	}
+	var out []byte
+	for level := 0; level <= 4; level++ {
+		out = summaryAt(m, manifestRaw, failures, dropped, level)
+		if len(out) <= SummaryMaxBytes {
+			break
+		}
+	}
+	return out
+}
+
+func summaryAt(m Manifest, manifestRaw []byte, failures []AssetFailure, dropped, level int) []byte {
 	type row struct {
 		Route    string `json:"route"`
 		Artifact string `json:"artifact"`
@@ -29,23 +58,35 @@ func Summary(m Manifest, manifestRaw []byte, failures []AssetFailure, dropped in
 		AssetFailures  []AssetFailure `json:"asset_failures,omitempty"`
 		AssetDropped   int            `json:"asset_failures_dropped,omitempty"`
 		Warnings       []string       `json:"warnings,omitempty"`
+		Shortened      bool           `json:"shortened,omitempty"`
 	}{
 		Manifest:       OutputDir + "/" + ManifestFile,
 		ManifestSHA256: DigestHex(manifestRaw),
 		FrontendSHA256: m.Subject.FrontendSHA256,
 		Browser:        m.Browser.Version,
 		Captures:       []row{},
+		Shortened:      level > 0,
+	}
+	route := func(r string) string {
+		if level >= 1 && len(r) > summaryRouteLen {
+			return r[:summaryRouteLen] + "..."
+		}
+		return r
 	}
 	shots := make([]RouteShot, 0, len(m.Captures))
 	for _, c := range m.Captures {
-		summary.Captures = append(summary.Captures, row{Route: c.Route, Artifact: c.Artifact, Bytes: c.Bytes, Blank: c.Blank})
-		shots = append(shots, RouteShot{Route: c.Route, Artifact: c.Artifact})
+		if level < 3 {
+			summary.Captures = append(summary.Captures, row{Route: route(c.Route), Artifact: c.Artifact, Bytes: c.Bytes, Blank: c.Blank})
+		}
+		shots = append(shots, RouteShot{Route: route(c.Route), Artifact: c.Artifact})
 	}
-	if len(failures) > MaxAssetFailures {
-		failures = failures[:MaxAssetFailures]
+	if level < 4 {
+		summary.AssetFailures = failures
 	}
-	summary.AssetFailures, summary.AssetDropped = failures, dropped
-	summary.Warnings = append(SharedShotWarnings(shots), AssetFailureWarnings(failures, dropped)...)
+	summary.AssetDropped = dropped
+	if level < 2 {
+		summary.Warnings = append(SharedShotWarnings(shots), AssetFailureWarnings(failures, dropped)...)
+	}
 	out, _ := json.Marshal(summary)
 	return out
 }

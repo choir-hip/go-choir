@@ -226,6 +226,52 @@ func TestRunReportsAModuleWhoseImportIsMissing(t *testing.T) {
 	}
 }
 
+// Review bunch 238 D: MaxRoutes routes of the longest admitted length, all
+// sharing one screenshot, plus MaxAssetFailures of the longest paths, made a
+// summary longer than the job's 4 KiB tail, so its leading manifest digest
+// was cut and Freeze found no capture receipt. The whole line is bounded.
+// Ways it can fail, written first: the line still exceeds the bound; the
+// digest is lost; the line is no longer one JSON line; the asset failures
+// Freeze reads are dropped while room remains.
+func TestSummaryStaysInsideTheTailAtTheBounds(t *testing.T) {
+	raw := []byte("{\"kind\":\"visual_capture\"}\n")
+	same := ArtifactRef(strings.Repeat("f", 64))
+	m := Manifest{Subject: Subject{FrontendSHA256: strings.Repeat("b", 64)}, Browser: Browser{Version: strings.Repeat("v", 120)}}
+	for i := 0; i < MaxRoutes; i++ {
+		route := "/" + strings.Repeat(string(rune('a'+i)), maxRouteLen-1)
+		if _, err := NormalizeRoute(route); err != nil {
+			t.Fatal(err)
+		}
+		m.Captures = append(m.Captures, Capture{Route: route, Artifact: same, Bytes: 12, Blank: true})
+	}
+	var failures []AssetFailure
+	for i := 0; i < MaxAssetFailures; i++ {
+		failures = append(failures, AssetFailure{Path: "/" + strings.Repeat("p", maxAssetPathLen-5) + fmt.Sprint(i) + ".js", Status: 404, Count: 99})
+	}
+	out := Summary(m, raw, failures, 1000)
+	if len(out) > SummaryMaxBytes || strings.Contains(string(out), "\n") {
+		t.Fatalf("summary is %d bytes (bound %d) or not one line", len(out), SummaryMaxBytes)
+	}
+	var back struct {
+		ManifestSHA256 string         `json:"manifest_sha256"`
+		AssetFailures  []AssetFailure `json:"asset_failures"`
+	}
+	if err := json.Unmarshal(out, &back); err != nil || back.ManifestSHA256 != DigestHex(raw) {
+		t.Fatalf("summary lost its digest or is not JSON: %v %s", err, out)
+	}
+	if len(back.AssetFailures) != MaxAssetFailures {
+		t.Fatalf("Freeze's asset failures were dropped though they fit: %d", len(back.AssetFailures))
+	}
+	// The job tail keeps the last TailBytes: the digest survives in it.
+	tail := "build noise\n" + string(out) + "\n"
+	if len(tail) > 4<<10 {
+		tail = tail[len(tail)-4<<10:]
+	}
+	if !strings.Contains(tail, DigestHex(raw)) || len(ParseSummaryAssetFailures(tail, DigestHex(raw))) != MaxAssetFailures {
+		t.Fatal("the bounded summary does not survive the 4 KiB tail")
+	}
+}
+
 // Devin's nit (bunch 238): "(the first N kept)" only when the recorder
 // actually dropped paths, and it says how many.
 func TestAssetWarningSaysWhatWasDropped(t *testing.T) {
