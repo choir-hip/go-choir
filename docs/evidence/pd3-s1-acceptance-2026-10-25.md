@@ -77,3 +77,21 @@ their documents' last revision time, newest first, before cutting; and ask
 the root to write the master newest first as well, for the owner's own
 reading. The switch was turned back on at 12:33:18 so S1 keeps the master
 current.
+
+## S2 paired test, rerun after F4, 2026-10-25 13:09-13:11 (fails again)
+
+The F4 fix deployed in a4ef55f5d (CI 40195331859 success, vmctl 13:04:44,
+NRestarts 0); b@c booted onto it at 13:08. On sample e89959c8: label
+present, offsite absent from the excerpt, absent from the answer. Off
+sample f26d775a: no label, no mention. The excerpt was still in the
+master's own order.
+
+Finding F5 (format mismatch): the root writes each document's refs at the
+end of its paragraph ("... is listed. refs: doc=<id> work=none"), and the
+excerpt builder recognizes "refs: doc=" only at the start of a line. Every
+section therefore counted as unknown and kept the root's order, and the
+run's own section was not dropped either. The unit tests passed because
+they built masters in the format the parser expects rather than the one
+the root writes. Fix: find "refs: doc=<uuid>" anywhere in a section, and
+test against a master in the root's real inline format (taken from b@c's
+master ef0e2ef8).
