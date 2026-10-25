@@ -1,0 +1,168 @@
+#!/usr/bin/env python3
+"""Find the green pull-request run that already tested a main push's commit.
+
+docs/design/ci-prove-once-2026-10-24.md. Prints `reuse_pr_run=<id>` (empty when
+nothing is provable) and a `reuse_note=...` line, appended to the file named by
+argv[1] when given, otherwise to stdout. Every failure, ambiguity or doubt
+prints an empty id: the caller then runs the tests. Exits non-zero only on a
+usage error.
+
+Env: GH_REPO (owner/name), AFTER (the pushed commit), GH_BIN (default gh; a
+test seam). The gh CLI reads GH_TOKEN.
+"""
+import json
+import os
+import re
+import subprocess
+import sys
+
+WORKFLOW = "ci.yml"
+# (job name, exact or prefix, distinct successful jobs wanted).
+EXPECTED = (
+    ("Go Test (race, non-runtime shard ", "prefix", 8),
+    ("Go Test (race, agentcore/textureowner shard ", "prefix", 8),
+    ("Go Test (scale, isolated load-sensitive tests)", "exact", 1),
+    ("Go Vet + Build", "exact", 1),
+    ("Go Vet + Test + Build", "exact", 1),
+)
+
+
+class NoReuse(Exception):
+    pass
+
+
+def gh(*args):
+    try:
+        proc = subprocess.run(
+            [os.environ.get("GH_BIN", "gh"), "api", *args],
+            capture_output=True, text=True, timeout=60,
+        )
+    except (OSError, subprocess.TimeoutExpired) as err:
+        raise NoReuse("gh api failed to run: %s" % err)
+    if proc.returncode != 0:
+        raise NoReuse("gh api %s failed: %s" % (args[0], proc.stderr.strip()[:200]))
+    return proc.stdout
+
+
+def gh_json(path):
+    try:
+        return json.loads(gh(path))
+    except ValueError as err:
+        raise NoReuse("gh api %s returned unparseable output: %s" % (path, err))
+
+
+SHA = re.compile(r"[0-9a-f]{40}")
+ANCESTORS = 50
+
+
+def decide(repo, after):
+    if not SHA.fullmatch(after or ""):
+        raise NoReuse("AFTER is not a full commit sha")
+    if not re.fullmatch(r"[\w.-]+/[\w.-]+", repo or ""):
+        raise NoReuse("GH_REPO is not owner/name")
+    # Newest-first first-parent-ish list of AFTER's ancestry, AFTER included.
+    commits = gh_json("repos/%s/commits?sha=%s&per_page=%d" % (repo, after, ANCESTORS))
+    if not isinstance(commits, list) or not commits or commits[0].get("sha") != after:
+        raise NoReuse("could not list the ancestry of %s" % after[:9])
+    order = [c.get("sha") for c in commits]
+    if not all(isinstance(x, str) and SHA.fullmatch(x) for x in order):
+        raise NoReuse("ancestry list holds a bad sha")
+    runs = gh_json(
+        "repos/%s/actions/workflows/%s/runs?event=pull_request&status=completed&per_page=100" % (repo, WORKFLOW)
+    ).get("workflow_runs")
+    if not isinstance(runs, list):
+        raise NoReuse("no workflow_runs list in the answer")
+    # A sha with a failed sibling run is fine (the green one counts); a sha
+    # with two green runs is ambiguous and counts for nothing.
+    green = {}
+    for r in runs:
+        if r.get("event") == "pull_request" and r.get("conclusion") == "success" and isinstance(r.get("head_sha"), str):
+            green.setdefault(r["head_sha"], []).append(r)
+    tested = next((sha for sha in order if sha in green), None)
+    if tested is None:
+        raise NoReuse("no green pull-request run among the last %d commits up to %s" % (len(order), after[:9]))
+    if len(green[tested]) > 1:
+        raise NoReuse("%d green pull-request runs of %s; ambiguous" % (len(green[tested]), tested[:9]))
+    run = green[tested][0]
+    run_id = run.get("id")
+    if not isinstance(run_id, int):
+        raise NoReuse("run has no id")
+    prs = run.get("pull_requests") or []
+    if len(prs) != 1:
+        raise NoReuse("run %s belongs to %d pull requests; want 1" % (run_id, len(prs)))
+    base = (prs[0].get("base") or {}).get("sha")
+    if not SHA.fullmatch(base or ""):
+        raise NoReuse("run %s has no base sha" % run_id)
+    # The run tested the merge of its head into its base. That merge has the
+    # head's own tree only when the base is an ancestor of the head.
+    status = gh_json("repos/%s/compare/%s...%s" % (repo, base, tested)).get("status")
+    if status not in ("ahead", "identical"):
+        raise NoReuse("run %s tested a merge into %s; %s is %s it, so its tree may differ"
+                      % (run_id, base[:9], tested[:9], status))
+    # What changed from the tested commit to AFTER must be nothing the Go
+    # lanes or the CI contract tests look at (the classifier decides, as it
+    # does for a docs-only push today).
+    delta = "identical"
+    if tested != after:
+        cmp = gh_json("repos/%s/compare/%s...%s" % (repo, tested, after))
+        delta = cmp.get("status")
+        files = cmp.get("files")
+        if delta != "ahead" or not isinstance(files, list) or len(files) >= 300 or cmp.get("ahead_by", 0) > 250:
+            raise NoReuse("cannot read the change from %s to %s (%s)" % (tested[:9], after[:9], delta))
+        names = []
+        for f in files:
+            if not isinstance(f.get("filename"), str):
+                raise NoReuse("compare file entry without a name")
+            names.append(f["filename"])
+            if f.get("previous_filename"):
+                names.append(f["previous_filename"])
+        classify = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".github", "scripts", "ci-impact-classify")
+        try:
+            proc = subprocess.run([classify, "--sha", after], input="\n".join(names) + "\n",
+                                  capture_output=True, text=True, timeout=60,
+                                  env=dict(os.environ, CI_FORCE_ALL="false"))
+        except (OSError, subprocess.TimeoutExpired) as err:
+            raise NoReuse("classifier failed to run: %s" % err)
+        if proc.returncode != 0:
+            raise NoReuse("classifier failed: %s" % proc.stderr.strip()[:200])
+        plan = dict(l.split("=", 1) for l in proc.stdout.splitlines() if re.fullmatch(r"[a-z_]+=[a-z0-9-]*", l))
+        for key in ("go", "ci", "high_risk_race"):
+            if plan.get(key) != "false":
+                raise NoReuse("the change from %s to %s touches Go or CI paths (%s=%s)" % (tested[:9], after[:9], key, plan.get(key)))
+    jobs = gh_json("repos/%s/actions/runs/%s/jobs?filter=latest&per_page=100" % (repo, run_id))
+    listed = jobs.get("jobs")
+    if not isinstance(listed, list) or jobs.get("total_count") != len(listed):
+        raise NoReuse("run %s job list is incomplete" % run_id)
+    counts = []
+    for name, kind, want in EXPECTED:
+        names = {j["name"] for j in listed
+                 if isinstance(j.get("name"), str) and j.get("conclusion") == "success"
+                 and (j["name"] == name if kind == "exact" else j["name"].startswith(name))}
+        if len(names) != want:
+            raise NoReuse("run %s has %d successful '%s' jobs, want %d" % (run_id, len(names), name.strip(" ("), want))
+        counts.append("%s=%d" % (name.strip(" ("), len(names)))
+    return run_id, "run %s %s tested %s (base %s, %s); change to %s is %s with no Go or CI path; jobs: %s" % (
+        run_id, run.get("html_url", ""), tested[:9], base[:9], status, after[:9], delta, "; ".join(counts))
+
+
+def main(argv):
+    if len(argv) > 2:
+        print("usage: ci-find-green-pr-run [output-file]", file=sys.stderr)
+        return 2
+    try:
+        run_id, note = decide(os.environ.get("GH_REPO", ""), os.environ.get("AFTER", ""))
+        lines = ["reuse_pr_run=%s" % run_id, "reuse_note=%s" % note]
+    except NoReuse as why:
+        lines = ["reuse_pr_run=", "reuse_note=not reused: %s" % why]
+    except Exception as err:  # fail closed on anything unexpected
+        lines = ["reuse_pr_run=", "reuse_note=not reused: unexpected %s: %s" % (type(err).__name__, err)]
+    text = "\n".join(l.replace("\n", " ") for l in lines) + "\n"
+    if len(argv) == 2:
+        with open(argv[1], "a") as out:
+            out.write(text)
+    sys.stdout.write(text)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

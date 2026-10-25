@@ -1,0 +1,164 @@
+#!/usr/bin/env bash
+# Contract test for scripts/ci-find-green-pr-run
+# (docs/design/ci-prove-once-2026-10-24.md): it names a run only when every
+# rule holds, and every doubt yields an empty id (the tests run).
+set -euo pipefail
+cd "$(dirname "$0")/../.."
+python3 -I - <<'PY'
+import json, os, subprocess, tempfile, pathlib
+
+AFTER = "a" * 40
+BASE = "b" * 40
+REPO = "owner/repo"
+
+def jobs(**over):
+    names = ["Go Test (race, non-runtime shard %d)" % i for i in range(8)]
+    names += ["Go Test (race, agentcore/textureowner shard %d)" % i for i in range(8)]
+    names += ["Go Test (scale, isolated load-sensitive tests)", "Go Vet + Build", "Go Vet + Test + Build",
+              "Plan CI Lanes", "Docs Truth Check"]
+    out = [{"name": n, "conclusion": "success"} for n in names]
+    return out
+
+def scenario(**kw):
+    s = {
+        "runs": {"workflow_runs": [{"id": 77, "head_sha": AFTER, "event": "pull_request", "conclusion": "success",
+                                     "html_url": "https://example/runs/77",
+                                     "pull_requests": [{"base": {"sha": BASE}}]}]},
+        "commits": [{"sha": AFTER}] + [{"sha": "%040x" % i} for i in range(1, 6)],
+        "compare": {"status": "ahead"},           # base...tested
+        "delta": {"status": "ahead", "ahead_by": 1, "files": [{"filename": "docs/x.md"}]},   # tested...after
+        "jobs": None,
+        "fail": None,
+        "tested": AFTER,
+    }
+    s.update(kw)
+    if s["jobs"] is None:
+        j = jobs()
+        s["jobs"] = {"total_count": len(j), "jobs": j}
+    return s
+
+with tempfile.TemporaryDirectory() as d:
+    d = pathlib.Path(d)
+    fake = d / "gh"
+    fake.write_text('''#!/usr/bin/env python3
+import json, os, sys
+s = json.load(open(os.environ["FAKE_GH"]))
+path = sys.argv[2]
+if s.get("fail") and s["fail"] in path:
+    sys.stderr.write("boom"); sys.exit(1)
+if "/jobs" in path: out = s["jobs"]
+elif "/commits?" in path: out = s["commits"]
+elif "/compare/" in path:
+    out = s["delta"] if path.split("/compare/")[1].startswith(s["tested"]) else s["compare"]
+elif "/runs?" in path: out = s["runs"]
+else: sys.exit(3)
+if out == "garbage": print("not json"); sys.exit(0)
+print(json.dumps(out))
+''')
+    fake.chmod(0o755)
+    cfg = d / "s.json"
+
+    def run(s, after=AFTER, repo=REPO):
+        cfg.write_text(json.dumps(s))
+        env = dict(os.environ, GH_BIN=str(fake), FAKE_GH=str(cfg), AFTER=after, GH_REPO=repo)
+        out = d / "out"
+        out.write_text("")
+        r = subprocess.run(["python3", "-I", "scripts/ci-find-green-pr-run", str(out)],
+                           env=env, capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        lines = dict(l.split("=", 1) for l in out.read_text().splitlines())
+        assert r.stdout == out.read_text(), "stdout and the output file differ"
+        return lines["reuse_pr_run"], lines["reuse_note"]
+
+    rid, note = run(scenario())
+    assert rid == "77", (rid, note)
+    assert "base bbbbbbbbb" in note and "Go Vet + Build=1" in note, note
+    assert run(scenario(compare={"status": "identical"}))[0] == "77"
+
+    def none(label, s, **kw):
+        rid, note = run(s, **kw)
+        assert rid == "", (label, rid, note)
+        assert note.startswith("not reused: "), note
+
+    none("diverged", scenario(compare={"status": "diverged"}))
+    none("behind", scenario(compare={"status": "behind"}))
+    none("compare missing", scenario(compare={}))
+    none("no runs", scenario(runs={"workflow_runs": []}))
+    none("runs shape", scenario(runs={}))
+    r = scenario()["runs"]["workflow_runs"][0]
+    none("failed run", scenario(runs={"workflow_runs": [dict(r, conclusion="failure")]}))
+    none("cancelled run", scenario(runs={"workflow_runs": [dict(r, conclusion="cancelled")]}))
+    none("other sha", scenario(runs={"workflow_runs": [dict(r, head_sha="c" * 40)]}))
+    none("push run", scenario(runs={"workflow_runs": [dict(r, event="push")]}))
+    none("two green runs", scenario(runs={"workflow_runs": [r, dict(r, id=78)]}))
+    none("no pull request", scenario(runs={"workflow_runs": [dict(r, pull_requests=[])]}))
+    none("two pull requests", scenario(runs={"workflow_runs": [dict(r, pull_requests=[{"base": {"sha": BASE}}, {"base": {"sha": BASE}}])]}))
+    none("no base", scenario(runs={"workflow_runs": [dict(r, pull_requests=[{"base": {}}])]}))
+    none("string id", scenario(runs={"workflow_runs": [dict(r, id="77")]}))
+    # A failed sibling does not hide the one green run.
+    assert run(scenario(runs={"workflow_runs": [dict(r, id=70, conclusion="failure"), r]}))[0] == "77"
+
+
+    # The tested commit is an ancestor of AFTER and only docs changed since:
+    # the run still proves the Go-relevant tree (the docs commits that follow
+    # a landing are the common case).
+    ANC = "%040x" % 3
+    anc_run = dict(r, head_sha=ANC)
+    def from_ancestor(delta, **kw):
+        return scenario(runs={"workflow_runs": [anc_run]}, tested=ANC, delta=delta, **kw)
+    docs = {"status": "ahead", "ahead_by": 3, "files": [{"filename": "docs/ACTIVE.md"}, {"filename": "docs/problems/x.md"}, {"filename": "README.md"}]}
+    rid, note = run(from_ancestor(docs))
+    assert rid == "77" and "no Go or CI path" in note, (rid, note)
+    none("go file changed since", from_ancestor(dict(docs, files=docs["files"] + [{"filename": "internal/store/x.go"}])))
+    none("test file changed since", from_ancestor(dict(docs, files=[{"filename": "internal/store/x_test.go"}])))
+    none("script changed since", from_ancestor(dict(docs, files=[{"filename": "scripts/go-test-split-weights"}])))
+    none("go.mod changed since", from_ancestor(dict(docs, files=[{"filename": "go.mod"}])))
+    none("ci changed since", from_ancestor(dict(docs, files=[{"filename": ".github/workflows/ci.yml"}])))
+    none("rename out of go", from_ancestor(dict(docs, files=[{"filename": "docs/x.md", "previous_filename": "internal/a/a.go"}])))
+    none("delta diverged", from_ancestor(dict(docs, status="diverged")))
+    none("delta files truncated", from_ancestor(dict(docs, files=[{"filename": "docs/f%d.md" % i} for i in range(300)])))
+    none("delta too many commits", from_ancestor(dict(docs, ahead_by=300)))
+    none("delta no files", from_ancestor({"status": "ahead", "ahead_by": 1}))
+    none("delta compare fails", from_ancestor(docs, fail="/compare/" + ANC))
+    none("green run outside the ancestry window", scenario(runs={"workflow_runs": [dict(r, head_sha="f" * 40)]}, tested="f" * 40))
+    none("ancestry list fails", scenario(fail="/commits?"))
+    none("ancestry list does not start at AFTER", scenario(commits=[{"sha": "e" * 40}]))
+    none("ancestry has a bad sha", scenario(commits=[{"sha": AFTER}, {"sha": "zz"}]))
+    # Newest tested ancestor wins; an older one is not consulted.
+    older = dict(r, id=55, head_sha="%040x" % 5)
+    rid, _ = run(scenario(runs={"workflow_runs": [older, anc_run]}, tested=ANC, delta=docs))
+    assert rid == "77"
+
+    # Lane coverage: a lane missing, failed, skipped or renamed (a PR that
+    # edits ci.yml to drop tests) is not a green run.
+    base_jobs = jobs()
+    def with_jobs(j, total=None):
+        return scenario(jobs={"total_count": len(j) if total is None else total, "jobs": j})
+    none("shard missing", with_jobs([j for j in base_jobs if j["name"] != "Go Test (race, non-runtime shard 3)"]))
+    none("runtime shard failed", with_jobs([dict(j, conclusion="failure") if j["name"].endswith("textureowner shard 5)") else j for j in base_jobs]))
+    none("scale skipped", with_jobs([dict(j, conclusion="skipped") if "scale" in j["name"] else j for j in base_jobs]))
+    none("standard not race", with_jobs([dict(j, name=j["name"].replace("(race,", "(standard,")) for j in base_jobs]))
+    none("check missing", with_jobs([j for j in base_jobs if j["name"] != "Go Vet + Test + Build"]))
+    none("vet-build missing", with_jobs([j for j in base_jobs if j["name"] != "Go Vet + Build"]))
+    none("duplicate shard names", with_jobs([dict(j, name="Go Test (race, non-runtime shard 0)") if "non-runtime shard 1)" in j["name"] else j for j in base_jobs]))
+    none("job list truncated", with_jobs(base_jobs, total=len(base_jobs) + 40))
+
+    # API failures at each call, garbage, a bad sha and a bad repo.
+    for part in ("/runs?", "/compare/", "/jobs"):
+        none("api failure " + part, scenario(fail=part))
+    none("garbage runs", scenario(runs="garbage"))
+    none("garbage jobs", scenario(jobs="garbage"))
+    none("short sha", scenario(), after="abc123")
+    none("empty sha", scenario(), after="")
+    none("bad repo", scenario(), repo="")
+    none("repo injection", scenario(), repo="a/b;rm -rf /")
+
+    # A missing gh binary is a no-reuse, not a crash.
+    env = dict(os.environ, GH_BIN=str(d / "absent"), AFTER=AFTER, GH_REPO=REPO)
+    r = subprocess.run(["python3", "-I", "scripts/ci-find-green-pr-run"], env=env, capture_output=True, text=True)
+    assert r.returncode == 0 and r.stdout.startswith("reuse_pr_run=\n"), (r.returncode, r.stdout, r.stderr)
+    # Usage error is the only non-zero exit.
+    r = subprocess.run(["python3", "-I", "scripts/ci-find-green-pr-run", "a", "b"], env=env, capture_output=True, text=True)
+    assert r.returncode == 2, r.returncode
+print("ci-find-green-pr-run: all tests passed")
+PY
