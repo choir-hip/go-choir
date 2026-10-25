@@ -5,24 +5,27 @@
 # internal/textureowner, which scripts/go-test-runtime-shards runs) on
 # TOTAL_SHARDS runners, each test exactly once. When TOTAL_SHARDS >= 4:
 #
-# - Split shards 0..TOTAL_SHARDS-3 run the split packages listed in
+# - Every shard runs a weighted share of the split packages listed in
 #   scripts/go-test-split-packages (internal/store and the other packages
 #   whose serial test binary would otherwise set a shard's length), sharded
 #   by test name. A test name goes to one shard for every split package that
 #   has it, so one `go test -run` over all split packages runs each
 #   (package, test) pair on exactly one shard, and the package binaries run
-#   in parallel on the runner's CPUs.
-# - Whole shards TOTAL_SHARDS-2 and TOTAL_SHARDS-1 run every other package
-#   whole, dealt by list index.
+#   in parallel on the runner's CPUs. The deal is heaviest first by the
+#   weights in scripts/go-test-split-weights (see plan_split).
+# - The last two shards also run every other package whole, dealt by list
+#   index, before their split share; the weights file says how much time that
+#   costs them, so they take a smaller share of the split tests.
 #
 # Below 4 shards every package runs whole, dealt by list index. Without
 # SHARD_INDEX one process runs every package whole.
 #
 # A failed `go list` or test discovery, a split list entry that go list
-# does not report as a non-runtime package, or a shard whose selection is
-# empty (TOTAL_SHARDS larger than the packages or test names it deals) fails
-# the shard: a shard never passes having tested less than its share
-# (docs/problems/ci-critical-path-race-shards-2026-10-22.md).
+# does not report as a non-runtime package, a bad weights line, or a shard
+# whose selection is empty (TOTAL_SHARDS larger than the packages or test
+# names it deals) fails the shard: a shard never passes having tested less
+# than its share (docs/problems/ci-critical-path-race-shards-2026-10-22.md,
+# docs/problems/ci-wall-clock-2026-10-24.md).
 #
 # Usage in CI:
 #   env:
@@ -95,11 +98,75 @@ fi
 
 timeout_args=(-timeout=60m)
 
-run_split_shard() {
+# Deal the split tests over all shards. Prints "K <distinct names>" and then the
+# names for shard $1. A package's tests run serially and the packages run side
+# by side, so a shard takes about as long as its heaviest package; each test
+# name (one shard for every split package that has it) goes, heaviest first,
+# to the shard where that estimate ends lowest, ties to the lighter total and
+# then the lower index. Weights come from scripts/go-test-split-weights
+# ("<seconds> <package>:<Test>", unlisted weighs 1; "@whole <seconds>" is the
+# load the two whole-package shards start with). Every shard plans the same
+# deal from the same discovery and weights.
+plan_split() {
+  awk -v shards="$total_shards" -v me="$1" -v wholes="$whole_shards" -v wfile="$weights_list" -v module="$module" '
+    function fail(msg) { printf "%s: %s\n", wfile, msg > "/dev/stderr"; bad = 1; exit 2 }
+    BEGIN {
+      whole_base = 0
+      if (wfile != "") {
+        while ((r = (getline line < wfile)) > 0) {
+          sub(/#.*/, "", line)
+          if (line ~ /^[ \t]*$/) continue
+          if (line ~ /^[ \t]*@whole[ \t]+[0-9]+[ \t]*$/) { split(line, f); whole_base = f[2] + 0; continue }
+          if (split(line, f) != 2 || f[1] !~ /^[0-9]+$/ || f[2] !~ /^[A-Za-z0-9_.\/-]+:[A-Za-z0-9_]+$/)
+            fail("bad line \"" line "\" (want: <seconds> <package>:<TestName>, or @whole <seconds>)")
+          weight[f[2]] += f[1]
+        }
+        if (r < 0) fail("cannot read")
+      }
+    }
+    /^(Test|Example|Fuzz)/ { pend[++np] = $1; next }
+    $1 == "ok" || $1 == "FAIL" || $1 == "?" {
+      pkg = $2
+      if (index(pkg, module "/") == 1) pkg = substr(pkg, length(module) + 2)
+      for (i = 1; i <= np; i++) {
+        n = pend[i]
+        if (!(n in first)) { first[n] = ++nn; order[nn] = n }
+        j = ++cnt[n]; ipkg[n, j] = pkg
+        w = ((pkg ":" n) in weight) ? weight[pkg ":" n] : 1
+        iw[n, j] = w; tw[n] += w
+      }
+      np = 0
+    }
+    END {
+      if (bad) exit 2
+      print "K " nn
+      for (i = 1; i <= nn; i++) idx[i] = order[i]
+      for (i = 2; i <= nn; i++) {
+        v = idx[i]; j = i - 1
+        while (j >= 1 && tw[idx[j]] < tw[v]) { idx[j + 1] = idx[j]; j-- }
+        idx[j + 1] = v
+      }
+      for (s = 0; s < shards; s++) { base[s] = (s >= shards - wholes) ? whole_base : 0; mx[s] = 0; tot[s] = 0 }
+      for (i = 1; i <= nn; i++) {
+        n = idx[i]; best = -1
+        for (s = 0; s < shards; s++) {
+          m = mx[s]
+          for (j = 1; j <= cnt[n]; j++) { l = load[s, ipkg[n, j]] + iw[n, j]; if (l > m) m = l }
+          after = base[s] + m
+          if (best < 0 || after < best_after || (after == best_after && tot[s] < tot[best])) { best = s; best_after = after }
+        }
+        for (j = 1; j <= cnt[n]; j++) { load[best, ipkg[n, j]] += iw[n, j]; if (load[best, ipkg[n, j]] > mx[best]) mx[best] = load[best, ipkg[n, j]] }
+        tot[best] += tw[n]
+        if (best == me) print n
+      }
+    }'
+}
+
+# Prints the split tests of this shard on stdout (the first line is
+# "K <distinct names>"); fails on a discovery failure or an empty discovery.
+split_selection() {
   local shard_index="$1"
   shift
-  local split_shards=$(( total_shards - whole_shards ))
-
   # Match execution's build mode (especially -race) so discovery warms the
   # right cache. Fuzz targets are listed too: -run executes their seeds.
   local listing
@@ -107,75 +174,25 @@ run_split_shard() {
     echo "Test discovery failed for split packages: ${split_packages[*]#"${module}/"}" >&2
     return 1
   fi
-  local -a names=()
-  mapfile -t names < <(grep -E '^(Test|Example|Fuzz)' <<<"$listing" || true)
-  if (( ${#names[@]} == 0 )); then
+  if ! grep -qE '^(Test|Example|Fuzz)' <<<"$listing"; then
     echo "Test discovery found no tests in split packages: ${split_packages[*]#"${module}/"}" >&2
     return 1
   fi
+  plan_split "$shard_index" <<<"$listing"
+}
 
-  # One shard per distinct name, so a name two split packages share runs on
-  # the same shard in both. Names are dealt heaviest first, each to the
-  # lightest split shard so far (ties to the lowest index), by the weights in
-  # scripts/go-test-split-weights; an unlisted name weighs 1. Every shard
-  # plans the same deal from the same discovery and weights.
-  local -A seen=()
-  local -a uniq=()
-  local name
-  for name in "${names[@]}"; do
-    [[ -n "${seen[$name]:-}" ]] && continue
-    seen["$name"]=1
-    uniq+=("$name")
-  done
-  local k=${#uniq[@]}
+run_split_shard() {
+  local shard_index="$1"
+  local plan="$2"
+  shift 2
   local -a selected=()
-  local plan
-  if ! plan=$(printf '%s\n' "${uniq[@]}" | awk -v shards="$split_shards" -v me="$shard_index" -v wfile="$weights_list" '
-    BEGIN {
-      if (wfile != "" && (getline line < wfile) >= 0) {
-        do {
-          sub(/#.*/, "", line)
-          if (line ~ /^[[:space:]]*$/) continue
-          if (split(line, f) != 2 || f[1] !~ /^[0-9]+$/ || f[2] !~ /^[A-Za-z0-9_]+$/) {
-            printf "%s: bad line \"%s\" (want: <seconds> <TestName>)\n", wfile, line > "/dev/stderr"
-            bad = 1; exit 2
-          }
-          weight[f[2]] += f[1]
-        } while ((getline line < wfile) > 0)
-      }
-    }
-    { name[NR] = $0; w[NR] = ($0 in weight) ? weight[$0] : 1 }
-    END {
-      if (bad) exit 2
-      for (i = 1; i <= NR; i++) order[i] = i
-      # insertion sort: heaviest first, discovery order among equals
-      for (i = 2; i <= NR; i++) {
-        v = order[i]; j = i - 1
-        while (j >= 1 && w[order[j]] < w[v]) { order[j + 1] = order[j]; j-- }
-        order[j + 1] = v
-      }
-      for (s = 0; s < shards; s++) load[s] = 0
-      for (i = 1; i <= NR; i++) {
-        best = 0
-        for (s = 1; s < shards; s++) if (load[s] < load[best]) best = s
-        load[best] += w[order[i]]
-        if (best == me) print name[order[i]]
-      }
-    }'); then
-    echo "Weighted deal of split tests failed (${weights_list#./})" >&2
-    return 1
-  fi
-  mapfile -t selected <<<"$plan"
-  [[ -z "$plan" ]] && selected=()
-
-  if (( ${#selected[@]} == 0 )); then
-    echo "No split-package tests selected for split shard ${shard_index}/${split_shards}: TOTAL_SHARDS exceeds the ${k} split test names" >&2
-    return 1
-  fi
-
+  mapfile -t selected < <(tail -n +2 <<<"$plan")
+  [[ -z "$(tail -n +2 <<<"$plan")" ]] && selected=()
+  local k="${plan%%$'\n'*}"
+  k="${k#K }"
   local regex
   regex="$(IFS='|'; echo "^(${selected[*]})$")"
-  echo "Running ${#selected[@]} of ${k} test names of ${#split_packages[@]} split packages (${split_packages[*]#"${module}/"}) in split shard ${shard_index}/${split_shards} (CI shard ${shard_index}/${total_shards})"
+  echo "Running ${#selected[@]} of ${k} test names of ${#split_packages[@]} split packages (${split_packages[*]#"${module}/"}) in split shard ${shard_index}/${total_shards}"
   "$(dirname "$0")/go-test-with-timing" -count=1 "${timeout_args[@]}" "${split_packages[@]}" -run "$regex" "$@"
 }
 
@@ -192,31 +209,49 @@ fi
 shard_index="$SHARD_INDEX"
 
 if (( split_mode )); then
-  split_shards=$(( total_shards - whole_shards ))
-  if (( shard_index < split_shards )); then
-    run_split_shard "$shard_index" "$@"
-    exit $?
+  # Every shard takes a weighted share of the split tests; the last
+  # whole_shards shards also run their share of the other packages whole.
+  if ! plan=$(split_selection "$shard_index" "$@"); then
+    exit 1
   fi
-  deal_packages=("${whole_packages[@]}")
-  deal_index=$(( shard_index - split_shards ))
-  deal_count="$whole_shards"
-  label="whole shard"
-else
-  deal_packages=("${all_packages[@]}")
-  deal_index="$shard_index"
-  deal_count="$total_shards"
-  label="shard"
+  split_count=$(( $(wc -l <<<"$plan") - 1 ))
+  whole_selected=()
+  if (( shard_index >= total_shards - whole_shards )); then
+    deal_index=$(( shard_index - (total_shards - whole_shards) ))
+    for i in "${!whole_packages[@]}"; do
+      if (( i % whole_shards == deal_index )); then
+        whole_selected+=("${whole_packages[$i]}")
+      fi
+    done
+  fi
+  if (( split_count == 0 && ${#whole_selected[@]} == 0 )); then
+    echo "Nothing selected for shard ${shard_index}/${total_shards}: TOTAL_SHARDS exceeds the split test names and the packages to deal" >&2
+    exit 1
+  fi
+  if (( split_count == 0 && shard_index < total_shards - whole_shards )); then
+    echo "No split-package tests selected for shard ${shard_index}/${total_shards}: TOTAL_SHARDS exceeds the split test names" >&2
+    exit 1
+  fi
+  status=0
+  if (( ${#whole_selected[@]} > 0 )); then
+    echo "Running ${#whole_selected[@]} of ${#whole_packages[@]} packages whole in shard ${shard_index}/${total_shards}"
+    "$(dirname "$0")/go-test-with-timing" -count=1 "${timeout_args[@]}" "${whole_selected[@]}" "$@" || status=1
+  fi
+  if (( split_count > 0 )); then
+    run_split_shard "$shard_index" "$plan" "$@" || status=1
+  fi
+  exit "$status"
 fi
 
 selected=()
-for i in "${!deal_packages[@]}"; do
-  if (( i % deal_count == deal_index )); then
-    selected+=("${deal_packages[$i]}")
+for i in "${!all_packages[@]}"; do
+  if (( i % total_shards == shard_index )); then
+    selected+=("${all_packages[$i]}")
   fi
 done
 if (( ${#selected[@]} == 0 )); then
-  echo "No packages selected for ${label} ${deal_index}/${deal_count} (CI shard ${shard_index}/${total_shards}): TOTAL_SHARDS exceeds the ${#deal_packages[@]} packages to deal" >&2
+  echo "No packages selected for shard ${shard_index}/${total_shards}: TOTAL_SHARDS exceeds the ${#all_packages[@]} packages to deal" >&2
   exit 1
 fi
-echo "Running ${#selected[@]} of ${#deal_packages[@]} packages whole in ${label} ${deal_index}/${deal_count} (CI shard ${shard_index}/${total_shards})"
+echo "Running ${#selected[@]} of ${#all_packages[@]} packages whole in shard ${shard_index}/${total_shards}"
 "$(dirname "$0")/go-test-with-timing" -count=1 "${timeout_args[@]}" "${selected[@]}" "$@"
