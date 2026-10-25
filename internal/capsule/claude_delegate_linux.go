@@ -18,12 +18,17 @@ import (
 // no changed file may carry the delegate token, or a candidate (and later a
 // public commit) would leak it (F6). It scans with the token the capsule
 // was spawned with, reads the overlay upper directly and never follows a
-// symlink.
+// symlink in any component (openBeneath).
 func (e *Executor) refuseClaudeTokenInChanges(ctx context.Context, caps *Capsule, changes []FileChange) error {
 	secret := caps.claudeToken
 	if len(secret) == 0 {
 		return fmt.Errorf("claude-mode capsule %s has no delegate token to scan the candidate for; refusing to freeze unchecked", caps.ID)
 	}
+	rootFD, err := unix.Open(caps.UpperDir, unix.O_PATH|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
+	if err != nil {
+		return fmt.Errorf("claude-mode capsule %s upper is unavailable to scan: %w", caps.ID, err)
+	}
+	defer unix.Close(rootFD)
 	for _, change := range changes {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -35,12 +40,12 @@ func (e *Executor) refuseClaudeTokenInChanges(ctx context.Context, caps *Capsule
 		if rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
 			return fmt.Errorf("capsule change has an unsafe path %q", change.Path)
 		}
-		fd, err := unix.Open(filepath.Join(caps.UpperDir, rel), unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
+		file, err := openBeneath(rootFD, filepath.ToSlash(rel))
 		if err != nil {
-			// A symlink, whiteout or vanished entry carries no file bytes.
+			// A symlink (at or above the leaf), whiteout or vanished
+			// entry carries no file bytes of the upper's own.
 			continue
 		}
-		file := os.NewFile(uintptr(fd), rel)
 		info, err := file.Stat()
 		if err != nil || !info.Mode().IsRegular() {
 			_ = file.Close()

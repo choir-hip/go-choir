@@ -42,6 +42,19 @@ func TestFreezeRefusesACandidateCarryingTheDelegateToken(t *testing.T) {
 	if err := e.refuseClaudeTokenInChanges(ctx, caps, clean); err != nil {
 		t.Fatalf("clean change refused: %v", err)
 	}
+	// An intermediate symlink is not followed either (bunch223 review F3):
+	// the scan reads only what lies beneath the upper.
+	outsideDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outsideDir, "tok.go"), []byte(testDelegateToken), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outsideDir, filepath.Join(upper, "workspace/platform/internal/dirlink")); err != nil {
+		t.Fatal(err)
+	}
+	through := append(clean, FileChange{Path: "workspace/platform/internal/dirlink/tok.go", Kind: ChangeAdded})
+	if err := e.refuseClaudeTokenInChanges(ctx, caps, through); err != nil {
+		t.Fatalf("the scan followed an intermediate symlink out of the upper: %v", err)
+	}
 	leak := append(clean, FileChange{Path: "/workspace/platform/internal/x/leak.go", Kind: ChangeAdded})
 	err := e.refuseClaudeTokenInChanges(ctx, caps, leak)
 	if err == nil || !strings.Contains(err.Error(), "leak.go") || strings.Contains(err.Error(), testDelegateToken) {

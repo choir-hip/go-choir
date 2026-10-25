@@ -2,12 +2,14 @@ package capsule
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 )
 
 // The overlay upper records what the capsule changed, but a deletion is not
@@ -30,9 +32,63 @@ import (
 // platformSourcePrefix is where the pinned source appears in a capsule.
 const platformSourcePrefix = "workspace/platform"
 
+// errOverlayBoundaryNotDirectory: at workspace/platform or a strict
+// ancestor, a change other than a whiteout or a directory cannot be
+// expanded into deletions.
+var errOverlayBoundaryNotDirectory = errors.New("only a whiteout or a directory can stand at or above the pinned source")
+
+// errOverlayUpperSymlink: a probe of the upper met a symlink in a
+// non-final component.
+var errOverlayUpperSymlink = errors.New("the overlay upper holds a symbolic link above a pinned source path")
+
+// errUnsafeSourcePath: a change path with an empty, "." or ".." component.
+var errUnsafeSourcePath = errors.New("source path has an empty, \".\" or \"..\" component")
+
 // maxOverlayDeletions bounds how many deletions one expansion may add. The
 // pinned source has far fewer files; a count past this is a runaway.
 const maxOverlayDeletions = 100000
+
+// sourceRelOK reports whether rel (slash-separated) has only real name
+// components: no empty, "." or ".." component. "..x" is a name like any
+// other.
+func sourceRelOK(rel string) bool {
+	for _, part := range strings.Split(rel, "/") {
+		if part == "" || part == "." || part == ".." {
+			return false
+		}
+	}
+	return true
+}
+
+// upperHolds reports whether the overlay upper holds a non-directory (a
+// change of its own, or a whiteout) at workspace/platform/sub. It Lstats
+// every component and never follows a symbolic link: a link above sub is
+// refused with errOverlayUpperSymlink, because what it serves is not the
+// capsule's change, and a whiteout or file above sub hides it (not held).
+func upperHolds(upperDir, sub string) (bool, error) {
+	parts := strings.Split(platformSourcePrefix+"/"+sub, "/")
+	p := upperDir
+	for i, part := range parts {
+		p = filepath.Join(p, part)
+		info, err := os.Lstat(p)
+		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ENOTDIR) {
+			return false, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		if i == len(parts)-1 {
+			return !info.IsDir(), nil
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return false, fmt.Errorf("%s: %w", strings.Join(parts[:i+1], "/"), errOverlayUpperSymlink)
+		}
+		if !info.IsDir() {
+			return false, nil
+		}
+	}
+	return false, nil
+}
 
 // expandOverlayDeletions returns changes plus a ChangeDeleted for every file
 // of the pinned source (lowerPlatform) that a change shows the capsule
@@ -47,7 +103,10 @@ const maxOverlayDeletions = 100000
 //
 // A marker on workspace itself, a strict ancestor of the pinned source,
 // expands as one on workspace/platform would: every file of the pinned
-// source the upper does not hold again.
+// source the upper does not hold again. At either, only a whiteout or a
+// directory is accepted; anything else (a symlink above all) refuses the
+// freeze with errOverlayBoundaryNotDirectory. A change path with a "." or
+// ".." component refuses it with errUnsafeSourcePath.
 //
 // upperDir is the overlay upper (the capsule's own writes), whose
 // workspace/platform tree mirrors the source. A path that already has a
@@ -96,7 +155,11 @@ func expandOverlayDeletions(ctx context.Context, changes []FileChange, upperDir,
 				return err
 			}
 			sub = filepath.ToSlash(sub)
-			if info, statErr := os.Lstat(filepath.Join(upperDir, filepath.FromSlash(platformSourcePrefix), filepath.FromSlash(sub))); statErr == nil && !info.IsDir() {
+			held, err := upperHolds(upperDir, sub)
+			if err != nil {
+				return err
+			}
+			if held {
 				// Held again (a change of its own) or already a whiteout.
 				return nil
 			}
@@ -126,8 +189,17 @@ func expandOverlayDeletions(ctx context.Context, changes []FileChange, upperDir,
 		default:
 			continue
 		}
-		if rel != "." && (strings.HasPrefix(rel, "..") || strings.Contains(rel, "/../")) {
-			continue
+		if rel == "." {
+			// At the pinned source or above it only a whiteout or a
+			// directory is representable. A symlink there serves whatever
+			// tree it points at: the walk never descends it, and nothing
+			// read through it is the capsule's change. A file or device is
+			// refused too rather than guessed at.
+			if !(c.Kind == ChangeDeleted && c.Whiteout) && !c.Mode.IsDir() {
+				return nil, fmt.Errorf("capsule change %q (%s, mode %s): %w", c.Path, c.Kind, c.Mode, errOverlayBoundaryNotDirectory)
+			}
+		} else if !sourceRelOK(rel) {
+			return nil, fmt.Errorf("capsule change %q: %w", c.Path, errUnsafeSourcePath)
 		}
 		var trigger bool
 		switch {

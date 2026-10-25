@@ -8,6 +8,7 @@ package capsule
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -228,12 +229,76 @@ func TestExpandOpaqueWorkspaceDeletesLowerFilesNotRecreated(t *testing.T) {
 	assertDeleted(t, out, platformRoot+"old.go", platformRoot+"sub/x.go")
 }
 
-func TestExpandWorkspaceReplacedByFileDeletesThePlatformTree(t *testing.T) {
+// Failure mode 12 (bunch223 review, Devin F1): at workspace/platform or a
+// strict ancestor, only a whiteout or a directory is representable. A
+// symlink there serves whatever tree it points at (the walk never descends
+// it, and a probe through it reads that tree as "held again"); a file or
+// device there is refused too rather than guessed at.
+func TestExpandRefusesNonDirectoryAtThePlatformBoundary(t *testing.T) {
+	for _, path := range []string{"workspace", "workspace/platform"} {
+		for _, kind := range []struct {
+			name string
+			mode os.FileMode
+			make func(t *testing.T, f *overlayFixture, at string)
+		}{
+			{"symlink", os.ModeSymlink | 0o777, func(t *testing.T, f *overlayFixture, at string) {
+				// The link points at a staged tree that serves a.go at a
+				// platform path, so a probe through it reads a.go as held.
+				staged := filepath.Join(f.upper, "var", "lib", "artifact", "fake")
+				served := staged
+				if at == "workspace" {
+					served = filepath.Join(staged, "platform")
+				}
+				putFile(t, served, "a.go", "staged\n", 0o644)
+				mustSymlink(t, staged, filepath.Join(f.upper, filepath.FromSlash(at)))
+			}},
+			{"file", 0o644, func(t *testing.T, f *overlayFixture, at string) {
+				putFile(t, f.upper, at, "a file now\n", 0o644)
+			}},
+		} {
+			t.Run(path+"/"+kind.name, func(t *testing.T) {
+				f := newOverlayFixture(t)
+				f.lowerFile(t, "a.go", "a\n")
+				f.lowerFile(t, "b.go", "b\n")
+				kind.make(t, f, path)
+				out, err := expandOverlayDeletions(context.Background(), []FileChange{{Path: path, Kind: ChangeAdded, Mode: kind.mode}}, f.upper, f.lower)
+				if !errors.Is(err, errOverlayBoundaryNotDirectory) {
+					t.Fatalf("expansion of a %s at %s = %v, %+v; want errOverlayBoundaryNotDirectory", kind.name, path, err, out)
+				}
+			})
+		}
+	}
+}
+
+// Failure mode 13 (bunch223 review): the "held again" probe never follows a
+// symlink in any component of the upper path.
+func TestExpandHeldProbeDoesNotFollowUpperSymlinks(t *testing.T) {
 	f := newOverlayFixture(t)
-	f.lowerFile(t, "a.go", "a\n")
-	putFile(t, f.upper, "workspace", "a file now\n", 0o644)
-	out := f.expand(t, []FileChange{{Path: "workspace", Kind: ChangeAdded, Mode: 0o644}})
-	assertDeleted(t, out, platformRoot+"a.go")
+	f.lowerFile(t, "d/sub/x.go", "x\n")
+	f.lowerFile(t, "d/y.go", "y\n")
+	upperD := filepath.Join(f.upper, "workspace", "platform", "d")
+	staged := filepath.Join(f.upper, "var", "lib", "artifact", "fake")
+	putFile(t, staged, "x.go", "staged\n", 0o644)
+	mustSymlink(t, staged, filepath.Join(upperD, "sub"))
+	out, err := expandOverlayDeletions(context.Background(), []FileChange{
+		{Path: platformRoot + "d", Kind: ChangeAdded, Mode: os.ModeDir | 0o755, Opaque: true},
+	}, f.upper, f.lower)
+	if !errors.Is(err, errOverlayUpperSymlink) {
+		t.Fatalf("probe through an upper symlink = %v, %+v; want errOverlayUpperSymlink", err, out)
+	}
+}
+
+// Failure mode 14 (bunch223 review, Devin F2): a dot-shaped name is either
+// a legal file name ("..x"), handled like any other, or a path with a "."
+// or ".." component, refused by name; never silently skipped.
+func TestExpandHandlesDotShapedNames(t *testing.T) {
+	f := newOverlayFixture(t)
+	f.lowerFile(t, "..d/a.go", "a\n")
+	wantPaths(t, f.expand(t, []FileChange{whiteoutChange("..d")}), "..d", "..d/a.go")
+	_, err := expandOverlayDeletions(context.Background(), []FileChange{whiteoutChange("x/../..d")}, f.upper, f.lower)
+	if !errors.Is(err, errUnsafeSourcePath) {
+		t.Fatalf("a .. component = %v, want errUnsafeSourcePath", err)
+	}
 }
 
 func TestExpandPlainWorkspaceDirectoryIsUnchanged(t *testing.T) {
