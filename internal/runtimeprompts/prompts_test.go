@@ -285,6 +285,19 @@ func TestRLMEngineeringOverlayTeachesCapsuleJobs(t *testing.T) {
 			t.Errorf("J6: the overlay does not name the option %s", opt)
 		}
 	}
+	// Problem 3 of docs/evidence/selfdev-trace-reviews-2026-10-25.md: a job
+	// run under `timeout 200` ran 271 s. The job's own wall clock is the
+	// bound (capsulejob: SIGTERM to the job's group, then SIGKILL); the
+	// overlay says so, and that a fraction of a minute is allowed.
+	for _, want := range []string{
+		"The timeout command does not work in the capsule",
+		"0.5 is 30 seconds",
+		"the job's whole process group is sent SIGTERM and then SIGKILL",
+	} {
+		if !strings.Contains(overlay, want) {
+			t.Errorf("problem 3: the overlay does not say %q", want)
+		}
+	}
 }
 
 // Research searches the computer's own corpus before the web (symptom 3 of
