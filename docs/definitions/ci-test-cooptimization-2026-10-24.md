@@ -120,7 +120,7 @@ boundaries:
 now:
   status: waiting_for_FP0
   slice: C1-C6 done as far as the worker can take them (C2 candidate 5 measured, C3 code off, C4 and C6 proposals, C5 manifest with no removals)
-  candidate: {id: ci0-c2-e, state: proven on draft PR #104 run 40155015588 (all green, check done 504 s), not landed}
+  candidate: {id: ci0-c2-e, state: proven on draft PR #104 run 40153944994 (all green, check done 504 s), not landed}
   conjecture:
     id: CI0-C2
     claim: with the shard maximum near 7 min the deploy is bound by the Node B prebuild (about 9.3 min plus 1.5 min deploy)

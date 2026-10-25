@@ -192,7 +192,7 @@ run so the next pull-request run can say whether a shard has idle CPUs at all
 (finding 7 stays a hypothesis; finding 9 says CPUs are not idle enough for a
 second process).
 
-## Measured after the fifth candidate (pull-request run 40155015588, 2026-10-25 02:18Z)
+## Measured after the fifth candidate (pull-request run 40153944994, 2026-10-25 02:18Z)
 
 Candidate: the fourth plus the whole phase planned at 140 s, CPU and warm-up
 logging. All jobs passed; `check` done 504 s (8.4 min; baseline 18.3 min, first
