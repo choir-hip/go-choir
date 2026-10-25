@@ -44,6 +44,8 @@ type fakeEvidenceSource struct {
 	listing agentcore.VisualEvidenceListing
 	err     error
 	calls   int
+	// anyComputer answers for any computer, as a broken resolver would.
+	anyComputer bool
 }
 
 func (f *fakeEvidenceSource) CandidateVisualEvidence(_ context.Context, computerID, operationID string) (agentcore.VisualEvidenceListing, error) {
@@ -51,7 +53,7 @@ func (f *fakeEvidenceSource) CandidateVisualEvidence(_ context.Context, computer
 	if f.err != nil {
 		return agentcore.VisualEvidenceListing{}, f.err
 	}
-	if computerID != f.listing.ComputerID || operationID != f.listing.OperationID {
+	if (!f.anyComputer && computerID != f.listing.ComputerID) || operationID != f.listing.OperationID {
 		return agentcore.VisualEvidenceListing{}, errors.New("self-development operation not found")
 	}
 	return f.listing, nil
@@ -201,6 +203,10 @@ func TestEvidenceEmbedRefusals(t *testing.T) {
 			}
 		},
 		"no captures": func(f *fakeEvidenceSource) { f.listing.Captures = nil },
+		"another computer's listing": func(f *fakeEvidenceSource) {
+			f.listing.ComputerID = "computer-elsewhere"
+			f.anyComputer = true
+		},
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -255,8 +261,29 @@ func TestOwnerRouteCannotAddEvidenceEmbeds(t *testing.T) {
 		copyNode.Attrs["target"].(map[string]any)["digest"] = evidenceDigest('9')
 		doc.Doc.Content = append(doc.Doc.Content, copyNode)
 	}
-	if w := post("forge-1", forged); w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "capsule_evidence") {
+	if w := post("forge-1", forged); w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "embed-forged") {
 		t.Fatalf("a forged evidence embed: %d %s", w.Code, w.Body.String())
+	}
+	image := func(doc *texturedoc.StructuredTextureDoc) {
+		doc.Doc.Content = append(doc.Doc.Content, texturedoc.Node{Type: "embed", Attrs: map[string]any{
+			"id": "embed-image", "kind": texturedoc.EmbedKindImage, "target": map[string]any{"digest": evidenceDigest('8')}, "alt": "Any stored image",
+		}})
+	}
+	if w := post("image-1", image); w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "embed-image") {
+		t.Fatalf("an owner-added image embed: %d %s", w.Code, w.Body.String())
+	}
+	altered := func(doc *texturedoc.StructuredTextureDoc) {
+		doc.Doc.Content[len(doc.Doc.Content)-1].Attrs["caption"] = "Screenshot of a page the candidate never rendered"
+	}
+	if w := post("alter-1", altered); w.Code != http.StatusBadRequest {
+		t.Fatalf("an altered evidence embed: %d %s", w.Code, w.Body.String())
+	}
+	moved := func(doc *texturedoc.StructuredTextureDoc) {
+		n := len(doc.Doc.Content)
+		doc.Doc.Content[n-1], doc.Doc.Content[n-2] = doc.Doc.Content[n-2], doc.Doc.Content[n-1]
+	}
+	if w := post("move-1", moved); w.Code != http.StatusCreated {
+		t.Fatalf("an owner moving an embed: %d %s", w.Code, w.Body.String())
 	}
 	keep := func(doc *texturedoc.StructuredTextureDoc) {
 		doc.Doc.Content[1].Content = []texturedoc.Node{{Type: "text", Text: "The owner edited this line."}}
@@ -273,4 +300,49 @@ func TestOwnerRouteCannotAddEvidenceEmbeds(t *testing.T) {
 	if got := texturedoc.Embeds(bodyOf(t, headOf(t, s, rec))); len(got) != 1 {
 		t.Fatal(fmt.Sprintf("embeds after the owner's delete = %d, want 1", len(got)))
 	}
+}
+
+// Review bunch 231 (Devin): a route Texture interpolates into its words must
+// not trip the authoring rules (a "[12]" is a legacy citation there), or the
+// write refuses and the evidence is lost.
+func TestABracketedRouteIsEmbeddedWithSafeWords(t *testing.T) {
+	h, core, rec, source := evidenceSetup(t, "bracketed")
+	source.listing.Captures[0].Route = "/items[12]/{{source:x}}"
+	if _, err := h.EmbedCandidateEvidence(context.Background(), rec.OwnerID, rec.ComputerID, rec.ComputerID, "selfdev-op-te"); err != nil {
+		t.Fatalf("a bracketed route: %v", err)
+	}
+	embeds := texturedoc.Embeds(bodyOf(t, headOf(t, core.Store(), rec)))
+	if len(embeds) != 2 || embeds[0].Route != "/items[12]/{{source:x}}" {
+		t.Fatalf("embeds = %+v; want the route kept as captured", embeds)
+	}
+	for _, words := range []string{embeds[0].Caption, embeds[0].Alt} {
+		if strings.ContainsAny(words, "[]{}") || !strings.Contains(words, "/items") {
+			t.Fatalf("Texture's words %q carry markup from the route", words)
+		}
+	}
+}
+
+// Review bunch 231 (DeepSeek): a publish-auto story whose document holds
+// evidence is held with the reason, and the platform is never asked.
+func TestAStoryHoldingEvidenceIsHeldNotPublished(t *testing.T) {
+	_, h, s, pub := storySetup(t)
+	rec := openStoryForTexture(t, h, s, "evidence", types.CastPublishAuto)
+	storyWrite(t, h, s, &rec, "write-1", cited("The harbor reopens Monday."))
+	pub.next(t)
+	h.evidenceSource = &fakeEvidenceSource{listing: evidenceListing(rec)}
+	if _, err := h.EmbedCandidateEvidence(context.Background(), rec.OwnerID, rec.ComputerID, rec.ComputerID, "selfdev-op-te"); err != nil {
+		t.Fatalf("embed: %v", err)
+	}
+	head := headOf(t, s, rec)
+	turn := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: head.RevisionID, Write: &yaegikernel.TextureWrite{
+		Edits: "@insert end\n" + cited("Ferries resume Tuesday."), Why: "add the ferries",
+	}})
+	receipt, err := h.CommitCellTextureAuthor(context.Background(), &rec, turn, "write-2")
+	if err != nil {
+		t.Fatalf("Write on the evidence revision: %v", err)
+	}
+	if !strings.Contains(receipt, "publish_held") || !strings.Contains(receipt, "private embed") {
+		t.Fatalf("receipt %s; want the publish held for the evidence", receipt)
+	}
+	pub.none(t, "a story holding evidence")
 }

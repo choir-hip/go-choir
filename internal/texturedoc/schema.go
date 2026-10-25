@@ -175,9 +175,19 @@ func (v *Validator) validateDoc(doc StructuredTextureDoc) error {
 	if len(doc.Doc.Content) == 0 {
 		return fmt.Errorf("doc content must contain at least one block")
 	}
+	embedIDs := map[string]bool{}
 	for i := range doc.Doc.Content {
 		if err := v.validateBlock(doc.Doc.Content[i], "doc.content"); err != nil {
 			return err
+		}
+		// An embed's id names one piece of evidence: a second block with the
+		// same id is a copy, not more evidence (review bunch 231).
+		if doc.Doc.Content[i].Type == "embed" {
+			id := nodeID(doc.Doc.Content[i])
+			if embedIDs[id] {
+				return fmt.Errorf("doc.content.embed attrs.id %q is not unique", id)
+			}
+			embedIDs[id] = true
 		}
 	}
 	for sourceEntityID := range v.entities {
