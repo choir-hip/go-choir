@@ -7,6 +7,11 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
+// textureEvidenceEmbedMetadataKey is the metadata key textureowner's
+// evidence embed writes (textureEvidenceMetadataKey there); it is not
+// carried forward to later revisions.
+const textureEvidenceEmbedMetadataKey = "texture_evidence_embed"
+
 // TextureTurnConsumedHead reports whether a texture_turn_committed event on the
 // tape ran against head revisionID without advancing it. A turn that advances
 // the head consumes its base implicitly (the head no longer equals revisionID),
@@ -72,7 +77,14 @@ func textureOwnerRevisionCandidate(view types.LifecycleSnapshot) bool {
 //     the desk's own commit would self-respawn it forever;
 //   - the trajectory's initial revision (ParentRevisionID empty): the seed is
 //     already armed by the initial-work wake, and counting it as owner input
-//     double-dispatches trajectory start.
+//     double-dispatches trajectory start;
+//   - Texture's evidence embed (station TE, textureowner
+//     EmbedCandidateEvidence): the platform adds the frozen candidate's
+//     screenshots at Freeze and nothing else. It asks the desk nothing, and
+//     counted as owner input it is never consumed, so every later wake took
+//     the owner-revision shape, which needs an open work item, and a records
+//     wake with none started no turn (P7, docs/evidence/selfdev-trace-
+//     reviews-2026-10-25.md round 4).
 func textureRevisionIsOwnerInput(rev types.Revision) bool {
 	if rev.AuthorKind == types.AuthorUser {
 		return true
@@ -88,6 +100,9 @@ func textureRevisionIsOwnerInput(rev types.Revision) bool {
 		var meta map[string]any
 		if err := json.Unmarshal(rev.Metadata, &meta); err == nil {
 			source, _ = meta["source"].(string)
+			if _, embed := meta[textureEvidenceEmbedMetadataKey]; embed {
+				return false
+			}
 		}
 	}
 	switch strings.TrimSpace(source) {
