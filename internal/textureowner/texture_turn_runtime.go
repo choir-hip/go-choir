@@ -204,6 +204,13 @@ func (h *Handler) applyTextureLifecycleTurn(ctx context.Context, rec *types.RunR
 		// A turn on records has no work item to settle (Cut 1).
 		callerWorkDisposition = types.WorkItemOpen
 	}
+	// The Texture root's turns leave its standing item open (PD3 S1): the
+	// item keeps the master's trajectory live, so a root that calls Done
+	// does not settle it.
+	_, isTextureRoot := h.textureRootFor(ctx, rec.OwnerID, doc.ComputerID, doc.DocID)
+	if isTextureRoot {
+		callerWorkDisposition = types.WorkItemOpen
+	}
 	req := types.ApplyTextureTurnRequest{
 		OwnerID: rec.OwnerID, ComputerID: doc.ComputerID,
 		CommandID: "texture-turn:" + commandUUID, DocumentID: doc.DocID, TrajectoryID: doc.TrajectoryID,
@@ -220,5 +227,13 @@ func (h *Handler) applyTextureLifecycleTurn(ctx context.Context, rec *types.RunR
 	if err != nil {
 		return types.LifecycleResult{}, fmt.Errorf("digest Texture lifecycle turn: %w", err)
 	}
-	return h.Store.ApplyTextureTurnWithSourceGraph(ctx, req, graph)
+	result, err := h.Store.ApplyTextureTurnWithSourceGraph(ctx, req, graph)
+	// After the transaction: a turn that changed another document wakes the
+	// Texture root through one coalesced digest (PD3 S1). The root's own
+	// turns never do.
+	if err == nil && !result.Replay && !isTextureRoot &&
+		(result.Revision != nil || len(in.InboxRecords) > 0 || len(in.UpdateDispositions) > 0 || callerWorkDisposition != types.WorkItemOpen) {
+		h.NoteTextureRootChange(ctx, rec.OwnerID, doc.ComputerID, doc.DocID)
+	}
+	return result, err
 }

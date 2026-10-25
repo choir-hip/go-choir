@@ -1,6 +1,7 @@
 package textureowner
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -76,33 +77,12 @@ func (h *Handler) HandleTextureLifecycleCreate(w http.ResponseWriter, r *http.Re
 		return
 	}
 	computerID := strings.TrimSpace(h.Core.TextureComputerID())
-	requestID, occurrenceID := textureOwnerOccurrenceIdentity(ownerID, computerID, "create", input.ClientRequestID)
-	key := strings.Join([]string{"choir:texture:owner-create", ownerID, computerID, occurrenceID}, ":")
-	docID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(key+":document")).String()
-	revisionID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(key+":revision:v0")).String()
-	workID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(key+":work:initial")).String()
-	trajectoryID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(key+":trajectory")).String()
 	deskProfile := strings.TrimSpace(input.Desk)
-	if deskProfile == "" {
-		deskProfile = agentprofile.Texture
-	}
-	if deskProfile != agentprofile.Texture {
+	if deskProfile != "" && deskProfile != agentprofile.Texture {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "desk must be texture"})
 		return
 	}
-	agentID := deskProfile + ":" + docID
-	now := time.Now().UTC()
-	start := types.StartLifecycleRequest{
-		OwnerID: ownerID, ComputerID: computerID, CommandID: "start:" + occurrenceID, TrajectoryID: trajectoryID, Kind: types.TrajectoryKindDocument,
-		SubjectRefs:     map[string]string{"artifact": "texture://documents/" + docID, "doc_id": docID},
-		SettlementRule:  types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
-		InitialWork:     types.WorkItemRecord{WorkItemID: workID, Objective: input.InitialContent, AssignedAgentID: agentID, AuthorityProfile: deskProfile},
-		InitialDocument: types.Document{DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID, Title: input.Title, CreatedAt: now, UpdatedAt: now},
-		InitialRevision: types.Revision{RevisionID: revisionID, DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID, AuthorKind: types.AuthorUser, AuthorLabel: ownerID, Content: input.InitialContent, CreatedAt: now},
-		Agent:           types.AgentRecord{AgentID: agentID, OwnerID: ownerID, ComputerID: computerID, Profile: deskProfile, Role: deskProfile, ChannelID: docID, CreatedAt: now, UpdatedAt: now},
-	}
-	start.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(start)
-	result, err := h.Store.StartLifecycle(ownerTextContext(r.Context(), r), start)
+	created, err := h.startLifecycleTextureDocument(ownerTextContext(r.Context(), r), ownerID, computerID, input.ClientRequestID, input.Title, input.InitialContent)
 	if err != nil {
 		if errors.Is(err, store.ErrLifecycleCommandConflict) {
 			writeAPIJSON(w, http.StatusConflict, apiError{Error: "create occurrence conflicts with its durable receipt"})
@@ -112,9 +92,48 @@ func (h *Handler) HandleTextureLifecycleCreate(w http.ResponseWriter, r *http.Re
 		}
 		return
 	}
-	if !result.Replay {
-		if _, wakeErr := h.ReconcileAgentWake(r.Context(), ownerID, docID); wakeErr != nil { /* durable start remains pending */
+	if !created.Replay {
+		if _, wakeErr := h.ReconcileAgentWake(r.Context(), ownerID, created.DocID); wakeErr != nil { /* durable start remains pending */
 		}
 	}
-	writeAPIJSON(w, http.StatusCreated, textureLifecycleCreateResponse{Schema: "choir.texture_create.v1", RequestID: requestID, DocID: docID, RevisionID: revisionID, TrajectoryID: trajectoryID, TargetAgentID: agentID, TargetWorkItemID: workID, Cursor: result.Trajectory.ReducerSeq, Replay: result.Replay})
+	writeAPIJSON(w, http.StatusCreated, created)
+}
+
+// textureCreateIdentity derives the ordinary create path's durable ids from
+// one client request id, so a caller can know the document id before it
+// creates the document (the Texture root's ensure step claims its marker
+// first).
+func textureCreateIdentity(ownerID, computerID, clientRequestID string) (requestID, occurrenceID, docID, revisionID, workID, trajectoryID string) {
+	requestID, occurrenceID = textureOwnerOccurrenceIdentity(ownerID, computerID, "create", clientRequestID)
+	key := strings.Join([]string{"choir:texture:owner-create", ownerID, computerID, occurrenceID}, ":")
+	docID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(key+":document")).String()
+	revisionID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(key+":revision:v0")).String()
+	workID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(key+":work:initial")).String()
+	trajectoryID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(key+":trajectory")).String()
+	return requestID, occurrenceID, docID, revisionID, workID, trajectoryID
+}
+
+// startLifecycleTextureDocument is the ordinary create path's durable step:
+// one document trajectory with an owner-authored v0, its texture:<doc> desk
+// and the one initial work item that desk holds. It wakes nothing.
+func (h *Handler) startLifecycleTextureDocument(ctx context.Context, ownerID, computerID, clientRequestID, title, initialContent string) (textureLifecycleCreateResponse, error) {
+	requestID, occurrenceID, docID, revisionID, workID, trajectoryID := textureCreateIdentity(ownerID, computerID, clientRequestID)
+	deskProfile := agentprofile.Texture
+	agentID := deskProfile + ":" + docID
+	now := time.Now().UTC()
+	start := types.StartLifecycleRequest{
+		OwnerID: ownerID, ComputerID: computerID, CommandID: "start:" + occurrenceID, TrajectoryID: trajectoryID, Kind: types.TrajectoryKindDocument,
+		SubjectRefs:     map[string]string{"artifact": "texture://documents/" + docID, "doc_id": docID},
+		SettlementRule:  types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
+		InitialWork:     types.WorkItemRecord{WorkItemID: workID, Objective: initialContent, AssignedAgentID: agentID, AuthorityProfile: deskProfile},
+		InitialDocument: types.Document{DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID, Title: title, CreatedAt: now, UpdatedAt: now},
+		InitialRevision: types.Revision{RevisionID: revisionID, DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID, AuthorKind: types.AuthorUser, AuthorLabel: ownerID, Content: initialContent, CreatedAt: now},
+		Agent:           types.AgentRecord{AgentID: agentID, OwnerID: ownerID, ComputerID: computerID, Profile: deskProfile, Role: deskProfile, ChannelID: docID, CreatedAt: now, UpdatedAt: now},
+	}
+	start.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(start)
+	result, err := h.Store.StartLifecycle(ctx, start)
+	if err != nil {
+		return textureLifecycleCreateResponse{}, err
+	}
+	return textureLifecycleCreateResponse{Schema: "choir.texture_create.v1", RequestID: requestID, DocID: docID, RevisionID: revisionID, TrajectoryID: trajectoryID, TargetAgentID: agentID, TargetWorkItemID: workID, Cursor: result.Trajectory.ReducerSeq, Replay: result.Replay}, nil
 }

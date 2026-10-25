@@ -57,6 +57,12 @@ type Handler struct {
 	evidenceSource     candidateEvidenceSource
 	textureWakeLocksMu sync.Mutex
 	textureWakeLocks   map[string]*textureWakeLock
+	// The Texture root's digest state (PD3 S1, texture_root.go): in memory
+	// only, so a restart forgets it. textureRootNow overrides the clock in
+	// tests.
+	textureRootMu     sync.Mutex
+	textureRootScopes map[string]*textureRootScope
+	textureRootNow    func() time.Time
 }
 
 func (h *Handler) lockTextureWakeScope(ownerID, computerID, docID string) func() {

@@ -205,6 +205,11 @@ type Config struct {
 	// they opt into parked lifecycle behavior explicitly.
 	TextureActorParkIdle time.Duration
 
+	// TextureRootDigestInterval and TextureRootDigestPerHour bound the
+	// Texture root's digest-started runs (PD3 S1). Zero means the default.
+	TextureRootDigestInterval time.Duration
+	TextureRootDigestPerHour  int
+
 	// VmctlURL is the host-side lifecycle URL used by product desktop controls.
 	// Runtime agents receive no vmctl or worker-computer authority.
 	VmctlURL string

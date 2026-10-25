@@ -34,6 +34,10 @@ type textureAgentRevisionRequest struct {
 	SourceEntities         []textureSourceEntity `json:"-"`
 	RequestedByRunID       string                `json:"-"`
 	Provenance             map[string]any        `json:"-"`
+	// RootDocuments are the documents a Texture root digest names (PD3 S1);
+	// RootFullRefresh asks for the bounded full refresh instead.
+	RootDocuments   []string `json:"-"`
+	RootFullRefresh bool     `json:"-"`
 }
 
 // HandleTextureAgentRevision handles POST
@@ -205,6 +209,7 @@ func (h *Handler) handleLifecycleOwnerRevision(w http.ResponseWriter, r *http.Re
 		h.recordTextureAudit(r.Context(), "revision_committed", ownerID, doc.ComputerID, doc.TrajectoryID, doc.DocID, result.Revision.RevisionID, command.CommandID, command.CommandDigest, result.Trajectory.LifecycleVersion)
 		h.emitTextureDocumentRevisionEvent(r.Context(), ownerID, *result.Revision)
 		h.dispatchTextureRevisionWake(ownerID, doc.ComputerID, doc.TrajectoryID, *result.Revision, requestID, result.Events, targetProfile)
+		h.NoteTextureRootChange(r.Context(), ownerID, doc.ComputerID, doc.DocID)
 	}
 	writeAPIJSON(w, http.StatusAccepted, textureOwnerRevisionResponse{
 		Schema:     textureOwnerRevisionSchemaV1,
@@ -492,6 +497,13 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 
 	contextMode := textureAgentRevisionContextMode(currentRevision, previousRevision)
 	agentPrompt := buildAgentRevisionRequest(currentRevision, previousRevision, promptMetadata, req, diffSummary, ownerDirections)
+	// The Texture root (PD3 S1): the run of the document the texture_root
+	// marker names carries the root section and the ledger in its request
+	// turn, never in the prompt core.
+	textureRoot, isTextureRoot := rt.textureRootFor(ctx, ownerID, doc.ComputerID, doc.DocID)
+	if isTextureRoot {
+		agentPrompt += rt.textureRootRequestSection(ctx, ownerID, doc, textureRoot, req)
+	}
 
 	// Create the runtime run with Texture agent revision metadata.
 	// Carry forward durable context keys from the current head revision
@@ -544,6 +556,13 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 	}
 	if holdTrajectory {
 		runMetadata["actor_rewarm_carry_conversation"] = true
+	}
+	if isTextureRoot {
+		runMetadata["texture_root"] = true
+		runMetadata["texture_root_generation"] = textureRoot.Generation
+		if len(req.RootDocuments) > 0 && !req.RootFullRefresh {
+			runMetadata["texture_root_documents"] = strings.Join(req.RootDocuments, ",")
+		}
 	}
 	if scheduledMessageSeq > 0 {
 		runMetadata["scheduled_message_seq"] = scheduledMessageSeq

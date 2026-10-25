@@ -177,7 +177,24 @@ var RestartWorkKinds = map[string]bool{
 	// Cut 1 L3a: a record's wake starts a turn; unread records wait for the
 	// next post-boot commit.
 	"inbox_record": true,
+	// PD3 S1: a crash never delivers a pre-boot root digest; the next commit
+	// after boot mints a new one.
+	TextureRootDigestKind: true,
 }
+
+// TextureRootDigestKind is the Texture root's wake (PD3 S1,
+// docs/definitions/choir-pd3-texture-root-desk-2026-10-11.md): minted after
+// commits on documents other than the master, coalesced and debounced, and
+// delivered to TextureRootDigestMailbox, whose handler checks the marked
+// master's liveness (and runs the ensure step) before it wakes the master's
+// own Texture desk.
+const TextureRootDigestKind = "texture_root_digest"
+
+// TextureRootDigestMailbox is the one mailbox digests are scheduled to, per
+// owner and computer. It is a mailbox, not an agent: the root is
+// texture:<master>, and the master can change (a settled master is
+// replaced), so the digest is addressed before the master is known.
+const TextureRootDigestMailbox = "texture-root-digest"
 
 // RestartWorkKind reports whether an occurrence of kind starts or resumes
 // work.

@@ -7,12 +7,16 @@ package textureprompts
 
 import (
 	_ "embed"
+	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/promptspec"
 )
 
 //go:embed texture.yaml
 var defaultSystemPromptYAML []byte
+
+//go:embed texture_root.txt
+var rootSection string
 
 // DefaultSystemPrompt returns Texture's prompt core.
 func DefaultSystemPrompt() string {
@@ -21,4 +25,12 @@ func DefaultSystemPrompt() string {
 		panic("texture default prompt yaml: " + err.Error())
 	}
 	return doc.BodyText()
+}
+
+// RootSection is the Texture root's instructions (PD3 S1,
+// docs/definitions/choir-pd3-texture-root-desk-2026-10-11.md). It is not part
+// of the prompt core: the run of the document the texture_root marker names
+// carries it in its request turn, with the ledger.
+func RootSection() string {
+	return strings.TrimSpace(rootSection)
 }
