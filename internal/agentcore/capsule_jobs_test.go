@@ -180,13 +180,14 @@ func TestEngineeringJobWaitResumesTheTurnWhenTheJobEnds(t *testing.T) {
 	table := &fakeJobTable{running: true, view: yaegikernel.JobView{ID: "job-test", State: capsulejob.StateRunning, Argv: []string{"go", "test", "./..."}}}
 	rt.jobTable = table
 	rec := &types.RunRecord{RunID: "run-1"}
+	deliveries := newJobDeliveries(nil)
 	type result struct {
 		res bool
 		out string
 	}
 	done := make(chan result, 1)
 	go func() {
-		got, ok := rt.engineeringJobWait(context.Background(), rec)
+		got, ok := rt.engineeringJobWait(context.Background(), rec, deliveries)
 		done <- result{ok && got.Continue && got.Waited, got.Instruction}
 	}()
 	time.Sleep(50 * time.Millisecond)
@@ -210,7 +211,7 @@ func TestEngineeringJobWaitResumesTheTurnWhenTheJobEnds(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("the job's end did not resume the turn")
 	}
-	if _, ok := rt.engineeringJobWait(context.Background(), rec); ok {
+	if _, ok := rt.engineeringJobWait(context.Background(), rec, deliveries); ok {
 		t.Fatal("waited with no running job")
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -218,7 +219,7 @@ func TestEngineeringJobWaitResumesTheTurnWhenTheJobEnds(t *testing.T) {
 	table.running = true
 	table.mu.Unlock()
 	cancel()
-	if _, ok := rt.engineeringJobWait(ctx, rec); ok {
+	if _, ok := rt.engineeringJobWait(ctx, rec, deliveries); ok {
 		t.Fatal("a cancelled run kept waiting")
 	}
 }
