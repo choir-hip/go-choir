@@ -17,6 +17,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/hostauth"
 	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
+	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -291,6 +292,13 @@ func (h *Handler) publishTextureRevision(w http.ResponseWriter, r *http.Request,
 	if rev.OwnerID != authResult.UserID || rev.DocID != req.DocID || rev.RevisionID != req.RevisionID {
 		writeJSON(w, http.StatusForbidden, errorResponse{Error: "revision does not belong to authenticated document"})
 		h.lifecycle.record("platform_publish.private_read", "revision_mismatch", time.Since(started))
+		return
+	}
+	// Station TE (E6): a document holding private embeds (capsule evidence)
+	// is refused here, before corpusd, which refuses it too.
+	if private := texturedoc.PrivateEmbedsInBody(rev.BodyDoc); len(private) > 0 {
+		writeJSON(w, http.StatusConflict, errorResponse{Error: platform.PrivateEmbedRefusal(private)})
+		h.lifecycle.record("platform_publish.private_read", "private_embed", time.Since(started))
 		return
 	}
 	if textureSourceEntitiesRequireBodyDoc(rev.SourceEntities, rev.BodyDoc) {
