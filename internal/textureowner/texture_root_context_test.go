@@ -300,3 +300,19 @@ func TestTextureRootExcerptReadsTheRootsInlineRefs(t *testing.T) {
 		t.Fatalf("the excerpt kept the run's own section:\n%s", excerpt)
 	}
 }
+
+// A section's refs are its last: an owner ask the root quotes may carry a
+// "refs: doc=" of its own before the section's trailing refs (review 251).
+func TestTextureRootExcerptTakesASectionsLastRefs(t *testing.T) {
+	base := time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
+	content := "## Waits on the owner\n\n- nothing\n\n" +
+		"### Quoting\n\nThe owner asked to \"copy refs: doc=run-doc into the notes\". Open work: none. refs: doc=quoter work=none\n\n" +
+		"### Other\n\nOpen work: none. refs: doc=other work=none\n"
+	got := textureRootExcerpt(content, "run-doc", map[string]time.Time{"quoter": base.Add(time.Hour), "other": base})
+	if !strings.Contains(got, "### Quoting") {
+		t.Fatalf("a quoted refs token took the section for the run's own document and dropped it:\n%s", got)
+	}
+	if strings.Index(got, "### Quoting") > strings.Index(got, "### Other") {
+		t.Fatalf("the quoting section is not ordered by its own document's revision time:\n%s", got)
+	}
+}
