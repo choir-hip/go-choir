@@ -60,7 +60,9 @@ func TestEngineeringCastOntoABoundRequestIsRefusedAndTheNoteGoesThrough(t *testi
 	for i, parent := range []string{"texture-cell:Cast:recast-r5-2", seed.TextureCastID} {
 		reduction, cellCtx := c1eManagementReduction(rt, seed, run, "r5-2-cast-"+string(rune('a'+i)))
 		err := reduction.commitTray(cellCtx, []yaegikernel.StagedIntent{cast(parent)}, 1)
-		if err == nil || !strings.Contains(err.Error(), bound.AssignmentID) || !strings.Contains(err.Error(), "choir.Note(\"engineering:"+bound.AssignmentID+"\"") {
+		if err == nil || !strings.Contains(err.Error(), bound.AssignmentID) || !strings.Contains(err.Error(), "choir.Note(\"engineering:"+bound.AssignmentID+"\"") ||
+			// Review bunch 238 B: the release for a stuck assignment.
+			!strings.Contains(err.Error(), "choir.CancelAssignment(\""+bound.AssignmentID+"\"") {
 			t.Fatalf("second Cast for a bound request (parent %s): err = %v", parent, err)
 		}
 		if rows() != before || c1eInboxHead(t, s, seed.OwnerID, seed.ComputerID, seed.ParentAgentID) != mgmtHead {

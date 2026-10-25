@@ -312,7 +312,7 @@ func (rt *Runtime) refuseCastOntoOpenAssignment(ctx context.Context, ownerID, co
 			continue
 		}
 		inbox := strings.TrimSpace(child.Binding.AssignedAgentID)
-		return fmt.Errorf("engineering cast: assignment %s for this request is still %s, so no second assignment opens; send the change to its engineer with choir.Note(%q, <the change in full>) and wait for its final Report before casting again", child.AssignmentID, child.Disposition, inbox)
+		return fmt.Errorf("engineering cast: assignment %s for this request is still %s, so no second assignment opens; send the change to its engineer with choir.Note(%q, <the change in full>) and wait for its final Report before casting again. If it is stuck, choir.CancelAssignment(%q, reason) ends it and mints its final Report, after which a Cast admits", child.AssignmentID, child.Disposition, inbox, child.AssignmentID)
 	}
 	return nil
 }
