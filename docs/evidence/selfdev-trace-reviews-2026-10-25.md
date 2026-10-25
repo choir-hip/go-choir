@@ -240,3 +240,40 @@ Nine problems in the self-development loop in one night, so per CLAUDE.md (Root 
 **Not clustered:** the capture's /auth/session 503 (a harness bug, fixed); the alias clash between the Reader and the old apps (a spec gap, resolved in the brief); no git base in the capsule; the carried tree arriving unapplied.
 
 **Next substrate step (proposed, not started):** design the ledger-derived current-obligations projection as the one input every desk prompt renders (docs/design, Opus, reviewed as an architectural design), after tonight's three symptom fixes land and their staging proof shows which fields matter.
+
+## Round 3: reader-3 after the f0c7f836 rejection (3440, 9d5d), 2026-10-25 04:35 UTC
+
+Computer b@c, trajectory e3e37430, trace re-exported 04:32 (`trace export`, `lifecycle capsule-evidence`, `self-dev show`), build per the export 091d10411 (built 02:39), not b1667677d. Finding = a trace line shows it; hypothesis = code reading.
+Lanes that landed after b1667677d (225323cee carry_unfinished, 02758edf9 texture.owner_directions, 345b8575e partial trap) are not in 091d10411, and the first two are flag-off; every problem they target recurred.
+
+### 1. Assignment 3440 (03:45:16-04:12:08, 489 model calls, 488 cells, 0 jobs, 0 Freeze)
+- Orient and carry 03:45:18-03:45:37 (calls 1-9): read cast (objective "build on selfdev-f0c7f836 ... pdf-classic/epub-classic ... signed-out sample PDF", record 66c94298 cast), carried.json (source_assignment 2d61, f0c7f836's tree). `git apply` at /workspace/platform printed APPLIED (call 8, 03:45:34). Finding.
+- Self-inflicted confusion 03:46-03:53 (calls 15-146): re-implemented patch application by hand on the already-patched tree (call 22: "applied 6 errs 128"), copied the patched tree to /tmp/pt and saw "patch does not apply" (call 26), applied and reverted the patch 6 times (calls 32, 92-94, 122-125, 139). Never recognised that call 8 had applied it. Finding.
+- Real edits (calls 118-135, 03:51:54-03:53:05): registry.ts gains pdf-classic / epub-classic, app-packages.spec.js updated. This is the owner's resolution, but it never ran a build, capture or check.
+- Echo loop 03:53:52-04:11:22 (calls 147-480, 334 cells, 17.5 min, 68% of all cells): `echo CMD-n word-n+1` with every output correct (0 odd outputs). No model text. Finding. Ended only when the model end_turned (call 481, 04:11:25).
+- Freeze: never called (0 of 488 sources mention choir.Freeze). Guard retry 1 at 04:11:25 (`engineering_overlay_terminal_fate_required`); then call 481 `rm -rf frontend/src/packages/reader` (04:11:28, it deleted the Reader package), re-restored PdfApp/EpubApp (call 484), rewrote registry.ts, Report at 04:11:57, Complete at 04:12:05.8.
+- The capsule "frozen" step is the quiesce of the terminal-fate commit, not a Freeze: freeze_requested 04:12:06.071 comes 0.3 s after the model call that carried Complete (04:12:05.755), then frozen .573, revoke .830/.330, report 08.406; no self-dev op was created. Finding. The report did mint candidate key-e55c83 (subject f267de37); 9d5d's carried.json (15,973 B) names it.
+
+### 2. How 3440 ended
+Management did not cancel; no guard exhaustion; 27 of 60 minutes used. `choir.Complete("blocked","none",...)`, fate_terminal true, run state failed, assignment disposition failed, report bddde8ae. Summary: "Blocked by capsule tooling, not by the task. Verified defects: (1) git apply --check exits 0 but the tree never reaches the patched state ... (2) choir.WriteFile folds a blank line ... (3) capsule_go_eval repeatedly returned other conversations' transcripts ...".
+All three claims are unsupported (finding): (1) is its own call 8; (2) is `println` adding a space after "hello\n" (call 34, receipt adb1caee); 9d5d proved round trip equal at 04:13:00 (receipt 09fb19e6); (3) all 488 receipts are distinct and every output matches its cell. Hypothesis: a low-effort Flash model in a degenerate loop invented a tooling cause.
+
+### 3. Spec delivery
+- 3440 got the resolution: cast from Texture 66c94298 (03:29:14, owner revise f0b70a62) carries pdf-classic/epub-classic, retain PdfApp/EpubApp, signed-out preview, Complete(completed). It did not get FP0's rejection text, only the cast. Finding.
+- Texture then undid it. 830c5f00 (03:29:52, prompt 7243 = original) rewrote the doc to e14fec6c, dropping the classic ids. 4c325b75 (04:11:57, woken by 3440's Report; one cell, no ReadDoc/Records) and b540525e (04:19:10, woken by 9d5d's Report) cast the original text verbatim, including "Delete the old readers" (revs db71f934, 24caced4: "before deletion"). Prompts of 830c5f00, 4c325b75, b540525e contain no "classic" and no "f0c7f836"; only 66c94298 did. Finding.
+- The original request itself orders "Texture: cast this request to management verbatim in your first cell", so each wake re-casts it. Finding (text), hypothesis (cause).
+
+### 4. 9d5d (04:12:33-04:26:04) and 9e18 (04:26:06, running)
+- 9d5d objective: "Continue the Reader replacement ... correcting the previous round's verified capsule/tooling failures ... avoid choir.WriteFile if its newline corruption recurs ... Preserve the old reader files ... only if its clean-base plan permits"; body is the original spec with "Delete the old readers". Not consistent with the owner (keep as pdf-classic). The 3440 false claims reached management through Report -> Texture -> management. It deleted PdfApp/EpubApp (04:16:55), captured only `/`, no Reader preview.
+- 9d5d died on the guard at 04:26:04: "completion guard ... not satisfied after 2 retries", op selfdev-5b4eb184 failed. Two Freeze refusals (04:25:19 "workspace changed while job ran"; 04:25:57 "visual evidence from a different frontend build"). 9e18 (cast 04:19:54 while 9d5d ran) carries the same stale body; no carried tree.
+
+### 5. Models
+Engineering (faf32, 3440, 9d5d, 9e18): hf:deepseek-ai/DeepSeek-V4.1-Flash-1017, synthetic, effort low. Texture and management: gpt-6-luna, chatgpt, effort high. 3440: 58.7M input tokens (99.3% cached), 22.8 min provider time.
+
+### 6. New problems
+- N1 Guard kills an engineer whose job finished before the guard looked. faf32 (03:25:44-03:45:14, 19.5 min, a working Reader with sample PDF, preview route and 2-page render proof) and 9d5d both died on the 3rd end_turn. Guard reminders arrive 0.14-0.22 s after the end_turn (faf: 03:37:36.37 +0.22 s, 03:44:58.76 +0.18 s; 9d5d: 04:23:42.51, 04:25:07.97), while true waits take 1.5-15 s (`capsule_job_ended`, attempt not incremented). Finding. Cause hypothesis: `engineeringJobWait` (capsule_jobs.go:210) returns false when the job already ended (2-3 s probes, captures), so the generic reminder is charged; `engineeringJobPark` handles "already ended", the guard does not.
+- N2 faf32's work was lost: cancel report 0 mutations, 0 candidate (carry_unfinished not live); 3440 carried the worse f0c7f836 tree instead. Finding.
+- N3 Serialised slot: 3440 opened 03:29:19, bound 03:45:16 (16 min) behind faf32; 9e18 queued behind 9d5d. Management casts onto a busy slot and never supersedes the stale assignment. Finding.
+- N4 Each engineer Report wakes Texture to re-cast the full spec (4c325b75, b540525e) -> duplicate assignments. Finding.
+- N5 Freeze order: capture must follow the last build, with nothing between (2 refusals in 9d5d). The overlay does not say so. Hypothesis.
+- N6 A refused first Freeze still opens an op row (5b4eb184 created 04:25:18.9, before the 04:25:19.3 refusal); it was failed by the assignment end. Finding.
