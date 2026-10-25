@@ -1807,7 +1807,10 @@ in
         # docs/problems/claude-delegate-resume-sonnet-2026-10-20.md). Two-week
         # expiry, renewed only by an explicit edit.
         # The 10-14 test computer is gone (ownership 404); replacement minted 2026-10-20.
-        "CHOIR_CLAUDE_DELEGATE_COMPUTERS=computer-ad1b46d4c20129e84b9e239cf4720fb9"
+        # 2026-10-25: b@c's test computer added by owner request ("We should
+        # set it up on b@c.com as well"); same token, same expiry. It reads
+        # the grant at its next cold boot.
+        "CHOIR_CLAUDE_DELEGATE_COMPUTERS=computer-ad1b46d4c20129e84b9e239cf4720fb9,computer-6c50d6e566143ae32cdb660faa60e24d"
         "CHOIR_CLAUDE_DELEGATE_EXPIRES=2026-11-03T00:00:00Z"
         "CHOIR_CLAUDE_DELEGATE_TOKEN_FILE=${claudeDelegateTokenCopy}"
         # Keep personal computers resident while the host is under capacity.
