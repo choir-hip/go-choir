@@ -92,8 +92,10 @@ It lists what this release can *read*:
 - store tables (§5).
 
 Each entry records a `since` date. The static check (§4.4) requires a new
-entry's date to be within one day of the run, and never lets an existing date
-change. A Go test, run in the existing shards, keeps the file equal to the
+entry's date to equal the committer date (UTC day) of the commit that
+introduces it, and never lets an existing date change. The commit comes from
+the candidate's own range since the base, which the gate fetches; the 7 days
+of history before it are not needed (bunch 225, 5). A Go test, run in the existing shards, keeps the file equal to the
 registries and to the reflected body structs.
 
 **Every new event kind or op kind declares `skip` explicitly; there is no
@@ -131,7 +133,7 @@ the signed event commits to them.
 
 | Level | Rule | Declared by | Recorded |
 |---|---|---|---|
-| **Unknown event kind** | Skip iff all three hold. (a) The receipt verifies. (b) In the signed next head, every field other than sequence and canonical head equals the current head; this covers today's 7 head fields and any future field. (c) The receipt carries `compat {skippable: true, writer_base_commit, writer_deployed_at}`. If (b) fails, the event is a transition: refuse. If (c) is missing, refuse. An unknown kind never runs `Reduce`, because `Validate` rejects it (`event.go:157`). The head advances on the receipt-verified path: next head = the signed head, with sequence, canonical head and reducer version derived as the page server derives them | corpusd, in the receipt (`PinEvent` validates every kind, `event_artifacts.go:34-41`). Only events of kinds new after S4a carry the field, so no older reader sees a new failure (F5) | a skip-ledger row |
+| **Unknown event kind** | Skip iff all three hold. (a) The receipt verifies. (b) In the next head, every field other than sequence and canonical head equals the current head. The receipt signs 5 of these fields (`event_receipt.go:37-41`); the other two are derived. The reader checks the derived ones too: `reducer_version` (copied from the event, `event_replay.go:99`) must equal the current head's, and the credential epoch (derived by counting `key_revoked`, `:100-103`) must not move. Checking the derived fields needs no corpusd change, so S4b does not sign `reducer_version` (bunch 225, 3). Any future head field joins the check. (c) The receipt carries `compat {skippable: true, writer_base_commit, writer_deployed_at}`. If (b) fails, the event is a transition: refuse. If (c) is missing, refuse. An unknown kind never runs `Reduce`, because `Validate` rejects it (`event.go:157`). The head advances on the receipt-verified path: next head = the signed head, with sequence, canonical head and reducer version derived as the page server derives them | corpusd, in the receipt (`PinEvent` validates every kind, `event_artifacts.go:34-41`). Only events of kinds new after S4a carry the field, so no older reader sees a new failure (F5) | a skip-ledger row |
 | **Unknown op in a known batch** | Apply the known ops. Skip an unknown op iff (i) the batch's `compat.skippable_ops` lists it, and (ii) every table in its declared `tables` is absent from this reader's manifest (structural independence, checked by the reader). Otherwise refuse | the guest writer: a batch-level `compat {skippable_ops: [{kind, tables}], writer_base_commit, writer_deployed_at}`, taken from its manifest. Older readers ignore the field (§0) | a skip-ledger row per (sequence, op index) |
 | **Unknown envelope field** | Ignore it. After S3, the tape and the local index keep the raw bytes. A field that changes the meaning of an event is not allowed; that is a new `refuse` kind | static check: `omitempty`, listed in the base manifest, and S3 deployed for at least the window | nothing |
 | **Unknown receipt kind field** | Accept extra signed fields; `RequireKindFields` becomes "required ⊆ present" (S4a) | corpusd | nothing |
@@ -179,8 +181,10 @@ On a computer with no skips and no pins it is empty.
 
 ### 2.5 Catch-up after a forward update (F6)
 
-1. At boot, before the tail, the binary reads the ledger rows whose kind it now
-   knows.
+1. At boot, before the tail, the binary reads the ledger rows with reason
+   `skipped_kind` or `skipped_op` whose kind it now knows. Pin rows are never
+   read or deleted by catch-up: deleting one would trip the missing-row
+   self-heal of §3.2 into a rebuild at every boot (bunch 225, 4).
 2. It applies each one on a **head-neutral** path: a transaction that runs the
    ops (all of an unknown-kind event's now-known finalize effects, or only the
    ops skipped before) and deletes the ledger row. It does not touch the head
@@ -277,16 +281,29 @@ carry the old value and no row, so they are not pins.
 3. Build the staged store through `effective(P)`: replay through T with the
    target's manifest (§3.4), check the witness at T, then process (T, P] as
    excluded. The staged head equals P, and the ledger holds P's row.
-4. Flip, reopen, rebind. Local head = platform head = P, so appends work at
-   once.
+   **Quiesce (bunch 225, 2).** From the admission of P until the restart, the
+   runtime refuses every new append in-process, with a typed "restore in
+   progress" error. Otherwise appends made during the rebuild, computed against
+   the state being discarded, would land after P and be replayed into the
+   restored timeline. This keeps H2's semantics ("no writes between a restore
+   and its restart") on purpose, now bounded by the restart.
+4. Flip, reopen, rebind. Local head = platform head = P.
 5. Write the planned marker (reason `self_development_restore`) and restart
-   (§3.5).
+   (§3.5). Appends resume in the new process.
 
 **If step 3 or 4 fails:**
 
 - The runtime appends a cancel: `restore_requested`, `AuthorityRef =
   platform-control:restore-cancelled`, `DecisionRef` = P's digest. A cancelled
-  pin is not a pin, and the live store is correct for that history.
+  pin is not a pin, and the live store is correct for that history. The cancel
+  is the one append the quiesce allows.
+- **Cancel admission (bunch 225, 1).** The CAS admits a cancel only with an
+  owner-act receipt bound to P, and only against a live (not yet cancelled)
+  row in `computer_restore_pins`. Otherwise a guest could neutralise an owner's
+  pin, which is F19 in reverse. In the same CAS transaction, corpusd records
+  `cancelled_by` (the cancel's sequence and digest) on P's row. Replay meets
+  (T, P] before it meets the cancel, so `effective()` reads cancellation from
+  the lookahead, never from the tape order.
 - If the process dies before the cancel, the next boot finds pin P at or below
   its local head with no ledger row for P. The store is then known not to honour
   the tape, so boot runs a staged rebuild to `effective(head)`. The owner's
@@ -442,8 +459,11 @@ It feeds `check`. The gate's steps are not added to `go-vet-build`.
 - `go-vet-build` (90-101 s) is one of the jobs whose slot frees during the
   crunch. Lengthening it could push back the prebuild, which waits for exactly
   such a slot (DeepSeek 8).
-- The new job becomes ready around +100 s, after the prebuild (+12 s) is
-  already queued, so it waits behind the prebuild for the next slot [H: GitHub
+- The new job becomes ready around +100 s. The prebuild becomes ready about
+  +12 s after plan ends, as soon as `deploy-impact` ends (it needs
+  `[plan, deploy-impact]`, `ci.yml:818`; median from
+  `docs/problems/ci-critical-path-race-shards-2026-10-22.md` table and finding
+  3). So it is already queued, so it waits behind the prebuild for the next slot [H: GitHub
   queues in roughly FIFO order; the 5-run measure decides].
 - It restores the `vet-build` Go cache lane read-only and builds two small
   harnesses, the candidate's and the base's (from a `git worktree` at the base
@@ -529,11 +549,13 @@ fails when:
 - **a `refuse` kind's reader is too young:** the candidate writes one whose
   base reader entry is less than 7 days old;
 - **the manifest is bad:** it lost an entry, an entry has no `skip`, a `since`
-  date changed, or a new `since` date is not within one day of the run;
+  date changed, or a new `since` date differs from its introducing commit's
+  committer date;
 - **a version constant is bumped** (F15, Devin 7);
 - **an envelope field lacks `omitempty`** (F15);
-- **a store table is new** but the base's airworthiness manifest or
-  `optionalTables` does not already name it (§5).
+- **a store table is new** but the base does not already name it in both the
+  airworthiness manifest and `optionalTables`; either one missing fails
+  (§5; bunch 225, 9).
 
 The override is a `Tape-Compat-Override: <reason>` trailer. It is report-only
 for one week, then enforcing.
@@ -607,7 +629,7 @@ window.
 | **S3** | corpusd `event_raw` (always sent); guest raw digest behind `CHOIR_TAPE_RAW_DIGEST` | a CI fixture with a test-only envelope field; the test computer boots and passes replay completeness with the switch on | reader stays on once fleet-on; corpusd field additive | red; tier 2 |
 | **S2** | The ledger (optional table, two-phase per §5), batch `compat` stamp (`CHOIR_TAPE_STAMP`), op skip with the structural table check (`CHOIR_TAPE_SKIP`), `/health`, head-neutral catch-up | on the test computer: probe ops written, then the updater rolls back to the reader-less release (or a restore to its checkpoint); `/health` shows skipped and boot succeeds; forward update empties the ledger and the probe rows appear | stamp off; skip reader stays on | red; tier 2 |
 | **S8a** | The builder stamps the manifest digest and the manifest itself into `release.Record` and the updater manifest | the release record of one build on the test computer | revert (readers treat a missing manifest as "cannot rebuild with target manifest": the restore refuses) | orange; tier 1 |
-| **S5** | Step 0, documented first: the probe (checkpoint C at T; three preference writes; restore to C; read; one write, where H2 predicts a refusal; owner restart; read; restore to C again, Devin 4; record the results in the problem doc). Then: the corpusd pin index, owner-act admission and the `restore_pins` capability; the pin-before-flip order with cancel; `effective()` in `reconstruct`; the head-only finalize; the index-reader filter; the restart that always closes work; the idempotency changes; the preflight; D7 | step 0 repeated with `CHOIR_RESTORE_PIN` on: head at P, the preference stays at T across two restarts, an immediate write succeeds, a probe event in the window shows as excluded, a failed flip leaves a cancel, a second restore writes a second pin | writer off (new restores unpinned); the S5 reader stays on. A code revert below S5 while any pin exists is refused by the static check unless the corpusd pin index count is zero (F10) | red; tier 2 |
+| **S5** | Step 0, documented first: the probe (checkpoint C at T; three preference writes; restore to C; read; one write, where H2 predicts a refusal; owner restart; read; restore to C again, Devin 4; record the results in the problem doc). Then: the corpusd pin index, owner-act admission and the `restore_pins` capability; the pin-before-flip order with cancel; `effective()` in `reconstruct`; the head-only finalize; the index-reader filter; the restart that always closes work; the idempotency changes; the preflight; D7 | step 0 repeated with `CHOIR_RESTORE_PIN` on: head at or past P (D7's rollback pair lands it at P+2 when the window held a materialization), the preference stays at T across two restarts, a write between pin and restart is refused as "restore in progress" and a write after the restart succeeds, a probe event in the window shows as excluded, a failed flip leaves a cancel, a second restore writes a second pin | writer off (new restores unpinned); the S5 reader stays on. A revert below S5 while any pin exists is refused unless the corpusd pin index count is zero (F10). This covers both the guest code (the static check) and the corpusd release (the host deploy preflight): a corpusd below S5 drops the index endpoint, and every pinned guest would then refuse replay at its next boot (bunch 225, 6) | red; tier 2 |
 | **S8b** | Apply and restore preflight against the computer's own tape: "this release would skip N events of kind K", refusing `refuse` kinds it lacks. This is SR8's "proved reversible" input, and it covers self-development candidates on old bases (selfdev-79dc4bf4) | an apply of a candidate built on a pre-probe base: the approval surface shows the skip line | revert | red (run acceptance); tier 2 |
 | **S4a** | `Validate` split, receipt-verified head for unknown kinds, `RequireKindFields` relaxed | CI fixture | reader stays on | red; tier 2 |
 | **S4b** | The corpusd receipt `compat` stamp for new kinds | ships with the first new event kind, 7 days or more after S4a is fleet-on | stamp off | red; tier 2 |
@@ -701,6 +723,21 @@ Every answer below was checked against the code named in it.
 | S-19 | Forks are unaddressed | **Adopted.** Answered, with Devin's ontology reading (`computer-ontology.md:409-414`): a fork has its own chain, its content is `effective(H)`, and replay uses the same `reconstruct` (§3.4) |
 | S-20 | Switch provenance | **Adopted.** Host-set, read once at boot, not settable by the guest; the probe gate is on the host side (§6) |
 | S-21 | The gate is one-directional | **Adopted.** The base writes a fixture and the candidate replays it (§4.2) |
+
+**Devin re-review (bunch 225, APPROVE with required additions; all adopted as text)**
+
+| ID | Finding | Answer |
+|---|---|---|
+| 225-1 | Cancel admission and the index | **Adopted** (§3.2). A cancel needs an owner-act receipt and a live pin row; corpusd records `cancelled_by` in the cancel's CAS transaction, so the lookahead can exclude it |
+| 225-2 | Appends race the restore between pin and flip | **Adopted** (§3.2 step 3). The runtime quiesces appends from pin admission to restart, so H2's semantics are kept on purpose. The S5 proof checks the refusal |
+| 225-3 | Rule (b) overclaims the signed fields | **Adopted: check the derived fields.** The reader checks `reducer_version` and the credential epoch, which the page server derives (`event_replay.go:99-103`). This was chosen over S4b signing `reducer_version` because it needs no corpusd or receipt change and holds for receipts already on tapes |
+| 225-4 | The catch-up sweep could delete pin rows | **Adopted** (§2.5). Catch-up touches only `skipped_kind` and `skipped_op` rows |
+| 225-5 | `since` against the run clock false-fails slow pull requests | **Adopted** (§2.1, §4.4). `since` is compared to the introducing commit's committer date, from the candidate's own fetched range |
+| 225-6 | A corpusd rollback below S5 with live pins | **Adopted** (§6 S5). The fence covers the corpusd release as well as the guest code |
+| 225-7 | The prebuild +12 s was unexplained | **Adopted** (§4.1). It is the ready time after `deploy-impact` (`ci.yml:818`), sourced to the 2026-10-22 timing doc |
+| 225-8 | "Head at P" | **Adopted** (§6). Now "at or past P" |
+| 225-9 | "or" for the two table registrations | **Adopted** (§4.4). Both are required |
+| 225-10 | The CI0 citation did not resolve on this lane | **Adopted.** The lane is rebased onto origin/main, where `docs/definitions/ci-test-cooptimization-2026-10-24.md` now exists (94e8898af). The prove-once design stays cited as `lane/ci0-coopt` |
 
 ## Class, heresy delta
 
