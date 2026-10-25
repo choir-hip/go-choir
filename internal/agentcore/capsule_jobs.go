@@ -7,6 +7,7 @@ import (
 	"log"
 	"math"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -25,8 +26,9 @@ import (
 // hands it to the capsule executor after the cell's acts commit. When a job
 // ends the executor calls handleCapsuleJobDone, which commits a job record
 // into the desk's inbox (engineering:<assignment>, from job:<id>) and wakes
-// the run: an engineering turn that ended while its job ran is held by the
-// completion guard (engineeringJobWait) and resumed with the outcome.
+// the run: an engineering turn that ended while its job ran, or after a job
+// whose outcome it was not given ended, is resumed with the outcome by the
+// completion guard (engineeringJobWait).
 
 // Notify keys the reducer gives a job start, returned on its completion.
 const (
@@ -207,28 +209,115 @@ func (rt *Runtime) signalJobWake(runID string) {
 	}
 }
 
+// jobDeliveries is one engineering tool loop's record of the job outcomes
+// it gave the model in a resume (a park's or the guard's). A job that ended
+// and is not in it is undelivered: the model was told "you are woken when it
+// ends" and has not been. Jobs that had already ended when the loop began
+// count as delivered. It lives as long as the tool loop: a restart ends it
+// with the process, and the restart rule closes the run.
+type jobDeliveries struct {
+	mu        sync.Mutex
+	delivered map[string]bool
+}
+
+// newJobDeliveries starts a loop's record; every job of seed that has
+// already ended counts as delivered.
+func newJobDeliveries(seed []yaegikernel.JobView) *jobDeliveries {
+	d := &jobDeliveries{delivered: map[string]bool{}}
+	for _, v := range seed {
+		if capsulejob.Terminal(v.State) {
+			d.delivered[v.ID] = true
+		}
+	}
+	return d
+}
+
+// newRunJobDeliveries starts the record for rec's tool loop.
+func (rt *Runtime) newRunJobDeliveries(rec *types.RunRecord) *jobDeliveries {
+	if rt == nil || rec == nil {
+		return newJobDeliveries(nil)
+	}
+	if jobs := rt.capsuleJobs(); jobs != nil {
+		return newJobDeliveries(jobs.JobViews(rec.RunID))
+	}
+	return newJobDeliveries(nil)
+}
+
+func (d *jobDeliveries) markDelivered(id string) {
+	if d == nil || strings.TrimSpace(id) == "" {
+		return
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.delivered[id] = true
+}
+
+// takeUndelivered returns the jobs of views that ended and were not
+// delivered, oldest first, and records them as delivered.
+func (d *jobDeliveries) takeUndelivered(views []yaegikernel.JobView) []yaegikernel.JobView {
+	if d == nil {
+		return nil
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	var out []yaegikernel.JobView
+	for _, v := range views {
+		if v.ID == "" || !capsulejob.Terminal(v.State) || d.delivered[v.ID] {
+			continue
+		}
+		d.delivered[v.ID] = true
+		out = append(out, v)
+	}
+	return out
+}
+
 // engineeringJobWait is the completion guard's wait (F15-F18): when an
 // engineering turn ends without a terminal fate while its capsule runs a
 // job, it waits for the job's end (bounded by the run's context and the
-// job's wall clock) and resumes the turn with the outcome. ok is false when
-// the run has no running job.
-func (rt *Runtime) engineeringJobWait(ctx context.Context, rec *types.RunRecord) (toolregistry.ToolLoopCompletionGuardResult, bool) {
+// job's wall clock) and resumes the turn with the outcome. A job that ended
+// before the guard looked, whose outcome the loop has not given the model
+// (deliveries), resumes the turn at once with it: a probe or a capture ends
+// in 2-3 s, often inside the model call that ended the turn, and charging
+// that turn as a guard retry cancelled working engineers (N1 of
+// docs/evidence/selfdev-trace-reviews-2026-10-25.md, Round 3). Each resume
+// is a wait, never a retry, bounded by the tool loop's wait cap; it needs a
+// job that ended since the last delivery, so a run that just stops talking
+// still meets the reminder. ok is false when the run has no running job
+// and no undelivered outcome, or its job outlived its wall clock.
+func (rt *Runtime) engineeringJobWait(ctx context.Context, rec *types.RunRecord, deliveries *jobDeliveries) (toolregistry.ToolLoopCompletionGuardResult, bool) {
+	none := toolregistry.ToolLoopCompletionGuardResult{}
 	if rt == nil || rec == nil {
-		return toolregistry.ToolLoopCompletionGuardResult{}, false
+		return none, false
 	}
 	jobs := rt.capsuleJobs()
 	if jobs == nil {
-		return toolregistry.ToolLoopCompletionGuardResult{}, false
+		return none, false
 	}
-	view, deadline, running := jobs.RunningJob(rec.RunID)
-	if !running {
-		return toolregistry.ToolLoopCompletionGuardResult{}, false
+	if deliveries == nil {
+		deliveries = newJobDeliveries(nil)
 	}
-	ended, reason, err := rt.waitJobEnd(ctx, jobs, rec.RunID, view, deadline)
-	if err != nil || reason != jobParkEnded {
-		return toolregistry.ToolLoopCompletionGuardResult{}, false
+	reason := jobOutcomeUndelivered
+	if view, deadline, running := jobs.RunningJob(rec.RunID); running {
+		_, ended, err := rt.waitJobEnd(ctx, jobs, rec.RunID, view, deadline)
+		if err != nil || ended != jobParkEnded {
+			return none, false
+		}
+		reason = jobParkEnded
 	}
-	return toolregistry.ToolLoopCompletionGuardResult{Continue: true, Waited: true, Reason: jobParkEnded, Instruction: withActivationBudget(ctx, jobEndedInstruction(ended))}, true
+	ended := deliveries.takeUndelivered(jobs.JobViews(rec.RunID))
+	if len(ended) == 0 {
+		return none, false
+	}
+	return toolregistry.ToolLoopCompletionGuardResult{Continue: true, Waited: true, Reason: reason, Instruction: withActivationBudget(ctx, jobsEndedInstruction(ended))}, true
+}
+
+// jobsEndedInstruction is one resume for every job outcome it carries.
+func jobsEndedInstruction(views []yaegikernel.JobView) string {
+	parts := make([]string, 0, len(views))
+	for _, v := range views {
+		parts = append(parts, jobEndedInstruction(v))
+	}
+	return strings.Join(parts, "\n\n")
 }
 
 // How a wait on a job ended.
@@ -237,6 +326,9 @@ const (
 	jobParkAlreadyEnded = "already_ended"
 	jobParkDeadline     = "deadline"
 	jobParkCancelled    = "cancelled"
+	// jobOutcomeUndelivered is the guard's resume of a job that ended before
+	// it looked, whose outcome the model was not given.
+	jobOutcomeUndelivered = "capsule_job_outcome_undelivered"
 )
 
 // waitJobEnd waits for the run's running job to end: woken by its end
@@ -301,7 +393,7 @@ func cellJobPark(result capsule.GoEvalResult) string {
 // end (capsule_job_park_ended) are run progress events. It holds nothing
 // durable: a crash ends it with the process, and the boot closes the job as
 // interrupted and the run under the restart rule.
-func (rt *Runtime) engineeringJobPark(ctx context.Context, rec *types.RunRecord, emit provideriface.EventEmitFunc, calls []types.ToolCall, results []types.ToolResult) (toolregistry.ToolLoopCompletionGuardResult, bool, error) {
+func (rt *Runtime) engineeringJobPark(ctx context.Context, rec *types.RunRecord, deliveries *jobDeliveries, emit provideriface.EventEmitFunc, calls []types.ToolCall, results []types.ToolResult) (toolregistry.ToolLoopCompletionGuardResult, bool, error) {
 	none := toolregistry.ToolLoopCompletionGuardResult{}
 	if rt == nil || rec == nil {
 		return none, false, nil
@@ -340,6 +432,7 @@ func (rt *Runtime) engineeringJobPark(ctx context.Context, rec *types.RunRecord,
 			if v.ID == jobID && capsulejob.Terminal(v.State) {
 				emitJobPark(emit, "capsule_job_park", map[string]any{"job_id": jobID, "cause": cause})
 				emitJobPark(emit, "capsule_job_park_ended", map[string]any{"job_id": jobID, "reason": jobParkAlreadyEnded, "state": v.State, "waited_ms": 0})
+				deliveries.markDelivered(v.ID)
 				return toolregistry.ToolLoopCompletionGuardResult{Continue: true, Waited: true, Reason: jobParkEnded, Instruction: withActivationBudget(ctx, jobEndedInstruction(v))}, true, nil
 			}
 		}
@@ -355,6 +448,8 @@ func (rt *Runtime) engineeringJobPark(ctx context.Context, rec *types.RunRecord,
 	instruction := jobEndedInstruction(ended)
 	if reason == jobParkDeadline {
 		instruction = jobOutlivedInstruction(ended)
+	} else {
+		deliveries.markDelivered(ended.ID)
 	}
 	return toolregistry.ToolLoopCompletionGuardResult{Continue: true, Waited: true, Reason: reason, Instruction: withActivationBudget(ctx, instruction)}, true, nil
 }

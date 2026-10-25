@@ -126,8 +126,13 @@ const maxTokenContinuationRetries = 3
 const maxCompletionGuardRetries = 2
 
 // maxCompletionGuardWaits bounds the guard's waits for outside events in
-// one run (a desk that starts a job per turn).
-const maxCompletionGuardWaits = 32
+// one run (a desk that starts a job per turn), park resumes included. Each
+// wait needs a job that ended, so a run cannot spin here without starting
+// jobs; the activation budget bounds the run's time. An engineer that works
+// in short jobs waits often: faf32 on b@c waited 13 times in 19.5 minutes
+// (docs/evidence/selfdev-trace-reviews-2026-10-25.md, Round 3, N1), so 32
+// would cancel such a run before a 60-minute activation ends.
+const maxCompletionGuardWaits = 128
 
 const maxToolLoopParkResumes = 16
 

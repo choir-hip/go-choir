@@ -3793,8 +3793,11 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		// A cell that looked at the run's running job parks the turn on the
 		// job's end, with no model turn in between (capsule_jobs.go,
 		// engineeringJobPark).
+		// One record per tool loop of the job outcomes the model was given,
+		// shared by the park and the guard (capsule_jobs.go, jobDeliveries).
+		deliveries := rt.newRunJobDeliveries(rec)
 		toolLoopOptions = append(toolLoopOptions, toolregistry.WithToolBatchWait(func(ctx context.Context, calls []types.ToolCall, results []types.ToolResult) (toolregistry.ToolLoopCompletionGuardResult, bool, error) {
-			return rt.engineeringJobPark(ctx, rec, emit, calls, results)
+			return rt.engineeringJobPark(ctx, rec, deliveries, emit, calls, results)
 		}))
 		// The desk's only tool is capsule_go_eval; its durable transition is a
 		// committed terminal fate (freeze/verify for selfdev casts). An
@@ -3803,22 +3806,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		// recorded in docs/problems/m11-engineering-desk-deferral-2026-09-27.md
 		// (fourth wedge). The guard rejects narrative-only endings: retry with
 		// a bounded reminder, then fail the run so assignment fate joins.
-		toolLoopOptions = append(toolLoopOptions, toolregistry.WithCompletionGuard(func(ctx context.Context, state toolregistry.ToolLoopCompletionState) (toolregistry.ToolLoopCompletionGuardResult, error) {
-			if engineeringOverlayTerminalFateCommitted(state.Messages) {
-				return toolregistry.ToolLoopCompletionGuardResult{}, nil
-			}
-			// A turn that ends while its capsule runs a job waits for the
-			// job and resumes with its outcome (capsule_jobs.go).
-			if waited, ok := rt.engineeringJobWait(ctx, rec); ok {
-				return waited, nil
-			}
-			reason, instruction := engineeringCompletionGuardReminder(ctx, state.Messages)
-			return toolregistry.ToolLoopCompletionGuardResult{
-				Continue:    true,
-				Reason:      reason,
-				Instruction: instruction,
-			}, nil
-		}))
+		toolLoopOptions = append(toolLoopOptions, toolregistry.WithCompletionGuard(rt.engineeringCompletionGuard(rec, deliveries)))
 	}
 	if waiter := rt.coagentParkWaiter(rec); waiter != nil {
 		toolLoopOptions = append(toolLoopOptions, toolregistry.WithParkWaiter(waiter))
@@ -4346,6 +4334,28 @@ func ptrBool(v bool) *bool {
 }
 
 const engineeringTerminalFateRequired = "engineering_overlay_terminal_fate_required"
+
+// engineeringCompletionGuard is the assigned engineering desk's completion
+// guard. A turn that ends without a committed terminal fate resumes with the
+// outcome of a job the model has not been given (capsule_jobs.go,
+// engineeringJobWait), which is a wait and not a retry; otherwise it gets
+// the bounded reminder, a retry.
+func (rt *Runtime) engineeringCompletionGuard(rec *types.RunRecord, deliveries *jobDeliveries) toolregistry.ToolLoopCompletionGuardFunc {
+	return func(ctx context.Context, state toolregistry.ToolLoopCompletionState) (toolregistry.ToolLoopCompletionGuardResult, error) {
+		if engineeringOverlayTerminalFateCommitted(state.Messages) {
+			return toolregistry.ToolLoopCompletionGuardResult{}, nil
+		}
+		if waited, ok := rt.engineeringJobWait(ctx, rec, deliveries); ok {
+			return waited, nil
+		}
+		reason, instruction := engineeringCompletionGuardReminder(ctx, state.Messages)
+		return toolregistry.ToolLoopCompletionGuardResult{
+			Continue:    true,
+			Reason:      reason,
+			Instruction: instruction,
+		}, nil
+	}
+}
 
 // freezeRefusedByOpenCandidate matches the refusal openFreezeCandidate
 // returns when another self-development operation is open, and captures that

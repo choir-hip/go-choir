@@ -90,7 +90,7 @@ type parkOutcome struct {
 func parkAsync(rt *Runtime, ctx context.Context, events *parkEvents, calls []types.ToolCall, results []types.ToolResult) chan parkOutcome {
 	done := make(chan parkOutcome, 1)
 	go func() {
-		res, ok, err := rt.engineeringJobPark(ctx, &types.RunRecord{RunID: "run-1"}, events.emit, calls, results)
+		res, ok, err := rt.engineeringJobPark(ctx, &types.RunRecord{RunID: "run-1"}, newJobDeliveries(nil), events.emit, calls, results)
 		done <- parkOutcome{res, ok, err}
 	}()
 	return done
