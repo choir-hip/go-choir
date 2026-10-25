@@ -98,7 +98,7 @@ type textureRootExcerptSection struct {
 // textureRootExcerpt orders and bounds the master's text for the run on
 // docID: "waits on the owner" sections first; then the sections whose
 // document revisedAt knows, newest first; then the rest in their order;
-// docID's own section (the one carrying its refs line) left out; the whole
+// docID's own section (the one whose refs name it) left out; the whole
 // cut from the end at textureRootContextMaxBytes.
 func textureRootExcerpt(content, docID string, revisedAt map[string]time.Time) string {
 	docID = strings.TrimSpace(docID)
@@ -112,8 +112,10 @@ func textureRootExcerpt(content, docID string, revisedAt map[string]time.Time) s
 			current = &textureRootExcerptSection{waits: strings.Contains(heading, "waits on the owner") || strings.Contains(heading, "waiting on the owner")}
 			sections = append(sections, current)
 		}
-		if current.docID == "" && strings.HasPrefix(trimmed, "refs: doc=") {
-			if fields := strings.Fields(strings.TrimPrefix(trimmed, "refs: doc=")); len(fields) > 0 {
+		// The root writes refs at the end of a paragraph as often as on a
+		// line of their own.
+		if at := strings.Index(trimmed, "refs: doc="); current.docID == "" && at >= 0 {
+			if fields := strings.Fields(trimmed[at+len("refs: doc="):]); len(fields) > 0 {
 				current.docID = fields[0]
 			}
 		}
