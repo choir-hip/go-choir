@@ -333,12 +333,19 @@ documents, and the per-run input to at most 32 KiB of ledger summary.
 
 **Master document.** An ordinary Texture document, so the existing UI, CLI
 and product API show it. It is created once per computer, when the switch
-first takes effect, by an ensure step that uses the ordinary create path
+first takes effect, by an ensure step that first claims the marker by
+compare-and-set, with the master's document id derived from the marker's
+generation, and then creates the document through the ordinary create path
 (`texture_lifecycle_create.go`; its v0 is the owner-authored seed, as for
-every document) and then claims the marker by compare-and-set; the claim
-is the atomic step, so a lost race leaves at most a stray ordinary document,
-never two masters. Its only agent writer is the root; the owner may revise
-it as any document.
+every document). The claim is the atomic step, so a lost race creates
+nothing and two masters cannot exist; a claim whose document is missing is
+completed, not replaced. (S1's builder changed the order from the draft's
+create-then-claim; review 247 judged it an improvement.) Its only agent writer is the root; the owner may revise
+it as any document. It says, per document: the title, what the owner last asked, open
+work by desk (engineering assignments and their candidates, research), what
+waits on the owner (candidates awaiting approval, questions), and a refs
+line with the document's id and each open work item's short id, which is
+what the acceptance proof checks. It also says what each desk is doing.
 
 **Staying live (added after review 245).** A drained document trajectory
 settles on its own (`store/lifecycle.go:2785-2859`, triggered when the
@@ -356,20 +363,18 @@ the root's turns leave it open (a turn need not complete its work item,
 `store/texture_turn.go:155-167`). A crash does not close it: crash boots
 close runs and pre-boot occurrences, not work items
 (`agentcore/runtime.go:2654-2682`, `actorruntime/handler.go:112-121`), and
-no boot path may be added that closes it. The real settle triggers are the
-switch turned off (which completes the item) and a root turn that completes
-it by mistake. Second, replacement: the digest's dispatch checks the marked
+no boot path may be added that closes it. The root's turns are clamped to
+leave it open, so in practice nothing settles the master; turning the switch
+off leaves the item open too, the master stays a live ordinary document, and
+turning the switch on again reuses it. Replacement covers any settle the
+clamp misses. Second, replacement: the digest's dispatch checks the marked
 master's liveness before it activates a run (a settled trajectory refuses
 activation, `store/lifecycle.go:3170`); if the master is not live, it runs
 the ensure step, which creates a fresh master and advances the marker's
 generation by compare-and-set, and the new master's first revision links its
 predecessor. The ensure step is idempotent on liveness, so turning the
 switch off and on again goes through the same path. It runs at the next
-digest, never at boot. It says, per document: the title, what the owner last asked, open
-work by desk (engineering assignments and their candidates, research), what
-waits on the owner (candidates awaiting approval, questions), and a refs
-line with the document's id and each open work item's short id, which is
-what the acceptance proof checks. It also says what each desk is doing.
+digest, never at boot.
 
 **Shared context (S2).** At wake, each sub-RLM's context carries the master
 document's latest revision, at most 4 KiB, as read-only context outside the
@@ -438,8 +443,8 @@ started without the owner.
    (one re-armed digest after the run).
 3b. The ensure step races and creates two master documents (the marker's
    compare-and-set is the claim; the loser is a stray ordinary document).
-3c. The master's trajectory settles (the switch off, or a root turn that
-   completes the standing item) and the root can never write again
+3c. The master's trajectory settles anyway (a path the clamp misses) and
+   the root can never write again
    (replacement at the next digest, checked before activation; runtime test
    that a settled master is replaced and the marker's generation advances).
 3d. A crash drops a digest and no further commit arrives, so the master
