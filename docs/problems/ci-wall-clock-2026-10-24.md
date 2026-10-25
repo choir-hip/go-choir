@@ -191,3 +191,28 @@ planned at 140 s, and `go-test-with-timing` prints whole-machine CPU use per
 run so the next pull-request run can say whether a shard has idle CPUs at all
 (finding 7 stays a hypothesis; finding 9 says CPUs are not idle enough for a
 second process).
+
+## Measured after the fifth candidate (pull-request run 40155015588, 2026-10-25 02:18Z)
+
+Candidate: the fourth plus the whole phase planned at 140 s, CPU and warm-up
+logging. All jobs passed; `check` done 504 s (8.4 min; baseline 18.3 min, first
+candidate 10.6). Restored cache warm (export-data warm-up 6-21 s on every
+shard). Non-runtime jobs 301-452 s (shard 3 452, 6 423, 1 420, 2 393, 5 363,
+4 315, 0 302, 7 301); runtime shards 277-325 s.
+
+### Whole-machine CPU use per go test run (finding 7 answered)
+
+| Phase | CPU busy (of 4) |
+|---|---|
+| split shards 0-5, one process | 35-55% over 236-391 s |
+| whole phase, shards 6 and 7 | 82% over 111 s, 56% over 76 s |
+| split phase, shards 6 and 7 | 54%, 52% |
+| runtime (agentcore, textureowner) shards | 25-29% over 151-235 s, 33% over the second run |
+
+Half of every split runner and most of every runtime runner is idle, so the
+work is not CPU-bound; it is latency-bound inside serial test binaries (Dolt
+fsync-like waits, sleeps). A second process per shard fills those gaps (finding
+7 supported) but its burst load made two startup-deadline tests fail when the
+cache was cold (finding 9). Nothing here is a reason to try again before the
+deadline-sensitive actorruntime tests are looked at; the test step is no longer
+the deploy path's maximum (the Node B prebuild ends at about 9.3 min).
