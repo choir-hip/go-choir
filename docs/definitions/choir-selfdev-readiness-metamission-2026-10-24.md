@@ -188,9 +188,9 @@ metamission:
         published. Red (Texture canonical schema and writes), tier 2. Runs
         now in parallel; the Reader and T1a candidates use it once live.
     - id: PD3
-      path: docs/definitions/choir-pd3-texture-root-desk-2026-10-11.md (drafted 2026-10-11; with PD2, docs/definitions/choir-pd2-desk-sessions-outlive-runs-2026-10-11.md)
-      readiness: drafted
-      status: pending
+      path: docs/definitions/choir-pd3-texture-root-desk-2026-10-11.md (drafted 2026-10-11, rewritten 2026-10-25; PD2 landed as fcb424b92)
+      readiness: executable
+      status: working
       depends_on: [SR5]
       note: >-
         Pulled forward (owner, 2026-10-25: "there should be one texture desk
@@ -447,15 +447,15 @@ boundaries:
 now:
   status: working
   slice: >-
-    SR5 is complete (receipt below): the Reader, built by engineering on b@c,
-    approved by FP0, seen by the owner in Texture, promoted through review,
-    deployed in 6113c82cd, and b@c's stack upstreamed. Now: reader-6, the
-    Reader's next self-development round on the new base (recents for a
-    file opened from Files, validation before upload, the preview's
-    paragraphs, review 242's nits), then PD3 (re-review the drafted file
-    against today's code), then T1a, then T1c.
-  source_ref: 6113c82cd
-  deploy_identity: 6113c82cd (the Reader on main; deployed 08:42 UTC 2026-10-25)
+    PD3 S1 (the live station): the master document and its root desk behind
+    texture.root_desk. Before it: SR5 complete (receipt below), and reader-6,
+    the Reader's next self-development round on the new base, done end to
+    end: built on b@c, rejected once on FP0's extractor check, repaired on
+    its carried tree, accepted, promoted (review 243 PASS), deployed in
+    7fbe45512, and b@c's stack upstreamed at 09:28:10. After PD3: T1a, then
+    T1c.
+  source_ref: 7fbe45512
+  deploy_identity: 7fbe45512 (reader-6 on main; deployed 09:27 UTC 2026-10-25)
   candidate:
     id: wave-1
     state: rehearsing
@@ -499,25 +499,32 @@ now:
   belief:
     believed_state: >-
       The self-development loop works end to end on b@c for a frontend app:
-      five candidates judged tonight, two approved, three rejected and
-      iterated on their carried trees without a restart. Texture holds its
-      trajectory (on for b@c) and the duplicate-round refusal (R5-2) is live.
+      seven candidates judged across reader-4 to reader-6, three approved
+      (the last two promoted and deployed), four rejected and repaired on
+      their carried trees. Texture
+      casts once per direction (R5-2 live). PD3's design is accepted
+      (re-review 246): the root is the master document's own Texture desk,
+      so no write check changes.
     main_uncertainty: >-
-      Whether a deploy under an applied, unpromoted stack will keep blocking
-      self-development (stack rebase, U4, is unbuilt), and whether a
-      signed-in path can be verified by anything but FP0's code read.
+      Whether a root Texture desk with only a prompt-section difference
+      writes a useful master document within its read bound, and whether
+      Texture keeps an owner direction verbatim when it casts (R6-1: it
+      retyped one into a Go raw string and paraphrased it).
     next_observation: >-
-      reader-6's first round on 6113c82cd: an engineering assignment opens
-      (no base-moved refusal), Texture casts once, and the candidate carries
-      the rejected 25239b5c tree onto the new base or reports why not.
+      PD3 S1's failure tests, written before its code: refusals both ways,
+      a digest interrupted after a markerless boot, a settled master
+      replaced, off is inert.
   blocker_or_risk: >-
-    A settled trajectory refuses texture revise (409), so a rejected
-    candidate can be iterated only while its trajectory is live.
+    Self-development stays blocked after any deploy under an applied,
+    unpromoted stack until U4 (stack rebase) exists; today the fix is to
+    promote the stack first. Verify sees only the signed-out preview and
+    trusts engineering's self-report (R6-2), so FP0's code read remains the
+    check for signed-in paths.
   next_action: >-
-    Revise reader-6 (doc d9e8b26f) to resume on the new base with the
-    four repair points of 08:16 plus review 242's two medium findings;
-    judge its candidate by reading the code for signed-in paths; approve,
-    promote with scripts/selfdev-promote, land. Then PD3.
+    Build PD3 S1 in a lane on current main (tests first), tier 2 review,
+    land, switch on for b@c, run the acceptance actions; in parallel,
+    record R6-1's fix shape (cast the owner revision by reference) as a
+    problem doc.
 
 receipts:
   - id: SR5

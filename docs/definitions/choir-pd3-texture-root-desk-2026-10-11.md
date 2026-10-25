@@ -14,13 +14,13 @@ definition_version: 5
 # Rewritten 2026-10-25 against main c59e289ca (version 4 is in git history);
 # revised 09:26 after file review 244 (send_back, both seats): the root is
 # the master document's own Texture desk, not a new non-lifecycle agent.
-readiness: drafted
+readiness: executable
 
 review:
-  reviewer: none
-  frozen_ref: none
-  verdict: none
-  evidence_ref: none
+  reviewer: Devin (re-review 246, after tier 2 review 244 and re-review 245, both send_back)
+  frozen_ref: de8aee85a (review 246's mediums and nits folded in afterwards, doc-only)
+  verdict: accept
+  evidence_ref: /Users/wiz/Dev/lanes/_runs/bunch244, bunch245, bunch246 (devin.out; 244 also out/omp-deepseek-v41-flash.out)
 
 start:
   captured_at: 2026-10-11T01:35:00Z
@@ -108,7 +108,8 @@ finish:
         carries, per document, a refs line naming the document's id and the
         short id (8 hex) of each open work item; the proof script reads each
         trajectory's open work items through the product API (choir
-        trajectory) and fails on any item missing from the refs.
+        trajectory) and fails on any item missing from the refs. The
+        master's own standing item is excluded from the check.
       proves: the root, the master document, machine-checked coverage
       evidence_class: deployed proof (test computer)
     - action: >-
@@ -214,11 +215,10 @@ boundaries:
 now:
   status: working
   slice: >-
-    Design rewritten 2026-10-25 against c59e289ca; review 244 (tier 2) sent
-    it back on the root's identity, the digest's restart kind and the
-    acceptance; revised 09:26; review 245 (Devin) answered those and sent
-    it back on the master's trajectory settling; revised 09:3x; one Devin
-    seat re-review. Then S1.
+    S1: the master document (ensure step, texture_root marker, standing
+    item), the root prompt section, the texture_root_digest occurrence and
+    its dispatch, behind texture.root_desk. Design accepted by re-review 246
+    (after 244 and 245 sent it back); the metamission's live station.
   source_ref: c59e289ca
   deploy_identity: staging 6113c82cd
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
@@ -263,8 +263,12 @@ now:
     next_observation: >-
       the read path the root uses: a digest naming the changed documents,
       read per trajectory for those only, with the bound in Design
-  blocker_or_risk: none open; review 245's blocker (the master's trajectory auto-settles) is answered in this revision and awaits re-review
-  next_action: one Devin seat re-review of this revision; on accept, S1
+  blocker_or_risk: none
+  next_action: >-
+    Write S1's failure tests first (refusals both ways, digest interrupted
+    after a markerless boot, settled master replaced, off is inert), then
+    build S1 in a lane on current main; tier 2 review; land; switch on for
+    b@c only; run the acceptance actions.
 
 receipts: []
 ---
@@ -340,17 +344,28 @@ it as any document.
 settles on its own (`store/lifecycle.go:2785-2859`, triggered when the
 active run goes terminal), and a settled trajectory refuses every later
 turn (`store/texture_turn.go:392`) with no reopen. Two layers keep the root
-alive. First, the ensure step opens one standing work item on the master's
-trajectory, assigned to the root ("keep the master document current"),
-which the root never completes, so settlement readiness never holds in
-normal running; turning the switch off completes it, and the trajectory may
-then settle. Second, if the master's trajectory settles anyway (a crash
-closes open work items as "interrupted by a restart"), the next digest's
-handler finds the marked master not live, creates a fresh master by the
-same ensure step, and advances the marker's generation; the new master's
-first revision links its predecessor. This is the standing-intent rule (a
-crash closes the occurrence, not the intent) and it runs at the next digest,
-never at boot. It says, per document: the title, what the owner last asked, open
+alive. First, the standing work item: the create path already opens one
+initial work item for the document's Texture (`texture_lifecycle_create.go:99`),
+and for the master that item is the standing item ("keep the master document
+current"), so there is one open item and owner revisions never meet the
+"multiple open desk target work items" refusal. Any open item keeps
+`lifecycleSettlementReady` false (`store/lifecycle.go:2832-2843`). Every
+owner revision of the master and every digest run binds to it
+(`ownerRevisionTarget`, `textureowner/texture_agent_revision.go:221-238`);
+the root's turns leave it open (a turn need not complete its work item,
+`store/texture_turn.go:155-167`). A crash does not close it: crash boots
+close runs and pre-boot occurrences, not work items
+(`agentcore/runtime.go:2654-2682`, `actorruntime/handler.go:112-121`), and
+no boot path may be added that closes it. The real settle triggers are the
+switch turned off (which completes the item) and a root turn that completes
+it by mistake. Second, replacement: the digest's dispatch checks the marked
+master's liveness before it activates a run (a settled trajectory refuses
+activation, `store/lifecycle.go:3170`); if the master is not live, it runs
+the ensure step, which creates a fresh master and advances the marker's
+generation by compare-and-set, and the new master's first revision links its
+predecessor. The ensure step is idempotent on liveness, so turning the
+switch off and on again goes through the same path. It runs at the next
+digest, never at boot. It says, per document: the title, what the owner last asked, open
 work by desk (engineering assignments and their candidates, research), what
 waits on the owner (candidates awaiting approval, questions), and a refs
 line with the document's id and each open work item's short id, which is
@@ -423,9 +438,10 @@ started without the owner.
    (one re-armed digest after the run).
 3b. The ensure step races and creates two master documents (the marker's
    compare-and-set is the claim; the loser is a stray ordinary document).
-3c. The master's trajectory settles and the root can never write again
-   (standing work item; fresh master at the next digest; runtime test that
-   a settled master is replaced and the marker's generation advances).
+3c. The master's trajectory settles (the switch off, or a root turn that
+   completes the standing item) and the root can never write again
+   (replacement at the next digest, checked before activation; runtime test
+   that a settled master is replaced and the marker's generation advances).
 3d. A crash drops a digest and no further commit arrives, so the master
    stays stale (accepted: owner input on the master or any commit
    re-arms it).

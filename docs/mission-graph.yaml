@@ -1025,11 +1025,11 @@ nodes:
     title: PD3 — one Texture root desk per computer with per-document sub-RLMs and a master document
     path: docs/definitions/choir-pd3-texture-root-desk-2026-10-11.md
     ledger: ''
-    status: working  # rewritten 2026-10-25 against c59e289ca; pulled forward into choir-selfdev-readiness-metamission-2026-10-24 before T1a; tier 2 file review pending
+    status: working  # rewritten 2026-10-25; accepted by re-review 246; the live station of choir-selfdev-readiness-metamission-2026-10-24 (before T1a)
     kind: station
     entrypoint: false
     member_of: choir-persistent-desks-metamission-2026-10-11
-    execution_mode: draft_non_executable
+    execution_mode: subordinate_only
     depends_on: [choir-pd2-desk-sessions-outlive-runs-2026-10-11]
     enables: [choir-pd4-computer-controls-computer-2026-10-11]
   - id: choir-pd4-computer-controls-computer-2026-10-11
