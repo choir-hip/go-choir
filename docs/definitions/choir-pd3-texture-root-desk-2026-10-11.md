@@ -85,15 +85,17 @@ finish:
     intentions on this computer.
   artifact: >-
     A master document per computer, created by the ordinary Texture create
-    path and named as the root by a durable per-computer marker
-    (texture.root_document = its doc id). Its own Texture desk,
+    path and named as the root by a durable per-computer marker (an
+    additive texture_root object holding the master's document id and a
+    generation, written by compare-and-set). Its own Texture desk,
     texture:<masterDoc>, is the root: the same lifecycle agent shape as
     every other Texture, so every existing write check (ApplyTextureTurn's
     ChannelID, ActiveRunID and trajectory binding) already confines it to
     the master document and confines every other texture:<doc> to its own.
     The root is woken by a debounced digest occurrence
-    (texture_root_digest, registered in RestartWorkKinds) after sub-RLM
-    commits and desk reports, never on a sub-RLM's wake path. Each
+    (texture_root_digest, registered in RestartWorkKinds) after other
+    documents' commits and desk reports, never on a sub-RLM's wake path; a
+    standing open work item keeps the master's trajectory live. Each
     texture:<doc> is unchanged as its document's sole writer and is given
     the master document as bounded read-only context. All behind the
     per-computer switch texture.root_desk, off by default.
@@ -214,7 +216,9 @@ now:
   slice: >-
     Design rewritten 2026-10-25 against c59e289ca; review 244 (tier 2) sent
     it back on the root's identity, the digest's restart kind and the
-    acceptance; revised 09:26; one Devin seat re-review. Then S1.
+    acceptance; revised 09:26; review 245 (Devin) answered those and sent
+    it back on the master's trajectory settling; revised 09:3x; one Devin
+    seat re-review. Then S1.
   source_ref: c59e289ca
   deploy_identity: staging 6113c82cd
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
@@ -259,7 +263,7 @@ now:
     next_observation: >-
       the read path the root uses: a digest naming the changed documents,
       read per trajectory for those only, with the bound in Design
-  blocker_or_risk: none open; review 244's B1 (identity) and B2 (restart kind) are answered in this revision and await re-review
+  blocker_or_risk: none open; review 245's blocker (the master's trajectory auto-settles) is answered in this revision and awaits re-review
   next_action: one Devin seat re-review of this revision; on accept, S1
 
 receipts: []
@@ -279,11 +283,14 @@ This replaces the 2026-10-11 draft below wherever they differ. The draft's
 identity, isolation and master-document choices stand; its "oracle before
 product" projection and its bundled research lift do not.
 
-**Identity (revised after review 244).** The per-document agents stay
+**Identity (revised after reviews 244 and 245).** The per-document agents stay
 `texture:<doc>`. They are the sub-RLMs, and nothing about their authority
 changes. The root is not a new kind of agent. It is the Texture desk of the
-master document, `texture:<masterDoc>`, and a durable per-computer marker,
-`texture.root_document`, names which document is the master. The first draft
+master document, `texture:<masterDoc>`, and a durable per-computer marker
+names which document is the master. Computer settings are boolean and a
+closed allowlist (`store/computer_setting.go:169-211`), so the marker is an
+additive object kind, `texture_root`, holding the master's document id and a
+generation, written by compare-and-set. The first draft
 made the root a non-lifecycle agent on the persistent-management precedent;
 both review seats showed that cannot write a document. `ApplyTextureTurn`
 refuses lifecycle version 0 (`store/texture_turn.go:158-161`), binds the
@@ -299,10 +306,12 @@ session follows PD2: keyed by agent, so it outlives each run.
 
 **Wake.** The root is never on a sub-RLM's wake path. Owner input, research
 reports and management reports wake the document's sub-RLM directly, as
-today. The root gets a `texture_root_digest` occurrence after a sub-RLM
-commit or a desk report, naming the documents that changed. It is coalesced,
+today. The root gets a `texture_root_digest` occurrence after a commit on
+any document other than the master (the root's own commits never mint one)
+or a desk report, naming the documents that changed. It is coalesced,
 dispatched after the commit transaction, and debounced: by default at most
-one root run per 120 seconds and 20 per hour (computer settings). A commit
+one root run per 120 seconds and 20 per hour (runtime configuration, not
+computer settings). A commit
 that arrives while a root run is live re-arms one digest for after that run,
 so no change is lost to coalescing. A root turn with nothing new commits
 nothing (`TextureTurnNoSemanticChange`), so the master document's history
@@ -322,10 +331,26 @@ documents, and the per-run input to at most 32 KiB of ledger summary.
 and product API show it. It is created once per computer, when the switch
 first takes effect, by an ensure step that uses the ordinary create path
 (`texture_lifecycle_create.go`; its v0 is the owner-authored seed, as for
-every document) and then writes the marker; the ensure step is idempotent on
-the marker, so it never creates a second master. Its only agent writer is
-the root; the owner may revise it as any document. Its trajectory never
-settles. It says, per document: the title, what the owner last asked, open
+every document) and then claims the marker by compare-and-set; the claim
+is the atomic step, so a lost race leaves at most a stray ordinary document,
+never two masters. Its only agent writer is the root; the owner may revise
+it as any document.
+
+**Staying live (added after review 245).** A drained document trajectory
+settles on its own (`store/lifecycle.go:2785-2859`, triggered when the
+active run goes terminal), and a settled trajectory refuses every later
+turn (`store/texture_turn.go:392`) with no reopen. Two layers keep the root
+alive. First, the ensure step opens one standing work item on the master's
+trajectory, assigned to the root ("keep the master document current"),
+which the root never completes, so settlement readiness never holds in
+normal running; turning the switch off completes it, and the trajectory may
+then settle. Second, if the master's trajectory settles anyway (a crash
+closes open work items as "interrupted by a restart"), the next digest's
+handler finds the marked master not live, creates a fresh master by the
+same ensure step, and advances the marker's generation; the new master's
+first revision links its predecessor. This is the standing-intent rule (a
+crash closes the occurrence, not the intent) and it runs at the next digest,
+never at boot. It says, per document: the title, what the owner last asked, open
 work by desk (engineering assignments and their candidates, research), what
 waits on the owner (candidates awaiting approval, questions), and a refs
 line with the document's id and each open work item's short id, which is
@@ -396,8 +421,14 @@ started without the owner.
    (debounce and read bounds, measured in acceptance).
 3a. A commit lands while a root run is live and is lost to coalescing
    (one re-armed digest after the run).
-3b. The ensure step races and creates two master documents (idempotent on
-   the marker).
+3b. The ensure step races and creates two master documents (the marker's
+   compare-and-set is the claim; the loser is a stray ordinary document).
+3c. The master's trajectory settles and the root can never write again
+   (standing work item; fresh master at the next digest; runtime test that
+   a settled master is replaced and the marker's generation advances).
+3d. A crash drops a digest and no further commit arrives, so the master
+   stays stale (accepted: owner input on the master or any commit
+   re-arms it).
 4. A sub-RLM waits on the root (no shared lock; latency medians).
 5. The master document drops open work (coverage check).
 6. The master document is read back as state, by the root on its next run
