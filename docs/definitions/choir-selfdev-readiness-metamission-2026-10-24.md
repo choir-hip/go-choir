@@ -173,6 +173,20 @@ metamission:
         SR7's gate proves each one reversible, and by computer class, test
         then primary then the owner's, the paper last. Auto-apply on one
         computer is not auto-promote to main: promotion stays reviewed.
+    - id: TE
+      path: none yet (design note first, lane fp0-evidence-embed)
+      readiness: intent
+      status: working
+      depends_on: []
+      note: >-
+        Screenshots embedded in Texture, pulled forward (owner, 2026-10-25:
+        "the evidence is persistent"). The consumer half of T1, narrowed to
+        the capsule_evidence and image embed kinds: a frozen candidate's
+        captures are written into its trajectory's Texture document as
+        embeds, the revision pins the assets it embeds, and the web renderer
+        shows them with the candidate's identity. Evidence is never
+        published. Red (Texture canonical schema and writes), tier 2. Runs
+        now in parallel; the Reader and T1a candidates use it once live.
     - id: T1a
       path: none yet (drafted in the ledger 01:5x)
       readiness: intent
