@@ -69,3 +69,28 @@ func TestManagementOverlaySaysThePlatformCarriesThePatch(t *testing.T) {
 		}
 	}
 }
+
+// P1 of trace review round 4 (docs/evidence/selfdev-trace-reviews-2026-10-25.md):
+// the owner's correction arrived in a Texture re-cast while the engineer was
+// bound, and management (run 665fbdcf) said the round stays open and sent no
+// Note, so the candidate kept the stale spec. Failure modes: the overlay does
+// not say to forward a spec change to the bound engineer; it says so but lets
+// management summarize the change; it lets management act on other records
+// first; it reads as applying only once the assignment ends.
+func TestManagementOverlayForwardsASpecChangeToTheBoundEngineer(t *testing.T) {
+	for _, labels := range []bool{false, true} {
+		management := RLMManagementOverlay(RLMManagementOverlayOptions{IntakeLabels: labels})
+		for _, want := range []string{
+			"changes the spec of an implementation assignment that is still open",
+			"owner direction",
+			"choir.Note to the bound engineer (engineering:<assignment>) carrying the change in full",
+			"before anything else",
+			"even while the assignment is bound and running",
+			"never reaches it",
+		} {
+			if !strings.Contains(management, want) {
+				t.Errorf("management overlay (labels %v) lacks %q", labels, want)
+			}
+		}
+	}
+}
