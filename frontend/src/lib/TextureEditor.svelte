@@ -82,6 +82,8 @@
   import './texture-source-flow.css';
   import './texture-published-citations.css';
   import './texture-related-stories.css';
+  import './texture-embeds.css';
+  import { hydrateEmbedIdentity, markEmbedUnresolvable } from './texture-embeds';
   import { opinionLabelHTML, pieceDisclosureHTML } from './texture-ai-disclosure';
 
   export let currentUser = null;
@@ -234,7 +236,15 @@
     if (!editorSurface || (surfaceFocused && !force)) return;
     if (editorSurface.innerHTML !== html) {
       editorSurface.innerHTML = html;
+      // Evidence embeds read their candidate's identity live (station TE).
+      hydrateEmbedIdentity(editorSurface, fetchWithRenewal);
     }
+  }
+
+  // A failed embed image switches its figure to the unresolvable state; the
+  // listener is the component's, so the document runs no script (station TE).
+  function handleEmbedMediaError(event) {
+    markEmbedUnresolvable(event.target);
   }
 
   function normalizeTitle(ctx) {
@@ -2044,6 +2054,7 @@
           aria-label={editorSurfaceAriaLabel}
           spellcheck="false"
           on:pointerdown={handleEditorPointerDown}
+          on:error|capture={handleEmbedMediaError}
           on:click={handleEditorClick}
           on:keydown={handleEditorKeydown}
           on:scroll={handleDocumentScroll}
@@ -2067,6 +2078,7 @@
           spellcheck="true"
           on:focus={handleEditorFocus}
           on:pointerdown={handleEditorPointerDown}
+          on:error|capture={handleEmbedMediaError}
           on:click={handleEditorClick}
           on:keydown={handleEditorKeydown}
           on:input={handleEditorInput}
