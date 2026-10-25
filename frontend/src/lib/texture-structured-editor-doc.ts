@@ -7,6 +7,12 @@ import {
   renderPublishedCitationRef,
   type PublishedCitationContext,
 } from './texture-published-citations';
+import {
+  allBlankOperations,
+  embedProjectionText,
+  renderEmbedBlockHTML,
+  serializeEmbedElement,
+} from './texture-embeds';
 
 export const TEXTURE_DOC_SCHEMA = 'choir.texture_doc.v1';
 
@@ -84,6 +90,8 @@ function serializeInlineNodes(node: any, nextID: (kind: string) => string, marks
     return item ? [item] : [];
   }
   if (!isElement(node)) return [];
+  // An embed's caption is not the owner's text (texture-embeds.ts).
+  if (matches(node, '[data-texture-embed]')) return [];
   if (matches(node, '[data-texture-source-ref]')) {
     const sourceEntityID = getAttr(node, 'data-source-entity-id');
     if (!sourceEntityID) return [];
@@ -115,10 +123,13 @@ function paragraphFromInline(inline: StructuredNode[], nextID: (kind: string) =>
   };
 }
 
-function serializeBlockNode(node: any, nextID: (kind: string) => string): StructuredNode | null {
+function serializeBlockNode(node: any, nextID: (kind: string) => string, existingDoc?: StructuredTextureDoc | null): StructuredNode | null {
   if (!node) return null;
   if (node.nodeType === TEXT_NODE) return paragraphFromInline(serializeInlineNodes(node, nextID), nextID);
   if (!isElement(node)) return null;
+  // An embed is kept by its id from the loaded revision, never built from
+  // the DOM (station TE).
+  if (matches(node, '[data-texture-embed]')) return serializeEmbedElement(node, existingDoc) as StructuredNode | null;
   if (matches(node, '[data-texture-source-flow]') || matches(node, '[data-texture-source-entity]')) return null;
   const tag = elementTag(node);
   if (/^h[1-6]$/.test(tag)) {
@@ -144,8 +155,8 @@ function serializeBlockNode(node: any, nextID: (kind: string) => string): Struct
   }
   if (tag === 'blockquote') {
     const content = childNodes(node)
-      .map((child) => serializeBlockNode(child, nextID))
-      .filter(Boolean) as StructuredNode[];
+      .map((child) => serializeBlockNode(child, nextID, existingDoc))
+      .filter((child) => child && child.type !== 'embed') as StructuredNode[];
     return {
       type: 'blockquote',
       attrs: { id: nextID('blockquote') },
@@ -167,9 +178,18 @@ function serializeBlockNode(node: any, nextID: (kind: string) => string): Struct
 
 export function serializeEditorStructuredDoc(root: any, options: SerializeOptions = {}): StructuredTextureDoc {
   const nextID = nodeIDFactory(options.existingDoc);
-  const content = childNodes(root)
-    .map((node) => serializeBlockNode(node, nextID))
-    .filter(Boolean) as StructuredNode[];
+  const embedIDs = new Set<string>();
+  const content = (childNodes(root)
+    .map((node) => serializeBlockNode(node, nextID, options.existingDoc))
+    .filter(Boolean) as StructuredNode[])
+    // A pasted copy of an embed is not a second piece of evidence.
+    .filter((node) => {
+      if (node.type !== 'embed') return true;
+      const id = String(node.attrs?.id || '');
+      if (embedIDs.has(id)) return false;
+      embedIDs.add(id);
+      return true;
+    });
   return {
     schema: TEXTURE_DOC_SCHEMA,
     doc: {
@@ -187,6 +207,7 @@ function sourceEntityLabel(entity: any, fallback = 'source'): string {
 type RenderContext = {
   sourceEntities: any[];
   citations: PublishedCitationContext | null;
+  allBlank?: Set<string>;
 };
 
 // Paired ** in a text node that carries no marks: bold written before Write
@@ -272,6 +293,8 @@ function renderBlockNode(node: StructuredNode, rc: RenderContext): string {
       return `<pre><code>${escapeHTML((node.content || []).map((item) => item.text || '').join('\n'))}</code></pre>`;
     case 'horizontal_rule':
       return '<hr>';
+    case 'embed':
+      return renderEmbedBlockHTML(node, { allBlank: rc.allBlank });
     default:
       return '';
   }
@@ -284,7 +307,7 @@ export function renderStructuredTextureDocHTML(
 ): string {
   if (!bodyDoc || bodyDoc.schema !== TEXTURE_DOC_SCHEMA || bodyDoc.doc?.type !== 'doc') return '';
   const blocks = Array.isArray(bodyDoc.doc?.content) ? bodyDoc.doc.content : [];
-  const rc: RenderContext = { sourceEntities, citations: options.citations || null };
+  const rc: RenderContext = { sourceEntities, citations: options.citations || null, allBlank: allBlankOperations(blocks) };
   return blocks.map((node: StructuredNode) => renderBlockNode(node, rc)).join('\n');
 }
 
@@ -318,6 +341,8 @@ function projectBlockNode(node: StructuredNode, sourceNumbers: Map<string, numbe
       return `\`\`\`\n${(node.content || []).map((child) => child.text || '').join('\n')}\n\`\`\``;
     case 'horizontal_rule':
       return '---';
+    case 'embed':
+      return embedProjectionText(node);
     default:
       return '';
   }

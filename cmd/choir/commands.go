@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/calibration"
+	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/vocabmigrate"
 )
 
@@ -240,10 +241,10 @@ func buildRegistry() []*command {
 			},
 		},
 		{
-			path: []string{"texture", "read"}, summary: "Read a Texture document's metadata (title, current revision id)",
+			path: []string{"texture", "read"}, summary: "Read a Texture document's metadata (title, current revision id) and its embeds (evidence digests and how to fetch them)",
 			params: []param{pStr("doc_id", "Texture document id").req().one()},
 			scopes: readTexture, readOnly: true,
-			handler: func(x *call) (any, error) { return getRaw(x, "/api/texture/documents/"+esc(x.str("doc_id"))) },
+			handler: textureRead,
 		},
 		{
 			path: []string{"texture", "history"}, summary: "List revision history for a document (metadata only)",
@@ -958,6 +959,84 @@ func textureShow(x *call) (any, error) {
 		Schema: "choir.texture_show.v1", Document: document, Revision: revision,
 		Current: requested == strings.TrimSpace(head.CurrentRevisionID),
 	}, nil
+}
+
+// textureRead returns the document's metadata, and, when its current
+// revision holds embeds, an "embeds" list: one row per embed block with the
+// digest, the candidate and the command that fetches and verifies the bytes
+// (station TE, docs/design/texture-evidence-embeds-te-2026-10-25.md). A
+// document with no embeds reads as before; a revision that cannot be read
+// is named in "embeds_error" and does not fail the read.
+func textureRead(x *call) (any, error) {
+	docID := x.trim("doc_id")
+	var document json.RawMessage
+	if err := x.c.do(http.MethodGet, "/api/texture/documents/"+url.PathEscape(docID), nil, &document); err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(document, &fields); err != nil {
+		return document, nil
+	}
+	var head struct {
+		CurrentRevisionID string `json:"current_revision_id"`
+	}
+	_ = json.Unmarshal(document, &head)
+	revisionID := strings.TrimSpace(head.CurrentRevisionID)
+	if revisionID == "" {
+		return document, nil
+	}
+	var revision struct {
+		DocID   string          `json:"doc_id"`
+		BodyDoc json.RawMessage `json:"body_doc"`
+	}
+	if err := x.c.do(http.MethodGet, "/api/texture/revisions/"+url.PathEscape(revisionID), nil, &revision); err != nil {
+		fields["embeds_error"], _ = json.Marshal("read revision " + revisionID + ": " + err.Error())
+		return fields, nil
+	}
+	if strings.TrimSpace(revision.DocID) != docID {
+		fields["embeds_error"], _ = json.Marshal("revision " + revisionID + " is not a version of this document")
+		return fields, nil
+	}
+	rows := textureEmbedRows(revisionID, revision.BodyDoc)
+	if len(rows) == 0 {
+		return document, nil
+	}
+	fields["embeds"], _ = json.Marshal(rows)
+	return fields, nil
+}
+
+type textureEmbedRow struct {
+	BlockID     string `json:"block_id"`
+	Kind        string `json:"kind"`
+	Digest      string `json:"digest"`
+	OperationID string `json:"operation_id,omitempty"`
+	ComputerID  string `json:"computer_id,omitempty"`
+	Route       string `json:"route,omitempty"`
+	Width       int    `json:"width,omitempty"`
+	Height      int    `json:"height,omitempty"`
+	Blank       bool   `json:"blank"`
+	Caption     string `json:"caption,omitempty"`
+	RevisionID  string `json:"revision_id"`
+	AssetURL    string `json:"asset_url"`
+	Fetch       string `json:"fetch,omitempty"`
+}
+
+func textureEmbedRows(revisionID string, body json.RawMessage) []textureEmbedRow {
+	var doc texturedoc.StructuredTextureDoc
+	if len(body) == 0 || json.Unmarshal(body, &doc) != nil {
+		return nil
+	}
+	var rows []textureEmbedRow
+	for _, e := range texturedoc.Embeds(doc) {
+		row := textureEmbedRow{BlockID: e.ID, Kind: e.Kind, Digest: e.Digest, OperationID: e.OperationID, ComputerID: e.ComputerID,
+			Route: e.Route, Width: e.Width, Height: e.Height, Blank: e.Blank, Caption: e.Caption, RevisionID: revisionID,
+			AssetURL: "/api/assets/sha256/" + e.Digest}
+		if e.Kind == texturedoc.EmbedKindCapsuleEvidence && e.ComputerID != "" && e.OperationID != "" {
+			row.Fetch = "choir self-dev visual --computer " + e.ComputerID + " --operation " + e.OperationID + " --out <dir>"
+		}
+		rows = append(rows, row)
+	}
+	return rows
 }
 
 func selfDevDecide(x *call, decision string) (any, error) {
