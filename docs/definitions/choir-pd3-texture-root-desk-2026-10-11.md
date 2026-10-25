@@ -215,12 +215,11 @@ boundaries:
 now:
   status: working
   slice: >-
-    S1: the master document (ensure step, texture_root marker, standing
-    item), the root prompt section, the texture_root_digest occurrence and
-    its dispatch, behind texture.root_desk. Design accepted by re-review 246
-    (after 244 and 245 sent it back); the metamission's live station.
-  source_ref: c59e289ca
-  deploy_identity: staging 6113c82cd
+    S2: each sub-RLM's wake context carries the master document (at most
+    4 KiB, "waits on the owner" first), behind the same switch; tier 1.
+    S1 is live on b@c (receipt S1 below).
+  source_ref: 7f769cc34
+  deploy_identity: staging 7f769cc34 (S1; deployed 11:26 UTC 2026-10-25)
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
   conjecture:
     id: PD3-1
@@ -254,23 +253,40 @@ now:
     evidence_ref: this file, Design (2026-10-25)
     owner_ratification_ref: direction ratified 2026-10-11 and 2026-10-25; this mechanism choice is FP0's conservative default under No Blocking Asks and is flagged for the owner
   belief:
-    believed_state: per-document Texture agents with no root and no master document; PD2 and hold_trajectory give each texture:<doc> continuity
+    believed_state: >-
+      S1 is live on b@c: the master document exists (ef0e2ef8), its only
+      writer is its own Texture desk, it covers every open work item on the
+      computer, and a cancelled document run does not stop the root or the
+      other documents.
     main_uncertainty: >-
-      Whether the root's computer-wide read can stay bounded (today the
-      warm read is per trajectory, store/lifecycle.go:2299-2363), and
-      whether a Texture desk whose document is the master behaves well as
-      a root with only a prompt-section difference.
-    next_observation: >-
-      the read path the root uses: a digest naming the changed documents,
-      read per trajectory for those only, with the bound in Design
-  blocker_or_risk: none
+      Whether a sub-RLM given the master document as context weighs the
+      owner's other open requests (S2's paired test), and whether the
+      root's "what the owner last asked" line misreads rejections as
+      requests (acceptance finding F2).
+    next_observation: S2's paired off/on test on b@c
+  blocker_or_risk: >-
+    A document whose work drains settles and then refuses owner revisions
+    (acceptance F1; the metamission's standing risk); proofs use fresh
+    documents.
   next_action: >-
-    Write S1's failure tests first (refusals both ways, digest interrupted
-    after a markerless boot, settled master replaced, off is inert), then
-    build S1 in a lane on current main; tier 2 review; land; switch on for
-    b@c only; run the acceptance actions.
+    Build S2 in a lane (tests first), tier 1 review, land, run the paired
+    test on b@c.
 
-receipts: []
+receipts:
+  - id: S1
+    status: complete
+    at: 2026-10-25T11:37:37Z
+    source_ref: 7f769cc34
+    ci: "40188211719 success"
+    deploy: "staging 7f769cc34, vmctl 11:26:11 UTC, NRestarts 0"
+    reviews: "247 (tier 2, send_back on B1), 248 (Devin, approve)"
+    acceptance: >-
+      b@c: off inert; master ef0e2ef8 created by the first digest; writer
+      texture:ef0e2ef8 only; coverage 3 of 3 open items; standing item
+      open; isolation (run 9587225f cancelled, C revised, master followed);
+      two root runs 3m20s apart; latency p50 off 16 s, on 10 s. Refusals and
+      crash by test receipt.
+    evidence_ref: docs/evidence/pd3-s1-acceptance-2026-10-25.md
 ---
 
 # PD3 — Texture root desk and master document
