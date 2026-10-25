@@ -93,3 +93,49 @@ func TestEngineeringCastOntoABoundRequestIsRefusedAndTheNoteGoesThrough(t *testi
 		t.Fatalf("a Cast after the assignment ended was refused for it: %v", err)
 	}
 }
+
+// Review bunch 238 A: the store's open is idempotent ("a replayed cell
+// replays the open"), and recoverPartialActCommit re-reduces a cell whose
+// acts half committed, re-deriving the same Cast record. The R5-2 refusal
+// must not pre-empt that replay: the assignment this same Cast opened (same
+// record id, same casting run) is exempt, and any other Cast for the round
+// is still refused. Ways it can fail, written first: the replay is refused
+// as "still bound" (the bug); the exemption keys on the run alone, so a
+// second Cast from the same run is admitted; it keys on the record alone.
+func TestEngineeringCastReplayOfTheSameCellIsNotRefused(t *testing.T) {
+	rt, s, _ := c1eRuntime(t)
+	ctx := context.Background()
+	seed, err := store.SeedEngineeringAssignmentAuthorityForDocument(s, "owner-r5-2-replay", rt.TextureComputerID(), "reader", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := c1eManagementRun(t, s, seed)
+	in := yaegikernel.StagedIntent{LocalID: "cast-eng", Kind: yaegikernel.IntentCast, ToDesk: agentprofile.Engineering,
+		Objective: "repair the Reader", Statement: `{"parent":"` + seed.TextureCastID + `"}`}
+	const cell = "r5-2-replay-cell"
+	reduction, cellCtx := c1eManagementReduction(rt, seed, run, cell)
+
+	// The first commit of the cell opened the assignment (as
+	// openDelegatedCastAssignment does: the Cast record id is the cell's).
+	recordID := commitmentRecordForIntent(reduction.scope, in).RecordID
+	open := store.SeedEngineeringOpenRequest(seed, 0, "cap-r5-2-replay")
+	open.Binding.ParentControlID, open.Binding.ParentRunID = recordID, run.RunID
+	open.Records.Records = []types.CommitmentRecord{store.EngineeringCastRecord(recordID, seed.ParentAgentID, open.AssignmentID, seed.TextureCastID, "repair the Reader")}
+	open.Records.CommandDigest, _ = store.ComputeCommitInboxRecordsDigest(open.Records)
+	open.CommandDigest, _ = store.ComputeOpenEngineeringAssignmentDigest(open)
+	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
+		t.Fatalf("first commit's open: %v", err)
+	}
+
+	// The replay of the same cell passes the R5-2 check (it reaches the
+	// source preflight, which off a Linux guest is unavailable; on the guest
+	// the store replays the open).
+	if err := reduction.commitTray(cellCtx, []yaegikernel.StagedIntent{in}, 1); err != nil && strings.Contains(err.Error(), "no second assignment opens") {
+		t.Fatalf("the replay of the cell that opened the assignment was refused: %v", err)
+	}
+	// Another cell of the same run is a second Cast, and is refused.
+	other, otherCtx := c1eManagementReduction(rt, seed, run, "r5-2-replay-other")
+	if err := other.commitTray(otherCtx, []yaegikernel.StagedIntent{in}, 1); err == nil || !strings.Contains(err.Error(), "no second assignment opens") {
+		t.Fatalf("a second Cast from the same run: err = %v", err)
+	}
+}

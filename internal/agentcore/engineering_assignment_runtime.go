@@ -213,7 +213,11 @@ func (rt *Runtime) planEngineeringCast(ctx context.Context, scope ReductionScope
 	// re-cast into the same round (a correction, "continue the repair") is
 	// for the bound engineer, as a Note (P1); a second assignment would
 	// start from the base beside it.
-	if err := rt.refuseCastOntoOpenAssignment(ctx, ownerID, computerID, parent.ConversationID, parent.Round); err != nil {
+	// The store replays an open for a replayed cell (recoverPartialActCommit
+	// re-derives the same Cast record), so the assignment this same Cast
+	// opened is not a second one.
+	recordID := commitmentRecordForIntent(scope, in).RecordID
+	if err := rt.refuseCastOntoOpenAssignment(ctx, ownerID, computerID, parent.ConversationID, parent.Round, recordID, caster.RunID); err != nil {
 		return engineeringCastPlan{}, err
 	}
 	docID := strings.TrimPrefix(parent.SenderInbox, agentprofile.Texture+":")
@@ -228,7 +232,6 @@ func (rt *Runtime) planEngineeringCast(ctx context.Context, scope ReductionScope
 	if rt.capsuleExecutor == nil {
 		return engineeringCastPlan{}, fmt.Errorf("engineering cast: capsule authority unavailable")
 	}
-	recordID := commitmentRecordForIntent(scope, in).RecordID
 	assignmentID := "assignment-" + computerevent.DigestBytes([]byte(strings.Join([]string{
 		vocabmigrate.IdentitySeedDelegatedCastRequestV1, ownerID, computerID, trajectoryID, recordID,
 	}, "\x00")))[:24]
@@ -296,14 +299,16 @@ func (rt *Runtime) planEngineeringCast(ctx context.Context, scope ReductionScope
 
 // refuseCastOntoOpenAssignment refuses an engineering Cast for a Texture
 // round that already has a non-terminal assignment, and names the bound
-// engineer's inbox to Note instead.
-func (rt *Runtime) refuseCastOntoOpenAssignment(ctx context.Context, ownerID, computerID, conversation string, round int) error {
+// engineer's inbox to Note instead. The assignment opened by this same Cast
+// (castRecordID from casterRunID) is its replay, not a second assignment.
+func (rt *Runtime) refuseCastOntoOpenAssignment(ctx context.Context, ownerID, computerID, conversation string, round int, castRecordID, casterRunID string) error {
 	children, err := rt.store.ListEngineeringAssignmentsByParentRound(ctx, ownerID, computerID, conversation, round)
 	if err != nil {
 		return fmt.Errorf("engineering cast: assignments of round %d of %s: %w", round, conversation, err)
 	}
 	for _, child := range children {
-		if child.Disposition.Terminal() {
+		if child.Disposition.Terminal() ||
+			(child.Binding.ParentControlID == castRecordID && child.Binding.ParentRunID == strings.TrimSpace(casterRunID)) {
 			continue
 		}
 		inbox := strings.TrimSpace(child.Binding.AssignedAgentID)
