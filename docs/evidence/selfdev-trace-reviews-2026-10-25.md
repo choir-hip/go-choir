@@ -228,3 +228,15 @@ Both engineers: hf:deepseek-ai/DeepSeek-V4.1-Flash-1017, provider synthetic, eff
 4. Reader evidence: ship a signed-out Reader fixture route (a sample PDF opened without sign-in) and require its capture; `/reader.html` shows only a sign-in modal.
 5. Give the engineer the base bytes (or a base-only mount) so "restore from base commit" is executable; the workspace is not a git repo.
 6. Deliver the carried tree already applied (and say which candidate and its deletions); the engineer lost a cell on the wrong cwd.
+
+## Clustering assessment after rounds 1 and 2 (2026-10-25 03:3x, FP0)
+
+Nine problems in the self-development loop in one night, so per CLAUDE.md (Root Cause Clustering) the next fixes are classified before more patches land.
+
+**Cluster A: a desk acts on a partial projection of the state it is told to obey.** Texture builds its run prompt from the newest revision's metadata only, so one Texture revision after an owner revise the owner's direction vanishes (finding, lane fp0-texture-spec). The completion-guard reminder does not show the committed Complete's result, so the engineer could not see why partial did not count (finding). Management cast a follow-up from a Texture cast record before reading the engineer's answer (finding). The engineer did not see its activation budget (fixed, 091d10411). The common substrate is that each desk's context surface is a hand-built projection of the commitment ledger, and each projection drops a different field. A substrate fix is one ledger-derived "current obligations" projection (the latest owner directions in order, the open assignment and its last committed fate, open questions and their answers, the budget) that every desk prompt renders, instead of each prompt picking metadata keys. Not built; the three lane fixes are the symptom-level repairs for tonight, and each is behind a switch or is prompt text.
+
+**Cluster B: a round that ends without a terminal fate discards its work.** The budget cancel threw away an unfrozen tree (round 1); the guard exhaustion closed a frozen, evidenced candidate as failed (round 2). Same substrate: the fate path treats "not completed" as "nothing to keep". Lanes fp0-carry-cancelled (keep the unfrozen tree) and fp0-partial-trap (refuse a partial Complete after a Freeze) close both entries; the residual question (should guard exhaustion with a frozen candidate close completed) is held for a red decision.
+
+**Not clustered:** the capture's /auth/session 503 (a harness bug, fixed); the alias clash between the Reader and the old apps (a spec gap, resolved in the brief); no git base in the capsule; the carried tree arriving unapplied.
+
+**Next substrate step (proposed, not started):** design the ledger-derived current-obligations projection as the one input every desk prompt renders (docs/design, Opus, reviewed as an architectural design), after tonight's three symptom fixes land and their staging proof shows which fields matter.
