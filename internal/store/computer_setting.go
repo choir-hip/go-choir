@@ -136,6 +136,16 @@ const SettingEngineeringSlotsGraph = "engineering.slots_graph"
 // and offers none of the kept ones, and is the rollback.
 const SettingEngineeringCarryUnfinished = "engineering.carry_unfinished"
 
+// SettingTextureOwnerDirections gives every Texture turn the owner's later
+// directions (the owner_prompt of each earlier owner revision on the head's
+// parent chain, oldest first), ranked above the original request
+// (docs/design/texture-spec-follows-owner-2026-10-25.md). Without it the turn
+// reads owner intent from the head revision only, so one Texture revision
+// after an owner revise drops the direction and the original seed stands
+// alone. Read at each Texture run start. Off by default; off is the
+// rollback: the turn is byte-identical to before.
+const SettingTextureOwnerDirections = "texture.owner_directions"
+
 // KnownComputerSettings are the settings a computer has, with their
 // defaults. A key outside this list is refused, so a typo never stores a
 // setting nobody reads.
@@ -155,6 +165,7 @@ var KnownComputerSettings = map[string]bool{
 	SettingEvidenceGraph:                false,
 	SettingEngineeringSlotsGraph:        false,
 	SettingEngineeringCarryUnfinished:   false,
+	SettingTextureOwnerDirections:       false,
 }
 
 // ComputerSetting is one switch's value on one computer.

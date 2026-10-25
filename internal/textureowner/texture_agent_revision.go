@@ -428,6 +428,13 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 		}
 	}
 
+	var ownerDirections []textureOwnerDirection
+	if rt.textureOwnerDirectionsOn(ctx, ownerID, doc.ComputerID) {
+		ownerDirections = collectTextureOwnerDirections(currentRevision, previousRevision, func(revisionID string) (types.Revision, error) {
+			return rt.getTextureRevision(ctx, ownerID, revisionID)
+		})
+	}
+
 	diffSummary := ""
 	if previousRevision != nil {
 		if diff, err := rt.Store.GetDiff(ctx, previousRevision.RevisionID, currentRevision.RevisionID, ownerID); err == nil {
@@ -466,7 +473,7 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 	}
 
 	contextMode := textureAgentRevisionContextMode(currentRevision, previousRevision)
-	agentPrompt := buildAgentRevisionRequest(currentRevision, previousRevision, metadata, req, diffSummary)
+	agentPrompt := buildAgentRevisionRequest(currentRevision, previousRevision, metadata, req, diffSummary, ownerDirections)
 
 	// Create the runtime run with Texture agent revision metadata.
 	// Carry forward durable context keys from the current head revision
@@ -662,7 +669,7 @@ func textureUseFocusedUserEditContext(current types.Revision, previous *types.Re
 // woke and what the owner asked. The document itself and the records past
 // the cursor arrive as the frame turn right after it (Cut 2 2a), so this
 // turn carries no document text, outline or source list.
-func buildAgentRevisionRequest(current types.Revision, previous *types.Revision, metadata map[string]any, req textureAgentRevisionRequest, diffSummary string) string {
+func buildAgentRevisionRequest(current types.Revision, previous *types.Revision, metadata map[string]any, req textureAgentRevisionRequest, diffSummary string, ownerDirections []textureOwnerDirection) string {
 	var b strings.Builder
 	intent := strings.TrimSpace(req.Intent)
 	if intent == "" {
@@ -670,8 +677,15 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 	}
 	b.WriteString("Your document woke you. Intent: " + intent + ". Your frame follows: the document as blocks b1..bN and the records addressed to you.")
 	if seedPrompt := metadataString(metadata, "seed_prompt"); seedPrompt != "" {
-		b.WriteString("\n\nThe owner's request:\n")
+		if len(ownerDirections) > 0 {
+			b.WriteString("\n\nThe owner's original request (the owner's later directions below override it wherever they differ):\n")
+		} else {
+			b.WriteString("\n\nThe owner's request:\n")
+		}
 		b.WriteString(seedPrompt)
+	}
+	if len(ownerDirections) > 0 {
+		writeTextureOwnerDirections(&b, ownerDirections)
 	}
 	if ownerPrompt := metadataString(metadata, "owner_prompt"); ownerPrompt != "" {
 		b.WriteString("\n\nThe owner's direction for this revision:\n")
