@@ -3812,15 +3812,11 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 			if waited, ok := rt.engineeringJobWait(ctx, rec); ok {
 				return waited, nil
 			}
-			instruction := "The turn ended without a committed terminal fate. Finish the assignment inside a capsule_go_eval cell: call choir.Freeze when a self-development bundle is bound, then choir.Complete once with execution_refs — or commit the corresponding terminal failure fate — before ending the turn. Narrative text alone does not end the run."
-			reason := engineeringTerminalFateGuardReason(state.Messages)
-			if reason != engineeringTerminalFateRequired {
-				instruction = "The freeze was refused because another self-development candidate is open. A partial report does not end the assignment: Complete with result failed and the refusal as the reason, in a capsule_go_eval cell, before ending the turn."
-			}
+			reason, instruction := engineeringCompletionGuardReminder(ctx, state.Messages)
 			return toolregistry.ToolLoopCompletionGuardResult{
 				Continue:    true,
 				Reason:      reason,
-				Instruction: withActivationBudget(ctx, instruction),
+				Instruction: instruction,
 			}, nil
 		}))
 	}
@@ -4406,6 +4402,67 @@ func engineeringTerminalFateGuardReason(messages []json.RawMessage) string {
 	}
 	return fmt.Sprintf("%s; the freeze was refused because self-development candidate %s was open (state %s)",
 		engineeringTerminalFateRequired, refused[1], refused[2])
+}
+
+// engineeringCompletionGuardReminder is the completion guard's reason and
+// the reminder the engineer sees, with the activation budget line. When the
+// run committed a Complete that was not terminal (result=partial, the only
+// non-terminal result) the reminder names it: the partial trap engineer
+// re-sent partial three times under a reminder that never said partial is
+// not a fate (docs/evidence/selfdev-trace-reviews-2026-10-25.md, Round 2).
+func engineeringCompletionGuardReminder(ctx context.Context, messages []json.RawMessage) (string, string) {
+	instruction := "The turn ended without a committed terminal fate. Finish the assignment inside a capsule_go_eval cell: call choir.Freeze when a self-development bundle is bound, then choir.Complete once with execution_refs — or commit the corresponding terminal failure fate — before ending the turn. Narrative text alone does not end the run."
+	reason := engineeringTerminalFateGuardReason(messages)
+	switch {
+	case reason != engineeringTerminalFateRequired:
+		instruction = "The freeze was refused because another self-development candidate is open. A partial report does not end the assignment: Complete with result failed and the refusal as the reason, in a capsule_go_eval cell, before ending the turn."
+	case engineeringPartialCompleteCommitted(messages):
+		instruction = "The turn ended without a committed terminal fate. Your Complete was result=partial, which records progress and keeps the assignment open; it is not a terminal fate. End with completed, failed or blocked: in a capsule_go_eval cell, call choir.Freeze when a self-development bundle is bound and not yet frozen, then choir.Complete(result=completed, ...) once with execution_refs, or Complete with result failed or blocked and the reason, before ending the turn. Narrative text alone does not end the run."
+	}
+	return reason, withActivationBudget(ctx, instruction)
+}
+
+// engineeringPartialCompleteCommitted reports whether a cell's top-level
+// result names a committed Complete (staged_intent_ids "rlm:complete:<seq>")
+// that was not terminal. Only partial is non-terminal (commitCompleteIntent).
+// A refused cell is a tool_error string, and cell stdout cannot set the
+// top-level keys.
+func engineeringPartialCompleteCommitted(messages []json.RawMessage) bool {
+	var msg struct {
+		Content json.RawMessage `json:"content"`
+	}
+	var blocks []struct {
+		Type    string `json:"type"`
+		Content string `json:"content"`
+	}
+	for _, raw := range messages {
+		msg.Content = nil
+		if err := json.Unmarshal(raw, &msg); err != nil || len(msg.Content) == 0 {
+			continue
+		}
+		blocks = blocks[:0]
+		if err := json.Unmarshal(msg.Content, &blocks); err != nil {
+			continue
+		}
+		for _, block := range blocks {
+			if block.Type != "tool_result" || block.Content == "" {
+				continue
+			}
+			var cell struct {
+				StagedIntentIDs []string `json:"staged_intent_ids"`
+				FateTerminal    bool     `json:"fate_terminal"`
+			}
+			if json.Unmarshal([]byte(block.Content), &cell) != nil || cell.FateTerminal {
+				continue
+			}
+			for _, id := range cell.StagedIntentIDs {
+				if strings.HasPrefix(id, "rlm:"+yaegikernel.IntentComplete+":") {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // engineeringOverlayTerminalFateCommitted reports whether any persisted
