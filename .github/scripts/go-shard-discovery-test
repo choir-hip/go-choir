@@ -88,6 +88,7 @@ elif os.environ.get('FAIL_EXECUTION'): sys.exit(8)
     base_env = dict(os.environ, PATH=str(fake.parent) + os.pathsep + os.environ['PATH'],
                     GO_CALLS=str(calls), FAKE_TESTS=json.dumps({p: tests_for(p) for p in packages}))
     base_env.pop('QUARANTINE_FILE', None)
+    base_env['SPLIT_PROCS'] = '1'  # the default's coverage is checked with SPLIT_PROCS=2,3 below
     # A login BASH_ENV (the repo's dev shell) re-prepends the real toolchain.
     base_env.pop('BASH_ENV', None)
     base_env.pop('ENV', None)
@@ -297,6 +298,41 @@ elif os.environ.get('FAIL_EXECUTION'): sys.exit(8)
             result, invocations = run(wscript, 8, shard)
             assert result.returncode != 0 and 'go-test-split-weights' in result.stderr, (bad, result.stderr)
             assert not executions(invocations), invocations
+    # SPLIT_PROCS=P: a shard runs its split share as P concurrent go test
+    # processes (the planner deals total*P virtual shards, and a shard takes P
+    # of them), so one serial test binary no longer uses one CPU of four.
+    # Coverage stays exactly once, over every layout CI uses.
+    weights.write_text('@whole 100\n' + heavy)
+    for total in (8, 4):
+        for procs in (2, 3):
+            ran = collections.Counter()
+            for shard in range(total):
+                result, invocations = run(wscript, total, shard, SPLIT_PROCS=str(procs))
+                assert result.returncode == 0, (total, procs, shard, result.stderr)
+                by_name = [c for c in executions(invocations) if '-run' in c]
+                if shard < total - 2:
+                    assert len(by_name) == procs, ('one process per virtual shard', total, procs, shard, by_name)
+                else:
+                    assert len(by_name) <= procs, (total, procs, shard, by_name)
+                for call in by_name:
+                    assert sorted(call_packages(call)) == sorted(SPLIT), call
+                    for n in call[call.index('-run') + 1][2:-2].split('|'):
+                        ran[n] += 1
+            assert all(ran[n] == 1 for n in split_names), (total, procs, {n: ran[n] for n in split_names if ran[n] != 1})
+    # The tracked default is the CI setting.
+    default_env = dict(base_env); default_env.pop('SPLIT_PROCS')
+    calls.write_text('')
+    result = subprocess.run(['bash', wscript, '-race'], env=dict(default_env, TOTAL_SHARDS='8', SHARD_INDEX='0'), capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    assert len([c for c in executions([json.loads(l) for l in calls.read_text().splitlines()]) if '-run' in c]) == 2, 'default SPLIT_PROCS is 2'
+    # A failing process fails the shard, and the others' results still show.
+    result, _ = run(wscript, 8, 0, SPLIT_PROCS='2', FAIL_EXECUTION='1')
+    assert result.returncode != 0, 'a failed process must fail the shard'
+    for bad in ('0', 'x', '-1', '17'):
+        result, invocations = run(wscript, 8, 0, SPLIT_PROCS=bad)
+        assert result.returncode != 0 and 'SPLIT_PROCS' in result.stderr, (bad, result.stderr)
+        assert not executions(invocations), invocations
+
     # No weights file: every name weighs 1 and the plan still covers all.
     weights.unlink()
     for shard in range(8):

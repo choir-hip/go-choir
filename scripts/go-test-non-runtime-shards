@@ -108,7 +108,7 @@ timeout_args=(-timeout=60m)
 # load the two whole-package shards start with). Every shard plans the same
 # deal from the same discovery and weights.
 plan_split() {
-  awk -v shards="$total_shards" -v me="$1" -v wholes="$whole_shards" -v wfile="$weights_list" -v module="$module" '
+  awk -v shards="$2" -v me="$1" -v wholes="$3" -v wfile="$weights_list" -v module="$module" '
     function fail(msg) { printf "%s: %s\n", wfile, msg > "/dev/stderr"; bad = 1; exit 2 }
     BEGIN {
       whole_base = 0
@@ -162,37 +162,33 @@ plan_split() {
     }'
 }
 
-# Prints the split tests of this shard on stdout (the first line is
-# "K <distinct names>"); fails on a discovery failure or an empty discovery.
-split_selection() {
-  local shard_index="$1"
-  shift
+# Lists the split tests once (discovery, a go test -list) into $split_listing;
+# fails on a discovery failure or an empty discovery.
+discover_split() {
   # Match execution's build mode (especially -race) so discovery warms the
   # right cache. Fuzz targets are listed too: -run executes their seeds.
-  local listing
-  if ! listing=$(go test "${split_packages[@]}" "$@" -list '^(Test|Example|Fuzz)'); then
+  if ! split_listing=$(go test "${split_packages[@]}" "$@" -list '^(Test|Example|Fuzz)'); then
     echo "Test discovery failed for split packages: ${split_packages[*]#"${module}/"}" >&2
     return 1
   fi
-  if ! grep -qE '^(Test|Example|Fuzz)' <<<"$listing"; then
+  if ! grep -qE '^(Test|Example|Fuzz)' <<<"$split_listing"; then
     echo "Test discovery found no tests in split packages: ${split_packages[*]#"${module}/"}" >&2
     return 1
   fi
-  plan_split "$shard_index" <<<"$listing"
 }
 
-run_split_shard() {
-  local shard_index="$1"
+# Runs one virtual shard's split tests ($1 label, $2 plan from plan_split).
+run_split_plan() {
+  local label="$1"
   local plan="$2"
   shift 2
   local -a selected=()
   mapfile -t selected < <(tail -n +2 <<<"$plan")
-  [[ -z "$(tail -n +2 <<<"$plan")" ]] && selected=()
   local k="${plan%%$'\n'*}"
   k="${k#K }"
   local regex
   regex="$(IFS='|'; echo "^(${selected[*]})$")"
-  echo "Running ${#selected[@]} of ${k} test names of ${#split_packages[@]} split packages (${split_packages[*]#"${module}/"}) in split shard ${shard_index}/${total_shards}"
+  echo "Running ${#selected[@]} of ${k} test names of ${#split_packages[@]} split packages (${split_packages[*]#"${module}/"}) in ${label}"
   "$(dirname "$0")/go-test-with-timing" -count=1 "${timeout_args[@]}" "${split_packages[@]}" -run "$regex" "$@"
 }
 
@@ -211,10 +207,26 @@ shard_index="$SHARD_INDEX"
 if (( split_mode )); then
   # Every shard takes a weighted share of the split tests; the last
   # whole_shards shards also run their share of the other packages whole.
-  if ! plan=$(split_selection "$shard_index" "$@"); then
-    exit 1
+  # SPLIT_PROCS=P (default 2; 1 restores a single process) runs the share as
+  # P concurrent go test processes: the deal
+  # is made over total_shards*P virtual shards and this shard takes P of them.
+  procs="${SPLIT_PROCS:-2}"
+  if ! [[ "$procs" =~ ^[1-8]$ ]]; then
+    echo "SPLIT_PROCS must be an integer in [1, 8], got: $procs" >&2
+    exit 2
   fi
-  split_count=$(( $(wc -l <<<"$plan") - 1 ))
+  split_listing=""
+  discover_split "$@" || exit 1
+  declare -a plans=()
+  for (( j = 0; j < procs; j++ )); do
+    plan=$(plan_split $(( shard_index * procs + j )) $(( total_shards * procs )) $(( whole_shards * procs )) <<<"$split_listing") || {
+      echo "Weighted deal of split tests failed (${weights_list#./})" >&2
+      exit 1
+    }
+    if [[ -n "$(tail -n +2 <<<"$plan")" ]]; then
+      plans+=("$plan")
+    fi
+  done
   whole_selected=()
   if (( shard_index >= total_shards - whole_shards )); then
     deal_index=$(( shard_index - (total_shards - whole_shards) ))
@@ -224,12 +236,12 @@ if (( split_mode )); then
       fi
     done
   fi
-  if (( split_count == 0 && ${#whole_selected[@]} == 0 )); then
+  if (( ${#plans[@]} == 0 && ${#whole_selected[@]} == 0 )); then
     echo "Nothing selected for shard ${shard_index}/${total_shards}: TOTAL_SHARDS exceeds the split test names and the packages to deal" >&2
     exit 1
   fi
-  if (( split_count == 0 && shard_index < total_shards - whole_shards )); then
-    echo "No split-package tests selected for shard ${shard_index}/${total_shards}: TOTAL_SHARDS exceeds the split test names" >&2
+  if (( ${#plans[@]} < procs && shard_index < total_shards - whole_shards )); then
+    echo "No split-package tests selected for part of shard ${shard_index}/${total_shards} (${#plans[@]} of ${procs} processes): TOTAL_SHARDS*SPLIT_PROCS exceeds the split test names" >&2
     exit 1
   fi
   status=0
@@ -237,8 +249,23 @@ if (( split_mode )); then
     echo "Running ${#whole_selected[@]} of ${#whole_packages[@]} packages whole in shard ${shard_index}/${total_shards}"
     "$(dirname "$0")/go-test-with-timing" -count=1 "${timeout_args[@]}" "${whole_selected[@]}" "$@" || status=1
   fi
-  if (( split_count > 0 )); then
-    run_split_shard "$shard_index" "$plan" "$@" || status=1
+  if (( ${#plans[@]} == 1 )); then
+    run_split_plan "split shard ${shard_index}/${total_shards}" "${plans[0]}" "$@" || status=1
+  elif (( ${#plans[@]} > 1 )); then
+    # Concurrent processes: each writes its own log, printed in order after.
+    logdir="$(mktemp -d)"
+    trap 'rm -rf "$logdir"' EXIT
+    pids=()
+    for idx in "${!plans[@]}"; do
+      ( run_split_plan "split shard ${shard_index}/${total_shards} process $((idx + 1))/${#plans[@]}" "${plans[$idx]}" "$@" ) >"$logdir/$idx.log" 2>&1 &
+      pids+=("$!")
+    done
+    for idx in "${!pids[@]}"; do
+      wait "${pids[$idx]}" || status=1
+      echo "::group::split shard ${shard_index} process $((idx + 1))/${#plans[@]} output"
+      cat "$logdir/$idx.log"
+      echo "::endgroup::"
+    done
   fi
   exit "$status"
 fi
