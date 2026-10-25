@@ -35,10 +35,29 @@ package agentcore
 //  A12. Anything is written outside <updater root>/carried.
 //  A13. The snapshot is taken after the capsule is destroyed (nothing left
 //      to read) instead of before.
+//
+// Tier 2 review (bunch 230, Devin and DeepSeek), written before the fixes:
+//
+//  R1. With the switch turned off after an unfinished offer was recorded,
+//      the replayed offer still mounts the patch or the run context still
+//      names it (off must be the whole rollback; a candidate's offer stays
+//      decided once).
+//  R2. A record's digest that is not 64 lowercase hex becomes a path.
+//  R3. The reconcile takes the snapshot (up to its 45 s bound) while it
+//      holds engineeringAssignmentOpenMu, serializing every open.
+//  R4. A record's Omitted list is unbounded, and an oversized record is
+//      read on every spawn.
+//  R5. The mounted carried.json names no source result for an unfinished
+//      round.
+//  R6. A newer stopped round silently outranks an older frozen candidate:
+//      the notice must name that candidate, its result, and whether the
+//      stopped round started from it.
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -135,7 +154,8 @@ func (f unfinishedFixture) stopByBudget(t *testing.T, bound types.EngineeringAss
 
 func (f unfinishedFixture) offerTo(t *testing.T, retry types.EngineeringAssignment, deriver *fakeCarriedDeriver) carriedPatchOffer {
 	t.Helper()
-	return offerCarriedPatch(context.Background(), carriedPatchDeps{History: storeCarriedHistory{rt: f.rt}, Deriver: deriver, Root: f.root},
+	on := f.rt.carryUnfinishedOn(context.Background(), retry.Binding.OwnerID, retry.Binding.ComputerID)
+	return offerCarriedPatch(context.Background(), carriedPatchDeps{History: storeCarriedHistory{rt: f.rt}, Deriver: deriver, Root: f.root, CarryUnfinished: on},
 		carriedPatchInput{OwnerID: retry.Binding.OwnerID, ComputerID: retry.Binding.ComputerID, TrajectoryID: retry.Binding.TrajectoryID,
 			AssignmentID: retry.AssignmentID, Attempt: retry.Binding.Attempt, RetryBaseRef: retry.Binding.SourceArtifactRef})
 }
@@ -431,5 +451,226 @@ func TestUnfinishedSnapshotWritesOnlyUnderCarried(t *testing.T) {
 		if info, err := os.Stat(path); err != nil || info.Mode().Perm()&0o222 != 0 {
 			t.Fatalf("%s is writable or missing: %v %v", path, info, err)
 		}
+	}
+}
+
+// R1: an unfinished offer recorded while on is absent once the switch is
+// off (no mount, no notice), and back when it is on again; decide-once is
+// unchanged.
+func TestRecordedUnfinishedOfferIsAbsentWhenTheSwitchIsOff(t *testing.T) {
+	f := newUnfinishedRoundFixture(t, testCarriedPatch("a.go"), true)
+	f.open(0)
+	first := f.bind(0)
+	f.stopByBudget(t, first)
+	retry := f.open(1)
+	if offer := f.offerTo(t, retry, &fakeCarriedDeriver{}); offer.Status != carriedOffered || !offer.SourceUnfinished {
+		t.Fatalf("fixture: offer = %+v", offer)
+	}
+	rec := &types.RunRecord{OwnerID: retry.Binding.OwnerID, ComputerID: retry.Binding.ComputerID, Metadata: map[string]any{
+		"assignment_kind": string(types.EngineeringAssignmentImplementation), "assignment_id": retry.AssignmentID, "assignment_attempt": int(retry.Binding.Attempt)}}
+	if f.rt.carriedPatchNoticeForRun(rec) == "" {
+		t.Fatal("fixture: no notice with the switch on")
+	}
+
+	setCarryUnfinished(t, f.admissionFixture, false)
+	if offer := f.offerTo(t, retry, &fakeCarriedDeriver{}); offer.Status != "" || carriedPatchDirForSpawn(offer) != "" {
+		t.Fatalf("with the switch off the recorded unfinished offer replayed: %+v", offer)
+	}
+	if notice := f.rt.carriedPatchNoticeForRun(rec); notice != "" {
+		t.Fatalf("with the switch off the run context still says:\n%s", notice)
+	}
+
+	setCarryUnfinished(t, f.admissionFixture, true)
+	if offer := f.offerTo(t, retry, &fakeCarriedDeriver{}); offer.Status != carriedOffered {
+		t.Fatalf("switched back on, the recorded decision is %+v", offer)
+	}
+}
+
+// R2: a digest that is not lowercase hex is never a path.
+func TestUnfinishedDigestMustBeLowercaseHex(t *testing.T) {
+	root := t.TempDir()
+	bad := strings.Repeat("../", 21) + "a"
+	if len(bad) != 64 {
+		t.Fatalf("fixture: %d", len(bad))
+	}
+	for _, sha := range []string{bad, strings.Repeat("AB", 32), strings.Repeat("g", 64)} {
+		if _, err := loadUnfinishedPatch(root, sha); err == nil {
+			t.Fatalf("loadUnfinishedPatch accepted %q", sha)
+		}
+		record := unfinishedRound{Schema: carriedUnfinishedSchema, PatchSHA256: sha, TrajectoryID: "traj", AssignmentID: "a", Attempt: 1}
+		raw, _ := json.Marshal(record)
+		path := unfinishedRecordPath(root, "traj", "a-"+sha[:3], 1)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, raw, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if rounds := readUnfinishedRounds(root, "traj"); len(rounds) != 0 {
+		t.Fatalf("records with a non-hex digest were read: %+v", rounds)
+	}
+	for _, name := range []string{"", ".", ".."} {
+		if unfinishedNameOK(name) {
+			t.Fatalf("%q is a usable record name", name)
+		}
+	}
+}
+
+// lockProbeCapsule is a snapshotCapsule that records whether
+// engineeringAssignmentOpenMu was held while it snapshotted.
+type lockProbeCapsule struct {
+	*snapshotCapsule
+	rt           *Runtime
+	heldDuringIt []bool
+}
+
+func (c *lockProbeCapsule) SnapshotUnfinishedSourcePatch(ctx context.Context, id string) (capsule.CarriedPatch, error) {
+	free := c.rt.engineeringAssignmentOpenMu.TryLock()
+	if free {
+		c.rt.engineeringAssignmentOpenMu.Unlock()
+	}
+	c.heldDuringIt = append(c.heldDuringIt, !free)
+	return c.snapshotCapsule.SnapshotUnfinishedSourcePatch(ctx, id)
+}
+
+// R3: a round whose run ended is kept by the reconcile before it takes the
+// saga mutex, and the revoke under the mutex then destroys it.
+func TestReconcileKeepsAStoppedRoundOutsideTheOpenMutex(t *testing.T) {
+	f := newUnfinishedRoundFixture(t, testCarriedPatch("a.go"), true)
+	probe := &lockProbeCapsule{snapshotCapsule: f.caps, rt: f.rt}
+	f.rt.assignmentRuntime = probe
+	f.open(0)
+	bound := f.bind(0)
+	ctx := context.Background()
+	run, err := f.s.GetLifecycleRun(ctx, bound.Binding.OwnerID, bound.Binding.ComputerID, bound.BoundRunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	run.State, run.Error, run.FinishedAt = types.RunFailed, "context deadline exceeded", &now
+	if err := f.rt.terminalizeRunCanonical(ctx, &run, "context deadline exceeded"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.rt.ReconcileEngineeringAssignmentsForTrajectory(ctx, bound.Binding.OwnerID, bound.Binding.ComputerID, bound.Binding.TrajectoryID); err != nil {
+		t.Fatal(err)
+	}
+	if len(probe.heldDuringIt) != 1 || probe.heldDuringIt[0] {
+		t.Fatalf("snapshots %v (held the open mutex: %v); want one, outside the mutex", f.caps.snapshots, probe.heldDuringIt)
+	}
+	if !f.caps.destroyed[bound.Binding.CapsuleID] || len(f.caps.afterDestroyed) != 0 {
+		t.Fatalf("destroyed %v, snapshot after destroy %v", f.caps.destroyed, f.caps.afterDestroyed)
+	}
+	rounds := readUnfinishedRounds(f.root, bound.Binding.TrajectoryID)
+	if len(rounds) != 1 || !strings.Contains(rounds[0].Reason, "context deadline exceeded") {
+		t.Fatalf("kept = %+v", rounds)
+	}
+	if got := f.get(0); got.Disposition != types.EngineeringAssignmentCancelled {
+		t.Fatalf("the reconcile left the round %s", got.Disposition)
+	}
+
+	// A live round (its run still pending) is not frozen by the pre-pass.
+	g := newUnfinishedRoundFixture(t, testCarriedPatch("a.go"), true)
+	g.open(0)
+	live := g.bind(0)
+	g.rt.keepStoppedRoundsBeforeReconcile(ctx, live.Binding.OwnerID, live.Binding.ComputerID, live.Binding.TrajectoryID)
+	if len(g.caps.snapshots) != 0 {
+		t.Fatalf("the pre-pass snapshotted a live round: %v", g.caps.snapshots)
+	}
+}
+
+// R4: the record's Omitted list is capped, and an oversized record is
+// skipped.
+func TestUnfinishedRecordIsBounded(t *testing.T) {
+	patch := testCarriedPatch("a.go")
+	for i := 0; i < 5000; i++ {
+		patch.Omitted = append(patch.Omitted, fmt.Sprintf("frontend/secrets/%04d/.env (secret-bearing path)", i))
+	}
+	f := newUnfinishedRoundFixture(t, patch, true)
+	f.open(0)
+	bound := f.bind(0)
+	f.stopByBudget(t, bound)
+	rounds := readUnfinishedRounds(f.root, bound.Binding.TrajectoryID)
+	if len(rounds) != 1 {
+		t.Fatalf("kept = %d", len(rounds))
+	}
+	omitted := rounds[0].Omitted
+	size := 0
+	for _, entry := range omitted {
+		size += len(entry)
+	}
+	if len(omitted) > unfinishedOmittedMaxEntries+1 || size > unfinishedOmittedMaxBytes+64 || !strings.Contains(omitted[len(omitted)-1], "more") {
+		t.Fatalf("omitted kept %d entries, %d bytes, last %q", len(omitted), size, omitted[len(omitted)-1])
+	}
+
+	huge := unfinishedRound{Schema: carriedUnfinishedSchema, PatchSHA256: strings.Repeat("cd", 32), TrajectoryID: bound.Binding.TrajectoryID,
+		AssignmentID: "huge", Attempt: 1, Omitted: patch.Omitted}
+	raw, _ := json.Marshal(huge)
+	if len(raw) <= unfinishedRecordMaxBytes {
+		t.Fatalf("fixture: record is only %d bytes", len(raw))
+	}
+	if err := os.WriteFile(unfinishedRecordPath(f.root, bound.Binding.TrajectoryID, "huge", 1), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if rounds := readUnfinishedRounds(f.root, bound.Binding.TrajectoryID); len(rounds) != 1 {
+		t.Fatalf("an oversized record was read: %d rounds", len(rounds))
+	}
+}
+
+// R5: carried.json names the unfinished round as such.
+func TestStagedUnfinishedFactsNameTheResult(t *testing.T) {
+	f := newUnfinishedRoundFixture(t, testCarriedPatch("a.go"), true)
+	f.open(0)
+	f.stopByBudget(t, f.bind(0))
+	offer := f.offerTo(t, f.open(1), &fakeCarriedDeriver{})
+	raw, err := os.ReadFile(filepath.Join(carriedPatchDirForSpawn(offer), "carried.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var facts carriedPatchFacts
+	if err := json.Unmarshal(raw, &facts); err != nil {
+		t.Fatal(err)
+	}
+	if !facts.Unfinished || facts.SourceResult != carriedUnfinishedResult {
+		t.Fatalf("facts = %+v; want unfinished with result %q", facts, carriedUnfinishedResult)
+	}
+}
+
+// R6: the notice names an older frozen candidate the newer stopped round
+// outranked, its result, and whether the stopped round started from it.
+func TestUnfinishedOfferNamesTheOlderFrozenCandidate(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "updater")
+	patch := testCarriedPatch("packages/reader/reader.go")
+	stopped := types.EngineeringAssignment{AssignmentID: "round-2", Disposition: types.EngineeringAssignmentCancelled,
+		Binding: types.EngineeringAssignmentBinding{TrajectoryID: "traj", Attempt: 1, Kind: types.EngineeringAssignmentImplementation, CapsuleID: "c2", SourceArtifactRef: baseA}}
+	if err := keepUnfinishedRound(context.Background(), newSnapshotCapsule(patch), root, stopped, "activation budget exceeded", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	frozen := finishedRound("round-1", "capsule-subject:sha256:c1", baseA, selfdev.StateRejected, "the Reader stays on Loading", 2*time.Hour)
+	kept := carriedCandidate{CandidateID: "unfinished:round-2", CandidateRef: carriedUnfinishedRefPrefix + patch.SHA256, AssignmentID: "round-2", Attempt: 1,
+		BaseRef: baseA, Kind: types.EngineeringAssignmentImplementation, CreatedAt: time.Date(2026, 10, 20, 18, 0, 0, 0, time.UTC), Unfinished: true,
+		UnfinishedReason: "activation budget exceeded"}
+	deps := carriedPatchDeps{History: &fakeCarriedHistory{entries: []carriedCandidate{frozen, kept}}, Deriver: &fakeCarriedDeriver{}, Root: root, CarryUnfinished: true}
+
+	// The stopped round was not offered the candidate.
+	offer := offerCarriedPatch(context.Background(), deps, carriedInput(baseA))
+	if offer.Status != carriedOffered || !offer.SourceUnfinished || offer.OlderFrozenCandidateID != "candidate-round-1" || offer.OlderFrozenStartedFrom {
+		t.Fatalf("offer = %+v", offer)
+	}
+	notice := carriedPatchNotice(offer)
+	for _, want := range []string{"candidate-round-1", "assignment round-1", "rejected", "newest", "did not start from it"} {
+		if !strings.Contains(notice, want) {
+			t.Fatalf("notice does not say %q:\n%s", want, notice)
+		}
+	}
+
+	// The stopped round was offered it: the notice says the patch may hold it.
+	writeCarriedOffer(root, carriedPatchOffer{Schema: carriedOfferSchema, AssignmentID: "round-2", Attempt: 1, Status: carriedOffered,
+		CandidateID: "candidate-round-1", PatchSHA256: strings.Repeat("ef", 32)})
+	in := carriedInput(baseA)
+	in.AssignmentID = "assignment-retry-2"
+	offer = offerCarriedPatch(context.Background(), deps, in)
+	if !offer.OlderFrozenStartedFrom || !strings.Contains(carriedPatchNotice(offer), "was offered that candidate") {
+		t.Fatalf("offer = %+v\n%s", offer, carriedPatchNotice(offer))
 	}
 }

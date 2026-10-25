@@ -523,6 +523,12 @@ func (rt *Runtime) reconcileEngineeringAssignmentsForTrajectory(ctx context.Cont
 	if rt == nil || rt.store == nil || rt.assignedCapsule() == nil {
 		return nil
 	}
+	if !crashBoot {
+		// Stopped rounds' work is kept before the saga mutex (a snapshot
+		// may take up to unfinishedSnapshotTimeout); the revokes below then
+		// keep nothing under it. A crash boot has no capsule to read.
+		rt.keepStoppedRoundsBeforeReconcile(ctx, ownerID, computerID, trajectoryID)
+	}
 	// The same saga mutex guards the open/spawn/bind critical section: an
 	// assignment committed by the durable open is legitimately Open+Unbound
 	// while its saga spawns — without the lock this reconciler would reap a
@@ -561,7 +567,7 @@ func (rt *Runtime) reconcileEngineeringAssignmentsForTrajectory(ctx context.Cont
 			// fails the SetEngineeringCapsuleDisposition guard (BoundRunID empty
 			// on a non-open assignment) and aborts the whole trajectory.
 			if assignment.CapsuleDisposition != types.EngineeringCapsuleRevoked && assignment.CapsuleDisposition != types.EngineeringCapsuleUnbound {
-				if _, fateErr := rt.revokeStoppedAssignedCapsule(ctx, assignment, "restart terminal assignment fate reconciliation"); fateErr != nil {
+				if _, fateErr := rt.revokeAssignedCapsule(ctx, assignment, "restart terminal assignment fate reconciliation"); fateErr != nil {
 					return fateErr
 				}
 			}
@@ -696,7 +702,7 @@ func (rt *Runtime) reconcileEngineeringAssignmentsForTrajectory(ctx context.Cont
 		if usable {
 			continue
 		}
-		assignment, err = rt.revokeStoppedAssignedCapsule(ctx, assignment, "restart executor binding reconciliation")
+		assignment, err = rt.revokeAssignedCapsule(ctx, assignment, "restart executor binding reconciliation")
 		if err != nil {
 			return err
 		}
