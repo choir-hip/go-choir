@@ -897,7 +897,12 @@ func (rt *Runtime) recordAssignedEngineeringReportOnce(ctx context.Context, rec 
 	if reportErr != nil && !errors.Is(reportErr, store.ErrNotFound) {
 		return types.EngineeringAssignmentCommandResult{}, reportErr
 	}
-	if reportExists {
+	// A partial report carries no proposition digest: its ReportID derives
+	// from the call identity (for a cell, a hash of the Complete's content),
+	// so a stored partial under that ID is this same command re-sent, and it
+	// replays below. Recomputing a terminal digest for it always conflicted
+	// (the partial trap, docs/evidence/selfdev-trace-reviews-2026-10-25.md).
+	if reportExists && (terminal || storedReport.Result != types.EngineeringResultPartial) {
 		// The derived ReportID already binds the digest; a stored row with a
 		// different digest is a defensive conflict (legacy rows without the
 		// field recompute best-effort from the pinned belief and can only

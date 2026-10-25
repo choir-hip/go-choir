@@ -810,6 +810,11 @@ func (r *rlmCallReduction) commit(ctx context.Context, intents []yaegikernel.Sta
 			return err
 		}
 	}
+	if r.toolCtx != nil && r.rec != nil {
+		if err := refusePartialCompleteAfterFreeze(ctx, r.toolCtx.OperationStore, r.toolCtx.ComputerID, metadataStringValue(r.rec.Metadata, "assignment_id"), intents); err != nil {
+			return err
+		}
+	}
 	highWater := r.highWater
 	if highWater < r.scope.Cursor {
 		highWater = r.scope.Cursor
@@ -850,6 +855,53 @@ func refuseCompleteWhileJobRuns(jobs capsuleJobTable, runID string, intents []ya
 		}
 	}
 	return nil
+}
+
+// partialAfterFreezeRefusal is the refusal of a partial Complete once the
+// assignment froze a candidate.
+const partialAfterFreezeRefusal = "You froze a candidate; partial keeps the assignment open and the candidate cannot be verified. " +
+	"End with Complete(result=completed, ...) to submit it, or failed/blocked with the reason."
+
+// refusePartialCompleteAfterFreeze refuses a cell that stages
+// Complete(result="partial") once the assignment's candidate is frozen (or
+// verified), or in the same cell as a Freeze, which commits first. Partial
+// keeps the assignment open; management verifies only a completed
+// assignment's candidate, and a run that ends without a terminal fate is
+// cancelled, which closes the frozen candidate as failed (the partial trap,
+// docs/evidence/selfdev-trace-reviews-2026-10-25.md, Round 2). A partial
+// before any freeze keeps its meaning. Like the running-job refusal it runs
+// before any side effect, so the refused cell leaves no fate, report,
+// cursor advance or envelope.
+func refusePartialCompleteAfterFreeze(ctx context.Context, operations *selfdev.Store, computerID, assignmentID string, intents []yaegikernel.StagedIntent) error {
+	var partial *yaegikernel.StagedIntent
+	freezes := false
+	for i := range intents {
+		switch {
+		case intents[i].Kind == yaegikernel.IntentFreeze:
+			freezes = true
+		case intents[i].Kind == yaegikernel.IntentComplete && strings.TrimSpace(intents[i].Result) == yaegikernel.CompletePartial:
+			partial = &intents[i]
+		}
+	}
+	if partial == nil {
+		return nil
+	}
+	if freezes {
+		return fmt.Errorf("reduce: complete %s: this cell freezes a candidate; %s", partial.LocalID, partialAfterFreezeRefusal)
+	}
+	if operations == nil || strings.TrimSpace(computerID) == "" || strings.TrimSpace(assignmentID) == "" {
+		return nil
+	}
+	operation, found, err := operations.GetByIdempotency(ctx, computerID, store.EngineeringFreezeIdempotencyKey(assignmentID))
+	if err != nil {
+		// Accepting the partial could strand a frozen candidate; the
+		// refused cell commits nothing, so the model can retry.
+		return fmt.Errorf("reduce: complete %s: read the assignment's candidate: %w", partial.LocalID, err)
+	}
+	if !found || (operation.State != selfdev.StateFrozen && operation.State != selfdev.StateVerified) {
+		return nil
+	}
+	return fmt.Errorf("reduce: complete %s: candidate %s is %s; %s", partial.LocalID, operation.OperationID, operation.State, partialAfterFreezeRefusal)
 }
 
 // abort records a terminal cell disposition without touching the staged tray
