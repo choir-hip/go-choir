@@ -321,7 +321,7 @@ func TestNormalizeRoute(t *testing.T) {
 	}
 }
 
-func TestServerServesTheTreeWithAnSPAFallbackAndNoBackend(t *testing.T) {
+func TestServerServesTheTreeWithAnSPAFallbackAndASignedOutBackend(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "assets"), 0o755); err != nil {
 		t.Fatal(err)
@@ -351,7 +351,11 @@ func TestServerServesTheTreeWithAnSPAFallbackAndNoBackend(t *testing.T) {
 		"/assets/app.js":       {200, "app"},
 		"/assets/missing.js":   {404, ""},
 		"/api/runtime/health":  {503, "no backend"},
-		"/auth/session":        {503, "no backend"},
+		// A signed-out session, as the auth service answers one with no
+		// cookie: the app shell leaves Loading for the signed-out desktop.
+		"/auth/session":        {200, `{"authenticated":false}`},
+		"/auth/session?x=1":    {200, `{"authenticated":false}`},
+		"/auth/api-keys":       {401, "not signed in"},
 		"/leak.txt":            {404, ""},
 		"/../../etc/passwd":    {400, ""},
 		"/assets/../index.htm": {404, ""},
