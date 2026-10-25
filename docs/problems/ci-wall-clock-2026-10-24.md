@@ -123,3 +123,31 @@ pull-request run the cache happened to hold the objects.
 
 Hypothesis check still open: the cold cost needs one more run with the warm-up
 (below) to see all shards near 205-300 s.
+
+## Measured after the third candidate (pull-request run 40151633847, 2026-10-25)
+
+Candidate: the second candidate plus the export-data warm-up in the
+background on every split-mode shard, run on a cold lane cache. Created to
+the last test job 523 s; test steps 330-469 s on the non-runtime shards (the
+cold compile ran on every shard); shard 3 failed.
+
+### 9. Two processes per shard and a cold warm-up made two load-sensitive actorruntime tests fail
+
+On shard 3, `internal/actorruntime` TestAdapterStartSerializesTextureOwnerRecoveryBeforeActorDelivery
+(21.6 s) and TestAdapterStartDeliversDurableLifecycleOccurrenceAfterPlannedRestart
+(26.4 s) failed in both processes that ran them, with "Texture activation did
+not start after owner recovery" (adapter_test.go:707) and actor wake latencies
+of 3.9-4.8 s in the log (`waited=3.887s`, `waited=4.77s`). Under 4 CPUs the
+shard was running two go test processes of up to five binaries each, plus the
+cold whole-repo compile of the warm-up. Both tests passed in the baseline and
+in the two earlier pull-request runs, where the shards ran at most one process
+and no cold compile. These tests have a startup deadline that CPU
+oversubscription defeats; the shard planner cannot see it. It is the "store
+now shares the runner" risk the 2026-10-22 note listed, now seen.
+
+Disposition: a gate that flakes is worse than a gate that is a minute slower.
+The tracked default goes back to one process per shard (`SPLIT_PROCS=1`; the
+knob and its test stay), and the background warm-up runs at the lowest CPU
+priority so a cold cache cannot starve the tests. Whether the actorruntime
+tests need a wider deadline or the scale quarantine is a separate question for
+the tests' owner; they were not changed here.
