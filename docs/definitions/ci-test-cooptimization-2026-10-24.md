@@ -118,27 +118,25 @@ boundaries:
     Devin seat.
 
 now:
-  status: working
-  slice: C1 and C2
-  candidate: {id: none, state: none}
+  status: waiting_for_FP0
+  slice: C1-C6 done as far as the worker can take them (C2 candidate 5 measured, C3 code off, C4 and C6 proposals, C5 manifest with no removals)
+  candidate: {id: ci0-c2-e, state: proven on draft PR #104 run 40153944994 (all green, check done 504 s), not landed}
   conjecture:
     id: CI0-C2
-    claim: one or a few tests dominate non-runtime shard 1; splitting or speeding them makes the race-shard maximum about 9 min and push-to-deploy about 11 min, bound by the Node B prebuild
-    test: per-test Elapsed in shard 1's go test -json log against its siblings, then a draft pull-request run of the fix
+    claim: with the shard maximum near 7 min the deploy is bound by the Node B prebuild (about 9.3 min plus 1.5 min deploy)
+    test: pull-request run test steps per shard, then the median of five main pushes after landing
     edge: missing_oracle
-    delta_o: per-test timing from the CI logs
-    scope_if_supported: today's critical path; C3 and C4 take the deploy path below the prebuild floor
-    status: proposed
+    delta_o: per-test Elapsed and whole-machine CPU use from the PR run logs
+    scope_if_supported: C4 (incremental Go build) and C3 (prove once) are what take the deploy below 10 min
+    status: supported on the pull-request side (504 s created to check vs 18.3 min baseline); the main-push median awaits landing
   belief:
     believed_state: >-
-      the wall clock is three serial things: the outlier shard (about 8 min
-      over its siblings), the Node B build that is next behind it (7 min),
-      and on main a second run of tests that a pre-land run could already
-      have proved; pruning tests mostly saves runner minutes and pull-request
-      latency, not deploy wall clock
-    main_uncertainty: what the 7 min Node B build spends its time on, and whether it can be incremental
-    next_observation: shard 1's per-test table; the prebuild log's phase times
-  next_action: C1 measure, C2 split the outlier and fit the cache budget, each on a draft pull request
+      tests are no longer the deploy's critical path once the lane lands and
+      the caches hold the export-data objects; push-to-deploy should be about
+      11 min, prebuild-bound; the cache prune (workflow patch) is unmeasured
+    main_uncertainty: what the 7 min Node B closure build spends (no per-derivation timing exists), and whether the cache prune keeps the Actions cache under 10 GB
+    next_observation: FP0 applies docs/evidence/ci0-workflow-ci-yml.patch to the PR branch, reads the prune lines and gh cache list, then lands; the median of the first five main pushes
+  next_action: FP0 lands the lane (all non-workflow commits are pushable), applies the workflow patch, runs the prebuild timing change in docs/design/ci-node-b-build-2026-10-24.md (P0)
 
 receipts: []
 ---

@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Prune the Go build cache before the job saves it to the Actions cache.
+#
+# The cache is restored by prefix, so it carries every object of every earlier
+# source version, and the save writes them all back: entries grow until Go's
+# own five-day trim, and each push stored about 6.4 GB against a 10 GB
+# repository limit (docs/problems/ci-wall-clock-2026-10-24.md, finding 3).
+#
+# Go marks an object used by touching its mtime when the mtime is more than an
+# hour old. An object this run used therefore has an mtime within an hour
+# before the restore finished, or later. Everything older was not used by this
+# run and is deleted. Nothing is lost that the lane needs: the next run on the
+# same lane compiles the same packages.
+#
+# Usage: ci-prune-go-cache <file written when the restore finished> [cache dir]
+# The cache dir defaults to ~/.cache/go-build. Test seam: GRACE_SECONDS (3900).
+set -euo pipefail
+
+marker="${1:?usage: ci-prune-go-cache <restored-at-file> [cache dir]}"
+dir="${2:-$HOME/.cache/go-build}"
+grace="${GRACE_SECONDS:-3900}"
+
+if [[ ! -f "$marker" ]]; then
+  echo "ci-prune-go-cache: no restore marker at $marker; not pruning" >&2
+  exit 0
+fi
+restored_at="$(<"$marker")"
+if ! [[ "$restored_at" =~ ^[0-9]+$ ]]; then
+  echo "ci-prune-go-cache: bad restore marker in $marker; not pruning" >&2
+  exit 0
+fi
+if [[ ! -d "$dir" ]]; then
+  echo "ci-prune-go-cache: $dir does not exist; nothing to prune"
+  exit 0
+fi
+
+cutoff=$(( restored_at - grace ))
+before_mb="$(du -sm "$dir" | cut -f1)"
+before_files="$(find "$dir" -type f | wc -l)"
+find "$dir" -type f ! -newermt "@${cutoff}" -delete
+after_mb="$(du -sm "$dir" | cut -f1)"
+after_files="$(find "$dir" -type f | wc -l)"
+echo "ci-prune-go-cache: ${dir}: ${before_mb} MB / ${before_files} files -> ${after_mb} MB / ${after_files} files (kept mtime >= restore - ${grace}s)"

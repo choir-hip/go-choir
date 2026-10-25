@@ -25,8 +25,11 @@ import collections, json, os, pathlib, shutil, subprocess, tempfile
 #  13. a sharded run selects nothing (more shards than packages or test
 #      names) and reports a green shard that tested nothing;
 #  14. (docs/problems/ci-wall-clock-2026-10-24.md) heavy tests land on one
-#      split shard because discovery order put them there, or a weights file
-#      line (a stale name, a bad number) drops or repeats a test.
+#      shard because discovery order put them there, whole-package shards get
+#      no weight for their whole packages, or a weights file line (a stale
+#      name, a bad number) drops or repeats a test;
+#  15. a shard that selects nothing at all passes (a split shard with no
+#      names; a whole shard with neither names nor packages).
 MODULE = 'github.com/yusefmosiah/go-choir/'
 RUNTIME = {'internal/agentcore', 'internal/textureowner'}
 
@@ -66,6 +69,9 @@ with open(os.environ['GO_CALLS'], 'a') as f: f.write(json.dumps(args) + '\\n')
 tests = json.loads(os.environ['FAKE_TESTS'])
 module = 'github.com/yusefmosiah/go-choir/'
 def short(p): return p.removeprefix(module).removeprefix('./')
+if args[0] == 'list' and '-export' in args:
+    with open(os.environ['GO_CALLS'] + '.nice', 'a') as f: f.write(str(os.nice(0)) + '\\n')
+    sys.exit(9 if os.environ.get('FAIL_WARM') else 0)
 if args[0] == 'list':
     for p in tests: print(module + p)
     if os.environ.get('FAIL_LIST'): sys.exit(9)
@@ -85,6 +91,7 @@ elif os.environ.get('FAIL_EXECUTION'): sys.exit(8)
     base_env = dict(os.environ, PATH=str(fake.parent) + os.pathsep + os.environ['PATH'],
                     GO_CALLS=str(calls), FAKE_TESTS=json.dumps({p: tests_for(p) for p in packages}))
     base_env.pop('QUARANTINE_FILE', None)
+    base_env['SPLIT_PROCS'] = '1'  # the default is checked below; 2 and 3 are checked explicitly
     # A login BASH_ENV (the repo's dev shell) re-prepends the real toolchain.
     base_env.pop('BASH_ENV', None)
     base_env.pop('ENV', None)
@@ -149,12 +156,14 @@ elif os.environ.get('FAIL_EXECUTION'): sys.exit(8)
             for call in discovery + executions(invocations):
                 assert '-race' in call and '-tags=ci_probe' in call, call
                 assert not set(call_packages(call)) & RUNTIME, ('runtime package in non-runtime shard', call)
-            if total >= 4 and shard < total - 2:
+            if total >= 4:
                 assert len(discovery) == 1, discovery
                 assert sorted(call_packages(discovery[0])) == sorted(SPLIT), discovery
                 assert 'Fuzz' in discovery[0][discovery[0].index('-list') + 1], discovery
             for call in executions(invocations):
                 pkgs = call_packages(call)
+                if total >= 4 and shard < total - 2:
+                    assert '-run' in call, ('a split-only shard runs only by name', shard, call)
                 if '-run' in call:
                     assert sorted(pkgs) == sorted(SPLIT), ('only split packages are run by name', call)
                     names = call[call.index('-run') + 1][2:-2].split('|')
@@ -201,13 +210,23 @@ elif os.environ.get('FAIL_EXECUTION'): sys.exit(8)
     result, invocations = run(script, distinct + 4, distinct + 1)
     assert result.returncode != 0, ('empty split shard must fail', result.stdout)
     assert not executions(invocations), invocations
-    # One whole package for two whole shards: the empty whole shard fails.
+    # One whole package for two whole shards: the second whole shard still
+    # runs its split names; with no split names either, it fails. (A copy
+    # without the weights file: the tracked "@whole" load would keep a
+    # 49-name fixture's split names off the whole shards entirely.)
+    plain = root / 'plain'
+    plain.mkdir()
+    for name in ('go-test-non-runtime-shards', 'go-test-with-timing', 'go-test-split-packages'):
+        shutil.copy2('scripts/' + name, plain / name)
     few = SPLIT + WHOLE[:1] + sorted(RUNTIME)
     few_tests = json.dumps({p: tests_for(p) for p in few})
-    result, invocations = run(script, 8, 7, FAKE_TESTS=few_tests)
-    assert result.returncode != 0, ('empty whole shard must fail', result.stdout)
+    result, invocations = run(str(plain / 'go-test-non-runtime-shards'), 8, 7, FAKE_TESTS=few_tests)
+    assert result.returncode == 0, result.stderr
+    assert all('-run' in c for c in executions(invocations)), invocations
+    result, invocations = run(str(plain / 'go-test-non-runtime-shards'), distinct + 4, distinct + 3, FAKE_TESTS=few_tests)
+    assert result.returncode != 0, ('a shard with no names and no packages must fail', result.stdout)
     assert not executions(invocations), invocations
-    result, _ = run(script, 8, 6, FAKE_TESTS=few_tests)
+    result, _ = run(str(plain / 'go-test-non-runtime-shards'), 8, 6, FAKE_TESTS=few_tests)
     assert result.returncode == 0, result.stderr
     for bad in ('8', '-1', 'x'):
         result, _ = run(script, 8, bad)
@@ -226,47 +245,124 @@ elif os.environ.get('FAIL_EXECUTION'): sys.exit(8)
             assert result.returncode != 0, ('stale split entry must fail closed', stale, shard)
             assert stale.removeprefix('./') in result.stderr, result.stderr
             assert not executions(invocations), invocations
-    # Weights (scripts/go-test-split-weights): the heaviest names go to
-    # different split shards, however discovery orders them. Round-robin
-    # would put TestStoreCase00 and TestStoreCase06 (positions 0 and 6) on
-    # shard 0 together.
+    # Weights (scripts/go-test-split-weights): "<seconds> <package>:<Test>".
+    # A package's tests run serially, packages run side by side, so a shard's
+    # time is its heaviest package's load; the whole-package shards (the last
+    # two) start with the "@whole" seconds their whole packages take.
     weighted = root / 'weighted'
     weighted.mkdir()
     for name in ('go-test-non-runtime-shards', 'go-test-with-timing', 'go-test-split-packages'):
         shutil.copy2('scripts/' + name, weighted / name)
     weights = weighted / 'go-test-split-weights'
     split_names = {n for p in SPLIT for n in tests_for(p)}
+    wscript = str(weighted / 'go-test-non-runtime-shards')
 
-    def shard_of_name(total, weights_text, name):
+    def homes(total, weights_text):
+        """Map each split test name to the shards that run it; asserts the
+        deal covers every name once."""
         weights.write_text(weights_text)
-        homes = []
-        ran = collections.Counter()
-        for shard in range(total - 2):
-            result, invocations = run(str(weighted / 'go-test-non-runtime-shards'), total, shard)
+        where = collections.defaultdict(list)
+        for shard in range(total):
+            result, invocations = run(wscript, total, shard)
             assert result.returncode == 0, (shard, result.stdout, result.stderr)
             for call in executions(invocations):
-                selected = call[call.index('-run') + 1][2:-2].split('|')
-                for n in selected:
-                    ran[n] += 1
-                if name in selected: homes.append(shard)
-        assert all(ran[n] == 1 for n in split_names), ('weights must not drop or repeat a name', {n: ran[n] for n in split_names if ran[n] != 1})
-        return homes
+                if '-run' not in call: continue
+                for n in call[call.index('-run') + 1][2:-2].split('|'):
+                    where[n].append(shard)
+        assert all(len(where[n]) == 1 for n in split_names), ('weights must not drop or repeat a name', {n: where[n] for n in split_names if len(where[n]) != 1})
+        return {n: v[0] for n, v in where.items()}
 
-    text = '# comment\n100 TestStoreCase00\n100 TestStoreCase06\n7 TestNoSuchTest\n'
-    a, b = shard_of_name(8, text, 'TestStoreCase00'), shard_of_name(8, text, 'TestStoreCase06')
-    assert len(a) == 1 and len(b) == 1 and a != b, ('the two heaviest names share a shard', a, b)
+    # Round-robin would put TestStoreCase00 and TestStoreCase06 (positions 0
+    # and 6 of 8 shards would be 0 and 6; of 6 it was 0 and 0) together.
+    heavy = ''.join('100 internal/store:TestStoreCase%02d\n' % i for i in range(6))
+    a = homes(8, '# comment\n@whole 500\n' + heavy + '7 internal/store:TestNoSuchTest\n')
+    got = sorted(a['TestStoreCase%02d' % i] for i in range(6))
+    # Six equal heavy store tests: one each on shards 0-5; the two shards that
+    # also run whole packages (starting at 500 s) take none of them.
+    assert got == [0, 1, 2, 3, 4, 5], ('heavy store tests must spread over the split-only shards', got)
     # Same inputs, same plan (every shard plans independently).
-    assert shard_of_name(8, text, 'TestStoreCase00') == a
-    # A bad weight fails every split shard, running nothing.
-    for bad in ('x TestStoreCase00\n', '-3 TestStoreCase00\n', '5\n'):
+    assert homes(8, '# comment\n@whole 500\n' + heavy + '7 internal/store:TestNoSuchTest\n') == a
+    # Without the whole-shard load the heavy tests spread over all eight.
+    b = homes(8, heavy + '100 internal/store:TestStoreCase06\n100 internal/store:TestStoreCase07\n')
+    assert len({b['TestStoreCase%02d' % i] for i in range(8)}) == 8, b
+    # Another package's weight does not count against store's: platform's
+    # heavy tests run beside store's, not behind them.
+    mixed = ''.join('100 internal/store:TestStoreCase%02d\n' % i for i in range(6)) + \
+            ''.join('100 internal/platform:TestPlatformCase%02d\n' % i for i in range(6))
+    c = homes(6, mixed)
+    for shard in range(6):
+        store = [i for i in range(6) if c['TestStoreCase%02d' % i] == shard]
+        assert len(store) == 1, ('one heavy store test per shard', shard, c)
+    # Bad lines fail every shard, running nothing.
+    for bad in ('x internal/store:TestStoreCase00\n', '-3 internal/store:TestStoreCase00\n', '5\n',
+                '5 TestStoreCase00\n', '5 internal/store:Test-Bad\n', '@whole x\n', '@wholes 5\n'):
         weights.write_text(bad)
-        result, invocations = run(str(weighted / 'go-test-non-runtime-shards'), 8, 0)
-        assert result.returncode != 0 and 'go-test-split-weights' in result.stderr, (bad, result.stderr)
+        for shard in (0, 7):
+            result, invocations = run(wscript, 8, shard)
+            assert result.returncode != 0 and 'go-test-split-weights' in result.stderr, (bad, result.stderr)
+            assert not executions(invocations), invocations
+    # SPLIT_PROCS=P: a shard runs its split share as P concurrent go test
+    # processes (the planner deals total*P virtual shards, and a shard takes P
+    # of them), so one serial test binary no longer uses one CPU of four.
+    # Coverage stays exactly once, over every layout CI uses.
+    weights.write_text('@whole 100\n' + heavy)
+    for total in (8, 4):
+        for procs in (2, 3):
+            ran = collections.Counter()
+            for shard in range(total):
+                result, invocations = run(wscript, total, shard, SPLIT_PROCS=str(procs))
+                assert result.returncode == 0, (total, procs, shard, result.stderr)
+                by_name = [c for c in executions(invocations) if '-run' in c]
+                if shard < total - 2:
+                    assert len(by_name) == procs, ('one process per virtual shard', total, procs, shard, by_name)
+                else:
+                    assert len(by_name) <= procs, (total, procs, shard, by_name)
+                for call in by_name:
+                    assert sorted(call_packages(call)) == sorted(SPLIT), call
+                    for n in call[call.index('-run') + 1][2:-2].split('|'):
+                        ran[n] += 1
+            assert all(ran[n] == 1 for n in split_names), (total, procs, {n: ran[n] for n in split_names if ran[n] != 1})
+    # Export-data warm-up (docs/problems/ci-wall-clock-2026-10-24.md, finding
+    # 8): the store stamp-guard tests run `go list -export -deps` over the
+    # repo, which compiles every package without -race. Whichever shard hosts
+    # them pays that compile cold, and only a shard whose cache holds the
+    # objects saves them. Every split-mode shard therefore runs the same
+    # listing once, in the background, so any shard's saved cache is complete.
+    # It never fails the shard.
+    for shard in (0, 5, 7):
+        result, invocations = run(wscript, 8, shard)
+        assert result.returncode == 0, result.stderr
+        warm = [c for c in invocations if c[:4] == ['list', '-e', '-export', '-deps']]
+        assert len(warm) == 1, ('one export-data warm-up per split-mode shard', shard, warm)
+        assert warm[0][4:7] == ['./internal/...', './cmd/...', './scripts/...'], warm[0]
+        niceness = [int(x) for x in pathlib.Path(str(calls) + '.nice').read_text().split()]
+        assert niceness and niceness[-1] >= 19, ('the warm-up must run at the lowest priority', niceness)
+    result, invocations = run(wscript, 8, 0, WARM_EXPORT_DATA='0')
+    assert not [c for c in invocations if c[:4] == ['list', '-e', '-export', '-deps']], 'WARM_EXPORT_DATA=0 skips the warm-up'
+    result, invocations = run(wscript, 8, 0, FAIL_WARM='1')
+    assert result.returncode == 0, 'a failed warm-up must not fail the shard'
+    # Whole-package-only layouts (below four shards) do not warm.
+    result, invocations = run(wscript, 3, 0)
+    assert not [c for c in invocations if c[:4] == ['list', '-e', '-export', '-deps']], 'no warm-up without split mode'
+
+    # The tracked default is the CI setting.
+    default_env = dict(base_env); default_env.pop('SPLIT_PROCS')
+    calls.write_text('')
+    result = subprocess.run(['bash', wscript, '-race'], env=dict(default_env, TOTAL_SHARDS='8', SHARD_INDEX='0'), capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    assert len([c for c in executions([json.loads(l) for l in calls.read_text().splitlines()]) if '-run' in c]) == 1, 'default SPLIT_PROCS is 1 (2 flaked actorruntime under load, finding 9)'
+    # A failing process fails the shard, and the others' results still show.
+    result, _ = run(wscript, 8, 0, SPLIT_PROCS='2', FAIL_EXECUTION='1')
+    assert result.returncode != 0, 'a failed process must fail the shard'
+    for bad in ('0', 'x', '-1', '17'):
+        result, invocations = run(wscript, 8, 0, SPLIT_PROCS=bad)
+        assert result.returncode != 0 and 'SPLIT_PROCS' in result.stderr, (bad, result.stderr)
         assert not executions(invocations), invocations
+
     # No weights file: every name weighs 1 and the plan still covers all.
     weights.unlink()
-    for shard in range(6):
-        result, _ = run(str(weighted / 'go-test-non-runtime-shards'), 8, shard)
+    for shard in range(8):
+        result, _ = run(wscript, 8, shard)
         assert result.returncode == 0, result.stderr
 print('go-shard-discovery: all tests passed')
 PY

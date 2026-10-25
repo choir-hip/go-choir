@@ -62,3 +62,157 @@ setup about 35 s. No test over 40 s. Nothing to deal differently.
 
 checkout 3, set up Go (cache restore) 38, test step 304, post cache save 10.
 `TMPDIR=/dev/shm` is set for the test step, so Dolt workspaces are in RAM.
+
+## Measured after the first candidate (pull-request run 40146522999, 2026-10-25)
+
+Candidate: heaviest-first deal by name, six split shards, the 489 s test
+filling its stores in parallel. Created to `check` done: 638 s (10.6 min; the
+baseline's `check` finished at 18.3 min). Test step per non-runtime shard:
+split shards 242-545 s, whole shards 100-110 s; runtime shards 250-385 s job.
+
+### 6. The deal balanced the wrong quantity
+
+The weights balanced the sum of test seconds per shard (584-587 on all six),
+but the wall time follows `internal/store` alone, because the packages run
+side by side and a package's tests run in series. Store seconds per shard in
+that run: 481, 452, 407, 217, 500, 417 (test step 516, 490, 444, 242, 545,
+454 s). Shards 6 and 7 finished their whole packages in 100-110 s and then
+idled while the split shards ran 5-9 min.
+
+### 7. A serial store binary uses one CPU of the runner's four (hypothesis)
+
+Each shard already runs up to five test binaries at once, yet its test step
+stays near the store slice's length. If the store binary is the only long one
+and the runner has idle CPUs, a second concurrent process with half the store
+tests halves the slice. This is a hypothesis until a pull-request run shows the
+test step; the candidate that follows runs two processes per shard and the
+planner models each as its own shard.
+
+## Measured after the second candidate (pull-request run 40150248142, 2026-10-25)
+
+Candidate: every shard takes a per-package weighted share of the split tests,
+shards 6 and 7 start loaded with their whole packages, two concurrent go test
+processes per shard. Created to the last test job: 592 s; `check` started at
+649 s (it waited 56 s for a runner after its dependencies finished, GitHub
+queueing outside the workflow), done 651 s. Test step per non-runtime shard:
+295, 238, 212, 487 (shard 3), 400 (4), 453 (5), 268 (6), 205 (7). Runtime
+shards 231-344 s.
+
+### 8. Four store tests compile the whole repository inside the test, and the cache lottery decides who pays
+
+Shards 3, 4 and 5 ran 400-487 s while the others ran 205-295 s. The extra
+time is four store tests that were 9-25 s in the baseline and in the first
+pull-request run: TestEventTableStampGuardCatchesEveryForm 241 s (was 15-19),
+TestEventTableOnlyEventObjectOpStamps 194 s (was 19-21),
+TestEventTableRollbackArtifactBuildsInTheStorePackage 152 s (was 9),
+TestEventTableNothingStampsInDeploy1 42 s (was 26). They call
+`listExportData`, which runs `go list -e -export -deps ./internal/...
+./cmd/... ./scripts/...` once per test process (internal/store/
+event_table_stamp_guard_test.go:79). That compiles every package of the
+repository without -race. It costs about 15 s when the build cache already
+holds those objects and 150-240 s when it does not.
+
+Why it was cold: the Actions cache entry for the lane is saved by whichever job
+of the lane finishes first (the key is the same for all of them), and
+restored by prefix by later runs. A job that did not run those tests never put
+the non-race repository objects in its cache, so if it is the saver the next
+run starts cold on whichever shard hosts the tests. The balance of the deal
+cannot see this: the cost lands on whichever shard draws the tests and
+whichever cache happened to be saved. In the baseline and the first
+pull-request run the cache happened to hold the objects.
+
+Hypothesis check still open: the cold cost needs one more run with the warm-up
+(below) to see all shards near 205-300 s.
+
+## Measured after the third candidate (pull-request run 40151633847, 2026-10-25)
+
+Candidate: the second candidate plus the export-data warm-up in the
+background on every split-mode shard, run on a cold lane cache. Created to
+the last test job 523 s; test steps 330-469 s on the non-runtime shards (the
+cold compile ran on every shard); shard 3 failed.
+
+### 9. Two processes per shard and a cold warm-up made two load-sensitive actorruntime tests fail
+
+On shard 3, `internal/actorruntime` TestAdapterStartSerializesTextureOwnerRecoveryBeforeActorDelivery
+(21.6 s) and TestAdapterStartDeliversDurableLifecycleOccurrenceAfterPlannedRestart
+(26.4 s) failed in both processes that ran them, with "Texture activation did
+not start after owner recovery" (adapter_test.go:707) and actor wake latencies
+of 3.9-4.8 s in the log (`waited=3.887s`, `waited=4.77s`). Under 4 CPUs the
+shard was running two go test processes of up to five binaries each, plus the
+cold whole-repo compile of the warm-up. Both tests passed in the baseline and
+in the two earlier pull-request runs, where the shards ran at most one process
+and no cold compile. These tests have a startup deadline that CPU
+oversubscription defeats; the shard planner cannot see it. It is the "store
+now shares the runner" risk the 2026-10-22 note listed, now seen.
+
+Disposition: a gate that flakes is worse than a gate that is a minute slower.
+The tracked default goes back to one process per shard (`SPLIT_PROCS=1`; the
+knob and its test stay), and the background warm-up runs at the lowest CPU
+priority so a cold cache cannot starve the tests. Whether the actorruntime
+tests need a wider deadline or the scale quarantine is a separate question for
+the tests' owner; they were not changed here.
+
+## Measured after the fourth candidate (pull-request run 40153017633, 2026-10-25 02:04Z)
+
+Candidate: one process per shard, per-package weighted deal over all eight
+shards, shards 6 and 7 run their whole packages first, export-data warm-up in
+the background at the lowest priority. All jobs passed. Created to `check`
+done: 657 s (10.9 min); baseline 18.3 min. Non-runtime test jobs 331-612 s:
+shard 0 331, 4 395, 3 401, 2 466, 5 477, 1 497, 6 540, 7 612; runtime shards
+243-327 s.
+
+### 10. The whole-package shards are the new maximum, and the export-data cost did not go away
+
+- Shard 6 ran its 72 whole packages in 147 s and then its split share in
+  305 s; shard 7 127 s and 400 s. The planner assumed 100 s for the whole
+  phase and a split share of about 220 s of store; shard 7's store slice took
+  392 s (1.8 times the plan). The plan used test times from runs with other
+  loads; individual tests move by 30% or more with what runs beside them.
+- Three shards still paid the cold whole-repository compile in the first
+  export-data test (shard 3 102 s, shard 5 87 s, shard 7 126 s; the next
+  export test in the process takes under 1 s). The warm-up did not help
+  because the cache these runs restored was probably not the one a warm-up had
+  filled (hypothesis, not read from the cache API): a run restores the newest
+  entry its key prefix matches, and main's own runs, which do not yet run the
+  warm-up, may have saved newer entries than the pull-request run's. If so the
+  warm-up only pays off once it is on main. `gh cache list` at 02:20Z is
+  consistent with it: main's `non-runtime-race-split` entry (saved 01:56Z) is
+  918 MB and the pull-request run's (02:09Z) is 1,236 MB; the 320 MB
+  difference is the size of the non-race repository objects. Total active
+  caches: 10.49 GB against the 10 GB limit.
+- Runtime shards finish at 243-327 s, well before the non-runtime maximum:
+  eight runtime jobs and eight non-runtime jobs are not balanced against each
+  other (about 2,000 against 3,200 test-seconds). Re-splitting the same 16
+  jobs (6 runtime, 10 non-runtime) is a workflow-matrix change, in
+  docs/design/ci-runner-slots-2026-10-24.md.
+
+Next candidate (measurement only plus one parameter): the whole phase is
+planned at 140 s, and `go-test-with-timing` prints whole-machine CPU use per
+run so the next pull-request run can say whether a shard has idle CPUs at all
+(finding 7 stays a hypothesis; finding 9 says CPUs are not idle enough for a
+second process).
+
+## Measured after the fifth candidate (pull-request run 40153944994, 2026-10-25 02:18Z)
+
+Candidate: the fourth plus the whole phase planned at 140 s, CPU and warm-up
+logging. All jobs passed; `check` done 504 s (8.4 min; baseline 18.3 min, first
+candidate 10.6). Restored cache warm (export-data warm-up 6-21 s on every
+shard). Non-runtime jobs 301-452 s (shard 3 452, 6 423, 1 420, 2 393, 5 363,
+4 315, 0 302, 7 301); runtime shards 277-325 s.
+
+### Whole-machine CPU use per go test run (finding 7 answered)
+
+| Phase | CPU busy (of 4) |
+|---|---|
+| split shards 0-5, one process | 35-55% over 236-391 s |
+| whole phase, shards 6 and 7 | 82% over 111 s, 56% over 76 s |
+| split phase, shards 6 and 7 | 54%, 52% |
+| runtime (agentcore, textureowner) shards | 25-29% over 151-235 s, 33% over the second run |
+
+Half of every split runner and most of every runtime runner is idle, so the
+work is not CPU-bound; it is latency-bound inside serial test binaries (Dolt
+fsync-like waits, sleeps). A second process per shard fills those gaps (finding
+7 supported) but its burst load made two startup-deadline tests fail when the
+cache was cold (finding 9). Nothing here is a reason to try again before the
+deadline-sensitive actorruntime tests are looked at; the test step is no longer
+the deploy path's maximum (the Node B prebuild ends at about 9.3 min).

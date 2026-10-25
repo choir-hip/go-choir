@@ -26,3 +26,6 @@ runs:
         key: choir-go-v3-${{ runner.os }}-${{ runner.arch }}-${{ steps.image.outputs.os }}-${{ steps.go.outputs.go-version }}-${{ inputs.lane }}-${{ hashFiles('go.mod', 'go.sum') }}-${{ hashFiles('**/*.go', '**/*.s', '**/*.c', '**/*.h', 'scripts/go-test-*', '.github/actions/setup-go-build-cache/action.yml') }}
         restore-keys: |
           choir-go-v3-${{ runner.os }}-${{ runner.arch }}-${{ steps.image.outputs.os }}-${{ steps.go.outputs.go-version }}-${{ inputs.lane }}-${{ hashFiles('go.mod', 'go.sum') }}-
+    # Marks when the restore finished, for scripts/ci-prune-go-cache.
+    - shell: bash
+      run: date +%s > "${RUNNER_TEMP:?}/go-cache-restored-at"
