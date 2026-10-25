@@ -208,6 +208,14 @@ func (rt *Runtime) planEngineeringCast(ctx context.Context, scope ReductionScope
 	if !head.Open || head.Round != parent.Round {
 		return engineeringCastPlan{}, fmt.Errorf("engineering cast: the round %s opened (round %d of %s) is not open", parentID, parent.Round, parent.ConversationID)
 	}
+	// R5-2 (docs/evidence/selfdev-trace-reviews-2026-10-25.md round 5): a
+	// request whose assignment is still open gets no second one. A Texture
+	// re-cast into the same round (a correction, "continue the repair") is
+	// for the bound engineer, as a Note (P1); a second assignment would
+	// start from the base beside it.
+	if err := rt.refuseCastOntoOpenAssignment(ctx, ownerID, computerID, parent.ConversationID, parent.Round); err != nil {
+		return engineeringCastPlan{}, err
+	}
 	docID := strings.TrimPrefix(parent.SenderInbox, agentprofile.Texture+":")
 	document, err := rt.store.GetLifecycleDocument(ctx, ownerID, computerID, docID)
 	if err != nil {
@@ -284,6 +292,24 @@ func (rt *Runtime) planEngineeringCast(ctx context.Context, scope ReductionScope
 	}
 	cast.ParentID = parentID
 	return engineeringCastPlan{AssignmentID: assignmentID, Binding: binding, Objective: objective, Cast: cast}, nil
+}
+
+// refuseCastOntoOpenAssignment refuses an engineering Cast for a Texture
+// round that already has a non-terminal assignment, and names the bound
+// engineer's inbox to Note instead.
+func (rt *Runtime) refuseCastOntoOpenAssignment(ctx context.Context, ownerID, computerID, conversation string, round int) error {
+	children, err := rt.store.ListEngineeringAssignmentsByParentRound(ctx, ownerID, computerID, conversation, round)
+	if err != nil {
+		return fmt.Errorf("engineering cast: assignments of round %d of %s: %w", round, conversation, err)
+	}
+	for _, child := range children {
+		if child.Disposition.Terminal() {
+			continue
+		}
+		inbox := strings.TrimSpace(child.Binding.AssignedAgentID)
+		return fmt.Errorf("engineering cast: assignment %s for this request is still %s, so no second assignment opens; send the change to its engineer with choir.Note(%q, <the change in full>) and wait for its final Report before casting again", child.AssignmentID, child.Disposition, inbox)
+	}
+	return nil
 }
 
 // openDelegatedCastAssignment is the one mint of an engineering assignment

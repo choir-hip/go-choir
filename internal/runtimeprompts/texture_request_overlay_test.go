@@ -87,6 +87,8 @@ func TestManagementOverlayForwardsASpecChangeToTheBoundEngineer(t *testing.T) {
 			"before anything else",
 			"even while the assignment is bound and running",
 			"never reaches it",
+			// R5-2: a re-cast of a bound request is refused, not a second assignment.
+			"A Cast to engineering for a request whose assignment is still open is refused",
 		} {
 			if !strings.Contains(management, want) {
 				t.Errorf("management overlay (labels %v) lacks %q", labels, want)
