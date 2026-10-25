@@ -139,6 +139,9 @@ plan_split() {
     }
     END {
       if (bad) exit 2
+      # A discovered name with no package status line after it would be
+      # dealt to no shard; refuse rather than run fewer tests.
+      if (np > 0) { printf "go test -list: %d test names with no package status line\n", np > "/dev/stderr"; exit 2 }
       print "K " nn
       for (i = 1; i <= nn; i++) idx[i] = order[i]
       for (i = 2; i <= nn; i++) {
@@ -230,7 +233,7 @@ if (( split_mode )); then
     (
       warm_started=$(date +%s)
       warm_status=0
-      nice -n 19 go list -e -export -deps ./internal/... ./cmd/... ./scripts/... >/dev/null 2>&1 || warm_status=$?
+      timeout 600 nice -n 19 go list -e -export -deps ./internal/... ./cmd/... ./scripts/... >/dev/null 2>&1 || warm_status=$?
       echo "export-data warm-up: exit ${warm_status} after $(( $(date +%s) - warm_started ))s (a cold compile is 100-200 s)" >"$warm_log"
     ) &
     warm_pid=$!
