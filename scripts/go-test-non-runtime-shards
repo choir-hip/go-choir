@@ -207,10 +207,12 @@ shard_index="$SHARD_INDEX"
 if (( split_mode )); then
   # Every shard takes a weighted share of the split tests; the last
   # whole_shards shards also run their share of the other packages whole.
-  # SPLIT_PROCS=P (default 2; 1 restores a single process) runs the share as
-  # P concurrent go test processes: the deal
+  # SPLIT_PROCS=P (default 1) runs the share as P concurrent go test
+  # processes: 2 was about a quarter faster warm but made load-sensitive
+  # actorruntime tests fail on a 4-CPU runner (docs/problems/
+  # ci-wall-clock-2026-10-24.md, finding 9). The deal
   # is made over total_shards*P virtual shards and this shard takes P of them.
-  procs="${SPLIT_PROCS:-2}"
+  procs="${SPLIT_PROCS:-1}"
   if ! [[ "$procs" =~ ^[1-8]$ ]]; then
     echo "SPLIT_PROCS must be an integer in [1, 8], got: $procs" >&2
     exit 2
@@ -220,11 +222,11 @@ if (( split_mode )); then
   # ci-wall-clock-2026-10-24.md, finding 8). Whichever shard hosts them pays
   # that compile unless its cache holds the objects, and only the shard that
   # saves the cache decides what later runs hold. So every split-mode shard
-  # runs the same listing in the background (about 15 s when warm) and the
-  # saved cache is complete. It never fails the shard.
+  # runs the same listing in the background at the lowest priority (about 15 s
+  # when warm) and the saved cache is complete. It never fails the shard.
   warm_pid=""
   if [[ "${WARM_EXPORT_DATA:-1}" != "0" ]]; then
-    go list -e -export -deps ./internal/... ./cmd/... ./scripts/... >/dev/null 2>&1 &
+    nice -n 19 go list -e -export -deps ./internal/... ./cmd/... ./scripts/... >/dev/null 2>&1 &
     warm_pid=$!
   fi
   split_listing=""
