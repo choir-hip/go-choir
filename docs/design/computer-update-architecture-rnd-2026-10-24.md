@@ -1520,6 +1520,86 @@ promote a change to main, refresh the computer, and the stack retires as
 U2 and U3 are independent of U1 and of each other. U4 needs U1, U2 and
 the classifier change.
 
+#### U4 design: rebasing an applied stack onto a new base (2026-10-25; design only, not built)
+
+Owner, 2026-10-25: "we're building on an old base, and then we get a new
+base, we should be able to easily resubmit or update whatever differences
+remain without having to start over." This is the guest-side half of U4. It
+reuses the carried-patch machinery (`internal/agentcore/carried_patch.go`),
+which already carries a failed or rejected candidate into the next round and
+checks it applies to a moved base. The host-side shadow rebase and the
+security class of §4.2 come after it, unchanged.
+
+**Starting state.** Reconcile answers `stack_base_moved`
+(`internal/sourceproj/sourceproj.go`, `reconcileStack`): the effective stack
+top is an applied operation whose bundle patch `P` is based on `B`, the
+computer booted `B'`, and `Contained` showed `P` is not already in `B'`.
+Casting refuses. (`upstreamed` is already handled: the projection moves to
+`B'` and the stack retires.)
+
+**Steps.**
+1. *Check (automatic, read only).* Run `CheckPatchAppliesToTree(P, B')`, the
+   same check a carried patch gets. The result is clean, or a conflict that
+   names the conflicting and the clean paths (`CarriedPatchConflictError`).
+   It is logged as a projection fact beside `source_projection_upstreamed`.
+2. *Rebase round (automatic when the switch is on).* Management casts one
+   engineering assignment of a new kind, `rebase`, pinned to `B'`, with
+   lineage `rebase_of: <applied operation id>`. Its capsule starts from `B'`
+   and mounts `P` at `/selfdev/carried/source.patch`. This is the carried
+   offer with one new source: the computer's own effective stack top. It is
+   offered only to a `rebase` assignment. An ordinary assignment still never
+   carries an applied operation. The cast gate admits a `rebase` assignment
+   while the computer is at `stack_base_moved`, and admits nothing else.
+3. *Clean.* The engineer applies `P` unchanged, runs the build, tests and
+   checks, and calls Freeze. Freeze opens the round's own operation (keyed by
+   its assignment, as today) and records the lineage in its bundle manifest.
+   The bundle is content addressed, so the lineage needs no new operation
+   column and no store schema change.
+4. *Conflict.* The same round is cast with the conflicting paths named. The
+   engineer redoes only those paths, and the clean paths still come from `P`.
+   The result freezes the same way.
+5. *Decision.* Verify, then awaiting approval, then the owner's decision, on
+   the ordinary path. Applying the rebased candidate makes it the stack top on
+   `B'`, so reconcile answers `projected` and casting opens again.
+
+**Automatic:** detection, the apply check, opening one rebase round, and
+building and freezing its candidate. **Needs approval:** applying any rebased
+candidate, clean or resolved, through the computer's own gate. A rebase made
+by an agent's capsule never takes `computer:platform_follow:security` (§4.2:
+only the host's deterministic transforms do). Policy `auto` may later approve
+a clean mechanical rebase whose diff from `P` is empty. That is a separate
+owner ruling.
+
+**Failure modes (written before any code).**
+- *Double apply.* `P` is partly upstreamed. Hunks already in `B'` fail the
+  apply check and are named as conflicts. They are never applied twice
+  silently.
+- *Base moves again.* `B''` boots before the rebased candidate applies. The
+  candidate is pinned to `B'`, and the materializer must refuse a candidate
+  whose base is not the booted base (a U4 check; not read to exist today).
+  The next reconcile starts a new rebase.
+- *Loop.* A rebase round that fails, or fails its tests, would be re-cast at
+  every boot. One automatic round per (stack operation, booted base) pair is
+  decided once and remembered, as the carried offer is. After that it takes
+  an owner act.
+- *Crash.* A crash closes the rebase round ("interrupted by a restart"), and
+  that counts as the pair's automatic round (CLAUDE.md restart rule).
+- *Rollback semantics.* Rolling back the rebased operation restores the old
+  stack on `B`. That puts the computer back at `stack_base_moved`, which is
+  expected and named in the rollback receipt.
+- *The gate exception widens.* The cast gate admits a `rebase` round only
+  when its pinned base equals the booted base and its `rebase_of` names the
+  current stack top. Anything else is refused.
+
+**Switch.** A computer setting, `source.rebase_offer`, follows
+`internal/store/computer_setting.go`. It is off by default and needs
+`source.projection` on. Off means today's refusal and nothing cast. **Class:**
+red (the cast gate, a new assignment kind, reconcile at boot). Review tier 2.
+**Proof on staging:** apply A on base `B`, deploy `B'` with an unrelated
+change, and see the rebase round freeze a candidate whose tree is A on `B'`.
+Approve it, see `projected`, and see a new cast succeed. Then repeat with a
+`B'` that conflicts in one file of A, and see that only that path is named.
+
 ---
 
 ## 5. Interaction with PSA, precommitment records and in-context RL
