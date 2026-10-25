@@ -230,3 +230,33 @@ func TestPromptCorePutsTheOwnersIntentionFirst(t *testing.T) {
 		}
 	}
 }
+
+// PD3 S1: the root's instructions are a section chosen from the texture_root
+// marker, never part of the prompt core every Texture reads
+// (docs/definitions/choir-pd3-texture-root-desk-2026-10-11.md). Ways it can
+// fail: the section leaks into the core (every document's Texture would act
+// as the root, and the core would blow its budget); it does not ask for the
+// refs line the coverage proof checks; it lets the root dispatch work or
+// complete its standing item; it teaches a retired write surface.
+func TestRootSectionStaysOutOfTheCoreAndAsksForRefs(t *testing.T) {
+	core, root := DefaultSystemPrompt(), RootSection()
+	if strings.TrimSpace(root) == "" {
+		t.Fatal("the root section is empty")
+	}
+	if strings.Contains(core, root) || strings.Contains(core, "master document") {
+		t.Fatal("the root section leaked into the prompt core")
+	}
+	for _, want := range []string{"master document", "refs line", "never call choir.Done", "never cast"} {
+		if !strings.Contains(root, want) {
+			t.Errorf("root section lacks %q", want)
+		}
+	}
+	for _, retired := range []string{"ApplyTexture", `"op"`, "decide", "work_disposition", "target_work_item_id", `"controls"`, "base_revision_id"} {
+		if strings.Contains(root, retired) {
+			t.Errorf("root section teaches %q", retired)
+		}
+	}
+	if n := len(root); n > 2000 {
+		t.Errorf("root section is %d characters; keep it under 2k", n)
+	}
+}
