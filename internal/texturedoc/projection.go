@@ -132,6 +132,8 @@ func (p *projector) renderBlock(node Node, depth int) {
 		p.builder.WriteString("\n```")
 	case "horizontal_rule":
 		p.builder.WriteString("---")
+	case "embed":
+		p.builder.WriteString(EmbedProjectionText(node))
 	}
 }
 

@@ -75,9 +75,37 @@ func renderBlock(n texturedoc.Node) string {
 		return b.String()
 	case "horizontal_rule":
 		return "---"
+	case "embed":
+		return EmbedFrameLine(n)
 	default:
 		return renderInline(n.Content)
 	}
+}
+
+// EmbedFrameLine is an embed block's line in the frame: read-only, since the
+// Write grammar has no embed token (only Texture's evidence path writes one;
+// docs/design/texture-evidence-embeds-te-2026-10-25.md). An @all that copies
+// it unchanged keeps the block. The route is shown with any character that
+// the grammar reads as markup replaced, so the line is plain text.
+func EmbedFrameLine(n texturedoc.Node) string {
+	e, _ := texturedoc.EmbedOf(n)
+	parts := []string{"[embed", frameSafe(e.Kind)}
+	if e.Route != "" {
+		parts = append(parts, frameSafe(e.Route))
+	}
+	return strings.Join(append(parts, "sha256:"+frameSafe(e.Digest)+"]"), " ")
+}
+
+func frameSafe(s string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+			return r
+		case strings.ContainsRune("/._~:?=&%-", r):
+			return r
+		}
+		return '-'
+	}, s)
 }
 
 // renderFlow writes nested blocks (a list item's or quote's) as one line.

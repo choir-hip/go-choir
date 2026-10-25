@@ -118,6 +118,9 @@ func Apply(ctx context.Context, in Input) (Result, error) {
 	if kept := dropEmbedOnlyBlocks(content); len(kept) > 0 {
 		content = kept
 	}
+	if err := keepEmbedBlocks(base, content, ops[0].Line); err != nil {
+		return Result{}, err
+	}
 	if len(content) == 0 {
 		return Result{}, Errors{{Line: ops[0].Line, Msg: "the Write leaves the document empty; a document keeps at least one block"}}
 	}
@@ -906,4 +909,28 @@ func (w *writer) entityIDList() string {
 		ids = ids[:6]
 	}
 	return strings.Join(ids, ", ") + more
+}
+
+// keepEmbedBlocks refuses a Write that removes or changes an embed block of
+// the base. Embed blocks are evidence that Texture's evidence path wrote from
+// a frozen candidate's bundle (docs/design/texture-evidence-embeds-te-
+// 2026-10-25.md); a desk's Write writes around them.
+func keepEmbedBlocks(base []Block, content []texturedoc.Node, line int) error {
+	after := map[string]string{}
+	for _, n := range content {
+		if n.Type == "embed" {
+			raw, _ := json.Marshal(n)
+			after[nodeID(n)] = string(raw)
+		}
+	}
+	for _, b := range base {
+		if b.Kind != "embed" {
+			continue
+		}
+		raw, _ := json.Marshal(b.Node)
+		if after[b.ID] != string(raw) {
+			return Errors{{Line: line, Msg: fmt.Sprintf("the Write removes or changes evidence embed %s (%s); an evidence embed stays as written: leave it out of @replace, @delete and @section, and copy its line unchanged under @all", b.Alias, b.Text)}}
+		}
+	}
+	return nil
 }
