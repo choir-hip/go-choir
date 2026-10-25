@@ -113,8 +113,8 @@ metamission:
         conventions in candidates) binds SR5's brief.
     - id: SR5
       path: this file, finish.acceptance (the first real loop)
-      readiness: drafted
-      status: pending
+      readiness: executable
+      status: complete
       depends_on: [SR1, SR2, SR3]
       note: >-
         The Reader app, one package combining the PDF and EPUB readers,
@@ -442,13 +442,15 @@ boundaries:
 now:
   status: working
   slice: >-
-    The Reader on b@c (SR5): reader-3's repair round, then a revision on the
-    same trajectory that keeps the old apps, FP0's approval, the promote,
-    and b@c's stack retiring as upstreamed. Then T1a, the other four apps.
-    In parallel: CI0 (the CI worker on the agents VM), SR7's first slices,
-    SR6's carried items. Waves W1 to W4 are live (see receipts in the ledger).
-  source_ref: 92e06844f
-  deploy_identity: 4e72decef (W4); the iteration fix 29fc9064a deploys with 92e06844f
+    SR5 is complete (receipt below): the Reader, built by engineering on b@c,
+    approved by FP0, seen by the owner in Texture, promoted through review,
+    deployed in 6113c82cd, and b@c's stack upstreamed. Now: reader-6, the
+    Reader's next self-development round on the new base (recents for a
+    file opened from Files, validation before upload, the preview's
+    paragraphs, review 242's nits), then PD3 (re-review the drafted file
+    against today's code), then T1a, then T1c.
+  source_ref: 6113c82cd
+  deploy_identity: 6113c82cd (the Reader on main; deployed 08:42 UTC 2026-10-25)
   candidate:
     id: wave-1
     state: rehearsing
@@ -491,23 +493,44 @@ now:
     owner_ratification_ref: not_applicable
   belief:
     believed_state: >-
-      D44 is live; U1 is built and in fix after tier 2 review; the other
-      wave-1 lanes are being built; the paper runs normally; D37's proof is
-      due at 04:00 UTC.
+      The self-development loop works end to end on b@c for a frontend app:
+      five candidates judged tonight, two approved, three rejected and
+      iterated on their carried trees without a restart. Texture holds its
+      trajectory (on for b@c) and the duplicate-round refusal (R5-2) is live.
     main_uncertainty: >-
-      Whether U1b can deliver the base's git history through an existing
-      channel without a new host service.
-    next_observation: U1b's investigation report.
+      Whether a deploy under an applied, unpromoted stack will keep blocking
+      self-development (stack rebase, U4, is unbuilt), and whether a
+      signed-in path can be verified by anything but FP0's code read.
+    next_observation: >-
+      reader-6's first round on 6113c82cd: an engineering assignment opens
+      (no base-moved refusal), Texture casts once, and the candidate carries
+      the rejected 25239b5c tree onto the new base or reports why not.
   blocker_or_risk: >-
     A settled trajectory refuses texture revise (409), so a rejected
     candidate can be iterated only while its trajectory is live.
   next_action: >-
-    When reader-3's repair round reaches approval, read its patch against
-    the brief; reject what misses with a reason and revise the same
-    trajectory to keep the old apps and make the Reader the PDF and EPUB
-    default; approve, promote with scripts/selfdev-promote, land.
+    Revise reader-6 (doc d9e8b26f) to resume on the new base with the
+    four repair points of 08:16 plus review 242's two medium findings;
+    judge its candidate by reading the code for signed-in paths; approve,
+    promote with scripts/selfdev-promote, land. Then PD3.
 
-receipts: []
+receipts:
+  - id: SR5
+    status: complete
+    at: 2026-10-25T08:43:20Z
+    evidence: >-
+      reader-4 (doc 5db2578d, trajectory ac0cb480) and reader-5 (doc
+      9f7a55cd, trajectory 359dad8a) on b@c; approved selfdev-de06563b
+      (07:02:41) and selfdev-fcc4ade6 (07:49:18); Texture embedded each
+      candidate's screenshots and the owner saw them; promoted as 942fb2415
+      (contained: yes) with FP0's shell fix 614dd1dfd; review 242 (tier 1,
+      Devin) PASS; CI 40177202689 success, deployed 6113c82cd at 08:42:37,
+      NRestarts 0; b@c's source projection upstreamed at 08:43:20 ("the
+      operation's patch is already in the booted base 6113c82cd").
+    residuals: >-
+      U4 (stack rebase) unbuilt; recents for a file opened from Files and
+      upload validation go to reader-6; R5-3 and R5-4 (carry race) red and
+      unfixed; R5-5 (owner acts do not wake the candidate's Texture).
 ---
 
 # Self-development readiness
