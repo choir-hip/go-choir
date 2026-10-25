@@ -175,7 +175,11 @@ shard 0 331, 4 395, 3 401, 2 466, 5 477, 1 497, 6 540, 7 612; runtime shards
   filled (hypothesis, not read from the cache API): a run restores the newest
   entry its key prefix matches, and main's own runs, which do not yet run the
   warm-up, may have saved newer entries than the pull-request run's. If so the
-  warm-up only pays off once it is on main.
+  warm-up only pays off once it is on main. `gh cache list` at 02:20Z is
+  consistent with it: main's `non-runtime-race-split` entry (saved 01:56Z) is
+  918 MB and the pull-request run's (02:09Z) is 1,236 MB; the 320 MB
+  difference is the size of the non-race repository objects. Total active
+  caches: 10.49 GB against the 10 GB limit.
 - Runtime shards finish at 243-327 s, well before the non-runtime maximum:
   eight runtime jobs and eight non-runtime jobs are not balanced against each
   other (about 2,000 against 3,200 test-seconds). Re-splitting the same 16
