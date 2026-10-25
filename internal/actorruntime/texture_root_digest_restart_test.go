@@ -84,3 +84,40 @@ func TestLedgerChangeWakesNoteTheTextureRoot(t *testing.T) {
 		})
 	}
 }
+
+// Review 248 (LOW): an assigned engineering fate deadline that ran changes
+// its document's ledger (it may fail an assignment closed), so it notes the
+// document for the root after it commits; a deadline the live saga holds
+// (deferred, nothing committed) notes nothing.
+func TestFateDeadlineNotesTheTextureRootAfterItCommits(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		err     error
+		digests int
+	}{{"ran", nil, 1}, {"held", agentcore.ErrAssignmentSagaHeld, 0}} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newRecordsWakeFixture(t, "fatenote", false, false)
+			if err := f.env.store.PutComputerSetting(f.env.ctx, store.ComputerSetting{OwnerID: f.ownerID, ComputerID: f.computerID, Key: store.SettingTextureRootDesk, Value: true}); err != nil {
+				t.Fatal(err)
+			}
+			var digests []string
+			f.env.adapter.Runtime.SetScheduleActor(func(_ context.Context, _, _, _, kind, content, _, _ string, _ time.Time) error {
+				if kind == agentcore.TextureRootDigestKind {
+					digests = append(digests, content)
+				}
+				return nil
+			})
+			handler := newActorHandler(f.env.adapter.Runtime, textureowner.NewHandler(f.env.adapter.Runtime))
+			handler.fateDeadline = func(context.Context, string, string, string, string) error { return tc.err }
+			mailbox := "management"
+			_, _ = handler.HandleUpdate(f.env.ctx, mailbox, actor.Update{
+				UpdateID: "fate-1", ToAgentID: scopedActorMailboxID(f.ownerID, f.computerID, mailbox),
+				Kind: "assigned_engineering_fate_deadline", Content: `{"assignment_id":"assignment-none","attempt":1}`,
+				TrajectoryID: f.trajectoryID, CreatedAt: time.Now().UTC().Add(time.Second),
+			}, nil)
+			if len(digests) != tc.digests || (tc.digests == 1 && !strings.Contains(digests[0], f.id)) {
+				t.Fatalf("fate deadline (%s) armed digests %v, want %d naming %s", tc.name, digests, tc.digests, f.id)
+			}
+		})
+	}
+}
