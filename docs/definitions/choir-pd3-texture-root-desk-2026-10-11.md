@@ -11,7 +11,9 @@ definition_version: 5
 # great"). Owner 2026-10-25: "texture actually is kinda incomplete. really,
 # there should be one texture desk per computer, with a root rlm and each
 # texture agent is a sub rlm. maybe we need to pull this forward?"
-# Rewritten 2026-10-25 against main c59e289ca (version 4 is in git history).
+# Rewritten 2026-10-25 against main c59e289ca (version 4 is in git history);
+# revised 09:26 after file review 244 (send_back, both seats): the root is
+# the master document's own Texture desk, not a new non-lifecycle agent.
 readiness: drafted
 
 review:
@@ -77,49 +79,84 @@ finish:
   deliver: >-
     The owner opens one master document and sees, for every document on the
     computer, what was asked, what is open, which desk holds it, and what
-    waits on the owner. Each document is still revised only by its own
-    Texture sub-RLM, which now also sees the master document, so it knows
-    the owner's other open intentions on this computer.
+    waits on the owner, and can talk to the computer-wide Texture there.
+    Each document is still revised only by its own Texture sub-RLM, which
+    now also sees the master document, so it knows the owner's other open
+    intentions on this computer.
   artifact: >-
-    One Texture root agent per computer (texture-root:<owner>, a
-    non-lifecycle persistent agent on the management precedent), woken by a
-    debounced digest after sub-RLM commits and desk reports and never on a
-    sub-RLM's wake path; a master document that is an ordinary Texture
-    document whose only writer is the root, with store refusals in both
-    directions; each texture:<doc> unchanged as its document's sole writer
-    and given the master document as read-only context; all behind the
+    A master document per computer, created by the ordinary Texture create
+    path and named as the root by a durable per-computer marker
+    (texture.root_document = its doc id). Its own Texture desk,
+    texture:<masterDoc>, is the root: the same lifecycle agent shape as
+    every other Texture, so every existing write check (ApplyTextureTurn's
+    ChannelID, ActiveRunID and trajectory binding) already confines it to
+    the master document and confines every other texture:<doc> to its own.
+    The root is woken by a debounced digest occurrence
+    (texture_root_digest, registered in RestartWorkKinds) after sub-RLM
+    commits and desk reports, never on a sub-RLM's wake path. Each
+    texture:<doc> is unchanged as its document's sole writer and is given
+    the master document as bounded read-only context. All behind the
     per-computer switch texture.root_desk, off by default.
   acceptance:
     - action: >-
         b@c with texture.root_desk on: two documents, each with an open
-        engineering or research request. The master document's revisions
-        are all authored by texture-root; its latest revision names both
-        documents, and the proof script checks it covers every open work
-        item it reads from the two trajectories through the product API.
-      proves: the root, the master document, coverage
+        engineering or research request. Every agent-authored revision of
+        the master document is by texture:<masterDoc> (v0 is the create
+        path's owner-authored seed and is excluded). Its latest revision
+        carries, per document, a refs line naming the document's id and the
+        short id (8 hex) of each open work item; the proof script reads each
+        trajectory's open work items through the product API (choir
+        trajectory) and fails on any item missing from the refs.
+      proves: the root, the master document, machine-checked coverage
       evidence_class: deployed proof (test computer)
     - action: >-
-        Cancel one document's Texture run mid-turn (choir run cancel); the
-        other document revises and the master document updates.
+        Refusals: a store test receipt that a turn by texture:<masterDoc> on
+        another document, and a turn by texture:<doc> on the master
+        document, are both refused; and on b@c, a revision attempt through
+        the product API on behalf of the wrong agent is refused.
+      proves: per-document authority is not widened to the root (the red invariant)
+      evidence_class: store test plus deployed negative probe
+    - action: >-
+        Cancel one document's Texture run while it is mid-turn (choir run
+        cancel; the run's state reads cancelled before its commit); the other
+        document revises and the master document's next revision reflects
+        it.
       proves: isolation
       evidence_class: deployed proof (test computer)
     - action: >-
-        Median owner-revision-to-Texture-commit time over five turns per
-        document, switch off then on, within 20 percent; the root's run count
-        per hour stays under the debounce bound.
-      proves: no document waits on the root; the root's cost is bounded
+        Owner-revision-to-Texture-commit time, p50 and p95 over ten turns per
+        document, switch off then on: p50 within 20 percent and p95 within
+        30 percent. Root runs per hour stay at or under the debounce bound,
+        and each root run's input stays under its read bound.
+      proves: no document waits on the root; the root's cost is bounded in rate and size
       evidence_class: deployed measurement (test computer)
     - action: >-
-        A sub-RLM's wake context carries the master document; a request in
-        document B that conflicts with an open request in document A is
-        answered in B with a reference to A (trace shows the master document
-        in the turn's context).
+        S2, paired: the same conflicting request in document B (one that
+        contradicts an open request in document A) with S2 off, then on. Off,
+        B's answer does not mention A; on, it names A, and the trace shows
+        the master document excerpt in B's turn context.
       proves: the sub-RLM is part of one desk, not a sibling
       evidence_class: deployed proof plus trace (test computer)
+    - action: >-
+        Off is inert: with texture.root_desk off, no texture_root_digest
+        occurrence is minted and no sub-RLM context carries the master
+        document. The switch is an owner act through /api/computer-settings,
+        which is not on management's ProductAPI allowlist.
+      proves: the switch is the rollback
+      evidence_class: deployed proof (test computer)
+    - action: >-
+        Crash: a store or runtime test that a texture_root_digest created
+        before a markerless boot is interrupted_by_restart and starts no
+        root run, and that the next commit after boot mints a new digest.
+        A deployed crash probe on b@c only if a no-SSH crash act exists;
+        otherwise that is a named residual.
+      proves: crash closes the root's work
+      evidence_class: runtime test (deployed if available)
   rollback: >-
     texture.root_desk off (one act, takes effect at the next wake); revert
     the commits for a full rollback. The master document stays as an
-    ordinary document; nothing reads it back as state.
+    ordinary document with an ordinary Texture desk; nothing reads it back
+    as state.
   landing:
     required: true
     environment: staging
@@ -149,12 +186,13 @@ homotopy:
     parallel sub-RLMs behind the I26 release gate.
 
 boundaries:
-  mutation_class: red (Texture canonical writes, a new persistent agent, store refusals)
+  mutation_class: red (Texture canonical writes, a new wake kind, a computer-wide read)
   review_tier: >-
-    tier 2 (Devin and DeepSeek) for S1, which adds a Texture writer and store
-    refusals; tier 1 (Devin) for S2, which adds read-only context behind the
-    same switch. This file is an architectural design and is reviewed at
-    tier 2 before execution.
+    tier 2 (Devin and DeepSeek) for S1, which adds a wake kind, the root's
+    computer-wide read and the root marker; tier 1 (Devin) for S2, which
+    adds read-only context behind the same switch. This file is an
+    architectural design: review 244 (tier 2) sent it back; this revision
+    gets one Devin seat.
   authority_sources:
     - owner statements 2026-10-11 and 2026-10-25 (above)
     - docs/choir-doctrine.md I26
@@ -169,13 +207,14 @@ boundaries:
     - per-computer research (split out as its own station, PD3b, intent)
     - root routing of wakes and in-session sub-RLMs (S3 and S4, owner ratification)
     - cross-computer documents (PD4)
-  protected_surfaces: [internal/textureowner, internal/store lifecycle and texture_turn, Texture commit path, agentcore desk sessions]
+  protected_surfaces: [internal/textureowner, internal/store lifecycle and texture_turn, Texture commit path, agentcore desk sessions, agentcore RestartWorkKinds, actorruntime wake handling, computer settings]
 
 now:
   status: working
   slice: >-
-    Design rewritten 2026-10-25 against c59e289ca; awaiting the tier 2 file
-    review. Then S1.
+    Design rewritten 2026-10-25 against c59e289ca; review 244 (tier 2) sent
+    it back on the root's identity, the digest's restart kind and the
+    acceptance; revised 09:26; one Devin seat re-review. Then S1.
   source_ref: c59e289ca
   deploy_identity: staging 6113c82cd
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
@@ -190,19 +229,22 @@ now:
     edge: frame_lock
     delta_o: >-
       the master document's object is named before building (an ordinary
-      Texture document, written only by texture-root, rendering the open
-      work of every trajectory on the computer, never read back as state),
-      and coverage is checked by the proof script against the ledger, so
-      "supervision surface" cannot be satisfied by any list
+      Texture document whose only agent writer is texture:<masterDoc>,
+      rendering the open work of every trajectory on the computer with
+      machine-checkable refs, never read back as state), and coverage is
+      checked by the proof script against the ledger, so "supervision
+      surface" cannot be satisfied by any list
     scope_if_supported: one computer, sequential Texture turns
     status: proposed
     evidence_refs: []
   decision:
     what: >-
-      the root is out of every sub-RLM's wake path (digest wake only); the
-      owner's "each texture agent is a sub rlm" is met by one desk identity,
-      one master document and shared context, not by routing; routing and
-      in-session sub-RLMs wait for owner ratification
+      the root is the master document's own Texture desk, named by a
+      marker, so no write check changes; it is out of every sub-RLM's wake
+      path (digest wake only); the owner's "each texture agent is a sub
+      rlm" is met by one root, one master document and shared context, not
+      by routing; routing and in-session sub-RLMs wait for owner
+      ratification
     kind: architecture
     status: proposal
     evidence_ref: this file, Design (2026-10-25)
@@ -210,17 +252,15 @@ now:
   belief:
     believed_state: per-document Texture agents with no root and no master document; PD2 and hold_trajectory give each texture:<doc> continuity
     main_uncertainty: >-
-      Whether a non-lifecycle root can write a Texture document through
-      ApplyTextureTurn without widening the lifecycle checks that make
-      texture:<doc> the sole writer; and whether the boot scan in
-      textureowner/texture_controller.go:21-25 re-dispatches owner-input
-      wakes after a crash (a resume without a marker).
+      Whether the root's computer-wide read can stay bounded (today the
+      warm read is per trajectory, store/lifecycle.go:2299-2363), and
+      whether a Texture desk whose document is the master behaves well as
+      a root with only a prompt-section difference.
     next_observation: >-
-      read ApplyTextureTurn's caller checks and the boot scan, and write
-      the S1 mechanism (identity, write path, refusals, wake, restart) into
-      this file before code
-  blocker_or_risk: none
-  next_action: tier 2 file review of this rewrite; on accept, the S1 code read named in next_observation
+      the read path the root uses: a digest naming the changed documents,
+      read per trajectory for those only, with the bound in Design
+  blocker_or_risk: none open; review 244's B1 (identity) and B2 (restart kind) are answered in this revision and await re-review
+  next_action: one Devin seat re-review of this revision; on accept, S1
 
 receipts: []
 ---
@@ -239,38 +279,62 @@ This replaces the 2026-10-11 draft below wherever they differ. The draft's
 identity, isolation and master-document choices stand; its "oracle before
 product" projection and its bundled research lift do not.
 
-**Identity.** The per-document agents stay `texture:<doc>`. They are the
-sub-RLMs, and nothing about their authority changes. The root is a new agent,
-`texture-root:<owner>`, with a prefix that no `texture:` check matches, so no
-`docIDFromTextureAgentID` call can mistake it for a document desk. It is a
-non-lifecycle persistent agent, ensured on demand, on the precedent of
-persistent management (`EnsurePersistentManagementAgent`,
-`agentcore/runtime.go`). Its session follows PD2: keyed by agent, so it
-outlives each run.
+**Identity (revised after review 244).** The per-document agents stay
+`texture:<doc>`. They are the sub-RLMs, and nothing about their authority
+changes. The root is not a new kind of agent. It is the Texture desk of the
+master document, `texture:<masterDoc>`, and a durable per-computer marker,
+`texture.root_document`, names which document is the master. The first draft
+made the root a non-lifecycle agent on the persistent-management precedent;
+both review seats showed that cannot write a document. `ApplyTextureTurn`
+refuses lifecycle version 0 (`store/texture_turn.go:158-161`), binds the
+caller's channel, active run and trajectory to the document
+(`texture_turn.go:394-403`), and the actor path refuses a Texture-profile
+agent whose id is not `texture:<doc>` (`actorruntime/handler.go:1055-1057`).
+Making the root the master document's own desk leaves every one of those
+checks unchanged, and they give both refusals for free: the root's channel
+is the master document, so it can write nothing else, and no other
+`texture:<doc>` has the master as its channel. The root is told it is the
+root by a prompt section chosen from the marker, not by a new profile. Its
+session follows PD2: keyed by agent, so it outlives each run.
 
 **Wake.** The root is never on a sub-RLM's wake path. Owner input, research
 reports and management reports wake the document's sub-RLM directly, as
-today. The root gets a digest wake after a sub-RLM commit or a desk report:
-coalesced, debounced (at most one root run per debounce window, a computer
-setting), dispatched after the commit transaction, and safe to drop. A crash
-closes the root's run like any other (`closePreBootRunsAfterCrash`), and the
-next commit re-arms the digest. There is no boot-time re-derivation for the
-root.
+today. The root gets a `texture_root_digest` occurrence after a sub-RLM
+commit or a desk report, naming the documents that changed. It is coalesced,
+dispatched after the commit transaction, and debounced: by default at most
+one root run per 120 seconds and 20 per hour (computer settings). A commit
+that arrives while a root run is live re-arms one digest for after that run,
+so no change is lost to coalescing. A root turn with nothing new commits
+nothing (`TextureTurnNoSemanticChange`), so the master document's history
+grows only with real change. The kind is registered in `RestartWorkKinds`
+(`agentcore/planned_restart.go:168`), so a digest created before a
+markerless boot is interrupted, never delivered; the root's run closes like
+any other (`closePreBootRunsAfterCrash`), and the next commit after boot
+mints a new digest. Owner input on the master document wakes the root as
+owner input wakes any Texture, which is how the owner talks to it.
 
-**Master document.** An ordinary Texture document, created by the root the
-first time it runs on a computer, so the existing UI, CLI and product API
-show it. Its only writer is the root. It says, per document: the title, what
-the owner last asked, open work by desk (engineering assignments and their
-candidates, research), and what waits on the owner (candidates awaiting
-approval, questions). It also says what each desk is doing. The store
-refuses a root write to any other document and a `texture:<doc>` write to
-the master document. How the root's turn passes the Texture write checks
-without a lifecycle agent is the first S1 design question; the answer must
-narrow, not widen, the checks that make `texture:<doc>` the sole writer.
+**Read bound.** The root reads only the documents its digest names, per
+trajectory through the existing warm read, plus the master document itself.
+A full refresh (every document) is bounded to the 50 most recently revised
+documents, and the per-run input to at most 32 KiB of ledger summary.
+
+**Master document.** An ordinary Texture document, so the existing UI, CLI
+and product API show it. It is created once per computer, when the switch
+first takes effect, by an ensure step that uses the ordinary create path
+(`texture_lifecycle_create.go`; its v0 is the owner-authored seed, as for
+every document) and then writes the marker; the ensure step is idempotent on
+the marker, so it never creates a second master. Its only agent writer is
+the root; the owner may revise it as any document. Its trajectory never
+settles. It says, per document: the title, what the owner last asked, open
+work by desk (engineering assignments and their candidates, research), what
+waits on the owner (candidates awaiting approval, questions), and a refs
+line with the document's id and each open work item's short id, which is
+what the acceptance proof checks. It also says what each desk is doing.
 
 **Shared context (S2).** At wake, each sub-RLM's context carries the master
-document's latest revision, bounded in size, as read-only context outside
-the prompt core. This is what makes the sub-RLMs one desk rather than
+document's latest revision, at most 4 KiB, as read-only context outside the
+prompt core: the "waits on the owner" section first, then the other
+documents' lines, truncated from the end. This is what makes the sub-RLMs one desk rather than
 siblings with a shared list. The owner's 2026-10-25 concern was that Texture
 loses the owner's intention; `hold_trajectory` fixed that within a document,
 and S2 extends it across documents.
@@ -302,7 +366,8 @@ started without the owner.
    sole writer of document text), CLAUDE.md's "Texture renders that ledger
    into the owner-facing supervision surface" (the master document is that
    surface), and the owner's no-projection ruling.
-3. *Deletion citers:* nothing is deleted in S1 or S2. The two copies of
+3. *Deletion citers:* nothing is deleted in S1 or S2, and the root needs no
+   new identity, so no `texture:` site changes. The two copies of
    `currentTextureAgentID` can become one when S1 touches them.
 4. *Production consumer:* the owner, through the document list; each
    sub-RLM, through its wake context (S2).
@@ -312,28 +377,35 @@ started without the owner.
    latency medians recorded.
 7. *Fate-sharing:* the root reads the store only and shares no run, lock or
    session with a sub-RLM.
-8. *Restart:* a crash closes the root's run and drops any pending digest;
-   the next commit re-arms it. Before S1, check the existing boot scan
-   (`textureowner/texture_controller.go:21-25`, "the boot scan re-derives
-   the same wake from the document head") against the crash rule; if it
-   resumes owner-input wakes without a planned-restart marker, record that
-   as a discovered heresy, and do not extend it to the root.
+8. *Restart:* `texture_root_digest` is in `RestartWorkKinds`, so a crash
+   interrupts any pending digest and the root's run, and the next commit
+   re-arms it. Review 244 resolved the boot-scan question: the comment at
+   `textureowner/texture_controller.go:21-25` is stale. The mechanism is
+   the in-commit owner_revision outbox row (`store/lifecycle.go:733-739`)
+   plus `preBootWorkWake`, which interrupts pre-boot wakes on a crash boot
+   and never re-dispatches them (test: `texture_owner_revision_test.go:486-498`).
+   No heresy; S1 corrects the comment.
 9. *No SSH:* the master document is visible through the product API, the
    CLI and the UI; the switch is a computer setting.
 
 **Failure modes, written before code.**
 1. The root writes a document that is not the master document (refused by
-   the store, tested).
-2. A sub-RLM writes the master document (refused by the store, tested).
+   the existing channel binding; store test and deployed negative probe).
+2. A sub-RLM writes the master document (the same binding; same probes).
 3. The root wakes on every commit and its cost grows with activity
-   (debounce bound, measured in acceptance).
+   (debounce and read bounds, measured in acceptance).
+3a. A commit lands while a root run is live and is lost to coalescing
+   (one re-armed digest after the run).
+3b. The ensure step races and creates two master documents (idempotent on
+   the marker).
 4. A sub-RLM waits on the root (no shared lock; latency medians).
 5. The master document drops open work (coverage check).
 6. The master document is read back as state, by the root on its next run
    or by a sub-RLM as an instruction (it is context; the ledger is
    authority; trace review checks a sub-RLM never acts on the master
    document alone).
-7. A crash leaves the root's digest to resume at boot (no boot path for it).
+7. A crash leaves the root's digest to resume at boot (the kind is in
+   `RestartWorkKinds`; runtime test).
 8. The master document pushes a sub-RLM over its context budget (bounded
    excerpt; prompt-core test unchanged).
 
