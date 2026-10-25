@@ -41,6 +41,8 @@ fi
 
 module="github.com/yusefmosiah/go-choir"
 split_list="$(dirname "$0")/go-test-split-packages"
+weights_list="$(dirname "$0")/go-test-split-weights"
+[[ -f "$weights_list" ]] || weights_list=""
 whole_shards=2
 
 # Capture first: process substitution hides a failed go list, which would
@@ -112,20 +114,59 @@ run_split_shard() {
     return 1
   fi
 
-  # One shard per distinct name, in first-listed order, so a name two split
-  # packages share runs on the same shard in both.
+  # One shard per distinct name, so a name two split packages share runs on
+  # the same shard in both. Names are dealt heaviest first, each to the
+  # lightest split shard so far (ties to the lowest index), by the weights in
+  # scripts/go-test-split-weights; an unlisted name weighs 1. Every shard
+  # plans the same deal from the same discovery and weights.
   local -A seen=()
-  local -a selected=()
-  local k=0
+  local -a uniq=()
   local name
   for name in "${names[@]}"; do
     [[ -n "${seen[$name]:-}" ]] && continue
     seen["$name"]=1
-    if (( k % split_shards == shard_index )); then
-      selected+=("$name")
-    fi
-    k=$(( k + 1 ))
+    uniq+=("$name")
   done
+  local k=${#uniq[@]}
+  local -a selected=()
+  local plan
+  if ! plan=$(printf '%s\n' "${uniq[@]}" | awk -v shards="$split_shards" -v me="$shard_index" -v wfile="$weights_list" '
+    BEGIN {
+      if (wfile != "" && (getline line < wfile) >= 0) {
+        do {
+          sub(/#.*/, "", line)
+          if (line ~ /^[[:space:]]*$/) continue
+          if (split(line, f) != 2 || f[1] !~ /^[0-9]+$/ || f[2] !~ /^[A-Za-z0-9_]+$/) {
+            printf "%s: bad line \"%s\" (want: <seconds> <TestName>)\n", wfile, line > "/dev/stderr"
+            bad = 1; exit 2
+          }
+          weight[f[2]] += f[1]
+        } while ((getline line < wfile) > 0)
+      }
+    }
+    { name[NR] = $0; w[NR] = ($0 in weight) ? weight[$0] : 1 }
+    END {
+      if (bad) exit 2
+      for (i = 1; i <= NR; i++) order[i] = i
+      # insertion sort: heaviest first, discovery order among equals
+      for (i = 2; i <= NR; i++) {
+        v = order[i]; j = i - 1
+        while (j >= 1 && w[order[j]] < w[v]) { order[j + 1] = order[j]; j-- }
+        order[j + 1] = v
+      }
+      for (s = 0; s < shards; s++) load[s] = 0
+      for (i = 1; i <= NR; i++) {
+        best = 0
+        for (s = 1; s < shards; s++) if (load[s] < load[best]) best = s
+        load[best] += w[order[i]]
+        if (best == me) print name[order[i]]
+      }
+    }'); then
+    echo "Weighted deal of split tests failed (${weights_list#./})" >&2
+    return 1
+  fi
+  mapfile -t selected <<<"$plan"
+  [[ -z "$plan" ]] && selected=()
 
   if (( ${#selected[@]} == 0 )); then
     echo "No split-package tests selected for split shard ${shard_index}/${split_shards}: TOTAL_SHARDS exceeds the ${k} split test names" >&2
