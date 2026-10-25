@@ -1,0 +1,149 @@
+#!/usr/bin/env bash
+# proof-pd3-root-desk: the deployed acceptance for PD3 S1 (the Texture root
+# desk and master document, docs/definitions/choir-pd3-texture-root-desk-2026-10-11.md)
+# on one test computer, through the product API and the choir CLI only.
+#
+#   scripts/proof-pd3-root-desk --computer ID --api-key-file FILE --out DIR [--host URL] [--turns N] [--dry-run]
+#
+# Phases, each recorded in DIR/evidence.json:
+#   off      texture.root_desk off: no "Master document" exists; N owner
+#            revisions on each of two new documents, latency measured.
+#   on       the switch on; N more revisions each, latency measured; the
+#            master appears, every agent-authored master revision after v0 is
+#            by texture:<master>, and its latest revision names every open
+#            work item of both documents by 8-hex short id (coverage).
+#   isolate  a revision on A whose Texture run is cancelled mid-turn; B
+#            still revises, and the master's next revision follows.
+# Never run it against the paper or an owner's computer.
+set -euo pipefail
+
+HOST=${CHOIR_HOST:-https://choir.news}
+TURNS=3
+DRY=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --computer) C=$2; shift 2;;
+    --api-key-file) K=$2; shift 2;;
+    --out) OUT=$2; shift 2;;
+    --host) HOST=$2; shift 2;;
+    --turns) TURNS=$2; shift 2;;
+    --dry-run) DRY=1; shift;;
+    *) echo "unknown flag $1" >&2; exit 2;;
+  esac
+done
+: "${C:?--computer}" "${K:?--api-key-file}" "${OUT:?--out}"
+CHOIR=${CHOIR_BIN:-choir}
+mkdir -p "$OUT"
+log() { printf '%s %s\n' "$(date -u +%T)" "$*" | tee -a "$OUT/log.txt" >&2; }
+cli() { env -u CHOIR_API_KEY "$CHOIR" "$@" --api-key-file "$K" --computer "$C" --host "$HOST"; }
+api() { # method path [json]
+  local m=$1 p=$2 d=${3:-}
+  if [ "$DRY" = 1 ]; then echo "DRY $m $p $d" >&2; echo '{}'; return; fi
+  curl -sS -X "$m" "$HOST$p" -H @<(printf 'Authorization: Bearer %s\n' "$(cat "$K")") \
+    -H "X-Choir-Computer: $C" -H 'Content-Type: application/json' ${d:+--data "$d"}
+}
+master_doc() { api GET /api/texture/documents | jq -r '[.documents[]? | select(.title=="Master document")] | sort_by(.created_at) | last | .doc_id // empty'; }
+head_rev() { cli texture read "$1" | jq -r .current_revision_id; }
+
+# Wait for an agent-authored revision newer than revision $2 on doc $1; print
+# seconds (history is newest first; Texture revisions are author_kind appagent).
+wait_agent_rev() {
+  local doc=$1 after=$2 t0 deadline
+  t0=$(date +%s); deadline=$((t0 + ${3:-600}))
+  while [ "$(date +%s)" -lt "$deadline" ]; do
+    if cli texture history "$doc" | jq -e --arg a "$after" '
+        (.entries // []) as $e | ([$e[] | select(.revision_id == $a)][0].created_at) as $at
+        | $at != null and ([$e[] | select(.author_kind != "user" and .created_at > $at)] | length) > 0' >/dev/null 2>&1; then
+      echo $(( $(date +%s) - t0 )); return 0
+    fi
+    sleep 10
+  done
+  echo -1
+}
+
+turns() { # doc label phase -> appends latencies
+  local doc=$1 label=$2 phase=$3 i
+  for i in $(seq 1 "$TURNS"); do
+    local h r s; h=$(head_rev "$doc")
+    r=$(cli texture revise "$doc" --expected-head "$h" --prompt "Owner turn $i ($phase): add one short sentence to the section on $label, nothing else." --request-id "pd3-proof-$label-$phase-$i-$(date +%s)" | jq -r .revision_id)
+    s=$(wait_agent_rev "$doc" "$r" 600)
+    log "latency $phase $label turn $i: ${s}s"
+    echo "{\"phase\":\"$phase\",\"doc\":\"$label\",\"turn\":$i,\"seconds\":$s}" >> "$OUT/latency.jsonl"
+  done
+}
+
+log "health $(curl -s "$HOST/health" | jq -c '{deployed: .build.deployed_commit}')"
+if [ "$DRY" = 1 ]; then
+  log "dry run: would set texture.root_desk off, create two documents, run $TURNS turns each off and on, check the master's coverage and isolation"
+  api POST /api/computer-settings '{"key":"texture.root_desk","value":false}' >/dev/null
+  exit 0
+fi
+
+# Phase off.
+api POST /api/computer-settings '{"key":"texture.root_desk","value":false}' | tee "$OUT/setting-off.json" >/dev/null
+pre=$(master_doc); log "master before (switch off): ${pre:-none}"
+A=$(cli texture create --title "PD3 proof A: harbors" --content "Write two short paragraphs on how a harbor pilot boards a ship. Use research for one cited fact." --request-id "pd3-proof-A-$(date +%s)" | jq -r .doc_id)
+B=$(cli texture create --title "PD3 proof B: lighthouses" --content "Write two short paragraphs on how a lighthouse lens is cleaned. Use research for one cited fact." --request-id "pd3-proof-B-$(date +%s)" | jq -r .doc_id)
+log "documents A=$A B=$B"
+wait_agent_rev "$A" "$(cli texture history "$A" | jq -r '.entries[-1].revision_id')" 900 >/dev/null
+wait_agent_rev "$B" "$(cli texture history "$B" | jq -r '.entries[-1].revision_id')" 900 >/dev/null
+turns "$A" harbors off; turns "$B" lighthouses off
+off_master=$(master_doc); log "master after the off phase: ${off_master:-none}"
+
+# Phase on.
+api POST /api/computer-settings '{"key":"texture.root_desk","value":true}' | tee "$OUT/setting-on.json" >/dev/null
+# Fresh documents for the on phase: a document whose work drains settles, and
+# a settled document refuses owner revisions (409), so the off phase's pair
+# may be closed by now.
+A=$(cli texture create --title "PD3 proof C: tides" --content "Write two short paragraphs on why there are two tides a day." --request-id "pd3-proof-C-$(date +%s)" | jq -r .doc_id)
+B=$(cli texture create --title "PD3 proof D: canals" --content "Write two short paragraphs on how a canal lock raises a boat." --request-id "pd3-proof-D-$(date +%s)" | jq -r .doc_id)
+log "on-phase documents A=$A B=$B"
+wait_agent_rev "$A" "$(cli texture history "$A" | jq -r '.entries[-1].revision_id')" 900 >/dev/null
+wait_agent_rev "$B" "$(cli texture history "$B" | jq -r '.entries[-1].revision_id')" 900 >/dev/null
+turns "$A" tides on; turns "$B" canals on
+M=""; for i in $(seq 1 60); do M=$(master_doc); [ -n "$M" ] && break; sleep 15; done
+log "master: ${M:-none}"
+[ -n "$M" ] || { echo '{"verdict":"fail","reason":"no master document"}' > "$OUT/evidence.json"; exit 1; }
+sleep 150   # one debounce window after the last turn
+cli texture history "$M" > "$OUT/master-history.json"
+cli texture show "$M" > "$OUT/master-show.json"
+content=$(jq -r '.revision.content // .current.content // empty' "$OUT/master-show.json")
+# Revision history carries no agent id, so the writer is read from the master
+# trajectory's trace: every agent that committed a turn on it.
+mtraj=$(api GET "/api/texture/documents/$M" | jq -r .trajectory_id)
+cli trace export "$mtraj" --out "$OUT/master-trace.json" >/dev/null
+authors=$(jq -c '[.layers.runs | .. | objects | (.agent_id? // empty) | select(type == "string" and . != "")] | unique' "$OUT/master-trace.json")
+missing='[]'
+for d in "$A" "$B"; do
+  traj=$(api GET "/api/texture/documents/$d" | jq -r .trajectory_id)
+  cli lifecycle snapshot "$traj" > "$OUT/snapshot-$d.json"
+  for w in $(jq -r '[(.snapshot.work_items // .work_items // [])[] | select((.state // .status) as $s | ($s != "completed" and $s != "cancelled" and $s != "failed" and $s != "settled"))] | .[].work_item_id' "$OUT/snapshot-$d.json"); do
+    short=$(printf '%s' "$w" | tr -d '-' | cut -c1-8)
+    printf '%s' "$content" | grep -q "$short" || missing=$(echo "$missing" | jq -c --arg w "$w" '. + [$w]')
+  done
+done
+log "master authors: $authors; missing open items: $missing"
+
+# Phase isolate.
+h=$(head_rev "$A")
+cli texture revise "$A" --expected-head "$h" --prompt "Owner turn (isolate): rewrite the whole document in full, in four paragraphs." --request-id "pd3-proof-iso-$(date +%s)" > "$OUT/iso-revise.json"
+run=""; for i in $(seq 1 30); do run=$(cli run list | jq -r --arg a "texture:$A" '[(.runs // .)[] | select(.agent_id==$a and .state=="running")][0].run_id // empty' 2>/dev/null); [ -n "$run" ] && break; sleep 3; done
+log "A's running Texture run: ${run:-none}"
+[ -n "$run" ] && cli run cancel "$run" > "$OUT/iso-cancel.json"
+mrev=$(head_rev "$M")
+turns "$B" canals isolate
+isoB=$(tail -1 "$OUT/latency.jsonl" | jq -r .seconds)
+for i in $(seq 1 30); do [ "$(head_rev "$M")" != "$mrev" ] && break; sleep 15; done
+mnext=$(head_rev "$M")
+
+jq -n --arg A "$A" --arg B "$B" --arg M "$M" --arg pre "$pre" --arg offm "$off_master" \
+  --argjson authors "$authors" --argjson missing "$missing" --arg run "$run" \
+  --arg mrev "$mrev" --arg mnext "$mnext" --arg isoB "$isoB" \
+  --slurpfile lat "$OUT/latency.jsonl" '{
+  documents: {A: $A, B: $B, master: $M},
+  off_inert: {master_before: $pre, master_after_off_phase: $offm, pass: ($pre == "" and $offm == "")},
+  authors: $authors, author_pass: ($authors == ["texture:" + $M]),
+  coverage: {missing: $missing, pass: ($missing | length == 0)},
+  isolation: {cancelled_run: $run, b_latency_s: ($isoB | tonumber), master_before: $mrev, master_after: $mnext, pass: ($run != "" and ($isoB | tonumber) >= 0 and $mnext != $mrev)},
+  latency: ($lat | group_by(.phase) | map({phase: .[0].phase, seconds: (map(.seconds) | sort)}))
+}' | tee "$OUT/evidence.json"
