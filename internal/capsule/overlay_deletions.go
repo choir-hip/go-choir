@@ -34,12 +34,6 @@ const platformSourcePrefix = "workspace/platform"
 // pinned source has far fewer files; a count past this is a runaway.
 const maxOverlayDeletions = 100000
 
-// isWhiteoutMode reports whether mode is that of an overlay whiteout entry
-// (a character device). Only deletions recorded from a whiteout carry it.
-func isWhiteoutMode(mode os.FileMode) bool {
-	return mode&os.ModeCharDevice != 0
-}
-
 // expandOverlayDeletions returns changes plus a ChangeDeleted for every file
 // of the pinned source (lowerPlatform) that a change shows the capsule
 // removed without naming it:
@@ -50,6 +44,10 @@ func isWhiteoutMode(mode os.FileMode) bool {
 //     is already an added or modified change);
 //   - an opaque directory over a lower file: that file;
 //   - a file or symlink over a lower directory: every file under it.
+//
+// A marker on workspace itself, a strict ancestor of the pinned source,
+// expands as one on workspace/platform would: every file of the pinned
+// source the upper does not hold again.
 //
 // upperDir is the overlay upper (the capsule's own writes), whose
 // workspace/platform tree mirrors the source. A path that already has a
@@ -118,6 +116,11 @@ func expandOverlayDeletions(ctx context.Context, changes []FileChange, upperDir,
 		switch {
 		case path == platformSourcePrefix:
 			rel = "."
+		case path != "" && strings.HasPrefix(platformSourcePrefix, path+"/"):
+			// A marker on a strict ancestor (workspace): a whiteout or a
+			// file there, or an opaque workspace, hides the whole pinned
+			// source, exactly as the same marker on workspace/platform.
+			rel = "."
 		case strings.HasPrefix(path, platformSourcePrefix+"/"):
 			rel = strings.TrimPrefix(path, platformSourcePrefix+"/")
 		default:
@@ -129,7 +132,9 @@ func expandOverlayDeletions(ctx context.Context, changes []FileChange, upperDir,
 		var trigger bool
 		switch {
 		case c.Kind == ChangeDeleted:
-			trigger = isWhiteoutMode(c.Mode)
+			// The walk's fact, not the mode: a deletion derived from a
+			// committed entry that is gone names no lower tree.
+			trigger = c.Whiteout
 		case c.Mode.IsDir():
 			trigger = c.Opaque
 		default:

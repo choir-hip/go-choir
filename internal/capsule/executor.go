@@ -1857,14 +1857,10 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 			return nil, fmt.Errorf("capsule release contains unsafe path %q", change.Path)
 		}
 		sourcePath := filepath.FromSlash(strings.TrimPrefix(change.Path, "/"))
-		sourceFD, err := unix.Openat2(rootFD, sourcePath, &unix.OpenHow{
-			Flags:   uint64(unix.O_RDONLY | unix.O_CLOEXEC | unix.O_NONBLOCK),
-			Resolve: unix.RESOLVE_BENEATH | unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS,
-		})
+		input, err := openBeneath(rootFD, sourcePath)
 		if err != nil {
 			return nil, fmt.Errorf("capsule release file %q is unavailable: %w", change.Path, err)
 		}
-		input := os.NewFile(uintptr(sourceFD), change.Path)
 		info, err := input.Stat()
 		if err != nil {
 			_ = input.Close()

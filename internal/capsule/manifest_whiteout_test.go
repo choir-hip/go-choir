@@ -38,6 +38,15 @@ package capsule
 //  8. Opaque scaffolding the spawn itself creates (the release dir) must
 //     stay out of the change list; expansion is limited to the pinned
 //     workspace/platform source and never touches the release tree.
+//  9. (bunch221 review) A marker on a strict ancestor of the pinned source
+//     (a whiteout at workspace, an opaque workspace, workspace replaced by
+//     a file) hides the whole workspace/platform tree; skipping it freezes
+//     a patch that does not reproduce the candidate.
+// 10. (bunch221 review) A whiteout is the walk's fact (Type "whiteout"),
+//     carried on the change; a char-device mode alone is not one.
+// 11. (bunch221 review) The kernel's other whiteout spelling, an empty
+//     regular file carrying user.overlay.whiteout, must read as a whiteout
+//     too, or the deletion returns as an added empty file.
 
 import (
 	"os"
@@ -65,8 +74,8 @@ func kindsByPath(changes []FileChange) map[string]ChangeKind {
 func TestDiffManifestsWhiteoutIsDeletedNeverAdded(t *testing.T) {
 	current := []FileManifest{whiteoutEntry("workspace/platform/frontend/src/lib/EpubApp.svelte")}
 	changes := diffManifests(nil, current)
-	if len(changes) != 1 || changes[0].Kind != ChangeDeleted {
-		t.Fatalf("a whiteout diffs as %+v, want one ChangeDeleted (failure mode 1)", changes)
+	if len(changes) != 1 || changes[0].Kind != ChangeDeleted || !changes[0].Whiteout {
+		t.Fatalf("a whiteout diffs as %+v, want one ChangeDeleted carrying Whiteout (failure modes 1, 10)", changes)
 	}
 }
 

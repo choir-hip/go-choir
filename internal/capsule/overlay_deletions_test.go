@@ -76,7 +76,7 @@ func (f *overlayFixture) mergedRemove(t *testing.T, rel string) {
 }
 
 func whiteoutChange(rel string) FileChange {
-	return FileChange{Path: platformRoot + rel, Kind: ChangeDeleted, Mode: os.ModeDevice | os.ModeCharDevice}
+	return FileChange{Path: platformRoot + rel, Kind: ChangeDeleted, Mode: os.ModeDevice | os.ModeCharDevice, Whiteout: true}
 }
 
 func deletedPaths(changes []FileChange) []string {
@@ -195,6 +195,74 @@ func TestExpandPlainDirectoryAndUpperOnlyChangesAreUnchanged(t *testing.T) {
 	}
 	if out := f.expand(t, in); len(out) != len(in) {
 		t.Fatalf("a plain directory change expanded to %+v", out)
+	}
+}
+
+// Failure mode 9: a marker on a strict ancestor of the pinned source
+// (workspace) hides the whole platform tree. rm -rf /workspace leaves one
+// whiteout at workspace and nothing under it; rm -rf and recreate leaves an
+// opaque workspace with only the recreated files. Skipping the marker
+// freezes a patch that does not reproduce the candidate tree.
+func TestExpandWhiteoutAtWorkspaceDeletesThePlatformTree(t *testing.T) {
+	f := newOverlayFixture(t)
+	f.lowerFile(t, "a.go", "a\n")
+	f.lowerFile(t, "d/deep/b.go", "b\n")
+	out := f.expand(t, []FileChange{{Path: "workspace", Kind: ChangeDeleted, Mode: os.ModeDevice | os.ModeCharDevice, Whiteout: true}})
+	assertDeleted(t, out, "workspace", platformRoot+"a.go", platformRoot+"d/deep/b.go")
+}
+
+func TestExpandOpaqueWorkspaceDeletesLowerFilesNotRecreated(t *testing.T) {
+	f := newOverlayFixture(t)
+	f.lowerFile(t, "kept.go", "kept\n")
+	f.lowerFile(t, "old.go", "old\n")
+	f.lowerFile(t, "sub/x.go", "x\n")
+	f.mergedRemove(t, ".")
+	f.upperFile(t, "kept.go", "kept, rewritten\n")
+	f.upperFile(t, "brand-new.go", "new\n")
+	out := f.expand(t, []FileChange{
+		{Path: "workspace", Kind: ChangeModified, Mode: os.ModeDir | 0o755, Opaque: true},
+		{Path: platformRoot[:len(platformRoot)-1], Kind: ChangeAdded, Mode: os.ModeDir | 0o755},
+		{Path: platformRoot + "kept.go", Kind: ChangeAdded, Mode: 0o644},
+		{Path: platformRoot + "brand-new.go", Kind: ChangeAdded, Mode: 0o644},
+	})
+	assertDeleted(t, out, platformRoot+"old.go", platformRoot+"sub/x.go")
+}
+
+func TestExpandWorkspaceReplacedByFileDeletesThePlatformTree(t *testing.T) {
+	f := newOverlayFixture(t)
+	f.lowerFile(t, "a.go", "a\n")
+	putFile(t, f.upper, "workspace", "a file now\n", 0o644)
+	out := f.expand(t, []FileChange{{Path: "workspace", Kind: ChangeAdded, Mode: 0o644}})
+	assertDeleted(t, out, platformRoot+"a.go")
+}
+
+func TestExpandPlainWorkspaceDirectoryIsUnchanged(t *testing.T) {
+	f := newOverlayFixture(t)
+	f.lowerFile(t, "a.go", "a\n")
+	in := []FileChange{{Path: "workspace", Kind: ChangeModified, Mode: os.ModeDir | 0o755}}
+	if out := f.expand(t, in); len(out) != 1 {
+		t.Fatalf("a plain workspace directory change expanded to %+v", out)
+	}
+}
+
+// Failure mode 10: a whiteout is the manifest's fact, carried on the change,
+// not re-derived from a character-device mode.
+func TestExpandTriggersOnTheWhiteoutFactNotTheMode(t *testing.T) {
+	f := newOverlayFixture(t)
+	f.lowerFile(t, "gone/a.go", "a\n")
+	notWhiteout := FileChange{Path: platformRoot + "gone", Kind: ChangeDeleted, Mode: os.ModeDevice | os.ModeCharDevice}
+	if out := f.expand(t, []FileChange{notWhiteout}); len(out) != 1 {
+		t.Fatalf("a char-device deletion without the whiteout fact expanded to %+v", out)
+	}
+	wantPaths(t, f.expand(t, []FileChange{whiteoutChange("gone")}), "gone", "gone/a.go")
+}
+
+func assertDeleted(t *testing.T, got []FileChange, want ...string) {
+	t.Helper()
+	have := deletedPaths(got)
+	sort.Strings(want)
+	if strings.Join(have, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("deleted paths = %v, want %v", have, want)
 	}
 }
 

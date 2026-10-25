@@ -263,3 +263,75 @@ func TestCapsuleReleaseDirStaysOutOfDeletions(t *testing.T) {
 		}
 	}
 }
+
+// Failure mode 11: an empty regular file carrying user.overlay.whiteout is
+// a whiteout; a non-empty one, or one without the xattr, is a file.
+func TestWalkUpperdirRecordsXattrWhiteout(t *testing.T) {
+	upper := t.TempDir()
+	platform := filepath.Join(upper, "workspace", "platform")
+	putFile(t, platform, "gone.go", "", 0o644)
+	putFile(t, platform, "full.go", "body\n", 0o644)
+	putFile(t, platform, "empty.go", "", 0o644)
+	for _, name := range []string{"gone.go", "full.go"} {
+		if err := unix.Setxattr(filepath.Join(platform, name), overlayWhiteoutXattr, nil, 0); err != nil {
+			t.Skipf("filesystem does not support %s: %v", overlayWhiteoutXattr, err)
+		}
+	}
+	manifests, err := walkUpperdir(context.Background(), upper)
+	if err != nil {
+		t.Fatal(err)
+	}
+	types := map[string]string{}
+	for _, m := range manifests {
+		types[m.Path] = m.Type
+	}
+	if got := types["workspace/platform/gone.go"]; got != "whiteout" {
+		t.Fatalf("empty file with %s recorded as %q, want whiteout", overlayWhiteoutXattr, got)
+	}
+	for _, name := range []string{"full.go", "empty.go"} {
+		if got := types["workspace/platform/"+name]; got != "file" {
+			t.Fatalf("%s recorded as %q, want file", name, got)
+		}
+	}
+	kinds := kindsByPath(diffManifests(nil, manifests))
+	if kinds["workspace/platform/gone.go"] != ChangeDeleted {
+		t.Fatalf("xattr whiteout diffs as %v, want deleted", kinds["workspace/platform/gone.go"])
+	}
+}
+
+// Failure mode 9 against the kernel: removing workspace itself.
+func TestCapsuleDeletesWorkspaceAncestor(t *testing.T) {
+	o := newRealOverlay(t, map[string]string{"a.go": "a\n", "d/b.go": "b\n"})
+	if err := os.RemoveAll(filepath.Join(o.merged, "workspace")); err != nil {
+		t.Fatal(err)
+	}
+	patch, _ := o.patchOf(t)
+	for _, want := range []string{"--- a/a.go\n+++ /dev/null", "--- a/d/b.go\n+++ /dev/null"} {
+		if !strings.Contains(patch, want) {
+			t.Fatalf("patch missing %q:\n%s", want, patch)
+		}
+	}
+}
+
+func TestCapsuleRemovesAndRecreatesWorkspaceAncestor(t *testing.T) {
+	o := newRealOverlay(t, map[string]string{"kept.go": "kept\n", "old.go": "old\n"})
+	if err := os.RemoveAll(filepath.Join(o.merged, "workspace")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(o.platform, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(o.platform, "kept.go"), []byte("kept, rewritten\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var buf [1]byte
+	if n, err := unix.Lgetxattr(filepath.Join(o.upper, "workspace"), overlayOpaqueXattr, buf[:]); err != nil || n != 1 {
+		t.Skipf("kernel did not mark the recreated workspace opaque (n=%d err=%v)", n, err)
+	}
+	patch, _ := o.patchOf(t)
+	for _, want := range []string{"--- a/old.go\n+++ /dev/null", "-kept", "+kept, rewritten"} {
+		if !strings.Contains(patch, want) {
+			t.Fatalf("patch missing %q:\n%s", want, patch)
+		}
+	}
+}

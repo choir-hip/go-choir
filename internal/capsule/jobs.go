@@ -355,14 +355,10 @@ func (e *Executor) storeJobLog(caps *Capsule, st capsulejob.Status) string {
 	}
 	defer unix.Close(rootFD)
 	rel := strings.TrimPrefix(filepath.Join(capsulejob.Root, st.ID, capsulejob.LogFile), "/")
-	fd, err := unix.Openat2(rootFD, rel, &unix.OpenHow{
-		Flags:   uint64(unix.O_RDONLY | unix.O_CLOEXEC | unix.O_NONBLOCK),
-		Resolve: unix.RESOLVE_BENEATH | unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS,
-	})
+	in, err := openBeneath(rootFD, rel)
 	if err != nil {
 		return ""
 	}
-	in := os.NewFile(uintptr(fd), rel)
 	defer in.Close()
 	if info, err := in.Stat(); err != nil || !info.Mode().IsRegular() || info.Size() > capsulejob.MaxLogBytes {
 		return ""

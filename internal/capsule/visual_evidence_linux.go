@@ -4,10 +4,7 @@ package capsule
 
 import (
 	"context"
-	"os"
 	"sort"
-
-	"golang.org/x/sys/unix"
 
 	"github.com/yusefmosiah/go-choir/internal/visualcapture"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
@@ -24,14 +21,11 @@ func (e *Executor) stageVisualEvidence(ctx context.Context, rootFD int, agentRun
 		return nil, err
 	}
 	open := func(name string) (evidenceInput, error) {
-		fd, err := unix.Openat2(rootFD, visualcapture.EvidencePrefix+name, &unix.OpenHow{
-			Flags:   uint64(unix.O_RDONLY | unix.O_CLOEXEC | unix.O_NONBLOCK),
-			Resolve: unix.RESOLVE_BENEATH | unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS,
-		})
+		in, err := openBeneath(rootFD, visualcapture.EvidencePrefix+name)
 		if err != nil {
 			return nil, err
 		}
-		return os.NewFile(uintptr(fd), name), nil
+		return in, nil
 	}
 	return stageEvidenceFiles(ctx, names, open, temporary, release, e.capsuleJobViews(agentRunID, capsuleID))
 }
