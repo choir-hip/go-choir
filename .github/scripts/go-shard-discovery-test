@@ -23,7 +23,10 @@ import collections, json, os, pathlib, shutil, subprocess, tempfile
 #  11. Fuzz targets (their seed corpora run under -run) are not discovered;
 #  12. discovery succeeds but lists no test names, and the shard passes;
 #  13. a sharded run selects nothing (more shards than packages or test
-#      names) and reports a green shard that tested nothing.
+#      names) and reports a green shard that tested nothing;
+#  14. (docs/problems/ci-wall-clock-2026-10-24.md) heavy tests land on one
+#      split shard because discovery order put them there, or a weights file
+#      line (a stale name, a bad number) drops or repeats a test.
 MODULE = 'github.com/yusefmosiah/go-choir/'
 RUNTIME = {'internal/agentcore', 'internal/textureowner'}
 
@@ -223,5 +226,47 @@ elif os.environ.get('FAIL_EXECUTION'): sys.exit(8)
             assert result.returncode != 0, ('stale split entry must fail closed', stale, shard)
             assert stale.removeprefix('./') in result.stderr, result.stderr
             assert not executions(invocations), invocations
+    # Weights (scripts/go-test-split-weights): the heaviest names go to
+    # different split shards, however discovery orders them. Round-robin
+    # would put TestStoreCase00 and TestStoreCase06 (positions 0 and 6) on
+    # shard 0 together.
+    weighted = root / 'weighted'
+    weighted.mkdir()
+    for name in ('go-test-non-runtime-shards', 'go-test-with-timing', 'go-test-split-packages'):
+        shutil.copy2('scripts/' + name, weighted / name)
+    weights = weighted / 'go-test-split-weights'
+    split_names = {n for p in SPLIT for n in tests_for(p)}
+
+    def shard_of_name(total, weights_text, name):
+        weights.write_text(weights_text)
+        homes = []
+        ran = collections.Counter()
+        for shard in range(total - 2):
+            result, invocations = run(str(weighted / 'go-test-non-runtime-shards'), total, shard)
+            assert result.returncode == 0, (shard, result.stdout, result.stderr)
+            for call in executions(invocations):
+                selected = call[call.index('-run') + 1][2:-2].split('|')
+                for n in selected:
+                    ran[n] += 1
+                if name in selected: homes.append(shard)
+        assert all(ran[n] == 1 for n in split_names), ('weights must not drop or repeat a name', {n: ran[n] for n in split_names if ran[n] != 1})
+        return homes
+
+    text = '# comment\n100 TestStoreCase00\n100 TestStoreCase06\n7 TestNoSuchTest\n'
+    a, b = shard_of_name(8, text, 'TestStoreCase00'), shard_of_name(8, text, 'TestStoreCase06')
+    assert len(a) == 1 and len(b) == 1 and a != b, ('the two heaviest names share a shard', a, b)
+    # Same inputs, same plan (every shard plans independently).
+    assert shard_of_name(8, text, 'TestStoreCase00') == a
+    # A bad weight fails every split shard, running nothing.
+    for bad in ('x TestStoreCase00\n', '-3 TestStoreCase00\n', '5\n'):
+        weights.write_text(bad)
+        result, invocations = run(str(weighted / 'go-test-non-runtime-shards'), 8, 0)
+        assert result.returncode != 0 and 'go-test-split-weights' in result.stderr, (bad, result.stderr)
+        assert not executions(invocations), invocations
+    # No weights file: every name weighs 1 and the plan still covers all.
+    weights.unlink()
+    for shard in range(6):
+        result, _ = run(str(weighted / 'go-test-non-runtime-shards'), 8, shard)
+        assert result.returncode == 0, result.stderr
 print('go-shard-discovery: all tests passed')
 PY
