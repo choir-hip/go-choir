@@ -429,11 +429,28 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 		}
 	}
 
+	// Texture holds its trajectory (texture.hold_trajectory,
+	// docs/design/texture-holds-the-trajectory-2026-10-25.md): the run
+	// continues its earlier conversation, and with no seed the owner's first
+	// revision is shown as the owner's request.
+	holdTrajectory := rt.textureSettingOn(ctx, ownerID, doc.ComputerID, store.SettingTextureHoldTrajectory)
+	directionsOn := rt.textureOwnerDirectionsOn(ctx, ownerID, doc.ComputerID)
+	wantRoot := holdTrajectory && metadataString(metadata, "seed_prompt") == "" && strings.TrimSpace(currentRevision.ParentRevisionID) != ""
 	var ownerDirections []textureOwnerDirection
-	if rt.textureOwnerDirectionsOn(ctx, ownerID, doc.ComputerID) {
-		ownerDirections = collectTextureOwnerDirections(currentRevision, previousRevision, func(revisionID string) (types.Revision, error) {
+	promptMetadata := metadata
+	if directionsOn || wantRoot {
+		directions, root := collectTextureOwnerStory(currentRevision, previousRevision, func(revisionID string) (types.Revision, error) {
 			return rt.getTextureRevision(ctx, ownerID, revisionID)
-		})
+		}, wantRoot)
+		if directionsOn {
+			ownerDirections = directions
+		}
+		if root != nil {
+			if request := strings.TrimSpace(root.Content); request != "" {
+				promptMetadata = cloneMetadata(metadata)
+				promptMetadata["seed_prompt"] = truncatePromptSnippet(request, textureOriginalRequestMaxChars)
+			}
+		}
 	}
 
 	diffSummary := ""
@@ -474,7 +491,7 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 	}
 
 	contextMode := textureAgentRevisionContextMode(currentRevision, previousRevision)
-	agentPrompt := buildAgentRevisionRequest(currentRevision, previousRevision, metadata, req, diffSummary, ownerDirections)
+	agentPrompt := buildAgentRevisionRequest(currentRevision, previousRevision, promptMetadata, req, diffSummary, ownerDirections)
 
 	// Create the runtime run with Texture agent revision metadata.
 	// Carry forward durable context keys from the current head revision
@@ -524,6 +541,9 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 		} else if ok {
 			runMetadata["actor_rewarm_source_loop_id"] = sourceRunID
 		}
+	}
+	if holdTrajectory {
+		runMetadata["actor_rewarm_carry_conversation"] = true
 	}
 	if scheduledMessageSeq > 0 {
 		runMetadata["scheduled_message_seq"] = scheduledMessageSeq

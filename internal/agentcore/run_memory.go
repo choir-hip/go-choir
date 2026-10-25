@@ -150,6 +150,9 @@ func (m *runMemoryManager) seedActorMemorySnapshot(ctx context.Context) error {
 	if ownerID == "" || computerID == "" || agentID == "" || runID == "" {
 		return nil
 	}
+	if metadataBoolValue(m.rec.Metadata, runMetadataCarryActorConversation) && agentProfileForRun(m.rec) == agentprofile.Texture {
+		return m.carryActorConversation(ctx, ownerID, computerID, agentID, runID)
+	}
 	sourceRunID, priorEntries, err := m.store.LatestActorRunMemoryEntries(ctx, ownerID, computerID, agentID, runID)
 	if err != nil {
 		if errors.Is(err, runtimestore.ErrNotFound) {
@@ -189,6 +192,132 @@ func (m *runMemoryManager) seedActorMemorySnapshot(ctx context.Context) error {
 		return fmt.Errorf("append actor memory snapshot: %w", err)
 	}
 	return nil
+}
+
+// carryActorConversation continues the actor's earlier activation: its latest
+// checkpoint (as this run's checkpoint) and the messages after it, verbatim,
+// so a Texture wake sees its own casts and writes and the owner's earlier
+// turns. The source is the run named by actor_rewarm_source_loop_id when it
+// holds this actor's memory, else the actor's newest run with memory; the
+// continuity is the agent's, never a run's (PD2). Carried messages keep
+// their message role: a runtime injection authorizes delivery only in the
+// run it was injected into, so none is carried as one. Run-context turns are
+// the earlier run's facts and are dropped, and a last cell cut off before
+// its result is dropped. The bound is the run's own threshold compaction.
+func (m *runMemoryManager) carryActorConversation(ctx context.Context, ownerID, computerID, agentID, runID string) error {
+	sourceRunID := strings.TrimSpace(metadataStringValue(m.rec.Metadata, runMetadataActorRewarmSource))
+	var priorEntries []types.RunMemoryEntry
+	if sourceRunID != "" && sourceRunID != runID {
+		entries, err := m.store.ListRunMemoryEntries(ctx, ownerID, sourceRunID)
+		if err != nil {
+			return fmt.Errorf("load actor conversation %s: %w", sourceRunID, err)
+		}
+		if runMemoryEntriesOfAgent(entries, agentID) {
+			priorEntries = entries
+		}
+	}
+	if len(priorEntries) == 0 {
+		var err error
+		sourceRunID, priorEntries, err = m.store.LatestActorRunMemoryEntries(ctx, ownerID, computerID, agentID, runID)
+		if err != nil {
+			if errors.Is(err, runtimestore.ErrNotFound) {
+				return nil
+			}
+			return fmt.Errorf("load actor conversation: %w", err)
+		}
+	}
+	checkpoint, tail := latestRunMemoryCheckpointAndTail(priorEntries)
+	tail = carryableRunMemoryTail(tail)
+	if checkpoint != "" {
+		if _, err := m.store.AppendRunMemoryEntry(ctx, types.RunMemoryEntry{
+			RunID:        runID,
+			OwnerID:      ownerID,
+			AgentID:      agentID,
+			Kind:         types.RunMemoryEntryCompaction,
+			Summary:      checkpoint,
+			TokensBefore: estimateRawMessagesTokens(buildRunMemoryContext(priorEntries)),
+			Reason:       "actor_rewarm",
+			Details: map[string]any{
+				"source_loop_id":    sourceRunID,
+				"carried_messages":  len(tail),
+				"checkpoint_status": "carried_actor_conversation",
+			},
+		}); err != nil {
+			return fmt.Errorf("carry actor checkpoint: %w", err)
+		}
+	}
+	for _, entry := range tail {
+		if err := m.appendMessage(ctx, runMemoryMessageRole(entry.Message), entry.Message); err != nil {
+			return fmt.Errorf("carry actor conversation: %w", err)
+		}
+	}
+	return nil
+}
+
+// runMemoryEntriesOfAgent reports a non-empty memory whose messages all
+// belong to agentID.
+func runMemoryEntriesOfAgent(entries []types.RunMemoryEntry, agentID string) bool {
+	found := false
+	for _, entry := range entries {
+		if entry.Kind != types.RunMemoryEntryMessage && entry.Kind != types.RunMemoryEntryCompaction {
+			continue
+		}
+		if strings.TrimSpace(entry.AgentID) != agentID {
+			return false
+		}
+		found = true
+	}
+	return found
+}
+
+// carryableRunMemoryTail drops run-context turns and tool results whose call
+// is not carried, and cuts the tail before the first tool_use whose result
+// never arrived, so the carried conversation is one a provider accepts.
+func carryableRunMemoryTail(tail []types.RunMemoryEntry) []types.RunMemoryEntry {
+	out := make([]types.RunMemoryEntry, 0, len(tail))
+	pending := map[string]int{} // tool_use id -> index in out of its call
+	called := map[string]bool{}
+	for _, entry := range tail {
+		if isRunContextMessage(entry.Message) {
+			continue
+		}
+		var parsed struct {
+			Content []struct {
+				Type      string `json:"type"`
+				ID        string `json:"id"`
+				ToolUseID string `json:"tool_use_id"`
+			} `json:"content"`
+		}
+		_ = json.Unmarshal(entry.Message, &parsed)
+		orphan := false
+		for _, block := range parsed.Content {
+			if block.Type == "tool_result" && !called[block.ToolUseID] {
+				orphan = true
+			}
+		}
+		if orphan {
+			continue
+		}
+		for _, block := range parsed.Content {
+			if block.Type == "tool_use" {
+				called[block.ID] = true
+			}
+		}
+		for _, block := range parsed.Content {
+			switch block.Type {
+			case "tool_use":
+				pending[block.ID] = len(out)
+			case "tool_result":
+				delete(pending, block.ToolUseID)
+			}
+		}
+		out = append(out, entry)
+	}
+	cut := len(out)
+	for _, idx := range pending {
+		cut = min(cut, idx)
+	}
+	return out[:cut]
 }
 
 func latestRunMemoryCheckpointAndTail(entries []types.RunMemoryEntry) (string, []types.RunMemoryEntry) {
