@@ -277,3 +277,40 @@ Engineering (faf32, 3440, 9d5d, 9e18): hf:deepseek-ai/DeepSeek-V4.1-Flash-1017, 
 - N4 Each engineer Report wakes Texture to re-cast the full spec (4c325b75, b540525e) -> duplicate assignments. Finding.
 - N5 Freeze order: capture must follow the last build, with nothing between (2 refusals in 9d5d). The overlay does not say so. Hypothesis.
 - N6 A refused first Freeze still opens an op row (5b4eb184 created 04:25:18.9, before the 04:25:19.3 refusal); it was failed by the assignment end. Finding.
+
+## Round 4: reader-4 (assignment-9561e7dc, op selfdev-f3076820), 2026-10-25 06:15 UTC
+
+Computer b@c, trajectory ac0cb480, build ce8d9c538 (deployed 05:20:25). Sources: `trace export` (06:03 and 06:13), `lifecycle events|capsule-evidence`, `self-dev show|visual|patch`, `run list`, a local rebuild of the frozen patch. Finding = a trace line or a reproduction shows it; hypothesis = code reading.
+
+### 1. The independent judgment
+- Finding: the op error is a fixed string (`tools_capsule.go:457`, decision "fail"); the reasons are only in management's verify (run 918f0195, gpt-6-luna, 06:01:00-06:01:39, op failed 06:01:37.75) and its report to Texture (inbox seq 4): build and 11 static checks passed; `/read.html` shows "only a header and signed-out sample label", no content or controls; the desktop capture is nonblank but proves nothing about the Reader. Correct call: I viewed fb5c8edb, it is the page bar over an empty dark page.
+- Finding: management judged against the stale spec. It accepted "classic readers preserved ... following the earlier retain ruling" and never mentioned the renamed ids, the aliases or the package.json edit, all of which break the 05:27 correction.
+
+### 2. Why /read.html is blank: three chained Reader defects, not the capture (reproduced locally)
+Rebuilt the frozen patch on ce8d9c538 (node 22, same lockfile), served dist with a stand-in for the capture server (/auth/session signed-out, /api 503) and ran Chrome with the capture's flags (`--headless=new --virtual-time-budget=5000 --screenshot`). Result: 9,742 B vs the trace's 9,372 B, same blank page.
+- D1 (what the capture shows). `inline-reader-page.mjs` `withoutImports` strips only `import"..."`; the chunk begins `import{l as M,...}from"./pdf-text-BRoX2Cg_.js"`. Inlined into /read.html it resolves to `/pdf-text-....js`, which is 404 (the file is in /assets/); the module never runs. Capture server log: two GETs of that path. The engineer's own cell (call 248, receipt f858a794) printed that very line; it counted only lines starting "import " (0) and moved on. Its check job (11/11 PASS) greps strings, it never runs the page.
+- D2 (hidden behind D1). `pdf-text.js` `extractTextFromPdfContent`: the `/` branch skips a name with `while (DELIMITERS.indexOf(c) < 0)`, but DELIMITERS contains `/`, so the loop never advances: infinite loop on any `/F1`. Node probes hung at the 30 s cell limit six times (calls 178-186, 3 min), and the first two captures hit the 60 s shot deadline (receipts 6878ce0c, 71f52418). The engineer blamed bundle downloads and inlined the page; inlining turned a hang into a silent blank. Verified: with only D1 fixed, Chrome hung until my 100 s kill.
+- D3. `reader.js` takes `pages` from `extractPdfText` as strings but `body()` calls `.map` on them: TypeError, DOM stays "Opening the sample document...". Playwright: `pageerror e.pdfPages[...].map is not a function`.
+- With a one-line fix for each, the 5000 ms virtual-time budget is enough: 133,782 B capture with the sample text, page 1/2, tools and footer (scratchpad/tr4/capE.png). So: not capture timing, not a static-server path issue, not a worker URL (the preview never loads pdf.js; it uses its own extractor, so the bundled PDF is not rendered by pdf.js there, and in-app the signed-out sample is `sampleModel` text, App.svelte:226, not a rendered PDF: hypothesis against the brief).
+- Harness facts: fixed `--virtual-time-budget`, no ready selector (the `--screenshot` flag cannot wait on one), `/api` 503. Chrome prints no console errors to stderr, so the failed module load left no trace; only the server saw the 404.
+
+### 3. Spec: the correction never reached the engineer
+- Finding: Texture's 05:21:53 cast was a two-action summary ("matches the detailed owner specification in this document"), not the request text. The engineer reported at 05:24:52 (call 51) that no such document reaches the capsule, and took the rename from repo docs (`app-packages-replan-2026-10-24.md`, the trace-review doc).
+- Finding: owner_directions works. Texture's 05:27:33 cast (run 43629206, revision 1c9164a8) carries aliases [], ids pdf/epub unchanged, only the two MEDIA_FILE_ROUTES rows removed, Desktop.svelte untouched. It did not re-cast the stale rename. But management run 665fbdcf (05:27:33-05:27:57) wrote "round remains open because engineering assignment ... is still bound" and sent no Note. The engineer's inbox at 05:59:42 (call 261) holds the original cast and 17 job-ended records, nothing else.
+- Result, in the frozen patch: aliases ["pdf","epub"]; registry ids renamed pdf-classic/epub-classic ("PDF Classic") with the static entries moved out; package.json build script edited (the original brief forbids it); scratch `scripts/reader-candidate-check.mjs` left in the candidate; the two MEDIA_FILE_ROUTES rows removed as asked (plus a mis-indented comment). Not honoured.
+- Finding: the engineer's mid-run Report (call 51, asks a question) was read as a pause: management 66510e1a and Texture rev ceba9f52 told the owner "engineering paused, no build started" while it was authoring.
+
+### 4. Fixes under test
+- Guard: no `loop.retry`, no `loop.cancelled`, no partial Complete (finding; partial refusal not exercised). Complete #1 was a compile error (arity), #2 completed 06:01:00.8.
+- Job-outcome resume: 11 parks, resumed 3.7-129 s later (129 s = the probe job's 2 min wall limit), 17 `job:...:ended` records, no guard charge. Works.
+- Freeze: 4 calls. Three refusals (05:59:33, :38, :52): the engineer cited the Poll cell's own receipt (capsule-go-eval, retyped) and then a failed earlier job; fourth (06:00:00) used `v.ReceiptRef`. 27 s lost. The first refused Freeze created the op row (05:59:32.9), as in round 3 N6; the real freeze is 06:00:00.
+- carry_unfinished: not exercised (fresh git base ce8d9c538, no carried tree). Capture /auth fix: `/` is the desktop (62,791 B), works.
+- Cost: 267 calls (all capsule_go_eval), 38 min 55 s (05:22:05-06:01:00), DeepSeek V4.1 Flash 1017 effort low via synthetic, 48.3M input tokens (98.4% cached), 120K output; 359 s parked on jobs, 180 s in six 30 s hangs (D2), about 210 s on five "secret-bearing Go source" refusals (calls 53-58). Management and Texture: gpt-6-luna, effort high.
+
+### 5. Now (06:13)
+Nothing is running. Assignment completed, capsule revoked, op failed, trajectory live. No management or engineering run since 06:01:39, no repair round, no carried tree. Texture inbox cursor 3, head 4: management's 06:01:37 report is unread 12 min, no Texture run since 05:27, no wake recorded (obligations: wakes 0 unprojected/retrying). The document (6ab01f15) still says "engineering paused".
+
+### 6. New problems
+- P1 Owner correction not forwarded to a bound engineer (665fbdcf, call 261). P2 Texture's cast is a summary, so quality bar and prohibitions never arrive (call 1 output).
+- P3 Inline plugin leaves a relative import (D1, call 248). P4 pdf-text infinite loop (D2). P5 pages shape (D3). P6 candidate checks assert strings, not rendering, and the Report says "light surface, not empty" for a 9 KB PNG next to a 62 KB one.
+- P7 Texture not woken by the final report. P8 "secret-bearing Go source" refusal names no pattern (cause hypothesis: the word "token" or a `*_KEY` constant; calls 53-58). P9 first refused Freeze opens an op row (N6).
