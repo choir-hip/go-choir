@@ -108,6 +108,10 @@ type carriedPatchDeps struct {
 	Deriver carriedPatchDeriver
 	// Root is the updater root; staged patches live under <Root>/carried.
 	Root string
+	// CarryUnfinished is engineering.carry_unfinished, read for this offer.
+	// Off, a recorded offer of a kept unfinished patch is absent: no mount,
+	// no notice (the switch is the whole rollback).
+	CarryUnfinished bool
 }
 
 type carriedPatchInput struct {
@@ -167,6 +171,14 @@ type carriedPatchOffer struct {
 	// SourceUnfinished: the source round was stopped before it froze and its
 	// work was kept from its capsule; SourceReason is why it was stopped.
 	SourceUnfinished bool `json:"source_unfinished,omitempty"`
+	// OlderFrozen* name the newest older round that froze a candidate, when
+	// a newer stopped round outranked it; StartedFrom is whether that
+	// stopped round was itself offered the candidate as its carried work.
+	OlderFrozenCandidateID    string `json:"older_frozen_candidate_id,omitempty"`
+	OlderFrozenAssignmentID   string `json:"older_frozen_assignment_id,omitempty"`
+	OlderFrozenResult         string `json:"older_frozen_result,omitempty"`
+	OlderFrozenOperationState string `json:"older_frozen_operation_state,omitempty"`
+	OlderFrozenStartedFrom    bool   `json:"older_frozen_started_from,omitempty"`
 	// ConflictPaths are the files that do not apply to a moved base, and
 	// CleanPaths the ones that still would, on a refusal for that cause.
 	ConflictPaths []string `json:"conflict_paths,omitempty"`
@@ -241,6 +253,9 @@ func carriedOfferPath(root, assignmentID string, attempt uint64) string {
 // the retry starts clean.
 func offerCarriedPatch(ctx context.Context, deps carriedPatchDeps, in carriedPatchInput) carriedPatchOffer {
 	if existing := readCarriedOffer(deps.Root, in.AssignmentID, in.Attempt); existing.Status != "" {
+		if existing.SourceUnfinished && !deps.CarryUnfinished {
+			return carriedPatchOffer{}
+		}
 		return existing
 	}
 	if deps.History == nil || deps.Deriver == nil || strings.TrimSpace(deps.Root) == "" {
@@ -268,6 +283,7 @@ func offerCarriedPatch(ctx context.Context, deps carriedPatchDeps, in carriedPat
 	case chosen.Unfinished:
 		offer.SourceUnfinished, offer.SourceResult = true, carriedUnfinishedResult
 		offer.SourceReason = boundCarriedReason(chosen.UnfinishedReason)
+		nameOlderFrozenCandidate(&offer, deps.Root, entries, in.AssignmentID, *chosen)
 	case chosen.OperationState != "" && (chosen.Result == types.EngineeringResultCompleted || chosen.OperationState == selfdev.StateRejected):
 		offer.SourceOperationID, offer.SourceOperationState = chosen.OperationID, chosen.OperationState
 		offer.SourceReason = boundCarriedReason(chosen.OperationReason)
@@ -329,7 +345,7 @@ func offerCarriedPatch(ctx context.Context, deps carriedPatchDeps, in carriedPat
 	facts := carriedPatchFacts{
 		Schema: carriedFactsSchema, PatchSHA256: patch.SHA256, Size: len(patch.Patch), BaseRef: chosen.BaseRef,
 		CandidateID: chosen.CandidateID, CandidateRef: chosen.CandidateRef,
-		SourceAssignmentID: chosen.AssignmentID, SourceAttempt: chosen.Attempt, SourceResult: string(chosen.Result),
+		SourceAssignmentID: chosen.AssignmentID, SourceAttempt: chosen.Attempt, SourceResult: offer.SourceResult,
 		Files: patch.Files, Omitted: patch.Omitted, Unfinished: chosen.Unfinished,
 	}
 	dir, err := stageCarriedPatch(deps.Root, patch.Patch, facts)
@@ -444,15 +460,8 @@ func writeCarriedOffer(root string, offer carriedPatchOffer) {
 // offered patch re-verified: bytes that no longer match are a refusal, never a
 // mount or a name.
 func readCarriedOffer(root, assignmentID string, attempt uint64) carriedPatchOffer {
-	if strings.TrimSpace(root) == "" || strings.TrimSpace(assignmentID) == "" {
-		return carriedPatchOffer{}
-	}
-	raw, err := os.ReadFile(carriedOfferPath(root, assignmentID, attempt))
-	if err != nil {
-		return carriedPatchOffer{}
-	}
-	var offer carriedPatchOffer
-	if json.Unmarshal(raw, &offer) != nil || offer.Schema != carriedOfferSchema || offer.AssignmentID != assignmentID || offer.Attempt != attempt {
+	offer, ok := decodeCarriedOffer(root, assignmentID, attempt)
+	if !ok {
 		return carriedPatchOffer{}
 	}
 	if offer.Status != carriedOffered {
@@ -468,6 +477,50 @@ func readCarriedOffer(root, assignmentID string, attempt uint64) carriedPatchOff
 	}
 	offer.Dir = dir
 	return offer
+}
+
+// decodeCarriedOffer reads the recorded decision for an assignment as it was
+// recorded, without re-verifying a staged patch.
+func decodeCarriedOffer(root, assignmentID string, attempt uint64) (carriedPatchOffer, bool) {
+	if strings.TrimSpace(root) == "" || strings.TrimSpace(assignmentID) == "" {
+		return carriedPatchOffer{}, false
+	}
+	raw, err := os.ReadFile(carriedOfferPath(root, assignmentID, attempt))
+	if err != nil {
+		return carriedPatchOffer{}, false
+	}
+	var offer carriedPatchOffer
+	if json.Unmarshal(raw, &offer) != nil || offer.Schema != carriedOfferSchema || offer.AssignmentID != assignmentID || offer.Attempt != attempt {
+		return carriedPatchOffer{}, false
+	}
+	return offer, true
+}
+
+// nameOlderFrozenCandidate records, on an offer of a kept unfinished patch,
+// the newest older round that froze a candidate: the newest round wins the
+// carry, so a stopped round outranks an older frozen candidate, and the
+// engineer is told which one and whether the stopped round started from it.
+func nameOlderFrozenCandidate(offer *carriedPatchOffer, root string, entries []carriedCandidate, selfAssignmentID string, chosen carriedCandidate) {
+	var older *carriedCandidate
+	for i := range entries {
+		entry := entries[i]
+		if entry.Unfinished || entry.AssignmentID == selfAssignmentID || entry.AssignmentID == chosen.AssignmentID ||
+			entry.Kind != types.EngineeringAssignmentImplementation || strings.TrimSpace(entry.CandidateRef) == "" ||
+			!entry.CreatedAt.Before(chosen.CreatedAt) {
+			continue
+		}
+		if older == nil || entry.CreatedAt.After(older.CreatedAt) {
+			older = &entries[i]
+		}
+	}
+	if older == nil {
+		return
+	}
+	offer.OlderFrozenCandidateID, offer.OlderFrozenAssignmentID = older.CandidateID, older.AssignmentID
+	offer.OlderFrozenResult, offer.OlderFrozenOperationState = string(older.Result), older.OperationState
+	if prior, ok := decodeCarriedOffer(root, chosen.AssignmentID, chosen.Attempt); ok {
+		offer.OlderFrozenStartedFrom = prior.Status == carriedOffered && prior.CandidateID == older.CandidateID
+	}
 }
 
 // carriedPatchDirForSpawn is the directory the retry's capsule mounts: only
@@ -530,6 +583,22 @@ func carriedPatchNotice(offer carriedPatchOffer) string {
 				"This capsule's /workspace/platform is still the clean base tree: nothing has been applied. " +
 				"You may ignore it and do the work from the objective, or apply it from /workspace/platform with `git apply /selfdev/carried/source.patch`, " +
 				"read what it left half done, and continue from there instead of starting over; re-run the build, tests and checks in this capsule after your last write, as for any change; Freeze judges only this capsule's own diff.")
+			if offer.OlderFrozenCandidateID != "" {
+				result := offer.OlderFrozenResult
+				if result == "" {
+					result = "no result"
+				}
+				fmt.Fprintf(&b, " An older round on this trajectory froze a candidate: %s (assignment %s, reported %s", offer.OlderFrozenCandidateID, offer.OlderFrozenAssignmentID, result)
+				if offer.OlderFrozenOperationState != "" {
+					fmt.Fprintf(&b, ", its self-development operation %s", offer.OlderFrozenOperationState)
+				}
+				b.WriteString("). It is not carried: the newest round's work is carried, and this kept patch is newer.")
+				if offer.OlderFrozenStartedFrom {
+					b.WriteString(" The stopped round was offered that candidate's patch as its starting point, so this patch may already contain it.")
+				} else {
+					b.WriteString(" The stopped round did not start from it, so this patch does not contain that candidate's work; if that candidate is the better start, ignore this patch and do the work from the objective.")
+				}
+			}
 		case offer.SourceOperationState != "":
 			fmt.Fprintf(&b, "Carried work: %s Its source patch, sha256 %s, %d bytes, changing: %s, is the starting point for this assignment.",
 				carriedOutcome(offer), offer.PatchSHA256, offer.Size, carriedFileList(offer.Files))
@@ -623,7 +692,7 @@ func (h storeCarriedHistory) CarriedCandidates(ctx context.Context, ownerID, com
 			Result: report.Result, CreatedAt: candidate.CreatedAt,
 		})
 	}
-	if h.rt.computerSettingOn(ctx, ownerID, computerID, store.SettingEngineeringCarryUnfinished) {
+	if h.rt.carryUnfinishedOn(ctx, ownerID, computerID) {
 		out = mergeUnfinishedRounds(out, readUnfinishedRounds(h.rt.selfdevUpdaterRoot, trajectoryID), trajectoryID,
 			func(assignmentID string, attempt uint64) (types.EngineeringAssignment, error) {
 				return h.rt.store.GetEngineeringAssignment(ctx, ownerID, computerID, assignmentID, attempt)
@@ -713,7 +782,8 @@ func (rt *Runtime) offerCarriedPatchForAssignment(ctx context.Context, assignmen
 		binding.Kind != types.EngineeringAssignmentImplementation {
 		return carriedPatchOffer{}
 	}
-	return offerCarriedPatch(ctx, carriedPatchDeps{History: storeCarriedHistory{rt: rt}, Deriver: rt.capsuleExecutor, Root: rt.selfdevUpdaterRoot},
+	return offerCarriedPatch(ctx, carriedPatchDeps{History: storeCarriedHistory{rt: rt}, Deriver: rt.capsuleExecutor, Root: rt.selfdevUpdaterRoot,
+		CarryUnfinished: rt.carryUnfinishedOn(ctx, binding.OwnerID, binding.ComputerID)},
 		carriedPatchInput{OwnerID: binding.OwnerID, ComputerID: binding.ComputerID, TrajectoryID: binding.TrajectoryID,
 			AssignmentID: assignment.AssignmentID, Attempt: binding.Attempt, RetryBaseRef: retryBaseRef})
 }
@@ -727,5 +797,9 @@ func (rt *Runtime) carriedPatchNoticeForRun(rec *types.RunRecord) string {
 	}
 	assignmentID := metadataStringValue(rec.Metadata, "assignment_id")
 	attempt := uint64(metadataIntValue(rec.Metadata, "assignment_attempt"))
-	return carriedPatchNotice(readCarriedOffer(rt.selfdevUpdaterRoot, assignmentID, attempt))
+	offer := readCarriedOffer(rt.selfdevUpdaterRoot, assignmentID, attempt)
+	if offer.SourceUnfinished && !rt.carryUnfinishedOn(context.Background(), rec.OwnerID, rec.ComputerID) {
+		return ""
+	}
+	return carriedPatchNotice(offer)
 }

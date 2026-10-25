@@ -48,6 +48,12 @@ const (
 	// unfinishedSnapshotTimeout bounds the snapshot inside the revoke, so a
 	// capsule that cannot be quiesced delays its destroy by at most this.
 	unfinishedSnapshotTimeout = 45 * time.Second
+	// A record's Omitted list is capped when it is kept (the rest are
+	// counted), and a record above unfinishedRecordMaxBytes is not read:
+	// records are read on every spawn on the trajectory.
+	unfinishedOmittedMaxEntries = 64
+	unfinishedOmittedMaxBytes   = 8 << 10
+	unfinishedRecordMaxBytes    = 64 << 10
 )
 
 var errUnfinishedPatchUnavailable = errors.New("kept unfinished patch is missing or no longer matches its digest")
@@ -71,6 +77,46 @@ type unfinishedRound struct {
 	Files        []string  `json:"files"`
 	Omitted      []string  `json:"omitted,omitempty"`
 	TakenAt      time.Time `json:"taken_at"`
+}
+
+// carryUnfinishedOn reads engineering.carry_unfinished for a computer.
+func (rt *Runtime) carryUnfinishedOn(ctx context.Context, ownerID, computerID string) bool {
+	return rt.computerSettingOn(ctx, ownerID, computerID, store.SettingEngineeringCarryUnfinished)
+}
+
+// isLowerHexSHA256 is whether s is a sha256 digest in lowercase hex, the
+// only form a kept patch's digest takes before it becomes a path.
+func isLowerHexSHA256(s string) bool {
+	if len(s) != sha256.Size*2 {
+		return false
+	}
+	for _, c := range s {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+// unfinishedNameOK is whether an id, escaped, is one local path element.
+func unfinishedNameOK(id string) bool {
+	escaped := url.PathEscape(id)
+	return strings.TrimSpace(id) != "" && escaped != "." && escaped != ".." && filepath.IsLocal(escaped) && !strings.ContainsAny(escaped, `/\`)
+}
+
+// capOmitted keeps the first entries of a snapshot's omitted list within
+// the entry and byte caps, and counts the rest.
+func capOmitted(omitted []string) []string {
+	var out []string
+	size := 0
+	for i, entry := range omitted {
+		if len(out) == unfinishedOmittedMaxEntries || size+len(entry) > unfinishedOmittedMaxBytes {
+			return append(out, fmt.Sprintf("and %d more left out", len(omitted)-i))
+		}
+		out = append(out, entry)
+		size += len(entry)
+	}
+	return out
 }
 
 func unfinishedRoot(root string) string { return filepath.Join(root, "carried", "unfinished") }
@@ -124,6 +170,9 @@ func (rt *Runtime) keepUnfinishedRoundBeforeDestroy(ctx context.Context, exec as
 // nothing.
 func keepUnfinishedRound(ctx context.Context, snapshotter unfinishedPatchSnapshotter, root string, assignment types.EngineeringAssignment, reason string, now time.Time) error {
 	binding := assignment.Binding
+	if !unfinishedNameOK(binding.TrajectoryID) || !unfinishedNameOK(assignment.AssignmentID) {
+		return fmt.Errorf("trajectory %q or assignment %q cannot name a record", binding.TrajectoryID, assignment.AssignmentID)
+	}
 	recordPath := unfinishedRecordPath(root, binding.TrajectoryID, assignment.AssignmentID, binding.Attempt)
 	if _, err := os.Lstat(recordPath); err == nil {
 		return nil
@@ -137,7 +186,7 @@ func keepUnfinishedRound(ctx context.Context, snapshotter unfinishedPatchSnapsho
 	}
 	// The executor is not trusted with the digest or the paths.
 	sum := sha256.Sum256(patch.Patch)
-	if len(patch.Patch) == 0 || patch.SHA256 != hex.EncodeToString(sum[:]) {
+	if len(patch.Patch) == 0 || patch.SHA256 != hex.EncodeToString(sum[:]) || !isLowerHexSHA256(patch.SHA256) {
 		return fmt.Errorf("the snapshot does not match its digest")
 	}
 	if len(patch.Patch) > capsule.CarriedPatchMaxBytes {
@@ -154,7 +203,7 @@ func keepUnfinishedRound(ctx context.Context, snapshotter unfinishedPatchSnapsho
 		Schema: carriedUnfinishedSchema, PatchSHA256: patch.SHA256, Size: len(patch.Patch),
 		TrajectoryID: binding.TrajectoryID, AssignmentID: assignment.AssignmentID, Attempt: binding.Attempt,
 		BaseRef: binding.SourceArtifactRef, CapsuleID: binding.CapsuleID, Reason: boundCarriedReason(reason),
-		Files: files, Omitted: patch.Omitted, TakenAt: now,
+		Files: files, Omitted: capOmitted(patch.Omitted), TakenAt: now,
 	}
 	raw, err := json.Marshal(record)
 	if err != nil {
@@ -199,7 +248,7 @@ func writeReadOnlyAtomic(path string, data []byte) error {
 // readUnfinishedRounds lists a trajectory's kept records, oldest first. A
 // record that does not decode, or names another trajectory, is skipped.
 func readUnfinishedRounds(root, trajectoryID string) []unfinishedRound {
-	if strings.TrimSpace(root) == "" || strings.TrimSpace(trajectoryID) == "" {
+	if strings.TrimSpace(root) == "" || !unfinishedNameOK(trajectoryID) {
 		return nil
 	}
 	entries, err := os.ReadDir(unfinishedRecordDir(root, trajectoryID))
@@ -211,13 +260,16 @@ func readUnfinishedRounds(root, trajectoryID string) []unfinishedRound {
 		if !entry.Type().IsRegular() || !strings.HasSuffix(entry.Name(), ".json") {
 			continue
 		}
+		if info, err := entry.Info(); err != nil || info.Size() > unfinishedRecordMaxBytes {
+			continue
+		}
 		raw, err := os.ReadFile(filepath.Join(unfinishedRecordDir(root, trajectoryID), entry.Name()))
 		if err != nil {
 			continue
 		}
 		var record unfinishedRound
 		if json.Unmarshal(raw, &record) != nil || record.Schema != carriedUnfinishedSchema || record.TrajectoryID != trajectoryID ||
-			strings.TrimSpace(record.AssignmentID) == "" || len(record.PatchSHA256) != sha256.Size*2 {
+			strings.TrimSpace(record.AssignmentID) == "" || !isLowerHexSHA256(record.PatchSHA256) {
 			continue
 		}
 		out = append(out, record)
@@ -230,6 +282,9 @@ func readUnfinishedRounds(root, trajectoryID string) []unfinishedRound {
 // verified: the bytes hash to sha, are within the bound, and name only
 // source paths. Its files are read from the patch, not from the record.
 func loadUnfinishedPatch(root, sha string) (capsule.CarriedPatch, error) {
+	if !isLowerHexSHA256(sha) {
+		return capsule.CarriedPatch{}, fmt.Errorf("%w: the digest is not lowercase hex", errUnfinishedPatchUnavailable)
+	}
 	raw, err := os.ReadFile(unfinishedPatchPath(root, sha))
 	if err != nil {
 		return capsule.CarriedPatch{}, fmt.Errorf("%w: %v", errUnfinishedPatchUnavailable, err)
@@ -283,4 +338,51 @@ func mergeUnfinishedRounds(entries []carriedCandidate, rounds []unfinishedRound,
 		})
 	}
 	return entries
+}
+
+// keepStoppedRoundsBeforeReconcile takes the reconcile's snapshots before it
+// takes engineeringAssignmentOpenMu, so a snapshot (bounded at
+// unfinishedSnapshotTimeout) never serializes the computer's opens. It
+// keeps only rounds that are stopped for good: a cancelled assignment, or
+// one whose bound run ended (terminal or blocked, never resumed) or is gone.
+// Those states never return to live, so freezing the capsule here cannot
+// strand work the reconcile would keep; the reconcile then revokes and
+// destroys under the mutex as before. A round it does not judge stopped
+// (a pending run past its grace never ran a cell) is revoked without a keep.
+func (rt *Runtime) keepStoppedRoundsBeforeReconcile(ctx context.Context, ownerID, computerID, trajectoryID string) {
+	exec := rt.assignedCapsule()
+	if rt == nil || rt.store == nil || exec == nil || strings.TrimSpace(rt.selfdevUpdaterRoot) == "" || !rt.carryUnfinishedOn(ctx, ownerID, computerID) {
+		return
+	}
+	trajectory, err := rt.store.GetLifecycleTrajectory(ctx, ownerID, computerID, trajectoryID)
+	if err != nil || trajectory.Status != types.TrajectoryLive {
+		return
+	}
+	assignments, err := rt.store.ListEngineeringAssignments(ctx, ownerID, computerID, trajectoryID)
+	if err != nil {
+		return
+	}
+	for _, assignment := range assignments {
+		if assignment.BoundRunID == "" || assignment.CapsuleDisposition == types.EngineeringCapsuleRevoked ||
+			assignment.CapsuleDisposition == types.EngineeringCapsuleUnbound || !unfinishedSnapshotWanted(assignment) {
+			continue
+		}
+		reason := assignment.DispositionReason
+		stopped := assignment.Disposition == types.EngineeringAssignmentCancelled
+		if !stopped {
+			run, runErr := rt.store.GetLifecycleRun(ctx, ownerID, computerID, assignment.BoundRunID)
+			switch {
+			case errors.Is(runErr, store.ErrNotFound):
+				stopped, reason = true, "the round's run is gone"
+			case runErr == nil && engineeringRunEnded(run.State):
+				stopped, reason = true, strings.TrimSpace(run.Error)
+				if reason == "" {
+					reason = "run_" + string(run.State)
+				}
+			}
+		}
+		if stopped {
+			rt.keepUnfinishedRoundBeforeDestroy(ctx, exec, assignment, reason)
+		}
+	}
 }
