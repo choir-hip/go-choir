@@ -417,6 +417,14 @@ func TestComputeRecoveryBodyDesktopMismatchStopsBeforeRecovery(t *testing.T) {
 	var guardLookups atomic.Int64
 	var downstreamCalls atomic.Int64
 	vmctlServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/internal/vmctl/touch" {
+			// The best-effort idle-clock touch (K) runs on its own goroutine and
+			// can land before or after the guard refuses; it moves an active
+			// computer's clock only and never wakes or recovers one, so it is not
+			// the downstream effect this test counts.
+			_, _ = w.Write([]byte(`{"touched":true}`))
+			return
+		}
 		if r.URL.Path == "/internal/vmctl/lookup" && r.URL.Query().Get("computer_id") == "computer-recovery" {
 			guardLookups.Add(1)
 			_ = json.NewEncoder(w).Encode(map[string]any{
@@ -651,6 +659,14 @@ func TestBoundAPIKeyDesktopMismatchDeniedAcrossComputerRouteFamilies(t *testing.
 	var guardLookups atomic.Int64
 	var downstreamCalls atomic.Int64
 	vmctlServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/internal/vmctl/touch" {
+			// The best-effort idle-clock touch (K) runs on its own goroutine and
+			// can land before or after the guard refuses; it moves an active
+			// computer's clock only and never wakes or recovers one, so it is not
+			// the downstream effect this test counts.
+			_, _ = w.Write([]byte(`{"touched":true}`))
+			return
+		}
 		if r.URL.Path == "/internal/vmctl/lookup" && r.URL.Query().Get("computer_id") == computerID {
 			guardLookups.Add(1)
 			_ = json.NewEncoder(w).Encode(map[string]any{
