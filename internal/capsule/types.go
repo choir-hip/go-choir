@@ -319,6 +319,10 @@ type FileChange struct {
 	// Opaque marks a directory the capsule removed and recreated: the
 	// overlay hides every lower entry under it.
 	Opaque bool
+	// Whiteout marks a deletion the upper records as an overlay whiteout
+	// (the walk's FileManifest.Type "whiteout"), as opposed to a deletion
+	// derived from a committed manifest entry that is gone.
+	Whiteout bool
 }
 
 type FrozenReleaseFile struct {

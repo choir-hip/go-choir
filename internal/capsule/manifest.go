@@ -151,9 +151,10 @@ func diffManifests(lastCommit, current []FileManifest) []FileChange {
 			// modification. Already committed, it is not a new change.
 			if !existed || last.Type != "whiteout" {
 				changes = append(changes, FileChange{
-					Path: fm.Path,
-					Kind: ChangeDeleted,
-					Mode: os.FileMode(fm.Mode),
+					Path:     fm.Path,
+					Kind:     ChangeDeleted,
+					Mode:     os.FileMode(fm.Mode),
+					Whiteout: true,
 				})
 			}
 			continue

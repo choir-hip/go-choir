@@ -9,11 +9,22 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// overlayWhiteoutXattr is the userxattr spelling of the overlay's other
+// whiteout form: an empty regular file carrying it ("xwhiteout", Linux
+// 6.7+).
+const overlayWhiteoutXattr = "user.overlay.whiteout"
+
 // overlayMarks reads the two overlay facts about an upper-layer entry that
 // a stat alone does not name as such:
 //
 //   - whiteout: a character device numbered 0:0 is how overlayfs records
-//     that a lower-layer entry was deleted;
+//     that a lower-layer entry was deleted; an empty regular file carrying
+//     user.overlay.whiteout is the same fact in xattr form. The kernel
+//     writes the device form on this mount's upper; reading the xattr form
+//     too keeps a deletion from coming back as an added empty file should
+//     one appear. A cell cannot forge either: the overlay refuses to set
+//     or copy up its own private xattrs, and the capsule seccomp allowlist
+//     has no mknod;
 //   - opaque: a directory carrying user.overlay.opaque=y (the xattr form
 //     MountOverlayFS's userxattr option uses) hides every lower entry under
 //     it, i.e. a lower directory was removed and recreated.
@@ -29,6 +40,9 @@ func overlayMarks(path string, info os.FileInfo) (whiteout, opaque bool) {
 	case info.Mode()&os.ModeCharDevice != 0:
 		rdev := uint64(st.Rdev)
 		return unix.Major(rdev) == 0 && unix.Minor(rdev) == 0, false
+	case info.Mode().IsRegular() && info.Size() == 0:
+		_, err := unix.Lgetxattr(path, overlayWhiteoutXattr, nil)
+		return err == nil, false
 	case info.IsDir():
 		var buf [4]byte
 		n, err := unix.Lgetxattr(path, overlayOpaqueXattr, buf[:])

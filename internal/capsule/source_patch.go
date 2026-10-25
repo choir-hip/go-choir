@@ -9,10 +9,15 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/pmezard/go-difflib/difflib"
 )
+
+// errSourcePatchSymlink names why a source change is refused when its
+// candidate or base path is, or passes through, a symbolic link.
+var errSourcePatchSymlink = errors.New("source patches do not read through or change symbolic links")
 
 // sourcePatchFile is one workspace/platform file a capsule changed, with
 // its base bytes (from the pinned source snapshot) and candidate bytes.
@@ -29,6 +34,22 @@ type sourcePatchFile struct {
 // and the candidate bytes from the merged tree. A directory cannot be
 // expressed in a unified diff (the files inside it carry it), so directory
 // changes are skipped.
+//
+// Both sides are read beneath their root without following a symbolic link
+// in any component (readSourceBeneath), and a change whose recorded mode is
+// a symlink is refused by name, whatever its kind. The merged tree is one a
+// cell can write: reading it by path would follow a link the cell planted
+// and carry bytes from outside the pinned source into source.patch, the
+// bundle draft, the verifiers' mounts and the host builder. The patch
+// renders every file as a regular file, and the builder refuses any patch
+// that changes a symbolic link, so a symlink on either side is refused
+// here, with errSourcePatchSymlink, rather than rendered.
+//
+// Stated limitation: a source file that is a symbolic link in the pinned
+// source cannot be deleted or replaced by a capsule (the repository ships
+// CLAUDE.md as one), so such a candidate cannot freeze; editing the file
+// the link points at still works, because the overlay records that change
+// at the target's own path.
 func collectSourcePatchFiles(mergedDir string, changes []FileChange) ([]sourcePatchFile, error) {
 	var sourceChanges []FileChange
 	for _, change := range changes {
@@ -40,7 +61,7 @@ func collectSourcePatchFiles(mergedDir string, changes []FileChange) ([]sourcePa
 			sourceChanges = append(sourceChanges, change)
 		}
 	}
-	lowerBase := filepath.Join(mergedDir, "..", "source-lower", "workspace", "platform")
+	lowerRoot := filepath.Join(mergedDir, "..", "source-lower")
 	var files []sourcePatchFile
 	for _, change := range sourceChanges {
 		rel := strings.TrimPrefix(change.Path, "/")
@@ -48,31 +69,38 @@ func collectSourcePatchFiles(mergedDir string, changes []FileChange) ([]sourcePa
 		if rel == "" || strings.HasPrefix(rel, "..") || strings.Contains(rel, "/../") {
 			continue
 		}
-		file := sourcePatchFile{Rel: rel}
-		oldPath := filepath.Join(lowerBase, filepath.FromSlash(rel))
-		var oldErr error
-		if info, statErr := os.Lstat(oldPath); statErr == nil && info.IsDir() {
-			oldErr = os.ErrNotExist // a directory replaced by a file
-		} else if statErr == nil && change.Kind == ChangeDeleted && info.Mode()&os.ModeSymlink != 0 {
-			// The builder refuses any patch that changes a symbolic link,
-			// and a deletion read through the link would carry the
-			// target's bytes: name the cause here instead.
-			return nil, fmt.Errorf("capsule source patch cannot delete %q: it is a symbolic link in the pinned source, and source patches do not change symbolic links", change.Path)
-		} else {
-			file.Old, oldErr = os.ReadFile(oldPath)
+		if change.Mode&os.ModeSymlink != 0 {
+			return nil, fmt.Errorf("capsule source patch refuses %s %q: it is a symbolic link: %w", change.Kind, change.Path, errSourcePatchSymlink)
 		}
-		if oldErr != nil && !errors.Is(oldErr, os.ErrNotExist) {
+		sourceRel := platformSourcePrefix + "/" + rel
+		file := sourcePatchFile{Rel: rel}
+		old, oldIsDir, oldErr := readSourceBeneath(lowerRoot, sourceRel)
+		switch {
+		case oldErr == nil && oldIsDir:
+			// A directory replaced by a file: no base file at this path.
+		case oldErr == nil:
+			file.Old, file.OldExists = old, true
+		case errors.Is(oldErr, errSourcePatchSymlink) && change.Kind == ChangeDeleted:
+			return nil, fmt.Errorf("capsule source patch cannot delete %q: it is a symbolic link in the pinned source: %w", change.Path, errSourcePatchSymlink)
+		case errors.Is(oldErr, errSourcePatchSymlink):
+			return nil, fmt.Errorf("capsule source patch cannot change %q: the pinned source path is or passes through a symbolic link: %w", change.Path, errSourcePatchSymlink)
+		case errors.Is(oldErr, os.ErrNotExist) || errors.Is(oldErr, syscall.ENOTDIR):
+			// Not in the base (ENOTDIR: a base file stands where the
+			// candidate has a directory).
+		default:
 			return nil, fmt.Errorf("capsule source patch reads base %q: %w", change.Path, oldErr)
 		}
-		file.OldExists = oldErr == nil
 		if change.Kind != ChangeDeleted {
-			newPath := filepath.Join(mergedDir, filepath.FromSlash(strings.TrimPrefix(change.Path, "/")))
-			var err error
-			file.New, err = os.ReadFile(newPath)
-			if err != nil {
+			data, isDir, err := readSourceBeneath(mergedDir, sourceRel)
+			switch {
+			case errors.Is(err, errSourcePatchSymlink):
+				return nil, fmt.Errorf("capsule source patch refuses %q: the candidate path is or passes through a symbolic link: %w", change.Path, errSourcePatchSymlink)
+			case err != nil:
 				return nil, fmt.Errorf("capsule source patch reads %q: %w", change.Path, err)
+			case isDir:
+				return nil, fmt.Errorf("capsule source patch reads %q: a directory where the change names a file", change.Path)
 			}
-			file.NewExists = true
+			file.New, file.NewExists = data, true
 		}
 		files = append(files, file)
 	}
