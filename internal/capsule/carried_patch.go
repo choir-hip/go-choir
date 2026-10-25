@@ -307,8 +307,63 @@ func CheckPatchAppliesToTree(ctx context.Context, patch []byte, files []string, 
 	if err := os.WriteFile(patchPath, patch, 0o644); err != nil {
 		return err
 	}
-	if err := run("apply", "--check", patchPath); err != nil {
-		return fmt.Errorf("the carried patch does not apply to this base: %w", err)
+	whole := run("apply", "--check", patchPath)
+	if whole == nil {
+		return nil
 	}
-	return nil
+	// Name the files that conflict: check each file's section on its own
+	// against the same scratch tree. The patch carries no blob ids, so a
+	// 3-way merge has no preimage to merge from and is not attempted.
+	conflict := &CarriedPatchConflictError{Detail: whole.Error()}
+	for i, section := range splitPatchByFile(patch) {
+		sectionPath := filepath.Join(scratch, fmt.Sprintf("section-%d.patch", i))
+		if err := os.WriteFile(sectionPath, section.body, 0o644); err != nil {
+			return err
+		}
+		if run("apply", "--check", sectionPath) != nil {
+			conflict.Paths = append(conflict.Paths, section.path)
+		} else {
+			conflict.Clean = append(conflict.Clean, section.path)
+		}
+	}
+	if len(conflict.Paths) == 0 {
+		// Every file applies alone but not together: name none rather than
+		// guess.
+		return fmt.Errorf("the carried patch does not apply to this base: %w", whole)
+	}
+	return conflict
+}
+
+// CarriedPatchConflictError is a carried patch that does not apply to a moved
+// base, with the files that conflict and the files that would still apply.
+type CarriedPatchConflictError struct {
+	Paths  []string
+	Clean  []string
+	Detail string
+}
+
+func (e *CarriedPatchConflictError) Error() string {
+	return fmt.Sprintf("the carried patch does not apply to this base: conflict in %s (%s)", strings.Join(e.Paths, ", "), e.Detail)
+}
+
+type patchSection struct {
+	path string
+	body []byte
+}
+
+// splitPatchByFile cuts a unified diff at its "diff --git" headers. Only a
+// patch CarriedPatchPaths accepted is split, so each header names one path.
+func splitPatchByFile(patch []byte) []patchSection {
+	var out []patchSection
+	lines := strings.SplitAfter(string(patch), "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, "diff --git a/") {
+			rest := strings.TrimSuffix(strings.TrimPrefix(line, "diff --git a/"), "\n")
+			out = append(out, patchSection{path: rest[:(len(rest)-3)/2]})
+		}
+		if len(out) > 0 {
+			out[len(out)-1].body = append(out[len(out)-1].body, line...)
+		}
+	}
+	return out
 }

@@ -23,6 +23,28 @@ package agentcore
 // 11. The desk is told nothing, or told the patch is trusted or tested.
 // 12. Anything is written outside <updater root>/carried (the live
 //     computer's source or incoming/).
+//
+// Iteration on a rejected candidate (owner, 2026-10-25: "if we, in
+// self-development, get part of the work done, but not everything, we can
+// iteratively improve on it rather than having to start over"; ledger
+// 2026-10-25 00:5x). A finished candidate's operation state decides:
+//
+// 13. A finished candidate whose operation was rejected, or failed before it
+//     applied, is not offered, and the next round starts from the base.
+// 14. A candidate whose operation applied (an upstreamed stack is still an
+//     applied operation), is awaiting approval, or is in any other open state
+//     is offered: its change would be applied twice, or would race the
+//     decision still pending on it. This holds for a round that reported
+//     failed as well as one that finished.
+// 15. A finished round with no operation (never proposed) is offered.
+// 16. The rejection reason is lost, unbounded, or the notice still calls the
+//     work unfinished instead of saying the patch is the starting point and
+//     the new directive and the reason are what to change.
+// 17. An operation read that fails is remembered as the decision instead of
+//     leaving the retry clean and undecided.
+// 18. A reason is read from an event that is not this operation's rejection.
+// 19. A moved base that conflicts is refused without naming the conflicting
+//     paths, so the engineer cannot redo only those.
 
 import (
 	"context"
@@ -35,8 +57,12 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/yusefmosiah/go-choir/internal/capsule"
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/selfdev"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -411,5 +437,298 @@ func TestRunContextTellsTheRetryAboutTheCarriedPatch(t *testing.T) {
 	rec.Metadata["assignment_id"] = "assignment-unrelated"
 	if strings.Contains(rt.runContextForRun(rec), "carried") {
 		t.Fatal("an unrelated assignment was told about a carried patch")
+	}
+}
+
+func finishedRound(id, candidate, base, opState, reason string, age time.Duration) carriedCandidate {
+	entry := failedRound(id, candidate, base, age)
+	entry.Result = types.EngineeringResultCompleted
+	if opState != "" {
+		entry.OperationID, entry.OperationState, entry.OperationReason = "selfdev-"+id, opState, reason
+	}
+	return entry
+}
+
+func TestCarriedOfferCarriesARejectedFinishedCandidateWithItsReason(t *testing.T) {
+	patch := testCarriedPatch("frontend/src/apps/reader/Reader.svelte")
+	rejected := finishedRound("round-2", "capsule-subject:sha256:c2", baseA, selfdev.StateRejected, "keep the old PDF and EPUB apps beside the Reader", time.Hour)
+	older := failedRound("round-1", "capsule-subject:sha256:c1", baseA, 2*time.Hour)
+	deriver := &fakeCarriedDeriver{patches: map[string]capsule.CarriedPatch{"capsule-subject:sha256:c2": patch}}
+	deps := carriedDeps(t, &fakeCarriedHistory{entries: []carriedCandidate{rejected, older}}, deriver)
+	offer := offerCarriedPatch(context.Background(), deps, carriedInput(baseA))
+	if offer.Status != carriedOffered || offer.SourceAssignmentID != "round-2" || offer.PatchSHA256 != patch.SHA256 {
+		t.Fatalf("offer = %+v; want the rejected candidate offered", offer)
+	}
+	if offer.SourceOperationID != "selfdev-round-2" || offer.SourceOperationState != selfdev.StateRejected ||
+		offer.SourceReason != "keep the old PDF and EPUB apps beside the Reader" {
+		t.Fatalf("offer operation = %q %q %q; want the rejected operation and its reason", offer.SourceOperationID, offer.SourceOperationState, offer.SourceReason)
+	}
+	if strings.Join(offer.OlderCandidates, ",") != "candidate-round-1" {
+		t.Fatalf("older = %v", offer.OlderCandidates)
+	}
+	notice := carriedPatchNotice(offer)
+	for _, want := range []string{
+		"rejected", "keep the old PDF and EPUB apps beside the Reader", "selfdev-round-2", "starting point",
+		"git apply /selfdev/carried/source.patch", "new directive", "re-run", patch.SHA256,
+	} {
+		if !strings.Contains(notice, want) {
+			t.Fatalf("notice does not say %q:\n%s", want, notice)
+		}
+	}
+	for _, bad := range []string{"unfinished", "tests passed", "verified by"} {
+		if strings.Contains(notice, bad) {
+			t.Fatalf("notice says %q:\n%s", bad, notice)
+		}
+	}
+	// Decided once: a replay reads the same reason without the history.
+	replay := offerCarriedPatch(context.Background(), carriedPatchDeps{History: &fakeCarriedHistory{}, Deriver: &fakeCarriedDeriver{}, Root: deps.Root}, carriedInput(baseA))
+	if replay.SourceReason != offer.SourceReason || replay.Status != carriedOffered {
+		t.Fatalf("replay = %+v", replay)
+	}
+}
+
+func TestCarriedOfferCarriesAFinishedCandidateWhoseOperationFailedBeforeApplying(t *testing.T) {
+	failedOp := finishedRound("round-2", "capsule-subject:sha256:c2", baseA, selfdev.StateFailed, "host build failed: vite exited 1", time.Hour)
+	deriver := &fakeCarriedDeriver{patches: map[string]capsule.CarriedPatch{"capsule-subject:sha256:c2": testCarriedPatch("a.go")}}
+	offer := offerCarriedPatch(context.Background(), carriedDeps(t, &fakeCarriedHistory{entries: []carriedCandidate{failedOp}}, deriver), carriedInput(baseA))
+	if offer.Status != carriedOffered || offer.SourceOperationState != selfdev.StateFailed {
+		t.Fatalf("offer = %+v; want the failed operation's candidate", offer)
+	}
+	notice := carriedPatchNotice(offer)
+	for _, want := range []string{"failed before it applied", "host build failed: vite exited 1", "starting point"} {
+		if !strings.Contains(notice, want) {
+			t.Fatalf("notice does not say %q:\n%s", want, notice)
+		}
+	}
+}
+
+func TestCarriedOfferNeverCarriesAnAppliedPendingOrUnproposedRound(t *testing.T) {
+	notCarried := []string{
+		selfdev.StateApplied, selfdev.StateAwaitingApproval, selfdev.StateAccepted, selfdev.StateMaterializing,
+		selfdev.StateDegraded, selfdev.StateFrozen, selfdev.StateVerified, selfdev.StateExecuting, selfdev.StateRequested,
+		selfdev.StateRollbackPending, selfdev.StateRolledBack,
+	}
+	for _, state := range notCarried {
+		for _, result := range []types.EngineeringAssignmentResultKind{types.EngineeringResultCompleted, types.EngineeringResultFailed} {
+			newest := finishedRound("round-2", "capsule-subject:sha256:c2", baseA, state, "", time.Hour)
+			newest.Result = result
+			older := finishedRound("round-1", "capsule-subject:sha256:c1", baseA, selfdev.StateRejected, "older rejection", 2*time.Hour)
+			deriver := &fakeCarriedDeriver{patches: map[string]capsule.CarriedPatch{
+				"capsule-subject:sha256:c1": testCarriedPatch("a.go"), "capsule-subject:sha256:c2": testCarriedPatch("b.go"),
+			}}
+			offer := offerCarriedPatch(context.Background(), carriedDeps(t, &fakeCarriedHistory{entries: []carriedCandidate{newest, older}}, deriver), carriedInput(baseA))
+			if offer.Status != "" || len(deriver.derived) != 0 {
+				t.Fatalf("operation %s, result %s: offer %+v derived %v; want nothing (and no older round reached past it)", state, result, offer, deriver.derived)
+			}
+		}
+	}
+	// A finished round that opened no operation was never proposed: nothing.
+	unproposed := finishedRound("round-2", "capsule-subject:sha256:c2", baseA, "", "", time.Hour)
+	deriver := &fakeCarriedDeriver{patches: map[string]capsule.CarriedPatch{"capsule-subject:sha256:c2": testCarriedPatch("b.go")}}
+	if offer := offerCarriedPatch(context.Background(), carriedDeps(t, &fakeCarriedHistory{entries: []carriedCandidate{unproposed}}, deriver), carriedInput(baseA)); offer.Status != "" {
+		t.Fatalf("unproposed finished round: offer %+v", offer)
+	}
+}
+
+func TestCarriedOfferBoundsTheReason(t *testing.T) {
+	long := strings.Repeat("é", carriedReasonMaxBytes)
+	rejected := finishedRound("round-2", "capsule-subject:sha256:c2", baseA, selfdev.StateRejected, long+"\n\tsecond line", time.Hour)
+	deriver := &fakeCarriedDeriver{patches: map[string]capsule.CarriedPatch{"capsule-subject:sha256:c2": testCarriedPatch("a.go")}}
+	offer := offerCarriedPatch(context.Background(), carriedDeps(t, &fakeCarriedHistory{entries: []carriedCandidate{rejected}}, deriver), carriedInput(baseA))
+	if len(offer.SourceReason) > carriedReasonMaxBytes+len("…") || !utf8.ValidString(offer.SourceReason) || strings.ContainsAny(offer.SourceReason, "\n\t") {
+		t.Fatalf("reason is %d bytes, valid %v: %q...", len(offer.SourceReason), utf8.ValidString(offer.SourceReason), offer.SourceReason[:20])
+	}
+	// No reason recorded: the notice says so instead of quoting nothing.
+	bare := finishedRound("round-3", "capsule-subject:sha256:c3", baseA, selfdev.StateRejected, "", time.Hour)
+	deriver = &fakeCarriedDeriver{patches: map[string]capsule.CarriedPatch{"capsule-subject:sha256:c3": testCarriedPatch("a.go")}}
+	offer = offerCarriedPatch(context.Background(), carriedDeps(t, &fakeCarriedHistory{entries: []carriedCandidate{bare}}, deriver), carriedInput(baseA))
+	if notice := carriedPatchNotice(offer); !strings.Contains(notice, "no reason could be read") {
+		t.Fatalf("reasonless notice:\n%s", notice)
+	}
+}
+
+func TestCarriedOfferMovedBaseConflictNamesTheConflictingPaths(t *testing.T) {
+	rejected := finishedRound("round-2", "capsule-subject:sha256:c2", baseA, selfdev.StateRejected, "keep the old apps", time.Hour)
+	deriver := &fakeCarriedDeriver{
+		patches:  map[string]capsule.CarriedPatch{"capsule-subject:sha256:c2": testCarriedPatch("a.go", "b.go", "c.go")},
+		applyErr: &capsule.CarriedPatchConflictError{Paths: []string{"a.go", "c.go"}, Clean: []string{"b.go"}, Detail: "error: patch failed: a.go:1"},
+	}
+	offer := offerCarriedPatch(context.Background(), carriedDeps(t, &fakeCarriedHistory{entries: []carriedCandidate{rejected}}, deriver), carriedInput(baseB))
+	if offer.Status != carriedRefused || offer.Dir != "" {
+		t.Fatalf("offer = %+v; want a refusal", offer)
+	}
+	if strings.Join(offer.ConflictPaths, ",") != "a.go,c.go" {
+		t.Fatalf("conflict paths = %v", offer.ConflictPaths)
+	}
+	notice := carriedPatchNotice(offer)
+	for _, want := range []string{"a.go, c.go", "b.go", "keep the old apps", "rejected"} {
+		if !strings.Contains(notice, want) {
+			t.Fatalf("refusal notice does not say %q:\n%s", want, notice)
+		}
+	}
+	if strings.Contains(notice, "unfinished") {
+		t.Fatalf("a rejected candidate's refusal calls it unfinished:\n%s", notice)
+	}
+}
+
+type fakeCarriedOperations struct {
+	ops map[string]selfdev.Operation // by idempotency key
+	err error
+}
+
+func (f fakeCarriedOperations) GetByIdempotency(_ context.Context, _, key string) (selfdev.Operation, bool, error) {
+	if f.err != nil {
+		return selfdev.Operation{}, false, f.err
+	}
+	op, ok := f.ops[key]
+	return op, ok, nil
+}
+
+func TestAnnotateCarriedOperationsReadsEachRoundsOwnOperation(t *testing.T) {
+	entries := []carriedCandidate{
+		finishedRound("round-rejected", "c1", baseA, "", "", time.Hour),
+		finishedRound("round-failed", "c2", baseA, "", "", time.Hour),
+		finishedRound("round-applied", "c3", baseA, "", "", time.Hour),
+		finishedRound("round-none", "c4", baseA, "", "", time.Hour),
+	}
+	ops := fakeCarriedOperations{ops: map[string]selfdev.Operation{
+		store.EngineeringFreezeIdempotencyKey("round-rejected"): {OperationID: "op-r", State: selfdev.StateRejected, DecisionEvent: "ev-r", TerminalError: "not this"},
+		store.EngineeringFreezeIdempotencyKey("round-failed"):   {OperationID: "op-f", State: selfdev.StateFailed, TerminalError: "materialize failed"},
+		store.EngineeringFreezeIdempotencyKey("round-applied"):  {OperationID: "op-a", State: selfdev.StateApplied},
+	}}
+	var asked []string
+	rejection := func(_ context.Context, op selfdev.Operation) string {
+		asked = append(asked, op.OperationID)
+		return "owner says no"
+	}
+	if err := annotateCarriedOperations(context.Background(), ops, rejection, "computer", entries); err != nil {
+		t.Fatal(err)
+	}
+	want := [][3]string{{"op-r", selfdev.StateRejected, "owner says no"}, {"op-f", selfdev.StateFailed, "materialize failed"}, {"op-a", selfdev.StateApplied, ""}, {"", "", ""}}
+	for i, w := range want {
+		if got := [3]string{entries[i].OperationID, entries[i].OperationState, entries[i].OperationReason}; got != w {
+			t.Fatalf("entry %d = %v, want %v", i, got, w)
+		}
+	}
+	if strings.Join(asked, ",") != "op-r" {
+		t.Fatalf("rejection reason read for %v; want only the rejected operation", asked)
+	}
+	// A failed read is an error (the offer is then not decided), never a
+	// round that looks unproposed.
+	if err := annotateCarriedOperations(context.Background(), fakeCarriedOperations{err: errors.New("db down")}, rejection, "computer", entries); err == nil {
+		t.Fatal("an operation read failure was swallowed")
+	}
+	// No operation store: rounds keep today's rule (no operation known).
+	plain := []carriedCandidate{failedRound("round-1", "c1", baseA, time.Hour)}
+	if err := annotateCarriedOperations(context.Background(), nil, rejection, "computer", plain); err != nil || plain[0].OperationState != "" {
+		t.Fatalf("nil store: %v, %+v", err, plain[0])
+	}
+}
+
+type fakeDecisionEvents struct {
+	events map[string]computerevent.Event
+	err    error
+}
+
+func (f fakeDecisionEvents) EventByDigest(_ context.Context, _, digest string) (computerevent.Event, bool, error) {
+	if f.err != nil {
+		return computerevent.Event{}, false, f.err
+	}
+	ev, ok := f.events[digest]
+	return ev, ok, nil
+}
+
+type fakePayloads struct {
+	byDigest map[string][]byte
+}
+
+func (f fakePayloads) FetchPayload(_ context.Context, _, digest string) ([]byte, error) {
+	raw, ok := f.byDigest[digest]
+	if !ok {
+		return nil, errors.New("not found")
+	}
+	return raw, nil
+}
+
+func TestCarriedRejectionReasonReadsOnlyTheOperationsOwnRejection(t *testing.T) {
+	reason := []byte("keep the old PDF and EPUB apps")
+	ref, err := computerevent.ArtifactRefFromDigest(computerevent.DigestBytes(reason))
+	if err != nil {
+		t.Fatal(err)
+	}
+	payloads := fakePayloads{byDigest: map[string][]byte{ref.Digest().String(): reason}}
+	op := selfdev.Operation{OperationID: "op-1", ComputerID: "computer", State: selfdev.StateRejected, DecisionEvent: "ev-1"}
+	good := computerevent.Event{EventKind: computerevent.EventEffectRejected, ParentEventID: "op-1", OutputArtifactRefs: []string{ref.String()}}
+	cases := []struct {
+		name   string
+		op     selfdev.Operation
+		events fakeDecisionEvents
+		reader computerevent.ArtifactReader
+		want   string
+	}{
+		{"the rejection", op, fakeDecisionEvents{events: map[string]computerevent.Event{"ev-1": good}}, payloads, string(reason)},
+		{"an accept event", op, fakeDecisionEvents{events: map[string]computerevent.Event{"ev-1": func() computerevent.Event { e := good; e.EventKind = computerevent.EventEffectAccepted; return e }()}}, payloads, ""},
+		{"another operation's event", op, fakeDecisionEvents{events: map[string]computerevent.Event{"ev-1": func() computerevent.Event { e := good; e.ParentEventID = "op-2"; return e }()}}, payloads, ""},
+		{"no output payload", op, fakeDecisionEvents{events: map[string]computerevent.Event{"ev-1": func() computerevent.Event { e := good; e.OutputArtifactRefs = nil; return e }()}}, payloads, ""},
+		{"payload unavailable", op, fakeDecisionEvents{events: map[string]computerevent.Event{"ev-1": good}}, fakePayloads{}, ""},
+		{"event missing", op, fakeDecisionEvents{}, payloads, ""},
+		{"event read error", op, fakeDecisionEvents{err: errors.New("db")}, payloads, ""},
+		{"no decision event", selfdev.Operation{OperationID: "op-1", State: selfdev.StateRejected}, fakeDecisionEvents{events: map[string]computerevent.Event{"ev-1": good}}, payloads, ""},
+		{"no payload reader", op, fakeDecisionEvents{events: map[string]computerevent.Event{"ev-1": good}}, nil, ""},
+	}
+	for _, tc := range cases {
+		if got := carriedRejectionReason(context.Background(), tc.events, tc.reader, tc.op); got != tc.want {
+			t.Errorf("%s: reason = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
+
+// A round that reported failed has its operation closed as failed too
+// (closeEndedAssignmentSelfdevOperation): it is still an unfinished round,
+// not a finished candidate that failed to apply.
+func TestCarriedOfferFailedRoundWithItsClosedOperationIsStillUnfinished(t *testing.T) {
+	round := failedRound("round-1", "capsule-subject:sha256:c1", baseA, time.Hour)
+	round.OperationID, round.OperationState, round.OperationReason = "selfdev-round-1", selfdev.StateFailed, "assignment failed before its candidate froze"
+	deriver := &fakeCarriedDeriver{patches: map[string]capsule.CarriedPatch{"capsule-subject:sha256:c1": testCarriedPatch("a.go")}}
+	offer := offerCarriedPatch(context.Background(), carriedDeps(t, &fakeCarriedHistory{entries: []carriedCandidate{round}}, deriver), carriedInput(baseA))
+	if offer.Status != carriedOffered || offer.SourceOperationState != "" {
+		t.Fatalf("offer = %+v; want offered as an unfinished round", offer)
+	}
+	if notice := carriedPatchNotice(offer); !strings.Contains(notice, "unfinished") || strings.Contains(notice, "finished a candidate") {
+		t.Fatalf("notice:\n%s", notice)
+	}
+}
+
+// The join is the real one: the operation openFreezeCandidate opens for an
+// assignment is the one annotateCarriedOperations finds for that round, in
+// its real state after a rejection, and a second assignment's operation is
+// not confused with the first's.
+func TestAnnotateCarriedOperationsFindsTheOperationAFreezeOpened(t *testing.T) {
+	ctx := context.Background()
+	_, operations, computerID := freezeCandidateTestStore(t)
+	authorized := func(context.Context) error { return nil }
+	opened, err := openFreezeCandidate(ctx, operations, authorized, computerID, "trajectory-iterate", "assignment-first", "first try")
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := opened.State
+	for _, next := range []string{selfdev.StateFrozen, selfdev.StateVerified, selfdev.StateAwaitingApproval, selfdev.StateRejected} {
+		if _, err := operations.Transition(ctx, computerID, opened.OperationID, state, next, nil); err != nil {
+			t.Fatalf("%s -> %s: %v", state, next, err)
+		}
+		state = next
+	}
+	entries := []carriedCandidate{
+		finishedRound("assignment-first", "c1", baseA, "", "", time.Hour),
+		finishedRound("assignment-second", "c2", baseA, "", "", time.Minute),
+	}
+	if err := annotateCarriedOperations(ctx, operations, func(context.Context, selfdev.Operation) string { return "no" }, computerID, entries); err != nil {
+		t.Fatal(err)
+	}
+	if entries[0].OperationID != store.EngineeringFreezeOperationID(computerID, "assignment-first") || entries[0].OperationState != selfdev.StateRejected || entries[0].OperationReason != "no" {
+		t.Fatalf("first round = %+v", entries[0])
+	}
+	if entries[1].OperationID != "" || entries[1].OperationState != "" {
+		t.Fatalf("second round (no operation) = %+v", entries[1])
 	}
 }

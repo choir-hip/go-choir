@@ -14,8 +14,12 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/yusefmosiah/go-choir/internal/capsule"
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/selfdev"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -29,6 +33,18 @@ import (
 // engineer about it. No capsule survives its round and nothing is applied: the
 // engineer chooses to apply the patch inside its own capsule, re-tests it
 // there, and the normal Freeze, verify, approval and apply judge the result.
+//
+// A finished candidate is carried the same way when its self-development
+// operation did not apply: the owner or a reviewer rejected it, or it failed
+// after it froze (owner, 2026-10-25: iterate on a partial result instead of
+// starting over). The operation is the assignment's own, keyed by
+// store.EngineeringFreezeIdempotencyKey (freeze_candidate.go); its state
+// (internal/selfdev/operations.go) decides: rejected and failed carry, and
+// every other state does not. Applied (an upstreamed stack, in
+// internal/sourceproj, is still an applied operation) would apply the change
+// twice; awaiting_approval and the other open states would race a decision
+// still pending. The rejection reason, the decision event's pinned output
+// payload (api_self_development.go), is passed to the engineer with the patch.
 //
 // The offer is decided once per assignment and remembered
 // (<updater root>/carried/offers/), so a replayed spawn after a crash reads
@@ -57,6 +73,12 @@ type carriedCandidate struct {
 	Kind      types.EngineeringAssignmentKind
 	Result    types.EngineeringAssignmentResultKind
 	CreatedAt time.Time
+	// OperationID and OperationState are the round's own self-development
+	// operation, empty when it opened none. OperationReason is why it did
+	// not apply: the rejection reason, or the failed operation's error.
+	OperationID     string
+	OperationState  string
+	OperationReason string
 }
 
 type carriedPatchHistory interface {
@@ -121,15 +143,44 @@ type carriedPatchOffer struct {
 	Omitted            []string `json:"omitted,omitempty"`
 	OlderCandidates    []string `json:"older_candidates,omitempty"`
 
+	// The source round's operation when it finished a candidate that did not
+	// apply, and why (bounded).
+	SourceOperationID    string `json:"source_operation_id,omitempty"`
+	SourceOperationState string `json:"source_operation_state,omitempty"`
+	SourceReason         string `json:"source_reason,omitempty"`
+	// ConflictPaths are the files that do not apply to a moved base, and
+	// CleanPaths the ones that still would, on a refusal for that cause.
+	ConflictPaths []string `json:"conflict_paths,omitempty"`
+	CleanPaths    []string `json:"clean_paths,omitempty"`
+
 	// Dir is the staged directory; derived from the root and the digest on
 	// every read, never trusted from disk.
 	Dir string `json:"-"`
 }
 
+// carriedReasonMaxBytes bounds the rejection or failure reason in the offer.
+const carriedReasonMaxBytes = 1500
+
+// roundCarriable is whether a round's candidate may be carried: its
+// operation was rejected or failed, or it opened no operation and did not
+// finish (a failed round, as before). Any other operation state never
+// carries, whatever the round reported.
+func roundCarriable(entry carriedCandidate) bool {
+	switch entry.OperationState {
+	case selfdev.StateRejected, selfdev.StateFailed:
+		return true
+	case "":
+		return entry.Result != types.EngineeringResultCompleted
+	default:
+		return false
+	}
+}
+
 // pickCarriedCandidate chooses the one round to carry: the newest changed
-// implementation candidate that is not the retry's own. A finished
-// (completed) newest round ends the chain and nothing is carried. The other
-// candidates are returned for reference only.
+// implementation candidate that is not the retry's own. When that newest
+// round is not carriable (it finished and was never proposed, or its
+// operation applied or is still pending) the chain ends and nothing is
+// carried. The other candidates are returned for reference only.
 func pickCarriedCandidate(entries []carriedCandidate, selfAssignmentID string) (*carriedCandidate, []string) {
 	var eligible []carriedCandidate
 	for _, entry := range entries {
@@ -147,7 +198,7 @@ func pickCarriedCandidate(entries []carriedCandidate, selfAssignmentID string) (
 		}
 		return eligible[i].CandidateID > eligible[j].CandidateID
 	})
-	if eligible[0].Result == types.EngineeringResultCompleted {
+	if !roundCarriable(eligible[0]) {
 		return nil, nil
 	}
 	var older []string
@@ -187,6 +238,13 @@ func offerCarriedPatch(ctx context.Context, deps carriedPatchDeps, in carriedPat
 		CandidateID: chosen.CandidateID, SourceAssignmentID: chosen.AssignmentID, SourceAttempt: chosen.Attempt,
 		SourceResult: string(chosen.Result), OlderCandidates: older,
 	}
+	// Only a finished candidate (or a rejected one) is described by its
+	// operation; a round that reported failed is unfinished work whatever
+	// closed its operation.
+	if chosen.OperationState != "" && (chosen.Result == types.EngineeringResultCompleted || chosen.OperationState == selfdev.StateRejected) {
+		offer.SourceOperationID, offer.SourceOperationState = chosen.OperationID, chosen.OperationState
+		offer.SourceReason = boundCarriedReason(chosen.OperationReason)
+	}
 	refuse := func(persist bool, format string, args ...any) carriedPatchOffer {
 		offer.Status, offer.Reason = carriedRefused, fmt.Sprintf(format, args...)
 		if persist {
@@ -222,6 +280,10 @@ func offerCarriedPatch(ctx context.Context, deps carriedPatchDeps, in carriedPat
 	}
 	if offer.BaseMoved {
 		if err := deps.Deriver.CheckCarriedPatchApplies(ctx, patch, in.RetryBaseRef); err != nil {
+			var conflict *capsule.CarriedPatchConflictError
+			if errors.As(err, &conflict) {
+				offer.ConflictPaths, offer.CleanPaths = conflict.Paths, conflict.Clean
+			}
 			return refuse(true, "the earlier round's base (%s) differs from this assignment's base (%s) and its patch does not apply: %v",
 				carriedBaseLabel(chosen.BaseRef), carriedBaseLabel(in.RetryBaseRef), err)
 		}
@@ -391,22 +453,44 @@ func carriedBaseLabel(ref string) string {
 }
 
 // carriedPatchNotice is what the engineer reads in its run context. The
-// patch is described as unfinished and untrusted; nothing here says it
-// passed anything.
+// patch is described as untrusted; nothing here says it passed anything. A
+// rejected (or failed) finished candidate is named as the starting point,
+// with the reason, so the engineer revises the delta instead of rebuilding.
 func carriedPatchNotice(offer carriedPatchOffer) string {
 	switch offer.Status {
 	case carriedRefused:
-		return "Carried work: an earlier round on this trajectory (assignment " + offer.SourceAssignmentID +
-			") left unfinished source changes, but they are not carried into this capsule: " + offer.Reason +
-			". /workspace/platform is the clean base tree; do the work from the objective."
+		var b strings.Builder
+		if offer.SourceOperationState != "" {
+			b.WriteString("Carried work: " + carriedOutcome(offer) + " Its source patch is not carried into this capsule: " + offer.Reason + ".")
+		} else {
+			b.WriteString("Carried work: an earlier round on this trajectory (assignment " + offer.SourceAssignmentID +
+				") left unfinished source changes, but they are not carried into this capsule: " + offer.Reason + ".")
+		}
+		if len(offer.ConflictPaths) > 0 {
+			b.WriteString(" The files that conflict with this base: " + carriedFileList(offer.ConflictPaths) + ".")
+			if len(offer.CleanPaths) > 0 {
+				b.WriteString(" The rest of that patch would still apply: " + carriedFileList(offer.CleanPaths) + ".")
+			}
+		}
+		b.WriteString(" /workspace/platform is the clean base tree; do the work from the objective.")
+		return b.String()
 	case carriedOffered:
 		var b strings.Builder
-		fmt.Fprintf(&b, "Carried work: assignment %s (attempt %d, reported %s) left an unfinished source patch, sha256 %s, %d bytes, changing: %s.",
-			offer.SourceAssignmentID, offer.SourceAttempt, offer.SourceResult, offer.PatchSHA256, offer.Size, carriedFileList(offer.Files))
-		b.WriteString(" It is mounted read only at /selfdev/carried/source.patch (its binding is /selfdev/carried/carried.json). " +
-			"This capsule's /workspace/platform is still the clean base tree: nothing has been applied. " +
-			"The patch is not trusted and carries no test results. You may ignore it and do the work from the objective, or apply it from /workspace/platform with " +
-			"`git apply /selfdev/carried/source.patch` and then re-run the build, tests and checks in this capsule after your last write, as for any change; Freeze judges only this capsule's own diff.")
+		if offer.SourceOperationState != "" {
+			fmt.Fprintf(&b, "Carried work: %s Its source patch, sha256 %s, %d bytes, changing: %s, is the starting point for this assignment.",
+				carriedOutcome(offer), offer.PatchSHA256, offer.Size, carriedFileList(offer.Files))
+			b.WriteString(" It is mounted read only at /selfdev/carried/source.patch (its binding is /selfdev/carried/carried.json); " +
+				"this capsule's /workspace/platform is the clean base tree until you apply it. " +
+				"Apply it from /workspace/platform with `git apply /selfdev/carried/source.patch`, then change only what this assignment's objective (the new directive) and the reason above ask for; do not rebuild the rest. " +
+				"The patch is not trusted and carries no test results: re-run the build, tests and checks in this capsule after your last write; Freeze judges only this capsule's own diff.")
+		} else {
+			fmt.Fprintf(&b, "Carried work: assignment %s (attempt %d, reported %s) left an unfinished source patch, sha256 %s, %d bytes, changing: %s.",
+				offer.SourceAssignmentID, offer.SourceAttempt, offer.SourceResult, offer.PatchSHA256, offer.Size, carriedFileList(offer.Files))
+			b.WriteString(" It is mounted read only at /selfdev/carried/source.patch (its binding is /selfdev/carried/carried.json). " +
+				"This capsule's /workspace/platform is still the clean base tree: nothing has been applied. " +
+				"The patch is not trusted and carries no test results. You may ignore it and do the work from the objective, or apply it from /workspace/platform with " +
+				"`git apply /selfdev/carried/source.patch` and then re-run the build, tests and checks in this capsule after your last write, as for any change; Freeze judges only this capsule's own diff.")
+		}
 		if offer.BaseMoved {
 			fmt.Fprintf(&b, " The base moved: that round started from %s and this capsule starts from %s; the patch was checked and applies to this base.",
 				carriedBaseLabel(offer.BaseRef), carriedBaseLabel(offer.RetryBaseRef))
@@ -420,6 +504,35 @@ func carriedPatchNotice(offer carriedPatchOffer) string {
 		return b.String()
 	}
 	return ""
+}
+
+// carriedOutcome says what became of a finished candidate that did not
+// apply, with its reason.
+func carriedOutcome(offer carriedPatchOffer) string {
+	what := "was rejected"
+	if offer.SourceOperationState == selfdev.StateFailed {
+		what = "failed before it applied"
+	}
+	reason := "no reason could be read"
+	if offer.SourceReason != "" {
+		reason = "the reason: \"" + offer.SourceReason + "\""
+	}
+	return fmt.Sprintf("assignment %s (attempt %d) finished a candidate on this trajectory, and its self-development operation %s %s; %s.",
+		offer.SourceAssignmentID, offer.SourceAttempt, offer.SourceOperationID, what, reason)
+}
+
+// boundCarriedReason puts a reason on one line within carriedReasonMaxBytes,
+// cut on a rune boundary.
+func boundCarriedReason(reason string) string {
+	reason = strings.Join(strings.Fields(reason), " ")
+	if len(reason) <= carriedReasonMaxBytes {
+		return reason
+	}
+	cut := carriedReasonMaxBytes
+	for cut > 0 && !utf8.RuneStart(reason[cut]) {
+		cut--
+	}
+	return reason[:cut] + "…"
 }
 
 func carriedFileList(files []string) string {
@@ -456,7 +569,79 @@ func (h storeCarriedHistory) CarriedCandidates(ctx context.Context, ownerID, com
 			Result: report.Result, CreatedAt: candidate.CreatedAt,
 		})
 	}
+	var operations carriedOperationReader
+	if h.rt.selfdevOperations != nil {
+		operations = h.rt.selfdevOperations
+	}
+	rejection := func(ctx context.Context, op selfdev.Operation) string {
+		return carriedRejectionReason(ctx, h.rt.store, h.rt.eventPayloadReader, op)
+	}
+	if err := annotateCarriedOperations(ctx, operations, rejection, computerID, out); err != nil {
+		return nil, err
+	}
 	return out, nil
+}
+
+type carriedOperationReader interface {
+	GetByIdempotency(ctx context.Context, computerID, idempotencyKey string) (selfdev.Operation, bool, error)
+}
+
+type carriedDecisionEvents interface {
+	EventByDigest(ctx context.Context, computerID, eventDigest string) (computerevent.Event, bool, error)
+}
+
+// annotateCarriedOperations joins each round to its own self-development
+// operation (keyed by its assignment, as openFreezeCandidate opens it). A
+// failed read is an error, so the offer stays undecided and the retry clean;
+// a round with no operation keeps the empty state. With no operation store
+// nothing is joined.
+func annotateCarriedOperations(ctx context.Context, operations carriedOperationReader, rejection func(context.Context, selfdev.Operation) string, computerID string, entries []carriedCandidate) error {
+	if operations == nil {
+		return nil
+	}
+	for i := range entries {
+		op, found, err := operations.GetByIdempotency(ctx, computerID, store.EngineeringFreezeIdempotencyKey(entries[i].AssignmentID))
+		if err != nil {
+			return fmt.Errorf("read the operation of assignment %s: %w", entries[i].AssignmentID, err)
+		}
+		if !found {
+			continue
+		}
+		entries[i].OperationID, entries[i].OperationState = op.OperationID, op.State
+		switch op.State {
+		case selfdev.StateRejected:
+			if rejection != nil {
+				entries[i].OperationReason = rejection(ctx, op)
+			}
+		case selfdev.StateFailed:
+			entries[i].OperationReason = op.TerminalError
+		}
+	}
+	return nil
+}
+
+// carriedRejectionReason reads the reason the decision pinned as its output
+// payload (decideSelfDevelopment): only from this operation's own rejection
+// event, and only that event's single output. Anything else is no reason.
+func carriedRejectionReason(ctx context.Context, events carriedDecisionEvents, payloads computerevent.ArtifactReader, op selfdev.Operation) string {
+	if events == nil || payloads == nil || strings.TrimSpace(op.DecisionEvent) == "" {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	event, found, err := events.EventByDigest(ctx, op.ComputerID, op.DecisionEvent)
+	if err != nil || !found || event.EventKind != computerevent.EventEffectRejected || event.ParentEventID != op.OperationID || len(event.OutputArtifactRefs) != 1 {
+		return ""
+	}
+	ref, err := computerevent.ParseArtifactRef(event.OutputArtifactRefs[0])
+	if err != nil {
+		return ""
+	}
+	raw, err := payloads.FetchPayload(ctx, op.ComputerID, ref.Digest().String())
+	if err != nil || !utf8.Valid(raw) {
+		return ""
+	}
+	return string(raw)
 }
 
 // offerCarriedPatchForAssignment is the spawn saga's call: the offer for an

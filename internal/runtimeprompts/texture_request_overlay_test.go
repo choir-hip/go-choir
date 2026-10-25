@@ -61,6 +61,7 @@ func TestManagementOverlaySaysThePlatformCarriesThePatch(t *testing.T) {
 			"the platform carries",
 			"never supply",
 			"Cast the next round",
+			"rejected or fails before it applies",
 		} {
 			if !strings.Contains(management, want) {
 				t.Errorf("management overlay (labels %v) lacks %q", labels, want)

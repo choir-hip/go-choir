@@ -26,6 +26,12 @@ package capsule
 // 10. Leaving those out also drops a real change: a file emptied by the
 //     candidate is still a change and must be carried.
 // 11. The carried-patch rule and the release rule drift apart.
+//
+// Iteration on a rejected candidate (owner, 2026-10-25):
+//
+// 12. A patch that conflicts on a moved base in some files is refused without
+//     naming which files, so the engineer redoes all of them; or a file that
+//     still applies is named as a conflict.
 
 import (
 	"context"
@@ -174,6 +180,38 @@ func TestCheckPatchAppliesToMovedBase(t *testing.T) {
 	err = CheckPatchAppliesToTree(context.Background(), got.Patch, got.Files, conflict)
 	if err == nil || !strings.Contains(err.Error(), "a.go") {
 		t.Fatalf("conflicting base = %v, want a refusal naming a.go", err)
+	}
+}
+
+// Mode 12 (iteration, 2026-10-25): a patch over several files that conflicts
+// in one of them on a moved base names exactly the conflicting paths, so the
+// engineer can redo only those; a file that still applies is not named as a
+// conflict. The patch carries no blob ids, so a 3-way merge has no preimage
+// to merge from and is not attempted.
+func TestCheckPatchAppliesNamesOnlyTheConflictingPaths(t *testing.T) {
+	requireGit(t)
+	base, cand := t.TempDir(), t.TempDir()
+	writeTree(t, base, map[string]string{"a.go": "package a\n\nfunc A() {}\n", "b.go": "package b\n\nfunc B() {}\n", "c.go": "package c\n"})
+	writeTree(t, cand, map[string]string{"a.go": "package a\n\nfunc A() { println(1) }\n", "b.go": "package b\n\nfunc B() { println(2) }\n", "c.go": "package c\n\nfunc C() {}\n"})
+	got, err := DiffTreesToPatch(context.Background(), base, cand, CarriedPatchMaxBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	moved := t.TempDir()
+	writeTree(t, moved, map[string]string{"a.go": "package a\n\nfunc A() { return }\n", "b.go": "package b\n\nfunc B() {}\n", "c.go": "package c\n// moved\n"})
+	err = CheckPatchAppliesToTree(context.Background(), got.Patch, got.Files, moved)
+	var conflict *CarriedPatchConflictError
+	if !errors.As(err, &conflict) {
+		t.Fatalf("conflicting base = %v (%T), want a *CarriedPatchConflictError", err, err)
+	}
+	if strings.Join(conflict.Paths, ",") != "a.go,c.go" {
+		t.Fatalf("conflicting paths = %v, want exactly a.go and c.go", conflict.Paths)
+	}
+	if strings.Join(conflict.Clean, ",") != "b.go" {
+		t.Fatalf("clean paths = %v, want b.go", conflict.Clean)
+	}
+	if !strings.Contains(err.Error(), "a.go, c.go") || strings.Contains(err.Error(), "conflict in b.go") {
+		t.Fatalf("refusal %q does not name exactly the conflicting paths", err)
 	}
 }
 
