@@ -18,6 +18,9 @@ var defaultSystemPromptYAML []byte
 //go:embed texture_root.txt
 var rootSection string
 
+//go:embed texture_root_context.txt
+var rootContextLabel string
+
 // DefaultSystemPrompt returns Texture's prompt core.
 func DefaultSystemPrompt() string {
 	doc, err := promptspec.Parse(defaultSystemPromptYAML)
@@ -33,4 +36,11 @@ func DefaultSystemPrompt() string {
 // carries it in its request turn, with the ledger.
 func RootSection() string {
 	return strings.TrimSpace(rootSection)
+}
+
+// RootContextLabel heads the master document's excerpt in the request turn
+// of every other document's Texture run (PD3 S2). Like the root section it
+// is not part of the prompt core.
+func RootContextLabel() string {
+	return strings.TrimSpace(rootContextLabel)
 }

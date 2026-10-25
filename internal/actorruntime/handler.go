@@ -312,6 +312,10 @@ func (h *actorHandler) handleAssignedEngineeringFateDeadline(ctx context.Context
 		}
 		return nil, fmt.Errorf("actorruntime: assigned Engineering fate deadline: %w", err)
 	}
+	// The deadline ran and committed (it may fail an assignment closed): its
+	// document's ledger changed, a change the Texture root renders (PD3 S1,
+	// review 248).
+	h.noteTextureRootTrajectory(ctx, ownerID, computerID, u.TrajectoryID)
 	return memory, nil
 }
 

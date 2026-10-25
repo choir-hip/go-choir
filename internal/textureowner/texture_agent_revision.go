@@ -501,8 +501,15 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 	// marker names carries the root section and the ledger in its request
 	// turn, never in the prompt core.
 	textureRoot, isTextureRoot := rt.textureRootFor(ctx, ownerID, doc.ComputerID, doc.DocID)
+	rootContextRevisionID := ""
 	if isTextureRoot {
 		agentPrompt += rt.textureRootRequestSection(ctx, ownerID, doc, textureRoot, req)
+	} else if textureRoot.DocumentID != "" {
+		// Every other document's run carries the master's excerpt as
+		// read-only context (PD3 S2), in this turn, never in the core.
+		section, revisionID := rt.textureRootSharedContext(ctx, ownerID, doc, textureRoot)
+		agentPrompt += section
+		rootContextRevisionID = revisionID
 	}
 
 	// Create the runtime run with Texture agent revision metadata.
@@ -556,6 +563,9 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 	}
 	if holdTrajectory {
 		runMetadata["actor_rewarm_carry_conversation"] = true
+	}
+	if rootContextRevisionID != "" {
+		runMetadata["texture_root_context_revision_id"] = rootContextRevisionID
 	}
 	if isTextureRoot {
 		runMetadata["texture_root"] = true
