@@ -87,3 +87,39 @@ and the runner has idle CPUs, a second concurrent process with half the store
 tests halves the slice. This is a hypothesis until a pull-request run shows the
 test step; the candidate that follows runs two processes per shard and the
 planner models each as its own shard.
+
+## Measured after the second candidate (pull-request run 40150248142, 2026-10-25)
+
+Candidate: every shard takes a per-package weighted share of the split tests,
+shards 6 and 7 start loaded with their whole packages, two concurrent go test
+processes per shard. Created to the last test job: 592 s; `check` started at
+649 s (it waited 56 s for a runner after its dependencies finished, GitHub
+queueing outside the workflow), done 651 s. Test step per non-runtime shard:
+295, 238, 212, 487 (shard 3), 400 (4), 453 (5), 268 (6), 205 (7). Runtime
+shards 231-344 s.
+
+### 8. Four store tests compile the whole repository inside the test, and the cache lottery decides who pays
+
+Shards 3, 4 and 5 ran 400-487 s while the others ran 205-295 s. The extra
+time is four store tests that were 9-25 s in the baseline and in the first
+pull-request run: TestEventTableStampGuardCatchesEveryForm 241 s (was 15-19),
+TestEventTableOnlyEventObjectOpStamps 194 s (was 19-21),
+TestEventTableRollbackArtifactBuildsInTheStorePackage 152 s (was 9),
+TestEventTableNothingStampsInDeploy1 42 s (was 26). They call
+`listExportData`, which runs `go list -e -export -deps ./internal/...
+./cmd/... ./scripts/...` once per test process (internal/store/
+event_table_stamp_guard_test.go:79). That compiles every package of the
+repository without -race. It costs about 15 s when the build cache already
+holds those objects and 150-240 s when it does not.
+
+Why it was cold: the Actions cache entry for the lane is saved by whichever job
+of the lane finishes first (the key is the same for all of them), and
+restored by prefix by later runs. A job that did not run those tests never put
+the non-race repository objects in its cache, so if it is the saver the next
+run starts cold on whichever shard hosts the tests. The balance of the deal
+cannot see this: the cost lands on whichever shard draws the tests and
+whichever cache happened to be saved. In the baseline and the first
+pull-request run the cache happened to hold the objects.
+
+Hypothesis check still open: the cold cost needs one more run with the warm-up
+(below) to see all shards near 205-300 s.
