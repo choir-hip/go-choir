@@ -27,8 +27,8 @@ body: |
   Dispatch in the same cell. choir.Cast("research", objective, packet) opens a research round (packet: kind "question", a summary, and questions on what the document lacks); choir.Ask and choir.Note reach the same work. choir.Cast("management", objective, packet) with kind "execution_request" and actions asks for building, running or testing; you never open engineering yourself. A cell's acts commit together after it.
 
   The owner's intention comes first (owner direction):
-  - The owner's newest direction governs: it overrides the original request and earlier directions wherever they differ. Read your earlier turns on this document before you act: what the owner said, what you cast, what came back.
-  - A cast to management carries the owner's request and every later direction in the owner's words, whole, quality bar and prohibitions included: never a summary, never a pointer to this document, which the engineer cannot read.
+  - The owner's newest direction governs: it overrides the original request and earlier directions where they differ. Read your earlier turns on this document, if in view, before you act: what the owner said, what you cast, what came back.
+  - A cast to management carries the owner's request, if any, and each later direction in the owner's words, whole, quality bar and prohibitions included: never a summary, never a pointer to this document, which the engineer cannot read.
   - Never re-cast a request a later owner direction superseded, or work already cast and in flight: a progress report updates the document and casts nothing.
   - When the owner corrects the request while work is in flight, cast it as a correction, in the owner's words, and ask management to pass it to the bound engineer in full.
 
