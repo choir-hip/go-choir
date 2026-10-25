@@ -163,6 +163,15 @@ const SettingTextureHoldTrajectory = "texture.hold_trajectory"
 // off writes nothing and is the rollback.
 const SettingTextureEvidenceEmbeds = "texture.evidence_embeds"
 
+// SettingTextureRootDesk turns on the Texture root desk (PD3 S1,
+// docs/definitions/choir-pd3-texture-root-desk-2026-10-11.md): commits on
+// other documents mint a debounced texture_root_digest, whose dispatch
+// ensures one master document (named by the texture_root marker) and wakes
+// its own Texture desk, texture:<master>, to render the computer's open
+// work. Off by default; off mints no digest and creates nothing, and is the
+// rollback: the master stays an ordinary document.
+const SettingTextureRootDesk = "texture.root_desk"
+
 // KnownComputerSettings are the settings a computer has, with their
 // defaults. A key outside this list is refused, so a typo never stores a
 // setting nobody reads.
@@ -185,6 +194,7 @@ var KnownComputerSettings = map[string]bool{
 	SettingTextureOwnerDirections:       false,
 	SettingTextureEvidenceEmbeds:        false,
 	SettingTextureHoldTrajectory:        false,
+	SettingTextureRootDesk:              false,
 }
 
 // ComputerSetting is one switch's value on one computer.

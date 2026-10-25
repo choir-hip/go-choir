@@ -112,7 +112,8 @@ func startTextureRootFixtureDocument(t *testing.T, s *Store, docID string) (type
 	start.InitialWork.AuthorityProfile = "texture"
 	start.InitialDocument.DocID = docID
 	start.InitialRevision.RevisionID = "revision-" + docID
-	start.InitialRevision.BodyDoc = lifecycleStructuredBodyDoc(docID, start.InitialRevision.RevisionID, "Initial "+docID)
+	start.InitialRevision.Content = "Initial " + docID
+	start.InitialRevision.BodyDoc = lifecycleStructuredBodyDoc(docID, start.InitialRevision.RevisionID, start.InitialRevision.Content)
 	start.Agent.AgentID = "texture:" + docID
 	start.Agent.ChannelID = docID
 	start.SubjectRefs = map[string]string{"doc_id": docID, "artifact": "texture://documents/" + docID}

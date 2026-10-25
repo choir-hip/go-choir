@@ -210,6 +210,8 @@ func (h *actorHandler) HandleUpdate(ctx context.Context, agentID string, u actor
 		return h.handleSourcePollDue(ctx, u, memory)
 	case "inbox_record":
 		return h.handleInboxRecord(ctx, u, memory)
+	case agentcore.TextureRootDigestKind:
+		return h.handleTextureRootDigest(ctx, u, memory)
 	case "lifecycle_work_assigned":
 		return h.handleLifecycleWorkAssigned(ctx, u, memory)
 	case "lifecycle_cancellation":
@@ -435,6 +437,24 @@ func (h *actorHandler) handleOwnerRevision(ctx context.Context, u actor.Update, 
 // record (Cut 1 L3a, the Texture-research conversation). The wake carries no
 // work: the desk reads its records in (cursor, head] when its turn runs, and
 // an active turn reads them in its next cell.
+// handleTextureRootDigest delivers the Texture root's digest (PD3 S1). The
+// Texture owner checks the marked master's liveness, runs the ensure step
+// when it is not live, and wakes the master's own desk; a pre-boot digest
+// never reaches here after a crash (RestartWorkKinds).
+func (h *actorHandler) handleTextureRootDigest(ctx context.Context, u actor.Update, memory []byte) ([]byte, error) {
+	ownerID, computerID, _, err := parseScopedActorMailboxID(u.ToAgentID)
+	if err != nil {
+		return nil, fmt.Errorf("actorruntime: resolve Texture root digest scope: %w", err)
+	}
+	if h.textureOwner == nil {
+		return nil, deferTextureOccurrence(fmt.Errorf("actorruntime: Texture owner is not bound"))
+	}
+	if err := h.textureOwner.HandleTextureRootDigest(ctx, ownerID, computerID, u.Content); err != nil {
+		return nil, fmt.Errorf("%w: actorruntime: Texture root digest: %v", actor.ErrDeferUnprocessed, err)
+	}
+	return memory, nil
+}
+
 func (h *actorHandler) handleInboxRecord(ctx context.Context, u actor.Update, memory []byte) ([]byte, error) {
 	ownerID, computerID, agentID, err := parseScopedActorMailboxID(u.ToAgentID)
 	if err != nil {
@@ -445,6 +465,9 @@ func (h *actorHandler) handleInboxRecord(ctx context.Context, u actor.Update, me
 		if h.textureOwner == nil {
 			return nil, deferTextureOccurrence(fmt.Errorf("actorruntime: Texture owner is not bound"))
 		}
+		// A desk report to a document is a change the Texture root renders
+		// (PD3 S1): noted after the record's commit, off this wake's path.
+		h.textureOwner.NoteTextureRootChange(ctx, ownerID, computerID, strings.TrimPrefix(agentID, agentprofile.Texture+":"))
 		rec, err := h.textureOwner.ReconcileAgentWake(ctx, ownerID, strings.TrimPrefix(agentID, agentprofile.Texture+":"))
 		if err != nil {
 			return nil, fmt.Errorf("%w: actorruntime: Texture inbox wake: %v", actor.ErrDeferUnprocessed, err)
@@ -1044,6 +1067,9 @@ func (h *actorHandler) reconcileCoagentWake(ctx context.Context, update actor.Up
 		if strings.TrimSpace(strings.TrimPrefix(agentID, prefix)) == "" {
 			return nil, fmt.Errorf("Texture agent id has no document id")
 		}
+		// A producer report to a document is a change the Texture root
+		// renders (PD3 S1).
+		h.textureOwner.NoteTextureRootChange(ctx, ownerID, computerID, strings.TrimPrefix(agentID, prefix))
 		return h.textureOwner.ReconcileActorWake(ctx, ownerID, computerID, agentID)
 	}
 	agent, err := h.rt.Store().GetAgentByScope(ctx, ownerID, computerID, agentID)

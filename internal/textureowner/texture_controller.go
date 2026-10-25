@@ -20,9 +20,12 @@ import (
 
 // dispatchTextureRevisionWake sends the owner-input occurrence to the Texture
 // agent for the given doc: the committed owner-authored revision is the
-// trigger. The actor mailbox dedupes on the encoded occurrence identity, and
-// the boot scan re-derives the same wake from the document head, so a crash
-// between commit and dispatch loses nothing.
+// trigger. The actor mailbox dedupes on the encoded occurrence identity. No
+// boot scan exists: the commit itself writes the owner_revision outbox row
+// in its transaction (store actorWakeOutboxFromObject), so a crash between
+// commit and this dispatch loses no wake; and a crash boot interrupts a wake
+// recorded before it (preBootWorkWake, RestartWorkKinds), never re-runs it,
+// so the pending owner revision waits for the document's next occurrence.
 func (rt *Handler) dispatchTextureRevisionWake(ownerID, computerID, trajectoryID string, revision types.Revision, requestID string, events []types.LifecycleEvent, deskProfile string) {
 	if rt == nil || rt.Core == nil {
 		return
@@ -503,6 +506,14 @@ func (rt *Handler) textureLifecycleActivationEligible(ctx context.Context, doc t
 }
 
 func (rt *Handler) reconcileAgentWakeLocked(ctx context.Context, doc types.Document, textureAgentID string) (*types.RunRecord, error) {
+	return rt.reconcileAgentWakeLockedFor(ctx, doc, textureAgentID, nil)
+}
+
+// reconcileAgentWakeLockedFor is the wake reconcile; root is set only for a
+// Texture root digest on the master document (PD3 S1), which starts a new
+// run naming the digest's documents instead of reactivating a parked one
+// (a parked run would replay its memory and never see them).
+func (rt *Handler) reconcileAgentWakeLockedFor(ctx context.Context, doc types.Document, textureAgentID string, root *textureRootWake) (*types.RunRecord, error) {
 	ownerID := strings.TrimSpace(doc.OwnerID)
 	docID := strings.TrimSpace(doc.DocID)
 	activationEligible, err := rt.textureLifecycleActivationEligible(ctx, doc)
@@ -670,13 +681,18 @@ func (rt *Handler) reconcileAgentWakeLocked(ctx context.Context, doc types.Docum
 		logTextureWakeNoRun(ownerID, doc.ComputerID, textureAgentID, "activation breaker tripped for update-driven pressure")
 		return nil, nil
 	}
-	if rec, reactivated, err := rt.reactivatePassivatedTextureRun(ctx, doc, textureAgentID, scheduledSeq, ownerHeadPending || initialWorkWake || recordsPending, recordsPending); err != nil {
-		return nil, err
-	} else if reactivated {
-		if bindErr := rt.reconcileTextureUpdateDelivery(ctx, doc, textureAgentID, rec.RunID, armedUpdates, exhausted, false, 0, "", ""); bindErr != nil {
-			log.Printf("texture controller: bind producer reports to reactivated run %s: %v", rec.RunID, bindErr)
+	// A root digest starts a fresh root run: it never reactivates a parked one.
+	if root == nil {
+		rec, reactivated, err := rt.reactivatePassivatedTextureRun(ctx, doc, textureAgentID, scheduledSeq, ownerHeadPending || initialWorkWake || recordsPending, recordsPending)
+		if err != nil {
+			return nil, err
 		}
-		return rec, nil
+		if reactivated {
+			if bindErr := rt.reconcileTextureUpdateDelivery(ctx, doc, textureAgentID, rec.RunID, armedUpdates, exhausted, false, 0, "", ""); bindErr != nil {
+				log.Printf("texture controller: bind producer reports to reactivated run %s: %v", rec.RunID, bindErr)
+			}
+			return rec, nil
+		}
 	}
 	pendingCleanupCtx := context.WithoutCancel(ctx)
 	for {
@@ -705,6 +721,15 @@ func (rt *Handler) reconcileAgentWakeLocked(ctx context.Context, doc types.Docum
 		// A turn started for unread records says so, so the trace links it
 		// to the records that caused it (Cut 1 L3a).
 		revisionReq.Provenance = map[string]any{"request_source": "inbox_record"}
+	}
+	if root != nil {
+		if !ownerHeadPending {
+			revisionReq.Intent = "render_texture_root_digest"
+		}
+		revisionReq.RootDocuments, revisionReq.RootFullRefresh = root.Docs, root.Full
+		if revisionReq.Provenance == nil {
+			revisionReq.Provenance = map[string]any{"request_source": agentcore.TextureRootDigestKind}
+		}
 	}
 	rec, err := rt.submitTextureAgentRevisionRun(ctx, doc, ownerID, revisionReq, scheduledSeq)
 	if err != nil {

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -103,6 +104,40 @@ func (rt *Runtime) TextureActorParkIdle() time.Duration {
 		return 0
 	}
 	return rt.cfg.TextureActorParkIdle
+}
+
+// TextureRootDigestInterval is the Texture root digest's debounce: a digest
+// is due this long after the change that armed it, and root runs started by
+// digests are at least this far apart (runtime configuration, default 120 s).
+func (rt *Runtime) TextureRootDigestInterval() time.Duration {
+	if rt == nil || rt.cfg.TextureRootDigestInterval <= 0 {
+		return provideriface.DefaultTextureRootDigestInterval
+	}
+	return rt.cfg.TextureRootDigestInterval
+}
+
+// TextureRootDigestPerHour bounds root runs started by digests in any hour
+// (runtime configuration, default 20).
+func (rt *Runtime) TextureRootDigestPerHour() int {
+	if rt == nil || rt.cfg.TextureRootDigestPerHour <= 0 {
+		return provideriface.DefaultTextureRootDigestPerHour
+	}
+	return rt.cfg.TextureRootDigestPerHour
+}
+
+// ScheduleActor records a durable actor occurrence due at notBefore through
+// the kernel's schedule hook.
+func (rt *Runtime) ScheduleActor(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string, notBefore time.Time) error {
+	if rt == nil {
+		return fmt.Errorf("runtime: actor schedule unavailable")
+	}
+	rt.deliveryHooksMu.Lock()
+	schedule := rt.scheduleActor
+	rt.deliveryHooksMu.Unlock()
+	if schedule == nil {
+		return fmt.Errorf("runtime: actor schedule unavailable")
+	}
+	return schedule(ctx, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID, notBefore.UTC())
 }
 
 // TextureComputerID returns the runtime autoputer identity used for durable actor records.
