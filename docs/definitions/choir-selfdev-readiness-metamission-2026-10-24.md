@@ -173,6 +173,39 @@ metamission:
         SR7's gate proves each one reversible, and by computer class, test
         then primary then the owner's, the paper last. Auto-apply on one
         computer is not auto-promote to main: promotion stays reviewed.
+    - id: T1a
+      path: none yet (drafted in the ledger 01:5x)
+      readiness: intent
+      status: pending
+      depends_on: [SR5]
+      note: >-
+        Self-develop the other four apps on the list, the same loop as the
+        Reader (owner, 2026-10-25: "more aggressive with self-development"):
+        Files (the hub, with routing by type and a context menu on
+        right-click, Shift+F10 and long-press whose Open with lists every
+        app that can open the file), then Slides, Calendar and Podcasts.
+        One app per request, never five in one (the v6 and v7 five-app
+        candidates failed); each brief names feature parity with what it
+        replaces, the house code style and the keys to keep; FP0 approves
+        on b@c, promotes and lands each; rejected candidates are iterated
+        with texture revise, not resubmitted. Engineering on b@c runs
+        Synthetic DeepSeek. Specs per app: the 2026-10-24 v7 brief
+        (_runs/apprewrite/v7/request.txt) is the starting list.
+    - id: T1c
+      path: none yet (intent)
+      readiness: intent
+      status: pending
+      depends_on: [T1a]
+      note: >-
+        After the five apps, the desktop redesign, self-developed on b@c
+        (owner, 2026-10-25): Frutiger Aero, vectorheart and liquid metal,
+        combined into one coherent system, as a new theme preset that is
+        the default while the existing presets stay selectable; brief
+        _runs/apprewrite/desktop/request.txt (restyle only: props, events,
+        data attributes, window-manager behaviour and registry ids
+        unchanged; accessibility required). Then, with time, more desktop
+        themes and designs, as creative as they can get, each one its own
+        request.
     - id: T1
       path: none yet (intent)
       readiness: intent
@@ -271,9 +304,10 @@ finish:
   deliver: >-
     The owner's self-development loop works end to end: a coding agent asks
     a test computer for a change through the choir CLI; the computer's
-    engineering builds it on current main; the owner sees it in Texture and
-    approves it; it is promoted to main through review and the landing
-    loop; every computer receives it as the new base, and the test
+    engineering builds it on current main; FP0 approves it as the coding
+    agent with the owner's standing authority for b@c (owner, 2026-10-25:
+    "you approve the reader"), and the owner sees it in Texture; it is
+    promoted to main through review and the landing loop; every computer receives it as the new base, and the test
     computer's stack retires as upstreamed.
   artifact: >-
     On main and deployed: U1 and U1b (source = base plus applied stack,
@@ -336,6 +370,14 @@ boundaries:
   mutation_class: red
   authority_sources:
     - the owner's statements in session (this file's header and ledger)
+    - >-
+      owner rulings 2026-10-25 (ledger 01:5x): FP0 approves the Reader; the
+      Reader opens PDF and EPUB files and the old PDF and EPUB apps stay
+      beside it to compare; when Files and Slides are rewritten, Files gets
+      a right-click and long-press context menu with Open with any app;
+      Synthetic DeepSeek runs engineering on b@c only; be more aggressive
+      with self-development: after the Reader, the other apps on the list
+      (Files, Slides, Calendar, Podcasts) are self-developed the same way
     - docs/choir-doctrine.md (I1, I25, I26, I27)
     - CLAUDE.md (mutation classes, review tiers, landing loop, problem documentation first)
   must_preserve:
@@ -358,12 +400,13 @@ boundaries:
 now:
   status: working
   slice: >-
-    Wave 1: land U1 and U1b, P1 and P2, the loop gaps C, F, H, K and
-    one-home steps 1 and 3, switched off, in as few deploys as the
-    switched-off rule allows; then turn each on for b@c one at a time and
-    prove it. In parallel, SR6's carried items.
-  source_ref: e2d8fca61
-  deploy_identity: c72cc2e07 (D44)
+    The Reader on b@c (SR5): reader-3's repair round, then a revision on the
+    same trajectory that keeps the old apps, FP0's approval, the promote,
+    and b@c's stack retiring as upstreamed. Then T1a, the other four apps.
+    In parallel: CI0 (the CI worker on the agents VM), SR7's first slices,
+    SR6's carried items. Waves W1 to W4 are live (see receipts in the ledger).
+  source_ref: 92e06844f
+  deploy_identity: 4e72decef (W4); the iteration fix 29fc9064a deploys with 92e06844f
   candidate:
     id: wave-1
     state: rehearsing
@@ -413,10 +456,14 @@ now:
       Whether U1b can deliver the base's git history through an existing
       channel without a new host service.
     next_observation: U1b's investigation report.
-  blocker_or_risk: wave-1 lanes are unpushed until their workers report; nothing is relied on before it is pushed
+  blocker_or_risk: >-
+    A settled trajectory refuses texture revise (409), so a rejected
+    candidate can be iterated only while its trajectory is live.
   next_action: >-
-    Land U1's fixes after a one-seat re-review; collect U1b, P1, P2 and the
-    gap lanes as they finish; mirror and review each by tier; freeze wave 1.
+    When reader-3's repair round reaches approval, read its patch against
+    the brief; reject what misses with a reason and revise the same
+    trajectory to keep the old apps and make the Reader the PDF and EPUB
+    default; approve, promote with scripts/selfdev-promote, land.
 
 receipts: []
 ---
