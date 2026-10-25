@@ -6,7 +6,8 @@
 // do not reach past it. This is the start of the "platform API range" a lock
 // entry declares later.
 
-// Media and file helpers (the shell's auth-renewing fetch lives behind these).
+// Media and file helpers (the shell's auth-renewing fetch and its upload live
+// behind these).
 export {
   appTitle,
   apiFileURL,
@@ -17,6 +18,7 @@ export {
   recentMediaAppContext,
   rememberRecentMedia,
   resolveMediaSource,
+  uploadMediaFile,
 } from './media-utils.js';
 
 // Live events (the synced computer state channel).

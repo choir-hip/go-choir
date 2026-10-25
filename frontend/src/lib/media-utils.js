@@ -2,14 +2,101 @@ import { fetchWithRenewal, AuthRequiredError } from './auth.js';
 import { currentDeviceId } from './live-events.js';
 import { PACKAGE_MEDIA_ROUTES } from './apps/registry';
 
+  // PDF and EPUB are opened by the Reader package (src/packages/reader), whose
+  // manifest declares those extensions in `opens`; packages.ts consults
+  // PACKAGE_MEDIA_ROUTES first, so mediaRouteForFileName still answers
+  // { appId: 'pdf' } and { appId: 'epub' } exactly as this table did.
 export const MEDIA_FILE_ROUTES = [
   { appId: 'audio', mediaType: 'audio/mpeg', extensions: ['mp3', 'm4a', 'aac', 'ogg', 'oga', 'wav', 'flac', 'opus'] },
   { appId: 'video', mediaType: 'video/mp4', extensions: ['mp4', 'm4v', 'webm', 'mov', 'avi', 'mkv'] },
-  { appId: 'pdf', mediaType: 'application/pdf', extensions: ['pdf'] },
-  { appId: 'epub', mediaType: 'application/epub+zip', extensions: ['epub'] },
   { appId: 'slides', mediaType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', extensions: ['pptx', 'html', 'htm'] },
   { appId: 'calendar', mediaType: 'text/calendar', extensions: ['ics'] },
 ];
+
+// The shell's upload, offered to packages through app-sdk.ts (the package
+// boundary refuses any other import): one file to top-level Files, by the same
+// request Files itself sends, so an upload from a package renews the session,
+// reports progress and answers the same way an upload from Files does.
+export async function uploadMediaFile(file, options = {}) {
+  const { onProgress, signal } = options || {};
+  const url = '/api/files/' + encodeURIComponent(String(file?.name || ''));
+  const headers = { 'X-Choir-Device': currentDeviceId() };
+  if (file?.type) headers['Content-Type'] = file.type;
+  const wantsProgress = typeof onProgress === 'function' && typeof XMLHttpRequest !== 'undefined';
+
+  let res;
+  try {
+    if (wantsProgress) {
+      res = await putFileWithProgress(file, url, headers, onProgress, signal);
+    } else {
+      res = await fetchWithRenewal(url, { method: 'PUT', headers, body: file, signal });
+    }
+  } catch (err) {
+    if (err?.name === 'AuthRequiredError') return { ok: false, path: '', status: 401, error: 'Your session ended. Sign in again to save the file.' };
+    if (err?.name === 'AbortError') return { ok: false, path: '', status: 0, error: 'The upload was cancelled.' };
+    return { ok: false, path: '', status: 0, error: 'The file did not finish uploading. Check the connection and try again.' };
+  }
+  if (!res || !res.ok) {
+    const status = Number(res?.status) || 0;
+    let message = '';
+    try {
+      const body = await res.json();
+      message = String(body?.error || '');
+    } catch (_err) {
+      message = '';
+    }
+    if (status === 401) return { ok: false, path: '', status, error: 'Your session ended. Sign in again to save the file.' };
+    if (status === 0) return { ok: false, path: '', status, error: 'The file did not finish uploading. Check the connection and try again.' };
+    return { ok: false, path: '', status, error: message || 'The library answered ' + status + ' while saving the file.' };
+  }
+  return { ok: true, path: String(file?.name || ''), status: Number(res.status) || 0, error: '' };
+}
+
+// The same PUT, sent by XMLHttpRequest when the caller wants progress: fetch
+// cannot report upload progress. Resolves to a Response-shaped value.
+function putFileWithProgress(file, url, headers, onProgress, signal) {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open('PUT', url);
+    request.withCredentials = true;
+    for (const [key, value] of Object.entries(headers)) request.setRequestHeader(key, value);
+    request.upload.addEventListener('progress', (event) => {
+      if (!event.lengthComputable) return;
+      onProgress({ loaded: event.loaded, total: event.total, fraction: event.total ? event.loaded / event.total : 0 });
+    });
+    request.addEventListener('load', () => {
+      resolve({
+        ok: request.status >= 200 && request.status < 300,
+        status: request.status,
+        json: async () => {
+          try {
+            return JSON.parse(request.responseText || '{}');
+          } catch (_err) {
+            return {};
+          }
+        },
+      });
+    });
+    request.addEventListener('error', () => {
+      const err = new Error('Upload failed');
+      err.name = 'NetworkError';
+      reject(err);
+    });
+    request.addEventListener('abort', () => {
+      const err = new Error('Upload cancelled');
+      err.name = 'AbortError';
+      reject(err);
+    });
+    if (signal) {
+      if (signal.aborted) {
+        request.abort();
+        return;
+      }
+      signal.addEventListener('abort', () => request.abort());
+    }
+    request.send(file);
+  });
+}
 
 export function appTitle(kind) {
   if (kind === 'pdf') return 'PDF';

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Reader – Choir</title>
+    <meta name="description" content="Reader, the Choir window for PDFs and EPUBs, on a sample document that needs no account." />
+    <meta name="theme-color" content="#050912" />
+    <link rel="icon" href="/favicon.svg" />
+  </head>
+  <body>
+    <div class="reader-chrome" data-reader-chrome>
+      <div class="reader-page-bar" data-reader-page-bar>
+        <span><strong>Reader</strong> · Choir</span>
+        <span>Sample document · no account needed</span>
+      </div>
+      <div id="reader-root" data-reader-preview></div>
+    </div>
+    <script>
+      // /read is the Reader preview's address; /read.html stays served for
+      // anyone who links the file, and /read/ is normalised to /read.
+      (function () {
+        var path = window.location.pathname;
+        if (path === '/read/') {
+          window.history.replaceState(window.history.state, '', '/read' + window.location.search + window.location.hash);
+        }
+      })();
+    </script>
+    <noscript><p style="padding: 24px">Reader needs JavaScript enabled to lay out the document.</p></noscript>
+    <script type="module" src="/src/reader.js"></script>
+  </body>
+</html>
