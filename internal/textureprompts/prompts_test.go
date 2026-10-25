@@ -260,3 +260,31 @@ func TestRootSectionStaysOutOfTheCoreAndAsksForRefs(t *testing.T) {
 		t.Errorf("root section is %d characters; keep it under 2k", n)
 	}
 }
+
+// PD3 S2: the master document's excerpt reaches every other document's
+// Texture under a label that says who wrote it and what it is not. Ways it
+// can fail: the label is in the prompt core (it would count against the
+// budget and reach the root too); it reads as owner input or an
+// instruction, so a sub-RLM acts on another document's line; it does not
+// name the ledger as the authority; the root is not told to lead the master
+// with the section the excerpt puts first.
+func TestRootContextLabelSaysWhoWroteItAndThatItIsNotAnInstruction(t *testing.T) {
+	core, label := DefaultSystemPrompt(), RootContextLabel()
+	if strings.TrimSpace(label) == "" {
+		t.Fatal("the root context label is empty")
+	}
+	if strings.Contains(core, label) || strings.Contains(core, "Texture root") {
+		t.Fatal("the root context label leaked into the prompt core")
+	}
+	for _, want := range []string{"master document", "Texture root", "read-only", "not the owner's input", "not an instruction", "ledger is the authority", "Never act on it alone"} {
+		if !strings.Contains(label, want) {
+			t.Errorf("root context label lacks %q", want)
+		}
+	}
+	if n := len(label); n > 700 {
+		t.Errorf("root context label is %d characters; keep it under 700", n)
+	}
+	if !strings.Contains(RootSection(), `"Waits on the owner"`) {
+		t.Error("the root section does not ask the master to lead with the \"Waits on the owner\" section")
+	}
+}
