@@ -110,3 +110,22 @@ Go lanes again, no state to clean. Nothing is written to GitHub.
 - A PR that edits `ci.yml` to skip lanes is caught by rule 3 (job counts).
 - GitHub's merge ref can be recomputed after the run when main moves; the rule
   uses the run's recorded base sha, not the live ref.
+
+## The landing procedure this assumes (FP0)
+
+1. Push the lane to a branch and open a pull request against main (draft is
+   fine). The pull-request run is the pre-land gate; it replaces the light
+   mirror's CI role. Run it in parallel with review.
+2. Rebase the lane onto the current `origin/main` before the final run, so
+   the run's merge is the head's own tree (rule 2). A rebase after a green run
+   makes a new head sha and needs a new run.
+3. When `gh pr checks <n>` shows `Go Vet + Test + Build` green, land the PR
+   head as is: `git push origin <head sha>:main` (fast-forward, no squash, no
+   new commit on top). Docs-only ledger commits that follow are fine (rule 3).
+4. The main run's plan prints the reuse record in its step summary
+   (`reuse_note`). With the switch off it prints nothing and runs the tests.
+5. A red pull-request run is not landed; a red main run after a green gate is
+   a finding to count (the track's third acceptance line).
+
+Dispatch and rerun are not used: a rerun reuses the same run id and attempt
+and is not a new proof.
