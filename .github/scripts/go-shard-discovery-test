@@ -207,16 +207,22 @@ elif os.environ.get('FAIL_EXECUTION'): sys.exit(8)
     assert result.returncode != 0, ('empty split shard must fail', result.stdout)
     assert not executions(invocations), invocations
     # One whole package for two whole shards: the second whole shard still
-    # runs its split names; with no split names either, it fails.
+    # runs its split names; with no split names either, it fails. (A copy
+    # without the weights file: the tracked "@whole" load would keep a
+    # 49-name fixture's split names off the whole shards entirely.)
+    plain = root / 'plain'
+    plain.mkdir()
+    for name in ('go-test-non-runtime-shards', 'go-test-with-timing', 'go-test-split-packages'):
+        shutil.copy2('scripts/' + name, plain / name)
     few = SPLIT + WHOLE[:1] + sorted(RUNTIME)
     few_tests = json.dumps({p: tests_for(p) for p in few})
-    result, invocations = run(script, 8, 7, FAKE_TESTS=few_tests)
+    result, invocations = run(str(plain / 'go-test-non-runtime-shards'), 8, 7, FAKE_TESTS=few_tests)
     assert result.returncode == 0, result.stderr
     assert all('-run' in c for c in executions(invocations)), invocations
-    result, invocations = run(script, distinct + 4, distinct + 3, FAKE_TESTS=few_tests)
+    result, invocations = run(str(plain / 'go-test-non-runtime-shards'), distinct + 4, distinct + 3, FAKE_TESTS=few_tests)
     assert result.returncode != 0, ('a shard with no names and no packages must fail', result.stdout)
     assert not executions(invocations), invocations
-    result, _ = run(script, 8, 6, FAKE_TESTS=few_tests)
+    result, _ = run(str(plain / 'go-test-non-runtime-shards'), 8, 6, FAKE_TESTS=few_tests)
     assert result.returncode == 0, result.stderr
     for bad in ('8', '-1', 'x'):
         result, _ = run(script, 8, bad)
