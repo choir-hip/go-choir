@@ -70,6 +70,7 @@ tests = json.loads(os.environ['FAKE_TESTS'])
 module = 'github.com/yusefmosiah/go-choir/'
 def short(p): return p.removeprefix(module).removeprefix('./')
 if args[0] == 'list' and '-export' in args:
+    with open(os.environ['GO_CALLS'] + '.nice', 'a') as f: f.write(str(os.nice(0)) + '\\n')
     sys.exit(9 if os.environ.get('FAIL_WARM') else 0)
 if args[0] == 'list':
     for p in tests: print(module + p)
@@ -90,7 +91,7 @@ elif os.environ.get('FAIL_EXECUTION'): sys.exit(8)
     base_env = dict(os.environ, PATH=str(fake.parent) + os.pathsep + os.environ['PATH'],
                     GO_CALLS=str(calls), FAKE_TESTS=json.dumps({p: tests_for(p) for p in packages}))
     base_env.pop('QUARANTINE_FILE', None)
-    base_env['SPLIT_PROCS'] = '1'  # the default's coverage is checked with SPLIT_PROCS=2,3 below
+    base_env['SPLIT_PROCS'] = '1'  # the default is checked below; 2 and 3 are checked explicitly
     # A login BASH_ENV (the repo's dev shell) re-prepends the real toolchain.
     base_env.pop('BASH_ENV', None)
     base_env.pop('ENV', None)
@@ -334,6 +335,8 @@ elif os.environ.get('FAIL_EXECUTION'): sys.exit(8)
         warm = [c for c in invocations if c[:4] == ['list', '-e', '-export', '-deps']]
         assert len(warm) == 1, ('one export-data warm-up per split-mode shard', shard, warm)
         assert warm[0][4:7] == ['./internal/...', './cmd/...', './scripts/...'], warm[0]
+        niceness = [int(x) for x in pathlib.Path(str(calls) + '.nice').read_text().split()]
+        assert niceness and niceness[-1] >= 19, ('the warm-up must run at the lowest priority', niceness)
     result, invocations = run(wscript, 8, 0, WARM_EXPORT_DATA='0')
     assert not [c for c in invocations if c[:4] == ['list', '-e', '-export', '-deps']], 'WARM_EXPORT_DATA=0 skips the warm-up'
     result, invocations = run(wscript, 8, 0, FAIL_WARM='1')
@@ -347,7 +350,7 @@ elif os.environ.get('FAIL_EXECUTION'): sys.exit(8)
     calls.write_text('')
     result = subprocess.run(['bash', wscript, '-race'], env=dict(default_env, TOTAL_SHARDS='8', SHARD_INDEX='0'), capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
-    assert len([c for c in executions([json.loads(l) for l in calls.read_text().splitlines()]) if '-run' in c]) == 2, 'default SPLIT_PROCS is 2'
+    assert len([c for c in executions([json.loads(l) for l in calls.read_text().splitlines()]) if '-run' in c]) == 1, 'default SPLIT_PROCS is 1 (2 flaked actorruntime under load, finding 9)'
     # A failing process fails the shard, and the others' results still show.
     result, _ = run(wscript, 8, 0, SPLIT_PROCS='2', FAIL_EXECUTION='1')
     assert result.returncode != 0, 'a failed process must fail the shard'
