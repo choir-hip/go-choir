@@ -29,6 +29,11 @@ concurrency:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  # Prove once (docs/design/ci-prove-once-2026-10-24.md): when 'true', a push
+  # to main whose exact commit a green pull-request run already tested (the
+  # run's lanes and base checked through the API) skips the Go test lanes.
+  # Anything not provable runs them. Shipped off; flip it in a reviewed commit.
+  CI_REUSE_GREEN_PR_RUN: 'false'
   # Node B's public host keys, pinned (SDC SEC-14): every ssh to Node B
   # checks them strictly under the alias go-choir-node-b, so a host that
   # answers at Node B's address with another key is refused instead of
@@ -42,7 +47,11 @@ jobs:
   plan:
     name: Plan CI Lanes
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
     outputs:
+      reuse_pr_run: ${{ steps.reuse.outputs.reuse_pr_run }}
       docs_only: ${{ steps.classify.outputs.docs_only }}
       non_docs: ${{ steps.classify.outputs.non_docs }}
       go: ${{ steps.classify.outputs.go }}
@@ -134,11 +143,25 @@ jobs:
           SAMPLED_RACE: ${{ steps.classify.outputs.sampled_race }}
         run: |
           race_selected=false
+          # A pull request is the pre-land gate (docs/design/ci-prove-once-2026-10-24.md):
+          # it always runs the Go lanes under -race when Go is selected.
           if [[ "$HIGH_RISK_RACE" == "true" ]] || \
+             [[ "$EVENT_NAME" == "pull_request" && "$GO_SELECTED" == "true" ]] || \
              [[ "$EVENT_NAME" == "push" && "$GO_SELECTED" == "true" && "$SAMPLED_RACE" == "true" ]]; then
             race_selected=true
           fi
           echo "race_selected=$race_selected" >> "$GITHUB_OUTPUT"
+
+      - name: Find a green pull-request run of this exact commit (prove once)
+        id: reuse
+        if: env.CI_REUSE_GREEN_PR_RUN == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.classify.outputs.go == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          AFTER: ${{ github.sha }}
+        run: |
+          python3 -I scripts/ci-find-green-pr-run "$GITHUB_OUTPUT" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Set up Go for CI contract tests
         if: steps.classify.outputs.ci == 'true'
@@ -152,6 +175,8 @@ jobs:
         run: |
           set -euo pipefail
           .github/scripts/go-shard-discovery-test
+          .github/scripts/ci-prune-go-cache-test
+          .github/scripts/ci-find-green-pr-run-test
           .github/scripts/ci-impact-classify-test
           .github/scripts/sbom-semantic-fingerprint-test
           .github/scripts/build-sboms-differential-test
@@ -170,7 +195,7 @@ jobs:
     name: Go Vet + Build
     runs-on: ubuntu-latest
     needs: plan
-    if: needs.plan.outputs.go == 'true'
+    if: needs.plan.outputs.go == 'true' && needs.plan.outputs.reuse_pr_run == ''
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
@@ -188,12 +213,16 @@ jobs:
       - name: Lock scope ratchet (O12)
         run: go run ./cmd/lockscope -check cmd/lockscope/baseline.txt
 
+      - name: Prune unused Go build cache objects before the cache save
+        if: success()
+        run: scripts/ci-prune-go-cache "$RUNNER_TEMP/go-cache-restored-at"
+
   go-test:
     name: Go Test (${{ needs.plan.outputs.race_selected == 'true' && 'race' || 'standard' }}, non-runtime shard ${{ matrix.shard }})
     runs-on: ubuntu-latest
     timeout-minutes: 60
     needs: plan
-    if: needs.plan.outputs.go == 'true'
+    if: needs.plan.outputs.go == 'true' && needs.plan.outputs.reuse_pr_run == ''
     strategy:
       fail-fast: false
       matrix:
@@ -201,9 +230,11 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
-      # Shards 0-5 run the split packages (scripts/go-test-split-packages)
-      # by test name and compile the same binaries; 6 and 7 run the rest
-      # whole (docs/problems/ci-critical-path-race-shards-2026-10-22.md).
+      # Every shard runs a weighted share of the split packages
+      # (scripts/go-test-split-packages, scripts/go-test-split-weights) by test
+      # name; 6 and 7 also run the rest whole before it. The cache lane is
+      # per workload: 0-5 compile the same split binaries; 6 and 7 add the
+      # whole packages (docs/problems/ci-wall-clock-2026-10-24.md).
       - name: Set up Go
         uses: ./.github/actions/setup-go-build-cache
         with:
@@ -223,12 +254,16 @@ jobs:
             scripts/go-test-non-runtime-shards
           fi
 
+      - name: Prune unused Go build cache objects before the cache save
+        if: success()
+        run: scripts/ci-prune-go-cache "$RUNNER_TEMP/go-cache-restored-at"
+
   go-test-runtime:
     name: Go Test (${{ needs.plan.outputs.race_selected == 'true' && 'race' || 'standard' }}, agentcore/textureowner shard ${{ matrix.shard }})
     runs-on: ubuntu-latest
     timeout-minutes: 60
     needs: plan
-    if: needs.plan.outputs.go == 'true'
+    if: needs.plan.outputs.go == 'true' && needs.plan.outputs.reuse_pr_run == ''
     strategy:
       fail-fast: false
       matrix:
@@ -267,12 +302,16 @@ jobs:
             scripts/go-test-integration
           fi
 
+      - name: Prune unused Go build cache objects before the cache save
+        if: success()
+        run: scripts/ci-prune-go-cache "$RUNNER_TEMP/go-cache-restored-at"
+
   go-test-scale:
     name: Go Test (scale, isolated load-sensitive tests)
     runs-on: ubuntu-latest
     timeout-minutes: 25
     needs: plan
-    if: needs.plan.outputs.go == 'true'
+    if: needs.plan.outputs.go == 'true' && needs.plan.outputs.reuse_pr_run == ''
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
@@ -293,6 +332,10 @@ jobs:
             echo "scale attempt $attempt failed; retrying once"
           done
           exit 1
+
+      - name: Prune unused Go build cache objects before the cache save
+        if: success()
+        run: scripts/ci-prune-go-cache "$RUNNER_TEMP/go-cache-restored-at"
 
   # Report-only (docs/reports/patch-lanes-plan-2026-10-15.md, slice 3):
   # reachable vulnerabilities for the toolchain go.mod names (its toolchain
@@ -445,6 +488,8 @@ jobs:
     steps:
       - name: Confirm selected CI gates passed
         shell: bash
+        env:
+          REUSE_PR_RUN: ${{ needs.plan.outputs.reuse_pr_run }}
         run: |
           set -euo pipefail
           require_success() {
@@ -455,6 +500,18 @@ jobs:
               echo "$name was selected but result was $result" >&2
               exit 1
             fi
+          }
+          # A Go test lane may be skipped only when plan named the green
+          # pull-request run that tested this commit (prove once). Otherwise
+          # it must have succeeded.
+          require_go_lane() {
+            local name="$1"
+            local result="$2"
+            if [[ "$result" == "skipped" && -n "$REUSE_PR_RUN" && "$REUSE_PR_RUN" =~ ^[0-9]+$ ]]; then
+              echo "$name skipped: tested by pull-request run $REUSE_PR_RUN"
+              return 0
+            fi
+            require_success "${{ needs.plan.outputs.go }}" "$name" "$result"
           }
           require_if_run() {
             local name="$1"
@@ -482,10 +539,10 @@ jobs:
               ;;
           esac
 
-          require_success "${{ needs.plan.outputs.go }}" go-vet-build "${{ needs.go-vet-build.result }}"
-          require_success "${{ needs.plan.outputs.go }}" go-test "${{ needs.go-test.result }}"
-          require_success "${{ needs.plan.outputs.go }}" go-test-runtime "${{ needs.go-test-runtime.result }}"
-          require_success "${{ needs.plan.outputs.go }}" go-test-scale "${{ needs.go-test-scale.result }}"
+          require_go_lane go-vet-build "${{ needs.go-vet-build.result }}"
+          require_go_lane go-test "${{ needs.go-test.result }}"
+          require_go_lane go-test-runtime "${{ needs.go-test-runtime.result }}"
+          require_go_lane go-test-scale "${{ needs.go-test-scale.result }}"
           require_success "${{ needs.plan.outputs.non_docs }}" heresy-detector "${{ needs.heresy-detector.result }}"
           require_success "${{ needs.plan.outputs.non_docs }}" v1-inventory "${{ needs.v1-inventory.result }}"
           require_if_run build-frontend "${{ needs.build-frontend.result }}"

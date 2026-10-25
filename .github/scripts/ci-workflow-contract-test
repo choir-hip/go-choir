@@ -47,6 +47,25 @@ reject "$ci" 'needs.plan.outputs.sampled_race'
 require "$ci" 'case "${{ needs.plan.outputs.race_selected }}" in'
 require "$ci" 'sbom-semantic-fingerprint-test'
 
+# Prove once (docs/design/ci-prove-once-2026-10-24.md, red): the switch ships
+# off, only the four Go lanes honor a reuse, and check lets a lane be skipped
+# only with plan's reuse output.
+require "$ci" "  CI_REUSE_GREEN_PR_RUN: 'false'"
+reject "$ci" "CI_REUSE_GREEN_PR_RUN: 'true'"
+require "$ci" 'reuse_pr_run: ${{ steps.reuse.outputs.reuse_pr_run }}'
+require "$ci" "python3 -I scripts/ci-find-green-pr-run"
+require "$ci" 'require_go_lane go-vet-build'
+require "$ci" 'require_go_lane go-test "'
+require "$ci" 'require_go_lane go-test-runtime'
+require "$ci" 'require_go_lane go-test-scale'
+require "$ci" '[[ "$EVENT_NAME" == "pull_request" && "$GO_SELECTED" == "true" ]]'
+reuse_ifs="$(grep -c "if: needs.plan.outputs.go == 'true' && needs.plan.outputs.reuse_pr_run == ''" "$ci" || true)"
+if [[ "$reuse_ifs" != 4 ]]; then
+  echo "exactly the four Go lanes (vet-build, go-test, go-test-runtime, go-test-scale) may skip on a reuse; found $reuse_ifs" >&2
+  exit 1
+fi
+require "$ci" 'REUSE_PR_RUN: ${{ needs.plan.outputs.reuse_pr_run }}'
+
 require "$race" 'pull_request:'
 require "$race" '      - .github/workflows/race.yml'
 require "$race" 'name: Go Test (non-runtime race shard ${{ matrix.shard }})'
