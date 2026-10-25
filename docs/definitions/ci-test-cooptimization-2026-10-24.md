@@ -119,26 +119,25 @@ boundaries:
 
 now:
   status: working
-  slice: C1 and C2
-  candidate: {id: none, state: none}
+  slice: C2 candidate 3 (PR #104), C3 off-switch code and C4 note done, C5 manifest (no removals), C6 not started
+  candidate: {id: ci0-c2-c, state: pushed to the draft PR, waiting for a main-idle window}
   conjecture:
     id: CI0-C2
-    claim: one or a few tests dominate non-runtime shard 1; splitting or speeding them makes the race-shard maximum about 9 min and push-to-deploy about 11 min, bound by the Node B prebuild
-    test: per-test Elapsed in shard 1's go test -json log against its siblings, then a draft pull-request run of the fix
+    claim: the shard maximum can fall to about 5 min (test step 205-300 s) so push-to-deploy is bound by the Node B prebuild (about 9 min plus 1.5 deploy)
+    test: pull-request run test steps per shard, then a main push
     edge: missing_oracle
-    delta_o: per-test timing from the CI logs
-    scope_if_supported: today's critical path; C3 and C4 take the deploy path below the prebuild floor
-    status: proposed
+    delta_o: per-test Elapsed from the PR run logs
+    scope_if_supported: C3 and C4 take the deploy path below the prebuild floor
+    status: supported for most shards (PR run 40150248142: 205-295 s on five of eight); the three slow shards were four store tests compiling the repo cold (finding 8), fixed in the next candidate and not yet measured
   belief:
     believed_state: >-
-      the wall clock is three serial things: the outlier shard (about 8 min
-      over its siblings), the Node B build that is next behind it (7 min),
-      and on main a second run of tests that a pre-land run could already
-      have proved; pruning tests mostly saves runner minutes and pull-request
-      latency, not deploy wall clock
-    main_uncertainty: what the 7 min Node B build spends its time on, and whether it can be incremental
-    next_observation: shard 1's per-test table; the prebuild log's phase times
-  next_action: C1 measure, C2 split the outlier and fit the cache budget, each on a draft pull request
+      first PR run 10.6 min created-to-check (baseline 18.3); second 10.8 min
+      by wall clock but 592 s to the last test job, of which three shards paid
+      a cold whole-repo compile inside four store tests; with the export-data
+      warm-up all shards should sit near 205-300 s test step
+    main_uncertainty: whether the cache warm-up makes the cold compile disappear in steady state, and whether two processes per shard flake load-sensitive store tests
+    next_observation: PR run 3 (cold cache after the warm-up lands) and run 4 (steady state)
+  next_action: read PR run 3 and 4 test steps; then C6 (runner slots) as a proposal, and the final report
 
 receipts: []
 ---
