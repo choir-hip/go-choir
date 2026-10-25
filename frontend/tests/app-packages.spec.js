@@ -321,8 +321,8 @@ test.describe('image viewer package in the shell', () => {
       { appId: 'image', mediaType: 'image/png' },
       { appId: 'image', mediaType: 'image/svg+xml' },
       { appId: 'image', mediaType: 'image/png' },
-      { appId: 'pdf', mediaType: 'application/pdf' },
-      { appId: 'epub', mediaType: 'application/epub+zip' },
+      { appId: 'reader', mediaType: 'application/pdf' },
+      { appId: 'reader', mediaType: 'application/epub+zip' },
       { appId: 'audio', mediaType: 'audio/mpeg' },
       { appId: 'calendar', mediaType: 'text/calendar' },
     ]);

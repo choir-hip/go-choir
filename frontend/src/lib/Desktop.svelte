@@ -72,6 +72,7 @@
     isHeavyAppId,
     normalizeAppId,
   } from './stores/desktop.js';
+  import { PACKAGE_MEDIA_ROUTES } from './apps/registry';
   import {
     createOverviewPreviewDecisions,
     getOverviewPreviewDecision,
@@ -1349,6 +1350,8 @@
     }
   }
 
+  const MEDIA_APP_IDS = new Set(['image', 'audio', 'video', 'pdf', 'epub', 'slides', 'calendar', ...PACKAGE_MEDIA_ROUTES.map((route) => route.appId)]);
+
   function handleOpenMediaFile(event) {
     if (!desktopReady) {
       showToast('Desktop is still connecting');
@@ -1357,7 +1360,10 @@
 
     const detail = event.detail || {};
     const appId = detail.appId || '';
-    if (!['image', 'audio', 'video', 'pdf', 'epub', 'slides', 'calendar'].includes(appId)) {
+    // A package's `opens` routes its file types to its own id (PDF and EPUB to
+    // 'reader'), so every app id the package routes name is accepted with the
+    // static media apps.
+    if (!MEDIA_APP_IDS.has(appId)) {
       showToast(`Could not open ${detail.fileName || 'media file'}`);
       return;
     }
