@@ -151,3 +151,38 @@ knob and its test stay), and the background warm-up runs at the lowest CPU
 priority so a cold cache cannot starve the tests. Whether the actorruntime
 tests need a wider deadline or the scale quarantine is a separate question for
 the tests' owner; they were not changed here.
+
+## Measured after the fourth candidate (pull-request run 40152286786 lane head, 2026-10-25 02:04Z)
+
+Candidate: one process per shard, per-package weighted deal over all eight
+shards, shards 6 and 7 run their whole packages first, export-data warm-up in
+the background at the lowest priority. All jobs passed. Created to `check`
+done: 657 s (10.9 min); baseline 18.3 min. Non-runtime test jobs 331-612 s:
+shard 0 331, 4 395, 3 401, 2 466, 5 477, 1 497, 6 540, 7 612; runtime shards
+243-327 s.
+
+### 10. The whole-package shards are the new maximum, and the export-data cost did not go away
+
+- Shard 6 ran its 72 whole packages in 147 s and then its split share in
+  305 s; shard 7 127 s and 400 s. The planner assumed 100 s for the whole
+  phase and a split share of about 220 s of store; shard 7's store slice took
+  392 s (1.8 times the plan). The plan used test times from runs with other
+  loads; individual tests move by 30% or more with what runs beside them.
+- Three shards still paid the cold whole-repository compile in the first
+  export-data test (shard 3 102 s, shard 5 87 s, shard 7 126 s; the next
+  export test in the process takes under 1 s). The warm-up did not help
+  because the cache these runs restored was not the one a warm-up had filled:
+  a pull-request run restores the newest entry its key prefix matches, and
+  main's own runs (which do not yet run the warm-up) save newer entries than
+  the pull-request run's own. The warm-up only pays off once it is on main.
+- Runtime shards finish at 243-327 s, well before the non-runtime maximum:
+  eight runtime jobs and eight non-runtime jobs are not balanced against each
+  other (about 2,000 against 3,200 test-seconds). Re-splitting the same 16
+  jobs (6 runtime, 10 non-runtime) is a workflow-matrix change, in
+  docs/design/ci-runner-slots-2026-10-24.md.
+
+Next candidate (measurement only plus one parameter): the whole phase is
+planned at 140 s, and `go-test-with-timing` prints whole-machine CPU use per
+run so the next pull-request run can say whether a shard has idle CPUs at all
+(finding 7 stays a hypothesis; finding 9 says CPUs are not idle enough for a
+second process).
