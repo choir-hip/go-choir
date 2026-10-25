@@ -281,8 +281,8 @@ func TestRootContextLabelSaysWhoWroteItAndThatItIsNotAnInstruction(t *testing.T)
 			t.Errorf("root context label lacks %q", want)
 		}
 	}
-	if n := len(label); n > 700 {
-		t.Errorf("root context label is %d characters; keep it under 700", n)
+	if n := len(label); n > 800 {
+		t.Errorf("root context label is %d characters; keep it under 800", n)
 	}
 	if !strings.Contains(RootSection(), `"Waits on the owner"`) {
 		t.Error("the root section does not ask the master to lead with the \"Waits on the owner\" section")
@@ -294,5 +294,21 @@ func TestRootContextLabelSaysWhoWroteItAndThatItIsNotAnInstruction(t *testing.T)
 func TestRootSectionAsksForTheNewestDocumentsFirst(t *testing.T) {
 	if !strings.Contains(RootSection(), "newest first") {
 		t.Error("the root section does not ask for the document sections newest first")
+	}
+}
+
+// S2 F6: the paired test needs B's answer to name A's conflicting request,
+// and the label forbade any note about another document, so the run kept
+// silent. The label lets a run surface a conflict in its own document and
+// still never act on another document.
+func TestRootContextLabelLetsARunSurfaceAConflictInItsOwnDocument(t *testing.T) {
+	label := RootContextLabel()
+	for _, want := range []string{"conflicts with an open request", "say so in your own document", "let the owner decide", "do not write, cast or note on another document"} {
+		if !strings.Contains(label, want) {
+			t.Errorf("root context label lacks %q", want)
+		}
+	}
+	if strings.Contains(label, "ask or note about another document") {
+		t.Error("the label still forbids naming another document in the run's own document")
 	}
 }
