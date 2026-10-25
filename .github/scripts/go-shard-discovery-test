@@ -69,6 +69,8 @@ with open(os.environ['GO_CALLS'], 'a') as f: f.write(json.dumps(args) + '\\n')
 tests = json.loads(os.environ['FAKE_TESTS'])
 module = 'github.com/yusefmosiah/go-choir/'
 def short(p): return p.removeprefix(module).removeprefix('./')
+if args[0] == 'list' and '-export' in args:
+    sys.exit(9 if os.environ.get('FAIL_WARM') else 0)
 if args[0] == 'list':
     for p in tests: print(module + p)
     if os.environ.get('FAIL_LIST'): sys.exit(9)
@@ -319,6 +321,27 @@ elif os.environ.get('FAIL_EXECUTION'): sys.exit(8)
                     for n in call[call.index('-run') + 1][2:-2].split('|'):
                         ran[n] += 1
             assert all(ran[n] == 1 for n in split_names), (total, procs, {n: ran[n] for n in split_names if ran[n] != 1})
+    # Export-data warm-up (docs/problems/ci-wall-clock-2026-10-24.md, finding
+    # 8): the store stamp-guard tests run `go list -export -deps` over the
+    # repo, which compiles every package without -race. Whichever shard hosts
+    # them pays that compile cold, and only a shard whose cache holds the
+    # objects saves them. Every split-mode shard therefore runs the same
+    # listing once, in the background, so any shard's saved cache is complete.
+    # It never fails the shard.
+    for shard in (0, 5, 7):
+        result, invocations = run(wscript, 8, shard)
+        assert result.returncode == 0, result.stderr
+        warm = [c for c in invocations if c[:4] == ['list', '-e', '-export', '-deps']]
+        assert len(warm) == 1, ('one export-data warm-up per split-mode shard', shard, warm)
+        assert warm[0][4:7] == ['./internal/...', './cmd/...', './scripts/...'], warm[0]
+    result, invocations = run(wscript, 8, 0, WARM_EXPORT_DATA='0')
+    assert not [c for c in invocations if c[:4] == ['list', '-e', '-export', '-deps']], 'WARM_EXPORT_DATA=0 skips the warm-up'
+    result, invocations = run(wscript, 8, 0, FAIL_WARM='1')
+    assert result.returncode == 0, 'a failed warm-up must not fail the shard'
+    # Whole-package-only layouts (below four shards) do not warm.
+    result, invocations = run(wscript, 3, 0)
+    assert not [c for c in invocations if c[:4] == ['list', '-e', '-export', '-deps']], 'no warm-up without split mode'
+
     # The tracked default is the CI setting.
     default_env = dict(base_env); default_env.pop('SPLIT_PROCS')
     calls.write_text('')

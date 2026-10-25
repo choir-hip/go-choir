@@ -215,6 +215,18 @@ if (( split_mode )); then
     echo "SPLIT_PROCS must be an integer in [1, 8], got: $procs" >&2
     exit 2
   fi
+  # The store stamp-guard tests run `go list -export -deps` over the repo,
+  # which compiles every package without -race (docs/problems/
+  # ci-wall-clock-2026-10-24.md, finding 8). Whichever shard hosts them pays
+  # that compile unless its cache holds the objects, and only the shard that
+  # saves the cache decides what later runs hold. So every split-mode shard
+  # runs the same listing in the background (about 15 s when warm) and the
+  # saved cache is complete. It never fails the shard.
+  warm_pid=""
+  if [[ "${WARM_EXPORT_DATA:-1}" != "0" ]]; then
+    go list -e -export -deps ./internal/... ./cmd/... ./scripts/... >/dev/null 2>&1 &
+    warm_pid=$!
+  fi
   split_listing=""
   discover_split "$@" || exit 1
   declare -a plans=()
@@ -266,6 +278,9 @@ if (( split_mode )); then
       cat "$logdir/$idx.log"
       echo "::endgroup::"
     done
+  fi
+  if [[ -n "$warm_pid" ]]; then
+    wait "$warm_pid" || true
   fi
   exit "$status"
 fi
