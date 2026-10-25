@@ -210,9 +210,16 @@ function body() {
     // string.
     const page = state.pdfPages[state.pdfPage - 1];
     const paragraphs = Array.isArray(page) ? page : page ? [page] : [];
+    // The extractor tags a heading as 'h3' and prose as 'p'; the page renders
+    // the tag it was given, so a heading is a heading and a paragraph is a
+    // paragraph, each with its own space around it.
     stage.appendChild(el('div', { class: 'reader-pdf-text', 'data-reader-pdf-text': '' },
       paragraphs.length
-        ? paragraphs.map((paragraph, index) => el('p', { 'data-reader-block': String(index), 'data-reader-block-page': String(state.pdfPage), text: paragraph }))
+        ? paragraphs.map((paragraph, index) => {
+            const block = paragraph && typeof paragraph === 'object' ? paragraph : { tag: 'p', text: paragraph };
+            const tag = isHeadingBlock(block.tag) ? 'h3' : 'p';
+            return el(tag, { 'data-reader-block': String(index), 'data-reader-block-page': String(state.pdfPage), text: block.text || '' });
+          })
         : [el('p', { class: 'reader-status', text: 'This page has no selectable text.' })]));
   } else {
     const section = state.model?.sections?.[state.section];

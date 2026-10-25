@@ -267,7 +267,7 @@
   line-height: 1.66;
 }
 
-.reader-sheet p,
+.reader-sheet > p,
 .reader-sheet blockquote,
 .reader-sheet pre,
 .reader-sheet li,
@@ -280,7 +280,10 @@
   overflow-wrap: anywhere;
 }
 
-.reader-sheet p {
+/* Only the sheet's own paragraphs: a paragraph inside a quote keeps the
+   quote's indent and spacing, and so does one inside any other block a
+   chapter may contain. */
+.reader-sheet > p {
   margin-top: 0;
   margin-bottom: 1em;
 }
@@ -377,6 +380,17 @@
 .reader-pdf-text p {
   margin: 0 0 0.9em;
   overflow-wrap: anywhere;
+}
+
+/* A heading the extractor recognised keeps its air: it opens a paragraph's
+   worth of space above it and sits close to the text it names, at the same
+   weight the sheet gives a heading. */
+.reader-pdf-text h3 {
+  margin: 1.7em 0 0.5em;
+  color: var(--reader-ink, var(--choir-text-primary));
+  font-family: var(--choir-font-display, inherit);
+  font-size: 1.12em;
+  line-height: 1.25;
 }
 
 .reader-empty {

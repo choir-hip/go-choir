@@ -16,60 +16,70 @@ endobj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 6 0 R >>
 endobj
 6 0 obj
-<< /Length 1091 >>
+<< /Length 933 >>
 stream
+BT /F2 22 Tf
 1 0 0 1 64 778 Tm
-BT /F2 22 Tf (Reader sample) Tj ET
-1 0 0 1 64 738 Tm
-BT /F2 22 Tf () Tj ET
-BT /F1 11 Tf (A PDF opened by Choir Reader, before sign-in, with no computer behind you.) Tj ET
-1 0 0 1 64 705 Tm
-BT /F1 11 Tf () Tj ET
-BT /F2 15 Tf (One window for long things) Tj ET
-1 0 0 1 64 677.8181818181819 Tm
-BT /F2 15 Tf () Tj ET
-BT /F1 11 Tf (Reader is the quiet place where Choir keeps papers, reports, manuals and books. It) Tj ET
-1 0 0 1 64 660.8181818181819 Tm
-BT /F1 11 Tf (opens PDFs and EPUBs, and it opens onto the place you left.) Tj ET
-1 0 0 1 64 635.8181818181819 Tm
-BT /F1 11 Tf () Tj ET
-BT /F1 11 Tf (A page of prose wants a measure, not a viewport. Reader sets one, and keeps the text) Tj ET
-1 0 0 1 64 618.8181818181819 Tm
-BT /F1 11 Tf (size you choose. Search finds a page in a PDF and a paragraph in an EPUB, without) Tj ET
-1 0 0 1 64 601.8181818181819 Tm
-BT /F1 11 Tf (leaving the document and without the network.) Tj ET
-1 0 0 1 64 576.8181818181819 Tm
-BT /F1 11 Tf () Tj ET
-BT /F1 11 Tf (Signed out, your text settings are kept in this browser, and nowhere else.) Tj ET
+(Reader sample) Tj
+ET
+BT /F1 11 Tf
+1 0 0 1 64 726 Tm
+(A PDF opened by Choir Reader, before sign-in, with no computer behind you.) Tj
+ET
+BT /F2 15 Tf
+1 0 0 1 64 691 Tm
+(One window for long things) Tj
+ET
+BT /F1 11 Tf
+1 0 0 1 64 655.8181818181819 Tm
+(Reader is the quiet place where Choir keeps papers, reports, manuals and books. It) Tj
+1 0 0 1 64 638.8181818181819 Tm
+(opens PDFs and EPUBs, and it opens onto the place you left.) Tj
+ET
+BT /F1 11 Tf
+1 0 0 1 64 609.8181818181819 Tm
+(A page of prose wants a measure, not a viewport. Reader sets one, and keeps the text) Tj
+1 0 0 1 64 592.8181818181819 Tm
+(size you choose. Search finds a page in a PDF and a paragraph in an EPUB, without) Tj
+1 0 0 1 64 575.8181818181819 Tm
+(leaving the document and without the network.) Tj
+ET
+BT /F1 11 Tf
+1 0 0 1 64 546.8181818181819 Tm
+(Signed out, your text settings are kept in this browser, and nowhere else.) Tj
+ET
 endstream
 endobj
 7 0 obj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 8 0 R >>
 endobj
 8 0 obj
-<< /Length 963 >>
+<< /Length 779 >>
 stream
+BT /F2 15 Tf
 1 0 0 1 64 778 Tm
-BT /F2 15 Tf (Reading position) Tj ET
-1 0 0 1 64 750.8181818181819 Tm
-BT /F2 15 Tf () Tj ET
-BT /F1 11 Tf (This is the second page of the sample, so the page controls have somewhere to go.) Tj ET
-1 0 0 1 64 733.8181818181819 Tm
-BT /F1 11 Tf (Signed in, Reader remembers where you stopped on your computer, through the media) Tj ET
-1 0 0 1 64 716.8181818181819 Tm
-BT /F1 11 Tf (progress route, and follows you to any device. Turn the page with Next page, the) Tj ET
-1 0 0 1 64 699.8181818181819 Tm
-BT /F1 11 Tf (arrow keys, or the floating arrow.) Tj ET
-1 0 0 1 64 662.8181818181819 Tm
-BT /F1 11 Tf () Tj ET
-BT /F2 15 Tf (The PDF and EPUB windows stay) Tj ET
-1 0 0 1 64 631.6363636363637 Tm
-BT /F2 15 Tf () Tj ET
-BT /F1 11 Tf (The PDF and EPUB windows remain in the launcher, unchanged, for anything Reader has) Tj ET
-1 0 0 1 64 614.6363636363637 Tm
-BT /F1 11 Tf (not learned to do yet.) Tj ET
-1 0 0 1 64 589.6363636363637 Tm
-BT /F1 11 Tf () Tj ET
+(Reading position) Tj
+ET
+BT /F1 11 Tf
+1 0 0 1 64 742.8181818181819 Tm
+(This is the second page of the sample, so the page controls have somewhere to go.) Tj
+1 0 0 1 64 725.8181818181819 Tm
+(Signed in, Reader remembers where you stopped on your computer, through the media) Tj
+1 0 0 1 64 708.8181818181819 Tm
+(progress route, and follows you to any device. Turn the page with Next page, the) Tj
+1 0 0 1 64 691.8181818181819 Tm
+(arrow keys, or the floating arrow.) Tj
+ET
+BT /F2 15 Tf
+1 0 0 1 64 656.8181818181819 Tm
+(The PDF and EPUB windows stay) Tj
+ET
+BT /F1 11 Tf
+1 0 0 1 64 621.6363636363637 Tm
+(The PDF and EPUB windows remain in the launcher, unchanged, for anything Reader has) Tj
+1 0 0 1 64 604.6363636363637 Tm
+(not learned to do yet.) Tj
+ET
 endstream
 endobj
 xref
@@ -81,10 +91,10 @@ xref
 0000000224 00000 n 
 0000000326 00000 n 
 0000000462 00000 n 
-0000001605 00000 n 
-0000001741 00000 n 
+0000001446 00000 n 
+0000001582 00000 n 
 trailer
 << /Size 9 /Root 1 0 R /Info << /Title (Reader sample) /Producer (Choir Reader sample) >> >>
 startxref
-2755
+2412
 %%EOF
