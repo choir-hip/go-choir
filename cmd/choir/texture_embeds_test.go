@@ -64,7 +64,7 @@ func TestTextureReadListsEmbedsWithTheirFetchCommand(t *testing.T) {
 		"block_id": "embed-1", "kind": "capsule_evidence", "digest": digest, "operation_id": "selfdev-op-1",
 		"computer_id": "computer-1", "route": "/reader", "width": float64(1280), "height": float64(800), "blank": true,
 		"revision_id": "rev-1", "asset_url": "/api/assets/sha256/" + digest,
-		"fetch": "choir self-dev visual --computer computer-1 --operation selfdev-op-1 --out <dir>",
+		"fetch": "choir self-dev visual --computer 'computer-1' --operation 'selfdev-op-1' --out <dir>",
 	}
 	for k, v := range want {
 		if row[k] != v {
