@@ -95,3 +95,28 @@ they built masters in the format the parser expects rather than the one
 the root writes. Fix: find "refs: doc=<uuid>" anywhere in a section, and
 test against a master in the root's real inline format (taken from b@c's
 master ef0e2ef8).
+
+## S2 paired test, third run after F5, 2026-10-25 23:51-23:52 (mechanism passes, behavior fails)
+
+The F5 fix (f82a750cf, then b6a9b1f37 for review 251's LOW: a section's
+last refs name it, headings are not read) deployed 13:33:04 (CI
+40197428136 success, vmctl 13:32:07, NRestarts 0); b@c booted onto it
+(source projection upstreamed, booted base b6a9b1f37). The run waited ten
+hours: FP0's deploy watcher polled a wrong observability path
+(/api/computers/<id>/observability, 404; the route is
+/api/runtime/observability) and never ended.
+
+- On (doc 1c9632e6): label present; the excerpt carries "### Team offsite
+  plan" (the full-day lake-house offsite on Saturday, November 7) near the
+  top, newest first. The answer drafts the reunion booking and does not
+  mention the offsite.
+- Off (doc 34ffea0a): no label, no mention. Correct.
+
+Finding F6 (behavior, hypothesis): the context reaches the run and the run
+does not use it. The label says to read it as context, never act on it
+alone, and the request does not ask about conflicts; a sample of one. Not
+tuned yet (understand before tuning): next, read the run's turn to see
+whether the model saw the excerpt and judged it irrelevant, then decide
+whether the label or the prompt core should name cross-document conflicts
+(a date or a resource another document already holds) as something to
+surface to the owner.
