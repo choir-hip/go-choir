@@ -2,10 +2,15 @@ package visualcapture
 
 import (
 	"context"
+	"fmt"
+	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
+	"time"
 )
 
 // TestLiveChromiumCapture runs a real Chromium (CHOIR_CAPTURE_LIVE_BROWSER)
@@ -62,5 +67,48 @@ func TestLiveChromiumCapture(t *testing.T) {
 	}
 	if _, err := ValidateEvidence(raw, evidenceFiles(t, out), FrontendDigest(tree)); err != nil {
 		t.Fatalf("live evidence does not validate: %v", err)
+	}
+}
+
+// TestLiveCaptureOfTheBuiltFrontendRendersPastLoading serves a built Choir
+// frontend (CHOIR_CAPTURE_LIVE_FRONTEND, a vite dist directory) through the
+// capture server and reads the DOM a real Chromium (CHOIR_CAPTURE_LIVE_BROWSER)
+// renders under the same virtual time budget a capture gets. The app shell
+// checks /auth/session first: the capture must answer it as a signed-out
+// session does, so the page leaves Loading for the signed-out desktop, where
+// public-preview apps render (problem 6, docs/evidence/selfdev-trace-reviews-
+// 2026-10-25.md). A 503 there is a transient auth error and leaves the app on
+// Loading, then Reconnecting.
+func TestLiveCaptureOfTheBuiltFrontendRendersPastLoading(t *testing.T) {
+	browser := os.Getenv("CHOIR_CAPTURE_LIVE_BROWSER")
+	frontend := os.Getenv("CHOIR_CAPTURE_LIVE_FRONTEND")
+	if browser == "" || frontend == "" {
+		t.Skip("set CHOIR_CAPTURE_LIVE_BROWSER to a Chromium binary and CHOIR_CAPTURE_LIVE_FRONTEND to a built frontend")
+	}
+	srv := httptest.NewServer(Server(frontend))
+	defer srv.Close()
+	profile := t.TempDir()
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, browser, "--headless=new", "--no-sandbox", "--disable-gpu", "--no-first-run",
+		"--disable-extensions", "--user-data-dir="+profile, fmt.Sprintf("--virtual-time-budget=%d", DefaultWaitMS), "--dump-dom", srv.URL+"/")
+	if runtime.GOOS == "darwin" {
+		cmd.Env = append(os.Environ(), "HOME="+os.Getenv("HOME"))
+	}
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("chromium --dump-dom: %v", err)
+	}
+	dom := string(out)
+	state := ""
+	if i := strings.Index(dom, `data-auth-state="`); i >= 0 {
+		rest := dom[i+len(`data-auth-state="`):]
+		state, _, _ = strings.Cut(rest, `"`)
+	}
+	if state != "signed_out" {
+		t.Fatalf("the captured app shell is in auth state %q, not signed_out (Loading/Reconnecting means the capture's /auth/session answer reads as a transient auth failure)", state)
+	}
+	if !strings.Contains(dom, `data-authenticated="false"`) {
+		t.Fatalf("the signed-out desktop did not render: %.400s", dom)
 	}
 }

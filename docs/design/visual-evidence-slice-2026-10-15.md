@@ -35,7 +35,7 @@ Five parts, each the smallest that closes its loop.
    the capsule PATH. After the frontend build the desk starts it with
    `choir.Start([]string{"choir-capture", "--route", "/"}, ...)`. It serves
    `/var/lib/artifact/release/frontend/` on the capsule's own loopback
-   (SPA fallback; `/api/` and `/auth/` answer 503 at once), runs headless
+   (SPA fallback; `/auth/session` answers signed-out, other `/auth/` 401 and `/api/` 503, at once), runs headless
    Chromium once per route at 1280×800 with reduced motion and no network,
    and writes each PNG, named by its sha256, plus `visual-evidence.json`
    into `/var/lib/artifact/evidence/visual/`. It is a job, so the 30 s exec
@@ -187,9 +187,13 @@ Capture:
 - **V15. Capture output lands in the source tree.** Guard: the output
   directory is fixed under `/var/lib/artifact/evidence/visual/`, outside
   `/workspace/platform`; the served root is the release tree.
-- **V16. A route needs live data.** Guard: `/api/` and `/auth/` answer 503
-  JSON at once, so the page renders its signed-out state instead of
-  waiting. Residual: screens that need data (mocks or a candidate binary in
+- **V16. A route needs live data.** Guard: the backend answers at once as
+  a signed-out one: `/auth/session` 200 `{"authenticated":false}` (what the
+  auth service answers with no session cookie), other `/auth/` routes 401,
+  `/api/` 503 JSON, so the page renders its signed-out state instead of
+  waiting. (Until 2026-10-25 `/auth/` answered 503, which the app shell reads
+  as a transient auth failure and stays on Loading; problem 6 in
+  docs/evidence/selfdev-trace-reviews-2026-10-25.md.) Residual: screens that need data (mocks or a candidate binary in
   the capsule are the report's next axis).
 
 Evidence:

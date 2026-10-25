@@ -329,9 +329,15 @@ func browserVersion(ctx context.Context, opts Options) string {
 
 // Server serves a built frontend: files under root, index.html for any
 // other path without an extension (an SPA route), 404 for a missing asset,
-// and 503 JSON at once for /api/ and /auth/, so a page renders its
-// signed-out state instead of waiting (V16). Nothing outside root is
-// served: paths are cleaned and symlinks are not followed out.
+// and a signed-out backend at once (V16): /auth/session answers 200
+// {"authenticated":false}, as the auth service does for a request with no
+// session cookie, other /auth/ routes 401, and /api/ 503. The app shell
+// reads a 5xx from /auth/session as a transient auth failure and stays on
+// Loading, then Reconnecting (frontend/src/lib/auth.js requestSessionState,
+// App.svelte checkSession), so only the signed-out answer lets a capture
+// show the signed-out desktop and its public-preview apps (problem 6,
+// docs/evidence/selfdev-trace-reviews-2026-10-25.md). Nothing outside root
+// is served: paths are cleaned and symlinks are not followed out.
 func Server(root string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -339,7 +345,19 @@ func Server(root string) http.Handler {
 			return
 		}
 		p := r.URL.Path
-		if p == "/api" || p == "/auth" || strings.HasPrefix(p, "/api/") || strings.HasPrefix(p, "/auth/") {
+		if p == "/auth/session" {
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Cache-Control", "no-store")
+			_, _ = io.WriteString(w, `{"authenticated":false}`)
+			return
+		}
+		if p == "/auth" || strings.HasPrefix(p, "/auth/") {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = io.WriteString(w, `{"error":"not signed in: this is a capture of the static frontend"}`)
+			return
+		}
+		if p == "/api" || strings.HasPrefix(p, "/api/") {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusServiceUnavailable)
 			_, _ = io.WriteString(w, `{"error":"no backend: this is a capture of the static frontend"}`)

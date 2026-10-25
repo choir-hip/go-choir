@@ -31,6 +31,8 @@ func TestEngineeringOverlayTeachesVisualCaptureOnlyWhenGranted(t *testing.T) {
 		"visual_captures", "at most 6 routes", "1280", "blank",
 		// V14: the capsule needs loopback.
 		"ecosystem network",
+		// V16 as the app shell reads it: a signed-out session, not a 503.
+		"/auth/session answers as a signed-out session", "signed-out desktop",
 	} {
 		if !strings.Contains(granted, want) {
 			t.Errorf("granted overlay lacks %q", want)
@@ -38,6 +40,9 @@ func TestEngineeringOverlayTeachesVisualCaptureOnlyWhenGranted(t *testing.T) {
 	}
 	if strings.Contains(granted, "{{") {
 		t.Fatal("unrendered template in the granted overlay")
+	}
+	if strings.Contains(granted, "/auth/ answer 503") {
+		t.Fatal("the overlay still says /auth/ answers 503")
 	}
 	// The granted text does not change anything else in the overlay.
 	if !strings.Contains(granted, "Precommit before you build") || !strings.Contains(granted, "FREEZE REQUIRES THE BUILT RELEASE TREE") {
