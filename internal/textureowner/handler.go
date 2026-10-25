@@ -51,7 +51,10 @@ type Handler struct {
 	ModelPolicy *modelpolicy.Manager
 	Provider    provideriface.Provider
 
-	textureEditMu      sync.Mutex
+	textureEditMu sync.Mutex
+	// evidenceSource overrides the visual-evidence listing in tests (station
+	// TE); nil reads it from Core.
+	evidenceSource     candidateEvidenceSource
 	textureWakeLocksMu sync.Mutex
 	textureWakeLocks   map[string]*textureWakeLock
 }

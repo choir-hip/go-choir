@@ -626,6 +626,9 @@ func Run() {
 	// ApplyTextureTurn. Do NOT register the retired typed texture tools
 	// (patch/rewrite/decision/email-draft) onto the sealed cell registry.
 	rt.Runtime.SetTextureCellAuthorizer(textureHandler)
+	// Station TE: a frozen candidate's captures are embedded in its
+	// trajectory's document by Texture's own package (texture.evidence_embeds).
+	rt.Runtime.SetTextureEvidenceEmbedder(textureHandler)
 	// Frozen self-development candidates are judged by the gateway's
 	// pinned decision model (Jev), not by a second engineering run.
 	if gatewayURL != "" {

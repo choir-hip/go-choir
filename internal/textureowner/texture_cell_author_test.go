@@ -38,8 +38,14 @@ import (
 // citations).
 func seedCellAuthorLifecycle(t *testing.T, s *store.Store, ownerID, suffix, content string, shape ...func(*types.Revision)) types.RunRecord {
 	t.Helper()
+	return seedCellAuthorLifecycleOn(t, s, "autoputer-cell-author", ownerID, suffix, content, shape...)
+}
+
+// seedCellAuthorLifecycleOn is seedCellAuthorLifecycle on a named computer
+// (the owner routes resolve documents on the runtime's own computer).
+func seedCellAuthorLifecycleOn(t *testing.T, s *store.Store, computerID, ownerID, suffix, content string, shape ...func(*types.Revision)) types.RunRecord {
+	t.Helper()
 	ctx := context.Background()
-	computerID := "autoputer-cell-author"
 	docID := "doc-cell-author-" + suffix
 	trajectoryID := "trajectory-cell-author-" + suffix
 	textureAgentID := agentprofile.Texture + ":" + docID

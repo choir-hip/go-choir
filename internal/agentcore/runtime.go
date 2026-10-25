@@ -210,6 +210,9 @@ type Runtime struct {
 	// the desk-cell carrier cannot import the owner, so this is an
 	// interface seam (same shape as the actor-dispatch hooks).
 	textureCellAuthorizer TextureCellAuthorizer
+	// evidenceEmbeds is the Texture owner's evidence-embed seam and its jobs
+	// (station TE, texture_evidence_embeds.go).
+	evidenceEmbeds evidenceEmbedding
 	// textureCaptures resolves a citation handle to its capture as a block
 	// document (Cut 2 2a): the frame marks which sources are captured, and
 	// the Write commit checks quotes against it. Nil until the capture store
