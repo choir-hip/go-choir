@@ -15,6 +15,7 @@ package textureowner
 //	owner edit) as the root's.
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -158,7 +159,7 @@ func TestTextureRootExcerptIsBoundedAndOrdered(t *testing.T) {
 		fmt.Fprintf(&b, "## Doc %02d\n\nstatus line for document %02d, %s\n\nrefs: doc=doc-%02d work=none\n\n", i, i, strings.Repeat("x", 60), i)
 	}
 	b.WriteString("## Waits on the owner\n\n- Doc 59: approve the candidate.\n")
-	excerpt := textureRootExcerpt(b.String(), "doc-01")
+	excerpt := textureRootExcerpt(b.String(), "doc-01", nil)
 	if len(excerpt) > textureRootContextMaxBytes || textureRootContextMaxBytes != 4<<10 {
 		t.Fatalf("excerpt is %d bytes, over the 4 KiB bound", len(excerpt))
 	}
@@ -173,7 +174,86 @@ func TestTextureRootExcerptIsBoundedAndOrdered(t *testing.T) {
 	}
 	// A "waits on the owner" section over the bound is itself cut from its end.
 	long := "## Waits on the owner\n\n" + strings.Repeat("- a thing that waits on the owner\n", 300) + "\n## Doc 00\n\nrefs: doc=doc-00 work=none\n"
-	if cut := textureRootExcerpt(long, "doc-99"); len(cut) > textureRootContextMaxBytes || !strings.HasPrefix(cut, "## Waits on the owner") {
+	if cut := textureRootExcerpt(long, "doc-99", nil); len(cut) > textureRootContextMaxBytes || !strings.HasPrefix(cut, "## Waits on the owner") {
 		t.Fatalf("a long waits section: %d bytes, prefix %.40q", len(cut), cut)
+	}
+}
+
+// S2 paired test F4 (docs/evidence/pd3-s1-acceptance-2026-10-25.md): the
+// root appends new documents at the end, and the excerpt cut from the end,
+// so a run saw the oldest sections and never the newest. After "Waits on the
+// owner", the excerpt orders the other sections by their documents' last
+// revision time, newest first, whatever order the root wrote; sections whose
+// document the listing does not know go last in their original order; then
+// the run's own section is dropped and the whole cut to 4 KiB.
+func TestTextureRootExcerptPutsTheNewestDocumentsFirst(t *testing.T) {
+	base := time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
+	revisedAt := map[string]time.Time{}
+	var b strings.Builder
+	b.WriteString("# Master document\n\n")
+	for i := 0; i < 60; i++ { // oldest first, as the root wrote it
+		docID := fmt.Sprintf("doc-%02d", i)
+		revisedAt[docID] = base.Add(time.Duration(i) * time.Minute)
+		fmt.Fprintf(&b, "## Doc %02d\n\nstatus line for document %02d, %s\n\nrefs: doc=%s work=none\n\n", i, i, strings.Repeat("x", 60), docID)
+		if i == 30 {
+			b.WriteString("## Waits on the owner\n\n- Doc 59: approve the offsite plan.\n\n")
+		}
+	}
+	excerpt := textureRootExcerpt(b.String(), "doc-58", revisedAt)
+	if len(excerpt) > textureRootContextMaxBytes {
+		t.Fatalf("excerpt is %d bytes, over the 4 KiB bound", len(excerpt))
+	}
+	if !strings.HasPrefix(excerpt, "## Waits on the owner") {
+		t.Fatalf("the waits section is not first:\n%.200s", excerpt)
+	}
+	if !strings.Contains(excerpt, "refs: doc=doc-59 ") || strings.Contains(excerpt, "refs: doc=doc-00 ") {
+		t.Fatalf("over 4 KiB the excerpt kept the oldest document and dropped the newest:\n%s", excerpt)
+	}
+	if strings.Contains(excerpt, "refs: doc=doc-58 ") {
+		t.Fatal("the excerpt kept the run's own section")
+	}
+	if i59, i57 := strings.Index(excerpt, "doc=doc-59 "), strings.Index(excerpt, "doc=doc-57 "); i57 < 0 || i59 > i57 {
+		t.Fatalf("the newest document is not first after the waits section:\n%s", excerpt)
+	}
+
+	// Unknown documents (and sections with no refs line) go last, in order.
+	small := "## Notes A\n\nno refs here\n\n## Old\n\nrefs: doc=old work=none\n\n## Stranger\n\nrefs: doc=stranger work=none\n\n## New\n\nrefs: doc=new work=none\n\n## Waits on the owner\n\n- nothing"
+	got := textureRootExcerpt(small, "", map[string]time.Time{"old": base, "new": base.Add(time.Hour)})
+	order := []string{"## Waits on the owner", "## New", "## Old", "## Notes A", "## Stranger"}
+	last := -1
+	for _, want := range order {
+		at := strings.Index(got, want)
+		if at < 0 || at < last {
+			t.Fatalf("order of %q wrong, want %v:\n%s", want, order, got)
+		}
+		last = at
+	}
+}
+
+// One document listing per run, and on a real computer the newest document
+// survives the cut: the root wrote Harbor (older) before Bridge (newer), each
+// over half the bound, and a new document's run sees Bridge.
+func TestTextureRootContextReadsOneListingAndKeepsTheNewest(t *testing.T) {
+	rh, _, root, b, c := rootStarted(t)
+	filler := strings.Repeat("A status line that takes room in the master. ", 50)
+	master := "## Harbor\n\n" + filler + "\n\nrefs: doc=" + b + " work=none\n\n" +
+		"## Bridge\n\n" + filler + "\n\nrefs: doc=" + c + " work=none\n\n" +
+		"## Waits on the owner\n\n- nothing waits on the owner."
+	rh.write(rh.h, &root, "master", master, "")
+	listings := 0
+	rh.h.textureRootListDocuments = func(ctx context.Context, ownerID, computerID string, limit int) ([]types.Document, error) {
+		listings++
+		return rh.s.ListDocumentsByScope(ctx, ownerID, computerID, limit)
+	}
+	_, run := rh.createDoc("ctx-newest-d", "Ferry")
+	if listings != 1 {
+		t.Fatalf("one run read the document listing %d times, want 1", listings)
+	}
+	if !hasRootContext(run) {
+		t.Fatalf("the new document's run lacks the excerpt:\n%s", run.Prompt)
+	}
+	excerpt := run.Prompt[strings.Index(run.Prompt, textureprompts.RootContextLabel()):]
+	if !strings.Contains(excerpt, "refs: doc="+c) || strings.Contains(excerpt, "refs: doc="+b) {
+		t.Fatalf("the excerpt kept the older document and cut the newer one:\n%s", excerpt)
 	}
 }
