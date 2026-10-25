@@ -486,6 +486,11 @@ func TestTextureRootSettledMasterIsReplaced(t *testing.T) {
 	if _, ok := rh.activeRun(master); ok {
 		t.Fatal("the settled master was activated")
 	}
+	// Review 247 item 10: the replacement's full refresh does not list the
+	// dead masters it replaces as documents.
+	if run, _ := rh.activeRun(marker.DocumentID); strings.Contains(run.Prompt, "refs: doc="+master) {
+		t.Fatalf("the replacement's ledger lists its predecessor master:\n%s", run.Prompt)
+	}
 }
 
 // Failure mode 3b: concurrent ensure steps yield one marker and one master.
@@ -498,7 +503,7 @@ func TestTextureRootEnsureRaceYieldsOneMaster(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			root, err := rh.h.EnsureTextureRoot(t.Context(), rootOwner, rootComputer)
+			root, _, err := rh.h.ensureTextureRoot(t.Context(), rootOwner, rootComputer)
 			got[i], errs[i] = root.DocumentID, err
 		}(i)
 	}
@@ -516,7 +521,7 @@ func TestTextureRootEnsureRaceYieldsOneMaster(t *testing.T) {
 		t.Fatalf("the race created %d master documents", n)
 	}
 	// Idempotent on liveness: a live master is kept.
-	again, err := rh.h.EnsureTextureRoot(t.Context(), rootOwner, rootComputer)
+	again, _, err := rh.h.ensureTextureRoot(t.Context(), rootOwner, rootComputer)
 	if err != nil || again.DocumentID != marker.DocumentID || again.Generation != 1 {
 		t.Fatalf("ensure on a live master = %+v, %v", again, err)
 	}
@@ -608,5 +613,226 @@ func TestTextureRootNextSlotHonorsTheRateBound(t *testing.T) {
 	}
 	if got := textureRootNextSlot(now, hour, 2*time.Minute, 20); got.Before(now.Add(10 * time.Minute)) {
 		t.Fatalf("twenty runs in the hour: slot %s, want no earlier than the oldest plus an hour", got)
+	}
+}
+
+// Review 247 (tier 2) on f233a0dba: each test below was written before its
+// fix.
+
+// B1: a digest whose reconcile starts no run (here the master's activation
+// breaker is tripped) keeps its documents and re-arms exactly one digest,
+// and the re-arms still honour the rate bound, so a tripped breaker cannot
+// make a tight loop.
+func TestTextureRootNoRunDigestReArmsWithinTheRateBound(t *testing.T) {
+	rh, master, root, b, _ := rootStarted(t)
+	rh.write(rh.h, &root, "master", "Harbor: open. Bridge: closed.", "")
+	passivateRun(t, rh.s, root)
+	head := rh.snapshot(master).HeadRevision.RevisionID
+	future := time.Now().UTC().Add(time.Hour)
+	for i := 0; i < 3; i++ {
+		if err := rh.s.CreateAgentMutation(t.Context(), store.AgentMutation{
+			DocID: master, RunID: fmt.Sprintf("dead-root-%d", i), OwnerID: rootOwner, ComputerID: rootComputer,
+			State: "stale_activation", RevisionID: head, CreatedAt: future.Add(time.Duration(i) * time.Second),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rh.advance(3 * time.Minute)
+	rh.h.NoteTextureRootChange(t.Context(), rootOwner, rootComputer, b)
+	var firstDelivery time.Time
+	inFirstHour := 0
+	for i := 0; i < 30; i++ {
+		digests := rh.digests()
+		last := digests[len(digests)-1]
+		rh.mu.Lock()
+		if !last.notBefore.Before(rh.now) {
+			rh.now = last.notBefore.Add(time.Second)
+		}
+		at := rh.now
+		rh.mu.Unlock()
+		if i == 0 {
+			firstDelivery = at
+		}
+		if at.Before(firstDelivery.Add(time.Hour)) {
+			inFirstHour++
+		}
+		rh.deliver(last)
+		if run, ok := rh.activeRun(master); ok {
+			t.Fatalf("a tripped breaker started root run %s", run.RunID)
+		}
+		after := rh.digests()
+		if n := len(after) - len(digests); n != 1 {
+			t.Fatalf("delivery %d with no run re-armed %d digests, want exactly 1 (the documents are dropped otherwise)", i, n)
+		}
+		if !strings.Contains(after[len(after)-1].content, b) {
+			t.Fatalf("delivery %d re-armed a digest without %s: %s", i, b, after[len(after)-1].content)
+		}
+	}
+	if per := rh.core.TextureRootDigestPerHour(); inFirstHour > per {
+		t.Fatalf("%d no-run deliveries in one hour, over the bound of %d", inFirstHour, per)
+	}
+}
+
+// Item 2: a wake on the master never reactivates a parked root run (a
+// parked run would replay its memory without the ledger); it starts a fresh
+// run with the root section and a full refresh. Owner input moves the head
+// past the parked run's revision, so it cannot reactivate; the reachable
+// case is a wake with the head unchanged (open-work pressure, a record).
+func TestTextureRootWakeOnTheMasterStartsAFreshRun(t *testing.T) {
+	rh, master, root, b, c := rootStarted(t)
+	doc, err := rh.s.GetLifecycleDocument(t.Context(), rootOwner, rootComputer, master)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rh.h.applyTextureLifecycleTurn(t.Context(), &root, doc, textureTurnArgs{ToolCallID: "root-wait", WorkDisposition: types.WorkItemOpen}, types.TextureTurnWait, types.Revision{}, store.TextureSourceGraphWriteSet{}, "the root waits"); err != nil {
+		t.Fatalf("root wait turn: %v", err)
+	}
+	if err := rh.s.SleepAgentMutationAfterTextureTurn(t.Context(), rootOwner, rootComputer, doc.TrajectoryID, root.RunID); err != nil {
+		t.Fatalf("sleep the root: %v", err)
+	}
+	passivateRun(t, rh.s, root)
+	if _, err := rh.h.ReconcileAgentWake(t.Context(), rootOwner, master); err != nil {
+		t.Fatalf("wake the master: %v", err)
+	}
+	next, ok := rh.activeRun(master)
+	if !ok || next.RunID == root.RunID {
+		t.Fatalf("a wake on the master reactivated the parked root run %s (active %s %v)", root.RunID, next.RunID, ok)
+	}
+	if !strings.Contains(next.Prompt, textureprompts.RootSection()) || !strings.Contains(next.Prompt, "a full refresh") {
+		t.Fatalf("the fresh root run lacks the root section or the full refresh:\n%s", next.Prompt)
+	}
+	for _, docID := range []string{b, c} {
+		if !strings.Contains(next.Prompt, "refs: doc="+docID) {
+			t.Fatalf("the fresh root run's full refresh lacks %s", docID)
+		}
+	}
+}
+
+// Item 3: ledger changes the actor runtime sees by trajectory (work
+// assigned, a cancellation, a delegated engineering spawn) note the document
+// for the root; the master's own trajectory notes nothing.
+func TestTextureRootTrajectoryChangeNotesItsDocument(t *testing.T) {
+	rh, master, _, b, _ := rootStarted(t)
+	rh.advance(3 * time.Minute)
+	before := len(rh.digests())
+	rh.h.NoteTextureRootTrajectoryChange(t.Context(), rootOwner, rootComputer, rh.snapshot(master).Trajectory.TrajectoryID)
+	if n := len(rh.digests()) - before; n != 0 {
+		t.Fatalf("a change on the master's own trajectory armed %d digests", n)
+	}
+	rh.h.NoteTextureRootTrajectoryChange(t.Context(), rootOwner, rootComputer, rh.snapshot(b).Trajectory.TrajectoryID)
+	if digests := rh.digests(); len(digests)-before != 1 || !strings.Contains(digests[len(digests)-1].content, b) {
+		t.Fatalf("a change on %s's trajectory armed %d digests, want one naming it", b, len(digests)-before)
+	}
+}
+
+// Item 4: the digest is scheduled outside the scope mutex (the actor-log
+// write does not serialize every commit's note), arming stays exactly-once,
+// and a failed schedule rolls the arm back so the next note schedules.
+func TestTextureRootScheduleRunsOutsideTheLockAndRollsBackOnFailure(t *testing.T) {
+	rh := newRootHarness(t, true)
+	var calls int
+	heldLock, fail := false, true
+	rh.core.SetScheduleActor(func(_ context.Context, _, _, to, kind, content, _, _ string, notBefore time.Time) error {
+		if rh.h.textureRootMu.TryLock() {
+			rh.h.textureRootMu.Unlock()
+		} else {
+			heldLock = true
+		}
+		calls++
+		if fail {
+			fail = false
+			return fmt.Errorf("actor log unavailable")
+		}
+		return nil
+	})
+	rh.h.NoteTextureRootChange(t.Context(), rootOwner, rootComputer, "doc-b")
+	rh.h.NoteTextureRootChange(t.Context(), rootOwner, rootComputer, "doc-c")
+	rh.h.NoteTextureRootChange(t.Context(), rootOwner, rootComputer, "doc-d")
+	if heldLock {
+		t.Fatal("the digest was scheduled while holding the root scope mutex")
+	}
+	if calls != 2 {
+		t.Fatalf("schedule calls = %d, want 2 (a failed schedule, then one armed digest the third note coalesces into)", calls)
+	}
+}
+
+// Item 5: the ensure step is not callable with the switch off.
+func TestTextureRootEnsureRefusesWithTheSwitchOff(t *testing.T) {
+	rh := newRootHarness(t, false)
+	if _, _, err := rh.h.ensureTextureRoot(t.Context(), rootOwner, rootComputer); err == nil {
+		t.Fatal("ensure with texture.root_desk off succeeded")
+	}
+	if _, ok := rh.marker(); ok {
+		t.Fatal("ensure with the switch off claimed a marker")
+	}
+	if n := rh.countDocsTitled(textureRootTitle); n != 0 {
+		t.Fatalf("ensure with the switch off created %d master documents", n)
+	}
+}
+
+// Item 6: once a document's head is Texture's, the ledger still says what
+// the owner last asked, from the revision chain.
+func TestTextureRootLedgerKeepsTheOwnerAskPastAnAgentHead(t *testing.T) {
+	_, _, root, b, _ := rootStarted(t)
+	_ = b
+	if !strings.Contains(root.Prompt, "the owner last asked: Write about Harbor.") {
+		t.Fatalf("the ledger lost the owner's ask once Texture wrote the head:\n%s", root.Prompt)
+	}
+}
+
+// Item 7: the master is bounded: a root revision over 48 KiB is refused with
+// a reason the root sees; another document's is not.
+func TestTextureRootRefusesAMasterRevisionOver48KiB(t *testing.T) {
+	rh, _, root, b, _ := rootStarted(t)
+	big := strings.Repeat("The harbor is open and the ferry runs. ", 50<<10/39+1)
+	base := headOf(rh.t, rh.s, root)
+	turn := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Write: &yaegikernel.TextureWrite{Edits: "@all\n# master\n\n" + big, Why: "too long"}})
+	_, err := rh.h.CommitCellTextureAuthor(t.Context(), &root, turn, "master-big")
+	if err == nil || !strings.Contains(err.Error(), "48 KiB") {
+		t.Fatalf("a 50 KiB master revision: err=%v, want a refusal naming 48 KiB", err)
+	}
+	if !strings.Contains(textureprompts.RootSection(), "48 KiB") {
+		t.Fatal("the root section does not tell the root its bound")
+	}
+	runB, ok := rh.activeRun(b)
+	if !ok {
+		t.Fatal("no run on b")
+	}
+	rh.write(rh.h, &runB, "harbor-big", big, "")
+}
+
+// Item 8: the master's client request ids are reserved.
+func TestTextureRootReservesItsClientRequestIDs(t *testing.T) {
+	rh := newRootHarness(t, true)
+	body := `{"client_request_id":"texture-root:1","title":"Mine","initial_content":"Hello."}`
+	w := runtimeHandlerRequest(t, rh.h.HandleTextureLifecycleCreate, http.MethodPost, "/api/texture/lifecycle/create", body, rootOwner)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("create with a texture-root: request id = %d %s, want 400", w.Code, w.Body.String())
+	}
+}
+
+// Item 9: a note after a committed change survives its caller's cancelled
+// context.
+func TestTextureRootNoteSurvivesACancelledContext(t *testing.T) {
+	rh := newRootHarness(t, true)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	rh.h.NoteTextureRootChange(ctx, rootOwner, rootComputer, "doc-b")
+	if n := len(rh.digests()); n != 1 {
+		t.Fatalf("a note with a cancelled context armed %d digests, want 1", n)
+	}
+}
+
+// Item 11 (DeepSeek #9): a document started after the marker is ordinary:
+// no root section, and its Done completes its own work item (no clamp).
+func TestTextureRootDocumentStartedAfterTheMarkerIsOrdinary(t *testing.T) {
+	rh, _, _, _, _ := rootStarted(t)
+	d, runD := rh.createDoc("after-d", "Ferry")
+	if strings.Contains(runD.Prompt, textureprompts.RootSection()) || runD.Metadata["texture_root"] == true {
+		t.Fatalf("a document started after the marker got the root section:\n%s", runD.Prompt)
+	}
+	rh.write(rh.h, &runD, "ferry", "The ferry runs hourly.", "answered")
+	if open := openWorkFor(rh.snapshot(d)); len(open) != 0 {
+		t.Fatalf("Done on an ordinary document left its work open (the root clamp applied): %+v", open)
 	}
 }
