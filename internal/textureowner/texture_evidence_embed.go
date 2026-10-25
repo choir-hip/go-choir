@@ -76,6 +76,11 @@ func (h *Handler) EmbedCandidateEvidence(ctx context.Context, ownerID, computerI
 	if err := checkEvidenceListing(listing, operationID); err != nil {
 		return "", err
 	}
+	// The listing must be this computer's: the asset route serves only this
+	// computer's store (design E5; review bunch 231).
+	if want := firstNonEmpty(strings.TrimSpace(selfdevComputerID), computerID); strings.TrimSpace(listing.ComputerID) != want {
+		return "", fmt.Errorf("texture evidence: the listing for %s is computer %q's, not %q's", operationID, listing.ComputerID, want)
+	}
 	trajectory, err := h.Store.GetLifecycleTrajectory(ctx, ownerID, computerID, listing.TrajectoryID)
 	if err != nil {
 		return "", fmt.Errorf("texture evidence: trajectory %s: %w", listing.TrajectoryID, err)
@@ -207,7 +212,9 @@ func (h *Handler) commitEvidenceEmbeds(ctx context.Context, ownerID, computerID,
 	}
 	result, err := h.Store.CommitLifecycleArtifactHeadWithSourceGraph(ctx, command, graph)
 	if err != nil {
-		retry := errors.Is(err, store.ErrConcurrentStateChange) || errors.Is(err, store.ErrStaleDocumentHead)
+		// Each attempt re-reads the document and the lifecycle, so a head or
+		// status that moved (live to settled) is retried on the new state.
+		retry := errors.Is(err, store.ErrConcurrentStateChange) || errors.Is(err, store.ErrStaleDocumentHead) || errors.Is(err, store.ErrLifecycleInvalidTransition)
 		return "", retry, fmt.Errorf("texture evidence: commit on %s: %w", docID, err)
 	}
 	if result.Revision == nil {
@@ -237,15 +244,20 @@ func evidenceEmbedNodes(body texturedoc.StructuredTextureDoc, listing agentcore.
 	walk(body.Doc)
 	nodes := make([]texturedoc.Node, 0, len(listing.Captures))
 	for i, capture := range listing.Captures {
-		id := "embed-" + objectgraph.SHA256([]byte(fmt.Sprintf("%s\x00%d\x00%s", listing.OperationID, i, capture.Digest)))[:16]
+		id := "embed-" + strings.TrimPrefix(objectgraph.SHA256([]byte(fmt.Sprintf("%s\x00%d\x00%s", listing.OperationID, i, capture.Digest))), "sha256:")[:16]
 		for used[id] {
 			id += "-x"
 		}
 		used[id] = true
 		route := strings.TrimSpace(capture.Route)
-		caption := fmt.Sprintf("Screenshot of %s from candidate %s (%dx%d)", route, listing.OperationID, capture.Width, capture.Height)
+		// Texture's words interpolate the route and the operation with any
+		// markup character replaced, so a route like /items[12] cannot read
+		// as a legacy citation and refuse the write (review bunch 231). The
+		// target keeps the route as captured.
+		wordsRoute, wordsOperation := wordsSafe(route), wordsSafe(listing.OperationID)
+		caption := fmt.Sprintf("Screenshot of %s from candidate %s (%dx%d)", wordsRoute, wordsOperation, capture.Width, capture.Height)
 		if capture.Blank {
-			caption = fmt.Sprintf("Blank screenshot of %s from candidate %s (%dx%d): the page rendered nothing", route, listing.OperationID, capture.Width, capture.Height)
+			caption = fmt.Sprintf("Blank screenshot of %s from candidate %s (%dx%d): the page rendered nothing", wordsRoute, wordsOperation, capture.Width, capture.Height)
 		}
 		nodes = append(nodes, texturedoc.Node{Type: "embed", Attrs: map[string]any{
 			"id": id, "kind": texturedoc.EmbedKindCapsuleEvidence,
@@ -253,7 +265,7 @@ func evidenceEmbedNodes(body texturedoc.StructuredTextureDoc, listing agentcore.
 				"digest": capture.Digest, "operation_id": listing.OperationID, "computer_id": listing.ComputerID,
 				"route": route, "width": capture.Width, "height": capture.Height, "blank": capture.Blank,
 			},
-			"caption": caption, "alt": "Screenshot of " + route,
+			"caption": caption, "alt": "Screenshot of " + wordsRoute,
 		}})
 	}
 	// The nodes are checked as a document of their own before they join the
@@ -263,6 +275,18 @@ func evidenceEmbedNodes(body texturedoc.StructuredTextureDoc, listing agentcore.
 		return nil, fmt.Errorf("texture evidence: %s: %w", listing.OperationID, err)
 	}
 	return nodes, nil
+}
+
+// wordsSafe is s for Texture's words: the characters the authoring rules or
+// the Write grammar read as markup ([]{}()*`) and control characters become
+// '-' (as the frame line's frameSafe does).
+func wordsSafe(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f || strings.ContainsRune("[]{}()*`", r) {
+			return '-'
+		}
+		return r
+	}, s)
 }
 
 // normalizeNumbers round-trips a document through JSON, so int attributes
@@ -302,16 +326,18 @@ func revisionUnusedSourceEntityIDs(raw json.RawMessage) []string {
 	return meta.Unused
 }
 
-// newEvidenceEmbeds names the capsule_evidence embeds of next that parent
-// does not hold unchanged. The owner revision route refuses them: only the
-// evidence path above writes one (design E7).
-func newEvidenceEmbeds(parentBody, nextBody json.RawMessage) ([]string, error) {
+// newEmbeds names the embeds of next, of any kind, whose exact block parent
+// does not hold. The owner revision route refuses them: it may keep, delete
+// or move an embed, never add or alter one. Only the evidence path above
+// writes an embed; owner-uploaded images are a later T1 authority (design
+// E7; review bunch 231).
+func newEmbeds(parentBody, nextBody json.RawMessage) []string {
 	if strings.TrimSpace(string(nextBody)) == "" || strings.TrimSpace(string(nextBody)) == "null" {
-		return nil, nil
+		return nil
 	}
 	var next texturedoc.StructuredTextureDoc
 	if err := json.Unmarshal(nextBody, &next); err != nil {
-		return nil, nil // the store's validator refuses it with its own reason
+		return nil // the store's validator refuses it with its own reason
 	}
 	held := map[string]bool{}
 	if raw := strings.TrimSpace(string(parentBody)); raw != "" && raw != "null" {
@@ -327,13 +353,17 @@ func newEvidenceEmbeds(parentBody, nextBody json.RawMessage) ([]string, error) {
 	}
 	var out []string
 	for _, n := range next.Doc.Content {
-		e, ok := texturedoc.EmbedOf(n)
-		if !ok || e.Kind != texturedoc.EmbedKindCapsuleEvidence {
+		if n.Type != "embed" {
 			continue
 		}
 		if data, _ := json.Marshal(n); !held[string(data)] {
-			out = append(out, e.ID)
+			out = append(out, firstNonEmpty(stringAttrOf(n, "id"), "(no id)"))
 		}
 	}
-	return out, nil
+	return out
+}
+
+func stringAttrOf(n texturedoc.Node, key string) string {
+	v, _ := n.Attrs[key].(string)
+	return strings.TrimSpace(v)
 }

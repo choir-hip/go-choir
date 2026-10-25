@@ -114,6 +114,8 @@ func TestEmbedBlockRefusals(t *testing.T) {
 		"image operation": docOf(Node{Type: "embed", Attrs: map[string]any{"id": "e", "kind": EmbedKindImage, "alt": "a",
 			"target": map[string]any{"digest": testDigest, "operation_id": "op"}}}),
 	}
+	cases["duplicate embed id"] = docOf(evidenceNode(nil), evidenceNode(nil))
+	cases["duplicate id, other target"] = docOf(evidenceNode(nil), evidenceNode(func(_, tg map[string]any) { tg["route"] = "/other" }))
 	for name, doc := range cases {
 		if err := Validate(doc, nil); err == nil {
 			t.Errorf("%s: accepted", name)
