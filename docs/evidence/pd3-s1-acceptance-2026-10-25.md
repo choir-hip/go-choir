@@ -46,3 +46,34 @@ left open by a refused cast).
 - F3 (latency on): the on-phase sample is one document and three turns,
   smaller than the design's ten per document; the p50 is lower than off,
   not higher, so the bound holds on this sample.
+
+## S2 paired test, 2026-10-25 12:29-12:33 (fails)
+
+S2 deployed in 3a1a702ff (CI 40192322501 success, vmctl 12:24:22, NRestarts
+0); b@c booted onto it at 12:28. Document A ("Team offsite plan", doc
+5a090ab3) states an open plan: a full-day team offsite at the lake house on
+Saturday, November 7th. The root rendered it into the master at 12:31:14,
+whose head now begins with "Waits on the owner".
+
+- On (switch on, master current): document 6da12ab4 asks to book the lake
+  house for a family reunion that day. Its run's prompt carries the
+  labelled excerpt (label present), but the excerpt holds the master's
+  first 11 document sections, oldest first, and is cut before A. The answer
+  does not mention the offsite.
+- Off (switch off at 12:32:15): document 94ea5d70, the same request. No
+  label in the prompt, no mention of the offsite. Correct.
+- A first attempt at the off half (document 2a6f8671, "Family reunion") is
+  void: the setting call was malformed and the switch stayed on; that run
+  got an excerpt from the 11:37 master, before A existed.
+
+Finding F4 (design gap, S2): the root writes the master's document sections
+in a stable order with new documents appended at the end (22 sections;
+the newest last), and the excerpt is cut from the end at 4 KiB. So the
+excerpt carries the oldest documents and drops the newest, which are the
+ones most likely to bear on a new request. "Cut from the end" was only
+right if the end was the least relevant part. The fix belongs in the
+excerpt builder, deterministically: order the other documents' sections by
+their documents' last revision time, newest first, before cutting; and ask
+the root to write the master newest first as well, for the owner's own
+reading. The switch was turned back on at 12:33:18 so S1 keeps the master
+current.
