@@ -275,6 +275,14 @@ anyway, so the first sweep has something to honor:
     - H2. The asset route serves any digest in the owner's store (V34,
       already recorded); the embed renderer does not rely on it for
       membership.
+    - H4. `frontend/tests/texture-structured-editor-doc.spec.js` cannot load
+      on the current main: the module imports
+      `texture-source-renderer` -> `media-utils.js` -> `apps/registry` ->
+      `apps/packages.ts`, whose `import.meta.glob` exists only under Vite,
+      so Playwright's loader fails with "glob is not a function" and runs
+      no test (since the app packages P1 commits, 2026-10-24). Found while
+      building this; not repaired here. The embed renderer lives in
+      `texture-embeds.ts`, which imports nothing, so its own spec runs.
   - introduced:
     - H3. A Texture revision path that is not a desk turn: a deterministic
       write from Texture's package. Bounded to embed blocks, behind the
@@ -298,3 +306,57 @@ anyway, so the first sweep has something to honor:
   not something built here.
 - R6. The management review's vision reading is not attached to the embed
   (10.3: "may refine alt, cited, not copied unchecked"); later.
+
+## 9. Built (2026-10-25, lane `fp0-evidence-embed`)
+
+- `internal/texturedoc/embed.go`: the block, its validator, projection,
+  derived privacy, `Embeds`, `PrivateEmbeds`, `EmbeddedDigests`.
+- `internal/texturewrite`: the frame line (`EmbedFrameLine`) and
+  `keepEmbedBlocks`, the refusal of a Write that removes or changes one.
+- `internal/imageblob/pin.go`: `Pin` and `Pins`.
+- `internal/agentcore`: `VisualEvidenceListing` exported with the
+  operation's trajectory and `Runtime.CandidateVisualEvidence` (the route
+  answers as before); `texture_evidence_embeds.go` (the seam, the switch
+  check, the detached job); the trigger in `settleFreezePrecommits`; story
+  auto-publish holds a document with a private embed.
+- `internal/store`: `texture.evidence_embeds` in the settings registry,
+  default off.
+- `internal/textureowner/texture_evidence_embed.go`: the write
+  (`EmbedCandidateEvidence`); the owner route's refusal of a new
+  `capsule_evidence` embed. autoputer binds it.
+- `internal/platform` and `internal/proxy`: the publish refusal
+  (`PrivateEmbedRefusal`), 409 at the proxy.
+- `cmd/choir`: `texture read` adds `embeds`.
+- `frontend/src/lib/texture-embeds.ts` and `.css`: the renderer, wired into
+  `texture-structured-editor-doc.ts` (render, projection, serializer by id,
+  a pasted copy dropped) and `TextureEditor.svelte` (identity hydration
+  and the capture-phase error listener).
+
+One behavior to know: Texture's evidence write reads the head the way a
+desk's Write does (`texturewrite.Base`), so a head that is still the owner's
+plain first text (one paragraph of lines) is committed as its markdown
+blocks, as the desk's first Write would.
+
+What the tests prove (local, Darwin): the schema accepts the two kinds and
+refuses every shape in section 3; a desk's Write keeps, and cannot remove
+or change, an embed; the write on the real store with a seeded lifecycle
+document appends one embed per capture from the listing only, stores no
+candidate identity, marks blank captures, pins every digest to the
+revision, is idempotent, refuses a listing for another trajectory, a bad
+digest, zero or more than six captures, and leaves the head unchanged on
+refusal; the desk's next Write on the old head is refused and on the new
+head keeps the embeds; the owner route refuses a forged embed and accepts
+keeping or deleting one; the Freeze trigger asks only on a fresh freeze
+with captures and the switch on, off the reduction path; corpusd and the
+proxy refuse a document with a private embed; `choir texture read` lists
+the embeds with the fetch command; the web renderer's output (escaping, the
+asset route only, reserved box, blank badge and all-blank warning,
+unresolvable state, plain card for an unknown kind, serializer by id).
+
+What they do not prove: the Linux Freeze executor end to end into the
+trigger (the trigger is driven through `settleFreezePrecommits` with the
+runtime's observation, as the visual slice's own tests do); a real browser
+loading the image behind the owner's session; the identity line against a
+live listing; the editor component itself (only its modules: H4 blocks the
+editor-doc spec, and the integration was checked with a one-off esbuild
+harness outside the repo); anything on staging.
