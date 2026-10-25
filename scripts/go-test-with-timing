@@ -5,8 +5,27 @@ json_log="$(mktemp)"
 json_only_log="$(mktemp)"
 trap 'rm -f "$json_log" "$json_only_log"' EXIT
 
+# Whole-machine CPU use over the run (docs/problems/ci-wall-clock-2026-10-24.md):
+# decides whether a shard has idle CPUs to give another process.
+cpu_sample() {
+  if [[ -r /proc/stat ]]; then
+    awk '/^cpu / { idle = $5 + $6; total = 0; for (i = 2; i <= NF; i++) total += $i; print idle, total; exit }' /proc/stat
+  fi
+}
+cpu_before="$(cpu_sample || true)"
+started_at="$(date +%s)"
+
 test_status=0
 go test -json "$@" 2>&1 | tee "$json_log" || test_status=${PIPESTATUS[0]}
+
+cpu_after="$(cpu_sample || true)"
+if [[ -n "$cpu_before" && -n "$cpu_after" ]]; then
+  read -r idle0 total0 <<<"$cpu_before"
+  read -r idle1 total1 <<<"$cpu_after"
+  if (( total1 > total0 )); then
+    echo "CPU utilization over this go test run: $(( 100 * ( (total1 - total0) - (idle1 - idle0) ) / (total1 - total0) ))% of $(nproc) CPUs in $(( $(date +%s) - started_at ))s"
+  fi
+fi
 
 if command -v jq >/dev/null 2>&1; then
   awk '/^[[:space:]]*\{/ { print }' "$json_log" > "$json_only_log"

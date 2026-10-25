@@ -226,7 +226,13 @@ if (( split_mode )); then
   # when warm) and the saved cache is complete. It never fails the shard.
   warm_pid=""
   if [[ "${WARM_EXPORT_DATA:-1}" != "0" ]]; then
-    nice -n 19 go list -e -export -deps ./internal/... ./cmd/... ./scripts/... >/dev/null 2>&1 &
+    warm_log="$(mktemp)"
+    (
+      warm_started=$(date +%s)
+      warm_status=0
+      nice -n 19 go list -e -export -deps ./internal/... ./cmd/... ./scripts/... >/dev/null 2>&1 || warm_status=$?
+      echo "export-data warm-up: exit ${warm_status} after $(( $(date +%s) - warm_started ))s (a cold compile is 100-200 s)" >"$warm_log"
+    ) &
     warm_pid=$!
   fi
   split_listing=""
@@ -283,6 +289,8 @@ if (( split_mode )); then
   fi
   if [[ -n "$warm_pid" ]]; then
     wait "$warm_pid" || true
+    cat "$warm_log" || true
+    rm -f "$warm_log"
   fi
   exit "$status"
 fi

@@ -9,7 +9,7 @@
 # Source: the mean of CI run 40138087758 (main, 2026-10-24) and pull-request
 # run 40146522999 over the six split shards, race; tests under 3 s are left out.
 # Refresh from a recent run's go test -json logs when a shard is the outlier.
-@whole 100
+@whole 140
 213 internal/store:TestEventTableTrajectoryWindowOverTenThousand
 141 internal/store:TestListRunsByOwnerEquivalentToTheFullKindScan
 102 internal/store:TestOpenWakeListMeasure
