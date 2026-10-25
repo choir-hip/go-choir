@@ -12,8 +12,8 @@ Computer b@c, trajectory e3e37430, engineer on Synthetic DeepSeek V4.1 Flash
 1017 (reasoning effort low), deployed build 4e72dec (00:38 UTC). The round ran
 01:00:47 to 02:00:50 and was cancelled by the 60 minute activation budget
 (`context deadline exceeded`, `DefaultActivationBudget` in provideriface). It
-made 159 model calls, one tool (`capsule_go_eval`) each, and never called Freeze
-or Complete: the cancel report has no commands, no mutations and no candidate.
+made 159 model calls (one `capsule_go_eval` each) and never called Freeze or
+Complete: the cancel report has no commands, mutations or candidate.
 The round's first engineer (gpt-6-luna) had read the spec, written a 26 KB
 Reader package and frozen in 2 min 40 s over 30 calls.
 
