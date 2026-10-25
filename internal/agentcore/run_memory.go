@@ -37,6 +37,16 @@ var (
 	runMemoryCompactionLocks sync.Map
 )
 
+const (
+	// runMetadataActorRewarmSource names the earlier activation of the same
+	// actor whose memory a new run continues (written by textureowner).
+	runMetadataActorRewarmSource = "actor_rewarm_source_loop_id"
+	// runMetadataCarryActorConversation makes a Texture run continue that
+	// activation's conversation verbatim instead of the digest snapshot
+	// (texture.hold_trajectory, docs/design/texture-holds-the-trajectory-2026-10-25.md).
+	runMetadataCarryActorConversation = "actor_rewarm_carry_conversation"
+)
+
 type runMemoryManager struct {
 	store                     *runtimestore.Store
 	rec                       *types.RunRecord

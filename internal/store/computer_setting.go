@@ -146,6 +146,16 @@ const SettingEngineeringCarryUnfinished = "engineering.carry_unfinished"
 // rollback: the turn is byte-identical to before.
 const SettingTextureOwnerDirections = "texture.owner_directions"
 
+// SettingTextureHoldTrajectory makes Texture hold its trajectory across
+// wakes (docs/design/texture-holds-the-trajectory-2026-10-25.md): a new
+// Texture run continues its earlier run's conversation verbatim (checkpoint
+// and messages, bounded by the run's own compaction) instead of the actor
+// rewarm digest, and when no revision carries a seed_prompt the request turn
+// shows the document's first owner revision as the owner's request. Read at
+// each Texture run start. Off by default; off is the rollback: the run is
+// seeded with the digest and the turn is byte-identical to before.
+const SettingTextureHoldTrajectory = "texture.hold_trajectory"
+
 // SettingTextureEvidenceEmbeds makes a fresh Freeze that observed visual
 // captures embed them in the operation's Texture document, written by
 // Texture's own package from the frozen bundle (station TE,
@@ -174,6 +184,7 @@ var KnownComputerSettings = map[string]bool{
 	SettingEngineeringCarryUnfinished:   false,
 	SettingTextureOwnerDirections:       false,
 	SettingTextureEvidenceEmbeds:        false,
+	SettingTextureHoldTrajectory:        false,
 }
 
 // ComputerSetting is one switch's value on one computer.

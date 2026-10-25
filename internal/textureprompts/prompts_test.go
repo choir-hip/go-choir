@@ -84,9 +84,10 @@ func TestPromptCoreRetiresTheOldWriteSurface(t *testing.T) {
 	// captures (texture-opens-stories-blind-to-their-capture-2026-10-16)
 	// and one sentence said so; 4.56k until the grounding rules
 	// (articles-relay-outlets-instead-of-grounding-them-2026-10-19)
-	// replaced two news rules with three.
-	if n := len(prompt); n > 5150 {
-		t.Errorf("prompt core is %d characters; the budget is about 5.15k", n)
+	// replaced two news rules with three; 5.15k until the owner's-intention
+	// rules (texture-holds-the-trajectory-2026-10-25) added four lines.
+	if n := len(prompt); n > 6000 {
+		t.Errorf("prompt core is %d characters; the budget is about 6k", n)
 	}
 }
 
@@ -196,6 +197,33 @@ func TestPromptCoreStatesOneReportedEventAndNamesOutletsOnlyForTheirOwnFindings(
 		"where outlets disagree",
 		`"in the material reviewed"`,
 		"A revision rewrites any block that breaks these rules.",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("prompt core lacks %q", want)
+		}
+	}
+}
+
+// The owner's intention comes first (owner, 2026-10-25: "texture ... should
+// hold onto the trajectory, and always remember to prioritize the user
+// intention"; docs/design/texture-holds-the-trajectory-2026-10-25.md).
+// Texture re-cast a superseded spec on every wake (reader-3), cast a
+// two-sentence summary so the engineer never saw the quality bar (reader-4),
+// re-cast an in-flight repair on a progress report (round 5, 06:40:17), and
+// did not ask management to forward the owner's correction. Ways the prompt
+// can fail: it does not say the newest owner direction governs; it allows a
+// summary cast; it allows re-casting superseded or in-flight work on a
+// report; it does not ask management to pass a correction to the bound
+// engineer; the rule is so long the core blows its budget.
+func TestPromptCorePutsTheOwnersIntentionFirst(t *testing.T) {
+	prompt := DefaultSystemPrompt()
+	for _, want := range []string{
+		"The owner's newest direction governs",
+		"in the owner's words, whole",
+		"never a summary",
+		"Never re-cast a request a later owner direction superseded",
+		"a progress report updates the document and casts nothing",
+		"pass it to the bound engineer in full",
 	} {
 		if !strings.Contains(prompt, want) {
 			t.Errorf("prompt core lacks %q", want)
