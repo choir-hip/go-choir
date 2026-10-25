@@ -257,3 +257,46 @@ func TestTextureRootContextReadsOneListingAndKeepsTheNewest(t *testing.T) {
 		t.Fatalf("the excerpt kept the older document and cut the newer one:\n%s", excerpt)
 	}
 }
+
+// The root writes each document's refs at the end of its paragraph, not on a
+// line of their own (b@c's master ef0e2ef8, 2026-10-25; the S2 paired test's
+// F5). The excerpt must find those refs, or every section counts as unknown:
+// it keeps the root's oldest-first order, cuts the newest documents, and
+// repeats the run's own section.
+func TestTextureRootExcerptReadsTheRootsInlineRefs(t *testing.T) {
+	base := time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
+	revisedAt := map[string]time.Time{}
+	var b strings.Builder
+	b.WriteString("## Waits on the owner\n\nNone listed across the documents in this ledger.\n\n" +
+		"The computer's master document: for every document on this computer, what the owner asked, what is open, which desk holds it and what waits on the owner. Kept current by this document's Texture, the computer's Texture root.\n\n")
+	for i := 0; i < 20; i++ { // oldest first, as the root wrote it
+		docID := fmt.Sprintf("0b4f3866-5966-5a06-9582-e03d1ae4cb%02d", i)
+		revisedAt[docID] = base.Add(time.Duration(i) * time.Minute)
+		fmt.Fprintf(&b, "### Change this computer itself: redesign document %02d\n\nWaits on owner: none listed. The owner asked for a full, careful rewrite of the document in four paragraphs. Open work: none listed; no desk assignment or candidate is listed. refs: doc=%s work=none\n\n", i, docID)
+	}
+	offsite, own := "5a090ab3-0000-5000-8000-000000000001", "e89959c8-0000-5000-8000-000000000002"
+	revisedAt[offsite] = base.Add(time.Hour)
+	revisedAt[own] = base.Add(2 * time.Hour)
+	b.WriteString("### Team offsite plan\n\nWaits on owner: none listed. The owner set a full-day team offsite at the lake house on Saturday, November 7th. Open work: none listed. refs: doc=" + offsite + " work=none\n\n")
+	b.WriteString("### Reunion booking (on)\n\nWaits on owner: none listed. The owner asked to book the lake house for a family reunion. Open work: Texture is assigned to revise. refs: doc=" + own + " work=4c55862e\n")
+	if b.Len() <= textureRootContextMaxBytes {
+		t.Fatalf("fixture is %d bytes; it must exceed the bound to test the cut", b.Len())
+	}
+	excerpt := textureRootExcerpt(b.String(), own, revisedAt)
+	if len(excerpt) > textureRootContextMaxBytes {
+		t.Fatalf("excerpt is %d bytes, over the 4 KiB bound", len(excerpt))
+	}
+	if !strings.HasPrefix(excerpt, "## Waits on the owner") {
+		t.Fatalf("the waits section is not first:\n%.200s", excerpt)
+	}
+	at := strings.Index(excerpt, "### Team offsite plan")
+	if at < 0 {
+		t.Fatalf("the newest other document was cut; the inline refs were not read:\n%s", excerpt)
+	}
+	if first := strings.Index(excerpt, "### Change this computer itself"); first >= 0 && first < at {
+		t.Fatalf("an older document comes before the newest:\n%s", excerpt)
+	}
+	if strings.Contains(excerpt, own) {
+		t.Fatalf("the excerpt kept the run's own section:\n%s", excerpt)
+	}
+}
