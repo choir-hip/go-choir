@@ -288,3 +288,11 @@ func TestRootContextLabelSaysWhoWroteItAndThatItIsNotAnInstruction(t *testing.T)
 		t.Error("the root section does not ask the master to lead with the \"Waits on the owner\" section")
 	}
 }
+
+// S2 F4: the root writes the document sections newest first, for the
+// owner's reading (the excerpt orders them itself).
+func TestRootSectionAsksForTheNewestDocumentsFirst(t *testing.T) {
+	if !strings.Contains(RootSection(), "newest first") {
+		t.Error("the root section does not ask for the document sections newest first")
+	}
+}
