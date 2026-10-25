@@ -1168,8 +1168,8 @@ func (e *Executor) GoEval(ctx context.Context, agentRunID, handle string, reques
 	// program must never execute; refusing after execution would let it
 	// mutate/exfiltrate. No execution attempt is admitted for secret-bearing
 	// source, so no receipt is required for a refused attempt.
-	if len(computerevent.DetectPrivateSecrets([]byte(request.Source))) != 0 {
-		return GoEvalResult{}, fmt.Errorf("capsule: secret-bearing Go source cannot produce auditable execution evidence")
+	if err := secretBearingRefusal("Go source", request.Source); err != nil {
+		return GoEvalResult{}, err
 	}
 	// Host-owned attempt record MUST exist regardless of outcome. We persist a
 	// receipt for every admitted evaluation: success, interpreter error,
@@ -1241,8 +1241,8 @@ func (e *Executor) Exec(ctx context.Context, agentRunID, handle string, request 
 	// command must never execute; refusing after execution would let it
 	// mutate/exfiltrate. No execution attempt is admitted for secret-bearing
 	// commands.
-	if len(computerevent.DetectPrivateSecrets([]byte(request.Command))) != 0 {
-		return ExecResult{}, fmt.Errorf("capsule: secret-bearing command cannot produce auditable execution evidence")
+	if err := secretBearingRefusal("command", request.Command); err != nil {
+		return ExecResult{}, err
 	}
 
 	result, err := caps.Exec(ctx, capability, request)
