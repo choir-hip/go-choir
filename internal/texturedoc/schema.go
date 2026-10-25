@@ -314,6 +314,8 @@ func (v *Validator) validateBlock(node Node, path string) error {
 		if len(node.Content) != 0 || node.Text != "" {
 			return fmt.Errorf("%s.horizontal_rule must be a leaf block", path)
 		}
+	case "embed":
+		return v.validateEmbed(node, path)
 	default:
 		return fmt.Errorf("%s unsupported block node type %q", path, node.Type)
 	}
