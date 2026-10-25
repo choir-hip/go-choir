@@ -152,7 +152,7 @@ priority so a cold cache cannot starve the tests. Whether the actorruntime
 tests need a wider deadline or the scale quarantine is a separate question for
 the tests' owner; they were not changed here.
 
-## Measured after the fourth candidate (pull-request run 40152286786 lane head, 2026-10-25 02:04Z)
+## Measured after the fourth candidate (pull-request run 40153017633, 2026-10-25 02:04Z)
 
 Candidate: one process per shard, per-package weighted deal over all eight
 shards, shards 6 and 7 run their whole packages first, export-data warm-up in
@@ -171,10 +171,11 @@ shard 0 331, 4 395, 3 401, 2 466, 5 477, 1 497, 6 540, 7 612; runtime shards
 - Three shards still paid the cold whole-repository compile in the first
   export-data test (shard 3 102 s, shard 5 87 s, shard 7 126 s; the next
   export test in the process takes under 1 s). The warm-up did not help
-  because the cache these runs restored was not the one a warm-up had filled:
-  a pull-request run restores the newest entry its key prefix matches, and
-  main's own runs (which do not yet run the warm-up) save newer entries than
-  the pull-request run's own. The warm-up only pays off once it is on main.
+  because the cache these runs restored was probably not the one a warm-up had
+  filled (hypothesis, not read from the cache API): a run restores the newest
+  entry its key prefix matches, and main's own runs, which do not yet run the
+  warm-up, may have saved newer entries than the pull-request run's. If so the
+  warm-up only pays off once it is on main.
 - Runtime shards finish at 243-327 s, well before the non-runtime maximum:
   eight runtime jobs and eight non-runtime jobs are not balanced against each
   other (about 2,000 against 3,200 test-seconds). Re-splitting the same 16
