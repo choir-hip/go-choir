@@ -43,3 +43,31 @@ func TestEngineeringOverlaySaysWhenAFrontendChangeBuildsTheBinary(t *testing.T) 
 		}
 	}
 }
+
+// Problems 2, 3, 4 and 5 of docs/evidence/selfdev-trace-reviews-2026-10-25.md:
+// round 1 re-ran a 269 s failing test five times when a 1 s probe would have
+// shown the cause, bounded a job with `timeout`, which the capsule's seccomp
+// breaks (timer_create), was cancelled by the activation budget it never
+// saw, and ran Go tests for a frontend-only change on a cold module cache.
+func TestEngineeringOverlayTeachesBoundedJobsAndTheBudget(t *testing.T) {
+	overlay := RLMEngineeringOverlay(RLMEngineeringOverlayOptions{HasSelfDevelopmentOperation: true})
+	for _, want := range []string{
+		"smoke check that finishes in under 10 s",
+		"timer_create",
+		"bound every step yourself",
+		"no new output for 60 s",
+		"activation budget",
+		"Freeze what you have",
+		"output tail",
+	} {
+		if !strings.Contains(overlay, want) {
+			t.Errorf("the overlay does not say %q", want)
+		}
+	}
+	noGo := overlay[strings.Index(overlay, "touches no Go input"):strings.Index(overlay, "A change that touches a Go input")]
+	for _, want := range []string{"no go test", "frontend checks"} {
+		if !strings.Contains(noGo, want) {
+			t.Errorf("the no-Go branch does not say %q", want)
+		}
+	}
+}

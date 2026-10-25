@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
@@ -226,7 +228,7 @@ func (rt *Runtime) engineeringJobWait(ctx context.Context, rec *types.RunRecord)
 	if err != nil || reason != jobParkEnded {
 		return toolregistry.ToolLoopCompletionGuardResult{}, false
 	}
-	return toolregistry.ToolLoopCompletionGuardResult{Continue: true, Waited: true, Reason: jobParkEnded, Instruction: jobEndedInstruction(ended)}, true
+	return toolregistry.ToolLoopCompletionGuardResult{Continue: true, Waited: true, Reason: jobParkEnded, Instruction: withActivationBudget(ctx, jobEndedInstruction(ended))}, true
 }
 
 // How a wait on a job ended.
@@ -338,7 +340,7 @@ func (rt *Runtime) engineeringJobPark(ctx context.Context, rec *types.RunRecord,
 			if v.ID == jobID && capsulejob.Terminal(v.State) {
 				emitJobPark(emit, "capsule_job_park", map[string]any{"job_id": jobID, "cause": cause})
 				emitJobPark(emit, "capsule_job_park_ended", map[string]any{"job_id": jobID, "reason": jobParkAlreadyEnded, "state": v.State, "waited_ms": 0})
-				return toolregistry.ToolLoopCompletionGuardResult{Continue: true, Waited: true, Reason: jobParkEnded, Instruction: jobEndedInstruction(v)}, true, nil
+				return toolregistry.ToolLoopCompletionGuardResult{Continue: true, Waited: true, Reason: jobParkEnded, Instruction: withActivationBudget(ctx, jobEndedInstruction(v))}, true, nil
 			}
 		}
 		return none, false, nil
@@ -354,7 +356,7 @@ func (rt *Runtime) engineeringJobPark(ctx context.Context, rec *types.RunRecord,
 	if reason == jobParkDeadline {
 		instruction = jobOutlivedInstruction(ended)
 	}
-	return toolregistry.ToolLoopCompletionGuardResult{Continue: true, Waited: true, Reason: reason, Instruction: instruction}, true, nil
+	return toolregistry.ToolLoopCompletionGuardResult{Continue: true, Waited: true, Reason: reason, Instruction: withActivationBudget(ctx, instruction)}, true, nil
 }
 
 func emitJobPark(emit provideriface.EventEmitFunc, phase string, body map[string]any) {
@@ -393,6 +395,56 @@ func jobEndedInstruction(v yaegikernel.JobView) string {
 			fmt.Fprintf(&b, " Its receipt %s records a failure; Freeze refuses it as evidence. Read the output, fix the cause and run it again.", v.ReceiptRef)
 		}
 	}
-	b.WriteString(" Its record is in choir.Records() and choir.Poll(\"" + v.ID + "\") shows its output tail. Continue the assignment in your next cell.")
+	b.WriteString(" Its record is in choir.Records(). Continue the assignment in your next cell.")
+	if tail := resumeTail(v.Tail); tail != "" {
+		fmt.Fprintf(&b, "\nOutput tail (the last %d bytes at most; choir.Poll(%q) shows the same):\n%s", resumeTailBytes, v.ID, tail)
+	}
 	return b.String()
+}
+
+// resumeTailBytes bounds the job output a park-ended resume carries, so the
+// engineer reads the result without a Poll cell (problem 6 of
+// docs/evidence/selfdev-trace-reviews-2026-10-25.md).
+const resumeTailBytes = 1500
+
+// resumeTail is the last resumeTailBytes of a job's output tail, cut on a
+// rune boundary.
+func resumeTail(tail string) string {
+	tail = strings.TrimSpace(tail)
+	if len(tail) <= resumeTailBytes {
+		return tail
+	}
+	cut := len(tail) - resumeTailBytes
+	for cut < len(tail) && !utf8.RuneStart(tail[cut]) {
+		cut++
+	}
+	return "…" + tail[cut:]
+}
+
+// withActivationBudget appends the run's remaining activation budget to a
+// resume, so the engineer can Freeze before the budget cancels the round and
+// its work with it (problem 4 of docs/evidence/selfdev-trace-reviews-
+// 2026-10-25.md). A run with no deadline gets no line.
+func withActivationBudget(ctx context.Context, instruction string) string {
+	line := activationBudgetLine(ctx, time.Now())
+	if line == "" {
+		return instruction
+	}
+	return instruction + "\n" + line
+}
+
+func activationBudgetLine(ctx context.Context, now time.Time) string {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return ""
+	}
+	left := deadline.Sub(now)
+	minutes := int(math.Ceil(left.Minutes()))
+	if minutes < 1 {
+		minutes = 1
+	}
+	if left < 10*time.Minute {
+		return fmt.Sprintf("Activation budget: %d min left: Freeze what you have now, or the round's work is lost.", minutes)
+	}
+	return fmt.Sprintf("Activation budget: %d min left; Freeze before it ends or the round's work is lost.", minutes)
 }
