@@ -65,7 +65,11 @@ The instructions add to it (finding, texture.yaml): nothing tells Texture
 that the owner's newest direction governs, that a cast carries the owner's
 words rather than a summary, or that a superseded spec is never re-cast. The
 two-sentence first cast on reader-4 and the verbatim re-casts on reader-3 are
-what the prompt allowed.
+what the prompt allowed. Round 5 (06:40:17): Texture woke on engineering's
+interim progress report and cast "Continue the authorized repair" while
+management's bound assignment was doing exactly that, so a duplicate round
+opened (finding, trace review round 5). A digest that drops Texture's own
+casts cannot tell it that its cast is in flight (hypothesis on cause).
 
 ## The fix
 
@@ -92,8 +96,10 @@ Connect what exists; no new package, no projection layer.
 3. **Texture's instructions put the owner first** (texture.yaml, a short
    block): the newest owner direction governs; a cast to management carries
    the owner's request and directions in the owner's words; a superseded spec
-   is never re-cast; a correction while work is in flight is cast as a
-   correction and asks management to pass it to the bound engineer in full.
+   or in-flight request is never re-cast (a progress report updates the
+   document and casts nothing); a correction while work is in flight is
+   cast as a correction and asks management to pass it to the bound
+   engineer in full.
    This is prompt text, unconditional; its rollback is the revert.
 
 Off, the run and the turn are byte-identical to today.
@@ -180,6 +186,12 @@ prompt text included).
   superseded re-casts.
 
 ## Residuals
+
+- Nothing refuses a duplicate cast mechanically (round 5's re-cast on a
+  progress report). This slice gives Texture its earlier cast in view and
+  the rule; a store-side refusal of a second execution request while one is
+  bound is management's or the store's, a later step if staging shows the
+  model still re-casts.
 
 - Management not forwarding an owner correction to a bound engineer (round 4
   P1) is management's text (lane fp0-round4); Texture's cast now asks for it

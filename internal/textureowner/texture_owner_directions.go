@@ -27,6 +27,9 @@ const (
 	textureOwnerDirectionKeep = 8
 	// textureOwnerDirectionMaxChars caps one direction's text.
 	textureOwnerDirectionMaxChars = 4000
+	// textureOriginalRequestMaxChars caps the original request read from the
+	// document's first owner revision (reader-4's was 8484 characters).
+	textureOriginalRequestMaxChars = 16000
 )
 
 // textureOwnerDirection is one owner revise on the document: the revision
@@ -44,10 +47,22 @@ type textureOwnerDirection struct {
 // textureOwnerDirectionWalkLimit revisions, stops at a revision with no
 // parent, a revision it cannot load, or one it has already seen.
 func collectTextureOwnerDirections(head types.Revision, previous *types.Revision, load func(string) (types.Revision, error)) []textureOwnerDirection {
+	directions, _ := collectTextureOwnerStory(head, previous, load, false)
+	return directions
+}
+
+// collectTextureOwnerStory is collectTextureOwnerDirections that, with
+// wantRoot, walks on (within the same bound) to the document's first
+// revision and returns it when the owner wrote it: the owner's original
+// request when no revision carries a seed_prompt
+// (docs/design/texture-holds-the-trajectory-2026-10-25.md; reader-4's request
+// was its first body, and Texture's first revision replaced it).
+func collectTextureOwnerStory(head types.Revision, previous *types.Revision, load func(string) (types.Revision, error), wantRoot bool) ([]textureOwnerDirection, *types.Revision) {
 	seen := map[string]bool{strings.TrimSpace(head.RevisionID): true}
 	var newestFirst []textureOwnerDirection
+	var root *types.Revision
 	parentID := strings.TrimSpace(head.ParentRevisionID)
-	for reads := 0; parentID != "" && !seen[parentID] && len(newestFirst) < textureOwnerDirectionKeep; {
+	for reads := 0; parentID != "" && !seen[parentID] && (wantRoot || len(newestFirst) < textureOwnerDirectionKeep); {
 		var rev types.Revision
 		if previous != nil && strings.TrimSpace(previous.RevisionID) == parentID {
 			rev, previous = *previous, nil
@@ -68,7 +83,11 @@ func collectTextureOwnerDirections(head types.Revision, previous *types.Revision
 			// owner direction (review bunch 232 finding 1).
 			break
 		}
-		if rev.AuthorKind == types.AuthorUser {
+		if wantRoot && strings.TrimSpace(rev.ParentRevisionID) == "" && rev.AuthorKind == types.AuthorUser {
+			first := rev
+			root = &first
+		}
+		if rev.AuthorKind == types.AuthorUser && len(newestFirst) < textureOwnerDirectionKeep {
 			if text := strings.TrimSpace(metadataString(decodeRevisionMetadata(rev.Metadata), "owner_prompt")); text != "" {
 				newestFirst = append(newestFirst, textureOwnerDirection{
 					RevisionID: strings.TrimSpace(rev.RevisionID),
@@ -83,18 +102,23 @@ func collectTextureOwnerDirections(head types.Revision, previous *types.Revision
 	for i := len(newestFirst) - 1; i >= 0; i-- {
 		out = append(out, newestFirst[i])
 	}
-	return out
+	return out, root
 }
 
 // textureOwnerDirectionsOn reads the computer setting; any read failure is off.
 func (rt *Handler) textureOwnerDirectionsOn(ctx context.Context, ownerID, computerID string) bool {
+	return rt.textureSettingOn(ctx, ownerID, computerID, store.SettingTextureOwnerDirections)
+}
+
+// textureSettingOn reads one computer setting; any read failure is off.
+func (rt *Handler) textureSettingOn(ctx context.Context, ownerID, computerID, key string) bool {
 	if rt == nil || rt.Store == nil || strings.TrimSpace(ownerID) == "" || strings.TrimSpace(computerID) == "" {
 		return false
 	}
-	setting, err := rt.Store.GetComputerSetting(ctx, ownerID, computerID, store.SettingTextureOwnerDirections)
+	setting, err := rt.Store.GetComputerSetting(ctx, ownerID, computerID, key)
 	if err != nil {
 		if !errors.Is(err, store.ErrNotFound) {
-			log.Printf("texture api: read %s on %s: %v; treating it as off", store.SettingTextureOwnerDirections, computerID, err)
+			log.Printf("texture api: read %s on %s: %v; treating it as off", key, computerID, err)
 		}
 		return false
 	}
