@@ -208,3 +208,25 @@ func TestVisualCapturedPrecommitRecordedAndSettledFromTheFreezeObservation(t *te
 		t.Fatalf("evidence refs = %v", verdict.Resolve.EvidenceRefs)
 	}
 }
+
+// Problem 7: two routes that froze one screenshot are named in the Freeze
+// result the engineer reads.
+func TestRecordFreezeVisualWarnsWhenRoutesShareOneScreenshot(t *testing.T) {
+	runtime, _ := testRuntime(t)
+	root, visual := stagedVisualRoot(t, assetPNG(t))
+	dup := visual.Captures[0]
+	dup.Route = "/read"
+	visual.Captures = append(visual.Captures, dup)
+	out := map[string]any{}
+	recordFreezeVisual(runtime.imageStore(), root, visual, out)
+	warnings, _ := out["visual_warnings"].([]string)
+	if len(warnings) != 1 || !strings.Contains(warnings[0], "/ and /read") {
+		t.Fatalf("visual_warnings = %v", out["visual_warnings"])
+	}
+	root, visual = stagedVisualRoot(t, assetPNG(t))
+	out = map[string]any{}
+	recordFreezeVisual(runtime.imageStore(), root, visual, out)
+	if _, present := out["visual_warnings"]; present {
+		t.Fatalf("one route warns: %v", out["visual_warnings"])
+	}
+}

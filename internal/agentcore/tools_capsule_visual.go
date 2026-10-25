@@ -58,7 +58,9 @@ func recordFreezeVisual(images visualAssetStore, stagedRoot string, visual *caps
 		observation.Receipt = visual.CaptureReceipt
 		var rows []map[string]any
 		var failures []string
+		var shots []visualcapture.RouteShot
 		for _, capture := range visual.Captures {
+			shots = append(shots, visualcapture.RouteShot{Route: capture.Route, Artifact: capture.Artifact})
 			resolvable := false
 			if err := storeStagedCapture(images, stagedRoot, capture); err != nil {
 				failures = append(failures, fmt.Sprintf("%s: %v", capture.Artifact, err))
@@ -75,6 +77,9 @@ func recordFreezeVisual(images visualAssetStore, stagedRoot string, visual *caps
 		out["visual_capture_receipt"] = visual.CaptureReceipt
 		if len(failures) > 0 {
 			out["visual_store_errors"] = failures
+		}
+		if warnings := visualcapture.SharedShotWarnings(shots); len(warnings) > 0 {
+			out["visual_warnings"] = warnings
 		}
 	}
 	out[freezeVisualKey] = observation

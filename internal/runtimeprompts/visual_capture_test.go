@@ -33,6 +33,8 @@ func TestEngineeringOverlayTeachesVisualCaptureOnlyWhenGranted(t *testing.T) {
 		"ecosystem network",
 		// V16 as the app shell reads it: a signed-out session, not a 503.
 		"/auth/session answers as a signed-out session", "signed-out desktop",
+		// Problem 7: an extensionless route is index.html; the warning.
+		"by its file", "visual_warnings",
 	} {
 		if !strings.Contains(granted, want) {
 			t.Errorf("granted overlay lacks %q", want)
