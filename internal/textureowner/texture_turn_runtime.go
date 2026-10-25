@@ -206,10 +206,16 @@ func (h *Handler) applyTextureLifecycleTurn(ctx context.Context, rec *types.RunR
 	}
 	// The Texture root's turns leave its standing item open (PD3 S1): the
 	// item keeps the master's trajectory live, so a root that calls Done
-	// does not settle it.
+	// does not settle it. A marker read error fails open (no clamp): it
+	// self-heals (a settled master is replaced at the next digest), and
+	// clamping on an error would hold every ordinary document's work open.
 	_, isTextureRoot := h.textureRootFor(ctx, rec.OwnerID, doc.ComputerID, doc.DocID)
 	if isTextureRoot {
 		callerWorkDisposition = types.WorkItemOpen
+		// The master is bounded, so a root run's input stays bounded.
+		if outcome == types.TextureTurnRevision && len(revision.Content) > textureRootMaxRevisionBytes {
+			return types.LifecycleResult{}, fmt.Errorf("the master document is bounded at 48 KiB and this revision is %d KiB; nothing was committed: keep each document's section to its status and its refs line", (len(revision.Content)+1023)/1024)
+		}
 	}
 	req := types.ApplyTextureTurnRequest{
 		OwnerID: rec.OwnerID, ComputerID: doc.ComputerID,
@@ -233,7 +239,7 @@ func (h *Handler) applyTextureLifecycleTurn(ctx context.Context, rec *types.RunR
 	// turns never do.
 	if err == nil && !result.Replay && !isTextureRoot &&
 		(result.Revision != nil || len(in.InboxRecords) > 0 || len(in.UpdateDispositions) > 0 || callerWorkDisposition != types.WorkItemOpen) {
-		h.NoteTextureRootChange(ctx, rec.OwnerID, doc.ComputerID, doc.DocID)
+		h.NoteTextureRootChange(context.WithoutCancel(ctx), rec.OwnerID, doc.ComputerID, doc.DocID)
 	}
 	return result, err
 }

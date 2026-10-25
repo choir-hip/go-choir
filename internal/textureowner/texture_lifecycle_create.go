@@ -72,6 +72,11 @@ func (h *Handler) HandleTextureLifecycleCreate(w http.ResponseWriter, r *http.Re
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "client_request_id, title, and initial_content are required"})
 		return
 	}
+	if strings.HasPrefix(input.ClientRequestID, textureRootClientRequestPrefix) {
+		// Reserved: the master documents' ids follow from these request ids.
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "client_request_id prefix " + textureRootClientRequestPrefix + " is reserved"})
+		return
+	}
 	if h.Core == nil || strings.TrimSpace(h.Core.TextureComputerID()) == "" {
 		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "computer identity unavailable"})
 		return

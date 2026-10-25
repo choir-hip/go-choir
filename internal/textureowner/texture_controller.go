@@ -510,9 +510,8 @@ func (rt *Handler) reconcileAgentWakeLocked(ctx context.Context, doc types.Docum
 }
 
 // reconcileAgentWakeLockedFor is the wake reconcile; root is set only for a
-// Texture root digest on the master document (PD3 S1), which starts a new
-// run naming the digest's documents instead of reactivating a parked one
-// (a parked run would replay its memory and never see them).
+// Texture root digest on the master document (PD3 S1), whose run names the
+// digest's documents. No wake on the master reactivates a parked run.
 func (rt *Handler) reconcileAgentWakeLockedFor(ctx context.Context, doc types.Document, textureAgentID string, root *textureRootWake) (*types.RunRecord, error) {
 	ownerID := strings.TrimSpace(doc.OwnerID)
 	docID := strings.TrimSpace(doc.DocID)
@@ -681,8 +680,17 @@ func (rt *Handler) reconcileAgentWakeLockedFor(ctx context.Context, doc types.Do
 		logTextureWakeNoRun(ownerID, doc.ComputerID, textureAgentID, "activation breaker tripped for update-driven pressure")
 		return nil, nil
 	}
-	// A root digest starts a fresh root run: it never reactivates a parked one.
-	if root == nil {
+	// The master's desk never reactivates a parked root run (PD3 S1, review
+	// 247): a parked run would replay its stale ledger, so a digest and every
+	// other wake on the master (owner input, open-work pressure, a record)
+	// start a fresh run, which reads the ledger (a full refresh unless a
+	// digest names documents).
+	reactivate := root == nil
+	if reactivate {
+		_, isTextureRoot := rt.textureRootFor(ctx, ownerID, doc.ComputerID, docID)
+		reactivate = !isTextureRoot
+	}
+	if reactivate {
 		rec, reactivated, err := rt.reactivatePassivatedTextureRun(ctx, doc, textureAgentID, scheduledSeq, ownerHeadPending || initialWorkWake || recordsPending, recordsPending)
 		if err != nil {
 			return nil, err

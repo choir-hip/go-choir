@@ -209,7 +209,7 @@ func (h *Handler) handleLifecycleOwnerRevision(w http.ResponseWriter, r *http.Re
 		h.recordTextureAudit(r.Context(), "revision_committed", ownerID, doc.ComputerID, doc.TrajectoryID, doc.DocID, result.Revision.RevisionID, command.CommandID, command.CommandDigest, result.Trajectory.LifecycleVersion)
 		h.emitTextureDocumentRevisionEvent(r.Context(), ownerID, *result.Revision)
 		h.dispatchTextureRevisionWake(ownerID, doc.ComputerID, doc.TrajectoryID, *result.Revision, requestID, result.Events, targetProfile)
-		h.NoteTextureRootChange(r.Context(), ownerID, doc.ComputerID, doc.DocID)
+		h.NoteTextureRootChange(context.WithoutCancel(r.Context()), ownerID, doc.ComputerID, doc.DocID)
 	}
 	writeAPIJSON(w, http.StatusAccepted, textureOwnerRevisionResponse{
 		Schema:     textureOwnerRevisionSchemaV1,
