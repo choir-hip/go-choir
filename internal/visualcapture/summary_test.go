@@ -30,3 +30,37 @@ func TestSummaryNamesTheManifestDigest(t *testing.T) {
 		t.Fatal("the summary must be one line")
 	}
 }
+
+// Problem 7 (docs/evidence/selfdev-trace-reviews-2026-10-25.md): the server
+// answers an extensionless route with index.html, so a route that is not a
+// file captures the root page. Two routes with one artifact are named in the
+// summary the engineer reads, and nothing is said when every route differs.
+func TestSummaryWarnsWhenRoutesShareOneScreenshot(t *testing.T) {
+	same := ArtifactRef(strings.Repeat("f", 64))
+	m := Manifest{Subject: Subject{FrontendSHA256: strings.Repeat("b", 64)}, Captures: []Capture{
+		{Route: "/", Artifact: same, Bytes: 12},
+		{Route: "/read", Artifact: same, Bytes: 12},
+		{Route: "/x.html", Artifact: ArtifactRef(strings.Repeat("e", 64)), Bytes: 12},
+		{Route: "/pdf", Artifact: same, Bytes: 12},
+	}}
+	out := string(Summary(m, []byte("{}\n")))
+	var back struct {
+		Warnings []string `json:"warnings"`
+	}
+	if err := json.Unmarshal([]byte(out), &back); err != nil || len(back.Warnings) != 1 {
+		t.Fatalf("summary warnings = %v (%v): %s", back.Warnings, err, out)
+	}
+	w := back.Warnings[0]
+	for _, want := range []string{"/, /read and /pdf", "same screenshot", "index.html", ".html"} {
+		if !strings.Contains(w, want) {
+			t.Fatalf("warning %q lacks %q", w, want)
+		}
+	}
+	if strings.Contains(w, "/x.html") || strings.Contains(out, "\n") {
+		t.Fatalf("warning names a distinct route or the summary is not one line: %s", out)
+	}
+	m.Captures = m.Captures[2:3]
+	if out := string(Summary(m, []byte("{}\n"))); strings.Contains(out, "warnings") {
+		t.Fatalf("a capture with distinct routes warns: %s", out)
+	}
+}

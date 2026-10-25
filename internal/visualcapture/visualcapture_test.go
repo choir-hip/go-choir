@@ -346,11 +346,11 @@ func TestServerServesTheTreeWithAnSPAFallbackAndASignedOutBackend(t *testing.T) 
 		code int
 		body string
 	}{
-		"/":                    {200, "index"},
-		"/desk/files":          {200, "index"},
-		"/assets/app.js":       {200, "app"},
-		"/assets/missing.js":   {404, ""},
-		"/api/runtime/health":  {503, "no backend"},
+		"/":                   {200, "index"},
+		"/desk/files":         {200, "index"},
+		"/assets/app.js":      {200, "app"},
+		"/assets/missing.js":  {404, ""},
+		"/api/runtime/health": {503, "no backend"},
 		// A signed-out session, as the auth service answers one with no
 		// cookie: the app shell leaves Loading for the signed-out desktop.
 		"/auth/session":        {200, `{"authenticated":false}`},

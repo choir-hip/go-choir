@@ -221,7 +221,9 @@ func inspectMountedVisualEvidence(root string, evidence *mountedVisualEvidence, 
 		return nil, fmt.Errorf("choir: inspect_bundle: visual evidence was captured from a different frontend than the frozen runtime files")
 	}
 	captures := make([]map[string]any, 0, len(evidence.Captures))
+	shots := make([]visualcapture.RouteShot, 0, len(evidence.Captures))
 	for _, capture := range evidence.Captures {
+		shots = append(shots, visualcapture.RouteShot{Route: capture.Route, Artifact: capture.Artifact})
 		digest, ok := strings.CutPrefix(capture.Artifact, "artifact:sha256:")
 		if !ok || !computerevent.IsSHA256(digest) {
 			return nil, fmt.Errorf("choir: inspect_bundle: visual capture %q is not a content-addressed artifact", capture.Artifact)
@@ -239,8 +241,12 @@ func inspectMountedVisualEvidence(root string, evidence *mountedVisualEvidence, 
 			"bytes": capture.Bytes, "width": capture.Width, "height": capture.Height, "blank": capture.Blank,
 		})
 	}
-	return map[string]any{
+	out := map[string]any{
 		"manifest_sha256": evidence.ManifestSHA256, "frontend_sha256": evidence.FrontendSHA256,
 		"capture_receipt": evidence.CaptureReceipt, "captures": captures,
-	}, nil
+	}
+	if warnings := visualcapture.SharedShotWarnings(shots); len(warnings) > 0 {
+		out["warnings"] = warnings
+	}
+	return out, nil
 }

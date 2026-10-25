@@ -91,6 +91,40 @@ func TestInBundleInspectionReportsAndRehashesTheCaptures(t *testing.T) {
 	}
 }
 
+// Problem 7: the verifier's inspection names routes that share one
+// screenshot, since the capture server answers an extensionless route with
+// index.html.
+func TestInBundleInspectionWarnsWhenRoutesShareOneScreenshot(t *testing.T) {
+	root, bundle, _ := mountedVisualBundle(t)
+	if out, err := yaegikernel.InspectMountedBundleAt(root); err != nil {
+		t.Fatal(err)
+	} else if visual, _ := out["visual_evidence"].(map[string]any); visual["warnings"] != nil {
+		t.Fatalf("one route warns: %v", visual["warnings"])
+	}
+	dup := bundle.VisualEvidence.Captures[0]
+	dup.Route = "/read"
+	bundle.VisualEvidence.Captures = append(bundle.VisualEvidence.Captures, dup)
+	bundle.ContentDigest, _ = bundle.ComputeContentDigest()
+	draft, _ := json.Marshal(bundle)
+	binding, _ := json.Marshal(map[string]string{"operation_id": "op-1", "bundle_digest": bundle.ContentDigest})
+	for name, data := range map[string][]byte{"bundle.draft.json": draft, "binding.json": binding} {
+		path := filepath.Join(root, name)
+		_ = os.Chmod(path, 0o600)
+		if err := os.WriteFile(path, data, 0o400); err != nil {
+			t.Fatal(err)
+		}
+	}
+	out, err := yaegikernel.InspectMountedBundleAt(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	visual, _ := out["visual_evidence"].(map[string]any)
+	warnings, _ := visual["warnings"].([]string)
+	if len(warnings) != 1 || !strings.Contains(warnings[0], "/choir-drill/x.html and /read") {
+		t.Fatalf("warnings = %v", visual["warnings"])
+	}
+}
+
 func TestInBundleInspectionRefusesCapturesThatDoNotMatchTheirBytes(t *testing.T) {
 	t.Run("a capture changed on disk", func(t *testing.T) {
 		root, _, name := mountedVisualBundle(t)
