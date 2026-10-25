@@ -200,6 +200,16 @@ func (r *rlmCallReduction) settleFreezePrecommits(ctx context.Context, in yaegik
 	var visual types.EngineeringFreezeObservation
 	applyFreezeVisual(&visual, out)
 	rt := r.rt()
+	// Station TE: a fresh Freeze that observed captures asks Texture to
+	// embed them; the operation is the Freeze's own result, never the cell's.
+	if fresh && visual.VisualKnown && len(visual.VisualCaptures) > 0 {
+		operationID, _ := out["operation_id"].(string)
+		selfdevComputerID := ""
+		if r.toolCtx != nil {
+			selfdevComputerID = r.toolCtx.ComputerID
+		}
+		rt.requestCandidateEvidenceEmbeds(ctx, r.scope.OwnerID, r.scope.ComputerID, selfdevComputerID, operationID)
+	}
 	if !fresh || rt == nil || r.toolCtx == nil || r.toolCtx.Executor == nil {
 		return
 	}

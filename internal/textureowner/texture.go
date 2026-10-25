@@ -1140,6 +1140,16 @@ func (h *Handler) handleTextureCreateRevision(w http.ResponseWriter, r *http.Req
 	if hasParentRev {
 		metadata = carryForwardDurableTextureMetadata(metadata, parentRev.Metadata)
 	}
+	// Only Texture's evidence path writes a capsule_evidence embed (station
+	// TE, design E7): the owner may keep or delete one, never add one.
+	var parentBody json.RawMessage
+	if hasParentRev {
+		parentBody = parentRev.BodyDoc
+	}
+	if added, _ := newEvidenceEmbeds(parentBody, req.BodyDoc); len(added) > 0 {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "capsule_evidence embeds are written only by Texture from a frozen candidate's bundle; this revision adds " + strings.Join(added, ", ")})
+		return
+	}
 	if !lifecycleBound {
 		if canonicalPath, err := h.ensureCanonicalTextureProjectionPath(r.Context(), ownerID, doc); err == nil && canonicalPath != "" {
 			metadata = mergeTextureRevisionMetadata(metadata, map[string]any{

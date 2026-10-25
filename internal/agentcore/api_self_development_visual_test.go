@@ -152,6 +152,18 @@ func TestSelfDevelopmentVisualEvidenceListing(t *testing.T) {
 			t.Fatalf("%s: status=%d body=%s, want %d and no captures", operationID, code, raw, want)
 		}
 	}
+	// The Texture evidence embed (station TE) reads the same listing, with
+	// the operation's trajectory, which the route does not answer.
+	listing, err := runtime.CandidateVisualEvidence(ctx, computerID, "op-frozen")
+	if err != nil || listing.TrajectoryID != "trajectory-op-frozen" || len(listing.Captures) != 2 || listing.Captures[1].Resolvable {
+		t.Fatalf("CandidateVisualEvidence = %+v, %v", listing, err)
+	}
+	if _, _, raw := get(http.MethodGet, "op-frozen"); strings.Contains(raw, "trajectory") {
+		t.Fatalf("the route answers the trajectory: %s", raw)
+	}
+	if _, err := runtime.CandidateVisualEvidence(ctx, computerID, "op-elsewhere"); err == nil {
+		t.Fatal("another computer's operation resolved")
+	}
 	if code, _, raw := get(http.MethodPost, "op-frozen"); code != http.StatusMethodNotAllowed {
 		t.Fatalf("POST status=%d body=%s, want 405", code, raw)
 	}

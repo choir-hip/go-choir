@@ -146,6 +146,13 @@ const SettingEngineeringCarryUnfinished = "engineering.carry_unfinished"
 // rollback: the turn is byte-identical to before.
 const SettingTextureOwnerDirections = "texture.owner_directions"
 
+// SettingTextureEvidenceEmbeds makes a fresh Freeze that observed visual
+// captures embed them in the operation's Texture document, written by
+// Texture's own package from the frozen bundle (station TE,
+// docs/design/texture-evidence-embeds-te-2026-10-25.md). Off by default;
+// off writes nothing and is the rollback.
+const SettingTextureEvidenceEmbeds = "texture.evidence_embeds"
+
 // KnownComputerSettings are the settings a computer has, with their
 // defaults. A key outside this list is refused, so a typo never stores a
 // setting nobody reads.
@@ -166,6 +173,7 @@ var KnownComputerSettings = map[string]bool{
 	SettingEngineeringSlotsGraph:        false,
 	SettingEngineeringCarryUnfinished:   false,
 	SettingTextureOwnerDirections:       false,
+	SettingTextureEvidenceEmbeds:        false,
 }
 
 // ComputerSetting is one switch's value on one computer.
