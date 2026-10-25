@@ -63,6 +63,9 @@ type Handler struct {
 	textureRootMu     sync.Mutex
 	textureRootScopes map[string]*textureRootScope
 	textureRootNow    func() time.Time
+	// textureRootListDocuments overrides the document listing the root's
+	// shared context reads (one read per run); nil is the store's.
+	textureRootListDocuments func(ctx context.Context, ownerID, computerID string, limit int) ([]types.Document, error)
 }
 
 func (h *Handler) lockTextureWakeScope(ownerID, computerID, docID string) func() {
