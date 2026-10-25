@@ -150,7 +150,7 @@ func TestStageEvidenceBindsCapturesToTheFrozenFrontendAndTheCaptureJob(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	jobs := []yaegikernel.JobView{captureJob("done", receiptA, "building...\n"+string(visualcapture.Summary(f.manifest, raw, nil))+"\n")}
+	jobs := []yaegikernel.JobView{captureJob("done", receiptA, "building...\n"+string(visualcapture.Summary(f.manifest, raw, nil, 0))+"\n")}
 
 	ev, temporary, err := f.stage(jobs)
 	if err != nil {
@@ -238,18 +238,18 @@ func TestStageEvidenceCarriesTheReceiptJobsAssetFailures(t *testing.T) {
 		t.Fatal(err)
 	}
 	missing := []visualcapture.AssetFailure{{Path: "/pdf-text-BRoX2Cg_.js", Status: 404, Count: 2}}
-	withFailures := string(visualcapture.Summary(f.manifest, raw, missing))
+	withFailures := string(visualcapture.Summary(f.manifest, raw, missing, 0))
 	other := `{"manifest_sha256":"` + strings.Repeat("9", 64) + `","asset_failures":[{"path":"/other.js","status":404,"count":1}]}`
 	for name, tc := range map[string]struct {
 		jobs []yaegikernel.JobView
 		want []visualcapture.AssetFailure
 	}{
 		"the receipt job's failures":             {[]yaegikernel.JobView{captureJob("done", receiptA, "noise\n"+withFailures+"\n")}, missing},
-		"a clean capture":                        {[]yaegikernel.JobView{captureJob("done", receiptA, string(visualcapture.Summary(f.manifest, raw, nil)))}, nil},
+		"a clean capture":                        {[]yaegikernel.JobView{captureJob("done", receiptA, string(visualcapture.Summary(f.manifest, raw, nil, 0)))}, nil},
 		"another manifest's job":                 {[]yaegikernel.JobView{captureJob("done", receiptA, withFailures), captureJob("done", receiptB, other)}, missing},
 		"no receipt job":                         {[]yaegikernel.JobView{captureJob("failed", receiptA, withFailures)}, nil},
 		"a tail that does not parse":             {[]yaegikernel.JobView{captureJob("done", receiptA, `{"manifest_sha256":"`+manifestSHA+`","asset_failures":"x"}`)}, nil},
-		"a newer clean run of the same manifest": {[]yaegikernel.JobView{captureJob("done", receiptA, withFailures), captureJob("done", receiptB, string(visualcapture.Summary(f.manifest, raw, nil)))}, nil},
+		"a newer clean run of the same manifest": {[]yaegikernel.JobView{captureJob("done", receiptA, withFailures), captureJob("done", receiptB, string(visualcapture.Summary(f.manifest, raw, nil, 0)))}, nil},
 	} {
 		t.Run(name, func(t *testing.T) {
 			ev, _, err := f.stage(tc.jobs)

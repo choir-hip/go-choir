@@ -12,7 +12,8 @@ import (
 // so a manifest written or rewritten after the job does not carry one (V17).
 // failures are the run's failed asset answers (Report.AssetFailures): the
 // summary lists them and warns, so Freeze can carry them to the verifier.
-func Summary(m Manifest, manifestRaw []byte, failures []AssetFailure) []byte {
+// dropped counts failed answers the recorder did not keep (Report.AssetDropped).
+func Summary(m Manifest, manifestRaw []byte, failures []AssetFailure, dropped int) []byte {
 	type row struct {
 		Route    string `json:"route"`
 		Artifact string `json:"artifact"`
@@ -26,6 +27,7 @@ func Summary(m Manifest, manifestRaw []byte, failures []AssetFailure) []byte {
 		Browser        string         `json:"browser,omitempty"`
 		Captures       []row          `json:"captures"`
 		AssetFailures  []AssetFailure `json:"asset_failures,omitempty"`
+		AssetDropped   int            `json:"asset_failures_dropped,omitempty"`
 		Warnings       []string       `json:"warnings,omitempty"`
 	}{
 		Manifest:       OutputDir + "/" + ManifestFile,
@@ -42,8 +44,8 @@ func Summary(m Manifest, manifestRaw []byte, failures []AssetFailure) []byte {
 	if len(failures) > MaxAssetFailures {
 		failures = failures[:MaxAssetFailures]
 	}
-	summary.AssetFailures = failures
-	summary.Warnings = append(SharedShotWarnings(shots), AssetFailureWarnings(failures)...)
+	summary.AssetFailures, summary.AssetDropped = failures, dropped
+	summary.Warnings = append(SharedShotWarnings(shots), AssetFailureWarnings(failures, dropped)...)
 	out, _ := json.Marshal(summary)
 	return out
 }

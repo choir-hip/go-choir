@@ -247,7 +247,7 @@ func inspectMountedVisualEvidence(root string, evidence *mountedVisualEvidence, 
 		"manifest_sha256": evidence.ManifestSHA256, "frontend_sha256": evidence.FrontendSHA256,
 		"capture_receipt": evidence.CaptureReceipt, "captures": captures,
 	}
-	if warnings := append(visualcapture.SharedShotWarnings(shots), visualcapture.AssetFailureWarnings(evidence.AssetFailures)...); len(warnings) > 0 {
+	if warnings := append(visualcapture.SharedShotWarnings(shots), visualcapture.AssetFailureWarnings(evidence.AssetFailures, 0)...); len(warnings) > 0 {
 		out["warnings"] = warnings
 	}
 	return out, nil

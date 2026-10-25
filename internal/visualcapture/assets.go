@@ -68,6 +68,7 @@ func isAssetPath(p string) bool {
 type AssetRecorder struct {
 	mu       sync.Mutex
 	failures []AssetFailure
+	dropped  int
 }
 
 // NewAssetRecorder returns an empty recorder.
@@ -105,7 +106,17 @@ func (a *AssetRecorder) record(p string, status int) {
 	}
 	if len(a.failures) < MaxAssetFailures {
 		a.failures = append(a.failures, AssetFailure{Path: p, Status: status, Count: 1})
+		return
 	}
+	a.dropped++
+}
+
+// Dropped counts the failed answers past MaxAssetFailures distinct paths,
+// which were not kept.
+func (a *AssetRecorder) Dropped() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.dropped
 }
 
 // Failures is what the recorder kept, in first-seen order.
@@ -138,8 +149,9 @@ func (s *statusWriter) Write(b []byte) (int, error) {
 }
 
 // AssetFailureWarnings is the advice for failed asset answers: one warning
-// naming each, or none.
-func AssetFailureWarnings(failures []AssetFailure) []string {
+// naming each, or none. dropped is how many more failed answers the
+// recorder did not keep (0 where it is not known, as at Freeze).
+func AssetFailureWarnings(failures []AssetFailure, dropped int) []string {
 	if len(failures) == 0 {
 		return nil
 	}
@@ -152,10 +164,10 @@ func AssetFailureWarnings(failures []AssetFailure) []string {
 		named = append(named, row)
 	}
 	more := ""
-	if len(failures) >= MaxAssetFailures {
-		more = fmt.Sprintf(" (the first %d kept)", MaxAssetFailures)
+	if dropped > 0 {
+		more = fmt.Sprintf(" and %d more not kept", dropped)
 	}
-	return []string{fmt.Sprintf("the capture server could not serve %d asset request(s)%s: %s. A script or module that failed to load never ran, so the screenshot may show a page that did not render; a relative import inlined into an .html page resolves against that page's directory, not /assets/", len(failures), more, strings.Join(named, ", "))}
+	return []string{fmt.Sprintf("the capture server could not serve %d asset path(s)%s: %s. A script or module that failed to load never ran, so the screenshot may show a page that did not render; a relative import inlined into an .html page resolves against that page's directory, not /assets/", len(failures), more, strings.Join(named, ", "))}
 }
 
 // ParseSummaryAssetFailures reads the asset failures from a capture job's

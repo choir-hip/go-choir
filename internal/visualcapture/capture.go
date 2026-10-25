@@ -106,6 +106,8 @@ func Run(ctx context.Context, opts Options) (Manifest, error) {
 type Report struct {
 	Manifest      Manifest
 	AssetFailures []AssetFailure
+	// AssetDropped counts failed answers past the kept paths.
+	AssetDropped int
 }
 
 // RunReport is Run with the run's failed asset answers (fix 3, trace review
@@ -116,7 +118,7 @@ func RunReport(ctx context.Context, opts Options) (Report, error) {
 	m, recorder, err := captureRoutes(ctx, opts)
 	res := Report{Manifest: m}
 	if recorder != nil {
-		res.AssetFailures = recorder.Failures()
+		res.AssetFailures, res.AssetDropped = recorder.Failures(), recorder.Dropped()
 	}
 	return res, err
 }

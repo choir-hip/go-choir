@@ -127,7 +127,7 @@ func TestSummaryWarnsOfFailedAssetsAndStaysInsideTheTail(t *testing.T) {
 		failures = append(failures, AssetFailure{Path: "/" + strings.Repeat("p", maxAssetPathLen-5) + fmt.Sprint(i) + ".js", Status: 404, Count: 3})
 	}
 	failures[0].Path = "/pdf-text-BRoX2Cg_.js"
-	out := Summary(m, raw, failures)
+	out := Summary(m, raw, failures, 0)
 	if strings.Contains(string(out), "\n") || len(out) > 2<<10 {
 		t.Fatalf("summary is %d bytes or not one line", len(out))
 	}
@@ -149,7 +149,7 @@ func TestSummaryWarnsOfFailedAssetsAndStaysInsideTheTail(t *testing.T) {
 	if got := ParseSummaryAssetFailures(string(out), strings.Repeat("9", 64)); got != nil {
 		t.Fatalf("another manifest's summary was read: %v", got)
 	}
-	if out := string(Summary(m, raw, nil)); strings.Contains(out, "asset_failures") || strings.Contains(out, "warnings") {
+	if out := string(Summary(m, raw, nil, 0)); strings.Contains(out, "asset_failures") || strings.Contains(out, "warnings") {
 		t.Fatalf("no failures, yet: %s", out)
 	}
 }
@@ -223,5 +223,28 @@ func TestRunReportsAModuleWhoseImportIsMissing(t *testing.T) {
 	}
 	if res, err := RunReport(context.Background(), fx.opts(t, "/read.html")); err != nil || len(res.AssetFailures) != 0 {
 		t.Fatalf("a resolving import reported %+v (%v)", res.AssetFailures, err)
+	}
+}
+
+// Devin's nit (bunch 238): "(the first N kept)" only when the recorder
+// actually dropped paths, and it says how many.
+func TestAssetWarningSaysWhatWasDropped(t *testing.T) {
+	var failures []AssetFailure
+	for i := 0; i < MaxAssetFailures; i++ {
+		failures = append(failures, AssetFailure{Path: fmt.Sprintf("/c%d.js", i), Status: 404, Count: 1})
+	}
+	if w := AssetFailureWarnings(failures, 0); len(w) != 1 || strings.Contains(w[0], "kept") || strings.Contains(w[0], "more") {
+		t.Fatalf("nothing dropped, yet: %v", w)
+	}
+	if w := AssetFailureWarnings(failures, 3); len(w) != 1 || !strings.Contains(w[0], "3 more") {
+		t.Fatalf("three dropped: %v", w)
+	}
+	rec := NewAssetRecorder()
+	h := rec.Wrap(http.NotFoundHandler())
+	for i := 0; i < MaxAssetFailures+2; i++ {
+		h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, fmt.Sprintf("/d%d.js", i), nil))
+	}
+	if rec.Dropped() != 2 {
+		t.Fatalf("dropped = %d, want 2", rec.Dropped())
 	}
 }
