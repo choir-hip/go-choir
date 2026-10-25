@@ -203,7 +203,9 @@ metamission:
         the default while the existing presets stay selectable; brief
         _runs/apprewrite/desktop/request.txt (restyle only: props, events,
         data attributes, window-manager behaviour and registry ids
-        unchanged; accessibility required). Then, with time, more desktop
+        unchanged; accessibility required). Extra credit (owner,
+        2026-10-25): three more presets, one pure theme each for Frutiger
+        Aero, vectorheart and liquid metal. Then, with time, more desktop
         themes and designs, as creative as they can get, each one its own
         request.
     - id: T1
@@ -381,6 +383,14 @@ boundaries:
     - docs/choir-doctrine.md (I1, I25, I26, I27)
     - CLAUDE.md (mutation classes, review tiers, landing loop, problem documentation first)
   must_preserve:
+    - >-
+      every self-development round gets a trace review (owner, 2026-10-25:
+      "make sure that our agent, which is monitoring the self-development,
+      is looking at the traces"): turn commits, controls, tool-loop steps,
+      model calls with tokens and latency, and the gaps between them, read
+      after each round; findings and proposed improvements are appended to
+      docs/evidence/selfdev-trace-reviews-2026-10-25.md, and a finding that
+      names a defect becomes a problem record before any fix
     - crash restarts close work; only a planned-restart marker resumes it
     - Texture is the sole agent writer of documents; desks reach each other only by semantic act
     - one home and one registered writer per kind of data (I27)
