@@ -187,11 +187,28 @@ metamission:
         shows them with the candidate's identity. Evidence is never
         published. Red (Texture canonical schema and writes), tier 2. Runs
         now in parallel; the Reader and T1a candidates use it once live.
+    - id: PD3
+      path: docs/definitions/choir-pd3-texture-root-desk-2026-10-11.md (drafted 2026-10-11; with PD2, docs/definitions/choir-pd2-desk-sessions-outlive-runs-2026-10-11.md)
+      readiness: drafted
+      status: pending
+      depends_on: [SR5]
+      note: >-
+        Pulled forward (owner, 2026-10-25: "there should be one texture desk
+        per computer, with a root rlm and each texture agent is a sub rlm.
+        maybe we need to pull this forward?"). One Texture root desk per
+        computer receives every Texture wake and routes it to the document's
+        sub-RLM, the sole writer of that document; the root writes a master
+        document of what every document is about, what is open and what
+        needs the owner. PD2's continuity (the desk keyed by agent, not run)
+        starts tonight as the Texture-holds-the-trajectory fix. Before T1a,
+        because each rewritten app becomes an app desk on this pattern (I26).
+        Red (Texture canonical writes, wake routing); re-review the drafted
+        file against today's code before execution.
     - id: T1a
       path: none yet (drafted in the ledger 01:5x)
       readiness: intent
       status: pending
-      depends_on: [SR5]
+      depends_on: [SR5, PD3]
       note: >-
         Self-develop the other four apps on the list, the same loop as the
         Reader (owner, 2026-10-25: "more aggressive with self-development"):
