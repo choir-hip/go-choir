@@ -45,7 +45,7 @@ func TestWakePromptDoesNotCallACarriedForwardStoryTheOwnersRequest(t *testing.T)
 	story := "# Harbor ferries resume\n\nThe ferries resumed on Monday [1][2].\n"
 	parent := types.Revision{RevisionID: "rev-texture-3", AuthorKind: types.AuthorAppAgent, Content: story}
 	carried := types.Revision{RevisionID: "rev-owner-4", AuthorKind: types.AuthorUser, Content: story, ParentRevisionID: parent.RevisionID}
-	got := buildAgentRevisionRequest(carried, &parent, ownerRevisionMetadata(t, "[expansion rx-1] more research"), textureAgentRevisionRequest{}, "")
+	got := buildAgentRevisionRequest(carried, &parent, ownerRevisionMetadata(t, "[expansion rx-1] more research"), textureAgentRevisionRequest{}, "", nil)
 	if strings.Contains(got, seedRequestSentence) {
 		t.Fatalf("a carried-forward story was called the owner's request itself:\n%s", got)
 	}
@@ -56,7 +56,7 @@ func TestWakePromptDoesNotCallACarriedForwardStoryTheOwnersRequest(t *testing.T)
 
 func TestWakePromptStillCallsASeedOwnerRequestTheRequest(t *testing.T) {
 	seed := types.Revision{RevisionID: "rev-owner-1", AuthorKind: types.AuthorUser, Content: "Write about harbor ferries."}
-	got := buildAgentRevisionRequest(seed, nil, ownerRevisionMetadata(t, ""), textureAgentRevisionRequest{}, "")
+	got := buildAgentRevisionRequest(seed, nil, ownerRevisionMetadata(t, ""), textureAgentRevisionRequest{}, "", nil)
 	if !strings.Contains(got, seedRequestSentence) {
 		t.Fatalf("a seed owner request lost its framing:\n%s", got)
 	}
@@ -65,7 +65,7 @@ func TestWakePromptStillCallsASeedOwnerRequestTheRequest(t *testing.T) {
 func TestWakePromptReadsAnEditWithInheritedOriginAsAnEdit(t *testing.T) {
 	parent := types.Revision{RevisionID: "rev-texture-3", AuthorKind: types.AuthorAppAgent, Content: "one"}
 	edit := types.Revision{RevisionID: "rev-owner-4", AuthorKind: types.AuthorUser, Content: "one two", ParentRevisionID: parent.RevisionID}
-	got := buildAgentRevisionRequest(edit, &parent, ownerRevisionMetadata(t, ""), textureAgentRevisionRequest{}, "+ two")
+	got := buildAgentRevisionRequest(edit, &parent, ownerRevisionMetadata(t, ""), textureAgentRevisionRequest{}, "+ two", nil)
 	if strings.Contains(got, seedRequestSentence) || !strings.Contains(got, "The owner edited the document.") {
 		t.Fatalf("an owner edit did not read as an edit:\n%s", got)
 	}
