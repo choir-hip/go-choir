@@ -46,6 +46,13 @@ import (
 // still pending. The rejection reason, the decision event's pinned output
 // payload (api_self_development.go), is passed to the engineer with the patch.
 //
+// A round stopped before it froze (its activation budget, its deadline, a
+// run that ended without Complete, a cancel) mints no candidate; with
+// engineering.carry_unfinished on, its capsule's source change is kept just
+// before the capsule is destroyed and joins the history as an unfinished
+// round (unfinished_patch.go), carried by the same rule and refusals and
+// named to the engineer as unfinished, unverified work.
+//
 // The offer is decided once per assignment and remembered
 // (<updater root>/carried/offers/), so a replayed spawn after a crash reads
 // the same decision. Failing to carry never fails the retry.
@@ -79,6 +86,12 @@ type carriedCandidate struct {
 	OperationID     string
 	OperationState  string
 	OperationReason string
+	// Unfinished marks a round stopped before it froze whose work was kept
+	// from its capsule (unfinished_patch.go); CandidateRef then names the
+	// kept patch, not a candidate tree.
+	Unfinished        bool
+	UnfinishedReason  string
+	UnfinishedOmitted []string
 }
 
 type carriedPatchHistory interface {
@@ -119,6 +132,9 @@ type carriedPatchFacts struct {
 	SourceResult       string   `json:"source_result"`
 	Files              []string `json:"files"`
 	Omitted            []string `json:"omitted,omitempty"`
+	// Unfinished: taken from a capsule stopped before it froze; never
+	// frozen, verified or approved.
+	Unfinished bool `json:"unfinished,omitempty"`
 }
 
 // carriedPatchOffer is the decision for one assignment. Status is "" when
@@ -148,6 +164,9 @@ type carriedPatchOffer struct {
 	SourceOperationID    string `json:"source_operation_id,omitempty"`
 	SourceOperationState string `json:"source_operation_state,omitempty"`
 	SourceReason         string `json:"source_reason,omitempty"`
+	// SourceUnfinished: the source round was stopped before it froze and its
+	// work was kept from its capsule; SourceReason is why it was stopped.
+	SourceUnfinished bool `json:"source_unfinished,omitempty"`
 	// ConflictPaths are the files that do not apply to a moved base, and
 	// CleanPaths the ones that still would, on a refusal for that cause.
 	ConflictPaths []string `json:"conflict_paths,omitempty"`
@@ -157,6 +176,10 @@ type carriedPatchOffer struct {
 	// every read, never trusted from disk.
 	Dir string `json:"-"`
 }
+
+// carriedUnfinishedResult is the source result named for a round stopped
+// before it froze.
+const carriedUnfinishedResult = "stopped before it froze"
 
 // carriedReasonMaxBytes bounds the rejection or failure reason in the offer.
 const carriedReasonMaxBytes = 1500
@@ -241,7 +264,11 @@ func offerCarriedPatch(ctx context.Context, deps carriedPatchDeps, in carriedPat
 	// Only a finished candidate (or a rejected one) is described by its
 	// operation; a round that reported failed is unfinished work whatever
 	// closed its operation.
-	if chosen.OperationState != "" && (chosen.Result == types.EngineeringResultCompleted || chosen.OperationState == selfdev.StateRejected) {
+	switch {
+	case chosen.Unfinished:
+		offer.SourceUnfinished, offer.SourceResult = true, carriedUnfinishedResult
+		offer.SourceReason = boundCarriedReason(chosen.UnfinishedReason)
+	case chosen.OperationState != "" && (chosen.Result == types.EngineeringResultCompleted || chosen.OperationState == selfdev.StateRejected):
 		offer.SourceOperationID, offer.SourceOperationState = chosen.OperationID, chosen.OperationState
 		offer.SourceReason = boundCarriedReason(chosen.OperationReason)
 	}
@@ -252,7 +279,18 @@ func offerCarriedPatch(ctx context.Context, deps carriedPatchDeps, in carriedPat
 		}
 		return offer
 	}
-	patch, err := deps.Deriver.DeriveCarriedPatch(ctx, chosen.BaseRef, chosen.CandidateRef)
+	var patch capsule.CarriedPatch
+	if chosen.Unfinished {
+		// Kept from the stopped capsule, already a patch: read and verified,
+		// never derived from a tree.
+		patch, err = loadUnfinishedPatch(deps.Root, strings.TrimPrefix(chosen.CandidateRef, carriedUnfinishedRefPrefix))
+		if err != nil {
+			return refuse(true, "the earlier round's kept unfinished patch could not be used (%v)", err)
+		}
+		patch.Omitted = chosen.UnfinishedOmitted
+	} else {
+		patch, err = deps.Deriver.DeriveCarriedPatch(ctx, chosen.BaseRef, chosen.CandidateRef)
+	}
 	switch {
 	case errors.Is(err, capsule.ErrCarriedPatchEmpty):
 		return carriedPatchOffer{}
@@ -292,7 +330,7 @@ func offerCarriedPatch(ctx context.Context, deps carriedPatchDeps, in carriedPat
 		Schema: carriedFactsSchema, PatchSHA256: patch.SHA256, Size: len(patch.Patch), BaseRef: chosen.BaseRef,
 		CandidateID: chosen.CandidateID, CandidateRef: chosen.CandidateRef,
 		SourceAssignmentID: chosen.AssignmentID, SourceAttempt: chosen.Attempt, SourceResult: string(chosen.Result),
-		Files: patch.Files, Omitted: patch.Omitted,
+		Files: patch.Files, Omitted: patch.Omitted, Unfinished: chosen.Unfinished,
 	}
 	dir, err := stageCarriedPatch(deps.Root, patch.Patch, facts)
 	if err != nil {
@@ -465,6 +503,9 @@ func carriedPatchNotice(offer carriedPatchOffer) string {
 		} else {
 			b.WriteString("Carried work: an earlier round on this trajectory (assignment " + offer.SourceAssignmentID +
 				") left unfinished source changes, but they are not carried into this capsule: " + offer.Reason + ".")
+			if offer.SourceUnfinished && offer.SourceReason != "" {
+				b.WriteString(" That round was stopped before it froze (the reason: \"" + offer.SourceReason + "\").")
+			}
 		}
 		if len(offer.ConflictPaths) > 0 {
 			b.WriteString(" The files that conflict with this base: " + carriedFileList(offer.ConflictPaths) + ".")
@@ -476,14 +517,27 @@ func carriedPatchNotice(offer carriedPatchOffer) string {
 		return b.String()
 	case carriedOffered:
 		var b strings.Builder
-		if offer.SourceOperationState != "" {
+		switch {
+		case offer.SourceUnfinished:
+			stopped := "no reason was recorded"
+			if offer.SourceReason != "" {
+				stopped = "the reason: \"" + offer.SourceReason + "\""
+			}
+			fmt.Fprintf(&b, "Carried work: assignment %s (attempt %d) was stopped before it froze (%s). The source changes its capsule held when it stopped were kept as an unfinished patch, sha256 %s, %d bytes, changing: %s.",
+				offer.SourceAssignmentID, offer.SourceAttempt, stopped, offer.PatchSHA256, offer.Size, carriedFileList(offer.Files))
+			b.WriteString(" This is unfinished, unverified work: it was never frozen, built, tested or approved, and a file may stop mid-change. " +
+				"It is mounted read only at /selfdev/carried/source.patch (its binding is /selfdev/carried/carried.json). " +
+				"This capsule's /workspace/platform is still the clean base tree: nothing has been applied. " +
+				"You may ignore it and do the work from the objective, or apply it from /workspace/platform with `git apply /selfdev/carried/source.patch`, " +
+				"read what it left half done, and continue from there instead of starting over; re-run the build, tests and checks in this capsule after your last write, as for any change; Freeze judges only this capsule's own diff.")
+		case offer.SourceOperationState != "":
 			fmt.Fprintf(&b, "Carried work: %s Its source patch, sha256 %s, %d bytes, changing: %s, is the starting point for this assignment.",
 				carriedOutcome(offer), offer.PatchSHA256, offer.Size, carriedFileList(offer.Files))
 			b.WriteString(" It is mounted read only at /selfdev/carried/source.patch (its binding is /selfdev/carried/carried.json); " +
 				"this capsule's /workspace/platform is the clean base tree until you apply it. " +
 				"Apply it from /workspace/platform with `git apply /selfdev/carried/source.patch`, then change only what this assignment's objective (the new directive) and the reason above ask for; do not rebuild the rest. " +
 				"The patch is not trusted and carries no test results: re-run the build, tests and checks in this capsule after your last write; Freeze judges only this capsule's own diff.")
-		} else {
+		default:
 			fmt.Fprintf(&b, "Carried work: assignment %s (attempt %d, reported %s) left an unfinished source patch, sha256 %s, %d bytes, changing: %s.",
 				offer.SourceAssignmentID, offer.SourceAttempt, offer.SourceResult, offer.PatchSHA256, offer.Size, carriedFileList(offer.Files))
 			b.WriteString(" It is mounted read only at /selfdev/carried/source.patch (its binding is /selfdev/carried/carried.json). " +
@@ -568,6 +622,12 @@ func (h storeCarriedHistory) CarriedCandidates(ctx context.Context, ownerID, com
 			Attempt: candidate.Attempt, BaseRef: assignment.Binding.SourceArtifactRef, Kind: assignment.Binding.Kind,
 			Result: report.Result, CreatedAt: candidate.CreatedAt,
 		})
+	}
+	if h.rt.computerSettingOn(ctx, ownerID, computerID, store.SettingEngineeringCarryUnfinished) {
+		out = mergeUnfinishedRounds(out, readUnfinishedRounds(h.rt.selfdevUpdaterRoot, trajectoryID), trajectoryID,
+			func(assignmentID string, attempt uint64) (types.EngineeringAssignment, error) {
+				return h.rt.store.GetEngineeringAssignment(ctx, ownerID, computerID, assignmentID, attempt)
+			})
 	}
 	var operations carriedOperationReader
 	if h.rt.selfdevOperations != nil {

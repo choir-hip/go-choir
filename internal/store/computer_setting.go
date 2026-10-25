@@ -125,6 +125,17 @@ const SettingEvidenceGraph = "evidence.graph"
 // evidence.graph.
 const SettingEngineeringSlotsGraph = "engineering.slots_graph"
 
+// SettingEngineeringCarryUnfinished keeps the source changes of an
+// implementation round stopped before it froze (its activation budget, its
+// deadline, a run that failed without Complete, a cancel) as an unfinished,
+// unverified patch taken from the capsule just before it is destroyed, and
+// offers it, labeled so, to the next round on the same trajectory
+// (docs/evidence/selfdev-trace-reviews-2026-10-25.md, problem 1). The patch
+// is never applied by the platform and is never a candidate. Read live at
+// each capsule revoke and each offer. Off by default; off takes no snapshot
+// and offers none of the kept ones, and is the rollback.
+const SettingEngineeringCarryUnfinished = "engineering.carry_unfinished"
+
 // KnownComputerSettings are the settings a computer has, with their
 // defaults. A key outside this list is refused, so a typo never stores a
 // setting nobody reads.
@@ -143,6 +154,7 @@ var KnownComputerSettings = map[string]bool{
 	SettingSearchCaps:                   false,
 	SettingEvidenceGraph:                false,
 	SettingEngineeringSlotsGraph:        false,
+	SettingEngineeringCarryUnfinished:   false,
 }
 
 // ComputerSetting is one switch's value on one computer.

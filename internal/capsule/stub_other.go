@@ -72,6 +72,13 @@ func (e *Executor) PersistGrantedCandidate(context.Context, string, string) (Sou
 func (e *Executor) DeriveCarriedPatch(context.Context, string, string) (CarriedPatch, error) {
 	return CarriedPatch{}, stubErr("derive carried patch")
 }
+
+// ErrCapsuleNotSnapshottable mirrors the linux implementation.
+var ErrCapsuleNotSnapshottable = errors.New("capsule cannot be snapshotted")
+
+func (e *Executor) SnapshotUnfinishedSourcePatch(context.Context, string) (CarriedPatch, error) {
+	return CarriedPatch{}, stubErr("snapshot unfinished source patch")
+}
 func (e *Executor) CheckCarriedPatchApplies(context.Context, CarriedPatch, string) error {
 	return stubErr("check carried patch")
 }
