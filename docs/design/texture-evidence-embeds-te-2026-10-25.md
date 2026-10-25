@@ -160,10 +160,10 @@ none. The write adds only embed blocks, no prose, so the desk still owns
 every sentence of the document.
 
 The owner revision route, the other entry for a raw `body_doc` (the owner's
-editor and a coding agent's `write:texture` key), may keep or delete an
-existing embed but may not add a `capsule_evidence` embed that the parent
-revision does not hold: the membership rule would otherwise have a second
-door.
+editor and a coding agent's `write:texture` key), may keep, delete or move an
+existing embed but may not add or alter an embed of any kind (its exact
+block must be in the parent revision): the membership rule would otherwise
+have a second door. Owner-uploaded images are a later T1 authority.
 
 The candidate identity is **not stored** in the revision: `bundle_digest`
 (the draft digest until Verify finalizes it), `frontend_sha256`,
@@ -179,9 +179,9 @@ was: digest, operation, computer, route, viewport and blank.
 | E2 | **Store write failed at Freeze** (V22). | Same as E1: `resolvable` is not stored, it is re-checked live. | embedder |
 | E3 | **Digest mismatch** (bytes swapped or tampered). | The asset route re-hashes on every read and answers 500; the renderer's error state applies; `choir self-dev visual --out` hashes every body. | existing route test |
 | E4 | **Oversized.** | Viewport bounded 1..16384 per side; caption and alt bounded; at most `visualcapture.MaxRoutes` (6) captures per evidence write, more is refused; bytes bounded by the store (20 MiB). | schema, embedder |
-| E5 | **A revision referencing a digest from another computer.** | The writer only takes digests from this computer's operation; the embed records `computer_id`; the asset route serves only this computer's store, so a copied document shows the unresolvable state, never another image (a digest names bytes, not a place). | embedder |
+| E5 | **A revision referencing a digest from another computer.** | The writer only takes digests from this computer's operation, and refuses a listing whose `computer_id` is not the requested computer's; the embed records `computer_id`; the asset route serves only this computer's store, so a copied document shows the unresolvable state, never another image (a digest names bytes, not a place). | embedder |
 | E6 | **Publication leak.** | Refused, not stripped, at three points: the proxy's publish route (409 with the reason), corpusd's `PublishTexture` (the authority), and story auto-publish (held with the reason). An older corpusd refuses through its validator. | platform, story |
-| E7 | **A forged embed** (a desk or a key names a digest as evidence). | The Write grammar has no embed token; the owner route refuses a new `capsule_evidence` embed; only the evidence path writes one, from the bound bundle. | texturewrite, owner route |
+| E7 | **A forged embed** (a desk or a key names a digest as evidence). | The Write grammar has no embed token; the owner route refuses any embed, of any kind, whose exact block the parent does not hold (it may keep, delete or move one, never add or alter one); only the evidence path writes one, from the bound bundle. Owner-uploaded images are a later T1 authority, not this station's. A document may not hold two embeds with one id. | texturewrite, owner route, validator |
 | E8 | **A desk Write removes or alters an embed.** | Refused with the block named; the line to copy is in the frame. | texturewrite |
 | E9 | **The Texture desk commits between read and write.** | Head-pinned commit; the embedder retries up to three times; the desk's own Write is refused once ("the document changed since your frame") and re-frames. | embedder |
 | E10 | **A replayed or repeated trigger.** | A replayed freeze asks nothing; a repeated ask finds the operation's embeds at head and writes nothing. | embedder, trigger |
@@ -301,6 +301,9 @@ anyway, so the first sweep has something to honor:
   pins.
 - R3. A cached old frontend drops embeds on an owner save (E14).
 - R4. Binary-revert hazard (section 1, Compatibility).
+- Runbook for R3 and R4 (accepted operationally, review bunch 231): the
+  switch is enabled only on b@c after its deploy, and the rollback is the
+  switch.
 - R5. The iOS app (not in this repository) does not know the block yet;
   until it does, the block's plain-card fallback is a requirement on it,
   not something built here.
@@ -322,8 +325,8 @@ anyway, so the first sweep has something to honor:
 - `internal/store`: `texture.evidence_embeds` in the settings registry,
   default off.
 - `internal/textureowner/texture_evidence_embed.go`: the write
-  (`EmbedCandidateEvidence`); the owner route's refusal of a new
-  `capsule_evidence` embed. autoputer binds it.
+  (`EmbedCandidateEvidence`); the owner route's refusal of an added
+  or altered embed of any kind. autoputer binds it.
 - `internal/platform` and `internal/proxy`: the publish refusal
   (`PrivateEmbedRefusal`), 409 at the proxy.
 - `cmd/choir`: `texture read` adds `embeds`.
@@ -360,3 +363,23 @@ loading the image behind the owner's session; the identity line against a
 live listing; the editor component itself (only its modules: H4 blocks the
 editor-doc spec, and the integration was checked with a one-off esbuild
 harness outside the repo); anything on staging.
+
+### Review bunch 231 fixes (tier 2: Devin PASS, DeepSeek CONDITIONAL ACCEPT)
+
+- The owner route refuses any embed whose exact block the parent does not
+  hold, whatever its kind (an `image` add or a caption change included);
+  it may keep, delete or move one. Owner-uploaded images are a later T1
+  authority.
+- Texture's caption and alt interpolate the route and operation with
+  `[]{}()*` and control characters replaced by `-`; `target.route` keeps the
+  route as captured. A bracketed route (`/items[12]/{{source:x}}`) is
+  embedded.
+- `ErrLifecycleInvalidTransition` is retried with the other two races; each
+  attempt re-reads the document and the lifecycle.
+- The story auto-publish hold is tested with an evidence revision: held,
+  no publisher call.
+- The writer refuses a listing whose `computer_id` is not the requested
+  computer's. `choir texture read` single-quotes the ids in its fetch line.
+  The validator refuses two embeds with one id; embed ids are now
+  `embed-` plus 16 hex characters (they were `embed-sha256:` plus 7).
+- `newEvidenceEmbeds` became `newEmbeds` and returns only the ids.
