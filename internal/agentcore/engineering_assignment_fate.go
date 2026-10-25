@@ -117,6 +117,21 @@ func (rt *Runtime) assignedEngineeringCapsuleUsable(ctx context.Context, assignm
 }
 
 func (rt *Runtime) revokeAssignedCapsule(ctx context.Context, assignment types.EngineeringAssignment, reason string) (types.EngineeringAssignment, error) {
+	return rt.revokeAssignedCapsuleKeeping(ctx, assignment, reason, false)
+}
+
+// revokeStoppedAssignedCapsule is revokeAssignedCapsule for a round stopped
+// before it reported (its activation budget, its deadline, a run that ended
+// without Complete, a cancel): with engineering.carry_unfinished on, the
+// capsule's source change is kept as an unfinished patch for the next round
+// on the trajectory, after the capability is revoked and before the capsule
+// is destroyed (unfinished_patch.go). The report paths call
+// revokeAssignedCapsule: a reported round's candidate is what the carry reads.
+func (rt *Runtime) revokeStoppedAssignedCapsule(ctx context.Context, assignment types.EngineeringAssignment, reason string) (types.EngineeringAssignment, error) {
+	return rt.revokeAssignedCapsuleKeeping(ctx, assignment, reason, true)
+}
+
+func (rt *Runtime) revokeAssignedCapsuleKeeping(ctx context.Context, assignment types.EngineeringAssignment, reason string, keepUnfinished bool) (types.EngineeringAssignment, error) {
 	exec := rt.assignedCapsule()
 	if exec == nil {
 		return assignment, fmt.Errorf("assigned capsule executor unavailable")
@@ -142,6 +157,10 @@ func (rt *Runtime) revokeAssignedCapsule(ctx context.Context, assignment types.E
 		if err := traceErr(rt, assignment.BoundRunID, "revoke.capability", func() error { return exec.RevokeCapability(assignment.BoundRunID, handle) }); err != nil {
 			return assignment, fmt.Errorf("revoke assignment capability: %w", err)
 		}
+	}
+	if keepUnfinished {
+		// The last moment the tree exists. Never fails the revoke.
+		rt.keepUnfinishedRoundBeforeDestroy(ctx, exec, assignment, reason)
 	}
 	if exec.HasCapsule(assignment.Binding.CapsuleID) {
 		if err := traceErr(rt, assignment.BoundRunID, "revoke.destroy_capsule", func() error { return exec.ForceDestroy(ctx, assignment.Binding.CapsuleID) }); err != nil {
@@ -205,7 +224,7 @@ func (rt *Runtime) cancelAssignedEngineering(ctx context.Context, parent types.R
 		return replayed, nil
 	}
 	if assignment.BoundRunID != "" {
-		assignment, err = rt.revokeAssignedCapsule(ctx, assignment, reason)
+		assignment, err = rt.revokeStoppedAssignedCapsule(ctx, assignment, reason)
 		if err != nil {
 			return types.EngineeringAssignmentCommandResult{}, err
 		}
@@ -372,11 +391,11 @@ func (rt *Runtime) cancelBoundEngineeringRun(ctx context.Context, rec types.RunR
 	}
 	if assignment.Disposition.Terminal() {
 		if assignment.CapsuleDisposition != types.EngineeringCapsuleRevoked {
-			_, err = rt.revokeAssignedCapsule(ctx, assignment, reason)
+			_, err = rt.revokeStoppedAssignedCapsule(ctx, assignment, reason)
 		}
 		return true, err
 	}
-	assignment, err = rt.revokeAssignedCapsule(ctx, assignment, reason)
+	assignment, err = rt.revokeStoppedAssignedCapsule(ctx, assignment, reason)
 	if err != nil {
 		return true, err
 	}
@@ -542,7 +561,7 @@ func (rt *Runtime) reconcileEngineeringAssignmentsForTrajectory(ctx context.Cont
 			// fails the SetEngineeringCapsuleDisposition guard (BoundRunID empty
 			// on a non-open assignment) and aborts the whole trajectory.
 			if assignment.CapsuleDisposition != types.EngineeringCapsuleRevoked && assignment.CapsuleDisposition != types.EngineeringCapsuleUnbound {
-				if _, fateErr := rt.revokeAssignedCapsule(ctx, assignment, "restart terminal assignment fate reconciliation"); fateErr != nil {
+				if _, fateErr := rt.revokeStoppedAssignedCapsule(ctx, assignment, "restart terminal assignment fate reconciliation"); fateErr != nil {
 					return fateErr
 				}
 			}
@@ -677,7 +696,7 @@ func (rt *Runtime) reconcileEngineeringAssignmentsForTrajectory(ctx context.Cont
 		if usable {
 			continue
 		}
-		assignment, err = rt.revokeAssignedCapsule(ctx, assignment, "restart executor binding reconciliation")
+		assignment, err = rt.revokeStoppedAssignedCapsule(ctx, assignment, "restart executor binding reconciliation")
 		if err != nil {
 			return err
 		}

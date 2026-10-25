@@ -5,6 +5,7 @@ package capsule
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -73,4 +74,55 @@ func (e *Executor) CheckCarriedPatchApplies(ctx context.Context, patch CarriedPa
 	return e.withSourceRefTree(ctx, retryBaseRef, func(root string) error {
 		return CheckPatchAppliesToTree(ctx, patch.Patch, patch.Files, root)
 	})
+}
+
+// ErrCapsuleNotSnapshottable is a capsule that is gone, or in a state its
+// tree cannot be read in (destroying, destroyed).
+var ErrCapsuleNotSnapshottable = errors.New("capsule cannot be snapshotted")
+
+// SnapshotUnfinishedSourcePatch derives the source patch of a capsule that is
+// about to be destroyed without a candidate: a round stopped by its
+// activation budget, its deadline or a failed run. The capsule is quiesced
+// first (operations drained, cgroup frozen), as Freeze's extraction does, so
+// no process can change the tree while it is read; it is left frozen, since
+// the caller destroys it next. It writes nothing: the patch is inert data
+// for the caller to store. A Claude delegate capsule is scanned for its token
+// as Freeze scans it.
+func (e *Executor) SnapshotUnfinishedSourcePatch(ctx context.Context, capsuleID string) (CarriedPatch, error) {
+	e.mu.RLock()
+	caps := e.capsules[capsuleID]
+	e.mu.RUnlock()
+	if caps == nil {
+		return CarriedPatch{}, fmt.Errorf("%w: %s is gone", ErrCapsuleNotSnapshottable, capsuleID)
+	}
+	caps.mu.RLock()
+	state, claude, merged := caps.State, caps.Spec.ClaudeDelegate, caps.MergedDir
+	caps.mu.RUnlock()
+	switch state {
+	case StateActive:
+		if err := e.traceStep(caps.ID, "capsule.unfinished.quiesce", func() error { return caps.Quiesce(ctx) }); err != nil {
+			return CarriedPatch{}, fmt.Errorf("freeze capsule before its unfinished snapshot: %w", err)
+		}
+	case StateFrozen:
+	default:
+		return CarriedPatch{}, fmt.Errorf("%w: %s is %s", ErrCapsuleNotSnapshottable, capsuleID, state)
+	}
+	if strings.TrimSpace(merged) == "" {
+		return CarriedPatch{}, fmt.Errorf("%w: %s has no tree", ErrCapsuleNotSnapshottable, capsuleID)
+	}
+	changes, err := caps.Diff(ctx)
+	if err != nil {
+		return CarriedPatch{}, err
+	}
+	if claude {
+		if err := e.refuseClaudeTokenInChanges(ctx, caps, changes); err != nil {
+			return CarriedPatch{}, err
+		}
+	}
+	var out CarriedPatch
+	err = e.traceStep(caps.ID, "capsule.unfinished.patch", func() (patchErr error) {
+		out, patchErr = UnfinishedPatchFromChanges(ctx, merged, changes, CarriedPatchMaxBytes)
+		return patchErr
+	})
+	return out, err
 }

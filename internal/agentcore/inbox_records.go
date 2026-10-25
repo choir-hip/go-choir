@@ -1322,7 +1322,7 @@ func (rt *Runtime) settleAssignmentOfEndedEngineeringRun(ctx context.Context, re
 		if rt.assignedCapsule() == nil {
 			return true
 		}
-		if assignment, err = rt.revokeAssignedCapsule(context.WithoutCancel(ctx), assignment, reason); err != nil {
+		if assignment, err = rt.revokeStoppedAssignedCapsule(context.WithoutCancel(ctx), assignment, reason); err != nil {
 			log.Printf("runtime: run-end settle of %s: revoke: %v", assignmentID, err)
 			return true
 		}

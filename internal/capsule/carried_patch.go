@@ -367,3 +367,128 @@ func splitPatchByFile(patch []byte) []patchSection {
 	}
 	return out
 }
+
+// unfinishedReadMaxBytes bounds what one unfinished snapshot reads from a
+// capsule in all, so a capsule full of large text files cannot fill the
+// guest's memory on its way to the patch bound.
+const unfinishedReadMaxBytes = 64 << 20
+
+// UnfinishedPatchFromChanges renders the source change of a capsule that is
+// being destroyed without a candidate (its round was stopped before it froze)
+// from the capsule's own overlay changes, the way Freeze renders source.patch
+// (collectSourcePatchFiles, renderSourcePatch, verifySourcePatch), and with
+// the carried patch's rules: only workspace/platform, never node_modules, .git
+// or a cache, never a secret-named path, a symbolic link, a binary file or a
+// new empty file; those are named in Omitted. Both trees are read beneath
+// their root without following a link (readSourceBeneath); a change whose
+// path passes through a link refuses the whole snapshot. A file or a patch
+// above maxBytes is refused, never truncated. The capsule must be frozen
+// (its cgroup stopped) so the tree cannot change while it is read.
+func UnfinishedPatchFromChanges(ctx context.Context, mergedDir string, changes []FileChange, maxBytes int) (CarriedPatch, error) {
+	if maxBytes <= 0 {
+		maxBytes = CarriedPatchMaxBytes
+	}
+	omitted := map[string]string{}
+	var kept []FileChange
+	var total int64
+	for _, change := range changes {
+		if err := ctx.Err(); err != nil {
+			return CarriedPatch{}, err
+		}
+		p := "/" + strings.TrimPrefix(change.Path, "/")
+		if !strings.HasPrefix(p, "/"+platformSourcePrefix+"/") || change.Mode.IsDir() {
+			continue
+		}
+		rel := strings.TrimPrefix(p, "/"+platformSourcePrefix+"/")
+		if !sourceRelOK(rel) || !carriedPatchSourcePath(rel) {
+			if excluded := carriedExcludedPrefix(rel); excluded != "" {
+				omitted[excluded] = "excluded directory"
+				continue
+			}
+			return CarriedPatch{}, fmt.Errorf("%w: %q", ErrCarriedPatchOutsideSource, change.Path)
+		}
+		if excluded := carriedExcludedPrefix(rel); excluded != "" {
+			omitted[excluded] = "excluded directory"
+			continue
+		}
+		if secretBearingPath(rel) {
+			omitted[rel] = "secret-bearing path"
+			continue
+		}
+		if change.Mode&os.ModeSymlink != 0 {
+			omitted[rel] = "symlink"
+			continue
+		}
+		if change.Kind != ChangeDeleted {
+			// A bound before any read. The read itself never follows a link
+			// (readSourceBeneath); this Lstat only sizes it.
+			if info, err := os.Lstat(filepath.Join(mergedDir, platformSourcePrefix, filepath.FromSlash(rel))); err == nil && info.Mode().IsRegular() {
+				if info.Size() > int64(maxBytes) {
+					return CarriedPatch{}, fmt.Errorf("%w: %s is %d bytes, above the %d byte bound", ErrCarriedPatchTooLarge, rel, info.Size(), maxBytes)
+				}
+				total += info.Size()
+				if total > unfinishedReadMaxBytes {
+					return CarriedPatch{}, fmt.Errorf("%w: the changed files exceed %d bytes", ErrCarriedPatchTooLarge, unfinishedReadMaxBytes)
+				}
+			}
+		}
+		kept = append(kept, change)
+	}
+	collected, err := collectSourcePatchFiles(mergedDir, kept)
+	if err != nil {
+		return CarriedPatch{}, err
+	}
+	var files []sourcePatchFile
+	var changed []string
+	for _, file := range collected {
+		switch {
+		case (file.OldExists && bytes.IndexByte(file.Old, 0) >= 0) || (file.NewExists && bytes.IndexByte(file.New, 0) >= 0):
+			omitted[file.Rel] = "binary file"
+			continue
+		case !file.OldExists && !file.NewExists:
+			continue
+		case file.OldExists && file.NewExists && bytes.Equal(file.Old, file.New):
+			continue
+		case !file.OldExists && file.NewExists && len(file.New) == 0:
+			omitted[file.Rel] = "new empty file"
+			continue
+		}
+		files = append(files, file)
+		changed = append(changed, file.Rel)
+	}
+	if len(files) == 0 {
+		return CarriedPatch{Omitted: omittedList(omitted)}, ErrCarriedPatchEmpty
+	}
+	sort.Slice(files, func(i, j int) bool { return files[i].Rel < files[j].Rel })
+	sort.Strings(changed)
+	patch, err := renderSourcePatch(files)
+	if err != nil {
+		return CarriedPatch{}, err
+	}
+	if len(patch) == 0 {
+		return CarriedPatch{Omitted: omittedList(omitted)}, ErrCarriedPatchEmpty
+	}
+	if len(patch) > maxBytes {
+		return CarriedPatch{}, fmt.Errorf("%w: %d bytes, above the %d byte bound", ErrCarriedPatchTooLarge, len(patch), maxBytes)
+	}
+	if _, err := CarriedPatchPaths(patch); err != nil {
+		return CarriedPatch{}, err
+	}
+	if err := verifySourcePatch(ctx, patch, files); err != nil {
+		return CarriedPatch{}, err
+	}
+	sum := sha256.Sum256(patch)
+	return CarriedPatch{Patch: patch, SHA256: hex.EncodeToString(sum[:]), Files: changed, Omitted: omittedList(omitted)}, nil
+}
+
+// carriedExcludedPrefix is the leading part of rel up to and including its
+// first excluded name (node_modules, .git, .cache), or "".
+func carriedExcludedPrefix(rel string) string {
+	parts := strings.Split(rel, "/")
+	for i, part := range parts {
+		if carriedPatchExcludedDirs[part] {
+			return strings.Join(parts[:i+1], "/")
+		}
+	}
+	return ""
+}
