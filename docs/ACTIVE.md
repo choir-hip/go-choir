@@ -25,6 +25,14 @@ first pass's carried items. Then the tent poles: app agents, an agentic
 red-teaming loop, distribution. Cadence: switched-off slices share a deploy
 wave; each is turned on for one test computer at a time.
 
+**Now (2026-10-25 09:4x):** SR5 is complete, and so is reader-6, the
+Reader's next self-development round (deployed in 7fbe45512, b@c's stack
+upstreamed). The live station is
+[PD3 Texture root desk](definitions/choir-pd3-texture-root-desk-2026-10-11.md)
+S1 (`readiness: executable`, accepted by re-review 246), pulled forward by
+the owner; then T1a (Files, Slides, Calendar, Podcasts), then T1c (the
+desktop redesign).
+
 ## Superseded (2026-10-24): the launch first pass
 
 [`definitions/choir-launch-first-pass-metamission-2026-10-21.md`](definitions/choir-launch-first-pass-metamission-2026-10-21.md)
