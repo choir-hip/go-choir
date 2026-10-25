@@ -196,14 +196,18 @@ metamission:
         Pulled forward (owner, 2026-10-25: "there should be one texture desk
         per computer, with a root rlm and each texture agent is a sub rlm.
         maybe we need to pull this forward?"). One Texture root desk per
-        computer receives every Texture wake and routes it to the document's
-        sub-RLM, the sole writer of that document; the root writes a master
-        document of what every document is about, what is open and what
-        needs the owner. PD2's continuity (the desk keyed by agent, not run)
-        starts tonight as the Texture-holds-the-trajectory fix. Before T1a,
-        because each rewritten app becomes an app desk on this pattern (I26).
-        Red (Texture canonical writes, wake routing); re-review the drafted
-        file against today's code before execution.
+        computer (texture-root:<owner>, on the persistent-management
+        precedent) writes a master document of what every document asked,
+        what is open, which desk holds it and what waits on the owner; each
+        texture:<doc> stays its document's sole writer and reads the master
+        document at wake. The root is woken by a debounced digest and is
+        never on a document's wake path (FP0's conservative default; routing
+        and in-session sub-RLMs wait for the owner). PD2 landed
+        (fcb424b92) and Texture holds its trajectory (d27844959). Rewritten
+        2026-10-25 against c59e289ca; tier 2 file review before execution.
+        Before T1a, because each rewritten app becomes an app desk on this
+        pattern (I26). Red (Texture canonical writes, a new persistent
+        agent, store refusals).
     - id: T1a
       path: none yet (drafted in the ledger 01:5x)
       readiness: intent
