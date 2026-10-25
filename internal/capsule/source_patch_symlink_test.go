@@ -152,3 +152,21 @@ func mustSymlink(t *testing.T, target, link string) {
 		t.Fatal(err)
 	}
 }
+
+// Failure mode 14 for the collector: "..x" is a file like any other; a "."
+// or ".." component is refused by name, never skipped, so the patch cannot
+// understate the change list.
+func TestSourcePatchHandlesDotShapedNames(t *testing.T) {
+	f := newOverlayFixture(t)
+	f.upperFile(t, "..x", "dots\n")
+	files, err := collectSourcePatchFiles(f.merged, []FileChange{{Path: platformRoot + "..x", Kind: ChangeAdded, Mode: 0o644}})
+	if err != nil || len(files) != 1 || files[0].Rel != "..x" || string(files[0].New) != "dots\n" {
+		t.Fatalf("..x = %+v, %v; want one added file", files, err)
+	}
+	for _, bad := range []string{"a/../b.go", "../escape.go", "a/./b.go", "a//b.go"} {
+		_, err := collectSourcePatchFiles(f.merged, []FileChange{{Path: platformRoot + bad, Kind: ChangeAdded, Mode: 0o644}})
+		if !errors.Is(err, errUnsafeSourcePath) {
+			t.Fatalf("%q = %v, want errUnsafeSourcePath", bad, err)
+		}
+	}
+}

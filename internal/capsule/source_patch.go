@@ -66,8 +66,10 @@ func collectSourcePatchFiles(mergedDir string, changes []FileChange) ([]sourcePa
 	for _, change := range sourceChanges {
 		rel := strings.TrimPrefix(change.Path, "/")
 		rel = strings.TrimPrefix(rel, "workspace/platform/")
-		if rel == "" || strings.HasPrefix(rel, "..") || strings.Contains(rel, "/../") {
-			continue
+		if !sourceRelOK(rel) {
+			// Refused, never skipped: a skipped change would leave the
+			// patch understating the bundle's ordered file effects.
+			return nil, fmt.Errorf("capsule source patch refuses %q: %w", change.Path, errUnsafeSourcePath)
 		}
 		if change.Mode&os.ModeSymlink != 0 {
 			return nil, fmt.Errorf("capsule source patch refuses %s %q: it is a symbolic link: %w", change.Kind, change.Path, errSourcePatchSymlink)
