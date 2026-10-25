@@ -41,51 +41,59 @@ export function wrapLine(line, maxChars) {
   return lines;
 }
 
-// Phrase: { size, font ('F1' roman or 'F2' bold), gap, text }. The layout is a
-// list of pages, each a list of runs { x, y, text, font, size }. A run with an
-// empty text marks a paragraph break: it moves the text position without
-// drawing, which is how a reader of the content stream sees blocks.
+// Phrase: { size, font ('F1' roman or 'F2' bold), gap, text, pageBreak }. The
+// layout is a list of pages, each a list of phrases-as-lines laid out on it. A
+// phrase is one block of the document, so the page writes one text object for
+// it and the extractor reads one block back; gap is the air above the phrase,
+// in points, and pageBreak true starts the phrase on a fresh page.
 export function layoutFromPhrases(phrases) {
   const pages = [];
-  let runs = [];
+  let phrasesOnPage = [];
   let y = PAGE_HEIGHT - MARGIN;
   const newPage = () => {
-    pages.push(runs);
-    runs = [];
+    if (!phrasesOnPage.length) return;
+    pages.push(phrasesOnPage);
+    phrasesOnPage = [];
     y = PAGE_HEIGHT - MARGIN;
   };
-  const addRun = (font, size, x, position, text) => runs.push({ x, y: position, text, font, size });
   for (const phrase of phrases) {
     const size = phrase.size || 11;
-    const font = phrase.font || 'F1';
+    const gap = phrase.gap == null ? 6 : phrase.gap;
     const maxChars = Math.max(20, Math.floor((PAGE_WIDTH - MARGIN * 2) / (size * 0.5)));
-    for (const line of wrapLine(phrase.text, maxChars)) {
-      if (y < MARGIN + LEADING) newPage();
-      addRun(font, size, MARGIN, y, line);
-      y -= LEADING * (size / 11);
-    }
-    y -= phrase.gap == null ? 6 : phrase.gap;
-    if (y < MARGIN + LEADING) {
-      newPage();
-    } else {
-      addRun(font, size, MARGIN, y, '');
-    }
+    const lines = wrapLine(phrase.text, maxChars);
+    const height = lines.length * LEADING * (size / 11);
+    // The air above the phrase belongs to the phrase: a page starts at the
+    // margin, so the first block on it is not pushed down by a gap it earned on
+    // the page before.
+    if (phrase.pageBreak) newPage();
+    if (phrasesOnPage.length) y -= gap;
+    // A block is never split across pages, and a heading is never the last
+    // block of one: the phrase moves whole to the next page when the lines and
+    // the room below them for a following block do not fit.
+    const reserve = phrase.heading ? LEADING * 3 : 0;
+    if (phrasesOnPage.length && y - height - reserve < MARGIN) newPage();
+    phrasesOnPage.push({ x: MARGIN, y, lines, font: phrase.font || 'F1', size });
+    y -= height;
   }
-  pages.push(runs);
+  newPage();
   return pages;
 }
 
-// One page's operator stream. Each vertical move of more than a line is a new
-// text matrix, so the extractor reads the same blocks a person sees.
-export function pageStreamFromRuns(runs) {
-  let previousY = null;
+// One page's operator stream: one BT ... ET per phrase, each line placed by its
+// own Tm inside that text object. A heading or a paragraph is therefore one
+// text object, and the extractor reads it as one block with its wrapped lines
+// joined; a new text object is what starts the next block. Valid PDF, and the
+// shape the placement already had (each line matrixed above its text).
+export function pageStreamFromRuns(phrases) {
   const ops = [];
-  for (const run of runs) {
-    if (previousY === null || Math.abs(previousY - run.y) > 1) {
-      ops.push('1 0 0 1 ' + run.x + ' ' + run.y + ' Tm');
+  for (const phrase of phrases) {
+    ops.push('BT /' + phrase.font + ' ' + phrase.size + ' Tf');
+    for (const line of phrase.lines) {
+      ops.push('1 0 0 1 ' + phrase.x + ' ' + phrase.y + ' Tm');
+      ops.push('(' + escapePdfText(line) + ') Tj');
+      phrase.y -= LEADING * (phrase.size / 11);
     }
-    ops.push('BT /' + run.font + ' ' + run.size + ' Tf (' + escapePdfText(run.text) + ') Tj ET');
-    previousY = run.y;
+    ops.push('ET');
   }
   return ops.join(LF);
 }
@@ -125,23 +133,21 @@ export function buildPdf(phrases, options) {
 }
 
 // The sample as two pages, so the preview proves page turning as well as text
-// selection.
+// selection. Page one is the title, an opening paragraph, a section heading and
+// three paragraphs of prose; page two opens on its own heading because the
+// phrase carries an explicit page break, and its text says it is the second
+// page. Nothing is left to where y happens to run out.
 export function samplePdfPhrases() {
-  // Page one ends with its own heading and paragraph, and page two starts with
-  // a heading and a paragraph of its own. Both break points are explicit
-  // because the layout guard only fires after the line that overflows: a break
-  // left to a filler gap split the last paragraph mid-sentence and put page
-  // two's opening prose at the foot of page one, under indicator 1 of 2.
   return [
-    { size: 22, font: 'F2', text: 'Reader sample', gap: 6 },
-    { size: 11, font: 'F1', text: 'A PDF opened by Choir Reader, before sign-in, with no computer behind you.', gap: 16 },
-    { size: 15, font: 'F2', text: 'One window for long things', gap: 4 },
-    { size: 11, font: 'F1', text: 'Reader is the quiet place where Choir keeps papers, reports, manuals and books. It opens PDFs and EPUBs, and it opens onto the place you left.', gap: 8 },
-    { size: 11, font: 'F1', text: 'A page of prose wants a measure, not a viewport. Reader sets one, and keeps the text size you choose. Search finds a page in a PDF and a paragraph in an EPUB, without leaving the document and without the network.', gap: 8 },
-    { size: 11, font: 'F1', text: 'Signed out, your text settings are kept in this browser, and nowhere else.', gap: 560 },
-    { size: 15, font: 'F2', text: 'Reading position', gap: 4 },
-    { size: 11, font: 'F1', text: 'This is the second page of the sample, so the page controls have somewhere to go. Signed in, Reader remembers where you stopped on your computer, through the media progress route, and follows you to any device. Turn the page with Next page, the arrow keys, or the floating arrow.', gap: 20 },
-    { size: 15, font: 'F2', text: 'The PDF and EPUB windows stay', gap: 8 },
-    { size: 11, font: 'F1', text: 'The PDF and EPUB windows remain in the launcher, unchanged, for anything Reader has not learned to do yet.', gap: 8 },
+    { size: 22, font: 'F2', heading: true, text: 'Reader sample', gap: 0 },
+    { size: 11, font: 'F1', text: 'A PDF opened by Choir Reader, before sign-in, with no computer behind you.', gap: 18 },
+    { size: 15, font: 'F2', heading: true, text: 'One window for long things', gap: 18 },
+    { size: 11, font: 'F1', text: 'Reader is the quiet place where Choir keeps papers, reports, manuals and books. It opens PDFs and EPUBs, and it opens onto the place you left.', gap: 12 },
+    { size: 11, font: 'F1', text: 'A page of prose wants a measure, not a viewport. Reader sets one, and keeps the text size you choose. Search finds a page in a PDF and a paragraph in an EPUB, without leaving the document and without the network.', gap: 12 },
+    { size: 11, font: 'F1', text: 'Signed out, your text settings are kept in this browser, and nowhere else.', gap: 12 },
+    { size: 15, font: 'F2', heading: true, text: 'Reading position', gap: 0, pageBreak: true },
+    { size: 11, font: 'F1', text: 'This is the second page of the sample, so the page controls have somewhere to go. Signed in, Reader remembers where you stopped on your computer, through the media progress route, and follows you to any device. Turn the page with Next page, the arrow keys, or the floating arrow.', gap: 12 },
+    { size: 15, font: 'F2', heading: true, text: 'The PDF and EPUB windows stay', gap: 18 },
+    { size: 11, font: 'F1', text: 'The PDF and EPUB windows remain in the launcher, unchanged, for anything Reader has not learned to do yet.', gap: 12 },
   ];
 }

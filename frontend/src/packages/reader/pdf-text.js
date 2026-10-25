@@ -6,7 +6,7 @@
 // for its own text layer; this module is the fallback the preview page uses
 // when it reads the sample without a worker, and it keeps the pure parts
 // testable on their own.
-import { cleanText } from './reader-text.js';
+import { cleanText, isHeadingTag } from './reader-text.js';
 
 const BACKSLASH = String.fromCharCode(92);
 const LF = String.fromCharCode(10);
@@ -70,11 +70,13 @@ function pdfUnescape(value) {
   return out;
 }
 
-// A page content stream, read token by token. A literal string contributes its
-// text; Td, TD and T* start a new line; Tm and ET start a new block; and a
-// string shown right after another string or a Tm in the same block continues
-// the line. Font names like /Helvetica or /F1 are skipped as tokens, so their
-// letters are never mistaken for operators.
+// A page content stream, read token by token. The text objects are the
+// structure: BT opens a block and a new BT after ET is a new block, so a
+// heading or a paragraph a writer set as one text object comes back as one
+// block. Inside a text object, Tm, Td, TD and T* start a new line of the same
+// block, which is how a paragraph's wrapped lines are placed; the strings
+// shown on a line join it. Font names like /Helvetica or /F1 are skipped as
+// tokens, so their letters are never mistaken for operators.
 export function extractTextFromPdfContent(content) {
   const source = String(content || '');
   const lines = [];
@@ -82,12 +84,23 @@ export function extractTextFromPdfContent(content) {
   let sawText = false;
   let index = 0;
   let inText = false;
+  // Set while a line of text is open. A string shown after a Tm, Td, T*, ET or
+  // BT starts a line; a second string on the same line (a font change mid-line)
+  // continues it.
+  let lineOpen = false;
+  // A line is the text written since the stream last moved. An empty line is
+  // the break between two blocks, and it is what paragraphsFromLines splits on;
+  // a second empty line in a row says nothing more and is not written.
   const pushLine = () => {
     const line = cleanText(current);
     if (line) lines.push(line);
+    else if (current !== '' && lines.length && lines[lines.length - 1] !== '') lines.push('');
     current = '';
+    lineOpen = false;
   };
-  const pushBlock = () => {
+  // A new text object starts a new block: the line above ends, and an empty
+  // line separates the two unless the block is the page's first.
+  const startBlock = () => {
     pushLine();
     if (lines.length && lines[lines.length - 1] !== '') lines.push('');
   };
@@ -125,12 +138,24 @@ export function extractTextFromPdfContent(content) {
         literal += inner;
         cursor += 1;
       }
+      // A show operator writes on the line it is on. A stream that moves the
+      // text position without a Tm or Td between two strings (a BT followed by
+      // two strings) leaves the line open, and the two join; a Tm or a new text
+      // object closes the line first, so each run is its own line.
+      if (!lineOpen) {
+        current = '';
+        lineOpen = true;
+      }
       current += pdfUnescape(literal);
       sawText = true;
       index = cursor + 1;
       continue;
     }
     if (char === 'B' && source[index + 1] === 'T') {
+      // BT after ET opens a new block; a BT that never followed an ET is the
+      // same object repeated, and only closes the line before it.
+      if (inText) pushLine();
+      else startBlock();
       inText = true;
       index += 2;
       continue;
@@ -145,12 +170,18 @@ export function extractTextFromPdfContent(content) {
       index += 2;
       continue;
     }
-    if (char === 'T' && inText && source[index + 1] === 'm') {
-      pushBlock();
+    if (char === 'T' && source[index + 1] === 'm') {
+      // A matrix inside a text object places the next line of the same block;
+      // one outside a text object is a page that moved without a BT, and the
+      // block above ends there.
+      if (inText) pushLine();
+      else startBlock();
       index += 2;
       continue;
     }
     if (char === 'E' && source[index + 1] === 'T') {
+      // The text object ends the line it holds; the block it wrote stays until
+      // another text object opens.
       inText = false;
       pushLine();
       index += 2;
@@ -159,54 +190,70 @@ export function extractTextFromPdfContent(content) {
     index += 1;
   }
   pushLine();
-  return { text: lines.filter((line, i) => line !== '' || i === 0 || lines[i - 1] !== '').join(LF), sawText };
+  // A page ends without a trailing blank line: a break at the foot of a page
+  // has nothing to separate.
+  while (lines.length && lines[lines.length - 1] === '') lines.pop();
+  return { text: lines.join(LF), sawText };
 }
 
-// Paragraphs are separated by a blank line, the layout modelFromPdfPages uses.
-function paragraphsOf(text) {
-  return String(text || '')
-    .split(LF + LF)
-    .map((part) => cleanText(part))
-    .filter(Boolean);
-}
-
-// One page's text, cut into the paragraphs the reader laid out. The extractor
-// keeps the breaks a stream declares (Tm, ET) as lines, so a wrapped line sits
-// between two others and a paragraph's last line does not. The shapes are
-// measured on the lines themselves: a paragraph is a line that wraps onto
-// further lines, or a pair of short lines (a heading and the line under it); a
-// lone short line is a stray line and stays on its own. Shapes are read as
-// pairs because a single-line rule cannot keep a heading with the paragraph it
-// belongs to; a heading is short and so is the line after it, and a wrapped
-// line is long and so is the line after it.
+// A page's lines as the blocks the surface renders. The extractor keeps the
+// stream's own line breaks (Tm, Td, T* inside a text object) and writes a
+// blank line where a new text object began, so the split is the document's,
+// not a guess: a blank line ends a block, and the lines between two of them
+// are one block of prose, set as one paragraph with its wrapped lines joined.
+// A block that reads as a short phrase without a closing mark is a heading.
+// The rule this replaces inferred paragraphs from the lengths of neighbouring
+// lines; that cannot tell a writer's tight text from its paragraphs, and it
+// merged a heading into the paragraph under it.
 export function paragraphsFromLines(text) {
-  const lines = String(text || '')
-    .split(LF)
-    .map((line) => cleanText(line))
-    .filter(Boolean);
-  if (!lines.length) return [];
-  const longest = lines.reduce((most, line) => Math.max(most, line.length), 0);
-  // A line longer than two thirds of the measure has wrapped.
-  const wrapsAt = Math.max(28, Math.floor(longest * 0.66));
-  const wraps = (line) => line.length > wrapsAt;
-  const paragraphs = [];
-  let current = lines[0];
-  for (let index = 1; index < lines.length; index++) {
-    const previous = lines[index - 1];
-    const line = lines[index];
-    const currentWraps = wraps(current);
-    const nextWraps = wraps(line);
-    const newParagraph = currentWraps ? !wraps(previous) : !(nextWraps && !wraps(previous));
-    if (newParagraph) {
-      paragraphs.push(current);
-      current = line;
-    } else {
-      current += ' ' + line;
+  const lines = String(text || '').split(LF).map((row) => cleanText(row));
+  const blocks = [];
+  let buffer = [];
+  const flush = () => {
+    const block = cleanText(buffer.join(' '));
+    buffer = [];
+    if (!block) return;
+    blocks.push({ tag: paragraphLooksLikeHeading(block) ? 'h3' : 'p', text: block });
+  };
+  // Lines in this page's text, and where the empty ones separate them.
+  const packed = lines.join(String.fromCharCode(1));
+  const runs = packed.split(String.fromCharCode(1));
+  let sinceBreak = 0;
+  for (const row of runs) {
+    if (row) {
+      buffer.push(row);
+      sinceBreak += 1;
+    } else if (sinceBreak) {
+      flush();
+      sinceBreak = 0;
     }
   }
-  paragraphs.push(current);
-  return paragraphs.map((part) => cleanText(part)).filter(Boolean);
+  flush();
+  return blocks;
 }
+
+// A heading: at most a dozen words, no closing mark a sentence ends with, and
+// opening with a capital letter, a digit or a quote. Text that reads as one
+// line of a heading is still a heading, and that is the cost of telling a
+// heading from prose without a font.
+export function paragraphLooksLikeHeading(text) {
+  const part = cleanText(text);
+  if (!part || part.length > 90) return false;
+  if (part.split(' ').length > 12) return false;
+  if (/[.!?,;:]$/.test(part)) return false;
+  return /^[A-Z0-9"'()]/.test(part);
+}
+
+// Paragraphs are separated by one or more blank lines: that is how a layout
+// writes the space between them, and how the lines of one paragraph stay
+// together.
+function paragraphsOf(text) {
+  return String(text || '')
+    .split(new RegExp(LF + '{2,}'))
+    .map((line) => cleanText(line))
+    .filter(Boolean);
+}
+
 
 export async function extractPdfText(data) {
   const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
@@ -241,7 +288,11 @@ export async function extractPdfText(data) {
     const result = extractTextFromPdfContent(bytesToLatin1(payload));
     if (!result.sawText) continue;
     pieces.push(result.text);
-    pages.push(paragraphsOf(result.text));
+    const blocks = paragraphsFromLines(result.text);
+    // An extractor that hands a page back as one string would leave the page
+    // with no paragraphs at all; then the blank-line split is the only
+    // structure there is.
+    pages.push(blocks.length ? blocks : paragraphsOf(result.text));
   }
   const text = pieces.join(LF + LF).trim();
   return { text, pages, sawText: Boolean(text), extractable: true };
@@ -254,9 +305,13 @@ export function modelFromPdfPages(pages, options) {
   const list = Array.isArray(pages) ? pages : [];
   const blocks = [];
   list.forEach((page, pageIndex) => {
+    // The page marker is what a PDF's contents list shows; it is emitted only
+    // when the page has text, so an empty trailing page adds no heading.
+    const parts = pagesSplitIntoParagraphs(page);
+    if (!parts.length) return;
     blocks.push({ tag: 'h3', text: 'Page ' + String(pageIndex + 1), page: pageIndex + 1 });
-    pagesSplitIntoParagraphs(page).forEach((paragraph) => {
-      blocks.push({ tag: 'p', text: paragraph, page: pageIndex + 1 });
+    parts.forEach((block) => {
+      blocks.push({ ...block, page: pageIndex + 1 });
     });
   });
   const title = chosen.title || chosen.fileName || 'PDF';
@@ -270,6 +325,12 @@ export function modelFromPdfPages(pages, options) {
   };
 }
 
+// A page is a list of blocks { tag, text } once it has been read for headings,
+// or a list of plain paragraph strings from an extractor that kept no line
+// shape. Both become blocks here, so the model always carries tags.
 function pagesSplitIntoParagraphs(page) {
-  return Array.isArray(page) ? page.map((part) => cleanText(part)).filter(Boolean) : paragraphsOf(page);
+  if (!Array.isArray(page)) return paragraphsOf(page).map((part) => ({ tag: paragraphLooksLikeHeading(part) ? 'h3' : 'p', text: part }));
+  return page
+    .map((part) => (part && typeof part === 'object' ? { tag: isHeadingTag(part.tag) ? 'h3' : 'p', text: cleanText(part.text) } : { tag: paragraphLooksLikeHeading(part) ? 'h3' : 'p', text: cleanText(part) }))
+    .filter((block) => block.text);
 }

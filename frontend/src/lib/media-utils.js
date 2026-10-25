@@ -2,10 +2,12 @@ import { fetchWithRenewal, AuthRequiredError } from './auth.js';
 import { currentDeviceId } from './live-events.js';
 import { PACKAGE_MEDIA_ROUTES } from './apps/registry';
 
-  // PDF and EPUB are opened by the Reader package (src/packages/reader), whose
-  // manifest declares those extensions in `opens`; packages.ts consults
-  // PACKAGE_MEDIA_ROUTES first, so mediaRouteForFileName still answers
-  // { appId: 'pdf' } and { appId: 'epub' } exactly as this table did.
+// PDFs and EPUBs route to the reader package (src/packages/reader): the
+// registry's PACKAGE_MEDIA_ROUTES carries those two extensions from that
+// package's manifest, and mediaRouteForFileName answers { appId: 'reader' }
+// for them, so this table does not list them. The dedicated PDF and EPUB
+// windows stay in the launcher under their own ids, but no file route sends
+// a document to them.
 export const MEDIA_FILE_ROUTES = [
   { appId: 'audio', mediaType: 'audio/mpeg', extensions: ['mp3', 'm4a', 'aac', 'ogg', 'oga', 'wav', 'flac', 'opus'] },
   { appId: 'video', mediaType: 'video/mp4', extensions: ['mp4', 'm4v', 'webm', 'mov', 'avi', 'mkv'] },

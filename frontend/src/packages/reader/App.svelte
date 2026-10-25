@@ -52,6 +52,7 @@
     READER_UPLOAD_ACCEPT,
     READER_UPLOAD_ACCEPT_TYPES,
     READER_UPLOAD_FORMATS,
+    inspectUploadCandidate,
     uploadFormatFor,
     uploadReaderFile,
   } from './open-file.js';
@@ -122,6 +123,15 @@
   $: sourceKey = source.displayUrl || '';
   $: sourceIdentity = mediaSourceIdentity(source);
   $: extractedText = item?.text_content || effectiveContext.textContent || '';
+  // Recents follow the window's source, not just its navigation: a file handed
+  // in through appContext on mount (a window opened from Files) resolves its
+  // source here and never calls navigateToSource, so this is where it is
+  // remembered too. The identity guard is what keeps a resolved source from
+  // writing a recents entry again on every store update, and what stops one
+  // source's write from racing the next one's (PdfApp.svelte does the same).
+  $: if (authenticated && sourceKey && sourceIdentity && sourceIdentity !== rememberedSourceIdentity) {
+    void rememberCurrentSource();
+  }
   $: if (sourceKey && sourceKey !== loadedSourceKey && !error && !loading) {
     void loadSource();
   }
@@ -500,8 +510,10 @@
     }
   }
 
+  let rememberedSourceIdentity = '';
   async function rememberCurrentSource() {
     if (!sourceKey || !sourceIdentity || !effectiveContext?.windowTitle) return;
+    rememberedSourceIdentity = sourceIdentity;
     if (await rememberRecentMedia(format, source)) recentFiles = await loadRecentMedia(format);
   }
 
@@ -701,6 +713,16 @@
     uploading = true;
     uploadAbort = typeof AbortController === 'function' ? new AbortController() : null;
     try {
+      // Checked here, before a byte is sent: a name Files would refuse, an
+      // empty file, one over the size ceiling, or one whose contents are not
+      // the format its name claims is answered on this line, and nothing is
+      // uploaded. The same check runs again where the file is written, so a
+      // file that changed under us still cannot land unread.
+      const candidate = await inspectUploadCandidate(file);
+      if (!candidate.ok) {
+        uploadError = candidate.error;
+        return;
+      }
       const result = await uploadReaderFile(file, {
         signal: uploadAbort?.signal,
         onProgress: ({ fraction }) => {
@@ -766,6 +788,9 @@
     await tick();
     if (sourceKey) await loadSource();
     else await loadSourceDirect();
+    // Remembering here as well as in the source reactive statement above is
+    // harmless: the identity guard makes the second call for one source a
+    // no-op.
     void rememberCurrentSource();
   }
 
@@ -1099,9 +1124,12 @@
             <button type="button" class="reader-button" data-reader-open-sample on:click={openSample}>Open the sample document</button>
           </div>
           {#if recentFiles.length}
+            <!-- The list is a keyed each: a recents answer that arrives while the
+                 field is focused must not be read as a change to the open window
+                 list, and Svelte only re-keyed a list it could match by identity. -->
             <div class="reader-recents" data-reader-recents>
               <span>Recently opened</span>
-              {#each recentFiles as recent}
+              {#each recentFiles as recent (recent.identity)}
                 <button type="button" class="reader-recent-item" data-reader-recent on:click={() => openRecent(recent)}>
                   <strong>{recent.title}</strong>
                   <small>{recent.filePath || recent.sourceUrl}</small>
