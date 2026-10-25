@@ -314,3 +314,26 @@ Nothing is running. Assignment completed, capsule revoked, op failed, trajectory
 - P1 Owner correction not forwarded to a bound engineer (665fbdcf, call 261). P2 Texture's cast is a summary, so quality bar and prohibitions never arrive (call 1 output).
 - P3 Inline plugin leaves a relative import (D1, call 248). P4 pdf-text infinite loop (D2). P5 pages shape (D3). P6 candidate checks assert strings, not rendering, and the Report says "light surface, not empty" for a 9 KB PNG next to a 62 KB one.
 - P7 Texture not woken by the final report. P8 "secret-bearing Go source" refusal names no pattern (cause hypothesis: the word "token" or a `*_KEY` constant; calls 53-58). P9 first refused Freeze opens an op row (N6).
+
+## Round 5: reader-4 repair (assignments 81bbc97b, 4513328f, d989b783), 2026-10-25 06:36-06:51
+
+Trajectory ac0cb480, doc 5db2578d, computer b@c (computer-6c50d6e5). Sources: `choir trace export` at 06:45, 06:48, 06:52 and 06:51 (records, runs, run_events, turn_commits, boot recent_log), `choir self-dev visual` for selfdev-5820206f, `choir run list`. FP0, green.
+
+### 1. The engineer did the repair
+- Finding: assignment 81bbc97b (06:36:37-06:43:11, DeepSeek V4.1 Flash via synthetic) got management's cast (06:36:37) naming all three defects and the spec corrections, applied the carried f3076820 tree, and reproduced each defect before fixing it. D1: a recursive inliner hit "Identifier '_' has already been declared" (minified chunks share top-level names), so it took the owner's stated alternative, deleted scripts/inline-reader-page.mjs and loads the built module from /assets. D2: advanced past "/" before the name scan (2000 name tokens in 1 ms). D3: wraps a string page and fixed the cause (extractPdfText flattened pages into one paragraph list). Froze selfdev-5820206f at 06:42:42 (105 changes), Complete(completed) after the Freeze. The order build, capture, Freeze, Complete held.
+- Finding: Texture embedded the /read.html capture in revision a04c371c at 06:42:44 (station TE working on its second candidate).
+
+### 2. The verify was right
+- Finding: management's verify (run b3dbc3b5, 06:43:11-06:43:59) failed the op at 06:43:35: "the frozen screenshot shows second-page text while the controls indicate page 1 of 2". I viewed the capture (67236aa1, 1280x800): the Reader renders the sample with its header, page controls, size and theme buttons and the progress bar, the first rendered Reader on b@c; the page 1 body ends with the page 2 text ("This is the second page of the sample ..."). A second defect the verify did not name: the "paper" theme is selected but the page is dark. Hypothesis: the D3 root-cause fix still joins pages, or the page split is by character count.
+
+### 3. A duplicate engineering round, then a restart from the base
+- Finding: engineering's interim progress report reached Texture (engineering.progress_to_texture) and management (run 364fb267, 06:40:05, which correctly decided to wait). Texture's turn at 06:40:17 committed revision c226d36f and cast to management (record cell:f0cb56e2...:cast:tray-2, objective "Continue the authorized repair ... Freeze only after the sample PDF first page is visibly rendered"). Management run fb555bae (06:40:17) opened a second implementation assignment, 4513328f, while 81bbc97b was still bound. Texture re-cast on a progress report, and management cast onto a bound slot (N3 again).
+- Finding: 4513328f bound at 06:43:13, two seconds after 81bbc97b completed and 22 seconds before 5820206f failed. Its capsule had no /selfdev/carried, packages [image], MEDIA_FILE_ROUTES with the pdf row: it was rebuilding the Reader from the base (45 iterations by 06:49). Cause, by code: `pickCarriedCandidate` (internal/agentcore/carried_patch.go:219) ends the chain when the newest candidate's operation is still pending, and the offer is decided once at spawn. A bind inside a verify window starts clean.
+- Finding by code: had FP0 cancelled 4513328f with carry_unfinished on, its kept snapshot (CreatedAt = TakenAt, the newest) would have won the next carry over 5820206f (`mergeUnfinishedRounds`, `nameOlderFrozenCandidate` only names the older frozen candidate), so the next round would carry the restart.
+- Action (FP0, b@c only): engineering.carry_unfinished off at 06:49:22, run cancel 4513328f at 06:49:31 (capsule torn down 06:49:31, no snapshot), on again at 06:50:45. Management opened d989b783, spawned 06:50:19 with carried=true from source assignment 81bbc97b (5820206f's tree), objective naming the page mismatch. A manual workaround, not a fix.
+
+### Problems from this round
+- R5-1 Texture re-casts on an engineering progress report (the P2 class; lane fp0-texture-hold).
+- R5-2 Management opens a second assignment for a request whose assignment is bound, instead of a Note to the bound engineer (N3; lane fp0-round4's Note path is the fix shape).
+- R5-3 A bind during a pending verify carries nothing: the newest pending candidate ends the chain. Proposed: when the newest candidate is pending, hold the offer (or the bind) until it settles. Red, unfixed.
+- R5-4 A stopped round that did not start from the newest frozen candidate outranks it in the carry. Proposed: a stopped round carries only if it started from the newest frozen candidate (OlderFrozenStartedFrom) or there is none. Red, unfixed.
