@@ -273,3 +273,49 @@ func TestEngineeringJobParkIsBounded(t *testing.T) {
 		t.Fatalf("a cancelled run kept its park: %+v", got)
 	}
 }
+
+// Problems 4 and 6 of docs/evidence/selfdev-trace-reviews-2026-10-25.md:
+// round 1 was cancelled by its activation budget while parked, never having
+// seen the budget, and followed most park ends with a Poll cell only to read
+// the output. The park-ended resume carries the budget left and the job's
+// output tail.
+func TestEngineeringJobParkResumeShowsTheBudgetAndTheOutputTail(t *testing.T) {
+	rt, _ := testRuntime(t)
+	table := runningBuild(time.Now().Add(20 * time.Minute))
+	table.view.Tail = strings.Repeat("x", 4000) + "\nFAIL reader-route chromium exit 0 bytes=0\n"
+	rt.jobTable = table
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(23*time.Minute+30*time.Second))
+	defer cancel()
+	calls, results := evalCall(`{"job_park":"job-build"}`, false)
+	done := parkAsync(rt, ctx, &parkEvents{}, calls, results)
+	table.end(capsulejob.StateFailed, 1)
+	rt.signalJobWake("run-1")
+	got := awaitPark(t, done, 5*time.Second)
+	text := got.res.Instruction
+	if !strings.Contains(text, "Activation budget: 24 min left") || !strings.Contains(text, "Freeze before it ends") {
+		t.Fatalf("no budget line: %s", text)
+	}
+	if !strings.Contains(text, "FAIL reader-route chromium exit 0 bytes=0") {
+		t.Fatalf("no output tail: %s", text)
+	}
+	if strings.Count(text, "x") > 1600 {
+		t.Fatalf("the tail is not bounded: %d bytes", len(text))
+	}
+
+	// Under ten minutes the line says to freeze now.
+	table = runningBuild(time.Now().Add(20 * time.Minute))
+	table.end(capsulejob.StateDone, 0)
+	rt.jobTable = table
+	ctx, cancel = context.WithDeadline(context.Background(), time.Now().Add(7*time.Minute))
+	defer cancel()
+	got = awaitPark(t, parkAsync(rt, ctx, &parkEvents{}, calls, results), 2*time.Second)
+	if !strings.Contains(got.res.Instruction, "Activation budget: 7 min left") || !strings.Contains(got.res.Instruction, "Freeze what you have now") {
+		t.Fatalf("no urgent budget line: %s", got.res.Instruction)
+	}
+
+	// A run with no deadline says nothing about a budget.
+	got = awaitPark(t, parkAsync(rt, context.Background(), &parkEvents{}, calls, results), 2*time.Second)
+	if strings.Contains(got.res.Instruction, "Activation budget") {
+		t.Fatalf("a budget line without a deadline: %s", got.res.Instruction)
+	}
+}

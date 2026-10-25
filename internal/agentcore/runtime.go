@@ -3820,7 +3820,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 			return toolregistry.ToolLoopCompletionGuardResult{
 				Continue:    true,
 				Reason:      reason,
-				Instruction: instruction,
+				Instruction: withActivationBudget(ctx, instruction),
 			}, nil
 		}))
 	}
