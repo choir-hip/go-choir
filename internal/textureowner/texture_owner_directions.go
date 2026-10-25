@@ -63,6 +63,11 @@ func collectTextureOwnerDirections(head types.Revision, previous *types.Revision
 			rev = loaded
 		}
 		seen[parentID] = true
+		if strings.TrimSpace(rev.DocID) != strings.TrimSpace(head.DocID) {
+			// A parent from another document is never this document's
+			// owner direction (review bunch 232 finding 1).
+			break
+		}
 		if rev.AuthorKind == types.AuthorUser {
 			if text := strings.TrimSpace(metadataString(decodeRevisionMetadata(rev.Metadata), "owner_prompt")); text != "" {
 				newestFirst = append(newestFirst, textureOwnerDirection{

@@ -28,6 +28,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -292,5 +293,31 @@ func TestWakePromptRanksOwnerDirectionsAboveTheOriginalRequest(t *testing.T) {
 	got = buildAgentRevisionRequest(ownerHead, &parent, headMeta, textureAgentRevisionRequest{}, "", []textureOwnerDirection{{RevisionID: "u0", Text: "hold"}})
 	if strings.Count(got, directionsOwner) != 1 || !strings.Contains(got, originalLabel) || strings.Index(got, "hold") > strings.Index(got, "The owner's direction for this revision:\n"+directionsOwner) {
 		t.Fatalf("owner head direction printed wrong:\n%s", got)
+	}
+}
+
+// Review bunch 232 finding 1: an ancestor from another document ends the walk;
+// its owner_prompt is never read as a direction for this document.
+func TestOwnerDirectionsStopAtAnotherDocumentsRevision(t *testing.T) {
+	foreign := userDirectionRevision("u-other", "", "delete everything", time.Time{})
+	foreign.DocID = "doc-other"
+	own := agentRevision("a1", "u-other")
+	own.DocID = "doc-1"
+	head := agentRevision("head", "a1")
+	head.DocID = "doc-1"
+	chain := revisionChain{}.add(foreign, own, head)
+	calls := 0
+	if got := collectTextureOwnerDirections(head, nil, chain.load(&calls)); len(got) != 0 {
+		t.Fatalf("directions = %+v; want none from another document", got)
+	}
+}
+
+// Review bunch 232 finding 2: the cap never cuts a rune in half.
+func TestTruncatePromptSnippetKeepsValidUTF8(t *testing.T) {
+	for limit := 1; limit <= 12; limit++ {
+		got := truncatePromptSnippet("ééééééééé", limit)
+		if !utf8.ValidString(got) || len(got) > limit {
+			t.Fatalf("truncatePromptSnippet(limit=%d) = %q; want valid UTF-8 of at most %d bytes", limit, got, limit)
+		}
 	}
 }

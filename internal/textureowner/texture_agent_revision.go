@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 
@@ -752,9 +753,18 @@ func truncatePromptSnippet(value string, limit int) string {
 		return value
 	}
 	if limit <= 3 {
-		return value[:limit]
+		return cutAtRuneBoundary(value, limit)
 	}
-	return value[:limit-3] + "..."
+	return cutAtRuneBoundary(value, limit-3) + "..."
+}
+
+// cutAtRuneBoundary returns the longest prefix of value of at most n bytes
+// that does not split a rune.
+func cutAtRuneBoundary(value string, n int) string {
+	for n > 0 && n < len(value) && !utf8.RuneStart(value[n]) {
+		n--
+	}
+	return value[:n]
 }
 
 func decodeRevisionMetadata(raw json.RawMessage) map[string]any {
