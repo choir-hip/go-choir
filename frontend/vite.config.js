@@ -11,6 +11,10 @@ const buildInfo = {
 
 export default defineConfig({
   // The package boundary plugin goes first so its pre hooks run before svelte's.
+  // No inline step: the preview page loads its built module from /assets like
+  // every other entry. Concatenating minified chunks into one module scope is
+  // not sound — sibling chunks reuse top-level identifiers and the browser
+  // rejects the re-declaration.
   plugins: [packageBoundary({ root: fileURLToPath(new URL('.', import.meta.url)) }), svelte()],
   define: {
     __CHOIR_BUILD_VERSION__: JSON.stringify(buildInfo.version),
@@ -19,6 +23,18 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
+    rollupOptions: {
+      input: {
+        // The shell, plus the sign-in-free Reader preview page at /read.html.
+        // It has to live outside public/ so Vite emits it once, at the root.
+        app: 'index.html',
+        reader: 'read.html',
+        // The preview page's shell stylesheet. read.html reaches it through
+        // reader.js's import (so it comes out hashed, with its own link);
+        // naming it here keeps it a stable, verifiable asset of the build.
+        'reader-chrome': 'reader-chrome.css',
+      },
+    },
   },
   server: {
     proxy: {
