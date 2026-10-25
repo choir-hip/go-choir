@@ -397,6 +397,7 @@ boundaries:
     - docs/choir-doctrine.md (I1, I25, I26, I27)
     - CLAUDE.md (mutation classes, review tiers, landing loop, problem documentation first)
   must_preserve:
+    - "Fix what we have before building more (owner, 2026-10-25: \"i dont want to build more code, but rather fix what we have. texture, for example, should hold onto the trajectory, and always remember to prioritize the user intention\"). Texture holds its trajectory across wakes and puts the owner's intention first; no new projection layer."
     - >-
       every self-development round gets a trace review (owner, 2026-10-25:
       "make sure that our agent, which is monitoring the self-development,
