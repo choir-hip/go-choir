@@ -112,9 +112,10 @@ func textureRootExcerpt(content, docID string, revisedAt map[string]time.Time) s
 			current = &textureRootExcerptSection{waits: strings.Contains(heading, "waits on the owner") || strings.Contains(heading, "waiting on the owner")}
 			sections = append(sections, current)
 		}
-		// The root writes refs at the end of a paragraph as often as on a
-		// line of their own.
-		if at := strings.Index(trimmed, "refs: doc="); current.docID == "" && at >= 0 {
+		// The root ends each section with its refs, at the end of a
+		// paragraph as often as on a line of their own; the last refs win,
+		// past any the root quotes from an owner ask.
+		if at := strings.LastIndex(trimmed, "refs: doc="); at >= 0 && !strings.HasPrefix(trimmed, "#") {
 			if fields := strings.Fields(trimmed[at+len("refs: doc="):]); len(fields) > 0 {
 				current.docID = fields[0]
 			}
