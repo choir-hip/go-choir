@@ -145,8 +145,8 @@ metamission:
         the paper (unverified); the roadmap recut (lane/fp0-roadmap-recut),
         to close or land.
     - id: SR7
-      path: docs/design/recoverable-changes-sr7-2026-10-24.md (problem: docs/problems/an-older-release-cannot-read-a-newer-tape-2026-10-24.md)
-      readiness: reviewed (design: bunch 222 Devin and DeepSeek, 225 Devin APPROVE with additions, folded)
+      path: "docs/design/recoverable-changes-sr7-2026-10-24.md (problem: docs/problems/an-older-release-cannot-read-a-newer-tape-2026-10-24.md)"
+      readiness: "reviewed (design: bunch 222 Devin and DeepSeek, 225 Devin APPROVE with additions, folded)"
       status: pending
       depends_on: [SR5]
       note: >-
@@ -489,7 +489,7 @@ now:
       inert when off ships alone
     kind: operational
     status: settled
-    evidence_ref: first-pass ledger 20:0x (owner: CI and staging are the bottleneck)
+    evidence_ref: "first-pass ledger 20:0x (owner: CI and staging are the bottleneck)"
     owner_ratification_ref: not_applicable
   belief:
     believed_state: >-
