@@ -62,3 +62,28 @@ setup about 35 s. No test over 40 s. Nothing to deal differently.
 
 checkout 3, set up Go (cache restore) 38, test step 304, post cache save 10.
 `TMPDIR=/dev/shm` is set for the test step, so Dolt workspaces are in RAM.
+
+## Measured after the first candidate (pull-request run 40146522999, 2026-10-25)
+
+Candidate: heaviest-first deal by name, six split shards, the 489 s test
+filling its stores in parallel. Created to `check` done: 638 s (10.6 min; the
+baseline's `check` finished at 18.3 min). Test step per non-runtime shard:
+split shards 242-545 s, whole shards 100-110 s; runtime shards 250-385 s job.
+
+### 6. The deal balanced the wrong quantity
+
+The weights balanced the sum of test seconds per shard (584-587 on all six),
+but the wall time follows `internal/store` alone, because the packages run
+side by side and a package's tests run in series. Store seconds per shard in
+that run: 481, 452, 407, 217, 500, 417 (test step 516, 490, 444, 242, 545,
+454 s). Shards 6 and 7 finished their whole packages in 100-110 s and then
+idled while the split shards ran 5-9 min.
+
+### 7. A serial store binary uses one CPU of the runner's four (hypothesis)
+
+Each shard already runs up to five test binaries at once, yet its test step
+stays near the store slice's length. If the store binary is the only long one
+and the runner has idle CPUs, a second concurrent process with half the store
+tests halves the slice. This is a hypothesis until a pull-request run shows the
+test step; the candidate that follows runs two processes per shard and the
+planner models each as its own shard.
