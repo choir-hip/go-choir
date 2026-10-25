@@ -65,6 +65,6 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "%s: read back the manifest: %v\n", visualcapture.ToolName, err)
 		return 1
 	}
-	fmt.Println(string(visualcapture.Summary(res.Manifest, manifestRaw, res.AssetFailures)))
+	fmt.Println(string(visualcapture.Summary(res.Manifest, manifestRaw, res.AssetFailures, res.AssetDropped)))
 	return 0
 }

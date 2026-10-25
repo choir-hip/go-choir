@@ -12,7 +12,7 @@ func TestSummaryNamesTheManifestDigest(t *testing.T) {
 	raw := []byte("{\"kind\":\"visual_capture\"}\n")
 	m := Manifest{Subject: Subject{FrontendSHA256: strings.Repeat("b", 64)}, Browser: Browser{Version: "155"},
 		Captures: []Capture{{Route: "/", Artifact: ArtifactRef(strings.Repeat("c", 64)), Bytes: 12}}}
-	out := Summary(m, raw, nil)
+	out := Summary(m, raw, nil, 0)
 	if !strings.Contains(string(out), DigestHex(raw)) {
 		t.Fatalf("summary does not carry the manifest digest: %s", out)
 	}
@@ -43,7 +43,7 @@ func TestSummaryWarnsWhenRoutesShareOneScreenshot(t *testing.T) {
 		{Route: "/x.html", Artifact: ArtifactRef(strings.Repeat("e", 64)), Bytes: 12},
 		{Route: "/pdf", Artifact: same, Bytes: 12},
 	}}
-	out := string(Summary(m, []byte("{}\n"), nil))
+	out := string(Summary(m, []byte("{}\n"), nil, 0))
 	var back struct {
 		Warnings []string `json:"warnings"`
 	}
@@ -60,7 +60,7 @@ func TestSummaryWarnsWhenRoutesShareOneScreenshot(t *testing.T) {
 		t.Fatalf("warning names a distinct route or the summary is not one line: %s", out)
 	}
 	m.Captures = m.Captures[2:3]
-	if out := string(Summary(m, []byte("{}\n"), nil)); strings.Contains(out, "warnings") {
+	if out := string(Summary(m, []byte("{}\n"), nil, 0)); strings.Contains(out, "warnings") {
 		t.Fatalf("a capture with distinct routes warns: %s", out)
 	}
 }
