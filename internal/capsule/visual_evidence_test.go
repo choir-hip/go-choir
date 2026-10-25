@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
@@ -149,7 +150,7 @@ func TestStageEvidenceBindsCapturesToTheFrozenFrontendAndTheCaptureJob(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	jobs := []yaegikernel.JobView{captureJob("done", receiptA, "building...\n"+string(visualcapture.Summary(f.manifest, raw))+"\n")}
+	jobs := []yaegikernel.JobView{captureJob("done", receiptA, "building...\n"+string(visualcapture.Summary(f.manifest, raw, nil))+"\n")}
 
 	ev, temporary, err := f.stage(jobs)
 	if err != nil {
@@ -222,6 +223,51 @@ func TestCaptureReceiptRequiresTheJobThatWroteThisManifest(t *testing.T) {
 				t.Fatalf("receipt %q, want %q", ev.CaptureReceipt, tc.want)
 			}
 		})
+	}
+}
+
+// Fix 3 (trace review round 4): the failed asset answers the receipt's own
+// capture job printed reach the bundle record as advice; another job's, or a
+// tail that does not parse, add nothing and never refuse the Freeze.
+func TestStageEvidenceCarriesTheReceiptJobsAssetFailures(t *testing.T) {
+	f := newEvidenceFixture(t)
+	f.capture("/read.html", pngBytes(t, evW, evH, true))
+	manifestSHA := f.writeManifest()
+	raw, err := os.ReadFile(filepath.Join(f.dir, visualcapture.ManifestFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	missing := []visualcapture.AssetFailure{{Path: "/pdf-text-BRoX2Cg_.js", Status: 404, Count: 2}}
+	withFailures := string(visualcapture.Summary(f.manifest, raw, missing))
+	other := `{"manifest_sha256":"` + strings.Repeat("9", 64) + `","asset_failures":[{"path":"/other.js","status":404,"count":1}]}`
+	for name, tc := range map[string]struct {
+		jobs []yaegikernel.JobView
+		want []visualcapture.AssetFailure
+	}{
+		"the receipt job's failures":             {[]yaegikernel.JobView{captureJob("done", receiptA, "noise\n"+withFailures+"\n")}, missing},
+		"a clean capture":                        {[]yaegikernel.JobView{captureJob("done", receiptA, string(visualcapture.Summary(f.manifest, raw, nil)))}, nil},
+		"another manifest's job":                 {[]yaegikernel.JobView{captureJob("done", receiptA, withFailures), captureJob("done", receiptB, other)}, missing},
+		"no receipt job":                         {[]yaegikernel.JobView{captureJob("failed", receiptA, withFailures)}, nil},
+		"a tail that does not parse":             {[]yaegikernel.JobView{captureJob("done", receiptA, `{"manifest_sha256":"`+manifestSHA+`","asset_failures":"x"}`)}, nil},
+		"a newer clean run of the same manifest": {[]yaegikernel.JobView{captureJob("done", receiptA, withFailures), captureJob("done", receiptB, string(visualcapture.Summary(f.manifest, raw, nil)))}, nil},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ev, _, err := f.stage(tc.jobs)
+			if err != nil {
+				t.Fatalf("advice refused the Freeze: %v", err)
+			}
+			if fmt.Sprint(ev.AssetFailures) != fmt.Sprint(tc.want) {
+				t.Fatalf("asset failures = %v, want %v", ev.AssetFailures, tc.want)
+			}
+			if err := ev.Validate(); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+	bad := &VisualEvidence{ManifestSHA256: manifestSHA, FrontendSHA256: manifestSHA, Captures: []VisualEvidenceCapture{{Artifact: "artifact:sha256:" + manifestSHA, Route: "/", MediaType: visualcapture.MediaTypePNG, Bytes: 1}},
+		AssetFailures: []visualcapture.AssetFailure{{Path: "/api/x.js", Status: 503, Count: 1}}}
+	if err := bad.Validate(); err == nil {
+		t.Fatal("a record naming the intended /api/ 503 validates")
 	}
 }
 

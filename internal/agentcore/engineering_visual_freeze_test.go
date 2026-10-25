@@ -3,6 +3,7 @@ package agentcore
 import (
 	"context"
 	"errors"
+	"github.com/yusefmosiah/go-choir/internal/visualcapture"
 	"os"
 	"path/filepath"
 	"strings"
@@ -228,5 +229,19 @@ func TestRecordFreezeVisualWarnsWhenRoutesShareOneScreenshot(t *testing.T) {
 	recordFreezeVisual(runtime.imageStore(), root, visual, out)
 	if _, present := out["visual_warnings"]; present {
 		t.Fatalf("one route warns: %v", out["visual_warnings"])
+	}
+}
+
+// Fix 3 (trace review round 4): the failed asset answers Freeze carried into
+// the record are named in the Freeze result's visual_warnings.
+func TestRecordFreezeVisualWarnsOfFailedAssets(t *testing.T) {
+	runtime, _ := testRuntime(t)
+	root, visual := stagedVisualRoot(t, assetPNG(t))
+	visual.AssetFailures = []visualcapture.AssetFailure{{Path: "/pdf-text-BRoX2Cg_.js", Status: 404, Count: 2}}
+	out := map[string]any{}
+	recordFreezeVisual(runtime.imageStore(), root, visual, out)
+	warnings, _ := out["visual_warnings"].([]string)
+	if len(warnings) != 1 || !strings.Contains(warnings[0], "404 /pdf-text-BRoX2Cg_.js (x2)") {
+		t.Fatalf("visual_warnings = %v", out["visual_warnings"])
 	}
 }

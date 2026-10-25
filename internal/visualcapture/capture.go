@@ -97,26 +97,52 @@ func (o Options) Normalize() (Options, error) {
 // output directory, replacing whatever an earlier run left there. The
 // manifest is written last, by rename (V21).
 func Run(ctx context.Context, opts Options) (Manifest, error) {
+	res, err := RunReport(ctx, opts)
+	return res.Manifest, err
+}
+
+// Report is a capture run: the manifest it wrote, and the asset requests
+// its server could not serve, which are advice and never in the manifest.
+type Report struct {
+	Manifest      Manifest
+	AssetFailures []AssetFailure
+}
+
+// RunReport is Run with the run's failed asset answers (fix 3, trace review
+// round 4).
+func RunReport(ctx context.Context, opts Options) (Report, error) {
+	// The server has shut down when captureRoutes returns, so the record
+	// is complete.
+	m, recorder, err := captureRoutes(ctx, opts)
+	res := Report{Manifest: m}
+	if recorder != nil {
+		res.AssetFailures = recorder.Failures()
+	}
+	return res, err
+}
+
+func captureRoutes(ctx context.Context, opts Options) (Manifest, *AssetRecorder, error) {
 	opts, err := opts.Normalize()
 	if err != nil {
-		return Manifest{}, err
+		return Manifest{}, nil, err
 	}
 	info, err := os.Stat(filepath.Join(opts.ServeRoot, "index.html"))
 	if err != nil || !info.Mode().IsRegular() {
-		return Manifest{}, fmt.Errorf("no built frontend at %s (build the frontend into the release tree first)", opts.ServeRoot)
+		return Manifest{}, nil, fmt.Errorf("no built frontend at %s (build the frontend into the release tree first)", opts.ServeRoot)
 	}
 	files, err := digestTree(opts.ServeRoot)
 	if err != nil {
-		return Manifest{}, err
+		return Manifest{}, nil, err
 	}
 	if err := resetOutput(opts.OutputDir); err != nil {
-		return Manifest{}, err
+		return Manifest{}, nil, err
 	}
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		return Manifest{}, fmt.Errorf("serve the frontend on loopback: %w (capture needs the capsule's loopback network: a capsule with the ecosystem network)", err)
+		return Manifest{}, nil, fmt.Errorf("serve the frontend on loopback: %w (capture needs the capsule's loopback network: a capsule with the ecosystem network)", err)
 	}
-	srv := &http.Server{Handler: Server(opts.ServeRoot), ReadHeaderTimeout: 10 * time.Second}
+	recorder := NewAssetRecorder()
+	srv := &http.Server{Handler: recorder.Wrap(Server(opts.ServeRoot)), ReadHeaderTimeout: 10 * time.Second}
 	go func() { _ = srv.Serve(listener) }()
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -126,7 +152,7 @@ func Run(ctx context.Context, opts Options) (Manifest, error) {
 	base := "http://" + listener.Addr().String()
 	scratch, err := os.MkdirTemp("", "choir-capture-")
 	if err != nil {
-		return Manifest{}, err
+		return Manifest{}, recorder, err
 	}
 	defer os.RemoveAll(scratch)
 
@@ -141,29 +167,29 @@ func Run(ctx context.Context, opts Options) (Manifest, error) {
 		shot := filepath.Join(scratch, fmt.Sprintf("shot-%d.png", i))
 		profile := filepath.Join(scratch, fmt.Sprintf("profile-%d", i))
 		if err := os.MkdirAll(profile, 0o700); err != nil {
-			return Manifest{}, err
+			return Manifest{}, recorder, err
 		}
 		args := BrowserArgs(base+route, shot, profile, opts.Width, opts.Height, opts.WaitMS)
 		if err := runShot(ctx, opts, args, profile, shot); err != nil {
-			return Manifest{}, fmt.Errorf("capture %s: %w", route, err)
+			return Manifest{}, recorder, fmt.Errorf("capture %s: %w", route, err)
 		}
 		data, err := os.ReadFile(shot)
 		if err != nil {
-			return Manifest{}, fmt.Errorf("capture %s: Chromium wrote no screenshot: %w", route, err)
+			return Manifest{}, recorder, fmt.Errorf("capture %s: Chromium wrote no screenshot: %w", route, err)
 		}
 		blank, err := CheckPNG(data, opts.Width, opts.Height)
 		if err != nil {
-			return Manifest{}, fmt.Errorf("capture %s: %w", route, err)
+			return Manifest{}, recorder, fmt.Errorf("capture %s: %w", route, err)
 		}
 		total += int64(len(data))
 		if total > MaxTotalBytes {
-			return Manifest{}, fmt.Errorf("captures exceed %d bytes", MaxTotalBytes)
+			return Manifest{}, recorder, fmt.Errorf("captures exceed %d bytes", MaxTotalBytes)
 		}
 		sum := sha256.Sum256(data)
 		digest := hex.EncodeToString(sum[:])
 		name := digest + ".png"
 		if err := writeAtomic(filepath.Join(opts.OutputDir, name), data); err != nil {
-			return Manifest{}, err
+			return Manifest{}, recorder, err
 		}
 		m.Captures = append(m.Captures, Capture{
 			Artifact: ArtifactRef(digest), File: name, MediaType: MediaTypePNG, Bytes: int64(len(data)),
@@ -173,12 +199,12 @@ func Run(ctx context.Context, opts Options) (Manifest, error) {
 	}
 	raw, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
-		return Manifest{}, err
+		return Manifest{}, recorder, err
 	}
 	if err := writeAtomic(filepath.Join(opts.OutputDir, ManifestFile), append(raw, '\n')); err != nil {
-		return Manifest{}, err
+		return Manifest{}, recorder, err
 	}
-	return m, nil
+	return m, recorder, nil
 }
 
 // BrowserArgs is one headless Chromium screenshot run: new headless, no

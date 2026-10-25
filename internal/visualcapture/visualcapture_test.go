@@ -12,8 +12,10 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	neturl "net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -70,6 +72,17 @@ func fakeChromium(args []string) int {
 		fmt.Fprintf(os.Stderr, "page answered %d\n", resp.StatusCode)
 		return 1
 	}
+	// Like a browser, ask for the page's scripts and module imports, so the
+	// server sees a missing chunk (fix 3, trace review round 4).
+	for _, ref := range subresourceRefs(body) {
+		if u, err := neturl.Parse(url); err == nil {
+			if target, err := u.Parse(ref); err == nil {
+				if r, err := http.Get(target.String()); err == nil {
+					_ = r.Body.Close()
+				}
+			}
+		}
+	}
 	if mode == "wrongsize" {
 		h--
 	}
@@ -92,6 +105,18 @@ func fakeChromium(args []string) int {
 		return 1
 	}
 	return 0
+}
+
+var subresourcePattern = regexp.MustCompile(`(?:src=|from|import)\s*"?([./][^"\s>]*)`)
+
+// subresourceRefs lists the src= attributes and module import specifiers a
+// fake page names.
+func subresourceRefs(body []byte) []string {
+	var out []string
+	for _, m := range subresourcePattern.FindAllSubmatch(body, -1) {
+		out = append(out, string(m[1]))
+	}
+	return out
 }
 
 // setFakeMode passes the fake Chromium its switches through the test hook

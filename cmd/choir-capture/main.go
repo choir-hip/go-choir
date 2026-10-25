@@ -47,7 +47,7 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "%s: unexpected arguments %q\n", visualcapture.ToolName, fs.Args())
 		return 2
 	}
-	m, err := visualcapture.Run(context.Background(), visualcapture.Options{
+	res, err := visualcapture.RunReport(context.Background(), visualcapture.Options{
 		Routes: routes, Width: *width, Height: *height, WaitMS: *wait,
 		Browser:    os.Getenv(visualcapture.BrowserEnv),
 		Fontconfig: os.Getenv(visualcapture.FontconfigEnv),
@@ -65,6 +65,6 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "%s: read back the manifest: %v\n", visualcapture.ToolName, err)
 		return 1
 	}
-	fmt.Println(string(visualcapture.Summary(m, manifestRaw)))
+	fmt.Println(string(visualcapture.Summary(res.Manifest, manifestRaw, res.AssetFailures)))
 	return 0
 }
