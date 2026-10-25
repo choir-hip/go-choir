@@ -193,6 +193,13 @@ func (rt *Runtime) AutoPublishRevision(ctx context.Context, ownerID string, doc 
 		return ""
 	}
 	v := StoryVersion{OwnerID: ownerID, ComputerID: doc.ComputerID, DocID: doc.DocID, RevisionID: rev.RevisionID, Revision: types.RevisionNumber(rev.VersionNumber)}
+	// Station TE (E6): evidence is never published; the platform refuses it,
+	// so it is held here with the reason instead of failing there.
+	if private := texturedoc.PrivateEmbedsInBody(rev.BodyDoc); len(private) > 0 {
+		held = fmt.Sprintf("it holds %d private embed(s) (capsule evidence is never published), so v%d stays a gap", len(private), v.Revision)
+		log.Printf("story publish: %s revision %s not published: %s", v.DocID, v.RevisionID, held)
+		return held
+	}
 	if cites, err := texturewrite.CitesSource(rev); err != nil || !cites {
 		held = "it cites no captured source, so v" + strconv.Itoa(v.Revision) + " stays a gap; the next revision that cites one publishes"
 		if err != nil {

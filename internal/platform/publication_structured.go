@@ -41,6 +41,13 @@ func normalizePublishTextureStructuredFields(content *string, bodyDoc *json.RawM
 	if err != nil {
 		return fmt.Errorf("body_doc/source_entities are invalid: %w", err)
 	}
+	// Refused, not stripped (station TE, docs/design/texture-evidence-
+	// embeds-te-2026-10-25.md E6): a publication names its source revision
+	// and its projection, so publishing the document without its evidence
+	// would publish something other than the revision, silently.
+	if private := texturedoc.PrivateEmbeds(doc); len(private) > 0 {
+		return fmt.Errorf("%s", PrivateEmbedRefusal(private))
+	}
 	if content != nil && strings.TrimSpace(*content) != "" && *content != projection.Text {
 		return fmt.Errorf("content must match derived body_doc projection")
 	}
@@ -69,4 +76,20 @@ func structuredArtifactFieldsFromManifest(manifestJSON string) (json.RawMessage,
 		return nil, nil
 	}
 	return envelope.BodyDoc, envelope.StructuredSourceEntities
+}
+
+// PrivateEmbedRefusal says why a document that holds private embeds is not
+// published: capsule_evidence is supervision material and never published,
+// and other kinds wait for public asset pinning.
+func PrivateEmbedRefusal(private []texturedoc.Embed) string {
+	kinds := map[string]bool{}
+	var names []string
+	for _, e := range private {
+		if !kinds[e.Kind] {
+			kinds[e.Kind] = true
+			names = append(names, e.Kind)
+		}
+	}
+	return fmt.Sprintf("the document holds %d private embed(s) (%s: %s); evidence and owned media are never published, so remove them from the document before publishing it",
+		len(private), strings.Join(names, ", "), private[0].ID)
 }
