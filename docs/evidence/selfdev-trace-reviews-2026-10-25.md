@@ -337,3 +337,27 @@ Trajectory ac0cb480, doc 5db2578d, computer b@c (computer-6c50d6e5). Sources: `c
 - R5-2 Management opens a second assignment for a request whose assignment is bound, instead of a Note to the bound engineer (N3; lane fp0-round4's Note path is the fix shape).
 - R5-3 A bind during a pending verify carries nothing: the newest pending candidate ends the chain. Proposed: when the newest candidate is pending, hold the offer (or the bind) until it settles. Red, unfixed.
 - R5-4 A stopped round that did not start from the newest frozen candidate outranks it in the carry. Proposed: a stopped round carries only if it started from the newest frozen candidate (OlderFrozenStartedFrom) or there is none. Red, unfixed.
+
+## Round 6: reader-6 (assignments 2aa48e88, f2d281a6, a9fdf836), 2026-10-25 07:50-09:12
+
+Trajectory a7257e6b (doc d9e8b26f), exported 09:16 by FP0 and read by a Sonnet reviewer; FP0 checked R6-1 against the export itself. Three engineering rounds, three candidates: 25239b5c rejected 08:16:52, 84dc7585 rejected 09:06:51, 1c1f6265 accepted 09:12:36 and landed as 7fbe45512 (review 243 PASS).
+
+### 1. What worked
+- Texture cast to management exactly once per direction (07:50:25, 08:17:05, 08:47:45, 09:07:03); the report-woken runs (a25d3a68 09:02:21, 4b4b0619 09:10:55) only wrote the document. No re-cast, so no R5-2 refusal fired.
+- The last round carried the rejected tree: /selfdev/carried/carried.json (source f2d281a6) applied 7 files cleanly at 09:07:26, and the round took 3m13s of real work: it rewrote sample-pdf.js and the extractor, regenerated the PDF, reverted the search field, ran extractPdfText on the real PDF twice and printed the expected blocks, built, captured, and froze at 09:10:10.
+
+### 2. What did not
+- At 08:47 Texture's first two cells failed to compile (08:47:31, 08:47:38: a backtick inside a Go raw string). The third cell (08:47:45, run 30f8ec82) cast a retyped "Owner direction 08:47" instead of the revision as written. Point 3 lost its specifics ("treat a Tm outside BT ... or use the existing paragraphsFromLines" became "separate paragraphs and headings in sample PDF"). The direction said "Cast this direction to management once, as written". The dropped specifics were themselves FP0's flawed prescription, so the rejected round is not attributable to the paraphrase; the fidelity defect stands on its own.
+- Round 2 (f2d281a6, 08:47:51-09:01:50) reported "15 blocks on page 1" as success, which is the defect FP0 then rejected; management's verify passed it at 09:02:20 although its image check could not load screenshot f3d50d72.
+- Round 1 (2aa48e88) did what the request forbade (a hardcoded 'reader' in Desktop.svelte at 08:02:05, appTitle, allowMultiple at 08:02:38), and management's verify passed it.
+- Round 1's first Freeze (08:05:54) was refused as "bin/autoputer built from another commit" and spent a 7.6 minute Go build (08:06:01-08:13:37) on a frontend-only change.
+- The sample files are mode 0444 in the capsule: EACCES on the first write in rounds 2 and 3.
+
+### Problems from this round
+- R6-1 Texture retypes an owner direction into a Go raw string to cast it; a backtick breaks the cell, and the retry paraphrases (five raw-string compile errors in Texture turns, one in management). Proposed: the cast carries the owner revision by reference and the runtime attaches its text verbatim, so Texture never retypes it. Real defect; unfixed. FP0's process fix meanwhile: no backticks in directions.
+- R6-2 Management's verify passes on engineering's self-report plus a screenshot, including when the screenshot cannot be read, and does not check a request's "do not change" list against the patch's paths. Process gap; FP0's code read is the check for now.
+- R6-3 Management's verify loops (7e0bfd7b, 5282a1f6, f39ad9ca, 5fb15455) are absent from the export's runs and run_events, and the captures layer is empty, so the verify cannot be audited from the trace. Real defect.
+- R6-4 Freeze rebuilds bin/autoputer for a frontend-only candidate when the binary was built from another commit (7.6 minutes). Real defect; joins the stack-base-moved problem.
+- R6-5 Engineering's extractor check was a temporary script, deleted at 09:09:37, and is not among the Freeze test_receipts, so it cannot be repeated. Process gap: a named check in a direction should become a Freeze receipt.
+- R6-6 Work item 4c55862e, opened by the 08:16:52 direction whose engineering cast was refused (base moved), is still open. To check: whether a refused cast should settle its work item.
+- Observed, fine: hold_trajectory cannot be confirmed from the export (seeds are not exported, only prompt lengths), and the boot log's diverged=true at 09:14:17 is b@c's applied, not yet deployed, stack.
