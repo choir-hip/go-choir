@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/capsule"
+	"github.com/yusefmosiah/go-choir/internal/visualcapture"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
@@ -121,6 +122,33 @@ func TestInBundleInspectionWarnsWhenRoutesShareOneScreenshot(t *testing.T) {
 	visual, _ := out["visual_evidence"].(map[string]any)
 	warnings, _ := visual["warnings"].([]string)
 	if len(warnings) != 1 || !strings.Contains(warnings[0], "/choir-drill/x.html and /read") {
+		t.Fatalf("warnings = %v", visual["warnings"])
+	}
+}
+
+// Fix 3 (trace review round 4): the verifier's inspection names the failed
+// asset answers the bundle record carries; the mirror reads the field, so the
+// strict decode and the digest recompute accept it.
+func TestInBundleInspectionWarnsOfFailedAssets(t *testing.T) {
+	root, bundle, _ := mountedVisualBundle(t)
+	bundle.VisualEvidence.AssetFailures = []visualcapture.AssetFailure{{Path: "/pdf-text-BRoX2Cg_.js", Status: 404, Count: 2}}
+	bundle.ContentDigest, _ = bundle.ComputeContentDigest()
+	draft, _ := json.Marshal(bundle)
+	binding, _ := json.Marshal(map[string]string{"operation_id": "op-1", "bundle_digest": bundle.ContentDigest})
+	for name, data := range map[string][]byte{"bundle.draft.json": draft, "binding.json": binding} {
+		path := filepath.Join(root, name)
+		_ = os.Chmod(path, 0o600)
+		if err := os.WriteFile(path, data, 0o400); err != nil {
+			t.Fatal(err)
+		}
+	}
+	out, err := yaegikernel.InspectMountedBundleAt(root)
+	if err != nil {
+		t.Fatalf("inspection refused a bundle with asset failures: %v", err)
+	}
+	visual, _ := out["visual_evidence"].(map[string]any)
+	warnings, _ := visual["warnings"].([]string)
+	if len(warnings) != 1 || !strings.Contains(warnings[0], "404 /pdf-text-BRoX2Cg_.js (x2)") {
 		t.Fatalf("warnings = %v", visual["warnings"])
 	}
 }

@@ -10,7 +10,9 @@ import (
 // output tail. It names the manifest's digest: Freeze accepts the job's
 // receipt as the evidence's receipt only when that digest is in the output,
 // so a manifest written or rewritten after the job does not carry one (V17).
-func Summary(m Manifest, manifestRaw []byte) []byte {
+// failures are the run's failed asset answers (Report.AssetFailures): the
+// summary lists them and warns, so Freeze can carry them to the verifier.
+func Summary(m Manifest, manifestRaw []byte, failures []AssetFailure) []byte {
 	type row struct {
 		Route    string `json:"route"`
 		Artifact string `json:"artifact"`
@@ -18,12 +20,13 @@ func Summary(m Manifest, manifestRaw []byte) []byte {
 		Blank    bool   `json:"blank,omitempty"`
 	}
 	summary := struct {
-		Manifest       string   `json:"manifest"`
-		ManifestSHA256 string   `json:"manifest_sha256"`
-		FrontendSHA256 string   `json:"frontend_sha256"`
-		Browser        string   `json:"browser,omitempty"`
-		Captures       []row    `json:"captures"`
-		Warnings       []string `json:"warnings,omitempty"`
+		Manifest       string         `json:"manifest"`
+		ManifestSHA256 string         `json:"manifest_sha256"`
+		FrontendSHA256 string         `json:"frontend_sha256"`
+		Browser        string         `json:"browser,omitempty"`
+		Captures       []row          `json:"captures"`
+		AssetFailures  []AssetFailure `json:"asset_failures,omitempty"`
+		Warnings       []string       `json:"warnings,omitempty"`
 	}{
 		Manifest:       OutputDir + "/" + ManifestFile,
 		ManifestSHA256: DigestHex(manifestRaw),
@@ -36,7 +39,11 @@ func Summary(m Manifest, manifestRaw []byte) []byte {
 		summary.Captures = append(summary.Captures, row{Route: c.Route, Artifact: c.Artifact, Bytes: c.Bytes, Blank: c.Blank})
 		shots = append(shots, RouteShot{Route: c.Route, Artifact: c.Artifact})
 	}
-	summary.Warnings = SharedShotWarnings(shots)
+	if len(failures) > MaxAssetFailures {
+		failures = failures[:MaxAssetFailures]
+	}
+	summary.AssetFailures = failures
+	summary.Warnings = append(SharedShotWarnings(shots), AssetFailureWarnings(failures)...)
 	out, _ := json.Marshal(summary)
 	return out
 }

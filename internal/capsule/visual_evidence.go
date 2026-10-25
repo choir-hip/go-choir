@@ -33,6 +33,11 @@ type VisualEvidence struct {
 	// rewritten evidence, V17), which visual_captured does not accept.
 	CaptureReceipt string                  `json:"capture_receipt,omitempty"`
 	Captures       []VisualEvidenceCapture `json:"captures"`
+	// AssetFailures are the asset requests the capture server could not
+	// serve, as the receipt's capture job printed them: advice for the
+	// engineer and the verifier, never a check, and never in the manifest
+	// (fix 3, docs/evidence/selfdev-trace-reviews-2026-10-25.md round 4).
+	AssetFailures []visualcapture.AssetFailure `json:"asset_failures,omitempty"`
 }
 
 // VisualEvidenceCapture is one capture: its artifact ref, route and size.
@@ -66,6 +71,14 @@ func (v *VisualEvidence) Validate() error {
 			return fmt.Errorf("visual evidence: capture %q is not a content-addressed PNG", c.Artifact)
 		}
 		if _, err := visualcapture.NormalizeRoute(c.Route); err != nil {
+			return fmt.Errorf("visual evidence: %w", err)
+		}
+	}
+	if len(v.AssetFailures) > visualcapture.MaxAssetFailures {
+		return fmt.Errorf("visual evidence: at most %d asset failures are recorded", visualcapture.MaxAssetFailures)
+	}
+	for _, f := range v.AssetFailures {
+		if err := f.Validate(); err != nil {
 			return fmt.Errorf("visual evidence: %w", err)
 		}
 	}
@@ -227,7 +240,11 @@ func buildVisualEvidence(manifestRaw []byte, files []visualcapture.EvidenceFile,
 		return nil, fmt.Errorf("capsule freeze: %w", err)
 	}
 	manifestSHA := visualcapture.DigestHex(manifestRaw)
-	out := &VisualEvidence{ManifestSHA256: manifestSHA, FrontendSHA256: m.Subject.FrontendSHA256, CaptureReceipt: latestCaptureReceipt(jobs, manifestSHA)}
+	out := &VisualEvidence{ManifestSHA256: manifestSHA, FrontendSHA256: m.Subject.FrontendSHA256}
+	if job, ok := latestCaptureJob(jobs, manifestSHA); ok {
+		out.CaptureReceipt = job.ReceiptRef
+		out.AssetFailures = captureAssetFailures(job.Tail, manifestSHA)
+	}
 	for _, c := range m.Captures {
 		blank, err := visualcapture.CheckPNG(contents[c.File], c.Width, c.Height)
 		if err != nil {
@@ -241,18 +258,31 @@ func buildVisualEvidence(manifestRaw []byte, files []visualcapture.EvidenceFile,
 	return out, out.Validate()
 }
 
-// latestCaptureReceipt is the receipt of the newest capture job that ended
-// done and whose output names this manifest's digest (jobs are oldest
-// first). A manifest written or rewritten after the job, or by hand, is in
-// no job's output, so it gets no receipt (V17).
-func latestCaptureReceipt(jobs []yaegikernel.JobView, manifestSHA256 string) string {
+// latestCaptureJob is the newest capture job that ended done with a receipt
+// and whose output names this manifest's digest (jobs are oldest first). A
+// manifest written or rewritten after the job, or by hand, is in no job's
+// output, so it gets no receipt (V17).
+func latestCaptureJob(jobs []yaegikernel.JobView, manifestSHA256 string) (yaegikernel.JobView, bool) {
 	for i := len(jobs) - 1; i >= 0; i-- {
 		j := jobs[i]
 		if visualcapture.IsCaptureJob(j.Argv) && j.State == "done" && j.ReceiptRef != "" && strings.Contains(j.Tail, manifestSHA256) {
-			return j.ReceiptRef
+			return j, true
 		}
 	}
-	return ""
+	return yaegikernel.JobView{}, false
+}
+
+// captureAssetFailures reads the receipt job's failed asset answers from its
+// summary, dropping any path the refusal scan flags: the bundle record is
+// scanned as the manifest is.
+func captureAssetFailures(tail, manifestSHA256 string) []visualcapture.AssetFailure {
+	var out []visualcapture.AssetFailure
+	for _, f := range visualcapture.ParseSummaryAssetFailures(tail, manifestSHA256) {
+		if len(computerevent.DetectRefusalSecrets([]byte(f.Path))) == 0 {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 func isHex64(s string) bool {

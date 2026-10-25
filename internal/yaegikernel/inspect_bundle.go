@@ -72,6 +72,8 @@ type mountedVisualEvidence struct {
 	FrontendSHA256 string                 `json:"frontend_sha256"`
 	CaptureReceipt string                 `json:"capture_receipt,omitempty"`
 	Captures       []mountedVisualCapture `json:"captures"`
+	// AssetFailures mirrors capsule.VisualEvidence.AssetFailures (advice).
+	AssetFailures []visualcapture.AssetFailure `json:"asset_failures,omitempty"`
 }
 
 // mountedVisualCapture mirrors capsule.VisualEvidenceCapture.
@@ -245,7 +247,7 @@ func inspectMountedVisualEvidence(root string, evidence *mountedVisualEvidence, 
 		"manifest_sha256": evidence.ManifestSHA256, "frontend_sha256": evidence.FrontendSHA256,
 		"capture_receipt": evidence.CaptureReceipt, "captures": captures,
 	}
-	if warnings := visualcapture.SharedShotWarnings(shots); len(warnings) > 0 {
+	if warnings := append(visualcapture.SharedShotWarnings(shots), visualcapture.AssetFailureWarnings(evidence.AssetFailures)...); len(warnings) > 0 {
 		out["warnings"] = warnings
 	}
 	return out, nil

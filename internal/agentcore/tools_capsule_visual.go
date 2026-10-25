@@ -78,7 +78,8 @@ func recordFreezeVisual(images visualAssetStore, stagedRoot string, visual *caps
 		if len(failures) > 0 {
 			out["visual_store_errors"] = failures
 		}
-		if warnings := visualcapture.SharedShotWarnings(shots); len(warnings) > 0 {
+		warnings := append(visualcapture.SharedShotWarnings(shots), visualcapture.AssetFailureWarnings(visual.AssetFailures)...)
+		if len(warnings) > 0 {
 			out["visual_warnings"] = warnings
 		}
 	}
