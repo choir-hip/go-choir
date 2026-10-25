@@ -435,8 +435,8 @@
     if (mediaRoute?.appId === 'image') return '🖼️';
     if (mediaRoute?.appId === 'audio') return '🎧';
     if (mediaRoute?.appId === 'video') return '🎬';
-    if (mediaRoute?.appId === 'pdf') return '📄';
-    if (mediaRoute?.appId === 'epub') return '📚';
+    if (mediaRoute?.mediaType === 'application/pdf') return '📄';
+    if (mediaRoute?.mediaType === 'application/epub+zip') return '📚';
     if (mediaRoute?.appId === 'slides') return '🖥️';
     if (mediaRoute?.appId === 'calendar') return '📅';
     return '📄';
