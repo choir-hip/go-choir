@@ -40,12 +40,15 @@ import (
 //	F13 two owners publish the same patch bytes and the blob read answers by
 //	    whichever was first (each owner must read the blob they published);
 //	F14 an unknown CHOIR_RELEASE_READS value opens reads (it must close them);
-//	F15 a tombstoned release is served.
+//	F15 a tombstoned release is served;
+//	F16 a missing CHOIR_RELEASE_READS, or a Handler nobody configured, opens
+//	    reads (the default must be owner; only an explicit open opens).
 
 func TestParseReleaseReads(t *testing.T) {
 	for raw, want := range map[string]ReleaseReadsMode{
-		"": ReleaseReadsOpen, "open": ReleaseReadsOpen, " OPEN ": ReleaseReadsOpen,
+		"open": ReleaseReadsOpen, " OPEN ": ReleaseReadsOpen, // only an explicit open opens
 		"owner": ReleaseReadsOwner, "Owner": ReleaseReadsOwner,
+		"": ReleaseReadsOwner, "   ": ReleaseReadsOwner, // F16: unset closes
 		"typo": ReleaseReadsOwner, "owners": ReleaseReadsOwner, // F14
 	} {
 		if got := ParseReleaseReads(raw); got != want {
@@ -328,7 +331,7 @@ func TestOwnerReadsTombstonedReleaseIsNotServed(t *testing.T) {
 func TestOpenModeReproducesTodaysReadsExactly(t *testing.T) {
 	// F10: at open every owner sees every release, whoever asks and whatever
 	// owner they name, and the answers are the ones before S1.
-	for _, mode := range []ReleaseReadsMode{ReleaseReadsOpen, ""} {
+	for _, mode := range []ReleaseReadsMode{ReleaseReadsOpen} {
 		w := newOwnerReadsWorld(t, mode)
 		if all := w.list("?owner_id=owner-b"); !has(all, w.idA, w.idB, w.idB2) || len(all) != 3 {
 			t.Fatalf("open list naming owner-b = %v, want all three", all)
@@ -356,5 +359,20 @@ func TestOpenModeReproducesTodaysReadsExactly(t *testing.T) {
 		if r := (releaseCall{method: http.MethodGet, path: "/internal/platform/releases/" + w.idA + "?computer_id=host&owner_id=owner-b", internal: true}).do(w.h); r.Code != http.StatusOK {
 			t.Fatalf("open: host read naming owner-b = %d, want 200", r.Code)
 		}
+	}
+}
+
+func TestUnconfiguredHandlerReadsAreOwnerScoped(t *testing.T) {
+	// F16: the zero value of the mode is owner, not open.
+	w := newOwnerReadsWorld(t, ReleaseReadsOwner)
+	w.h.releaseReads = "" // as NewHandler leaves it when nothing configures it
+	if r := w.one(w.idB, "computer-a1", tapA1, "computer-a1"); r.Code != http.StatusNotFound {
+		t.Fatalf("unconfigured handler: guest of owner-a reads owner-b's release = %d, want 404", r.Code)
+	}
+	if r := w.blob(w.shaB, "computer-a1", tapA1, "computer-a1"); r.Code != http.StatusNotFound {
+		t.Fatalf("unconfigured handler: guest of owner-a reads owner-b's blob = %d, want 404", r.Code)
+	}
+	if got := w.list("?owner_id=owner-a"); len(got) != 1 || got[0] != w.idA {
+		t.Fatalf("unconfigured handler list = %v, want only owner-a's", got)
 	}
 }

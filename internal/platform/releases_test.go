@@ -89,6 +89,9 @@ func newReleaseHandler(t *testing.T) (*Handler, string) {
 	store, root := openTestPlatformStore(t)
 	h := NewHandler(NewService(store, filepath.Join(root, "artifacts"), filepath.Join(root, "signing-key")))
 	h.eventAuth = releaseGuestAuth{computer: "computer-b"}
+	// These tests pin the publish rules and today's open reads; the owner
+	// scope has its own file (releases_owner_reads_test.go).
+	h.SetReleaseReads(ReleaseReadsOpen)
 	return h, root
 }
 
