@@ -83,3 +83,11 @@ block is duplicated elsewhere stays not contained).
 Rollback: revert the commit; computers return to today's exact test, which can
 only make a stack not contained again (stack_base_moved), never retire one
 that is not upstreamed.
+
+## Staging proof (2026-10-26)
+
+Train 9 (583c93065) deployed. b@c booted it at 10:52 and observability
+reported `upstreamed: the operation's patch is already in the booted base
+583c93065` for selfdev-d81c1246 at 10:52:05 (it was stack_base_moved on
+21c212d0f, aa21b024e and 9da69a5d2). The Reader round 6 request sent at 10:52:35
+(trajectory 277d4b93) is the cast check.
