@@ -100,3 +100,44 @@ test-results files deleted, and resize capped at the free area's edges.
 Lesson: management's verify passed a candidate whose central function throws
 on first use; a reading of the diff cannot catch an undefined name, a type
 check can, so the direction now names one.
+
+## The window manager, rounds 3 and 4 (selfdev-da6f273e, selfdev-1380320d), 2026-10-26
+
+Round 3 (`_runs/design/wm-request-r3.txt`, trajectory ce030d08) froze at
+08:05:07, three minutes after it was sent, and management's verify failed it at
+08:06:08 for missing signed-in evidence. The direction had said that a
+signed-out capture cannot show windows and that FP0 checks them after the
+freeze. FP0's render of round 3 in the real shell passed: restore works again
+(button, double-click, drag), maximize is square in all three presets, resize
+stops at the screen edges, and tsc reports no TS2304. It left two defects. A
+drag-restore after a snap to the top put the pointer at the window's left edge.
+A top-edge resize past the top moved the bottom edge down.
+
+Round 4 (`_runs/design/wm-request-r4.txt`, sent 08:10:55, trajectory d67da8c6)
+asked for those two fixes. It also asked for signed-in screenshots taken inside
+the capsule with Vite and Playwright route mocks. The round froze at 08:45:15
+and passed management's verify (awaiting approval 08:46:16). Its patch from
+df5480a77 is 1879 lines over 8 files plus one new spec.
+
+| Check | Result | Evidence |
+|---|---|---|
+| Undefined names (tsc --checkJs, TS2304) | 0 | judge worktree |
+| Restore button, double-click, drag after a button or double-click maximize | pass | wm-probe5, wm-probe6 |
+| Top-edge resize keeps the bottom; stops at the top | pass (fix 2 done) | wm-probe3 17/18 |
+| Drag-restore after a snap to the top | **fail (fix 1 not done)**: the frame is full width at x 0, but after a drag from pointer x 500 the window's left edge lands at 510, under the pointer | wm-probe7 (frame 0..1280, after 510..1210) |
+| Signed-in screenshots inside the capsule | not taken; the round's only capture is the signed-out `/` | `self-dev visual` lists one capture |
+| Scope | Desktop.svelte gains 3 lines that pass the resize anchor; needed for fix 2 | diff |
+| New spec | `tests/window-fulscreen-sizing.spec.js` (misspelled), unrun, needs the local auth stack | file header |
+
+Management's report to Texture contradicts itself. It says the verify passed.
+It also says signed-in Playwright was not run and the only screenshot is the
+signed-out preview. Engineering reported fix 1 as done; the render shows it is
+not.
+
+Verdict: approve (08:54:31). The round improves on main in every other way
+FP0 probed, and the remaining defect is cosmetic. The next round on the applied
+tree fixes the snap grab point and renames or drops the misspelled spec. It is
+also the binary-reuse proof that R9-5 waits for (a frontend-only round after
+an apply must not rebuild bin/autoputer). Lesson: engineering's report of a fix
+is a claim. Only the render decides it, and the in-capsule signed-in capture
+the direction asked for was skipped without a word in the report.
