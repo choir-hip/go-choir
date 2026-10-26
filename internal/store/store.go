@@ -1979,6 +1979,17 @@ func (s *Store) ListRunsByChannel(ctx context.Context, ownerID, channelID string
 // trajectory. The metadata keyset is exhausted before owner and state filters
 // are applied. A non-positive limit returns every matching active run.
 func (s *Store) ListActiveRunsByTrajectory(ctx context.Context, ownerID, trajectoryID string, limit int) ([]types.RunRecord, error) {
+	return s.listRunsByTrajectoryWhere(ctx, ownerID, trajectoryID, limit, types.RunState.Active)
+}
+
+// ListNonTerminalRunsByTrajectory returns every run on the trajectory that can
+// still change: the active states and passivated runs, which a backlog can
+// re-warm.
+func (s *Store) ListNonTerminalRunsByTrajectory(ctx context.Context, ownerID, trajectoryID string, limit int) ([]types.RunRecord, error) {
+	return s.listRunsByTrajectoryWhere(ctx, ownerID, trajectoryID, limit, func(state types.RunState) bool { return !state.Terminal() })
+}
+
+func (s *Store) listRunsByTrajectoryWhere(ctx context.Context, ownerID, trajectoryID string, limit int, keep func(types.RunState) bool) ([]types.RunRecord, error) {
 	ownerID = strings.TrimSpace(ownerID)
 	trajectoryID = strings.TrimSpace(trajectoryID)
 	if ownerID == "" || trajectoryID == "" {
@@ -2004,7 +2015,7 @@ func (s *Store) ListActiveRunsByTrajectory(ctx context.Context, ownerID, traject
 		if rec.TrajectoryID == "" {
 			rec.TrajectoryID = runTrajectoryID(rec)
 		}
-		if rec.OwnerID != ownerID || rec.TrajectoryID != trajectoryID || !rec.State.Active() {
+		if rec.OwnerID != ownerID || rec.TrajectoryID != trajectoryID || !keep(rec.State) {
 			continue
 		}
 		runs = append(runs, rec)

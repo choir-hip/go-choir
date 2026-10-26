@@ -111,10 +111,13 @@ type RunRootVerdict struct {
 }
 
 // isRunRootRecord is true for a registry row minted for a root run: not a
-// publication, not a lifecycle row, and carrying root_loop_id.
+// publication, not a lifecycle row, and carrying a root_loop_id that is the
+// trajectory's own id (a run that joined someone else's trajectory also stamps
+// root_loop_id, with its own run id).
 func isRunRootRecord(rec types.TrajectoryRecord) bool {
+	root := strings.TrimSpace(rec.SubjectRefs[runRootSubjectRef])
 	return rec.Kind != types.TrajectoryKindPublication && rec.LifecycleVersion == 0 &&
-		strings.TrimSpace(rec.SubjectRefs[runRootSubjectRef]) != ""
+		root != "" && root == strings.TrimSpace(rec.TrajectoryID)
 }
 
 // TrajectoryObligations loads the trajectory and evaluates its settlement
@@ -148,12 +151,13 @@ func (rt *Runtime) TrajectoryObligations(ctx context.Context, ownerID, trajector
 		runRoot = &RunRootVerdict{RunID: strings.TrimSpace(trajectory.SubjectRefs[runRootSubjectRef])}
 	}
 	ready, waitingOn := EvaluateTrajectorySettlement(evaluated, len(open))
-	if runRoot != nil {
-		rt.describeRunRoot(ctx, ownerID, trajectory, runRoot, &ready, &waitingOn)
-	}
 	if pendingUpdates > 0 {
 		ready = false
 		waitingOn = append(waitingOn, fmt.Sprintf("%d pending update_coagent update(s)", pendingUpdates))
+	}
+	if runRoot != nil {
+		// After the pending-update check, so the verdict text agrees with it.
+		rt.describeRunRoot(ctx, ownerID, trajectory, runRoot, &ready, &waitingOn)
 	}
 	return TrajectoryObligations{
 		Trajectory:      trajectory,
@@ -215,15 +219,9 @@ func (rt *Runtime) settleRunRootTrajectory(ctx context.Context, rec *types.RunRe
 	if obligations.RunRoot == nil || obligations.Trajectory.Status != types.TrajectoryLive || !obligations.SettlementReady {
 		return
 	}
-	active, err := rt.store.ListActiveRunsByTrajectory(ctx, rec.OwnerID, trajectoryID, 1)
-	if err != nil {
-		log.Printf("runtime: settle run-root trajectory %s: list active runs: %v", trajectoryID, err)
-		return
-	}
-	if len(active) > 0 {
-		return
-	}
-	if _, err := rt.store.UpdateTrajectoryStatus(ctx, rec.OwnerID, trajectoryID, types.TrajectorySettled); err != nil &&
+	// The store re-checks open work, pending updates and non-terminal runs
+	// (passivated included) under the trajectory lock before it settles.
+	if _, err := rt.store.SettleTrajectoryIfIdle(ctx, rec.OwnerID, trajectoryID); err != nil &&
 		!errors.Is(err, store.ErrLifecycleAuthorityRequired) {
 		log.Printf("runtime: settle run-root trajectory %s: %v", trajectoryID, err)
 	}
