@@ -106,10 +106,23 @@ func (rt *Runtime) runContextForRun(rec *types.RunRecord) string {
 					b.WriteString("\n\n" + notice)
 				}
 			}
+			b.WriteString("\n\n" + capsuleBrowserRecipe)
 		}
 	}
 	return strings.TrimSpace(b.String())
 }
+
+// capsuleBrowserRecipe is the one authoritative way to run a browser in an
+// engineering capsule (R10-6: four assignments made six statements about the
+// toolchain, three of them false). The capsule's workspace has no
+// node_modules; the Nix-built deps tree and the store Chromium are the only
+// browser stack, and a bare npx fetches a newer Playwright that wants a
+// browser build the capsule does not have.
+const capsuleBrowserRecipe = "Capsule browser recipe (authoritative; node, npm and a store Chromium are present, do not probe for alternatives):\n" +
+	"- The workspace has no node_modules. Link them from the frontend deps tree: ln -s $CHOIR_FRONTEND_DEPS/node_modules /workspace/platform/frontend/node_modules, and run Vite from that tree.\n" +
+	"- Use the pinned Playwright from that node_modules (node_modules/.bin/playwright), not npx's fetched one: a bare npx playwright fetches a newer version that cannot find its browser.\n" +
+	"- Launch chromium with executablePath set to the store Chromium's bin/chromium (ls /nix/store/*chromium*/bin/chromium). Never run npx playwright install.\n" +
+	"- Mock the backend with context.route for signed-in views."
 
 // runContextText renders the run context: the time to the second, then the
 // run's facts, if any.
