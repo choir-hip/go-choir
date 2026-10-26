@@ -343,6 +343,29 @@ func (a *RecoveryAdmission) storeCondition(condition *RecoveryCondition) {
 	a.saveLocked()
 }
 
+// mergeReevaluation applies a re-evaluation to the live stored condition and
+// returns the merged clone. Only Kind, Reason, Witness and LastEvaluatedAt come
+// from the re-evaluation; Job, JobRequestedAt, JobSeed* and JobError stay as
+// the background job request left them. It returns nil, storing nothing, when
+// the condition was cleared while the evidence was being read.
+func (a *RecoveryAdmission) mergeReevaluation(updated *RecoveryCondition) *RecoveryCondition {
+	if a == nil || updated == nil {
+		return nil
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	current := a.conditions[updated.ComputerID]
+	if current == nil {
+		return nil
+	}
+	current.Kind = updated.Kind
+	current.Reason = updated.Reason
+	current.Witness = updated.Witness
+	current.LastEvaluatedAt = updated.LastEvaluatedAt
+	a.saveLocked()
+	return cloneRecoveryCondition(current)
+}
+
 // Admit decides whether a realization start may proceed for one computer.
 //
 //   - A durable condition is re-evaluated against fresh canonical evidence.
@@ -401,8 +424,13 @@ func (a *RecoveryAdmission) Admit(ctx context.Context, computerID, ownerID strin
 		}
 		allowed, updated := reevaluateRecoveryCondition(a.now(), condition, observed)
 		if !allowed {
-			a.storeCondition(updated)
-			a.considerJob(updated)
+			// The snapshot predates the evidence read; a background job
+			// request may have finished since. Merge the re-evaluated fields
+			// onto the live condition rather than storing the snapshot over it.
+			if merged := a.mergeReevaluation(updated); merged != nil {
+				updated = merged
+				a.considerJob(updated)
+			}
 			return refusalFromCondition(updated)
 		}
 		emptyStore = emptyStore || condition.Witness.FreshRealization
