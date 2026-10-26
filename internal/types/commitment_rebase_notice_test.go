@@ -85,21 +85,27 @@ func TestRebaseNoticeCannotBeForged(t *testing.T) {
 		return rec
 	}
 	cases := map[string]CommitmentRecord{
-		"agent emitter":             mutate(func(r *CommitmentRecord) { r.EmitterKind = CommitmentEmitterAgent }),
-		"wrong sender":              mutate(func(r *CommitmentRecord) { r.SenderInbox = "management:owner" }),
-		"owner-act sender":          mutate(func(r *CommitmentRecord) { r.SenderInbox = OwnerActSenderInbox(rebaseTestOp) }),
-		"sender names another op":   mutate(func(r *CommitmentRecord) { r.SenderInbox = StackRebaseSenderInbox("op-b") }),
-		"attempt zero":              mutate(func(r *CommitmentRecord) { r.RecordID = StackRebaseNoticeID(rebaseTestOp, rebaseTestBase, 0); r.SubjectRefs["attempt"] = "0" }),
-		"attempt over the cap":      mutate(func(r *CommitmentRecord) { r.RecordID = StackRebaseNoticeID(rebaseTestOp, rebaseTestBase, 4); r.SubjectRefs["attempt"] = "4" }),
-		"id not derived":            mutate(func(r *CommitmentRecord) { r.RecordID = "rebase-notice:forged" }),
-		"id names another base":     mutate(func(r *CommitmentRecord) { r.RecordID = StackRebaseNoticeID(rebaseTestOp, "cccc", 1) }),
-		"subject op differs":        mutate(func(r *CommitmentRecord) { r.SubjectRefs["operation_id"] = "op-b" }),
-		"subject base differs":      mutate(func(r *CommitmentRecord) { r.SubjectRefs["booted_base"] = "cccc" }),
-		"subject attempt differs":   mutate(func(r *CommitmentRecord) { r.SubjectRefs["attempt"] = "2" }),
-		"not a note":                mutate(func(r *CommitmentRecord) { r.Directive.Subtype = CommitmentDirectiveCast }),
-		"no directive":              mutate(func(r *CommitmentRecord) { r.Directive = nil }),
-		"final":                     mutate(func(r *CommitmentRecord) { r.Final = true }),
-		"to a non-texture inbox":    mutate(func(r *CommitmentRecord) { r.Inbox = "management:owner" }),
+		"agent emitter":           mutate(func(r *CommitmentRecord) { r.EmitterKind = CommitmentEmitterAgent }),
+		"wrong sender":            mutate(func(r *CommitmentRecord) { r.SenderInbox = "management:owner" }),
+		"owner-act sender":        mutate(func(r *CommitmentRecord) { r.SenderInbox = OwnerActSenderInbox(rebaseTestOp) }),
+		"sender names another op": mutate(func(r *CommitmentRecord) { r.SenderInbox = StackRebaseSenderInbox("op-b") }),
+		"attempt zero": mutate(func(r *CommitmentRecord) {
+			r.RecordID = StackRebaseNoticeID(rebaseTestOp, rebaseTestBase, 0)
+			r.SubjectRefs["attempt"] = "0"
+		}),
+		"attempt over the cap": mutate(func(r *CommitmentRecord) {
+			r.RecordID = StackRebaseNoticeID(rebaseTestOp, rebaseTestBase, 4)
+			r.SubjectRefs["attempt"] = "4"
+		}),
+		"id not derived":          mutate(func(r *CommitmentRecord) { r.RecordID = "rebase-notice:forged" }),
+		"id names another base":   mutate(func(r *CommitmentRecord) { r.RecordID = StackRebaseNoticeID(rebaseTestOp, "cccc", 1) }),
+		"subject op differs":      mutate(func(r *CommitmentRecord) { r.SubjectRefs["operation_id"] = "op-b" }),
+		"subject base differs":    mutate(func(r *CommitmentRecord) { r.SubjectRefs["booted_base"] = "cccc" }),
+		"subject attempt differs": mutate(func(r *CommitmentRecord) { r.SubjectRefs["attempt"] = "2" }),
+		"not a note":              mutate(func(r *CommitmentRecord) { r.Directive.Subtype = CommitmentDirectiveCast }),
+		"no directive":            mutate(func(r *CommitmentRecord) { r.Directive = nil }),
+		"final":                   mutate(func(r *CommitmentRecord) { r.Final = true }),
+		"to a non-texture inbox":  mutate(func(r *CommitmentRecord) { r.Inbox = "management:owner" }),
 	}
 	for name, rec := range cases {
 		if IsStackRebaseNotice(rec) {
@@ -118,12 +124,12 @@ func TestRebaseNoticeRefusesWhatDoesNotBind(t *testing.T) {
 		t.Fatal("baseline notice must build")
 	}
 	for name, f := range map[string]func(*StackRebaseNotice){
-		"not a texture inbox": func(n *StackRebaseNotice) { n.TextureInbox = "management:o" },
-		"bare texture inbox":  func(n *StackRebaseNotice) { n.TextureInbox = "texture:" },
-		"no operation":        func(n *StackRebaseNotice) { n.OperationID = "" },
-		"no booted base":      func(n *StackRebaseNotice) { n.BootedBase = "" },
-		"no stack base":       func(n *StackRebaseNotice) { n.StackBase = "" },
-		"attempt zero":        func(n *StackRebaseNotice) { n.Attempt = 0 },
+		"not a texture inbox":  func(n *StackRebaseNotice) { n.TextureInbox = "management:o" },
+		"bare texture inbox":   func(n *StackRebaseNotice) { n.TextureInbox = "texture:" },
+		"no operation":         func(n *StackRebaseNotice) { n.OperationID = "" },
+		"no booted base":       func(n *StackRebaseNotice) { n.BootedBase = "" },
+		"no stack base":        func(n *StackRebaseNotice) { n.StackBase = "" },
+		"attempt zero":         func(n *StackRebaseNotice) { n.Attempt = 0 },
 		"attempt over the cap": func(n *StackRebaseNotice) { n.Attempt = RebaseNoticeMaxAttempts + 1 },
 	} {
 		n := ok
