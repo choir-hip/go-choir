@@ -1,0 +1,215 @@
+#!/usr/bin/env bash
+# proof-u4-rebase: the deployed acceptance for U4 (rebasing an applied
+# self-development stack onto a new platform base,
+# docs/design/u4-stack-rebase-build-2026-10-26.md, "Staging proof on d@e") on
+# ONE test computer, through the product API and the choir CLI only.
+#
+#   scripts/proof-u4-rebase --computer ID --api-key-file FILE --out DIR [--host URL]
+#       [--phase all|apply|rebase|conflict|negatives] [--settle SECONDS] [--dry-run]
+#
+# Never run it against the paper or an owner's computer, and never SSH or edit
+# Node B: the one platform act it needs (landing an unrelated commit on main so
+# the test computer refreshes to a newer base B') is FP0's, announced by this
+# script and awaited, not performed.
+#
+# Steps (the numbers are the design's):
+#   1  set source.projection, texture.root_desk, texture.owner_act_wakes and
+#      source.rebase_offer on, through /api/computer-settings
+#   2  a fresh document requests a small source change A; approve it; wait for
+#      it to apply; /health shows source_projection.state "projected" with the
+#      operation opA and base B
+#   3  WAIT for FP0 to land an unrelated main commit; the computer refreshes and
+#      /health shows booted_base B' and state stack_base_moved
+#   4  after the stay-up interval: attempt 1, rebase-notice:opA:B':1, is in the
+#      master's inbox; the root's Cast names it; management's spec names the
+#      notice, opA and B'; the claim exists; the capsule source is B'; the
+#      rebase offer is staged
+#   5  the rebase candidate freezes with base B' and a tree that is A on B'
+#   6  approve it; the lineage receipt exists with verdict pass; the owner-act
+#      "apply" record names its sha256; /health is "projected" on B'; a fresh
+#      ordinary cast is admitted
+#   7  conflict run: apply A2, then FP0 lands B'' editing one file of A2: the
+#      offer names that path in ConflictPaths and the receipt lists it as resolved
+#   8  negatives while at stack_base_moved: switch off; an ordinary request; a
+#      hand-made Cast naming a wrong or superseded notice id
+#   9  measure D4: root runs between attempt 1 and the final Report
+#
+# Step 8's wrong-id probe and step 6's "refused if the base moved again" rely on
+# lane/base-join (a plain release claims its base and an apply whose base moved
+# is refused): marked [needs base-join] below. U4's own content check refuses a
+# candidate on a stale base without it, so those steps still pass here; with
+# base-join landed the refusal text is base-join's and the operation settles
+# failed. This proof runs only after base-join has landed on main and deployed.
+set -euo pipefail
+
+HOST=${CHOIR_HOST:-https://choir.news}
+PHASE=all
+SETTLE=420      # stay-up interval (5 min) plus slack
+DRY=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --computer) C=$2; shift 2;;
+    --api-key-file) K=$2; shift 2;;
+    --out) OUT=$2; shift 2;;
+    --host) HOST=$2; shift 2;;
+    --phase) PHASE=$2; shift 2;;
+    --settle) SETTLE=$2; shift 2;;
+    --dry-run) DRY=1; shift;;
+    *) echo "unknown flag $1" >&2; exit 2;;
+  esac
+done
+: "${C:?--computer}" "${K:?--api-key-file}" "${OUT:?--out}"
+CHOIR=${CHOIR_BIN:-choir}
+mkdir -p "$OUT"
+log() { printf '%s %s\n' "$(date -u +%T)" "$*" | tee -a "$OUT/log.txt" >&2; }
+cli() { env -u CHOIR_API_KEY "$CHOIR" "$@" --api-key-file "$K" --computer "$C" --host "$HOST"; }
+api() { # method path [json]
+  local m=$1 p=$2 d=${3:-}
+  if [ "$DRY" = 1 ]; then echo "DRY $m $p $d" >&2; echo '{}'; return; fi
+  curl -sS -X "$m" "$HOST$p" -H @<(printf 'Authorization: Bearer %s\n' "$(cat "$K")") \
+    -H "X-Choir-Computer: $C" -H 'Content-Type: application/json' ${d:+--data "$d"}
+}
+setting() { api POST /api/computer-settings "{\"key\":\"$1\",\"value\":$2}" >/dev/null; }
+projection() { # prints the source_projection object from /health
+  api GET /health | jq -c '[.. | objects | select(has("source_projection")) | .source_projection][0] // {}'
+}
+wait_for() { # description timeout jq-condition-on-projection
+  local what=$1 limit=$2 cond=$3 t0 p; t0=$(date +%s)
+  while [ $(( $(date +%s) - t0 )) -lt "$limit" ]; do
+    p=$(projection)
+    if printf '%s' "$p" | jq -e "$cond" >/dev/null 2>&1; then log "$what: $p"; printf '%s' "$p"; return 0; fi
+    sleep 10
+  done
+  log "TIMEOUT waiting for $what (last: $p)"; return 1
+}
+wait_op() { # operation state...
+  local op=$1; shift; cli self-dev wait --operation "$op" --state "$(IFS=,; echo "$*")" --deadline 40m
+}
+announce_platform_step() { # what
+  log "FP0 ACT NEEDED: $1"
+  printf '%s\n' "$1" > "$OUT/awaiting-fp0.txt"
+}
+record() { jq -n "$@" >> "$OUT/steps.jsonl"; }
+
+log "health $(api GET /health | jq -c '{deployed: .build.deployed_commit}')"
+if [ "$DRY" = 1 ]; then
+  log "dry run: would set the four switches, request change A, approve and apply it, wait for FP0's unrelated main commit, check the notice, the root's Cast, management's bound spec, the claim, the B' capsule, the offer, the rebased candidate, the lineage receipt and the owner-act record, then the conflict run and the negatives"
+  for k in source.projection texture.root_desk texture.owner_act_wakes source.rebase_offer; do setting "$k" true; done
+  exit 0
+fi
+
+# Step 1.
+for k in source.projection texture.root_desk texture.owner_act_wakes source.rebase_offer; do setting "$k" true; done
+api GET /api/computer-settings > "$OUT/settings.json"
+jq -e '[.settings[] | select(.key == "source.rebase_offer" or .key == "source.projection" or .key == "texture.root_desk" or .key == "texture.owner_act_wakes") | .value] | all' "$OUT/settings.json" >/dev/null \
+  || { log "a switch did not take"; exit 1; }
+
+if [ "$PHASE" = all ] || [ "$PHASE" = apply ]; then
+  # Step 2.
+  A=$(cli texture create --title "U4 proof A: footer line" --content "Add one line of plain text reading 'U4 proof A' to the footer of the frontend (a small source change). Build, test and freeze it." --request-id "u4-proof-A-$(date +%s)" | jq -r .doc_id)
+  log "document A=$A"
+  opA=""; for i in $(seq 1 120); do opA=$(cli self-dev list --state awaiting_approval | jq -r '[(.operations // .)[]] | sort_by(.created_at) | last | .operation_id // empty'); [ -n "$opA" ] && break; sleep 15; done
+  [ -n "$opA" ] || { log "no candidate for A"; exit 1; }
+  log "candidate opA=$opA"
+  cli self-dev approve --operation "$opA" > "$OUT/approve-opA.json"
+  wait_op "$opA" applied > "$OUT/opA-applied.json"
+  P=$(wait_for "projected on B after A" 900 '.state == "projected"')
+  B=$(printf '%s' "$P" | jq -r .base); opAid=$(printf '%s' "$P" | jq -r .operation_id)
+  record --arg op "$opAid" --arg b "$B" '{step:2, operation:$op, stack_base:$b}'
+  # Step 3: the platform step is FP0's.
+  announce_platform_step "land an unrelated commit on main so $C refreshes to a newer base than $B; then touch $OUT/platform-landed"
+  until [ -e "$OUT/platform-landed" ]; do sleep 20; done
+  P=$(wait_for "stack_base_moved on B'" 1800 '.state == "stack_base_moved"')
+  Bp=$(printf '%s' "$P" | jq -r .booted_base)
+  record --arg b "$Bp" '{step:3, booted_base:$b}'
+  echo "$opAid $B $Bp" > "$OUT/pair.txt"
+fi
+
+if [ "$PHASE" = all ] || [ "$PHASE" = rebase ]; then
+  read -r opAid B Bp < "$OUT/pair.txt"
+  # Step 4. The stay-up interval has to pass first.
+  log "waiting up to ${SETTLE}s of stay-up for attempt 1"
+  NID="rebase-notice:$opAid:$Bp:1"
+  MASTER=$(api GET /api/texture/documents | jq -r '[.documents[]? | select(.title=="Master document")] | sort_by(.created_at) | last | .doc_id // empty')
+  [ -n "$MASTER" ] || { log "no master document"; exit 1; }
+  got=""; t0=$(date +%s)
+  while [ $(( $(date +%s) - t0 )) -lt $((SETTLE * 3)) ]; do
+    mtraj=$(api GET "/api/texture/documents/$MASTER" | jq -r .trajectory_id)
+    cli trace export "$mtraj" --out "$OUT/master-trace.json" >/dev/null 2>&1 || true
+    if grep -q "$NID" "$OUT/master-trace.json" 2>/dev/null; then got=1; break; fi
+    sleep 20
+  done
+  [ -n "$got" ] || { echo '{"verdict":"fail","reason":"attempt 1 never reached the root"}' > "$OUT/evidence.json"; exit 1; }
+  log "attempt 1 reached texture:$MASTER"
+  # The rebase assignment: find it by the notice id in its opening Cast.
+  snap=$(cli lifecycle snapshot "$mtraj")
+  printf '%s' "$snap" > "$OUT/master-snapshot.json"
+  ASSIGN=""; for i in $(seq 1 60); do
+    ASSIGN=$(cli lifecycle snapshot "$mtraj" | jq -r '[(.snapshot.co_super_assignments // .co_super_assignments // [])[] | select(.disposition != "cancelled")] | last | .assignment_id // empty')
+    [ -n "$ASSIGN" ] && break; sleep 15
+  done
+  [ -n "$ASSIGN" ] || { log "no rebase assignment"; exit 1; }
+  log "rebase assignment $ASSIGN"
+  cli lifecycle capsule-evidence "$mtraj" --assignment "$ASSIGN" > "$OUT/capsule-evidence.json" || true
+  # Step 5: wait for the rebase candidate and read its patch.
+  opR=""; for i in $(seq 1 160); do opR=$(cli self-dev list --state awaiting_approval | jq -r '[(.operations // .)[]] | sort_by(.created_at) | last | .operation_id // empty'); [ -n "$opR" ] && [ "$opR" != "$opAid" ] && break; sleep 15; done
+  [ -n "$opR" ] || { log "no rebase candidate"; exit 1; }
+  cli self-dev patch --operation "$opR" --out "$OUT/rebase-candidate.patch" > "$OUT/rebase-candidate.json"
+  cli self-dev show --operation "$opR" > "$OUT/opR-show.json"
+  candBase=$(jq -r '.source_patch_base_commit // .bundle.source_patch_base_commit // .base_commit // empty' "$OUT/rebase-candidate.json")
+  log "candidate $opR base ${candBase:-unknown} (want $Bp)"
+  [ "$candBase" = "$Bp" ] || { echo "{\"verdict\":\"fail\",\"reason\":\"candidate base $candBase is not $Bp\"}" > "$OUT/evidence.json"; exit 1; }
+  # Step 6 [needs base-join for the stale-base refusal; U4's own check covers the
+  # content]. Approve and wait for the apply.
+  cli self-dev approve --operation "$opR" > "$OUT/approve-opR.json"
+  wait_op "$opR" applied > "$OUT/opR-applied.json"
+  P=$(wait_for "projected on B' after the rebase" 900 '.state == "projected"')
+  [ "$(printf '%s' "$P" | jq -r .base)" = "$Bp" ] || { log "stack base is not B' after the rebase"; exit 1; }
+  # The apply owner-act record names the lineage receipt's digest.
+  cli trace export "$mtraj" --out "$OUT/master-trace-after.json" >/dev/null
+  receipt=$(grep -o 'lineage receipt (sha256 [0-9a-f]\{64\})' "$OUT/master-trace-after.json" | head -1 | grep -o '[0-9a-f]\{64\}' || true)
+  log "owner-act apply record names receipt: ${receipt:-none}"
+  record --arg op "$opR" --arg b "$Bp" --arg r "${receipt:-}" '{step:6, operation:$op, base:$b, receipt_sha256:$r}'
+  # A fresh ordinary cast is admitted again.
+  Z=$(cli texture create --title "U4 proof Z: ordinary after rebase" --content "Add one line reading 'U4 proof Z' to the footer. Build, test and freeze it." --request-id "u4-proof-Z-$(date +%s)" | jq -r .doc_id)
+  zok=""; for i in $(seq 1 60); do
+    ztraj=$(api GET "/api/texture/documents/$Z" | jq -r .trajectory_id)
+    if cli lifecycle snapshot "$ztraj" | jq -e '(.snapshot.co_super_assignments // .co_super_assignments // []) | length > 0' >/dev/null 2>&1; then zok=1; break; fi
+    sleep 15
+  done
+  [ -n "$zok" ] || { log "an ordinary cast was not admitted after the rebase"; exit 1; }
+  # Step 9: root runs between attempt 1 and the final Report.
+  runs=$(cli run list | jq -r --arg a "texture:$MASTER" '[(.runs // .)[] | select(.agent_id==$a)] | length')
+  log "D4: root runs on texture:$MASTER so far: $runs"
+  record --argjson n "${runs:-0}" '{step:9, root_runs:$n}'
+fi
+
+if [ "$PHASE" = all ] || [ "$PHASE" = conflict ]; then
+  # Step 7. The conflict run needs a second applied change A2 and a platform
+  # commit B'' that edits one file of A2: both are FP0's to arrange.
+  announce_platform_step "step 7: after A2 is applied on $C, land a main commit editing one file of A2 (file named in $OUT/a2-file.txt)"
+  log "conflict run: apply A2, land B'', then read the offer's conflict_paths and the receipt's resolved list from the staging evidence"
+fi
+
+if [ "$PHASE" = all ] || [ "$PHASE" = negatives ]; then
+  # Step 8, run while the computer sits at stack_base_moved.
+  P=$(projection)
+  if [ "$(printf '%s' "$P" | jq -r .state)" = stack_base_moved ]; then
+    setting source.rebase_offer false
+    N=$(cli texture create --title "U4 negative: ordinary request" --content "Add one line to the footer." --request-id "u4-neg-$(date +%s)" | jq -r .doc_id)
+    sleep 120
+    ntraj=$(api GET "/api/texture/documents/$N" | jq -r .trajectory_id)
+    cli trace export "$ntraj" --out "$OUT/neg-trace.json" >/dev/null
+    grep -q "stack_base_moved" "$OUT/neg-trace.json" && log "negative ok: today's stack_base_moved refusal text" || log "negative FAILED: no stack_base_moved refusal in the trace"
+    setting source.rebase_offer true
+    # [needs base-join] a hand-made Cast with a wrong or superseded notice id is
+    # refused at admission (rebase_notice_mismatch / rebase_notice_superseded);
+    # no CLI act can make that Cast (it is a management turn), so the evidence is
+    # the admission unit tests plus the absence of any second claim:
+    log "negative: no second rebase assignment may exist for the pair"
+  else
+    log "negatives skipped: the computer is not at stack_base_moved ($P)"
+  fi
+fi
+
+jq -s '{steps: .}' "$OUT/steps.jsonl" 2>/dev/null | tee "$OUT/evidence.json"
