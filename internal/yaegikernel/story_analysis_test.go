@@ -69,3 +69,13 @@ func TestStoryAnalysisIsExportedToTheResearchDeskOnly(t *testing.T) { // G9a
 		}
 	}
 }
+
+// The surface teaches Relate's own-story form and the analysis it cites.
+func TestRelateSurfaceNamesTheOwnStoryAndTheAnalysis(t *testing.T) {
+	doc := choirFunctionDocs["Relate"].Summary
+	for _, want := range []string{`""`, "choir.StoryAnalysis()", "novelty"} {
+		if !strings.Contains(doc, want) {
+			t.Fatalf("Relate's surface doc misses %q: %s", want, doc)
+		}
+	}
+}
