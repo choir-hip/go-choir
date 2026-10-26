@@ -160,3 +160,6 @@ func EvaluateTrajectorySettlement(rec types.TrajectoryRecord, openWorkItems int)
 	}
 	return len(waitingOn) == 0, waitingOn
 }
+
+// settleRunRootTrajectory is stubbed until the fix lands.
+func (rt *Runtime) settleRunRootTrajectory(ctx context.Context, rec *types.RunRecord) {}
