@@ -336,3 +336,24 @@ func TestRootContextLabelLetsARunSurfaceAConflictInItsOwnDocument(t *testing.T) 
 		t.Error("the label still forbids naming another document in the run's own document")
 	}
 }
+
+// U4 (docs/design/u4-stack-rebase-build-2026-10-26.md, slice 5): the root's
+// only Cast is the one a rebase notice asks for. Ways it can fail: the
+// exception is missing, so the root cannot answer the platform's notice; the
+// exception is broad, so the root casts to management for an owner's request or
+// to research; it does not say to copy the notice id exactly or to cast once
+// per notice, so management's Cast cannot be bound to the notice.
+func TestRootSectionCastsOnlyForARebaseNotice(t *testing.T) {
+	root := RootSection()
+	for _, want := range []string{
+		"rebase_notice", "selfdev-rebase:", `choir.Cast("management"`, "once per notice", "copying the notice id exactly",
+		"An owner's request is never one", "never cast to research", "Waits on the owner",
+	} {
+		if !strings.Contains(root, want) {
+			t.Errorf("root section lacks %q", want)
+		}
+	}
+	if strings.Contains(root, `choir.Cast("research"`) {
+		t.Error("the root section teaches a Cast to research")
+	}
+}

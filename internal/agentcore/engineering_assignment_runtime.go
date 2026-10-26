@@ -167,6 +167,31 @@ type assignmentSpawnRequest struct {
 // withholds the L2 ecosystem egress.
 type engineeringCastSpec struct {
 	Parent string `json:"parent"`
+	// RebaseNotice, RebaseOf and Base name a U4 rebase request (docs/design/
+	// u4-stack-rebase-build-2026-10-26.md): the notice the root answered, the
+	// applied operation to rebase and the booted base to rebase onto. A spec
+	// without RebaseNotice is an ordinary Cast.
+	RebaseNotice string `json:"rebase_notice,omitempty"`
+	RebaseOf     string `json:"rebase_of,omitempty"`
+	Base         string `json:"base,omitempty"`
+}
+
+func (s engineeringCastSpec) rebase() rebaseSpec {
+	return rebaseSpec{Notice: s.RebaseNotice, RebaseOf: s.RebaseOf, Base: s.Base}
+}
+
+// sourcePreflighter is the capsule executor's source preflight, a seam so the
+// cast planning runs where the linux executor does not.
+type sourcePreflighter interface {
+	PreflightSourceSnapshot(ctx context.Context, candidateRef string) (capsule.SourcePreflight, error)
+	PreflightSourceCommit(ctx context.Context, commit string) (capsule.SourcePreflight, error)
+}
+
+func (rt *Runtime) sourcePreflighter() sourcePreflighter {
+	if rt.sourcePreflight != nil {
+		return rt.sourcePreflight
+	}
+	return rt.capsuleExecutor
 }
 
 // engineeringCastPlan is a management cell's Cast to engineering, admitted
@@ -177,6 +202,10 @@ type engineeringCastPlan struct {
 	Binding      types.EngineeringAssignmentBinding
 	Objective    string
 	Cast         types.CommitmentRecord
+	// Rebase is set when the Cast answers a rebase notice (U4): the open then
+	// carries the admission clock and the store binds the notice and claims
+	// the pair in the open's own transaction.
+	Rebase bool
 }
 
 // planEngineeringCast runs D4's checks for one staged Cast to engineering
@@ -255,10 +284,18 @@ func (rt *Runtime) planEngineeringCast(ctx context.Context, scope ReductionScope
 	// U1: the capsule seeds from the repository's HEAD, so HEAD must be the
 	// effective release's source before it is read (and a stack on a moved
 	// base refuses here, visibly, rather than building on the old base).
-	if err := rt.sourceProjectionCastGate(ctx); err != nil {
+	rebaseBase, err := rt.sourceProjectionCastGateFor(ctx, spec.rebase())
+	if err != nil {
 		return engineeringCastPlan{}, fmt.Errorf("engineering cast: %w", err)
 	}
-	preflight, err := rt.capsuleExecutor.PreflightSourceSnapshot(ctx, "")
+	var preflight capsule.SourcePreflight
+	if rebaseBase != "" {
+		// A rebase round starts from the booted base B', not from HEAD (the
+		// projection commit on the old base): HEAD would "rebase" onto B.
+		preflight, err = rt.sourcePreflighter().PreflightSourceCommit(ctx, rebaseBase)
+	} else {
+		preflight, err = rt.sourcePreflighter().PreflightSourceSnapshot(ctx, "")
+	}
 	if err != nil {
 		return engineeringCastPlan{}, fmt.Errorf("engineering cast: preflight capsule source: %w", err)
 	}
@@ -310,7 +347,7 @@ func (rt *Runtime) planEngineeringCast(ctx context.Context, scope ReductionScope
 		return engineeringCastPlan{}, err
 	}
 	cast.ParentID = parentID
-	return engineeringCastPlan{AssignmentID: assignmentID, Binding: binding, Objective: objective, Cast: cast}, nil
+	return engineeringCastPlan{AssignmentID: assignmentID, Binding: binding, Objective: objective, Cast: cast, Rebase: rebaseBase != ""}, nil
 }
 
 // refuseCastOntoOpenAssignment refuses an engineering Cast for a Texture
@@ -343,6 +380,12 @@ func (rt *Runtime) openDelegatedCastAssignment(ctx context.Context, plan enginee
 	open := types.OpenEngineeringAssignmentRequest{
 		CommandID: "engineering-open:" + plan.AssignmentID, AssignmentID: plan.AssignmentID, Binding: plan.Binding,
 		AssignedAgent: types.AgentRecord{AgentID: plan.Binding.AssignedAgentID}, Records: records,
+	}
+	if plan.Rebase {
+		// The store does not read the clock: the runtime says when this boot
+		// began and whether a marker made it a planned restart, so a notice
+		// committed before a crash boot is never acted on.
+		open.Rebase = &types.RebaseAdmission{BootedAt: rt.bootedAt, PlannedBoot: rt.bootRestartPlanned}
 	}
 	var err error
 	if open.CommandDigest, err = store.ComputeOpenEngineeringAssignmentDigest(open); err != nil {

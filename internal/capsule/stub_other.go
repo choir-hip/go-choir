@@ -46,6 +46,9 @@ func (e *Executor) SourceDir() string              { return "" }
 func (e *Executor) PreflightSourceSnapshot(context.Context, string) (SourcePreflight, error) {
 	return SourcePreflight{}, stubErr("preflight source")
 }
+func (e *Executor) PreflightSourceCommit(context.Context, string) (SourcePreflight, error) {
+	return SourcePreflight{}, stubErr("preflight source commit")
+}
 func (e *Executor) Spawn(context.Context, SpawnSpec) (*Capsule, error) { return nil, stubErr("spawn") }
 func (e *Executor) Destroy(context.Context, string) error              { return stubErr("destroy") }
 func (e *Executor) ForceDestroy(context.Context, string) error         { return stubErr("destroy") }
