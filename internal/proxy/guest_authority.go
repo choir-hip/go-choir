@@ -12,6 +12,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/hostauth"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/release"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
@@ -149,6 +150,11 @@ func (h *Handler) requirePlatformObjectGraphCaller(r *http.Request) error {
 		_ = json.Unmarshal(body, &kinds)
 		if kinds.ObjectKind == string(objectgraph.WebCaptureObjectKind) || kinds.Kind == string(objectgraph.WebCaptureObjectKind) {
 			return fmt.Errorf("captures are written through /internal/platform/captures")
+		}
+		// A release is published by the owner's act, never filed by a guest
+		// (Library S1 review 262, F20).
+		if kinds.ObjectKind == release.ObjectKind || kinds.Kind == release.ObjectKind {
+			return fmt.Errorf("releases are published through the owner's act, not written as objects")
 		}
 		return nil
 	}

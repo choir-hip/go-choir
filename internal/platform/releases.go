@@ -62,6 +62,8 @@ type releaseStore interface {
 	GetObjectByMetadata(ctx context.Context, kind, jsonPath, value string) (objectgraph.Object, error)
 	ListObjects(ctx context.Context, filter objectgraph.ListFilter) ([]objectgraph.Object, error)
 	ListObjectsByMetadata(ctx context.Context, kind, jsonPath, value string, limit int) ([]objectgraph.Object, error)
+	ListObjectsByMetadataForOwner(ctx context.Context, kind, jsonPath, value, ownerID string, limit int) ([]objectgraph.Object, error)
+	GetObject(ctx context.Context, id string) (objectgraph.Object, error)
 }
 
 func (h *Handler) releaseStore() releaseStore {
@@ -287,7 +289,7 @@ func (h *Handler) publishRelease(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, apiError{Error: "release publish: " + err.Error()})
 		return
 	}
-	view, err := h.readRelease(r.Context(), releaseID, "")
+	view, err := h.readRelease(r.Context(), releaseID, record.Publisher.OwnerID)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, apiError{Error: "release publish: read back"})
 		return
@@ -325,19 +327,23 @@ func (h *Handler) releaseReadScope(r *http.Request, computerID string) (scope st
 }
 
 // ownerPublishedPatch reports whether ownerID published a release whose
-// patch is the blob digest. Two owners may publish the same bytes, so this
-// asks for every release naming the digest, not the first.
+// patch is the blob digest. The owner is in the query, so another owner's
+// objects cannot fill the limit, and each candidate is verified from its
+// body, not from its metadata: the record hashes to its id, names ownerID
+// as publisher on an object ownerID holds, and names this digest. Two
+// owners may publish the same bytes, so every candidate is checked.
 func (h *Handler) ownerPublishedPatch(ctx context.Context, ownerID, digest string) bool {
 	store := h.releaseStore()
 	if store == nil {
 		return false
 	}
-	objects, err := store.ListObjectsByMetadata(ctx, string(SoftwareReleaseKind), "$.patch_sha256", digest, 200)
+	objects, err := store.ListObjectsByMetadataForOwner(ctx, string(SoftwareReleaseKind), "$.patch_sha256", digest, ownerID, 200)
 	if err != nil {
 		return false
 	}
 	for _, obj := range objects {
-		if obj.ObjectKind == SoftwareReleaseKind && !obj.Tombstone && obj.OwnerID == ownerID {
+		_, record, err := verifiedRelease(obj)
+		if err == nil && obj.OwnerID == ownerID && record.Publisher.OwnerID == ownerID && record.Source.PatchSHA256 == digest {
 			return true
 		}
 	}
@@ -346,42 +352,88 @@ func (h *Handler) ownerPublishedPatch(ctx context.Context, ownerID, digest strin
 
 // readRelease finds a release by its id and re-verifies the stored record
 // against it: the store is not trusted by name either (A3). A non-empty
-// ownerID limits the read to that owner's releases; another owner's release
-// is objectgraph.ErrNotFound, the same as one nobody published.
+// ownerID limits the read to that owner's releases, found by the canonical
+// id that owner's release has (a deterministic key no other owner can file
+// an object under); another owner's release is objectgraph.ErrNotFound, the
+// same as one nobody published. An unscoped host read lists the objects that
+// claim the id and takes the one that verifies, so an object claiming the
+// id with a bad body cannot hide the real release.
 func (h *Handler) readRelease(ctx context.Context, releaseID, ownerID string) (ReleaseView, error) {
 	store := h.releaseStore()
 	if store == nil {
 		return ReleaseView{}, errors.New("release store unavailable")
 	}
-	obj, err := store.GetObjectByMetadata(ctx, string(SoftwareReleaseKind), "$.release_id", releaseID)
+	if ownerID != "" {
+		canonicalID, err := objectgraph.BuildCanonicalID(SoftwareReleaseKind, ownerID, releaseID)
+		if err != nil {
+			return ReleaseView{}, objectgraph.ErrNotFound
+		}
+		obj, err := store.GetObject(ctx, canonicalID)
+		if err != nil {
+			return ReleaseView{}, err
+		}
+		return viewOfRelease(obj, releaseID)
+	}
+	objects, err := store.ListObjectsByMetadata(ctx, string(SoftwareReleaseKind), "$.release_id", releaseID, 200)
 	if err != nil {
 		return ReleaseView{}, err
 	}
-	if ownerID != "" && obj.OwnerID != ownerID {
+	var lastErr error = objectgraph.ErrNotFound
+	for _, obj := range objects {
+		view, err := viewOfRelease(obj, releaseID)
+		if err == nil {
+			return view, nil
+		}
+		if !errors.Is(err, objectgraph.ErrNotFound) {
+			lastErr = err
+		}
+	}
+	return ReleaseView{}, lastErr
+}
+
+// viewOfRelease is verifiedRelease for the release a caller asked for by id.
+func viewOfRelease(obj objectgraph.Object, releaseID string) (ReleaseView, error) {
+	view, _, err := verifiedRelease(obj)
+	if err != nil {
+		return ReleaseView{}, err
+	}
+	if view.ReleaseID != releaseID {
 		return ReleaseView{}, objectgraph.ErrNotFound
 	}
-	return releaseViewFromObject(obj)
+	return view, nil
 }
 
 func releaseViewFromObject(obj objectgraph.Object) (ReleaseView, error) {
+	view, _, err := verifiedRelease(obj)
+	return view, err
+}
+
+// verifiedRelease trusts nothing about an object but its body: the record
+// must hash to the release id its metadata names, and its publisher must be
+// the owner the object is filed under (publish sets both from one value).
+// An object that fails is not a release this host published.
+func verifiedRelease(obj objectgraph.Object) (ReleaseView, release.Record, error) {
 	if obj.ObjectKind != SoftwareReleaseKind || obj.Tombstone {
-		return ReleaseView{}, objectgraph.ErrNotFound
+		return ReleaseView{}, release.Record{}, objectgraph.ErrNotFound
 	}
 	var metadata struct {
 		ReleaseID   string `json:"release_id"`
 		PublishedAt string `json:"published_at"`
 	}
 	if err := json.Unmarshal(obj.Metadata, &metadata); err != nil {
-		return ReleaseView{}, err
+		return ReleaseView{}, release.Record{}, err
 	}
 	record, err := release.Decode(obj.Body)
 	if err != nil {
-		return ReleaseView{}, err
+		return ReleaseView{}, release.Record{}, err
 	}
 	if err := release.VerifyID(record, metadata.ReleaseID); err != nil {
-		return ReleaseView{}, err
+		return ReleaseView{}, release.Record{}, err
 	}
-	return ReleaseView{ReleaseID: metadata.ReleaseID, CanonicalID: obj.CanonicalID, PublishedAt: metadata.PublishedAt, Record: json.RawMessage(obj.Body)}, nil
+	if record.Publisher.OwnerID != obj.OwnerID {
+		return ReleaseView{}, release.Record{}, objectgraph.ErrNotFound
+	}
+	return ReleaseView{ReleaseID: metadata.ReleaseID, CanonicalID: obj.CanonicalID, PublishedAt: metadata.PublishedAt, Record: json.RawMessage(obj.Body)}, record, nil
 }
 
 func (h *Handler) listReleases(w http.ResponseWriter, r *http.Request) {
