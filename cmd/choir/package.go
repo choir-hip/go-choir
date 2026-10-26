@@ -5,16 +5,19 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/pkgrelease"
 )
 
-// Package commands (Library S2,
+// Package commands (Library S2 and S3,
 // docs/design/library-package-propagation-2026-10-26.md 14): publish one
-// applied operation's package change at scope owner (owner act), and read
-// the owner's catalog: a package's history, a search, and one release
-// verified against its id.
+// applied operation's package change at scope owner (owner act); share,
+// withdraw and reinstate a release (owner acts, gated by the named
+// computer's packages.share); and read the catalog the caller may see: a
+// package's history on one track, a search, and one release verified
+// against its id.
 
 type packageReleaseView struct {
 	ReleaseID   string          `json:"release_id"`
@@ -39,11 +42,29 @@ func packageCommands() []*command {
 			},
 		},
 		{
-			path: []string{"package", "history"}, summary: "List one package's releases on your track, newest first",
-			params: []param{pStr("package", "Package name").req()},
-			usage:  "--package is required", scopes: selfDevRead, readOnly: true,
+			path: []string{"package", "history"}, summary: "List one package's releases on one track (yours by default), newest first",
+			params: []param{
+				pStr("package", "Package name").req(),
+				pStr("track", "The track's owner id (default: your own)"),
+				pInt("limit", "Releases per page (default 100, at most 500)"),
+				pInt("before_seq", "Only releases below this seq (the next page's cursor, next_before_seq)"),
+			},
+			usage: "--package is required", scopes: selfDevRead, readOnly: true,
 			handler: func(x *call) (any, error) {
-				return getRaw(x, "/api/catalog/packages/"+url.PathEscape(x.trim("package"))+"/releases")
+				q := url.Values{}
+				if track := x.trim("track"); track != "" {
+					q.Set("track", track)
+				}
+				for _, key := range []string{"limit", "before_seq"} {
+					if n := x.num(key); n > 0 {
+						q.Set(key, strconv.FormatInt(n, 10))
+					}
+				}
+				path := "/api/catalog/packages/" + url.PathEscape(x.trim("package")) + "/releases"
+				if len(q) > 0 {
+					path += "?" + q.Encode()
+				}
+				return getRaw(x, path)
 			},
 		},
 		{
@@ -87,5 +108,76 @@ func packageCommands() []*command {
 				return sendRaw(x, http.MethodPost, computerPath(x, "/packages/releases"), body)
 			},
 		}),
+		ownerAct(&command{
+			path: []string{"package", "share"}, summary: "Set who may see a package release: named owners, everyone, or only you (owner act)",
+			desc: "A widening first answers confirm_paths_required with every path that would leave and the review diff's size; " +
+				"rerun with --confirm-paths <paths_digest> to share them. Narrowing (--private, or fewer owners) needs no confirmation.",
+			params: []param{
+				computerParam().orSay("--computer names the computer whose packages.share setting gates the act"),
+				pStr("release", "Package release id").req(),
+				pList("owners", "Owner ids to share with (comma-separated)").commas(),
+				pBool("public", "Share with every owner on this cloud"),
+				pBool("private", "Only you (and your computers)"),
+				pStr("confirm_paths", "The paths_digest the widening's preview showed"),
+				pStr("reason", "Why, recorded on the listing"),
+			},
+			usage:  "--computer, --release, and one of --owners, --public or --private are required",
+			scopes: []string{releaseApprove}, idempotent: true,
+			handler: func(x *call) (any, error) {
+				owners, public, private := x.list("owners"), x.flag("public"), x.flag("private")
+				named := 0
+				for _, set := range []bool{len(owners) > 0, public, private} {
+					if set {
+						named++
+					}
+				}
+				if named != 1 {
+					return nil, usagef("name exactly one of --owners, --public or --private")
+				}
+				body := map[string]any{"computer_id": x.trim("computer")}
+				switch {
+				case private:
+					body["scopes"] = []string{pkgrelease.ScopeOwner}
+				case public:
+					body["scopes"] = []string{pkgrelease.ScopeOwner, pkgrelease.ScopePublic}
+				default:
+					body["scopes"] = []string{pkgrelease.ScopeOwner, pkgrelease.ScopeShared}
+					body["shared_with"] = map[string]any{"owners": owners}
+				}
+				if confirm := x.trim("confirm_paths"); confirm != "" {
+					body["confirm_paths"] = confirm
+				}
+				if reason := x.trim("reason"); reason != "" {
+					body["reason"] = reason
+				}
+				return sendRaw(x, http.MethodPatch, listingPath(x), body)
+			},
+		}),
+		packageStateAct("withdraw", pkgrelease.StateWithdrawn, "Withdraw a package release: it leaves the catalog heads and stays in the history (owner act)"),
+		packageStateAct("reinstate", pkgrelease.StateListed, "Reinstate a withdrawn or suspended package release while it can still head its track (owner act)"),
 	}
+}
+
+func listingPath(x *call) string {
+	return "/api/catalog/records/" + url.PathEscape(strings.ToLower(x.trim("release"))) + "/listing"
+}
+
+func packageStateAct(verb, state, summary string) *command {
+	return ownerAct(&command{
+		path: []string{"package", verb}, summary: summary,
+		params: []param{
+			computerParam().orSay("--computer names the computer whose packages.share setting gates the act"),
+			pStr("release", "Package release id").req(),
+			pStr("reason", "Why, recorded on the listing"),
+		},
+		usage:  "--computer and --release are required",
+		scopes: []string{releaseApprove}, idempotent: true,
+		handler: func(x *call) (any, error) {
+			body := map[string]any{"computer_id": x.trim("computer"), "state": state}
+			if reason := x.trim("reason"); reason != "" {
+				body["reason"] = reason
+			}
+			return sendRaw(x, http.MethodPatch, listingPath(x), body)
+		},
+	})
 }

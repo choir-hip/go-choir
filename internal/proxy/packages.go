@@ -22,6 +22,7 @@ import (
 //	GET  /api/catalog/packages[?q=]               the packages the caller may see           read
 //	GET  /api/catalog/packages/<name>/releases    a package's history                       read
 //	GET  /api/catalog/releases/<release id>       one package release and its listing       read
+//	PATCH /api/catalog/records/<release id>/listing  share, withdraw or reinstate (S3)    owner act
 //
 // Publish is the owner's act from the originating computer. The proxy reads
 // the owner's track head from corpusd, has the computer draft the release
@@ -255,10 +256,16 @@ func verifyPackageDraft(draft packageDraftBody) (pkgrelease.Record, [][]byte, er
 }
 
 // HandleCatalog serves the package catalog to an authenticated caller with
-// the read scope. The proxy names the owner it authenticated on every read;
-// a caller-supplied owner is never forwarded, and the admin scope passes the
-// scope check and nothing more (L4).
+// the read scope, and the listing acts (PATCH .../records/<id>/listing). The
+// proxy names the owner it authenticated on every read; a caller-supplied
+// owner is never forwarded, and the admin scope passes the scope check and
+// nothing more (L4).
 func (h *Handler) HandleCatalog(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/catalog"), "/"), "/")
+	if len(parts) == 3 && parts[0] == "records" && parts[2] == "listing" && r.Method == http.MethodPatch {
+		h.handlePackageListingAct(w, r, strings.ToLower(parts[1]))
+		return
+	}
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
 		return
@@ -273,7 +280,6 @@ func (h *Handler) HandleCatalog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	owner := url.Values{"owner_id": {authResult.UserID}}
-	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/catalog"), "/"), "/")
 	var upstream string
 	switch {
 	case len(parts) == 1 && parts[0] == "packages":
@@ -282,6 +288,13 @@ func (h *Handler) HandleCatalog(w http.ResponseWriter, r *http.Request) {
 		}
 		upstream = "/internal/platform/packages/catalog?" + owner.Encode()
 	case len(parts) == 3 && parts[0] == "packages" && parts[2] == "releases" && objectgraph.ValidPackageName(parts[1]):
+		// One track's history: the caller's own unless track names
+		// another, a page at a time (S3).
+		for _, key := range []string{"track", "limit", "before_seq"} {
+			if v := strings.TrimSpace(r.URL.Query().Get(key)); v != "" {
+				owner.Set(key, v)
+			}
+		}
 		upstream = "/internal/platform/packages/catalog/" + parts[1] + "/releases?" + owner.Encode()
 	case len(parts) == 2 && parts[0] == "releases" && computerevent.IsSHA256(strings.ToLower(parts[1])):
 		upstream = "/internal/platform/packages/releases/" + strings.ToLower(parts[1]) + "?" + owner.Encode()
@@ -290,6 +303,100 @@ func (h *Handler) HandleCatalog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	status, raw, err := h.corpusdCall(r.Context(), http.MethodGet, upstream, "", nil)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "package store unavailable"})
+		return
+	}
+	relayJSON(w, status, raw)
+}
+
+// packageListingBody is the owner's listing act: a scope set (share) or a
+// state (withdraw, reinstate), and the computer whose packages.share gates
+// it.
+type packageListingBody struct {
+	ComputerID   string                 `json:"computer_id"`
+	Scopes       []string               `json:"scopes"`
+	SharedWith   *pkgrelease.SharedWith `json:"shared_with"`
+	State        string                 `json:"state"`
+	Reason       string                 `json:"reason"`
+	ConfirmPaths string                 `json:"confirm_paths"`
+}
+
+// handlePackageListingAct is share, withdraw and reinstate (Library S3,
+// design 4.1, 14). It is the owner's act: the proxy asks the named
+// computer's share gate (packages.share, the rollout switch, off by
+// default), then hands corpusd the change for the owner it authenticated
+// with an owner-act receipt binding the release and the change. corpusd
+// decides the rest from the release's own listing: a release of another
+// owner answers as missing, and a widening needs the paths confirmed.
+func (h *Handler) handlePackageListingAct(w http.ResponseWriter, r *http.Request, releaseID string) {
+	if !computerevent.IsSHA256(releaseID) {
+		writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})
+		return
+	}
+	authResult, err := h.authenticate(r)
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
+		return
+	}
+	if authResult.AuthMethod == "api_key" && !hasAPIKeyScope(authResult.Scopes, "admin") && !hasAPIKeyScope(authResult.Scopes, releasePublishScope) {
+		writeJSON(w, http.StatusForbidden, errorResponse{Error: "missing required scope: " + releasePublishScope})
+		return
+	}
+	if !authorizeOwnerAct(w, authResult, "package listing act") {
+		return
+	}
+	var body packageListingBody
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 32<<10))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid listing act"})
+		return
+	}
+	computerID := strings.TrimSpace(body.ComputerID)
+	scoped, stated := len(body.Scopes) > 0, strings.TrimSpace(body.State) != ""
+	if computerID == "" || strings.ContainsAny(computerID, "/?#") || scoped == stated {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "computer_id, and either scopes (share) or state (withdraw, reinstate), are required"})
+		return
+	}
+	guestURL, ok := h.ownedComputerURL(w, r, authResult, computerID)
+	if !ok {
+		return
+	}
+	gatePath := "/api/computers/" + url.PathEscape(computerID) + "/packages/share-gate?" + url.Values{"release_id": {releaseID}}.Encode()
+	status, raw, err := h.guestJSON(r.Context(), guestURL, http.MethodGet, gatePath, authResult, computerID, nil)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "the computer's share gate is unavailable"})
+		return
+	}
+	if status != http.StatusOK {
+		relayJSON(w, status, raw)
+		return
+	}
+	change := platform.ListingChange{
+		Scopes: body.Scopes, SharedWith: body.SharedWith, State: strings.TrimSpace(body.State),
+		Reason: strings.TrimSpace(body.Reason), ConfirmPaths: strings.TrimSpace(body.ConfirmPaths),
+	}
+	headers := map[string]string{}
+	if h.ownerActSigner != nil {
+		method := owneract.AuthMethodSession
+		if authResult.AuthMethod == "api_key" {
+			method = owneract.AuthMethodAPIKey
+		}
+		receipt, err := h.ownerActSigner.Mint(owneract.Act{
+			Kind: owneract.ActPackageListing, OwnerUserID: authResult.UserID, AuthMethod: method,
+			CredentialRef: authResult.CredentialRef, ComputerID: computerID, Subject: platform.PackageListingSubject(releaseID, change),
+		}, time.Now())
+		if err == nil {
+			headers[owneract.Header], err = owneract.Encode(receipt)
+		}
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "owner act receipt unavailable"})
+			return
+		}
+	}
+	act, _ := json.Marshal(platform.PackageListingRequest{OwnerID: authResult.UserID, ComputerID: computerID, ListingChange: change})
+	status, raw, err = h.corpusdCallHeaders(r.Context(), http.MethodPut, "/internal/platform/listings/"+releaseID, "application/json", headers, act)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "package store unavailable"})
 		return

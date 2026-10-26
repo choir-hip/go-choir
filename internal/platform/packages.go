@@ -32,13 +32,6 @@ const ReleaseListingKind objectgraph.ObjectKind = "choir.release_listing"
 
 const packagesRoute = "/internal/platform/packages"
 
-// maxTrackListings bounds one (owner, package) listing read, and one
-// owner's catalog read. S2 lists one version per release; S3's state
-// changes add versions. A read is never answered truncated: past the cap it
-// refuses track_full, and a publish refuses at it, so seq and the head are
-// never counted from part of a track (review 274 F7). A var for the test.
-var maxTrackListings = 1000
-
 // PackageBaseStatus is the package base store in corpusd's health detail:
 // FP0 reads the shallow flag without SSH before S2's proof (design 3.2,
 // check 3).
@@ -114,13 +107,14 @@ type packagePublishRequest struct {
 //	POST /internal/platform/packages/releases                    publish (owner act, through the proxy)
 //	GET  /internal/platform/packages/releases/<id>?owner_id=     one release and its listing
 //	GET  /internal/platform/packages/catalog?owner_id=&q=        the packages the owner may see
-//	GET  /internal/platform/packages/catalog/<name>/releases?owner_id=   a package's history
+//	GET  /internal/platform/packages/catalog/<name>/releases?owner_id=[&track=&limit=&before_seq=]   one track's history
 //	GET  /internal/platform/packages/tracks/<name>/head?owner_id=        the owner's track head
 //
 // A guest never reaches them: publish is the owner's act through the proxy
-// (L6), and S2's reads are the owner's own, named by the proxy. Every read
-// names the owner it is for; a read that names none is refused, never
-// unscoped. Visibility is the listing's scope set, which S2 holds at owner.
+// (L6). Every read names the owner it is for, as the proxy authenticated
+// it; a read that names none is refused, never unscoped. Visibility is the
+// listing's scope set (S3: owner, shared, public; listingVisible), and an
+// unseen release answers exactly as a missing one.
 func (h *Handler) HandlePackages(w http.ResponseWriter, r *http.Request) {
 	if !trustedInternalCaller(r) {
 		writeJSON(w, http.StatusForbidden, apiError{Error: "package routes are host only; publish is the owner's act through the proxy"})
@@ -182,7 +176,8 @@ func writePackageRefusal(w http.ResponseWriter, err error) {
 	status := http.StatusUnprocessableEntity
 	switch reason {
 	case pkgrelease.ReasonTrackMoved, pkgrelease.ReasonParentUnverifiable, pkgrelease.ReasonBlobMismatch,
-		pkgrelease.ReasonTrackFull, pkgrelease.ReasonRecordUnlisted, pkgrelease.ReasonListingConflict:
+		pkgrelease.ReasonRecordUnlisted, pkgrelease.ReasonListingConflict, pkgrelease.ReasonConfirmPathsRequired,
+		pkgrelease.ReasonConfirmPathsMismatch, pkgrelease.ReasonListingState, pkgrelease.ReasonListingMoved:
 		status = http.StatusConflict
 	case pkgrelease.ReasonBlobTooLarge:
 		status = http.StatusRequestEntityTooLarge
@@ -193,8 +188,8 @@ func writePackageRefusal(w http.ResponseWriter, err error) {
 	writeJSON(w, status, packageAPIError{Error: err.Error(), Reason: reason})
 }
 
-// writeListingsError answers a failed track read: a refusal (track_full)
-// by its reason, anything else as the store being unavailable.
+// writeListingsError answers a failed track read: a refusal by its reason,
+// anything else as the store being unavailable.
 func writeListingsError(w http.ResponseWriter, err error) {
 	if pkgrelease.ReasonOf(err) != "" {
 		writePackageRefusal(w, err)
@@ -212,36 +207,49 @@ func PackagePublishSubject(releaseID string) map[string]any {
 // packagePublishActor verifies the publish's owner-act receipt and names
 // the listing's state actor. status is nonzero for a refusal.
 func (h *Handler) packagePublishActor(r *http.Request, ownerID, computerID, releaseID string) (actor string, status int, refusal packageAPIError) {
+	return h.packageActor(r, ownerID, computerID, owneract.ActPackagePublish, PackagePublishSubject(releaseID), "package publish")
+}
+
+// packageActor verifies an owner-act receipt of kind for ownerID on
+// computerID whose subject is exactly subject, and names the listing's
+// state actor. status is nonzero for a refusal.
+func (h *Handler) packageActor(r *http.Request, ownerID, computerID, kind string, subject map[string]any, what string) (actor string, status int, refusal packageAPIError) {
 	authority := h.packageOwnerActs
 	if authority == nil {
 		// No authority is a wiring fault, not observe: a red route's
 		// unconfigured default refuses (review 274 F3). cmd/corpusd always
 		// configures one, in the mode CHOIR_OWNER_ACT_MODE names.
-		return "", http.StatusServiceUnavailable, packageAPIError{Error: "package publish: no owner-act authority is configured", Reason: "owner_act_unconfigured"}
+		return "", http.StatusServiceUnavailable, packageAPIError{Error: what + ": no owner-act authority is configured", Reason: "owner_act_unconfigured"}
 	}
 	verified, err := func() (owneract.Verified, error) {
 		receipt, err := owneract.Decode(r.Header.Get(owneract.Header))
 		if err != nil {
 			return owneract.Verified{}, err
 		}
-		verified, err := authority.verifier.Verify(receipt, computerID, owneract.ActPackagePublish, authority.now())
+		verified, err := authority.verifier.Verify(receipt, computerID, kind, authority.now())
 		if err != nil {
 			return owneract.Verified{}, err
 		}
-		want := PackagePublishSubject(releaseID)
-		if verified.OwnerUserID != ownerID || verified.SubjectString("release_id") != want["release_id"] || verified.SubjectString("scopes") != want["scopes"] {
-			return owneract.Verified{}, fmt.Errorf("owner act: the receipt does not bind this owner, release and scope")
+		if verified.OwnerUserID != ownerID {
+			return owneract.Verified{}, fmt.Errorf("owner act: the receipt does not bind this owner")
+		}
+		for key, want := range subject {
+			if verified.SubjectString(key) != want {
+				return owneract.Verified{}, fmt.Errorf("owner act: the receipt does not bind this %s", key)
+			}
 		}
 		return verified, nil
 	}()
 	if err != nil {
-		if refused := authority.refuse(ErrOwnerActRefused, "package publish", computerID, err.Error()); refused != nil {
+		if refused := authority.refuse(ErrOwnerActRefused, what, computerID, err.Error()); refused != nil {
 			return "", http.StatusForbidden, packageAPIError{Error: refused.Error()}
 		}
 		return "owner_act:unverified", 0, packageAPIError{}
 	}
-	// A receipt replayed inside its five minutes can only republish the
-	// release it names, which is idempotent.
+	// A receipt replayed inside its five minutes can only repeat the act it
+	// names, and only a host-internal caller carries one: a publish is
+	// idempotent on the release id; a listing act asks for one scope set or
+	// state, which the owner set or will set again by a newer act.
 	return "owner_act:" + verified.Digest, 0, packageAPIError{}
 }
 
@@ -267,11 +275,18 @@ func listingObject(ownerID, computerID string, listing pkgrelease.Listing, now t
 	if err != nil {
 		return objectgraph.Object{}, err
 	}
-	metadata, err := objectgraph.NormalizeMetadata(map[string]any{
+	fields := map[string]any{
 		"record_id": listing.RecordID, "record_kind": listing.RecordKind, "package": listing.Package,
 		"track": listing.Track, "seq": listing.Seq, "state": listing.State, "version": listing.Version,
 		"listed_at": now.UTC().Format(time.RFC3339Nano),
-	})
+	}
+	if listingWidened(listing) {
+		// The index another owner's catalog finds this track by (S3): a
+		// version that admits any reader beyond the owner. Whether the
+		// track's current version still does is decided from the chain.
+		fields["widened"] = "true"
+	}
+	metadata, err := objectgraph.NormalizeMetadata(fields)
 	if err != nil {
 		return objectgraph.Object{}, err
 	}
@@ -307,21 +322,13 @@ func verifiedListing(obj objectgraph.Object, ownerID string) (pkgrelease.Listing
 // package: the newest version whose chain of predecessor digests is intact
 // back to version 1.
 //
-// It also answers how many listing objects the track holds. More than
-// maxTrackListings refuses track_full rather than answer from part of the
-// track.
+// It reads the track to its end, a page of trackPageSize at a time, so
+// seq and the head are never counted from part of a track (review 274 F7)
+// and a long track never stops taking releases (bunch279-I2).
 func (h *Handler) trackListings(ctx context.Context, ownerID, pkg string) (map[string]pkgrelease.Listing, int, error) {
-	store := h.releaseStore()
-	if store == nil {
-		return nil, 0, errors.New("package store unavailable")
-	}
-	objects, err := store.ListObjectsByMetadataForOwner(ctx, string(ReleaseListingKind), "$.package", pkg, ownerID, maxTrackListings+1)
+	objects, err := h.pagedListings(ctx, "$.package", pkg, ownerID)
 	if err != nil {
 		return nil, 0, err
-	}
-	if len(objects) > maxTrackListings {
-		return nil, len(objects), &pkgrelease.Refusal{Reason: pkgrelease.ReasonTrackFull, Detail: fmt.Sprintf(
-			"the %s track of %s holds more than %d listings, more than one read returns", pkg, ownerID, maxTrackListings)}
 	}
 	versions := map[string]map[int]pkgrelease.Listing{}
 	for _, obj := range objects {
@@ -356,6 +363,28 @@ func (h *Handler) trackListings(ctx context.Context, ownerID, pkg string) (map[s
 	return current, len(objects), nil
 }
 
+// pagedListings reads every listing object matching (jsonPath = value,
+// ownerID when named), page by page.
+func (h *Handler) pagedListings(ctx context.Context, jsonPath, value, ownerID string) ([]objectgraph.Object, error) {
+	store := h.releaseStore()
+	if store == nil {
+		return nil, errors.New("package store unavailable")
+	}
+	var out []objectgraph.Object
+	after := ""
+	for {
+		page, err := store.ListObjectsByMetadataPage(ctx, string(ReleaseListingKind), jsonPath, value, ownerID, after, trackPageSize)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, page...)
+		if len(page) < trackPageSize {
+			return out, nil
+		}
+		after = page[len(page)-1].CanonicalID
+	}
+}
+
 // trackHead is the latest listing on the track that can be a parent (not
 // withdrawn, not yanked), and the highest seq the track has given.
 func trackHead(listings map[string]pkgrelease.Listing) (head pkgrelease.Listing, found bool, maxSeq int) {
@@ -370,15 +399,32 @@ func trackHead(listings map[string]pkgrelease.Listing) (head pkgrelease.Listing,
 	return head, found, maxSeq
 }
 
-// listingVisible is the listing's scope set for a reader. S2 lists at owner
-// only: the owner sees it, and nobody else, an admin included (L4).
-func listingVisible(listing pkgrelease.Listing, readerOwnerID string) bool {
-	for _, scope := range listing.Scopes {
-		if scope == pkgrelease.ScopeOwner && listing.Track == readerOwnerID {
-			return true
+// listingVisible is the listing's scope set for a reader (L4): the owner;
+// a named owner of a shared listing; anyone of a public one. Nobody else,
+// an admin included. CHOIR_PACKAGE_SHARE_READS=owner reads every listing at
+// owner scope, whatever its versions say.
+func (h *Handler) listingVisible(listing pkgrelease.Listing, readerOwnerID string) bool {
+	if h.packageShareReads == PackageShareReadsOwner {
+		return readerOwnerID != "" && listing.Track == readerOwnerID
+	}
+	return listing.VisibleTo(readerOwnerID)
+}
+
+// listingFor is the listing as reader may see it: another owner never
+// learns who else a shared listing names.
+func listingFor(listing pkgrelease.Listing, reader string) pkgrelease.Listing {
+	listing = listing.Normalize()
+	if listing.Track == reader {
+		return listing
+	}
+	named := []string{}
+	for _, owner := range listing.SharedWith.Owners {
+		if owner == reader {
+			named = append(named, owner)
 		}
 	}
-	return false
+	listing.SharedWith = pkgrelease.SharedWith{Owners: named, Computers: []string{}}
+	return listing
 }
 
 // readPackageRecord reads ownerID's release by id and re-verifies it from
@@ -498,7 +544,7 @@ func (h *Handler) publishPackage(w http.ResponseWriter, r *http.Request) {
 	h.packageMu.Lock()
 	defer h.packageMu.Unlock()
 	ctx := r.Context()
-	listings, count, err := h.trackListings(ctx, ownerID, record.Package.Name)
+	listings, _, err := h.trackListings(ctx, ownerID, record.Package.Name)
 	if err != nil {
 		writeListingsError(w, err)
 		return
@@ -513,11 +559,6 @@ func (h *Handler) publishPackage(w http.ResponseWriter, r *http.Request) {
 		}
 		// The record was stored and its listing was not (a crash between the
 		// two writes): list it now, under the same checks.
-	}
-	if count >= maxTrackListings {
-		writePackageRefusal(w, &pkgrelease.Refusal{Reason: pkgrelease.ReasonTrackFull, Detail: fmt.Sprintf(
-			"the %s track holds %d listings, the most one read returns; another would be counted from part of the track", record.Package.Name, count)})
-		return
 	}
 	head, hasHead, maxSeq := trackHead(listings)
 	// moved refuses a parent that is not the head. A record stored without
@@ -654,22 +695,44 @@ func (h *Handler) readPackageRelease(w http.ResponseWriter, r *http.Request, rel
 		return
 	}
 	// A release the reader may not see answers exactly as a missing one.
-	obj, record, err := h.readPackageRecord(r.Context(), reader, releaseID)
+	obj, record, err := h.findPackageRecord(r.Context(), reader, releaseID)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, errPackageNotPublished)
 		return
 	}
-	listings, _, err := h.trackListings(r.Context(), reader, record.Package.Name)
+	listings, _, err := h.trackListings(r.Context(), record.Publisher.OwnerID, record.Package.Name)
 	if err != nil {
 		writeListingsError(w, err)
 		return
 	}
 	listing, ok := listings[releaseID]
-	if !ok || !listingVisible(listing, reader) {
+	if !ok || !h.listingVisible(listing, reader) {
 		writeJSON(w, http.StatusNotFound, errPackageNotPublished)
 		return
 	}
-	writePackageJSON(w, http.StatusOK, packageView(obj, releaseID, listing))
+	writePackageJSON(w, http.StatusOK, packageView(obj, releaseID, listingFor(listing, reader)))
+}
+
+// findPackageRecord is the release by id: the reader's own, or another
+// owner's found by its id. Visibility is the caller's to decide from the
+// listing; under CHOIR_PACKAGE_SHARE_READS=owner only the reader's own is
+// looked for.
+func (h *Handler) findPackageRecord(ctx context.Context, reader, releaseID string) (objectgraph.Object, pkgrelease.Record, error) {
+	obj, record, err := h.readPackageRecord(ctx, reader, releaseID)
+	if err == nil || h.packageShareReads == PackageShareReadsOwner {
+		return obj, record, err
+	}
+	store := h.releaseStore()
+	if store == nil {
+		return objectgraph.Object{}, pkgrelease.Record{}, errors.New("package store unavailable")
+	}
+	found, err := store.GetObjectByMetadata(ctx, string(PackageReleaseKind), "$.release_id", releaseID)
+	if err != nil {
+		return objectgraph.Object{}, pkgrelease.Record{}, err
+	}
+	// Re-read under the owner the object is filed under, so the id, the
+	// owner and the body verify as for the owner's own read.
+	return h.readPackageRecord(ctx, found.OwnerID, releaseID)
 }
 
 // PackageCatalogEntry is one package on one track the reader may see.
@@ -686,39 +749,49 @@ func (h *Handler) packageCatalog(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	store := h.releaseStore()
-	if store == nil {
-		writeJSON(w, http.StatusServiceUnavailable, apiError{Error: "package store unavailable"})
-		return
-	}
+	ctx := r.Context()
 	query := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
-	objects, err := store.ListObjects(r.Context(), objectgraph.ListFilter{Kind: ReleaseListingKind, OwnerID: reader, Limit: maxTrackListings + 1})
+	matches := func(name string) bool { return query == "" || strings.Contains(name, query) }
+	type trackKey struct{ track, pkg string }
+	tracks := map[trackKey]bool{}
+	// The reader's own tracks.
+	own, err := h.pagedListings(ctx, "", "", reader)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, apiError{Error: "package catalog unavailable"})
 		return
 	}
-	if len(objects) > maxTrackListings {
-		// A catalog from part of the listings would drop packages silently.
-		writePackageRefusal(w, &pkgrelease.Refusal{Reason: pkgrelease.ReasonTrackFull, Detail: fmt.Sprintf(
-			"the owner holds more than %d listings, more than one catalog read returns", maxTrackListings)})
-		return
+	for _, obj := range own {
+		if listing, err := verifiedListing(obj, reader); err == nil && matches(listing.Package) {
+			tracks[trackKey{reader, listing.Package}] = true
+		}
 	}
-	names := map[string]bool{}
-	for _, obj := range objects {
-		if listing, err := verifiedListing(obj, reader); err == nil && (query == "" || strings.Contains(listing.Package, query)) {
-			names[listing.Package] = true
+	// Other owners' tracks with a version that ever admitted this reader;
+	// whether the current version still does is decided below.
+	if h.packageShareReads != PackageShareReadsOwner {
+		widened, err := h.pagedListings(ctx, "$.widened", "true", "")
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, apiError{Error: "package catalog unavailable"})
+			return
+		}
+		for _, obj := range widened {
+			if obj.OwnerID == reader {
+				continue
+			}
+			if listing, err := verifiedListing(obj, obj.OwnerID); err == nil && listing.VisibleTo(reader) && matches(listing.Package) {
+				tracks[trackKey{obj.OwnerID, listing.Package}] = true
+			}
 		}
 	}
 	entries := []PackageCatalogEntry{}
-	for name := range names {
-		listings, _, err := h.trackListings(r.Context(), reader, name)
+	for key := range tracks {
+		listings, _, err := h.trackListings(ctx, key.track, key.pkg)
 		if err != nil {
 			writeListingsError(w, err)
 			return
 		}
 		visible := map[string]pkgrelease.Listing{}
 		for id, listing := range listings {
-			if listingVisible(listing, reader) {
+			if h.listingVisible(listing, reader) {
 				visible[id] = listing
 			}
 		}
@@ -726,41 +799,94 @@ func (h *Handler) packageCatalog(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		head, found, _ := trackHead(visible)
-		entry := PackageCatalogEntry{Package: name, Track: reader, Releases: len(visible)}
+		entry := PackageCatalogEntry{Package: key.pkg, Track: key.track, Releases: len(visible)}
 		if found {
 			entry.HeadReleaseID, entry.HeadSeq = head.RecordID, head.Seq
 		}
 		entries = append(entries, entry)
 	}
-	sort.Slice(entries, func(i, j int) bool { return entries[i].Package < entries[j].Package })
-	writeJSON(w, http.StatusOK, map[string]any{"packages": entries, "count": len(entries)})
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].Package != entries[j].Package {
+			return entries[i].Package < entries[j].Package
+		}
+		return entries[i].Track < entries[j].Track
+	})
+	// reader is the caller's own owner id: what another owner names to
+	// share with it.
+	writeJSON(w, http.StatusOK, map[string]any{"packages": entries, "count": len(entries), "reader": reader})
 }
 
+// History pages: newest first, at most maxHistoryPage releases a page.
+const (
+	defaultHistoryPage = 100
+	maxHistoryPage     = 500
+)
+
+// packageHistory is one track's version history, newest first, as reader
+// may see it: the reader's own track unless track names another. A track
+// that shows the reader nothing is 200 with nothing (L4). before_seq pages:
+// the page holds releases below it, and next_before_seq names the next
+// page when there is one.
 func (h *Handler) packageHistory(w http.ResponseWriter, r *http.Request, name string) {
 	reader, ok := packageReader(w, r)
 	if !ok {
 		return
 	}
+	q := r.URL.Query()
+	track := strings.TrimSpace(q.Get("track"))
+	if track == "" {
+		track = reader
+	}
+	limit := defaultHistoryPage
+	if raw := strings.TrimSpace(q.Get("limit")); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 {
+			writeJSON(w, http.StatusBadRequest, apiError{Error: "limit is a positive number"})
+			return
+		}
+		limit = min(n, maxHistoryPage)
+	}
+	before := 0
+	if raw := strings.TrimSpace(q.Get("before_seq")); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 {
+			writeJSON(w, http.StatusBadRequest, apiError{Error: "before_seq is a positive number"})
+			return
+		}
+		before = n
+	}
 	views := []PackageReleaseView{}
-	if objectgraph.ValidPackageName(name) {
-		listings, _, err := h.trackListings(r.Context(), reader, name)
+	next := 0
+	if objectgraph.ValidPackageName(name) && pkgrelease.ValidTrack(track) {
+		listings, _, err := h.trackListings(r.Context(), track, name)
 		if err != nil {
 			writeListingsError(w, err)
 			return
 		}
-		for id, listing := range listings {
-			if !listingVisible(listing, reader) {
-				continue
+		visible := []pkgrelease.Listing{}
+		for _, listing := range listings {
+			if h.listingVisible(listing, reader) && (before == 0 || listing.Seq < before) {
+				visible = append(visible, listing)
 			}
-			obj, _, err := h.readPackageRecord(r.Context(), reader, id)
+		}
+		sort.Slice(visible, func(i, j int) bool { return visible[i].Seq > visible[j].Seq })
+		for i, listing := range visible {
+			if len(views) == limit {
+				next = visible[i-1].Seq
+				break
+			}
+			obj, _, err := h.readPackageRecord(r.Context(), track, listing.RecordID)
 			if err != nil {
 				continue // a record that no longer verifies is not served
 			}
-			views = append(views, packageView(obj, id, listing))
+			views = append(views, packageView(obj, listing.RecordID, listingFor(listing, reader)))
 		}
 	}
-	sort.Slice(views, func(i, j int) bool { return views[i].Listing.Seq > views[j].Listing.Seq })
-	writePackageJSON(w, http.StatusOK, map[string]any{"package": name, "releases": views, "count": len(views)})
+	out := map[string]any{"package": name, "track": track, "releases": views, "count": len(views)}
+	if next > 0 {
+		out["next_before_seq"] = next
+	}
+	writePackageJSON(w, http.StatusOK, out)
 }
 
 // PackageTrackHead is a track's head: the parent the next release names.
@@ -786,7 +912,9 @@ func (h *Handler) packageTrackHead(w http.ResponseWriter, r *http.Request, name 
 		return
 	}
 	head, found, _ := trackHead(listings)
-	if !found || !listingVisible(head, reader) {
+	// The head a publish drafts on is the reader's own track's, never a
+	// track shared with it (L24).
+	if !found || head.Track != reader {
 		writeJSON(w, http.StatusNotFound, noHead)
 		return
 	}

@@ -138,7 +138,9 @@ func writePackageDraftRefusal(w http.ResponseWriter, err error) {
 	case pkgrelease.ReasonBlobTooLarge:
 		status = http.StatusRequestEntityTooLarge
 	case "":
-		writeAPIJSON(w, http.StatusConflict, releaseAPIError{Error: "the package release cannot be drafted on this computer: " + err.Error(), Reason: "tree_unavailable"})
+		// Not a refusal: a store, ref or git read failed. That is the
+		// computer being unable to answer now, not a conflict (bunch279-N1).
+		writeAPIJSON(w, http.StatusServiceUnavailable, releaseAPIError{Error: "the package release cannot be drafted on this computer: " + err.Error(), Reason: "tree_unavailable"})
 		return
 	}
 	writeAPIJSON(w, status, releaseAPIError{Error: err.Error(), Reason: reason})
@@ -198,4 +200,18 @@ func (rt *Runtime) packageSourceBefore(ctx context.Context, repo string, operati
 		return ref.Commit, "operation " + previous.OperationID, nil
 	}
 	return base, baseLabel, nil
+}
+
+// packageShareGate answers GET /api/computers/<id>/packages/share-gate: the
+// proxy asks it before every share, withdraw or reinstate the owner acts
+// with this computer named (Library S3). It is the rollout switch, as
+// packages.publish is for the draft: off by default, and off refuses
+// packages_share_off so a stock computer gates nothing. Like publish's, it
+// is not a security control; the owner act and corpusd's checks are.
+func (h *APIHandler) packageShareGate(w http.ResponseWriter, r *http.Request, ownerID, computerID string) {
+	if !h.rt.computerSettingOn(r.Context(), ownerID, computerID, store.SettingPackagesShare) {
+		writeAPIJSON(w, http.StatusConflict, releaseAPIError{Error: "package sharing is off on this computer; the owner turns on the setting " + store.SettingPackagesShare, Reason: "packages_share_off"})
+		return
+	}
+	writeAPIJSON(w, http.StatusOK, map[string]any{"setting": store.SettingPackagesShare, "on": true})
 }

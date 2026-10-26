@@ -37,6 +37,9 @@ type Handler struct {
 	packageBase       pkgrelease.BaseTrees
 	packageBaseStatus *PackageBaseStatus
 	packageOwnerActs  *OwnerActAuthority
+	// packageShareReads is CHOIR_PACKAGE_SHARE_READS (Library S3): the zero
+	// value reads each listing's scope set.
+	packageShareReads PackageShareReadsMode
 	// packageMu serializes package publishes: the track head read, the
 	// seq and the listing write. It is the only thing that keeps a track
 	// linear, and it holds only while one corpusd process writes Store B
@@ -610,6 +613,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc(releasesRoute, h.HandleReleases)
 	s.HandleFunc(releasesRoute+"/", h.HandleReleases)
 	s.HandleFunc(packagesRoute+"/", h.HandlePackages)
+	s.HandleFunc(listingsRoute+"/", h.HandleListings)
 	s.HandleFunc("/internal/computers/keys/escrow-public-key", h.HandleKeyEscrowPublicKey)
 	s.HandleFunc("/internal/computers/keys/escrow", h.HandleKeyEscrow)
 	s.HandleFunc("/internal/computers/keys/escrow/status", h.HandleKeyEscrowStatus)
