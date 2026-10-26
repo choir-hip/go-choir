@@ -185,8 +185,15 @@ func (s *Service) checkStoryEntities(ctx context.Context, req types.StoryEntitie
 	if err != nil {
 		return "", nil, nil, fmt.Errorf("story %q is not a publication id", req.Story)
 	}
-	if err := s.checkPublicAutopaperStory(ctx, og, owner, pub); err != nil {
-		return "", nil, nil, err
+	switch {
+	case req.Pending && !req.ValidateOnly:
+		return "", nil, nil, fmt.Errorf("a pending story's entities are checked validate-only; they are exported after the story publishes")
+	case req.Pending:
+		// Not published yet: every entity check below still runs.
+	default:
+		if err := s.checkPublicAutopaperStory(ctx, og, owner, pub); err != nil {
+			return "", nil, nil, err
+		}
 	}
 
 	now := time.Now().UTC()

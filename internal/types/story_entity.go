@@ -115,6 +115,14 @@ func MintedEntityID(name string) string {
 	return "ent:" + hex.EncodeToString(sum[:])[:24]
 }
 
+// StoryPublicationID is the publication id corpusd gives the story of
+// owner's document docID (internal/platform publicationIdentityFor; a test
+// pins the two together), so a computer names its own story without a read.
+func StoryPublicationID(ownerID, docID string) string {
+	sum := sha256.Sum256([]byte("texture-publication\x00" + ownerID + "\x00" + docID))
+	return "pub-" + hex.EncodeToString(sum[:])[:32]
+}
+
 // WikidataEntityID is the id of an entity linked to a Wikidata item.
 func WikidataEntityID(qid string) string { return "wd:" + strings.TrimSpace(qid) }
 
@@ -129,6 +137,10 @@ type StoryEntitiesRequest struct {
 	Story        string        `json:"story"`
 	Entities     []StoryEntity `json:"entities"`
 	ValidateOnly bool          `json:"validate_only,omitempty"`
+	// Pending marks a story not published yet (slice c): with ValidateOnly
+	// every entity check runs and only the published-story check is
+	// skipped. A pending request is never a write.
+	Pending bool `json:"pending,omitempty"`
 	// Review is the review that produced the attachments (slice c0 §6): its
 	// counts, and what it taught the lexicon. With a review the request may
 	// carry no attachments (a story about none of its candidates).
