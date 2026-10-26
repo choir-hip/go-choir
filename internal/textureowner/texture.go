@@ -1137,8 +1137,13 @@ func (h *Handler) handleTextureCreateRevision(w http.ResponseWriter, r *http.Req
 			log.Printf("texture api: load parent revision for structure stabilization %s: %v", parentID, err)
 		}
 	}
-	if hasParentRev {
-		metadata = carryForwardDurableTextureMetadata(metadata, parentRev.Metadata)
+	// A bound commit, settled-unbound included, is on doc.TrajectoryID, so its label is too.
+	recordTrajectoryID := ""
+	if lifecycleBound {
+		recordTrajectoryID = doc.TrajectoryID
+	}
+	if hasParentRev || lifecycleBound {
+		metadata = carryForwardTextureMetadataForRecord(metadata, parentRev.Metadata, recordTrajectoryID)
 	}
 	// Only Texture's evidence path writes an embed (station TE, design E7):
 	// the owner may keep, delete or move one, never add or alter one.

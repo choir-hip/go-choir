@@ -199,7 +199,7 @@ func (h *Handler) commitEvidenceEmbeds(ctx context.Context, ownerID, computerID,
 	if len(unused) > 0 {
 		extra["unused_source_entity_ids"] = unused
 	}
-	metadata := mergeTextureRevisionMetadata(carryForwardDurableTextureMetadata(json.RawMessage("{}"), head.Metadata), extra)
+	metadata := mergeTextureRevisionMetadata(carryForwardTextureMetadataForRecord(json.RawMessage("{}"), head.Metadata, doc.TrajectoryID), extra)
 	now := time.Now().UTC()
 	rev := types.Revision{
 		RevisionID: revisionID, DocID: docID, OwnerID: ownerID, ComputerID: doc.ComputerID, TrajectoryID: doc.TrajectoryID,
