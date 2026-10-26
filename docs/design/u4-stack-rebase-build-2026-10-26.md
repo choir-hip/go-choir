@@ -843,7 +843,25 @@ darwin: CI runs it); `rebaseLineage` derived from the tape; the rebase offer und
   (landing B', landing B'' for the conflict run) are announced and awaited.
   `[needs base-join]` marks the steps whose refusal text comes from base-join.
 
-**Not built:** the staging run itself (FP0), the conflict run's automation, and
-slice 8 (the owner retry act). Known residual: a replayed rebase open after a
+**Slice 8 (built):** the owner retry act, `POST /api/computers/<id>/self-development/rebase-retry`
+(`internal/agentcore/rebase_retry.go`). It mints one notice numbered above the cap
+(`max(latest, 3) + 1`), stamped `owner_retry` with provenance
+`system:rebase-owner-retry`, when the pair is spent (three automatic attempts used
+up and closed with no claim, or a claimed round ended), no rebase round of the
+operation runs, and the switches and root are live; refusals are 409 with
+`rebase_retry_*` codes. `IsStackRebaseNotice` requires the stamp above the cap and
+refuses it at or below. The claim key is `(pair, attempt)` above the cap
+(`types.StackRebaseClaimKey`), so the spent pair's claim stands and each owner
+generation has its own. The superseded check spans the gap (`StackRebaseNewerAttemptIDs`).
+It is not on the desks' allowlist (computer routes are read-only to a desk; a test
+pins it). No CLI command was added.
+
+**Also:** the apply owner-act record now lists the resolved conflicts (bounded), so
+the staging proof's step 7 is a hard check on the master document's trace:
+the rebase candidate is on B'', contains the conflicting file, and the apply record
+names it as resolved. The offer's conflict list is a soft check (the run context
+may not be in the trace export).
+
+**Not built:** the staging run itself (FP0). Known residual: a replayed rebase open after a
 restart has a different `RebaseAdmission.BootedAt`, so its command digest differs
 and the replay fails closed.
