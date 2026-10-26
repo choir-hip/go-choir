@@ -69,6 +69,21 @@ func (rt *Runtime) assignedCapsule() assignmentCapsuleRuntime {
 	return rt.capsuleExecutor
 }
 
+// assignmentFate is the executor the terminal report saga drives: the test
+// substitute when one is set, else the capsule executor, else nil.
+func (rt *Runtime) assignmentFate() assignmentFateExecutor {
+	if rt == nil {
+		return nil
+	}
+	if rt.assignmentFateRuntime != nil {
+		return rt.assignmentFateRuntime
+	}
+	if rt.capsuleExecutor == nil {
+		return nil
+	}
+	return rt.capsuleExecutor
+}
+
 func assignedEngineeringRun(rec *types.RunRecord) bool {
 	if rec == nil {
 		return false
@@ -864,7 +879,8 @@ func (rt *Runtime) recordAssignedEngineeringReport(ctx context.Context, rec *typ
 }
 
 func (rt *Runtime) recordAssignedEngineeringReportOnce(ctx context.Context, rec *types.RunRecord, toolCallID string, report types.EngineeringAssignmentReport) (types.EngineeringAssignmentCommandResult, error) {
-	if rec == nil || rt.capsuleExecutor == nil || strings.TrimSpace(toolCallID) == "" {
+	fate := rt.assignmentFate()
+	if rec == nil || fate == nil || strings.TrimSpace(toolCallID) == "" {
 		return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("assigned Engineering report authority unavailable")
 	}
 	assignmentID := metadataStringValue(rec.Metadata, "assignment_id")
@@ -1038,28 +1054,28 @@ func (rt *Runtime) recordAssignedEngineeringReportOnce(ctx context.Context, rec 
 			rt.armAssignedEngineeringFateWatchdog(assignment)
 			return types.EngineeringAssignmentCommandResult{}, err
 		}
-		handle, err := rt.capsuleExecutor.AssignmentHandle(rec.RunID, assignment.Binding.CapsuleID)
+		handle, err := fate.AssignmentHandle(rec.RunID, assignment.Binding.CapsuleID)
 		if err != nil {
 			return freezeFailure(fmt.Errorf("resolve exact assignment capability after freeze intent: %w", err))
 		}
 		_, err = traceCall(rt, rec.RunID, "complete.freeze_capsule", func() ([]capsule.FileChange, error) {
-			return rt.capsuleExecutor.ExtractGranted(ctx, rec.RunID, handle)
+			return fate.ExtractGranted(ctx, rec.RunID, handle)
 		})
 		if err != nil {
 			return freezeFailure(fmt.Errorf("freeze assignment after durable intent: %w", err))
 		}
-		diagnostics, err := rt.capsuleExecutor.InspectCapsuleRaw(assignment.Binding.CapsuleID)
+		diagnostics, err := fate.InspectCapsuleRaw(assignment.Binding.CapsuleID)
 		if err != nil || diagnostics.ID != assignment.Binding.CapsuleID || diagnostics.State != capsule.StateFrozen {
 			return freezeFailure(fmt.Errorf("executor did not acknowledge exact frozen assignment capsule: %w", err))
 		}
 		frozenDigest, err := traceCall(rt, rec.RunID, "complete.digest_frozen_tree", func() (string, error) {
-			return rt.capsuleExecutor.ResolveGrantedWorktreeDigest(ctx, rec.RunID, handle)
+			return fate.ResolveGrantedWorktreeDigest(ctx, rec.RunID, handle)
 		})
 		if err != nil || !types.ValidSHA256Digest(frozenDigest) {
 			return freezeFailure(fmt.Errorf("frozen assignment digest unavailable: %w", err))
 		}
 		freezeReceipt, receiptErr := traceCall(rt, rec.RunID, "complete.freeze_receipt", func() (capsule.CapsuleFateReceipt, error) {
-			return rt.capsuleExecutor.PersistGrantedFreezeReceipt(ctx, rec.RunID, handle)
+			return fate.PersistGrantedFreezeReceipt(ctx, rec.RunID, handle)
 		})
 		if receiptErr != nil || freezeReceipt.CapsuleID != assignment.Binding.CapsuleID || "sha256:"+strings.TrimPrefix(freezeReceipt.FinalSubjectDigest, "sha256:") != frozenDigest || "sha256:"+strings.TrimPrefix(freezeReceipt.SourceSubjectDigest, "sha256:") != assignment.Binding.SubjectDigest {
 			return freezeFailure(fmt.Errorf("durable typed executor freeze receipt unavailable: %w", receiptErr))
@@ -1093,12 +1109,12 @@ func (rt *Runtime) recordAssignedEngineeringReportOnce(ctx context.Context, rec 
 		// A revoke_requested strand is the saga's own mid-flight state: the
 		// executor capsule is still physically frozen until the revoke
 		// effects run, so the receipt binding re-drives here.
-		handle, resolveErr := rt.capsuleExecutor.AssignmentHandle(rec.RunID, assignment.Binding.CapsuleID)
+		handle, resolveErr := fate.AssignmentHandle(rec.RunID, assignment.Binding.CapsuleID)
 		if resolveErr != nil {
 			return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("resolve frozen assignment capability: %w", resolveErr)
 		}
 		frozenDigest, digestErr := traceCall(rt, rec.RunID, "complete.digest_frozen_tree_again", func() (string, error) {
-			return rt.capsuleExecutor.ResolveGrantedWorktreeDigest(ctx, rec.RunID, handle)
+			return fate.ResolveGrantedWorktreeDigest(ctx, rec.RunID, handle)
 		})
 		if digestErr != nil || !types.ValidSHA256Digest(frozenDigest) {
 			return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("already-frozen assignment digest unavailable: %w", digestErr)
@@ -1115,7 +1131,7 @@ func (rt *Runtime) recordAssignedEngineeringReportOnce(ctx context.Context, rec 
 		}
 		if frozenDigest != assignment.Binding.SubjectDigest {
 			candidate, candidateErr := traceCall(rt, rec.RunID, "complete.export_candidate", func() (capsule.SourcePreflight, error) {
-				return rt.capsuleExecutor.PersistGrantedCandidate(ctx, rec.RunID, handle)
+				return fate.PersistGrantedCandidate(ctx, rec.RunID, handle)
 			})
 			if candidateErr != nil || "sha256:"+strings.TrimPrefix(candidate.SubjectDigest, "sha256:") != frozenDigest {
 				return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("persist reconstructable content-addressed candidate: %w", candidateErr)
@@ -1580,7 +1596,7 @@ func (rt *Runtime) bindFrozenAssignmentExecutionReceipts(ctx context.Context, as
 		return report, nil
 	}
 	binding := assignmentSubjectBinding(report.Result)
-	receipts, err := rt.capsuleExecutor.ResolveGrantedExecutionReceiptsFor(ctx, assignment.BoundRunID, handle, refs, binding)
+	receipts, err := rt.assignmentFate().ResolveGrantedExecutionReceiptsFor(ctx, assignment.BoundRunID, handle, refs, binding)
 	if err != nil || len(receipts) != len(refs) {
 		return report, executionEvidenceCountError("assignment command evidence unavailable after durable freeze", len(refs), len(receipts), err)
 	}
