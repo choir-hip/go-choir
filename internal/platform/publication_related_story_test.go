@@ -27,6 +27,11 @@ package platform
 //  S7 A judged pair ranks behind a capture link, or ranks by its age before
 //     its relation.
 //  S8 The record route answers a non-internal caller or any method but POST.
+//  S9 The record route writes a story the read never shows: one whose access
+//     policy is not public.
+//  S10 The validate-only call writes an edge, skips a check the write runs
+//     (owner, published, access policy, the degree bound), or answers like a
+//     record, so a caller that took it for one would believe an edge exists.
 
 import (
 	"bytes"
@@ -460,5 +465,78 @@ func TestStoryRelationsRouteIsInternalPostOnly(t *testing.T) { // S8
 	raw, _ := json.Marshal(refused)
 	if w := call(http.MethodPost, true, raw); w.Code != http.StatusBadRequest && w.Code != http.StatusForbidden {
 		t.Fatalf("a private computer = %d, want a refusal", w.Code)
+	}
+}
+
+func TestStoryRelationsRefusesAStoryTheReadWouldNeverShow(t *testing.T) { // S9
+	l := newRelatedStoryLab(t)
+	a := l.publish("doc-a", 1, "Story A", l.capture("https://wire.example/a", "", "Story A source"))
+	private := l.publishAs(labOwner, PublishModeAuto, json.RawMessage(`{"visibility":"private","route":"public"}`), "doc-private", 1, "Private story", l.capture("https://wire.example/p", "", "Private source"))
+	internalRoute := l.publishAs(labOwner, PublishModeAuto, json.RawMessage(`{"visibility":"public","route":"owner"}`), "doc-route", 1, "Owner route story", l.capture("https://wire.example/r", "", "Route source"))
+	for name, other := range map[string]*PublishTextureResponse{"private": private, "owner route": internalRoute} {
+		if n, err := l.svc.RecordStoryRelations(context.Background(), l.relateReq(types.StoryRelationSameIncident, a, other)); err == nil || !strings.Contains(err.Error(), "public") || n != 0 {
+			t.Errorf("%s story: recorded %d err = %v, want a refusal naming the public route", name, n, err)
+		}
+	}
+	if edges := l.relatedStoryEdges(a.PublicationID); len(edges) != 0 {
+		t.Fatalf("refused requests left %d edges", len(edges))
+	}
+}
+
+func TestStoryRelationsValidateOnlyChecksEverythingAndWritesNothing(t *testing.T) { // S10
+	l := newRelatedStoryLab(t)
+	a := l.publish("doc-a", 1, "Story A", l.capture("https://wire.example/a", "", "Story A source"))
+	b := l.publish("doc-b", 1, "Story B", l.capture("https://wire.example/b", "", "Story B source"))
+	foreign := l.publishAs("other-owner", PublishModeAuto, nil, "doc-foreign", 1, "Foreign story", l.capture("https://wire.example/f", "", "Foreign source"))
+	private := l.publishAs(labOwner, PublishModeAuto, json.RawMessage(`{"visibility":"private","route":"public"}`), "doc-private", 1, "Private story", l.capture("https://wire.example/p", "", "Private source"))
+	owner := l.publishAs(labOwner, PublishModeOwner, nil, "doc-owner", 1, "Owner piece", l.capture("https://wire.example/o", "", "Owner source"))
+	h := NewHandler(l.svc)
+	validate := func(req types.StoryRelationsRequest) *httptest.ResponseRecorder {
+		raw, _ := json.Marshal(req)
+		var body map[string]any
+		_ = json.Unmarshal(raw, &body)
+		body["validate_only"] = true
+		raw, _ = json.Marshal(body)
+		r := httptest.NewRequest(http.MethodPost, types.StoryRelationsPath, bytes.NewReader(raw))
+		r.Header.Set("X-Internal-Caller", "true")
+		w := httptest.NewRecorder()
+		h.HandleStoryRelations(w, r)
+		return w
+	}
+
+	w := validate(l.relateReq(types.StoryRelationSameIncident, a, b))
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"validated":1`) || strings.Contains(w.Body.String(), `"recorded"`) {
+		t.Fatalf("validate-only = %d %s, want 200 validated 1 and no recorded count", w.Code, w.Body.String())
+	}
+	if edges := l.relatedStoryEdges(a.PublicationID); len(edges) != 0 {
+		t.Fatalf("validate-only wrote %d edges", len(edges))
+	}
+
+	for name, other := range map[string]*PublishTextureResponse{"another owner's": foreign, "private": private, "not autopaper": owner} {
+		if w := validate(l.relateReq(types.StoryRelationSameIncident, a, other)); w.Code != http.StatusBadRequest {
+			t.Errorf("%s story: validate-only = %d %s, want 400", name, w.Code, w.Body.String())
+		}
+	}
+	self := l.relateReq(types.StoryRelationSameIncident, a, a)
+	if w := validate(self); w.Code != http.StatusBadRequest {
+		t.Errorf("self pair: validate-only = %d, want 400", w.Code)
+	}
+	notPlatform := l.relateReq(types.StoryRelationSameIncident, a, b)
+	notPlatform.ComputerID = "computer-private"
+	if w := validate(notPlatform); w.Code == http.StatusOK {
+		t.Errorf("a private computer: validate-only = %d, want a refusal", w.Code)
+	}
+
+	// The degree bound counts the pair as the write would.
+	bound := l.svc.related.tune().MaxRelatedEdges
+	for i := 0; i < bound; i++ {
+		other := l.publish(fmt.Sprintf("doc-n%d", i), 1, fmt.Sprintf("Neighbour %d", i), l.capture(fmt.Sprintf("https://wire.example/n%d", i), "", fmt.Sprintf("Neighbour %d source", i)))
+		l.relate(types.StoryRelationSameSubject, a, other)
+	}
+	if w := validate(l.relateReq(types.StoryRelationSameSubject, a, b)); w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "bound") {
+		t.Errorf("a story at its bound: validate-only = %d %s, want 400 naming the bound", w.Code, w.Body.String())
+	}
+	if edges := l.relatedStoryEdges(b.PublicationID); len(edges) != 0 {
+		t.Fatalf("refused validate-only left %d edges on B", len(edges))
 	}
 }
