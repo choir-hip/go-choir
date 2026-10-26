@@ -55,14 +55,26 @@ func (rollbackTestReceiptVerifier) VerifyEventHeadReceipt(context.Context, compu
 	return nil
 }
 
-func TestSelfDevelopmentRollbackCreatesOneHeadBoundPendingOperation(t *testing.T) {
+// rollbackAPIFixture is the owner rollback endpoint over a real event
+// appender and a recorded baseline operation. targetKind picks the event the
+// rollback targets: the genesis event, or a materialization_applied event.
+type rollbackAPIFixture struct {
+	handler      *APIHandler
+	store        *choirstore.Store
+	computerID   string
+	currentHead  *computerevent.Head
+	request      selfDevelopmentRollbackRequest
+	targetDigest string
+}
+
+func newRollbackAPIFixture(t *testing.T, targetKind computerevent.EventKind) rollbackAPIFixture {
 	ctx := context.Background()
 	computerID := "computer-rollback"
 	productStore, err := choirstore.Open(filepath.Join(t.TempDir(), "runtime.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer productStore.Close()
+	t.Cleanup(func() { _ = productStore.Close() })
 	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -82,12 +94,34 @@ func TestSelfDevelopmentRollbackCreatesOneHeadBoundPendingOperation(t *testing.T
 		t.Fatal("genesis event unavailable")
 	}
 	genesisDigest, _ := genesis.Digest()
+	targetDigest, targetCommitment := genesisDigest, strings.Repeat("a", 64)
+	if targetKind == computerevent.EventMaterializationApplied {
+		// A prior applied release: an accepted effect, then its applied event.
+		targetCommitment = strings.Repeat("9", 64)
+		acceptedID, _ := computerevent.NewEventID()
+		accepted := computerevent.Event{SchemaVersion: 1, EventID: acceptedID, ComputerID: computerID, EventKind: computerevent.EventEffectAccepted, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano), IdempotencyKey: "prior-accepted", ActorProfile: "management", AuthorityRef: "owner", PrivacyClass: "owner", PayloadCommitment: strings.Repeat("a", 64), ProposedEffectRef: strings.Repeat("b", 64), DecisionRef: strings.Repeat("c", 64), VerifierRefs: []string{genesisDigest}, ResultingEffectiveCommitment: targetCommitment, ReducerVersion: 1}
+		if _, err := appender.AppendNew(ctx, accepted, computerevent.TransitionInput{TargetStateCommitment: targetCommitment}, nil); err != nil {
+			t.Fatal(err)
+		}
+		accepted, _, _ = productStore.EventByIdempotency(ctx, computerID, "prior-accepted")
+		acceptedDigest, _ := accepted.Digest()
+		appliedID, _ := computerevent.NewEventID()
+		applied := computerevent.Event{SchemaVersion: 1, EventID: appliedID, ComputerID: computerID, EventKind: computerevent.EventMaterializationApplied, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano), IdempotencyKey: "prior-applied", ActorProfile: "management", AuthorityRef: "owner", PrivacyClass: "owner", PayloadCommitment: strings.Repeat("a", 64), DecisionRef: acceptedDigest, ResultingEffectiveCommitment: targetCommitment, ReducerVersion: 1}
+		if _, err := appender.AppendNew(ctx, applied, computerevent.TransitionInput{}, nil); err != nil {
+			t.Fatal(err)
+		}
+		applied, found, err = productStore.EventByIdempotency(ctx, computerID, "prior-applied")
+		if err != nil || !found {
+			t.Fatal("applied event unavailable")
+		}
+		targetDigest, _ = applied.Digest()
+	}
 	operations, err := selfdev.NewStore(productStore, productStore)
 	if err != nil {
 		t.Fatal(err)
 	}
 	target, err := operations.RecordAppliedBaseline(ctx, selfdev.BaselineRequest{
-		ComputerID: computerID, IdempotencyKey: "baseline", EventHead: genesisDigest, StateCommitment: strings.Repeat("a", 64),
+		ComputerID: computerID, IdempotencyKey: "baseline", EventHead: targetDigest, StateCommitment: targetCommitment,
 		ReleaseDigest: strings.Repeat("c", 64), CodeRef: "code:baseline", ArtifactProgramRef: "artifact:baseline",
 		VerifierRefs: []string{genesisDigest}, MaterializationReceipt: strings.Repeat("d", 64),
 		CheckpointRef: "checkpoint:sha256:" + strings.Repeat("e", 64), RouteReceipt: "route-receipt-baseline", RouteGeneration: 1,
@@ -136,10 +170,18 @@ func TestSelfDevelopmentRollbackCreatesOneHeadBoundPendingOperation(t *testing.T
 	routeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(vmctl.RouteResolution{Slot: slot, LatestReceipt: currentRouteReceipt, CodeClosure: newCode, ArtifactProgram: newProgram})
 	}))
-	defer routeServer.Close()
+	t.Cleanup(routeServer.Close)
 	runtime := &Runtime{cfg: provideriface.Config{ComputerID: computerID}, store: productStore, eventAppender: appender, selfdevOperations: operations, selfdevRoute: vmctl.NewClient(routeServer.URL), selfdevRouteOwnerID: "owner", selfdevRouteDesktopID: "primary"}
 	handler := &APIHandler{rt: runtime}
-	requestBody := selfDevelopmentRollbackRequest{ExpectedDesiredHead: currentHead.DesiredEventHead, CurrentAppliedHead: currentHead.EffectiveEventHead, ToAppliedHead: genesisDigest, PriorMaterialization: target.MaterializationReceipt, PriorCheckpoint: target.CheckpointRef, ExpectedRouteGeneration: slot.Generation, IdempotencyKey: "rollback-api"}
+	requestBody := selfDevelopmentRollbackRequest{ExpectedDesiredHead: currentHead.DesiredEventHead, CurrentAppliedHead: currentHead.EffectiveEventHead, ToAppliedHead: targetDigest, PriorMaterialization: target.MaterializationReceipt, PriorCheckpoint: target.CheckpointRef, ExpectedRouteGeneration: slot.Generation, IdempotencyKey: "rollback-api"}
+	return rollbackAPIFixture{handler: handler, store: productStore, computerID: computerID, currentHead: currentHead, request: requestBody, targetDigest: targetDigest}
+}
+
+func TestSelfDevelopmentRollbackCreatesOneHeadBoundPendingOperation(t *testing.T) {
+	ctx := context.Background()
+	fx := newRollbackAPIFixture(t, computerevent.EventMaterializationApplied)
+	handler, productStore, computerID, currentHead, targetDigest := fx.handler, fx.store, fx.computerID, fx.currentHead, fx.targetDigest
+	requestBody := fx.request
 	body, _ := json.Marshal(requestBody)
 	recorder := httptest.NewRecorder()
 	handler.startSelfDevelopmentRollback(recorder, httptest.NewRequest(http.MethodPost, "/", strings.NewReader(string(body))), "owner", computerID)
@@ -151,7 +193,7 @@ func TestSelfDevelopmentRollbackCreatesOneHeadBoundPendingOperation(t *testing.T
 		t.Fatal(err)
 	}
 	resultHead, _ := productStore.Head(ctx, computerID)
-	if operation.State != selfdev.StateRollbackPending || operation.BaseHead != genesisDigest || resultHead.PendingTransitionRef == "" || resultHead.EffectiveEventHead != currentHead.EffectiveEventHead {
+	if operation.State != selfdev.StateRollbackPending || operation.BaseHead != targetDigest || resultHead.PendingTransitionRef == "" || resultHead.EffectiveEventHead != currentHead.EffectiveEventHead {
 		t.Fatalf("rollback operation=%+v head=%+v", operation, resultHead)
 	}
 	replay := httptest.NewRecorder()
@@ -160,6 +202,32 @@ func TestSelfDevelopmentRollbackCreatesOneHeadBoundPendingOperation(t *testing.T
 	_ = json.NewDecoder(replay.Body).Decode(&replayed)
 	if replay.Code != http.StatusOK || replayed.OperationID != operation.OperationID {
 		t.Fatalf("rollback replay status=%d operation=%+v", replay.Code, replayed)
+	}
+}
+
+// A rollback to the genesis baseline cannot record its success (the genesis
+// event is not a verification event, so verificationEvidence refuses it after
+// the updater has swapped the release): the owner API refuses it at open,
+// visibly, and records nothing, instead of wedging at record
+// (docs/problems/selfdev-rollback-cannot-record-success-2026-10-26.md).
+func TestSelfDevelopmentRollbackToGenesisBaselineRefusedAtOpen(t *testing.T) {
+	ctx := context.Background()
+	fx := newRollbackAPIFixture(t, computerevent.EventGenesisImported)
+	body, _ := json.Marshal(fx.request)
+	recorder := httptest.NewRecorder()
+	fx.handler.startSelfDevelopmentRollback(recorder, httptest.NewRequest(http.MethodPost, "/", strings.NewReader(string(body))), "owner", fx.computerID)
+	if recorder.Code != http.StatusConflict || !strings.Contains(recorder.Body.String(), "genesis") {
+		t.Fatalf("genesis rollback status=%d body=%s; want a 409 that names the genesis baseline", recorder.Code, recorder.Body.String())
+	}
+	after, _ := fx.store.Head(ctx, fx.computerID)
+	if after.CanonicalEventHead != fx.currentHead.CanonicalEventHead || after.PendingTransitionRef != "" {
+		t.Fatalf("a refused genesis rollback changed the head: before=%+v after=%+v", fx.currentHead, after)
+	}
+	if _, found, err := fx.store.EventByIdempotency(ctx, fx.computerID, "selfdev-rollback-requested-"+fx.request.IdempotencyKey); err != nil || found {
+		t.Fatalf("a rollback_requested event was appended for a refused genesis rollback (found=%v err=%v)", found, err)
+	}
+	if _, found, err := fx.handler.rt.selfdevOperations.GetByIdempotency(ctx, fx.computerID, fx.request.IdempotencyKey); err != nil || found {
+		t.Fatalf("a rollback operation was opened for a refused genesis rollback (found=%v err=%v)", found, err)
 	}
 }
 
