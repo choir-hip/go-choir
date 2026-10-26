@@ -8,14 +8,20 @@ It supersedes the L20 section of
 [start-refused-for-memory-no-reclaim-2026-10-26.md](../problems/start-refused-for-memory-no-reclaim-2026-10-26.md) §6.3,
 [hibernate-writes-whole-guest-and-deploys-void-snapshots-2026-10-22.md](../problems/hibernate-writes-whole-guest-and-deploys-void-snapshots-2026-10-22.md) R1.
 
+- **Revision:** revised 2026-10-26 after review 306 (tier 2: Devin,
+  "approve with required amendments"; DeepSeek v4.1 flash, "accept the
+  shape, do not open S6 as written"). Every finding is answered by name in
+  §12.
 - **Mutation class of this document:** green. Every build slice is red
   (VM lifecycle, snapshot validation, boot path, deploy activation)
-  except S1, which is orange.
+  except S1, which is orange, and S1c, which is yellow (a CI check).
 - **Review tier:** this design is reviewed like the change it designs:
   **tier 2** (Devin and DeepSeek v4.1 flash). A defect here can be silent
   and can damage data: loading guest memory against disk bytes it was not
-  taken against corrupts a computer without an error. S3 is tier 2. S1, S2,
-  S4 and S5 are additive and behind a switch, so they are tier 1.
+  taken against corrupts a computer without an error. S3 is tier 2. S1,
+  S1b, S2, S4 and S5 are additive or fail closed, so they are tier 1. S1c
+  is a security gate, so it gets one seat (Devin) even though CI tooling
+  is otherwise tier 0.
 - **Owner inputs:** "If we can restore fast we can hibernate idle computers
   at will" (2026-10-26). Security first, then availability, then
   customizations (2026-10-25). The floor is "all host-level and
@@ -23,6 +29,14 @@ It supersedes the L20 section of
   (2026-10-25 Q2). The support window is one week (2026-10-25 Q1). Restart
   rules are in CLAUDE.md, "Restarts End Work (Crash) Or Resume It (Planned
   Update)".
+- **FP0 ruling (2026-10-26, review 306 DeepSeek finding 6), open to the
+  owner's reversal:** under the owner's standing "security comes first"
+  ruling and the No Blocking Asks rule, FP0 took the conservative option.
+  `security_epoch` is not left to the author's memory. A CI check refuses
+  any change to a named security surface outside the floor unless the same
+  change raises `security_epoch` or carries an explicit, reviewed "no
+  security effect" marker (§6.6, slice S1c). This replaces the old default
+  of Q-D2-2.
 - **Proof computers:** d@e and test accounts only. b@c is crash-looping
   at boot (X1) and may not be a starter, a victim or a proof computer
   until X1 lands.
@@ -43,9 +57,9 @@ It supersedes the L20 section of
 2. **When it is safe.** A snapshot is safe to resume after a deploy if
    all of these hold: the bytes it was taken against still exist; the
    guest floor is unchanged; the security epoch is unchanged; the host
-   still serves the guest's ABI; the release is inside the support window;
-   and the Firecracker version, host kernel, confinement and host boot
-   policy are unchanged. Then it resumes onto **its own** release. A
+   still serves the guest's ABI; the release is current or inside the
+   support window; and the Firecracker version, host kernel, confinement
+   and host boot policy are unchanged. Then it resumes onto **its own** release. A
    computer that resumed behind the current release is updated at its next
    idle moment by an ordinary planned, marker-backed refresh ("resume,
    then update"). If any condition fails, the snapshot never resumes and
@@ -54,15 +68,25 @@ It supersedes the L20 section of
    written. The update after it is the existing deploy refresh. The guest
    writes its marker only when it is not busy. The refreshed boot consumes
    the marker once. A crash in that boot closes work. Busy computers wait
-   in the existing durable pending set.
+   in the existing pending set, which survives a vmctl restart.
 4. **Security.** Floor and security epoch are fixed when the image is
    built and recorded in the image itself. They are compared against the
    **current** release at every wake. A snapshot from before a floor move or
    an epoch bump cannot load. A hibernated computer therefore never runs
    pre-fix code again; its next wake is a cold boot onto the fix. A
    computer running behind is active, so the deploy that carries the fix
-   reaches it like any other active computer.
-5. **Proof.** Hibernate d@e. Wait for a deploy that **changes the guest
+   reaches it like any other active computer. A CI check makes the epoch
+   bump hard to forget: a change to a named security surface outside the
+   floor must raise the epoch or carry a reviewed "no security effect"
+   marker (§6.6). The residual is stated plainly in §6.7: a computer that
+   stays busy runs its old code until its next idle moment, exactly as a
+   busy computer does after any deploy today.
+5. **Gate on S6.** The switch opens only after S5 has landed and the
+   deploy-level floor measurement (R9, §10) shows that at least half of the
+   NixOS-switch deploys over a week keep floor, epoch and ABI. Below that,
+   D2 resumes too little to pay for its red surface, and the built-binary
+   floor digest comes first.
+6. **Proof.** Hibernate d@e. Wait for a deploy that **changes the guest
    image**, which means any NixOS-switch deploy. Wake d@e and read the wake
    timeline: `outcome=snapshot`, `behind=true`, `wake_to_healthy_ms < 1000`.
    Then read the retry sweep's planned refresh onto current. A deploy that
@@ -145,8 +169,8 @@ It supersedes the L20 section of
 
 | What a deploy can change | Checked by | Real or conservative |
 |---|---|---|
-| **Guest store disk** (erofs: the guest's /nix/store, including the runtime binary `autoputer`, updater, capsule broker, frontend) | `kernel-params` `init=` path in the launch hash; bound-file identity | **Real.** The guest's page cache and the file-backed text of running processes describe old erofs blocks. Pages it evicts are read back from the disk, so loading against new bytes corrupts the guest. It is safe only against the **old** bytes. |
-| **Runtime binary** | the same as the store disk (it lives inside it, nix/autoputer-vm.nix:239); no separate host-served runtime exists | **Real**, for the same reason. A self-development layered release lives on data.img, which is inside the snapshot. |
+| **Guest store disk** (erofs: the guest's /nix/store, including the runtime binary `autoputer`, updater, capsule broker, frontend) | `kernel-params` `init=` path in the launch hash; bound-file identity | **Real.** The guest's page cache and the file-backed text of running processes describe old erofs blocks. Pages it evicts are read back from the disk, so loading against new bytes corrupts the guest. It is safe only against the **old** bytes. Today's bound-file identity is sampled at hibernate, through the stable symlink, not at launch, so it misses a switch that lands between launch and hibernate (H6, §11). |
+| **Runtime binary** | the same as the store disk (it lives inside it, nix/autoputer-vm.nix:239); no separate host-served runtime exists (the comment at nix/node-b.nix:2989, "vmctl serves it to VMs", is stale: the host pointer is read only by the deploy manifest check, node-b-ci-deploy:550) | **Real**, for the same reason. A self-development layered release lives on data.img, which is inside the snapshot. |
 | **Guest kernel (vmlinux), initrd** | bound-file identity, launch hash | **Conservative.** A snapshot load does not read the boot source; kernel text is in guest memory. They matter only at the next cold boot. Kernel modules loaded later come from the store disk (covered above). |
 | **rootfs.ext4** | bound-file identity only | **Conservative.** It is not attached when a store disk is configured (manager.go:1951-1968). |
 | **kernel-params** | launch hash | **Conservative** in itself, because it is read only at boot. It is a proxy for "the store disk changed". |
@@ -171,7 +195,7 @@ That is only about 2 to 3 hours at the current cadence.
 | **(a) Guest image unchanged, only host services changed** (service-pointer deploy, no switch) | Resumes already (vm-ee2fb953, §1.1). | Unchanged. |
 | **(a') Host-only change that still needs a switch** (nix/node-b.nix, vmctl code) | Voided: the switch makes a new guest image (commit stamps). | Becomes case (b): the floor is unchanged, so it **resumes onto its own release**, then updates. |
 | **(b) Guest changed, but not its floor and not its security epoch** (runtime, frontend, desks) | Voided, cold boot. | **Resume, then update.** Resume onto the snapshot's own release, sub-second. Mark the computer behind. It refreshes onto current at its next idle moment through the planned, marker-backed deploy refresh (§5). |
-| **(c) Never** | n/a | Any of these: the floor digest changed; the security epoch changed; the guest ABI is outside the host's range; the release is older than the support window; the snapshot is older than `VM_SNAPSHOT_MAX_AGE`; the release files are missing or changed; the Firecracker version, host kernel, confinement or host boot policy changed; the CPU fingerprint changed (S5); or the snapshot was already consumed or its epoch moved. The wake cold boots onto current: a crash boot, which closes open work (none, since the fence guaranteed nothing ran). |
+| **(c) Never** | n/a | Any of these: the floor digest changed; the security epoch changed; the guest ABI is outside the host's range; the release is not current and older than the support window; the snapshot is older than `VM_SNAPSHOT_MAX_AGE`; the release files are missing or changed; the Firecracker version, host kernel, confinement or host boot policy changed; the CPU fingerprint changed or is unknown (S5); or the snapshot was already consumed or its epoch moved. The wake cold boots onto current: a crash boot, which closes open work (none, since the fence guaranteed nothing ran). |
 
 ## 3. Data model
 
@@ -210,7 +234,8 @@ immutable and tied to the build:
   - the locked revisions of `nixpkgs` and `microvm` (flake.lock);
   - the Go toolchain version (`choirGo.version`);
   - the store path of a **floor source fileset**: `lib.fileset.toSource`
-    over the paths listed in `nix/guest-floor-paths.txt`. Its hash
+    over the paths listed in `nix/guest-floor-paths.txt`, minus
+    `*_test.go` and `testdata/` (tests are not in the binaries). Its hash
     depends only on file contents.
 
   The list holds:
@@ -222,20 +247,37 @@ immutable and tied to the build:
   - `nix/autoputer-vm.nix`;
   - the scripts it reads (`scripts/guest-signer-state-migrate`,
     `scripts/guest-signer-state-project`);
-  - the definition of `choirKernelModule`.
+  - **`flake.nix` and `flake.lock`, whole** (review 306 Devin F2). The
+    floor binaries are built by `mkGoService`, `commonGoArgs` and
+    `goChoirPackages` (flake.nix:287-293, 454-530), and the image by
+    `mkGuestImage` (flake.nix:575-604). A change to a build flag or an
+    install step there rewrites floor bytes without touching a Go package,
+    and `check-guest-floor-paths` cannot see a missing `.nix` file. The
+    whole files are listed, not the two locked revisions and the kernel
+    module definition alone, because a partial list is exactly how a
+    recipe change slips past. This over-approximates: in the 7 days to
+    2026-10-26, 30 commits touched `flake.nix`. The built-binary digest
+    (R9) is the later refinement that removes the over-count.
 
   Today that is 35 Choir packages
-  (`GOOS=linux go list -deps` of those commands, run 2026-10-26),
+  (`GOOS=linux go list -deps` of those commands, rerun 2026-10-26),
   including `internal/capsule`, `internal/updater`, `internal/types` and
   `internal/yaegikernel`. This is the owner's floor, "everything
   engineering has no access to". It over-approximates on purpose: a
-  wrongly counted floor change only costs a cold boot.
+  wrongly counted floor change only costs a cold boot. A package is listed
+  as its whole directory, so files it embeds (`//go:embed` cannot reach
+  outside the package directory) and generated files in it are covered.
 - **security_epoch** comes from the tracked file
-  `nix/guest-release-policy.json`. It is a monotone integer that the
-  author of a security fix outside the floor (for example in the runtime
-  or a desk) raises in the same commit. It works like Android's rollback
-  index and the update design's `security_epoch`
-  (docs/design/computer-update-architecture-rnd-2026-10-24.md §4.2).
+  `nix/guest-release-policy.json`. It is a monotone integer. It rises in
+  the commit that carries a security fix outside the floor (for example in
+  the runtime or a desk). It never falls: a revert of a commit that raised
+  it keeps the raised value. It works like Android's rollback index and the
+  update design's `security_epoch`
+  (docs/design/computer-update-architecture-rnd-2026-10-24.md §4.2). Under
+  FP0's ruling it is **enforced, not declared**: the CI check in §6.6
+  refuses a change to a named security surface that neither raises it nor
+  carries a reviewed "no security effect" marker, and refuses any commit
+  that lowers it.
 - **guest_abi** and **guest_abi_min** come from the same policy file.
   `guest_abi` is the host-guest protocol version this build speaks.
   `guest_abi_min` is the oldest guest protocol this build's host services
@@ -252,12 +294,18 @@ moves only with the deploy.
   release a realization was launched from. It is empty for a launch in
   legacy mode (switch off, or the current release has no directory).
 - **Launch record** `<VM_STATE_DIR>/<vm>/guest-release.json`
-  `{"release": "<id>", "epoch": N, "launched_at": "..."}`. It is written
-  and fsynced before Firecracker is spawned, and rewritten at every cold
-  boot. Reattach reads it (§4.3).
+  `{"release": "<id>", "image_target": "/nix/store/<hash>-go-choir-guest-image", "epoch": N, "launched_at": "..."}`.
+  It is written and fsynced before Firecracker is spawned, and rewritten at
+  every cold boot. It is written **for every launch, switch on or off**
+  (S1b): `release` is empty for a legacy launch, and `image_target` is the
+  `readlink` of `VM_GUEST_RELEASE_LINK` taken once at launch. Reattach reads
+  it (§4.3); the H6 guard reads it at hibernate (§4.4).
 - `SnapshotMeta.GuestRelease string` (`json:"guest_release,omitempty"`):
   copied from the realization's config at hibernate. It is additive, with
   no meta version bump: an old meta reads as legacy.
+- `SnapshotMeta.LaunchImageTarget string`
+  (`json:"launch_image_target,omitempty"`): the launch record's
+  `image_target`, copied at hibernate (S1b). Additive in the same way.
 - On `SnapshotTimeline`, `GuestRelease`, `CurrentRelease` and `Behind`
   are added to the wake receipt.
 - On `vmctl.VMInstanceInfo`, `GuestRelease` and `Behind` are added
@@ -271,7 +319,9 @@ moves only with the deploy.
   `current` symlink. Since then `/var/lib/go-choir/guest` has become an
   **atomic symlink into the Nix store** (nix/node-b.nix:2861-2865). A
   directory under it would be inside an immutable store path, and the
-  cutover script refuses a non-symlink tree. Releases therefore live
+  cutover script owns that name: it moves a first non-symlink tree aside
+  as a recovery ref and refuses a second (nix/node-b.nix:2936-2947; review
+  306 Devin F6 corrected the earlier wording). Releases therefore live
   beside it, in `guest-releases/`.
 - **Why not Nix GC roots on the old store paths?**
   - Rooting a guest image probably also roots its whole guest closure:
@@ -291,32 +341,45 @@ moves only with the deploy.
   holds both, nix/disks.nix:6-10). A reflink costs metadata only until the
   store path is garbage collected. After that the release owns its
   extents.
-- **The activation step** goes into the `go-choir-guest-image` activation
-  script, before `mv -Tf "$next" "$target"`. It is root and never fails
-  the switch:
+- **The activation step is its own snippet, and it cannot fail the
+  switch** (review 306 DeepSeek finding 4). The earlier draft put it
+  inside `go-choir-guest-image`, which runs under `set -euo pipefail`
+  (nix/node-b.nix:2866), so an unguarded `mkdir`, `chmod`, `sync` or `mv`
+  on a full disk would have aborted the switch before the symlink swap.
+  The step is now a separate snippet, `system.activationScripts.go-choir-guest-release`,
+  and `go-choir-guest-image` gains `deps = [ "go-choir-guest-release" ]`
+  so the release exists before the link moves. A NixOS activation snippet
+  that exits non-zero marks the whole switch failed, so the body runs in a
+  subshell that checks every step itself and always exits 0:
 
   ```sh
-  rel=/var/lib/go-choir/guest-releases
-  id=$(basename "$src" | cut -c1-32)
-  if [ -n "$retain" ] && [ ! -d "$rel/$id" ]; then      # retain: nix let-binding, see §7 switch
-    tmp="$rel/.tmp-$id"; rm -rf "$tmp"; mkdir -p "$tmp"
-    ok=1
+  # go-choir-guest-release: materialize ${guestImage} as a release; never fail the switch.
+  (
+    set +e +u +o pipefail
+    src="${guestImage}"; rel=/var/lib/go-choir/guest-releases
+    id=$(basename "$src" | cut -c1-32)
+    note() { echo "go-choir guest release $id not materialized ($1); snapshots of it will cold boot" >&2; }
+    [ -n "$retain" ] || exit 0                              # retain: nix let-binding, see §7 switch
+    [ -d "$rel/$id" ] && exit 0
+    tmp="$rel/.tmp-$id"
+    rm -rf "$tmp" && mkdir -p "$tmp" || { note "mkdir"; rm -rf "$tmp"; exit 0; }
     for f in vmlinux initrd rootfs.ext4 storedisk.erofs kernel-params build.json guest-image-manifest release.json; do
-      cp --reflink=always "$src/$f" "$tmp/$f" || { ok=0; break; }
+      cp --reflink=always "$src/$f" "$tmp/$f" || { note "reflink $f"; rm -rf "$tmp"; exit 0; }
     done
-    if [ "$ok" = 1 ]; then
-      printf '{"store_path":"%s","first_current_at":"%s"}\n' "$src" "$(date -u +%FT%TZ)" > "$tmp/installed.json"
-      chmod 0444 "$tmp"/*; chmod 0555 "$tmp"; sync -f "$tmp/installed.json"
-      mv -T "$tmp" "$rel/$id"
-    else
-      rm -rf "$tmp"; echo "go-choir guest release $id not materialized (reflink failed); snapshots of it will cold boot" >&2
-    fi
-  fi
+    printf '{"store_path":"%s","first_current_at":"%s"}\n' "$src" "$(date -u +%FT%TZ)" > "$tmp/installed.json" \
+      && chmod 0444 "$tmp"/* && chmod 0555 "$tmp" && sync -f "$tmp/installed.json" \
+      && mv -T "$tmp" "$rel/$id" \
+      || { note "finish"; chmod -R u+w "$tmp" 2>/dev/null; rm -rf "$tmp"; exit 0; }
+    exit 0
+  ) || true
   ```
 
   Never use `--reflink=auto`: a silent full copy is GBs per deploy.
   Without a release directory, vmctl launches the current image in legacy
-  mode, which is safe.
+  mode, which is safe. **S2 test:** the snippet, run against a fixture
+  with a read-only releases directory and with a source missing one file,
+  exits 0, leaves no `.tmp-*` and no release directory, and logs the
+  reason.
 - **Access:** add `/var/lib/go-choir/guest-releases` to vmctl's
   `ReadOnlyPaths` (nix/node-b.nix:1550), so a VMM escape cannot rewrite a
   kernel a later boot runs, the same property `guest/` has. Add the
@@ -378,7 +441,20 @@ moves only with the deploy.
   records `meta.GuestRelease = cfg.GuestRelease`.
 - **Bound paths.** `snapshotBoundPaths` (snapshot.go:455) already reads
   the realization's `cfg`, which now holds release paths. It needs no
-  change, as long as §4.3 is right.
+  change, as long as §4.3 is right. A release path is immutable, so its
+  identity at hibernate is its identity at launch.
+- **The H6 guard, for legacy launches (S1b, switch on or off).**
+  `diskIdentity` stats the configured path at hibernate
+  (snapshot.go:435-446, sampled in `commitSnapshot` after Firecracker
+  stops). For a legacy launch that path is the stable symlink, so after a
+  switch it already names the new erofs while the guest's memory describes
+  the old one. `commitSnapshot` copies the launch record's `image_target`
+  into `meta.LaunchImageTarget`. `validateSnapshot` refuses a legacy meta
+  whose `LaunchImageTarget` is set and differs from the `readlink` of
+  `VM_GUEST_RELEASE_LINK` now, with the new reason
+  `image_moved_since_launch`. It runs in the same place as R0 to R6. An
+  old meta without the field validates as today. A release-bound meta skips
+  it, because its paths cannot move.
 
 ### 4.5 Wake (S3)
 
@@ -411,15 +487,32 @@ Firecracker, kernel and hash checks:
 | R3 | `rel.floor_digest != cur.floor_digest` | `release_floor_moved` |
 | R4 | `rel.security_epoch != cur.security_epoch` (lower: a fix landed; higher: the host rolled back; both refuse) | `release_security_epoch` |
 | R5 | `rel.guest_abi < cur.guest_abi_min` or `rel.guest_abi > cur.guest_abi` | `release_abi_unsupported` |
-| R6 | `now − rel.first_current_at > VM_GUEST_RELEASE_SUPPORT_WINDOW` (default 168h, owner Q1) | `release_out_of_support` |
+| R6 | `rel.ID != cur.ID` and `now − rel.first_current_at > VM_GUEST_RELEASE_SUPPORT_WINDOW` (default 168h, owner Q1) | `release_out_of_support` |
 
+- **R6 never ages out the current release** (review 306 Devin F4,
+  DeepSeek finding 3). The earlier rule refused snapshots of a release
+  that was still current once it had been current for a week, a pure
+  availability loss with no security gain, and it also refused snapshots
+  of a release that became current again after a host rollback. The window
+  still runs from `first_current_at`, not from supersession. That is
+  conservative: a release that was current for six days gets one day of
+  support once superseded.
 - **Legacy metas** (`GuestRelease == ""`) skip R0 to R6 and validate
-  exactly as today. A legacy snapshot of the current image therefore still
-  resumes, and one taken before a deploy still cold boots.
+  exactly as today, plus the H6 guard (§4.4). A legacy snapshot of the
+  current image therefore still resumes, and one taken before a deploy
+  still cold boots.
 - **On success.** `ResumeVMFromSnapshot` (snapshot_lifecycle.go:440) sets
   `snap.GuestRelease`, `snap.CurrentRelease` and
   `snap.Behind = meta.GuestRelease != cur.ID`, and keeps `GuestRelease` on
-  the instance config.
+  the instance config. It rewrites the launch record (§3.2) with the
+  meta's release and `LaunchImageTarget` and the resumed epoch, before the
+  load, so a vmctl restart after the resume reattaches the computer with
+  the release it actually runs (§4.3), and its next snapshot carries the
+  original launch target (S1b). `Behind` is a **receipt** of what validation saw,
+  not the trigger for the update: `cur` was resolved during validation,
+  and a switch can repoint the link between validation and the load
+  (review 306 DeepSeek finding 2). Enrollment therefore does not depend on
+  it (§5.1 step 2).
 - **Unchanged:**
   - the one-shot consume (snapshot.go:429);
   - the credential delivery (a fresh envelope minted by today's vmctl);
@@ -430,11 +523,16 @@ Firecracker, kernel and hash checks:
 
 - **The endpoint.** `GET /internal/vmctl/guest-releases` (internal caller
   only) returns
-  `{"retain": bool, "current": "<id>|", "in_use": [{"id", "running": [vm], "snapshots": [vm]}]}`.
+  `{"retain": bool, "current": "<id>|", "complete": bool, "in_use": [{"id", "running": [vm], "snapshots": [vm]}]}`.
   - `running`: manager instances in a live state with a `GuestRelease`.
   - `snapshots`: unconsumed metas from `listSnapshots()`, from every
     root including the vault, that name a release and are younger than
     `VM_SNAPSHOT_MAX_AGE`.
+  - `complete`: false when any snapshot root that is configured (the
+    state directory, or the vault when one is set) could not be read.
+    `listSnapshots` skips an unreadable root silently today
+    (snapshot.go:710-713), so the endpoint uses a variant that reports
+    which roots it read (review 306 Devin F5).
 - **The script.** `scripts/node-b-guest-release-retention` runs as root
   from a new `go-choir-guest-release-retention` oneshot on a 30-minute
   timer, and from the disk retention sweep (beside `nixRetention`,
@@ -446,13 +544,18 @@ Firecracker, kernel and hash checks:
   - **Delete:** every other directory whose name matches the id regex
     and that is a real directory (not a symlink), with `rm -rf`.
   - **Delete anyway:** any non-current release older than the support
-    window, which can never resume (R6).
+    window that no running VM uses. Its snapshots can never resume (R6).
+  - **Never delete** current, previous, or a release a running VM uses,
+    by any rule, including the cap and the support window (review 306
+    DeepSeek finding 8: the earlier "delete anyway" rule did not exclude
+    running releases, which contradicted M1).
   - **Cap:** `GO_CHOIR_GUEST_RELEASE_KEEP_MAX` (default 8). Above it,
-    delete releases that only snapshots use, oldest first. Never delete
-    current, previous, or a release a running VM uses.
-  - **If vmctl does not answer** (connection error, 5xx), delete nothing
-    except past the support window. If it answers 404 (an older vmctl),
-    treat `in_use` as empty.
+    delete releases that only snapshots use, oldest first.
+  - **If vmctl does not answer** (connection error, 5xx), delete
+    nothing: without an answer the script cannot know what is running.
+    **If it answers `complete: false`**, delete only past-window releases
+    that the answer does not list as running. If it answers 404 (an older
+    vmctl, which never launches from a release), treat `in_use` as empty.
   - **Log** the count and `btrfs filesystem du -s` exclusive bytes.
 - Retention affects **efficiency only, never correctness**. A deleted
   release makes its snapshots refuse (R1) and cold boot. A running VM
@@ -468,25 +571,48 @@ Firecracker, kernel and hash checks:
    hibernate fence guaranteed that nothing ran when the snapshot was taken
    (`prepareHibernate` refuses while runs or self-development operations
    are live, hibernate.go:281-326).
-2. **Enroll.** If `Behind`, vmctl adds the computer to the **existing
-   durable pending set** (internal/vmctl/deploy_refresh_retry.go:86-155)
-   with:
-   - `Target` = the current release's `build.json` commit;
+2. **Enroll every release-bound resume** (review 306 DeepSeek finding 2).
+   The earlier draft enrolled only when `Behind` was true, but `Behind`
+   is decided against the current release resolved during validation. A
+   wake that validates just before the switch repoints the link loads the
+   old release with `Behind=false`, enrolls nothing, and is caught only if
+   that deploy refreshes active computers. Now every resume whose meta
+   names a release adds the computer to the **existing pending set**
+   (internal/vmctl/deploy_refresh_retry.go:86-155) with:
    - a new field `Kind: "woke_behind"`;
-   - `LastReason: "woke behind on release <id>"`.
+   - a new field `Release` = the release it resumed onto;
+   - `Target` = the current release's commit at enrollment. It is only a
+     placeholder: the sweep resolves it again **at each pass** (step 3).
+     It must not be empty, because the pending file loader drops entries
+     with an empty target (deploy_refresh_retry.go:106-108);
+   - `LastReason: "resumed on release <id>"`.
 
    The hook goes into `OwnershipRegistry.resumeFromSnapshot`
    (ownership.go:1664-1689) as a callback set from `cmd/vmctl/main.go`
    next to `SetDeployRefreshPendingPath` (:264), so the registry does not
-   import the handler. A resume that is not behind enrolls nothing.
-3. **User-idle gate.** Before asking the guest, the sweep
-   (`SweepDeployRefreshPending`, :256-288) skips a `woke_behind` entry
-   until `now − own.LastActiveAt ≥ VMCTL_BEHIND_REFRESH_IDLE` (default
-   2m). Without the gate, a person who has just woken their computer would
-   get a 10 s cold boot within a minute. With D3's 10-minute idle
-   hibernate, the 2-minute gate fires first in practice. Entries that are
-   not `woke_behind` are unchanged.
-4. **Update.** The sweep calls the unchanged `trackedDeployRefresh`.
+   import the handler. Enrolling a computer that is not behind costs one
+   sweep pass: step 3 forgets it.
+3. **Resolve at the sweep, then the user-idle gate.** For a `woke_behind`
+   entry, the sweep (`SweepDeployRefreshPending`, :256-288) first calls
+   `currentRelease()`. If the computer's instance `GuestRelease` equals the
+   current id, the entry is forgotten. Otherwise `Target` is set to the
+   current release's `build.json` commit, and the existing "already serves
+   target" check (:277-283) runs against it. Only then does the gate
+   apply: the sweep skips the entry until
+   `now − own.LastActiveAt ≥ VMCTL_BEHIND_REFRESH_IDLE` (default 2m).
+   Without the gate, a person who has just woken their computer would get
+   a 10 s cold boot within a minute. With D3's 10-minute idle hibernate,
+   the 2-minute gate fires first in practice. Entries that are not
+   `woke_behind` are unchanged.
+4. **A deploy replaces the kind.** `settle` (:134-155) keeps a known
+   entry's fields when a refresh is deferred, so as written a
+   `woke_behind` entry would keep its kind under a CI deploy. S4 changes
+   `settle` to clear `Kind` when the caller is not the retry sweep. When a
+   CI deploy refresh of the same computer is deferred as busy, the entry
+   then holds the deploy's target and an empty `Kind`. A deploy's refresh
+   is therefore never held by the user-idle gate; only the "resume, then
+   update" entry is.
+5. **Update.** The sweep calls the unchanged `trackedDeployRefresh`.
    - The guest writes its planned-restart marker, or refuses while busy
      (deploy_refresh.go:424-447). `allow_busy` applies only to
      critical_protected and public_platform computers (:215-221), which
@@ -496,10 +622,18 @@ Firecracker, kernel and hash checks:
    - Busy: the entry stays and is asked again every minute. Refreshed or
      failed: the entry is forgotten (:134-155), so there is no kill loop.
    - "Already serves target": forgotten (:277-283).
-5. **The next deploy.** A behind computer is active, so the next deploy's
+   - **Not active** (hibernated again, or stopped): the entry is
+     forgotten, because `trackedDeployRefresh` answers "skipped, not
+     active" (deploy_refresh.go:417-424) and the sweep forgets skipped
+     entries. The pending set is durable across a vmctl restart, **not**
+     across a hibernate (review 306 DeepSeek finding 8; the earlier
+     wording overstated it). Nothing is lost: the next wake validates the
+     snapshot against the then-current release (R0 to R6) and enrolls
+     again.
+6. **The next deploy.** A behind computer is active, so the next deploy's
    CI refresh (`selectDeployRefresh`, deploy_refresh.go:280-315) reaches
-   it like any other active computer. `settle` then forgets the pending
-   entry.
+   it like any other active computer, when that deploy refreshes active
+   computers. `settle` then forgets or replaces the pending entry.
 
 ### 5.2 Why the update keeps the marker
 
@@ -516,7 +650,7 @@ not worth adding.
 | A crash restart never resumes work | A behind guest that crashes is recovered by a cold boot with no marker, onto current. Its work closes. |
 | A planned restart resumes once | The refresh boot consumes the marker before resuming (planned_restart.go). If that boot crashes, the next boot has no marker and closes work. |
 | No boot-time resumer without a marker | Nothing new runs at boot. The pending set is not a resumer: it only asks the guest for a planned refresh. After a vmctl restart, reattach reads the launch record (§4.3) and the durable pending set continues. **A vmctl restart resumes nothing.** |
-| One marker, one resume | A snapshot resume neither writes nor consumes a marker. The remaining hazard is a marker **captured inside a snapshot**: mark, then a lifecycle race lets a hibernate win, `marker.clear` fails against the fenced guest (deploy_refresh.go:457-460), and the resumed guest crashes within the marker's 15 minutes (planned_restart.go:26). That crash would boot as planned. S5 closes this (§7). |
+| One marker, one resume | A snapshot resume neither writes nor consumes a marker. The remaining hazard is a marker **captured inside a snapshot**, which has two orderings. (1) Mark, then a lifecycle race lets a hibernate win. (2) The hibernate fence closes first (`prepareHibernate`, hibernate.go:282), and then a mark request writes the marker anyway, because `HandleInternalPlannedRestart` (planned_restart.go:469-536) and `markPlannedRestart` (:317) never consult the fence; the fence gates only `EnterWork` (hibernate.go:129-167) (review 306 Devin F3). In both, `marker.clear` fails against the fenced or paused guest (deploy_refresh.go:457-460), and a resumed guest that crashes within the marker's 15 minutes (planned_restart.go:26) would boot as planned and resume work. Both orderings exist today, without D2. S5 item 1 closes both, and S6 waits for S5. |
 
 ## 6. Security
 
@@ -531,7 +665,7 @@ not worth adding.
      waits.
    - A computer already running behind is active, so the deploy that
      carries the fix reaches it through the ordinary CI deploy refresh.
-     D2 adds no new deferral. Forcing a fix on a **busy** computer (the
+     D2 adds no new deferral of a fix (the residual is in §6.7). Forcing a fix on a **busy** computer (the
      owner's 10-25 ruling: "a forced fix is never deferred, and a
      computer is never contained or stopped for it") belongs to the
      update architecture (U-series), not to D2. D2 neither changes nor
@@ -545,16 +679,14 @@ not worth adding.
    - Retention deletion only causes cold boots.
    - Epoch equality (R4) refuses in both directions, so a host rollback
      cannot load a snapshot newer than the host.
-3. **Bounded staleness for an unclassified fix.** If an author ships a
-   security fix outside the floor without raising the epoch, a woken
-   computer runs the old runtime until its idle refresh. That is bounded
-   by the support window (one week from `first_current_at`) and by
-   `VM_SNAPSHOT_MAX_AGE` (36h). The exposure is the same as a busy
-   computer deferred at deploy, which happens today. The guard is:
-   - the commit rule (S1 adds it to `nix/guest-release-policy.json`'s
-     header comment);
-   - a deploy classifier line that labels any deploy touching that file
-     "security epoch raised" (S1, explanation only).
+3. **An unclassified fix is refused at CI, not bounded after the fact.**
+   The earlier draft left the epoch to the author and bounded the
+   exposure by the support window and the max age. Review 306 (DeepSeek
+   finding 6) named this the one place where the design did not keep "a
+   stale snapshot cannot skip a security fix" by construction. Under FP0's
+   ruling, the CI check in §6.6 now refuses such a change before it can
+   deploy. What remains is a wrong "no security effect" marker, which is a
+   reviewed claim, and the busy-computer residual in §6.7.
 4. **Host-guest protocol.**
    - **Today:** an old runtime that meets new host services is guarded
      only by the resume handshake. `resumed` must answer 200 and
@@ -567,22 +699,173 @@ not worth adding.
 5. **Credential delivery** is unchanged. **The snapshot vault** is
    unchanged; vault metas are counted in `in_use`.
 
+### 6.6 The security-epoch check (S1c; FP0 ruling, open to the owner's reversal)
+
+**The ruling.** FP0 ruled on 2026-10-26, under the owner's standing
+"security comes first" ruling and the No Blocking Asks rule, for the
+conservative option on review 306 DeepSeek finding 6: a change to a named
+security surface outside the floor must, **in the same change**, either
+raise `security_epoch` or carry an explicit, reviewed "no security effect"
+marker. CI refuses anything else. The owner may reverse this; the reversal
+is one edit (drop the CI step) and costs nothing at runtime.
+
+**The surfaces file.** `nix/guest-security-surfaces.txt` (new), one
+repo-relative directory prefix per line, `#` comments, grouped with one
+line of why per group. It names the code that runs in the guest, outside
+the floor, and decides what a guest may do, read or reach:
+
+| Group | Prefixes |
+|---|---|
+| autoputer, the guest runtime and its HTTP surface | `cmd/autoputer/`, `internal/autoputer/`, `internal/server/`, `internal/apihandler/` |
+| the desk runtime | `internal/agentcore/`, `internal/actorruntime/`, `internal/actor/`, `internal/deskworker/`, `cmd/desk-worker/`, `internal/toolregistry/` |
+| guest credentials and host-guest authentication | `internal/hostauth/`, `internal/dbcred/`, `internal/keyescrow/` |
+| grants and authority | `internal/capfloor/`, `internal/eventtablegrant/`, `internal/owneract/` |
+| self-development and capsule transactions | `internal/selfdev/`, `internal/selfdevprotocol/`, `internal/capsule/transaction/` |
+| guest egress | `internal/hostfetch/`, `internal/gatewayruntime/` |
+
+These are the packages that `cmd/autoputer` and `cmd/desk-worker` import
+and the floor commands do not (`go list -deps`, 2026-10-26), filtered to
+the ones with an authority, credential, egress or mutation role. Paths
+excluded from matching everywhere: `*_test.go`, `*/testdata/*`, `*.md`.
+A new guest package with such a role is added to the file in the commit
+that creates it; review asks the question.
+
+**The script.** `scripts/check-guest-security-epoch [--base REF] [--head REF]`,
+in the style of `scripts/check-store-schema-floor.sh` (same `ensure_base`
+fetch-and-retry, same fail-closed rules). It reads the diff like this:
+
+1. `range = base..head`. Commits are `git rev-list --no-merges range`.
+   For each commit `c`, the touched paths are
+   `git diff-tree --no-commit-id --name-only -r c` against its first
+   parent, minus the exclusions.
+2. `E(x)` is `.security_epoch` of `nix/guest-release-policy.json` at `x`
+   (`git show x:nix/guest-release-policy.json`, parsed with `jq`). A
+   missing file at the base counts as 0. A file that does not parse at any
+   commit that changed it, or at the head, fails.
+3. **Monotone.** For every commit that changed the policy file,
+   `E(c) ≥ E(c^)`. A fall fails, with no override: a revert of a raise
+   keeps the raised value.
+4. **Coverage.** `S` is the commits in the range that touch a surface
+   path. If `E(head) > E(base)`, the range passes: the deploy refuses every
+   older release-bound snapshot (R4), which is what a raise per commit
+   would have done. Otherwise every commit in `S` must carry, in its own
+   message, both trailers:
+
+   ```
+   Security-Effect: none; <why, at least 20 characters>
+   Security-Effect-Reviewed-By: <seat>; <ref>
+   ```
+
+   `<seat>` is one of `devin`, `deepseek`, `owner`. `<ref>` matches
+   `review [0-9]+` or `owner [0-9]{4}-[0-9]{2}-[0-9]{2}`. A trailer in a
+   later commit does not cover an earlier one: "the same change".
+5. **Sanity.** The surfaces file must exist and must not share a prefix
+   with `nix/guest-floor-paths.txt` (a surface is outside the floor by
+   definition; the floor moves by itself).
+
+**How it fails.** Exit 1, and one line per uncovered commit:
+`guest-security-epoch: FAIL <sha12> "<subject>" touches <paths>`, then the
+two remedies. Before the commit lands on main: amend it with the trailers
+after its review, or raise `security_epoch` in it. After it is on main: a
+follow-up commit that raises `security_epoch` (it covers the whole range
+from the deployed base, rule 4). Trailers cannot be added to a pushed
+commit. It also fails, with the cause named, when the base cannot be read
+after the fetch retry, when the policy file does not parse, and when the
+surfaces file is missing.
+
+**Where it runs, and which base.**
+- **CI:** a step in the `v1-inventory` job (Vocabulary Gates,
+  .github/workflows/ci.yml:448-480). `check` needs that job, and the
+  staging deploy needs `check` (ci.yml:486, 936), so a failure blocks the
+  deploy. The job's checkout takes `fetch-depth: 0`.
+  - On a push to main, the base is **the live staging commit** that the
+    plan job already selects (ci.yml:93-115), exposed as a new
+    `plan.outputs.base`. Not the push's before-SHA: a commit that failed
+    the check in one push would otherwise drop out of the next push's
+    range and deploy unchecked. With the deployed base, the failure
+    repeats until a raise or a revert lands.
+  - When the plan has no trustworthy staging commit (it forces every
+    lane), the base is the newest first-parent commit older than eight
+    days (`git rev-list -1 --first-parent --before=8.days head`): a release
+    older than the one-week support window cannot resume (R6), and the
+    extra day covers deploy latency.
+  - On a pull request, the base is the PR base SHA.
+- **Locally:** the lane gate before every push, with
+  `--base $(git merge-base origin/main HEAD)`. FP0 adds it to the gate list
+  in the worker rules and in CLAUDE.md's cheap checks; this design does
+  not edit those files.
+- **The deploy explanation** (`deploy-impact-classify`) prints
+  "security epoch raised N→M" when the policy file changed, and the CI step
+  writes each covered commit's `Security-Effect` trailers to the job
+  summary, so a reviewed claim is visible at deploy time.
+
+**What it cannot check, stated plainly.** The script verifies that the
+trailers exist and are well formed. It cannot verify that the named seat
+actually reviewed the change, or that the claim is true. A wrong marker is
+the remaining way for an unflagged fix to reach a resumed computer, and it
+is bounded by §6.7. The review prompt for a change that touches a
+surface asks the seat to answer "security effect: none, or raise the
+epoch" explicitly (S1c adds the line to the code-review prompt template).
+
+**Cost, measured.** In the 7 days to 2026-10-26, 220 of 887 non-doc
+commits on origin/main (25%) touched these prefixes outside tests, 156 of
+them in `internal/agentcore`. Each needs the trailers or a raise. Orange
+and red changes already get a tier 1 seat, so the trailer rides that
+review. A tier 0 change that touches a surface now needs a seat or a
+raise. A raise costs one cold boot for every hibernated computer, which is
+what every deploy costs today. If raises become routine, D2's ceiling
+falls; R9 counts deploys that keep the floor **and** the epoch, so the S6
+gate sees it.
+
+### 6.7 The residual: a busy resumed computer runs its old code until its next idle moment
+
+DeepSeek finding 6 names the case, and it stays true after the check:
+**a continuously active computer that resumed onto an older release runs
+that release's code until its next idle moment.** The checks in R0 to R6
+act at wake only. Once a computer is running, nothing in D2 stops it.
+
+How the idle gate bounds it:
+- **For the "resume, then update" entry** (§5.1): the sweep runs every
+  minute and refreshes the computer at the first pass where its user has
+  been away for `VMCTL_BEHIND_REFRESH_IDLE` (2 minutes) **and** the guest
+  answers not busy (no running run, no self-development operation, no
+  live capsule; `plannedRestartBusy`, planned_restart.go:373).
+- **For a deploy that carries a fix**, whether by an epoch raise or a
+  floor move: its CI refresh asks every active computer at once, with no
+  user-idle gate (§5.1 step 4). A busy computer is deferred and asked again
+  every minute, and is refreshed at the first minute it is not busy.
+- **No hard time bound exists** for a computer that never goes idle. The
+  support window and `VM_SNAPSHOT_MAX_AGE` bound how stale a release may be
+  **at wake**, not how long a computer runs after it. This is the same
+  exposure every busy computer has after any deploy today; D2 adds the
+  population of computers that resumed behind, not a new kind of exposure.
+  Forcing a fix into a busy computer ("a forced fix is never contained",
+  owner 2026-10-25) is the update architecture's job (U-series), not D2's.
+- **The protected classes** (critical_protected, public_platform) take a
+  marker-backed refresh while busy (`allow_busy`), but they never
+  idle-hibernate, so they never resume behind through D2.
+
 ## 7. Slices
 
 Use the rules in the goal file for every item: failure modes first (green,
 alone); then tests (yellow, red until the code); then the code; push
 `lane/<name>` after each commit, never main; the gates before every push;
-both nix evals when `nix/` changed. Order: S0, S1, S2, S3, S4; S5 may run
-after S3; then S6.
+both nix evals when `nix/` changed. Order: S0, S1, S1b, S1c, S2, S3, S4,
+S5; then S6. S1b and S5 repair defects of today's code, so they land
+whether or not S6 ever does. **S6 waits for S5** (review 306 DeepSeek
+finding 1; the earlier "S5 may follow S6" contradicted this order).
 
 ### S0: problem documentation (green)
 
 - Add a "D2" section to
   `docs/problems/density-station-d-failure-modes-2026-10-26.md` in the D1
-  shape (Problem, Design, Failure modes M1..M19 from §8, Protected
+  shape (Problem, Design, Failure modes M1..M25 from §8, Protected
   surfaces/evidence/rollback). Commit it alone.
-- FP0 decides whether H1 and H2 (§11) get their own problem docs. They
-  are real defects of today's code that S3 also repairs.
+- H1 and H6 (§11) are defects of today's code that can boot a guest
+  wrongly or load it against the wrong bytes, with D2 off. They get their
+  own problem doc,
+  `docs/problems/guest-image-switch-window-kernel-params-and-bound-identity-2026-10-26.md`,
+  committed before S1b. FP0 decides whether H2 gets one; S3 repairs it.
 
 ### S1: release metadata in the guest image (orange, tier 1)
 
@@ -591,7 +874,8 @@ after S3; then S6.
   `{"security_epoch":1,"guest_abi":1,"guest_abi_min":1}`, with the commit
   rule for raising each in a sibling `nix/guest-release-policy.md`
   comment, or in the flake comment, because JSON has no comments.
-- `nix/guest-floor-paths.txt` (new): one repo-relative path per line.
+- `nix/guest-floor-paths.txt` (new): one repo-relative path per line,
+  including `flake.nix` and `flake.lock` (§3.1).
 - `flake.nix`: a `guestFloorDigest` let-binding (§3.1), and
   `mkGuestImage` (flake.nix:575-605) writes `$out/release.json` from it,
   the policy file and `buildCommit`.
@@ -602,10 +886,14 @@ after S3; then S6.
 - `.github/workflows/ci.yml`: run that script in the check job.
 - `.github/scripts/deploy-impact-classify`: an explanation line for
   `nix/guest-release-policy.json`.
+- A flake output, `packages.x86_64-linux.guest-release-json`, that
+  evaluates to the release.json of the current commit without building the
+  image, so R9 can read the floor digest per deployed commit by `nix eval`
+  alone.
 
 **Tests, written first:**
-1. The check script fails on a fixture list missing `internal/capsule`
-   and passes on the real list.
+1. The check script fails on a fixture list missing `internal/capsule`,
+   fails on a list missing `flake.nix`, and passes on the real list.
 2. A flake check, `checks.x86_64-linux.guest-floor-commit-free`. It
    evaluates the guest NixOS config with two different `buildCommit`
    specialArgs and asserts that the kernel, initrd and floor-source store
@@ -615,6 +903,62 @@ after S3; then S6.
 
 **Runtime effect:** none (one extra file in the image directory).
 **Rollback:** git revert.
+
+### S1b: the switch window, with D2 off (red, tier 1; review 306 DeepSeek finding 7, Devin F1)
+
+H1 and H6 are real today and do not depend on release directories, so
+their repair is split out of S3 and lands regardless of the switch.
+
+**Files:**
+- `internal/vmmanager/manager.go`: `applyLaunchDefaults` reads
+  `VM_KERNEL_PARAMS_FILE` **at each launch**, through a small
+  `m.kernelParams()` that falls back to `m.cfg.KernelParams` when the file
+  is unset or unreadable (H1). `expectedLaunchConfig` uses the same
+  function, so a wake inside the window rebuilds the new parameters, and
+  the launch hash of a guest launched before the switch mismatches.
+- `launchFirecracker`: write the launch record (§3.2) for every launch,
+  with `image_target` from one `readlink`.
+- `snapshot.go`, `snapshot_lifecycle.go`: `SnapshotMeta.LaunchImageTarget`,
+  copied at `commitSnapshot`; the `image_moved_since_launch` refusal
+  (§4.4).
+
+**Tests, written first:**
+1. A launch after the kernel-params file changes uses the new contents
+   without a vmctl restart; an unreadable file falls back to the cached
+   value.
+2. Launch with link target A, repoint to B, hibernate, wake: the wake
+   refuses `image_moved_since_launch` and cold boots. Without the repoint
+   it resumes.
+3. A meta without `launch_image_target` validates exactly as today.
+4. Outside the window, `buildFirecrackerConfig` and the launch hash are
+   byte-identical to today's (the golden test S3 also uses), so the S1b
+   deploy voids no snapshot that today's code would keep.
+
+**Rollback:** git revert. A reverted vmctl ignores the meta field.
+
+### S1c: the security-epoch check (yellow, one seat; §6.6)
+
+**Files:**
+- `nix/guest-security-surfaces.txt` (new; §6.6 table).
+- `scripts/check-guest-security-epoch` (new).
+- `scripts/selftest-guest-security-epoch` (new): builds a throwaway git
+  repo in a temp directory and runs the check against it.
+- `.github/workflows/ci.yml`: `plan.outputs.base`; the step in
+  `v1-inventory` with `fetch-depth: 0`.
+- `.github/scripts/deploy-impact-classify`: the "security epoch raised"
+  explanation.
+- The code-review prompt template: the "security effect" question.
+
+**Tests, written first** (the selftest, each case a fixture commit
+range): a surface change with no raise and no trailer fails; the same with
+both trailers passes; a trailer with an unknown seat or a malformed ref
+fails; a trailer in a later commit does not cover an earlier one; a raise
+anywhere in the range passes the range; a fall fails even with trailers; a
+`_test.go`-only change passes; an unreadable base fails; an unparsable
+policy file fails; a prefix shared with the floor list fails; a merge
+commit is skipped.
+
+**Rollback:** remove the CI step. Nothing at runtime depends on it.
 
 ### S2: release directories and retention (red, inert, tier 1)
 
@@ -640,7 +984,12 @@ release, a symlink with a release name, and an odd name. Check:
 - 404: `in_use` is empty;
 - the cap: the oldest snapshot-only releases go first, and current,
   previous and running are never deleted;
-- a symlink or an odd name is never deleted.
+- a past-window release that a running VM uses is never deleted;
+- `complete: false`: only past-window releases not listed as running are
+  deleted;
+- a symlink or an odd name is never deleted;
+- the activation snippet exits 0 and leaves no `.tmp-*` on a read-only
+  releases directory and on a source missing a file (§4.1).
 
 **Proof before S3 switches on:** turn `snapshotReleaseRetain` on alone,
 deploy, and read R7 (§10). Releases are made and pruned, and vmctl
@@ -688,7 +1037,9 @@ releases dir with two releases, R1 and R2, and a link pointing at R2:
    the expected hash equals the launch hash, and the resume timeline says
    `behind=true`.
 4. Each of R0 to R6 returns its reason. A legacy meta under on behaves
-   exactly as under off.
+   exactly as under off. A snapshot of the **current** release whose
+   `first_current_at` is older than the window resumes (R6 exemption), and
+   so does one of a release that became current again after a rollback.
 5. A changed byte or mtime in `R1/storedisk.erofs` gives
    `disk_identity_mismatch`.
 6. A host policy change (for example the guest DNS list now selecting
@@ -700,7 +1051,7 @@ releases dir with two releases, R1 and R2, and a link pointing at R2:
    shared-copy name is stable for the same release across two link flips.
 9. **Env:** each of the four variables parses, and the defaults hold.
 10. **The handler:** running plus unconsumed snapshots, max age honoured,
-    vault root included.
+    vault root included; an unreadable vault root gives `complete: false`.
 
 Use `-race` for the reattach and resume tests.
 **Rollback:** `snapshotReleaseRetain = false` (R0 then refuses every
@@ -714,49 +1065,95 @@ loads against wrong bytes.
 
 **Files:**
 - `internal/vmctl/ownership.go`: the `resumeFromSnapshot` hook (§5.1).
-- `deploy_refresh_retry.go`: the entry's `Kind`, `enrollBehind`, and the
-  user-idle gate in `SweepDeployRefreshPending`.
+- `deploy_refresh_retry.go`: the entry's `Kind` and `Release`,
+  `enrollResumed`, the sweep-time resolution of the current release, the
+  user-idle gate in `SweepDeployRefreshPending`, and `settle` clearing
+  `Kind` for a caller other than the retry sweep.
 - `cmd/vmctl/main.go`: wiring and env `VMCTL_BEHIND_REFRESH_IDLE`
   (default `2m`).
 - `nix/node-b.nix`: the env line.
 
 **Tests, written first** (`deploy_refresh_behind_test.go`, with the
 fixed clock and the fake marker the existing tests use):
-1. A behind resume enrolls one entry with target = the current commit. A
-   non-behind resume enrolls nothing.
-2. The sweep skips the entry while `LastActiveAt` is within the gate and
+1. Every release-bound resume enrolls one entry with a non-empty
+   placeholder target. A legacy resume enrolls nothing.
+2. **The race:** a resume validated against R1 while R1 was current, with
+   the link then moved to R2 before the first sweep: the sweep resolves R2,
+   sets the target to R2's commit and, after the gate, refreshes. A resume
+   onto the release that is still current is forgotten at the first sweep.
+3. The sweep skips the entry while `LastActiveAt` is within the gate and
    refreshes it after (`planned_restart=true`).
-3. A busy guest keeps the entry. Refreshed or failed forgets it.
-4. "Already serves target" forgets it.
-5. A vmctl restart reloads the entry from the pending file with `Kind`.
-6. A CI deploy refresh of the same computer settles and forgets the entry.
-7. A non-`woke_behind` entry is unaffected by the gate.
+4. A busy guest keeps the entry. Refreshed or failed forgets it.
+5. "Already serves target" forgets it.
+6. A vmctl restart reloads the entry from the pending file with `Kind`
+   and `Release`.
+7. A CI deploy refresh of the same computer settles and forgets the entry;
+   a CI refresh deferred as busy replaces it with an empty `Kind`, and the
+   gate then no longer applies.
+8. A hibernated computer's entry is forgotten at the next sweep.
+9. A non-`woke_behind` entry is unaffected by the gate.
 
 **Rollback:** the switch off stops behind resumes, so no new entries
 appear. Existing entries are ordinary deferred refreshes.
 
-### S5: hardening (red, tier 1; may follow S6)
+### S5: hardening (red, tier 1; before S6)
 
-1. **The marker is never captured in a snapshot.**
-   - **Guest:** `prepareHibernate` (hibernate.go:281) answers 409 busy
-     (`planned_restart_pending`) while a planned-restart marker younger
-     than `plannedRestartMaxAge` exists.
+1. **The marker is never captured in a snapshot**, in either ordering
+   (§5.3).
+   - **Guest, mark then hibernate:** `prepareHibernate` (hibernate.go:281)
+     answers 409 busy (`planned_restart_pending`) while a planned-restart
+     marker younger than `plannedRestartMaxAge` exists.
+   - **Guest, hibernate then mark** (review 306 Devin F3):
+     `HandleInternalPlannedRestart` answers 409 busy
+     (`hibernate_fenced`) while the hibernate fence holds, before it
+     writes anything, and `markPlannedRestart` refuses the same way. Both
+     enter the fence as one work occurrence through a non-waiting variant
+     of `enter` (`hibernateFence`, hibernate.go:68-161, guarded by its
+     `mu`): fenced means refuse at once; otherwise `inflight` counts the
+     mark until the marker write returns, so the fence cannot close while
+     a marker is being written. No lock is held across the fsync.
    - **Host:** the idle sweep, make-room and operator hibernate skip a
      computer whose deploy refresh is in flight
-     (`deployRefreshState().inFlight`).
-   - **Tests** for both.
-2. **CPU fingerprint.**
-   - `SnapshotMeta.HostCPU` = sha256 of the first processor's `vendor_id`,
-     `model name`, `flags` and `microcode` from `/proc/cpuinfo`.
+     (`deployRefreshState().inFlight`, held across the whole refresh,
+     deploy_refresh.go:389-393).
+   - **Tests** for all three, including the interleaving "fence closes,
+     then a mark arrives" (refused, no marker file) and "a mark is inside,
+     then the fence is asked" (the fence answers busy, and after the mark
+     returns it answers busy again because a marker exists).
+2. **CPU fingerprint** (review 306 DeepSeek finding 5: the earlier form
+   was fail-open).
+   - `SnapshotMeta.HostCPU` = sha256 of the sorted, de-duplicated set of
+     (`vendor_id`, `model name`, `flags`, `microcode`) over **every**
+     processor in `/proc/cpuinfo`, so a microcode change on any core moves
+     it.
    - Validation refuses `host_cpu_mismatch` when both are set and differ.
-     An empty value (an old meta) is allowed, as today.
-   - **Tests** with fake cpuinfo.
+   - For a **release-bound** meta, an empty `HostCPU`, or a current
+     fingerprint that cannot be read, refuses `host_cpu_unknown`. The
+     refusal is at wake, not at hibernate: the result is the same (no load
+     on an unknown CPU), and the hibernate still frees the memory. A
+     legacy meta with an empty value is allowed, as today, so S5 voids no
+     existing snapshot.
+   - **Tests** with fake cpuinfo: a change on the last core only; an
+     unreadable file at hibernate and at wake.
 
 ### S6: switch on and prove (red; FP0 runs the landing loop)
 
-Set `snapshotReleaseRetain = true` in nix/node-b.nix. Land it through the
-landing loop. Then run §9 P1 on the **next** NixOS-switch deploy after a
-d@e hibernate taken under the switch. A snapshot taken before the switch
+**Gates. S6 does not open until all of these hold:**
+1. S1, S1b, S1c, S2, S3, S4 and **S5** have landed and deployed
+   (review 306 DeepSeek finding 1).
+2. **R9, the deploy-level floor measurement (§10), passes its threshold**:
+   over at least 7 days and at least 20 NixOS-switch deploys after S1 and
+   S1c landed, at least **50%** of those deploys keep the previous
+   deployed release's `floor_digest`, `security_epoch` and `guest_abi`
+   (review 306 DeepSeek "worth it?"). Below 50%, S6 waits and the
+   built-binary floor digest (§10 R9) is designed first.
+3. R7 is read and the cap is set from it (§10).
+4. FP0's ruling on the security epoch (§6.6) is live in CI, or the owner
+   has reversed it in writing.
+
+Then set `snapshotReleaseRetain = true` in nix/node-b.nix. Land it through
+the landing loop. Then run §9 P1 on the **next** NixOS-switch deploy after
+a d@e hibernate taken under the switch. A snapshot taken before the switch
 was on is legacy.
 
 **Switch summary:**
@@ -771,9 +1168,9 @@ was on is legacy.
 
 | # | Failure | Answer |
 |---|---|---|
-| M1 | Resume onto a deleted or overwritten release | R1 `release_missing`; bound-file identity (S3 test 5). Retention never deletes a running or young release, and deleting a snapshot's release only cold boots it. |
+| M1 | Resume onto a deleted or overwritten release | R1 `release_missing`; bound-file identity (S3 test 5). Retention never deletes a running or young release by any rule, the support-window rule included, and deleting a snapshot's release only cold boots it. |
 | M2 | Resume below the floor or the security epoch | R3 and R4, compared at every wake with the current release. S3 test 4. |
-| M3 | A behind computer is never refreshed | The durable pending set with a 1-minute sweep and a 2-minute user-idle gate. A computer behind and busy for longer than the support window is refused at its next wake (R6). The CI refresh at the next deploy also reaches it. Health lists `behind`. |
+| M3 | A behind computer is never refreshed | Every release-bound resume enrolls; the sweep resolves the current release each pass, with a 1-minute sweep and a 2-minute user-idle gate. The entry survives a vmctl restart, not a hibernate; the next wake re-validates and re-enrolls. A computer that never goes idle is the residual in §6.7. The CI refresh at the next deploy also reaches it. Health lists `behind`. |
 | M4 | Disk growth from retained releases | Kept: current, previous, young, in use; the cap (8); deletion past the support window. R7 sizes a release before S6. Logged per run. The snapshot budget (`VM_SNAPSHOT_BUDGET_GIB=48`) is separate and unchanged. |
 | M5 | Jailer paths | The source is the release path, so the shared copy is stable per release (§4.2). `confinement_mismatch` and the uid checks are kept. S3 test 8. |
 | M6 | Snapshot vault | No vault under the jailer (snapshot_lifecycle.go:131); vault metas are counted in `in_use` (S3 test 10). |
@@ -782,14 +1179,20 @@ was on is legacy.
 | M9 | The switch races a launch | Launch resolves the link once and binds the resolved release paths. A release under 2 h old and the previous one are never pruned. |
 | M10 | A reattached VM records the wrong release (today's `m.cfg` paths) | §4.3. With no launch record, the next snapshot is legacy, which is safe. S3 test 7. |
 | M11 | `kernel-params` goes stale between the NixOS switch and the vmctl restart (H1) | With the switch on, every launch reads `kernel-params` from the resolved release. S3 test 2. |
-| M12 | A planned-restart marker is captured in a snapshot | S5 item 1. |
+| M12 | A planned-restart marker is captured in a snapshot, mark-then-fence or fence-then-mark | S5 item 1, both orderings; S6 waits for S5. |
 | M13 | Silent host-guest protocol skew | R5 `guest_abi`, plus the fail-closed handshake. The same skew already exists for deferred computers. |
-| M14 | Floor list drift: a floor dependency missing from the digest | `scripts/check-guest-floor-paths` in CI. The `guest-floor-commit-free` flake check. Over-approximation is safe. |
-| M15 | CPU features change under a resumed guest | S5 item 2. |
+| M14 | Floor list drift: a floor dependency missing from the digest, including the build recipe | `scripts/check-guest-floor-paths` in CI. `flake.nix` and `flake.lock` are listed whole. The `guest-floor-commit-free` flake check. Over-approximation is safe. |
+| M15 | CPU features change under a resumed guest | S5 item 2: every core, and an unknown fingerprint refuses a release-bound meta. |
 | M16 | Rollback loads wrong bytes | Off: R0 refuses. Revert: the launch hash mismatches (§7 S3 rollback). Neither path loads. |
 | M17 | A behind computer is hibernated again before its refresh (idle sweep, make-room) | Allowed: the snapshot names the old release, which stays in use. Each cycle stays bounded by R6 and the max age. |
 | M18 | The update restarts a computer in front of its user | The user-idle gate (S4). The CI refresh at deploy time keeps today's semantics for every active computer, unchanged by D2. |
-| M19 | A security fix outside the floor ships without an epoch bump | §6 item 3: bounded by the support window and the max age. Commit rule and classifier label. |
+| M19 | A security fix outside the floor ships without an epoch bump | Refused by the CI check (§6.6, S1c) unless a reviewed "no security effect" marker is wrong; then M25. |
+| M20 | A hibernate and wake inside the switch-to-restart window load a legacy guest against the new erofs (H6) | S1b: the launch record's `image_target` and `image_moved_since_launch`; kernel parameters read at each launch. Release-bound launches are immune. S1b tests 2 and 4. |
+| M21 | A wake validates just before the link moves, loads the old release with `Behind=false`, and is never refreshed | Every release-bound resume enrolls; the sweep resolves the current release itself (§5.1). S4 test 2. |
+| M22 | Materializing a release fails the NixOS switch | A separate activation snippet in a subshell that checks every step and always exits 0 (§4.1). S2 test. |
+| M23 | R6 refuses snapshots of the current release after a quiet week, or after a rollback makes an old release current again | R6 exempts the current release. S3 test 4. |
+| M24 | Retention deletes a vault snapshot's release while the vault is unreadable | The endpoint reports `complete: false`; the script then deletes only past-window releases not running. S2 and S3 tests. |
+| M25 | A "no security effect" marker is wrong | A reviewed claim the check cannot verify (§6.6). Bounded as in §6.7: the computer refreshes at its first idle moment (user away 2 minutes, guest not busy); any later deploy's refresh asks again at its first not-busy minute; and a later raise or floor move refuses its snapshot at the next wake. No hard time bound for a computer that is never idle. |
 
 ## 9. Proof on staging
 
@@ -863,19 +1266,44 @@ Record the evidence in
   08:23, per the journal. D2 pays off only once D3 makes idle hibernation
   reach computers again; P1 uses an operator hibernate, so it does not
   wait on D3.
-- **R9: how often the floor moves.**
-  - Data so far: in the 7 days to 2026-10-26, 159 of 1,135 non-doc
-    commits on origin/main touched a floor Go package. The file changes
-    are dominated by `internal/capsule` (132) and `internal/yaegikernel`
-    (68). 19 touched `nix/autoputer-vm.nix` and 2 touched `flake.lock`.
-  - So a sizeable share of NixOS-switch deploys will move the floor. For
-    those, D2 resumes nothing, by design.
-  - After S1, record the floor digest per deploy for a week and report
-    the share of deploys that keep it. That share is D2's ceiling.
-  - If it is low, the refinement is to compute the floor from **built**
-    floor binaries without the commit stamp, rather than from source
-    paths. Go builds are reproducible, so only real code changes would
-    move it. That is a later slice.
+- **R9: how often the floor moves. This is the S6 gate.**
+  - **Commit-level data:** in the 7 days to 2026-10-26, 159 of 1,135
+    non-doc commits on origin/main touched a floor Go package (both
+    reviewers reproduced the order: about 154 of 1,145). The file changes
+    are dominated by `internal/capsule` (132 file changes, 69 commits) and
+    `internal/yaegikernel` (68 file changes, 48 commits). 19 commits
+    touched `nix/autoputer-vm.nix`, 2 `flake.lock`, and 30 `flake.nix`.
+  - **Deploy-level proxy, read 2026-10-26 (review 306 asked for the
+    deploy-level number).** Take the successful CI runs on main from
+    2026-10-21 09:35 to 2026-10-26 13:22 (345 runs; the `gh run list`
+    limit reached back that far) as the deploy sequence. Classify each
+    consecutive pair's diff with `.github/scripts/deploy-impact-classify`:
+    121 pairs would run a NixOS switch. Of those:
+    - 80 (66%) keep the floor paths without `flake.nix`/`flake.lock`;
+    - **74 (61%) keep them with `flake.nix`/`flake.lock` listed** (the
+      revised floor);
+    - 45 (37%) keep them and touch no §6.6 security surface, which is
+      the floor if every surface change were answered with an epoch raise
+      instead of a marker.
+
+    It is a proxy and it flatters D2: real deploys batch several CI runs,
+    and a larger diff is more likely to move the floor. It says the 50%
+    gate is reachable, and that the marker path, not the raise, is what
+    keeps D2 above it.
+  - **The measurement that gates S6.** After S1 and S1c land, for each
+    staging deploy that ran a NixOS switch (the deploy receipt's
+    `deploy_host_os=true`), read the deployed commit's release.json with
+    `nix eval .#packages.x86_64-linux.guest-release-json` and compare
+    `floor_digest`, `security_epoch` and `guest_abi` with the previous
+    switch deploy's. Record the series in
+    `docs/evidence/density-d2-floor-share-<date>.md`. **Threshold:** over
+    at least 7 days and at least 20 switch deploys, at least 50% keep all
+    three. That share is D2's ceiling.
+  - **Below the threshold**, the refinement comes before S6: compute the
+    floor from **built** floor binaries without the commit stamp, rather
+    than from source paths. Go builds are reproducible, so only real code
+    and recipe changes would move it, and listing `flake.nix` whole would
+    no longer be needed. That is a later slice with its own design.
 
 ## 11. Heresy delta and owner questions
 
@@ -890,7 +1318,8 @@ Record the evidence in
   - That it has caused failed boots is a **hypothesis**. To confirm, match
     boot failures in the vmctl journal against the switch-to-restart
     window of each deploy.
-  - S3 repairs it when the switch is on.
+  - S1b repairs it with the switch off as well (review 306 DeepSeek
+    finding 7: the earlier draft repaired it only under the switch).
 - **H2.** `ReattachVMWithConfig` gives a VM running an older image the
   current image's paths (manager.go:1517-1527). Today it is masked by the
   launch hash. S3 repairs it.
@@ -900,6 +1329,27 @@ Record the evidence in
 - **H4.** No snapshot hibernate on staging since 2026-10-24 08:23 (R8).
 - **H5.** No CPU template and no CPU fingerprint check (§1.2). S5
   repairs it.
+- **H6** (review 306 Devin F1). A silent-corruption path in today's
+  legacy snapshots. Between the NixOS switch and the vmctl restart,
+  `m.cfg.KernelParams` is stale (H1). A guest launched before the switch,
+  hibernated and woken inside that window, passes every check: the launch
+  hash is rebuilt from the same stale parameters, so it matches; and
+  `diskIdentity` stats the stable symlink at hibernate
+  (snapshot.go:435-446) and again at wake, both times seeing the **new**
+  erofs, so it matches too. Guest memory then loads against store-disk
+  bytes it was never taken against. The comment on `snapshotBoundPaths`
+  (snapshot.go:448-454) claims this is guarded; it guards only a
+  replacement between hibernate and wake, not between launch and
+  hibernate. The code path is certain; whether it has happened is
+  unobserved (the window is the seconds-to-minutes between the switch and
+  `systemctl restart go-choir-vmctl`, node-b-ci-deploy:508-516). Verified
+  here for direct launches; the jailed path was not traced, and S1b's
+  guard does not depend on it, because it compares link targets, not file
+  identities. S1b repairs it for legacy launches; release-bound launches
+  cannot hit it.
+- **H7.** The comment at nix/node-b.nix:2989 says vmctl serves the
+  autoputer binary to VMs; the guest execs it from its own store disk
+  (nix/autoputer-vm.nix:239). A stale comment, recorded only.
 
 **Introduced:** none (a design). **Repaired:** none yet.
 
@@ -908,8 +1358,47 @@ Record the evidence in
 - **Q-D2-1.** May a woken computer run the previous runtime for a few
   minutes, until its next idle moment, when the floor and the security
   epoch are unchanged? Default: yes, within the one-week support window.
-- **Q-D2-2.** Who raises `security_epoch` for a fix outside the floor?
-  Default: the fix's author, in the same commit, visible in the deploy
-  explanation.
+  The residual for a computer that never goes idle is stated in §6.7.
+- **Q-D2-2.** Ruled by FP0 on 2026-10-26, open to the owner's reversal:
+  the CI check in §6.6. A change to a named security surface raises the
+  epoch or carries a reviewed "no security effect" marker in the same
+  change. (The earlier default, "the fix's author remembers", is
+  withdrawn.)
 - **Q-D2-3.** The user-idle gate before the update restart. Default: 2
   minutes.
+
+## 12. Review 306 answers
+
+Review 306 was tier 2: Devin ("approve with required amendments", six
+findings) and DeepSeek v4.1 flash ("accept the shape; do not open S6 as
+written", nine findings). Each finding was checked against the code
+before it was accepted. None was rejected outright. Where a reviewer
+offered two fixes, the one taken is named, and so is the reason the other
+was not.
+
+**Devin**
+
+| Finding | Verified against | Answer |
+|---|---|---|
+| F1, a third silent-corruption window (H6) | `diskIdentity` stats the configured path at commit time (snapshot.go:435-446, `commitSnapshot` after Firecracker stops); `expectedLaunchConfig` refills kernel params from the start-time `m.cfg` (manager.go:1232-1257, config.go:47-49) | **Accepted.** H6 in §11, M20 in §8, guard in §4.4, slice S1b. The alternative, "make release-bound launch the only snapshot-eligible mode", was not taken: it would stop legacy snapshots resuming within a deploy, which works today, and S1b's link-target guard closes the window at less cost. |
+| F2, floor digest omits the build recipe | flake.nix:287-293, 454-530, 575-604 build the floor binaries and the image | **Accepted.** `flake.nix` and `flake.lock` are listed whole (§3.1, S1). The built-binary digest stays the later refinement and becomes the first step if R9 falls below its threshold (§10). |
+| F3, fence-then-mark captures a marker | `HandleInternalPlannedRestart` (planned_restart.go:469-536) and `markPlannedRestart` (:317) never consult the fence; the fence gates only `EnterWork` (hibernate.go:129-167) | **Accepted.** Both orderings in §5.3; S5 item 1 makes the mark a non-waiting work occurrence that refuses while fenced. The hazard exists today, without D2. |
+| F4, R6 refuses after a rollback | `first_current_at` is written once, 0444 (§4.1) | **Accepted**, as an exemption for the current release (§4.5). Rewriting `first_current_at` when a release returns was not taken: the file is immutable on purpose. |
+| F5, `in_use` silently misses an unreadable vault | `listSnapshots` skips an unreadable root (snapshot.go:710-713) | **Accepted.** `complete` flag on the endpoint; retention fails closed (§4.6, M24). |
+| F6, cutover wording | nix/node-b.nix:2936-2947 | **Accepted** (§4.1). |
+
+**DeepSeek v4.1 flash**
+
+| Finding | Verified against | Answer |
+|---|---|---|
+| 1, S5/S6 order contradiction | the earlier §7 intro and S5 header | **Accepted.** S6 waits for S5; S5's header says so (§7). |
+| 2, `Behind` is a validation-time fact | `trackedDeployRefresh` skips a computer that is not active (deploy_refresh.go:417-424); `deploy-impact-classify` sets `deploy_active_vm_refresh` only for some classes | **Accepted**, by the first fix offered: enroll every release-bound resume and resolve the current release at each sweep (§5.1, M21). The second, comparing after load, was not taken: it is the same comparison done once, and the sweep already repeats it. |
+| 3, R6 ages out the current release | as Devin F4 | **Accepted**, exemption (§4.5). Measuring the window from supersession was not taken: the earlier start is the conservative one. |
+| 4, "never fails the switch" was false | `set -euo pipefail` at nix/node-b.nix:2866 | **Accepted.** A separate snippet in a checked subshell that always exits 0 (§4.1, M22). |
+| 5, CPU fingerprint fail-open | the earlier S5 text | **Accepted**: every core, and an unknown fingerprint refuses a release-bound meta. Changed in one respect: the refusal is at wake, not at hibernate, with the same safety and the memory still freed (S5 item 2). |
+| 6, `security_epoch` is a manual declaration | `autoputer` and the desk runtime are outside the floor by design (§3.1) | **Accepted; FP0 ruled** (header, §6.6): a CI check over named surfaces, raise or reviewed marker in the same change. The residual DeepSeek names is stated in §6.7: a busy resumed computer runs pre-fix code until its next idle moment, with no hard bound for one that is never idle. The dissent "make the epoch automatic over all guest code" was not taken: it would reduce D2 to case (a'), and the check is the conservative middle. |
+| 7, H1 fix bundled behind the switch | config.go:47-49; node-b-ci-deploy:508-516 | **Accepted.** Slice S1b, switch-independent. |
+| 8, "durable" overstated; M1 contradicted §4.6 | deploy_refresh_retry.go:276-288 forgets skipped entries | **Accepted.** §5.1 step 5 rewords; retention never deletes a running release by any rule (§4.6, M1). |
+| 9, deliverable shape | goal file docs/definitions/choir-density-2026-10-26.md:331-345 | **Accepted.** The fp10 doc gains a short "L20 revised 2026-10-26" section that points here, so there is one authority and the deliverable the goal file named exists. |
+| "Worth it?", gate S6 on the deploy-level number | — | **Accepted.** S6 gate 2 (§7) and the R9 method and threshold (§10). A proxy read today puts the share at 61% with the revised floor, 37% if every surface change took a raise. |
+| Risk, embeds and generated files | `//go:embed` cannot leave the package directory | **Answered**: whole package directories are listed (§3.1). |
