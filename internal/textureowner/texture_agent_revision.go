@@ -174,6 +174,10 @@ func (h *Handler) handleLifecycleOwnerRevision(w http.ResponseWriter, r *http.Re
 		textureMetadataPromptUnixTS: time.Now().UTC().Unix(),
 	})
 	metadata = carryForwardDurableTextureMetadata(metadata, head.Metadata)
+	if doc.TrajectoryID != "" {
+		// The carry-forward copies the head's trajectory_id, which on a continued document is the settled one.
+		metadata = mergeTextureRevisionMetadata(metadata, map[string]any{"trajectory_id": doc.TrajectoryID})
+	}
 	revisionID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join([]string{ownerID, doc.ComputerID, doc.TrajectoryID, clientRequestID}, "\x00"))).String()
 	rev := types.Revision{
 		RevisionID:       revisionID,
