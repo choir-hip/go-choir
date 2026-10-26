@@ -985,3 +985,106 @@ func TestMakeRoomBoundsAreCapped(t *testing.T) {
 		t.Fatalf("bounds = %d victims, %s settle, want 10 and 60s", cfg.MakeRoomMaxVictims, cfg.MakeRoomSettleWait)
 	}
 }
+
+// Review 310 Low 1: a start cancelled while make-room plans its next victim
+// is abandoned, not given a last admission attempt. pick returns nothing on a
+// cancelled context, which is not the plan running out of victims: the final
+// attempt could admit and boot a request nobody waits for, and a refusal
+// after the cancel would be labelled refuse_no_room.
+func TestMakeRoomCancelledWhilePlanningIsAbandonedNotAdmitted(t *testing.T) {
+	cfg := makeRoomAdmission()
+	cfg.MakeRoomSettleWait = time.Nanosecond // one sample per wait, so the sample count is exact
+	f := newMakeRoomFixture(t, cfg)
+	f.freeOnHibernate = false
+	f.activeComputer("v1", "vm-v1", 3*time.Hour, 1536*mib)
+	f.activeComputer("v2", "vm-v2", 2*time.Hour, 1536*mib)
+	short := 4*gib + 1*gib + 2*gib - 2560*mib
+	f.setAvail(short)
+	f.mgr.bootHook = func(cfg VMManagerConfig) {
+		f.mgr.mu.Lock()
+		f.mgr.getVMs[cfg.VMID] = &VMInstanceInfo{HostURL: "http://127.0.0.1:9001", Epoch: 1, Healthy: true, State: "running"}
+		f.mgr.mu.Unlock()
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var calls int32
+	f.reg.setPressureSamplerForTest(func(PressureReclaimConfig) HostPressureSample {
+		n := atomic.AddInt32(&calls, 1)
+		avail := short
+		switch {
+		case n == 5: // the second pass of the loop: cancelled while it plans
+			cancel()
+		case n >= 6: // the final attempt, if one is made, would fit
+			avail = 16 * gib
+		}
+		return HostPressureSample{MemoryTotalBytes: 32 * gib, MemoryAvailableBytes: avail,
+			MemoryAvailablePercent: float64(avail) / float64(32*gib) * 100}
+	})
+	_, err := f.reg.ResolveOrAssignDesktopContext(ctx, "new-user", PrimaryDesktopID)
+	if err == nil {
+		t.Fatalf("a start cancelled while make-room planned was admitted and booted")
+	}
+	if got := f.mr.hibernates(); strings.Join(got, " ") != "vm-v1" {
+		t.Fatalf("hibernates = %v, want [vm-v1] before the cancel", got)
+	}
+	d := lastDecision(t, f.reg)
+	if d.Decision != "abandon_make_room" || len(d.MadeRoomVMIDs) != 1 || d.MadeRoomVMIDs[0] != "vm-v1" {
+		t.Fatalf("last decision = %s made %v, want abandon_make_room naming vm-v1", d.Decision, d.MadeRoomVMIDs)
+	}
+	for _, d := range f.reg.HostAdmissionSummary().Recent {
+		if d.Decision == "refuse_no_room" {
+			t.Fatalf("a cancelled start was recorded as refused for no room: %+v", d)
+		}
+	}
+}
+
+// Review 310 nit 4: the refusal's numbers are one sample's. The shortfall in
+// the detail comes from the latest sample, so the "host memory available"
+// figure beside it must too, not the start's first sample.
+func TestMakeRoomRefusalTextUsesTheLatestSample(t *testing.T) {
+	f := newMakeRoomFixture(t, makeRoomAdmission())
+	f.setAvail(5 * gib) // nothing running to hibernate: refused
+	var calls int32
+	f.reg.setPressureSamplerForTest(func(PressureReclaimConfig) HostPressureSample {
+		avail := 5 * gib
+		if atomic.AddInt32(&calls, 1) > 2 { // the admission and make-room's own first sample
+			avail = 6 * gib // still short, but not by what the first sample said
+		}
+		return HostPressureSample{MemoryTotalBytes: 32 * gib, MemoryAvailableBytes: avail,
+			MemoryAvailablePercent: float64(avail) / float64(32*gib) * 100}
+	})
+	_, err := f.reg.admitHostMemory(hibernated("starter", "vm-s", 2*gib), WarmnessClassPrimary)
+	refusal := RecoveryRefusalFrom(err)
+	if refusal == nil {
+		t.Fatalf("err = %v, want a refusal", err)
+	}
+	if !strings.Contains(refusal.Reason, "host memory available 6144 MiB") || !strings.Contains(refusal.Reason, "short 1024 MiB") {
+		t.Fatalf("refusal %q mixes samples; want available 6144 MiB beside short 1024 MiB", refusal.Reason)
+	}
+}
+
+// Review 310 nit 4: one computer is counted once in the refusal's skipped
+// list. A victim whose guest answered busy at the fence, and that became held
+// meanwhile, is both tried here and skipped by the next plan.
+func TestMakeRoomSkippedListCountsAComputerOnce(t *testing.T) {
+	f := newMakeRoomFixture(t, makeRoomAdmission())
+	f.activeComputer("v1", "vm-v1", 3*time.Hour, 1536*mib)
+	f.setAvail(4*gib + 1*gib + 2*gib - 1*gib)
+	f.mr.failWith = func(vmID string) error {
+		f.reg.mu.Lock()
+		f.reg.vmByID[vmID].HoldStatus = &MaintenanceHold{Reason: "operator"}
+		f.reg.mu.Unlock()
+		return busyHibernateError{}
+	}
+	_, err := f.reg.admitHostMemory(hibernated("starter", "vm-s", 2*gib), WarmnessClassPrimary)
+	refusal := RecoveryRefusalFrom(err)
+	if refusal == nil {
+		t.Fatalf("err = %v, want a refusal", err)
+	}
+	if strings.Contains(refusal.Reason, "held=1") && strings.Contains(refusal.Reason, "hibernate_busy=1") {
+		t.Fatalf("refusal %q counts one computer under two reasons", refusal.Reason)
+	}
+	if !strings.Contains(refusal.Reason, "hibernate_busy=1") {
+		t.Fatalf("refusal %q does not say the guest answered busy", refusal.Reason)
+	}
+}

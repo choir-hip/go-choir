@@ -230,6 +230,47 @@ func TestSettledRSSNotCapturedForVMKilledInsideWindow(t *testing.T) {
 	}
 }
 
+// Review 305 F1: a VM killed in the last sampler interval of its window,
+// when an admission or health read (not the sampler) is the one that ends the
+// window, still has its last reading in the ledger. Capture waits for the
+// sampler's liveness pass, so the stale reading is not taken.
+func TestSettledRSSNotCapturedForVMKilledInTheLastSamplerInterval(t *testing.T) {
+	f, ticket := settleFixture(t, "vm-1")
+	ticket.finish(true)
+	f.mgr.setRSS("vm-1", 1229<<20)
+	f.advanceAndSample(15 * time.Second)
+	f.advanceAndSample(4*time.Minute + 30*time.Second) // 4m45s in, inside the window
+	// Killed now; the sampler has not run since.
+	f.mgr.rmu.Lock()
+	delete(f.mgr.rss, "vm-1")
+	f.mgr.rmu.Unlock()
+	*f.now = f.now.Add(25 * time.Second) // 5m10s: the window is over
+	f.reg.HostAdmissionSummary()         // a health read ends the window
+	f.advanceAndSample(10 * time.Second) // the sampler finds the VM gone
+	if got := f.settledOf("vm-1"); got != 0 {
+		t.Fatalf("settled = %d MiB captured from a VM that was dead at the window end", got>>20)
+	}
+}
+
+// Review 305 F1, the other side: a live VM whose window is ended by a health
+// read is still captured, at the sampler's next pass.
+func TestSettledRSSCapturedAfterAHealthReadEndsTheWindow(t *testing.T) {
+	f, ticket := settleFixture(t, "vm-1")
+	ticket.finish(true)
+	f.mgr.setRSS("vm-1", 1229<<20)
+	f.advanceAndSample(15 * time.Second)
+	f.advanceAndSample(4*time.Minute + 30*time.Second)
+	*f.now = f.now.Add(25 * time.Second)
+	f.reg.HostAdmissionSummary()
+	if s := f.reg.HostAdmissionSummary(); len(s.Reservations) != 0 {
+		t.Fatalf("an ended window still holds %d reservations", len(s.Reservations))
+	}
+	f.advanceAndSample(10 * time.Second)
+	if got := f.settledOf("vm-1"); got != 1229<<20 {
+		t.Fatalf("settled = %d MiB, want 1229", got>>20)
+	}
+}
+
 // M5: the first start's window ends while the VM's second start is still
 // settling; the reading is the second start's early one and must not be
 // taken for the first's.
