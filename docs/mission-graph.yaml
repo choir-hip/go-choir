@@ -1372,10 +1372,10 @@ nodes:
   - id: choir-selfdev-readiness-metamission-2026-10-24
     title: Self-development readiness — the platform upgrades the self-development loop needs, then the first real loop (the Reader app) end to end
     path: docs/definitions/choir-selfdev-readiness-metamission-2026-10-24.md
-    ledger: ''
-    status: working
+    ledger: docs/definitions/choir-selfdev-readiness-metamission-2026-10-24.ledger.md
+    status: checkpoint_incomplete  # 2026-10-26, superseded in ordering by choir-consolidate-and-scale-metamission-2026-10-26
     kind: spine
-    entrypoint: true
+    entrypoint: false
     execution_mode: mission_orchestrator
     depends_on: [choir-launch-first-pass-metamission-2026-10-21]
     enables: []
@@ -1383,14 +1383,28 @@ nodes:
       Owner 2026-10-24: "do all of the platform upgrades that relate to
       self-development now"; "supersede our current one and start the new
       one". Carries the first pass's open items as station SR6.
+  - id: choir-consolidate-and-scale-metamission-2026-10-26
+    title: Consolidate and scale — computers start without a person making room, then every started thing finished or deleted, then the residuals
+    path: docs/definitions/choir-consolidate-and-scale-metamission-2026-10-26.md
+    ledger: docs/definitions/choir-consolidate-and-scale-metamission-2026-10-26.ledger.md
+    status: working
+    kind: spine
+    entrypoint: true
+    execution_mode: mission_orchestrator
+    depends_on: [choir-selfdev-readiness-metamission-2026-10-24]
+    enables: []
+    note: >-
+      Owner 2026-10-26: "this scalability work is all a priority, above
+      other residuals even"; "New metamission looks good" (12:1x). Stations
+      L0, D (density), X, W, F, R, Z.
   - id: choir-t1a-app-self-development-2026-10-26
     title: T1a — the desktop apps self-developed to a design bar, one per request, on b@c
     path: docs/definitions/choir-t1a-app-self-development-2026-10-26.md
     ledger: ''
-    status: working  # the live station of choir-selfdev-readiness-metamission-2026-10-24
+    status: working  # carried into choir-consolidate-and-scale-metamission-2026-10-26 as station F (F3, F4)
     kind: station
     entrypoint: false
-    member_of: choir-selfdev-readiness-metamission-2026-10-24
+    member_of: choir-consolidate-and-scale-metamission-2026-10-26
     execution_mode: subordinate_only
     depends_on: [choir-pd3-texture-root-desk-2026-10-11]
     enables: []

@@ -8,7 +8,27 @@ Sequencing lives here and in
 throughline (`skills/throughline/SKILL.md`). Direction:
 [`reports/choir-state-and-vision-2026-10-14.md`](reports/choir-state-and-vision-2026-10-14.md).
 
-## Active metamission (2026-10-24): self-development readiness
+## Active metamission (2026-10-26): consolidate and scale
+
+**Goal:** [`definitions/choir-consolidate-and-scale-metamission-2026-10-26.md`](definitions/choir-consolidate-and-scale-metamission-2026-10-26.md)
+(`readiness: executable`; the owner ratified the spine at 12:1x, "New
+metamission looks good"). Owner, 2026-10-26: "this scalability work is all a
+priority, above other residuals even"; "We shouldn't need to be doing that
+manual memory management"; today is "retracing our steps, cleaning up
+residuals, and completing all the stuff that we started". Stations: L0 land
+what is in flight; D density (admission makes room by hibernating, snapshots
+survive deploys, primary computers hibernate in minutes, wake cost charged,
+diff snapshots, balloon, bench); X the self-development substrate (X1 the
+apply's checkpoint replay, X2 R10-5, X3 the U4 stack rebase, which the owner
+said to build: "we need to rebase not reject security updates. Security
+comes first"); W switches (built features on, failed experiments deleted);
+F finish what started (Library, related stories by shared entities, themes,
+apps, ingestion gate); R residuals; Z deferred (email, PR-12 step-up: "let's
+not build this yet", SR7, SR8, T1b to T3).
+
+## Settled (2026-10-26): self-development readiness, checkpoint_incomplete
+
+Was: Active metamission (2026-10-24): self-development readiness
 
 **Goal:** [`definitions/choir-selfdev-readiness-metamission-2026-10-24.md`](definitions/choir-selfdev-readiness-metamission-2026-10-24.md)
 (`readiness: executable` on the owner's word; file review pending). Owner,

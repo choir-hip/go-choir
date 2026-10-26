@@ -460,7 +460,13 @@ boundaries:
     - run acceptance and Texture canonical writes (gap C)
 
 now:
-  status: working
+  # 2026-10-26 12:1x: settled checkpoint_incomplete, superseded in ordering by
+  # docs/definitions/choir-consolidate-and-scale-metamission-2026-10-26.md
+  # (owner ratified 12:1x). SR5's first real loop is complete; the open
+  # stations (T1a apps, SR9 Library, T1c themes, SR7, SR8, the residuals)
+  # carry over there by name as F, R and Z. The card below is the last
+  # working state, kept as the receipt.
+  status: checkpoint_incomplete
   slice: >-
     T1a (the live station, docs/definitions/choir-t1a-app-self-development-2026-10-26.md):
     the apps self-developed to a design bar, one per request, engineering on
