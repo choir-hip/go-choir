@@ -47,6 +47,10 @@ type checkpointPlatformFake struct {
 	refuseAll bool
 	requests  []selfdevprotocol.CheckpointRequest
 	published []selfdevprotocol.CheckpointResponse
+	// headSequence is the computer's head sequence, to place a checkpoint in
+	// the listing; sequences are those at publish, by checkpoint digest.
+	headSequence func() uint64
+	sequences    map[string]uint64
 }
 
 func (f *checkpointPlatformFake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -78,8 +82,44 @@ func (f *checkpointPlatformFake) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	}
 	response := selfdevprotocol.CheckpointResponse{Checkpoint: checkpoint, Receipt: receipt}
 	f.published = append(f.published, response)
+	if f.headSequence != nil {
+		if f.sequences == nil {
+			f.sequences = map[string]uint64{}
+		}
+		f.sequences[checkpoint.Digest] = f.headSequence()
+	}
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(response)
+}
+
+// serveList is the platform's checkpoint listing as the guest sees it: every
+// published checkpoint, newest first, pending; or one checkpoint with its
+// receipt when asked for by digest.
+func (f *checkpointPlatformFake) serveList(w http.ResponseWriter, r *http.Request) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if digest := r.URL.Query().Get("checkpoint_digest"); digest != "" {
+		for _, response := range f.published {
+			if response.Checkpoint.Digest == digest {
+				_ = json.NewEncoder(w).Encode(response)
+				return
+			}
+		}
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	list := selfdevprotocol.CheckpointList{Checkpoints: []selfdevprotocol.CheckpointSummary{}}
+	for i := len(f.published) - 1; i >= 0; i-- {
+		request := f.published[i].Checkpoint.Request
+		list.Checkpoints = append(list.Checkpoints, selfdevprotocol.CheckpointSummary{
+			CheckpointDigest: f.published[i].Checkpoint.Digest, AcceptedHead: request.AcceptedEventHead,
+			AcceptedSequence: f.sequences[f.published[i].Checkpoint.Digest],
+			ReleaseDigest: request.ReleaseDigest, EvidenceClass: selfdevprotocol.CheckpointClassOwnerRecovery,
+			CreatedAt: f.published[i].Receipt.IssuedAt.Format(time.RFC3339Nano),
+			Verdict:   selfdevprotocol.CheckpointVerdict{Status: selfdevprotocol.CheckpointVerdictPending},
+		})
+	}
+	_ = json.NewEncoder(w).Encode(list)
 }
 
 type checkpointHeadFixture struct {
@@ -120,8 +160,16 @@ func newCheckpointHeadFixture(t *testing.T, computerID string) *checkpointHeadFi
 		}
 		return head.CanonicalEventHead
 	}
+	platform.headSequence = func() uint64 {
+		head, err := rt.store.Head(context.Background(), computerID)
+		if err != nil || head == nil {
+			return 0
+		}
+		return head.Sequence
+	}
 	mux := http.NewServeMux()
 	mux.Handle("/internal/computers/checkpoints", platform)
+	mux.HandleFunc("/internal/computers/checkpoints/list", platform.serveList)
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
 	WithOwnerRecoveryControl(selfdev.GuestCredentialsWithCapability(server.URL, computerID, "capability", time.Now().UTC().Add(time.Hour), publicKey))(rt)
