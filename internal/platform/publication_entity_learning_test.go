@@ -148,7 +148,7 @@ func TestEntityAliasesAreLearnedBoundedAndNeverAnotherEntitysName(t *testing.T) 
 
 	review := types.StoryEntityReview{Aliases: []types.StoryEntityAlias{
 		{EntityID: vz.EntityID, Alias: "Zelensky"},
-		{EntityID: vz.EntityID, Alias: "Zelenska Foundation"}, // another entity's name
+		{EntityID: vz.EntityID, Alias: "Zelenska Foundation"},   // another entity's name
 		{EntityID: vz.EntityID, Alias: "Volodymyr Zelenskyy's"}, // its own name
 	}}
 	l.record(reviewReq(l, s[0], "rec-a", review, types.StoryEntity{EntityID: vz.EntityID, Role: types.EntityRoleCentral}))
