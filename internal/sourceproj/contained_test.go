@@ -196,6 +196,26 @@ func TestThreeWayBinaryIsExactOnly(t *testing.T) {
 	}
 }
 
+// The binary rule reads the bytes, not the repository's attributes: a
+// gitattributes "-diff" makes git's numstat report a binary blob as text, and
+// that must not route a binary file through the line merge.
+func TestThreeWayBinaryIgnoresAttributes(t *testing.T) {
+	repo, root := baseRepo(t)
+	if err := os.WriteFile(filepath.Join(repo, ".git", "info", "attributes"), []byte("* -diff\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	bin := func(n int) string { return strings.ReplaceAll(numbered("bin", n), " line", "\x00line") }
+	base := platformMoved(t, repo, root, func(r string) { write(t, r, "frontend/src/blob.bin", bin(40)) })
+	patch := patchFromBinary(t, repo, base, func(r string) { editLine(t, r, "frontend/src/blob.bin", 5, "bin\x00changed") })
+	booted := platformMoved(t, repo, base, func(r string) {
+		editLine(t, r, "frontend/src/blob.bin", 5, "bin\x00changed")
+		editLine(t, r, "frontend/src/blob.bin", 35, "bin\x00main's own")
+	})
+	if ok, err := containedAt(t, repo, base, patch, booted); err != nil || ok {
+		t.Fatalf("a binary file marked -diff is still exact only: %v %v", ok, err)
+	}
+}
+
 // Without the base blob there is no three-way merge; the test falls back to
 // exact, never to anything looser, and that is an answer, not an error.
 func TestThreeWayBaseBlobMissingIsExactOnly(t *testing.T) {
