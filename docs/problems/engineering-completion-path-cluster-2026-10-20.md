@@ -1821,9 +1821,11 @@ Failure modes considered:
    admits, so neither a corrected report nor a thaw is available without a
    state-machine change. The saga ends the assignment there: on the typed
    refusal (`capsule.ErrFinalSubjectNotCertified`) and only on it, it
-   revokes the capsule (the stopped-round revoke, so `carry_unfinished`
-   can keep the patch) and records a non-silent system cancellation whose
-   reason names the refusal. The store records that as a `failed` report,
+   revokes the capsule (the stopped-round revoke) and records a non-silent
+   system cancellation whose reason names the refusal. The frozen tree
+   survives the revoke only as an unfinished patch, and only when
+   `engineering.carry_unfinished` is on and the binding is an
+   implementation; otherwise it is destroyed (residual R1-b below). The store records that as a `failed` report,
    management is told, the self-development operation closes. Other
    post-freeze errors (I/O, a persist) keep today's re-drive. If the
    cancellation itself fails after the revoke, the re-drive meets the
@@ -1848,6 +1850,31 @@ Failure modes considered:
    says the assignment ended; the run's next cell is refused at the
    doorway and the completion guard ends the run. Named residual: the run
    is not stopped from inside its own reduce.
+
+Residuals named after review 281 (Devin, DeepSeek v4.1 flash; approved):
+
+- R1-a (Devin 1, DeepSeek 1). The pre-check covers only the capsule binder
+  (run, handle, capsule, source snapshot, the final-subject rule). The other
+  deterministic post-freeze refusals are not in it and are not typed, so
+  they still strand the assignment until the six-re-drive limit cancels it:
+  a command-digest or capsule mismatch, a duplicate or missing granted ref,
+  an exit-code mismatch, an attestation build error, a count mismatch
+  (`bindFrozenAssignmentExecutionReceipts`), and the commit-time report
+  validation (`RecordEngineeringAssignmentReport`, the attestation and
+  `ValidateAgainst` checks, `internal/store/engineering_assignments.go`
+  about line 2023). None is reachable through the reducer path today: the
+  reducer builds the report's commands from the same receipts and dedupes
+  the refs. Follow-up: run them in the pre-check, or type them so the saga
+  ends the assignment on them as it does on the final-subject refusal.
+- R1-b (DeepSeek 2). In the race branch the frozen tree is kept only by the
+  stopped-round carry (`engineering.carry_unfinished` on, implementation
+  binding). Follow-up: export the content-addressed candidate while the
+  capsule is frozen, before the revoke, so a race-cancelled round's tree is
+  always recoverable.
+- Wording (DeepSeek 3). A proposal staged before this fix (no pre-check
+  ran) that is re-driven meets the same cancellation; its reason no longer
+  claims a pre-check ("the cited receipts do not certify the tree that
+  froze").
 
 Tests first: the staging shape through the real saga with a fake executor
 (a Freeze already happened; `Complete("completed")` whose latest receipt
