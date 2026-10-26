@@ -273,8 +273,10 @@ corpusd and the guest alike.
   - possessives ("Anthropic's") dropped;
   - hyphens and apostrophes handled;
   - the leading article and company suffixes folded, as
-    `NormalizeEntityName` does today. That function moves into the
-    package; the minted ids do not change, which a test pins.
+    `NormalizeEntityName` does today. As built, that function stays in
+    `types` as identity, and the match key (`entitytext.Key`) layers NFKC
+    and diacritic folding over it, so the minted ids do not change, which
+    a test pins.
 - **Tokens and sentences.** A rule sentence splitter (stops, closing quotes
   and brackets, a list of abbreviations such as Mr, Dr, U.S., Jan.), so a
   capital at the start of a sentence is known.
@@ -287,7 +289,9 @@ corpusd and the guest alike.
     adding one changes the Nix vendor hash for a gain a token trie already
     gives, so none is added;
   - one-word names under four letters, or on the stopword and title-word
-    list, never match alone.
+    list, never match alone. As built, a short name matches a token written
+    in capitals ("FBI", "US"), never a lower or mixed-case one ("fed",
+    "Fed").
 - **Phrase proposal** (new candidates):
   - capitalised spans of 1 to 4 tokens not at the start of a sentence, or
     at the start when the same span recurs mid-sentence elsewhere;
