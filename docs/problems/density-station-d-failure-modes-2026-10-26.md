@@ -495,3 +495,28 @@ Named, not fixed here:
   for an act to start.
 - The guest route answers 503 only when the handler has no runtime (not
   reachable in a served guest).
+
+### D6 review 334 (S3, S4): folded, and one ruling
+
+Folded: step 0's one deadline now covers candidate selection (each busy probe
+is clipped to what remains and abandoned as busy at the deadline; none starts
+with under a quarter of the budget left); the settle's cap is recomputed after
+the call (`min(5 s, deadline - now)`, and a step out of time skips the settle
+and takes no re-sample); the S3 hibernate option excludes held computers; a
+dry-run hibernate is never waited for whatever the guest claims.
+
+**Ruling on the observe nit (FP0, builder's recommendation): step 0 does
+nothing under `observe`, by design.** A dry-run act frees nothing and so can
+neither admit a start nor show a fall; running one inside the make-room slot
+would only spend the start's time. The evidence the pressure trigger needs
+before `active` comes from the idle and hibernate triggers' dry runs
+(`reportable_kib`, targets, `swappiness_key`), which share the act and the
+guest route. The pressure trigger's own first proof is therefore its `active`
+run on a test computer (design section 10 step 4).
+
+Named, not changed: `admit_after_cache_return` can name a computer whose
+measured fall is 0 when a fresh sample admitted for another reason (the fields
+are honest; the decision word is generous). Design section 4.2 still says the
+idle pass runs "after the sweep's hibernate decisions"; since review 333 it
+has its own ticker, so the two can race, which is safe (the pass reads the
+lifecycle claims at selection and the guest stops at a closed fence).
