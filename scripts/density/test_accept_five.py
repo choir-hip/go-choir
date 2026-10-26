@@ -286,5 +286,49 @@ class PlanAndPreflight(unittest.TestCase):
             af.main(["--canned", "/nonexistent", "--run"])
 
 
+class WakeHelpers(unittest.TestCase):
+    T0 = 1_000_000.0
+
+    def tl(self, kind="resume", started=None, outcome="snapshot"):
+        ts = af.fmt_ts(started if started is not None else self.T0 + 1)
+        return {"boot_kind": kind, "started_at": ts, "outcome": "healthy", "total_ms": 400,
+                "snapshot": {"outcome": outcome, "load_ms": 120, "wake_to_healthy_ms": 380}}
+
+    def test_restore_kind(self):
+        self.assertEqual(af.restore_kind(self.tl(), self.T0), "resume")
+        self.assertEqual(af.restore_kind(self.tl("cold"), self.T0), "cold")
+        self.assertEqual(af.restore_kind(self.tl("resume", outcome="fallback_cold"), self.T0), "fallback_cold")
+        self.assertEqual(af.restore_kind(None, self.T0), "unknown")
+        self.assertEqual(af.restore_kind({"error": "no boot timeline"}, self.T0), "unknown")
+        self.assertEqual(af.restore_kind(self.tl(started=self.T0 - 600), self.T0), "unknown")  # the timeline of an earlier boot
+
+    def test_timeline_facts(self):
+        f = af.timeline_facts(self.tl())
+        self.assertEqual((f["boot_kind"], f["load_ms"], f["wake_to_healthy_ms"], f["total_ms"]), ("resume", 120, 380, 400))
+        self.assertEqual(af.timeline_facts(None), {})
+
+    def test_wake_argv_flags_before_positionals_and_no_secret(self):
+        argv = af.wake_argv("/tmp/choir", "computer-m1", "d7-wake-t-1")
+        self.assertEqual(argv[:3], ["/tmp/choir", "computer", "start"])
+        self.assertEqual(argv[argv.index("--computer") + 1], "computer-m1")
+        self.assertEqual(argv[argv.index("--idempotency-key") + 1], "d7-wake-t-1")
+        self.assertFalse([a for a in argv if not a.startswith("-") and a not in ("computer", "start") and a not in
+                          ("/tmp/choir", "computer-m1", "d7-wake-t-1", "120s")])
+        self.assertFalse([a for a in argv if "choir_sk_" in a])
+
+    def test_wake_env_carries_the_key_only_in_env(self):
+        env = af.wake_env({"api_key": "choir_sk_secret", "base_url": "https://choir.news"}, {"PATH": "/bin"})
+        self.assertEqual(env["CHOIR_API_KEY"], "choir_sk_secret")
+        self.assertEqual(env["CHOIR_HOST"], "https://choir.news")
+        with self.assertRaises(af.Stop):
+            af.wake_env({"base_url": "https://choir.news"}, {})
+        with self.assertRaises(af.Stop):
+            af.wake_env({"api_key": "choir_sk_x", "base_url": "http://evil.example"}, {})
+
+    def test_redact(self):
+        self.assertEqual(af.redact("boom choir_sk_secret end", "choir_sk_secret"), "boom <redacted> end")
+        self.assertEqual(af.redact("choir_sk_other1234", ""), "<redacted>")
+
+
 if __name__ == "__main__":
     unittest.main()
