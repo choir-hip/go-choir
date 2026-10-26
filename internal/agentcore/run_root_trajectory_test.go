@@ -227,3 +227,126 @@ func TestNonRunRootRowWithEmptyRuleStaysInvalid(t *testing.T) {
 		t.Fatalf("unexpected verdict for a non-run-root row: %+v", got)
 	}
 }
+
+// Review 330 (1): a passivated child is non-terminal and can be re-warmed, so
+// it keeps the trajectory open.
+func TestRunRootTrajectoryStaysLiveWhileAChildRunIsPassivated(t *testing.T) {
+	ctx := context.Background()
+	rt, s := testRuntime(t)
+	rec := seedRunRoot(t, rt, "traj-root-passivated-child", types.RunCompleted, defaultSettlementRuleForKind(types.TrajectoryKindDocument))
+	now := time.Now().UTC()
+	child := types.RunRecord{
+		RunID: "run-child-passivated", AgentID: "agent-child-p", ChannelID: "chan-1", RequestedByRunID: rec.RunID,
+		AgentProfile: agentprofile.Research, AgentRole: agentprofile.Research,
+		OwnerID: "user-alice", ComputerID: "autoputer-test", State: types.RunPassivated,
+		Prompt: "child", CreatedAt: now, UpdatedAt: now, TrajectoryID: rec.TrajectoryID,
+		Metadata: map[string]any{runMetadataTrajectoryID: rec.TrajectoryID},
+	}
+	if err := s.CreateRun(ctx, child); err != nil {
+		t.Fatalf("seed child: %v", err)
+	}
+	rt.settleRunRootTrajectory(ctx, &rec)
+	got, _ := s.GetTrajectory(ctx, "user-alice", rec.TrajectoryID)
+	if got.Status != types.TrajectoryLive {
+		t.Fatalf("trajectory settled under a passivated child run: %+v", got)
+	}
+}
+
+// Review 330 (2): the settle itself re-checks open work and non-terminal runs
+// under the trajectory lock, so work that landed after the caller's reads keeps
+// the row live.
+func TestSettleTrajectoryIfIdleRechecksUnderTheLock(t *testing.T) {
+	ctx := context.Background()
+	rt, s := testRuntime(t)
+	rec := seedRunRoot(t, rt, "traj-idle-recheck", types.RunCompleted, defaultSettlementRuleForKind(types.TrajectoryKindDocument))
+
+	work, err := s.CreateWorkItem(ctx, types.WorkItemRecord{OwnerID: "user-alice", TrajectoryID: rec.TrajectoryID, Objective: "late work"})
+	if err != nil {
+		t.Fatalf("create work item: %v", err)
+	}
+	if settled, err := s.SettleTrajectoryIfIdle(ctx, "user-alice", rec.TrajectoryID); err != nil || settled {
+		t.Fatalf("settled over an open work item: settled=%v err=%v", settled, err)
+	}
+	if _, err := s.UpdateWorkItemStatus(ctx, "user-alice", work.WorkItemID, types.WorkItemCompleted); err != nil {
+		t.Fatalf("complete work: %v", err)
+	}
+
+	now := time.Now().UTC()
+	child := types.RunRecord{
+		RunID: "run-late-child", AgentID: "agent-late", ChannelID: "chan-1", RequestedByRunID: rec.RunID,
+		AgentProfile: agentprofile.Research, AgentRole: agentprofile.Research,
+		OwnerID: "user-alice", ComputerID: "autoputer-test", State: types.RunPassivated,
+		Prompt: "child", CreatedAt: now, UpdatedAt: now, TrajectoryID: rec.TrajectoryID,
+		Metadata: map[string]any{runMetadataTrajectoryID: rec.TrajectoryID},
+	}
+	if err := s.CreateRun(ctx, child); err != nil {
+		t.Fatalf("seed child: %v", err)
+	}
+	if settled, err := s.SettleTrajectoryIfIdle(ctx, "user-alice", rec.TrajectoryID); err != nil || settled {
+		t.Fatalf("settled over a non-terminal run: settled=%v err=%v", settled, err)
+	}
+	child.State = types.RunCompleted
+	fin := time.Now().UTC()
+	child.FinishedAt = &fin
+	if err := s.UpdateRun(ctx, child); err != nil {
+		t.Fatalf("finish child: %v", err)
+	}
+	if settled, err := s.SettleTrajectoryIfIdle(ctx, "user-alice", rec.TrajectoryID); err != nil || !settled {
+		t.Fatalf("idle trajectory did not settle: settled=%v err=%v", settled, err)
+	}
+	got, _ := s.GetTrajectory(ctx, "user-alice", rec.TrajectoryID)
+	if got.Status != types.TrajectorySettled || got.SettledAt == nil {
+		t.Fatalf("stored trajectory = %+v", got)
+	}
+}
+
+// Review 330 (3): with a pending update the verdict must not say the row is
+// ready to settle.
+func TestRunRootVerdictDoesNotClaimReadyWithPendingUpdates(t *testing.T) {
+	ctx := context.Background()
+	rt, s := testRuntime(t)
+	done := seedRunRoot(t, rt, "traj-root-pending-update", types.RunCompleted, defaultSettlementRuleForKind(types.TrajectoryKindDocument))
+	managementAgent, err := rt.EnsurePersistentManagementAgent(ctx, done.OwnerID)
+	if err != nil {
+		t.Fatalf("ensure management agent: %v", err)
+	}
+	update := types.CoagentSourcePacket{
+		UpdateID: "update-root-pending", OwnerID: done.OwnerID, AgentID: "engineering:verifier",
+		TargetAgentID: managementAgent.AgentID, ChannelID: managementAgent.ChannelID, TrajectoryID: done.TrajectoryID,
+		Role: agentprofile.Engineering, Packet: testCoagentUpdatePacket("execution_result", "pending"),
+		Content: "pending", CreatedAt: time.Now().UTC(),
+	}
+	message := types.ChannelMessage{
+		ChannelID: update.ChannelID, FromAgentID: update.AgentID, ToAgentID: update.TargetAgentID,
+		TrajectoryID: update.TrajectoryID, Role: update.Role, Content: update.Content, Timestamp: update.CreatedAt,
+	}
+	if _, _, err := s.DispatchWorkerUpdate(ctx, update, &message); err != nil {
+		t.Fatalf("dispatch update: %v", err)
+	}
+	got, err := rt.TrajectoryObligations(ctx, done.OwnerID, done.TrajectoryID)
+	if err != nil {
+		t.Fatalf("obligations: %v", err)
+	}
+	if got.SettlementReady || got.RunRoot == nil {
+		t.Fatalf("obligations = %+v", got)
+	}
+	if strings.Contains(got.RunRoot.Verdict, "ready to settle") || strings.Contains(got.RunRoot.Verdict, "nothing is open") {
+		t.Fatalf("verdict claims ready while an update is pending: %q", got.RunRoot.Verdict)
+	}
+}
+
+// Review 330 (4): a run-root row names the run that is the trajectory's own
+// root; a root_loop_id that is some other run is not a run-root row.
+func TestRunRootRecordRequiresRootLoopToBeTheTrajectory(t *testing.T) {
+	rec := types.TrajectoryRecord{
+		TrajectoryID: "traj-a", Kind: types.TrajectoryKindTask, Status: types.TrajectoryLive,
+		SubjectRefs: map[string]string{"root_loop_id": "run-other"},
+	}
+	if isRunRootRecord(rec) {
+		t.Fatalf("a row whose root_loop_id is another run read as a run-root row")
+	}
+	rec.SubjectRefs["root_loop_id"] = "traj-a"
+	if !isRunRootRecord(rec) {
+		t.Fatalf("a row whose root_loop_id is its own id is a run-root row")
+	}
+}

@@ -376,3 +376,8 @@ func (s *Store) UpdateWorkItemDetails(ctx context.Context, ownerID, workItemID s
 	}
 	return s.GetWorkItemOG(ctx, ownerID, workItemID)
 }
+
+// SettleTrajectoryIfIdle is stubbed until the fix lands.
+func (s *Store) SettleTrajectoryIfIdle(ctx context.Context, ownerID, trajectoryID string) (bool, error) {
+	return false, nil
+}
